@@ -2,7 +2,7 @@
 #' 
 #' @param type Which function to be returned
 #' @param parameters Named vector, character or numeric. Replace parameters by the corresponding valus
-#' in \code{parameters}.
+#' in `parameters`.
 #' @return String with the function
 #' @export
 forcingsSymb <- function(type =c("Gauss", "Fermi", "1-Fermi", "MM", "Signal", "Dose"), parameters = NULL) {
@@ -74,7 +74,7 @@ getCoefficients <- function(char, symbol) {
 #' @param variables named character vector
 #' @details If the names of top vector elements occur in the bottom of the vector, 
 #' they are replaced by the character of the top entry. Useful for steady state conditions.
-#' @return named character vector of the same length as \code{variables}
+#' @return named character vector of the same length as `variables`
 #' @examples resolveRecurrence(c(A = "k1*B/k2", C = "A*k3+k4", D="A*C*k5"))
 #' @export
 resolveRecurrence <- function (variables) {
@@ -94,92 +94,62 @@ resolveRecurrence <- function (variables) {
 
 
 
+## getElements (moved from toolsMarcus.R) ------------------------------------
 
-
-#' Find integer-null space of matrix A 
-#  this function is written along the lines of matlab's function null(A,'r'), where 'r' specifies that integer solutions are returned instead of orthonormal vectors
+#' Get Symbols and Numeric constants from a character
+#'
+#' @param char Character vector (e.g. equation)
+#' @param exclude Character vector, the symbols to be excluded from the return value
 #' 
-#' @param A matrix for which the null space is searched
-#' @param tol tolerance to find pivots in rref-function below
-#' @return null space of A with only integers in it
-#' 
-#' @author Malenka Mader, \email{Malenka.Mader@@fdm.uni-freiburg.de}
-#'   
 #' @export
-nullZ <- function(A, tol=sqrt(.Machine$double.eps)) {
-  
-  ret <- rref(A) # compute reduced row echelon form of A
-  ret[[1]] -> R # matrix A in rref 
-  ret[[2]] -> pivcol #columns in which a pivot was found
-  
-  n <- ncol(A) # number of columns of A
-  r <- length(pivcol) # rank of reduced row echelon form
-  nopiv <- 1:n
-  nopiv <- nopiv[-pivcol]  # columns in which no pivot was found
-  
-  Z <- mat <- matrix(0, nrow = n, ncol = n-r) # matrix containing the vectors spanning the null space
-  if ( n>r ) {
-    Z[nopiv,] <- diag(1, n-r, n-r)
-    if ( r>0 ) {
-      Z[pivcol,] <- -R[1:r,nopiv]
-    }
-  }
-  return (Z) 
-  
+#' 
+#' @examples getElements(c("A*AB+B^2"))
+#' 
+getElements <- function (char, exclude = NULL) 
+{
+  if (is.null(char)) 
+    return(NULL)
+  char <- char[char != "0"]
+  out <- parse(text = char, keep.source = TRUE)
+  out <- utils::getParseData(out)
+  names <- out$text[out$token == "SYMBOL" | out$token == "NUM_CONST"]
+  if (!is.null(exclude)) 
+    names <- names[!names %in% exclude]
+  return(names)
 }
 
 
 
-#' Transform matrix A into reduced row echelon form 
-#' this function is written along the lines of the rref-matlab function.
-#' @param A matrix for which the reduced row echelon form is searched
-#' @param tol tolerance to find pivots
-#' @param verbose logical, print verbose information
-#' @param fractions logical, not used right now. 
-#' @return a list of two entries is returned; ret[[1]] is the reduced row echelon form of A, ret[[2]] is the index of columns in which a pivot was found
-#' 
-#' @author Malenka Mader, \email{Malenka.Mader@@fdm.uni-freiburg.de}
-#'   
-#' @export
-rref <- function(A, tol=sqrt(.Machine$double.eps), verbose=FALSE, fractions=FALSE){
-  ## Written by John Fox
-  if ((!is.matrix(A)) || (!is.numeric(A)))
-    stop("argument must be a numeric matrix")
-  m <- nrow(A)
-  n <- ncol(A)
-  
-  i <- 1 # row index
-  j <- 1 # column index
-  pivcol <- c() # vector of columns in which nozero pivots are found
-  while ((i <= m) & (j <= n)){
-    # find pivot in column j
-    which <- which.max(abs(A[i:m,j])) # column in which pivot is
-    k <- i+which-1 #row index, in which pivot is
-    pivot <- A[k, j] # pivot of column j
-    
-    if ( abs(pivot) <= tol ) {
-      A[i:m,j] =matrix(0,m-i+1,1) # column is negligible, zero it out
-      j <- j+1
-    } else {
-      # remember column index
-      pivcol <- cbind(pivcol,j)
-      
-      # swap i-th and k-th column
-      A[cbind(i,k),j:n] = A[cbind(k, i),j:n];
-      
-      # divide pivot row by pivot element.
-      A[i,j:n] = A[i,j:n]/A[i,j];
-      
-      # subtract multiples of pivot row from all other rows.
-      otherRows <- 1:m
-      otherRows <- otherRows[-i]
-      for (u in otherRows) {
-        A[u,j:n] = A[u,j:n] - A[u,j]*A[i,j:n];
-      }
-      i = i + 1;
-      j = j + 1;
-    }
-  }
-  return (list(A,pivcol))
-}
 
+## blockdiagSymb (moved from tools.R) ----------------------------------------
+
+#' Embed two matrices into one blockdiagonal matrix
+#' 
+#' @param M matrix of type character
+#' @param N matrix of type character
+#' @return Matrix of type character containing M and N as upper left and lower right block
+#' @examples
+#' M <- matrix(1:9, 3, 3, dimnames = list(letters[1:3], letters[1:3]))
+#' N <- matrix(1:4, 2, 2, dimnames = list(LETTERS[1:2], LETTERS[1:2]))
+#' blockdiagSymb(M, N)
+#' @export
+blockdiagSymb <- function(M, N) {
+  
+  red <- sapply(list(M, N), is.null)
+  if(all(red)) {
+    return()
+  } else if(red[1]) {
+    return(N)
+  } else if(red[2]) {
+    return(M)
+  }
+  
+  A <- matrix(0, ncol=dim(N)[2], nrow=dim(M)[1])
+  B <- matrix(0, ncol=dim(M)[2], nrow=dim(N)[1])
+  result <- rbind(cbind(M, A), cbind(B, N))
+  colnames(result) <- c(colnames(M), colnames(N))
+  rownames(result) <- c(rownames(M), rownames(N))
+  
+  return(result)
+  
+}
