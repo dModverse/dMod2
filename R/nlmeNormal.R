@@ -1175,7 +1175,8 @@ emObjfn <- function(obj, control = list()) {
                     c("nBurnin", "nEM", "nMcmc", "cm1Control", "cores"),
                     "saem")
   fc <- control$focei %||% list()
-  .normalCheckControlKeys(fc, c("innerControl", "trustControl", "cores"), "focei")
+  .normalCheckControlKeys(fc, c("innerControl", "trustControl", "cores",
+                                "secondOrderCorrection"), "focei")
   .normalCheckControlKeys(fc$innerControl %||% list(),
                     c("rinit", "rmax", "iterlim", "ftol", "mtol",
                       "fterm", "mterm", "eigen_floor_relative"),
