@@ -25,6 +25,26 @@ constraintL2_mvn_kernel <- function(pars, fixed_opt, dP_opt, dP2_opt, inner_par_
     .Call(`_dMod2_constraintL2_mvn_kernel`, pars, fixed_opt, dP_opt, dP2_opt, inner_par_names, K, N, all_eta_names, mu, L_lower, include_chol_block)
 }
 
+focei_kernel_ping <- function(joint_cb, pars, fixed, conditions) {
+    .Call(`_dMod2_focei_kernel_ping`, joint_cb, pars, fixed, conditions)
+}
+
+focei_eval_one_subject <- function(model_cb, err_cb, pars_full, fixed, meta_i, eta_block, Omega_inv, Omega_log_det) {
+    .Call(`_dMod2_focei_eval_one_subject`, model_cb, err_cb, pars_full, fixed, meta_i, eta_block, Omega_inv, Omega_log_det)
+}
+
+focei_inner_trust <- function(model_cb, err_cb, pars_full, eta_warmstart, subject_meta, Omega_inv_mat, Omega_log_det, fixed, control, predict_cb = NULL) {
+    .Call(`_dMod2_focei_inner_trust`, model_cb, err_cb, pars_full, eta_warmstart, subject_meta, Omega_inv_mat, Omega_log_det, fixed, control, predict_cb)
+}
+
+focei_outer_objfn <- function(model_cb, err_cb, joint_cb, outer_pars, eta_warmstart, subject_meta, Omega_inv_mat, Omega_log_det, fixed, inner_ctrl, correction_mode = "none", correction_cb_opt = NULL, predict_cb = NULL) {
+    .Call(`_dMod2_focei_outer_objfn`, model_cb, err_cb, joint_cb, outer_pars, eta_warmstart, subject_meta, Omega_inv_mat, Omega_log_det, fixed, inner_ctrl, correction_mode, correction_cb_opt, predict_cb)
+}
+
+focei_run <- function(model_cb, err_cb, joint_cb, init, subject_meta, fixed, control, correction_mode = "none", correction_cb = NULL, predict_cb = NULL) {
+    .Call(`_dMod2_focei_run`, model_cb, err_cb, joint_cb, init, subject_meta, fixed, control, correction_mode, correction_cb, predict_cb)
+}
+
 normL2_kernel <- function(prediction, err_list_opt, meta_list, par_names_global, deriv2_requested, threads, bloq_mode = "M3") {
     .Call(`_dMod2_normL2_kernel`, prediction, err_list_opt, meta_list, par_names_global, deriv2_requested, threads, bloq_mode)
 }
@@ -39,6 +59,22 @@ parvec_concat <- function(lst) {
 
 priorOmegaKernel <- function(omegaVec, cholLoc, isDiag, K, lkjEta, scaleSD, kindFlag) {
     .Call(`_dMod2_prior_omega_kernel`, omegaVec, cholLoc, isDiag, K, lkjEta, scaleSD, kindFlag)
+}
+
+#' @name sparseGridGH
+#' @title Sparse-grid Gauss-Hermite quadrature nodes (Smolyak rule)
+#' @description Builds the K-dimensional Smolyak sparse grid for physicists'
+#'   Gauss-Hermite at depth `level`. Returns nodes `[B, K]` in z-space and
+#'   signed weights (length `B`).
+#' @param K Integer >= 1, problem dimension.
+#' @param level Integer >= K, Smolyak depth (K+1..K+3 is the useful range).
+#' @param derivMode Reserved for future Genz-Keister / adaptive refinement;
+#'   currently ignored.
+#' @return A list with `nodes` (B x K, batch-first), `weights` (length B,
+#'   signed), and `K`, `level`.
+#' @export
+sparseGridGH <- function(K, level, derivMode = 0L) {
+    .Call(`_dMod2_sparseGridGH`, K, level, derivMode)
 }
 
 residual_kernel_aloq <- function(pred, dpred, d2pred, y_data, sigma, dsigma, d2sigma, lloq, opts) {
