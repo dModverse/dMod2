@@ -37,6 +37,10 @@ parvec_concat <- function(lst) {
     .Call(`_dMod2_parvec_concat`, lst)
 }
 
+priorOmegaKernel <- function(omegaVec, cholLoc, isDiag, K, lkjEta, scaleSD, kindFlag) {
+    .Call(`_dMod2_prior_omega_kernel`, omegaVec, cholLoc, isDiag, K, lkjEta, scaleSD, kindFlag)
+}
+
 residual_kernel_aloq <- function(pred, dpred, d2pred, y_data, sigma, dsigma, d2sigma, lloq, opts) {
     .Call(`_dMod2_residual_kernel_aloq`, pred, dpred, d2pred, y_data, sigma, dsigma, d2sigma, lloq, opts)
 }

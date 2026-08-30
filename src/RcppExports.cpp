@@ -161,6 +161,23 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// prior_omega_kernel
+List prior_omega_kernel(NumericVector omegaVec, IntegerMatrix cholLoc, LogicalVector isDiag, int K, double lkjEta, double scaleSD, int kindFlag);
+RcppExport SEXP _dMod2_prior_omega_kernel(SEXP omegaVecSEXP, SEXP cholLocSEXP, SEXP isDiagSEXP, SEXP KSEXP, SEXP lkjEtaSEXP, SEXP scaleSDSEXP, SEXP kindFlagSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type omegaVec(omegaVecSEXP);
+    Rcpp::traits::input_parameter< IntegerMatrix >::type cholLoc(cholLocSEXP);
+    Rcpp::traits::input_parameter< LogicalVector >::type isDiag(isDiagSEXP);
+    Rcpp::traits::input_parameter< int >::type K(KSEXP);
+    Rcpp::traits::input_parameter< double >::type lkjEta(lkjEtaSEXP);
+    Rcpp::traits::input_parameter< double >::type scaleSD(scaleSDSEXP);
+    Rcpp::traits::input_parameter< int >::type kindFlag(kindFlagSEXP);
+    rcpp_result_gen = Rcpp::wrap(prior_omega_kernel(omegaVec, cholLoc, isDiag, K, lkjEta, scaleSD, kindFlag));
+    return rcpp_result_gen;
+END_RCPP
+}
 // residual_kernel_aloq
 List residual_kernel_aloq(NumericVector pred, NumericMatrix dpred, Nullable<NumericVector> d2pred, NumericVector y_data, NumericVector sigma, Nullable<NumericMatrix> dsigma, Nullable<NumericVector> d2sigma, Nullable<NumericVector> lloq, List opts);
 RcppExport SEXP _dMod2_residual_kernel_aloq(SEXP predSEXP, SEXP dpredSEXP, SEXP d2predSEXP, SEXP y_dataSEXP, SEXP sigmaSEXP, SEXP dsigmaSEXP, SEXP d2sigmaSEXP, SEXP lloqSEXP, SEXP optsSEXP) {
@@ -300,6 +317,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_dMod2_normL2_kernel", (DL_FUNC) &_dMod2_normL2_kernel, 7},
     {"_dMod2_parvec_attach", (DL_FUNC) &_dMod2_parvec_attach, 3},
     {"_dMod2_parvec_concat", (DL_FUNC) &_dMod2_parvec_concat, 1},
+    {"_dMod2_prior_omega_kernel", (DL_FUNC) &_dMod2_prior_omega_kernel, 7},
     {"_dMod2_residual_kernel_aloq", (DL_FUNC) &_dMod2_residual_kernel_aloq, 9},
     {"_dMod2_residual_kernel_bloq", (DL_FUNC) &_dMod2_residual_kernel_bloq, 9},
     {"_dMod2_trustL1_impl", (DL_FUNC) &_dMod2_trustL1_impl, 22},
