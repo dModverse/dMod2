@@ -424,6 +424,56 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// smc_log_sum_exp
+double smc_log_sum_exp(const NumericVector& x);
+RcppExport SEXP _dMod2_smc_log_sum_exp(SEXP xSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const NumericVector& >::type x(xSEXP);
+    rcpp_result_gen = Rcpp::wrap(smc_log_sum_exp(x));
+    return rcpp_result_gen;
+END_RCPP
+}
+// smc_ess
+double smc_ess(const NumericVector& logw);
+RcppExport SEXP _dMod2_smc_ess(SEXP logwSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const NumericVector& >::type logw(logwSEXP);
+    rcpp_result_gen = Rcpp::wrap(smc_ess(logw));
+    return rcpp_result_gen;
+END_RCPP
+}
+// smc_systematic_resample
+IntegerVector smc_systematic_resample(const NumericVector& weights, double u);
+RcppExport SEXP _dMod2_smc_systematic_resample(SEXP weightsSEXP, SEXP uSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const NumericVector& >::type weights(weightsSEXP);
+    Rcpp::traits::input_parameter< double >::type u(uSEXP);
+    rcpp_result_gen = Rcpp::wrap(smc_systematic_resample(weights, u));
+    return rcpp_result_gen;
+END_RCPP
+}
+// smc_beta_bisect
+double smc_beta_bisect(const NumericVector& logL, const NumericVector& logwPrev, double betaOld, double targetESS, double tol, int maxIter);
+RcppExport SEXP _dMod2_smc_beta_bisect(SEXP logLSEXP, SEXP logwPrevSEXP, SEXP betaOldSEXP, SEXP targetESSSEXP, SEXP tolSEXP, SEXP maxIterSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const NumericVector& >::type logL(logLSEXP);
+    Rcpp::traits::input_parameter< const NumericVector& >::type logwPrev(logwPrevSEXP);
+    Rcpp::traits::input_parameter< double >::type betaOld(betaOldSEXP);
+    Rcpp::traits::input_parameter< double >::type targetESS(targetESSSEXP);
+    Rcpp::traits::input_parameter< double >::type tol(tolSEXP);
+    Rcpp::traits::input_parameter< int >::type maxIter(maxIterSEXP);
+    rcpp_result_gen = Rcpp::wrap(smc_beta_bisect(logL, logwPrev, betaOld, targetESS, tol, maxIter));
+    return rcpp_result_gen;
+END_RCPP
+}
 // trustL1_impl
 List trustL1_impl(Function objfun, NumericVector parinit, NumericVector mu, NumericVector lambda, bool one_sided, double rinit, double rmax, Nullable<NumericVector> parscale, int iterlim, double ftol, double mtol, double gtol, double xtol, double rmin, double thetamax, std::string boundary, bool minimize, bool blather, Nullable<NumericVector> parupper, Nullable<NumericVector> parlower, bool printIter, Nullable<CharacterVector> traceFile);
 RcppExport SEXP _dMod2_trustL1_impl(SEXP objfunSEXP, SEXP parinitSEXP, SEXP muSEXP, SEXP lambdaSEXP, SEXP one_sidedSEXP, SEXP rinitSEXP, SEXP rmaxSEXP, SEXP parscaleSEXP, SEXP iterlimSEXP, SEXP ftolSEXP, SEXP mtolSEXP, SEXP gtolSEXP, SEXP xtolSEXP, SEXP rminSEXP, SEXP thetamaxSEXP, SEXP boundarySEXP, SEXP minimizeSEXP, SEXP blatherSEXP, SEXP parupperSEXP, SEXP parlowerSEXP, SEXP printIterSEXP, SEXP traceFileSEXP) {
@@ -541,6 +591,10 @@ static const R_CallMethodDef CallEntries[] = {
     {"_dMod2_sparseGridGH", (DL_FUNC) &_dMod2_sparseGridGH, 3},
     {"_dMod2_residual_kernel_aloq", (DL_FUNC) &_dMod2_residual_kernel_aloq, 9},
     {"_dMod2_residual_kernel_bloq", (DL_FUNC) &_dMod2_residual_kernel_bloq, 9},
+    {"_dMod2_smc_log_sum_exp", (DL_FUNC) &_dMod2_smc_log_sum_exp, 1},
+    {"_dMod2_smc_ess", (DL_FUNC) &_dMod2_smc_ess, 1},
+    {"_dMod2_smc_systematic_resample", (DL_FUNC) &_dMod2_smc_systematic_resample, 2},
+    {"_dMod2_smc_beta_bisect", (DL_FUNC) &_dMod2_smc_beta_bisect, 6},
     {"_dMod2_trustL1_impl", (DL_FUNC) &_dMod2_trustL1_impl, 22},
     {"_dMod2_trustL1_lockstep_impl", (DL_FUNC) &_dMod2_trustL1_lockstep_impl, 19},
     {"_dMod2_trust_impl", (DL_FUNC) &_dMod2_trust_impl, 19},

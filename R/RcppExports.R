@@ -113,6 +113,22 @@ residual_kernel_bloq <- function(pred, dpred, d2pred, y_data, sigma, dsigma, d2s
     .Call(`_dMod2_residual_kernel_bloq`, pred, dpred, d2pred, y_data, sigma, dsigma, d2sigma, lloq, opts)
 }
 
+smcLogSumExp <- function(x) {
+    .Call(`_dMod2_smc_log_sum_exp`, x)
+}
+
+smcESS <- function(logw) {
+    .Call(`_dMod2_smc_ess`, logw)
+}
+
+smcSystematicResample <- function(weights, u) {
+    .Call(`_dMod2_smc_systematic_resample`, weights, u)
+}
+
+smcBetaBisect <- function(logL, logwPrev, betaOld, targetESS, tol = 1e-6, maxIter = 80L) {
+    .Call(`_dMod2_smc_beta_bisect`, logL, logwPrev, betaOld, targetESS, tol, maxIter)
+}
+
 trustL1_impl <- function(objfun, parinit, mu, lambda, one_sided, rinit, rmax, parscale = NULL, iterlim = 100L, ftol = 1e-6, mtol = 1e-6, gtol = 1e-6, xtol = 0.0, rmin = 0.0, thetamax = 0.99995, boundary = "reflective", minimize = TRUE, blather = FALSE, parupper = NULL, parlower = NULL, printIter = FALSE, traceFile = NULL) {
     .Call(`_dMod2_trustL1_impl`, objfun, parinit, mu, lambda, one_sided, rinit, rmax, parscale, iterlim, ftol, mtol, gtol, xtol, rmin, thetamax, boundary, minimize, blather, parupper, parlower, printIter, traceFile)
 }
