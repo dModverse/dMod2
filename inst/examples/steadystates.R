@@ -1,6 +1,6 @@
 
 \dontrun{
-  library(dMod)
+  library(dMod2)
   setwd(tempdir())
   
   reactions <- eqnlist()
@@ -16,7 +16,8 @@
   mysteadies <- steadyStates(reactions)
   print(mysteadies)
   
-  x <- Xs(odemodel(reactions))
+  x <- Xs(odemodel(reactions, compile = FALSE))
+  compile(x)
   
   parameters <- getParameters(x)
   trafo <- `names<-`(parameters, parameters)

@@ -1,6 +1,6 @@
 # Framework
 library(cOde)
-library(dMod)
+library(dMod2)
 
 # Plotting
 library(ggplot2)

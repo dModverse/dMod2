@@ -10,7 +10,7 @@ library(parallel)
 library(ggplot2)
 library(ggthemes)
 library(cOde)
-library(dMod)
+library(dMod2)
 
 qplot <- function(...) ggplot2::qplot(...) + theme_few() + scale_color_colorblind() + scale_fill_colorblind()
 

@@ -6,7 +6,7 @@
   library(ggplot2)
   library(deSolve)
   library(cOde)
-  library(dMod)
+  library(dMod2)
   library(trust)
   library(parallel)
   

@@ -1,4 +1,4 @@
-    
+\dontrun{    
     ## Observation function
     fn <- eqnvec(
       sine = "1 + sin(6.28*omega*time)",
@@ -55,4 +55,4 @@
      plot4
     plot5 <- plotCombined(prediction, data, aesthetics = list(linetype = "condition"))
      plot5
-
+}

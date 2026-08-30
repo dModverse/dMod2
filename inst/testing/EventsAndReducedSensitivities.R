@@ -1,6 +1,6 @@
 library(deSolve)
 library(cOde)
-library(dMod)
+library(dMod2)
 
 f <- NULL
 f <- addReaction("2*A", "B", "k1*A*Egf", f)

@@ -1,12 +1,15 @@
 ##
 ## JAK-STAT pathway
 ##
+## Legacy: written against the pre-1.0 API (wrss(), res(), priorL2(), the deSolve
+## backend) and kept for reference only. It does not run against dMod 1.2.
+##
   
 # Load required packages
   library(ggplot2)
   library(deSolve)
   library(cOde)
-  library(dMod)
+  library(dMod2)
   library(trust)
   library(parallel)
   

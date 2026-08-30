@@ -2,7 +2,7 @@
 
 library(deSolve)
 library(parallel)
-library(dMod)
+library(dMod2)
 
 ## Model Definition ------------------------------------------------------
 

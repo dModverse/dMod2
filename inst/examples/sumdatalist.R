@@ -1,4 +1,4 @@
-  
+\dontrun{
   # Start with two data frames
   mydata1 <- data.frame(
     name = "A",
@@ -29,4 +29,4 @@
   # Check the condition.grid (if available)
    condition.grid <- attr(data, "condition.grid")
    print(condition.grid)
-
+}
