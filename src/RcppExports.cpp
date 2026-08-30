@@ -215,6 +215,40 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// normalLaplaceCpp
+List normalLaplaceCpp(NumericVector a, NumericVector m, NumericVector lambda);
+RcppExport SEXP _dMod2_normalLaplaceCpp(SEXP aSEXP, SEXP mSEXP, SEXP lambdaSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type a(aSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type m(mSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type lambda(lambdaSEXP);
+    rcpp_result_gen = Rcpp::wrap(normalLaplaceCpp(a, m, lambda));
+    return rcpp_result_gen;
+END_RCPP
+}
+// clusterMarginalCpp
+List clusterMarginalCpp(NumericVector H, NumericVector m, double lambda, NumericVector sizes, NumericMatrix B, NumericMatrix L, NumericVector zc, NumericMatrix U, NumericVector logw, NumericVector z2, NumericVector sgn);
+RcppExport SEXP _dMod2_clusterMarginalCpp(SEXP HSEXP, SEXP mSEXP, SEXP lambdaSEXP, SEXP sizesSEXP, SEXP BSEXP, SEXP LSEXP, SEXP zcSEXP, SEXP USEXP, SEXP logwSEXP, SEXP z2SEXP, SEXP sgnSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type H(HSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type m(mSEXP);
+    Rcpp::traits::input_parameter< double >::type lambda(lambdaSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type sizes(sizesSEXP);
+    Rcpp::traits::input_parameter< NumericMatrix >::type B(BSEXP);
+    Rcpp::traits::input_parameter< NumericMatrix >::type L(LSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type zc(zcSEXP);
+    Rcpp::traits::input_parameter< NumericMatrix >::type U(USEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type logw(logwSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type z2(z2SEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type sgn(sgnSEXP);
+    rcpp_result_gen = Rcpp::wrap(clusterMarginalCpp(H, m, lambda, sizes, B, L, zc, U, logw, z2, sgn));
+    return rcpp_result_gen;
+END_RCPP
+}
 // normL2_kernel
 List normL2_kernel(List prediction, Nullable<List> err_list_opt, List meta_list, CharacterVector par_names_global, bool deriv2_requested, int threads, std::string bloq_mode);
 RcppExport SEXP _dMod2_normL2_kernel(SEXP predictionSEXP, SEXP err_list_optSEXP, SEXP meta_listSEXP, SEXP par_names_globalSEXP, SEXP deriv2_requestedSEXP, SEXP threadsSEXP, SEXP bloq_modeSEXP) {
@@ -427,6 +461,8 @@ static const R_CallMethodDef CallEntries[] = {
     {"_dMod2_focei_inner_trust", (DL_FUNC) &_dMod2_focei_inner_trust, 10},
     {"_dMod2_focei_outer_objfn", (DL_FUNC) &_dMod2_focei_outer_objfn, 13},
     {"_dMod2_focei_run", (DL_FUNC) &_dMod2_focei_run, 10},
+    {"_dMod2_normalLaplaceCpp", (DL_FUNC) &_dMod2_normalLaplaceCpp, 3},
+    {"_dMod2_clusterMarginalCpp", (DL_FUNC) &_dMod2_clusterMarginalCpp, 11},
     {"_dMod2_normL2_kernel", (DL_FUNC) &_dMod2_normL2_kernel, 7},
     {"_dMod2_parvec_attach", (DL_FUNC) &_dMod2_parvec_attach, 3},
     {"_dMod2_parvec_concat", (DL_FUNC) &_dMod2_parvec_concat, 1},

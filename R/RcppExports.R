@@ -45,6 +45,14 @@ focei_run <- function(model_cb, err_cb, joint_cb, init, subject_meta, fixed, con
     .Call(`_dMod2_focei_run`, model_cb, err_cb, joint_cb, init, subject_meta, fixed, control, correction_mode, correction_cb, predict_cb)
 }
 
+normalLaplaceCpp <- function(a, m, lambda) {
+    .Call(`_dMod2_normalLaplaceCpp`, a, m, lambda)
+}
+
+clusterMarginalCpp <- function(H, m, lambda, sizes, B, L, zc, U, logw, z2, sgn) {
+    .Call(`_dMod2_clusterMarginalCpp`, H, m, lambda, sizes, B, L, zc, U, logw, z2, sgn)
+}
+
 normL2_kernel <- function(prediction, err_list_opt, meta_list, par_names_global, deriv2_requested, threads, bloq_mode = "M3") {
     .Call(`_dMod2_normL2_kernel`, prediction, err_list_opt, meta_list, par_names_global, deriv2_requested, threads, bloq_mode)
 }
