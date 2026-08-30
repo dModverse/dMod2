@@ -1,40 +1,98 @@
 Package: dMod2
 Type: Package
 Title: Dynamic Modeling and Parameter Estimation in ODE Models
-Version: 0.5.6
-Date: 2020-02-10
-Author: Daniel Kaschek
-Maintainer: Daniel Kaschek <daniel.kaschek@gmail.com>
-Description: The framework provides functions to generate ODEs of reaction
-    networks, parameter transformations, observation functions, residual functions,
-    etc. The framework follows the paradigm that derivative information should be
-    used for optimization whenever possible. Therefore, all major functions produce
-    and can handle expressions for symbolic derivatives.
+Version: 0.5.7
+Date: 2026-07-18
+Authors@R: c(
+    person("Simon", "Beyer", email = "simon.beyer@fdm.uni-freiburg.de",
+           role = c("aut", "cre")),
+    person("Daniel", "Kaschek", email = "daniel.kaschek@gmail.com",
+           role = c("aut", "cph"),
+           comment = "Created dMod 1.0; original design, philosophy"),
+    person("Daniel", "Lill", email = "daniel.lill@posteo.de", role = "ctb"),
+    person("Wolfgang", "Mader", email = "Wolfgang.Mader@fdm.uni-freiburg.de",
+           role = "ctb"),
+    person("Mirjam", "Fehling-Kaschek",
+           email = "mirjam.fehling@physik.uni-freiburg.de", role = "ctb"),
+    person("Severin", "Bang", email = "severin.bang@physik.uni-freiburg.de",
+           role = "ctb"),
+    person("Marcus", "Rosenblatt", email = "marcus.rosenblatt@gmail.com",
+           role = "ctb"),
+    person("Svenja", "Kemmer", email = "svenja.kemmer@fdm.uni-freiburg.de",
+           role = "ctb"))
+Description: Tools for dynamic modeling and parameter estimation in ordinary
+    differential equation (ODE) models of reaction networks. Models are built
+    symbolically and compiled to C/C++ with first- and second-order
+    sensitivities. Prediction, observation and objective functions are
+    composable function objects that carry symbolic derivatives, following the
+    paradigm that derivative information should be used for optimization
+    whenever possible. Model calibration uses trust-region optimization with
+    optional L1 penalties, multi-start search and profile-likelihood
+    identifiability analysis, over experimental conditions that are integrated
+    and evaluated in parallel. Further tools cover symbolic steady states,
+    parameter transformations with implicit and steady-state solutions, error
+    models, and distributed computing on a cluster. Structural identifiability
+    is assessed by Lie symmetry detection on the model equations, and the
+    symmetries found can be used to reduce a model to an identifiable
+    parametrisation. Populations are fitted by nonlinear mixed-effects
+    estimation (FOCEI, adaptive sparse-grid Gauss-Hermite quadrature,
+    Laplace-EM and stochastic-approximation EM), including L1 penalties that
+    cluster individual parameters and select the number of clusters by marginal
+    likelihood. Posteriors are sampled by Markov chain Monte Carlo
+    (Metropolis-Hastings, Langevin, Hamiltonian and NUTS) and sequential Monte
+    Carlo, for single models and for populations. Models, experimental
+    conditions, measurements and parameter tables are imported from and
+    exported to the PEtab format, with SBML import and export through libSBML.
+URL: https://github.com/dModverse/dMod2
+BugReports: https://github.com/dModverse/dMod2/issues
 License: GPL (>= 2)
-Depends:
-    cOde (>= 1.1)
+Depends: R (>= 4.5.0)
 Imports:
-    deSolve,
-    rootSolve,
+    cOde,
+    tools,
+    cppDE (>= 0.8.0),
     ggplot2,
     parallel,
     stringr,
-    plyr,
     dplyr,
     foreach,
     doParallel,
-    rjson,
-    stringr,
-    crayon,
-    yaml,
     rlang,
     data.table,
-    purrr
+    tidyselect,
+    abind,
+    Rcpp,
+    digest,
+    nleqslv,
+    scales,
+    grDevices,
+    MASS
+Remotes:
+    dModverse/cppDE,
+    dkaschek/cOde
 Suggests:
-    MASS,
-    rPython,
-    pander,
     knitr,
     rmarkdown,
-RoxygenNote: 7.3.2
+    testthat (>= 3.0.0),
+    numDeriv,
+    withr,
+    deSolve,
+    openxlsx,
+    Polychrome,
+    reticulate,
+    lpSolve,
+    optimx,
+    cowplot,
+    pander,
+    purrr,
+    ragg,
+    rjson,
+    yaml
 VignetteBuilder: knitr
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+LinkingTo: 
+    Rcpp
+Config/roxygen2/version: 8.0.0
+Config/testthat/edition: 3
+Config/testthat/parallel: true
