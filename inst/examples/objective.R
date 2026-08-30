@@ -1,3 +1,4 @@
+\dontrun{
   ## Generate three objective functions
   prior <- structure(rep(0, 5), names = letters[1:5])
   
@@ -26,3 +27,4 @@
   pouter <- prior + rnorm(length(prior))
   obj <- obj1 + obj2 + obj3
   print(obj(pouter))
+}

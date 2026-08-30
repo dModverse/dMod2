@@ -6,7 +6,7 @@
 ## Model Definition ------------------------------------------------------
 
 # Read in model csv
-reactionlist <- read.csv(paste0(system.file(package = "dMod"),'/examples/example_CCD4/model.csv')) 
+reactionlist <- read.csv(paste0(system.file(package = "dMod2"),'/examples/example_CCD4/model.csv')) 
 
 f <- as.eqnlist(reactionlist)
 
@@ -38,10 +38,10 @@ model0 <- odemodel(as.eqnvec(f), fixed = fixed, forcings = NULL, jacobian = "inz
 
 # Data was preprocessed using an error model fit
 # datasheet <- subset(read.table("data_mark_out.csv",sep=",",header=TRUE), time >0 ) # needs columns condition, name, time, value, sigma, time = 0 were removed due to experimental problems
-# dMod::fitErrorModel(datasheet, factors = c("name"), plotting = FALSE, errorModel = "(exp(s0) + x^2*exp(srel))", par = c(s0 = -6, srel = -4))$sigma
+# dMod2::fitErrorModel(datasheet, factors = c("name"), plotting = FALSE, errorModel = "(exp(s0) + x^2*exp(srel))", par = c(s0 = -6, srel = -4))$sigma
 
 # Final data used for the publication (class: datalist):
-data <- readRDS(paste0(system.file(package = "dMod"),'/examples/example_CCD4/datalist.Rds'))
+data <- readRDS(paste0(system.file(package = "dMod2"),'/examples/example_CCD4/datalist.Rds'))
 data <- as.datalist(data)
 conditions <- getConditions(data)
 ## Parameter Transformations -------------------------------------------
