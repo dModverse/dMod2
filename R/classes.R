@@ -434,20 +434,24 @@ match.fnargs <- function(arglist, choices) {
 # Pre-rebuild path: drive an fn without a descriptor one condition at a time.
 .evalLegacy <- function(f, b, deriv, deriv2, env) {
   kind <- .fnKind(f)
-  conds <- b$conds
+  # A request without conditions asks the fn for all of its own, so the result
+  # keeps the names `.evalProd` reads back as p1's condition vector.
+  conds <- if (is.null(b$conds)) attr(f, "conditions") else b$conds
   outlist <- .emptySlots(conds)
+  nb <- .bundle_n(b)
   for (i in seq_len(max(1L, length(conds)))) {
+    j <- min(i, nb)
     cond <- if (is.null(conds)) NULL else conds[i]
     r <- switch(kind,
-      prdfn = f(times = .req_times(b, i), pars = .req_pars(b, i),
-                fixed = .req_fixed(b, i), deriv = deriv, deriv2 = deriv2,
+      prdfn = f(times = .req_times(b, j), pars = .req_pars(b, j),
+                fixed = .req_fixed(b, j), deriv = deriv, deriv2 = deriv2,
                 conditions = cond, env = env),
-      obsfn = f(out = .req_out(b, i), pars = .req_pars(b, i),
-                fixed = .req_fixed(b, i), deriv = deriv, deriv2 = deriv2,
+      obsfn = f(out = .req_out(b, j), pars = .req_pars(b, j),
+                fixed = .req_fixed(b, j), deriv = deriv, deriv2 = deriv2,
                 conditions = cond, env = env),
-      parfn = f(pars = .req_pars(b, i), fixed = .req_fixed(b, i),
+      parfn = f(pars = .req_pars(b, j), fixed = .req_fixed(b, j),
                 deriv = deriv, deriv2 = deriv2, conditions = cond, env = env),
-      objfn = f(pars = .req_pars(b, i), fixed = .req_fixed(b, i),
+      objfn = f(pars = .req_pars(b, j), fixed = .req_fixed(b, j),
                 deriv = deriv, deriv2 = deriv2, conditions = cond, env = env),
       stop(".evalLegacy: cannot drive an fn of class ",
            paste(class(f), collapse = "/"), call. = FALSE))
@@ -679,10 +683,16 @@ match.fnargs <- function(arglist, choices) {
     .ps1 <- attr(x1, "penaltySpec", exact = TRUE)
     .ps2 <- attr(x2, "penaltySpec", exact = TRUE)
     # Only two real specs need merging, and only the penalty layer can produce
-    # them; inline its NULL semantics so the core does not depend on it.
+    # them. Looked up at call time so the core does not name a symbol it does
+    # not own.
+    .merge <- get0(".mergePenaltySpec", envir = asNamespace("dMod2"),
+                   mode = "function")
     .ps  <- if (is.null(.ps1)) .ps2
             else if (is.null(.ps2)) .ps1
-            else .mergePenaltySpec(.ps1, .ps2)
+            else if (is.null(.merge))
+              stop("merging two penalty specifications needs the penalty layer.",
+                   call. = FALSE)
+            else .merge(.ps1, .ps2)
     if (!is.null(.ps)) attr(outfn, "penaltySpec") <- .ps
     return(outfn)
 
