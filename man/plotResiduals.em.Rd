@@ -7,17 +7,14 @@
 \method{plotResiduals}{em}(parframe, ...)
 }
 \arguments{
-\item{...}{Ignored.}
+\item{parframe}{An \link{EM}.}
 
-\item{fit}{An \link{EM}.}
+\item{...}{Ignored.}
 }
 \value{
 A ggplot.
 }
 \description{
 Two-panel scatter: IWRES vs IPRED and IWRES vs TIME with a
-loess smoother. Sourced from \code{plotResiduals(fit, ...)} when the first
-argument inherits from \code{EM} (internal type dispatch, see
-\link{plotResiduals}).
+loess smoother.
 }
-\keyword{internal}

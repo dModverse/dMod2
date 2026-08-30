@@ -163,14 +163,13 @@ plot.em <- function(x, ...) {
 #' Weighted-residual diagnostics for an EM
 #'
 #' @description Two-panel scatter: IWRES vs IPRED and IWRES vs TIME with a
-#'   loess smoother. Sourced from `plotResiduals(fit, ...)` when the first
-#'   argument inherits from `EM` (internal type dispatch, see
-#'   [plotResiduals]).
-#' @param fit An [EM].
+#'   loess smoother.
+#' @param parframe An [EM].
 #' @param ... Ignored.
 #' @return A ggplot.
-#' @keywords internal
+#' @export
 plotResiduals.em <- function(parframe, ...) {
+  fit <- parframe
   pf <- predict(fit)
   pf <- pf[pf$source == "obs", , drop = FALSE]
   long <- rbind(
