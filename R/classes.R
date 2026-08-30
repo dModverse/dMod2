@@ -434,20 +434,24 @@ match.fnargs <- function(arglist, choices) {
 # Pre-rebuild path: drive an fn without a descriptor one condition at a time.
 .evalLegacy <- function(f, b, deriv, deriv2, env) {
   kind <- .fnKind(f)
-  conds <- b$conds
+  # A request without conditions asks the fn for all of its own, so the result
+  # keeps the names `.evalProd` reads back as p1's condition vector.
+  conds <- if (is.null(b$conds)) attr(f, "conditions") else b$conds
   outlist <- .emptySlots(conds)
+  nb <- .bundle_n(b)
   for (i in seq_len(max(1L, length(conds)))) {
+    j <- min(i, nb)
     cond <- if (is.null(conds)) NULL else conds[i]
     r <- switch(kind,
-      prdfn = f(times = .req_times(b, i), pars = .req_pars(b, i),
-                fixed = .req_fixed(b, i), deriv = deriv, deriv2 = deriv2,
+      prdfn = f(times = .req_times(b, j), pars = .req_pars(b, j),
+                fixed = .req_fixed(b, j), deriv = deriv, deriv2 = deriv2,
                 conditions = cond, env = env),
-      obsfn = f(out = .req_out(b, i), pars = .req_pars(b, i),
-                fixed = .req_fixed(b, i), deriv = deriv, deriv2 = deriv2,
+      obsfn = f(out = .req_out(b, j), pars = .req_pars(b, j),
+                fixed = .req_fixed(b, j), deriv = deriv, deriv2 = deriv2,
                 conditions = cond, env = env),
-      parfn = f(pars = .req_pars(b, i), fixed = .req_fixed(b, i),
+      parfn = f(pars = .req_pars(b, j), fixed = .req_fixed(b, j),
                 deriv = deriv, deriv2 = deriv2, conditions = cond, env = env),
-      objfn = f(pars = .req_pars(b, i), fixed = .req_fixed(b, i),
+      objfn = f(pars = .req_pars(b, j), fixed = .req_fixed(b, j),
                 deriv = deriv, deriv2 = deriv2, conditions = cond, env = env),
       stop(".evalLegacy: cannot drive an fn of class ",
            paste(class(f), collapse = "/"), call. = FALSE))
