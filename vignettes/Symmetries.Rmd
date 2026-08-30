@@ -1,0 +1,1963 @@
+---
+title: "Symmetries in dMod: structural identifiability, the observability-identifiability matrix, and symmetry reduction"
+author: "Simon Beyer"
+date: "`r format(Sys.Date(), '%Y-%m-%d')`"
+output:
+  rmarkdown::pdf_document:
+    toc: false
+    number_sections: true
+    keep_tex: false
+    latex_engine: xelatex
+header-includes:
+  - \usepackage{amsmath,amssymb}
+  - \usepackage{bm}
+  - \usepackage{booktabs}
+  - \usepackage{fvextra}
+  # a Unicode-complete monospace font so the summary()/print() output renders its
+  # generators verbatim: the sigma, eta and partial-derivative signs and the digit
+  # subscripts (X_1, eta_i, d_i) are absent from the default Latin Modern Mono.
+  - \usepackage{fontspec}
+  - \setmonofont{DejaVu Sans Mono}[Scale=0.82]
+  - \DefineVerbatimEnvironment{Highlighting}{Verbatim}{breaklines,breakanywhere,commandchars=\\\{\}}
+vignette: >
+  %\VignetteIndexEntry{Symmetries and structural identifiability in dMod}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment  = "#>",
+  echo     = TRUE
+)
+# symmetryDetection() is purely symbolic: it drives a Python module (sympy,
+# numpy, scipy) through reticulate and needs no compiled model. Every
+# computational chunk runs only if sympy is already present, so building the
+# vignette never triggers a Python install.
+haveSympy <- isTRUE(tryCatch(
+  reticulate::py_module_available("sympy"),
+  error = function(e) FALSE))
+```
+
+\setcounter{tocdepth}{3}
+\tableofcontents
+\newpage
+
+# Introduction
+
+A parameter is *structurally non-identifiable* when the model produces exactly the
+same output for a whole family of parameter values, so that no amount of data and
+no reduction of noise can tell those values apart. This is a property of the model
+equations and the observation map alone. It is distinct from *practical*
+non-identifiability, which depends on the data at hand; `symmetryDetection()`
+addresses the structural question only.
+
+For an ODE model with states $x \in \mathbb{R}^n$ and parameters
+$\theta \in \mathbb{R}^q$,
+\begin{equation}
+\dot x(t) = f(x(t), \theta), \qquad x(0) = x_0(\theta),
+\label{eq:ode}
+\end{equation}
+with observation function
+\begin{equation}
+g : (x, \theta) \longmapsto g(x, \theta)
+\label{eq:obs}
+\end{equation}
+collecting the measured quantities, the question is whether two different unknown
+vectors produce the same $g\big(x(t), \theta\big)$ for all $t$. If they do, the
+data constrains only certain combinations of the unknowns.
+
+dMod answers this through the `method` argument of `symmetryDetection()`.
+
+* `method = "observability"` (the default) builds the *observability-identifiability
+  matrix* and reads identifiability off its rank. It uses no ansatz and, for a
+  rational model, is evaluated entirely in exact finite-field arithmetic, so it
+  scales to large systems. With `reconstruct = TRUE` each non-identifiable
+  direction comes back as an exact rational function of the parameters
+  (Section \ref{sec-closedform}).
+* `method = "polynomial"` searches for *continuous symmetries* via the polynomial
+  Lie-symmetry ansatz and returns the explicit transformation that leaves the
+  output invariant.
+* `method = "scaling"` returns the scaling (toric) symmetries
+  $z_i \mapsto \lambda^{c_i} z_i$ exactly, from an integer kernel. Pure integer
+  linear algebra, so it scales, but it sees only the scaling part of the symmetry
+  algebra (Section \ref{sec-scaling}).
+
+Detection is half the job: a direction the data cannot constrain has to be removed
+before fitting, and `symmetryReduction()` does that constructively
+(Section \ref{sec-reduce}).
+
+Sections \ref{sec-sym} and \ref{sec-oim} develop the mathematics of the two
+methods, assuming only multivariable calculus. Section \ref{sec-supply} shows how
+they consume the dMod pipeline objects, and Section \ref{sec-examples} works
+through examples. Section \ref{sec-cycle} carries one model through the whole
+route, from the determining equations by hand to the reduced parametrisation.
+
+## Structural identifiability, local and global
+
+Collect the unknowns into $z = (x_0, \theta)$ and write
+$g(t\,; z) := g\big(x(t; z), \theta\big)$. Two unknown vectors are
+*output-equivalent*, $z \sim z'$, when $g(t\,; z) = g(t\,; z')$ for all admissible
+times and inputs; output-equivalent vectors are indistinguishable from data.
+
+A component $z_i$ is *structurally globally identifiable* if, for generic $z$,
+\begin{equation}
+z \sim z' \;\Longrightarrow\; z_i = z_i' ,
+\label{eq:sgi}
+\end{equation}
+and *structurally locally identifiable* if \eqref{eq:sgi} holds after restricting
+$z'$ to a neighbourhood $U \ni z$,
+\begin{equation}
+z' \in U \ \text{and}\ z \sim z' \;\Longrightarrow\; z_i = z_i' .
+\label{eq:sli}
+\end{equation}
+The model is identifiable when every component is. The two failure modes map onto
+the two methods:
+
+* A *continuous* family of output-equivalent vectors through $z$ is a local
+  non-identifiability. Its tangent at $z$ is a null vector of the
+  observability-identifiability matrix (Section \ref{sec-oim}); its explicit form
+  along the family is the symmetry generator (Section \ref{sec-sym}).
+* An *isolated* output-equivalent $z' \neq z$ (a sign flip, say) is purely global
+  and has no infinitesimal signature. Neither method targets it: a full-rank
+  observability matrix certifies *local* identifiability only.
+
+# Symmetries and the determining equations {#sec-sym}
+
+## The infinitesimal generator
+
+The unknowns $z = (x_0, \theta) \in \mathbb{R}^{n+q}$ are treated as one augmented
+system carrying $\dot\theta = 0$ alongside \eqref{eq:ode}. A *symmetry* is a
+smooth, invertible map $z \mapsto \Phi_\varepsilon(z)$ with $\Phi_0 = \mathrm{id}$
+that maps every solution of the dynamics to a solution and leaves the output
+\eqref{eq:obs} unchanged. The canonical example trades a state against a
+calibration parameter: if only $\alpha\,x_1$ is observed, doubling $\alpha$ and
+halving $x_1$ reproduces the readout.
+
+Working with the finite map is awkward; one differentiates at $\varepsilon = 0$
+and keeps the *infinitesimals*
+\begin{equation}
+\eta(z) = \left.\frac{\partial}{\partial \varepsilon}
+            \Phi_\varepsilon(z)\right|_{\varepsilon = 0},
+\qquad
+X = \sum_{i=1}^{n+q} \eta_i(z)\, \frac{\partial}{\partial z_i},
+\end{equation}
+the *infinitesimal generator*. For any smooth $h$,
+\begin{equation}
+X(h) = \sum_i \eta_i(z)\, \frac{\partial h}{\partial z_i}
+\label{eq:lie-h}
+\end{equation}
+is the rate of change of $h$ along the family, the Lie derivative of $h$ along
+$X$. The notation follows Merkt et al. (2015), whose algorithm is the
+`"polynomial"` method.
+
+## Recovering the transformation by integrating the generator {#sec-flow}
+
+Both methods return $\eta$, not the finite map. The transformation is its flow,
+\begin{equation}
+\frac{d}{d\varepsilon}\,\Phi_\varepsilon(z) = \eta\big(\Phi_\varepsilon(z)\big),
+\qquad \Phi_0(z) = z,
+\label{eq:flow}
+\end{equation}
+that is $\Phi_\varepsilon = \exp[\varepsilon X]$ (Merkt et al., 2015, Theorem 1).
+
+For a *scaling*, $\eta_i = c_i z_i$, \eqref{eq:flow} decouples and integrates at
+once; with $\lambda = e^\varepsilon$,
+\begin{equation}
+z_i \;\longmapsto\; \lambda^{c_i}\, z_i ,
+\label{eq:scaling-flow}
+\end{equation}
+which is why a scaling is reported by its integer weight vector $c$: the weights
+*are* the generator. For a *general* direction the $\eta_i$ are rational and
+\eqref{eq:flow} is a nonlinear coupled flow: still a one-parameter family through
+$z$, a curved orbit rather than a ray, but its integral need not be elementary.
+What the method delivers is always $\eta$, exactly.
+
+## The determining equations
+
+*Output invariance.* With $h = g$ in \eqref{eq:lie-h},
+\begin{equation}
+\sum_{i=1}^{n+q} \eta_i\, \frac{\partial g_{k'}}{\partial z_i} \;=\; 0 .
+\label{eq:obs-cond}
+\end{equation}
+
+*Compatibility with the dynamics.* Transforming $z$ also transforms $\dot z$, so
+$X$ is *prolonged*,
+\begin{equation}
+X' = \sum_i \eta_i\,\frac{\partial}{\partial z_i}
+   + \sum_i \eta'_i\,\frac{\partial}{\partial \dot z_i},
+\qquad
+\eta'_i = \sum_j \dot z_j\, \frac{\partial \eta_i}{\partial z_j},
+\label{eq:prolong}
+\end{equation}
+and the model admits $X$ iff $X'\cdot(\dot z_k - f_k) = 0$ on solutions
+(Merkt et al., 2015, Theorem 2), that is
+\begin{equation}
+\sum_{j=1}^{n} f_j\, \frac{\partial \eta_k}{\partial z_j}
+\;-\;
+\sum_{i=1}^{n+q} \eta_i\, \frac{\partial f_k}{\partial z_i} \;=\; 0,
+\qquad k = 1, \dots, n .
+\label{eq:flow-cond}
+\end{equation}
+The first sum is the change of $\eta_k$ along $f$, the second the change of $f_k$
+along $\eta$; their cancellation says $[f, X] = 0$, transforming and flowing
+commute. It runs over the states alone because the parameters do not move under
+the dynamics, while the second sum runs over all unknowns because $f$ depends on
+the parameters.
+
+Equations \eqref{eq:obs-cond} and \eqref{eq:flow-cond} are the *determining
+equations*. They are linear in $\eta$, and the Lie bracket of two admitted
+generators is admitted, so the solutions form a Lie algebra: a reported set of
+directions is a *basis*, not a canonical list.
+
+## Solving them: the polynomial ansatz
+
+$\eta$ is an unknown *function*, so the system is closed by an ansatz. Merkt et
+al. (2015) take a polynomial one, motivated by the elementary one-parameter groups
+\begin{equation}
+\begin{aligned}
+z_i^\ast &= z_i + \varepsilon,
+  &\quad X &= \partial_{z_i} &&\text{(translation)},\\
+z_i^\ast &= e^{\varepsilon} z_i,
+  &\quad X &= z_i\,\partial_{z_i} &&\text{(scaling)},\\
+z_i^\ast &= \frac{z_i}{1 - \varepsilon\, z_i},
+  &\quad X &= z_i^2\,\partial_{z_i} &&\text{(M\"obius)},
+\end{aligned}
+\label{eq:elementary}
+\end{equation}
+whose infinitesimals are all of the form $z_i^{\,d}$, hence
+\begin{equation}
+\eta_i(z_i) \;=\; \sum_{d = 0}^{d_{\max}} r_{i,d}\, z_i^{\,d} .
+\label{eq:ansatz}
+\end{equation}
+Degree $d_{\max} = 1$ covers translations and scalings; higher degrees bring in
+Möbius transformations and beyond. Letting $\eta_i$ depend on the other
+coordinates as well replaces the single power by monomials of total degree
+$\le d_{\max}$. The two are `polynomialControl(ansatz = "uni")` and `"multi"`,
+with `"par"` the intermediate choice, and `pMax` $= d_{\max}$.
+
+For rational $f$ and $g$, substituting the ansatz and clearing denominators gives
+polynomial identities in $z$; each monomial coefficient is linear in the
+$r_{i,d}$, so the system collapses to
+\begin{equation}
+C\,r \;=\; 0
+\label{eq:linsys}
+\end{equation}
+in $N_r = (n+q)(d_{\max}+1)$ unknowns, solved in exact rational arithmetic
+(modular elimination with rational reconstruction), so the rank decision is exact
+rather than a floating-point threshold, and every surviving generator is verified
+symbolically. Two sets of rows are added beyond the paper: the Lie chain
+$X(L_f^{\,k} g) = 0$ up to `lieOrder`, and the resting field
+$[f_{\mathrm{ss}}, X] = 0$ when the model is equilibrated.
+
+# The observability-identifiability matrix {#sec-oim}
+
+The default method takes a different route to the same information and needs no
+ansatz. It is the local algebraic observability test of Sedoglavic (2002),
+extended so that the unknowns include parameters and initial states, the FISPO
+setting of Villaverde et al. (2016).
+
+## Output derivatives and the rank criterion
+
+At $t = 0$ the output is $g$ itself; its time derivative follows by the chain rule
+and \eqref{eq:ode}, $\frac{d}{dt} g|_{t=0} = \sum_i \partial_{x_i} g\, f_i = L_F g$,
+and iterating, the $k$-th derivative is $L_F^{\,k} g$. The sequence
+\begin{equation}
+\big(\, g,\; L_F g,\; L_F^2 g,\; \dots,\; L_F^N g \,\big)
+\label{eq:summary}
+\end{equation}
+is the list of Taylor coefficients of the output at $t = 0$, everything the
+output curve can reveal about the unknowns, and each entry is an explicit
+function of $z$ (the classical power-series method, Pohjanpalo, 1978; used
+numerically in SIAN, Hong et al., 2020).
+
+Collect \eqref{eq:summary} into $\Phi: z \mapsto (g, L_F g, \dots, L_F^N g)$.
+Output-equivalent vectors give the same $\Phi(z)$, so the unknowns are locally
+determined exactly when $\Phi$ is injective near a generic point, which holds when
+its Jacobian
+\begin{equation}
+\mathcal{O}(z) \;=\; \frac{\partial \Phi}{\partial z}
+\;=\;
+\begin{pmatrix}
+\partial g / \partial z \\[2pt]
+\partial (L_F g) / \partial z \\[2pt]
+\vdots \\[2pt]
+\partial (L_F^N g) / \partial z
+\end{pmatrix}
+\label{eq:oim}
+\end{equation}
+has full column rank $n + q$. That is the observability-identifiability matrix
+(OIM) and the rank condition of Sedoglavic (2002). When the rank is deficient, the
+null space of $\mathcal{O}$ collects the directions along which the output and all
+its derivatives are unchanged. These are exactly the values $\eta(z)$ of the generators of
+Section \ref{sec-sym} at $z$ (Massonis and Villaverde, 2020): the two methods
+describe the same object, one as a tangent vector, the other as a field.
+
+## The matrix on a small model
+
+Take one species with a lumped influx and linear decay, measured directly,
+\begin{equation}
+\dot A \;=\; k_1 + u\, k_2 - k_d\, A, \qquad y \;=\; A,
+\label{eq:toy-oim}
+\end{equation}
+with $u$ a known constant input and unknowns $z = (A_0, k_1, k_2, k_d)$. The
+output and its derivatives are read straight off \eqref{eq:toy-oim},
+\begin{align}
+g          &= A, \nonumber\\
+L_F g      &= k_1 + u\, k_2 - k_d\, A, \nonumber\\
+L_F^2 g    &= -k_d\,(k_1 + u\, k_2) + k_d^2\, A,
+\label{eq:toy-lie}
+\end{align}
+and differentiating in $z$ at $A = A_0$ gives the first three rows of the OIM,
+\begin{equation}
+\mathcal{O} \;=\;
+\begin{pmatrix}
+1            & 0     & 0     & 0 \\
+-k_d         & 1     & u     & -A_0 \\
+k_d^2        & -k_d  & -u\,k_d & -(k_1 + u\,k_2) + 2 k_d A_0
+\end{pmatrix}.
+\label{eq:toy-matrix}
+\end{equation}
+The two rates enter every derivative only through $K = k_1 + u\, k_2$, so
+\eqref{eq:toy-matrix} has a one-dimensional null space spanned by
+\begin{equation}
+\eta_{k_1} = -u, \quad \eta_{k_2} = 1, \quad \eta_{A_0} = \eta_{k_d} = 0 ,
+\label{eq:toy-null}
+\end{equation}
+which one checks row by row ($-u + u = 0$, $u k_d - u k_d = 0$). The higher
+derivatives add no constraint because they too depend on the rates only through
+$K$, which is why the Lie order saturates. $A_0$, $K$ and $k_d$ are identifiable.
+Note that $\eta$ depends on the input value $u$: holding $u$ at one generic value
+reports this trade-off, whereas measuring at two distinct values pins $k_1$ and
+$k_2$ separately (Section \ref{sec-conditions}).
+
+## Evaluation over a finite field {#sec-finitefield}
+
+Carrying $\mathcal{O}$ symbolically is what makes the naive test intractable: the
+entries $L_F^{\,k} g$ are rational functions whose numerators and denominators
+grow with every Lie derivative, and the expression swell dominates the cost. The
+remedy (Sedoglavic, 2002) is to evaluate $\mathcal{O}$ at a single generic point,
+because the rank there equals the symbolic rank away from a measure-zero set.
+
+dMod evaluates in exact arithmetic over $\mathrm{GF}(p)$. Two reasons: every
+intermediate number stays in $\{0,\dots,p-1\}$, so there is no swell yet the
+result is exact; and $p$ prime makes $\mathrm{GF}(p)$ a *field*, so every nonzero
+residue is invertible, which is what row reduction needs. dMod uses primes just
+below $2^{31}$, so products stay within a 63-bit integer.
+
+For a rational model $\mathcal{O}$ is never written symbolically at all. Expanding
+the solution as $x(t) = \sum_k x_k t^k$ and the right-hand side along it as
+$f = \sum_k \phi_k t^k$, matching $\dot x = f(x)$ order by order gives
+\begin{equation}
+x_{k+1} = \tfrac{1}{k+1}\, \phi_k ,
+\label{eq:taylor-rec}
+\end{equation}
+where $\phi_k$ depends only on $x_0,\dots,x_k$ because the series of a product is
+a convolution $c_k = \sum_i a_i b_{k-i}$ and of a reciprocal the same convolution
+rearranged. Running the operations that define $f$ on truncated series is
+automatic differentiation in *Taylor mode*: no symbolic $L_F^{\,k} g$ is ever
+formed, yet the coefficient of $t^k$ in $g(x(t))$ equals $L_F^{\,k} g / k!$. The
+columns come from the same pass by carrying, next to each coefficient, its
+gradient with respect to $z$ (forward-mode dual numbers nested inside the Taylor
+recurrence); after the recurrence the gradient parts are the rows of
+$\mathcal{O}$. The work is a few convolutions per operation and grows only
+polynomially with model size, so chains that defeat a symbolic construction take a
+fraction of a second.
+
+Because the construction uses $+, -, \times, \div$ only, it is defined for
+*rational* right-hand sides and observables; the one exception is a power or Hill
+term $\mathrm{base}^{\,n}$ with a parameter exponent, recast to a rational
+coordinate (Section \ref{sec-hill}). A logarithmic readout
+$\log_{10}(h) + \mathrm{offset}$ carries the same information as the rational
+$\mathrm{scale}\cdot h$, since a monotone transformation has the same level sets
+and the additive offset plays the role of a multiplicative scale, and is supplied
+in that form. An observable whose *gradient* is not rational either is outside both
+methods.
+
+One prime and one point already give the rank with probability one, but dMod
+repeats the evaluation at several points and primes and takes the maximal rank;
+agreement certifies it, since a non-generic coincidence at every point and prime
+has probability zero. The points are deterministic, so runs are reproducible. The
+support of each null vector names the unknowns taking part in the
+non-identifiability; `reconstruct = TRUE` returns the directions as exact rational
+functions instead (Section \ref{sec-closedform}). The price is that the verdict is
+*local*, and a null vector gives the tangent rather than the finite
+transformation; for that, use `"polynomial"`.
+
+## Scaling symmetries and large models {#sec-scaling}
+
+The dominant class of non-identifiability is scaling,
+$z_i \mapsto \lambda^{c_i} z_i$, whose generator has the constant integer tangent
+$c$. Both conditions of Section \ref{sec-sym} then become integer-linear: output
+invariance forces every monomial exponent of the observation to be orthogonal to
+$c$, and compatibility forces every monomial of $f_i$ to carry the weight of
+$x_i$, that is $(b - e_i) \cdot c = 0$ for each exponent $b$ of $f_i$. Stacking
+these and taking the integer kernel returns all scaling symmetries exactly, with
+no point evaluation and no swell, hence `method = "scaling"` scales to large
+models, at the price of seeing the scaling part of the algebra only, which in
+practice is the bulk of identifiability problems (units, calibration, absolute
+levels).
+
+## Closed-form directions by multi-point reconstruction {#sec-closedform}
+
+The rank verdict needs $\mathcal{O}$ at one point; the *functional* form of a
+direction needs sampling. Over $\mathbb{Q}(z)$ the null space has a basis whose
+entries are rational functions of $z$, and evaluating at one point yields one
+*sample* of each. Reconstructing a function from samples is interpolation, done
+here in exact arithmetic.
+
+**A canonical sample.** At $z^\ast$ the reduced row echelon form of
+$\mathcal{O}(z^\ast)$ over $\mathrm{GF}(p)$ splits the coordinates into pivot and
+free columns. Each free column $f$ gives one null vector $v$ with $v_f = 1$ and
+$v_c = -R_{cf}$ on the pivot coordinates. As long as the pivot pattern is generic,
+the same free column yields the *same* rational functions $r_c(z) := v_c$ at every
+point, so values from different points are samples of one function.
+
+**Two reductions.** The scaling directions are peeled off first by the integer
+kernel of Section \ref{sec-scaling}, so only the non-scaling residue is sampled.
+Then each *entry* is probed for its relevant variables by perturbing each
+coordinate in turn, and reconstructed over that small set only. Because the probe
+is per entry, a direction may couple many coordinates while each entry stays
+narrow, and the cost is set by the widest single entry.
+
+**The per-entry fit.** Write $r_c(u) = \mathrm{num}(u)/\mathrm{den}(u)$ with total
+degree at most $D$. Clearing the denominator gives, at every sample $u^{(s)}$,
+\begin{equation}
+\mathrm{num}\!\left(u^{(s)}\right)
+\;-\; r_c\!\left(u^{(s)}\right)\,\mathrm{den}\!\left(u^{(s)}\right) \;=\; 0 ,
+\label{eq:fit}
+\end{equation}
+*linear and homogeneous* in the unknown coefficients. Stacking over sample points
+gives a matrix whose kernel is the coefficient vector, up to one common scale that
+cancels in the ratio. Solving homogeneously, rather than fixing the constant term
+of $\mathrm{den}$, is what lets the fit recover a denominator without constant
+term. $D$ is raised from zero: below the true degree the fit is inconsistent, at
+it the kernel is one-dimensional, and that minimal $D$ is taken; a few extra
+sample points make a spurious low-degree fit fail \eqref{eq:fit}.
+
+**Wide entries.** The dense fit costs
+$\binom{n_{\mathrm{rel}}+D}{n_{\mathrm{rel}}}$ samples, prohibitive for an entry
+coupling many variables, in practice the conserved-moiety cofactors
+$-(x_1+\dots+x_k)/r$. Such an entry is a Laurent polynomial, so on a geometric
+schedule its values form a linear-recurrence sequence and it is recovered by
+Ben-Or-Tiwari interpolation (Ben-Or and Tiwari, 1988) from a handful of samples,
+the work set by the number of terms. An entry with a genuine multi-term
+denominator is first split by a univariate Cauchy fit along a ray, after which
+numerator and denominator are ordinary sparse polynomials. Anything beyond the
+degree caps falls back to its support rather than to a guess.
+
+**Lifting $\mathrm{GF}(p)$ back to $\mathbb{Q}$.** A single prime returns the
+coefficients only as residues. The Chinese Remainder Theorem combines residues
+modulo $p_1, \dots, p_r$ into one value modulo $M = p_1\cdots p_r$, and *rational
+reconstruction*, the extended Euclidean algorithm on $x$ and $M$, turns that
+integer back into the unique fraction with
+\begin{equation}
+x \,\equiv\, n\, d^{-1} \pmod{M},
+\qquad |n|,\ |d| \,\le\, \sqrt{M/2} .
+\label{eq:ratrec}
+\end{equation}
+The bound is the point of using several primes: identifiability coefficients are
+small, so once $\sqrt{M/2}$ exceeds them the lift is exact. dMod uses four primes
+near $2^{31}$, giving $M \approx 2^{124}$ and a range up to $|n|,|d| \approx
+2^{61}$.
+
+**Certification.** Every reconstructed direction is re-evaluated at a fifth prime,
+disjoint from the four used to build it, and checked against the null vector
+there; one that fails is reported by its support with `explicit = FALSE` rather
+than as a wrong closed form. No floating-point number enters anywhere. The caps
+are the fields of `reconstControl()`, passed as
+`symmetryDetection(..., control = reconstControl(...))`.
+
+## Several experimental conditions {#sec-conditions}
+
+Each condition $c$ fixes the externally controlled quantities (switches, dose) to
+known values and may reparametrise a few rates, so it has its own $f^{(c)}$,
+$g^{(c)}$ and $\mathcal{O}^{(c)}(z)$ over a shared set of unknowns. A direction is
+invisible in the whole experiment exactly when it is invisible in every condition,
+\begin{equation}
+\mathcal{O}(z) \;=\;
+\begin{bmatrix} \mathcal{O}^{(1)}(z) \\ \vdots \\ \mathcal{O}^{(K)}(z) \end{bmatrix},
+\qquad
+\ker \mathcal{O} \;=\; \bigcap_{c=1}^{K} \ker \mathcal{O}^{(c)} .
+\label{eq:stacked}
+\end{equation}
+The intersection can be strictly smaller than any single kernel: a combination
+hidden under one switch setting is often exposed by another.
+
+This is also the correct treatment of a known switch. Holding a switch at one
+generic symbol finds the directions valid for *that* generic value and can produce
+regime-specific artefacts; setting it to its actual value per condition and
+stacking removes them, and since the switch is then a constant rather than a
+symbol of $z$, it cannot appear in any reconstructed direction. Conditions are
+supplied as an [eventlist] with a condition grid.
+
+## Several stimuli in time: piecewise segments {#sec-segments}
+
+An event after $t_0$ breaks the analytic continuation of the output, so the
+timeline is split at the distinct event times into segments $S_0, S_1, \dots$, one
+local jet per segment, stacked exactly as in \eqref{eq:stacked}.
+
+The subtlety is the seed of a later segment: building $S_j$'s jet needs the state
+*and* its $z$-Jacobian at the boundary, i.e. the previous segment's state flowed
+across the gap. That finite-time nonlinear flow is transcendental in the gap
+length and is not a finite-field number. The exact device is to keep the gap
+length a **formal power-series variable**: the flow of $S_{j-1}$ over its gap is
+the state's Taylor series re-read as a series in $\Delta t_{j-1}$,
+\begin{equation}
+x(\tau_j^-) \;=\; \sum_{m\ge 0} x_m\,\Delta t_{j-1}^{\,m},
+\label{eq:gapseries}
+\end{equation}
+whose coefficients the kernel already computes (with their $z$-duals). Every entry
+of $\mathcal{O}$ becomes a power series in the gaps, and a constant direction $v$
+is unobservable for *generic* timing exactly when $R_m v = 0$ for every
+coefficient layer $R_m$. Those layers are simply stacked as extra rows: nothing
+symbolic enters the linear algebra, $\Delta t$ only labels which layer a row came
+from. The gap order is raised until the rank stops growing
+(`info$gapOrderUsed`). This recovers parameters that enter only through a
+transient between events, an inhibitor pre-incubation say, whose relaxed state
+at the stimulus is propagated exactly across the gap.
+
+## Verifying the rank: the saturation guard {#sec-verify}
+
+The verdict rests on one heuristic: the Lie order is raised only until the rank
+stops growing for a few orders. A rank can plateau and then climb again, a free
+Hill exponent being the typical case, and stopping on a false plateau drops rows,
+which only enlarges $\ker\mathcal{O}$: the failure mode is a silent
+*over*-reporting.
+
+`verify = TRUE`, the default, closes that gap. It re-uses the kernel and the
+cached base point and simply extends the Lie order by `DMOD_SYM_VERIFY_MARGIN`
+further orders (default six). Only the jet grows; the expensive
+$f_{\mathrm{ss}} = 0$ solve is not repeated. If the rank is still climbing, the
+guard FAILS and warns; if not, saturation is confirmed. `summary()` prints it:
+
+```
+saturation guard: PASSED (rank 233 stable through Lie order 18
+  (6 orders beyond the reported saturation))
+```
+
+That rank is *not* the identifiability rank of the header line. The header's
+`rank r / dim d` is the rank after projecting onto the $d$ unknowns, so $d - r$ is
+the number of reported directions; the guard's rank is that of the raw kernel,
+whose columns span the full jet across all stacked conditions and can be many
+times $d$. Only its *constancy* certifies anything. For small models
+`symEngine = "symbolic"` gives an independent cross-check over the exact
+rational-function field, with no guard needed.
+
+The guard is complementary to the per-direction certification of
+Section \ref{sec-closedform}: that one rejects a wrong functional *form*, this one
+checks the *number* of directions.
+
+# Supplying the model {#sec-supply}
+
+`symmetryDetection()` needs no compiled model; it takes the equations directly.
+
+\begin{center}
+\begin{tabular}{l p{0.66\textwidth}}
+\toprule
+argument & meaning \\
+\midrule
+\texttt{f} & the right-hand sides: an \texttt{eqnlist}, an \texttt{eqnvec}, or a named character vector \\
+\texttt{g} & the observation functions, as an \texttt{eqnvec} or named character vector \\
+\texttt{trafo} & an optional parameter transformation (parameter-named entries) and initial conditions (state-named entries) \\
+\texttt{method} & \texttt{"observability"} (default), \texttt{"polynomial"} or \texttt{"scaling"} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Anything `as.eqnvec` accepts is a valid `f`; with an `eqnlist` the conserved
+moieties are reduced first (`reduceCQ`). Known constants are declared through
+`fixed`, externally driven inputs through `forcings`, several conditions through
+`events` and `conditions`, and the pre-stimulus steady state through a
+steady-state `trafo` or `equilibrate`.
+
+## Parameter transformations {#sec-trafo}
+
+`trafo` is an [eqnvec] mapping each inner symbol to an expression in the outer
+parameters, substituted symbolically into $f$ and $g$. Three uses occur
+constantly: reparametrisation (a rate through its half-life); fixing, $k = 1$,
+which deletes $k$ from the unknowns; and lumping, $k_{\mathrm{deg},m} =
+k_{\mathrm{deg},p} = k_{\mathrm{deg}}$. A state-named entry is that state's
+initial condition rather than a substitution, so a solved steady state from
+[steadyStates] can be passed whole.
+
+Structural identifiability is invariant under an invertible, smooth
+reparametrisation: it neither creates nor removes a non-identifiability, only
+changes its form. A scaling in natural parameters is a translation in
+logarithmic ones. Both engines require rationality, so a `trafo` making $f$ or $g$
+non-rational, such as $k = \exp(\log k)$, is inadmissible; a log-parametrised
+model is analysed in its natural rational parameters, with identical conclusions.
+
+## Steady-state constraints
+
+Before the experiment a model often rests at a steady state, so $x_0$ is not free
+but solves
+\begin{equation}
+f_{\mathrm{ss}}(x_0, \theta) = 0 ,
+\label{eq:ssfield}
+\end{equation}
+which binds $x_0$ to $\theta$ and can only make the model more identifiable
+(Saccomani et al., 2003). `"polynomial"` imposes this as one more commutation
+condition $[F_{\mathrm{ss}}, X] = 0$. `"observability"` binds it through the
+initial condition, in one of two ways: pass a closed form through state-named
+`trafo` entries (`trafo = steadyStates(reactions)`), or set `equilibrate = TRUE`,
+which puts the states on a numeric point of \eqref{eq:ssfield}, recomputed at each
+evaluation point and prime.
+
+Four things make the latter exact and cheap. The resting system is solved for the
+*states only*, the rates held as symbolic coefficients, because solving for a rate would
+express a globally shared rate through condition-specific quantities. States
+occurring linearly are eliminated by Gaussian elimination and substituted, leaving
+only the nonlinear core, which over $\mathrm{GF}(p)$ is triangulated by a Groebner
+basis (grevlex plus FGLM, since a lexicographic basis is ruinous on a coupled
+core). Degenerate branches where a species vanishes are removed by the
+Rabinowitsch trick, and the back-substitution accepts a point only when every core
+equation vanishes, so branches cannot be mixed. Finally, when the resting state is
+algebraic of degree $d$ its coordinates lie in $\mathrm{GF}(p)$ only at some
+points and primes, so generic points are drawn until one works for every
+condition. The parameter sensitivities come from the implicit function theorem,
+$J_x\,(\partial x_0/\partial\theta) = -J_\theta$, solved at that point.
+
+The steady state is event-free; perturbations are applied on top of it. A switch
+is a `forcing`, zero at rest; a dose is a `t0` event composed onto the resting
+initial condition with its sensitivities. State initial conditions in `trafo` are
+ignored under `equilibrate`.
+
+## Free Hill and power exponents {#sec-hill}
+
+A rate with a free exponent is not rational, and is handled by a recast (Savageau
+and Voit, 1987): $\mathrm{base}^{\,n}$ becomes a coordinate $E$ with companion
+$L = \log(\mathrm{base})$, carrying
+\begin{equation}
+\dot E = n\,E\,\frac{\dot{\mathrm{base}}}{\mathrm{base}}, \qquad
+\dot L = \frac{\dot{\mathrm{base}}}{\mathrm{base}}, \qquad
+\frac{\partial E}{\partial\,\mathrm{base}} = n\,\frac{E}{\mathrm{base}}, \qquad
+\frac{\partial E}{\partial n} = E\,L .
+\end{equation}
+With $\mathrm{base}^{\,n}\to E$ the field is rational and $n$ enters the OIM
+through $\partial E/\partial n = E\,L$, so it is assessed like any other
+parameter. The logarithm is never evaluated: $\mathrm{base}$,
+$\log(\mathrm{base})$ and $\mathrm{base}^{\,n}$ are algebraically independent, so
+giving $L$ an independent generic residue yields the structural rank by the same
+argument as Section \ref{sec-finitefield}.
+
+*Without* `equilibrate` the base carries a free initial value, so $E$ and $L$ are
+two further free-initial-value coordinates and the transient itself resolves the
+exponent. *With* `equilibrate` the base is a solved steady-state coordinate,
+\eqref{eq:ssfield} is solved with $E$ held generic, and the chain rule of $E$
+folds into the steady-state Jacobian. (If the base has no linear turnover term in
+its own balance the roles invert: $E$ is solved rationally and
+$\mathrm{base} = E^{1/n}$, $L$ are held generic, with duals from the inverse chain
+rule.)
+
+A self-inhibited producer with a free Hill exponent, observed on an unknown scale
+and analysed *without* a steady state, has its exponent identified:
+
+```{r hill-transient, eval = haveSympy}
+f <- eqnvec(p = "kpr / (1 + kinh*p^nhill) - dp*p")     # free Hill exponent nhill
+res <- symmetryDetection(f, eqnvec(y = "s*p"), method = "observability",
+                         reconstruct = TRUE, reduceCQ = FALSE)
+c(rank = res$rank, dim = res$dim,
+  nhill_identifiable = !("nhill" %in% res$symmetries[[1]]$support))
+res$symmetries[[1]]$generator
+```
+
+Rank $5$ of $6$: `nhill` is identifiable and the lone direction is the weighted
+scaling $\eta_{kinh} = nhill\cdot kinh$, $\eta_{kpr} = -kpr$, $\eta_p = -p$,
+$\eta_s = s$, rational in `nhill` with no $\log$ term, since here the exponent
+is pinned rather than freed.
+
+With `reconstruct`, $E$ and $L$ are sampled as coordinates and back-substituted,
+so a direction that involves the exponent carries an explicit $\log$ factor. A
+feedback species `FB` throttling the production of `x` through
+$K^{\,n}/(K^{\,n}+\mathrm{FB}^{\,n})$, with only a scaled `x` measured, shows both
+regimes at once: the transient resolves the exponent, the resting state does not.
+
+```{r hill-free, eval = haveSympy}
+hill <- eqnlist() |>
+  addReaction("0",  "FB", "k_pr_FB")                     |>
+  addReaction("FB", "0",  "d_FB * FB")                   |>
+  addReaction("0",  "x",  "k_pr_x * K^n / (K^n + FB^n)") |>
+  addReaction("x",  "0",  "d_x * x")
+
+# the modular engine assesses the free exponent n through the recast, like any
+# parameter. Started from a free initial state, the transient resolves it: n is
+# identifiable and the two directions left are ordinary scalings
+res <- symmetryDetection(hill, eqnvec(xobs = "scale * x"),
+                         method = "observability", equilibrate = FALSE,
+                         reconstruct = TRUE, reduceCQ = FALSE)
+
+c(identifiable = res$identifiable, dim = res$dim,
+  n_confounded = "n" %in% unlist(lapply(res$symmetries, function(d) d$support)))
+
+# started at rest, that information is gone and n trades against the Michaelis
+# constant K with a log factor. The symbolic engine carries base^n as an atom, so
+# a free exponent is native to it; it needs the steady state supplied.
+ss <- eqnvec(FB = "k_pr_FB/d_FB",
+             x  = "k_pr_x*K^n/(d_x*(K^n + (k_pr_FB/d_FB)^n))")
+sres <- symmetryDetection(hill, eqnvec(xobs = "scale * x"),
+                          method = "observability", symEngine = "symbolic", trafo = ss)
+Filter(function(d) "n" %in% d$support, sres$symmetries)[[1]]$generator
+```
+
+The exponent direction has $\eta_n = 1$ and
+\begin{equation*}
+\eta_K = \frac{K}{n}\,\log\!\frac{k_{pr\_FB}/d_{FB}}{K},
+\end{equation*}
+so at rest the free exponent and the Michaelis constant cannot be told apart (the
+resting feedback level $k_{pr\_FB}/d_{FB}$ is the other base), and the predicted
+$\log(\mathrm{base})$ factor appears explicitly. `equilibrate = TRUE` returns the
+same verdict from the recast alone. Entered linearly, the same
+confounder would be an ordinary integer scaling; entered through a Hill term it
+keeps the exponent in its weight.
+
+# Removing a symmetry: reduction to invariants {#sec-reduce}
+
+Detection names the free directions. Removing one is a change of parameters, and
+`symmetryReduction()` constructs it.
+
+It is the construction Lagrangian mechanics performs with generalised
+coordinates: the configuration space is foliated, by constraint surfaces or by the
+orbits of a symmetry, and one keeps the coordinates transverse to the leaves and
+drops the directions along them. Here the space is the parameter space
+$\mathbb{R}^m_{>0}$, the leaves are the symmetry orbits, and the transverse
+coordinates are the *invariants*. Three consequences carry over. The count is
+$\#q = \dim - \dim(\text{leaf})$, here the corank of the observability matrix,
+whose kernel is tangent to the orbit. The choice is free up to any
+reparametrisation $q \to Q(q)$, so the report offers an admissible family instead
+of one pick. And a generalised coordinate need not inherit an old meaning:
+$\theta$ replaces $(x, y)$ for the pendulum, while a free particle keeps its $x$.
+Two things do not carry over. There is no dynamics on the $q$; an invariant is a
+first integral of the flow of $X$, whose time is the group parameter $\varepsilon$
+and not the model time $t$. And the section that picks one point per orbit is a
+gauge fixing, so it must meet every orbit exactly once, which is what
+Section \ref{sec-chart} has to establish.
+
+## Invariants, and how many are needed
+
+For a block of generators $X_1, \dots, X_r$ on $m$ coordinates, $I(z)$ is an
+*invariant* when
+\begin{equation}
+X_a(I) \;=\; \sum_i \eta^{(a)}_i\, \frac{\partial I}{\partial z_i} \;=\; 0,
+\qquad a = 1, \dots, r,
+\label{eq:invariant}
+\end{equation}
+that is when $I$ is constant along every orbit. Output invariance
+\eqref{eq:obs-cond} is \eqref{eq:invariant} for $I = g$: the observed quantities
+are themselves invariants. That is why these are the right coordinates. They are
+what the data pins down, and the orbit directions are what it cannot.
+
+If the orbits through a generic point have dimension $k$, the rank of the
+generator matrix there, then $m - k$ functionally independent invariants
+coordinatise the orbit space. The reduction is that statement made constructive:
+
+1. find a complete set $I_1, \dots, I_{m-k}$ (Sections \ref{sec-lattice} and
+   \ref{sec-search});
+2. make them the new parameters;
+3. add $k$ equations that single out one point on each orbit, a *section*, and
+   solve for the old coordinates (Section \ref{sec-chart}).
+
+The composite is the emitted `trafo`, ready for [P()].
+
+The naming follows one rule. A scaling leaves each surviving coordinate carrying
+an invariant monomial, so it keeps its name. A curved carrier is an invariant
+*value* and not the coordinate it was solved from, so every invariant of a curved
+block gets a fresh parameter `q_<k>`: reusing a coordinate's name would suggest
+substitutions that do not exist, a pinned entry `z = 1` fixing the inner
+coordinate where `q_<k>` is free. The `Invariants:` block of the report states
+which invariant each `q_<k>` holds.
+
+## Scalings: an integer kernel {#sec-lattice}
+
+For a scaling block everything is integer linear algebra. Stack the weights as a
+matrix $W$, one row per direction, one column per coordinate. A Laurent monomial
+$z^a = \prod_i z_i^{a_i}$ satisfies \eqref{eq:invariant} exactly when $W a = 0$,
+so the invariant monomials are the integer kernel of $W$.
+
+The section is as explicit. A *transversal* is a set $T$ of $k$ coordinates whose
+block $A = W[\,\cdot\,, T]$ is invertible and for which $M = A^{-1} W$ is an
+integer matrix, the integrality being what keeps each survivor's monomial Laurent.
+Pinning $T$ leaves $z_j$ carrying $z_j \prod_{t \in T} z_t^{-M_{tj}}$. Since a
+scaling orbit is a ray through the positive orthant, the pins may be *any*
+positive values; $1$ is a convention and a known calibration value does as well.
+The admissible $T$ are the bases of the matroid of the columns of $W$, and which
+one to hold is a modelling decision, so the report lists the whole family.
+
+## Curved directions: the search {#sec-search}
+
+Beyond scalings there is no lattice. Every stage of the search rests on one
+observation: \eqref{eq:invariant} is *linear in $I$*. Each is therefore the same
+three steps over a richer class of candidates.
+
+1. **Ansatz.** Write $I$ with undetermined coefficients over the class.
+2. **Linear system.** Demand $X_a(I) = 0$ identically. By linearity that is a
+   homogeneous system $C\,c = 0$, whose rows come from *evaluating* at generic
+   points rather than from symbolic expansion, over $\mathrm{GF}(p)$ with the lift
+   of Section \ref{sec-closedform}.
+3. **Keep what is new.** Products and powers of invariants are invariants, so the
+   null space is far larger than the number of independent invariants. A Jacobian
+   rank test at a generic point keeps an independent subset, which a certificate
+   such as `2 functionally independent of 9` reports.
+
+The cheapest class is *Laurent monomials*: for $I = \prod_i z_i^{a_i}$, dividing
+\eqref{eq:invariant} by $I$ gives
+\begin{equation}
+\sum_i a_i\, \frac{\eta^{(a)}_i}{z_i} \;=\; 0 ,
+\label{eq:monomial-stage}
+\end{equation}
+linear in the exponent vector $a$, whose integer null space is the exponent
+lattice. From there the ladder escalates:
+
+* **Polynomials** of total degree up to `dPoly`. Every monomial coefficient of
+  $X_a(I)$ is a linear form in the unknown coefficients: one row per monomial and
+  generator. Generators with linear components preserve the total degree, so the
+  degrees can be searched one at a time.
+* **Separable characteristics.** If every $\eta_i$ involves no moved coordinate
+  but $z_i$, the characteristic system
+  $dz_1/\eta_1 = \cdots = dz_m/\eta_m$ (Olver, 1993) separates: each ratio
+  integrates on its own as $G_i = \int dz_i/\eta_i(z_i)$, and the differences
+  $G_i - G_j$ are invariants. No degree cap enters and the antiderivative may
+  leave the Darboux language, $\eta = 1 + z^2$ giving $\arctan z$. It runs after
+  the two ansatz stages, which answer in the form one wants to read,
+  $k_1 + u\,k_2$ rather than $\exp(-(k_1 + u\,k_2)/u)$.
+* **Rational invariants,** through a *Darboux polynomial*: a $P$ with
+  $X(P) = \lambda P$ for a polynomial cofactor $\lambda$, which says the surface
+  $\{P = 0\}$ is invariant. Cofactors add under multiplication, so a product of
+  Darboux factors is invariant exactly when its cofactors cancel, and the
+  Darboux-type rational invariants are the integer kernel of the cofactor matrix.
+  Linear once more. The candidates come from the extactic determinant: every
+  Darboux polynomial of degree at most $d$ divides the extactic determinant of the
+  degree-$d$ monomial basis (Christopher, Llibre and Pereira, 2007), so one
+  determinant and one factorisation deliver all of them.
+* **Exponential factors** $\exp(g/h)$, with $h$ a product of Darboux factors and
+  $\deg g \le$ `dExp`, each carrying its own cofactor into the same kernel. Here
+  the escalation ends: by Prelle and Singer (1983) a vector field with an
+  elementary first integral has one of Darboux form, so within the caps nothing
+  expressible in closed form is missed.
+* **Integrating factor,** for a planar block only: an $M$ with
+  $\operatorname{div}(M X) = 0$, then a quadrature. Its value may fall outside the
+  language of a parameter transformation, an $\arctan$ in the damped-oscillator
+  case, and is then reported as an invariant with no reparametrisation claimed.
+
+Before the ladder runs, the block is *module reduced*: over the field of rational
+functions its generators may be combined with *function* coefficients, which can
+collapse the support every later stage works in. After it, the count decides.
+Pinning a coordinate with invariants still missing would discard identifiable
+structure, so a block that ends short is reported `invariantOnly` with what it
+found and the caps it exhausted.
+
+## The chart: the old parameters as functions of the new {#sec-chart}
+
+The invariants say what the new parameters *mean*. The `trafo` has to say the
+opposite, what each old coordinate *is* as a function of them. That is one square
+system, in four steps.
+
+**1. Name.** Each invariant becomes one outer parameter,
+\begin{equation}
+I_1(z) = q_1, \qquad \dots, \qquad I_{m-k}(z) = q_{m-k},
+\label{eq:chart-names}
+\end{equation}
+which is $m - k$ equations for the $m$ moved coordinates.
+
+**2. Section.** The missing $k$ equations single out one point per orbit. A scaling
+orbit is a ray and meets $\{z_i = 1\}$ once, so a constant pin suffices. A curved
+orbit may never reach the pinned value, and may cross it twice and leave the solve
+without a single branch. `symmetryReduction()` therefore searches for a *balance
+section*, an equation $m_1 = m_2$ between two low-degree monomials in the moved
+coordinates, and admits it only if the ratio $r = m_1/m_2$ is strictly monotone
+along every orbit. That is a sign condition on
+\begin{equation}
+X(\log r) \;=\; \frac{X(m_1)\,m_2 - m_1\,X(m_2)}{m_1\,m_2},
+\label{eq:section}
+\end{equation}
+checked symbolically: if the numerator's coefficients have one sign for every
+generator then $r$ cannot return to a value it has taken, so the section is met
+exactly once, inside the positive orthant. Mixed signs admit tangencies and are
+dropped before any solve. With several gauge directions the *set* of sections must
+be transversal to all of them, which a rank test on the values of
+\eqref{eq:section} decides.
+
+**3. Eliminate.** Equations \eqref{eq:chart-names} and the section are $m$
+equations in $m$ unknowns, and the elimination is triangular. Each naming equation
+is solved for one coordinate of its own, its *carrier*, no two invariants sharing
+one. A carrier $v_l$ is admissible only if that single solve stays inside the
+language a `trafo` may use: either $v_l$ enters the rational part of $I_l$ in the
+degrees $\{0, d\}$ only, so that
+$\mathrm{num} - q_l\,\mathrm{den} = \alpha\,v_l^{\,d} + \beta$ and $v_l$ follows
+by a $d$-th root, with $d = 1$ giving a rational entry, or $v_l$ sits only inside
+a single exponential factor, linearly in its argument, and follows by a logarithm.
+Substituting the carriers into the section leaves the $k$ gauge coordinates as the
+only unknowns; solving for them and back-substituting gives one entry per moved
+coordinate. Where a carrier's solution still references another carrier, the
+substitution is iterated until only outer symbols remain. The degree that survives
+the substitution fixes the shape of the chart: linear leaves rational entries, a
+quadratic produces a square root, and a radical denominator is cleared by
+conjugate multiplication.
+
+**4. Certify positivity.** Rates and concentrations are estimated on
+$(0, \infty)$, so the chart is usable only if every entry is positive *for every
+admissible value of the outer parameters*; otherwise a fit started in the wrong
+corner leaves the model's domain with no sign that anything is wrong. Admissible is
+the carrier's own domain: $(0, \infty)$ where the invariant is certified
+sign-definite on the orthant, $\mathbb{R}$ otherwise. Each entry
+is therefore proven sign-pure, numerator and denominator of one sign, and an entry
+$a + c\sqrt{r}$ by the exact comparison of $a^2$ with $c^2 r$, which also pins the
+branch of the root. The constant pin $z = 1$ goes through the same test instead of
+sitting below it as a fallback, so it is emitted exactly where the orbit
+demonstrably reaches it. If no candidate survives, nothing is emitted.
+
+The four steps decide one geometric object, worth naming because it is easy to
+confuse with its complement. The image of the emitted trafo is not an orbit; it is
+the *section*. An orbit has dimension $k$ and carries points the data cannot tell
+apart, while the image has dimension $m - k$ and carries one representative of
+every orbit, so on it everything is distinguishable. The two are transverse and
+their dimensions add up to $m$. Read that way the certificates are statements
+about the image: monotonicity in step 2 says each orbit is met at most once,
+positivity and coverage in step 4 say each is met at least once and inside the
+positive orthant. Together the image is exactly the reachable part of the section
+surface, a global cross-section of the map onto the orbit space.
+
+**Offsets.** Positivity can fail for a reason no section repairs: the invariant
+itself does not range over all of $(0, \infty)$, so no parameter free there can
+carry it. The fix is a triangular change of the invariant basis, the outer
+parameter carrying $I - \varphi$ with the offset $\varphi$ read off the offending
+factor of a solved entry, either a constant or a function of the *other*
+invariants. Two things are proven: $\varphi \ge 0$ for all positive outer values,
+so the shifted entries stay positive, and *coverage*, $I - \varphi > 0$ on the
+whole positive orthant with $\varphi$ composed back into inner coordinates, so the
+chart still reaches every positive orbit. Coverage is what separates a sharp bound
+from a lossy one: an offset read off a section that meets only part of the orbit
+space also yields positive entries, and only coverage rejects it.
+Section \ref{sec-egf} carries one through by hand.
+
+**Real carriers.** An offset needs a finite bound. Where the invariant's value set
+on the orthant is all of $\mathbb{R}$ there is none, and no reparametrisation
+$\psi(I)$ inside the language repairs it: a rational $\psi$ that is defined on all of
+$\mathbb{R}$, injective (hence strictly monotone, so that $\psi(I)$ still separates
+orbits) and positive does not exist, since $\deg p \le \deg q$ forces equal limits at
+$\pm\infty$ while $\deg p > \deg q$ forces $-\infty$ at one end or $+\infty$ at
+both. The carrier is declared *real* instead, and the gauge follows, a constant pin
+being reached only by the orbits that happen to cross it. With each entry written as a
+polynomial in the pin coordinate $\tau$ over the invariants,
+\begin{equation}
+E_i(\iota, \tau) \;=\; \sum_{k \le n_i} a_{i,k}(\iota)\,\tau^{k},
+\qquad a_{i,n_i} > 0 ,
+\label{eq:pin-poly}
+\end{equation}
+every real root obeys $|\tau| \le 1 + \sum_k |a_{i,k}/a_{i,n_i}|$, and
+$|x| \le (1 + x^2)/2$ turns that into a rational pin
+\begin{equation}
+\sigma(\iota) \;=\; 1 + \sum_i \sum_{k < n_i}
+  \tfrac{1}{2}\Big(1 + \big(a_{i,k}/a_{i,n_i}\big)^{2}\Big)
+\label{eq:sos-pin}
+\end{equation}
+above every root of every entry, where each $E_i$ carries the sign of its leading
+coefficient. For an entry affine in $\tau$ this is $\sigma = 1 + \sum_i L_i^2$ with
+$L_i$ its lower bound, since $1 + L^2 - L = (L - \tfrac12)^2 + \tfrac34 > 0$. The
+chart then meets every orbit that meets the orthant, which `coverage` records.
+
+A block can still come back with its invariants and no chart, and that is a
+statement about the model. An invariant whose *sign* is not constant on the
+positive orthant, a difference of rates that is a Darboux polynomial and so has a
+fixed sign along every orbit, is a genuine boundary between components of the
+orbit space; no chart over free *positive* parameters covers both sides, which is
+what \eqref{eq:sos-pin} trades for a real one.
+
+**The four steps on the phosphorylation cycle.** With the gain $s$ known, the
+block has the two invariants \eqref{eq:cycle-I1} and \eqref{eq:cycle-I2} on the
+three moved coordinates $(k_p, k_d, P_0)$, so one section is needed, and the
+balance $k_d\,P = k_p\,pP$ is monotone along the orbit. Steps 1 and 2 give
+\begin{equation}
+k_p + k_d = \Lambda, \qquad
+k_p\,(P_0 + pP_0) = C, \qquad
+k_d\,P_0 = k_p\,pP_0 ,
+\label{eq:chart-cycle}
+\end{equation}
+with $p_0 = pP_0$ untouched. The carriers are $k_p$ from the first equation and
+$P_0$ from the second, which leaves $k_d$ as the gauge coordinate:
+\begin{equation}
+k_p = \Lambda - k_d, \qquad P_0 = \frac{C}{k_p} - p_0 .
+\label{eq:chart-cycle-carriers}
+\end{equation}
+Substituting both into the section leaves one equation in $k_d$,
+\begin{equation}
+k_d\Big(\frac{C}{\Lambda - k_d} - p_0\Big) = (\Lambda - k_d)\,p_0
+\qquad\Longleftrightarrow\qquad
+k_d\,C = \Lambda\,p_0\,(\Lambda - k_d) ,
+\label{eq:chart-cycle-gauge}
+\end{equation}
+linear in $k_d$ because the quadratic terms cancel, with the single root
+$k_d = \Lambda^2 p_0/(\Lambda\,p_0 + C)$, the `transversal` line of the report.
+Back-substituting into \eqref{eq:chart-cycle-carriers} gives
+$k_p = \Lambda - k_d = \Lambda C/(\Lambda p_0 + C)$ and then
+$P_0 = C/k_p - p_0 = C/\Lambda$, which is the chart \eqref{eq:cycle-trafo}. Every
+entry is a ratio of sums of products of $\Lambda, C, p_0 > 0$, so step 4 passes
+with no offset and the chart covers the whole reachable interval
+\eqref{eq:cycle-reach}. Its image satisfies $k_d P_0 = k_p\,pP_0$ identically, one
+codimension inside $(k_p, k_d, P_0, pP_0)$: the section surface, met by each orbit
+once, and not an orbit itself.
+
+Nothing in the chain is assumed. Every emitted invariant is verified
+symbolically, $X(I) = 0$ for every generator, before the transformation is
+assembled, and every entry is proven positive as in step 4. A stage that comes up
+empty records instead what it excluded, so an unreduced block still says how many
+invariants the caps produced and therefore which cap to raise; the full per-stage
+record stays on the object in `$blocks[[i]]$certificates`.
+
+# Examples {#sec-examples}
+
+```{r lib, eval = haveSympy, message = FALSE}
+library(dMod2)
+```
+
+## A gene-expression cascade at steady state
+
+A stimulus `TF` drives transcription, the mRNA is translated into protein, both
+species degrade at a shared rate, and only a scaled protein readout is measured.
+Before stimulation the cell rests at the basal steady state.
+
+```{r genex-model, eval = haveSympy}
+eq <- eqnlist() |>
+  addReaction("",     "mRNA", "ksyn * TF")   |>
+  addReaction("mRNA", "",     "kdeg * mRNA") |>
+  addReaction("",     "Prot", "ktrl * mRNA") |>
+  addReaction("Prot", "",     "kdeg * Prot")
+
+g <- eqnvec(yProt = "scale * Prot")          # readout of unknown gain
+```
+
+```{r genex-oim, eval = haveSympy}
+res <- symmetryDetection(eq, g, method = "observability",
+                         equilibrate = TRUE, reconstruct = TRUE,
+                         verbose = FALSE)
+summary(res)          # the report; printing `res` alone shows the directions only
+```
+
+At rest the protein sits at $\mathrm{scale}\cdot TF\,ksyn\,ktrl/kdeg^2$, so only
+that product is observed: rank $1$ of $5$, four free directions, all exact integer
+scalings. Three trade the numerator factors of the product; the fourth couples
+$TF$, $ktrl$ and $kdeg$ with equal weight and is induced by the steady state,
+where the degradation enters squared. Handing the steady state in explicitly with
+`trafo = steadyStates(eq)` gives the identical verdict.
+
+## Acting on a result: reparametrisation
+
+A non-identifiable direction almost always means that a product or ratio of
+parameters is identifiable while the factors are not. When a factor is
+independently known, fix it:
+
+```{r genex-fix, eval = haveSympy}
+res2 <- symmetryDetection(eq, g, method = "observability",
+                          equilibrate = TRUE, fixed = "scale",
+                          reconstruct = TRUE)
+c(rank = res2$rank, dim = res2$dim)
+```
+
+More often the product itself is the meaningful quantity. Carry it as one
+parameter by fixing the redundant factor to one in a `trafo`:
+
+```{r reparam, eval = haveSympy}
+f <- eqnvec(x = "k1*k2 - d*x")            # only the product k1*k2 is identifiable
+symmetryDetection(f, eqnvec(y = "x"), method = "observability")$identifiable
+
+symmetryDetection(f, eqnvec(y = "x"), method = "observability",
+                  trafo = eqnvec(k1 = "1", k2 = "k"))$identifiable   # now TRUE
+```
+
+The same recipe resolves any scaling direction: fix all but one of the involved
+coordinates and let the survivor carry the product.
+
+### Automated reduction
+
+`symmetryReduction()` mechanises that and extends it beyond scalings:
+
+```{r reduce, eval = haveSympy}
+res <- symmetryDetection(eqnvec(m = "ktx - dm*m", p = "ktl*m - dp*p"),
+                         eqnvec(y = "p"), method = "observability",
+                         reconstruct = TRUE, verbose = FALSE)
+red <- symmetryReduction(res)
+red
+symmetryDetection(eqnvec(m = "ktx - dm*m", p = "ktl*m - dp*p"), eqnvec(y = "p"),
+                  method = "observability", trafo = red$trafo,
+                  verbose = FALSE)$identifiable
+```
+
+`print()` shows only the verdict, the trafo and the invariants it is built from
+(`q_1 = k_p + k_d` reads "the invariant $k_p + k_d$ is now the parameter `q_1`");
+`summary()` adds one line per block, naming its kind, status, stage and how it
+was gauged, and `summary(verbose = TRUE)` adds the admissible gauges. A
+candidate fixing of your own goes in through `fixed = `. A transcendental
+invariant may solve into `log`/`exp` entries, which `P()` accepts but the rational
+round trip `symmetryDetection(trafo = )` does not. Directions the search cannot
+resolve within its degree caps are reported with the caps they exhausted and the
+remaining options: a structural assumption, a separating experiment, or prediction
+profiles.
+
+### A real-valued carrier
+
+Only $a - b$ enters, and it takes both signs on the orthant, so the carrier is
+declared real and the pin picks up \eqref{eq:sos-pin}:
+
+```{r realcarrier, eval = haveSympy}
+res <- symmetryDetection(eqnvec(x = "-(a - b)*x"), eqnvec(y = "x"),
+                         method = "observability", reconstruct = TRUE,
+                         verbose = FALSE)
+symmetryReduction(res)
+```
+
+Both entries are positive for every real `q_1` (discriminant $1 - 4 < 0$), so every
+positive $(a, b)$ is reached; the constant pin $b = 1$ would have reached only
+$a - b > -1$.
+
+## A phosphorylation cycle, worked through in full {#sec-cycle}
+
+This model is small enough to solve in closed form yet carries both kinds of
+direction: a scaling that trades amounts against the readout gain, and a curved
+direction that splits the relaxation rate into its two halves. Everything is
+derived by hand first and then confirmed. The numerical counterpart, what the
+directions do to a profile likelihood, is `bench/symmetry_profile_flatness.R` in
+the package sources.
+
+A protein is phosphorylated at rate $k_p$ and dephosphorylated at rate $k_d$, and
+only the phospho-form is measured, on an unknown gain $s$:
+\begin{equation}
+\dot P = -k_p\,P + k_d\,pP, \qquad
+\dot{pP} = k_p\,P - k_d\,pP, \qquad
+y = s\,pP .
+\label{eq:cycle}
+\end{equation}
+
+```{r cycle-model, eval = haveSympy}
+reactions <- eqnlist() |>
+  addReaction("P",  "pP", "k_p*P",  "phosphorylation") |>
+  addReaction("pP", "P",  "k_d*pP", "dephosphorylation")
+observables <- eqnvec(y = "s*pP")
+```
+
+The unknowns are $z = (P, pP, k_p, k_d, s)$, $\dim z = 5$; an initial value is
+carried under the name of its state, so `P` and `pP` *are* $P_0, pP_0$.
+
+### What the data can see
+
+The cycle conserves $T = P_0 + pP_0$, so the phospho-equation closes on its own,
+$\dot{pP} = k_p T - \lambda\,pP$ with $\lambda = k_p + k_d$, and
+\begin{equation}
+pP(t) = pP_\infty + (pP_0 - pP_\infty)\,e^{-\lambda t},
+\qquad
+pP_\infty = \frac{k_p\,T}{\lambda} .
+\label{eq:cycle-sol}
+\end{equation}
+The measured curve is a single exponential,
+\begin{equation}
+y(t) = s\,pP_\infty \;+\; s\,(pP_0 - pP_\infty)\,e^{-\lambda t},
+\label{eq:cycle-y}
+\end{equation}
+which carries three coefficients. No experiment on this model can deliver more
+than
+\begin{equation}
+\lambda = k_p + k_d,
+\qquad
+s\,pP_0,
+\qquad
+s\,pP_\infty = \frac{s\,k_p\,(P_0 + pP_0)}{k_p + k_d} .
+\label{eq:cycle-obs}
+\end{equation}
+Five unknowns, three identifiable functions: the OIM must have rank $3$ and two
+directions must be free. The next section recovers the same verdict from the
+matrix, which applies equally when no closed form exists.
+
+### The generators, from the observability matrix
+
+Write $u = k_p P - k_d\,pP$ for the net flux, so $\dot P = -u$, $\dot{pP} = u$.
+Differentiating $g = s\,pP$ along the flow,
+\begin{equation}
+g = s\,pP, \qquad L_F\,g = s\,u, \qquad L_F^2\,g = -\lambda\,s\,u ,
+\label{eq:cycle-lie}
+\end{equation}
+because $\dot u = -\lambda\,u$: past the first derivative the flow only multiplies
+by $-\lambda$, so $L_F^{\,k} g = (-\lambda)^{k-1} s\,u$ for $k \ge 1$. The rows of
+$\mathcal{O}$ are the gradients of \eqref{eq:cycle-lie} in $z$,
+\begin{equation}
+\mathcal{O} \;=\;
+\begin{pmatrix}
+0 & s & 0 & 0 & pP\\[2pt]
+s\,k_p & -s\,k_d & s\,P & -s\,pP & u\\[2pt]
+-\lambda\,s\,k_p & \lambda\,s\,k_d & -s\,(u + \lambda P) & -s\,(u - \lambda\,pP)
+  & -\lambda\,u
+\end{pmatrix},
+\label{eq:cycle-oim}
+\end{equation}
+and every further row is a combination of $d(s\,u)$ and $d\lambda$. The row space
+is spanned by $d(s\,pP)$, $d(s\,u)$ and $d\lambda$ whatever the Lie order, the
+rank saturates at $3$, and the null space is two-dimensional, the count read off
+\eqref{eq:cycle-obs}, now without the solution. A vector $\eta$ lies in it exactly
+when it annihilates the three differentials,
+\begin{equation}
+\eta_{k_p} + \eta_{k_d} = 0,
+\qquad
+s\,\eta_{pP} + pP\,\eta_s = 0,
+\qquad
+s\big(k_p\,\eta_P - k_d\,\eta_{pP} + P\,\eta_{k_p} - pP\,\eta_{k_d}\big)
+  + u\,\eta_s = 0 .
+\label{eq:cycle-null}
+\end{equation}
+Any basis of that solution space is an equally valid answer; the natural one
+splits on whether the gain moves. Taking $\eta_s = -s$ gives $\eta_{pP} = pP$ and,
+with $\eta_{k_p} = \eta_{k_d} = 0$, $\eta_P = P$:
+\begin{equation}
+X_1 = P\,\partial_P + pP\,\partial_{pP} - s\,\partial_s .
+\label{eq:cycle-X1}
+\end{equation}
+Taking $\eta_s = 0$ forces $\eta_{pP} = 0$, leaves $\eta_{k_d} = -\eta_{k_p}$, and
+with $\eta_{k_p} = -k_p$ gives $\eta_P = P + pP$:
+\begin{equation}
+X_2 = (P + pP)\,\partial_P + k_p\,\partial_{k_d} - k_p\,\partial_{k_p} .
+\label{eq:cycle-X2}
+\end{equation}
+
+$X_1$ is a *scaling* with integer weights $(P\!:1,\; pP\!:1,\; s\!:-1)$: the
+amounts enter \eqref{eq:cycle-obs} only through gain-times-amount products. The
+$P$-component of $X_2$ is $P + pP$, not a multiple of $P$, so $X_2$ is *general*.
+It holds $s$ and $pP_0$ and moves $(k_p, k_d, P_0)$, which carry only the two
+constraints $\lambda$ and $k_p(P_0 + pP_0)$: a fast forward rate on a small
+unphosphorylated pool cannot be told from a slow one on a large pool.
+
+That split is a choice of reduction, not a taxonomy. $X_1$ is gauged by holding
+any one of $P$, $pP$, $s$ at any value: its orbit is the ray
+$(\mu P_0,\, \mu\,pP_0,\, \mu^{-1}s)$, which meets each of $\{P = c\}$,
+$\{pP = c\}$, $\{s = c\}$ exactly once for every $c > 0$. $X_2$ has to be
+reparametrised instead.
+
+```{r cycle-detect, eval = haveSympy}
+res <- symmetryDetection(reactions, observables, method = "observability",
+                         reconstruct = TRUE)
+```
+
+Rank $3$ of $5$, and the two directions come back as derived: `X₁` under
+`Scalings` with the weights of \eqref{eq:cycle-X1}, `X₂` under `General` with the
+components of \eqref{eq:cycle-X2}. The `Reduction` block of `summary(res)` names
+the two strategies.
+
+### The finite transformations
+
+For $X_1$ the flow is the power law \eqref{eq:scaling-flow}, with
+$\mu = e^{\varepsilon}$:
+\begin{equation}
+P_0 \to \mu\,P_0, \qquad pP_0 \to \mu\,pP_0, \qquad s \to \mu^{-1}s .
+\label{eq:cycle-flow1}
+\end{equation}
+For $X_2$ the flow decouples in the right order: $dk_p/d\varepsilon = -k_p$ gives
+$k_p(\varepsilon) = e^{-\varepsilon}k_p$, which drives
+$dk_d/d\varepsilon = k_p(\varepsilon)$, and $dP/d\varepsilon = P + pP$ integrates
+with $pP$ fixed. With $\mu = e^{-\varepsilon}$,
+\begin{equation}
+k_p \to \mu\,k_p, \qquad
+k_d \to k_d + (1-\mu)\,k_p, \qquad
+P_0 \to \frac{P_0 + pP_0}{\mu} - pP_0 ,
+\label{eq:cycle-flow2}
+\end{equation}
+with $pP_0$ and $s$ unchanged: $k_d$ absorbs what $k_p$ gives up so $\lambda$ is
+held, and the total moves inversely to $k_p$ so $k_p(P_0 + pP_0)$ is held too.
+Those are exactly the two constraints of \eqref{eq:cycle-obs} involving the moved
+unknowns.
+
+Since \eqref{eq:cycle-y} is available in closed form, the invariance can be
+checked on the output directly, with no solver and no symbolics:
+
+```{r cycle-flow}
+ysol <- function(z, t) {                              # y(t) from (eq:cycle-sol)
+  lambda <- z[["k_p"]] + z[["k_d"]]
+  pPinf  <- z[["k_p"]] * (z[["P"]] + z[["pP"]]) / lambda
+  z[["s"]] * (pPinf + (z[["pP"]] - pPinf) * exp(-lambda * t))
+}
+flowX1 <- function(z, mu) {                           # readout units
+  z[["P"]] <- mu * z[["P"]]; z[["pP"]] <- mu * z[["pP"]]
+  z[["s"]] <- z[["s"]] / mu
+  z
+}
+flowX2 <- function(z, mu) {                           # split of the relaxation rate
+  total      <- z[["P"]] + z[["pP"]]
+  z[["k_d"]] <- z[["k_d"]] + (1 - mu) * z[["k_p"]]
+  z[["k_p"]] <- mu * z[["k_p"]]
+  z[["P"]]   <- total / mu - z[["pP"]]
+  z
+}
+
+z <- c(P = 1, pP = 0.2, k_p = 0.3, k_d = 0.05, s = 1.7)
+t <- seq(0, 20, by = 0.5)
+
+max(abs(ysol(flowX1(z, 2.5), t) - ysol(z, t)))
+max(abs(ysol(flowX2(z, 0.4), t) - ysol(z, t)))
+```
+
+`flowX2(z, 0.4)` turns $(k_p, k_d, P_0) = (0.3, 0.05, 1)$ into $(0.12, 0.23,
+2.8)$, reversing which rate dominates, and the predicted curve does not move.
+
+### Finding the invariants
+
+Suppose the readout is calibrated, so $s$ is known. The fixing removes `X₁` and
+leaves the curved `X₂`, whose moved coordinates are $P$, $k_p$, $k_d$ and whose
+orbit is one-dimensional: $3 - 1 = 2$ invariants to find, each stage small enough
+to do by hand.
+
+*Laurent monomials.* For $I = P^{\alpha}\,pP^{\beta}\,k_p^{\gamma}\,k_d^{\delta}$,
+\eqref{eq:monomial-stage} reads
+\begin{equation}
+\alpha\,\frac{P + pP}{P} - \gamma + \delta\,\frac{k_p}{k_d}
+\;=\;
+(\alpha - \gamma) + \alpha\,\frac{pP}{P} + \delta\,\frac{k_p}{k_d}
+\;=\; 0 .
+\end{equation}
+The functions $1$, $pP/P$, $k_p/k_d$ are linearly independent, so
+$\alpha = \gamma = \delta = 0$: no monomial invariant. That is the negative
+result recorded before the search escalates.
+
+*Degree one.* With $I = a\,P + b\,k_p + c\,k_d$ (coefficients in the untouched
+$pP$, $s$ allowed), $X_2(I) = a\,P + a\,pP + (c - b)\,k_p$, so $a = 0$, $b = c$:
+\begin{equation}
+I_1 \;=\; k_p + k_d .
+\label{eq:cycle-I1}
+\end{equation}
+
+*Degree two.* One invariant is still missing. $X_2$ maps the nine degree-two
+monomials involving a moved coordinate to
+\begin{equation}
+\begin{aligned}
+P^2      &\mapsto 2P^2 + 2P\,pP, &\quad
+P\,pP    &\mapsto P\,pP + pP^2,  &\quad
+P k_p    &\mapsto pP\,k_p, \\
+P k_d    &\mapsto P k_d + pP\,k_d + P k_p, &\quad
+pP\,k_p  &\mapsto -\,pP\,k_p, &\quad
+pP\,k_d  &\mapsto pP\,k_p, \\
+k_p^2    &\mapsto -2\,k_p^2, &\quad
+k_p k_d  &\mapsto k_p^2 - k_p k_d, &\quad
+k_d^2    &\mapsto 2\,k_p k_d ,
+\end{aligned}
+\end{equation}
+and collecting $X_2(I)$ by monomial gives a three-dimensional solution space
+spanned by $k_p\,(P + pP)$, $pP\,(k_p + k_d)$ and $(k_p + k_d)^2$. The last two
+are a product and a square of quantities already known, so the independence test
+keeps one new invariant,
+\begin{equation}
+I_2 \;=\; k_p\,(P_0 + pP_0) .
+\label{eq:cycle-I2}
+\end{equation}
+With $I_1$ that is the corank $m - k = 2$, so the search stops at degree two and
+the Darboux and exponential stages are never reached.
+
+### The reduced model
+
+```{r cycle-reduce, eval = haveSympy}
+red <- symmetryReduction(res, fixed = "s")
+summary(red)
+```
+
+The report has one block per coupled set of directions. `X₁` and `X₂` share the
+coordinate `P`, so the scaling is not gauged on its own; it is carried along with
+the curved direction, and fixing `s` removes it outright: that is the first
+block, `fixed`. The second block is `X₂` alone, and its stages are the ones
+computed above. No monomial invariant exists, and the polynomial stage returns
+\eqref{eq:cycle-I1} and \eqref{eq:cycle-I2}, the two values `q_1` and `q_2`
+carry under `Invariants:`. Write them $\lambda$ and $C$.
+
+```{r cycle-roundtrip, eval = haveSympy}
+red$trafo
+symmetryDetection(reactions, observables, method = "observability",
+                  trafo = red$trafo, fixed = "s", verbose = FALSE)$identifiable
+```
+
+The `trafo` maps the *outer* (estimated) coordinates to the *inner* (model) ones,
+and the `now carries` lines say what the outer names mean: `q_1` holds
+$\lambda = k_p + k_d$, `q_2` the flux $C = k_p(P_0 + pP_0)$, while `pP` keeps its
+own name and its meaning. Those are the three quantities of \eqref{eq:cycle-obs}
+with $s$ known, so the reduced model is parametrised by exactly what the data
+delivers: three outer parameters where the model had four free coordinates
+$(P_0, pP_0, k_p, k_d)$. The redundant direction is gone, not merely constrained.
+Writing the outer values as $(\Lambda, C, p_0)$,
+\begin{equation}
+k_p = \frac{\Lambda\,C}{\Lambda\,p_0 + C},
+\qquad
+k_d = \frac{\Lambda^2\,p_0}{\Lambda\,p_0 + C},
+\qquad
+P_0 = \frac{C}{\Lambda},
+\qquad
+pP_0 = p_0 ,
+\label{eq:cycle-trafo}
+\end{equation}
+and indeed $k_p + k_d = \Lambda$ and $k_p (P_0 + pP_0) = C$ identically.
+
+### How far a curved orbit reaches
+
+Parametrise the orbit by $k_p$; the invariants fix the rest,
+$k_d = \lambda - k_p$ and $P_0 = C/k_p - pP_0$, and positivity of the two rates
+and two amounts bounds
+\begin{equation}
+0 \;<\; k_p \;<\; \min\!\Big(\lambda,\ \frac{C}{pP_0}\Big)
+ \;=\; \lambda\cdot\min\!\Big(1,\ \frac{pP_\infty}{pP_0}\Big) .
+\label{eq:cycle-reach}
+\end{equation}
+Both walls mean something: at $k_p = \lambda$ the dephosphorylation has vanished,
+at $k_p = C/pP_0$ the unphosphorylated pool has. Which binds is decided by the
+direction of the measured curve: the rate wall for a rising readout
+($pP_0 < pP_\infty$), the amount wall for a falling one.
+
+```{r cycle-reach}
+mu   <- c(0.05, 0.5, 1, 1.15, 1.2)         # k_p is multiplied by mu along the orbit
+orbit <- t(vapply(mu, function(m) unlist(flowX2(z, m)), numeric(5)))
+cbind(orbit[, c("k_p", "k_d", "P")],
+      maxdev = apply(orbit, 1, function(r) max(abs(ysol(r, t) - ysol(z, t)))))
+```
+
+The last row has left the model's domain. The likelihood profiles follow: along
+the orbit the output does not change at all, so the profile of any coordinate is
+exactly flat over the interval its orbit reaches and can only rise where the walk
+must leave the orbit. With $\lambda = 0.35$ here, $k_p$ and $k_d$ are flat below
+$\lambda$, $P_0$ is flat above $pP_\infty - pP_0 \approx 0.83$, and $pP_0$, which
+no direction moves, is the only coordinate with a proper parabola. Reparametrising
+with `red$trafo` makes every profile a parabola.
+
+The two walls are different objects, and the distinction is exactly the Darboux
+bookkeeping of Section \ref{sec-reduce}. The surface $\{k_p = 0\}$ is *invariant*:
+$X_2(k_p) = -k_p$ vanishes on it, so $k_p$ is a Darboux polynomial with cofactor
+$-1$ and no orbit crosses it, so the profile of $k_p$ stays flat all the way down.
+$\{k_d = 0\}$ is not invariant, since $X_2(k_d) = k_p \neq 0$ there; the orbit
+crosses at finite $\varepsilon$ into $k_d < 0$, outside the model's domain. That
+crossing, not the symmetry, is the wall: the flatness ends where the model does.
+
+`symmetryReduction()` carries both walls, on request: `reportZeroCompatibility`
+asks which coordinates the orbit can drive to $0$ with nothing running off to
+infinity -- several at once allowed, since a set of rates switched off is still a
+model. It is off by default: it costs one exact face solve per coordinate of each
+block.
+
+```{r cycle-zero, eval = haveSympy}
+red <- symmetryReduction(res, fixed = "s", reportZeroCompatibility = TRUE)
+red$zeroCompatibility[, c("coordinates", "verdict", "limit", "condition")]
+```
+
+`k_p` is excluded outright -- $C = k_p(P_0 + pP_0)$ is invariant and strictly
+positive, so no orbit carries $k_p$ to zero at finite amounts, which is the
+Darboux statement again. The other two are the two walls of
+\eqref{eq:cycle-reach}, and `limit = FALSE` says both are met at finite
+$\varepsilon$. Neither holds everywhere: `condition` is the comparison
+\eqref{eq:cycle-reach} decides, $P_0 k_p > k_d\,pP_0$ for the rate wall and its
+reverse for the amount wall -- a rising readout switches the dephosphorylation
+off, a falling one empties the unphosphorylated pool. That is a property of the
+point, not of the model, so it is stated as a condition and never as a verdict.
+The reduction itself takes no parameter values; the condition is an R expression
+over the model's own names, and one `eval()` settles it wherever it matters:
+
+```{r cycle-zero-point, eval = haveSympy}
+cond <- setNames(red$zeroCompatibility$condition, red$zeroCompatibility$coordinates)
+sapply(cond[c("P", "k_d")], function(cc) eval(parse(text = cc), as.list(z)))
+```
+
+### The gauge section
+
+The `Family` block closes the report with the gauge section `k_d*P = k_p*pP`. The
+naive pin would have failed: by \eqref{eq:cycle-reach} $k_d$ never exceeds
+$\lambda$, so for a slow cycle setting $k_d = 1$ is not a different chart but an
+unreachable one. Substituting the orbit parametrisation into the section gives a
+linear equation with the single root
+\begin{equation}
+k_p^{\ast} = \frac{\lambda\,C}{\lambda\,pP_0 + C} ,
+\end{equation}
+the first entry of \eqref{eq:cycle-trafo}, satisfying both $k_p^\ast < \lambda$
+and $k_p^\ast < C/pP_0$: the representative lies strictly inside the reachable
+interval whatever the invariants are. That is the monotonicity condition
+\eqref{eq:section} in this instance.
+
+```{r cycle-section}
+lambda <- z[["k_p"]] + z[["k_d"]]
+C      <- z[["k_p"]] * (z[["P"]] + z[["pP"]])
+out    <- c(k_p = lambda, P = C, pP = z[["pP"]], s = z[["s"]])        # invariants
+
+inner <- with(as.list(out), c(
+  k_p = k_p * P / (k_p * pP + P),
+  k_d = k_p^2 * pP / (k_p * pP + P),
+  P   = P / k_p,
+  pP  = pP,
+  s   = s))
+signif(inner, 4)
+max(abs(ysol(inner, t) - ysol(z, t)))
+```
+
+Without the calibration, `symmetryReduction(res)` gauges both directions at once:
+the block is then `{X₁, X₂}`, the invariant set gains $s\,pP$, and the section
+becomes `k_d = pP, k_p = P`. The reduced model has three free parameters, matching
+the three numbers of \eqref{eq:cycle-obs}.
+
+## Closed-form directions and a known input
+
+The components of a direction may be rational functions of a known input. Model
+\eqref{eq:toy-oim} is the minimal case: declaring `u` with `fixed` keeps it out of
+the unknowns yet lets it appear as a coefficient.
+
+```{r toy-input, eval = haveSympy}
+f   <- eqnvec(A = "k1 + u*k2 - kdeg*A")
+toy <- symmetryDetection(f, eqnvec(y = "A"), method = "observability",
+                         reconstruct = TRUE, fixed = "u")
+Filter(function(d) d$type != "scaling", toy$symmetries)
+```
+
+The direction is the constant `k1 : u`, `k2 : -1`, the input-weighted slope
+\eqref{eq:toy-null} up to sign. When such an input takes several known values
+across conditions, stacking them separates `k1` and `k2` outright, and `u`, now a
+constant of each condition, drops out of every reported direction.
+
+## A pre-equilibrated model with a dose
+
+Most experiments do not start from an arbitrary state: the system rests, a
+stimulus is applied, and the relaxation is recorded. Let
+\begin{equation}
+\dot x \;=\; b - a\,x, \qquad y \;=\; s\,x,
+\label{eq:ss-model}
+\end{equation}
+with basal production $b$, turnover $a$ and readout scale $s$, resting at
+\begin{equation}
+x_\ast \;=\; b/a
+\label{eq:ss-fixed}
+\end{equation}
+until a dose sets the level to $D$ at $t = 0$ (a `replace` event), after which
+\begin{equation}
+x(t) \;=\; \frac{b}{a} + \Bigl(D - \frac{b}{a}\Bigr) e^{-a t},
+\qquad y(t) = s\,x(t).
+\label{eq:ss-traj}
+\end{equation}
+The Taylor coefficients at $t = 0$ are $sD$, $s(b - aD)$, $sa(aD - b)$, each a
+multiple of the single relaxation mode with $a$ fixing the ratio between
+successive coefficients. So $a$ is identifiable, and beyond it the data carry only
+the two amplitude products $sD$ and $sb$. With $D$ unknown the OIM has rank $3$
+and the null space is spanned by $b \mapsto -b$, $s \mapsto s$, $D \mapsto -D$:
+the products are held but $s$ alone is not. With $D$ set by the experiment, $sD$
+pins $s$, then $sb$ gives $b$, and the model is identifiable. The
+pre-equilibration is what makes this clean, since a free initial value would add a
+second non-identifiability.
+
+```{r ss-dose, eval = haveSympy}
+f <- eqnvec(x = "b - a*x")     # turnover; steady state b/a
+g <- eqnvec(y = "s*x")         # scaled readout
+dose <- addEvent(eventlist(), var = "x", time = 0, value = "dose",
+                 method = "replace")
+
+# a known dose: the relaxation identifies the rate, the scale and the production
+symmetryDetection(f, g, method = "observability", events = dose,
+                  conditions = data.frame(dose = 2,
+                                          row.names = "stim"))$identifiable
+
+# an unknown dose magnitude: the readout scale confounds with the amounts
+res <- symmetryDetection(f, g, method = "observability", reconstruct = TRUE,
+                         events = dose,
+                         conditions = data.frame(row.names = "stim"))
+res$symmetries[[1]]$generator
+```
+
+The direction is the exact integer scaling $b:1,\ \mathrm{dose}:1,\ s:-1$, peeled
+from the integer kernel, so no reconstruction is needed. The same resting state
+can be imposed without writing it down:
+
+```{r ss-constraint, eval = haveSympy}
+# rank 1 of 3: only the resting product s*b/a is seen, exactly as with the
+# explicit steady state trafo = eqnvec(x = "b/a")
+res <- symmetryDetection(f, g, method = "observability",
+                         equilibrate = TRUE, reconstruct = TRUE)
+c(identifiable = res$identifiable, rank = res$rank, dim = res$dim)
+
+# a genuinely irrational steady state x* = sqrt(b/a): no rational form exists,
+# yet the modular interior point still delivers the verdict
+symmetryDetection(eqnvec(x = "b - a*x^2"), g, method = "observability",
+                  equilibrate = TRUE)$rank
+```
+
+## A transient channel made identifiable by exact propagation
+
+The gap propagation of Section \ref{sec-segments} identifies parameters that enter
+only through a transient between events. A species $x$ is produced under a
+feedback inhibition of strength $k_{\mathrm{inh}}$, switched on by an inhibitor
+input, and read out on an unknown scale; a stimulus follows later. The inhibition
+strength affects only the inhibitor-relaxed state at the stimulus onset.
+
+```{r segments, eval = haveSympy}
+f <- eqnvec(x = "kpr/(1 + kinh*inh) - kdeg*x + kstim*stim",
+            inh = "0", stim = "0")
+g <- eqnvec(y = "s*x")
+
+# inhibitor and stimulus at the same time (no gap): kinh not identifiable
+ev0 <- eventlist() |>
+  addEvent(var = "inh",  time = 0, value = "1", method = "replace") |>
+  addEvent(var = "stim", time = 0, value = "1", method = "replace")
+r0 <- symmetryDetection(f, g, method = "observability", equilibrate = TRUE,
+                        events = ev0, forcings = c("inh", "stim"))
+"kinh" %in% unlist(lapply(r0$symmetries, function(d) d$support))   # TRUE
+
+# inhibitor applied 30 units before the stimulus: the gap is propagated exactly
+ev30 <- eventlist() |>
+  addEvent(var = "inh",  time = -30, value = "1", method = "replace") |>
+  addEvent(var = "stim", time = 0,   value = "1", method = "replace")
+r30 <- symmetryDetection(f, g, method = "observability", equilibrate = TRUE,
+                         events = ev30, forcings = c("inh", "stim"))
+c(gapOrder = r30$info$gapOrderUsed,
+  kinhIdentifiable = !("kinh" %in% unlist(lapply(r30$symmetries,
+                                                 function(d) d$support))))
+```
+
+The second run reports a non-zero `info$gapOrderUsed`, the gap series carrying
+$k_{\mathrm{inh}}$, and a higher rank than the first.
+
+## An enzyme assay and its hidden symmetries
+
+In the classical enzyme-kinetics assay the non-identifiabilities are not visible
+by inspection yet can still be derived by hand:
+\begin{equation}
+\dot S = -\,\frac{k_{\mathrm{cat}}\,E_{\mathrm{tot}}\,S}{K_m + S},
+\qquad y = s\,S,
+\label{eq:mm}
+\end{equation}
+with unknowns $(S_0, E_{\mathrm{tot}}, K_m, s, k_{\mathrm{cat}})$, $\dim z = 5$.
+Two substitutions leave the whole trajectory unchanged.
+
+*The turnover-enzyme confounder.* The pair enters \eqref{eq:mm} only through
+$V_{\max} = k_{\mathrm{cat}} E_{\mathrm{tot}}$, so
+$k_{\mathrm{cat}} \to \lambda k_{\mathrm{cat}}$,
+$E_{\mathrm{tot}} \to \lambda^{-1} E_{\mathrm{tot}}$ fixes everything observed:
+weights $(k_{\mathrm{cat}}\!:1,\; E_{\mathrm{tot}}\!:-1)$.
+
+*The readout-units confounder.* The right-hand side is jointly homogeneous of
+degree one in the amounts $(S, K_m, E_{\mathrm{tot}})$, so rescaling them by $\mu$
+and compensating $s \to \mu^{-1}s$ keeps $y = sS$: weights
+$(S\!:1,\; E_{\mathrm{tot}}\!:1,\; K_m\!:1,\; s\!:-1)$.
+
+Both are scalings, so the data pin exactly $sS$, $sK_m$ and $sV_{\max}$: three
+functions, matching a rank of three out of five.
+
+```{r mm, eval = haveSympy}
+f <- eqnvec(S = "-kcat*Etot*S/(Km + S)")   # quasi-steady-state turnover
+g <- eqnvec(y = "s*S")                      # readout of unknown gain s
+
+res <- symmetryDetection(f, g, method = "observability", reconstruct = TRUE)
+```
+
+The engine returns two integer scalings spanning the same rank-$2$ lattice. The
+printed basis may combine the two hand-derived confounders, since a null space
+has no canonical basis, but the invariants it fixes are the same.
+
+## Two rates on a curve
+
+A non-identifiability need not be a straight ray. Gene expression observed only at
+the protein level,
+\begin{equation}
+\dot m = k_{tx} - d_m\,m, \qquad
+\dot p = k_{tl}\,m - d_p\,p, \qquad y = p,
+\label{eq:gene}
+\end{equation}
+cannot separate transcription from translation: more mRNA poorly translated and
+less mRNA well translated give the same protein. Scaling the hidden mRNA by any
+$\lambda > 0$,
+\begin{equation}
+m \to \lambda\,m, \quad m_0 \to \lambda\,m_0, \quad
+k_{tx} \to \lambda\,k_{tx}, \quad k_{tl} \to \lambda^{-1} k_{tl},
+\label{eq:gene-sym}
+\end{equation}
+leaves $y = p$ invariant. Eliminating $\lambda$ confines the two rates to
+$k_{tx}\,k_{tl} = \text{const}$, a hyperbola rather than a line: only the
+product, which sets $p_\infty = k_{tx} k_{tl}/(d_m d_p)$, is identifiable. The
+orbit is curved, but its generator is a plain scaling with weights
+$(k_{tx}\!:1,\; k_{tl}\!:-1,\; m\!:1)$:
+
+```{r gene, eval = haveSympy}
+f <- eqnvec(m = "ktx - dm*m", p = "ktl*m - dp*p")   # mRNA hidden, protein seen
+res <- symmetryDetection(f, eqnvec(y = "p"), method = "observability",
+                         reconstruct = TRUE)
+res$rank                                  # 5 of 6: one direction
+res$symmetries[[1]]$generator
+```
+
+The $m\!:1$ weight records that the hidden mRNA scales with $k_{tx}$ along the
+hyperbola. Degradation rates and the protein do not appear: the data fix them.
+
+## EGF/EGFR feeding a MEK/ERK cascade {#sec-egf}
+
+A larger but still hand-checkable network shows how to *read* a whole set of
+directions at once. EGF binds its receptor to form an active complex that
+phosphorylates MEK, phospho-MEK phosphorylates ERK, and each kinase is returned by
+a constitutive phosphatase. Only the two phospho-forms are measured, each on an
+unknown gain, so the ligand, the receptor and the unphosphorylated pools are
+hidden. Every rate is mass-action, so every direction is rational.
+
+```{r egf-model, eval = haveSympy}
+reactions <- eqnlist() |>
+  addReaction("EGF + EGFR", "EGF_EGFR", "k_bind * EGF * EGFR")   |>
+  addReaction("EGF_EGFR", "EGF + EGFR", "k_unbind * EGF_EGFR")   |>
+  addReaction("MEK", "pMEK", "k_phos_MEK * EGF_EGFR * MEK")      |>
+  addReaction("pMEK", "MEK", "k_dephos_MEK * pMEK")              |>
+  addReaction("ERK", "pERK", "k_phos_ERK * pMEK * ERK")          |>
+  addReaction("pERK", "ERK", "k_dephos_ERK * pERK")
+reactions <- customTotals(reactions, list(
+  totalEGF  = "EGF + EGF_EGFR", totalEGFR = "EGFR + EGF_EGFR",
+  totalMEK  = "MEK + pMEK",     totalERK  = "ERK + pERK"))
+
+observables <- eqnvec(pMEK_obs = "scale_pMEK * pMEK",
+                      pERK_obs = "scale_pERK * pERK")
+```
+
+`reduceCQ = FALSE` reports the directions in the species themselves rather than
+through the moiety totals, which makes them easier to read:
+
+```{r egf-run, eval = haveSympy}
+egf <- symmetryDetection(reactions, observables, method = "observability",
+                         reduceCQ = FALSE, reconstruct = TRUE)
+```
+
+Rank $11$ of $15$: four directions, three scalings and one rational confounder,
+each forced by the partial observation.
+
+* **Receptor-module units**
+  $(EGF\!:\!1,\, EGFR\!:\!1,\, EGF\_EGFR\!:\!1,\, k_{bind}\!:\!-1,\, k_{phosMEK}\!:\!-1)$.
+  The receptor module is never seen directly, so its concentration scale is free:
+  multiplying the three species by $\lambda$ scales the bimolecular flux by
+  $\lambda^2$, undone by $k_{bind}\!\to\!k_{bind}/\lambda$, and the MEK activation
+  is held by $k_{phosMEK}\!\to\!k_{phosMEK}/\lambda$.
+* **MEK amount against its readout gain**
+  $(MEK\!:\!1,\, pMEK\!:\!1,\, k_{phosERK}\!:\!-1,\, scale_{pMEK}\!:\!-1)$.
+* **ERK amount against its readout gain**
+  $(ERK\!:\!1,\, pERK\!:\!1,\, scale_{pERK}\!:\!-1)$, the same trade-off at the
+  foot of the cascade; nothing lies downstream, so no rate compensates.
+* **The binding equilibrium** (general). Only $EGF$, $EGFR$ and $k_{unbind}$ move,
+  with the complex and $k_{bind}$ held. Because the cascade reads the receptor
+  module only through that complex, the dissociation rate and the split between
+  free ligand and free receptor cannot be told apart.
+
+The scalings integrate by \eqref{eq:scaling-flow} into power laws. The general
+direction is the same construction with a non-constant $\eta$: writing
+$C = EGF\_EGFR$ and $D = k_{bind}(EGF - EGFR)$, the flow \eqref{eq:flow} is
+\begin{equation}
+\frac{d\,EGF}{d\varepsilon} = \frac{-(EGF + C)}{D},\qquad
+\frac{d\,EGFR}{d\varepsilon} = \frac{EGFR + C}{D},\qquad
+\frac{d\,k_{unbind}}{d\varepsilon} = 1,
+\end{equation}
+with $C$, $k_{bind}$ and everything downstream constant. It has no elementary
+closed form, but integrating it is unnecessary to see what it does: along the flow
+\begin{equation}
+\frac{d}{d\varepsilon}\big(k_{bind}\,EGF\,EGFR\big) = C,\qquad
+\frac{d}{d\varepsilon}\big(k_{unbind}\,EGF\_EGFR\big) = C,
+\end{equation}
+so binding and unbinding fluxes move in lockstep and their difference, the net
+rate of complex formation, is preserved. The orbit re-partitions free ligand and
+receptor and shifts the dissociation rate while holding the active complex and
+hence the entire measured cascade. That is exactly the non-identifiability the
+support announced.
+
+### Reducing it: the four steps in one report
+
+The receptor-module direction is a scaling, so one of its coordinates may be
+pinned at any positive value; doing that by hand with `trafo = eqnvec(EGF = "1")`
+leaves the two readout scalings and the binding equilibrium, and the curved one
+exercises all of Section \ref{sec-chart}.
+
+```{r egf-reduce, eval = haveSympy}
+egf1 <- symmetryDetection(reactions, observables, method = "observability",
+                          reduceCQ = FALSE, reconstruct = TRUE,
+                          trafo = eqnvec(EGF = "1"), verbose = FALSE)
+red <- symmetryReduction(egf1)
+summary(red)
+```
+
+The general block moves five coordinates, `EGFR`, `EGF_EGFR`, `k_bind`,
+`k_phos_MEK` and `k_unbind`, along a one-dimensional orbit, so the search looks for
+$5 - 1 = 4$ invariants. The polynomial stage already meets that count, but one of
+its members changes sign on the positive orthant and no positive parameter can
+carry it; the escalation therefore continues and the exponential-factor stage
+supplies a sign-definite rational replacement, which is why the block reports
+stage `exp` although the final set is entirely rational:
+\begin{equation*}
+I_1 = C\,k_{bind}, \quad
+I_2 = \frac{k_{phosMEK}}{k_{bind}}, \quad
+I_3 = k_{unbind} + k_{bind}(1 + EGFR), \quad
+I_4 = \frac{EGFR\,C + EGFR + C}{C^2},
+\end{equation*}
+with $C = EGF\_EGFR$. Step 2 finds the balance $EGFR\cdot k_{bind} = k_{bind}$ between two
+summands of $I_3$, reported in lowest terms as $EGFR = 1$ and certified monotone
+along every orbit, as the fifth equation. Step 3 solves the
+five jointly; the section makes one of them quadratic, hence the
+$\sqrt{q_4 + 1}$, and step 4 certifies every entry positive for all positive
+outer values, which is also what pins the branch of that root. $I_3$ needs an
+offset, worked out below, after which its entry is the bare parameter,
+`k_unbind = q_3`. Four outer parameters for five moved coordinates, one fewer than
+the model started with.
+
+**The elimination, by hand.** Write $C = EGF\_EGFR$. On the section $EGFR = 1$ the
+fourth invariant collapses to $I_4 = (2C+1)/C^2$, so naming it $q_4$ gives a
+genuine quadratic in its carrier,
+\begin{equation*}
+q_4\,C^2 - 2\,C - 1 = 0
+\qquad\Longrightarrow\qquad
+C = \frac{1 \pm \sqrt{1 + q_4}}{q_4} ,
+\end{equation*}
+and since $\sqrt{1+q_4} > 1$ only the $+$ branch is positive: step 4 does the
+choosing, and the entry is `EGF_EGFR = (sqrt(q_4 + 1) + 1)/q_4`. The first
+invariant then gives $k_{bind}$ by division, $k_{bind} = q_1/C$, whose radical
+denominator clears by conjugate multiplication, the one rewrite `cancel()` cannot
+do on its own:
+\begin{equation*}
+k_{bind} \;=\; \frac{q_1\,q_4}{1 + \sqrt{1+q_4}}
+        \;=\; \frac{q_1\,q_4\,\big(\sqrt{1+q_4} - 1\big)}{(1+q_4) - 1}
+        \;=\; q_1\big(\sqrt{1+q_4} - 1\big) ,
+\end{equation*}
+and $I_2 = k_{phosMEK}/k_{bind}$ multiplies it up to $k_{phosMEK} = q_2\,k_{bind}$.
+
+The third invariant is where an offset becomes unavoidable. On the section
+$I_3 = k_{unbind} + 2\,k_{bind}$, so naming it directly would give
+$k_{unbind} = q - 2\,k_{bind}$, negative wherever $q$ is small: no parameter free
+on $(0,\infty)$ can carry $I_3$. The offset is the AM--GM bound. With
+$I_4 + 1 = (1+C)(EGFR+C)/C^2$,
+\begin{equation*}
+\varphi \;=\; 2\,I_1\big(\sqrt{I_4+1} - 1\big)
+        \;=\; 2\,k_{bind}\Big[\sqrt{(1+C)(EGFR+C)} - C\Big] ,
+\end{equation*}
+so $I_3 - \varphi > 0$ reads
+\begin{equation*}
+k_{unbind} + k_{bind}\big[(1 + C) + (EGFR + C)\big]
+\;>\; 2\,k_{bind}\sqrt{(1+C)(EGFR+C)} ,
+\end{equation*}
+which is AM--GM on the two bracketed factors, strict because $k_{unbind} > 0$ --
+the coverage proof. AM--GM holds with equality exactly when the two factors agree,
+that is at $EGFR = 1$, which is the section itself; there $\varphi = 2\,k_{bind}$
+and $I_3 - \varphi$ is *exactly* $k_{unbind}$. The offset is therefore not merely
+sufficient but sharp, which is why that entry comes out as the bare parameter,
+`k_unbind = q_3`.
+
+### The same network at rest, with a dose {#sec-egf-dose}
+
+Michaelis--Menten rates, the states started at the resting state `steadyStates()`
+solves for, and a unit dose of EGF at $t = 0$:
+
+```{r egf-dose, eval = haveSympy}
+reactionsMM <- eqnlist() |>
+  addReaction("EGF + EGFR", "EGF_EGFR", "k_bind * EGF * EGFR")                |>
+  addReaction("EGF_EGFR", "EGF + EGFR", "k_unbind * EGF_EGFR")                |>
+  addReaction("MEK", "pMEK", "k_phos_MEK * EGF_EGFR * MEK / (Km_MEK + MEK)")  |>
+  addReaction("pMEK", "MEK", "k_dephos_MEK * pMEK / (Km_pMEK + pMEK)")        |>
+  addReaction("ERK", "pERK", "k_phos_ERK * pMEK * ERK / (Km_ERK + ERK)")      |>
+  addReaction("pERK", "ERK", "k_dephos_ERK * pERK / (Km_pERK + pERK)")
+rest <- eqnvec(
+  k_phos_MEK = "k_dephos_MEK*pMEK*(Km_MEK + MEK)/(EGF_EGFR*MEK*(Km_pMEK + pMEK))",
+  k_phos_ERK = "k_dephos_ERK*pERK*(ERK + Km_ERK)/(ERK*pMEK*(Km_pERK + pERK))",
+  EGF        = "EGF_EGFR*k_unbind/(EGFR*k_bind)")
+dose <- eventlist(var = "EGF", time = 0, value = "1", method = "add")
+
+egf2 <- symmetryDetection(reactionsMM, eqnvec(pMEK_obs = "pMEK", pERK_obs = "pERK"),
+                          method = "observability", events = dose, trafo = rest,
+                          reduceCQ = FALSE, reconstruct = TRUE)
+```
+
+A `trafo` right-hand side names *initial values*, never the running states
+(Section \ref{sec-trafo}), and here that distinction is load-bearing: the resting
+state is written in the state symbols themselves, so reading them as states and
+substituting $k_{phosMEK}$ back into its own equation gives, with
+$C = EGF\_EGFR$,
+\begin{equation}
+\dot{pMEK} \;=\; k_{phosMEK}\,\frac{C\,MEK}{K_{MEK}+MEK}
+              \;-\; k_{dephosMEK}\,\frac{pMEK}{K_{pMEK}+pMEK} \;\equiv\; 0 ,
+\label{eq:ss-collapse}
+\end{equation}
+the cascade frozen and every Michaelis constant and phosphatase rate out of the
+analysis with it. The dose is what makes the resting state informative: without it
+the trajectory never leaves the steady state and the observation says no more than
+$pMEK$ and $pERK$ themselves.
+
+Rank $13$ of $14$, one direction, on the receptor module alone:
+\begin{equation}
+\eta_{EGFR} = 2\,EGFR\,(EGFR + C), \quad
+\eta_{C} = C\,(EGFR + C), \quad
+\eta_{k_{bind}} = -\,k_{bind}\,(EGFR + C),
+\label{eq:egf-dose-gen}
+\end{equation}
+with $\eta_{k_{unbind}} = k_{bind}\,EGFR\,(1 - EGFR) + C\,k_{unbind}$. Two invariants
+come straight off \eqref{eq:egf-dose-gen}, since $\eta_{k_{bind}}/k_{bind}$ is both
+$-\tfrac12\,\eta_{EGFR}/EGFR$ and $-\,\eta_{C}/C$:
+\begin{equation}
+I_1 = EGFR\,k_{bind}^2, \qquad I_2 = C\,k_{bind} .
+\label{eq:egf-dose-inv}
+\end{equation}
+The third moves $k_{unbind}$ and comes from the rational stage,
+\begin{equation}
+I_3 \;=\; \frac{EGFR^2 k_{bind} + EGFR\,k_{bind} + EGFR\,k_{unbind} + C\,k_{unbind}}
+               {EGFR}
+    \;=\; k_{bind}\,(EGFR + 1) \;+\; k_{unbind}\,\frac{EGFR + C}{EGFR} .
+\label{eq:egf-dose-I3}
+\end{equation}
+
+Step 2 balances two summands of \eqref{eq:egf-dose-I3}; in lowest terms the section
+is $EGFR = 1$, monotone since
+$X(\log r) = -\,X(EGFR)/EGFR = -2\,(EGFR + C) < 0$. Step 4 needs an offset again,
+and it is AM--GM once more, now between $EGFR$ and $1$:
+$k_{bind}(EGFR + 1) \ge 2\,k_{bind}\sqrt{EGFR} = 2\sqrt{I_1}$, so the carrier holds
+\begin{equation}
+q_3 \;=\; I_3 - 2\sqrt{I_1}
+    \;=\; k_{bind}\big(\sqrt{EGFR} - 1\big)^2 + k_{unbind}\,\frac{EGFR + C}{EGFR} ,
+\label{eq:egf-dose-offset}
+\end{equation}
+a completed square plus a positive term, with infimum $0$ -- the range a parameter
+free on $(0,\infty)$ needs. Equality in AM--GM holds exactly at $EGFR = 1$, the
+section itself, so the offset is sharp there too. It is a function of $I_1$ alone,
+which makes $X(q_3) = X(I_3) - 2\,X(\sqrt{I_1}) = 0$ immediate. The chart then
+follows from \eqref{eq:egf-dose-inv} on the section,
+\begin{equation}
+EGFR = 1, \quad k_{bind} = \sqrt{q_1}, \quad C = \frac{q_2}{\sqrt{q_1}}, \quad
+k_{unbind} = \frac{\sqrt{q_1}\;q_3}{\sqrt{q_1} + q_2} ,
+\label{eq:egf-dose-chart}
+\end{equation}
+the last entry because $q_3 = k_{unbind}(1 + C)$ there while
+$\sqrt{q_1} + q_2 = k_{bind}(1 + C)$.
+
+```{r egf-dose-reduce, eval = haveSympy}
+summary(symmetryReduction(egf2))
+```
+
+# References
+
+Ben-Or, M., and Tiwari, P. (1988). A deterministic algorithm for sparse
+multivariate polynomial interpolation. In *Proceedings of the 20th Annual ACM
+Symposium on Theory of Computing (STOC)*, 301--309.
+
+Christopher, C., Llibre, J., and Pereira, J. V. (2007). Multiplicity of invariant
+algebraic curves in polynomial vector fields. *Pacific Journal of Mathematics*
+229, 63--117.
+
+Hong, H., Ovchinnikov, A., Pogudin, G., and Yap, C. (2020). Global
+identifiability of differential models. *Communications on Pure and Applied
+Mathematics* 73, 1831--1879.
+
+Massonis, G., and Villaverde, A. F. (2020). Finding and breaking Lie symmetries:
+implications for structural identifiability and observability in biological
+modelling. *Symmetry* 12, 469.
+
+Merkt, B., Timmer, J., and Kaschek, D. (2015). Higher-order Lie symmetries
+in identifiability and predictability analysis of dynamic models.
+*Physical Review E* 92, 012920.
+
+Olver, P. J. (1993). *Applications of Lie Groups to Differential Equations*,
+2nd edition. Springer, New York.
+
+Pohjanpalo, H. (1978). System identifiability based on the power series
+expansion of the solution. *Mathematical Biosciences* 41, 21--33.
+
+Prelle, M. J., and Singer, M. F. (1983). Elementary first integrals of
+differential equations. *Transactions of the American Mathematical Society* 279,
+215--229.
+
+Saccomani, M. P., Audoly, S., and D'Angiò, L. (2003). Parameter identifiability
+of nonlinear systems: the role of initial conditions. *Automatica* 39, 619--632.
+
+Savageau, M. A., and Voit, E. O. (1987). Recasting nonlinear differential
+equations as S-systems: a canonical nonlinear form. *Mathematical Biosciences*
+87, 83--115.
+
+Sedoglavic, A. (2002). A probabilistic algorithm to test local algebraic
+observability in polynomial time. *Journal of Symbolic Computation* 33,
+735--755.
+
+Villaverde, A. F., Barreiro, A., and Papachristodoulou, A. (2016).
+Structural identifiability of dynamic systems biology models. *PLoS
+Computational Biology* 12, e1005153.
