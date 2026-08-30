@@ -249,6 +249,72 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// mcmc_chain_run
+Rcpp::List mcmc_chain_run(Rcpp::Function objfun, Rcpp::NumericVector parinit, int n, int warmup, int moveType, Rcpp::List control, Rcpp::List bounds, Rcpp::NumericVector parscale_, Rcpp::Nullable<Rcpp::Function> dG_cb_opt);
+RcppExport SEXP _dMod2_mcmc_chain_run(SEXP objfunSEXP, SEXP parinitSEXP, SEXP nSEXP, SEXP warmupSEXP, SEXP moveTypeSEXP, SEXP controlSEXP, SEXP boundsSEXP, SEXP parscale_SEXP, SEXP dG_cb_optSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Rcpp::Function >::type objfun(objfunSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type parinit(parinitSEXP);
+    Rcpp::traits::input_parameter< int >::type n(nSEXP);
+    Rcpp::traits::input_parameter< int >::type warmup(warmupSEXP);
+    Rcpp::traits::input_parameter< int >::type moveType(moveTypeSEXP);
+    Rcpp::traits::input_parameter< Rcpp::List >::type control(controlSEXP);
+    Rcpp::traits::input_parameter< Rcpp::List >::type bounds(boundsSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericVector >::type parscale_(parscale_SEXP);
+    Rcpp::traits::input_parameter< Rcpp::Nullable<Rcpp::Function> >::type dG_cb_opt(dG_cb_optSEXP);
+    rcpp_result_gen = Rcpp::wrap(mcmc_chain_run(objfun, parinit, n, warmup, moveType, control, bounds, parscale_, dG_cb_opt));
+    return rcpp_result_gen;
+END_RCPP
+}
+// mcmc_smc_reweight
+Rcpp::List mcmc_smc_reweight(const Rcpp::NumericVector& logL, const Rcpp::NumericVector& logwPrev, double betaOld, double betaNew);
+RcppExport SEXP _dMod2_mcmc_smc_reweight(SEXP logLSEXP, SEXP logwPrevSEXP, SEXP betaOldSEXP, SEXP betaNewSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const Rcpp::NumericVector& >::type logL(logLSEXP);
+    Rcpp::traits::input_parameter< const Rcpp::NumericVector& >::type logwPrev(logwPrevSEXP);
+    Rcpp::traits::input_parameter< double >::type betaOld(betaOldSEXP);
+    Rcpp::traits::input_parameter< double >::type betaNew(betaNewSEXP);
+    rcpp_result_gen = Rcpp::wrap(mcmc_smc_reweight(logL, logwPrev, betaOld, betaNew));
+    return rcpp_result_gen;
+END_RCPP
+}
+// mcmc_stratified_resample
+IntegerVector mcmc_stratified_resample(const NumericVector& weights);
+RcppExport SEXP _dMod2_mcmc_stratified_resample(SEXP weightsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const NumericVector& >::type weights(weightsSEXP);
+    rcpp_result_gen = Rcpp::wrap(mcmc_stratified_resample(weights));
+    return rcpp_result_gen;
+END_RCPP
+}
+// mcmc_residual_resample
+IntegerVector mcmc_residual_resample(const NumericVector& weights);
+RcppExport SEXP _dMod2_mcmc_residual_resample(SEXP weightsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const NumericVector& >::type weights(weightsSEXP);
+    rcpp_result_gen = Rcpp::wrap(mcmc_residual_resample(weights));
+    return rcpp_result_gen;
+END_RCPP
+}
+// mcmc_multinomial_resample
+IntegerVector mcmc_multinomial_resample(const NumericVector& weights);
+RcppExport SEXP _dMod2_mcmc_multinomial_resample(SEXP weightsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const NumericVector& >::type weights(weightsSEXP);
+    rcpp_result_gen = Rcpp::wrap(mcmc_multinomial_resample(weights));
+    return rcpp_result_gen;
+END_RCPP
+}
 // normL2_kernel
 List normL2_kernel(List prediction, Nullable<List> err_list_opt, List meta_list, CharacterVector par_names_global, bool deriv2_requested, int threads, std::string bloq_mode);
 RcppExport SEXP _dMod2_normL2_kernel(SEXP predictionSEXP, SEXP err_list_optSEXP, SEXP meta_listSEXP, SEXP par_names_globalSEXP, SEXP deriv2_requestedSEXP, SEXP threadsSEXP, SEXP bloq_modeSEXP) {
@@ -463,6 +529,11 @@ static const R_CallMethodDef CallEntries[] = {
     {"_dMod2_focei_run", (DL_FUNC) &_dMod2_focei_run, 10},
     {"_dMod2_normalLaplaceCpp", (DL_FUNC) &_dMod2_normalLaplaceCpp, 3},
     {"_dMod2_clusterMarginalCpp", (DL_FUNC) &_dMod2_clusterMarginalCpp, 11},
+    {"_dMod2_mcmc_chain_run", (DL_FUNC) &_dMod2_mcmc_chain_run, 9},
+    {"_dMod2_mcmc_smc_reweight", (DL_FUNC) &_dMod2_mcmc_smc_reweight, 4},
+    {"_dMod2_mcmc_stratified_resample", (DL_FUNC) &_dMod2_mcmc_stratified_resample, 1},
+    {"_dMod2_mcmc_residual_resample", (DL_FUNC) &_dMod2_mcmc_residual_resample, 1},
+    {"_dMod2_mcmc_multinomial_resample", (DL_FUNC) &_dMod2_mcmc_multinomial_resample, 1},
     {"_dMod2_normL2_kernel", (DL_FUNC) &_dMod2_normL2_kernel, 7},
     {"_dMod2_parvec_attach", (DL_FUNC) &_dMod2_parvec_attach, 3},
     {"_dMod2_parvec_concat", (DL_FUNC) &_dMod2_parvec_concat, 1},

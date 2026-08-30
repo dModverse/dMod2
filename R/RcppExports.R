@@ -53,6 +53,26 @@ clusterMarginalCpp <- function(H, m, lambda, sizes, B, L, zc, U, logw, z2, sgn) 
     .Call(`_dMod2_clusterMarginalCpp`, H, m, lambda, sizes, B, L, zc, U, logw, z2, sgn)
 }
 
+mcmcChainRun <- function(objfun, parinit, n, warmup, moveType, control, bounds, parscale_, dG_cb_opt) {
+    .Call(`_dMod2_mcmc_chain_run`, objfun, parinit, n, warmup, moveType, control, bounds, parscale_, dG_cb_opt)
+}
+
+mcmcSmcReweight <- function(logL, logwPrev, betaOld, betaNew) {
+    .Call(`_dMod2_mcmc_smc_reweight`, logL, logwPrev, betaOld, betaNew)
+}
+
+mcmcStratifiedResample <- function(weights) {
+    .Call(`_dMod2_mcmc_stratified_resample`, weights)
+}
+
+mcmcResidualResample <- function(weights) {
+    .Call(`_dMod2_mcmc_residual_resample`, weights)
+}
+
+mcmcMultinomialResample <- function(weights) {
+    .Call(`_dMod2_mcmc_multinomial_resample`, weights)
+}
+
 normL2_kernel <- function(prediction, err_list_opt, meta_list, par_names_global, deriv2_requested, threads, bloq_mode = "M3") {
     .Call(`_dMod2_normL2_kernel`, prediction, err_list_opt, meta_list, par_names_global, deriv2_requested, threads, bloq_mode)
 }
