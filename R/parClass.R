@@ -2,7 +2,7 @@
 
 #' Parameter list
 #' 
-#' @param x list of lists, as returned by \code{trust}
+#' @param x list of lists, as returned by `trust`
 #' @rdname parlist
 #' @export
 as.parlist <- function(x = NULL) {
@@ -15,6 +15,27 @@ as.parlist <- function(x = NULL) {
 }
 
 #' @export
+#' @rdname parlist
+print.parlist <- function(x, ...) {
+
+  if (length(x) == 0L) {
+    cat("Empty parlist (no fits).\n")
+    return(invisible(x))
+  }
+
+  m_stat <- .statParlist(x)
+
+  cat("Parameter list of", length(x), if (length(x) == 1L) "fit\n" else "fits\n")
+  cat("... converged:     ", sum(m_stat == "converged"), "\n")
+  cat("... not converged: ", sum(m_stat == "notconverged"), "\n")
+  cat("... aborted:       ", sum(m_stat == "error"), "\n")
+  cat("\nUse summary() for the best/worst fit, as.parframe() for a data frame.\n")
+
+  invisible(x)
+
+}
+
+#' @export
 #' @param object a parlist
 #' @rdname parlist
 summary.parlist <- function(object, ...) {
@@ -22,7 +43,7 @@ summary.parlist <- function(object, ...) {
   x <- object
   
   # Statistics
-  m_stat <- stat.parlist(x)
+  m_stat <- .statParlist(x)
   m_error <- sum(m_stat == "error")
   m_converged <- sum(m_stat == "converged")
   m_notConverged <- sum(m_stat == "notconverged")
@@ -42,13 +63,22 @@ summary.parlist <- function(object, ...) {
       "\nFits not converged: ", m_notConverged,
       "\nFits converged:     ", m_converged,
       "\nFits total:         ", m_sumStatus, " [", m_total, "]", sep = "")
+
+  m_reasons <- .stopReasonTable(x)
+  if (!is.null(m_reasons)) {
+    cat("\n\nTermination reason\n")
+    for (nm in names(m_reasons))
+      cat(formatC(nm, width = -20), m_reasons[[nm]], "\n", sep = "")
+  }
+  invisible(object)
 }
 
 
 
-#' Gather statistics of a fitlist
-#' @param x The fitlist
-stat.parlist <- function(x) {
+## Gather statistics of a fitlist: one row per fit, holding the convergence
+## status ("error" / "converged" / "notconverged"). Consumed by
+## summary.parlist() and as.parframe.parlist().
+.statParlist <- function(x) {
   status <- do.call(rbind, lapply(x, function(fit) {
     if (inherits(fit, "try-error") || any(names(fit) == "error") || any(is.null(fit))) {
       return("error")
@@ -63,8 +93,29 @@ stat.parlist <- function(x) {
   
   rownames(status) <- 1:length(status)
   colnames(status) <- "fit status"
-  
+
   return(status)
+}
+
+
+## Termination reason per fit, as reported by trust()$stopReason. NA for fits
+## that errored or predate the field. "gradient" is the only certified stop;
+## "stagnation" and "iterlim" mean the run ran out of resolution or budget.
+.stopReasonParlist <- function(x) {
+  vapply(x, function(fit) {
+    if (inherits(fit, "try-error") || any(names(fit) == "error") || is.null(fit))
+      return(NA_character_)
+    if (is.null(fit$stopReason)) NA_character_ else as.character(fit$stopReason)
+  }, NA_character_, USE.NAMES = FALSE)
+}
+
+
+## Tabulate termination reasons for printing; empty when nothing reports one.
+.stopReasonTable <- function(x) {
+  reasons <- .stopReasonParlist(x)
+  reasons <- reasons[!is.na(reasons)]
+  if (!length(reasons)) return(NULL)
+  sort(table(reasons), decreasing = TRUE)
 }
 
 
@@ -73,7 +124,7 @@ stat.parlist <- function(x) {
 #' @param x fitlist obtained from mstrust
 #' @param ... additional arguments
 #' @param path print path of parameters from initials to convergence. For this
-#'   option to be TRUE \code{\link{mstrust}} must have had the option
+#'   option to be TRUE [mstrust()] must have had the option
 #'   \option{blather}.
 #' 
 #' @details If path=TRUE:        
@@ -118,16 +169,22 @@ plot.parlist <- function(x, path = FALSE, ...) {
 #' @importFrom data.table as.data.table rbindlist
 #' @rdname as.parframe
 #' @param sort.by character indicating by which colum the returned parameter frame
-#' should be sorted. Defaults to \code{"value"}.
+#' should be sorted. Defaults to `"value"`.
 as.parframe.parlist <- function(x, sort.by = "value", ...) {
-  m_stat <- stat.parlist(x)
+  m_stat <- .statParlist(x)
   m_metanames <- c("index", "value", "converged", "iterations")
   m_idx <- which("error" != m_stat)
-  m_parframe <- data.frame(index = m_idx, 
+  m_parframe <- data.frame(index = m_idx,
                            value = vapply(x[m_idx], function(.x) .x$value, 1.0),
                            converged = vapply(x[m_idx], function(.x) .x$converged, TRUE),
                            iterations = vapply(x[m_idx], function(.x) as.integer(.x$iterations), 1L))
-  
+
+  m_reasons <- .stopReasonParlist(x)[m_idx]
+  if (any(!is.na(m_reasons))) {
+    m_parframe$stopReason <- m_reasons
+    m_metanames <- c(m_metanames, "stopReason")
+  }
+
   parameters <- lapply(x[m_idx], function(x) data.table::as.data.table(as.list(x$argument)))
   parameters <- data.table::rbindlist(parameters, use.names = TRUE)
   m_parframe <- cbind(m_parframe, parameters)
@@ -172,7 +229,7 @@ c.parlist <- function(...) {
 #' 
 #' @param x object to be coerced
 #' @param ... other arguments
-#' @return object of class \link{parframe}.
+#' @return object of class [parframe].
 #' @example inst/examples/parlist.R
 #' @export
 as.parframe <- function(x, ...) {
@@ -185,8 +242,8 @@ as.parframe <- function(x, ...) {
 #' @description Obtain a parameter vector from a parameter frame.
 #' 
 #' @param x A parameter frame, e.g., the output of
-#'   \code{\link{as.parframe}}.
-#' @param index Integer, the parameter vector with the \code{index}-th lowest
+#'   [as.parframe()].
+#' @param index Integer, the parameter vector with the `index`-th lowest
 #'   objective value.
 #' @param ... not used right now
 #'   
@@ -227,7 +284,7 @@ plotPars.parframe <- function(x, tol = 1, ...){
   
   if (!missing(...)) x <- subset(x, ...)
   
-  jumps <- stepDetect(x$value, tol)
+  jumps <- .stepDetect(x$value, tol)
   jump.index <- approx(jumps, jumps, xout = 1:length(x$value), method = "constant", rule = 2)$y
   
   #values <- round(x$value/tol)
@@ -251,26 +308,32 @@ plotPars.parframe <- function(x, tol = 1, ...){
 
 #' @export
 #' @rdname plotValues
-plotValues.parframe <- function(x, tol = 1, ...) {
-  
+plotValues.parframe <- function(x, tol = 1, ..., showSteps = FALSE) {
+
   if (!missing(...)) x <- subset(x, ...)
-  
-  jumps <- stepDetect(x$value, tol)
+
+  jumps <- .stepDetect(x$value, tol)
   y.range <- c(min(x$value), max(max(x$value), min(x$value) + tol))
   y.jumps <- seq(y.range[2], y.range[1], length.out = length(jumps))
-  
-  
+
+
   pars <- x
   pars <- pars[order(pars$value),]
   pars[["index"]] <-  1:nrow(pars)
-  
-  
-  
-  P <- ggplot2::ggplot(pars, aes(x = index, y = value, pch = converged, color = iterations)) + 
-    geom_vline(xintercept = jumps, lty = 2) +
-    geom_point() + 
-    annotate("text", x = jumps + 1, y = y.jumps, label = jumps, hjust = 0, color = "firebrick", size = 3) +
-    xlab("index") + ylab("value") + 
+
+
+
+  stepLines <- stepLabels <- NULL
+  if (showSteps) {
+    stepLines <- geom_vline(xintercept = jumps, lty = 2)
+    stepLabels <- annotate("text", x = jumps + 1, y = y.jumps, label = jumps, hjust = 0, color = "firebrick", size = 3)
+  }
+
+  P <- ggplot2::ggplot(pars, aes(x = index, y = value, pch = converged, color = iterations)) +
+    stepLines +
+    geom_point() +
+    stepLabels +
+    xlab("index") + ylab("value") +
     scale_color_gradient(low = "dodgerblue", high = "orange") +
     coord_cartesian(ylim = y.range) +
     theme_dMod()
@@ -284,209 +347,134 @@ plotValues.parframe <- function(x, tol = 1, ...) {
 
 
 
-#' @export
-#' @rdname plotProfile
-plotProfile.parframe <- function(profs, ..., maxvalue = 5, parlist = NULL) {
-  
-  if("parframe" %in% class(profs)) 
-    arglist <- list(profs)
-  else
-    arglist <- as.list(profs)
-  
-  
-  if (is.null(names(arglist))) {
-    profnames <- 1:length(arglist)
-  } else {
-    profnames <- names(arglist)
-  }
-  
-  data <- do.call(rbind, lapply(1:length(arglist), function(i) {
-    proflist <- as.data.frame(arglist[[i]])
-    obj.attributes <- attr(arglist[[i]], "obj.attributes")
-    
-    if(is.data.frame(proflist)) {
-      whichPars <- unique(proflist$whichPar)
-      proflist <- lapply(whichPars, function(n) {
-        with(proflist, proflist[whichPar == n, ])
-      })
-      names(proflist) <- whichPars
-    }
-    
-    do.valueData <- "valueData" %in% colnames(proflist[[1]])
-    do.valuePrior <- "valuePrior" %in% colnames(proflist[[1]])
-    
-    
-    # Discard faulty profiles
-    proflistidx <- sapply(proflist, function(prf) any(class(prf) == "data.frame"))
-    proflist <- proflist[proflistidx]
-    if (sum(!proflistidx) > 0) {
-      warning(sum(!proflistidx), " profiles discarded.", call. = FALSE)
-    }
-    
-    subdata <- do.call(rbind, lapply(names(proflist), function(n) {
-      
-      values <- proflist[[n]][, "value"]
-      origin <- which.min(abs(proflist[[n]][, "constraint"]))
-      zerovalue <- proflist[[n]][origin, "value"]
-      parvalues <- proflist[[n]][, n]
-      deltavalues <- values - zerovalue
-      
-      sub <- subset(data.frame(name = n, delta = deltavalues, par = parvalues, proflist = profnames[i], mode="total", is.zero = 1:nrow(proflist[[n]]) == origin), delta <= maxvalue)
-      
-      if(!is.null(obj.attributes)) {
-        for(mode in obj.attributes) {
-          valuesO <- proflist[[n]][, mode]
-          originO <- which.min(abs(proflist[[n]][, "constraint"]))
-          zerovalueO <- proflist[[n]][originO, mode]
-          deltavaluesO <- valuesO - zerovalueO
-          sub <- rbind(sub,subset(data.frame(name = n, delta = deltavaluesO, par = parvalues, proflist = profnames[i], mode=mode, is.zero = 1:nrow(proflist[[n]]) == originO), delta <= maxvalue))
-        }
-      }
-      
-      return(sub)
-    }))
-    return(subdata)
+# Default lines of a profile plot: the chi-square thresholds, labelled with the
+# level they belong to. The names carry the labels, so a caller can hand in the
+# thresholds its intervals are actually read at.
+.profileLines <- function() {
+  c("68%" = 1, "90%" = qchisq(0.90, 1), "95%" = qchisq(0.95, 1))
+}
+
+.profileLineLabels <- function(threshold) {
+  labels <- names(threshold)
+  if (is.null(labels)) labels <- formatC(threshold, format = "f", digits = 2)
+  labels
+}
+
+
+# Profile sets covered by one call. Names label the colour scale.
+.profileSets <- function(profs) {
+  sets <- if (inherits(profs, "parframe")) list(profs) else as.list(profs)
+  if (is.null(names(sets))) names(sets) <- seq_along(sets)
+  sets
+}
+
+# One data.frame per profiled parameter. Failed profiles are dropped.
+.profileSplit <- function(x) {
+  prof <- as.data.frame(x)
+  if (is.data.frame(prof)) prof <- split(prof, prof[["whichPar"]])
+  ok <- vapply(prof, is.data.frame, logical(1))
+  if (!all(ok)) warning(sum(!ok), " profiles discarded.", call. = FALSE)
+  prof[ok]
+}
+
+# Long format for one parameter. `delta` is measured against the profile's own
+# origin, where the constraint vanishes.
+.profileDeltas <- function(prof, name, set, modes, maxvalue) {
+  origin <- which.min(abs(prof[["constraint"]]))
+  block <- function(column, mode)
+    data.frame(name    = name,
+               delta   = prof[[column]] - prof[[column]][origin],
+               par     = prof[[name]],
+               proflist = set,
+               mode    = mode,
+               is.zero = seq_len(nrow(prof)) == origin)
+  out <- do.call(rbind, c(list(block("value", "total")),
+                          lapply(modes, function(m) block(m, m))))
+  out[which(out$delta <= maxvalue), , drop = FALSE]
+}
+
+# The frame behind every profile plot, over all sets and parameters.
+.profileFrame <- function(sets, maxvalue) {
+  out <- do.call(rbind, lapply(names(sets), function(s) {
+    modes <- attr(sets[[s]], "obj.attributes")
+    parts <- .profileSplit(sets[[s]])
+    do.call(rbind, lapply(names(parts), function(n)
+      .profileDeltas(parts[[n]], n, s, modes, maxvalue)))
   }))
-  
-  data$proflist <- as.factor(data$proflist)
-  data <- droplevels(subset(data, ...))
-  
-  data.zero <- subset(data, is.zero)
-  
-  threshold <- c(1, 2.7, 3.84)
-  
-  data <- droplevels.data.frame(subset(data, ...))
-  
-  p <- ggplot(data, aes(x=par, y=delta, group=interaction(proflist,mode), color=proflist, linetype=mode)) + facet_wrap(~name, scales="free_x") + 
-    geom_hline(yintercept=threshold, lty=2, color="gray") + 
-    geom_line() + #geom_point(aes=aes(size=1), alpha=1/3) +
-    geom_point(data = data.zero) +
-    ylab(expression(paste("CL /", Delta*chi^2))) +
-    scale_y_continuous(breaks=c(1, 2.7, 3.84), labels = c("68% / 1   ", "90% / 2.71", "95% / 3.84"), limits = c(NA, maxvalue)) +
-    xlab("parameter value")
-  
-  if(!is.null(parlist)){
-    delta <- 0
-    if("value" %in% colnames(parlist)){
-      minval <- min(unlist(lapply(1:length(arglist), function(i){ 
-        origin <- which.min(arglist[[i]][["constraint"]])
-        zerovalue <- arglist[[i]][origin, 1]  
-      })))
-      values <- parlist[, "value", drop = TRUE]
-      parlist <- parlist[,!(colnames(parlist) %in% c("index", "value", "converged", "iterations"))]
-      delta <- as.numeric(values - minval)
-    }
-    points <- data.frame(par = as.numeric(as.matrix(parlist)), name = rep(colnames(parlist), each = nrow(parlist)), delta = delta)
-    
-    #points <- data.frame(name = colnames(parlist), par = as.numeric(parlist), delta=0)
-    p <- p + geom_point(data=points, aes(x=par, y=delta), color = "black", inherit.aes = FALSE)
+  out$proflist <- as.factor(out$proflist)
+  out
+}
+
+# Reference for the `parlist` points: lowest value at any profile origin.
+.profileReference <- function(sets) {
+  min(vapply(sets, function(p) {
+    d <- as.data.frame(p)
+    d[[which.min(abs(d[["constraint"]])), 1L]]
+  }, numeric(1)))
+}
+
+# `parlist` overlay. A `value` column places points at their distance to the
+# reference, otherwise on the zero line.
+.profilePoints <- function(parlist, sets) {
+  delta <- 0
+  if ("value" %in% colnames(parlist)) {
+    delta   <- as.numeric(parlist[, "value", drop = TRUE] - .profileReference(sets))
+    parlist <- parlist[, !colnames(parlist) %in%
+                         c("index", "value", "converged", "iterations")]
   }
+  points <- data.frame(par   = as.numeric(as.matrix(parlist)),
+                       name  = rep(colnames(parlist), each = nrow(parlist)),
+                       delta = delta)
+  geom_point(data = points, aes(x = par, y = delta), color = "black",
+             inherit.aes = FALSE)
+}
+
+# Shared body of the plotProfile methods.
+.profilePlot <- function(data, sets, parlist, ncol, maxvalue, threshold) {
+
+  # The optimum is always drawn, whatever the thresholds are.
+  keep      <- threshold != 0
+  labels    <- c("optimum", .profileLineLabels(threshold)[keep])
+  threshold <- c(0, threshold[keep])
+
+  p <- ggplot(data, aes(x = par, y = delta, group = interaction(proflist, mode),
+                        color = proflist, linetype = mode)) +
+    facet_wrap(~name, scales = "free_x", ncol = ncol) +
+    geom_hline(yintercept = threshold, lty = 2, color = "gray") +
+    geom_line() +
+    geom_point(data = subset(data, is.zero)) +
+    scale_y_continuous(breaks = threshold, labels = labels,
+                       limits = c(NA, maxvalue)) +
+    xlab("parameter value") + ylab("Confidence Level")
+
+  # A single set needs no colour legend to say so.
+  p <- if (nlevels(data$proflist) < 2L) p + guides(color = "none")
+       else p + labs(color = "set")
+
+  if (!is.null(parlist)) p <- p + .profilePoints(parlist, sets)
+
   attr(p, "data") <- data
-  return(p)
-  
+  p
 }
 
 
 #' @export
 #' @rdname plotProfile
-plotProfile.list <- function(profs, ..., maxvalue = 5, parlist = NULL) {
-  
-  if("parframe" %in% class(profs)) 
-    arglist <- list(profs)
-  else
-    arglist <- as.list(profs)
-  
-  
-  if (is.null(names(arglist))) {
-    profnames <- 1:length(arglist)
-  } else {
-    profnames <- names(arglist)
-  }
-  
-  data <- do.call(rbind, lapply(1:length(arglist), function(i) {
-    proflist <- as.data.frame(arglist[[i]])
-    obj.attributes <- attr(arglist[[i]], "obj.attributes")
-    
-    if(is.data.frame(proflist)) {
-      whichPars <- unique(proflist$whichPar)
-      proflist <- lapply(whichPars, function(n) {
-        with(proflist, proflist[whichPar == n, ])
-      })
-      names(proflist) <- whichPars
-    }
-    
-    do.valueData <- "valueData" %in% colnames(proflist[[1]])
-    do.valuePrior <- "valuePrior" %in% colnames(proflist[[1]])
-    
-    
-    # Discard faulty profiles
-    proflistidx <- sapply(proflist, function(prf) any(class(prf) == "data.frame"))
-    proflist <- proflist[proflistidx]
-    if (sum(!proflistidx) > 0) {
-      warning(sum(!proflistidx), " profiles discarded.", call. = FALSE)
-    }
-    
-    subdata <- do.call(rbind, lapply(names(proflist), function(n) {
-      
-      values <- proflist[[n]][, "value"]
-      origin <- which.min(abs(proflist[[n]][, "constraint"]))
-      zerovalue <- proflist[[n]][origin, "value"]
-      parvalues <- proflist[[n]][, n]
-      deltavalues <- values - zerovalue
-      
-      sub <- subset(data.frame(name = n, delta = deltavalues, par = parvalues, proflist = profnames[i], mode="total", is.zero = 1:nrow(proflist[[n]]) == origin), delta <= maxvalue)
-      
-      if(!is.null(obj.attributes)) {
-        for(mode in obj.attributes) {
-          valuesO <- proflist[[n]][, mode]
-          originO <- which.min(abs(proflist[[n]][, "constraint"]))
-          zerovalueO <- proflist[[n]][originO, mode]
-          deltavaluesO <- valuesO - zerovalueO
-          sub <- rbind(sub,subset(data.frame(name = n, delta = deltavaluesO, par = parvalues, proflist = profnames[i], mode=mode, is.zero = 1:nrow(proflist[[n]]) == originO), delta <= maxvalue))
-        }
-      }
-      
-      return(sub)
-    }))
-    return(subdata)
-  }))
-  
-  data$proflist <- as.factor(data$proflist)
-  data <- droplevels(subset(data, ...))
-  
-  data.zero <- subset(data, is.zero)
-  
-  threshold <- c(1, 2.7, 3.84)
-  
-  data <- droplevels.data.frame(subset(data, ...))
-  
-  p <- ggplot(data, aes(x=par, y=delta, group=interaction(proflist,mode), color=proflist, linetype=mode)) + facet_wrap(~name, scales="free_x") + 
-    geom_hline(yintercept=threshold, lty=2, color="gray") + 
-    geom_line() + #geom_point(aes=aes(size=1), alpha=1/3) +
-    geom_point(data = data.zero) +
-    ylab(expression(paste("CL /", Delta*chi^2))) +
-    scale_y_continuous(breaks=c(1, 2.7, 3.84), labels = c("68% / 1   ", "90% / 2.71", "95% / 3.84"), limits = c(NA, maxvalue)) +
-    xlab("parameter value")
-  
-  if(!is.null(parlist)){
-    delta <- 0
-    if("value" %in% colnames(parlist)){
-      minval <- min(unlist(lapply(1:length(arglist), function(i){ 
-        origin <- which.min(arglist[[i]][["constraint"]])
-        zerovalue <- arglist[[i]][origin, 1]  
-      })))
-      values <- parlist[, "value", drop = TRUE]
-      parlist <- parlist[,!(colnames(parlist) %in% c("index", "value", "converged", "iterations"))]
-      delta <- as.numeric(values - minval)
-    }
-    points <- data.frame(par = as.numeric(as.matrix(parlist)), name = rep(colnames(parlist), each = nrow(parlist)), delta = delta)
-    
-    #points <- data.frame(name = colnames(parlist), par = as.numeric(parlist), delta=0)
-    p <- p + geom_point(data=points, aes(x=par, y=delta), color = "black", inherit.aes = FALSE)
-  }
-  attr(p, "data") <- data
-  return(p)
-  
+plotProfile.parframe <- function(profs, ..., maxvalue = 5, parlist = NULL, ncol = NULL,
+                                 threshold = .profileLines()) {
+  sets <- .profileSets(profs)
+  data <- droplevels(subset(.profileFrame(sets, maxvalue), ...))
+  .profilePlot(data, sets, parlist, ncol, maxvalue, threshold)
+}
+
+
+#' @export
+#' @rdname plotProfile
+plotProfile.list <- function(profs, ..., maxvalue = 5, parlist = NULL, ncol = NULL,
+                             threshold = .profileLines()) {
+  sets <- .profileSets(profs)
+  data <- droplevels(subset(.profileFrame(sets, maxvalue), ...))
+  .profilePlot(data, sets, parlist, ncol, maxvalue, threshold)
 }
 
 
@@ -536,9 +524,9 @@ subset.parframe <- function(x, ...) {
 #' Extract those lines of a parameter frame with unique elements in the value column
 #' @param x parameter frame
 #' @param incomparables not used. Argument exists for compatibility with S3 generic.
-#' @param tol tolerance to decide when values are assumed to be equal, see \code{\link{plotValues}()}.
-#' @param ... additional arguments being passed to \code{\link{plotValues}()}, e.g. for subsetting.
-#' @return A subset of the parameter frame \code{x}.
+#' @param tol tolerance to decide when values are assumed to be equal, see [plotValues()].
+#' @param ... additional arguments being passed to [plotValues()], e.g. for subsetting.
+#' @return A subset of the parameter frame `x`.
 #' @export
 unique.parframe <- function(x, incomparables = FALSE, tol = 1, ...) {
   
@@ -555,6 +543,23 @@ unique.parframe <- function(x, incomparables = FALSE, tol = 1, ...) {
 
 #' Dispatch as.parvec.
 #'
+#' Creates an object of class \code{"parvec"} from a numeric vector, optionally
+#' carrying first-order derivatives. Existing derivatives may be inherited,
+#' replaced, or dropped; no derivatives are created automatically.
+#'
+#' Parameters missing from the derivative matrix are treated as fixed and
+#' stored in the \code{"fixed"} attribute.
+#'
+#' @param x Numeric vector of parameter values.
+#' @param names Optional parameter names.
+#' @param deriv Optional Jacobian matrix, \code{NULL} to inherit or
+#'   \code{FALSE} to drop.
+#' @param deriv2 Optional 3D Hessian array, \code{NULL} to inherit or
+#'   \code{FALSE} to drop.
+#' @param ... Further arguments passed to methods.
+#'
+#' @return A numeric vector of class \code{c("parvec", "numeric")}.
+#'
 #' @export
 #' @rdname parvec
 as.parvec <- function(x, ...) {
@@ -562,118 +567,263 @@ as.parvec <- function(x, ...) {
 }
 
 
-#' Parameter vector
-#' @param x numeric or named numeric, the parameter values
-#' @param names optional character vector, the parameter names. Otherwise, names
-#' are taken from \code{x}.
-#' @rdname parvec
 #' @export
-as.parvec.numeric <- function(x, names = NULL, deriv = NULL, ...) {
-  
-  p <- x
-  
-  out <- as.numeric(p)
-  if (is.null(names)) names(out) <- names(p) else names(out) <- names
-  if (is.null(deriv)) deriv <- attr(x, "deriv")
-  if (is.null(deriv)) {
-    deriv <- diag(length(out))
-    colnames(deriv) <- rownames(deriv) <- names(out)
+#' @rdname parvec
+as.parvec.numeric <- function(x, names = NULL, deriv = NULL, deriv2 = NULL, ...) {
+
+  # --- Basic setup ---
+  p <- as.numeric(x)
+  if (is.null(names)) names(p) <- names(x) else names(p) <- names
+  pnames <- names(p)
+
+  # --- Derivative Information ---
+  if (isFALSE(deriv)) {
+    full_deriv <- NULL
+  } else if (is.matrix(deriv)) {
+    full_deriv <- deriv
+  } else { # deriv == NULL
+    full_deriv <- attr(x, "deriv")
   }
-  attr(out, "deriv") <- deriv
-  class(out) <- c("parvec", "numeric")
-  
-  return(out)
-  
+
+  # --- Second-order derivative information ---
+  # `deriv2` is a 3D array [p, theta, theta], symmetric in the last two axes.
+  if (isFALSE(deriv2)) {
+    full_deriv2 <- NULL
+  } else if (is.array(deriv2) && length(dim(deriv2)) == 3L) {
+    full_deriv2 <- deriv2
+  } else { # deriv2 == NULL
+    full_deriv2 <- attr(x, "deriv2")
+  }
+
+  # --- Infer fixed from missing deriv rows ---
+  fixed <- NULL
+  if (!is.null(full_deriv)) {
+    if (nrow(full_deriv) < length(pnames)) {
+      fixed <- .setdiffU(pnames, rownames(full_deriv))
+    }
+  }
+
+  # --- Assemble object ---
+  attr(p, "deriv") <- full_deriv
+  attr(p, "deriv2") <- full_deriv2
+  attr(p, "fixed") <- fixed
+  class(p) <- c("parvec", "numeric")
+  p
 }
 
 
-#' Pretty printing for a parameter vector
-#' 
-#' @author Wolfgang Mader, \email{Wolfgang.Mader@@fdm.uni-freiburg.de}
-#' 
-#' @param x object of class \code{parvec}
-#' @param ... not used yet.
+
+
+#' Pretty printing for parvec objects
+#'
+#' Prints a parameter vector along with information about
+#' its attached derivatives and information about constant parameters in 'fixed'.
+#'
+#' @param x parvec object
+#' @param ... Currently ignored.
 #' @export
 print.parvec <- function(x, ...) {
   
-  par <- x
+  par <- unclass(x)
+  nms <- names(par)
+  n_width <- max(nchar(nms))
   
-  m_parWidth <- max(nchar(names(par)))
-  m_names <- names(par)
-  m_order <- order(m_names)
-  
-  msg <- mapply(function(p, n) {
-    if (!as.numeric(p) < 0 ) {
-      p <- paste0(" ", p)
-    }
-    paste0(strpad(n, m_parWidth, where = "left"), ": ", p)
-  }, p = par[m_order], n = m_names[m_order])
-  
-  cat(msg, sep = "\n")
-}
-
-
-
-
-#' @export
-#' @param drop logical, drop empty columns in Jacobian after subsetting. 
-#' ATTENTION: Be careful with this option. The default behavior is to keep
-#' the columns in the Jacobian. This can lead to unintended results when
-#' subsetting the parvec and using it e.g. in another parameter
-#' transformation.
-#' @rdname parvec
-"[.parvec" <- function(x, ..., drop = FALSE) {
-  
-  # myclass <- class(...)
-  # if (inherits(myclass, "character")) {
-  #   select.name <- Reduce("|", lapply(as.list(...), function(n) grepl(glob2rx(n), names(x))))
-  #   select.row <- Reduce("|", lapply(as.list(...), function(n) grepl(glob2rx(n), rownames(attr(x, "deriv")))))
-  #   out <- unclass(x)[select.name]
-  #   deriv <- submatrix(attr(x, "deriv"), rows = select.row)
-  # } else {
-  #   out <- unclass(x)[...]
-  #   deriv <- submatrix(attr(x, "deriv"), rows = ...)
-  # }
-  # 
-  out <- unclass(x)[...]
-  deriv <- submatrix(attr(x, "deriv"), rows = ...)
-  if (drop) {
-    empty.cols <- apply(deriv, 2, function(v) all(v == 0))
-    deriv <- submatrix(deriv, cols = !empty.cols)
+  cat("Parameter vector:\n")
+  for (i in seq_along(par)) {
+    val <- formatC(par[i], digits = 6, format = "g")
+    if (par[i] >= 0) val <- paste0(" ", val)
+    cat(sprintf("  %s : %s\n", format(nms[i], width = n_width, justify = "right"), val))
   }
-  as.parvec(out, deriv = deriv)
+  
+  deriv  <- attr(x, "deriv")
+  deriv2 <- attr(x, "deriv2")
+  fixed  <- attr(x, "fixed")
+
+  cat("\nAttributes:\n")
+  if (!is.null(deriv)) {
+    d <- dim(deriv)
+    cat(sprintf("  deriv  : %d x %d matrix\n", d[1], d[2]))
+  } else {
+    cat("  deriv  : <none>\n")
+  }
+
+  if (!is.null(deriv2)) {
+    d2 <- dim(deriv2)
+    cat(sprintf("  deriv2 : %d x %d x %d array\n", d2[1], d2[2], d2[3]))
+  } else {
+    cat("  deriv2 : <none>\n")
+  }
+
+  if (!is.null(fixed) && length(fixed) > 0) {
+    cat(sprintf("  fixed  : %s\n", paste(fixed, collapse = ", ")))
+  } else {
+    cat("  fixed  : <none>\n")
+  }
+
+  invisible(x)
 }
 
+
+#' Subset a parameter vector
+#'
+#' Subsets a \code{parvec} object and propagates first-order derivatives.
+#' Derivatives are restricted to retained parameters and optionally dropped
+#' if they become identically zero.
+#'
+#' @param x A \code{parvec} object.
+#' @param ... Subsetting indices.
+#' @param drop Logical; drop derivative columns that are zero after subsetting.
+#'
+#' @return A subsetted \code{parvec} object.
+#'
 #' @export
-#' @rdname parvec
-c.parvec <- function(...) {
-  
-  mylist <- list(...) #lapply(list(...), as.parvec)
-  
-  n <- unlist(lapply(mylist, function(l) names(l)))
-  v <- unlist(lapply(mylist, function(l) as.numeric(l)))
-  d <- lapply(mylist, function(l) attr(l, "deriv"))
-  
-  
-  
-  if (any(duplicated(n))) stop("Found duplicated names. Parameter vectors cannot be coerced.")
-  
-  deriv <- Reduce(combine, d)
-  n.missing <- setdiff(n, rownames(deriv))
-  n.available <- intersect(n, rownames(deriv))
-  deriv.missing <- matrix(0, nrow = length(n.missing), ncol = ncol(deriv), 
-                          dimnames = list(n.missing, colnames(deriv)))
-  
-  ## Attention: The expected way of function is that
-  ## no columns are attachd for parameters for which no derivatives
-  ## were available. This is important for prdfn() and obsfn() to 
-  ## work properly with the "fixed" argument.
-  deriv <- submatrix(rbind(deriv, deriv.missing), rows = n)
-  
-  as.parvec(v, names = n, deriv = deriv)
-  
+"[.parvec" <- function(x, ..., drop = FALSE) {
+
+  # `.subset()` subsets without dispatch and without carrying the attributes:
+  # `unclass(x)[...]` duplicates the values and the deriv arrays first, only to
+  # drop them again.
+  out <- .subset(x, ...)
+  nms <- names(out)
+  # Reselecting every name in order reproduces x exactly, and the composition
+  # protocol does it once per condition.
+  if (!drop && !is.null(nms) && identical(nms, names(x))) return(x)
+
+  deriv <- attr(x, "deriv")
+  if (!drop) {
+    # The row selection and the `fixed` derivation are the whole cost here, and
+    # this runs a few hundred times per objective evaluation.
+    fast <- parvec_attach(out, deriv, attr(x, "deriv2"))
+    if (!is.null(fast)) return(fast)
+  }
+  if (!is.null(deriv)) {
+    rn <- rownames(deriv)
+    # Row set unchanged and in order: keep the matrix, skip the subset copy.
+    if (!identical(rn, nms)) {
+      available <- nms[match(nms, rn, 0L) > 0L]
+      deriv <- if (length(available)) deriv[available, , drop = FALSE] else NULL
+    }
+  }
+
+  deriv2 <- attr(x, "deriv2")
+  if (!is.null(deriv2)) {
+    rn2 <- dimnames(deriv2)[[1]]
+    if (!identical(rn2, nms)) {
+      available2 <- nms[match(nms, rn2, 0L) > 0L]
+      deriv2 <- if (length(available2)) deriv2[available2, , , drop = FALSE] else NULL
+    }
+  }
+
+  if (drop && !is.null(deriv)) {
+    keep.cols <- colSums(abs(deriv)) > 0
+    deriv <- deriv[, keep.cols, drop = FALSE]
+    if (!is.null(deriv2)) {
+      keep_names <- colnames(deriv)
+      deriv2 <- deriv2[, keep_names, keep_names, drop = FALSE]
+    }
+  }
+
+  # Assemble in place: `as.parvec()` would re-derive what is already known and
+  # copy the values once more.
+  attr(out, "deriv")  <- deriv
+  attr(out, "deriv2") <- deriv2
+  attr(out, "fixed")  <- if (!is.null(deriv) && nrow(deriv) < length(nms))
+    .setdiffU(nms, rownames(deriv))
+  class(out) <- c("parvec", "numeric")
+  out
 }
 
+#' Concatenate parameter vectors
+#'
+#' Concatenates multiple \code{parvec} objects, combining values and
+#' propagating first-order derivatives when present.
+#'
+#' @param ... \code{parvec} objects (or \code{NULL}, which are ignored).
+#'
+#' @return A combined \code{parvec} object.
+#'
+#' @export
+c.parvec <- function(...) {
+
+  p <- Filter(Negate(is.null), list(...))
+  stopifnot(length(p) > 0)
+  # An empty operand adds no name, value or derivative row, but it does push
+  # the single-operand case into the rbind/abind path below.
+  keep <- vapply(p, function(z) length(z) > 0L, TRUE)
+  if (any(keep)) p <- p[keep]
+
+  nms  <- unlist(lapply(p, names), use.names = FALSE)
+  if (anyDuplicated(nms)) stop("Duplicated parameter names.")
+
+  # One operand: rbind and abind would copy the largest arrays in the chain to
+  # reproduce their own input. `prdframe(parameters = c(pars, fixed))` hits this
+  # once per condition.
+  if (length(p) == 1L) {
+    q <- p[[1]]
+    return(as.parvec(as.numeric(q), names = nms,
+                     deriv  = attr(q, "deriv")  %||% FALSE,
+                     deriv2 = attr(q, "deriv2") %||% FALSE))
+  }
+
+  fast <- parvec_concat(p)
+  if (!is.null(fast)) return(fast)
+
+  vals <- unlist(lapply(p, unclass), use.names = FALSE)
+
+  d <- lapply(p, attr, "deriv")
+  has_deriv <- !vapply(d, is.null, TRUE)
+
+  if (!any(has_deriv)) {
+    return(as.parvec(vals, names = nms))
+  }
+
+  J_list <- Filter(Negate(is.null), d)
+  J <- do.call(rbind, J_list)
+
+  # Concatenate deriv2 along the first axis if any input carries one.
+  d2 <- lapply(p, attr, "deriv2")
+  has_d2 <- !vapply(d2, is.null, TRUE)
+  H <- NULL
+  if (any(has_d2)) {
+    # Resolve a common theta basis; use the first non-null array's outer dims.
+    ref <- d2[which(has_d2)[1L]][[1L]]
+    theta_names <- dimnames(ref)[[2L]]
+    n_theta <- dim(ref)[2L]
+    H_list <- lapply(seq_along(p), function(i) {
+      di <- d2[[i]]
+      di_names <- names(p[[i]])
+      n_i <- length(di_names)
+      if (is.null(di)) {
+        # Pad with zeros for parvecs that have no deriv2 attribute.
+        array(0, c(n_i, n_theta, n_theta),
+              dimnames = list(di_names, theta_names, theta_names))
+      } else {
+        di
+      }
+    })
+    # abind() spends two thirds of a concatenation on dimname bookkeeping, and
+    # this runs once per condition. Same result, assembled in place.
+    n_rows <- vapply(H_list, function(a) dim(a)[1L], 0L)
+    margin <- function(m) {
+      for (a in H_list) if (!is.null(dimnames(a)[[m]])) return(dimnames(a)[[m]])
+      NULL
+    }
+    rn <- lapply(H_list, function(a) dimnames(a)[[1L]])
+    # abind() pads a block without names with "" and drops the margin only when
+    # no block has names.
+    rn <- if (any(!vapply(rn, is.null, TRUE)))
+      unlist(lapply(seq_along(rn), function(i) rn[[i]] %||% rep("", n_rows[i])),
+             use.names = FALSE) else NULL
+    H <- array(0, c(sum(n_rows), n_theta, n_theta),
+               dimnames = list(rn, margin(2L), margin(3L)))
+    off <- 0L
+    for (i in seq_along(H_list)) {
+      if (n_rows[i]) H[off + seq_len(n_rows[i]), , ] <- H_list[[i]]
+      off <- off + n_rows[i]
+    }
+  }
+
+  as.parvec(vals, names = nms, deriv = J, deriv2 = H)
+}
 
 
 ## Methods for the class parfn--------------------------------------------------
@@ -696,7 +846,6 @@ print.parfn <- function(x, ...) {
   cat("\n")
   cat("... conditions:", paste0(conditions, collapse = ", "), "\n")
   cat("... parameters:", paste0(parameters, collapse = ", "), "\n")
-  
 }
 
 #' @export
@@ -729,6 +878,153 @@ summary.parfn <- function(object, ...) {
     
     cat("\nObject is composed. See original objects for more details.\n")
     
+  }
+}
+
+
+
+
+## parfn / parframe / parlist / parvec constructors (moved from classes.R) ----------------------------------------
+
+## Parameter classes --------------------------------------------------------
+
+
+## Body of the parfn dispatcher. Package level for the same reason as
+## .Pexpl_p2p(): one parfn per condition should cost state, not code.
+
+#' Parameter transformation function
+#'
+#' Generate functions that transform one parameter vector into another
+#' by means of a transformation, pushing forward the jacobian matrix
+#' of the original parameter.
+#' Usually, this function is called internally, e.g. by \link{P}.
+#' However, you can use it to add your own specialized parameter
+#' transformations to the general framework.
+#' @param p2p a transformation function for one condition, i.e. a function
+#' \code{p2p(p, fixed, deriv)} which translates a parameter vector \code{p}
+#' and a vector of fixed parameter values \code{fixed} into a new parameter
+#' vector. If \code{deriv = TRUE}, the function should return an attribute
+#' \code{deriv} with the Jacobian matrix of the parameter transformation.
+#' @param parameters character vector, the parameters accepted by the function
+#' @param condition character, the condition for which the transformation is defined
+#' @return object of class \code{parfn}, i.e. a function \code{p(..., fixed, deriv,
+#'  conditions, env)}. The argument \code{pars} should be passed via the \code{...}
+#'  argument.
+#'
+#' Contains attributes "mappings", a list of \code{p2p}
+#' functions, "parameters", the union of parameters acceted by the mappings and
+#' "conditions", the total set of conditions.
+#' @seealso \link{sumfn}, \link{P}
+#' @example inst/examples/prediction.R
+#' @export
+parfn <- function(p2p, parameters = NULL, condition = NULL) {
+
+  force(condition)
+  st <- .leafState(p2p, "parfn", condition)
+  outfn <- .fnWrap(st)
+  attr(outfn, "mappings") <- setNames(list(p2p), condition)
+  attr(outfn, "parameters") <- parameters
+  attr(outfn, "conditions") <- condition
+  attr(outfn, "compileInfo") <- attr(p2p, "compileInfo")
+  attr(outfn, "resetWarmStart") <- attr(p2p, "resetWarmStart")
+  class(outfn) <- c("parfn", "fn")
+  outfn
+
+}
+
+
+
+
+#' Generate a parameter frame
+#'
+#' @description A parameter frame is a data.frame where the rows correspond to different
+#' parameter specifications. The columns are divided into three parts. (1) the meta-information
+#' columns (e.g. index, value, constraint, etc.), (2) the attributes of an objective function
+#' (e.g. data contribution and prior contribution) and (3) the parameters.
+#' @seealso [profile], [mstrust]
+#' @param x data.frame.
+#' @param parameters character vector, the names of the parameter columns.
+#' @param metanames character vector, the names of the meta-information columns.
+#' @param obj.attributes character vector, the names of the objective function attributes.
+#' @return An object of class `parframe`, i.e. a data.frame with attributes for the
+#' different names. Inherits from data.frame.
+#' @details Parameter frames can be subsetted either by `[ , ]` or by `subset`. If
+#' `[ , index]` is used, the names of the removed columns will also be removed from
+#' the corresponding attributes, i.e. metanames, obj.attributes and parameters.
+#' @example inst/examples/parlist.R
+#' @export
+parframe <- function(x = NULL, parameters = colnames(x), metanames = NULL, obj.attributes = NULL) {
+
+  if (!is.null(x)) {
+    rownames(x) <- NULL
+    out <- as.data.frame(x)
+  } else {
+    out <- data.frame()
+  }
+
+  attr(out, "parameters") <- parameters
+  attr(out, "metanames") <- metanames
+  attr(out, "obj.attributes") <- obj.attributes
+  class(out) <- c("parframe", "data.frame")
+
+  return(out)
+
+}
+
+#' Parameter list
+#'
+#' @description The special use of a parameter list is to save
+#' the outcome of multiple optimization runs provided by [mstrust],
+#' into one list.
+#' @param ... Objects to be coerced to parameter list.
+#' @export
+#' @example inst/examples/parlist.R
+#' @seealso [load.parlist], [plot.parlist]
+parlist <- function(...) {
+
+  mylist <- list(...)
+  return(as.parlist(mylist))
+
+}
+
+
+
+#' Parameter vector
+#'
+#' @description 
+#' A parameter vector is a named numeric vector (the parameter values)
+#' together with derivative attributes describing how it was generated by
+#' a parameter transformation. The first derivative (Jacobian) is stored in 
+#' the `"deriv"` attribute.
+#'
+#' @param ... Objects to be concatenated.
+#' @param deriv Matrix with row names corresponding to the names of `...`
+#'   and column names corresponding to the parameters by which the vector
+#'   was generated (the Jacobian).
+#'
+#' @return 
+#' An object of class `"parvec"`, i.e. a named numeric vector with
+#' attributes:
+#' \itemize{
+#'   \item `attr(x, "deriv")` -- Jacobian matrix
+#' }
+#'
+#' @example inst/examples/parvec.R
+#' @export
+parvec <- function(..., deriv = NULL) {
+  
+  mylist <- list(...)
+  if (length(mylist) > 0) {
+    mynames <- paste0("par", seq_along(mylist))
+    is.available <- !is.null(names(mylist))
+    mynames[is.available] <- names(mylist)[is.available]
+    
+    out <- as.numeric(unlist(mylist))
+    names(out) <- mynames
+    
+    return(as.parvec(out, deriv = deriv))
+  } else {
+    return(NULL)
   }
 }
 
