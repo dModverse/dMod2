@@ -10,7 +10,7 @@
 \item{x}{fitlist obtained from mstrust}
 
 \item{path}{print path of parameters from initials to convergence. For this
-option to be TRUE \code{\link{mstrust}} must have had the option
+option to be TRUE \code{\link[=mstrust]{mstrust()}} must have had the option
 \option{blather}.}
 
 \item{...}{additional arguments}

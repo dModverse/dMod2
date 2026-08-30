@@ -8,43 +8,46 @@ P(
   trafo = NULL,
   parameters = NULL,
   condition = NULL,
-  attach.input = FALSE,
-  keep.root = TRUE,
   compile = FALSE,
   modelname = NULL,
-  method = c("explicit", "implicit"),
-  verbose = FALSE
+  method = NULL,
+  cores = NULL,
+  verbose = FALSE,
+  deriv = TRUE,
+  deriv2 = FALSE,
+  ...
 )
 }
 \arguments{
-\item{trafo}{object of class \code{eqnvec} or named character or list thereof. In case,
-trafo is a list, \code{P()} is called on each element and conditions are assumed to be
-the list names.}
+\item{trafo}{An \link{eqnvec}, named character, \link{eqnlist}, or list thereof.}
 
-\item{parameters}{character vector}
+\item{parameters}{Outer-parameter names.}
 
-\item{condition}{character, the condition for which the transformation is generated}
+\item{condition}{Condition label.}
 
-\item{attach.input}{attach those incoming parameters to output which are not overwritten by
-the parameter transformation.}
+\item{compile, modelname, verbose}{Forwarded to \link[cppDE:funCpp]{cppDE::funCpp}.}
 
-\item{keep.root}{logical, applies for \code{method = "implicit"}. The root of the last
-evaluation of the parameter transformation function is saved as guess for the next 
-evaluation.}
+\item{method}{One of \code{"explicit"}, \code{"implicit"}, \code{"equilibrate"}, or \code{NULL}.}
 
-\item{compile}{logical, compile the function (see \link{funC0})}
+\item{cores}{Per-condition \code{mclapply()} cores. \code{NULL} auto-detects via
+\link{detectFreeCores}; capped at 1 on Windows.}
 
-\item{modelname}{character, see \link{funC0}}
+\item{deriv, deriv2}{Attach first/second-order sensitivities. \code{deriv2}
+requires \code{deriv = TRUE}.}
 
-\item{method}{character, either \code{"explicit"} or \code{"implicit"}}
-
-\item{verbose}{Print out information during compilation}
+\item{...}{Forwarded to the chosen backend. In particular \code{outdir}
+(directory for the generated sources and shared object, default the
+working directory).}
 }
 \value{
-An object of class \link{parfn}.
+A \link{parfn}.
 }
 \description{
-Generate parameter transformation function from a
-named character vector or object of class \link{eqnvec}. This is a wrapper
-function for \link{Pexpl} and \link{Pimpl}. See for more details there.
+Unified entry to the three backends: explicit (\link{Pexpl}, algebraic),
+implicit (\link{Pimpl}, root-finding) and equilibrate (\link{Pequil}, ODE
+pre-integration). \code{method = NULL} picks \code{"equilibrate"} for
+\link{eqnlist} entries, \code{"explicit"} otherwise.
+}
+\seealso{
+\link{Pexpl}, \link{Pimpl}, \link{Pequil}, \link{parfn}
 }

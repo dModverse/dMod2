@@ -19,7 +19,7 @@ subset of an equation list
 }
 \details{
 The argument \code{...} can contain "Educt", "Product", "Rate" and "Description".
-The "%in%" operator is modified to allow searches in Educt and Product (see examples).
+The "\%in\%" operator is modified to allow searches in Educt and Product (see examples).
 }
 \examples{
 reactions <- data.frame(Description = c("Activation", "Deactivation"), 

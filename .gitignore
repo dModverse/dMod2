@@ -1,13 +1,73 @@
-.Rproj.user
+# RStudio / R session
+.Rproj.user/
 .Rhistory
 .RData
-.Rbuildignore
-.gitignore.swp
-.f*
-CompiledObjects
-Test
 
-# Compiled objects
-*.c
+# Editor and OS
+*.swp
+.DS_Store
+Thumbs.db
+
+# Build and check artefacts
+*.tar.gz
+*.Rcheck/
+.Rcheck/
+check/
+inst/doc/
+/doc/
+/Meta/
+
+# knitr and R Markdown
+README.html
+README_files/
+*.knit.md
+*.utf8.md
+*_cache/
+*_files/
+.cache/
+/notes/
+
+# knitr output in vignettes/; only the .Rmd sources are tracked
+vignettes/*.R
+vignettes/*.html
+vignettes/*.pdf
+
+# Compiled objects and scratch
 *.o
 *.so
+*.dll
+.f*
+*.log
+*.tmp
+deriv2Tests/wd/
+
+# Codegen and solver outputs written by tests under tests/testthat
+tests/testthat/*.c
+tests/testthat/*.cpp
+tests/testthat/*.o
+tests/testthat/*.so
+tests/testthat/*.dll
+tests/testthat/reactions_for_Alyssa*
+tests/testthat/_snaps/
+
+# bench baselines are transient, except the tracked pre-rewrite baseline
+bench/baselines/*
+!bench/baselines/focei_theoph_pre_rewrite.rds
+
+# Python caches from the reticulate helpers under inst/code
+__pycache__/
+*.pyc
+
+# Local tooling
+.positai
+.claude/
+CLAUDE.md
+
+# compile() object-reuse index
+.dMod_objects
+
+# Third-party fixture trees. Resolved at test time via DMOD_PETABTESTS /
+# DMOD_BENCHMARKMODELS or by walking up from the package root; test-petab.R
+# skips cleanly when absent. Kept out of git for weight (526 files).
+PEtabTests/
+BenchmarkModels/

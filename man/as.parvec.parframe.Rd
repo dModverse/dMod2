@@ -8,7 +8,7 @@
 }
 \arguments{
 \item{x}{A parameter frame, e.g., the output of
-\code{\link{as.parframe}}.}
+\code{\link[=as.parframe]{as.parframe()}}.}
 
 \item{index}{Integer, the parameter vector with the \code{index}-th lowest
 objective value.}
@@ -17,21 +17,23 @@ objective value.}
 }
 \value{
 The parameter vector with the \option{index}-th lowest objective
-  value.
+value.
 }
 \description{
 Obtain a parameter vector from a parameter frame.
 }
 \details{
 With this command, additional information included in the parameter
-  frame as the objective value and the convergence state are removed and a
-  parameter vector is returned. This parameter vector can be used to e.g.,
-  evaluate an objective function.
-  
-  On selection, the parameters in the parameter frame are ordered such, that
-  the parameter vector with the lowest objective value is at \option{index}
-  1. Thus, the parameter vector with the \option{index}-th lowest objective
-  value is easily obtained.
+frame as the objective value and the convergence state are removed and a
+parameter vector is returned. This parameter vector can be used to e.g.,
+evaluate an objective function.
+
+On selection, the parameters in the parameter frame are ordered such, that
+the parameter vector with the lowest objective value is at \option{index}
+\enumerate{
+\item Thus, the parameter vector with the \option{index}-th lowest objective
+value is easily obtained.
+}
 }
 \author{
 Wolfgang Mader, \email{Wolfgang.Mader@fdm.uni-freiburg.de}

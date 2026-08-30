@@ -16,7 +16,7 @@ named character vector of the same length as \code{variables}
 Place top elements into bottom elemens
 }
 \details{
-If the names of top vector elements occur in the bottom of the vector, 
+If the names of top vector elements occur in the bottom of the vector,
 they are replaced by the character of the top entry. Useful for steady state conditions.
 }
 \examples{

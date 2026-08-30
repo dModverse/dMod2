@@ -14,19 +14,19 @@ strelide(string, width, where = "right", force = FALSE)
 \item{where}{Eliding can happen at 'left', 'middel', or 'right'. Defaults to
 'right'.}
 
-\item{force}{Elide, even is <string> is shorter than <width>. Default to
+\item{force}{Elide, even is \if{html}{\out{<string>}} is shorter than \if{html}{\out{<width>}}. Default to
 'FALSE'.}
 }
 \value{
-Elided string of length <width>.
+Elided string of length \if{html}{\out{<width>}}.
 }
 \description{
 Elide character vector
 }
 \details{
-Elide a string to <width>. Eliding can happen at 'left', 'middle', or
+Elide a string to \if{html}{\out{<width>}}. Eliding can happen at 'left', 'middle', or
 'right'. #' If forcing = FALSE, which is the default, strings shorten than
-<width> are returend unaltered; forcing = TRUE inserts eliding symbols (...)
+\if{html}{\out{<width>}} are returend unaltered; forcing = TRUE inserts eliding symbols (...)
 in any case.
 }
 \author{

@@ -10,8 +10,8 @@ as.objlist(p)
 \item{p}{Named numeric vector}
 }
 \value{
-list with entries value (\code{0}), 
-gradient (\code{rep(0, length(p))}) and 
+list with entries value (\code{0}),
+gradient (\code{rep(0, length(p))}) and
 hessian (\code{matrix(0, length(p), length(p))}) of class \code{obj}.
 }
 \description{

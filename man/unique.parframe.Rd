@@ -11,9 +11,9 @@
 
 \item{incomparables}{not used. Argument exists for compatibility with S3 generic.}
 
-\item{tol}{tolerance to decide when values are assumed to be equal, see \code{\link{plotValues}()}.}
+\item{tol}{tolerance to decide when values are assumed to be equal, see \code{\link[=plotValues]{plotValues()}}.}
 
-\item{...}{additional arguments being passed to \code{\link{plotValues}()}, e.g. for subsetting.}
+\item{...}{additional arguments being passed to \code{\link[=plotValues]{plotValues()}}, e.g. for subsetting.}
 }
 \value{
 A subset of the parameter frame \code{x}.

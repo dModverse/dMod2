@@ -25,7 +25,7 @@ The direct sum of datalist is meant as merging the two data lists and
 returning the overarching datalist.
 }
 \examples{
-  
+\dontrun{
   # Start with two data frames
   mydata1 <- data.frame(
     name = "A",
@@ -56,5 +56,5 @@ returning the overarching datalist.
   # Check the condition.grid (if available)
    condition.grid <- attr(data, "condition.grid")
    print(condition.grid)
-
+}
 }

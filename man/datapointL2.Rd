@@ -16,7 +16,7 @@ prediction value.}
 
 \item{sigma}{numeric, the uncertainty of the introduced test data point}
 
-\item{attr.name}{character. The constraint value is additionally returned in an 
+\item{attr.name}{character. The constraint value is additionally returned in an
 attributed with this name}
 
 \item{condition}{character, the condition for which the prediction is made.}
@@ -28,7 +28,7 @@ List of class \code{objlist}, i.e. objective value, gradient and Hessian as list
 L2 objective function for validation data point
 }
 \details{
-Computes the constraint value 
+Computes the constraint value
 \deqn{\left(\frac{x(t)-\mu}{\sigma}\right)^2}{(pred-p[names(mu)])^2/sigma^2}
 and its derivatives with respect to p.
 }
@@ -42,5 +42,5 @@ vali <- datapointL2(name = "A", time = 0, value = "newpoint", sigma = 1, conditi
 vali(pars = c(p0, newpoint = 1), env = .GlobalEnv)
 }
 \seealso{
-\link{wrss}, \link{constraintL2}
+\link{normL2}, \link{constraintL2}
 }

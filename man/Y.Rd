@@ -2,7 +2,7 @@
 % Please edit documentation in R/prediction.R
 \name{Y}
 \alias{Y}
-\title{Observation functions.}
+\title{Observation functions}
 \usage{
 Y(
   g,
@@ -10,99 +10,109 @@ Y(
   states = NULL,
   parameters = NULL,
   condition = NULL,
-  attach.input = TRUE,
-  deriv = TRUE,
+  attach.input = FALSE,
   compile = FALSE,
   modelname = NULL,
-  verbose = FALSE
+  verbose = FALSE,
+  deriv = TRUE,
+  deriv2 = FALSE,
+  derivMode = c("dual", "symbolic"),
+  outdir = getwd()
 )
 }
 \arguments{
-\item{g}{Named character vector or equation vector defining the observation function}
+\item{g}{Named character vector or \link{eqnvec} defining the observation function.}
 
-\item{f}{Named character of equations or object that can be converted to eqnvec or object of class fn.
-If f is provided, states and parameters are guessed from f.}
+\item{f}{Named character vector of equations or an object that can be converted
+to \link{eqnvec}, or an object of class 'fn'. If \code{f} is provided, states and parameters
+are automatically inferred from \code{f}.}
 
-\item{states}{character vector, alternative definition of "states", usually the names of \code{f}. If both,
-f and states are provided, the states argument overwrites the states derived from f.}
+\item{states}{Character vector, alternative definition of state variables, usually
+the names of \code{f}. If both \code{f} and \code{states} are provided, the \code{states} argument
+overrides those derived from \code{f}.}
 
-\item{parameters}{character vector, alternative definition of the "parameters",
-usually the symbols contained in "g" and "f" except for \code{states} and the code word \code{time}. If both,
-f and parameters are provided, the parameters argument overwrites the parameters derived from f and g.}
+\item{parameters}{Character vector, alternative definition of parameters, usually
+the symbols contained in \code{g} and \code{f} except for \code{states} and the keyword \code{time}.
+If both \code{f} and \code{parameters} are provided, the \code{parameters} argument overrides those
+derived from \code{f} and \code{g}.}
 
-\item{condition}{either NULL (generic prediction for any condition) or a character, denoting
-the condition for which the function makes a prediction.}
+\item{condition}{Either \code{NULL} (generic prediction for any condition) or a character
+string specifying the condition for which the function generates predictions.}
 
-\item{attach.input}{logical, indiating whether the original input should be
-returned with the output.}
+\item{attach.input}{Logical, append the incoming states to the output.
+Defaults to \code{FALSE}: carrying the state sensitivities through costs a
+full array copy per condition and objective functions do not read them.
+Set \code{TRUE} to plot states alongside observables.}
 
-\item{deriv}{logical, generate function to evaluate derivatives of observables. Necessary for parameter estimation.}
+\item{compile}{Logical, if \code{TRUE}, the function is compiled (see
+\link[cppDE:funCpp]{cppDE::funCpp}).}
 
-\item{compile}{Logical, compile the function (see \link{funC0})}
+\item{modelname}{Character, used if \code{compile = TRUE}, specifies a fixed
+filename for the generated C file.}
 
-\item{modelname}{Character, used if \code{compile = TRUE}, sets a fixed filename for the
-C file.}
+\item{verbose}{Logical, print compiler output to the R console.}
 
-\item{verbose}{Print compiler output to R command line.}
+\item{deriv}{Logical. If \code{TRUE} (default), attach the first-order
+sensitivity \code{attr(., "deriv")} of shape \verb{[time, observable, theta]}.}
+
+\item{deriv2}{Logical. If \code{TRUE}, attach a second-order derivative
+\code{attr(., "deriv2")} array of shape \verb{[time, observable, theta, theta]}.
+Requires \code{deriv = TRUE}. Default \code{FALSE}.}
+
+\item{derivMode}{Character. Jacobian backend: \code{"dual"} (default,
+forward-mode AD; faster for many parameters; requires compiled native
+code) or \code{"symbolic"} (SymPy Jacobian + chain rule against upstream
+\code{dX}/\code{dP}; pure R).}
+
+\item{outdir}{Character. Directory for the generated C++ source and the
+compiled shared object. Defaults to the working directory.}
 }
 \value{
-Object of class \link{obsfn}, i.e.
-a function \code{y(..., deriv = TRUE, conditions = NULL)} representing the evaluation of the 
-observation function. Arguments \code{out} (model prediction) and \code{pars} (parameter values)
-shoudl be passed by the \code{...} argument.
-If \code{out} has the attribute  "sensitivities", the result of
-\code{y(out, pars)}, will have an attributed "deriv" which reflecs the sensitivities of 
-the observation with respect to the parameters.
-If \code{pars} is the result of a parameter transformation \code{p(pars)} (see \link{P}), 
-the Jacobian 
-of the parameter transformation and the sensitivities of the observation function
-are multiplied according to the chain rule for differentiation.
+An object of class \link{obsfn}, i.e. a function  \code{g(..., fixed = NULL, deriv = TRUE, condition = NULL, env = NULL)}
+returning predictions for observables and its derivatives.
 }
 \description{
 Creates an object of type \link{obsfn} that evaluates an observation function
-and its derivatives based on the output of a model prediction function, see \link{prdfn}, 
-as e.g. produced by \link{Xs}.
-}
-\details{
-For \link{odemodel}s with forcings, it is best, to pass the prediction function \code{x} to the "f"-argument 
-instead of the equations themselves. If an eqnvec is passed to "f" in this case, the forcings and states
-have to be specified manually via the "states"-argument.
+and, if requested, its first and second derivatives based on the output of a model
+prediction function, see \link{prdfn}, as e.g. produced by \link{Xs}.
 }
 \examples{
-# Define a time grid on which to make a prediction by peace-wise linear function.
-# Then define a (generic) prediction function based on thid grid.
-times <- 0:5
-grid <- data.frame(name = "A", time = times, row.names = paste0("p", times))
-x <- Xd(grid)
-
-# Define an observable and an observation function
-observables <- eqnvec(Aobs = "s*A")
-g <- Y(g = observables, f = NULL, states = "A", parameters = "s")
-
-# Collect parameters and define an overarching parameter transformation
-# for two "experimental condtions".
-dynpars <- attr(x, "parameters")
-obspars <- attr(g, "parameters")
-innerpars <- c(dynpars, obspars)
-
-trafo <- structure(innerpars, names = innerpars)
-trafo_C1 <- replaceSymbols(innerpars, paste(innerpars, "C1", sep = "_"), trafo)
-trafo_C2 <- replaceSymbols(innerpars, paste(innerpars, "C2", sep = "_"), trafo)
-
-p <- NULL
-p <- p + P(trafo = trafo_C1, condition = "C1")
-p <- p + P(trafo = trafo_C2, condition = "C2")
-
-# Collect outer (overarching) parameters and 
-# initialize with random values
-outerpars <- attr(p, "parameters")
-pars <- structure(runif(length(outerpars), 0, 1), names = outerpars)
-
-# Predict internal/unobserved states
-out1 <- (x*p)(times, pars)
-plot(out1)
-
-# Predict observed states in addition to unobserved
-out2 <- (g*x*p)(times, pars)
-plot(out2)
+\dontrun{
+  # Define a time grid on which to make a prediction by peace-wise linear function.
+  # Then define a (generic) prediction function based on thid grid.
+  times <- 0:5
+  grid <- data.frame(name = "A", time = times, row.names = paste0("p", times))
+  x <- Xd(grid)
+  
+  # Define an observable and an observation function
+  observables <- eqnvec(Aobs = "s*A")
+  g <- Y(g = observables, f = NULL, states = "A", parameters = "s")
+  
+  # Collect parameters and define an overarching parameter transformation
+  # for two "experimental condtions".
+  dynpars <- attr(x, "parameters")
+  obspars <- attr(g, "parameters")
+  innerpars <- c(dynpars, obspars)
+  
+  trafo <- structure(innerpars, names = innerpars)
+  trafo_C1 <- replaceSymbols(innerpars, paste(innerpars, "C1", sep = "_"), trafo)
+  trafo_C2 <- replaceSymbols(innerpars, paste(innerpars, "C2", sep = "_"), trafo)
+  
+  p <- NULL
+  p <- p + P(trafo = trafo_C1, condition = "C1")
+  p <- p + P(trafo = trafo_C2, condition = "C2")
+  
+  # Collect outer (overarching) parameters and 
+  # initialize with random values
+  outerpars <- attr(p, "parameters")
+  pars <- structure(runif(length(outerpars), 0, 1), names = outerpars)
+  
+  # Predict internal/unobserved states
+  out1 <- (x*p)(times, pars)
+  plot(out1)
+  
+  # Predict observed states in addition to unobserved
+  out2 <- (g*x*p)(times, pars)
+  plot(out2)
+}
 }

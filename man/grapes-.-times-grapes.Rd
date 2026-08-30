@@ -15,6 +15,6 @@ x1 \%.*\% x2
 An objective function or objlist object.
 }
 \description{
-The \code{\%.*\%} operator allows to multiply objects of class objlist or objfn with
+The \verb{\\\%.*\\\%} operator allows to multiply objects of class objlist or objfn with
 a scalar.
 }

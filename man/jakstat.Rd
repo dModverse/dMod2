@@ -6,7 +6,7 @@
 \title{Time-course data for the JAK-STAT cell signaling pathway}
 \description{
 Phosphorylated Epo receptor (pEpoR), phosphorylated STAT in the
-cytoplasm (tpSTAT) and total STAT (tSTAT) in the cytoplasmhave been 
+cytoplasm (tpSTAT) and total STAT (tSTAT) in the cytoplasmhave been
 measured at times 0, ..., 60.
 }
 \keyword{data}

@@ -11,17 +11,17 @@ strpad(string, width, where = "right", padding = " ", autoelide = FALSE)
 
 \item{width}{Desired width of padded string}
 
-\item{where}{Padding can be inserted to the right or left of <string>.
+\item{where}{Padding can be inserted to the right or left of \if{html}{\out{<string>}}.
 Default to 'right'.}
 
 \item{padding}{A single character with with the padding space is filled.
 Defaults to blank ' ' yielding invisible padding.}
 
-\item{autoelide}{If TRUE, <string> is elided if it is wider than <width>. The
-position of eliding follows <where>. Defaults to FALSE.}
+\item{autoelide}{If TRUE, \if{html}{\out{<string>}} is elided if it is wider than \if{html}{\out{<width>}}. The
+position of eliding follows \if{html}{\out{<where>}}. Defaults to FALSE.}
 }
 \value{
-Padded string of length <width>.
+Padded string of length \if{html}{\out{<width>}}.
 }
 \description{
 Pad string to desired width

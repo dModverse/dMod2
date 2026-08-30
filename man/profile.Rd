@@ -5,7 +5,7 @@
 \title{Profile-likelihood (PL) computation}
 \usage{
 profile(
-  obj,
+  objfun,
   pars,
   whichPar,
   alpha = 0.05,
@@ -17,11 +17,13 @@ profile(
   verbose = FALSE,
   cores = 1,
   cautiousMode = FALSE,
+  side = c("both", "left", "right"),
+  delta = NULL,
   ...
 )
 }
 \arguments{
-\item{obj}{Objective function \code{obj(pars, fixed, ...)} returning a list with "value",
+\item{objfun}{Objective function \code{objfun(pars, fixed, ...)} returning a list with "value",
 "gradient" and "hessian". If attribute "valueData" and/or "valuePrior are returned they are attached to the return value.}
 
 \item{pars}{Parameter vector corresponding to the log-liklihood optimum.}
@@ -30,7 +32,7 @@ profile(
 
 \item{alpha}{Numeric, the significance level based on the chisquare distribution with df=1}
 
-\item{limits}{Numeric vector of length 2, the lower and upper deviance from the original 
+\item{limits}{Numeric vector of length 2, the lower and upper deviance from the original
 value of \code{pars[whichPar]}}
 
 \item{method}{Character, either \code{"integrate"} or \code{"optimize"}. This is a short-cut for
@@ -43,23 +45,34 @@ setting stepControl, algoControl and optControl by hand.}
 \code{list(gamma = 1, W = "hessian", reoptimize = FALSE, correction = 1, reg = .Machine$double.eps)}}
 
 \item{optControl}{List of arguments controlling the \code{trust()} optimizer. Defaults to
-\code{list(rinit = .1, rmax = 10, iterlim = 10, fterm = sqrt(.Machine$double.eps), mterm = sqrt(.Machine$double.eps))}.
-See \link{trust} for more details.}
+\code{list(rinit = .1, rmax = 10, iterlim = 10)}; any other argument of \link{trust},
+e.g. \code{ftol} or \code{parupper}, can be added. See \link{trust} for more details.}
 
 \item{verbose}{Logical, print verbose messages.}
 
-\item{cores}{number of cores used when computing profiles for several
-parameters.}
+\item{cores}{Number of parallel workers over parameters, or
+\code{c(pars = , conditions = )} to also give each worker a condition axis.
+An inner axis selects a PSOCK backend: cppDE's batch runs serially inside
+a fork. Used when computing profiles for several
+parameters. Multiplies with the OpenMP threads each objective function uses
+(its \code{cores} argument); keep the product below your core count.}
 
 \item{cautiousMode}{Logical, write every step to disk and don't delete intermediate results}
 
-\item{...}{Arguments going to obj()}
+\item{side}{either, "left", "right" or "both": determines the side of the profile which is calculated (usefeull for parallelization). default is "both"}
+
+\item{delta}{Numeric, the rise in the objective at which a profile stops.
+Defaults to \code{qchisq(1 - alpha, 1)}. Pass \link{profileThreshold} with the same
+arguments used for \link{confint.parframe} so the profile reaches that threshold
+instead of leaving it to extrapolation.}
+
+\item{...}{Arguments going to objfun()}
 }
 \value{
 Named list of length one. The name is the parameter name. The list enty is a
 matrix with columns "value" (the objective value), "constraint" (deviation of the profiled paramter from
 the original value), "stepsize" (the stepsize take for the iteration), "gamma" (the gamma value employed for the
-iteration), "valueData" and "valuePrior" (if specified in obj), one column per parameter (the profile paths).
+iteration), "valueData" and "valuePrior" (if specified in objfun), one column per parameter (the profile paths).
 }
 \description{
 Profile-likelihood (PL) computation
@@ -68,7 +81,7 @@ Profile-likelihood (PL) computation
 Computation of the profile likelihood is based on the method of Lagrangian multipliers
 and Euler integration of the corresponding differential equation of the profile likelihood paths.
 
-\code{algoControl}: Since the Hessian which is needed for the differential equation is frequently misspecified, 
+\code{algoControl}: Since the Hessian which is needed for the differential equation is frequently misspecified,
 the error in integration needs to be compensated by a correction factor \code{gamma}. Instead of the
 Hessian, an identity matrix can be used. To guarantee that the profile likelihood path stays on
 the true path, each point proposed by the differential equation can be used as starting point for

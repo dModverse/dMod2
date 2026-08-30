@@ -2,9 +2,13 @@
 % Please edit documentation in R/prediction.R
 \name{Xs}
 \alias{Xs}
+\alias{Xs.deSolve}
+\alias{Xs.cppDE}
 \title{Model prediction function for ODE models.}
 \usage{
-Xs(
+Xs(odemodel, ...)
+
+\method{Xs}{deSolve}(
   odemodel,
   forcings = NULL,
   events = NULL,
@@ -12,20 +16,34 @@ Xs(
   condition = NULL,
   optionsOde = list(method = "lsoda"),
   optionsSens = list(method = "lsodes"),
-  fcontrol = NULL
+  fcontrol = NULL,
+  ...
+)
+
+\method{Xs}{cppDE}(
+  odemodel,
+  forcings = NULL,
+  events = NULL,
+  names = NULL,
+  condition = NULL,
+  optionsOde = list(),
+  optionsSens = list(),
+  ...
 )
 }
 \arguments{
-\item{odemodel}{object of class \link{odemodel}}
+\item{odemodel}{object of class 'odemodel' or 'odemodel++', see \link{odemodel}}
+
+\item{...}{Additional arguments passed to methods.}
 
 \item{forcings}{data.frame with columns name (factor), time (numeric) and value (numeric).
-The ODE forcings.}
+The ODE forcings. Forcing support for the cppDE / Sundials backends depends
+on the chosen stepper method; see \code{\link[cppDE:cppODE]{cppDE::cppODE()}}.}
 
-\item{events}{data.frame of events with columns "var" (character, the name of the state to be
-affected), "time" (numeric, time point), "value" (numeric, value), "method" (character, either
-"replace", "add" or "multiply"). See \link[deSolve]{events}.
-ATTENTION: Sensitivities for event states will only be correctly computed if defined within
-\code{\link{odemodel}()}. Specify events within \code{Xs()} only for forward simulation.}
+\item{events}{An \link{eventlist} (or \code{data.frame} coercible via \link{as.eventlist}).
+Applied to the forward simulation only -- sensitivities are not corrected.
+Define events on \code{\link[=odemodel]{odemodel()}} unless the prediction is used purely for
+forward simulation.}
 
 \item{names}{character vector with the states to be returned. If NULL, all states are returned.}
 
@@ -36,15 +54,13 @@ the condition for which the function makes a prediction.}
 
 \item{optionsSens}{list with arguments to be passed to odeC() for integration of the extended system}
 
-\item{fcontrol}{list with additional fine-tuning arguments for the forcing interpolation. 
-See \link[stats]{approxfun} for possible arguments.}
+\item{fcontrol}{list with additional fine-tuning arguments for the forcing interpolation.
+See \link[stats:approxfun]{approxfun} for possible arguments.}
 }
 \value{
-Object of class \link{prdfn}. If the function is called with parameters that
-result from a parameter transformation (see \link{P}), the Jacobian of the parameter transformation
-and the sensitivities of the ODE are multiplied according to the chain rule for
-differentiation. The result is saved in the attributed "deriv", 
-i.e. in this case the attibutes "deriv" and "sensitivities" do not coincide.
+Object of class \link{prdfn}. When called with transformed parameters
+(see \link{P}), the chain rule is applied automatically; the result is
+stored in \code{attr(., "deriv")} (which then differs from \code{"sensitivities"}).
 }
 \description{
 Interface to combine an ODE and its sensitivity equations

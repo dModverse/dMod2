@@ -11,7 +11,7 @@ coordTransform(data, transformations)
 "value" (numeric). Can optionally contain a column "sigma" (numeric).}
 
 \item{transformations}{character (the transformation) or named list of
-characters. In this case, the list names must be a subset of those 
+characters. In this case, the list names must be a subset of those
 contained in the "name" column.}
 }
 \value{

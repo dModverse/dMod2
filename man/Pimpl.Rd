@@ -2,95 +2,78 @@
 % Please edit documentation in R/parameters.R
 \name{Pimpl}
 \alias{Pimpl}
-\title{Parameter transformation (implicit)}
+\title{Parameter transformation (implicit, root-finding)}
 \usage{
 Pimpl(
   trafo,
   parameters = NULL,
+  forcings = NULL,
   condition = NULL,
   keep.root = TRUE,
-  positive = TRUE,
+  expressInTotals = TRUE,
   compile = FALSE,
   modelname = NULL,
-  verbose = FALSE
+  verbose = FALSE,
+  deriv = TRUE,
+  deriv2 = FALSE,
+  controlsMS = list(),
+  controlsNleqslv = list(),
+  outdir = getwd()
 )
 }
 \arguments{
-\item{trafo}{Named character vector defining the equations to be set to zero. 
-Names correspond to dependent variables.}
+\item{trafo}{Named character / \link{eqnvec} / \link{eqnlist}.}
 
-\item{parameters}{Character vector, the independent variables.}
+\item{parameters}{Outer parameters; auto-extended with the \verb{total_*}
+conserved-quantity parameters.}
 
-\item{condition}{character, the condition for which the transformation is generated}
+\item{forcings}{Forcing names; zeroed and removed.}
 
-\item{keep.root}{logical, applies for \code{method = "implicit"}. The root of the last
-evaluation of the parameter transformation function is saved as guess for the next 
-evaluation.}
+\item{condition}{Condition label.}
 
-\item{positive}{logical, returns projection to the (semi)positive range. Comes with a warning if
-the steady state has been found to be negative.}
+\item{keep.root}{Cache the root as warm-start for the next call.}
 
-\item{compile}{Logical, compile the function (see \link{funC0})}
+\item{expressInTotals}{If \code{TRUE} (default), every conserved moiety stays a
+solve variable and one redundant rate equation per conserved quantity is
+replaced by the algebraic conservation constraint \verb{sum(c_k x_k) = total_X},
+adding \code{total_X} as a parameter. The moiety is solved in log space, so all
+species stay positive and none is reconstructed by subtraction; the
+conservation then holds to the solver tolerance (\code{controlsNleqslv$ftol}).
+If \code{FALSE}, the pivot species per conserved quantity becomes a pass-through
+parameter and its redundant equation is dropped.}
 
-\item{modelname}{Character, used if \code{compile = TRUE}, sets a fixed filename for the
-C file.}
+\item{compile, modelname, verbose}{Forwarded to \link[cppDE:funCpp]{cppDE::funCpp}.}
 
-\item{verbose}{Print compiler output to R command line.}
+\item{deriv, deriv2}{Attach first/second-order IFT sensitivities.
+\code{deriv2} requires \code{funCpp} to expose \code{hess()}.}
+
+\item{controlsMS}{Multistart controls. Recognised keys: \code{nStarts}
+(default \code{100L}; \code{1L} disables multistart), \code{positive} (default
+\code{TRUE}; selects nleqslv's log-space transform and log-uniform
+random starts), \code{lower}/\code{upper} (scalar or named vector of bounds
+for the random sweep), \code{debugPlot} (default \code{FALSE}; emit a
+waterfall plot of multistart termination codes).}
+
+\item{controlsNleqslv}{nleqslv tuning: \code{method}, \code{global}, \code{xscalm},
+\code{xtol}, \code{ftol}, \code{btol}, \code{cndtol}, \code{maxit}, \code{allowSingular}. Residuals
+are scaled per equation by their turnover \verb{sum_k |df_i/dx_k| |x_k|}, so
+\code{ftol} is a relative criterion that converges multi-scale systems
+uniformly.}
+
+\item{outdir}{Directory for the generated source and shared object,
+default the working directory.}
 }
 \value{
-a function \code{p2p(p, fixed = NULL, deriv = TRUE)} representing the parameter 
-transformation. Here, \code{p} is a named numeric vector with the values of the outer parameters,
-\code{fixed} is a named numeric vector with values of the outer parameters being considered
-as fixed (no derivatives returned) and \code{deriv} is a logical determining whether the Jacobian
-of the parameter transformation is returned as attribute "deriv".
+A \link{parfn}.
 }
 \description{
-Parameter transformation (implicit)
-}
-\details{
-Usually, the equations contain the dependent variables, the independent variables and 
-other parameters. The argument \code{p} of \code{p2p} must provide values for the independent
-variables and the parameters but ALSO FOR THE DEPENDENT VARIABLES. Those serve as initial guess
-for the dependent variables. The dependent variables are then numerically computed by 
-\link[rootSolve]{multiroot}. The Jacobian of the solution with respect to dependent variables
-and parameters is computed by the implicit function theorem. The function \code{p2p} returns
-all parameters as they are with corresponding 1-entries in the Jacobian.
-}
-\examples{
-########################################################################
-## Example 1: Steady-state trafo
-########################################################################
-f <- c(A = "-k1*A + k2*B",
-       B = "k1*A - k2*B")
-P.steadyState <- Pimpl(f, "A")
-
-p.outerValues <- c(k1 = 1, k2 = 0.1, A = 10, B = 1)
-P.steadyState(p.outerValues)
-
-########################################################################
-## Example 2: Steady-state trafo combined with log-transform
-########################################################################
-f <- c(A = "-k1*A + k2*B",
-       B = "k1*A - k2*B")
-P.steadyState <- Pimpl(f, "A")
-
-logtrafo <- c(k1 = "exp(logk1)", k2 = "exp(logk2)", A = "exp(logA)", B = "exp(logB)")
-P.log <- P(logtrafo)
-
-p.outerValue <- c(logk1 = 1, logk2 = -1, logA = 0, logB = 0)
-(P.log)(p.outerValue)
-(P.steadyState * P.log)(p.outerValue)
-
-########################################################################
-## Example 3: Steady-states with conserved quantitites
-########################################################################
-f <- c(A = "-k1*A + k2*B", B = "k1*A - k2*B")
-replacement <- c(B = "A + B - total")
-f[names(replacement)] <- replacement
-
-pSS <- Pimpl(f, "total")
-pSS(c(k1 = 1, k2 = 2, A = 5, B = 5, total = 3))
+Returns a \link{parfn} over the outer inputs. On call, the parfn solves
+\code{f(x, p) = 0} for the dependent states via \link[nleqslv:nleqslv]{nleqslv::nleqslv}, warm
+starting from the cached root when available and falling back to
+multistart otherwise. The IFT-derived Jacobian (and Hessian when
+\code{deriv2 = TRUE}) are attached to the result. For \link{eqnlist} inputs with
+conserved moieties, see \code{expressInTotals}.
 }
 \seealso{
-\link{Pexpl} for explicit parameter transformations
+\link{Pexpl}, \link{Pequil}, \link{P}.
 }

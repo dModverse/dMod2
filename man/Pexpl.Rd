@@ -2,7 +2,7 @@
 % Please edit documentation in R/parameters.R
 \name{Pexpl}
 \alias{Pexpl}
-\title{Parameter transformation}
+\title{Parameter transformation (explicit, algebraic)}
 \usage{
 Pexpl(
   trafo,
@@ -11,50 +11,41 @@ Pexpl(
   condition = NULL,
   compile = FALSE,
   modelname = NULL,
-  verbose = FALSE
+  verbose = FALSE,
+  deriv = TRUE,
+  deriv2 = FALSE,
+  derivMode = c("dual", "symbolic"),
+  outdir = getwd()
 )
 }
 \arguments{
-\item{trafo}{Named character vector. Names correspond to the parameters being fed into
-the model (the inner parameters). The elements of tafo are equations that express 
-the inner parameters in terms of other parameters (the outer parameters)}
+\item{trafo}{Named character / \link{eqnvec}; names are inner parameters,
+values are expressions in the outer parameters.}
 
-\item{parameters}{Character vector. Optional. If given, the generated parameter
-transformation returns values for each element in \code{parameters}. If elements of
-\code{parameters} are not in \code{names(trafo)} the identity transformation is assumed.}
+\item{parameters}{Outer parameters; defaults to \code{getSymbols(trafo)}.}
 
-\item{attach.input}{attach those incoming parameters to output which are not overwritten by
-the parameter transformation.}
+\item{attach.input}{Append outer inputs to the output.}
 
-\item{condition}{character, the condition for which the transformation is generated}
+\item{condition}{Condition label.}
 
-\item{compile}{Logical, compile the function (see \link{funC0})}
+\item{compile, modelname, verbose}{Forwarded to \link[cppDE:funCpp]{cppDE::funCpp}.}
 
-\item{modelname}{Character, used if \code{compile = TRUE}, sets a fixed filename for the
-C file.}
+\item{deriv, deriv2}{Attach \code{attr(., "deriv")} \verb{[p, theta]} and/or
+\code{attr(., "deriv2")} \verb{[p, theta, theta]}. \code{deriv2} needs \code{deriv = TRUE}.}
 
-\item{verbose}{Print compiler output to R command line.}
+\item{derivMode}{\code{"dual"} (AD, needs \code{compile = TRUE}) or \code{"symbolic"}.}
+
+\item{outdir}{Directory for the generated source and shared object,
+default the working directory.}
 }
 \value{
-a function \code{p2p(p, fixed = NULL, deriv = TRUE)} representing the parameter 
-transformation. Here, \code{p} is a named numeric vector with the values of the outer parameters,
-\code{fixed} is a named numeric vector with values of the outer parameters being considered
-as fixed (no derivatives returned) and \code{deriv} is a logical determining whether the Jacobian
-of the parameter transformation is returned as attribute "deriv".
+A \link{parfn}.
 }
 \description{
-Parameter transformation
-}
-\examples{
-
-logtrafo <- c(k1 = "exp(logk1)", k2 = "exp(logk2)", 
-              A = "exp(logA)", B = "exp(logB)")
-p_log <- P(logtrafo)
-
-pars <- c(logk1 = 1, logk2 = -1, logA = 0, logB = 0)
-out <- p_log(pars)
-getDerivs(out)
+Builds \code{p_inner = f(p_outer)} from symbolic expressions via
+\link[cppDE:funCpp]{cppDE::funCpp}, in forward-mode AD or SymPy mode. The returned
+\link{parfn} attaches the Jacobian and, optionally, the Hessian.
 }
 \seealso{
-\link{Pimpl} for implicit parameter transformations
+\link{Pimpl}, \link{Pequil}, \link{P}.
 }

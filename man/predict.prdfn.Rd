@@ -13,11 +13,11 @@
 
 \item{times}{numeric vector of time points}
 
-\item{pars}{parameter frame, e.g. output from \link{mstrust} or 
+\item{pars}{parameter frame, e.g. output from \link{mstrust} or
 \link{profile}}
 
 \item{data}{data list object. If data is passed, its condition.grid
-attribute is used to augment the output dataframe by additional 
+attribute is used to augment the output dataframe by additional
 columns. \code{"data"} itself is returned as an attribute.}
 }
 \value{

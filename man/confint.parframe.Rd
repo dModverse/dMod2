@@ -4,12 +4,21 @@
 \alias{confint.parframe}
 \title{Profile uncertainty extraction}
 \usage{
-\method{confint}{parframe}(object, parm = NULL, level = 0.95, ..., val.column = "data")
+\method{confint}{parframe}(
+  object,
+  parm = NULL,
+  level = 0.95,
+  ...,
+  val.column = "data",
+  method = c("chisq", "F"),
+  n = NULL,
+  p = NULL
+)
 }
 \arguments{
 \item{object}{object of class \code{parframe}, returned from \link{profile} function.}
 
-\item{parm}{a specification of which parameters are to be given confidence intervals, 
+\item{parm}{a specification of which parameters are to be given confidence intervals,
 either a vector of numbers or a vector of names. If missing, all parameters are considered.}
 
 \item{level}{the confidence level required.}
@@ -17,6 +26,17 @@ either a vector of numbers or a vector of names. If missing, all parameters are 
 \item{...}{not used right now.}
 
 \item{val.column}{the value column used in the parframe, usually 'data'.}
+
+\item{method}{calibration of the threshold. \code{"chisq"} (default) uses the
+asymptotic \eqn{\chi^2_1} quantile. \code{"F"} uses the finite-sample threshold
+\eqn{n\log(1 + F_{1,\nu,1-\alpha}/\nu)}, \eqn{\nu = n - p}, which is exact
+for Gaussian errors with a single sigma profiled out and requires \code{n} and \code{p}.}
+
+\item{n}{number of data points. Only for \code{method = "F"}.}
+
+\item{p}{number of estimated mean parameters, that is without the error-model
+parameters. Only for \code{method = "F"}. \link{remlLeverage} reports the effective
+count, which is what to pass when directions are non-identifiable.}
 }
 \description{
 extract parameter uncertainties from profiles

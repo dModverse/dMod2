@@ -20,7 +20,7 @@ msParframe(
 
 \item{seed}{Seed for the random number generator}
 
-\item{samplefun}{random number generator: \code{\link{rnorm}}, \code{\link{runif}}, etc...}
+\item{samplefun}{random number generator: \code{\link[=rnorm]{rnorm()}}, \code{\link[=runif]{runif()}}, etc...}
 
 \item{keepfirst}{boolean, if set to \code{TRUE} the first row of the parframe will be the pars}
 
@@ -30,7 +30,7 @@ msParframe(
 parframe (without metanames)
 }
 \description{
-The output of this function can be used for the \code{center} - argument of \code{\link{mstrust}}
+The output of this function can be used for the \code{center} - argument of \code{\link[=mstrust]{mstrust()}}
 }
 \examples{
 msParframe(c(a = 0, b = 100000), 5)
@@ -39,5 +39,5 @@ msParframe(c(a = 0, b = 100000), 5)
 msParframe(c(a = 0, b = 100000), 5, samplefun = rnorm, sd = c(100, 0.5))
 }
 \seealso{
-\code{\link{mstrust}} and \code{\link{parframe}}
+\code{\link[=mstrust]{mstrust()}} and \code{\link[=parframe]{parframe()}}
 }

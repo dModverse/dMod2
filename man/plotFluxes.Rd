@@ -13,7 +13,7 @@ plotFluxes(pouter, x, times, fluxEquations, nameFlux = "Fluxes:", ...)
 
 \item{times}{Numeric vector of time points for the model prediction}
 
-\item{fluxEquations}{list of chars containing expressions for the fluxes, 
+\item{fluxEquations}{list of chars containing expressions for the fluxes,
 if names are given, they are shown in the legend. Easy to obtain via \link{subset.eqnlist}, see Examples.}
 
 \item{nameFlux}{character, name of the legend.}

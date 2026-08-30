@@ -7,7 +7,6 @@
 mstrust(
   objfun,
   center,
-  studyname,
   rinit = 0.1,
   rmax = 10,
   fits = 20,
@@ -15,98 +14,97 @@ mstrust(
   optmethod = "trust",
   samplefun = "rnorm",
   resultPath = ".",
+  name = "mstrust",
   stats = FALSE,
   output = FALSE,
   cautiousMode = FALSE,
   start1stfromCenter = FALSE,
+  retry = TRUE,
+  nTries = 10L,
+  studyname,
   ...
 )
 }
 \arguments{
-\item{objfun}{Objective function, see \code{\link{trust}}.}
+\item{objfun}{Objective function, see \code{\link[=trust]{trust()}}.}
 
-\item{center}{Parameter values around which the initial values for each fit 
-are randomly sampled. The initial values handed to \link{trust} are the sum
-of center and the output of \option{samplefun}, center + 
-\option{samplefun}. See \code{\link{trust}}, parinit.
-\code{center} Can also be a parframe, then the parameter values are taken 
-from the parframe. In this case, the \code{fits} argument is overwritten.
-To use a reproducible set of initial guesses, generate center with 
-\code{\link{msParframe}}}
+\item{center}{Parameter centre. Initial values are \code{center + samplefun(...)}.
+May also be a parframe (rows are then used directly; \code{fits} is overwritten).
+Use \code{\link[=msParframe]{msParframe()}} for reproducible random starts.}
 
-\item{studyname}{The names of the study or fit. This name is used to 
-determine filenames for interim and final results. See Details.}
+\item{rinit}{Starting trust-region radius, see \code{\link[=trust]{trust()}}.}
 
-\item{rinit}{Starting trust region radius, see \code{\link{trust}}.}
+\item{rmax}{Maximum trust-region radius, see \code{\link[=trust]{trust()}}.}
 
-\item{rmax}{Maximum allowed trust region radius, see \code{\link{trust}}.}
+\item{fits}{Number of fits.}
 
-\item{fits}{Number of fits (jobs).}
+\item{cores}{Number of parallel fits, or \code{c(fits = , conditions = )} to
+also give each fit a condition axis. An inner axis selects a PSOCK
+backend: cppDE's batch runs serially inside a fork. Keep the product
+below your core count.}
 
-\item{cores}{Number of cores for job parallelization.}
+\item{optmethod}{Character. Name of the optimiser function to call via
+\code{do.call(optmethod, ...)}. Default \code{"trust"}.}
 
-\item{samplefun}{Function to sample random initial values. It is assumed, 
-that \option{samplefun} has a named parameter "n" which defines how many 
-random numbers are to be returned, such as for \code{\link{rnorm}} or 
-\code{\link{runif}}. By default \code{\link{rnorm}} is used. Parameteres 
-for samplefun are simply appended as named parameters to the mstrust call 
-and automatically handed to samplefun by matching parameter names.}
+\item{samplefun}{Sampler for random initial values; must accept an \code{n}
+argument. Default \code{\link[=rnorm]{rnorm()}}. Extra named args from \code{...} matching
+\code{samplefun} parameters are forwarded.}
 
-\item{resultPath}{character indicating the folder where the results should 
-be stored. Defaults to ".".}
+\item{resultPath}{Output folder. Default \code{"."}.}
 
-\item{stats}{If true, the same summary statistic as written to the logfile is
-printed to command line on mstrust completion.}
+\item{name}{Character. Folder stem for on-disk results, under \code{resultPath}.
+Only consulted when something is actually written.}
 
-\item{output}{logical. If true, writes output to the disc.}
+\item{stats}{Logical. Print the summary statistics to the console.}
 
-\item{cautiousMode}{Logical, write every fit to disk in deparsed form (avoids the RDA incompatibility trap) and don't delete intermediate results}
+\item{output}{Logical. Write per-fit output to disk.}
 
-\item{...}{Additional parameters handed to trust(), samplefun(), or the 
-objective function by matching parameter names. All unmatched parameters 
-are handed to the objective function objfun(). The log file starts with a 
-table telling which parameter was assigend to which function.}
+\item{cautiousMode}{Logical. Persist every fit deparsed (avoids RDA-version
+pitfalls) and keep intermediate files.}
+
+\item{start1stfromCenter}{Logical. If \code{TRUE}, the first fit starts exactly
+at \code{center} (no random offset).}
+
+\item{retry}{Logical. If \code{TRUE} (default), a fit that fails (with a
+\code{try-error} or with a \code{fit$error} element) is re-attempted with a
+freshly sampled \code{parinit} up to \code{nTries} times before being recorded
+as failed. Ignored when \code{center} is a parframe (rows are taken as
+given and cannot be resampled).}
+
+\item{nTries}{Maximum number of attempts per fit slot, including the
+first. Default \code{10L}.}
+
+\item{studyname}{Deprecated alias for \code{name}.}
+
+\item{...}{Forwarded to \code{\link[=trust]{trust()}}, \code{samplefun}, or \code{objfun} by name match.
+Unmatched names go to \code{objfun}.}
 }
 \value{
 A parlist holding errored and converged fits.
 }
 \description{
-Wrapper around \code{\link{trust}} allowing for multiple fits 
-  from randomly chosen initial values.
+Wrapper around \code{\link[=trust]{trust()}} allowing for multiple fits
+from randomly chosen initial values.
 }
 \details{
-By running multiple fits starting at randomly chosen inital 
-  parameters, the chisquare landscape can be explored using a deterministic 
-  optimizer. Here, \code{\link{trust}} is used for optimization. The standard
-  procedure to obtain random initial values is to sample random variables 
-  from a uniform distribution (\code{\link{rnorm}}) and adding these to 
-  \option{center}. It is, however, possible, to employ any other sampling 
-  strategy by handing the respective function to mstrust(), 
-  \option{samplefun}.
-  
-  In case a special sampling is required, a customized sampling function can 
-  be used. If, e.g., inital values leading to a non-physical systems are to 
-  be discarded upfront, the objective function can be addapted accordingly.
-  
-  All started fits either lead to an error or complete converged or
-  unconverged. A statistics about the return status of fits can be shown by
-  setting \option{stats} to TRUE.
-  
-  Fit final and intermediat results are stored under \option{studyname}. For
-  each run of mstrust for the same study name, a folder under
-  \option{studyname} of the form "trial-x-date" is created. "x" is the number
-  of the trial, date is the current time stamp. In this folder, the
-  intermediate results are stored. These intermediate results can be loaded
-  by \code{\link{load.parlist}}. These are removed on successfull completion
-  of mstrust. In this case, the final list of fit parameters
-  (parameterList.Rda) and the fit log (mstrust.log) are found instead.
+Runs \code{fits} independent \code{\link[=trust]{trust()}} optimisations from random
+starts (sampled by \code{samplefun}, default \code{\link[=rnorm]{rnorm()}}) added to \code{center},
+exploring the chi-square landscape.
+
+Nothing reaches the disk unless \code{output}, \code{cautiousMode} or \code{traceFile}
+asks for it. When one of them does, results go to
+\verb{<resultPath>/<name>/trial-x-<date>/}: intermediate fits are removed on
+successful completion, the final \code{parameterList.Rda} and \code{mstrust.log}
+are kept.
 }
 \seealso{
-1. \code{\link{trust}}, for the used optimizer,
-  2. \code{\link{rnorm}}, \code{\link{runif}} for two common sampling functions,
-  3. \code{\link{msParframe}} for passing a reproducible set of random initial 
-  guesses to mstrust,
-  4. \code{\link{as.parframe}} for formatting the output to a handy table
+\enumerate{
+\item \code{\link[=trust]{trust()}}, for the used optimizer,
+\item \code{\link[=rnorm]{rnorm()}}, \code{\link[=runif]{runif()}} for two common sampling functions,
+\item \code{\link[=msParframe]{msParframe()}} for passing a reproducible set of random initial
+guesses to mstrust,
+\item \code{\link[=as.parframe]{as.parframe()}} for formatting the output to a handy table
+}
 }
 \author{
 Wolfgang Mader, \email{Wolfgang.Mader@fdm.uni-freiburg.de}

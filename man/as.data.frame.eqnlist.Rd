@@ -12,8 +12,8 @@
 \item{...}{other arguments}
 }
 \value{
-a \code{data.frame} with columns "Description" (character), 
-"Rate" (character), and one column per ODE state with the state names. 
+a \code{data.frame} with columns "Description" (character),
+"Rate" (character), and one column per ODE state with the state names.
 The state columns correspond to the stoichiometric matrix.
 }
 \description{

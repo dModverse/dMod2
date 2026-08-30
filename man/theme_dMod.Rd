@@ -4,12 +4,15 @@
 \alias{theme_dMod}
 \title{Standard plotting theme of dMod}
 \usage{
-theme_dMod(base_size = 12, base_family = "")
+theme_dMod(base_size = 12, base_family = "", showGrid = FALSE)
 }
 \arguments{
 \item{base_size}{numeric, font-size}
 
 \item{base_family}{character, font-name}
+
+\item{showGrid}{logical, keep the panel grid. \code{FALSE} (the default) drops it;
+\code{TRUE} leaves \code{\link[ggplot2:theme_bw]{ggplot2::theme_bw()}}'s grid in place.}
 }
 \description{
 Standard plotting theme of dMod

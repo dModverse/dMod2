@@ -4,58 +4,49 @@
 \alias{constraintL2}
 \title{Soft L2 constraint on parameters}
 \usage{
-constraintL2(mu, sigma = 1, attr.name = "prior", condition = NULL)
+constraintL2(
+  mu,
+  sigma = 1,
+  Omega = NULL,
+  attr.name = "prior",
+  condition = NULL
+)
 }
 \arguments{
-\item{mu}{named numeric, the prior values}
+\item{mu}{Named numeric vector of prior means. For the MVN path
+(\code{Omega} set), \code{mu} may be a scalar (broadcast across all etas) or a
+length-K named vector matching \code{Omega$eta}.}
 
-\item{sigma}{named numeric of length of mu or numeric of length one
-or character of length of mu or character of length one}
+\item{sigma}{Named numeric or character vector. Character entries indicate
+log-scale sigma parameters to be estimated. Used only when \code{Omega} is NULL.}
 
-\item{attr.name}{character. The constraint value is additionally returned in an 
-attributed with this name}
+\item{Omega}{Optional \code{omegaSpec} object (see \code{omega()} (NLME layer)) describing a
+multivariate Gaussian prior over subject-level random effects with full
+Cholesky-parametrised covariance. When supplied, the function switches to
+the MVN path and ignores \code{sigma}.}
 
-\item{condition}{character, the condition for which the constraint should apply. If
-\code{NULL}, applies to any condition.}
+\item{attr.name}{Character. Name of the attribute storing the constraint value.}
+
+\item{condition}{Optional character vector of conditions.}
 }
 \value{
-object of class \code{objfn}
+Object of class \code{objfn}.
 }
 \description{
 Soft L2 constraint on parameters
 }
 \details{
-If sigma is numeric, the function computes the constraint value 
-\deqn{\left(\frac{p-\mu}{\sigma}\right)^2}{(p-mu)^2/sigma^2}
-and its derivatives with respect to p. If sigma is a character, the 
-function computes
-\deqn{\left(\frac{p-\mu}{\sigma}\right)^2 + \log(\sigma^2)}{(p-mu)^2/sigma^2 + log(sigma^2)}
-and its derivatives with respect to p and sigma. Sigma parameters being
-passed to the function are ALWAYS assumed to be on a log scale, i.e. internally
-sigma parameters are converted by \code{exp()}.
-}
-\examples{
-mu <- c(A = 0, B = 0)
-sigma <- c(A = 0.1, B = 1)
-myfn <- constraintL2(mu, sigma)
-myfn(pars = c(A = 1, B = -1))
+Computes, depending on which path is selected,
+\deqn{(p-\mu)^2 / \sigma^2}
+or, if sigma is estimated,
+\deqn{(p-\mu)^2 / \sigma^2 + 2\log(\sigma)},
+with sigma internally transformed via \code{exp()}.
 
-# Introduce sigma parameter but fix them (sigma parameters
-# are assumed to be passed on log scale)
-mu <- c(A = 0, B = 0)
-sigma <- paste("sigma", names(mu), sep = "_")
-myfn <- constraintL2(mu, sigma)
-pars <- c(A = .8, B = -.3, sigma_A = -1, sigma_B = 1)
-myfn(pars = pars[c(1, 3)], fixed = pars[c(2, 4)])
-
-# Assume same sigma parameter for both A and B
-# sigma is assumed to be passed on log scale
-mu <- c(A = 0, B = 0)
-myfn <- constraintL2(mu, sigma = "sigma")
-pars <- c(A = .8, B = -.3, sigma = 0)
-myfn(pars = pars)
-
-}
-\seealso{
-\link{wrss}
+When \code{Omega} is set, computes the multivariate-normal prior
+\deqn{\sum_i (\eta_i - \mu)^T \Omega^{-1} (\eta_i - \mu) + N \log|\Omega|}
+over subject-level random effects \eqn{\eta_i}, where \eqn{\Omega = L L^T}
+with \eqn{L} lower-triangular and log-parametrised on the diagonal. The
+parameter vector at evaluation time must contain all subject-level eta
+parameters listed in \code{Omega$subjectEtas} and all Cholesky parameters in
+\code{Omega$cholPars}.
 }

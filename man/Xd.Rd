@@ -7,7 +7,7 @@
 Xd(data, condition = NULL)
 }
 \arguments{
-\item{data}{data.frame with columns "name", "time", and row names that 
+\item{data}{data.frame with columns "name", "time", and row names that
 are taken as parameter names. The data frame can contain a column "value"
 to initialize the parameters.}
 
@@ -15,8 +15,8 @@ to initialize the parameters.}
 the condition for which the function makes a prediction.}
 }
 \value{
-Object of class \link{prdfn}, i.e. 
-a function \code{x(times pars, deriv = TRUE, conditions = NULL)}, 
+Object of class \link{prdfn}, i.e.
+a function \verb{x(times pars, deriv = TRUE, conditions = NULL)},
 see also \link{Xs}. Attributes are "parameters", the parameter names (row names of
 the data frame), and possibly "pouter", a named numeric vector which is generated
 from \code{data$value}.
@@ -25,6 +25,7 @@ from \code{data$value}.
 Model prediction function from data.frame
 }
 \examples{
+\dontrun{
 # Generate a data.frame and corresponding prediction function
 timesD <- seq(0, 2*pi, 0.5)
 mydata <- data.frame(name = "A", time = timesD, value = sin(timesD), 
@@ -37,4 +38,5 @@ pouter <- structure(mydata$value, names = rownames(mydata))
 prediction <- x(times, pouter)
 plot(prediction)
 
+}
 }

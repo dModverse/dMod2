@@ -9,7 +9,7 @@ write.eqnlist(eqnlist, ...)
 \arguments{
 \item{eqnlist}{object of class \link{eqnlist}}
 
-\item{...}{Arguments going to \link[utils]{write.table}}
+\item{...}{Arguments going to \link[utils:write.table]{write.table}}
 }
 \description{
 Write equation list into a csv file

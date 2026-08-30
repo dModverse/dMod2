@@ -2,25 +2,31 @@
 % Please edit documentation in R/plots.R
 \name{scale_color_dMod}
 \alias{scale_color_dMod}
-\title{Standard dMod color palette}
+\alias{scale_fill_dMod}
+\title{Discrete dMod colour scales}
 \usage{
-scale_color_dMod(...)
+scale_color_dMod(..., palette = "okabe")
+
+scale_fill_dMod(..., palette = "okabe")
 }
 \arguments{
-\item{...}{arguments goint to code{scale_color_manual()}}
+\item{...}{arguments forwarded to \code{\link[ggplot2:discrete_scale]{ggplot2::discrete_scale()}}.}
+
+\item{palette}{name of a qualitative palette, see \code{\link[=dMod_palettes]{dMod_palettes()}}. The
+default is colorblind-safe.}
 }
 \description{
-Standard dMod color palette
+Discrete dMod colour scales
 }
 \examples{
 library(ggplot2)
 times <- seq(0, 2*pi, 0.1)
 values <- sin(times)
 data <- data.frame(
-   time = times, 
-   value = c(values, 1.2*values, 1.4*values, 1.6*values), 
+   time = times,
+   value = c(values, 1.2*values, 1.4*values, 1.6*values),
    group = rep(c("C1", "C2", "C3", "C4"), each = length(times))
 )
-qplot(time, value, data = data, color = group, geom = "line") + 
+ggplot(data, aes(time, value, colour = group)) + geom_line() +
    theme_dMod() + scale_color_dMod()
 }
