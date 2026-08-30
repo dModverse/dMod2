@@ -1202,6 +1202,10 @@ emObjfn <- function(obj, control = list()) {
          paste(miss, collapse = ", "),
          ". Use emInit(structural, omega) to assemble a complete start.",
          call. = FALSE)
+  bad <- names(init)[!is.finite(init)]
+  if (length(bad))
+    stop(".fitNormal: `init` must be finite; got NA/NaN/Inf for: ",
+         paste(bad, collapse = ", "), call. = FALSE)
   invisible()
 }
 
