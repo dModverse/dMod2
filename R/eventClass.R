@@ -3,7 +3,7 @@
 #' An eventlist is a data.frame with the necessary parameters to define an event as columns and specific events as rows.
 #' Event time and value can be passed as parameters, which can also be estimated.
 #' 
-#' The function \code{addEvent} is pipe-friendly
+#' The function `addEvent` is pipe-friendly
 #'  
 #' @param var Character, the state to which the event is applied
 #' @param time Character or Numeric, the time at which the event happens
@@ -15,25 +15,36 @@
 #' @export
 #'
 #' @examples
-#' eventlist(var = "A", time = "5", value = 1, method = "add")
-#' 
-#' events <- addEvent(NULL, var = "A", time = "5", value = 1, method = "add")
-#' events <- addEvent(events, var = "A", time = "10", value = 1, method = "add")
-#' 
-#' # With symbols
-#' events <- eventlist()
-#' # Set "A" to "value_switch" at time "time_Switch"
-#' events <- addEvent(events, var = "A", time = "time_switch", value = "value_switch", method = "replace")
-#' # Set "B" to 2 when "A" reaches "A_target". The time-parameter for internal use will be "time_root".
-#' events <- addEvent(events, var = "B", time = "time_root", value = 2, root = "A - A_target", method = "replace")
+#' \dontrun{
+#'   eventlist(var = "A", time = "5", value = 1, method = "add")
+#'   
+#'   events <- addEvent(NULL, var = "A", time = "5", value = 1, method = "add")
+#'   events <- addEvent(events, var = "A", time = "10", value = 1, method = "add")
+#'   
+#'   # With symbols
+#'   events <- eventlist()
+#'   # Set "A" to "value_switch" at time "time_Switch"
+#'   events <- addEvent(events, var = "A", time = "time_switch",
+#'                      value = "value_switch", method = "replace")
+#'   # Set "B" to 2 when "A" reaches "A_target". The time-parameter for
+#'   # internal use will be "time_root".
+#'   events <- addEvent(events, var = "B", time = "time_root", value = 2,
+#'                      root = "A - A_target", method = "replace")
+#' }
 eventlist <- function(var = NULL, time = NULL, value = NULL, root = NULL, method = NULL) {
-  
-  # root is NULL if all are NULL or NA if any is not NULL
-  if (!is.null(var) | !is.null(time) | !is.null(value) | !is.null(method) & is.null(root)) root <- NA
-  
+
+  # If any non-root field is supplied, default root to NA so all columns share
+  # the same length. Mirrors as.eventlist.list() which fills root with NA when
+  # absent. Without this, eventlist(var = "A", time = 5, value = "x", method = "add")
+  # crashes in data.frame() with a 0-vs-1 length conflict.
+  if (is.null(root) &&
+      (!is.null(var) || !is.null(time) || !is.null(value) || !is.null(method))) {
+    root <- NA
+  }
+
   out <- data.frame(var = var,
                     time = time,
-                    value = value, 
+                    value = value,
                     root = root,
                     method = method,
                     stringsAsFactors = FALSE)
@@ -42,6 +53,28 @@ eventlist <- function(var = NULL, time = NULL, value = NULL, root = NULL, method
   return(out)
   
 }
+
+#' @export
+print.eventlist <- function(x, ...) {
+
+  if (nrow(x) == 0L) {
+    cat("Empty eventlist (no events).\n")
+    return(invisible(x))
+  }
+
+  cat("Eventlist with", nrow(x), if (nrow(x) == 1L) "event:\n" else "events:\n")
+  # Strip the class so this dispatches to print.data.frame rather than recursing.
+  print.data.frame(as.data.frame(x, stringsAsFactors = FALSE), ...)
+
+  rooted <- !is.na(x$root) & nzchar(as.character(x$root))
+  if (any(rooted))
+    cat("... ", sum(rooted), " event(s) triggered by a root condition ",
+        "rather than a fixed time.\n", sep = "")
+
+  invisible(x)
+
+}
+
 
 #' Coerce to eventlist
 #'
@@ -86,7 +119,7 @@ as.eventlist.data.frame <- function(x, ...) {
 }
 
 #' @rdname eventlist
-#' @param event object of class \code{eventlist}
+#' @param event object of class `eventlist`
 #' @param ... not used
 #' @export
 addEvent <- function(event, var, time = 0, value = 0, root = NA, method = "replace", ...) {
