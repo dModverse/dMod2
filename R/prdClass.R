@@ -113,7 +113,7 @@ as.data.frame.prdlist <- function(x, ..., data = NULL, errfn = NULL) {
 #' @export
 #' @param x prediction
 #' @rdname plotCombined
-plot.prdlist <- function(x, data = NULL, ..., scales = "free", facet = "wrap", transform = NULL) {
+plot.prdlist <- function(x, data = NULL, ..., scales = "free", facet = c("wrap", "grid", "wrap_plain"), transform = NULL) {
   
   prediction <- x
   
@@ -125,105 +125,194 @@ plot.prdlist <- function(x, data = NULL, ..., scales = "free", facet = "wrap", t
 }
 
 
+#' Plot combined prediction and data
+#'
+#' @description
+#' Creates a combined plot of model predictions and observed data with flexible
+#' faceting options. Supports error bars, below limit of quantification (BLoQ) 
+#' indicators, and coordinate transformations.
+#'
+#' @param prediction A \code{prdlist} object containing model predictions.
+#' @param data Optional data object with observed values. If provided, will be 
+#'   merged with covariate information and displayed as points with error bars.
+#' @param ... Filter expressions passed to \code{dplyr::filter} for subsetting
+#'   both prediction and data.
+#' @param scales Scale specification for facets, passed to facet functions.
+#'   Default is \code{"free"}.
+#' @param facet Faceting style. One of:
+#'   \itemize{
+#'     \item \code{"wrap"}: Facet by name, color by condition (default)
+#'     \item \code{"grid"}: Facet grid with name as rows, condition as columns
+#'     \item \code{"wrap_plain"}: Facet wrap by name and condition combined
+#'   }
+#' @param transform Optional transformation function applied to coordinates
+#'   via \code{coordTransform}.
+#' @param aesthetics Optional named list of aesthetic mappings (as strings) to
+#'   override defaults. Default aesthetics include x, y, ymin, ymax, and 
+#'   conditionally group and color.
+#'
+#' @return A \code{ggplot} object with an additional \code{"data"} attribute
+#'   containing a list with the processed \code{data} and \code{prediction} 
+#'   data frames.
+#'
+#' @examples
+#' \dontrun{
+#' plotCombined(pred, mydata, time < 100, facet = "grid")
+#' plotCombined(pred, mydata, aesthetics = list(color = "treatment"))
+#' }
+#'
 #' @export
 #' @rdname plotCombined
-#' @importFrom dplyr filter left_join
-plotCombined.prdlist <- function(prediction, data = NULL, ..., scales = "free", facet = "wrap", transform = NULL, aesthetics = NULL) {
+#' @importFrom dplyr filter
+#' @importFrom rlang parse_expr
+plotCombined.prdlist <- function(prediction, data = NULL, ..., 
+                                 scales = "free", 
+                                 facet = c("wrap", "grid", "wrap_plain"), 
+                                 transform = NULL, aesthetics = NULL) {
+  
+  facet <- match.arg(facet)
+  
+  make_aes <- function(mapping) {
+    mapping <- lapply(mapping, function(col) {
+      if (!is.null(col)) rlang::parse_expr(col)
+    })
+    do.call(aes, Filter(Negate(is.null), mapping))
+  }
   
   mynames <- c("time", "name", "value", "sigma", "condition")
   covtable <- NULL
   
+  # --- Prepare data ---
   if (!is.null(data)) {
-    rownames_to_condition <- function(covtable) {
-      out <- cbind(condition = rownames(covtable), covtable, stringsAsFactors = F)
-      out <- out[!duplicated(names(out))]
-      return(out)}
-    covtable <- rownames_to_condition(covariates(data))
-
+    covtable <- covariates(data)
+    covtable <- cbind(condition = rownames(covtable), covtable)
+    covtable <- covtable[!duplicated(names(covtable))]
+    
     data <- lbind(data)
-    data <- base::merge(data, covtable, by = "condition", all.x = T)
-    data <- dplyr::filter(data, ...)
-    data <- as.data.frame(data, stringsAsFactors = F)
+    data <- base::merge(data, covtable, by = "condition", all.x = TRUE)
+    data <- as.data.frame(dplyr::filter(data, ...))
     data$bloq <- ifelse(data$value <= data$lloq, "yes", "no")
     
     if (!is.null(transform)) data <- coordTransform(data, transform)
   }
   
+  # --- Prepare prediction ---
   if (!is.null(prediction)) {
     prediction <- cbind(wide2long(prediction), sigma = NA)
-    if (!is.null(data)) prediction <- base::merge(prediction, covtable, by = "condition", all.x = T)
-    prediction <- as.data.frame(dplyr::filter(prediction, ...), stringsAsFactors = F)
+    if (!is.null(covtable)) {
+      prediction <- base::merge(prediction, covtable, by = "condition", all.x = TRUE)
+    }
+    prediction <- as.data.frame(dplyr::filter(prediction, ...))
     
     if (!is.null(transform)) prediction <- coordTransform(prediction, transform)
   }
   
-  total <- rbind(prediction[, unique(c(mynames, names(covtable)))], data[, unique(c(mynames, names(covtable)))])
+  # --- Combine into single data frame ---
+  keep_cols <- unique(c(mynames, names(covtable)))
+  total <- rbind(
+    if (!is.null(prediction)) prediction[, keep_cols] else NULL,
+    if (!is.null(data)) data[, keep_cols] else NULL
+  )
   
+  # --- Build aesthetics ---
+  aes_base <- list(x = "time", y = "value", 
+                   ymin = "value - sigma", ymax = "value + sigma")
+  if (facet == "wrap") {
+    aes_base$group <- "condition"
+    aes_base$color <- "condition"
+  }
+  aesthetics <- c(aes_base[setdiff(names(aes_base), names(aesthetics))], aesthetics)
   
-  if (facet == "wrap"){
-    aes0 <- list(x = "time", y = "value", ymin = "value - sigma", ymax = "value + sigma", group = "condition", color = "condition")
-    aesthetics <- c(aes0[setdiff(names(aes0), names(aesthetics))], aesthetics)
-    p <- ggplot(total, do.call("aes_string", aesthetics)) + facet_wrap(~name, scales = scales)}
-  if (facet == "grid"){
-    aes0 <- list(x = "time", y = "value", ymin = "value - sigma", ymax = "value + sigma")
-    aesthetics <- c(aes0[setdiff(names(aes0), names(aesthetics))], aesthetics)
-    p <- ggplot(total, do.call("aes_string", aesthetics)) + facet_grid(name ~ condition, scales = scales)}
-  if (facet == "wrap_plain"){
-    aes0 <- list(x = "time", y = "value", ymin = "value - sigma", ymax = "value + sigma")
-    aesthetics <- c(aes0[setdiff(names(aes0), names(aesthetics))], aesthetics)
-    p <- ggplot(total, do.call("aes_string", aesthetics)) + facet_wrap(~name*condition, scales = scales)}
+  # --- Construct plot ---
+  p <- ggplot(total, make_aes(aesthetics))
   
-  if (!is.null(prediction))
-    p <- p +  geom_line(data = prediction)
+  p <- p + switch(facet,
+                  wrap       = facet_wrap(~name, scales = scales),
+                  grid       = facet_grid(name ~ condition, scales = scales),
+                  wrap_plain = facet_wrap(~name * condition, scales = scales)
+  )
   
-  if (!is.null(data))
+  if (!is.null(prediction)) {
+    p <- p + geom_line(data = prediction)
+  }
+  
+  if (!is.null(data)) {
     p <- p + 
-    geom_point(data = data, aes(pch = bloq)) + 
-    geom_errorbar(data = data, width = 0) +
-    scale_shape_manual(name = "BLoQ", values = c(yes = 4, no = 19))
-  
-  if (all(data$bloq %in% "no"))
-    p <- p + guides(shape = "none")
-  
-  
-  attr(p, "data") <- list(data = data, prediction = prediction)
-  return(p)
+      geom_point(data = data, aes(pch = bloq)) + 
+      geom_errorbar(data = data, width = 0) +
+      scale_shape_manual(name = "BLoQ", values = c(yes = 4, no = 19))
+    
+    if (all(data$bloq == "no")) {
+      p <- p + guides(shape = "none")
+    }
+  }
   
   attr(p, "data") <- list(data = data, prediction = prediction)
-  return(p)
-  
+  p
 }
 
 
-
-
+#' Plot model predictions
+#'
+#' @description
+#' Creates a plot of model predictions with optional error bands from an error
+#' model function. Supports flexible faceting and coordinate transformations.
+#'
+#' @param prediction A \code{prdlist} object containing model predictions.
+#' @param ... Filter expressions passed to \code{dplyr::filter} for subsetting
+#'   the predictions.
+#' @param errfn Optional error model function. If provided, predictions are
+#'   augmented with sigma values and displayed with ribbon error bands.
+#' @param scales Scale specification for facets, passed to facet functions.
+#'   Default is \code{"free"}.
+#' @param facet Faceting style. One of:
+#'   \itemize{
+#'     \item \code{"wrap"}: Facet by name, color by condition (default)
+#'     \item \code{"grid"}: Facet grid with name as rows, condition as columns
+#'   }
+#' @param transform Optional transformation function applied to coordinates
+#'   via \code{coordTransform}.
+#'
+#' @return A \code{ggplot} object with an additional \code{"data"} attribute
+#'   containing the processed prediction data frame.
+#'
 #' @export
 #' @rdname plotPrediction
-#' @param errfn error model function
 #' @importFrom dplyr filter
-plotPrediction.prdlist <- function(prediction, ..., errfn = NULL, scales = "free", facet = "wrap", transform = NULL) {
+plotPrediction.prdlist <- function(prediction, ..., errfn = NULL, 
+                                   scales = "free", 
+                                   facet = c("wrap", "grid"), 
+                                   transform = NULL) {
+  
+  facet <- match.arg(facet)
   
   prediction <- as.data.frame(prediction, errfn = errfn)
   prediction <- dplyr::filter(prediction, ...)
   
-  #prediction <- as.data.frame(dplyr::filter(wide2long.list(prediction), ...), stringsAsFactors = F)
-  
   if (!is.null(transform)) prediction <- coordTransform(prediction, transform)
   
-  if (facet == "wrap")
-    p <- ggplot(prediction, aes(x = time, y = value, group = condition, color = condition)) + 
+  # --- Construct plot ---
+  p <- ggplot(prediction, aes(x = time, y = value))
+  
+  if (facet == "wrap") {
+    p <- p + 
+      aes(group = condition, color = condition) +
       facet_wrap(~name, scales = scales)
-  if (facet == "grid")
-    p <- ggplot(prediction, aes(x = time, y = value)) + facet_grid(name ~ condition, scales = scales)
+  } else {
+    p <- p + facet_grid(name ~ condition, scales = scales)
+  }
   
-  if (!is.null(errfn))
-    p <- p + geom_ribbon(aes(ymin = value - sigma, ymax = value + sigma, fill = condition), lty = 0, alpha = .3)
+  if (!is.null(errfn)) {
+    p <- p + geom_ribbon(
+      aes(ymin = value - sigma, ymax = value + sigma, fill = condition), 
+      lty = 0, alpha = 0.3
+    )
+  }
   
-  p <- p + geom_line() 
+  p <- p + geom_line()
   
   attr(p, "data") <- prediction
-  return(p)
-  
+  p
 }
 
 
@@ -231,7 +320,7 @@ plotPrediction.prdlist <- function(prediction, ..., errfn = NULL, scales = "free
 ## Methods for class prdframe ----------------------------
 #' @export
 #' @rdname plotCombined
-plot.prdframe <- function(x, data = NULL, ..., scales = "free", facet = "wrap", transform = NULL) {
+plot.prdframe <- function(x, data = NULL, ..., scales = "free", facet = c("wrap", "grid", "wrap_plain"), transform = NULL) {
   
   prediction <- x
   
@@ -246,19 +335,26 @@ plot.prdframe <- function(x, data = NULL, ..., scales = "free", facet = "wrap", 
 
 #' @export
 print.prdframe <- function(x, ...) {
-  
-  derivs <- ifelse(!is.null(attr(x, "deriv")), yes = "yes", no = "no")
-  sensitivities <- ifelse(!is.null(attr(x, "sensitivities")), yes = "yes", no = "no")
-  
-  attr(x, "deriv") <- NULL
-  attr(x, "sensitivities") <- NULL
+
+  d1 <- attr(x, "deriv")
+  d2 <- attr(x, "deriv2")
+
+  derivs <- if (!is.null(d1)) {
+    sprintf("yes [%s]", paste(dim(d1), collapse = " x "))
+  } else "no"
+  derivs2 <- if (!is.null(d2)) {
+    sprintf("yes [%s]", paste(dim(d2), collapse = " x "))
+  } else "no"
+
+  attr(x, "deriv")      <- NULL
+  attr(x, "deriv2")     <- NULL
   attr(x, "parameters") <- NULL
-  
+
   print(unclass(x))
   cat("\n")
-  cat("The prediction contains derivatives: ", derivs, "\n", sep = "")
-  
-  
+  cat("The prediction contains 1st-order derivatives: ", derivs,  "\n", sep = "")
+  cat("The prediction contains 2nd-order derivatives: ", derivs2, "\n", sep = "")
+
 }
 
 
@@ -362,6 +458,31 @@ summary.obsfn <- function(object, ...) {
 }
 
 
+# One prediction per parameter row. Rows x conditions go out as a single
+# request when the chain supports it -- a parframe from mstrust() has many
+# rows and the conditions repeat across them.
+.predictRows <- function(x, times, pars, dots) {
+  rows <- seq_len(nrow(pars))
+  parsList <- lapply(rows, function(i) as.parvec(pars, i))
+  serial <- function() lapply(parsList, function(pp)
+    do.call(x, c(list(times, pp), list(deriv = FALSE), dots)))
+
+  conds <- if (!is.null(dots$conditions)) dots$conditions else attr(x, "conditions")
+  extra <- setdiff(names(dots), "conditions")
+  if (length(rows) < 2L || is.null(conds) || length(extra) ||
+      is.null(.fnNode(x))) return(serial())
+
+  nc <- length(conds)
+  flat <- .predictMany(x, times,
+                       parsList = rep(parsList, each = nc),
+                       conditions = rep(conds, times = length(rows)),
+                       deriv = FALSE)
+  lapply(rows, function(i)
+    as.prdlist(setNames(flat[seq_len(nc) + (i - 1L) * nc], conds)))
+}
+
+
+
 #' Model Predictions
 #' 
 #' Make a model prediction for times and a parameter frame. The
@@ -372,11 +493,11 @@ summary.obsfn <- function(object, ...) {
 #' @param object prediction function
 #' @param ... Further arguments goint to the prediction function
 #' @param times numeric vector of time points
-#' @param pars parameter frame, e.g. output from \link{mstrust} or 
-#' \link{profile}
+#' @param pars parameter frame, e.g. output from [mstrust] or 
+#' [profile]
 #' @param data data list object. If data is passed, its condition.grid
 #' attribute is used to augment the output dataframe by additional 
-#' columns. \code{"data"} itself is returned as an attribute.
+#' columns. `"data"` itself is returned as an attribute.
 #' @return A data frame
 #' @export
 predict.prdfn <- function(object, ..., times, pars, data = NULL) {
@@ -393,10 +514,11 @@ predict.prdfn <- function(object, ..., times, pars, data = NULL) {
   if (is.null(data)) data <- data.frame()
   condition.grid.data <- attr(data, "condition.grid")
   
+  preds <- .predictRows(x, times, pars, arglist)
+
   prediction <- do.call(combine, lapply(1:nrow(pars), function(i) {
     
-    mypar <- as.parvec(pars, i)
-    prediction <- x(times, mypar, deriv = FALSE, ...)
+    prediction <- preds[[i]]
     
     if (is.null(names(prediction))) {
       conditions <- 1
@@ -442,4 +564,140 @@ predict.prdfn <- function(object, ..., times, pars, data = NULL) {
   
   
 }
+
+
+
+## prdfn / obsfn / prdframe / prdlist constructors (moved from classes.R) ----------------------------------------
+
+## Prediction classes ----------------------------------------------------
+
+#' Prediction function
+#'
+#' @description A prediction function is a function 
+#' `x(..., fixed, deriv, conditions, env)`.
+#' Prediction functions are generated by [Xs()], [Xf()] or [Xd()].
+#'
+#' @param P2X Transformation function as produced by [Xs()], [Xf()] or [Xd()].
+#' @param parameters Character vector with parameter names.
+#' @param condition Character, the condition name.
+#'
+#' @details
+#' Prediction functions can be "added" by the "+" operator, see [sumfn()]. 
+#' Thereby, predictions for different conditions are merged or overwritten. 
+#' Prediction functions can also be composed with other functions, 
+#' e.g. observation functions ([obsfn()]) or parameter transformation 
+#' functions ([parfn()]) by the "*" operator, see [prodfn()].
+#'
+#' @return Object of class `"prdfn"`, i.e. a function
+#' `x(..., fixed, deriv, conditions, env)` returning a [prdlist].
+#' The arguments `times` and `pars` should be passed via `...`, in this order.
+#'
+#' @example inst/examples/prediction.R
+#' @export
+prdfn <- function(P2X, parameters = NULL, condition = NULL) {
+
+  st <- .leafState(P2X, "prdfn", condition)
+  outfn <- .fnWrap(st)
+  attr(outfn, "mappings") <- setNames(list(P2X), condition)
+  attr(outfn, "parameters") <- parameters
+  attr(outfn, "conditions") <- condition
+  attr(outfn, "compileInfo") <- attr(P2X, "compileInfo")
+  class(outfn) <- c("prdfn", "fn")
+  outfn
+
+}
+
+#' Observation function
+#'
+#' @description An observation function is a function is that is concatenated
+#' with a prediction function via [prodfn] to yield a new prediction function,
+#' see [prdfn]. Observation functions are generated by [Y]. Handling
+#' of the conditions is then organized by the `obsfn` object.
+#' @param X2Y the low-level observation function generated e.g. by [Y].
+#' @param parameters character vector with parameter names
+#' @param condition character, the condition name
+#' @details Observation functions can be "added" by the "+" operator, see [sumfn]. Thereby,
+#' observations for different conditions are merged or, overwritten. Observation functions can
+#' also be concatenated with other functions, e.g. observation functions ([obsfn]) or
+#' prediction functions ([prdfn]) by the "*" operator, see [prodfn].
+#' @return Object of class `obsfn`, i.e. a function `x(..., fixed, deriv, conditions, env)`
+#' which returns a [prdlist]. The arguments `out` (prediction) and `pars` (parameter values)
+#' should be passed via the `...` argument.
+#' @example inst/examples/prediction.R
+#' @export
+obsfn <- function(X2Y, parameters = NULL, condition = NULL) {
+
+  st <- .leafState(X2Y, "obsfn", condition)
+  outfn <- .fnWrap(st)
+  attr(outfn, "mappings") <- setNames(list(X2Y), condition)
+  attr(outfn, "parameters") <- parameters
+  attr(outfn, "conditions") <- condition
+  attr(outfn, "compileInfo") <- attr(X2Y, "compileInfo")
+  class(outfn) <- c("obsfn", "fn")
+  outfn
+
+}
+
+
+#' Prediction frame
+#'
+#' @description
+#' A prediction frame stores model predictions in a matrix along with sensitivity information.
+#' The columns of the prediction matrix are typically `"time"` and one column per state variable.
+#' The object carries several attributes containing sensitivities and parameter information:
+#' \itemize{
+#'   \item `"deriv"` – 3D array of first-order sensitivities with respect to outer parameters
+#'     (see [P]); dimensions: `(time, state, outer parameter)`
+#'   \item `"parameters"` – vector of the inner parameters used to generate the prediction
+#' }
+#'
+#' Prediction frames are usually elements of prediction lists ([prdlist]), produced by
+#' [Xs], [Xd], or [Xf]. When defining custom prediction functions
+#' (see `P2X` in [prdfn]), the result should be returned as a prediction frame.
+#'
+#' @param prediction Numeric matrix of model predictions.
+#' @param deriv 3D numeric array of first-order sensitivities with respect to outer parameters.
+#' @param deriv2 4D numeric array of second-order sensitivities with respect to
+#'   outer parameters; dimensions: `(time, variable, theta, theta)`. Symmetric
+#'   in the last two axes. Optional; only set when the upstream pipeline
+#'   provides second-order information.
+#' @param parameters Named numeric vector of the inner parameters used for the prediction.
+#'
+#' @return
+#' An object of class `"prdframe"` (inheriting from `"matrix"`) with attached arrays of
+#' sensitivities and the corresponding parameter vector as attributes.
+#'
+#' @export
+prdframe <- function(prediction = NULL,
+                     deriv = NULL,
+                     deriv2 = NULL,
+                     parameters = NULL) {
+
+  out <- if (!is.null(prediction)) as.matrix(prediction) else matrix(, 0, 0)
+
+  attr(out, "deriv") <- deriv
+  attr(out, "deriv2") <- deriv2
+  attr(out, "parameters") <- parameters
+  class(out) <- c("prdframe", "matrix")
+
+  return(out)
+}
+
+
+#' Prediction list
+#'
+#' @description A prediction list is used to store a list of model predictions
+#' from different prediction functions or the same prediction function with different
+#' parameter specifications. Each entry of the list is a [prdframe].
+#' @param ... objects of class [prdframe]
+#' conditions.
+#' @export
+prdlist <- function(...) {
+  mylist <- list(...)
+  mynames <- names(mylist)
+  if (is.null(mynames)) mynames <- as.character(1:length(mylist))
+  as.prdlist(mylist, mynames)
+}
+
+
 
