@@ -1,0 +1,134 @@
+# Workflow derived from https://github.com/r-lib/actions/tree/v2/examples
+# Need help debugging build failures? Start at https://github.com/r-lib/actions#where-to-find-help
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+name: R-CMD-check.yaml
+
+permissions: read-all
+
+jobs:
+  R-CMD-check:
+    runs-on: ${{ matrix.config.os }}
+
+    name: ${{ matrix.config.os }} (${{ matrix.config.r }})
+
+    strategy:
+      fail-fast: false
+      matrix:
+        config:
+          - {os: macos-latest,   r: 'release'}
+          - {os: windows-latest, r: 'release'}
+          - {os: ubuntu-latest,   r: 'devel', http-user-agent: 'release'}
+          - {os: ubuntu-latest,   r: 'release'}
+
+    env:
+      # cppDE is a private repo in the same org and GITHUB_TOKEN is scoped to
+      # this repo alone, so pak cannot resolve the Remote with it. DMODVERSE_PAT
+      # carries Contents:read on dModverse/cppDE. The fallback keeps outside
+      # forks running as far as they can get.
+      GITHUB_PAT: ${{ secrets.DMODVERSE_PAT || secrets.GITHUB_TOKEN }}
+      R_KEEP_PKG_SOURCE: yes
+      # skip_on_cran() guards 13 test files; our own jobs opt in.
+      NOT_CRAN: true
+      # PEtabTests/ and BenchmarkModels/ are .Rbuildignore'd and not committed,
+      # so these paths do not exist in the checkout and the tests that need them
+      # skip. The vars take effect once the fixtures are added.
+      DMOD_PETABTESTS: ${{ github.workspace }}/PEtabTests
+      DMOD_BENCHMARKMODELS: ${{ github.workspace }}/BenchmarkModels
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: r-lib/actions/setup-pandoc@v2
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      # cppDE generates C++ through SymPy, and getLinVars(), the eqnClass
+      # simplify path and steadyStates() reach sympy through reticulate.
+      # Setting RETICULATE_PYTHON overrides the py_require() list in zzz.R, so
+      # everything the tests import has to be installed here: scipy is what
+      # steadyStates(version = "1.2"/"1.3") needs.
+      - name: Install SymPy and point reticulate at it
+        shell: bash
+        run: |
+          python -m pip install --upgrade pip sympy numpy scipy
+          echo "RETICULATE_PYTHON=$(python -c 'import sys; print(sys.executable)')" >> "$GITHUB_ENV"
+
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          r-version: ${{ matrix.config.r }}
+          http-user-agent: ${{ matrix.config.http-user-agent }}
+          use-public-rspm: true
+
+      - uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          extra-packages: any::rcmdcheck
+          needs: check
+
+      - uses: r-lib/actions/check-r-package@v2
+        with:
+          # --as-cran dropped: dMod depends on cppDE via Remotes (GitHub-only),
+          # so CRAN-submission feasibility checks would always WARN.
+          # --ignore-vignettes: vignettes/petab.Rmd needs the libsbml Python venv
+          # which is not provisioned in CI; --no-build-vignettes alone leaves a
+          # "Directory 'inst/doc' does not exist" WARNING that --ignore-vignettes
+          # silences cleanly.
+          args: 'c("--no-manual", "--ignore-vignettes")'
+          upload-snapshots: true
+          build_args: 'c("--no-manual","--no-build-vignettes","--compact-vignettes=gs+qpdf")'
+          error-on: '"warning"'
+
+  # Fedora is not a hosted runner, hence a container with the distro's own R:
+  # gcc, FlexiBLAS and the hardening flags differ from Ubuntu's. No RSPM binaries
+  # here, so dependencies build from source.
+  fedora:
+    runs-on: ubuntu-latest
+    container: fedora:latest
+    name: fedora (R release, gcc/FlexiBLAS)
+
+    env:
+      GITHUB_PAT: ${{ secrets.DMODVERSE_PAT || secrets.GITHUB_TOKEN }}
+      R_KEEP_PKG_SOURCE: yes
+      NOT_CRAN: true
+      # the distro packages below carry sympy, numpy and scipy, so point
+      # reticulate at the system interpreter rather than provisioning one.
+      RETICULATE_PYTHON: /usr/bin/python3
+      DMOD_PETABTESTS: ${{ github.workspace }}/PEtabTests
+      DMOD_BENCHMARKMODELS: ${{ github.workspace }}/BenchmarkModels
+      # the container sets no LANG, so R runs with session charset ASCII and
+      # every multibyte character in printed output arrives as raw bytes, which
+      # makes regexes over captured output behave differently than on the
+      # hosted runners
+      LANG: en_US.UTF-8
+
+    steps:
+      # glibc-langpack-en: the image ships glibc-minimal-langpack only, so the
+      # en_US.UTF-8 above (and the one R CMD check's syntax pass asks for) has no
+      # locale to bind to, and the warning that follows fails error-on: "warning".
+      - name: Install R and build dependencies
+        run: |
+          dnf install -y --setopt=install_weak_deps=False \
+            R R-devel gcc gcc-c++ gcc-gfortran make cmake git glibc-langpack-en \
+            openssl-devel libcurl-devel libxml2-devel fontconfig-devel \
+            harfbuzz-devel fribidi-devel freetype-devel libpng-devel \
+            libtiff-devel libjpeg-turbo-devel pandoc \
+            python3 python3-pip python3-sympy python3-numpy python3-scipy
+
+      - uses: actions/checkout@v5
+
+      - uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          extra-packages: any::rcmdcheck
+          needs: check
+
+      - uses: r-lib/actions/check-r-package@v2
+        with:
+          args: 'c("--no-manual", "--ignore-vignettes")'
+          upload-snapshots: true
+          build_args: 'c("--no-manual","--no-build-vignettes","--compact-vignettes=gs+qpdf")'
+          error-on: '"warning"'
