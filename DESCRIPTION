@@ -1,7 +1,7 @@
 Package: dMod2
 Type: Package
 Title: Dynamic Modeling and Parameter Estimation in ODE Models
-Version: 0.5.14
+Version: 0.5.15
 Date: 2026-07-18
 Authors@R: c(
     person("Simon", "Beyer", email = "simon.beyer@fdm.uni-freiburg.de",
@@ -50,7 +50,7 @@ Depends: R (>= 4.5.0)
 Imports:
     cOde,
     tools,
-    cppDE (>= 0.8.1),
+    cppDE (>= 0.9.0),
     ggplot2,
     parallel,
     stringr,
