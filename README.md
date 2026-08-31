@@ -259,15 +259,15 @@ rbind(ML = best[remlfit$errpars], REML = remlfit$argument[remlfit$errpars])
 ```
 
     ##      sd_pSTAT5A_rel sd_pSTAT5B_rel sd_rSTAT5A_rel
-    ## ML        0.5878611      0.8200770      0.4987482
-    ## REML      0.6253905      0.8442257      0.5248830
+    ## ML        0.5876483      0.8200724      0.4987661
+    ## REML      0.6254742      0.8442083      0.5248422
 
 ``` r
 remlfit$dof     # n_g minus the leverage each observable spends
 ```
 
     ## pSTAT5A_rel pSTAT5B_rel rSTAT5A_rel 
-    ##    13.67911    14.22154    14.09935
+    ##    13.67813    14.22147    14.10040
 
 ``` r
 remlfit$rank    # effective number of mean parameters
@@ -284,7 +284,7 @@ tapply(lev$leverage, lev$name, sum)
 ```
 
     ## pSTAT5A_rel pSTAT5B_rel rSTAT5A_rel 
-    ##    2.370236    1.743215    1.886549
+    ##    2.372391    1.742590    1.885019
 
 ### Fit and uncertainty band
 
@@ -349,7 +349,7 @@ thr_90 <- profileThreshold(0.90, method = "F", n = nd, p = remlfit$rank)
 profiles <- profile(
   obj, best, names(best), limits = c(-5, 5), cores = length(best), delta = thr_95,
   stepControl = list(stepsize = 1e-4, min = 1e-4, max = Inf,
-                     atol = 1e-3, rtol = 1e-3, limit = 200, stop = "value"),
+                     atol = 1e-3, rtol = 1e-3, limit = 200, stop = "data"),
   algoControl = list(reoptimize = TRUE),
   optControl  = list(rinit = 0.1, rmax = 10, iterlim = 20))
 
@@ -359,20 +359,20 @@ plotProfile(profiles, mode %in% c("data", "prior"), threshold = c("90%" = thr_90
 <img src="man/figures/README-profiles-1.svg" alt="" width="100%" />
 
 ``` r
-confint(profiles, level = 0.95, val.column = "value",
+confint(profiles, level = 0.95, val.column = "data",
         method = "F", n = nd, p = remlfit$rank)
 ```
 
-    ##                                      name      value        lower      upper
-    ## Epo_degradation_BaF3 Epo_degradation_BaF3 -1.5678382  -1.73695985 -1.3902979
-    ## k_exp_hetero                 k_exp_hetero -4.4194494 -10.34823306 -2.8946270
-    ## k_exp_homo                     k_exp_homo -2.2024766  -2.55028643 -1.8657436
-    ## k_imp_hetero                 k_imp_hetero -1.7874266  -1.91294412 -1.6603002
-    ## k_imp_homo                     k_imp_homo  1.4794785   0.07366071  8.1411569
-    ## k_phos                             k_phos  4.1977304   4.10556883  4.2980496
-    ## sd_pSTAT5A_rel             sd_pSTAT5A_rel  0.5878611   0.41152546  0.7985545
-    ## sd_pSTAT5B_rel             sd_pSTAT5B_rel  0.8200770   0.66585246  1.0147002
-    ## sd_rSTAT5A_rel             sd_rSTAT5A_rel  0.4987482   0.34832821  0.6924861
+    ##                                      name      value      lower      upper
+    ## Epo_degradation_BaF3 Epo_degradation_BaF3 -1.5680325 -1.7398858 -1.3903480
+    ## k_exp_hetero                 k_exp_hetero -4.4562477       -Inf -2.9546299
+    ## k_exp_homo                     k_exp_homo -2.2032225 -2.5569151 -1.8895645
+    ## k_imp_hetero                 k_imp_hetero -1.7872354 -1.9108026 -1.6583018
+    ## k_imp_homo                     k_imp_homo  1.4788926  0.1002196        Inf
+    ## k_phos                             k_phos  4.1976370  4.1064208  4.2964734
+    ## sd_pSTAT5A_rel             sd_pSTAT5A_rel  0.5876483  0.4098707  0.7938722
+    ## sd_pSTAT5B_rel             sd_pSTAT5B_rel  0.8200724  0.6648408  1.0126894
+    ## sd_rSTAT5A_rel             sd_rSTAT5A_rel  0.4987661  0.3488114  0.6910599
 
 The plot separates the two terms, and that is where the two
 non-identifiable directions become visible: for `k_imp_homo` and
