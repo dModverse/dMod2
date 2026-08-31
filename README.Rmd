@@ -238,7 +238,7 @@ thr_90 <- profileThreshold(0.90, method = "F", n = nd, p = remlfit$rank)
 profiles <- profile(
   obj, best, names(best), limits = c(-5, 5), cores = length(best), delta = thr_95,
   stepControl = list(stepsize = 1e-4, min = 1e-4, max = Inf,
-                     atol = 1e-3, rtol = 1e-3, limit = 200, stop = "value"),
+                     atol = 1e-3, rtol = 1e-3, limit = 200, stop = "data"),
   algoControl = list(reoptimize = TRUE),
   optControl  = list(rinit = 0.1, rmax = 10, iterlim = 20))
 
@@ -246,7 +246,7 @@ plotProfile(profiles, mode %in% c("data", "prior"), threshold = c("90%" = thr_90
 ```
 
 ```{r confint}
-confint(profiles, level = 0.95, val.column = "value",
+confint(profiles, level = 0.95, val.column = "data",
         method = "F", n = nd, p = remlfit$rank)
 ```
 

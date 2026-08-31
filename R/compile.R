@@ -100,10 +100,19 @@
   hdr
 }
 
+## Counts the symbol-cache flushes of this session. Callers that hold a
+## resolved address of their own key on it, since resolving again per call
+## costs more than the check is worth.
+.dmodSymbols <- new.env(parent = emptyenv())
+.dmodSymbols$generation <- 0L
+
+.symbolGeneration <- function() .dmodSymbols$generation
+
 ## cppDE caches the addresses of a model's compiled entry points, so loading a
 ## shared object invalidates them. Guarded, to stay loadable against a cppDE
 ## that predates the cache.
 .clearSymbols <- function() {
+  .dmodSymbols$generation <- .dmodSymbols$generation + 1L
   f <- get0("clearNativeSymbols", envir = asNamespace("cppDE"), inherits = FALSE)
   if (is.function(f)) f()
 }
@@ -677,30 +686,47 @@ getLocalDLLs <- function() {
 
 
 
+## Absolute paths of the shared objects loaded in this process.
+.loadedDLLPaths <- function() {
+  dlls <- getLoadedDLLs()
+  if (!length(dlls)) return(character(0))
+  paths <- vapply(dlls, function(d) unclass(d)$path, character(1))
+  normalizePath(paths, winslash = "/", mustWork = FALSE)
+}
+
+
 #' Load shared object for a dMod object
-#' 
+#'
 #' Usually when restarting the R session, although all objects are saved in
 #' the workspace, the dynamic libraries are not linked any more. `loadDLL`
 #' is a wrapper for `dyn.load` that uses the "modelname" attribute of
 #' dMod objects like prediction functions, observation functions, etc. to
 #' load the corresponding shared object.
-#' 
+#'
+#' Shared objects already loaded in the current process are skipped, so
+#' calling `loadDLL` repeatedly is a no-op. Unloading them would null the
+#' native symbol pointers that the already built prediction, observation and
+#' parameter functions hold, and nothing resolves those again.
+#'
 #' @param ... objects of class prdfn, obsfn, parfn, objfn, ...
-#' 
+#'
+#' @return Invisibly, the character vector of files loaded by this call.
+#'
 #' @export
 loadDLL <- function(...) {
-  
+
   .so <- .Platform$dynlib.ext
   models <- modelname(...)
   files <- paste0(outer(models, c("", "_s", "_s2", "_sdcv", "_deriv", "_dfdx", "_dfdp"), paste0), .so)
   files <- files[file.exists(files)]
-  
-  for (f in files) {
-    try(dyn.unload(f), silent = TRUE)
-    dyn.load(f)
-  }
+  files <- files[!normalizePath(files, winslash = "/", mustWork = FALSE) %in%
+                   .loadedDLLPaths()]
+  if (!length(files)) return(invisible(character(0)))
+
+  for (f in files) dyn.load(f)
   .clearSymbols()
   message("The following local files were dynamically loaded: ", paste(files, collapse = ", "))
+  invisible(files)
 }
 
 
