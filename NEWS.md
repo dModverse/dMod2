@@ -1,3 +1,13 @@
+# dMod2 0.6.1
+
+* `loadDLL()` skips shared objects that are already loaded in the current
+  process. Unloading them nulled the native symbol pointers held by the
+  prediction, observation and parameter functions built from them, leaving
+  every later call without a way to resolve them again.
+* `Xs()` caches a prepared batch handle that carries such a pointer of its
+  own, which no symbol-cache flush reached. It is now rebuilt whenever the
+  cache is flushed.
+
 # dMod2 0.6.0
 
 * The core is complete: equations, compiled prediction, observation and
