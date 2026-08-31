@@ -352,11 +352,14 @@ Xs.cppDE <- function(odemodel, forcings = NULL, events = NULL, names = NULL, con
              fixed = NULL, forcings = controls$forcings), o)))
     } else if (!is.null(prepFn) && !is.null(solveFn)) {
       # The handle bakes in everything but the numbers, so it is only valid
-      # while shapes and labels stay put.
+      # while shapes and labels stay put. It also holds the resolved native
+      # symbol, which unloading the shared object nulls in place, so the
+      # symbol generation is part of the signature.
       sig <- list(model = as.character(model), times = timesL,
                   deriv = deriv, deriv2 = deriv2,
                   sens = lapply(preps, function(pr) dimnames(pr$sens1ini)),
-                  forcings = controls$forcings, opts = obatch)
+                  forcings = controls$forcings, opts = obatch,
+                  symbols = .symbolGeneration())
       if (!identical(bcache$sig, sig)) {
         bcache$handle <- do.call(prepFn, c(list(model, conditions = mkConds()),
                                            obatch))

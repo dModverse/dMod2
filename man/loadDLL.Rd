@@ -9,10 +9,19 @@ loadDLL(...)
 \arguments{
 \item{...}{objects of class prdfn, obsfn, parfn, objfn, ...}
 }
+\value{
+Invisibly, the character vector of files loaded by this call.
+}
 \description{
 Usually when restarting the R session, although all objects are saved in
 the workspace, the dynamic libraries are not linked any more. \code{loadDLL}
 is a wrapper for \code{dyn.load} that uses the "modelname" attribute of
 dMod objects like prediction functions, observation functions, etc. to
 load the corresponding shared object.
+}
+\details{
+Shared objects already loaded in the current process are skipped, so
+calling \code{loadDLL} repeatedly is a no-op. Unloading them would null the
+native symbol pointers that the already built prediction, observation and
+parameter functions hold, and nothing resolves those again.
 }
