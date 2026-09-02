@@ -465,13 +465,41 @@ Pexpl <- function(trafo, parameters = NULL, attach.input = FALSE, condition = NU
 
   zero_states <- character(0)
 
+  # SBML rate rules may carry conditionals, so the structural probes below
+  # evaluate them with SBML's flat `piecewise(v1, c1, ..., otherwise)`.
+  ss_env <- new.env(parent = baseenv())
+  ss_env$piecewise <- function(...) {
+    a <- list(...); n <- length(a); i <- 1L
+    while (i + 1L <= n) {
+      if (isTRUE(a[[i + 1L]])) return(a[[i]])
+      i <- i + 2L
+    }
+    if (n %% 2L == 1L) a[[n]] else 0
+  }
+
   .is_struct_zero <- function(expr) {
     v <- tryCatch({
       syms <- getSymbols(expr)
-      if (!length(syms)) eval(parse(text = expr))
-      else eval(parse(text = replaceSymbols(syms, rep("1", length(syms)), expr)))
+      if (!length(syms)) eval(parse(text = expr), ss_env)
+      else eval(parse(text = replaceSymbols(syms, rep("1", length(syms)), expr)),
+                ss_env)
     }, error = function(e) NA_real_)
     isTRUE(v == 0)
+  }
+
+  # "Pure influx whose rate involves one state" implies that state is zero at
+  # steady state only if the rate cannot vanish at a nonzero value. A
+  # conditional rate can, so probe before concluding.
+  .vanishes_only_at_zero <- function(expr, st) {
+    others <- setdiff(getSymbols(expr), st)
+    base <- if (length(others))
+              replaceSymbols(others, rep("1", length(others)), expr) else expr
+    vals <- vapply(c(1, 1e3, 1e6), function(v) {
+      e <- replaceSymbols(st, format(v, scientific = FALSE), base)
+      out <- tryCatch(eval(parse(text = e), ss_env), error = function(err) NA_real_)
+      if (length(out) == 1L) as.numeric(out) else NA_real_
+    }, numeric(1))
+    !any(!is.na(vals) & vals == 0)
   }
 
   ## Drop a-priori-zero rates: their +1 stoichiometry otherwise masks the
@@ -500,7 +528,8 @@ Pexpl <- function(trafo, parameters = NULL, attach.input = FALSE, condition = NU
       if (any(col < 0) || !any(col > 0)) next
       for (k in which(col > 0)) {
         in_rate <- intersect(getSymbols(rates_chr[k]), cn)
-        if (length(in_rate) == 1L) return(in_rate)
+        if (length(in_rate) == 1L &&
+            .vanishes_only_at_zero(rates_chr[k], in_rate)) return(in_rate)
       }
     }
     NA_character_

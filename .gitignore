@@ -71,3 +71,6 @@ CLAUDE.md
 # skips cleanly when absent. Kept out of git for weight (526 files).
 PEtabTests/
 BenchmarkModels/
+
+# Test-run artefact from a headless plot() call.
+tests/testthat/Rplots.pdf

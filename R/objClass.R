@@ -174,6 +174,8 @@ evalConditionResidual <- function(dataI, predictionI, pars,
 #' @param times Optional numeric vector of additional time points at which the
 #'   prediction function is evaluated. If NULL, time points are taken from the
 #'   data. Event times should be included here if the prediction model uses events.
+#' @param t0 Numeric. Start of the time grid, i.e. the time at which initial
+#'   values take effect. Defaults to 0.
 #' @param attr.name Character string. The objective value is additionally returned
 #'   as an attribute with this name.
 #' @param cores Deprecated and ignored. Pass `cores` to the objective call, or
@@ -194,7 +196,7 @@ evalConditionResidual <- function(dataI, predictionI, pars,
 #'
 #' @example inst/examples/normL2.R
 #' @export
-normL2 <- function(data, x, errmodel = NULL, times = NULL,
+normL2 <- function(data, x, errmodel = NULL, times = NULL, t0 = 0,
                    attr.name = "data",
                    cores = 1L,
                    opt.BLOQ = c("M3", "M1", "M4NM", "M4BEAL")) {
@@ -205,7 +207,9 @@ normL2 <- function(data, x, errmodel = NULL, times = NULL,
             call. = FALSE)
   opt.BLOQ <- match.arg(opt.BLOQ)
 
-  timesD <- sort(unique(c(0, unlist(lapply(data, `[[`, "time")), times)))
+  # `t0` anchors the time grid: the prediction starts there, so that is where
+  # initial values take effect.
+  timesD <- sort(unique(c(t0, unlist(lapply(data, `[[`, "time")), times)))
 
   x.cond <- names(attr(x, "mappings"))
   d.cond <- names(data)
@@ -252,7 +256,11 @@ normL2 <- function(data, x, errmodel = NULL, times = NULL,
       cn_eval <- if (is.null(e.cond)) conditions else intersect(conditions, e.cond)
       split <- lapply(cn_eval, function(cn) {
         pinner     <- getParameters(prediction[[cn]])
-        fixedinner <- pinner[attr(pinner, "fixed")]
+        # The `fixed` marker is derived from the sensitivity rows, so it is
+        # empty under deriv = FALSE. Fall back to the outer fixed names, or
+        # the error model loses those parameters entirely.
+        fixedinner <- pinner[union(attr(pinner, "fixed"),
+                                   intersect(names(pinner), names(fixed)))]
         list(pars  = as.parvec(pinner[setdiff(names(pinner), names(fixed))]),
              fixed = as.parvec(fixedinner, deriv = FALSE, deriv2 = FALSE))
       })

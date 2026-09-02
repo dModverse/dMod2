@@ -640,6 +640,9 @@ setCompartmentVolume <- function(eqnlist, ..., rules = NULL) {
 # csv the steady-state backend reads cannot drift apart.
 .refCompartments <- function(SMatrix, compOf, reactionCompartment, description) {
 
+  # A model without reactions has no stoichiometry to read frames off.
+  if (is.null(SMatrix)) return(character(0))
+
   vref_cid <- rep(NA_character_, nrow(SMatrix))
   for (i in seq_len(nrow(SMatrix))) {
     if (!is.null(reactionCompartment) && !is.na(reactionCompartment[i])) {
@@ -1528,8 +1531,12 @@ eqnlist <- function(smatrix = NULL, states = colnames(smatrix), rates = NULL,
                     compartments = NULL, compartmentOf = NULL,
                     reactionCompartment = NULL, amountStates = NULL, totals = NULL) {
 
+  # A model without species carries no stoichiometry;
+  # canonicalise it to NULL so is.eqnlist() recognises the empty list.
+  if (length(states) == 0L && length(rates) == 0L) smatrix <- NULL
+
   # Dimension checks and preparations for non-empty argument list.
-  if (all(!is.null(c(smatrix, states, rates)))) {
+  if (!is.null(smatrix)) {
     #Dimension checks
     d1 <- dim(smatrix)
     l2 <- length(states)

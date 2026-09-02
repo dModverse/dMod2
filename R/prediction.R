@@ -1064,7 +1064,9 @@ Xt <- function(condition = NULL) {
             dimnames = list(NULL, "time", par_names, par_names))
     else NULL
 
-    prdframe(out, deriv = sens, deriv2 = sens2, parameters = pars)
+    # Fixed parameters carry no sensitivity but must stay visible downstream
+    # (an error model reads them off the prediction), as in Xs.
+    prdframe(out, deriv = sens, deriv2 = sens2, parameters = c(pars, fixed))
   }
   attr(P2X, "parameters") <- NULL
   attr(P2X, "equations") <- NULL

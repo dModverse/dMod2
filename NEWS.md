@@ -1,3 +1,16 @@
+# dMod2 0.6.3
+
+* `normL2()` takes `t0`, the time at which initial values take effect. The time
+  grid starts there rather than at 0, so a prediction may begin after 0.
+* The error model keeps its fixed parameters under `deriv = FALSE`. They were
+  derived from the sensitivity rows, which are absent then.
+* `Xt()` reports its fixed parameters, as `Xs()` does, so an error model can
+  read them off the prediction.
+* `eqnlist()` accepts a model without species, which is a parameter-only
+  problem rather than an error.
+* The steady-state heuristic evaluates SBML's `piecewise()` and declares a
+  state structurally zero only when its rate vanishes at zero alone.
+
 # dMod2 0.6.2
 
 * Reloading a model's shared object no longer invalidates anything. cppDE

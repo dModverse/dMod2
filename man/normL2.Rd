@@ -9,6 +9,7 @@ normL2(
   x,
   errmodel = NULL,
   times = NULL,
+  t0 = 0,
   attr.name = "data",
   cores = 1L,
   opt.BLOQ = c("M3", "M1", "M4NM", "M4BEAL")
@@ -25,6 +26,9 @@ defined only for a subset of conditions.}
 \item{times}{Optional numeric vector of additional time points at which the
 prediction function is evaluated. If NULL, time points are taken from the
 data. Event times should be included here if the prediction model uses events.}
+
+\item{t0}{Numeric. Start of the time grid, i.e. the time at which initial
+values take effect. Defaults to 0.}
 
 \item{attr.name}{Character string. The objective value is additionally returned
 as an attribute with this name.}
