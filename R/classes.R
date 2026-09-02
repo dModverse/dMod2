@@ -95,8 +95,8 @@ match.fnargs <- function(arglist, choices) {
 # shared = TRUE: pars/fixed/out are n references to one object. A leaf must
 # then evaluate once and replicate -- batching would turn one solve into n.
 #
-# times is one vector for all requests, or a list of n (the NLME axes need
-# per-request grids; every composition call site shares one).
+# times is one vector for all requests, or a list of n for per-request grids;
+# every composition call site shares one.
 .bundle <- function(conds = NULL, times = NULL, out = NULL, pars = NULL,
                     fixed = NULL, shared = FALSE) {
   list(conds = conds, times = times, out = out, pars = pars,
@@ -666,10 +666,10 @@ match.fnargs <- function(arglist, choices) {
     attr(outfn, "conditions") <- conditions12
     attr(outfn, "parameters") <- parameters12
     attr(outfn, "modelname") <- modelname12
-    # Propagate NLME reconstruction handles so a composed objective exposes its
-    # model pieces (prdfn/data/errfn/omegaSpec) regardless of term order or
-    # nesting. Coalesce from either operand. See .normalReconstruct() in nlmeNormal.R.
-    for (.a in c("prdfn", "data", "errfn", "timesD", "omegaSpec")) {
+    # Propagate the reconstruction handles so a composed objective exposes its
+    # model pieces regardless of term order or nesting. Coalesce from either
+    # operand.
+    for (.a in c("prdfn", "data", "errfn", "timesD")) {
       .v <- attr(x1, .a, exact = TRUE)
       if (is.null(.v)) .v <- attr(x2, .a, exact = TRUE)
       if (!is.null(.v)) attr(outfn, .a) <- .v
@@ -678,22 +678,6 @@ match.fnargs <- function(arglist, choices) {
     # error model, which is what reml() needs from a split objective.
     attr(outfn, "l2spec") <- c(attr(x1, "l2spec", exact = TRUE),
                                attr(x2, "l2spec", exact = TRUE))
-    # penaltySpec is MERGED (not first-wins): two constraintL1 terms combine
-    # their penalty blocks under one shared lambda. See .mergePenaltySpec().
-    .ps1 <- attr(x1, "penaltySpec", exact = TRUE)
-    .ps2 <- attr(x2, "penaltySpec", exact = TRUE)
-    # Only two real specs need merging, and only the penalty layer can produce
-    # them. Looked up at call time so the core does not name a symbol it does
-    # not own.
-    .merge <- get0(".mergePenaltySpec", envir = asNamespace("dMod2"),
-                   mode = "function")
-    .ps  <- if (is.null(.ps1)) .ps2
-            else if (is.null(.ps2)) .ps1
-            else if (is.null(.merge))
-              stop("merging two penalty specifications needs the penalty layer.",
-                   call. = FALSE)
-            else .merge(.ps1, .ps2)
-    if (!is.null(.ps)) attr(outfn, "penaltySpec") <- .ps
     return(outfn)
 
   }
@@ -948,9 +932,9 @@ test_conditions <- function(c1, c2) {
 
   if (identical(spec$out, "objfn")) {
     # An objfn carries no mappings; without these an objfn * parfn loses its
-    # parameter set, its model name and the NLME reconstruction handles.
+    # parameter set, its model name and the reconstruction handles.
     attr(outfn, "modelname") <- union(attr(p1, "modelname"), attr(p2, "modelname"))
-    for (.a in c("data", "errfn", "timesD", "omegaSpec", "penaltySpec")) {
+    for (.a in c("data", "errfn", "timesD")) {
       .v <- attr(p1, .a, exact = TRUE)
       if (!is.null(.v)) attr(outfn, .a) <- .v
     }

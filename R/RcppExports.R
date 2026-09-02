@@ -21,10 +21,6 @@ datapointL2_kernel <- function(pouter, fixed_opt, prdf, dpred_attr_opt, d2pred_a
     .Call(`_dMod2_datapointL2_kernel`, pouter, fixed_opt, prdf, dpred_attr_opt, d2pred_attr_opt, obs_name, t, sigma, value_par, deriv)
 }
 
-constraintL2_mvn_kernel <- function(pars, fixed_opt, dP_opt, dP2_opt, inner_par_names, K, N, all_eta_names, mu, L_lower, include_chol_block) {
-    .Call(`_dMod2_constraintL2_mvn_kernel`, pars, fixed_opt, dP_opt, dP2_opt, inner_par_names, K, N, all_eta_names, mu, L_lower, include_chol_block)
-}
-
 normL2_kernel <- function(prediction, err_list_opt, meta_list, par_names_global, deriv2_requested, threads, bloq_mode = "M3") {
     .Call(`_dMod2_normL2_kernel`, prediction, err_list_opt, meta_list, par_names_global, deriv2_requested, threads, bloq_mode)
 }

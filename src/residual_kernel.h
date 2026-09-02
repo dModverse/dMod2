@@ -55,7 +55,7 @@
 namespace dmod {
 
 enum class BloqMode {
-  NONE,    // no BLOQ data at all (FOCEI default)
+  NONE,    // no BLOQ data at all (the default)
   M1,      // BLOQ rows exist but are excluded from the objective
   M3,      // -2 log Phi(-wr)
   M4NM,    // M4 method

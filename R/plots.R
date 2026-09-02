@@ -1,18 +1,7 @@
 
-# Pharmacometric abbreviations used in the NLME plot helpers below:
-#   DV    observed value
-#   IPRED individual prediction (per subject, with eta_i*)
-#   PRED  population prediction (eta = 0)
-#   IRES  individual residual = DV - IPRED
-#   IWRES individual weighted residual = (DV - IPRED) / sigma
-
 # ggplot2 / dplyr NSE column references; declared so R CMD check does not
 # flag them as undefined globals.
-utils::globalVariables(c("IPRED", "PRED", "predicted", "observed",
-                         "sd_est", "iter", "level",
-                         # plot.sparsify ggplot2 aes() variables
-                         "subject", "cluster", "centroid", "G", "score",
-                         "selected"))
+utils::globalVariables(c("predicted", "observed", "sd_est", "iter", "level"))
 
 
 # Custom interface to ggplot2 ---
@@ -789,42 +778,13 @@ plotResiduals.default <- function(parframe, x, data, split = "condition",
 }
 
 
-# NLME plot helpers ---------------------------------------------------------
+# Plot generics for the layer branches -------------------------------------
 
 
-#' Per-subject individual fits (spaghetti plot)
+#' Convergence trace of an iterative fit
 #'
-#' @description Faceted plot with one panel per subject: observed dots, IPRED
-#'   curve, and (optionally) the population PRED curve overlaid dashed.
-#' @param x Object to plot.
-#' @param ... Method-specific arguments.
-#' @return A ggplot.
-#' @export
-plotIndivs <- function(x, ...) UseMethod("plotIndivs", x)
-
-
-
-
-#' Random-effect distribution diagnostics
-#'
-#' @description Per-eta histogram against the estimated `N(0, Omega_kk)`
-#'   density plus a QQ-plot against the estimated normal. Detects systematic
-#'   shrinkage, bimodality, or distributional misfit. Generic to leave room
-#'   for non-EM methods in the future.
-#' @param x Object to plot.
-#' @param ... Method-specific arguments.
-#' @return A ggplot (or a list of ggplots if `cowplot` is unavailable).
-#' @export
-plotHistIndivs <- function(x, ...) UseMethod("plotHistIndivs", x)
-
-
-
-
-#' ECM convergence trace (OFV, |delta-psi|) per stage
-#'
-#' @description Four-panel trace of OFV, structural-parameter step
-#'   `|delta psi|`, max softmax weight, and minimum effective node count
-#'   across ECM iterations. Quadrature-method EM only.
+#' @description Generic. Methods plot the quantities their fitting method
+#'   iterates on, one panel each.
 #' @param x Object to plot.
 #' @param ... Method-specific arguments.
 #' @return A ggplot.

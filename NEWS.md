@@ -1,3 +1,16 @@
+# dMod2 0.6.4
+
+* New soft constraints next to `constraintL2()`: `constraintL1()` (Laplace),
+  `constraintCauchy()`, `constraintGamma()`, `constraintExponential()`,
+  `constraintChisq()` and `constraintRayleigh()`. Each is the `-2 log` density
+  including its normalisation, unlike `constraintL2()`, which is the penalty
+  form, and each carries the chain rule so `constraint * P()` is exact.
+* The multivariate-normal path of `constraintL2()` is gone, together with the
+  `penaltySpec` plumbing and the `plotIndivs()` / `plotHistIndivs()` generics.
+  All of them need an `omegaSpec` or a `penaltyspec`, which only the NLME layer
+  builds, so here they were unreachable.
+* `constraintExp2()`, an unused box prior inherited from dMod 1.x, is removed.
+
 # dMod2 0.6.3
 
 * `normL2()` takes `t0`, the time at which initial values take effect. The time

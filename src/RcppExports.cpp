@@ -99,27 +99,6 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
-// constraintL2_mvn_kernel
-List constraintL2_mvn_kernel(NumericVector pars, Nullable<NumericVector> fixed_opt, Nullable<NumericMatrix> dP_opt, Nullable<NumericVector> dP2_opt, CharacterVector inner_par_names, int K, int N, CharacterVector all_eta_names, NumericVector mu, NumericMatrix L_lower, bool include_chol_block);
-RcppExport SEXP _dMod2_constraintL2_mvn_kernel(SEXP parsSEXP, SEXP fixed_optSEXP, SEXP dP_optSEXP, SEXP dP2_optSEXP, SEXP inner_par_namesSEXP, SEXP KSEXP, SEXP NSEXP, SEXP all_eta_namesSEXP, SEXP muSEXP, SEXP L_lowerSEXP, SEXP include_chol_blockSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< NumericVector >::type pars(parsSEXP);
-    Rcpp::traits::input_parameter< Nullable<NumericVector> >::type fixed_opt(fixed_optSEXP);
-    Rcpp::traits::input_parameter< Nullable<NumericMatrix> >::type dP_opt(dP_optSEXP);
-    Rcpp::traits::input_parameter< Nullable<NumericVector> >::type dP2_opt(dP2_optSEXP);
-    Rcpp::traits::input_parameter< CharacterVector >::type inner_par_names(inner_par_namesSEXP);
-    Rcpp::traits::input_parameter< int >::type K(KSEXP);
-    Rcpp::traits::input_parameter< int >::type N(NSEXP);
-    Rcpp::traits::input_parameter< CharacterVector >::type all_eta_names(all_eta_namesSEXP);
-    Rcpp::traits::input_parameter< NumericVector >::type mu(muSEXP);
-    Rcpp::traits::input_parameter< NumericMatrix >::type L_lower(L_lowerSEXP);
-    Rcpp::traits::input_parameter< bool >::type include_chol_block(include_chol_blockSEXP);
-    rcpp_result_gen = Rcpp::wrap(constraintL2_mvn_kernel(pars, fixed_opt, dP_opt, dP2_opt, inner_par_names, K, N, all_eta_names, mu, L_lower, include_chol_block));
-    return rcpp_result_gen;
-END_RCPP
-}
 // normL2_kernel
 List normL2_kernel(List prediction, Nullable<List> err_list_opt, List meta_list, CharacterVector par_names_global, bool deriv2_requested, int threads, std::string bloq_mode);
 RcppExport SEXP _dMod2_normL2_kernel(SEXP predictionSEXP, SEXP err_list_optSEXP, SEXP meta_listSEXP, SEXP par_names_globalSEXP, SEXP deriv2_requestedSEXP, SEXP threadsSEXP, SEXP bloq_modeSEXP) {
@@ -296,7 +275,6 @@ static const R_CallMethodDef CallEntries[] = {
     {"_dMod2_bmm_bb", (DL_FUNC) &_dMod2_bmm_bb, 6},
     {"_dMod2_constraintL2_scalar_kernel", (DL_FUNC) &_dMod2_constraintL2_scalar_kernel, 11},
     {"_dMod2_datapointL2_kernel", (DL_FUNC) &_dMod2_datapointL2_kernel, 10},
-    {"_dMod2_constraintL2_mvn_kernel", (DL_FUNC) &_dMod2_constraintL2_mvn_kernel, 11},
     {"_dMod2_normL2_kernel", (DL_FUNC) &_dMod2_normL2_kernel, 7},
     {"_dMod2_parvec_attach", (DL_FUNC) &_dMod2_parvec_attach, 3},
     {"_dMod2_parvec_concat", (DL_FUNC) &_dMod2_parvec_concat, 1},

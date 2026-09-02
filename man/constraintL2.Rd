@@ -4,26 +4,14 @@
 \alias{constraintL2}
 \title{Soft L2 constraint on parameters}
 \usage{
-constraintL2(
-  mu,
-  sigma = 1,
-  Omega = NULL,
-  attr.name = "prior",
-  condition = NULL
-)
+constraintL2(mu, sigma = 1, attr.name = "prior", condition = NULL)
 }
 \arguments{
-\item{mu}{Named numeric vector of prior means. For the MVN path
-(\code{Omega} set), \code{mu} may be a scalar (broadcast across all etas) or a
-length-K named vector matching \code{Omega$eta}.}
+\item{mu}{Named numeric vector of prior means. Its names select the
+constrained parameters.}
 
 \item{sigma}{Named numeric or character vector. Character entries indicate
-log-scale sigma parameters to be estimated. Used only when \code{Omega} is NULL.}
-
-\item{Omega}{Optional \code{omegaSpec} object (see \code{omega()} (NLME layer)) describing a
-multivariate Gaussian prior over subject-level random effects with full
-Cholesky-parametrised covariance. When supplied, the function switches to
-the MVN path and ignores \code{sigma}.}
+log-scale sigma parameters to be estimated.}
 
 \item{attr.name}{Character. Name of the attribute storing the constraint value.}
 
@@ -40,13 +28,7 @@ Computes, depending on which path is selected,
 \deqn{(p-\mu)^2 / \sigma^2}
 or, if sigma is estimated,
 \deqn{(p-\mu)^2 / \sigma^2 + 2\log(\sigma)},
-with sigma internally transformed via \code{exp()}.
-
-When \code{Omega} is set, computes the multivariate-normal prior
-\deqn{\sum_i (\eta_i - \mu)^T \Omega^{-1} (\eta_i - \mu) + N \log|\Omega|}
-over subject-level random effects \eqn{\eta_i}, where \eqn{\Omega = L L^T}
-with \eqn{L} lower-triangular and log-parametrised on the diagonal. The
-parameter vector at evaluation time must contain all subject-level eta
-parameters listed in \code{Omega$subjectEtas} and all Cholesky parameters in
-\code{Omega$cholPars}.
+with sigma internally transformed via \code{exp()}. This is the penalty
+form and drops the Gaussian's normalisation; \link{constraintL1} and its siblings
+are the full \verb{-2 log} density.
 }
