@@ -1,6 +1,6 @@
-# loadDLL() must not unload a shared object that is still in use: dyn.unload()
-# nulls every native symbol pointer resolved so far, the one baked into a
-# prepared batch handle included, and nothing resolves those again.
+# Loading and unloading must not be able to break a model that is in use.
+# `dyn.unload()` nulls every native symbol address already handed out, so
+# nothing may keep one: entry points are dispatched by name and shared object.
 
 
 # Two-condition decay model in its own workdir, so the reload tests cannot
@@ -66,6 +66,44 @@ test_that("an objective survives repeated loadDLL calls", {
 })
 
 
+test_that("a reloaded shared object needs no cache flush", {
+  fx <- fx_loaddll()
+  oldwd <- setwd(fx$dir); on.exit(setwd(oldwd), add = TRUE)
+
+  before <- fx$obj(fx$pouter)$value
+  dyn.unload(fx$so)
+  dyn.load(fx$so)
+  # Both the scalar and the batched path, and the batch handle cached by Xs().
+  expect_identical(fx$obj(fx$pouter)$value, before)
+  expect_identical(fx$obj(fx$pouter)$value, before)
+})
+
+
+test_that("an unloaded model names the shared object it is missing", {
+  fx <- fx_loaddll()
+  oldwd <- setwd(fx$dir); on.exit(setwd(oldwd), add = TRUE)
+  on.exit({ if (!fx$so %in% dMod2:::.loadedDLLPaths()) dyn.load(fx$so) }, add = TRUE)
+
+  # Whichever entry point the chain reaches first, the message has to name it
+  # and its library instead of failing on a null address.
+  dyn.unload(fx$so)
+  expect_error(fx$obj(fx$pouter), "ld_all")
+})
+
+
+test_that("loadDLL finds shared objects outside the working directory", {
+  fx <- fx_loaddll()
+  other <- file.path(tempdir(), "dmod_loaddll_elsewhere")
+  dir.create(other, showWarnings = FALSE, recursive = TRUE)
+  oldwd <- setwd(other); on.exit(setwd(oldwd), add = TRUE)
+
+  dyn.unload(fx$so)
+  loaded <- suppressMessages(loadDLL(fx$obj))
+  expect_identical(loaded, fx$so)
+  expect_true(is.finite(fx$obj(fx$pouter)$value))
+})
+
+
 test_that("mstrust converges when it reloads the objective per fit", {
   fx <- fx_loaddll()
   oldwd <- setwd(fx$dir); on.exit(setwd(oldwd), add = TRUE)
@@ -81,13 +119,26 @@ test_that("mstrust converges when it reloads the objective per fit", {
 })
 
 
-test_that("a flushed symbol cache rebuilds the prepared batch handle", {
-  fx <- fx_loaddll()
-  oldwd <- setwd(fx$dir); on.exit(setwd(oldwd), add = TRUE)
+test_that("recompiling into a loaded shared object serves the new model", {
+  dir <- file.path(tempdir(), "dmod_recompile")
+  dir.create(dir, showWarnings = FALSE, recursive = TRUE)
+  oldwd <- setwd(dir); on.exit(setwd(oldwd), add = TRUE)
 
-  before <- fx$obj(fx$pouter)$value
-  dyn.unload(fx$so)
-  dyn.load(fx$so)
-  dMod2:::.clearSymbols()
-  expect_identical(fx$obj(fx$pouter)$value, before)
+  build <- function(rate, nm) {
+    m <- odemodel(addReaction(eqnlist(), "A", "", rate), modelname = nm,
+                  compile = FALSE)
+    x <- Xs(m)
+    suppressMessages(compile(x, output = "rc_all", cores = 1))
+    x
+  }
+
+  x1 <- build("k*A", "rc_one")
+  v1 <- unname(x1(0:2, c(A = 1, k = 1))[[1]][3, "A"])
+  expect_equal(v1, exp(-2), tolerance = 1e-4)
+
+  # Same output library, different equations: R will not reload a shared object
+  # it already holds, so the second model has to displace the first.
+  x2 <- build("2*k*A", "rc_two")
+  v2 <- unname(x2(0:2, c(A = 1, k = 1))[[1]][3, "A"])
+  expect_equal(v2, exp(-4), tolerance = 1e-4)
 })

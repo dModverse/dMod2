@@ -1,3 +1,15 @@
+# dMod2 0.6.2
+
+* Reloading a model's shared object no longer invalidates anything. cppDE
+  (>= 0.9.2) resolves entry points by name, so the batch handle cached by
+  `Xs()`, and every objective built on it, survives an unload and reload. This
+  replaces the symbol-cache flush counter of 0.6.1, which only caught reloads
+  that went through `loadDLL()` or `compile()`.
+* `loadDLL()` also searches the directories the sources were generated in, so a
+  model compiled into a temporary folder is found rather than silently skipped.
+* `normL2()` carries `compileInfo`, as `*` and `+` already did, so `loadDLL()`
+  and `compile()` reach the shared objects of a composed objective.
+
 # dMod2 0.6.1
 
 * `loadDLL()` skips shared objects that are already loaded in the current

@@ -313,6 +313,10 @@ normL2 <- function(data, x, errmodel = NULL, times = NULL,
   err_pars <- if (!is.null(errmodel)) attr(errmodel, "parameters") else character(0)
   attr(myfn, "parameters") <- union(attr(x, "parameters"), err_pars)
   attr(myfn, "modelname") <- modelname(x, errmodel)
+  # Carried like `*` and `+` carry it, so loadDLL() and compile() can reach the
+  # shared objects of a composed objective.
+  attr(myfn, "compileInfo") <- .mergeCompileInfo(attr(x, "compileInfo"),
+                                                 attr(errmodel, "compileInfo"))
   # NLME reconstruction handles: let .fitNormal()/emObjfn() recover the model
   # pieces from a composed objective instead of re-demanding them as arguments
   # (see .normalReconstruct() in nlmeNormal.R). Setting an attribute to NULL is a no-op,

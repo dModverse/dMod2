@@ -100,19 +100,10 @@
   hdr
 }
 
-## Counts the symbol-cache flushes of this session. Callers that hold a
-## resolved address of their own key on it, since resolving again per call
-## costs more than the check is worth.
-.dmodSymbols <- new.env(parent = emptyenv())
-.dmodSymbols$generation <- 0L
-
-.symbolGeneration <- function() .dmodSymbols$generation
-
-## cppDE caches the addresses of a model's compiled entry points, so loading a
-## shared object invalidates them. Guarded, to stay loadable against a cppDE
-## that predates the cache.
+## cppDE remembers which shared object exports which generated entry point.
+## Loading one under a name it has already seen makes that pairing stale.
+## Guarded, to stay loadable against a cppDE that predates the function.
 .clearSymbols <- function() {
-  .dmodSymbols$generation <- .dmodSymbols$generation + 1L
   f <- get0("clearNativeSymbols", envir = asNamespace("cppDE"), inherits = FALSE)
   if (is.function(f)) f()
 }
@@ -484,7 +475,7 @@ compile <- function(..., output = NULL, args = NULL, cores = detectFreeCores(),
     if (.Platform$OS.type == "unix" && cores > 1)
       parallel::mclapply(info, compile_one, mc.cores = cores)
     else for (e in info) compile_one(e)
-    for (r in roots_full) dyn.load(paste0(r, so))
+    for (r in roots_full) .reloadDLL(paste0(r, so))
     .clearSymbols()
   } else {
     ## Combined output: per-file compile to .o (parallel on Unix when cores>1,
@@ -656,7 +647,7 @@ compile <- function(..., output = NULL, args = NULL, cores = detectFreeCores(),
     if (!file.exists(out))
       stop("R CMD SHLIB returned exit 0 but did not produce ", out, ":\n",
            paste(out_lines, collapse = "\n"))
-    dyn.load(out)
+    .reloadDLL(out)
     .clearSymbols()
     ## Only arguments passed as a plain variable can have their modelname
     ## updated in the caller; an expression has nothing to assign back to.
@@ -686,12 +677,32 @@ getLocalDLLs <- function() {
 
 
 
+## Loading a shared object that is already loaded is a no-op in R, so a rebuilt
+## file would keep serving the old code. Entry points resolve by name, so
+## unloading first is safe even for objects still in use.
+.reloadDLL <- function(path) {
+  p <- normalizePath(path, winslash = "/", mustWork = FALSE)
+  if (p %in% .loadedDLLPaths()) try(dyn.unload(p), silent = TRUE)
+  dyn.load(p)
+}
+
+
 ## Absolute paths of the shared objects loaded in this process.
 .loadedDLLPaths <- function() {
   dlls <- getLoadedDLLs()
   if (!length(dlls)) return(character(0))
   paths <- vapply(dlls, function(d) unclass(d)$path, character(1))
   normalizePath(paths, winslash = "/", mustWork = FALSE)
+}
+
+## Directories to search for an object's shared libraries: where its sources
+## were generated, plus the working directory. A model compiled into a temp
+## folder is not findable from the modelname alone.
+.dllSearchDirs <- function(objects) {
+  dirs <- unlist(lapply(objects, function(o)
+    vapply(attr(o, "compileInfo") %||% list(),
+           function(e) dirname(e$srcfile[1]), character(1))))
+  unique(c(getwd(), dirs[nzchar(dirs)]))
 }
 
 
@@ -701,12 +712,11 @@ getLocalDLLs <- function() {
 #' the workspace, the dynamic libraries are not linked any more. `loadDLL`
 #' is a wrapper for `dyn.load` that uses the "modelname" attribute of
 #' dMod objects like prediction functions, observation functions, etc. to
-#' load the corresponding shared object.
+#' load the corresponding shared object. Searched are the directories the
+#' objects were generated in and the working directory.
 #'
 #' Shared objects already loaded in the current process are skipped, so
-#' calling `loadDLL` repeatedly is a no-op. Unloading them would null the
-#' native symbol pointers that the already built prediction, observation and
-#' parameter functions hold, and nothing resolves those again.
+#' calling `loadDLL` repeatedly is a no-op.
 #'
 #' @param ... objects of class prdfn, obsfn, parfn, objfn, ...
 #'
@@ -715,12 +725,13 @@ getLocalDLLs <- function() {
 #' @export
 loadDLL <- function(...) {
 
-  .so <- .Platform$dynlib.ext
+  .so    <- .Platform$dynlib.ext
   models <- modelname(...)
-  files <- paste0(outer(models, c("", "_s", "_s2", "_sdcv", "_deriv", "_dfdx", "_dfdp"), paste0), .so)
-  files <- files[file.exists(files)]
-  files <- files[!normalizePath(files, winslash = "/", mustWork = FALSE) %in%
-                   .loadedDLLPaths()]
+  names  <- paste0(outer(models, c("", "_s", "_s2", "_sdcv", "_deriv", "_dfdx", "_dfdp"),
+                         paste0), .so)
+  files  <- as.vector(outer(.dllSearchDirs(list(...)), names, file.path))
+  files  <- normalizePath(files[file.exists(files)], winslash = "/", mustWork = FALSE)
+  files  <- setdiff(unique(files), .loadedDLLPaths())
   if (!length(files)) return(invisible(character(0)))
 
   for (f in files) dyn.load(f)
