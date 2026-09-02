@@ -289,7 +289,11 @@ compile <- function(..., output = NULL, args = NULL, cores = detectFreeCores(),
     dir  <- if (basename(stem) == stem) dirname(files[1]) else dirname(stem)
     if (!dir.exists(dir))
       stop("compile: the directory of `output` does not exist: ", dir, call. = FALSE)
-    outfile <- file.path(dir, paste0(basename(stem), so))
+    # Never link into a shared object this process already holds: unloading it
+    # is not portable, Windows may keep the file handle and macOS may keep the
+    # image resident, so the reload would serve the old code.
+    out_base <- .uniqueLibname(basename(stem))
+    outfile  <- file.path(dir, paste0(out_base, so))
   }
   roots      <- sub("\\.[^.]+$", "", basename(files))
   roots_full <- sub("\\.[^.]+$", "", files)
@@ -680,6 +684,27 @@ getLocalDLLs <- function() {
 ## Loading a shared object that is already loaded is a no-op in R, so a rebuilt
 ## file would keep serving the old code. Entry points resolve by name, so
 ## unloading first is safe even for objects still in use.
+## A base name no loaded shared library carries: the desired one if it is
+## free, otherwise the smallest `<name>_<i>`, i >= 2, with a warning. Mirrors
+## cppDE's `unique_modelname()`, which the model constructors apply to their
+## own names; the two must stay in step.
+.uniqueLibname <- function(name) {
+  loaded <- names(getLoadedDLLs())
+  if (!name %in% loaded) return(name)
+  i <- 2L
+  repeat {
+    cand <- paste0(name, "_", i)
+    if (!cand %in% loaded) {
+      warning(sprintf(
+        "A shared library named '%s' is already loaded; overwriting it is not portable. Using '%s' instead.",
+        name, cand), call. = FALSE)
+      return(cand)
+    }
+    i <- i + 1L
+  }
+}
+
+
 .reloadDLL <- function(path) {
   p <- normalizePath(path, winslash = "/", mustWork = FALSE)
   if (p %in% .loadedDLLPaths()) try(dyn.unload(p), silent = TRUE)

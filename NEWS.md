@@ -1,3 +1,11 @@
+# dMod2 0.6.5
+
+* `compile(output = )` no longer links into a shared object the process
+  already holds. Overwriting one is not portable: Windows may keep the file
+  handle and macOS may keep the image resident, so the reload would serve the
+  old code. A loaded name is replaced by `<name>_2` with a warning, the rule
+  cppDE's model constructors already apply to their own names.
+
 # dMod2 0.6.4
 
 * New soft constraints next to `constraintL2()`: `constraintL1()` (Laplace),

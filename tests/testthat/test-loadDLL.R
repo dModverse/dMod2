@@ -119,7 +119,7 @@ test_that("mstrust converges when it reloads the objective per fit", {
 })
 
 
-test_that("recompiling into a loaded shared object serves the new model", {
+test_that("compiling into a loaded output name yields a fresh library", {
   dir <- file.path(tempdir(), "dmod_recompile")
   dir.create(dir, showWarnings = FALSE, recursive = TRUE)
   oldwd <- setwd(dir); on.exit(setwd(oldwd), add = TRUE)
@@ -133,12 +133,17 @@ test_that("recompiling into a loaded shared object serves the new model", {
   }
 
   x1 <- build("k*A", "rc_one")
-  v1 <- unname(x1(0:2, c(A = 1, k = 1))[[1]][3, "A"])
-  expect_equal(v1, exp(-2), tolerance = 1e-4)
+  expect_equal(unname(x1(0:2, c(A = 1, k = 1))[[1]][3, "A"]), exp(-2),
+               tolerance = 1e-4)
 
-  # Same output library, different equations: R will not reload a shared object
-  # it already holds, so the second model has to displace the first.
-  x2 <- build("2*k*A", "rc_two")
-  v2 <- unname(x2(0:2, c(A = 1, k = 1))[[1]][3, "A"])
-  expect_equal(v2, exp(-4), tolerance = 1e-4)
+  # Overwriting a loaded shared object is not portable: dyn.unload() may leave
+  # the image resident, so the reload would keep serving the old code. The
+  # second build therefore goes to a suffixed name and says so.
+  expect_warning(x2 <- build("2*k*A", "rc_two"), "already loaded")
+  expect_equal(unname(x2(0:2, c(A = 1, k = 1))[[1]][3, "A"]), exp(-4),
+               tolerance = 1e-4)
+
+  # Both models stay callable, which is the point of not displacing.
+  expect_equal(unname(x1(0:2, c(A = 1, k = 1))[[1]][3, "A"]), exp(-2),
+               tolerance = 1e-4)
 })
