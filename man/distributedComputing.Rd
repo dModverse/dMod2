@@ -78,7 +78,7 @@ transferred to the cluster and linked into shared objects (\code{.so}),
 skipping compilation. If no \code{.o} files are found, an error is raised.
 This option is ignored if \code{compile = TRUE}. Object files are toolchain
 specific, so this only works when the cluster compiler is ABI-compatible
-with the local one -- in particular, \code{.o} files produced with link-time
+with the local one, in particular, \code{.o} files produced with link-time
 optimisation by a newer GCC cannot be read by an older one. Prefer
 \code{compile = TRUE} when the two machines run different compiler generations.}
 

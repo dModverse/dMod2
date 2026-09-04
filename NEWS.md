@@ -1,3 +1,43 @@
+# dMod2 0.7.0
+
+* PEtab import and export. `importPEtab()` reads a v1 or v2 problem and returns
+  the composed `g * x * p`, the error model, the objective with its priors and
+  the published parameter vector. `exportPEtabObject()` writes one back, and
+  `exportPEtab()` builds a problem from a hand-written dMod model.
+* SBML import and export through libsbml, reached over reticulate, so a problem
+  that needs neither stays Python-free. Identifiers that R or C++ reserve are
+  renamed throughout, including in the PEtab tables, and the MathML constants
+  `pi`, `exponentiale` and `avogadro` are folded to their value.
+* `normL2()` returns gradient and Hessian in the order of the parameter vector
+  it was called with. They used to follow the union of the per-condition
+  sensitivity blocks, while `trust()` and `optim()` read them positionally, so
+  every fit optimised a permuted model.
+* `normL2()` reports its sum of squares as a `chi2` attribute. Adding
+  objectives pools the terms sharing an `attr.name` and splits the rest into
+  `chi2_<attr.name>`.
+* `compile(output = )` points the cOde models inside a function object at the
+  batched shared object. Without that the deSolve backend looked for an entry
+  point in a library that was never built.
+* Pre-equilibration takes its conserved moieties from the same reduced network
+  `Pequil()` uses, freezes a time dependent input at the start time, and leaves
+  symbols no outer parameter reaches out of the sensitivity system. A failure
+  now reports the solver error and the non-finite parameters.
+* `Y()` accepts one observation function per condition and takes `cores`.
+  `importPEtab()` takes `cores`, `deriv`, `outdir`, `optionsOde` and
+  `optionsSens`, and derives a model name that steps aside for what is already
+  loaded.
+* `as.data.frame()` on a prediction joins the error model by observable rather
+  than by row order, which used to hand each observable the wrong sigma.
+* `wide2long()` on an unnamed list numbers its conditions instead of dropping
+  the `condition` column, and forwards `keep` and `na.rm`.
+* `print()` on an objective result from a `deriv = FALSE` call shows the value
+  alone, where it used to fail on the absent Hessian.
+* New data set `bachmann` with `inst/examples/example_BachmannMSB2011.R`
+  building the model: 25 states, 36 conditions, 113 estimated parameters.
+* All 31 cases of the PEtab v2 test suite reproduce the published likelihood
+  and survive the export round trip. Of the 35 problems in the Benchmark-Models
+  collection, 33 import, evaluate with derivatives, export and reimport.
+
 # dMod2 0.6.5
 
 * `compile(output = )` no longer links into a shared object the process

@@ -16,8 +16,10 @@ prediction value.}
 
 \item{sigma}{numeric, the uncertainty of the introduced test data point}
 
-\item{attr.name}{character. The constraint value is additionally returned in an
-attributed with this name}
+\item{attr.name}{character. The constraint value is additionally returned in
+an attribute of this name. Being a squared standardised residual already, it
+is also the term's \code{chi2} contribution, which pools with \link{normL2}'s under the
+rules described there.}
 
 \item{condition}{character, the condition for which the prediction is made.}
 }

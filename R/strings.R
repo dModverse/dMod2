@@ -20,7 +20,7 @@ strpad <- function(string, width, where = "right", padding = " ", autoelide = FA
     stop("<padding> must be of width 1")
   }
 
-  # We only work on a character vector
+  # Only a character vector is handled.
   if (!inherits(string, "character")) {
     warning("Argument <string> does not inherit class 'character'")
     return(NULL)
@@ -110,7 +110,7 @@ strelide <- function(string, width, where = "right", force = FALSE) {
   }
 
   # Check function argumets
-  # We only work on a character vector
+  # Only a character vector is handled.
   if (!inherits(string, "character")) {
     warning("Argument does not inherit class 'character'")
     return(NULL)
@@ -122,13 +122,13 @@ strelide <- function(string, width, where = "right", force = FALSE) {
 
 
   # Eliding
-  # Do we need to elide?
+  # Elision needed?
   if (strWidth <= width && !force) {
     return(string)
   }
 
 
-  # Are we forced to elide?
+  # Elision forced?
   if (width > strWidth && force) {
     width <- strWidth
   }

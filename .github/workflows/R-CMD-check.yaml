@@ -33,11 +33,9 @@ jobs:
       R_KEEP_PKG_SOURCE: yes
       # skip_on_cran() guards 13 test files; our own jobs opt in.
       NOT_CRAN: true
-      # PEtabTests/ and BenchmarkModels/ are .Rbuildignore'd and not committed,
-      # so these paths do not exist in the checkout and the tests that need them
-      # skip. The vars take effect once the fixtures are added.
+      # PEtabTests/ is .Rbuildignore'd but tracked, so the checkout carries it
+      # and the conformance tests run here.
       DMOD_PETABTESTS: ${{ github.workspace }}/PEtabTests
-      DMOD_BENCHMARKMODELS: ${{ github.workspace }}/BenchmarkModels
 
     steps:
       - uses: actions/checkout@v5
@@ -99,7 +97,6 @@ jobs:
       # reticulate at the system interpreter rather than provisioning one.
       RETICULATE_PYTHON: /usr/bin/python3
       DMOD_PETABTESTS: ${{ github.workspace }}/PEtabTests
-      DMOD_BENCHMARKMODELS: ${{ github.workspace }}/BenchmarkModels
       # the container sets no LANG, so R runs with session charset ASCII and
       # every multibyte character in printed output arrives as raw bytes, which
       # makes regexes over captured output behave differently than on the

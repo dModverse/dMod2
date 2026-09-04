@@ -383,7 +383,7 @@ getReactions <- function(eqnlist) {
 #' @param compartment Character, compartment ID for the states this reaction
 #' *introduces*, and the frame the reaction is written in. Defaults to
 #' `"defaultComp"`; created with volume `"1"` if new. States that already have a
-#' compartment keep it -- use [assignCompartment()] to place a species that does
+#' compartment keep it, use [assignCompartment()] to place a species that does
 #' not belong to the compartment of the reaction first mentioning it.
 #' @param rateCompartment Optional compartment ID naming the frame in which `rate`
 #' is a concentration-rate. Needed when educts span multiple compartments (e.g.
@@ -524,7 +524,7 @@ addReaction <- function(eqnlist, from, to, rate, description = names(rate),
 #' @description Declares which compartment a state lives in, independently of
 #' the reactions that use it. [addReaction()] only ever assigns states it
 #' introduces, so without an explicit declaration a species inherits the
-#' compartment of whichever reaction happens to mention it first -- which makes
+#' compartment of whichever reaction happens to mention it first, which makes
 #' the model depend on the order in which it is written. `assignCompartment()`
 #' removes that dependency: it works before the state exists (the declaration is
 #' remembered and applied when the reaction arrives) as well as afterwards.
@@ -769,8 +769,8 @@ getFluxes <- function(eqnlist, type = c("conc", "amount")) {
   # Resolve per-reaction reference compartment V_ref (concentration-rate frame).
   # Priority: (1) user-supplied reactionCompartment[i] if non-NA, (2) unique
   # educt compartment, (3) unique product compartment for pure synthesis.
-  # When educts span multiple compartments and no annotation is given, we
-  # error with a clear message pointing the user at `reactionCompartment`.
+  # When educts span multiple compartments and no annotation is given, the
+  # call errors with a message pointing at `reactionCompartment`.
   vref_cid <- .refCompartments(SMatrix, compOf, reactionCompartment, description)
   vref_vol <- .refVolumes(vref_cid, compartments)
 
@@ -860,23 +860,6 @@ dot <- function(observable, eqnlist) {
     
     prodSymb(matrix(der, nrow = 1), matrix(f[names(der)], ncol = 1))
     
-#     
-#     out <- sapply(names(der), function(n) {
-#       d <- der[n]
-#       
-#       if (d != "0") {
-#         prodSymb(matrix(d, nrow = 1), matrix(f[names(d)], ncol = 1))
-#       } else  {
-#         return("0")
-#       }
-#         
-#       
-#       
-#       #paste( paste("(", d, ")", sep="") , paste("(", f[names(d)], ")",sep=""), sep="*") else return("0")
-#     })
-#     out <- paste(out, collapse = "+")
-#     
-#     return(out)
     
   })
   
@@ -1230,7 +1213,7 @@ c.eqnlist <- function(...) {
   if (length(all_compartments) == 0L) all_compartments <- NULL
   if (length(all_compartmentOf) == 0L) all_compartmentOf <- NULL
 
-  # Concatenate reactionCompartment annotations. If any input has them, we need
+  # Concatenate reactionCompartment annotations. If any input has them, the result needs
   # to produce a vector of length nrow(combined). Missing entries become NA.
   any_rc <- any(vapply(inputs, function(el) !is.null(el$reactionCompartment), logical(1)))
   if (any_rc) {
@@ -1693,7 +1676,7 @@ eqnlist <- function(smatrix = NULL, states = colnames(smatrix), rates = NULL,
 #' runtime.
 #'
 #' Integrating in these coordinates cannot produce a negative state, since a power
-#' of ten is positive for every real exponent -- positivity is the geometry of the
+#' of ten is positive for every real exponent, positivity is the geometry of the
 #' chart rather than a constraint checked afterwards. Where a trajectory would have
 #' crossed \eqn{x = 0}, the transformed variable escapes to `-Inf` and the solver
 #' stops there instead.
@@ -1702,7 +1685,7 @@ eqnlist <- function(smatrix = NULL, states = colnames(smatrix), rates = NULL,
 #' the latter reads better and works inside a [P()] transformation: `exp10` is a
 #' C99 function with no entry in R's derivatives table, so a model built on it has
 #' no symbolic Jacobian and [Xs()] cannot generate sensitivities. The parentheses
-#' are load-bearing -- R's `^` is right-associative, so a bare `10^x_l10`
+#' are load-bearing, R's `^` is right-associative, so a bare `10^x_l10`
 #' substituted into `x^2` would mean `10^(x_l10^2)`.
 #'
 #' Read results back in R with `10^x_l10`.

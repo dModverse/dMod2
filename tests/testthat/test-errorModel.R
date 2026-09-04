@@ -73,3 +73,47 @@ test_that("fitErrorModel recovers exp(s0) ~ sigma_true^2 for constant variance",
   # Across 10 time points * 20 replicates we expect ~5% accuracy.
   expect_lt(abs(sqrt(sigma_hat_sq) - sigma_true) / sigma_true, 0.20)
 })
+
+
+# ============================================================================
+# as.data.frame(<prdlist>, errfn = )
+# ============================================================================
+
+test_that("as.data.frame joins the error model by observable, not by row order", {
+  skip_if_not_installed("cppDE")
+  skip_on_cran()
+  withr::local_dir(tempdir())
+
+  reactions <- addReaction(eqnlist(), "A", "B", "k*A")
+  m <- odemodel(reactions, modelname = "adf_ode", compile = FALSE)
+  x <- Xs(m)
+  g <- Y(eqnvec(obsA = "A", obsB = "B"), x, attach.input = FALSE,
+         modelname = "adf_obs", compile = FALSE)
+  # the error model lists its observables the other way round
+  e <- Y(eqnvec(obsB = "sB", obsA = "sA"), g, attach.input = FALSE,
+         modelname = "adf_err", compile = FALSE)
+  compile(x, g, e, cores = 1)
+
+  pars <- c(A = 2, B = 0, k = 0.3, sA = 0.11, sB = 0.77)
+  prd  <- (g * x)(seq(0, 3, length.out = 4), pars)
+  df   <- as.data.frame(prd, errfn = e)
+
+  expect_equal(unique(df$sigma[df$name == "obsA"]), 0.11)
+  expect_equal(unique(df$sigma[df$name == "obsB"]), 0.77)
+
+  # an unnamed prediction numbers its conditions rather than losing the column
+  names(prd) <- NULL
+  bare <- as.data.frame(prd)
+  expect_true("condition" %in% names(bare))
+  expect_equal(unique(bare$condition), "1")
+})
+
+
+test_that("wide2long forwards keep and na.rm to the matrix method", {
+  m <- matrix(c(0, 1, 2, NA, 4, 5), ncol = 3,
+              dimnames = list(NULL, c("time", "a", "b")))
+  out <- wide2long(list(C1 = m), na.rm = TRUE)
+  expect_false(anyNA(out$value))
+  expect_equal(nrow(out), 3L)
+  expect_equal(unique(out$condition), "C1")
+})

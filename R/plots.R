@@ -59,7 +59,7 @@ theme_dMod <- function(base_size = 12, base_family = "", showGrid = FALSE) {
 # distance within it, taken as the WORST case over normal, deuteranopic,
 # protanopic and tritanopic vision (for ramps, between positions at least a
 # quarter of the domain apart). A palette counts as colorblind-safe at 10 or
-# above -- below roughly 3 two colors are indistinguishable side by side, and a
+# above, below roughly 3 two colors are indistinguishable side by side, and a
 # thin line needs more headroom than a filled patch.
 #
 # The numbers are baked in rather than computed at load time so that the
@@ -68,8 +68,8 @@ theme_dMod <- function(base_size = 12, base_family = "", showGrid = FALSE) {
 
 #' Seed colors of the dMod palette
 #'
-#' The ten qualitative house colors. Not colorblind-safe -- its brown and red
-#' collapse under protanopia -- see [dMod_palettes()] for the alternatives.
+#' The ten qualitative house colors. Not colorblind-safe, its brown and red
+#' collapse under protanopia, see [dMod_palettes()] for the alternatives.
 #'
 #' @export
 dMod_colors <- c("#000000", "#C5000B", "#0084D1", "#579D1C", "#FF950E",
@@ -1049,7 +1049,6 @@ PlotPaths <- function(profs=myprofiles, ..., whichPar, sort = FALSE, relative = 
     # determine strength of change
     data[, max.dev := max(c(abs(max(as.numeric(y))), abs(min(as.numeric(y) )))), by = "partner"]
     setorder(data, name, -max.dev)
-    # max.devis <- unique(data$max.dev)[1:n_pars]
     
     # create new column "label" only use to assign ploting colors
     data[,label := ifelse(max.dev %in% unique(max.dev)[1:n_pars], partner, "Others")]
@@ -1154,7 +1153,7 @@ plotProfilesAndPaths <- function(profs, whichpars, npars = 5, ncols = 3, normali
   profs <- profs[profs$whichPar %in% whichpars]
   
   cleanProfilePlot <- function(prof_sub) {
-    # Remove columns for modes we don't want, so plotProfile can't plot them
+    # Remove columns for unwanted modes, so plotProfile cannot plot them
     cols_to_drop <- setdiff(orig_oa, modes)
     prof_sub <- prof_sub[, !(colnames(prof_sub) %in% cols_to_drop), drop = FALSE]
     attr(prof_sub, "obj.attributes") <- filtered_oa

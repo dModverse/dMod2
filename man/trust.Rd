@@ -164,7 +164,7 @@ trust-region-reflective scheme: the subproblem is solved in the scaled frame
 being the distance to the bound the gradient pushes toward. A step leaving
 the box is truncated, reflected off the blocking faces, or replaced by the
 scaled steepest-descent step, whichever the model rates best. Iterates stay
-strictly inside the box and never land exactly on a bound -- use
+strictly inside the box and never land exactly on a bound, use
 \code{atBound} to test bound activity.
 
 \code{boundary = "clip"} is the historical scheme (active-set reduction plus

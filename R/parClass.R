@@ -287,10 +287,6 @@ plotPars.parframe <- function(x, tol = 1, ...){
   jumps <- .stepDetect(x$value, tol)
   jump.index <- approx(jumps, jumps, xout = 1:length(x$value), method = "constant", rule = 2)$y
   
-  #values <- round(x$value/tol)
-  #unique.values <- unique(values)
-  #jumps <- which(!duplicated(values))
-  #jump.index <- jumps[match(values, unique.values)]
   x$index <- as.factor(jump.index)
   
   myparframe <- x
@@ -497,7 +493,6 @@ is.parframe <- function(x) {
   parameters <- attr(x, "parameters")
   
   out <- as.data.frame(x)
-  #out <- as.data.frame(unclass(x))
   if (!is.null(i)) out <- out[i, ]
   if (!is.null(j)) out <- out[, j, drop = drop]
   
@@ -1006,7 +1001,7 @@ parlist <- function(...) {
 #' An object of class `"parvec"`, i.e. a named numeric vector with
 #' attributes:
 #' \itemize{
-#'   \item `attr(x, "deriv")` -- Jacobian matrix
+#'   \item `attr(x, "deriv")`, Jacobian matrix
 #' }
 #'
 #' @example inst/examples/parvec.R

@@ -31,7 +31,7 @@ becomes \code{x_l10 = "-k/log(10)"}, not a ratio that happens to simplify at
 runtime.
 
 Integrating in these coordinates cannot produce a negative state, since a power
-of ten is positive for every real exponent -- positivity is the geometry of the
+of ten is positive for every real exponent, positivity is the geometry of the
 chart rather than a constraint checked afterwards. Where a trajectory would have
 crossed \eqn{x = 0}, the transformed variable escapes to \code{-Inf} and the solver
 stops there instead.
@@ -40,7 +40,7 @@ The back-substitution is written \code{(10^(x_l10))}, not \code{exp10(x_l10)}, a
 the latter reads better and works inside a \code{\link[=P]{P()}} transformation: \code{exp10} is a
 C99 function with no entry in R's derivatives table, so a model built on it has
 no symbolic Jacobian and \code{\link[=Xs]{Xs()}} cannot generate sensitivities. The parentheses
-are load-bearing -- R's \code{^} is right-associative, so a bare \code{10^x_l10}
+are load-bearing, R's \code{^} is right-associative, so a bare \code{10^x_l10}
 substituted into \code{x^2} would mean \code{10^(x_l10^2)}.
 
 Read results back in R with \code{10^x_l10}.

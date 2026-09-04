@@ -101,7 +101,7 @@ Unmatched names are reported and ignored. Version \code{"1.2"} and later.}
 priority-table cycle breaking, \code{simplify} toggle, optional quadratic
 state-side solve), or \code{"1.3"} (default; same interface as \code{"1.2"}, but
 solutions are recorded lazily and resolved once at output time, with a
-lock guard replacing most rollbacks -- typically orders of magnitude
+lock guard replacing most rollbacks, typically orders of magnitude
 faster on feedback-heavy networks).}
 
 \item{resolve}{Logical, whether the equations are passed through

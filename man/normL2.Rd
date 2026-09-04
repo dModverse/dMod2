@@ -30,8 +30,11 @@ data. Event times should be included here if the prediction model uses events.}
 \item{t0}{Numeric. Start of the time grid, i.e. the time at which initial
 values take effect. Defaults to 0.}
 
-\item{attr.name}{Character string. The objective value is additionally returned
-as an attribute with this name.}
+\item{attr.name}{Character string. The objective value is additionally
+returned as an attribute of this name, and the sum of squares behind it
+under \code{chi2}. Adding objectives pools the terms sharing an \code{attr.name},
+so \code{chi2} stays one number; where two \code{attr.name}s meet it splits into
+\verb{chi2_<attr.name>} per contribution.}
 
 \item{cores}{Deprecated and ignored. Pass \code{cores} to the objective call, or
 set \code{options(dMod.cores = )}.}

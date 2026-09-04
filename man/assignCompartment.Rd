@@ -27,7 +27,7 @@ An object of class \link{eqnlist}.
 Declares which compartment a state lives in, independently of
 the reactions that use it. \code{\link[=addReaction]{addReaction()}} only ever assigns states it
 introduces, so without an explicit declaration a species inherits the
-compartment of whichever reaction happens to mention it first -- which makes
+compartment of whichever reaction happens to mention it first, which makes
 the model depend on the order in which it is written. \code{assignCompartment()}
 removes that dependency: it works before the state exists (the declaration is
 remembered and applied when the reaction arrives) as well as afterwards.

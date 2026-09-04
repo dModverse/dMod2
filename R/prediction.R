@@ -8,7 +8,7 @@
 #' The ODE forcings. Forcing support for the cppDE / Sundials backends depends
 #' on the chosen stepper method; see [cppDE::cppODE()].
 #' @param events An [eventlist] (or `data.frame` coercible via [as.eventlist]).
-#' Applied to the forward simulation only -- sensitivities are not corrected.
+#' Applied to the forward simulation only, sensitivities are not corrected.
 #' Define events on [odemodel()] unless the prediction is used purely for
 #' forward simulation.
 #' @param names character vector with the states to be returned. If NULL, all states are returned.
@@ -271,7 +271,7 @@ Xs.cppDE <- function(odemodel, forcings = NULL, events = NULL, names = NULL, con
   }
 
   # Subsetting to `names` copies the whole sensitivity array. When `names` is
-  # the full variable set -- the default -- the copy buys nothing.
+  # the full variable set, the default, the copy buys nothing.
   assemble1 <- function(res, pars, fixed, deriv, deriv2) {
     nms <- controls$names
     keepAll <- identical(nms, colnames(res$variable))
@@ -637,7 +637,7 @@ Xd <- function(data, condition = NULL) {
     myderivs <- NULL
     if (deriv) {
 
-      # Fill in sensitivities -- column layout is state-fastest, matching the
+      # Fill in sensitivities, column layout is state-fastest, matching the
       # expand.grid(states, parameters) ordering used to build sensNames.
       outSens <- matrix(0, nrow = length(times), ncol = length(sensNames),
                         dimnames = list(NULL, sensNames))
@@ -680,7 +680,9 @@ Xd <- function(data, condition = NULL) {
 #' and, if requested, its first and second derivatives based on the output of a model 
 #' prediction function, see [prdfn], as e.g. produced by [Xs].
 #' 
-#' @param g Named character vector or [eqnvec] defining the observation function.
+#' @param g Named character vector or [eqnvec] defining the observation
+#' function, or a list of those named by condition, which builds one
+#' observation function per condition in a single call.
 #' @param f Named character vector of equations or an object that can be converted 
 #' to [eqnvec], or an object of class 'fn'. If `f` is provided, states and parameters 
 #' are automatically inferred from `f`.
@@ -702,6 +704,9 @@ Xd <- function(data, condition = NULL) {
 #' @param modelname Character, used if `compile = TRUE`, specifies a fixed
 #'   filename for the generated C file.
 #' @param verbose Logical, print compiler output to the R console.
+#' @param cores Number of parallel jobs used to generate the sources when
+#' `g` is a list; `NULL` auto-detects. Ignored for a single observation
+#' function, which is one source either way.
 #' @param derivMode Character. Jacobian backend: `"dual"` (default,
 #'   forward-mode AD; faster for many parameters; requires compiled native
 #'   code) or `"symbolic"` (SymPy Jacobian + chain rule against upstream
@@ -726,10 +731,31 @@ Xd <- function(data, condition = NULL) {
 Y <- function(g, f = NULL, states = NULL, parameters = NULL,
               condition = NULL, attach.input = FALSE,
               compile = FALSE, modelname = NULL, verbose = FALSE,
-              deriv = TRUE, deriv2 = FALSE,
+              cores = NULL, deriv = TRUE, deriv2 = FALSE,
               derivMode = c("dual", "symbolic"), outdir = getwd()) {
 
   derivMode <- match.arg(derivMode)
+
+  # A named list of observable sets builds one obsfn per condition, generated
+  # in parallel and compiled once, the way `P()` handles a trafo list.
+  if (is.list(g) && !inherits(g, "eqnvec")) {
+    if (is.null(names(g)) || any(!nzchar(names(g))))
+      stop("Y(): a list of observables needs the conditions as its names.",
+           call. = FALSE)
+    cores <- if (Sys.info()[["sysname"]] == "Windows") 1L
+             else if (is.null(cores)) detectFreeCores()
+             else min(detectFreeCores(), cores)
+    result <- Reduce("+", parallel::mclapply(seq_along(g), function(i)
+      Y(g[[i]], f = f, states = states, parameters = parameters,
+        condition = names(g)[i], attach.input = attach.input,
+        compile = FALSE, modelname = modelname, verbose = verbose,
+        deriv = deriv, deriv2 = deriv2, derivMode = derivMode, outdir = outdir),
+      mc.cores = cores))
+    if (compile)
+      compile(result, cores = cores, output = modelname, verbose = verbose)
+    return(result)
+  }
+
   emit_d1 <- isTRUE(deriv)
   emit_d2 <- isTRUE(deriv2)
   if (emit_d2 && !emit_d1)
@@ -839,10 +865,14 @@ Y <- function(g, f = NULL, states = NULL, parameters = NULL,
       # attach.input = TRUE) under attach.input semantics matching gfun.
       gAll <- ad_out$y
       gVal <- gAll[, observables, drop = FALSE]
-      if (any(is.nan(gVal)))
+      if (any(is.nan(gVal))) {
+        hit <- which(colSums(is.nan(gVal)) > 0)
+        when <- vapply(hit, function(j) out[which(is.nan(gVal[, j]))[1], "time"], 0)
         stop("Observable(s) evaluate to NaN: ",
-             paste(observables[colSums(is.nan(gVal)) > 0], collapse = ", "),
+             paste0(observables[hit], " (first at time ", format(when), ")",
+                    collapse = ", "),
              "\nLikely cause: division by zero or missing inputs.")
+      }
       values <- cbind(time = out[, "time"], gVal)
       if (attach.input) values <- cbind(values, submatrix(out, cols = -1))
       myderivs <- ad_out$dy
@@ -885,10 +915,14 @@ Y <- function(g, f = NULL, states = NULL, parameters = NULL,
       # Symbolic path (also serves the !compile fallback for AD modes).
       gVal <- gfun(out[, obsStates, drop = FALSE], params[obsParams], attach.input, fixedObsParams)[, observables, drop = FALSE]
 
-      if (any(is.nan(gVal)))
+      if (any(is.nan(gVal))) {
+        hit <- which(colSums(is.nan(gVal)) > 0)
+        when <- vapply(hit, function(j) out[which(is.nan(gVal[, j]))[1], "time"], 0)
         stop("Observable(s) evaluate to NaN: ",
-             paste(observables[colSums(is.nan(gVal)) > 0], collapse = ", "),
+             paste0(observables[hit], " (first at time ", format(when), ")",
+                    collapse = ", "),
              "\nLikely cause: division by zero or missing inputs.")
+      }
 
       values <- cbind(time = out[, "time"], gVal)
       if (attach.input) values <- cbind(values, submatrix(out, cols = -1))
@@ -928,7 +962,7 @@ Y <- function(g, f = NULL, states = NULL, parameters = NULL,
         }
 
         # Second-order: delegate the full sandwich to ghess(), which applies
-        # chain_hess_sym internally. We pass upstream seeds (dX, dP, dX2, dP2)
+        # chain_hess_sym internally. Upstream seeds (dX, dP, dX2, dP2) go in
         # and let cppDE produce d2y already aligned to theta.
         if (deriv2) {
           if (is.null(ghess))
@@ -1055,7 +1089,7 @@ Xt <- function(condition = NULL) {
 
     out <- matrix(times, ncol = 1, dimnames = list(NULL, "time"))
 
-    # time has no parameter dependence -- both sens1 and sens2 are zero arrays
+    # time has no parameter dependence, both sens1 and sens2 are zero arrays
     # in batch-first [time, observable, ...] layout matching Xs.
     sens  <- array(0, dim = c(n_times, 1, n_pars),
                    dimnames = list(NULL, "time", par_names))

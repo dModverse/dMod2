@@ -90,6 +90,7 @@ void accumulate_aloq_residual(
     const double* lloq,
     const AccumOpts& opts,
     double& value_acc,
+    double& chi2_acc,
     double* grad_acc,
     double* hess_acc) {
 
@@ -122,6 +123,7 @@ void accumulate_aloq_residual(
 
     // Value: ALOQ likelihood contribution.
     value_acc += wr * wr + LOG_2PI + 2.0 * std::log(sig);
+    chi2_acc  += wr * wr;
 
     // M4BEAL ALOQ-side correction term: +2 log Phi(w0).
     double w0 = 0.0, G_w0 = 0.0;

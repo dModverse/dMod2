@@ -80,8 +80,8 @@ exmpextr <- function(test, testPath = NULL, examplePath = NULL) {
     # Get the current example block
     blockCode <- code[(s + 1):(e - 1)]
     
-    # Inspect lines in order to remove our tag.
-    # We do not guarantee, that 'tag' is the first non-whitespace character.
+    # Inspect lines in order to remove the tag.
+    # 'tag' is not guaranteed to be the first non-whitespace character.
     # Thus, the first occurence of 'tag' is removed irrespective of its position
     # in l. This seems to be a corner case which is not worth introducing an
     # extra if statement.

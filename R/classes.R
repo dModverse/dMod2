@@ -93,7 +93,7 @@ match.fnargs <- function(arglist, choices) {
 # One entry per condition, or a single entry when `conds` is NULL.
 #
 # shared = TRUE: pars/fixed/out are n references to one object. A leaf must
-# then evaluate once and replicate -- batching would turn one solve into n.
+# then evaluate once and replicate, batching would turn one solve into n.
 #
 # times is one vector for all requests, or a list of n for per-request grids;
 # every composition call site shares one.
@@ -380,7 +380,7 @@ match.fnargs <- function(arglist, choices) {
 ## ---- Public shim ---------------------------------------------------------
 
 # Every fn object is this: a thin wrapper over its descriptor. The signature
-# is the pre-rebuild one plus `cores`, which must be a formal -- match.fnargs
+# is the pre-rebuild one plus `cores`, which must be a formal, match.fnargs
 # drops named arguments it does not know, so a `cores` in `...` would vanish.
 .fnWrap <- function(st) {
   function(..., fixed = NULL, deriv = TRUE, deriv2 = FALSE,
@@ -502,7 +502,7 @@ match.fnargs <- function(arglist, choices) {
 }
 
 # A condition-unspecific operand is asked with NULL, not with the composed
-# condition name -- otherwise getParameters/modelname return nothing.
+# condition name, otherwise getParameters/modelname return nothing.
 .condFor <- function(f, cond) if (is.null(attr(f, "conditions"))) NULL else cond
 
 # Read `what` off an operand's mapping for one condition.

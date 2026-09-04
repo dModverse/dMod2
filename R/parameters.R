@@ -1322,9 +1322,10 @@ Pimpl <- function(trafo, parameters = NULL, forcings = NULL, condition = NULL,
   if (is.null(modelname)) modelname <- "equil_parfn"
   if (!is.null(condition)) modelname <- paste(modelname, sanitizeConditions(condition), sep = "_")
 
+  fixedSyms <- dotArgs[["fixed"]]; dotArgs[["fixed"]] <- NULL
   base <- c(list(rhs = unclass(f[dependent]), rootfunc = "equilibrate", compile = compile,
                  outdir = outdir, verbose = verbose), dotArgs)
-  fixed_states <- setdiff(dependent, pivots)
+  fixed_states <- union(setdiff(dependent, pivots), fixedSyms)
   model    <- do.call(cppDE::cppODE, c(base, list(deriv = FALSE, deriv2 = FALSE,
                                                    modelname = modelname)))
   model_s  <- if (emit_d1)
@@ -1383,6 +1384,9 @@ Pimpl <- function(trafo, parameters = NULL, forcings = NULL, condition = NULL,
     }
 
     sens_model <- if (deriv2) model_s2 else if (deriv) model_s else model
+    # The solver error is the only account of why an attempt produced nothing,
+    # so it is kept for the failure message rather than discarded.
+    last_err <- NULL
     run_attempt <- function(y0) {
       tryCatch(
         cppDE::solveODE(
@@ -1395,7 +1399,10 @@ Pimpl <- function(trafo, parameters = NULL, forcings = NULL, condition = NULL,
           maxattemps = as.integer(controls$maxattemps),
           hini = controls$hini, maxroot = as.integer(controls$maxroot),
           onFailure = "silent"),
-        error = function(e) NULL)
+        error = function(e) {
+          last_err <<- .solveFailure(e, c(y0, p[model_params]))
+          NULL
+        })
     }
     is_success <- function(r) {
       if (is.null(r) || is.null(r$diagnostics)) return(FALSE)
@@ -1432,7 +1439,8 @@ Pimpl <- function(trafo, parameters = NULL, forcings = NULL, condition = NULL,
       setNames(rep(0, length(zero_states)), zero_states) else NULL
     if (!is_success(res)) {
       rc <- if (!is.null(res) && !is.null(res$diagnostics))
-              as.character(res$diagnostics$return_code) else "exception"
+              as.character(res$diagnostics$return_code)
+            else paste0("exception: ", last_err %||% "no message")
       stop("Pequil: no steady state reached after ", ms$nStarts,
            " integration attempt(s) (last return_code: ", rc, "). Either no stable ",
            "fixed point exists in this regime, the totals admit no non-negative ",
@@ -1514,6 +1522,17 @@ Pimpl <- function(trafo, parameters = NULL, forcings = NULL, condition = NULL,
 }
 
 
+# Internal: the solver error, with the non-finite parameters named. A missing
+# or overflowing value reaches the solver as a bare "'parms' must be finite",
+# which says nothing about where it came from.
+.solveFailure <- function(e, parms) {
+  msg <- conditionMessage(e)
+  bad <- names(parms)[!is.finite(parms)]
+  if (!length(bad)) return(msg)
+  paste0(msg, " [", paste(bad, collapse = ", "), "]")
+}
+
+
 #' Parameter transformation (steady states via pre-equilibration)
 #'
 #' Returns a [parfn] over the outer inputs. On call, the parfn integrates
@@ -1557,7 +1576,11 @@ Pimpl <- function(trafo, parameters = NULL, forcings = NULL, condition = NULL,
 #'   default the working directory.
 #' @param deriv,deriv2 Attach first/second-order sensitivities; `deriv2`
 #'   requires the model built with `deriv2 = TRUE`.
-#' @param ... Forwarded to [cppDE::cppODE].
+#' @param ... Forwarded to [cppDE::cppODE]. `fixed` is a character vector of
+#'   symbols left out of the sensitivity system, on top of the states. A
+#'   constant that the outer parameters never reach belongs there: its
+#'   sensitivity can drift without ever settling and would then veto the
+#'   steady state.
 #'
 #' @return A [parfn].
 #' @seealso [Pexpl], [Pimpl], [P].
@@ -1601,6 +1624,9 @@ Pequil <- function(trafo, parameters = NULL, forcings = NULL, condition = NULL,
   if (!is.null(condition)) modelname <- paste(modelname, sanitizeConditions(condition), sep = "_")
 
   dotArgs <- list(...); dotArgs[["deriv2"]] <- NULL
+  # `fixed` names symbols to leave out of the sensitivity system. It is merged
+  # with the states below rather than handed to cppODE twice.
+  fixedSyms <- dotArgs[["fixed"]]; dotArgs[["fixed"]] <- NULL
   base <- c(list(rhs = unclass(f_red), rootfunc = "equilibrate", compile = compile,
                  outdir = outdir, verbose = verbose), dotArgs)
   model    <- do.call(cppDE::cppODE, c(base, list(deriv = FALSE, deriv2 = FALSE,
@@ -1608,11 +1634,11 @@ Pequil <- function(trafo, parameters = NULL, forcings = NULL, condition = NULL,
   model_s  <- if (emit_d1)
     do.call(cppDE::cppODE, c(base, list(deriv = TRUE,  deriv2 = FALSE,
                                          modelname = paste0(modelname, "_s"),
-                                         fixed = names(f)))) else NULL
+                                         fixed = union(names(f), fixedSyms)))) else NULL
   model_s2 <- if (emit_d2)
     do.call(cppDE::cppODE, c(base, list(deriv = TRUE, deriv2 = TRUE,
                                          modelname = paste0(modelname, "_s2"),
-                                         fixed = names(f)))) else NULL
+                                         fixed = union(names(f), fixedSyms)))) else NULL
   all_sens <- if (emit_d1) attr(model_s, "dimNames")$sens else character(0)
 
   ode_ctrl <- modifyList(list(abstol = 1e-6, reltol = 1e-6, maxsteps = 1e6L,
@@ -1698,6 +1724,7 @@ Pequil <- function(trafo, parameters = NULL, forcings = NULL, condition = NULL,
     n_active    <- length(active_sens)
     sens_model  <- ctx$sens_model
 
+    last_err <- NULL
     run_attempt <- function(y0_dep, use_cache_sens) {
       a <- solveArgs(ctx, y0_dep, use_cache_sens)
       tryCatch(
@@ -1709,7 +1736,7 @@ Pequil <- function(trafo, parameters = NULL, forcings = NULL, condition = NULL,
           maxattemps = as.integer(controls$maxattemps),
           hini = controls$hini, maxroot = as.integer(controls$maxroot),
           onFailure = "silent"),
-        error = function(e) NULL)
+        error = function(e) { last_err <<- .solveFailure(e, a$parms); NULL })
     }
     is_success <- function(r) {
       if (is.null(r) || is.null(r$diagnostics)) return(FALSE)
@@ -1743,7 +1770,8 @@ Pequil <- function(trafo, parameters = NULL, forcings = NULL, condition = NULL,
 
     if (!is_success(res)) {
       rc <- if (!is.null(res) && !is.null(res$diagnostics))
-              as.character(res$diagnostics$return_code) else "exception"
+              as.character(res$diagnostics$return_code)
+            else paste0("exception: ", last_err %||% "no message")
       stop("Pequil: no steady state reached after ", ms$nStarts,
            " integration attempt(s) (last return_code: ", rc, "). ",
            "Either no stable fixed point exists in this parameter regime, ",

@@ -130,6 +130,7 @@ List run_kernel(bool aloq,
   }
 
   double value = 0.0;
+  double chi2  = 0.0;
   std::vector<double> grad(n_par, 0.0);
   std::vector<double> hess((std::size_t) n_par * (std::size_t) n_par, 0.0);
 
@@ -139,7 +140,7 @@ List run_kernel(bool aloq,
         pred.begin(), dpred_rm.data(), d2pred_ptr,
         y_data.begin(), sigma.begin(),
         dsigma_ptr, d2sigma_ptr, lloq_ptr,
-        opts, value, grad.data(), hess.data());
+        opts, value, chi2, grad.data(), hess.data());
   } else {
     dmod::accumulate_bloq_residual(
         n_obs, n_par,
@@ -155,6 +156,7 @@ List run_kernel(bool aloq,
 
   return List::create(
       Named("value")    = value,
+      Named("chi2")     = chi2,
       Named("gradient") = NumericVector(grad.begin(), grad.end()),
       Named("hessian")  = H);
 }

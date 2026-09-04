@@ -528,3 +528,94 @@ test_that("normL2 cpp kernel agrees with R reference on the linear-decay fixture
   expect_equal(o_C$gradient, o_R$gradient, tolerance = 1e-8)
   expect_equal(o_C$hessian,  o_R$hessian,  tolerance = 1e-8)
 })
+
+
+# ============================================================================
+# chi2 attribute
+# ============================================================================
+
+test_that("normL2 reports the sum of squares as a chi2 attribute", {
+  skip_if_no_compile()
+  bench <- fx_decay_compiled()
+  data  <- fx_decay_data(sigma = 0.1)
+
+  o <- normL2(data, bench$prd_id)(bench$outerpars_id)
+  n <- sum(vapply(data, nrow, 0L))
+  # value = chi2 + sum(log(2 pi sigma^2)), with one sigma over the fixture
+  expect_equal(unname(attr(o, "chi2")),
+               o$value - n * log(2 * pi * 0.1^2), tolerance = 1e-9)
+  expect_equal(names(attr(o, "chi2")), "data")
+})
+
+
+test_that("terms sharing an attr.name pool their chi2, others split", {
+  skip_if_no_compile()
+  bench <- fx_decay_compiled()
+  data  <- fx_decay_data(sigma = 0.1)
+
+  one  <- normL2(data, bench$prd_id)
+  chi1 <- unname(attr(one(bench$outerpars_id), "chi2"))
+
+  same <- (one + normL2(data, bench$prd_id))(bench$outerpars_id)
+  expect_equal(unname(attr(same, "chi2")), 2 * chi1, tolerance = 1e-9)
+  expect_null(attr(same, "chi2_data"))
+
+  split <- (one + normL2(data, bench$prd_id, attr.name = "validation"))(bench$outerpars_id)
+  expect_null(attr(split, "chi2"))
+  expect_equal(unname(attr(split, "chi2_data")), chi1, tolerance = 1e-9)
+  expect_equal(unname(attr(split, "chi2_validation")), chi1, tolerance = 1e-9)
+
+  # a third term folds back into the contribution it belongs to
+  three <- (one + normL2(data, bench$prd_id, attr.name = "validation") +
+              normL2(data, bench$prd_id))(bench$outerpars_id)
+  expect_equal(unname(attr(three, "chi2_data")), 2 * chi1, tolerance = 1e-9)
+  expect_equal(unname(attr(three, "chi2_validation")), chi1, tolerance = 1e-9)
+})
+
+
+# ============================================================================
+# Printing
+# ============================================================================
+
+test_that("print.objlist skips the blocks a deriv = FALSE call does not carry", {
+  o <- structure(list(value = -480.3, gradient = NULL, hessian = NULL),
+                 class = "objlist")
+  attr(o, "data") <- -480.3
+  attr(o, "chi2") <- c(data = 541)
+  out <- capture.output(print(o))
+  expect_true(any(grepl("^value", out)))
+  expect_false(any(grepl("^(gradient|hessian)\\[", out)))
+  # the attribute block carries names and numbers, not storage modes
+  expect_true(any(grepl("^ chi2 +541", out)))
+  expect_false(any(grepl("num |chr |List of", out)))
+
+  g <- setNames(c(1, 2, 3), letters[1:3])
+  h <- matrix(0, 3, 3, dimnames = list(letters[1:3], letters[1:3]))
+  o2 <- structure(list(value = 1.5, gradient = g, hessian = h), class = "objlist")
+  out2 <- capture.output(print(o2))
+  expect_true(any(grepl("gradient\\[1:3\\]", out2)))
+  expect_true(any(grepl("hessian\\[1:3,1:3\\]", out2)))
+})
+
+
+test_that("normL2 gradient and Hessian follow the order of the parameter vector", {
+  skip_if_no_compile()
+  bench <- fx_decay_compiled()
+  data  <- fx_decay_data(sigma = 0.1)
+
+  p1 <- bench$outerpars_id
+  p2 <- p1[rev(names(p1))]
+
+  for_each_backend(function(cpp) {
+    obj <- normL2(data, bench$prd_id)
+    o1 <- obj(p1)
+    o2 <- obj(p2)
+
+    expect_identical(names(o1$gradient), names(p1), info = paste0("cpp=", cpp))
+    expect_identical(names(o2$gradient), names(p2), info = paste0("cpp=", cpp))
+    expect_equal(o1$value, o2$value, info = paste0("cpp=", cpp))
+    expect_equal(o1$gradient[names(p2)], o2$gradient, info = paste0("cpp=", cpp))
+    expect_equal(o1$hessian[names(p2), names(p2)], o2$hessian,
+                 info = paste0("cpp=", cpp))
+  })
+})

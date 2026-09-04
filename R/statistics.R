@@ -259,8 +259,13 @@ profile <- function(objfun, pars, whichPar, alpha = 0.05,
                                 warning(paste0("Iteration ", i, ": Impossible to invert Hessian. Trying to optimize instead."))
                               }
                               
-                              # Get attributes of the returned objective value (only if numeric)
+                              # Numeric attributes of the objective value become
+                              # profile modes, and those have to add up to the
+                              # total. chi2 is a decomposition of one of them,
+                              # not a term next to it.
                               out.attributes <- attributes(out)[sapply(attributes(out), is.numeric)]
+                              out.attributes <- out.attributes[
+                                !grepl("^chi2($|_)", names(out.attributes))]
                               out.attributes.names <- names(out.attributes)
                               
                               
@@ -760,7 +765,7 @@ vcov <- function(fit, parupper = NULL, parlower = NULL) {
   
   # Which parameters are held by a bound rather than determined by the data.
   # `trust(boundary = "reflective")` keeps iterates strictly inside the box, so
-  # an exact comparison against the bound never fires -- it reports the activity
+  # an exact comparison against the bound never fires, it reports the activity
   # itself. The comparison below is the fallback for fits without that field,
   # and is relaxed to a relative tolerance for the same reason.
   fixed <- NULL
@@ -788,14 +793,6 @@ vcov <- function(fit, parupper = NULL, parlower = NULL) {
   
   # This part should not be necessary due to regularization usually done
   # Perform identifiability check based on
-  # subvcov__ <- vcov__[!is_fixed__, !is_fixed__, drop = FALSE]
-  # eigen__ <- eigen(subhessian__)
-  # tol__ <- sqrt(.Machine$double.eps)
-  # V__ <- eigen__[["vectors"]][, abs(eigen__[["values"]]) < tol__, drop = FALSE]
-  # identifiable__ <- apply(V__, 1, function(v) all(abs(v) < tol__))
-  # diag(subvcov__)[!identifiable__] <- Inf
-  # 
-  # vcov__[!is_fixed__, !is_fixed__] <- subvcov__
   
   return(vcov__) 
   
@@ -981,7 +978,7 @@ mstrust <- function(objfun, center, rinit = .1, rmax = 10, fits = 20, cores = 1,
   
   
   # cores = c(fits = , conditions = ) splits the two axes. A forked outer axis
-  # cannot carry an inner one -- cppDE's batch runs serially inside a fork --
+  # cannot carry an inner one, cppDE's batch runs serially inside a fork --
   # so an inner axis > 1 selects PSOCK.
   .cc <- .splitCores(cores, "fits")
   coresConditions <- .cc$conditions
@@ -1085,7 +1082,7 @@ mstrust <- function(objfun, center, rinit = .1, rmax = 10, fits = 20, cores = 1,
     
     
     # In some crashes a try-error object is returned which is not a list. Since
-    # each element in the parlist is assumed to be a list, we wrap these cases.
+    # each element in the parlist is assumed to be a list, these cases are wrapped.
     if (!is.list(fit)) {
       f <- list()
       f$error <- fit

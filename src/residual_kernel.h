@@ -7,6 +7,7 @@
 //
 //   For ALOQ rows (val > lloq):
 //     obj   += wr^2 + log(2 pi sigma^2)
+//     chi2  += wr^2                    (the data term without its normaliser)
 //     grad  += 2 * (wr * dwr/dtheta + 1/sigma * dsigma/dtheta)
 //     hess  += 2 * outer(dwr/dtheta, dwr/dtheta)              -- Part0 (GN)
 //            + ALOQ_part1 + ALOQ_part2 + ALOQ_part3            -- toggleable
@@ -113,6 +114,8 @@ struct AccumOpts {
 //
 // In/out:
 //   value_acc   scalar accumulator
+//   chi2_acc    scalar accumulator over wr^2 alone. Censored rows contribute
+//               nothing to it, so it stays the classical sum of squares.
 //   grad_acc    [n_par] accumulator
 //   hess_acc    [n_par * n_par] accumulator, column-major
 void accumulate_aloq_residual(
@@ -128,6 +131,7 @@ void accumulate_aloq_residual(
     const double* lloq,
     const AccumOpts& opts,
     double& value_acc,
+    double& chi2_acc,
     double* grad_acc,
     double* hess_acc);
 

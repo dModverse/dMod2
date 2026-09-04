@@ -76,7 +76,7 @@
 #'   priority-table cycle breaking, `simplify` toggle, optional quadratic
 #'   state-side solve), or `"1.3"` (default; same interface as `"1.2"`, but
 #'   solutions are recorded lazily and resolved once at output time, with a
-#'   lock guard replacing most rollbacks -- typically orders of magnitude
+#'   lock guard replacing most rollbacks, typically orders of magnitude
 #'   faster on feedback-heavy networks).
 #'
 #' @return Named character vector of steady-state equations in dMod format, or
@@ -214,7 +214,7 @@ steadyStates <- function(model, file = NULL, rates = NULL, forcings = NULL,
   if (length(m_ssChar) == 0) return(0)
 
   # Versions 1.2+ resolve on the backend side; this covers the older ones. Only
-  # rewrite when there is something to resolve -- resolveRecurrence() reformats
+  # rewrite when there is something to resolve, resolveRecurrence() reformats
   # every equation it touches, which would break printed == returned.
   if (resolve && outputFormat == "R" && length(m_ssChar) > 1) {
     # Entries kept as their own name are free parameters, not definitions.

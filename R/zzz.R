@@ -1,6 +1,6 @@
 #' Package initialization
 #'
-#' Declares the Python dependencies the symbolic layer needs -- `getLinVars()`
+#' Declares the Python dependencies the symbolic layer needs, `getLinVars()`
 #' and the `simplify` path in `eqnClass.R`, and `steadyStates()`.
 #' `reticulate::py_require()` does not start Python here: it records the
 #' requirement so the first call into Python provisions an env that has the

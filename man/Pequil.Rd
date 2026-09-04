@@ -72,7 +72,11 @@ requires the model built with \code{deriv2 = TRUE}.}
 \item{outdir}{Directory for the generated source and shared object,
 default the working directory.}
 
-\item{...}{Forwarded to \link[cppDE:cppODE]{cppDE::cppODE}.}
+\item{...}{Forwarded to \link[cppDE:cppODE]{cppDE::cppODE}. \code{fixed} is a character vector of
+symbols left out of the sensitivity system, on top of the states. A
+constant that the outer parameters never reach belongs there: its
+sensitivity can drift without ever settling and would then veto the
+steady state.}
 }
 \value{
 A \link{parfn}.

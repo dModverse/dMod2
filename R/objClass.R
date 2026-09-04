@@ -97,6 +97,25 @@ evalConditionResidual <- function(dataI, predictionI, pars,
 
 
 
+# Internal: gradient and Hessian in the order of the parameter vector the
+# objective was called with. The kernel names them after the union of the
+# per-condition sensitivity blocks, while `trust()` and `optim()` read them
+# positionally against their own start vector. A parameter the objective does
+# not depend on gets a zero derivative rather than being left out.
+.alignObjlist <- function(out, pnames) {
+  g <- out$gradient
+  if (is.null(g) || !length(pnames) || identical(names(g), pnames)) return(out)
+  hit <- intersect(pnames, names(g))
+  gradient <- setNames(numeric(length(pnames)), pnames)
+  gradient[hit] <- g[hit]
+  hessian <- matrix(0, length(pnames), length(pnames),
+                    dimnames = list(pnames, pnames))
+  if (!is.null(out$hessian) && length(hit)) hessian[hit, hit] <- out$hessian[hit, hit]
+  out$gradient <- gradient
+  out$hessian  <- hessian
+  out
+}
+
 #' L2 norm between data and model prediction
 #'
 #' @description
@@ -114,8 +133,11 @@ evalConditionResidual <- function(dataI, predictionI, pars,
 #'   data. Event times should be included here if the prediction model uses events.
 #' @param t0 Numeric. Start of the time grid, i.e. the time at which initial
 #'   values take effect. Defaults to 0.
-#' @param attr.name Character string. The objective value is additionally returned
-#'   as an attribute with this name.
+#' @param attr.name Character string. The objective value is additionally
+#'   returned as an attribute of this name, and the sum of squares behind it
+#'   under `chi2`. Adding objectives pools the terms sharing an `attr.name`,
+#'   so `chi2` stays one number; where two `attr.name`s meet it splits into
+#'   `chi2_<attr.name>` per contribution.
 #' @param cores Deprecated and ignored. Pass `cores` to the objective call, or
 #'   set `options(dMod.cores = )`.
 #' @param opt.BLOQ Character. NONMEM-style treatment of below-LOQ rows
@@ -243,10 +265,15 @@ normL2 <- function(data, x, errmodel = NULL, times = NULL, t0 = 0,
       bloq_mode        = opt.BLOQ
     )
     out <- if (deriv)
-      objlist(value = kr$value, gradient = kr$gradient, hessian = kr$hessian)
+      .alignObjlist(objlist(value = kr$value, gradient = kr$gradient,
+                            hessian = kr$hessian), names(pars))
     else
       objlist(value = kr$value, gradient = NULL, hessian = NULL)
     attr(out, attr.name) <- out$value
+    # The sum of squares alone, tagged with the contribution it belongs to.
+    # Summing objectives pools terms sharing an `attr.name` into one `chi2` and
+    # splits the rest into `chi2_<attr.name>`.
+    attr(out, "chi2") <- setNames(kr$chi2, attr.name)
     env$prediction <- prediction
     attr(out, "env") <- env
     out
@@ -774,8 +801,10 @@ constraintRayleigh <- function(sigma, attr.name = "prior", condition = NULL) {
 #' @param value character, the name of the parameter which contains the
 #' prediction value.
 #' @param sigma numeric, the uncertainty of the introduced test data point
-#' @param attr.name character. The constraint value is additionally returned in an 
-#' attributed with this name
+#' @param attr.name character. The constraint value is additionally returned in
+#' an attribute of this name. Being a squared standardised residual already, it
+#' is also the term's `chi2` contribution, which pools with [normL2]'s under the
+#' rules described there.
 #' @param condition character, the condition for which the prediction is made.
 #' @return List of class \code{objlist}, i.e. objective value, gradient and Hessian as list.
 #' @seealso [normL2], [constraintL2]
@@ -841,6 +870,8 @@ datapointL2 <- function(name, time, value, sigma = 1, attr.name = "validation", 
 
     out <- objlist(value = kr$value, gradient = kr$gradient, hessian = kr$hessian)
     attr(out, attr.name)    <- out$value
+    # The value is the squared standardised residual itself, no normaliser.
+    attr(out, "chi2")       <- setNames(out$value, attr.name)
     attr(out, "prediction") <- kr$prediction
     attr(out, "env")        <- env
     class(out) <- NULL
@@ -899,10 +930,13 @@ datapointL2 <- function(name, time, value, sigma = 1, attr.name = "validation", 
                                    out1$hessian), out2$hessian)))
   names(out12) <- what
 
-  # Numeric attributes are summed, an absent one counting as zero.
+  # Numeric attributes are summed, an absent one counting as zero. The chi2
+  # contributions are kept apart from that: they are pooled by the `attr.name`
+  # they belong to, not by the attribute they happen to sit under.
   numeric_attrs <- function(x) {
     a <- attributes(x)
-    a[vapply(a, is.numeric, logical(1))]
+    a <- a[vapply(a, is.numeric, logical(1))]
+    a[!grepl("^chi2($|_)", names(a))]
   }
   a1 <- numeric_attrs(out1)
   a2 <- numeric_attrs(out2)
@@ -910,26 +944,68 @@ datapointL2 <- function(name, time, value, sigma = 1, attr.name = "validation", 
     attr(out12, n) <- (if (is.null(a1[[n]])) 0 else a1[[n]]) +
                       (if (is.null(a2[[n]])) 0 else a2[[n]])
 
+  chi2 <- c(.chi2Contributions(out1), .chi2Contributions(out2))
+  if (length(chi2)) {
+    chi2 <- vapply(split(unname(chi2), names(chi2)), sum, 0)
+    if (length(chi2) == 1L) attr(out12, "chi2") <- chi2
+    else for (n in names(chi2)) attr(out12, paste0("chi2_", n)) <- unname(chi2[n])
+  }
+
   class(out12) <- "objlist"
 
   out12
 }
 
 
+# The chi2 contributions of an objlist as one named vector, however they are
+# currently stored: a single one sits under `chi2`, several under `chi2_<name>`.
+.chi2Contributions <- function(x) {
+  a <- attributes(x)
+  a <- a[grepl("^chi2($|_)", names(a))]
+  if (!length(a)) return(numeric(0))
+  out <- unlist(a, use.names = FALSE)
+  names(out) <- unlist(lapply(names(a), function(n)
+    if (identical(n, "chi2")) names(a[[n]]) else sub("^chi2_", "", n)))
+  out
+}
+
+
 #' @export
 print.objlist <- function(x, n1 = 20, n2 = 6, ...) {
-  n1 <- min(n1,length(x$gradient))
-  n2 <- min(n2,length(x$gradient))
   cat("value\n", "==================\n",x$value, "\n")
-  cat("gradient[1:",n1,"] (full length = ",length(x$gradient),")\n", "==================\n", sep = "")
-  print(x$gradient[1:n1])
+  # An objlist from a `deriv = FALSE` call carries the value alone.
+  if (length(x$gradient)) {
+    n1 <- min(n1, length(x$gradient))
+    cat("gradient[1:",n1,"] (full length = ",length(x$gradient),")\n", "==================\n", sep = "")
+    print(x$gradient[1:n1])
+    cat("\n")
+  }
+  if (length(x$hessian)) {
+    n2 <- min(n2, nrow(x$hessian))
+    cat("hessian[1:",n2,",1:",n2,"]","\n", "==================\n", sep = "")
+    print(x$hessian[1:n2,1:n2, drop = FALSE])
+    cat("\n")
+  }
   cat("\n")
-  cat("hessian[1:",n2,",1:",n2,"]","\n", "==================\n", sep = "")
-  print(x$hessian[1:n2,1:n2])
-  cat("\n\n")
   cat("attributes\n", "==================\n")
-  cat(capture.output(str(attributes(x), max.level = 1)), sep = "\n")
-  
+  # str() would prefix every line with the storage mode, and the chi2 tag with
+  # a line of its own. The attributes carry objective contributions, so what
+  # matters is the name and the number.
+  a <- attributes(x)[setdiff(names(attributes(x)), c("names", "class"))]
+  if (length(a)) {
+    w <- max(nchar(names(a)))
+    for (n in names(a)) cat(sprintf(" %-*s  %s\n", w, n, .objlistAttrText(a[[n]])))
+  }
+  invisible(x)
+}
+
+
+# One line for one objlist attribute, no storage mode and no nesting.
+.objlistAttrText <- function(v) {
+  if (is.environment(v)) return("<environment>")
+  if (is.numeric(v) || is.character(v))
+    return(paste(format(unname(v), trim = TRUE), collapse = ", "))
+  paste0("<", paste(class(v), collapse = "/"), ">")
 }
 
 

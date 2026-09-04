@@ -126,12 +126,12 @@ controls.fn <- function(x, condition = NULL, name = NULL, ...) {
 #'
 #' @return The structure of the returned object depends on the class of `x`:
 #' \itemize{
-#'   \item `parvec` – a matrix containing first-order parameter derivatives.
-#'   \item `prdframe` – a `prdframe` containing time and first-order sensitivities
+#'   \item `parvec`: a matrix containing first-order parameter derivatives.
+#'   \item `prdframe`: a `prdframe` containing time and first-order sensitivities
 #'     of each model variable with respect to all parameters.
-#'   \item `prdlist` – a `prdlist` whose elements are first-derivative `prdframe`s.
-#'   \item `list` – a list of derivative objects, depending on the elements.
-#'   \item `objlist` – directly returns the stored gradient (named numeric vector).
+#'   \item `prdlist`: a `prdlist` whose elements are first-derivative `prdframe`s.
+#'   \item `list`: a list of derivative objects, depending on the elements.
+#'   \item `objlist`: directly returns the stored gradient (named numeric vector).
 #' }
 #'
 #' @examples
@@ -237,11 +237,11 @@ getDerivs.objlist <- function(x, ...) {
 #'
 #' @return The structure of the returned object depends on the class of `x`:
 #' \itemize{
-#'   \item `parvec` – a 3D array `[p, theta, theta]` of second derivatives.
-#'   \item `prdframe` – a 4D array `[time, variable, theta, theta]`.
-#'   \item `prdlist` – a list of `prdframe` second-derivative arrays.
-#'   \item `objlist` – the stored `hessian` matrix.
-#'   \item `list` – a list of derivative objects, depending on the elements.
+#'   \item `parvec`: a 3D array `[p, theta, theta]` of second derivatives.
+#'   \item `prdframe`: a 4D array `[time, variable, theta, theta]`.
+#'   \item `prdlist`: a list of `prdframe` second-derivative arrays.
+#'   \item `objlist`: the stored `hessian` matrix.
+#'   \item `list`: a list of derivative objects, depending on the elements.
 #' }
 #'
 #' @examples
@@ -557,12 +557,16 @@ modelname.fn <- function(x = NULL, ..., conditions = NULL) {
         modelname(m) <- value[i %% length(value) + 1]  # recursive
       } else {
         attr(m, "modelname") <- value[i %% length(value) + 1]
-        # handle prdfn special environments
-        if (inherits(x, "prdfn")) {
-          if (!is.null(environment(m)[["func"]])) 
-            attr(environment(m)[["func"]], "modelname") <- value[i %% length(value) + 1]
-          if (!is.null(environment(m)[["extended"]])) 
-            attr(environment(m)[["extended"]], "modelname") <- value[i %% length(value) + 1]
+        # A deSolve leaf keeps the compiled model in its closure, and cOde
+        # reads the shared object to load from there while the entry point
+        # names come from the object's own value. The rename therefore has to
+        # reach the closure, including when the leaf sits inside a composition.
+        e <- if (is.function(m)) environment(m) else NULL
+        if (!is.null(e)) {
+          if (!is.null(e[["func"]]))
+            attr(e[["func"]], "modelname") <- value[i %% length(value) + 1]
+          if (!is.null(e[["extended"]]))
+            attr(e[["extended"]], "modelname") <- value[i %% length(value) + 1]
         }
       }
       mappings[[i]] <- m

@@ -1,8 +1,8 @@
 Package: dMod2
 Type: Package
 Title: Dynamic Modeling and Parameter Estimation in ODE Models
-Version: 0.6.5
-Date: 2026-09-02
+Version: 0.7.0
+Date: 2026-09-04
 Authors@R: c(
     person("Simon", "Beyer", email = "simon.beyer@fdm.uni-freiburg.de",
            role = c("aut", "cre")),
@@ -31,18 +31,10 @@ Description: Tools for dynamic modeling and parameter estimation in ordinary
     identifiability analysis, over experimental conditions that are integrated
     and evaluated in parallel. Further tools cover symbolic steady states,
     parameter transformations with implicit and steady-state solutions, error
-    models, and distributed computing on a cluster. Structural identifiability
-    is assessed by Lie symmetry detection on the model equations, and the
-    symmetries found can be used to reduce a model to an identifiable
-    parametrisation. Populations are fitted by nonlinear mixed-effects
-    estimation (FOCEI, adaptive sparse-grid Gauss-Hermite quadrature,
-    Laplace-EM and stochastic-approximation EM), including L1 penalties that
-    cluster individual parameters and select the number of clusters by marginal
-    likelihood. Posteriors are sampled by Markov chain Monte Carlo
-    (Metropolis-Hastings, Langevin, Hamiltonian and NUTS) and sequential Monte
-    Carlo, for single models and for populations. Models, experimental
+    models, and distributed computing on a cluster. Models, experimental
     conditions, measurements and parameter tables are imported from and
-    exported to the PEtab format, with SBML import and export through libSBML.
+    exported to the 'PEtab' format, with 'SBML' import and export through
+    'libSBML'.
 URL: https://github.com/dModverse/dMod2
 BugReports: https://github.com/dModverse/dMod2/issues
 License: GPL (>= 2)
@@ -50,7 +42,7 @@ Depends: R (>= 4.5.0)
 Imports:
     cOde,
     tools,
-    cppDE (>= 0.9.2),
+    cppDE (>= 0.9.3),
     ggplot2,
     parallel,
     stringr,
@@ -85,10 +77,11 @@ Suggests:
     cowplot,
     pander,
     purrr,
+    R.rsp,
     ragg,
     rjson,
     yaml
-VignetteBuilder: knitr
+VignetteBuilder: R.rsp
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
 LinkingTo: 

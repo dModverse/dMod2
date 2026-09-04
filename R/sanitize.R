@@ -1,9 +1,11 @@
-## sanitize.R -- input validation / normalization helpers
+## sanitize.R, input validation / normalization helpers
 
 sanitizeConditions <- function(conditions) {
   
-  new <- str_replace_all(conditions, "[[:punct:]]", "_")
-  new <- str_replace_all(new, "\\s+", "_")
+  # The result names generated C sources and identifiers, so anything outside
+  # the C identifier alphabet has to go. `[[:punct:]]` is not enough: ICU counts
+  # `^` and `+` as symbols, and a non-ASCII condition name would survive it too.
+  new <- str_replace_all(conditions, "[^A-Za-z0-9_]+", "_")
   return(new)
   
 }

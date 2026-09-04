@@ -21,7 +21,7 @@ detectFreeCores <- function(machine = NULL) {
     os <- if (!is.null(prefix)) cmd("uname") else Sys.info()[["sysname"]]
     
     if (grepl("Windows", os, ignore.case = TRUE)) {
-      # No load average on Windows -- return 1 free core as safe default
+      # No load average on Windows, return 1 free core as safe default
       warning("detectFreeCores: load average not available on Windows, returning 1")
       nCores <- parallel::detectCores()
       return(list(free = 1, nCores = nCores, occupied = NA_real_))
@@ -75,7 +75,7 @@ detectFreeCores <- function(machine = NULL) {
 ## from the cppDE package tree, and the shared object gets linked against
 ## BLAS/LAPACK (plus Sundials/KLU for CVODE and sparse models). `compile()`
 ## assembles those flags from the `"compileInfo"` attribute that every model
-## object carries -- but every path in there points into the *local* library
+## object carries, but every path in there points into the *local* library
 ## tree and is meaningless on the cluster.
 ##
 ## `.remoteBuildInfo()` therefore keeps only the portable part of that
@@ -181,7 +181,7 @@ detectFreeCores <- function(machine = NULL) {
 
   ## SUNDIALS/KLU flags come from the *remote* cppDE install, so they are
   ## resolved by Rscript inside the generated script. Embedded in a
-  ## single-quoted shell string -- must contain no single quotes.
+  ## single-quoted shell string, must contain no single quotes.
   cfgExpr <- function(field) paste0(
     "cfg <- get0(\"cvodeConfig\", envir = asNamespace(\"cppDE\"), inherits = FALSE); ",
     "cat(if (is.environment(cfg)) paste(unlist(mget(c(", field, "), envir = cfg, ",
@@ -206,7 +206,7 @@ detectFreeCores <- function(machine = NULL) {
       "if [ \"$NPROC\" -gt 16 ]; then NPROC=16; fi", "")
 
   ## Precompiled header, decided here because the prologue check needs the
-  ## sources. A missing .gch is harmless -- the header then just includes what
+  ## sources. A missing .gch is harmless, the header then just includes what
   ## the sources include anyway.
   cxxSrc <- files[grepl("\\.cpp$", files, ignore.case = TRUE)]
   pchInc <- if (!link && length(cxxSrc) >= 8L) .compilePCHIncludes(cxxSrc)
@@ -575,7 +575,7 @@ runbg <- function(..., machine = "localhost", filename = NULL, input = ls(.Globa
   output <- ".runbgOutput"
   
   # Compiler flags mirroring compile() in compile.R. The flags themselves are
-  # resolved on the remote machine (see .remoteBuildScript); here we only
+  # resolved on the remote machine (see .remoteBuildScript); here only
   # collect the portable, model-specific part and the file list. Everything is
   # written into a shell script to avoid quoting issues with nested SSH commands.
   buildinfo <- list(compileArgs = "", needsCVODE = FALSE, needsKLU = FALSE)
@@ -779,7 +779,7 @@ runbg <- function(..., machine = "localhost", filename = NULL, input = ls(.Globa
 #' skipping compilation. If no `.o` files are found, an error is raised.
 #' This option is ignored if `compile = TRUE`. Object files are toolchain
 #' specific, so this only works when the cluster compiler is ABI-compatible
-#' with the local one -- in particular, `.o` files produced with link-time
+#' with the local one, in particular, `.o` files produced with link-time
 #' optimisation by a newer GCC cannot be read by an older one. Prefer
 #' `compile = TRUE` when the two machines run different compiler generations.
 #' @param buildCores Number of compiler processes the remote build runs in
@@ -1178,7 +1178,6 @@ distributedComputing <- function(
   
   # WRITE R
   expr <- as.expression(substitute(...))
-  # expr <- as.expression(substitute(called_function))
   cat(
     paste(
       "#!/usr/bin/env Rscript",
@@ -1451,7 +1450,7 @@ profileParsPerNode <- function(parameters, fits_per_node, side = c("both", "spli
 
 # Split a two-axis core budget. `cores` is a single number (outer axis only)
 # or a named vector such as c(fits = 10, conditions = 5). The product is
-# reported, not capped -- over-subscribing is sometimes deliberate.
+# reported, not capped, over-subscribing is sometimes deliberate.
 .splitCores <- function(cores, outer = "outer") {
   if (is.null(cores)) return(list(outer = 1L, conditions = NULL))
   cores <- as.integer(cores)
