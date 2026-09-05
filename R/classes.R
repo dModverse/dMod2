@@ -314,11 +314,11 @@ match.fnargs <- function(arglist, choices) {
 ## ---- Composition evaluation ---------------------------------------------
 
 # p2 over every condition at once; its result names are p1's condition vector.
-.evalProd <- function(st, b, deriv, deriv2, env, cores) {
+.evalProd <- function(st, b, deriv, deriv2, env, cores, hessian = TRUE) {
   b2 <- .bundle(conds = b$conds, times = b$times, pars = b$pars,
                 fixed = b$fixed, shared = b$shared,
                 out = if (identical(st$p2kind, "obsfn")) b$out else NULL)
-  inner <- .evalMany(st$p2, b2, deriv, deriv2, env, cores)
+  inner <- .evalMany(st$p2, b2, deriv, deriv2, env, cores, hessian)
 
   conds <- names(inner)
   n <- max(1L, length(inner))
@@ -341,12 +341,12 @@ match.fnargs <- function(arglist, choices) {
     fixed = lapply(hs, function(h) if (is.null(h)) NULL else h$fixed),
     shared = FALSE)
 
-  res <- .evalMany(st$p1, b1, deriv, deriv2, env, cores)
+  res <- .evalMany(st$p1, b1, deriv, deriv2, env, cores, hessian)
   if (identical(st$reduce, "sum")) Reduce("+", res) else res
 }
 
 # One dispatch per PART: a sum of two g*x*p chains issues two batched solves.
-.evalPlus <- function(st, b, deriv, deriv2, env, cores) {
+.evalPlus <- function(st, b, deriv, deriv2, env, cores, hessian = TRUE) {
   slotnames <- if (is.null(b$conds)) names(st$owner) else b$conds
   outlist <- .emptySlots(slotnames)
   own <- st$owner[slotnames]
@@ -356,24 +356,24 @@ match.fnargs <- function(arglist, choices) {
   for (k in unique(own[keep])) {
     pos  <- keep[own[keep] == k]
     sub  <- .bundle_positions(b, pos, slotnames[pos])
-    part <- .evalMany(st$parts[[k]], sub, deriv, deriv2, env, cores)
+    part <- .evalMany(st$parts[[k]], sub, deriv, deriv2, env, cores, hessian)
     for (j in seq_along(pos)) outlist[[pos[j]]] <- part[[j]]
   }
   outlist
 }
 
-.evalNode <- function(st, b, deriv, deriv2, env, cores) {
+.evalNode <- function(st, b, deriv, deriv2, env, cores, hessian = TRUE) {
   switch(st$op,
     leaf = .evalLeaf(st, b, deriv, deriv2, cores),
-    "*"  = .evalProd(st, b, deriv, deriv2, env, cores),
-    "+"  = .evalPlus(st, b, deriv, deriv2, env, cores),
+    "*"  = .evalProd(st, b, deriv, deriv2, env, cores, hessian),
+    "+"  = .evalPlus(st, b, deriv, deriv2, env, cores, hessian),
     stop(".evalNode: unknown node op '", st$op, "'.", call. = FALSE))
 }
 
-.evalMany <- function(f, b, deriv, deriv2, env, cores) {
+.evalMany <- function(f, b, deriv, deriv2, env, cores, hessian = TRUE) {
   st <- .fnNode(f)
-  if (is.null(st)) return(.evalLegacy(f, b, deriv, deriv2, env))
-  .evalNode(st, b, deriv, deriv2, env, cores)
+  if (is.null(st)) return(.evalLegacy(f, b, deriv, deriv2, env, hessian))
+  .evalNode(st, b, deriv, deriv2, env, cores, hessian)
 }
 
 
@@ -383,20 +383,20 @@ match.fnargs <- function(arglist, choices) {
 # is the pre-rebuild one plus `cores`, which must be a formal, match.fnargs
 # drops named arguments it does not know, so a `cores` in `...` would vanish.
 .fnWrap <- function(st) {
-  function(..., fixed = NULL, deriv = TRUE, deriv2 = FALSE,
+  function(..., fixed = NULL, deriv = TRUE, deriv2 = FALSE, hessian = TRUE,
            conditions = st$default_conditions, env = NULL,
            cores = getOption("dMod.cores", 1L))
-    .fnCall(st, list(...), fixed, deriv, deriv2, conditions, env, cores)
+    .fnCall(st, list(...), fixed, deriv, deriv2, hessian, conditions, env, cores)
 }
 
-.fnCall <- function(st, arglist, fixed, deriv, deriv2, conditions, env, cores) {
+.fnCall <- function(st, arglist, fixed, deriv, deriv2, hessian, conditions, env, cores) {
   spec <- .fnSpec[[st$kind]]
   arglist <- arglist[match.fnargs(arglist, spec$inputs)]
   names(arglist) <- spec$inputs
   b <- .bundle_from_call(conditions,
                          times = arglist$times, out = arglist$out,
                          pars  = arglist$pars,  fixed = fixed)
-  out <- .evalNode(st, b, deriv, deriv2, env, cores)
+  out <- .evalNode(st, b, deriv, deriv2, env, cores, hessian)
   if (identical(spec$result, "prdlist")) as.prdlist(out) else out
 }
 
@@ -432,7 +432,7 @@ match.fnargs <- function(arglist, choices) {
 }
 
 # Pre-rebuild path: drive an fn without a descriptor one condition at a time.
-.evalLegacy <- function(f, b, deriv, deriv2, env) {
+.evalLegacy <- function(f, b, deriv, deriv2, env, hessian = TRUE) {
   kind <- .fnKind(f)
   # A request without conditions asks the fn for all of its own, so the result
   # keeps the names `.evalProd` reads back as p1's condition vector.
@@ -452,7 +452,8 @@ match.fnargs <- function(arglist, choices) {
       parfn = f(pars = .req_pars(b, j), fixed = .req_fixed(b, j),
                 deriv = deriv, deriv2 = deriv2, conditions = cond, env = env),
       objfn = f(pars = .req_pars(b, j), fixed = .req_fixed(b, j),
-                deriv = deriv, deriv2 = deriv2, conditions = cond, env = env),
+                deriv = deriv, deriv2 = deriv2, hessian = hessian,
+                conditions = cond, env = env),
       stop(".evalLegacy: cannot drive an fn of class ",
            paste(class(f), collapse = "/"), call. = FALSE))
     # an objfn returns its objlist directly, not a per-condition list
@@ -544,15 +545,15 @@ match.fnargs <- function(arglist, choices) {
   switch(kind,
     obsfn = function(out, pars, fixed = NULL, deriv = TRUE, deriv2 = FALSE,
                      cores = getOption("dMod.cores", 1L))
-      .fnCall(st, list(out = out, pars = pars), fixed, deriv, deriv2,
+      .fnCall(st, list(out = out, pars = pars), fixed, deriv, deriv2, TRUE,
               cond, NULL, cores)[[1]],
     prdfn = function(times, pars, fixed = NULL, deriv = TRUE, deriv2 = FALSE,
                      cores = getOption("dMod.cores", 1L))
-      .fnCall(st, list(times = times, pars = pars), fixed, deriv, deriv2,
+      .fnCall(st, list(times = times, pars = pars), fixed, deriv, deriv2, TRUE,
               cond, NULL, cores)[[1]],
     function(pars, fixed = NULL, deriv = TRUE, deriv2 = FALSE,
              cores = getOption("dMod.cores", 1L))
-      .fnCall(st, list(pars = pars), fixed, deriv, deriv2,
+      .fnCall(st, list(pars = pars), fixed, deriv, deriv2, TRUE,
               cond, NULL, cores)[[1]])
 }
 
@@ -633,7 +634,7 @@ match.fnargs <- function(arglist, choices) {
   # objfn + objfn
   if (inherits(x1, "objfn") & inherits(x2, "objfn")) {
 
-    outfn <- function(..., fixed = NULL, deriv = TRUE, deriv2 = FALSE,
+    outfn <- function(..., fixed = NULL, deriv = TRUE, deriv2 = FALSE, hessian = TRUE,
                       conditions = conditions12, env = NULL,
                       cores = getOption("dMod.cores", 1L)) {
 
@@ -646,15 +647,15 @@ match.fnargs <- function(arglist, choices) {
       # 3. If not null & intersection is empty, don't evaluate xi at all
       v1 <- v2 <- NULL
       if (is.null(conditions.x1)) {
-        v1 <- x1(pars = pars, fixed = fixed, deriv = deriv, deriv2 = deriv2, conditions = conditions.x1, env = env, cores = cores)
+        v1 <- x1(pars = pars, fixed = fixed, deriv = deriv, deriv2 = deriv2, hessian = hessian, conditions = conditions.x1, env = env, cores = cores)
       } else if (any(conditions %in% conditions.x1)) {
-        v1 <- x1(pars = pars, fixed = fixed, deriv = deriv, deriv2 = deriv2, conditions = intersect(conditions, conditions.x1), env = env, cores = cores)
+        v1 <- x1(pars = pars, fixed = fixed, deriv = deriv, deriv2 = deriv2, hessian = hessian, conditions = intersect(conditions, conditions.x1), env = env, cores = cores)
       }
 
       if (is.null(conditions.x2)) {
-        v2 <- x2(pars = pars, fixed = fixed, deriv = deriv, deriv2 = deriv2, conditions = conditions.x2, env = env, cores = cores)
+        v2 <- x2(pars = pars, fixed = fixed, deriv = deriv, deriv2 = deriv2, hessian = hessian, conditions = conditions.x2, env = env, cores = cores)
       } else if (any(conditions %in% conditions.x2)) {
-        v2 <- x2(pars = pars, fixed = fixed, deriv = deriv, deriv2 = deriv2, conditions = intersect(conditions, conditions.x2), env = attr(v1, "env"), cores = cores)
+        v2 <- x2(pars = pars, fixed = fixed, deriv = deriv, deriv2 = deriv2, hessian = hessian, conditions = intersect(conditions, conditions.x2), env = attr(v1, "env"), cores = cores)
       }
 
       out <- v1 + v2
@@ -720,7 +721,7 @@ match.fnargs <- function(arglist, choices) {
     conditions12 <- attr(x2, "conditions")
     parameters12 <- attr(x2, "parameters")
     modelname12 <- attr(x2, "modelname")
-    outfn <- function(..., fixed = NULL, deriv = TRUE, deriv2 = FALSE,
+    outfn <- function(..., fixed = NULL, deriv = TRUE, deriv2 = FALSE, hessian = TRUE,
                       conditions = conditions12, env = NULL,
                       cores = getOption("dMod.cores", 1L)) {
 
@@ -729,7 +730,7 @@ match.fnargs <- function(arglist, choices) {
       pars <- arglist[[1]]
 
       v2 <- x2(pars = pars, fixed = fixed, deriv = deriv, deriv2 = deriv2,
-               conditions = conditions, env = env, cores = cores)
+               hessian = hessian, conditions = conditions, env = env, cores = cores)
 
       out <- x1 %.*% v2
       attr(out, "env") <- attr(v2, "env")

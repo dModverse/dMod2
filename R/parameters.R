@@ -1904,6 +1904,17 @@ Pequil <- function(trafo, parameters = NULL, forcings = NULL, condition = NULL,
 }
 
 
+## Values passed through `...` resolve against the condition row, then the
+## per-branch symbols, then the calling frame. The last of those is what makes
+## a call from inside a function work.
+.evalDots <- function(dots, row, currentTrafo, currentSymbols, callerEnv) {
+  env <- list2env(as.list(row), envir = new.env(parent = callerEnv))
+  env$.currentTrafo   <- currentTrafo
+  env$.currentSymbols <- currentSymbols
+  lapply(eval(dots), eval, envir = env)
+}
+
+
 #' Construct and modify parameter transformations
 #'
 #' Symbolic helpers used by [P()] and [Xs()] to build, substitute, and
@@ -1937,7 +1948,8 @@ define <- function(trafo, expr, ..., conditionMatch = NULL) {
     stop("List names must be a subset of rownames(attr(trafo, 'tree')).", call. = FALSE)
   mytrafo <- if (is.list(trafo)) trafo else list(trafo)
 
-  dots <- substitute(alist(...))
+  dots      <- substitute(alist(...))
+  callerEnv <- parent.frame()
   out  <- lapply(seq_along(mytrafo), function(i) {
     .currentTrafo   <- mytrafo[[i]]
     .currentSymbols <- if (is.null(.currentTrafo)) NULL else getSymbols(.currentTrafo)
@@ -1945,8 +1957,8 @@ define <- function(trafo, expr, ..., conditionMatch = NULL) {
            else tree[1, , drop = FALSE]
     if (!is.null(conditionMatch) && !str_detect(rownames(row), conditionMatch))
       return(.currentTrafo)
-    with(row, do.call(repar,
-      c(list(expr = expr, trafo = .currentTrafo, reset = TRUE), eval(dots))))
+    args <- .evalDots(dots, row, .currentTrafo, .currentSymbols, callerEnv)
+    do.call(repar, c(list(expr = expr, trafo = .currentTrafo, reset = TRUE), args))
   })
   names(out) <- names(mytrafo)
   if (!is.list(trafo)) out <- out[[1]]
@@ -1966,7 +1978,8 @@ insert <- function(trafo, expr, ..., conditionMatch = NULL) {
     stop("List names must be a subset of rownames(attr(trafo, 'tree')).", call. = FALSE)
   mytrafo <- if (is.list(trafo)) trafo else list(trafo)
 
-  dots <- substitute(alist(...))
+  dots      <- substitute(alist(...))
+  callerEnv <- parent.frame()
   out  <- lapply(seq_along(mytrafo), function(i) {
     .currentTrafo   <- mytrafo[[i]]
     .currentSymbols <- if (is.null(.currentTrafo)) NULL else getSymbols(.currentTrafo)
@@ -1974,21 +1987,15 @@ insert <- function(trafo, expr, ..., conditionMatch = NULL) {
            else tree[1, , drop = FALSE]
     if (!is.null(conditionMatch) && !str_detect(rownames(row), conditionMatch))
       return(.currentTrafo)
-    with(row, {
-      ## Caller may pass logical dots to gate substitution per condition,
-      ## and non-logical dots to substitute symbols in `expr`. Logical dots
-      ## are stripped before forwarding to `repar`.
-      .apply <- function() {
-        d <- eval(dots)
-        if (!length(d)) return(do.call(repar, list(expr = expr, trafo = .currentTrafo)))
-        d_eval  <- lapply(d, function(x) eval.parent(x, 3))
-        is_log  <- vapply(d_eval, is.logical, logical(1))
-        gate    <- do.call(c, d[is_log])
-        if (!is.null(gate) && any(!gate)) return(.currentTrafo)
-        do.call(repar, c(list(expr = expr, trafo = .currentTrafo), d_eval[!is_log]))
-      }
-      .apply()
-    })
+    args <- .evalDots(dots, row, .currentTrafo, .currentSymbols, callerEnv)
+    if (!length(args))
+      return(do.call(repar, list(expr = expr, trafo = .currentTrafo)))
+    ## Logical dots gate the substitution per condition rather than naming a
+    ## symbol, so they decide and are then dropped.
+    isGate <- vapply(args, is.logical, logical(1))
+    gate   <- unlist(args[isGate], use.names = FALSE)
+    if (length(gate) && any(!gate)) return(.currentTrafo)
+    do.call(repar, c(list(expr = expr, trafo = .currentTrafo), args[!isGate]))
   })
   names(out) <- names(mytrafo)
   if (!is.list(trafo)) out <- out[[1]]

@@ -21,7 +21,6 @@ mstrust(
   start1stfromCenter = FALSE,
   retry = TRUE,
   nTries = 10L,
-  studyname,
   ...
 )
 }
@@ -73,8 +72,6 @@ given and cannot be resampled).}
 
 \item{nTries}{Maximum number of attempts per fit slot, including the
 first. Default \code{10L}.}
-
-\item{studyname}{Deprecated alias for \code{name}.}
 
 \item{...}{Forwarded to \code{\link[=trust]{trust()}}, \code{samplefun}, or \code{objfun} by name match.
 Unmatched names go to \code{objfun}.}

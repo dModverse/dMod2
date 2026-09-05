@@ -840,7 +840,6 @@ vcov <- function(fit, parupper = NULL, parlower = NULL) {
 #'   given and cannot be resampled).
 #' @param nTries Maximum number of attempts per fit slot, including the
 #'   first. Default `10L`.
-#' @param studyname Deprecated alias for `name`.
 #'   
 #' @details Runs `fits` independent [trust()] optimisations from random
 #'   starts (sampled by `samplefun`, default [rnorm()]) added to `center`,
@@ -867,13 +866,8 @@ vcov <- function(fit, parupper = NULL, parlower = NULL) {
 mstrust <- function(objfun, center, rinit = .1, rmax = 10, fits = 20, cores = 1, optmethod = "trust",
                     samplefun = "rnorm", resultPath = ".", name = "mstrust",
                     stats = FALSE, output = FALSE, cautiousMode = FALSE, start1stfromCenter = FALSE,
-                    retry = TRUE, nTries = 10L, studyname,
+                    retry = TRUE, nTries = 10L,
                     ...) {
-
-  if (!missing(studyname)) {
-    warning("mstrust: `studyname` is deprecated, use `name`.", call. = FALSE)
-    name <- studyname
-  }
 
   narrowing <- NULL
   
@@ -1124,12 +1118,12 @@ mstrust <- function(objfun, center, rinit = .1, rmax = 10, fits = 20, cores = 1,
   })
   
   if (!is.null(logfile)) close(logfile)
-  
+
   if (Sys.info()[['sysname']] == "Windows" & cores > 1) {
-    
+
     parallel::stopCluster(cluster)
     doParallel::stopImplicitCluster()
-    
+
   }
   
   

@@ -108,11 +108,14 @@ evalConditionResidual <- function(dataI, predictionI, pars,
   hit <- intersect(pnames, names(g))
   gradient <- setNames(numeric(length(pnames)), pnames)
   gradient[hit] <- g[hit]
-  hessian <- matrix(0, length(pnames), length(pnames),
-                    dimnames = list(pnames, pnames))
-  if (!is.null(out$hessian) && length(hit)) hessian[hit, hit] <- out$hessian[hit, hit]
   out$gradient <- gradient
-  out$hessian  <- hessian
+  # A skipped Hessian stays NULL; only realign one that was actually built.
+  if (!is.null(out$hessian)) {
+    hessian <- matrix(0, length(pnames), length(pnames),
+                      dimnames = list(pnames, pnames))
+    if (length(hit)) hessian[hit, hit] <- out$hessian[hit, hit]
+    out$hessian <- hessian
+  }
   out
 }
 
@@ -191,7 +194,7 @@ normL2 <- function(data, x, errmodel = NULL, times = NULL, t0 = 0,
 
   # `.prediction` lets a caller that already batched the predictions hand them
   # in; see .objEvalMany().
-  myfn <- function(..., fixed = NULL, deriv = TRUE, deriv2 = FALSE,
+  myfn <- function(..., fixed = NULL, deriv = TRUE, deriv2 = FALSE, hessian = TRUE,
                    conditions = NULL, env = NULL,
                    cores = getOption("dMod.cores", 1L), .prediction = NULL) {
     pars <- ..1
@@ -199,6 +202,11 @@ normL2 <- function(data, x, errmodel = NULL, times = NULL, t0 = 0,
     conditions <- if (is.null(conditions)) conditions.obj else
       intersect(conditions.obj, conditions)
     if (!length(conditions)) return(NULL)
+
+    # The Hessian is only meaningful with deriv; when it is not wanted, the
+    # J^T J contraction is skipped and no second-order sensitivities are needed.
+    build_hessian <- isTRUE(deriv) && isTRUE(hessian)
+    deriv2 <- isTRUE(deriv2) && build_hessian
 
     prediction <- if (!is.null(.prediction)) .prediction else
       x(times = timesD, pars = pars, fixed = fixed,
@@ -262,7 +270,8 @@ normL2 <- function(data, x, errmodel = NULL, times = NULL, t0 = 0,
       par_names_global = par_names_global,
       deriv2_requested = isTRUE(deriv2),
       threads          = as.integer(cores),
-      bloq_mode        = opt.BLOQ
+      bloq_mode        = opt.BLOQ,
+      build_hessian    = build_hessian
     )
     out <- if (deriv)
       .alignObjlist(objlist(value = kr$value, gradient = kr$gradient,
@@ -448,12 +457,14 @@ constraintL2 <- function(mu, sigma = 1, attr.name = "prior", condition = NULL) {
   if (is.null(names(sigma))) names(sigma) <- names(mu)
   sigma <- sigma[names(mu)]
 
-  myfn <- function(..., fixed = NULL, deriv = TRUE, deriv2 = FALSE, conditions = condition, env = NULL,
+  myfn <- function(..., fixed = NULL, deriv = TRUE, deriv2 = FALSE, hessian = TRUE,
+                   conditions = condition, env = NULL,
                    cores = getOption("dMod.cores", 1L)) {
 
     p <- list(...)[[match.fnargs(list(...), "pars")]]
+    build_hessian <- isTRUE(deriv) && isTRUE(hessian)
     dP  <- if (deriv) attr(p, "deriv", exact = TRUE) else NULL
-    dP2 <- if (deriv && deriv2) attr(p, "deriv2", exact = TRUE) else NULL
+    dP2 <- if (build_hessian && deriv2) attr(p, "deriv2", exact = TRUE) else NULL
 
     sigma_pars <- if (est) sigma[names(mu)] else rep("", length(mu))
     sigma_vec  <- if (est) rep(0.0, length(mu)) else as.numeric(sigma[names(mu)])
@@ -468,7 +479,8 @@ constraintL2 <- function(mu, sigma = 1, attr.name = "prior", condition = NULL) {
       sigma = sigma_vec,
       sigma_pars = as.character(sigma_pars),
       est = est,
-      deriv = deriv
+      deriv = deriv,
+      build_hessian = build_hessian
     )
 
     out <- objlist(value = kr$value, gradient = kr$gradient, hessian = kr$hessian)
@@ -511,18 +523,19 @@ constraintL2 <- function(mu, sigma = 1, attr.name = "prior", condition = NULL) {
 # contributes to the value but not to gradient or Hessian.
 .constraintTerms <- function(parnames, term, attr.name, condition) {
 
-  myfn <- function(..., fixed = NULL, deriv = TRUE, deriv2 = FALSE,
+  myfn <- function(..., fixed = NULL, deriv = TRUE, deriv2 = FALSE, hessian = TRUE,
                    conditions = condition, env = NULL,
                    cores = getOption("dMod.cores", 1L)) {
 
     p    <- list(...)[[match.fnargs(list(...), "pars")]]
+    build_hessian <- isTRUE(deriv) && isTRUE(hessian)
     dP   <- if (deriv) attr(p, "deriv", exact = TRUE) else NULL
-    dP2  <- if (deriv && deriv2) attr(p, "deriv2", exact = TRUE) else NULL
+    dP2  <- if (build_hessian && deriv2) attr(p, "deriv2", exact = TRUE) else NULL
 
     allp <- c(p, fixed)
     np   <- length(p)
     gr   <- setNames(numeric(np), names(p))
-    hs   <- matrix(0, np, np, dimnames = list(names(p), names(p)))
+    hs   <- if (build_hessian) matrix(0, np, np, dimnames = list(names(p), names(p))) else NULL
 
     k   <- which(parnames %in% names(allp))
     td  <- term(as.numeric(allp[parnames[k]]), k)
@@ -533,32 +546,34 @@ constraintL2 <- function(mu, sigma = 1, attr.name = "prior", condition = NULL) {
       pos <- match(parnames[k], names(p))
       free <- !is.na(pos)
       gr[pos[free]] <- td$d1[free]
-      hs[cbind(pos[free], pos[free])] <- td$d2[free]
+      if (build_hessian) hs[cbind(pos[free], pos[free])] <- td$d2[free]
     }
 
     # Chain rule through an upstream parfn, so `constraint * P()` is exact.
     if (deriv && !is.null(dP)) {
       gi <- gr
       gr <- drop(gi %*% dP); names(gr) <- colnames(dP)
-      hs <- t(dP) %*% hs %*% dP
-      dimnames(hs) <- list(colnames(dP), colnames(dP))
+      if (build_hessian) {
+        hs <- t(dP) %*% hs %*% dP
+        dimnames(hs) <- list(colnames(dP), colnames(dP))
 
-      if (!is.null(dP2)) {
-        common <- intersect(names(gi), dimnames(dP2)[[1]])
-        if (length(common) > 0L) {
-          theta   <- colnames(dP)
-          dP2_sub <- dP2[common, theta, theta, drop = FALSE]
-          flat    <- matrix(dP2_sub, nrow = length(common),
-                            ncol = length(theta)^2)
-          hs <- hs + matrix(crossprod(flat, gi[common]),
-                            length(theta), length(theta))
+        if (!is.null(dP2)) {
+          common <- intersect(names(gi), dimnames(dP2)[[1]])
+          if (length(common) > 0L) {
+            theta   <- colnames(dP)
+            dP2_sub <- dP2[common, theta, theta, drop = FALSE]
+            flat    <- matrix(dP2_sub, nrow = length(common),
+                              ncol = length(theta)^2)
+            hs <- hs + matrix(crossprod(flat, gi[common]),
+                              length(theta), length(theta))
+          }
         }
       }
     }
 
     out <- objlist(value = unname(val),
                    gradient = if (deriv) gr else NULL,
-                   hessian  = if (deriv) hs else NULL)
+                   hessian  = if (build_hessian) hs else NULL)
     attr(out, attr.name) <- out$value
     attr(out, "env") <- env
     out
@@ -829,8 +844,10 @@ datapointL2 <- function(name, time, value, sigma = 1, attr.name = "validation", 
     attr.name = attr.name
   )
 
-  myfn <- function(..., fixed = NULL, deriv = TRUE, deriv2 = FALSE, conditions = NULL, env = NULL,
+  myfn <- function(..., fixed = NULL, deriv = TRUE, deriv2 = FALSE, hessian = TRUE,
+                   conditions = NULL, env = NULL,
                    cores = getOption("dMod.cores", 1L)) {
+    build_hessian <- isTRUE(deriv) && isTRUE(hessian)
     mu        <- controls$mu
     t         <- controls$time
     sigma     <- controls$sigma
@@ -854,7 +871,7 @@ datapointL2 <- function(name, time, value, sigma = 1, attr.name = "validation", 
       stop("datapointL2() requests time point for which no prediction is available. Please add missing time point by the times argument in normL2()")
 
     dpred_attr  <- if (deriv) attr(prdf, "deriv") else NULL
-    d2pred_attr <- if (deriv && deriv2) attr(prdf, "deriv2") else NULL
+    d2pred_attr <- if (build_hessian && deriv2) attr(prdf, "deriv2") else NULL
     kr <- datapointL2_kernel(
       pouter           = pouter,
       fixed_opt        = fixed,
@@ -865,7 +882,8 @@ datapointL2 <- function(name, time, value, sigma = 1, attr.name = "validation", 
       t                = as.numeric(t),
       sigma            = as.numeric(sigma),
       value_par        = names(mu)[1],
-      deriv            = deriv
+      deriv            = deriv,
+      build_hessian    = build_hessian
     )
 
     out <- objlist(value = kr$value, gradient = kr$gradient, hessian = kr$hessian)
@@ -925,9 +943,14 @@ datapointL2 <- function(name, time, value, sigma = 1, attr.name = "validation", 
     value    = out1$value + out2$value,
     gradient = addVector(addVector(setNames(numeric(length(pars)), pars),
                                    out1$gradient), out2$gradient),
-    hessian  = addMatrix(addMatrix(matrix(0, length(pars), length(pars),
-                                          dimnames = list(pars, pars)),
-                                   out1$hessian), out2$hessian)))
+    # A summand may carry a NULL hessian (built with hessian = FALSE); the sum
+    # is NULL only when both are, otherwise the present ones add.
+    hessian  = if (is.null(out1$hessian) && is.null(out2$hessian)) NULL else {
+      H <- matrix(0, length(pars), length(pars), dimnames = list(pars, pars))
+      if (!is.null(out1$hessian)) H <- addMatrix(H, out1$hessian)
+      if (!is.null(out2$hessian)) H <- addMatrix(H, out2$hessian)
+      H
+    }))
   names(out12) <- what
 
   # Numeric attributes are summed, an absent one counting as zero. The chi2

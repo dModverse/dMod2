@@ -39,7 +39,7 @@ test_that("modelnames behave as expected", {
     setNames(.,.) %>%
     branch(conditions = conditions) %>%
     insert("x~x_cond", x = "s1", cond = condition) %>%
-    insert("x~exp(x)", x = getSymbols(mytrafo[[i]])) %>%
+    insert("x~exp(x)", x = .currentSymbols) %>%
     {.}
   
   p1 <- P(trafo, modelname = "p", compile = T)

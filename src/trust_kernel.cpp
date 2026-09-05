@@ -16,6 +16,7 @@
 #include "trust_subproblem.h"
 #include "trust_driver.h"
 #include <vector>
+#include <deque>
 #include <cmath>
 #include <string>
 #include <algorithm>
@@ -38,6 +39,92 @@ using dmod::trust_driver::subproblem_label;
 
 namespace {
 
+// Interchangeable Hessian source (Stage 1 of dev/reverseAD-plan.md). The
+// quasi-Newton approximation lives in the working Hessian `H_full`, so the
+// scaling, eigendecomposition and subproblem downstream are untouched.
+enum HessianMethod { HM_GN = 0, HM_BFGS = 1, HM_SR1 = 2, HM_HYBRID = 3 };
+
+// Seed of the quasi-Newton approximation. Identity is all a gradient-only
+// derivative scheme can supply.
+enum HessianInit { HI_GN = 0, HI_IDENTITY = 1 };
+
+// Dense quasi-Newton update of `B` in place, all arguments in the minimised
+// sign convention phi = sgn*val and `s` in the x frame. BFGS is Powell-damped
+// and stays positive definite; SR1 may be indefinite.
+void qn_update_B(int kind, int K, std::vector<double>& B,
+                 const std::vector<double>& s, const std::vector<double>& y) {
+  std::vector<double> Bs(K, 0.0);
+  for (int j = 0; j < K; ++j) {
+    const double sj = s[j];
+    if (sj != 0.0)
+      for (int i = 0; i < K; ++i) Bs[i] += B[i + (std::size_t) j * K] * sj;
+  }
+  double sy = 0.0, sBs = 0.0;
+  for (int i = 0; i < K; ++i) { sy += s[i] * y[i]; sBs += s[i] * Bs[i]; }
+
+  if (kind == HM_BFGS) {
+    if (!(sBs > 0.0)) return;                 // no curvature reference; keep B
+    double theta = 1.0;
+    if (sy < 0.2 * sBs) theta = (0.8 * sBs) / (sBs - sy);
+    std::vector<double> rv(K);
+    for (int i = 0; i < K; ++i) rv[i] = theta * y[i] + (1.0 - theta) * Bs[i];
+    double sr = 0.0;
+    for (int i = 0; i < K; ++i) sr += s[i] * rv[i];
+    if (!(sr > 0.0)) return;
+    for (int j = 0; j < K; ++j)
+      for (int i = 0; i < K; ++i)
+        B[i + (std::size_t) j * K] += rv[i] * rv[j] / sr - Bs[i] * Bs[j] / sBs;
+  } else {  // HM_SR1
+    std::vector<double> w(K);
+    for (int i = 0; i < K; ++i) w[i] = y[i] - Bs[i];
+    double ws = 0.0, wn = 0.0, sn = 0.0;
+    for (int i = 0; i < K; ++i) { ws += w[i] * s[i]; wn += w[i] * w[i]; sn += s[i] * s[i]; }
+    if (std::fabs(ws) <= 1e-8 * std::sqrt(sn * wn) || !(wn > 0.0)) return;
+    for (int j = 0; j < K; ++j)
+      for (int i = 0; i < K; ++i)
+        B[i + (std::size_t) j * K] += w[i] * w[j] / ws;
+  }
+}
+
+// Same update, applied to the working Hessian `H` of `val` rather than of phi.
+void qn_update(int kind, int K, std::vector<double>& H,
+               const std::vector<double>& s, const std::vector<double>& y,
+               double sgn) {
+  const std::size_t KK = (std::size_t) K * K;
+  std::vector<double> B(KK);
+  for (std::size_t t = 0; t < KK; ++t) B[t] = sgn * H[t];
+  qn_update_B(kind, K, B, s, y);
+  for (std::size_t t = 0; t < KK; ++t) H[t] = sgn * B[t];
+}
+
+// Limited memory: rebuild `H` from gamma*I and the kept pairs, oldest first, so
+// it depends on neither the seed nor curvature outside the window.
+void qn_assemble(int kind, int K, std::vector<double>& H, double gamma,
+                 const std::deque<std::vector<double>>& S,
+                 const std::deque<std::vector<double>>& Y, double sgn) {
+  const std::size_t KK = (std::size_t) K * K;
+  std::vector<double> B(KK, 0.0);
+  for (int i = 0; i < K; ++i) B[i + (std::size_t) i * K] = gamma;
+  for (std::size_t k = 0; k < S.size(); ++k) qn_update_B(kind, K, B, S[k], Y[k]);
+  for (std::size_t t = 0; t < KK; ++t) H[t] = sgn * B[t];
+}
+
+// Li-Fukushima cautious update: a pair with negligible curvature along the step
+// carries no information. SR1 is exempt, negative curvature is legal there.
+bool qn_pair_informative(int K, const std::vector<double>& s,
+                         const std::vector<double>& y, double cautious) {
+  if (!(cautious > 0.0)) return true;
+  double sy = 0.0, ss = 0.0, yy = 0.0;
+  for (int i = 0; i < K; ++i) { sy += s[i] * y[i]; ss += s[i] * s[i]; yy += y[i] * y[i]; }
+  return sy > cautious * std::sqrt(ss * yy);
+}
+
+inline const char* hessian_source_label(bool qn_active, int qn_kind) {
+  if (!qn_active)        return "gn";
+  if (qn_kind == HM_SR1) return "sr1";
+  return "bfgs";
+}
+
 // -------------------------------------------------------------------------
 // Coleman-Li interior trust-region-reflective
 // -------------------------------------------------------------------------
@@ -48,6 +135,8 @@ List trust_reflective(Function objfun, NumericVector parinit,
                       double ftol, double mtol,
                       double gtol, double xtol,
                       double rmin, double thetamax,
+                      int hessianMethod, int hessianInit,
+                      int qnMemory, double qnCautious,
                       bool minimize, bool blather_on,
                       Nullable<NumericVector> parupper,
                       Nullable<NumericVector> parlower,
@@ -85,19 +174,29 @@ List trust_reflective(Function objfun, NumericVector parinit,
   x_named.names() = parnames;
   for (int i = 0; i < K; ++i) x_named[i] = z[i] / ps[i];
 
+  // Only a run that starts quasi-Newton can do without the objective's Hessian;
+  // gn needs it every iteration and hybrid seeds its handover from it.
+  const bool qn_start = (hessianMethod == HM_BFGS || hessianMethod == HM_SR1);
+  const bool seed_gn  = !(qn_start && hessianInit == HI_IDENTITY);
+
   List out_init;
-  if (!eval_objfun(objfun, x_named, out_init))
+  if (!eval_objfun(objfun, x_named, out_init, seed_gn))
     stop("parinit not feasible: objfun failed");
   double val = as<double>(out_init["value"]);
   if (!std::isfinite(val)) stop("parinit not feasible: value is not finite");
   NumericVector grad0 = as<NumericVector>(out_init["gradient"]);
-  NumericMatrix Hmat0 = as<NumericMatrix>(out_init["hessian"]);
 
   std::vector<double> grad_full(grad0.begin(), grad0.end());
-  std::vector<double> H_full((std::size_t) K * K);
-  for (int j = 0; j < K; ++j)
-    for (int i = 0; i < K; ++i)
-      H_full[i + (std::size_t) j * K] = Hmat0(i, j);
+  std::vector<double> H_full((std::size_t) K * K, 0.0);
+  if (seed_gn) {
+    NumericMatrix Hmat0 = as<NumericMatrix>(out_init["hessian"]);
+    for (int j = 0; j < K; ++j)
+      for (int i = 0; i < K; ++i)
+        H_full[i + (std::size_t) j * K] = Hmat0(i, j);
+  } else {
+    const double sgn0 = minimize ? 1.0 : -1.0;
+    for (int i = 0; i < K; ++i) H_full[i + (std::size_t) i * K] = sgn0;
+  }
 
   int neval = 1;
   report(neval, val, x_named, /*head=*/true);
@@ -114,6 +213,20 @@ List trust_reflective(Function objfun, NumericVector parinit,
   bool   accept = true, converged = false, bail = false;
   int    n_iter = 0, n_fail = 0, n_stall = 0;
   std::string stop_reason = "iterlim";
+
+  // Hessian source: gn passes the objective's J^T J through; bfgs/sr1 maintain
+  // their own update seeded from it; hybrid runs gn until the first soft stop,
+  // then switches to bfgs once. Hmat0 already seeds H_full.
+  const bool is_hybrid = (hessianMethod == HM_HYBRID);
+  bool qn_active = (hessianMethod == HM_BFGS || hessianMethod == HM_SR1);
+  int  qn_kind  = (hessianMethod == HM_SR1) ? HM_SR1 : HM_BFGS;
+  bool switched = false;
+  int  qn_neval = 0, qn_accepted = 0, qn_skipped = 0;
+  const double qn_sgn = minimize ? 1.0 : -1.0;
+  std::vector<double> s_qn(K), y_qn(K);
+  // qnMemory = 0 accumulates onto the seed, otherwise rebuild from the window.
+  std::deque<std::vector<double>> qn_S, qn_Y;
+  double qn_gamma = 1.0;
 
   for (int iter = 1; iter <= iterlim; ++iter) {
     R_CheckUserInterrupt();
@@ -189,18 +302,22 @@ List trust_reflective(Function objfun, NumericVector parinit,
     x_try.names() = parnames;
     for (int i = 0; i < K; ++i) x_try[i] = z_try[i] / ps[i];
 
+    // The quasi-Newton phase maintains its own Hessian, so it asks the
+    // objective not to build J^T J; only the gn pass-through reads it back.
+    const bool want_h = !qn_active;
     List out_try;
-    bool eval_ok = eval_objfun(objfun, x_try, out_try);
+    bool eval_ok = eval_objfun(objfun, x_try, out_try, want_h);
     double val_try = kInf;
     NumericVector grad_try;
     NumericMatrix Htry_mat;
     if (eval_ok) {
       val_try  = as<double>(out_try["value"]);
       grad_try = as<NumericVector>(out_try["gradient"]);
-      Htry_mat = as<NumericMatrix>(out_try["hessian"]);
+      if (want_h) Htry_mat = as<NumericMatrix>(out_try["hessian"]);
       if (!std::isfinite(val_try)) eval_ok = false;
     }
     neval++;
+    if (qn_active) qn_neval++;
     report(neval, val_try, x_try, /*head=*/false);
 
     const double pred_pos  = -m_value;
@@ -231,12 +348,39 @@ List trust_reflective(Function objfun, NumericVector parinit,
     else                                                              n_stall++;
 
     if (accept && eval_ok) {
+      // (s, y) in minimised sign, before z/grad_full are overwritten.
+      if (qn_active)
+        for (int i = 0; i < K; ++i) {
+          s_qn[i] = (z_try[i] - z[i]) / ps[i];
+          y_qn[i] = qn_sgn * (grad_try[i] - grad_full[i]);
+        }
       z = z_try;
       val = val_try;
       grad_full.assign(grad_try.begin(), grad_try.end());
-      for (int j = 0; j < K; ++j)
-        for (int i = 0; i < K; ++i)
-          H_full[i + (std::size_t) j * K] = Htry_mat(i, j);
+      if (qn_active) {
+        const bool keep = (qn_kind == HM_SR1) ||
+                          qn_pair_informative(K, s_qn, y_qn, qnCautious);
+        if (!keep) {
+          qn_skipped++;
+        } else if (qnMemory > 0) {
+          double sy = 0.0, yy = 0.0;
+          for (int i = 0; i < K; ++i) { sy += s_qn[i] * y_qn[i]; yy += y_qn[i] * y_qn[i]; }
+          if (sy > 0.0 && yy > 0.0) qn_gamma = yy / sy;
+          qn_S.push_back(s_qn);
+          qn_Y.push_back(y_qn);
+          if ((int) qn_S.size() > qnMemory) { qn_S.pop_front(); qn_Y.pop_front(); }
+          qn_assemble(qn_kind, K, H_full, qn_gamma, qn_S, qn_Y, qn_sgn);
+        } else {
+          double sy = 0.0, yy = 0.0;
+          for (int i = 0; i < K; ++i) { sy += s_qn[i] * y_qn[i]; yy += y_qn[i] * y_qn[i]; }
+          if (sy > 0.0 && yy > 0.0) qn_gamma = yy / sy;
+          qn_update(qn_kind, K, H_full, s_qn, y_qn, qn_sgn);
+        }
+        qn_accepted++;
+      } else
+        for (int j = 0; j < K; ++j)
+          for (int i = 0; i < K; ++i)
+            H_full[i + (std::size_t) j * K] = Htry_mat(i, j);
     }
 
     if (blather_on) {
@@ -248,17 +392,39 @@ List trust_reflective(Function objfun, NumericVector parinit,
       trace.rho.push_back(rho);
       trace.steptype.push_back(subproblem_label(is_newton, is_hard, is_easy));
       trace.stepback.push_back(sb_label);
+      trace.hsource.push_back(hessian_source_label(qn_active, qn_kind));
     }
     n_iter = iter;
 
     if (bail) break;
+
+    // Soft stops read the last accepted step rather than first-order
+    // optimality, so a misleading model can trip them far from a stationary
+    // point. The gradient test above is not one and stays terminal.
+    const char* soft_stop = nullptr;
+    bool model_stop = false;
     if (accept && eval_ok) {
-      if (dval < ftol) { converged = true; stop_reason = "fvalue"; break; }
-      if (std::fabs(m_value) < mtol)             { converged = true; stop_reason = "preddiff";  break; }
-      if (xtol > 0.0 && stepnorm < xtol)         { converged = true; stop_reason = "step";   break; }
+      if (dval < ftol)                        { soft_stop = "fvalue";   model_stop = true; }
+      else if (std::fabs(m_value) < mtol)     { soft_stop = "preddiff"; model_stop = true; }
+      else if (xtol > 0.0 && stepnorm < xtol) { soft_stop = "step";     model_stop = true; }
     }
+    if (soft_stop == nullptr && r >= rmin && n_stall >= kStallLimit)
+      soft_stop = "stagnation";
+
+    // Hybrid: the first soft stop hands gn over to bfgs and restarts the trust
+    // region from the last accepted J^T J seed.
+    if (soft_stop != nullptr && is_hybrid && !switched) {
+      switched = true; qn_active = true; qn_kind = HM_BFGS;
+      n_stall = 0; qn_accepted = 0; r = rinit;
+      qn_S.clear(); qn_Y.clear(); qn_gamma = 1.0;
+      soft_stop = nullptr;
+    }
+    // The three tests above read the quadratic model, which in a quasi-Newton
+    // phase describes the approximation rather than the iterate. Such a run
+    // ends on the gradient; stagnation reads accepted steps and still applies.
+    if (soft_stop != nullptr && qn_active && model_stop) soft_stop = nullptr;
+    if (soft_stop != nullptr) { converged = true; stop_reason = soft_stop; break; }
     if (r < rmin) { stop_reason = "radius"; break; }
-    if (n_stall >= kStallLimit) { converged = true; stop_reason = "stagnation"; break; }
   }
 
   if (stop_reason == "objfun")
@@ -286,6 +452,9 @@ List trust_reflective(Function objfun, NumericVector parinit,
       Named("gradient")   = grad_out,
       Named("hessian")    = Hess_out,
       Named("iterations") = n_iter,
+      Named("neval")      = neval,
+      Named("qnEval")     = qn_neval,
+      Named("qnSkipped")  = qn_skipped,
       Named("converged")  = converged,
       Named("atBound")    = at_bound_out,
       Named("stopReason") = stop_reason);
@@ -554,6 +723,10 @@ List trust_impl(Function objfun,
                 double rmin      = 0.0,
                 double thetamax  = 0.99995,
                 std::string boundary = "reflective",
+                std::string hessianMethod = "gn",
+                std::string hessianInit = "gn",
+                int    qnMemory   = 0,
+                double qnCautious = 1e-8,
                 bool   minimize  = true,
                 bool   blather   = false,
                 Nullable<NumericVector>  parupper  = R_NilValue,
@@ -568,15 +741,33 @@ List trust_impl(Function objfun,
   for (int i = 0; i < K; ++i)
     if (!std::isfinite(parinit[i])) stop("trust: parinit not all finite");
 
-  if (boundary == "clip")
+  int hm = HM_GN;
+  if      (hessianMethod == "gn")     hm = HM_GN;
+  else if (hessianMethod == "bfgs")   hm = HM_BFGS;
+  else if (hessianMethod == "sr1")    hm = HM_SR1;
+  else if (hessianMethod == "hybrid") hm = HM_HYBRID;
+  else stop("trust: hessianMethod must be one of \"gn\", \"bfgs\", \"sr1\", \"hybrid\"");
+
+  int hi = HI_GN;
+  if      (hessianInit == "gn")       hi = HI_GN;
+  else if (hessianInit == "identity") hi = HI_IDENTITY;
+  else stop("trust: hessianInit must be one of \"gn\", \"identity\"");
+  if (qnMemory < 0) stop("trust: qnMemory must be >= 0");
+  if (qnCautious < 0.0) stop("trust: qnCautious must be >= 0");
+
+  if (boundary == "clip") {
+    if (hm != HM_GN)
+      stop("trust: hessianMethod other than \"gn\" requires boundary=\"reflective\"");
     return trust_clip(objfun, parinit, rinit, rmax, parscale, iterlim,
                       ftol, mtol, minimize, blather,
                       parupper, parlower, printIter, traceFile);
+  }
   if (boundary != "reflective")
     stop("trust: boundary must be one of \"reflective\", \"clip\"");
 
   return trust_reflective(objfun, parinit, rinit, rmax, parscale, iterlim,
                           ftol, mtol, gtol, xtol, rmin, thetamax,
+                          hm, hi, qnMemory, qnCautious,
                           minimize, blather, parupper, parlower,
                           printIter, traceFile);
 }

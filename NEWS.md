@@ -1,3 +1,59 @@
+# dMod2 0.7.1
+
+* `trust()` ends a quasi-Newton run on the gradient. `fvalue`, `preddiff` and
+  `step` read the prediction of the quadratic model, which during a
+  quasi-Newton phase describes the approximation being built rather than the
+  iterate, so they no longer terminate such a run; `gradient`, `stagnation` and
+  the radius still do. This follows the usual recommendation for quasi-Newton
+  methods. On the Boehm model it raises the starts that reach the published
+  optimum from 10 to 13 for `"bfgs"` and from 12 to 18 for `"sr1"`, and lowers
+  the evaluations spent per such start in both.
+* `trust()` takes an interchangeable Hessian source through `hessianMethod`.
+  `"gn"` (default) is the Gauss-Newton `J^T J` as before; `"bfgs"` and `"sr1"`
+  maintain a dense quasi-Newton update seeded from it; `"hybrid"` runs `"gn"`
+  until it stagnates, then switches to `"bfgs"` once. The quasi-Newton phase
+  consumes only the gradient. Reflective boundary only.
+* Objective functions take a call-time `hessian` argument (default `TRUE`).
+  With `hessian = FALSE` they return value and gradient but skip the Hessian
+  entirely -- the `J^T J` contraction never runs and the result carries a `NULL`
+  hessian. `trust()` uses this in the quasi-Newton phase; it propagates through
+  objective composition (`+`).
+* `trust()` reports `neval` and, under `blather`, the `hessianSource` per
+  iteration, so a multi-start can be scored on gradient evaluations. These reach
+  `as.parframe()` as columns.
+* `mstrust()` drops the deprecated `studyname` argument. Use `name`.
+* `compile()` builds model shared objects correctly on Windows. The per-source
+  link and the combined-output object compile ran `system()` with a `2>&1`
+  token, but R's `system()` on Windows has no shell: the token reached
+  `R CMD SHLIB` as the override `PKG_LIBS=2>&1` and the compiler as an input
+  file, so the object never built and the `.dll` never linked against BLAS,
+  LAPACK or the Sundials solver. Both now go through `system2()`.
+* Adds `inst/examples/example_Boehm_JProteomeRes2014.R`, which builds the Boehm
+  et al. (2014) STAT5 model and compares the Hessian sources over a multi-start.
+* `define()` and `insert()` resolve the values passed through `...` in the frame
+  they were called from. Resolution reached the global environment only, so the
+  same call that worked at top level failed with an "object not found" inside a
+  function or a knitr chunk. Condition columns and `.currentSymbols` keep
+  precedence over the calling frame.  The internal names of `insert()` are no longer visible to those
+  values either; `.currentTrafo` and `.currentSymbols` are the documented way to
+  reach the branch being rewritten.
+* `plotValues()` marks a converged fit with a circle and an unconverged one with
+  a triangle, in every plot, and keeps both in the legend. The mapping followed
+  the levels present in the data, so it could differ between two plots of the
+  same kind.
+* `subset()` on a `parframe` evaluates its condition against the columns of the
+  frame and then in the frame it was written in. The second step reached the
+  package namespace instead, so a condition naming a local variable failed from
+  inside a function.
+* Adds the `Optimisation` vignette on Hessian sources, seeding and the economics
+  of a multi-start, shipped pre-rendered, with
+  `inst/benchmarks/bench_hessianSource.R` behind its numbers.
+* Attaching the package reports that BLAS is pinned to one thread inside the
+  forked workers of `mstrust()` and `profile()`, so a serial BLAS there is not a
+  surprise, and says so when no thread-control entry point was found and the
+  deadlock is still reachable. `options(dMod.quiet = TRUE)` suppresses the line.
+  The pin itself is cppDE's and needs no cooperation here; requires cppDE 0.9.4.
+
 # dMod2 0.7.0
 
 * PEtab import and export. `importPEtab()` reads a v1 or v2 problem and returns

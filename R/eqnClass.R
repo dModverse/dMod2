@@ -943,6 +943,7 @@ write.eqnlist <- function(eqnlist, ...) {
 subset.eqnlist <- function(x, ...) {
   
   eqnlist <- x
+  callerEnv <- parent.frame()
   
   # Do selection on data.frame
   data <- getReactions(eqnlist)
@@ -954,8 +955,14 @@ subset.eqnlist <- function(x, ...) {
                     Description = data$Description,
                     Check = data$Check)
   
-  "%in%" <- function(x, table) sapply(table, function(mytable) any(x == mytable))
-  select <- which(eval(substitute(...), data.list))
+  # The condition resolves against the reaction table, then the calling frame.
+  # `%in%` is overloaded because Educt and Product are lists of symbol vectors,
+  # which the base operator cannot compare.
+  env <- list2env(data.list, envir = new.env(parent = callerEnv))
+  env$"%in%" <- function(x, table)
+    sapply(table, function(mytable) any(x == mytable))
+  condition <- eval(substitute(alist(...)))[[1L]]
+  select <- which(eval(condition, env))
   if (length(select) == 0) return(NULL)
   
   # Translate subsetting on eqnlist entries

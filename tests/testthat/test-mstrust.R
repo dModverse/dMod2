@@ -230,17 +230,14 @@ test_that("mstrust writes nothing unless asked", {
 })
 
 
-test_that("studyname is deprecated in favour of name", {
-  target <- c(a = 1.0, b = -0.5)
-  obj <- constraintL2(mu = target, sigma = 1)
-  d <- file.path(tempdir(), paste0("ms_depr_", as.integer(runif(1, 1e6, 9e6))))
-  dir.create(d)
+test_that("subset() on a parframe sees the calling frame", {
+  pf <- parframe(data.frame(value = c(1, 5, 9), a = c(0.1, 0.2, 0.3)),
+                 parameters = "a", metanames = "value")
 
-  expect_warning(
-    fits <- mstrust(objfun = obj, center = c(a = 0, b = 0), resultPath = d,
-                    studyname = "old", rinit = 1, rmax = 10, iterlim = 100,
-                    fits = 2, sd = 1, cores = 1, output = TRUE),
-    "deprecated")
-  expect_true(any(grepl("^old/", list.files(d, recursive = TRUE))))
-  expect_s3_class(as.parframe(fits), "parframe")
+  # The condition is written where the caller stands, not where subset() runs.
+  pick <- function(cutoff) subset(pf, value < cutoff)
+
+  expect_equal(nrow(pick(6)), 2L)
+  expect_equal(nrow(subset(pf, value < 6)), 2L)
+  expect_s3_class(pick(6), "parframe")
 })

@@ -19,6 +19,10 @@ trust(
   rmin = 0,
   theta.max = 0.99995,
   boundary = c("reflective", "clip"),
+  hessianMethod = c("gn", "bfgs", "sr1", "hybrid"),
+  hessianInit = c("gn", "identity"),
+  qnMemory = 0L,
+  qnCautious = 1e-08,
   minimize = TRUE,
   blather = FALSE,
   parupper = NULL,
@@ -103,13 +107,38 @@ use, keeping iterates strictly interior. Only used by
 \item{boundary}{Box-bound handling, \code{"reflective"} (default) or
 \code{"clip"}. See Details.}
 
+\item{hessianMethod}{Source of the model Hessian: \code{"gn"} (default)
+uses the objective's Gauss-Newton Hessian; \code{"bfgs"} and \code{"sr1"}
+maintain a quasi-Newton update seeded from it; \code{"hybrid"} runs
+\code{"gn"} until the first value, model, step or stagnation stop, then
+switches to \code{"bfgs"} and carries on from there. Quasi-Newton methods
+require \code{boundary = "reflective"}.}
+
+\item{hessianInit}{Seed of the quasi-Newton approximation: \code{"gn"}
+(default) the objective's Hessian at \code{parinit}, \code{"identity"} the
+identity, which also stops \code{trust} asking for a Hessian at all. Read
+only when the run starts quasi-Newton, so it is inert for \code{"gn"} and
+\code{"hybrid"}, which need that Hessian.}
+
+\item{qnMemory}{Number of \code{(s, y)} pairs kept. \code{0} (default)
+accumulates every update onto the seed. A positive value rebuilds the
+approximation each iteration from \code{gamma * I} plus the last
+\code{qnMemory} pairs, \code{gamma} being the Shanno-Phua scaling
+\code{y^T y / s^T y} of the newest, and so discards the seed with the stale
+curvature. This is L-BFGS curvature at \code{O(qnMemory * K^2)} per
+iteration; the explicit matrix the subproblem needs saves no memory.}
+
+\item{qnCautious}{Cautious-update threshold: a BFGS pair counts only when
+\code{s^T y > qnCautious * |s| * |y|}. \code{0} disables the test,
+\code{"sr1"} is exempt. \code{qnSkipped} counts the rejected pairs.}
+
 \item{minimize}{If \code{TRUE} (default) minimise; if \code{FALSE}
 maximise.}
 
 \item{blather}{If \code{TRUE} return the per-iteration trace
 (\code{argpath}, \code{argtry}, \code{steptype}, \code{stepback},
 \code{accept}, \code{r}, \code{rho}, \code{valpath}, \code{valtry},
-\code{preddiff}, \code{stepnorm}).}
+\code{preddiff}, \code{stepnorm}, \code{hessianSource}).}
 
 \item{parupper, parlower}{Named or scalar numeric bounds. If unnamed,
 the first element broadcasts to all parameters; if named, the
@@ -141,7 +170,9 @@ all entries of \code{mu}) or a named numeric aligned with \code{mu}.}
 }
 \value{
 A list with components \code{argument}, \code{value},
-\code{gradient}, \code{hessian}, \code{iterations},
+\code{gradient}, \code{hessian}, \code{iterations}, \code{neval},
+\code{qnEval} (evaluations spent in the quasi-Newton phase),
+\code{qnSkipped} (pairs the cautious test rejected),
 \code{converged}, \code{atBound} (named logical, which parameters are
 held by a bound) and \code{stopReason}. When \code{blather = TRUE} the
 list also contains \code{argpath}, \code{argtry}, \code{steptype},
@@ -195,6 +226,13 @@ flat within \code{ftol}.
 \code{"fvalue"}, \code{"preddiff"}, \code{"step"}, \code{"stagnation"},
 \code{"radius"}, \code{"objfun"} or \code{"iterlim"}. Stagnation reports
 \code{converged = TRUE}; use \code{rmin} for a hard failure instead.
+
+Only \code{gtol} tests first-order optimality; the other four read the last
+accepted step and a misleading Hessian can trip them far from a stationary
+point. \code{hessianMethod = "hybrid"} uses that: the first of the four
+switches the Hessian source instead of ending the run. In a quasi-Newton
+phase \code{"fvalue"}, \code{"preddiff"} and \code{"step"} do not end the
+run at all; it ends on \code{"gradient"}, \code{"stagnation"} or the radius.
 }
 
 \section{Choosing tolerances}{

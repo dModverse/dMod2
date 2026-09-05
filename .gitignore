@@ -33,6 +33,7 @@ vignettes/*.R
 vignettes/*.html
 vignettes/*.pdf
 !vignettes/PEtab.pdf
+!vignettes/Optimisation.pdf
 
 # Compiled objects and scratch
 *.o

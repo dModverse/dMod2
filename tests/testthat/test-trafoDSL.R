@@ -51,3 +51,55 @@ test_that("branch tolerates grid columns that match no parameter", {
   expect_equal(unname(out[["C2"]][["k_pr_R2mRNA_Pert"]]), "k_pr_R2mRNA_Pert")
 
 })
+
+test_that("dots are resolved in the calling frame", {
+
+  # A caller inside a function must see its own variables, not only globals.
+  build <- function() {
+    pars <- c("alpha", "beta")
+    repl <- "0.5"
+    define(eqnvec(), "x~x", x = pars) |> insert("beta ~ v", v = repl)
+  }
+
+  out <- build()
+
+  expect_equal(out[["alpha"]], "alpha")
+  expect_equal(out[["beta"]], "0.5")
+
+})
+
+test_that("condition columns and .currentSymbols outrank the calling frame", {
+
+  grid <- data.frame(shift = c("s1", "s2"), row.names = c("C1", "C2"))
+
+  build <- function() {
+    shift <- "caller"
+    define(eqnvec(), "x~x", x = c("alpha", "beta")) |>
+      branch(table = grid, apply = "nothing") |>
+      insert("x ~ x_y", x = .currentSymbols, y = shift)
+  }
+
+  out <- build()
+
+  expect_equal(out[["C1"]][["alpha"]], "alpha_s1")
+  expect_equal(out[["C2"]][["beta"]], "beta_s2")
+
+})
+
+
+test_that("subset() on an eqnlist sees the calling frame", {
+
+  eq <- eqnlist() |>
+    addReaction("A", "B", "k1*A") |>
+    addReaction("B", "C", "k2*B")
+
+  # The condition may name columns of the reaction table, may use the `%in%`
+  # this method overloads, and may name variables of the calling frame.
+  byRate  <- function(pattern) subset(eq, grepl(pattern, Rate))
+  byEduct <- function(species) subset(eq, species %in% Educt)
+
+  expect_equal(nrow(getReactions(byRate("k1"))), 1L)
+  expect_equal(nrow(getReactions(byEduct("A"))), 1L)
+  expect_equal(nrow(getReactions(subset(eq, grepl("k", Rate)))), 2L)
+
+})

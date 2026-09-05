@@ -652,14 +652,20 @@ plotFluxes <- function(pouter, x, times, fluxEquations, nameFlux = "Fluxes:", ..
 }
 
 #' Plotting objective values of a collection of fits
-#' 
-#' @param x data.frame with columns "value", "converged" and "iterations", e.g. 
+#'
+#' Draws the waterfall plot of a fit collection: objective values in ascending
+#' order against their rank. A converged fit is marked by a circle and an
+#' unconverged one by a triangle, in every plot.
+#'
+#' @param x data.frame with columns "value", "converged" and "iterations", e.g.
 #' a [parframe].
 #' @param ... arguments for subsetting of x
 #' @param tol maximal allowed difference between neighboring objective values
 #' to be recognized as one.
 #' @param showSteps logical, if `TRUE`, the detected steps are indicated by
 #' dashed vertical lines and labelled by their index. Defaults to `FALSE`.
+#' @return A `ggplot` object, with the plotted data attached as attribute
+#' `"data"`.
 #' @export
 plotValues <- function(x,...) {
   UseMethod("plotValues", x)

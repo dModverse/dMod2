@@ -2346,6 +2346,11 @@ importPEtab <- function(yamlPath, backend,
     if (is.null(fixed)) fixed <- baked_fixed
     raw_obj(pars, fixed = fixed, ...)
   }
+  # Carry the objfn class and attributes over: mstrust() and profile() dispatch
+  # on them to reload the shared object inside a worker.
+  for (a in setdiff(names(attributes(raw_obj)), "class"))
+    attr(obj, a) <- attr(raw_obj, a)
+  class(obj) <- class(raw_obj)
 
   bestfit <- param_meta$pouter
   attr(bestfit, "petab_scales") <- param_meta$scales[names(bestfit)]
