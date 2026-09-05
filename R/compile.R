@@ -467,10 +467,30 @@ compile <- function(..., output = NULL, args = NULL, cores = detectFreeCores(),
         else Sys.setenv(R_MAKEVARS_USER = old_mu)
         unlink(mv)
       }, add = TRUE)
+
+      ## As in the combined-output link: env PKG_LIBS can vanish from SHLIB's
+      ## link command on some R/rtools combinations, so also drop a Makevars.win
+      ## next to the source. compile_one runs serially on Windows, no race.
+      mv_path <- file.path(dirname(entry$srcfile), "Makevars.win")
+      mv_pre  <- if (file.exists(mv_path)) readLines(mv_path, warn = FALSE) else NULL
+      writeLines(c(
+        paste("PKG_CFLAGS =",   pkg_c),
+        paste("PKG_CXXFLAGS =", pkg_cx),
+        paste("PKG_CPPFLAGS =", cppflags),
+        paste("PKG_LIBS =",     pkg_l)
+      ), mv_path)
+      on.exit({
+        if (is.null(mv_pre)) try(unlink(mv_path), silent = TRUE)
+        else                 try(writeLines(mv_pre, mv_path), silent = TRUE)
+      }, add = TRUE)
     }
-    cmd <- paste(Rbin, "CMD SHLIB", shQuote(entry$srcfile))
-    if (verbose) cat(cmd, "\n")
-    out <- suppressWarnings(system(paste(cmd, "2>&1"), intern = TRUE))
+    ## Use system2() with piped stdout/stderr, not a `2>&1` token: R's system()
+    ## on Windows runs without a shell, so `2>&1` reaches R CMD SHLIB as the make
+    ## override PKG_LIBS=2>&1, stripping all libs and breaking the link.
+    Rexe <- file.path(R.home("bin"), "R")
+    shlib_args <- c("CMD", "SHLIB", shQuote(entry$srcfile))
+    if (verbose) cat(shQuote(Rexe), paste(shlib_args, collapse = " "), "\n")
+    out <- suppressWarnings(system2(Rexe, shlib_args, stdout = TRUE, stderr = TRUE))
     if (verbose && length(out)) writeLines(out)
     status <- attr(out, "status")
     if (!is.null(status) && status != 0L)
@@ -496,9 +516,12 @@ compile <- function(..., output = NULL, args = NULL, cores = detectFreeCores(),
 
   compile_one_obj <- function(job) {
     if (verbose) cat(job$cmd, "\n")
-    ## The compiler message is the only account of what went wrong, and a
-    ## worker that fails inside mclapply reports nothing else.
-    out <- suppressWarnings(system(paste(job$cmd, "2>&1"), intern = TRUE))
+    ## system2() with piped streams, not a `2>&1` token: R's system() on Windows
+    ## has no shell, so `2>&1` is handed to the compiler as an input file
+    ## ("2>&1: linker input file not found") and the object never builds. Keeps
+    ## the compiler diagnostics, which are the only account of a failed build.
+    toks <- .tok(job$cmd)
+    out  <- suppressWarnings(system2(toks[1], toks[-1], stdout = TRUE, stderr = TRUE))
     if (verbose && length(out)) writeLines(out)
     status <- attr(out, "status")
     if (!is.null(status) && status != 0L)

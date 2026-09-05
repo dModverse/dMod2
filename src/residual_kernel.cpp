@@ -196,6 +196,7 @@ void accumulate_aloq_residual(
 
     // Single per-row Hessian double-loop. Branchless on the inner k1 loop,
     // since each coefficient defaults to 0 when its contribution is absent.
+    if (opts.build_hessian)
     for (int k2 = 0; k2 < n_par; ++k2) {
       const double dwr_k2 = dwr[k2];
       const double dx_k2  = has_dsig ? dpred_i[k2]  : 0.0;
@@ -229,10 +230,10 @@ void accumulate_aloq_residual(
     }
   }  // for each row
 
-  if (opts.use_deriv2_exact && d2pred != nullptr) {
+  if (opts.build_hessian && opts.use_deriv2_exact && d2pred != nullptr) {
     contract_d2_block(n_obs, n_par, d2pred, W_d2.data(), hess_acc, scratch_d2);
   }
-  if (has_d2sig) {
+  if (opts.build_hessian && has_d2sig) {
     contract_d2_block(n_obs, n_par, d2sigma, W_d2sig.data(), hess_acc,
                       scratch_d2);
   }
@@ -398,6 +399,7 @@ void accumulate_bloq_residual(
         if (opts.bloq_part2) coef_cross_m3 = -2.0 * G_neg_wr * inv_s2;
         if (opts.bloq_part3) coef_dsig2_m3 =  4.0 * G_neg_wr * wr * inv_s2;
       }
+      if (opts.build_hessian)
       for (int k2 = 0; k2 < n_par; ++k2) {
         const double dwr_k2 = dwr[k2];
         const double dx_k2  = has_dsig ? dpred_i[k2]  : 0.0;
@@ -438,7 +440,7 @@ void accumulate_bloq_residual(
       const double C_w0w0  = 2.0 * (-w0 * G_w0 - G_w0 * G_w0 + w0 * sw0 + sw0 * sw0);
       const double C_cross = -2.0 * swr * sw0;
 
-      if (opts.bloq_part1) {
+      if (opts.build_hessian && opts.bloq_part1) {
         for (int k2 = 0; k2 < n_par; ++k2) {
           const double dwr_k2 = dwr[k2];
           const double dw0_k2 = dw0[k2];
@@ -452,7 +454,7 @@ void accumulate_bloq_residual(
       }
 
       // dpred/dsigma cross term from the a*d2wr + b*d2w0 chain rule.
-      if (opts.bloq_part2 && has_dsig) {
+      if (opts.build_hessian && opts.bloq_part2 && has_dsig) {
         const double c = -2.0 * (half_a + half_b) * inv_s2;   // -(a + b) inv_s^2
         for (int k2 = 0; k2 < n_par; ++k2) {
           const double dxk2 = dpred_i[k2];
@@ -465,7 +467,7 @@ void accumulate_bloq_residual(
       }
 
       // dsigma^2 term from the a*d2wr + b*d2w0 chain rule.
-      if (opts.bloq_part3 && has_dsig) {
+      if (opts.build_hessian && opts.bloq_part3 && has_dsig) {
         const double c = 4.0 * inv_s2 * (half_a * wr + half_b * w0);  // 2(a wr + b w0) inv_s^2
         for (int k2 = 0; k2 < n_par; ++k2) {
           const double dsk2 = dsigma_i[k2];
@@ -480,10 +482,10 @@ void accumulate_bloq_residual(
     if (has_d2sig) W_d2sig[i] = w_deriv2_sig;
   }  // for each BLOQ row
 
-  if (opts.use_deriv2_exact && d2pred != nullptr) {
+  if (opts.build_hessian && opts.use_deriv2_exact && d2pred != nullptr) {
     contract_d2_block(n_obs, n_par, d2pred, W_d2.data(), hess_acc, scratch_d2);
   }
-  if (has_d2sig) {
+  if (opts.build_hessian && has_d2sig) {
     contract_d2_block(n_obs, n_par, d2sigma, W_d2sig.data(), hess_acc,
                       scratch_d2);
   }

@@ -185,6 +185,15 @@ as.parframe.parlist <- function(x, sort.by = "value", ...) {
     m_metanames <- c(m_metanames, "stopReason")
   }
 
+  # Objective (= gradient) evaluations, and those spent in the quasi-Newton
+  # phase; present only when the optimiser reports them.
+  .intcol <- function(field) vapply(x[m_idx], function(.x)
+    if (is.null(.x[[field]])) NA_integer_ else as.integer(.x[[field]]), 1L)
+  for (field in c("neval", "qnEval")) {
+    col <- .intcol(field)
+    if (any(!is.na(col))) { m_parframe[[field]] <- col; m_metanames <- c(m_metanames, field) }
+  }
+
   parameters <- lapply(x[m_idx], function(x) data.table::as.data.table(as.list(x$argument)))
   parameters <- data.table::rbindlist(parameters, use.names = TRUE)
   m_parframe <- cbind(m_parframe, parameters)

@@ -619,3 +619,28 @@ test_that("normL2 gradient and Hessian follow the order of the parameter vector"
                  info = paste0("cpp=", cpp))
   })
 })
+
+
+## ---- hessian = FALSE: gradient without the Hessian ---------------------
+
+test_that("hessian = FALSE returns value and gradient but no Hessian", {
+  skip_if_no_compile()
+  bench <- fx_decay_compiled()
+  data  <- fx_decay_data(pars = c(A = 1.0, k = 0.5), sigma = 0.05)
+  obj   <- normL2(data, bench$prd_id)
+  p     <- bench$outerpars_id
+
+  full   <- obj(p)
+  nohess <- obj(p, hessian = FALSE)
+  expect_true(is.matrix(full$hessian))
+  expect_null(nohess$hessian)
+  expect_equal(nohess$value, full$value)
+  expect_equal(nohess$gradient, full$gradient)
+
+  # The NULL Hessian survives objective composition (normL2 + constraintL2).
+  comp <- obj + constraintL2(setNames(rep(0, length(p)), names(p)), sigma = 4)
+  expect_true(is.matrix(comp(p)$hessian))
+  expect_null(comp(p, hessian = FALSE)$hessian)
+  expect_equal(comp(p, hessian = FALSE)$gradient, comp(p)$gradient)
+  expect_equal(comp(p, hessian = FALSE)$value,    comp(p)$value)
+})

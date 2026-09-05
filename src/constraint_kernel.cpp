@@ -103,7 +103,8 @@ List constraintL2_scalar_kernel(
     NumericVector sigma,                // length = length(mu_names); when est, holds 0.0 for est-rows
     CharacterVector sigma_pars,         // names of sigma params (empty string if fixed)
     bool est,
-    bool deriv = true) {
+    bool deriv = true,
+    bool build_hessian = true) {
 
   // Build allp lookup: name -> value
   // pars carries the outer (theta) parameter values when dP is given;
@@ -213,9 +214,11 @@ List constraintL2_scalar_kernel(
     }
   }
 
-  // Chain rule via dP / exact dP2 contribution.
+  // Chain rule via dP / exact dP2 contribution. The Hessian sandwich (and its
+  // dP2 term) is skipped entirely under build_hessian = false; only the
+  // gradient chain rule runs and the result carries a NULL hessian.
   NumericVector grad_out;
-  NumericMatrix hess_out;
+  RObject hess_out = R_NilValue;
   CharacterVector theta_names;
 
   if (dP_opt.isNotNull()) {
@@ -234,45 +237,52 @@ List constraintL2_scalar_kernel(
       for (int p = 0; p < n_inner_full; ++p) s += dP(p, k) * gi[p];
       grad_theta[k] = s;
     }
-    // hess_theta = dP^T * Hi * dP
-    std::vector<double> hess_theta((std::size_t) n_theta * n_theta, 0.0);
-    sandwich_hess(&dP(0,0), n_inner_full, n_theta, Hi.data(), hess_theta.data());
-
-    // Exact dP2 contribution: H_theta[k1, k2] += sum_p gi[p] * dP2[p, k1, k2]
-    if (dP2_opt.isNotNull()) {
-      NumericVector dP2_flat(dP2_opt.get());
-      IntegerVector dP2_dim = dP2_flat.attr("dim");
-      if (dP2_dim.size() == 3 && dP2_dim[1] == n_theta && dP2_dim[2] == n_theta) {
-        List dP2_dn = dP2_flat.attr("dimnames");
-        CharacterVector dP2_inner_names = dP2_dn[0];
-        std::vector<int> idx(dP2_inner_names.size(), -1);
-        std::vector<double> gi_inner(dP2_inner_names.size(), 0.0);
-        for (int i = 0; i < dP2_inner_names.size(); ++i) {
-          int ip = find_name(inner_par_names, as<std::string>(dP2_inner_names[i]));
-          if (ip >= 0) {
-            idx[i]      = i;
-            gi_inner[i] = gi[ip];
-          }
-        }
-        apply_dP2_exact(REAL(dP2_flat), dP2_dim, idx, gi_inner,
-                        n_theta, hess_theta.data());
-      }
-    }
-
     grad_out = NumericVector(grad_theta.begin(), grad_theta.end());
     grad_out.names() = theta_names;
-    hess_out = NumericMatrix(n_theta, n_theta);
-    std::memcpy(&hess_out(0,0), hess_theta.data(),
-                sizeof(double) * (std::size_t) n_theta * n_theta);
-    hess_out.attr("dimnames") = List::create(theta_names, theta_names);
+
+    if (build_hessian) {
+      // hess_theta = dP^T * Hi * dP
+      std::vector<double> hess_theta((std::size_t) n_theta * n_theta, 0.0);
+      sandwich_hess(&dP(0,0), n_inner_full, n_theta, Hi.data(), hess_theta.data());
+
+      // Exact dP2 contribution: H_theta[k1, k2] += sum_p gi[p] * dP2[p, k1, k2]
+      if (dP2_opt.isNotNull()) {
+        NumericVector dP2_flat(dP2_opt.get());
+        IntegerVector dP2_dim = dP2_flat.attr("dim");
+        if (dP2_dim.size() == 3 && dP2_dim[1] == n_theta && dP2_dim[2] == n_theta) {
+          List dP2_dn = dP2_flat.attr("dimnames");
+          CharacterVector dP2_inner_names = dP2_dn[0];
+          std::vector<int> idx(dP2_inner_names.size(), -1);
+          std::vector<double> gi_inner(dP2_inner_names.size(), 0.0);
+          for (int i = 0; i < dP2_inner_names.size(); ++i) {
+            int ip = find_name(inner_par_names, as<std::string>(dP2_inner_names[i]));
+            if (ip >= 0) {
+              idx[i]      = i;
+              gi_inner[i] = gi[ip];
+            }
+          }
+          apply_dP2_exact(REAL(dP2_flat), dP2_dim, idx, gi_inner,
+                          n_theta, hess_theta.data());
+        }
+      }
+
+      NumericMatrix H(n_theta, n_theta);
+      std::memcpy(&H(0,0), hess_theta.data(),
+                  sizeof(double) * (std::size_t) n_theta * n_theta);
+      H.attr("dimnames") = List::create(theta_names, theta_names);
+      hess_out = H;
+    }
   } else {
     // No chain rule: gradient/Hessian directly in inner-par space.
     grad_out = NumericVector(gi.begin(), gi.end());
     grad_out.names() = inner_par_names;
-    hess_out = NumericMatrix(n_inner_full, n_inner_full);
-    std::memcpy(&hess_out(0,0), Hi.data(),
-                sizeof(double) * (std::size_t) n_inner_full * n_inner_full);
-    hess_out.attr("dimnames") = List::create(inner_par_names, inner_par_names);
+    if (build_hessian) {
+      NumericMatrix H(n_inner_full, n_inner_full);
+      std::memcpy(&H(0,0), Hi.data(),
+                  sizeof(double) * (std::size_t) n_inner_full * n_inner_full);
+      H.attr("dimnames") = List::create(inner_par_names, inner_par_names);
+      hess_out = H;
+    }
   }
 
   return List::create(
@@ -293,7 +303,8 @@ List datapointL2_kernel(
     double t,
     double sigma,
     std::string value_par,               // name of pouter param that holds the data target value
-    bool deriv = true) {
+    bool deriv = true,
+    bool build_hessian = true) {
 
   CharacterVector pouter_names = pouter.names();
   const int n_p = pouter.size();
@@ -369,17 +380,20 @@ List datapointL2_kernel(
   const int idx_value = find_name(pouter_names, value_par);
   if (idx_value >= 0) dres_dp[idx_value] = -1.0;
 
-  // 5. Gradient + Hessian
+  // 5. Gradient + Hessian. The Hessian (and its exact d2pred term) is skipped
+  // entirely under build_hessian = false; the result then carries a NULL hessian.
   std::vector<double> gr(n_p, 0.0);
-  std::vector<double> hs((std::size_t) n_p * n_p, 0.0);
+  std::vector<double> hs;
+  if (build_hessian) hs.assign((std::size_t) n_p * n_p, 0.0);
   for (int i = 0; i < n_p; ++i) {
     gr[i] = 2.0 * res * dres_dp[i] / sigma2;
-    for (int j = 0; j < n_p; ++j) {
-      hs[i + (std::size_t) j * n_p] = 2.0 * dres_dp[i] * dres_dp[j] / sigma2;
-    }
+    if (build_hessian)
+      for (int j = 0; j < n_p; ++j) {
+        hs[i + (std::size_t) j * n_p] = 2.0 * dres_dp[i] * dres_dp[j] / sigma2;
+      }
   }
   // 6. Exact d2pred contribution (only on structural pars)
-  if (d2pred_attr_opt.isNotNull()) {
+  if (build_hessian && d2pred_attr_opt.isNotNull()) {
     NumericVector d2_flat(d2pred_attr_opt.get());
     IntegerVector d2dim = d2_flat.attr("dim");
     if (d2dim.size() == 4) {
@@ -410,10 +424,13 @@ List datapointL2_kernel(
 
   NumericVector grad_out(gr.begin(), gr.end());
   grad_out.names() = pouter_names;
-  NumericMatrix hess_out(n_p, n_p);
-  std::memcpy(&hess_out(0,0), hs.data(),
-              sizeof(double) * (std::size_t) n_p * n_p);
-  hess_out.attr("dimnames") = List::create(pouter_names, pouter_names);
+  RObject hess_out = R_NilValue;
+  if (build_hessian) {
+    NumericMatrix H(n_p, n_p);
+    std::memcpy(&H(0,0), hs.data(), sizeof(double) * (std::size_t) n_p * n_p);
+    H.attr("dimnames") = List::create(pouter_names, pouter_names);
+    hess_out = H;
+  }
 
   return List::create(
       Named("value")      = value,

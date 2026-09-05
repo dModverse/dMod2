@@ -64,6 +64,11 @@ enum class BloqMode {
 };
 
 struct AccumOpts {
+  // If false, the Hessian accumulation is skipped entirely (value and gradient
+  // still computed). hess_acc may then be null. Used by the quasi-Newton
+  // Hessian sources, which maintain their own approximation.
+  bool build_hessian = true;
+
   // If true, adds the exact second-order pred and sigma contributions to the
   // Hessian:
   //   H += sum_i w_pred_i * d^2 pred_i / d theta^2

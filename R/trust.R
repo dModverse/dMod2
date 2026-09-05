@@ -92,12 +92,17 @@
 #'   \code{boundary = "reflective"}.
 #' @param boundary Box-bound handling, \code{"reflective"} (default) or
 #'   \code{"clip"}. See Details.
+#' @param hessianMethod Source of the model Hessian: \code{"gn"} (default)
+#'   uses the objective's Gauss-Newton Hessian; \code{"bfgs"} and \code{"sr1"}
+#'   maintain a quasi-Newton update seeded from it; \code{"hybrid"} runs
+#'   \code{"gn"} until it stagnates, then switches to \code{"bfgs"}. Quasi-Newton
+#'   methods require \code{boundary = "reflective"}.
 #' @param minimize If \code{TRUE} (default) minimise; if \code{FALSE}
 #'   maximise.
 #' @param blather If \code{TRUE} return the per-iteration trace
 #'   (\code{argpath}, \code{argtry}, \code{steptype}, \code{stepback},
 #'   \code{accept}, \code{r}, \code{rho}, \code{valpath}, \code{valtry},
-#'   \code{preddiff}, \code{stepnorm}).
+#'   \code{preddiff}, \code{stepnorm}, \code{hessianSource}).
 #' @param parupper,parlower Named or scalar numeric bounds. If unnamed,
 #'   the first element broadcasts to all parameters; if named, the
 #'   entries slot by name into a length-K vector defaulting to
@@ -136,6 +141,7 @@ trust <- function(objfun, parinit, rinit = 0.1, rmax = 10,
                   rmin      = 0,
                   theta.max = 0.99995,
                   boundary  = c("reflective", "clip"),
+                  hessianMethod = c("gn", "bfgs", "sr1", "hybrid"),
                   minimize  = TRUE,
                   blather   = FALSE,
                   parupper  = NULL,
@@ -147,16 +153,16 @@ trust <- function(objfun, parinit, rinit = 0.1, rmax = 10,
   if (!missing(fterm)) ftol <- fterm
   if (!missing(mterm)) mtol  <- mterm
   boundary <- match.arg(boundary)
+  hessianMethod <- match.arg(hessianMethod)
 
+  # The kernel passes hessian = FALSE in the quasi-Newton phase, so the wrapper
+  # forwards it; dMod objectives skip J^T J then, others ignore it via `...`.
   dots <- list(...)
-  fn <- if (length(dots) > 0L) {
-    function(x) do.call(objfun, c(list(x), dots))
-  } else {
-    objfun
-  }
+  fn <- function(x, hessian = TRUE)
+    do.call(objfun, c(list(x, hessian = hessian), dots))
   trust_impl(fn, parinit, rinit, rmax, parscale, as.integer(iterlim),
              ftol, mtol, gtol, xtol, rmin, theta.max,
-             boundary, minimize, blather,
+             boundary, hessianMethod, minimize, blather,
              parupper, parlower, printIter, traceFile)
 }
 

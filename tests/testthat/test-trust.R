@@ -482,3 +482,70 @@ test_that("a flat, high-value start makes progress instead of stopping at once",
   expect_gt(fit$iterations, 0L)
   expect_lt(fit$value, f0$value)
 })
+
+
+## ---- Interchangeable Hessian source (gn / bfgs / sr1 / hybrid) ---------
+
+# A flat objective: constant value, nonzero gradient. Every trial step is
+# rejected with an unchanged value, so trust stalls deterministically -- the
+# hook the hybrid switch fires on.
+.flat_objfn <- function(d) {
+  function(p, ...) list(value = 1.0, gradient = rep(1.0, d), hessian = diag(d))
+}
+
+test_that("quasi-Newton methods reach the same optimum as gn on a nonlinear fit", {
+  skip_if_no_compile()
+  bench <- fx_decay_compiled()
+  data  <- fx_decay_data(pars = c(A = 1.0, k = 0.5), sigma = 0.02,
+                         times = seq(0, 8, by = 0.5), seed = 17L)
+  obj   <- normL2(data, bench$prd_id)
+  init  <- c(A = 0.6, k = 0.9)
+
+  ref <- trust(obj, init, rinit = 1, rmax = 10, iterlim = 200)
+  expect_true(ref$converged)
+  for (hm in c("bfgs", "sr1", "hybrid")) {
+    fit <- trust(obj, init, rinit = 1, rmax = 10, iterlim = 200, hessianMethod = hm)
+    expect_true(fit$converged, info = hm)
+    expect_equal(fit$argument, ref$argument, tolerance = 1e-3, ignore_attr = TRUE,
+                 info = hm)
+  }
+})
+
+test_that("qnEval counts objective evaluations spent in the quasi-Newton phase", {
+  target <- c(a = 1.0, b = -0.5)
+  obj <- .quadratic_objfn(target)
+  init <- c(a = 0, b = 0)
+  expect_equal(trust(obj, init)$qnEval, 0L)                     # gn: never
+  expect_gt(trust(obj, init, hessianMethod = "bfgs")$qnEval, 0L)
+  expect_gt(trust(obj, init, hessianMethod = "sr1")$qnEval, 0L)
+})
+
+test_that("blather reports the Hessian source per iteration", {
+  target <- c(a = 1.0, b = -0.5, c = 2.3)
+  obj <- .quadratic_objfn(target)
+  init <- c(a = 0, b = 0, c = 0)
+  expect_true(all(trust(obj, init, blather = TRUE)$hessianSource == "gn"))
+  expect_true(all(trust(obj, init, hessianMethod = "bfgs",
+                        blather = TRUE)$hessianSource == "bfgs"))
+})
+
+test_that("hybrid runs gn, then switches to bfgs on stagnation", {
+  obj  <- .flat_objfn(2L)
+  init <- c(a = 0, b = 0)
+
+  gn <- suppressWarnings(trust(obj, init, hessianMethod = "gn", blather = TRUE))
+  expect_true(all(gn$hessianSource == "gn"))
+
+  hy <- suppressWarnings(trust(obj, init, hessianMethod = "hybrid", blather = TRUE))
+  expect_identical(hy$hessianSource[1], "gn")   # always starts on gn
+  expect_true("bfgs" %in% hy$hessianSource)      # and switches
+  expect_gt(hy$qnEval, 0L)
+})
+
+test_that("quasi-Newton methods require the reflective boundary and a known name", {
+  obj <- .quadratic_objfn(c(a = 1.0))
+  init <- c(a = 0)
+  expect_error(trust(obj, init, boundary = "clip", hessianMethod = "bfgs"),
+               "reflective")
+  expect_error(trust(obj, init, hessianMethod = "nope"))   # match.arg rejects
+})

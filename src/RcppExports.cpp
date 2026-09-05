@@ -59,8 +59,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // constraintL2_scalar_kernel
-List constraintL2_scalar_kernel(NumericVector pars, Nullable<NumericMatrix> dP_opt, Nullable<NumericVector> dP2_opt, CharacterVector inner_par_names, Nullable<NumericVector> fixed_opt, CharacterVector mu_names, NumericVector mu, NumericVector sigma, CharacterVector sigma_pars, bool est, bool deriv);
-RcppExport SEXP _dMod2_constraintL2_scalar_kernel(SEXP parsSEXP, SEXP dP_optSEXP, SEXP dP2_optSEXP, SEXP inner_par_namesSEXP, SEXP fixed_optSEXP, SEXP mu_namesSEXP, SEXP muSEXP, SEXP sigmaSEXP, SEXP sigma_parsSEXP, SEXP estSEXP, SEXP derivSEXP) {
+List constraintL2_scalar_kernel(NumericVector pars, Nullable<NumericMatrix> dP_opt, Nullable<NumericVector> dP2_opt, CharacterVector inner_par_names, Nullable<NumericVector> fixed_opt, CharacterVector mu_names, NumericVector mu, NumericVector sigma, CharacterVector sigma_pars, bool est, bool deriv, bool build_hessian);
+RcppExport SEXP _dMod2_constraintL2_scalar_kernel(SEXP parsSEXP, SEXP dP_optSEXP, SEXP dP2_optSEXP, SEXP inner_par_namesSEXP, SEXP fixed_optSEXP, SEXP mu_namesSEXP, SEXP muSEXP, SEXP sigmaSEXP, SEXP sigma_parsSEXP, SEXP estSEXP, SEXP derivSEXP, SEXP build_hessianSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -75,13 +75,14 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< CharacterVector >::type sigma_pars(sigma_parsSEXP);
     Rcpp::traits::input_parameter< bool >::type est(estSEXP);
     Rcpp::traits::input_parameter< bool >::type deriv(derivSEXP);
-    rcpp_result_gen = Rcpp::wrap(constraintL2_scalar_kernel(pars, dP_opt, dP2_opt, inner_par_names, fixed_opt, mu_names, mu, sigma, sigma_pars, est, deriv));
+    Rcpp::traits::input_parameter< bool >::type build_hessian(build_hessianSEXP);
+    rcpp_result_gen = Rcpp::wrap(constraintL2_scalar_kernel(pars, dP_opt, dP2_opt, inner_par_names, fixed_opt, mu_names, mu, sigma, sigma_pars, est, deriv, build_hessian));
     return rcpp_result_gen;
 END_RCPP
 }
 // datapointL2_kernel
-List datapointL2_kernel(NumericVector pouter, Nullable<NumericVector> fixed_opt, NumericMatrix prdf, Nullable<NumericVector> dpred_attr_opt, Nullable<NumericVector> d2pred_attr_opt, std::string obs_name, double t, double sigma, std::string value_par, bool deriv);
-RcppExport SEXP _dMod2_datapointL2_kernel(SEXP pouterSEXP, SEXP fixed_optSEXP, SEXP prdfSEXP, SEXP dpred_attr_optSEXP, SEXP d2pred_attr_optSEXP, SEXP obs_nameSEXP, SEXP tSEXP, SEXP sigmaSEXP, SEXP value_parSEXP, SEXP derivSEXP) {
+List datapointL2_kernel(NumericVector pouter, Nullable<NumericVector> fixed_opt, NumericMatrix prdf, Nullable<NumericVector> dpred_attr_opt, Nullable<NumericVector> d2pred_attr_opt, std::string obs_name, double t, double sigma, std::string value_par, bool deriv, bool build_hessian);
+RcppExport SEXP _dMod2_datapointL2_kernel(SEXP pouterSEXP, SEXP fixed_optSEXP, SEXP prdfSEXP, SEXP dpred_attr_optSEXP, SEXP d2pred_attr_optSEXP, SEXP obs_nameSEXP, SEXP tSEXP, SEXP sigmaSEXP, SEXP value_parSEXP, SEXP derivSEXP, SEXP build_hessianSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -95,13 +96,14 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< double >::type sigma(sigmaSEXP);
     Rcpp::traits::input_parameter< std::string >::type value_par(value_parSEXP);
     Rcpp::traits::input_parameter< bool >::type deriv(derivSEXP);
-    rcpp_result_gen = Rcpp::wrap(datapointL2_kernel(pouter, fixed_opt, prdf, dpred_attr_opt, d2pred_attr_opt, obs_name, t, sigma, value_par, deriv));
+    Rcpp::traits::input_parameter< bool >::type build_hessian(build_hessianSEXP);
+    rcpp_result_gen = Rcpp::wrap(datapointL2_kernel(pouter, fixed_opt, prdf, dpred_attr_opt, d2pred_attr_opt, obs_name, t, sigma, value_par, deriv, build_hessian));
     return rcpp_result_gen;
 END_RCPP
 }
 // normL2_kernel
-List normL2_kernel(List prediction, Nullable<List> err_list_opt, List meta_list, CharacterVector par_names_global, bool deriv2_requested, int threads, std::string bloq_mode);
-RcppExport SEXP _dMod2_normL2_kernel(SEXP predictionSEXP, SEXP err_list_optSEXP, SEXP meta_listSEXP, SEXP par_names_globalSEXP, SEXP deriv2_requestedSEXP, SEXP threadsSEXP, SEXP bloq_modeSEXP) {
+List normL2_kernel(List prediction, Nullable<List> err_list_opt, List meta_list, CharacterVector par_names_global, bool deriv2_requested, int threads, std::string bloq_mode, bool build_hessian);
+RcppExport SEXP _dMod2_normL2_kernel(SEXP predictionSEXP, SEXP err_list_optSEXP, SEXP meta_listSEXP, SEXP par_names_globalSEXP, SEXP deriv2_requestedSEXP, SEXP threadsSEXP, SEXP bloq_modeSEXP, SEXP build_hessianSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -112,7 +114,8 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< bool >::type deriv2_requested(deriv2_requestedSEXP);
     Rcpp::traits::input_parameter< int >::type threads(threadsSEXP);
     Rcpp::traits::input_parameter< std::string >::type bloq_mode(bloq_modeSEXP);
-    rcpp_result_gen = Rcpp::wrap(normL2_kernel(prediction, err_list_opt, meta_list, par_names_global, deriv2_requested, threads, bloq_mode));
+    Rcpp::traits::input_parameter< bool >::type build_hessian(build_hessianSEXP);
+    rcpp_result_gen = Rcpp::wrap(normL2_kernel(prediction, err_list_opt, meta_list, par_names_global, deriv2_requested, threads, bloq_mode, build_hessian));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -240,8 +243,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // trust_impl
-List trust_impl(Function objfun, NumericVector parinit, double rinit, double rmax, Nullable<NumericVector> parscale, int iterlim, double ftol, double mtol, double gtol, double xtol, double rmin, double thetamax, std::string boundary, bool minimize, bool blather, Nullable<NumericVector> parupper, Nullable<NumericVector> parlower, bool printIter, Nullable<CharacterVector> traceFile);
-RcppExport SEXP _dMod2_trust_impl(SEXP objfunSEXP, SEXP parinitSEXP, SEXP rinitSEXP, SEXP rmaxSEXP, SEXP parscaleSEXP, SEXP iterlimSEXP, SEXP ftolSEXP, SEXP mtolSEXP, SEXP gtolSEXP, SEXP xtolSEXP, SEXP rminSEXP, SEXP thetamaxSEXP, SEXP boundarySEXP, SEXP minimizeSEXP, SEXP blatherSEXP, SEXP parupperSEXP, SEXP parlowerSEXP, SEXP printIterSEXP, SEXP traceFileSEXP) {
+List trust_impl(Function objfun, NumericVector parinit, double rinit, double rmax, Nullable<NumericVector> parscale, int iterlim, double ftol, double mtol, double gtol, double xtol, double rmin, double thetamax, std::string boundary, std::string hessianMethod, bool minimize, bool blather, Nullable<NumericVector> parupper, Nullable<NumericVector> parlower, bool printIter, Nullable<CharacterVector> traceFile);
+RcppExport SEXP _dMod2_trust_impl(SEXP objfunSEXP, SEXP parinitSEXP, SEXP rinitSEXP, SEXP rmaxSEXP, SEXP parscaleSEXP, SEXP iterlimSEXP, SEXP ftolSEXP, SEXP mtolSEXP, SEXP gtolSEXP, SEXP xtolSEXP, SEXP rminSEXP, SEXP thetamaxSEXP, SEXP boundarySEXP, SEXP hessianMethodSEXP, SEXP minimizeSEXP, SEXP blatherSEXP, SEXP parupperSEXP, SEXP parlowerSEXP, SEXP printIterSEXP, SEXP traceFileSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -258,13 +261,14 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< double >::type rmin(rminSEXP);
     Rcpp::traits::input_parameter< double >::type thetamax(thetamaxSEXP);
     Rcpp::traits::input_parameter< std::string >::type boundary(boundarySEXP);
+    Rcpp::traits::input_parameter< std::string >::type hessianMethod(hessianMethodSEXP);
     Rcpp::traits::input_parameter< bool >::type minimize(minimizeSEXP);
     Rcpp::traits::input_parameter< bool >::type blather(blatherSEXP);
     Rcpp::traits::input_parameter< Nullable<NumericVector> >::type parupper(parupperSEXP);
     Rcpp::traits::input_parameter< Nullable<NumericVector> >::type parlower(parlowerSEXP);
     Rcpp::traits::input_parameter< bool >::type printIter(printIterSEXP);
     Rcpp::traits::input_parameter< Nullable<CharacterVector> >::type traceFile(traceFileSEXP);
-    rcpp_result_gen = Rcpp::wrap(trust_impl(objfun, parinit, rinit, rmax, parscale, iterlim, ftol, mtol, gtol, xtol, rmin, thetamax, boundary, minimize, blather, parupper, parlower, printIter, traceFile));
+    rcpp_result_gen = Rcpp::wrap(trust_impl(objfun, parinit, rinit, rmax, parscale, iterlim, ftol, mtol, gtol, xtol, rmin, thetamax, boundary, hessianMethod, minimize, blather, parupper, parlower, printIter, traceFile));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -273,16 +277,16 @@ static const R_CallMethodDef CallEntries[] = {
     {"_dMod2_bmm_lb", (DL_FUNC) &_dMod2_bmm_lb, 6},
     {"_dMod2_bmm_rb", (DL_FUNC) &_dMod2_bmm_rb, 6},
     {"_dMod2_bmm_bb", (DL_FUNC) &_dMod2_bmm_bb, 6},
-    {"_dMod2_constraintL2_scalar_kernel", (DL_FUNC) &_dMod2_constraintL2_scalar_kernel, 11},
-    {"_dMod2_datapointL2_kernel", (DL_FUNC) &_dMod2_datapointL2_kernel, 10},
-    {"_dMod2_normL2_kernel", (DL_FUNC) &_dMod2_normL2_kernel, 7},
+    {"_dMod2_constraintL2_scalar_kernel", (DL_FUNC) &_dMod2_constraintL2_scalar_kernel, 12},
+    {"_dMod2_datapointL2_kernel", (DL_FUNC) &_dMod2_datapointL2_kernel, 11},
+    {"_dMod2_normL2_kernel", (DL_FUNC) &_dMod2_normL2_kernel, 8},
     {"_dMod2_parvec_attach", (DL_FUNC) &_dMod2_parvec_attach, 3},
     {"_dMod2_parvec_concat", (DL_FUNC) &_dMod2_parvec_concat, 1},
     {"_dMod2_residual_kernel_aloq", (DL_FUNC) &_dMod2_residual_kernel_aloq, 9},
     {"_dMod2_residual_kernel_bloq", (DL_FUNC) &_dMod2_residual_kernel_bloq, 9},
     {"_dMod2_trustL1_impl", (DL_FUNC) &_dMod2_trustL1_impl, 22},
     {"_dMod2_trustL1_lockstep_impl", (DL_FUNC) &_dMod2_trustL1_lockstep_impl, 19},
-    {"_dMod2_trust_impl", (DL_FUNC) &_dMod2_trust_impl, 19},
+    {"_dMod2_trust_impl", (DL_FUNC) &_dMod2_trust_impl, 20},
     {NULL, NULL, 0}
 };
 

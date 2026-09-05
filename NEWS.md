@@ -1,3 +1,27 @@
+# dMod2 0.7.1
+
+* `trust()` takes an interchangeable Hessian source through `hessianMethod`.
+  `"gn"` (default) is the Gauss-Newton `J^T J` as before; `"bfgs"` and `"sr1"`
+  maintain a dense quasi-Newton update seeded from it; `"hybrid"` runs `"gn"`
+  until it stagnates, then switches to `"bfgs"` once. The quasi-Newton phase
+  consumes only the gradient. Reflective boundary only.
+* Objective functions take a call-time `hessian` argument (default `TRUE`).
+  With `hessian = FALSE` they return value and gradient but skip the Hessian
+  entirely -- the `J^T J` contraction never runs and the result carries a `NULL`
+  hessian. `trust()` uses this in the quasi-Newton phase; it propagates through
+  objective composition (`+`).
+* `trust()` reports `neval` and, under `blather`, the `hessianSource` per
+  iteration, so a multi-start can be scored on gradient evaluations. These reach
+  `as.parframe()` as columns.
+* `compile()` builds model shared objects correctly on Windows. The per-source
+  link and the combined-output object compile ran `system()` with a `2>&1`
+  token, but R's `system()` on Windows has no shell: the token reached
+  `R CMD SHLIB` as the override `PKG_LIBS=2>&1` and the compiler as an input
+  file, so the object never built and the `.dll` never linked against BLAS,
+  LAPACK or the Sundials solver. Both now go through `system2()`.
+* Adds `inst/examples/example_Boehm_JProteomeRes2014.R`, which builds the Boehm
+  et al. (2014) STAT5 model and compares the Hessian sources over a multi-start.
+
 # dMod2 0.7.0
 
 * PEtab import and export. `importPEtab()` reads a v1 or v2 problem and returns
