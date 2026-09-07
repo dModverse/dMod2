@@ -273,15 +273,15 @@ rbind(ML = best[remlfit$errpars], REML = remlfit$argument[remlfit$errpars])
 ```
 
     ##      sd_pSTAT5A_rel sd_pSTAT5B_rel sd_rSTAT5A_rel
-    ## ML        0.5880246      0.8200799      0.4987346
-    ## REML      0.6254604      0.8442266      0.5248558
+    ## ML        0.5877572      0.8200216      0.4987433
+    ## REML      0.6254260      0.8442122      0.5248647
 
 ``` r
 remlfit$dof     # n_g minus the leverage each observable spends
 ```
 
     ## pSTAT5A_rel pSTAT5B_rel rSTAT5A_rel 
-    ##    13.67822    14.22151    14.10027
+    ##    13.67956    14.22139    14.09904
 
 ``` r
 remlfit$rank    # effective number of mean parameters
@@ -298,7 +298,7 @@ tapply(lev$leverage, lev$name, sum)
 ```
 
     ## pSTAT5A_rel pSTAT5B_rel rSTAT5A_rel 
-    ##    2.368112    1.743765    1.888123
+    ##    2.370426    1.743118    1.886456
 
 ### Fit and uncertainty band
 
@@ -377,16 +377,16 @@ confint(profiles, level = 0.95, val.column = "data",
         method = "F", n = nd, p = remlfit$rank)
 ```
 
-    ##                                      name      value       lower      upper
-    ## Epo_degradation_BaF3 Epo_degradation_BaF3 -1.5676092 -1.74038103 -1.3898086
-    ## k_exp_hetero                 k_exp_hetero -4.3927603        -Inf -2.9516401
-    ## k_exp_homo                     k_exp_homo -2.2018715 -2.55803260 -1.8883996
-    ## k_imp_hetero                 k_imp_hetero -1.7876328 -1.91114147 -1.6579472
-    ## k_imp_homo                     k_imp_homo  1.4806915  0.09815481        Inf
-    ## k_phos                             k_phos  4.1978110  4.10619897  4.2967967
-    ## sd_pSTAT5A_rel             sd_pSTAT5A_rel  0.5880246  0.40940895  0.7947085
-    ## sd_pSTAT5B_rel             sd_pSTAT5B_rel  0.8200799  0.66445676  1.0133337
-    ## sd_rSTAT5A_rel             sd_rSTAT5A_rel  0.4987346  0.34842048  0.6917000
+    ##                                      name      value      lower      upper
+    ## Epo_degradation_BaF3 Epo_degradation_BaF3 -1.5678339 -1.7399326 -1.3902970
+    ## k_exp_hetero                 k_exp_hetero -4.4324631       -Inf -2.9543342
+    ## k_exp_homo                     k_exp_homo -2.2027231 -2.5570183 -1.8895055
+    ## k_imp_hetero                 k_imp_hetero -1.7874090 -1.9108318 -1.6582719
+    ## k_imp_homo                     k_imp_homo  1.5022968  0.1000066        Inf
+    ## k_phos                             k_phos  4.1977213  4.1063857  4.2964874
+    ## sd_pSTAT5A_rel             sd_pSTAT5A_rel  0.5877572  0.4098095  0.7938723
+    ## sd_pSTAT5B_rel             sd_pSTAT5B_rel  0.8200216  0.6647988  1.0126860
+    ## sd_rSTAT5A_rel             sd_rSTAT5A_rel  0.4987433  0.3487698  0.6911164
 
 The plot separates the two terms, and that is where the two
 non-identifiable directions become visible: for `k_imp_homo` and

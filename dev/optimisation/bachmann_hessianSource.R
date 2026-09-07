@@ -28,31 +28,30 @@ library(dMod2)
 # because submitting deletes the job folder a running array writes into.
 .submit  <- nzchar(Sys.getenv("BACHMANN_SUBMIT"))
 .recover <- FALSE    # TRUE re-attaches to a job already in the queue
-# One job per Hessian source, each an array of .blocks tasks. One core per task
-# and one fit on it, so a task is exactly one fit and the wall clock is the time
-# of a single fit. cores = 1 also keeps mstrust() out of its forking path.
-.cores   <- 1L       # fits per array task
-.blocks  <- 200L     # array tasks per source
+# One job per Hessian source, each an array of .blocks tasks. Small tasks over
+# many array slots rather than few wide jobs: the scheduler backfills them one
+# by one, so the fits start without waiting for a block of free cores.
+.cores   <- 4L       # fits per array task, one core each
+.blocks  <- 50L      # array tasks per source
 .nstart  <- .cores * .blocks   # 200 shared starting points per Hessian source
 .jobname <- "bachmann_hessianSource"
 
 # Starts are drawn in batches. A batch has its own seed but the same seed for
 # every source, so the sources stay comparable; batches accumulate, so two of
 # them give 2 * .blocks starts per source. Batch 1 keeps the bare job name.
-.batch   <- 2L       # the batch to submit
-.batches <- 1L:2L    # the batches to collect
+.batch   <- 4L       # the batch to submit
+.batches <- 4L       # the batches to collect
 .jobFor  <- function(source, batch)
   paste0(.jobname, if (batch > 1L) paste0("_b", batch) else "", "_", source)
 .collect <- nzchar(Sys.getenv("BACHMANN_COLLECT"))
 
-# Keys stay free of spaces and commas: they travel to the nodes as literals in
-# the generated array script.
-settings <- list(
-  gn      = list(hessianMethod = "gn"),
-  hybrid  = list(hessianMethod = "hybrid"),
-  bfgs_id = list(hessianMethod = "bfgs", hessianInit = "identity"),
-  sr1_id  = list(hessianMethod = "sr1",  hessianInit = "identity"))
-.only    <- NULL     # NULL submits every source, a name submits just that one
+# From the shared catalogue. Its keys are free of spaces and commas: they travel
+# to the nodes as literals in the generated array script.
+source(system.file("benchmarks", "hessianSourceSettings.R", package = "dMod2"))
+settings <- hessianSourceSettings[c("gn", "gn_sr1", "sr1_id", "sr1_gn", "sr1_id_gn")]
+# BACHMANN_ONLY names a single source, which is how a source whose remote build
+# failed is sent again without touching the ones already in the queue.
+.only    <- if (nzchar(Sys.getenv("BACHMANN_ONLY"))) Sys.getenv("BACHMANN_ONLY") else NULL
 
 
 # –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
@@ -169,17 +168,34 @@ if (.collect) {
 
 # distributedComputing() ships the model sources it finds in the working
 # directory, so the generated code has to land there rather than in tempdir().
+# Codegen lands in the working directory, because distributedComputing() ships
+# the sources it finds there. Run this from a scratch directory: in a package
+# root it would leave forty sources and their objects behind.
+if (file.exists("DESCRIPTION") || file.exists("NAMESPACE"))
+  stop("run this from a scratch directory, not from a package root: ", getwd())
 .exampleCode <- sub("^\\.outdir\\s*<-.*$", ".outdir <- getwd()", .exampleCode)
 eval(parse(text = .exampleCode[seq_len(.upto)]), envir = globalenv())
 stopifnot(length(list.files(pattern = "[.](c|cpp)$")) > 0)
 
 parlower <- setNames(log10(.pars$lowerBound), .pars$parameterId)
 parupper <- setNames(log10(.pars$upperBound), .pars$parameterId)
+# Prior centre and sampling centre in one. A flat -1 is wrong for a model whose
+# published parameters span twelve decades, so anything further than a decade
+# away is moved onto its own, which is the order of magnitude a modeller brings.
+.published <- setNames(log10(.pars$nominalValue), .pars$parameterId)[outerpars]
+stopifnot(!anyNA(.published))
 pouter   <- structure(rep(-1, length(outerpars)), names = outerpars)
+.moved   <- abs(.published + 1) > 1
+pouter[.moved] <- round(.published[.moved])
 
 # The published problem carries one informative prior, on the receptor pool.
 # A multi-start needs the weak prior of the Boehm setup as well, over everything
 # but the error model, or starts drift into the bounds instead of converging.
+# The prior must not be able to reorder the optima the comparison is about: with
+# the centre above it costs about 1 at the published parameters, a quarter of
+# the gap between the local optima seen here. Out of it: the error parameters,
+# whose variance it would bias, and init_EpoRJAK2, which already carries the
+# published informative prior.
 .weak <- setdiff(outerpars,
                  c(grep("^sd_", outerpars, value = TRUE), "init_EpoRJAK2"))
 obj <- obj + constraintL2(pouter[.weak], sigma = 4, attr.name = "prior")
@@ -187,11 +203,23 @@ obj <- obj + constraintL2(pouter[.weak], sigma = 4, attr.name = "prior")
 
 # –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
 # One shared set of starts, so a comparison differs only in the Hessian source.
-# Gauss-Newton-seeded BFGS is left out: on Boehm it spent the iteration cap on
-# three quarters of its starts, and at 113 parameters that is unaffordable.
+# The spread is set on its own rather than from the prior: it decides how hard
+# the multi-start problem is, the prior decides where the optimum sits.
 # –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
 set.seed(20260905 + .batch - 1L)
 starts <- msParframe(pouter, n = .nstart, sd = 4)
+# At this width a normal draw leaves the box on nearly half of all coordinates,
+# and clipping would pile those onto the bounds and turn a random start into a
+# corner. Redraw instead, so the spread is kept and every start is interior.
+for (.nm in outerpars) {
+  .x <- starts[[.nm]]
+  .out <- .x <= parlower[[.nm]] | .x >= parupper[[.nm]]
+  while (any(.out)) {
+    .x[.out] <- rnorm(sum(.out), pouter[[.nm]], 4)
+    .out <- .x <= parlower[[.nm]] | .x >= parupper[[.nm]]
+  }
+  starts[[.nm]] <- .x
+}
 
 # Task i of an array takes one block of the shared starts; the source is fixed
 # per job.
@@ -222,7 +250,10 @@ if (.submit) {
       cores        = .cores,
       nodes        = 1,
       mem_per_core = 2,
-      walltime     = "00:30:00",
+      # Set by the slowest arm, not the typical one: a quasi-Newton method from
+      # an identity seed needs of the order of n_theta accepted steps, and a
+      # truncated arm shrinks the shared block set for every other arm too.
+      walltime     = "03:00:00",
       machine      = "helix",
       var_values   = list(seq_len(.blocks)),
       no_rep       = NULL,

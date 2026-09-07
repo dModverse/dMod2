@@ -233,7 +233,7 @@ test_that("trust hits the analytic KKT point of a bound-active quadratic", {
   # not drift with the package defaults.
   fit <- trust(.quadratic_objfn_A(target, A), c(x = 0, y = 0),
                rinit = 1, rmax = 10, iterlim = 100,
-               gtol = 1e-10, ftol = 0, mtol = 0,
+               tolControl = list(gtol = 1e-10, ftol = 0, mtol = 0),
                parupper = c(x = 1, y = Inf))
 
   expect_true(fit$converged)
@@ -295,7 +295,7 @@ test_that("truncated and reflected steps are taken when the box blocks", {
   init <- c(a =  -0.539109, b = -0.150667, c = -0.316588)
 
   fit <- trust(.quadratic_objfn_A(tg, A), init, rinit = 1.014421, rmax = 20,
-               iterlim = 100, gtol = 1e-12,
+               iterlim = 100, tolControl = list(gtol = 1e-12),
                parlower = lb, parupper = ub, blather = TRUE)
 
   expect_true(fit$converged)
@@ -318,7 +318,7 @@ test_that("a collapsing trust radius reports failure, not convergence", {
   }
   expect_warning(
     fit <- trust(misleading, c(a = 1, b = 1), rinit = 1, rmax = 10,
-                 iterlim = 200, rmin = 0.05),
+                 iterlim = 200, tolControl = list(rmin = 0.05)),
     "rmin")
   expect_false(fit$converged)
   expect_equal(fit$stopReason, "radius")
@@ -412,10 +412,11 @@ test_that("bounds compose with parscale, parinit on a bound, and minimize = FALS
   # their own frame-dependent distance from the bound.
   scaled <- trust(.quadratic_objfn(target), c(x = 0, y = 0),
                   rinit = 1, rmax = 10, parupper = c(x = 1, y = Inf),
-                  parscale = c(10, 0.1), iterlim = 200, gtol = 1e-12)
+                  parscale = c(10, 0.1), iterlim = 200,
+                  tolControl = list(gtol = 1e-12))
   plain  <- trust(.quadratic_objfn(target), c(x = 0, y = 0),
                   rinit = 1, rmax = 10, parupper = c(x = 1, y = Inf),
-                  iterlim = 200, gtol = 1e-12)
+                  iterlim = 200, tolControl = list(gtol = 1e-12))
   expect_equal(unname(scaled$argument), unname(plain$argument), tolerance = 1e-5)
 
   # Maximising a concave objective under the same bound.
@@ -436,9 +437,9 @@ test_that("without bounds the two boundary schemes agree", {
   target <- c(a = 1.0, b = -0.5, c = 2.3)
   init   <- c(a = 0, b = 0, c = 0)
   refl <- trust(.quadratic_objfn(target), init, rinit = 0.5, rmax = 10,
-                boundary = "reflective")
+                stepControl = list(boundary = "reflective"))
   clip <- trust(.quadratic_objfn(target), init, rinit = 0.5, rmax = 10,
-                boundary = "clip")
+                stepControl = list(boundary = "clip"))
   expect_equal(unname(refl$argument), unname(clip$argument), tolerance = 1e-10)
 })
 
@@ -446,20 +447,20 @@ test_that("without bounds the two boundary schemes agree", {
 test_that("boundary = 'clip' keeps landing exactly on the bound", {
   fit <- trust(.quadratic_objfn(c(a = 5, b = 1)), c(a = 0, b = 0),
                rinit = 1, rmax = 10, parupper = c(a = 2, b = Inf),
-               boundary = "clip")
+               stepControl = list(boundary = "clip"))
   expect_identical(unname(fit$argument[["a"]]), 2)
   expect_error(
     trust(.quadratic_objfn(c(a = 1)), c(a = 0), rinit = 1, rmax = 10,
-          boundary = "nonsense"),
+          stepControl = list(boundary = "nonsense")),
     "should be one of")
 })
 
 
-test_that("fterm and mterm still work as deprecated aliases", {
-  fit <- trust(.quadratic_objfn(c(a = 1, b = 2)), c(a = 0, b = 0),
-               rinit = 1, rmax = 10, fterm = 1e-10, mterm = 1e-10)
-  expect_true(fit$converged)
-  expect_equal(unname(fit$argument), c(1, 2), tolerance = 1e-8)
+test_that("an argument that moved into a control list is rejected by name", {
+  obj <- .quadratic_objfn(c(a = 1))
+  expect_error(trust(obj, c(a = 0), gtol = 1e-8), "tolControl\\$gtol")
+  expect_error(trust(obj, c(a = 0), qnMemory = 3L), "qnControl\\$qnMemory")
+  expect_error(trust(obj, c(a = 0), boundary = "clip"), "stepControl\\$boundary")
 })
 
 
@@ -484,18 +485,18 @@ test_that("a flat, high-value start makes progress instead of stopping at once",
 })
 
 
-## ---- Interchangeable Hessian source (gn / bfgs / sr1 / hybrid) ---------
+## ---- Interchangeable Hessian source (gn / bfgs / sr1) -----------------
 
 # A flat objective: constant value, nonzero gradient. Every trial step is
 # rejected with an unchanged value, so trust stalls deterministically: one of
-# the hooks the hybrid switch fires on.
+# the hooks a handover fires on.
 .flat_objfn <- function(d) {
   function(p, ...) list(value = 1.0, gradient = rep(1.0, d), hessian = diag(d))
 }
 
 # A quadratic reported with a Hessian `stiff` times too large. The model step is
 # that much too short, so the value test fires long before the minimum: the
-# stopped-short case the hybrid switch has to survive.
+# stopped-short case a handover has to survive.
 .misscaled_objfn <- function(target, stiff = 20) {
   d <- length(target)
   function(p, ...) {
@@ -503,6 +504,18 @@ test_that("a flat, high-value start makes progress instead of stopping at once",
       value    = 0.5 * sum((p - target)^2),
       gradient = p - target,
       hessian  = stiff * diag(d))
+  }
+}
+
+# Rosenbrock: a curved valley. A quasi-Newton model mispredicts along it, so
+# steps get rejected.
+.rosenbrock_objfn <- function() {
+  function(p, ...) {
+    x <- p[[1]]; y <- p[[2]]
+    gr <- c(-2 * (1 - x) - 400 * x * (y - x^2), 200 * (y - x^2))
+    hs <- matrix(c(2 - 400 * y + 1200 * x^2, -400 * x, -400 * x, 200), 2, 2)
+    names(gr) <- names(p); dimnames(hs) <- list(names(p), names(p))
+    list(value = (1 - x)^2 + 100 * (y - x^2)^2, gradient = gr, hessian = hs)
   }
 }
 
@@ -516,8 +529,12 @@ test_that("quasi-Newton methods reach the same optimum as gn on a nonlinear fit"
 
   ref <- trust(obj, init, rinit = 1, rmax = 10, iterlim = 200)
   expect_true(ref$converged)
-  for (hm in c("bfgs", "sr1", "hybrid")) {
-    fit <- trust(obj, init, rinit = 1, rmax = 10, iterlim = 200, hessianMethod = hm)
+  runs <- list(bfgs = list(hessianMethod = "bfgs"),
+               sr1  = list(hessianMethod = "sr1"),
+               fb   = list(hessianFallback = "bfgs"))
+  for (hm in names(runs)) {
+    fit <- do.call(trust, c(list(obj, init, rinit = 1, rmax = 10, iterlim = 200),
+                            runs[[hm]]))
     expect_true(fit$converged, info = hm)
     expect_equal(fit$argument, ref$argument, tolerance = 1e-3, ignore_attr = TRUE,
                  info = hm)
@@ -533,6 +550,65 @@ test_that("qnEval counts objective evaluations spent in the quasi-Newton phase",
   expect_gt(trust(obj, init, hessianMethod = "sr1")$qnEval, 0L)
 })
 
+test_that("evalBySource and nSwitch account for every evaluation", {
+  target <- c(a = 1.0, b = -0.5)
+  obj    <- .quadratic_objfn(target)
+  init   <- c(a = 0, b = 0)
+
+  for (hm in c("gn", "bfgs", "sr1")) {
+    fit <- trust(obj, init, hessianMethod = hm)
+    expect_identical(names(fit$evalBySource), c("gn", "bfgs", "sr1"), info = hm)
+    expect_identical(sum(fit$evalBySource), fit$neval, info = hm)
+    expect_identical(fit$nSwitch, 0L, info = hm)                 # no handover
+    expect_gt(fit$evalBySource[[hm]], 0L)                        # charged to itself
+  }
+  expect_identical(trust(obj, init)$evalBySource[["bfgs"]], 0L)  # gn: only gn
+
+  # A fallback hands over once and both phases are charged separately.
+  hy <- suppressWarnings(trust(.flat_objfn(2L), init, hessianFallback = "bfgs"))
+  expect_identical(hy$nSwitch, 1L)
+  expect_identical(sum(hy$evalBySource), hy$neval)
+  expect_gt(hy$evalBySource[["gn"]], 0L)
+  expect_gt(hy$evalBySource[["bfgs"]], 0L)
+})
+
+test_that("sr1 also learns from rejected steps, and gets there sooner for it", {
+  obj  <- .rosenbrock_objfn()
+  init <- c(x = -1.2, y = 1)
+  fit  <- function(qr)
+    trust(obj, init, rinit = 0.1, rmax = 10, iterlim = 2000,
+          hessianMethod = "sr1", blather = TRUE,
+          qnControl = list(hessianInit = "identity", qnRejected = qr))
+
+  off <- fit(FALSE)
+  on  <- fit(TRUE)
+
+  # There are rejected steps to learn from.
+  expect_gt(sum(off$accept == 0), 0L)
+  for (f in list(off, on)) {
+    expect_true(f$converged)
+    expect_identical(f$stopReason, "gradient")
+    expect_equal(unname(f$argument), c(1, 1), tolerance = 1e-6)
+  }
+  expect_lt(on$neval, off$neval)
+})
+
+test_that("qnRejected leaves gn and bfgs alone", {
+  # BFGS updates only on accepted steps and gn forms no pair, so both are
+  # bit-identical either way.
+  obj  <- .rosenbrock_objfn()
+  init <- c(x = -1.2, y = 1)
+  for (hm in c("gn", "bfgs")) {
+    args <- list(obj, init, rinit = 0.1, rmax = 10, iterlim = 2000,
+                 hessianMethod = hm)
+    off <- do.call(trust, c(args, list(qnControl = list(qnRejected = FALSE))))
+    on  <- do.call(trust, c(args, list(qnControl = list(qnRejected = TRUE))))
+    expect_identical(on$neval, off$neval, info = hm)
+    expect_identical(on$value, off$value, info = hm)
+    expect_identical(on$argument, off$argument, info = hm)
+  }
+})
+
 test_that("blather reports the Hessian source per iteration", {
   target <- c(a = 1.0, b = -0.5, c = 2.3)
   obj <- .quadratic_objfn(target)
@@ -542,20 +618,20 @@ test_that("blather reports the Hessian source per iteration", {
                         blather = TRUE)$hessianSource == "bfgs"))
 })
 
-test_that("hybrid runs gn, then switches to bfgs on stagnation", {
+test_that("a bfgs fallback takes over from gn on stagnation", {
   obj  <- .flat_objfn(2L)
   init <- c(a = 0, b = 0)
 
   gn <- suppressWarnings(trust(obj, init, hessianMethod = "gn", blather = TRUE))
   expect_true(all(gn$hessianSource == "gn"))
 
-  hy <- suppressWarnings(trust(obj, init, hessianMethod = "hybrid", blather = TRUE))
+  hy <- suppressWarnings(trust(obj, init, hessianFallback = "bfgs", blather = TRUE))
   expect_identical(hy$hessianSource[1], "gn")   # always starts on gn
   expect_true("bfgs" %in% hy$hessianSource)      # and switches
   expect_gt(hy$qnEval, 0L)
 })
 
-test_that("hybrid switches on a value stop too, and gets past where gn stops", {
+test_that("the fallback takes over on a value stop too, and gets past where gn stops", {
   target <- c(a = 1.0, b = -0.5, c = 2.3)
   obj    <- .misscaled_objfn(target)
   init   <- c(a = 0, b = 0, c = 0)
@@ -567,7 +643,7 @@ test_that("hybrid switches on a value stop too, and gets past where gn stops", {
   expect_gt(max(abs(gn$argument - target)), 1e-3)   # nowhere near it
 
   hy <- trust(obj, init, rinit = 1, rmax = 10, iterlim = 500,
-              hessianMethod = "hybrid", blather = TRUE)
+              hessianFallback = "bfgs", blather = TRUE)
   expect_true("bfgs" %in% hy$hessianSource)
   expect_identical(hy$stopReason, "gradient")       # first-order, not stopped short
   expect_lt(hy$value, gn$value)
@@ -575,11 +651,11 @@ test_that("hybrid switches on a value stop too, and gets past where gn stops", {
 })
 
 test_that("a soft stop past the handover ends the run", {
-  # Only one switch is available, so hybrid must terminate like bfgs afterwards
+  # Only one switch is available, so the run must terminate like bfgs afterwards
   # rather than run to iterlim.
   obj  <- .flat_objfn(2L)
   init <- c(a = 0, b = 0)
-  hy <- suppressWarnings(trust(obj, init, hessianMethod = "hybrid",
+  hy <- suppressWarnings(trust(obj, init, hessianFallback = "bfgs",
                                iterlim = 500))
   expect_true(hy$converged)
   expect_identical(hy$stopReason, "stagnation")
@@ -590,9 +666,11 @@ test_that("hessianInit is inert for the methods that need the objective Hessian"
   target <- c(a = 1.0, b = -0.5, c = 2.3)
   obj <- .quadratic_objfn(target)
   init <- c(a = 0, b = 0, c = 0)
-  for (hm in c("gn", "hybrid")) {
-    ref <- trust(obj, init, rinit = 1, hessianMethod = hm)
-    alt <- trust(obj, init, rinit = 1, hessianMethod = hm, hessianInit = "identity")
+  runs <- list(gn = list(), fb = list(hessianFallback = "bfgs"))
+  for (hm in names(runs)) {
+    args <- c(list(obj, init, rinit = 1), runs[[hm]])
+    ref <- do.call(trust, args)
+    alt <- do.call(trust, c(args, list(qnControl = list(hessianInit = "identity"))))
     expect_equal(alt$argument, ref$argument, ignore_attr = TRUE, info = hm)
     expect_identical(alt$neval, ref$neval, info = hm)
   }
@@ -601,8 +679,8 @@ test_that("hessianInit is inert for the methods that need the objective Hessian"
 test_that("quasi-Newton methods require the reflective boundary and a known name", {
   obj <- .quadratic_objfn(c(a = 1.0))
   init <- c(a = 0)
-  expect_error(trust(obj, init, boundary = "clip", hessianMethod = "bfgs"),
-               "reflective")
+  expect_error(trust(obj, init, stepControl = list(boundary = "clip"),
+                     hessianMethod = "bfgs"), "reflective")
   expect_error(trust(obj, init, hessianMethod = "nope"))   # match.arg rejects
 })
 
@@ -615,7 +693,7 @@ test_that("model tests do not end a quasi-Newton run", {
 
   runs <- lapply(c(gn = "gn", bfgs = "bfgs", sr1 = "sr1"), function(m)
     trust(obj, start, rinit = 0.1, rmax = 10, iterlim = 300, hessianMethod = m,
-          hessianInit = if (m == "gn") "gn" else "identity"))
+          qnControl = list(hessianInit = if (m == "gn") "gn" else "identity")))
 
   # The model tests may end a run only while the model is the objective's own
   # Hessian. A quasi-Newton run is left with gradient, stagnation and radius.
@@ -627,4 +705,145 @@ test_that("model tests do not end a quasi-Newton run", {
   expect_true(all(vapply(runs, `[[`, TRUE, "converged")))
   for (fit in runs) expect_equal(fit$value, runs$gn$value, tolerance = 1e-4)
 
+})
+
+
+## ---- The iterate the result reports -----------------------------------
+
+test_that("the reported iterate is the last accepted one under monotone acceptance", {
+  obj  <- .rosenbrock_objfn()
+  init <- c(x = -1.2, y = 1)
+  for (hm in c("gn", "bfgs", "sr1")) {
+    f   <- trust(obj, init, rinit = 0.1, rmax = 10, iterlim = 2000,
+                 hessianMethod = hm, blather = TRUE)
+    acc <- which(f$accept == 1)
+    last <- acc[length(acc)]
+
+    expect_identical(f$value, f$valtry[last], info = hm)
+    expect_equal(unname(f$argument), unname(f$argtry[last, ]),
+                 tolerance = 1e-14, info = hm)
+    # The reported gradient has to belong to the reported argument.
+    expect_equal(unname(f$gradient), unname(obj(f$argument)$gradient),
+                 tolerance = 1e-12, info = hm)
+  }
+})
+
+test_that("nonmonotone accepts an increase and still reports the best iterate", {
+  obj  <- .rosenbrock_objfn()
+  init <- c(x = -1.2, y = 1)
+  for (hm in c("gn", "bfgs")) {
+    f   <- trust(obj, init, rinit = 0.1, rmax = 10, iterlim = 2000,
+                 hessianMethod = hm, stepControl = list(nonmonotone = 0.85),
+                 blather = TRUE)
+    acc <- which(f$accept == 1)
+
+    # The mechanism under test: a step that raises the objective is taken.
+    expect_gt(sum(f$valtry[acc] > f$valpath[acc]), 0)
+    expect_identical(f$value, min(c(f$valpath[1], f$valtry[acc])), info = hm)
+    expect_equal(unname(f$argument), c(1, 1), tolerance = 1e-4, info = hm)
+  }
+})
+
+test_that("nonmonotone = 0 is the monotone rule and a positive eta changes the run", {
+  obj  <- .rosenbrock_objfn()
+  init <- c(x = -1.2, y = 1)
+  run  <- function(...)
+    trust(obj, init, rinit = 0.1, rmax = 10, iterlim = 2000, blather = TRUE, ...)
+
+  mono <- run()
+  expect_identical(run(stepControl = list(nonmonotone = 0))$valpath, mono$valpath)
+
+  acc <- which(mono$accept == 1)
+  expect_true(all(mono$valtry[acc] < mono$valpath[acc]))
+  expect_false(identical(run(stepControl = list(nonmonotone = 0.85))$valpath,
+                         mono$valpath))
+})
+
+test_that("nonmonotone outside [0, 1) is rejected", {
+  obj <- .quadratic_objfn(c(a = 1.0))
+  expect_error(trust(obj, c(a = 0), stepControl = list(nonmonotone = 1)),
+               "nonmonotone")
+  expect_error(trust(obj, c(a = 0), stepControl = list(nonmonotone = -0.1)),
+               "nonmonotone")
+})
+
+test_that("an iteration-limit stop also reports the last accepted iterate", {
+  # The iteration limit ends the run after an accepted step just as the soft
+  # stops do, and it is the exit a quasi-Newton run reaches it through.
+  obj  <- .rosenbrock_objfn()
+  init <- c(x = -1.2, y = 1)
+  for (hm in c("gn", "bfgs")) {
+    f <- suppressWarnings(trust(obj, init, rinit = 0.1, rmax = 10, iterlim = 8,
+                                hessianMethod = hm, blather = TRUE))
+    expect_identical(f$stopReason, "iterlim", info = hm)
+    acc <- which(f$accept == 1)
+    expect_identical(f$value, f$valtry[acc[length(acc)]], info = hm)
+  }
+})
+
+
+## ---- Selectable Hessian fallback --------------------------------------
+
+test_that("a fallback run is the same whichever way it is spelled", {
+  init <- c(a = 0, b = 0)
+  for (nm in c("flat", "misscaled")) {
+    obj <- if (nm == "flat") .flat_objfn(2L) else .misscaled_objfn(c(a = 1, b = -2))
+    old <- trust(obj, init, iterlim = 200, hessianFallback = "bfgs",
+                 blather = TRUE)
+    new <- trust(obj, init, iterlim = 200, hessianFallback = "bfgs",
+                 fallbackLimit = 1L, blather = TRUE)
+    expect_identical(new$neval, old$neval, info = nm)
+    expect_identical(new$value, old$value, info = nm)
+    expect_identical(new$nSwitch, old$nSwitch, info = nm)
+    expect_identical(new$hessianSource, old$hessianSource, info = nm)
+    expect_identical(new$argument, old$argument, info = nm)
+  }
+})
+
+test_that("no fallback reproduces the plain run", {
+  obj  <- .misscaled_objfn(c(a = 1, b = -2))
+  init <- c(a = 0, b = 0)
+  plain <- trust(obj, init, iterlim = 200)
+  for (off in list(list(hessianFallback = "none"),
+                   list(hessianFallback = "bfgs", fallbackLimit = 0L))) {
+    f <- do.call(trust, c(list(obj, init, iterlim = 200), off))
+    expect_identical(f$neval, plain$neval)
+    expect_identical(f$value, plain$value)
+    expect_identical(f$nSwitch, 0L)
+  }
+})
+
+test_that("the fallback source is selectable and is charged for its evaluations", {
+  obj  <- .misscaled_objfn(c(a = 1, b = -2))
+  init <- c(a = 0, b = 0)
+  for (fb in c("bfgs", "sr1")) {
+    f <- trust(obj, init, iterlim = 200, hessianFallback = fb, blather = TRUE)
+    expect_identical(f$nSwitch, 1L, info = fb)
+    expect_true(fb %in% f$hessianSource, info = fb)
+    expect_gt(f$evalBySource[[fb]], 0)
+    expect_identical(sum(f$evalBySource), f$neval, info = fb)
+  }
+})
+
+test_that("fallbackLimit above one hands control back to the primary source", {
+  # A flat objective stalls under either source, so every allowed handover
+  # fires and the sources alternate.
+  obj  <- .flat_objfn(2L)
+  init <- c(a = 0, b = 0)
+  one <- trust(obj, init, iterlim = 300, hessianFallback = "bfgs",
+               fallbackLimit = 1L, blather = TRUE)
+  two <- trust(obj, init, iterlim = 300, hessianFallback = "bfgs",
+               fallbackLimit = 2L, blather = TRUE)
+
+  expect_identical(one$nSwitch, 1L)
+  expect_identical(two$nSwitch, 2L)
+  # Back on gn after the second handover, and the reseed evaluation is charged.
+  expect_identical(utils::tail(two$hessianSource, 1L), "gn")
+  expect_identical(sum(two$evalBySource), two$neval)
+})
+
+test_that("an unknown Hessian source is rejected by name", {
+  obj <- .quadratic_objfn(c(a = 1.0))
+  expect_error(trust(obj, c(a = 0), hessianMethod = "nope"), "should be one of")
+  expect_error(trust(obj, c(a = 0), hessianFallback = "nope"), "should be one of")
 })

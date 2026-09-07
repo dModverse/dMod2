@@ -172,6 +172,77 @@ because the quasi-Newton updates described below can produce an indefinite $H$:
 the Moré-Sorensen solver treats that case directly, whereas a Steihaug-type
 method can only stop at the trust-region boundary.
 
+## The subproblem
+
+Moré and Sorensen characterise the solution of the subproblem by a scalar. With
+the eigendecomposition $H = Q \Lambda Q^{\mathsf T}$ and $\gamma = Q^{\mathsf T} g$,
+a step $p(\lambda) = -Q (\Lambda + \lambda I)^{-1} \gamma$ solves it exactly when
+$\lambda \ge \max(0, -\lambda_{\min})$ and either $\lambda = 0$ with
+$\lVert p \rVert \le r$, or $\lambda > 0$ with $\lVert p \rVert = r$. The
+second case is a root of the secular equation
+
+$$\phi(\lambda) \;=\; \frac{1}{r} - \frac{1}{\lVert p(\lambda) \rVert}
+ \;=\; \frac{1}{r} - \Big( \sum_i \frac{\gamma_i^2}{(\lambda_i + \lambda)^2} \Big)^{-1/2},$$
+
+which is smooth and almost linear on $\lambda > -\lambda_{\min}$, so Newton's
+method on $\phi$ converges in a handful of iterations. Writing it this way is
+what makes the eigendecomposition worth its cost: one decomposition per
+iteration prices every subsequent $\lambda$ at $O(n_\theta)$.
+
+The interesting case is the one a positive definite model never reaches. When
+$\gamma_i = 0$ for every eigenvector of $\lambda_{\min}$, no $\lambda$ drives
+$\lVert p \rVert$ out to $r$, and the solution is
+$p = p(-\lambda_{\min}) + \tau q_{\min}$ with $\tau$ chosen so that
+$\lVert p \rVert = r$. This hard case is exactly what an indefinite SR1 model
+produces, and it is why the exact solver is not a luxury here.
+
+## The step and the radius
+
+One iteration compares the decrease the model promised with the decrease the
+objective delivered,
+
+$$\rho_k \;=\; \frac{f(x_k) - f(x_k + p_k)}{-m_k(p_k)},
+\qquad m_k(p) = g_k^{\mathsf T} p + \tfrac12 p^{\mathsf T} H_k p ,$$
+
+and reads the radius off that ratio. A step with $\rho_k < 1/4$ is rejected and
+the radius contracts to $\min(r_k/4, \lVert p_k \rVert / 4)$, so a step that
+was far shorter than the radius shrinks it to its own scale rather than to a
+quarter of an irrelevant bound. A step with $\rho_k > 3/4$ that used at least
+nine tenths of the radius doubles it, capped at `rmax`; anything between leaves
+the radius alone. Only pressing against the boundary earns an increase, since a
+step that stopped short was limited by the model and not by the region.
+
+Under `stepControl$nonmonotone` the numerator is measured against a weighted
+average of past values rather than the current one [@zhang2004nonmonotone]:
+
+$$Q_{k+1} = \eta Q_k + 1, \qquad
+C_{k+1} = \frac{\eta Q_k C_k + f(x_{k+1})}{Q_{k+1}},$$
+
+with $\rho_k$ scored against $C_k$. At $\eta = 0$ this is $C_k = f(x_k)$ and
+the rule above is recovered exactly. A larger $\eta$ lets the iterate climb out
+of a narrow valley at the price of accepting steps that raise the objective, so
+the result reports the best iterate visited rather than the last one. The
+termination tests keep reading the true objective either way: acceptance is
+relaxed, convergence is not.
+
+## Bounds
+
+Coleman and Li turn a bound into a change of metric. With
+$v_i$ the signed distance from $x_i$ to whichever bound the gradient pushes it
+towards, $D = \operatorname{diag}(\lvert v \rvert^{1/2})$, and $J^v$ the
+diagonal of $\partial \lvert v \rvert / \partial x$, the subproblem is solved
+in the scaled variables
+
+$$\hat g = D g, \qquad \hat B = D H D + \operatorname{diag}(g) J^v ,$$
+
+so the model steepens as a bound is approached and the step turns away from it
+on its own. The first-order optimality measure that `gtol` reads is
+$\max_i \lvert v_i g_i \rvert$, which vanishes both at an interior stationary
+point and at a bound the gradient pushes into, and is therefore the right
+quantity for a box problem. A step that would still leave the box is truncated
+to a fraction `theta.max` of the distance, reflected off the blocking faces, or
+replaced by the scaled steepest-descent step, whichever the model rates best.
+
 ## Termination
 
 Six tests can end a run, and the `stopReason` component names the one that
@@ -189,7 +260,7 @@ fired. Which of them apply depends on where the Hessian comes from.
 Only the first tests first-order optimality. Three of the others, `fvalue`,
 `preddiff` and `step`, read the prediction of the quadratic model, so a Hessian
 that misrepresents the local curvature can trip them at a point that is not
-stationary. The hybrid switch below exploits that asymmetry; it also accounts
+stationary. The handover below exploits that asymmetry; it also accounts
 for a fit reporting `converged = TRUE` at an implausibly high objective value.
 
 Which tests may end a run follows from the same distinction. While the model is
@@ -211,7 +282,10 @@ solver, the scaling and the bound handling are identical in all four cases.
 | `"gn"` | the objective's $J^{\mathsf T} J$, rebuilt each iteration | value, gradient, Hessian |
 | `"bfgs"` | a Powell-damped BFGS update [@powell1978fast] | value, gradient |
 | `"sr1"` | a symmetric rank-one update, possibly indefinite | value, gradient |
-| `"hybrid"` | `"gn"`, then `"bfgs"` after the first soft stop | value, gradient, Hessian |
+
+`hessianFallback` names a second source and `fallbackLimit` how often the two
+may change places. A run is a method and, optionally, a fallback; no particular
+pair carries a name of its own.
 
 For a sum of squares the Gauss-Newton matrix $J^{\mathsf T} J$ is an adequate
 curvature model wherever the residuals are small, and in dMod2 it is obtained
@@ -225,26 +299,77 @@ improve, and `ftol` or `mtol` fires while the iterate is still short of the
 minimum. A quasi-Newton approximation does not carry that bias, since it infers
 curvature from the steps actually taken.
 
-## The hybrid switch
+## BFGS and SR1
 
-`"hybrid"` runs `"gn"` until the first of `fvalue`, `preddiff`, `step` or
-`stagnation` would terminate the run, then switches once to `"bfgs"` and
+Both updates read the same secant pair, the step taken and the change in
+gradient along it,
+
+$$s_k = x_{k+1} - x_k, \qquad y_k = \nabla f(x_{k+1}) - \nabla f(x_k),$$
+
+and both ask the new model to reproduce it, $B_{k+1} s_k = y_k$. They differ in
+what they are willing to give up to do so.
+
+**BFGS** is the rank-two update that stays positive definite, which it can only
+do while $s^{\mathsf T} y > 0$. Away from a minimum that curvature condition
+fails, so the pair is damped before use [@powell1978fast]: with
+
+$$\theta = \begin{cases}
+1, & s^{\mathsf T} y \ge 0.2\, s^{\mathsf T} B s, \\[2pt]
+\dfrac{0.8\, s^{\mathsf T} B s}{s^{\mathsf T} B s - s^{\mathsf T} y}, & \text{otherwise,}
+\end{cases}
+\qquad \tilde y = \theta y + (1 - \theta) B s ,$$
+
+the update is
+
+$$B_{k+1} = B_k - \frac{B_k s\, s^{\mathsf T} B_k}{s^{\mathsf T} B_k s}
+                 + \frac{\tilde y\, \tilde y^{\mathsf T}}{s^{\mathsf T} \tilde y}.$$
+
+Damping interpolates the pair towards $Bs$, for which the curvature condition
+holds by construction, so $B$ never loses definiteness. `qnCautious` adds the
+Li-Fukushima test on top [@li2001modified]: a pair counts only when
+$s^{\mathsf T} y > c \lVert s \rVert \lVert y \rVert$, which discards pairs
+whose curvature is numerical noise rather than information. `qnSkipped` counts
+what it rejected.
+
+**SR1** is the rank-one update that satisfies the secant equation without
+insisting on definiteness. With $w = y - B_k s$,
+
+$$B_{k+1} = B_k + \frac{w\, w^{\mathsf T}}{w^{\mathsf T} s},$$
+
+which is the only symmetric rank-one matrix that does so, and is therefore
+forced rather than chosen. The price is the denominator: $w^{\mathsf T} s$ can
+be arbitrarily small, so the update is skipped when
+$\lvert w^{\mathsf T} s \rvert \le 10^{-8} \lVert s \rVert \lVert w \rVert$.
+SR1 converges to the true Hessian, indefinite regions included, which is
+useless to a line search and exactly what a trust region wants: the negative
+curvature it reports is real, and the Moré-Sorensen solver can step along it.
+
+That is also why `qnRejected` is on for SR1. A rejected trial point still
+supplies a valid $(s, y)$, since curvature along a step does not depend on
+whether the step was worth taking, and the trial gradient has been paid for
+already [@nocedal2006numerical]. BFGS cannot use it: its positive definiteness
+argument rests on the step having been accepted.
+
+## The handover
+
+A fallback run stays on `"gn"` until the first of `fvalue`, `preddiff`, `step`
+or `stagnation` would terminate it, then switches to the fallback source and
 continues from the last accepted $J^{\mathsf T} J$ as its seed. The `gradient`
 test remains terminal, since it is a genuine optimality statement rather than a
 symptom of a stalled model. The construction follows Fides
 [@froehlich2022fides], which switches when the trust radius stops updating. The
 `qnEval` component counts the objective evaluations spent after the switch.
 
-```{r hybrid}
+```{r handover}
 set.seed(1L)
 start <- as.parvec(msParframe(pouter, n = 1, sd = 3))
 
 single <- .fit("single", list(
   gn     = trust(obj, start, rinit = 0.1, rmax = 10, iterlim = 5000,
                  parlower = parlower, parupper = parupper),
-  hybrid = trust(obj, start, rinit = 0.1, rmax = 10, iterlim = 5000,
+  fallback = trust(obj, start, rinit = 0.1, rmax = 10, iterlim = 5000,
                  parlower = parlower, parupper = parupper,
-                 hessianMethod = "hybrid")))
+                 hessianFallback = "bfgs")))
 
 data.frame(method = names(single),
            value  = vapply(single, `[[`, 0.0, "value"),
@@ -254,16 +379,16 @@ data.frame(method = names(single),
            row.names = NULL)
 ```
 
-Over the shared starting points of the next section the hybrid spends a few per
-cent more evaluations than `"gn"` and reaches a lower median value. The `grad`
-column of the table there counts the starts that end at a stationary point,
-which the hybrid reaches and `"gn"` does not.
+Over the shared starting points of the next section a fallback run spends a few
+per cent more evaluations than `"gn"`. The `grad` column of the table there
+counts the starts that end at a stationary point, which a fallback reaches and
+`"gn"` does not.
 
-# Seeding and memory of the quasi-Newton approximation
+# Seed and memory of the approximation
 
 Three arguments shape the approximation itself. They are read when the run
 begins in a quasi-Newton phase, that is for `"bfgs"` and `"sr1"`; `"gn"`
-ignores them, and `"hybrid"` seeds its handover from the Gauss-Newton matrix
+ignores them, and a fallback seeds its handover from the Gauss-Newton matrix
 irrespective of `hessianInit`.
 
 `hessianInit` selects the initial matrix. The default `"gn"` uses the
@@ -303,8 +428,9 @@ neither the outcome nor the cost.
 ```{r seed}
 seeds <- .fit("seeds", lapply(list(
   list(hessianMethod = "bfgs"),
-  list(hessianMethod = "bfgs", hessianInit = "identity"),
-  list(hessianMethod = "bfgs", hessianInit = "identity", qnMemory = 10L)),
+  list(hessianMethod = "bfgs", qnControl = list(hessianInit = "identity")),
+  list(hessianMethod = "bfgs",
+       qnControl = list(hessianInit = "identity", qnMemory = 10L))),
   function(a) do.call(trust, c(list(obj, start, rinit = 0.1, rmax = 10,
                                     iterlim = 5000, parlower = parlower,
                                     parupper = parupper), a))))
@@ -316,7 +442,7 @@ data.frame(seed   = c("gn", "identity", "identity"),
            neval  = vapply(seeds, `[[`, 0L, "neval"))
 ```
 
-# Multi-start behaviour
+# Multi-start on Boehm
 
 `mstrust()` runs `trust()` from many starting points. Drawing them once with
 `msParframe()` and passing the resulting frame as `center` ensures that a
@@ -331,13 +457,11 @@ fitAll <- function(...)
                       cores = .cores, rinit = 0.1, rmax = 10, iterlim = 5000,
                       parlower = parlower, parupper = parupper, ...))
 
-settings <- list(
-  `gn`       = list(hessianMethod = "gn"),
-  `hybrid`   = list(hessianMethod = "hybrid"),
-  `bfgs, id` = list(hessianMethod = "bfgs", hessianInit = "identity"),
-  `sr1, id`  = list(hessianMethod = "sr1",  hessianInit = "identity"))
+source(system.file("benchmarks", "hessianSourceSettings.R", package = "dMod2"))
+settings <- hessianSourceSettings[c("gn", "gn_bfgs", "gn_sr1", "bfgs_id", "sr1_id")]
 
 runs <- .fit("multistart", lapply(settings, function(a) do.call(fitAll, a)))
+names(runs) <- hessianSourceLabels[names(settings)]
 ```
 
 A start counts as a hit when it lands within `0.1` of the best value seen
@@ -346,13 +470,17 @@ anywhere.
 ```{r per-start}
 best <- min(vapply(runs, function(f) min(f$value), 0.0))
 
-summary <- function(f)
-  data.frame(conv     = sum(f$converged),
-             grad     = sum(f$stopReason == "gradient"),
-             hits     = sum(f$value <= best + 0.1),
-             neval    = sum(f$neval),
-             medEval  = stats::median(f$neval),
-             medValue = stats::median(f$value))
+summary <- function(f) {
+  hits <- sum(f$value <= best + 0.1)
+  data.frame(conv       = sum(f$converged),
+             grad       = sum(f$stopReason == "gradient"),
+             hits       = hits,
+             neval      = sum(f$neval),
+             medEval    = stats::median(f$neval),
+             # The price of one start that reaches the optimum, as reported by
+             # the Bachmann run.
+             evalPerHit = if (hits > 0) round(sum(f$neval) / hits) else NA_real_)
+}
 
 cbind(source = names(runs), do.call(rbind, lapply(runs, summary)),
       row.names = NULL)
@@ -362,10 +490,10 @@ The waterfall plot sorts the final objective values in ascending order. A flat
 leading plateau indicates repeated arrival at the same optimum, and the height
 of the first step how well that optimum is separated from its competitors.
 `plotValues()` draws one collection, shaded by iteration count; the figure below
-ranks the four separately and colours them by method. A circle marks a converged
+ranks the five separately and colours them by method. A circle marks a converged
 fit, a triangle one that stopped on any other test.
 
-```{r waterfall, fig.width = 7.8, fig.height = 5.5, out.width = "100%", fig.cap = "Waterfall plots of the four Hessian sources over the same 100 starting points, each ranked separately. Values above 600 are omitted."}
+```{r waterfall, fig.width = 7.8, fig.height = 5.5, out.width = "100%", fig.cap = "Waterfall plots of the five Hessian sources over the same 100 starting points, each ranked separately. Values above 600 are omitted."}
 # One panel for several fit collections, each ranked on its own. Drawn back to
 # front, so the first one listed is not buried, and without the palette's
 # pale yellow.
@@ -395,50 +523,174 @@ waterfall(runs, cutoff = 600)
 ```
 
 The curves share their starting points and therefore their basins, and they
-fall into two shapes. Gauss-Newton and the hybrid track each other over the
-whole range, as they must, since the hybrid is Gauss-Newton until a soft stop
-fires; they differ in the leading plateau, which is not flat under Gauss-Newton
-because the model stops improving before the minimum is reached, whereas the
-quasi-Newton phase carries those starts onto a common value. The two
-identity-seeded quasi-Newton runs have a different shape altogether: they reach
-the global optimum from more starting points and abandon more of them on the
-poor plateau, so they explore more widely and end on a worse typical value.
+fall into two shapes. Gauss-Newton and the two fallback runs track each other
+over the whole range, as they must, since a fallback is Gauss-Newton until a
+soft stop fires; they differ in the leading plateau, which is not flat under
+Gauss-Newton because the model stops improving before the minimum is reached,
+whereas the quasi-Newton phase carries those starts onto a common value. The
+identity-seeded runs have a different shape altogether, with a longer leading
+plateau: they reach the global optimum from more starting points and abandon
+more of them further down. Under `"bfgs"` that trade costs the typical value,
+under `"sr1"` it does not.
 
 The `stopReason` of the runs shows the mechanism. Gauss-Newton ends on the
 model tests, which for it are legitimate. The quasi-Newton runs, which those
 tests no longer terminate, end on `stagnation` or on `gradient`.
 
+## Boehm without the prior
+
+The prior above keeps a start from running into a bound, and it shapes the
+comparison. The same 200 starts were therefore also run on the likelihood
+alone, with the bounds widened to $\pm 8$. The published optimum is
+$-2 \log L = 276.44$ [@hass2019benchmark], and a hit ends within 0.1 of it.
+
+| source | best | reaching the optimum | median evaluations | evaluations per optimum |
+|---|---|---|---|---|
+| `"gn"` | 276.396 | 28 of 200 | 98 | 4236 |
+| `"gn"` to `"sr1"` | 276.396 | 28 of 200 | 133 | 4452 |
+| `"sr1"`, identity | 276.396 | 32 of 200 | 219 | 4190 |
+| `"sr1"`, gn seed | 276.396 | **40 of 200** | 226 | 2440 |
+| `"sr1"` to `"gn"` | 276.396 | 35 of 200 | 172 | **2411** |
+
+```{r boehm-noprior-waterfall, fig.width = 7.8, fig.height = 4.0, out.width = "100%", fig.cap = "Waterfall plots of five Hessian sources on the Boehm likelihood without a prior, over the same 200 starting points, each ranked separately. Values above 600 are omitted."}
+noprior <- readRDS("boehm_noprior.rds")
+waterfall(split(noprior[c("value", "converged")], noprior$source), cutoff = 600)
+```
+
+Removing the prior costs every source: each still reaches the published
+optimum, but from fewer starts and at several times the evaluations per one.
+The ordering changes. `"sr1"` now reaches the optimum from the most starts and
+for the fewest evaluations each, and the reversed handover is level with it at
+a fifth fewer evaluations per start.
+
+The reversed handover also repairs how a run ends. Alone, `"sr1"` stagnates on
+156 of 200 starts; handing back to `"gn"` turns that into 159 ends on `fvalue`
+and 11 on stagnation, and cuts runs exhausting the iteration cap from 13 to 4.
+The forward handover does none of this and matches `"gn"` on every count, as on
+Bachmann.
+
+# Bachmann, 113 parameters
+
+A dense quasi-Newton update needs of the order of $n_\theta$ accepted steps
+before it carries curvature along every direction, so its advantage should
+narrow as the problem grows. Bachmann's JAK2-STAT5 model
+[@bachmann2011division] puts a number on that: 113 estimated parameters, 25
+states, 20 observables, 36 conditions. The fits come from a SLURM cluster
+through `dMod2::distributedComputing()`, one job per source, each an array of
+50 tasks running four fits.
+
+The setup needs one deliberate choice. A multi-start over 113 parameters needs
+a weak prior, or starts run into the bounds instead of converging, but one
+centre for every parameter is wrong where the published values span twelve
+decades: at $\sigma = 4$ it costs 27 at the published optimum and moves it.
+Every parameter further than a decade from the default centre is therefore
+moved onto the order of magnitude of its published value, which leaves the
+centre within one decade everywhere and the same $\sigma = 4$ costing 1.04. The
+objective keeps its published minimum, at -479.26, and a hit ends within 0.1 of
+it. Starts are drawn around that centre and redrawn where they leave the box.
+
+| source | best | reaching the optimum | median evaluations | evaluations per optimum |
+|---|---|---|---|---|
+| `"gn"` | -479.264 | 83 of 200 | 141 | **638** |
+| `"gn"` to `"sr1"` | -479.264 | 83 of 200 | 156 | 678 |
+| `"sr1"`, identity | -479.264 | 79 of 200 | 500 | 1292 |
+| `"sr1"`, gn seed | -479.264 | 65 of 200 | 592 | 1926 |
+| `"sr1"` to `"gn"` | -479.264 | 79 of 200 | 490 | 1275 |
+
+```{r bachmann-waterfall, fig.width = 7.8, fig.height = 4.0, out.width = "100%", fig.cap = "Waterfall plots of five Hessian sources on Bachmann over the same 200 starting points, each ranked separately. Starts ending above -400 are omitted."}
+# Cluster fits, so they sit beside the document as data rather than in the
+# refit cache: a --refit cannot recompute them.
+bachmann <- readRDS("bachmann.rds")
+waterfall(split(bachmann[c("value", "converged")], bachmann$source), cutoff = -400)
+```
+
+Every source reaches the same best value, and the counts at 0.1 and at 1.0 from
+the optimum are identical, so a start either finds the published minimum or
+ends far from it. No source finds an optimum another misses. What separates
+them is price: Gauss-Newton reaches the optimum for a third of what the
+cheapest quasi-Newton run pays, reversing the ordering seen at nine
+parameters.
+
+Two differences are structural rather than statistical.
+
+An identity seed beats a Gauss-Newton seed for `"sr1"`, 79 starts against 65.
+Seeding an approximation that is about to be rebuilt from scratch with a matrix
+from a point it is about to leave carries the wrong curvature into the first
+steps, and SR1 has no damping to discard it.
+
+The handovers do what their construction says and no more. Forward, the model
+tests never fire again and 197 of 200 runs end on stagnation, at the values
+`"gn"` reaches alone. Reversed, the run ends on `fvalue` 140 times instead,
+because the Gauss-Newton model is a legitimate stopping test again. Neither
+changes which optimum is found: matched start by start, `"gn"` and the forward
+handover differ by $3 \times 10^{-6}$. By the time a soft stop fires the basin
+is chosen, and the handover only decides how the run ends inside it.
+
 # Discussion
 
-The four sources differ in what a single start buys. `"gn"` and the hybrid
-produce the better typical run, reaching the lower median value, and the hybrid
-additionally resolves the leading plateau that `"gn"` leaves ragged, for a few
-per cent more evaluations. The two identity-seeded quasi-Newton sources spend
-fewer evaluations on a start and reach the published optimum from more of them,
-at a worse typical value. Which of those matters depends on whether starting
-points or evaluations are the scarce resource.
+The five sources differ in what a single start buys. `"gn"` and the two
+fallback runs reach the published optimum from the same number of starts; a
+fallback changes only how a run ends, moving stops off the model tests and onto
+the gradient, and an `"sr1"` fallback moves more of them than a `"bfgs"` one.
 
-`parscale`, the diagonal preconditioner, is off by default and stays off here.
-It has nothing to correct when parameters are already on a logarithmic scale,
-which is the normal case in dMod2, and the ill-conditioning of sloppy models
-lies along rotated directions [@gutenkunst2007universally] that no diagonal
-scaling reaches.
+The source that separates is `"sr1"` seeded from the identity. It reaches the
+published optimum from several times as many starts as `"gn"` and at a fraction
+of the evaluations each one costs.
 
-The measurements come from a single model with nine estimated parameters, and the advantage of a quasi-Newton method is
-expected to narrow as the parameter count grows, since a dense update requires
-of the order of $n_\theta$ accepted steps before it carries curvature along
-every direction. The hit counts are single digit to low double digit out of 100
-starts and carry a corresponding sampling error, so they do not establish an
-ordering between two sources that lie close together. A ranking that carried
-weight would have to run over a set of models.
+`parscale`, the diagonal preconditioner, is off by default and stays off here,
+and the quasi-Newton seed is not scaled either. Neither has anything to correct
+when parameters are already on a logarithmic scale, which is the normal case in
+dMod2, and the ill-conditioning of sloppy models lies along rotated directions
+[@gutenkunst2007universally] that no diagonal scaling reaches. Scaling the seed
+is worse than idle: it reads one curvature from the first accepted pair of a
+run and applies it to every direction, which a spectrum spread over decades
+does not support.
+
+Three settings are not a set of models, but they are enough to separate what
+travels from what does not.
+
+The ordering of the sources does not travel. Gauss-Newton reaches the optimum
+for a third of what the cheapest quasi-Newton run pays on Bachmann; on Boehm
+`"sr1"` is cheapest, by an order of magnitude with the prior and by a factor of
+two without it. The direction is the one the theory gives: where the residuals
+at the optimum are small, $J^{\mathsf T} J$ is close to the true Hessian and a
+source that infers curvature from steps pays for information it does not need.
+Where they are large the omitted term is not, the Gauss-Newton model stops
+improving early, and its own tests fire far from the minimum.
+
+Three things do travel. No source reaches an optimum another misses; every
+comparison here separates on price, not on which minimum is found. A handover
+does not change which basin a run ends in, because by the time a soft stop
+fires the basin has been chosen: matched start by start on Bachmann, `"gn"` and
+the forward handover differ by $3 \times 10^{-6}$. And a quasi-Newton phase
+costs of the order of $n_\theta$ accepted steps before it carries curvature
+everywhere, which is why its price per optimum grows with the parameter count.
+
+The two handovers therefore buy different things, and neither buys an optimum.
+The forward one changes only where inside a basin a run stops. The reversed one
+restores a legitimate stopping test: on Boehm without a prior it turns 156
+stagnations into 159 ends on `fvalue` and cuts runs hitting the iteration cap
+from 13 to 4.
 
 # Reproducing the numbers
 
-The fits behind the tables and figures are stored in
+The nine-parameter fits behind the tables and figures are stored in
 `dev/optimisation/results.rds` and reused, so this document renders in seconds
 and reproduces exactly what it shows; `dev/render-optimisation.R --refit`
-recomputes them. The script `bench_hessianSource.R` under `inst/benchmarks`
-runs the same comparison outside the vignette, over both seeds and with the
-per-start `stopReason` tables.
+recomputes them.
+
+The two heavy comparisons are too expensive for a render and sit beside the
+document as data instead, one file each, with the script that produced them:
+
+- `boehm_noprior.rds` comes from `bench_hessianSource.R` under `inst/benchmarks`
+  with the environment variable `BOEHM_NOPRIOR` set, and takes minutes on one
+  machine.
+- `bachmann.rds` comes from `bachmann_hessianSource.R` under `dev/optimisation`,
+  first with `BACHMANN_SUBMIT` and then with `BACHMANN_COLLECT`. It needs a
+  SLURM cluster: five job arrays of 50 tasks, four fits each.
+
+`bench_hessianSource.R` without that variable is the nine-parameter comparison
+of the earlier sections, over the whole catalogue rather than the subset shown
+here and with the per-start `stopReason` tables.
 
 # References

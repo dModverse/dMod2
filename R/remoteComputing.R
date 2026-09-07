@@ -567,10 +567,10 @@ runbg <- function(..., machine = "localhost", filename = NULL, input = ls(.Globa
   # Save current workspace to be transferred to remote machines
   save(list = input, file = paste0(filename0, ".RData"), envir = .GlobalEnv)
   
-  # Collect currently loaded packages to replicate the library state remotely
-  pack <- sapply(strsplit(search(), "package:", fixed = TRUE), function(v) v[2])
-  pack <- pack[!is.na(pack)]
-  pack <- paste(paste0("try(library(", pack, "))"), collapse = "\n")
+  # The transferred objects dispatch on dMod2 classes, so that is what the
+  # remote script needs. Replicating whatever the submitting session happened
+  # to attach makes a job depend on it; anything else belongs in the expression.
+  pack <- "library(dMod2)"
   
   output <- ".runbgOutput"
   
@@ -1111,10 +1111,10 @@ distributedComputing <- function(
   # WRITE R
   
   
-  # generate list of currently loaded packages
-  package_list <- sapply(strsplit(search(), "package:", fixed = TRUE), function(v) v[2])
-  package_list <- package_list[!is.na(package_list)]
-  package_list <- paste(paste0("try(library(", package_list, "))"), collapse = "\n")
+  # The transferred objects dispatch on dMod2 classes, so that is what the node
+  # script needs. Replicating whatever the submitting session happened to
+  # attach makes a job depend on it; anything else belongs in the expression.
+  package_list <- "library(dMod2)"
   if (compile || link) {
     objfns <- 'obj.fns <- ls()[sapply(ls(), function(nm) inherits(get(nm, envir=.GlobalEnv), c("obsfn", "parfn", "prdfn")))]'
     setmn <- sprintf('for (o in obj.fns) eval(parse(text=paste0("modelname(", o, ") <- \'%s\'")))\n', paste0(jobname, "_shared_object"))
@@ -1184,7 +1184,6 @@ distributedComputing <- function(
       "",
       "# Load packages",
       package_list,
-      "try(library(tidyverse))",
       "",
       "# Load environment",
       paste0("load('",jobname,"_workspace.RData')"),

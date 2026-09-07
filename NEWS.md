@@ -1,3 +1,48 @@
+# dMod2 0.7.2
+
+* `trust()` reports the iterate the run actually reached. The best-iterate
+  bookkeeping introduced with non-monotone acceptance took its snapshot at the
+  head of an iteration, so a run ending on `fvalue`, `preddiff`, `step` or the
+  iteration limit reported the second to last accepted point. `argument`,
+  `value`, `gradient`, `hessian` and `atBound` were affected, and with them
+  `vcov()`, `confint()` and profiles. The objective value moved by less than
+  `ftol` on the three soft stops, but the gradient could be orders of magnitude
+  too large, and an iteration-limit stop lost a full step. Runs ending on
+  `gradient`, `stagnation`, `radius` or `objfun` were never affected.
+* `trust()` takes `hessianFallback` and `fallbackLimit`. The fallback takes
+  over at the first value, model, step or stagnation stop instead of ending the
+  run; `fallbackLimit` above one alternates back to the primary source at the
+  next such stop, re-seeding a Gauss-Newton phase from a fresh Hessian at the
+  cost of one evaluation. `hessianMethod = "hybrid"` is gone, not deprecated: a
+  run is a method and, optionally, a fallback, and no pair carries a name of its
+  own. It was `"gn"` with `hessianFallback = "bfgs"`, and `trust()` says so when
+  it is passed.
+* `as.parframe()` carries `nSwitch`, the number of Hessian source handovers, so
+  a multi-start can be scored on them.
+* `trustL1()` is gone. It carried its own trust-region driver, shared no
+  acceptance semantics with `trust()` after the changes above, and had no caller
+  left here: the L1 penalty, its clustering and the EM layer that use it live on
+  `devel-EM`, and it returns with them once that layer lands, aligned with the
+  interface above. `constraintL1()` stays as the Laplace prior it always was.
+* `createExample()`, `exmpextr()` and `extractExamples()` are gone. They served
+  the pre-testthat `inst/tests` layout, and `createExample()` opened an editor
+  on a template to write a unit test, which is maintainer tooling rather than
+  package API.
+* `distributedComputing()` and `runbg()` attach `dMod2` on the remote machine
+  and nothing else. They used to replicate every package attached in the
+  submitting session, plus a hard-coded `tidyverse`, which made a job depend on
+  the session that sent it and filled the node logs with failed loads. A job
+  that needs another package should attach it in its own expression.
+* `trust()` groups its arguments into `tolControl`, `qnControl` and
+  `stepControl`. The flat `ftol`, `mtol`, `gtol`, `xtol`, `rmin`, `boundary`,
+  `theta.max`, `hessianInit`, `qnMemory` and `qnCautious` are gone, not
+  deprecated; `trust()` and `mstrust()` name the control member a moved
+  argument became. `trustL1` keeps its flat tolerances.
+* `trust()` takes `qnControl$qnRejected` (SR1 also updates from a rejected
+  trial point, Nocedal and Wright sec. 6.2; default `TRUE` wherever an SR1
+  phase can occur) and `stepControl$nonmonotone` (Zhang-Hager acceptance,
+  default `0`, the monotone rule).
+
 # dMod2 0.7.1
 
 * `trust()` ends a quasi-Newton run on the gradient. `fvalue`, `preddiff` and

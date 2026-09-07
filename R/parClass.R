@@ -185,11 +185,12 @@ as.parframe.parlist <- function(x, sort.by = "value", ...) {
     m_metanames <- c(m_metanames, "stopReason")
   }
 
-  # Objective (= gradient) evaluations, and those spent in the quasi-Newton
-  # phase; present only when the optimiser reports them.
+  # Objective (= gradient) evaluations, those spent in the quasi-Newton phase,
+  # and the Hessian source handovers; present only when the optimiser reports
+  # them.
   .intcol <- function(field) vapply(x[m_idx], function(.x)
     if (is.null(.x[[field]])) NA_integer_ else as.integer(.x[[field]]), 1L)
-  for (field in c("neval", "qnEval", "qnSkipped")) {
+  for (field in c("neval", "qnEval", "qnSkipped", "nSwitch")) {
     col <- .intcol(field)
     if (any(!is.na(col))) { m_parframe[[field]] <- col; m_metanames <- c(m_metanames, field) }
   }

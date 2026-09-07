@@ -58,7 +58,7 @@ Everything below uses PEtab v2 unless stated otherwise. Version 1 problems
 are read as well; the importer normalises them onto the same internal
 shape.
 
-# What maps onto what
+# PEtab objects and their dMod2 counterparts
 
 dMod2 composes a fit problem from function objects, `g * x * p` closed by
 an objective [@kaschek2019dmod]. The importer fills exactly those slots:
@@ -193,7 +193,7 @@ recovers `conditions.tsv` from it. Symbols that the trafo references but
 that are neither estimated nor declared fixed raise an error rather than
 being written out silently.
 
-# A worked example
+# A worked example: Boehm
 
 The package ships the Boehm et al. JAK/STAT5 problem
 [@boehm2014identification], the canonical PEtab benchmark, so the example

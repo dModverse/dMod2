@@ -2,7 +2,6 @@
 % Please edit documentation in R/trust.R
 \name{trust}
 \alias{trust}
-\alias{trustL1}
 \title{Non-linear optimisation via a trust-region method}
 \usage{
 trust(
@@ -10,55 +9,20 @@ trust(
   parinit,
   rinit = 0.1,
   rmax = 10,
-  parscale = NULL,
   iterlim = 100L,
-  ftol = 1e-06,
-  mtol = 1e-06,
-  gtol = 1e-06,
-  xtol = 0,
-  rmin = 0,
-  theta.max = 0.99995,
-  boundary = c("reflective", "clip"),
-  hessianMethod = c("gn", "bfgs", "sr1", "hybrid"),
-  hessianInit = c("gn", "identity"),
-  qnMemory = 0L,
-  qnCautious = 1e-08,
-  minimize = TRUE,
-  blather = FALSE,
+  hessianMethod = c("gn", "bfgs", "sr1"),
+  hessianFallback = c("none", "bfgs", "sr1", "gn"),
+  fallbackLimit = 1L,
+  parscale = NULL,
   parupper = NULL,
   parlower = NULL,
-  printIter = FALSE,
-  traceFile = NULL,
-  fterm,
-  mterm,
-  ...
-)
-
-trustL1(
-  objfun,
-  parinit,
-  mu = 0 * parinit,
-  one.sided = FALSE,
-  lambda = 1,
-  rinit = 0.1,
-  rmax = 10,
-  parscale = NULL,
-  iterlim = 100L,
-  ftol = 1e-06,
-  mtol = 1e-06,
-  gtol = 1e-06,
-  xtol = 0,
-  rmin = 0,
-  theta.max = 0.99995,
-  boundary = c("reflective", "clip"),
+  tolControl = NULL,
+  qnControl = NULL,
+  stepControl = NULL,
   minimize = TRUE,
   blather = FALSE,
-  parupper = NULL,
-  parlower = NULL,
   printIter = FALSE,
   traceFile = NULL,
-  fterm,
-  mterm,
   ...
 )
 }
@@ -77,60 +41,96 @@ inside the box.}
 
 \item{rmax}{Maximum allowed trust-region radius.}
 
+\item{iterlim}{Maximum number of outer trust-region iterations.}
+
+\item{hessianMethod}{Source of the model Hessian the run starts on:
+\code{"gn"} (default) uses the objective's Gauss-Newton Hessian,
+\code{"bfgs"} and \code{"sr1"} maintain a quasi-Newton update seeded from
+it. A run is a method and, optionally, the \code{hessianFallback} it hands
+over to. Quasi-Newton methods require
+\code{stepControl$boundary = "reflective"}. Also selects the control
+defaults below.}
+
+\item{hessianFallback}{Source the run hands over to at the first value,
+model, step or stagnation stop, instead of ending there. \code{"none"}
+(default) never hands over. A handover restarts the trust region at
+\code{rinit} and discards the quasi-Newton pairs, keeping the working
+Hessian. Handing back to \code{"gn"} costs one extra objective
+evaluation.}
+
+\item{fallbackLimit}{Number of handovers allowed. \code{1} (default) hands
+over once and runs the fallback to the end; a higher value alternates back
+and forth, each time at the next soft stop. \code{0} disables the fallback.
+The result reports the count as \code{nSwitch}.}
+
 \item{parscale}{Optional named or unnamed numeric of length
 \code{length(parinit)} for parameter rescaling. The subproblem
 operates on \code{g / parscale} and
 \code{H / outer(parscale, parscale)}; the trust radius and \code{xtol}
 are measured in that frame.}
 
-\item{iterlim}{Maximum number of outer trust-region iterations.}
+\item{parupper, parlower}{Named or scalar numeric bounds. If unnamed,
+the first element broadcasts to all parameters; if named, the
+entries slot by name into a length-K vector defaulting to
+\code{+/- Inf}.}
 
-\item{ftol}{Convergence threshold on the change in objective value.}
+\item{tolControl}{List of convergence thresholds, merged into the defaults.
+\describe{
+\item{\code{ftol}}{Change in objective value. Default \code{1e-6}.}
+\item{\code{mtol}}{Predicted model decrease. Default \code{1e-6}.}
+\item{\code{gtol}}{First-order optimality measure. Default \code{1e-6}.
+Deliberately absolute: scaling a gradient by the objective value is not
+meaningful for a general objective, and for a sum of squares it is
+wrong, since \code{|f|} grows quadratically in the residuals while
+\code{|g|} grows linearly. Pass \code{gtol = x * |f|} for that.}
+\item{\code{xtol}}{Step norm. Default \code{0}, which disables it.}
+\item{\code{rmin}}{Lower limit on the trust radius; falling below it
+stops the run with \code{converged = FALSE}. Default \code{0},
+which disables it.}
+}}
 
-\item{mtol}{Convergence threshold on the predicted model decrease.}
+\item{qnControl}{List of quasi-Newton settings, merged into the defaults and
+read only by \code{"bfgs"}, \code{"sr1"} and a quasi-Newton fallback
+phase.
+\describe{
+\item{\code{hessianInit}}{Seed of the approximation: \code{"gn"}
+(default) the objective's Hessian at \code{parinit}, \code{"identity"}
+the identity, which also stops \code{trust} asking for a Hessian at
+all. Read only when the run starts quasi-Newton, so it is inert for
+\code{"gn"}.}
+\item{\code{qnMemory}}{Number of \code{(s, y)} pairs kept. \code{0}
+(default) accumulates every update onto the seed. A positive value
+rebuilds the approximation each iteration from the last
+\code{qnMemory} pairs and the Shanno-Phua scaling of the newest with
+positive curvature, discarding the seed. Costs
+\code{O(qnMemory * K^2)} per iteration and saves no memory, since the
+subproblem needs the explicit matrix.}
+\item{\code{qnCautious}}{Cautious-update threshold: a BFGS pair counts
+only when \code{s^T y > qnCautious * |s| * |y|}. Default \code{1e-8},
+\code{0} disables the test, \code{"sr1"} is exempt. \code{qnSkipped}
+counts the rejected pairs.}
+\item{\code{qnRejected}}{Whether \code{"sr1"} also takes its
+\code{(s, y)} pair from a rejected trial point. Default \code{TRUE}
+for \code{"sr1"}, \code{FALSE} otherwise; \code{"gn"} and
+\code{"bfgs"} are unaffected either way.}
+}}
 
-\item{gtol}{Convergence threshold on the first-order optimality measure.
-Deliberately absolute: no scaling of a gradient by the objective value is
-meaningful for a general objective, and for a sum of squares it is actively
-wrong -- \code{|f|} grows quadratically in the residuals while \code{|g|}
-grows linearly. Pass \code{gtol = x * |f|} explicitly if you want that.}
-
-\item{xtol}{Convergence threshold on the step norm. \code{0} disables it.}
-
-\item{rmin}{Lower limit on the trust radius. Falling below it stops the run
-with \code{converged = FALSE}. \code{0} disables it.}
-
-\item{theta.max}{Largest fraction of the distance to a bound that a step may
-use, keeping iterates strictly interior. Only used by
-\code{boundary = "reflective"}.}
-
-\item{boundary}{Box-bound handling, \code{"reflective"} (default) or
-\code{"clip"}. See Details.}
-
-\item{hessianMethod}{Source of the model Hessian: \code{"gn"} (default)
-uses the objective's Gauss-Newton Hessian; \code{"bfgs"} and \code{"sr1"}
-maintain a quasi-Newton update seeded from it; \code{"hybrid"} runs
-\code{"gn"} until the first value, model, step or stagnation stop, then
-switches to \code{"bfgs"} and carries on from there. Quasi-Newton methods
-require \code{boundary = "reflective"}.}
-
-\item{hessianInit}{Seed of the quasi-Newton approximation: \code{"gn"}
-(default) the objective's Hessian at \code{parinit}, \code{"identity"} the
-identity, which also stops \code{trust} asking for a Hessian at all. Read
-only when the run starts quasi-Newton, so it is inert for \code{"gn"} and
-\code{"hybrid"}, which need that Hessian.}
-
-\item{qnMemory}{Number of \code{(s, y)} pairs kept. \code{0} (default)
-accumulates every update onto the seed. A positive value rebuilds the
-approximation each iteration from \code{gamma * I} plus the last
-\code{qnMemory} pairs, \code{gamma} being the Shanno-Phua scaling
-\code{y^T y / s^T y} of the newest, and so discards the seed with the stale
-curvature. This is L-BFGS curvature at \code{O(qnMemory * K^2)} per
-iteration; the explicit matrix the subproblem needs saves no memory.}
-
-\item{qnCautious}{Cautious-update threshold: a BFGS pair counts only when
-\code{s^T y > qnCautious * |s| * |y|}. \code{0} disables the test,
-\code{"sr1"} is exempt. \code{qnSkipped} counts the rejected pairs.}
+\item{stepControl}{List of step and acceptance settings, merged into the
+defaults.
+\describe{
+\item{\code{boundary}}{Box-bound handling, \code{"reflective"} (default)
+or \code{"clip"}. See Details.}
+\item{\code{theta.max}}{Largest fraction of the distance to a bound that
+a step may use, keeping iterates strictly interior. Default
+\code{0.99995}, used only by \code{boundary = "reflective"}.}
+\item{\code{nonmonotone}}{Zhang-Hager relaxation \code{eta} in
+\code{[0, 1)}. The step ratio is measured against a weighted average of
+past objective values instead of the current one, so a step may be
+accepted that increases the objective. Default \code{0}, the monotone
+rule; \code{0.85} is the value Zhang and Hager report as generally
+best. The result reports the best iterate visited, which is the last
+one when \code{eta = 0}.}
+}}
 
 \item{minimize}{If \code{TRUE} (default) minimise; if \code{FALSE}
 maximise.}
@@ -140,39 +140,21 @@ maximise.}
 \code{accept}, \code{r}, \code{rho}, \code{valpath}, \code{valtry},
 \code{preddiff}, \code{stepnorm}, \code{hessianSource}).}
 
-\item{parupper, parlower}{Named or scalar numeric bounds. If unnamed,
-the first element broadcasts to all parameters; if named, the
-entries slot by name into a length-K vector defaulting to
-\code{+/- Inf}.}
-
 \item{printIter}{If \code{TRUE} print iteration count and objective
 value to the console at each function evaluation.}
 
 \item{traceFile}{Optional path. If non-\code{NULL}, CSV-log per
 evaluation \code{iter, value, p1, p2, ...}.}
 
-\item{fterm, mterm}{Deprecated aliases for \code{ftol} and \code{mtol}.}
-
 \item{...}{Additional named arguments forwarded to \code{objfun}.}
-
-\item{mu}{Named numeric vector of reference values for the L1-penalised
-parameters. Names must be a subset of \code{names(parinit)}; only the
-named parameters receive a penalty. Each must lie strictly inside
-\code{[parlower, parupper]}. Defaults to a zero vector covering all of
-\code{parinit}.}
-
-\item{one.sided}{Logical. If \code{TRUE}, the penalty is one-sided and
-acts as a lower wall at \code{mu}: \code{lambda * max(0, mu - p)}.
-Otherwise it is the symmetric \code{lambda * |p - mu|}.}
-
-\item{lambda}{Strength of the L1 penalty. Either a scalar (broadcast to
-all entries of \code{mu}) or a named numeric aligned with \code{mu}.}
 }
 \value{
 A list with components \code{argument}, \code{value},
 \code{gradient}, \code{hessian}, \code{iterations}, \code{neval},
 \code{qnEval} (evaluations spent in the quasi-Newton phase),
 \code{qnSkipped} (pairs the cautious test rejected),
+\code{nSwitch} (Hessian source handovers),
+\code{evalBySource} (named integer, evaluations per source),
 \code{converged}, \code{atBound} (named logical, which parameters are
 held by a bound) and \code{stopReason}. When \code{blather = TRUE} the
 list also contains \code{argpath}, \code{argtry}, \code{steptype},
@@ -181,11 +163,9 @@ list also contains \code{argpath}, \code{argtry}, \code{steptype},
 }
 \description{
 \code{trust} minimises (or maximises) a smooth objective function for which
-value, gradient and Hessian are available. \code{trustL1} additionally adds
-an L1 (lasso-style) penalty \code{lambda * sum(|p - mu|)} on a user-selected
-subset of parameters, with kink-aware step handling. Both routines solve a
-Moré-Sorensen trust-region subproblem exactly, via the full eigendecomposition
-of the Hessian.
+value, gradient and Hessian are available. It solves a Moré-Sorensen
+trust-region subproblem exactly, via the full eigendecomposition of the
+Hessian.
 }
 \section{Box bounds}{
 
@@ -229,10 +209,15 @@ flat within \code{ftol}.
 
 Only \code{gtol} tests first-order optimality; the other four read the last
 accepted step and a misleading Hessian can trip them far from a stationary
-point. \code{hessianMethod = "hybrid"} uses that: the first of the four
-switches the Hessian source instead of ending the run. In a quasi-Newton
+point. \code{hessianFallback} uses that: the first of the four hands the
+Hessian source over instead of ending the run. In a quasi-Newton
 phase \code{"fvalue"}, \code{"preddiff"} and \code{"step"} do not end the
 run at all; it ends on \code{"gradient"}, \code{"stagnation"} or the radius.
+
+Whatever ends the run, \code{argument}, \code{value}, \code{gradient},
+\code{hessian} and \code{atBound} describe one and the same iterate: the
+best one visited, which under the default \code{stepControl$nonmonotone = 0}
+is the last accepted one.
 }
 
 \section{Choosing tolerances}{

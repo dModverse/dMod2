@@ -51,7 +51,9 @@ test_that("modelnames behave as expected", {
   #-!End example code
   # 2. Rerunning the same parts breaks existing objects
   g2 <- Y(c(Bobs = "s1*B"), x1, compile = T, modelname = "obsfn")
-  p2 <- P(trafo, modelname = "p", compile = T)
+  # Reusing a loaded name is what point 2 tests, and renaming rather than
+  # overwriting is the documented reaction, so assert it instead of leaking it.
+  expect_warning(p2 <- P(trafo, modelname = "p", compile = T), "not portable")
   
   # 3. Compiling the same structural model into a different modelname lets both functions intact
   g3 <- Y(c(Bobs = "s1*B"), x1, compile = T, modelname = "obsfn3")

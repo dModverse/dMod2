@@ -6,7 +6,8 @@
 # Boehm et al. (2014) in dMod2: STAT5A/STAT5B are phosphorylated, form the
 # dimers ApA, ApB and BpB, shuttle into the nucleus and back. 48 measurements,
 # one condition, 9 estimated parameters. The multi-start section fits the model
-# with the three trust-region Hessian sources gn, bfgs and hybrid over one
+# with the trust-region Hessian sources gn and bfgs, and a gn run handing over
+# to bfgs, over one
 # shared set of starting points.
 #
 # [AUTHOR]
@@ -147,28 +148,31 @@ stopifnot(setequal(names(bestfit), outerpars))
 
 
 # –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
-# Multi-start fit: gn vs bfgs vs hybrid
+# Multi-start fit: gn vs bfgs vs a gn run handing over to bfgs
 #
 # One set of 100 starting points, drawn once with msParframe() and handed to
 # every method as the `center`, so the three fits differ only in their Hessian
 # source. neval counts objective (gradient) evaluations, qnEval the share of
 # them spent on a quasi-Newton Hessian.
 #
-# `iterlim` is one shared evaluation budget. gn and hybrid never come near it,
+# `iterlim` is one shared evaluation budget. gn and the handover never come near
+# it,
 # they finish under 1200; bfgs loses about three quarters of the starts and
 # would otherwise spend the whole budget on starts it has already lost, which
 # says nothing about the method beyond how long one lets it wander.
 # –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
 if (.fit) {
-  .methods <- c("gn", "bfgs", "hybrid")
+  # A run is a Hessian source and, optionally, a fallback it hands over to.
+  .methods <- list(gn        = list(hessianMethod = "gn"),
+                   bfgs      = list(hessianMethod = "bfgs"),
+                   `gn->bfgs` = list(hessianFallback = "bfgs"))
   set.seed(20260905)
   .starts  <- msParframe(pouter, n = 100, sd = 3)   # shared across methods
 
-  runs <- lapply(.methods, function(hm)
-    mstrust(obj, center = .starts, fits = nrow(.starts), cores = 20,
-            rinit = 0.1, rmax = 10, iterlim = 1500,
-            parlower = .lower, parupper = .upper, hessianMethod = hm))
-  names(runs) <- .methods
+  runs <- lapply(.methods, function(a)
+    do.call(mstrust, c(list(obj, center = .starts, fits = nrow(.starts), cores = 20,
+                            rinit = 0.1, rmax = 10, iterlim = 1500,
+                            parlower = .lower, parupper = .upper), a)))
   frames <- lapply(runs, as.parframe)
 
   # Best value seen anywhere is the reference optimum; a start "succeeds" if it

@@ -1,5 +1,5 @@
 # -------------------------------------------------------------------------#
-# Hessian source in a multi-start: gn, hybrid, bfgs
+# Hessian source in a multi-start: gn, bfgs, sr1 and their handovers
 # -------------------------------------------------------------------------#
 #
 # [PURPOSE]
@@ -25,7 +25,7 @@ library(dMod2)
 .outdir <- file.path(tempdir(), "bench_hessianSource")
 dir.create(.outdir, recursive = TRUE, showWarnings = FALSE)
 .cores  <- 20
-.nstart <- 100
+.nstart <- if (nzchar(Sys.getenv("BOEHM_NOPRIOR"))) 200L else 100L
 
 data(boehm)
 mydataL <- as.datalist(boehm)
@@ -90,10 +90,16 @@ prd       <- g*x*p
 outerpars <- getParameters(prd)
 pouter    <- structure(rep(-1, length(outerpars)), names = outerpars)
 dyn       <- setdiff(outerpars, grep("^sd_", outerpars, value = TRUE))
-obj       <- normL2(mydataL, prd, e) + constraintL2(pouter[dyn], sigma = 4)
+# BOEHM_NOPRIOR=1 drops the weak prior and widens the box, which is the setting
+# the vignette compares against: the likelihood alone, and nothing holding a
+# start back from a bound.
+.noprior  <- nzchar(Sys.getenv("BOEHM_NOPRIOR"))
+obj       <- normL2(mydataL, prd, e)
+if (!.noprior) obj <- obj + constraintL2(pouter[dyn], sigma = 4)
 
-parlower <- structure(rep(-5, length(outerpars)), names = outerpars)
-parupper <- structure(rep( 5, length(outerpars)), names = outerpars)
+.bound   <- if (.noprior) 8 else 5
+parlower <- structure(rep(-.bound, length(outerpars)), names = outerpars)
+parupper <- structure(rep( .bound, length(outerpars)), names = outerpars)
 
 set.seed(20260905)
 starts <- msParframe(pouter, n = .nstart, sd = 3)
@@ -105,15 +111,11 @@ run <- function(...)
                       rinit = 0.1, rmax = 10, iterlim = 5000,
                       parlower = parlower, parupper = parupper, ...))
 
-frames <- list(
-  `gn`            = run(hessianMethod = "gn"),
-  `hybrid`        = run(hessianMethod = "hybrid"),
-  `bfgs, gn`      = run(hessianMethod = "bfgs"),
-  `bfgs, id`      = run(hessianMethod = "bfgs", hessianInit = "identity"),
-  `sr1, gn`       = run(hessianMethod = "sr1"),
-  `sr1, id`       = run(hessianMethod = "sr1", hessianInit = "identity"),
-  `bfgs, id, m10` = run(hessianMethod = "bfgs", hessianInit = "identity",
-                        qnMemory = 10L))
+# Every variant of the shared catalogue.
+source(system.file("benchmarks", "hessianSourceSettings.R", package = "dMod2"))
+
+frames <- lapply(hessianSourceSettings, function(a) do.call(run, a))
+names(frames) <- hessianSourceLabels[names(hessianSourceSettings)]
 
 
 # –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
@@ -141,12 +143,12 @@ print(perStart, row.names = FALSE)
 
 for (id in names(frames)) { cat(id, ": "); print(table(frames[[id]]$stopReason)) }
 
-# The hybrid against the source it starts from, matched per start. A parframe is
+# A handover against the source it starts from, matched per start. A parframe is
 # sorted by value, so the starts are lined up on `index` before comparing.
-byIndex <- lapply(frames[c("gn", "hybrid")], function(f) f[order(f$index), ])
-stopifnot(identical(byIndex$gn$index, byIndex$hybrid$index))
-cat("hybrid: switched on", sum(byIndex$hybrid$qnEval > 0), "of", .nstart,
-    "starts, lower value than gn on", sum(byIndex$hybrid$value < byIndex$gn$value),
-    ", higher on", sum(byIndex$hybrid$value > byIndex$gn$value), "\n")
+byIndex <- lapply(frames[c("gn", "gn -> bfgs")], function(f) f[order(f$index), ])
+stopifnot(identical(byIndex[[1]]$index, byIndex[[2]]$index))
+cat("gn -> bfgs: switched on", sum(byIndex[[2]]$qnEval > 0), "of", .nstart,
+    "starts, lower value than gn on", sum(byIndex[[2]]$value < byIndex[[1]]$value),
+    ", higher on", sum(byIndex[[2]]$value > byIndex[[1]]$value), "\n")
 
-print(plotValues(frames[["hybrid"]], tol = 0.1, value < 1e4))
+print(plotValues(frames[["gn -> bfgs"]], tol = 0.1, value < 1e4))

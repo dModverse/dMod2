@@ -29,6 +29,26 @@ test_that("mstrust returns the global minimum across random starts on a convex q
 })
 
 
+test_that("a multi-start reports the Hessian source handovers per fit", {
+  # nSwitch is the gate quantity for a switching Hessian source, so it has to
+  # survive the trip from trust() through the parlist into the parframe.
+  target <- c(a = 1.0, b = -0.5)
+  obj <- constraintL2(mu = target, sigma = 1)
+
+  oldwd <- setwd(tempdir()); on.exit(setwd(oldwd), add = TRUE)
+  fits <- mstrust(objfun = obj, center = c(a = 0, b = 0),
+                  name = "test_mstrust_switch",
+                  rinit = 1, rmax = 10, iterlim = 100,
+                  hessianFallback = "bfgs",
+                  fits = 3, sd = 1, cores = 1, output = FALSE)
+
+  pf <- as.parframe(fits)
+  expect_true("nSwitch" %in% names(pf))
+  expect_true(is.integer(pf$nSwitch))
+  expect_false(anyNA(pf$nSwitch))
+})
+
+
 # ---- profile ------------------------------------------------------------
 
 test_that("profile on a 1D quadratic increases monotonically on both sides", {

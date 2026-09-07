@@ -764,10 +764,10 @@ vcov <- function(fit, parupper = NULL, parlower = NULL) {
   }
   
   # Which parameters are held by a bound rather than determined by the data.
-  # `trust(boundary = "reflective")` keeps iterates strictly inside the box, so
-  # an exact comparison against the bound never fires, it reports the activity
-  # itself. The comparison below is the fallback for fits without that field,
-  # and is relaxed to a relative tolerance for the same reason.
+  # `stepControl$boundary = "reflective"` keeps iterates strictly inside the
+  # box, so an exact comparison against the bound never fires; it reports the
+  # activity itself. The comparison below is the fallback for fits without that
+  # field, and is relaxed to a relative tolerance for the same reason.
   fixed <- NULL
   atBound__ <- fit[["atBound"]]
   if (!is.null(atBound__) && !is.null(names(atBound__)))
@@ -898,6 +898,9 @@ mstrust <- function(objfun, center, rinit = .1, rmax = 10, fits = 20, cores = 1,
   nameslocal <- c("name", "center", "fits", "cores", "optmethod", "samplefun",
                   "resultPath", "stats", "narrowing", "output",
                   "retry", "nTries")
+  # A name that moved into one of trust()'s control lists is no longer a
+  # formal, so without this it would silently be routed to objfun instead.
+  .trustRejectMoved(names(argslist), "mstrust")
   namestrust <- intersect(names(formals(trust)), names(argslist))
   namessample <- intersect(names(formals(samplefun)), names(argslist))
   if (length(intersect(namestrust, namessample) != 0)) {

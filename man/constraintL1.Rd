@@ -29,15 +29,13 @@ Computes the Laplace prior on the \verb{-2 log} scale,
 the L1 counterpart of \link{constraintL2}. Note the difference in normalisation:
 this constructor and its siblings are the full \verb{-2 log} density, while
 \link{constraintL2} is the penalty form and drops the Gaussian's constant.
-The term is not differentiable at
-\eqn{p = \mu}, where the gradient is reported as 0; \link{trustL1} penalises the
-same shape inside the optimiser and handles that kink exactly, so prefer it
-for fitting and use this constructor to score a posterior.
+The term is not differentiable at \eqn{p = \mu}, where the gradient is
+reported as 0, so it scores a posterior rather than driving a fit.
 }
 \examples{
 prior <- constraintL1(mu = c(k1 = 0), sigma = 2)
 prior(pars = c(k1 = 1))$value
 }
 \seealso{
-\link{constraintL2}, \link{trustL1}
+\link{constraintL2}
 }
