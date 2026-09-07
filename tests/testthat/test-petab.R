@@ -32,6 +32,26 @@
 }
 
 
+## --- interpreter resolution -----------------------------------------------
+
+test_that(".dmod_libsbml_python resolves a usable interpreter", {
+
+  # Deliberately not behind .libsbml_works(): that helper turns every failure
+  # into FALSE, so a resolver returning an empty path made the libsbml tests
+  # skip instead of fail. Skip only when reticulate itself cannot start Python.
+  skip_if_not_installed("reticulate")
+  ok <- isTRUE(tryCatch(reticulate::py_available(initialize = TRUE),
+                        error = function(e) FALSE))
+  if (!ok) skip("reticulate cannot start Python")
+
+  withr::local_envvar(c(DMOD_LIBSBML_PYTHON = NA, DMOD_LIBSBML_OK = NA))
+
+  py <- dMod2:::.dmod_libsbml_python()
+  expect_true(nzchar(py))
+  expect_true(file.exists(py))
+})
+
+
 ## --- pure parser unit tests (no SBML) -------------------------------------
 
 test_that(".petab_parse_parameters splits estimated / fixed and tracks scales", {
