@@ -23,10 +23,11 @@ jobs:
         branch: [devel-symmetry, devel-EM, devel-bayes, devel-reverseAD]
 
     steps:
+      # GITHUB_TOKEN, not DMODVERSE_PAT: the PAT carries Contents:read only, so a
+      # push with it is refused. A GITHUB_TOKEN push triggers no further workflow.
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          token: ${{ secrets.DMODVERSE_PAT || secrets.GITHUB_TOKEN }}
 
       - name: Merge master into ${{ matrix.branch }}
         id: merge
