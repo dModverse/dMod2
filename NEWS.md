@@ -1,3 +1,16 @@
+# dMod2 0.7.3
+
+* SBML and PEtab import work again in a fresh session. `.dmod_libsbml_python()`
+  read `reticulate::py_exe()` before Python was initialised, where it falls back
+  to discovery, misses the reticulate-managed environment and returns an empty
+  string. The `system2()` that followed then failed with status 127, which the
+  resolver reported as a missing `python-libsbml`, so a working environment
+  looked like a broken one. It now initialises Python first and rejects an empty
+  path.
+* The libsbml integration tests did not catch that, because `.libsbml_works()`
+  turns any error into `FALSE` and every test behind it into a skip. A test now
+  covers the interpreter resolution itself, outside that guard.
+
 # dMod2 0.7.2
 
 * `trust()` reports the iterate the run actually reached. The best-iterate
