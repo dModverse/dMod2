@@ -465,13 +465,41 @@ Pexpl <- function(trafo, parameters = NULL, attach.input = FALSE, condition = NU
 
   zero_states <- character(0)
 
+  # SBML rate rules may carry conditionals, so the structural probes below
+  # evaluate them with SBML's flat `piecewise(v1, c1, ..., otherwise)`.
+  ss_env <- new.env(parent = baseenv())
+  ss_env$piecewise <- function(...) {
+    a <- list(...); n <- length(a); i <- 1L
+    while (i + 1L <= n) {
+      if (isTRUE(a[[i + 1L]])) return(a[[i]])
+      i <- i + 2L
+    }
+    if (n %% 2L == 1L) a[[n]] else 0
+  }
+
   .is_struct_zero <- function(expr) {
     v <- tryCatch({
       syms <- getSymbols(expr)
-      if (!length(syms)) eval(parse(text = expr))
-      else eval(parse(text = replaceSymbols(syms, rep("1", length(syms)), expr)))
+      if (!length(syms)) eval(parse(text = expr), ss_env)
+      else eval(parse(text = replaceSymbols(syms, rep("1", length(syms)), expr)),
+                ss_env)
     }, error = function(e) NA_real_)
     isTRUE(v == 0)
+  }
+
+  # "Pure influx whose rate involves one state" implies that state is zero at
+  # steady state only if the rate cannot vanish at a nonzero value. A
+  # conditional rate can, so probe before concluding.
+  .vanishes_only_at_zero <- function(expr, st) {
+    others <- setdiff(getSymbols(expr), st)
+    base <- if (length(others))
+              replaceSymbols(others, rep("1", length(others)), expr) else expr
+    vals <- vapply(c(1, 1e3, 1e6), function(v) {
+      e <- replaceSymbols(st, format(v, scientific = FALSE), base)
+      out <- tryCatch(eval(parse(text = e), ss_env), error = function(err) NA_real_)
+      if (length(out) == 1L) as.numeric(out) else NA_real_
+    }, numeric(1))
+    !any(!is.na(vals) & vals == 0)
   }
 
   ## Drop a-priori-zero rates: their +1 stoichiometry otherwise masks the
@@ -500,7 +528,8 @@ Pexpl <- function(trafo, parameters = NULL, attach.input = FALSE, condition = NU
       if (any(col < 0) || !any(col > 0)) next
       for (k in which(col > 0)) {
         in_rate <- intersect(getSymbols(rates_chr[k]), cn)
-        if (length(in_rate) == 1L) return(in_rate)
+        if (length(in_rate) == 1L &&
+            .vanishes_only_at_zero(rates_chr[k], in_rate)) return(in_rate)
       }
     }
     NA_character_
@@ -1293,9 +1322,10 @@ Pimpl <- function(trafo, parameters = NULL, forcings = NULL, condition = NULL,
   if (is.null(modelname)) modelname <- "equil_parfn"
   if (!is.null(condition)) modelname <- paste(modelname, sanitizeConditions(condition), sep = "_")
 
+  fixedSyms <- dotArgs[["fixed"]]; dotArgs[["fixed"]] <- NULL
   base <- c(list(rhs = unclass(f[dependent]), rootfunc = "equilibrate", compile = compile,
                  outdir = outdir, verbose = verbose), dotArgs)
-  fixed_states <- setdiff(dependent, pivots)
+  fixed_states <- union(setdiff(dependent, pivots), fixedSyms)
   model    <- do.call(cppDE::cppODE, c(base, list(deriv = FALSE, deriv2 = FALSE,
                                                    modelname = modelname)))
   model_s  <- if (emit_d1)
@@ -1354,6 +1384,9 @@ Pimpl <- function(trafo, parameters = NULL, forcings = NULL, condition = NULL,
     }
 
     sens_model <- if (deriv2) model_s2 else if (deriv) model_s else model
+    # The solver error is the only account of why an attempt produced nothing,
+    # so it is kept for the failure message rather than discarded.
+    last_err <- NULL
     run_attempt <- function(y0) {
       tryCatch(
         cppDE::solveODE(
@@ -1366,7 +1399,10 @@ Pimpl <- function(trafo, parameters = NULL, forcings = NULL, condition = NULL,
           maxattemps = as.integer(controls$maxattemps),
           hini = controls$hini, maxroot = as.integer(controls$maxroot),
           onFailure = "silent"),
-        error = function(e) NULL)
+        error = function(e) {
+          last_err <<- .solveFailure(e, c(y0, p[model_params]))
+          NULL
+        })
     }
     is_success <- function(r) {
       if (is.null(r) || is.null(r$diagnostics)) return(FALSE)
@@ -1403,7 +1439,8 @@ Pimpl <- function(trafo, parameters = NULL, forcings = NULL, condition = NULL,
       setNames(rep(0, length(zero_states)), zero_states) else NULL
     if (!is_success(res)) {
       rc <- if (!is.null(res) && !is.null(res$diagnostics))
-              as.character(res$diagnostics$return_code) else "exception"
+              as.character(res$diagnostics$return_code)
+            else paste0("exception: ", last_err %||% "no message")
       stop("Pequil: no steady state reached after ", ms$nStarts,
            " integration attempt(s) (last return_code: ", rc, "). Either no stable ",
            "fixed point exists in this regime, the totals admit no non-negative ",
@@ -1485,6 +1522,17 @@ Pimpl <- function(trafo, parameters = NULL, forcings = NULL, condition = NULL,
 }
 
 
+# Internal: the solver error, with the non-finite parameters named. A missing
+# or overflowing value reaches the solver as a bare "'parms' must be finite",
+# which says nothing about where it came from.
+.solveFailure <- function(e, parms) {
+  msg <- conditionMessage(e)
+  bad <- names(parms)[!is.finite(parms)]
+  if (!length(bad)) return(msg)
+  paste0(msg, " [", paste(bad, collapse = ", "), "]")
+}
+
+
 #' Parameter transformation (steady states via pre-equilibration)
 #'
 #' Returns a [parfn] over the outer inputs. On call, the parfn integrates
@@ -1528,7 +1576,11 @@ Pimpl <- function(trafo, parameters = NULL, forcings = NULL, condition = NULL,
 #'   default the working directory.
 #' @param deriv,deriv2 Attach first/second-order sensitivities; `deriv2`
 #'   requires the model built with `deriv2 = TRUE`.
-#' @param ... Forwarded to [cppDE::cppODE].
+#' @param ... Forwarded to [cppDE::cppODE]. `fixed` is a character vector of
+#'   symbols left out of the sensitivity system, on top of the states. A
+#'   constant that the outer parameters never reach belongs there: its
+#'   sensitivity can drift without ever settling and would then veto the
+#'   steady state.
 #'
 #' @return A [parfn].
 #' @seealso [Pexpl], [Pimpl], [P].
@@ -1572,6 +1624,9 @@ Pequil <- function(trafo, parameters = NULL, forcings = NULL, condition = NULL,
   if (!is.null(condition)) modelname <- paste(modelname, sanitizeConditions(condition), sep = "_")
 
   dotArgs <- list(...); dotArgs[["deriv2"]] <- NULL
+  # `fixed` names symbols to leave out of the sensitivity system. It is merged
+  # with the states below rather than handed to cppODE twice.
+  fixedSyms <- dotArgs[["fixed"]]; dotArgs[["fixed"]] <- NULL
   base <- c(list(rhs = unclass(f_red), rootfunc = "equilibrate", compile = compile,
                  outdir = outdir, verbose = verbose), dotArgs)
   model    <- do.call(cppDE::cppODE, c(base, list(deriv = FALSE, deriv2 = FALSE,
@@ -1579,11 +1634,11 @@ Pequil <- function(trafo, parameters = NULL, forcings = NULL, condition = NULL,
   model_s  <- if (emit_d1)
     do.call(cppDE::cppODE, c(base, list(deriv = TRUE,  deriv2 = FALSE,
                                          modelname = paste0(modelname, "_s"),
-                                         fixed = names(f)))) else NULL
+                                         fixed = union(names(f), fixedSyms)))) else NULL
   model_s2 <- if (emit_d2)
     do.call(cppDE::cppODE, c(base, list(deriv = TRUE, deriv2 = TRUE,
                                          modelname = paste0(modelname, "_s2"),
-                                         fixed = names(f)))) else NULL
+                                         fixed = union(names(f), fixedSyms)))) else NULL
   all_sens <- if (emit_d1) attr(model_s, "dimNames")$sens else character(0)
 
   ode_ctrl <- modifyList(list(abstol = 1e-6, reltol = 1e-6, maxsteps = 1e6L,
@@ -1669,6 +1724,7 @@ Pequil <- function(trafo, parameters = NULL, forcings = NULL, condition = NULL,
     n_active    <- length(active_sens)
     sens_model  <- ctx$sens_model
 
+    last_err <- NULL
     run_attempt <- function(y0_dep, use_cache_sens) {
       a <- solveArgs(ctx, y0_dep, use_cache_sens)
       tryCatch(
@@ -1680,7 +1736,7 @@ Pequil <- function(trafo, parameters = NULL, forcings = NULL, condition = NULL,
           maxattemps = as.integer(controls$maxattemps),
           hini = controls$hini, maxroot = as.integer(controls$maxroot),
           onFailure = "silent"),
-        error = function(e) NULL)
+        error = function(e) { last_err <<- .solveFailure(e, a$parms); NULL })
     }
     is_success <- function(r) {
       if (is.null(r) || is.null(r$diagnostics)) return(FALSE)
@@ -1714,7 +1770,8 @@ Pequil <- function(trafo, parameters = NULL, forcings = NULL, condition = NULL,
 
     if (!is_success(res)) {
       rc <- if (!is.null(res) && !is.null(res$diagnostics))
-              as.character(res$diagnostics$return_code) else "exception"
+              as.character(res$diagnostics$return_code)
+            else paste0("exception: ", last_err %||% "no message")
       stop("Pequil: no steady state reached after ", ms$nStarts,
            " integration attempt(s) (last return_code: ", rc, "). ",
            "Either no stable fixed point exists in this parameter regime, ",
@@ -1847,6 +1904,17 @@ Pequil <- function(trafo, parameters = NULL, forcings = NULL, condition = NULL,
 }
 
 
+## Values passed through `...` resolve against the condition row, then the
+## per-branch symbols, then the calling frame. The last of those is what makes
+## a call from inside a function work.
+.evalDots <- function(dots, row, currentTrafo, currentSymbols, callerEnv) {
+  env <- list2env(as.list(row), envir = new.env(parent = callerEnv))
+  env$.currentTrafo   <- currentTrafo
+  env$.currentSymbols <- currentSymbols
+  lapply(eval(dots), eval, envir = env)
+}
+
+
 #' Construct and modify parameter transformations
 #'
 #' Symbolic helpers used by [P()] and [Xs()] to build, substitute, and
@@ -1880,7 +1948,8 @@ define <- function(trafo, expr, ..., conditionMatch = NULL) {
     stop("List names must be a subset of rownames(attr(trafo, 'tree')).", call. = FALSE)
   mytrafo <- if (is.list(trafo)) trafo else list(trafo)
 
-  dots <- substitute(alist(...))
+  dots      <- substitute(alist(...))
+  callerEnv <- parent.frame()
   out  <- lapply(seq_along(mytrafo), function(i) {
     .currentTrafo   <- mytrafo[[i]]
     .currentSymbols <- if (is.null(.currentTrafo)) NULL else getSymbols(.currentTrafo)
@@ -1888,8 +1957,8 @@ define <- function(trafo, expr, ..., conditionMatch = NULL) {
            else tree[1, , drop = FALSE]
     if (!is.null(conditionMatch) && !str_detect(rownames(row), conditionMatch))
       return(.currentTrafo)
-    with(row, do.call(repar,
-      c(list(expr = expr, trafo = .currentTrafo, reset = TRUE), eval(dots))))
+    args <- .evalDots(dots, row, .currentTrafo, .currentSymbols, callerEnv)
+    do.call(repar, c(list(expr = expr, trafo = .currentTrafo, reset = TRUE), args))
   })
   names(out) <- names(mytrafo)
   if (!is.list(trafo)) out <- out[[1]]
@@ -1909,7 +1978,8 @@ insert <- function(trafo, expr, ..., conditionMatch = NULL) {
     stop("List names must be a subset of rownames(attr(trafo, 'tree')).", call. = FALSE)
   mytrafo <- if (is.list(trafo)) trafo else list(trafo)
 
-  dots <- substitute(alist(...))
+  dots      <- substitute(alist(...))
+  callerEnv <- parent.frame()
   out  <- lapply(seq_along(mytrafo), function(i) {
     .currentTrafo   <- mytrafo[[i]]
     .currentSymbols <- if (is.null(.currentTrafo)) NULL else getSymbols(.currentTrafo)
@@ -1917,21 +1987,15 @@ insert <- function(trafo, expr, ..., conditionMatch = NULL) {
            else tree[1, , drop = FALSE]
     if (!is.null(conditionMatch) && !str_detect(rownames(row), conditionMatch))
       return(.currentTrafo)
-    with(row, {
-      ## Caller may pass logical dots to gate substitution per condition,
-      ## and non-logical dots to substitute symbols in `expr`. Logical dots
-      ## are stripped before forwarding to `repar`.
-      .apply <- function() {
-        d <- eval(dots)
-        if (!length(d)) return(do.call(repar, list(expr = expr, trafo = .currentTrafo)))
-        d_eval  <- lapply(d, function(x) eval.parent(x, 3))
-        is_log  <- vapply(d_eval, is.logical, logical(1))
-        gate    <- do.call(c, d[is_log])
-        if (!is.null(gate) && any(!gate)) return(.currentTrafo)
-        do.call(repar, c(list(expr = expr, trafo = .currentTrafo), d_eval[!is_log]))
-      }
-      .apply()
-    })
+    args <- .evalDots(dots, row, .currentTrafo, .currentSymbols, callerEnv)
+    if (!length(args))
+      return(do.call(repar, list(expr = expr, trafo = .currentTrafo)))
+    ## Logical dots gate the substitution per condition rather than naming a
+    ## symbol, so they decide and are then dropped.
+    isGate <- vapply(args, is.logical, logical(1))
+    gate   <- unlist(args[isGate], use.names = FALSE)
+    if (length(gate) && any(!gate)) return(.currentTrafo)
+    do.call(repar, c(list(expr = expr, trafo = .currentTrafo), args[!isGate]))
   })
   names(out) <- names(mytrafo)
   if (!is.list(trafo)) out <- out[[1]]

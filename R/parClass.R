@@ -185,6 +185,16 @@ as.parframe.parlist <- function(x, sort.by = "value", ...) {
     m_metanames <- c(m_metanames, "stopReason")
   }
 
+  # Objective (= gradient) evaluations, those spent in the quasi-Newton phase,
+  # and the Hessian source handovers; present only when the optimiser reports
+  # them.
+  .intcol <- function(field) vapply(x[m_idx], function(.x)
+    if (is.null(.x[[field]])) NA_integer_ else as.integer(.x[[field]]), 1L)
+  for (field in c("neval", "qnEval", "qnSkipped", "nSwitch")) {
+    col <- .intcol(field)
+    if (any(!is.na(col))) { m_parframe[[field]] <- col; m_metanames <- c(m_metanames, field) }
+  }
+
   parameters <- lapply(x[m_idx], function(x) data.table::as.data.table(as.list(x$argument)))
   parameters <- data.table::rbindlist(parameters, use.names = TRUE)
   m_parframe <- cbind(m_parframe, parameters)
@@ -287,10 +297,6 @@ plotPars.parframe <- function(x, tol = 1, ...){
   jumps <- .stepDetect(x$value, tol)
   jump.index <- approx(jumps, jumps, xout = 1:length(x$value), method = "constant", rule = 2)$y
   
-  #values <- round(x$value/tol)
-  #unique.values <- unique(values)
-  #jumps <- which(!duplicated(values))
-  #jump.index <- jumps[match(values, unique.values)]
   x$index <- as.factor(jump.index)
   
   myparframe <- x
@@ -306,6 +312,16 @@ plotPars.parframe <- function(x, tol = 1, ...){
 }
 
 
+# Convergence always reads the same way, a filled circle for a converged fit and
+# a triangle for one that stopped otherwise. Both levels stay in the legend even
+# when only one occurs, so several waterfall plots can be compared directly.
+.scaleConverged <- function()
+  scale_shape_manual(name = "converged",
+                     values = c(`TRUE` = 16, `FALSE` = 17),
+                     limits = c("TRUE", "FALSE"),
+                     labels = c("yes", "no"), drop = FALSE)
+
+
 #' @export
 #' @rdname plotValues
 plotValues.parframe <- function(x, tol = 1, ..., showSteps = FALSE) {
@@ -316,12 +332,8 @@ plotValues.parframe <- function(x, tol = 1, ..., showSteps = FALSE) {
   y.range <- c(min(x$value), max(max(x$value), min(x$value) + tol))
   y.jumps <- seq(y.range[2], y.range[1], length.out = length(jumps))
 
-
-  pars <- x
-  pars <- pars[order(pars$value),]
-  pars[["index"]] <-  1:nrow(pars)
-
-
+  pars <- x[order(x$value), ]
+  pars[["index"]] <- seq_len(nrow(pars))
 
   stepLines <- stepLabels <- NULL
   if (showSteps) {
@@ -335,6 +347,7 @@ plotValues.parframe <- function(x, tol = 1, ..., showSteps = FALSE) {
     stepLabels +
     xlab("index") + ylab("value") +
     scale_color_gradient(low = "dodgerblue", high = "orange") +
+    .scaleConverged() +
     coord_cartesian(ylim = y.range) +
     theme_dMod()
   
@@ -344,7 +357,6 @@ plotValues.parframe <- function(x, tol = 1, ..., showSteps = FALSE) {
   return(P)
   
 }
-
 
 
 # Default lines of a profile plot: the chi-square thresholds, labelled with the
@@ -497,7 +509,6 @@ is.parframe <- function(x) {
   parameters <- attr(x, "parameters")
   
   out <- as.data.frame(x)
-  #out <- as.data.frame(unclass(x))
   if (!is.null(i)) out <- out[i, ]
   if (!is.null(j)) out <- out[, j, drop = drop]
   
@@ -516,9 +527,13 @@ is.parframe <- function(x) {
 #' @param ... additional arguments
 #' @rdname parframe
 subset.parframe <- function(x, ...) {
-  
-  x[with(as.list(x), ...), ]
-  
+
+  # The condition names columns of `x` and may name variables of the frame it
+  # was written in, so it is evaluated against the columns first and the caller
+  # second.
+  condition <- eval(substitute(alist(...)))[[1L]]
+  x[eval(condition, as.list(x), parent.frame()), ]
+
 }
 
 #' Extract those lines of a parameter frame with unique elements in the value column
@@ -1006,7 +1021,7 @@ parlist <- function(...) {
 #' An object of class `"parvec"`, i.e. a named numeric vector with
 #' attributes:
 #' \itemize{
-#'   \item `attr(x, "deriv")` -- Jacobian matrix
+#'   \item `attr(x, "deriv")`, Jacobian matrix
 #' }
 #'
 #' @example inst/examples/parvec.R

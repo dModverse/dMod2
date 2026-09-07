@@ -107,7 +107,7 @@
   
   
 # Compute profiles    
-  myfit <- trust(myfn, pini, rinit = 1, rmax = 10, fixed = c(loglambda = -5, fixed), fterm = 0)
+  myfit <- trust(myfn, pini, rinit = 1, rmax = 10, fixed = c(loglambda = -5, fixed), tolControl = list(ftol = 0))
   bestfit <- myfit$argument
   
   proflist.approx <- do.call(c, mclapply(names(bestfit), function(n) profile.trust(myfn, bestfit, n, limits=c(-5, 5), algoControl = list(gamma = 1, reg = 1e-1), fixed = c(loglambda = -5, fixed)), mc.cores=length(bestfit)))

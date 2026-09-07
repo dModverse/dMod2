@@ -226,7 +226,8 @@ myfit <- trust(obj.validation, parinit = c(v = 190, bestfit[getParameters(p)]), 
 validation_profile <- profile(obj.validation, myfit$argument, "v", cores = 4, method = "optimize",
                               stepControl = list(stepsize = 1e-4, min = 1e-5, max = 1e3, atol = 1e-2, rtol = 1e-2, limit = 500, stop = "data"),
                               algoControl = list(reoptimize = T),
-                              optControl = list(rinit = .1, rmax = 5, iterlim = 200, ftol = 1e-5, mtol = 1e-5),
+                              optControl = list(rinit = .1, rmax = 5, iterlim = 200,
+                                                tolControl = list(ftol = 1e-5, mtol = 1e-5)),
                               cautiousMode = TRUE)
 
 # plotProfile(validation_profile) # This also plos the prediction colums, which is a bug in the code.
@@ -254,7 +255,8 @@ prediction_band <- do.call(rbind, mclapply(c(0,1,2,3,4,seq(5, 50, 2)), function(
   profile_prediction <- profile(obj.validation, refit$argument, "v", cores = 1, method = "integrate",
                                 stepControl = list(stop = "data"),
                                 algoControl = list(gamma = 1, reoptimize = T),
-                                optControl = list(rinit = .1, rmax = 10, iterlim = 100, ftol = 1e-5, mtol = 1e-5))
+                                optControl = list(rinit = .1, rmax = 10, iterlim = 100,
+                                                  tolControl = list(ftol = 1e-5, mtol = 1e-5)))
   
   proflist <- c(predprofs, list(profile = profile_prediction, time = t))
   

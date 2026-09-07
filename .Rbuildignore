@@ -5,6 +5,7 @@
 ^\.github$
 ^\.positai$
 ^\.claude$
+^dev$
 ^doc$
 ^Meta$
 ^scripts$
@@ -26,7 +27,6 @@
 ^tests/testthat/reactions_for_Alyssa_model\.csv$
 
 # Unrelated working directories and notes
-^BenchmarkModels$
 ^PEtabTests$
 ^PEtab2dmod_example\.Rmd$
 ^README\.Rmd$

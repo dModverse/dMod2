@@ -10,8 +10,6 @@ forcingsSymb <- function(type =c("Gauss", "Fermi", "1-Fermi", "MM", "Signal", "D
   type <- match.arg(type)
   
   # INPUT1 (differentiable box)
-  #fn <- "(1/(1+exp(k*(time-T1))))*(exp(k*(time-T2))/(1+exp(k*(time-T2))))" # T1 = start, T2 = end, k/4 = +-steepness in T1 and T2
-  #fn <- "((exp(-k*(time-T1))/(exp(-k*(time-T1))+1))/(exp(-k*(time-T2))+1))" # T1 = start, T2 = end, k/4 = +-steepness in T1 and T2
   fn1 <- "(.5*(1.-tanh(.5*k*(time-T1))))" # T1 = start, T2 = end, k/4 = +-steepness in T1 and T2
   fn2 <- "(.5*(1.+tanh(.5*k*(time-T2))))" # T1 = start, T2 = end, k/4 = +-steepness in T1 and T2
   integral <- "(Tduration/(exp(20)-1))" # 100 = k*Tduration

@@ -31,11 +31,11 @@ Supported classes are \code{parvec}, \code{prdframe}, \code{prdlist}, \code{list
 \value{
 The structure of the returned object depends on the class of \code{x}:
 \itemize{
-\item \code{parvec} – a 3D array \verb{[p, theta, theta]} of second derivatives.
-\item \code{prdframe} – a 4D array \verb{[time, variable, theta, theta]}.
-\item \code{prdlist} – a list of \code{prdframe} second-derivative arrays.
-\item \code{objlist} – the stored \code{hessian} matrix.
-\item \code{list} – a list of derivative objects, depending on the elements.
+\item \code{parvec}: a 3D array \verb{[p, theta, theta]} of second derivatives.
+\item \code{prdframe}: a 4D array \verb{[time, variable, theta, theta]}.
+\item \code{prdlist}: a list of \code{prdframe} second-derivative arrays.
+\item \code{objlist}: the stored \code{hessian} matrix.
+\item \code{list}: a list of derivative objects, depending on the elements.
 }
 }
 \description{

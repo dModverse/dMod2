@@ -9,9 +9,6 @@
 //   which is itself a parameter. With deriv = false only value and prediction
 //   are returned.
 //
-// constraintL2_mvn_kernel: multivariate Gaussian prior over per-subject eta
-// blocks; Cholesky-parametrized Omega. Eta + chol parameter blocks, GN Hessian
-// in z-space, with full chain-rule via dP and exact dP2 contribution.
 
 #include "residual_kernel.h"
 
@@ -106,7 +103,8 @@ List constraintL2_scalar_kernel(
     NumericVector sigma,                // length = length(mu_names); when est, holds 0.0 for est-rows
     CharacterVector sigma_pars,         // names of sigma params (empty string if fixed)
     bool est,
-    bool deriv = true) {
+    bool deriv = true,
+    bool build_hessian = true) {
 
   // Build allp lookup: name -> value
   // pars carries the outer (theta) parameter values when dP is given;
@@ -216,9 +214,11 @@ List constraintL2_scalar_kernel(
     }
   }
 
-  // Chain rule via dP / exact dP2 contribution.
+  // Chain rule via dP / exact dP2 contribution. The Hessian sandwich (and its
+  // dP2 term) is skipped entirely under build_hessian = false; only the
+  // gradient chain rule runs and the result carries a NULL hessian.
   NumericVector grad_out;
-  NumericMatrix hess_out;
+  RObject hess_out = R_NilValue;
   CharacterVector theta_names;
 
   if (dP_opt.isNotNull()) {
@@ -237,45 +237,52 @@ List constraintL2_scalar_kernel(
       for (int p = 0; p < n_inner_full; ++p) s += dP(p, k) * gi[p];
       grad_theta[k] = s;
     }
-    // hess_theta = dP^T * Hi * dP
-    std::vector<double> hess_theta((std::size_t) n_theta * n_theta, 0.0);
-    sandwich_hess(&dP(0,0), n_inner_full, n_theta, Hi.data(), hess_theta.data());
-
-    // Exact dP2 contribution: H_theta[k1, k2] += sum_p gi[p] * dP2[p, k1, k2]
-    if (dP2_opt.isNotNull()) {
-      NumericVector dP2_flat(dP2_opt.get());
-      IntegerVector dP2_dim = dP2_flat.attr("dim");
-      if (dP2_dim.size() == 3 && dP2_dim[1] == n_theta && dP2_dim[2] == n_theta) {
-        List dP2_dn = dP2_flat.attr("dimnames");
-        CharacterVector dP2_inner_names = dP2_dn[0];
-        std::vector<int> idx(dP2_inner_names.size(), -1);
-        std::vector<double> gi_inner(dP2_inner_names.size(), 0.0);
-        for (int i = 0; i < dP2_inner_names.size(); ++i) {
-          int ip = find_name(inner_par_names, as<std::string>(dP2_inner_names[i]));
-          if (ip >= 0) {
-            idx[i]      = i;
-            gi_inner[i] = gi[ip];
-          }
-        }
-        apply_dP2_exact(REAL(dP2_flat), dP2_dim, idx, gi_inner,
-                        n_theta, hess_theta.data());
-      }
-    }
-
     grad_out = NumericVector(grad_theta.begin(), grad_theta.end());
     grad_out.names() = theta_names;
-    hess_out = NumericMatrix(n_theta, n_theta);
-    std::memcpy(&hess_out(0,0), hess_theta.data(),
-                sizeof(double) * (std::size_t) n_theta * n_theta);
-    hess_out.attr("dimnames") = List::create(theta_names, theta_names);
+
+    if (build_hessian) {
+      // hess_theta = dP^T * Hi * dP
+      std::vector<double> hess_theta((std::size_t) n_theta * n_theta, 0.0);
+      sandwich_hess(&dP(0,0), n_inner_full, n_theta, Hi.data(), hess_theta.data());
+
+      // Exact dP2 contribution: H_theta[k1, k2] += sum_p gi[p] * dP2[p, k1, k2]
+      if (dP2_opt.isNotNull()) {
+        NumericVector dP2_flat(dP2_opt.get());
+        IntegerVector dP2_dim = dP2_flat.attr("dim");
+        if (dP2_dim.size() == 3 && dP2_dim[1] == n_theta && dP2_dim[2] == n_theta) {
+          List dP2_dn = dP2_flat.attr("dimnames");
+          CharacterVector dP2_inner_names = dP2_dn[0];
+          std::vector<int> idx(dP2_inner_names.size(), -1);
+          std::vector<double> gi_inner(dP2_inner_names.size(), 0.0);
+          for (int i = 0; i < dP2_inner_names.size(); ++i) {
+            int ip = find_name(inner_par_names, as<std::string>(dP2_inner_names[i]));
+            if (ip >= 0) {
+              idx[i]      = i;
+              gi_inner[i] = gi[ip];
+            }
+          }
+          apply_dP2_exact(REAL(dP2_flat), dP2_dim, idx, gi_inner,
+                          n_theta, hess_theta.data());
+        }
+      }
+
+      NumericMatrix H(n_theta, n_theta);
+      std::memcpy(&H(0,0), hess_theta.data(),
+                  sizeof(double) * (std::size_t) n_theta * n_theta);
+      H.attr("dimnames") = List::create(theta_names, theta_names);
+      hess_out = H;
+    }
   } else {
     // No chain rule: gradient/Hessian directly in inner-par space.
     grad_out = NumericVector(gi.begin(), gi.end());
     grad_out.names() = inner_par_names;
-    hess_out = NumericMatrix(n_inner_full, n_inner_full);
-    std::memcpy(&hess_out(0,0), Hi.data(),
-                sizeof(double) * (std::size_t) n_inner_full * n_inner_full);
-    hess_out.attr("dimnames") = List::create(inner_par_names, inner_par_names);
+    if (build_hessian) {
+      NumericMatrix H(n_inner_full, n_inner_full);
+      std::memcpy(&H(0,0), Hi.data(),
+                  sizeof(double) * (std::size_t) n_inner_full * n_inner_full);
+      H.attr("dimnames") = List::create(inner_par_names, inner_par_names);
+      hess_out = H;
+    }
   }
 
   return List::create(
@@ -296,7 +303,8 @@ List datapointL2_kernel(
     double t,
     double sigma,
     std::string value_par,               // name of pouter param that holds the data target value
-    bool deriv = true) {
+    bool deriv = true,
+    bool build_hessian = true) {
 
   CharacterVector pouter_names = pouter.names();
   const int n_p = pouter.size();
@@ -372,17 +380,20 @@ List datapointL2_kernel(
   const int idx_value = find_name(pouter_names, value_par);
   if (idx_value >= 0) dres_dp[idx_value] = -1.0;
 
-  // 5. Gradient + Hessian
+  // 5. Gradient + Hessian. The Hessian (and its exact d2pred term) is skipped
+  // entirely under build_hessian = false; the result then carries a NULL hessian.
   std::vector<double> gr(n_p, 0.0);
-  std::vector<double> hs((std::size_t) n_p * n_p, 0.0);
+  std::vector<double> hs;
+  if (build_hessian) hs.assign((std::size_t) n_p * n_p, 0.0);
   for (int i = 0; i < n_p; ++i) {
     gr[i] = 2.0 * res * dres_dp[i] / sigma2;
-    for (int j = 0; j < n_p; ++j) {
-      hs[i + (std::size_t) j * n_p] = 2.0 * dres_dp[i] * dres_dp[j] / sigma2;
-    }
+    if (build_hessian)
+      for (int j = 0; j < n_p; ++j) {
+        hs[i + (std::size_t) j * n_p] = 2.0 * dres_dp[i] * dres_dp[j] / sigma2;
+      }
   }
   // 6. Exact d2pred contribution (only on structural pars)
-  if (d2pred_attr_opt.isNotNull()) {
+  if (build_hessian && d2pred_attr_opt.isNotNull()) {
     NumericVector d2_flat(d2pred_attr_opt.get());
     IntegerVector d2dim = d2_flat.attr("dim");
     if (d2dim.size() == 4) {
@@ -413,10 +424,13 @@ List datapointL2_kernel(
 
   NumericVector grad_out(gr.begin(), gr.end());
   grad_out.names() = pouter_names;
-  NumericMatrix hess_out(n_p, n_p);
-  std::memcpy(&hess_out(0,0), hs.data(),
-              sizeof(double) * (std::size_t) n_p * n_p);
-  hess_out.attr("dimnames") = List::create(pouter_names, pouter_names);
+  RObject hess_out = R_NilValue;
+  if (build_hessian) {
+    NumericMatrix H(n_p, n_p);
+    std::memcpy(&H(0,0), hs.data(), sizeof(double) * (std::size_t) n_p * n_p);
+    H.attr("dimnames") = List::create(pouter_names, pouter_names);
+    hess_out = H;
+  }
 
   return List::create(
       Named("value")      = value,
@@ -425,196 +439,3 @@ List datapointL2_kernel(
       Named("prediction") = pred);
 }
 
-
-// [[Rcpp::export]]
-List constraintL2_mvn_kernel(
-    NumericVector pars,                 // free params (theta-named if dP, else inner)
-    Nullable<NumericVector> fixed_opt,
-    Nullable<NumericMatrix> dP_opt,
-    Nullable<NumericVector> dP2_opt,
-    CharacterVector inner_par_names,    // c(all_eta_names, chol_pars)
-    int K,
-    int N,
-    CharacterVector all_eta_names,      // length K*N
-    NumericVector mu,                   // length K
-    NumericMatrix L_lower,              // K x K lower-triangular Omega chol (precomputed in R)
-    bool include_chol_block) {          // false => return zeros in chol-block (typical trust use)
-
-  (void) include_chol_block;
-  // Build allp lookup
-  std::vector<std::string> allp_names; std::vector<double> allp_vals;
-  CharacterVector pn = pars.names();
-  for (int i = 0; i < pars.size(); ++i) {
-    allp_names.push_back(as<std::string>(pn[i])); allp_vals.push_back(pars[i]);
-  }
-  if (fixed_opt.isNotNull()) {
-    NumericVector f = fixed_opt.get();
-    CharacterVector fn = f.names();
-    for (int i = 0; i < f.size(); ++i) {
-      allp_names.push_back(as<std::string>(fn[i])); allp_vals.push_back(f[i]);
-    }
-  }
-  auto lookup = [&](const std::string& nm) -> double {
-    for (std::size_t i = 0; i < allp_names.size(); ++i)
-      if (allp_names[i] == nm) return allp_vals[i];
-    return std::numeric_limits<double>::quiet_NaN();
-  };
-
-  // Gather eta_mat as K x N: eta_mat[k, i] = allp[all_eta_names[i*K + k]]
-  // (matches R's subjectEtas which is N x K but indexed with all_eta_names
-  // = as.vector(subjectEtas) -- by column).
-  std::vector<double> eta_mat((std::size_t) K * N, 0.0);
-  bool all_present = true;
-  for (int i = 0; i < N; ++i) {
-    for (int k = 0; k < K; ++k) {
-      // R uses as.vector(subject_etas) which is column-major over [N, K]:
-      //   all_eta_names[(k-1)*N + (i-1)+1] = subject_etas[i, k]
-      // So all_eta_names[k*N + i] = subject_etas[i, k]
-      std::string nm = as<std::string>(all_eta_names[k * N + i]);
-      double v = lookup(nm);
-      if (std::isnan(v)) { all_present = false; break; }
-      eta_mat[k + (std::size_t) i * K] = v;
-    }
-    if (!all_present) break;
-  }
-
-  const int n_inner = inner_par_names.size();
-  std::vector<double> gi(n_inner, 0.0);
-  std::vector<double> Hi((std::size_t) n_inner * n_inner, 0.0);
-  double value = 0.0;
-
-  if (all_present) {
-    // R = eta_mat - mu  (K x N, col-major)
-    std::vector<double> R((std::size_t) K * N, 0.0);
-    for (int i = 0; i < N; ++i)
-      for (int k = 0; k < K; ++k)
-        R[k + (std::size_t) i * K] = eta_mat[k + (std::size_t) i * K] - mu[k];
-
-    // Z = forwardsolve(L, R): L * Z = R, solve for Z; col-major
-    std::vector<double> Z = R;  // overwritten in place by dtrtrs
-    int nrhs = N, info = 0;
-    F77_CALL(dtrtrs)("L", "N", "N", &K, &nrhs, &L_lower(0, 0), &K,
-                     Z.data(), &K, &info FCONE FCONE FCONE);
-    if (info != 0) throw std::runtime_error("constraintL2_mvn: dtrtrs forward failed.");
-
-    // W = backsolve(t(L), Z): L^T * W = Z; col-major
-    std::vector<double> W = Z;
-    F77_CALL(dtrtrs)("L", "T", "N", &K, &nrhs, &L_lower(0, 0), &K,
-                     W.data(), &K, &info FCONE FCONE FCONE);
-    if (info != 0) throw std::runtime_error("constraintL2_mvn: dtrtrs backsolve failed.");
-
-    // quad = sum(Z * Z); logdetO = 2 * sum log diag(L); value = quad + N * logdetO
-    double quad = 0.0;
-    for (std::size_t s = 0; s < (std::size_t) K * N; ++s) quad += Z[s] * Z[s];
-    double logdetO = 0.0;
-    for (int k = 0; k < K; ++k) logdetO += std::log(L_lower(k, k));
-    logdetO *= 2.0;
-    value = quad + (double) N * logdetO;
-
-    // Inner gradient (eta block): gi[name_of(eta_mat[k,i])] = 2 * W[k, i]
-    for (int i = 0; i < N; ++i) {
-      for (int k = 0; k < K; ++k) {
-        std::string nm = as<std::string>(all_eta_names[k * N + i]);
-        int ip = find_name(inner_par_names, nm);
-        if (ip >= 0) gi[ip] = 2.0 * W[k + (std::size_t) i * K];
-      }
-    }
-
-    // Inner Hessian (eta-eta block, GN): Hi[eta_idx, eta_idx] = 2 * Omega_inv
-    // Omega_inv = L^{-T} L^{-1}. Compute via two dtrtrs against identity.
-    std::vector<double> Linv((std::size_t) K * K, 0.0);
-    for (int k = 0; k < K; ++k) Linv[k + (std::size_t) k * K] = 1.0;
-    int K_int = K;
-    F77_CALL(dtrtrs)("L", "N", "N", &K_int, &K_int, &L_lower(0, 0), &K,
-                     Linv.data(), &K, &info FCONE FCONE FCONE);
-    // Now Linv = L^{-1} (lower tri).
-    // Omega_inv = Linv^T * Linv : K x K, symmetric. Use dgemm.
-    std::vector<double> Omega_inv((std::size_t) K * K, 0.0);
-    const double alpha = 1.0, beta_init = 0.0;
-    F77_CALL(dgemm)("T", "N", &K_int, &K_int, &K_int,
-                    &alpha, Linv.data(), &K_int, Linv.data(), &K_int,
-                    &beta_init, Omega_inv.data(), &K_int FCONE FCONE);
-
-    // For each subject, add 2 * Omega_inv to the eta-block of Hi.
-    for (int i = 0; i < N; ++i) {
-      std::vector<int> idx(K, -1);
-      for (int k = 0; k < K; ++k) {
-        std::string nm = as<std::string>(all_eta_names[k * N + i]);
-        idx[k] = find_name(inner_par_names, nm);
-      }
-      for (int k2 = 0; k2 < K; ++k2) {
-        if (idx[k2] < 0) continue;
-        for (int k1 = 0; k1 < K; ++k1) {
-          if (idx[k1] < 0) continue;
-          Hi[idx[k1] + (std::size_t) idx[k2] * n_inner] +=
-              2.0 * Omega_inv[k1 + (std::size_t) k2 * K];
-        }
-      }
-    }
-    // Chol-block + cross-block are NOT computed here (typical trust users
-    // don't estimate chol pars; for ECM workflow the dedicated path runs).
-  }
-
-  // Chain rule via dP / exact dP2 contribution. Mirrors scalar kernel.
-  NumericVector grad_out;
-  NumericMatrix hess_out;
-  CharacterVector theta_names;
-
-  if (dP_opt.isNotNull()) {
-    NumericMatrix dP(dP_opt.get());
-    const int dP_n_inner = dP.nrow();
-    const int n_theta    = dP.ncol();
-    if (dP_n_inner != n_inner)
-      throw std::runtime_error("constraintL2_mvn: dP nrow mismatch.");
-    List dP_dn = dP.attr("dimnames");
-    theta_names = (dP_dn.size() >= 2) ? dP_dn[1] : CharacterVector(n_theta);
-
-    std::vector<double> grad_theta(n_theta, 0.0);
-    for (int k = 0; k < n_theta; ++k) {
-      double s = 0.0;
-      for (int p = 0; p < n_inner; ++p) s += dP(p, k) * gi[p];
-      grad_theta[k] = s;
-    }
-    std::vector<double> hess_theta((std::size_t) n_theta * n_theta, 0.0);
-    sandwich_hess(&dP(0,0), n_inner, n_theta, Hi.data(), hess_theta.data());
-
-    if (dP2_opt.isNotNull()) {
-      NumericVector dP2_flat(dP2_opt.get());
-      IntegerVector dP2_dim = dP2_flat.attr("dim");
-      if (dP2_dim.size() == 3 && dP2_dim[1] == n_theta && dP2_dim[2] == n_theta) {
-        List dP2_dn = dP2_flat.attr("dimnames");
-        CharacterVector dP2_inner_names = dP2_dn[0];
-        std::vector<int> idx(dP2_inner_names.size(), -1);
-        std::vector<double> gi_inner(dP2_inner_names.size(), 0.0);
-        for (int i = 0; i < dP2_inner_names.size(); ++i) {
-          int ip = find_name(inner_par_names, as<std::string>(dP2_inner_names[i]));
-          if (ip >= 0) {
-            idx[i] = i;
-            gi_inner[i] = gi[ip];
-          }
-        }
-        apply_dP2_exact(REAL(dP2_flat), dP2_dim, idx, gi_inner,
-                        n_theta, hess_theta.data());
-      }
-    }
-
-    grad_out = NumericVector(grad_theta.begin(), grad_theta.end());
-    grad_out.names() = theta_names;
-    hess_out = NumericMatrix(n_theta, n_theta);
-    std::memcpy(&hess_out(0,0), hess_theta.data(),
-                sizeof(double) * (std::size_t) n_theta * n_theta);
-    hess_out.attr("dimnames") = List::create(theta_names, theta_names);
-  } else {
-    grad_out = NumericVector(gi.begin(), gi.end());
-    grad_out.names() = inner_par_names;
-    hess_out = NumericMatrix(n_inner, n_inner);
-    std::memcpy(&hess_out(0,0), Hi.data(),
-                sizeof(double) * (std::size_t) n_inner * n_inner);
-    hess_out.attr("dimnames") = List::create(inner_par_names, inner_par_names);
-  }
-
-  return List::create(
-      Named("value")    = value,
-      Named("gradient") = grad_out,
-      Named("hessian")  = hess_out);
-}

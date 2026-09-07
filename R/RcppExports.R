@@ -13,20 +13,16 @@ bmm_bb <- function(A, B, Bn, M, K, N) {
     .Call(`_dMod2_bmm_bb`, A, B, Bn, M, K, N)
 }
 
-constraintL2_scalar_kernel <- function(pars, dP_opt, dP2_opt, inner_par_names, fixed_opt, mu_names, mu, sigma, sigma_pars, est, deriv = TRUE) {
-    .Call(`_dMod2_constraintL2_scalar_kernel`, pars, dP_opt, dP2_opt, inner_par_names, fixed_opt, mu_names, mu, sigma, sigma_pars, est, deriv)
+constraintL2_scalar_kernel <- function(pars, dP_opt, dP2_opt, inner_par_names, fixed_opt, mu_names, mu, sigma, sigma_pars, est, deriv = TRUE, build_hessian = TRUE) {
+    .Call(`_dMod2_constraintL2_scalar_kernel`, pars, dP_opt, dP2_opt, inner_par_names, fixed_opt, mu_names, mu, sigma, sigma_pars, est, deriv, build_hessian)
 }
 
-datapointL2_kernel <- function(pouter, fixed_opt, prdf, dpred_attr_opt, d2pred_attr_opt, obs_name, t, sigma, value_par, deriv = TRUE) {
-    .Call(`_dMod2_datapointL2_kernel`, pouter, fixed_opt, prdf, dpred_attr_opt, d2pred_attr_opt, obs_name, t, sigma, value_par, deriv)
+datapointL2_kernel <- function(pouter, fixed_opt, prdf, dpred_attr_opt, d2pred_attr_opt, obs_name, t, sigma, value_par, deriv = TRUE, build_hessian = TRUE) {
+    .Call(`_dMod2_datapointL2_kernel`, pouter, fixed_opt, prdf, dpred_attr_opt, d2pred_attr_opt, obs_name, t, sigma, value_par, deriv, build_hessian)
 }
 
-constraintL2_mvn_kernel <- function(pars, fixed_opt, dP_opt, dP2_opt, inner_par_names, K, N, all_eta_names, mu, L_lower, include_chol_block) {
-    .Call(`_dMod2_constraintL2_mvn_kernel`, pars, fixed_opt, dP_opt, dP2_opt, inner_par_names, K, N, all_eta_names, mu, L_lower, include_chol_block)
-}
-
-normL2_kernel <- function(prediction, err_list_opt, meta_list, par_names_global, deriv2_requested, threads, bloq_mode = "M3") {
-    .Call(`_dMod2_normL2_kernel`, prediction, err_list_opt, meta_list, par_names_global, deriv2_requested, threads, bloq_mode)
+normL2_kernel <- function(prediction, err_list_opt, meta_list, par_names_global, deriv2_requested, threads, bloq_mode = "M3", build_hessian = TRUE) {
+    .Call(`_dMod2_normL2_kernel`, prediction, err_list_opt, meta_list, par_names_global, deriv2_requested, threads, bloq_mode, build_hessian)
 }
 
 parvec_attach <- function(out, deriv, deriv2) {
@@ -93,15 +89,7 @@ symCauchyEval <- function(tnodes, rvals, dN, dD, pIn) {
     .Call(`_dMod2_symCauchyEval`, tnodes, rvals, dN, dD, pIn)
 }
 
-trustL1_impl <- function(objfun, parinit, mu, lambda, one_sided, rinit, rmax, parscale = NULL, iterlim = 100L, ftol = 1e-6, mtol = 1e-6, gtol = 1e-6, xtol = 0.0, rmin = 0.0, thetamax = 0.99995, boundary = "reflective", minimize = TRUE, blather = FALSE, parupper = NULL, parlower = NULL, printIter = FALSE, traceFile = NULL) {
-    .Call(`_dMod2_trustL1_impl`, objfun, parinit, mu, lambda, one_sided, rinit, rmax, parscale, iterlim, ftol, mtol, gtol, xtol, rmin, thetamax, boundary, minimize, blather, parupper, parlower, printIter, traceFile)
-}
-
-trustL1_lockstep_impl <- function(objfun_many, parinit, mu, lambda, one_sided, rinit, rmax, parscale = NULL, iterlim = 100L, ftol = 1e-6, mtol = 1e-6, gtol = 1e-6, xtol = 0.0, rmin = 0.0, thetamax = 0.99995, minimize = TRUE, blather = FALSE, parupper = NULL, parlower = NULL) {
-    .Call(`_dMod2_trustL1_lockstep_impl`, objfun_many, parinit, mu, lambda, one_sided, rinit, rmax, parscale, iterlim, ftol, mtol, gtol, xtol, rmin, thetamax, minimize, blather, parupper, parlower)
-}
-
-trust_impl <- function(objfun, parinit, rinit, rmax, parscale = NULL, iterlim = 100L, ftol = 1e-6, mtol = 1e-6, gtol = 1e-6, xtol = 0.0, rmin = 0.0, thetamax = 0.99995, boundary = "reflective", minimize = TRUE, blather = FALSE, parupper = NULL, parlower = NULL, printIter = FALSE, traceFile = NULL) {
-    .Call(`_dMod2_trust_impl`, objfun, parinit, rinit, rmax, parscale, iterlim, ftol, mtol, gtol, xtol, rmin, thetamax, boundary, minimize, blather, parupper, parlower, printIter, traceFile)
+trust_impl <- function(objfun, parinit, rinit, rmax, parscale = NULL, iterlim = 100L, ftol = 1e-6, mtol = 1e-6, gtol = 1e-6, xtol = 0.0, rmin = 0.0, thetamax = 0.99995, boundary = "reflective", hessianMethod = "gn", hessianFallback = "none", fallbackLimit = 1L, hessianInit = "gn", qnMemory = 0L, qnCautious = 1e-8, qnRejected = TRUE, nonmonotone = 0.0, minimize = TRUE, blather = FALSE, parupper = NULL, parlower = NULL, printIter = FALSE, traceFile = NULL) {
+    .Call(`_dMod2_trust_impl`, objfun, parinit, rinit, rmax, parscale, iterlim, ftol, mtol, gtol, xtol, rmin, thetamax, boundary, hessianMethod, hessianFallback, fallbackLimit, hessianInit, qnMemory, qnCautious, qnRejected, nonmonotone, minimize, blather, parupper, parlower, printIter, traceFile)
 }
 

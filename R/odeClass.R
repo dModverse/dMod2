@@ -70,7 +70,7 @@ print.odemodel <- function(x, ...) {
 #'   `FALSE`.
 #' @param forcings Character vector with the names of external forcings.
 #' @param events An [eventlist] (or `data.frame` coercible via [as.eventlist]).
-#'   Must be defined here -- not on [Xs()] -- so that the sensitivity equations
+#'   Must be defined here, not on [Xs()] -- so that the sensitivity equations
 #'   are extended consistently.
 #' @param fixed Character vector with the names of parameters (initial values and dynamic)
 #'   for which no sensitivities are required (this speeds up integration).

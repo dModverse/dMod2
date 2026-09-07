@@ -25,68 +25,6 @@ as.objlist <- function(p) {
 }
 
 
-#' Compute a differentiable box prior
-#'
-#' @param p Named numeric, the parameter value
-#' @param mu Named numeric, the prior values, means of boxes
-#' @param sigma Named numeric, half box width
-#' @param k Named numeric, shape of box; if 0 a quadratic prior is obtained, the higher k the more box shape, gradient at border of the box (-sigma, sigma) is equal to sigma*k
-#' @param fixed Named numeric with fixed parameter values (contribute to the prior value but not to gradient and Hessian)
-#' @return list with entries: value (numeric, the weighted residual sum of squares),
-#' gradient (numeric, gradient) and
-#' hessian (matrix of type numeric). Object of class \code{objlist}.
-#' @keywords internal
-#' @noRd
-constraintExp2 <- function(p, mu, sigma = 1, k = 0.05, fixed=NULL) {
-  
-  kmin <- 1e-5
-  
-  ## Augment sigma if length = 1
-  if(length(sigma) == 1) 
-    sigma <- structure(rep(sigma, length(mu)), names = names(mu)) 
-  ## Augment k if length = 1
-  if(length(k) == 1) 
-    k <- structure(rep(k, length(mu)), names = names(mu))
-  
-  k <- sapply(k, function(ki){
-    if(ki < kmin){
-      kmin
-    } else ki
-  })
-  
-  
-  ## Extract contribution of fixed pars and delete names for calculation of gr and hs  
-  par.fixed <- intersect(names(mu), names(fixed))
-  sumOfFixed <- 0
-  if(!is.null(par.fixed)) sumOfFixed <- sum(0.5*(exp(k[par.fixed]*((fixed[par.fixed] - mu[par.fixed])/sigma[par.fixed])^2)-1)/(exp(k[par.fixed])-1))
-  
-  
-  par <- intersect(names(mu), names(p))
-  t <- p[par]
-  mu <- mu[par]
-  s <- sigma[par]
-  k <- k[par]
-  
-  # Compute prior value and derivatives 
-  
-  gr <- rep(0, length(t)); names(gr) <- names(t)
-  hs <- matrix(0, length(t), length(t), dimnames = list(names(t), names(t)))
-  
-  val <- sum(0.5*(exp(k*((t-mu)/s)^2)-1)/(exp(k)-1)) + sumOfFixed
-  gr <- (k*(t-mu)/(s^2)*exp(k*((t-mu)/s)^2)/(exp(k)-1))
-  diag(hs)[par] <- k/(s*s)*exp(k*((t-mu)/s)^2)/(exp(k)-1)*(1+2*k*(t-mu)/(s^2))
-  
-  dP <- attr(p, "deriv")
-  if(!is.null(dP)) {
-    gr <- as.vector(gr%*%dP); names(gr) <- colnames(dP)
-    hs <- t(dP)%*%hs%*%dP; colnames(hs) <- colnames(dP); rownames(hs) <- colnames(dP)
-  }
-  
-  objlist(value=val,gradient=gr,hessian=hs)
-  
-}
-
-
 #' Per-condition residual contribution to an L2 objective
 #'
 #' @description
@@ -159,6 +97,28 @@ evalConditionResidual <- function(dataI, predictionI, pars,
 
 
 
+# Internal: gradient and Hessian in the order of the parameter vector the
+# objective was called with. The kernel names them after the union of the
+# per-condition sensitivity blocks, while `trust()` and `optim()` read them
+# positionally against their own start vector. A parameter the objective does
+# not depend on gets a zero derivative rather than being left out.
+.alignObjlist <- function(out, pnames) {
+  g <- out$gradient
+  if (is.null(g) || !length(pnames) || identical(names(g), pnames)) return(out)
+  hit <- intersect(pnames, names(g))
+  gradient <- setNames(numeric(length(pnames)), pnames)
+  gradient[hit] <- g[hit]
+  out$gradient <- gradient
+  # A skipped Hessian stays NULL; only realign one that was actually built.
+  if (!is.null(out$hessian)) {
+    hessian <- matrix(0, length(pnames), length(pnames),
+                      dimnames = list(pnames, pnames))
+    if (length(hit)) hessian[hit, hit] <- out$hessian[hit, hit]
+    out$hessian <- hessian
+  }
+  out
+}
+
 #' L2 norm between data and model prediction
 #'
 #' @description
@@ -174,8 +134,13 @@ evalConditionResidual <- function(dataI, predictionI, pars,
 #' @param times Optional numeric vector of additional time points at which the
 #'   prediction function is evaluated. If NULL, time points are taken from the
 #'   data. Event times should be included here if the prediction model uses events.
-#' @param attr.name Character string. The objective value is additionally returned
-#'   as an attribute with this name.
+#' @param t0 Numeric. Start of the time grid, i.e. the time at which initial
+#'   values take effect. Defaults to 0.
+#' @param attr.name Character string. The objective value is additionally
+#'   returned as an attribute of this name, and the sum of squares behind it
+#'   under `chi2`. Adding objectives pools the terms sharing an `attr.name`,
+#'   so `chi2` stays one number; where two `attr.name`s meet it splits into
+#'   `chi2_<attr.name>` per contribution.
 #' @param cores Deprecated and ignored. Pass `cores` to the objective call, or
 #'   set `options(dMod.cores = )`.
 #' @param opt.BLOQ Character. NONMEM-style treatment of below-LOQ rows
@@ -194,7 +159,7 @@ evalConditionResidual <- function(dataI, predictionI, pars,
 #'
 #' @example inst/examples/normL2.R
 #' @export
-normL2 <- function(data, x, errmodel = NULL, times = NULL,
+normL2 <- function(data, x, errmodel = NULL, times = NULL, t0 = 0,
                    attr.name = "data",
                    cores = 1L,
                    opt.BLOQ = c("M3", "M1", "M4NM", "M4BEAL")) {
@@ -205,7 +170,9 @@ normL2 <- function(data, x, errmodel = NULL, times = NULL,
             call. = FALSE)
   opt.BLOQ <- match.arg(opt.BLOQ)
 
-  timesD <- sort(unique(c(0, unlist(lapply(data, `[[`, "time")), times)))
+  # `t0` anchors the time grid: the prediction starts there, so that is where
+  # initial values take effect.
+  timesD <- sort(unique(c(t0, unlist(lapply(data, `[[`, "time")), times)))
 
   x.cond <- names(attr(x, "mappings"))
   d.cond <- names(data)
@@ -227,7 +194,7 @@ normL2 <- function(data, x, errmodel = NULL, times = NULL,
 
   # `.prediction` lets a caller that already batched the predictions hand them
   # in; see .objEvalMany().
-  myfn <- function(..., fixed = NULL, deriv = TRUE, deriv2 = FALSE,
+  myfn <- function(..., fixed = NULL, deriv = TRUE, deriv2 = FALSE, hessian = TRUE,
                    conditions = NULL, env = NULL,
                    cores = getOption("dMod.cores", 1L), .prediction = NULL) {
     pars <- ..1
@@ -235,6 +202,11 @@ normL2 <- function(data, x, errmodel = NULL, times = NULL,
     conditions <- if (is.null(conditions)) conditions.obj else
       intersect(conditions.obj, conditions)
     if (!length(conditions)) return(NULL)
+
+    # The Hessian is only meaningful with deriv; when it is not wanted, the
+    # J^T J contraction is skipped and no second-order sensitivities are needed.
+    build_hessian <- isTRUE(deriv) && isTRUE(hessian)
+    deriv2 <- isTRUE(deriv2) && build_hessian
 
     prediction <- if (!is.null(.prediction)) .prediction else
       x(times = timesD, pars = pars, fixed = fixed,
@@ -252,7 +224,11 @@ normL2 <- function(data, x, errmodel = NULL, times = NULL,
       cn_eval <- if (is.null(e.cond)) conditions else intersect(conditions, e.cond)
       split <- lapply(cn_eval, function(cn) {
         pinner     <- getParameters(prediction[[cn]])
-        fixedinner <- pinner[attr(pinner, "fixed")]
+        # The `fixed` marker is derived from the sensitivity rows, so it is
+        # empty under deriv = FALSE. Fall back to the outer fixed names, or
+        # the error model loses those parameters entirely.
+        fixedinner <- pinner[union(attr(pinner, "fixed"),
+                                   intersect(names(pinner), names(fixed)))]
         list(pars  = as.parvec(pinner[setdiff(names(pinner), names(fixed))]),
              fixed = as.parvec(fixedinner, deriv = FALSE, deriv2 = FALSE))
       })
@@ -294,13 +270,19 @@ normL2 <- function(data, x, errmodel = NULL, times = NULL,
       par_names_global = par_names_global,
       deriv2_requested = isTRUE(deriv2),
       threads          = as.integer(cores),
-      bloq_mode        = opt.BLOQ
+      bloq_mode        = opt.BLOQ,
+      build_hessian    = build_hessian
     )
     out <- if (deriv)
-      objlist(value = kr$value, gradient = kr$gradient, hessian = kr$hessian)
+      .alignObjlist(objlist(value = kr$value, gradient = kr$gradient,
+                            hessian = kr$hessian), names(pars))
     else
       objlist(value = kr$value, gradient = NULL, hessian = NULL)
     attr(out, attr.name) <- out$value
+    # The sum of squares alone, tagged with the contribution it belongs to.
+    # Summing objectives pools terms sharing an `attr.name` into one `chi2` and
+    # splits the rest into `chi2_<attr.name>`.
+    attr(out, "chi2") <- setNames(kr$chi2, attr.name)
     env$prediction <- prediction
     attr(out, "env") <- env
     out
@@ -313,10 +295,13 @@ normL2 <- function(data, x, errmodel = NULL, times = NULL,
   err_pars <- if (!is.null(errmodel)) attr(errmodel, "parameters") else character(0)
   attr(myfn, "parameters") <- union(attr(x, "parameters"), err_pars)
   attr(myfn, "modelname") <- modelname(x, errmodel)
-  # NLME reconstruction handles: let .fitNormal()/emObjfn() recover the model
-  # pieces from a composed objective instead of re-demanding them as arguments
-  # (see .normalReconstruct() in nlmeNormal.R). Setting an attribute to NULL is a no-op,
-  # so "errfn" is simply absent when there is no error model.
+  # Carried like `*` and `+` carry it, so loadDLL() and compile() can reach the
+  # shared objects of a composed objective.
+  attr(myfn, "compileInfo") <- .mergeCompileInfo(attr(x, "compileInfo"),
+                                                 attr(errmodel, "compileInfo"))
+  # Reconstruction handles: recover the model pieces from a composed objective
+  # instead of re-demanding them as arguments. Setting an attribute to NULL is
+  # a no-op, so "errfn" is simply absent when there is no error model.
   # One entry per L2 term. The single handles below are first-wins on
   # composition, so a split objective would otherwise expose only its first
   # term, and reml() needs every one of them.
@@ -331,10 +316,9 @@ normL2 <- function(data, x, errmodel = NULL, times = NULL,
 
 
 # Evaluate a set of single-condition objectives, one parameter vector each, with
-# the predictions gathered into one batched request. The NLME stacks solve their
-# subjects in `for` loops over objectives built on a shared prdfn; that is one
-# ODE solve per subject per pass, and the condition axis is exactly what the
-# batch parallelises.
+# the predictions gathered into one batched request. A loop over objectives
+# built on a shared prdfn is one ODE solve per objective per pass; the
+# condition axis is exactly what the batch parallelises.
 #
 # Falls back to the loop whenever the batch cannot reproduce it: a missing
 # reconstruction handle, objectives from different prdfns, a condition owned by
@@ -448,15 +432,10 @@ normL2 <- function(data, x, errmodel = NULL, times = NULL,
 
 #' Soft L2 constraint on parameters
 #'
-#' @param mu Named numeric vector of prior means. For the MVN path
-#'   (`Omega` set), `mu` may be a scalar (broadcast across all etas) or a
-#'   length-K named vector matching `Omega$eta`.
+#' @param mu Named numeric vector of prior means. Its names select the
+#'   constrained parameters.
 #' @param sigma Named numeric or character vector. Character entries indicate
-#'   log-scale sigma parameters to be estimated. Used only when `Omega` is NULL.
-#' @param Omega Optional `omegaSpec` object (see `omega()` (NLME layer)) describing a
-#'   multivariate Gaussian prior over subject-level random effects with full
-#'   Cholesky-parametrised covariance. When supplied, the function switches to
-#'   the MVN path and ignores `sigma`.
+#'   log-scale sigma parameters to be estimated.
 #' @param attr.name Character. Name of the attribute storing the constraint value.
 #' @param condition Optional character vector of conditions.
 #'
@@ -465,38 +444,27 @@ normL2 <- function(data, x, errmodel = NULL, times = NULL,
 #' \deqn{(p-\mu)^2 / \sigma^2}
 #' or, if sigma is estimated,
 #' \deqn{(p-\mu)^2 / \sigma^2 + 2\log(\sigma)},
-#' with sigma internally transformed via \code{exp()}.
-#'
-#' When `Omega` is set, computes the multivariate-normal prior
-#' \deqn{\sum_i (\eta_i - \mu)^T \Omega^{-1} (\eta_i - \mu) + N \log|\Omega|}
-#' over subject-level random effects \eqn{\eta_i}, where \eqn{\Omega = L L^T}
-#' with \eqn{L} lower-triangular and log-parametrised on the diagonal. The
-#' parameter vector at evaluation time must contain all subject-level eta
-#' parameters listed in `Omega$subjectEtas` and all Cholesky parameters in
-#' `Omega$cholPars`.
+#' with sigma internally transformed via \code{exp()}. This is the penalty
+#' form and drops the Gaussian's normalisation; [constraintL1] and its siblings
+#' are the full `-2 log` density.
 #'
 #' @return Object of class \code{objfn}.
 #' @export
-constraintL2 <- function(mu, sigma = 1, Omega = NULL,
-                         attr.name = "prior", condition = NULL) {
-
-  if (!is.null(Omega)) {
-    if (missing(mu)) mu <- 0
-    return(constraintL2_mvn(mu = mu, Omega = Omega,
-                            attr.name = attr.name, condition = condition))
-  }
+constraintL2 <- function(mu, sigma = 1, attr.name = "prior", condition = NULL) {
 
   est <- is.character(sigma)
   if (length(sigma) == 1) sigma <- setNames(rep(sigma, length(mu)), names(mu))
   if (is.null(names(sigma))) names(sigma) <- names(mu)
   sigma <- sigma[names(mu)]
 
-  myfn <- function(..., fixed = NULL, deriv = TRUE, deriv2 = FALSE, conditions = condition, env = NULL,
+  myfn <- function(..., fixed = NULL, deriv = TRUE, deriv2 = FALSE, hessian = TRUE,
+                   conditions = condition, env = NULL,
                    cores = getOption("dMod.cores", 1L)) {
 
     p <- list(...)[[match.fnargs(list(...), "pars")]]
+    build_hessian <- isTRUE(deriv) && isTRUE(hessian)
     dP  <- if (deriv) attr(p, "deriv", exact = TRUE) else NULL
-    dP2 <- if (deriv && deriv2) attr(p, "deriv2", exact = TRUE) else NULL
+    dP2 <- if (build_hessian && deriv2) attr(p, "deriv2", exact = TRUE) else NULL
 
     sigma_pars <- if (est) sigma[names(mu)] else rep("", length(mu))
     sigma_vec  <- if (est) rep(0.0, length(mu)) else as.numeric(sigma[names(mu)])
@@ -511,7 +479,8 @@ constraintL2 <- function(mu, sigma = 1, Omega = NULL,
       sigma = sigma_vec,
       sigma_pars = as.character(sigma_pars),
       est = est,
-      deriv = deriv
+      deriv = deriv,
+      build_hessian = build_hessian
     )
 
     out <- objlist(value = kr$value, gradient = kr$gradient, hessian = kr$hessian)
@@ -528,198 +497,84 @@ constraintL2 <- function(mu, sigma = 1, Omega = NULL,
 
 
 
-# Multivariate-normal Gaussian prior over subject-level random effects.
-# Internal: dispatched from constraintL2() when its `Omega` argument is set.
-# Returns sum_i (eta_i - mu)^T Omega^-1 (eta_i - mu) + N log|Omega| with exact
-# value/gradient and Gauss-Newton Hessian (block-diagonal in eta, exact crosses
-# to the Cholesky parameters; sandwich via dP for chain rule).
-constraintL2_mvn <- function(mu, Omega, attr.name = "prior", condition = NULL) {
+# Internal: broadcast a constraint's shape argument onto the constrained
+# parameters and reject the estimated-parameter spelling that only
+# constraintL2() supports.
+.constraintArg <- function(x, parnames, what, fn) {
+  if (is.character(x))
+    stop("`", what, "` must be numeric in ", fn, "(). An estimated scale is ",
+         "only available in constraintL2().")
+  if (anyDuplicated(parnames))
+    stop("Duplicated parameter name in ", fn, "(): ",
+         paste(unique(parnames[duplicated(parnames)]), collapse = ", "), ".")
+  if (length(x) == 1L) x <- setNames(rep(x, length(parnames)), parnames)
+  if (is.null(names(x))) names(x) <- parnames
+  missing <- setdiff(parnames, names(x))
+  if (length(missing))
+    stop("`", what, "` has no entry for ", paste(missing, collapse = ", "), ".")
+  as.numeric(x[parnames])
+}
 
-  if (!inherits(Omega, "omegaspec"))
-    stop("`Omega` must be an omegaSpec object built by omega().")
-  if (is.null(Omega$subjectEtas))
-    stop("`Omega` must have subject expansion. Call omega(..., subjects = ...).")
 
-  K            <- Omega$K
-  subject_etas <- Omega$subjectEtas
-  N            <- nrow(subject_etas)
-  chol_pars    <- Omega$cholPars
-  is_diag      <- Omega$isDiag
-  chol_loc     <- Omega$cholLoc
-  build_L      <- Omega$buildL
+# Internal: shared assembly for the soft constraints below. `term(x, k)` takes
+# the current values of the constrained parameters present in the call and the
+# indices they occupy, and returns the -2 log density plus its first two
+# derivatives, one entry per parameter. A parameter passed in `fixed`
+# contributes to the value but not to gradient or Hessian.
+.constraintTerms <- function(parnames, term, attr.name, condition) {
 
-  if (length(mu) == 1L) mu <- rep(mu, K)
-  if (length(mu) != K)
-    stop("`mu` must have length 1 or K = ", K, " for the MVN constraintL2 path.")
-  if (is.null(names(mu))) names(mu) <- Omega$eta
-
-  all_eta_names <- as.vector(subject_etas)
-  parnames      <- c(all_eta_names, chol_pars)
-
-  myfn <- function(..., fixed = NULL, deriv = TRUE, deriv2 = FALSE, conditions = condition, env = NULL,
+  myfn <- function(..., fixed = NULL, deriv = TRUE, deriv2 = FALSE, hessian = TRUE,
+                   conditions = condition, env = NULL,
                    cores = getOption("dMod.cores", 1L)) {
 
-    p  <- list(...)[[match.fnargs(list(...), "pars")]]
-    dP <- attr(p, "deriv", exact = TRUE)
-    dP2 <- if (deriv2) attr(p, "deriv2", exact = TRUE) else NULL
+    p    <- list(...)[[match.fnargs(list(...), "pars")]]
+    build_hessian <- isTRUE(deriv) && isTRUE(hessian)
+    dP   <- if (deriv) attr(p, "deriv", exact = TRUE) else NULL
+    dP2  <- if (build_hessian && deriv2) attr(p, "deriv2", exact = TRUE) else NULL
 
     allp <- c(p, fixed)
+    np   <- length(p)
+    gr   <- setNames(numeric(np), names(p))
+    hs   <- if (build_hessian) matrix(0, np, np, dimnames = list(names(p), names(p))) else NULL
 
-    if (!all(parnames %in% names(allp)))
-      return(objlist(value = 0,
-                     gradient = setNames(numeric(length(p)), names(p)),
-                     hessian  = matrix(0, length(p), length(p),
-                                       dimnames = list(names(p), names(p)))))
+    k   <- which(parnames %in% names(allp))
+    td  <- term(as.numeric(allp[parnames[k]]), k)
+    val <- sum(td$value)
 
-    # --- value -------------------------------------------------------------
-    chol_vec <- allp[chol_pars]
-    L        <- build_L(chol_vec)
-
-    use_cpp <- deriv
-    # The C++ path is correct only when the chol params are HELD FIXED (i.e.
-    # none of `chol_pars` is in `names(p)` as a free parameter). When the
-    # caller is estimating chol params (ECM workflow), fall back to R.
-    if (use_cpp && length(intersect(chol_pars, names(p))) > 0L) use_cpp <- FALSE
-
-    if (use_cpp) {
-      kr <- constraintL2_mvn_kernel(
-        pars                = p,
-        fixed_opt           = fixed,
-        dP_opt              = if (!is.null(dP)) dP else NULL,
-        dP2_opt             = if (!is.null(dP2)) dP2 else NULL,
-        inner_par_names     = names(p),
-        K                   = K,
-        N                   = N,
-        all_eta_names       = all_eta_names,
-        mu                  = as.numeric(mu),
-        L_lower             = L,
-        include_chol_block  = FALSE
-      )
-      out <- objlist(value = kr$value, gradient = kr$gradient,
-                     hessian = kr$hessian)
-      attr(out, attr.name) <- kr$value
-      attr(out, "env") <- env
-      return(out)
+    if (deriv) {
+      # Only the free parameters carry derivatives; the rest came in `fixed`.
+      pos <- match(parnames[k], names(p))
+      free <- !is.na(pos)
+      gr[pos[free]] <- td$d1[free]
+      if (build_hessian) hs[cbind(pos[free], pos[free])] <- td$d2[free]
     }
 
-    eta_mat  <- matrix(allp[all_eta_names], nrow = N, ncol = K,
-                       dimnames = dimnames(subject_etas))
-    R        <- t(sweep(eta_mat, 2, mu, "-"))   # K x N
-    Z        <- forwardsolve(L, R)              # K x N
-    W        <- backsolve(t(L), Z)              # K x N
-
-    quad     <- sum(Z * Z)
-    logdetO  <- 2 * sum(log(diag(L)))
-    val      <- quad + N * logdetO
-
-    if (!deriv)
-      return(objlist(value    = val,
-                     gradient = setNames(numeric(length(p)), names(p)),
-                     hessian  = matrix(0, length(p), length(p),
-                                       dimnames = list(names(p), names(p)))))
-
-    np <- length(p)
-    gr <- setNames(numeric(np), names(p))
-    hs <- matrix(0, np, np, dimnames = list(names(p), names(p)))
-
-    free_etas  <- intersect(all_eta_names, names(p))
-    free_chols <- intersect(chol_pars,    names(p))
-
-    # --- gradient: eta block -----------------------------------------------
-    if (length(free_etas) > 0L) {
-      idx_mat <- match(free_etas, all_eta_names)
-      sub_idx <- ((idx_mat - 1L) %% N) + 1L
-      eta_idx <- ((idx_mat - 1L) %/% N) + 1L
-      gr[free_etas] <- 2 * W[cbind(eta_idx, sub_idx)]
-    }
-
-    # --- gradient: chol block ----------------------------------------------
-    if (length(free_chols) > 0L) {
-      WZt <- W %*% t(Z)
-      for (nm in free_chols) {
-        m <- match(nm, chol_pars)
-        k <- chol_loc[m, 1L]; l <- chol_loc[m, 2L]
-        if (is_diag[m]) {
-          gr[nm] <- -2 * WZt[k, k] * L[k, k] + 2 * N
-        } else {
-          gr[nm] <- -2 * WZt[k, l]
-        }
-      }
-    }
-
-    # --- Hessian: Gauss-Newton on z_i --------------------------------------
-    Linv      <- forwardsolve(L, diag(K))   # K x K, lower-triangular inverse
-    Omega_inv <- crossprod(Linv)            # = L^{-T} L^{-1}
-
-    if (length(free_chols) > 0L) {
-      J_chol_template <- matrix(0, K, length(free_chols),
-                                dimnames = list(NULL, free_chols))
-      chol_meta <- vapply(free_chols, function(nm) {
-        m <- match(nm, chol_pars); c(m, chol_loc[m, 1L], chol_loc[m, 2L],
-                                     as.integer(is_diag[m]))
-      }, integer(4))
-      colnames(chol_meta) <- free_chols
-    } else {
-      J_chol_template <- NULL
-    }
-
-    for (i in seq_len(N)) {
-      eta_i_names  <- subject_etas[i, ]
-      eta_i_active <- eta_i_names %in% names(p)
-
-      # eta-eta block: 2 * Omega^{-1}[active, active]
-      if (any(eta_i_active)) {
-        idx <- eta_i_names[eta_i_active]
-        hs[idx, idx] <- hs[idx, idx] + 2 * Omega_inv[eta_i_active, eta_i_active]
-      }
-
-      if (!is.null(J_chol_template)) {
-        J_chol <- J_chol_template
-        for (j_idx in seq_along(free_chols)) {
-          k <- chol_meta[2L, j_idx]; l <- chol_meta[3L, j_idx]
-          if (chol_meta[4L, j_idx] == 1L) {
-            J_chol[, j_idx] <- -L[k, k] * Z[k, i] * Linv[, k]
-          } else {
-            J_chol[, j_idx] <- -Z[l, i] * Linv[, k]
-          }
-        }
-        hs[free_chols, free_chols] <- hs[free_chols, free_chols] + 2 * crossprod(J_chol)
-
-        if (any(eta_i_active)) {
-          idx   <- eta_i_names[eta_i_active]
-          J_eta <- Linv[, eta_i_active, drop = FALSE]
-          colnames(J_eta) <- idx
-          cross <- 2 * crossprod(J_eta, J_chol)
-          hs[idx, free_chols] <- hs[idx, free_chols] + cross
-          hs[free_chols, idx] <- hs[free_chols, idx] + t(cross)
-        }
-      }
-    }
-
-    # --- chain rule via dP -------------------------------------------------
-    if (!is.null(dP)) {
+    # Chain rule through an upstream parfn, so `constraint * P()` is exact.
+    if (deriv && !is.null(dP)) {
       gi <- gr
       gr <- drop(gi %*% dP); names(gr) <- colnames(dP)
-      hs <- t(dP) %*% hs %*% dP
-      dimnames(hs) <- list(colnames(dP), colnames(dP))
+      if (build_hessian) {
+        hs <- t(dP) %*% hs %*% dP
+        dimnames(hs) <- list(colnames(dP), colnames(dP))
 
-      # Exact Hessian addition: gi . dP2.
-      if (!is.null(dP2)) {
-        common <- intersect(names(gi), dimnames(dP2)[[1]])
-        if (length(common) > 0L) {
-          theta_names <- colnames(dP)
-          dP2_sub <- dP2[common, theta_names, theta_names, drop = FALSE]
-          gi_sub <- gi[common]
-          flat <- matrix(dP2_sub, nrow = length(common), ncol = length(theta_names)^2)
-          h_add_flat <- crossprod(flat, gi_sub)
-          h_add <- matrix(h_add_flat, length(theta_names), length(theta_names))
-          hs <- hs + h_add
+        if (!is.null(dP2)) {
+          common <- intersect(names(gi), dimnames(dP2)[[1]])
+          if (length(common) > 0L) {
+            theta   <- colnames(dP)
+            dP2_sub <- dP2[common, theta, theta, drop = FALSE]
+            flat    <- matrix(dP2_sub, nrow = length(common),
+                              ncol = length(theta)^2)
+            hs <- hs + matrix(crossprod(flat, gi[common]),
+                              length(theta), length(theta))
+          }
         }
       }
     }
 
-    out <- objlist(value = val, gradient = gr, hessian = hs)
-    attr(out, attr.name) <- val
+    out <- objlist(value = unname(val),
+                   gradient = if (deriv) gr else NULL,
+                   hessian  = if (build_hessian) hs else NULL)
+    attr(out, attr.name) <- out$value
     attr(out, "env") <- env
     out
   }
@@ -727,14 +582,230 @@ constraintL2_mvn <- function(mu, Omega, attr.name = "prior", condition = NULL) {
   class(myfn) <- c("objfn", "fn")
   attr(myfn, "conditions") <- condition
   attr(myfn, "parameters") <- parnames
-  # NLME reconstruction handle: expose the omegaSpec so a composed objective
-  # (normL2 + constraintL2(Omega=)) self-describes (see .normalReconstruct()).
-  attr(myfn, "omegaSpec") <- Omega
   myfn
 }
 
 
+#' Soft L1 constraint on parameters
+#'
+#' @param mu Named numeric vector of prior locations. Its names select the
+#'   constrained parameters.
+#' @param sigma Numeric, scalar or named and aligned with `mu`. The Laplace
+#'   scale, i.e. the reciprocal penalty strength.
+#' @param attr.name Character. Name of the attribute storing the constraint value.
+#' @param condition Optional character vector of conditions.
+#'
+#' @details
+#' Computes the Laplace prior on the `-2 log` scale,
+#' \deqn{2\log(2\sigma) + 2|p-\mu|/\sigma,}
+#' the L1 counterpart of [constraintL2]. Note the difference in normalisation:
+#' this constructor and its siblings are the full `-2 log` density, while
+#' [constraintL2] is the penalty form and drops the Gaussian's constant.
+#' The term is not differentiable at \eqn{p = \mu}, where the gradient is
+#' reported as 0, so it scores a posterior rather than driving a fit.
+#'
+#' @return Object of class \code{objfn}.
+#' @seealso [constraintL2]
+#' @examples
+#' prior <- constraintL1(mu = c(k1 = 0), sigma = 2)
+#' prior(pars = c(k1 = 1))$value
+#' @export
+constraintL1 <- function(mu, sigma = 1, attr.name = "prior", condition = NULL) {
 
+  parnames <- names(mu)
+  mu    <- .constraintArg(mu,    parnames, "mu",    "constraintL1")
+  sigma <- .constraintArg(sigma, parnames, "sigma", "constraintL1")
+
+  .constraintTerms(parnames, function(x, k) {
+    d <- x - mu[k]; s <- sigma[k]
+    list(value = 2 * log(2 * s) + 2 * abs(d) / s,
+         d1 = 2 * sign(d) / s, d2 = numeric(length(x)))
+  }, attr.name, condition)
+}
+
+
+#' Soft Cauchy constraint on parameters
+#'
+#' @param mu Named numeric vector of prior locations. Its names select the
+#'   constrained parameters.
+#' @param sigma Numeric, scalar or named and aligned with `mu`. The Cauchy
+#'   scale.
+#' @param attr.name Character. Name of the attribute storing the constraint value.
+#' @param condition Optional character vector of conditions.
+#'
+#' @details
+#' Computes the Cauchy prior on the `-2 log` scale,
+#' \deqn{2\log(\pi\sigma) + 2\log(1 + ((p-\mu)/\sigma)^2).}
+#' The heavy tails make it the tolerant alternative to [constraintL2]: a
+#' parameter far from `mu` is pulled far more weakly than a Gaussian would
+#' pull it.
+#'
+#' @return Object of class \code{objfn}.
+#' @seealso [constraintL2], [constraintL1]
+#' @examples
+#' prior <- constraintCauchy(mu = c(k1 = 0), sigma = 2)
+#' prior(pars = c(k1 = 1))$value
+#' @export
+constraintCauchy <- function(mu, sigma = 1, attr.name = "prior", condition = NULL) {
+
+  parnames <- names(mu)
+  mu    <- .constraintArg(mu,    parnames, "mu",    "constraintCauchy")
+  sigma <- .constraintArg(sigma, parnames, "sigma", "constraintCauchy")
+
+  .constraintTerms(parnames, function(x, k) {
+    s <- sigma[k]; t <- (x - mu[k]) / s
+    list(value = 2 * log(pi * s) + 2 * log1p(t^2),
+         d1 = 4 * t / (s * (1 + t^2)),
+         d2 = 4 * (1 - t^2) / (s^2 * (1 + t^2)^2))
+  }, attr.name, condition)
+}
+
+
+#' Soft gamma constraint on positive parameters
+#'
+#' @param shape Named numeric vector of shape parameters. Its names select the
+#'   constrained parameters.
+#' @param scale Numeric, scalar or named and aligned with `shape`. The gamma
+#'   scale, not the rate.
+#' @param attr.name Character. Name of the attribute storing the constraint value.
+#' @param condition Optional character vector of conditions.
+#'
+#' @details
+#' Computes the gamma prior on the `-2 log` scale,
+#' \deqn{-2(a-1)\log p + 2p/s + 2\log\Gamma(a) + 2a\log s}
+#' with shape \eqn{a} and scale \eqn{s}. The value is `Inf` for a
+#' non-positive parameter.
+#'
+#' @return Object of class \code{objfn}.
+#' @seealso [constraintExponential], [constraintChisq]
+#' @examples
+#' prior <- constraintGamma(shape = c(k1 = 3), scale = 5)
+#' prior(pars = c(k1 = 5))$value
+#' @export
+constraintGamma <- function(shape, scale = 1, attr.name = "prior", condition = NULL) {
+
+  parnames <- names(shape)
+  shape <- .constraintArg(shape, parnames, "shape", "constraintGamma")
+  scale <- .constraintArg(scale, parnames, "scale", "constraintGamma")
+
+  .constraintTerms(parnames, function(x, k) {
+    a <- shape[k]; s <- scale[k]; ok <- x > 0
+    xo <- x[ok]; ao <- a[ok]; so <- s[ok]
+    value <- rep(Inf, length(x)); d1 <- d2 <- numeric(length(x))
+    value[ok] <- -2 * (ao - 1) * log(xo) + 2 * xo / so +
+                 2 * lgamma(ao) + 2 * ao * log(so)
+    d1[ok] <- -2 * (ao - 1) / xo + 2 / so
+    d2[ok] <- 2 * (ao - 1) / xo^2
+    list(value = value, d1 = d1, d2 = d2)
+  }, attr.name, condition)
+}
+
+
+#' Soft exponential constraint on positive parameters
+#'
+#' @param scale Named numeric vector of scale parameters, not rates. Its names
+#'   select the constrained parameters.
+#' @param attr.name Character. Name of the attribute storing the constraint value.
+#' @param condition Optional character vector of conditions.
+#'
+#' @details
+#' Computes the exponential prior on the `-2 log` scale,
+#' \deqn{2p/s + 2\log s.}
+#' It is the gamma prior at shape 1 and pulls a parameter towards 0 with a
+#' constant force, which makes it the smooth one-sided counterpart of an L1
+#' penalty at `mu = 0`. The value is `Inf` for a negative parameter.
+#'
+#' @return Object of class \code{objfn}.
+#' @seealso [constraintGamma], [constraintL1]
+#' @examples
+#' prior <- constraintExponential(scale = c(k1 = 3))
+#' prior(pars = c(k1 = 5))$value
+#' @export
+constraintExponential <- function(scale, attr.name = "prior", condition = NULL) {
+
+  parnames <- names(scale)
+  scale <- .constraintArg(scale, parnames, "scale", "constraintExponential")
+
+  .constraintTerms(parnames, function(x, k) {
+    s <- scale[k]; ok <- x >= 0
+    value <- rep(Inf, length(x)); d1 <- d2 <- numeric(length(x))
+    value[ok] <- 2 * x[ok] / s[ok] + 2 * log(s[ok])
+    d1[ok] <- 2 / s[ok]
+    list(value = value, d1 = d1, d2 = d2)
+  }, attr.name, condition)
+}
+
+
+#' Soft chi-squared constraint on positive parameters
+#'
+#' @param df Named numeric vector of degrees of freedom. Its names select the
+#'   constrained parameters.
+#' @param attr.name Character. Name of the attribute storing the constraint value.
+#' @param condition Optional character vector of conditions.
+#'
+#' @details
+#' Computes the chi-squared prior on the `-2 log` scale,
+#' \deqn{-(k-2)\log p + p + k\log 2 + 2\log\Gamma(k/2)}
+#' with `k` degrees of freedom. The value is `Inf` for a non-positive
+#' parameter.
+#'
+#' @return Object of class \code{objfn}.
+#' @seealso [constraintGamma]
+#' @examples
+#' prior <- constraintChisq(df = c(k1 = 4))
+#' prior(pars = c(k1 = 5))$value
+#' @export
+constraintChisq <- function(df, attr.name = "prior", condition = NULL) {
+
+  parnames <- names(df)
+  df <- .constraintArg(df, parnames, "df", "constraintChisq")
+
+  .constraintTerms(parnames, function(x, k) {
+    v <- df[k]; ok <- x > 0
+    xo <- x[ok]; vo <- v[ok]
+    value <- rep(Inf, length(x)); d1 <- d2 <- numeric(length(x))
+    value[ok] <- -(vo - 2) * log(xo) + xo + vo * log(2) + 2 * lgamma(vo / 2)
+    d1[ok] <- -(vo - 2) / xo + 1
+    d2[ok] <- (vo - 2) / xo^2
+    list(value = value, d1 = d1, d2 = d2)
+  }, attr.name, condition)
+}
+
+
+#' Soft Rayleigh constraint on positive parameters
+#'
+#' @param sigma Named numeric vector of scale parameters. Its names select the
+#'   constrained parameters.
+#' @param attr.name Character. Name of the attribute storing the constraint value.
+#' @param condition Optional character vector of conditions.
+#'
+#' @details
+#' Computes the Rayleigh prior on the `-2 log` scale,
+#' \deqn{-2\log p + 4\log\sigma + p^2/\sigma^2.}
+#' Unlike the exponential it vanishes at 0, so it keeps a parameter away from
+#' both 0 and large values. The value is `Inf` for a non-positive parameter.
+#'
+#' @return Object of class \code{objfn}.
+#' @seealso [constraintGamma], [constraintExponential]
+#' @examples
+#' prior <- constraintRayleigh(sigma = c(k1 = 3))
+#' prior(pars = c(k1 = 5))$value
+#' @export
+constraintRayleigh <- function(sigma, attr.name = "prior", condition = NULL) {
+
+  parnames <- names(sigma)
+  sigma <- .constraintArg(sigma, parnames, "sigma", "constraintRayleigh")
+
+  .constraintTerms(parnames, function(x, k) {
+    s <- sigma[k]; ok <- x > 0
+    xo <- x[ok]; so <- s[ok]
+    value <- rep(Inf, length(x)); d1 <- d2 <- numeric(length(x))
+    value[ok] <- -2 * log(xo) + 4 * log(so) + xo^2 / so^2
+    d1[ok] <- -2 / xo + 2 * xo / so^2
+    d2[ok] <- 2 / xo^2 + 2 / so^2
+    list(value = value, d1 = d1, d2 = d2)
+  }, attr.name, condition)
+}
 
 #' L2 objective function for validation data point
 #' 
@@ -743,8 +814,10 @@ constraintL2_mvn <- function(mu, Omega, attr.name = "prior", condition = NULL) {
 #' @param value character, the name of the parameter which contains the
 #' prediction value.
 #' @param sigma numeric, the uncertainty of the introduced test data point
-#' @param attr.name character. The constraint value is additionally returned in an 
-#' attributed with this name
+#' @param attr.name character. The constraint value is additionally returned in
+#' an attribute of this name. Being a squared standardised residual already, it
+#' is also the term's `chi2` contribution, which pools with [normL2]'s under the
+#' rules described there.
 #' @param condition character, the condition for which the prediction is made.
 #' @return List of class \code{objlist}, i.e. objective value, gradient and Hessian as list.
 #' @seealso [normL2], [constraintL2]
@@ -769,8 +842,10 @@ datapointL2 <- function(name, time, value, sigma = 1, attr.name = "validation", 
     attr.name = attr.name
   )
 
-  myfn <- function(..., fixed = NULL, deriv = TRUE, deriv2 = FALSE, conditions = NULL, env = NULL,
+  myfn <- function(..., fixed = NULL, deriv = TRUE, deriv2 = FALSE, hessian = TRUE,
+                   conditions = NULL, env = NULL,
                    cores = getOption("dMod.cores", 1L)) {
+    build_hessian <- isTRUE(deriv) && isTRUE(hessian)
     mu        <- controls$mu
     t         <- controls$time
     sigma     <- controls$sigma
@@ -794,7 +869,7 @@ datapointL2 <- function(name, time, value, sigma = 1, attr.name = "validation", 
       stop("datapointL2() requests time point for which no prediction is available. Please add missing time point by the times argument in normL2()")
 
     dpred_attr  <- if (deriv) attr(prdf, "deriv") else NULL
-    d2pred_attr <- if (deriv && deriv2) attr(prdf, "deriv2") else NULL
+    d2pred_attr <- if (build_hessian && deriv2) attr(prdf, "deriv2") else NULL
     kr <- datapointL2_kernel(
       pouter           = pouter,
       fixed_opt        = fixed,
@@ -805,11 +880,14 @@ datapointL2 <- function(name, time, value, sigma = 1, attr.name = "validation", 
       t                = as.numeric(t),
       sigma            = as.numeric(sigma),
       value_par        = names(mu)[1],
-      deriv            = deriv
+      deriv            = deriv,
+      build_hessian    = build_hessian
     )
 
     out <- objlist(value = kr$value, gradient = kr$gradient, hessian = kr$hessian)
     attr(out, attr.name)    <- out$value
+    # The value is the squared standardised residual itself, no normaliser.
+    attr(out, "chi2")       <- setNames(out$value, attr.name)
     attr(out, "prediction") <- kr$prediction
     attr(out, "env")        <- env
     class(out) <- NULL
@@ -863,15 +941,23 @@ datapointL2 <- function(name, time, value, sigma = 1, attr.name = "validation", 
     value    = out1$value + out2$value,
     gradient = addVector(addVector(setNames(numeric(length(pars)), pars),
                                    out1$gradient), out2$gradient),
-    hessian  = addMatrix(addMatrix(matrix(0, length(pars), length(pars),
-                                          dimnames = list(pars, pars)),
-                                   out1$hessian), out2$hessian)))
+    # A summand may carry a NULL hessian (built with hessian = FALSE); the sum
+    # is NULL only when both are, otherwise the present ones add.
+    hessian  = if (is.null(out1$hessian) && is.null(out2$hessian)) NULL else {
+      H <- matrix(0, length(pars), length(pars), dimnames = list(pars, pars))
+      if (!is.null(out1$hessian)) H <- addMatrix(H, out1$hessian)
+      if (!is.null(out2$hessian)) H <- addMatrix(H, out2$hessian)
+      H
+    }))
   names(out12) <- what
 
-  # Numeric attributes are summed, an absent one counting as zero.
+  # Numeric attributes are summed, an absent one counting as zero. The chi2
+  # contributions are kept apart from that: they are pooled by the `attr.name`
+  # they belong to, not by the attribute they happen to sit under.
   numeric_attrs <- function(x) {
     a <- attributes(x)
-    a[vapply(a, is.numeric, logical(1))]
+    a <- a[vapply(a, is.numeric, logical(1))]
+    a[!grepl("^chi2($|_)", names(a))]
   }
   a1 <- numeric_attrs(out1)
   a2 <- numeric_attrs(out2)
@@ -879,26 +965,68 @@ datapointL2 <- function(name, time, value, sigma = 1, attr.name = "validation", 
     attr(out12, n) <- (if (is.null(a1[[n]])) 0 else a1[[n]]) +
                       (if (is.null(a2[[n]])) 0 else a2[[n]])
 
+  chi2 <- c(.chi2Contributions(out1), .chi2Contributions(out2))
+  if (length(chi2)) {
+    chi2 <- vapply(split(unname(chi2), names(chi2)), sum, 0)
+    if (length(chi2) == 1L) attr(out12, "chi2") <- chi2
+    else for (n in names(chi2)) attr(out12, paste0("chi2_", n)) <- unname(chi2[n])
+  }
+
   class(out12) <- "objlist"
 
   out12
 }
 
 
+# The chi2 contributions of an objlist as one named vector, however they are
+# currently stored: a single one sits under `chi2`, several under `chi2_<name>`.
+.chi2Contributions <- function(x) {
+  a <- attributes(x)
+  a <- a[grepl("^chi2($|_)", names(a))]
+  if (!length(a)) return(numeric(0))
+  out <- unlist(a, use.names = FALSE)
+  names(out) <- unlist(lapply(names(a), function(n)
+    if (identical(n, "chi2")) names(a[[n]]) else sub("^chi2_", "", n)))
+  out
+}
+
+
 #' @export
 print.objlist <- function(x, n1 = 20, n2 = 6, ...) {
-  n1 <- min(n1,length(x$gradient))
-  n2 <- min(n2,length(x$gradient))
   cat("value\n", "==================\n",x$value, "\n")
-  cat("gradient[1:",n1,"] (full length = ",length(x$gradient),")\n", "==================\n", sep = "")
-  print(x$gradient[1:n1])
+  # An objlist from a `deriv = FALSE` call carries the value alone.
+  if (length(x$gradient)) {
+    n1 <- min(n1, length(x$gradient))
+    cat("gradient[1:",n1,"] (full length = ",length(x$gradient),")\n", "==================\n", sep = "")
+    print(x$gradient[1:n1])
+    cat("\n")
+  }
+  if (length(x$hessian)) {
+    n2 <- min(n2, nrow(x$hessian))
+    cat("hessian[1:",n2,",1:",n2,"]","\n", "==================\n", sep = "")
+    print(x$hessian[1:n2,1:n2, drop = FALSE])
+    cat("\n")
+  }
   cat("\n")
-  cat("hessian[1:",n2,",1:",n2,"]","\n", "==================\n", sep = "")
-  print(x$hessian[1:n2,1:n2])
-  cat("\n\n")
   cat("attributes\n", "==================\n")
-  cat(capture.output(str(attributes(x), max.level = 1)), sep = "\n")
-  
+  # str() would prefix every line with the storage mode, and the chi2 tag with
+  # a line of its own. The attributes carry objective contributions, so what
+  # matters is the name and the number.
+  a <- attributes(x)[setdiff(names(attributes(x)), c("names", "class"))]
+  if (length(a)) {
+    w <- max(nchar(names(a)))
+    for (n in names(a)) cat(sprintf(" %-*s  %s\n", w, n, .objlistAttrText(a[[n]])))
+  }
+  invisible(x)
+}
+
+
+# One line for one objlist attribute, no storage mode and no nesting.
+.objlistAttrText <- function(v) {
+  if (is.environment(v)) return("<environment>")
+  if (is.numeric(v) || is.character(v))
+    return(paste(format(unname(v), trim = TRUE), collapse = ", "))
+  paste0("<", paste(class(v), collapse = "/"), ">")
 }
 
 

@@ -30,7 +30,6 @@ Observables are translated into an ODE
   # such that the test is not littered. Statements guarded by  are enabled
   # in the example file which is extracted from this test file. To extract the
   # example run
-  #    extractExamples()
   # on the R command line.
     
     ## Generate another equation list
