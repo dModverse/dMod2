@@ -578,11 +578,16 @@ exportSbml <- function(eqnlist, parameters = NULL, inits = NULL, filepath,
       stop("DMOD_LIBSBML_PYTHON=", override, " does not exist.")
     override
   } else {
-    # `python-libsbml` was declared via reticulate::py_require() in
-    # .onLoad(). py_exe() materialises the managed env (downloads Python +
-    # installs the requirement on first call) and returns the interpreter
-    # path used by the system2() calls below.
-    tryCatch(reticulate::py_exe(), error = function(e) {
+    # `python-libsbml` was declared via reticulate::py_require() in .onLoad(),
+    # but py_exe() reports a path only once Python is initialised. Before that
+    # it falls back to discovery, misses the managed env and returns "".
+    tryCatch({
+      if (!reticulate::py_available(initialize = TRUE))
+        stop("reticulate could not start Python")
+      exe <- reticulate::py_exe()
+      if (!nzchar(exe)) stop("reticulate reported no interpreter path")
+      exe
+    }, error = function(e) {
       stop("Could not provision a Python with python-libsbml via ",
            "reticulate (", conditionMessage(e), "). Set ",
            "DMOD_LIBSBML_PYTHON to point at a Python interpreter that ",

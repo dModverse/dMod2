@@ -32,6 +32,24 @@
 }
 
 
+## --- interpreter resolution -----------------------------------------------
+
+test_that(".dmod_libsbml_python resolves a usable interpreter", {
+
+  # Deliberately not behind .libsbml_works(): that helper turns every failure
+  # into FALSE, so a resolver returning an empty path made the libsbml tests
+  # skip instead of fail. Nothing starts Python before the call either: the bug
+  # lives in the uninitialised state, so a guard that initialises first would
+  # let the old code pass here.
+  skip_if_not_installed("reticulate")
+  withr::local_envvar(c(DMOD_LIBSBML_PYTHON = NA, DMOD_LIBSBML_OK = NA))
+
+  py <- dMod2:::.dmod_libsbml_python()
+  expect_true(nzchar(py))
+  expect_true(file.exists(py))
+})
+
+
 ## --- pure parser unit tests (no SBML) -------------------------------------
 
 test_that(".petab_parse_parameters splits estimated / fixed and tracks scales", {
