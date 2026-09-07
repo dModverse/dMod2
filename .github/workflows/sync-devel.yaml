@@ -1,0 +1,90 @@
+# Keeps the long-lived devel branches at master plus their own work.
+#
+# A push to master merges into each devel branch and pushes the result. On a
+# conflict the branch is left untouched and an issue names it and the files,
+# because a merge that needs judgement is not one a job should force.
+name: sync-devel
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  merge:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        branch: [devel-symmetry, devel-EM, devel-bayes, devel-reverseAD]
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.DMODVERSE_PAT || secrets.GITHUB_TOKEN }}
+
+      - name: Merge master into ${{ matrix.branch }}
+        id: merge
+        run: |
+          set +e
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout "${{ matrix.branch }}" || { echo "missing=1" >> "$GITHUB_OUTPUT"; exit 0; }
+
+          if git merge-base --is-ancestor master HEAD; then
+            echo "Already contains master."
+            exit 0
+          fi
+
+          git merge --no-edit master
+          if [ $? -ne 0 ]; then
+            {
+              echo "conflicts<<EOT"
+              git diff --name-only --diff-filter=U
+              echo "EOT"
+            } >> "$GITHUB_OUTPUT"
+            git merge --abort
+            exit 0
+          fi
+          git push origin "${{ matrix.branch }}"
+
+      - name: Report a conflict
+        if: steps.merge.outputs.conflicts != ''
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const branch = '${{ matrix.branch }}';
+            const files = `${{ steps.merge.outputs.conflicts }}`.trim();
+            const title = `sync-devel: ${branch} needs a manual merge`;
+            const body = [
+              `\`git merge master\` into \`${branch}\` stopped on conflicts, so the branch is unchanged.`,
+              '',
+              'Conflicting paths:',
+              '```', files, '```',
+              '',
+              'Generated files (`man/`, `NAMESPACE`, `RcppExports`, `README.md`) are resolved by',
+              'regenerating after the merge, not by hand. Watch for changes that conflict without',
+              'a marker: a deletion on master the branch still calls, or a signature the branch',
+              'still passes the old arguments to.',
+            ].join('\n');
+            const open = await github.rest.issues.listForRepo({
+              owner: context.repo.owner, repo: context.repo.repo,
+              state: 'open', labels: 'sync-devel',
+            });
+            const hit = open.data.find(i => i.title === title);
+            if (hit) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: hit.number, body,
+              });
+            } else {
+              await github.rest.issues.create({
+                owner: context.repo.owner, repo: context.repo.repo,
+                title, body, labels: ['sync-devel'],
+              });
+            }
