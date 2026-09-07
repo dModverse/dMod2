@@ -1,5 +1,5 @@
 Version: 1.0
-ProjectId: dmod2
+ProjectId: 2cc7a0f7-04e9-4c8b-9550-ae38e81a7821
 
 RestoreWorkspace: No
 SaveWorkspace: No
@@ -13,5 +13,10 @@ Encoding: UTF-8
 RnwWeave: Sweave
 LaTeX: pdfLaTeX
 
+AutoAppendNewline: Yes
+StripTrailingWhitespace: Yes
+LineEndingConversion: Posix
+
 BuildType: Package
 PackageUseDevtools: Yes
+PackageInstallArgs: --no-multiarch --with-keep.source

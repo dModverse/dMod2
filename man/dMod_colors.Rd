@@ -7,6 +7,6 @@
 dMod_colors
 }
 \description{
-The ten qualitative house colors. Not colorblind-safe -- its brown and red
-collapse under protanopia -- see \code{\link[=dMod_palettes]{dMod_palettes()}} for the alternatives.
+The ten qualitative house colors. Not colorblind-safe, its brown and red
+collapse under protanopia, see \code{\link[=dMod_palettes]{dMod_palettes()}} for the alternatives.
 }

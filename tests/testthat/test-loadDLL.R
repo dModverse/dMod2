@@ -1,6 +1,6 @@
-# loadDLL() must not unload a shared object that is still in use: dyn.unload()
-# nulls every native symbol pointer resolved so far, the one baked into a
-# prepared batch handle included, and nothing resolves those again.
+# Loading and unloading must not be able to break a model that is in use.
+# `dyn.unload()` nulls every native symbol address already handed out, so
+# nothing may keep one: entry points are dispatched by name and shared object.
 
 
 # Two-condition decay model in its own workdir, so the reload tests cannot
@@ -34,7 +34,13 @@ fx_loaddll <- local({
                  sigma = 0.1)))
 
     cache <<- list(dir = dir, x = x, prd = prd, pouter = pouter,
-                   obj = normL2(data, prd), so = file.path(dir, "ld_all.so"))
+                   obj = normL2(data, prd),
+                   # dyn.unload() matches the path string dyn.load() was given.
+                   # compile() loads a normalised path and names the library by
+                   # the platform's extension, so both have to be reproduced.
+                   so = normalizePath(
+                     file.path(dir, paste0("ld_all", .Platform$dynlib.ext)),
+                     winslash = "/"))
     cache
   }
 })
@@ -60,6 +66,44 @@ test_that("an objective survives repeated loadDLL calls", {
 })
 
 
+test_that("a reloaded shared object needs no cache flush", {
+  fx <- fx_loaddll()
+  oldwd <- setwd(fx$dir); on.exit(setwd(oldwd), add = TRUE)
+
+  before <- fx$obj(fx$pouter)$value
+  dyn.unload(fx$so)
+  dyn.load(fx$so)
+  # Both the scalar and the batched path, and the batch handle cached by Xs().
+  expect_identical(fx$obj(fx$pouter)$value, before)
+  expect_identical(fx$obj(fx$pouter)$value, before)
+})
+
+
+test_that("an unloaded model names the shared object it is missing", {
+  fx <- fx_loaddll()
+  oldwd <- setwd(fx$dir); on.exit(setwd(oldwd), add = TRUE)
+  on.exit({ if (!fx$so %in% dMod2:::.loadedDLLPaths()) dyn.load(fx$so) }, add = TRUE)
+
+  # Whichever entry point the chain reaches first, the message has to name it
+  # and its library instead of failing on a null address.
+  dyn.unload(fx$so)
+  expect_error(fx$obj(fx$pouter), "ld_all")
+})
+
+
+test_that("loadDLL finds shared objects outside the working directory", {
+  fx <- fx_loaddll()
+  other <- file.path(tempdir(), "dmod_loaddll_elsewhere")
+  dir.create(other, showWarnings = FALSE, recursive = TRUE)
+  oldwd <- setwd(other); on.exit(setwd(oldwd), add = TRUE)
+
+  dyn.unload(fx$so)
+  loaded <- suppressMessages(loadDLL(fx$obj))
+  expect_identical(loaded, fx$so)
+  expect_true(is.finite(fx$obj(fx$pouter)$value))
+})
+
+
 test_that("mstrust converges when it reloads the objective per fit", {
   fx <- fx_loaddll()
   oldwd <- setwd(fx$dir); on.exit(setwd(oldwd), add = TRUE)
@@ -75,13 +119,31 @@ test_that("mstrust converges when it reloads the objective per fit", {
 })
 
 
-test_that("a flushed symbol cache rebuilds the prepared batch handle", {
-  fx <- fx_loaddll()
-  oldwd <- setwd(fx$dir); on.exit(setwd(oldwd), add = TRUE)
+test_that("compiling into a loaded output name yields a fresh library", {
+  dir <- file.path(tempdir(), "dmod_recompile")
+  dir.create(dir, showWarnings = FALSE, recursive = TRUE)
+  oldwd <- setwd(dir); on.exit(setwd(oldwd), add = TRUE)
 
-  before <- fx$obj(fx$pouter)$value
-  dyn.unload(fx$so)
-  dyn.load(fx$so)
-  dMod2:::.clearSymbols()
-  expect_identical(fx$obj(fx$pouter)$value, before)
+  build <- function(rate, nm) {
+    m <- odemodel(addReaction(eqnlist(), "A", "", rate), modelname = nm,
+                  compile = FALSE)
+    x <- Xs(m)
+    suppressMessages(compile(x, output = "rc_all", cores = 1))
+    x
+  }
+
+  x1 <- build("k*A", "rc_one")
+  expect_equal(unname(x1(0:2, c(A = 1, k = 1))[[1]][3, "A"]), exp(-2),
+               tolerance = 1e-4)
+
+  # Overwriting a loaded shared object is not portable: dyn.unload() may leave
+  # the image resident, so the reload would keep serving the old code. The
+  # second build therefore goes to a suffixed name and says so.
+  expect_warning(x2 <- build("2*k*A", "rc_two"), "already loaded")
+  expect_equal(unname(x2(0:2, c(A = 1, k = 1))[[1]][3, "A"]), exp(-4),
+               tolerance = 1e-4)
+
+  # Both models stay callable, which is the point of not displacing.
+  expect_equal(unname(x1(0:2, c(A = 1, k = 1))[[1]][3, "A"]), exp(-2),
+               tolerance = 1e-4)
 })

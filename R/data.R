@@ -18,6 +18,34 @@ NULL
 NULL
 
 
+#' Time-course data for JAK2-STAT5 signalling in CFU-E cells
+#'
+#' 541 measurements from thirteen experiments on Epo stimulated erythroid
+#' progenitor cells: phosphorylated JAK2 and Epo receptor, total and
+#' phosphorylated STAT5, the feedback proteins CIS, SOCS3 and SHP1, their
+#' transcripts, and dose responses at four times. `value` is the recorded
+#' signal divided by the maximum of its own column, so the scale parameters
+#' are estimated in that gauge; `sigma` is `NA` throughout, the standard
+#' deviations belong to the fit. `condition` keys the 36 experimental
+#' conditions, `experiment` names the recording each one comes from and
+#' selects its scale and offset parameters. `ActD` is 1 where actinomycin D
+#' was added, which inverts the column of the same name in the PEtab copy of
+#' the problem.
+#'
+#' @source Bachmann J, Raue A, Schilling M, Boehm ME, Kreutz C, Kaschek D,
+#' Busch H, Gretz N, Lehmann WD, Timmer J, Klingmueller U (2011),
+#' Division of labor by dual feedback regulators controls JAK2/STAT5
+#' signaling over broad ligand range. Mol Syst Biol 7:516. Values as
+#' distributed in the PEtab benchmark collection, model
+#' `Bachmann_MSB2011`, which ships with the package as
+#' `inst/extdata/petab_bachmann`.
+#' @seealso `inst/examples/example_BachmannMSB2011.R` builds the model.
+#' @name bachmann
+#' @docType data
+#' @keywords data
+NULL
+
+
 #' Time-course data for STAT5 dimerisation in BaF3-EpoR cells
 #'
 #' Relative amounts of phosphorylated STAT5A (`pSTAT5A_rel`), phosphorylated
@@ -165,11 +193,15 @@ wide2long.matrix <- function(out, keep = 1, na.rm = FALSE) {
 #' @export
 wide2long.list <- function(out, keep = 1, na.rm = FALSE) {
   
+  # An unnamed list still needs a condition column; without one `cbind` would
+  # drop it and every caller reading `$condition` would come up empty.
   conditions <- names(out)
+  if (is.null(conditions)) conditions <- as.character(seq_along(out))
   
-  outlong <- do.call(rbind, lapply(1:max(c(length(conditions), 1)), function(cond) {
+  outlong <- do.call(rbind, lapply(seq_along(out), function(cond) {
     
-    cbind(wide2long.matrix(out[[cond]]), condition = conditions[cond])
+    cbind(wide2long.matrix(out[[cond]], keep = keep, na.rm = na.rm),
+          condition = conditions[cond])
     
   }))
   
@@ -217,11 +249,6 @@ long2wide <- function(out) {
 lbind <- function(mylist) {
   
   conditions <- names(mylist)
-  #numconditions <- suppressWarnings(as.numeric(conditions))
-  #
-  # if(!any(is.na(numconditions))) 
-  #   numconditions <- as.numeric(numconditions) 
-  # else 
   numconditions <- conditions
 
   

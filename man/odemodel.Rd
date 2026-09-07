@@ -32,7 +32,7 @@ Defaults to \code{TRUE}.}
 \item{forcings}{Character vector with the names of external forcings.}
 
 \item{events}{An \link{eventlist} (or \code{data.frame} coercible via \link{as.eventlist}).
-Must be defined here -- not on \code{\link[=Xs]{Xs()}} -- so that the sensitivity equations
+Must be defined here, not on \code{\link[=Xs]{Xs()}} -- so that the sensitivity equations
 are extended consistently.}
 
 \item{fixed}{Character vector with the names of parameters (initial values and dynamic)

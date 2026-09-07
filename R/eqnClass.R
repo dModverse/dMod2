@@ -383,7 +383,7 @@ getReactions <- function(eqnlist) {
 #' @param compartment Character, compartment ID for the states this reaction
 #' *introduces*, and the frame the reaction is written in. Defaults to
 #' `"defaultComp"`; created with volume `"1"` if new. States that already have a
-#' compartment keep it -- use [assignCompartment()] to place a species that does
+#' compartment keep it, use [assignCompartment()] to place a species that does
 #' not belong to the compartment of the reaction first mentioning it.
 #' @param rateCompartment Optional compartment ID naming the frame in which `rate`
 #' is a concentration-rate. Needed when educts span multiple compartments (e.g.
@@ -524,7 +524,7 @@ addReaction <- function(eqnlist, from, to, rate, description = names(rate),
 #' @description Declares which compartment a state lives in, independently of
 #' the reactions that use it. [addReaction()] only ever assigns states it
 #' introduces, so without an explicit declaration a species inherits the
-#' compartment of whichever reaction happens to mention it first -- which makes
+#' compartment of whichever reaction happens to mention it first, which makes
 #' the model depend on the order in which it is written. `assignCompartment()`
 #' removes that dependency: it works before the state exists (the declaration is
 #' remembered and applied when the reaction arrives) as well as afterwards.
@@ -639,6 +639,9 @@ setCompartmentVolume <- function(eqnlist, ..., rules = NULL) {
 # concentration-rate. Shared with .volumeScaledReactions() so the ODE and the
 # csv the steady-state backend reads cannot drift apart.
 .refCompartments <- function(SMatrix, compOf, reactionCompartment, description) {
+
+  # A model without reactions has no stoichiometry to read frames off.
+  if (is.null(SMatrix)) return(character(0))
 
   vref_cid <- rep(NA_character_, nrow(SMatrix))
   for (i in seq_len(nrow(SMatrix))) {
@@ -766,8 +769,8 @@ getFluxes <- function(eqnlist, type = c("conc", "amount")) {
   # Resolve per-reaction reference compartment V_ref (concentration-rate frame).
   # Priority: (1) user-supplied reactionCompartment[i] if non-NA, (2) unique
   # educt compartment, (3) unique product compartment for pure synthesis.
-  # When educts span multiple compartments and no annotation is given, we
-  # error with a clear message pointing the user at `reactionCompartment`.
+  # When educts span multiple compartments and no annotation is given, the
+  # call errors with a message pointing at `reactionCompartment`.
   vref_cid <- .refCompartments(SMatrix, compOf, reactionCompartment, description)
   vref_vol <- .refVolumes(vref_cid, compartments)
 
@@ -857,23 +860,6 @@ dot <- function(observable, eqnlist) {
     
     prodSymb(matrix(der, nrow = 1), matrix(f[names(der)], ncol = 1))
     
-#     
-#     out <- sapply(names(der), function(n) {
-#       d <- der[n]
-#       
-#       if (d != "0") {
-#         prodSymb(matrix(d, nrow = 1), matrix(f[names(d)], ncol = 1))
-#       } else  {
-#         return("0")
-#       }
-#         
-#       
-#       
-#       #paste( paste("(", d, ")", sep="") , paste("(", f[names(d)], ")",sep=""), sep="*") else return("0")
-#     })
-#     out <- paste(out, collapse = "+")
-#     
-#     return(out)
     
   })
   
@@ -957,6 +943,7 @@ write.eqnlist <- function(eqnlist, ...) {
 subset.eqnlist <- function(x, ...) {
   
   eqnlist <- x
+  callerEnv <- parent.frame()
   
   # Do selection on data.frame
   data <- getReactions(eqnlist)
@@ -968,8 +955,14 @@ subset.eqnlist <- function(x, ...) {
                     Description = data$Description,
                     Check = data$Check)
   
-  "%in%" <- function(x, table) sapply(table, function(mytable) any(x == mytable))
-  select <- which(eval(substitute(...), data.list))
+  # The condition resolves against the reaction table, then the calling frame.
+  # `%in%` is overloaded because Educt and Product are lists of symbol vectors,
+  # which the base operator cannot compare.
+  env <- list2env(data.list, envir = new.env(parent = callerEnv))
+  env$"%in%" <- function(x, table)
+    sapply(table, function(mytable) any(x == mytable))
+  condition <- eval(substitute(alist(...)))[[1L]]
+  select <- which(eval(condition, env))
   if (length(select) == 0) return(NULL)
   
   # Translate subsetting on eqnlist entries
@@ -1227,7 +1220,7 @@ c.eqnlist <- function(...) {
   if (length(all_compartments) == 0L) all_compartments <- NULL
   if (length(all_compartmentOf) == 0L) all_compartmentOf <- NULL
 
-  # Concatenate reactionCompartment annotations. If any input has them, we need
+  # Concatenate reactionCompartment annotations. If any input has them, the result needs
   # to produce a vector of length nrow(combined). Missing entries become NA.
   any_rc <- any(vapply(inputs, function(el) !is.null(el$reactionCompartment), logical(1)))
   if (any_rc) {
@@ -1528,8 +1521,12 @@ eqnlist <- function(smatrix = NULL, states = colnames(smatrix), rates = NULL,
                     compartments = NULL, compartmentOf = NULL,
                     reactionCompartment = NULL, amountStates = NULL, totals = NULL) {
 
+  # A model without species carries no stoichiometry;
+  # canonicalise it to NULL so is.eqnlist() recognises the empty list.
+  if (length(states) == 0L && length(rates) == 0L) smatrix <- NULL
+
   # Dimension checks and preparations for non-empty argument list.
-  if (all(!is.null(c(smatrix, states, rates)))) {
+  if (!is.null(smatrix)) {
     #Dimension checks
     d1 <- dim(smatrix)
     l2 <- length(states)
@@ -1686,7 +1683,7 @@ eqnlist <- function(smatrix = NULL, states = colnames(smatrix), rates = NULL,
 #' runtime.
 #'
 #' Integrating in these coordinates cannot produce a negative state, since a power
-#' of ten is positive for every real exponent -- positivity is the geometry of the
+#' of ten is positive for every real exponent, positivity is the geometry of the
 #' chart rather than a constraint checked afterwards. Where a trajectory would have
 #' crossed \eqn{x = 0}, the transformed variable escapes to `-Inf` and the solver
 #' stops there instead.
@@ -1695,7 +1692,7 @@ eqnlist <- function(smatrix = NULL, states = colnames(smatrix), rates = NULL,
 #' the latter reads better and works inside a [P()] transformation: `exp10` is a
 #' C99 function with no entry in R's derivatives table, so a model built on it has
 #' no symbolic Jacobian and [Xs()] cannot generate sensitivities. The parentheses
-#' are load-bearing -- R's `^` is right-associative, so a bare `10^x_l10`
+#' are load-bearing, R's `^` is right-associative, so a bare `10^x_l10`
 #' substituted into `x^2` would mean `10^(x_l10^2)`.
 #'
 #' Read results back in R with `10^x_l10`.

@@ -1,6 +1,6 @@
 #' Package initialization
 #'
-#' Declares the Python dependencies the symbolic layer needs -- `getLinVars()`
+#' Declares the Python dependencies the symbolic layer needs, `getLinVars()`
 #' and the `simplify` path in `eqnClass.R`, and `steadyStates()`.
 #' `reticulate::py_require()` does not start Python here: it records the
 #' requirement so the first call into Python provisions an env that has the
@@ -13,6 +13,35 @@
 .onLoad <- function(libname, pkgname) {
   if (requireNamespace("reticulate", quietly = TRUE))
     reticulate::py_require(c("python-libsbml", "sympy", "scipy", "numpy", "symengine"))
+}
+
+#' Package attach
+#'
+#' @keywords internal
+#' @noRd
+.onAttach <- function(libname, pkgname) {
+  .announceForkGuard()
+}
+
+# mstrust() and profile() fork, and a threaded BLAS deadlocks in the child. cppDE
+# pins it for the width of each fork, which makes BLAS inside a worker serial, so
+# say so here, and say when there is no lever and the hang is still reachable.
+.announceForkGuard <- function() {
+  if (isTRUE(getOption("dMod.quiet"))) return(invisible(NULL))
+  g <- tryCatch(cppDE::forkGuard(), error = function(e) NULL)
+  if (is.null(g) || !isTRUE(g$guard)) return(invisible(NULL))
+
+  if (is.na(g$api)) {
+    packageStartupMessage(
+      "dMod2: no BLAS thread-control entry point found. If this BLAS is threaded, ",
+      "mstrust() and profile() with cores > 1 can deadlock; start R with ",
+      "OMP_NUM_THREADS=1. See cppDE::forkGuard().")
+  } else if (!is.na(g$threads) && g$threads > 1L) {
+    packageStartupMessage(sprintf(
+      "dMod2: %s (%d threads) is pinned to 1 inside the forked workers of mstrust() and profile(). See cppDE::forkGuard().",
+      g$api, g$threads))
+  }
+  invisible(NULL)
 }
 
 # Guard for optionally-Suggested feature dependencies: fail with an actionable

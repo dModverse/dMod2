@@ -284,6 +284,9 @@ static EvalResult eval_one_subject_from(
   // Delegate the ALOQ residual math (Part0+1+2+3, sigma(eta), value+grad+hess)
   // to the shared kernel. FOCEI never has BLOQ data, no exact-deriv2, and no
   // Bessel correction, so the opts struct is minimal.
+  // The shared kernel accumulates the plain sum of squares alongside the
+  // likelihood; FOCEI does not report it.
+  double chi2_unused = 0.0;
   dmod::AccumOpts opts;
   opts.use_deriv2_exact    = false;
   opts.bloq_mode           = dmod::BloqMode::NONE;
@@ -304,6 +307,7 @@ static EvalResult eval_one_subject_from(
       /*lloq   =*/ nullptr,
       opts,
       value,
+      chi2_unused,
       grad.data(),
       hess.data());
 

@@ -6,7 +6,7 @@
 \alias{plotTrace.mcmcresultsequential}
 \alias{plotTrace.mcmcresultsingle}
 \alias{plotTrace.mcmcresultblocked}
-\title{ECM convergence trace (OFV, |delta-psi|) per stage}
+\title{Convergence trace of an iterative fit}
 \usage{
 plotTrace(x, ...)
 
@@ -32,9 +32,8 @@ A ggplot.
 A ggplot.
 }
 \description{
-Four-panel trace of OFV, structural-parameter step
-\verb{|delta psi|}, max softmax weight, and minimum effective node count
-across ECM iterations. Quadrature-method EM only.
+Generic. Methods plot the quantities their fitting method
+iterates on, one panel each.
 
 Method for \code{\link[=mcmc]{mcmc()}} sequential / SMC outputs: shows the
 adaptive tempering schedule (beta vs level), the post-resample ESS,

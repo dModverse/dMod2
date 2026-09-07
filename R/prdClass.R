@@ -92,8 +92,12 @@ as.data.frame.prdlist <- function(x, ..., data = NULL, errfn = NULL) {
   prediction <- wide2long(prediction)
   prediction$sigma <- NaN
   if (!is.null(sigma)) {
-    common <- intersect(unique(prediction$name), unique(sigma$name))
-    prediction$sigma[prediction$name %in% common] <- sigma$value[sigma$name %in% common]
+    # Keyed, not positional: the error model may order or cover its observables
+    # differently from the prediction, and a row-wise copy would then hand a
+    # sigma to the wrong observable.
+    i <- match(paste(prediction$condition, prediction$time, prediction$name),
+               paste(sigma$condition, sigma$time, sigma$name))
+    prediction$sigma[!is.na(i)] <- sigma$value[i[!is.na(i)]]
   }
   
   if (!is.null(condition.grid)) {
@@ -459,7 +463,7 @@ summary.obsfn <- function(object, ...) {
 
 
 # One prediction per parameter row. Rows x conditions go out as a single
-# request when the chain supports it -- a parframe from mstrust() has many
+# request when the chain supports it, a parframe from mstrust() has many
 # rows and the conditions repeat across them.
 .predictRows <- function(x, times, pars, dots) {
   rows <- seq_len(nrow(pars))
@@ -646,9 +650,9 @@ obsfn <- function(X2Y, parameters = NULL, condition = NULL) {
 #' The columns of the prediction matrix are typically `"time"` and one column per state variable.
 #' The object carries several attributes containing sensitivities and parameter information:
 #' \itemize{
-#'   \item `"deriv"` – 3D array of first-order sensitivities with respect to outer parameters
+#'   \item `"deriv"`: 3D array of first-order sensitivities with respect to outer parameters
 #'     (see [P]); dimensions: `(time, state, outer parameter)`
-#'   \item `"parameters"` – vector of the inner parameters used to generate the prediction
+#'   \item `"parameters"`: vector of the inner parameters used to generate the prediction
 #' }
 #'
 #' Prediction frames are usually elements of prediction lists ([prdlist]), produced by

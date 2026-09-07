@@ -29,7 +29,7 @@ of the reaction.}
 \item{compartment}{Character, compartment ID for the states this reaction
 \emph{introduces}, and the frame the reaction is written in. Defaults to
 \code{"defaultComp"}; created with volume \code{"1"} if new. States that already have a
-compartment keep it -- use \code{\link[=assignCompartment]{assignCompartment()}} to place a species that does
+compartment keep it, use \code{\link[=assignCompartment]{assignCompartment()}} to place a species that does
 not belong to the compartment of the reaction first mentioning it.}
 
 \item{rateCompartment}{Optional compartment ID naming the frame in which \code{rate}
@@ -58,7 +58,6 @@ f <- addReaction(f, "C + A", "B + A", "k2*C*A")
   # such that the test is not littered. Statements guarded by  are enabled
   # in the example file which is extracted from this test file. To extract the
   # example run
-  #    extractExamples()
   # on the R command line.
     
     ## Generate another equation list

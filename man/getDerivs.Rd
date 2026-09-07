@@ -30,12 +30,12 @@ Supported classes are \code{parvec}, \code{prdframe}, \code{prdlist}, and \code{
 \value{
 The structure of the returned object depends on the class of \code{x}:
 \itemize{
-\item \code{parvec} – a matrix containing first-order parameter derivatives.
-\item \code{prdframe} – a \code{prdframe} containing time and first-order sensitivities
+\item \code{parvec}: a matrix containing first-order parameter derivatives.
+\item \code{prdframe}: a \code{prdframe} containing time and first-order sensitivities
 of each model variable with respect to all parameters.
-\item \code{prdlist} – a \code{prdlist} whose elements are first-derivative \code{prdframe}s.
-\item \code{list} – a list of derivative objects, depending on the elements.
-\item \code{objlist} – directly returns the stored gradient (named numeric vector).
+\item \code{prdlist}: a \code{prdlist} whose elements are first-derivative \code{prdframe}s.
+\item \code{list}: a list of derivative objects, depending on the elements.
+\item \code{objlist}: directly returns the stored gradient (named numeric vector).
 }
 }
 \description{

@@ -304,7 +304,8 @@ List normL2_kernel(
     CharacterVector par_names_global,
     bool deriv2_requested,
     int threads,
-    std::string bloq_mode = "M3") {
+    std::string bloq_mode = "M3",
+    bool build_hessian = true) {
 
   const int n_cond = prediction.size();
   if ((int) meta_list.size() != n_cond)
@@ -335,8 +336,11 @@ List normL2_kernel(
 
   // Phase 2: accumulate (parallel-over-conditions)
   std::vector<double> grad_global(n_par_global, 0.0);
-  std::vector<double> hess_global((std::size_t) n_par_global * n_par_global, 0.0);
+  std::vector<double> hess_global;
+  if (build_hessian)
+    hess_global.assign((std::size_t) n_par_global * n_par_global, 0.0);
   double value_global = 0.0;
+  double chi2_global  = 0.0;
 
   int n_threads = std::max(1, threads);
 #ifndef _OPENMP
@@ -349,6 +353,7 @@ List normL2_kernel(
   dmod::AccumOpts base_opts;
   base_opts.use_deriv2_exact = deriv2_requested;
   base_opts.bloq_mode        = bmode;
+  base_opts.build_hessian    = build_hessian;
 
   // Per-thread slots merged in thread order after the region, not in a
   // critical section: a critical merge follows the scheduler, so the same
@@ -361,11 +366,12 @@ List normL2_kernel(
   // fraction of one global Hessian, where a per-thread global accumulator was
   // n_par_global^2 per thread and had to be zeroed on every call.
   std::vector<double> value_c(n_cond, 0.0);
+  std::vector<double> chi2_c(n_cond, 0.0);
   std::vector<std::vector<double> > grad_c(n_cond), hess_c(n_cond);
   for (int c = 0; c < n_cond; ++c) {
     const int npl = conds[c].n_par_local;
     grad_c[c].assign(npl, 0.0);
-    hess_c[c].assign((std::size_t) npl * npl, 0.0);
+    if (build_hessian) hess_c[c].assign((std::size_t) npl * npl, 0.0);
   }
 
 #ifdef _OPENMP
@@ -380,8 +386,9 @@ List normL2_kernel(
       const int npl = C.n_par_local;
 
       double* grad_cond = grad_c[c].data();
-      double* hess_cond = hess_c[c].data();
+      double* hess_cond = build_hessian ? hess_c[c].data() : nullptr;
       double  value_cond = 0.0;
+      double  chi2_cond  = 0.0;
 
       dmod::AccumOpts opts = base_opts;
       opts.sigma_depends_on_par = C.has_dsigma;
@@ -398,7 +405,7 @@ List normL2_kernel(
             C.has_d2sigma ? C.d2sigma.data() : nullptr,
             C.lloq.data(),
             opts,
-            value_cond, grad_cond, hess_cond);
+            value_cond, chi2_cond, grad_cond, hess_cond);
       }
       // BLOQ rows (offset = n_aloq)
       if (C.n_bloq > 0) {
@@ -420,6 +427,7 @@ List normL2_kernel(
       }
 
       value_c[c] = value_cond;
+      chi2_c[c]  = chi2_cond;
     }
   }
 
@@ -430,11 +438,13 @@ List normL2_kernel(
     const CondInputs& C = conds[c];
     const int npl = C.n_par_local;
     value_global += value_c[c];
+    chi2_global  += chi2_c[c];
     for (int p = 0; p < npl; ++p) {
       const int g = C.par_idx_global[p] - 1;
       if (g < 0) continue;
       grad_global[g] += grad_c[c][p];
     }
+    if (build_hessian)
     for (int p2 = 0; p2 < npl; ++p2) {
       const int g2 = C.par_idx_global[p2] - 1;
       if (g2 < 0) continue;
@@ -451,16 +461,24 @@ List normL2_kernel(
   // n_par_global == 0; skip the name/dimname assignment and the [0,0] write
   // into the empty gradient/Hessian then.
   NumericVector grad_R(grad_global.begin(), grad_global.end());
-  NumericMatrix hess_R(n_par_global, n_par_global);
-  if (n_par_global > 0) {
-    grad_R.names() = par_names_global;
-    std::memcpy(&hess_R(0, 0), hess_global.data(),
-                sizeof(double) * (std::size_t) n_par_global * n_par_global);
-    hess_R.attr("dimnames") = List::create(par_names_global, par_names_global);
+  if (n_par_global > 0) grad_R.names() = par_names_global;
+
+  // Skipped entirely under build_hessian = false: no matrix is allocated and
+  // the result carries a NULL hessian, not a zero placeholder.
+  RObject hess_R = R_NilValue;
+  if (build_hessian) {
+    NumericMatrix H(n_par_global, n_par_global);
+    if (n_par_global > 0) {
+      std::memcpy(&H(0, 0), hess_global.data(),
+                  sizeof(double) * (std::size_t) n_par_global * n_par_global);
+      H.attr("dimnames") = List::create(par_names_global, par_names_global);
+    }
+    hess_R = H;
   }
 
   return List::create(
       Named("value")    = value_global,
+      Named("chi2")     = chi2_global,
       Named("gradient") = grad_R,
       Named("hessian")  = hess_R);
 }

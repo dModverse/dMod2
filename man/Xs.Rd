@@ -41,7 +41,7 @@ The ODE forcings. Forcing support for the cppDE / Sundials backends depends
 on the chosen stepper method; see \code{\link[cppDE:cppODE]{cppDE::cppODE()}}.}
 
 \item{events}{An \link{eventlist} (or \code{data.frame} coercible via \link{as.eventlist}).
-Applied to the forward simulation only -- sensitivities are not corrected.
+Applied to the forward simulation only, sensitivities are not corrected.
 Define events on \code{\link[=odemodel]{odemodel()}} unless the prediction is used purely for
 forward simulation.}
 

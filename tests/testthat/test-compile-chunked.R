@@ -94,21 +94,27 @@ test_that("compile() reuses objects whose source and command are unchanged", {
   mk <- function() Reduce("+", lapply(conditions, function(cn)
     P(trafo, condition = cn, compile = FALSE, modelname = paste0("reuse_p_", cn))))
 
+  ## The index keys on source bytes and compile command, so the shared object
+  ## may take a fresh name each time and the objects are still reused.
+  # expect_no_match() forces its argument twice (quasi_label, then
+  # check_character), which would compile and load a second time, so the
+  # side-effecting call is evaluated once into a variable first.
   p <- mk()
-  expect_no_match(capture.output(compile(p, output = "reuse_all", cores = 1)), "reusing")
+  out1 <- capture.output(compile(p, output = "reuse_all_1", cores = 1))
+  expect_no_match(out1, "reusing")
 
   ## Codegen rewrites every source, so only the content decides.
   p <- mk()
-  expect_output(compile(p, output = "reuse_all", cores = 1),
+  expect_output(compile(p, output = "reuse_all_2", cores = 1),
                 paste("reusing", length(conditions), "unchanged"))
   out <- p(c(logk1 = log(2), logA0 = log(3), scale = 5), deriv = TRUE)
   expect_equal(as.numeric(out[[conditions[1]]]["A0"]), 15)
   expect_equal(attr(out[[conditions[9]]], "deriv")["k1", "logk1"], 2)
 
   ## A changed compile command has to invalidate the entry.
-  expect_no_match(capture.output(compile(p, output = "reuse_all", cores = 1,
-                                         args = "-DDMOD_TEST_FLAG")),
-                  "reusing")
+  out3 <- capture.output(compile(p, output = "reuse_all_3", cores = 1,
+                                 args = "-DDMOD_TEST_FLAG"))
+  expect_no_match(out3, "reusing")
 
 })
 
