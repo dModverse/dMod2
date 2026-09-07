@@ -41,13 +41,27 @@ alternative through `odemodel(backend = "deSolve")`.
 remotes::install_github("dModverse/dMod2")
 ```
 
-The `Remotes:` field pulls in cppDE and cOde. `master` carries the core:
-equations, compiled prediction, objectives, optimisers and profile
-likelihood. Four layers live on their own branches, each with its own
-vignette: `devel-symmetry` (structural identifiability by symmetry
-detection and model reduction), `devel-petab` (PEtab and SBML import and
-export), `devel-EM` (nonlinear mixed-effects estimation) and
-`devel-bayes` (MCMC and SMC).
+The backend [cppDE](https://github.com/dModverse/cppDE) comes along as a
+`Remotes:` dependency and does not have to be installed separately.
+
+### As an RStudio project
+
+Working on the package itself is easier from a checkout.
+
+1.  **File → New Project → Version Control → Git**, repository URL
+    `https://github.com/dModverse/dMod2`.
+
+2.  Install the dependencies, including the ones declared under
+    `Remotes:`:
+
+    ``` r
+    remotes::install_deps(dependencies = TRUE)
+    ```
+
+3.  **Build → Install and Restart**.
+
+`cppDE` installs the same way and has to be built first: dMod2 compiles
+the generated model sources against its headers.
 
 ## Example: STAT5 dimerisation after Epo stimulation
 
@@ -259,15 +273,15 @@ rbind(ML = best[remlfit$errpars], REML = remlfit$argument[remlfit$errpars])
 ```
 
     ##      sd_pSTAT5A_rel sd_pSTAT5B_rel sd_rSTAT5A_rel
-    ## ML        0.5876483      0.8200724      0.4987661
-    ## REML      0.6254742      0.8442083      0.5248422
+    ## ML        0.5877572      0.8200216      0.4987433
+    ## REML      0.6254260      0.8442122      0.5248647
 
 ``` r
 remlfit$dof     # n_g minus the leverage each observable spends
 ```
 
     ## pSTAT5A_rel pSTAT5B_rel rSTAT5A_rel 
-    ##    13.67813    14.22147    14.10040
+    ##    13.67956    14.22139    14.09904
 
 ``` r
 remlfit$rank    # effective number of mean parameters
@@ -284,7 +298,7 @@ tapply(lev$leverage, lev$name, sum)
 ```
 
     ## pSTAT5A_rel pSTAT5B_rel rSTAT5A_rel 
-    ##    2.372391    1.742590    1.885019
+    ##    2.370426    1.743118    1.886456
 
 ### Fit and uncertainty band
 
@@ -364,15 +378,15 @@ confint(profiles, level = 0.95, val.column = "data",
 ```
 
     ##                                      name      value      lower      upper
-    ## Epo_degradation_BaF3 Epo_degradation_BaF3 -1.5680325 -1.7398858 -1.3903480
-    ## k_exp_hetero                 k_exp_hetero -4.4562477       -Inf -2.9546299
-    ## k_exp_homo                     k_exp_homo -2.2032225 -2.5569151 -1.8895645
-    ## k_imp_hetero                 k_imp_hetero -1.7872354 -1.9108026 -1.6583018
-    ## k_imp_homo                     k_imp_homo  1.4788926  0.1002196        Inf
-    ## k_phos                             k_phos  4.1976370  4.1064208  4.2964734
-    ## sd_pSTAT5A_rel             sd_pSTAT5A_rel  0.5876483  0.4098707  0.7938722
-    ## sd_pSTAT5B_rel             sd_pSTAT5B_rel  0.8200724  0.6648408  1.0126894
-    ## sd_rSTAT5A_rel             sd_rSTAT5A_rel  0.4987661  0.3488114  0.6910599
+    ## Epo_degradation_BaF3 Epo_degradation_BaF3 -1.5678339 -1.7399326 -1.3902970
+    ## k_exp_hetero                 k_exp_hetero -4.4324631       -Inf -2.9543342
+    ## k_exp_homo                     k_exp_homo -2.2027231 -2.5570183 -1.8895055
+    ## k_imp_hetero                 k_imp_hetero -1.7874090 -1.9108318 -1.6582719
+    ## k_imp_homo                     k_imp_homo  1.5022968  0.1000066        Inf
+    ## k_phos                             k_phos  4.1977213  4.1063857  4.2964874
+    ## sd_pSTAT5A_rel             sd_pSTAT5A_rel  0.5877572  0.4098095  0.7938723
+    ## sd_pSTAT5B_rel             sd_pSTAT5B_rel  0.8200216  0.6647988  1.0126860
+    ## sd_rSTAT5A_rel             sd_rSTAT5A_rel  0.4987433  0.3487698  0.6911164
 
 The plot separates the two terms, and that is where the two
 non-identifiable directions become visible: for `k_imp_homo` and
@@ -383,6 +397,14 @@ the cytoplasm within the measured 240 minutes. Neither reaches the
 threshold inside the searched range, so those intervals stay open on one
 side. The prior keeps the fit at finite values without pretending to
 close them.
+
+## A larger model
+
+[`inst/examples/example_BachmannMSB2011.R`](inst/examples/example_BachmannMSB2011.R)
+builds the JAK2-STAT5 model of [Bachmann et
+al. (2011)](https://doi.org/10.1038/msb.2011.50): 25 states in two
+compartments, the three negative feedbacks CIS, SOCS3 and SHP1, and 113
+parameters estimated from 541 measurements across thirteen experiments.
 
 ## Citation
 

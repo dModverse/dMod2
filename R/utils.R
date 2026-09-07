@@ -4,7 +4,7 @@
 .setdiffU <- function(a, b) a[match(a, b, 0L) == 0L]
 .intersectU <- function(a, b) a[match(a, b, 0L) > 0L]
 
-## utils.R -- general-purpose utility functions
+## utils.R, general-purpose utility functions
 
 #' Compare two objects and return differences
 #' 

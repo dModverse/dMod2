@@ -8,10 +8,10 @@ if (requireNamespace("withr", quietly = TRUE)) {
 }
 
 # Resolve fixture directories that live OUTSIDE the installed package
-# (PEtabTests/ and BenchmarkModels/ are .Rbuildignore'd because of their
-# size). Tests look them up via DMOD_PETABTESTS / DMOD_BENCHMARKMODELS env
-# vars; we set those here once, before any test_that block runs `setwd()`
-# / `withr::local_dir(tempdir())` and breaks cwd-relative discovery.
+# (PEtabTests/ is .Rbuildignore'd because of its size). Tests look them up
+# via env vars; we set those here once, before any test_that block runs
+# `setwd()` / `withr::local_dir(tempdir())` and breaks cwd-relative
+# discovery.
 #
 # Walk up from the current wd looking for a dir of the given name. Caps at
 # 8 levels so a missing fixture cannot loop to filesystem root forever.
@@ -29,8 +29,7 @@ if (requireNamespace("withr", quietly = TRUE)) {
 
 local({
   for (spec in list(
-    c(env = "DMOD_PETABTESTS",     dir = "PEtabTests"),
-    c(env = "DMOD_BENCHMARKMODELS", dir = "BenchmarkModels")
+    c(env = "DMOD_PETABTESTS", dir = "PEtabTests")
   )) {
     if (!nzchar(Sys.getenv(spec[["env"]], unset = ""))) {
       hit <- .dmod_find_fixture(spec[["dir"]])

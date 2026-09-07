@@ -1,18 +1,7 @@
 
-# Pharmacometric abbreviations used in the NLME plot helpers below:
-#   DV    observed value
-#   IPRED individual prediction (per subject, with eta_i*)
-#   PRED  population prediction (eta = 0)
-#   IRES  individual residual = DV - IPRED
-#   IWRES individual weighted residual = (DV - IPRED) / sigma
-
 # ggplot2 / dplyr NSE column references; declared so R CMD check does not
 # flag them as undefined globals.
-utils::globalVariables(c("IPRED", "PRED", "predicted", "observed",
-                         "sd_est", "iter", "level",
-                         # plot.sparsify ggplot2 aes() variables
-                         "subject", "cluster", "centroid", "G", "score",
-                         "selected"))
+utils::globalVariables(c("predicted", "observed", "sd_est", "iter", "level"))
 
 
 # Custom interface to ggplot2 ---
@@ -70,7 +59,7 @@ theme_dMod <- function(base_size = 12, base_family = "", showGrid = FALSE) {
 # distance within it, taken as the WORST case over normal, deuteranopic,
 # protanopic and tritanopic vision (for ramps, between positions at least a
 # quarter of the domain apart). A palette counts as colorblind-safe at 10 or
-# above -- below roughly 3 two colors are indistinguishable side by side, and a
+# above, below roughly 3 two colors are indistinguishable side by side, and a
 # thin line needs more headroom than a filled patch.
 #
 # The numbers are baked in rather than computed at load time so that the
@@ -79,8 +68,8 @@ theme_dMod <- function(base_size = 12, base_family = "", showGrid = FALSE) {
 
 #' Seed colors of the dMod palette
 #'
-#' The ten qualitative house colors. Not colorblind-safe -- its brown and red
-#' collapse under protanopia -- see [dMod_palettes()] for the alternatives.
+#' The ten qualitative house colors. Not colorblind-safe, its brown and red
+#' collapse under protanopia, see [dMod_palettes()] for the alternatives.
 #'
 #' @export
 dMod_colors <- c("#000000", "#C5000B", "#0084D1", "#579D1C", "#FF950E",
@@ -663,14 +652,20 @@ plotFluxes <- function(pouter, x, times, fluxEquations, nameFlux = "Fluxes:", ..
 }
 
 #' Plotting objective values of a collection of fits
-#' 
-#' @param x data.frame with columns "value", "converged" and "iterations", e.g. 
+#'
+#' Draws the waterfall plot of a fit collection: objective values in ascending
+#' order against their rank. A converged fit is marked by a circle and an
+#' unconverged one by a triangle, in every plot.
+#'
+#' @param x data.frame with columns "value", "converged" and "iterations", e.g.
 #' a [parframe].
 #' @param ... arguments for subsetting of x
 #' @param tol maximal allowed difference between neighboring objective values
 #' to be recognized as one.
 #' @param showSteps logical, if `TRUE`, the detected steps are indicated by
 #' dashed vertical lines and labelled by their index. Defaults to `FALSE`.
+#' @return A `ggplot` object, with the plotted data attached as attribute
+#' `"data"`.
 #' @export
 plotValues <- function(x,...) {
   UseMethod("plotValues", x)
@@ -789,42 +784,13 @@ plotResiduals.default <- function(parframe, x, data, split = "condition",
 }
 
 
-# NLME plot helpers ---------------------------------------------------------
+# Plot generics for the layer branches -------------------------------------
 
 
-#' Per-subject individual fits (spaghetti plot)
+#' Convergence trace of an iterative fit
 #'
-#' @description Faceted plot with one panel per subject: observed dots, IPRED
-#'   curve, and (optionally) the population PRED curve overlaid dashed.
-#' @param x Object to plot.
-#' @param ... Method-specific arguments.
-#' @return A ggplot.
-#' @export
-plotIndivs <- function(x, ...) UseMethod("plotIndivs", x)
-
-
-
-
-#' Random-effect distribution diagnostics
-#'
-#' @description Per-eta histogram against the estimated `N(0, Omega_kk)`
-#'   density plus a QQ-plot against the estimated normal. Detects systematic
-#'   shrinkage, bimodality, or distributional misfit. Generic to leave room
-#'   for non-EM methods in the future.
-#' @param x Object to plot.
-#' @param ... Method-specific arguments.
-#' @return A ggplot (or a list of ggplots if `cowplot` is unavailable).
-#' @export
-plotHistIndivs <- function(x, ...) UseMethod("plotHistIndivs", x)
-
-
-
-
-#' ECM convergence trace (OFV, |delta-psi|) per stage
-#'
-#' @description Four-panel trace of OFV, structural-parameter step
-#'   `|delta psi|`, max softmax weight, and minimum effective node count
-#'   across ECM iterations. Quadrature-method EM only.
+#' @description Generic. Methods plot the quantities their fitting method
+#'   iterates on, one panel each.
 #' @param x Object to plot.
 #' @param ... Method-specific arguments.
 #' @return A ggplot.
@@ -1089,7 +1055,6 @@ PlotPaths <- function(profs=myprofiles, ..., whichPar, sort = FALSE, relative = 
     # determine strength of change
     data[, max.dev := max(c(abs(max(as.numeric(y))), abs(min(as.numeric(y) )))), by = "partner"]
     setorder(data, name, -max.dev)
-    # max.devis <- unique(data$max.dev)[1:n_pars]
     
     # create new column "label" only use to assign ploting colors
     data[,label := ifelse(max.dev %in% unique(max.dev)[1:n_pars], partner, "Others")]
@@ -1194,7 +1159,7 @@ plotProfilesAndPaths <- function(profs, whichpars, npars = 5, ncols = 3, normali
   profs <- profs[profs$whichPar %in% whichpars]
   
   cleanProfilePlot <- function(prof_sub) {
-    # Remove columns for modes we don't want, so plotProfile can't plot them
+    # Remove columns for unwanted modes, so plotProfile cannot plot them
     cols_to_drop <- setdiff(orig_oa, modes)
     prof_sub <- prof_sub[, !(colnames(prof_sub) %in% cols_to_drop), drop = FALSE]
     attr(prof_sub, "obj.attributes") <- filtered_oa

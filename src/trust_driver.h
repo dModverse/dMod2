@@ -114,7 +114,7 @@ struct Reporter {
 // completed iteration, which `attach` relies on.
 struct Blather {
   std::vector<double> argpath, argtry;
-  std::vector<std::string> steptype, stepback;
+  std::vector<std::string> steptype, stepback, hsource;
   std::vector<int>    accept;
   std::vector<double> r, rho, valpath, valtry, preddiff, stepnorm;
 
@@ -151,6 +151,12 @@ struct Blather {
     result["valtry"]   = NumericVector(valtry.begin(), valtry.end());
     result["preddiff"] = preddiff_out;
     result["stepnorm"] = NumericVector(stepnorm.begin(), stepnorm.end());
+
+    if (!hsource.empty()) {  // Hessian source per iteration (gn/bfgs/sr1)
+      CharacterVector hsource_out(hsource.size());
+      for (std::size_t i = 0; i < hsource.size(); ++i) hsource_out[i] = hsource[i];
+      result["hessianSource"] = hsource_out;
+    }
   }
 };
 
@@ -169,9 +175,10 @@ inline const char* subproblem_label(bool is_newton, bool is_hard, bool is_easy) 
 // Turn an R-level failure into eval_ok = false, but let a user interrupt
 // through -- a bare catch(...) would swallow Ctrl-C and count it as a failed
 // evaluation.
-inline bool eval_objfun(Function& objfun, const NumericVector& x, List& out) {
+inline bool eval_objfun(Function& objfun, const NumericVector& x, List& out,
+                        bool build_hessian = true) {
   try {
-    out = as<List>(objfun(x));
+    out = as<List>(objfun(x, build_hessian));
   } catch (Rcpp::internal::InterruptedException&) {
     throw;
   } catch (...) {

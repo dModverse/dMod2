@@ -14,6 +14,7 @@ Y(
   compile = FALSE,
   modelname = NULL,
   verbose = FALSE,
+  cores = NULL,
   deriv = TRUE,
   deriv2 = FALSE,
   derivMode = c("dual", "symbolic"),
@@ -21,7 +22,9 @@ Y(
 )
 }
 \arguments{
-\item{g}{Named character vector or \link{eqnvec} defining the observation function.}
+\item{g}{Named character vector or \link{eqnvec} defining the observation
+function, or a list of those named by condition, which builds one
+observation function per condition in a single call.}
 
 \item{f}{Named character vector of equations or an object that can be converted
 to \link{eqnvec}, or an object of class 'fn'. If \code{f} is provided, states and parameters
@@ -51,6 +54,10 @@ Set \code{TRUE} to plot states alongside observables.}
 filename for the generated C file.}
 
 \item{verbose}{Logical, print compiler output to the R console.}
+
+\item{cores}{Number of parallel jobs used to generate the sources when
+\code{g} is a list; \code{NULL} auto-detects. Ignored for a single observation
+function, which is one source either way.}
 
 \item{deriv}{Logical. If \code{TRUE} (default), attach the first-order
 sensitivity \code{attr(., "deriv")} of shape \verb{[time, observable, theta]}.}

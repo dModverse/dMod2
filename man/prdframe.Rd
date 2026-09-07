@@ -27,9 +27,9 @@ A prediction frame stores model predictions in a matrix along with sensitivity i
 The columns of the prediction matrix are typically \code{"time"} and one column per state variable.
 The object carries several attributes containing sensitivities and parameter information:
 \itemize{
-\item \code{"deriv"} – 3D array of first-order sensitivities with respect to outer parameters
+\item \code{"deriv"}: 3D array of first-order sensitivities with respect to outer parameters
 (see \link{P}); dimensions: \verb{(time, state, outer parameter)}
-\item \code{"parameters"} – vector of the inner parameters used to generate the prediction
+\item \code{"parameters"}: vector of the inner parameters used to generate the prediction
 }
 
 Prediction frames are usually elements of prediction lists (\link{prdlist}), produced by

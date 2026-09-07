@@ -17,11 +17,10 @@ Usually when restarting the R session, although all objects are saved in
 the workspace, the dynamic libraries are not linked any more. \code{loadDLL}
 is a wrapper for \code{dyn.load} that uses the "modelname" attribute of
 dMod objects like prediction functions, observation functions, etc. to
-load the corresponding shared object.
+load the corresponding shared object. Searched are the directories the
+objects were generated in and the working directory.
 }
 \details{
 Shared objects already loaded in the current process are skipped, so
-calling \code{loadDLL} repeatedly is a no-op. Unloading them would null the
-native symbol pointers that the already built prediction, observation and
-parameter functions hold, and nothing resolves those again.
+calling \code{loadDLL} repeatedly is a no-op.
 }
