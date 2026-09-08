@@ -1,28 +1,40 @@
 ---
-title: "Symmetries in dMod: structural identifiability, the observability-identifiability matrix, and symmetry reduction"
+title: "Symmetries in dMod2"
+subtitle: "Structural identifiability, the observability-identifiability matrix, and symmetry reduction"
 author: "Simon Beyer"
 date: "`r format(Sys.Date(), '%Y-%m-%d')`"
 output:
   rmarkdown::pdf_document:
-    toc: false
+    toc: true
     number_sections: true
     keep_tex: false
-    latex_engine: xelatex
+    latex_engine: lualatex
+    fig_caption: true
+bibliography: refs.bib
+csl: ieee.csl
+link-citations: true
 header-includes:
-  - \usepackage{amsmath,amssymb}
-  - \usepackage{bm}
-  - \usepackage{booktabs}
-  - \usepackage{fvextra}
-  # a Unicode-complete monospace font so the summary()/print() output renders its
-  # generators verbatim: the sigma, eta and partial-derivative signs and the digit
-  # subscripts (X_1, eta_i, d_i) are absent from the default Latin Modern Mono.
   - \usepackage{fontspec}
-  - \setmonofont{DejaVu Sans Mono}[Scale=0.82]
-  - \DefineVerbatimEnvironment{Highlighting}{Verbatim}{breaklines,breakanywhere,commandchars=\\\{\}}
-vignette: >
-  %\VignetteIndexEntry{Symmetries and structural identifiability in dMod}
-  %\VignetteEngine{knitr::rmarkdown}
-  %\VignetteEncoding{UTF-8}
+  - \usepackage{unicode-math}
+  - \setmainfont{CMU Serif}
+  - \setsansfont{CMU Sans Serif}
+  # the printed generators carry sigma, eta, partial and digit subscripts, which Latin
+  # Modern Mono has not; DejaVu Sans Mono is the Unicode-complete stand-in
+  - \setmonofont{DejaVu Sans Mono}[Scale=MatchLowercase]
+  - \setmathfont{NewCMMath-Regular.otf}
+  - \usepackage{mathtools}
+  - \usepackage{booktabs}
+  - \usepackage{fancyvrb}
+  - \usepackage{fvextra}
+  - \fvset{fontsize=\small,breaklines=true,breakanywhere=true}
+  - \usepackage{graphicx}
+  - \usepackage{float}
+  - \usepackage{microtype}
+  - \usepackage{etoolbox}
+  - \AtBeginEnvironment{longtable}{\small}
+  - \AtBeginDocument{\let\OldTOC\tableofcontents\renewcommand{\tableofcontents}{\OldTOC\clearpage}}
+  - \setcounter{secnumdepth}{3}
+fontsize: 10pt
 ---
 
 ```{r setup, include = FALSE}
@@ -39,10 +51,6 @@ haveSympy <- isTRUE(tryCatch(
   reticulate::py_module_available("sympy"),
   error = function(e) FALSE))
 ```
-
-\setcounter{tocdepth}{3}
-\tableofcontents
-\newpage
 
 # Introduction
 
@@ -149,7 +157,7 @@ X(h) = \sum_i \eta_i(z)\, \frac{\partial h}{\partial z_i}
 \label{eq:lie-h}
 \end{equation}
 is the rate of change of $h$ along the family, the Lie derivative of $h$ along
-$X$. The notation follows Merkt et al. (2015), whose algorithm is the
+$X$. The notation follows Merkt et al. [@merkt2015higher], whose algorithm is the
 `"polynomial"` method.
 
 ## Recovering the transformation by integrating the generator {#sec-flow}
@@ -160,7 +168,7 @@ Both methods return $\eta$, not the finite map. The transformation is its flow,
 \qquad \Phi_0(z) = z,
 \label{eq:flow}
 \end{equation}
-that is $\Phi_\varepsilon = \exp[\varepsilon X]$ (Merkt et al., 2015, Theorem 1).
+that is $\Phi_\varepsilon = \exp[\varepsilon X]$ (Theorem 1 of [@merkt2015higher]).
 
 For a *scaling*, $\eta_i = c_i z_i$, \eqref{eq:flow} decouples and integrates at
 once; with $\lambda = e^\varepsilon$,
@@ -192,7 +200,7 @@ X' = \sum_i \eta_i\,\frac{\partial}{\partial z_i}
 \label{eq:prolong}
 \end{equation}
 and the model admits $X$ iff $X'\cdot(\dot z_k - f_k) = 0$ on solutions
-(Merkt et al., 2015, Theorem 2), that is
+(Theorem 2 of [@merkt2015higher]), that is
 \begin{equation}
 \sum_{j=1}^{n} f_j\, \frac{\partial \eta_k}{\partial z_j}
 \;-\;
@@ -214,7 +222,7 @@ directions is a *basis*, not a canonical list.
 ## Solving them: the polynomial ansatz
 
 $\eta$ is an unknown *function*, so the system is closed by an ansatz. Merkt et
-al. (2015) take a polynomial one, motivated by the elementary one-parameter groups
+al. [@merkt2015higher] take a polynomial one, motivated by the elementary one-parameter groups
 \begin{equation}
 \begin{aligned}
 z_i^\ast &= z_i + \varepsilon,
@@ -254,9 +262,9 @@ $[f_{\mathrm{ss}}, X] = 0$ when the model is equilibrated.
 # The observability-identifiability matrix {#sec-oim}
 
 The default method takes a different route to the same information and needs no
-ansatz. It is the local algebraic observability test of Sedoglavic (2002),
+ansatz. It is the local algebraic observability test of Sedoglavic [@sedoglavic2002probabilistic],
 extended so that the unknowns include parameters and initial states, the FISPO
-setting of Villaverde et al. (2016).
+setting of Villaverde et al. [@villaverde2016structural].
 
 ## Output derivatives and the rank criterion
 
@@ -269,8 +277,8 @@ and iterating, the $k$-th derivative is $L_F^{\,k} g$. The sequence
 \end{equation}
 is the list of Taylor coefficients of the output at $t = 0$, everything the
 output curve can reveal about the unknowns, and each entry is an explicit
-function of $z$ (the classical power-series method, Pohjanpalo, 1978; used
-numerically in SIAN, Hong et al., 2020).
+function of $z$ (the classical power-series method [@pohjanpalo1978power]; used
+numerically in SIAN [@hong2020global]).
 
 Collect \eqref{eq:summary} into $\Phi: z \mapsto (g, L_F g, \dots, L_F^N g)$.
 Output-equivalent vectors give the same $\Phi(z)$, so the unknowns are locally
@@ -288,10 +296,10 @@ its Jacobian
 \label{eq:oim}
 \end{equation}
 has full column rank $n + q$. That is the observability-identifiability matrix
-(OIM) and the rank condition of Sedoglavic (2002). When the rank is deficient, the
+(OIM) and the rank condition of Sedoglavic [@sedoglavic2002probabilistic]. When the rank is deficient, the
 null space of $\mathcal{O}$ collects the directions along which the output and all
 its derivatives are unchanged. These are exactly the values $\eta(z)$ of the generators of
-Section \ref{sec-sym} at $z$ (Massonis and Villaverde, 2020): the two methods
+Section \ref{sec-sym} at $z$ [@massonis2020breaking]: the two methods
 describe the same object, one as a tangent vector, the other as a field.
 
 ## The matrix on a small model
@@ -337,7 +345,7 @@ $k_2$ separately (Section \ref{sec-conditions}).
 Carrying $\mathcal{O}$ symbolically is what makes the naive test intractable: the
 entries $L_F^{\,k} g$ are rational functions whose numerators and denominators
 grow with every Lie derivative, and the expression swell dominates the cost. The
-remedy (Sedoglavic, 2002) is to evaluate $\mathcal{O}$ at a single generic point,
+remedy [@sedoglavic2002probabilistic] is to evaluate $\mathcal{O}$ at a single generic point,
 because the rank there equals the symbolic rank away from a measure-zero set.
 
 dMod evaluates in exact arithmetic over $\mathrm{GF}(p)$. Two reasons: every
@@ -441,7 +449,7 @@ $\binom{n_{\mathrm{rel}}+D}{n_{\mathrm{rel}}}$ samples, prohibitive for an entry
 coupling many variables, in practice the conserved-moiety cofactors
 $-(x_1+\dots+x_k)/r$. Such an entry is a Laurent polynomial, so on a geometric
 schedule its values form a linear-recurrence sequence and it is recovered by
-Ben-Or-Tiwari interpolation (Ben-Or and Tiwari, 1988) from a handful of samples,
+Ben-Or-Tiwari interpolation [@benor1988sparse] from a handful of samples,
 the work set by the number of terms. An entry with a genuine multi-term
 denominator is first split by a univariate Cauchy fit along a ray, after which
 numerator and denominator are ordinary sparse polynomials. Anything beyond the
@@ -492,6 +500,76 @@ stacking removes them, and since the switch is then a constant rather than a
 symbol of $z$, it cannot appear in any reconstructed direction. Conditions are
 supplied as an [eventlist] with a condition grid.
 
+### Saturation per condition, not on the stack {#sec-lieorder}
+
+Raising the Lie order until the rank stops growing is sound for a single condition. With
+$\Omega_k$ the span of $\mathrm{d}g, \dots, \mathrm{d}L_F^{\,k}g$ over the function field,
+a step that does not grow gives $L_F\Omega_k \subseteq \Omega_k$, since
+\begin{equation}
+L_F\Big(\sum_j c_j\,\mathrm{d}L_F^{\,j}g\Big)
+  \;=\; \sum_j (L_Fc_j)\,\mathrm{d}L_F^{\,j}g \;+\; \sum_j c_j\,\mathrm{d}L_F^{\,j+1}g ,
+\label{eq:liefiltration}
+\end{equation}
+and both sums lie in $\Omega_k$ already; by induction no higher order adds anything. One
+flat step settles it.
+
+The stack \eqref{eq:stacked} inherits none of this. It is a sum of such spans, one per
+condition and each with its own $F^{(c)}$, and a sum can stand still while a summand grows
+inside it: a condition with many observables covers for several orders what a sparse one
+contributes, until the sparse one produces a row outside the sum. Stopping there drops
+rows, which enlarges $\ker\mathcal{O}$, so the failure mode is again an over-report. The
+order is therefore saturated per condition and the stack built once, at the largest of
+them. A stacked rank grows only where some block grows, so this never stops earlier than
+a plateau taken on the stack, and it is cheaper, the deep orders being reached on one
+block instead of on all of them.
+
+### Specialised coordinates: the codimension budget {#sec-budget}
+
+The argument also assumes an unspecialised coordinate space. The analysis rarely works
+with $\Omega_k$ itself: an explicit steady state, a pinned initial value or a known parameter pulls it
+through $J = \partial(x_0,\theta)/\partial z$, and a constraint adds constant rows $C$,
+the resting-manifold tangency of `equilibrate` or the relations of a recast exponent. The
+rank is taken of $W_k = J^*\Omega_k + C$, and with $A = \ker J^*$,
+$a_k = \dim(\Omega_k \cap A)$ and $c_k = \dim(J^*\Omega_k \cap C)$,
+\begin{equation}
+\dim W_k \;=\; \dim\Omega_k \;-\; a_k \;+\; \dim C \;-\; c_k .
+\label{eq:specialised}
+\end{equation}
+Both $a_k$ and $c_k$ are non-decreasing and bounded by $\dim A$ and $\dim C$, so a flat
+step of $W$ while $\Omega$ still grows forces $a_k + c_k$ up, which can happen at most
+$\operatorname{codim} = \dim A + \dim C$ times over the whole run. A misleading flat step
+spends one unit of a finite budget.
+
+The rule that follows is to count flat steps cumulatively rather than consecutively, and
+to stop once more than $\operatorname{codim}$ of them have been seen: one was then a
+genuine flat step, and the rank is final. That is a proof in the specialised space, from
+the projected curve alone. Without a specialisation the budget is zero and a single flat
+step certifies, the statement of the previous section. Once the budget is spent,
+$A \subseteq \Omega_N$ and $C \subseteq J^*\Omega_N$, and \eqref{eq:specialised} makes the
+projected rank grow exactly where the unprojected one does, so one flat step certifies
+again.
+
+The budget needs no algebra, only a count: every coordinate of the unspecialised
+$(x_0,\theta)$ space that is not a free coordinate of $z$ contributes at most one, because
+the rows of $J$ belonging to the untouched coordinates are independent unit vectors. A
+`trafo` entry, an initial value pinned by the grid, an event or `fixed`, a known parameter
+and a constraint row each count once, per condition. Started at a steady state the budget
+is of the order of the state count, so the certificate is cheap on a small model and
+expensive on a large one. `DMOD_SYM_LIEPLATEAU` caps what is spent, and `summary()`
+reports which side of the bound a run ended on:
+
+```
+Lie order 5 (gap order 0), set by condition 2
+saturation: certified (plateau 3 > codimension 2)
+```
+
+Below the bound the verdict is provisional and the guard of Section \ref{sec-verify} is
+the backstop. The bound is the worst case in $\dim A$: after order $N$ the misleading
+steps left are $\operatorname{codim} - (\rho_N - r_N)$, where $\rho_N = \dim\Omega_N$ is
+the rank of the unspecialised system at the same order and $r_N = \dim W_N$ the reported
+one. That is one further rank on a tape built without the transformation, which the
+implementation does not compute.
+
 ## Several stimuli in time: piecewise segments {#sec-segments}
 
 An event after $t_0$ breaks the analytic continuation of the output, so the
@@ -520,17 +598,22 @@ at the stimulus is propagated exactly across the gap.
 
 ## Verifying the rank: the saturation guard {#sec-verify}
 
-The verdict rests on one heuristic: the Lie order is raised only until the rank
-stops growing for a few orders. A rank can plateau and then climb again, a free
-Hill exponent being the typical case, and stopping on a false plateau drops rows,
-which only enlarges $\ker\mathcal{O}$: the failure mode is a silent
-*over*-reporting.
+Where the plateau is shorter than the budget of Section \ref{sec-budget} the verdict
+rests on a heuristic: the Lie order is raised only until the rank stops growing for a
+few orders, per condition. A rank can plateau and then climb again, a free Hill
+exponent and a constrained initial value being the typical cases, and stopping on a
+false plateau drops rows, which only enlarges $\ker\mathcal{O}$: the failure mode is a
+silent *over*-reporting. A certified saturation gets no guard, a provisional one
+does.
 
-`verify = TRUE`, the default, closes that gap. It re-uses the kernel and the
-cached base point and simply extends the Lie order by `DMOD_SYM_VERIFY_MARGIN`
-further orders (default six). Only the jet grows; the expensive
-$f_{\mathrm{ss}} = 0$ solve is not repeated. If the rank is still climbing, the
-guard FAILS and warns; if not, saturation is confirmed. `summary()` prints it:
+`verify = TRUE`, the default, closes that gap, and runs only where the budget
+did not: it re-uses the kernel and the cached base point and extends the Lie
+order by `DMOD_SYM_VERIFY_MARGIN` further orders (default six). Only the jet grows; the expensive
+$f_{\mathrm{ss}} = 0$ solve is not repeated. The rank is monotone in the order, so
+the far end settles the whole window in a single call; the orders in between are
+built only when that call fails, to report where the growth starts. If the rank is
+still climbing, the guard FAILS and warns; if not, saturation is confirmed.
+`summary()` prints it:
 
 ```
 saturation guard: PASSED (rank 233 stable through Lie order 18
@@ -598,7 +681,7 @@ f_{\mathrm{ss}}(x_0, \theta) = 0 ,
 \label{eq:ssfield}
 \end{equation}
 which binds $x_0$ to $\theta$ and can only make the model more identifiable
-(Saccomani et al., 2003). `"polynomial"` imposes this as one more commutation
+[@saccomani2003initial]. `"polynomial"` imposes this as one more commutation
 condition $[F_{\mathrm{ss}}, X] = 0$. `"observability"` binds it through the
 initial condition, in one of two ways: pass a closed form through state-named
 `trafo` entries (`trafo = steadyStates(reactions)`), or set `equilibrate = TRUE`,
@@ -626,8 +709,7 @@ ignored under `equilibrate`.
 
 ## Free Hill and power exponents {#sec-hill}
 
-A rate with a free exponent is not rational, and is handled by a recast (Savageau
-and Voit, 1987): $\mathrm{base}^{\,n}$ becomes a coordinate $E$ with companion
+A rate with a free exponent is not rational, and is handled by a recast [@savageau1987recasting]: $\mathrm{base}^{\,n}$ becomes a coordinate $E$ with companion
 $L = \log(\mathrm{base})$, carrying
 \begin{equation}
 \dot E = n\,E\,\frac{\dot{\mathrm{base}}}{\mathrm{base}}, \qquad
@@ -815,7 +897,7 @@ lattice. From there the ladder escalates:
   degrees can be searched one at a time.
 * **Separable characteristics.** If every $\eta_i$ involves no moved coordinate
   but $z_i$, the characteristic system
-  $dz_1/\eta_1 = \cdots = dz_m/\eta_m$ (Olver, 1993) separates: each ratio
+  $dz_1/\eta_1 = \cdots = dz_m/\eta_m$ [@olver1993applications] separates: each ratio
   integrates on its own as $G_i = \int dz_i/\eta_i(z_i)$, and the differences
   $G_i - G_j$ are invariants. No degree cap enters and the antiderivative may
   leave the Darboux language, $\eta = 1 + z^2$ giving $\arctan z$. It runs after
@@ -828,11 +910,11 @@ lattice. From there the ladder escalates:
   Darboux-type rational invariants are the integer kernel of the cofactor matrix.
   Linear once more. The candidates come from the extactic determinant: every
   Darboux polynomial of degree at most $d$ divides the extactic determinant of the
-  degree-$d$ monomial basis (Christopher, Llibre and Pereira, 2007), so one
+  degree-$d$ monomial basis [@christopher2007multiplicity], so one
   determinant and one factorisation deliver all of them.
 * **Exponential factors** $\exp(g/h)$, with $h$ a product of Darboux factors and
   $\deg g \le$ `dExp`, each carrying its own cofactor into the same kernel. Here
-  the escalation ends: by Prelle and Singer (1983) a vector field with an
+  the escalation ends: by Prelle and Singer [@prelle1983elementary] a vector field with an
   elementary first integral has one of Darboux form, so within the caps nothing
   expressible in closed form is missed.
 * **Integrating factor,** for a planar block only: an $M$ with
@@ -1916,48 +1998,3 @@ summary(symmetryReduction(egf2))
 ```
 
 # References
-
-Ben-Or, M., and Tiwari, P. (1988). A deterministic algorithm for sparse
-multivariate polynomial interpolation. In *Proceedings of the 20th Annual ACM
-Symposium on Theory of Computing (STOC)*, 301--309.
-
-Christopher, C., Llibre, J., and Pereira, J. V. (2007). Multiplicity of invariant
-algebraic curves in polynomial vector fields. *Pacific Journal of Mathematics*
-229, 63--117.
-
-Hong, H., Ovchinnikov, A., Pogudin, G., and Yap, C. (2020). Global
-identifiability of differential models. *Communications on Pure and Applied
-Mathematics* 73, 1831--1879.
-
-Massonis, G., and Villaverde, A. F. (2020). Finding and breaking Lie symmetries:
-implications for structural identifiability and observability in biological
-modelling. *Symmetry* 12, 469.
-
-Merkt, B., Timmer, J., and Kaschek, D. (2015). Higher-order Lie symmetries
-in identifiability and predictability analysis of dynamic models.
-*Physical Review E* 92, 012920.
-
-Olver, P. J. (1993). *Applications of Lie Groups to Differential Equations*,
-2nd edition. Springer, New York.
-
-Pohjanpalo, H. (1978). System identifiability based on the power series
-expansion of the solution. *Mathematical Biosciences* 41, 21--33.
-
-Prelle, M. J., and Singer, M. F. (1983). Elementary first integrals of
-differential equations. *Transactions of the American Mathematical Society* 279,
-215--229.
-
-Saccomani, M. P., Audoly, S., and D'Angiò, L. (2003). Parameter identifiability
-of nonlinear systems: the role of initial conditions. *Automatica* 39, 619--632.
-
-Savageau, M. A., and Voit, E. O. (1987). Recasting nonlinear differential
-equations as S-systems: a canonical nonlinear form. *Mathematical Biosciences*
-87, 83--115.
-
-Sedoglavic, A. (2002). A probabilistic algorithm to test local algebraic
-observability in polynomial time. *Journal of Symbolic Computation* 33,
-735--755.
-
-Villaverde, A. F., Barreiro, A., and Papachristodoulou, A. (2016).
-Structural identifiability of dynamic systems biology models. *PLoS
-Computational Biology* 12, e1005153.

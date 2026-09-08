@@ -34,6 +34,7 @@ vignettes/*.html
 vignettes/*.pdf
 !vignettes/PEtab.pdf
 !vignettes/Optimisation.pdf
+!vignettes/Symmetries.pdf
 
 # Compiled objects and scratch
 *.o
