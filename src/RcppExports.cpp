@@ -102,8 +102,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // normL2_kernel
-List normL2_kernel(List prediction, Nullable<List> err_list_opt, List meta_list, CharacterVector par_names_global, bool deriv2_requested, int threads, std::string bloq_mode, bool build_hessian);
-RcppExport SEXP _dMod2_normL2_kernel(SEXP predictionSEXP, SEXP err_list_optSEXP, SEXP meta_listSEXP, SEXP par_names_globalSEXP, SEXP deriv2_requestedSEXP, SEXP threadsSEXP, SEXP bloq_modeSEXP, SEXP build_hessianSEXP) {
+List normL2_kernel(List prediction, Nullable<List> err_list_opt, List meta_list, CharacterVector par_names_global, bool deriv2_requested, int threads, std::string bloq_mode, bool build_hessian, bool want_seed);
+RcppExport SEXP _dMod2_normL2_kernel(SEXP predictionSEXP, SEXP err_list_optSEXP, SEXP meta_listSEXP, SEXP par_names_globalSEXP, SEXP deriv2_requestedSEXP, SEXP threadsSEXP, SEXP bloq_modeSEXP, SEXP build_hessianSEXP, SEXP want_seedSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -115,7 +115,8 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< int >::type threads(threadsSEXP);
     Rcpp::traits::input_parameter< std::string >::type bloq_mode(bloq_modeSEXP);
     Rcpp::traits::input_parameter< bool >::type build_hessian(build_hessianSEXP);
-    rcpp_result_gen = Rcpp::wrap(normL2_kernel(prediction, err_list_opt, meta_list, par_names_global, deriv2_requested, threads, bloq_mode, build_hessian));
+    Rcpp::traits::input_parameter< bool >::type want_seed(want_seedSEXP);
+    rcpp_result_gen = Rcpp::wrap(normL2_kernel(prediction, err_list_opt, meta_list, par_names_global, deriv2_requested, threads, bloq_mode, build_hessian, want_seed));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -225,7 +226,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_dMod2_bmm_bb", (DL_FUNC) &_dMod2_bmm_bb, 6},
     {"_dMod2_constraintL2_scalar_kernel", (DL_FUNC) &_dMod2_constraintL2_scalar_kernel, 12},
     {"_dMod2_datapointL2_kernel", (DL_FUNC) &_dMod2_datapointL2_kernel, 11},
-    {"_dMod2_normL2_kernel", (DL_FUNC) &_dMod2_normL2_kernel, 8},
+    {"_dMod2_normL2_kernel", (DL_FUNC) &_dMod2_normL2_kernel, 9},
     {"_dMod2_parvec_attach", (DL_FUNC) &_dMod2_parvec_attach, 3},
     {"_dMod2_parvec_concat", (DL_FUNC) &_dMod2_parvec_concat, 1},
     {"_dMod2_residual_kernel_aloq", (DL_FUNC) &_dMod2_residual_kernel_aloq, 9},

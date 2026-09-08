@@ -21,8 +21,8 @@ datapointL2_kernel <- function(pouter, fixed_opt, prdf, dpred_attr_opt, d2pred_a
     .Call(`_dMod2_datapointL2_kernel`, pouter, fixed_opt, prdf, dpred_attr_opt, d2pred_attr_opt, obs_name, t, sigma, value_par, deriv, build_hessian)
 }
 
-normL2_kernel <- function(prediction, err_list_opt, meta_list, par_names_global, deriv2_requested, threads, bloq_mode = "M3", build_hessian = TRUE) {
-    .Call(`_dMod2_normL2_kernel`, prediction, err_list_opt, meta_list, par_names_global, deriv2_requested, threads, bloq_mode, build_hessian)
+normL2_kernel <- function(prediction, err_list_opt, meta_list, par_names_global, deriv2_requested, threads, bloq_mode = "M3", build_hessian = TRUE, want_seed = FALSE) {
+    .Call(`_dMod2_normL2_kernel`, prediction, err_list_opt, meta_list, par_names_global, deriv2_requested, threads, bloq_mode, build_hessian, want_seed)
 }
 
 parvec_attach <- function(out, deriv, deriv2) {

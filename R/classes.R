@@ -314,11 +314,12 @@ match.fnargs <- function(arglist, choices) {
 ## ---- Composition evaluation ---------------------------------------------
 
 # p2 over every condition at once; its result names are p1's condition vector.
-.evalProd <- function(st, b, deriv, deriv2, env, cores, hessian = TRUE) {
+.evalProd <- function(st, b, deriv, deriv2, env, cores, hessian = TRUE,
+                      sweep = "forward") {
   b2 <- .bundle(conds = b$conds, times = b$times, pars = b$pars,
                 fixed = b$fixed, shared = b$shared,
                 out = if (identical(st$p2kind, "obsfn")) b$out else NULL)
-  inner <- .evalMany(st$p2, b2, deriv, deriv2, env, cores, hessian)
+  inner <- .evalMany(st$p2, b2, deriv, deriv2, env, cores, hessian, sweep)
 
   conds <- names(inner)
   n <- max(1L, length(inner))
@@ -341,12 +342,13 @@ match.fnargs <- function(arglist, choices) {
     fixed = lapply(hs, function(h) if (is.null(h)) NULL else h$fixed),
     shared = FALSE)
 
-  res <- .evalMany(st$p1, b1, deriv, deriv2, env, cores, hessian)
+  res <- .evalMany(st$p1, b1, deriv, deriv2, env, cores, hessian, sweep)
   if (identical(st$reduce, "sum")) Reduce("+", res) else res
 }
 
 # One dispatch per PART: a sum of two g*x*p chains issues two batched solves.
-.evalPlus <- function(st, b, deriv, deriv2, env, cores, hessian = TRUE) {
+.evalPlus <- function(st, b, deriv, deriv2, env, cores, hessian = TRUE,
+                      sweep = "forward") {
   slotnames <- if (is.null(b$conds)) names(st$owner) else b$conds
   outlist <- .emptySlots(slotnames)
   own <- st$owner[slotnames]
@@ -356,26 +358,226 @@ match.fnargs <- function(arglist, choices) {
   for (k in unique(own[keep])) {
     pos  <- keep[own[keep] == k]
     sub  <- .bundle_positions(b, pos, slotnames[pos])
-    part <- .evalMany(st$parts[[k]], sub, deriv, deriv2, env, cores, hessian)
+    part <- .evalMany(st$parts[[k]], sub, deriv, deriv2, env, cores, hessian, sweep)
     for (j in seq_along(pos)) outlist[[pos[j]]] <- part[[j]]
   }
   outlist
 }
 
-.evalNode <- function(st, b, deriv, deriv2, env, cores, hessian = TRUE) {
+.evalNode <- function(st, b, deriv, deriv2, env, cores, hessian = TRUE,
+                      sweep = "forward") {
   switch(st$op,
     leaf = .evalLeaf(st, b, deriv, deriv2, cores),
-    "*"  = .evalProd(st, b, deriv, deriv2, env, cores, hessian),
-    "+"  = .evalPlus(st, b, deriv, deriv2, env, cores, hessian),
+    "*"  = .evalProd(st, b, deriv, deriv2, env, cores, hessian, sweep),
+    "+"  = .evalPlus(st, b, deriv, deriv2, env, cores, hessian, sweep),
     stop(".evalNode: unknown node op '", st$op, "'.", call. = FALSE))
 }
 
-.evalMany <- function(f, b, deriv, deriv2, env, cores, hessian = TRUE) {
+.evalMany <- function(f, b, deriv, deriv2, env, cores, hessian = TRUE,
+                      sweep = "forward") {
   st <- .fnNode(f)
-  if (is.null(st)) return(.evalLegacy(f, b, deriv, deriv2, env, hessian))
-  .evalNode(st, b, deriv, deriv2, env, cores, hessian)
+  if (is.null(st)) return(.evalLegacy(f, b, deriv, deriv2, env, hessian, sweep))
+  .evalNode(st, b, deriv, deriv2, env, cores, hessian, sweep)
 }
 
+
+## ---- Reverse evaluation --------------------------------------------------
+##
+## The forward pass threads a Jacobian: a leaf reads dP/dtheta off its input and
+## returns dX/dtheta on its output, so the chain rule happens inside the leaves
+## and everything in flight is n_theta wide. The reverse pass threads a
+## cotangent the other way and is as wide as the number of seeds, which for a
+## gradient is one.
+##
+## A `*` node cannot be walked in one recursion: p2 has to be evaluated before
+## p1 can run at all, and p2 cannot be differentiated before p1 has been. So the
+## protocol is two phases with an explicit tape between them, built on the way
+## down and consumed on the way up. The tape holds the forward values of every
+## node, which is what a reverse pass needs anyway; nothing is recomputed.
+##
+##   .fwdNode(st, b, ...)      -> list(values, tape)
+##   .bwdNode(tape, w, ...)    -> cotangent of the node's own input
+##
+## `w` is one .ct() per condition: `out` on the matrix a prediction or an
+## observation carries, `pars` on the parameters it passes through. The `pars`
+## half is what makes the tree a graph rather than a chain -- an observation
+## function reads the prediction's parameters as well as its values -- and both
+## halves accumulate.
+
+.fwdNode <- function(st, b, env, cores) {
+  switch(st$op,
+    leaf = list(values = .evalLeaf(st, b, FALSE, FALSE, cores),
+                tape   = list(op = "leaf", st = st, b = b)),
+    "*"  = .fwdProd(st, b, env, cores),
+    "+"  = .fwdPlus(st, b, env, cores),
+    stop(".fwdNode: unknown node op '", st$op, "'.", call. = FALSE))
+}
+
+.fwdMany <- function(f, b, env, cores) {
+  st <- .fnNode(f)
+  if (is.null(st))
+    stop("reverse mode needs an fn object with a structure descriptor; this one ",
+         "predates the evaluation protocol and has none.", call. = FALSE)
+  .fwdNode(st, b, env, cores)
+}
+
+.fwdProd <- function(st, b, env, cores) {
+  b2 <- .bundle(conds = b$conds, times = b$times, pars = b$pars,
+                fixed = b$fixed, shared = b$shared,
+                out = if (identical(st$p2kind, "obsfn")) b$out else NULL)
+  f2 <- .fwdNode(.fnNode(st$p2), b2, env, cores)
+  inner <- f2$values
+
+  conds <- names(inner)
+  n <- max(1L, length(inner))
+  handoff <- get(st$handoff, envir = asNamespace("dMod2"))
+  hs <- lapply(seq_len(n), function(i) {
+    v <- inner[[i]]
+    if (is.null(v)) NULL else handoff(v, .req_fixed(b, min(i, .bundle_n(b))))
+  })
+
+  p2_is_par <- identical(st$p2kind, "parfn")
+  b1 <- .bundle(
+    conds = conds,
+    times = b$times,
+    out   = if (p2_is_par) {
+              if (is.null(b$out)) NULL else .bundle_broadcast(b$out[[1L]], n)
+            } else inner,
+    pars  = lapply(hs, function(h) if (is.null(h)) NULL else h$pars),
+    fixed = lapply(hs, function(h) if (is.null(h)) NULL else h$fixed),
+    shared = FALSE)
+
+  f1 <- .fwdNode(.fnNode(st$p1), b1, env, cores)
+  values <- if (identical(st$reduce, "sum")) Reduce("+", f1$values) else f1$values
+  list(values = values,
+       tape = list(op = "*", st = st, b = b, t1 = f1$tape, t2 = f2$tape,
+                   inner = inner, p2_is_par = p2_is_par, n = n))
+}
+
+.fwdPlus <- function(st, b, env, cores) {
+  slotnames <- if (is.null(b$conds)) names(st$owner) else b$conds
+  outlist <- .emptySlots(slotnames)
+  own <- st$owner[slotnames]
+  keep <- which(!is.na(own))
+  parts <- list()
+  if (length(keep)) for (k in unique(own[keep])) {
+    pos  <- keep[own[keep] == k]
+    sub  <- .bundle_positions(b, pos, slotnames[pos])
+    f    <- .fwdNode(.fnNode(st$parts[[k]]), sub, env, cores)
+    for (j in seq_along(pos)) outlist[[pos[j]]] <- f$values[[j]]
+    parts[[as.character(k)]] <- list(pos = pos, tape = f$tape)
+  }
+  list(values = outlist,
+       tape = list(op = "+", st = st, b = b, parts = parts,
+                   n = length(slotnames)))
+}
+
+# ---------------------------------------------------------------------------
+
+.bwdNode <- function(tape, w, env, cores) {
+  switch(tape$op,
+    leaf = .bwdLeaf(tape, w, cores),
+    "*"  = .bwdProd(tape, w, env, cores),
+    "+"  = .bwdPlus(tape, w, env, cores),
+    stop(".bwdNode: unknown node op '", tape$op, "'.", call. = FALSE))
+}
+
+# The leaf's own vjp, once per condition it answered. A leaf that answered no
+# slot contributes nothing, which is the same NULL hole the forward pass leaves.
+.bwdLeaf <- function(tape, w, cores) {
+  st <- tape$st; b <- tape$b
+  vjp <- st$vjpfn
+  if (is.null(vjp))
+    stop("reverse mode: the ", st$kind, " leaf has no vjp entry. A prediction ",
+         "needs odemodel(reverse = TRUE) and Xs(); Xf() carries no derivatives ",
+         "in either direction, which is what it is for. An observation or a ",
+         "transformation needs a compiled derivMode = \"dual\" evaluator.",
+         call. = FALSE)
+
+  res <- .resolveConditions(b$conds, st$condition)
+  n <- max(1L, length(res$conditions))
+  out <- vector("list", n)
+  if (!res$evaluate || !length(res$slots)) return(out)
+
+  shared <- b$shared || is.null(b$conds)
+  for (s in res$slots) {
+    ws <- w[[s]]
+    if (.ct_null(ws)) next
+    i <- if (shared) 1L else s
+    pf <- .splitParsFixed(.req_pars(b, i), .req_fixed(b, i))
+    cond <- if (is.null(res$conditions)) NULL else res$conditions[s]
+    r <- switch(st$kind,
+      prdfn = .ct(pars = vjp(times = .req_times(b, i), pars = pf$pars,
+                             fixed = pf$fixed, w = ws$out)),
+      obsfn = vjp(out = .req_out(b, i), pars = pf$pars, fixed = pf$fixed,
+                  w = ws$out),
+      parfn = .ct(pars = vjp(pars = pf$pars, fixed = pf$fixed, w = ws$pars,
+                             condition = cond)),
+      stop(".bwdLeaf: no reverse mode for a ", st$kind, " leaf.", call. = FALSE))
+    # Whatever the node passed through untouched keeps its cotangent.
+    if (!identical(st$kind, "parfn"))
+      r <- .addCt(r, .ct(pars = .pickCotangent(ws$pars, names(pf$pars))))
+    out[[s]] <- r
+  }
+  # One request behind every slot means one input behind every slot: the
+  # cotangents of the slots add rather than standing side by side.
+  if (shared && length(res$slots) > 1L) {
+    tot <- Reduce(.addCt, out[res$slots])
+    for (s in res$slots) out[[s]] <- NULL
+    out[[res$slots[1L]]] <- tot
+  }
+  out
+}
+
+.bwdProd <- function(tape, w, env, cores) {
+  st <- tape$st
+  # A summed objective hands every term the same cotangent, because the sum's
+  # derivative in each term is one.
+  w1 <- if (identical(st$reduce, "sum")) rep(list(w[[1L]]), tape$n) else w
+  u1 <- .bwdNode(tape$t1, w1, env, cores)
+
+  if (tape$p2_is_par) {
+    # p1 read p2's parvec as its parameters, and the outer `out` as its input.
+    w2 <- lapply(u1, function(u) if (is.null(u)) NULL else .ct(pars = u$pars))
+    down <- .bwdNode(tape$t2, w2, env, cores)
+    outer_out <- lapply(u1, function(u) if (is.null(u)) NULL else .ct(out = u$out))
+    return(.mergeCt(down, outer_out))
+  }
+  # p1 read p2's own output, values and parameters both.
+  .bwdNode(tape$t2, u1, env, cores)
+}
+
+.bwdPlus <- function(tape, w, env, cores) {
+  out <- vector("list", tape$n)
+  for (p in tape$parts) {
+    u <- .bwdNode(p$tape, w[p$pos], env, cores)
+    for (j in seq_along(p$pos)) out[[p$pos[j]]] <- u[[j]]
+  }
+  out
+}
+
+.mergeCt <- function(a, b) {
+  n <- max(length(a), length(b))
+  lapply(seq_len(n), function(i) .addCt(a[[i]], b[[i]]))
+}
+
+# ---------------------------------------------------------------------------
+
+# One forward and one backward pass over a chain. `seedfn` turns the forward
+# values into the cotangent of the chain's output; what comes back is the
+# cotangent of `pars`, which is the gradient the caller asked for.
+.reverseChain <- function(f, times, pars, fixed = NULL, conditions = NULL,
+                          seedfn, env = NULL,
+                          cores = getOption("dMod.cores", 1L)) {
+  b <- .bundle_from_call(conditions, times = times, out = NULL,
+                         pars = pars, fixed = fixed)
+  fw <- .fwdMany(f, b, env, cores)
+  w  <- seedfn(fw$values)
+  u  <- .bwdNode(fw$tape, w, env, cores)
+  list(values = fw$values,
+       gradient = Reduce(.addNamed,
+                         lapply(u, function(x) if (is.null(x)) NULL else x$pars)))
+}
 
 ## ---- Public shim ---------------------------------------------------------
 
@@ -385,18 +587,20 @@ match.fnargs <- function(arglist, choices) {
 .fnWrap <- function(st) {
   function(..., fixed = NULL, deriv = TRUE, deriv2 = FALSE, hessian = TRUE,
            conditions = st$default_conditions, env = NULL,
-           cores = getOption("dMod.cores", 1L))
-    .fnCall(st, list(...), fixed, deriv, deriv2, hessian, conditions, env, cores)
+           cores = getOption("dMod.cores", 1L), sweep = "forward")
+    .fnCall(st, list(...), fixed, deriv, deriv2, hessian, conditions, env, cores,
+            sweep)
 }
 
-.fnCall <- function(st, arglist, fixed, deriv, deriv2, hessian, conditions, env, cores) {
+.fnCall <- function(st, arglist, fixed, deriv, deriv2, hessian, conditions, env,
+                    cores, sweep = "forward") {
   spec <- .fnSpec[[st$kind]]
   arglist <- arglist[match.fnargs(arglist, spec$inputs)]
   names(arglist) <- spec$inputs
   b <- .bundle_from_call(conditions,
                          times = arglist$times, out = arglist$out,
                          pars  = arglist$pars,  fixed = fixed)
-  out <- .evalNode(st, b, deriv, deriv2, env, cores, hessian)
+  out <- .evalNode(st, b, deriv, deriv2, env, cores, hessian, sweep)
   if (identical(spec$result, "prdlist")) as.prdlist(out) else out
 }
 
@@ -426,13 +630,15 @@ match.fnargs <- function(arglist, choices) {
 .leafState <- function(kernel, kind, condition) {
   list2env(list(op = "leaf", kind = kind, kernel = kernel,
                 batchfn = attr(kernel, "batchfn"),
+                vjpfn = attr(kernel, "vjpfn"),
                 kernel_has_cond = "condition" %in% names(formals(kernel)),
                 condition = condition, default_conditions = condition),
            parent = emptyenv())
 }
 
 # Pre-rebuild path: drive an fn without a descriptor one condition at a time.
-.evalLegacy <- function(f, b, deriv, deriv2, env, hessian = TRUE) {
+.evalLegacy <- function(f, b, deriv, deriv2, env, hessian = TRUE,
+                        sweep = "forward") {
   kind <- .fnKind(f)
   # A request without conditions asks the fn for all of its own, so the result
   # keeps the names `.evalProd` reads back as p1's condition vector.
@@ -453,7 +659,7 @@ match.fnargs <- function(arglist, choices) {
                 deriv = deriv, deriv2 = deriv2, conditions = cond, env = env),
       objfn = f(pars = .req_pars(b, j), fixed = .req_fixed(b, j),
                 deriv = deriv, deriv2 = deriv2, hessian = hessian,
-                conditions = cond, env = env),
+                conditions = cond, env = env, sweep = sweep),
       stop(".evalLegacy: cannot drive an fn of class ",
            paste(class(f), collapse = "/"), call. = FALSE))
     # an objfn returns its objlist directly, not a per-condition list
@@ -636,26 +842,42 @@ match.fnargs <- function(arglist, choices) {
 
     outfn <- function(..., fixed = NULL, deriv = TRUE, deriv2 = FALSE, hessian = TRUE,
                       conditions = conditions12, env = NULL,
-                      cores = getOption("dMod.cores", 1L)) {
+                      cores = getOption("dMod.cores", 1L),
+                      sweep = "forward") {
 
       arglist <- list(...)
       arglist <- arglist[match.fnargs(arglist, c("pars"))]
       pars <- arglist[[1]]
 
       # 1. If conditions.xi is null, always evaluate xi, but only once
+
+      # A term that has no reverse path of its own keeps the forward one: a
+      # constraint's gradient is a line of algebra and costs nothing either
+      # way, and the sum is the same number however each half got there. A
+      # reverse term returns no Hessian, so neither does the sum.
+      .call <- function(f, conds, e) {
+        if (identical(sweep, "reverse") && "sweep" %in% names(formals(f)))
+          f(pars = pars, fixed = fixed, deriv = deriv, deriv2 = deriv2,
+            hessian = hessian, conditions = conds, env = e, cores = cores,
+            sweep = sweep)
+        else
+          f(pars = pars, fixed = fixed, deriv = deriv, deriv2 = deriv2,
+            hessian = if (identical(sweep, "reverse")) FALSE else hessian,
+            conditions = conds, env = e, cores = cores)
+      }
       # 2. If not null, evaluate at intersection with conditions
       # 3. If not null & intersection is empty, don't evaluate xi at all
       v1 <- v2 <- NULL
       if (is.null(conditions.x1)) {
-        v1 <- x1(pars = pars, fixed = fixed, deriv = deriv, deriv2 = deriv2, hessian = hessian, conditions = conditions.x1, env = env, cores = cores)
+        v1 <- .call(x1, conditions.x1, env)
       } else if (any(conditions %in% conditions.x1)) {
-        v1 <- x1(pars = pars, fixed = fixed, deriv = deriv, deriv2 = deriv2, hessian = hessian, conditions = intersect(conditions, conditions.x1), env = env, cores = cores)
+        v1 <- .call(x1, intersect(conditions, conditions.x1), env)
       }
 
       if (is.null(conditions.x2)) {
-        v2 <- x2(pars = pars, fixed = fixed, deriv = deriv, deriv2 = deriv2, hessian = hessian, conditions = conditions.x2, env = env, cores = cores)
+        v2 <- .call(x2, conditions.x2, env)
       } else if (any(conditions %in% conditions.x2)) {
-        v2 <- x2(pars = pars, fixed = fixed, deriv = deriv, deriv2 = deriv2, hessian = hessian, conditions = intersect(conditions, conditions.x2), env = attr(v1, "env"), cores = cores)
+        v2 <- .call(x2, intersect(conditions, conditions.x2), attr(v1, "env"))
       }
 
       out <- v1 + v2

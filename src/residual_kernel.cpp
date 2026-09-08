@@ -92,7 +92,9 @@ void accumulate_aloq_residual(
     double& value_acc,
     double& chi2_acc,
     double* grad_acc,
-    double* hess_acc) {
+    double* hess_acc,
+    double* seed_pred,
+    double* seed_sigma) {
 
   if (n_obs == 0) return;
   if (n_par < 0) throw std::runtime_error("accumulate_aloq: n_par must be >= 0");
@@ -157,13 +159,23 @@ void accumulate_aloq_residual(
       }
     }
 
-    // Gradient: 2 * (wr * dwr + dlogs); M4BEAL adds 2 * G(w0) * dw0.
+    // Gradient: A * dwr + B * dw0 + C * dlogs, which is the one shape every
+    // branch of this kernel has. Written this way so the reverse seeds below
+    // are the same arithmetic rather than a second derivation of it.
+    const double A = 2.0 * wr;
+    const double B = m4beal_aloq ? 2.0 * G_w0 : 0.0;
+    const double C = 2.0;
     for (int k = 0; k < n_par; ++k) {
-      grad_acc[k] += 2.0 * (wr * dwr[k] + dlogs[k]);
+      grad_acc[k] += A * dwr[k] + C * dlogs[k];
     }
     if (m4beal_aloq) {
-      for (int k = 0; k < n_par; ++k) grad_acc[k] += 2.0 * G_w0 * dw0[k];
+      for (int k = 0; k < n_par; ++k) grad_acc[k] += B * dw0[k];
     }
+    // dwr = inv_s * dpred - wr * inv_s * dsigma, dw0 likewise with w0, and
+    // dlogs = inv_s * dsigma, so stopping the chain rule one step earlier is
+    // this.
+    if (seed_pred)  seed_pred[i]  += inv_s * (A + B);
+    if (seed_sigma) seed_sigma[i] += inv_s * (C - A * wr - B * w0);
 
     // Combine all per-row Hessian additions into a single (k1, k2) loop with
     // pre-merged coefficients. Each term contributes a fixed bilinear form
@@ -254,7 +266,9 @@ void accumulate_bloq_residual(
     const AccumOpts& opts,
     double& value_acc,
     double* grad_acc,
-    double* hess_acc) {
+    double* hess_acc,
+    double* seed_pred,
+    double* seed_sigma) {
 
   if (n_obs == 0) return;
   if (opts.bloq_mode == BloqMode::NONE || opts.bloq_mode == BloqMode::M1) {
@@ -345,10 +359,12 @@ void accumulate_bloq_residual(
     //        c3 = G(w0, w0)
     double w_deriv2 = 0.0;  // per-row weight for the d2pred exact contribution
     double w_deriv2_sig = 0.0;  // per-row weight for the d2sigma exact contribution
+    double A_row = 0.0, B_row = 0.0;   // the same shape as the ALOQ branch
     if (is_m3) {
       const double G_neg_wr = G_by_Phi(-wr, -wr);
+      A_row = 2.0 * G_neg_wr;
       for (int k = 0; k < n_par; ++k) {
-        grad_acc[k] += 2.0 * G_neg_wr * dwr[k];
+        grad_acc[k] += A_row * dwr[k];
       }
       if (opts.use_deriv2_exact) {
         w_deriv2 = 2.0 * G_neg_wr * inv_s;
@@ -367,8 +383,10 @@ void accumulate_bloq_residual(
       const double c1 = phi_wr / dP;
       const double c2 = phi_w0 / dP;
       const double c3 = G_by_Phi(w0, w0);
+      A_row = 2.0 * c1;
+      B_row = 2.0 * (c3 - c2);
       for (int k = 0; k < n_par; ++k) {
-        grad_acc[k] += 2.0 * (c1 * dwr[k] + (c3 - c2) * dw0[k]);
+        grad_acc[k] += A_row * dwr[k] + B_row * dw0[k];
       }
       if (opts.use_deriv2_exact) {
         // Both dwr and dw0 contribute inv_s * dpred to their d2pred-via-d2wr term;
@@ -382,6 +400,12 @@ void accumulate_bloq_residual(
         }
       }
     }
+
+    // The same reduction as the ALOQ branch: dwr and dw0 are linear in dpred
+    // and dsigma, so stopping one step earlier gives the seeds. A censored row
+    // has no dlogs term, hence no C here.
+    if (seed_pred)  seed_pred[i]  += inv_s * (A_row + B_row);
+    if (seed_sigma) seed_sigma[i] += inv_s * (-A_row * wr - B_row * w0);
 
     // ---- Hessian ----
     if (is_m3) {

@@ -78,7 +78,12 @@ reactions <- eqnlist() |>
 myOptionsODE  <- list(atol = 1e-8, rtol = 1e-6, maxattemps = 100L, maxsteps = 1e6)
 myOptionsSens <- myOptionsODE
 
-model <- odemodel(reactions, modelname = "boehm_ode", compile = FALSE, outdir = .outdir)
+# `reverse = TRUE` compiles a fourth object beside func, extended and
+# extended2: the states in plain double with a checkpoint per step, and one
+# backward sweep for the derivatives. It is what the reverse section at the
+# bottom needs; without it that section errors and nothing else changes.
+model <- odemodel(reactions, modelname = "boehm_ode", compile = FALSE,
+                  reverse = TRUE, outdir = .outdir)
 x <- Xs(model, optionsOde = myOptionsODE, optionsSens = myOptionsSens)
 
 # Only relative quantities were measured, mixed by the isotope ratio specC17.
@@ -199,6 +204,54 @@ if (.fit) {
       print(plotValues(outframe, tol = 0.1, value < 1e4))
     })
 }
+
+
+# –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
+# The gradient the other way round
+#
+# The forward mode integrates 1 + n_theta copies of the system and reads the
+# gradient off the sensitivities. The reverse mode integrates the states alone,
+# keeps a checkpoint per step, and sweeps one tape backwards; its cost does not
+# grow with n_theta. `sweep = "reverse"` is the whole of the caller's side.
+#
+# The two do not agree to machine precision, and the reason is not the adjoint.
+# A forward-sensitivity solve carries n_theta tangent columns and the
+# step-size controller's error norm takes the maximum over the state norm AND
+# every one of them; a maximum over a larger set is larger, so it steps finer
+# than a value-only run. The two modes therefore differentiate two different
+# discretisations, each of them exactly, and the gap is the O(tol) between them.
+# Tightening the tolerance closes it -- see section 5 of
+# inst/examples/example_ReverseAD.R, which measures that over eight decades.
+#
+# The corollary is in reverse's favour: its gradient belongs to the trajectory
+# a value-only prediction produces, so value and gradient are consistent with
+# each other, which under forward sensitivities they are not.
+#
+# The Hessian is the point of the exercise. The reverse objective returns none,
+# because there is no J to contract; that is exactly what a quasi-Newton
+# Hessian source wants, and `sr1` from an identity seed is the arm that leaves
+# the plateau on the larger benchmarks.
+# –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
+.fwd <- obj(bestfit, deriv = TRUE)
+.rev <- obj(bestfit, deriv = TRUE, sweep = "reverse")
+
+print(rbind(forward = .fwd$gradient,
+            reverse = .rev$gradient[names(.fwd$gradient)]))
+cat(sprintf("value    %.10g vs %.10g\ngradient max relative difference %.2e\n",
+            .fwd$value, .rev$value,
+            max(abs(.fwd$gradient - .rev$gradient[names(.fwd$gradient)])) /
+              max(abs(.fwd$gradient))))
+cat("the reverse objective carries no Hessian:", is.null(.rev$hessian), "\n")
+
+# Nine parameters is around where the two are level on this model; the forward
+# line rises with n_theta and the reverse one does not, so which side wins is a
+# property of the problem and not of the implementation.
+.reps <- 10
+.tf <- system.time(for (i in seq_len(.reps)) obj(bestfit, deriv = TRUE))[["elapsed"]]
+.tr <- system.time(for (i in seq_len(.reps))
+                     obj(bestfit, deriv = TRUE, sweep = "reverse"))[["elapsed"]]
+cat(sprintf("%d gradients at %d parameters: forward %.2fs, reverse %.2fs\n",
+            .reps, length(outerpars), .tf, .tr))
 
 
 # –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––

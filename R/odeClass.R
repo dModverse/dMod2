@@ -94,16 +94,24 @@ print.odemodel <- function(x, ...) {
 #'   function, so backend-specific linker requirements (e.g. Sundials libraries
 #'   for \code{backend = "Sundials"}) are applied to the right files only.
 #'
+#' @param reverse Logical. Also compile the reverse-mode object, which
+#'   integrates in plain `double` and takes its derivatives from one backward
+#'   sweep, so their cost does not grow with the number of parameters. Needed
+#'   by `obj(..., sweep = "reverse")`; `backend = "cppDE"` only.
+#'
 #' @seealso [cOde::funC()], [cppDE::cppODE()], [cppDE::cvode()]
 #'
 #' @example inst/examples/odemodel.R
 #' @export
-odemodel <- function(f, deriv = TRUE, deriv2 = FALSE, forcings=NULL, events = NULL,
+odemodel <- function(f, deriv = TRUE, deriv2 = FALSE, reverse = FALSE,
+                     forcings=NULL, events = NULL,
                      fixed = NULL, modelname = "odemodel", backend = c("cppDE", "Sundials", "deSolve"),
                      verbose = FALSE, outdir = getwd(), ...) {
 
   f <- as.eqnvec(f)
   backend <- match.arg(backend)
+  if (isTRUE(reverse) && backend != "cppDE")
+    stop("`reverse = TRUE` needs backend = 'cppDE'.", call. = FALSE)
 
   if (deriv2 && !deriv) {
     warning("`deriv2 = TRUE` implies `deriv = TRUE`. Setting deriv = TRUE.",
@@ -224,7 +232,19 @@ odemodel <- function(f, deriv = TRUE, deriv2 = FALSE, forcings=NULL, events = NU
                                  dots_ext))
         }
       }
-      out <- list(func = func, extended = extended, extended2 = extended2)
+      # The reverse object. A fourth compilation beside func, extended and
+      # extended2, not a flag on any of them: the direction decides what the
+      # generated code is, and cannot be chosen after the fact.
+      reversed <- NULL
+      if (isTRUE(reverse)) {
+        reversed <- do.call(cppDE::cppODE,
+                            c(list(f, events = events, fixed = fixed, forcings = forcings,
+                                   modelname = paste0(modelname, "_r"), outdir = outdir,
+                                   sweep = "reverse", verbose = verbose),
+                              dots_func))
+      }
+      out <- list(func = func, extended = extended, extended2 = extended2,
+                  reversed = reversed)
       class(out) <- c("cppDE", "odemodel")
     } else if (backend == "Sundials") {
       dots_func <- pick(cppDE::cvode, dots[setdiff(names(dots), "nStack")])
@@ -246,6 +266,7 @@ odemodel <- function(f, deriv = TRUE, deriv2 = FALSE, forcings=NULL, events = NU
       class(out) <- c("cppDE", "odemodel")
       }
   }
-  attr(out, "compileInfo") <- .collectCompileInfo(out$func, out$extended, out$extended2)
+  attr(out, "compileInfo") <- .collectCompileInfo(out$func, out$extended,
+                                                  out$extended2, out$reversed)
   return(out)
 }

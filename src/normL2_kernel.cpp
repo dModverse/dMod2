@@ -305,7 +305,8 @@ List normL2_kernel(
     bool deriv2_requested,
     int threads,
     std::string bloq_mode = "M3",
-    bool build_hessian = true) {
+    bool build_hessian = true,
+    bool want_seed = false) {
 
   const int n_cond = prediction.size();
   if ((int) meta_list.size() != n_cond)
@@ -368,10 +369,19 @@ List normL2_kernel(
   std::vector<double> value_c(n_cond, 0.0);
   std::vector<double> chi2_c(n_cond, 0.0);
   std::vector<std::vector<double> > grad_c(n_cond), hess_c(n_cond);
+  // The reverse seeds, one pair per condition, in the row order the meta
+  // built: ALOQ rows first, then BLOQ. The caller scatters them back onto
+  // times and observables.
+  std::vector<std::vector<double> > seedp_c(n_cond), seeds_c(n_cond);
   for (int c = 0; c < n_cond; ++c) {
     const int npl = conds[c].n_par_local;
     grad_c[c].assign(npl, 0.0);
     if (build_hessian) hess_c[c].assign((std::size_t) npl * npl, 0.0);
+    if (want_seed) {
+      const int nrow = conds[c].n_aloq + conds[c].n_bloq;
+      seedp_c[c].assign(nrow, 0.0);
+      seeds_c[c].assign(nrow, 0.0);
+    }
   }
 
 #ifdef _OPENMP
@@ -405,7 +415,9 @@ List normL2_kernel(
             C.has_d2sigma ? C.d2sigma.data() : nullptr,
             C.lloq.data(),
             opts,
-            value_cond, chi2_cond, grad_cond, hess_cond);
+            value_cond, chi2_cond, grad_cond, hess_cond,
+            want_seed ? seedp_c[c].data() : nullptr,
+            want_seed ? seeds_c[c].data() : nullptr);
       }
       // BLOQ rows (offset = n_aloq)
       if (C.n_bloq > 0) {
@@ -423,7 +435,9 @@ List normL2_kernel(
             C.has_d2sigma ? (C.d2sigma.data() + off_n3) : nullptr,
             C.lloq.data()   + off_n,
             opts,
-            value_cond, grad_cond, hess_cond);
+            value_cond, grad_cond, hess_cond,
+            want_seed ? (seedp_c[c].data() + off_n) : nullptr,
+            want_seed ? (seeds_c[c].data() + off_n) : nullptr);
       }
 
       value_c[c] = value_cond;
@@ -476,9 +490,20 @@ List normL2_kernel(
     hess_R = H;
   }
 
+  RObject seed_R = R_NilValue;
+  if (want_seed) {
+    List sp(n_cond), ss(n_cond);
+    for (int c = 0; c < n_cond; ++c) {
+      sp[c] = NumericVector(seedp_c[c].begin(), seedp_c[c].end());
+      ss[c] = NumericVector(seeds_c[c].begin(), seeds_c[c].end());
+    }
+    seed_R = List::create(Named("pred") = sp, Named("sigma") = ss);
+  }
+
   return List::create(
       Named("value")    = value_global,
       Named("chi2")     = chi2_global,
       Named("gradient") = grad_R,
-      Named("hessian")  = hess_R);
+      Named("hessian")  = hess_R,
+      Named("seed")     = seed_R);
 }

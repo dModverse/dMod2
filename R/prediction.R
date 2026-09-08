@@ -216,6 +216,7 @@ Xs.cppDE <- function(odemodel, forcings = NULL, events = NULL, names = NULL, con
   func <- odemodel$func
   extended <- odemodel$extended
   extended2 <- odemodel$extended2
+  reversed <- odemodel$reversed
   if (is.null(extended)) warning("Element 'extended' empty. ODE model does not contain sensitivities.")
 
   # Extract metadata
@@ -239,6 +240,7 @@ Xs.cppDE <- function(odemodel, forcings = NULL, events = NULL, names = NULL, con
   )
 
   has_deriv2 <- !is.null(extended2)
+  has_reverse <- !is.null(reversed)
 
   # Marshalling shared by the single and the batched entry: seed Phi'(theta)
   # (and Phi''(theta)) on the inner parameter rows.
@@ -378,6 +380,35 @@ Xs.cppDE <- function(odemodel, forcings = NULL, events = NULL, names = NULL, con
   }
   attr(P2X, "batchfn") <- P2Xbatch
 
+  # ---- Reverse mode -------------------------------------------------------
+  #
+  # w is the cotangent of the prediction as this leaf returns it: one row per
+  # output row, one column per name in `controls$names`. What comes back is the
+  # cotangent of `pars`, which is where the chain above this leaf continues.
+  #
+  # The seed is widened to the model's own state set first, because the solver
+  # answers on all of them and `names` may be a subset.
+  #
+  # The trajectory is integrated twice over a reverse evaluation, once for the
+  # values and once inside this call, because a seed only exists after the
+  # chain above has been walked. Cheaper than it sounds against the forward
+  # mode, and the fix -- a solve that keeps its checkpoints between the two
+  # calls -- is an interface question, not a correctness one.
+  P2Xvjp <- function(times, pars, fixed = NULL, w) {
+    if (!has_reverse)
+      stop("Xs.cppDE: the model has no reverse object; rebuild via ",
+           "odemodel(..., reverse = TRUE).", call. = FALSE)
+    params <- c(unclass(pars), unclass(fixed))
+    states <- dim_names$variable
+    W <- .widenSeed(w, states, controls$names)
+    o <- solveOpts(FALSE)
+    res <- do.call(cppDE::solveODE, c(
+      list(reversed, times, params, fixed = NULL,
+           forcings = controls$forcings, seed = W), o))
+    .pickCotangent(res$adjoint[, 1L], names(pars))
+  }
+  attr(P2X, "vjpfn") <- P2Xvjp
+
   attr(P2X, "parameters") <- paramNames
   attr(P2X, "equations") <- as.eqnvec(attr(func, "equations"))
   attr(P2X, "forcings") <- forcings
@@ -474,6 +505,8 @@ Xf.deSolve <- function(odemodel, forcings = NULL, events = NULL, condition = NUL
 
 #' @export
 #' @rdname Xf
+# Xf is the no-derivative prediction, so it has no vjp either -- not an
+# omission, the point of it. A chain that needs a gradient uses Xs().
 Xf.cppDE <- function(odemodel, forcings = NULL, events = NULL, condition = NULL,
                       optionsOde = list(), ...) {
 
@@ -665,6 +698,24 @@ Xd <- function(data, condition = NULL) {
     
   }
   
+  # The interpolation is linear in the parameters it reads, and its Jacobian is
+  # the same `grad` the forward path builds; contracting it with w rather than
+  # with dP is the whole difference.
+  attr(P2X, "vjpfn") <- function(times, pars, fixed = NULL, w) {
+    p <- if (is.null(fixed)) pars else c(unclass(pars), unclass(fixed))
+    out <- setNames(numeric(length(pars)), names(pars))
+    for (s in states) {
+      if (!(s %in% colnames(w))) next
+      pr  <- predL[[s]](times, p)
+      sens <- attr(pr, "sensitivities")
+      nms  <- attr(pr, "parameters") %||% attr(predL[[s]], "parameters")
+      contrib <- setNames(as.numeric(crossprod(sens, w[, s])), nms)
+      hit <- intersect(names(contrib), names(out))
+      if (length(hit)) out[hit] <- out[hit] + contrib[hit]
+    }
+    out
+  }
+
   attr(P2X, "parameters") <- structure(parameters, names = NULL)
   attr(P2X, "pouter") <- pouter
   
@@ -1050,6 +1101,45 @@ Y <- function(g, f = NULL, states = NULL, parameters = NULL,
       X2Y(outList[[i]], parsList[[i]], fixedList[[i]], deriv, deriv2,
           .ad_out = ad[[i]], .fixedObs = sets[[i]]$fixed))
   }
+  # ---- Reverse mode -------------------------------------------------------
+  #
+  # w is the cotangent of the observables this leaf returns; back come the
+  # cotangents of the two things it read, the prediction's states and its own
+  # parameters. Two contractions where the forward path does two matrix
+  # products, and neither of them is n_theta wide.
+  #
+  # attach.input passes states through untouched, so their cotangent goes
+  # straight back onto the prediction.
+  X2Yvjp <- function(out, pars, fixed = NULL, w) {
+    if (is.null(gEval$vjp))
+      stop("Y(): reverse mode needs a compiled derivMode = \"dual\" evaluator; ",
+           "rebuild with Y(..., compile = TRUE).", call. = FALSE)
+    params <- c(unclass(pars), unclass(fixed))
+    fixedObsParams <- intersect(union(attr(pars, "fixed"), names(fixed)), obsParams)
+
+    w_obs <- w[, intersect(colnames(w), observables), drop = FALSE]
+    W <- matrix(0, nrow(out), length(observables),
+                dimnames = list(NULL, observables))
+    if (ncol(w_obs)) W[, colnames(w_obs)] <- w_obs
+
+    r <- gEval$vjp(out[, obsStates, drop = FALSE], params[obsParams], W)
+
+    w_out <- matrix(0, nrow(out), ncol(out), dimnames = list(NULL, colnames(out)))
+    hit <- intersect(obsStates, colnames(out))
+    if (length(hit)) w_out[, hit] <- r$wx[, hit, 1L]
+    # Everything attach.input carried through keeps whatever the caller put on
+    # it, the observables aside.
+    if (controls$attach.input) {
+      through <- intersect(setdiff(colnames(w), c("time", observables)), colnames(out))
+      if (length(through)) w_out[, through] <- w_out[, through] + w[, through]
+    }
+
+    w_pars <- .pickCotangent(setNames(r$wp[, 1L], rownames(r$wp)),
+                             setdiff(names(pars), fixedObsParams))
+    .ct(out = w_out, pars = .pickCotangent(w_pars, names(pars)))
+  }
+
+  attr(X2Y, "vjpfn") <- X2Yvjp
   attr(X2Y, "batchfn") <- X2Ybatch
 
   attr(X2Y, "equations")  <- as.eqnvec(g)
@@ -1102,6 +1192,11 @@ Xt <- function(condition = NULL) {
     # (an error model reads them off the prediction), as in Xs.
     prdframe(out, deriv = sens, deriv2 = sens2, parameters = c(pars, fixed))
   }
+  # Time depends on nothing, so its cotangent is nothing. The pass-through of
+  # the parameters is the caller's business and happens above this leaf.
+  attr(P2X, "vjpfn") <- function(times, pars, fixed = NULL, w)
+    setNames(numeric(length(pars)), names(pars))
+
   attr(P2X, "parameters") <- NULL
   attr(P2X, "equations") <- NULL
   attr(P2X, "forcings") <- NULL

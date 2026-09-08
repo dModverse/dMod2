@@ -207,6 +207,33 @@ P <- function(trafo = NULL, parameters = NULL, condition = NULL,
     .Pexpl_p2p(st, pars, fixed, deriv, deriv2)
 }
 
+# w' Jac, where the forward path forms Jac %*% dP. The transformation is one
+# evaluation with no variables and one observation, so the vjp is the same call
+# the observation functions make, with the seed on the inner parameters.
+#
+# attach.input passes the outer parameters through untouched, so their cotangent
+# adds to whatever the transformation itself puts on them.
+.Pexpl_vjp <- function(st, pars, fixed = NULL, w, condition = NULL) {
+  if (is.null(st$vjp))
+    stop("Pexpl(): reverse mode needs a compiled derivMode = \"dual\" ",
+         "transformation; rebuild with compile = TRUE.", call. = FALSE)
+  p <- c(pars, fixed)
+  outnames <- st$outnames
+  W <- matrix(0, 1L, length(outnames), dimnames = list(NULL, outnames))
+  hit <- intersect(names(w), outnames)
+  if (length(hit)) W[1L, hit] <- w[hit]
+
+  r <- st$vjp(NULL, p[st$parameters], W)
+  wp <- .pickCotangent(setNames(r$wp[, 1L], rownames(r$wp)), names(pars))
+
+  if (st$attach.input) {
+    through <- setdiff(names(w), outnames)
+    keep <- intersect(through, names(pars))
+    if (length(keep)) wp[keep] <- wp[keep] + w[keep]
+  }
+  wp
+}
+
 #' Parameter transformation (explicit, algebraic)
 #'
 #' Builds `p_inner = f(p_outer)` from symbolic expressions via
@@ -265,12 +292,15 @@ Pexpl <- function(trafo, parameters = NULL, attach.input = FALSE, condition = NU
 
   ## The wrapper closes over `st` alone, not over Pexpl's frame.
   st <- list2env(list(fun = fun, jac = jac, hess = hess, evaluate = evaluate,
-                      evaluateBatch = PEval$evaluateBatch,
+                      evaluateBatch = PEval$evaluateBatch, vjp = PEval$vjp,
+                      outnames = names(trafo),
                       parameters = parameters, attach.input = attach.input,
                       use_ad = use_ad, ad_symbol = ad_symbol,
                       ad2_symbol = ad2_symbol, emit_d1 = emit_d1,
                       emit_d2 = emit_d2), parent = emptyenv())
   p2p <- .Pexpl_wrap(st)
+  attr(p2p, "vjpfn") <- function(pars, fixed = NULL, w, condition = NULL)
+    .Pexpl_vjp(st, pars, fixed, w, condition)
   attr(p2p, "batchfn") <- function(parsList, fixedList, deriv, deriv2,
                                    conditions, cores)
     .Pexpl_batch(st, parsList, fixedList, deriv, deriv2, cores)
