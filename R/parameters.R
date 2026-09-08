@@ -1262,6 +1262,7 @@ Pimpl <- function(trafo, parameters = NULL, forcings = NULL, condition = NULL,
               deriv2 = if (deriv2 && !is.null(d)) d$hessian  else if (deriv2) NULL else FALSE)
   }
 
+  attr(p2p, "vjpfn")       <- .parfnVjpFromJacobian(p2p)
   attr(p2p, "equations")   <- as.eqnvec(all_exprs)
   attr(p2p, "parameters")  <- parameters
   attr(p2p, "modelname")   <- modelname
@@ -1537,6 +1538,7 @@ Pimpl <- function(trafo, parameters = NULL, forcings = NULL, condition = NULL,
     result
   }
 
+  attr(p2p, "vjpfn")       <- .parfnVjpFromJacobian(p2p)
   attr(p2p, "equations")   <- as.eqnvec(f[dependent])
   attr(p2p, "parameters")  <- parameters
   attr(p2p, "modelname")   <- modelname
@@ -1919,6 +1921,7 @@ Pequil <- function(trafo, parameters = NULL, forcings = NULL, condition = NULL,
           condition = conditions[[i]], .ctx = ctxs[[i]], .res = res[[i]]))
   }
 
+  attr(p2p, "vjpfn")       <- .parfnVjpFromJacobian(p2p)
   attr(p2p, "equations")   <- as.eqnvec(f_red)
   attr(p2p, "parameters")  <- parameters
   attr(p2p, "modelname")   <- modelname

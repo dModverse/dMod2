@@ -212,3 +212,35 @@ test_that("a model without a reverse object says so", {
                         reverse = TRUE, backend = "deSolve", outdir = d),
                "cppDE")
 })
+
+
+test_that("a steady-state transformation goes backwards too", {
+  fx <- .rev_fx()
+  d  <- fx$dir
+  owd <- setwd(d); on.exit(setwd(owd))
+
+  # A* = k_in / k_out feeding the decay chain's initial A, so the gradient has
+  # to pass through the nested steady state to reach logkin and logkout.
+  # The reverse path solves the nested steady state twice, once for the value
+  # and once for the Jacobian, and each lands within roottol of the fixed point.
+  # That gap is the sub-solve's own and has nothing to do with the adjoint, so
+  # it is tightened out of the way rather than tolerated.
+  pq <- Pequil(c(A = "k_in - k_out * A"), parameters = c("k_in", "k_out"),
+               modelname = "rv_equil", compile = TRUE, attach.input = TRUE,
+               deriv = TRUE, outdir = d, verbose = FALSE,
+               controlsODE = list(abstol = 1e-12, reltol = 1e-12,
+                                  roottol = 1e-12))
+  pl <- P(c(k_in = "exp(logkin)", k_out = "exp(logkout)", B = "0",
+            k1 = "exp(logk1)", k2 = "exp(logk2)", s = "exp(logs)"),
+          condition = "C1", compile = TRUE, modelname = "rv_pq", outdir = d)
+
+  prd  <- fx$g * fx$x * pq * pl
+  pars <- c(logkin = log(1.5), logkout = log(0.75),
+            logk1 = log(0.6), logk2 = log(0.3), logs = log(1.5))
+  obj  <- normL2(.rev_data(fx, prd, pars, seed = 11L), prd)
+
+  both <- expect_modes_agree(obj, pars, tolerance = 1e-5)
+  # Both steady-state parameters have to arrive; a Jacobian contracted on the
+  # wrong side would silently zero one of them.
+  expect_true(all(abs(both$reverse$gradient[c("logkin", "logkout")]) > 1e-6))
+})

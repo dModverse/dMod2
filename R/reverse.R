@@ -78,3 +78,33 @@
   if (is.null(z)) return(NULL)
   array(0, dim(z), dimnames = dimnames(z))
 }
+
+
+# A parfn whose Jacobian is a matrix it already builds -- Pimpl solves it by the
+# implicit function theorem, Pequil reads it off the endpoint sensitivity of a
+# nested steady-state solve. The vjp is that matrix transposed onto w.
+#
+# The split is deliberate and not a shortcut. What makes the forward mode
+# expensive is that its width is n_theta, and the outer chain is where n_theta
+# lives; a nested transformation's width is its own parameter set, which does
+# not grow when the outer parametrisation does. So the trajectory goes backwards
+# and the sub-problem stays forward, and the cost of the whole is still
+# independent of n_theta.
+#
+# `deriv` is stripped off `pars` first: in a reverse chain the forward pass ran
+# without one, and a leftover would chain the Jacobian to the outer parameters
+# here instead of one node further down, where it belongs.
+.parfnVjpFromJacobian <- function(p2p) {
+  function(pars, fixed = NULL, w, condition = NULL) {
+    attr(pars, "deriv") <- NULL
+    attr(pars, "deriv2") <- NULL
+    v <- p2p(pars, fixed = fixed, deriv = TRUE, deriv2 = FALSE,
+             condition = condition)
+    J <- attr(v, "deriv")
+    if (is.null(J) || !is.matrix(J))
+      return(setNames(numeric(length(pars)), names(pars)))
+    wv <- .pickCotangent(w, rownames(J))
+    .pickCotangent(setNames(as.numeric(crossprod(J, wv)), colnames(J)),
+                   names(pars))
+  }
+}
