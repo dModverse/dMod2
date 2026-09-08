@@ -38,12 +38,10 @@ test_that(".dmod_libsbml_python resolves a usable interpreter", {
 
   # Deliberately not behind .libsbml_works(): that helper turns every failure
   # into FALSE, so a resolver returning an empty path made the libsbml tests
-  # skip instead of fail. Skip only when reticulate itself cannot start Python.
+  # skip instead of fail. Nothing starts Python before the call either: the bug
+  # lives in the uninitialised state, so a guard that initialises first would
+  # let the old code pass here.
   skip_if_not_installed("reticulate")
-  ok <- isTRUE(tryCatch(reticulate::py_available(initialize = TRUE),
-                        error = function(e) FALSE))
-  if (!ok) skip("reticulate cannot start Python")
-
   withr::local_envvar(c(DMOD_LIBSBML_PYTHON = NA, DMOD_LIBSBML_OK = NA))
 
   py <- dMod2:::.dmod_libsbml_python()
