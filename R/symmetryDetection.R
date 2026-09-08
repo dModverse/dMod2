@@ -80,6 +80,9 @@
 #'   reported rank has really saturated and warn if it has not, since stopping early
 #'   over-reports non-identifiability. The verdict is attached as `$info$verification`.
 #'   `DMOD_SYM_VERIFY_MARGIN` (default 6) sets how far past the reported order it looks.
+#'   The guard is the fallback for a saturation the codimension budget did not certify
+#'   (`$info$lieCertified`, see `vignette("Symmetries")`); a certified one does not run
+#'   it.
 #' @param cores Number of threads for `"observability"`, split across the parallel
 #'   steady-state solves and the observability kernel so they do not oversubscribe.
 #'   The solves -- the dominant cost of `equilibrate = TRUE` -- are filled in parallel
@@ -121,7 +124,9 @@
 #'       `certified`, `transformation` (the finite map, polynomial engine), `verified` and
 #'       `display` (the same components factored for printing; `generator` stays in
 #'       the canonical expanded form).}
-#'     \item{`info`}{`engine`, `lieOrderUsed`, `gapOrderUsed`, `conditions`, `segments`,
+#'     \item{`info`}{`engine`, `lieOrderUsed` (and `lieOrderDriver`, the condition that
+#'       set it), the saturation status `lieBudget` / `liePlateau` / `lieCertified`,
+#'       `gapOrderUsed`, `conditions`, `segments`,
 #'       `coordinates` (the full coordinate list of the analysis), the `settings` used,
 #'       `elapsed` seconds and the `verification` guard.}
 #'     \item{`call`}{the matched call.}
@@ -611,6 +616,25 @@ symmetryDetection <- function(f = NULL, g = NULL, trafo = NULL,
     # its observation, so the per-condition list is expanded along chainOf. NULL for a
     # single shared `g`, which every condition observes.
     segObs <- if (gPerCond) lapply(res$chainOf, gLines) else NULL
+
+    # Codimension of the specialisation, the budget the saturation rule spends (see
+    # .symSaturateCertify): every coordinate of the unspecialised (x0, theta) space that
+    # is not a free coordinate of the analysis counts once. With equilibrate that is every
+    # state, whose resting manifold enters as constraint rows rather than as a pin.
+    modelSyms <- getSymbols(c(as.character(fdyn), gChar()))
+    pinnedIC <- unique(c(if (equilibrate) states else icNames,
+                         .symEventPinnedStates(events, conditions),
+                         .symGridPinnedStates(conditions, states),
+                         intersect(c(forcings, fixed, constStates), states)))
+    gridPars <- if (is.null(conditions)) character(0) else {
+      cdfC <- as.data.frame(conditions, stringsAsFactors = FALSE)
+      cols <- setdiff(colnames(cdfC), states)
+      intersect(cols[vapply(cdfC[cols], is.numeric, logical(1))], modelSyms)
+    }
+    pinnedPar <- unique(c(names(trafoSubs), unlist(lapply(condSubs, names)),
+                          setdiff(fixed, states), gridPars))
+    codimSpec <- length(pinnedIC) + length(setdiff(pinnedPar, ""))
+
     spy <- tryCatch(reticulate::import("sympy", convert = TRUE),
                     error = function(err) NULL)
 
@@ -678,7 +702,7 @@ symmetryDetection <- function(f = NULL, g = NULL, trafo = NULL,
              equilZeroStates = equilZeroStates, t0events = res$events0,
              nConditions = res$nConditions, chainOf = res$chainOf,
              nGaps = res$nGaps, implicitSteadyState = isTRUE(ui), control = control,
-             verify = verify))
+             verify = verify, codimSpec = codimSpec))
     }
     ro <- runObs(useImplicit)
     if (useImplicit && !isFALSE(ro$ok) && is.null(ro$result))
@@ -779,7 +803,9 @@ symmetryDetection <- function(f = NULL, g = NULL, trafo = NULL,
 # NtUsed on the kernel and base point the analysis already built -- only the jet grows,
 # the expensive f = 0 solve is not repeated. A rank climbing past the reported value
 # means the saturation was premature. Directions are certified separately, so the Lie
-# stop is exactly the residual risk this closes.
+# stop is exactly the residual risk this closes. The rank is monotone in the Lie order,
+# so the far end of the window settles it in one call; the orders in between are built
+# only when that fails, to report where the growth starts.
 .symSzSaturationGuard <- function(kcall, point0Solved, NtUsed, reportedRank,
                                      margin = as.integer(Sys.getenv("DMOD_SYM_VERIFY_MARGIN", "6"))) {
   P <- .symPrimes[1]                          # saturation prime: point0Solved's solve is cached
@@ -788,19 +814,30 @@ symmetryDetection <- function(f = NULL, g = NULL, trafo = NULL,
     return(list(ok = NA, method = "saturation guard",
                 reason = "base point not re-evaluable"))
   base <- as.integer(r0$rank); maxR <- base; growAt <- NA_integer_
-  for (k in seq_len(max(1L, margin))) {       # extend the Lie order; only the jet grows
+  margin <- max(1L, margin)
+  rankAt <- function(k) {                     # extend the Lie order; only the jet grows
     rk <- tryCatch(kcall(point0Solved, P, as.integer(NtUsed + k)), error = function(e) NULL)
-    if (is.null(rk) || !isTRUE(rk$ok)) next
-    if (as.integer(rk$rank) > maxR) maxR <- as.integer(rk$rank)
-    if (as.integer(rk$rank) > base) { growAt <- as.integer(NtUsed + k); break }
+    if (is.null(rk) || !isTRUE(rk$ok)) NA_integer_ else as.integer(rk$rank)
+  }
+  top <- rankAt(margin)
+  if (!is.na(top)) maxR <- max(maxR, top)
+  if (is.na(top) || top > base) {             # only a failure pays for the window
+    for (k in seq_len(margin)) {
+      rk <- rankAt(k)
+      if (is.na(rk)) next
+      if (rk > maxR) maxR <- rk
+      if (rk > base) { growAt <- as.integer(NtUsed + k); break }
+    }
+    if (is.na(growAt) && !is.na(top) && top > base)
+      growAt <- as.integer(NtUsed + margin)
   }
   ok <- is.na(growAt)
   list(ok = ok, method = "saturation guard", lieOrderUsed = as.integer(NtUsed),
-       ordersChecked = as.integer(NtUsed + max(1L, margin)),
+       ordersChecked = as.integer(NtUsed + margin),
        kernelRank = base, kernelRankExtended = maxR, growAt = growAt,
        reason = if (ok)
          sprintf("rank %d stable through Lie order %d (%d orders beyond the reported saturation)",
-                 base, NtUsed + max(1L, margin), max(1L, margin))
+                 base, NtUsed + margin, margin)
        else sprintf("rank grows %d -> %d at Lie order %d (the reported Lie order was premature)",
                     base, maxR, growAt))}
 
@@ -2065,37 +2102,98 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
 # Find a generic base point where the rank is maximal over the primes and
 # saturate the Lie order (and, with event gaps, the gap power-series order Mtot)
 # until the rank stops growing. kcall(point, p, Nt, Mtot) must return the kernel
-# list (ok, R, pivots, rank, dim). `maxM` caps the gap order (0 for the no-gap
-# path). Returns NULL if no usable point is found, else the reference reduction,
-# the certified rank, and the Lie / gap orders used.
+# list (ok, R, pivots, rank, dim). `blockCall` holds that same kernel restricted to a
+# single condition each, which is where the Lie order is decided; `budget` is the
+# codimension of the specialisation (NA where the certificate does not apply); `maxM`
+# caps the gap order (0 for the no-gap path). Returns NULL if no usable point is found,
+# else the reference reduction, the certified rank, and the Lie / gap orders used.
 .symSaturateCertify <- function(kcall, nLeaves, nz, maxM = 0L,
                                 warm = function(pts, primes) invisible(),
-                                probeBlock = 1L) {
+                                probeBlock = 1L, blockCall = NULL,
+                                budget = NA_integer_) {
   P <- .symPrimes[1]
   pool <- .symPool()
   point0 <- pool(seq_len(nLeaves))
   poolNext <- nLeaves + 1L
 
-  # Consecutive non-growing Lie orders required before the rank counts as saturated. A
-  # single plateau stops early on models whose rank plateaus and then grows again (a Hill
-  # exponent only observable through a high-order derivative), spuriously reporting those
-  # parameters as non-identifiable. Default 3; verify = TRUE is the backstop.
-  # DMOD_SYM_LIEPLATEAU overrides, DMOD_SYM_LIEDIAG traces.
+  # A flat step means saturation for ONE condition in an unspecialised coordinate space:
+  # the span of dg .. dL^k g is L_F-invariant from there and no higher order adds to it.
+  # Neither hypothesis holds for the stack, so the order is decided per block and the
+  # stack built once, at the largest of them; a stacked rank grows only where a block
+  # grows. Within a block the specialisation (a trafo, a pinned initial value, a known
+  # parameter, constant constraint rows) can still hide a growth, but at most dim A +
+  # dim C times in total, the codimension `budget`. Flat steps are therefore counted
+  # cumulatively and never reset; past the budget the rank is final. The derivation is in
+  # vignette("Symmetries"). `budget` NA means the certificate does not apply (a gap chain
+  # is itself a sum over segments), and the plateau is a heuristic with verify = TRUE as
+  # the backstop. DMOD_SYM_LIEPLATEAU caps what is spent, DMOD_SYM_LIEPLATEAU_BLOCK forces
+  # the per-block value (0 falls back to the stacked rule), DMOD_SYM_LIEDIAG traces.
   plateauNeed <- max(1L, as.integer(Sys.getenv("DMOD_SYM_LIEPLATEAU", "3")))
+  blockOverride <- suppressWarnings(
+    as.integer(Sys.getenv("DMOD_SYM_LIEPLATEAU_BLOCK", NA_character_)))
   lieDiag <- nzchar(Sys.getenv("DMOD_SYM_LIEDIAG"))
-  saturateNt <- function(point, Mtot) {
-    prev <- -1L; Nt <- 1L; res <- NULL; flat <- 0L; ranks <- integer(0)
+  perBlock <- length(blockCall) > 1L && (is.na(blockOverride) || blockOverride > 0L)
+  budget <- if (is.null(budget) || length(budget) != 1L) NA_integer_ else as.integer(budget)
+  # the budget covers ONE filtration: each block, or the stack itself when there is only
+  # one condition. A stacked scan over several blocks is a sum and stays a heuristic.
+  useBudget <- perBlock || length(blockCall) == 1L
+  needUsed <- if (!is.na(blockOverride) && blockOverride > 0L) blockOverride
+              else if (!useBudget || is.na(budget)) plateauNeed
+              else min(plateauNeed, budget + 1L)
+  certified <- useBudget && !is.na(budget) && needUsed >= budget + 1L
+
+  # One filtration's rank curve: raise the Lie order until the rank has been flat for
+  # `need` orders. Returns the kernel at the last order scanned and `grew`, the last
+  # order at which the rank rose; the flat tail above it is evidence, not information.
+  # Starting at `from` skips what an earlier block has already settled: a block flat over
+  # [from, from + need] saturated at or below `from` and cannot raise the maximum. That
+  # block only has to be shown NOT to raise it, and its rank is monotone in the order, so
+  # the two ends of the window settle it without building what lies between.
+  scanNt <- function(call1, point, Mtot, from, need, label) {
+    if (from > 1L) {
+      lo <- call1(point, P, from, Mtot)
+      if (!isTRUE(lo$ok)) return(NULL)
+      hi <- call1(point, P, from + need, Mtot)
+      if (!isTRUE(hi$ok)) return(NULL)
+      if (lo$rank == hi$rank) {
+        if (lieDiag) message("[liediag] ", label, " Mtot=", Mtot, " rank ", lo$rank,
+                             " flat over Lie order ", from, "-", from + need,
+                             " (nz=", nz, ")")
+        return(list(res = hi, Nt = from + need, grew = from))
+      }
+    }
+    Nt <- max(1L, from); prev <- -1L; flat <- 0L; grew <- Nt
+    res <- NULL; ranks <- integer(0)
     repeat {
-      r <- kcall(point, P, Nt, Mtot)
+      r <- call1(point, P, Nt, Mtot)
       if (!isTRUE(r$ok)) return(NULL)
-      res <- r; ranks <- c(ranks, r$rank)
-      flat <- if (r$rank == prev) flat + 1L else 0L
-      if (r$rank >= nz || (flat >= plateauNeed && Nt >= 2L) || Nt > nz + 1L) break
+      res <- r; ranks <- c(ranks, as.integer(r$rank))
+      # flat steps accumulate: each one spends a unit of the codimension budget, and
+      # a growth in between does not give the spent units back
+      if (r$rank == prev) flat <- flat + 1L else grew <- Nt
+      if (r$rank >= nz || (flat >= need && Nt >= 2L) || Nt > nz + 1L) break
       prev <- r$rank; Nt <- Nt + 1L
     }
-    if (lieDiag) message("[liediag] Mtot=", Mtot, " ranks by Lie order: ",
-                         paste(ranks, collapse = ","), " (nz=", nz, ")")
-    list(res = res, Nt = Nt)
+    if (lieDiag) message("[liediag] ", label, " Mtot=", Mtot, " ranks from Lie order ",
+                         max(1L, from), ": ", paste(ranks, collapse = ","),
+                         " (nz=", nz, ")")
+    list(res = res, Nt = Nt, grew = grew)
+  }
+
+  saturateNt <- function(point, Mtot) {
+    if (!perBlock) return(scanNt(kcall, point, Mtot, 1L, needUsed, "stacked"))
+    orders <- integer(length(blockCall)); Nt <- 1L; driver <- 1L
+    for (bi in seq_along(blockCall)) {
+      sb <- scanNt(blockCall[[bi]], point, Mtot, Nt, needUsed, paste0("block ", bi))
+      if (is.null(sb)) return(NULL)
+      orders[bi] <- sb$grew
+      if (sb$grew > Nt) { Nt <- sb$grew; driver <- bi }
+    }
+    r <- kcall(point, P, Nt, Mtot)
+    if (!isTRUE(r$ok)) return(NULL)
+    if (lieDiag) message("[liediag] block Lie orders: ", paste(orders, collapse = ","),
+                         " -> stacked order ", Nt, ", rank ", r$rank)
+    list(res = r, Nt = Nt, blockOrders = orders, blockDriver = driver)
   }
 
   # several generic points may be tried before one admits a steady-state point
@@ -2151,6 +2249,8 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
   }
   list(ref = sat$res, NtUsed = NtUsed, MtotUsed = MtotUsed, saturatedM = saturatedM,
        point0 = point0, pool = pool, poolNext = poolNext,
+       blockOrders = sat$blockOrders, blockDriver = sat$blockDriver,
+       budget = budget, plateau = needUsed, certified = certified,
        rank = sat$res$rank, pivots = sat$res$pivots)
 }
 
@@ -2443,7 +2543,8 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
                                           t0events = list(), nConditions = NULL,
                                           chainOf = NULL, nGaps = 0L,
                                           implicitSteadyState = FALSE,
-                                          control = reconstControl(), verify = FALSE) {
+                                          control = reconstControl(), verify = FALSE,
+                                          codimSpec = NA_integer_) {
   ctrl <- control
   jointSS <- isTRUE(multi$jointSteadyState) && isTRUE(implicitSteadyState)
   # ==== parallelism: fork axis vs. kernel threads ===================================
@@ -2553,6 +2654,25 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
   # batched per-chunk evaluator for the coupled+gap reconstruction loop (set inside
   # the joint block below when hasGaps); NULL keeps the serial parMap fallback.
   kchunk <- NULL
+
+  # The Lie order is decided per condition rather than on the stack (see
+  # .symSaturateCertify): the same kernel restricted to one tape, or to one chain of
+  # segments. Constant rows a branch stacks on top (df tangency, recast relations) are
+  # not part of the Lie filtration and stay out of the saturation.
+  obsBlockCalls <- function() {
+    zs <- zSlots; nl <- nLeaves; ns <- nStates
+    if (hasGaps)
+      lapply(chainGroups, function(idx) { force(idx)
+        function(point, p, Nt, Mtot = 0L)
+          symObsNullChain(list(tapes[idx]), nl, ns, zs, as.integer(point), p,
+                          as.integer(Nt), as.integer(Mtot), 1L) })
+    else
+      lapply(seq_along(tapes), function(i) { force(i)
+        function(point, p, Nt, Mtot = 0L)
+          symObsNullMulti(list(tapes[[i]]), nl, ns, zs, as.integer(point), p,
+                          as.integer(Nt), 1L) })
+  }
+  blockCall <- NULL
 
   if (ssConstraint) {
     # equilibrate mode: the states stay free coordinates, seeded on-manifold to the
@@ -3011,6 +3131,15 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
         list(ok = TRUE, R = rr$R,
              pivots = as.integer(rr$piv), rank = as.integer(rr$rank), dim = nzWide)
       }
+      # one condition's observability rows for the saturation: the cached solve kcall4
+      # reads and this condition's jet, without the df tangency and recast rows, which
+      # are constant in the Lie order.
+      blockCall <- lapply(seq_len(Kc), function(mi) { force(mi)
+        function(point, p, Nt, Mtot = 0L) {
+          sc0 <- jointSolveCond(point, p, equilConds[mi])
+          if (is.null(sc0)) { ssWhy <<- "joint solve failed"; return(list(ok = FALSE)) }
+          condObs(equilConds[mi], sc0$ptc, p, Nt, Mtot)
+        } })
       # ---- the batched twin of the serial per-point loop ---------------------------
       # Batched twin of the serial parMap(kcall4) loop for the coupled + gap path: in
       # joint mode symObsNullChain runs once per (point, condition), single-threaded --
@@ -3138,6 +3267,7 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
       list(ok = TRUE, R = rr$R, pivots = as.integer(rr$piv),
            rank = as.integer(rr$rank), dim = nz)
     }
+    blockCall <- obsBlockCalls()
   } else {
     # solveFn unused here; kept to match the joint-branch kcall4 signature (above)
     kcall4 <- function(point, p, Nt, Mtot = 0L, solveFn = jointSolveCond) {
@@ -3148,6 +3278,7 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
       else
         symObsNullMulti(tapes, nLeaves, nStates, zSlots, pt, p, as.integer(Nt), coresCall)
     }
+    blockCall <- obsBlockCalls()
   }
 
   # The saturation loop discards a point as soon as its FIRST condition fails to
@@ -3158,8 +3289,13 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
   warmProbe <- if (jointSS)
     function(pts, primes) warmSolves(pts, primes, conds = equilConds[1])
     else function(pts, primes) invisible()
+  # the constant recast rows are part of the specialisation too (dim C); a gap chain is
+  # itself a sum over segments, where the budget argument does not reach, so no budget
+  satBudget <- if (hasGaps || is.na(codimSpec)) NA_integer_
+               else as.integer(codimSpec) + 2L * length(recast)
   sc <- .symSaturateCertify(kcall4, nAug, nz, maxM, warm = warmProbe,
-                            probeBlock = max(1L, min(8L, coresGLp)))
+                            probeBlock = max(1L, min(8L, coresGLp)),
+                            blockCall = blockCall, budget = satBudget)
   if (is.null(sc)) {
     if (ssConstraint && !is.null(ssWhy))
       warning("symmetryDetection(): no steady-state point over the finite field ",
@@ -3241,6 +3377,8 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
                  segments = nSegmentTapes, gapOrderUsed = MtotUsed,
                  identifiable = (sc$rank == nz), rank = as.integer(sc$rank),
                  dim = as.integer(nz), lieOrderUsed = as.integer(sc$NtUsed),
+                 lieOrderDriver = sc$blockDriver, lieBudget = sc$budget,
+                 liePlateau = sc$plateau, lieCertified = isTRUE(sc$certified),
                  nonIdentifiable = list())
   class(result) <- "symmetrydetection"
   # joint mode reports in PARAMETER space (states are auxiliary coordinates): a full
@@ -3648,13 +3786,12 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
     result <- .symReportPhysical(result, znames, recastAtomNames,
                                    sc, nz, P, "recastVector")
   # ==== the saturation guard (verify = TRUE) and the return value ===================
-  # Schwartz-Zippel saturation guard: re-saturate the SAME kernel with a wider plateau
-  # (more consecutive non-growing Lie orders required) and check the rank does not climb
-  # past the reported value. The plateau rule is the one step that can stop early and
-  # silently over-report; a wider re-saturation catches an intermediate plateau it slipped
-  # through. This is one saturation pass -- find a modular point, extend the Lie jet -- not
-  # a second analysis (no peeling, no reconstruction). Only reached when non-identifiable.
-  if (isTRUE(verify))
+  # Schwartz-Zippel saturation guard: re-evaluate the SAME kernel further up the Lie
+  # order and check the rank does not climb past the reported value. It is the fallback
+  # for a saturation the codimension budget did not certify, a plateau capped below the
+  # budget or a gap chain, where the stop is a heuristic and this is the only detector of
+  # a premature one. One pass, not a second analysis (no peeling, no reconstruction).
+  if (isTRUE(verify) && !isTRUE(sc$certified))
     result$verification <- tryCatch(
       .symSzSaturationGuard(kcall, point0Solved, sc$NtUsed, sc$rank),
       error = function(e) list(ok = NA, method = "saturation guard",
@@ -5106,6 +5243,10 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
   info <- list(
     engine       = engine,
     lieOrderUsed = raw$lieOrderUsed,
+    lieOrderDriver = raw$lieOrderDriver,
+    lieBudget = raw$lieBudget,
+    liePlateau = raw$liePlateau,
+    lieCertified = raw$lieCertified,
     gapOrderUsed = raw$gapOrderUsed,
     conditions   = raw$conditions,
     segments     = raw$segments,
@@ -5186,8 +5327,19 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
   # ---- computation report ----
   comp <- character(0)
   if (isObs && !is.null(info$lieOrderUsed))
-    comp <- c(comp, sprintf("Lie order %d (gap order %d)",
-                            info$lieOrderUsed, if (!is.null(info$gapOrderUsed)) info$gapOrderUsed else 0L))
+    comp <- c(comp, sprintf("Lie order %d (gap order %d)%s",
+                            info$lieOrderUsed,
+                            if (!is.null(info$gapOrderUsed)) info$gapOrderUsed else 0L,
+                            if (!is.null(info$lieOrderDriver))
+                              sprintf(", set by condition %d", info$lieOrderDriver) else ""))
+  if (isObs && !is.null(info$liePlateau))
+    comp <- c(comp, if (isTRUE(info$lieCertified))
+        sprintf("saturation: certified (plateau %d > codimension %d)",
+                info$liePlateau, info$lieBudget)
+      else sprintf("saturation: provisional (plateau %d, %s)", info$liePlateau,
+                   if (is.null(info$lieBudget) || is.na(info$lieBudget))
+                     "no codimension bound available"
+                   else sprintf("codimension %d would certify", info$lieBudget)))
   if (!is.null(info$conditions) && info$conditions > 1L)
     comp <- c(comp, paste0(.symPlural(info$conditions, "condition", "conditions"), ", ",
                            .symPlural(info$segments, "segment", "segments")))

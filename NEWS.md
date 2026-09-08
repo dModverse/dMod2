@@ -1,5 +1,32 @@
 # dMod2 0.7.3
 
+* `symmetryDetection(method = "observability")` saturates the Lie order per
+  condition instead of on the stacked system. A flat step certifies saturation for
+  one filtration, never for a sum of them: with several conditions the stacked rank
+  can stand still while a single block is still growing inside it, and stopping
+  there drops rows and reports directions that are not there. The order is now the
+  largest of the per-condition ones, which is never below what the stacked plateau
+  reaches, and it costs less, since the deep orders are built on one block rather
+  than on all of them. `DMOD_SYM_LIEPLATEAU_BLOCK` overrides the per-block plateau,
+  `0` restores the stacked rule.
+* The plateau that ends the saturation is no longer a guess. In the specialised
+  coordinate space the analysis works in, a flat step that is not a real saturation
+  forces the codistribution to grow into the part the specialisation hides, and that
+  part is finite: its dimension is the codimension of the specialisation, one per
+  pinned initial value, substituted or known parameter and constraint row. Flat steps
+  are therefore counted cumulatively rather than consecutively, and once more than the
+  budget have been seen the rank is proved final. Without any specialisation the budget
+  is zero and a single flat step certifies, which is the classical statement.
+  `DMOD_SYM_LIEPLATEAU` now caps what is spent: `summary()` reports the saturation as
+  certified or provisional, and a certified one needs no saturation guard.
+* The saturation guard is now the fallback rather than the rule: it runs only where
+  the budget did not certify the saturation, which leaves a capped plateau and a gap
+  chain. It also checks the far end of its window first. The rank is monotone
+  in the Lie order, so one call settles a window that cost `DMOD_SYM_VERIFY_MARGIN`
+  of them; the orders in between are built only when the guard fails, to report
+  where the rank starts to grow.
+* `print()` and `summary()` of a `symmetrydetection` name the condition that set the
+  Lie order.
 * SBML and PEtab import work again in a fresh session. `.dmod_libsbml_python()`
   read `reticulate::py_exe()` before Python was initialised, where it falls back
   to discovery, misses the reticulate-managed environment and returns an empty

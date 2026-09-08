@@ -103,7 +103,10 @@ with \code{explicit = FALSE}.}
 \item{verify}{Logical (default \code{TRUE}), \code{"observability"} only. Check that the
 reported rank has really saturated and warn if it has not, since stopping early
 over-reports non-identifiability. The verdict is attached as \verb{$info$verification}.
-\code{DMOD_SYM_VERIFY_MARGIN} (default 6) sets how far past the reported order it looks.}
+\code{DMOD_SYM_VERIFY_MARGIN} (default 6) sets how far past the reported order it looks.
+The guard is the fallback for a saturation the codimension budget did not certify
+(\verb{$info$lieCertified}, see \code{vignette("Symmetries")}); a certified one does not run
+it.}
 
 \item{cores}{Number of threads for \code{"observability"}, split across the parallel
 steady-state solves and the observability kernel so they do not oversubscribe.
@@ -152,7 +155,9 @@ only field set when no closed form was reached), \code{explicit}, \code{reason},
 \code{certified}, \code{transformation} (the finite map, polynomial engine), \code{verified} and
 \code{display} (the same components factored for printing; \code{generator} stays in
 the canonical expanded form).}
-\item{\code{info}}{\code{engine}, \code{lieOrderUsed}, \code{gapOrderUsed}, \code{conditions}, \code{segments},
+\item{\code{info}}{\code{engine}, \code{lieOrderUsed} (and \code{lieOrderDriver}, the condition that
+set it), the saturation status \code{lieBudget} / \code{liePlateau} / \code{lieCertified},
+\code{gapOrderUsed}, \code{conditions}, \code{segments},
 \code{coordinates} (the full coordinate list of the analysis), the \code{settings} used,
 \code{elapsed} seconds and the \code{verification} guard.}
 \item{\code{call}}{the matched call.}

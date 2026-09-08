@@ -1694,3 +1694,62 @@ test_that("a condition-grid column naming a state fixes its initial value, not t
   expect_false(any(vapply(rs$symmetries,
                           function(d) "A" %in% names(d$generator), logical(1))))
 })
+
+
+test_that("the Lie order saturates per condition, not on the stacked system", {
+  if (!.sympy_works()) skip("reticulate/sympy not available")
+
+  # A transit chain fed back through a + u*b. The rich condition reads every state and a
+  # and is saturated at the first order; the sparse one reads x1 alone and needs five
+  # orders to reach b. The stacked rank is flat across four of them, so a plateau rule on
+  # the stack stops before b arrives.
+  f <- eqnvec(x1 = "x2", x2 = "x3", x3 = "x4", x4 = "x5", x5 = "-(a + u*b)*x1")
+  g <- list(eqnvec(y1 = "x1", y2 = "x2", y3 = "x3", y4 = "x4", y5 = "x5", y6 = "a*x1"),
+            eqnvec(w = "x1"))
+  cg <- data.frame(u = c(0, 1), row.names = c("rich", "sparse"))
+
+  res <- symdet(f, g, method = "observability", conditions = cg)
+  expect_true(res$identifiable)
+  expect_equal(res$rank, res$dim)
+  expect_equal(res$info$lieOrderUsed, 5L)
+  expect_equal(res$info$lieOrderDriver, 2L)     # the sparse condition sets the order
+
+  # the stacked plateau alone, for comparison: it stops at order 4 and reports a
+  # direction that is not there, which is what the saturation guard is for
+  withr::local_envvar(DMOD_SYM_LIEPLATEAU_BLOCK = "0")
+  expect_warning(stacked <- symdet(f, g, method = "observability", conditions = cg),
+                 "saturation guard")
+  expect_false(stacked$identifiable)
+  expect_false(stacked$info$verification$ok)
+})
+
+
+test_that("the saturation is certified against the codimension of the specialisation", {
+  if (!.sympy_works()) skip("reticulate/sympy not available")
+
+  # Nothing specialised: free initial values, nothing substituted, no constraint rows.
+  # The budget is zero, so a single flat step is a proof and the run reports it as one.
+  f <- eqnvec(A = "-k1*A", B = "k1*A - k2*B")
+  g <- list(eqnvec(y = "s*A"), eqnvec(y = "s*B"))
+  free <- symdet(f, g, method = "observability",
+                 conditions = data.frame(row.names = c("c1", "c2")))
+  expect_equal(free$info$lieBudget, 0L)
+  expect_equal(free$info$liePlateau, 1L)
+  expect_true(free$info$lieCertified)
+
+  # An explicit steady state pins both initial values and the grid bakes b: three
+  # coordinates of the unspecialised space are gone, so a plateau of 3 is not yet a proof
+  fs <- eqnvec(x = "b - a*x", z = "a*x - c*z")
+  tr <- eqnvec(x = "b/a", z = "b/c")
+  cg <- data.frame(b = c(1, 2), row.names = c("c1", "c2"))
+  ss <- symdet(fs, eqnvec(y = "s*x"), method = "observability", trafo = tr, conditions = cg)
+  expect_equal(ss$info$lieBudget, 3L)
+  expect_false(ss$info$lieCertified)
+
+  # paying the full budget certifies the same verdict, it does not change it
+  withr::local_envvar(DMOD_SYM_LIEPLATEAU = "4")
+  ss4 <- symdet(fs, eqnvec(y = "s*x"), method = "observability", trafo = tr, conditions = cg)
+  expect_true(ss4$info$lieCertified)
+  expect_equal(ss4$rank, ss$rank)
+  expect_equal(ss4$dim, ss$dim)
+})
