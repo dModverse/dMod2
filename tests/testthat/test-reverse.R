@@ -133,6 +133,13 @@ test_that("the reverse mode reaches every condition and every branch", {
   # own branch and from nowhere else, which a shared-parameter-only check would
   # not notice.
   expect_true(all(abs(both$reverse$gradient[c("dk_C1", "dk_C2")]) > 1e-6))
+
+  # Two conditions is where the batched backward solve takes over from the
+  # loop, so this is where it has to answer the same thing.
+  withr::with_options(list(dMod.batch.check = TRUE), {
+    r2 <- obj(pars, deriv = TRUE, sweep = "reverse")
+    expect_equal(r2$gradient, both$reverse$gradient)
+  })
 })
 
 test_that("an estimated error model seeds the prediction a second time", {

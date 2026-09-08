@@ -4,9 +4,16 @@
 #
 # [PURPOSE]
 # `factor` is the price of one objective gradient in value solves. Forward
-# sensitivities pay it per evaluation; an adjoint would pay a constant instead,
-# so `factor` is the number an adjoint has to beat. Measured per model and, on
-# one model, as a curve over the number of estimated parameters.
+# sensitivities pay it per evaluation; the adjoint pays a constant instead, so
+# `factor_grad` is the number the adjoint has to beat. Measured per model and,
+# on one model, as a curve over the number of estimated parameters.
+#
+# `factor_rev` is the adjoint's own price, from obj(pars, sweep = "reverse").
+# It is not expected to be one: a reverse evaluation integrates the states twice
+# -- once for the values, once inside the sweep, because a seed only exists
+# after the chain above has been walked -- and sweeps a tape one step wide on
+# top. What matters is that it stays flat while factor_grad rises, and where the
+# two lines cross.
 #
 # [AUTHOR]
 # Simon Beyer
@@ -32,16 +39,22 @@ tmin <- function(f, reps = 7L)
   min(vapply(seq_len(reps), function(i) system.time(f())[["elapsed"]], 0.0))
 
 probe <- function(obj, p, label) {
+  # A model imported without reverse = TRUE has no reverse object; report NA
+  # rather than failing the whole sweep for it.
+  t_rev <- tryCatch(tmin(function() obj(p, deriv = TRUE, sweep = "reverse")),
+                    error = function(e) NA_real_)
   data.frame(model = label, n_theta = length(p),
              t_value = tmin(function() obj(p, deriv = FALSE)),
              t_grad  = tmin(function() obj(p, deriv = TRUE, hessian = FALSE)),
-             t_full  = tmin(function() obj(p, deriv = TRUE, hessian = TRUE)))
+             t_full  = tmin(function() obj(p, deriv = TRUE, hessian = TRUE)),
+             t_rev   = t_rev)
 }
 
 importOne <- function(dir, tag) {
   yml <- list.files(dir, pattern = "\\.yaml$", full.names = TRUE)[1]
   od  <- file.path(.outdir, tag); dir.create(od, recursive = TRUE, showWarnings = FALSE)
-  importPEtab(yml, backend = "cppDE", cores = 6, modelname = paste0("gc_", tag), outdir = od)
+  importPEtab(yml, backend = "cppDE", cores = 6, modelname = paste0("gc_", tag),
+              reverse = TRUE, outdir = od)
 }
 
 
@@ -74,6 +87,8 @@ for (d in dirs) {
 perModel <- perModel[order(perModel$n_theta), ]
 perModel$factor_grad <- perModel$t_grad / perModel$t_value
 perModel$factor_full <- perModel$t_full / perModel$t_value
+perModel$factor_rev  <- perModel$t_rev  / perModel$t_value
+perModel$speedup     <- perModel$t_grad / perModel$t_rev
 print(perModel, row.names = FALSE, digits = 4)
 
 
@@ -105,8 +120,15 @@ overK <- do.call(rbind, lapply(c(10L, 25L, 50L, 75L, length(estimated)), functio
 }))
 overK$factor_grad <- overK$t_grad / overK$t_value
 overK$factor_full <- overK$t_full / overK$t_value
+overK$factor_rev  <- overK$t_rev  / overK$t_value
+overK$speedup     <- overK$t_grad / overK$t_rev
 print(overK, row.names = FALSE, digits = 4)
 
-plot(overK$n_theta, overK$factor_grad, type = "b", log = "x",
-     xlab = "estimated parameters", ylab = "gradient cost in value solves",
-     main = "Bachmann2011")
+# The whole point in one picture: one line rises with n_theta, the other does
+# not, and where they cross is a property of the model.
+matplot(overK$n_theta, cbind(overK$factor_grad, overK$factor_rev),
+        type = "b", pch = c(1, 4), lty = 1, log = "x", col = c(1, 2),
+        xlab = "estimated parameters", ylab = "gradient cost in value solves",
+        main = "Bachmann2011")
+legend("topleft", c("forward sensitivities", "adjoint"), pch = c(1, 4),
+       col = c(1, 2), bty = "n")

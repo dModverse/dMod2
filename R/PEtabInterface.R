@@ -1642,7 +1642,8 @@ readPetabTables <- function(yamlPath) {
                                   compile = TRUE,
                                   events = NULL,
                                   optionsOde = NULL, optionsSens = NULL,
-                                  deriv = TRUE, outdir = getwd()) {
+                                  deriv = TRUE, reverse = FALSE,
+                                  outdir = getwd()) {
   # No species means no dynamics: Xt() supplies the time axis and the
   # observables are evaluated from parameters alone.
   if (length(reactions$states) == 0L)
@@ -1653,7 +1654,7 @@ readPetabTables <- function(yamlPath) {
   # which would apply the initial values there instead.
   m <- odemodel(reactions, modelname = modelname, backend = backend,
                 events = events, compile = compile, includeTimeZero = FALSE,
-                deriv = deriv, outdir = outdir)
+                deriv = deriv, reverse = reverse, outdir = outdir)
   opts <- list(m)
   if (!is.null(optionsOde))  opts$optionsOde  <- optionsOde
   if (!is.null(optionsSens)) opts$optionsSens <- optionsSens
@@ -1749,7 +1750,7 @@ readPetabTables <- function(yamlPath) {
                                       start_times = NULL,
                                       switches = NULL,
                                       optionsOde = NULL, optionsSens = NULL,
-                                      deriv = TRUE, cores = 1L,
+                                      deriv = TRUE, reverse = FALSE, cores = 1L,
                                       outdir = getwd()) {
 
   # `importSbml` renames ids that R cannot parse or that C++ reserves. The PEtab
@@ -1902,7 +1903,7 @@ readPetabTables <- function(yamlPath) {
                                     events = all_events,
                                     optionsOde = optionsOde,
                                     optionsSens = optionsSens,
-                                    deriv = deriv,
+                                    deriv = deriv, reverse = reverse,
                                     outdir = outdir)
   g <- .petab_build_observation_fn(obs_meta$obs, obs_meta$obs_trafo,
                                    sbml$reactions,
@@ -2088,6 +2089,8 @@ readPetabTables <- function(yamlPath) {
 #' @param yamlPath Path to the PEtab YAML manifest.
 #' @param backend Required: one of `"deSolve"` or `"cppDE"`. Forwarded to
 #'   [odemodel()].
+#' @param reverse Logical. Also build the reverse-mode object, so the imported
+#'   objective answers to `obj(pars, sweep = "reverse")`. See [odemodel()].
 #' @param compile Logical. If `TRUE` (default) the generated trafo,
 #'   observation function, and ODE model are compiled to native code. Set to
 #'   `FALSE` for inspection-only use.
@@ -2128,7 +2131,8 @@ readPetabTables <- function(yamlPath) {
 #' @example inst/examples/PEtabInterface.R
 importPEtab <- function(yamlPath, backend,
                         compile = TRUE, cores = 1L, modelname = NULL,
-                        deriv = TRUE, optionsOde = NULL, optionsSens = NULL,
+                        deriv = TRUE, reverse = FALSE,
+                        optionsOde = NULL, optionsSens = NULL,
                         outdir = getwd()) {
 
   cores <- as.integer(cores)
@@ -2225,6 +2229,7 @@ importPEtab <- function(yamlPath, backend,
       optionsOde       = optionsOde,
       optionsSens      = optionsSens,
       deriv            = deriv,
+      reverse          = reverse,
       cores            = cores,
       outdir           = outdir)
     pieces$modelID <- mid

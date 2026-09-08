@@ -409,6 +409,36 @@ Xs.cppDE <- function(odemodel, forcings = NULL, events = NULL, names = NULL, con
   }
   attr(P2X, "vjpfn") <- P2Xvjp
 
+  # Every condition's backward solve in one call, the way P2Xbatch does the
+  # forward ones. Falls back to a loop where cppDE predates the entry point.
+  P2Xvjpbatch <- function(times, parsList, fixedList, wList, conditions, cores) {
+    if (!has_reverse)
+      stop("Xs.cppDE: the model has no reverse object; rebuild via ",
+           "odemodel(..., reverse = TRUE).", call. = FALSE)
+    n <- length(parsList)
+    timesL <- if (is.list(times)) times else rep(list(times), n)
+    states <- dim_names$variable
+    o <- solveOpts(FALSE)
+
+    batch <- get0("solveODEBatch", envir = asNamespace("cppDE"), inherits = FALSE)
+    conds <- lapply(seq_len(n), function(i) list(
+      times = timesL[[i]],
+      parms = c(unclass(parsList[[i]]), unclass(fixedList[[i]])),
+      forcings = controls$forcings,
+      seed = .widenSeed(wList[[i]], states, controls$names)))
+
+    res <- if (is.null(batch))
+      lapply(seq_len(n), function(i) do.call(cppDE::solveODE, c(
+        list(reversed, conds[[i]]$times, conds[[i]]$parms, fixed = NULL,
+             forcings = controls$forcings, seed = conds[[i]]$seed), o)))
+    else
+      do.call(batch, c(list(reversed, conditions = conds, cores = cores), o))
+
+    lapply(seq_len(n), function(i)
+      .pickCotangent(res[[i]]$adjoint[, 1L], names(parsList[[i]])))
+  }
+  attr(P2X, "vjpbatchfn") <- P2Xvjpbatch
+
   attr(P2X, "parameters") <- paramNames
   attr(P2X, "equations") <- as.eqnvec(attr(func, "equations"))
   attr(P2X, "forcings") <- forcings

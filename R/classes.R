@@ -500,6 +500,41 @@ match.fnargs <- function(arglist, choices) {
   if (!res$evaluate || !length(res$slots)) return(out)
 
   shared <- b$shared || is.null(b$conds)
+
+  # One backward solve per condition costs what one forward solve per condition
+  # costs, which is the reason the forward path has a batch entry at all. A leaf
+  # that offers one gets the same treatment here.
+  live <- Filter(function(s) !.ct_null(w[[s]]), res$slots)
+  if (!shared && !is.null(st$vjpbatchfn) && length(live) > 1L) {
+    split <- lapply(live, function(s) .splitParsFixed(.req_pars(b, s),
+                                                      .req_fixed(b, s)))
+    vals <- st$vjpbatchfn(
+      times    = if (is.list(b$times)) b$times[live] else b$times,
+      parsList = lapply(split, `[[`, "pars"),
+      fixedList = lapply(split, `[[`, "fixed"),
+      wList    = lapply(live, function(s) w[[s]]$out),
+      conditions = if (is.null(res$conditions)) NULL else as.list(res$conditions[live]),
+      cores    = cores)
+    if (isTRUE(getOption("dMod.batch.check", FALSE))) {
+      ref <- lapply(seq_along(live), function(j)
+        st$vjpfn(times = .req_times(b, live[j]), pars = split[[j]]$pars,
+                 fixed = split[[j]]$fixed, w = w[[live[j]]]$out))
+      cmp <- all.equal(vals, ref, tolerance = 0)
+      if (!isTRUE(cmp))
+        stop("dMod.batch.check: the batched vjp of a ", st$kind,
+             " leaf disagrees with the scalar one:\n  ",
+             paste(cmp, collapse = "\n  "), call. = FALSE)
+    }
+    for (j in seq_along(live)) {
+      s <- live[j]
+      r <- .ct(pars = vals[[j]])
+      r <- .addCt(r, .ct(pars = .pickCotangent(
+        w[[s]]$pars, names(.splitParsFixed(.req_pars(b, s), .req_fixed(b, s))$pars))))
+      out[[s]] <- r
+    }
+    return(out)
+  }
+
   for (s in res$slots) {
     ws <- w[[s]]
     if (.ct_null(ws)) next
@@ -631,6 +666,7 @@ match.fnargs <- function(arglist, choices) {
   list2env(list(op = "leaf", kind = kind, kernel = kernel,
                 batchfn = attr(kernel, "batchfn"),
                 vjpfn = attr(kernel, "vjpfn"),
+                vjpbatchfn = attr(kernel, "vjpbatchfn"),
                 kernel_has_cond = "condition" %in% names(formals(kernel)),
                 condition = condition, default_conditions = condition),
            parent = emptyenv())
