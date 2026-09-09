@@ -4,7 +4,7 @@
 #   * identity trafo round-trips (value + Jacobian)
 #   * log trafo gives Jacobian = diag(exp(theta)) = diag(p)
 #   * a mixed nonlinear trafo's Jacobian matches the algebraic derivative
-#   * derivMode "symbolic" and "dual" agree on value and Jacobian
+#   * derivMode "symbolic" and "forward" agree on value and Jacobian
 #   * getParameters() consistency through composition (Y * Xs * P)
 #
 # Second-order chain rule is covered by test-deriv2-Pexpl.R.
@@ -75,22 +75,22 @@ test_that("Pexpl Jacobian on a mixed nonlinear trafo equals the algebraic deriva
 
 ## ---- derivMode parity --------------------------------------------------
 
-test_that("Pexpl derivMode 'symbolic' and 'dual' agree on value and Jacobian", {
+test_that("Pexpl derivMode 'symbolic' and 'forward' agree on value and Jacobian", {
   skip_if_no_compile()
   oldwd <- setwd(.dmod_fx_workdir()); on.exit(setwd(oldwd), add = TRUE)
 
   pfn_sym <- P(eqnvec(A = "exp(a)", k = "exp(b)"), condition = "C1",
                method = "explicit", derivMode = "symbolic",
                modelname = "test_P_dm_sym", compile = TRUE)
-  pfn_dual <- P(eqnvec(A = "exp(a)", k = "exp(b)"), condition = "C1",
-                method = "explicit", derivMode = "dual",
-                modelname = "test_P_dm_dual", compile = TRUE)
+  pfn_fwd <- P(eqnvec(A = "exp(a)", k = "exp(b)"), condition = "C1",
+                method = "explicit", derivMode = "forward",
+                modelname = "test_P_dm_fwd", compile = TRUE)
 
   outer <- c(a = 0.3, b = -0.5)
   i_sym  <- pfn_sym (outer, deriv = TRUE)$C1
-  i_dual <- pfn_dual(outer, deriv = TRUE)$C1
-  expect_equal(as.numeric(i_sym), as.numeric(i_dual), tolerance = 1e-10)
-  expect_equal(attr(i_sym, "deriv"), attr(i_dual, "deriv"), tolerance = 1e-10)
+  i_fwd <- pfn_fwd(outer, deriv = TRUE)$C1
+  expect_equal(as.numeric(i_sym), as.numeric(i_fwd), tolerance = 1e-10)
+  expect_equal(attr(i_sym, "deriv"), attr(i_fwd, "deriv"), tolerance = 1e-10)
 })
 
 
@@ -108,7 +108,7 @@ test_that("getParameters(Y * Xs * P) equals getParameters(P) (outer-pars view)",
 # Edge case: Pexpl with pure-numeric trafo (no outer parameters)
 # ============================================================================
 
-test_that("Pexpl with pure-numeric trafo evaluates (symbolic and dual)", {
+test_that("Pexpl with pure-numeric trafo evaluates (symbolic and forward)", {
   withr::local_dir(tempdir())
   trafo <- c(A = "1.0", B = "2.5")
 
@@ -117,10 +117,10 @@ test_that("Pexpl with pure-numeric trafo evaluates (symbolic and dual)", {
   out_sym <- p_sym(c(dummy = 1.0))
   expect_equal(unclass(out_sym[[1]])[c("A", "B")], c(A = 1.0, B = 2.5))
 
-  p_dual <- Pexpl(trafo, derivMode = "dual", compile = TRUE,
-                  modelname = "noparam_pexpl_dual")
-  out_dual <- p_dual(c(dummy = 1.0))
-  expect_equal(unclass(out_dual[[1]])[c("A", "B")], c(A = 1.0, B = 2.5))
+  p_fwd <- Pexpl(trafo, derivMode = "forward", compile = TRUE,
+                  modelname = "noparam_pexpl_fwd")
+  out_fwd <- p_fwd(c(dummy = 1.0))
+  expect_equal(unclass(out_fwd[[1]])[c("A", "B")], c(A = 1.0, B = 2.5))
 })
 
 

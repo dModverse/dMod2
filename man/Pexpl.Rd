@@ -14,7 +14,7 @@ Pexpl(
   verbose = FALSE,
   deriv = TRUE,
   deriv2 = FALSE,
-  derivMode = c("dual", "symbolic"),
+  derivMode = c("forward", "reverse"),
   outdir = getwd()
 )
 }
@@ -28,12 +28,17 @@ values are expressions in the outer parameters.}
 
 \item{condition}{Condition label.}
 
-\item{compile, modelname, verbose}{Forwarded to \link[cppDE:funCpp]{cppDE::funCpp}.}
+\item{compile, modelname, verbose}{Forwarded to \link[cppDE:cppFUN]{cppDE::cppFUN}.}
 
 \item{deriv, deriv2}{Attach \code{attr(., "deriv")} \verb{[p, theta]} and/or
 \code{attr(., "deriv2")} \verb{[p, theta, theta]}. \code{deriv2} needs \code{deriv = TRUE}.}
 
-\item{derivMode}{\code{"dual"} (AD, needs \code{compile = TRUE}) or \code{"symbolic"}.}
+\item{derivMode}{Which derivative products to build, one or more of
+\code{"forward"} (AD, needs \code{compile = TRUE}), \code{"reverse"} (the
+vector-Jacobian product the reverse sweep contracts against) and
+\code{"symbolic"}. The default \code{c("forward", "reverse")} builds both
+directions; \code{"symbolic"} is a backend for the forward Jacobian rather than
+a direction and stands alone.}
 
 \item{outdir}{Directory for the generated source and shared object,
 default the working directory.}
@@ -43,7 +48,7 @@ A \link{parfn}.
 }
 \description{
 Builds \code{p_inner = f(p_outer)} from symbolic expressions via
-\link[cppDE:funCpp]{cppDE::funCpp}, in forward-mode AD or SymPy mode. The returned
+\link[cppDE:cppFUN]{cppDE::cppFUN}, in forward-mode AD or SymPy mode. The returned
 \link{parfn} attaches the Jacobian and, optionally, the Hessian.
 }
 \seealso{

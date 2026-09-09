@@ -606,7 +606,7 @@ plotFluxes <- function(pouter, x, times, fluxEquations, nameFlux = "Fluxes:", ..
 
   if (is.null(names(fluxEquations))) names(fluxEquations) <- fluxEquations
 
-  flux <- funCpp(fluxEquations, convenient = FALSE)$func
+  flux <- cppFUN(fluxEquations, convenient = FALSE)$func
   prediction.all <- x(times, pouter, deriv = FALSE, ...)
   names.prediction.all <- names(prediction.all)
   if (is.null(names.prediction.all)) names.prediction.all <- paste0("C", 1:length(prediction.all))

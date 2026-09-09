@@ -397,7 +397,7 @@ Xs.cppDE <- function(odemodel, forcings = NULL, events = NULL, names = NULL, con
   P2Xvjp <- function(times, pars, fixed = NULL, w) {
     if (!has_reverse)
       stop("Xs.cppDE: the model has no reverse object; rebuild via ",
-           "odemodel(..., reverse = TRUE).", call. = FALSE)
+           "odemodel(..., derivMode = c(\"forward\", \"reverse\")).", call. = FALSE)
     params <- c(unclass(pars), unclass(fixed))
     states <- dim_names$variable
     W <- .widenSeed(w, states, controls$names)
@@ -414,7 +414,7 @@ Xs.cppDE <- function(odemodel, forcings = NULL, events = NULL, names = NULL, con
   P2Xvjpbatch <- function(times, parsList, fixedList, wList, conditions, cores) {
     if (!has_reverse)
       stop("Xs.cppDE: the model has no reverse object; rebuild via ",
-           "odemodel(..., reverse = TRUE).", call. = FALSE)
+           "odemodel(..., derivMode = c(\"forward\", \"reverse\")).", call. = FALSE)
     n <- length(parsList)
     timesL <- if (is.list(times)) times else rep(list(times), n)
     states <- dim_names$variable
@@ -781,17 +781,23 @@ Xd <- function(data, condition = NULL) {
 #'   full array copy per condition and objective functions do not read them.
 #'   Set `TRUE` to plot states alongside observables.
 #' @param compile Logical, if `TRUE`, the function is compiled (see
-#'   [cppDE::funCpp]).
+#'   [cppDE::cppFUN]).
 #' @param modelname Character, used if `compile = TRUE`, specifies a fixed
 #'   filename for the generated C file.
 #' @param verbose Logical, print compiler output to the R console.
 #' @param cores Number of parallel jobs used to generate the sources when
 #' `g` is a list; `NULL` auto-detects. Ignored for a single observation
 #' function, which is one source either way.
-#' @param derivMode Character. Jacobian backend: `"dual"` (default,
-#'   forward-mode AD; faster for many parameters; requires compiled native
-#'   code) or `"symbolic"` (SymPy Jacobian + chain rule against upstream
-#'   `dX`/`dP`; pure R).
+#' @param derivMode Which derivative products to build. More than one may be
+#'   named; the default `c("forward", "reverse")` builds both.
+#'   * `"forward"`: forward-mode AD on `cppde::dual`. Faster for many
+#'     parameters and what the Jacobian path uses. Requires compiled code.
+#'   * `"reverse"`: the vector-Jacobian product the reverse sweep contracts
+#'     against, a second instantiation of the expression body. It is what
+#'     `obj(..., sweep = "reverse")` needs from an observation function.
+#'   * `"symbolic"`: a SymPy Jacobian plus the chain rule against upstream
+#'     `dX`/`dP`, in pure R. A backend for the forward direction rather than a
+#'     direction of its own, so it cannot be combined with the other two.
 #' @param deriv Logical. If `TRUE` (default), attach the first-order
 #'   sensitivity `attr(., "deriv")` of shape `[time, observable, theta]`.
 #' @param deriv2 Logical. If `TRUE`, attach a second-order derivative
@@ -806,16 +812,16 @@ Xd <- function(data, condition = NULL) {
 #' 
 #' @example inst/examples/prediction.R
 #' 
-#' @importFrom cppDE funCpp
+#' @importFrom cppDE cppFUN
 #' @importFrom abind abind
 #' @export
 Y <- function(g, f = NULL, states = NULL, parameters = NULL,
               condition = NULL, attach.input = FALSE,
               compile = FALSE, modelname = NULL, verbose = FALSE,
               cores = NULL, deriv = TRUE, deriv2 = FALSE,
-              derivMode = c("dual", "symbolic"), outdir = getwd()) {
+              derivMode = c("forward", "reverse"), outdir = getwd()) {
 
-  derivMode <- match.arg(derivMode)
+  derivMode <- .matchDerivMode(derivMode, c("forward", "reverse", "symbolic"))
 
   # A named list of observable sets builds one obsfn per condition, generated
   # in parallel and compiled once, the way `P()` handles a trafo list.
@@ -883,7 +889,7 @@ Y <- function(g, f = NULL, states = NULL, parameters = NULL,
 
   # Compile evaluator for g (value, Jacobian, Hessian, AD chain)
   gEval <- suppressWarnings(
-    cppDE::funCpp(
+    cppDE::cppFUN(
       unclass(g),
       variables  = obsStates,
       parameters = obsParams,
@@ -902,7 +908,7 @@ Y <- function(g, f = NULL, states = NULL, parameters = NULL,
   gjac       <- gEval$jac
   ghess      <- gEval$hess
   gevaluate  <- gEval$evaluate
-  use_ad     <- derivMode == "dual"
+  use_ad     <- "forward" %in% derivMode
 
   controls <- list(attach.input = attach.input)
 
@@ -1142,8 +1148,9 @@ Y <- function(g, f = NULL, states = NULL, parameters = NULL,
   # straight back onto the prediction.
   X2Yvjp <- function(out, pars, fixed = NULL, w) {
     if (is.null(gEval$vjp))
-      stop("Y(): reverse mode needs a compiled derivMode = \"dual\" evaluator; ",
-           "rebuild with Y(..., compile = TRUE).", call. = FALSE)
+      stop("Y(): the reverse mode needs a vector-Jacobian product; rebuild ",
+           "with Y(..., derivMode = c(\"forward\", \"reverse\"), ",
+           "compile = TRUE).", call. = FALSE)
     params <- c(unclass(pars), unclass(fixed))
     fixedObsParams <- intersect(union(attr(pars, "fixed"), names(fixed)), obsParams)
 

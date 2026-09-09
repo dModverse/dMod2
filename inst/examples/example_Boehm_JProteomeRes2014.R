@@ -78,12 +78,12 @@ reactions <- eqnlist() |>
 myOptionsODE  <- list(atol = 1e-8, rtol = 1e-6, maxattemps = 100L, maxsteps = 1e6)
 myOptionsSens <- myOptionsODE
 
-# `reverse = TRUE` compiles a fourth object beside func, extended and
-# extended2: the states in plain double with a checkpoint per step, and one
-# backward sweep for the derivatives. It is what the reverse section at the
-# bottom needs; without it that section errors and nothing else changes.
+# `derivMode = c("forward", "reverse")` compiles a fourth object beside func,
+# extended and extended2: the states in plain double with a checkpoint per step,
+# and one backward sweep for the derivatives. It is what the reverse section
+# at the bottom needs; without it that section errors and nothing else changes.
 model <- odemodel(reactions, modelname = "boehm_ode", compile = FALSE,
-                  reverse = TRUE, outdir = .outdir)
+                  derivMode = c("forward", "reverse"), outdir = .outdir)
 x <- Xs(model, optionsOde = myOptionsODE, optionsSens = myOptionsSens)
 
 # Only relative quantities were measured, mixed by the isotope ratio specC17.

@@ -3,7 +3,7 @@
 # Verifies:
 #   * value: observable g(states) evaluates correctly
 #   * composition: (Y * Xs)(...) equals Y applied to Xs output
-#   * derivMode: "symbolic" and "dual" backends agree numerically
+#   * derivMode: "symbolic" and "forward" backends agree numerically
 #   * attach.input: pass-through of inputs alongside outputs
 #   * gradient: analytic chain rule on y = A^2 (no numDeriv)
 #
@@ -54,7 +54,7 @@ test_that("Y(y = A^2) evaluates the closed-form (A(t))^2", {
 
 ## ---- derivMode parity --------------------------------------------------
 
-test_that("Y derivMode 'symbolic' and 'dual' agree on a nonlinear observable", {
+test_that("Y derivMode 'symbolic' and 'forward' agree on a nonlinear observable", {
   skip_if_no_compile()
   oldwd <- setwd(.dmod_fx_workdir()); on.exit(setwd(oldwd), add = TRUE)
   bench <- fx_decay_compiled()
@@ -63,7 +63,7 @@ test_that("Y derivMode 'symbolic' and 'dual' agree on a nonlinear observable", {
              attach.input = FALSE, derivMode = "symbolic",
              modelname = "test_Y_dm_sym", compile = TRUE)
   g_dual <- Y(c(y = "A^2"), f = bench$xfn, condition = NULL,
-              attach.input = FALSE, derivMode = "dual",
+              attach.input = FALSE, derivMode = "forward",
               modelname = "test_Y_dm_dual", compile = TRUE)
 
   prd_sym  <- g_sym  * bench$xfn * bench$pfn_id

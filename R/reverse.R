@@ -71,15 +71,6 @@
   else m
 }
 
-# Zero cotangent shaped like a prediction, so a node with nothing to say still
-# hands the node below it something of the right shape.
-.zeroLike <- function(m) {
-  z <- .dropTime(m)
-  if (is.null(z)) return(NULL)
-  array(0, dim(z), dimnames = dimnames(z))
-}
-
-
 # A parfn whose Jacobian is a matrix it already builds -- Pimpl solves it by the
 # implicit function theorem, Pequil reads it off the endpoint sensitivity of a
 # nested steady-state solve. The vjp is that matrix transposed onto w.

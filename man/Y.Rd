@@ -17,7 +17,7 @@ Y(
   cores = NULL,
   deriv = TRUE,
   deriv2 = FALSE,
-  derivMode = c("dual", "symbolic"),
+  derivMode = c("forward", "reverse"),
   outdir = getwd()
 )
 }
@@ -48,7 +48,7 @@ full array copy per condition and objective functions do not read them.
 Set \code{TRUE} to plot states alongside observables.}
 
 \item{compile}{Logical, if \code{TRUE}, the function is compiled (see
-\link[cppDE:funCpp]{cppDE::funCpp}).}
+\link[cppDE:cppFUN]{cppDE::cppFUN}).}
 
 \item{modelname}{Character, used if \code{compile = TRUE}, specifies a fixed
 filename for the generated C file.}
@@ -66,10 +66,18 @@ sensitivity \code{attr(., "deriv")} of shape \verb{[time, observable, theta]}.}
 \code{attr(., "deriv2")} array of shape \verb{[time, observable, theta, theta]}.
 Requires \code{deriv = TRUE}. Default \code{FALSE}.}
 
-\item{derivMode}{Character. Jacobian backend: \code{"dual"} (default,
-forward-mode AD; faster for many parameters; requires compiled native
-code) or \code{"symbolic"} (SymPy Jacobian + chain rule against upstream
-\code{dX}/\code{dP}; pure R).}
+\item{derivMode}{Which derivative products to build. More than one may be
+named; the default \code{c("forward", "reverse")} builds both.
+\itemize{
+\item \code{"forward"}: forward-mode AD on \code{cppde::dual}. Faster for many
+parameters and what the Jacobian path uses. Requires compiled code.
+\item \code{"reverse"}: the vector-Jacobian product the reverse sweep contracts
+against, a second instantiation of the expression body. It is what
+\code{obj(..., sweep = "reverse")} needs from an observation function.
+\item \code{"symbolic"}: a SymPy Jacobian plus the chain rule against upstream
+\code{dX}/\code{dP}, in pure R. A backend for the forward direction rather than a
+direction of its own, so it cannot be combined with the other two.
+}}
 
 \item{outdir}{Character. Directory for the generated C++ source and the
 compiled shared object. Defaults to the working directory.}

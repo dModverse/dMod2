@@ -10,7 +10,7 @@
 #' @param trafo An [eqnvec], named character, [eqnlist], or list thereof.
 #' @param parameters Outer-parameter names.
 #' @param condition Condition label.
-#' @param compile,modelname,verbose Forwarded to [cppDE::funCpp].
+#' @param compile,modelname,verbose Forwarded to [cppDE::cppFUN].
 #' @param method One of `"explicit"`, `"implicit"`, `"equilibrate"`, or `NULL`.
 #' @param cores Per-condition `mclapply()` cores. `NULL` auto-detects via
 #'   [detectFreeCores]; capped at 1 on Windows.
@@ -215,8 +215,9 @@ P <- function(trafo = NULL, parameters = NULL, condition = NULL,
 # adds to whatever the transformation itself puts on them.
 .Pexpl_vjp <- function(st, pars, fixed = NULL, w, condition = NULL) {
   if (is.null(st$vjp))
-    stop("Pexpl(): reverse mode needs a compiled derivMode = \"dual\" ",
-         "transformation; rebuild with compile = TRUE.", call. = FALSE)
+    stop("Pexpl(): the reverse mode needs a vector-Jacobian product; rebuild ",
+         "with derivMode = c(\"forward\", \"reverse\") and compile = TRUE.",
+         call. = FALSE)
   p <- c(pars, fixed)
   outnames <- st$outnames
   W <- matrix(0, 1L, length(outnames), dimnames = list(NULL, outnames))
@@ -237,7 +238,7 @@ P <- function(trafo = NULL, parameters = NULL, condition = NULL,
 #' Parameter transformation (explicit, algebraic)
 #'
 #' Builds `p_inner = f(p_outer)` from symbolic expressions via
-#' [cppDE::funCpp], in forward-mode AD or SymPy mode. The returned
+#' [cppDE::cppFUN], in forward-mode AD or SymPy mode. The returned
 #' [parfn] attaches the Jacobian and, optionally, the Hessian.
 #'
 #' @param trafo Named character / [eqnvec]; names are inner parameters,
@@ -245,23 +246,29 @@ P <- function(trafo = NULL, parameters = NULL, condition = NULL,
 #' @param parameters Outer parameters; defaults to `getSymbols(trafo)`.
 #' @param attach.input Append outer inputs to the output.
 #' @param condition Condition label.
-#' @param compile,modelname,verbose Forwarded to [cppDE::funCpp].
+#' @param compile,modelname,verbose Forwarded to [cppDE::cppFUN].
 #' @param deriv,deriv2 Attach `attr(., "deriv")` `[p, theta]` and/or
 #'   `attr(., "deriv2")` `[p, theta, theta]`. `deriv2` needs `deriv = TRUE`.
-#' @param derivMode `"dual"` (AD, needs `compile = TRUE`) or `"symbolic"`.
+#' @param derivMode Which derivative products to build, one or more of
+#'   `"forward"` (AD, needs `compile = TRUE`), `"reverse"` (the
+#'   vector-Jacobian product the reverse sweep contracts against) and
+#'   `"symbolic"`. The default `c("forward", "reverse")` builds both
+#'   directions; `"symbolic"` is a backend for the forward Jacobian rather than
+#'   a direction and stands alone.
 #' @param outdir Directory for the generated source and shared object,
 #'   default the working directory.
 #'
 #' @return A [parfn].
 #' @seealso [Pimpl], [Pequil], [P].
-#' @importFrom cppDE funCpp
+#' @importFrom cppDE cppFUN
 #' @export
 Pexpl <- function(trafo, parameters = NULL, attach.input = FALSE, condition = NULL,
                   compile = FALSE, modelname = NULL, verbose = FALSE,
-                  deriv = TRUE, deriv2 = FALSE, derivMode = c("dual", "symbolic"),
+                  deriv = TRUE, deriv2 = FALSE,
+                  derivMode = c("forward", "reverse"),
                   outdir = getwd()) {
 
-  derivMode <- match.arg(derivMode)
+  derivMode <- .matchDerivMode(derivMode, c("forward", "reverse", "symbolic"))
   emit_d1   <- isTRUE(deriv)
   emit_d2   <- isTRUE(deriv2)
   if (emit_d2 && !emit_d1)
@@ -279,14 +286,14 @@ Pexpl <- function(trafo, parameters = NULL, attach.input = FALSE, condition = NU
   if (is.null(modelname)) modelname <- "expl_parfn"
   if (!is.null(condition)) modelname <- paste(modelname, sanitizeConditions(condition), sep = "_")
 
-  PEval <- suppressWarnings(cppDE::funCpp(
+  PEval <- suppressWarnings(cppDE::cppFUN(
     unclass(trafo), variables = NULL, parameters = parameters, fixed = NULL,
     compile = compile, modelname = modelname, outdir = outdir,
     verbose = verbose, convenient = FALSE, derivMode = derivMode,
     deriv = emit_d1, deriv2 = emit_d2))
 
   fun <- PEval$func; jac <- PEval$jac; hess <- PEval$hess; evaluate <- PEval$evaluate
-  use_ad     <- derivMode == "dual"
+  use_ad     <- "forward" %in% derivMode
   ad_symbol  <- paste0(modelname, "_eval_ad")
   ad2_symbol <- paste0(modelname, "_eval_ad2")
 
@@ -908,9 +915,9 @@ resetWarmStarts <- function(fn, verbose = TRUE) {
 #'   conservation then holds to the solver tolerance (`controlsNleqslv$ftol`).
 #'   If `FALSE`, the pivot species per conserved quantity becomes a pass-through
 #'   parameter and its redundant equation is dropped.
-#' @param compile,modelname,verbose Forwarded to [cppDE::funCpp].
+#' @param compile,modelname,verbose Forwarded to [cppDE::cppFUN].
 #' @param deriv,deriv2 Attach first/second-order IFT sensitivities.
-#'   `deriv2` requires `funCpp` to expose `hess()`.
+#'   `deriv2` requires `cppFUN` to expose `hess()`.
 #' @param controlsMS Multistart controls. Recognised keys: `nStarts`
 #'   (default `100L`; `1L` disables multistart), `positive` (default
 #'   `TRUE`; selects nleqslv's log-space transform and log-uniform
@@ -964,7 +971,7 @@ Pimpl <- function(trafo, parameters = NULL, forcings = NULL, condition = NULL,
   n_dep <- length(dependent)
   parms_all <- intersect(parms_all, getSymbols(all_exprs))
 
-  PEval <- suppressWarnings(cppDE::funCpp(
+  PEval <- suppressWarnings(cppDE::cppFUN(
     all_exprs, variables = dependent, parameters = parms_all, fixed = NULL,
     compile = compile, modelname = modelname, outdir = outdir,
     verbose = verbose, convenient = FALSE,

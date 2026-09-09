@@ -1,3 +1,58 @@
+# dMod2 (development version)
+
+* A PEtab prior term honours `hessian = FALSE`. It did not: the argument fell
+  into `...` and was ignored, so an objective carrying a prior handed back a
+  zero Hessian to a caller that asked for none. Under `sweep = "reverse"`, which
+  cannot produce a Hessian at all, that made the objective look as though it
+  had, which is the invariant a caller uses to check the direction arrived.
+* `backend = "Sundials"` goes backwards as well.
+  `odemodel(..., backend = "Sundials", derivMode = c("forward", "reverse"))`
+  compiles CVODES adjoint sensitivity analysis beside the forward object, and
+  `obj(pars, sweep = "reverse")` walks the same chain through it. It refuses
+  events, which the cppDE backend carries. Having two independent adjoints
+  under one interface is what makes a systematic error in either visible;
+  `inst/examples/example_AdjointComparison.R` puts the three routes to a
+  gradient side by side on Bachmann.
+* One argument names the derivative direction everywhere it is chosen at build
+  time. `odemodel(reverse = TRUE)` becomes
+  `odemodel(derivMode = c("forward", "reverse"))`, and the `derivMode` of `Y()`,
+  `Pexpl()` and `importPEtab()` takes the same vocabulary: `"forward"`,
+  `"reverse"`, `"symbolic"`, one or more at a time. `derivMode = "dual"` is gone
+  and is spelled `"forward"`. There is no deprecation path; both old spellings
+  are errors. `normL2(sweep = )` keeps its name, being a choice per call rather
+  than a property of a compiled object.
+* Gradients can be taken backwards through the whole chain.
+  `obj(pars, sweep = "reverse")` walks `normL2 -> Y -> Xs -> P`, seeding the
+  objective's cotangent at the data and pushing it back to the outer parameters
+  in one sweep instead of propagating one tangent per parameter forward. It needs
+  `odemodel(..., derivMode = c("forward", "reverse"))` and compiled observation
+  and transformation functions, since the reverse path has no interpreted
+  fallback. Its cost does
+  not grow with the number of parameters.
+* The composition algebra gained a backward pass. A `*` node cannot be walked in
+  one recursion, since p2 has to be evaluated before p1 runs and differentiated
+  after p1 has been, so the protocol is two phases with an explicit tape between
+  them, holding each node's forward values so nothing is recomputed. Conditions,
+  the `+` of several branches, the batch entry and `dMod.batch.check` all carry
+  through.
+* A reverse objective returns no Hessian, because there is no Jacobian to
+  contract. That is what the quasi-Newton Hessian sources want.
+* The reverse gradient belongs to the trajectory a value-only prediction
+  produces, so value and gradient are consistent with each other. Under forward
+  sensitivities they are not: the error norm takes the maximum over every tangent
+  column, so a sensitivity solve steps finer than the value solve reported
+  beside it.
+* `importPEtab(..., reverse = TRUE)` builds the reverse object, and
+  `inst/benchmarks/bench_gradientCost.R` measures the adjoint next to the forward
+  gradient it was written to be compared against.
+* `inst/examples/example_ReverseAD.R` walks the chain piece by piece on toy
+  models; the Boehm example gained a reverse section.
+* Every objective wrapper now declares `sweep` rather than forwarding it through
+  `...`. A caller decides which direction a term supports by reading its formals,
+  and a wrapper that forwarded the argument without naming it read as a term with
+  no reverse path, so a reverse call quietly returned a forward gradient.
+* `cppDE::funCpp()` is now `cppDE::cppFUN()`.
+
 # dMod2 0.7.3
 
 * SBML and PEtab import work again in a fresh session. `.dmod_libsbml_python()`

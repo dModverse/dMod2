@@ -38,6 +38,9 @@
 ^tests/testthat/\.dMod_objects$
 
 # Build artefacts left in the package root by compiling a model there: dMod's
-# own object cache, and any stray .o/.so from a scratch compile.
+# own object cache, and any stray .o/.so from a scratch compile. Rplots.pdf is
+# R's own: any example or test that draws without opening a device leaves one
+# where it ran, and R CMD check then reports it as a non-standard top-level file.
 ^\.dMod_objects$
 ^[^/]+\.(o|so|dll)$
+^Rplots\.pdf$

@@ -15,9 +15,10 @@
 # alone.
 #
 # [WHAT IT TAKES]
-# One extra compilation on the ODE, `odemodel(..., reverse = TRUE)`, and
-# `compile = TRUE` on the observation and transformation functions, because the
-# reverse path has no interpreted fallback. Then:
+# One extra compilation on the ODE,
+# `odemodel(..., derivMode = c("forward", "reverse"))`, and `compile = TRUE` on
+# the observation and transformation functions, because the reverse path has
+# no interpreted fallback. Then:
 #
 #     obj(pars, sweep = "reverse")
 #
@@ -56,7 +57,7 @@ reactions <- eqnlist() |>
   addReaction("B", "", "k2*B", "decay")
 
 
-# –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
+# -----------------------------------------------------------------------------
 # 1. The solver alone
 #
 # Xs() backwards is one value solve with a checkpoint per step, then one
@@ -66,9 +67,9 @@ reactions <- eqnlist() |>
 #
 # The oracle is the forward sensitivity contracted with the same cotangent: the
 # two compute w' S from opposite ends.
-# –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
+# -----------------------------------------------------------------------------
 model <- odemodel(reactions, modelname = "rev_ode", deriv = TRUE,
-                  reverse = TRUE, outdir = .outdir, compile = TRUE)
+                  derivMode = c("forward", "reverse"), outdir = .outdir, compile = TRUE)
 
 x     <- Xs(model, optionsOde = tight, optionsSens = tight)
 inner <- c(A = 2, B = 0, k1 = 0.6, k2 = 0.3)
@@ -86,14 +87,14 @@ cat("1. solver          max |difference| =",
     format(max(abs(ref - got[names(ref)])), digits = 3), "\n\n")
 
 
-# –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
+# -----------------------------------------------------------------------------
 # 2. The whole chain, g * x * p
 #
 # normL2 turns the residuals into a seed -- not the residual vector itself, see
 # section 4 -- and pushes it back through the observation function, the solver
 # and the transformation in one pass. `sweep = "reverse"` is the only thing the
 # caller says.
-# –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
+# -----------------------------------------------------------------------------
 g <- Y(c(obsA = "s*A", obsB = "s*B"), reactions, compile = TRUE,
        modelname = "rev_obs", outdir = .outdir)
 p <- P(c(A = "exp(logA)", B = "0", k1 = "exp(logk1)", k2 = "exp(logk2)",
@@ -120,13 +121,13 @@ cat("2. g * x * p       max |difference| =",
     "\n   the reverse objective carries no Hessian:", is.null(r$hessian), "\n\n")
 
 
-# –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
+# -----------------------------------------------------------------------------
 # 3. Several conditions, and a parameter that only one of them has
 #
 # Conditions are independent, so the backward pass walks each branch of the `+`
 # and the cotangents meet again on the shared parameters. dk_C1 and dk_C2 reach
 # one condition each and must come back with a contribution from that one only.
-# –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
+# -----------------------------------------------------------------------------
 conds <- c("C1", "C2")
 trafo2 <- c(A = "exp(logA)", B = "0", k1 = "exp(logk1)", k2 = "exp(logk2)",
             s = "exp(logs)")
@@ -152,7 +153,7 @@ cat("3. two conditions  max |difference| =",
     "\n\n")
 
 
-# –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
+# -----------------------------------------------------------------------------
 # 4. An estimated error model
 #
 # This is where the seed stops being the residual vector. sigma depends on theta
@@ -164,7 +165,7 @@ cat("3. two conditions  max |difference| =",
 # Leaving that second channel out would still produce a gradient, and it would
 # be wrong only in the sd_* directions -- which is exactly the kind of error a
 # finite-difference check at 1e-3 does not catch.
-# –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
+# -----------------------------------------------------------------------------
 e <- Y(c(obsA = "sd_rel*obsA + sd_abs", obsB = "sd_rel*obsB + sd_abs"), g,
        states = c("obsA", "obsB"), parameters = c("sd_rel", "sd_abs"),
        compile = TRUE, modelname = "rev_err", outdir = .outdir)
@@ -186,13 +187,13 @@ cat("4. error model     max |difference| =",
     "\n\n")
 
 
-# –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
+# -----------------------------------------------------------------------------
 # 5. Why the two do not agree to machine precision
 #
 # The gap is the difference between two discretisations, so it falls with the
 # solver tolerance and not with anything about the adjoint. A missing channel in
 # the reverse pass would leave a floor here instead.
-# –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
+# -----------------------------------------------------------------------------
 gap <- t(vapply(10^-c(4, 6, 8, 10, 12), function(tt) {
   o  <- list(atol = tt, rtol = tt)
   xx <- Xs(model, optionsOde = o, optionsSens = o)
@@ -209,7 +210,33 @@ cat("\n5. the gap tracks the tolerance over eight decades, so it is the\n",
     "  discretisation and not the adjoint.\n\n")
 
 
-# –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
+# -----------------------------------------------------------------------------
+# 5b. An observable no gradient can be trusted through
+#
+# The two modes disagreeing is a useful instrument, and on a real model it can
+# point at the model rather than at either of them. Bachmann observes
+#
+#     log10(CIS + 1e-15)
+#
+# and CIS is zero over part of the run, so the derivative there is
+# 1/(1e-15 * ln 10), about 4e14. An epsilon of 1e-15 sits below anything a
+# double-precision solve can resolve, so the observable multiplies whatever
+# noise the integration leaves by fifteen decades. At that model's default
+# tolerance the two modes differ by 1.76 relative; at 1e-12 they agree to 2.6e-6
+# and their gradients are parallel to ten digits.
+#
+# The forward gradient is no better there. It is the same amplification of the
+# same noise; it simply has no second opinion to disagree with, which is what
+# makes a mismatch between the two worth reading rather than suppressing.
+#
+# The fix belongs in the model: an epsilon above the integration's own noise
+# floor and a tolerance under it. log10(state + 1e-9) with atol = 1e-11 and
+# rtol = 1e-9 bounds the derivative at about 4e8 and keeps the state's own error
+# two decades below the epsilon.
+# -----------------------------------------------------------------------------
+
+
+# -----------------------------------------------------------------------------
 # 6. Events, and why they need no second derivation
 #
 # A jump is replayed backwards through the very function that applied it
@@ -217,10 +244,10 @@ cat("\n5. the gap tracks the tolerance over eight decades, so it is the\n",
 # reverse type takes the same branch the forward one does. What the reverse pass
 # reads back is which events fired and where a root sat, because those are
 # control decisions and not arithmetic.
-# –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
+# -----------------------------------------------------------------------------
 ev <- eventlist(var = "A", time = "t_dose", value = "d_amt", method = "add")
 model_ev <- odemodel(reactions, events = ev, modelname = "rev_ev",
-                     deriv = TRUE, reverse = TRUE, outdir = .outdir,
+                     deriv = TRUE, derivMode = c("forward", "reverse"), outdir = .outdir,
                      compile = TRUE)
 x_ev <- Xs(model_ev, optionsOde = tight, optionsSens = tight)
 p_ev <- P(c(A = "exp(logA)", B = "0", k1 = "exp(logk1)", k2 = "exp(logk2)",
@@ -238,7 +265,7 @@ cat("6. dosing event    max |difference| =",
     "\n   the dose itself is estimated, so the jump has to carry a derivative.\n\n")
 
 
-# –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
+# -----------------------------------------------------------------------------
 # 7. What it costs
 #
 # The forward gradient integrates 1 + n_theta copies of the system; the reverse
@@ -248,7 +275,7 @@ cat("6. dosing event    max |difference| =",
 #
 # Four parameters is far too few for reverse to win. The point of the number
 # below is the shape, not the winner.
-# –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
+# -----------------------------------------------------------------------------
 reps <- 20
 tf <- system.time(for (i in seq_len(reps)) obj(pars, deriv = TRUE))[["elapsed"]]
 tr <- system.time(for (i in seq_len(reps))

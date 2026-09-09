@@ -11,6 +11,7 @@ importPEtab(
   cores = 1L,
   modelname = NULL,
   deriv = TRUE,
+  derivMode = "forward",
   optionsOde = NULL,
   optionsSens = NULL,
   outdir = getwd()
@@ -38,6 +39,11 @@ Defaults to the YAML basename.}
 equations, which is much cheaper to generate and compile. The objective
 then returns its value only, so use it when the likelihood is to be
 evaluated rather than optimised.}
+
+\item{derivMode}{Which derivative directions to compile, passed to
+\code{\link[=odemodel]{odemodel()}}. \code{c("forward", "reverse")} also builds the reverse-mode
+object, so the imported objective answers to
+\code{obj(pars, sweep = "reverse")}.}
 
 \item{optionsOde, optionsSens}{Optional lists forwarded to \code{\link[=Xs]{Xs()}} as solver
 settings for the states and their sensitivities. \code{NULL} keeps the

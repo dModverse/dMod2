@@ -35,7 +35,7 @@ skip_on_cran()
     d <- .rev_dir()
     owd <- setwd(d); on.exit(setwd(owd))
     re <- .rev_reactions()
-    m <- odemodel(re, modelname = "rv_ode", deriv = TRUE, reverse = TRUE,
+    m <- odemodel(re, modelname = "rv_ode", deriv = TRUE, derivMode = c("forward", "reverse"),
                   outdir = d, compile = TRUE)
     x <- Xs(m, optionsOde = .rev_opt, optionsSens = .rev_opt)
     g <- Y(c(obsA = "s*A", obsB = "s*B"), re, compile = TRUE,
@@ -178,7 +178,7 @@ test_that("an event with an estimated dose goes backwards too", {
   owd <- setwd(d); on.exit(setwd(owd))
   ev <- eventlist(var = "A", time = "t_dose", value = "d_amt", method = "add")
   m <- odemodel(.rev_reactions(), events = ev, modelname = "rv_ev",
-                deriv = TRUE, reverse = TRUE, outdir = d, compile = TRUE)
+                deriv = TRUE, derivMode = c("forward", "reverse"), outdir = d, compile = TRUE)
   xv <- Xs(m, optionsOde = .rev_opt, optionsSens = .rev_opt)
   pv <- P(c(A = "exp(logA)", B = "0", k1 = "exp(logk1)", k2 = "exp(logk2)",
             s = "exp(logs)", t_dose = "3", d_amt = "exp(logdose)"),
@@ -214,9 +214,9 @@ test_that("a model without a reverse object says so", {
   prd <- fx$g * xf * fx$p
   obj <- normL2(.rev_data(fx, fx$g * fx$x * fx$p, fx$pars), prd)
   expect_error(obj(fx$pars, deriv = TRUE, sweep = "reverse"),
-               "reverse = TRUE")
+               "no reverse object")
   expect_error(odemodel(.rev_reactions(), modelname = "rv_deSolve",
-                        reverse = TRUE, backend = "deSolve", outdir = d),
+                        derivMode = c("forward", "reverse"), backend = "deSolve", outdir = d),
                "cppDE")
 })
 
@@ -250,4 +250,77 @@ test_that("a steady-state transformation goes backwards too", {
   # Both steady-state parameters have to arrive; a Jacobian contracted on the
   # wrong side would silently zero one of them.
   expect_true(all(abs(both$reverse$gradient[c("logkin", "logkout")]) > 1e-6))
+})
+
+
+test_that("censored rows go backwards on every BLOQ treatment", {
+  fx  <- .rev_fx()
+  prd <- fx$g * fx$x * fx$p
+  d   <- as.data.frame(.rev_data(fx, prd, fx$pars))
+  # A limit above the smaller observable's tail, so some rows really are
+  # censored and the kernel's BLOQ branch is the one under test.
+  d$lloq <- stats::quantile(d$value, 0.35)
+  expect_gt(sum(d$value <= d$lloq), 1L)
+  dl <- as.datalist(d)
+
+  for (mode in c("M3", "M4NM", "M4BEAL", "M1")) {
+    obj <- normL2(dl, prd, opt.BLOQ = mode)
+    expect_modes_agree(obj, fx$pars, info = mode)
+  }
+})
+
+test_that("a fixed sigma seeds the prediction and nothing else", {
+  fx <- .rev_fx()
+  prd <- fx$g * fx$x * fx$pe
+  pars <- c(fx$pars, logsdrel = log(0.08), logsdabs = log(0.02))
+  # sigma given in the data, so the error model is there but carries no
+  # derivative for these rows: its cotangent has to be dropped rather than
+  # multiplied by a zero that is never formed.
+  obj <- normL2(.rev_data(fx, prd, pars, sigma = 0.1), prd, fx$e)
+  both <- expect_modes_agree(obj, pars)
+  expect_equal(unname(both$reverse$gradient[c("logsdrel", "logsdabs")]),
+               c(0, 0), tolerance = 1e-10)
+})
+test_that("the Sundials backend goes backwards too", {
+  skip_if_not(isTRUE(cppDE:::cvodeConfig$available),
+              "CVODE backend not available")
+  fx <- .rev_fx()
+  d  <- .rev_dir()
+  owd <- setwd(d); on.exit(setwd(owd))
+
+  # CVODES adjoint sensitivity analysis under the same chain the native reverse
+  # mode uses. It is a third discretisation: the adjoint is solved as its own
+  # ODE over checkpointed forward states rather than by replaying the steps, so
+  # this is a cross-check by foreign mathematics and not a repeat.
+  m <- odemodel(.rev_reactions(), modelname = "rv_sun", deriv = TRUE,
+                backend = "Sundials", derivMode = c("forward", "reverse"),
+                outdir = d, compile = TRUE)
+  expect_false(is.null(m$reversed))
+
+  x   <- Xs(m, optionsOde = .rev_opt, optionsSens = .rev_opt)
+  prd <- fx$g * x * fx$p
+  obj <- normL2(.rev_data(fx, fx$g * fx$x * fx$p, fx$pars), prd)
+
+  fo <- obj(fx$pars, deriv = TRUE, hessian = FALSE)
+  rv <- obj(fx$pars, deriv = TRUE, sweep = "reverse")
+
+  expect_null(rv$hessian)
+  expect_equal(rv$value, fo$value, tolerance = 1e-8)
+  expect_equal(unname(rv$gradient[names(fo$gradient)]), unname(fo$gradient),
+               tolerance = 1e-5)
+})
+
+test_that("the Sundials reverse object refuses events", {
+  skip_if_not(isTRUE(cppDE:::cvodeConfig$available),
+              "CVODE backend not available")
+  d <- .rev_dir()
+  owd <- setwd(d); on.exit(setwd(owd))
+  ev <- data.frame(var = "A", time = 1, value = 0.2, method = "add",
+                   stringsAsFactors = FALSE)
+  # The native backend replays the jump; CVODES integrates the adjoint over
+  # checkpointed states and has no way to be told about one.
+  expect_error(odemodel(.rev_reactions(), modelname = "rv_sun_ev",
+                        backend = "Sundials", events = ev,
+                        derivMode = c("forward", "reverse"), outdir = d),
+               "does not support events")
 })

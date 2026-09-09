@@ -34,15 +34,35 @@ options(dMod.cores = 1)
 dir.create(.outdir, recursive = TRUE, showWarnings = FALSE)
 .collection <- Sys.getenv("DMOD_PETAB_COLLECTION", "")
 
-# The machine scatters, so report the minimum rather than the mean.
-tmin <- function(f, reps = 7L)
-  min(vapply(seq_len(reps), function(i) system.time(f())[["elapsed"]], 0.0))
+# The machine scatters, so report the minimum rather than the mean. Each timing
+# covers a burst rather than one call: the clock resolves about 10 ms on
+# Windows, and a small model's value solve is under that, which reports zero and
+# turns every ratio built on it into NaN.
+tmin <- function(f, reps = 7L, target = 0.25) {
+  once <- system.time(f())[["elapsed"]]
+  n <- max(1L, ceiling(target / max(once, 1e-3)))
+  min(vapply(seq_len(reps), function(i)
+    system.time(for (j in seq_len(n)) f())[["elapsed"]] / n, 0.0))
+}
 
 probe <- function(obj, p, label) {
-  # A model imported without reverse = TRUE has no reverse object; report NA
-  # rather than failing the whole sweep for it.
-  t_rev <- tryCatch(tmin(function() obj(p, deriv = TRUE, sweep = "reverse")),
-                    error = function(e) NA_real_)
+  # A reverse evaluation returns no Hessian, so that is the one invariant that
+  # says the direction actually arrived. A wrapper that swallows `sweep` would
+  # otherwise be timed as an adjoint while running the forward mode, which is
+  # exactly how the first run of this benchmark lied.
+  chk <- tryCatch(obj(p, deriv = TRUE, sweep = "reverse"),
+                  error = function(e) e)
+  if (inherits(chk, "error")) {
+    cat("  no reverse path [", label, "]:", conditionMessage(chk), "
+")
+    t_rev <- NA_real_
+  } else if (!is.null(chk$hessian)) {
+    stop("probe(", label, "): sweep = \"reverse\" returned a Hessian, so some ",
+         "wrapper in the chain swallowed the argument and the timing would be ",
+         "the forward mode's.", call. = FALSE)
+  } else {
+    t_rev <- tmin(function() obj(p, deriv = TRUE, sweep = "reverse"))
+  }
   data.frame(model = label, n_theta = length(p),
              t_value = tmin(function() obj(p, deriv = FALSE)),
              t_grad  = tmin(function() obj(p, deriv = TRUE, hessian = FALSE)),
@@ -54,7 +74,7 @@ importOne <- function(dir, tag) {
   yml <- list.files(dir, pattern = "\\.yaml$", full.names = TRUE)[1]
   od  <- file.path(.outdir, tag); dir.create(od, recursive = TRUE, showWarnings = FALSE)
   importPEtab(yml, backend = "cppDE", cores = 6, modelname = paste0("gc_", tag),
-              reverse = TRUE, outdir = od)
+              derivMode = c("forward", "reverse"), outdir = od)
 }
 
 

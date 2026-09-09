@@ -87,7 +87,7 @@ test_that("Y deriv2 (AD) reproduces analytical observation Hessian", {
   withr::local_dir(tempdir())
   gfn <- Y(c(y = "a*x^2 + b*x"), states = "x", parameters = c("a", "b"),
            modelname = paste0("y_d2_", as.integer(Sys.time())),
-           compile = TRUE, deriv2 = TRUE, derivMode = "dual",
+           compile = TRUE, deriv2 = TRUE, derivMode = "forward",
            attach.input = FALSE)
 
   times <- c(0.0, 0.5, 1.0)
@@ -155,7 +155,7 @@ test_that("Pexpl deriv2 (AD) reproduces analytical Hessian", {
   trafo <- c(a = "exp(la)", b = "la^2 + lb", c = "la*lb")
   p <- Pexpl(trafo, parameters = NULL,
              modelname = paste0("ad_pexpl_d2_", as.integer(Sys.time())),
-             compile = TRUE, deriv2 = TRUE, derivMode = "dual")
+             compile = TRUE, deriv2 = TRUE, derivMode = "forward")
 
   pars <- c(la = 0.3, lb = 0.5)
   pinner <- p(pars, deriv = TRUE, deriv2 = TRUE)[[1]]
@@ -211,7 +211,7 @@ test_that("Pexpl deriv2 (AD) handles identity pass-through entries", {
   trafo <- c(a = "exp(la)", b = "la^2 + lb")
   p <- Pexpl(trafo, parameters = c("la", "lb"),
              modelname = paste0("id_pexpl_d2_", as.integer(Sys.time())),
-             compile = TRUE, deriv2 = TRUE, derivMode = "dual")
+             compile = TRUE, deriv2 = TRUE, derivMode = "forward")
 
   pars <- c(la = 0.3, lb = 0.5)
   pinner <- p(pars, deriv = TRUE, deriv2 = TRUE)[[1]]
@@ -252,7 +252,7 @@ test_that("Pexpl(deriv2 = FALSE) refuses deriv2 = TRUE at call time", {
   trafo <- c(a = "exp(la)")
   p <- Pexpl(trafo, parameters = NULL,
              modelname = paste0("nod2_pexpl_", as.integer(Sys.time())),
-             compile = TRUE, deriv2 = FALSE, derivMode = "dual")
+             compile = TRUE, deriv2 = FALSE, derivMode = "forward")
   expect_error(p(c(la = 0.1), deriv2 = TRUE),
                "deriv2 = FALSE")
 })
@@ -425,7 +425,7 @@ test_that("normL2 gradient is identical for deriv2 = FALSE and deriv2 = TRUE", {
   pfn <- Pexpl(c(x = "exp(lx)", k = "exp(lk)", a = "la", b = "lb"),
                parameters = NULL,
                modelname = paste0("nl_grad_p_", as.integer(Sys.time())),
-               compile = TRUE, deriv2 = TRUE, derivMode = "dual",
+               compile = TRUE, deriv2 = TRUE, derivMode = "forward",
                condition = "C1")
   prd <- gfn * xfn * pfn
 
@@ -541,7 +541,7 @@ test_that("constraintL2 deriv2 adds gi . dP2 chain term after Pexpl", {
   # composed via attr(p, "deriv") and attr(p, "deriv2") from Pexpl.
   pfn <- Pexpl(c(a = "exp(la)"), parameters = NULL,
                modelname = paste0("c2_pexpl_", as.integer(Sys.time())),
-               compile = TRUE, deriv2 = TRUE, derivMode = "dual")
+               compile = TRUE, deriv2 = TRUE, derivMode = "forward")
 
   mu <- c(a = 1.0); sg <- 0.5
   cfn <- constraintL2(mu = mu, sigma = sg)

@@ -245,3 +245,20 @@ attrs <- function(x, atr = NULL, keep = TRUE) {
 
 
 
+
+# Match a `derivMode` argument against what an entry point supports. Mirrors
+# cppDE's helper of the same shape: "forward" and "reverse" are separate build
+# products and combine, "symbolic" is a backend for the forward Jacobian rather
+# than a direction and stands alone.
+.matchDerivMode <- function(x, choices) {
+  x <- unique(match.arg(x, choices, several.ok = TRUE))
+  if (!length(x))
+    stop("'derivMode' must name at least one of ",
+         paste0('"', choices, '"', collapse = ", "), call. = FALSE)
+  if ("symbolic" %in% x && length(x) > 1L)
+    stop('derivMode = "symbolic" is a backend for the forward Jacobian, not a ',
+         "direction, and cannot be combined with ",
+         paste0('"', setdiff(x, "symbolic"), '"', collapse = " or "),
+         '. There is no symbolic vector-Jacobian product.', call. = FALSE)
+  choices[choices %in% x]
+}

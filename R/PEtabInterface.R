@@ -808,13 +808,18 @@ readPetabTables <- function(yamlPath) {
     log(.petab_prior_mass(sp$dist, sp$pars, sp$lower, sp$upper)) + norm_const(sp),
     numeric(1)))
 
+  # `hessian` is declared and honoured. Without it the argument lands in `...`
+  # and is ignored, and this term hands back a zero Hessian to a caller that
+  # asked for none, which under a reverse sweep makes the whole objective look
+  # as though it had produced one.
   myfn <- function(..., fixed = NULL, deriv = TRUE, deriv2 = FALSE,
-                   conditions = condition, env = NULL,
+                   hessian = TRUE, conditions = condition, env = NULL,
                    cores = getOption("dMod.cores", 1L)) {
 
     p   <- list(...)[[match.fnargs(list(...), "pars")]]
     all <- c(p, fixed)
     nms <- names(p)
+    build_hessian <- isTRUE(deriv) && isTRUE(hessian)
 
     value <- 2 * sum(const[ids %in% names(all)])
     grad  <- setNames(rep(0, length(nms)), nms)
@@ -826,13 +831,13 @@ readPetabTables <- function(yamlPath) {
       value <- value - 2 * td$ld
       if (deriv && sp$id %in% nms) {
         grad[sp$id] <- grad[sp$id] - 2 * td$d1
-        hess[sp$id, sp$id] <- hess[sp$id, sp$id] - 2 * td$d2
+        if (build_hessian) hess[sp$id, sp$id] <- hess[sp$id, sp$id] - 2 * td$d2
       }
     }
 
     out <- objlist(value = unname(value),
                    gradient = if (deriv) grad else NULL,
-                   hessian  = if (deriv) hess else NULL)
+                   hessian  = if (build_hessian) hess else NULL)
     attr(out, attr.name) <- out$value
     attr(out, "env") <- env
     out
@@ -1642,7 +1647,7 @@ readPetabTables <- function(yamlPath) {
                                   compile = TRUE,
                                   events = NULL,
                                   optionsOde = NULL, optionsSens = NULL,
-                                  deriv = TRUE, reverse = FALSE,
+                                  deriv = TRUE, derivMode = "forward",
                                   outdir = getwd()) {
   # No species means no dynamics: Xt() supplies the time axis and the
   # observables are evaluated from parameters alone.
@@ -1654,7 +1659,7 @@ readPetabTables <- function(yamlPath) {
   # which would apply the initial values there instead.
   m <- odemodel(reactions, modelname = modelname, backend = backend,
                 events = events, compile = compile, includeTimeZero = FALSE,
-                deriv = deriv, reverse = reverse, outdir = outdir)
+                deriv = deriv, derivMode = derivMode, outdir = outdir)
   opts <- list(m)
   if (!is.null(optionsOde))  opts$optionsOde  <- optionsOde
   if (!is.null(optionsSens)) opts$optionsSens <- optionsSens
@@ -1750,7 +1755,7 @@ readPetabTables <- function(yamlPath) {
                                       start_times = NULL,
                                       switches = NULL,
                                       optionsOde = NULL, optionsSens = NULL,
-                                      deriv = TRUE, reverse = FALSE, cores = 1L,
+                                      deriv = TRUE, derivMode = "forward", cores = 1L,
                                       outdir = getwd()) {
 
   # `importSbml` renames ids that R cannot parse or that C++ reserves. The PEtab
@@ -1903,7 +1908,7 @@ readPetabTables <- function(yamlPath) {
                                     events = all_events,
                                     optionsOde = optionsOde,
                                     optionsSens = optionsSens,
-                                    deriv = deriv, reverse = reverse,
+                                    deriv = deriv, derivMode = derivMode,
                                     outdir = outdir)
   g <- .petab_build_observation_fn(obs_meta$obs, obs_meta$obs_trafo,
                                    sbml$reactions,
@@ -2012,8 +2017,13 @@ readPetabTables <- function(yamlPath) {
   jac_offset <- .petab_likelihood_offset(data, obs_meta)
   if (jac_offset == 0) return(base_obj)
 
-  myfn <- function(..., fixed = NULL, deriv = TRUE, env = NULL) {
-    out <- base_obj(..., fixed = fixed, deriv = deriv, env = env)
+  # `sweep` is declared rather than left to `...`: a caller that decides which
+  # direction a term supports reads formals(), and a wrapper that forwards the
+  # argument without naming it reads as a term with no reverse path. The answer
+  # would then be a silent forward gradient where a reverse one was asked for.
+  myfn <- function(..., fixed = NULL, deriv = TRUE, env = NULL,
+                   sweep = "forward") {
+    out <- base_obj(..., fixed = fixed, deriv = deriv, env = env, sweep = sweep)
     out$value <- out$value + jac_offset
     attr_nm <- "data"
     if (!is.null(attr(out, attr_nm)))
@@ -2089,8 +2099,10 @@ readPetabTables <- function(yamlPath) {
 #' @param yamlPath Path to the PEtab YAML manifest.
 #' @param backend Required: one of `"deSolve"` or `"cppDE"`. Forwarded to
 #'   [odemodel()].
-#' @param reverse Logical. Also build the reverse-mode object, so the imported
-#'   objective answers to `obj(pars, sweep = "reverse")`. See [odemodel()].
+#' @param derivMode Which derivative directions to compile, passed to
+#'   [odemodel()]. `c("forward", "reverse")` also builds the reverse-mode
+#'   object, so the imported objective answers to
+#'   `obj(pars, sweep = "reverse")`.
 #' @param compile Logical. If `TRUE` (default) the generated trafo,
 #'   observation function, and ODE model are compiled to native code. Set to
 #'   `FALSE` for inspection-only use.
@@ -2131,7 +2143,7 @@ readPetabTables <- function(yamlPath) {
 #' @example inst/examples/PEtabInterface.R
 importPEtab <- function(yamlPath, backend,
                         compile = TRUE, cores = 1L, modelname = NULL,
-                        deriv = TRUE, reverse = FALSE,
+                        deriv = TRUE, derivMode = "forward",
                         optionsOde = NULL, optionsSens = NULL,
                         outdir = getwd()) {
 
@@ -2229,7 +2241,7 @@ importPEtab <- function(yamlPath, backend,
       optionsOde       = optionsOde,
       optionsSens      = optionsSens,
       deriv            = deriv,
-      reverse          = reverse,
+      derivMode        = derivMode,
       cores            = cores,
       outdir           = outdir)
     pieces$modelID <- mid
@@ -2347,9 +2359,9 @@ importPEtab <- function(yamlPath, backend,
   # vector. `fixed = NULL` (the default) lets the closure inject the PEtab
   # fixed values; an explicit `fixed = ...` overrides per call.
   baked_fixed <- fixed
-  obj <- function(pars, fixed = NULL, ...) {
+  obj <- function(pars, fixed = NULL, ..., sweep = "forward") {
     if (is.null(fixed)) fixed <- baked_fixed
-    raw_obj(pars, fixed = fixed, ...)
+    raw_obj(pars, fixed = fixed, ..., sweep = sweep)
   }
   # Carry the objfn class and attributes over: mstrust() and profile() dispatch
   # on them to reload the shared object inside a worker.

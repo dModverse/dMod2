@@ -94,24 +94,40 @@ print.odemodel <- function(x, ...) {
 #'   function, so backend-specific linker requirements (e.g. Sundials libraries
 #'   for \code{backend = "Sundials"}) are applied to the right files only.
 #'
-#' @param reverse Logical. Also compile the reverse-mode object, which
-#'   integrates in plain `double` and takes its derivatives from one backward
-#'   sweep, so their cost does not grow with the number of parameters. Needed
-#'   by `obj(..., sweep = "reverse")`; `backend = "cppDE"` only.
+#' @param derivMode Which derivative directions to compile. More than one may
+#'   be named; the default is `"forward"` alone.
+#'   * `"forward"`: sensitivity equations carried alongside the states, the
+#'     object `deriv` and `deriv2` fill.
+#'   * `"reverse"`: a further object whose derivatives come from one backward
+#'     sweep, so their cost does not grow with the number of parameters. It is
+#'     a separate compilation and not a flag on the others, so asking for it
+#'     costs build time; it is what `obj(..., sweep = "reverse")` needs. On
+#'     `backend = "cppDE"` it is the discrete adjoint, which replays each step
+#'     backwards and carries events; on `backend = "Sundials"` it is CVODES
+#'     adjoint sensitivity analysis, which solves the adjoint as its own ODE
+#'     over checkpointed states and therefore refuses events. Not available
+#'     under `backend = "deSolve"`.
+#'
+#'   `derivMode = c("forward", "reverse")` builds both, which is what a session
+#'   that compares the two directions needs. `deriv = FALSE` turns first
+#'   derivatives off altogether and leaves `derivMode` without effect.
 #'
 #' @seealso [cOde::funC()], [cppDE::cppODE()], [cppDE::cvode()]
 #'
 #' @example inst/examples/odemodel.R
 #' @export
-odemodel <- function(f, deriv = TRUE, deriv2 = FALSE, reverse = FALSE,
+odemodel <- function(f, deriv = TRUE, deriv2 = FALSE, derivMode = "forward",
                      forcings=NULL, events = NULL,
                      fixed = NULL, modelname = "odemodel", backend = c("cppDE", "Sundials", "deSolve"),
                      verbose = FALSE, outdir = getwd(), ...) {
 
   f <- as.eqnvec(f)
   backend <- match.arg(backend)
-  if (isTRUE(reverse) && backend != "cppDE")
-    stop("`reverse = TRUE` needs backend = 'cppDE'.", call. = FALSE)
+  derivMode <- .matchDerivMode(derivMode, c("forward", "reverse"))
+  reverse <- "reverse" %in% derivMode
+  if (reverse && backend == "deSolve")
+    stop("derivMode = \"reverse\" needs backend = 'cppDE' or 'Sundials'.",
+         call. = FALSE)
 
   if (deriv2 && !deriv) {
     warning("`deriv2 = TRUE` implies `deriv = TRUE`. Setting deriv = TRUE.",
@@ -236,7 +252,7 @@ odemodel <- function(f, deriv = TRUE, deriv2 = FALSE, reverse = FALSE,
       # extended2, not a flag on any of them: the direction decides what the
       # generated code is, and cannot be chosen after the fact.
       reversed <- NULL
-      if (isTRUE(reverse)) {
+      if (reverse) {
         reversed <- do.call(cppDE::cppODE,
                             c(list(f, events = events, fixed = fixed, forcings = forcings,
                                    modelname = paste0(modelname, "_r"), outdir = outdir,
@@ -262,7 +278,18 @@ odemodel <- function(f, deriv = TRUE, deriv2 = FALSE, reverse = FALSE,
                                    deriv = TRUE, verbose = verbose),
                               dots_ext))
       }
-      out <- list(func = func, extended = extended)
+      # CVODES adjoint sensitivity analysis. A separate compilation, as on the
+      # native backend, and with the same interface: solveODE(..., seed = W)
+      # returns $adjoint. It refuses events, which cppDE::cvode() reports.
+      reversed <- NULL
+      if (reverse) {
+        reversed <- do.call(cppDE::cvode,
+                            c(list(f, events = events, fixed = fixed, forcings = forcings,
+                                   modelname = paste0(modelname, "_r"), outdir = outdir,
+                                   deriv = FALSE, sweep = "reverse", verbose = verbose),
+                              dots_func))
+      }
+      out <- list(func = func, extended = extended, reversed = reversed)
       class(out) <- c("cppDE", "odemodel")
       }
   }

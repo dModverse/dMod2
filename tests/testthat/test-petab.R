@@ -1233,6 +1233,35 @@ test_that("v2 priors add the truncated log density to the objective", {
 })
 
 
+test_that("a prior term honours hessian = FALSE", {
+  # It did not, and the argument fell into `...` and was ignored. The cost was
+  # not the wasted work: an objective summed with a prior handed back a zero
+  # Hessian to a caller that asked for none, so a reverse-swept objective,
+  # which cannot produce one, looked as though it had. That is exactly the
+  # invariant a caller uses to check the direction actually arrived.
+  specs <- list(list(id = "a", dist = "normal", pars = c(0, 1),
+                     lower = -Inf, upper = Inf))
+  pf <- dMod2:::.petab_prior_objective(specs)
+  pars <- c(a = 0.3, b = 1.1)
+
+  full <- pf(pars, deriv = TRUE)
+  expect_false(is.null(full$hessian))
+  expect_equal(dim(full$hessian), c(2L, 2L))
+
+  none <- pf(pars, deriv = TRUE, hessian = FALSE)
+  expect_null(none$hessian)
+  expect_equal(none$gradient, full$gradient)
+  expect_equal(none$value, full$value)
+
+  # And through the sum, where it mattered: a term that declares `sweep` is
+  # asked for a Hessian, one that does not is asked for none, and a zero matrix
+  # from the second used to make the total look Hessian-bearing.
+  base <- constraintL2(c(a = 0, b = 0), sigma = 1)
+  total <- base + pf
+  expect_null(total(pars, deriv = TRUE, hessian = FALSE)$hessian)
+})
+
+
 test_that("v2 export round-trips a mid-run condition switch on a compartment", {
   withr::local_dir(tempdir())
   petab_dir <- .petab_repo_dir()

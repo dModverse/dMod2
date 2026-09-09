@@ -286,61 +286,75 @@ import(parallel)
 import(stringr)
 importFrom(Rcpp,sourceCpp)
 importFrom(abind,abind)
-importFrom(cOde,getSymbols)
-importFrom(cOde,odeC)
-importFrom(cOde,prodSymb)
-importFrom(cOde,replaceSymbols)
-importFrom(cOde,sensitivitiesSymb)
-importFrom(cOde,setForcings)
-importFrom(cppDE,funCpp)
-importFrom(data.table,as.data.table)
-importFrom(data.table,rbindlist)
+importFrom(cOde,
+  getSymbols,
+  odeC,
+  prodSymb,
+  replaceSymbols,
+  sensitivitiesSymb,
+  setForcings
+)
+importFrom(cppDE,cppFUN)
+importFrom(data.table,
+  as.data.table,
+  rbindlist
+)
 importFrom(digest,digest)
-importFrom(dplyr,across)
-importFrom(dplyr,filter)
-importFrom(dplyr,group_by)
-importFrom(dplyr,summarise)
-importFrom(ggplot2,aes)
-importFrom(ggplot2,facet_wrap)
-importFrom(ggplot2,geom_line)
-importFrom(ggplot2,geom_point)
-importFrom(ggplot2,geom_ribbon)
-importFrom(ggplot2,ggplot)
-importFrom(ggplot2,scale_y_log10)
-importFrom(ggplot2,theme)
-importFrom(ggplot2,ylab)
+importFrom(dplyr,
+  across,
+  filter,
+  group_by,
+  summarise
+)
+importFrom(ggplot2,
+  aes,
+  facet_wrap,
+  geom_line,
+  geom_point,
+  geom_ribbon,
+  ggplot,
+  scale_y_log10,
+  theme,
+  ylab
+)
 importFrom(graphics,par)
-importFrom(rlang,data_sym)
-importFrom(rlang,parse_expr)
-importFrom(rlang,syms)
-importFrom(stats,D)
-importFrom(stats,approx)
-importFrom(stats,as.formula)
-importFrom(stats,density)
-importFrom(stats,dnorm)
-importFrom(stats,median)
-importFrom(stats,optim)
-importFrom(stats,predict)
-importFrom(stats,qchisq)
-importFrom(stats,qf)
-importFrom(stats,rnorm)
-importFrom(stats,runif)
-importFrom(stats,sd)
-importFrom(stats,setNames)
+importFrom(rlang,
+  data_sym,
+  parse_expr,
+  syms
+)
+importFrom(stats,
+  D,
+  approx,
+  as.formula,
+  density,
+  dnorm,
+  median,
+  optim,
+  predict,
+  qchisq,
+  qf,
+  rnorm,
+  runif,
+  sd,
+  setNames
+)
 importFrom(stringr,str_replace_all)
 importFrom(tidyselect,all_of)
-importFrom(utils,capture.output)
-importFrom(utils,file.edit)
-importFrom(utils,getParseData)
-importFrom(utils,glob2rx)
-importFrom(utils,globalVariables)
-importFrom(utils,head)
-importFrom(utils,install.packages)
-importFrom(utils,installed.packages)
-importFrom(utils,modifyList)
-importFrom(utils,read.csv)
-importFrom(utils,str)
-importFrom(utils,tail)
-importFrom(utils,write.csv)
-importFrom(utils,write.table)
+importFrom(utils,
+  capture.output,
+  file.edit,
+  getParseData,
+  glob2rx,
+  globalVariables,
+  head,
+  install.packages,
+  installed.packages,
+  modifyList,
+  read.csv,
+  str,
+  tail,
+  write.csv,
+  write.table
+)
 useDynLib(dMod2, .registration = TRUE)

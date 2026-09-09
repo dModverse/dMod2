@@ -482,16 +482,24 @@ match.fnargs <- function(arglist, choices) {
     stop(".bwdNode: unknown node op '", tape$op, "'.", call. = FALSE))
 }
 
-# The leaf's own vjp, once per condition it answered. A leaf that answered no
-# slot contributes nothing, which is the same NULL hole the forward pass leaves.
+# The leaf's own vjp. A leaf that answered no slot contributes nothing, which is
+# the same NULL hole the forward pass leaves.
+#
+# Two shapes rather than one loop. Where one request stands behind several slots
+# the leaf saw one input, so their cotangents are added first and the vjp runs
+# once: it is linear in the seed, so summing before is the same answer as
+# summing after and costs one solve instead of n. Where the slots are separate
+# requests and the leaf offers a batch entry, they go in one call, for the same
+# reason the forward path batches them.
 .bwdLeaf <- function(tape, w, cores) {
   st <- tape$st; b <- tape$b
   vjp <- st$vjpfn
   if (is.null(vjp))
     stop("reverse mode: the ", st$kind, " leaf has no vjp entry. A prediction ",
-         "needs odemodel(reverse = TRUE) and Xs(); Xf() carries no derivatives ",
-         "in either direction, which is what it is for. An observation or a ",
-         "transformation needs a compiled derivMode = \"dual\" evaluator.",
+         "needs odemodel(derivMode = c(\"forward\", \"reverse\")) and Xs(); ",
+         "Xf() carries no derivatives in either direction, which is what it ",
+         "is for. An observation or a ",
+         "transformation needs derivMode = \"reverse\" and compile = TRUE.",
          call. = FALSE)
 
   res <- .resolveConditions(b$conds, st$condition)
@@ -500,48 +508,16 @@ match.fnargs <- function(arglist, choices) {
   if (!res$evaluate || !length(res$slots)) return(out)
 
   shared <- b$shared || is.null(b$conds)
-
-  # One backward solve per condition costs what one forward solve per condition
-  # costs, which is the reason the forward path has a batch entry at all. A leaf
-  # that offers one gets the same treatment here.
   live <- Filter(function(s) !.ct_null(w[[s]]), res$slots)
-  if (!shared && !is.null(st$vjpbatchfn) && length(live) > 1L) {
-    split <- lapply(live, function(s) .splitParsFixed(.req_pars(b, s),
-                                                      .req_fixed(b, s)))
-    vals <- st$vjpbatchfn(
-      times    = if (is.list(b$times)) b$times[live] else b$times,
-      parsList = lapply(split, `[[`, "pars"),
-      fixedList = lapply(split, `[[`, "fixed"),
-      wList    = lapply(live, function(s) w[[s]]$out),
-      conditions = if (is.null(res$conditions)) NULL else as.list(res$conditions[live]),
-      cores    = cores)
-    if (isTRUE(getOption("dMod.batch.check", FALSE))) {
-      ref <- lapply(seq_along(live), function(j)
-        st$vjpfn(times = .req_times(b, live[j]), pars = split[[j]]$pars,
-                 fixed = split[[j]]$fixed, w = w[[live[j]]]$out))
-      cmp <- all.equal(vals, ref, tolerance = 0)
-      if (!isTRUE(cmp))
-        stop("dMod.batch.check: the batched vjp of a ", st$kind,
-             " leaf disagrees with the scalar one:\n  ",
-             paste(cmp, collapse = "\n  "), call. = FALSE)
-    }
-    for (j in seq_along(live)) {
-      s <- live[j]
-      r <- .ct(pars = vals[[j]])
-      r <- .addCt(r, .ct(pars = .pickCotangent(
-        w[[s]]$pars, names(.splitParsFixed(.req_pars(b, s), .req_fixed(b, s))$pars))))
-      out[[s]] <- r
-    }
-    return(out)
-  }
+  if (!length(live)) return(out)
 
-  for (s in res$slots) {
-    ws <- w[[s]]
-    if (.ct_null(ws)) next
-    i <- if (shared) 1L else s
+  # One vjp call at input index i, seeded with ws. A node reached only through
+  # the parameters it passes on has nothing to solve for: the pass-through below
+  # is then the whole of its cotangent.
+  call_one <- function(i, ws, cond) {
     pf <- .splitParsFixed(.req_pars(b, i), .req_fixed(b, i))
-    cond <- if (is.null(res$conditions)) NULL else res$conditions[s]
-    r <- switch(st$kind,
+    r <- if (!identical(st$kind, "parfn") && is.null(ws$out)) .ct() else
+      switch(st$kind,
       prdfn = .ct(pars = vjp(times = .req_times(b, i), pars = pf$pars,
                              fixed = pf$fixed, w = ws$out)),
       obsfn = vjp(out = .req_out(b, i), pars = pf$pars, fixed = pf$fixed,
@@ -552,14 +528,49 @@ match.fnargs <- function(arglist, choices) {
     # Whatever the node passed through untouched keeps its cotangent.
     if (!identical(st$kind, "parfn"))
       r <- .addCt(r, .ct(pars = .pickCotangent(ws$pars, names(pf$pars))))
-    out[[s]] <- r
+    r
   }
-  # One request behind every slot means one input behind every slot: the
-  # cotangents of the slots add rather than standing side by side.
-  if (shared && length(res$slots) > 1L) {
-    tot <- Reduce(.addCt, out[res$slots])
-    for (s in res$slots) out[[s]] <- NULL
-    out[[res$slots[1L]]] <- tot
+
+  if (shared) {
+    ws <- Reduce(.addCt, lapply(live, function(s) w[[s]]))
+    cond <- if (is.null(res$conditions)) NULL else res$conditions[live[1L]]
+    out[[live[1L]]] <- call_one(1L, ws, cond)
+    return(out)
+  }
+
+  batchable <- identical(st$kind, "prdfn") && !is.null(st$vjpbatchfn) &&
+               length(live) > 1L &&
+               all(vapply(live, function(s) !is.null(w[[s]]$out), TRUE))
+  if (batchable) {
+    split <- lapply(live, function(s) .splitParsFixed(.req_pars(b, s),
+                                                      .req_fixed(b, s)))
+    vals <- st$vjpbatchfn(
+      times     = if (is.list(b$times)) b$times[live] else b$times,
+      parsList  = lapply(split, `[[`, "pars"),
+      fixedList = lapply(split, `[[`, "fixed"),
+      wList     = lapply(live, function(s) w[[s]]$out),
+      conditions = if (is.null(res$conditions)) NULL else as.list(res$conditions[live]),
+      cores     = cores)
+    if (isTRUE(getOption("dMod.batch.check", FALSE))) {
+      ref <- lapply(seq_along(live), function(j)
+        vjp(times = .req_times(b, live[j]), pars = split[[j]]$pars,
+            fixed = split[[j]]$fixed, w = w[[live[j]]]$out))
+      cmp <- all.equal(vals, ref, tolerance = 0)
+      if (!isTRUE(cmp))
+        stop("dMod.batch.check: the batched vjp of a ", st$kind,
+             " leaf disagrees with the scalar one:\n  ",
+             paste(cmp, collapse = "\n  "), call. = FALSE)
+    }
+    for (j in seq_along(live))
+      out[[live[j]]] <- .addCt(
+        .ct(pars = vals[[j]]),
+        .ct(pars = .pickCotangent(w[[live[j]]]$pars, names(split[[j]]$pars))))
+    return(out)
+  }
+
+  for (s in live) {
+    cond <- if (is.null(res$conditions)) NULL else res$conditions[s]
+    out[[s]] <- call_one(s, w[[s]], cond)
   }
   out
 }
@@ -594,24 +605,6 @@ match.fnargs <- function(arglist, choices) {
 .mergeCt <- function(a, b) {
   n <- max(length(a), length(b))
   lapply(seq_len(n), function(i) .addCt(a[[i]], b[[i]]))
-}
-
-# ---------------------------------------------------------------------------
-
-# One forward and one backward pass over a chain. `seedfn` turns the forward
-# values into the cotangent of the chain's output; what comes back is the
-# cotangent of `pars`, which is the gradient the caller asked for.
-.reverseChain <- function(f, times, pars, fixed = NULL, conditions = NULL,
-                          seedfn, env = NULL,
-                          cores = getOption("dMod.cores", 1L)) {
-  b <- .bundle_from_call(conditions, times = times, out = NULL,
-                         pars = pars, fixed = fixed)
-  fw <- .fwdMany(f, b, env, cores)
-  w  <- seedfn(fw$values)
-  u  <- .bwdNode(fw$tape, w, env, cores)
-  list(values = fw$values,
-       gradient = Reduce(.addNamed,
-                         lapply(u, function(x) if (is.null(x)) NULL else x$pars)))
 }
 
 ## ---- Public shim ---------------------------------------------------------
@@ -891,6 +884,12 @@ match.fnargs <- function(arglist, choices) {
       # constraint's gradient is a line of algebra and costs nothing either
       # way, and the sum is the same number however each half got there. A
       # reverse term returns no Hessian, so neither does the sum.
+      #
+      # `sweep` in the formals is what says a term understands the direction. A
+      # wrapper that forwards it through `...` without naming it reads here as a
+      # term with no reverse path, and the sum would then return a forward
+      # gradient without anyone noticing, so every wrapper in this package
+      # declares it.
       .call <- function(f, conds, e) {
         if (identical(sweep, "reverse") && "sweep" %in% names(formals(f)))
           f(pars = pars, fixed = fixed, deriv = deriv, deriv2 = deriv2,
@@ -981,14 +980,23 @@ match.fnargs <- function(arglist, choices) {
     modelname12 <- attr(x2, "modelname")
     outfn <- function(..., fixed = NULL, deriv = TRUE, deriv2 = FALSE, hessian = TRUE,
                       conditions = conditions12, env = NULL,
-                      cores = getOption("dMod.cores", 1L)) {
+                      cores = getOption("dMod.cores", 1L),
+                      sweep = "forward") {
 
       arglist <- list(...)
       arglist <- arglist[match.fnargs(arglist, c("pars"))]
       pars <- arglist[[1]]
 
-      v2 <- x2(pars = pars, fixed = fixed, deriv = deriv, deriv2 = deriv2,
-               hessian = hessian, conditions = conditions, env = env, cores = cores)
+      # A scaled objective is still the same objective, so the direction goes
+      # through; a term that cannot take it keeps the forward one.
+      v2 <- if (identical(sweep, "reverse") && "sweep" %in% names(formals(x2)))
+        x2(pars = pars, fixed = fixed, deriv = deriv, deriv2 = deriv2,
+           hessian = hessian, conditions = conditions, env = env, cores = cores,
+           sweep = sweep)
+      else
+        x2(pars = pars, fixed = fixed, deriv = deriv, deriv2 = deriv2,
+           hessian = if (identical(sweep, "reverse")) FALSE else hessian,
+           conditions = conditions, env = env, cores = cores)
 
       out <- x1 %.*% v2
       attr(out, "env") <- attr(v2, "env")
