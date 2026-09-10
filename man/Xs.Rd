@@ -28,6 +28,7 @@ Xs(odemodel, ...)
   condition = NULL,
   optionsOde = list(),
   optionsSens = list(),
+  optionsReverse = NULL,
   ...
 )
 }
@@ -56,6 +57,14 @@ the condition for which the function makes a prediction.}
 
 \item{fcontrol}{list with additional fine-tuning arguments for the forcing interpolation.
 See \link[stats:approxfun]{approxfun} for possible arguments.}
+
+\item{optionsReverse}{list weighting the backward pass's step size by the
+adjoint of the previous evaluation, \code{cppDE} backend only. \code{NULL}, the
+default, leaves the step size to \code{abstol} and \code{reltol} alone. \code{gradtol} is
+the accuracy asked of the gradient and turns the weighting on; \code{floor} is
+the smallest weight as a fraction of the largest. The term enters under a
+maximum, so the grid can only become finer: a weight from a parameter the
+optimiser has since left costs steps and never accuracy.}
 }
 \value{
 Object of class \link{prdfn}. When called with transformed parameters

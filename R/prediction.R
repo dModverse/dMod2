@@ -16,6 +16,13 @@
 #' the condition for which the function makes a prediction.
 #' @param optionsOde list with arguments to be passed to odeC() for the ODE integration.
 #' @param optionsSens list with arguments to be passed to odeC() for integration of the extended system
+#' @param optionsReverse list weighting the backward pass's step size by the
+#' adjoint of the previous evaluation, `cppDE` backend only. `NULL`, the
+#' default, leaves the step size to `abstol` and `reltol` alone. `gradtol` is
+#' the accuracy asked of the gradient and turns the weighting on; `floor` is
+#' the smallest weight as a fraction of the largest. The term enters under a
+#' maximum, so the grid can only become finer: a weight from a parameter the
+#' optimiser has since left costs steps and never accuracy.
 #' @param fcontrol list with additional fine-tuning arguments for the forcing interpolation. 
 #' See [approxfun][stats::approxfun] for possible arguments.
 #' @param ... Additional arguments passed to methods.
@@ -170,7 +177,8 @@ Xs.deSolve <- function(odemodel, forcings = NULL, events = NULL, names = NULL, c
 #' @export
 #' @rdname Xs
 Xs.cppDE <- function(odemodel, forcings = NULL, events = NULL, names = NULL, condition = NULL,
-                      optionsOde = list(), optionsSens = list(), ...) {
+                      optionsOde = list(), optionsSens = list(),
+                      optionsReverse = NULL, ...) {
   
   if (!is.null(forcings)) {
     if (!inherits(forcings, "data.frame")) {
@@ -235,12 +243,80 @@ Xs.cppDE <- function(odemodel, forcings = NULL, events = NULL, names = NULL, con
     names = names,
     optionsOde = optionsOde,
     optionsSens = optionsSens,
+    optionsReverse = optionsReverse,
     sensnames = dim_names_sens$sens,
     inner_names = inner_names
   )
 
   has_deriv2 <- !is.null(extended2)
   has_reverse <- !is.null(reversed)
+  # CVODES holds its checkpoints inside the solver and runs the backward solve
+  # under its own step-size control, so both the shared store and the weighted
+  # grid are arrangements of the native backend alone.
+  has_store <- has_reverse && !identical(attr(reversed, "backend"), "cvode")
+  if (!is.null(optionsReverse) && !has_store)
+    stop("Xs: 'optionsReverse' weights the native backward pass. It needs ",
+         "odemodel(backend = \"cppDE\", derivMode = c(\"forward\", \"reverse\")); ",
+         "the Sundials backend runs its own step-size control.", call. = FALSE)
+
+  # Checkpoints of the value pass, for the backward pass that replays the same
+  # trajectory. Matched on the point they were taken at, which is what cppDE
+  # fingerprints the store on, so one can never answer for another parameter.
+  scache <- new.env(parent = emptyenv())
+  scache$items <- list()
+  storeFind <- function(times, params) {
+    it <- scache$items
+    for (k in seq_along(it))
+      if (identical(it[[k]]$times, times) && identical(it[[k]]$params, params))
+        return(k)
+    NA_integer_
+  }
+  storePut <- function(times, params, store) {
+    if (is.null(store)) return(invisible(NULL))
+    k <- storeFind(times, params)
+    e <- list(times = times, params = params, store = store)
+    if (is.na(k)) scache$items[[length(scache$items) + 1L]] <- e
+    else scache$items[[k]] <- e
+    invisible(NULL)
+  }
+  storeTake <- function(times, params) {
+    k <- storeFind(times, params)
+    if (is.na(k)) return(NULL)
+    st <- scache$items[[k]]$store
+    scache$items[[k]] <- NULL
+    st
+  }
+
+  # lambda of the previous evaluation, weighting the next one's step size. It
+  # is kept per condition rather than per point, because carrying it across a
+  # parameter change is the whole purpose: the weight enters under a maximum,
+  # so one that misses costs steps and never accuracy.
+  wcache <- new.env(parent = emptyenv())
+  wcache$items <- list()
+  weightOn <- function() {
+    o <- controls$optionsReverse
+    !is.null(o) && !is.null(o$gradtol)
+  }
+  weightKey <- function(cond, times)
+    if (!is.null(cond) && length(cond) == 1L) as.character(cond)
+    else paste0("#", length(times))
+  weightGet <- function(cond, times) {
+    if (!weightOn()) return(NULL)
+    wcache$items[[weightKey(cond, times)]]
+  }
+  weightPut <- function(cond, times, res) {
+    g <- res$adjointGrid
+    if (is.null(g) || !length(g$time)) return(invisible(NULL))
+    o <- controls$optionsReverse
+    # lambda jumps where the objective seeds it, so the interpolant must not
+    # span an observation time.
+    br <- unique(findInterval(times, g$time))
+    br <- br[br >= 1L & br <= length(g$time)]
+    wcache$items[[weightKey(cond, times)]] <- list(
+      time = g$time, lambda = g$lambda, breaks = br,
+      gradtol = o$gradtol, floor = if (is.null(o$floor)) 0 else o$floor)
+    invisible(NULL)
+  }
 
   # Marshalling shared by the single and the batched entry: seed Phi'(theta)
   # (and Phi''(theta)) on the inner parameter rows.
@@ -300,11 +376,24 @@ Xs.cppDE <- function(odemodel, forcings = NULL, events = NULL, names = NULL, con
     if (!deriv) func else if (deriv2) extended2 else extended
   }
 
-  P2X <- function(times, pars, fixed = NULL, deriv = TRUE, deriv2 = FALSE) {
+  P2X <- function(times, pars, fixed = NULL, deriv = TRUE, deriv2 = FALSE,
+                  keepStore = FALSE) {
 
     if (deriv2 && !has_deriv2)
       stop("Xs.cppDE: model was compiled without deriv2; rebuild via odemodel(..., deriv2 = TRUE).")
     if (deriv2 && !deriv) deriv <- TRUE
+
+    # The values of a reverse evaluation come off the reverse object itself, so
+    # the checkpoints the backward pass needs are already there and the states
+    # are integrated once instead of twice.
+    if (keepStore && !deriv && has_store) {
+      params <- c(unclass(pars), unclass(fixed))
+      res <- do.call(cppDE::solveODE, c(
+        list(reversed, times, params, fixed = NULL,
+             forcings = controls$forcings, keepStore = TRUE), solveOpts(FALSE)))
+      storePut(times, params, res$store)
+      return(assemble1(res, pars, fixed, FALSE, FALSE))
+    }
 
     prep <- prep1(pars, fixed, deriv, deriv2)
     res <- do.call(cppDE::solveODE, c(
@@ -323,7 +412,8 @@ Xs.cppDE <- function(odemodel, forcings = NULL, events = NULL, names = NULL, con
   # One batched cppDE call over all requests. Falls back to a loop when cppDE
   # predates the entry point. A requested trace goes through: the batch writes
   # one file per condition, using `traceFile` as a template.
-  P2Xbatch <- function(times, parsList, fixedList, deriv, deriv2, cores) {
+  P2Xbatch <- function(times, parsList, fixedList, deriv, deriv2, cores,
+                       keepStore = FALSE) {
 
     if (deriv2 && !has_deriv2)
       stop("Xs.cppDE: model was compiled without deriv2; rebuild via odemodel(..., deriv2 = TRUE).")
@@ -331,6 +421,26 @@ Xs.cppDE <- function(odemodel, forcings = NULL, events = NULL, names = NULL, con
 
     n <- length(parsList)
     timesL <- if (is.list(times)) times else rep(list(times), n)
+
+    if (keepStore && !deriv && has_store) {
+      o      <- solveOpts(FALSE)
+      paramL <- lapply(seq_len(n), function(i)
+        c(unclass(parsList[[i]]), unclass(fixedList[[i]])))
+      conds  <- lapply(seq_len(n), function(i) list(
+        times = timesL[[i]], parms = paramL[[i]],
+        forcings = controls$forcings, keepStore = TRUE))
+      batch <- get0("solveODEBatch", envir = asNamespace("cppDE"),
+                    inherits = FALSE)
+      res <- if (is.null(batch))
+        lapply(seq_len(n), function(i) do.call(cppDE::solveODE, c(
+          list(reversed, timesL[[i]], paramL[[i]], fixed = NULL,
+               forcings = controls$forcings, keepStore = TRUE), o)))
+      else
+        do.call(batch, c(list(reversed, conditions = conds, cores = cores), o))
+      for (i in seq_len(n)) storePut(timesL[[i]], paramL[[i]], res[[i]]$store)
+      return(lapply(seq_len(n), function(i)
+        assemble1(res[[i]], parsList[[i]], fixedList[[i]], FALSE, FALSE)))
+    }
     preps  <- lapply(seq_len(n), function(i)
       prep1(parsList[[i]], fixedList[[i]], deriv, deriv2))
     model <- pickModel(deriv, deriv2)
@@ -389,11 +499,9 @@ Xs.cppDE <- function(odemodel, forcings = NULL, events = NULL, names = NULL, con
   # The seed is widened to the model's own state set first, because the solver
   # answers on all of them and `names` may be a subset.
   #
-  # The trajectory is integrated twice over a reverse evaluation, once for the
-  # values and once inside this call, because a seed only exists after the
-  # chain above has been walked. Cheaper than it sounds against the forward
-  # mode, and the fix -- a solve that keeps its checkpoints between the two
-  # calls -- is an interface question, not a correctness one.
+  # A seed only exists after the chain above has been walked, so this is a
+  # second call over the same trajectory. It integrates nothing where the value
+  # pass left its checkpoints behind, and replays the recorded steps instead.
   P2Xvjp <- function(times, pars, fixed = NULL, w) {
     if (!has_reverse)
       stop("Xs.cppDE: the model has no reverse object; rebuild via ",
@@ -404,7 +512,12 @@ Xs.cppDE <- function(odemodel, forcings = NULL, events = NULL, names = NULL, con
     o <- solveOpts(FALSE)
     res <- do.call(cppDE::solveODE, c(
       list(reversed, times, params, fixed = NULL,
-           forcings = controls$forcings, seed = W), o))
+           forcings = controls$forcings, seed = W,
+           store = storeTake(times, params),
+           errWeights = weightGet(NULL, times),
+           adjointGrid = weightOn()), o))
+    if (weightOn()) weightPut(NULL, times, res)
+    .requireAdjoint(res)
     .pickCotangent(res$adjoint[, 1L], names(pars))
   }
   attr(P2X, "vjpfn") <- P2Xvjp
@@ -421,23 +534,40 @@ Xs.cppDE <- function(odemodel, forcings = NULL, events = NULL, names = NULL, con
     o <- solveOpts(FALSE)
 
     batch <- get0("solveODEBatch", envir = asNamespace("cppDE"), inherits = FALSE)
-    conds <- lapply(seq_len(n), function(i) list(
-      times = timesL[[i]],
-      parms = c(unclass(parsList[[i]]), unclass(fixedList[[i]])),
-      forcings = controls$forcings,
-      seed = .widenSeed(wList[[i]], states, controls$names)))
+    condOf <- function(i)
+      if (is.null(conditions)) NULL else conditions[[i]]
+    conds <- lapply(seq_len(n), function(i) {
+      params <- c(unclass(parsList[[i]]), unclass(fixedList[[i]]))
+      list(times = timesL[[i]],
+           parms = params,
+           forcings = controls$forcings,
+           seed = .widenSeed(wList[[i]], states, controls$names),
+           store = storeTake(timesL[[i]], params),
+           errWeights = weightGet(condOf(i), timesL[[i]]),
+           adjointGrid = weightOn())
+    })
 
     res <- if (is.null(batch))
       lapply(seq_len(n), function(i) do.call(cppDE::solveODE, c(
         list(reversed, conds[[i]]$times, conds[[i]]$parms, fixed = NULL,
-             forcings = controls$forcings, seed = conds[[i]]$seed), o)))
+             forcings = controls$forcings, seed = conds[[i]]$seed,
+             store = conds[[i]]$store, errWeights = conds[[i]]$errWeights,
+             adjointGrid = conds[[i]]$adjointGrid), o)))
     else
       do.call(batch, c(list(reversed, conditions = conds, cores = cores), o))
 
-    lapply(seq_len(n), function(i)
-      .pickCotangent(res[[i]]$adjoint[, 1L], names(parsList[[i]])))
+    if (weightOn())
+      for (i in seq_len(n)) weightPut(condOf(i), timesL[[i]], res[[i]])
+
+    lapply(seq_len(n), function(i) {
+      .requireAdjoint(res[[i]], condOf(i))
+      .pickCotangent(res[[i]]$adjoint[, 1L], names(parsList[[i]]))
+    })
   }
   attr(P2X, "vjpbatchfn") <- P2Xvjpbatch
+  # Says the value pass of a reverse evaluation should run on the reverse
+  # object, so the backward pass finds the checkpoints already taken.
+  attr(P2X, "keepstore") <- has_store
 
   attr(P2X, "parameters") <- paramNames
   attr(P2X, "equations") <- as.eqnvec(attr(func, "equations"))

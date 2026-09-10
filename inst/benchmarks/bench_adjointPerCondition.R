@@ -1,130 +1,227 @@
 # -------------------------------------------------------------------------#
-# Forward, reverse and ASA, one condition at a time
+# The discrete adjoint against CVODES ASA on Bachmann
 # -------------------------------------------------------------------------#
 #
 # [PURPOSE]
-# Two measurements of the same two methods disagree by a factor of five, and
-# this script exists to find out why.
+# Both reverse routes answer the same interface, `obj(pars, sweep = "reverse")`,
+# and differ only in the ODE object underneath: our own discrete adjoint, which
+# replays every accepted forward step, and CVODES adjoint sensitivity analysis,
+# which integrates the adjoint as its own ODE over checkpointed states. This
+# times them against each other on the whole chain up to normL2, over all
+# conditions at once and then over one condition at a time.
 #
-#   one condition, one bare solve   our reverse is 2.6x faster than ASA
-#   36 conditions, whole objective  ASA is 1.9x faster than our reverse
+# The two granularities answer different questions. The whole objective is what
+# an optimiser pays per iteration. The per-condition table says where that time
+# sits, and whether the whole is the sum of its parts: a ratio near one means
+# the chain is the sum of its conditions, well under one means the whole shares
+# work that the parts each repeat.
 #
-# Threading is already excluded: this cppDE has no OpenMP, the BLAS is R's own
-# reference build, and dMod2's kernels take their thread count from
-# `dMod.cores`. All three are pinned below anyway, because a comparison in
-# which one route threads and another does not measures the threading.
+# The model is the hand-built one from
+# inst/examples/example_BachmannMSB2011.R, sourced up to its objective rather
+# than transcribed. Its observables floor log10 at 1e-10, which sits above
+# what the solver resolves at these tolerances; the PEtab form of the same
+# problem floors at 1e-15, and a floor below the tolerance multiplies whatever
+# noise is left by several decades and makes every gradient comparison on it
+# meaningless.
 #
-# What is left is the conditions. The bare solve used the first one, which need
-# not be representative: they differ in time points, in stiffness, and in how
-# many steps the integration takes. So build one objective per condition, run
-# all three routes through each, and see whether the per-condition times add up
-# to the whole-objective time. If they do not, the chain is doing something
-# that is not the sum of its conditions, and that is the thing to look at.
+# Only the ODE object differs between the two chains. The observation, error
+# and transformation functions are the example's own, so the likelihood, the
+# per-condition data groups and the parameter scale are shared by construction.
+#
+# Every route is called once before it is timed. A first call builds dMod2's
+# prepared-batch handle and fills the object caches, so timing it cold measures
+# the marshalling rather than the solve.
 #
 # [WHAT IT TAKES]
 # SUNDIALS, for the ASA column; without it that column is NA and the rest still
-# runs. An idle machine: every number here is a wall time.
+# runs. An idle machine: every number here is a wall time. Two full Bachmann
+# compilations on top of the example's own.
 #
 # [AUTHOR]
 # Simon Beyer
 #
 # [Date]
-# Tue 09 Sep 2026
+# Wed 10 Sep 2026
 # -------------------------------------------------------------------------#
 
 library(dMod2)
+library(microbenchmark)
 
 Sys.setenv(OMP_NUM_THREADS = "1", MKL_NUM_THREADS = "1",
            OPENBLAS_NUM_THREADS = "1", GOTO_NUM_THREADS = "1")
 options(dMod.cores = 1, cppDE.cores = 1)
 
-.outdir <- file.path(tempdir(), "bench_perCondition")
-dir.create(.outdir, recursive = TRUE, showWarnings = FALSE)
-.yaml <- list.files(system.file("extdata", "petab_bachmann", package = "dMod2"),
-                    pattern = "[.]yaml$", full.names = TRUE)[1]
-TOL <- list(atol = 1e-8, rtol = 1e-8)
+# atol under rtol under the observables' own floor: the three have to hold in
+# that order, or the gradient is measuring the floor.
+TOL <- list(atol = 1e-11, rtol = 1e-9, maxsteps = 1e7L, maxattemps = 100L)
 
-# The machine scatters, so report the minimum rather than the mean, and time a
-# burst rather than one call: the clock resolves about 10 ms on Windows.
-tmin <- function(f, reps = 3L, target = 0.15) {
-  once <- system.time(f())[["elapsed"]]
-  n <- max(1L, ceiling(target / max(once, 1e-3)))
-  min(vapply(seq_len(reps),
-             function(i) system.time(for (j in seq_len(n)) f())[["elapsed"]] / n, 0.0))
+# The machine scatters badly, so report the minimum over repetitions rather
+# than the mean or the median. One condition is two orders of magnitude cheaper
+# than all of them together and affords more of them.
+REPS_WHOLE <- 7L
+REPS_COND  <- 15L
+
+tmin <- function(f, reps) {
+  f()
+  min(microbenchmark(f(), times = reps, unit = "ms")$time) / 1e6
 }
 
 
 # -----------------------------------------------------------------------------
-# One import, two prediction chains
+# The example's own chain, up to but not including its first objective call
 #
-# Both objectives are built from the same pieces by the same recipe, and only
-# the ODE object differs. Building one of them from the import and the other by
-# hand is how an earlier version of this comparison got the sign wrong: the
-# imported objective carries a likelihood offset and per-condition data groups
-# that a hand-built one does not.
+# `reactions`, `observables`, `errorModels`, `trafo`, `mydataL` and `bestfit`
+# come from there, along with the compiled g, e and p this benchmark reuses.
 # -----------------------------------------------------------------------------
-pet <- importPEtab(.yaml, backend = "cppDE", cores = 6, modelname = "bpc",
-                   derivMode = c("forward", "reverse"),
-                   optionsOde = TOL, optionsSens = TOL, outdir = .outdir)
-pars  <- pet$bestfit
-fixed <- attr(pet, "petab_meta")$fixed
+.example <- system.file("examples", "example_BachmannMSB2011.R", package = "dMod2")
+.src <- readLines(.example)
+.upto <- grep("^obj\\(bestfit", .src)[1] - 1L
+eval(parse(text = .src[seq_len(.upto)]), envir = globalenv())
 
+.bdir <- file.path(tempdir(), "bench_adjoint")
+dir.create(.bdir, recursive = TRUE, showWarnings = FALSE)
+
+
+# -----------------------------------------------------------------------------
+# One ODE object per backend, both directions in each
+# -----------------------------------------------------------------------------
 .cfg <- tryCatch(get("cvodeConfig", envir = asNamespace("cppDE")),
                  error = function(e) NULL)
 hasASA <- isTRUE(.cfg$available) &&
-  "sweep" %in% names(formals(cppDE::cvode)) &&
-  "reverse" %in% eval(formals(cppDE::cvode)$sweep)
+  "derivMode" %in% names(formals(cppDE::cvode)) &&
+  "reverse" %in% eval(formals(cppDE::cvode)$derivMode)
+
+mC <- odemodel(reactions, modelname = "bench_cpp", backend = "cppDE",
+               derivMode = c("forward", "reverse"), compile = FALSE,
+               outdir = .bdir)
+xC <- Xs(mC, optionsOde = TOL, optionsSens = TOL)
 
 xS <- NULL
 if (hasASA) {
-  mS <- odemodel(pet$reactions, modelname = "bpc_sun", backend = "Sundials",
-                 derivMode = c("forward", "reverse"), compile = TRUE,
-                 outdir = .outdir)
+  mS <- odemodel(reactions, modelname = "bench_sun", backend = "Sundials",
+                 derivMode = c("forward", "reverse"), compile = FALSE,
+                 outdir = .bdir)
   xS <- Xs(mS, optionsOde = TOL, optionsSens = TOL)
+  compile(xC, xS, output = "bench_adjoint", cores = 12)
 } else {
   cat("SUNDIALS absent or cvode() has no reverse direction: ASA column is NA.\n")
+  compile(xC, output = "bench_adjoint", cores = 12)
 }
 
-mkobj <- function(x, dat) normL2(dat, pet$g * x * pet$p, pet$e)
+# normL2 alone, not the example's objective: its prior term is one scalar over
+# the whole problem and would be counted once per condition below.
+mkobj  <- function(dat) normL2(dat, g * xC * p, e)
+mkobjS <- function(dat) if (is.null(xS)) NULL else normL2(dat, g * xS * p, e)
+
+pars <- bestfit
 
 
 # -----------------------------------------------------------------------------
-# Per condition
+# All conditions at once, the whole chain up to normL2
+#
+# The value run is the unit the other three are quoted in: how many value runs
+# a gradient costs is the number that decides which direction is worth taking.
+# -----------------------------------------------------------------------------
+objC_all <- mkobj(mydataL)
+objS_all <- mkobjS(mydataL)
+
+# A reverse evaluation returns no Hessian: the one invariant that says the
+# direction arrived rather than being swallowed by a wrapper in the chain.
+chk <- objC_all(pars, deriv = TRUE, sweep = "reverse")
+if (!is.null(chk$hessian)) stop("sweep = \"reverse\" returned a Hessian")
+
+# The two chains must be the same model before their times mean anything.
+if (!is.null(objS_all)) {
+  v1 <- objC_all(pars, deriv = FALSE)$value
+  v2 <- objS_all(pars, deriv = FALSE)$value
+  cat("\nlikelihood, cppDE against Sundials:", format(v1, digits = 12), "/",
+      format(v2, digits = 12), " relative gap",
+      format(abs(v2 - v1) / abs(v1), digits = 3), "\n")
+}
+
+w_val <- tmin(function() objC_all(pars, deriv = FALSE), REPS_WHOLE)
+w_fwd <- tmin(function() objC_all(pars, deriv = TRUE, hessian = FALSE), REPS_WHOLE)
+w_rev <- tmin(function() objC_all(pars, deriv = TRUE, sweep = "reverse"), REPS_WHOLE)
+w_asa <- if (is.null(objS_all)) NA_real_ else
+  tmin(function() objS_all(pars, deriv = TRUE, sweep = "reverse"), REPS_WHOLE)
+
+whole <- data.frame(
+  route     = c("value", "forward", "reverse", "ASA"),
+  ms        = c(w_val, w_fwd, w_rev, w_asa),
+  in_values = c(w_val, w_fwd, w_rev, w_asa) / w_val,
+  stringsAsFactors = FALSE)
+
+cat("\nAll conditions, whole chain to normL2, one core\n\n")
+print(format(whole, digits = 3), row.names = FALSE)
+
+
+# -----------------------------------------------------------------------------
+# Do the two adjoints agree?
+#
+# Speed without this says nothing. Both are held against the forward gradient,
+# which is the third discretisation of the same derivative and the only oracle
+# either of them has here.
+# -----------------------------------------------------------------------------
+g_fwd <- objC_all(pars, deriv = TRUE, hessian = FALSE)$gradient
+g_rev <- objC_all(pars, deriv = TRUE, sweep = "reverse")$gradient
+g_asa <- if (is.null(objS_all)) NULL else
+  objS_all(pars, deriv = TRUE, sweep = "reverse")$gradient
+
+# Against the largest component rather than each component's own size: a
+# forward component near zero would otherwise set the whole scale.
+relgap <- function(a, b) {
+  nm <- names(a)
+  max(abs(b[nm] - a[nm])) / max(abs(a[nm]))
+}
+# The angle, which is what a line search feels.
+cosgap <- function(a, b) {
+  nm <- names(a)
+  1 - sum(a[nm] * b[nm]) / sqrt(sum(a[nm]^2) * sum(b[nm]^2))
+}
+
+agree <- data.frame(
+  against_forward    = c("reverse", "ASA"),
+  worst_over_largest = c(relgap(g_fwd, g_rev),
+                         if (is.null(g_asa)) NA_real_ else relgap(g_fwd, g_asa)),
+  one_minus_cos      = c(cosgap(g_fwd, g_rev),
+                         if (is.null(g_asa)) NA_real_ else cosgap(g_fwd, g_asa)),
+  stringsAsFactors = FALSE)
+
+cat("\nThe two adjoints against the forward gradient\n\n")
+print(format(agree, digits = 3), row.names = FALSE)
+
+
+# -----------------------------------------------------------------------------
+# One condition at a time
 #
 # `steps` is the accepted step count of the reverse solve for that condition,
 # read off the sweep's own grid. It is the thing our cost is proportional to and
 # ASA's is not: we replay every accepted forward step, ASA integrates the
 # adjoint on a grid of its own choosing.
 # -----------------------------------------------------------------------------
-conds <- names(pet$dataList)
+conds <- names(mydataL)
 rows <- lapply(conds, function(cn) {
-  dat  <- pet$dataList[cn]
-  objC <- mkobj(pet$x, dat)
-  objS <- if (is.null(xS)) NULL else mkobj(xS, dat)
+  objC <- mkobj(mydataL[cn])
+  objS <- mkobjS(mydataL[cn])
 
-  # A reverse evaluation returns no Hessian: the one invariant that says the
-  # direction arrived rather than being swallowed by a wrapper in the chain.
-  chk <- objC(pars, fixed = fixed, deriv = TRUE, sweep = "reverse")
-  if (!is.null(chk$hessian))
-    stop("condition ", cn, ": sweep = \"reverse\" returned a Hessian")
-
-  t_val <- tmin(function() objC(pars, fixed = fixed, deriv = FALSE))
-  t_fwd <- tmin(function() objC(pars, fixed = fixed, deriv = TRUE, hessian = FALSE))
-  t_rev <- tmin(function() objC(pars, fixed = fixed, deriv = TRUE, sweep = "reverse"))
+  t_val <- tmin(function() objC(pars, deriv = FALSE), REPS_COND)
+  t_fwd <- tmin(function() objC(pars, deriv = TRUE, hessian = FALSE), REPS_COND)
+  t_rev <- tmin(function() objC(pars, deriv = TRUE, sweep = "reverse"), REPS_COND)
   t_asa <- if (is.null(objS)) NA_real_ else
-           tmin(function() objS(pars, fixed = fixed, deriv = TRUE, sweep = "reverse"))
+    tmin(function() objS(pars, deriv = TRUE, sweep = "reverse"), REPS_COND)
 
   steps <- tryCatch({
-    inner <- pet$p(pars, fixed = fixed)[[cn]]
-    tt <- sort(unique(c(0, dat[[cn]]$time)))
-    g <- cppDE::solveODE(pet$odemodel$reversed, tt, inner,
-                         seed = array(1, c(length(tt),
-                                           length(attr(pet$odemodel$func, "variables")), 1L)),
-                         adjointGrid = TRUE, abstol = TOL$atol, reltol = TOL$rtol)
-    length(g$adjointGrid$h)
+    inner <- p(pars)[[cn]]
+    tt <- sort(unique(c(0, mydataL[[cn]]$time)))
+    gr <- cppDE::solveODE(mC$reversed, tt, inner,
+                          seed = array(1, c(length(tt),
+                                            length(attr(mC$func, "variables")), 1L)),
+                          adjointGrid = TRUE, abstol = TOL$atol, reltol = TOL$rtol,
+                          maxsteps = TOL$maxsteps)
+    length(gr$adjointGrid$h)
   }, error = function(e) NA_integer_)
 
-  data.frame(condition = cn, n_times = nrow(dat[[cn]]), steps = steps,
+  data.frame(condition = cn, n_times = nrow(mydataL[[cn]]), steps = steps,
              t_value = t_val, t_fwd = t_fwd, t_rev = t_rev, t_asa = t_asa,
              stringsAsFactors = FALSE)
 })
@@ -132,39 +229,22 @@ per <- do.call(rbind, rows)
 per$rev_over_asa <- per$t_rev / per$t_asa
 per <- per[order(-per$t_rev), ]
 
-cat("\nPer condition, one objective each, everything on one core\n\n")
+cat("\nPer condition, one objective each, milliseconds\n\n")
 print(format(per, digits = 3), row.names = FALSE)
 
 
 # -----------------------------------------------------------------------------
-# Do the parts add up to the whole?
-#
-# If the sum over conditions matches the objective built over all of them, the
-# chain is the sum of its conditions and the per-condition table explains the
-# whole. If it does not, the difference is the thing to chase.
+# The parts against the whole
 # -----------------------------------------------------------------------------
-objC_all <- mkobj(pet$x, pet$dataList)
-objS_all <- if (is.null(xS)) NULL else mkobj(xS, pet$dataList)
-
-w_val <- tmin(function() objC_all(pars, fixed = fixed, deriv = FALSE))
-w_fwd <- tmin(function() objC_all(pars, fixed = fixed, deriv = TRUE, hessian = FALSE))
-w_rev <- tmin(function() objC_all(pars, fixed = fixed, deriv = TRUE, sweep = "reverse"))
-w_asa <- if (is.null(objS_all)) NA_real_ else
-         tmin(function() objS_all(pars, fixed = fixed, deriv = TRUE, sweep = "reverse"))
-
 cmp <- data.frame(
-  route      = c("value", "forward", "reverse", "ASA"),
+  route        = c("value", "forward", "reverse", "ASA"),
   sum_of_parts = c(sum(per$t_value), sum(per$t_fwd), sum(per$t_rev), sum(per$t_asa)),
   whole        = c(w_val, w_fwd, w_rev, w_asa),
   stringsAsFactors = FALSE)
 cmp$whole_over_parts <- cmp$whole / cmp$sum_of_parts
 
-cat("\n\nThe parts against the whole\n\n")
+cat("\n\nThe parts against the whole, milliseconds\n\n")
 print(format(cmp, digits = 3), row.names = FALSE)
 
-cat("\n  conditions:", length(conds), "  n_theta:", length(pars), "\n")
-cat("  A ratio near one means the objective is the sum of its conditions and\n",
-    " the table above accounts for it. Well under one means the whole shares\n",
-    " work the parts each repeat, one compiled prediction call for all\n",
-    " conditions rather than 36, and then per-condition timings overstate\n",
-    " every route, though not necessarily by the same factor.\n")
+cat("\n  conditions:", length(conds), "  n_theta:", length(pars),
+    "  atol", TOL$atol, " rtol", TOL$rtol, "\n")

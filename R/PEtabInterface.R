@@ -1655,7 +1655,7 @@ readPetabTables <- function(yamlPath) {
     return(list(odemodel = NULL, x = Xt()))
 
   # A PEtab experiment may start after t = 0, and its initial values belong at
-  # that start. Both backends otherwise force 0 into the integration grid,
+  # that start. The backends otherwise force 0 into the integration grid,
   # which would apply the initial values there instead.
   m <- odemodel(reactions, modelname = modelname, backend = backend,
                 events = events, compile = compile, includeTimeZero = FALSE,
@@ -2097,12 +2097,13 @@ readPetabTables <- function(yamlPath) {
 #' multi-period experiments (>2 periods).
 #'
 #' @param yamlPath Path to the PEtab YAML manifest.
-#' @param backend Required: one of `"deSolve"` or `"cppDE"`. Forwarded to
-#'   [odemodel()].
+#' @param backend Required: one of `"deSolve"`, `"cppDE"` or `"Sundials"`.
+#'   Forwarded to [odemodel()].
 #' @param derivMode Which derivative directions to compile, passed to
 #'   [odemodel()]. `c("forward", "reverse")` also builds the reverse-mode
 #'   object, so the imported objective answers to
-#'   `obj(pars, sweep = "reverse")`.
+#'   `obj(pars, sweep = "reverse")`. `"reverse"` needs `backend = "cppDE"` or
+#'   `"Sundials"`; the deSolve backend goes forward only.
 #' @param compile Logical. If `TRUE` (default) the generated trafo,
 #'   observation function, and ODE model are compiled to native code. Set to
 #'   `FALSE` for inspection-only use.
@@ -2152,8 +2153,13 @@ importPEtab <- function(yamlPath, backend,
     stop("`cores` must be a single positive integer.")
 
   if (missing(backend))
-    stop("Argument `backend` is required (one of \"deSolve\", \"cppDE\").")
-  backend <- match.arg(backend, c("deSolve", "cppDE"))
+    stop("Argument `backend` is required (one of \"deSolve\", \"cppDE\", ",
+         "\"Sundials\").")
+  backend <- match.arg(backend, c("deSolve", "cppDE", "Sundials"))
+  derivMode <- .matchDerivMode(derivMode, c("forward", "reverse"))
+  if ("reverse" %in% derivMode && backend == "deSolve")
+    stop("derivMode = \"reverse\" needs backend = 'cppDE' or 'Sundials'; ",
+         "the deSolve backend goes forward only.", call. = FALSE)
 
   yamlPath <- normalizePath(yamlPath, mustWork = TRUE)
   derived <- is.null(modelname)

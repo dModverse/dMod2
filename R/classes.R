@@ -223,11 +223,15 @@ match.fnargs <- function(arglist, choices) {
 }
 
 # `cond` is the slot's condition name; Pequil/Pimpl use it as warm-start key.
-.callKernel <- function(st, b, i, cond, deriv, deriv2) {
+.callKernel <- function(st, b, i, cond, deriv, deriv2, keepStore = FALSE) {
   pf <- .splitParsFixed(.req_pars(b, i), .req_fixed(b, i))
   switch(st$kind,
-    prdfn = st$kernel(times = .req_times(b, i), pars = pf$pars, fixed = pf$fixed,
-                      deriv = deriv, deriv2 = deriv2),
+    prdfn = if (keepStore)
+              st$kernel(times = .req_times(b, i), pars = pf$pars, fixed = pf$fixed,
+                        deriv = deriv, deriv2 = deriv2, keepStore = TRUE)
+            else
+              st$kernel(times = .req_times(b, i), pars = pf$pars, fixed = pf$fixed,
+                        deriv = deriv, deriv2 = deriv2),
     obsfn = {
       o <- .req_out(b, i)
       .checkPrediction(o, cond)
@@ -244,20 +248,27 @@ match.fnargs <- function(arglist, choices) {
 
 # Batch entry when the leaf has one, else a loop. Not mclapply: prdframes carry
 # 3-D and 4-D arrays whose trip through a fork pipe outweighs the solve.
-.callKernelMany <- function(st, b, idx, conds, deriv, deriv2, cores) {
+.callKernelMany <- function(st, b, idx, conds, deriv, deriv2, cores,
+                            keepStore = FALSE) {
   bf <- st$batchfn
   if (is.null(bf) || length(idx) < 2L)
     return(lapply(seq_along(idx), function(j)
-      .callKernel(st, b, idx[j], conds[[j]], deriv, deriv2)))
+      .callKernel(st, b, idx[j], conds[[j]], deriv, deriv2, keepStore)))
 
   split <- lapply(idx, function(i) .splitParsFixed(.req_pars(b, i), .req_fixed(b, i)))
   parsL  <- lapply(split, `[[`, "pars")
   fixedL <- lapply(split, `[[`, "fixed")
 
   res <- switch(st$kind,
-    prdfn = bf(times = if (is.list(b$times)) b$times[idx] else b$times,
-               parsList = parsL, fixedList = fixedL,
-               deriv = deriv, deriv2 = deriv2, cores = cores),
+    prdfn = if (keepStore)
+              bf(times = if (is.list(b$times)) b$times[idx] else b$times,
+                 parsList = parsL, fixedList = fixedL,
+                 deriv = deriv, deriv2 = deriv2, cores = cores,
+                 keepStore = TRUE)
+            else
+              bf(times = if (is.list(b$times)) b$times[idx] else b$times,
+                 parsList = parsL, fixedList = fixedL,
+                 deriv = deriv, deriv2 = deriv2, cores = cores),
     obsfn = {
       outL <- lapply(seq_along(idx), function(j) {
         o <- .req_out(b, idx[j]); .checkPrediction(o, conds[[j]]); o
@@ -288,7 +299,7 @@ match.fnargs <- function(arglist, choices) {
   rep(list(NULL), length(conds))
 }
 
-.evalLeaf <- function(st, b, deriv, deriv2, cores) {
+.evalLeaf <- function(st, b, deriv, deriv2, cores, keepStore = FALSE) {
   res <- .resolveConditions(b$conds, st$condition)
   outlist <- .emptySlots(res$conditions)
   if (!res$evaluate || length(res$slots) == 0L) return(outlist)
@@ -300,12 +311,13 @@ match.fnargs <- function(arglist, choices) {
 
   # One request behind every slot: evaluate once, replicate.
   if (shared) {
-    r <- .callKernel(st, b, 1L, cond_of_slot[[1L]], deriv, deriv2)
+    r <- .callKernel(st, b, 1L, cond_of_slot[[1L]], deriv, deriv2, keepStore)
     for (s in slots) outlist[[s]] <- r
     return(outlist)
   }
 
-  vals <- .callKernelMany(st, b, slots, cond_of_slot, deriv, deriv2, cores)
+  vals <- .callKernelMany(st, b, slots, cond_of_slot, deriv, deriv2, cores,
+                          keepStore)
   for (j in seq_along(slots)) outlist[[slots[j]]] <- vals[[j]]
   outlist
 }
@@ -406,7 +418,10 @@ match.fnargs <- function(arglist, choices) {
 
 .fwdNode <- function(st, b, env, cores) {
   switch(st$op,
-    leaf = list(values = .evalLeaf(st, b, FALSE, FALSE, cores),
+    # The value pass of a reverse evaluation is the one whose trajectory the
+    # backward pass replays, so a leaf that can keep its checkpoints does.
+    leaf = list(values = .evalLeaf(st, b, FALSE, FALSE, cores,
+                                   keepStore = isTRUE(st$keepstore)),
                 tape   = list(op = "leaf", st = st, b = b)),
     "*"  = .fwdProd(st, b, env, cores),
     "+"  = .fwdPlus(st, b, env, cores),
@@ -660,6 +675,7 @@ match.fnargs <- function(arglist, choices) {
                 batchfn = attr(kernel, "batchfn"),
                 vjpfn = attr(kernel, "vjpfn"),
                 vjpbatchfn = attr(kernel, "vjpbatchfn"),
+                keepstore = isTRUE(attr(kernel, "keepstore")),
                 kernel_has_cond = "condition" %in% names(formals(kernel)),
                 condition = condition, default_conditions = condition),
            parent = emptyenv())

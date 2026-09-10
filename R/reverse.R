@@ -44,6 +44,17 @@
 }
 
 # A named vector on exactly `nms`, zero where the cotangent says nothing.
+# A solve that answers a seed and returns no adjoint has failed, and an absent
+# cotangent reads as a zero one everywhere above. Saying so beats a gradient
+# that is quietly zero in the directions the solver dropped.
+.requireAdjoint <- function(res, condition = NULL) {
+  if (!is.null(res$adjoint)) return(invisible(NULL))
+  stop("the backward solve returned no adjoint",
+       if (is.null(condition)) "" else paste0(" for condition ", condition),
+       ", though it reported success. The model was seeded, so this is a ",
+       "backend fault rather than a modelling one.", call. = FALSE)
+}
+
 .pickCotangent <- function(w, nms) {
   out <- setNames(numeric(length(nms)), nms)
   if (is.null(w) || !length(nms)) return(out)

@@ -256,7 +256,7 @@ odemodel <- function(f, deriv = TRUE, deriv2 = FALSE, derivMode = "forward",
         reversed <- do.call(cppDE::cppODE,
                             c(list(f, events = events, fixed = fixed, forcings = forcings,
                                    modelname = paste0(modelname, "_r"), outdir = outdir,
-                                   sweep = "reverse", verbose = verbose),
+                                   derivMode = "reverse", verbose = verbose),
                               dots_func))
       }
       out <- list(func = func, extended = extended, extended2 = extended2,
@@ -286,7 +286,7 @@ odemodel <- function(f, deriv = TRUE, deriv2 = FALSE, derivMode = "forward",
         reversed <- do.call(cppDE::cvode,
                             c(list(f, events = events, fixed = fixed, forcings = forcings,
                                    modelname = paste0(modelname, "_r"), outdir = outdir,
-                                   deriv = FALSE, sweep = "reverse", verbose = verbose),
+                                   deriv = FALSE, derivMode = "reverse", verbose = verbose),
                               dots_func))
       }
       out <- list(func = func, extended = extended, reversed = reversed)

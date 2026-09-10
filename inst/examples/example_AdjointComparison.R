@@ -157,8 +157,8 @@ objS <- NULL
 .cvodeCfg <- tryCatch(get("cvodeConfig", envir = asNamespace("cppDE")),
                       error = function(e) NULL)
 .hasASA <- isTRUE(.cvodeCfg$available) &&
-  "sweep" %in% names(formals(cppDE::cvode)) &&
-  "reverse" %in% eval(formals(cppDE::cvode)$sweep)
+  "derivMode" %in% names(formals(cppDE::cvode)) &&
+  "reverse" %in% eval(formals(cppDE::cvode)$derivMode)
 
 if (.hasASA) {
   mS <- odemodel(pet$reactions, modelname = "adjcmp_sun", backend = "Sundials",

@@ -1,5 +1,28 @@
 # dMod2 (development version)
 
+* A backward solve that returns no adjoint is an error. It used to read as a
+  cotangent of zero, so a backend that dropped the answer produced a gradient
+  that was quietly zero in every direction it dropped rather than a failure.
+  Found by the CVODES batch fault fixed in cppDE.
+* A reverse gradient integrates the states once. The value pass of a reverse
+  evaluation now runs on the reverse object itself and keeps its checkpoints,
+  and the backward pass replays them instead of integrating the trajectory a
+  second time. Nothing to switch on: it happens wherever `obj(pars, sweep =
+  "reverse")` walks a prediction built with
+  `odemodel(..., derivMode = c("forward", "reverse"))`. A store is matched on
+  the times and parameters it was taken at, so it can never answer for another
+  point.
+* The backward pass can weight its own step size. `Xs(..., optionsReverse =
+  list(gradtol = ))` hands the adjoint of the previous evaluation to the
+  controller, which refines the grid where a step carries objective error. The
+  term enters under a maximum, so the grid only ever becomes finer than
+  `abstol` and `reltol` ask: a weight from a parameter the optimiser has since
+  left costs steps and never accuracy. Off by default, and worth turning on
+  only where a measurement says the steps saved beat the steps spent.
+* `importPEtab(backend = "Sundials")` imports onto the CVODE backend, which
+  `odemodel()` has carried all along. `derivMode` is matched at the door there
+  too, and `"reverse"` on `backend = "deSolve"` says so rather than failing
+  later: the deSolve backend goes forward only.
 * A PEtab prior term honours `hessian = FALSE`. It did not: the argument fell
   into `...` and was ignored, so an objective carrying a prior handed back a
   zero Hessian to a caller that asked for none. Under `sweep = "reverse"`, which

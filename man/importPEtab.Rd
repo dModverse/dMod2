@@ -20,8 +20,8 @@ importPEtab(
 \arguments{
 \item{yamlPath}{Path to the PEtab YAML manifest.}
 
-\item{backend}{Required: one of \code{"deSolve"} or \code{"cppDE"}. Forwarded to
-\code{\link[=odemodel]{odemodel()}}.}
+\item{backend}{Required: one of \code{"deSolve"}, \code{"cppDE"} or \code{"Sundials"}.
+Forwarded to \code{\link[=odemodel]{odemodel()}}.}
 
 \item{compile}{Logical. If \code{TRUE} (default) the generated trafo,
 observation function, and ODE model are compiled to native code. Set to
@@ -43,7 +43,8 @@ evaluated rather than optimised.}
 \item{derivMode}{Which derivative directions to compile, passed to
 \code{\link[=odemodel]{odemodel()}}. \code{c("forward", "reverse")} also builds the reverse-mode
 object, so the imported objective answers to
-\code{obj(pars, sweep = "reverse")}.}
+\code{obj(pars, sweep = "reverse")}. \code{"reverse"} needs \code{backend = "cppDE"} or
+\code{"Sundials"}; the deSolve backend goes forward only.}
 
 \item{optionsOde, optionsSens}{Optional lists forwarded to \code{\link[=Xs]{Xs()}} as solver
 settings for the states and their sensitivities. \code{NULL} keeps the
