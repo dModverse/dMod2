@@ -34,7 +34,7 @@ Defaults to \code{TRUE}.}
 be named; the default is \code{"forward"} alone.
 \itemize{
 \item \code{"forward"}: sensitivity equations carried alongside the states, the
-object \code{deriv} and \code{deriv2} fill.
+object \code{deriv} fills.
 \item \code{"reverse"}: a further object whose derivatives come from one backward
 sweep, so their cost does not grow with the number of parameters. It is
 a separate compilation and not a flag on the others, so asking for it
@@ -44,6 +44,13 @@ backwards and carries events; on \code{backend = "Sundials"} it is CVODES
 adjoint sensitivity analysis, which solves the adjoint as its own ODE
 over checkpointed states and therefore refuses events. Not available
 under \code{backend = "deSolve"}.
+\item \code{"forward-forward"}: second derivatives of every state, carried as a
+nested dual. The older spelling is \code{deriv2 = TRUE} and still selects it.
+\item \code{"forward-reverse"}: the backward sweep run over tangents, so the
+gradient comes back with its own derivatives. That is the Hessian of the
+seeded functional in one sweep rather than one per direction. \code{cppDE}
+only. The object is built and returned; the objective layer does not
+read it yet.
 }
 
 \code{derivMode = c("forward", "reverse")} builds both, which is what a session

@@ -324,3 +324,27 @@ test_that("the Sundials reverse object refuses events", {
                         derivMode = c("forward", "reverse"), outdir = d),
                "does not support events")
 })
+
+test_that("odemodel builds the forward-reverse object and names it", {
+  d <- .rev_dir()
+  owd <- setwd(d); on.exit(setwd(owd))
+  m <- odemodel(.rev_reactions(), modelname = "rv_fr", outdir = d,
+                derivMode = c("forward", "forward-reverse"), compile = TRUE,
+                nStack = 4)
+
+  expect_null(m$extended2)
+  expect_null(m$reversed)
+  expect_false(is.null(m$reversed2))
+  expect_identical(attr(m$reversed2, "derivMode"), "forward-reverse")
+
+  # forward-forward is the older deriv2 = TRUE under its own name.
+  m2 <- odemodel(.rev_reactions(), modelname = "rv_ffm", outdir = d,
+                 derivMode = c("forward", "forward-forward"), compile = FALSE)
+  expect_false(is.null(m2$extended2))
+  expect_identical(attr(m2$extended2, "derivMode"), "forward-forward")
+
+  expect_error(odemodel(.rev_reactions(), modelname = "rv_fr_bad", outdir = d,
+                        backend = "Sundials", derivMode = "forward-reverse",
+                        compile = FALSE),
+               "forward-reverse")
+})

@@ -6,6 +6,8 @@ print.odemodel <- function(x, ...) {
   func      <- x$func
   extended  <- x$extended
   extended2 <- x$extended2
+  reversed  <- x$reversed
+  reversed2 <- x$reversed2
 
   ## attr(func, "backend") is cppDE's own marker, not dMod's `backend` argument.
   isCVODE <- inherits(x, "cppDE") && identical(attr(func, "backend"), "cvode")
@@ -33,6 +35,10 @@ print.odemodel <- function(x, ...) {
     } else {
       cat("  Sens2:   not compiled (deriv2 = FALSE)\n", sep = "")
     }
+    if (!is.null(reversed))
+      cat("  Adjoint: ", as.character(reversed), "\n", sep = "")
+    if (!is.null(reversed2))
+      cat("  Adjoint2:", as.character(reversed2), "\n", sep = "")
   }
 
   cat("\nEquations:\n", sep = "")
@@ -97,7 +103,7 @@ print.odemodel <- function(x, ...) {
 #' @param derivMode Which derivative directions to compile. More than one may
 #'   be named; the default is `"forward"` alone.
 #'   * `"forward"`: sensitivity equations carried alongside the states, the
-#'     object `deriv` and `deriv2` fill.
+#'     object `deriv` fills.
 #'   * `"reverse"`: a further object whose derivatives come from one backward
 #'     sweep, so their cost does not grow with the number of parameters. It is
 #'     a separate compilation and not a flag on the others, so asking for it
@@ -107,6 +113,13 @@ print.odemodel <- function(x, ...) {
 #'     adjoint sensitivity analysis, which solves the adjoint as its own ODE
 #'     over checkpointed states and therefore refuses events. Not available
 #'     under `backend = "deSolve"`.
+#'   * `"forward-forward"`: second derivatives of every state, carried as a
+#'     nested dual. The older spelling is `deriv2 = TRUE` and still selects it.
+#'   * `"forward-reverse"`: the backward sweep run over tangents, so the
+#'     gradient comes back with its own derivatives. That is the Hessian of the
+#'     seeded functional in one sweep rather than one per direction. `cppDE`
+#'     only. The object is built and returned; the objective layer does not
+#'     read it yet.
 #'
 #'   `derivMode = c("forward", "reverse")` builds both, which is what a session
 #'   that compares the two directions needs. `deriv = FALSE` turns first
@@ -123,10 +136,17 @@ odemodel <- function(f, deriv = TRUE, deriv2 = FALSE, derivMode = "forward",
 
   f <- as.eqnvec(f)
   backend <- match.arg(backend)
-  derivMode <- .matchDerivMode(derivMode, c("forward", "reverse"))
-  reverse <- "reverse" %in% derivMode
+  derivMode <- .matchDerivMode(derivMode, c("forward", "reverse",
+                                            "forward-forward", "forward-reverse"))
+  reverse  <- "reverse" %in% derivMode
+  reverse2 <- "forward-reverse" %in% derivMode
+  # The two spellings of forward over forward name the same build product.
+  if ("forward-forward" %in% derivMode) deriv2 <- TRUE
   if (reverse && backend == "deSolve")
     stop("derivMode = \"reverse\" needs backend = 'cppDE' or 'Sundials'.",
+         call. = FALSE)
+  if (reverse2 && backend != "cppDE")
+    stop("derivMode = \"forward-reverse\" needs backend = 'cppDE'.",
          call. = FALSE)
 
   if (deriv2 && !deriv) {
@@ -259,8 +279,19 @@ odemodel <- function(f, deriv = TRUE, deriv2 = FALSE, derivMode = "forward",
                                    derivMode = "reverse", verbose = verbose),
                               dots_func))
       }
+      # Forward over reverse: the same sweep over tangents. It integrates under
+      # sensitivities like `extended` and sweeps like `reversed`, so it takes
+      # the sensitivity dots rather than the value ones.
+      reversed2 <- NULL
+      if (reverse2) {
+        reversed2 <- do.call(cppDE::cppODE,
+                             c(list(f, events = events, fixed = fixed, forcings = forcings,
+                                    modelname = paste0(modelname, "_r2"), outdir = outdir,
+                                    derivMode = "forward-reverse", verbose = verbose),
+                               dots_ext))
+      }
       out <- list(func = func, extended = extended, extended2 = extended2,
-                  reversed = reversed)
+                  reversed = reversed, reversed2 = reversed2)
       class(out) <- c("cppDE", "odemodel")
     } else if (backend == "Sundials") {
       dots_func <- pick(cppDE::cvode, dots[setdiff(names(dots), "nStack")])
@@ -294,6 +325,7 @@ odemodel <- function(f, deriv = TRUE, deriv2 = FALSE, derivMode = "forward",
       }
   }
   attr(out, "compileInfo") <- .collectCompileInfo(out$func, out$extended,
-                                                  out$extended2, out$reversed)
+                                                  out$extended2, out$reversed,
+                                                  out$reversed2)
   return(out)
 }
