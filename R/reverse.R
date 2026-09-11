@@ -26,13 +26,17 @@
 
 # Adds two named vectors on the union of their names. Cheaper than a merge and
 # it keeps the order of the first, which is the order a caller expects back.
+# Positions are resolved once with match(); indexing a vector by name resolves
+# them again on every use, and this runs once per node per condition.
 .addNamed <- function(a, b) {
   if (is.null(a)) return(b)
   if (is.null(b)) return(a)
-  nms <- union(names(a), names(b))
+  na <- names(a); nb <- names(b)
+  nms <- c(na, nb[is.na(match(nb, na))])
   out <- setNames(numeric(length(nms)), nms)
-  out[names(a)] <- out[names(a)] + a
-  out[names(b)] <- out[names(b)] + b
+  out[seq_along(na)] <- a
+  ib <- match(nb, nms)
+  out[ib] <- out[ib] + b
   out
 }
 
@@ -55,11 +59,14 @@
        "backend fault rather than a modelling one.", call. = FALSE)
 }
 
+# One match() rather than an intersect() and two name lookups: this is the
+# hottest thing in a reverse objective that is not the solver.
 .pickCotangent <- function(w, nms) {
   out <- setNames(numeric(length(nms)), nms)
   if (is.null(w) || !length(nms)) return(out)
-  hit <- intersect(names(w), nms)
-  if (length(hit)) out[hit] <- w[hit]
+  i <- match(nms, names(w))
+  hit <- !is.na(i)
+  if (any(hit)) out[hit] <- w[i[hit]]
   out
 }
 
@@ -77,9 +84,10 @@
 # The "time" column is a label, not an output: nothing differentiates it and no
 # leaf seeds it. Dropping it here keeps every vjp free of the special case.
 .dropTime <- function(m) {
-  if (is.null(m)) return(NULL)
-  if (is.matrix(m) && "time" %in% colnames(m)) m[, setdiff(colnames(m), "time"), drop = FALSE]
-  else m
+  if (is.null(m) || !is.matrix(m)) return(m)
+  keep <- colnames(m) != "time"
+  if (all(keep)) return(m)
+  m[, keep, drop = FALSE]
 }
 
 # A parfn whose Jacobian is a matrix it already builds -- Pimpl solves it by the

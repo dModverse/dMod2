@@ -28,12 +28,13 @@
   err_pars <- err_fixed <- NULL
   cn_eval <- character(0)
   if (!is.null(errmodel)) {
-    cn_eval <- if (is.null(e.cond)) conditions else intersect(conditions, e.cond)
+    cn_eval <- if (is.null(e.cond)) conditions else .intersectU(conditions, e.cond)
+    fixed_names <- names(fixed)
     split <- lapply(cn_eval, function(cn) {
       pinner <- getParameters(prediction[[cn]])
-      fixedinner <- pinner[union(attr(pinner, "fixed"),
-                                 intersect(names(pinner), names(fixed)))]
-      list(pars  = as.parvec(pinner[setdiff(names(pinner), names(fixed))]),
+      own <- attr(pinner, "fixed")
+      fixedinner <- pinner[c(own, .setdiffU(.intersectU(names(pinner), fixed_names), own))]
+      list(pars  = as.parvec(pinner[.setdiffU(names(pinner), fixed_names)]),
            fixed = as.parvec(fixedinner, deriv = FALSE, deriv2 = FALSE))
     })
     err_pars  <- lapply(split, `[[`, "pars")

@@ -178,7 +178,7 @@ match.fnargs <- function(arglist, choices) {
 
 .handoff_par_innerfixed <- function(v, fixed) {        # prdfn|parfn * parfn (:627)
   f <- attr(v, "fixed")
-  list(pars = v[setdiff(names(v), f)], fixed = v[f])
+  list(pars = v[.setdiffU(names(v), f)], fixed = v[f])
 }
 
 .handoff_par_nofixed <- function(v, fixed)             # objfn * parfn  (:730)
@@ -204,7 +204,7 @@ match.fnargs <- function(arglist, choices) {
 # Kernels expect disjoint pars / fixed.
 .splitParsFixed <- function(pars, fixed) {
   if (is.null(fixed)) return(list(pars = pars, fixed = NULL))
-  sub <- pars[setdiff(names(pars), names(fixed))]
+  sub <- pars[.setdiffU(names(pars), names(fixed))]
   if (!inherits(sub, "parvec")) sub <- as.parvec(sub)   # `[.parvec` already did
   f <- as.numeric(fixed)
   names(f) <- names(fixed)
