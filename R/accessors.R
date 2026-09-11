@@ -567,6 +567,11 @@ modelname.fn <- function(x = NULL, ..., conditions = NULL) {
             attr(e[["func"]], "modelname") <- value[i %% length(value) + 1]
           if (!is.null(e[["extended"]]))
             attr(e[["extended"]], "modelname") <- value[i %% length(value) + 1]
+          # A cppDE leaf caches a prepared batch handle bound to the shared
+          # object the entry point was resolved from. The rename is exactly
+          # what invalidates that binding, so drop the cache with it.
+          if (is.environment(e[["bcache"]]))
+            rm(list = ls(e[["bcache"]], all.names = TRUE), envir = e[["bcache"]])
         }
       }
       mappings[[i]] <- m
