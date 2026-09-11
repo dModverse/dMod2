@@ -76,6 +76,21 @@
   no reverse path, so a reverse call quietly returned a forward gradient.
 * `cppDE::funCpp()` is now `cppDE::cppFUN()`.
 
+# dMod2 0.7.4
+
+* A prepared ODE batch handle no longer outlives the shared object it was
+  resolved from. `Xs()` caches that handle for the derivative path and keyed the
+  cache on shapes and labels only, so a workspace shipped to a cluster node went
+  on calling an entry point of a shared object that was never built there. Every
+  `mstrust()` start then failed with `parinit not feasible`, and the real error,
+  `"solve_x_s_batch" not available for .Call()`, showed up only when the
+  objective was evaluated by hand. The cache now also checks that the shared
+  object is still loaded, and `modelname<-` drops it. The rename loop in the
+  scripts `runbg()` and `distributedComputing()` generate covers objective
+  functions too, which it had skipped.
+* Needs cppDE 0.9.5, where a Windows install detects OpenMP. Without it a
+  batched solve stays serial there.
+
 # dMod2 0.7.3
 
 * SBML and PEtab import work again in a fresh session. `.dmod_libsbml_python()`
