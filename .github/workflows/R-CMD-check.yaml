@@ -2,11 +2,7 @@
 # Need help debugging build failures? Start at https://github.com/r-lib/actions#where-to-find-help
 on:
   push:
-    branches: [main, master]
   pull_request:
-  # the devel branches are not push-triggered: a full matrix run on every
-  # commit of a port in progress is not worth the minutes. Dispatch one when
-  # a layer is ready to be judged.
   workflow_dispatch:
 
 name: R-CMD-check.yaml
