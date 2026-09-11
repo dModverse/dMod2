@@ -96,21 +96,30 @@ mC <- odemodel(reactions, modelname = "bench_cpp", backend = "cppDE",
                outdir = .bdir)
 xC <- Xs(mC, optionsOde = TOL, optionsSens = TOL)
 
+# The same model on the Rosenbrock stepper. Its adjoint is a different piece of
+# arithmetic: six direct solves transposed, against a corrector's implicit
+# function theorem, so the two are worth seeing side by side.
+mR <- odemodel(reactions, modelname = "bench_rb4", backend = "cppDE",
+               method = "rb4", derivMode = c("forward", "reverse"),
+               compile = FALSE, outdir = .bdir)
+xR <- Xs(mR, optionsOde = TOL, optionsSens = TOL)
+
 xS <- NULL
 if (hasASA) {
   mS <- odemodel(reactions, modelname = "bench_sun", backend = "Sundials",
                  derivMode = c("forward", "reverse"), compile = FALSE,
                  outdir = .bdir)
   xS <- Xs(mS, optionsOde = TOL, optionsSens = TOL)
-  compile(xC, xS, output = "bench_adjoint", cores = 12)
+  compile(xC, xR, xS, output = "bench_adjoint", cores = 12)
 } else {
   cat("SUNDIALS absent or cvode() has no reverse direction: ASA column is NA.\n")
-  compile(xC, output = "bench_adjoint", cores = 12)
+  compile(xC, xR, output = "bench_adjoint", cores = 12)
 }
 
 # normL2 alone, not the example's objective: its prior term is one scalar over
 # the whole problem and would be counted once per condition below.
 mkobj  <- function(dat) normL2(dat, g * xC * p, e)
+mkobjR <- function(dat) normL2(dat, g * xR * p, e)
 mkobjS <- function(dat) if (is.null(xS)) NULL else normL2(dat, g * xS * p, e)
 
 pars <- bestfit
@@ -123,6 +132,7 @@ pars <- bestfit
 # a gradient costs is the number that decides which direction is worth taking.
 # -----------------------------------------------------------------------------
 objC_all <- mkobj(mydataL)
+objR_all <- mkobjR(mydataL)
 objS_all <- mkobjS(mydataL)
 
 # A reverse evaluation returns no Hessian: the one invariant that says the
@@ -142,13 +152,15 @@ if (!is.null(objS_all)) {
 w_val <- tmin(function() objC_all(pars, deriv = FALSE), REPS_WHOLE)
 w_fwd <- tmin(function() objC_all(pars, deriv = TRUE, hessian = FALSE), REPS_WHOLE)
 w_rev <- tmin(function() objC_all(pars, deriv = TRUE, sweep = "reverse"), REPS_WHOLE)
+w_rrev <- tmin(function() objR_all(pars, deriv = TRUE, sweep = "reverse"), REPS_WHOLE)
+w_rval <- tmin(function() objR_all(pars, deriv = FALSE), REPS_WHOLE)
 w_asa <- if (is.null(objS_all)) NA_real_ else
   tmin(function() objS_all(pars, deriv = TRUE, sweep = "reverse"), REPS_WHOLE)
 
 whole <- data.frame(
-  route     = c("value", "forward", "reverse", "ASA"),
-  ms        = c(w_val, w_fwd, w_rev, w_asa),
-  in_values = c(w_val, w_fwd, w_rev, w_asa) / w_val,
+  route     = c("value", "forward", "reverse", "value rb4", "reverse rb4", "ASA"),
+  ms        = c(w_val, w_fwd, w_rev, w_rval, w_rrev, w_asa),
+  in_values = c(w_val, w_fwd, w_rev, w_rval, w_rrev, w_asa) / w_val,
   stringsAsFactors = FALSE)
 
 cat("\nAll conditions, whole chain to normL2, one core\n\n")
@@ -164,6 +176,7 @@ print(format(whole, digits = 3), row.names = FALSE)
 # -----------------------------------------------------------------------------
 g_fwd <- objC_all(pars, deriv = TRUE, hessian = FALSE)$gradient
 g_rev <- objC_all(pars, deriv = TRUE, sweep = "reverse")$gradient
+g_rrev <- objR_all(pars, deriv = TRUE, sweep = "reverse")$gradient
 g_asa <- if (is.null(objS_all)) NULL else
   objS_all(pars, deriv = TRUE, sweep = "reverse")$gradient
 
@@ -180,10 +193,10 @@ cosgap <- function(a, b) {
 }
 
 agree <- data.frame(
-  against_forward    = c("reverse", "ASA"),
-  worst_over_largest = c(relgap(g_fwd, g_rev),
+  against_forward    = c("reverse", "reverse rb4", "ASA"),
+  worst_over_largest = c(relgap(g_fwd, g_rev), relgap(g_fwd, g_rrev),
                          if (is.null(g_asa)) NA_real_ else relgap(g_fwd, g_asa)),
-  one_minus_cos      = c(cosgap(g_fwd, g_rev),
+  one_minus_cos      = c(cosgap(g_fwd, g_rev), cosgap(g_fwd, g_rrev),
                          if (is.null(g_asa)) NA_real_ else cosgap(g_fwd, g_asa)),
   stringsAsFactors = FALSE)
 
