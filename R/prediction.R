@@ -174,6 +174,19 @@ Xs.deSolve <- function(odemodel, forcings = NULL, events = NULL, names = NULL, c
 
 }
 
+# A prepared cppDE batch handle names the shared object it resolved its entry
+# point from, so it goes stale as soon as that object is gone: after a rename
+# via `modelname<-`, or when a saved workspace is reopened somewhere the object
+# was never built -- a cluster node, say. cppDE calls through
+# `.Call(name, PACKAGE = dll)`, so a stale handle fails at the call rather than
+# before it. A handle that resolved no symbol has nothing to go stale.
+.batchHandleLive <- function(handle) {
+  if (is.null(handle)) return(FALSE)
+  dll <- handle$sym$dll
+  if (is.null(dll)) return(TRUE)
+  dll %in% names(getLoadedDLLs())
+}
+
 #' @export
 #' @rdname Xs
 Xs.cppDE <- function(odemodel, forcings = NULL, events = NULL, names = NULL, condition = NULL,
@@ -465,12 +478,14 @@ Xs.cppDE <- function(odemodel, forcings = NULL, events = NULL, names = NULL, con
     } else if (!is.null(prepFn) && !is.null(solveFn)) {
       # The handle bakes in everything but the numbers, so it is only valid
       # while shapes and labels stay put. It names its entry point rather than
-      # holding an address, so it survives a reload of the shared object.
+      # holding an address, so it survives a reload of the shared object -- but
+      # not a rename or a move to another machine, which `sig` cannot see and
+      # `.batchHandleLive()` therefore checks separately.
       sig <- list(model = as.character(model), times = timesL,
                   deriv = deriv, deriv2 = deriv2,
                   sens = lapply(preps, function(pr) dimnames(pr$sens1ini)),
                   forcings = controls$forcings, opts = obatch)
-      if (!identical(bcache$sig, sig)) {
+      if (!identical(bcache$sig, sig) || !.batchHandleLive(bcache$handle)) {
         bcache$handle <- do.call(prepFn, c(list(model, conditions = mkConds()),
                                            obatch))
         bcache$sig <- sig
