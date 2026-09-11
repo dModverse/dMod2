@@ -602,7 +602,7 @@ runbg <- function(..., machine = "localhost", filename = NULL, input = ls(.Globa
   
   if (compile || link) {
     # R code to load the newly built shared object and update modelnames of known function objects
-    objfns <- 'obj.fns <- ls()[sapply(ls(), function(nm) inherits(get(nm, envir=.GlobalEnv), c("obsfn", "parfn", "prdfn")))]'
+    objfns <- 'obj.fns <- ls()[sapply(ls(), function(nm) inherits(get(nm, envir=.GlobalEnv), c("obsfn", "parfn", "prdfn", "objfn")))]'
     setmn <- sprintf('for (o in obj.fns) eval(parse(text=paste0("modelname(", o, ") <- \'%s\'")))', paste0(filename0, "_shared_object"))
     load_so <- paste0("dyn.load('", filename0, "_shared_object.so')")
   } else {
@@ -1116,7 +1116,7 @@ distributedComputing <- function(
   # attach makes a job depend on it; anything else belongs in the expression.
   package_list <- "library(dMod2)"
   if (compile || link) {
-    objfns <- 'obj.fns <- ls()[sapply(ls(), function(nm) inherits(get(nm, envir=.GlobalEnv), c("obsfn", "parfn", "prdfn")))]'
+    objfns <- 'obj.fns <- ls()[sapply(ls(), function(nm) inherits(get(nm, envir=.GlobalEnv), c("obsfn", "parfn", "prdfn", "objfn")))]'
     setmn <- sprintf('for (o in obj.fns) eval(parse(text=paste0("modelname(", o, ") <- \'%s\'")))\n', paste0(jobname, "_shared_object"))
     load_so <- paste0("dyn.load('",jobname,"_shared_object.so')")
   } else {
