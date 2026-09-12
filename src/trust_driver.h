@@ -187,6 +187,22 @@ inline bool eval_objfun(Function& objfun, const NumericVector& x, List& out,
   return true;
 }
 
+// An objective may decline to build a Hessian and says so with NULL. Converting
+// that to a matrix throws from outside eval_objfun's try, so a caller would see
+// an Rcpp conversion error instead of a decision it can act on. Reads the raw
+// SEXP so nothing here throws, and copies column-major, the way H_full is held.
+inline bool read_hessian(const List& out, int K, std::vector<double>& H) {
+  if (!out.containsElementNamed("hessian")) return false;
+  SEXP h = out["hessian"];
+  if (TYPEOF(h) != REALSXP) return false;
+  SEXP dim = Rf_getAttrib(h, R_DimSymbol);
+  if (TYPEOF(dim) != INTSXP || Rf_length(dim) != 2) return false;
+  if (INTEGER(dim)[0] != K || INTEGER(dim)[1] != K) return false;
+  const double* p = REAL(h);
+  H.assign(p, p + (std::size_t) K * K);
+  return true;
+}
+
 }}  // namespace dmod::trust_driver
 
 #endif  // DMOD_TRUST_DRIVER_H

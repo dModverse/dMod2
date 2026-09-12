@@ -35,6 +35,7 @@ using dmod::trust_driver::fill_parscale;
 using dmod::trust_driver::kInf;
 using dmod::trust_driver::kStallLimit;
 using dmod::trust_driver::push_interior;
+using dmod::trust_driver::read_hessian;
 using dmod::trust_driver::subproblem_label;
 
 namespace {
@@ -201,12 +202,19 @@ List trust_reflective(Function objfun, NumericVector parinit,
 
   std::vector<double> grad_full(grad0.begin(), grad0.end());
   std::vector<double> H_full((std::size_t) K * K, 0.0);
+  bool seeded = false;
   if (seed_gn) {
-    NumericMatrix Hmat0 = as<NumericMatrix>(out_init["hessian"]);
-    for (int j = 0; j < K; ++j)
-      for (int i = 0; i < K; ++i)
-        H_full[i + (std::size_t) j * K] = Hmat0(i, j);
-  } else {
+    seeded = read_hessian(out_init, K, H_full);
+    // gn reads a Hessian at every iterate, so an objective that declines one
+    // cannot drive it at all; a quasi-Newton start only loses its seed.
+    if (!seeded && !qn_start)
+      stop("objfun returned no Hessian at parinit, which this hessianMethod "
+           "needs at every iterate");
+    if (!seeded)
+      Rf_warning("objfun returned no Hessian at parinit; seeding the "
+                 "quasi-Newton approximation with the identity instead");
+  }
+  if (!seeded) {
     const double sgn0 = minimize ? 1.0 : -1.0;
     for (int i = 0; i < K; ++i) H_full[i + (std::size_t) i * K] = sgn0;
   }
@@ -237,8 +245,8 @@ List trust_reflective(Function objfun, NumericVector parinit,
   std::vector<unsigned char> best_at_bound = at_bound;
 
   // Hessian source: gn passes the objective's J^T J through, bfgs and sr1
-  // maintain their own update seeded from it (Hmat0 already seeds H_full). The
-  // fallback takes over at a soft stop and hands back while switches remain.
+  // maintain their own update seeded from it (the seed already filled H_full).
+  // The fallback takes over at a soft stop and hands back while switches remain.
   const int primary  = hessianMethod;
   const int fallback = hessianFallback;
   const bool has_fallback =
@@ -300,10 +308,9 @@ List trust_reflective(Function objfun, NumericVector parinit,
       for (int i = 0; i < K; ++i) x_now[i] = z[i] / ps[i];
       List out_now;
       if (eval_objfun(objfun, x_now, out_now, true)) {
-        NumericMatrix H_now = as<NumericMatrix>(out_now["hessian"]);
-        for (int j = 0; j < K; ++j)
-          for (int i = 0; i < K; ++i)
-            H_full[i + (std::size_t) j * K] = H_now(i, j);
+        // A declined Hessian leaves the approximation in place, the same as a
+        // failed evaluation does; the handover runs on what it already had.
+        read_hessian(out_now, K, H_full);
         neval++;
         eval_src[hessian_source_slot(qn_active, qn_kind)]++;
       }
@@ -373,11 +380,13 @@ List trust_reflective(Function objfun, NumericVector parinit,
     bool eval_ok = eval_objfun(objfun, x_try, out_try, want_h);
     double val_try = kInf;
     NumericVector grad_try;
-    NumericMatrix Htry_mat;
+    std::vector<double> Htry;
     if (eval_ok) {
       val_try  = as<double>(out_try["value"]);
       grad_try = as<NumericVector>(out_try["gradient"]);
-      if (want_h) Htry_mat = as<NumericMatrix>(out_try["hessian"]);
+      // A gn iteration without a Hessian has no model to build, so the point
+      // counts as a failed evaluation rather than as a silent fallback.
+      if (want_h && !read_hessian(out_try, K, Htry)) eval_ok = false;
       if (!std::isfinite(val_try)) eval_ok = false;
     }
     neval++;
@@ -432,10 +441,7 @@ List trust_reflective(Function objfun, NumericVector parinit,
       const double q_new = nonmonotone * zh_Q + 1.0;
       zh_C = (nonmonotone * zh_Q * zh_C + ftry_used) / q_new;
       zh_Q = q_new;
-      if (!qn_active)
-        for (int j = 0; j < K; ++j)
-          for (int i = 0; i < K; ++i)
-            H_full[i + (std::size_t) j * K] = Htry_mat(i, j);
+      if (!qn_active) H_full = Htry;
     }
 
     if (qn_pair) {
@@ -605,14 +611,13 @@ List trust_clip(Function objfun, NumericVector parinit,
   List out_init = as<List>(objfun(x_named));
   double val = as<double>(out_init["value"]);
   NumericVector grad0 = as<NumericVector>(out_init["gradient"]);
-  NumericMatrix Hmat0 = as<NumericMatrix>(out_init["hessian"]);
   if (!std::isfinite(val)) stop("parinit not feasible: value is not finite");
 
   std::vector<double> grad_full(grad0.begin(), grad0.end());
-  std::vector<double> H_full((std::size_t) K * K);
-  for (int j = 0; j < K; ++j)
-    for (int i = 0; i < K; ++i)
-      H_full[i + (std::size_t) j * K] = Hmat0(i, j);
+  std::vector<double> H_full((std::size_t) K * K, 0.0);
+  if (!read_hessian(out_init, K, H_full))
+    stop("objfun returned no Hessian at parinit, which boundary = \"clip\" "
+         "needs at every iterate");
 
   int neval = 1;
   report(neval, val, x_named, /*head=*/true);
@@ -711,11 +716,11 @@ List trust_clip(Function objfun, NumericVector parinit,
     bool eval_ok = eval_objfun(objfun, x_try, out_try);
     double val_try = kInf;
     NumericVector grad_try;
-    NumericMatrix Htry_mat;
+    std::vector<double> Htry;
     if (eval_ok) {
       val_try  = as<double>(out_try["value"]);
       grad_try = as<NumericVector>(out_try["gradient"]);
-      Htry_mat = as<NumericMatrix>(out_try["hessian"]);
+      if (!read_hessian(out_try, K, Htry)) eval_ok = false;
       if (!std::isfinite(val_try)) eval_ok = false;
     }
     neval++;
@@ -754,9 +759,7 @@ List trust_clip(Function objfun, NumericVector parinit,
       for (int i = 0; i < K; ++i) theta[i] = theta_try[i];
       val = val_try;
       grad_full.assign(grad_try.begin(), grad_try.end());
-      for (int j = 0; j < K; ++j)
-        for (int i = 0; i < K; ++i)
-          H_full[i + (std::size_t) j * K] = Htry_mat(i, j);
+      H_full = Htry;
     }
 
     if (blather_on) {

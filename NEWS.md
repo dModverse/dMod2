@@ -1,5 +1,14 @@
 # dMod2 (development version)
 
+* An objective that declines to build a Hessian gets an answer rather than a
+  crash. `trust()` read the `hessian` element as a matrix at three points
+  outside the handler that turns an objective's failure into a rejected step,
+  so a `NULL` surfaced as an Rcpp conversion error naming neither the objective
+  nor the argument. Each point now decides for itself: a quasi-Newton start
+  seeds the identity and says so, a handover keeps the approximation it had, and
+  a trial point counts as a failed evaluation. `hessianMethod = "gn"` and
+  `boundary = "clip"` need one at every iterate and stop at `parinit` instead.
+
 * A backward solve that returns no adjoint is an error. It used to read as a
   cotangent of zero, so a backend that dropped the answer produced a gradient
   that was quietly zero in every direction it dropped rather than a failure.

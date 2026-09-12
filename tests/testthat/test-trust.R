@@ -847,3 +847,49 @@ test_that("an unknown Hessian source is rejected by name", {
   expect_error(trust(obj, c(a = 0), hessianMethod = "nope"), "should be one of")
   expect_error(trust(obj, c(a = 0), hessianFallback = "nope"), "should be one of")
 })
+
+# An objective may decline to build a Hessian, and NULL is how it says so.
+# `give` decides which evaluations carry one.
+.declining_objfn <- function(give = function(n) FALSE) {
+  n <- 0L
+  function(p, hessian = TRUE, ...) {
+    n <<- n + 1L
+    x <- p[[1]]; y <- p[[2]]
+    gr <- c(-2 * (1 - x) - 400 * x * (y - x^2), 200 * (y - x^2))
+    hs <- matrix(c(2 - 400 * y + 1200 * x^2, -400 * x, -400 * x, 200), 2, 2)
+    names(gr) <- names(p); dimnames(hs) <- list(names(p), names(p))
+    list(value = (1 - x)^2 + 100 * (y - x^2)^2, gradient = gr,
+         hessian = if (isTRUE(hessian) && give(n)) hs else NULL)
+  }
+}
+
+test_that("a quasi-Newton start survives an objective that returns no Hessian", {
+  init <- c(x = -1.2, y = 1)
+  expect_warning(
+    fit <- trust(.declining_objfn(), init, rinit = 1, rmax = 10, iterlim = 200,
+                 hessianMethod = "bfgs"),
+    "no Hessian at parinit")
+  expect_true(fit$converged)
+  expect_lt(fit$value, 1e-8)
+})
+
+test_that("gn says which argument it cannot honour when no Hessian arrives", {
+  init <- c(x = -1.2, y = 1)
+  expect_error(trust(.declining_objfn(), init, rinit = 1, rmax = 10),
+               "no Hessian at parinit")
+  expect_error(trust(.declining_objfn(), init, rinit = 1, rmax = 10,
+                     stepControl = list(boundary = "clip")),
+               "no Hessian at parinit")
+})
+
+test_that("a trial point without a Hessian is a failed evaluation, not an error", {
+  # Seeded, then declining: the kernel must treat the trial as infeasible
+  # rather than let the conversion throw from outside its own handler.
+  init <- c(x = -1.2, y = 1)
+  expect_warning(
+    fit <- trust(.declining_objfn(function(n) n == 1L), init, rinit = 1,
+                 rmax = 10, iterlim = 20),
+    "evaluation failed")
+  expect_identical(fit$stopReason, "objfun")
+  expect_false(fit$converged)
+})
