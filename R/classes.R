@@ -416,31 +416,33 @@ match.fnargs <- function(arglist, choices) {
 ## function reads the prediction's parameters as well as its values -- and both
 ## halves accumulate.
 
-.fwdNode <- function(st, b, env, cores) {
+.fwdNode <- function(st, b, env, cores, deriv = FALSE) {
   switch(st$op,
     # The value pass of a reverse evaluation is the one whose trajectory the
-    # backward pass replays, so a leaf that can keep its checkpoints does.
-    leaf = list(values = .evalLeaf(st, b, FALSE, FALSE, cores,
+    # backward pass replays, so a leaf that can keep its checkpoints does. Under
+    # second order it also carries tangents: they are the directions the
+    # backward half differentiates each node's vjp along.
+    leaf = list(values = .evalLeaf(st, b, deriv, FALSE, cores,
                                    keepStore = isTRUE(st$keepstore)),
                 tape   = list(op = "leaf", st = st, b = b)),
-    "*"  = .fwdProd(st, b, env, cores),
-    "+"  = .fwdPlus(st, b, env, cores),
+    "*"  = .fwdProd(st, b, env, cores, deriv),
+    "+"  = .fwdPlus(st, b, env, cores, deriv),
     stop(".fwdNode: unknown node op '", st$op, "'.", call. = FALSE))
 }
 
-.fwdMany <- function(f, b, env, cores) {
+.fwdMany <- function(f, b, env, cores, deriv = FALSE) {
   st <- .fnNode(f)
   if (is.null(st))
     stop("reverse mode needs an fn object with a structure descriptor; this one ",
          "predates the evaluation protocol and has none.", call. = FALSE)
-  .fwdNode(st, b, env, cores)
+  .fwdNode(st, b, env, cores, deriv)
 }
 
-.fwdProd <- function(st, b, env, cores) {
+.fwdProd <- function(st, b, env, cores, deriv = FALSE) {
   b2 <- .bundle(conds = b$conds, times = b$times, pars = b$pars,
                 fixed = b$fixed, shared = b$shared,
                 out = if (identical(st$p2kind, "obsfn")) b$out else NULL)
-  f2 <- .fwdNode(.fnNode(st$p2), b2, env, cores)
+  f2 <- .fwdNode(.fnNode(st$p2), b2, env, cores, deriv)
   inner <- f2$values
 
   conds <- names(inner)
@@ -462,14 +464,14 @@ match.fnargs <- function(arglist, choices) {
     fixed = lapply(hs, function(h) if (is.null(h)) NULL else h$fixed),
     shared = FALSE)
 
-  f1 <- .fwdNode(.fnNode(st$p1), b1, env, cores)
+  f1 <- .fwdNode(.fnNode(st$p1), b1, env, cores, deriv)
   values <- if (identical(st$reduce, "sum")) Reduce("+", f1$values) else f1$values
   list(values = values,
        tape = list(op = "*", st = st, b = b, t1 = f1$tape, t2 = f2$tape,
                    inner = inner, p2_is_par = p2_is_par, n = n))
 }
 
-.fwdPlus <- function(st, b, env, cores) {
+.fwdPlus <- function(st, b, env, cores, deriv = FALSE) {
   slotnames <- if (is.null(b$conds)) names(st$owner) else b$conds
   outlist <- .emptySlots(slotnames)
   own <- st$owner[slotnames]
@@ -478,7 +480,7 @@ match.fnargs <- function(arglist, choices) {
   if (length(keep)) for (k in unique(own[keep])) {
     pos  <- keep[own[keep] == k]
     sub  <- .bundle_positions(b, pos, slotnames[pos])
-    f    <- .fwdNode(.fnNode(st$parts[[k]]), sub, env, cores)
+    f    <- .fwdNode(.fnNode(st$parts[[k]]), sub, env, cores, deriv)
     for (j in seq_along(pos)) outlist[[pos[j]]] <- f$values[[j]]
     parts[[as.character(k)]] <- list(pos = pos, tape = f$tape)
   }
@@ -541,8 +543,10 @@ match.fnargs <- function(arglist, choices) {
                              condition = cond)),
       stop(".bwdLeaf: no reverse mode for a ", st$kind, " leaf.", call. = FALSE))
     # Whatever the node passed through untouched keeps its cotangent.
-    if (!identical(st$kind, "parfn"))
-      r <- .addCt(r, .ct(pars = .pickCotangent(ws$pars, names(pf$pars))))
+    if (!identical(st$kind, "parfn")) {
+      K <- max(.ctK(ws$pars), .ctK(ws$out))
+      r <- .addCt(r, .ct(pars = .pickCotangent(ws$pars, names(pf$pars), K)))
+    }
     r
   }
 

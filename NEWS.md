@@ -1,5 +1,9 @@
 # dMod2 (development version)
 
+* A cotangent carries directions. Every backward node now hands on a matrix or
+  an array with a trailing direction axis: slice one is the cotangent, the rest
+  are its derivatives along the directions the value pass carried. First order is
+  one direction and the same code path, so nothing about it changed.
 * An objective that declines to build a Hessian gets an answer rather than a
   crash. `trust()` read the `hessian` element as a matrix at three points
   outside the handler that turns an objective's failure into a rejected step,

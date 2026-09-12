@@ -238,6 +238,7 @@ Xs.cppDE <- function(odemodel, forcings = NULL, events = NULL, names = NULL, con
   extended <- odemodel$extended
   extended2 <- odemodel$extended2
   reversed <- odemodel$reversed
+  reversed2 <- odemodel$reversed2
   if (is.null(extended)) warning("Element 'extended' empty. ODE model does not contain sensitivities.")
 
   # Extract metadata
@@ -263,6 +264,7 @@ Xs.cppDE <- function(odemodel, forcings = NULL, events = NULL, names = NULL, con
 
   has_deriv2 <- !is.null(extended2)
   has_reverse <- !is.null(reversed)
+  has_reverse2 <- !is.null(reversed2)
   # CVODES holds its checkpoints inside the solver and runs the backward solve
   # under its own step-size control, so both the shared store and the weighted
   # grid are arrangements of the native backend alone.
@@ -518,65 +520,93 @@ Xs.cppDE <- function(odemodel, forcings = NULL, events = NULL, names = NULL, con
   # second call over the same trajectory. It integrates nothing where the value
   # pass left its checkpoints behind, and replays the recorded steps instead.
   P2Xvjp <- function(times, pars, fixed = NULL, w) {
-    if (!has_reverse)
-      stop("Xs.cppDE: the model has no reverse object; rebuild via ",
-           "odemodel(..., derivMode = c(\"forward\", \"reverse\")).", call. = FALSE)
-    params <- c(unclass(pars), unclass(fixed))
+    w <- .asCtOut(w)
+    K <- .ctK(w)
+    .requireReverse(has_reverse, has_reverse2, K)
     states <- dim_names$variable
     W <- .widenSeed(w, states, controls$names)
-    o <- solveOpts(FALSE)
-    res <- do.call(cppDE::solveODE, c(
-      list(reversed, times, params, fixed = NULL,
+    # Second order sweeps over tangents, so it takes the directions the value
+    # pass carried, the same seeding prep1 builds for a forward solve. A store
+    # cannot help it: a checkpoint's tangents do not outlive the solve that
+    # took them, so the sweep integrates its own.
+    pr <- prep1(pars, fixed, K > 1L, FALSE)
+    o <- solveOpts(K > 1L)
+    call <- if (K > 1L) {
+      if (is.null(pr$sens1ini))
+        stop("a second-order cotangent needs the tangents the value pass ",
+             "carried, and this input has none.", call. = FALSE)
+      list(reversed2, times, pr$params, fixed = NULL,
            forcings = controls$forcings, seed = W,
-           store = storeTake(times, params),
+           sens1ini = pr$sens1ini)
+    } else
+      list(reversed, times, pr$params, fixed = NULL,
+           forcings = controls$forcings, seed = W,
+           store = storeTake(times, pr$params),
            errWeights = weightGet(NULL, times),
-           adjointGrid = weightOn()), o))
-    if (weightOn()) weightPut(NULL, times, res)
+           adjointGrid = weightOn())
+    res <- do.call(cppDE::solveODE, c(call, o))
+    if (K == 1L && weightOn()) weightPut(NULL, times, res)
     .requireAdjoint(res)
-    .pickCotangent(res$adjoint[, 1L], names(pars))
+    .pickCotangent(.adjointCt(res, K), names(pars))
   }
   attr(P2X, "vjpfn") <- P2Xvjp
 
   # Every condition's backward solve in one call, the way P2Xbatch does the
   # forward ones. Falls back to a loop where cppDE predates the entry point.
   P2Xvjpbatch <- function(times, parsList, fixedList, wList, conditions, cores) {
-    if (!has_reverse)
-      stop("Xs.cppDE: the model has no reverse object; rebuild via ",
-           "odemodel(..., derivMode = c(\"forward\", \"reverse\")).", call. = FALSE)
+    wList <- lapply(wList, .asCtOut)
+    K <- max(vapply(wList, .ctK, 1L))
+    .requireReverse(has_reverse, has_reverse2, K)
     n <- length(parsList)
     timesL <- if (is.list(times)) times else rep(list(times), n)
     states <- dim_names$variable
-    o <- solveOpts(FALSE)
+    o <- solveOpts(K > 1L)
 
     batch <- get0("solveODEBatch", envir = asNamespace("cppDE"), inherits = FALSE)
     condOf <- function(i)
       if (is.null(conditions)) NULL else conditions[[i]]
     conds <- lapply(seq_len(n), function(i) {
-      params <- c(unclass(parsList[[i]]), unclass(fixedList[[i]]))
+      pr <- prep1(parsList[[i]], fixedList[[i]], K > 1L, FALSE)
+      if (K > 1L) {
+        if (is.null(pr$sens1ini))
+          stop("a second-order cotangent needs the tangents the value pass ",
+               "carried, and condition ", i, " has none.", call. = FALSE)
+        return(list(times = timesL[[i]], parms = pr$params,
+                    forcings = controls$forcings,
+                    seed = .widenSeed(wList[[i]], states, controls$names),
+                    sens1ini = pr$sens1ini))
+      }
       list(times = timesL[[i]],
-           parms = params,
+           parms = pr$params,
            forcings = controls$forcings,
            seed = .widenSeed(wList[[i]], states, controls$names),
-           store = storeTake(timesL[[i]], params),
+           store = storeTake(timesL[[i]], pr$params),
            errWeights = weightGet(condOf(i), timesL[[i]]),
            adjointGrid = weightOn())
     })
 
+    model <- if (K > 1L) reversed2 else reversed
     res <- if (is.null(batch))
-      lapply(seq_len(n), function(i) do.call(cppDE::solveODE, c(
-        list(reversed, conds[[i]]$times, conds[[i]]$parms, fixed = NULL,
-             forcings = controls$forcings, seed = conds[[i]]$seed,
-             store = conds[[i]]$store, errWeights = conds[[i]]$errWeights,
-             adjointGrid = conds[[i]]$adjointGrid), o)))
+      lapply(seq_len(n), function(i) {
+        a <- conds[[i]]
+        do.call(cppDE::solveODE,
+                c(list(model, a$times, a$parms, fixed = NULL,
+                       forcings = controls$forcings, seed = a$seed),
+                  if (K > 1L) list(sens1ini = a$sens1ini)
+                  else list(store = a$store, errWeights = a$errWeights,
+                            adjointGrid = a$adjointGrid),
+                  o))
+      })
     else
-      do.call(batch, c(list(reversed, conditions = conds, cores = cores), o))
+      do.call(batch, c(list(model, conditions = conds, cores = cores), o))
 
-    if (weightOn())
+    if (K == 1L && weightOn())
       for (i in seq_len(n)) weightPut(condOf(i), timesL[[i]], res[[i]])
 
     lapply(seq_len(n), function(i) {
       .requireAdjoint(res[[i]], condOf(i))
-      .pickCotangent(res[[i]]$adjoint[, 1L], names(parsList[[i]]))
+      .pickCotangent(.adjointCt(res[[i]], .ctK(wList[[i]])),
+                     names(parsList[[i]]))
     })
   }
   attr(P2X, "vjpbatchfn") <- P2Xvjpbatch
@@ -877,16 +907,21 @@ Xd <- function(data, condition = NULL) {
   # the same `grad` the forward path builds; contracting it with w rather than
   # with dP is the whole difference.
   attr(P2X, "vjpfn") <- function(times, pars, fixed = NULL, w) {
+    w <- .asCtOut(w)
     p <- if (is.null(fixed)) pars else c(unclass(pars), unclass(fixed))
-    out <- setNames(numeric(length(pars)), names(pars))
+    K <- .ctK(w)
+    out <- .ctZero(names(pars), K)
     for (s in states) {
-      if (!(s %in% colnames(w))) next
+      if (!(s %in% dimnames(w)[[2L]])) next
       pr  <- predL[[s]](times, p)
       sens <- attr(pr, "sensitivities")
       nms  <- attr(pr, "parameters") %||% attr(predL[[s]], "parameters")
-      contrib <- setNames(as.numeric(crossprod(sens, w[, s])), nms)
-      hit <- intersect(names(contrib), names(out))
-      if (length(hit)) out[hit] <- out[hit] + contrib[hit]
+      ws <- matrix(w[, s, ], nrow = dim(w)[1L], ncol = K)
+      contrib <- crossprod(sens, ws)
+      rownames(contrib) <- nms
+      hit <- intersect(nms, rownames(out))
+      if (length(hit))
+        out[hit, ] <- out[hit, , drop = FALSE] + contrib[hit, , drop = FALSE]
     }
     out
   }
@@ -1292,6 +1327,7 @@ Y <- function(g, f = NULL, states = NULL, parameters = NULL,
   # attach.input passes states through untouched, so their cotangent goes
   # straight back onto the prediction.
   X2Yvjp <- function(out, pars, fixed = NULL, w) {
+    w <- .asCtOut(w)
     if (is.null(gEval$vjp))
       stop("Y(): the reverse mode needs a vector-Jacobian product; rebuild ",
            "with Y(..., derivMode = c(\"forward\", \"reverse\"), ",
@@ -1299,25 +1335,69 @@ Y <- function(g, f = NULL, states = NULL, parameters = NULL,
     params <- c(unclass(pars), unclass(fixed))
     fixedObsParams <- intersect(union(attr(pars, "fixed"), names(fixed)), obsParams)
 
-    w_obs <- w[, intersect(colnames(w), observables), drop = FALSE]
+    K <- .ctK(w)
+    if (K > 1L && is.null(gEval$vjp2))
+      stop("Y(): a second-order cotangent needs the vjp over a dual; rebuild ",
+           "with derivMode = c(\"forward\", \"reverse\") and compile = TRUE.",
+           call. = FALSE)
+    wm <- .ctSlice(w)
+    w_obs <- wm[, intersect(colnames(wm), observables), drop = FALSE]
     W <- matrix(0, nrow(out), length(observables),
                 dimnames = list(NULL, observables))
     if (ncol(w_obs)) W[, colnames(w_obs)] <- w_obs
 
-    r <- gEval$vjp(out[, obsStates, drop = FALSE], params[obsParams], W)
+    if (K == 1L) {
+      r <- gEval$vjp(out[, obsStates, drop = FALSE], params[obsParams], W)
+    } else {
+      # The directions the value pass carried, on the two inputs this node
+      # reads: the prediction's own tangents and the parameters it passes
+      # through. The cotangent brings its own beside them.
+      nd <- K - 1L
+      dX <- attr(out, "deriv")
+      VX <- array(0, c(nrow(out), length(obsStates), nd))
+      if (!is.null(dX)) {
+        take <- intersect(obsStates, dimnames(dX)[[2L]])
+        if (length(take))
+          VX[, match(take, obsStates), ] <- dX[, take, seq_len(nd), drop = FALSE]
+      }
+      VP <- matrix(0, length(obsParams), nd, dimnames = list(obsParams, NULL))
+      dP <- attr(pars, "deriv")
+      if (!is.null(dP)) {
+        take <- intersect(rownames(dP), obsParams)
+        if (length(take)) VP[take, ] <- dP[take, seq_len(nd), drop = FALSE]
+      }
+      DW <- array(0, c(nrow(out), length(observables), 1L, nd))
+      hitw <- intersect(dimnames(w)[[2L]], observables)
+      if (length(hitw))
+        DW[, match(hitw, observables), 1L, ] <- w[, hitw, -1L, drop = FALSE]
+      r <- gEval$vjp2(out[, obsStates, drop = FALSE], params[obsParams], W,
+                      vx = VX, vp = VP, dw = DW)
+    }
 
-    w_out <- matrix(0, nrow(out), ncol(out), dimnames = list(NULL, colnames(out)))
+    w_out <- array(0, c(nrow(out), ncol(out), K),
+                   dimnames = list(NULL, colnames(out), NULL))
     hit <- intersect(obsStates, colnames(out))
-    if (length(hit)) w_out[, hit] <- r$wx[, hit, 1L]
+    if (length(hit)) {
+      w_out[, hit, 1L] <- r$wx[, hit, 1L]
+      if (K > 1L)
+        w_out[, hit, -1L] <- r$dwx[, match(hit, obsStates), 1L, , drop = FALSE]
+    }
     # Everything attach.input carried through keeps whatever the caller put on
     # it, the observables aside.
     if (controls$attach.input) {
-      through <- intersect(setdiff(colnames(w), c("time", observables)), colnames(out))
-      if (length(through)) w_out[, through] <- w_out[, through] + w[, through]
+      through <- intersect(setdiff(colnames(wm), c("time", observables)), colnames(out))
+      if (length(through))
+        w_out[, through, ] <- w_out[, through, , drop = FALSE] +
+                              w[, through, , drop = FALSE]
     }
 
-    w_pars <- .pickCotangent(setNames(r$wp[, 1L], rownames(r$wp)),
-                             setdiff(names(pars), fixedObsParams))
+    up <- matrix(r$wp[, 1L], ncol = 1L,
+                 dimnames = list(rownames(r$wp), NULL))
+    if (K > 1L) {
+      up <- cbind(up, matrix(r$dwp[, 1L, ], nrow = nrow(up)))
+      rownames(up) <- rownames(r$wp)
+    }
+    w_pars <- .pickCotangent(up, setdiff(names(pars), fixedObsParams))
     .ct(out = w_out, pars = .pickCotangent(w_pars, names(pars)))
   }
 
@@ -1377,7 +1457,7 @@ Xt <- function(condition = NULL) {
   # Time depends on nothing, so its cotangent is nothing. The pass-through of
   # the parameters is the caller's business and happens above this leaf.
   attr(P2X, "vjpfn") <- function(times, pars, fixed = NULL, w)
-    setNames(numeric(length(pars)), names(pars))
+    .ctZero(names(pars), .ctK(.asCtOut(w)))
 
   attr(P2X, "parameters") <- NULL
   attr(P2X, "equations") <- NULL

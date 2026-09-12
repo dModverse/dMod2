@@ -218,19 +218,47 @@ P <- function(trafo = NULL, parameters = NULL, condition = NULL,
     stop("Pexpl(): the reverse mode needs a vector-Jacobian product; rebuild ",
          "with derivMode = c(\"forward\", \"reverse\") and compile = TRUE.",
          call. = FALSE)
+  w <- .asCtPars(w)
+  K <- .ctK(w)
+  if (K > 1L && is.null(st$vjp2))
+    stop("Pexpl(): a second-order cotangent needs the vjp over a dual; rebuild ",
+         "with derivMode = c(\"forward\", \"reverse\") and compile = TRUE.",
+         call. = FALSE)
   p <- c(pars, fixed)
   outnames <- st$outnames
   W <- matrix(0, 1L, length(outnames), dimnames = list(NULL, outnames))
-  hit <- intersect(names(w), outnames)
-  if (length(hit)) W[1L, hit] <- w[hit]
+  hit <- intersect(rownames(w), outnames)
+  if (length(hit)) W[1L, hit] <- w[hit, 1L]
 
-  r <- st$vjp(NULL, p[st$parameters], W)
-  wp <- .pickCotangent(setNames(r$wp[, 1L], rownames(r$wp)), names(pars))
+  if (K == 1L) {
+    r <- st$vjp(NULL, p[st$parameters], W)
+    u <- matrix(r$wp[, 1L], ncol = 1L, dimnames = list(rownames(r$wp), NULL))
+  } else {
+    # The node has no variables, so only the parameters carry tangents in, and
+    # the cotangent brings its own. Both halves of d/dv (w' J) come back in one
+    # pass; nothing here forms a Hessian.
+    nd <- K - 1L
+    V <- matrix(0, length(st$parameters), nd,
+                dimnames = list(st$parameters, NULL))
+    dp <- attr(pars, "deriv")
+    if (!is.null(dp)) {
+      take <- intersect(rownames(dp), st$parameters)
+      if (length(take)) V[take, ] <- dp[take, seq_len(nd), drop = FALSE]
+    }
+    DW <- array(0, c(1L, length(outnames), 1L, nd))
+    if (length(hit))
+      DW[1L, match(hit, outnames), 1L, ] <- w[hit, -1L, drop = FALSE]
+    r <- st$vjp2(NULL, p[st$parameters], W, vp = V, dw = DW)
+    u <- cbind(r$wp[, 1L, drop = FALSE], matrix(r$dwp[, 1L, ], ncol = nd))
+    rownames(u) <- rownames(r$wp)
+  }
+  wp <- .pickCotangent(u, names(pars))
 
   if (st$attach.input) {
-    through <- setdiff(names(w), outnames)
-    keep <- intersect(through, names(pars))
-    if (length(keep)) wp[keep] <- wp[keep] + w[keep]
+    through <- setdiff(rownames(w), outnames)
+    keep <- intersect(through, rownames(wp))
+    if (length(keep))
+      wp[keep, ] <- wp[keep, , drop = FALSE] + w[keep, , drop = FALSE]
   }
   wp
 }
@@ -300,6 +328,7 @@ Pexpl <- function(trafo, parameters = NULL, attach.input = FALSE, condition = NU
   ## The wrapper closes over `st` alone, not over Pexpl's frame.
   st <- list2env(list(fun = fun, jac = jac, hess = hess, evaluate = evaluate,
                       evaluateBatch = PEval$evaluateBatch, vjp = PEval$vjp,
+                      vjp2 = PEval$vjp2,
                       outnames = names(trafo),
                       parameters = parameters, attach.input = attach.input,
                       use_ad = use_ad, ad_symbol = ad_symbol,

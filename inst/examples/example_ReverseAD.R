@@ -80,7 +80,10 @@ set.seed(1)
 w <- matrix(rnorm(nrow(fwd) * 2), nrow(fwd), 2, dimnames = list(NULL, c("A", "B")))
 
 ref <- apply(attr(fwd, "deriv") * as.vector(w), 3, sum)
+# A vjp answers a cotangent with a direction axis: column 1 is the gradient,
+# and second order would put its derivatives beside it.
 got <- attr(x, "mappings")[[1]] |> attr("vjpfn") |> (\(f) f(times, inner, NULL, w))()
+got <- got[, 1L]
 
 print(rbind(forward = ref, reverse = got[names(ref)]))
 cat("1. solver          max |difference| =",
