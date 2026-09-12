@@ -14,12 +14,26 @@
 
 .normL2_reverse <- function(pars, fixed, deriv, conditions, env, cores,
                             x, errmodel, data, timesD, e.cond, opt.BLOQ,
-                            attr.name) {
+                            attr.name, hessian = FALSE) {
 
-  # --- forward, values only, keeping the tape ------------------------------
+  # The objective's Hessian splits along a line the residual kernel already
+  # draws: J' H_rho J from the forward tangents, which is what the kernel
+  # computes when it is handed no second derivatives, plus the prediction's own
+  # curvature weighted by the seed, which is what a dual sweep with a constant
+  # seed returns. The seed and that weight are the same number by construction,
+  # see src/residual_kernel.h.
+  n_dir <- if (isTRUE(hessian)) length(pars) else 0L
+  if (n_dir > 0L) {
+    nm <- names(pars)
+    attr(pars, "deriv") <- diag(length(nm))
+    dimnames(attr(pars, "deriv")) <- list(nm, nm)
+  }
+
+  # --- forward, keeping the tape, and the tangents when second order needs
+  #     them: they are the directions every node's vjp is differentiated along
   b <- .bundle_from_call(conditions, times = timesD, out = NULL,
                          pars = pars, fixed = fixed)
-  fw <- .fwdMany(x, b, env, cores)
+  fw <- .fwdMany(x, b, env, cores, deriv = n_dir > 0L)
   prediction <- as.prdlist(fw$values)
   prediction <- prediction[conditions]
 
@@ -53,11 +67,11 @@
     prediction       = prediction,
     err_list_opt     = err_list,
     meta_list        = meta_list,
-    par_names_global = character(0),
+    par_names_global = if (n_dir > 0L) names(pars) else character(0),
     deriv2_requested = FALSE,
     threads          = as.integer(cores),
     bloq_mode        = opt.BLOQ,
-    build_hessian    = FALSE,
+    build_hessian    = n_dir > 0L,
     want_seed        = isTRUE(deriv)
   )
 
@@ -110,7 +124,7 @@
   # It reads the prediction's values and its parameters, so its cotangent lands
   # on both, and the prediction's half adds to the seed above.
   w_chain <- lapply(seq_along(conditions), function(ci)
-    .ct(out = .dropTime(w_pred[[ci]])))
+    .ct(out = .ctWiden(.ct(out = .dropTime(w_pred[[ci]]))$out, n_dir + 1L)))
   if (!is.null(errmodel) && length(cn_eval)) {
     evjp <- attr(.fnLeafKernel(errmodel), "vjpfn")
     if (is.null(evjp))
@@ -120,7 +134,8 @@
       ci <- match(cn_eval[j], conditions)
       if (is.null(w_err[[ci]])) next
       u <- evjp(out = prediction[[cn_eval[j]]], pars = err_pars[[j]],
-                fixed = err_fixed[[j]], w = .dropTime(w_err[[ci]]))
+                fixed = err_fixed[[j]],
+                w = .ctWiden(.ct(out = .dropTime(w_err[[ci]]))$out, n_dir + 1L))
       w_chain[[ci]] <- .addCt(w_chain[[ci]], .ct(out = .dropTime(u$out),
                                                  pars = u$pars))
     }
@@ -131,11 +146,24 @@
   grad <- Reduce(.addNamed,
                  lapply(u, function(z) if (is.null(z)) NULL else z$pars))
   grad <- .pickCotangent(grad, names(pars))
+  gradient <- setNames(grad[, 1L], rownames(grad))
 
-  out <- .alignObjlist(objlist(value = kr$value, gradient = grad, hessian = NULL),
+  # The two terms, on the same rows and in the same order: the kernel's is in
+  # par_names_global order, the sweep's directions are the identity's columns.
+  hess <- NULL
+  if (n_dir > 0L) {
+    hess <- kr$hessian + grad[, -1L, drop = FALSE]
+    dimnames(hess) <- list(names(pars), names(pars))
+  }
+
+  out <- .alignObjlist(objlist(value = kr$value, gradient = gradient,
+                               hessian = hess),
                        names(pars))
   attr(out, attr.name) <- out$value
   attr(out, "chi2") <- setNames(kr$chi2, attr.name)
+  # Which direction answered. A caller used to read that off an absent Hessian,
+  # which stops being a signal the moment the reverse mode can return one.
+  attr(out, "sweep") <- if (n_dir > 0L) "forward-reverse" else "reverse"
   env$prediction <- prediction
   attr(out, "env") <- env
   out

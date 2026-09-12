@@ -197,7 +197,8 @@ normL2 <- function(data, x, errmodel = NULL, times = NULL, t0 = 0,
   myfn <- function(..., fixed = NULL, deriv = TRUE, deriv2 = FALSE, hessian = TRUE,
                    conditions = NULL, env = NULL,
                    cores = getOption("dMod.cores", 1L), .prediction = NULL,
-                   sweep = c("forward", "reverse")) {
+                   sweep = c("forward", "reverse"),
+                   curvature = c("auto", "none", "gn", "exact")) {
     pars <- ..1
     if (is.null(env)) env <- new.env()
     conditions <- if (is.null(conditions)) conditions.obj else
@@ -205,16 +206,20 @@ normL2 <- function(data, x, errmodel = NULL, times = NULL, t0 = 0,
     if (!length(conditions)) return(NULL)
 
     sweep <- match.arg(sweep)
+    curvature <- match.arg(curvature)
     if (identical(sweep, "reverse")) {
       if (!is.null(.prediction))
         stop("normL2: a handed-in prediction is a forward-mode shortcut and ",
              "carries no tape; the reverse mode has to walk the chain itself.",
              call. = FALSE)
       if (isTRUE(deriv2))
-        stop("normL2: the reverse mode is first order; second order is ",
-             "forward-over-reverse and is not built yet.", call. = FALSE)
+        stop("normL2: second order backwards is asked for with ",
+             "curvature = \"exact\", not with deriv2 = TRUE; deriv2 selects ",
+             "forward over forward.", call. = FALSE)
       return(.normL2_reverse(
-        pars = pars, fixed = fixed, deriv = deriv, conditions = conditions,
+        pars = pars, fixed = fixed, deriv = deriv,
+        hessian = isTRUE(deriv) && identical(curvature, "exact"),
+        conditions = conditions,
         env = env, cores = cores, x = x, errmodel = errmodel, data = data,
         timesD = timesD, e.cond = e.cond, opt.BLOQ = opt.BLOQ,
         attr.name = attr.name))

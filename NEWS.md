@@ -1,9 +1,25 @@
 # dMod2 (development version)
 
+* The objective can be differentiated twice backwards.
+  `obj(pars, sweep = "reverse", curvature = "exact")` returns the exact Hessian
+  through the whole chain, `normL2 -> Y -> Xs -> P`, at a cost that grows with
+  the parameter count rather than with its square. It needs
+  `odemodel(..., derivMode = c("forward", "forward-reverse"))` and observation
+  and transformation functions built with `derivMode = c("forward", "reverse")`.
+  The Hessian splits along a line the residual kernel already drew: the first
+  term is what the forward path computes from the prediction's own tangents, and
+  the second is what a backward sweep over those tangents returns under a
+  constant seed. The seed and the second order's contraction weight were already
+  the same number, which is why nothing in the kernel had to change.
 * A cotangent carries directions. Every backward node now hands on a matrix or
   an array with a trailing direction axis: slice one is the cotangent, the rest
   are its derivatives along the directions the value pass carried. First order is
   one direction and the same code path, so nothing about it changed.
+* An evaluation says which direction answered it. `attr(out, "sweep")` on the
+  returned objlist is `"reverse"` or `"forward-reverse"`. A caller used to read
+  that off an absent Hessian, which stops being a signal the moment the reverse
+  mode can return one. `hessian = TRUE` keeps its meaning as the Gauss-Newton
+  request and is still inert backwards; second order is asked for by name.
 * An objective that declines to build a Hessian gets an answer rather than a
   crash. `trust()` read the `hessian` element as a matrix at three points
   outside the handler that turns an objective's failure into a rejected step,

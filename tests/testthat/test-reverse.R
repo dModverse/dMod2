@@ -98,7 +98,7 @@ test_that("the solver alone answers what the forward sensitivities answer", {
   expect_false(is.null(vjp))
   got <- vjp(fx$times, inner, NULL, w)
 
-  expect_equal(unname(got[names(ref)]), unname(ref), tolerance = 1e-7)
+  expect_equal(unname(got[names(ref), 1L]), unname(ref), tolerance = 1e-7)
 })
 
 test_that("normL2 carries the whole chain backwards", {
@@ -347,4 +347,85 @@ test_that("odemodel builds the forward-reverse object and names it", {
                         backend = "Sundials", derivMode = "forward-reverse",
                         compile = FALSE),
                "forward-reverse")
+})
+
+# ---------------------------------------------------------------------------
+#  Second order: the exact Hessian through the whole chain.
+#
+#  Oracle is deriv2 = TRUE, forward over forward, on the same objective. The two
+#  differentiate two discretisations, the forward one under sensitivity error
+#  control and the backward one on the value run's grid, so the gap is O(tol)
+#  and the same one the first-order tests measure.
+# ---------------------------------------------------------------------------
+
+.rev2_fx <- local({
+  cache <- NULL
+  function() {
+    if (!is.null(cache)) return(cache)
+    d <- .rev_dir()
+    owd <- setwd(d); on.exit(setwd(owd))
+    re <- .rev_reactions()
+    m <- odemodel(re, modelname = "rv2_ode", deriv = TRUE, deriv2 = TRUE,
+                  nStack = 8L, outdir = d, compile = TRUE,
+                  derivMode = c("forward", "reverse", "forward-forward",
+                                "forward-reverse"))
+    x <- Xs(m, optionsOde = .rev_opt, optionsSens = .rev_opt)
+    g <- Y(c(obsA = "s*A", obsB = "s*B"), re, compile = TRUE, deriv2 = TRUE,
+           derivMode = c("forward", "reverse"),
+           modelname = "rv2_obs", outdir = d)
+    tr <- c(A = "exp(logA)", B = "0", k1 = "exp(logk1)", k2 = "exp(logk2)",
+            s = "exp(logs)")
+    p <- P(tr, condition = "C1", compile = TRUE, deriv2 = TRUE,
+           derivMode = c("forward", "reverse"), modelname = "rv2_p", outdir = d)
+    cache <<- list(x = x, g = g, p = p,
+                   times = seq(0, 8, length.out = 21),
+                   pars = c(logA = log(2), logk1 = log(0.6),
+                            logk2 = log(0.3), logs = log(1.5)))
+    cache
+  }
+})
+
+# Data on whatever the chain's own columns are called, on its own grid.
+.rev2_data <- function(fx, chain, nms, seed = 4L) {
+  pred <- chain(fx$times, fx$pars)[["C1"]]
+  set.seed(seed)
+  idx <- c(4L, 8L, 12L, 16L, 20L)
+  d <- do.call(rbind, lapply(nms, function(nm)
+    data.frame(name = nm, time = pred[idx, "time"],
+               value = pred[idx, nm] * exp(rnorm(length(idx), 0, 0.05)),
+               sigma = 0.1, condition = "C1", stringsAsFactors = FALSE)))
+  as.datalist(d)
+}
+
+test_that("the chain answers the Hessian forward over forward answers", {
+  fx <- .rev2_fx()
+  for (nm in c("x * p", "g * x * p")) {
+    chain <- if (nm == "x * p") fx$x * fx$p else fx$g * fx$x * fx$p
+    cols  <- if (nm == "x * p") c("A", "B") else c("obsA", "obsB")
+    obj   <- normL2(.rev2_data(fx, chain, cols), chain)
+
+    fwd <- obj(fx$pars, deriv2 = TRUE)
+    rev <- obj(fx$pars, sweep = "reverse", curvature = "exact")
+
+    expect_identical(attr(rev, "sweep"), "forward-reverse", info = nm)
+    expect_equal(rev$gradient, fwd$gradient, tolerance = 1e-3, info = nm)
+    expect_equal(rev$hessian, fwd$hessian, tolerance = 1e-4, info = nm)
+    # Symmetric on one grid, and on the objective's own parameter order.
+    expect_equal(rev$hessian, t(rev$hessian), tolerance = 1e-8, info = nm)
+    expect_identical(dimnames(rev$hessian),
+                     list(names(fx$pars), names(fx$pars)), info = nm)
+  }
+})
+
+test_that("a reverse evaluation says which direction answered it", {
+  fx <- .rev2_fx()
+  chain <- fx$x * fx$p
+  obj <- normL2(.rev2_data(fx, chain, c("A", "B")), chain)
+
+  first <- obj(fx$pars, sweep = "reverse")
+  expect_identical(attr(first, "sweep"), "reverse")
+  expect_null(first$hessian)
+  # hessian = TRUE is the Gauss-Newton alias and stays inert backwards; second
+  # order is its own request.
+  expect_null(obj(fx$pars, sweep = "reverse", hessian = TRUE)$hessian)
 })
