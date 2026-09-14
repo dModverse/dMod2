@@ -109,7 +109,9 @@ then runs on gradients alone. It needs an objective that takes
 \code{"never"} (default) stops, \code{"stall"} fetches a fresh
 Hessian of the same kind at the current iterate, clears the stored
 pairs and carries on. The source does not change; only the matrix it
-updates from does.}
+updates from does. A stall is made of rejected steps, so one is taken
+only after the iterate moves; a run that stalls again without moving
+stops the way \code{"never"} does. \code{nReseed} counts them.}
 \item{\code{qnMemory}}{Number of \code{(s, y)} pairs kept. \code{0}
 (default) accumulates every update onto the seed. A positive value
 rebuilds the approximation each iteration from the last

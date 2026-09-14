@@ -38,6 +38,7 @@ using dmod::trust_driver::fill_bound;
 using dmod::trust_driver::fill_parscale;
 using dmod::trust_driver::kInf;
 using dmod::trust_driver::kStallLimit;
+using dmod::trust_driver::kReseedLimit;
 using dmod::trust_driver::push_interior;
 using dmod::trust_driver::read_hessian;
 using dmod::trust_driver::subproblem_label;
@@ -284,6 +285,9 @@ List trust_reflective(Function objfun, NumericVector parinit,
   bool qn_active = (primary != HM_GN && primary != HM_EXACT);
   int  qn_kind  = (primary == HM_SR1) ? HM_SR1 : HM_BFGS;
   int  qn_neval = 0, qn_skipped = 0, n_switch = 0;
+  // At a standing iterate a reseed refetches the same matrix.
+  int  n_reseed = 0;
+  bool moved_since_reseed = true;
   // The initial evaluation belongs to whichever source the run starts on.
   std::vector<int> eval_src(kHessianSourceCount, 0);
   eval_src[hessian_source_slot(qn_active, qn_kind, primary)] = 1;
@@ -466,6 +470,7 @@ List trust_reflective(Function objfun, NumericVector parinit,
       }
 
     if (accept && eval_ok) {
+      moved_since_reseed = true;
       z = z_try;
       val = val_try;
       grad_full.assign(grad_try.begin(), grad_try.end());
@@ -529,8 +534,10 @@ List trust_reflective(Function objfun, NumericVector parinit,
     // stopping. A reseed, not a handover: the source stays and only the matrix
     // it updates from is replaced, so the stored pairs go with it.
     if (soft_stop != nullptr && reseed_on_stall && qn_active &&
+        moved_since_reseed && n_reseed < kReseedLimit &&
         std::strcmp(soft_stop, "stagnation") == 0) {
       reseed_gn = true;
+      n_reseed++; moved_since_reseed = false;
       n_stall = 0; r = rinit;
       qn_S.clear(); qn_Y.clear(); qn_gamma = 1.0;
       soft_stop = nullptr;
@@ -599,6 +606,7 @@ List trust_reflective(Function objfun, NumericVector parinit,
       Named("qnEval")     = qn_neval,
       Named("qnSkipped")  = qn_skipped,
       Named("nSwitch")    = n_switch,
+      Named("nReseed")    = n_reseed,
       Named("evalBySource") = eval_by_source,
       Named("converged")  = converged,
       Named("atBound")    = at_bound_out,

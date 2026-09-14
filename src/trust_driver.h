@@ -165,6 +165,11 @@ struct Blather {
 // means nothing is left to resolve, typically the ODE solver's noise floor.
 const int kStallLimit = 5;
 
+// A stall is made of rejected steps, so the iterate stands still through one
+// and refetching the curvature there returns the same matrix. A reseed needs a
+// moved iterate; this caps how many a run may spend.
+const int kReseedLimit = 8;
+
 inline const char* subproblem_label(bool is_newton, bool is_hard, bool is_easy) {
   if (is_newton)          return "Newton";
   if (is_hard && is_easy) return "hard-easy";

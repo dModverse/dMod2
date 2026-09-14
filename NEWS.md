@@ -12,6 +12,12 @@
 * `qnControl$hessianReseed = "stall"` lets a stalled quasi-Newton phase fetch a
   fresh Hessian at the current iterate rather than ending there. It keeps its
   source; the stored pairs go with the matrix they described. Default `"never"`.
+  A stall is made of rejected steps, so the iterate stands still through one and
+  a reseed there refetches the same matrix: one is taken only after the iterate
+  moves, and a run that stalls again without moving stops the way `"never"`
+  does. Without that, `"stall"` had no exit left at all, since a quasi-Newton
+  phase ends on the gradient test or on stagnation and the reseed consumed the
+  second. `nReseed` counts them.
 * `hessianMethod = "exact"` is a Newton run. The subproblem solver already took
   an indefinite matrix natively.
 * An objective's derivative arguments say one thing each: `deriv` asks for a

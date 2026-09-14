@@ -510,19 +510,51 @@ test_that("trust drives the exact Hessian, forwards and backwards", {
   expect_equal(rv$value, gn$value, tolerance = 1e-6)
 
   # A stalled quasi-Newton phase fetching a fresh curvature rather than
-  # stopping. Inert here, since the run does not stall, so this pins that it
-  # changes no answer it should not.
+  # stopping. Whether it stalls at all is decided at the solver's noise floor
+  # and therefore by the platform, which is the point: "stall" has to reach the
+  # same place either way and may never cost more than "never" does.
   rs <- trust(obj, start, rinit = 0.1, rmax = 10, iterlim = 100L,
               hessianMethod = "sr1", sweep = "reverse",
               qnControl = list(hessianInit = "exact", hessianReseed = "stall"))
   expect_true(rs$converged)
+  expect_true(rs$stopReason %in% c("gradient", "stagnation"))
   expect_equal(rs$value, gn$value, tolerance = 1e-6)
+  # A reseed at a standing iterate would refetch the same matrix, so one is
+  # taken only after the iterate moves and the run cannot loop on it.
+  expect_lt(rs$iterations, 100L)
 
   # Reverse and forward Newton reach the same place from the same start.
   nr <- trust(obj, start, rinit = 0.1, rmax = 10, iterlim = 100L,
               hessianMethod = "exact", sweep = "reverse")
   expect_true(nr$converged)
   expect_equal(nr$value, nw$value, tolerance = 1e-6)
+})
+
+test_that("a reseed needs a moved iterate and cannot outlast one", {
+  # Whether the run above stalls is decided at the solver's noise floor, so it
+  # does on some platforms and not on others. gtol shut off forces the case.
+  fx    <- .rev2_fx()
+  chain <- fx$x * fx$p
+  obj   <- normL2(.rev2_data(fx, chain, c("A", "B")), chain)
+  start <- fx$pars + c(0.4, -0.35, 0.3, 0.2)
+  qn    <- list(hessianInit = "exact", hessianReseed = "stall")
+  args  <- list(obj, start, rinit = 0.1, rmax = 10, iterlim = 100L,
+                hessianMethod = "sr1", sweep = "reverse",
+                tolControl = list(gtol = 1e-14))
+
+  rs <- do.call(trust, c(args, list(qnControl = qn)))
+  qn$hessianReseed <- "never"
+  nv <- do.call(trust, c(args, list(qnControl = qn)))
+
+  # A stall is made of rejected steps, so refetching at the same iterate would
+  # return the same matrix. Reseeds are taken, and then the run stops the way
+  # "never" does instead of spending its budget on them.
+  expect_gt(rs$nReseed, 0L)
+  expect_true(rs$converged)
+  expect_identical(rs$stopReason, "stagnation")
+  expect_lt(rs$iterations, 100L)
+  expect_identical(nv$nReseed, 0L)
+  expect_equal(rs$value, nv$value, tolerance = 1e-6)
 })
 
 test_that("an exact Hessian asked of an objective that cannot give one says so", {
