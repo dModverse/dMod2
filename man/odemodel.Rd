@@ -49,8 +49,9 @@ nested dual. The older spelling is \code{deriv2 = TRUE} and still selects it.
 \item \code{"forward-reverse"}: the backward sweep run over tangents, so the
 gradient comes back with its own derivatives. That is the Hessian of the
 seeded functional in one sweep rather than one per direction. \code{cppDE}
-only. The object is built and returned; the objective layer does not
-read it yet.
+only. This is what \code{obj(pars, sweep = "reverse", deriv2 = TRUE)} needs;
+the forward spelling of the same Hessian is \code{"forward-forward"}, and
+\code{sweep} picks between them at the call.
 }
 
 \code{derivMode = c("forward", "reverse")} builds both, which is what a session

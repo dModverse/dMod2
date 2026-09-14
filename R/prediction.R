@@ -387,8 +387,18 @@ Xs.cppDE <- function(odemodel, forcings = NULL, events = NULL, names = NULL, con
          maxroot = o$maxroot, onFailure = o$onFailure, traceFile = o$traceFile)
   }
 
+  # Second order forward exists only where it was built, and only on cppDE:
+  # Sundials carries first order both ways, deSolve forward alone. Saying which
+  # rebuild would answer beats handing solveODE a NULL model.
   pickModel <- function(deriv, deriv2) {
-    if (!deriv) func else if (deriv2) extended2 else extended
+    if (!deriv) return(func)
+    if (!deriv2) return(extended)
+    if (is.null(extended2))
+      stop("an exact Hessian forward needs the forward-over-forward object; ",
+           "rebuild via odemodel(..., deriv2 = TRUE), which needs ",
+           "backend = \"cppDE\". Backwards it is ",
+           "derivMode = \"forward-reverse\" instead.", call. = FALSE)
+    extended2
   }
 
   P2X <- function(times, pars, fixed = NULL, deriv = TRUE, deriv2 = FALSE,
@@ -531,21 +541,23 @@ Xs.cppDE <- function(odemodel, forcings = NULL, events = NULL, names = NULL, con
     # took them, so the sweep integrates its own.
     pr <- prep1(pars, fixed, K > 1L, FALSE)
     o <- solveOpts(K > 1L)
-    call <- if (K > 1L) {
+    # The weighted backward grid is about which states the error test cares
+    # for, not about tangents, so it applies at either order. Only the store
+    # does not: cppDE refuses one under forward-reverse.
+    call <- c(list(reversed, times, pr$params, fixed = NULL,
+                   forcings = controls$forcings, seed = W,
+                   errWeights = weightGet(NULL, times),
+                   adjointGrid = weightOn()),
+              if (K > 1L) NULL else list(store = storeTake(times, pr$params)))
+    if (K > 1L) {
       if (is.null(pr$sens1ini))
         stop("a second-order cotangent needs the tangents the value pass ",
              "carried, and this input has none.", call. = FALSE)
-      list(reversed2, times, pr$params, fixed = NULL,
-           forcings = controls$forcings, seed = W,
-           sens1ini = pr$sens1ini)
-    } else
-      list(reversed, times, pr$params, fixed = NULL,
-           forcings = controls$forcings, seed = W,
-           store = storeTake(times, pr$params),
-           errWeights = weightGet(NULL, times),
-           adjointGrid = weightOn())
+      call[[1L]] <- reversed2
+      call$sens1ini <- pr$sens1ini
+    }
     res <- do.call(cppDE::solveODE, c(call, o))
-    if (K == 1L && weightOn()) weightPut(NULL, times, res)
+    if (weightOn()) weightPut(NULL, times, res)
     .requireAdjoint(res)
     .pickCotangent(.adjointCt(res, K), names(pars))
   }
@@ -567,22 +579,24 @@ Xs.cppDE <- function(odemodel, forcings = NULL, events = NULL, names = NULL, con
       if (is.null(conditions)) NULL else conditions[[i]]
     conds <- lapply(seq_len(n), function(i) {
       pr <- prep1(parsList[[i]], fixedList[[i]], K > 1L, FALSE)
+      cd <- list(times = timesL[[i]],
+                 parms = pr$params,
+                 forcings = controls$forcings,
+                 seed = .widenSeed(wList[[i]], states, controls$names),
+                 errWeights = weightGet(condOf(i), timesL[[i]]),
+                 adjointGrid = weightOn())
       if (K > 1L) {
         if (is.null(pr$sens1ini))
           stop("a second-order cotangent needs the tangents the value pass ",
                "carried, and condition ", i, " has none.", call. = FALSE)
-        return(list(times = timesL[[i]], parms = pr$params,
-                    forcings = controls$forcings,
-                    seed = .widenSeed(wList[[i]], states, controls$names),
-                    sens1ini = pr$sens1ini))
+        cd$sens1ini <- pr$sens1ini
+        return(cd)
       }
-      list(times = timesL[[i]],
-           parms = pr$params,
-           forcings = controls$forcings,
-           seed = .widenSeed(wList[[i]], states, controls$names),
-           store = storeTake(timesL[[i]], pr$params),
-           errWeights = weightGet(condOf(i), timesL[[i]]),
-           adjointGrid = weightOn())
+      # Only the store is first order only: cppDE refuses one under
+      # forward-reverse, because a checkpoint's tangents do not outlive the
+      # solve that took them.
+      cd$store <- storeTake(timesL[[i]], pr$params)
+      cd
     })
 
     model <- if (K > 1L) reversed2 else reversed
@@ -600,7 +614,7 @@ Xs.cppDE <- function(odemodel, forcings = NULL, events = NULL, names = NULL, con
     else
       do.call(batch, c(list(model, conditions = conds, cores = cores), o))
 
-    if (K == 1L && weightOn())
+    if (weightOn())
       for (i in seq_len(n)) weightPut(condOf(i), timesL[[i]], res[[i]])
 
     lapply(seq_len(n), function(i) {

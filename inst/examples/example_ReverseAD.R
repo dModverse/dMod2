@@ -68,8 +68,10 @@ reactions <- eqnlist() |>
 # The oracle is the forward sensitivity contracted with the same cotangent: the
 # two compute w' S from opposite ends.
 # -----------------------------------------------------------------------------
-model <- odemodel(reactions, modelname = "rev_ode", deriv = TRUE,
-                  derivMode = c("forward", "reverse"), outdir = .outdir, compile = TRUE)
+model <- odemodel(reactions, modelname = "rev_ode", deriv = TRUE, deriv2 = TRUE,
+                  derivMode = c("forward", "reverse", "forward-forward",
+                                "forward-reverse"),
+                  outdir = .outdir, compile = TRUE)
 
 x     <- Xs(model, optionsOde = tight, optionsSens = tight)
 inner <- c(A = 2, B = 0, k1 = 0.6, k2 = 0.3)
@@ -98,11 +100,12 @@ cat("1. solver          max |difference| =",
 # and the transformation in one pass. `sweep = "reverse"` is the only thing the
 # caller says.
 # -----------------------------------------------------------------------------
-g <- Y(c(obsA = "s*A", obsB = "s*B"), reactions, compile = TRUE,
+g <- Y(c(obsA = "s*A", obsB = "s*B"), reactions, compile = TRUE, deriv2 = TRUE,
        modelname = "rev_obs", outdir = .outdir)
 p <- P(c(A = "exp(logA)", B = "0", k1 = "exp(logk1)", k2 = "exp(logk2)",
          s = "exp(logs)"),
-       condition = "C1", compile = TRUE, modelname = "rev_p", outdir = .outdir)
+       condition = "C1", compile = TRUE, deriv2 = TRUE,
+       modelname = "rev_p", outdir = .outdir)
 
 pars <- c(logA = log(2), logk1 = log(0.6), logk2 = log(0.3), logs = log(1.5))
 truth <- (g * x * p)(times, pars)[[1]]
@@ -286,3 +289,54 @@ tr <- system.time(for (i in seq_len(reps))
 cat(sprintf("7. %d gradients    forward %.3fs   reverse %.3fs   ratio %.2f\n",
             reps, tf, tr, tr / tf))
 cat("   with", length(pars), "parameters. The ratio is what falls as they grow.\n")
+
+# -----------------------------------------------------------------------------
+# 8. The second order, and what it costs
+#
+# `deriv2 = TRUE` asks for the exact Hessian rather than the Gauss-Newton
+# approximation. `sweep` picks which way it is computed, exactly as it does for
+# the gradient: forward over forward carries n_theta^2 sensitivity trajectories,
+# forward over reverse carries n_theta tangents through one backward sweep.
+#
+# The model has to be built for it. `derivMode = "forward-forward"` builds the
+# nested dual, `"forward-reverse"` the sweep over tangents, and the observation
+# and transformation functions need `deriv2 = TRUE` so their own curvature is
+# there to contract.
+#
+# What it buys is not a cheaper Hessian at one point. It is a Hessian cheap
+# enough to seed an optimiser with, after which the descent runs on gradients
+# alone. See `hessianInit = "exact"` below, and `hessianReseed = "stall"` for
+# fetching a fresh one when the approximation stops informing.
+# -----------------------------------------------------------------------------
+hf <- obj(pars, deriv2 = TRUE)
+hr <- obj(pars, sweep = "reverse", deriv2 = TRUE)
+cat(sprintf("8. exact Hessian   forward vs reverse: max|difference| %.2e\n",
+            max(abs(hf$hessian - hr$hessian))))
+cat("   attr(., \"sweep\") says which answered:",
+    attr(hr, "sweep"), "\n")
+
+# The three requests, told apart. `hessian` asks for a Hessian at all, `deriv2`
+# says it should be exact rather than Gauss-Newton, and a contradiction is
+# resolved to the cheaper answer with a warning rather than in silence.
+gn <- obj(pars, hessian = TRUE)
+cat(sprintf("   Gauss-Newton vs exact: max|difference| %.2e  (they are not the ",
+            max(abs(gn$hessian - hf$hessian))))
+cat("same matrix)\n")
+
+# -----------------------------------------------------------------------------
+# 9. An optimiser that chooses per evaluation
+#
+# One exact Hessian at the start, then a quasi-Newton descent on reverse
+# gradients. On a model this small it does not pay; the crossover is where the
+# gradient ratio in step 7 crosses one, which is tens of parameters.
+# -----------------------------------------------------------------------------
+start <- pars + 0.3
+fit_gn <- trust(obj, start, iterlim = 100L)
+fit_ex <- trust(obj, start, iterlim = 100L, hessianMethod = "sr1",
+                sweep = "reverse",
+                qnControl = list(hessianInit = "exact",
+                                 hessianReseed = "stall"))
+cat(sprintf("9. gn: value %.6f in %d iterations\n", fit_gn$value,
+            fit_gn$iterations))
+cat(sprintf("   sr1 from an exact seed, reverse: value %.6f in %d iterations\n",
+            fit_ex$value, fit_ex$iterations))

@@ -263,9 +263,9 @@ test_that("Heap and stack AD slabs match on a single-condition linear model", {
   f <- c(A = "-k1*A + k2*B",
          B =  "k1*A - k2*B")
 
-  # Default heap slab vs explicit stack slab (nStack = 4 covers {A,B,log_k1,log_k2}).
+  # Default heap slab vs explicit stack slab (B,log_k1,log_k2}).
   mod_v1 <- odemodel(f, modelname = "rep_v1", backend = "cppDE")
-  mod_v2 <- odemodel(f, modelname = "rep_v2", backend = "cppDE", nStack = 4L)
+  mod_v2 <- odemodel(f, modelname = "rep_v2", backend = "cppDE")
 
   # Same parameter transformation for both.
   trafo <- c(A = "A", B = "B", k1 = "exp(log_k1)", k2 = "exp(log_k2)")
@@ -306,7 +306,7 @@ test_that("Heap/stack parity holds with per-condition varying theta subsets", {
 
   mod_v1 <- odemodel(f, modelname = "repmulti_v1", backend = "cppDE")
   # Stack upper bound: any condition may activate up to 4 thetas.
-  mod_v2 <- odemodel(f, modelname = "repmulti_v2", backend = "cppDE", nStack = 4L)
+  mod_v2 <- odemodel(f, modelname = "repmulti_v2", backend = "cppDE")
 
   # Condition "closed" uses log_k1; condition "open" uses log_k_open instead.
   # Global theta set has 5 elements; each condition activates 4.

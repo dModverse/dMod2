@@ -46,20 +46,24 @@ tmin <- function(f, reps = 7L, target = 0.25) {
 }
 
 probe <- function(obj, p, label) {
-  # A reverse evaluation returns no Hessian, so that is the one invariant that
-  # says the direction actually arrived. A wrapper that swallows `sweep` would
-  # otherwise be timed as an adjoint while running the forward mode, which is
-  # exactly how the first run of this benchmark lied.
+  # The evaluation stamps the direction that answered it, and that is the one
+  # invariant saying the direction actually arrived. A wrapper that swallows
+  # `sweep` would otherwise be timed as an adjoint while running the forward
+  # mode, which is exactly how the first run of this benchmark lied. An absent
+  # Hessian used to serve as the proof and no longer can: the reverse mode
+  # returns one when asked with deriv2 = TRUE.
   chk <- tryCatch(obj(p, deriv = TRUE, sweep = "reverse"),
                   error = function(e) e)
   if (inherits(chk, "error")) {
     cat("  no reverse path [", label, "]:", conditionMessage(chk), "
 ")
     t_rev <- NA_real_
-  } else if (!is.null(chk$hessian)) {
-    stop("probe(", label, "): sweep = \"reverse\" returned a Hessian, so some ",
-         "wrapper in the chain swallowed the argument and the timing would be ",
-         "the forward mode's.", call. = FALSE)
+  } else if (!identical(attr(chk, "sweep"), "reverse")) {
+    stop("probe(", label, "): sweep = \"reverse\" was answered by ",
+         if (is.null(attr(chk, "sweep"))) "the forward mode" else
+           attr(chk, "sweep"),
+         ", so some wrapper in the chain swallowed the argument and the timing ",
+         "would not be the adjoint's.", call. = FALSE)
   } else {
     t_rev <- tmin(function() obj(p, deriv = TRUE, sweep = "reverse"))
   }

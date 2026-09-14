@@ -172,13 +172,18 @@ inline const char* subproblem_label(bool is_newton, bool is_hard, bool is_easy) 
   return "easy-easy";
 }
 
+// What the kernel wants from an evaluation, each level including the one below.
+// The R closure turns this into `deriv`, `hessian` and `deriv2`, where an
+// objective's formals are visible.
+enum Curvature { CV_VALUE = 0, CV_GRADIENT = 1, CV_GN = 2, CV_EXACT = 3 };
+
 // Turn an R-level failure into eval_ok = false, but let a user interrupt
 // through -- a bare catch(...) would swallow Ctrl-C and count it as a failed
 // evaluation.
 inline bool eval_objfun(Function& objfun, const NumericVector& x, List& out,
-                        bool build_hessian = true) {
+                        int want = CV_GN) {
   try {
-    out = as<List>(objfun(x, build_hessian));
+    out = as<List>(objfun(x, want));
   } catch (Rcpp::internal::InterruptedException&) {
     throw;
   } catch (...) {

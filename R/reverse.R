@@ -205,8 +205,15 @@
     v <- p2p(pars, fixed = fixed, deriv = TRUE, deriv2 = (K > 1L),
              condition = condition)
     J <- attr(v, "deriv")
+    # Answering without a Jacobian used to read as a cotangent of zero, so a
+    # Pimpl whose IFT fell back to value only zeroed this node's whole block of
+    # the gradient and the Hessian. An error, as a missing adjoint is.
     if (is.null(J) || !is.matrix(J))
-      return(.ctZero(names(pars), K))
+      stop("a transformation returned no Jacobian, so the backward pass has ",
+           "nothing to contract here. A preceding warning usually names the ",
+           "cause; Pimpl and Pequil fall back to value only when the implicit ",
+           "function theorem cannot be applied at the current root.",
+           call. = FALSE)
     wv <- .pickCotangent(w, rownames(J))
     u  <- crossprod(J, wv)
     rownames(u) <- colnames(J)

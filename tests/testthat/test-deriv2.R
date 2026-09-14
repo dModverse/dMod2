@@ -414,7 +414,7 @@ test_that("normL2 gradient is identical for deriv2 = FALSE and deriv2 = TRUE", {
   withr::local_dir(tempdir())
   f <- c(x = "-k*x")
   m <- odemodel(f, modelname = paste0("nl_grad_id_", as.integer(Sys.time())),
-                backend = "cppDE", deriv2 = TRUE, nStack = 4L, verbose = FALSE)
+                backend = "cppDE", deriv2 = TRUE, verbose = FALSE)
   ode_opts <- list(atol = 1e-12, rtol = 1e-12)
   xfn <- Xs(m, condition = "C1",
             optionsOde = ode_opts, optionsSens = ode_opts)
@@ -448,7 +448,7 @@ test_that("normL2(deriv2 = FALSE) reproduces the pre-deriv2 GN Hessian", {
   withr::local_dir(tempdir())
   f <- c(x = "-k*x")
   m <- odemodel(f, modelname = paste0("nl_d2_gn_", as.integer(Sys.time())),
-                backend = "cppDE", deriv2 = TRUE, nStack = 4L, verbose = FALSE)
+                backend = "cppDE", deriv2 = TRUE, verbose = FALSE)
   xfn <- Xs(m, condition = "C1")
   gfn <- Y(c(y = "a*x^2 + b*x"), f = f, parameters = c("a", "b"),
            modelname = paste0("nl_obs_gn_", as.integer(Sys.time())),
@@ -478,7 +478,7 @@ test_that("normL2(deriv2 = TRUE) adds residual times d^2 pred / sigma^2", {
   withr::local_dir(tempdir())
   f <- c(x = "-k*x")
   m <- odemodel(f, modelname = paste0("nl_d2_ex_", as.integer(Sys.time())),
-                backend = "cppDE", deriv2 = TRUE, nStack = 4L, verbose = FALSE)
+                backend = "cppDE", deriv2 = TRUE, verbose = FALSE)
   ode_opts <- list(atol = 1e-12, rtol = 1e-12)
   xfn <- Xs(m, condition = "C1",
             optionsOde = ode_opts, optionsSens = ode_opts)

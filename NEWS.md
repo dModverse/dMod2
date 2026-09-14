@@ -1,122 +1,101 @@
 # dMod2 (development version)
 
-* The objective can be differentiated twice backwards.
-  `obj(pars, sweep = "reverse", curvature = "exact")` returns the exact Hessian
-  through the whole chain, `normL2 -> Y -> Xs -> P`, at a cost that grows with
-  the parameter count rather than with its square. It needs
-  `odemodel(..., derivMode = c("forward", "forward-reverse"))` and observation
-  and transformation functions built with `derivMode = c("forward", "reverse")`.
-  The Hessian splits along a line the residual kernel already drew: the first
-  term is what the forward path computes from the prediction's own tangents, and
-  the second is what a backward sweep over those tangents returns under a
-  constant seed. The seed and the second order's contraction weight were already
-  the same number, which is why nothing in the kernel had to change.
-* A cotangent carries directions. Every backward node now hands on a matrix or
-  an array with a trailing direction axis: slice one is the cotangent, the rest
-  are its derivatives along the directions the value pass carried. First order is
-  one direction and the same code path, so nothing about it changed.
-* An evaluation says which direction answered it. `attr(out, "sweep")` on the
-  returned objlist is `"reverse"` or `"forward-reverse"`. A caller used to read
-  that off an absent Hessian, which stops being a signal the moment the reverse
-  mode can return one. `hessian = TRUE` keeps its meaning as the Gauss-Newton
-  request and is still inert backwards; second order is asked for by name.
-* An objective that declines to build a Hessian gets an answer rather than a
-  crash. `trust()` read the `hessian` element as a matrix at three points
-  outside the handler that turns an objective's failure into a rejected step,
-  so a `NULL` surfaced as an Rcpp conversion error naming neither the objective
-  nor the argument. Each point now decides for itself: a quasi-Newton start
-  seeds the identity and says so, a handover keeps the approximation it had, and
-  a trial point counts as a failed evaluation. `hessianMethod = "gn"` and
-  `boundary = "clip"` need one at every iterate and stop at `parinit` instead.
-
+* `trust()` chooses what it asks for, per evaluation: a value, a gradient, a
+  Gauss-Newton Hessian or an exact one. The wrapper translates that into
+  whichever of `deriv`, `hessian` and `deriv2` the objective declares, so one
+  that only knows `hessian` still receives the logical it always did. `sweep`
+  stays the caller's, passed through `...`.
+* `qnControl$hessianInit = "exact"` seeds a quasi-Newton run from the
+  objective's true Hessian. One expensive evaluation buys a real curvature and
+  the descent then runs on gradients, which backwards cost a fraction of a
+  forward one.
+* `qnControl$hessianReseed = "stall"` lets a stalled quasi-Newton phase fetch a
+  fresh Hessian at the current iterate rather than ending there. It keeps its
+  source; the stored pairs go with the matrix they described. Default `"never"`.
+* `hessianMethod = "exact"` is a Newton run. The subproblem solver already took
+  an indefinite matrix natively.
+* An objective's derivative arguments say one thing each: `deriv` asks for a
+  gradient, `hessian` for a Hessian, `deriv2` for the exact one rather than
+  Gauss-Newton, and `sweep` for the direction, for both orders alike.
+  `odemodel()` decides what is built, `sweep` what is used. `curvature` is gone;
+  it duplicated `hessian` and `deriv2`.
+* `hessian` defaults to `NULL`, meaning not asked: forward that is Gauss-Newton,
+  backwards none, and `deriv2 = TRUE` always implies one. A contradiction
+  resolves to the cheaper answer with a warning. Two exist: `deriv2 = TRUE` with
+  `hessian = FALSE`, and `hessian = TRUE` under `sweep = "reverse"`, which would
+  need the sensitivities the reverse mode exists not to build.
+* A summed objective no longer loses a term's curvature. A summand answering
+  without a Hessian beside one that answers with a Hessian used to be added as
+  zero, so a prior dropped out of the total. Such a term is now asked for its
+  Hessian under an exact request, and a one-sided total is an error.
+* The batched backward path carries the direction axis. A prediction leaf sized
+  the cotangent it passes through from its own width, so second order over more
+  than one condition met a one-column neighbour and stopped.
+* `obj(pars, sweep = "reverse", deriv2 = TRUE)` returns the exact Hessian
+  through `normL2 -> Y -> Xs -> P` at a cost that grows with the parameter count
+  rather than with its square. It splits as `J' H_rho J` from the forward
+  tangents plus what one backward sweep over those tangents returns under a
+  constant seed. Needs `odemodel(..., derivMode = c("forward",
+  "forward-reverse"))` and `Y()`, `P()` built with `deriv2 = TRUE`.
+* A cotangent carries directions: slice one is the cotangent, the rest its
+  derivatives along the directions the value pass carried. First order is one
+  direction and the same code path.
+* `attr(out, "sweep")` says which direction answered, `"reverse"` or
+  `"forward-reverse"`. A caller used to read that off an absent Hessian.
+* An objective that declines a Hessian gets an answer rather than a crash.
+  `trust()` read the element as a matrix outside the handler that turns a failed
+  evaluation into a rejected step, so a `NULL` surfaced as an Rcpp conversion
+  error. Each site now decides: seed the identity, keep the approximation, or
+  count a failed evaluation. `boundary = "clip"` stops at `parinit` instead.
 * A backward solve that returns no adjoint is an error. It used to read as a
-  cotangent of zero, so a backend that dropped the answer produced a gradient
-  that was quietly zero in every direction it dropped rather than a failure.
-  Found by the CVODES batch fault fixed in cppDE.
-* A reverse gradient integrates the states once. The value pass of a reverse
-  evaluation now runs on the reverse object itself and keeps its checkpoints,
-  and the backward pass replays them instead of integrating the trajectory a
-  second time. Nothing to switch on: it happens wherever `obj(pars, sweep =
-  "reverse")` walks a prediction built with
-  `odemodel(..., derivMode = c("forward", "reverse"))`. A store is matched on
-  the times and parameters it was taken at, so it can never answer for another
-  point.
-* The backward pass can weight its own step size. `Xs(..., optionsReverse =
-  list(gradtol = ))` hands the adjoint of the previous evaluation to the
-  controller, which refines the grid where a step carries objective error. The
-  term enters under a maximum, so the grid only ever becomes finer than
-  `abstol` and `reltol` ask: a weight from a parameter the optimiser has since
-  left costs steps and never accuracy. Off by default, and worth turning on
-  only where a measurement says the steps saved beat the steps spent.
-* `importPEtab(backend = "Sundials")` imports onto the CVODE backend, which
-  `odemodel()` has carried all along. `derivMode` is matched at the door there
-  too, and `"reverse"` on `backend = "deSolve"` says so rather than failing
-  later: the deSolve backend goes forward only.
-* A PEtab prior term honours `hessian = FALSE`. It did not: the argument fell
-  into `...` and was ignored, so an objective carrying a prior handed back a
-  zero Hessian to a caller that asked for none. Under `sweep = "reverse"`, which
-  cannot produce a Hessian at all, that made the objective look as though it
-  had, which is the invariant a caller uses to check the direction arrived.
-* `backend = "Sundials"` goes backwards as well.
-  `odemodel(..., backend = "Sundials", derivMode = c("forward", "reverse"))`
-  compiles CVODES adjoint sensitivity analysis beside the forward object, and
-  `obj(pars, sweep = "reverse")` walks the same chain through it. It refuses
-  events, which the cppDE backend carries. Having two independent adjoints
-  under one interface is what makes a systematic error in either visible;
-  `inst/examples/example_AdjointComparison.R` puts the three routes to a
-  gradient side by side on Bachmann.
-* One argument names the derivative direction everywhere it is chosen at build
-  time. `odemodel(reverse = TRUE)` becomes
-  `odemodel(derivMode = c("forward", "reverse"))`, and the `derivMode` of `Y()`,
-  `Pexpl()` and `importPEtab()` takes the same vocabulary: `"forward"`,
-  `"reverse"`, `"symbolic"`, one or more at a time. `derivMode = "dual"` is gone
-  and is spelled `"forward"`. There is no deprecation path; both old spellings
-  are errors. `normL2(sweep = )` keeps its name, being a choice per call rather
-  than a property of a compiled object.
-* Gradients can be taken backwards through the whole chain.
-  `obj(pars, sweep = "reverse")` walks `normL2 -> Y -> Xs -> P`, seeding the
-  objective's cotangent at the data and pushing it back to the outer parameters
-  in one sweep instead of propagating one tangent per parameter forward. It needs
+  cotangent of zero, so a dropped answer became a quietly zero gradient.
+* A reverse gradient integrates the states once. The value pass runs on the
+  reverse object and keeps its checkpoints; the backward pass replays them. A
+  store is matched on the times and parameters it was taken at.
+* `Xs(..., optionsReverse = list(gradtol = ))` weights the backward step size by
+  the previous evaluation's adjoint. The term enters under a maximum, so a stale
+  weight costs steps and never accuracy. Off by default.
+* `importPEtab(backend = "Sundials")` imports onto the CVODE backend.
+  `derivMode` is matched at the door, and `"reverse"` on `"deSolve"` says so.
+* A PEtab prior term honours `hessian = FALSE`. The argument fell into `...`, so
+  an objective carrying a prior handed back a zero Hessian to a caller that
+  asked for none.
+* `odemodel(..., backend = "Sundials", derivMode = c("forward", "reverse"))`
+  compiles CVODES adjoint sensitivity analysis beside the forward object. It
+  refuses events, which the cppDE backend carries.
+  `inst/examples/example_AdjointComparison.R` puts three routes to a gradient
+  side by side on Bachmann.
+* One argument names the derivative direction wherever it is chosen at build
+  time. `odemodel(reverse = TRUE)` becomes `derivMode = c("forward",
+  "reverse")`, and `Y()`, `Pexpl()` and `importPEtab()` take the same
+  vocabulary. `"dual"` is gone. Both old spellings are errors.
+  `normL2(sweep = )` keeps its name, being a choice per call.
+* `obj(pars, sweep = "reverse")` walks `normL2 -> Y -> Xs -> P`, seeding the
+  cotangent at the data and pushing it back in one sweep. Needs
   `odemodel(..., derivMode = c("forward", "reverse"))` and compiled observation
-  and transformation functions, since the reverse path has no interpreted
-  fallback. Its cost does
-  not grow with the number of parameters.
+  and transformation functions. Its cost does not grow with the parameter count.
 * The composition algebra gained a backward pass. A `*` node cannot be walked in
-  one recursion, since p2 has to be evaluated before p1 runs and differentiated
-  after p1 has been, so the protocol is two phases with an explicit tape between
-  them, holding each node's forward values so nothing is recomputed. Conditions,
-  the `+` of several branches, the batch entry and `dMod.batch.check` all carry
-  through.
-* A reverse objective returns no Hessian, because there is no Jacobian to
-  contract. That is what the quasi-Newton Hessian sources want.
+  one recursion, so the protocol is two phases with an explicit tape between
+  them. Conditions, `+`, the batch entry and `dMod.batch.check` carry through.
 * The reverse gradient belongs to the trajectory a value-only prediction
-  produces, so value and gradient are consistent with each other. Under forward
-  sensitivities they are not: the error norm takes the maximum over every tangent
-  column, so a sensitivity solve steps finer than the value solve reported
-  beside it.
-* `importPEtab(..., reverse = TRUE)` builds the reverse object, and
-  `inst/benchmarks/bench_gradientCost.R` measures the adjoint next to the forward
-  gradient it was written to be compared against.
-* `inst/examples/example_ReverseAD.R` walks the chain piece by piece on toy
-  models; the Boehm example gained a reverse section.
-* Every objective wrapper now declares `sweep` rather than forwarding it through
-  `...`. A caller decides which direction a term supports by reading its formals,
-  and a wrapper that forwarded the argument without naming it read as a term with
-  no reverse path, so a reverse call quietly returned a forward gradient.
+  produces, so value and gradient are consistent. Forward sensitivities step
+  finer than the value solve reported beside them.
+* `inst/examples/example_ReverseAD.R` walks the chain piece by piece; the Boehm
+  example gained a reverse section, and `inst/benchmarks/bench_gradientCost.R`
+  measures the adjoint against the forward gradient.
+* Every objective wrapper declares `sweep` rather than forwarding it through
+  `...`. A caller reads a term's formals to decide which direction it supports,
+  and a wrapper that hid the argument returned a forward gradient quietly.
 * `cppDE::funCpp()` is now `cppDE::cppFUN()`.
 
 # dMod2 0.7.4
 
 * A prepared ODE batch handle no longer outlives the shared object it was
-  resolved from. `Xs()` caches that handle for the derivative path and keyed the
-  cache on shapes and labels only, so a workspace shipped to a cluster node went
-  on calling an entry point of a shared object that was never built there. Every
-  `mstrust()` start then failed with `parinit not feasible`, and the real error,
-  `"solve_x_s_batch" not available for .Call()`, showed up only when the
-  objective was evaluated by hand. The cache now also checks that the shared
-  object is still loaded, and `modelname<-` drops it. The rename loop in the
-  scripts `runbg()` and `distributedComputing()` generate covers objective
-  functions too, which it had skipped.
+  resolved from. `Xs()` keyed its cache on shapes and labels only, so a
+  workspace shipped to a cluster node called an entry point that was never built
+  there and every `mstrust()` start failed with `parinit not feasible`. The
+  cache now checks that the object is loaded, `modelname<-` drops it, and the
+  rename loop in `runbg()` and `distributedComputing()` covers objectives.
 * Needs cppDE 0.9.5, where a Windows install detects OpenMP. Without it a
   batched solve stays serial there.
 
@@ -193,11 +172,10 @@
   maintain a dense quasi-Newton update seeded from it; `"hybrid"` runs `"gn"`
   until it stagnates, then switches to `"bfgs"` once. The quasi-Newton phase
   consumes only the gradient. Reflective boundary only.
-* Objective functions take a call-time `hessian` argument (default `TRUE`).
-  With `hessian = FALSE` they return value and gradient but skip the Hessian
-  entirely -- the `J^T J` contraction never runs and the result carries a `NULL`
-  hessian. `trust()` uses this in the quasi-Newton phase; it propagates through
-  objective composition (`+`).
+* Objective functions take a call-time `hessian` argument. With
+  `hessian = FALSE` the `J^T J` contraction never runs and the result carries a
+  `NULL` hessian. `trust()` uses this in the quasi-Newton phase, and it
+  propagates through objective composition.
 * `trust()` reports `neval` and, under `blather`, the `hessianSource` per
   iteration, so a multi-start can be scored on gradient evaluations. These reach
   `as.parframe()` as columns.

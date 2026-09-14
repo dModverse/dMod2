@@ -135,10 +135,13 @@ objC_all <- mkobj(mydataL)
 objR_all <- mkobjR(mydataL)
 objS_all <- mkobjS(mydataL)
 
-# A reverse evaluation returns no Hessian: the one invariant that says the
-# direction arrived rather than being swallowed by a wrapper in the chain.
+# The evaluation stamps the direction that answered it: the one invariant that
+# says the direction arrived rather than being swallowed by a wrapper in the
+# chain. An absent Hessian used to serve as the proof and no longer can, since
+# the reverse mode returns one when asked with deriv2 = TRUE.
 chk <- objC_all(pars, deriv = TRUE, sweep = "reverse")
-if (!is.null(chk$hessian)) stop("sweep = \"reverse\" returned a Hessian")
+if (!identical(attr(chk, "sweep"), "reverse"))
+  stop("sweep = \"reverse\" was not answered by the reverse mode")
 
 # The two chains must be the same model before their times mean anything.
 if (!is.null(objS_all)) {

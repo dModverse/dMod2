@@ -813,13 +813,14 @@ readPetabTables <- function(yamlPath) {
   # asked for none, which under a reverse sweep makes the whole objective look
   # as though it had produced one.
   myfn <- function(..., fixed = NULL, deriv = TRUE, deriv2 = FALSE,
-                   hessian = TRUE, conditions = condition, env = NULL,
+                   hessian = NULL, conditions = condition, env = NULL,
                    cores = getOption("dMod.cores", 1L)) {
 
     p   <- list(...)[[match.fnargs(list(...), "pars")]]
     all <- c(p, fixed)
     nms <- names(p)
-    build_hessian <- isTRUE(deriv) && isTRUE(hessian)
+    cv <- .resolveCurvature(deriv, deriv2, hessian, "forward")
+    build_hessian <- cv$hessian
 
     value <- 2 * sum(const[ids %in% names(all)])
     grad  <- setNames(rep(0, length(nms)), nms)
@@ -2104,6 +2105,8 @@ readPetabTables <- function(yamlPath) {
 #'   object, so the imported objective answers to
 #'   `obj(pars, sweep = "reverse")`. `"reverse"` needs `backend = "cppDE"` or
 #'   `"Sundials"`; the deSolve backend goes forward only.
+#'   Second order is not available here: the chain a PEtab import builds hits a
+#'   cotangent width mismatch under it, so `derivMode` takes first order only.
 #' @param compile Logical. If `TRUE` (default) the generated trafo,
 #'   observation function, and ODE model are compiled to native code. Set to
 #'   `FALSE` for inspection-only use.
@@ -2140,6 +2143,47 @@ readPetabTables <- function(yamlPath) {
 #'   metadata used by the exporter (`fixed`, `inits`, `modelID`,
 #'   `source_yaml`, `sub_cond_map`, `obs_meta`, `param_meta`) lives on
 #'   `attr(., "petab_meta")`.
+#' @examples
+#' \dontrun{
+#'   ## Import a PEtab problem from disk. importPEtab dispatches on the YAML's
+#'   ## `format_version` key, so v1 and v2 manifests are both supported. The
+#'   ## TSVs and the SBML model live next to the YAML; native artefacts
+#'   ## (`.c`, `.cpp`, `.so`) land in the current working directory --
+#'   ## `setwd(tempdir())` keeps them out of the project tree.
+#'   setwd(tempdir())
+#'
+#'   ## v2 example (the bundled v2 test suite):
+#'   yamlPath <- system.file("PEtabTests/v2/0001/_0001.yaml", package = "dMod2")
+#'   petab <- importPEtab(yamlPath, backend = "deSolve")
+#'
+#'   ## v1 still works, same call and a different YAML schema:
+#'   ## yamlPath <- system.file("PEtabTests/0001/_0001.yaml", package = "dMod2")
+#'
+#'   print(petab)
+#'
+#'   ## petab is a plain list; every slot is a regular dMod object.
+#'   ## The objective has the PEtab `fixed` parameters baked in, so calling
+#'   ## obj(bestfit) evaluates the likelihood at the nominal estimate:
+#'   petab$obj(petab$bestfit)$value
+#'
+#'   ## Predict and plot:
+#'   times <- seq(0, 10, length.out = 51)
+#'   prediction <- petab$prd(times, c(petab$bestfit,
+#'                                    attr(petab, "petab_meta")$fixed))
+#'   plot(prediction, petab$dataList)
+#'
+#'   ## Fit:
+#'   fit <- trust(petab$obj, petab$bestfit, rinit = 1, rmax = 10)
+#'
+#'   ## Round-trip back to PEtab on disk. exportPEtabObject takes the full
+#'   ## petabProblem list; for a dMod-native problem (no PEtab origin), use
+#'   ## exportPEtab(data, reactions, observables, p, pouter, ...).
+#'   ## formatVersion defaults to "2.0.0"; pass "1" to write the legacy
+#'   ## schema instead.
+#'   outDir <- file.path(tempdir(), "petab_export")
+#'   yamlOut <- exportPEtabObject(petab, outDir, formatVersion = "2.0.0",
+#'                                overwrite = TRUE)
+#'   petab2 <- importPEtab(yamlOut, backend = "deSolve")
 #' @export
 #' @example inst/examples/PEtabInterface.R
 importPEtab <- function(yamlPath, backend,
@@ -2160,6 +2204,7 @@ importPEtab <- function(yamlPath, backend,
   if ("reverse" %in% derivMode && backend == "deSolve")
     stop("derivMode = \"reverse\" needs backend = 'cppDE' or 'Sundials'; ",
          "the deSolve backend goes forward only.", call. = FALSE)
+
 
   yamlPath <- normalizePath(yamlPath, mustWork = TRUE)
   derived <- is.null(modelname)

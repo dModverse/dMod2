@@ -329,8 +329,7 @@ test_that("odemodel builds the forward-reverse object and names it", {
   d <- .rev_dir()
   owd <- setwd(d); on.exit(setwd(owd))
   m <- odemodel(.rev_reactions(), modelname = "rv_fr", outdir = d,
-                derivMode = c("forward", "forward-reverse"), compile = TRUE,
-                nStack = 4)
+                derivMode = c("forward", "forward-reverse"), compile = TRUE)
 
   expect_null(m$extended2)
   expect_null(m$reversed)
@@ -365,8 +364,7 @@ test_that("odemodel builds the forward-reverse object and names it", {
     d <- .rev_dir()
     owd <- setwd(d); on.exit(setwd(owd))
     re <- .rev_reactions()
-    m <- odemodel(re, modelname = "rv2_ode", deriv = TRUE, deriv2 = TRUE,
-                  nStack = 8L, outdir = d, compile = TRUE,
+    m <- odemodel(re, modelname = "rv2_ode", deriv = TRUE, deriv2 = TRUE, outdir = d, compile = TRUE,
                   derivMode = c("forward", "reverse", "forward-forward",
                                 "forward-reverse"))
     x <- Xs(m, optionsOde = .rev_opt, optionsSens = .rev_opt)
@@ -377,7 +375,13 @@ test_that("odemodel builds the forward-reverse object and names it", {
             s = "exp(logs)")
     p <- P(tr, condition = "C1", compile = TRUE, deriv2 = TRUE,
            derivMode = c("forward", "reverse"), modelname = "rv2_p", outdir = d)
-    cache <<- list(x = x, g = g, p = p,
+    # A second condition on the same compiled ODE. The batched backward path
+    # only engages with more than one live condition, so one condition leaves
+    # it untested.
+    p2 <- p + P(tr, condition = "C2", compile = TRUE, deriv2 = TRUE,
+                derivMode = c("forward", "reverse"), modelname = "rv2_p2",
+                outdir = d)
+    cache <<- list(x = x, g = g, p = p, p2 = p2,
                    times = seq(0, 8, length.out = 21),
                    pars = c(logA = log(2), logk1 = log(0.6),
                             logk2 = log(0.3), logs = log(1.5)))
@@ -386,14 +390,15 @@ test_that("odemodel builds the forward-reverse object and names it", {
 })
 
 # Data on whatever the chain's own columns are called, on its own grid.
-.rev2_data <- function(fx, chain, nms, seed = 4L) {
-  pred <- chain(fx$times, fx$pars)[["C1"]]
+.rev2_data <- function(fx, chain, nms, seed = 4L, conditions = "C1") {
+  pred <- chain(fx$times, fx$pars)
   set.seed(seed)
   idx <- c(4L, 8L, 12L, 16L, 20L)
-  d <- do.call(rbind, lapply(nms, function(nm)
-    data.frame(name = nm, time = pred[idx, "time"],
-               value = pred[idx, nm] * exp(rnorm(length(idx), 0, 0.05)),
-               sigma = 0.1, condition = "C1", stringsAsFactors = FALSE)))
+  d <- do.call(rbind, lapply(conditions, function(cc)
+    do.call(rbind, lapply(nms, function(nm)
+      data.frame(name = nm, time = pred[[cc]][idx, "time"],
+                 value = pred[[cc]][idx, nm] * exp(rnorm(length(idx), 0, 0.05)),
+                 sigma = 0.1, condition = cc, stringsAsFactors = FALSE)))))
   as.datalist(d)
 }
 
@@ -405,7 +410,7 @@ test_that("the chain answers the Hessian forward over forward answers", {
     obj   <- normL2(.rev2_data(fx, chain, cols), chain)
 
     fwd <- obj(fx$pars, deriv2 = TRUE)
-    rev <- obj(fx$pars, sweep = "reverse", curvature = "exact")
+    rev <- obj(fx$pars, sweep = "reverse", deriv2 = TRUE)
 
     expect_identical(attr(rev, "sweep"), "forward-reverse", info = nm)
     expect_equal(rev$gradient, fwd$gradient, tolerance = 1e-3, info = nm)
@@ -417,6 +422,35 @@ test_that("the chain answers the Hessian forward over forward answers", {
   }
 })
 
+test_that("the batched backward path carries the directions too", {
+  # The batched leaf sizes its pass-through half from the cotangent it was
+  # handed, not from its own. With one condition the batch entry never engages,
+  # so this is the first place a K-column answer meets a one-column neighbour.
+  fx    <- .rev2_fx()
+  chain <- fx$x * fx$p2
+  obj   <- normL2(.rev2_data(fx, chain, c("A", "B"), conditions = c("C1", "C2")),
+                  chain)
+
+  # Guard against a vacuous pass: the batched route needs a batch vjp on the
+  # prediction leaf and more than one live condition. Without both, the loop
+  # this test is about never runs.
+  expect_false(is.null(attr(attr(fx$x, "mappings")[[1L]], "vjpbatchfn")))
+  expect_length(chain(fx$times, fx$pars), 2L)
+
+  fwd <- obj(fx$pars, deriv2 = TRUE)
+  rev <- obj(fx$pars, sweep = "reverse", deriv2 = TRUE)
+
+  expect_identical(attr(rev, "sweep"), "forward-reverse")
+  expect_equal(rev$gradient, fwd$gradient, tolerance = 1e-3)
+  expect_equal(rev$hessian, fwd$hessian, tolerance = 1e-4)
+  expect_equal(rev$hessian, t(rev$hessian), tolerance = 1e-8)
+  # The batched and the scalar route are the same arithmetic; dMod.batch.check
+  # re-runs every batched leaf through the scalar kernel and compares.
+  withr::local_options(dMod.batch.check = TRUE)
+  expect_equal(obj(fx$pars, sweep = "reverse", deriv2 = TRUE)$hessian,
+               rev$hessian, tolerance = 0)
+})
+
 test_that("a reverse evaluation says which direction answered it", {
   fx <- .rev2_fx()
   chain <- fx$x * fx$p
@@ -425,7 +459,108 @@ test_that("a reverse evaluation says which direction answered it", {
   first <- obj(fx$pars, sweep = "reverse")
   expect_identical(attr(first, "sweep"), "reverse")
   expect_null(first$hessian)
-  # hessian = TRUE is the Gauss-Newton alias and stays inert backwards; second
-  # order is its own request.
-  expect_null(obj(fx$pars, sweep = "reverse", hessian = TRUE)$hessian)
+})
+
+test_that("a summed objective keeps every term's curvature", {
+  # A constraint has no reverse path of its own, so it runs forward. Under an
+  # exact request it must still hand back its Hessian: .sumobjlist adds an
+  # absent one as zero, so a dropped term would leave the total short of that
+  # term's curvature and nothing would fail.
+  fx    <- .rev2_fx()
+  chain <- fx$x * fx$p
+  dat   <- .rev2_data(fx, chain, c("A", "B"))
+  mu    <- fx$pars * 0.9
+  obj   <- normL2(dat, chain) + constraintL2(mu = mu, sigma = 0.3)
+
+  fwd <- obj(fx$pars, deriv2 = TRUE)
+  rev <- obj(fx$pars, sweep = "reverse", deriv2 = TRUE)
+
+  expect_equal(rev$value, fwd$value, tolerance = 1e-8)
+  expect_equal(rev$gradient, fwd$gradient, tolerance = 1e-3)
+  expect_equal(rev$hessian, fwd$hessian, tolerance = 1e-4)
+
+  # The constraint's own curvature is 2/sigma^2 on the diagonal and does not
+  # vanish, so a total that dropped it would differ by exactly that much.
+  bare <- normL2(dat, chain)(fx$pars, sweep = "reverse", deriv2 = TRUE)
+  expect_gt(max(abs(rev$hessian - bare$hessian)), 1)
+})
+
+test_that("trust drives the exact Hessian, forwards and backwards", {
+  fx    <- .rev2_fx()
+  chain <- fx$x * fx$p
+  obj   <- normL2(.rev2_data(fx, chain, c("A", "B")), chain)
+  start <- fx$pars + c(0.4, -0.35, 0.3, 0.2)
+
+  gn <- trust(obj, start, rinit = 0.1, rmax = 10, iterlim = 100L)
+  expect_true(gn$converged)
+
+  # A Newton run: the objective's own Hessian at every iterate. The subproblem
+  # solver takes an indefinite matrix natively, so this needed no new algebra.
+  nw <- trust(obj, start, rinit = 0.1, rmax = 10, iterlim = 100L,
+              hessianMethod = "exact")
+  expect_true(nw$converged)
+  expect_equal(nw$value, gn$value, tolerance = 1e-6)
+
+  # The shape this whole mode exists for: one exact Hessian at the start, then
+  # a descent on reverse gradients alone.
+  rv <- trust(obj, start, rinit = 0.1, rmax = 10, iterlim = 100L,
+              hessianMethod = "sr1", sweep = "reverse",
+              qnControl = list(hessianInit = "exact"))
+  expect_true(rv$converged)
+  expect_equal(rv$value, gn$value, tolerance = 1e-6)
+
+  # A stalled quasi-Newton phase fetching a fresh curvature rather than
+  # stopping. Inert here, since the run does not stall, so this pins that it
+  # changes no answer it should not.
+  rs <- trust(obj, start, rinit = 0.1, rmax = 10, iterlim = 100L,
+              hessianMethod = "sr1", sweep = "reverse",
+              qnControl = list(hessianInit = "exact", hessianReseed = "stall"))
+  expect_true(rs$converged)
+  expect_equal(rs$value, gn$value, tolerance = 1e-6)
+
+  # Reverse and forward Newton reach the same place from the same start.
+  nr <- trust(obj, start, rinit = 0.1, rmax = 10, iterlim = 100L,
+              hessianMethod = "exact", sweep = "reverse")
+  expect_true(nr$converged)
+  expect_equal(nr$value, nw$value, tolerance = 1e-6)
+})
+
+test_that("an exact Hessian asked of an objective that cannot give one says so", {
+  # A configuration error, caught before the run. Inside the closure it would be
+  # swallowed by the kernel's evaluation handler and come back as "parinit not
+  # feasible", which names the wrong thing.
+  plain <- function(pars, deriv = TRUE, hessian = NULL) {
+    objlist(value = sum(pars^2), gradient = 2 * pars,
+            hessian = if (isTRUE(hessian))
+              diag(2, length(pars), length(pars)) else NULL)
+  }
+  st <- c(a = 1, b = -1)
+  expect_error(trust(plain, st, hessianMethod = "exact"), "deriv2")
+  expect_error(trust(plain, st, hessianMethod = "sr1",
+                     qnControl = list(hessianInit = "exact")), "deriv2")
+  # Without an exact request it runs as it always did.
+  expect_true(trust(plain, st, iterlim = 50L)$converged)
+})
+
+test_that("a contradictory request is overridden and says so", {
+  fx    <- .rev2_fx()
+  chain <- fx$x * fx$p
+  obj   <- normL2(.rev2_data(fx, chain, c("A", "B")), chain)
+
+  # A Gauss-Newton Hessian needs J, which the reverse mode does not build. The
+  # request is dropped to the cheaper answer and warns rather than going quiet.
+  expect_warning(gn <- obj(fx$pars, sweep = "reverse", hessian = TRUE),
+                 "Gauss-Newton")
+  expect_null(gn$hessian)
+
+  # An exact Hessian and no Hessian cannot both hold; hessian = FALSE wins,
+  # again with a warning.
+  expect_warning(no <- obj(fx$pars, deriv2 = TRUE, hessian = FALSE),
+                 "overrides")
+  expect_null(no$hessian)
+
+  # Taking the default is not a contradiction and stays silent, in either
+  # direction.
+  expect_silent(obj(fx$pars, sweep = "reverse"))
+  expect_silent(obj(fx$pars, deriv2 = TRUE, sweep = "reverse"))
 })

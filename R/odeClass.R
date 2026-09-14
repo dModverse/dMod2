@@ -118,8 +118,9 @@ print.odemodel <- function(x, ...) {
 #'   * `"forward-reverse"`: the backward sweep run over tangents, so the
 #'     gradient comes back with its own derivatives. That is the Hessian of the
 #'     seeded functional in one sweep rather than one per direction. `cppDE`
-#'     only. The object is built and returned; the objective layer does not
-#'     read it yet.
+#'     only. This is what `obj(pars, sweep = "reverse", deriv2 = TRUE)` needs;
+#'     the forward spelling of the same Hessian is `"forward-forward"`, and
+#'     `sweep` picks between them at the call.
 #'
 #'   `derivMode = c("forward", "reverse")` builds both, which is what a session
 #'   that compares the two directions needs. `deriv = FALSE` turns first

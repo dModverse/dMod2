@@ -555,9 +555,14 @@ test_that("evalBySource and nSwitch account for every evaluation", {
   obj    <- .quadratic_objfn(target)
   init   <- c(a = 0, b = 0)
 
+  # "exact" is a fourth source: the objective's own Hessian, told apart from the
+  # Gauss-Newton pass-through by which one the run asked for. A quadratic
+  # objective has no `deriv2` argument, so it is not driven here.
   for (hm in c("gn", "bfgs", "sr1")) {
     fit <- trust(obj, init, hessianMethod = hm)
-    expect_identical(names(fit$evalBySource), c("gn", "bfgs", "sr1"), info = hm)
+    expect_identical(names(fit$evalBySource), c("gn", "bfgs", "sr1", "exact"),
+                     info = hm)
+    expect_identical(fit$evalBySource[["exact"]], 0L, info = hm)
     expect_identical(sum(fit$evalBySource), fit$neval, info = hm)
     expect_identical(fit$nSwitch, 0L, info = hm)                 # no handover
     expect_gt(fit$evalBySource[[hm]], 0L)                        # charged to itself

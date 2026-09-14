@@ -118,6 +118,37 @@ evalConditionResidual <- function(dataI, predictionI, pars,
   }
   out
 }
+# Resolve the three nested derivative switches, deriv -> hessian -> deriv2.
+#
+# `hessian` is a tri-state: NULL means not asked and resolves to TRUE forward,
+# FALSE backwards, TRUE whenever deriv2 asks for one. Only an explicit value can
+# contradict something, and a contradiction resolves to the cheaper answer with
+# a warning. Two exist: deriv2 = TRUE with hessian = FALSE, and hessian = TRUE
+# backwards without deriv2, which would need the sensitivities the reverse mode
+# exists not to build.
+.resolveCurvature <- function(deriv, deriv2, hessian, sweep) {
+  reverse <- identical(sweep, "reverse")
+  asked   <- !is.null(hessian)
+  deriv2  <- isTRUE(deriv2)
+  want    <- if (asked) isTRUE(hessian) else (deriv2 || !reverse)
+
+  if (deriv2 && asked && !want) {
+    warning("'hessian = FALSE' overrides 'deriv2 = TRUE'; no Hessian is built.",
+            call. = FALSE)
+    deriv2 <- FALSE
+  }
+  if (reverse && want && !deriv2) {
+    if (asked)
+      warning("a Gauss-Newton Hessian needs the prediction's sensitivities, ",
+              "which sweep = \"reverse\" does not build; no Hessian is ",
+              "returned. Ask for deriv2 = TRUE to get the exact one backwards.",
+              call. = FALSE)
+    want <- FALSE
+  }
+  want   <- isTRUE(deriv) && want
+  list(hessian = want, deriv2 = deriv2 && want)
+}
+
 
 #' L2 norm between data and model prediction
 #'
@@ -150,7 +181,13 @@ evalConditionResidual <- function(dataI, predictionI, pars,
 #'
 #' @return
 #' An object of class `objfn`, i.e. a function
-#' \code{obj(pars, fixed, deriv, env, cores)} returning an [objlist].
+#' \code{obj(pars, fixed, deriv, hessian, deriv2, sweep, env, cores)} returning
+#' an [objlist]. `deriv` asks for a gradient, `hessian` for a Hessian, `deriv2`
+#' for the exact one rather than the Gauss-Newton approximation, and `sweep`
+#' (`"forward"` or `"reverse"`) says which way all of it is computed. `hessian`
+#' defaults to `NULL`, meaning "not asked": forward that is a Gauss-Newton
+#' Hessian, backwards none, and `deriv2 = TRUE` always implies one. What the
+#' model was built with decides what is available; see [odemodel].
 #'
 #' @details
 #' Combine objectives with `+` (see [sumobjfn]). `cores` is a call-time
@@ -194,11 +231,10 @@ normL2 <- function(data, x, errmodel = NULL, times = NULL, t0 = 0,
 
   # `.prediction` lets a caller that already batched the predictions hand them
   # in; see .objEvalMany().
-  myfn <- function(..., fixed = NULL, deriv = TRUE, deriv2 = FALSE, hessian = TRUE,
+  myfn <- function(..., fixed = NULL, deriv = TRUE, deriv2 = FALSE, hessian = NULL,
                    conditions = NULL, env = NULL,
                    cores = getOption("dMod.cores", 1L), .prediction = NULL,
-                   sweep = c("forward", "reverse"),
-                   curvature = c("auto", "none", "gn", "exact")) {
+                   sweep = c("forward", "reverse")) {
     pars <- ..1
     if (is.null(env)) env <- new.env()
     conditions <- if (is.null(conditions)) conditions.obj else
@@ -206,19 +242,17 @@ normL2 <- function(data, x, errmodel = NULL, times = NULL, t0 = 0,
     if (!length(conditions)) return(NULL)
 
     sweep <- match.arg(sweep)
-    curvature <- match.arg(curvature)
+    cv <- .resolveCurvature(deriv, deriv2, hessian, sweep)
+    hessian <- cv$hessian
+    deriv2  <- cv$deriv2
     if (identical(sweep, "reverse")) {
       if (!is.null(.prediction))
         stop("normL2: a handed-in prediction is a forward-mode shortcut and ",
              "carries no tape; the reverse mode has to walk the chain itself.",
              call. = FALSE)
-      if (isTRUE(deriv2))
-        stop("normL2: second order backwards is asked for with ",
-             "curvature = \"exact\", not with deriv2 = TRUE; deriv2 selects ",
-             "forward over forward.", call. = FALSE)
       return(.normL2_reverse(
         pars = pars, fixed = fixed, deriv = deriv,
-        hessian = isTRUE(deriv) && identical(curvature, "exact"),
+        hessian = hessian,
         conditions = conditions,
         env = env, cores = cores, x = x, errmodel = errmodel, data = data,
         timesD = timesD, e.cond = e.cond, opt.BLOQ = opt.BLOQ,
@@ -227,8 +261,7 @@ normL2 <- function(data, x, errmodel = NULL, times = NULL, t0 = 0,
 
     # The Hessian is only meaningful with deriv; when it is not wanted, the
     # J^T J contraction is skipped and no second-order sensitivities are needed.
-    build_hessian <- isTRUE(deriv) && isTRUE(hessian)
-    deriv2 <- isTRUE(deriv2) && build_hessian
+    build_hessian <- hessian
 
     prediction <- if (!is.null(.prediction)) .prediction else
       x(times = timesD, pars = pars, fixed = fixed,
@@ -479,12 +512,14 @@ constraintL2 <- function(mu, sigma = 1, attr.name = "prior", condition = NULL) {
   if (is.null(names(sigma))) names(sigma) <- names(mu)
   sigma <- sigma[names(mu)]
 
-  myfn <- function(..., fixed = NULL, deriv = TRUE, deriv2 = FALSE, hessian = TRUE,
+  myfn <- function(..., fixed = NULL, deriv = TRUE, deriv2 = FALSE, hessian = NULL,
                    conditions = condition, env = NULL,
                    cores = getOption("dMod.cores", 1L)) {
 
     p <- list(...)[[match.fnargs(list(...), "pars")]]
-    build_hessian <- isTRUE(deriv) && isTRUE(hessian)
+    cv <- .resolveCurvature(deriv, deriv2, hessian, "forward")
+    build_hessian <- cv$hessian
+    deriv2        <- cv$deriv2
     dP  <- if (deriv) attr(p, "deriv", exact = TRUE) else NULL
     dP2 <- if (build_hessian && deriv2) attr(p, "deriv2", exact = TRUE) else NULL
 
@@ -545,12 +580,14 @@ constraintL2 <- function(mu, sigma = 1, attr.name = "prior", condition = NULL) {
 # contributes to the value but not to gradient or Hessian.
 .constraintTerms <- function(parnames, term, attr.name, condition) {
 
-  myfn <- function(..., fixed = NULL, deriv = TRUE, deriv2 = FALSE, hessian = TRUE,
+  myfn <- function(..., fixed = NULL, deriv = TRUE, deriv2 = FALSE, hessian = NULL,
                    conditions = condition, env = NULL,
                    cores = getOption("dMod.cores", 1L)) {
 
     p    <- list(...)[[match.fnargs(list(...), "pars")]]
-    build_hessian <- isTRUE(deriv) && isTRUE(hessian)
+    cv <- .resolveCurvature(deriv, deriv2, hessian, "forward")
+    build_hessian <- cv$hessian
+    deriv2        <- cv$deriv2
     dP   <- if (deriv) attr(p, "deriv", exact = TRUE) else NULL
     dP2  <- if (build_hessian && deriv2) attr(p, "deriv2", exact = TRUE) else NULL
 
@@ -864,10 +901,12 @@ datapointL2 <- function(name, time, value, sigma = 1, attr.name = "validation", 
     attr.name = attr.name
   )
 
-  myfn <- function(..., fixed = NULL, deriv = TRUE, deriv2 = FALSE, hessian = TRUE,
+  myfn <- function(..., fixed = NULL, deriv = TRUE, deriv2 = FALSE, hessian = NULL,
                    conditions = NULL, env = NULL,
                    cores = getOption("dMod.cores", 1L)) {
-    build_hessian <- isTRUE(deriv) && isTRUE(hessian)
+    cv <- .resolveCurvature(deriv, deriv2, hessian, "forward")
+    build_hessian <- cv$hessian
+    deriv2        <- cv$deriv2
     mu        <- controls$mu
     t         <- controls$time
     sigma     <- controls$sigma

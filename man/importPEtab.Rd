@@ -44,7 +44,9 @@ evaluated rather than optimised.}
 \code{\link[=odemodel]{odemodel()}}. \code{c("forward", "reverse")} also builds the reverse-mode
 object, so the imported objective answers to
 \code{obj(pars, sweep = "reverse")}. \code{"reverse"} needs \code{backend = "cppDE"} or
-\code{"Sundials"}; the deSolve backend goes forward only.}
+\code{"Sundials"}; the deSolve backend goes forward only.
+Second order is not available here: the chain a PEtab import builds hits a
+cotangent width mismatch under it, so \code{derivMode} takes first order only.}
 
 \item{optionsOde, optionsSens}{Optional lists forwarded to \code{\link[=Xs]{Xs()}} as solver
 settings for the states and their sensitivities. \code{NULL} keeps the

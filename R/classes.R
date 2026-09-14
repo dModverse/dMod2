@@ -580,10 +580,16 @@ match.fnargs <- function(arglist, choices) {
              " leaf disagrees with the scalar one:\n  ",
              paste(cmp, collapse = "\n  "), call. = FALSE)
     }
-    for (j in seq_along(live))
+    # Same width rule as call_one: the pass-through half is picked at the width
+    # the node hands on, not at its own. A leaf whose pars-half is absent reads
+    # as one direction otherwise, and second order then meets a K-column answer.
+    for (j in seq_along(live)) {
+      wj <- w[[live[j]]]
+      K  <- max(.ctK(wj$pars), .ctK(wj$out))
       out[[live[j]]] <- .addCt(
         .ct(pars = vals[[j]]),
-        .ct(pars = .pickCotangent(w[[live[j]]]$pars, names(split[[j]]$pars))))
+        .ct(pars = .pickCotangent(wj$pars, names(split[[j]]$pars), K)))
+    }
     return(out)
   }
 
@@ -889,7 +895,7 @@ match.fnargs <- function(arglist, choices) {
   # objfn + objfn
   if (inherits(x1, "objfn") & inherits(x2, "objfn")) {
 
-    outfn <- function(..., fixed = NULL, deriv = TRUE, deriv2 = FALSE, hessian = TRUE,
+    outfn <- function(..., fixed = NULL, deriv = TRUE, deriv2 = FALSE, hessian = NULL,
                       conditions = conditions12, env = NULL,
                       cores = getOption("dMod.cores", 1L),
                       sweep = "forward") {
@@ -902,8 +908,11 @@ match.fnargs <- function(arglist, choices) {
 
       # A term that has no reverse path of its own keeps the forward one: a
       # constraint's gradient is a line of algebra and costs nothing either
-      # way, and the sum is the same number however each half got there. A
-      # reverse term returns no Hessian, so neither does the sum.
+      # way, and the sum is the same number however each half got there.
+      #
+      # Under an exact request such a term is still asked for its curvature,
+      # which is a line of algebra. Left out, a prior drops out of the total
+      # while the data term stays in it.
       #
       # `sweep` in the formals is what says a term understands the direction. A
       # wrapper that forwards it through `...` without naming it reads here as a
@@ -917,7 +926,8 @@ match.fnargs <- function(arglist, choices) {
             sweep = sweep)
         else
           f(pars = pars, fixed = fixed, deriv = deriv, deriv2 = deriv2,
-            hessian = if (identical(sweep, "reverse")) FALSE else hessian,
+            hessian = if (identical(sweep, "reverse")) isTRUE(deriv2)
+                      else hessian,
             conditions = conds, env = e, cores = cores)
       }
       # 2. If not null, evaluate at intersection with conditions
@@ -934,6 +944,17 @@ match.fnargs <- function(arglist, choices) {
       } else if (any(conditions %in% conditions.x2)) {
         v2 <- .call(x2, intersect(conditions, conditions.x2), attr(v1, "env"))
       }
+
+      # .sumobjlist adds an absent Hessian as zero. That is right when neither
+      # term has one, and wrong when only one does: the total would then miss
+      # the other term's curvature with nothing to show for it.
+      .h <- function(v) !is.null(v) && !is.null(v$hessian)
+      if (!is.null(v1) && !is.null(v2) && xor(.h(v1), .h(v2)))
+        stop("a summed objective got a Hessian from ",
+             if (.h(v1)) "its first" else "its second", " term and none from ",
+             if (.h(v1)) "its second" else "its first",
+             ". Adding them would drop that term's curvature silently.",
+             call. = FALSE)
 
       out <- v1 + v2
       attr(out, "env") <- attr(v1, "env")
@@ -998,7 +1019,7 @@ match.fnargs <- function(arglist, choices) {
     conditions12 <- attr(x2, "conditions")
     parameters12 <- attr(x2, "parameters")
     modelname12 <- attr(x2, "modelname")
-    outfn <- function(..., fixed = NULL, deriv = TRUE, deriv2 = FALSE, hessian = TRUE,
+    outfn <- function(..., fixed = NULL, deriv = TRUE, deriv2 = FALSE, hessian = NULL,
                       conditions = conditions12, env = NULL,
                       cores = getOption("dMod.cores", 1L),
                       sweep = "forward") {
@@ -1015,7 +1036,8 @@ match.fnargs <- function(arglist, choices) {
            sweep = sweep)
       else
         x2(pars = pars, fixed = fixed, deriv = deriv, deriv2 = deriv2,
-           hessian = if (identical(sweep, "reverse")) FALSE else hessian,
+           hessian = if (identical(sweep, "reverse")) isTRUE(deriv2)
+                     else hessian,
            conditions = conditions, env = env, cores = cores)
 
       out <- x1 %.*% v2
