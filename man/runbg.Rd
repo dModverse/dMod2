@@ -11,6 +11,8 @@ runbg(
   input = ls(.GlobalEnv),
   compile = FALSE,
   link = FALSE,
+  buildCores = NULL,
+  buildBundle = 50,
   wait = FALSE,
   recover = FALSE,
   walltime = NULL
@@ -39,6 +41,14 @@ This option is ignored if \code{compile = TRUE}. Object files are toolchain
 specific, so this only works when the remote compiler is ABI-compatible
 with the local one; prefer \code{compile = TRUE} when the two machines run
 different compiler generations.}
+
+\item{buildCores}{Number of compiler processes the build on each remote
+machine runs in parallel, before the job starts there. \code{NULL} (default) lets
+the build use what the machine reports, capped at 16.}
+
+\item{buildBundle}{Number of generated sources the remote build puts into one
+translation unit, as in \code{\link[=distributedComputing]{distributedComputing()}}. Only used above the shell's
+argument limit. \code{1} compiles one file at a time.}
 
 \item{wait}{Logical. Wait until executed. If \code{TRUE}, the code checks if the
 result file is already present in which case it is loaded. If not present,
