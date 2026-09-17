@@ -1,5 +1,16 @@
 # dMod2 (development version)
 
+* `derivMode = "symbolic"` is gone from `Pexpl()`, `Y()` and `P()`, following
+  cppDE, which now generates every derivative by AD. `Pimpl()` differentiates
+  its root equations in forward mode. A transformation or observation function
+  is evaluable only after `compile()`: without it, evaluation stops with
+  cppDE's "is not compiled; call compile()".
+  `plotFluxes()` evaluates the flux expressions in R and compiles nothing.
+* **Bug fix.** On Windows `compile()` assumed a command line of 24000
+  characters, but `R CMD` hands its command to cmd.exe, which stops at 8191.
+  A model with many generated sources and long names failed with "command line
+  too long" or "Archiving failed"; the limit is now 8000, and an archive chunk
+  counts the `ar` call in front of it.
 * `trust()` chooses what it asks for, per evaluation: a value, a gradient, a
   Gauss-Newton Hessian or an exact one. The wrapper translates that into
   whichever of `deriv`, `hessian` and `deriv2` the objective declares, so one

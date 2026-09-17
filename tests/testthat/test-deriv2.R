@@ -119,36 +119,6 @@ test_that("Y deriv2 (AD) reproduces analytical observation Hessian", {
   }
 })
 
-test_that("Y deriv2 (symbolic) reproduces analytical observation Hessian", {
-  prev <- getwd(); on.exit(setwd(prev), add = TRUE)
-  withr::local_dir(tempdir())
-  gfn <- Y(c(y = "a*x^2 + b*x"), states = "x", parameters = c("a", "b"),
-           modelname = paste0("y_d2_sym_", as.integer(Sys.time())),
-           compile = TRUE, deriv2 = TRUE, derivMode = "symbolic",
-           attach.input = FALSE)
-
-  times <- c(0.5, 1.0)
-  out <- cbind(time = times, x = c(0.6, 0.3))
-  class(out) <- c("prdframe", "matrix")
-  pars <- as.parvec(c(a = -0.2, b = 0.4))
-
-  res <- gfn(out, pars, deriv = TRUE, deriv2 = TRUE)[[1]]
-  a <- pars["a"]; b <- pars["b"]
-  xv <- out[, "x"]
-  d2 <- attr(res, "deriv2")
-  for (i in seq_along(times)) {
-    H_ref <- matrix(0, 3, 3, dimnames = list(c("x", "a", "b"), c("x", "a", "b")))
-    H_ref["x", "x"] <- 2 * a
-    H_ref["x", "a"] <- 2 * xv[i]; H_ref["a", "x"] <- 2 * xv[i]
-    H_ref["x", "b"] <- 1;          H_ref["b", "x"] <- 1
-    expect_equal(d2[i, "y", c("x", "a", "b"), c("x", "a", "b")], H_ref,
-                 tolerance = 1e-10)
-  }
-})
-
-
-# ---- Pexpl ----------------------------------------------------------------
-
 test_that("Pexpl deriv2 (AD) reproduces analytical Hessian", {
   prev <- getwd(); on.exit(setwd(prev), add = TRUE)
   withr::local_dir(tempdir())
@@ -175,29 +145,6 @@ test_that("Pexpl deriv2 (AD) reproduces analytical Hessian", {
   expect_equal(attr(pinner, "deriv"),
                J_ref[rownames(attr(pinner, "deriv")), , drop = FALSE],
                tolerance = 1e-10)
-  expect_equal(attr(pinner, "deriv2")[c("a", "b", "c"), , ], H_ref,
-               tolerance = 1e-10)
-})
-
-test_that("Pexpl deriv2 (symbolic) reproduces analytical Hessian", {
-  prev <- getwd(); on.exit(setwd(prev), add = TRUE)
-  withr::local_dir(tempdir())
-  trafo <- c(a = "exp(la)", b = "la^2 + lb", c = "la*lb")
-  p <- Pexpl(trafo, parameters = NULL,
-             modelname = paste0("sym_pexpl_d2_", as.integer(Sys.time())),
-             compile = TRUE, deriv2 = TRUE, derivMode = "symbolic")
-
-  pars <- c(la = -0.4, lb = 0.7)
-  pinner <- p(pars, deriv = TRUE, deriv2 = TRUE)[[1]]
-
-  la <- pars["la"]; lb <- pars["lb"]
-  H_ref <- array(0, c(3, 2, 2),
-                 dimnames = list(c("a", "b", "c"), c("la", "lb"), c("la", "lb")))
-  H_ref["a", "la", "la"] <- exp(la)
-  H_ref["b", "la", "la"] <- 2
-  H_ref["c", "la", "lb"] <- 1
-  H_ref["c", "lb", "la"] <- 1
-
   expect_equal(attr(pinner, "deriv2")[c("a", "b", "c"), , ], H_ref,
                tolerance = 1e-10)
 })
@@ -456,7 +403,7 @@ test_that("normL2(deriv2 = FALSE) reproduces the pre-deriv2 GN Hessian", {
            condition = "C1")
   pfn <- Pexpl(c(x = "x", k = "k", a = "a", b = "b"), parameters = NULL,
                modelname = paste0("nl_id_gn_", as.integer(Sys.time())),
-               compile = TRUE, deriv2 = TRUE, derivMode = "symbolic",
+               compile = TRUE, deriv2 = TRUE, derivMode = "forward",
                condition = "C1")
   prd <- gfn * xfn * pfn
 
@@ -488,7 +435,7 @@ test_that("normL2(deriv2 = TRUE) adds residual times d^2 pred / sigma^2", {
            condition = "C1")
   pfn <- Pexpl(c(x = "x", k = "k", a = "a", b = "b"), parameters = NULL,
                modelname = paste0("nl_id_ex_", as.integer(Sys.time())),
-               compile = TRUE, deriv2 = TRUE, derivMode = "symbolic",
+               compile = TRUE, deriv2 = TRUE, derivMode = "forward",
                condition = "C1")
   prd <- gfn * xfn * pfn
 

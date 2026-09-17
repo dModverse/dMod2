@@ -606,7 +606,19 @@ plotFluxes <- function(pouter, x, times, fluxEquations, nameFlux = "Fluxes:", ..
 
   if (is.null(names(fluxEquations))) names(fluxEquations) <- fluxEquations
 
-  flux <- cppFUN(fluxEquations, convenient = FALSE)$func
+  # Flux values evaluated in R.
+  exprs <- lapply(fluxEquations, function(e) str2lang(as.character(e)))
+  fluxEnv <- list2env(list(
+    Heaviside = function(x) ifelse(x < 0, 0, ifelse(x == 0, 0.5, 1)),
+    exp10 = function(x) 10^x,
+    piecewise = function(...) {
+      a <- list(...); n <- length(a)
+      val <- if (n %% 2L) a[[n]] else NA_real_
+      for (i in rev(seq_len(n %/% 2L))) val <- ifelse(a[[2L * i]], a[[2L * i - 1L]], val)
+      val
+    }), parent = baseenv())
+  flux <- function(values, n)
+    do.call(cbind, lapply(exprs, function(e) rep_len(as.numeric(eval(e, values, fluxEnv)), n)))
   prediction.all <- x(times, pouter, deriv = FALSE, ...)
   names.prediction.all <- names(prediction.all)
   if (is.null(names.prediction.all)) names.prediction.all <- paste0("C", 1:length(prediction.all))
@@ -614,9 +626,8 @@ plotFluxes <- function(pouter, x, times, fluxEquations, nameFlux = "Fluxes:", ..
   out <- lapply(1:length(prediction.all), function(cond) {
     prediction <- prediction.all[[cond]]
     pinner <- attr(prediction, "parameters")
-    pinner.matrix <- matrix(pinner, nrow = length(pinner), ncol = nrow(prediction),
-                            dimnames = list(names(pinner), NULL))
-    fluxes <- cbind(time = prediction[, "time"], flux(cbind(prediction, t(pinner.matrix))))
+    values <- c(as.list(as.data.frame(unclass(prediction))), as.list(unclass(pinner)))
+    fluxes <- cbind(time = prediction[, "time"], flux(values, nrow(prediction)))
     return(fluxes)
   }); names(out) <- names.prediction.all
   out <- wide2long(out)

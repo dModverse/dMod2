@@ -108,10 +108,8 @@ P <- function(trafo = NULL, parameters = NULL, condition = NULL,
   if (deriv2 && !deriv) deriv <- TRUE
 
   p <- c(pars, fixed)
-  ad_ok  <- st$use_ad && !is.null(st$evaluate) && is.loaded(st$ad_symbol)
-  ad_ok2 <- ad_ok && st$emit_d2 && is.loaded(st$ad2_symbol)
-  if (deriv2 && !ad_ok2 && st$use_ad)
-    stop("Pexpl(deriv2 = TRUE) needs the compiled AD2 entry; rebuild with compile = TRUE.", call. = FALSE)
+  ## A missing or unloaded build is reported by the AD entry itself.
+  ad_ok <- st$use_ad && !is.null(st$evaluate)
 
   Jac <- NULL; Hess <- NULL
 
@@ -135,23 +133,8 @@ P <- function(trafo = NULL, parameters = NULL, condition = NULL,
     if (deriv2 && !is.null(out$d2y))
       Hess <- array(out$d2y, dim(out$d2y)[2:4], dimnames = dimnames(out$d2y)[2:4])
   } else {
+    ## Values only (reverse-only build).
     pinnerVal <- st$fun(NULL, p, attach.input = st$attach.input, fixed = names(fixed))[, ]
-    if (deriv && !is.null(st$jac)) {
-      Jac <- as.matrix(st$jac(NULL, p, attach.input = st$attach.input, fixed = names(fixed))[1, , ])
-      dP  <- attr(pars, "deriv")
-      if (!is.null(dP)) {
-        Jac <- Jac %*% dP[colnames(Jac), , drop = FALSE]
-        dimnames(Jac) <- list(names(pinnerVal), colnames(dP))
-      }
-    }
-    if (deriv2) {
-      if (is.null(st$hess))
-        stop("Pexpl(deriv2 = TRUE) requires hess(); rebuild with deriv2 = TRUE.", call. = FALSE)
-      H4 <- st$hess(NULL, p, dX = NULL, dP = attr(pars, "deriv"),
-                 dX2 = NULL, dP2 = attr(pars, "deriv2"),
-                 attach.input = st$attach.input, fixed = names(fixed))
-      Hess <- array(H4, dim(H4)[2:4], dimnames = dimnames(H4)[2:4])
-    }
   }
 
   if (any(is.nan(pinnerVal)))
@@ -172,7 +155,7 @@ P <- function(trafo = NULL, parameters = NULL, condition = NULL,
 }
 
 
-# One evaluateBatch over all conditions; the symbolic path still loops.
+# One evaluateBatch over all conditions; the value-only path still loops.
 .Pexpl_batch <- function(st, parsList, fixedList, deriv, deriv2, cores) {
   n <- length(parsList)
   loop <- function() lapply(seq_len(n), function(i)
@@ -266,8 +249,9 @@ P <- function(trafo = NULL, parameters = NULL, condition = NULL,
 #' Parameter transformation (explicit, algebraic)
 #'
 #' Builds `p_inner = f(p_outer)` from symbolic expressions via
-#' [cppDE::cppFUN], in forward-mode AD or SymPy mode. The returned
-#' [parfn] attaches the Jacobian and, optionally, the Hessian.
+#' [cppDE::cppFUN], with derivatives by AD. The returned [parfn] attaches the
+#' Jacobian and, optionally, the Hessian. It is evaluable only after
+#' compilation.
 #'
 #' @param trafo Named character / [eqnvec]; names are inner parameters,
 #'   values are expressions in the outer parameters.
@@ -277,12 +261,10 @@ P <- function(trafo = NULL, parameters = NULL, condition = NULL,
 #' @param compile,modelname,verbose Forwarded to [cppDE::cppFUN].
 #' @param deriv,deriv2 Attach `attr(., "deriv")` `[p, theta]` and/or
 #'   `attr(., "deriv2")` `[p, theta, theta]`. `deriv2` needs `deriv = TRUE`.
-#' @param derivMode Which derivative products to build, one or more of
-#'   `"forward"` (AD, needs `compile = TRUE`), `"reverse"` (the
-#'   vector-Jacobian product the reverse sweep contracts against) and
-#'   `"symbolic"`. The default `c("forward", "reverse")` builds both
-#'   directions; `"symbolic"` is a backend for the forward Jacobian rather than
-#'   a direction and stands alone.
+#' @param derivMode Which derivative products to build, one or both of
+#'   `"forward"` (AD) and `"reverse"` (the vector-Jacobian product the reverse
+#'   sweep contracts against). The default `c("forward", "reverse")` builds
+#'   both directions.
 #' @param outdir Directory for the generated source and shared object,
 #'   default the working directory.
 #'
@@ -296,7 +278,7 @@ Pexpl <- function(trafo, parameters = NULL, attach.input = FALSE, condition = NU
                   derivMode = c("forward", "reverse"),
                   outdir = getwd()) {
 
-  derivMode <- .matchDerivMode(derivMode, c("forward", "reverse", "symbolic"))
+  derivMode <- .matchDerivMode(derivMode, c("forward", "reverse"))
   emit_d1   <- isTRUE(deriv)
   emit_d2   <- isTRUE(deriv2)
   if (emit_d2 && !emit_d1)
@@ -944,9 +926,9 @@ resetWarmStarts <- function(fn, verbose = TRUE) {
 #'   conservation then holds to the solver tolerance (`controlsNleqslv$ftol`).
 #'   If `FALSE`, the pivot species per conserved quantity becomes a pass-through
 #'   parameter and its redundant equation is dropped.
-#' @param compile,modelname,verbose Forwarded to [cppDE::cppFUN].
+#' @param compile,modelname,verbose Forwarded to [cppDE::cppFUN]. The
+#'   transformation is evaluable only after compilation.
 #' @param deriv,deriv2 Attach first/second-order IFT sensitivities.
-#'   `deriv2` requires `cppFUN` to expose `hess()`.
 #' @param controlsMS Multistart controls. Recognised keys: `nStarts`
 #'   (default `100L`; `1L` disables multistart), `positive` (default
 #'   `TRUE`; selects nleqslv's log-space transform and log-uniform
@@ -1004,7 +986,7 @@ Pimpl <- function(trafo, parameters = NULL, forcings = NULL, condition = NULL,
     all_exprs, variables = dependent, parameters = parms_all, fixed = NULL,
     compile = compile, modelname = modelname, outdir = outdir,
     verbose = verbose, convenient = FALSE,
-    deriv = TRUE, deriv2 = emit_d2, derivMode = "symbolic"))
+    deriv = TRUE, deriv2 = emit_d2, derivMode = "forward"))
 
   X <- function(x) matrix(x[dependent], 1, dimnames = list(NULL, dependent))
   eval_f <- function(x, p) {

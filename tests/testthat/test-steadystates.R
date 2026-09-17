@@ -25,7 +25,7 @@ test_that("steady_states_are_steady", {
   trafo <- `names<-`(parameters, parameters)
   trafo <- repar("inner~steadyEqn", trafo, inner = names(mysteadies), steadyEqn = mysteadies)
 
-  pSS <- P(trafo, condition = "steady")
+  pSS <- P(trafo, condition = "steady", compile = TRUE)
 
   set.seed(2)
   pars <- structure(runif( length(getParameters(pSS)), 0,1), names = getParameters(pSS))

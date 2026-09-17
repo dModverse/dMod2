@@ -989,9 +989,8 @@ Xd <- function(data, condition = NULL) {
 #'   * `"reverse"`: the vector-Jacobian product the reverse sweep contracts
 #'     against, a second instantiation of the expression body. It is what
 #'     `obj(..., sweep = "reverse")` needs from an observation function.
-#'   * `"symbolic"`: a SymPy Jacobian plus the chain rule against upstream
-#'     `dX`/`dP`, in pure R. A backend for the forward direction rather than a
-#'     direction of its own, so it cannot be combined with the other two.
+#'
+#'   Either way the observation function is evaluable only after compilation.
 #' @param deriv Logical. If `TRUE` (default), attach the first-order
 #'   sensitivity `attr(., "deriv")` of shape `[time, observable, theta]`.
 #' @param deriv2 Logical. If `TRUE`, attach a second-order derivative
@@ -1015,7 +1014,7 @@ Y <- function(g, f = NULL, states = NULL, parameters = NULL,
               cores = NULL, deriv = TRUE, deriv2 = FALSE,
               derivMode = c("forward", "reverse"), outdir = getwd()) {
 
-  derivMode <- .matchDerivMode(derivMode, c("forward", "reverse", "symbolic"))
+  derivMode <- .matchDerivMode(derivMode, c("forward", "reverse"))
 
   # A named list of observable sets builds one obsfn per condition, generated
   # in parallel and compiled once, the way `P()` handles a trafo list.
@@ -1126,10 +1125,10 @@ Y <- function(g, f = NULL, states = NULL, parameters = NULL,
       # AD path: evaluate() returns y and dy already chain-ruled via dX/dP seeds.
       dX_full <- attr(out, "deriv")
       dX2_full <- attr(out, "deriv2")
-      # Gate dX the same way the symbolic path gates activeS: if no obsStates
-      # appear in dX's state dim, it carries no upstream state sensitivity for
-      # this observation function. Suppress to avoid spurious theta mismatches
-      # against dP (e.g. Xt() returns a deriv array with unrelated layout).
+      # If no obsStates appear in dX's state dim, it carries no upstream state
+      # sensitivity for this observation function. Suppress it to avoid
+      # spurious theta mismatches against dP (e.g. Xt() returns a deriv array
+      # with unrelated layout).
       dX <- dX_full
       if (!is.null(dX) && !any(match(obsStates, dimnames(dX)[[2]], 0L) > 0L))
         dX <- NULL
@@ -1193,7 +1192,7 @@ Y <- function(g, f = NULL, states = NULL, parameters = NULL,
           myderivs2 <- abind::abind(myderivs2, dX2_full[, add_states, outer_theta, outer_theta, drop = FALSE], along = 2)
       }
     } else {
-      # Symbolic path (also serves the !compile fallback for AD modes).
+      # Values only (reverse-only build).
       gVal <- gfun(out[, obsStates, drop = FALSE], params[obsParams], attach.input, fixedObsParams)[, observables, drop = FALSE]
 
       if (any(is.nan(gVal))) {
@@ -1207,81 +1206,15 @@ Y <- function(g, f = NULL, states = NULL, parameters = NULL,
 
       values <- cbind(time = out[, "time"], gVal)
       if (attach.input) values <- cbind(values, submatrix(out, cols = -1))
-
       myderivs <- NULL
       myderivs2 <- NULL
-      if (deriv && !is.null(gjac)) {
-
-        dX <- attr(out, "deriv")  # [time, states, theta] state sensitivities
-        dP <- attr(pars, "deriv") # [p, theta] parameter transformation Jacobian
-        dG <- gjac(out[, obsStates, drop = FALSE], params[obsParams]) # [time, obs, states+params]
-
-        activeP <- setdiff(obsParams, fixedObsParams)
-        activeS <- if (!is.null(dX)) intersect(obsStates, dimnames(dX)[[2]]) else character()
-        theta <- if (!is.null(dP)) colnames(dP) else if (!is.null(dX)) dimnames(dX)[[3]] else NULL
-
-        # Chain rule: dY/dtheta = dG/dX * dX/dtheta + dG/dP * dP/dtheta
-        t1 <- if (length(activeS)) dG[,,activeS,drop=F] %bmm% dX[,activeS,,drop=F] else NULL
-        t2 <- if (!is.null(dP) && length(activeP)) dG[,,activeP,drop=F] %bmm% dP[activeP,,drop=F] else NULL
-
-        # Align by theta names before addition
-        if (!is.null(t1)) dimnames(t1)[[3]] <- dimnames(dX)[[3]]
-        if (!is.null(t2)) dimnames(t2)[[3]] <- colnames(dP)
-        myderivs <- if (!is.null(t1) && !is.null(t2)) t1[,,theta,drop=F] + t2[,,theta,drop=F] else t1 %||% t2
-
-        # Fallback: no upstream derivs, return dG/dp directly
-
-        if (is.null(myderivs) && length(activeP)) myderivs <- dG[,,activeP,drop=F]
-        if (!is.null(myderivs)) dimnames(myderivs) <- list(NULL, observables, theta)
-
-        # Append original state sensitivities if attach.input
-        if (attach.input && !is.null(myderivs) && !is.null(dX)) {
-          outer_theta <- theta %||% dimnames(dX)[[3]]
-          missing <- setdiff(outer_theta, dimnames(dX)[[3]])
-          if (length(missing)) dX <- abind::abind(dX, array(0, c(dim(dX)[1], dim(dX)[2], length(missing)), dimnames = list(NULL, NULL, missing)), along = 3)
-          myderivs <- abind::abind(myderivs, dX[, , outer_theta, drop = FALSE], along = 2)
-        }
-
-        # Second-order: delegate the full sandwich to ghess(), which applies
-        # chain_hess_sym internally. Upstream seeds (dX, dP, dX2, dP2) go in
-        # and let cppDE produce d2y already aligned to theta.
-        if (deriv2) {
-          if (is.null(ghess))
-            stop("Y(deriv2 = TRUE) requires hess(); rebuild Y with deriv2 = TRUE.")
-          dX2_in <- attr(out, "deriv2")
-          dP2_in <- attr(pars, "deriv2")
-          gH <- ghess(out[, obsStates, drop = FALSE], params[obsParams],
-                      dX = dX, dP = dP, dX2 = dX2_in, dP2 = dP2_in)
-          # gH: [time, obs, theta, theta]. Restrict columns to declared observables
-          # (gjac path output above uses [, , observables, theta]).
-          if (!is.null(gH)) {
-            obs_cols <- intersect(observables, dimnames(gH)[[2]])
-            if (length(obs_cols)) gH <- gH[, obs_cols, , , drop = FALSE]
-            myderivs2 <- gH
-
-            # Pass-through state Hessians for attach.input
-            if (attach.input && !is.null(dX2_in)) {
-              outer_theta <- dimnames(myderivs2)[[3]] %||% dimnames(dX2_in)[[3]]
-              missing <- setdiff(outer_theta, dimnames(dX2_in)[[3]])
-              if (length(missing)) dX2_in <- abind::abind(dX2_in,
-                                                          array(0, c(dim(dX2_in)[1], dim(dX2_in)[2], length(missing), length(missing)),
-                                                                dimnames = list(NULL, NULL, missing, missing)),
-                                                          along = 3)
-              already <- intersect(dimnames(myderivs2)[[2]], dimnames(dX2_in)[[2]])
-              add_states <- setdiff(dimnames(dX2_in)[[2]], already)
-              if (length(add_states))
-                myderivs2 <- abind::abind(myderivs2, dX2_in[, add_states, outer_theta, outer_theta, drop = FALSE], along = 2)
-            }
-          }
-        }
-      }
     }
 
     prdframe(prediction = values, deriv = myderivs, deriv2 = myderivs2, parameters = c(pars, fixed))
   }
 
   # One evaluateBatch over all requests; the surrounding assembly stays in R.
-  # The symbolic path still loops.
+  # The value-only path still loops.
   X2Ybatch <- function(outList, parsList, fixedList, deriv, deriv2, cores) {
     n <- length(parsList)
     loop <- function() lapply(seq_len(n), function(i)

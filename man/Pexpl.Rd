@@ -33,12 +33,10 @@ values are expressions in the outer parameters.}
 \item{deriv, deriv2}{Attach \code{attr(., "deriv")} \verb{[p, theta]} and/or
 \code{attr(., "deriv2")} \verb{[p, theta, theta]}. \code{deriv2} needs \code{deriv = TRUE}.}
 
-\item{derivMode}{Which derivative products to build, one or more of
-\code{"forward"} (AD, needs \code{compile = TRUE}), \code{"reverse"} (the
-vector-Jacobian product the reverse sweep contracts against) and
-\code{"symbolic"}. The default \code{c("forward", "reverse")} builds both
-directions; \code{"symbolic"} is a backend for the forward Jacobian rather than
-a direction and stands alone.}
+\item{derivMode}{Which derivative products to build, one or both of
+\code{"forward"} (AD) and \code{"reverse"} (the vector-Jacobian product the reverse
+sweep contracts against). The default \code{c("forward", "reverse")} builds
+both directions.}
 
 \item{outdir}{Directory for the generated source and shared object,
 default the working directory.}
@@ -48,8 +46,9 @@ A \link{parfn}.
 }
 \description{
 Builds \code{p_inner = f(p_outer)} from symbolic expressions via
-\link[cppDE:cppFUN]{cppDE::cppFUN}, in forward-mode AD or SymPy mode. The returned
-\link{parfn} attaches the Jacobian and, optionally, the Hessian.
+\link[cppDE:cppFUN]{cppDE::cppFUN}, with derivatives by AD. The returned \link{parfn} attaches the
+Jacobian and, optionally, the Hessian. It is evaluable only after
+compilation.
 }
 \seealso{
 \link{Pimpl}, \link{Pequil}, \link{P}.

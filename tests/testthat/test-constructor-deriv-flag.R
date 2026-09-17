@@ -17,7 +17,7 @@ test_that("Pexpl(deriv = FALSE) yields a parvec without deriv attribute", {
   trafo <- c(A = "a * x", B = "b + y")
   pf <- Pexpl(trafo, deriv = FALSE,
               modelname = paste0("test_pexpl_nod1_", as.integer(Sys.time())),
-              compile = TRUE, derivMode = "symbolic", verbose = FALSE)
+              compile = TRUE, derivMode = "forward", verbose = FALSE)
   out <- pf(c(a = 2, b = 3, x = 4, y = 5))
   expect_null(attr(out[[1]], "deriv"))
   # Default runtime deriv = TRUE is silently capped by the constructor:
@@ -60,7 +60,7 @@ test_that("Y(deriv = FALSE) produces output without deriv attribute", {
   g <- c(obs = "k * A")
   gfn <- Y(g, states = c("A", "time"), parameters = "k", deriv = FALSE,
            modelname = paste0("test_y_nod1_", as.integer(Sys.time())),
-           compile = TRUE, derivMode = "symbolic", verbose = FALSE,
+           compile = TRUE, derivMode = "forward", verbose = FALSE,
            attach.input = FALSE)
 
   prd <- structure(

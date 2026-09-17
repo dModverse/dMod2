@@ -74,10 +74,9 @@ parameters and what the Jacobian path uses. Requires compiled code.
 \item \code{"reverse"}: the vector-Jacobian product the reverse sweep contracts
 against, a second instantiation of the expression body. It is what
 \code{obj(..., sweep = "reverse")} needs from an observation function.
-\item \code{"symbolic"}: a SymPy Jacobian plus the chain rule against upstream
-\code{dX}/\code{dP}, in pure R. A backend for the forward direction rather than a
-direction of its own, so it cannot be combined with the other two.
-}}
+}
+
+Either way the observation function is evaluable only after compilation.}
 
 \item{outdir}{Character. Directory for the generated C++ source and the
 compiled shared object. Defaults to the working directory.}

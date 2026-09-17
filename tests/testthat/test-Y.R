@@ -3,7 +3,7 @@
 # Verifies:
 #   * value: observable g(states) evaluates correctly
 #   * composition: (Y * Xs)(...) equals Y applied to Xs output
-#   * derivMode: "symbolic" and "forward" backends agree numerically
+#   * derivMode: "reverse" and "forward" builds agree on the value
 #   * attach.input: pass-through of inputs alongside outputs
 #   * gradient: analytic chain rule on y = A^2 (no numDeriv)
 #
@@ -54,14 +54,14 @@ test_that("Y(y = A^2) evaluates the closed-form (A(t))^2", {
 
 ## ---- derivMode parity --------------------------------------------------
 
-test_that("Y derivMode 'symbolic' and 'forward' agree on a nonlinear observable", {
+test_that("Y derivMode 'reverse' and 'forward' agree on a nonlinear observable", {
   skip_if_no_compile()
   oldwd <- setwd(.dmod_fx_workdir()); on.exit(setwd(oldwd), add = TRUE)
   bench <- fx_decay_compiled()
 
   g_sym <- Y(c(y = "A^2"), f = bench$xfn, condition = NULL,
-             attach.input = FALSE, derivMode = "symbolic",
-             modelname = "test_Y_dm_sym", compile = TRUE)
+             attach.input = FALSE, derivMode = "reverse",
+             modelname = "test_Y_dm_rev", compile = TRUE)
   g_dual <- Y(c(y = "A^2"), f = bench$xfn, condition = NULL,
               attach.input = FALSE, derivMode = "forward",
               modelname = "test_Y_dm_dual", compile = TRUE)
@@ -74,9 +74,10 @@ test_that("Y derivMode 'symbolic' and 'forward' agree on a nonlinear observable"
   o_sym  <- prd_sym (times = times, pars = pars, deriv = TRUE)
   o_dual <- prd_dual(times = times, pars = pars, deriv = TRUE)
 
-  expect_equal(o_sym$C1[, "y"], o_dual$C1[, "y"], tolerance = 1e-8)
-  expect_equal(attr(o_sym$C1, "deriv"), attr(o_dual$C1, "deriv"),
-               tolerance = 1e-8)
+  expect_equal(o_sym$C1[, "y"], o_dual$C1[, "y"], tolerance = 1e-12)
+  # The reverse build carries no forward entries, the forward one does.
+  expect_null(attr(o_sym$C1, "deriv"))
+  expect_false(is.null(attr(o_dual$C1, "deriv")))
 })
 
 
@@ -147,7 +148,7 @@ test_that("Y with pure-numeric observable composes with an Xs prediction", {
 
   g <- Y(c(y1 = "1.0"), f = NULL, states = c("A"),
          parameters = character(0),
-         derivMode = "symbolic", compile = FALSE,
+         derivMode = "forward", compile = TRUE,
          modelname = "noparam_y_obs")
 
   out <- (g * x)(seq(0, 5, length.out = 3), c(A = 1.0, k = 0.1))

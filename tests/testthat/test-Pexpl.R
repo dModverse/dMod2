@@ -4,7 +4,7 @@
 #   * identity trafo round-trips (value + Jacobian)
 #   * log trafo gives Jacobian = diag(exp(theta)) = diag(p)
 #   * a mixed nonlinear trafo's Jacobian matches the algebraic derivative
-#   * derivMode "symbolic" and "forward" agree on value and Jacobian
+#   * derivMode "reverse" and "forward" agree on the value
 #   * getParameters() consistency through composition (Y * Xs * P)
 #
 # Second-order chain rule is covered by test-deriv2-Pexpl.R.
@@ -75,22 +75,24 @@ test_that("Pexpl Jacobian on a mixed nonlinear trafo equals the algebraic deriva
 
 ## ---- derivMode parity --------------------------------------------------
 
-test_that("Pexpl derivMode 'symbolic' and 'forward' agree on value and Jacobian", {
+test_that("Pexpl derivMode 'reverse' and 'forward' agree on the value", {
   skip_if_no_compile()
   oldwd <- setwd(.dmod_fx_workdir()); on.exit(setwd(oldwd), add = TRUE)
 
-  pfn_sym <- P(eqnvec(A = "exp(a)", k = "exp(b)"), condition = "C1",
-               method = "explicit", derivMode = "symbolic",
-               modelname = "test_P_dm_sym", compile = TRUE)
+  pfn_rev <- P(eqnvec(A = "exp(a)", k = "exp(b)"), condition = "C1",
+               method = "explicit", derivMode = "reverse",
+               modelname = "test_P_dm_rev", compile = TRUE)
   pfn_fwd <- P(eqnvec(A = "exp(a)", k = "exp(b)"), condition = "C1",
                 method = "explicit", derivMode = "forward",
                 modelname = "test_P_dm_fwd", compile = TRUE)
 
   outer <- c(a = 0.3, b = -0.5)
-  i_sym  <- pfn_sym (outer, deriv = TRUE)$C1
+  i_rev <- pfn_rev(outer, deriv = TRUE)$C1
   i_fwd <- pfn_fwd(outer, deriv = TRUE)$C1
-  expect_equal(as.numeric(i_sym), as.numeric(i_fwd), tolerance = 1e-10)
-  expect_equal(attr(i_sym, "deriv"), attr(i_fwd, "deriv"), tolerance = 1e-10)
+  expect_equal(as.numeric(i_rev), as.numeric(i_fwd), tolerance = 1e-12)
+  J <- attr(i_fwd, "deriv")
+  expect_equal(unname(J[c("A", "k"), c("a", "b")]), diag(exp(c(0.3, -0.5))),
+               tolerance = 1e-12)
 })
 
 
@@ -108,14 +110,14 @@ test_that("getParameters(Y * Xs * P) equals getParameters(P) (outer-pars view)",
 # Edge case: Pexpl with pure-numeric trafo (no outer parameters)
 # ============================================================================
 
-test_that("Pexpl with pure-numeric trafo evaluates (symbolic and forward)", {
+test_that("Pexpl with pure-numeric trafo evaluates (values and forward)", {
   withr::local_dir(tempdir())
   trafo <- c(A = "1.0", B = "2.5")
 
-  p_sym <- Pexpl(trafo, derivMode = "symbolic", compile = FALSE,
-                 modelname = "noparam_pexpl_sym")
-  out_sym <- p_sym(c(dummy = 1.0))
-  expect_equal(unclass(out_sym[[1]])[c("A", "B")], c(A = 1.0, B = 2.5))
+  p_val <- Pexpl(trafo, deriv = FALSE, compile = TRUE,
+                 modelname = "noparam_pexpl_val")
+  out_val <- p_val(c(dummy = 1.0))
+  expect_equal(unclass(out_val[[1]])[c("A", "B")], c(A = 1.0, B = 2.5))
 
   p_fwd <- Pexpl(trafo, derivMode = "forward", compile = TRUE,
                   modelname = "noparam_pexpl_fwd")
@@ -132,13 +134,13 @@ test_that("Full g*x*p chain with constant-only Pexpl evaluates", {
   x <- Xs(m)
 
   trafo <- c(A = "1.0", k = "0.5")
-  p <- Pexpl(trafo, derivMode = "symbolic", compile = FALSE,
+  p <- Pexpl(trafo, derivMode = "forward", compile = TRUE,
              modelname = "noparam_full_p")
   # attach.input keeps the state alongside the observable, which is what the
   # comparison below checks.
   g <- Y(c(y1 = "A"), f = NULL, states = c("A"),
          parameters = character(0), attach.input = TRUE,
-         derivMode = "symbolic", compile = FALSE,
+         derivMode = "forward", compile = TRUE,
          modelname = "noparam_full_g")
 
   out <- (g * x * p)(seq(0, 5, length.out = 3), c(dummy = 1.0))
@@ -146,4 +148,11 @@ test_that("Full g*x*p chain with constant-only Pexpl evaluates", {
   expect_equal(unname(pred[, "y1"]), unname(pred[, "A"]))
   expect_equal(unname(pred[1, "A"]), 1.0, tolerance = 1e-8)
   expect_equal(unname(pred[3, "A"]), exp(-0.5 * 5), tolerance = 1e-4)
+})
+
+test_that("an uncompiled Pexpl asks for compile()", {
+  withr::local_dir(tempdir())
+  p <- Pexpl(c(A = "exp(a)"), compile = FALSE, modelname = "uncompiled_pexpl")
+  expect_error(p(c(a = 1)), "is not compiled; call compile\\(\\)")
+  expect_error(p(c(a = 1), deriv = FALSE), "is not compiled; call compile\\(\\)")
 })

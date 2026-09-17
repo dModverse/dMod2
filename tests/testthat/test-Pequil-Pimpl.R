@@ -86,7 +86,7 @@ test_that("Pimpl(deriv2) matches FD on a 1D mass-action steady state", {
   pf <- Pimpl(trafo, parameters = c("k1","km","totA","totB"),
               deriv2 = TRUE,
               modelname = paste0("test_Pimpl_d2_", as.integer(Sys.time())),
-              compile = FALSE, verbose = FALSE,
+              compile = TRUE, verbose = FALSE,
               controlsMS = list(nStarts = 5L, positive = TRUE),
               controlsNleqslv = list(ftol = 1e-12, xtol = 1e-12))
 
@@ -129,7 +129,7 @@ test_that("Pimpl(deriv2) matches FD on a 2-state coupled SS", {
   pf <- Pimpl(trafo, parameters = c("a","b","c"),
               deriv2 = TRUE,
               modelname = paste0("test_Pimpl_d2_2_", as.integer(Sys.time())),
-              compile = FALSE, verbose = FALSE,
+              compile = TRUE, verbose = FALSE,
               controlsMS = list(nStarts = 5L, positive = TRUE),
               controlsNleqslv = list(ftol = 1e-12, xtol = 1e-12))
 
@@ -171,7 +171,7 @@ test_that("Pimpl(deriv2) propagates Hessian through CQ-eliminated species", {
   pf <- Pimpl(el, parameters = c("k","km"),
               deriv2 = TRUE,
               modelname = paste0("test_Pimpl_d2_cq_", as.integer(Sys.time())),
-              compile = FALSE, verbose = FALSE,
+              compile = TRUE, verbose = FALSE,
               controlsMS = list(nStarts = 1L, positive = FALSE),
               controlsNleqslv = list(ftol = 1e-12, xtol = 1e-12))
 
@@ -338,7 +338,7 @@ test_that("non-unit stoichiometric coefficient is handled (2*M <-> D)", {
 
   # Pimpl conserves the moiety to the solver tolerance (constraint residual),
   # so tighten ftol; Pequil conserves it exactly (ODE invariant).
-  pfi <- Pimpl(el, expressInTotals = TRUE, compile = FALSE,
+  pfi <- Pimpl(el, expressInTotals = TRUE, compile = TRUE,
                modelname = paste0("test_Pimpl_dimer_", as.integer(Sys.time())),
                controlsMS = list(nStarts = 30L),
                controlsNleqslv = list(ftol = 1e-12, xtol = 1e-12))
@@ -375,7 +375,7 @@ test_that("overlapping conserved quantities reconstruct consistently (recycle en
 
   p0 <- c(k1 = 2, k1r = 1, k1c = 3, k3 = 1, total_1 = 1, total_2 = 4,
           G = 0.3, GS = 0.2, S = 2, P = 1)
-  pf <- Pimpl(el, expressInTotals = TRUE, compile = FALSE,
+  pf <- Pimpl(el, expressInTotals = TRUE, compile = TRUE,
               modelname = paste0("test_Pimpl_recycle_", as.integer(Sys.time())),
               controlsMS = list(nStarts = 50L),
               controlsNleqslv = list(ftol = 1e-12, xtol = 1e-12))
@@ -423,7 +423,7 @@ test_that("Pimpl uses the pseudoinverse when df/dx is rank-deficient", {
   pf <- Pimpl(trafo, parameters = "s",
               deriv2 = FALSE,
               modelname = paste0("test_Pimpl_sing_", as.integer(Sys.time())),
-              compile = FALSE, verbose = FALSE,
+              compile = TRUE, verbose = FALSE,
               controlsMS = list(nStarts = 1L, positive = FALSE),
               controlsNleqslv = list(ftol = 1e-12, xtol = 1e-12))
 
@@ -618,7 +618,7 @@ test_that("Pimpl throws when no start brings the residual below ftol", {
   trafo <- c(x = "x*x + 1")
   pf <- Pimpl(trafo, parameters = character(0),
               modelname = paste0("test_Pimpl_noroot_", as.integer(Sys.time())),
-              compile = FALSE, verbose = FALSE,
+              compile = TRUE, verbose = FALSE,
               controlsMS = list(nStarts = 5L, positive = FALSE),
               controlsNleqslv = list(ftol = 1e-6, xtol = 1e-6))
 
@@ -881,7 +881,7 @@ test_that("Pimpl and Pequil produce identical parvec interface (totals mode)", {
   ts <- as.integer(Sys.time())
   p_pimpl <- Pimpl(el, parameters = c("k1", "k2"),
                    modelname = paste0("test_harm_pimpl_", ts),
-                   compile = FALSE, verbose = FALSE,
+                   compile = TRUE, verbose = FALSE,
                    controlsMS = list(nStarts = 1L, positive = FALSE),
                    controlsNleqslv = list(ftol = 1e-12, xtol = 1e-12))
   p_pequil <- Pequil(el, parameters = c("k1", "k2"), expressInTotals = TRUE,
