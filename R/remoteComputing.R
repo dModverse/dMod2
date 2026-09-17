@@ -201,8 +201,9 @@ detectFreeCores <- function(machine = NULL) {
 
   ## Job count: a fixed `cores`, or whatever the remote machine reports.
   nproc <- if (is.null(cores)) "$NPROC" else as.character(max(1L, as.integer(cores)))
+  ## nproc honours OMP_NUM_THREADS, which runbg() sets to 1 for the job itself
   detect <- if (is.null(cores))
-    c("NPROC=$(nproc 2>/dev/null || echo 1)",
+    c("NPROC=$(env -u OMP_NUM_THREADS -u OMP_THREAD_LIMIT nproc 2>/dev/null || echo 1)",
       "if [ \"$NPROC\" -gt 16 ]; then NPROC=16; fi", "")
 
   ## Precompiled header, decided here because the prologue check needs the
@@ -214,7 +215,8 @@ detectFreeCores <- function(machine = NULL) {
     "CC=$(R CMD config CC);   CFLAGS=$(R CMD config CFLAGS)",
     "CXX=$(R CMD config CXX); CXXFLAGS=$(R CMD config CXXFLAGS)",
     "CPICFLAGS=$(R CMD config CPICFLAGS); CXXPICFLAGS=$(R CMD config CXXPICFLAGS)",
-    "RINC=\"-I$(R RHOME)/include\"",
+    ## R.home("include"), not R_HOME/include: Debian keeps the headers outside R_HOME
+    "RINC=\"-I$(Rscript -e 'cat(R.home(\"include\"))')\"",
     "AR=$(R CMD config AR); RANLIB=$(R CMD config RANLIB)",
     "export CC CXX CFLAGS CXXFLAGS CPICFLAGS CXXPICFLAGS RINC", "")
   pchBlock <- if (!is.null(pchInc)) c(
@@ -390,6 +392,12 @@ detectFreeCores <- function(machine = NULL) {
 #' specific, so this only works when the remote compiler is ABI-compatible
 #' with the local one; prefer `compile = TRUE` when the two machines run
 #' different compiler generations.
+#' @param buildCores Number of compiler processes the build on each remote
+#' machine runs in parallel, before the job starts there. `NULL` (default) lets
+#' the build use what the machine reports, capped at 16.
+#' @param buildBundle Number of generated sources the remote build puts into one
+#' translation unit, as in [distributedComputing()]. Only used above the shell's
+#' argument limit. `1` compiles one file at a time.
 #' @param wait Logical. Wait until executed. If `TRUE`, the code checks if the
 #' result file is already present in which case it is loaded. If not present,
 #' `runbg()` starts, produces the result and loads it as `.runbgOutput` directly
@@ -443,7 +451,7 @@ detectFreeCores <- function(machine = NULL) {
 #' print(result)
 #' out_job1$purge()
 #' }
-runbg <- function(..., machine = "localhost", filename = NULL, input = ls(.GlobalEnv), compile = FALSE, link = FALSE, wait = FALSE, recover = FALSE, walltime = NULL) {
+runbg <- function(..., machine = "localhost", filename = NULL, input = ls(.GlobalEnv), compile = FALSE, link = FALSE, buildCores = NULL, buildBundle = 50, wait = FALSE, recover = FALSE, walltime = NULL) {
   
   expr <- as.expression(substitute(...))
   nmachines <- length(machine)
@@ -681,9 +689,10 @@ runbg <- function(..., machine = "localhost", filename = NULL, input = ls(.Globa
         needsKLU    = buildinfo$needsKLU,
         link        = link,
         cxx         = has_cxx,
-        cores       = NULL,
+        cores       = buildCores,
         workdir     = paste0(filename[m], "_folder"),
-        filelist    = filelist_file
+        filelist    = filelist_file,
+        bundle      = buildBundle
       )
       compile_script_file <- paste0(filename[m], "_compile.sh")
       cat(compile_script_content, file = compile_script_file)

@@ -1,3 +1,16 @@
+# dMod2 0.7.5
+
+* `runbg(compile = TRUE)` builds on Debian and Ubuntu machines again. The
+  generated build script looked for R's headers in `$(R RHOME)/include`, which
+  Debian does not have, so every source failed with `R.h: No such file or
+  directory` and the job never started. The script now asks the remote R for
+  `R.home("include")`, as `compile()` does locally.
+* `runbg(compile = TRUE)` compiles in parallel again. It exports
+  `OMP_NUM_THREADS=1` before the build, and `nproc` honours that, so the build
+  counted one core and compiled every source in turn. The count now ignores the
+  OpenMP variables. `runbg()` also gains `buildCores` and `buildBundle`, as
+  `distributedComputing()` has.
+
 # dMod2 0.7.4
 
 * A prepared ODE batch handle no longer outlives the shared object it was
