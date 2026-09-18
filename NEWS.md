@@ -1,5 +1,8 @@
 # dMod2 (development version)
 
+* `distributedComputing()` and `runbg()` gain `libs`, library paths put in front
+  of the remote R's search path for the jobs and the remote build, so a
+  development installation runs next to the default one.
 * `derivMode = "symbolic"` is gone from `Pexpl()`, `Y()` and `P()`, following
   cppDE, which now generates every derivative by AD. `Pimpl()` differentiates
   its root equations in forward mode. A transformation or observation function
