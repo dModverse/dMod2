@@ -42,7 +42,7 @@ Depends: R (>= 4.5.0)
 Imports:
     cOde,
     tools,
-    cppDE (>= 0.9.5),
+    cppDE (>= 0.10.0),
     ggplot2,
     parallel,
     stringr,
