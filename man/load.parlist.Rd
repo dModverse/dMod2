@@ -20,7 +20,7 @@ fits into a fitlist.
 \details{
 The command \code{\link[=mstrust]{mstrust()}} saves
 each completed fit along the multi-start sequence such that the results can
-be resurected on abortion. This command loads a fitlist from these
+be resurrected on abortion. This command loads a fitlist from these
 intermediate results.
 }
 \seealso{

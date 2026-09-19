@@ -60,7 +60,7 @@ Imports:
     grDevices,
     MASS
 Remotes:
-    dModverse/cppDE@devel-reverseAD,
+    dModverse/cppDE,
     dkaschek/cOde
 Suggests:
     knitr,

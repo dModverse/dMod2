@@ -112,7 +112,7 @@ multi-period experiments (>2 periods).
   ## Import a PEtab problem from disk. importPEtab dispatches on the YAML's
   ## `format_version` key, so v1 and v2 manifests are both supported. The
   ## TSVs and the SBML model live next to the YAML; native artefacts
-  ## (`.c`, `.cpp`, `.so`) land in the current working directory --
+  ## (`.c`, `.cpp`, `.so`) land in the current working directory, and
   ## `setwd(tempdir())` keeps them out of the project tree.
   setwd(tempdir())
 

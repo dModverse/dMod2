@@ -10,7 +10,7 @@ utils::globalVariables(c("predicted", "observed", "sd_est", "iter", "level"))
 #' 
 #' @description Convenience function to show last plot in an external viewer.
 #' @param plot `ggplot2` plot object.
-#' @param command character, indicatig which pdf viewer is started.
+#' @param command character, indicating which pdf viewer is started.
 #' @param ... arguments going to `ggsave`.
 #' @export
 ggopen <- function(plot = last_plot(), command = "xdg-open", ...) {

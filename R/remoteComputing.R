@@ -1406,7 +1406,7 @@ distributedComputing <- function(
 
 #' Generate parameter list for distributed profile calculation
 #' 
-#' @description Generates list of `WhichPar` entries to facillitate distribute
+#' @description Generates list of `WhichPar` entries to facilitate distributed
 #' profile calculation.
 #' @details Lists to split the parameters for which the profiles are calculated
 #' on the different nodes.

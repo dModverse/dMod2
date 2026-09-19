@@ -11,7 +11,7 @@ strelide(string, width, where = "right", force = FALSE)
 
 \item{width}{Width including eliding ... of return string}
 
-\item{where}{Eliding can happen at 'left', 'middel', or 'right'. Defaults to
+\item{where}{Eliding can happen at 'left', 'middle', or 'right'. Defaults to
 'right'.}
 
 \item{force}{Elide, even is \if{html}{\out{<string>}} is shorter than \if{html}{\out{<width>}}. Default to
@@ -26,7 +26,7 @@ Elide character vector
 \details{
 Elide a string to \if{html}{\out{<width>}}. Eliding can happen at 'left', 'middle', or
 'right'. #' If forcing = FALSE, which is the default, strings shorten than
-\if{html}{\out{<width>}} are returend unaltered; forcing = TRUE inserts eliding symbols (...)
+\if{html}{\out{<width>}} are returned unaltered; forcing = TRUE inserts eliding symbols (...)
 in any case.
 }
 \author{

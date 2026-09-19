@@ -9,7 +9,7 @@ ggopen(plot = last_plot(), command = "xdg-open", ...)
 \arguments{
 \item{plot}{\code{ggplot2} plot object.}
 
-\item{command}{character, indicatig which pdf viewer is started.}
+\item{command}{character, indicating which pdf viewer is started.}
 
 \item{...}{arguments going to \code{ggsave}.}
 }

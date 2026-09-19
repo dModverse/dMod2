@@ -8,7 +8,7 @@
 
 #' Compare two objects and return differences
 #' 
-#' Works eigher on a list or on two arguments. In case of a list,
+#' Works either on a list or on two arguments. In case of a list,
 #' comparison is done with respect to a reference entry. Besides the
 #' objects themselves also some of their attributes are compared,
 #' i.e. "equations", "parameters" and "events" and "forcings".
@@ -170,7 +170,7 @@ compare.data.frame <- function(vec1, vec2 = NULL, ...) {
 #' Alternative version of expand.grid
 #' @param seq1 Vector, numeric or character
 #' @param seq2 Vector, numeric or character
-#' @return Matrix ob combinations of elemens of `seq1` and `seq2`
+#' @return Matrix of combinations of elements of `seq1` and `seq2`
 expand.grid.alt <- function(seq1, seq2) {
   cbind(Var1=rep.int(seq1, length(seq2)), Var2=rep(seq2, each=length(seq1)))
 }

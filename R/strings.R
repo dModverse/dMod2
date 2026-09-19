@@ -61,7 +61,7 @@ strpad <- function(string, width, where = "right", padding = " ", autoelide = FA
 #'
 #' @param string String subject to eliding
 #' @param width Width including eliding ... of return string
-#' @param where Eliding can happen at 'left', 'middel', or 'right'. Defaults to
+#' @param where Eliding can happen at 'left', 'middle', or 'right'. Defaults to
 #'        'right'.
 #' @param force Elide, even is <string> is shorter than <width>. Default to
 #'        'FALSE'.
@@ -71,7 +71,7 @@ strpad <- function(string, width, where = "right", padding = " ", autoelide = FA
 #' @details
 #' Elide a string to <width>. Eliding can happen at 'left', 'middle', or
 #' 'right'. #' If forcing = FALSE, which is the default, strings shorten than
-#' <width> are returend unaltered; forcing = TRUE inserts eliding symbols (...)
+#' <width> are returned unaltered; forcing = TRUE inserts eliding symbols (...)
 #' in any case.
 #'
 #' @author Wolfgang Mader, \email{Wolfgang.Mader@@fdm.uni-freiburg.de}

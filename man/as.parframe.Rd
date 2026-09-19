@@ -12,7 +12,7 @@ as.parframe(x, ...)
 \arguments{
 \item{x}{object to be coerced}
 
-\item{sort.by}{character indicating by which colum the returned parameter frame
+\item{sort.by}{character indicating by which column the returned parameter frame
 should be sorted. Defaults to \code{"value"}.}
 
 \item{...}{other arguments}

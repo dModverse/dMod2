@@ -23,12 +23,12 @@ object of class \code{parfn}, i.e. a function \code{p(..., fixed, deriv,
 argument.
 
 Contains attributes "mappings", a list of \code{p2p}
-functions, "parameters", the union of parameters acceted by the mappings and
+functions, "parameters", the union of parameters accepted by the mappings and
 "conditions", the total set of conditions.
 }
 \description{
 Generate functions that transform one parameter vector into another
-by means of a transformation, pushing forward the jacobian matrix
+by means of a transformation, pushing forward the Jacobian matrix
 of the original parameter.
 Usually, this function is called internally, e.g. by \link{P}.
 However, you can use it to add your own specialized parameter

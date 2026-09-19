@@ -68,7 +68,7 @@ print.prdlist <- function(x, ...) {
 
 
 #' @export
-#' @param data data list oject
+#' @param data data list object
 #' @param errfn obsfn object, the error model function to predict sigma
 #' @param ... not used right now
 #' @rdname as.data.frame.dMod
@@ -495,7 +495,7 @@ summary.obsfn <- function(object, ...) {
 #' frame instead of a single parameter vector.
 #' 
 #' @param object prediction function
-#' @param ... Further arguments goint to the prediction function
+#' @param ... Further arguments going to the prediction function
 #' @param times numeric vector of time points
 #' @param pars parameter frame, e.g. output from [mstrust] or 
 #' [profile]

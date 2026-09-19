@@ -35,7 +35,7 @@ eqnlist(
 )
 }
 \arguments{
-\item{data}{data.frame with columns Description, Rate, and one colum for each state
+\item{data}{data.frame with columns Description, Rate, and one column for each state
 reflecting the stoichiometric matrix}
 
 \item{volumes}{Named character of state volumes (kept for back-compat; when
