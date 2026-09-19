@@ -536,11 +536,11 @@ match.fnargs <- function(arglist, choices) {
     r <- if (!identical(st$kind, "parfn") && is.null(ws$out)) .ct() else
       switch(st$kind,
       prdfn = .ct(pars = vjp(times = .req_times(b, i), pars = pf$pars,
-                             fixed = pf$fixed, w = ws$out)),
+                             fixed = pf$fixed, cotangent = ws$out)),
       obsfn = vjp(out = .req_out(b, i), pars = pf$pars, fixed = pf$fixed,
-                  w = ws$out),
-      parfn = .ct(pars = vjp(pars = pf$pars, fixed = pf$fixed, w = ws$pars,
-                             condition = cond)),
+                  cotangent = ws$out),
+      parfn = .ct(pars = vjp(pars = pf$pars, fixed = pf$fixed,
+                             cotangent = ws$pars, condition = cond)),
       stop(".bwdLeaf: no reverse mode for a ", st$kind, " leaf.", call. = FALSE))
     # Whatever the node passed through untouched keeps its cotangent.
     if (!identical(st$kind, "parfn")) {
@@ -567,13 +567,13 @@ match.fnargs <- function(arglist, choices) {
       times     = if (is.list(b$times)) b$times[live] else b$times,
       parsList  = lapply(split, `[[`, "pars"),
       fixedList = lapply(split, `[[`, "fixed"),
-      wList     = lapply(live, function(s) w[[s]]$out),
+      cotangentList = lapply(live, function(s) w[[s]]$out),
       conditions = if (is.null(res$conditions)) NULL else as.list(res$conditions[live]),
       cores     = cores)
     if (isTRUE(getOption("dMod.batch.check", FALSE))) {
       ref <- lapply(seq_along(live), function(j)
         vjp(times = .req_times(b, live[j]), pars = split[[j]]$pars,
-            fixed = split[[j]]$fixed, w = w[[live[j]]]$out))
+            fixed = split[[j]]$fixed, cotangent = w[[live[j]]]$out))
       cmp <- all.equal(vals, ref, tolerance = 0)
       if (!isTRUE(cmp))
         stop("dMod.batch.check: the batched vjp of a ", st$kind,

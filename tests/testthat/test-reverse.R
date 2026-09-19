@@ -26,35 +26,88 @@ skip_on_cran()
   addReaction(addReaction(eqnlist(), "A", "B", "k1*A", "conversion"),
               "B", "", "k2*B", "decay")
 
-# One compiled chain for the whole file: three compilations per test would
-# dominate its runtime and prove nothing extra.
-.rev_fx <- local({
+# Every model the file evaluates, generated first and linked into one shared
+# object: a build per model and derivative direction would dominate the runtime
+# and prove nothing extra.
+.rev_models <- local({
   cache <- NULL
   function() {
     if (!is.null(cache)) return(cache)
     d <- .rev_dir()
     owd <- setwd(d); on.exit(setwd(owd))
     re <- .rev_reactions()
-    m <- odemodel(re, modelname = "rv_ode", deriv = TRUE, derivMode = c("forward", "reverse"),
-                  outdir = d, compile = TRUE)
-    x <- Xs(m, optionsOde = .rev_opt, optionsSens = .rev_opt)
-    g <- Y(c(obsA = "s*A", obsB = "s*B"), re, compile = TRUE,
-           modelname = "rv_obs", outdir = d)
-    e <- Y(c(obsA = "sd_rel*obsA + sd_abs", obsB = "sd_rel*obsB + sd_abs"), g,
-           states = c("obsA", "obsB"), parameters = c("sd_rel", "sd_abs"),
-           compile = TRUE, modelname = "rv_err", outdir = d)
+    fr <- c("forward", "reverse")
     tr <- c(A = "exp(logA)", B = "0", k1 = "exp(logk1)", k2 = "exp(logk2)",
             s = "exp(logs)")
-    p <- P(tr, condition = "C1", compile = TRUE, modelname = "rv_p", outdir = d)
+
+    m <- odemodel(re, modelname = "rv_ode", deriv = TRUE, derivMode = fr,
+                  outdir = d, compile = FALSE)
+    g <- Y(c(obsA = "s*A", obsB = "s*B"), re, modelname = "rv_obs", outdir = d)
+    e <- Y(c(obsA = "sd_rel*obsA + sd_abs", obsB = "sd_rel*obsB + sd_abs"), g,
+           states = c("obsA", "obsB"), parameters = c("sd_rel", "sd_abs"),
+           modelname = "rv_err", outdir = d)
+    p <- P(tr, condition = "C1", modelname = "rv_p", outdir = d)
     pe <- P(c(tr, sd_rel = "exp(logsdrel)", sd_abs = "exp(logsdabs)"),
-            condition = "C1", compile = TRUE, modelname = "rv_pe", outdir = d)
-    cache <<- list(dir = d, m = m, x = x, g = g, e = e, p = p, pe = pe,
-                   times = seq(0, 8, length.out = 41),
-                   pars = c(logA = log(2), logk1 = log(0.6),
-                            logk2 = log(0.3), logs = log(1.5)))
+            condition = "C1", modelname = "rv_pe", outdir = d)
+    # One trafo per condition, each with a parameter of its own.
+    pc <- Reduce("+", lapply(c("C1", "C2"), function(cn)
+      P(repar(paste0("logk1 ~ logk1 + dk_", cn), tr), condition = cn,
+        modelname = paste0("rv_p2_", cn), outdir = d)))
+
+    ev <- eventlist(var = "A", time = "t_dose", value = "d_amt", method = "add")
+    mev <- odemodel(re, events = ev, modelname = "rv_ev", deriv = TRUE,
+                    derivMode = fr, outdir = d, compile = FALSE)
+    pev <- P(c(tr, t_dose = "3", d_amt = "exp(logdose)"), condition = "C1",
+             modelname = "rv_pev", outdir = d)
+    mnr <- odemodel(re, modelname = "rv_noRev", deriv = TRUE, outdir = d,
+                    compile = FALSE)
+
+    # The steady state is solved twice on the reverse path, once for the value
+    # and once for the Jacobian; roottol keeps that sub-solve gap out of the way.
+    pq <- Pequil(c(A = "k_in - k_out * A"), parameters = c("k_in", "k_out"),
+                 modelname = "rv_equil", attach.input = TRUE, deriv = TRUE,
+                 outdir = d, verbose = FALSE,
+                 controlsODE = list(abstol = 1e-12, reltol = 1e-12,
+                                    roottol = 1e-12))
+    pl <- P(c(k_in = "exp(logkin)", k_out = "exp(logkout)", B = "0",
+              k1 = "exp(logk1)", k2 = "exp(logk2)", s = "exp(logs)"),
+            condition = "C1", modelname = "rv_pq", outdir = d)
+
+    sun <- if (isTRUE(cppDE:::cvodeConfig$available))
+      odemodel(re, modelname = "rv_sun", deriv = TRUE, backend = "Sundials",
+               derivMode = fr, outdir = d, compile = FALSE)
+
+    m2 <- odemodel(re, modelname = "rv2_ode", deriv = TRUE, deriv2 = TRUE,
+                   outdir = d, compile = FALSE,
+                   derivMode = c(fr, "forward-forward", "forward-reverse"))
+    g2 <- Y(c(obsA = "s*A", obsB = "s*B"), re, deriv2 = TRUE, derivMode = fr,
+            modelname = "rv2_obs", outdir = d)
+    q <- P(tr, condition = "C1", deriv2 = TRUE, derivMode = fr,
+           modelname = "rv2_p", outdir = d)
+    # A second condition on the same ODE. The batched backward path only
+    # engages with more than one live condition.
+    q2 <- q + P(tr, condition = "C2", deriv2 = TRUE, derivMode = fr,
+                modelname = "rv2_p2", outdir = d)
+
+    compile(m, g, e, p, pe, pc, mev, pev, mnr, pq, pl, sun, m2, g2, q, q2,
+            output = "rv_all", cores = 4L)
+
+    pars <- c(logA = log(2), logk1 = log(0.6), logk2 = log(0.3), logs = log(1.5))
+    cache <<- list(
+      first = list(dir = d, m = m,
+                   x = Xs(m, optionsOde = .rev_opt, optionsSens = .rev_opt),
+                   g = g, e = e, p = p, pe = pe, pc = pc, mev = mev, pev = pev,
+                   mnr = mnr, pq = pq, pl = pl, sun = sun,
+                   times = seq(0, 8, length.out = 41), pars = pars),
+      second = list(x = Xs(m2, optionsOde = .rev_opt, optionsSens = .rev_opt),
+                    g = g2, p = q, p2 = q2,
+                    times = seq(0, 8, length.out = 21), pars = pars))
     cache
   }
 })
+
+.rev_fx  <- function() .rev_models()$first
+.rev2_fx <- function() .rev_models()$second
 
 # Data on the prediction's own grid, so nothing has to be interpolated onto it.
 .rev_data <- function(fx, prd, pars, conds = "C1", sigma = 0.1, seed = 4L) {
@@ -115,17 +168,9 @@ test_that("normL2 carries the whole chain backwards", {
 
 test_that("the reverse mode reaches every condition and every branch", {
   fx <- .rev_fx()
-  d  <- fx$dir
-  owd <- setwd(d); on.exit(setwd(owd))
   conds <- c("C1", "C2")
-  tr <- c(A = "exp(logA)", B = "0", k1 = "exp(logk1)", k2 = "exp(logk2)",
-          s = "exp(logs)")
-  p2 <- Reduce("+", lapply(conds, function(cn)
-    P(repar(paste0("logk1 ~ logk1 + dk_", cn), tr), condition = cn,
-      compile = TRUE, modelname = paste0("rv_p2_", cn), outdir = d)))
-
   pars <- c(fx$pars, dk_C1 = 0.1, dk_C2 = -0.15)
-  prd  <- fx$g * fx$x * p2
+  prd  <- fx$g * fx$x * fx$pc
   obj  <- normL2(.rev_data(fx, prd, pars, conds, seed = 7L), prd)
 
   both <- expect_modes_agree(obj, pars)
@@ -174,18 +219,10 @@ test_that("the gap to the forward mode is the discretisation, not the adjoint", 
 
 test_that("an event with an estimated dose goes backwards too", {
   fx <- .rev_fx()
-  d  <- fx$dir
-  owd <- setwd(d); on.exit(setwd(owd))
-  ev <- eventlist(var = "A", time = "t_dose", value = "d_amt", method = "add")
-  m <- odemodel(.rev_reactions(), events = ev, modelname = "rv_ev",
-                deriv = TRUE, derivMode = c("forward", "reverse"), outdir = d, compile = TRUE)
-  xv <- Xs(m, optionsOde = .rev_opt, optionsSens = .rev_opt)
-  pv <- P(c(A = "exp(logA)", B = "0", k1 = "exp(logk1)", k2 = "exp(logk2)",
-            s = "exp(logs)", t_dose = "3", d_amt = "exp(logdose)"),
-          condition = "C1", compile = TRUE, modelname = "rv_pev", outdir = d)
+  xv <- Xs(fx$mev, optionsOde = .rev_opt, optionsSens = .rev_opt)
 
   pars <- c(fx$pars, logdose = log(0.8))
-  prd  <- fx$g * xv * pv
+  prd  <- fx$g * xv * fx$pev
   obj  <- normL2(.rev_data(fx, prd, pars), prd)
 
   both <- expect_modes_agree(obj, pars, tolerance = 1e-5)
@@ -208,9 +245,7 @@ test_that("a model without a reverse object says so", {
   fx <- .rev_fx()
   d  <- fx$dir
   owd <- setwd(d); on.exit(setwd(owd))
-  m <- odemodel(.rev_reactions(), modelname = "rv_noRev", deriv = TRUE,
-                outdir = d, compile = TRUE)
-  xf <- Xs(m)
+  xf <- Xs(fx$mnr)
   prd <- fx$g * xf * fx$p
   obj <- normL2(.rev_data(fx, fx$g * fx$x * fx$p, fx$pars), prd)
   expect_error(obj(fx$pars, deriv = TRUE, sweep = "reverse"),
@@ -223,25 +258,10 @@ test_that("a model without a reverse object says so", {
 
 test_that("a steady-state transformation goes backwards too", {
   fx <- .rev_fx()
-  d  <- fx$dir
-  owd <- setwd(d); on.exit(setwd(owd))
 
   # A* = k_in / k_out feeding the decay chain's initial A, so the gradient has
   # to pass through the nested steady state to reach logkin and logkout.
-  # The reverse path solves the nested steady state twice, once for the value
-  # and once for the Jacobian, and each lands within roottol of the fixed point.
-  # That gap is the sub-solve's own and has nothing to do with the adjoint, so
-  # it is tightened out of the way rather than tolerated.
-  pq <- Pequil(c(A = "k_in - k_out * A"), parameters = c("k_in", "k_out"),
-               modelname = "rv_equil", compile = TRUE, attach.input = TRUE,
-               deriv = TRUE, outdir = d, verbose = FALSE,
-               controlsODE = list(abstol = 1e-12, reltol = 1e-12,
-                                  roottol = 1e-12))
-  pl <- P(c(k_in = "exp(logkin)", k_out = "exp(logkout)", B = "0",
-            k1 = "exp(logk1)", k2 = "exp(logk2)", s = "exp(logs)"),
-          condition = "C1", compile = TRUE, modelname = "rv_pq", outdir = d)
-
-  prd  <- fx$g * fx$x * pq * pl
+  prd  <- fx$g * fx$x * fx$pq * fx$pl
   pars <- c(logkin = log(1.5), logkout = log(0.75),
             logk1 = log(0.6), logk2 = log(0.3), logs = log(1.5))
   obj  <- normL2(.rev_data(fx, prd, pars, seed = 11L), prd)
@@ -285,16 +305,12 @@ test_that("the Sundials backend goes backwards too", {
   skip_if_not(isTRUE(cppDE:::cvodeConfig$available),
               "CVODE backend not available")
   fx <- .rev_fx()
-  d  <- .rev_dir()
-  owd <- setwd(d); on.exit(setwd(owd))
 
   # CVODES adjoint sensitivity analysis under the same chain the native reverse
   # mode uses. It is a third discretisation: the adjoint is solved as its own
   # ODE over checkpointed forward states rather than by replaying the steps, so
   # this is a cross-check by foreign mathematics and not a repeat.
-  m <- odemodel(.rev_reactions(), modelname = "rv_sun", deriv = TRUE,
-                backend = "Sundials", derivMode = c("forward", "reverse"),
-                outdir = d, compile = TRUE)
+  m <- fx$sun
   expect_false(is.null(m$reversed))
 
   x   <- Xs(m, optionsOde = .rev_opt, optionsSens = .rev_opt)
@@ -321,15 +337,18 @@ test_that("the Sundials reverse object refuses events", {
   # checkpointed states and has no way to be told about one.
   expect_error(odemodel(.rev_reactions(), modelname = "rv_sun_ev",
                         backend = "Sundials", events = ev,
-                        derivMode = c("forward", "reverse"), outdir = d),
+                        derivMode = c("forward", "reverse"), outdir = d,
+                        compile = FALSE),
                "does not support events")
 })
 
 test_that("odemodel builds the forward-reverse object and names it", {
   d <- .rev_dir()
   owd <- setwd(d); on.exit(setwd(owd))
+  # Code generation only: the second-order models compile the same
+  # forward-reverse source.
   m <- odemodel(.rev_reactions(), modelname = "rv_fr", outdir = d,
-                derivMode = c("forward", "forward-reverse"), compile = TRUE)
+                derivMode = c("forward", "forward-reverse"), compile = FALSE)
 
   expect_null(m$extended2)
   expect_null(m$reversed)
@@ -356,38 +375,6 @@ test_that("odemodel builds the forward-reverse object and names it", {
 #  control and the backward one on the value run's grid, so the gap is O(tol)
 #  and the same one the first-order tests measure.
 # ---------------------------------------------------------------------------
-
-.rev2_fx <- local({
-  cache <- NULL
-  function() {
-    if (!is.null(cache)) return(cache)
-    d <- .rev_dir()
-    owd <- setwd(d); on.exit(setwd(owd))
-    re <- .rev_reactions()
-    m <- odemodel(re, modelname = "rv2_ode", deriv = TRUE, deriv2 = TRUE, outdir = d, compile = TRUE,
-                  derivMode = c("forward", "reverse", "forward-forward",
-                                "forward-reverse"))
-    x <- Xs(m, optionsOde = .rev_opt, optionsSens = .rev_opt)
-    g <- Y(c(obsA = "s*A", obsB = "s*B"), re, compile = TRUE, deriv2 = TRUE,
-           derivMode = c("forward", "reverse"),
-           modelname = "rv2_obs", outdir = d)
-    tr <- c(A = "exp(logA)", B = "0", k1 = "exp(logk1)", k2 = "exp(logk2)",
-            s = "exp(logs)")
-    p <- P(tr, condition = "C1", compile = TRUE, deriv2 = TRUE,
-           derivMode = c("forward", "reverse"), modelname = "rv2_p", outdir = d)
-    # A second condition on the same compiled ODE. The batched backward path
-    # only engages with more than one live condition, so one condition leaves
-    # it untested.
-    p2 <- p + P(tr, condition = "C2", compile = TRUE, deriv2 = TRUE,
-                derivMode = c("forward", "reverse"), modelname = "rv2_p2",
-                outdir = d)
-    cache <<- list(x = x, g = g, p = p, p2 = p2,
-                   times = seq(0, 8, length.out = 21),
-                   pars = c(logA = log(2), logk1 = log(0.6),
-                            logk2 = log(0.3), logs = log(1.5)))
-    cache
-  }
-})
 
 # Data on whatever the chain's own columns are called, on its own grid.
 .rev2_data <- function(fx, chain, nms, seed = 4L, conditions = "C1") {

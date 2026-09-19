@@ -11,6 +11,70 @@ skip_if_no_compile <- function() {
   testthat::skip_on_cran()
 }
 
+# The models of this file beyond the shared decay fixture, generated with
+# compile = FALSE on first use and linked into one shared object.
+xs_models <- local({
+  cache <- NULL
+  function() {
+    if (!is.null(cache)) return(cache)
+    dir <- file.path(tempdir(), "xs_models")
+    dir.create(dir, showWarnings = FALSE, recursive = TRUE)
+    withr::local_dir(dir)
+    nm <- function(x) paste0(x, "_", as.integer(Sys.time()))
+
+    cascade <- eqnlist() |>
+      addReaction("A", "B", "k1 * A") |>
+      addReaction("B", "C", "k2 * B")
+    m_cascade <- odemodel(cascade, modelname = nm("xs_cascade"), compile = FALSE)
+    p_cascade <- P(eqnvec(A = "A", B = "0", C = "0", k1 = "k1", k2 = "k2"),
+                   condition = "C1", modelname = nm("xs_cascade_p"),
+                   compile = FALSE)
+
+    p_C2 <- P(eqnvec(A = "A_C2", k = "k_C2"), condition = "C2",
+              modelname = nm("xs_p"), compile = FALSE)
+
+    m_event <- odemodel(eqnlist() |> addReaction("A", "", "k * A", "decay"),
+                        events = eventlist(var = "A", time = 5, value = "A_add",
+                                           method = "add"),
+                        modelname = nm("xs_event"), compile = FALSE)
+    p_event <- P(eqnvec(A = "A", k = "k", A_add = "A_add"), condition = "C1",
+                 modelname = nm("xs_event_p"), compile = FALSE)
+
+    forced <- eqnlist() |>
+      addReaction("",  "A", "F",     "production by forcing") |>
+      addReaction("A", "",  "k * A", "decay")
+    m_forc <- odemodel(forced, forcings = "F", modelname = nm("xs_forc"),
+                       compile = FALSE)
+    p_forc <- P(eqnvec(A = "A", k = "k"), condition = "C1",
+                modelname = nm("xs_forc_p"), compile = FALSE)
+
+    # Two separate builds of one model, compared against each other.
+    f <- c(A = "-k1*A + k2*B",
+           B =  "k1*A - k2*B")
+    m_rep1 <- odemodel(f, modelname = nm("xs_rep_v1"), backend = "cppDE",
+                       compile = FALSE)
+    m_rep2 <- odemodel(f, modelname = nm("xs_rep_v2"), backend = "cppDE",
+                       compile = FALSE)
+    trafo <- c(A = "A", B = "B", k1 = "exp(log_k1)", k2 = "exp(log_k2)")
+    p_rep <- P(trafo, modelname = nm("xs_rep_trafo"), compile = FALSE)
+    p_rep_cl <- P(trafo, condition = "closed",
+                  modelname = nm("xs_rep_trafo_cl"), compile = FALSE)
+    p_rep_op <- P(c(A = "A", B = "B", k1 = "exp(log_k_open)", k2 = "exp(log_k2)"),
+                  condition = "open", modelname = nm("xs_rep_trafo_op"),
+                  compile = FALSE)
+
+    compile(m_cascade, p_cascade, p_C2, m_event, p_event, m_forc, p_forc,
+            m_rep1, m_rep2, p_rep, p_rep_cl, p_rep_op,
+            output = nm("xs_models"), cores = 4L)
+
+    cache <<- list(m_cascade = m_cascade, p_cascade = p_cascade, p_C2 = p_C2,
+                   m_event = m_event, p_event = p_event, m_forc = m_forc,
+                   p_forc = p_forc, m_rep1 = m_rep1, m_rep2 = m_rep2,
+                   p_rep = p_rep, p_rep_cl = p_rep_cl, p_rep_op = p_rep_op)
+    cache
+  }
+})
+
 
 # ---- Xs: state trajectories (closed-form) -------------------------------
 
@@ -31,18 +95,8 @@ test_that("Xs on linear decay matches A0 * exp(-k * t)", {
 test_that("Xs on two-step cascade matches the closed-form A(t), B(t), C(t)", {
   skip_if_no_compile()
   testthat::skip_if_not_installed("cppDE")
-  oldwd <- setwd(.dmod_fx_workdir()); on.exit(setwd(oldwd), add = TRUE)
-
-  reactions <- eqnlist() |>
-    addReaction("A", "B", "k1 * A") |>
-    addReaction("B", "C", "k2 * B")
-  m  <- odemodel(reactions, modelname = "test_xs_cascade", compile = FALSE)
-  xf <- Xs(m)
-  pf <- P(eqnvec(A = "A", B = "0", C = "0", k1 = "k1", k2 = "k2"),
-          condition = "C1",
-          modelname = "test_xs_cascade_p", compile = FALSE)
-  compile(xf, pf)
-  prd <- xf * pf
+  mods <- xs_models()
+  prd <- Xs(mods$m_cascade) * mods$p_cascade
 
   times <- c(0, 0.5, 1, 2, 4)
   pars <- c(A = 1.0, k1 = 0.7, k2 = 0.3)
@@ -79,11 +133,7 @@ test_that("Xs sensitivities on linear decay match analytical d/d(A0,k)", {
 test_that("Xs predictions across conditions are independent and parameter-local", {
   skip_if_no_compile()
   bench <- fx_decay_compiled()
-  .dmod_with_fx_workdir({
-    pfn_C2 <- P(eqnvec(A = "A_C2", k = "k_C2"), condition = "C2",
-                modelname = "test_xs_p_C2", compile = TRUE)
-  })
-  prd_multi <- bench$xfn * (bench$pfn_id + pfn_C2)
+  prd_multi <- bench$xfn * (bench$pfn_id + xs_models()$p_C2)
   times <- c(0, 1, 2, 5)
   pars <- c(A = 1.0, k = 0.5, A_C2 = 2.0, k_C2 = 1.0)
   out <- prd_multi(times = times, pars = pars, deriv = TRUE)
@@ -123,22 +173,8 @@ test_that("Xs with an 'add' event reproduces the analytical post-event trajector
   #   at t0 A(t0)       = A0 * exp(-k * t0) + Delta
   #   post  A(t)        = (A0 * exp(-k * t0) + Delta) * exp(-k * (t - t0))
   skip_if_no_compile()
-  oldwd <- setwd(tempdir()); on.exit(setwd(oldwd), add = TRUE)
-
-  reactions <- eqnlist() |>
-    addReaction("A", "", "k * A", "decay")
-  ev <- eventlist(var = "A", time = 5, value = "A_add", method = "add")
-
-  m  <- odemodel(reactions, events = ev,
-                 modelname = paste0("xs_event_", as.integer(Sys.time())),
-                 compile = FALSE)
-  xf <- Xs(m)
-  pf <- P(eqnvec(A = "A", k = "k", A_add = "A_add"),
-          condition = "C1",
-          modelname = paste0("xs_event_p_", as.integer(Sys.time())),
-          compile = FALSE)
-  compile(xf, pf)
-  prd <- xf * pf
+  mods <- xs_models()
+  prd <- Xs(mods$m_event) * mods$p_event
 
   A0 <- 1.0; k <- 0.4; Delta <- 0.5; t0 <- 5
   pars <- c(A = A0, k = k, A_add = Delta)
@@ -161,26 +197,14 @@ test_that("Xs with an 'add' event reproduces the analytical post-event trajector
 test_that("Xs with constant forcing input matches the closed-form linear ODE solution", {
   # dA/dt = F - k*A with constant F gives A(t) = (A0 - F/k)*exp(-k*t) + F/k.
   skip_if_no_compile()
-  oldwd <- setwd(tempdir()); on.exit(setwd(oldwd), add = TRUE)
-
-  reactions <- eqnlist() |>
-    addReaction("",  "A", "F",     "production by forcing") |>
-    addReaction("A", "",  "k * A", "decay")
-
-  m <- odemodel(reactions, forcings = "F",
-                modelname = paste0("xs_forc_", as.integer(Sys.time())),
-                compile = FALSE)
+  mods <- xs_models()
 
   u_const <- 0.6
   forc <- data.frame(name = "F",
                      time = seq(0, 20, by = 0.5),
                      value = u_const)
-  xf <- Xs(m, forcings = forc, condition = "C1")
-  pf <- P(eqnvec(A = "A", k = "k"), condition = "C1",
-          modelname = paste0("xs_forc_p_", as.integer(Sys.time())),
-          compile = FALSE)
-  compile(xf, pf)
-  prd <- xf * pf
+  xf <- Xs(mods$m_forc, forcings = forc, condition = "C1")
+  prd <- xf * mods$p_forc
 
   A0 <- 0.1; k <- 0.3
   pars <- c(A = A0, k = k)
@@ -232,14 +256,7 @@ test_that("Xd linearly interpolates between grid points", {
 
 test_that("Xf reproduces the linear-decay closed form and emits no deriv attribute", {
   skip_if_no_compile()
-  oldwd <- setwd(tempdir()); on.exit(setwd(oldwd), add = TRUE)
-
-  reactions <- eqnlist() |>
-    addReaction("A", "", "k * A", "decay")
-  m <- odemodel(reactions,
-                modelname = paste0("xf_decay_", as.integer(Sys.time())),
-                compile = FALSE)
-  xfn <- Xf(m, condition = "C1"); compile(xfn)
+  xfn <- Xf(fx_decay_compiled()$m, condition = "C1")
 
   times <- c(0, 1, 2, 5)
   pars <- c(A = 1.3, k = 0.42)
@@ -254,27 +271,17 @@ test_that("Xf reproduces the linear-decay closed form and emits no deriv attribu
 
 # ============================================================================
 # Xs.cppDE theta-sensitivity path: heap vs stack AD slab parity
-# (Phi'(theta) as sens1ini; per-condition varying theta counts via two-condition setup)
+# (Phi'(theta) as tangent; per-condition varying theta counts via two-condition setup)
 # ============================================================================
 
 test_that("Heap and stack AD slabs match on a single-condition linear model", {
 
-  withr::local_dir(tempdir())
-  f <- c(A = "-k1*A + k2*B",
-         B =  "k1*A - k2*B")
-
-  # Default heap slab vs explicit stack slab (B,log_k1,log_k2}).
-  mod_v1 <- odemodel(f, modelname = "rep_v1", backend = "cppDE")
-  mod_v2 <- odemodel(f, modelname = "rep_v2", backend = "cppDE")
-
-  # Same parameter transformation for both.
-  trafo <- c(A = "A", B = "B", k1 = "exp(log_k1)", k2 = "exp(log_k2)")
-  p1 <- P(trafo, modelname = "rep_trafo_v1", compile = TRUE)
-  p2 <- P(trafo, modelname = "rep_trafo_v2", compile = TRUE)
-
+  # Default heap slab vs explicit stack slab (B,log_k1,log_k2}), same
+  # parameter transformation for both.
+  mods <- xs_models()
   tight <- list(atol = 1e-10, rtol = 1e-10)
-  x1 <- Xs(mod_v1, optionsSens = tight) * p1
-  x2 <- Xs(mod_v2, optionsSens = tight) * p2
+  x1 <- Xs(mods$m_rep1, optionsSens = tight) * mods$p_rep
+  x2 <- Xs(mods$m_rep2, optionsSens = tight) * mods$p_rep
 
   theta <- c(A = 1.0, B = 0.2, log_k1 = log(0.5), log_k2 = log(0.3))
   times <- seq(0, 3, length.out = 7)
@@ -300,34 +307,15 @@ test_that("Heap and stack AD slabs match on a single-condition linear model", {
 
 test_that("Heap/stack parity holds with per-condition varying theta subsets", {
 
-  withr::local_dir(tempdir())
-  f <- c(A = "-k1*A + k2*B",
-         B =  "k1*A - k2*B")
-
-  mod_v1 <- odemodel(f, modelname = "repmulti_v1", backend = "cppDE")
   # Stack upper bound: any condition may activate up to 4 thetas.
-  mod_v2 <- odemodel(f, modelname = "repmulti_v2", backend = "cppDE")
-
   # Condition "closed" uses log_k1; condition "open" uses log_k_open instead.
   # Global theta set has 5 elements; each condition activates 4.
-  trafo_closed <- c(A = "A", B = "B", k1 = "exp(log_k1)",      k2 = "exp(log_k2)")
-  trafo_open   <- c(A = "A", B = "B", k1 = "exp(log_k_open)",  k2 = "exp(log_k2)")
-
-  p1 <-
-    P(trafo_closed, condition = "closed",
-      modelname = "repmulti_trafo_cl_v1", compile = TRUE) +
-    P(trafo_open,   condition = "open",
-      modelname = "repmulti_trafo_op_v1", compile = TRUE)
-
-  p2 <-
-    P(trafo_closed, condition = "closed",
-      modelname = "repmulti_trafo_cl_v2", compile = TRUE) +
-    P(trafo_open,   condition = "open",
-      modelname = "repmulti_trafo_op_v2", compile = TRUE)
+  mods <- xs_models()
+  p <- mods$p_rep_cl + mods$p_rep_op
 
   tight <- list(atol = 1e-10, rtol = 1e-10)
-  x1 <- Xs(mod_v1, optionsSens = tight) * p1
-  x2 <- Xs(mod_v2, optionsSens = tight) * p2
+  x1 <- Xs(mods$m_rep1, optionsSens = tight) * p
+  x2 <- Xs(mods$m_rep2, optionsSens = tight) * p
 
   theta <- c(A = 1.0, B = 0.2,
              log_k1 = log(0.5), log_k_open = log(0.8), log_k2 = log(0.3))

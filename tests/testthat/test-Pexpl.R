@@ -15,6 +15,49 @@ skip_if_no_compile <- function() {
 }
 
 
+# Every model the file compiles itself, in one shared object built on first use.
+.pexpl_fx <- local({
+  cache <- NULL
+  function() {
+    if (!is.null(cache)) return(cache)
+    oldwd <- setwd(.dmod_fx_workdir()); on.exit(setwd(oldwd), add = TRUE)
+
+    p_mix <- P(eqnvec(A = "a^2", k = "a * b"), condition = "C1",
+               modelname = "test_P_mix", compile = FALSE)
+    p_rev <- P(eqnvec(A = "exp(a)", k = "exp(b)"), condition = "C1",
+               method = "explicit", derivMode = "reverse",
+               modelname = "test_P_dm_rev", compile = FALSE)
+    p_fwd <- P(eqnvec(A = "exp(a)", k = "exp(b)"), condition = "C1",
+               method = "explicit", derivMode = "forward",
+               modelname = "test_P_dm_fwd", compile = FALSE)
+
+    const <- c(A = "1.0", B = "2.5")
+    p_const_val <- Pexpl(const, deriv = FALSE, compile = FALSE,
+                         modelname = "noparam_pexpl_val")
+    p_const_fwd <- Pexpl(const, derivMode = "forward", compile = FALSE,
+                         modelname = "noparam_pexpl_fwd")
+
+    x_full <- Xs(odemodel(as.eqnvec(c(A = "-k*A")), modelname = "noparam_full_ode",
+                          compile = FALSE, backend = "cppDE"))
+    p_full <- Pexpl(c(A = "1.0", k = "0.5"), derivMode = "forward",
+                    compile = FALSE, modelname = "noparam_full_p")
+    # attach.input keeps the state alongside the observable, which is what the
+    # full-chain test compares.
+    g_full <- Y(c(y1 = "A"), f = NULL, states = c("A"),
+                parameters = character(0), attach.input = TRUE,
+                derivMode = "forward", compile = FALSE,
+                modelname = "noparam_full_g")
+
+    compile(p_mix, p_rev, p_fwd, p_const_val, p_const_fwd, x_full, p_full, g_full,
+            output = "test_P_all", cores = 4L)
+    cache <<- list(p_mix = p_mix, p_rev = p_rev, p_fwd = p_fwd,
+                   p_const_val = p_const_val, p_const_fwd = p_const_fwd,
+                   x_full = x_full, p_full = p_full, g_full = g_full)
+    cache
+  }
+})
+
+
 ## ---- Identity transformation -------------------------------------------
 
 test_that("Pexpl identity trafo round-trips and has identity Jacobian", {
@@ -54,13 +97,10 @@ test_that("Pexpl log trafo maps theta -> exp(theta) with Jacobian diag(exp(theta
 
 test_that("Pexpl Jacobian on a mixed nonlinear trafo equals the algebraic derivative", {
   skip_if_no_compile()
-  oldwd <- setwd(.dmod_fx_workdir()); on.exit(setwd(oldwd), add = TRUE)
 
   # Mixed trafo: A = a^2, k = a * b
   # Analytical Jacobian: J[1,] = (2a, 0), J[2,] = (b, a).
-  pfn <- P(eqnvec(A = "a^2", k = "a * b"),
-           condition = "C1",
-           modelname = "test_P_mix", compile = TRUE)
+  pfn <- .pexpl_fx()$p_mix
 
   outer <- c(a = 1.3, b = 0.7)
   inner <- pfn(outer, deriv = TRUE)$C1
@@ -77,14 +117,9 @@ test_that("Pexpl Jacobian on a mixed nonlinear trafo equals the algebraic deriva
 
 test_that("Pexpl derivMode 'reverse' and 'forward' agree on the value", {
   skip_if_no_compile()
-  oldwd <- setwd(.dmod_fx_workdir()); on.exit(setwd(oldwd), add = TRUE)
-
-  pfn_rev <- P(eqnvec(A = "exp(a)", k = "exp(b)"), condition = "C1",
-               method = "explicit", derivMode = "reverse",
-               modelname = "test_P_dm_rev", compile = TRUE)
-  pfn_fwd <- P(eqnvec(A = "exp(a)", k = "exp(b)"), condition = "C1",
-                method = "explicit", derivMode = "forward",
-                modelname = "test_P_dm_fwd", compile = TRUE)
+  fx <- .pexpl_fx()
+  pfn_rev <- fx$p_rev
+  pfn_fwd <- fx$p_fwd
 
   outer <- c(a = 0.3, b = -0.5)
   i_rev <- pfn_rev(outer, deriv = TRUE)$C1
@@ -111,39 +146,18 @@ test_that("getParameters(Y * Xs * P) equals getParameters(P) (outer-pars view)",
 # ============================================================================
 
 test_that("Pexpl with pure-numeric trafo evaluates (values and forward)", {
-  withr::local_dir(tempdir())
-  trafo <- c(A = "1.0", B = "2.5")
-
-  p_val <- Pexpl(trafo, deriv = FALSE, compile = TRUE,
-                 modelname = "noparam_pexpl_val")
-  out_val <- p_val(c(dummy = 1.0))
+  fx <- .pexpl_fx()
+  out_val <- fx$p_const_val(c(dummy = 1.0))
   expect_equal(unclass(out_val[[1]])[c("A", "B")], c(A = 1.0, B = 2.5))
 
-  p_fwd <- Pexpl(trafo, derivMode = "forward", compile = TRUE,
-                  modelname = "noparam_pexpl_fwd")
-  out_fwd <- p_fwd(c(dummy = 1.0))
+  out_fwd <- fx$p_const_fwd(c(dummy = 1.0))
   expect_equal(unclass(out_fwd[[1]])[c("A", "B")], c(A = 1.0, B = 2.5))
 })
 
 
 test_that("Full g*x*p chain with constant-only Pexpl evaluates", {
-  withr::local_dir(tempdir())
-  f <- as.eqnvec(c(A = "-k*A"))
-  m <- odemodel(f, modelname = "noparam_full_ode", compile = TRUE,
-                backend = "cppDE")
-  x <- Xs(m)
-
-  trafo <- c(A = "1.0", k = "0.5")
-  p <- Pexpl(trafo, derivMode = "forward", compile = TRUE,
-             modelname = "noparam_full_p")
-  # attach.input keeps the state alongside the observable, which is what the
-  # comparison below checks.
-  g <- Y(c(y1 = "A"), f = NULL, states = c("A"),
-         parameters = character(0), attach.input = TRUE,
-         derivMode = "forward", compile = TRUE,
-         modelname = "noparam_full_g")
-
-  out <- (g * x * p)(seq(0, 5, length.out = 3), c(dummy = 1.0))
+  fx <- .pexpl_fx()
+  out <- (fx$g_full * fx$x_full * fx$p_full)(seq(0, 5, length.out = 3), c(dummy = 1.0))
   pred <- out[[1]]
   expect_equal(unname(pred[, "y1"]), unname(pred[, "A"]))
   expect_equal(unname(pred[1, "A"]), 1.0, tolerance = 1e-8)

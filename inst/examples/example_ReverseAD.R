@@ -63,7 +63,7 @@ reactions <- eqnlist() |>
 # Xs() backwards is one value solve with a checkpoint per step, then one
 # backward sweep. What goes in is a cotangent on the prediction; what comes out
 # is a cotangent on the model's own parameters, which is the row set a forward
-# sens1ini seeds.
+# tangent is seeded on.
 #
 # The oracle is the forward sensitivity contracted with the same cotangent: the
 # two compute w' S from opposite ends.

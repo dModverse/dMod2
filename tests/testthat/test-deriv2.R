@@ -6,15 +6,76 @@
 # ============================================================================
 
 
+# ---- Models ---------------------------------------------------------------
+
+# Every model of this file, generated with compile = FALSE on first use and
+# linked into one shared object. Tests with identical equations share a model.
+d2_models <- local({
+  cache <- NULL
+  function() {
+    if (!is.null(cache)) return(cache)
+    dir <- file.path(tempdir(), "deriv2_models")
+    dir.create(dir, showWarnings = FALSE, recursive = TRUE)
+    withr::local_dir(dir)
+    nm <- function(x) paste0(x, "_", as.integer(Sys.time()))
+
+    f     <- c(x = "-k * x")
+    decay <- nm("d2_decay")
+    equil <- nm("d2_equil")
+
+    m <- odemodel(f, modelname = decay, backend = "cppDE", deriv2 = TRUE,
+                  verbose = FALSE, compile = FALSE)
+    xdes <- Xs(odemodel(f, modelname = nm("d2_decay_des"), backend = "deSolve",
+                        verbose = FALSE, compile = FALSE))
+
+    yfwd <- Y(c(y = "a*x^2 + b*x"), states = "x", parameters = c("a", "b"),
+              modelname = nm("d2_obs_fwd"), deriv2 = TRUE,
+              derivMode = "forward", attach.input = FALSE)
+    yobs <- Y(c(y = "a*x^2 + b*x"), f = f, parameters = c("a", "b"),
+              modelname = nm("d2_obs"), deriv2 = TRUE, attach.input = FALSE)
+
+    pabc <- Pexpl(c(a = "exp(la)", b = "la^2 + lb", c = "la*lb"),
+                  parameters = NULL, modelname = nm("d2_pexpl"),
+                  deriv2 = TRUE, derivMode = "forward")
+    ppass <- Pexpl(c(a = "exp(la)", b = "la^2 + lb"), parameters = c("la", "lb"),
+                   modelname = nm("d2_pexpl_pass"), deriv2 = TRUE,
+                   derivMode = "forward")
+    pnod2 <- Pexpl(c(a = "exp(la)"), parameters = NULL,
+                   modelname = nm("d2_pexpl_nod2"), deriv2 = FALSE,
+                   derivMode = "forward")
+    plog <- Pexpl(c(x = "exp(lx)", k = "exp(lk)", a = "la", b = "lb"),
+                  parameters = NULL, modelname = nm("d2_pexpl_log"),
+                  deriv2 = TRUE, derivMode = "forward", condition = "C1")
+    pid <- Pexpl(c(x = "x", k = "k", a = "a", b = "b"), parameters = NULL,
+                 modelname = nm("d2_pexpl_id"), deriv2 = TRUE,
+                 derivMode = "forward", condition = "C1")
+    pcon <- Pexpl(c(a = "exp(la)"), parameters = NULL,
+                  modelname = nm("d2_pexpl_con"), deriv2 = TRUE,
+                  derivMode = "forward")
+
+    peq <- Pequil(c(x = "-k * x + s"), parameters = c("k", "s"),
+                  modelname = equil, deriv2 = TRUE, attach.input = FALSE,
+                  verbose = FALSE)
+    peq_nod2 <- Pequil(c(x = "-k * x + s"), parameters = c("k", "s"),
+                       modelname = nm("d2_equil_nod2"), deriv2 = FALSE,
+                       attach.input = FALSE, verbose = FALSE)
+
+    compile(m, xdes, yfwd, yobs, pabc, ppass, pnod2, plog, pid, pcon, peq,
+            peq_nod2, output = nm("deriv2_models"), cores = 4L)
+
+    cache <<- list(dir = dir, decay = decay, equil = equil, m = m, xdes = xdes,
+                   yfwd = yfwd, yobs = yobs, pabc = pabc, ppass = ppass,
+                   pnod2 = pnod2, plog = plog, pid = pid, pcon = pcon,
+                   peq = peq, peq_nod2 = peq_nod2)
+    cache
+  }
+})
+
+
 # ---- Xs -------------------------------------------------------------------
 
 test_that("Xs.cppDE deriv2 reproduces linear-decay analytical Hessian", {
-  prev <- getwd(); on.exit(setwd(prev), add = TRUE)
-  withr::local_dir(tempdir())
-  f <- c(x = "-k * x")  # x(t) = x0 * exp(-k*t)
-  m <- odemodel(f, modelname = paste0("decay_d2_", as.integer(Sys.time())),
-                backend = "cppDE", deriv2 = TRUE, verbose = FALSE)
-  xfn <- Xs(m, optionsOde = list(atol = 1e-10, rtol = 1e-10),
+  xfn <- Xs(d2_models()$m, optionsOde = list(atol = 1e-10, rtol = 1e-10),
             optionsSens = list(atol = 1e-10, rtol = 1e-10))
 
   times <- c(0.0, 0.5, 1.0, 1.5)
@@ -41,18 +102,12 @@ test_that("Xs.cppDE deriv2 reproduces linear-decay analytical Hessian", {
 })
 
 test_that("odemodel(deriv2 = TRUE) emits <m>, <m>_s, <m>_s2 and Xs.cppDE dispatches", {
-  prev <- getwd(); on.exit(setwd(prev), add = TRUE)
-  td <- file.path(tempdir(), paste0("triple_", as.integer(Sys.time())))
-  dir.create(td, showWarnings = FALSE, recursive = TRUE)
-  setwd(td)
-
-  f <- c(x = "-k * x")
-  modelname <- "triple"
-  m <- odemodel(f, modelname = modelname, backend = "cppDE",
-                deriv2 = TRUE, verbose = FALSE)
-  expect_true(file.exists(paste0(modelname,    ".cpp")))
-  expect_true(file.exists(paste0(modelname, "_s.cpp")))
-  expect_true(file.exists(paste0(modelname, "_s2.cpp")))
+  d <- d2_models()
+  m <- d$m
+  src <- file.path(d$dir, d$decay)
+  expect_true(file.exists(paste0(src,    ".cpp")))
+  expect_true(file.exists(paste0(src, "_s.cpp")))
+  expect_true(file.exists(paste0(src, "_s2.cpp")))
   expect_false(isTRUE(attr(m$extended,  "deriv2")))
   expect_true(isTRUE(attr(m$extended2, "deriv2")))
 
@@ -69,12 +124,7 @@ test_that("odemodel(deriv2 = TRUE) emits <m>, <m>_s, <m>_s2 and Xs.cppDE dispatc
 })
 
 test_that("Xs.deSolve refuses deriv2 = TRUE", {
-  prev <- getwd(); on.exit(setwd(prev), add = TRUE)
-  withr::local_dir(tempdir())
-  f <- c(x = "-k*x")
-  m <- odemodel(f, modelname = paste0("decay_des_", as.integer(Sys.time())),
-                backend = "deSolve", verbose = FALSE, compile = FALSE)
-  xfn <- Xs(m); compile(xfn)
+  xfn <- d2_models()$xdes
   expect_error(xfn(c(0, 1), c(x = 1, k = 0.5), deriv2 = TRUE),
                "Xs.deSolve")
 })
@@ -83,12 +133,7 @@ test_that("Xs.deSolve refuses deriv2 = TRUE", {
 # ---- Y --------------------------------------------------------------------
 
 test_that("Y deriv2 (AD) reproduces analytical observation Hessian", {
-  prev <- getwd(); on.exit(setwd(prev), add = TRUE)
-  withr::local_dir(tempdir())
-  gfn <- Y(c(y = "a*x^2 + b*x"), states = "x", parameters = c("a", "b"),
-           modelname = paste0("y_d2_", as.integer(Sys.time())),
-           compile = TRUE, deriv2 = TRUE, derivMode = "forward",
-           attach.input = FALSE)
+  gfn <- d2_models()$yfwd
 
   times <- c(0.0, 0.5, 1.0)
   out <- cbind(time = times, x = c(1.0, 0.7, 0.4))
@@ -120,12 +165,7 @@ test_that("Y deriv2 (AD) reproduces analytical observation Hessian", {
 })
 
 test_that("Pexpl deriv2 (AD) reproduces analytical Hessian", {
-  prev <- getwd(); on.exit(setwd(prev), add = TRUE)
-  withr::local_dir(tempdir())
-  trafo <- c(a = "exp(la)", b = "la^2 + lb", c = "la*lb")
-  p <- Pexpl(trafo, parameters = NULL,
-             modelname = paste0("ad_pexpl_d2_", as.integer(Sys.time())),
-             compile = TRUE, deriv2 = TRUE, derivMode = "forward")
+  p <- d2_models()$pabc
 
   pars <- c(la = 0.3, lb = 0.5)
   pinner <- p(pars, deriv = TRUE, deriv2 = TRUE)[[1]]
@@ -153,12 +193,7 @@ test_that("Pexpl deriv2 (AD) handles identity pass-through entries", {
   # Regression: with `parameters` supplied, identity entries (e.g. la = "la")
   # are appended to the trafo; the compiled AD2 entry must propagate dual2nd
   # values through them without corrupting derivatives.
-  prev <- getwd(); on.exit(setwd(prev), add = TRUE)
-  withr::local_dir(tempdir())
-  trafo <- c(a = "exp(la)", b = "la^2 + lb")
-  p <- Pexpl(trafo, parameters = c("la", "lb"),
-             modelname = paste0("id_pexpl_d2_", as.integer(Sys.time())),
-             compile = TRUE, deriv2 = TRUE, derivMode = "forward")
+  p <- d2_models()$ppass
 
   pars <- c(la = 0.3, lb = 0.5)
   pinner <- p(pars, deriv = TRUE, deriv2 = TRUE)[[1]]
@@ -194,12 +229,7 @@ test_that("[.parvec and c.parvec propagate deriv2 attributes", {
 })
 
 test_that("Pexpl(deriv2 = FALSE) refuses deriv2 = TRUE at call time", {
-  prev <- getwd(); on.exit(setwd(prev), add = TRUE)
-  withr::local_dir(tempdir())
-  trafo <- c(a = "exp(la)")
-  p <- Pexpl(trafo, parameters = NULL,
-             modelname = paste0("nod2_pexpl_", as.integer(Sys.time())),
-             compile = TRUE, deriv2 = FALSE, derivMode = "forward")
+  p <- d2_models()$pnod2
   expect_error(p(c(la = 0.1), deriv2 = TRUE),
                "deriv2 = FALSE")
 })
@@ -208,13 +238,7 @@ test_that("Pexpl(deriv2 = FALSE) refuses deriv2 = TRUE at call time", {
 # ---- Pequil ---------------------------------------------------------------
 
 test_that("Pequil deriv2 reproduces analytical equilibrium Hessian", {
-  prev <- getwd(); on.exit(setwd(prev), add = TRUE)
-  withr::local_dir(tempdir())
-  trafo <- c(x = "-k * x + s")  # x* = s/k
-  p <- Pequil(trafo, parameters = c("k", "s"),
-              modelname = paste0("equil_lin_d2_", as.integer(Sys.time())),
-              compile = TRUE, deriv2 = TRUE, attach.input = FALSE,
-              verbose = FALSE)
+  p <- d2_models()$peq
 
   pars <- c(k = 0.5, s = 2.0, x = 1.0)
   pinner <- p(pars, deriv = TRUE, deriv2 = TRUE)[[1]]
@@ -238,17 +262,9 @@ test_that("Pequil deriv2 reproduces analytical equilibrium Hessian", {
 })
 
 test_that("Pequil(deriv2 = TRUE) emits <m>, <m>_s, <m>_s2 and dispatches", {
-  prev <- getwd(); on.exit(setwd(prev), add = TRUE)
-  td <- file.path(tempdir(), paste0("equil_triple_", as.integer(Sys.time())))
-  dir.create(td, showWarnings = FALSE, recursive = TRUE)
-  setwd(td)
-
-  trafo <- c(x = "-k*x + s")
-  base <- "equil_triple"
-  p <- Pequil(trafo, parameters = c("k", "s"),
-              modelname = base,
-              compile = TRUE, deriv2 = TRUE, attach.input = FALSE,
-              verbose = FALSE)
+  d <- d2_models()
+  p <- d$peq
+  base <- file.path(d$dir, d$equil)
   expect_true(file.exists(paste0(base,     ".cpp")))
   expect_true(file.exists(paste0(base, "_s.cpp")))
   expect_true(file.exists(paste0(base, "_s2.cpp")))
@@ -263,13 +279,7 @@ test_that("Pequil(deriv2 = TRUE) emits <m>, <m>_s, <m>_s2 and dispatches", {
 })
 
 test_that("Pequil(deriv2 = FALSE) refuses deriv2 = TRUE at call time", {
-  prev <- getwd(); on.exit(setwd(prev), add = TRUE)
-  withr::local_dir(tempdir())
-  trafo <- c(x = "-k*x + s")
-  p <- Pequil(trafo, parameters = c("k", "s"),
-              modelname = paste0("equil_nod2_", as.integer(Sys.time())),
-              compile = TRUE, deriv2 = FALSE, attach.input = FALSE,
-              verbose = FALSE)
+  p <- d2_models()$peq_nod2
   expect_error(p(c(k = 0.5, s = 2, x = 1), deriv2 = TRUE),
                "deriv2 = TRUE")
 })
@@ -278,18 +288,10 @@ test_that("Pequil(deriv2 = FALSE) refuses deriv2 = TRUE at call time", {
 # ---- Composition ----------------------------------------------------------
 
 test_that("(Y * Xs)(times, pars, deriv2 = TRUE) chain-rule matches analytical", {
-  prev <- getwd(); on.exit(setwd(prev), add = TRUE)
-  withr::local_dir(tempdir())
-  f <- c(x = "-k * x")
-  m <- odemodel(f,
-                modelname = paste0("compose_decay_", as.integer(Sys.time())),
-                backend = "cppDE", deriv2 = TRUE, verbose = FALSE)
-  xfn <- Xs(m, optionsOde = list(atol = 1e-10, rtol = 1e-10),
+  d <- d2_models()
+  xfn <- Xs(d$m, optionsOde = list(atol = 1e-10, rtol = 1e-10),
             optionsSens = list(atol = 1e-10, rtol = 1e-10))
-  gfn <- Y(c(y = "a*x^2 + b*x"), f = f, parameters = c("a", "b"),
-           modelname = paste0("compose_obs_", as.integer(Sys.time())),
-           compile = TRUE, deriv2 = TRUE, attach.input = FALSE)
-  prd <- gfn * xfn
+  prd <- d$yobs * xfn
 
   times <- c(0.0, 0.5, 1.0)
   pars <- c(x = 2.0, k = 0.7, a = 0.3, b = -0.5)
@@ -357,24 +359,11 @@ test_that("normL2 gradient is identical for deriv2 = FALSE and deriv2 = TRUE", {
   # the upstream Hessian seed must reach Xs.cppDE so the _s2 integration
   # produces the same first-order sensitivities as the _s integration. If
   # subsetting drops attr(., "deriv2") the gradient diverges silently.
-  prev <- getwd(); on.exit(setwd(prev), add = TRUE)
-  withr::local_dir(tempdir())
-  f <- c(x = "-k*x")
-  m <- odemodel(f, modelname = paste0("nl_grad_id_", as.integer(Sys.time())),
-                backend = "cppDE", deriv2 = TRUE, verbose = FALSE)
+  d <- d2_models()
   ode_opts <- list(atol = 1e-12, rtol = 1e-12)
-  xfn <- Xs(m, condition = "C1",
+  xfn <- Xs(d$m, condition = "C1",
             optionsOde = ode_opts, optionsSens = ode_opts)
-  gfn <- Y(c(y = "a*x^2 + b*x"), f = f, parameters = c("a", "b"),
-           modelname = paste0("nl_grad_obs_", as.integer(Sys.time())),
-           compile = TRUE, deriv2 = TRUE, attach.input = FALSE,
-           condition = "C1")
-  pfn <- Pexpl(c(x = "exp(lx)", k = "exp(lk)", a = "la", b = "lb"),
-               parameters = NULL,
-               modelname = paste0("nl_grad_p_", as.integer(Sys.time())),
-               compile = TRUE, deriv2 = TRUE, derivMode = "forward",
-               condition = "C1")
-  prd <- gfn * xfn * pfn
+  prd <- d$yobs * xfn * d$plog
 
   times_d <- c(0.5, 1.0, 1.5)
   pars <- c(lx = log(2.0), lk = log(0.7), la = 0.3, lb = -0.5)
@@ -391,21 +380,9 @@ test_that("normL2 gradient is identical for deriv2 = FALSE and deriv2 = TRUE", {
 })
 
 test_that("normL2(deriv2 = FALSE) reproduces the pre-deriv2 GN Hessian", {
-  prev <- getwd(); on.exit(setwd(prev), add = TRUE)
-  withr::local_dir(tempdir())
-  f <- c(x = "-k*x")
-  m <- odemodel(f, modelname = paste0("nl_d2_gn_", as.integer(Sys.time())),
-                backend = "cppDE", deriv2 = TRUE, verbose = FALSE)
-  xfn <- Xs(m, condition = "C1")
-  gfn <- Y(c(y = "a*x^2 + b*x"), f = f, parameters = c("a", "b"),
-           modelname = paste0("nl_obs_gn_", as.integer(Sys.time())),
-           compile = TRUE, deriv2 = TRUE, attach.input = FALSE,
-           condition = "C1")
-  pfn <- Pexpl(c(x = "x", k = "k", a = "a", b = "b"), parameters = NULL,
-               modelname = paste0("nl_id_gn_", as.integer(Sys.time())),
-               compile = TRUE, deriv2 = TRUE, derivMode = "forward",
-               condition = "C1")
-  prd <- gfn * xfn * pfn
+  d <- d2_models()
+  xfn <- Xs(d$m, condition = "C1")
+  prd <- d$yobs * xfn * d$pid
 
   times_d <- c(0.5, 1.0, 1.5)
   pars <- c(x = 2.0, k = 0.7, a = 0.3, b = -0.5)
@@ -421,23 +398,11 @@ test_that("normL2(deriv2 = FALSE) reproduces the pre-deriv2 GN Hessian", {
 })
 
 test_that("normL2(deriv2 = TRUE) adds residual times d^2 pred / sigma^2", {
-  prev <- getwd(); on.exit(setwd(prev), add = TRUE)
-  withr::local_dir(tempdir())
-  f <- c(x = "-k*x")
-  m <- odemodel(f, modelname = paste0("nl_d2_ex_", as.integer(Sys.time())),
-                backend = "cppDE", deriv2 = TRUE, verbose = FALSE)
+  d <- d2_models()
   ode_opts <- list(atol = 1e-12, rtol = 1e-12)
-  xfn <- Xs(m, condition = "C1",
+  xfn <- Xs(d$m, condition = "C1",
             optionsOde = ode_opts, optionsSens = ode_opts)
-  gfn <- Y(c(y = "a*x^2 + b*x"), f = f, parameters = c("a", "b"),
-           modelname = paste0("nl_obs_ex_", as.integer(Sys.time())),
-           compile = TRUE, deriv2 = TRUE, attach.input = FALSE,
-           condition = "C1")
-  pfn <- Pexpl(c(x = "x", k = "k", a = "a", b = "b"), parameters = NULL,
-               modelname = paste0("nl_id_ex_", as.integer(Sys.time())),
-               compile = TRUE, deriv2 = TRUE, derivMode = "forward",
-               condition = "C1")
-  prd <- gfn * xfn * pfn
+  prd <- d$yobs * xfn * d$pid
 
   times_d <- c(0.5, 1.0, 1.5)
   pars <- c(x = 2.0, k = 0.7, a = 0.3, b = -0.5)
@@ -482,13 +447,9 @@ test_that("normL2(deriv2 = TRUE) adds residual times d^2 pred / sigma^2", {
 # ---- constraintL2 ---------------------------------------------------------
 
 test_that("constraintL2 deriv2 adds gi . dP2 chain term after Pexpl", {
-  prev <- getwd(); on.exit(setwd(prev), add = TRUE)
-  withr::local_dir(tempdir())
   # Pexpl: a = exp(la). constraintL2(mu = mu_a, sigma = s) on `a`,
   # composed via attr(p, "deriv") and attr(p, "deriv2") from Pexpl.
-  pfn <- Pexpl(c(a = "exp(la)"), parameters = NULL,
-               modelname = paste0("c2_pexpl_", as.integer(Sys.time())),
-               compile = TRUE, deriv2 = TRUE, derivMode = "forward")
+  pfn <- d2_models()$pcon
 
   mu <- c(a = 1.0); sg <- 0.5
   cfn <- constraintL2(mu = mu, sigma = sg)

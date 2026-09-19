@@ -76,7 +76,7 @@ fx_decay_compiled <- function() {
     pfn_log <- P(trafo_log, condition = "C1",
                  modelname = "fx_decay_p_log", compile = FALSE)
 
-    compile(xfn, gfn, pfn_id, pfn_log, cores = 1)
+    compile(xfn, gfn, pfn_id, pfn_log, output = "fx_decay_all", cores = 4L)
 
     cache$decay <- list(
       m           = m,
@@ -122,7 +122,7 @@ fx_decay_multicond_compiled <- function() {
     pfn <- P(branch(trafo, table = tree, apply = "insert"),
              method = "explicit", modelname = "fx_mc_p", compile = FALSE)
 
-    compile(gfn, pfn, cores = 1)
+    compile(gfn, pfn, output = "fx_mc_all", cores = 4L)
 
     outerpars <- c(A_log = 0, k_log = log(0.5),
                    setNames(seq(0, 0.3, length.out = 4), paste0("s_", conds, "_log")))

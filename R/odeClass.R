@@ -311,8 +311,8 @@ odemodel <- function(f, deriv = TRUE, deriv2 = FALSE, derivMode = "forward",
                               dots_ext))
       }
       # CVODES adjoint sensitivity analysis. A separate compilation, as on the
-      # native backend, and with the same interface: solveODE(..., seed = W)
-      # returns $adjoint. It refuses events, which cppDE::cvode() reports.
+      # native backend, and with the same interface: solveODE(..., cotangent = W)
+      # returns $cotangent. It refuses events, which cppDE::cvode() reports.
       reversed <- NULL
       if (reverse) {
         reversed <- do.call(cppDE::cvode,

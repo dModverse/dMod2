@@ -123,15 +123,18 @@ P <- function(trafo = NULL, parameters = NULL, condition = NULL,
       dP <- diag(length(active)); dimnames(dP) <- list(active, active)
     }
     out <- if (!is.null(.ad_out)) .ad_out else
-      st$evaluate(NULL, p[st$parameters], dX = NULL, dP = dP, dX2 = NULL, dP2 = dP2,
+      st$evaluate(NULL, p[st$parameters], tangentX = NULL, tangentP = dP,
+                  hessianX = NULL, hessianP = dP2,
                   deriv2 = deriv2, attach.input = st$attach.input,
                   fixed = intersect(names(fixed), st$parameters))
     pinnerVal <- out$y[1, ]
-    if (!is.null(out$dy))
-      Jac <- matrix(out$dy, dim(out$dy)[2], dim(out$dy)[3],
-                    dimnames = list(dimnames(out$dy)[[2]], dimnames(out$dy)[[3]]))
-    if (deriv2 && !is.null(out$d2y))
-      Hess <- array(out$d2y, dim(out$d2y)[2:4], dimnames = dimnames(out$d2y)[2:4])
+    tg <- out$tangent
+    if (!is.null(tg))
+      Jac <- matrix(tg, dim(tg)[2], dim(tg)[3],
+                    dimnames = list(dimnames(tg)[[2]], dimnames(tg)[[3]]))
+    if (deriv2 && !is.null(out$hessian))
+      Hess <- array(out$hessian, dim(out$hessian)[2:4],
+                    dimnames = dimnames(out$hessian)[2:4])
   } else {
     ## Values only (reverse-only build).
     pinnerVal <- st$fun(NULL, p, attach.input = st$attach.input, fixed = names(fixed))[, ]
@@ -173,8 +176,9 @@ P <- function(trafo = NULL, parameters = NULL, condition = NULL,
       active <- setdiff(st$parameters, names(fixed))
       dP <- diag(length(active)); dimnames(dP) <- list(active, active)
     }
-    list(vars = NULL, params = c(pars, fixed)[st$parameters], dX = NULL, dP = dP,
-         dX2 = NULL, dP2 = if (deriv2) attr(pars, "deriv2") else NULL,
+    list(vars = NULL, params = c(pars, fixed)[st$parameters],
+         tangentX = NULL, tangentP = dP, hessianX = NULL,
+         hessianP = if (deriv2) attr(pars, "deriv2") else NULL,
          attach.input = st$attach.input,
          fixed = intersect(names(fixed), st$parameters))
   })
@@ -192,21 +196,17 @@ P <- function(trafo = NULL, parameters = NULL, condition = NULL,
 
 # w' Jac, where the forward path forms Jac %*% dP. The transformation is one
 # evaluation with no variables and one observation, so the vjp is the same call
-# the observation functions make, with the seed on the inner parameters.
+# the observation functions make, with the cotangent on the inner parameters.
 #
 # attach.input passes the outer parameters through untouched, so their cotangent
 # adds to whatever the transformation itself puts on them.
-.Pexpl_vjp <- function(st, pars, fixed = NULL, w, condition = NULL) {
+.Pexpl_vjp <- function(st, pars, fixed = NULL, cotangent, condition = NULL) {
   if (is.null(st$vjp))
     stop("Pexpl(): the reverse mode needs a vector-Jacobian product; rebuild ",
          "with derivMode = c(\"forward\", \"reverse\") and compile = TRUE.",
          call. = FALSE)
-  w <- .asCtPars(w)
+  w <- .asCtPars(cotangent)
   K <- .ctK(w)
-  if (K > 1L && is.null(st$vjp2))
-    stop("Pexpl(): a second-order cotangent needs the vjp over a dual; rebuild ",
-         "with derivMode = c(\"forward\", \"reverse\") and compile = TRUE.",
-         call. = FALSE)
   p <- c(pars, fixed)
   outnames <- st$outnames
   W <- matrix(0, 1L, length(outnames), dimnames = list(NULL, outnames))
@@ -215,7 +215,8 @@ P <- function(trafo = NULL, parameters = NULL, condition = NULL,
 
   if (K == 1L) {
     r <- st$vjp(NULL, p[st$parameters], W)
-    u <- matrix(r$wp[, 1L], ncol = 1L, dimnames = list(rownames(r$wp), NULL))
+    u <- matrix(r$cotangentP[, 1L], ncol = 1L,
+                dimnames = list(rownames(r$cotangentP), NULL))
   } else {
     # The node has no variables, so only the parameters carry tangents in, and
     # the cotangent brings its own. Both halves of d/dv (w' J) come back in one
@@ -231,9 +232,10 @@ P <- function(trafo = NULL, parameters = NULL, condition = NULL,
     DW <- array(0, c(1L, length(outnames), 1L, nd))
     if (length(hit))
       DW[1L, match(hit, outnames), 1L, ] <- w[hit, -1L, drop = FALSE]
-    r <- st$vjp2(NULL, p[st$parameters], W, vp = V, dw = DW)
-    u <- cbind(r$wp[, 1L, drop = FALSE], matrix(r$dwp[, 1L, ], ncol = nd))
-    rownames(u) <- rownames(r$wp)
+    r <- st$vjp(NULL, p[st$parameters], W, tangentP = V, curvature = DW)
+    u <- cbind(r$cotangentP[, 1L, drop = FALSE],
+               matrix(r$curvatureP[, 1L, ], ncol = nd))
+    rownames(u) <- rownames(r$cotangentP)
   }
   wp <- .pickCotangent(u, names(pars))
 
@@ -310,15 +312,14 @@ Pexpl <- function(trafo, parameters = NULL, attach.input = FALSE, condition = NU
   ## The wrapper closes over `st` alone, not over Pexpl's frame.
   st <- list2env(list(fun = fun, jac = jac, hess = hess, evaluate = evaluate,
                       evaluateBatch = PEval$evaluateBatch, vjp = PEval$vjp,
-                      vjp2 = PEval$vjp2,
                       outnames = names(trafo),
                       parameters = parameters, attach.input = attach.input,
                       use_ad = use_ad, ad_symbol = ad_symbol,
                       ad2_symbol = ad2_symbol, emit_d1 = emit_d1,
                       emit_d2 = emit_d2), parent = emptyenv())
   p2p <- .Pexpl_wrap(st)
-  attr(p2p, "vjpfn") <- function(pars, fixed = NULL, w, condition = NULL)
-    .Pexpl_vjp(st, pars, fixed, w, condition)
+  attr(p2p, "vjpfn") <- function(pars, fixed = NULL, cotangent, condition = NULL)
+    .Pexpl_vjp(st, pars, fixed, cotangent, condition)
   attr(p2p, "batchfn") <- function(parsList, fixedList, deriv, deriv2,
                                    conditions, cores)
     .Pexpl_batch(st, parsList, fixedList, deriv, deriv2, cores)
@@ -1441,8 +1442,8 @@ Pimpl <- function(trafo, parameters = NULL, forcings = NULL, condition = NULL,
         cppDE::solveODE(
           sens_model, times = c(controls$start.time, controls$end.time),
           parms = c(y0, p[model_params]),
-          sens1ini = if (deriv) default_sens else NULL,
-          sens2ini = if (deriv2) default_sens2 else NULL,
+          tangent = if (deriv) default_sens else NULL,
+          hessian = if (deriv2) default_sens2 else NULL,
           roottol = controls$roottol, abstol = controls$abstol, reltol = controls$reltol,
           maxsteps = as.integer(controls$maxsteps),
           maxattemps = as.integer(controls$maxattemps),
@@ -1505,10 +1506,10 @@ Pimpl <- function(trafo, parameters = NULL, forcings = NULL, condition = NULL,
             else c(root, zero_vec)
     if (keep.root) cache$yini <- root
 
-    if (!deriv || is.null(res$sens1)) {
+    if (!deriv || is.null(res$tangent)) {
       result <- as.parvec(out, deriv = NULL, deriv2 = NULL)
     } else {
-      sens_outer <- matrix(res$sens1[last, , ], n_dep, length(all_sens),
+      sens_outer <- matrix(res$tangent[last, , ], n_dep, length(all_sens),
                            dimnames = list(dependent, all_sens)) %*% Tmat
       input_cols <- setdiff(names(p), c(dependent, names(fixed)))
       jacobian <- matrix(0, length(out), length(input_cols),
@@ -1521,9 +1522,9 @@ Pimpl <- function(trafo, parameters = NULL, forcings = NULL, condition = NULL,
       if (length(sc)) jacobian[dependent, sc] <- sens_outer[dependent, sc, drop = FALSE]
 
       hess_attr <- NULL
-      if (deriv2 && !is.null(res$sens2)) {
+      if (deriv2 && !is.null(res$hessian)) {
         ns <- length(all_sens)
-        sens2 <- array(res$sens2[last, , , ], c(n_dep, ns, ns),
+        sens2 <- array(res$hessian[last, , , ], c(n_dep, ns, ns),
                        dimnames = list(dependent, all_sens, all_sens))
         hess_arr <- array(0, c(length(out), length(input_cols), length(input_cols)),
                           dimnames = list(names(out), input_cols, input_cols))
@@ -1738,17 +1739,17 @@ Pequil <- function(trafo, parameters = NULL, forcings = NULL, condition = NULL,
   }
 
   solveArgs <- function(ctx, y0_dep, use_cache_sens) {
-    s1 <- if (ctx$deriv && controls$keep.root && use_cache_sens && !is.null(ctx$cache$sensini))
-            ctx$cache$sensini[, ctx$active_sens, drop = FALSE]
+    s1 <- if (ctx$deriv && controls$keep.root && use_cache_sens && !is.null(ctx$cache$tangent))
+            ctx$cache$tangent[, ctx$active_sens, drop = FALSE]
           else if (ctx$deriv)
             default_sens[, ctx$active_sens, drop = FALSE]
-    s2 <- if (ctx$deriv2 && controls$keep.root && use_cache_sens && !is.null(ctx$cache$sens2ini))
-            ctx$cache$sens2ini[, ctx$active_sens, ctx$active_sens, drop = FALSE]
+    s2 <- if (ctx$deriv2 && controls$keep.root && use_cache_sens && !is.null(ctx$cache$hessian))
+            ctx$cache$hessian[, ctx$active_sens, ctx$active_sens, drop = FALSE]
           else if (ctx$deriv2)
             default_sens2[, ctx$active_sens, ctx$active_sens, drop = FALSE]
     list(times = c(controls$start.time, controls$end.time),
          parms = c(y0_dep, ctx$p[parms_all]),
-         sens1ini = s1, sens2ini = s2,
+         tangent = s1, hessian = s2,
          fixed = if (ctx$deriv || ctx$deriv2) ctx$fixed_char)
   }
 
@@ -1780,7 +1781,7 @@ Pequil <- function(trafo, parameters = NULL, forcings = NULL, condition = NULL,
       tryCatch(
         cppDE::solveODE(
           sens_model, times = a$times, parms = a$parms,
-          sens1ini = a$sens1ini, sens2ini = a$sens2ini, fixed = a$fixed,
+          tangent = a$tangent, hessian = a$hessian, fixed = a$fixed,
           roottol = controls$roottol, abstol = controls$abstol, reltol = controls$reltol,
           maxsteps = as.integer(controls$maxsteps),
           maxattemps = as.integer(controls$maxattemps),
@@ -1842,18 +1843,18 @@ Pequil <- function(trafo, parameters = NULL, forcings = NULL, condition = NULL,
 
     if (keep.root) {
       cache$yini <- root
-      cache$sensini <- if (!is.null(res$sens1)) {
-        s <- default_sens; s[, active_sens] <- res$sens1[last, , ]; s
+      cache$tangent <- if (!is.null(res$tangent)) {
+        s <- default_sens; s[, active_sens] <- res$tangent[last, , ]; s
       } else NULL
-      cache$sens2ini <- if (deriv2 && !is.null(res$sens2)) {
-        s <- default_sens2; s[, active_sens, active_sens] <- res$sens2[last, , , ]; s
+      cache$hessian <- if (deriv2 && !is.null(res$hessian)) {
+        s <- default_sens2; s[, active_sens, active_sens] <- res$hessian[last, , , ]; s
       } else NULL
     }
 
-    if (!deriv || is.null(res$sens1)) {
+    if (!deriv || is.null(res$tangent)) {
       result <- as.parvec(out, deriv = NULL, deriv2 = NULL)
     } else {
-      sens_final <- matrix(res$sens1[last, , ], n_dep, n_active,
+      sens_final <- matrix(res$tangent[last, , ], n_dep, n_active,
                            dimnames = list(dependent, active_sens))
       input_cols <- setdiff(names(p), c(dependent, names(fixed)))
       jacobian <- matrix(0, length(out), length(input_cols),
@@ -1867,8 +1868,8 @@ Pequil <- function(trafo, parameters = NULL, forcings = NULL, condition = NULL,
       if (length(sr) && length(sc)) jacobian[sr, sc] <- sens_final[sr, sc, drop = FALSE]
 
       hess_attr <- NULL
-      if (deriv2 && !is.null(res$sens2)) {
-        sens2_final <- array(res$sens2[last, , , ],
+      if (deriv2 && !is.null(res$hessian)) {
+        sens2_final <- array(res$hessian[last, , , ],
                              c(n_dep, n_active, n_active),
                              dimnames = list(dependent, active_sens, active_sens))
         hess_arr <- array(0, c(length(out), length(input_cols), length(input_cols)),

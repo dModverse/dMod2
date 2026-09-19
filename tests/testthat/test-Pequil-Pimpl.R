@@ -19,17 +19,158 @@ skip_if_no_compile <- function() {
 }
 
 
+## ---- Shared models -----------------------------------------------------
+
+# Every model a test evaluates, generated once and compiled on first use. The
+# ODE sources carry -fopenmp and the algebraic ones do not, so each flag set
+# gets its own shared object.
+.pp_env <- new.env(parent = emptyenv())
+
+pp_models <- function() {
+  if (!is.null(.pp_env$models)) return(.pp_env$models)
+  oldwd <- setwd(.dmod_fx_workdir()); on.exit(setwd(oldwd), add = TRUE)
+  stamp <- as.integer(Sys.time())
+  mn <- function(x) paste0("test_pp_", x, "_", stamp)
+
+  ## Pequil. Objects that differ only in R-level controls share a modelname
+  ## and with it the compiled source, which each rebuild announces rewriting.
+  pd_variant <- function(...) suppressMessages(
+    Pequil(c(A = "k_in - k_out * A"), parameters = c("k_in", "k_out"),
+           modelname = mn("pd"), verbose = FALSE, ...))
+  pd       <- pd_variant(attach.input = FALSE)
+  pd_twin  <- pd_variant(attach.input = FALSE)
+  pd_ms    <- pd_variant(attach.input = FALSE,
+                         controlsMS = list(nStarts = 5L, positive = TRUE,
+                                           lower = 1e-3, upper = 1e3))
+  pd_input <- pd_variant(attach.input = TRUE)
+  pd_stall <- pd_variant(controlsODE = list(maxsteps = 1L, maxattemps = 1L))
+
+  unstable <- Pequil(c(A = "k * A"), parameters = "k", modelname = mn("unstable"),
+                     attach.input = FALSE, verbose = FALSE,
+                     controlsMS = list(nStarts = 3L, positive = TRUE,
+                                       lower = 1e-3, upper = 1e3))
+
+  el_pos <- eqnlist() |>
+    addReaction("A", "Ap", "ka*A") |>
+    addReaction("Ap", "A", "kap*Ap") |>
+    addReaction("Ap + B", "C", "kf*Ap*B") |>
+    addReaction("C", "Ap + B", "kr*C") |>
+    addReaction("B", "Bp", "kb*B") |>
+    addReaction("Bp", "B", "kbp*Bp")
+  pos <- Pequil(el_pos, expressInTotals = TRUE, modelname = mn("pos"),
+                controlsMS = list(nStarts = 30L))
+
+  el_2moiety <- eqnlist() |>
+    addReaction("A", "B", "k1*A") |> addReaction("B", "A", "k2*B") |>
+    addReaction("C", "D", "k3*C") |> addReaction("D", "C", "k4*D")
+  moiety2_eq <- Pequil(el_2moiety, expressInTotals = TRUE,
+                       modelname = mn("2moiety_eq"), controlsMS = list(nStarts = 20L))
+
+  el_dimer <- eqnlist() |>
+    addReaction("2*M", "D", "ka*M^2") |>
+    addReaction("D", "2*M", "kd*D") |>
+    customTotals(list(total_MD = "M + 2*D"))
+  dimer_eq <- Pequil(el_dimer, expressInTotals = TRUE, modelname = mn("dimer_eq"),
+                     controlsMS = list(nStarts = 30L))
+
+  el_zero <- eqnlist() |>
+    addReaction("",       "R",  "k_pr_R") |>
+    addReaction("R",      "",   "k_dg_R * R") |>
+    addReaction("L + R",  "LR", "k_on * L * R") |>
+    addReaction("LR",     "L + R", "k_off * LR") |>
+    addReaction("LR",     "",   "k_dg_LR * LR")
+  zero <- Pequil(el_zero, modelname = mn("zero"), verbose = FALSE)
+
+  el_ERK <- eqnlist() |>
+    addReaction("ERK",  "pERK", "k1 * ERK") |>
+    addReaction("pERK", "ERK",  "k2 * pERK")
+  erk_variant <- function(...) suppressMessages(
+    Pequil(el_ERK, parameters = c("k1", "k2"), expressInTotals = TRUE,
+           modelname = mn("erk_eq"), verbose = FALSE, attach.input = TRUE, ...))
+  erk_eq   <- erk_variant(controlsMS = list(nStarts = 1L))
+  erk_eq10 <- erk_variant()
+
+  ## Pimpl and Pexpl
+  lin <- Pimpl(c(x = "x - a"), parameters = "a", controlsMS = list(positive = TRUE),
+               modelname = mn("lin"), verbose = FALSE)
+
+  d2 <- Pimpl(c(C = "k1*(totA - C)*(totB - C) - km*C"),
+              parameters = c("k1","km","totA","totB"), deriv2 = TRUE,
+              modelname = mn("d2"), verbose = FALSE,
+              controlsMS = list(nStarts = 5L, positive = TRUE),
+              controlsNleqslv = list(ftol = 1e-12, xtol = 1e-12))
+
+  d2_2 <- Pimpl(c(x1 = "a*x1 - b*x2 - 1", x2 = "x1*x2 - c"),
+                parameters = c("a","b","c"), deriv2 = TRUE,
+                modelname = mn("d2_2"), verbose = FALSE,
+                controlsMS = list(nStarts = 5L, positive = TRUE),
+                controlsNleqslv = list(ftol = 1e-12, xtol = 1e-12))
+
+  el_AB <- eqnlist() |>
+    addReaction("A", "B", "k*A") |>
+    addReaction("B", "A", "km*B")
+  d2_cq <- Pimpl(el_AB, parameters = c("k","km"), deriv2 = TRUE,
+                 modelname = mn("d2_cq"), verbose = FALSE,
+                 controlsMS = list(nStarts = 1L, positive = FALSE),
+                 controlsNleqslv = list(ftol = 1e-12, xtol = 1e-12))
+
+  moiety2_im <- Pimpl(el_2moiety, expressInTotals = TRUE,
+                      modelname = mn("2moiety_im"), controlsMS = list(nStarts = 20L))
+
+  dimer_im <- Pimpl(el_dimer, expressInTotals = TRUE, modelname = mn("dimer_im"),
+                    controlsMS = list(nStarts = 30L),
+                    controlsNleqslv = list(ftol = 1e-12, xtol = 1e-12))
+
+  el_recycle <- eqnlist() |>
+    addReaction("G + S", "GS", "k1*G*S") |>
+    addReaction("GS", "G + S", "k1r*GS") |>
+    addReaction("GS", "G + P", "k1c*GS") |>
+    addReaction("P", "S", "k3*P")
+  recycle <- Pimpl(el_recycle, expressInTotals = TRUE, modelname = mn("recycle"),
+                   controlsMS = list(nStarts = 50L),
+                   controlsNleqslv = list(ftol = 1e-12, xtol = 1e-12))
+
+  sing <- Pimpl(c(x1 = "x1 + x2 - s", x2 = "x1 + x2 - s"), parameters = "s",
+                deriv2 = FALSE, modelname = mn("sing"), verbose = FALSE,
+                controlsMS = list(nStarts = 1L, positive = FALSE),
+                controlsNleqslv = list(ftol = 1e-12, xtol = 1e-12))
+
+  noroot <- Pimpl(c(x = "x*x + 1"), parameters = character(0),
+                  modelname = mn("noroot"), verbose = FALSE,
+                  controlsMS = list(nStarts = 5L, positive = FALSE),
+                  controlsNleqslv = list(ftol = 1e-6, xtol = 1e-6))
+
+  noparam <- Pimpl(c(A = "A - 1.0"), parameters = NULL, modelname = mn("noparam"))
+
+  erk_im <- Pimpl(el_ERK, parameters = c("k1", "k2"),
+                  modelname = mn("erk_im"), verbose = FALSE,
+                  controlsMS = list(nStarts = 1L, positive = FALSE),
+                  controlsNleqslv = list(ftol = 1e-12, xtol = 1e-12))
+
+  px <- P(list(C1 = c(k_in = "s",     k_out = "1", A = "1"),
+               C2 = c(k_in = "2 * s", k_out = "1", A = "1")),
+          modelname = mn("px"), verbose = FALSE)
+
+  compile(pd, pd_twin, pd_ms, pd_input, pd_stall, unstable, pos, moiety2_eq,
+          dimer_eq, zero, erk_eq, erk_eq10, output = mn("equil"), cores = 4L)
+  compile(lin, d2, d2_2, d2_cq, moiety2_im, dimer_im, recycle, sing, noroot,
+          noparam, erk_im, px, output = mn("impl"), cores = 4L)
+
+  .pp_env$models <- list(
+    pd = pd, pd_twin = pd_twin, pd_ms = pd_ms, pd_input = pd_input,
+    pd_stall = pd_stall, unstable = unstable, pos = pos, moiety2_eq = moiety2_eq,
+    dimer_eq = dimer_eq, zero = zero, erk_eq = erk_eq, erk_eq10 = erk_eq10,
+    lin = lin, d2 = d2, d2_2 = d2_2, d2_cq = d2_cq, moiety2_im = moiety2_im,
+    dimer_im = dimer_im, recycle = recycle, el_recycle = el_recycle, sing = sing,
+    noroot = noroot, noparam = noparam, erk_im = erk_im, px = px)
+}
+
+
 ## ---- Pequil: production-decay -----------------------------------------
 
 test_that("Pequil on dA = k_in - k_out * A converges to A* = k_in / k_out", {
   skip_if_no_compile()
-  oldwd <- setwd(.dmod_fx_workdir()); on.exit(setwd(oldwd), add = TRUE)
-
-  trafo <- c(A = "k_in - k_out * A")
-  pf <- Pequil(trafo, parameters = c("k_in", "k_out"),
-               modelname = paste0("test_Pequil_pd_", as.integer(Sys.time())),
-               compile = TRUE, deriv2 = FALSE, attach.input = FALSE,
-               verbose = FALSE)
+  pf <- pp_models()$pd
 
   pars <- c(k_in = 1.5, k_out = 0.3, A = 0.1)  # A is the initial guess
   out <- pf(pars, deriv = TRUE)[[1]]
@@ -52,13 +193,7 @@ test_that("Pequil on dA = k_in - k_out * A converges to A* = k_in / k_out", {
 
 test_that("Pimpl on x - a = 0 returns x = a (root-finding correctness)", {
   skip_if_no_compile()
-  oldwd <- setwd(.dmod_fx_workdir()); on.exit(setwd(oldwd), add = TRUE)
-
-  trafo <- c(x = "x - a")
-  pf <- Pimpl(trafo, parameters = "a",
-              controlsMS = list(positive = TRUE),
-              modelname = paste0("test_Pimpl_lin_", as.integer(Sys.time())),
-              compile = TRUE, verbose = FALSE)
+  pf <- pp_models()$lin
 
   pars <- c(a = 2.0, x = 0.5)
   out <- pf(pars, deriv = TRUE)[[1]]
@@ -79,16 +214,8 @@ test_that("Pimpl on x - a = 0 returns x = a (root-finding correctness)", {
 
 test_that("Pimpl(deriv2) matches FD on a 1D mass-action steady state", {
   skip_if_no_compile()
-  oldwd <- setwd(.dmod_fx_workdir()); on.exit(setwd(oldwd), add = TRUE)
-
   # A + B <-> C, with totA, totB substituted in: solve k1*(totA-C)*(totB-C) - km*C = 0
-  trafo <- c(C = "k1*(totA - C)*(totB - C) - km*C")
-  pf <- Pimpl(trafo, parameters = c("k1","km","totA","totB"),
-              deriv2 = TRUE,
-              modelname = paste0("test_Pimpl_d2_", as.integer(Sys.time())),
-              compile = TRUE, verbose = FALSE,
-              controlsMS = list(nStarts = 5L, positive = TRUE),
-              controlsNleqslv = list(ftol = 1e-12, xtol = 1e-12))
+  pf <- pp_models()$d2
 
   p0 <- c(k1 = 1, km = 0.5, totA = 2, totB = 3, C = 0.5)
   inputs <- c("k1","km","totA","totB")
@@ -122,16 +249,7 @@ test_that("Pimpl(deriv2) matches FD on a 1D mass-action steady state", {
 
 test_that("Pimpl(deriv2) matches FD on a 2-state coupled SS", {
   skip_if_no_compile()
-  oldwd <- setwd(.dmod_fx_workdir()); on.exit(setwd(oldwd), add = TRUE)
-
-  trafo <- c(x1 = "a*x1 - b*x2 - 1",
-             x2 = "x1*x2 - c")
-  pf <- Pimpl(trafo, parameters = c("a","b","c"),
-              deriv2 = TRUE,
-              modelname = paste0("test_Pimpl_d2_2_", as.integer(Sys.time())),
-              compile = TRUE, verbose = FALSE,
-              controlsMS = list(nStarts = 5L, positive = TRUE),
-              controlsNleqslv = list(ftol = 1e-12, xtol = 1e-12))
+  pf <- pp_models()$d2_2
 
   p0 <- c(a = 2, b = 0.5, c = 1, x1 = 0.5, x2 = 0.5)
   inputs <- c("a","b","c")
@@ -161,19 +279,8 @@ test_that("Pimpl(deriv2) matches FD on a 2-state coupled SS", {
 
 test_that("Pimpl(deriv2) propagates Hessian through CQ-eliminated species", {
   skip_if_no_compile()
-  oldwd <- setwd(.dmod_fx_workdir()); on.exit(setwd(oldwd), add = TRUE)
-
   # A <-> B; CQ A + B = total_1; A gets eliminated, B stays dependent
-  el <- eqnlist()
-  el <- addReaction(el, "A", "B", "k*A")
-  el <- addReaction(el, "B", "A", "km*B")
-
-  pf <- Pimpl(el, parameters = c("k","km"),
-              deriv2 = TRUE,
-              modelname = paste0("test_Pimpl_d2_cq_", as.integer(Sys.time())),
-              compile = TRUE, verbose = FALSE,
-              controlsMS = list(nStarts = 1L, positive = FALSE),
-              controlsNleqslv = list(ftol = 1e-12, xtol = 1e-12))
+  pf <- pp_models()$d2_cq
 
   p0 <- c(k = 2, km = 0.5, total_1 = 3, A = 0.5, B = 0.5)
   inputs <- c("k","km","total_1")
@@ -260,22 +367,10 @@ test_that("Pequil(expressInTotals) integrates the full system (no elimination)",
 
 test_that("Pequil(expressInTotals) keeps reconstructed moiety species non-negative", {
   skip_if_no_compile()
-  oldwd <- setwd(.dmod_fx_workdir()); on.exit(setwd(oldwd), add = TRUE)
-
   # Overlapping moieties sharing C: A+C and B+C. The full-system integration
   # cannot produce a negative C the way linear elimination (C = total - rest)
   # could.
-  el <- eqnlist()
-  el <- addReaction(el, "A", "Ap", "ka*A")
-  el <- addReaction(el, "Ap", "A", "kap*Ap")
-  el <- addReaction(el, "Ap + B", "C", "kf*Ap*B")
-  el <- addReaction(el, "C", "Ap + B", "kr*C")
-  el <- addReaction(el, "B", "Bp", "kb*B")
-  el <- addReaction(el, "Bp", "B", "kbp*Bp")
-
-  pf <- Pequil(el, expressInTotals = TRUE, compile = TRUE,
-               modelname = paste0("test_Pequil_pos_", as.integer(Sys.time())),
-               controlsMS = list(nStarts = 30L))
+  pf <- pp_models()$pos
   set.seed(11)
   for (i in 1:8) {
     resetWarmStarts(pf)
@@ -299,22 +394,15 @@ test_that("Pequil(expressInTotals) keeps reconstructed moiety species non-negati
 
 test_that("two independent conserved moieties solve to closed form (both backends)", {
   skip_if_no_compile()
-  oldwd <- setwd(.dmod_fx_workdir()); on.exit(setwd(oldwd), add = TRUE)
-
   # A <-> B  and  C <-> D : two disjoint moieties, total_1 = A+B, total_2 = C+D
-  el <- eqnlist()
-  el <- addReaction(el, "A", "B", "k1*A"); el <- addReaction(el, "B", "A", "k2*B")
-  el <- addReaction(el, "C", "D", "k3*C"); el <- addReaction(el, "D", "C", "k4*D")
+  m <- pp_models()
 
   p0 <- c(k1 = 2, k2 = 1, k3 = 0.5, k4 = 1.5, total_1 = 4, total_2 = 6,
           A = 1, B = 1, C = 1, D = 1)
   Bs <- p0[["k1"]] * p0[["total_1"]] / (p0[["k1"]] + p0[["k2"]]); As <- p0[["total_1"]] - Bs
   Ds <- p0[["k3"]] * p0[["total_2"]] / (p0[["k3"]] + p0[["k4"]]); Cs <- p0[["total_2"]] - Ds
 
-  for (backend in c("Pimpl", "Pequil")) {
-    pf <- get(backend)(el, expressInTotals = TRUE, compile = TRUE,
-                       modelname = paste0("test_", backend, "_2moiety_", as.integer(Sys.time())),
-                       controlsMS = list(nStarts = 20L))
+  for (pf in list(Pimpl = m$moiety2_im, Pequil = m$moiety2_eq)) {
     o <- pf(p0)[[1]]
     expect_equal(as.numeric(o[c("A","B","C","D")]),
                  c(As, Bs, Cs, Ds), tolerance = 1e-3)
@@ -323,13 +411,8 @@ test_that("two independent conserved moieties solve to closed form (both backend
 
 test_that("non-unit stoichiometric coefficient is handled (2*M <-> D)", {
   skip_if_no_compile()
-  oldwd <- setwd(.dmod_fx_workdir()); on.exit(setwd(oldwd), add = TRUE)
-
   # Dimerisation 2 M <-> D conserves the monomer count M + 2 D.
-  el <- eqnlist()
-  el <- addReaction(el, "2*M", "D", "ka*M^2")
-  el <- addReaction(el, "D", "2*M", "kd*D")
-  el <- customTotals(el, list(total_MD = "M + 2*D"))
+  m <- pp_models()
 
   p0 <- c(ka = 1, kd = 2, total_MD = 5)
   r  <- p0[["ka"]] / p0[["kd"]]
@@ -338,19 +421,12 @@ test_that("non-unit stoichiometric coefficient is handled (2*M <-> D)", {
 
   # Pimpl conserves the moiety to the solver tolerance (constraint residual),
   # so tighten ftol; Pequil conserves it exactly (ODE invariant).
-  pfi <- Pimpl(el, expressInTotals = TRUE, compile = TRUE,
-               modelname = paste0("test_Pimpl_dimer_", as.integer(Sys.time())),
-               controlsMS = list(nStarts = 30L),
-               controlsNleqslv = list(ftol = 1e-12, xtol = 1e-12))
-  oi <- pfi(p0)[[1]]
+  oi <- m$dimer_im(p0)[[1]]
   expect_equal(as.numeric(oi["M"]), Ms, tolerance = 1e-4)
   expect_equal(as.numeric(oi["D"]), Ds, tolerance = 1e-4)
   expect_equal(as.numeric(oi["M"] + 2 * oi["D"]), p0[["total_MD"]], tolerance = 1e-6)
 
-  pfe <- Pequil(el, expressInTotals = TRUE, compile = TRUE,
-                modelname = paste0("test_Pequil_dimer_", as.integer(Sys.time())),
-                controlsMS = list(nStarts = 30L))
-  oe <- pfe(p0)[[1]]
+  oe <- m$dimer_eq(p0)[[1]]
   expect_equal(as.numeric(oe["M"]), Ms, tolerance = 1e-3)
   expect_equal(as.numeric(oe["D"]), Ds, tolerance = 1e-3)
   expect_equal(as.numeric(oe["M"] + 2 * oe["D"]), p0[["total_MD"]], tolerance = 1e-6)
@@ -358,28 +434,18 @@ test_that("non-unit stoichiometric coefficient is handled (2*M <-> D)", {
 
 test_that("overlapping conserved quantities reconstruct consistently (recycle enzyme)", {
   skip_if_no_compile()
-  oldwd <- setwd(.dmod_fx_workdir()); on.exit(setwd(oldwd), add = TRUE)
-
   # G + S <-> GS -> G + P, P -> S : closed catalytic cycle.
   # Two overlapping CQs share G/GS; one auto-detected CQ carries a
   # negative coefficient on G, so the recon both divides by coef_g and
   # nests another eliminated species (fixed-point substitution).
-  el <- eqnlist()
-  el <- addReaction(el, "G + S", "GS", "k1*G*S")
-  el <- addReaction(el, "GS", "G + S", "k1r*GS")
-  el <- addReaction(el, "GS", "G + P", "k1c*GS")
-  el <- addReaction(el, "P", "S", "k3*P")
+  m <- pp_models()
 
-  totals <- getTotals(el)
+  totals <- getTotals(m$el_recycle)
   expect_length(totals, 2L)                       # two independent CQs
 
   p0 <- c(k1 = 2, k1r = 1, k1c = 3, k3 = 1, total_1 = 1, total_2 = 4,
           G = 0.3, GS = 0.2, S = 2, P = 1)
-  pf <- Pimpl(el, expressInTotals = TRUE, compile = TRUE,
-              modelname = paste0("test_Pimpl_recycle_", as.integer(Sys.time())),
-              controlsMS = list(nStarts = 50L),
-              controlsNleqslv = list(ftol = 1e-12, xtol = 1e-12))
-  o <- pf(p0)[[1]]
+  o <- m$recycle(p0)[[1]]
 
   # all four species reconstructed and non-negative at the steady state
   expect_setequal(intersect(c("G","GS","S","P"), names(o)), c("G","GS","S","P"))
@@ -408,8 +474,6 @@ test_that("a fully open network (all states drain to zero) errors clearly", {
 
 test_that("Pimpl uses the pseudoinverse when df/dx is rank-deficient", {
   skip_if_no_compile()
-  oldwd <- setwd(.dmod_fx_workdir()); on.exit(setwd(oldwd), add = TRUE)
-
   # Two-state system with a hidden conservation law that .detect_and_substitute_cq
   # cannot pick up because there is no `eqnlist` smatrix:
   #   f1 = x1 + x2 - s
@@ -418,14 +482,7 @@ test_that("Pimpl uses the pseudoinverse when df/dx is rank-deficient", {
   # uniquely, but the Moore-Penrose pseudoinverse gives the minimum-norm
   # sensitivity (movement on the manifold, perpendicular to the null space)
   # which downstream callers can still use; Pimpl warns and proceeds.
-  trafo <- c(x1 = "x1 + x2 - s",
-             x2 = "x1 + x2 - s")
-  pf <- Pimpl(trafo, parameters = "s",
-              deriv2 = FALSE,
-              modelname = paste0("test_Pimpl_sing_", as.integer(Sys.time())),
-              compile = TRUE, verbose = FALSE,
-              controlsMS = list(nStarts = 1L, positive = FALSE),
-              controlsNleqslv = list(ftol = 1e-12, xtol = 1e-12))
+  pf <- pp_models()$sing
 
   p0 <- c(s = 1, x1 = 0.5, x2 = 0.5)
   expect_warning(out <- pf(p0, deriv = TRUE)[[1]], "rank-deficient")
@@ -445,12 +502,7 @@ test_that("Pimpl uses the pseudoinverse when df/dx is rank-deficient", {
 
 test_that("resetWarmStarts clears Pequil's cache by name", {
   skip_if_no_compile()
-  oldwd <- setwd(.dmod_fx_workdir()); on.exit(setwd(oldwd), add = TRUE)
-
-  pf <- Pequil(c(A = "k_in - k_out * A"),
-               parameters = c("k_in", "k_out"),
-               modelname = paste0("test_rws_pequil_", as.integer(Sys.time())),
-               compile = TRUE, verbose = FALSE, attach.input = FALSE)
+  pf <- pp_models()$pd
   pars <- c(k_in = 1.5, k_out = 0.3, A = 0.1)
   pf(pars)
 
@@ -469,12 +521,7 @@ test_that("resetWarmStarts clears Pequil's cache by name", {
 
 test_that("resetWarmStarts clears Pimpl's cache by name", {
   skip_if_no_compile()
-  oldwd <- setwd(.dmod_fx_workdir()); on.exit(setwd(oldwd), add = TRUE)
-
-  trafo <- c(x = "x - a")
-  pf <- Pimpl(trafo, parameters = "a",
-              modelname = paste0("test_rws_pimpl_", as.integer(Sys.time())),
-              compile = TRUE, verbose = FALSE)
+  pf <- pp_models()$lin
   pf(c(a = 1, x = 0.5))
 
   reset_env <- environment(attr(pf, "resetWarmStart"))$reg_ref$caches[["__default__"]]
@@ -489,19 +536,13 @@ test_that("resetWarmStarts clears Pimpl's cache by name", {
 
 test_that("resetWarmStarts walks into composed functions", {
   skip_if_no_compile()
-  oldwd <- setwd(.dmod_fx_workdir()); on.exit(setwd(oldwd), add = TRUE)
+  # resetWarmStarts() walks this frame through `wrap`, so no other
+  # warm-starting object may sit in it.
+  p1 <- pp_models()$pd
+  p2 <- pp_models()$pd_twin
 
-  p1 <- Pequil(c(A = "k1 - kdg1 * A"),
-               parameters = c("k1", "kdg1"),
-               modelname = paste0("test_rws_p1_", as.integer(Sys.time())),
-               compile = TRUE, verbose = FALSE, attach.input = FALSE)
-  p2 <- Pequil(c(B = "k2 - kdg2 * B"),
-               parameters = c("k2", "kdg2"),
-               modelname = paste0("test_rws_p2_", as.integer(Sys.time())),
-               compile = TRUE, verbose = FALSE, attach.input = FALSE)
-
-  p1(c(k1 = 1, kdg1 = 0.5, A = 0.1))
-  p2(c(k2 = 2, kdg2 = 0.4, B = 0.2))
+  p1(c(k_in = 1, k_out = 0.5, A = 0.1))
+  p2(c(k_in = 2, k_out = 0.4, A = 0.2))
 
   ref1 <- environment(attr(p1, "resetWarmStart"))$reg_ref$caches[["__default__"]]
   ref2 <- environment(attr(p2, "resetWarmStart"))$reg_ref$caches[["__default__"]]
@@ -519,22 +560,12 @@ test_that("resetWarmStarts walks into composed functions", {
 
 test_that("a condition-less Pequil keeps an independent warm start per condition", {
   skip_if_no_compile()
-  oldwd <- setwd(.dmod_fx_workdir()); on.exit(setwd(oldwd), add = TRUE)
-
-  stamp <- as.integer(Sys.time())
+  m <- pp_models()
 
   # Condition-less equilibration: SS A* = k_in / k_out.
-  g_eq <- Pequil(c(A = "k_in - k_out * A"),
-                 parameters = c("k_in", "k_out"),
-                 modelname = paste0("test_percond_eq_", stamp),
-                 compile = TRUE, verbose = FALSE, attach.input = TRUE)
-
+  g_eq <- m$pd_input
   # Two conditions with different k_in -> different steady states (3 and 6).
-  trafos <- list(
-    C1 = c(k_in = "s",     k_out = "1", A = "1"),
-    C2 = c(k_in = "2 * s", k_out = "1", A = "1"))
-  px <- P(trafos, modelname = paste0("test_percond_px_", stamp),
-          compile = TRUE, verbose = FALSE)
+  px <- m$px
 
   pf  <- g_eq * px
   out <- pf(c(s = 3), deriv = FALSE)
@@ -568,16 +599,8 @@ test_that("resetWarmStarts rejects non-function inputs", {
 
 test_that("Pequil multistart recovers from a bad initial guess", {
   skip_if_no_compile()
-  oldwd <- setwd(.dmod_fx_workdir()); on.exit(setwd(oldwd), add = TRUE)
-
   # Stable: dA = k_in - k_out * A, SS A* = k_in / k_out = 5.
-  trafo <- c(A = "k_in - k_out * A")
-  pf <- Pequil(trafo, parameters = c("k_in", "k_out"),
-               modelname = paste0("test_Pequil_ms_", as.integer(Sys.time())),
-               compile = TRUE, attach.input = FALSE,
-               controlsMS = list(nStarts = 5L, positive = TRUE,
-                                 lower = 1e-3, upper = 1e3),
-               verbose = FALSE)
+  pf <- pp_models()$pd_ms
 
   # Start with a wildly wrong (but legal) guess; integrator should still
   # find the basin via warm-start, but force a fresh search by resetting.
@@ -592,16 +615,8 @@ test_that("Pequil multistart recovers from a bad initial guess", {
 
 test_that("Pequil throws when no integration attempt produces a root", {
   skip_if_no_compile()
-  oldwd <- setwd(.dmod_fx_workdir()); on.exit(setwd(oldwd), add = TRUE)
-
   # Linear *unstable* system: dA = k * A with k > 0 has no finite SS.
-  trafo <- c(A = "k * A")
-  pf <- Pequil(trafo, parameters = "k",
-               modelname = paste0("test_Pequil_unstable_", as.integer(Sys.time())),
-               compile = TRUE, attach.input = FALSE,
-               controlsMS = list(nStarts = 3L, positive = TRUE,
-                                 lower = 1e-3, upper = 1e3),
-               verbose = FALSE)
+  pf <- pp_models()$unstable
 
   resetWarmStarts(pf, verbose = FALSE)
   expect_error(pf(c(k = 1.0, A = 0.5))[[1]], "no steady state reached")
@@ -612,15 +627,8 @@ test_that("Pequil throws when no integration attempt produces a root", {
 
 test_that("Pimpl throws when no start brings the residual below ftol", {
   skip_if_no_compile()
-  oldwd <- setwd(.dmod_fx_workdir()); on.exit(setwd(oldwd), add = TRUE)
-
   # x^2 + 1 = 0 has no real root: nleqslv cannot reach zero residual.
-  trafo <- c(x = "x*x + 1")
-  pf <- Pimpl(trafo, parameters = character(0),
-              modelname = paste0("test_Pimpl_noroot_", as.integer(Sys.time())),
-              compile = TRUE, verbose = FALSE,
-              controlsMS = list(nStarts = 5L, positive = FALSE),
-              controlsNleqslv = list(ftol = 1e-6, xtol = 1e-6))
+  pf <- pp_models()$noroot
 
   resetWarmStarts(pf, verbose = FALSE)
   expect_error(pf(c(x = 0.1))[[1]], "exceeds ftol|all .*solve attempt")
@@ -723,20 +731,9 @@ test_that("Pure production-decay has no zero states", {
 
 test_that("Pequil reports zero states with value 0 and drops them from getParameters()", {
   skip_if_no_compile()
-  oldwd <- setwd(.dmod_fx_workdir()); on.exit(setwd(oldwd), add = TRUE)
-
   # Receptor R alone has production + degradation (nonzero baseline).
   # Ligand L and complex LR form a sink cluster (LR degrades).
-  el <- eqnlist() |>
-    addReaction("",       "R",  "k_pr_R") |>
-    addReaction("R",      "",   "k_dg_R * R") |>
-    addReaction("L + R",  "LR", "k_on * L * R") |>
-    addReaction("LR",     "L + R", "k_off * LR") |>
-    addReaction("LR",     "",   "k_dg_LR * LR")
-
-  pf <- Pequil(el,
-               modelname = paste0("test_zero_states_", as.integer(Sys.time())),
-               compile = TRUE, verbose = FALSE)
+  pf <- pp_models()$zero
 
   expect_false(any(c("L", "LR") %in% getParameters(pf)))
   pars <- c(k_pr_R = 2, k_dg_R = 0.5, k_on = 1, k_off = 0.5, k_dg_LR = 0.1)
@@ -752,16 +749,10 @@ test_that("Pequil reports zero states with value 0 and drops them from getParame
 
 test_that("Pequil errors when the solver makes no progress", {
   skip_if_no_compile()
-  oldwd <- setwd(.dmod_fx_workdir()); on.exit(setwd(oldwd), add = TRUE)
-
   # Force a no-progress condition by capping the total step budget so the
   # solver can't even take one accepted step. Without the new guard,
   # Pequil would silently return the initial values.
-  pf <- Pequil(c(A = "k_in - k_out * A"),
-               parameters = c("k_in", "k_out"),
-               modelname = paste0("test_no_progress_", as.integer(Sys.time())),
-               controlsODE = list(maxsteps = 1L, maxattemps = 1L),
-               compile = TRUE, verbose = FALSE)
+  pf <- pp_models()$pd_stall
   expect_error(
     suppressWarnings(pf(c(k_in = 1, k_out = 1, A = 1))),
     "no steady state reached")
@@ -773,10 +764,8 @@ test_that("Pequil errors when the solver makes no progress", {
 # ============================================================================
 
 test_that("Pimpl with no outer parameters does not crash in build_jacobian", {
-  withr::local_dir(tempdir())
-  trafo <- c(A = "A - 1.0")
-  p <- Pimpl(trafo, parameters = NULL, compile = TRUE,
-             modelname = "noparam_pimpl")
+  skip_if_no_compile()
+  p <- pp_models()$noparam
   out <- p(c(dummy = 1.0))
   expect_true(is.numeric(unclass(out[[1]])["A"]))
   expect_equal(unname(unclass(out[[1]])["A"]), 1.0, tolerance = 1e-3)
@@ -851,18 +840,7 @@ test_that("P(method='implicit') preserves the eqnlist smatrix for CQ detection",
 
 test_that("Pimpl on ERK <-> pERK introduces totalERK via LCS", {
   skip_if_no_compile()
-  oldwd <- setwd(.dmod_fx_workdir()); on.exit(setwd(oldwd), add = TRUE)
-
-  el <- eqnlist() |>
-    addReaction("ERK",  "pERK", "k1 * ERK") |>
-    addReaction("pERK", "ERK",  "k2 * pERK")
-
-  pf <- Pimpl(el, parameters = c("k1", "k2"),
-              modelname = paste0("test_Pimpl_totalERK_",
-                                 as.integer(Sys.time())),
-              compile = FALSE, verbose = FALSE,
-              controlsMS = list(nStarts = 1L, positive = FALSE),
-              controlsNleqslv = list(ftol = 1e-12, xtol = 1e-12))
+  pf <- pp_models()$erk_im
   expect_true("totalERK" %in% getParameters(pf))
   expect_false("total_1" %in% getParameters(pf))
 })
@@ -872,22 +850,8 @@ test_that("Pimpl on ERK <-> pERK introduces totalERK via LCS", {
 
 test_that("Pimpl and Pequil produce identical parvec interface (totals mode)", {
   skip_if_no_compile()
-  oldwd <- setwd(.dmod_fx_workdir()); on.exit(setwd(oldwd), add = TRUE)
-
-  el <- eqnlist() |>
-    addReaction("ERK",  "pERK", "k1 * ERK") |>
-    addReaction("pERK", "ERK",  "k2 * pERK")
-
-  ts <- as.integer(Sys.time())
-  p_pimpl <- Pimpl(el, parameters = c("k1", "k2"),
-                   modelname = paste0("test_harm_pimpl_", ts),
-                   compile = TRUE, verbose = FALSE,
-                   controlsMS = list(nStarts = 1L, positive = FALSE),
-                   controlsNleqslv = list(ftol = 1e-12, xtol = 1e-12))
-  p_pequil <- Pequil(el, parameters = c("k1", "k2"), expressInTotals = TRUE,
-                     modelname = paste0("test_harm_pequil_", ts),
-                     compile = TRUE, verbose = FALSE, attach.input = TRUE,
-                     controlsMS = list(nStarts = 1L))
+  p_pimpl  <- pp_models()$erk_im
+  p_pequil <- pp_models()$erk_eq
 
   expect_setequal(getParameters(p_pimpl), getParameters(p_pequil))
 
@@ -907,16 +871,7 @@ test_that("Pimpl and Pequil produce identical parvec interface (totals mode)", {
 
 test_that("Pequil chain-rules the eliminated species sensitivity correctly", {
   skip_if_no_compile()
-  oldwd <- setwd(.dmod_fx_workdir()); on.exit(setwd(oldwd), add = TRUE)
-
-  el <- eqnlist() |>
-    addReaction("ERK",  "pERK", "k1 * ERK") |>
-    addReaction("pERK", "ERK",  "k2 * pERK")
-
-  pf <- Pequil(el, parameters = c("k1", "k2"), expressInTotals = TRUE,
-               modelname = paste0("test_pequil_elimjac_",
-                                  as.integer(Sys.time())),
-               compile = TRUE, verbose = FALSE, attach.input = TRUE)
+  pf <- pp_models()$erk_eq10
 
   pars <- c(k1 = 1, k2 = 3, totalERK = 4, ERK = 1, pERK = 1)
   out  <- pf(pars, deriv = TRUE)[[1]]
@@ -970,7 +925,7 @@ test_that("Pequil default (expressInTotals = FALSE) introduces no totals", {
   pf <- Pequil(el, parameters = c("k1", "k2"),
                modelname = paste0("test_Pequil_default_pivot_",
                                   as.integer(Sys.time())),
-               compile = TRUE, verbose = FALSE)
+               compile = FALSE, verbose = FALSE)
   expect_false(any(grepl("^total", getParameters(pf))))
 })
 
@@ -991,7 +946,7 @@ test_that("Pequil with expressInTotals = FALSE matches Pimpl interface", {
                    controlsNleqslv = list(ftol = 1e-12, xtol = 1e-12))
   p_pequil <- Pequil(el, parameters = c("k1", "k2"), expressInTotals = FALSE,
                      modelname = paste0("test_harm_pivot_pequil_", ts),
-                     compile = TRUE, verbose = FALSE,
+                     compile = FALSE, verbose = FALSE,
                      controlsMS = list(nStarts = 1L))
   expect_setequal(getParameters(p_pimpl), getParameters(p_pequil))
 })

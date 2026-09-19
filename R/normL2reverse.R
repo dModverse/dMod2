@@ -135,7 +135,8 @@
       if (is.null(w_err[[ci]])) next
       u <- evjp(out = prediction[[cn_eval[j]]], pars = err_pars[[j]],
                 fixed = err_fixed[[j]],
-                w = .ctWiden(.ct(out = .dropTime(w_err[[ci]]))$out, n_dir + 1L))
+                cotangent = .ctWiden(.ct(out = .dropTime(w_err[[ci]]))$out,
+                                     n_dir + 1L))
       w_chain[[ci]] <- .addCt(w_chain[[ci]], .ct(out = .dropTime(u$out),
                                                  pars = u$pars))
     }

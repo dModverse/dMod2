@@ -15,6 +15,41 @@ skip_if_no_compile <- function() {
 }
 
 
+# Every observation function the file needs, compiled into one shared object on
+# first use. Prediction and trafo of the decay chain come from the shared fixture.
+.y_fx <- local({
+  cache <- NULL
+  function() {
+    if (!is.null(cache)) return(cache)
+    bench <- fx_decay_compiled()
+    oldwd <- setwd(.dmod_fx_workdir()); on.exit(setwd(oldwd), add = TRUE)
+
+    g_sq <- Y(c(y = "A^2"), f = bench$xfn, condition = NULL,
+              attach.input = FALSE, modelname = "test_Y_sq", compile = FALSE)
+    g_rev <- Y(c(y = "A^2"), f = bench$xfn, condition = NULL,
+               attach.input = FALSE, derivMode = "reverse",
+               modelname = "test_Y_dm_rev", compile = FALSE)
+    g_dual <- Y(c(y = "A^2"), f = bench$xfn, condition = NULL,
+                attach.input = FALSE, derivMode = "forward",
+                modelname = "test_Y_dm_dual", compile = FALSE)
+    g_attach <- Y(c(y = "A"), f = bench$xfn, condition = NULL,
+                  attach.input = TRUE, modelname = "test_Y_attach", compile = FALSE)
+
+    x_np <- Xs(odemodel(as.eqnvec(c(A = "-k*A")), modelname = "noparam_y_ode",
+                        compile = FALSE, backend = "cppDE"))
+    g_np <- Y(c(y1 = "1.0"), f = NULL, states = c("A"),
+              parameters = character(0), derivMode = "forward",
+              compile = FALSE, modelname = "noparam_y_obs")
+
+    compile(g_sq, g_rev, g_dual, g_attach, x_np, g_np,
+            output = "test_Y_all", cores = 4L)
+    cache <<- list(bench = bench, g_sq = g_sq, g_rev = g_rev, g_dual = g_dual,
+                   g_attach = g_attach, x_np = x_np, g_np = g_np)
+    cache
+  }
+})
+
+
 ## ---- Value: linear observable ------------------------------------------
 
 test_that("Y(y = A) on linear decay matches A(t) directly", {
@@ -35,13 +70,9 @@ test_that("Y(y = A) on linear decay matches A(t) directly", {
 
 test_that("Y(y = A^2) evaluates the closed-form (A(t))^2", {
   skip_if_no_compile()
-  oldwd <- setwd(.dmod_fx_workdir()); on.exit(setwd(oldwd), add = TRUE)
-  bench <- fx_decay_compiled()
-
-  g_sq <- Y(c(y = "A^2"), f = bench$xfn, condition = NULL,
-            attach.input = FALSE,
-            modelname = "test_Y_sq", compile = TRUE)
-  prd_sq <- g_sq * bench$xfn * bench$pfn_id
+  fx <- .y_fx()
+  bench <- fx$bench
+  prd_sq <- fx$g_sq * bench$xfn * bench$pfn_id
 
   times <- c(0, 1, 2, 5)
   pars  <- c(A = 1.4, k = 0.3)
@@ -56,18 +87,11 @@ test_that("Y(y = A^2) evaluates the closed-form (A(t))^2", {
 
 test_that("Y derivMode 'reverse' and 'forward' agree on a nonlinear observable", {
   skip_if_no_compile()
-  oldwd <- setwd(.dmod_fx_workdir()); on.exit(setwd(oldwd), add = TRUE)
-  bench <- fx_decay_compiled()
+  fx <- .y_fx()
+  bench <- fx$bench
 
-  g_sym <- Y(c(y = "A^2"), f = bench$xfn, condition = NULL,
-             attach.input = FALSE, derivMode = "reverse",
-             modelname = "test_Y_dm_rev", compile = TRUE)
-  g_dual <- Y(c(y = "A^2"), f = bench$xfn, condition = NULL,
-              attach.input = FALSE, derivMode = "forward",
-              modelname = "test_Y_dm_dual", compile = TRUE)
-
-  prd_sym  <- g_sym  * bench$xfn * bench$pfn_id
-  prd_dual <- g_dual * bench$xfn * bench$pfn_id
+  prd_sym  <- fx$g_rev  * bench$xfn * bench$pfn_id
+  prd_dual <- fx$g_dual * bench$xfn * bench$pfn_id
 
   times <- c(0, 1, 2, 5)
   pars  <- c(A = 1.4, k = 0.3)
@@ -85,13 +109,9 @@ test_that("Y derivMode 'reverse' and 'forward' agree on a nonlinear observable",
 
 test_that("Y with attach.input = TRUE returns inputs and outputs", {
   skip_if_no_compile()
-  oldwd <- setwd(.dmod_fx_workdir()); on.exit(setwd(oldwd), add = TRUE)
-  bench <- fx_decay_compiled()
-
-  g_with_input <- Y(c(y = "A"), f = bench$xfn, condition = NULL,
-                    attach.input = TRUE,
-                    modelname = "test_Y_attach", compile = TRUE)
-  prd_in <- g_with_input * bench$xfn * bench$pfn_id
+  fx <- .y_fx()
+  bench <- fx$bench
+  prd_in <- fx$g_attach * bench$xfn * bench$pfn_id
 
   times <- c(0, 1, 2)
   pars  <- c(A = 1.0, k = 0.5)
@@ -110,13 +130,9 @@ test_that("Y with attach.input = TRUE returns inputs and outputs", {
 
 test_that("Y gradient on y = A^2 follows the analytic chain rule dy/dtheta = 2 A * dA/dtheta", {
   skip_if_no_compile()
-  oldwd <- setwd(.dmod_fx_workdir()); on.exit(setwd(oldwd), add = TRUE)
-  bench <- fx_decay_compiled()
-
-  g_sq <- Y(c(y = "A^2"), f = bench$xfn, condition = NULL,
-            attach.input = FALSE,
-            modelname = "test_Y_grad", compile = TRUE)
-  prd_sq <- g_sq * bench$xfn * bench$pfn_id
+  fx <- .y_fx()
+  bench <- fx$bench
+  prd_sq <- fx$g_sq * bench$xfn * bench$pfn_id
 
   times <- c(0, 1, 2, 5)
   pars  <- c(A = 1.0, k = 0.5)
@@ -140,18 +156,8 @@ test_that("Y gradient on y = A^2 follows the analytic chain rule dy/dtheta = 2 A
 # ============================================================================
 
 test_that("Y with pure-numeric observable composes with an Xs prediction", {
-  withr::local_dir(tempdir())
-  f <- as.eqnvec(c(A = "-k*A"))
-  m <- odemodel(f, modelname = "noparam_y_ode", compile = TRUE,
-                backend = "cppDE")
-  x <- Xs(m)
-
-  g <- Y(c(y1 = "1.0"), f = NULL, states = c("A"),
-         parameters = character(0),
-         derivMode = "forward", compile = TRUE,
-         modelname = "noparam_y_obs")
-
-  out <- (g * x)(seq(0, 5, length.out = 3), c(A = 1.0, k = 0.1))
+  fx <- .y_fx()
+  out <- (fx$g_np * fx$x_np)(seq(0, 5, length.out = 3), c(A = 1.0, k = 0.1))
   pred <- out[[1]]
   expect_true(all(pred[, "y1"] == 1.0))
   expect_equal(pred[, "time"], c(0, 2.5, 5))

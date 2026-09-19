@@ -42,16 +42,16 @@
   matrix(0, length(nms), K, dimnames = list(nms, NULL))
 
 # The solver's answer as a K-column cotangent: the gradient in slice 1, its
-# directional derivatives beside it. adjoint2's middle axis is the sensitivity
-# set the call seeded, which is exactly the directions the chain carries.
+# directional derivatives beside it. The curvature's middle axis is the tangent
+# set the call was handed, which is exactly the directions the chain carries.
 .adjointCt <- function(res, K = 1L) {
-  g <- res$adjoint[, 1L]
+  g <- res$cotangent[, 1L]
   u <- matrix(g, ncol = 1L, dimnames = list(names(g), NULL))
   if (K == 1L) return(u)
-  if (is.null(res$adjoint2))
+  if (is.null(res$curvature))
     stop("a second-order cotangent needs a model built with ",
          "derivMode = \"forward-reverse\"", call. = FALSE)
-  cbind(u, matrix(res$adjoint2[, seq_len(K - 1L), 1L], nrow = nrow(u)))
+  cbind(u, matrix(res$curvature[, seq_len(K - 1L), 1L], nrow = nrow(u)))
 }
 
 .ct_null <- function(w) is.null(w) || (is.null(w$out) && is.null(w$pars))
@@ -84,7 +84,7 @@
 }
 
 # A named vector on exactly `nms`, zero where the cotangent says nothing.
-# A solve that answers a seed and returns no adjoint has failed, and an absent
+# A seeded solve that returns no cotangent has failed, and an absent
 # cotangent reads as a zero one everywhere above. Saying so beats a gradient
 # that is quietly zero in the directions the solver dropped.
 # Which object a cotangent of width K asks the prediction for, and what to say
@@ -101,8 +101,8 @@
 }
 
 .requireAdjoint <- function(res, condition = NULL) {
-  if (!is.null(res$adjoint)) return(invisible(NULL))
-  stop("the backward solve returned no adjoint",
+  if (!is.null(res$cotangent)) return(invisible(NULL))
+  stop("the backward solve returned no cotangent",
        if (is.null(condition)) "" else paste0(" for condition ", condition),
        ", though it reported success. The model was seeded, so this is a ",
        "backend fault rather than a modelling one.", call. = FALSE)
@@ -121,28 +121,26 @@
   out
 }
 
-# A seed on a subset of columns, widened to the full set with zeros. The
+# A cotangent on a subset of columns, widened to the full set with zeros. The
 # solver answers on every state; a leaf may only return some of them.
 #
 # This is the one place the chain's direction axis and the solver's seed axis
 # meet, and they are not the same thing: a seed column is its own functional and
 # costs a whole sweep, a direction rides inside the dual. So slice 1 becomes the
-# seed and the rest becomes its tangents.
-.widenSeed <- function(w, full, subset) {
+# solver's `cotangent` and the rest its `curvature`, NULL at first order.
+.widenCotangent <- function(w, full, subset) {
   n <- dim(w)[1L]
   K <- .ctK(w)
   W <- array(0, c(n, length(full), 1L),
              dimnames = list(NULL, full, NULL))
   hit <- intersect(subset, full)
   if (length(hit)) W[, hit, 1L] <- w[, hit, 1L, drop = FALSE]
-  if (K > 1L) {
-    # The tangent block is positional: it has no dimnames of its own, and the
-    # seed's column order is `full`.
-    tg <- array(0, c(n, length(full), 1L, K - 1L))
-    if (length(hit)) tg[, match(hit, full), 1L, ] <- w[, hit, -1L, drop = FALSE]
-    attr(W, "seedTangent") <- tg
-  }
-  W
+  if (K == 1L) return(list(cotangent = W, curvature = NULL))
+  # The curvature is positional: it has no dimnames of its own, and the
+  # cotangent's column order is `full`.
+  cv <- array(0, c(n, length(full), 1L, K - 1L))
+  if (length(hit)) cv[, match(hit, full), 1L, ] <- w[, hit, -1L, drop = FALSE]
+  list(cotangent = W, curvature = cv)
 }
 
 # A vjp is also called from outside the chain, where the natural shape of a
@@ -181,7 +179,8 @@
 
 # A parfn whose Jacobian is a matrix it already builds -- Pimpl solves it by the
 # implicit function theorem, Pequil reads it off the endpoint sensitivity of a
-# nested steady-state solve. The vjp is that matrix transposed onto w.
+# nested steady-state solve. The vjp is that matrix transposed onto the
+# cotangent.
 #
 # The split is deliberate and not a shortcut. What makes the forward mode
 # expensive is that its width is n_theta, and the outer chain is where n_theta
@@ -194,8 +193,8 @@
 # without one, and a leftover would chain the Jacobian to the outer parameters
 # here instead of one node further down, where it belongs.
 .parfnVjpFromJacobian <- function(p2p) {
-  function(pars, fixed = NULL, w, condition = NULL) {
-    w <- .asCtPars(w)
+  function(pars, fixed = NULL, cotangent, condition = NULL) {
+    w <- .asCtPars(cotangent)
     K <- .ctK(w)
     # The incoming tangents, read before the strip below takes them off: at
     # second order they are what the node's curvature is contracted along.
@@ -207,7 +206,7 @@
     J <- attr(v, "deriv")
     # Answering without a Jacobian used to read as a cotangent of zero, so a
     # Pimpl whose IFT fell back to value only zeroed this node's whole block of
-    # the gradient and the Hessian. An error, as a missing adjoint is.
+    # the gradient and the Hessian. An error, as a missing cotangent is.
     if (is.null(J) || !is.matrix(J))
       stop("a transformation returned no Jacobian, so the backward pass has ",
            "nothing to contract here. A preceding warning usually names the ",

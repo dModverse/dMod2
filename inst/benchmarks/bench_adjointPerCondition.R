@@ -230,8 +230,8 @@ rows <- lapply(conds, function(cn) {
     inner <- p(pars)[[cn]]
     tt <- sort(unique(c(0, mydataL[[cn]]$time)))
     gr <- cppDE::solveODE(mC$reversed, tt, inner,
-                          seed = array(1, c(length(tt),
-                                            length(attr(mC$func, "variables")), 1L)),
+                          cotangent = array(1, c(length(tt),
+                                                 length(attr(mC$func, "variables")), 1L)),
                           adjointGrid = TRUE, abstol = TOL$atol, reltol = TOL$rtol,
                           maxsteps = TOL$maxsteps)
     length(gr$adjointGrid$h)

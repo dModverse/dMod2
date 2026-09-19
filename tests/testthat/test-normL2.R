@@ -17,6 +17,37 @@ skip_if_no_compile <- function() {
 }
 
 
+# Error-model chains (sigma = sigma_y, sigma = srel * y) and a second-condition
+# trafo on the shared decay fixture, in one shared object built on first use.
+# The trafos pass the error parameters through, so normL2's errmodel call sees them.
+.nl2_fx <- local({
+  cache <- NULL
+  function() {
+    if (!is.null(cache)) return(cache)
+    bench <- fx_decay_compiled()
+    oldwd <- setwd(.dmod_fx_workdir()); on.exit(setwd(oldwd), add = TRUE)
+
+    e_const <- Y(c(y = "sigma_y"), f = bench$gfn, attach.input = FALSE,
+                 condition = "C1", modelname = "nl2_err_const", compile = FALSE)
+    p_sig <- P(eqnvec(A = "A", k = "k", sigma_y = "sigma_y"), condition = "C1",
+               modelname = "nl2_p_sig", compile = FALSE)
+    e_prop <- Y(c(y = "srel * y"), f = bench$gfn, attach.input = FALSE,
+                condition = "C1", modelname = "nl2_err_prop", compile = FALSE)
+    p_prop <- P(eqnvec(A = "A", k = "k", srel = "srel"), condition = "C1",
+                modelname = "nl2_p_prop", compile = FALSE)
+    p_C2 <- P(eqnvec(A = "A", k = "k"), condition = "C2",
+              modelname = "nl2_p_id", compile = FALSE)
+    compile(e_const, p_sig, e_prop, p_prop, p_C2, output = "nl2_all", cores = 4L)
+
+    cache <<- list(
+      const = list(prd = bench$gfn * bench$xfn * p_sig,  e = e_const),
+      prop  = list(prd = bench$gfn * bench$xfn * p_prop, e = e_prop),
+      pfn_C2 = p_C2)
+    cache
+  }
+})
+
+
 # ---- Basics: value / gradient -------------------------------------------
 
 test_that("normL2 value equals sum(wr^2) + sum(log(2*pi*sigma^2)) at a known point", {
@@ -84,25 +115,6 @@ test_that("normL2 gradient equals 2 * Jt * (pred - y) / sigma^2 (analytic decay 
 
 # ---- Sigma source equivalence -------------------------------------------
 
-# Build a "prediction chain with sigma pass-through" plus a matching
-# constant-sigma errmodel. The errmodel parameter (sigma_y) must appear in
-# the inner-parameter set of the prediction chain so normL2's call into
-# errmodel sees it.
-.build_const_errmodel_chain <- function(bench, mn_suffix) {
-  .dmod_with_fx_workdir({
-    e_const <- Y(c(y = "sigma_y"), f = bench$gfn, attach.input = FALSE,
-                 condition = "C1",
-                 modelname = paste0("fx_decay_err_", mn_suffix),
-                 compile = TRUE)
-    pfn_sig <- P(eqnvec(A = "A", k = "k", sigma_y = "sigma_y"),
-                 condition = "C1",
-                 modelname = paste0("fx_decay_p_sig_", mn_suffix),
-                 compile = TRUE)
-    prd_sig <- bench$gfn * bench$xfn * pfn_sig
-  })
-  list(prd = prd_sig, e = e_const)
-}
-
 test_that("sigma from data column == sigma from errmodel, constant case", {
   skip_if_no_compile()
   bench <- fx_decay_compiled()
@@ -112,7 +124,7 @@ test_that("sigma from data column == sigma from errmodel, constant case", {
   data_em  <- data_col
   data_em$C1$sigma <- NA_real_
 
-  ec <- .build_const_errmodel_chain(bench, "src")
+  ec <- .nl2_fx()$const
   pars_em <- c(bench$outerpars_id, sigma_y = sigma_const)
 
   for_each_backend(function(cpp) {
@@ -130,11 +142,7 @@ test_that("normL2 sums per-condition contributions across two conditions", {
   skip_if_no_compile()
   bench <- fx_decay_compiled()
 
-  .dmod_with_fx_workdir({
-    pfn_C2 <- P(eqnvec(A = "A", k = "k"), condition = "C2",
-                modelname = "fx_decay_p_id_C2", compile = TRUE)
-  })
-  prd_multi <- bench$gfn * bench$xfn * (bench$pfn_id + pfn_C2)
+  prd_multi <- bench$gfn * bench$xfn * (bench$pfn_id + .nl2_fx()$pfn_C2)
   data_multi <- fx_decay_data_multi(
     parslist = list(C1 = c(A = 1.0, k = 0.5), C2 = c(A = 1.0, k = 1.0)),
     sigma = 0.1)
@@ -326,29 +334,10 @@ test_that("normL2 rejects unknown opt.BLOQ values", {
 
 # ---- errmodel: proportional sigma ---------------------------------------
 
-# Build a prediction chain plus a proportional-error errmodel:
-#   sigma(y) = srel * y    where y = A (the observable).
-.build_prop_errmodel_chain <- function(mn_suffix) {
-  bench <- fx_decay_compiled()
-  .dmod_with_fx_workdir({
-    e_prop <- Y(c(y = "srel * y"), f = bench$gfn, attach.input = FALSE,
-                condition = "C1",
-                modelname = paste0("fx_decay_err_prop_", mn_suffix),
-                compile = TRUE)
-    pfn_prop <- P(eqnvec(A = "A", k = "k", srel = "srel"),
-                  condition = "C1",
-                  modelname = paste0("fx_decay_p_prop_", mn_suffix),
-                  compile = TRUE)
-    prd_prop <- bench$gfn * bench$xfn * pfn_prop
-  })
-  list(prd = prd_prop, e = e_prop)
-}
-
-
 test_that("normL2 with sigma = srel*y matches the proportional-error log-likelihood", {
   skip_if_no_compile()
   bench <- fx_decay_compiled()
-  ec <- .build_prop_errmodel_chain("val")
+  ec <- .nl2_fx()$prop
 
   pars <- c(A = 1.0, k = 0.5, srel = 0.1)
   data <- fx_decay_data(pars = pars[c("A", "k")], sigma = 0.05)
@@ -371,7 +360,7 @@ test_that("normL2 with sigma = srel*y matches the proportional-error log-likelih
 test_that("normL2 gradient with proportional errmodel follows the analytic closed form", {
   skip_if_no_compile()
   bench <- fx_decay_compiled()
-  ec <- .build_prop_errmodel_chain("grad")
+  ec <- .nl2_fx()$prop
 
   data <- fx_decay_data(pars = c(A = 1.0, k = 0.5), sigma = 0.05)
   data$C1$sigma <- NA_real_
@@ -401,7 +390,7 @@ test_that("normL2 gradient with proportional errmodel follows the analytic close
 test_that("rows with explicit sigma keep it; NA rows fall through to errmodel", {
   skip_if_no_compile()
   bench <- fx_decay_compiled()
-  ec <- .build_prop_errmodel_chain("mix")
+  ec <- .nl2_fx()$prop
 
   pars <- c(A = 1.0, k = 0.5, srel = 0.1)
   data <- fx_decay_data(pars = pars[c("A", "k")], sigma = 0.05)
@@ -432,7 +421,7 @@ test_that("rows with explicit sigma keep it; NA rows fall through to errmodel", 
 test_that("getParameters(normL2(..., errmodel = ec$e)) includes errmodel pars", {
   skip_if_no_compile()
   bench <- fx_decay_compiled()
-  ec <- .build_prop_errmodel_chain("pars")
+  ec <- .nl2_fx()$prop
   data <- fx_decay_data()
   data$C1$sigma <- NA_real_
   obj <- normL2(data, ec$prd, errmodel = ec$e)
@@ -448,7 +437,7 @@ test_that("getParameters(normL2(..., errmodel = ec$e)) includes errmodel pars", 
 # propagation into the BLOQ rows).
 test_that("normL2 BLOQ M3 + proportional errmodel: value and gradient match", {
   skip_if_no_compile()
-  ec <- .build_prop_errmodel_chain("bloqprop")
+  ec <- .nl2_fx()$prop
 
   pars <- c(A = 1.0, k = 0.5, srel = 0.1)
   data <- fx_decay_data_bloq(pars = pars[c("A", "k")], sigma = 0.05,
@@ -480,7 +469,7 @@ test_that("normL2 BLOQ M3 + proportional errmodel: value and gradient match", {
 
 test_that("normL2 BLOQ M4 + proportional errmodel: value and gradient match", {
   skip_if_no_compile()
-  ec <- .build_prop_errmodel_chain("bloqpropm4")
+  ec <- .nl2_fx()$prop
 
   pars <- c(A = 1.0, k = 0.5, srel = 0.1)
   data <- fx_decay_data_bloq(pars = pars[c("A", "k")], sigma = 0.05,
