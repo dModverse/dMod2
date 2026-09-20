@@ -100,11 +100,11 @@
 #' Hat values of the weighted mean model,
 #' \eqn{h = \mathrm{diag}(W^{1/2} J (J^\top W J)^{-1} J^\top W^{1/2})} with
 #' \eqn{J = \partial\mu/\partial\theta} the prediction sensitivities and
-#' \eqn{W = \mathrm{diag}(1/\sigma_i^2)}. They say how much of the parameter
-#' budget each data point, and by aggregation each observable, spends.
+#' \eqn{W = \mathrm{diag}(1/\sigma_i^2)}. Each value is the share of the mean
+#' parameters carried by one data point, summed by observable.
 #'
 #' Their sum is the numerical rank of the weighted sensitivity matrix, not the
-#' nominal parameter count: a non-identifiable direction costs nothing.
+#' nominal parameter count: a non-identifiable direction contributes nothing.
 #'
 #' @param objfun objective function built by [normL2], carrying its prediction
 #'   function, data and error model.
@@ -188,8 +188,8 @@ remlLeverage <- function(objfun, pars, meanpars = NULL, fixed = NULL,
 #' @description
 #' Alternates between fitting the mean parameters at a fixed error model and
 #' updating the error parameters from the REML stationarity condition, until
-#' the error parameters stop moving. Every data point is charged its own
-#' leverage instead of an equal share of the parameter budget.
+#' the error parameters stop moving. Every data point enters with its own
+#' leverage rather than with the average \eqn{p/n}.
 #'
 #' The objective is left untouched, it stays the plain \eqn{-2\log L}. Every L2
 #' term of a composed objective is used, so a split

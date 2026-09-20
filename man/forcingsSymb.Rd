@@ -12,7 +12,7 @@ forcingsSymb(
 \arguments{
 \item{type}{Which function to be returned}
 
-\item{parameters}{Named vector, character or numeric. Replace parameters by the corresponding valus
+\item{parameters}{Named vector, character or numeric. Replace parameters by the corresponding values
 in \code{parameters}.}
 }
 \value{

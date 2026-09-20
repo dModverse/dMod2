@@ -19,7 +19,7 @@ parameter, while \code{to} stores the respective upper end of the parameter list
 per node.
 }
 \description{
-Generates list of \code{WhichPar} entries to facillitate distribute
+Generates list of \code{WhichPar} entries to facilitate distributed
 profile calculation.
 }
 \details{

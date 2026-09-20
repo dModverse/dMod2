@@ -40,7 +40,20 @@ hessianSourceSettings <- list(
   sr1_id_gn   = list(hessianMethod = "sr1", hessianFallback = "gn",
                      qnControl = list(hessianInit = "identity")),
   bfgs_id_gn  = list(hessianMethod = "bfgs", hessianFallback = "gn",
-                     qnControl = list(hessianInit = "identity")))
+                     qnControl = list(hessianInit = "identity")),
+  # The shape the reverse mode exists for: one exact Hessian at the start, then
+  # a descent on gradients that cost a fraction of a forward one. `sweep` rides
+  # in the same list and reaches the objective through trust()'s dots. Needs a
+  # model built with derivMode = c("forward", "forward-reverse") and an
+  # observation and transformation chain built with deriv2 = TRUE.
+  sr1_ex_rev  = list(hessianMethod = "sr1", sweep = "reverse",
+                     qnControl = list(hessianInit = "exact")),
+  # The same, and a stalled phase fetches a fresh curvature rather than ending.
+  sr1_ex_stall = list(hessianMethod = "sr1", sweep = "reverse",
+                      qnControl = list(hessianInit = "exact",
+                                       hessianReseed = "stall")),
+  # A true Newton run, the yardstick the others are read against.
+  exact_rev   = list(hessianMethod = "exact", sweep = "reverse"))
 
 hessianSourceLabels <- c(
   gn          = "gn",
@@ -53,6 +66,9 @@ hessianSourceLabels <- c(
   gn_sr1      = "gn -> sr1",
   gn_bfgs_x3  = "gn <-> bfgs, x3",
   sr1_id_gn   = "sr1, id -> gn",
-  bfgs_id_gn  = "bfgs, id -> gn")
+  bfgs_id_gn  = "bfgs, id -> gn",
+  sr1_ex_rev  = "sr1, exact seed, rev",
+  sr1_ex_stall = "sr1, exact + reseed, rev",
+  exact_rev   = "newton, rev")
 
 stopifnot(setequal(names(hessianSourceSettings), names(hessianSourceLabels)))

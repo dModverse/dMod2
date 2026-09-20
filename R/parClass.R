@@ -168,7 +168,7 @@ plot.parlist <- function(x, path = FALSE, ...) {
 #' @export
 #' @importFrom data.table as.data.table rbindlist
 #' @rdname as.parframe
-#' @param sort.by character indicating by which colum the returned parameter frame
+#' @param sort.by character indicating by which column the returned parameter frame
 #' should be sorted. Defaults to `"value"`.
 as.parframe.parlist <- function(x, sort.by = "value", ...) {
   m_stat <- .statParlist(x)
@@ -910,7 +910,7 @@ summary.parfn <- function(object, ...) {
 #' Parameter transformation function
 #'
 #' Generate functions that transform one parameter vector into another
-#' by means of a transformation, pushing forward the jacobian matrix
+#' by means of a transformation, pushing forward the Jacobian matrix
 #' of the original parameter.
 #' Usually, this function is called internally, e.g. by \link{P}.
 #' However, you can use it to add your own specialized parameter
@@ -927,7 +927,7 @@ summary.parfn <- function(object, ...) {
 #'  argument.
 #'
 #' Contains attributes "mappings", a list of \code{p2p}
-#' functions, "parameters", the union of parameters acceted by the mappings and
+#' functions, "parameters", the union of parameters accepted by the mappings and
 #' "conditions", the total set of conditions.
 #' @seealso \link{sumfn}, \link{P}
 #' @example inst/examples/prediction.R

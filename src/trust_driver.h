@@ -165,6 +165,11 @@ struct Blather {
 // means nothing is left to resolve, typically the ODE solver's noise floor.
 const int kStallLimit = 5;
 
+// A stall is made of rejected steps, so the iterate stands still through one
+// and refetching the curvature there returns the same matrix. A reseed needs a
+// moved iterate; this caps how many a run may spend.
+const int kReseedLimit = 8;
+
 inline const char* subproblem_label(bool is_newton, bool is_hard, bool is_easy) {
   if (is_newton)          return "Newton";
   if (is_hard && is_easy) return "hard-easy";
@@ -172,18 +177,39 @@ inline const char* subproblem_label(bool is_newton, bool is_hard, bool is_easy) 
   return "easy-easy";
 }
 
+// What the kernel wants from an evaluation, each level including the one below.
+// The R closure turns this into `deriv`, `hessian` and `deriv2`, where an
+// objective's formals are visible.
+enum Curvature { CV_VALUE = 0, CV_GRADIENT = 1, CV_GN = 2, CV_EXACT = 3 };
+
 // Turn an R-level failure into eval_ok = false, but let a user interrupt
 // through -- a bare catch(...) would swallow Ctrl-C and count it as a failed
 // evaluation.
 inline bool eval_objfun(Function& objfun, const NumericVector& x, List& out,
-                        bool build_hessian = true) {
+                        int want = CV_GN) {
   try {
-    out = as<List>(objfun(x, build_hessian));
+    out = as<List>(objfun(x, want));
   } catch (Rcpp::internal::InterruptedException&) {
     throw;
   } catch (...) {
     return false;
   }
+  return true;
+}
+
+// An objective may decline to build a Hessian and says so with NULL. Converting
+// that to a matrix throws from outside eval_objfun's try, so a caller would see
+// an Rcpp conversion error instead of a decision it can act on. Reads the raw
+// SEXP so nothing here throws, and copies column-major, the way H_full is held.
+inline bool read_hessian(const List& out, int K, std::vector<double>& H) {
+  if (!out.containsElementNamed("hessian")) return false;
+  SEXP h = out["hessian"];
+  if (TYPEOF(h) != REALSXP) return false;
+  SEXP dim = Rf_getAttrib(h, R_DimSymbol);
+  if (TYPEOF(dim) != INTSXP || Rf_length(dim) != 2) return false;
+  if (INTEGER(dim)[0] != K || INTEGER(dim)[1] != K) return false;
+  const double* p = REAL(h);
+  H.assign(p, p + (std::size_t) K * K);
   return true;
 }
 

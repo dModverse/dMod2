@@ -31,11 +31,11 @@ Explicit parameter transformations express parameters (e.g. model parameters) in
 p <- eqnvec(
   X = "a + b",
   Y = "a - b"
-) %>% P(method = "explicit")
+) %>% P(method = "explicit", compile = TRUE)
 
 ```
 
-Here, the names of the vector denote the original parameters and the vector entries are expressions of the new parameters. We test the result:
+Here, the names of the vector denote the original parameters and the vector entries are expressions of the new parameters. The transformation runs compiled code, hence `compile = TRUE`. We test the result:
 
 ```{r}
 
@@ -56,7 +56,7 @@ Implicit parameter transformations express the current parameters in terms of co
 p <- eqnvec(
   X = "X + Y - 2*a",
   Y = "X - Y - 2*b"
-) %>% P(method = "implicit")
+) %>% P(method = "implicit", compile = TRUE)
 ```
 
 Here, the names of the vector denote the parameters which should be expressed in terms of other parameters and the vector entries denote the constraints which must cancel out.
@@ -106,7 +106,7 @@ constraint <- eqnvec(
   B = equations[["B"]]
 )
 
-p <- P(constraint, method = "implicit")
+p <- P(constraint, method = "implicit", compile = TRUE)
 
 
 pars <- c(k_on = 1, k_off = 3, A = 2)
@@ -126,7 +126,7 @@ constraint <- eqnvec(
   B = "A + B - total"
 )
 
-p <- P(constraint, method = "implicit")
+p <- P(constraint, method = "implicit", compile = TRUE)
 
 pars <- c(k_on = 1, k_off = 3, total = 3)
 p(pars)

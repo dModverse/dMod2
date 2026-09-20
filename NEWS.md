@@ -1,3 +1,39 @@
+# dMod2 0.8.0
+
+* **Reverse mode.** `obj(pars, sweep = "reverse")` walks `normL2 -> Y -> Xs -> P`
+  backwards in one sweep, at a cost that does not grow with the number of
+  parameters; with `deriv2 = TRUE` it returns the exact Hessian at a cost linear
+  in it. Needs `odemodel(..., derivMode = c("forward", "reverse"))`, or
+  `"forward-reverse"` for second order; `backend = "Sundials"` uses the CVODES
+  adjoint, and `importPEtab(backend = "Sundials")` imports onto it. The reverse
+  gradient belongs to the trajectory of the value solve and reuses its
+  checkpoints; `Xs(optionsReverse = list(gradtol = ))` weights the backward step
+  size.
+* **Derivative arguments.** `deriv`, `hessian`, `deriv2` and `sweep` each ask
+  for one thing, and `curvature` is gone. `derivMode` names the direction at
+  build time in `odemodel()`, `Y()`, `Pexpl()` and `importPEtab()`;
+  `reverse = TRUE` and `"dual"` are errors. `"symbolic"` is gone, so
+  transformation and observation functions evaluate only after `compile()`.
+* **Optimisation.** `trust()` asks per evaluation for a value, a gradient, a
+  Gauss-Newton or an exact Hessian. `qnControl$hessianInit = "exact"` seeds a
+  quasi-Newton run, `hessianReseed = "stall"` fetches a fresh Hessian when it
+  stalls, and `hessianMethod = "exact"` is a Newton run.
+* Requires cppDE 0.10.0 and follows its names: `tangent`, `hessian`,
+  `cotangent` and `curvature`, and `cppFUN()` for `funCpp()`.
+* `distributedComputing()` and `runbg()` gain `libs`, library paths put in
+  front on the remote side.
+* `compile()` reports the toolchain and reused objects through `message()`
+  rather than `cat()`, so `suppressMessages()` silences it.
+* **Bug fixes.** A summed objective keeps the curvature of every term. An
+  objective that declines a Hessian no longer crashes `trust()`. A backward
+  solve without an answer is an error instead of a zero gradient. A PEtab prior
+  honours `hessian = FALSE`. The batched backward path carries more than one
+  direction. `compile()` stays within the 8191-character command line of
+  Windows.
+* New examples `inst/examples/example_ReverseAD.R`,
+  `example_AdjointComparison.R` and `example_BachmannReverse.R`; the tests
+  compile the models of each file jointly.
+
 # dMod2 0.7.5
 
 * `runbg(compile = TRUE)` builds on Debian and Ubuntu machines again. The
@@ -14,15 +50,11 @@
 # dMod2 0.7.4
 
 * A prepared ODE batch handle no longer outlives the shared object it was
-  resolved from. `Xs()` caches that handle for the derivative path and keyed the
-  cache on shapes and labels only, so a workspace shipped to a cluster node went
-  on calling an entry point of a shared object that was never built there. Every
-  `mstrust()` start then failed with `parinit not feasible`, and the real error,
-  `"solve_x_s_batch" not available for .Call()`, showed up only when the
-  objective was evaluated by hand. The cache now also checks that the shared
-  object is still loaded, and `modelname<-` drops it. The rename loop in the
-  scripts `runbg()` and `distributedComputing()` generate covers objective
-  functions too, which it had skipped.
+  resolved from. `Xs()` keyed its cache on shapes and labels only, so a
+  workspace shipped to a cluster node called an entry point that was never built
+  there and every `mstrust()` start failed with `parinit not feasible`. The
+  cache now checks that the object is loaded, `modelname<-` drops it, and the
+  rename loop in `runbg()` and `distributedComputing()` covers objectives.
 * Needs cppDE 0.9.5, where a Windows install detects OpenMP. Without it a
   batched solve stays serial there.
 
@@ -99,11 +131,10 @@
   maintain a dense quasi-Newton update seeded from it; `"hybrid"` runs `"gn"`
   until it stagnates, then switches to `"bfgs"` once. The quasi-Newton phase
   consumes only the gradient. Reflective boundary only.
-* Objective functions take a call-time `hessian` argument (default `TRUE`).
-  With `hessian = FALSE` they return value and gradient but skip the Hessian
-  entirely -- the `J^T J` contraction never runs and the result carries a `NULL`
-  hessian. `trust()` uses this in the quasi-Newton phase; it propagates through
-  objective composition (`+`).
+* Objective functions take a call-time `hessian` argument. With
+  `hessian = FALSE` the `J^T J` contraction never runs and the result carries a
+  `NULL` hessian. `trust()` uses this in the quasi-Newton phase, and it
+  propagates through objective composition.
 * `trust()` reports `neval` and, under `blather`, the `hessianSource` per
   iteration, so a multi-start can be scored on gradient evaluations. These reach
   `as.parframe()` as columns.

@@ -90,7 +90,9 @@
 #' @param hessianMethod Source of the model Hessian the run starts on:
 #'   \code{"gn"} (default) uses the objective's Gauss-Newton Hessian,
 #'   \code{"bfgs"} and \code{"sr1"} maintain a quasi-Newton update seeded from
-#'   it. A run is a method and, optionally, the \code{hessianFallback} it hands
+#'   it, and \code{"exact"} asks the objective for its true Hessian at every
+#'   iterate. \code{"exact"} needs an objective that takes \code{deriv2}.
+#'   A run is a method and, optionally, the \code{hessianFallback} it hands
 #'   over to. Quasi-Newton methods require
 #'   \code{stepControl$boundary = "reflective"}. Also selects the control
 #'   defaults below.
@@ -123,10 +125,23 @@
 #'   phase.
 #'   \describe{
 #'     \item{\code{hessianInit}}{Seed of the approximation: \code{"gn"}
-#'       (default) the objective's Hessian at \code{parinit}, \code{"identity"}
-#'       the identity, which also stops \code{trust} asking for a Hessian at
-#'       all. Read only when the run starts quasi-Newton, so it is inert for
-#'       \code{"gn"}.}
+#'       (default) the objective's Gauss-Newton Hessian at \code{parinit},
+#'       \code{"identity"} the identity, which also stops \code{trust} asking
+#'       for a Hessian at all, or \code{"exact"} the objective's true Hessian
+#'       there. Read only when the run starts quasi-Newton, so it is inert for
+#'       \code{"gn"}. \code{"exact"} is what makes a reverse sweep worth its
+#'       price: one expensive evaluation buys a true curvature and the descent
+#'       then runs on gradients alone. It needs an objective that takes
+#'       \code{deriv2} and a model built for it, see \code{derivMode} in
+#'       \code{\link{odemodel}}.}
+#'     \item{\code{hessianReseed}}{What a stalled quasi-Newton phase does:
+#'       \code{"never"} (default) stops, \code{"stall"} fetches a fresh
+#'       Hessian of the same kind at the current iterate, clears the stored
+#'       pairs and carries on. The source does not change; only the matrix it
+#'       updates from does. A stall consists of rejected steps, so a reseed is
+#'       taken only after the iterate has moved; a run that stalls again without
+#'       moving stops as \code{"never"} does. \code{nReseed} reports the
+#'       count.}
 #'     \item{\code{qnMemory}}{Number of \code{(s, y)} pairs kept. \code{0}
 #'       (default) accumulates every update onto the seed. A positive value
 #'       rebuilds the approximation each iteration from the last
@@ -198,7 +213,7 @@
 #' @export
 trust <- function(objfun, parinit, rinit = 0.1, rmax = 10,
                   iterlim   = 100L,
-                  hessianMethod   = c("gn", "bfgs", "sr1"),
+                  hessianMethod   = c("gn", "bfgs", "sr1", "exact"),
                   hessianFallback = c("none", "bfgs", "sr1", "gn"),
                   fallbackLimit   = 1L,
                   parscale  = NULL,
@@ -223,16 +238,35 @@ trust <- function(objfun, parinit, rinit = 0.1, rmax = 10,
   step <- .mergeControl(ctl$stepControl, stepControl, "stepControl")
 
   boundary    <- match.arg(step$boundary, c("reflective", "clip"))
-  hessianInit <- match.arg(qn$hessianInit, c("gn", "identity"))
+  hessianInit   <- match.arg(qn$hessianInit, c("gn", "identity", "exact"))
+  hessianReseed <- match.arg(qn$hessianReseed %||% "never", c("never", "stall"))
 
-  # The kernel passes hessian = FALSE in the quasi-Newton phase, so the wrapper
-  # forwards it; dMod objectives skip J^T J then, others ignore it via `...`.
-  fn <- function(x, hessian = TRUE)
-    do.call(objfun, c(list(x, hessian = hessian), dots))
+  # The kernel names what it wants, 0 value, 1 gradient, 2 Gauss-Newton, 3
+  # exact, and the translation into an objective's own arguments happens here,
+  # where its formals are visible. One that only knows `hessian` gets the
+  # logical it always got. `sweep` is not chosen here; it stays the caller's.
+  #
+  # The exact request is checked before the run rather than inside fn, where a
+  # stop() is caught by the kernel's evaluation handler and reported as
+  # "parinit not feasible".
+  .fml   <- names(formals(objfun))
+  .wants_exact <- identical(hessianMethod, "exact") ||
+                  identical(hessianInit, "exact")
+  if (.wants_exact && !any(c("deriv2", "...") %in% .fml))
+    stop("trust: hessianMethod or qnControl$hessianInit is \"exact\", but ",
+         "this objective has no `deriv2` argument to ask an exact Hessian ",
+         "with.", call. = FALSE)
+
+  fn <- function(x, want = 2L) {
+    want <- as.integer(want)
+    args <- list(x, deriv = want >= 1L, hessian = want >= 2L)
+    if (want >= 3L) args$deriv2 <- TRUE
+    do.call(objfun, c(args, dots))
+  }
   trust_impl(fn, parinit, rinit, rmax, parscale, as.integer(iterlim),
              tol$ftol, tol$mtol, tol$gtol, tol$xtol, tol$rmin, step$theta.max,
              boundary, hessianMethod, hessianFallback,
-             as.integer(fallbackLimit), hessianInit,
+             as.integer(fallbackLimit), hessianInit, hessianReseed,
              as.integer(qn$qnMemory), qn$qnCautious, isTRUE(qn$qnRejected),
              step$nonmonotone, minimize, blather,
              parupper, parlower, printIter, traceFile)
@@ -243,8 +277,8 @@ trust <- function(objfun, parinit, rinit = 0.1, rmax = 10,
 # control group accepts. Members of one group are settable together or not at
 # all; see the roxygen of `trust` for what they mean.
 .trustDefaults <- function(hessianMethod = "gn", hessianFallback = "none") {
-  qn <- list(hessianInit = "gn", qnMemory = 0L, qnCautious = 1e-8,
-             qnRejected = FALSE)
+  qn <- list(hessianInit = "gn", hessianReseed = "never",
+             qnMemory = 0L, qnCautious = 1e-8, qnRejected = FALSE)
   # Nocedal and Wright, sec. 6.2: SR1 also updates from a rejected step. The
   # flag is inert outside an sr1 phase, so a fallback to sr1 arms it too.
   if ("sr1" %in% c(hessianMethod, hessianFallback)) qn$qnRejected <- TRUE
@@ -266,6 +300,7 @@ trust <- function(objfun, parinit, rinit = 0.1, rmax = 10,
   rmin = "tolControl$rmin",   fterm = "tolControl$ftol",
   mterm = "tolControl$mtol",
   hessianInit = "qnControl$hessianInit", qnMemory   = "qnControl$qnMemory",
+  hessianReseed = "qnControl$hessianReseed",
   qnCautious  = "qnControl$qnCautious",  qnRejected = "qnControl$qnRejected",
   boundary    = "stepControl$boundary",  theta.max  = "stepControl$theta.max",
   nonmonotone = "stepControl$nonmonotone")

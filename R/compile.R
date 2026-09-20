@@ -17,13 +17,13 @@
 
 
 
-## Command strings reach the shell as a single argument, so the ceiling is the
-## per-argument limit (128 KiB on Linux, 32 KiB on Windows), not ARG_MAX. The
-## option lowers it for tests.
+## Longest command line: the per-argument limit on Linux (128 KiB), cmd.exe's
+## 8191 characters on Windows, where `R CMD` runs through it. The option lowers
+## it for tests.
 .compileCmdLimit <- function() {
   lim <- suppressWarnings(as.integer(getOption("dMod.compile.cmdlimit")))
   if (length(lim) == 1L && !is.na(lim)) return(lim)
-  if (.Platform$OS.type == "windows") 24000L else 96000L
+  if (.Platform$OS.type == "windows") 8000L else 96000L
 }
 
 ## Chunks of at most `maxN` elements and `maxChars` quoted characters, each
@@ -405,17 +405,17 @@ compile <- function(..., output = NULL, args = NULL, cores = detectFreeCores(),
       character(1))
 
     if (!any(nzchar(extra))) {
-      cat(sprintf("using %-3s compiler: %s [%s]\n", label, strip(bin), trimws(shared)))
+      message(sprintf("using %-3s compiler: %s [%s]", label, strip(bin), trimws(shared)))
       return(invisible(NULL))
     }
     sets  <- setdiff(unique(extra), "")
     tags  <- c("every source", sprintf("%d of %d also", vapply(sets, function(k)
       sum(extra == k), integer(1)), length(ent)))
     width <- max(nchar(tags))
-    cat(sprintf("using %-3s compiler: %s\n", label, strip(bin)))
-    cat(sprintf("  %-*s : %s\n", width, tags[1], trimws(shared)))
+    message(sprintf("using %-3s compiler: %s", label, strip(bin)))
+    message(sprintf("  %-*s : %s", width, tags[1], trimws(shared)))
     for (i in seq_along(sets))
-      cat(sprintf("  %-*s : %s\n", width, tags[i + 1L], sets[i]))
+      message(sprintf("  %-*s : %s", width, tags[i + 1L], sets[i]))
     invisible(NULL)
   }
   .reportToolchain("C",   cc_bin,  base,     "\\.c$")
@@ -551,8 +551,8 @@ compile <- function(..., output = NULL, args = NULL, cores = detectFreeCores(),
     ## source is .cpp, which a .o-only invocation would miss. The pre-compile
     ## also has to run on Windows: the single-call SHLIB (compile + link in
     ## one go) was occasionally producing .dll files that LoadLibrary
-    ## couldn't resolve when the source pulled in BLAS via the symbolic-
-    ## mode chain wrapper, splitting compile and link sidesteps that.
+    ## couldn't resolve when the source pulled in BLAS; splitting compile and
+    ## link sidesteps that.
     ## A precompiled header is keyed to one flag set, so it is only built when
     ## every C++ source shares its compile arguments and there are enough of
     ## them to amortise it.
@@ -581,7 +581,7 @@ compile <- function(..., output = NULL, args = NULL, cores = detectFreeCores(),
     fresh[fresh] <- prev[hit[fresh]] == keys[fresh]
     if (any(fresh)) {
       Sys.setFileTime(objs[fresh], Sys.time())
-      cat(sprintf("reusing %d unchanged object(s)\n", sum(fresh)))
+      message(sprintf("reusing %d unchanged object(s)", sum(fresh)))
     }
 
     jobs <- lapply(which(!fresh), function(i)
@@ -616,7 +616,9 @@ compile <- function(..., output = NULL, args = NULL, cores = detectFreeCores(),
       ## Via `R CMD`, which puts the Rtools toolchain on PATH under Windows.
       ar_bin     <- cfg("AR");     if (!nzchar(ar_bin))     ar_bin     <- "ar"
       ranlib_bin <- cfg("RANLIB"); if (!nzchar(ranlib_bin)) ranlib_bin <- "ranlib"
-      chunks <- .compileChunks(objs[-anchor], maxN = as.integer(chunkSize))
+      ar_cmd <- paste(Rbin, "CMD", ar_bin, "qc", shQuote(lib))
+      chunks <- .compileChunks(objs[-anchor], maxN = as.integer(chunkSize),
+                               maxChars = max(1L, .compileCmdLimit() - nchar(ar_cmd)))
       for (i in seq_along(chunks)) {
         ## `q` appends without an index; ranlib writes it once at the end.
         cmd <- paste(Rbin, "CMD", ar_bin, if (i == 1L) "qc" else "q", shQuote(lib),
@@ -628,8 +630,8 @@ compile <- function(..., output = NULL, args = NULL, cores = detectFreeCores(),
       if (system(paste(Rbin, "CMD", ranlib_bin, shQuote(lib)),
                  ignore.stdout = !verbose, ignore.stderr = !verbose) != 0)
         stop("Building the archive index failed: ", lib, call. = FALSE)
-      cat(sprintf("archived %d objects into %s (%d chunks)\n",
-                  length(objs) - 1L, basename(lib), length(chunks)))
+      message(sprintf("archived %d objects into %s (%d chunks)",
+                      length(objs) - 1L, basename(lib), length(chunks)))
       link_files <- files[anchor]
       base_libs  <- paste(.compileWholeArchive(lib), base_libs)
     }
@@ -693,8 +695,8 @@ compile <- function(..., output = NULL, args = NULL, cores = detectFreeCores(),
     ## that trailing token is not consumed by a shell but swallowed by
     ## R CMD SHLIB as the make override `PKG_LIBS=2>&1`, which beats every
     ## Makevars/R_MAKEVARS_USER assignment and strips the BLAS/LAPACK libs
-    ## (breaking the symbolic-mode chain_jac link with "undefined reference to
-    ## dgemm_"). system2() keeps the argument vector clean and is identical on
+    ## (breaking the link of any model that calls them with "undefined
+    ## reference to dgemm_"). system2() keeps the argument vector clean and is identical on
     ## Linux/macOS, where the shell would have consumed the redirection anyway.
     Rexe <- file.path(R.home("bin"), "R")
     shlib_args <- c("CMD", "SHLIB", shQuote(link_files), "-o", shQuote(out))

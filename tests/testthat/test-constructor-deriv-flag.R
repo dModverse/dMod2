@@ -9,15 +9,45 @@ skip_if_no_compile <- function() {
   testthat::skip_on_cran()
 }
 
+# The compiled models of this file, generated with compile = FALSE on first
+# use and linked into one shared object.
+ctor_models <- local({
+  cache <- NULL
+  function() {
+    if (!is.null(cache)) return(cache)
+    dir <- file.path(tempdir(), "ctor_models")
+    dir.create(dir, showWarnings = FALSE, recursive = TRUE)
+    withr::local_dir(dir)
+    nm <- function(x) paste0(x, "_", as.integer(Sys.time()))
+
+    pexpl <- Pexpl(c(A = "a * x", B = "b + y"), deriv = FALSE,
+                   modelname = nm("test_pexpl_nod1"), derivMode = "forward",
+                   verbose = FALSE)
+    pequil <- Pequil(c(A = "k_in - k_out * A"),
+                     parameters = c("k_in", "k_out"), deriv = FALSE,
+                     modelname = nm("test_pequil_nod1"), verbose = FALSE,
+                     attach.input = FALSE)
+    pimpl <- Pimpl(c(x = "x - a"), parameters = "a", deriv = FALSE,
+                   modelname = nm("test_pimpl_nod1"), verbose = FALSE)
+    gfn <- Y(c(obs = "k * A"), states = c("A", "time"), parameters = "k",
+             deriv = FALSE, modelname = nm("test_y_nod1"),
+             derivMode = "forward", verbose = FALSE, attach.input = FALSE)
+    pdisp <- P(c(A = "a * x"), method = "explicit", deriv = FALSE,
+               modelname = nm("test_P_nod1"), verbose = FALSE)
+
+    compile(pexpl, pequil, pimpl, gfn, pdisp, output = nm("ctor_models"),
+            cores = 4L)
+
+    cache <<- list(pexpl = pexpl, pequil = pequil, pimpl = pimpl, gfn = gfn,
+                   pdisp = pdisp)
+    cache
+  }
+})
+
 
 test_that("Pexpl(deriv = FALSE) yields a parvec without deriv attribute", {
   skip_if_no_compile()
-  oldwd <- setwd(.dmod_fx_workdir()); on.exit(setwd(oldwd), add = TRUE)
-
-  trafo <- c(A = "a * x", B = "b + y")
-  pf <- Pexpl(trafo, deriv = FALSE,
-              modelname = paste0("test_pexpl_nod1_", as.integer(Sys.time())),
-              compile = TRUE, derivMode = "symbolic", verbose = FALSE)
+  pf <- ctor_models()$pexpl
   out <- pf(c(a = 2, b = 3, x = 4, y = 5))
   expect_null(attr(out[[1]], "deriv"))
   # Default runtime deriv = TRUE is silently capped by the constructor:
@@ -29,13 +59,7 @@ test_that("Pexpl(deriv = FALSE) yields a parvec without deriv attribute", {
 
 test_that("Pequil(deriv = FALSE) skips the sensitivity model", {
   skip_if_no_compile()
-  oldwd <- setwd(.dmod_fx_workdir()); on.exit(setwd(oldwd), add = TRUE)
-
-  pf <- Pequil(c(A = "k_in - k_out * A"),
-               parameters = c("k_in", "k_out"),
-               deriv = FALSE,
-               modelname = paste0("test_pequil_nod1_", as.integer(Sys.time())),
-               compile = TRUE, verbose = FALSE, attach.input = FALSE)
+  pf <- ctor_models()$pequil
   out <- pf(c(k_in = 1, k_out = 0.5, A = 0.1))
   expect_null(attr(out[[1]], "deriv"))
 })
@@ -43,11 +67,7 @@ test_that("Pequil(deriv = FALSE) skips the sensitivity model", {
 
 test_that("Pimpl(deriv = FALSE) drops the IFT chain rule from output", {
   skip_if_no_compile()
-  oldwd <- setwd(.dmod_fx_workdir()); on.exit(setwd(oldwd), add = TRUE)
-
-  pf <- Pimpl(c(x = "x - a"), parameters = "a", deriv = FALSE,
-              modelname = paste0("test_pimpl_nod1_", as.integer(Sys.time())),
-              compile = TRUE, verbose = FALSE)
+  pf <- ctor_models()$pimpl
   out <- pf(c(a = 1.5, x = 0.5))
   expect_null(attr(out[[1]], "deriv"))
 })
@@ -55,13 +75,7 @@ test_that("Pimpl(deriv = FALSE) drops the IFT chain rule from output", {
 
 test_that("Y(deriv = FALSE) produces output without deriv attribute", {
   skip_if_no_compile()
-  oldwd <- setwd(.dmod_fx_workdir()); on.exit(setwd(oldwd), add = TRUE)
-
-  g <- c(obs = "k * A")
-  gfn <- Y(g, states = c("A", "time"), parameters = "k", deriv = FALSE,
-           modelname = paste0("test_y_nod1_", as.integer(Sys.time())),
-           compile = TRUE, derivMode = "symbolic", verbose = FALSE,
-           attach.input = FALSE)
+  gfn <- ctor_models()$gfn
 
   prd <- structure(
     cbind(time = c(0, 1), A = c(1, 2)),
@@ -91,11 +105,7 @@ test_that("Constructors reject deriv = FALSE combined with deriv2 = TRUE", {
 
 test_that("P() dispatcher forwards deriv to each method", {
   skip_if_no_compile()
-  oldwd <- setwd(.dmod_fx_workdir()); on.exit(setwd(oldwd), add = TRUE)
-
-  pf <- P(c(A = "a * x"), method = "explicit", deriv = FALSE,
-          modelname = paste0("test_P_nod1_", as.integer(Sys.time())),
-          compile = TRUE, verbose = FALSE)
+  pf <- ctor_models()$pdisp
   out <- pf(c(a = 2, x = 3))
   expect_null(attr(out[[1]], "deriv"))
 })

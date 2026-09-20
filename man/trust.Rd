@@ -10,7 +10,7 @@ trust(
   rinit = 0.1,
   rmax = 10,
   iterlim = 100L,
-  hessianMethod = c("gn", "bfgs", "sr1"),
+  hessianMethod = c("gn", "bfgs", "sr1", "exact"),
   hessianFallback = c("none", "bfgs", "sr1", "gn"),
   fallbackLimit = 1L,
   parscale = NULL,
@@ -46,7 +46,9 @@ inside the box.}
 \item{hessianMethod}{Source of the model Hessian the run starts on:
 \code{"gn"} (default) uses the objective's Gauss-Newton Hessian,
 \code{"bfgs"} and \code{"sr1"} maintain a quasi-Newton update seeded from
-it. A run is a method and, optionally, the \code{hessianFallback} it hands
+it, and \code{"exact"} asks the objective for its true Hessian at every
+iterate. \code{"exact"} needs an objective that takes \code{deriv2}.
+A run is a method and, optionally, the \code{hessianFallback} it hands
 over to. Quasi-Newton methods require
 \code{stepControl$boundary = "reflective"}. Also selects the control
 defaults below.}
@@ -94,10 +96,23 @@ read only by \code{"bfgs"}, \code{"sr1"} and a quasi-Newton fallback
 phase.
 \describe{
 \item{\code{hessianInit}}{Seed of the approximation: \code{"gn"}
-(default) the objective's Hessian at \code{parinit}, \code{"identity"}
-the identity, which also stops \code{trust} asking for a Hessian at
-all. Read only when the run starts quasi-Newton, so it is inert for
-\code{"gn"}.}
+(default) the objective's Gauss-Newton Hessian at \code{parinit},
+\code{"identity"} the identity, which also stops \code{trust} asking
+for a Hessian at all, or \code{"exact"} the objective's true Hessian
+there. Read only when the run starts quasi-Newton, so it is inert for
+\code{"gn"}. \code{"exact"} is what makes a reverse sweep worth its
+price: one expensive evaluation buys a true curvature and the descent
+then runs on gradients alone. It needs an objective that takes
+\code{deriv2} and a model built for it, see \code{derivMode} in
+\code{\link{odemodel}}.}
+\item{\code{hessianReseed}}{What a stalled quasi-Newton phase does:
+\code{"never"} (default) stops, \code{"stall"} fetches a fresh
+Hessian of the same kind at the current iterate, clears the stored
+pairs and carries on. The source does not change; only the matrix it
+updates from does. A stall consists of rejected steps, so a reseed is
+taken only after the iterate has moved; a run that stalls again without
+moving stops as \code{"never"} does. \code{nReseed} reports the
+count.}
 \item{\code{qnMemory}}{Number of \code{(s, y)} pairs kept. \code{0}
 (default) accumulates every update onto the seed. A positive value
 rebuilds the approximation each iteration from the last

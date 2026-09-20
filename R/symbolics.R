@@ -1,7 +1,7 @@
 #' Return some useful forcing functions as strings
 #' 
 #' @param type Which function to be returned
-#' @param parameters Named vector, character or numeric. Replace parameters by the corresponding valus
+#' @param parameters Named vector, character or numeric. Replace parameters by the corresponding values
 #' in `parameters`.
 #' @return String with the function
 #' @export
@@ -67,7 +67,7 @@ getCoefficients <- function(char, symbol) {
 }
 
 
-#' Place top elements into bottom elemens
+#' Place top elements into bottom elements
 #' 
 #' @param variables named character vector
 #' @details If the names of top vector elements occur in the bottom of the vector, 

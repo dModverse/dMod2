@@ -25,7 +25,7 @@ P(
 
 \item{condition}{Condition label.}
 
-\item{compile, modelname, verbose}{Forwarded to \link[cppDE:funCpp]{cppDE::funCpp}.}
+\item{compile, modelname, verbose}{Forwarded to \link[cppDE:cppFUN]{cppDE::cppFUN}.}
 
 \item{method}{One of \code{"explicit"}, \code{"implicit"}, \code{"equilibrate"}, or \code{NULL}.}
 

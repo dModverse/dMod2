@@ -46,7 +46,13 @@ or \code{"M4BEAL"} (truncated variants; require non-negative LOQ).}
 }
 \value{
 An object of class \code{objfn}, i.e. a function
-\code{obj(pars, fixed, deriv, env, cores)} returning an \link{objlist}.
+\code{obj(pars, fixed, deriv, hessian, deriv2, sweep, env, cores)} returning
+an \link{objlist}. \code{deriv} asks for a gradient, \code{hessian} for a Hessian, \code{deriv2}
+for the exact one rather than the Gauss-Newton approximation, and \code{sweep}
+(\code{"forward"} or \code{"reverse"}) says which way all of it is computed. \code{hessian}
+defaults to \code{NULL}, meaning "not asked": forward that is a Gauss-Newton
+Hessian, backwards none, and \code{deriv2 = TRUE} always implies one. What the
+model was built with decides what is available; see \link{odemodel}.
 }
 \description{
 Creates an objective function for parameter estimation based on the

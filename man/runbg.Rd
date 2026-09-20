@@ -15,7 +15,8 @@ runbg(
   buildBundle = 50,
   wait = FALSE,
   recover = FALSE,
-  walltime = NULL
+  walltime = NULL,
+  libs = NULL
 )
 }
 \arguments{
@@ -66,6 +67,11 @@ Requires the correct filename, so if the previous \code{runbg()} was run with
 
 \item{walltime}{Optional character. Maximum runtime in the format \code{"HH:MM:SS"}.
 If exceeded, the job will be terminated.}
+
+\item{libs}{Optional character vector of library paths put in front of the
+remote R's library search path, for the job and the remote build, so that a
+development installation can run next to the default one. The remote shell
+expands them, so \code{~} is the remote home.}
 }
 \value{
 List of functions \code{check()}, \code{get()}, \code{purge()} and \code{terminate()}.
