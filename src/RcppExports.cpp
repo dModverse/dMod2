@@ -102,8 +102,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // normL2_kernel
-List normL2_kernel(List prediction, Nullable<List> err_list_opt, List meta_list, CharacterVector par_names_global, bool deriv2_requested, int threads, std::string bloq_mode, bool build_hessian);
-RcppExport SEXP _dMod2_normL2_kernel(SEXP predictionSEXP, SEXP err_list_optSEXP, SEXP meta_listSEXP, SEXP par_names_globalSEXP, SEXP deriv2_requestedSEXP, SEXP threadsSEXP, SEXP bloq_modeSEXP, SEXP build_hessianSEXP) {
+List normL2_kernel(List prediction, Nullable<List> err_list_opt, List meta_list, CharacterVector par_names_global, bool deriv2_requested, int threads, std::string bloq_mode, bool build_hessian, bool want_seed);
+RcppExport SEXP _dMod2_normL2_kernel(SEXP predictionSEXP, SEXP err_list_optSEXP, SEXP meta_listSEXP, SEXP par_names_globalSEXP, SEXP deriv2_requestedSEXP, SEXP threadsSEXP, SEXP bloq_modeSEXP, SEXP build_hessianSEXP, SEXP want_seedSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -115,7 +115,8 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< int >::type threads(threadsSEXP);
     Rcpp::traits::input_parameter< std::string >::type bloq_mode(bloq_modeSEXP);
     Rcpp::traits::input_parameter< bool >::type build_hessian(build_hessianSEXP);
-    rcpp_result_gen = Rcpp::wrap(normL2_kernel(prediction, err_list_opt, meta_list, par_names_global, deriv2_requested, threads, bloq_mode, build_hessian));
+    Rcpp::traits::input_parameter< bool >::type want_seed(want_seedSEXP);
+    rcpp_result_gen = Rcpp::wrap(normL2_kernel(prediction, err_list_opt, meta_list, par_names_global, deriv2_requested, threads, bloq_mode, build_hessian, want_seed));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -362,8 +363,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // trust_impl
-List trust_impl(Function objfun, NumericVector parinit, double rinit, double rmax, Nullable<NumericVector> parscale, int iterlim, double ftol, double mtol, double gtol, double xtol, double rmin, double thetamax, std::string boundary, std::string hessianMethod, std::string hessianFallback, int fallbackLimit, std::string hessianInit, int qnMemory, double qnCautious, bool qnRejected, double nonmonotone, bool minimize, bool blather, Nullable<NumericVector> parupper, Nullable<NumericVector> parlower, bool printIter, Nullable<CharacterVector> traceFile);
-RcppExport SEXP _dMod2_trust_impl(SEXP objfunSEXP, SEXP parinitSEXP, SEXP rinitSEXP, SEXP rmaxSEXP, SEXP parscaleSEXP, SEXP iterlimSEXP, SEXP ftolSEXP, SEXP mtolSEXP, SEXP gtolSEXP, SEXP xtolSEXP, SEXP rminSEXP, SEXP thetamaxSEXP, SEXP boundarySEXP, SEXP hessianMethodSEXP, SEXP hessianFallbackSEXP, SEXP fallbackLimitSEXP, SEXP hessianInitSEXP, SEXP qnMemorySEXP, SEXP qnCautiousSEXP, SEXP qnRejectedSEXP, SEXP nonmonotoneSEXP, SEXP minimizeSEXP, SEXP blatherSEXP, SEXP parupperSEXP, SEXP parlowerSEXP, SEXP printIterSEXP, SEXP traceFileSEXP) {
+List trust_impl(Function objfun, NumericVector parinit, double rinit, double rmax, Nullable<NumericVector> parscale, int iterlim, double ftol, double mtol, double gtol, double xtol, double rmin, double thetamax, std::string boundary, std::string hessianMethod, std::string hessianFallback, int fallbackLimit, std::string hessianInit, std::string hessianReseed, int qnMemory, double qnCautious, bool qnRejected, double nonmonotone, bool minimize, bool blather, Nullable<NumericVector> parupper, Nullable<NumericVector> parlower, bool printIter, Nullable<CharacterVector> traceFile);
+RcppExport SEXP _dMod2_trust_impl(SEXP objfunSEXP, SEXP parinitSEXP, SEXP rinitSEXP, SEXP rmaxSEXP, SEXP parscaleSEXP, SEXP iterlimSEXP, SEXP ftolSEXP, SEXP mtolSEXP, SEXP gtolSEXP, SEXP xtolSEXP, SEXP rminSEXP, SEXP thetamaxSEXP, SEXP boundarySEXP, SEXP hessianMethodSEXP, SEXP hessianFallbackSEXP, SEXP fallbackLimitSEXP, SEXP hessianInitSEXP, SEXP hessianReseedSEXP, SEXP qnMemorySEXP, SEXP qnCautiousSEXP, SEXP qnRejectedSEXP, SEXP nonmonotoneSEXP, SEXP minimizeSEXP, SEXP blatherSEXP, SEXP parupperSEXP, SEXP parlowerSEXP, SEXP printIterSEXP, SEXP traceFileSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -384,6 +385,7 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< std::string >::type hessianFallback(hessianFallbackSEXP);
     Rcpp::traits::input_parameter< int >::type fallbackLimit(fallbackLimitSEXP);
     Rcpp::traits::input_parameter< std::string >::type hessianInit(hessianInitSEXP);
+    Rcpp::traits::input_parameter< std::string >::type hessianReseed(hessianReseedSEXP);
     Rcpp::traits::input_parameter< int >::type qnMemory(qnMemorySEXP);
     Rcpp::traits::input_parameter< double >::type qnCautious(qnCautiousSEXP);
     Rcpp::traits::input_parameter< bool >::type qnRejected(qnRejectedSEXP);
@@ -394,7 +396,7 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< Nullable<NumericVector> >::type parlower(parlowerSEXP);
     Rcpp::traits::input_parameter< bool >::type printIter(printIterSEXP);
     Rcpp::traits::input_parameter< Nullable<CharacterVector> >::type traceFile(traceFileSEXP);
-    rcpp_result_gen = Rcpp::wrap(trust_impl(objfun, parinit, rinit, rmax, parscale, iterlim, ftol, mtol, gtol, xtol, rmin, thetamax, boundary, hessianMethod, hessianFallback, fallbackLimit, hessianInit, qnMemory, qnCautious, qnRejected, nonmonotone, minimize, blather, parupper, parlower, printIter, traceFile));
+    rcpp_result_gen = Rcpp::wrap(trust_impl(objfun, parinit, rinit, rmax, parscale, iterlim, ftol, mtol, gtol, xtol, rmin, thetamax, boundary, hessianMethod, hessianFallback, fallbackLimit, hessianInit, hessianReseed, qnMemory, qnCautious, qnRejected, nonmonotone, minimize, blather, parupper, parlower, printIter, traceFile));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -405,7 +407,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_dMod2_bmm_bb", (DL_FUNC) &_dMod2_bmm_bb, 6},
     {"_dMod2_constraintL2_scalar_kernel", (DL_FUNC) &_dMod2_constraintL2_scalar_kernel, 12},
     {"_dMod2_datapointL2_kernel", (DL_FUNC) &_dMod2_datapointL2_kernel, 11},
-    {"_dMod2_normL2_kernel", (DL_FUNC) &_dMod2_normL2_kernel, 8},
+    {"_dMod2_normL2_kernel", (DL_FUNC) &_dMod2_normL2_kernel, 9},
     {"_dMod2_parvec_attach", (DL_FUNC) &_dMod2_parvec_attach, 3},
     {"_dMod2_parvec_concat", (DL_FUNC) &_dMod2_parvec_concat, 1},
     {"_dMod2_residual_kernel_aloq", (DL_FUNC) &_dMod2_residual_kernel_aloq, 9},
@@ -422,7 +424,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_dMod2_symMonoResidues", (DL_FUNC) &_dMod2_symMonoResidues, 3},
     {"_dMod2_symBMorder", (DL_FUNC) &_dMod2_symBMorder, 2},
     {"_dMod2_symCauchyEval", (DL_FUNC) &_dMod2_symCauchyEval, 5},
-    {"_dMod2_trust_impl", (DL_FUNC) &_dMod2_trust_impl, 27},
+    {"_dMod2_trust_impl", (DL_FUNC) &_dMod2_trust_impl, 28},
     {NULL, NULL, 0}
 };
 

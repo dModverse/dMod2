@@ -10,7 +10,7 @@ is.eqnvec(x)
 eqnvec(...)
 }
 \arguments{
-\item{x}{obect of any class}
+\item{x}{object of any class}
 
 \item{...}{mathematical expressions as characters to be coerced,
 the right-hand sides of the equations}

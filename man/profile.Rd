@@ -26,7 +26,7 @@ profile(
 \item{objfun}{Objective function \code{objfun(pars, fixed, ...)} returning a list with "value",
 "gradient" and "hessian". If attribute "valueData" and/or "valuePrior are returned they are attached to the return value.}
 
-\item{pars}{Parameter vector corresponding to the log-liklihood optimum.}
+\item{pars}{Parameter vector corresponding to the log-likelihood optimum.}
 
 \item{whichPar}{Numeric or character vector. The parameters for which the profile is computed.}
 
@@ -59,7 +59,7 @@ parameters. Multiplies with the OpenMP threads each objective function uses
 
 \item{cautiousMode}{Logical, write every step to disk and don't delete intermediate results}
 
-\item{side}{either, "left", "right" or "both": determines the side of the profile which is calculated (usefeull for parallelization). default is "both"}
+\item{side}{either, "left", "right" or "both": determines the side of the profile which is calculated (useful for parallelization). default is "both"}
 
 \item{delta}{Numeric, the rise in the objective at which a profile stops.
 Defaults to \code{qchisq(1 - alpha, 1)}. Pass \link{profileThreshold} with the same
@@ -69,8 +69,8 @@ instead of leaving it to extrapolation.}
 \item{...}{Arguments going to objfun()}
 }
 \value{
-Named list of length one. The name is the parameter name. The list enty is a
-matrix with columns "value" (the objective value), "constraint" (deviation of the profiled paramter from
+Named list of length one. The name is the parameter name. The list entry is a
+matrix with columns "value" (the objective value), "constraint" (deviation of the profiled parameter from
 the original value), "stepsize" (the stepsize take for the iteration), "gamma" (the gamma value employed for the
 iteration), "valueData" and "valuePrior" (if specified in objfun), one column per parameter (the profile paths).
 }
@@ -93,7 +93,7 @@ than \code{reg}.
 
 \code{stepControl}: The Euler integration starts with \code{stepsize}. In each step the predicted change
 of the objective function is compared with the actual change. If this is larger than \code{atol}, the
-stepsize is reduced. For small deviations, either compared the abolute tolerance \code{atol} or the
+stepsize is reduced. For small deviations, either compared with the absolute tolerance \code{atol} or the
 relative tolerance \code{rtol}, the stepsize may be increased. \code{max} and \code{min} are upper and lower
 bounds for \code{stepsize}. \code{limit} is the maximum number of steps that are take for the profile computation.
 \code{stop} is a character, usually "value" or "data", for which the significance level \code{alpha}

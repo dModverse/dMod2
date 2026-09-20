@@ -14,7 +14,7 @@
 
 \item{...}{not used right now}
 
-\item{data}{data list oject}
+\item{data}{data list object}
 
 \item{errfn}{obsfn object, the error model function to predict sigma}
 }

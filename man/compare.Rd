@@ -32,7 +32,7 @@ compare(vec1, ...)
 \code{data.frame} or list of data.frames with the differences.
 }
 \description{
-Works eigher on a list or on two arguments. In case of a list,
+Works either on a list or on two arguments. In case of a list,
 comparison is done with respect to a reference entry. Besides the
 objects themselves also some of their attributes are compared,
 i.e. "equations", "parameters" and "events" and "forcings".

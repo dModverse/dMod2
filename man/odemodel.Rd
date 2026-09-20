@@ -8,6 +8,7 @@ odemodel(
   f,
   deriv = TRUE,
   deriv2 = FALSE,
+  derivMode = "forward",
   forcings = NULL,
   events = NULL,
   fixed = NULL,
@@ -28,6 +29,34 @@ Defaults to \code{TRUE}.}
 \item{deriv2}{Logical. If \code{TRUE}, also generate second-order sensitivities
 (requires \code{backend = "cppDE"}). Implies \code{deriv = TRUE}. Defaults to
 \code{FALSE}.}
+
+\item{derivMode}{Which derivative directions to compile. More than one may
+be named; the default is \code{"forward"} alone.
+\itemize{
+\item \code{"forward"}: sensitivity equations carried alongside the states, the
+object \code{deriv} fills.
+\item \code{"reverse"}: a further object whose derivatives come from one backward
+sweep, so their cost does not grow with the number of parameters. It is
+a separate compilation and not a flag on the others, so asking for it
+costs build time; it is what \code{obj(..., sweep = "reverse")} needs. On
+\code{backend = "cppDE"} it is the discrete adjoint, which replays each step
+backwards and carries events; on \code{backend = "Sundials"} it is CVODES
+adjoint sensitivity analysis, which solves the adjoint as its own ODE
+over checkpointed states and therefore refuses events. Not available
+under \code{backend = "deSolve"}.
+\item \code{"forward-forward"}: second derivatives of every state, carried as a
+nested dual. The older spelling is \code{deriv2 = TRUE} and still selects it.
+\item \code{"forward-reverse"}: the backward sweep run over tangents, so the
+gradient comes back with its own derivatives. That is the Hessian of the
+seeded functional in one sweep rather than one per direction. \code{cppDE}
+only. This is what \code{obj(pars, sweep = "reverse", deriv2 = TRUE)} needs;
+the forward spelling of the same Hessian is \code{"forward-forward"}, and
+\code{sweep} picks between them at the call.
+}
+
+\code{derivMode = c("forward", "reverse")} builds both, which is what a session
+that compares the two directions needs. \code{deriv = FALSE} turns first
+derivatives off altogether and leaves \code{derivMode} without effect.}
 
 \item{forcings}{Character vector with the names of external forcings.}
 

@@ -19,13 +19,13 @@ test_that("steady_states_are_steady", {
   #-! print(mysteadies)
 
   x <- Xs(odemodel(reactions, modelname = "ssTest", compile = FALSE))
-  compile(x)
 
   parameters <- getParameters(x)
   trafo <- `names<-`(parameters, parameters)
   trafo <- repar("inner~steadyEqn", trafo, inner = names(mysteadies), steadyEqn = mysteadies)
 
-  pSS <- P(trafo, condition = "steady")
+  pSS <- P(trafo, condition = "steady", compile = FALSE)
+  compile(x, pSS, output = "ssTest_all", cores = 4L)
 
   set.seed(2)
   pars <- structure(runif( length(getParameters(pSS)), 0,1), names = getParameters(pSS))

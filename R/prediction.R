@@ -16,6 +16,13 @@
 #' the condition for which the function makes a prediction.
 #' @param optionsOde list with arguments to be passed to odeC() for the ODE integration.
 #' @param optionsSens list with arguments to be passed to odeC() for integration of the extended system
+#' @param optionsReverse list weighting the backward pass's step size by the
+#' adjoint of the previous evaluation, `cppDE` backend only. `NULL`, the
+#' default, leaves the step size to `abstol` and `reltol` alone. `gradtol` is
+#' the accuracy asked of the gradient and turns the weighting on; `floor` is
+#' the smallest weight as a fraction of the largest. The term enters under a
+#' maximum, so the grid can only become finer: a weight from a parameter the
+#' optimiser has since left costs steps and never accuracy.
 #' @param fcontrol list with additional fine-tuning arguments for the forcing interpolation. 
 #' See [approxfun][stats::approxfun] for possible arguments.
 #' @param ... Additional arguments passed to methods.
@@ -183,7 +190,8 @@ Xs.deSolve <- function(odemodel, forcings = NULL, events = NULL, names = NULL, c
 #' @export
 #' @rdname Xs
 Xs.cppDE <- function(odemodel, forcings = NULL, events = NULL, names = NULL, condition = NULL,
-                      optionsOde = list(), optionsSens = list(), ...) {
+                      optionsOde = list(), optionsSens = list(),
+                      optionsReverse = NULL, ...) {
   
   if (!is.null(forcings)) {
     if (!inherits(forcings, "data.frame")) {
@@ -229,6 +237,8 @@ Xs.cppDE <- function(odemodel, forcings = NULL, events = NULL, names = NULL, con
   func <- odemodel$func
   extended <- odemodel$extended
   extended2 <- odemodel$extended2
+  reversed <- odemodel$reversed
+  reversed2 <- odemodel$reversed2
   if (is.null(extended)) warning("Element 'extended' empty. ODE model does not contain sensitivities.")
 
   # Extract metadata
@@ -247,17 +257,87 @@ Xs.cppDE <- function(odemodel, forcings = NULL, events = NULL, names = NULL, con
     names = names,
     optionsOde = optionsOde,
     optionsSens = optionsSens,
+    optionsReverse = optionsReverse,
     sensnames = dim_names_sens$sens,
     inner_names = inner_names
   )
 
   has_deriv2 <- !is.null(extended2)
+  has_reverse <- !is.null(reversed)
+  has_reverse2 <- !is.null(reversed2)
+  # CVODES holds its checkpoints inside the solver and runs the backward solve
+  # under its own step-size control, so both the shared store and the weighted
+  # grid are arrangements of the native backend alone.
+  has_store <- has_reverse && !identical(attr(reversed, "backend"), "cvode")
+  if (!is.null(optionsReverse) && !has_store)
+    stop("Xs: 'optionsReverse' weights the native backward pass. It needs ",
+         "odemodel(backend = \"cppDE\", derivMode = c(\"forward\", \"reverse\")); ",
+         "the Sundials backend runs its own step-size control.", call. = FALSE)
 
-  # Marshalling shared by the single and the batched entry: seed Phi'(theta)
-  # (and Phi''(theta)) on the inner parameter rows.
+  # Checkpoints of the value pass, for the backward pass that replays the same
+  # trajectory. Matched on the point they were taken at, which is what cppDE
+  # fingerprints the store on, so one can never answer for another parameter.
+  scache <- new.env(parent = emptyenv())
+  scache$items <- list()
+  storeFind <- function(times, params) {
+    it <- scache$items
+    for (k in seq_along(it))
+      if (identical(it[[k]]$times, times) && identical(it[[k]]$params, params))
+        return(k)
+    NA_integer_
+  }
+  storePut <- function(times, params, store) {
+    if (is.null(store)) return(invisible(NULL))
+    k <- storeFind(times, params)
+    e <- list(times = times, params = params, store = store)
+    if (is.na(k)) scache$items[[length(scache$items) + 1L]] <- e
+    else scache$items[[k]] <- e
+    invisible(NULL)
+  }
+  storeTake <- function(times, params) {
+    k <- storeFind(times, params)
+    if (is.na(k)) return(NULL)
+    st <- scache$items[[k]]$store
+    scache$items[[k]] <- NULL
+    st
+  }
+
+  # lambda of the previous evaluation, weighting the next one's step size. It
+  # is kept per condition rather than per point, because carrying it across a
+  # parameter change is the whole purpose: the weight enters under a maximum,
+  # so one that misses costs steps and never accuracy.
+  wcache <- new.env(parent = emptyenv())
+  wcache$items <- list()
+  weightOn <- function() {
+    o <- controls$optionsReverse
+    !is.null(o) && !is.null(o$gradtol)
+  }
+  weightKey <- function(cond, times)
+    if (!is.null(cond) && length(cond) == 1L) as.character(cond)
+    else paste0("#", length(times))
+  weightGet <- function(cond, times) {
+    if (!weightOn()) return(NULL)
+    wcache$items[[weightKey(cond, times)]]
+  }
+  weightPut <- function(cond, times, res) {
+    g <- res$adjointGrid
+    if (is.null(g) || !length(g$time)) return(invisible(NULL))
+    o <- controls$optionsReverse
+    # lambda jumps where the objective seeds it, so the interpolant must not
+    # span an observation time.
+    br <- unique(findInterval(times, g$time))
+    br <- br[br >= 1L & br <= length(g$time)]
+    wcache$items[[weightKey(cond, times)]] <- list(
+      time = g$time, lambda = g$lambda, breaks = br,
+      gradtol = o$gradtol, floor = if (is.null(o$floor)) 0 else o$floor)
+    invisible(NULL)
+  }
+
+  # Marshalling shared by the single and the batched entry: Phi'(theta) as the
+  # tangent (and Phi''(theta) as the Hessian) on the inner parameter rows.
   prep1 <- function(pars, fixed, deriv, deriv2) {
     out <- list(params = c(unclass(pars), unclass(fixed)),
-                sens1ini = NULL, sens2ini = NULL)
+                tangent = NULL, hessian = NULL)
     if (!deriv) return(out)
     deriv_in <- attr(pars, "deriv")
     if (is.null(deriv_in)) return(out)
@@ -267,17 +347,17 @@ Xs.cppDE <- function(odemodel, forcings = NULL, events = NULL, names = NULL, con
     ridx <- match(phi_rows, rownames(deriv_in))
     hit  <- !is.na(ridx)
     src  <- ridx[hit]
-    out$sens1ini <- matrix(0, length(phi_rows), ncol(deriv_in),
-                           dimnames = list(phi_rows, colnames(deriv_in)))
-    out$sens1ini[hit, ] <- deriv_in[src, , drop = FALSE]
+    out$tangent <- matrix(0, length(phi_rows), ncol(deriv_in),
+                          dimnames = list(phi_rows, colnames(deriv_in)))
+    out$tangent[hit, ] <- deriv_in[src, , drop = FALSE]
     if (deriv2) {
       d2 <- attr(pars, "deriv2")
       if (!is.null(d2)) {
-        out$sens2ini <- array(0, c(length(phi_rows), dim(d2)[2], dim(d2)[3]),
-                              dimnames = c(list(phi_rows), dimnames(d2)[2:3]))
+        out$hessian <- array(0, c(length(phi_rows), dim(d2)[2], dim(d2)[3]),
+                             dimnames = c(list(phi_rows), dimnames(d2)[2:3]))
         s2 <- match(phi_rows, dimnames(d2)[[1]])
         h2 <- !is.na(s2)
-        out$sens2ini[h2, , ] <- d2[s2[h2], , , drop = FALSE]
+        out$hessian[h2, , ] <- d2[s2[h2], , , drop = FALSE]
       }
     }
     out
@@ -293,9 +373,9 @@ Xs.cppDE <- function(odemodel, forcings = NULL, events = NULL, names = NULL, con
     colnames(out)[1] <- "time"
     dX <- dX2 <- NULL
     if (deriv) {
-      dX <- if (keepAll) res$sens1 else res$sens1[, nms, , drop = FALSE]
-      if (deriv2 && !is.null(res$sens2))
-        dX2 <- if (keepAll) res$sens2 else res$sens2[, nms, , , drop = FALSE]
+      dX <- if (keepAll) res$tangent else res$tangent[, nms, , drop = FALSE]
+      if (deriv2 && !is.null(res$hessian))
+        dX2 <- if (keepAll) res$hessian else res$hessian[, nms, , , drop = FALSE]
     }
     prdframe(out, deriv = dX, deriv2 = dX2, parameters = c(pars, fixed))
   }
@@ -307,20 +387,43 @@ Xs.cppDE <- function(odemodel, forcings = NULL, events = NULL, names = NULL, con
          maxroot = o$maxroot, onFailure = o$onFailure, traceFile = o$traceFile)
   }
 
+  # Second order forward exists only where it was built, and only on cppDE:
+  # Sundials carries first order both ways, deSolve forward alone. Saying which
+  # rebuild would answer beats handing solveODE a NULL model.
   pickModel <- function(deriv, deriv2) {
-    if (!deriv) func else if (deriv2) extended2 else extended
+    if (!deriv) return(func)
+    if (!deriv2) return(extended)
+    if (is.null(extended2))
+      stop("an exact Hessian forward needs the forward-over-forward object; ",
+           "rebuild via odemodel(..., deriv2 = TRUE), which needs ",
+           "backend = \"cppDE\". Backwards it is ",
+           "derivMode = \"forward-reverse\" instead.", call. = FALSE)
+    extended2
   }
 
-  P2X <- function(times, pars, fixed = NULL, deriv = TRUE, deriv2 = FALSE) {
+  P2X <- function(times, pars, fixed = NULL, deriv = TRUE, deriv2 = FALSE,
+                  keepStore = FALSE) {
 
     if (deriv2 && !has_deriv2)
       stop("Xs.cppDE: model was compiled without deriv2; rebuild via odemodel(..., deriv2 = TRUE).")
     if (deriv2 && !deriv) deriv <- TRUE
 
+    # The values of a reverse evaluation come off the reverse object itself, so
+    # the checkpoints the backward pass needs are already there and the states
+    # are integrated once instead of twice.
+    if (keepStore && !deriv && has_store) {
+      params <- c(unclass(pars), unclass(fixed))
+      res <- do.call(cppDE::solveODE, c(
+        list(reversed, times, params, fixed = NULL,
+             forcings = controls$forcings, keepStore = TRUE), solveOpts(FALSE)))
+      storePut(times, params, res$store)
+      return(assemble1(res, pars, fixed, FALSE, FALSE))
+    }
+
     prep <- prep1(pars, fixed, deriv, deriv2)
     res <- do.call(cppDE::solveODE, c(
       list(pickModel(deriv, deriv2), times, prep$params,
-           sens1ini = prep$sens1ini, sens2ini = prep$sens2ini, fixed = NULL,
+           tangent = prep$tangent, hessian = prep$hessian, fixed = NULL,
            forcings = controls$forcings), solveOpts(deriv)))
     assemble1(res, pars, fixed, deriv, deriv2)
 
@@ -334,7 +437,8 @@ Xs.cppDE <- function(odemodel, forcings = NULL, events = NULL, names = NULL, con
   # One batched cppDE call over all requests. Falls back to a loop when cppDE
   # predates the entry point. A requested trace goes through: the batch writes
   # one file per condition, using `traceFile` as a template.
-  P2Xbatch <- function(times, parsList, fixedList, deriv, deriv2, cores) {
+  P2Xbatch <- function(times, parsList, fixedList, deriv, deriv2, cores,
+                       keepStore = FALSE) {
 
     if (deriv2 && !has_deriv2)
       stop("Xs.cppDE: model was compiled without deriv2; rebuild via odemodel(..., deriv2 = TRUE).")
@@ -342,6 +446,26 @@ Xs.cppDE <- function(odemodel, forcings = NULL, events = NULL, names = NULL, con
 
     n <- length(parsList)
     timesL <- if (is.list(times)) times else rep(list(times), n)
+
+    if (keepStore && !deriv && has_store) {
+      o      <- solveOpts(FALSE)
+      paramL <- lapply(seq_len(n), function(i)
+        c(unclass(parsList[[i]]), unclass(fixedList[[i]])))
+      conds  <- lapply(seq_len(n), function(i) list(
+        times = timesL[[i]], parms = paramL[[i]],
+        forcings = controls$forcings, keepStore = TRUE))
+      batch <- get0("solveODEBatch", envir = asNamespace("cppDE"),
+                    inherits = FALSE)
+      res <- if (is.null(batch))
+        lapply(seq_len(n), function(i) do.call(cppDE::solveODE, c(
+          list(reversed, timesL[[i]], paramL[[i]], fixed = NULL,
+               forcings = controls$forcings, keepStore = TRUE), o)))
+      else
+        do.call(batch, c(list(reversed, conditions = conds, cores = cores), o))
+      for (i in seq_len(n)) storePut(timesL[[i]], paramL[[i]], res[[i]]$store)
+      return(lapply(seq_len(n), function(i)
+        assemble1(res[[i]], parsList[[i]], fixedList[[i]], FALSE, FALSE)))
+    }
     preps  <- lapply(seq_len(n), function(i)
       prep1(parsList[[i]], fixedList[[i]], deriv, deriv2))
     model <- pickModel(deriv, deriv2)
@@ -355,13 +479,13 @@ Xs.cppDE <- function(odemodel, forcings = NULL, events = NULL, names = NULL, con
 
     mkConds <- function() lapply(seq_len(n), function(i)
       list(times = timesL[[i]], parms = preps[[i]]$params,
-           sens1ini = preps[[i]]$sens1ini, sens2ini = preps[[i]]$sens2ini,
+           tangent = preps[[i]]$tangent, hessian = preps[[i]]$hessian,
            forcings = controls$forcings))
 
     res <- if (is.null(batch)) {
       lapply(seq_len(n), function(i) do.call(cppDE::solveODE, c(
         list(model, timesL[[i]], preps[[i]]$params,
-             sens1ini = preps[[i]]$sens1ini, sens2ini = preps[[i]]$sens2ini,
+             tangent = preps[[i]]$tangent, hessian = preps[[i]]$hessian,
              fixed = NULL, forcings = controls$forcings), o)))
     } else if (!is.null(prepFn) && !is.null(solveFn)) {
       # The handle bakes in everything but the numbers, so it is only valid
@@ -371,7 +495,7 @@ Xs.cppDE <- function(odemodel, forcings = NULL, events = NULL, names = NULL, con
       # `.batchHandleLive()` therefore checks separately.
       sig <- list(model = as.character(model), times = timesL,
                   deriv = deriv, deriv2 = deriv2,
-                  sens = lapply(preps, function(pr) dimnames(pr$sens1ini)),
+                  sens = lapply(preps, function(pr) dimnames(pr$tangent)),
                   forcings = controls$forcings, opts = obatch)
       if (!identical(bcache$sig, sig) || !.batchHandleLive(bcache$handle)) {
         bcache$handle <- do.call(prepFn, c(list(model, conditions = mkConds()),
@@ -380,8 +504,8 @@ Xs.cppDE <- function(odemodel, forcings = NULL, events = NULL, names = NULL, con
       }
       solveFn(bcache$handle,
               parms    = lapply(preps, `[[`, "params"),
-              sens1ini = lapply(preps, `[[`, "sens1ini"),
-              sens2ini = lapply(preps, `[[`, "sens2ini"),
+              tangent  = lapply(preps, `[[`, "tangent"),
+              hessian  = lapply(preps, `[[`, "hessian"),
               cores = cores, traceFile = o$traceFile, onFailure = o$onFailure)
     } else {
       do.call(batch, c(list(model, conditions = mkConds(), cores = cores), o))
@@ -392,6 +516,121 @@ Xs.cppDE <- function(odemodel, forcings = NULL, events = NULL, names = NULL, con
 
   }
   attr(P2X, "batchfn") <- P2Xbatch
+
+  # ---- Reverse mode -------------------------------------------------------
+  #
+  # The cotangent is that of the prediction as this leaf returns it: one row
+  # per output row, one column per name in `controls$names`. What comes back is
+  # the cotangent of `pars`, which is where the chain above this leaf continues.
+  #
+  # The cotangent is widened to the model's own state set first, because the
+  # solver answers on all of them and `names` may be a subset.
+  #
+  # A cotangent only exists after the chain above has been walked, so this is a
+  # second call over the same trajectory. It integrates nothing where the value
+  # pass left its checkpoints behind, and replays the recorded steps instead.
+  P2Xvjp <- function(times, pars, fixed = NULL, cotangent) {
+    w <- .asCtOut(cotangent)
+    K <- .ctK(w)
+    .requireReverse(has_reverse, has_reverse2, K)
+    states <- dim_names$variable
+    ct <- .widenCotangent(w, states, controls$names)
+    # Second order sweeps over tangents, so it takes the directions the value
+    # pass carried, the same tangent prep1 builds for a forward solve. A store
+    # cannot help it: a checkpoint's tangents do not outlive the solve that
+    # took them, so the sweep integrates its own.
+    pr <- prep1(pars, fixed, K > 1L, FALSE)
+    o <- solveOpts(K > 1L)
+    # The weighted backward grid is about which states the error test cares
+    # for, not about tangents, so it applies at either order. Only the store
+    # does not: cppDE refuses one under forward-reverse.
+    call <- c(list(reversed, times, pr$params, fixed = NULL,
+                   forcings = controls$forcings, cotangent = ct$cotangent,
+                   errWeights = weightGet(NULL, times),
+                   adjointGrid = weightOn()),
+              if (K > 1L) NULL else list(store = storeTake(times, pr$params)))
+    if (K > 1L) {
+      if (is.null(pr$tangent))
+        stop("a second-order cotangent needs the tangents the value pass ",
+             "carried, and this input has none.", call. = FALSE)
+      call[[1L]] <- reversed2
+      call$tangent <- pr$tangent
+      call$curvature <- ct$curvature
+    }
+    res <- do.call(cppDE::solveODE, c(call, o))
+    if (weightOn()) weightPut(NULL, times, res)
+    .requireAdjoint(res)
+    .pickCotangent(.adjointCt(res, K), names(pars))
+  }
+  attr(P2X, "vjpfn") <- P2Xvjp
+
+  # Every condition's backward solve in one call, the way P2Xbatch does the
+  # forward ones. Falls back to a loop where cppDE predates the entry point.
+  P2Xvjpbatch <- function(times, parsList, fixedList, cotangentList, conditions,
+                          cores) {
+    wList <- lapply(cotangentList, .asCtOut)
+    K <- max(vapply(wList, .ctK, 1L))
+    .requireReverse(has_reverse, has_reverse2, K)
+    n <- length(parsList)
+    timesL <- if (is.list(times)) times else rep(list(times), n)
+    states <- dim_names$variable
+    o <- solveOpts(K > 1L)
+
+    batch <- get0("solveODEBatch", envir = asNamespace("cppDE"), inherits = FALSE)
+    condOf <- function(i)
+      if (is.null(conditions)) NULL else conditions[[i]]
+    conds <- lapply(seq_len(n), function(i) {
+      pr <- prep1(parsList[[i]], fixedList[[i]], K > 1L, FALSE)
+      ct <- .widenCotangent(wList[[i]], states, controls$names)
+      cd <- list(times = timesL[[i]],
+                 parms = pr$params,
+                 forcings = controls$forcings,
+                 cotangent = ct$cotangent,
+                 errWeights = weightGet(condOf(i), timesL[[i]]),
+                 adjointGrid = weightOn())
+      if (K > 1L) {
+        if (is.null(pr$tangent))
+          stop("a second-order cotangent needs the tangents the value pass ",
+               "carried, and condition ", i, " has none.", call. = FALSE)
+        cd$tangent <- pr$tangent
+        cd$curvature <- ct$curvature
+        return(cd)
+      }
+      # Only the store is first order only: cppDE refuses one under
+      # forward-reverse, because a checkpoint's tangents do not outlive the
+      # solve that took them.
+      cd$store <- storeTake(timesL[[i]], pr$params)
+      cd
+    })
+
+    model <- if (K > 1L) reversed2 else reversed
+    res <- if (is.null(batch))
+      lapply(seq_len(n), function(i) {
+        a <- conds[[i]]
+        do.call(cppDE::solveODE,
+                c(list(model, a$times, a$parms, fixed = NULL,
+                       forcings = controls$forcings, cotangent = a$cotangent),
+                  if (K > 1L) list(tangent = a$tangent, curvature = a$curvature)
+                  else list(store = a$store, errWeights = a$errWeights,
+                            adjointGrid = a$adjointGrid),
+                  o))
+      })
+    else
+      do.call(batch, c(list(model, conditions = conds, cores = cores), o))
+
+    if (weightOn())
+      for (i in seq_len(n)) weightPut(condOf(i), timesL[[i]], res[[i]])
+
+    lapply(seq_len(n), function(i) {
+      .requireAdjoint(res[[i]], condOf(i))
+      .pickCotangent(.adjointCt(res[[i]], .ctK(wList[[i]])),
+                     names(parsList[[i]]))
+    })
+  }
+  attr(P2X, "vjpbatchfn") <- P2Xvjpbatch
+  # Says the value pass of a reverse evaluation should run on the reverse
+  # object, so the backward pass finds the checkpoints already taken.
+  attr(P2X, "keepstore") <- has_store
 
   attr(P2X, "parameters") <- paramNames
   attr(P2X, "equations") <- as.eqnvec(attr(func, "equations"))
@@ -489,6 +728,8 @@ Xf.deSolve <- function(odemodel, forcings = NULL, events = NULL, condition = NUL
 
 #' @export
 #' @rdname Xf
+# Xf is the no-derivative prediction, so it has no vjp either -- not an
+# omission, the point of it. A chain that needs a gradient uses Xs().
 Xf.cppDE <- function(odemodel, forcings = NULL, events = NULL, condition = NULL,
                       optionsOde = list(), ...) {
 
@@ -532,7 +773,7 @@ Xf.cppDE <- function(odemodel, forcings = NULL, events = NULL, condition = NULL,
     optionsOde <- controls$optionsOde
 
     out <- cppDE::solveODE(func, times, params,
-                            sens1ini = NULL, sens2ini = NULL, fixed = NULL,
+                            tangent = NULL, hessian = NULL, fixed = NULL,
                             forcings = forcings,
                             abstol = optionsOde$atol, reltol = optionsOde$rtol,
                             maxattemps = optionsOde$maxattemps,
@@ -680,6 +921,29 @@ Xd <- function(data, condition = NULL) {
     
   }
   
+  # The interpolation is linear in the parameters it reads, and its Jacobian is
+  # the same `grad` the forward path builds; contracting it with the cotangent
+  # rather than with dP is the whole difference.
+  attr(P2X, "vjpfn") <- function(times, pars, fixed = NULL, cotangent) {
+    w <- .asCtOut(cotangent)
+    p <- if (is.null(fixed)) pars else c(unclass(pars), unclass(fixed))
+    K <- .ctK(w)
+    out <- .ctZero(names(pars), K)
+    for (s in states) {
+      if (!(s %in% dimnames(w)[[2L]])) next
+      pr  <- predL[[s]](times, p)
+      sens <- attr(pr, "sensitivities")
+      nms  <- attr(pr, "parameters") %||% attr(predL[[s]], "parameters")
+      ws <- matrix(w[, s, ], nrow = dim(w)[1L], ncol = K)
+      contrib <- crossprod(sens, ws)
+      rownames(contrib) <- nms
+      hit <- intersect(nms, rownames(out))
+      if (length(hit))
+        out[hit, ] <- out[hit, , drop = FALSE] + contrib[hit, , drop = FALSE]
+    }
+    out
+  }
+
   attr(P2X, "parameters") <- structure(parameters, names = NULL)
   attr(P2X, "pouter") <- pouter
   
@@ -715,17 +979,22 @@ Xd <- function(data, condition = NULL) {
 #'   full array copy per condition and objective functions do not read them.
 #'   Set `TRUE` to plot states alongside observables.
 #' @param compile Logical, if `TRUE`, the function is compiled (see
-#'   [cppDE::funCpp]).
+#'   [cppDE::cppFUN]).
 #' @param modelname Character, used if `compile = TRUE`, specifies a fixed
 #'   filename for the generated C file.
 #' @param verbose Logical, print compiler output to the R console.
 #' @param cores Number of parallel jobs used to generate the sources when
 #' `g` is a list; `NULL` auto-detects. Ignored for a single observation
 #' function, which is one source either way.
-#' @param derivMode Character. Jacobian backend: `"dual"` (default,
-#'   forward-mode AD; faster for many parameters; requires compiled native
-#'   code) or `"symbolic"` (SymPy Jacobian + chain rule against upstream
-#'   `dX`/`dP`; pure R).
+#' @param derivMode Which derivative products to build. More than one may be
+#'   named; the default `c("forward", "reverse")` builds both.
+#'   * `"forward"`: forward-mode AD on `cppde::dual`. Faster for many
+#'     parameters and what the Jacobian path uses. Requires compiled code.
+#'   * `"reverse"`: the vector-Jacobian product the reverse sweep contracts
+#'     against, a second instantiation of the expression body. It is what
+#'     `obj(..., sweep = "reverse")` needs from an observation function.
+#'
+#'   Either way the observation function is evaluable only after compilation.
 #' @param deriv Logical. If `TRUE` (default), attach the first-order
 #'   sensitivity `attr(., "deriv")` of shape `[time, observable, theta]`.
 #' @param deriv2 Logical. If `TRUE`, attach a second-order derivative
@@ -740,16 +1009,16 @@ Xd <- function(data, condition = NULL) {
 #' 
 #' @example inst/examples/prediction.R
 #' 
-#' @importFrom cppDE funCpp
+#' @importFrom cppDE cppFUN
 #' @importFrom abind abind
 #' @export
 Y <- function(g, f = NULL, states = NULL, parameters = NULL,
               condition = NULL, attach.input = FALSE,
               compile = FALSE, modelname = NULL, verbose = FALSE,
               cores = NULL, deriv = TRUE, deriv2 = FALSE,
-              derivMode = c("dual", "symbolic"), outdir = getwd()) {
+              derivMode = c("forward", "reverse"), outdir = getwd()) {
 
-  derivMode <- match.arg(derivMode)
+  derivMode <- .matchDerivMode(derivMode, c("forward", "reverse"))
 
   # A named list of observable sets builds one obsfn per condition, generated
   # in parallel and compiled once, the way `P()` handles a trafo list.
@@ -817,7 +1086,7 @@ Y <- function(g, f = NULL, states = NULL, parameters = NULL,
 
   # Compile evaluator for g (value, Jacobian, Hessian, AD chain)
   gEval <- suppressWarnings(
-    cppDE::funCpp(
+    cppDE::cppFUN(
       unclass(g),
       variables  = obsStates,
       parameters = obsParams,
@@ -836,7 +1105,7 @@ Y <- function(g, f = NULL, states = NULL, parameters = NULL,
   gjac       <- gEval$jac
   ghess      <- gEval$hess
   gevaluate  <- gEval$evaluate
-  use_ad     <- derivMode == "dual"
+  use_ad     <- "forward" %in% derivMode
 
   controls <- list(attach.input = attach.input)
 
@@ -857,13 +1126,13 @@ Y <- function(g, f = NULL, states = NULL, parameters = NULL,
     params <- c(unclass(pars), unclass(fixed))
 
     if (use_ad && deriv && !is.null(gevaluate)) {
-      # AD path: evaluate() returns y and dy already chain-ruled via dX/dP seeds.
+      # AD path: evaluate() returns y and its tangent, chain-ruled via dX/dP.
       dX_full <- attr(out, "deriv")
       dX2_full <- attr(out, "deriv2")
-      # Gate dX the same way the symbolic path gates activeS: if no obsStates
-      # appear in dX's state dim, it carries no upstream state sensitivity for
-      # this observation function. Suppress to avoid spurious theta mismatches
-      # against dP (e.g. Xt() returns a deriv array with unrelated layout).
+      # If no obsStates appear in dX's state dim, it carries no upstream state
+      # sensitivity for this observation function. Suppress it to avoid
+      # spurious theta mismatches against dP (e.g. Xt() returns a deriv array
+      # with unrelated layout).
       dX <- dX_full
       if (!is.null(dX) && !any(match(obsStates, dimnames(dX)[[2]], 0L) > 0L))
         dX <- NULL
@@ -872,8 +1141,8 @@ Y <- function(g, f = NULL, states = NULL, parameters = NULL,
         dX2 <- NULL
       ad_out <- if (!is.null(.ad_out)) .ad_out else
         gevaluate(out[, obsStates, drop = FALSE], params[obsParams],
-                  dX = dX, dP = attr(pars, "deriv"),
-                  dX2 = dX2, dP2 = attr(pars, "deriv2"),
+                  tangentX = dX, tangentP = attr(pars, "deriv"),
+                  hessianX = dX2, hessianP = attr(pars, "deriv2"),
                   deriv2 = deriv2,
                   attach.input = attach.input, fixed = fixedObsParams)
       # Values: evaluate() returns observables (and pass-through extras when
@@ -890,8 +1159,8 @@ Y <- function(g, f = NULL, states = NULL, parameters = NULL,
       }
       values <- cbind(time = out[, "time"], gVal)
       if (attach.input) values <- cbind(values, submatrix(out, cols = -1))
-      myderivs <- ad_out$dy
-      myderivs2 <- if (deriv2) ad_out$d2y else NULL
+      myderivs <- ad_out$tangent
+      myderivs2 <- if (deriv2) ad_out$hessian else NULL
       # Append pass-through state sensitivities for states that are attached
       # but not consumed by the observables; the AD path only emits sensitivities
       # for obsStates and would otherwise leave those rows missing.
@@ -927,7 +1196,7 @@ Y <- function(g, f = NULL, states = NULL, parameters = NULL,
           myderivs2 <- abind::abind(myderivs2, dX2_full[, add_states, outer_theta, outer_theta, drop = FALSE], along = 2)
       }
     } else {
-      # Symbolic path (also serves the !compile fallback for AD modes).
+      # Values only (reverse-only build).
       gVal <- gfun(out[, obsStates, drop = FALSE], params[obsParams], attach.input, fixedObsParams)[, observables, drop = FALSE]
 
       if (any(is.nan(gVal))) {
@@ -941,81 +1210,15 @@ Y <- function(g, f = NULL, states = NULL, parameters = NULL,
 
       values <- cbind(time = out[, "time"], gVal)
       if (attach.input) values <- cbind(values, submatrix(out, cols = -1))
-
       myderivs <- NULL
       myderivs2 <- NULL
-      if (deriv && !is.null(gjac)) {
-
-        dX <- attr(out, "deriv")  # [time, states, theta] state sensitivities
-        dP <- attr(pars, "deriv") # [p, theta] parameter transformation Jacobian
-        dG <- gjac(out[, obsStates, drop = FALSE], params[obsParams]) # [time, obs, states+params]
-
-        activeP <- setdiff(obsParams, fixedObsParams)
-        activeS <- if (!is.null(dX)) intersect(obsStates, dimnames(dX)[[2]]) else character()
-        theta <- if (!is.null(dP)) colnames(dP) else if (!is.null(dX)) dimnames(dX)[[3]] else NULL
-
-        # Chain rule: dY/dtheta = dG/dX * dX/dtheta + dG/dP * dP/dtheta
-        t1 <- if (length(activeS)) dG[,,activeS,drop=F] %bmm% dX[,activeS,,drop=F] else NULL
-        t2 <- if (!is.null(dP) && length(activeP)) dG[,,activeP,drop=F] %bmm% dP[activeP,,drop=F] else NULL
-
-        # Align by theta names before addition
-        if (!is.null(t1)) dimnames(t1)[[3]] <- dimnames(dX)[[3]]
-        if (!is.null(t2)) dimnames(t2)[[3]] <- colnames(dP)
-        myderivs <- if (!is.null(t1) && !is.null(t2)) t1[,,theta,drop=F] + t2[,,theta,drop=F] else t1 %||% t2
-
-        # Fallback: no upstream derivs, return dG/dp directly
-
-        if (is.null(myderivs) && length(activeP)) myderivs <- dG[,,activeP,drop=F]
-        if (!is.null(myderivs)) dimnames(myderivs) <- list(NULL, observables, theta)
-
-        # Append original state sensitivities if attach.input
-        if (attach.input && !is.null(myderivs) && !is.null(dX)) {
-          outer_theta <- theta %||% dimnames(dX)[[3]]
-          missing <- setdiff(outer_theta, dimnames(dX)[[3]])
-          if (length(missing)) dX <- abind::abind(dX, array(0, c(dim(dX)[1], dim(dX)[2], length(missing)), dimnames = list(NULL, NULL, missing)), along = 3)
-          myderivs <- abind::abind(myderivs, dX[, , outer_theta, drop = FALSE], along = 2)
-        }
-
-        # Second-order: delegate the full sandwich to ghess(), which applies
-        # chain_hess_sym internally. Upstream seeds (dX, dP, dX2, dP2) go in
-        # and let cppDE produce d2y already aligned to theta.
-        if (deriv2) {
-          if (is.null(ghess))
-            stop("Y(deriv2 = TRUE) requires hess(); rebuild Y with deriv2 = TRUE.")
-          dX2_in <- attr(out, "deriv2")
-          dP2_in <- attr(pars, "deriv2")
-          gH <- ghess(out[, obsStates, drop = FALSE], params[obsParams],
-                      dX = dX, dP = dP, dX2 = dX2_in, dP2 = dP2_in)
-          # gH: [time, obs, theta, theta]. Restrict columns to declared observables
-          # (gjac path output above uses [, , observables, theta]).
-          if (!is.null(gH)) {
-            obs_cols <- intersect(observables, dimnames(gH)[[2]])
-            if (length(obs_cols)) gH <- gH[, obs_cols, , , drop = FALSE]
-            myderivs2 <- gH
-
-            # Pass-through state Hessians for attach.input
-            if (attach.input && !is.null(dX2_in)) {
-              outer_theta <- dimnames(myderivs2)[[3]] %||% dimnames(dX2_in)[[3]]
-              missing <- setdiff(outer_theta, dimnames(dX2_in)[[3]])
-              if (length(missing)) dX2_in <- abind::abind(dX2_in,
-                                                          array(0, c(dim(dX2_in)[1], dim(dX2_in)[2], length(missing), length(missing)),
-                                                                dimnames = list(NULL, NULL, missing, missing)),
-                                                          along = 3)
-              already <- intersect(dimnames(myderivs2)[[2]], dimnames(dX2_in)[[2]])
-              add_states <- setdiff(dimnames(dX2_in)[[2]], already)
-              if (length(add_states))
-                myderivs2 <- abind::abind(myderivs2, dX2_in[, add_states, outer_theta, outer_theta, drop = FALSE], along = 2)
-            }
-          }
-        }
-      }
     }
 
     prdframe(prediction = values, deriv = myderivs, deriv2 = myderivs2, parameters = c(pars, fixed))
   }
 
   # One evaluateBatch over all requests; the surrounding assembly stays in R.
-  # The symbolic path still loops.
+  # The value-only path still loops.
   X2Ybatch <- function(outList, parsList, fixedList, deriv, deriv2, cores) {
     n <- length(parsList)
     loop <- function() lapply(seq_len(n), function(i)
@@ -1056,8 +1259,8 @@ Y <- function(g, f = NULL, states = NULL, parameters = NULL,
         fVal <<- intersect(union(attr(pars, "fixed"), fnm), obsParams)
       }
       list(vars = out[, obsStates, drop = FALSE], params = params[obsParams],
-           dX = dX, dP = attr(pars, "deriv"), dX2 = dX2,
-           dP2 = if (deriv2) attr(pars, "deriv2") else NULL,
+           tangentX = dX, tangentP = attr(pars, "deriv"), hessianX = dX2,
+           hessianP = if (deriv2) attr(pars, "deriv2") else NULL,
            attach.input = controls$attach.input, fixed = fVal)
     })
     ad <- eb(sets, cores = cores, deriv2 = deriv2)
@@ -1065,6 +1268,87 @@ Y <- function(g, f = NULL, states = NULL, parameters = NULL,
       X2Y(outList[[i]], parsList[[i]], fixedList[[i]], deriv, deriv2,
           .ad_out = ad[[i]], .fixedObs = sets[[i]]$fixed))
   }
+  # ---- Reverse mode -------------------------------------------------------
+  #
+  # The cotangent is that of the observables this leaf returns; back come the
+  # cotangents of the two things it read, the prediction's states and its own
+  # parameters. Two contractions where the forward path does two matrix
+  # products, and neither of them is n_theta wide.
+  #
+  # attach.input passes states through untouched, so their cotangent goes
+  # straight back onto the prediction.
+  X2Yvjp <- function(out, pars, fixed = NULL, cotangent) {
+    w <- .asCtOut(cotangent)
+    if (is.null(gEval$vjp))
+      stop("Y(): the reverse mode needs a vector-Jacobian product; rebuild ",
+           "with Y(..., derivMode = c(\"forward\", \"reverse\"), ",
+           "compile = TRUE).", call. = FALSE)
+    params <- c(unclass(pars), unclass(fixed))
+    fixedObsParams <- intersect(union(attr(pars, "fixed"), names(fixed)), obsParams)
+
+    K <- .ctK(w)
+    wm <- .ctSlice(w)
+    w_obs <- wm[, intersect(colnames(wm), observables), drop = FALSE]
+    W <- matrix(0, nrow(out), length(observables),
+                dimnames = list(NULL, observables))
+    if (ncol(w_obs)) W[, colnames(w_obs)] <- w_obs
+
+    if (K == 1L) {
+      r <- gEval$vjp(out[, obsStates, drop = FALSE], params[obsParams], W)
+    } else {
+      # The directions the value pass carried, on the two inputs this node
+      # reads: the prediction's own tangents and the parameters it passes
+      # through. The cotangent brings its own beside them.
+      nd <- K - 1L
+      dX <- attr(out, "deriv")
+      VX <- array(0, c(nrow(out), length(obsStates), nd))
+      if (!is.null(dX)) {
+        take <- intersect(obsStates, dimnames(dX)[[2L]])
+        if (length(take))
+          VX[, match(take, obsStates), ] <- dX[, take, seq_len(nd), drop = FALSE]
+      }
+      VP <- matrix(0, length(obsParams), nd, dimnames = list(obsParams, NULL))
+      dP <- attr(pars, "deriv")
+      if (!is.null(dP)) {
+        take <- intersect(rownames(dP), obsParams)
+        if (length(take)) VP[take, ] <- dP[take, seq_len(nd), drop = FALSE]
+      }
+      DW <- array(0, c(nrow(out), length(observables), 1L, nd))
+      hitw <- intersect(dimnames(w)[[2L]], observables)
+      if (length(hitw))
+        DW[, match(hitw, observables), 1L, ] <- w[, hitw, -1L, drop = FALSE]
+      r <- gEval$vjp(out[, obsStates, drop = FALSE], params[obsParams], W,
+                     tangentX = VX, tangentP = VP, curvature = DW)
+    }
+
+    w_out <- array(0, c(nrow(out), ncol(out), K),
+                   dimnames = list(NULL, colnames(out), NULL))
+    hit <- intersect(obsStates, colnames(out))
+    if (length(hit)) {
+      w_out[, hit, 1L] <- r$cotangentX[, hit, 1L]
+      if (K > 1L)
+        w_out[, hit, -1L] <- r$curvatureX[, match(hit, obsStates), 1L, , drop = FALSE]
+    }
+    # Everything attach.input carried through keeps whatever the caller put on
+    # it, the observables aside.
+    if (controls$attach.input) {
+      through <- intersect(setdiff(colnames(wm), c("time", observables)), colnames(out))
+      if (length(through))
+        w_out[, through, ] <- w_out[, through, , drop = FALSE] +
+                              w[, through, , drop = FALSE]
+    }
+
+    up <- matrix(r$cotangentP[, 1L], ncol = 1L,
+                 dimnames = list(rownames(r$cotangentP), NULL))
+    if (K > 1L) {
+      up <- cbind(up, matrix(r$curvatureP[, 1L, ], nrow = nrow(up)))
+      rownames(up) <- rownames(r$cotangentP)
+    }
+    w_pars <- .pickCotangent(up, setdiff(names(pars), fixedObsParams))
+    .ct(out = w_out, pars = .pickCotangent(w_pars, names(pars)))
+  }
+
+  attr(X2Y, "vjpfn") <- X2Yvjp
   attr(X2Y, "batchfn") <- X2Ybatch
 
   attr(X2Y, "equations")  <- as.eqnvec(g)
@@ -1104,7 +1388,7 @@ Xt <- function(condition = NULL) {
 
     out <- matrix(times, ncol = 1, dimnames = list(NULL, "time"))
 
-    # time has no parameter dependence, both sens1 and sens2 are zero arrays
+    # time has no parameter dependence, both derivative arrays are zero
     # in batch-first [time, observable, ...] layout matching Xs.
     sens  <- array(0, dim = c(n_times, 1, n_pars),
                    dimnames = list(NULL, "time", par_names))
@@ -1117,6 +1401,11 @@ Xt <- function(condition = NULL) {
     # (an error model reads them off the prediction), as in Xs.
     prdframe(out, deriv = sens, deriv2 = sens2, parameters = c(pars, fixed))
   }
+  # Time depends on nothing, so its cotangent is nothing. The pass-through of
+  # the parameters is the caller's business and happens above this leaf.
+  attr(P2X, "vjpfn") <- function(times, pars, fixed = NULL, cotangent)
+    .ctZero(names(pars), .ctK(.asCtOut(cotangent)))
+
   attr(P2X, "parameters") <- NULL
   attr(P2X, "equations") <- NULL
   attr(P2X, "forcings") <- NULL

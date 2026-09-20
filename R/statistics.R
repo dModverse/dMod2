@@ -14,7 +14,7 @@
 #' 
 #' @param objfun Objective function \code{objfun(pars, fixed, ...)} returning a list with "value",
 #' "gradient" and "hessian". If attribute "valueData" and/or "valuePrior are returned they are attached to the return value.
-#' @param pars Parameter vector corresponding to the log-liklihood optimum.
+#' @param pars Parameter vector corresponding to the log-likelihood optimum.
 #' @param whichPar Numeric or character vector. The parameters for which the profile is computed.
 #' @param alpha Numeric, the significance level based on the chisquare distribution with df=1
 #' @param delta Numeric, the rise in the objective at which a profile stops.
@@ -40,7 +40,7 @@
 #' parameters. Multiplies with the OpenMP threads each objective function uses
 #' (its `cores` argument); keep the product below your core count.
 #' @param cautiousMode Logical, write every step to disk and don't delete intermediate results
-#' @param side either, "left", "right" or "both": determines the side of the profile which is calculated (usefeull for parallelization). default is "both"
+#' @param side either, "left", "right" or "both": determines the side of the profile which is calculated (useful for parallelization). default is "both"
 #' @param ... Arguments going to objfun()
 #' @details Computation of the profile likelihood is based on the method of Lagrangian multipliers
 #' and Euler integration of the corresponding differential equation of the profile likelihood paths.
@@ -57,14 +57,14 @@
 #' 
 #' \code{stepControl}: The Euler integration starts with \code{stepsize}. In each step the predicted change
 #' of the objective function is compared with the actual change. If this is larger than \code{atol}, the
-#' stepsize is reduced. For small deviations, either compared the abolute tolerance \code{atol} or the
+#' stepsize is reduced. For small deviations, either compared with the absolute tolerance \code{atol} or the
 #' relative tolerance \code{rtol}, the stepsize may be increased. \code{max} and \code{min} are upper and lower
 #' bounds for \code{stepsize}. \code{limit} is the maximum number of steps that are take for the profile computation.
 #' \code{stop} is a character, usually "value" or "data", for which the significance level \code{alpha}
 #' is evaluated.
 #' 
-#' @return Named list of length one. The name is the parameter name. The list enty is a
-#' matrix with columns "value" (the objective value), "constraint" (deviation of the profiled paramter from
+#' @return Named list of length one. The name is the parameter name. The list entry is a
+#' matrix with columns "value" (the objective value), "constraint" (deviation of the profiled parameter from
 #' the original value), "stepsize" (the stepsize take for the iteration), "gamma" (the gamma value employed for the
 #' iteration), "valueData" and "valuePrior" (if specified in objfun), one column per parameter (the profile paths).
 #' @example inst/examples/profiles.R
@@ -1255,7 +1255,7 @@ msParframe <- function(pars, n = 20, seed = 12345, samplefun = stats::rnorm,
 #'
 #' @details The command [mstrust()] saves
 #'   each completed fit along the multi-start sequence such that the results can
-#'   be resurected on abortion. This command loads a fitlist from these
+#'   be resurrected on abortion. This command loads a fitlist from these
 #'   intermediate results.
 #'
 #' @return An object of class parlist.
@@ -1286,7 +1286,7 @@ load.parlist <- function(folder) {
 #'        conditions, see Details.
 #' @param datatrans Character vector describing a function to transform data.
 #'        Use \kbd{x} to refer to data.
-#' @param keep Character vector with colums, that should not get dropped
+#' @param keep Character vector with columns that should not get dropped
 #' @param weighted Logical flag: if TRUE, calculate weighted standard deviation using 'sigma' column.
 #'
 #' @format

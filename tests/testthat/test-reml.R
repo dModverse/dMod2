@@ -16,25 +16,31 @@ skip_if_no_compile <- function() {
 
 
 # Decay chain with a constant error model. The observation carries a scale `s`,
-# so the error model reports it as one of its inner parameters; `fix.s` has the
-# transformation fix it, which separates the estimated parameter count from the
-# inner one.
-.build_reml_chain <- function(bench, mn_suffix, fix.s = FALSE) {
-  .dmod_with_fx_workdir({
+# an inner parameter of the error model; the `fixed` trafo fixes it, separating
+# the estimated parameter count from the inner one. One shared object for both.
+.reml_fx <- local({
+  cache <- NULL
+  function() {
+    if (!is.null(cache)) return(cache)
+    bench <- fx_decay_compiled()
+    oldwd <- setwd(.dmod_fx_workdir()); on.exit(setwd(oldwd), add = TRUE)
+
     gfn_s <- Y(c(y = "s*A"), f = bench$xfn, attach.input = FALSE,
-               modelname = paste0("fx_decay_obs_s_", mn_suffix), compile = TRUE)
+               modelname = "reml_obs_s", compile = FALSE)
     e_const <- Y(c(y = "sigma_y"), f = gfn_s, attach.input = FALSE,
-                 condition = "C1",
-                 modelname = paste0("fx_decay_err_", mn_suffix),
-                 compile = TRUE)
-    trafo <- eqnvec(A = "A", k = "k", sigma_y = "sigma_y",
-                    s = if (fix.s) "1" else "s")
-    pfn <- P(trafo, condition = "C1",
-             modelname = paste0("fx_decay_p_reml_", mn_suffix), compile = TRUE)
-    prd <- gfn_s * bench$xfn * pfn
-  })
-  list(prd = prd, e = e_const)
-}
+                 condition = "C1", modelname = "reml_err", compile = FALSE)
+    p_free <- P(eqnvec(A = "A", k = "k", sigma_y = "sigma_y", s = "s"),
+                condition = "C1", modelname = "reml_p_free", compile = FALSE)
+    p_fixed <- P(eqnvec(A = "A", k = "k", sigma_y = "sigma_y", s = "1"),
+                 condition = "C1", modelname = "reml_p_fixed", compile = FALSE)
+    compile(gfn_s, e_const, p_free, p_fixed, output = "reml_all", cores = 4L)
+
+    cache <<- list(
+      free  = list(prd = gfn_s * bench$xfn * p_free,  e = e_const),
+      fixed = list(prd = gfn_s * bench$xfn * p_fixed, e = e_const))
+    cache
+  }
+})
 
 
 test_that("leverages are hat values: in [0, 1] and summing to the rank", {
@@ -43,7 +49,7 @@ test_that("leverages are hat values: in [0, 1] and summing to the rank", {
   data  <- fx_decay_data(sigma = 0.1)
   data$C1$sigma <- NA_real_
 
-  ec <- .build_reml_chain(bench, "lev")
+  ec <- .reml_fx()$free
   obj  <- normL2(data, ec$prd, errmodel = ec$e)
   pars <- c(bench$outerpars_id, sigma_y = 0.1, s = 1)
 
@@ -64,7 +70,7 @@ test_that("reml converges to the stationary point of the restricted likelihood",
   data  <- fx_decay_data(sigma = 0.1)
   data$C1$sigma <- NA_real_
 
-  ec <- .build_reml_chain(bench, "fix", fix.s = TRUE)
+  ec <- .reml_fx()$fixed
   obj  <- normL2(data, ec$prd, errmodel = ec$e)
   pars <- c(bench$outerpars_id, sigma_y = 0.1)
 
@@ -120,7 +126,7 @@ test_that("reml sees every term of a split objective", {
   data  <- fx_decay_data(sigma = 0.1)
   data$C1$sigma <- NA_real_
 
-  ec <- .build_reml_chain(bench, "split", fix.s = TRUE)
+  ec <- .reml_fx()$fixed
   pars <- c(bench$outerpars_id, sigma_y = 0.1)
 
   n <- nrow(data$C1)
