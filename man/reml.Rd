@@ -53,8 +53,8 @@ observable), \code{iterations}, \code{converged} and \code{fit} (the last mean f
 \description{
 Alternates between fitting the mean parameters at a fixed error model and
 updating the error parameters from the REML stationarity condition, until
-the error parameters stop moving. Every data point is charged its own
-leverage instead of an equal share of the parameter budget.
+the error parameters stop moving. Every data point enters with its own
+leverage rather than with the average \eqn{p/n}.
 
 The objective is left untouched, it stays the plain \eqn{-2\log L}. Every L2
 term of a composed objective is used, so a split

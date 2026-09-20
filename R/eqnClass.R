@@ -16,7 +16,7 @@ as.eqnlist <- function(data, volumes, ...) {
 }
 
 #' @export
-#' @param data data.frame with columns Description, Rate, and one colum for each state
+#' @param data data.frame with columns Description, Rate, and one column for each state
 #' reflecting the stoichiometric matrix
 #' @rdname eqnlist
 as.eqnlist.data.frame <- function(data, volumes = NULL, compartments = NULL, compartmentOf = NULL,
@@ -90,7 +90,7 @@ is.eqnlist <- function(x) {
 
 ## Class "eqnlist" and its methods ------------------------------------------
 
-#' Determine conserved quantites by finding the kernel of the stoichiometric
+#' Determine conserved quantities by finding the kernel of the stoichiometric
 #' matrix
 #'
 #' @param S Stoichiometric matrix
@@ -1241,7 +1241,7 @@ c.eqnlist <- function(...) {
 
 
 #' @export
-#' @param x obect of any class
+#' @param x object of any class
 #' @rdname eqnvec
 is.eqnvec <- function(x) {
   if (inherits(x, "eqnvec") &&

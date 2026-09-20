@@ -1,8 +1,8 @@
 Package: dMod2
 Type: Package
 Title: Dynamic Modeling and Parameter Estimation in ODE Models
-Version: 0.7.5
-Date: 2026-09-17
+Version: 0.8.0
+Date: 2026-09-19
 Authors@R: c(
     person("Simon", "Beyer", email = "simon.beyer@fdm.uni-freiburg.de",
            role = c("aut", "cre")),
@@ -42,7 +42,7 @@ Depends: R (>= 4.5.0)
 Imports:
     cOde,
     tools,
-    cppDE (>= 0.9.5),
+    cppDE (>= 0.10.0),
     ggplot2,
     parallel,
     stringr,
@@ -86,6 +86,6 @@ Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
 LinkingTo: 
     Rcpp
-Config/roxygen2/version: 8.0.0
+Config/roxygen2/version: 8.1.0
 Config/testthat/edition: 3
 Config/testthat/parallel: true

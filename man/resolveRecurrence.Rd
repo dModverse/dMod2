@@ -2,7 +2,7 @@
 % Please edit documentation in R/symbolics.R
 \name{resolveRecurrence}
 \alias{resolveRecurrence}
-\title{Place top elements into bottom elemens}
+\title{Place top elements into bottom elements}
 \usage{
 resolveRecurrence(variables)
 }
@@ -13,7 +13,7 @@ resolveRecurrence(variables)
 named character vector of the same length as \code{variables}
 }
 \description{
-Place top elements into bottom elemens
+Place top elements into bottom elements
 }
 \details{
 If the names of top vector elements occur in the bottom of the vector,

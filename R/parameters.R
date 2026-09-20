@@ -10,7 +10,7 @@
 #' @param trafo An [eqnvec], named character, [eqnlist], or list thereof.
 #' @param parameters Outer-parameter names.
 #' @param condition Condition label.
-#' @param compile,modelname,verbose Forwarded to [cppDE::funCpp].
+#' @param compile,modelname,verbose Forwarded to [cppDE::cppFUN].
 #' @param method One of `"explicit"`, `"implicit"`, `"equilibrate"`, or `NULL`.
 #' @param cores Per-condition `mclapply()` cores. `NULL` auto-detects via
 #'   [detectFreeCores]; capped at 1 on Windows.
@@ -108,10 +108,8 @@ P <- function(trafo = NULL, parameters = NULL, condition = NULL,
   if (deriv2 && !deriv) deriv <- TRUE
 
   p <- c(pars, fixed)
-  ad_ok  <- st$use_ad && !is.null(st$evaluate) && is.loaded(st$ad_symbol)
-  ad_ok2 <- ad_ok && st$emit_d2 && is.loaded(st$ad2_symbol)
-  if (deriv2 && !ad_ok2 && st$use_ad)
-    stop("Pexpl(deriv2 = TRUE) needs the compiled AD2 entry; rebuild with compile = TRUE.", call. = FALSE)
+  ## A missing or unloaded build is reported by the AD entry itself.
+  ad_ok <- st$use_ad && !is.null(st$evaluate)
 
   Jac <- NULL; Hess <- NULL
 
@@ -125,33 +123,21 @@ P <- function(trafo = NULL, parameters = NULL, condition = NULL,
       dP <- diag(length(active)); dimnames(dP) <- list(active, active)
     }
     out <- if (!is.null(.ad_out)) .ad_out else
-      st$evaluate(NULL, p[st$parameters], dX = NULL, dP = dP, dX2 = NULL, dP2 = dP2,
+      st$evaluate(NULL, p[st$parameters], tangentX = NULL, tangentP = dP,
+                  hessianX = NULL, hessianP = dP2,
                   deriv2 = deriv2, attach.input = st$attach.input,
                   fixed = intersect(names(fixed), st$parameters))
     pinnerVal <- out$y[1, ]
-    if (!is.null(out$dy))
-      Jac <- matrix(out$dy, dim(out$dy)[2], dim(out$dy)[3],
-                    dimnames = list(dimnames(out$dy)[[2]], dimnames(out$dy)[[3]]))
-    if (deriv2 && !is.null(out$d2y))
-      Hess <- array(out$d2y, dim(out$d2y)[2:4], dimnames = dimnames(out$d2y)[2:4])
+    tg <- out$tangent
+    if (!is.null(tg))
+      Jac <- matrix(tg, dim(tg)[2], dim(tg)[3],
+                    dimnames = list(dimnames(tg)[[2]], dimnames(tg)[[3]]))
+    if (deriv2 && !is.null(out$hessian))
+      Hess <- array(out$hessian, dim(out$hessian)[2:4],
+                    dimnames = dimnames(out$hessian)[2:4])
   } else {
+    ## Values only (reverse-only build).
     pinnerVal <- st$fun(NULL, p, attach.input = st$attach.input, fixed = names(fixed))[, ]
-    if (deriv && !is.null(st$jac)) {
-      Jac <- as.matrix(st$jac(NULL, p, attach.input = st$attach.input, fixed = names(fixed))[1, , ])
-      dP  <- attr(pars, "deriv")
-      if (!is.null(dP)) {
-        Jac <- Jac %*% dP[colnames(Jac), , drop = FALSE]
-        dimnames(Jac) <- list(names(pinnerVal), colnames(dP))
-      }
-    }
-    if (deriv2) {
-      if (is.null(st$hess))
-        stop("Pexpl(deriv2 = TRUE) requires hess(); rebuild with deriv2 = TRUE.", call. = FALSE)
-      H4 <- st$hess(NULL, p, dX = NULL, dP = attr(pars, "deriv"),
-                 dX2 = NULL, dP2 = attr(pars, "deriv2"),
-                 attach.input = st$attach.input, fixed = names(fixed))
-      Hess <- array(H4, dim(H4)[2:4], dimnames = dimnames(H4)[2:4])
-    }
   }
 
   if (any(is.nan(pinnerVal)))
@@ -172,7 +158,7 @@ P <- function(trafo = NULL, parameters = NULL, condition = NULL,
 }
 
 
-# One evaluateBatch over all conditions; the symbolic path still loops.
+# One evaluateBatch over all conditions; the value-only path still loops.
 .Pexpl_batch <- function(st, parsList, fixedList, deriv, deriv2, cores) {
   n <- length(parsList)
   loop <- function() lapply(seq_len(n), function(i)
@@ -190,8 +176,9 @@ P <- function(trafo = NULL, parameters = NULL, condition = NULL,
       active <- setdiff(st$parameters, names(fixed))
       dP <- diag(length(active)); dimnames(dP) <- list(active, active)
     }
-    list(vars = NULL, params = c(pars, fixed)[st$parameters], dX = NULL, dP = dP,
-         dX2 = NULL, dP2 = if (deriv2) attr(pars, "deriv2") else NULL,
+    list(vars = NULL, params = c(pars, fixed)[st$parameters],
+         tangentX = NULL, tangentP = dP, hessianX = NULL,
+         hessianP = if (deriv2) attr(pars, "deriv2") else NULL,
          attach.input = st$attach.input,
          fixed = intersect(names(fixed), st$parameters))
   })
@@ -207,34 +194,93 @@ P <- function(trafo = NULL, parameters = NULL, condition = NULL,
     .Pexpl_p2p(st, pars, fixed, deriv, deriv2)
 }
 
+# w' Jac, where the forward path forms Jac %*% dP. The transformation is one
+# evaluation with no variables and one observation, so the vjp is the same call
+# the observation functions make, with the cotangent on the inner parameters.
+#
+# attach.input passes the outer parameters through untouched, so their cotangent
+# adds to whatever the transformation itself puts on them.
+.Pexpl_vjp <- function(st, pars, fixed = NULL, cotangent, condition = NULL) {
+  if (is.null(st$vjp))
+    stop("Pexpl(): the reverse mode needs a vector-Jacobian product; rebuild ",
+         "with derivMode = c(\"forward\", \"reverse\") and compile = TRUE.",
+         call. = FALSE)
+  w <- .asCtPars(cotangent)
+  K <- .ctK(w)
+  p <- c(pars, fixed)
+  outnames <- st$outnames
+  W <- matrix(0, 1L, length(outnames), dimnames = list(NULL, outnames))
+  hit <- intersect(rownames(w), outnames)
+  if (length(hit)) W[1L, hit] <- w[hit, 1L]
+
+  if (K == 1L) {
+    r <- st$vjp(NULL, p[st$parameters], W)
+    u <- matrix(r$cotangentP[, 1L], ncol = 1L,
+                dimnames = list(rownames(r$cotangentP), NULL))
+  } else {
+    # The node has no variables, so only the parameters carry tangents in, and
+    # the cotangent brings its own. Both halves of d/dv (w' J) come back in one
+    # pass; nothing here forms a Hessian.
+    nd <- K - 1L
+    V <- matrix(0, length(st$parameters), nd,
+                dimnames = list(st$parameters, NULL))
+    dp <- attr(pars, "deriv")
+    if (!is.null(dp)) {
+      take <- intersect(rownames(dp), st$parameters)
+      if (length(take)) V[take, ] <- dp[take, seq_len(nd), drop = FALSE]
+    }
+    DW <- array(0, c(1L, length(outnames), 1L, nd))
+    if (length(hit))
+      DW[1L, match(hit, outnames), 1L, ] <- w[hit, -1L, drop = FALSE]
+    r <- st$vjp(NULL, p[st$parameters], W, tangentP = V, curvature = DW)
+    u <- cbind(r$cotangentP[, 1L, drop = FALSE],
+               matrix(r$curvatureP[, 1L, ], ncol = nd))
+    rownames(u) <- rownames(r$cotangentP)
+  }
+  wp <- .pickCotangent(u, names(pars))
+
+  if (st$attach.input) {
+    through <- setdiff(rownames(w), outnames)
+    keep <- intersect(through, rownames(wp))
+    if (length(keep))
+      wp[keep, ] <- wp[keep, , drop = FALSE] + w[keep, , drop = FALSE]
+  }
+  wp
+}
+
 #' Parameter transformation (explicit, algebraic)
 #'
 #' Builds `p_inner = f(p_outer)` from symbolic expressions via
-#' [cppDE::funCpp], in forward-mode AD or SymPy mode. The returned
-#' [parfn] attaches the Jacobian and, optionally, the Hessian.
+#' [cppDE::cppFUN], with derivatives by AD. The returned [parfn] attaches the
+#' Jacobian and, optionally, the Hessian. It is evaluable only after
+#' compilation.
 #'
 #' @param trafo Named character / [eqnvec]; names are inner parameters,
 #'   values are expressions in the outer parameters.
 #' @param parameters Outer parameters; defaults to `getSymbols(trafo)`.
 #' @param attach.input Append outer inputs to the output.
 #' @param condition Condition label.
-#' @param compile,modelname,verbose Forwarded to [cppDE::funCpp].
+#' @param compile,modelname,verbose Forwarded to [cppDE::cppFUN].
 #' @param deriv,deriv2 Attach `attr(., "deriv")` `[p, theta]` and/or
 #'   `attr(., "deriv2")` `[p, theta, theta]`. `deriv2` needs `deriv = TRUE`.
-#' @param derivMode `"dual"` (AD, needs `compile = TRUE`) or `"symbolic"`.
+#' @param derivMode Which derivative products to build, one or both of
+#'   `"forward"` (AD) and `"reverse"` (the vector-Jacobian product the reverse
+#'   sweep contracts against). The default `c("forward", "reverse")` builds
+#'   both directions.
 #' @param outdir Directory for the generated source and shared object,
 #'   default the working directory.
 #'
 #' @return A [parfn].
 #' @seealso [Pimpl], [Pequil], [P].
-#' @importFrom cppDE funCpp
+#' @importFrom cppDE cppFUN
 #' @export
 Pexpl <- function(trafo, parameters = NULL, attach.input = FALSE, condition = NULL,
                   compile = FALSE, modelname = NULL, verbose = FALSE,
-                  deriv = TRUE, deriv2 = FALSE, derivMode = c("dual", "symbolic"),
+                  deriv = TRUE, deriv2 = FALSE,
+                  derivMode = c("forward", "reverse"),
                   outdir = getwd()) {
 
-  derivMode <- match.arg(derivMode)
+  derivMode <- .matchDerivMode(derivMode, c("forward", "reverse"))
   emit_d1   <- isTRUE(deriv)
   emit_d2   <- isTRUE(deriv2)
   if (emit_d2 && !emit_d1)
@@ -252,25 +298,28 @@ Pexpl <- function(trafo, parameters = NULL, attach.input = FALSE, condition = NU
   if (is.null(modelname)) modelname <- "expl_parfn"
   if (!is.null(condition)) modelname <- paste(modelname, sanitizeConditions(condition), sep = "_")
 
-  PEval <- suppressWarnings(cppDE::funCpp(
+  PEval <- suppressWarnings(cppDE::cppFUN(
     unclass(trafo), variables = NULL, parameters = parameters, fixed = NULL,
     compile = compile, modelname = modelname, outdir = outdir,
     verbose = verbose, convenient = FALSE, derivMode = derivMode,
     deriv = emit_d1, deriv2 = emit_d2))
 
   fun <- PEval$func; jac <- PEval$jac; hess <- PEval$hess; evaluate <- PEval$evaluate
-  use_ad     <- derivMode == "dual"
+  use_ad     <- "forward" %in% derivMode
   ad_symbol  <- paste0(modelname, "_eval_ad")
   ad2_symbol <- paste0(modelname, "_eval_ad2")
 
   ## The wrapper closes over `st` alone, not over Pexpl's frame.
   st <- list2env(list(fun = fun, jac = jac, hess = hess, evaluate = evaluate,
-                      evaluateBatch = PEval$evaluateBatch,
+                      evaluateBatch = PEval$evaluateBatch, vjp = PEval$vjp,
+                      outnames = names(trafo),
                       parameters = parameters, attach.input = attach.input,
                       use_ad = use_ad, ad_symbol = ad_symbol,
                       ad2_symbol = ad2_symbol, emit_d1 = emit_d1,
                       emit_d2 = emit_d2), parent = emptyenv())
   p2p <- .Pexpl_wrap(st)
+  attr(p2p, "vjpfn") <- function(pars, fixed = NULL, cotangent, condition = NULL)
+    .Pexpl_vjp(st, pars, fixed, cotangent, condition)
   attr(p2p, "batchfn") <- function(parsList, fixedList, deriv, deriv2,
                                    conditions, cores)
     .Pexpl_batch(st, parsList, fixedList, deriv, deriv2, cores)
@@ -878,9 +927,9 @@ resetWarmStarts <- function(fn, verbose = TRUE) {
 #'   conservation then holds to the solver tolerance (`controlsNleqslv$ftol`).
 #'   If `FALSE`, the pivot species per conserved quantity becomes a pass-through
 #'   parameter and its redundant equation is dropped.
-#' @param compile,modelname,verbose Forwarded to [cppDE::funCpp].
+#' @param compile,modelname,verbose Forwarded to [cppDE::cppFUN]. The
+#'   transformation is evaluable only after compilation.
 #' @param deriv,deriv2 Attach first/second-order IFT sensitivities.
-#'   `deriv2` requires `funCpp` to expose `hess()`.
 #' @param controlsMS Multistart controls. Recognised keys: `nStarts`
 #'   (default `100L`; `1L` disables multistart), `positive` (default
 #'   `TRUE`; selects nleqslv's log-space transform and log-uniform
@@ -934,11 +983,11 @@ Pimpl <- function(trafo, parameters = NULL, forcings = NULL, condition = NULL,
   n_dep <- length(dependent)
   parms_all <- intersect(parms_all, getSymbols(all_exprs))
 
-  PEval <- suppressWarnings(cppDE::funCpp(
+  PEval <- suppressWarnings(cppDE::cppFUN(
     all_exprs, variables = dependent, parameters = parms_all, fixed = NULL,
     compile = compile, modelname = modelname, outdir = outdir,
     verbose = verbose, convenient = FALSE,
-    deriv = TRUE, deriv2 = emit_d2, derivMode = "symbolic"))
+    deriv = TRUE, deriv2 = emit_d2, derivMode = "forward"))
 
   X <- function(x) matrix(x[dependent], 1, dimnames = list(NULL, dependent))
   eval_f <- function(x, p) {
@@ -1232,6 +1281,7 @@ Pimpl <- function(trafo, parameters = NULL, forcings = NULL, condition = NULL,
               deriv2 = if (deriv2 && !is.null(d)) d$hessian  else if (deriv2) NULL else FALSE)
   }
 
+  attr(p2p, "vjpfn")       <- .parfnVjpFromJacobian(p2p)
   attr(p2p, "equations")   <- as.eqnvec(all_exprs)
   attr(p2p, "parameters")  <- parameters
   attr(p2p, "modelname")   <- modelname
@@ -1392,8 +1442,8 @@ Pimpl <- function(trafo, parameters = NULL, forcings = NULL, condition = NULL,
         cppDE::solveODE(
           sens_model, times = c(controls$start.time, controls$end.time),
           parms = c(y0, p[model_params]),
-          sens1ini = if (deriv) default_sens else NULL,
-          sens2ini = if (deriv2) default_sens2 else NULL,
+          tangent = if (deriv) default_sens else NULL,
+          hessian = if (deriv2) default_sens2 else NULL,
           roottol = controls$roottol, abstol = controls$abstol, reltol = controls$reltol,
           maxsteps = as.integer(controls$maxsteps),
           maxattemps = as.integer(controls$maxattemps),
@@ -1456,10 +1506,10 @@ Pimpl <- function(trafo, parameters = NULL, forcings = NULL, condition = NULL,
             else c(root, zero_vec)
     if (keep.root) cache$yini <- root
 
-    if (!deriv || is.null(res$sens1)) {
+    if (!deriv || is.null(res$tangent)) {
       result <- as.parvec(out, deriv = NULL, deriv2 = NULL)
     } else {
-      sens_outer <- matrix(res$sens1[last, , ], n_dep, length(all_sens),
+      sens_outer <- matrix(res$tangent[last, , ], n_dep, length(all_sens),
                            dimnames = list(dependent, all_sens)) %*% Tmat
       input_cols <- setdiff(names(p), c(dependent, names(fixed)))
       jacobian <- matrix(0, length(out), length(input_cols),
@@ -1472,9 +1522,9 @@ Pimpl <- function(trafo, parameters = NULL, forcings = NULL, condition = NULL,
       if (length(sc)) jacobian[dependent, sc] <- sens_outer[dependent, sc, drop = FALSE]
 
       hess_attr <- NULL
-      if (deriv2 && !is.null(res$sens2)) {
+      if (deriv2 && !is.null(res$hessian)) {
         ns <- length(all_sens)
-        sens2 <- array(res$sens2[last, , , ], c(n_dep, ns, ns),
+        sens2 <- array(res$hessian[last, , , ], c(n_dep, ns, ns),
                        dimnames = list(dependent, all_sens, all_sens))
         hess_arr <- array(0, c(length(out), length(input_cols), length(input_cols)),
                           dimnames = list(names(out), input_cols, input_cols))
@@ -1507,6 +1557,7 @@ Pimpl <- function(trafo, parameters = NULL, forcings = NULL, condition = NULL,
     result
   }
 
+  attr(p2p, "vjpfn")       <- .parfnVjpFromJacobian(p2p)
   attr(p2p, "equations")   <- as.eqnvec(f[dependent])
   attr(p2p, "parameters")  <- parameters
   attr(p2p, "modelname")   <- modelname
@@ -1688,17 +1739,17 @@ Pequil <- function(trafo, parameters = NULL, forcings = NULL, condition = NULL,
   }
 
   solveArgs <- function(ctx, y0_dep, use_cache_sens) {
-    s1 <- if (ctx$deriv && controls$keep.root && use_cache_sens && !is.null(ctx$cache$sensini))
-            ctx$cache$sensini[, ctx$active_sens, drop = FALSE]
+    s1 <- if (ctx$deriv && controls$keep.root && use_cache_sens && !is.null(ctx$cache$tangent))
+            ctx$cache$tangent[, ctx$active_sens, drop = FALSE]
           else if (ctx$deriv)
             default_sens[, ctx$active_sens, drop = FALSE]
-    s2 <- if (ctx$deriv2 && controls$keep.root && use_cache_sens && !is.null(ctx$cache$sens2ini))
-            ctx$cache$sens2ini[, ctx$active_sens, ctx$active_sens, drop = FALSE]
+    s2 <- if (ctx$deriv2 && controls$keep.root && use_cache_sens && !is.null(ctx$cache$hessian))
+            ctx$cache$hessian[, ctx$active_sens, ctx$active_sens, drop = FALSE]
           else if (ctx$deriv2)
             default_sens2[, ctx$active_sens, ctx$active_sens, drop = FALSE]
     list(times = c(controls$start.time, controls$end.time),
          parms = c(y0_dep, ctx$p[parms_all]),
-         sens1ini = s1, sens2ini = s2,
+         tangent = s1, hessian = s2,
          fixed = if (ctx$deriv || ctx$deriv2) ctx$fixed_char)
   }
 
@@ -1730,7 +1781,7 @@ Pequil <- function(trafo, parameters = NULL, forcings = NULL, condition = NULL,
       tryCatch(
         cppDE::solveODE(
           sens_model, times = a$times, parms = a$parms,
-          sens1ini = a$sens1ini, sens2ini = a$sens2ini, fixed = a$fixed,
+          tangent = a$tangent, hessian = a$hessian, fixed = a$fixed,
           roottol = controls$roottol, abstol = controls$abstol, reltol = controls$reltol,
           maxsteps = as.integer(controls$maxsteps),
           maxattemps = as.integer(controls$maxattemps),
@@ -1792,18 +1843,18 @@ Pequil <- function(trafo, parameters = NULL, forcings = NULL, condition = NULL,
 
     if (keep.root) {
       cache$yini <- root
-      cache$sensini <- if (!is.null(res$sens1)) {
-        s <- default_sens; s[, active_sens] <- res$sens1[last, , ]; s
+      cache$tangent <- if (!is.null(res$tangent)) {
+        s <- default_sens; s[, active_sens] <- res$tangent[last, , ]; s
       } else NULL
-      cache$sens2ini <- if (deriv2 && !is.null(res$sens2)) {
-        s <- default_sens2; s[, active_sens, active_sens] <- res$sens2[last, , , ]; s
+      cache$hessian <- if (deriv2 && !is.null(res$hessian)) {
+        s <- default_sens2; s[, active_sens, active_sens] <- res$hessian[last, , , ]; s
       } else NULL
     }
 
-    if (!deriv || is.null(res$sens1)) {
+    if (!deriv || is.null(res$tangent)) {
       result <- as.parvec(out, deriv = NULL, deriv2 = NULL)
     } else {
-      sens_final <- matrix(res$sens1[last, , ], n_dep, n_active,
+      sens_final <- matrix(res$tangent[last, , ], n_dep, n_active,
                            dimnames = list(dependent, active_sens))
       input_cols <- setdiff(names(p), c(dependent, names(fixed)))
       jacobian <- matrix(0, length(out), length(input_cols),
@@ -1817,8 +1868,8 @@ Pequil <- function(trafo, parameters = NULL, forcings = NULL, condition = NULL,
       if (length(sr) && length(sc)) jacobian[sr, sc] <- sens_final[sr, sc, drop = FALSE]
 
       hess_attr <- NULL
-      if (deriv2 && !is.null(res$sens2)) {
-        sens2_final <- array(res$sens2[last, , , ],
+      if (deriv2 && !is.null(res$hessian)) {
+        sens2_final <- array(res$hessian[last, , , ],
                              c(n_dep, n_active, n_active),
                              dimnames = list(dependent, active_sens, active_sens))
         hess_arr <- array(0, c(length(out), length(input_cols), length(input_cols)),
@@ -1889,6 +1940,7 @@ Pequil <- function(trafo, parameters = NULL, forcings = NULL, condition = NULL,
           condition = conditions[[i]], .ctx = ctxs[[i]], .res = res[[i]]))
   }
 
+  attr(p2p, "vjpfn")       <- .parfnVjpFromJacobian(p2p)
   attr(p2p, "equations")   <- as.eqnvec(f_red)
   attr(p2p, "parameters")  <- parameters
   attr(p2p, "modelname")   <- modelname

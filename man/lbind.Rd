@@ -10,12 +10,12 @@ lbind(mylist)
 \item{mylist}{A named list of data.frame. The data.frames are expected to have the same structure.}
 }
 \value{
-data.frame with the originial columns augmented by a "condition" column.
+data.frame with the original columns augmented by a "condition" column.
 }
 \description{
 Bind named list of data.frames into one data.frame
 }
 \details{
-Each data.frame ist augented by a "condition" column containing the name attributed of
+Each data.frame is augmented by a "condition" column containing the name attribute of
 the list entry. Subsequently, the augmented data.frames are bound together by \code{rbind}.
 }

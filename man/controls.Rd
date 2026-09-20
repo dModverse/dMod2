@@ -45,7 +45,7 @@ objects.
 If called without further arguments, \code{controls(x)} lists the
 available controls within an object. Calling \code{controls()} with \code{name}
 and \code{condition} returns the control value. The value can be overwritten. If
-a list or data.frame ist returned, elements of those can be manipulated by the
+a list or data.frame is returned, elements of those can be manipulated by the
 \code{$}- or \verb{[]}-operator.
 }
 \examples{

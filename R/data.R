@@ -1,7 +1,7 @@
 #' Time-course data for the JAK-STAT cell signaling pathway
 #'
 #' Phosphorylated Epo receptor (pEpoR), phosphorylated STAT in the
-#' cytoplasm (tpSTAT) and total STAT (tSTAT) in the cytoplasmhave been 
+#' cytoplasm (tpSTAT) and total STAT (tSTAT) in the cytoplasm have been 
 #' measured at times 0, ..., 60.
 #'
 #' @name jakstat
@@ -242,9 +242,9 @@ long2wide <- function(out) {
 #' Bind named list of data.frames into one data.frame
 #' 
 #' @param mylist A named list of data.frame. The data.frames are expected to have the same structure.
-#' @details Each data.frame ist augented by a "condition" column containing the name attributed of
+#' @details Each data.frame is augmented by a "condition" column containing the name attribute of
 #' the list entry. Subsequently, the augmented data.frames are bound together by `rbind`.
-#' @return data.frame with the originial columns augmented by a "condition" column.
+#' @return data.frame with the original columns augmented by a "condition" column.
 #' @export
 lbind <- function(mylist) {
   

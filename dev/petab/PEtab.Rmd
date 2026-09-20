@@ -44,24 +44,21 @@ have_libsbml <- isTRUE(tryCatch(
 knitr::opts_chunk$set(eval = have_libsbml)
 ```
 
-# What this vignette covers
+# Overview
 
 PEtab [@schmiester2021petab] is a file format for parameter estimation
 problems in systems biology: a YAML manifest, an SBML model
-[@hucka2003sbml], and a handful of TSV tables. dMod2 reads such a problem
-into a fully assembled fit problem in one call, and writes a dMod problem
-back out in the same format. Both directions are covered here, first as a
-recipe, then on a worked example, and finally as a table of what the
-format offers against what dMod2 does with it.
+[@hucka2003sbml] and a set of TSV tables. dMod2 imports such a problem as a
+fully assembled fit problem in one call and exports dMod problems in the
+same format.
 
-Everything below uses PEtab v2 unless stated otherwise. Version 1 problems
-are read as well; the importer normalises them onto the same internal
-shape.
+PEtab refers to v2 unless stated otherwise. Version 1 problems are read as
+well and normalised onto the same internal shape.
 
 # PEtab objects and their dMod2 counterparts
 
-dMod2 composes a fit problem from function objects, `g * x * p` closed by
-an objective [@kaschek2019dmod]. The importer fills exactly those slots:
+dMod2 composes a fit problem from function objects, `g * x * p`, closed by
+an objective [@kaschek2019dmod]. The importer fills these slots:
 
 | PEtab | dMod2 |
 |---|---|
@@ -73,22 +70,10 @@ an objective [@kaschek2019dmod]. The importer fills exactly those slots:
 | `experiments.tsv` | simulation start times and mid-run events |
 | `parameters.tsv` priors | a prior term added to the objective |
 
-The composite is `prd = g * x * p` and the objective is
-`normL2(dataList, prd, errmodel = e)`, with the fixed parameters baked in.
-
-Two conventions are worth stating up front, because they decide what the
-numbers in `bestfit` mean.
-
-**Parameter scales live in the trafo, not in the data.** PEtab declares a
-scale per parameter (`lin`, `log`, `log10`); dMod2 wraps `p` so the
-optimiser sees the parameter on that scale and the chain rule carries
-through the composition. `bestfit` is therefore on the PEtab scale, not
-on the linear one.
-
-**Bounds are not a prior.** `lowerBound` and `upperBound` reach the fit as
-`parlower` and `parupper` and never enter the objective. A parameter that
-declares no `priorDistribution` contributes nothing to the objective
-value.
+PEtab declares a scale per parameter (`lin`, `log`, `log10`). dMod2 wraps
+`p` so that the optimiser sees each parameter on its scale and the chain
+rule carries through the composition; `bestfit` is therefore on the PEtab
+scale, not the linear one.
 
 # Importing a problem
 
@@ -96,10 +81,9 @@ value.
 petab <- importPEtab("problem.yaml", backend = "cppDE")
 ```
 
-That single call parses the manifest, reads the SBML through libsbml,
-generates the right-hand side together with its sensitivity equations,
-compiles them, and returns an object of class `petabproblem`. The
-arguments worth knowing:
+`importPEtab()` parses the manifest, reads the SBML through libsbml,
+generates and compiles the right-hand side with its sensitivity equations,
+and returns an object of class `petabproblem`.
 
 | argument | meaning |
 |---|---|
@@ -111,13 +95,12 @@ arguments worth knowing:
 | `outdir` | where the generated sources and the shared object are written |
 | `optionsOde`, `optionsSens` | solver settings, forwarded to `Xs()` |
 
-`outdir` defaults to the working directory, and a problem with many
-conditions writes one source per condition, so a scratch folder is the
-better choice. The solver defaults are the backend's; a problem whose
-reference values were computed at tighter tolerances needs them passed.
+`outdir` defaults to the working directory. A problem with many conditions
+writes one source per condition, so a scratch folder is preferable. Solver
+settings default to the backend's; reproducing reference values computed at
+tighter tolerances requires passing those tolerances.
 
-The returned object is a plain list; its slots are ordinary dMod objects
-that can be used, composed and plotted like any others:
+The returned object is a plain list whose slots are ordinary dMod objects:
 
 | slot | what it is |
 |---|---|
@@ -131,15 +114,15 @@ that can be used, composed and plotted like any others:
 | `bestfit` | `nominalValue` per estimated parameter, on the PEtab scale |
 | `parlower`, `parupper` | bounds, likewise on the PEtab scale |
 
-Because the fixed parameters are already inside `obj`, evaluating the
-likelihood at the published optimum needs nothing else:
+With the fixed parameters inside `obj`, the likelihood at the published
+optimum is
 
 ```{r import-obj, eval=FALSE}
 petab$obj(petab$bestfit)$value
 ```
 
-and fitting is the usual dMod call, with the bounds handed to the
-optimiser rather than to the objective:
+and a fit is the usual dMod call, with the bounds passed to the optimiser,
+not to the objective:
 
 ```{r import-fit, eval=FALSE}
 fit <- trust(petab$obj, petab$bestfit, rinit = 1, rmax = 10,
@@ -148,20 +131,17 @@ fit <- trust(petab$obj, petab$bestfit, rinit = 1, rmax = 10,
 
 ## Prerequisites
 
-Reading the SBML model needs `python-libsbml`. dMod2 provisions a managed
-Python environment through `reticulate` on first use, so no manual setup
-is required. To use an existing interpreter instead, point
-`DMOD_LIBSBML_PYTHON` at it. The YAML and TSV readers, `readPetabYaml()`
-and `readPetabTables()`, work without libsbml.
+Reading the SBML model requires `python-libsbml`, which dMod2 provisions on
+first use in a Python environment managed by `reticulate`. Setting
+`DMOD_LIBSBML_PYTHON` to an existing interpreter uses that one instead. The
+YAML and TSV readers, `readPetabYaml()` and `readPetabTables()`, work
+without libsbml.
 
 # Exporting a problem
 
-There are two entry points, depending on where the problem comes from.
-
-**A problem that was imported** goes back out with
-`exportPEtabObject()`. It writes the manifest, the SBML, and every table,
-and reproduces the tables it read: prior declarations, per-row noise
-parameters and the period schedule all survive the round trip.
+**Imported problems.** `exportPEtabObject()` writes the manifest, the SBML
+and every table. The tables it read are reproduced, including prior
+declarations, per-row noise parameters and the period schedule.
 
 ```{r export-recipe, eval=FALSE}
 exportPEtabObject(petab, dir = "out", formatVersion = "2.0.0")
@@ -175,8 +155,8 @@ exportPEtabObject(petab, dir = "out", formatVersion = "2.0.0")
 | `formatVersion` | `"2.0.0"` or `"1"` |
 | `overwrite` | overwrite an existing directory |
 
-**A problem built by hand** goes out with `exportPEtab()`, which takes the
-dMod objects directly rather than a `petabproblem`:
+**Problems built by hand.** `exportPEtab()` takes the dMod objects directly
+rather than a `petabproblem`:
 
 ```{r export-native, eval=FALSE}
 exportPEtab(data = myData, reactions = myEqnlist,
@@ -188,23 +168,22 @@ exportPEtab(data = myData, reactions = myEqnlist,
             dir = "out", formatVersion = "2.0.0")
 ```
 
-The trafo `p` carries the per-condition structure, so the exporter
-recovers `conditions.tsv` from it. Symbols that the trafo references but
-that are neither estimated nor declared fixed raise an error rather than
-being written out silently.
+`conditions.tsv` is recovered from the per-condition structure of the trafo
+`p`. A symbol that `p` references but that is neither estimated nor
+declared fixed raises an error.
 
 # A worked example: Boehm
 
-The package ships the Boehm et al. JAK/STAT5 problem
-[@boehm2014identification], the canonical PEtab benchmark, so the example
-below runs as written.
+The package ships the JAK/STAT5 problem of Boehm et al.
+[@boehm2014identification], a PEtab benchmark problem, so the example runs
+as written.
 
 ```{r example-files}
 petab_dir <- system.file("extdata/petab_boehm", package = "dMod2")
 list.files(petab_dir)
 ```
 
-The manifest and the tables can be inspected before anything is compiled:
+The manifest and tables can be inspected before compilation:
 
 ```{r example-tables}
 yamlPath <- file.path(petab_dir, "Boehm.yaml")
@@ -214,8 +193,7 @@ obs <- tables$observables
 data.frame(id = obs$observableId, noise = obs$noiseFormula)
 ```
 
-The observable formulas are long, so they are shown wrapped rather than as a
-table column:
+The observable formulas:
 
 ```{r example-formulas}
 writeLines(strwrap(paste0(obs$observableId, " = ",
@@ -224,8 +202,8 @@ writeLines(strwrap(paste0(obs$observableId, " = ",
 ```
 
 The model has eight STAT5 species, six estimated rate constants, three
-estimated noise standard deviations and two fixed scaling parameters, all
-estimated parameters on `log10` scale.
+estimated noise standard deviations and two fixed scaling parameters; all
+estimated parameters are on `log10` scale.
 
 ## Import and evaluate
 
@@ -235,21 +213,18 @@ petab <- importPEtab(yamlPath, backend = "cppDE",
                      modelname = "boehm_vig", outdir = wd)
 ```
 
-Compiling the model prints the compiler invocation, which is hidden here.
-The objective is then evaluated at the published maximum-likelihood estimate:
+The objective, $-2\log L$, at the published maximum-likelihood estimate:
 
 ```{r example-obj}
 petab$obj(petab$bestfit)$value
 ```
 
-The value is $-2\log L$ at the published maximum-likelihood estimate.
-
 ## Predict and plot
 
-`prd` returns one trace per observable, and `plot()` draws it against the
-data. The band is one standard deviation, read off the error model rather
-than reconstructed by hand: `as.data.frame(errfn = )` evaluates it alongside
-the prediction and returns `sigma` per row.
+`prd` returns one trace per observable, and `plot()` draws them against the
+data. The band spans one standard deviation either side, taken from the
+error model: `as.data.frame(errfn = )` evaluates it alongside the prediction
+and returns `sigma` per row.
 
 ```{r example-plot}
 library(ggplot2)
@@ -268,9 +243,8 @@ plot(pred, petab$dataList) +
 
 ## Write it back out
 
-The imported problem exports as a v2 problem in one call. Boehm arrives as
-v1, so its `parameterScale` is linearised on the way out, which the exporter
-warns about.
+Boehm is a v1 problem, so exporting it as v2 linearises its
+`parameterScale`, with a warning.
 
 ```{r example-export}
 exportDir <- file.path(wd, "export"); dir.create(exportDir)
@@ -323,55 +297,54 @@ unlink(wd, recursive = TRUE)
 \end{tikzpicture}
 \end{center}
 
-Six pieces are not obvious from that picture.
+**Extensive against intensive flux.** SBML kinetic laws are in amount per
+time, dMod2 rates in concentration per time. On import, each kinetic law is
+divided by the volume of its home compartment,
+$\text{rate}_{\text{dMod}} = K_{\text{SBML}} / V_{\text{home}}$, and on
+export multiplied by it again. The home compartment is the shared
+compartment of the educts, or of the products for a pure synthesis.
+Assignment rules are inlined into rates and initial expressions before the
+`eqnlist` is built.
 
-**Extensive against intensive flux.** SBML kinetic laws carry units of
-amount per time, dMod2 stores rates as concentration per time. Each
-kinetic law is divided by the volume of its home compartment on import,
-$\text{rate}_{\text{dMod}} = K_{\text{SBML}} / V_{\text{home}}$, and
-multiplied by it again on export. The home compartment is the shared
-compartment of the educts, falling back to the products for a pure
-synthesis. Assignment rules are inlined into rates and initial
-expressions before the `eqnlist` is built.
-
-**Experiments are period sequences.** An experiment is an ordered list of
+**Experiments as period sequences.** An experiment is an ordered list of
 `(time, conditionId)` pairs. A leading `-inf` period is the
 preequilibration and becomes a `Pequil` stage. The first finite period
-sets the simulation start, which reaches the objective as
-`normL2(t0 = )`, so initial values take effect there rather than at zero.
-Every later period becomes an event that applies its condition overrides
-at that time. There is no limit on the number of periods.
+sets the simulation start, passed to the objective as `normL2(t0 = )`, so
+initial values apply there rather than at zero. Each later period becomes
+an event that applies its condition overrides at its start time. The number
+of periods is unlimited.
 
 **Event targets that are not states.** Solvers assign only to states, but
-PEtab and SBML both allow an event to assign to a parameter or to a
-compartment volume. Such a target is promoted to a state with rate zero,
-keeping its SBML default as the initial value; the export takes the
-promotion back.
+PEtab and SBML events may also assign to a parameter or a compartment
+volume. Such a target is promoted to a state with rate zero and its SBML
+default as initial value; export reverses the promotion.
 
-**Placeholders are per observable.** `measurements.tsv` may override
-`observableParameter${k}_${id}` and `noiseParameter${k}_${id}` per row.
-Placeholders carry the observable id as a suffix, so substitutions never
-collide across observables. Rows inside one condition merge into a single
-sub-condition whose trafo carries one substitution per observable; a new
-sub-condition appears only when the same observable turns up with
-conflicting values. Numeric noise folds into the data column and leaves
-the error model `NULL`, which is `normL2`'s fast path; symbolic noise
-becomes an inner parameter of the trafo.
+**Placeholders per observable.** `measurements.tsv` may override
+`observableParameter${k}_${id}` and `noiseParameter${k}_${id}` per row. The
+observable id suffix keeps substitutions from colliding across observables.
+The rows of one condition merge into one sub-condition whose trafo carries
+one substitution per observable; a further sub-condition is created only
+when an observable appears with conflicting values. Numeric noise is folded
+into the data column and leaves the error model `NULL`, `normL2`'s fast
+path; symbolic noise becomes an inner parameter of the trafo.
 
 **Steady-state measurements.** A measurement at `time = inf` is evaluated
-on the equilibration horizon that `Pequil` integrates to, and is written
-back as `inf` on export.
+at the equilibration horizon that `Pequil` integrates to and exported as
+`inf`.
 
-# Priors, and telling them from the likelihood
+# Priors
 
-A parameter row may declare a `priorDistribution` with its
-`priorParameters`. dMod turns each one into a term on the objective's
-$-2\log$ scale and adds it to the likelihood, so `obj()` returns
-$-2\log$ posterior, not $-2\log$ likelihood.
+A parameter row may declare a `priorDistribution` with `priorParameters`.
+With $\pi_i$ the prior density of parameter $i$, truncated to its bounds,
+`obj()` returns the $-2\log$ posterior
+$$
+-2\log L - 2\sum_i \log\pi_i
+$$
+rather than $-2\log L$.
 
-**The two parts stay separable.** The prior contribution is reported in an
-attribute of the result, so subtracting it recovers exactly the quantity
-PEtab publishes as `llh`:
+**Separating prior and likelihood.** The prior term $-2\sum_i \log\pi_i$ is
+returned as the attribute `prior` of the result; subtracting it leaves
+$-2\log L$, that is $-2$ times the `llh` PEtab publishes:
 
 ```{r prior-split}
 res <- petab$obj(petab$bestfit)
@@ -382,22 +355,21 @@ c(total      = unname(res$value),
   likelihood = unname(res$value) - if (is.null(prior)) 0 else unname(prior))
 ```
 
-Boehm declares no prior, so the attribute is absent and the two agree. For a
-problem that does declare one, `total` is $-2\log$ posterior and `likelihood`
-is what a published `llh` can be compared against.
+Boehm declares no prior, so the attribute is absent and `total` equals
+`likelihood`.
 
 **Bounds are not a prior.** `lowerBound` and `upperBound` reach the fit as
-`parlower` and `parupper` and never enter the objective. A parameter with
-bounds but no declared distribution contributes nothing. This differs from
-implementations that read bounds as an implicit uniform prior; there the
-reported posterior carries a constant that dMod leaves out.
+`parlower` and `parupper` and never enter the objective, so a parameter
+without a declared distribution contributes nothing. Implementations that
+read bounds as an implicit uniform prior report a posterior that carries a
+constant dMod2 leaves out.
 
 **Truncation.** PEtab truncates every prior to the parameter bounds and
-renormalises it to the mass between them. dMod does the same. The
-renormalisation is a constant in the parameter, so it shifts the objective
-value without touching gradient or Hessian, and the fit is unaffected.
+renormalises it to the mass between them; dMod2 does the same. The
+renormalisation is constant in the parameter: it shifts the objective value
+but not gradient or Hessian, so the fit is unaffected.
 
-**The families, and where their parameterisation bites.**
+**Families and their parameterisation.**
 
 | `priorDistribution` | parameters | note |
 |---|---|---|
@@ -413,19 +385,17 @@ value without touching gradient or Hessian, and the fit is unaffected.
 | `log-laplace` | mu, b | likewise |
 | `log-uniform` | a, b | likewise |
 
-Each spelling also exists with a `parameterScale` prefix. Those act on the
-parameter as the optimiser sees it, i.e. after the scale wrap, and the plain
-spellings act on the linear value. A plain `normal` or `laplace` on a
-non-`lin` `parameterScale` is rejected rather than guessed at: the two
-readings differ, and picking one silently would move the optimum.
+Each name also exists with a `parameterScale` prefix. Prefixed priors act on
+the parameter as the optimiser sees it, after the scale wrap; plain ones act
+on the linear value. A plain `normal` or `laplace` on a non-`lin`
+`parameterScale` is rejected: the two readings differ, and choosing one
+silently would move the optimum.
 
 # How the exporter works
 
-The reverse direction reads the same slots and writes one table each. What is
-not a plain read-back is the model: the kinetic laws are multiplied by their
-home compartment volume again, promoted event targets go back to being
-parameters or compartments, and the period schedule is reconstructed from the
-simulation start times and the mid-run events.
+The exporter reads the same slots and writes one table each. Besides undoing
+the compartment scaling and the promotion of event targets, it reconstructs
+the period schedule from the simulation start times and the mid-run events.
 
 \begin{center}
 \begin{tikzpicture}[
@@ -460,24 +430,20 @@ simulation start times and the mid-run events.
 \end{tikzpicture}
 \end{center}
 
-A problem built by hand goes through `exportPEtab()` instead, which takes the
-same pieces as separate arguments rather than reading them off a
-`petabproblem`.
+`exportPEtab()` takes the same pieces as separate arguments.
 
 # Feature coverage
 
-Measured against the official PEtab test suite: all 31 v2 cases reproduce
-the published likelihood, and all 31 survive an export-to-v2 and reimport
-round trip.
+All 31 v2 cases of the official PEtab test suite reproduce the published
+likelihood and pass an export-to-v2 and reimport round trip.
 
-Beyond the test suite, the
+Of the 35 problems in the
 [Benchmark-Models](https://github.com/Benchmarking-Initiative/Benchmark-Models-PEtab)
-collection was run end to end: 33 of its 35 problems import, evaluate their
-objective with derivatives, export to v2 and reimport.
-`Froehlich_CellSystems2018` is left out because each of its 9570 conditions
-produces its own generated transformation, and `Laske_PLOSComputBiol2019`
-because one of its observables divides by a sum of species that is zero at the
-initial time.
+collection, 33 import, evaluate their objective with derivatives, export to
+v2 and reimport. Left out are `Froehlich_CellSystems2018`, whose 9570
+conditions each produce their own generated transformation, and
+`Laske_PLOSComputBiol2019`, where one observable divides by a sum of species
+that is zero at the initial time.
 
 ## SBML model
 
@@ -517,20 +483,20 @@ initial time.
 
 ## Noise distributions
 
-dMod2's objective is `normL2`, so the noise model maps as follows.
+The supported noise distributions follow from dMod2's objective, `normL2`.
 
 | `noiseDistribution` | dMod2 | notes |
 |---|:---:|---|
 | `normal` | yes | direct |
 | `log-normal` | yes | through `observableTransformation = log` |
-| `laplace`, `log-laplace` | no | rejected at import, an L1 residual is not implemented |
+| `laplace`, `log-laplace` | no | rejected at import; an L1 residual is not implemented |
 
 ## Export caveats
 
 | caveat | notes |
 |---|---|
-| `parameterScale` on a v2 export | linearised on disk with one warning, v2 has no such column |
-| `log10` observable transformation on a v2 export | rewritten as `log-normal` noise, v2 has no `log10` |
+| `parameterScale` on a v2 export | linearised on disk with one warning; v2 has no such column |
+| `log10` observable transformation on a v2 export | rewritten as `log-normal` noise; v2 has no `log10` |
 | `<algebraicRule>` in the source model | absent from the dMod model and therefore from any SBML written back |
 | experiment identity | experiments are keyed by their starting condition, so the exported `experimentId` need not match the imported one |
 
