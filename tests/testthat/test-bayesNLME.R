@@ -461,7 +461,7 @@ skip_if_no_compile <- function() {
            condition = "C1")
   pfn <- Pexpl(c(A = "A", k = "k"), parameters = NULL,
                modelname = paste0("md_decay_p_", tag),
-               compile = TRUE, deriv2 = TRUE, derivMode = "symbolic",
+               compile = TRUE, deriv2 = TRUE, derivMode = "forward",
                condition = "C1")
   list(prd = gfn * xfn * pfn, m = m)
 }

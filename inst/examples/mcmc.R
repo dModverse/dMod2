@@ -16,7 +16,7 @@
            modelname = "mcmc_decay_obs", compile = TRUE, deriv2 = TRUE)
   pfn <- Pexpl(c(A = "A", k = "k"), parameters = NULL,
                modelname = "mcmc_decay_p", compile = TRUE, deriv2 = TRUE,
-               condition = "C1", derivMode = "symbolic")
+               condition = "C1", derivMode = "forward")
   prd <- gfn * xfn * pfn
 
   times <- seq(0, 8, by = 1)
