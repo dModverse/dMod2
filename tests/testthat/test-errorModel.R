@@ -92,7 +92,7 @@ test_that("as.data.frame joins the error model by observable, not by row order",
   # the error model lists its observables the other way round
   e <- Y(eqnvec(obsB = "sB", obsA = "sA"), g, attach.input = FALSE,
          modelname = "adf_err", compile = FALSE)
-  compile(x, g, e, cores = 1)
+  compile(x, g, e, output = "adf_all", cores = 4L)
 
   pars <- c(A = 2, B = 0, k = 0.3, sA = 0.11, sB = 0.77)
   prd  <- (g * x)(seq(0, 3, length.out = 4), pars)

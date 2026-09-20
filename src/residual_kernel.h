@@ -123,6 +123,18 @@ struct AccumOpts {
 //               nothing to it, so it stays the classical sum of squares.
 //   grad_acc    [n_par] accumulator
 //   hess_acc    [n_par * n_par] accumulator, column-major
+//   seed_pred   [n_obs], optional. dvalue/dpred, one entry per row: the
+//               cotangent the reverse mode seeds the prediction with. It is
+//               not the residual, because sigma carries theta as well.
+//   seed_sigma  [n_obs], optional. dvalue/dsigma, likewise.
+//
+// Every row of every branch reduces to one shape,
+//
+//   grad = A * dwr + B * dw0 + C * dlogs,
+//
+// with dwr, dw0 and dlogs linear in dpred and dsigma. The seeds are what falls
+// out of that when the chain rule is stopped one step earlier, so they are the
+// same arithmetic and not a second derivation.
 void accumulate_aloq_residual(
     int n_obs,
     int n_par,
@@ -138,7 +150,9 @@ void accumulate_aloq_residual(
     double& value_acc,
     double& chi2_acc,
     double* grad_acc,
-    double* hess_acc);
+    double* hess_acc,
+    double* seed_pred = nullptr,
+    double* seed_sigma = nullptr);
 
 
 // Accumulate BLOQ-row contributions for one condition. No-op when
@@ -162,7 +176,9 @@ void accumulate_bloq_residual(
     const AccumOpts& opts,
     double& value_acc,
     double* grad_acc,
-    double* hess_acc);
+    double* hess_acc,
+    double* seed_pred = nullptr,
+    double* seed_sigma = nullptr);
 
 }  // namespace dmod
 

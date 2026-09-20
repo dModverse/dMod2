@@ -25,7 +25,8 @@ distributedComputing(
   custom_folders = NULL,
   resetSeeds = TRUE,
   returnAll = TRUE,
-  input = ls(.GlobalEnv, all.names = TRUE)
+  input = ls(.GlobalEnv, all.names = TRUE),
+  libs = NULL
 )
 }
 \arguments{
@@ -110,6 +111,11 @@ fetched.}
 \item{input}{Character vector of object names in the global environment to
 transfer. Defaults to the whole workspace; naming only what the expression
 uses keeps the transferred \code{.RData} small.}
+
+\item{libs}{Optional character vector of library paths put in front of the
+remote R's library search path, for the jobs and the remote build, so that a
+development installation can run next to the default one. The remote shell
+expands them, so \code{~} is the remote home.}
 }
 \value{
 A list containing three functions:

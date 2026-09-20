@@ -49,8 +49,8 @@ clusterMarginalCpp <- function(H, m, lambda, sizes, B, L, zc, U, logw, z2, sgn) 
     .Call(`_dMod2_clusterMarginalCpp`, H, m, lambda, sizes, B, L, zc, U, logw, z2, sgn)
 }
 
-normL2_kernel <- function(prediction, err_list_opt, meta_list, par_names_global, deriv2_requested, threads, bloq_mode = "M3", build_hessian = TRUE) {
-    .Call(`_dMod2_normL2_kernel`, prediction, err_list_opt, meta_list, par_names_global, deriv2_requested, threads, bloq_mode, build_hessian)
+normL2_kernel <- function(prediction, err_list_opt, meta_list, par_names_global, deriv2_requested, threads, bloq_mode = "M3", build_hessian = TRUE, want_seed = FALSE) {
+    .Call(`_dMod2_normL2_kernel`, prediction, err_list_opt, meta_list, par_names_global, deriv2_requested, threads, bloq_mode, build_hessian, want_seed)
 }
 
 parvec_attach <- function(out, deriv, deriv2) {
@@ -97,7 +97,7 @@ trustL1_lockstep_impl <- function(objfun_many, parinit, mu, lambda, one_sided, r
     .Call(`_dMod2_trustL1_lockstep_impl`, objfun_many, parinit, mu, lambda, one_sided, rinit, rmax, parscale, iterlim, ftol, mtol, gtol, xtol, rmin, thetamax, minimize, blather, parupper, parlower)
 }
 
-trust_impl <- function(objfun, parinit, rinit, rmax, parscale = NULL, iterlim = 100L, ftol = 1e-6, mtol = 1e-6, gtol = 1e-6, xtol = 0.0, rmin = 0.0, thetamax = 0.99995, boundary = "reflective", hessianMethod = "gn", hessianFallback = "none", fallbackLimit = 1L, hessianInit = "gn", qnMemory = 0L, qnCautious = 1e-8, qnRejected = TRUE, nonmonotone = 0.0, minimize = TRUE, blather = FALSE, parupper = NULL, parlower = NULL, printIter = FALSE, traceFile = NULL) {
-    .Call(`_dMod2_trust_impl`, objfun, parinit, rinit, rmax, parscale, iterlim, ftol, mtol, gtol, xtol, rmin, thetamax, boundary, hessianMethod, hessianFallback, fallbackLimit, hessianInit, qnMemory, qnCautious, qnRejected, nonmonotone, minimize, blather, parupper, parlower, printIter, traceFile)
+trust_impl <- function(objfun, parinit, rinit, rmax, parscale = NULL, iterlim = 100L, ftol = 1e-6, mtol = 1e-6, gtol = 1e-6, xtol = 0.0, rmin = 0.0, thetamax = 0.99995, boundary = "reflective", hessianMethod = "gn", hessianFallback = "none", fallbackLimit = 1L, hessianInit = "gn", hessianReseed = "never", qnMemory = 0L, qnCautious = 1e-8, qnRejected = TRUE, nonmonotone = 0.0, minimize = TRUE, blather = FALSE, parupper = NULL, parlower = NULL, printIter = FALSE, traceFile = NULL) {
+    .Call(`_dMod2_trust_impl`, objfun, parinit, rinit, rmax, parscale, iterlim, ftol, mtol, gtol, xtol, rmin, thetamax, boundary, hessianMethod, hessianFallback, fallbackLimit, hessianInit, hessianReseed, qnMemory, qnCautious, qnRejected, nonmonotone, minimize, blather, parupper, parlower, printIter, traceFile)
 }
 

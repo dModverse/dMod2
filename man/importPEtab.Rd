@@ -11,6 +11,7 @@ importPEtab(
   cores = 1L,
   modelname = NULL,
   deriv = TRUE,
+  derivMode = "forward",
   optionsOde = NULL,
   optionsSens = NULL,
   outdir = getwd()
@@ -19,8 +20,8 @@ importPEtab(
 \arguments{
 \item{yamlPath}{Path to the PEtab YAML manifest.}
 
-\item{backend}{Required: one of \code{"deSolve"} or \code{"cppDE"}. Forwarded to
-\code{\link[=odemodel]{odemodel()}}.}
+\item{backend}{Required: one of \code{"deSolve"}, \code{"cppDE"} or \code{"Sundials"}.
+Forwarded to \code{\link[=odemodel]{odemodel()}}.}
 
 \item{compile}{Logical. If \code{TRUE} (default) the generated trafo,
 observation function, and ODE model are compiled to native code. Set to
@@ -38,6 +39,14 @@ Defaults to the YAML basename.}
 equations, which is much cheaper to generate and compile. The objective
 then returns its value only, so use it when the likelihood is to be
 evaluated rather than optimised.}
+
+\item{derivMode}{Which derivative directions to compile, passed to
+\code{\link[=odemodel]{odemodel()}}. \code{c("forward", "reverse")} also builds the reverse-mode
+object, so the imported objective answers to
+\code{obj(pars, sweep = "reverse")}. \code{"reverse"} needs \code{backend = "cppDE"} or
+\code{"Sundials"}; the deSolve backend goes forward only.
+Second order is not available here: the chain a PEtab import builds hits a
+cotangent width mismatch under it, so \code{derivMode} takes first order only.}
 
 \item{optionsOde, optionsSens}{Optional lists forwarded to \code{\link[=Xs]{Xs()}} as solver
 settings for the states and their sensitivities. \code{NULL} keeps the
@@ -103,7 +112,7 @@ multi-period experiments (>2 periods).
   ## Import a PEtab problem from disk. importPEtab dispatches on the YAML's
   ## `format_version` key, so v1 and v2 manifests are both supported. The
   ## TSVs and the SBML model live next to the YAML; native artefacts
-  ## (`.c`, `.cpp`, `.so`) land in the current working directory --
+  ## (`.c`, `.cpp`, `.so`) land in the current working directory, and
   ## `setwd(tempdir())` keeps them out of the project tree.
   setwd(tempdir())
 

@@ -20,7 +20,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        branch: [devel-symmetry, devel-EM, devel-bayes, devel-reverseAD]
+        branch: [devel-symmetry, devel-EM, devel-bayes]
 
     steps:
       # GITHUB_TOKEN, not DMODVERSE_PAT: the PAT carries Contents:read only, so a

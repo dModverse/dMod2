@@ -54,7 +54,7 @@ test_that("compile() links many conditions through a chunked archive", {
       condition = cn, compile = FALSE, modelname = paste0("chunked_p_", cn))))
 
   expect_length(attr(p, "compileInfo"), length(conditions))
-  expect_output(compile(p, output = "chunked_all", cores = 1), "archived 11 objects")
+  expect_message(compile(p, output = "chunked_all", cores = 1), "archived 11 objects")
 
   expect_true(file.exists(paste0("chunked_all", .Platform$dynlib.ext)))
   expect_equal(list.files(pattern = "^chunked_all.*\\.a$"), character(0))
@@ -100,12 +100,12 @@ test_that("compile() reuses objects whose source and command are unchanged", {
   # check_character), which would compile and load a second time, so the
   # side-effecting call is evaluated once into a variable first.
   p <- mk()
-  out1 <- capture.output(compile(p, output = "reuse_all_1", cores = 1))
+  out1 <- capture.output(compile(p, output = "reuse_all_1", cores = 1), type = "message")
   expect_no_match(out1, "reusing")
 
   ## Codegen rewrites every source, so only the content decides.
   p <- mk()
-  expect_output(compile(p, output = "reuse_all_2", cores = 1),
+  expect_message(compile(p, output = "reuse_all_2", cores = 1),
                 paste("reusing", length(conditions), "unchanged"))
   out <- p(c(logk1 = log(2), logA0 = log(3), scale = 5), deriv = TRUE)
   expect_equal(as.numeric(out[[conditions[1]]]["A0"]), 15)
@@ -113,7 +113,7 @@ test_that("compile() reuses objects whose source and command are unchanged", {
 
   ## A changed compile command has to invalidate the entry.
   out3 <- capture.output(compile(p, output = "reuse_all_3", cores = 1,
-                                 args = "-DDMOD_TEST_FLAG"))
+                                 args = "-DDMOD_TEST_FLAG"), type = "message")
   expect_no_match(out3, "reusing")
 
 })
@@ -164,7 +164,7 @@ test_that("the toolchain report separates shared from per-file flags", {
   skip_if_no_compile()
   bench <- fx_decay_compiled()
 
-  out <- capture.output(compile(bench$gfn, bench$xfn, cores = 1))
+  out <- capture.output(compile(bench$gfn, bench$xfn, cores = 1), type = "message")
   head  <- grep("^using C\\+\\+ compiler:", out, value = TRUE)
   every <- grep("^ +every source +:", out, value = TRUE)
   also  <- grep("^ +[0-9]+ of [0-9]+ also +:", out, value = TRUE)
@@ -203,7 +203,7 @@ test_that("output places the shared object where it says", {
 
   # a bare name lands next to the sources
   src <- attr(bench$xfn, "compileInfo")[[1]]$srcfile
-  invisible(capture.output(compile(bench$gfn, bench$xfn, output = "bare", cores = 1)))
+  suppressMessages(compile(bench$gfn, bench$xfn, output = "bare", cores = 1))
   expect_true(file.exists(file.path(dirname(src), paste0("bare", so))))
 
   expect_error(compile(bench$gfn, output = file.path(d, "nope", "x")),

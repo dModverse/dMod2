@@ -2,7 +2,7 @@
 % Please edit documentation in R/eqnClass.R
 \name{conservedQuantities}
 \alias{conservedQuantities}
-\title{Determine conserved quantites by finding the kernel of the stoichiometric
+\title{Determine conserved quantities by finding the kernel of the stoichiometric
 matrix}
 \usage{
 conservedQuantities(S, weight = c("none", "volume"), volumes = NULL)
@@ -23,7 +23,7 @@ Data frame with conserved quantities carrying an attribute with the
 number of conserved quantities.
 }
 \description{
-Determine conserved quantites by finding the kernel of the stoichiometric
+Determine conserved quantities by finding the kernel of the stoichiometric
 matrix
 }
 \examples{

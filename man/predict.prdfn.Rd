@@ -9,7 +9,7 @@
 \arguments{
 \item{object}{prediction function}
 
-\item{...}{Further arguments goint to the prediction function}
+\item{...}{Further arguments going to the prediction function}
 
 \item{times}{numeric vector of time points}
 

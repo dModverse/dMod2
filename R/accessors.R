@@ -12,7 +12,7 @@
 #' @details If called without further arguments, `controls(x)` lists the
 #' available controls within an object. Calling `controls()` with `name`
 #' and `condition` returns the control value. The value can be overwritten. If
-#' a list or data.frame ist returned, elements of those can be manipulated by the
+#' a list or data.frame is returned, elements of those can be manipulated by the
 #' `$`- or `[]`-operator.
 #'
 #' @param x function

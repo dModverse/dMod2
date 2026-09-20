@@ -86,6 +86,14 @@ detectFreeCores <- function(machine = NULL) {
 
 ## Scan a workspace for model objects and return the portable build settings
 ## needed to rebuild their C/C++ sources elsewhere.
+## Shell command that puts `libs` in front of the remote R's library path. The
+## paths are expanded by the remote shell, so `~` is the remote home.
+.remoteLibs <- function(libs) {
+  if (!length(libs)) return("")
+  paths <- sub("^~", "$HOME", libs)
+  paste0('export R_LIBS="', paste(paths, collapse = ":"), '${R_LIBS:+:$R_LIBS}"; ')
+}
+
 .remoteBuildInfo <- function(envir = .GlobalEnv) {
 
   compileArgs <- character(0)
@@ -412,6 +420,10 @@ detectFreeCores <- function(machine = NULL) {
 #' `filename = NULL`, you have to specify the filename manually.
 #' @param walltime Optional character. Maximum runtime in the format `"HH:MM:SS"`.
 #' If exceeded, the job will be terminated.
+#' @param libs Optional character vector of library paths put in front of the
+#' remote R's library search path, for the job and the remote build, so that a
+#' development installation can run next to the default one. The remote shell
+#' expands them, so `~` is the remote home.
 #' @return List of functions `check()`, `get()`, `purge()` and `terminate()`. 
 #' `check()` checks if the result is ready.
 #' `get()` copies the result file
@@ -451,7 +463,7 @@ detectFreeCores <- function(machine = NULL) {
 #' print(result)
 #' out_job1$purge()
 #' }
-runbg <- function(..., machine = "localhost", filename = NULL, input = ls(.GlobalEnv), compile = FALSE, link = FALSE, buildCores = NULL, buildBundle = 50, wait = FALSE, recover = FALSE, walltime = NULL) {
+runbg <- function(..., machine = "localhost", filename = NULL, input = ls(.GlobalEnv), compile = FALSE, link = FALSE, buildCores = NULL, buildBundle = 50, wait = FALSE, recover = FALSE, walltime = NULL, libs = NULL) {
   
   expr <- as.expression(substitute(...))
   nmachines <- length(machine)
@@ -705,7 +717,7 @@ runbg <- function(..., machine = "localhost", filename = NULL, input = ls(.Globa
     # OMP_NUM_THREADS=1 and MKL_NUM_THREADS=1 ensure single-threaded execution per job
     system(paste0(
       "ssh ", machine[m], 
-      " 'export OMP_NUM_THREADS=1 && export MKL_NUM_THREADS=1",
+      " '", .remoteLibs(libs), "export OMP_NUM_THREADS=1 && export MKL_NUM_THREADS=1",
       if (nzchar(compile_cmd)) paste0(" && ", compile_cmd),
       " && R CMD BATCH --vanilla ", filename[m], "_folder/", filename[m], ".R'"
     ), intern = FALSE, wait = wait)
@@ -814,6 +826,10 @@ runbg <- function(..., machine = "localhost", filename = NULL, input = ls(.Globa
 #' produced, excluding the uploaded workspace and the build artefacts, which
 #' are already local. If `FALSE`, only result files (`*result.RData`) are
 #' fetched.
+#' @param libs Optional character vector of library paths put in front of the
+#' remote R's library search path, for the jobs and the remote build, so that a
+#' development installation can run next to the default one. The remote shell
+#' expands them, so `~` is the remote home.
 #'
 #' @return
 #' A list containing three functions:
@@ -929,7 +945,8 @@ distributedComputing <- function(
     custom_folders = NULL,
     resetSeeds = TRUE,
     returnAll = TRUE,
-    input = ls(.GlobalEnv, all.names = TRUE)
+    input = ls(.GlobalEnv, all.names = TRUE),
+    libs = NULL
 ){
   original_wd <- getwd()
   if (is.null(custom_folders)) {
@@ -1261,6 +1278,7 @@ distributedComputing <- function(
       # paste0("export OPENBLAS_NUM_THREADS=",cores),
       paste0("export OMP_NUM_THREADS=","1"), # paste0("export OMP_NUM_THREADS=",cores),
       paste0("export MKL_NUM_THREADS=", "1"), # paste0("export MKL_NUM_THREADS=",cores),
+      .remoteLibs(libs),
       "",
       "# Run R script",
       paste0("Rscript ", jobname, ".R"),
@@ -1276,7 +1294,8 @@ distributedComputing <- function(
   # skips the sbatch instead of queueing a job that cannot run.
   build_script_file <- paste0(jobname, "_build.sh")
   filelist_file <- paste0(jobname, "_files.txt")
-  module_cmd <- "module load compiler/gnu/13.3 2>/dev/null; module load math/R; "
+  module_cmd <- paste0("module load compiler/gnu/13.3 2>/dev/null; module load math/R; ",
+                       .remoteLibs(libs))
 
   ## Names travel as a list, not on the command line: tar and its remote
   ## counterpart share one `system()` string. The list lives in the job folder
@@ -1387,7 +1406,7 @@ distributedComputing <- function(
 
 #' Generate parameter list for distributed profile calculation
 #' 
-#' @description Generates list of `WhichPar` entries to facillitate distribute
+#' @description Generates list of `WhichPar` entries to facilitate distributed
 #' profile calculation.
 #' @details Lists to split the parameters for which the profiles are calculated
 #' on the different nodes.
