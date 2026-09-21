@@ -265,15 +265,28 @@
 # denominators cleared across the WHOLE generator (Q*X has the same invariants as X
 # off Q = 0), re-serialised as polynomial strings. `vars` carries the support plus
 # every coefficient symbol (a known input like `u` may enter an invariant).
-.symRedGenPrep <- function(d, spy) {
+#
+# `pins` is the gauge of the scaling blocks. A direction that does not move a pinned
+# coordinate is tangent to that section, so restricting it there is exact, and it
+# takes the pinned symbol out of the ansatz: what the search then builds is
+# invariant under those scalings too, not merely under this generator.
+.symRedGenPrep <- function(d, spy, pins = character(0)) {
   out <- list(ok = FALSE, comps = NULL, support = NULL, vars = NULL, degree = NA_integer_)
   # $generator arrives in R's power syntax (see .symPublicSymmetry); sympy reads '^'
   # as XOR, so it goes back to '**' before parsing
   comp0 <- gsub("\\^", "**", vapply(d$generator, as.character, character(1)))
-  locals <- .symRedLocals(comp0, spy)
+  pins <- pins[!names(pins) %in% names(comp0)[comp0 != "0"]]
+  locals <- .symRedLocals(c(comp0, pins), spy)
   exprs <- tryCatch(lapply(comp0, function(x) .symRedSympify(x, spy, locals)),
                     error = function(e) NULL)
   if (is.null(exprs)) { out$reason <- "component not parseable by sympy"; return(out) }
+  if (length(pins)) {
+    subs <- lapply(names(pins), function(nm) reticulate::tuple(
+      spy$Symbol(nm), .symRedSympify(gsub("\\^", "**", pins[[nm]]), spy, locals)))
+    exprs <- tryCatch(lapply(exprs, function(e) e$subs(subs)),
+                      error = function(e) NULL)
+    if (is.null(exprs)) { out$reason <- "gauge not substitutable"; return(out) }
+  }
   dens <- lapply(exprs, function(e) spy$fraction(spy$cancel(spy$together(e)))[[2]])
   L <- Reduce(function(a, b) spy$lcm(a, b), dens, spy$Integer(1L))
   exprs <- lapply(exprs, function(e) spy$expand(spy$cancel(e * L)))
@@ -1498,7 +1511,8 @@
 # reduced row may decouple), then run the invariant stages per sub-block.
 # Support-only directions and failed preps become unresolved singleton blocks.
 .symRedCurved <- function(syms, idx, labels, fixed, dPoly, dDarboux, dExp, sd,
-                          spy, verbose = FALSE, separable = TRUE) {
+                          spy, verbose = FALSE, separable = TRUE,
+                          pins = character(0)) {
   blocks <- list()
   emit <- function(b) blocks[[length(blocks) + 1L]] <<- b
   unresolved <- function(labs, support, reason)
@@ -1520,7 +1534,7 @@
       "no closed-form generator; re-run symmetryDetection(reconstruct = TRUE)"))
 
   gi <- idx[hasGen]
-  preps <- lapply(gi, function(i) .symRedGenPrep(syms[[i]], spy))
+  preps <- lapply(gi, function(i) .symRedGenPrep(syms[[i]], spy, pins))
   bad <- !vapply(preps, `[[`, logical(1), "ok")
   for (w in which(bad))
     emit(unresolved(labels[gi[w]], .symCoords(syms[[gi[w]]]), preps[[w]]$reason))
@@ -1587,6 +1601,10 @@
 # invariant is dropped and the failure recorded (this guards our own algebra; it
 # should never fire).
 .symRedVerify <- function(blocks, sd) {
+  chk <- function(inv, preps) as.logical(unlist(tryCatch(sd$verifyInvariants(
+    as.list(gsub("\\^", "**", inv)),
+    lapply(preps, function(pr) as.list(pr$comps))),
+    error = function(e) rep(FALSE, length(inv)))))
   for (bi in seq_along(blocks)) {
     b <- blocks[[bi]]
     if (identical(b$type, "scaling")) {
@@ -1602,10 +1620,7 @@
       next
     }
     if (!length(b$invariants) || is.null(b$preps)) next
-    keep <- as.logical(unlist(tryCatch(sd$verifyInvariants(
-      as.list(gsub("\\^", "**", b$invariants)),
-      lapply(b$preps, function(pr) as.list(pr$comps))),
-      error = function(e) rep(FALSE, length(b$invariants)))))
+    keep <- chk(b$invariants, b$preps)
     if (any(!keep)) {
       blocks[[bi]]$certificates <- c(b$certificates, sprintf(
         "verification DROPPED %d invariant(s): X(I) != 0", sum(!keep)))
@@ -1614,6 +1629,24 @@
     } else {
       blocks[[bi]]$certificates <- c(b$certificates,
         "verified: X(I) = 0 exactly (sympy cancel) for every generator")
+    }
+    # An invariant may carry coordinates that another block moves: the ansatz runs
+    # over the support plus the coefficient symbols. The trafo composes the blocks,
+    # so it has to hold for all of them. The scaling blocks need no pass of their
+    # own, their gauge went into the search.
+    other <- unlist(lapply(blocks[-bi], `[[`, "preps"), recursive = FALSE)
+    inv <- blocks[[bi]]$invariants
+    if (!length(other) || !length(inv)) next
+    keep <- chk(inv, other)
+    if (any(!keep)) {
+      blocks[[bi]]$certificates <- c(blocks[[bi]]$certificates, sprintf(
+        "verification DROPPED %d invariant(s): X(I) != 0 for a direction of another block",
+        sum(!keep)))
+      blocks[[bi]]$invariants <- inv[keep]
+      if (!any(keep)) blocks[[bi]]$status <- "unresolved"
+    } else {
+      blocks[[bi]]$certificates <- c(blocks[[bi]]$certificates,
+        "verified: X(I) = 0 for every direction of every other block too")
     }
   }
   blocks
@@ -1647,7 +1680,44 @@
 # whose coefficients share one sign -- such an entry maps ANY positive outer
 # point to a positive inner value, so the chart covers the whole positive
 # orthant. Sufficient, not necessary.
-# Sign of a RADICAL-FREE polynomial on the positive orthant: +1, -1, or 0 for
+# `positive` as a set of coordinate names: TRUE (all) is NULL, FALSE is the empty
+# set, a character vector is taken as given and checked against the coordinates.
+.symRedPositiveSet <- function(positive, coords) {
+  if (isTRUE(positive)) return(NULL)
+  if (isFALSE(positive)) return(character(0))
+  if (!is.character(positive))
+    stop("symmetryReduction(): `positive` must be TRUE, FALSE or a character ",
+         "vector of coordinate names.", call. = FALSE)
+  positive <- unique(positive)
+  unknown <- setdiff(positive, coords)
+  if (length(unknown))
+    warning("symmetryReduction(): no effect: ", paste(unknown, collapse = ", "),
+            " -- not a coordinate of the analysis.", call. = FALSE)
+  intersect(positive, coords)
+}
+
+# The coordinates declared positive, for the whole of one symmetryReduction() call.
+# NULL means every coordinate is positive, the default and what the certificates
+# assumed before the declaration existed. Held here rather than threaded through
+# thirty call sites of the sign recursion; the driver sets and restores it.
+.symDomain <- new.env(parent = emptyenv())
+.symDomain$positive <- NULL
+
+.symPositive <- function() .symDomain$positive
+
+# what the certificates are proved over, for the strings that name it
+.symDomainName <- function() {
+  pos <- .symPositive()
+  if (is.null(pos)) "positive orthant" else "declared domain"
+}
+
+.symSetPositive <- function(x) {
+  old <- .symDomain$positive
+  .symDomain$positive <- x
+  invisible(old)
+}
+
+# Sign of a RADICAL-FREE polynomial on the declared domain: +1, -1, or 0 for
 # "not decided" (includes the zero expression). Coefficient sign-purity first,
 # then AM-GM square absorption (.symRedAbsorb) for mixed patterns.
 .symRedSgnPoly <- function(pp, spy) {
@@ -1669,6 +1739,18 @@
   cf <- vapply(tm, function(t)
     suppressWarnings(as.numeric(as.character(spy$N(t[[2]])))), numeric(1))
   if (anyNA(cf) || any(!is.finite(cf))) return(0L)
+  # Coefficient purity and AM-GM both rest on every monomial being positive, which
+  # holds for a coordinate of unknown sign only at an even power. One odd power
+  # leaves the whole polynomial undecided, which is the conservative answer.
+  pos <- .symPositive()
+  if (!is.null(pos)) {
+    gens <- tryCatch(as.character(unlist(.symRedIter(spy$Poly(ex)$gens,
+                                                     function(g) as.character(g)))),
+                     error = function(err) NULL)
+    if (is.null(gens) || length(gens) != ncol(expts)) return(0L)
+    free <- !(gens %in% pos)
+    if (any(free) && any(expts[, free, drop = FALSE] %% 2 != 0)) return(0L)
+  }
   if (all(cf > 0)) return(1L)
   if (all(cf < 0)) return(-1L)
   if (.symRedAbsorb(expts, cf)) return(1L)
@@ -2040,14 +2122,82 @@
 # coordinates produces a difference, positive only where the section puts the
 # summands in a fixed ratio, and generic support monomials would push these
 # candidates past the scan cap before they are ever tried.
+# A monomial string as an integer coefficient and its symbol exponents, NULL when
+# the string is not a plain monomial. Used to multiply two balances, so anything
+# that is not a monomial drops the candidate rather than being guessed at.
+.symRedMonoParts <- function(m) {
+  coef <- 1L; ex <- integer(0)
+  for (f in trimws(strsplit(m, "*", fixed = TRUE)[[1]])) {
+    if (grepl("^[0-9]+$", f)) { coef <- coef * as.integer(f); next }
+    sp <- strsplit(f, "^", fixed = TRUE)[[1]]
+    if (length(sp) > 2L || !grepl("^[A-Za-z.][0-9A-Za-z._]*$", sp[1])) return(NULL)
+    k <- if (length(sp) == 2L) suppressWarnings(as.integer(sp[2])) else 1L
+    if (is.na(k) || k < 1L) return(NULL)
+    ex[sp[1]] <- (if (sp[1] %in% names(ex)) ex[[sp[1]]] else 0L) + k
+  }
+  if (!length(ex)) return(NULL)
+  list(coef = coef, ex = ex)
+}
+
+# The two orientations of the product of two balances, each divided by the monomial
+# both sides share. Pinning one ratio can leave a chart with a difference that turns
+# negative; pinning two together is a section no pair of generic monomials reaches,
+# because one side carries the degree of both balances.
+.symRedBalanceProducts <- function(p, q) {
+  parts <- lapply(c(p, q), .symRedMonoParts)
+  if (any(vapply(parts, is.null, logical(1)))) return(list())
+  mul <- function(u, v) {
+    ex <- u$ex
+    for (n in names(v$ex))
+      ex[n] <- (if (n %in% names(ex)) ex[[n]] else 0L) + v$ex[[n]]
+    list(coef = u$coef * v$coef, ex = ex)
+  }
+  join <- function(u) {
+    ex <- u$ex[u$ex != 0L]
+    if (!length(ex)) return(as.character(u$coef))
+    nms <- .symSort(names(ex))
+    mono <- .symRedMonoString(as.integer(ex[nms]), nms)
+    if (u$coef == 1L) mono else paste0(u$coef, "*", mono)
+  }
+  out <- list()
+  for (flip in c(FALSE, TRUE)) {
+    l <- mul(parts[[1]], parts[[if (flip) 4L else 3L]])
+    r <- mul(parts[[2]], parts[[if (flip) 3L else 4L]])
+    for (n in union(names(l$ex), names(r$ex))) {
+      g <- min(if (n %in% names(l$ex)) l$ex[[n]] else 0L,
+               if (n %in% names(r$ex)) r$ex[[n]] else 0L)
+      if (g > 0L) { l$ex[n] <- l$ex[[n]] - g; r$ex[n] <- r$ex[[n]] - g }
+    }
+    ls <- join(l); rs <- join(r)
+    if (!identical(ls, rs)) out[[length(out) + 1L]] <- c(ls, rs)
+  }
+  out
+}
+
 .symRedSectionCands <- function(support, extra = list()) {
-  head <- list()
+  key <- function(pr) paste(.symSort(pr), collapse = " = ")
+  head <- list(); groups <- list()
   for (tm in extra) {
     tm <- unique(tm)
     if (length(tm) < 2L) next
     pr <- utils::combn(tm, 2L)
-    head <- c(head, lapply(seq_len(ncol(pr)), function(j) c(pr[1, j], pr[2, j])))
+    g <- lapply(seq_len(ncol(pr)), function(j) c(pr[1, j], pr[2, j]))
+    groups[[length(groups) + 1L]] <- g
+    head <- c(head, g)
   }
+  # the products of balances from two different invariants, right behind the plain
+  # ones: a few per pair, enough for the two-summand case and bounded for the rest
+  if (length(groups) > 1L) {
+    gp <- utils::combn(length(groups), 2L)
+    for (j in seq_len(ncol(gp))) {
+      A <- groups[[gp[1, j]]]; B <- groups[[gp[2, j]]]
+      for (u in A[seq_len(min(length(A), 3L))])
+        for (v in B[seq_len(min(length(B), 3L))])
+          head <- c(head, .symRedBalanceProducts(u, v))
+      if (length(head) >= 40L) break
+    }
+  }
+  head <- head[!duplicated(vapply(head, key, character(1)))]
   mons <- data.frame(m = support, d = 1L, stringsAsFactors = FALSE)
   if (length(support) > 1L) {
     pr <- utils::combn(support, 2L)
@@ -2059,7 +2209,6 @@
   out <- lapply(seq_len(ncol(idx)), function(j)
     c(mons$m[idx[1, j]], mons$m[idx[2, j]]))
   out <- out[order(mons$d[idx[1, ]] + mons$d[idx[2, ]])]
-  key <- function(pr) paste(.symSort(pr), collapse = " = ")
   c(head, out[!vapply(out, key, character(1)) %in% vapply(head, key, character(1))])
 }
 
@@ -2269,6 +2418,11 @@
       pool <- 1 + pool / (max(pool) + 1)          # small values: rows stay finite
       pts <- list(setNames(pool[seq_along(evalVars)], evalVars),
                   setNames(pool[length(evalVars) + seq_along(evalVars)], evalVars))
+      # a coordinate of unknown sign is sampled on both sides, so the ranking sees
+      # the domain the chart is certified over and not just its positive part
+      free <- if (is.null(.symPositive())) character(0)
+              else setdiff(evalVars, .symPositive())
+      if (length(free)) pts[[2]][free] <- -pts[[2]][free]
       need <- if (length(gauge0) == 1L) 40L else 10L
       keep <- list()
       for (pr in cands[seq_len(min(length(cands), 200L))]) {
@@ -2544,8 +2698,8 @@
   # domain with no sign that anything is wrong. A block for which neither section
   # certified is therefore reported with its invariants and the reason.
   out$reason <- paste0(
-    "no gauge section with entries certified positive on the whole positive ",
-    "orthant (tried: monomial balances",
+    "no gauge section with entries certified positive on the whole ",
+    .symDomainName(), " (tried: monomial balances",
     if (any(grepl("exp(", b$invariants, fixed = TRUE)))
       " (skipped, a transcendental invariant is in the set)"
     else if (length(gauge0) < 1L || length(gauge0) > 2L)
@@ -2982,28 +3136,31 @@ summary.symmetryreduction <- function(object, verbose = FALSE,
 }
 
 # the reparametrisation itself: the non-identity entries, and the invariant each
-# outer name carries -- `q_1 = k_p + k_d` reads as "the invariant k_p + k_d is the
-# outer parameter q_1". Shared by print() and summary(), so neither repeats it.
+# fresh parameter carries -- `q_1 = k_p + k_d` reads as "the invariant k_p + k_d is
+# the outer parameter q_1". A scaling survivor keeps its own name and is not listed:
+# its monomial follows from the gauge printed above it, and the mapping stays on the
+# object as `survivorMeaning`. Shared by print() and summary(), so neither repeats it.
 .symRedCatChart <- function(x, width) {
   nonid <- x$trafo[x$trafo != names(x$trafo)]
   if (length(nonid)) {
     cat("\nTrafo (non-identity entries)\n")
     .symRedCatPairs(names(nonid), as.character(nonid), width)
   }
-  meaning <- unlist(lapply(x$blocks, `[[`, "survivorMeaning"))
-  if (length(meaning)) {
+  fresh <- unlist(lapply(x$blocks, function(b)
+    if (!identical(b$type, "scaling")) b$survivorMeaning))
+  if (length(fresh)) {
     # which outer names are log-fittable is the one thing a reader cannot see from
     # the expression: a carrier whose invariant takes both signs on the positive
     # orthant is a REAL parameter, and putting it on a log scale would silently
     # confine the fit to half the model's domain
     dom  <- unlist(lapply(x$blocks, `[[`, "carrierDomain"))
-    real <- names(meaning) %in% names(dom)[dom == "real"]
+    real <- names(fresh) %in% names(dom)[dom == "real"]
     cat("\nInvariants:\n")
-    .symRedCatPairs(names(meaning),
-                    paste0(unname(meaning), ifelse(real, "        [real-valued]", "")),
+    .symRedCatPairs(names(fresh),
+                    paste0(unname(fresh), ifelse(real, "        [real-valued]", "")),
                     width)
     if (any(real))
-      cat("  [real-valued] takes both signs on the positive orthant -- fit it",
+      cat("  [real-valued] takes both signs on the", .symDomainName(), "-- fit it",
           "linearly, not on a log scale\n")
   }
 }
@@ -3174,6 +3331,13 @@ summary.symmetryreduction <- function(object, verbose = FALSE,
 #'   beforehand (same semantics as `summary(object, fixed = )`): scaling directions
 #'   removed by the fixing drop out of the reparametrisation, and the fixed
 #'   coordinates never enter a transversal. Unknown names warn and are ignored.
+#' @param positive The coordinates that are known to be positive, the domain every
+#'   chart certificate is proved over. `TRUE` (the default) declares all of them,
+#'   as rate constants and concentrations are; `FALSE` declares none; a character
+#'   vector declares those named, and unknown names warn and are ignored. A
+#'   coordinate left out keeps its sign open, so a term containing it at an odd
+#'   power decides no sign: fewer charts certify, more carriers come back
+#'   real-valued, and none of the certificates that do come back is weaker.
 #' @param reportZeroCompatibility Logical, off by default: work out which zeros the
 #'   symmetry is compatible with (see below), one exact face solve per coordinate of
 #'   each block. It costs a quarter of the reduction on a six-reaction cascade and is
@@ -3236,7 +3400,9 @@ summary.symmetryreduction <- function(object, verbose = FALSE,
 #'     \item{`coordinates`, `fixed`, `settings`, `call`}{provenance.}
 #'   }
 #'   `print()` is terse: the verdict, the non-identity trafo entries, the invariant
-#'   each outer parameter carries and where each zero limit is reached. `summary()`
+#'   each fresh `q_<k>` parameter carries and where each zero limit is reached. The
+#'   monomial a scaling survivor carries is not printed, it follows from the gauge
+#'   and stays on the object as `survivorMeaning`. `summary()`
 #'   adds one line per block --
 #'   kind, status, stage, how it was gauged -- plus, for a block that did not
 #'   reduce, its invariants and the reason (how many invariants were found under
@@ -3247,8 +3413,8 @@ summary.symmetryreduction <- function(object, verbose = FALSE,
 #' @seealso [symmetryDetection()]
 #' @example inst/examples/symmetryReduction.R
 #' @export
-symmetryReduction <- function(object, fixed = NULL, dPoly = 3L, dDarboux = 2L,
-                           dExp = 2L, separable = TRUE,
+symmetryReduction <- function(object, fixed = NULL, positive = TRUE, dPoly = 3L,
+                           dDarboux = 2L, dExp = 2L, separable = TRUE,
                            reportZeroCompatibility = FALSE, verbose = FALSE, ...) {
   if (!inherits(object, "symmetrydetection"))
     stop("symmetryReduction(): `object` must be a symmetrydetection result.",
@@ -3268,6 +3434,18 @@ symmetryReduction <- function(object, fixed = NULL, dPoly = 3L, dDarboux = 2L,
   if (length(unknown))
     warning("symmetryReduction(): no effect: ", paste(unknown, collapse = ", "),
             " -- not a coordinate of the analysis.", call. = FALSE)
+
+  # the domain the sign certificates are proved over, as a set of coordinate names
+  # or NULL for all of them. Restored on exit so a failing call leaves nothing set.
+  posSet <- .symRedPositiveSet(positive, coords)
+  settings$positive <- if (is.null(posSet)) TRUE else
+    if (!length(posSet)) FALSE else posSet
+  oldPos <- .symSetPositive(posSet)
+  on.exit(.symSetPositive(oldPos), add = TRUE)
+  if (!is.null(posSet) && isTRUE(reportZeroCompatibility))
+    warning("symmetryReduction(): zero limits are the faces of the positive ",
+            "orthant; for a coordinate that is not declared positive, zero is an ",
+            "interior point and the verdict does not apply.", call. = FALSE)
 
   if (isTRUE(object$identifiable) || !length(object$symmetries))
     return(.symRedResult(object, list(), NULL, coords, fixed, settings, .symCall))
@@ -3317,18 +3495,19 @@ symmetryReduction <- function(object, fixed = NULL, dPoly = 3L, dDarboux = 2L,
     }
   }
   curvedIdx <- sort(c(curvedIdx0, wr$rows[demoted]))
-  if (length(curvedIdx))
-    blocks <- c(blocks, .symRedCurved(o$syms, curvedIdx, o$labels, fixed,
-                                      dPoly, dDarboux, dExp, sd, spy, verbose,
-                                      separable))
-
-  blocks <- .symRedVerify(blocks, sd)
-
-  # solve the curved blocks' invariants into trafo entries, with every scaling pin
-  # substituted in so a pinned coordinate cannot re-enter through a solution
+  # the scaling gauge goes in before the curved search, not only into its solve:
+  # every scaling still standing on its own is disjoint from the curved supports,
+  # so the curved directions are tangent to its section
   scalPins <- unlist(lapply(blocks, function(b)
     if (identical(b$type, "scaling")) b$pins))
   if (is.null(scalPins)) scalPins <- character(0)
+  if (length(curvedIdx))
+    blocks <- c(blocks, .symRedCurved(o$syms, curvedIdx, o$labels, fixed,
+                                      dPoly, dDarboux, dExp, sd, spy, verbose,
+                                      separable, scalPins))
+
+  blocks <- .symRedVerify(blocks, sd)
+
   invStart <- 0L
   for (bi in seq_along(blocks)) {
     b <- blocks[[bi]]
@@ -3351,8 +3530,8 @@ symmetryReduction <- function(object, fixed = NULL, dPoly = 3L, dDarboux = 2L,
                     paste(gaugeVal, collapse = ", ")),
         if (identical(sol$coverage, "partial"))
           paste0("entries certified positive for POSITIVE carrier values only -- a ",
-                 "carrier that takes both signs leaves part of the positive orthant ",
-                 "outside the chart")
+                 "carrier that takes both signs leaves part of the ",
+                 .symDomainName(), " outside the chart")
         else "entries certified positive for every admissible outer value",
         sol$rootNote), collapse = "; ")
       blocks[[bi]]$survivorMeaning <- sol$meaning
@@ -3363,13 +3542,14 @@ symmetryReduction <- function(object, fixed = NULL, dPoly = 3L, dDarboux = 2L,
           "section pre-certified: balance ratio strictly monotone along every orbit",
         if (identical(sol$coverage, "partial"))
           paste0("chart certified for POSITIVE carrier values only: a carrier that ",
-                 "takes both signs leaves part of the positive orthant uncovered")
+                 "takes both signs leaves part of the ", .symDomainName(),
+                 " uncovered")
         else paste0("chart certified: every solved entry positive on the carrier ",
                     "domains (", paste(names(sol$carrierDomain), sol$carrierDomain,
                                        sep = " ", collapse = ", "), ")"),
         if (length(sol$shifted)) sprintf(paste0(
           "carrier offset(s) certified for %s: the shifted invariant exceeds ",
-          "its offset on the whole positive orthant"),
+          paste0("its offset on the whole ", .symDomainName())),
           paste(sol$shifted, collapse = ", ")))
     } else {
       blocks[[bi]]$reason <- if (!is.null(sol$reason)) sol$reason else b$reason

@@ -27,7 +27,11 @@ if (!file.exists(src))
   stop("Cannot find ", src, ": run this from the package root.")
 
 # Without sympy every computational chunk is skipped (eval = haveSympy) and the PDF
-# would ship with empty outputs, which is worse than not rendering at all.
+# would ship with empty outputs. The requirement reaches reticulate through
+# py_require() in .onLoad(), so the namespace has to be loaded before the check.
+if (!requireNamespace("dMod2", quietly = TRUE))
+  stop("dMod2 is not installed: install the package before rendering.")
+
 if (!isTRUE(tryCatch(reticulate::py_module_available("sympy"),
                      error = function(e) FALSE)))
   stop("sympy is not available through reticulate: the chunks would all be skipped.")

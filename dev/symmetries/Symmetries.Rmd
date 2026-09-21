@@ -44,9 +44,11 @@ knitr::opts_chunk$set(
   echo     = TRUE
 )
 # symmetryDetection() is purely symbolic: it drives a Python module (sympy,
-# numpy, scipy) through reticulate and needs no compiled model. Every
-# computational chunk runs only if sympy is already present, so building the
-# vignette never triggers a Python install.
+# numpy, scipy) through reticulate, declared by py_require() in .onLoad(), so the
+# package has to be attached before the check, and the chunks below use it from
+# here on. Every computational chunk runs only if sympy is already present, so
+# building the vignette never triggers an install.
+library(dMod2)
 haveSympy <- isTRUE(tryCatch(
   reticulate::py_module_available("sympy"),
   error = function(e) FALSE))
@@ -847,8 +849,10 @@ an invariant monomial, so it keeps its name. A curved carrier is an invariant
 *value* and not the coordinate it was solved from, so every invariant of a curved
 block gets a fresh parameter `q_<k>`: reusing a coordinate's name would suggest
 substitutions that do not exist, a pinned entry `z = 1` fixing the inner
-coordinate where `q_<k>` is free. The `Invariants:` block of the report states
-which invariant each `q_<k>` holds.
+coordinate where `q_<k>` is free. The `Invariants:` block of the report gives the
+invariant behind each `q_<k>`. A scaling survivor is not listed: its monomial
+follows from the gauge above it, `k_phos_ERK` standing for $k_{phos,ERK} \cdot MEK$
+under `MEK = 1`. The full mapping is on the object, as `survivorMeaning`.
 
 ## Scalings: an integer kernel {#sec-lattice}
 
@@ -931,9 +935,8 @@ found and the caps it exhausted.
 
 ## The chart: the old parameters as functions of the new {#sec-chart}
 
-The invariants say what the new parameters *mean*. The `trafo` has to say the
-opposite, what each old coordinate *is* as a function of them. That is one square
-system, in four steps.
+The invariants define the new parameters. The `trafo` runs the other way, each old
+coordinate as a function of them. That is one square system, in four steps.
 
 **1. Name.** Each invariant becomes one outer parameter,
 \begin{equation}
@@ -1165,8 +1168,7 @@ symmetryDetection(eqnvec(m = "ktx - dm*m", p = "ktl*m - dp*p"), eqnvec(y = "p"),
                   verbose = FALSE)$identifiable
 ```
 
-`print()` shows only the verdict, the trafo and the invariants it is built from
-(`q_1 = k_p + k_d` reads "the invariant $k_p + k_d$ is now the parameter `q_1`");
+`print()` shows only the verdict, the trafo and the invariants it is built from;
 `summary()` adds one line per block, naming its kind, status, stage and how it
 was gauged, and `summary(verbose = TRUE)` adds the admissible gauges. A
 candidate fixing of your own goes in through `fixed = `. A transcendental
@@ -1440,8 +1442,8 @@ coordinate `P`, so the scaling is not gauged on its own; it is carried along wit
 the curved direction, and fixing `s` removes it outright: that is the first
 block, `fixed`. The second block is `X₂` alone, and its stages are the ones
 computed above. No monomial invariant exists, and the polynomial stage returns
-\eqref{eq:cycle-I1} and \eqref{eq:cycle-I2}, the two values `q_1` and `q_2`
-carry under `Invariants:`. Write them $\lambda$ and $C$.
+\eqref{eq:cycle-I1} and \eqref{eq:cycle-I2}, reported as `q_1` and `q_2`. Write
+them $\lambda$ and $C$.
 
 ```{r cycle-roundtrip, eval = haveSympy}
 red$trafo
@@ -1450,9 +1452,8 @@ symmetryDetection(reactions, observables, method = "observability",
 ```
 
 The `trafo` maps the *outer* (estimated) coordinates to the *inner* (model) ones,
-and the `now carries` lines say what the outer names mean: `q_1` holds
-$\lambda = k_p + k_d$, `q_2` the flux $C = k_p(P_0 + pP_0)$, while `pP` keeps its
-own name and its meaning. Those are the three quantities of \eqref{eq:cycle-obs}
+and the `Invariants:` lines give the outer ones: `q_1` is $\lambda = k_p + k_d$,
+`q_2` the flux $C = k_p(P_0 + pP_0)$, and `pP` keeps its own name. Those are the three quantities of \eqref{eq:cycle-obs}
 with $s$ known, so the reduced model is parametrised by exactly what the data
 delivers: three outer parameters where the model had four free coordinates
 $(P_0, pP_0, k_p, k_d)$. The redundant direction is gone, not merely constrained.

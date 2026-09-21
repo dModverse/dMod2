@@ -251,7 +251,10 @@ test_that("print stays lean; summary carries the block report", {
   out <- capture.output(print(red))
   expect_true(any(grepl("^Reduced 1 of 1 direction", out)))
   expect_true(any(grepl("Trafo", out)))
-  expect_true(any(grepl("ktx *= ktx\\*ktl", out)))          # aligned meaning line
+  # the monomial a scaling survivor carries follows from the gauge, so it is not
+  # printed; it stays on the object
+  expect_false(any(grepl("ktx\\*ktl", out)))
+  expect_true(any(grepl("ktx\\*ktl", unlist(red$blocks[[1]]$survivorMeaning))))
   # nothing of the report leaks into print()
   expect_false(any(grepl("Scaling block|transversal:|admissible|\\[", out)))
   expect_lt(length(out), 12L)
@@ -264,7 +267,7 @@ test_that("print stays lean; summary carries the block report", {
   # captured line as its raw bytes, which a byte-wise "." cannot span
   expect_true(any(grepl("\\{X[^}]+\\} scaling, reduced \\| transversal ktl = 1", rep)))
   expect_true(any(grepl("admissible", rep)))
-  expect_true(any(grepl("ktx *= ktx\\*ktl", rep)))
+  expect_false(any(grepl("ktx\\*ktl", rep)))
   expect_false(any(grepl("invariants  |certificate|certified", rep)))
   expect_lt(length(rep), 20L)
   # verbose adds the admissible sets and the raw invariants -- still no certificates
@@ -492,6 +495,122 @@ test_that("exponential-factor invariant: found, certified, solved and printed", 
   red0 <- redquiet(obj, dExp = 0L)
   expect_identical(red0$blocks[[1]]$status, "unresolved")
   expect_true(any(grepl("exp stage skipped", red0$blocks[[1]]$certificates)))
+})
+
+
+test_that("section from the product of two summand balances", {
+  if (!.sympy_works()) skip("reticulate/sympy not available")
+  # a scaling and a curved direction in separate blocks, the curved invariants
+  # carrying coordinates the scaling moves. Each single summand balance leaves a
+  # difference that turns negative, so the chart exists only for their product.
+  f <- eqnvec(m  = "ktx - dm*m",
+              P  = "-k_p*s*ktx*P + k_d*pP",
+              pP = "k_p*s*ktx*P - k_d*pP")
+  g <- eqnvec(yA = "s*m", yB = "pP")
+  res <- symdet2(f, g, method = "observability", reconstruct = TRUE)
+  red <- redquiet(res)
+  expect_length(red$remaining, 0L)
+  curved <- Filter(function(b) identical(b$type, "curved"), red$blocks)[[1]]
+  expect_identical(curved$status, "reduced")
+  expect_match(curved$gaugeNote, "certified positive")
+  # the scaling gauge went in before the search, so the pinned coordinate is out
+  # of the ansatz and out of what the block reports
+  expect_false(any(grepl("ktx", c(curved$invariants, curved$section))))
+  # positive for every positive outer value, where a single balance was not
+  z <- vapply(names(red$trafo), function(nm)
+    eval(parse(text = red$trafo[[nm]]),
+         list(q_1 = 2.3, q_2 = 0.7, pP = 1.4, s = 0.9, dm = 1.1, m = 0.5)),
+    numeric(1))
+  expect_true(all(z[c("P", "k_p", "k_d")] > 0))
+  res2 <- symdet2(f, g, method = "observability", trafo = red$trafo)
+  expect_true(res2$identifiable)
+})
+
+
+test_that("invariants are verified against the other blocks too", {
+  if (!.sympy_works()) skip("reticulate/sympy not available")
+  # a block's ansatz runs over its support plus the coefficient symbols, so an
+  # invariant can carry coordinates another block moves. The trafo composes the
+  # blocks, so every one of them has to annihilate it.
+  f <- eqnvec(P1 = "-k1*P1 + k2*pP1", pP1 = "k1*P1 - k2*pP1",
+              P2 = "-k3*P2 + k4*pP2", pP2 = "k3*P2 - k4*pP2")
+  g <- eqnvec(y1 = "pP1", y2 = "pP2")
+  res <- symdet2(f, g, method = "observability", reconstruct = TRUE)
+  red <- redquiet(res)
+  curved <- Filter(function(b) identical(b$type, "curved"), red$blocks)
+  expect_length(curved, 2L)
+  expect_true(all(vapply(curved, function(b)
+    any(grepl("every other block", b$certificates)), logical(1))))
+  res2 <- symdet2(f, g, method = "observability", trafo = red$trafo)
+  expect_true(res2$identifiable)
+})
+
+
+test_that("balance products cancel what both sides share", {
+  pr <- dMod2:::.symRedBalanceProducts(c("k_d", "k_p*ktx*s"), c("P*k_p", "k_p*pP"))
+  keys <- vapply(pr, function(p) paste(sort(p), collapse = " = "), character(1))
+  expect_true("P*k_d = k_p*ktx*pP*s" %in% keys)
+  # integer coefficients survive, a shared symbol does not
+  expect_true("2*c = b^2*d" %in%
+    vapply(dMod2:::.symRedBalanceProducts(c("2*a", "b^2"), c("c", "a*d")),
+           function(p) paste(sort(p), collapse = " = "), character(1)))
+  # a sum is not a monomial, so it yields no product rather than a guess
+  expect_length(dMod2:::.symRedBalanceProducts(c("a + b", "c"), c("d", "e")), 0L)
+})
+
+
+test_that("positive declares the domain the certificates are proved over", {
+  if (!.sympy_works()) skip("reticulate/sympy not available")
+  # a chart is certified on the domain the coordinates are declared to live in.
+  # Leaving a coordinate out opens its sign, so a term carrying it at an odd power
+  # decides nothing and the chart that needs it is not certified.
+  f <- eqnvec(P = "-k_p*P + k_d*pP", pP = "k_p*P - k_d*pP")
+  g <- eqnvec(y = "s*pP")
+  res <- symdet2(f, g, method = "observability", reconstruct = TRUE)
+  # fixing removes a direction into a block of its own, which carries no invariants
+  curved <- function(red) Filter(function(b) identical(b$type, "curved") &&
+                                   length(b$invariants), red$blocks)[[1]]
+
+  all <- redquiet(res, fixed = "s")
+  expect_length(all$remaining, 0L)
+  expect_identical(curved(all)$status, "reduced")
+
+  none <- redquiet(res, fixed = "s", positive = FALSE)
+  expect_true(length(none$remaining) > 0L)
+  expect_identical(curved(none)$status, "invariantOnly")
+  expect_match(curved(none)$reason, "declared domain")
+  # the invariants are unchanged, only the chart is gone. Compared as expressions,
+  # since the solve may hand the same invariant back in a factored form
+  expect_length(curved(none)$invariants, length(curved(all)$invariants))
+  expect_true(all(vapply(curved(none)$invariants, function(iv)
+    any(vapply(curved(all)$invariants, function(jv) .symExprEqual(iv, jv),
+               logical(1))), logical(1))))
+
+  # one coordinate short of the full declaration is enough to lose the chart
+  short <- redquiet(res, fixed = "s", positive = c("P", "pP", "k_p"))
+  expect_identical(curved(short)$status, "invariantOnly")
+
+  expect_warning(symmetryReduction(res, positive = c("P", "nonesuch")),
+                 "not a coordinate")
+})
+
+
+test_that("an unknown sign decides no sign, an even power still does", {
+  if (!.sympy_works()) skip("reticulate/sympy not available")
+  spy <- reticulate::import("sympy", convert = TRUE)
+  old <- dMod2:::.symSetPositive(NULL)
+  on.exit(dMod2:::.symSetPositive(old), add = TRUE)
+  sgn <- function(e) dMod2:::.symRedSgnPoly(spy$sympify(e), spy)
+
+  dMod2:::.symSetPositive(NULL)                       # every coordinate positive
+  expect_identical(sgn("a + b"), 1L)
+  dMod2:::.symSetPositive("a")                        # b of unknown sign
+  expect_identical(sgn("a + b"), 0L)
+  expect_identical(sgn("a + b^2"), 1L)                # even power is positive
+  expect_identical(sgn("-a - b^2"), -1L)
+  dMod2:::.symSetPositive(character(0))
+  expect_identical(sgn("a + 1"), 0L)
+  expect_identical(sgn("a^2 + 1"), 1L)
 })
 
 
