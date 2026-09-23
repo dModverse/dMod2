@@ -589,14 +589,46 @@ x(\tau_j^-) \;=\; \sum_{m\ge 0} x_m\,\Delta t_{j-1}^{\,m},
 \label{eq:gapseries}
 \end{equation}
 whose coefficients the kernel already computes (with their $z$-duals). Every entry
-of $\mathcal{O}$ becomes a power series in the gaps, and a constant direction $v$
-is unobservable for *generic* timing exactly when $R_m v = 0$ for every
-coefficient layer $R_m$. Those layers are simply stacked as extra rows: nothing
-symbolic enters the linear algebra, $\Delta t$ only labels which layer a row came
-from. The gap order is raised until the rank stops growing
-(`info$gapOrderUsed`). This recovers parameters that enter only through a
-transient between events, an inhibitor pre-incubation say, whose relaxed state
-at the stimulus is propagated exactly across the gap.
+of $\mathcal{O}$ becomes a power series in the gaps. Stacking the coefficient
+layers $R_m$ as rows would find only the directions that are the same for every
+gap length: a direction $v(\Delta t)$ that moves with the gaps is annihilated by
+$\sum_m R_m \Delta t^m$ but by no single layer, so the stacked rank over-reports
+identifiability. A switch that hands a decaying $z$ to an observed $x$ at $t = 1$
+shows it: the data fix $z_0 e^{-k_2 \Delta t}$, the kernel is
+$z_0 \Delta t\,\partial_{z_0} + \partial_{k_2}$, and the stacked layers would
+report every coordinate identifiable.
+
+The rank is therefore taken over the field of formal Laurent series. All gaps are
+put on the line through the actual gap lengths, $\Delta t_i = \varepsilon\,
+\delta_i$, and the rows, now truncated series in the one variable $\varepsilon$,
+are reduced by Gaussian elimination with a pivot of minimal valuation over the
+remaining block, which keeps every entry exact modulo $\varepsilon^{M+1}$. A
+nonzero minor of the generic matrix stays nonzero on the line unless $\delta$ is a
+root of its lowest homogeneous part, so the rank on the line is the generic rank
+for all but special ratios of the actual gaps, and events at equal times in
+different conditions stay equal. The number of pivots found at order $M$ grows to
+it as $M$ is raised
+(`info$gapOrderUsed`). Where it falls below the rank of the stacked layers, some
+kernel direction moves with the gaps. Its series is solved by back substitution
+and, when it is a polynomial in $\varepsilon$ with a known tail of zeros at least
+as long as its degree, read at $\varepsilon = 1$, the actual gaps; the direction
+then goes through the reconstruction like any other. Otherwise it is reported by
+its support.
+
+An event time may also be an expression $\tau(\theta)$. Its parameters are then
+coordinates, and the time enters in three places: the gap before the event grows
+with $\tau$, the gap after it shrinks, and the segment that starts at $\tau$ is
+anchored there, so its local coefficients shift with it. At fixed absolute time
+$t = \tau + s$ the $k$-th output coefficient moves by
+$-(k+1)\,y_{k+1}\,\mathrm{d}\tau$, and a carried state by
+$x'(\Delta t)\,\mathrm{d}\Delta t$. Where the output is not analytic across the
+event, a jump or a kink in some derivative, the time is read off the output
+itself and its gradient joins the rows; a switch the output does not feel leaves
+$\tau$ free. The eventlist orders such an event among the others.
+
+This recovers parameters that enter only through a transient between events, an
+inhibitor pre-incubation say, whose relaxed state at the stimulus is propagated
+exactly across the gap.
 
 ## Verifying the rank: the saturation guard {#sec-verify}
 
@@ -670,9 +702,14 @@ initial condition rather than a substitution, so a solved steady state from
 Structural identifiability is invariant under an invertible, smooth
 reparametrisation: it neither creates nor removes a non-identifiability, only
 changes its form. A scaling in natural parameters is a translation in
-logarithmic ones. Both engines require rationality, so a `trafo` making $f$ or $g$
-non-rational, such as $k = \exp(\log k)$, is inadmissible; a log-parametrised
-model is analysed in its natural rational parameters, with identical conclusions.
+logarithmic ones. A parameter $\theta$ that enters only through $b^{c\theta}$,
+as in $k = \exp(\theta)$, $10^{\theta}$ or `exp10(theta)`, is therefore analysed
+in $X = b^{\theta}$, where the model is rational, and the directions are reported
+in $\theta$ with $\xi_\theta = \xi_X / (X \log b)$. An observable
+$a \log h + c$ with a number $a$ is a strictly monotone function of
+$h^{a} e^{c}$, so the two carry the same information and the latter is
+analysed. [symmetryReduction()] reduces in the same chart and maps the result
+back, $\theta = \log_b X$.
 
 ## Steady-state constraints
 

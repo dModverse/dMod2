@@ -57,6 +57,10 @@ symObsNullChainSeedBatch <- function(chains, evalChain, seeds, primes, nLeaves, 
     .Call(`_dMod2_symObsNullChainSeedBatch`, chains, evalChain, seeds, primes, nLeaves, nStates, zSlots, Nt, Mtot, cores)
 }
 
+symSeriesRank <- function(S, nz, N, pIn, cols, support = FALSE, atOneBelow = -1L) {
+    .Call(`_dMod2_symSeriesRank`, S, nz, N, pIn, cols, support, atOneBelow)
+}
+
 symSolveMod <- function(A, b, pIn) {
     .Call(`_dMod2_symSolveMod`, A, b, pIn)
 }

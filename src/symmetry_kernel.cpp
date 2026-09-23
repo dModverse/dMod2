@@ -218,6 +218,231 @@ std::vector<int> rref_mod(std::vector<std::vector<u64> >& A, u64 p) {
   return pivots;
 }
 
+// ---- Rank over GF(p)((eps)) of rows truncated at eps^N ----
+// A series row holds nz entries, each a truncated power series: coefficient d of
+// entry c at c*N + d. Rows are reduced with a pivot of minimal valuation over the
+// whole remaining block, which keeps every entry exact modulo eps^N. The number of
+// pivots found is a lower bound of the rank that grows to it with N.
+inline int ser_val(const u64* a, int n) {
+  for (int d = 0; d < n; ++d) if (a[d]) return d;
+  return n;
+}
+
+// B = 1 / A modulo eps^n, A[0] != 0
+inline void ser_inv(u64* B, const u64* A, int n, u64 p) {
+  u64 a0 = invmod(A[0], p);
+  B[0] = a0;
+  for (int d = 1; d < n; ++d) {
+    u64 s = 0;
+    for (int j = 1; j <= d; ++j) s = addmod(s, mulmod(A[j], B[d - j], p), p);
+    B[d] = mulmod(submod(0, s, p), a0, p);
+  }
+}
+
+// In place: the first `rank` rows of A become the echelon rows. Columns with
+// mask[c] == 0 are ignored.
+int rref_series_mod(std::vector<std::vector<u64> >& A, int nz, int N, u64 p,
+                    const std::vector<char>& mask) {
+  int nr = (int)A.size(), r = 0;
+  std::vector<char> used(nz, 0);
+  for (int c = 0; c < nz; ++c) if (!mask[c]) used[c] = 1;
+  std::vector<u64> uinv(N), q(N);
+  while (r < nr) {
+    int bi = -1, bc = -1, bv = N;
+    for (int i = r; i < nr && bv > 0; ++i)
+      for (int c = 0; c < nz; ++c) {
+        if (used[c]) continue;
+        int v = ser_val(A[i].data() + (size_t)c * N, bv);
+        if (v < bv) { bv = v; bi = i; bc = c; if (bv == 0) break; }
+      }
+    if (bi < 0) break;
+    std::swap(A[r], A[bi]);
+    int n = N - bv;
+    ser_inv(uinv.data(), A[r].data() + (size_t)bc * N + bv, n, p);
+    for (int i = r + 1; i < nr; ++i) {
+      const u64* b = A[i].data() + (size_t)bc * N;
+      if (ser_val(b, N) == N) continue;
+      for (int d = 0; d < n; ++d) {
+        u64 s = 0;
+        for (int j = 0; j <= d; ++j) s = addmod(s, mulmod(b[bv + j], uinv[d - j], p), p);
+        q[d] = s;
+      }
+      for (int c = 0; c < nz; ++c) {
+        const u64* rc = A[r].data() + (size_t)c * N;
+        u64* ic = A[i].data() + (size_t)c * N;
+        for (int d = bv; d < N; ++d) {
+          if (!rc[d]) continue;
+          for (int e = 0; d + e < N; ++e)
+            if (q[e]) ic[d + e] = submod(ic[d + e], mulmod(q[e], rc[d], p), p);
+        }
+      }
+    }
+    used[bc] = 1;
+    ++r;
+  }
+  return r;
+}
+
+// ---- The series kernel at eps = 1 ----
+// A Laurent series with absolute precision: coefficient of eps^(lo + i) is c[i],
+// zero beyond c, and the series is known modulo eps^prec.
+const int LS_EXACT = 1 << 20;
+struct LSer { int lo, prec; std::vector<u64> c; };
+
+inline int ls_val(const LSer& a) {
+  for (size_t i = 0; i < a.c.size() && a.lo + (int)i < a.prec; ++i)
+    if (a.c[i]) return a.lo + (int)i;
+  return a.prec;
+}
+
+LSer ls_mul(const LSer& a, const LSer& b, u64 p) {
+  int va = ls_val(a), vb = ls_val(b);
+  LSer o; o.lo = a.lo + b.lo;
+  long pa = (long)va + b.prec, pb = (long)vb + a.prec;
+  o.prec = (int)std::min<long>(LS_EXACT, std::min(pa, pb));
+  int len = (int)std::min<long>((long)o.prec - o.lo, (long)a.c.size() + b.c.size());
+  o.c.assign(std::max(0, len), 0);
+  for (size_t i = 0; i < a.c.size(); ++i) {
+    if (!a.c[i]) continue;
+    for (size_t j = 0; j < b.c.size() && (int)(i + j) < len; ++j)
+      if (b.c[j]) o.c[i + j] = addmod(o.c[i + j], mulmod(a.c[i], b.c[j], p), p);
+  }
+  return o;
+}
+
+// a + s * b
+LSer ls_axpy(const LSer& a, const LSer& b, u64 sgn, u64 p) {
+  LSer o; o.lo = std::min(a.lo, b.lo); o.prec = std::min(a.prec, b.prec);
+  int hi = std::max(a.lo + (int)a.c.size(), b.lo + (int)b.c.size());
+  hi = std::min(hi, o.prec);
+  o.c.assign(std::max(0, hi - o.lo), 0);
+  for (size_t i = 0; i < a.c.size(); ++i) {
+    int e = a.lo + (int)i - o.lo;
+    if (e < (int)o.c.size()) o.c[e] = addmod(o.c[e], a.c[i], p);
+  }
+  for (size_t i = 0; i < b.c.size(); ++i) {
+    int e = b.lo + (int)i - o.lo;
+    if (e < (int)o.c.size()) o.c[e] = addmod(o.c[e], mulmod(sgn, b.c[i], p), p);
+  }
+  return o;
+}
+
+// Kernel of the series echelon rows U (rank r, entries mod eps^N) at eps = 1. Each
+// kernel vector is solved by back substitution in Laurent series, shifted to start
+// at eps^0, and accepted only if every entry is a polynomial whose known tail of
+// zeros is at least as long as its degree. Returns false otherwise.
+bool series_kernel_at_one(const std::vector<std::vector<u64> >& U, int r, int nz, int N,
+                          u64 p, std::vector<std::vector<u64> >& K) {
+  std::vector<int> pc(r, -1), pv(r, N);
+  std::vector<char> isPiv(nz, 0);
+  for (int t = 0; t < r; ++t) {
+    // the pivot of row t: its entry of minimal valuation among columns no earlier
+    // row pivots on, ties to the lowest column (as rref_series_mod chose it)
+    for (int c = 0; c < nz; ++c) {
+      if (isPiv[c]) continue;
+      int v = ser_val(U[t].data() + (size_t)c * N, N);
+      if (v < pv[t]) { pv[t] = v; pc[t] = c; }
+    }
+    if (pc[t] < 0) return false;
+    isPiv[pc[t]] = 1;
+  }
+  K.clear();
+  for (int f = 0; f < nz; ++f) {
+    if (isPiv[f]) continue;
+    std::vector<LSer> x(nz);
+    for (int c = 0; c < nz; ++c) { x[c].lo = 0; x[c].prec = LS_EXACT; }
+    x[f].c.assign(1, 1);
+    for (int t = r - 1; t >= 0; --t) {
+      LSer acc; acc.lo = 0; acc.prec = LS_EXACT;
+      for (int c = 0; c < nz; ++c) {
+        if (c == pc[t] || x[c].c.empty()) continue;
+        LSer u; u.lo = 0; u.prec = N;
+        u.c.assign(U[t].begin() + (size_t)c * N, U[t].begin() + (size_t)(c + 1) * N);
+        acc = ls_axpy(acc, ls_mul(u, x[c], p), 1, p);
+      }
+      int v = pv[t], n = N - v;
+      std::vector<u64> uinv(n);
+      ser_inv(uinv.data(), U[t].data() + (size_t)pc[t] * N + v, n, p);
+      LSer ui; ui.lo = -v; ui.prec = n - v; ui.c = uinv;
+      LSer q = ls_mul(acc, ui, p);
+      for (size_t i = 0; i < q.c.size(); ++i) q.c[i] = submod(0, q.c[i], p);
+      x[pc[t]] = q;
+    }
+    int m = LS_EXACT;
+    for (int c = 0; c < nz; ++c) if (!x[c].c.empty()) m = std::min(m, ls_val(x[c]));
+    std::vector<u64> k1(nz, 0);
+    for (int c = 0; c < nz; ++c) {
+      const LSer& e = x[c];
+      int deg = -1;
+      for (size_t i = 0; i < e.c.size(); ++i)
+        if (e.lo + (int)i < e.prec && e.c[i]) deg = e.lo + (int)i - m;
+      int known = e.prec >= LS_EXACT ? LS_EXACT : e.prec - m;
+      if (deg >= 0 && known < 2 * (deg + 1) + 1) return false;
+      for (size_t i = 0; i < e.c.size(); ++i)
+        if (e.lo + (int)i < e.prec) k1[c] = addmod(k1[c], e.c[i], p);
+    }
+    K.push_back(k1);
+  }
+  // the vectors at eps = 1 must stay independent
+  std::vector<std::vector<u64> > KK = K;
+  if ((int)rref_mod(KK, p).size() != (int)K.size()) return false;
+  return true;
+}
+
+// Reduced rows whose nullspace is spanned by the vectors K.
+void annihilator_rows(const std::vector<std::vector<u64> >& K, int nz, u64 p,
+                      std::vector<std::vector<u64> >& R, std::vector<int>& piv) {
+  std::vector<std::vector<u64> > A = K;
+  std::vector<int> kp = rref_mod(A, p);
+  std::vector<char> isP(nz, 0);
+  for (size_t i = 0; i < kp.size(); ++i) isP[kp[i]] = 1;
+  // annihilator basis: for each non-pivot column g of rref(K), the row
+  // e_g - sum_i A[i][g] e_{kp[i]}
+  std::vector<std::vector<u64> > rows;
+  for (int g = 0; g < nz; ++g) {
+    if (isP[g]) continue;
+    std::vector<u64> row(nz, 0);
+    row[g] = 1;
+    for (size_t i = 0; i < kp.size(); ++i) row[kp[i]] = submod(0, A[i][g], p);
+    rows.push_back(row);
+  }
+  piv = rref_mod(rows, p);
+  rows.resize(piv.size());
+  R = rows;
+}
+
+// Restrict the gap monomials to the line Delta_i = lineC[i] * eps: rows arrive in
+// groups of nMono (one per monomial of one time-order row) and each group becomes a
+// series row, monomial mu contributing lineC^mu at eps^|mu|.
+void rows_to_line(const std::vector<std::vector<u64> >& rows, size_t from,
+                  const PolyBasis& pb, const std::vector<u64>& lineC, int nz, int N,
+                  u64 p, std::vector<std::vector<u64> >& srows) {
+  int nM = pb.nMono;
+  std::vector<u64> coef(nM, 1);
+  std::vector<int> deg(nM, 0);
+  for (int mo = 0; mo < nM; ++mo)
+    for (int i = 0; i < pb.K; ++i) {
+      deg[mo] += pb.idx[mo][i];
+      u64 ci = i < (int)lineC.size() ? lineC[i] : 1;
+      coef[mo] = mulmod(coef[mo], powmod(ci, (u64)pb.idx[mo][i], p), p);
+    }
+  for (size_t g = from; g + nM <= rows.size(); g += nM) {
+    std::vector<u64> s((size_t)nz * N, 0);
+    bool any = false;
+    for (int mo = 0; mo < nM; ++mo) {
+      if (deg[mo] >= N || !coef[mo]) continue;
+      const std::vector<u64>& row = rows[g + mo];
+      for (int c = 0; c < nz; ++c) {
+        if (!row[c]) continue;
+        u64* e = s.data() + (size_t)c * N + deg[mo];
+        *e = addmod(*e, mulmod(coef[mo], row[c], p), p);
+        any = true;
+      }
+    }
+    if (any) srows.push_back(s);
+  }
+}
+
 u128 u128_isqrt(u128 n) {
   if (n == 0) return 0;
   int bits = 0;
@@ -393,7 +618,8 @@ bool build_obs_rows_poly(std::vector<std::vector<u64> >& val,
                          int instrBase, const std::vector<int>& stateSlots,
                          const std::vector<int>& fOut, const std::vector<int>& gOut,
                          const PolyBasis& pb, int Nrun, int Ntemit, u64 p,
-                         std::vector<std::vector<u64> >& rows) {
+                         std::vector<std::vector<u64> >& rows,
+                         const u64* dtau = nullptr) {
   int nInstr = (int)op.size();
   int m = (int)stateSlots.size();
   int w = pb.w, nM = pb.nMono, blk = nM * w, nz = w - 1;
@@ -455,6 +681,14 @@ bool build_obs_rows_poly(std::vector<std::vector<u64> >& val,
         std::vector<u64> row(nz);
         const u64* d = g + (size_t)k * blk + (size_t)mo * w;
         for (int c = 0; c < nz; ++c) row[c] = d[1 + c];
+        // a segment anchored at a moving time tau: at fixed absolute time the local
+        // coefficient y_k shifts by -(k+1) y_{k+1} dtau
+        if (dtau) {
+          u64 fk = mulmod((u64)(k + 1) % p, g[(size_t)(k + 1) * blk + (size_t)mo * w], p);
+          if (fk)
+            for (int c = 0; c < nz; ++c)
+              row[c] = submod(row[c], mulmod(fk, dtau[c], p), p);
+        }
         rows.push_back(row);
       }
   }
@@ -571,6 +805,9 @@ struct SegRaw {
   std::vector<u64> icCval;
   std::vector<int> evVarIdx, evMethod, evOp, evA, evB, evOut;
   std::vector<u64> evCval;
+  bool hasTm;
+  std::vector<int> tmOp, tmA, tmB, tmOut;
+  std::vector<u64> tmCval;
 };
 
 SegRaw extract_seg_raw(List seg, int nStates, int w, u64 p) {
@@ -614,6 +851,17 @@ SegRaw extract_seg_raw(List seg, int nStates, int w, u64 p) {
       if (s.evOp[i] == OP_CONST)
         s.evCval[i] = reduce_rational(ecn[i], ecd[i], p);
   }
+  s.hasTm = seg.containsElementNamed("tmOp");
+  if (s.hasTm) {
+    s.tmOp = to_ivec(seg["tmOp"]); s.tmA = to_ivec(seg["tmA"]); s.tmB = to_ivec(seg["tmB"]);
+    s.tmOut = to_ivec(seg["tmOut"]);
+    std::vector<std::string> tcn = to_svec(seg["tmCnum"]), tcd = to_svec(seg["tmCden"]);
+    int nTm = (int)s.tmOp.size();
+    s.tmCval.assign(nTm, 0);
+    for (int i = 0; i < nTm; ++i)
+      if (s.tmOp[i] == OP_CONST)
+        s.tmCval[i] = reduce_rational(tcn[i], tcd[i], p);
+  }
   return s;
 }
 
@@ -624,13 +872,13 @@ SegRaw extract_seg_raw(List seg, int nStates, int w, u64 p) {
 bool build_one_chain(const std::vector<SegRaw>& segs, int nLeaves, int nStates,
                      int nz, int w, const std::vector<int>& dualCol,
                      const std::vector<int>& leafPt, int Nt, int Mtot, u64 p,
-                     std::vector<std::vector<u64> >& rows) {
+                     std::vector<std::vector<u64> >& rows,
+                     std::vector<std::vector<u64> >& srows) {
   int instrBase = nLeaves + nStates;
   int nSeg = (int)segs.size();
   int K = nSeg - 1; if (K < 1) K = 1;
   PolyBasis pb(K, Mtot, w);
   int nM = pb.nMono, blk = nM * w;
-  int Nrun = Nt > Mtot ? Nt : Mtot;
 
   std::vector<std::vector<u64> > leafVal(nLeaves, std::vector<u64>(blk, 0));
   for (int L = 0; L < nLeaves; ++L) {
@@ -638,6 +886,34 @@ bool build_one_chain(const std::vector<SegRaw>& segs, int nLeaves, int nStates,
     leafVal[L][0] = (u64)pv;
     if (dualCol[L] >= 0) leafVal[L][1 + dualCol[L]] = 1;
   }
+
+  // each segment's left boundary time with its duals; the gaps between them set the
+  // line Delta_i = lineC[i] * eps along which the rank is taken
+  std::vector<std::vector<u64> > tau(nSeg, std::vector<u64>(w, 0));
+  std::vector<char> moves(nSeg, 0);
+  for (int sj = 0; sj < nSeg; ++sj) {
+    const SegRaw& sg = segs[sj];
+    if (!sg.hasTm) continue;
+    std::vector<std::vector<u64> > tmVal(nLeaves + sg.tmOp.size(), std::vector<u64>(w, 0));
+    for (int L = 0; L < nLeaves; ++L)
+      for (int c = 0; c < w; ++c) tmVal[L][c] = leafVal[L][c];
+    if (!eval_ic_order0(tmVal, sg.tmOp, sg.tmA, sg.tmB, sg.tmCval, nLeaves, w, p))
+      return false;
+    tau[sj] = tmVal[sg.tmOut[0]];
+    for (int c = 1; c < w; ++c) if (tau[sj][c]) moves[sj] = 1;
+  }
+  bool anyMoves = false;
+  for (int sj = 0; sj < nSeg; ++sj) if (moves[sj]) anyMoves = true;
+  std::vector<u64> lineC(K, 1);
+  for (int i = 0; i + 1 < nSeg; ++i) {
+    if (!segs[i].hasTm || !segs[i + 1].hasTm) continue;
+    lineC[i] = submod(tau[i + 1][0], tau[i][0], p);
+    if (!lineC[i]) return false;
+  }
+  // a moving boundary needs one time order more, for the time derivative
+  int Nrun = (Nt > Mtot ? Nt : Mtot) + (anyMoves ? 1 : 0);
+  // output jet just before a moving boundary, continued in the old regime
+  std::vector<std::vector<u64> > leftJet;
 
   std::vector<std::vector<u64> > carry;
   for (int sj = 0; sj < nSeg; ++sj) {
@@ -670,9 +946,32 @@ bool build_one_chain(const std::vector<SegRaw>& segs, int nLeaves, int nStates,
         for (int c = 0; c < blk; ++c) st[c] = carry[i][c];
       }
     }
+    size_t from = rows.size();
     if (!build_obs_rows_poly(val, seg.op, seg.a, seg.b, seg.cval, instrBase,
-                             seg.stateSlots, seg.fOut, seg.gOut, pb, Nrun, Nt, p, rows))
+                             seg.stateSlots, seg.fOut, seg.gOut, pb, Nrun, Nt, p, rows,
+                             moves[sj] ? tau[sj].data() + 1 : nullptr))
       return false;
+    rows_to_line(rows, from, pb, lineC, nz, Mtot + 1, p, srows);
+    // where the output is not analytic across a moving boundary, the boundary time is
+    // itself read off the output: its gradient joins the rows
+    if (sj > 0 && moves[sj]) {
+      bool kink = leftJet.size() != seg.gOut.size();
+      for (size_t gi = 0; gi < seg.gOut.size() && !kink; ++gi) {
+        const u64* gr = val[seg.gOut[gi]].data();
+        for (int k = 0; k <= Nt && !kink; ++k)
+          for (int mo = 0; mo < nM; ++mo) {
+            size_t at = (size_t)k * blk + (size_t)mo * w;
+            if (gr[at] != leftJet[gi][at]) { kink = true; break; }
+          }
+      }
+      if (kink) {
+        std::vector<u64> row(tau[sj].begin() + 1, tau[sj].end());
+        std::vector<u64> ser((size_t)nz * (Mtot + 1), 0);
+        for (int c = 0; c < nz; ++c) ser[(size_t)c * (Mtot + 1)] = row[c];
+        rows.push_back(row);
+        srows.push_back(ser);
+      }
+    }
     if (sj < nSeg - 1) {
       int axis = sj;
       carry.assign(nStates, std::vector<u64>(blk, 0));
@@ -686,6 +985,38 @@ bool build_one_chain(const std::vector<SegRaw>& segs, int nLeaves, int nStates,
             u64* d = carry[i].data() + (size_t)dst * w;
             for (int c = 0; c < w; ++c) d[c] = addmod(d[c], src[c], p);
           }
+      }
+      // a gap whose length depends on the coordinates adds x'(Delta) dDelta
+      if (moves[sj] || moves[sj + 1]) {
+        std::vector<u64> dd(w, 0);
+        for (int c = 1; c < w; ++c) dd[c] = submod(tau[sj + 1][c], tau[sj][c], p);
+        for (int i = 0; i < nStates; ++i) {
+          const u64* xv = val[seg.stateSlots[i]].data();
+          for (int k = 0; k <= Mtot; ++k)
+            for (int aMono = 0; aMono < nM; ++aMono) {
+              int dst = pb.shiftSlot(aMono, axis, k);
+              if (dst < 0) continue;
+              u64 fk = mulmod((u64)(k + 1) % p,
+                              xv[(size_t)(k + 1) * blk + (size_t)aMono * w], p);
+              if (!fk) continue;
+              u64* d = carry[i].data() + (size_t)dst * w;
+              for (int c = 1; c < w; ++c)
+                if (dd[c]) d[c] = addmod(d[c], mulmod(fk, dd[c], p), p);
+            }
+        }
+      }
+      if (moves[sj + 1]) {
+        std::vector<std::vector<u64> > valL(Sn, std::vector<u64>((size_t)(Nt + 1) * blk, 0));
+        for (int L = 0; L < nLeaves; ++L)
+          for (int c = 0; c < blk; ++c) valL[L][c] = leafVal[L][c];
+        for (int i = 0; i < nStates; ++i)
+          for (int c = 0; c < blk; ++c) valL[nLeaves + i][c] = carry[i][c];
+        std::vector<std::vector<u64> > none;
+        if (!build_obs_rows_poly(valL, seg.op, seg.a, seg.b, seg.cval, instrBase,
+                                 seg.stateSlots, seg.fOut, seg.gOut, pb, Nt, -1, p, none))
+          return false;
+        leftJet.assign(seg.gOut.size(), std::vector<u64>());
+        for (size_t gi = 0; gi < seg.gOut.size(); ++gi) leftJet[gi] = valL[seg.gOut[gi]];
       }
       const SegRaw& nxt = segs[sj + 1];
       if (nxt.hasEv) {
@@ -945,6 +1276,44 @@ List symObsNullBatch(List tapes, int nLeaves, int nStates, IntegerVector zSlots,
   return out;
 }
 
+// Series echelon rows as an R integer matrix (rank x nz*N).
+static IntegerMatrix series_matrix(const std::vector<std::vector<u64> >& S, int rank, int width) {
+  IntegerMatrix M(rank, width);
+  for (int i = 0; i < rank; ++i)
+    for (int j = 0; j < width; ++j) M(i, j) = (int)S[i][j];
+  return M;
+}
+
+// Where the series rank falls below the rank of the stacked coefficient rows, some
+// kernel direction moves with the gap lengths. If the series kernel is polynomial in
+// eps it is replaced by its value at eps = 1, the actual gaps: R, pivots and rank then
+// describe that kernel, and `atOne` says so.
+static void kernel_at_one_or_keep(const std::vector<std::vector<u64> >& ser, int rankS,
+                                  int nz, int N, u64 p,
+                                  std::vector<std::vector<u64> >& R, std::vector<int>& piv,
+                                  bool& atOne) {
+  atOne = false;
+  if (rankS >= (int)piv.size()) return;
+  std::vector<std::vector<u64> > K;
+  if (!series_kernel_at_one(ser, rankS, nz, N, p, K)) return;
+  annihilator_rows(K, nz, p, R, piv);
+  atOne = true;
+}
+
+static List chain_result(const std::vector<std::vector<u64> >& R, const std::vector<int>& piv,
+                         int nz, int rankS, const std::vector<std::vector<u64> >& ser,
+                         int N, bool atOne) {
+  int rank = (int)piv.size();
+  IntegerMatrix Rm(rank, nz);
+  for (int i = 0; i < rank; ++i)
+    for (int c = 0; c < nz; ++c) Rm(i, c) = (int)R[i][c];
+  IntegerVector pv(piv.begin(), piv.end());
+  return List::create(_["ok"] = true, _["R"] = Rm, _["pivots"] = pv,
+                      _["rank"] = rank, _["dim"] = nz, _["rankS"] = rankS,
+                      _["S"] = series_matrix(ser, rankS, nz * N), _["N"] = N,
+                      _["atOne"] = atOne);
+}
+
 // Multi-segment observability with exact generic-timing propagation across events.
 // `chains` is one entry per condition: an ordered list of segments. Each segment
 // supplies its regime-substituted tape (op/a/b/cnum/cden, stateSlots, fOut, gOut);
@@ -981,13 +1350,13 @@ List symObsNullChain(List chains, int nLeaves, int nStates, IntegerVector zSlots
 
   // parallel per-condition build: each thread owns its row block; a vanishing
   // denominator in any condition marks failure (no early return inside OpenMP).
-  std::vector<std::vector<std::vector<u64> > > perRows(T);
+  std::vector<std::vector<std::vector<u64> > > perRows(T), perSer(T);
   std::vector<char> okFlag(T, 1);
   #pragma omp parallel for num_threads(cores > 0 ? cores : 1) schedule(dynamic) \
           if (cores > 1 && T > 1)
   for (int t = 0; t < T; ++t)
     if (!build_one_chain(chainsRaw[t], nLeaves, nStates, nz, w, dualCol, leafPt,
-                         Nt, Mtot, p, perRows[t]))
+                         Nt, Mtot, p, perRows[t], perSer[t]))
       okFlag[t] = 0;
 
   for (int t = 0; t < T; ++t)
@@ -999,14 +1368,16 @@ List symObsNullChain(List chains, int nLeaves, int nStates, IntegerVector zSlots
       rows.push_back(std::move(perRows[t][i]));
 
   std::vector<int> pivots = rref_mod(rows, p);
-  int rank = (int)pivots.size();
-  IntegerMatrix R(rank, nz);
-  for (int i = 0; i < rank; ++i)
-    for (int c = 0; c < nz; ++c) R(i, c) = (int)rows[i][c];
-  IntegerVector piv(rank);
-  for (int i = 0; i < rank; ++i) piv[i] = pivots[i];
-  return List::create(_["ok"] = true, _["R"] = R, _["pivots"] = piv,
-                      _["rank"] = rank, _["dim"] = nz);
+  rows.resize(pivots.size());
+
+  int N = Mtot + 1;
+  std::vector<std::vector<u64> > ser;
+  for (int t = 0; t < T; ++t)
+    for (size_t i = 0; i < perSer[t].size(); ++i) ser.push_back(std::move(perSer[t][i]));
+  int rankS = rref_series_mod(ser, nz, N, p, std::vector<char>(nz, 1));
+  bool atOne;
+  kernel_at_one_or_keep(ser, rankS, nz, N, p, rows, pivots, atOne);
+  return chain_result(rows, pivots, nz, rankS, ser, N, atOne);
 }
 
 // Batched seeded single-chain observability: evaluate, for many (chain, seed, prime)
@@ -1044,6 +1415,7 @@ List symObsNullChainSeedBatch(List chains, IntegerVector evalChain,
     primeIdx[e] = idx;
   }
   int nPr = (int)distinct.size();
+  int N = Mtot + 1;
 
   // serial pre-pass: extract every chain's segments per distinct prime into
   // thread-safe plain C++, so the parallel build below touches no R object.
@@ -1068,6 +1440,9 @@ List symObsNullChainSeedBatch(List chains, IntegerVector evalChain,
   std::vector<char> okFlag(nB, 1);
   std::vector<std::vector<std::vector<u64> > > redRows(nB);
   std::vector<std::vector<int> > redPiv(nB);
+  std::vector<std::vector<std::vector<u64> > > redSer(nB);
+  std::vector<int> rankS(nB, 0);
+  std::vector<char> atOneE(nB, 0);
   #pragma omp parallel for num_threads(cores > 0 ? cores : 1) schedule(dynamic) \
           if (cores > 1 && nB > 1)
   for (int e = 0; e < nB; ++e) {
@@ -1076,26 +1451,65 @@ List symObsNullChainSeedBatch(List chains, IntegerVector evalChain,
     for (int L = 0; L < nLeaves; ++L) leafPt[L] = sd[(size_t)e * nLeaves + L];
     std::vector<std::vector<u64> > rows;
     if (!build_one_chain(segsRaw[primeIdx[e]][ec[e]], nLeaves, nStates, nz, w,
-                         dualCol, leafPt, Nt, Mtot, p, rows)) { okFlag[e] = 0; continue; }
+                         dualCol, leafPt, Nt, Mtot, p, rows, redSer[e])) {
+      okFlag[e] = 0; continue; }
     std::vector<int> pivots = rref_mod(rows, p);
-    int rank = (int)pivots.size();
-    redRows[e].assign(rank, std::vector<u64>(nz));
-    for (int i = 0; i < rank; ++i)
-      for (int c = 0; c < nz; ++c) redRows[e][i][c] = rows[i][c];
+    rows.resize(pivots.size());
+    rankS[e] = rref_series_mod(redSer[e], nz, N, p, std::vector<char>(nz, 1));
+    bool atOne;
+    kernel_at_one_or_keep(redSer[e], rankS[e], nz, N, p, rows, pivots, atOne);
+    atOneE[e] = atOne;
+    redRows[e] = rows;
     redPiv[e] = pivots;
   }
 
   List out(nB);
   for (int e = 0; e < nB; ++e) {
     if (!okFlag[e]) { out[e] = List::create(_["ok"] = false); continue; }
-    int rank = (int)redPiv[e].size();
-    IntegerMatrix R(rank, nz);
-    for (int i = 0; i < rank; ++i)
-      for (int c = 0; c < nz; ++c) R(i, c) = (int)redRows[e][i][c];
-    IntegerVector piv(rank);
-    for (int i = 0; i < rank; ++i) piv[i] = redPiv[e][i];
-    out[e] = List::create(_["ok"] = true, _["R"] = R, _["pivots"] = piv,
-                          _["rank"] = rank, _["dim"] = nz);
+    out[e] = chain_result(redRows[e], redPiv[e], nz, rankS[e], redSer[e], N, atOneE[e]);
+  }
+  return out;
+}
+
+// Rank over GF(p)((eps)) of series rows S (rows x nz*N, entry c at columns
+// c*N .. c*N+N-1), restricted to the 0-based columns `cols` (all when empty).
+// Returns the rank and the echelon rows; with support = TRUE also the columns a
+// kernel vector can move, those whose removal keeps the rank.
+// [[Rcpp::export]]
+List symSeriesRank(IntegerMatrix S, int nz, int N, double pIn, IntegerVector cols,
+                   bool support = false, int atOneBelow = -1) {
+  u64 p = (u64)pIn;
+  int nr = S.nrow();
+  std::vector<char> mask(nz, cols.size() ? 0 : 1);
+  for (int i = 0; i < cols.size(); ++i) mask[cols[i]] = 1;
+  std::vector<std::vector<u64> > A(nr, std::vector<u64>((size_t)nz * N));
+  for (int i = 0; i < nr; ++i)
+    for (int j = 0; j < nz * N; ++j) A[i][j] = red(S(i, j), p);
+  int rank = rref_series_mod(A, nz, N, p, mask);
+  List out = List::create(_["rank"] = rank, _["S"] = series_matrix(A, rank, nz * N));
+  // atOneBelow: the rank of the stacked coefficient rows; below it, try the kernel at
+  // eps = 1 and return its reduced rows
+  if (atOneBelow > rank && !cols.size()) {
+    std::vector<std::vector<u64> > K, R;
+    std::vector<int> piv;
+    if (series_kernel_at_one(A, rank, nz, N, p, K)) {
+      annihilator_rows(K, nz, p, R, piv);
+      IntegerMatrix Rm((int)piv.size(), nz);
+      for (size_t i = 0; i < piv.size(); ++i)
+        for (int c = 0; c < nz; ++c) Rm(i, c) = (int)R[i][c];
+      out["R"] = Rm;
+      out["pivots"] = IntegerVector(piv.begin(), piv.end());
+    }
+  }
+  if (support) {
+    std::vector<int> supp;
+    for (int c = 0; c < nz; ++c) {
+      if (!mask[c]) continue;
+      std::vector<std::vector<u64> > B(A.begin(), A.begin() + rank);
+      std::vector<char> m2 = mask; m2[c] = 0;
+      if (rref_series_mod(B, nz, N, p, m2) == rank) supp.push_back(c);
+    }
+    out["support"] = IntegerVector(supp.begin(), supp.end());
   }
   return out;
 }

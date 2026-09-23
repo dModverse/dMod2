@@ -1348,6 +1348,109 @@ test_that("a post-t0 event opens a second segment, propagated exactly", {
 })
 
 
+test_that("a direction that depends on the time between events is not missed", {
+  if (!.sympy_works()) skip("reticulate/sympy not available")
+
+  # z decays until a switch at t = 1 hands it to x; only z(1) = z * exp(-k2 * 1)
+  # reaches the output, so the kernel moves z and k2 in a ratio set by the gap
+  f  <- eqnvec(x = "-k1*x + u*z", z = "-(1-u)*k2*z", u = "0")
+  ev <- eventlist() |>
+    addEvent(var = "u", time = 0, value = "0", method = "replace") |>
+    addEvent(var = "u", time = 1, value = "1", method = "replace")
+  r <- symdet(f, eqnvec(y = "x"), method = "observability", events = ev,
+              reconstruct = TRUE)
+  expect_false(r$identifiable)
+  expect_equal(r$rank, 3L)
+  expect_length(r$symmetries, 1L)
+  gen <- r$symmetries[[1]]$generator
+  expect_setequal(names(gen), c("z", "k2"))
+  expect_true(.symExprEqual(gen[["z"]], paste0("z*(", gen[["k2"]], ")")))
+
+  # with k2 multiplying the transfer instead, the kernel is a gap-free scaling
+  f2 <- eqnvec(x = "-k1*x + u*k2*z", z = "-(1-u)*z", u = "0")
+  r2 <- symdet(f2, eqnvec(y = "x"), method = "observability", events = ev)
+  expect_equal(r2$rank, 3L)
+  expect_true(r2$symmetries[[1]]$explicit)
+})
+
+
+test_that("an event time given in parameters is a coordinate", {
+  if (!.sympy_works()) skip("reticulate/sympy not available")
+
+  # the switch at tau hands z to x: the kernel direction now carries tau itself
+  f  <- eqnvec(x = "-k1*x + u*z", z = "-(1-u)*k2*z", u = "0")
+  ev <- eventlist() |>
+    addEvent(var = "u", time = 0, value = "0", method = "replace") |>
+    addEvent(var = "u", time = "tau", value = "1", method = "replace")
+  r <- symdet(f, eqnvec(y = "x"), method = "observability", events = ev,
+              reconstruct = TRUE)
+  expect_true("tau" %in% r$info$coordinates)
+  expect_equal(r$rank, 4L)
+  gen <- r$symmetries[[1]]$generator
+  expect_setequal(names(gen), c("z", "k2"))
+  expect_true(.symExprEqual(gen[["z"]], paste0("tau*z*(", gen[["k2"]], ")")))
+
+  # a jump or a kink in the output reveals the time of a dose
+  evd <- eventlist() |> addEvent(var = "A", time = "tau", value = "d", method = "add")
+  rj <- symdet(eqnvec(A = "-k*A"), eqnvec(y = "A"), events = evd,
+               trafo = eqnvec(A = "0"))
+  expect_true(rj$identifiable)
+  rk <- symdet(eqnvec(D = "-ka*D", A = "ka*D - k*A"), eqnvec(y = "A"),
+               events = eventlist() |> addEvent(var = "D", time = "tau", value = "d",
+                                                method = "add"),
+               trafo = eqnvec(D = "0", A = "0"))
+  expect_true(rk$identifiable)
+
+  # a switch the output does not feel leaves its time free
+  ri <- symdet(eqnvec(A = "-k*A", u = "0"), eqnvec(y = "A"),
+               events = eventlist() |>
+                 addEvent(var = "u", time = 0, value = "0") |>
+                 addEvent(var = "u", time = "tau", value = "1"),
+               reconstruct = TRUE)
+  expect_equal(ri$rank, 2L)
+  expect_equal(names(ri$symmetries[[1]]$generator), "tau")
+
+  # the eventlist orders a time given in parameters among the numeric ones
+  bad <- eventlist() |>
+    addEvent(var = "A", time = 0, value = "d", method = "add") |>
+    addEvent(var = "A", time = 5, value = "d", method = "add") |>
+    addEvent(var = "A", time = "tau", value = "d", method = "add") |>
+    addEvent(var = "A", time = 2, value = "d", method = "add")
+  expect_error(symdet(eqnvec(A = "-k*A"), eqnvec(y = "A"), events = bad),
+               "ascending")
+  expect_error(symdet(eqnvec(A = "-k*A"), eqnvec(y = "A"), events = evd,
+                      symEngine = "symbolic"), "modular")
+})
+
+
+test_that("log-parametrised parameters and logarithmic observables are rational", {
+  if (!.sympy_works()) skip("reticulate/sympy not available")
+
+  f  <- eqnvec(A = "-k1*A + k2*B", B = "k1*A - k2*B")
+  tr <- eqnvec(k1 = "exp(lk1)", k2 = "exp(lk2)", s = "exp10(ls)", B = "10^lB")
+  lin <- symdet(f, eqnvec(y = "s*A"), reconstruct = TRUE)
+  lg  <- symdet(f, eqnvec(y = "log10(s*A)"), trafo = tr, reconstruct = TRUE)
+  expect_equal(lg$rank, lin$rank)
+  expect_setequal(lg$info$coordinates, c("A", "lB", "lk1", "lk2", "ls"))
+  # the scaling of B and s is a translation of lB and ls at rate 1/log(10)
+  sc <- Filter(function(d) setequal(names(d$generator), c("A", "lB", "ls")),
+               lg$symmetries)[[1]]$generator
+  expect_true(.symExprEqual(sc[["lB"]], paste0("(", sc[["A"]], ")/(A*log(10))")))
+  expect_true(.symExprEqual(sc[["ls"]], paste0("-(", sc[["A"]], ")/(A*log(10))")))
+  # the symbolic engine takes exp and log as they are
+  sy <- symdet(f, eqnvec(y = "log10(s*A)"), trafo = tr, symEngine = "symbolic")
+  expect_equal(sy$rank, lg$rank)
+
+  # an offset on a log observable is a translation; a scale on it stays unsupported
+  off <- symdet(f, eqnvec(y = "log(A) + c"), reconstruct = TRUE)
+  expect_equal(off$rank, 3L)
+  expect_error(symdet(f, eqnvec(y = "s*log(A)")), "a\\*log\\(h\\)")
+
+  # a parameter that also enters outside an exponent is not traded for exp(lk)
+  expect_error(symdet(eqnvec(A = "-exp(lk)*A + lk"), eqnvec(y = "A")), "exp\\(theta\\)")
+})
+
+
 test_that("with no post-t0 events the analysis collapses to a single segment", {
   if (!.sympy_works()) skip("reticulate/sympy not available")
 
@@ -1752,4 +1855,42 @@ test_that("the saturation is certified against the codimension of the specialisa
   expect_true(ss4$info$lieCertified)
   expect_equal(ss4$rank, ss$rank)
   expect_equal(ss4$dim, ss$dim)
+})
+
+
+test_that("the complete generator has the same orbits and a flow for all s", {
+  if (!.sympy_works()) skip("reticulate/sympy not available")
+  eq <- eqnlist() |> addReaction("A", "B", "k1 * A") |> addReaction("B", "A", "k2 * B")
+  r  <- symdet(eq, eqnvec(y = "s * B"), method = "observability", reconstruct = TRUE)
+  sc <- Filter(function(d) d$type == "scaling", r$symmetries)[[1]]
+  gn <- Filter(function(d) d$type == "general", r$symmetries)[[1]]
+  expect_identical(sc$completeGenerator, sc$generator)
+  expect_identical(sc$factor, "1")
+
+  # completeGenerator = factor * generator, the factor positive on the orthant
+  for (k in names(gn$generator))
+    expect_true(.symExprEqual(gn$completeGenerator[[k]],
+                              paste0("(", gn$factor, ")*(", gn$generator[[k]], ")")))
+  set.seed(1)
+  pts <- replicate(50, as.list(setNames(exp(rnorm(4, 0, 3)), c("A", "B", "k1", "k2"))),
+                   simplify = FALSE)
+  expect_true(all(vapply(pts, function(pt) eval(parse(text = gn$factor), pt), 0.0) > 0))
+
+  # in log coordinates its speed is at most 1/2, so the flow exists for all s
+  speed <- vapply(pts, function(pt) sqrt(sum(vapply(names(gn$completeGenerator),
+    function(k) (eval(parse(text = gn$completeGenerator[[k]]), pt) / pt[[k]])^2,
+    0.0))), 0.0)
+  expect_true(all(speed <= 0.5 + 1e-12))
+
+  # with nothing declared positive the bound holds in the linear coordinates
+  r0 <- symdet(eq, eqnvec(y = "s * B"), method = "observability", reconstruct = TRUE,
+               positive = FALSE)
+  g0 <- Filter(function(d) d$type == "general", r0$symmetries)[[1]]
+  speed0 <- vapply(pts, function(pt) sqrt(sum(vapply(g0$completeGenerator, function(x)
+    eval(parse(text = x), pt)^2, 0.0))), 0.0)
+  expect_true(all(speed0 <= 0.5 + 1e-12))
+
+  # neither print() nor summary() shows it
+  out <- c(capture.output(print(r)), capture.output(summary(r)))
+  expect_false(any(grepl(gn$factor, out, fixed = TRUE)))
 })

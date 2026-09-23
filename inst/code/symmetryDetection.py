@@ -121,6 +121,7 @@ def _function_aliases():
     return {
         'log10': spy.Lambda(x, spy.log(x) / spy.log(10)),
         'log2': spy.Lambda(x, spy.log(x) / spy.log(2)),
+        'exp10': spy.Lambda(x, spy.Integer(10) ** x),
     }
 
 
@@ -2502,6 +2503,217 @@ def solveForwardModular(model, stateNames, paramNames, stateVals, paramVals, pri
             'dfParamCols': list(c['paramNames'])}
 
 
+def _strip_log_obs(g):
+    """An observable kappa*(sum a_i log(h_i)) + c, with a_i rational and kappa 1 or
+    1/log(b) for a numeric b, is a strictly monotone function of exp(g/kappa) =
+    prod h_i^a_i * exp(c/kappa) and carries the same information; that expression is
+    returned. Anything else comes back unchanged."""
+    g = spy.sympify(g)
+    logs = [a for a in g.atoms(spy.log) if not a.args[0].is_number]
+    if not logs:
+        return g
+    consts = [spy.Integer(1)] + [a for a in g.atoms(spy.log) if a.args[0].is_number]
+    dums = [spy.Dummy() for _ in logs]
+    gd = g.xreplace(dict(zip(logs, dums)))
+    for kap in consts:
+        g2 = spy.expand(gd * kap)
+        coeffs = [g2.coeff(d) for d in dums]
+        rest = spy.expand(g2 - sum(c * d for c, d in zip(coeffs, dums)))
+        if rest.has(*dums):
+            continue
+        if not all(c.is_Rational for c in coeffs):
+            continue
+        if any(not a.args[0].is_number for a in rest.atoms(spy.log)):
+            continue
+        out = spy.Integer(1)
+        for c, L in zip(coeffs, logs):
+            out = out * L.args[0] ** c
+        for t in spy.Add.make_args(rest):
+            nl = [a for a in t.atoms(spy.log) if a.args[0].is_number]
+            out = out * (nl[0].args[0] ** spy.cancel(t / nl[0]) if len(nl) == 1
+                         else spy.exp(t))
+        if not out.atoms(spy.log):
+            return out
+    return g
+
+
+def _exp_atom(e):
+    """(base, exponent) of an exponential atom with a numeric base, else None."""
+    if isinstance(e, spy.exp):
+        return spy.E, e.args[0]
+    if e.is_Pow and e.base.is_number and e.base.is_positive and not e.exp.is_number:
+        return e.base, e.exp
+    return None
+
+
+def _detect_log_params(exprs, states):
+    """Parameters that occur only in exponents of numeric-base powers, base^(c*theta +
+    ...) with c rational and one base per parameter. Returns {theta: base}. A constant
+    term in the exponent must leave a rational factor base^k."""
+    baseOf, bad = {}, set()
+    for e in exprs:
+        for at in spy.sympify(e).atoms(spy.exp, spy.Pow):
+            be = _exp_atom(at)
+            if be is None:
+                continue
+            base, ex = be
+            terms = spy.expand(ex).as_coefficients_dict()
+            k = terms.pop(spy.Integer(1), spy.Integer(0))
+            ok = k == 0 or (base != spy.E and base.is_Rational and k.is_Integer)
+            for t, cf in terms.items():
+                if not (t.is_Symbol and cf.is_Rational and t not in states) or not ok:
+                    bad |= ex.free_symbols
+                    break
+                if baseOf.get(t, base) != base:
+                    bad.add(t)
+                baseOf[t] = base
+    return {t: b for t, b in baseOf.items() if t not in bad}
+
+
+def _log_param_sub(lp):
+    """Rewrite base^(sum c_i theta_i + k) as base^k * prod X_i^c_i, X_i = base^theta_i."""
+    def repl(at):
+        be = _exp_atom(at)
+        if be is None:
+            return at
+        base, ex = be
+        terms = spy.expand(ex).as_coefficients_dict()
+        k = terms.pop(spy.Integer(1), spy.Integer(0))
+        if not terms or any(t not in lp or lp[t][1] != base for t in terms):
+            return at
+        out = base ** k if k != 0 else spy.Integer(1)
+        for t, cf in terms.items():
+            out = out * lp[t][0] ** cf
+        return out
+
+    def sub(e):
+        e = spy.sympify(e)
+        if not lp:
+            return e
+        return e.replace(lambda x: _exp_atom(x) is not None, repl)
+    return sub
+
+
+def _log_params_only_in_atoms(baseOf, exprs):
+    """Drop every candidate that still occurs after the rewrite: it enters somewhere
+    other than an exponent and cannot be traded for base^theta."""
+    baseOf = dict(baseOf)
+    while baseOf:
+        sub = _log_param_sub({t: (spy.Dummy(), b) for t, b in baseOf.items()})
+        left = set()
+        for e in exprs:
+            left |= sub(e).free_symbols
+        drop = [t for t in baseOf if t in left]
+        if not drop:
+            break
+        for t in drop:
+            del baseOf[t]
+    return baseOf
+
+
+def logChart(gens, coords):
+    """Generators in the chart X = b^theta for every coordinate theta that enters
+    them only through b^(c*theta), or whose own component carries 1/log(b): there
+    they are rational. `gens` is a list of {name: expression} (None for a support-only
+    direction). Returns {'map': [...], 'gens': [...]} or None when there is no such
+    coordinate or the chart does not make every component rational."""
+    exprsOf = []
+    names = [str(c) for c in coords]
+    for g in gens:
+        if g is None:
+            exprsOf.append(None)
+            continue
+        local, parse = _make_local_parse([str(v) for v in g.values()] + names)
+        exprsOf.append({str(k): spy.sympify(parse(str(v))) for k, v in g.items()})
+    allE = [e for g in exprsOf if g for e in g.values()]
+    coordSyms = {spy.Symbol(n) for n in names}
+    baseOf = _detect_log_params(allE, set())
+    baseOf = {t: b for t, b in baseOf.items() if t in coordSyms}
+    # a coordinate whose own component carries 1/log(b) and that enters nowhere else
+    for g in exprsOf:
+        if not g:
+            continue
+        for k, v in g.items():
+            t = spy.Symbol(k)
+            nl = {a.args[0] for a in v.atoms(spy.log) if a.args[0].is_number}
+            if t in baseOf or len(nl) != 1:
+                continue
+            if all(t not in e.free_symbols for e in allE):
+                baseOf[t] = nl.pop()
+    baseOf = _log_params_only_in_atoms(baseOf, allE)
+    if not baseOf:
+        return None
+    taken = set(names)
+    lp = {}
+    for t, b in sorted(baseOf.items(), key=lambda kv: str(kv[0])):
+        nm = 'exp_%s' % t
+        while nm in taken:
+            nm += '_'
+        taken.add(nm)
+        lp[t] = (spy.Symbol(nm), b)
+    sub = _log_param_sub(lp)
+    out = []
+    for g in exprsOf:
+        if g is None:
+            out.append(None)
+            continue
+        h = {}
+        for k, v in g.items():
+            t = spy.Symbol(k)
+            if t in lp:
+                X, b = lp[t]
+                h[str(X)] = sub(X * spy.log(b) * v)
+            else:
+                h[k] = sub(v)
+        h = {k: spy.cancel(v) for k, v in h.items()}
+        for v in h.values():
+            if v.atoms(spy.log, spy.exp) or any(t in v.free_symbols for t in lp):
+                return None
+        out.append({k: str(v) for k, v in h.items()})
+    return {'map': [{'theta': str(t), 'X': str(X), 'base': 'E' if b == spy.E else str(b)}
+                    for t, (X, b) in lp.items()],
+            'gens': out}
+
+
+def logChartBack(expr, xNames, thetas, bases, solveFor=None):
+    """An expression of the chart X = b^theta back in theta. With `solveFor` naming
+    an X, the expression is the value of that X and log_b of it is returned, the
+    value of theta."""
+    asList = lambda v: list(v) if isinstance(v, (list, tuple)) else [v]
+    xNames, thetas, bases = asList(xNames), asList(thetas), asList(bases)
+    local, parse = _make_local_parse([str(expr)] + [str(x) for x in xNames + thetas])
+    e = parse(str(expr))
+    subs = {}
+    logb = None
+    for X, th, b in zip(xNames, thetas, bases):
+        bb = spy.E if str(b) == 'E' else spy.sympify(str(b))
+        subs[parse(str(X))] = bb ** parse(str(th))
+        if solveFor is not None and str(X) == str(solveFor):
+            logb = spy.log(bb)
+    e = e.subs(subs)
+    if logb is not None:
+        e = spy.cancel(spy.expand_log(spy.log(e), force=True) / logb)
+    return str(e)
+
+
+def logParamBacksub(expr, comp, xNames, thetas, bases):
+    """A reported component in the rational coordinates X = base^theta back in theta:
+    X -> base^theta everywhere, and the component of X itself divided by X*log(base)
+    when `comp` names an X."""
+    asList = lambda v: list(v) if isinstance(v, (list, tuple)) else [v]
+    xNames, thetas, bases = asList(xNames), asList(thetas), asList(bases)
+    local, parse = _make_local_parse([str(expr)] + [str(x) for x in xNames + thetas])
+    e = parse(str(expr))
+    subs = {}
+    for X, th, b in zip(xNames, thetas, bases):
+        bb = spy.E if str(b) == 'E' else spy.sympify(str(b))
+        Xs = parse(str(X))
+        if str(comp) == str(X):
+            e = e / (Xs * spy.log(bb))
+        subs[Xs] = bb ** parse(str(th))
+    return str(spy.powsimp(spy.cancel(e.subs(subs))))
+
+
 def _detect_power_atoms(perCond):
     """Find base^exp terms with a non-numeric exponent. base must be a single
     symbol and exp = c*n (c rational, n a symbol); returns the unique (base, n)
@@ -2615,7 +2827,7 @@ def compileObservabilityTapeMulti(model, observation, conditionSubs, conditionIC
                                   segEquilibrate=None, conditionEvents=None,
                                   conditionT0Events=None, jointSteadyState=False,
                                   jointFixedStates=None, heldStateParams=None,
-                                  conditionObs=None):
+                                  conditionObs=None, conditionTimes=None):
     """Compile one observability tape per experimental condition over a shared
     coordinate space, for the multi-condition observability path.
 
@@ -2758,6 +2970,45 @@ def compileObservabilityTapeMulti(model, observation, conditionSubs, conditionIC
         perCond.append((f_c, g_c, ic_c, f_ss))
         subsPer.append(subsMap)
 
+    # a logarithmic observable carries the information of its argument
+    perCond = [(f_c, [_strip_log_obs(e) for e in g_c], ic_c, f_ss)
+               for (f_c, g_c, ic_c, f_ss) in perCond]
+
+    # log-parametrised parameters: one that occurs only as base^(c*theta) is replaced
+    # by the rational coordinate X = base^theta, and the report maps X back to theta
+    conditionEvents = conditionEvents or []
+    conditionTimes = conditionTimes or []
+    evExprs = []
+    for c in range(K):
+        for e in (list(conditionEvents[c]) if c < len(conditionEvents) else []):
+            evExprs.append(subsMemo(pval(e['value']), subsPer[c]))
+        if c < len(conditionTimes) and conditionTimes[c] is not None:
+            evExprs.append(subsMemo(pval(conditionTimes[c]), subsPer[c]))
+    lpExprs = [e for (f_c, g_c, ic_c, f_ss) in perCond
+               for e in list(f_c) + list(g_c) + list(ic_c.values()) + list(f_ss)]
+    lpBase = _detect_log_params(lpExprs + evExprs, set(S))
+    lpBase = _log_params_only_in_atoms(lpBase, lpExprs + evExprs)
+    taken = set()
+    for e in lpExprs + evExprs:
+        taken |= {str(x) for x in spy.sympify(e).free_symbols}
+    lp = {}
+    for t, b in lpBase.items():
+        nm = 'exp_%s' % t
+        while nm in taken:
+            nm += '_'
+        taken.add(nm)
+        lp[t] = (spy.Symbol(nm), b)
+    lpSub = _log_param_sub(lp)
+    if lp:
+        perCond = [([lpSub(e) for e in f_c], [lpSub(e) for e in g_c],
+                    {k: lpSub(v) for k, v in ic_c.items()}, [lpSub(e) for e in f_ss])
+                   for (f_c, g_c, ic_c, f_ss) in perCond]
+        for t, (X, b) in lp.items():
+            if str(t) in fixedNames:
+                fixedNames.add(str(X))
+    logParams = [{'X': str(X), 'theta': str(t), 'base': 'E' if b == spy.E else str(b)}
+                 for t, (X, b) in sorted(lp.items(), key=lambda kv: str(kv[0]))]
+
     # power/Hill recast: replace base^exp (exp a parameter) by a state E with
     # E' = exp*E*base'/base and a companion L = log(base). E and L are appended as
     # coordinates and tied to (base, exp) by an algebraic relation downstream, so f
@@ -2856,7 +3107,7 @@ def compileObservabilityTapeMulti(model, observation, conditionSubs, conditionIC
     eventVals = []
     for c in range(K):
         evs = list(conditionEvents[c]) if c < len(conditionEvents) else []
-        eventVals.append([spy.sympify(pval(e['value'])) for e in evs])
+        eventVals.append([lpSub(spy.sympify(pval(e['value']))) for e in evs])
 
     # f_ss is included so parameters the perturbed dynamics drop still count
     paramset = set()
@@ -2870,6 +3121,10 @@ def compileObservabilityTapeMulti(model, observation, conditionSubs, conditionIC
     for vs in eventVals:
         for e in vs:
             paramset |= set(e.free_symbols)
+    # a segment's left boundary may sit at a time given in the parameters
+    for c, tm in enumerate(conditionTimes):
+        if tm is not None and c < K:
+            paramset |= set(lpSub(pval(tm)).free_symbols)
     paramset -= set(S)
     paramset |= set(heldParamSyms)   # held-variable initial-value parameters
     params = sorted(paramset, key=spy.default_sort_key)
@@ -3029,7 +3284,7 @@ def compileObservabilityTapeMulti(model, observation, conditionSubs, conditionIC
             methodCode = {'replace': 0, 'add': 1, 'multiply': 2}
             keep = [e for e in evs if str(e['var']) in idxOfState]
             if keep:
-                vals = [subsMemo(pval(e['value']), subsMap) for e in keep]
+                vals = [lpSub(subsMemo(pval(e['value']), subsMap)) for e in keep]
                 try:
                     evOp, evA, evB, evCnum, evCden, evO = _emit_tape_shared(
                         [], vals, leafSlot, nLeaves)
@@ -3040,6 +3295,17 @@ def compileObservabilityTapeMulti(model, observation, conditionSubs, conditionIC
                     'evCden': evCden, 'evOut': evO,
                     'evVarIdx': [idxOfState[str(e['var'])] for e in keep],
                     'evMethod': [methodCode[str(e['method'])] for e in keep]})
+        # the segment's left boundary time as an order-0 tape: its value sets the gap
+        # lengths, its duals carry a time that depends on the coordinates
+        if c < len(conditionTimes) and conditionTimes[c] is not None:
+            tv = lpSub(subsMemo(pval(conditionTimes[c]), subsMap))
+            try:
+                tmOp, tmA, tmB, tmCnum, tmCden, tmO = _emit_tape_shared(
+                    [], [tv], leafSlot, nLeaves)
+            except _NotRational:
+                return {'ok': False}
+            tape.update({'tmOp': tmOp, 'tmA': tmA, 'tmB': tmB, 'tmCnum': tmCnum,
+                         'tmCden': tmCden, 'tmOut': tmO})
         tapes.append(tape)
 
     zStateNames = [str(X) for X in freeStates if str(X) not in fixedNames]
@@ -3055,6 +3321,7 @@ def compileObservabilityTapeMulti(model, observation, conditionSubs, conditionIC
         'zSlots': zSlots,
         'znames': znames,
         'leafNames': leafNames,
+        'logParams': logParams,
     }
     if equilibrate:
         out['equilibrate'] = True

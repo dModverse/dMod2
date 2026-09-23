@@ -3056,6 +3056,72 @@
   as.eqnvec(structure(as.character(vals), names = names(vals)))
 }
 
+# ---- log-parametrised coordinates ----------------------------------------------------
+
+# The detection result in the chart X = b^theta (see logChart in the Python module):
+# the transformed object, the name map and a renaming function theta -> X. NULL when no
+# coordinate qualifies.
+.symRedLogChart <- function(object, coords, sd) {
+  gens <- lapply(object$symmetries, function(d) if (is.null(d$generator)) NULL else
+    as.list(setNames(gsub("\\^", "**", as.character(d$generator)), names(d$generator))))
+  if (!length(gens) || all(vapply(gens, is.null, logical(1)))) return(NULL)
+  ch <- tryCatch(sd$logChart(gens, as.list(coords)), error = function(e) NULL)
+  if (is.null(ch)) return(NULL)
+  th <- vapply(ch$map, function(m) as.character(m$theta), "")
+  X  <- vapply(ch$map, function(m) as.character(m$X), "")
+  b  <- vapply(ch$map, function(m) as.character(m$base), "")
+  ren <- function(v) { if (is.null(v)) return(v); i <- match(v, th)
+    v[!is.na(i)] <- X[i[!is.na(i)]]; v }
+  obj <- object
+  for (i in seq_along(obj$symmetries)) {
+    g <- ch$gens[[i]]
+    if (is.null(g)) {
+      obj$symmetries[[i]]$support <- ren(obj$symmetries[[i]]$support)
+      next
+    }
+    g <- unlist(g)
+    obj$symmetries[[i]]$generator <- as.eqnvec(setNames(gsub("\\*\\*", "^", g), names(g)))
+    obj$symmetries[[i]]$support <- .symSort(ren(obj$symmetries[[i]]$support))
+    obj$symmetries[[i]]$completeGenerator <- NULL
+  }
+  obj$info$coordinates <- ren(as.character(coords))
+  list(object = obj, theta = th, X = X, base = b, ren = ren)
+}
+
+# A reduction computed in the chart X = b^theta, reported in theta: an entry for X is
+# the value of theta = log_b(entry), and every X on a right-hand side is b^theta.
+.symRedLogBack <- function(res, lc, sd) {
+  back <- function(v, solveFor = NULL) vapply(as.character(v), function(x)
+    as.character(sd$logChartBack(gsub("\\^", "**", x), lc$X, lc$theta, lc$base,
+                                 solveFor)), "", USE.NAMES = FALSE)
+  unren <- function(v) { if (is.null(v)) return(v); i <- match(v, lc$X)
+    v[!is.na(i)] <- lc$theta[i[!is.na(i)]]; v }
+  entries <- function(v) {
+    if (is.null(v) || !length(v)) return(v)
+    nm <- names(v)
+    out <- vapply(seq_along(v), function(i)
+      if (nm[i] %in% lc$X) back(v[[i]], nm[i]) else back(v[[i]]), "")
+    setNames(gsub("\\*\\*", "^", out), unren(nm))
+  }
+  res$coordinates <- unren(res$coordinates)
+  res$fixed <- unren(res$fixed)
+  if (!is.null(res$trafo))
+    res$trafo <- as.eqnvec(entries(setNames(as.character(res$trafo), names(res$trafo))))
+  res$blocks <- lapply(res$blocks, function(b) {
+    b$support <- unren(b$support)
+    b$transversal <- unren(b$transversal)
+    if (!is.null(b$pins)) b$pins <- entries(b$pins)
+    if (length(b$invariants))
+      b$invariants <- gsub("\\*\\*", "^", back(b$invariants))
+    if (length(b$survivorMeaning))
+      b$survivorMeaning <- setNames(gsub("\\*\\*", "^", back(b$survivorMeaning)),
+                                    unren(names(b$survivorMeaning)))
+    b
+  })
+  res
+}
+
+
 # ---- result object and print -----------------------------------------------------
 
 .symRedResult <- function(object, blocks, trafo, coords, fixed, settings, call) {
@@ -3455,6 +3521,22 @@ symmetryReduction <- function(object, fixed = NULL, positive = TRUE, dPoly = 3L,
   if (!(code_dir %in% sysmod$path)) sysmod$path <- c(code_dir, sysmod$path)
   sd <- reticulate::import("symmetryDetection", convert = TRUE)
   spy <- reticulate::import("sympy", convert = TRUE)
+
+  # A coordinate that enters the generators only through b^theta is reduced in the
+  # chart X = b^theta, where they are rational; the result is mapped back to theta.
+  lc <- .symRedLogChart(object, coords, sd)
+  if (!is.null(lc)) {
+    pos2 <- if (is.character(positive)) c(positive, lc$X[lc$theta %in% positive])
+            else positive
+    res <- symmetryReduction(lc$object, fixed = lc$ren(fixed), positive = pos2,
+                             dPoly = dPoly, dDarboux = dDarboux, dExp = dExp,
+                             separable = separable,
+                             reportZeroCompatibility = reportZeroCompatibility,
+                             verbose = verbose)
+    res <- .symRedLogBack(res, lc, sd)
+    res$call <- .symCall
+    return(res)
+  }
 
   o <- .symOrdered(object)
   wr <- .symRedWeightRows(o$syms)

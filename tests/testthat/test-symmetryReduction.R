@@ -883,3 +883,20 @@ test_that("zero limits: coordinates that can only vanish together", {
                          capture.output(print(redquiet(obj2,
                            reportZeroCompatibility = TRUE))))))
 })
+
+
+test_that("a log-parametrised direction is reduced in base^theta and mapped back", {
+  if (!.sympy_works()) skip("reticulate/sympy not available")
+  f  <- eqnvec(A = "-k1*A + k2*B", B = "k1*A - k2*B")
+  tr <- eqnvec(k1 = "exp(lk1)", k2 = "exp(lk2)", s = "exp10(ls)", B = "10^lB")
+  r <- symdet2(f, eqnvec(y = "log10(s*A)"), trafo = tr, reconstruct = TRUE)
+  red <- redquiet(r)
+  expect_setequal(red$removed, c("X\u2081", "X\u2082"))
+  expect_setequal(names(red$trafo), c("A", "lB", "lk1", "lk2", "ls"))
+  # composing both trafos gives an identifiable model
+  comp <- as.character(tr)
+  for (nm in names(red$trafo))
+    comp <- cOde::replaceSymbols(nm, paste0("(", red$trafo[[nm]], ")"), comp)
+  comp <- c(setNames(comp, names(tr)), red$trafo["A"])
+  expect_true(symdet2(f, eqnvec(y = "log10(s*A)"), trafo = as.eqnvec(comp))$identifiable)
+})

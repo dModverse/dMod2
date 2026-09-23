@@ -18,6 +18,7 @@ symmetryDetection(
   reduceCQ = FALSE,
   freeInitial = NULL,
   reconstruct = FALSE,
+  positive = TRUE,
   verify = TRUE,
   cores = 1,
   control = reconstControl(),
@@ -37,7 +38,8 @@ to every condition, or -- for \code{"observability"} and \code{"scaling"} -- a \
 the observables differ between conditions: a single \code{g} credits every condition
 with every measurement and so under-reports. Its length must match the \code{conditions}
 rows and any per-condition \code{trafo} list; given neither, it sets the number of
-conditions.}
+conditions. For \code{"observability"} an observable \code{a*log(h) + c} in any base, \code{a} a
+number, is analysed through \code{h}, which carries the same information.}
 
 \item{trafo}{Optional parameter transformation: one \link{eqnvec} applied to every
 condition, or -- for \code{"observability"} -- a \emph{list} of \link{eqnvec}s, one per condition.
@@ -45,7 +47,10 @@ A parameter-named entry is substituted into \code{f} and \code{g}; a state-named
 that state's initial condition. A steady state from \link{steadyStates} can be passed
 whole: a state name on the RIGHT of an entry is read as that state's initial value
 (the dMod convention), never as the running state, so substituting the entry cannot
-cancel \code{f} against the steady state it solves.}
+cancel \code{f} against the steady state it solves. The substitution reaches event values
+and times too. A log-parametrisation such as \code{k = "exp(lk)"}, \code{"exp10(lk)"} or
+\code{"10^lk"} is analysed in \code{b^lk}, where the model stays rational, as long as \code{lk}
+enters nowhere else; directions are reported in \code{lk}.}
 
 \item{method}{One of \code{"observability"} (default), \code{"polynomial"} or \code{"scaling"}; see
 Description.}
@@ -61,10 +66,16 @@ For \code{"polynomial"} they do not transform.}
 \code{"observability"} a forcing is an integrated state with initial value 0, excluded
 from the \code{f = 0} steady state; for \code{"polynomial"}/\code{"scaling"} it does not transform.}
 
-\item{events}{Optional \link{eventlist} for \code{"observability"} and \code{"scaling"}; event times
-must be numeric. The analysis starts at the earliest event time, so place an event
+\item{events}{Optional \link{eventlist} for \code{"observability"} and \code{"scaling"}. An event
+time is a number or, for \code{"observability"} with \code{symEngine = "modular"}, an
+expression in the parameters; its parameters are then coordinates like any other.
+The order of the eventlist places a time given in parameters among the others, so
+the events are listed chronologically. Root events are not supported. The analysis
+starts at the earliest numeric event time (0 when there is none), so place an event
 there if its transient is to be seen. An event value naming a \code{conditions} column
-is read from that grid.}
+is read from that grid. The rank is the one at the actual times between events; a
+direction that changes with them is given in closed form where it is a polynomial
+in them and by its support otherwise.}
 
 \item{conditions}{Optional data frame of experimental conditions: one row per
 condition, columns named by model symbols or by event-value placeholders. A numeric
@@ -99,6 +110,11 @@ outside that case.}
 as exact rational functions rather than only their support; scalings are always
 exact. A direction that cannot be reconstructed or certified stays support-only,
 with \code{explicit = FALSE}.}
+
+\item{positive}{The coordinates known to be positive, as in \link{symmetryReduction}:
+\code{TRUE} (the default) declares all, \code{FALSE} none, a character vector those
+named. It sets the domain on which \code{completeGenerator} has a flow for every
+\code{s} in R; orbits and invariants do not depend on it.}
 
 \item{verify}{Logical (default \code{TRUE}), \code{"observability"} only. Check that the
 reported rank has really saturated and warn if it has not, since stopping early
@@ -152,9 +168,12 @@ at any value, reparametrise a general direction onto its invariants with
 \link{symmetryReduction} --, \code{degree} (total degree of the canonical generator,
 \code{-1} when it is not polynomial), \code{support} (the coordinates involved -- the
 only field set when no closed form was reached), \code{explicit}, \code{reason},
-\code{certified}, \code{transformation} (the finite map, polynomial engine), \code{verified} and
+\code{certified}, \code{transformation} (the finite map, polynomial engine), \code{verified},
 \code{display} (the same components factored for printing; \code{generator} stays in
-the canonical expanded form).}
+the canonical expanded form), \code{completeGenerator} (\code{factor * generator}, a
+generator of the same orbits whose flow exists for every \code{s} in R on the
+domain set by \code{positive}; equal to \code{generator} for a scaling) and \code{factor}
+(that positive function, \code{"1"} for a scaling). Neither is printed.}
 \item{\code{info}}{\code{engine}, \code{lieOrderUsed} (and \code{lieOrderDriver}, the condition that
 set it), the saturation status \code{lieBudget} / \code{liePlateau} / \code{lieCertified},
 \code{gapOrderUsed}, \code{conditions}, \code{segments},
@@ -178,8 +197,10 @@ model \code{f}, the observables \code{g} and an optional \code{trafo} are given 
 \itemize{
 \item \code{"observability"} (default): the non-identifiable directions of the
 observability-identifiability matrix. Exact and scalable; requires rational
-right-hand sides and observables. Supports a free power/Hill exponent
-(\code{base^exp}), and is the only engine that uses \code{equilibrate}.
+right-hand sides and observables, up to a free power/Hill exponent
+(\code{base^exp}), a parameter that enters only as \code{exp(theta)} or \code{b^theta}, and a
+logarithmic observable (see \code{g}). The only engine that uses \code{equilibrate} and
+event times given in parameters.
 \item \code{"polynomial"}: the polynomial Lie-symmetry ansatz of Merkt et al. (2015),
 returning the generator and the finite transformation. Cost grows with
 \code{polynomialControl(pMax =)}. Ignores \code{events} and \code{conditions}.

@@ -7,6 +7,7 @@
 symmetryReduction(
   object,
   fixed = NULL,
+  positive = TRUE,
   dPoly = 3L,
   dDarboux = 2L,
   dExp = 2L,
@@ -23,6 +24,14 @@ symmetryReduction(
 beforehand (same semantics as \code{summary(object, fixed = )}): scaling directions
 removed by the fixing drop out of the reparametrisation, and the fixed
 coordinates never enter a transversal. Unknown names warn and are ignored.}
+
+\item{positive}{The coordinates that are known to be positive, the domain every
+chart certificate is proved over. \code{TRUE} (the default) declares all of them,
+as rate constants and concentrations are; \code{FALSE} declares none; a character
+vector declares those named, and unknown names warn and are ignored. A
+coordinate left out keeps its sign open, so a term containing it at an odd
+power decides no sign: fewer charts certify, more carriers come back
+real-valued, and none of the certificates that do come back is weaker.}
 
 \item{dPoly}{Total-degree cap of the polynomial invariant search (stage 2),
 and the numerator-degree cap of the rational stage that follows it (a
@@ -93,7 +102,9 @@ nonzero constant.}
 \item{\code{coordinates}, \code{fixed}, \code{settings}, \code{call}}{provenance.}
 }
 \code{print()} is terse: the verdict, the non-identity trafo entries, the invariant
-each outer parameter carries and where each zero limit is reached. \code{summary()}
+each fresh \verb{q_<k>} parameter carries and where each zero limit is reached. The
+monomial a scaling survivor carries is not printed, it follows from the gauge
+and stays on the object as \code{survivorMeaning}. \code{summary()}
 adds one line per block --
 kind, status, stage, how it was gauged -- plus, for a block that did not
 reduce, its invariants and the reason (how many invariants were found under

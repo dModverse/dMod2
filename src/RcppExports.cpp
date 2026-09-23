@@ -257,6 +257,23 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// symSeriesRank
+List symSeriesRank(IntegerMatrix S, int nz, int N, double pIn, IntegerVector cols, bool support, int atOneBelow);
+RcppExport SEXP _dMod2_symSeriesRank(SEXP SSEXP, SEXP nzSEXP, SEXP NSEXP, SEXP pInSEXP, SEXP colsSEXP, SEXP supportSEXP, SEXP atOneBelowSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< IntegerMatrix >::type S(SSEXP);
+    Rcpp::traits::input_parameter< int >::type nz(nzSEXP);
+    Rcpp::traits::input_parameter< int >::type N(NSEXP);
+    Rcpp::traits::input_parameter< double >::type pIn(pInSEXP);
+    Rcpp::traits::input_parameter< IntegerVector >::type cols(colsSEXP);
+    Rcpp::traits::input_parameter< bool >::type support(supportSEXP);
+    Rcpp::traits::input_parameter< int >::type atOneBelow(atOneBelowSEXP);
+    rcpp_result_gen = Rcpp::wrap(symSeriesRank(S, nz, N, pIn, cols, support, atOneBelow));
+    return rcpp_result_gen;
+END_RCPP
+}
 // symSolveMod
 SEXP symSolveMod(IntegerMatrix A, IntegerVector b, double pIn);
 RcppExport SEXP _dMod2_symSolveMod(SEXP ASEXP, SEXP bSEXP, SEXP pInSEXP) {
@@ -416,6 +433,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_dMod2_symObsNullBatch", (DL_FUNC) &_dMod2_symObsNullBatch, 8},
     {"_dMod2_symObsNullChain", (DL_FUNC) &_dMod2_symObsNullChain, 9},
     {"_dMod2_symObsNullChainSeedBatch", (DL_FUNC) &_dMod2_symObsNullChainSeedBatch, 10},
+    {"_dMod2_symSeriesRank", (DL_FUNC) &_dMod2_symSeriesRank, 7},
     {"_dMod2_symSolveMod", (DL_FUNC) &_dMod2_symSolveMod, 3},
     {"_dMod2_symRrefMod", (DL_FUNC) &_dMod2_symRrefMod, 2},
     {"_dMod2_symFitRational", (DL_FUNC) &_dMod2_symFitRational, 4},

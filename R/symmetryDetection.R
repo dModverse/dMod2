@@ -7,8 +7,10 @@
 #'
 #'   * `"observability"` (default): the non-identifiable directions of the
 #'     observability-identifiability matrix. Exact and scalable; requires rational
-#'     right-hand sides and observables. Supports a free power/Hill exponent
-#'     (`base^exp`), and is the only engine that uses `equilibrate`.
+#'     right-hand sides and observables, up to a free power/Hill exponent
+#'     (`base^exp`), a parameter that enters only as `exp(theta)` or `b^theta`, and a
+#'     logarithmic observable (see `g`). The only engine that uses `equilibrate` and
+#'     event times given in parameters.
 #'   * `"polynomial"`: the polynomial Lie-symmetry ansatz of Merkt et al. (2015),
 #'     returning the generator and the finite transformation. Cost grows with
 #'     `polynomialControl(pMax =)`. Ignores `events` and `conditions`.
@@ -25,24 +27,34 @@
 #'   the observables differ between conditions: a single `g` credits every condition
 #'   with every measurement and so under-reports. Its length must match the `conditions`
 #'   rows and any per-condition `trafo` list; given neither, it sets the number of
-#'   conditions.
+#'   conditions. For `"observability"` an observable `a*log(h) + c` in any base, `a` a
+#'   number, is analysed through `h`, which carries the same information.
 #' @param trafo Optional parameter transformation: one [eqnvec] applied to every
 #'   condition, or -- for `"observability"` -- a *list* of [eqnvec]s, one per condition.
 #'   A parameter-named entry is substituted into `f` and `g`; a state-named entry is
 #'   that state's initial condition. A steady state from [steadyStates] can be passed
 #'   whole: a state name on the RIGHT of an entry is read as that state's initial value
 #'   (the dMod convention), never as the running state, so substituting the entry cannot
-#'   cancel `f` against the steady state it solves.
+#'   cancel `f` against the steady state it solves. The substitution reaches event values
+#'   and times too. A log-parametrisation such as `k = "exp(lk)"`, `"exp10(lk)"` or
+#'   `"10^lk"` is analysed in `b^lk`, where the model stays rational, as long as `lk`
+#'   enters nowhere else; directions are reported in `lk`.
 #' @param method One of `"observability"` (default), `"polynomial"` or `"scaling"`; see
 #'   Description.
 #' @param parameters Character vector of extra symbols to treat as parameters.
 #' @param forcings Character vector of externally driven (input) state names. For
 #'   `"observability"` a forcing is an integrated state with initial value 0, excluded
 #'   from the `f = 0` steady state; for `"polynomial"`/`"scaling"` it does not transform.
-#' @param events Optional [eventlist] for `"observability"` and `"scaling"`; event times
-#'   must be numeric. The analysis starts at the earliest event time, so place an event
+#' @param events Optional [eventlist] for `"observability"` and `"scaling"`. An event
+#'   time is a number or, for `"observability"` with `symEngine = "modular"`, an
+#'   expression in the parameters; its parameters are then coordinates like any other.
+#'   The order of the eventlist places a time given in parameters among the others, so
+#'   the events are listed chronologically. Root events are not supported. The analysis
+#'   starts at the earliest numeric event time (0 when there is none), so place an event
 #'   there if its transient is to be seen. An event value naming a `conditions` column
-#'   is read from that grid.
+#'   is read from that grid. The rank is the one at the actual times between events; a
+#'   direction that changes with them is given in closed form where it is a polynomial
+#'   in them and by its support otherwise.
 #' @param conditions Optional data frame of experimental conditions: one row per
 #'   condition, columns named by model symbols or by event-value placeholders. A numeric
 #'   cell bakes that symbol to a constant in the condition, a character cell renames it.
@@ -72,6 +84,10 @@
 #'   `equilibrate = TRUE, reduceCQ = FALSE`, instead of the automatic choice. A name that
 #'   is not a valid pivot is dropped, and the argument is ignored (with a warning)
 #'   outside that case.
+#' @param positive The coordinates known to be positive, as in [symmetryReduction]:
+#'   `TRUE` (the default) declares all, `FALSE` none, a character vector those
+#'   named. It sets the domain on which `completeGenerator` has a flow for every
+#'   `s` in R; orbits and invariants do not depend on it.
 #' @param reconstruct Logical, `"observability"` only. Return the non-scaling directions
 #'   as exact rational functions rather than only their support; scalings are always
 #'   exact. A direction that cannot be reconstructed or certified stays support-only,
@@ -121,9 +137,12 @@
 #'       [symmetryReduction] --, `degree` (total degree of the canonical generator,
 #'       `-1` when it is not polynomial), `support` (the coordinates involved -- the
 #'       only field set when no closed form was reached), `explicit`, `reason`,
-#'       `certified`, `transformation` (the finite map, polynomial engine), `verified` and
+#'       `certified`, `transformation` (the finite map, polynomial engine), `verified`,
 #'       `display` (the same components factored for printing; `generator` stays in
-#'       the canonical expanded form).}
+#'       the canonical expanded form), `completeGenerator` (`factor * generator`, a
+#'       generator of the same orbits whose flow exists for every `s` in R on the
+#'       domain set by `positive`; equal to `generator` for a scaling) and `factor`
+#'       (that positive function, `"1"` for a scaling). Neither is printed.}
 #'     \item{`info`}{`engine`, `lieOrderUsed` (and `lieOrderDriver`, the condition that
 #'       set it), the saturation status `lieBudget` / `liePlateau` / `lieCertified`,
 #'       `gapOrderUsed`, `conditions`, `segments`,
@@ -200,7 +219,8 @@ symmetryDetection <- function(f = NULL, g = NULL, trafo = NULL,
                               events = NULL, conditions = NULL,
                               equilibrate = FALSE,
                               reduceCQ = FALSE, freeInitial = NULL,
-                              reconstruct = FALSE, verify = TRUE, cores = 1,
+                              reconstruct = FALSE, positive = TRUE,
+                              verify = TRUE, cores = 1,
                               control = reconstControl(),
                               polynomial = polynomialControl(),
                               scaling = scalingControl(),
@@ -218,7 +238,8 @@ symmetryDetection <- function(f = NULL, g = NULL, trafo = NULL,
   .symT0 <- Sys.time()
   # the engine settings surfaced in summary()'s computation report; summary()
   # shows only the entries relevant to the chosen method
-  .symSettings <- list(reduceCQ = isTRUE(reduceCQ), equilibrate = isTRUE(equilibrate),
+  .symSettings <- list(positive = positive,
+                        reduceCQ = isTRUE(reduceCQ), equilibrate = isTRUE(equilibrate),
                         reconstruct = isTRUE(reconstruct), verify = isTRUE(verify),
                         symEngine = symEngine, degreeCap = control$degreeCap,
                         certifyPoly = isTRUE(control$certifyPoly),
@@ -380,7 +401,8 @@ symmetryDetection <- function(f = NULL, g = NULL, trafo = NULL,
       knownSyms <- c(getSymbols(c(as.character(fdyn), gChar(),
                                   as.character(trafo[icEntries]))),
                      if (!is.null(events) && nrow(as.data.frame(events)))
-                       getSymbols(as.character(as.data.frame(events)$value)),
+                       getSymbols(c(as.character(as.data.frame(events)$value),
+                                    as.character(as.data.frame(events)$time))),
                      if (!is.null(conditions))
                        c(names(as.data.frame(conditions)),
                          unlist(lapply(as.data.frame(conditions),
@@ -390,6 +412,13 @@ symmetryDetection <- function(f = NULL, g = NULL, trafo = NULL,
     fdyn <- sub(fdyn)
     substModel(sub)
     if (length(icEntries)) initial <- sub(trafo[icEntries])
+    # event values and times are in the same parameters
+    if (!is.null(events) && nrow(as.data.frame(events)) && length(trafoSubs)) {
+      events$value <- replaceSymbols(names(trafoSubs), as.character(trafoSubs),
+                                     as.character(events$value))
+      events$time <- replaceSymbols(names(trafoSubs), as.character(trafoSubs),
+                                    as.character(events$time))
+    }
   }
 
   # The renamed initial-value coordinate is also named by a condition-grid column (a
@@ -548,14 +577,19 @@ symmetryDetection <- function(f = NULL, g = NULL, trafo = NULL,
   if (!(code_dir %in% sysmod$path)) sysmod$path <- c(code_dir, sysmod$path)
   sd <- reticulate::import("symmetryDetection", convert = TRUE)
 
-  # event times must be numeric (an event at a parameter time has no place in the
-  # local Taylor jet at t0)
+  # an event fires at a known time, a number or an expression in the parameters; a
+  # time given in parameters needs the modular observability engine
   if (!is.null(events) && nrow(as.data.frame(events))) {
-    et <- as.character(as.data.frame(events)$time)
-    if (any(is.na(suppressWarnings(as.numeric(et)))))
-      stop("event `time` must be numeric; a parameter time is not supported: ",
-           paste(et[is.na(suppressWarnings(as.numeric(et)))], collapse = ", "),
+    evdf <- as.data.frame(events)
+    if (!is.null(evdf$root) && any(!is.na(evdf$root)))
+      stop("symmetryDetection(): root events are not supported; give the event a time.",
            call. = FALSE)
+    et <- as.character(evdf$time)
+    symTime <- is.na(suppressWarnings(as.numeric(et)))
+    if (any(symTime) && !(method == "observability" && symEngine == "modular"))
+      stop("symmetryDetection(): an event time given in parameters (",
+           paste(unique(et[symTime]), collapse = ", "), ") needs method = ",
+           "\"observability\" with symEngine = \"modular\".", call. = FALSE)
   }
 
   # ==== engine: observability (conditions/segments, symbolic or modular) ============
@@ -566,7 +600,8 @@ symmetryDetection <- function(f = NULL, g = NULL, trafo = NULL,
     # grid-substitution targets include symbols that appear only in initial
     # values, event values or a per-condition trafo, so they can be fixed too
     extraSyms <- c(if (!is.null(initial)) getSymbols(as.character(as.eqnvec(initial))),
-                   if (!is.null(events)) getSymbols(as.character(as.data.frame(events)$value)),
+                   if (!is.null(events)) getSymbols(c(as.character(as.data.frame(events)$value),
+                                                      as.character(as.data.frame(events)$time))),
                    if (length(condInitial)) unlist(lapply(condInitial,
                      function(x) if (is.null(x)) NULL else getSymbols(as.character(x)))),
                    trafoSyms)
@@ -691,18 +726,19 @@ symmetryDetection <- function(f = NULL, g = NULL, trafo = NULL,
         equilibrate = equilibrate, segEquilibrate = as.list(res$segEquil),
         forcings = if (length(forcings)) forcings else NULL,
         conditionEvents = res$segEvents, conditionT0Events = res$events0,
+        conditionTimes = if (res$nGaps > 0L) res$times else NULL,
         jointSteadyState = isTRUE(ui),
         jointFixedStates = if (isTRUE(ui) && length(equilZeroStates))
           equilZeroStates else NULL,
         heldStateParams = if (isTRUE(ui) && length(heldStateParams))
           as.list(heldStateParams) else NULL)
       if (!isTRUE(multi$ok)) return(list(ok = FALSE, nonrational = multi$nonrational))
-      list(ok = TRUE, result = .observability_analytic_multi(multi, spy = spy,
+      list(ok = TRUE, result = .symLogParamBack(.observability_analytic_multi(multi, spy = spy,
              closedForm = reconstruct, sd = sd, cores = cores,
              equilZeroStates = equilZeroStates, t0events = res$events0,
              nConditions = res$nConditions, chainOf = res$chainOf,
              nGaps = res$nGaps, implicitSteadyState = isTRUE(ui), control = control,
-             verify = verify, codimSpec = codimSpec))
+             verify = verify, codimSpec = codimSpec), multi$logParams, sd))
     }
     ro <- runObs(useImplicit)
     if (useImplicit && !isFALSE(ro$ok) && is.null(ro$result))
@@ -712,13 +748,14 @@ symmetryDetection <- function(f = NULL, g = NULL, trafo = NULL,
            "explicit steady state through `trafo` (from steadyStates()).",
            call. = FALSE)
     if (isFALSE(ro$ok))
-      stop("method = \"observability\" requires rational right-hand sides, ",
-           "observables and initial conditions (built from +, -, *, / and ",
-           "integer powers).\n  ",
+      stop("method = \"observability\" requires right-hand sides, observables and ",
+           "initial conditions that are rational (built from +, -, *, / and integer ",
+           "powers) up to free power exponents, parameters that enter only as ",
+           "exp(theta) or b^theta, and observables of the form ",
+           "a*log(h) + offset with a number a.\n  ",
            paste(unlist(ro$nonrational), collapse = "\n  "),
-           "\nA logarithmic observable log10(h) + offset equals the rational ",
-           "observable scale * h; supply it in that form, or use ",
-           "method = \"polynomial\".", call. = FALSE)
+           "\nUse symEngine = \"symbolic\" or method = \"polynomial\" for other ",
+           "functions.", call. = FALSE)
     res <- ro$result
     if (is.list(res)) {
       res$nonIdentifiable <- .symRelabelDirections(res$nonIdentifiable, sd)
@@ -813,11 +850,11 @@ symmetryDetection <- function(f = NULL, g = NULL, trafo = NULL,
   if (is.null(r0) || !isTRUE(r0$ok))
     return(list(ok = NA, method = "saturation guard",
                 reason = "base point not re-evaluable"))
-  base <- as.integer(r0$rank); maxR <- base; growAt <- NA_integer_
+  base <- as.integer(.symRankOf(r0)); maxR <- base; growAt <- NA_integer_
   margin <- max(1L, margin)
   rankAt <- function(k) {                     # extend the Lie order; only the jet grows
     rk <- tryCatch(kcall(point0Solved, P, as.integer(NtUsed + k)), error = function(e) NULL)
-    if (is.null(rk) || !isTRUE(rk$ok)) NA_integer_ else as.integer(rk$rank)
+    if (is.null(rk) || !isTRUE(rk$ok)) NA_integer_ else as.integer(.symRankOf(rk))
   }
   top <- rankAt(margin)
   if (!is.na(top)) maxR <- max(maxR, top)
@@ -2099,6 +2136,50 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
 }
 
 
+# ---- event gaps: rank along a line in the gap lengths --------------------------------
+
+# Series rows S (rows x nzIn*N) with column c scaled by scale[c] and moved to column
+# colMap[c] of a width nzOut*N block.
+.symSeriesEmbed <- function(S, N, colMap, nzOut, p, scale = NULL) {
+  out <- matrix(0, nrow(S), nzOut * N)
+  for (c in seq_along(colMap)) {
+    v <- S[, (c - 1L) * N + seq_len(N), drop = FALSE]
+    if (!is.null(scale)) v[] <- .symMulmod(v, scale[c], p)
+    out[, (colMap[c] - 1L) * N + seq_len(N)] <- v
+  }
+  out
+}
+
+# Constant rows as series rows (every entry at eps^0).
+.symSeriesConst <- function(M, N) {
+  out <- matrix(0, nrow(M), ncol(M) * N)
+  if (nrow(M)) out[, (seq_len(ncol(M)) - 1L) * N + 1L] <- M
+  out
+}
+
+# Attach the series rank of the stacked series blocks to a reduced kernel result. A
+# kernel that moves with the gap lengths and is polynomial in them replaces the rows
+# by their value at the actual gaps.
+.symSeriesStack <- function(res, sblocks, nz, N, p) {
+  S <- do.call(rbind, sblocks)
+  storage.mode(S) <- "integer"
+  sr <- symSeriesRank(S, as.integer(nz), as.integer(N), p, integer(0),
+                      atOneBelow = as.integer(res$rank))
+  res$rankS <- sr$rank; res$S <- sr$S; res$N <- N; res$atOne <- !is.null(sr$R)
+  if (res$atOne) {
+    res$R <- sr$R; res$pivots <- as.integer(sr$pivots); res$rank <- length(sr$pivots)
+  }
+  res
+}
+
+# The rank that decides identifiability: over the gap series where there is one.
+.symRankOf <- function(r) if (is.null(r$rankS)) r$rank else r$rankS
+
+# Progress of a kernel result in the saturation: both the rank of the stacked
+# coefficient rows (whose nullspace the reconstruction uses) and the series rank.
+.symRankScore <- function(r) r$rank + .symRankOf(r)
+
+
 # Find a generic base point where the rank is maximal over the primes and
 # saturate the Lie order (and, with event gaps, the gap power-series order Mtot)
 # until the rank stops growing. kcall(point, p, Nt, Mtot) must return the kernel
@@ -2155,7 +2236,7 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
       if (!isTRUE(lo$ok)) return(NULL)
       hi <- call1(point, P, from + need, Mtot)
       if (!isTRUE(hi$ok)) return(NULL)
-      if (lo$rank == hi$rank) {
+      if (.symRankScore(lo) == .symRankScore(hi)) {
         if (lieDiag) message("[liediag] ", label, " Mtot=", Mtot, " rank ", lo$rank,
                              " flat over Lie order ", from, "-", from + need,
                              " (nz=", nz, ")")
@@ -2167,12 +2248,12 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
     repeat {
       r <- call1(point, P, Nt, Mtot)
       if (!isTRUE(r$ok)) return(NULL)
-      res <- r; ranks <- c(ranks, as.integer(r$rank))
+      res <- r; ranks <- c(ranks, as.integer(.symRankOf(r)))
       # flat steps accumulate: each one spends a unit of the codimension budget, and
       # a growth in between does not give the spent units back
-      if (r$rank == prev) flat <- flat + 1L else grew <- Nt
-      if (r$rank >= nz || (flat >= need && Nt >= 2L) || Nt > nz + 1L) break
-      prev <- r$rank; Nt <- Nt + 1L
+      if (.symRankScore(r) == prev) flat <- flat + 1L else grew <- Nt
+      if (.symRankOf(r) >= nz || (flat >= need && Nt >= 2L) || Nt > nz + 1L) break
+      prev <- .symRankScore(r); Nt <- Nt + 1L
     }
     if (lieDiag) message("[liediag] ", label, " Mtot=", Mtot, " ranks from Lie order ",
                          max(1L, from), ": ", paste(ranks, collapse = ","),
@@ -2222,13 +2303,21 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
   # raise the gap order until the rank stops growing (exact generic-timing rank);
   # if the cap is hit while still growing, the truncated rank is conservative
   if (maxM > 0L) repeat {
-    if (sat$res$rank >= nz) break
+    if (.symRankOf(sat$res) >= nz) break
     if (MtotUsed >= maxM) { saturatedM <- FALSE; break }
     satM <- saturateNt(point0, MtotUsed + 1L)
     if (is.null(satM)) break
     MtotUsed <- MtotUsed + 1L
-    if (satM$res$rank <= sat$res$rank) break
+    if (.symRankScore(satM$res) <= .symRankScore(sat$res)) break
     sat <- satM; NtUsed <- sat$Nt
+  }
+
+  # a kernel that moves with the gap lengths is read at the actual gaps once it is known
+  # as a polynomial in them, which takes further gap orders
+  while (.symRankOf(sat$res) < sat$res$rank && MtotUsed < maxM) {
+    r <- kcall(point0, P, NtUsed, MtotUsed + 1L)
+    if (!isTRUE(r$ok)) break
+    MtotUsed <- MtotUsed + 1L; sat$res <- r
   }
 
   # The cross-prime rank check re-evaluates the SAME point at each remaining prime,
@@ -2236,12 +2325,12 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
   # independent, so warm them as ONE batch; the remaining conditions of a prime are
   # filled by kcall below, and only for the primes whose probe actually passed.
   warm(rep(list(point0), length(.symPrimes) - 1L), as.list(.symPrimes[-1]))
-  rankMax <- sat$res$rank
+  rankMax <- .symRankScore(sat$res)
   for (pj in .symPrimes[-1]) {
     rj <- kcall(point0, pj, NtUsed, MtotUsed)
-    if (isTRUE(rj$ok)) rankMax <- max(rankMax, rj$rank)
+    if (isTRUE(rj$ok)) rankMax <- max(rankMax, .symRankScore(rj))
   }
-  while (sat$res$rank < rankMax) {
+  while (.symRankScore(sat$res) < rankMax) {
     point0 <- pool(poolNext + seq_len(nLeaves) - 1L); poolNext <- poolNext + nLeaves
     sat <- saturateNt(point0, MtotUsed)
     if (is.null(sat)) return(NULL)
@@ -2251,7 +2340,7 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
        point0 = point0, pool = pool, poolNext = poolNext,
        blockOrders = sat$blockOrders, blockDriver = sat$blockDriver,
        budget = budget, plateau = needUsed, certified = certified,
-       rank = sat$res$rank, pivots = sat$res$pivots)
+       rank = sat$res$rank, rankS = .symRankOf(sat$res), pivots = sat$res$pivots)
 }
 
 
@@ -2367,6 +2456,15 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
   N <- .symNullspaceBasis(sc$ref, setdiff(0:(nz - 1L), sc$pivots), P)
   physNull <- if (length(physCols) && ncol(N))
     .symRrefModp(N[physCols, , drop = FALSE], P)$rank else 0L
+  # with directions that depend on the event gaps, project the series kernel instead:
+  # its part with vanishing physical entries is the kernel of the auxiliary columns
+  if (!is.null(sc$rankS) && sc$rankS < sc$rank) {
+    auxCols <- which(!(znames %in% physCoords)) - 1L
+    rAux <- if (length(auxCols))
+      symSeriesRank(sc$ref$S, as.integer(nz), as.integer(sc$ref$N), P, auxCols)$rank
+      else 0L
+    physNull <- (nz - sc$rankS) - (length(auxCols) - rAux)
+  }
   result$dim <- length(physCoords)
   result$coordinates <- physCoords
   result$rank <- as.integer(length(physCoords) - physNull)
@@ -2647,6 +2745,12 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
         evB = as.integer(t$evB), evCnum = as.character(t$evCnum),
         evCden = as.character(t$evCden), evOut = as.integer(t$evOut),
         evVarIdx = as.integer(t$evVarIdx), evMethod = as.integer(t$evMethod)))
+    # the segment's left boundary time (value and duals)
+    if (!is.null(t$tmOp))
+      out <- c(out, list(
+        tmOp = as.integer(t$tmOp), tmA = as.integer(t$tmA), tmB = as.integer(t$tmB),
+        tmCnum = as.character(t$tmCnum), tmCden = as.character(t$tmCden),
+        tmOut = as.integer(t$tmOut)))
     out
   }
   tapes <- lapply(multi$tapes, tapeFields)
@@ -3091,6 +3195,15 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
           r2[wc[rc$baseCol]] <- (p - bScale) %% p                         # -1/base
           bl[[length(bl) + 1L]] <- rbind(r1, r2)
         }
+        # the same blocks over the gap series: the chain's series rows scaled and
+        # embedded like oR, every other block constant
+        if (!is.null(obs$S)) {
+          scl <- rep(1, nzL); scl[logCols] <- xvals
+          S <- matrix(as.numeric(obs$S), nrow(obs$S), ncol(obs$S))
+          cst <- if (length(bl) > 1L) do.call(rbind, bl[-1]) else matrix(0, 0, nzWide)
+          attr(bl, "series") <- rbind(.symSeriesEmbed(S, obs$N, wc, nzWide, p, scl),
+                                      .symSeriesConst(cst, obs$N))
+        }
         bl
       }
       # one condition's observability kernel at its seeded resting state: a chain of
@@ -3116,20 +3229,23 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
         if (missing(solveFn) && Kc > 1L &&
             !is.null(jointSolveCond(point, p, equilConds[1])))
           warmSolves(list(point), list(p))
-        blocks <- list()
+        blocks <- list(); sblocks <- list()
         for (mi in seq_len(Kc)) {
           ci <- equilConds[mi]
           sc0 <- solveFn(point, p, ci)
           if (is.null(sc0)) { ssWhy <<- "joint solve failed"; return(list(ok = FALSE)) }
           b <- oneCondBlocks(mi, condObs(ci, sc0$ptc, p, Nt, Mtot), sc0, p)
           if (is.null(b)) return(list(ok = FALSE))
+          sblocks <- c(sblocks, list(attr(b, "series")))
           blocks <- c(blocks, b)
         }
         # final stacked reduction over GF(p), run per accepted sample; the pivot
         # rows are all this path reads, so it calls symRrefMod directly
         rr <- symRrefMod(do.call(rbind, blocks), p)
-        list(ok = TRUE, R = rr$R,
-             pivots = as.integer(rr$piv), rank = as.integer(rr$rank), dim = nzWide)
+        res <- list(ok = TRUE, R = rr$R,
+                    pivots = as.integer(rr$piv), rank = as.integer(rr$rank), dim = nzWide)
+        if (hasGaps) res <- .symSeriesStack(res, sblocks, nzWide, Mtot + 1L, p)
+        res
       }
       # one condition's observability rows for the saturation: the cached solve kcall4
       # reads and this condition's jet, without the df tangency and recast rows, which
@@ -3182,16 +3298,18 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
           out <- vector("list", nP); e <- 0L
           for (i in seq_len(nP)) {
             if (is.null(perCond[[i]])) { out[[i]] <- list(ok = FALSE); next }
-            blocks <- list(); bad <- FALSE
+            blocks <- list(); sblocks <- list(); bad <- FALSE
             for (mi in seq_len(Kc)) {
               e <- e + 1L
               b <- oneCondBlocks(mi, kr[[e]], perCond[[i]][[mi]], primeVec[[i]])
-              if (is.null(b)) bad <- TRUE else blocks <- c(blocks, b)
+              if (is.null(b)) bad <- TRUE
+              else { blocks <- c(blocks, b); sblocks <- c(sblocks, list(attr(b, "series"))) }
             }
             out[[i]] <- if (bad) list(ok = FALSE) else {
               rr <- symRrefMod(do.call(rbind, blocks), primeVec[[i]])
-              list(ok = TRUE, R = rr$R, pivots = as.integer(rr$piv),
-                   rank = as.integer(rr$rank), dim = nzWide) }
+              .symSeriesStack(list(ok = TRUE, R = rr$R, pivots = as.integer(rr$piv),
+                                   rank = as.integer(rr$rank), dim = nzWide),
+                              sblocks, nzWide, MtotUsed + 1L, primeVec[[i]]) }
           }
           out
         }
@@ -3263,9 +3381,14 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
           rel[[length(rel) + 1L]] <- r2
         }
       }
-      rr <- symRrefMod(rbind(oR, do.call(rbind, rel)), p)
-      list(ok = TRUE, R = rr$R, pivots = as.integer(rr$piv),
-           rank = as.integer(rr$rank), dim = nz)
+      relM <- do.call(rbind, rel)
+      rr <- symRrefMod(rbind(oR, relM), p)
+      res <- list(ok = TRUE, R = rr$R, pivots = as.integer(rr$piv),
+                  rank = as.integer(rr$rank), dim = nz)
+      if (hasGaps)
+        res <- .symSeriesStack(res, list(matrix(as.numeric(o$S), nrow(o$S), ncol(o$S)),
+                                         .symSeriesConst(relM, o$N)), nz, o$N, p)
+      res
     }
     blockCall <- obsBlockCalls()
   } else {
@@ -3375,7 +3498,7 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
                               else as.integer(nConditions),
                  coordinates = znames,
                  segments = nSegmentTapes, gapOrderUsed = MtotUsed,
-                 identifiable = (sc$rank == nz), rank = as.integer(sc$rank),
+                 identifiable = (sc$rankS == nz), rank = as.integer(sc$rankS),
                  dim = as.integer(nz), lieOrderUsed = as.integer(sc$NtUsed),
                  lieOrderDriver = sc$blockDriver, lieBudget = sc$budget,
                  liePlateau = sc$plateau, lieCertified = isTRUE(sc$certified),
@@ -3387,7 +3510,7 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
   if (jointSS) {
     physParams0 <- setdiff(znames, as.character(multi$zStateNames))
     result$dim <- length(physParams0)
-    if (sc$rank == nz) result$rank <- length(physParams0)
+    if (sc$rankS == nz) result$rank <- length(physParams0)
   }
   # transient recast reports in the physical space (real states + parameters); the
   # recast atoms E = base^exp, L = log(base) are auxiliary. A full augmented rank ties
@@ -3395,10 +3518,38 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
   if (recastTransient) {
     physCoords0 <- setdiff(znames, recastAtomNames)
     result$dim <- length(physCoords0)
-    if (sc$rank == nz) result$rank <- length(physCoords0)
+    if (sc$rankS == nz) result$rank <- length(physCoords0)
   }
-  if (sc$rank == nz)
+  # Directions that change with the time between events have no closed form in the
+  # coordinates. They are the gap between the series rank and the rank of the stacked
+  # coefficient rows, and are reported by the support of the series kernel.
+  gapDirs <- list()
+  if (sc$rankS < sc$rank) {
+    S <- sc$ref$S
+    supp <- symSeriesRank(S, as.integer(nz), as.integer(sc$ref$N), .symPrimes[1],
+                          integer(0), support = TRUE)$support
+    gapDirs <- rep(list(list(support = .symSort(znames[supp + 1L]), type = "general",
+                             closedForm = FALSE,
+                             reason = "depends on the time between events")),
+                   sc$rank - sc$rankS)
+  }
+  if (sc$rankS == nz)
     return(result)
+  # joint mode reports in parameter space, transient recast without its atoms; the
+  # rationale sits with the call at the end
+  reportPhysical <- function(result) {
+    if (jointSS)
+      result <- .symReportPhysical(result, znames, as.character(multi$zStateNames),
+                                     sc, nz, .symPrimes[1], "stateVector", flagJoint = TRUE)
+    if (recastTransient)
+      result <- .symReportPhysical(result, znames, recastAtomNames,
+                                     sc, nz, .symPrimes[1], "recastVector")
+    result
+  }
+  if (sc$rank == nz) {
+    result$nonIdentifiable <- gapDirs
+    return(reportPhysical(result))
+  }
 
   P <- .symPrimes[1]
   freeCols <- setdiff(0:(nz - 1L), sc$pivots)
@@ -3759,13 +3910,13 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
     .tlog(sprintf("reconstruction done: %d/%d closed",
                   sum(vapply(interp, function(e) isTRUE(e$closedForm), logical(1))),
                   length(interp)))
-    result$nonIdentifiable <- c(scaling, peeled, interp)
+    result$nonIdentifiable <- c(scaling, peeled, interp, gapDirs)
   } else {
     support <- lapply(residualFree, function(fc) {
       v <- .symNullResidues(sc$ref, fc, P)
       list(support = .symSort(znames[v != 0]), type = "general", closedForm = FALSE)
     })
-    result$nonIdentifiable <- c(scaling, support)
+    result$nonIdentifiable <- c(scaling, support, gapDirs)
   }
   # ==== report in the physical coordinate space =====================================
   # joint mode: the per-condition state columns are auxiliary -- the physical question
@@ -3774,17 +3925,12 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
   # state components stay in $stateVector: they are determined by the parameters on the
   # resting manifold (xi_x = dx . xi_theta), so the parameter part specifies the
   # direction and the states are redundant in the reported closed form.
-  if (jointSS)
-    result <- .symReportPhysical(result, znames, as.character(multi$zStateNames),
-                                   sc, nz, P, "stateVector", flagJoint = TRUE)
   # transient recast: only the atoms E = base^exp and L = log(base) are auxiliary --
   # unlike joint mode the real state initial values ARE physical coordinates (a free-IC
   # symmetry such as FB d/dFB is legitimate). The atoms' components are determined by
   # the recast relation and redundant, and the reconstructed entry VALUES already had
   # them back-substituted, so no auxiliary symbol survives in the reported closed form.
-  if (recastTransient)
-    result <- .symReportPhysical(result, znames, recastAtomNames,
-                                   sc, nz, P, "recastVector")
+  result <- reportPhysical(result)
   # ==== the saturation guard (verify = TRUE) and the return value ===================
   # Schwartz-Zippel saturation guard: re-evaluate the SAME kernel further up the Lie
   # order and check the rank does not climb past the reported value. It is the fallback
@@ -3793,7 +3939,7 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
   # a premature one. One pass, not a second analysis (no peeling, no reconstruction).
   if (isTRUE(verify) && !isTRUE(sc$certified))
     result$verification <- tryCatch(
-      .symSzSaturationGuard(kcall, point0Solved, sc$NtUsed, sc$rank),
+      .symSzSaturationGuard(kcall, point0Solved, sc$NtUsed, sc$rankS),
       error = function(e) list(ok = NA, method = "saturation guard",
                                reason = conditionMessage(e)))
   result
@@ -4696,8 +4842,8 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
   subCols <- setdiff(subCols, icCols)
 
   ev <- if (is.null(events)) NULL else as.data.frame(events, stringsAsFactors = FALSE)
-  tnum <- if (is.null(ev) || !nrow(ev)) numeric(0)
-          else suppressWarnings(as.numeric(as.character(ev$time)))
+  tstr <- if (is.null(ev) || !nrow(ev)) character(0) else trimws(as.character(ev$time))
+  tnum <- suppressWarnings(as.numeric(tstr))
   if (is.null(t0)) t0 <- if (length(tnum) && any(!is.na(tnum)))
     min(tnum, na.rm = TRUE) else 0
   t0 <- as.numeric(t0)
@@ -4721,14 +4867,28 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
     v
   }
 
-  # post-t0 segment boundaries: the distinct event times strictly after t0
-  postT <- if (length(tnum)) sort(unique(tnum[!is.na(tnum) & tnum > t0])) else numeric(0)
-  segTimes <- c(t0, postT)               # left endpoints of S0, S1, ...
+  # Segment of each event: 1 for S0 (a numeric time <= t0), else the rank of its time
+  # among the distinct later times. A time given in parameters takes its place in the
+  # order of the eventlist, which must then list the numeric times ascending.
+  isT0 <- !is.na(tnum) & tnum <= t0
+  key <- ifelse(is.na(tnum), tstr, as.character(tnum))
+  postKeys <- if (!any(is.na(tnum))) as.character(sort(unique(tnum[!isT0])))
+              else unique(key[!isT0])
+  if (any(is.na(tnum))) {
+    kn <- suppressWarnings(as.numeric(postKeys))
+    if (is.unsorted(kn[!is.na(kn)], strictly = TRUE))
+      stop("symmetryDetection(): with an event time given in parameters, the ",
+           "eventlist sets the order of the events and must list the numeric times ",
+           "ascending.", call. = FALSE)
+  }
+  segOf <- ifelse(isT0, 1L, 1L + match(key, postKeys))
+  segTimes <- c(as.character(t0), postKeys)   # left endpoints of S0, S1, ...
   nSeg <- length(segTimes)
   # dummy seed for a propagation-seeded later segment: not a free unknown
   dummyIc0 <- setNames(as.list(rep("0", length(dynStates))), dynStates)
 
   subsList <- list(); ic0List <- list(); ev0List <- list(); segEvList <- list()
+  timeList <- list()
   equilList <- logical(0); chainOf <- integer(0); posInChain <- integer(0)
   for (k in seq_along(conds)) {
     subsBase <- list()
@@ -4742,21 +4902,19 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
     initK <- if (length(condInitial)) condInitial[[k]] else initial
     initK <- if (is.null(initK)) NULL else as.eqnvec(initK)
     for (j in seq_len(nSeg)) {
-      tau <- segTimes[j]
-      # regime in force during this segment: the latest switch value <= tau for
-      # each constant state. A forcing defaults to 0 before its first event fires,
+      # regime in force during this segment: the latest switch value up to its start
+      # for each constant state. A forcing defaults to 0 before its first event fires,
       # so it stays a baked constant (never a free coordinate) in early segments.
       subs <- subsBase
       for (cs in constStates) {
-        si <- which(isSwitch & evVar == cs & evMethod == "replace" &
-                    !is.na(tnum) & tnum <= tau)
-        if (length(si)) subs[[cs]] <- resolve(ev$value[si[which.max(tnum[si])]], k)
+        si <- which(isSwitch & evVar == cs & evMethod == "replace" & segOf <= j)
+        if (length(si)) subs[[cs]] <- resolve(ev$value[si[which.max(segOf[si])]], k)
         else if (cs %in% forcings) subs[[cs]] <- "0"
       }
       if (j == 1L) {
         # S0: t0 events compose the start-point initial condition (and feed the
         # equilibrate solver as the dose applied on top of the resting state)
-        leIdx <- which(!isSwitch & !is.na(tnum) & tnum <= t0)
+        leIdx <- which(!isSwitch & isT0)
         ev0 <- lapply(leIdx, function(i) list(
           var = evVar[i], method = evMethod[i], value = resolve(ev$value[i], k)))
         ic0 <- list()
@@ -4776,7 +4934,7 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
         # later segment: propagation-seeded, dummy ic0 (no free coordinates). State
         # doses at this boundary are applied to the propagated state by the kernel.
         ev0 <- list(); ic0 <- dummyIc0
-        evIdx <- which(!isSwitch & !is.na(tnum) & tnum == tau)
+        evIdx <- which(!isSwitch & segOf == j)
         segEv <- lapply(evIdx, function(i) list(
           var = evVar[i], method = evMethod[i], value = resolve(ev$value[i], k)))
       }
@@ -4784,14 +4942,46 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
       ic0List[[length(ic0List) + 1L]] <- ic0
       ev0List[[length(ev0List) + 1L]] <- ev0
       segEvList[[length(segEvList) + 1L]] <- if (j == 1L) list() else segEv
+      timeList[[length(timeList) + 1L]] <- resolve(segTimes[j], k)
       equilList <- c(equilList, isTRUE(equilibrate))
       chainOf <- c(chainOf, k); posInChain <- c(posInChain, j)
     }
   }
   list(subs = subsList, ic0 = ic0List, segEquil = equilList, events0 = ev0List,
        segEvents = segEvList, chainOf = chainOf, posInChain = posInChain,
-       conditions = conds, nConditions = length(conds), nGaps = nSeg - 1L)
+       conditions = conds, nConditions = length(conds), nGaps = nSeg - 1L,
+       times = timeList)
 }
+
+# A log-parametrised parameter theta is analysed through the rational coordinate
+# X = base^theta. The report is in theta: X -> base^theta in every component, and the
+# component of X becomes that of theta, xi_X / (X log(base)). A scaling of X is a
+# translation of theta, so such a direction is no longer a scaling.
+.symLogParamBack <- function(res, lp, sd) {
+  if (is.null(res) || !length(lp)) return(res)
+  X  <- vapply(lp, function(e) as.character(e$X), "")
+  th <- vapply(lp, function(e) as.character(e$theta), "")
+  b  <- vapply(lp, function(e) as.character(e$base), "")
+  ren <- function(v) { i <- match(v, X); v[!is.na(i)] <- th[i[!is.na(i)]]; v }
+  res$coordinates <- ren(res$coordinates)
+  res$nonIdentifiable <- lapply(res$nonIdentifiable, function(d) {
+    d$support <- .symSort(ren(d$support))
+    vec <- d$vector
+    if (is.null(vec)) return(d)
+    if (isTRUE(d$type == "scaling")) {
+      if (!any(names(vec) %in% X)) return(d)
+      vec <- setNames(lapply(names(vec), function(k) .symScalingComponent(vec[[k]], k)),
+                      names(vec))
+      d$type <- "general"
+    }
+    d$vector <- setNames(lapply(names(vec), function(k)
+      as.character(sd$logParamBacksub(as.character(vec[[k]]), k, X, th, b))),
+      ren(names(vec)))
+    d
+  })
+  res
+}
+
 
 # compose one event onto a current initial-value expression string
 .symComposeEvent <- function(cur, method, value) {
@@ -5218,6 +5408,60 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
 }
 
 
+# Complete form f * X of a general generator, f = D^2 / (1 + sum_i Q_i^2) with
+# Q_i = D^2 xi_i, divided by z_i on a positive coordinate: same orbits and
+# invariants, flow defined for all s in R. A scaling is complete already.
+.symComplete <- function(syms, positive = TRUE, coordinates = NULL) {
+  if (!length(syms)) return(syms)
+  if (is.character(positive) && length(coordinates)) {
+    unknown <- setdiff(positive, as.character(coordinates))
+    if (length(unknown))
+      warning("symmetryDetection(): `positive` names no coordinate: ",
+              paste(unknown, collapse = ", "), "; ignored.", call. = FALSE)
+  }
+  spy <- tryCatch(reticulate::import("sympy", convert = TRUE), error = function(e) NULL)
+  lapply(syms, function(d) {
+    if (is.null(d$generator)) return(d)
+    d$completeGenerator <- d$generator
+    d$factor            <- "1"
+    if (isTRUE(d$type == "scaling")) return(d)
+    xi  <- vapply(d$generator, as.character, character(1))
+    pos <- if (isTRUE(positive)) names(xi) else if (isFALSE(positive)) character(0)
+           else intersect(names(xi), positive)
+    D2  <- paste0("(", .symDenominator(xi, spy), ")^2")
+    Q   <- ifelse(names(xi) %in% pos,
+                  paste0(D2, "*(", xi, ")/", names(xi)), paste0(D2, "*(", xi, ")"))
+    f   <- .symTidy(paste0(D2, "/(1 + ", paste0("(", Q, ")^2", collapse = " + "), ")"), spy)
+    d$completeGenerator <- as.eqnvec(setNames(paste0("(", f, ")*(", xi, ")"), names(xi)))
+    d$factor            <- f
+    d
+  })
+}
+
+# common denominator of the components, "1" when they are polynomial or sympy
+# cannot tell
+.symDenominator <- function(xi, spy) {
+  if (is.null(spy)) return("1")
+  tryCatch({
+    comp   <- gsub("\\^", "**", xi)
+    locals <- .symRedLocals(comp, spy)
+    dens   <- lapply(comp, function(x)
+      spy$fraction(spy$cancel(spy$together(spy$sympify(x, locals = locals))))[[2]])
+    gsub("\\*\\*", "^",
+         as.character(Reduce(function(a, b) spy$lcm(a, b), dens, spy$Integer(1L))))
+  }, error = function(e) "1")
+}
+
+# an expression in R's power syntax, cancelled by sympy when that makes it shorter
+.symTidy <- function(x, spy) {
+  if (is.null(spy)) return(x)
+  y <- tryCatch({
+    e <- spy$sympify(gsub("\\^", "**", x), locals = .symRedLocals(x, spy))
+    gsub("\\*\\*", "^", as.character(spy$factor(spy$cancel(e))))
+  }, error = function(e) x)
+  if (length(y) == 1L && !is.na(y) && nchar(y) < nchar(x)) y else x
+}
+
 # Assemble the class-"symmetrydetection" object every engine return funnels
 # through. Top level carries only the verdict (method / identifiable / rank /
 # dim / symmetries); everything about *how* it was computed lives in $info.
@@ -5229,7 +5473,8 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
   isObs   <- method == "observability"
   rawSyms <- if (isObs || method == "scaling") raw$nonIdentifiable else raw
   if (is.null(rawSyms)) rawSyms <- list()
-  syms    <- .symDisplayForm(lapply(rawSyms, .symPublicSymmetry))
+  syms    <- .symComplete(.symDisplayForm(lapply(rawSyms, .symPublicSymmetry)),
+                          settings$positive %||% TRUE, coordinates)
 
   rank <- if (!is.null(raw$rank)) as.integer(raw$rank) else NA_integer_
   dim  <- if (!is.null(raw$dim))  as.integer(raw$dim)  else NA_integer_
