@@ -1,3 +1,22 @@
+# dMod2 (development version)
+
+* `symmetryDetection()` handles exponentials of states: `exp()`, `exp10()`, `b^x`,
+  `sinh()`, `cosh()` and `tanh()`, in every engine. The modular observability
+  engine carries each exponential as an auxiliary state; later events that
+  replace or add to a state inside an exponential are supported,
+  `equilibrate = TRUE` is not. A parameter inside `exp()` that also enters
+  elsewhere is now a coordinate instead of an error.
+* The scaling engine no longer skips equations with an exponential; it could
+  report scalings of a state inside `exp()`.
+* `symmetryReduction()` certifies a chart with real entries where a coordinate
+  that is not declared positive moves by translation, as a state inside `exp()`
+  does. Under a declared `positive` set, parameters that carry positive
+  invariants count as positive.
+* New example `inst/examples/symmetryExponentials.R`: exponential degradation,
+  Hodgkin-Huxley, Morris-Lecar and a Boltzmann gate.
+* The documentation of `symmetryDetection()`, `symmetryReduction()` and their
+  control functions is shorter.
+
 # dMod2 0.8.0
 
 * **Reverse mode.** `obj(pars, sweep = "reverse")` walks `normL2 -> Y -> Xs -> P`

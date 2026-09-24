@@ -1,216 +1,185 @@
-#' Search for structural non-identifiabilities of a model
+#' Structural non-identifiabilities of an ODE model
 #'
-#' @description Detects structural non-identifiabilities of a reaction network and its
-#'   observation map, through the Python module `symmetryDetection` (`reticulate`). The
-#'   model `f`, the observables `g` and an optional `trafo` are given as equations
-#'   (anything [as.eqnvec] accepts). `method` selects the engine:
+#' @description Finds the directions in parameters and initial values along which
+#'   the observations of a model do not change. The model `f`, the observables `g`
+#'   and an optional `trafo` are equations in any form [as.eqnvec()] accepts. The
+#'   computation runs in the Python module `symmetryDetection` through `reticulate`.
+#'   `method` selects the engine:
 #'
-#'   * `"observability"` (default): the non-identifiable directions of the
-#'     observability-identifiability matrix. Exact and scalable; requires rational
-#'     right-hand sides and observables, up to a free power/Hill exponent
-#'     (`base^exp`), a parameter that enters only as `exp(theta)` or `b^theta`, and a
-#'     logarithmic observable (see `g`). The only engine that uses `equilibrate` and
-#'     event times given in parameters.
+#'   * `"observability"` (default): the nullspace of the observability matrix. The
+#'     only engine that is exhaustive and supports `equilibrate`, event times in
+#'     parameters and closed-form reconstruction.
 #'   * `"polynomial"`: the polynomial Lie-symmetry ansatz of Merkt et al. (2015),
-#'     returning the generator and the finite transformation. Cost grows with
+#'     with generators and finite transformations. The cost grows with
 #'     `polynomialControl(pMax =)`. Ignores `events` and `conditions`.
-#'   * `"scaling"`: the scaling symmetries only, from an exact integer kernel. Ignores
-#'     `equilibrate` (a scaling leaves `f = 0` invariant).
+#'   * `"scaling"`: scaling symmetries only, from an exact integer kernel. Ignores
+#'     `equilibrate`.
 #'
-#'   How the engines work is described in `vignette("Symmetries")`.
+#'   All engines accept `exp()`, `exp10()`, `b^x`, `sinh()`, `cosh()` and `tanh()`
+#'   of states and parameters. Otherwise `"observability"` with `symEngine =
+#'   "modular"` requires rational expressions, up to free power exponents `x^n` and
+#'   observables `a*log(h) + c` with a number `a`. The methods are described in
+#'   `vignette("Symmetries")`.
 #'
-#' @param f The model right-hand sides: an [eqnlist], an [eqnvec], or a named character
-#'   vector keyed by state name. `reduceCQ` needs an [eqnlist].
-#' @param g The observation functions, as an [eqnvec] or named character vector applied
-#'   to every condition, or -- for `"observability"` and `"scaling"` -- a *list* of
-#'   [eqnvec]s, one per condition in the row order of `conditions`. Use the list when
-#'   the observables differ between conditions: a single `g` credits every condition
-#'   with every measurement and so under-reports. Its length must match the `conditions`
-#'   rows and any per-condition `trafo` list; given neither, it sets the number of
-#'   conditions. For `"observability"` an observable `a*log(h) + c` in any base, `a` a
-#'   number, is analysed through `h`, which carries the same information.
-#' @param trafo Optional parameter transformation: one [eqnvec] applied to every
-#'   condition, or -- for `"observability"` -- a *list* of [eqnvec]s, one per condition.
-#'   A parameter-named entry is substituted into `f` and `g`; a state-named entry is
-#'   that state's initial condition. A steady state from [steadyStates] can be passed
-#'   whole: a state name on the RIGHT of an entry is read as that state's initial value
-#'   (the dMod convention), never as the running state, so substituting the entry cannot
-#'   cancel `f` against the steady state it solves. The substitution reaches event values
-#'   and times too. A log-parametrisation such as `k = "exp(lk)"`, `"exp10(lk)"` or
-#'   `"10^lk"` is analysed in `b^lk`, where the model stays rational, as long as `lk`
-#'   enters nowhere else; directions are reported in `lk`.
-#' @param method One of `"observability"` (default), `"polynomial"` or `"scaling"`; see
-#'   Description.
-#' @param parameters Character vector of extra symbols to treat as parameters.
-#' @param forcings Character vector of externally driven (input) state names. For
-#'   `"observability"` a forcing is an integrated state with initial value 0, excluded
-#'   from the `f = 0` steady state; for `"polynomial"`/`"scaling"` it does not transform.
-#' @param events Optional [eventlist] for `"observability"` and `"scaling"`. An event
+#' @param f Right-hand sides: an [eqnlist], an [eqnvec] or a named character vector.
+#'   `reduceCQ` needs an [eqnlist].
+#' @param g Observables: one [eqnvec] or named character vector for all conditions,
+#'   or, for `"observability"` and `"scaling"`, a list with one per row of
+#'   `conditions`. Use a list when the conditions measure different observables.
+#'   Without `conditions` and a `trafo` list, its length sets the number of
+#'   conditions. An observable `a*log(h) + c` with a number `a` is analysed through
+#'   `h`.
+#' @param trafo Parameter transformation: one [eqnvec] for all conditions or, for
+#'   `"observability"`, a list with one per condition. An entry named like a
+#'   parameter is substituted into `f`, `g`, event values and event times; an entry
+#'   named like a state is its initial value. On the right-hand side a state name is
+#'   the initial value of that state, so a steady state from [steadyStates()] can be
+#'   passed as it is. A parameter that enters only through `k = "exp(lk)"`,
+#'   `"exp10(lk)"` or `"10^lk"` is analysed in `b^lk` and reported in `lk`.
+#' @param method `"observability"` (default), `"polynomial"` or `"scaling"`.
+#' @param parameters Character vector of additional symbols treated as parameters.
+#' @param forcings Character vector of input states. For `"observability"` an input
+#'   starts at 0 and is held at 0 in the steady state; for `"polynomial"` and
+#'   `"scaling"` it does not transform.
+#' @param events An [eventlist], for `"observability"` and `"scaling"`. An event
 #'   time is a number or, for `"observability"` with `symEngine = "modular"`, an
-#'   expression in the parameters; its parameters are then coordinates like any other.
-#'   The order of the eventlist places a time given in parameters among the others, so
-#'   the events are listed chronologically. Root events are not supported. The analysis
-#'   starts at the earliest numeric event time (0 when there is none), so place an event
-#'   there if its transient is to be seen. An event value naming a `conditions` column
-#'   is read from that grid. The rank is the one at the actual times between events; a
-#'   direction that changes with them is given in closed form where it is a polynomial
-#'   in them and by its support otherwise.
-#' @param conditions Optional data frame of experimental conditions: one row per
-#'   condition, columns named by model symbols or by event-value placeholders. A numeric
-#'   cell bakes that symbol to a constant in the condition, a character cell renames it.
-#'   A column named after a dynamic state sets that state's initial value in the
-#'   condition (it does not freeze the state); one named after a constant state sets the
-#'   regime in force. A direction is reported only if it is non-identifiable in *every*
-#'   condition.
-#' @param fixed Character vector of symbols that are known and therefore not unknowns.
-#'   For `"observability"` they leave the coordinates: a fixed parameter is a known
-#'   constant, a fixed state keeps its dynamics but carries no unknown initial value.
-#'   For `"polynomial"` they do not transform.
-#' @param equilibrate Logical, `"observability"` only. Start the states at a steady state
-#'   of `f` (forcings held at 0) instead of at free initial values; the earliest events
-#'   are applied on top, and state initial conditions in `trafo` are then ignored.
-#' @param reduceCQ Logical, [eqnlist] input only: how a conserved moiety is
-#'   parameterised. `FALSE` (default) keeps every species a coordinate and reports the
-#'   moiety freedom under one pivot species' own name -- its initial value, following the
-#'   dMod convention that a parameter named like a state IS that state's initial value.
-#'   `TRUE` instead eliminates one species per conserved quantity and reports the freedom
-#'   on a `total` parameter, which means fewer coordinates on large models. Both give the
-#'   same identifiability verdict. Forced to `FALSE` with a warning when `trafo` supplies
-#'   an initial condition for a moiety species. The `total` parameters exist only under
-#'   `TRUE`, are named after [getTotals()], and can be pinned through `fixed` or a
-#'   `trafo` entry (`total_x = "1"`) although they are not among [getParameters()].
-#' @param freeInitial Character vector of state names, at most one per conserved
-#'   quantity. Chooses which species carries the moiety's free resting value under
-#'   `equilibrate = TRUE, reduceCQ = FALSE`, instead of the automatic choice. A name that
-#'   is not a valid pivot is dropped, and the argument is ignored (with a warning)
-#'   outside that case.
-#' @param positive The coordinates known to be positive, as in [symmetryReduction]:
-#'   `TRUE` (the default) declares all, `FALSE` none, a character vector those
-#'   named. It sets the domain on which `completeGenerator` has a flow for every
-#'   `s` in R; orbits and invariants do not depend on it.
-#' @param reconstruct Logical, `"observability"` only. Return the non-scaling directions
-#'   as exact rational functions rather than only their support; scalings are always
-#'   exact. A direction that cannot be reconstructed or certified stays support-only,
-#'   with `explicit = FALSE`.
-#' @param verify Logical (default `TRUE`), `"observability"` only. Check that the
-#'   reported rank has really saturated and warn if it has not, since stopping early
-#'   over-reports non-identifiability. The verdict is attached as `$info$verification`.
-#'   `DMOD_SYM_VERIFY_MARGIN` (default 6) sets how far past the reported order it looks.
-#'   The guard is the fallback for a saturation the codimension budget did not certify
-#'   (`$info$lieCertified`, see `vignette("Symmetries")`); a certified one does not run
-#'   it.
-#' @param cores Number of threads for `"observability"`, split across the parallel
-#'   steady-state solves and the observability kernel so they do not oversubscribe.
-#'   The solves -- the dominant cost of `equilibrate = TRUE` -- are filled in parallel
-#'   on every platform: `mclapply` forks on unix, a worker pool of Python interpreters
-#'   is used elsewhere. `"polynomial"` and `"scaling"` are serial and ignore it.
-#' @param control A [reconstControl()] list tuning the `"observability"` engine's
-#'   saturation and closed-form reconstruction (relevance caps, fit degrees, term and
-#'   gap-order caps). Raise the caps to recover wide or high-degree directions.
-#' @param polynomial A [polynomialControl()] list tuning the `"polynomial"` engine: the
-#'   infinitesimal ansatz and degree, the extra Lie-derivative order, the symbolic
-#'   backend and verification.
-#' @param scaling A [scalingControl()] list tuning the `"scaling"` engine: the symbolic
-#'   backend.
-#' @param symEngine For `"observability"`: `"modular"` (default) is fast and scalable and
-#'   the only engine that supports `equilibrate`, event gaps, a recast exponent and
-#'   closed-form reconstruction. `"symbolic"` is an exact sympy cross-check for SMALL
-#'   models.
-#' @param verbose Logical (default `TRUE`). Print the result report on return, as
-#'   `print()` renders it; `FALSE` computes silently.
+#'   expression in the parameters; list the events in chronological order. Root
+#'   events are not supported. The analysis starts at the earliest numeric event
+#'   time, or at 0 without events. An event value named like a column of
+#'   `conditions` is read from it. A later event on a state inside an exponential
+#'   must replace the state or add to it.
+#' @param conditions Data frame with one row per experimental condition and columns
+#'   named by model symbols or event values. A numeric cell fixes the symbol, a
+#'   character cell renames it. A column named like a dynamic state sets its
+#'   initial value, one named like a constant state sets its value. A direction is
+#'   reported only if it is non-identifiable in every condition.
+#' @param fixed Character vector of known symbols. For `"observability"` a fixed
+#'   parameter is a known constant and a fixed state has no unknown initial value;
+#'   for `"polynomial"` a fixed symbol does not transform.
+#' @param equilibrate Logical, `"observability"` only. Start at a steady state of
+#'   `f` with the inputs at 0 instead of at free initial values. The earliest events
+#'   apply on top; initial values in `trafo` are ignored. Not available for
+#'   exponentials of states.
+#' @param reduceCQ Logical, [eqnlist] only. `FALSE` (default) keeps every species
+#'   and reports the freedom of a conserved moiety on the initial value of one
+#'   species. `TRUE` eliminates one species per conserved quantity and reports the
+#'   freedom on a total named after [getTotals()], which `fixed` or `trafo` can fix.
+#'   Both give the same verdict. Set to `FALSE` with a warning when `trafo` gives the
+#'   initial value of a moiety species.
+#' @param freeInitial Character vector of states, at most one per conserved
+#'   quantity, that carry the free resting value of their moiety under
+#'   `equilibrate = TRUE, reduceCQ = FALSE`. Invalid choices are dropped; ignored
+#'   with a warning otherwise.
+#' @param positive Coordinates known to be positive, as in [symmetryReduction()]:
+#'   `TRUE` (default) for all, `FALSE` for none, or a character vector. Sets the
+#'   domain on which `completeGenerator` has a flow for every `s`.
+#' @param reconstruct Logical, `"observability"` only. Return general directions as
+#'   exact rational functions instead of their support. A direction that cannot be
+#'   reconstructed or verified keeps `explicit = FALSE`.
+#' @param verify Logical (default `TRUE`), `"observability"` only. Where the Lie
+#'   order is not certified (`$info$lieCertified`), check that the rank has
+#'   saturated and warn if not. `DMOD_SYM_VERIFY_MARGIN` (default 6) sets how far
+#'   the check looks; the result is in `$info$verification`.
+#' @param cores Number of threads for `"observability"`, shared between the
+#'   steady-state solves and the kernel. `"polynomial"` and `"scaling"` run
+#'   serially.
+#' @param control A [reconstControl()] list for the `"observability"` engine.
+#' @param polynomial A [polynomialControl()] list for the `"polynomial"` engine.
+#' @param scaling A [scalingControl()] list for the `"scaling"` engine.
+#' @param symEngine For `"observability"`: `"modular"` (default) computes over
+#'   finite fields and scales to large models; `"symbolic"` is an exact sympy
+#'   computation for small models, without `equilibrate` and later events.
+#' @param verbose Logical (default `TRUE`). Print the result on return.
 #'
-#' @return An object of class `symmetrydetection`, the same shape for every `method`,
-#'   holding the verdict at the top level and the computation under `$info`:
+#' @return An object of class `symmetrydetection`:
 #'   \describe{
-#'     \item{`method`}{the engine that ran.}
-#'     \item{`identifiable`}{`TRUE`/`FALSE` for `"observability"`; `NA` for
-#'       `"scaling"`/`"polynomial"`, which search non-exhaustively, so finding nothing
-#'       is no proof of identifiability.}
-#'     \item{`rank`, `dim`}{observability-matrix rank and coordinate-space dimension;
-#'       both `NA` for the scaling/polynomial engines.}
-#'     \item{`symmetries`}{the found directions (empty when identifiable), each a
-#'       generator `X = sum_i eta_i d/dz_i`. Fields: `generator` (the components
-#'       `eta_i`, keyed by coordinate), `weights` (a scaling's integer weights, else
-#'       `NULL`), `type` -- `"scaling"` or `"general"`, the two classes being the two
-#'       ways to remove a direction: gauge a scaling by fixing one of its coordinates
-#'       at any value, reparametrise a general direction onto its invariants with
-#'       [symmetryReduction] --, `degree` (total degree of the canonical generator,
-#'       `-1` when it is not polynomial), `support` (the coordinates involved -- the
-#'       only field set when no closed form was reached), `explicit`, `reason`,
-#'       `certified`, `transformation` (the finite map, polynomial engine), `verified`,
-#'       `display` (the same components factored for printing; `generator` stays in
-#'       the canonical expanded form), `completeGenerator` (`factor * generator`, a
-#'       generator of the same orbits whose flow exists for every `s` in R on the
-#'       domain set by `positive`; equal to `generator` for a scaling) and `factor`
-#'       (that positive function, `"1"` for a scaling). Neither is printed.}
-#'     \item{`info`}{`engine`, `lieOrderUsed` (and `lieOrderDriver`, the condition that
-#'       set it), the saturation status `lieBudget` / `liePlateau` / `lieCertified`,
-#'       `gapOrderUsed`, `conditions`, `segments`,
-#'       `coordinates` (the full coordinate list of the analysis), the `settings` used,
-#'       `elapsed` seconds and the `verification` guard.}
+#'     \item{`method`}{the engine.}
+#'     \item{`identifiable`}{`TRUE` or `FALSE` for `"observability"`; `NA` for
+#'       `"scaling"` and `"polynomial"`, whose search is not exhaustive.}
+#'     \item{`rank`, `dim`}{rank of the observability matrix and number of
+#'       coordinates; `NA` for `"scaling"` and `"polynomial"`.}
+#'     \item{`symmetries`}{the directions, each a generator
+#'       `X = sum_i eta_i d/dz_i` with `generator` (the components `eta_i` by
+#'       coordinate), `weights` (integer weights of a scaling, else `NULL`), `type`
+#'       (`"scaling"`, removed by fixing one coordinate of the support, or
+#'       `"general"`, removed by [symmetryReduction()]), `degree` (`-1` if not
+#'       polynomial), `support`, `explicit`, `reason`, `certified`,
+#'       `transformation` (`"polynomial"` only), `verified`, `display` (factored
+#'       components for printing), `completeGenerator` (`factor * generator`, with
+#'       a flow for every `s` on the domain set by `positive`) and `factor`.}
+#'     \item{`info`}{`engine`, the Lie order and its certification
+#'       (`lieOrderUsed`, `lieOrderDriver`, `lieBudget`, `liePlateau`,
+#'       `lieCertified`), `gapOrderUsed`, `conditions`, `segments`, `coordinates`,
+#'       `settings`, `elapsed` and `verification`.}
 #'     \item{`call`}{the matched call.}
 #'   }
-#'   `print()` shows the verdict, the generators as a component table (one coordinate
-#'   per line) and how to remove them; `summary()` adds the computation block, and
-#'   `summary(x, verbose = TRUE)` the settings and guard detail. Both take `fixed =`
-#'   to test a candidate set of fixings against the result without recomputing it: a
-#'   set removes all scaling directions exactly when it selects independent columns of
-#'   their weight matrix, which is reported as a rank. `width =` overrides the wrapping
-#'   width (default `getOption("width")`).
+#'   `print()` shows the verdict and the generators, `summary()` adds the
+#'   computation and `summary(verbose = TRUE)` the settings. Both take `fixed`, a
+#'   candidate set of fixed coordinates, and report whether it removes every
+#'   scaling direction, and `width`.
 #'
-#' @details Two behaviours are worth knowing before reading a result. Events after the
-#'   earliest one split the timeline into segments, so a parameter that enters only
-#'   through a transient between events is identified -- but the expansion starts at the
-#'   *earliest* event time, so an event placed there is the one whose transient is seen.
-#'   And a dose on a species that `reduceCQ = TRUE` eliminates is not seen; keep such a
-#'   model at `reduceCQ = FALSE`. See `vignette("Symmetries")`.
+#' @details Events after the earliest one split the time line into segments. The
+#'   analysis starts at the earliest event, so only an event placed there shows its
+#'   transient. A dose on a species that `reduceCQ = TRUE` eliminates is not seen.
 #'
-#' @note The interface, defaults and output structure may still change between releases.
+#'   An exponential of a state enters the `"observability"` engine as an auxiliary
+#'   state whose initial value is a further coordinate, tied to the others by its
+#'   differential. The `"polynomial"` and `"scaling"` engines treat it as an
+#'   independent variable. Both are exact, since exponentials of exponents that are
+#'   linearly independent over the rationals are algebraically independent (Ax
+#'   1971).
 #'
-#' @references \[1\]
-#' <https://journals.aps.org/pre/abstract/10.1103/PhysRevE.92.012920>
+#' @note The interface, defaults and output structure may still change.
+#'
+#' @references
+#'   Merkt B, Timmer J, Kaschek D (2015). Higher-order Lie symmetries in
+#'   identifiability and predictability analysis of dynamic models. Physical
+#'   Review E 92, 012920. \doi{10.1103/PhysRevE.92.012920}
+#'
+#'   Ax J (1971). On Schanuel's conjectures. Annals of Mathematics 93, 252-268.
 #'
 #' @examples
 #' \dontrun{
-#' # A reversible reaction observed only through alpha * A: the absolute scale is free.
+#' # A reversible reaction observed through alpha * A: the scale is free.
 #' eq <- eqnlist() |>
 #'   addReaction("A", "B", "k1 * A") |>
 #'   addReaction("B", "A", "k2 * B")
 #'
-#' # The result prints on return, so assigning still shows it.
-#' out <- symmetryDetection(eq, eqnvec(Aobs = "alpha * A"))   # observability
-#' summary(out)                                               # adds the computation block
+#' out <- symmetryDetection(eq, eqnvec(Aobs = "alpha * A"))
+#' summary(out)
 #' out <- symmetryDetection(eq, eqnvec(Aobs = "alpha * A"), method = "polynomial")
 #' out <- symmetryDetection(eq, eqnvec(Aobs = "alpha * A"), method = "scaling")
 #'
-#' # A state-named trafo entry is that state's initial condition.
+#' # A state-named trafo entry is an initial value.
 #' out <- symmetryDetection(eqnvec(x = "b - a*x"), eqnvec(y = "s*x"),
 #'                          trafo = eqnvec(x = "b/a"), reconstruct = TRUE)
 #'
-#' # Several conditions: one switch value cannot separate k1 and k2, two can.
+#' # Two switch values separate k1 and k2, one does not.
 #' fu <- eqnvec(A = "-(k1 + u * k2) * A", u = "0")
 #' events <- addEvent(eventlist(), var = "u", time = -1, value = "var_u",
 #'                    method = "replace")
 #' grid <- data.frame(var_u = c(0, 1), row.names = c("ctrl", "stim"))
-#' out <- symmetryDetection(fu, eqnvec(y = "A"), method = "observability",
-#'                          events = events, conditions = grid)
-#' out$identifiable   # the fields are there for programmatic use
+#' out <- symmetryDetection(fu, eqnvec(y = "A"), events = events, conditions = grid)
+#' out$identifiable
 #'
-#' # Observables measured in disjoint conditions: one eqnvec per condition row.
+#' # Observables measured in different conditions: one eqnvec per condition.
 #' fd <- eqnvec(A = "-k1*A", B = "-k2*B")
 #' out <- symmetryDetection(fd, list(eqnvec(yA = "sA*A"), eqnvec(yB = "sB*B")),
-#'                          method = "observability",
 #'                          conditions = data.frame(row.names = c("elisa", "wb")))
 #'
-#' # Pre-equilibrated model with a known dose, which makes (a, b, s) identifiable.
+#' # A known dose makes a, b and s identifiable.
 #' dose <- addEvent(eventlist(), var = "x", time = 0, value = "dose",
 #'                  method = "replace")
-#' out <- symmetryDetection(eqnvec(x = "b - a*x"), eqnvec(y = "s*x"),
-#'                          method = "observability", events = dose,
+#' out <- symmetryDetection(eqnvec(x = "b - a*x"), eqnvec(y = "s*x"), events = dose,
 #'                          conditions = data.frame(dose = 2, row.names = "stim"))
 #'
-#' # Full worked script:
+#' # A state inside exp(): A + c, kA + kd*c and kE*exp(-c) give the same y.
+#' out <- symmetryDetection(eqnvec(A = "kA - kd*A", B = "kB - kE*exp(A)*B"),
+#'                          eqnvec(y = "s*B"), reconstruct = TRUE)
+#'
+#' # Worked scripts
 #' file.edit(system.file("examples", "symmetryDetection.R", package = "dMod2"))
+#' file.edit(system.file("examples", "symmetryExponentials.R", package = "dMod2"))
 #' }
 #' @export
 symmetryDetection <- function(f = NULL, g = NULL, trafo = NULL,
@@ -1149,70 +1118,46 @@ symmetryDetection <- function(f = NULL, g = NULL, trafo = NULL,
   !is.null(d) && Sys.time() > d
 }
 
-#' Tuning controls for `symmetryDetection(method = "observability")`
+#' Settings of the observability engine
 #'
-#' Bundles the saturation and closed-form-reconstruction parameters of the
-#' observability engine into one object, passed as `symmetryDetection(...,
-#' control = reconstControl(...))`. Raise the caps for models whose
-#' non-identifiability directions are wide or high-degree rationals (at the cost of
-#' more finite-field samples).
+#' Saturation and closed-form reconstruction settings for
+#' `symmetryDetection(method = "observability", control = reconstControl())`. Raise
+#' the caps to reconstruct wide or high-degree directions, at the cost of more
+#' samples.
 #'
-#' @param relevanceCap Max variables a single nullspace entry may couple before it
-#'   is fit by sparse interpolation instead of the dense fit.
-#' @param relevanceCapDir Max variables a whole direction may couple before it is
-#'   returned as support-only.
-#' @param relevanceCapSparse Max variables a single entry may couple for the
-#'   sparse (Ben-Or-Tiwari) path; beyond this the entry is support-only.
-#' @param degreeCap Total-degree bound of the dense rational fit per entry.
-#' @param sampleSlack Extra evaluation points beyond the minimum the fit needs.
-#' @param probeRetries Fresh-randomness retries for the per-leaf relevance probe
-#'   when a perturbation shifts the pivot set.
-#' @param laurentDegNum,laurentDegDen Numerator and single-monomial denominator
-#'   degree bounds of the sparse Laurent path.
-#' @param laurentCandCap Cap on the candidate-monomial product enumerated by the
-#'   Laurent / general path (guards memory).
-#' @param termCap Max term count (Ben-Or-Tiwari order) of a sparse entry.
-#' @param generalDegNum,generalDegDen Numerator and (multi-term) denominator
-#'   degree bounds of the general sparse-rational (Cauchy + Ben-Or-Tiwari) path.
-#' @param gapOrderCap Cap on the gap power-series order raised when propagating the
-#'   state exactly across later (post-stimulus) event boundaries.
-#' @param minsupportCandCap Cap on the number of column subsets the minimal-support
-#'   search enumerates when hunting narrow nullspace cocircuits. A genuinely wide
-#'   direction has no small-support cocircuit, so an exhaustive scan would test
-#'   `choose(support, s)` subsets fruitlessly; the search stops at this cap and lets
-#'   any wide direction fall through to the free-column fit. Raise it only to peel
-#'   cocircuits of unusually large support.
-#' @param perprimeCap Max sample points per prime for the per-prime reconstruction
-#'   used by the equilibrate/joint (coupled steady-state) path. There a random
-#'   multi-parameter perturbation admits an interior modular steady state at only
-#'   some primes, so a point that solves at every prime at once is vanishingly rare
-#'   and the shared all-prime bank cannot fill; instead each prime collects its own
-#'   solvable, pivot-consistent points and the per-prime entry fits are lifted by
-#'   Chinese remaindering. It doubles as the width gate: a direction whose widest
-#'   entry needs more than `perprimeCap` points already at degree 2 is too wide for
-#'   the dense per-prime fit and is returned support-only immediately (no sampling),
-#'   so an intrinsically wide/transcendental joint confound is reported by support
-#'   quickly rather than grinding. The default keeps the coupled reconstruction
-#'   bounded; raise it (with `timeout`) to attempt a genuinely wide joint direction.
-#' @param perprimeMinPrimes Minimum number of primes that must fill for the
-#'   per-prime path to lift a coefficient by CRT. A prime whose coupled solve never
-#'   succeeds under the direction's perturbations is dropped; the rational
-#'   reconstruction then runs over the remaining primes (their product still bounds
-#'   the coefficient height). Below this many live primes the entry is support-only.
-#' @param certifyPoly Logical. For each direction whose canonical generator is polynomial
-#'   of degree `1..degreeCap`, run the
-#'   polynomial Lie-symmetry engine (`method = "polynomial"`) and set `$certified`
-#'   to whether the direction is a nonzero constant combination of its generators --
-#'   i.e. an exact polynomial Lie point symmetry, not merely an observability
-#'   non-identifiability. `FALSE` by default; it is comparatively expensive.
-#' @param certifyPolyDeg Ansatz degree for `certifyPoly`; `NULL` (default) uses each
-#'   direction's own classified degree.
-#' @param timeout Wall-clock budget in seconds for the closed-form reconstruction
-#'   (`reconstruct = TRUE`). When it is exceeded, the directions still being
-#'   reconstructed are returned support-only (`reconstruct = FALSE`) with a
-#'   `reason`, so a hard general (non-scaling) direction aborts cleanly instead of
-#'   running unbounded. `Inf` (the default) imposes no limit and reproduces the
-#'   previous behaviour exactly.
+#' @param relevanceCap Maximum number of coordinates in one entry of a direction
+#'   for the dense fit; wider entries use sparse interpolation.
+#' @param relevanceCapDir Maximum number of coordinates in one direction; a wider
+#'   one is reported by its support.
+#' @param relevanceCapSparse Maximum number of coordinates in one entry for the
+#'   sparse (Ben-Or/Tiwari) fit; a wider entry is reported by its support.
+#' @param degreeCap Total degree bound of the dense rational fit.
+#' @param sampleSlack Number of samples beyond the minimum of the fit.
+#' @param probeRetries Number of retries of the relevance probe when a
+#'   perturbation changes the pivots.
+#' @param laurentDegNum,laurentDegDen Numerator degree and monomial denominator
+#'   degree bounds of the sparse Laurent fit.
+#' @param laurentCandCap Maximum number of candidate monomials of the Laurent and
+#'   general sparse fits.
+#' @param termCap Maximum number of terms of a sparse entry.
+#' @param generalDegNum,generalDegDen Numerator and denominator degree bounds of the
+#'   general sparse rational fit.
+#' @param gapOrderCap Maximum order of the power series in the time between
+#'   events.
+#' @param minsupportCandCap Maximum number of column subsets searched for
+#'   directions with small support; wider directions go to the general fit.
+#' @param perprimeCap Maximum number of samples per prime for the reconstruction
+#'   under `equilibrate = TRUE`. A direction that needs more at degree 2 is reported
+#'   by its support.
+#' @param perprimeMinPrimes Minimum number of primes with samples for a
+#'   reconstruction under `equilibrate = TRUE`.
+#' @param certifyPoly Logical. Check with the `"polynomial"` engine whether each
+#'   polynomial direction of degree up to `degreeCap` is a Lie point symmetry, and
+#'   set `$certified`. Costly; `FALSE` by default.
+#' @param certifyPolyDeg Ansatz degree for `certifyPoly`; `NULL` (default) uses the
+#'   degree of each direction.
+#' @param timeout Time limit in seconds for the reconstruction. Directions not
+#'   finished in time are reported by their support. `Inf` (default) sets no limit.
 #' @return A `reconstControl` list.
 #' @seealso [symmetryDetection()]
 #' @export
@@ -1267,21 +1212,20 @@ reconstControl <- function(relevanceCap       = 6L,
 }
 
 
-#' Tuning control for `symmetryDetection(method = "polynomial")`
+#' Settings of the polynomial engine
 #'
-#' Bundles the polynomial Lie-symmetry engine's parameters into one object, passed
-#' as `symmetryDetection(..., polynomial = polynomialControl(...))`.
+#' Settings for `symmetryDetection(method = "polynomial", polynomial =
+#' polynomialControl())`.
 #'
-#' @param ansatz Type of infinitesimal ansatz: `"uni"`, `"par"` or `"multi"`.
-#' @param pMax Maximal degree of the infinitesimal ansatz (integer `>= 1`).
-#' @param lieOrder Integer `N >= 0`. Also require the generator to annihilate the
-#'   `k`-th Lie derivative `L^k g` for `k = 1..N`.
-#' @param exact Logical. Use exact modular linear algebra (`TRUE`) or the
-#'   floating-point path (`FALSE`).
-#' @param verify Logical. Symbolically verify each generator.
+#' @param ansatz Infinitesimal ansatz: `"uni"`, `"par"` or `"multi"`.
+#' @param pMax Maximum degree of the ansatz, at least 1.
+#' @param lieOrder Also require invariance of the Lie derivatives `L^k g` for
+#'   `k = 1, ..., lieOrder`.
+#' @param exact Logical. Exact modular linear algebra (`TRUE`) or floating point.
+#' @param verify Logical. Verify each generator symbolically.
 #' @param allTrafos Logical. Keep transformations that share a common parameter
-#'   factor instead of dropping them.
-#' @param backend `"symengine"` (faster, falls back to sympy) or `"sympy"`.
+#'   factor.
+#' @param backend `"symengine"` (falls back to sympy) or `"sympy"`.
 #' @return A `polynomialControl` list.
 #' @seealso [symmetryDetection()], [scalingControl()]
 #' @export
@@ -1304,12 +1248,11 @@ polynomialControl <- function(ansatz    = c("uni", "par", "multi"),
 }
 
 
-#' Tuning control for `symmetryDetection(method = "scaling")`
+#' Settings of the scaling engine
 #'
-#' Bundles the scaling (toric) symmetry engine's parameters into one object, passed
-#' as `symmetryDetection(..., scaling = scalingControl(...))`.
+#' Settings for `symmetryDetection(method = "scaling", scaling = scalingControl())`.
 #'
-#' @param backend `"symengine"` (faster, falls back to sympy) or `"sympy"`.
+#' @param backend `"symengine"` (falls back to sympy) or `"sympy"`.
 #' @return A `scalingControl` list.
 #' @seealso [symmetryDetection()], [polynomialControl()]
 #' @export

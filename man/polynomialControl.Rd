@@ -2,7 +2,7 @@
 % Please edit documentation in R/symmetryDetection.R
 \name{polynomialControl}
 \alias{polynomialControl}
-\title{Tuning control for \code{symmetryDetection(method = "polynomial")}}
+\title{Settings of the polynomial engine}
 \usage{
 polynomialControl(
   ansatz = c("uni", "par", "multi"),
@@ -15,29 +15,27 @@ polynomialControl(
 )
 }
 \arguments{
-\item{ansatz}{Type of infinitesimal ansatz: \code{"uni"}, \code{"par"} or \code{"multi"}.}
+\item{ansatz}{Infinitesimal ansatz: \code{"uni"}, \code{"par"} or \code{"multi"}.}
 
-\item{pMax}{Maximal degree of the infinitesimal ansatz (integer \verb{>= 1}).}
+\item{pMax}{Maximum degree of the ansatz, at least 1.}
 
-\item{lieOrder}{Integer \code{N >= 0}. Also require the generator to annihilate the
-\code{k}-th Lie derivative \verb{L^k g} for \verb{k = 1..N}.}
+\item{lieOrder}{Also require invariance of the Lie derivatives \verb{L^k g} for
+\verb{k = 1, ..., lieOrder}.}
 
-\item{exact}{Logical. Use exact modular linear algebra (\code{TRUE}) or the
-floating-point path (\code{FALSE}).}
+\item{exact}{Logical. Exact modular linear algebra (\code{TRUE}) or floating point.}
 
-\item{verify}{Logical. Symbolically verify each generator.}
+\item{verify}{Logical. Verify each generator symbolically.}
 
 \item{allTrafos}{Logical. Keep transformations that share a common parameter
-factor instead of dropping them.}
+factor.}
 
-\item{backend}{\code{"symengine"} (faster, falls back to sympy) or \code{"sympy"}.}
+\item{backend}{\code{"symengine"} (falls back to sympy) or \code{"sympy"}.}
 }
 \value{
 A \code{polynomialControl} list.
 }
 \description{
-Bundles the polynomial Lie-symmetry engine's parameters into one object, passed
-as \code{symmetryDetection(..., polynomial = polynomialControl(...))}.
+Settings for \code{symmetryDetection(method = "polynomial", polynomial = polynomialControl())}.
 }
 \seealso{
 \code{\link[=symmetryDetection]{symmetryDetection()}}, \code{\link[=scalingControl]{scalingControl()}}

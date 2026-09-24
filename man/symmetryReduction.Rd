@@ -2,7 +2,7 @@
 % Please edit documentation in R/symmetryReduction.R
 \name{symmetryReduction}
 \alias{symmetryReduction}
-\title{Constructive removal of detected symmetries}
+\title{Remove detected symmetries by reparametrisation}
 \usage{
 symmetryReduction(
   object,
@@ -18,157 +18,85 @@ symmetryReduction(
 )
 }
 \arguments{
-\item{object}{A \code{symmetrydetection} result, from \code{\link[=symmetryDetection]{symmetryDetection()}}.}
+\item{object}{A \code{symmetrydetection} result from \code{\link[=symmetryDetection]{symmetryDetection()}}.}
 
-\item{fixed}{Character vector of coordinates the user pins at known values
-beforehand (same semantics as \code{summary(object, fixed = )}): scaling directions
-removed by the fixing drop out of the reparametrisation, and the fixed
-coordinates never enter a transversal. Unknown names warn and are ignored.}
+\item{fixed}{Character vector of coordinates with known values, as in
+\code{summary(object, fixed = )}. Scaling directions they remove are dropped, and
+they are not used as gauge. Unknown names are ignored with a warning.}
 
-\item{positive}{The coordinates that are known to be positive, the domain every
-chart certificate is proved over. \code{TRUE} (the default) declares all of them,
-as rate constants and concentrations are; \code{FALSE} declares none; a character
-vector declares those named, and unknown names warn and are ignored. A
-coordinate left out keeps its sign open, so a term containing it at an odd
-power decides no sign: fewer charts certify, more carriers come back
-real-valued, and none of the certificates that do come back is weaker.}
+\item{positive}{Coordinates known to be positive, the domain of every
+certificate: \code{TRUE} (default) for all, \code{FALSE} for none, or a character vector.
+Unknown names are ignored with a warning.}
 
-\item{dPoly}{Total-degree cap of the polynomial invariant search (stage 2),
-and the numerator-degree cap of the rational stage that follows it (a
-Laurent ansatz allowing one moved coordinate at exponent -1 -- the cheap
-route to invariants like \code{(z^2*a + z*b + c*d)/z} that the factor stages
-only reach at much higher caps).}
+\item{dPoly}{Degree bound of the polynomial invariant search and numerator
+degree bound of the rational search with a monomial denominator.}
 
-\item{dDarboux}{Degree cap of the Darboux factors in the rational invariant
-search (stage 3). The cofactor degree is bounded structurally (at most the
-generator degree minus one), not by this cap.}
+\item{dDarboux}{Degree bound of the Darboux polynomials.}
 
-\item{dExp}{Numerator degree cap of the exponential-factor search (stage 4):
-factors \code{exp(g/h)} with \code{deg(g) <= dExp} and \code{h} a product of Darboux
-factors. \code{dExp = 0} skips the stage. Invariants from this stage are
-transcendental; the emitted trafo entries may contain \code{log}/\code{exp} (fine for
-\code{\link[=P]{P()}}, but not accepted by \code{symmetryDetection(trafo = )}, which requires
-rational entries).}
+\item{dExp}{Numerator degree bound of the exponential factors \code{exp(g/h)}; \code{0}
+skips this stage. Its entries may contain \code{exp()} and \code{log()}, which \code{\link[=P]{P()}}
+accepts and \code{symmetryDetection(trafo = )} accepts without \code{log()}.}
 
-\item{separable}{Logical: run the separable-characteristics stage. When every
-component of a generator involves no moved coordinate but its own, the
-characteristic system decouples and the invariants follow from one-dimensional
-quadratures -- cheaper than every other stage and the only one reaching
-antiderivatives outside the Darboux language (\code{atan}). \code{FALSE} forces the
-ansatz and factor stages to carry such a block on their own.}
+\item{separable}{Logical (default \code{TRUE}). Solve blocks whose components depend
+only on their own coordinate by quadratures.}
 
-\item{reportZeroCompatibility}{Logical, off by default: work out which zeros the
-symmetry is compatible with (see below), one exact face solve per coordinate of
-each block. It costs a quarter of the reduction on a six-reaction cascade and is
-asked for, not paid for by everyone.}
+\item{reportZeroCompatibility}{Logical (default \code{FALSE}). Report the zero limits
+of each block, see Details. Needs one exact solve per coordinate.}
 
-\item{verbose}{Logical: print progress per block and stage.}
+\item{verbose}{Logical. Report the progress per block and stage.}
 
-\item{...}{Reserved.}
+\item{...}{Not used.}
 }
 \value{
 An object of class \code{symmetryreduction}:
 \describe{
-\item{\code{blocks}}{one entry per coupled block of directions: \code{labels} (the
-\code{X} labels as printed by \code{print(object)}), \code{type} (\code{kind} names what the
-block holds when a scaling was demoted into a curved block), \code{support}, \code{stage}
-reached, \code{invariants} (exact strings), \code{certificates} (positive and
-negative), \code{transversal}/\code{pins}, \code{survivorMeaning} (which invariant each
-surviving coordinate or fresh \verb{q_<k>} parameter carries), \code{carrierDomain}
-(\code{"positive"} or \code{"real"} per carrier) and \code{coverage} (\code{"total"} when the
-chart reaches every orbit that meets the positive orthant, \code{"partial"}
-otherwise), \code{moduleCombos}, \code{status}
-(\code{"fixed"}, \code{"reduced"}, \code{"invariantOnly"} or \code{"unresolved"}), \code{reason},
-\code{zeroCompatibility}.}
-\item{\code{zeroCompatibility}}{the zero limits of every block, one row per set of
-coordinates that vanish together (\code{coordinates}, comma-separated):
-\code{verdict} (\code{"yes"} reached from every positive point, \code{"if"} reached exactly
-where \code{condition} holds, \code{"no"} not reached, \code{"unknown"} not decided),
-\code{limit} (\code{TRUE} when the face is invariant, so the
-zero is only approached as \code{eps -> +-Inf}), \code{certain} (\code{FALSE} when the
-block's invariant set is incomplete, which leaves anything but \code{"no"} an
-upper bound), \code{condition} (an R expression over the model's own coordinate
-names -- \code{eval(parse(text = condition), as.list(pars))} decides it at a
-point) and \code{at} (the degenerate point the
-orbit lands on; a primed name is a coordinate the remaining freedom leaves
-open). \code{NULL} unless \code{reportZeroCompatibility = TRUE}.}
-\item{\code{trafo}}{a complete \link{eqnvec} over all coordinates (identity plus the
-transversal pins and solved entries), ready for \code{\link[=P]{P()}} or
-\code{symmetryDetection(trafo = )}; \code{NULL} when nothing was reducible.}
-\item{\code{family}}{the general form: admissible transversals (or their matroid
-description) per reduced block, plus the gauge note that pins may be any
-nonzero constant.}
-\item{\code{removed}, \code{remaining}}{direction labels by outcome.}
+\item{\code{blocks}}{one entry per set of coupled directions: \code{labels}, \code{type},
+\code{kind}, \code{support}, \code{stage}, \code{invariants}, \code{certificates}, \code{transversal},
+\code{pins}, \code{survivorMeaning} (the invariant each remaining coordinate or
+\verb{q_<k>} carries), \code{carrierDomain} (\code{"positive"} or \code{"real"} per \verb{q_<k>}),
+\code{coverage} (\code{"total"} or \code{"partial"}), \code{moduleCombos}, \code{status}
+(\code{"fixed"}, \code{"reduced"}, \code{"invariantOnly"} or \code{"unresolved"}), \code{reason}
+and \code{zeroCompatibility}.}
+\item{\code{zeroCompatibility}}{\code{NULL} unless \code{reportZeroCompatibility = TRUE},
+else one row per set of coordinates that vanish together: \code{verdict}
+(\code{"yes"}, \code{"if"}, \code{"no"} or \code{"unknown"}), \code{limit} (\code{TRUE} if the zero is
+only approached asymptotically), \code{certain} (\code{FALSE} if the invariants are
+incomplete), \code{condition} and \code{at}.}
+\item{\code{trafo}}{an \link{eqnvec} over all coordinates for \code{\link[=P]{P()}} or
+\code{symmetryDetection(trafo = )}; \code{NULL} if nothing was reduced.}
+\item{\code{family}}{the admissible gauges of each reduced block.}
+\item{\code{removed}, \code{remaining}}{labels of the directions.}
 \item{\code{coordinates}, \code{fixed}, \code{settings}, \code{call}}{provenance.}
 }
-\code{print()} is terse: the verdict, the non-identity trafo entries, the invariant
-each fresh \verb{q_<k>} parameter carries and where each zero limit is reached. The
-monomial a scaling survivor carries is not printed, it follows from the gauge
-and stays on the object as \code{survivorMeaning}. \code{summary()}
-adds one line per block --
-kind, status, stage, how it was gauged -- plus, for a block that did not
-reduce, its invariants and the reason (how many invariants were found under
-which degree caps). \code{summary(verbose = TRUE)} adds the admissible gauges and
-the invariants of the reduced blocks. The per-stage certificates are kept in
-\verb{$blocks[[i]]$certificates} and are not printed.
+\code{print()} shows the verdict, the trafo, the new parameters and the zero limits.
+\code{summary()} adds one line per block, \code{summary(verbose = TRUE)} the admissible
+gauges and the invariants.
 }
 \description{
-Turns the non-identifiable directions reported by \code{\link[=symmetryDetection]{symmetryDetection()}} into a
-parameter reparametrisation. Scaling directions are gauged exactly: the integer
-weight lattice yields the invariant monomials, and a certified transversal (one
-coordinate per independent weight row, pinned to 1) removes the directions while
-every surviving coordinate keeps its name and absorbs an invariant product. When
-a whole space of transformations exists, the admissible family is reported
-instead of hiding an arbitrary choice. Curved (polynomial/general) directions go
-through module reduction and an escalating exact invariant search -- monomial,
-polynomial up to \code{dPoly}, rational with a single-coordinate denominator (a
-Laurent ansatz with numerator degree up to \code{dPoly}), rational via Darboux
-polynomials up to \code{dDarboux}, Liouvillian via exponential factors \code{exp(g/h)}
-with numerator degree up to \code{dExp} -- and every failed stage leaves a precise
-negative certificate. By
-Prelle--Singer the last stage completes the search class: every elementary or
-Liouvillian first integral is of Darboux form once exponential factors are
-admitted, so within the degree caps nothing expressible in closed form is
-missed. A solved curved block carries each invariant on a fresh outer parameter
-\verb{q_<k>}; the \code{survivorMeaning} entries state which invariant each one holds.
+Turns the non-identifiable directions of a \code{\link[=symmetryDetection]{symmetryDetection()}} result into a
+parameter transformation that removes them. Scaling directions are removed
+through their integer weight lattice: one coordinate per independent weight is
+fixed to 1 and the others keep their names. General directions go through an
+exact invariant search of increasing complexity: monomial, polynomial up to
+degree \code{dPoly}, separable quadratures, rational with a monomial denominator,
+Darboux polynomials up to degree \code{dDarboux} and exponential factors up to degree
+\code{dExp}. Each stage that fails leaves a certificate. The invariants of a reduced
+block are carried by new parameters \verb{q_<k>}.
 }
 \details{
-Each carrier is emitted with a DOMAIN. An invariant certified positive on the
-positive orthant gives a positive, log-fittable carrier; one that takes both signs
-there gives a real one, reported as \verb{[real-valued]} and to be fitted linearly --
-putting it on a log scale would confine the fit to part of the model's domain. The
-gauge is chosen to match: a constant pin only reaches the orbits that happen to
-cross it, so when a carrier is real the gauge coordinate is pinned to
-\verb{1 + sum_l q_l^2} instead. On an entry affine in the pin that clears every lower
-bound at once (\code{1 + L^2 - L = (L - 1/2)^2 + 3/4 > 0}), and on a higher-degree entry
-it pushes the pin past the Cauchy bound on the real roots, where the entry carries
-the sign of its leading coefficient. The chart then reaches every orbit that meets
-the positive orthant (\code{coverage = "total"}). A block where no such gauge certified
-keeps the positive-domain chart and is reported as \code{coverage = "partial"}.
+A chart is returned only if it is certified on the domain declared by
+\code{positive}: every solved entry must be positive for all admissible values of
+the new parameters. An entry of a coordinate that is not declared positive only
+needs to be real where the fixed coordinates of the block move by translation,
+as a state inside \code{exp()} does. An invariant that takes both signs gives a
+real-valued parameter, marked \verb{[real-valued]} and to be estimated on a linear
+scale; the gauge is then fixed at \verb{1 + sum_l q_l^2}. A chart certified only for
+positive values of such a parameter has \code{coverage = "partial"}.
 
-With \code{reportZeroCompatibility = TRUE} every block also reports its ZERO LIMITS:
-which coordinates the orbit can drive to 0 with nothing running off to infinity.
-That is the difference between a flat direction that runs forever and one that
-ends in a degenerate model -- a rate switched off, its whole reaction gone --
-which fits the data exactly as well and is rarely what a symmetry is wanted for.
-Several coordinates may vanish together (a set of rates switched off is still a
-model); only divergence disqualifies, a zero bought by sending another coordinate
-to infinity being no zero of the model. The orbit lies inside the level set of the
-block's invariants, so the face \code{{z_Z = 0}} is asked for the invariant values a
-point carries: the face system is solved exactly, a solved coordinate that cannot
-be positive there is added to \code{Z} and the face asked again -- so the sets come out
-of the solve, not from enumerating subsets -- and an equation left with no unknown
-is the divergence. Whether the face is reached at finite \code{eps} or only approached
-as \code{eps -> +-Inf} follows from \code{v | xi_v} (\code{limit}).
-
-A zero is never ANNOUNCED as reachable unless it is reachable from every positive
-point; where it is not, the report states the inequality under which it is, and
-leaves the call to the reader. Whether \code{k_d} can be removed from \verb{P <-> pP}
-depends on which side of its steady state the parameters sit (\code{P*k_p > k_d*pP}),
-and on the other side \code{P = 0} is the reachable one instead: that is a statement
-about the parameters, not about the model. The condition is an R expression over
-the model's own coordinate names, so one \code{eval()} settles it at whatever point
-matters -- the reduction itself stays symbolic and takes no parameter values.
+With \code{reportZeroCompatibility = TRUE} each block reports which coordinates the
+symmetry can drive to 0 without another coordinate diverging. Where this
+depends on the parameters, the condition is returned as an R expression in the
+coordinates.
 }
 \examples{
 \dontrun{
@@ -199,11 +127,10 @@ matters -- the reduction itself stays symbolic and takes no parameter values.
   symmetryReduction(res2, dPoly = 0L, dDarboux = 0L, dExp = 0L)
 
   ## zero limits: k1 + u*k2 is the invariant, so either production term can be
-  ## switched off from anywhere -- reported without a point
+  ## switched off from any point
   symmetryReduction(res2, reportZeroCompatibility = TRUE)$zeroCompatibility
 
-  ## P <-> pP through s*pP: neither zero holds everywhere, so nothing is claimed
-  ## until a point decides it
+  ## P <-> pP through s*pP: neither zero holds everywhere, so a condition decides
   pp <- eqnlist() |>
     addReaction("P",  "pP", "k_p*P",  "phosphorylation") |>
     addReaction("pP", "P",  "k_d*pP", "dephosphorylation")
@@ -211,8 +138,8 @@ matters -- the reduction itself stays symbolic and takes no parameter values.
                              reconstruct = TRUE)
   redPP <- symmetryReduction(resPP, fixed = "s", reportZeroCompatibility = TRUE)
   redPP                           # k_d and P each "where ...", k_p "nowhere"
-  ## the conditions are R over the model's own names -- one eval decides them, and
-  ## above the steady state the back reaction goes, below it the initial value
+  ## the conditions are R expressions in the coordinates: above the steady state
+  ## k_d can vanish, below it P
   cond <- setNames(redPP$zeroCompatibility$condition, redPP$zeroCompatibility$coordinates)
   sapply(cond[c("P", "k_d")], function(cc)
     eval(parse(text = cc), list(P = 1, pP = 0.2, k_p = 0.3, k_d = 0.05)))
@@ -238,12 +165,11 @@ matters -- the reduction itself stays symbolic and takes no parameter values.
   ## the factor stages reach it too: Darboux with the quadrature switched off
   symmetryReduction(res4, dDarboux = 1L, separable = FALSE)$blocks[[1]]$invariants
 
-  ## both capped away: the exp stage takes over (log/exp entries suit P(),
-  ## not symmetryDetection(trafo = ))
+  ## both capped: the exp stage finds it (log entries suit P() only)
   symmetryReduction(res4, dDarboux = 0L, separable = FALSE)$blocks[[1]]$invariants
 
-  ## EGF/EGFR -> MEK/ERK cascade: the curved block's invariants are carried on
-  ## fresh q_<k> parameters with certified offsets
+  ## EGF/EGFR -> MEK/ERK cascade: the invariants of the curved block are
+  ## carried by new parameters q_<k>
   reactions <- eqnlist() |>
     addReaction("EGF + EGFR", "EGF_EGFR", "k_bind * EGF * EGFR")   |>
     addReaction("EGF_EGFR", "EGF + EGFR", "k_unbind * EGF_EGFR")   |>
@@ -272,6 +198,12 @@ matters -- the reduction itself stays symbolic and takes no parameter values.
   summary(redEgf)                 # the certificates behind the positive chart
   redEgf$trafo                    # positive chart, ready for P()
 
+  ## a state inside exp(): A and kA declared real, A is fixed by a translation
+  fE <- eqnvec(A = "kA - kd*A", B = "kB - kE*exp(A)*B")
+  resE <- symmetryDetection(fE, eqnvec(y = "s*B"), reconstruct = TRUE)
+  redE <- symmetryReduction(resE, positive = c("B", "kB", "kd", "kE", "s"))
+  redE$trafo
+  file.edit(system.file("examples", "symmetryExponentials.R", package = "dMod2"))
 }
 
 }

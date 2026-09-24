@@ -3370,147 +3370,75 @@ summary.symmetryreduction <- function(object, verbose = FALSE,
 
 # ---- the user-facing function ----------------------------------------------------
 
-#' Constructive removal of detected symmetries
+#' Remove detected symmetries by reparametrisation
 #'
-#' Turns the non-identifiable directions reported by [symmetryDetection()] into a
-#' parameter reparametrisation. Scaling directions are gauged exactly: the integer
-#' weight lattice yields the invariant monomials, and a certified transversal (one
-#' coordinate per independent weight row, pinned to 1) removes the directions while
-#' every surviving coordinate keeps its name and absorbs an invariant product. When
-#' a whole space of transformations exists, the admissible family is reported
-#' instead of hiding an arbitrary choice. Curved (polynomial/general) directions go
-#' through module reduction and an escalating exact invariant search -- monomial,
-#' polynomial up to `dPoly`, rational with a single-coordinate denominator (a
-#' Laurent ansatz with numerator degree up to `dPoly`), rational via Darboux
-#' polynomials up to `dDarboux`, Liouvillian via exponential factors `exp(g/h)`
-#' with numerator degree up to `dExp` -- and every failed stage leaves a precise
-#' negative certificate. By
-#' Prelle--Singer the last stage completes the search class: every elementary or
-#' Liouvillian first integral is of Darboux form once exponential factors are
-#' admitted, so within the degree caps nothing expressible in closed form is
-#' missed. A solved curved block carries each invariant on a fresh outer parameter
-#' `q_<k>`; the `survivorMeaning` entries state which invariant each one holds.
+#' Turns the non-identifiable directions of a [symmetryDetection()] result into a
+#' parameter transformation that removes them. Scaling directions are removed
+#' through their integer weight lattice: one coordinate per independent weight is
+#' fixed to 1 and the others keep their names. General directions go through an
+#' exact invariant search of increasing complexity: monomial, polynomial up to
+#' degree `dPoly`, separable quadratures, rational with a monomial denominator,
+#' Darboux polynomials up to degree `dDarboux` and exponential factors up to degree
+#' `dExp`. Each stage that fails leaves a certificate. The invariants of a reduced
+#' block are carried by new parameters `q_<k>`.
 #'
-#' Each carrier is emitted with a DOMAIN. An invariant certified positive on the
-#' positive orthant gives a positive, log-fittable carrier; one that takes both signs
-#' there gives a real one, reported as `[real-valued]` and to be fitted linearly --
-#' putting it on a log scale would confine the fit to part of the model's domain. The
-#' gauge is chosen to match: a constant pin only reaches the orbits that happen to
-#' cross it, so when a carrier is real the gauge coordinate is pinned to
-#' `1 + sum_l q_l^2` instead. On an entry affine in the pin that clears every lower
-#' bound at once (`1 + L^2 - L = (L - 1/2)^2 + 3/4 > 0`), and on a higher-degree entry
-#' it pushes the pin past the Cauchy bound on the real roots, where the entry carries
-#' the sign of its leading coefficient. The chart then reaches every orbit that meets
-#' the positive orthant (`coverage = "total"`). A block where no such gauge certified
-#' keeps the positive-domain chart and is reported as `coverage = "partial"`.
+#' @details A chart is returned only if it is certified on the domain declared by
+#'   `positive`: every solved entry must be positive for all admissible values of
+#'   the new parameters. An entry of a coordinate that is not declared positive only
+#'   needs to be real where the fixed coordinates of the block move by translation,
+#'   as a state inside `exp()` does. An invariant that takes both signs gives a
+#'   real-valued parameter, marked `[real-valued]` and to be estimated on a linear
+#'   scale; the gauge is then fixed at `1 + sum_l q_l^2`. A chart certified only for
+#'   positive values of such a parameter has `coverage = "partial"`.
 #'
-#' With `reportZeroCompatibility = TRUE` every block also reports its ZERO LIMITS:
-#' which coordinates the orbit can drive to 0 with nothing running off to infinity.
-#' That is the difference between a flat direction that runs forever and one that
-#' ends in a degenerate model -- a rate switched off, its whole reaction gone --
-#' which fits the data exactly as well and is rarely what a symmetry is wanted for.
-#' Several coordinates may vanish together (a set of rates switched off is still a
-#' model); only divergence disqualifies, a zero bought by sending another coordinate
-#' to infinity being no zero of the model. The orbit lies inside the level set of the
-#' block's invariants, so the face `{z_Z = 0}` is asked for the invariant values a
-#' point carries: the face system is solved exactly, a solved coordinate that cannot
-#' be positive there is added to `Z` and the face asked again -- so the sets come out
-#' of the solve, not from enumerating subsets -- and an equation left with no unknown
-#' is the divergence. Whether the face is reached at finite `eps` or only approached
-#' as `eps -> +-Inf` follows from `v | xi_v` (`limit`).
+#'   With `reportZeroCompatibility = TRUE` each block reports which coordinates the
+#'   symmetry can drive to 0 without another coordinate diverging. Where this
+#'   depends on the parameters, the condition is returned as an R expression in the
+#'   coordinates.
 #'
-#' A zero is never ANNOUNCED as reachable unless it is reachable from every positive
-#' point; where it is not, the report states the inequality under which it is, and
-#' leaves the call to the reader. Whether `k_d` can be removed from `P <-> pP`
-#' depends on which side of its steady state the parameters sit (`P*k_p > k_d*pP`),
-#' and on the other side `P = 0` is the reachable one instead: that is a statement
-#' about the parameters, not about the model. The condition is an R expression over
-#' the model's own coordinate names, so one `eval()` settles it at whatever point
-#' matters -- the reduction itself stays symbolic and takes no parameter values.
-#'
-#' @param object A `symmetrydetection` result, from [symmetryDetection()].
-#' @param fixed Character vector of coordinates the user pins at known values
-#'   beforehand (same semantics as `summary(object, fixed = )`): scaling directions
-#'   removed by the fixing drop out of the reparametrisation, and the fixed
-#'   coordinates never enter a transversal. Unknown names warn and are ignored.
-#' @param positive The coordinates that are known to be positive, the domain every
-#'   chart certificate is proved over. `TRUE` (the default) declares all of them,
-#'   as rate constants and concentrations are; `FALSE` declares none; a character
-#'   vector declares those named, and unknown names warn and are ignored. A
-#'   coordinate left out keeps its sign open, so a term containing it at an odd
-#'   power decides no sign: fewer charts certify, more carriers come back
-#'   real-valued, and none of the certificates that do come back is weaker.
-#' @param reportZeroCompatibility Logical, off by default: work out which zeros the
-#'   symmetry is compatible with (see below), one exact face solve per coordinate of
-#'   each block. It costs a quarter of the reduction on a six-reaction cascade and is
-#'   asked for, not paid for by everyone.
-#' @param dPoly Total-degree cap of the polynomial invariant search (stage 2),
-#'   and the numerator-degree cap of the rational stage that follows it (a
-#'   Laurent ansatz allowing one moved coordinate at exponent -1 -- the cheap
-#'   route to invariants like `(z^2*a + z*b + c*d)/z` that the factor stages
-#'   only reach at much higher caps).
-#' @param dDarboux Degree cap of the Darboux factors in the rational invariant
-#'   search (stage 3). The cofactor degree is bounded structurally (at most the
-#'   generator degree minus one), not by this cap.
-#' @param dExp Numerator degree cap of the exponential-factor search (stage 4):
-#'   factors `exp(g/h)` with `deg(g) <= dExp` and `h` a product of Darboux
-#'   factors. `dExp = 0` skips the stage. Invariants from this stage are
-#'   transcendental; the emitted trafo entries may contain `log`/`exp` (fine for
-#'   [P()], but not accepted by `symmetryDetection(trafo = )`, which requires
-#'   rational entries).
-#' @param separable Logical: run the separable-characteristics stage. When every
-#'   component of a generator involves no moved coordinate but its own, the
-#'   characteristic system decouples and the invariants follow from one-dimensional
-#'   quadratures -- cheaper than every other stage and the only one reaching
-#'   antiderivatives outside the Darboux language (`atan`). `FALSE` forces the
-#'   ansatz and factor stages to carry such a block on their own.
-#' @param verbose Logical: print progress per block and stage.
-#' @param ... Reserved.
+#' @param object A `symmetrydetection` result from [symmetryDetection()].
+#' @param fixed Character vector of coordinates with known values, as in
+#'   `summary(object, fixed = )`. Scaling directions they remove are dropped, and
+#'   they are not used as gauge. Unknown names are ignored with a warning.
+#' @param positive Coordinates known to be positive, the domain of every
+#'   certificate: `TRUE` (default) for all, `FALSE` for none, or a character vector.
+#'   Unknown names are ignored with a warning.
+#' @param reportZeroCompatibility Logical (default `FALSE`). Report the zero limits
+#'   of each block, see Details. Needs one exact solve per coordinate.
+#' @param dPoly Degree bound of the polynomial invariant search and numerator
+#'   degree bound of the rational search with a monomial denominator.
+#' @param dDarboux Degree bound of the Darboux polynomials.
+#' @param dExp Numerator degree bound of the exponential factors `exp(g/h)`; `0`
+#'   skips this stage. Its entries may contain `exp()` and `log()`, which [P()]
+#'   accepts and `symmetryDetection(trafo = )` accepts without `log()`.
+#' @param separable Logical (default `TRUE`). Solve blocks whose components depend
+#'   only on their own coordinate by quadratures.
+#' @param verbose Logical. Report the progress per block and stage.
+#' @param ... Not used.
 #'
 #' @return An object of class `symmetryreduction`:
 #'   \describe{
-#'     \item{`blocks`}{one entry per coupled block of directions: `labels` (the
-#'       `X` labels as printed by `print(object)`), `type` (`kind` names what the
-#'       block holds when a scaling was demoted into a curved block), `support`, `stage`
-#'       reached, `invariants` (exact strings), `certificates` (positive and
-#'       negative), `transversal`/`pins`, `survivorMeaning` (which invariant each
-#'       surviving coordinate or fresh `q_<k>` parameter carries), `carrierDomain`
-#'       (`"positive"` or `"real"` per carrier) and `coverage` (`"total"` when the
-#'       chart reaches every orbit that meets the positive orthant, `"partial"`
-#'       otherwise), `moduleCombos`, `status`
-#'       (`"fixed"`, `"reduced"`, `"invariantOnly"` or `"unresolved"`), `reason`,
-#'       `zeroCompatibility`.}
-#'     \item{`zeroCompatibility`}{the zero limits of every block, one row per set of
-#'       coordinates that vanish together (`coordinates`, comma-separated):
-#'       `verdict` (`"yes"` reached from every positive point, `"if"` reached exactly
-#'       where `condition` holds, `"no"` not reached, `"unknown"` not decided),
-#'       `limit` (`TRUE` when the face is invariant, so the
-#'       zero is only approached as `eps -> +-Inf`), `certain` (`FALSE` when the
-#'       block's invariant set is incomplete, which leaves anything but `"no"` an
-#'       upper bound), `condition` (an R expression over the model's own coordinate
-#'       names -- `eval(parse(text = condition), as.list(pars))` decides it at a
-#'       point) and `at` (the degenerate point the
-#'       orbit lands on; a primed name is a coordinate the remaining freedom leaves
-#'       open). `NULL` unless `reportZeroCompatibility = TRUE`.}
-#'     \item{`trafo`}{a complete [eqnvec] over all coordinates (identity plus the
-#'       transversal pins and solved entries), ready for [P()] or
-#'       `symmetryDetection(trafo = )`; `NULL` when nothing was reducible.}
-#'     \item{`family`}{the general form: admissible transversals (or their matroid
-#'       description) per reduced block, plus the gauge note that pins may be any
-#'       nonzero constant.}
-#'     \item{`removed`, `remaining`}{direction labels by outcome.}
+#'     \item{`blocks`}{one entry per set of coupled directions: `labels`, `type`,
+#'       `kind`, `support`, `stage`, `invariants`, `certificates`, `transversal`,
+#'       `pins`, `survivorMeaning` (the invariant each remaining coordinate or
+#'       `q_<k>` carries), `carrierDomain` (`"positive"` or `"real"` per `q_<k>`),
+#'       `coverage` (`"total"` or `"partial"`), `moduleCombos`, `status`
+#'       (`"fixed"`, `"reduced"`, `"invariantOnly"` or `"unresolved"`), `reason`
+#'       and `zeroCompatibility`.}
+#'     \item{`zeroCompatibility`}{`NULL` unless `reportZeroCompatibility = TRUE`,
+#'       else one row per set of coordinates that vanish together: `verdict`
+#'       (`"yes"`, `"if"`, `"no"` or `"unknown"`), `limit` (`TRUE` if the zero is
+#'       only approached asymptotically), `certain` (`FALSE` if the invariants are
+#'       incomplete), `condition` and `at`.}
+#'     \item{`trafo`}{an [eqnvec] over all coordinates for [P()] or
+#'       `symmetryDetection(trafo = )`; `NULL` if nothing was reduced.}
+#'     \item{`family`}{the admissible gauges of each reduced block.}
+#'     \item{`removed`, `remaining`}{labels of the directions.}
 #'     \item{`coordinates`, `fixed`, `settings`, `call`}{provenance.}
 #'   }
-#'   `print()` is terse: the verdict, the non-identity trafo entries, the invariant
-#'   each fresh `q_<k>` parameter carries and where each zero limit is reached. The
-#'   monomial a scaling survivor carries is not printed, it follows from the gauge
-#'   and stays on the object as `survivorMeaning`. `summary()`
-#'   adds one line per block --
-#'   kind, status, stage, how it was gauged -- plus, for a block that did not
-#'   reduce, its invariants and the reason (how many invariants were found under
-#'   which degree caps). `summary(verbose = TRUE)` adds the admissible gauges and
-#'   the invariants of the reduced blocks. The per-stage certificates are kept in
-#'   `$blocks[[i]]$certificates` and are not printed.
+#'   `print()` shows the verdict, the trafo, the new parameters and the zero limits.
+#'   `summary()` adds one line per block, `summary(verbose = TRUE)` the admissible
+#'   gauges and the invariants.
 #'
 #' @seealso [symmetryDetection()]
 #' @example inst/examples/symmetryReduction.R

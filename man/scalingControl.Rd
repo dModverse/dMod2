@@ -2,19 +2,18 @@
 % Please edit documentation in R/symmetryDetection.R
 \name{scalingControl}
 \alias{scalingControl}
-\title{Tuning control for \code{symmetryDetection(method = "scaling")}}
+\title{Settings of the scaling engine}
 \usage{
 scalingControl(backend = c("symengine", "sympy"))
 }
 \arguments{
-\item{backend}{\code{"symengine"} (faster, falls back to sympy) or \code{"sympy"}.}
+\item{backend}{\code{"symengine"} (falls back to sympy) or \code{"sympy"}.}
 }
 \value{
 A \code{scalingControl} list.
 }
 \description{
-Bundles the scaling (toric) symmetry engine's parameters into one object, passed
-as \code{symmetryDetection(..., scaling = scalingControl(...))}.
+Settings for \code{symmetryDetection(method = "scaling", scaling = scalingControl())}.
 }
 \seealso{
 \code{\link[=symmetryDetection]{symmetryDetection()}}, \code{\link[=polynomialControl]{polynomialControl()}}

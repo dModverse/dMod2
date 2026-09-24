@@ -2,7 +2,7 @@
 % Please edit documentation in R/symmetryDetection.R
 \name{reconstControl}
 \alias{reconstControl}
-\title{Tuning controls for \code{symmetryDetection(method = "observability")}}
+\title{Settings of the observability engine}
 \usage{
 reconstControl(
   relevanceCap = 6L,
@@ -27,87 +27,64 @@ reconstControl(
 )
 }
 \arguments{
-\item{relevanceCap}{Max variables a single nullspace entry may couple before it
-is fit by sparse interpolation instead of the dense fit.}
+\item{relevanceCap}{Maximum number of coordinates in one entry of a direction
+for the dense fit; wider entries use sparse interpolation.}
 
-\item{relevanceCapDir}{Max variables a whole direction may couple before it is
-returned as support-only.}
+\item{relevanceCapDir}{Maximum number of coordinates in one direction; a wider
+one is reported by its support.}
 
-\item{relevanceCapSparse}{Max variables a single entry may couple for the
-sparse (Ben-Or-Tiwari) path; beyond this the entry is support-only.}
+\item{relevanceCapSparse}{Maximum number of coordinates in one entry for the
+sparse (Ben-Or/Tiwari) fit; a wider entry is reported by its support.}
 
-\item{degreeCap}{Total-degree bound of the dense rational fit per entry.}
+\item{degreeCap}{Total degree bound of the dense rational fit.}
 
-\item{sampleSlack}{Extra evaluation points beyond the minimum the fit needs.}
+\item{sampleSlack}{Number of samples beyond the minimum of the fit.}
 
-\item{probeRetries}{Fresh-randomness retries for the per-leaf relevance probe
-when a perturbation shifts the pivot set.}
+\item{probeRetries}{Number of retries of the relevance probe when a
+perturbation changes the pivots.}
 
-\item{laurentDegNum, laurentDegDen}{Numerator and single-monomial denominator
-degree bounds of the sparse Laurent path.}
+\item{laurentDegNum, laurentDegDen}{Numerator degree and monomial denominator
+degree bounds of the sparse Laurent fit.}
 
-\item{laurentCandCap}{Cap on the candidate-monomial product enumerated by the
-Laurent / general path (guards memory).}
+\item{laurentCandCap}{Maximum number of candidate monomials of the Laurent and
+general sparse fits.}
 
-\item{termCap}{Max term count (Ben-Or-Tiwari order) of a sparse entry.}
+\item{termCap}{Maximum number of terms of a sparse entry.}
 
-\item{generalDegNum, generalDegDen}{Numerator and (multi-term) denominator
-degree bounds of the general sparse-rational (Cauchy + Ben-Or-Tiwari) path.}
+\item{generalDegNum, generalDegDen}{Numerator and denominator degree bounds of the
+general sparse rational fit.}
 
-\item{gapOrderCap}{Cap on the gap power-series order raised when propagating the
-state exactly across later (post-stimulus) event boundaries.}
+\item{gapOrderCap}{Maximum order of the power series in the time between
+events.}
 
-\item{minsupportCandCap}{Cap on the number of column subsets the minimal-support
-search enumerates when hunting narrow nullspace cocircuits. A genuinely wide
-direction has no small-support cocircuit, so an exhaustive scan would test
-\code{choose(support, s)} subsets fruitlessly; the search stops at this cap and lets
-any wide direction fall through to the free-column fit. Raise it only to peel
-cocircuits of unusually large support.}
+\item{minsupportCandCap}{Maximum number of column subsets searched for
+directions with small support; wider directions go to the general fit.}
 
-\item{perprimeCap}{Max sample points per prime for the per-prime reconstruction
-used by the equilibrate/joint (coupled steady-state) path. There a random
-multi-parameter perturbation admits an interior modular steady state at only
-some primes, so a point that solves at every prime at once is vanishingly rare
-and the shared all-prime bank cannot fill; instead each prime collects its own
-solvable, pivot-consistent points and the per-prime entry fits are lifted by
-Chinese remaindering. It doubles as the width gate: a direction whose widest
-entry needs more than \code{perprimeCap} points already at degree 2 is too wide for
-the dense per-prime fit and is returned support-only immediately (no sampling),
-so an intrinsically wide/transcendental joint confound is reported by support
-quickly rather than grinding. The default keeps the coupled reconstruction
-bounded; raise it (with \code{timeout}) to attempt a genuinely wide joint direction.}
+\item{perprimeCap}{Maximum number of samples per prime for the reconstruction
+under \code{equilibrate = TRUE}. A direction that needs more at degree 2 is reported
+by its support.}
 
-\item{perprimeMinPrimes}{Minimum number of primes that must fill for the
-per-prime path to lift a coefficient by CRT. A prime whose coupled solve never
-succeeds under the direction's perturbations is dropped; the rational
-reconstruction then runs over the remaining primes (their product still bounds
-the coefficient height). Below this many live primes the entry is support-only.}
+\item{perprimeMinPrimes}{Minimum number of primes with samples for a
+reconstruction under \code{equilibrate = TRUE}.}
 
-\item{certifyPoly}{Logical. For each direction whose canonical generator is polynomial
-of degree \verb{1..degreeCap}, run the
-polynomial Lie-symmetry engine (\code{method = "polynomial"}) and set \verb{$certified}
-to whether the direction is a nonzero constant combination of its generators --
-i.e. an exact polynomial Lie point symmetry, not merely an observability
-non-identifiability. \code{FALSE} by default; it is comparatively expensive.}
+\item{certifyPoly}{Logical. Check with the \code{"polynomial"} engine whether each
+polynomial direction of degree up to \code{degreeCap} is a Lie point symmetry, and
+set \verb{$certified}. Costly; \code{FALSE} by default.}
 
-\item{certifyPolyDeg}{Ansatz degree for \code{certifyPoly}; \code{NULL} (default) uses each
-direction's own classified degree.}
+\item{certifyPolyDeg}{Ansatz degree for \code{certifyPoly}; \code{NULL} (default) uses the
+degree of each direction.}
 
-\item{timeout}{Wall-clock budget in seconds for the closed-form reconstruction
-(\code{reconstruct = TRUE}). When it is exceeded, the directions still being
-reconstructed are returned support-only (\code{reconstruct = FALSE}) with a
-\code{reason}, so a hard general (non-scaling) direction aborts cleanly instead of
-running unbounded. \code{Inf} (the default) imposes no limit and reproduces the
-previous behaviour exactly.}
+\item{timeout}{Time limit in seconds for the reconstruction. Directions not
+finished in time are reported by their support. \code{Inf} (default) sets no limit.}
 }
 \value{
 A \code{reconstControl} list.
 }
 \description{
-Bundles the saturation and closed-form-reconstruction parameters of the
-observability engine into one object, passed as \code{symmetryDetection(..., control = reconstControl(...))}. Raise the caps for models whose
-non-identifiability directions are wide or high-degree rationals (at the cost of
-more finite-field samples).
+Saturation and closed-form reconstruction settings for
+\code{symmetryDetection(method = "observability", control = reconstControl())}. Raise
+the caps to reconstruct wide or high-degree directions, at the cost of more
+samples.
 }
 \seealso{
 \code{\link[=symmetryDetection]{symmetryDetection()}}

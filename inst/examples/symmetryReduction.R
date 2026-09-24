@@ -26,11 +26,10 @@
   symmetryReduction(res2, dPoly = 0L, dDarboux = 0L, dExp = 0L)
 
   ## zero limits: k1 + u*k2 is the invariant, so either production term can be
-  ## switched off from anywhere -- reported without a point
+  ## switched off from any point
   symmetryReduction(res2, reportZeroCompatibility = TRUE)$zeroCompatibility
 
-  ## P <-> pP through s*pP: neither zero holds everywhere, so nothing is claimed
-  ## until a point decides it
+  ## P <-> pP through s*pP: neither zero holds everywhere, so a condition decides
   pp <- eqnlist() |>
     addReaction("P",  "pP", "k_p*P",  "phosphorylation") |>
     addReaction("pP", "P",  "k_d*pP", "dephosphorylation")
@@ -38,8 +37,8 @@
                              reconstruct = TRUE)
   redPP <- symmetryReduction(resPP, fixed = "s", reportZeroCompatibility = TRUE)
   redPP                           # k_d and P each "where ...", k_p "nowhere"
-  ## the conditions are R over the model's own names -- one eval decides them, and
-  ## above the steady state the back reaction goes, below it the initial value
+  ## the conditions are R expressions in the coordinates: above the steady state
+  ## k_d can vanish, below it P
   cond <- setNames(redPP$zeroCompatibility$condition, redPP$zeroCompatibility$coordinates)
   sapply(cond[c("P", "k_d")], function(cc)
     eval(parse(text = cc), list(P = 1, pP = 0.2, k_p = 0.3, k_d = 0.05)))
@@ -65,12 +64,11 @@
   ## the factor stages reach it too: Darboux with the quadrature switched off
   symmetryReduction(res4, dDarboux = 1L, separable = FALSE)$blocks[[1]]$invariants
 
-  ## both capped away: the exp stage takes over (log/exp entries suit P(),
-  ## not symmetryDetection(trafo = ))
+  ## both capped: the exp stage finds it (log entries suit P() only)
   symmetryReduction(res4, dDarboux = 0L, separable = FALSE)$blocks[[1]]$invariants
 
-  ## EGF/EGFR -> MEK/ERK cascade: the curved block's invariants are carried on
-  ## fresh q_<k> parameters with certified offsets
+  ## EGF/EGFR -> MEK/ERK cascade: the invariants of the curved block are
+  ## carried by new parameters q_<k>
   reactions <- eqnlist() |>
     addReaction("EGF + EGFR", "EGF_EGFR", "k_bind * EGF * EGFR")   |>
     addReaction("EGF_EGFR", "EGF + EGFR", "k_unbind * EGF_EGFR")   |>
@@ -99,5 +97,11 @@
   summary(redEgf)                 # the certificates behind the positive chart
   redEgf$trafo                    # positive chart, ready for P()
 
+  ## a state inside exp(): A and kA declared real, A is fixed by a translation
+  fE <- eqnvec(A = "kA - kd*A", B = "kB - kE*exp(A)*B")
+  resE <- symmetryDetection(fE, eqnvec(y = "s*B"), reconstruct = TRUE)
+  redE <- symmetryReduction(resE, positive = c("B", "kB", "kd", "kE", "s"))
+  redE$trafo
+  file.edit(system.file("examples", "symmetryExponentials.R", package = "dMod2"))
 }
 
