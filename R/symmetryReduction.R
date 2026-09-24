@@ -1702,6 +1702,7 @@
 # thirty call sites of the sign recursion; the driver sets and restores it.
 .symDomain <- new.env(parent = emptyenv())
 .symDomain$positive <- NULL
+.symDomain$realCarriers <- character(0)
 
 .symPositive <- function() .symDomain$positive
 
@@ -1748,7 +1749,9 @@
                                                      function(g) as.character(g)))),
                      error = function(err) NULL)
     if (is.null(gens) || length(gens) != ncol(expts)) return(0L)
-    free <- !(gens %in% pos)
+    # a carrier of a positive invariant is positive
+    carrier <- grepl("^dModRedC[0-9]+$", gens) & !(gens %in% .symDomain$realCarriers)
+    free <- !(gens %in% pos) & !carrier
     if (any(free) && any(expts[, free, drop = FALSE] %% 2 != 0)) return(0L)
   }
   if (all(cf > 0)) return(1L)
@@ -2112,6 +2115,33 @@
   NULL
 }
 
+# A coordinate left out of `positive` needs a real entry only: rational operations
+# and exp over a denominator of fixed sign on the domain (realSyms range over R).
+# Sound when every orbit crosses the pin: each pinned real coordinate has a constant
+# component in every direction of the block, nonzero in one (a translation).
+.symRedIsReal <- function(v) !is.null(.symPositive()) && !(v %in% .symPositive())
+.symRedTranslationGauge <- function(b, gauge) {
+  if (!length(b$preps) || !any(vapply(gauge, .symRedIsReal, logical(1))))
+    return(FALSE)
+  all(vapply(gauge, function(v) {
+    if (!.symRedIsReal(v)) return(TRUE)
+    x <- vapply(b$preps, function(pr) {
+      cv <- pr$comps[v]
+      if (is.na(cv)) 0 else suppressWarnings(as.numeric(cv))
+    }, numeric(1))
+    !anyNA(x) && any(x != 0)
+  }, logical(1)))
+}
+.symRedRealForm <- function(e, spy, realSyms) {
+  f <- tryCatch(spy$cancel(spy$together(e)), error = function(err) NULL)
+  if (is.null(f) || !identical(.symRedEntryClass(f, spy), "yes")) return(NULL)
+  if (length(.symRedIter(f$atoms(spy$log), function(a) a))) return(NULL)
+  den <- spy$fraction(f)[[2]]
+  if (.symRedSgnReal(den, spy, realSyms) != 1L &&
+      .symRedSgnReal(-den, spy, realSyms) != 1L) return(NULL)
+  f
+}
+
 # Gauge-section candidates for a curved block: monomial balances "m1 = m2" over
 # the support, simple ones first. A balance section can intersect every positive
 # orbit (a constant pin cannot -- the curved orbit may not reach it); which one
@@ -2361,6 +2391,9 @@
   # carriers whose invariant is not certified sign-definite range over R, so every
   # certificate below is taken on that domain and the pin has to clear it
   realTmp <- tmpN[vapply(Ies, function(Ie) .symRedSgn(Ie, spy) != 1L, logical(1))]
+  oldRC <- .symDomain$realCarriers
+  .symDomain$realCarriers <- realTmp
+  on.exit(.symDomain$realCarriers <- oldRC, add = TRUE)
   eqs <- lapply(seq_along(Ies), function(l)
     Ies[[l]] - spy$Symbol(tmpN[l]))
   getE <- function(solDict, v)
@@ -2595,6 +2628,7 @@
   # point of it.
   if (!is.null(solCarr) && length(solCarr)) {
     gauge <- setdiff(b$support, carriers)
+    relax <- length(solCarr) == 1L && .symRedTranslationGauge(b, gauge)
     # Pin candidates for the gauge coordinates: the constant 1 first, then -- once a
     # carrier ranges over R -- the sum-of-squares pin 1 + sum_l t_l^2. On an entry
     # affine in the pin that clears every lower bound L at once, since
@@ -2654,7 +2688,9 @@
     entries <- character(0); root <- FALSE; partial <- FALSE
     realPin <- if (is.null(sh)) realTmp else setdiff(realTmp, names(sh$shift))
     if (okPin) for (l in seq_along(carriers)) {
-      e <- .symRedPosFormReal(pinned[[carriers[l]]], spy, realPin)
+      e <- if (relax && .symRedIsReal(carriers[l]))
+        .symRedRealForm(pinned[[carriers[l]]], spy, realPin)
+      if (is.null(e)) e <- .symRedPosFormReal(pinned[[carriers[l]]], spy, realPin)
       if (is.null(e)) {
         e <- .symRedPosForm(pinned[[carriers[l]]], spy)
         if (is.null(e)) { okPin <- FALSE; break }

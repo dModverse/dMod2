@@ -419,6 +419,56 @@ def doEquation(k, numerators, denominators, derivativesNum, infis, diffInfis,
     return list(polynomial.coefs)
 
 
+def _exp_det_rows(fields, obsExprs, infisSym, diffInfisSym, allVariables, rs,
+                  ansatz, m):
+    """Determining rows of a model with exponentials: each canonical exponential
+    W = r^(tau/L) (_exp_leaf_canon) is an extra polynomial variable, algebraically
+    independent of the coordinates, and enters derivatives by the chain rule. The
+    ansatz stays in the coordinates."""
+    taken = {str(v) for v in allVariables}
+    for e in list(fields) + list(obsExprs):
+        taken |= {str(x) for x in spy.sympify(e).free_symbols}
+    ctx = _ExpCtx(taken)
+    lc = _exp_leaf_canon([spy.sympify(e) for e in list(fields) + list(obsExprs)], ctx)
+    if 'why' in lc:
+        raise UserWarning(lc['why'])
+    F, G = lc['exprs'][:len(fields)], lc['exprs'][len(fields):]
+    atoms = lc['atoms']
+    extra = set()
+    for e in lc['exprs'] + [w['tau'] for w in atoms]:
+        extra |= e.free_symbols
+    extVars = list(allVariables) + sorted(extra - set(allVariables), key=str)
+
+    def D(e, z):
+        out = spy.diff(e, z)
+        for w in atoms:
+            dW = spy.diff(e, w['W'])
+            if dW != 0:
+                out += dW * w['W'] * ctx.lnOf(w['r']) * D(w['tau'] / w['L'], z)
+        return out
+
+    def coefRows(expr):
+        num = spy.expand(spy.fraction(spy.together(expr))[0])
+        return list(Apoly(num, extVars, rs).coefs) if num != 0 else []
+
+    n = len(allVariables)
+    rows = []
+    for k in range(m):
+        if ansatz in ('uni', 'par'):
+            lhs = diffInfisSym[0][k] * F[k]
+        else:
+            lhs = sum(diffInfisSym[k][j] * F[j] for j in range(m))
+        rhs = sum(infisSym[i] * D(F[k], allVariables[i])
+                  for i in range(n) if infisSym[i] != 0)
+        rows.extend(coefRows(lhs - rhs))
+    for g in G:
+        rows.extend(coefRows(sum(infisSym[l] * D(g, allVariables[l])
+                                 for l in range(n) if infisSym[l] != 0)))
+    back = {sm: spy.log(pr) for pr, sm in ctx.lnSym.items()}
+    back[ctx.ec] = spy.exp(spy.Rational(1, getattr(ctx, 'L0', 1)))
+    return rows, back
+
+
 def _obs_rows(obsExpr, infisSym, allVariables, rs):
     # X(g) = sum_l xi_l dg/dvar_l = 0. Only the gradient of g enters, so g may
     # be non-rational (e.g. log10) as long as every dg/dvar is rational; the
@@ -1057,10 +1107,15 @@ def symmetryDetection(allVariables, diffEquations, obsFunctions,
     sys.stdout.flush()
 
     infisSym, diffInfis, rs = makeAnsatz(ansatz, allVariables, m, q, pMax, list(fixed))
+    diffInfisSym = diffInfis
     infis, diffInfis = transformInfisToPoly(infisSym, diffInfis, allVariables, rs)
 
-    numerators, denominators = _rationalize(diffEquations, allVariables)
-    derivativesNum = _quotient_derivatives(numerators, denominators, allVariables)
+    diffEquations = [_hyp_to_exp(f) for f in diffEquations]
+    obsFunctions = [_hyp_to_exp(g) for g in obsFunctions]
+    expMode = any(_has_exp(e) for e in list(diffEquations) + list(obsFunctions))
+    if not expMode:
+        numerators, denominators = _rationalize(diffEquations, allVariables)
+        derivativesNum = _quotient_derivatives(numerators, denominators, allVariables)
 
     # observation invariance plus the Lie-derivative chain X(L_f^k g) = 0
     fieldExprs = [spy.together(spy.sympify(f)) for f in diffEquations]
@@ -1082,12 +1137,16 @@ def symmetryDetection(allVariables, diffEquations, obsFunctions,
     sys.stdout.write('done\nBuilding system...')
     sys.stdout.flush()
 
-    rows = []
-    for k in range(m):
-        rows.extend(doEquation(k, numerators, denominators, derivativesNum,
-                               infis, diffInfis, allVariables, rs, ansatz))
-    for k in range(h):
-        rows.extend(_obs_rows(obsExprs[k], infisSym, allVariables, rs))
+    rows, expBack = [], {}
+    if expMode:
+        rows, expBack = _exp_det_rows(fieldExprs[:m], obsExprs, infisSym, diffInfisSym,
+                                      allVariables, rs, ansatz, m)
+    else:
+        for k in range(m):
+            rows.extend(doEquation(k, numerators, denominators, derivativesNum,
+                                   infis, diffInfis, allVariables, rs, ansatz))
+        for k in range(h):
+            rows.extend(_obs_rows(obsExprs[k], infisSym, allVariables, rs))
 
     ncols = len(rs)
     sys.stdout.write('done\nSolving system of size %dx%d (%s)...'
@@ -1108,7 +1167,8 @@ def symmetryDetection(allVariables, diffEquations, obsFunctions,
         for i in range(n):
             poly = infis[i].getCopy()
             poly.rs = [v[j] for j in range(ncols)]
-            infisTmp[i] = poly.as_expr()
+            infisTmp[i] = (_tidy_logs(poly.as_expr().xreplace(expBack))
+                           if expBack else poly.as_expr())
         if allTrafos or not checkForCommonFactor(infisTmp, allVariables, m):
             infisAll.append(infisTmp)
 
@@ -2503,6 +2563,24 @@ def solveForwardModular(model, stateNames, paramNames, stateVals, paramVals, pri
             'dfParamCols': list(c['paramNames'])}
 
 
+_HYPERBOLIC = (spy.sinh, spy.cosh, spy.tanh, spy.coth, spy.sech, spy.csch)
+
+
+def _hyp_to_exp(e):
+    """Hyperbolic functions written in exponentials."""
+    e = spy.sympify(e)
+    if not e.has(*_HYPERBOLIC):
+        return e
+    return e.replace(lambda x: isinstance(x, _HYPERBOLIC), lambda x: x.rewrite(spy.exp))
+
+
+def _has_exp(e):
+    """True if e contains an exponential or the number E."""
+    e = spy.sympify(e)
+    return e.has(spy.E) or any(_exp_atom(a) is not None
+                               for a in e.atoms(spy.exp, spy.Pow))
+
+
 def _strip_log_obs(g):
     """An observable kappa*(sum a_i log(h_i)) + c, with a_i rational and kappa 1 or
     1/log(b) for a numeric b, is a strictly monotone function of exp(g/kappa) =
@@ -2714,20 +2792,22 @@ def logParamBacksub(expr, comp, xNames, thetas, bases):
     return str(spy.powsimp(spy.cancel(e.subs(subs))))
 
 
-def _detect_power_atoms(perCond):
+def _detect_power_atoms(perCond, states=()):
     """Find base^exp terms with a non-numeric exponent. base must be a single
-    symbol and exp = c*n (c rational, n a symbol); returns the unique (base, n)
-    pairs, or None if a power is outside this form (then it stays non-rational)."""
+    symbol and exp = c*n (c rational, n a symbol other than a state); returns the
+    unique (base, n) pairs, or None if a power is outside this form (then it stays
+    non-rational). A numeric base is an exponential, see _apply_exp_recast."""
     pairs = set()
+    states = set(states)
     for (f_c, g_c, ic_c, f_ss) in perCond:
         for e in list(f_c) + list(g_c) + list(ic_c.values()) + list(f_ss):
             for pw in spy.sympify(e).atoms(spy.Pow):
-                if pw.exp.is_number:
+                if pw.exp.is_number or _exp_atom(pw) is not None:
                     continue
                 if not pw.base.is_Symbol:
                     return None
                 c, rest = pw.exp.as_coeff_Mul()
-                if not (rest.is_Symbol and c.is_rational):
+                if not (rest.is_Symbol and c.is_rational) or rest in states:
                     return None
                 pairs.add((pw.base, rest))
     return sorted(pairs, key=lambda t: (str(t[0]), str(t[1])))
@@ -2797,6 +2877,430 @@ def recastBacksub(expr, eNames, lNames, bases, exps):
         subs[parse(str(E))] = b ** parse(str(exp))
         subs[parse(str(L))] = spy.log(b)
     return str(spy.cancel(e.subs(subs)))
+
+
+# ---- exponentials of states: auxiliary states and generic exponential leaves ---------
+#
+# b^u with u in the states is carried by an auxiliary state X = r^phi (r the canonical
+# base, phi = t/D a term of u), X' = log(r) X phi'. Its initial value is rational in
+# leaf coordinates W = r^(tau/L), one per term tau of the initial exponents, which the
+# kernel samples as generic values. Each W is tied to the leaves by the relation
+# dW = W log(r) d(tau/L), stacked onto the codistribution in R. This is exact at a
+# generic point: exponentials of terms that are Q-linearly independent modulo the
+# constants are algebraically independent over the rational functions (Ax 1971).
+# e^c and the logs of the primes enter as fixed generic leaves.
+
+def _canon_exp_base(b):
+    """(r, k) with b = r^k, r = E or a positive rational that is not a perfect power;
+    None for any other base."""
+    if b == spy.E:
+        return spy.E, 1
+    b = spy.nsimplify(b, rational=True)
+    if not (b.is_Rational and b.is_positive) or b == 1:
+        return None
+    sign = 1
+    if b < 1:
+        b, sign = 1 / b, -1
+    fp, fq = spy.factorint(b.p), spy.factorint(b.q)
+    g = 0
+    for e in list(fp.values()) + list(fq.values()):
+        g = math.gcd(g, int(e))
+    num = den = 1
+    for pr, e in fp.items():
+        num *= pr ** (e // g)
+    for pr, e in fq.items():
+        den *= pr ** (e // g)
+    return spy.Rational(num, den), sign * g
+
+
+def _exp_terms(b, u):
+    """b^u = r^(c0 + sum q*t): (r, c0, {t: q}) with q rational, or None."""
+    rk = _canon_exp_base(b)
+    if rk is None:
+        return None
+    r, k = rk
+    u = spy.expand(spy.nsimplify(k * u, rational=True))
+    terms = dict(u.as_coefficients_dict())
+    c0 = terms.pop(spy.Integer(1), spy.Integer(0))
+    if not (c0.is_Rational and all(q.is_Rational for q in terms.values())):
+        return None
+    return r, c0, terms
+
+
+def _log_basis(r):
+    """log(r) as {1: 1} for r = E, else {prime: exponent}."""
+    if r == spy.E:
+        return {1: 1}
+    d = dict(spy.factorint(r.p))
+    for pr, e in spy.factorint(r.q).items():
+        d[pr] = d.get(pr, 0) - e
+    return d
+
+
+def _terms_independent(atoms):
+    """True if 1 and the exponents tau*log(r) of the atoms [(r, tau)] are linearly
+    independent over Q, with 1 and the logs of the primes independent. Checked at
+    random integer points."""
+    if not atoms:
+        return True
+    comps = [_log_basis(r) for r, _ in atoms]
+    basis = sorted({b for d in comps for b in d}, key=str)
+    taus = [t for _, t in atoms]
+    syms = sorted(set().union(*[t.free_symbols for t in taus]), key=str)
+    m, nb = len(atoms), len(basis)
+    rng = np.random.default_rng(7)
+    rows, npts = [], 0
+    for _ in range(4 * (m + 3)):
+        pt = {s: spy.Integer(int(v)) for s, v in zip(syms, rng.integers(2, 997, len(syms)))}
+        vals = [spy.nsimplify(t.xreplace(pt)) for t in taus]
+        if not all(v.is_Rational for v in vals):
+            continue
+        for bi, b in enumerate(basis):
+            rows.append([comps[k].get(b, 0) * vals[k] for k in range(m)] +
+                        [1 if j == bi else 0 for j in range(nb)])
+        npts += 1
+        if npts >= m + 3:
+            break
+    return npts >= m + 1 and spy.Matrix(rows).rank() == m + nb
+
+
+class _ExpCtx:
+    """Fresh symbols and constant leaves shared by one exponential rewrite: e^(1/L0)
+    as `ec` (a power of it until L0 is known), log(p) as one leaf per prime p."""
+    def __init__(self, taken):
+        self.taken = set(taken)
+        self.ec = self.fresh('_e_', positive=True)
+        self.lnSym = {}
+
+    def fresh(self, stem, **kw):
+        nm = stem
+        while nm in self.taken:
+            nm += '_'
+        self.taken.add(nm)
+        return spy.Symbol(nm, **kw)
+
+    def lnOf(self, r):
+        """log(r) through one leaf per prime."""
+        out = spy.Integer(0)
+        for pr, e in _log_basis(r).items():
+            if pr == 1:
+                out += e
+                continue
+            if pr not in self.lnSym:
+                self.lnSym[pr] = self.fresh('_ln%d_' % pr, positive=True)
+            out += e * self.lnSym[pr]
+        return out
+
+    @staticmethod
+    def rpow(r, e):
+        return spy.exp(e) if r == spy.E else r ** e
+
+    def const(self, r, c0):
+        """r^c0, None when it is irrational and not a power of e."""
+        if c0 == 0:
+            return spy.Integer(1)
+        if r == spy.E:
+            return self.ec ** c0
+        return r ** c0 if c0.is_Integer else None
+
+    def numbers(self, e):
+        """E as the leaf ec, log(b) of a number as a multiple of a log leaf."""
+        e = spy.sympify(e).xreplace({spy.E: self.ec})
+        rep = {}
+        for L in e.atoms(spy.log):
+            if L.args[0].is_number:
+                rk = _canon_exp_base(L.args[0])
+                if rk is not None:
+                    rep[L] = rk[1] * self.lnOf(rk[0])
+        return e.xreplace(rep) if rep else e
+
+
+def _exp_leaf_canon(exprs, ctx):
+    """Every exponential in `exprs`, innermost first, as a product of generic leaves
+    W = r^(tau/L), one per term tau, and powers of ctx.ec. Returns {'exprs', 'atoms'}
+    with atoms [{'W', 'r', 'tau', 'L'}], after ec -> ec^L0; or {'why': ...}."""
+    exprs = [ctx.numbers(e) for e in exprs]
+    atoms = []
+    while True:
+        found = {}
+        for e in exprs:
+            for at in e.atoms(spy.exp, spy.Pow):
+                if at in found or _exp_atom(at) is None:
+                    continue
+                if any(_exp_atom(a) is not None
+                       for a in _exp_atom(at)[1].atoms(spy.exp, spy.Pow)):
+                    continue
+                dec = _exp_terms(*_exp_atom(at))
+                if dec is None or ctx.const(dec[0], dec[1]) is None:
+                    return {'why': 'the exponential %s is not supported by '
+                            'symEngine = "modular"; try symEngine = "symbolic"' % at}
+                found[at] = dec
+        if not found:
+            break
+        den = {}
+        for r, c0, terms in found.values():
+            for t, q in terms.items():
+                den[(r, t)] = spy.ilcm(den.get((r, t), 1), q.q)
+        keyW = {}
+        for (r, t), L in sorted(den.items(), key=lambda kv: (str(kv[0][0]), str(kv[0][1]))):
+            W = ctx.fresh('_ew%d_' % (len(atoms) + 1), positive=True)
+            keyW[(r, t)] = W
+            atoms.append({'W': W, 'r': r, 'tau': t, 'L': L})
+        repl = {}
+        for at, (r, c0, terms) in found.items():
+            v = ctx.const(r, c0)
+            for t, q in terms.items():
+                v = v * keyW[(r, t)] ** int(q * den[(r, t)])
+            repl[at] = v
+        exprs = [e.xreplace(repl) for e in exprs]
+    # e^c as integer powers of the leaf e^(1/L0)
+    L0 = 1
+    for e in exprs + [w['tau'] for w in atoms]:
+        for pw in e.atoms(spy.Pow):
+            if pw.base == ctx.ec:
+                L0 = spy.ilcm(L0, spy.Rational(pw.exp).q)
+    ecSub = {ctx.ec: ctx.ec ** L0}
+    exprs = [e.xreplace(ecSub) for e in exprs]
+    for w in atoms:
+        w['tau'] = w['tau'].xreplace(ecSub)
+    ctx.L0 = L0
+    if not _terms_independent([(w['r'], w['tau']) for w in atoms]):
+        return {'why': 'exponents that are linearly dependent over the rationals '
+                'are not supported'}
+    return {'exprs': exprs, 'atoms': atoms}
+
+
+def _exp_back(atoms, ctx, used):
+    """Back-substitution map {name: value string} for the leaves and constants."""
+    back = {str(w['W']): str(ctx.rpow(w['r'], w['tau'] / w['L'])) for w in atoms}
+    if ctx.ec in used:
+        back[str(ctx.ec)] = str(spy.exp(spy.Rational(1, ctx.L0)))
+    for r, s in ctx.lnSym.items():
+        back[str(s)] = 'log(%s)' % r
+    return back
+
+
+def _apply_exp_recast(S, perCond, evPer, tmPer, taken):
+    """Replace every exponential in the per-condition model by auxiliary states and
+    generic exponential leaves (see above). `evPer` holds each condition's later
+    events as {'var', 'value', 'method'} with sympy values, `tmPer` its segment start
+    time or None. Returns a dict with the extended S, perCond, evPer and tmPer, the
+    relation list [(W, z, expr)], the fixed constant leaves, the back-substitution map
+    and the codimension added; or {'why': ...} for an unsupported form."""
+    ctx = _ExpCtx(taken)
+    rpow, const = ctx.rpow, ctx.const
+    S = list(S)
+    K = len(perCond)
+    f = [[ctx.numbers(e) for e in p[0]] for p in perCond]
+    g = [[ctx.numbers(e) for e in p[1]] for p in perCond]
+    ic = [{k: ctx.numbers(v) for k, v in p[2].items()} for p in perCond]
+    fss = [list(p[3]) for p in perCond]
+    ev = [[dict(e, value=ctx.numbers(e['value'])) for e in evs] for evs in evPer]
+    tm = [None if t is None else ctx.numbers(t) for t in tmPer]
+
+    # ---- dynamics: auxiliary states, innermost exponential first
+    aux = []                         # {'X', 'r', 'phi'}
+    nReal = len(S)
+    while True:
+        states = set(S)
+
+        def stateAtom(a):
+            be = _exp_atom(a)
+            return be is not None and bool(be[1].free_symbols & states)
+        found = {}
+        for c in range(K):
+            for e in f[c] + g[c]:
+                for at in e.atoms(spy.exp, spy.Pow):
+                    if at in found or not stateAtom(at):
+                        continue
+                    if any(stateAtom(a) for a in _exp_atom(at)[1].atoms(spy.exp, spy.Pow)):
+                        continue
+                    dec = _exp_terms(*_exp_atom(at))
+                    if dec is None or const(dec[0], dec[1]) is None:
+                        return {'why': 'the exponential %s is not supported by '
+                            'symEngine = "modular"; try symEngine = "symbolic"' % at}
+                    found[at] = dec
+        if not found:
+            break
+        den = {}
+        for r, c0, terms in found.values():
+            for t, q in terms.items():
+                if t.free_symbols & states:
+                    den[(r, t)] = spy.ilcm(den.get((r, t), 1), q.q)
+        keyX = {}
+        for (r, t), D in sorted(den.items(), key=lambda kv: (str(kv[0][0]), str(kv[0][1]))):
+            X = ctx.fresh('_ex%d_' % (len(aux) + 1))
+            keyX[(r, t)] = X
+            aux.append({'X': X, 'r': r, 'phi': t / D})
+        repl = {}
+        for at, (r, c0, terms) in found.items():
+            v = const(r, c0)
+            for t, q in terms.items():
+                if (r, t) in keyX:
+                    v = v * keyX[(r, t)] ** int(q * den[(r, t)])
+                else:
+                    v = v * rpow(r, q * t)
+            repl[at] = v
+        f = [[e.xreplace(repl) for e in fc] for fc in f]
+        g = [[e.xreplace(repl) for e in gc] for gc in g]
+        newAux = aux[len(aux) - len(keyX):]
+        for c in range(K):
+            rhsOf = dict(zip(S, f[c]))
+            for a in newAux:
+                phi = a['phi']
+                dphi = sum(spy.diff(phi, s) * rhsOf[s] for s in phi.free_symbols & states)
+                f[c].append(spy.expand(a['X'] * ctx.lnOf(a['r']) * dphi))
+                icSub = {s: ic[c][str(s)] for s in phi.free_symbols & states}
+                ic[c][str(a['X'])] = rpow(a['r'], phi.xreplace(icSub))
+                fss[c].append(spy.Integer(0))
+        S += [a['X'] for a in newAux]
+
+    # an auxiliary state no observable depends on stays at 1 in that condition
+    idx = {X: i for i, X in enumerate(S)}
+    for c in range(K):
+        used = set()
+        front = set()
+        for e in f[c][:nReal] + g[c]:
+            front |= e.free_symbols
+        while front:
+            nxt = set()
+            for a in aux:
+                if a['X'] in front and a['X'] not in used:
+                    used.add(a['X'])
+                    nxt |= f[c][idx[a['X']]].free_symbols
+            front = nxt - used
+        for a in aux:
+            if a['X'] not in used:
+                f[c][idx[a['X']]] = spy.Integer(0)
+                ic[c][str(a['X'])] = spy.Integer(1)
+
+    # later events on a state inside an exponent move the auxiliary states with it
+    Sset = set(S)
+    for c in range(K):
+        out = []
+        for e in ev[c]:
+            out.append(e)
+            queue = [e]
+            while queue:
+                cur = queue.pop(0)
+                for a in aux:
+                    phi = a['phi']
+                    vs = [s for s in phi.free_symbols if str(s) == str(cur['var'])]
+                    if not vs or f[c][idx[a['X']]] == 0:
+                        continue
+                    vsym = vs[0]
+                    others = (phi.free_symbols & Sset) - {vsym}
+                    d1 = spy.diff(phi, vsym)
+                    if cur['method'] == 'replace' and not others:
+                        new = {'var': str(a['X']), 'method': 'replace',
+                               'value': rpow(a['r'], phi.xreplace({vsym: cur['value']}))}
+                    elif (cur['method'] == 'add' and spy.diff(d1, vsym) == 0 and
+                          not (d1.free_symbols & Sset)):
+                        new = {'var': str(a['X']), 'method': 'multiply',
+                               'value': rpow(a['r'], cur['value'] * d1)}
+                    else:
+                        return {'why': 'an event (%s) on %s, which enters an exponent, '
+                                'is not supported' % (cur['method'], cur['var'])}
+                    out.append(new)
+                    queue.append(new)
+        ev[c] = out
+
+    # ---- leaf level: generic exponential leaves W
+    refs = ([('f', c, i) for c in range(K) for i in range(len(f[c]))] +
+            [('g', c, i) for c in range(K) for i in range(len(g[c]))] +
+            [('ic', c, k) for c in range(K) for k in ic[c]] +
+            [('ev', c, i) for c in range(K) for i in range(len(ev[c]))] +
+            [('tm', c, None) for c in range(K) if tm[c] is not None])
+    store = {'f': f, 'g': g, 'ic': ic}
+    vals = []
+    for kind, c, i in refs:
+        vals.append(ev[c][i]['value'] if kind == 'ev' else tm[c] if kind == 'tm'
+                    else store[kind][c][i])
+    lc = _exp_leaf_canon(vals, ctx)
+    if 'why' in lc:
+        return lc
+    for (kind, c, i), v in zip(refs, lc['exprs']):
+        if kind == 'ev':
+            ev[c][i]['value'] = v
+        elif kind == 'tm':
+            tm[c] = v
+        else:
+            store[kind][c][i] = v
+    wAtoms = lc['atoms']
+
+    constSyms = set(ctx.lnSym.values())
+    used = set()
+    for v in lc['exprs'] + [w['tau'] for w in wAtoms]:
+        used |= v.free_symbols
+    if ctx.ec in used:
+        constSyms.add(ctx.ec)
+    rel = []
+    for w in wAtoms:
+        phi = w['tau'] / w['L']
+        for z in sorted(phi.free_symbols - constSyms, key=str):
+            rel.append((str(w['W']), str(z),
+                        spy.together(w['W'] * ctx.lnOf(w['r']) * spy.diff(phi, z))))
+    perCond = [(f[c], g[c], ic[c], fss[c]) for c in range(K)]
+    return {'S': S, 'perCond': perCond, 'evPer': ev, 'tmPer': tm, 'rel': rel,
+            'consts': sorted(str(s) for s in constSyms),
+            'atoms': [str(w['W']) for w in wAtoms], 'back': _exp_back(wAtoms, ctx, used),
+            'nAux': len(aux), 'codim': len(aux) + len(wAtoms)}
+
+
+def _tidy_logs(e):
+    """Common factors pulled out and each numeric sum of logs as one log."""
+    e = spy.factor_terms(spy.cancel(e))
+    return e.replace(lambda x: x.is_Add and x.is_number and x.has(spy.log),
+                     lambda x: spy.logcombine(x, force=True))
+
+
+def dropMonomialContent(vector):
+    """A direction {coordinate: component} with denominators cleared, divided by the
+    power product of symbols every component carries and signed so that the first
+    coordinate has a positive component: the same direction."""
+    items = [(str(k), str(v)) for k, v in dict(vector).items()]
+    local, parse = _make_local_parse([v for _, v in items])
+    es = [spy.cancel(parse(v)) for _, v in items]
+    L = spy.Integer(1)
+    for e in es:
+        L = spy.lcm(L, spy.fraction(e)[1])
+    es = [spy.factor_terms(spy.cancel(e * L)) for e in es]
+    first = [e for (k, _), e in sorted(zip(items, es)) if e != 0]
+    if first and first[0].could_extract_minus_sign():
+        es = [-e for e in es]
+    common = None
+    for e in es:
+        pw = {}
+        num, den = spy.fraction(e)
+        for sgn, part in ((1, num), (-1, den)):
+            for f in spy.Mul.make_args(part):
+                b, x = f.as_base_exp()
+                if b.is_Symbol and x.is_Integer:
+                    pw[b] = pw.get(b, 0) + sgn * int(x)
+        common = pw if common is None else {
+            b: (min(x, common[b]) if x > 0 else max(x, common[b]))
+            for b, x in pw.items() if b in common and (x > 0) == (common[b] > 0)}
+    m = spy.Integer(1)
+    for b, x in (common or {}).items():
+        m *= b ** x
+    return {k: str(spy.cancel(e / m)) for (k, _), e in zip(items, es)}
+
+
+def expBacksub(expr, names, values):
+    """A reported component in the exponential leaves back in the model symbols:
+    each name is replaced by its value until none is left."""
+    asList = lambda v: list(v) if isinstance(v, (list, tuple)) else [v]
+    names, values = asList(names), asList(values)
+    local, parse = _make_local_parse([str(expr)] + [str(v) for v in values] +
+                                     [str(n) for n in names])
+    e = parse(str(expr))
+    sub = {parse(str(n)): parse(str(v)) for n, v in zip(names, values)}
+    for _ in range(len(sub) + 1):
+        e2 = e.xreplace(sub)
+        if e2 == e:
+            break
+        e = e2
+    return str(_tidy_logs(spy.powsimp(spy.cancel(e))))
 
 
 # ---- observability tape compiler (multi-condition, shared coordinate space) ----------
@@ -2970,8 +3474,12 @@ def compileObservabilityTapeMulti(model, observation, conditionSubs, conditionIC
         perCond.append((f_c, g_c, ic_c, f_ss))
         subsPer.append(subsMap)
 
-    # a logarithmic observable carries the information of its argument
-    perCond = [(f_c, [_strip_log_obs(e) for e in g_c], ic_c, f_ss)
+    # a logarithmic observable carries the information of its argument; hyperbolic
+    # functions are exponentials
+    perCond = [([_hyp_to_exp(e) for e in f_c],
+                [_hyp_to_exp(_strip_log_obs(e)) for e in g_c],
+                {k: _hyp_to_exp(v) for k, v in ic_c.items()},
+                [_hyp_to_exp(e) for e in f_ss])
                for (f_c, g_c, ic_c, f_ss) in perCond]
 
     # log-parametrised parameters: one that occurs only as base^(c*theta) is replaced
@@ -3009,6 +3517,15 @@ def compileObservabilityTapeMulti(model, observation, conditionSubs, conditionIC
     logParams = [{'X': str(X), 'theta': str(t), 'base': 'E' if b == spy.E else str(b)}
                  for t, (X, b) in sorted(lp.items(), key=lambda kv: str(kv[0]))]
 
+    # each condition's later events and segment start time, in the leaves
+    evPer = [[{'var': str(e['var']), 'method': str(e['method']),
+               'value': lpSub(subsMemo(pval(e['value']), subsPer[c]))}
+              for e in (list(conditionEvents[c]) if c < len(conditionEvents) else [])]
+             for c in range(K)]
+    tmPer = [lpSub(subsMemo(pval(conditionTimes[c]), subsPer[c]))
+             if c < len(conditionTimes) and conditionTimes[c] is not None else None
+             for c in range(K)]
+
     # power/Hill recast: replace base^exp (exp a parameter) by a state E with
     # E' = exp*E*base'/base and a companion L = log(base). E and L are appended as
     # coordinates and tied to (base, exp) by an algebraic relation downstream, so f
@@ -3019,7 +3536,7 @@ def compileObservabilityTapeMulti(model, observation, conditionSubs, conditionIC
     nReal = nS
     powerRecast = []
     invSolveName = {}
-    pairs = _detect_power_atoms(perCond)
+    pairs = _detect_power_atoms(perCond, S)
     if pairs is None:
         return {'ok': False, 'nonrational':
                 ['unsupported power form: base must be a symbol and exponent c*param']}
@@ -3054,6 +3571,32 @@ def compileObservabilityTapeMulti(model, observation, conditionSubs, conditionIC
             # recast atom is a free-initial-value leaf tied to (base, exp) in R.
             for rc in powerRecast:
                 rc['inverted'] = False
+
+    # exponentials: auxiliary states and generic exponential leaves (_apply_exp_recast)
+    scalS, scalPerCond = list(S), perCond
+    expRecast = None
+    if any(_has_exp(e) for (f_c, g_c, ic_c, f_ss) in perCond
+           for e in list(f_c) + list(g_c) + list(ic_c.values())) or \
+            any(_has_exp(e['value']) for evs in evPer for e in evs) or \
+            any(t is not None and _has_exp(t) for t in tmPer):
+        if equilibrate:
+            return {'ok': False, 'why': 'equilibrate = TRUE does not support exp() '
+                    'or b^x of a state, or of a parameter that also enters elsewhere; '
+                    'give the steady state through `trafo` or start from free '
+                    'initial values'}
+        taken = {str(x) for x in S} | set(fixedNames) | {str(X) for X, _ in lp.values()}
+        for (f_c, g_c, ic_c, f_ss) in perCond:
+            for e in list(f_c) + list(g_c) + list(ic_c.values()) + list(f_ss):
+                taken |= {str(x) for x in spy.sympify(e).free_symbols}
+        for e in lpExprs + evExprs:
+            taken |= {str(x) for x in spy.sympify(e).free_symbols}
+        expRecast = _apply_exp_recast(S, perCond, evPer, tmPer, taken)
+        if 'why' in expRecast:
+            return {'ok': False, 'why': expRecast['why']}
+        S, perCond = expRecast['S'], expRecast['perCond']
+        evPer, tmPer = expRecast['evPer'], expRecast['tmPer']
+        nS = len(S)
+        fixedNames |= set(expRecast['consts'])
 
     nonrational = []
     ratOK = set()            # deduped exprs recur across conditions; check each once
@@ -3121,6 +3664,12 @@ def compileObservabilityTapeMulti(model, observation, conditionSubs, conditionIC
     for vs in eventVals:
         for e in vs:
             paramset |= set(e.free_symbols)
+    for evs in evPer:
+        for e in evs:
+            paramset |= set(spy.sympify(e['value']).free_symbols)
+    if expRecast is not None:
+        for rl in expRecast['rel']:
+            paramset |= set(rl[2].free_symbols)
     # a segment's left boundary may sit at a time given in the parameters
     for c, tm in enumerate(conditionTimes):
         if tm is not None and c < K:
@@ -3165,10 +3714,13 @@ def compileObservabilityTapeMulti(model, observation, conditionSubs, conditionIC
                 return {'ok': False}
             # substituted dynamics and observation of this segment, serialised
             # for the multi-condition scaling peel
-            mLines = ['%s = %s' % (str(S[i]), spy.sympify(f_c[i]))
-                      for i in range(nS)]
-            oLines = ['%s = %s' % (str(obsVarsPer[c][j]), spy.sympify(g_c[j]))
-                      for j in range(len(g_c))]
+            # exponentials stay in these lines; the scaling engine reads them
+            f0, g0 = scalPerCond[c][0], scalPerCond[c][1]
+            eNum = {spy.E: spy.exp(1, evaluate=False)}
+            mLines = ['%s = %s' % (str(scalS[i]), spy.sympify(f0[i]).xreplace(eNum))
+                      for i in range(len(scalS))]
+            oLines = ['%s = %s' % (str(obsVarsPer[c][j]), spy.sympify(g0[j]).xreplace(eNum))
+                      for j in range(len(g0))]
             cached = (emitted, mLines, oLines)
             emitCache[ekey] = cached
         (op, a, b, cnum, cden, outslots), mLines, oLines = cached
@@ -3278,13 +3830,13 @@ def compileObservabilityTapeMulti(model, observation, conditionSubs, conditionIC
         # state-dose event map at this segment's left boundary, applied by the
         # kernel to the propagated state (replace/add/multiply by a parametric
         # value). The values are emitted as a small order-0 tape over the leaves.
-        evs = list(conditionEvents[c]) if c < len(conditionEvents) else []
+        evs = evPer[c]
         if evs:
             idxOfState = {str(X): i for i, X in enumerate(S)}
             methodCode = {'replace': 0, 'add': 1, 'multiply': 2}
             keep = [e for e in evs if str(e['var']) in idxOfState]
             if keep:
-                vals = [lpSub(subsMemo(pval(e['value']), subsMap)) for e in keep]
+                vals = [e['value'] for e in keep]
                 try:
                     evOp, evA, evB, evCnum, evCden, evO = _emit_tape_shared(
                         [], vals, leafSlot, nLeaves)
@@ -3297,8 +3849,8 @@ def compileObservabilityTapeMulti(model, observation, conditionSubs, conditionIC
                     'evMethod': [methodCode[str(e['method'])] for e in keep]})
         # the segment's left boundary time as an order-0 tape: its value sets the gap
         # lengths, its duals carry a time that depends on the coordinates
-        if c < len(conditionTimes) and conditionTimes[c] is not None:
-            tv = lpSub(subsMemo(pval(conditionTimes[c]), subsMap))
+        if tmPer[c] is not None:
+            tv = tmPer[c]
             try:
                 tmOp, tmA, tmB, tmCnum, tmCden, tmO = _emit_tape_shared(
                     [], [tv], leafSlot, nLeaves)
@@ -3323,6 +3875,22 @@ def compileObservabilityTapeMulti(model, observation, conditionSubs, conditionIC
         'leafNames': leafNames,
         'logParams': logParams,
     }
+    if expRecast is not None:
+        # relation rows dW = W log(r) d(tau/L): one tape output per (W, leaf) pair
+        rel = expRecast['rel']
+        try:
+            rOp, rA, rB, rCnum, rCden, rOut = _emit_tape_shared(
+                [rl[2] for rl in rel], [], leafSlot, nLeaves)
+        except _NotRational:
+            return {'ok': False, 'why': 'an exponent that is not rational is not '
+                    'supported by symEngine = "modular"; try symEngine = "symbolic"'}
+        out['expRelation'] = {'W': [rl[0] for rl in rel], 'z': [rl[1] for rl in rel],
+                              'op': rOp, 'a': rA, 'b': rB, 'cnum': rCnum,
+                              'cden': rCden, 'out': rOut}
+        out['expAtoms'] = expRecast['atoms']
+        out['expBack'] = {'names': list(expRecast['back'].keys()),
+                          'values': list(expRecast['back'].values())}
+        out['expCodim'] = expRecast['codim']
     if equilibrate:
         out['equilibrate'] = True
         out['stateNames'] = [str(X) for X in S]
@@ -3371,13 +3939,35 @@ def _poly_monomials(expr, zvars):
     return list(pe.keys()), list(qe.keys())
 
 
+def _exp_split(expr):
+    """expr with every exponential atom (exp(u), or b^u with a numeric base) replaced
+    by a fresh symbol, innermost first, and the list of exponents u."""
+    exps = []
+
+    def rec(e):
+        if not e.args:
+            return e
+        be = _exp_atom(e)
+        if be is not None:
+            exps.append(rec(be[1]))
+            return spy.Dummy('exp')
+        return e.func(*[rec(a) for a in e.args])
+    return rec(_hyp_to_exp(expr)), exps
+
+
 def _scaling_rows(diffEquations, obsFunctions, m, zvars, interOffset):
     """Sparse monomial-exponent rows of one (f, g) system for the scaling kernel:
     weight columns 0..nz-1 are shared over zvars, intermediate columns run from
-    interOffset. Returns (rows, ninter, skipped); each row is a {col: coeff} map."""
+    interOffset. Returns (rows, ninter, skipped); each row is a {col: coeff} map.
+    An exponential has weight zero and its exponent is an invariant, like an
+    observable."""
     nz = len(zvars)
     exprs = []          # (numer monomials, denom monomials, target weight vector)
     skipped = 0
+    split = [_exp_split(e) for e in list(obsFunctions) + list(diffEquations[:m])]
+    obsFunctions = ([s[0] for s in split[:len(obsFunctions)]] +
+                    [u for s in split for u in s[1]])
+    diffEquations = [s[0] for s in split[len(split) - m:]] if m else []
     for g in obsFunctions:
         try:
             pmon, qmon = _poly_monomials(g, zvars)

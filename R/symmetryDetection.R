@@ -732,7 +732,8 @@ symmetryDetection <- function(f = NULL, g = NULL, trafo = NULL,
           equilZeroStates else NULL,
         heldStateParams = if (isTRUE(ui) && length(heldStateParams))
           as.list(heldStateParams) else NULL)
-      if (!isTRUE(multi$ok)) return(list(ok = FALSE, nonrational = multi$nonrational))
+      if (!isTRUE(multi$ok))
+        return(list(ok = FALSE, nonrational = multi$nonrational, why = multi$why))
       list(ok = TRUE, result = .symLogParamBack(.observability_analytic_multi(multi, spy = spy,
              closedForm = reconstruct, sd = sd, cores = cores,
              equilZeroStates = equilZeroStates, t0events = res$events0,
@@ -747,15 +748,15 @@ symmetryDetection <- function(f = NULL, g = NULL, trafo = NULL,
            "moiety). Reduce conserved moieties (reduceCQ = TRUE) or supply an ",
            "explicit steady state through `trafo` (from steadyStates()).",
            call. = FALSE)
+    if (isFALSE(ro$ok) && !is.null(ro$why))
+      stop("symmetryDetection(): ", ro$why, ".", call. = FALSE)
     if (isFALSE(ro$ok))
       stop("method = \"observability\" requires right-hand sides, observables and ",
-           "initial conditions that are rational (built from +, -, *, / and integer ",
-           "powers) up to free power exponents, parameters that enter only as ",
-           "exp(theta) or b^theta, and observables of the form ",
-           "a*log(h) + offset with a number a.\n  ",
+           "initial conditions built from +, -, *, /, integer powers, exp(), b^x, ",
+           "hyperbolic functions and free power exponents x^n, and observables ",
+           "a*log(h) + offset with a number a; anything else is not rational.\n  ",
            paste(unlist(ro$nonrational), collapse = "\n  "),
-           "\nUse symEngine = \"symbolic\" or method = \"polynomial\" for other ",
-           "functions.", call. = FALSE)
+           "\nUse symEngine = \"symbolic\" for other functions.", call. = FALSE)
     res <- ro$result
     if (is.list(res)) {
       res$nonIdentifiable <- .symRelabelDirections(res$nonIdentifiable, sd)
@@ -1677,6 +1678,78 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
   })
   list(anchors = vapply(found, function(fc) fc$anchor, integer(1)),
        residueFns = fns, vectors = sel)
+}
+
+
+# An integer given as a decimal string, modulo p.
+.symBigMod <- function(s, p) {
+  neg <- startsWith(s, "-")
+  d <- sub("^-", "", s)
+  r <- if (nchar(d) <= 15L) as.numeric(d) %% p else {
+    acc <- 0
+    for (ch in strsplit(d, "")[[1]]) acc <- (.symMulmod(acc, 10, p) + as.numeric(ch)) %% p
+    acc
+  }
+  if (neg) (p - r) %% p else r
+}
+
+# Evaluator of a straight-line tape (op codes 0 const, 1 add, 2 mul, 3 inv) over the
+# leaves, modulo p. Returns function(point, p), NULL where an inverse hits zero.
+.symTapeFn <- function(tp, nLeaves) {
+  op <- as.integer(tp$op); a <- as.integer(tp$a) + 1L; b <- as.integer(tp$b) + 1L
+  cnum <- as.character(tp$cnum); cden <- as.character(tp$cden)
+  out <- as.integer(tp$out) + 1L
+  isC <- which(op == 0L)
+  cpos <- integer(length(op)); cpos[isC] <- seq_along(isC)
+  cache <- list()
+  function(point, p) {
+    key <- as.character(p)
+    cv <- cache[[key]]
+    if (is.null(cv)) {
+      cv <- vapply(isC, function(i) {
+        d <- .symBigMod(cden[i], p)
+        if (d == 0) NA_real_ else .symMulmod(.symBigMod(cnum[i], p), .symInvmod(d, p), p)
+      }, numeric(1))
+      cache[[key]] <<- cv
+    }
+    if (anyNA(cv)) return(NULL)
+    v <- numeric(nLeaves + length(op))
+    v[seq_len(nLeaves)] <- as.numeric(point[seq_len(nLeaves)]) %% p
+    for (i in seq_along(op)) {
+      s <- nLeaves + i
+      v[s] <- switch(op[i] + 1L,
+        cv[cpos[i]],
+        (v[a[i]] + v[b[i]]) %% p,
+        .symMulmod(v[a[i]], v[b[i]], p),
+        if (v[a[i]] == 0) return(NULL) else .symInvmod(v[a[i]], p))
+    }
+    v[out]
+  }
+}
+
+# Relation rows e_W - W log(r) grad(tau/L) of the exponential leaves at a point.
+.symExpRows <- function(rel, relFn, znames, point, p) {
+  vals <- relFn(point, p)
+  if (is.null(vals)) return(NULL)
+  Ws <- unique(as.character(rel$W))
+  M <- matrix(0, length(Ws), length(znames))
+  M[cbind(seq_along(Ws), match(Ws, znames))] <- 1
+  zc <- match(as.character(rel$z), znames)
+  ok <- !is.na(zc)
+  wr <- match(as.character(rel$W), Ws)
+  for (k in which(ok))
+    M[wr[k], zc[k]] <- (M[wr[k], zc[k]] - vals[k]) %% p
+  M
+}
+
+# Components in the exponential leaves back in the model symbols.
+.symExpBacksub <- function(vector, back, sd) {
+  nm <- as.list(as.character(back$names)); vl <- as.list(as.character(back$values))
+  lapply(vector, function(x) {
+    out <- tryCatch(sd$expBacksub(as.character(x), nm, vl),
+                    error = function(e) as.character(x))
+    if (length(out) != 1L || is.na(out)) as.character(x) else out
+  })
 }
 
 
@@ -3330,18 +3403,23 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
       auxLeaves <- which(leafNamesAug %in% setdiff(leafNames, paramNames))
       ctrl$relevanceCap <- ctrl$relevanceCap + nSt
     }
-  } else if (length(multi$powerRecast)) {
+  } else if (length(multi$powerRecast) || length(multi$expAtoms)) {
     # Transient recast: a free power/Hill exponent without equilibrate. E = base^exp and
     # L = log(base) are ordinary free-initial-value leaves; the codistribution is stacked
     # with the linearised recast relations
     #   E:  xi_E - (exp*E/base) xi_base - (E*log base) xi_exp = 0
     #   L:  xi_L - (1/base) xi_base = 0
     # exact at a generic sample point because base, log(base) and base^exp are
-    # algebraically independent. The physical report drops E and L.
+    # algebraically independent. The physical report drops E and L. An exponential
+    # leaf W = r^(tau/L) adds the row xi_W - W log(r) grad(tau/L) . xi = 0 likewise.
     recastTransient <- TRUE
     recast <- multi$powerRecast
+    if (is.null(recast)) recast <- list()
     for (i in seq_along(recast)) recast[[i]]$inverted <- FALSE
-    recastAtomNames <- as.character(multi$recastAtomNames)
+    recastAtomNames <- c(as.character(multi$recastAtomNames),
+                         as.character(multi$expAtoms))
+    expRel <- multi$expRelation
+    expRelFn <- if (length(multi$expAtoms)) .symTapeFn(expRel, nLeaves) else NULL
     auxLeaves <- which(leafNamesAug %in% recastAtomNames)
     # ---- assembling the joint kernel call kcall4 -----------------------------------
     slotOfL <- function(nm) { i <- match(nm, leafNames); if (is.na(i)) NA_integer_ else i }
@@ -3381,6 +3459,11 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
           rel[[length(rel) + 1L]] <- r2
         }
       }
+      if (!is.null(expRelFn)) {
+        eM <- .symExpRows(expRel, expRelFn, znames, pt, p)
+        if (is.null(eM)) return(list(ok = FALSE))         # degenerate point, resample
+        rel <- c(rel, lapply(seq_len(nrow(eM)), function(i) eM[i, ]))
+      }
       relM <- do.call(rbind, rel)
       rr <- symRrefMod(rbind(oR, relM), p)
       res <- list(ok = TRUE, R = rr$R, pivots = as.integer(rr$piv),
@@ -3415,7 +3498,8 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
   # the constant recast rows are part of the specialisation too (dim C); a gap chain is
   # itself a sum over segments, where the budget argument does not reach, so no budget
   satBudget <- if (hasGaps || is.na(codimSpec)) NA_integer_
-               else as.integer(codimSpec) + 2L * length(recast)
+               else as.integer(codimSpec) + 2L * length(recast) +
+                    as.integer(if (is.null(multi$expCodim)) 0L else multi$expCodim)
   sc <- .symSaturateCertify(kcall4, nAug, nz, maxM, warm = warmProbe,
                             probeBlock = max(1L, min(8L, coresGLp)),
                             blockCall = blockCall, budget = satBudget)
@@ -3518,6 +3602,7 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
   if (recastTransient) {
     physCoords0 <- setdiff(znames, recastAtomNames)
     result$dim <- length(physCoords0)
+    result$coordinates <- physCoords0
     if (sc$rankS == nz) result$rank <- length(physCoords0)
   }
   # Directions that change with the time between events have no closed form in the
@@ -3739,6 +3824,11 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
       }
       if (isTRUE(e$closedForm) && length(recast) && !is.null(sd))
         e$vector <- .symRecastBacksub(e$vector, recast, sd)
+      if (isTRUE(e$closedForm) && length(multi$expBack$names) && !is.null(sd)) {
+        e$vector <- .symExpBacksub(e$vector, multi$expBack, sd)
+        v <- tryCatch(sd$dropMonomialContent(e$vector), error = function(err) NULL)
+        if (!is.null(v)) e$vector <- lapply(v[names(e$vector)], as.character)
+      }
       e
     }
 

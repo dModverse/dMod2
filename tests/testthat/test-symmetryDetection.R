@@ -1446,8 +1446,10 @@ test_that("log-parametrised parameters and logarithmic observables are rational"
   expect_equal(off$rank, 3L)
   expect_error(symdet(f, eqnvec(y = "s*log(A)")), "a\\*log\\(h\\)")
 
-  # a parameter that also enters outside an exponent is not traded for exp(lk)
-  expect_error(symdet(eqnvec(A = "-exp(lk)*A + lk"), eqnvec(y = "A")), "exp\\(theta\\)")
+  # a parameter that also enters outside an exponent stays a coordinate
+  both <- symdet(eqnvec(A = "-exp(lk)*A + lk"), eqnvec(y = "A"))
+  expect_true(both$identifiable)
+  expect_setequal(both$info$coordinates, c("A", "lk"))
 })
 
 
