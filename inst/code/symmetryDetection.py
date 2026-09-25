@@ -891,6 +891,11 @@ def classifyDirection(vector):
                 'components': {k: v for k, v in items}, 'degree': -1}
     if not items:
         return {'type': 'general', 'weights': None, 'components': {}, 'degree': 0}
+    # one moved coordinate: z*d/dz spans the same direction
+    moved = [(k, v) for k, v in items if v.strip() != '0']
+    if len(moved) == 1:
+        z = moved[0][0]
+        return {'type': 'scaling', 'weights': {z: 1}, 'components': {z: z}, 'degree': 1}
 
     # symbol table so names like E, I, S, N are model symbols, not sympy constants
     _, parse = _make_local_parse([k + " = " + v for k, v in items])
@@ -4195,27 +4200,27 @@ def compileObservabilityTapeMulti(model, observation, conditionSubs, conditionIC
 def _poly_monomials(expr, zvars):
     """Numerator and denominator monomial-exponent lists of expr over zvars
     (other symbols are treated as weight-zero coefficients). Exponents may be
-    rational, as in sqrt(x). Raises if expr is not a ratio of such sums."""
+    rational, as in sqrt(x). Raises if expr is not a ratio of such sums.
+    Read term by term: a dense Poly nests one level per coordinate."""
+    idx = {z: i for i, z in enumerate(zvars)}
     zset = set(zvars)
+    zero = spy.Integer(0)
 
     def mons(poly):
-        out = []
+        out = {}
         for t in spy.Add.make_args(spy.expand(poly)):
-            d = t.as_powers_dict()
-            for k, v in d.items():
-                if k not in zset and k.free_symbols & zset:
+            if t == 0:
+                continue
+            a = [zero] * len(zvars)
+            for k, v in t.as_powers_dict().items():
+                if k in idx:
+                    a[idx[k]] = spy.Rational(v)
+                elif k.free_symbols & zset:
                     raise ValueError('not a monomial in the coordinates: %s' % t)
-            a = tuple(spy.Rational(d.get(z, 0)) for z in zvars)
-            if a not in out:
-                out.append(a)
-        return out
-    e = spy.together(spy.sympify(expr))
-    p, q = spy.fraction(e)
-    try:
-        return (list(spy.Poly(spy.expand(p), *zvars).as_dict().keys()),
-                list(spy.Poly(spy.expand(q), *zvars).as_dict().keys()))
-    except Exception:
-        return mons(p), mons(q)
+            out[tuple(a)] = None
+        return list(out)
+    p, q = spy.fraction(spy.together(spy.sympify(expr)))
+    return mons(p), mons(q)
 
 
 def _exp_split(expr, logs=False):
@@ -4239,12 +4244,14 @@ def _exp_split(expr, logs=False):
     return rec(_hyp_to_exp(expr)), exps
 
 
-def _scaling_rows(diffEquations, obsFunctions, m, zvars, interOffset, logs=False):
+def _scaling_rows(diffEquations, obsFunctions, m, zvars, interOffset, logs=False,
+                  seen=None):
     """Sparse {col: coeff} monomial-exponent rows of one (f, g) system for the scaling
     kernel: weight columns 0..nz-1 over zvars, intermediate columns from interOffset.
     Returns (rows, ninter, skipped). An exponential has weight zero and its exponent
     is an invariant, like an observable; with `logs` so is the argument of a log(),
-    off for the power recast, which keeps log(base) as a coordinate."""
+    off for the power recast, which keeps log(base) as a coordinate. An (expression,
+    target) pair already in `seen` is skipped."""
     nz = len(zvars)
     exprs = []          # (numer monomials, denom monomials, target weight vector)
     skipped = 0
@@ -4252,7 +4259,18 @@ def _scaling_rows(diffEquations, obsFunctions, m, zvars, interOffset, logs=False
     obsFunctions = ([s[0] for s in split[:len(obsFunctions)]] +
                     [u for s in split for u in s[1]])
     diffEquations = [s[0] for s in split[len(split) - m:]] if m else []
+    seen = set() if seen is None else seen
+
+    def fresh(e, t):
+        key = (e, t)
+        if key in seen:
+            return False
+        seen.add(key)
+        return True
+
     for g in obsFunctions:
+        if not fresh(g, -1):
+            continue
         try:
             pmon, qmon = _poly_monomials(g, zvars)
         except Exception:
@@ -4260,6 +4278,8 @@ def _scaling_rows(diffEquations, obsFunctions, m, zvars, interOffset, logs=False
             continue
         exprs.append((pmon, qmon, [0] * nz))
     for i in range(m):
+        if not fresh(diffEquations[i], i):
+            continue
         try:
             pmon, qmon = _poly_monomials(diffEquations[i], zvars)
         except Exception:
@@ -4471,10 +4491,10 @@ def scalingSymmetriesMulti(perCondModel, perCondObs, inputs=None, fixed=None,
     znames = [str(s) for s in zvars]
     m = len(stateSyms)
 
-    rows, interOffset, skipped = [], nz, 0
+    rows, interOffset, skipped, seen = [], nz, 0, set()
     for c in range(K):
         sparse, ninter, sk = _scaling_rows(perF[c], perG[c], m, zvars, interOffset,
-                                           logs)
+                                           logs, seen)
         rows.extend(sparse)
         interOffset += ninter
         skipped += sk

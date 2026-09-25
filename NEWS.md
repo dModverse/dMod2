@@ -1,5 +1,8 @@
 # dMod2 (development version)
 
+* `symmetryDetection()` builds scaling rows without dense polynomials and reads an
+  equation repeated across conditions once. Large models no longer run out of memory.
+* `symmetryDetection()` reports a direction that moves one coordinate as a scaling.
 * `symmetryDetection()` handles exponentials of states: `exp()`, `exp10()`, `b^x`,
   `sinh()`, `cosh()` and `tanh()`, in every engine. The modular observability
   engine carries each exponential as an auxiliary state; later events that
