@@ -17,7 +17,7 @@
   co <- object$info$coordinates
   if (!is.null(co) && length(co)) return(as.character(co))
   warning("symmetryReduction(): this result carries no coordinate list (older dMod); ",
-          "the emitted trafo covers only coordinates appearing in some direction -- ",
+          "the emitted trafo covers only coordinates appearing in some direction; ",
           "extend it with identity entries before use in P().", call. = FALSE)
   .symSort(unique(unlist(lapply(object$symmetries, .symCoords))))
 }
@@ -56,7 +56,7 @@
 .symRedIntKernel <- function(M, sd) {
   if (ncol(M) == 0L) return(matrix(0L, 0L, 0L))
   # as.list per row so a length-1 row still reaches Python as a list, not a scalar;
-  # as.numeric, not as.integer -- entries run past 2^31 and Python ints do not
+  # as.numeric, not as.integer: entries run past 2^31, Python ints do not overflow
   ker <- sd$exactIntKernel(lapply(seq_len(nrow(M)), function(r)
     as.list(as.numeric(M[r, ]))), ncol(M))
   if (!length(ker)) return(matrix(0L, ncol(M), 0L))
@@ -238,10 +238,9 @@
   reticulate::dict(setNames(lapply(ids, function(x) spy$Symbol(x)), ids))
 }
 
-# Sympify memo: every locals table in this file maps every non-call identifier to
-# a plain Symbol, so the parse of a given string is the same expression whichever
-# table covers it -- a global string-keyed cache is exact. The same strings recur
-# across prep, module reduction, Darboux, exp, verify and solve.
+# Sympify memo: every locals table in this file maps every non-call identifier to a
+# plain Symbol, so a string parses the same under any table and a global
+# string-keyed cache is exact.
 .symRedSympifyCache <- new.env(parent = emptyenv())
 .symRedSympify <- function(x, spy, locals) {
   key <- as.character(x)
@@ -325,11 +324,10 @@
 
 # Pivot-schedule discovery for the module reduction: RREF-style elimination on the
 # value matrix over GF(p), at each step choosing the (row, column) whose elimination
-# leaves the fewest nonzeros. A Markowitz-style count cannot serve here: the point of
-# the reduction is to discover symbolic cancellations, which appear only as numeric
-# zeros AFTER a trial elimination. The fill delta is therefore computed exactly, but
-# only over the affected rows and without matrix copies; a pivot in a singleton
-# column eliminates nothing and is skipped. Returns the schedule and its final fill.
+# leaves the fewest nonzeros. The fill delta is computed exactly (over the affected
+# rows only), not estimated Markowitz-style: symbolic cancellations show up only as
+# zeros after a trial elimination. Singleton-column pivots eliminate nothing and are
+# skipped. Returns the schedule and its final fill.
 .symRedReduceSchedule <- function(V, p) {
   k <- nrow(V); n <- ncol(V)
   used <- logical(k); sched <- list()
@@ -364,12 +362,11 @@
 .symRedMulmodP <- function(a, b, p) .symMulmod(a %% p, b %% p, p)
 
 # Module reduction of a curved block: generators may be combined with FUNCTION
-# coefficients (pointwise span decides identifiability -- a module over the function
+# coefficients (pointwise span decides identifiability: a module over the function
 # field, not a vector space), so RREF with symbolic multipliers is legitimate and
-# can collapse the support (M009: X13 - r2*X12 went from 7 to 3 coordinates). The
-# pivot schedule is discovered on a value matrix over GF(p) (cheap, fill-minimising,
-# cross-checked on a second prime), then replayed exactly in sympy. The heuristic
-# affects only how small the support gets, never correctness.
+# can collapse the support. The pivot schedule is found on a GF(p) value matrix
+# (fill-minimising, cross-checked on a second prime), then replayed exactly in sympy.
+# The heuristic affects only how small the support gets, never correctness.
 .symRedModuleReduce <- function(preps, labels, sd, spy) {
   k <- length(preps)
   cols <- .symSort(unique(unlist(lapply(preps, `[[`, "support"))))
@@ -396,9 +393,8 @@
   })
   sched <- scheds[[which.min(vapply(scheds, `[[`, numeric(1), "fill"))]]$sched
 
-  # exact symbolic replay of the schedule, batched into one Python call (the
-  # per-entry cancel() loop through reticulate dominated M009-scale blocks);
-  # 'combo' tracks the combination coefficients over the original rows
+  # exact symbolic replay of the schedule in one Python call; 'combo' tracks the
+  # combination coefficients over the original rows
   rr <- sd$moduleReduceReplay(lapply(preps, function(pr) as.list(pr$comps)),
                               as.list(cols), lapply(sched, as.list))
 
@@ -454,10 +450,8 @@
 
 # ---- invariant stages ------------------------------------------------------------
 
-# Batch evaluation of rational expression strings at one integer point mod p: one
-# Python round trip for the whole vector (the scalar .symEvalModq re-parses per
-# call, which dominates the sampling loops at M009 scale). NA where the
-# denominator vanishes mod p or the evaluation fails.
+# Batch evaluation of rational expression strings at one integer point mod p, in one
+# Python round trip. NA where the denominator vanishes mod p or evaluation fails.
 .symRedEvalBatch <- function(exprs, pt, p, sd) {
   if (!length(exprs)) return(numeric(0))
   v <- tryCatch(sd$evalRationalModBatch(as.list(as.character(exprs)),
@@ -505,11 +499,9 @@
     pool <- .symPool()
     rows <- matrix(0, 0L, n); prev <- -1L; flat <- 0L
     off <- 50L * pi; draws <- 0L
-    # The rank is checked once per CHUNK of drawn rows, on the carried-forward
-    # reduced rows plus the chunk (the compiled RREF never re-reduces old rows):
-    # a full re-reduction of the accumulated matrix per drawn row is quadratic in
-    # the sample count and dominated the larger ansatz stages. Chunk 1 for small
-    # systems keeps the draw-exact saturation of the scalar path.
+    # Rank is checked once per CHUNK of drawn rows, on the carried-forward reduced
+    # rows plus the chunk, so old rows are never re-reduced; small systems use
+    # chunk 1 for draw-exact saturation.
     chunk <- max(1L, min(16L, n %/% 8L))
     red <- matrix(0, 0L, n); pend <- matrix(0, 0L, n); r <- 0L
     repeat {
@@ -565,7 +557,7 @@
   while (b) { t <- b; b <- a %% b; a <- t }; a }
 
 # Stage 1: Laurent-monomial invariants. m = prod z_i^{a_i} is invariant under X iff
-# sum_i a_i * xi_i/z_i vanishes identically -- linear in the exponents a, one row per
+# sum_i a_i * xi_i/z_i vanishes identically: linear in the exponents a, one row per
 # (generator, point). Exponents run over the MOVED coordinates only: a coefficient
 # symbol (xi identically 0) would only multiply in a trivial constant factor.
 .symRedMonomialInvariants <- function(preps, sd) {
@@ -578,7 +570,7 @@
                          "%d sampling rows"), length(.symPrimes), ns$rows)
   if (is.null(ns$basis))
     return(list(ok = FALSE, invariants = character(0), exps = NULL,
-                cert = paste0(cert, " -- reconstruction failed (inconclusive)")))
+                cert = paste0(cert, "; reconstruction failed (inconclusive)")))
   if (!ncol(ns$basis))
     return(list(ok = FALSE, invariants = character(0), exps = NULL,
                 cert = paste0("no Laurent-monomial invariant (", cert, ")")))
@@ -609,8 +601,7 @@
 # per (generator, point) has entries m_k(z) * <a^(k), eta(z)> mod p. The ansatz runs
 # over the block support plus the coefficient symbols, but monomials with no moved
 # coordinate are dropped up front: X kills them identically, so they contribute only
-# the trivial invariants (the observed 2/5/9 pattern) and excluding them is lossless
-# up to additive constants.
+# trivial invariants and excluding them is lossless up to additive constants.
 .symRedPolyInvariants <- function(preps, dPoly, sd) {
   moved <- .symSort(unique(unlist(lapply(preps, `[[`, "support"))))
   vars <- .symSort(unique(c(moved, unlist(lapply(preps, `[[`, "vars")))))
@@ -637,7 +628,7 @@
                   dPoly, N, length(.symPrimes), ns$rows)
   if (is.null(ns$basis))
     return(list(ok = FALSE, invariants = character(0),
-                cert = paste0(cert, " -- reconstruction failed (inconclusive)")))
+                cert = paste0(cert, "; reconstruction failed (inconclusive)")))
   if (!ncol(ns$basis))
     return(list(ok = FALSE, invariants = character(0),
                 cert = paste0("no polynomial invariant of total degree <= ", dPoly,
@@ -656,7 +647,7 @@
 # reappear as independent basis vectors. Select a functionally independent subset by
 # a greedy Jacobian rank test at a generic point, lowest degree / fewest terms
 # first; the target count is #moved - rank(xi), the dimension of the invariant
-# foliation. Selection only -- correctness rests on the verify layer.
+# foliation. Selection only; correctness rests on the verify layer.
 .symRedIndependentPoly <- function(B, expts, vars, moved, preps) {
   pt <- setNames(as.numeric(.symPool()(seq_along(vars) + 5L)), vars)
   Xi <- t(vapply(preps, function(pr) vapply(moved, function(v)
@@ -666,10 +657,8 @@
   target <- length(moved) - qr(Xi, tol = 1e-9)$rank
   mv <- exp(expts %*% log(pt))                       # monomial values at pt
   # The gradient spans the MOVED coordinates only, matching what `target` counts:
-  # an unmoved coordinate is itself a trivial invariant, so two invariants that
-  # differ only in unmoved directions do not separate orbits. Scoring them as
-  # independent fills the quota with a set that leaves moved coordinates
-  # untouched -- and the solve then has fewer carriers than invariants.
+  # invariants differing only in unmoved directions do not separate orbits, and
+  # counting them would leave the solve with fewer carriers than invariants.
   mIdx <- match(moved, vars)
   grad <- function(cf) vapply(mIdx, function(i)
     sum(cf * mv * expts[, i] / pt[i]), numeric(1))
@@ -692,16 +681,14 @@
 # Stage 2b: rational invariants with a single-coordinate denominator. The ansatz
 # is Laurent: the polynomial monomials of total degree <= dPoly plus every such
 # monomial with ONE moved coordinate at exponent -1. The invariance condition
-# stays LINEAR in the coefficients -- X(m_k) = m_k * <a^(k), eta> holds for
-# Laurent monomials too, and symMonoResidues takes negative exponents through the
-# modular inverse -- so the same exact modular-nullspace sampling applies. This is
-# the cheap stage that reaches sums like (z^2*a + z*a + b*c)/z: the factor stages
-# see them only as high-degree Darboux polynomials (never a factor of anything
-# visible), the exp stage only at a raised numerator cap. Denominators are pruned
-# to the coordinates with z_i | xi_i for every generator: for N/z_i in lowest
-# terms X(N/z_i) = 0 forces z_i | N*xi_i, and z_i is irreducible. The screen is a
-# numeric divisibility test (xi_i vanishes on z_i = 0), selection-only -- the
-# verify layer re-proves every invariant symbolically.
+# stays LINEAR in the coefficients (X(m_k) = m_k * <a^(k), eta> holds for Laurent
+# monomials, and symMonoResidues takes negative exponents via the modular inverse),
+# so the same modular-nullspace sampling applies. It reaches sums like
+# (z^2*a + z*a + b*c)/z cheaply, which the factor stages see only as high-degree
+# Darboux polynomials. Denominators are pruned to coordinates with z_i | xi_i for
+# every generator: for N/z_i in lowest terms X(N/z_i) = 0 forces z_i | N*xi_i, and
+# z_i is irreducible. The screen is numeric (xi_i vanishes on z_i = 0) and
+# selection-only; the verify layer re-proves every invariant symbolically.
 .symRedRationalInvariants <- function(preps, dPoly, sd, spy) {
   moved <- .symSort(unique(unlist(lapply(preps, `[[`, "support"))))
   vars <- .symSort(unique(c(moved, unlist(lapply(preps, `[[`, "vars")))))
@@ -753,7 +740,7 @@
                   dPoly, paste(denC, collapse = ", "), N, length(.symPrimes),
                   ns$rows)
   if (is.null(ns$basis))
-    return(skip(paste0(cert, " -- reconstruction failed (inconclusive)")))
+    return(skip(paste0(cert, "; reconstruction failed (inconclusive)")))
   if (!ncol(ns$basis))
     return(skip(paste0("no rational invariant with a single-coordinate ",
                        "denominator and numerator degree <= ", dPoly, " (",
@@ -761,9 +748,8 @@
   sel <- .symRedIndependentPoly(ns$basis, expts, vars, moved, preps)
   inv <- vapply(sel, function(j)
     .symRedPolyString(ns$basis[, j], expts, vars), character(1))
-  # canonical fraction form N/z instead of the raw Laurent sum: the readable
-  # shape -- and the joint carrier solve is orders of magnitude faster on it
-  # (sympy's solve grinds on the sum-with-embedded-quotient form)
+  # canonical fraction form N/z instead of the raw Laurent sum: readable, and far
+  # faster for the joint carrier solve
   locals <- .symRedLocals(inv, spy)
   inv <- vapply(inv, function(s) {
     e <- tryCatch(spy$cancel(spy$together(
@@ -807,11 +793,9 @@
   rows <- list(); perGen <- integer(nGen)
   for (g in seq_len(nGen)) {
     exprs <- vapply(cols, function(cl) as.character(cl[[g]]), character(1))
-    # The sample index must not walk the prime pool outwards: a cofactor of degree
-    # d turns the point magnitude into its d-th power, so a stride of 101 put every
-    # row of a high-degree generator past the storage bound, where the guard below
-    # dropped it -- silently, leaving a rank-deficient matrix whose kernel is not
-    # the cofactor kernel at all. A stride of 2 keeps the points distinct and small.
+    # Small stride through the prime pool: a degree-d cofactor raises the point
+    # magnitude to the d-th power, and large points would push high-degree rows past
+    # the storage bound below, leaving a rank-deficient matrix.
     pts <- lapply(seq_len(nMon), function(t)
       as.list(.symPool()(seq_along(vars) + 2L * t + 7L * g)))
     v <- tryCatch(sd$evalRationalBatch(as.list(exprs), as.list(vars), pts),
@@ -823,17 +807,15 @@
       if (anyNA(num) || anyNA(den) || any(den == 0)) next
       L <- Reduce(function(a, b) a * b / .symRedGcd(a, b), unique(den), 1)
       row <- round(num * (L / den))
-      # 2^53 is where a double stops holding integers exactly -- the real bound,
-      # and the kernel takes them from here as doubles
+      # doubles hold integers exactly below 2^53; the kernel takes them as doubles
       if (all(is.finite(row)) && max(abs(row)) < 2^53) {
         rows[[length(rows) + 1L]] <- row
         perGen[g] <- perGen[g] + 1L
       }
     }
   }
-  # A generator that contributed no row is simply absent from the matrix, and its
-  # kernel constraints with it: report nothing rather than a kernel of the wrong
-  # system (the caller turns an empty return into an inconclusive certificate).
+  # A generator without rows would drop its constraints from the kernel: return
+  # nothing instead (the caller reports it as inconclusive).
   if (any(perGen == 0L)) return(list())
   rows
 }
@@ -843,7 +825,7 @@
 # <= d divides the extactic determinant E_d of the monomial basis B_d (Pereira), so
 # spy$factor(E_d) delivers ALL candidates of that degree; candidates must divide for
 # every generator of the block. Rational invariants are prod P_j^{n_j} for integer
-# vectors n with sum n_j lambda_j = 0 identically -- the integer kernel of the
+# vectors n with sum n_j lambda_j = 0 identically, i.e. the integer kernel of the
 # cofactor matrix, sampled exactly at integer points and lcm-cleared. This subsumes
 # equal-cofactor pairs and the coordinate factors z_i | xi_i. Above the basis cap
 # only the coordinate factors are tried (stated in the certificate).
@@ -856,26 +838,22 @@
     lapply(pr$comps, function(x) .symRedSympify(x, spy, locals)))
 
   # Candidate Darboux polynomials from three sources: the coordinate factors, the
-  # irreducible factors of the xi components themselves (an invariant hypersurface
-  # often sits inside the vanishing of xi -- and when a first integral makes the
-  # extactic degenerate, these are the candidates that remain reachable), and the
-  # extactic factors when the basis stays below the cap. The exact division test
-  # filters, so extra candidates never cost correctness.
+  # irreducible factors of the xi components (an invariant hypersurface often lies
+  # in the zero set of xi; these remain reachable when a first integral makes the
+  # extactic degenerate), and the extactic factors below the cap. The exact
+  # division test filters, so extra candidates never cost correctness.
   cands <- lapply(moved, function(v) .symRedSympify(v, spy, locals))
   for (xi in unlist(xiOf, recursive = FALSE)) {
     fl <- tryCatch(spy$factor_list(xi), error = function(e) NULL)
     if (!is.null(fl)) cands <- c(cands, lapply(fl[[2]], function(pair) pair[[1]]))
   }
-  # The extactic basis runs over the MOVED coordinates only, with every
-  # coefficient symbol treated as a constant of the ground field: Pereira's
-  # theorem holds over any characteristic-0 field, so completeness is "factor
-  # degree <= d in the moved coordinates, arbitrary degree in the parameters" --
-  # a stronger statement than the all-variables basis, at a fraction of the size
-  # (C(nMoved + d, d) instead of C(nvars + d, d)); module-reduced blocks with a
-  # handful of moved coordinates now pass the cap that used to skip them.
+  # The extactic basis runs over the MOVED coordinates only, coefficient symbols
+  # being constants of the ground field (Pereira holds over any characteristic-0
+  # field): complete for factor degree <= d in the moved coordinates and any degree
+  # in the parameters, with C(nMoved + d, d) instead of C(nvars + d, d) monomials.
   Nbasis <- choose(length(moved) + dDarboux, dDarboux)
   # the symbolic determinant's cost is driven by the entry degrees, which grow to
-  # ~ dDarboux + (N-1)*(D-1) in the last extactic row -- cap that, not just N
+  # ~ dDarboux + (N-1)*(D-1) in the last extactic row; cap that, not just N
   Dmax <- max(1L, vapply(preps, function(pr)
     if (is.na(pr$degree)) 3L else pr$degree, integer(1)))
   entryDeg <- dDarboux + (Nbasis - 1L) * (Dmax - 1L)
@@ -906,7 +884,7 @@
   }
 
   # keep candidates that are Darboux for EVERY generator, with their cofactors and
-  # proportionality dedup -- batched into one Python call
+  # proportionality dedup, in one Python call
   dc <- sd$darbouxCofactors(lapply(cands, as.character),
                             lapply(preps, function(pr) as.list(pr$comps)))
   Ps <- lapply(dc$Ps, function(s) .symRedSympify(s, spy, locals))
@@ -929,17 +907,17 @@
   fail <- function(cert) list(ok = FALSE, invariants = character(0), cert = cert,
                               Ps = Ps, lams = lams, coverage = coverage)
   if (length(Ps) < 2L)
-    return(fail(paste0("no rational invariant from Darboux factors -- ", certBase)))
+    return(fail(paste0("no rational invariant from Darboux factors; ", certBase)))
 
   # integer kernel of the cofactor matrix, sampled exactly at integer points
   nMon <- choose(length(vars) + max(1L, dDarboux), length(vars)) + 3L
   rows <- .symRedCofactorRows(lams, vars, length(preps), nMon, sd)
   if (!length(rows))
-    return(fail(paste0("cofactor sampling failed (inconclusive) -- ", certBase)))
+    return(fail(paste0("cofactor sampling failed (inconclusive); ", certBase)))
   K <- .symRedIntKernel(do.call(rbind, rows), sd)
   if (!ncol(K))
     return(fail(paste0("no rational invariant with Darboux factors of degree <= ",
-                       dDarboux, " -- ", certBase)))
+                       dDarboux, "; ", certBase)))
   Pstr <- vapply(Ps, function(P) gsub("\\*\\*", "^", as.character(P)), character(1))
   inv <- vapply(seq_len(ncol(K)), function(j) {
     nz <- which(K[, j] != 0L)
@@ -952,8 +930,8 @@
        Ps = Ps, lams = lams, coverage = coverage)
 }
 
-# denominator-candidate cap of the exp stage (h = 1, all P_j, then all P_j^2)
-.symRedExpDenCap <- 13L
+# work budget of the exp stage, in unknowns summed over the systems it solves
+.symRedExpWorkCap <- 3250L
 # unknown-count budget per exp-stage linear system (g- plus mu-coefficients)
 .symRedExpSizeCap <- 250L
 
@@ -995,31 +973,37 @@
       cof = lapply(darb$lams[[j]], function(l) spy$Integer(2L) * l), deg = 2L * dj)
   }
   hC <- c(hC, hC2)
-  capped <- length(hC) > .symRedExpDenCap
-  if (capped) hC <- hC[seq_len(.symRedExpDenCap)]
 
-  # g-ansatz: moved monomials plus the constant (exp(c/h) is a genuine factor)
-  exptsG <- .symMonoTable(length(vars), as.integer(dExp))
-  keepG <- rowSums(exptsG[, match(moved, vars), drop = FALSE]) > 0L |
-    rowSums(exptsG) == 0L
-  exptsG <- exptsG[keepG, , drop = FALSE]
-  Ng <- nrow(exptsG)
+  # g-ansatz per numerator degree: moved monomials plus the constant
+  exptsGs <- lapply(seq_len(max(1L, as.integer(dExp))), function(dg) {
+    e <- .symMonoTable(length(vars), dg)
+    e[rowSums(e[, match(moved, vars), drop = FALSE]) > 0L | rowSums(e) == 0L, ,
+      drop = FALSE]
+  })
 
   factors <- list()
   seen <- character(0)
   sizeSkipped <- 0L
+  capped <- FALSE
+  work <- 0L
   for (hc in hC) {
-    # deg mu <= D - 1 is the DEFINING bound of an exponential factor (Christopher/
-    # Llibre), not just a structural one -- and it is lossless for the combination
-    # step: higher-degree cofactors could only cancel among themselves, and the
-    # corresponding g-sum lies in this ansatz with a small cofactor already. It
-    # also keeps the h = 1 system from being solved by every g.
-    degMu <- min(D - 1L, dExp + D - 1L - hc$deg)
-    exptsMu <- if (degMu >= 0L) .symMonoTable(length(vars), degMu) else
-      matrix(0L, 0L, length(vars))
-    Nmu <- nrow(exptsMu)
-    n <- Ng + K * Nmu
+    # deg mu <= D - 1 is the defining bound of an exponential factor (Christopher,
+    # Llibre) and lossless for the combination step: higher-degree cofactors could
+    # only cancel among themselves. It also keeps every g from solving the h = 1
+    # system. Pick the highest numerator degree <= dExp that fits the size cap.
+    for (dg in rev(seq_along(exptsGs))) {
+      exptsG <- exptsGs[[dg]]
+      Ng <- nrow(exptsG)
+      degMu <- min(D - 1L, dg + D - 1L - hc$deg)
+      exptsMu <- if (degMu >= 0L) .symMonoTable(length(vars), degMu) else
+        matrix(0L, 0L, length(vars))
+      Nmu <- nrow(exptsMu)
+      n <- Ng + K * Nmu
+      if (n <= .symRedExpSizeCap) break
+    }
     if (n > .symRedExpSizeCap) { sizeSkipped <- sizeSkipped + 1L; next }
+    if (work + n > .symRedExpWorkCap) { capped <- TRUE; break }
+    work <- work + n
     hStr <- as.character(hc$h)
     lamStr <- vapply(hc$cof, as.character, character(1))
     rowsAt <- function(pt, p) {
@@ -1073,14 +1057,15 @@
   certBase <- sprintf(paste0("exp stage (numerator degree <= %d over %d ",
                              "denominator candidate(s)%s%s): %d exponential ",
                              "factor(s)"),
-                      dExp, length(hC), if (capped) ", capped" else "",
+                      dExp, length(hC), if (capped) sprintf(
+                        ", capped at %d unknowns", .symRedExpWorkCap) else "",
                       if (sizeSkipped) sprintf(", %d skipped over the %d-unknown budget",
                                                sizeSkipped, .symRedExpSizeCap) else "",
                       length(factors))
   if (!length(factors))
     return(list(ok = FALSE, invariants = character(0), factors = list(),
                 cert = paste0("no exponential factor with numerator degree <= ",
-                              dExp, " -- ", certBase)))
+                              dExp, "; ", certBase)))
   if (isTRUE(verbose)) message("  exp: ", length(factors), " factor(s) certified")
 
   # integer kernel of the extended cofactor matrix [lambda | mu]
@@ -1090,13 +1075,13 @@
   rows <- .symRedCofactorRows(cols, vars, K, nMon, sd)
   if (!length(rows))
     return(list(ok = FALSE, invariants = character(0), factors = factors,
-                cert = paste0("cofactor sampling failed (inconclusive) -- ", certBase)))
+                cert = paste0("cofactor sampling failed (inconclusive); ", certBase)))
   Kk <- .symRedIntKernel(do.call(rbind, rows), sd)
   useCol <- if (ncol(Kk)) which(vapply(seq_len(ncol(Kk)), function(j)
     any(Kk[J + seq_along(factors), j] != 0L), logical(1))) else integer(0)
   if (!length(useCol))
     return(list(ok = FALSE, invariants = character(0), factors = factors,
-                cert = paste0("no invariant combining the exponential factors -- ",
+                cert = paste0("no invariant combining the exponential factors; ",
                               certBase)))
   Pstr <- vapply(darb$Ps, function(P) gsub("\\*\\*", "^", as.character(P)),
                  character(1))
@@ -1114,7 +1099,11 @@
     # invariant; unwrap only when its sign is certified (exp(q) covers both
     # signs of an indefinite q, a bare positive carrier does not)
     sArg <- if (!length(parts)) .symRedSgn(arg, spy) else 0L
-    if (sArg == 1L) argStr
+    # an argument in undeclared coordinates is real anyway; exp() would only hide
+    # it from the section search
+    realArg <- !length(parts) && !is.null(.symPositive()) &&
+      length(setdiff(.symRedFreeSyms(arg), .symPositive())) > 0L
+    if (sArg == 1L || (sArg == 0L && realArg)) argStr
     else if (sArg == -1L) gsub("\\*\\*", "^", as.character(spy$cancel(-arg)))
     else paste(c(parts, paste0("exp(", argStr, ")")), collapse = "*")
   }, character(1))
@@ -1144,13 +1133,13 @@
                       J, E)
   if (!length(rows))
     return(list(ok = FALSE, invariants = character(0),
-                cert = paste0("cofactor sampling failed (inconclusive) -- ", certBase)))
+                cert = paste0("cofactor sampling failed (inconclusive); ", certBase)))
   Kk <- .symRedIntKernel(do.call(rbind, rows), sd)
   last <- J + E + 1L
   useCol <- if (ncol(Kk)) which(Kk[last, ] != 0L) else integer(0)
   if (!length(useCol))
     return(list(ok = FALSE, invariants = character(0),
-                cert = paste0("no Darboux-form integrating factor -- ", certBase)))
+                cert = paste0("no Darboux-form integrating factor; ", certBase)))
   Pstr <- vapply(darb$Ps, function(P) gsub("\\*\\*", "^", as.character(P)),
                  character(1))
   inv <- character(0)
@@ -1178,25 +1167,20 @@
   }
   if (!length(inv))
     return(list(ok = FALSE, invariants = character(0),
-                cert = paste0("integrating factor found, quadrature failed -- ",
+                cert = paste0("integrating factor found, quadrature failed; ",
                               certBase)))
   if (isTRUE(verbose)) message("  intfactor: first integral by quadrature")
   list(ok = TRUE, invariants = inv, cert = paste0(certBase, ": solved by quadrature"))
 }
 
-# The invariant count a block needs: #moved coordinates minus the generic rank of
-# the xi-matrix -- the dimension of the invariant foliation. Numeric, at a generic
-# point; selection-only (correctness rests on the verify layer).
 # Stage: separable characteristics. When every component of a generator involves no
 # MOVED coordinate but its own, the characteristic system dz_i/xi_i = dz_j/xi_j
-# decouples and the first integrals are n-1 one-dimensional quadratures
-# G_i = int dz_i / xi_i, with the invariants G_i - G_j (exponentiated, so a pair of
-# logarithms comes back as the rational quotient). No ansatz and no degree cap, and
-# it reaches antiderivatives -- atan, log of a factored denominator -- that no
-# product of Darboux factors can express; the Laurent-monomial stage is the special
-# case xi_i = w_i z_i. A separable generator's own integrals need NOT be invariants
-# of a multi-generator block, so every candidate is checked against every generator
-# before it is offered.
+# decouples into one-dimensional quadratures G_i = int dz_i / xi_i, with invariants
+# G_i - G_j (exponentiated when logarithmic, giving the rational quotient). No
+# ansatz or degree cap, and it reaches antiderivatives (atan, log of a factored
+# denominator) outside the Darboux language. A separable generator's integrals need
+# not be invariants of a multi-generator block, so each is checked against every
+# generator.
 .symRedSeparable <- function(preps, sd, spy) {
   moved <- .symSort(unique(unlist(lapply(preps, `[[`, "support"))))
   locals <- .symRedLocals(c(unlist(lapply(preps, `[[`, "comps")), moved), spy)
@@ -1242,7 +1226,7 @@
                   length(sepIdx), length(preps), length(cand))
   if (!length(cand))
     return(list(ok = FALSE, invariants = character(0),
-                cert = paste0("no closed-form quadrature -- ", cert)))
+                cert = paste0("no closed-form quadrature; ", cert)))
   # exact X(I) = 0 against EVERY generator; the same checker the verify layer uses
   keep <- tryCatch(as.logical(unlist(sd$verifyInvariants(
     as.list(gsub("\\^", "**", cand)),
@@ -1251,12 +1235,14 @@
   if (is.null(keep) || !any(keep))
     return(list(ok = FALSE, invariants = character(0),
                 cert = paste0("quadrature integrals are not invariants of every ",
-                              "generator -- ", cert)))
+                              "generator; ", cert)))
   list(ok = TRUE, invariants = cand[keep],
        cert = paste0(cert, sprintf(": %d verified", sum(keep))))
 }
 
-
+# The invariant count a block needs: #moved coordinates minus the generic rank of
+# the xi-matrix (the dimension of the invariant foliation). Numeric, at a generic
+# point; selection-only (correctness rests on the verify layer).
 .symRedBlockCorank <- function(preps) {
   moved <- .symSort(unique(unlist(lapply(preps, `[[`, "support"))))
   vars <- .symSort(unique(c(moved, unlist(lapply(preps, `[[`, "vars")))))
@@ -1279,11 +1265,9 @@
   # keep every gradient finite without losing genericity (rank only)
   if (any(grepl("exp(", invs, fixed = TRUE))) pool <- 1 + pool / (max(pool) + 1)
   pt <- setNames(pool, vars)
-  # The point spans every variable (an unmoved coefficient still has to evaluate),
-  # but the gradient spans the MOVED coordinates only -- that is what `target`
-  # counts. An unmoved coordinate is itself a trivial invariant, so two invariants
-  # differing only in unmoved directions do not separate orbits, and scoring them
-  # as independent fills the quota with a set that leaves moved coordinates free.
+  # The point spans every variable (unmoved coefficients still evaluate), the
+  # gradient only the MOVED coordinates, as `target` counts: invariants differing
+  # only in unmoved directions do not separate orbits.
   grad <- function(iv) {
     ex <- parse(text = iv)[[1]]
     vapply(moved, function(v)
@@ -1303,20 +1287,17 @@
   sel
 }
 
-# run the invariant-search stages on one (already module-reduced) sub-block of
-# generators -- monomial, then polynomial <= dPoly, then Darboux <= dDarboux,
-# then exponential factors with numerator degree <= dExp.
+# run the invariant-search stages on one module-reduced sub-block, escalating from
+# monomial through polynomial, separable, rational and Darboux to exponential factors
 .symRedSolveBlock <- function(preps, dPoly, dDarboux, dExp, sd, spy,
                               verbose = FALSE, separable = TRUE) {
   moved <- .symSort(unique(unlist(lapply(preps, `[[`, "support"))))
   vars <- .symSort(unique(c(moved, unlist(lapply(preps, `[[`, "vars")))))
   target <- .symRedBlockCorank(preps)
   certs <- character(0); found <- character(0); stage <- "monomial"
-  # an invariant free of every moved coordinate is trivially constant on the
-  # orbits and must never count toward the target (a Darboux factor with
-  # cofactor 0, e.g. a pure parameter sum, would otherwise fake a complete
-  # invariant set and an exactness claim); monomial/polynomial stages exclude
-  # such invariants by construction, the factor stages cannot
+  # an invariant free of every moved coordinate is trivially constant on orbits and
+  # must not count toward the target (e.g. a pure parameter sum from the factor
+  # stages, which unlike the ansatz stages do not exclude them by construction)
   movedRe <- paste0("(?<![0-9A-Za-z_.])(", paste(moved, collapse = "|"),
                     ")(?![0-9A-Za-z_.])")
   # sign-definite invariants first: an indefinite one cannot be carried by a
@@ -1345,12 +1326,9 @@
   # holds an indefinite invariant: a definite replacement may live one stage up
   short <- function() length(found) < target ||
     !all(vapply(found, definite, logical(1)))
-  # A later stage's reshuffle of the set is always ACCEPTED -- pick's preference
-  # for short representatives is load-bearing (the monomial lattice basis can
-  # come back as EGF_EGFR^2/EGFR where a later stage offers EGF_EGFR*k_bind, and
-  # the joint carrier solve grinds for minutes on the former) -- but the stage
-  # LABEL only advances when the stage genuinely contributed: more invariants,
-  # or more definite ones.
+  # A later stage's reshuffle of the set is always accepted (pick's preference for
+  # short representatives keeps the carrier solve fast), but the stage LABEL only
+  # advances on more invariants or more definite ones.
   better <- function(got) length(got) > length(found) ||
     (length(got) == length(found) &&
        sum(vapply(got, definite, logical(1))) >
@@ -1372,12 +1350,9 @@
       }
     }
   }
-  # Separability is a syntactic property of the generator plus n univariate
-  # quadratures -- far cheaper than the factor stages below, so it runs before
-  # them. It sits AFTER the two ansatz stages because those return the closed form
-  # a reader wants for the cases they do cover (a linear invariant as k1 + u*k2,
-  # not as exp(-(k1 + u*k2)/u)); what is left over is where the quadrature earns
-  # its place, including antiderivatives outside the Darboux language (atan).
+  # Separability is cheaper than the factor stages, so it runs before them, but
+  # after the ansatz stages, whose closed forms read better where they apply
+  # (k1 + u*k2, not exp(-(k1 + u*k2)/u)).
   if (separable && short()) {
     sep <- .symRedSeparable(preps, sd, spy)
     certs <- c(certs, sep$cert)
@@ -1435,10 +1410,8 @@
           length(unique(unlist(lapply(preps, `[[`, "support")))) == 2L) {
         itf <- .symRedIntFactor(preps, dar, ex$factors, sd, spy, verbose)
         certs <- c(certs, itf$cert)
-        # a 2-coordinate single-generator block has target 1 and `found` is empty
-        # here, so the quadrature integral (already proven X(I) = 0 in Python) is
-        # appended directly -- pick()'s numeric gradient cannot evaluate the
-        # atan/Abs forms this stage may produce
+        # target is 1 and `found` empty here; the integral (proven X(I) = 0 in
+        # Python) is appended directly, as pick() cannot evaluate atan/Abs forms
         if (itf$ok) { found <- c(found, itf$invariants[1]); stage <- "intfactor" }
       }
     } else
@@ -1457,11 +1430,10 @@
 # admissible generators are the combinations whose xi vanishes on every fixed
 # coordinate (a fixed coordinate cannot move). Exact symbolic Gaussian elimination
 # on the fixed columns; each pivot row cannot combine away from the fixed
-# coordinates and is removed by the fixing -- the curved mirror of
-# .symRedScalingFixed. Kept rows are exactly zero on every fixed column (the
-# elimination is symbolic), so the fixed coordinates leave their support and can
-# never become carriers or gauge pins. `sources` tracks which original directions
-# enter each kept combination.
+# coordinates and is removed by the fixing (the curved mirror of
+# .symRedScalingFixed). Kept rows are exactly zero on every fixed column, so fixed
+# coordinates never become carriers or gauge pins. `sources` tracks which original
+# directions enter each kept combination.
 .symRedFixedReduce <- function(preps, fixed, spy) {
   k <- length(preps)
   cols <- .symSort(unique(unlist(lapply(preps, `[[`, "support"))))
@@ -1596,10 +1568,9 @@
 
 # Exact internal verification. Scaling blocks: the invariant exponents annihilate
 # the residual weights over the integers (by construction; asserted). Curved blocks:
-# X(I) = 0 proven symbolically -- the Lie derivative of every invariant along every
-# generator must cancel() to literally "0", a full proof, not a sample. A failing
-# invariant is dropped and the failure recorded (this guards our own algebra; it
-# should never fire).
+# X(I) = 0 proven symbolically: the Lie derivative of every invariant along every
+# generator must cancel() to literally "0". A failing invariant is dropped and the
+# failure recorded (a guard on our own algebra).
 .symRedVerify <- function(blocks, sd) {
   chk <- function(inv, preps) as.logical(unlist(tryCatch(sd$verifyInvariants(
     as.list(gsub("\\^", "**", inv)),
@@ -1612,7 +1583,7 @@
           nrow(b$Wres)) {
         prod <- b$Wres[, rownames(b$invExps), drop = FALSE] %*% b$invExps
         if (any(prod != 0))
-          stop("symmetryReduction(): internal error -- scaling invariant not in the ",
+          stop("symmetryReduction(): internal error: scaling invariant not in the ",
                "weight kernel.", call. = FALSE)
         blocks[[bi]]$certificates <- c(b$certificates,
           "verified: integer weight annihilation, exact")
@@ -1630,10 +1601,9 @@
       blocks[[bi]]$certificates <- c(b$certificates,
         "verified: X(I) = 0 exactly (sympy cancel) for every generator")
     }
-    # An invariant may carry coordinates that another block moves: the ansatz runs
-    # over the support plus the coefficient symbols. The trafo composes the blocks,
-    # so it has to hold for all of them. The scaling blocks need no pass of their
-    # own, their gauge went into the search.
+    # An invariant may carry coordinates another block moves, and the trafo composes
+    # the blocks, so it must hold for all of them. Scaling blocks need no pass: their
+    # gauge went into the search.
     other <- unlist(lapply(blocks[-bi], `[[`, "preps"), recursive = FALSE)
     inv <- blocks[[bi]]$invariants
     if (!length(other) || !length(inv)) next
@@ -1657,8 +1627,8 @@
   tryCatch(reticulate::iterate(x, f), error = function(e) lapply(x, f))
 
 # Whether a solved entry stays inside the emitted trafo language: rational
-# operations, Rational powers, exp and log -- nothing else (LambertW & friends
-# mean the carrier choice was wrong, not that the block is reducible). Returns
+# operations, Rational powers, exp and log only (LambertW and the like mean the
+# carrier choice was wrong, not that the block is irreducible). Returns
 # "no", "yes" or "root" (yes, with a non-integer power needing a branch note).
 .symRedEntryClass <- function(e, spy) {
   fnames <- tryCatch(unlist(.symRedIter(e$atoms(spy$Function), function(f)
@@ -1676,10 +1646,6 @@
   if (root) "root" else "yes"
 }
 
-# Positivity certificate: TRUE when the expression is a ratio of polynomials
-# whose coefficients share one sign -- such an entry maps ANY positive outer
-# point to a positive inner value, so the chart covers the whole positive
-# orthant. Sufficient, not necessary.
 # `positive` as a set of coordinate names: TRUE (all) is NULL, FALSE is the empty
 # set, a character vector is taken as given and checked against the coordinates.
 .symRedPositiveSet <- function(positive, coords) {
@@ -1692,14 +1658,13 @@
   unknown <- setdiff(positive, coords)
   if (length(unknown))
     warning("symmetryReduction(): no effect: ", paste(unknown, collapse = ", "),
-            " -- not a coordinate of the analysis.", call. = FALSE)
+            ": not a coordinate of the analysis.", call. = FALSE)
   intersect(positive, coords)
 }
 
 # The coordinates declared positive, for the whole of one symmetryReduction() call.
-# NULL means every coordinate is positive, the default and what the certificates
-# assumed before the declaration existed. Held here rather than threaded through
-# thirty call sites of the sign recursion; the driver sets and restores it.
+# NULL means every coordinate is positive (the default). Held here rather than
+# threaded through the sign recursion; the driver sets and restores it.
 .symDomain <- new.env(parent = emptyenv())
 .symDomain$positive <- NULL
 .symDomain$realCarriers <- character(0)
@@ -1821,9 +1786,8 @@
     }
     return(as.integer(s))
   }
-  # only radicals over a SYMBOLIC base matter here. A numeric one -- the sqrt(2)
-  # that comes out of solving 2a^2 = c -- is a positive constant, and Poly()
-  # carries it as a coefficient like any other number.
+  # only radicals over a SYMBOLIC base matter here; a numeric one such as sqrt(2)
+  # is a positive constant that Poly() carries as a coefficient
   rads <- tryCatch(Filter(function(w) isTRUE(w$exp$is_Rational) &&
                             !isTRUE(w$exp$is_Integer) && !isTRUE(w$base$is_number),
                           .symRedIter(ex$atoms(spy$Pow), function(w) w)),
@@ -1875,19 +1839,18 @@
 # placeholder t_l has as its root the bound phi (possibly depending on the other
 # invariants); t_l -> t_l + phi is a triangular basis change and the outer
 # parameter carries I_l - phi, free on (0, Inf). Two certificates per shift:
-# phi >= 0, and COVERAGE -- I_l - phi composed into inner coordinates positive
-# on the WHOLE orthant, which rejects lossy offsets and picks the placeholder.
-# Shifts apply one at a time with re-substitution in between: an offset may
-# only become certifiable after an earlier shift has landed.
+# phi >= 0, and COVERAGE (I_l - phi composed into inner coordinates positive on
+# the WHOLE orthant), which rejects lossy offsets and picks the placeholder.
+# Shifts apply one at a time with re-substitution in between, since an offset may
+# become certifiable only after an earlier shift.
 .symRedShiftFix <- function(es, tmpN, Ies, spy) {
   shift <- list()
   meanE <- setNames(Ies, tmpN)
   tsym <- setNames(lapply(tmpN, spy$Symbol), tmpN)
   # factors of num/den, one extra level (a radical factor keeps its base
-  # unfactored, multiplicity 1/2), plus the factors of every radicand base --
-  # scanned over the entry's raw, half-power and conjugate-rationalised forms:
-  # each form exposes factors the others hide (the raw form the readable ones,
-  # the other two those sympy only cancels or factors modulo s^2 = z)
+  # unfactored, multiplicity 1/2), plus the factors of every radicand base, scanned
+  # over the raw, half-power and conjugate-rationalised forms, each of which
+  # exposes factors the others hide
   factorBases <- function(e0) {
     out <- list(); seen <- character(0)
     push <- function(f) {
@@ -1950,11 +1913,9 @@
     }
     NULL
   }
-  # es stays in the RAW form: the conjugate rationalisation can turn a positive
-  # radical denominator (sqrt(q1) + q2) into an indefinite radical-free one
-  # (q2^2 - q1) that sympy cannot cancel back modulo s^2 = q1 -- the multi-form
-  # certificate (.symRedPosForm) and the multi-form factor scan above see every
-  # form they need without committing the entry to one
+  # es stays in the RAW form: conjugate rationalisation can turn a positive radical
+  # denominator (sqrt(q1) + q2) into an indefinite one (q2^2 - q1); .symRedPosForm
+  # and the factor scan above try every form without committing the entry to one
   norm <- function(e) tryCatch(spy$cancel(spy$together(e)), error = function(err) e)
   es <- lapply(es, norm)
   for (round in seq_along(tmpN)) {
@@ -2029,15 +1990,13 @@
 
 # Positivity certificate for a solved trafo entry: is it > 0 for EVERY positive value
 # of the outer parameters? Numerator and denominator are certified separately and must
-# agree in sign. This is what makes an emitted chart global rather than local -- a
-# fit in the reduced coordinates can then never leave the model's positive domain.
-# The certificate is tried on THREE forms of the entry and the first that
-# certifies is returned: the entry as it stands (a conjugate rationalisation can
-# only destroy a manifestly positive form like sqrt(q1)*q4/(sqrt(q1) + q2)),
-# the half-power cancellation (which sees factors sympy's cancel misses modulo
-# s^2 = z), and the conjugate rationalisation (which cancels factors hiding in a
-# radical DENOMINATOR). NULL when no form certifies; the certified form is what
-# the caller emits -- it is the readable one, and it has no spurious 0/0 points.
+# agree in sign. This makes an emitted chart global: a fit in the reduced
+# coordinates never leaves the model's positive domain. Three forms are tried, the
+# first that certifies returned: the entry as it stands (rationalisation can destroy
+# a manifestly positive form like sqrt(q1)*q4/(sqrt(q1) + q2)), the half-power
+# cancellation, and the conjugate rationalisation (factors in a radical
+# DENOMINATOR). NULL when none certifies; the caller emits the certified form, which
+# is readable and free of spurious 0/0 points.
 .symRedPosForm <- function(e, spy) {
   forms <- list(tryCatch(spy$cancel(spy$together(e)), error = function(err) NULL),
                 tryCatch(.symRedHalfPow(e, spy), error = function(err) NULL),
@@ -2060,12 +2019,9 @@
 
 # Sign on a MIXED domain: the symbols in `realSyms` range over ALL of R, everything
 # else over the positive orthant. A carrier whose invariant is not sign-certified
-# takes both signs on the positive orthant, so its outer parameter is a real one and
-# the chart has to hold there -- certifying it only for positive values of that
-# carrier emits a chart that covers part of the model's domain and says nothing
-# about the rest. Completes the square in each real symbol, which is exactly the
-# form the sum-of-squares pin produces, and hands the remainder to .symRedSgn.
-# +1 or 0 = not decided; a negative verdict is never needed here.
+# takes both signs, so its outer parameter is real and the chart must hold for all
+# its values. Completes the square in each real symbol (the form the sum-of-squares
+# pin produces) and hands the remainder to .symRedSgn. +1, or 0 = not decided.
 .symRedSgnReal <- function(pp, spy, realSyms) {
   if (!length(realSyms)) return(.symRedSgn(pp, spy))
   ex <- tryCatch(spy$expand(pp), error = function(err) NULL)
@@ -2132,6 +2088,27 @@
     !anyNA(x) && any(x != 0)
   }, logical(1)))
 }
+# v reaches every real value along one generator: after dividing out the common
+# factor, a translation (components free of the moved coordinates) of real
+# coordinates only, none of `pinned` but v, with a certified sign on v.
+.symRedTranslates <- function(b, v, pinned, spy) {
+  any(vapply(b$preps, function(pr) {
+    if (is.na(pr$comps[v]) || !all(vapply(pr$support, .symRedIsReal, logical(1))) ||
+        length(intersect(setdiff(pinned, v), pr$support))) return(FALSE)
+    loc <- .symRedLocals(pr$comps, spy)
+    ex <- tryCatch({
+      ex <- lapply(pr$comps, function(x) .symRedSympify(x, spy, loc))
+      # a multiple of a direction spans the same one
+      g <- Reduce(function(a, c) spy$gcd(a, c), ex)
+      lapply(ex, function(e) spy$cancel(e / g))
+    }, error = function(e) NULL)
+    if (is.null(ex) || any(vapply(ex, function(e)
+      length(intersect(.symRedFreeSyms(e), pr$support)) > 0L, logical(1))))
+      return(FALSE)
+    .symRedSgn(ex[[v]], spy) != 0L
+  }, logical(1)))
+}
+
 .symRedRealForm <- function(e, spy, realSyms) {
   f <- tryCatch(spy$cancel(spy$together(e)), error = function(err) NULL)
   if (is.null(f) || !identical(.symRedEntryClass(f, spy), "yes")) return(NULL)
@@ -2142,16 +2119,6 @@
   f
 }
 
-# Gauge-section candidates for a curved block: monomial balances "m1 = m2" over
-# the support, simple ones first. A balance section can intersect every positive
-# orbit (a constant pin cannot -- the curved orbit may not reach it); which one
-# actually yields a positive chart is decided by the certificate above.
-#
-# `extra` holds the summand monomials of each invariant that is a SUM, and their
-# balances go in FRONT of everything: solving such an invariant for one of its
-# coordinates produces a difference, positive only where the section puts the
-# summands in a fixed ratio, and generic support monomials would push these
-# candidates past the scan cap before they are ever tried.
 # A monomial string as an integer coefficient and its symbol exponents, NULL when
 # the string is not a plain monomial. Used to multiply two balances, so anything
 # that is not a monomial drops the candidate rather than being guessed at.
@@ -2204,6 +2171,14 @@
   out
 }
 
+# Gauge-section candidates for a curved block: monomial balances "m1 = m2" over
+# the support, simple ones first. A balance section can intersect every positive
+# orbit (a constant pin may lie off a curved orbit); the positivity certificate
+# decides which one yields a positive chart.
+# `extra` holds the summand monomials of each invariant that is a SUM; their
+# balances go first, since solving such an invariant yields a difference that is
+# positive only where the section fixes the summands' ratio, and generic
+# candidates would push them past the scan cap.
 .symRedSectionCands <- function(support, extra = list()) {
   key <- function(pr) paste(.symSort(pr), collapse = " = ")
   head <- list(); groups <- list()
@@ -2243,7 +2218,7 @@
 }
 
 # The summand monomials of an invariant that is a sum, as printable balance operands
-# (sign dropped -- the balance is between magnitudes). Empty for a single-term
+# (sign dropped: the balance is between magnitudes). Empty for a single-term
 # invariant, which needs no ratio pinned.
 .symRedInvSummands <- function(Ie, spy) {
   num <- tryCatch(spy$expand(spy$fraction(spy$together(Ie))[[1]]),
@@ -2257,8 +2232,8 @@
 }
 
 # Monotone-transversality pre-filter for a balance m1 = m2: the numerator of
-# X(log(m1/m2)) must be sign-pure per generator (zero allowed, nonzero once) --
-# the section is then crossed at most once. Returns NULL on failure, else its
+# X(log(m1/m2)) must be sign-pure per generator (zero allowed, nonzero once), so
+# the section is crossed at most once. Returns NULL on failure, else its
 # values at the two points `pts`, one pair per generator: a SET of sections
 # fixes the gauge only when these rows are independent (summand balances are
 # all scale-blind, so blind pairs must be pruned before the solve).
@@ -2308,14 +2283,14 @@
 # Chained solutions (one carrier's entry referencing another) are resolved by
 # substitution, the pins of every scaling block are substituted in, and only
 # solutions built from rational operations, Rational powers, exp and log are
-# emitted -- a block whose invariants cannot be solved in that language stays
-# invariantOnly, its invariants still reported.
+# emitted; a block whose invariants cannot be solved in that language stays
+# invariantOnly, its invariants still reported. preferReal tries undeclared
+# coordinates first, whose entries need no sign certificate.
 .symRedSolveInvariants <- function(b, pins, spy, coords = character(0),
-                                   invStart = 0L) {
+                                   invStart = 0L, preferReal = FALSE) {
   out <- list(pins = NULL, meaning = NULL, solved = FALSE)
   # a chart certified only for positive values of a real-valued carrier still covers
-  # part of the domain; it is kept as the fallback and reported as partial rather
-  # than thrown away, so this change can only add coverage, never remove a chart
+  # part of the domain; it is kept as the fallback and reported as partial
   best <- NULL
   if (!length(b$invariants)) return(out)
   locals <- .symRedLocals(c(b$invariants, b$support, names(pins), pins), spy)
@@ -2323,10 +2298,11 @@
     tryCatch(.symRedSympify(gsub("\\^", "**", iv), spy, locals),
              error = function(e) NULL))
   if (any(vapply(Ies, is.null, logical(1)))) return(out)
-  # canonical fraction form: sympy's joint solve below can grind for minutes on
-  # a sum with embedded quotients where the together'd equivalent solves at once
+  # canonical fraction form, which the joint solve handles far faster; cancel()
+  # splits exp(a + b), powsimp() rejoins it for the carrier test
   Ies <- lapply(Ies, function(e)
-    tryCatch(spy$cancel(spy$together(e)), error = function(err) e))
+    tryCatch(spy$powsimp(spy$cancel(spy$together(e)), combine = "exp"),
+             error = function(err) e))
   invN <- character(length(Ies))
   k <- invStart
   for (l in seq_along(Ies)) {
@@ -2351,6 +2327,7 @@
   for (Ie in Ies) {
     cand <- setdiff(b$support, used)
     if (length(coords)) cand <- cand[order(-match(cand, coords, nomatch = 0L))]
+    if (preferReal) cand <- cand[order(cand %in% .symPositive())]
     expA <- tryCatch(.symRedIter(Ie$atoms(spy$exp), function(a) a),
                      error = function(e) list())
     if (length(expA) > 1L) return(out)
@@ -2400,10 +2377,7 @@
     if (is.list(solDict)) solDict[[v]] else
       reticulate::py_get_item(solDict, spy$Symbol(v), silent = TRUE)
   # The carrier system does not depend on the gauge choice, so it is eliminated
-  # ONCE here: it serves the constant-pin path below and, expressed in the gauge
-  # coordinates, every candidate section of the search in between. Solving the
-  # full system per candidate instead re-derives this elimination each time --
-  # the dominant cost of the whole reduction on a block with several invariants.
+  # ONCE here, for the constant-pin path and every candidate section.
   solCarr <- tryCatch(spy$solve(eqs, lapply(carriers, function(v) spy$Symbol(v)),
                                 dict = TRUE), error = function(e) NULL)
 
@@ -2412,8 +2386,37 @@
   # not reach the pinned value, and the solved entries can leave the positive
   # orthant). Before falling back to pins, search for a monomial-balance section
   # m1 = m2 whose joint solve with the invariants gives entries certified
-  # positive on the whole positive orthant -- a global, log-fittable chart.
-  gauge0 <- setdiff(b$support, carriers)
+  # positive on the whole positive orthant: a global, log-fittable chart.
+  # Balances cover one or two positive gauge coordinates; the others are pinned.
+  gaugeAll <- setdiff(b$support, carriers)
+  gPos <- if (is.null(.symPositive())) gaugeAll else intersect(gaugeAll, .symPositive())
+  keepSets <- list()
+  if (length(gaugeAll) > 2L || length(gPos) < length(gaugeAll))
+    for (k in seq_len(min(2L, length(gPos)))) {
+      cm <- utils::combn(gPos, k)
+      keepSets <- c(keepSets, lapply(seq_len(ncol(cm)), function(j) cm[, j]))
+    }
+  if (length(gaugeAll) <= 2L) keepSets <- c(keepSets, list(gaugeAll))
+  keepSets <- unique(keepSets)
+  # pins: 0 for a real coordinate, which must reach it on every orbit, 1 else
+  pinVal <- function(v) if (.symRedIsReal(v)) "0" else "1"
+  keepSets <- Filter(function(k) {
+    pr <- Filter(.symRedIsReal, setdiff(gaugeAll, k))
+    # a translating real coordinate is pinned, not balanced
+    kr <- Filter(.symRedIsReal, k)
+    (!length(pr) || all(vapply(pr, function(v)
+      .symRedTranslates(b, v, setdiff(gaugeAll, k), spy), logical(1)))) &&
+      !any(vapply(kr, function(v) .symRedTranslates(b, v, gaugeAll, spy), logical(1)))
+  }, keepSets)
+  pinsIn <- pins
+  eqsIn <- eqs
+  for (gauge0 in keepSets) {
+  pinned1 <- setdiff(gaugeAll, gauge0)
+  pins <- c(pinsIn, setNames(vapply(pinned1, pinVal, ""), pinned1))
+  # surplus pins substituted before the search
+  pin1 <- lapply(pinned1, function(v) reticulate::tuple(spy$Symbol(v),
+                                                        spy$Integer(as.integer(pinVal(v)))))
+  eqs <- if (length(pin1)) lapply(eqsIn, function(e) e$subs(pin1)) else eqsIn
   if (length(gauge0) >= 1L && length(gauge0) <= 2L &&
       !any(grepl("exp(", b$invariants, fixed = TRUE))) {
     scalPinPairs <- lapply(names(pins), function(nm)
@@ -2424,8 +2427,8 @@
     # a pair touching no moved coordinate cannot constrain the orbit and is
     # dropped
     invSyms <- unique(unlist(lapply(Ies, .symRedFreeSyms)))
-    secVars <- .symSort(unique(c(b$support,
-      if (length(coords)) intersect(invSyms, coords) else invSyms)))
+    secVars <- setdiff(.symSort(unique(c(b$support,
+      if (length(coords)) intersect(invSyms, coords) else invSyms))), pinned1)
     cands <- .symRedSectionCands(secVars,
       lapply(Ies, function(Ie) .symRedInvSummands(Ie, spy)))
     touches <- function(pr) any(vapply(b$support, function(v)
@@ -2483,29 +2486,30 @@
       reticulate::tuple(spy$Symbol(v), vals[[v]]))
     # the branches of the carrier elimination, each as (carrier value list, the
     # substitution that puts it into a section equation); empty when the hoisted
-    # solve came back empty, in which case each candidate falls back to the joint
-    # solve it used before
+    # solve came back empty, and each candidate then runs the joint solve
     carrBr <- if (!is.null(solCarr)) Filter(Negate(is.null), lapply(solCarr,
       function(br) {
         cv <- setNames(lapply(carriers, function(v) getE(br, v)), carriers)
-        if (any(vapply(cv, is.null, logical(1)))) NULL else
-          list(vals = cv, subs = subsOf(cv))
+        if (any(vapply(cv, is.null, logical(1)))) return(NULL)
+        if (length(pin1)) {
+          cv <- lapply(cv, function(e) spy$cancel(e$subs(pin1)))
+          if (any(vapply(cv, function(e) isTRUE(e$has(spy$zoo, spy$nan)),
+                         logical(1)))) return(NULL)
+        }
+        list(vals = cv, subs = subsOf(cv))
       }))
-    # the gauge coordinates by triangular elimination -- shared with the zero-limit
-    # face solve, which sets up the same kind of system; see .symRedTriSolve for why
-    # sympy's multivariate solve() is not what runs here
+    # surplus pins on a pole of every carrier branch
+    if (length(pin1) && length(solCarr) && !length(carrBr)) next
+    # the gauge coordinates by triangular elimination, shared with the zero-limit
+    # face solve; .symRedTriSolve says why not sympy's multivariate solve()
     gaugeSolve <- function(sys, vars) .symRedTriSolve(sys, vars, spy)
     # One candidate's solution branches, as named lists over allUnk, from two
-    # elimination orders. Carriers first (the hoisted solCarr) is the cheap one and
-    # the one that pays off when several sections are tried against the same
-    # invariants. It fails whenever a carrier solves through a root, because the
-    # radical then sits INSIDE the section equation and no factor of it has a degree
-    # the root finder can use -- the rotation a' = b, b' = -a is the small example.
-    # Sections first fixes exactly that: the section is linear in a gauge coordinate,
-    # substituting it into the invariants leaves a plain power equation. Both orders
-    # are tried PER SECTION (carriers first), so the best-ranked section gets its
-    # fallback before the search walks on -- running one order over every section
-    # first burned minutes of sympy solves before the winning pair was ever tried.
+    # elimination orders. Carriers first (the hoisted solCarr) is cheap but fails
+    # when a carrier solves through a root, which then sits inside the section
+    # equation (e.g. the rotation a' = b, b' = -a). Sections first handles that: the
+    # section is linear in a gauge coordinate and leaves a plain power equation.
+    # Both orders are tried per section, so the best-ranked one gets its fallback
+    # before the search moves on.
     branchesOf <- function(secEqs, order) {
       if (identical(order, "sections") || !length(carrBr))
         return(gaugeSolve(c(secEqs, eqs), allUnk))
@@ -2540,6 +2544,8 @@
     }
     for (st in sets[seq_len(min(length(sets), 40L))])
     for (order in c("carriers", "sections")) {
+      # without carrier branches both orders are the same joint solve
+      if (identical(order, "sections") && !length(carrBr)) next
       secEqs <- lapply(st, function(pr)
         .symRedSympify(pr[1], spy, locals) - .symRedSympify(pr[2], spy, locals))
       sol2 <- branchesOf(secEqs, order)
@@ -2553,6 +2559,10 @@
             okBr <- FALSE; break
           }
           es[[v]] <- spy$cancel(e0$subs(scalPinPairs))
+          # a surplus pin can land on a pole of the entry
+          if (isTRUE(es[[v]]$has(spy$zoo, spy$nan, spy$oo, spy$S$NegativeInfinity))) {
+            okBr <- FALSE; break
+          }
         }
         if (!okBr) next
         # an entry certified NEGATIVE for every positive outer value can never be
@@ -2566,11 +2576,12 @@
         realBr <- setdiff(realTmp, names(sh$shift))
         ent <- character(0); hasRoot <- FALSE; partial <- FALSE
         for (v in allUnk) {
-          # a fractional power is fine once it is certified positive: the branch is
-          # then pinned by the certificate, not left to the reader. The CERTIFIED
-          # form is the one emitted -- it is the readable one and carries no
-          # spurious 0/0 point from a conjugate rationalisation.
-          e <- .symRedPosFormReal(sh$es[[v]], spy, realBr)
+          # a fractional power is fine once certified positive (the certificate pins
+          # the branch); the certified form is emitted. A real carrier needs a
+          # defined entry, not a positive one.
+          e <- if (.symRedIsReal(v) && v %in% carriers)
+            .symRedRealForm(sh$es[[v]], spy, realBr)
+          if (is.null(e)) e <- .symRedPosFormReal(sh$es[[v]], spy, realBr)
           if (is.null(e)) {
             e <- .symRedPosForm(sh$es[[v]], spy)   # positive values of the carrier only
             if (is.null(e)) { okBr <- FALSE; break }
@@ -2586,8 +2597,8 @@
           ent <- setNames(gsub(paste0("\\b", tmpN[l], "\\b"), invN[l], ent),
                           names(ent))
         cand <- out
-        cand$pins <- ent
-        cand$gauge <- gauge0
+        cand$pins <- c(ent, pins[pinned1])
+        cand$gauge <- c(gauge0, pinned1)
         # report the balance in lowest terms: the candidates are pairs of monomials,
         # and a shared factor makes a plain pin read as a relation between two of
         # them (EGFR*k_bind = EGFR^2*k_bind is EGFR = 1)
@@ -2600,6 +2611,7 @@
           bq <- gsub("\\*\\*", "^", as.character(r[[2]]))
           if (identical(a, "1")) paste(bq, "= 1") else paste(a, "=", bq)
         }, character(1))
+        if (length(pinned1)) cand$section <- c(cand$section, paste(pinned1, "=", pins[pinned1]))
         cand$rootNote <- if (hasRoot)
           "a solved entry carries a square root; the branch is the certified positive one"
         cand$meaning <- .symRedShiftedMeaning(b$invariants, invN, tmpN, sh)
@@ -2615,28 +2627,29 @@
       }
     }
   }
+  }
+  pins <- pinsIn
+  eqs <- eqsIn
+  gauge0 <- gaugeAll
 
   # ---- the constant section, certified the same way ---------------------------
-  # Pinning the gauge coordinates to 1 is a section too, and a legitimate one
-  # exactly when the chart it produces is positive throughout: every entry
-  # sign-pure means the pinned point lies in the positive orthant for EVERY
-  # positive outer value, which exhibits an orbit reaching the pin instead of
-  # assuming it. That certificate is the whole difference to the old fallback,
-  # which emitted the pin unchecked and so could hand back a chart valid only on
-  # part of the parameter space. It runs after the balance search because a
-  # balance leaves the reachable set open on both sides, where a pin fixes one
-  # point of it.
+  # Pinning the gauge coordinates to 1 is a section too, legitimate exactly when
+  # every entry is certified positive: then the pinned point lies in the positive
+  # orthant for EVERY positive outer value, so every orbit reaches the pin. It runs
+  # after the balance search, as a balance leaves the reachable set open on both
+  # sides where a pin fixes one point of it.
   if (!is.null(solCarr) && length(solCarr)) {
     gauge <- setdiff(b$support, carriers)
     relax <- length(solCarr) == 1L && .symRedTranslationGauge(b, gauge)
-    # Pin candidates for the gauge coordinates: the constant 1 first, then -- once a
-    # carrier ranges over R -- the sum-of-squares pin 1 + sum_l t_l^2. On an entry
-    # affine in the pin that clears every lower bound L at once, since
-    # 1 + L^2 - L = (L - 1/2)^2 + 3/4 > 0; on a higher-degree entry it pushes the pin
-    # past the Cauchy bound 1 + sum|a_k/a_n| on the real roots, where the entry
-    # carries the sign of its leading coefficient. Either way the pinned point exists
-    # on EVERY orbit -- which a constant pin cannot promise once the carrier is real.
-    pinStr <- list(setNames(rep("1", length(gauge)), gauge))
+    # Pin candidates for the gauge coordinates: the constant 1 first, then, once a
+    # carrier ranges over R, the sum-of-squares pin 1 + sum_l t_l^2. On an entry
+    # affine in the pin that clears every lower bound L, since
+    # 1 + L^2 - L = (L - 1/2)^2 + 3/4 > 0; on a higher-degree entry it passes the
+    # Cauchy root bound 1 + sum|a_k/a_n|, where the entry has its leading sign.
+    # Either way the pinned point exists on EVERY orbit, which a constant pin cannot
+    # promise for a real carrier. A translating real coordinate is pinned to 0.
+    pinStr <- list(setNames(vapply(gauge, function(v)
+      if (relax && .symRedIsReal(v)) "0" else "1", ""), gauge))
     if (length(realTmp) && length(gauge))
       pinStr[[2]] <- setNames(
         rep(paste0("1 + ", paste0(realTmp, "**2", collapse = " + ")), length(gauge)),
@@ -2656,7 +2669,7 @@
       es[[l]] <- e
     }
     # chained solutions: an entry referencing another carrier means that carrier's
-    # INNER value -- substitute its solved expression until every entry references
+    # INNER value; substitute its solved expression until every entry references
     # tmps, pins and outer symbols only
     if (okPin) for (round in seq_along(carriers)) {
       dirty <- FALSE
@@ -2727,20 +2740,18 @@
   }
   if (!is.null(best)) return(best)
 
-  # Nothing certified. Pinning the gauge coordinates anyway would always yield a
-  # chart, but only a LOCAL one: a curved orbit need not pass through the pinned
-  # value at all, and the solved entries then leave the positive orthant over part
-  # of the outer parameter space -- a fit started there walks off the model's
-  # domain with no sign that anything is wrong. A block for which neither section
-  # certified is therefore reported with its invariants and the reason.
+  # Nothing certified. An unchecked pin would give only a LOCAL chart (a curved
+  # orbit need not reach the pinned value, and a fit could silently leave the
+  # model's domain), so the block is reported with its invariants and the reason.
   out$reason <- paste0(
     "no gauge section with entries certified positive on the whole ",
     .symDomainName(), " (tried: monomial balances",
     if (any(grepl("exp(", b$invariants, fixed = TRUE)))
       " (skipped, a transcendental invariant is in the set)"
-    else if (length(gauge0) < 1L || length(gauge0) > 2L)
-      sprintf(" (skipped, %d gauge coordinates and the search covers 1 or 2)",
-              length(gauge0)),
+    else if (length(gauge0) < 1L)
+      " (skipped, no gauge coordinate)"
+    else if (length(gauge0) > 2L)
+      sprintf(" with %d gauge coordinates, the surplus pinned", length(gauge0)),
     ", then the constant pin)")
   out
 }
@@ -2749,9 +2760,8 @@
 # ---- zero compatibility: which coordinate the orbit can drive to 0 ----------------
 
 # Roots of one equation in one unknown, from the FACTORS of its numerator: only
-# degree <= 2 is handed to solve(). A cubic or quartic factor has no closed form the
-# callers can use -- its radicals fail the trafo language's entry class -- and asking
-# solve() for one is where sympy grinds, minutes on an irreducible symbolic cubic.
+# degree <= 2 is handed to solve(). Radicals of a cubic or quartic fail the trafo
+# language's entry class anyway, and solving them symbolically is very slow.
 .symRedRootsIn <- function(e, v, spy) {
   sv <- spy$Symbol(v)
   num <- tryCatch(spy$fraction(spy$together(e))[[1]], error = function(err) NULL)
@@ -2770,8 +2780,8 @@
   out
 }
 
-# The first `m` k-subsets of 1:n, lexicographic. combn() materialises all C(n, k) of
-# them -- 9 GiB for 15 of 30 -- where only the first few are ever tried.
+# The first `m` k-subsets of 1:n, lexicographic, without materialising all C(n, k)
+# as combn() would.
 .symRedFirstSubsets <- function(n, k, m) {
   if (k > n || k < 0L) return(list())
   if (k == 0L) return(list(integer(0)))
@@ -2789,13 +2799,11 @@
 }
 
 # Solve `sys` for `vars` by TRIANGULAR elimination: roots of one equation in one
-# unknown, substitute, recurse. sympy's multivariate solve() is what makes the
-# searches built on this unaffordable -- two equations with symbolic coefficients can
-# grind for many minutes there, and are immediate one unknown at a time. An unknown
-# with no usable root falls through to the next elimination order; a branch is
-# returned only when every unknown was eliminated. Eliminating through a denominator
-# can invent branches that solve a numerator only, so callers substitute an accepted
-# branch back into the original equations.
+# unknown, substitute, recurse; far faster than sympy's multivariate solve() on
+# symbolic coefficients. An unknown with no usable root falls through to the next
+# elimination order; a branch is returned only when every unknown was eliminated.
+# Eliminating through a denominator can invent branches that solve a numerator only,
+# so callers substitute an accepted branch back into the original equations.
 .symRedTriSolve <- function(sys, vars, spy) {
   if (!length(vars)) return(list(setNames(list(), character(0))))
   subsOf <- function(vals) lapply(names(vals), function(v)
@@ -2822,7 +2830,7 @@
 
 # "e > 0" as the comparison it is, positive terms left, negated ones right. Valid R
 # over the model's own names, so the reader decides it with one eval(). NULL when
-# every term shares a sign -- the caller then has the verdict, not a condition.
+# every term shares a sign: the caller then has the verdict, not a condition.
 .symRedIneqStr <- function(e, spy) {
   ex <- tryCatch(spy$expand(e), error = function(err) NULL)
   if (is.null(ex)) return(NULL)
@@ -2875,27 +2883,21 @@
 }
 
 # Which coordinates can the orbit drive to 0 with NOTHING running off to infinity?
-# Several at once is fine -- a set of rates switched off is still a model, and the
-# flat direction ending there means it fits exactly as well. Only divergence
-# disqualifies: a zero bought by sending another coordinate to infinity is no zero of
-# the model.
+# Several at once is fine: a set of rates switched off is still a model that fits
+# equally well. Only divergence disqualifies.
 #
 # The orbit lies in the level set of the invariants, so the face {z_Z = 0} is asked
 # for the point's invariant values: with the face coordinates primed and z_Z' = 0,
 # I_l(z') = I_l(z) clears to num'(z')*den(z) - num(z)*den'(z') = 0, triangular-solved
 # for the rest. A solved entry certified positive is silent, an undecided one IS the
-# condition, and one that cannot be positive names a coordinate that has to vanish
-# along -- which grows Z and asks again, so the sets come out of the solve rather
-# than from enumerating subsets. An equation that survives with no unknown left pins
-# an invariant at a value no face point carries: that is divergence, and it stays
-# blocked however Z grows, since the equation no longer depends on Z. An equation
-# that cancels identically is the 0/0 of a rational invariant on the joint face --
-# vacuous, and dropped.
+# condition, and one that cannot be positive names a coordinate that must vanish
+# along, which grows Z and asks again. An equation left with no unknown pins an
+# invariant at a value no face point carries (divergence, independent of Z); one
+# that cancels identically is the vacuous 0/0 of a rational invariant, and dropped.
 #
-# Two gaps, both reported rather than hidden: the level set may have components
-# beyond the orbit, so a positive verdict exhibits the invariant values and not a
-# path to them; and an incomplete invariant set widens it further, which leaves only
-# "never" exact (column `certain`).
+# The level set may have components beyond the orbit, so a positive verdict exhibits
+# invariant values, not a path; with an incomplete invariant set only "never" is
+# exact (column `certain`).
 .symRedZeroCompat <- function(b, spy, fixed = character(0), verbose = FALSE) {
   supp <- setdiff(b$support, fixed)
   invs <- b$invariants
@@ -2984,7 +2986,7 @@
         s <- .symRedCondition(vals[[f$unk[i]]], spy)
         if (identical(s$sign, 1L)) next
         # cannot be positive here: it is 0 on this face, or it would have to be
-        # negative -- either way its own zero belongs in the set
+        # negative; either way its own zero belongs in the set
         if (!is.na(s$sign)) { dead <- c(dead, f$other[i]); next }
         # a condition on a free coordinate constrains no parameter: it says the
         # face is met for SOME positive value of it
@@ -3045,13 +3047,9 @@
 }
 
 # One line per zero set the orbit reaches, and under which condition. A conditional
-# zero is never announced as reachable: P/pP reaches {k_d = 0} from one side of its
-# steady state and {P = 0} from the other, so neither is a property of the model and
-# the condition is all there is to report. Coordinates no set reaches are not
-# reported at all -- a zero that cannot happen is not news, and a model of thirty
-# parameters would drown the two that can in the twenty-eight that cannot. They stay
-# on `$zeroCompatibility` with verdict "no", as does the point each set lands on
-# (`at`), data to build a reduced model from rather than a line to read past.
+# zero is never announced as reachable, only its condition. Coordinates no set
+# reaches are not printed; they stay on `$zeroCompatibility` with verdict "no", as
+# does the point each set lands on (`at`).
 .symRedCatZeroCompat <- function(x, width) {
   v <- x$zeroCompatibility
   if (is.null(v) || !nrow(v)) return(invisible(NULL))
@@ -3122,6 +3120,71 @@
   }
   obj$info$coordinates <- ren(as.character(coords))
   list(object = obj, theta = th, X = X, base = b, ren = ren)
+}
+
+# The detection result in the chart L = log(v) (expChart) for positive v inside
+# log() or moved by a scaling with symbolic weights; NULL if none or not rational.
+.symRedExpChart <- function(object, coords, positive, sd) {
+  gens <- lapply(object$symmetries, function(d) if (is.null(d$generator)) NULL else
+    as.list(setNames(gsub("^", "**", as.character(d$generator), fixed = TRUE),
+                     names(d$generator))))
+  if (!length(gens) || all(vapply(gens, is.null, logical(1)))) return(NULL)
+  pos <- if (isTRUE(positive)) TRUE else as.list(if (isFALSE(positive)) character(0)
+                                                 else positive)
+  ch <- tryCatch(sd$expChart(gens, as.list(coords), pos), error = function(e) NULL)
+  if (is.null(ch)) return(NULL)
+  v <- vapply(ch$map, function(m) as.character(m$v), "")
+  L <- vapply(ch$map, function(m) as.character(m$L), "")
+  ren <- function(x) { if (is.null(x) || isTRUE(x) || isFALSE(x)) return(x)
+    i <- match(x, v); x[!is.na(i)] <- L[i[!is.na(i)]]; x }
+  obj <- object
+  for (i in seq_along(obj$symmetries)) {
+    g <- ch$gens[[i]]
+    d <- obj$symmetries[[i]]
+    if (!is.null(g)) {
+      g <- unlist(g)
+      d$generator <- as.eqnvec(setNames(gsub("**", "^", g, fixed = TRUE), names(g)))
+      d$completeGenerator <- NULL
+    }
+    if (any(d$support %in% v)) { d$weights <- NULL; d$type <- "general" }
+    d$support <- .symSort(ren(d$support))
+    obj$symmetries[[i]] <- d
+  }
+  obj$info$coordinates <- ren(as.character(coords))
+  list(object = obj, v = v, L = L, ren = ren)
+}
+
+# A reduction in the chart L = log(v) reported in v: an entry for L gives
+# v = exp(entry), every other L becomes log(v).
+.symRedExpBack <- function(res, ec, sd) {
+  back <- function(x, solveFor = NULL) vapply(as.character(x), function(e)
+    gsub("**", "^", as.character(sd$expChartBack(gsub("^", "**", e, fixed = TRUE),
+                                                 ec$v, ec$L, solveFor)), fixed = TRUE),
+    "", USE.NAMES = FALSE)
+  unren <- function(x) { if (is.null(x)) return(x); i <- match(x, ec$L)
+    x[!is.na(i)] <- ec$v[i[!is.na(i)]]; x }
+  entries <- function(x) {
+    if (is.null(x) || !length(x)) return(x)
+    nm <- names(x)
+    out <- vapply(seq_along(x), function(i)
+      if (nm[i] %in% ec$L) back(x[[i]], nm[i]) else back(x[[i]]), "")
+    setNames(out, unren(nm))
+  }
+  res$coordinates <- unren(res$coordinates)
+  res$fixed <- unren(res$fixed)
+  if (!is.null(res$trafo))
+    res$trafo <- as.eqnvec(entries(setNames(as.character(res$trafo), names(res$trafo))))
+  res$blocks <- lapply(res$blocks, function(b) {
+    b$support <- unren(b$support)
+    b$transversal <- unren(b$transversal)
+    if (!is.null(b$pins)) b$pins <- entries(b$pins)
+    if (length(b$invariants)) b$invariants <- back(b$invariants)
+    if (length(b$survivorMeaning))
+      b$survivorMeaning <- setNames(back(b$survivorMeaning),
+                                    unren(names(b$survivorMeaning)))
+    b
+  })
+  res
 }
 
 # A reduction computed in the chart X = b^theta, reported in theta: an entry for X is
@@ -3205,8 +3268,8 @@
 
 #' @export
 # print() is deliberately terse, as print.symmetrydetection() is: the verdict, the
-# reparametrisation and what the outer parameters now mean -- nothing a reader has
-# to skip to reach the trafo. summary() adds the block report on top.
+# reparametrisation and what the outer parameters mean. summary() adds the block
+# report on top.
 print.symmetryreduction <- function(x, width = getOption("width"), ...) {
   if (!length(x$removed) + length(x$remaining)) {
     cat("Nothing to reduce.\n"); return(invisible(x))
@@ -3238,10 +3301,9 @@ summary.symmetryreduction <- function(object, verbose = FALSE,
 }
 
 # the reparametrisation itself: the non-identity entries, and the invariant each
-# fresh parameter carries -- `q_1 = k_p + k_d` reads as "the invariant k_p + k_d is
-# the outer parameter q_1". A scaling survivor keeps its own name and is not listed:
-# its monomial follows from the gauge printed above it, and the mapping stays on the
-# object as `survivorMeaning`. Shared by print() and summary(), so neither repeats it.
+# fresh parameter carries (`q_1 = k_p + k_d`: the invariant k_p + k_d is the outer
+# parameter q_1). A scaling survivor keeps its own name and is not listed; its
+# mapping stays on the object as `survivorMeaning`. Shared by print() and summary().
 .symRedCatChart <- function(x, width) {
   nonid <- x$trafo[x$trafo != names(x$trafo)]
   if (length(nonid)) {
@@ -3262,16 +3324,14 @@ summary.symmetryreduction <- function(object, verbose = FALSE,
                     paste0(unname(fresh), ifelse(real, "        [real-valued]", "")),
                     width)
     if (any(real))
-      cat("  [real-valued] takes both signs on the", .symDomainName(), "-- fit it",
-          "linearly, not on a log scale\n")
+      cat("  [real-valued] takes both signs on the ", .symDomainName(),
+          "; fit it linearly, not on a log scale\n", sep = "")
   }
 }
 
 # one line per block: what it is, which stage answered, how it was gauged. A block
-# that did NOT reduce adds its invariants and the reason -- how many invariants
-# were found under which degree caps, the only thing there is to act on. The
-# per-stage certificates stay on the object (`$blocks[[i]]$certificates`); printed,
-# they bury the result under its own provenance.
+# that did NOT reduce adds its invariants and the reason. The per-stage
+# certificates stay on the object (`$blocks[[i]]$certificates`), unprinted.
 .symRedBlockLines <- function(b, fam, verbose, width) {
   kind <- if (is.null(b$kind)) b$type else b$kind
   if (identical(kind, "curved")) kind <- "general"   # the detection report's word
@@ -3306,9 +3366,8 @@ summary.symmetryreduction <- function(object, verbose = FALSE,
     cat(ind, "module reduction  ",
         .symRedWrap(b$moduleCombos, paste0(ind, "                  "), width,
                     sep = ";  "), "\n", sep = "")
-  # the invariants of a REDUCED block are the "outer parameters" list above, named
-  # by their carrier -- printing them again says nothing new. A block that did not
-  # reduce has no carriers, so there they are the result.
+  # a REDUCED block's invariants are already listed by carrier above; a block that
+  # did not reduce has no carriers, so there they are the result
   if (length(b$invariants) && full)
     cat(ind, "invariants  ",
         .symRedWrap(b$invariants, paste0(ind, "            "), width), "\n",
@@ -3333,7 +3392,7 @@ summary.symmetryreduction <- function(object, verbose = FALSE,
 }
 
 # the report: the chart print() gives, plus one block per coupled set of
-# directions -- kind, status, stage, how it was gauged, and for a block that did
+# directions (kind, status, stage, how it was gauged) and, for a block that did
 # not reduce its invariants and the reason. verbose = TRUE adds the admissible
 # gauges, the invariants of the reduced blocks and the search caps.
 .symRedReport <- function(x, verbose = FALSE, width = getOption("width")) {
@@ -3388,8 +3447,9 @@ summary.symmetryreduction <- function(object, verbose = FALSE,
 #'   needs to be real where the fixed coordinates of the block move by translation,
 #'   as a state inside `exp()` does. An invariant that takes both signs gives a
 #'   real-valued parameter, marked `[real-valued]` and to be estimated on a linear
-#'   scale; the gauge is then fixed at `1 + sum_l q_l^2`. A chart certified only for
-#'   positive values of such a parameter has `coverage = "partial"`.
+#'   scale; the gauge is then fixed at \eqn{1 + \sum_l q_l^2}{1 + sum_l q_l^2}. A
+#'   chart certified only for positive values of such a parameter has
+#'   `coverage = "partial"`.
 #'
 #'   With `reportZeroCompatibility = TRUE` each block reports which coordinates the
 #'   symmetry can drive to 0 without another coordinate diverging. Where this
@@ -3408,9 +3468,10 @@ summary.symmetryreduction <- function(object, verbose = FALSE,
 #' @param dPoly Degree bound of the polynomial invariant search and numerator
 #'   degree bound of the rational search with a monomial denominator.
 #' @param dDarboux Degree bound of the Darboux polynomials.
-#' @param dExp Numerator degree bound of the exponential factors `exp(g/h)`; `0`
-#'   skips this stage. Its entries may contain `exp()` and `log()`, which [P()]
-#'   accepts and `symmetryDetection(trafo = )` accepts without `log()`.
+#' @param dExp Numerator degree bound of the exponential factors
+#'   \eqn{\exp(g/h)}{exp(g/h)}; `0` skips this stage. Its entries may contain
+#'   `exp()` and `log()`, which [P()] accepts and `symmetryDetection(trafo = )`
+#'   accepts without `log()`.
 #' @param separable Logical (default `TRUE`). Solve blocks whose components depend
 #'   only on their own coordinate by quadratures.
 #' @param verbose Logical. Report the progress per block and stage.
@@ -3463,7 +3524,7 @@ symmetryReduction <- function(object, fixed = NULL, positive = TRUE, dPoly = 3L,
   unknown <- setdiff(fixed, coords)
   if (length(unknown))
     warning("symmetryReduction(): no effect: ", paste(unknown, collapse = ", "),
-            " -- not a coordinate of the analysis.", call. = FALSE)
+            ": not a coordinate of the analysis.", call. = FALSE)
 
   # the domain the sign certificates are proved over, as a set of coordinate names
   # or NULL for all of them. Restored on exit so a failing call leaves nothing set.
@@ -3490,14 +3551,31 @@ symmetryReduction <- function(object, fixed = NULL, positive = TRUE, dPoly = 3L,
   # chart X = b^theta, where they are rational; the result is mapped back to theta.
   lc <- .symRedLogChart(object, coords, sd)
   if (!is.null(lc)) {
-    pos2 <- if (is.character(positive)) c(positive, lc$X[lc$theta %in% positive])
-            else positive
+    # X = b^theta is positive for every real theta
+    pos2 <- if (is.character(positive)) c(positive, lc$X)
+            else if (isFALSE(positive)) lc$X else positive
     res <- symmetryReduction(lc$object, fixed = lc$ren(fixed), positive = pos2,
                              dPoly = dPoly, dDarboux = dDarboux, dExp = dExp,
                              separable = separable,
                              reportZeroCompatibility = reportZeroCompatibility,
                              verbose = verbose)
     res <- .symRedLogBack(res, lc, sd)
+    res$call <- .symCall
+    return(res)
+  }
+
+  # positive v inside log() or under symbolic weights: reduced in L = log(v)
+  ec <- .symRedExpChart(object, coords, positive, sd)
+  if (!is.null(ec)) {
+    pos2 <- if (isTRUE(positive)) setdiff(ec$object$info$coordinates, ec$L)
+            else setdiff(ec$ren(positive), ec$L)
+    res <- symmetryReduction(ec$object, fixed = ec$ren(fixed),
+                             positive = if (length(pos2)) pos2 else FALSE,
+                             dPoly = dPoly, dDarboux = dDarboux, dExp = dExp,
+                             separable = separable,
+                             reportZeroCompatibility = reportZeroCompatibility,
+                             verbose = verbose)
+    res <- .symRedExpBack(res, ec, sd)
     res$call <- .symCall
     return(res)
   }
@@ -3561,6 +3639,13 @@ symmetryReduction <- function(object, fixed = NULL, positive = TRUE, dPoly = 3L,
     if (!is.null(b$target) && length(b$invariants) < b$target) next  # partial set:
     sol <- .symRedSolveInvariants(b, scalPins, spy, coords,     # gauge pin would be lossy
                                   invStart)
+    # a carrier outside the declared domain needs no positivity certificate
+    if (!sol$solved && !is.null(.symPositive()) &&
+        length(setdiff(b$support, .symPositive()))) {
+      solR <- .symRedSolveInvariants(b, scalPins, spy, coords, invStart,
+                                     preferReal = TRUE)
+      if (solR$solved) sol <- solR
+    }
     if (sol$solved) {
       invStart <- invStart + length(sol$invNames)
       blocks[[bi]]$pins <- sol$pins
@@ -3575,7 +3660,7 @@ symmetryReduction <- function(object, fixed = NULL, positive = TRUE, dPoly = 3L,
         else paste0("gauge pin ", paste(sol$gauge, collapse = ", "), " = ",
                     paste(gaugeVal, collapse = ", ")),
         if (identical(sol$coverage, "partial"))
-          paste0("entries certified positive for POSITIVE carrier values only -- a ",
+          paste0("entries certified positive for positive carrier values only; a ",
                  "carrier that takes both signs leaves part of the ",
                  .symDomainName(), " outside the chart")
         else "entries certified positive for every admissible outer value",
@@ -3601,11 +3686,11 @@ symmetryReduction <- function(object, fixed = NULL, positive = TRUE, dPoly = 3L,
       blocks[[bi]]$reason <- if (!is.null(sol$reason)) sol$reason else b$reason
       if (isTRUE(verbose))
         message("general block {", paste(b$labels, collapse = ", "), "}: ",
-                blocks[[bi]]$reason, " -- reported as invariantOnly")
+                blocks[[bi]]$reason, "; reported as invariantOnly")
     }
   }
 
-  # which coordinate the orbit can drive to zero -- read off the invariants, so it
+  # which coordinate the orbit can drive to zero, read off the invariants; it
   # runs after the solve and before the working fields are dropped
   if (isTRUE(reportZeroCompatibility)) for (bi in seq_along(blocks))
     blocks[[bi]]$zeroCompatibility <- tryCatch(

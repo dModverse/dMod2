@@ -33,9 +33,10 @@ degree bound of the rational search with a monomial denominator.}
 
 \item{dDarboux}{Degree bound of the Darboux polynomials.}
 
-\item{dExp}{Numerator degree bound of the exponential factors \code{exp(g/h)}; \code{0}
-skips this stage. Its entries may contain \code{exp()} and \code{log()}, which \code{\link[=P]{P()}}
-accepts and \code{symmetryDetection(trafo = )} accepts without \code{log()}.}
+\item{dExp}{Numerator degree bound of the exponential factors
+\eqn{\exp(g/h)}{exp(g/h)}; \code{0} skips this stage. Its entries may contain
+\code{exp()} and \code{log()}, which \code{\link[=P]{P()}} accepts and \code{symmetryDetection(trafo = )}
+accepts without \code{log()}.}
 
 \item{separable}{Logical (default \code{TRUE}). Solve blocks whose components depend
 only on their own coordinate by quadratures.}
@@ -90,8 +91,9 @@ the new parameters. An entry of a coordinate that is not declared positive only
 needs to be real where the fixed coordinates of the block move by translation,
 as a state inside \code{exp()} does. An invariant that takes both signs gives a
 real-valued parameter, marked \verb{[real-valued]} and to be estimated on a linear
-scale; the gauge is then fixed at \verb{1 + sum_l q_l^2}. A chart certified only for
-positive values of such a parameter has \code{coverage = "partial"}.
+scale; the gauge is then fixed at \eqn{1 + \sum_l q_l^2}{1 + sum_l q_l^2}. A
+chart certified only for positive values of such a parameter has
+\code{coverage = "partial"}.
 
 With \code{reportZeroCompatibility = TRUE} each block reports which coordinates the
 symmetry can drive to 0 without another coordinate diverging. Where this

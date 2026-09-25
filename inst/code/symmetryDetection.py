@@ -497,10 +497,9 @@ def _obs_rows(obsExpr, infisSym, allVariables, rs):
 ###########################################################################
 
 def _rref_mod_p(A, p):
-    """Vectorized int64 Gauss-Jordan over GF(p). Returns (R, pivots). Only the rows
-    that actually carry the pivot column are eliminated (the scaling matrix is sparse),
-    via a rank-1 update over just those rows A[nz] -= outer(col[nz], pivotRow) mod p
-    (products < p^2 < 2^62 fit int64) -- vectorized, but without touching zero rows."""
+    """Vectorized int64 Gauss-Jordan over GF(p); returns (R, pivots). Eliminates
+    only rows nonzero in the pivot column (the scaling matrix is sparse) by a rank-1
+    update; products < p^2 < 2^62 fit int64."""
     A = (np.asarray(A, dtype=np.int64) % p)
     nrows, ncols = A.shape
     pivots = []
@@ -544,13 +543,10 @@ def _rational_reconstruct(a, m):
 
 
 def symRatReconBig(residues, primes):
-    """Arbitrary-precision per-row CRT + rational reconstruction, without the u128
-    cap of the C++ symRatRecon (which limits the product of ~2**31 primes to 4). Each
-    row of `residues` is one coefficient's residues across `primes`; returns
-    {'num': [...], 'den': [...]} as decimal strings, with den '0' when a coefficient
-    does not rationally reconstruct at the given prime product. Used by the
-    gauge-robust reconstruction path, whose log-carrying coefficients can have a
-    height beyond the 4-prime (~4.6e18) bound."""
+    """Arbitrary-precision per-row CRT + rational reconstruction, free of the u128
+    cap (4 primes) of the C++ symRatRecon. Each row of `residues` is one coefficient
+    across `primes`; returns {'num', 'den'} as decimal strings, den '0' where no lift
+    exists. For log-carrying coefficients whose height exceeds the 4-prime bound."""
     from sympy.ntheory.modular import crt
     mods = [int(p) for p in primes]
     M = 1
@@ -571,13 +567,11 @@ def symRatReconBig(residues, primes):
 
 
 def _crt_nullspace(reduceModP, ncols):
-    """Multi-prime GF(p) + CRT + rational-reconstruction nullspace core, shared by
-    the two exact nullspace routines below. `reduceModP(p)` yields the matrix rows
-    reduced mod p (anything _rref_mod_p accepts). Primes whose pivot set differs
-    from the first one's are skipped -- they saw an unlucky rank drop -- and the
-    residues of the first four agreeing primes are lifted to Q. Returns the free-
-    column basis as sympy column vectors (NOT validated: each caller validates in
-    its own arithmetic), or None if no prime agreed or a residue has no lift."""
+    """Multi-prime GF(p) + CRT + rational-reconstruction nullspace, shared by the
+    two exact nullspace routines below. `reduceModP(p)` yields the matrix mod p.
+    Primes whose pivot set differs from the first (unlucky rank drop) are skipped;
+    the first four agreeing ones are lifted to Q. Returns the unvalidated basis as
+    sympy column vectors (callers validate), or None if no residue lifts."""
     ref_pivots = None
     free = None
     residues = {}
@@ -644,10 +638,9 @@ def _modular_nullspace(M):
 
 
 def _modular_nullspace_int(rowsInt, ncols):
-    """Exact nullspace of an INTEGER matrix (list of int rows), staying in numpy int
-    with no per-entry sympy (the analogue of _modular_nullspace for the scaling
-    determining matrix). Returns a list of sympy column vectors, or None if
-    reconstruction/validation fails."""
+    """Integer-matrix analogue of _modular_nullspace (scaling determining matrix),
+    in numpy int with no per-entry sympy. Returns sympy column vectors, or None if
+    reconstruction or validation fails."""
     A0 = np.asarray(rowsInt, dtype=np.int64)
     basis = _crt_nullspace(lambda p: A0 % p, ncols)
     if basis is None:
@@ -689,10 +682,8 @@ def exactIntKernel(rows, ncols):
 
 
 def exactNullspace(rows, ncols, integer=False):
-    """Return basis vectors (list of sympy column vectors). With integer=True the rows
-    are known to be integer (the scaling determining matrix): the nullspace is computed
-    in numpy int over GF(p) + CRT with no per-entry sympy, falling back to the sympy
-    path below if that does not reconstruct."""
+    """Nullspace basis as sympy column vectors. integer=True (integer rows) tries
+    the numpy-int GF(p) + CRT path first, falling back to sympy."""
     if not rows:
         return [spy.Matrix([1 if j == c else 0 for j in range(ncols)])
                 for c in range(ncols)]
@@ -847,11 +838,9 @@ def buildTransformation(infis, allVariables):
 
 
 def _canon_int_vector(prim, gens):
-    """Scale a polynomial vector by a rational constant to a canonical integer-
-    primitive form: clear coefficient denominators, divide by the integer content,
-    then fix the sign so the leading coefficient of the first nonzero component is
-    positive. Deterministic (given a fixed `gens` order), so two gauge-equivalent
-    representatives of the same direction land on the same canonical vector."""
+    """Scale a polynomial vector by a rational constant to canonical integer-primitive
+    form (clear denominators, divide by content, first nonzero LC positive), so
+    gauge-equivalent representatives coincide for a fixed `gens` order."""
     coeffs = []
     for e in prim:
         if e == 0:
@@ -884,27 +873,19 @@ def classifyDirection(vector):
     """Classify one non-identifiability direction and return its canonical
     poly-primitive differential generator.
 
-    `vector` is a dict {coordinate: component_str} giving the LITERAL components
-    eta_i of the generator  X = sum_i eta_i * d/dz_i  (a scaling is passed as
-    {z_i: "w_i*z_i"}). A generator is only defined up to multiplication by a
-    nonzero function h(z); that gauge is fixed by clearing the common denominator
-    and dividing by the polynomial content of the numerators, then normalising to a
-    canonical integer-primitive representative. The class is read off the result.
+    `vector` is {coordinate: component_str}, the components eta_i of
+    X = sum_i eta_i d/dz_i (a scaling as {z_i: "w_i*z_i"}). X is defined up to a
+    factor h(z); the gauge is fixed by clearing the common denominator, dividing by
+    the polynomial content and normalising to integer-primitive form.
 
-    There are two classes, because there are two ways to remove a direction:
+      scaling : every eta_i = w_i * z_i. The orbit is a ray, so any one coordinate
+                can be fixed at any value.
+      general : anything else. The orbit is curved, so fixing a coordinate is not
+                free; the direction is removed by reparametrising onto invariants.
 
-      scaling : every eta_i = w_i * z_i (own coordinate, degree 1). The orbit is a
-                ray through the positive orthant, so every value of a coordinate is
-                reachable and the direction is a gauge freedom: hold one coordinate
-                fixed, at any value.
-      general : anything else. The orbit is curved and reaches only part of the
-                coordinate space, so fixing a coordinate is not free -- the
-                direction is removed by reparametrising onto its invariants.
-
-    Returns {'type', 'weights', 'components', 'degree'}: `weights` is the integer
-    scaling-weight map (None unless scaling), `components` the canonical generator
-    {z_i: str(eta_i)}, and `degree` its total degree (-1 when not polynomial, which
-    is what the fallback returns)."""
+    Returns {'type', 'weights', 'components', 'degree'}: integer scaling weights
+    (None unless scaling), the canonical generator {z_i: str(eta_i)} and its total
+    degree (-1 when not polynomial)."""
     items = [(str(k), str(v)) for k, v in vector.items()]
     fallback = {'type': 'general', 'weights': None,
                 'components': {k: v for k, v in items}, 'degree': -1}
@@ -972,13 +953,10 @@ def classifyDirection(vector):
 
 
 def certifyInSpan(vector, generators):
-    """Certificate for an affine/polynomial non-identifiability direction: is the
-    generator `vector` {coord: xi_i} a nonzero CONSTANT linear combination of the
-    Lie-symmetry `generators` (each {coord: xi_i})? If so, the direction is an exact
-    polynomial Lie point symmetry (the strict determining-equation notion), not only
-    an observability non-identifiability. Decided exactly by evaluating at several
-    integer points and testing that the direction lies in the column span of the
-    generator matrix over the constants. Returns {'certified': bool}."""
+    """Is the direction `vector` {coord: xi_i} a nonzero constant linear combination
+    of the Lie-symmetry `generators`, i.e. an exact polynomial Lie point symmetry?
+    Decided exactly by a span test on evaluations at several integer points.
+    Returns {'certified': bool}."""
     items = [(str(k), str(v)) for k, v in vector.items()]
     G = [{str(k): str(v) for k, v in g.items()} for g in generators]
     if not G or not items:
@@ -1063,9 +1041,8 @@ def _verify_generator(infis, allVariables, diffEquations, obsExprs):
                 s += infis[l] * spy.diff(o, allVariables[l])
         if not _is_zero(s):
             return False
-    # flow conditions [f, X] = 0 for each dynamic field. The field has a
-    # component only for the dynamic states (index < len(fields)); parameter
-    # and input directions evolve trivially (component 0).
+    # flow conditions [f, X] = 0; f has components only for dynamic states
+    # (index < len(fields)), zero for parameters and inputs
     fields = diffEquations
     mf = len(fields)
     for k in range(mf):
@@ -1222,10 +1199,9 @@ def _is_rational_expr(e):
 
 
 def _emit_tape_shared(fexpr, gexpr, slotOf, base):
-    """Emit a straight-line tape over an explicit slot map covering both
-    states and leaves; instruction i writes slot base + i. Used by the
-    multi-condition compiler, where states occupy their own slots (seeded from
-    an initial condition) rather than being leaves."""
+    """Emit a straight-line tape over an explicit slot map of states and leaves;
+    instruction i writes slot base + i. States get their own slots, seeded from an
+    initial condition (multi-condition compiler)."""
     op, a, b, cnum, cden = [], [], [], [], []
     memo = {}
 
@@ -1403,10 +1379,8 @@ _invModCache = {}
 
 
 def _inv_mod(a, p):
-    """Modular inverse of a mod p, memoised per (a, p). The coefficient denominators
-    of the compiled term lists are a small fixed set drawn from few primes, so this
-    replaces a per-term Fermat exponentiation with a dict hit. inv(0)=0, inv(1)=1
-    (Fermat convention: pow(0,p-2,p)=0)."""
+    """Modular inverse of a mod p, memoised per (a, p): term-list denominators are
+    a small fixed set. inv(0)=0 as with Fermat."""
     a %= p
     if a <= 1:
         return a
@@ -1441,9 +1415,8 @@ def _eval_terms(numden, ptvals, p):
 
 
 def _eval_terms_guarded(numden, ptvals, p):
-    """Residue num/den mod p, or None when the denominator vanishes mod p. The
-    explicit denominator check is required because a Fermat inverse of 0 returns
-    0, which would silently corrupt the value."""
+    """Residue num/den mod p, or None when the denominator vanishes mod p (a Fermat
+    inverse of 0 would silently return 0)."""
     dv = _eval_poly_terms(numden[1], ptvals, p)
     if dv % p == 0:
         return None
@@ -1486,12 +1459,9 @@ _evalBatchCache = {}
 def evalRationalModBatch(exprs, names, points, q):
     """Values of the rational expressions `exprs` (strings) at each integer point
     (rows of `points`, columns aligned with `names`), reduced modulo the prime q.
-    One shared symbol table and one parse + lambdify per expression, memoised on
-    (exprs, names) across calls -- the sampling loops re-evaluate the same
-    expression set at hundreds of points, and compilation dominates evaluation.
-    Evaluation runs over exact Fraction arithmetic (a polynomial stays in
-    arbitrary-precision int). Returns one list per point; -1 marks a denominator
-    vanishing mod q or a failed evaluation (mod-q values are never negative)."""
+    The lambdified expressions are memoised on (exprs, names), since compiling
+    dominates evaluation in the sampling loops; evaluation is exact (Fraction).
+    Returns one list per point; -1 marks a vanishing denominator or a failure."""
     q = int(q)
     exprs = [str(e) for e in _as_list(exprs)]
     names = [str(n) for n in _as_list(names)]
@@ -1533,10 +1503,9 @@ def evalRationalModBatch(exprs, names, points, q):
 
 
 def evalRationalBatch(exprs, names, points):
-    """Exact rational values of `exprs` (strings) at each integer point, as
-    decimal 'num'/'den' strings (den '0' marks a failed evaluation). Same
-    compilation cache as evalRationalModBatch; used for the cofactor-matrix
-    sampling where values must stay exact rationals, not residues."""
+    """Exact rational values of `exprs` at each integer point as decimal 'num'/'den'
+    strings (den '0' marks a failure), for cofactor-matrix sampling. Shares the
+    cache of evalRationalModBatch."""
     exprs = [str(e) for e in _as_list(exprs)]
     names = [str(n) for n in _as_list(names)]
     points = _as_list(points)
@@ -1730,12 +1699,10 @@ _LINSOLVE_OPS_CAP = 2000  # bail to the numeric solver past this elimination siz
 
 
 def _linear_solution(polys, solveStates):
-    """Generic linear-elimination solution of polys = 0 for `solveStates`, each a
-    rational function of the parameters. Returns {state: expr} or None when the
-    system is not generically linear (a coupled residual remains, or an
-    intermediate expression exceeds `_LINSOLVE_OPS_CAP` and is left to the numeric
-    solver). The order is fixed generically; a point where a pivot denominator
-    vanishes mod p is caught at evaluation and routed to the symbolic solve."""
+    """Solve polys = 0 for `solveStates` by generic linear elimination, each state a
+    rational function of the parameters. Returns {state: expr}, or None when a
+    coupled residual remains or an expression exceeds `_LINSOLVE_OPS_CAP`. A point
+    where a pivot denominator vanishes mod p is caught at evaluation."""
     remSet = set(solveStates)
     remP = [spy.sympify(pl) for pl in polys]
     elim = []
@@ -1945,16 +1912,12 @@ def _solve_states_modular(polysN, solveStates, p):
 
 
 # ---- fast numeric state solve (dict polynomials mod p, no sympy in the hot loop) ----
-# The symbolic _solve_states_modular above spends its time in sympy object overhead
-# (Poly/subs/_reduce_modp) re-deriving the SAME linear elimination per point. Here the
-# per-point numeric polynomials are carried as dicts {state-exponent-tuple: coeff mod p}
-# and the linear elimination is plain modular arithmetic; only the small coupled residual
-# is handed to sympy (_coupled_groebner). Byte-identical to _solve_states_modular (same
-# pivots, same reduced residual, same interior root), cross-checked via _SS_FORCE_SYMPY.
+# Same elimination as _solve_states_modular (same pivots, residual and root;
+# cross-checked via _SS_FORCE_SYMPY) on dicts {state-exponent-tuple: coeff mod p},
+# avoiding sympy per point; only the coupled residual goes to _coupled_groebner.
 
 def _eval_bipoly_dict(bip, paramvals, p):
-    """Numeric state polynomial as {state-exponent-tuple: coeff mod p} from a _bipoly
-    at numeric parameter values -- the dict analogue of _eval_bipoly (no sympy Add)."""
+    """Dict analogue of _eval_bipoly: {state-exponent-tuple: coeff mod p}."""
     d = {}
     for sm, ct in bip:
         c = _eval_terms(ct, paramvals, p)
@@ -2115,15 +2078,12 @@ def _ss_compile(model, stateNames, paramNames, forcings, heldStateNames=()):
     lists and the forcings set. Returns the cached tuple (paramSyms, solveStates,
     polys, Jx, Jt, gens, JxTerms, JtTerms, polyBi, genericLinear, linTerms, pointPlan).
 
-    `heldStateNames` are conserved-moiety pivot states whose resting value is a FREE
-    coordinate (the held-variable parameterisation, reduceCQ = FALSE): the f = 0 system
-    is rank-deficient by one equation per moiety, so those states are fixed to their
-    supplied residue (they act as parameters for the point solve) and their own -- the
-    dependent -- equations are dropped, leaving a square reduced system in the remaining
-    states. `solveStates` and the full Jx/Jt (the df tangency snapshot) stay over ALL
-    non-forcing states, so the resting Jacobian keeps its (rank-deficient) columns and
-    the joint determining system leaves the pivot directions free in state coordinates.
-    `pointPlan` is None when nothing is held (the ordinary full solve)."""
+    `heldStateNames` are conserved-moiety pivot states with a free resting value
+    (reduceCQ = FALSE). f = 0 is rank-deficient by one equation per moiety, so these
+    states act as parameters of the point solve and their dependent equations are
+    dropped, leaving a square system (`pointPlan`, None when nothing is held).
+    `solveStates` and Jx/Jt still cover all non-forcing states, so the joint
+    determining system leaves the pivot directions free."""
     key = (tuple(model), tuple(stateNames), tuple(paramNames), tuple(sorted(forcings)),
            tuple(sorted(heldStateNames)))
     cached = _ssModularCache.get(key)
@@ -2154,11 +2114,8 @@ def _ss_compile(model, stateNames, paramNames, forcings, heldStateNames=()):
                for th in paramSyms}
     polyBi = [_bipoly(pl, list(solveStates), list(paramSyms)) for pl in polys]
     genericLinear, linTerms = _compile_linear_plan(polys, solveStates, paramSyms)
-    # held-variable reduced point solve: drop the held (pivot) states' own equations
-    # and treat those states as extra parameters, giving a square system in the
-    # remaining states. The held states are a valid conserved-moiety pivot set (chosen
-    # in R via .cq_pivot_decomposition), so their equations are exactly the dependent
-    # rows of the rank-deficient f = 0 and dropping them leaves an independent system.
+    # held states are a moiety pivot set (R: .cq_pivot_decomposition), so their own
+    # equations are exactly the dependent rows of f = 0
     heldSet = set(heldStateNames)
     pointPlan = None
     if heldSet:
@@ -2205,9 +2162,7 @@ def solveSteadyStateModular(model, stateNames, paramNames, paramVals, prime,
     paramvals = [int(paramVals.get(str(th), 0)) % p for th in paramSyms]
 
     if pointPlan is not None:
-        # held-variable path: the pivot states are fixed to their supplied residue and
-        # act as parameters; solve the reduced (square) system for the rest, then
-        # assemble a value for every solveState (held -> residue, others -> solved).
+        # held pivot states act as parameters; solve the square reduced system
         (pointStates, pointParams, heldSyms, pointPolyBi,
          pointGenericLinear, pointLinTerms) = pointPlan
         ppvals = [(heldStates[str(th)] if str(th) in heldStates
@@ -2264,21 +2219,12 @@ def solveSteadyStateModular(model, stateNames, paramNames, paramVals, prime,
     Jxeff = [[_eval_terms(JxTerms[i][j], ptvals, p) for j in range(nS)]
              for i in range(nS)]
 
-    # raw resting Jacobian rows for the implicit/joint determining system: the
-    # constraint df_rest . xi = 0 (tangency to the resting manifold) in the
-    # UNELIMINATED (x, theta) coordinates. Snapshot BEFORE the recast folding below
-    # mutates Jxeff/JtBy. Row i is d f_rest[i] / d(solveStates, params). State
-    # columns are Jxeff, parameter columns are JtBy (which already carry the recast
-    # gen coordinate E as a param). Returned so R can stack these rows and run the
-    # scaling peel over the enlarged coordinate set (dfStateCols / dfParamCols name
-    # the columns).
+    # resting Jacobian df_rest for the joint determining system (tangency
+    # df_rest . xi = 0 in uneliminated (x, theta) coordinates), snapshot before the
+    # recast folding below mutates Jxeff/JtBy; R stacks these rows
     if pointPlan is not None:
-        # held-variable reduced tangency: keep only the non-pivot equations (rows) and
-        # the non-pivot state columns; the pivot state columns move to df PARAMETER
-        # columns (labelled by the pivot state name), because the pivot's resting value
-        # is a free parameter. This is exactly the tangency of the reduced steady-state
-        # system in (non-pivot states, params, pivot-values) coordinates, and folds the
-        # moiety freedom onto the pivot's initial-value parameter downstream in R.
+        # reduced tangency: non-pivot rows and state columns; pivot state columns
+        # become parameter columns, as the pivot's resting value is free
         heldIdx = [i for i, s in enumerate(solveStates) if str(s) in heldStates]
         keepIdx = [i for i, s in enumerate(solveStates) if str(s) not in heldStates]
         dfJx = [[Jxeff[i][j] for j in keepIdx] for i in keepIdx]
@@ -2295,21 +2241,16 @@ def solveSteadyStateModular(model, stateNames, paramNames, paramVals, prime,
         dfParamCols = [str(th) for th in paramSyms]
 
     if jointMode:
-        # joint/implicit mode uses only the pre-event resting value (valBy) and the
-        # raw constraint Jacobian df_rest; the IFT parameter-duals, the recast dual
-        # chain and the t0-event composition below are all for the eliminated icSeed
-        # and are unused here. Returning now also skips the (occasionally singular)
-        # dual solve, so a point that seeds fine is not rejected for a dual failure.
+        # joint mode needs only valBy and df_rest; returning here also skips the
+        # (occasionally singular) dual solve, which would reject a good point
         return {'ok': True, 'stateNames': list(stateNames), 'valBy': dict(valBy),
                 'dfJx': dfJx, 'dfJt': dfJt, 'dfStateCols': dfStateCols,
                 'dfParamCols': dfParamCols}
 
-    # power/Hill recast. A normal entry holds E = base^exp generic and folds its
-    # chain rule into the base and exponent columns, so the IFT duals of the solved
-    # base pick up the exponent. An inverted entry has E solved (the balance is
-    # linear in E) and holds base and L = log(base) generic; no folding is done and
-    # their duals come from dE by the inverse chain rule. base0, E0, L0 are the
-    # resting values; the generic partner of each entry is an independent residue.
+    # power/Hill recast. A normal entry holds E = base^exp generic and folds its chain
+    # rule into the base and exponent columns. An inverted entry solves for E (linear
+    # in the balance), holds base and L = log(base) generic, and takes their duals
+    # from dE by the inverse chain rule. base0, E0, L0 are resting values.
     recastOut = []
     if recast:
         lVals = lVals or {}
@@ -2422,26 +2363,19 @@ def solveSteadyStateModular(model, stateNames, paramNames, paramVals, prime,
 
 
 # ---- forward steady-state solve (choose the resting states, solve for rates) ----------
-# The backward solve above finds x*(theta); the FORWARD solve inverts it: CHOOSE the resting
-# state values and the free parameters, and solve f = 0 for a turnover subset of the rate
-# constants. Because every mass-action rate enters f linearly (and no two rates multiply),
-# f = 0 is a LINEAR system in the chosen rates -- so it is solvable at EVERY prime (no
-# per-prime Groebner degeneracy), which lets the gauge-robust reconstruction sample a
-# direction on a SHARED slice across primes (the states become independent coordinates, so a
-# direction whose entries depend on x* -- e.g. via a Hill term C3^n -- reconstructs as a
-# rational in (theta, states) instead of an inconsistent per-prime constant).
+# Inverts the backward solve: choose resting states and free parameters, solve f = 0
+# for a turnover subset of rates. Mass-action rates enter f linearly, so this solves
+# at every prime, and a direction depending on x* (e.g. a Hill term C3^n)
+# reconstructs as a rational in (theta, states) on a slice shared across primes.
 
 def _forward_rate_pick(rhsByName, solveStates, paramNames, forcings, keepFree=None):
-    """Match each state to one rate constant to solve for: a parameter that enters that state's
-    balance LINEARLY (f = 0 stays linear in it), preferring a turnover term (the rate multiplies
-    a monomial containing the state, with a negative sign) that is DEDICATED (appears in few
-    balances). Parameters in `keepFree` are never solved for -- pass the direction's support so
-    the reconstruction can vary them. Assigns the most-constrained states first. Returns the
-    rate-name list (one per solve state) or None if no complete matching exists."""
+    """Match each state to a rate entering its balance linearly, preferring a negative
+    turnover term (rate times a monomial containing the state) found in few balances.
+    `keepFree` (the direction's support) is never solved for. Most-constrained states go
+    first. Returns one rate name per solve state, or None if no matching exists."""
     keepFree = set(keepFree or [])
-    # never solve for a recast coordinate (E = base^exp, L = log base): they are independent
-    # generic coordinates the reconstruction varies, and choosing one makes f bilinear in the
-    # rates (E multiplies a real turnover rate in the recast balance).
+    # never solve for a recast coordinate (E, L): E multiplies a turnover rate, which
+    # would make f bilinear in the rates
     paramset = {spy.Symbol(pn) for pn in paramNames
                 if pn not in keepFree and not pn.startswith('_E_') and not pn.startswith('_L_')}
     forc = {spy.Symbol(nm) for nm in forcings}
@@ -2477,12 +2411,10 @@ _forwardCache = {}
 
 
 def _forward_compile(model, stateNames, paramNames, forcings, solveRates):
-    """Prime-independent compile of the forward solve, cached: the coefficient of each solve
-    rate in each state balance and the rate-free constant, as (num, den) term lists over the
-    free coords rgens = (non-solve params) + solve states, PLUS the reused steady-state Jacobian
-    term lists (JxTerms/JtTerms). So a forward solve is per-point integer arithmetic, not
-    symbolic. Returns {'bad': reason} if the rate set is not linear (two rates multiply, a
-    concentration chosen, etc.)."""
+    """Cached prime-independent compile of the forward solve: each solve rate's coefficient
+    and the rate-free constant per balance as term lists over rgens = (non-solve params) +
+    solve states, plus the steady-state Jacobian term lists. Returns {'bad': reason} if the
+    balances are not linear in the chosen rates."""
     key = (tuple(model), tuple(stateNames), tuple(paramNames), tuple(sorted(forcings)),
            tuple(solveRates))
     c = _forwardCache.get(key)
@@ -2514,13 +2446,10 @@ def _forward_compile(model, stateNames, paramNames, forcings, solveRates):
 
 def solveForwardModular(model, stateNames, paramNames, stateVals, paramVals, prime,
                         forcings=None, solveRates=None, keepFree=None, backend='sympy'):
-    """Solve f = 0 over GF(prime) for a turnover subset of rate constants, given CHOSEN resting
-    `stateVals` and `paramVals` (residues mod prime; forcings held at 0). `solveRates` names the
-    rates to solve (one per non-forcing state) -- auto-picked (avoiding `keepFree`) if None.
-    Uses the cached `_forward_compile`, so it is per-point integer arithmetic. Returns the SAME
-    joint-mode payload as the backward solve -- {'valBy','dfJx','dfJt','dfStateCols',
-    'dfParamCols'} at the forward point -- plus {'rates','solveRates'}, or {'ok': False,'why'}.
-    Linear in the rates, so it solves at every prime unless a pivot vanishes there."""
+    """Solve f = 0 over GF(prime) for a turnover subset of rates, given chosen resting
+    `stateVals` and `paramVals` (residues; forcings held at 0). `solveRates` (one per
+    non-forcing state) is auto-picked avoiding `keepFree` if None. Returns the joint-mode
+    payload of the backward solve plus {'rates', 'solveRates'}, or {'ok': False, 'why'}."""
     _select_backend(backend)
     p = int(prime)
     model = _as_list(model); forcings = set(_as_list(forcings))
@@ -2689,6 +2618,301 @@ def _log_params_only_in_atoms(baseOf, exprs):
     return baseOf
 
 
+def signChart(f, gs, positive):
+    """abs() and sign() resolved with the declared signs (abs(v) = v for positive
+    v). `f` maps state -> rhs, `gs` is a list of observable dicts. Returns {'f',
+    'g'} as strings, or {'why': ...} for max, min, a step (not analytic) or an
+    abs() of undecided sign."""
+    fl = dict(f)
+    gl = [dict(g) for g in gs]
+    lines = list(fl.values()) + [v for g in gl for v in g.values()] + [str(k) for k in fl]
+    local, parse = _make_local_parse(lines)
+    local = dict(local)
+    local.update({'abs': spy.Abs, 'sign': spy.sign})
+    parse = _make_parse(local)
+    pos = None if positive is True else {str(x) for x in (positive or [])}
+    names = {str(sym) for sym in local.values() if isinstance(sym, spy.Symbol)}
+    toPos = {spy.Symbol(n): spy.Symbol(n, positive=True)
+             for n in names if pos is None or n in pos}
+    back = {v: k for k, v in toPos.items()}
+
+    def one(k, rhs):
+        if any(t in rhs for t in ('max(', 'min(', 'pmax(', 'pmin(', 'ifelse(',
+                                  'Heaviside(')):
+            raise ValueError('%s: max, min and steps are not analytic; analyse each '
+                             'regime on its own, e.g. through `conditions`' % k)
+        e = parse(rhs).xreplace(toPos)
+        if e.atoms(spy.Abs, spy.sign):
+            raise ValueError('%s: the sign inside abs() or sign() is not decided by '
+                             'the coordinates declared `positive`' % k)
+        return str(e.xreplace(back))
+    try:
+        Fn = {k: one(k, str(v)) for k, v in fl.items()}
+        Gn = [{k: one(k, str(v)) for k, v in g.items()} for g in gl]
+    except ValueError as err:
+        return {'why': str(err)}
+    return {'f': Fn, 'g': Gn}
+
+
+def _log_numbers(e, consts):
+    """Rewrite log of a positive rational as sum e_p*lognum_p over its prime factors,
+    collecting the constants lognum_p in `consts`. Exact: log 4 = 2 log 2 is kept, and
+    logs of distinct primes are independent (Schanuel)."""
+    rep = {}
+    for a in e.atoms(spy.log):
+        n = a.args[0]
+        if not n.is_number:
+            continue
+        n = spy.nsimplify(n)
+        if not (n.is_Rational and n > 0):
+            raise ValueError('log(%s) of a number that is not a positive rational' % n)
+        out = spy.Integer(0)
+        for q, sgn in ((n.p, 1), (n.q, -1)):
+            for pr, ex in spy.factorint(q).items():
+                sym = spy.Symbol('lognum_%d' % pr)
+                consts.add(str(sym))
+                out += sgn * ex * sym
+        rep[a] = out
+    return e.xreplace(rep)
+
+
+def logArgChart(f, gs, positive, taken, ics=None):
+    """Log chart for positive arguments of log() and fractional powers: log(a + b*v),
+    a and b free of states and v, a + b*v positive, becomes L with v = (exp(L) - a)/b;
+    log(v) and v^(p/q) are a = 0, b = 1. A state v becomes L with rhs b*f_v*exp(-L)
+    and initial value log(a + b*v0). `f` maps state -> rhs, `gs` and `ics` are lists
+    of dicts, `positive` True or a list of names. Returns None when nothing qualifies,
+    else {'f', 'g', 'ic', 'consts', 'map': [{'v', 'L', 'a', 'b'}]}, or {'why': ...}."""
+    fl = dict(f)
+    gl = [dict(g) for g in gs]
+    il = [dict(ic) for ic in (ics or [])]
+    lines = (list(fl.values()) + [v for g in gl for v in g.values()] +
+             [v for ic in il for v in ic.values()] +
+             [str(k) for k in fl] + [str(t) for t in taken])
+    local, parse = _make_local_parse(lines)
+    F = {k: parse(str(v)) for k, v in fl.items()}
+    G = [{k: parse(str(v)) for k, v in g.items()} for g in gl]
+    I = [{k: parse(str(v)) for k, v in ic.items()} for ic in il]
+    pos = None if positive is True else {str(x) for x in (positive or [])}
+    states = {spy.Symbol(k) for k in fl}
+    one, zero = spy.Integer(1), spy.Integer(0)
+
+    def isPos(sym):
+        return pos is None or str(sym) in pos
+
+    def positiveOn(e):
+        # sign certificate on the declared domain
+        sub = {x: spy.Symbol(str(x), positive=True) for x in e.free_symbols if isPos(x)}
+        return bool(e.xreplace(sub).is_positive)
+
+    chart = {}                               # v -> (a, b)
+
+    def claim(v, a, b):
+        if v in chart and (spy.simplify(chart[v][0] - a) != 0 or
+                           spy.simplify(chart[v][1] - b) != 0):
+            raise ValueError('%s enters two different logarithms, which no single '
+                             'chart makes rational' % v)
+        chart[v] = (a, b)
+
+    def scan(e):
+        e = e.xreplace({at: spy.log(spy.factor(spy.together(at.args[0])))
+                        for at in e.atoms(spy.log)})
+        e = spy.expand_log(e, force=True)
+        for at in e.atoms(spy.log):
+            arg = at.args[0]
+            if arg.is_number:
+                continue
+            if arg.is_Symbol:
+                if isPos(arg):
+                    claim(arg, zero, one)
+                continue
+            # affine in one symbol: a state first, then a parameter
+            for v in sorted(arg.free_symbols, key=lambda x: (x not in states, str(x))):
+                b = spy.diff(arg, v)
+                if b.free_symbols & (states | {v}):
+                    continue
+                a = spy.expand(arg - b * v)
+                if a.free_symbols & states or not positiveOn(arg):
+                    continue
+                claim(v, a, b)
+                break
+        for pw in e.atoms(spy.Pow):
+            if pw.base.is_Symbol and pw.exp.is_Rational and not pw.exp.is_Integer:
+                if isPos(pw.base):
+                    claim(pw.base, zero, one)
+
+    try:
+        for e in F.values():
+            scan(e)
+        for g in G:
+            for e in g.values():
+                scan(_strip_log_obs(e))
+        # a free-exponent base with a given initial value has no leaf for the recast
+        given = {spy.Symbol(k) for ic in I for k in ic}
+        for e in list(F.values()) + [e for g in G for e in g.values()]:
+            for pw in e.atoms(spy.Pow):
+                if pw.base in given and not pw.exp.is_number and isPos(pw.base):
+                    claim(pw.base, zero, one)
+        # an initial value of a charted state enters as the logarithm of its argument
+        while True:
+            n0 = len(chart)
+            for ic in I:
+                for k, e in ic.items():
+                    ks = spy.Symbol(k)
+                    if ks in chart:
+                        a, b = chart[ks]
+                        scan(spy.log(a + b * e))
+            if len(chart) == n0:
+                break
+    except ValueError as err:
+        return {'why': str(err)}
+    if not chart:
+        return None
+
+    used = {str(t) for t in taken} | {str(k) for k in fl}
+    L = {}
+    for v in sorted(chart, key=str):
+        nm = 'log_%s' % v
+        while nm in used:
+            nm += '_'
+        used.add(nm)
+        L[v] = spy.Symbol(nm, real=True)
+    sub0 = {v: (spy.exp(L[v]) - chart[v][0]) / chart[v][1] for v in chart}
+    # a and b may hold other charted symbols
+    sub = dict(sub0)
+    for _ in chart:
+        sub = {v: e.xreplace(sub) for v, e in sub0.items()}
+    consts = set()
+
+    def tidy(e):
+        e = e.xreplace(sub)
+        e = e.xreplace({at: spy.log(spy.cancel(at.args[0])) for at in e.atoms(spy.log)})
+        return _log_numbers(spy.powsimp(spy.expand_log(e, force=True)), consts)
+    Fn = {}
+    for k, e in F.items():
+        ks = spy.Symbol(k)
+        if ks in chart:
+            Fn[str(L[ks])] = str(spy.powsimp(spy.expand(
+                tidy(chart[ks][1] * e) * spy.exp(-L[ks]))))
+        else:
+            Fn[k] = str(tidy(e))
+    Gn = [{k: str(tidy(e)) for k, e in g.items()} for g in G]
+    In = []
+    for ic in I:
+        d = {}
+        for k, e in ic.items():
+            ks = spy.Symbol(k)
+            if ks in chart:
+                a, b = chart[ks]
+                le = tidy(spy.log(a + b * e))
+                if any(not at.args[0].is_number for at in le.atoms(spy.log)):
+                    return {'why': 'the initial value %s = %s does not split into '
+                            'logarithms of positive coordinates' % (k, e)}
+                try:
+                    d[str(L[ks])] = str(_log_numbers(le, consts))
+                except ValueError as err:
+                    return {'why': str(err)}
+            else:
+                d[k] = str(tidy(e))
+        In.append(d)
+    return {'f': Fn, 'g': Gn, 'ic': In, 'consts': sorted(consts),
+            'map': [{'v': str(v), 'L': str(L[v]), 'a': str(chart[v][0]),
+                     'b': str(chart[v][1])} for v in sorted(chart, key=str)]}
+
+
+def logArgEvent(var, value, method, maps):
+    """One event in the log chart: v -> (exp(L) - a)/b in its value, and an event
+    on a charted state acts on L: a replacement by log(a + b*value), and for
+    a = 0 a multiplication as the addition of log(value). Returns {'var',
+    'value', 'method', 'consts'} as strings or {'why': ...}."""
+    maps = list(maps)
+    lines = [str(value)] + [str(m[k]) for m in maps for k in ('v', 'L', 'a', 'b')]
+    local, parse = _make_local_parse(lines)
+    ent = {str(m['v']): (spy.Symbol(str(m['L']), real=True), parse(str(m['a'])),
+                         parse(str(m['b']))) for m in maps}
+    sub = {parse(v): (spy.exp(Lv) - a) / b for v, (Lv, a, b) in ent.items()}
+    e = parse(str(value)).subs(sub)
+    if str(var) not in ent:
+        return {'var': str(var), 'value': str(e), 'method': str(method), 'consts': []}
+    Lv, a, b = ent[str(var)]
+    if method == 'add' and e == 0:
+        return {'var': str(Lv), 'value': '0', 'method': 'add', 'consts': []}
+    if method == 'replace':
+        le = spy.log(a + b * e)
+        kind = 'replace'
+    elif method == 'multiply' and a == 0:
+        le = spy.log(e)
+        kind = 'add'
+    else:
+        return {'why': 'a %s event on %s, which is analysed as %s, is not supported'
+                % (method, var, 'log(%s)' % (a + b * parse(str(var))))}
+    le = spy.powsimp(spy.expand_log(le, force=True))
+    if any(not at.args[0].is_number for at in le.atoms(spy.log)):
+        return {'why': 'the event value %s for %s does not split into logarithms of '
+                'positive coordinates' % (value, var)}
+    consts = set()
+    try:
+        le = _log_numbers(le, consts)
+    except ValueError as err:
+        return {'why': str(err)}
+    return {'var': str(Lv), 'value': str(le), 'method': kind, 'consts': sorted(consts)}
+
+
+def logArgBackVec(vec, maps, transform=False):
+    """A generator (or, with `transform`, a finite transformation) of the log chart
+    back in the user's symbols. L -> log(a + b*v) everywhere; for a component
+    eta_v = ((a + b*v)*eta_L - eta(a) - v*eta(b))/b with eta(a) = grad(a) . eta,
+    for a transformation v = (exp(T_L) - a(T))/b(T)."""
+    maps = list(maps)
+    lines = [str(x) for x in vec.values()] + [str(k) for k in vec] + \
+        [str(m[k]) for m in maps for k in ('v', 'L', 'a', 'b')]
+    local, parse = _make_local_parse(lines)
+    V = {str(k): parse(str(x)) for k, x in vec.items()}
+    ent = [(parse(str(m['v'])), str(m['L']), parse(str(m['a'])), parse(str(m['b'])))
+           for m in maps]
+    Lnames = {Ln for _, Ln, _, _ in ent}
+    vp = {v: spy.Symbol(str(v), positive=True) for v, _, _, _ in ent}
+    toL = {parse(Ln): spy.log(a + b * v) for v, Ln, a, b in ent}
+    out = {k: e.subs(toL) for k, e in V.items() if k not in Lnames}
+    # charts whose a, b hold another charted symbol come after it
+    order = sorted(ent, key=lambda t: len((t[2].free_symbols | t[3].free_symbols) &
+                                          set(vp)))
+    for v, Ln, a, b in order:
+        eL = V.get(Ln, spy.Integer(0)).subs(toL)
+        if transform:
+            T = {parse(k): e for k, e in out.items()}
+            aT, bT = a.xreplace(T), b.xreplace(T)
+            if eL == 0 and aT == a and bT == b:
+                continue
+            nv = (spy.exp(eL if Ln in V else spy.log(a + b * v)) - aT) / bT
+        else:
+            grad = lambda h: sum((spy.diff(h, parse(k)) * e for k, e in out.items()),
+                                 spy.Integer(0))
+            nv = ((a + b * v) * eL - grad(a) - v * grad(b)) / b
+        out[str(v)] = nv
+    res = {}
+    for k, e in out.items():
+        e = spy.powsimp(spy.expand_log(e.xreplace(vp), force=True))
+        e = spy.factor_terms(spy.cancel(e)).xreplace({s: v for v, s in vp.items()})
+        if e != 0 or k in vec:
+            res[k] = str(e)
+    return res
+
+
+def scalingWeights(comps):
+    """{name: component} -> {name: weight} when every component is a number times
+    its own coordinate, else None."""
+    local, parse = _make_local_parse([str(v) for v in comps.values()] +
+                                     [str(k) for k in comps])
+    out = {}
+    for k, v in comps.items():
+        w = spy.cancel(parse(str(v)) / parse(str(k)))
+        if not w.is_Rational:
+            return None
+        out[str(k)] = str(w)
+    return out
+
+
 def logChart(gens, coords):
     """Generators in the chart X = b^theta for every coordinate theta that enters
     them only through b^(c*theta), or whose own component carries 1/log(b): there
@@ -2744,6 +2968,13 @@ def logChart(gens, coords):
             else:
                 h[k] = sub(v)
         h = {k: spy.cancel(v) for k, v in h.items()}
+        # a translation of theta is X*log(b) d/dX: the constant factor goes
+        if any(v.atoms(spy.log) for v in h.values()):
+            for b in {b for _, b in lp.values()}:
+                h2 = {k: spy.cancel(v / spy.log(b)) for k, v in h.items()}
+                if not any(v.atoms(spy.log) for v in h2.values()):
+                    h = h2
+                    break
         for v in h.values():
             if v.atoms(spy.log, spy.exp) or any(t in v.free_symbols for t in lp):
                 return None
@@ -2751,6 +2982,88 @@ def logChart(gens, coords):
     return {'map': [{'theta': str(t), 'X': str(X), 'base': 'E' if b == spy.E else str(b)}
                     for t, (X, b) in lp.items()],
             'gens': out}
+
+
+def expChart(gens, coords, positive):
+    """Generators in the chart L = log(v) for every positive coordinate v that enters
+    them through log(v), or that a scaling with symbolic weights moves:
+    eta_L = eta_v/v, v = exp(L). `gens` as in logChart,
+    `positive` True or a list of names. Returns {'map': [{'v', 'L'}], 'gens': [...]}
+    or None when no coordinate qualifies or a component stays transcendental."""
+    names = [str(c) for c in coords]
+    pos = None if positive is True else {str(x) for x in (positive or [])}
+    exprsOf = []
+    for g in gens:
+        if g is None:
+            exprsOf.append(None)
+            continue
+        local, parse = _make_local_parse([str(v) for v in g.values()] + names)
+        exprsOf.append({str(k): spy.expand_log(spy.sympify(parse(str(v))), force=True)
+                        for k, v in g.items()})
+    coordSyms = {spy.Symbol(n) for n in names}
+    cand = set()
+    for g in exprsOf:
+        for e in (g or {}).values():
+            for a in e.atoms(spy.log):
+                if a.args[0] in coordSyms and (pos is None or str(a.args[0]) in pos):
+                    cand.add(a.args[0])
+    # a scaling with symbolic weights w translates log(z) at the rate w
+    for g in exprsOf:
+        if not g:
+            continue
+        supp = {spy.Symbol(k) for k in g}
+        w = {k: spy.cancel(e / spy.Symbol(k)) for k, e in g.items()}
+        if any(ww.free_symbols & supp or ww.atoms(spy.log, spy.exp) for ww in w.values()):
+            continue
+        if all(ww.is_number for ww in w.values()):
+            continue
+        if all(pos is None or str(z) in pos for z in supp):
+            cand |= supp
+    if not cand:
+        return None
+    taken = set(names)
+    L = {}
+    for v in sorted(cand, key=str):
+        nm = 'log_%s' % v
+        while nm in taken:
+            nm += '_'
+        taken.add(nm)
+        L[v] = spy.Symbol(nm, real=True)
+    sub = {v: spy.exp(L[v]) for v in cand}
+    out = []
+    for g in exprsOf:
+        if g is None:
+            out.append(None)
+            continue
+        h = {}
+        for k, e in g.items():
+            ks = spy.Symbol(k)
+            e2 = spy.expand_log(e.subs(sub), force=True)
+            if ks in cand:
+                h[str(L[ks])] = spy.cancel(spy.powsimp(e2 * spy.exp(-L[ks])))
+            else:
+                h[k] = spy.cancel(spy.powsimp(e2))
+        for v in h.values():
+            if v.atoms(spy.log, spy.exp):
+                return None
+        out.append({k: str(v) for k, v in h.items()})
+    return {'map': [{'v': str(v), 'L': str(L[v])} for v in sorted(cand, key=str)],
+            'gens': out}
+
+
+def expChartBack(expr, vNames, lNames, solveFor=None):
+    """An expression of the chart L = log(v) back in v; with `solveFor` naming an L
+    the expression is its value and exp() of it, the value of v, is returned."""
+    asList = lambda v: list(v) if isinstance(v, (list, tuple)) else [v]
+    vNames, lNames = asList(vNames), asList(lNames)
+    local, parse = _make_local_parse([str(expr)] + [str(x) for x in vNames + lNames])
+    e = parse(str(expr))
+    vp = {str(l): spy.Symbol(str(v), positive=True) for v, l in zip(vNames, lNames)}
+    e = e.subs({parse(l): spy.log(v) for l, v in vp.items()})
+    if solveFor is not None and str(solveFor) in vp:
+        e = spy.exp(e)
+    e = spy.powsimp(spy.expand_log(e, force=True))
+    return str(e.subs({v: spy.Symbol(str(v)) for v in vp.values()}))
 
 
 def logChartBack(expr, xNames, thetas, bases, solveFor=None):
@@ -2860,11 +3173,9 @@ def _apply_power_recast(pairs, S, perCond):
 
 
 def recastBacksub(expr, eNames, lNames, bases, exps):
-    """Substitute the recast coordinates of a reconstructed direction back to
-    their meaning, E -> base**exp and L -> log(base), and cancel. `expr` is a
-    rational expression string; the name vectors are aligned per recast atom.
-    Every name goes through the shared symbol table so model names like E, I, N
-    are taken as symbols, not sympy constants."""
+    """Substitute recast coordinates back, E -> base**exp and L -> log(base), and
+    cancel. The name vectors are aligned per recast atom; the shared symbol table
+    keeps names like E, I, N as symbols."""
     asList = lambda v: list(v) if isinstance(v, (list, tuple)) else [v]
     eNames, lNames, bases, exps = (asList(eNames), asList(lNames),
                                    asList(bases), asList(exps))
@@ -2883,12 +3194,11 @@ def recastBacksub(expr, eNames, lNames, bases, exps):
 #
 # b^u with u in the states is carried by an auxiliary state X = r^phi (r the canonical
 # base, phi = t/D a term of u), X' = log(r) X phi'. Its initial value is rational in
-# leaf coordinates W = r^(tau/L), one per term tau of the initial exponents, which the
-# kernel samples as generic values. Each W is tied to the leaves by the relation
-# dW = W log(r) d(tau/L), stacked onto the codistribution in R. This is exact at a
-# generic point: exponentials of terms that are Q-linearly independent modulo the
-# constants are algebraically independent over the rational functions (Ax 1971).
-# e^c and the logs of the primes enter as fixed generic leaves.
+# generic leaves W = r^(tau/L), one per term tau of the initial exponents, tied to the
+# other leaves by dW = W log(r) d(tau/L) (stacked onto the codistribution in R).
+# Exact at a generic point: exponentials of Q-linearly independent terms are
+# algebraically independent over the rational functions (Ax 1971). e^c and
+# log(prime) are fixed leaves.
 
 def _canon_exp_base(b):
     """(r, k) with b = r^k, r = E or a positive rational that is not a perfect power;
@@ -3306,10 +3616,9 @@ def expBacksub(expr, names, values):
 # ---- observability tape compiler (multi-condition, shared coordinate space) ----------
 
 def _compose_t0_events(icMap, t0evs, pval, subsMap):
-    """Apply a segment's t0 events (a dose at the start point) to the initial-state
-    map in place: the observability jet then starts at x0 = E(x_ss) while the f = 0
-    constraint stays on the pre-event x_ss. An event on a state that is not a
-    coordinate (a constant/eliminated species) is ignored."""
+    """Apply a segment's t0 events to the initial-state map in place: the jet starts
+    at x0 = E(x_ss), the f = 0 constraint stays on the pre-event x_ss. Events on
+    non-coordinate states are ignored."""
     for e in t0evs or []:
         Xv = spy.Symbol(str(e['var']))
         if Xv not in icMap:
@@ -3331,31 +3640,22 @@ def compileObservabilityTapeMulti(model, observation, conditionSubs, conditionIC
                                   segEquilibrate=None, conditionEvents=None,
                                   conditionT0Events=None, jointSteadyState=False,
                                   jointFixedStates=None, heldStateParams=None,
-                                  conditionObs=None, conditionTimes=None):
+                                  conditionObs=None, conditionTimes=None,
+                                  keepCoords=None):
     """Compile one observability tape per experimental condition over a shared
     coordinate space, for the multi-condition observability path.
 
-    The base `model` and `observation` are symbolic. `conditionObs` optionally
-    replaces `observation` per condition (one entry per condition, each a list of
-    observation lines), for observables that exist only in a subset of the
-    conditions -- their rows then enter the stacked codistribution only where they
-    are actually measured. `conditionSubs` is a list
-    (one entry per condition) of {symbol: replacement} maps: a numeric
-    replacement bakes that symbol to a constant in the condition, a symbol
-    replacement renames it (e.g. a knockdown-specific rate), and pre-equilibration
-    switches enter here too. `conditionIC0` is a list of {state: expression} maps
-    giving the start-point (t0+) initial condition of each state in each
-    condition, already composed in R from the steady state / `initial` and the
-    t0 events; an entry may be a symbol, a number, or an arbitrary rational
-    expression in the parameters. A state with no entry starts free (its own
-    unknown initial value).
+    `conditionObs` optionally replaces `observation` per condition, so an observable
+    measured in some conditions enters only their rows. `conditionSubs` holds one
+    {symbol: replacement} map per condition: a number bakes the symbol, a symbol renames
+    it (e.g. a knockdown rate). `conditionIC0` holds one {state: expression} map per
+    condition with the t0+ initial values composed in R (steady state, `initial`, t0
+    events); a state without entry starts free.
 
-    Returns the per-condition tapes (each carrying a small IC tape that seeds the
-    state initial values, with their parameter-duals, at order 0) plus the shared
-    leaf/state layout, the dual-carrying coordinates z = free state initial values
-    + free parameters (excluding `fixed`), and their names. A non-rational
-    right-hand side, observable or initial condition returns
-    {'ok': False, 'nonrational': ...}."""
+    Returns the per-condition tapes (each with an IC tape seeding the initial values and
+    their duals), the shared leaf/state layout and the dual-carrying coordinates z (free
+    initial values + free parameters, minus `fixed`). A non-rational right-hand side,
+    observable or initial value returns {'ok': False, 'nonrational': ...}."""
     _select_backend(backend)
     model = _as_list(model)
     observation = _as_list(observation)
@@ -3363,19 +3663,15 @@ def compileObservabilityTapeMulti(model, observation, conditionSubs, conditionIC
     conditionIC0 = conditionIC0 or []
     forcings = set(_as_list(forcings))
     K = len(conditionSubs)
-    # one flag per (condition, segment): the first segment of an equilibrated
-    # condition is seeded from the resting steady state (icSeed); every later
-    # segment, and every segment without equilibrate, is seeded from an IC tape
-    # whose initial-value expressions may reference fresh carry coordinates.
+    # one flag per (condition, segment): equilibrated first segments are seeded from
+    # the steady state, all others from an IC tape (possibly over carry coordinates)
     if segEquilibrate is None:
         segEq = [bool(equilibrate)] * K
     else:
         segEq = [bool(x) for x in list(segEquilibrate)]
         segEq += [bool(equilibrate)] * (K - len(segEq))
 
-    # per-condition observation: an entry of `conditionObs` overrides `observation`
-    # for that condition, so an observable measured in only some conditions
-    # contributes rows only there. Missing/None entries fall back to `observation`.
+    # missing/None entries of `conditionObs` fall back to `observation`
     conditionObs = list(conditionObs) if conditionObs else []
     obsPerCond = [_as_list(conditionObs[c]) if (c < len(conditionObs) and
                                                 conditionObs[c] is not None)
@@ -3400,11 +3696,9 @@ def compileObservabilityTapeMulti(model, observation, conditionSubs, conditionIC
     obsVarsPer = [r[0] for r in obsRead]
     fixedNames = set(str(s) for s in
                      [local.get(nm, spy.Symbol(nm)) for nm in _as_list(fixed)])
-    # held-variable moiety parameterisation (equilibrate + reduceCQ = FALSE): each pivot
-    # state's resting value is a shared initial-value parameter (heldMap). In joint mode
-    # its initial condition is seeded from that parameter, not an identity free-state
-    # leaf, so the moiety freedom is carried by a shared, reported parameter (states are
-    # projected out here) instead of a per-condition state column.
+    # held-variable moieties (equilibrate + reduceCQ = FALSE): each pivot state's resting
+    # value is a shared initial-value parameter (heldMap), so in joint mode the moiety
+    # freedom lands on a reported parameter, not a per-condition state column
     heldStateParams = dict(heldStateParams or {})
     heldMap = {str(k): spy.Symbol(str(v)) for k, v in heldStateParams.items()}
     heldParamSyms = [spy.Symbol(str(v)) for v in heldStateParams.values()]
@@ -3425,12 +3719,9 @@ def compileObservabilityTapeMulti(model, observation, conditionSubs, conditionIC
             parseCache[key] = e
         return e
 
-    # Memoized substitution. Conditions largely repeat the same replacement
-    # expressions (a shared trafo, per-segment switch regimes), so the result is
-    # cached on the transitively relevant subset of the map: an item whose symbol
-    # is not free in e and not introduced by another relevant value can never
-    # fire, and sympy orders unordered-dict items canonically PER ITEM, so
-    # substituting only the relevant subset is exact.
+    # substitution memoised on the transitively relevant subset of the map (conditions
+    # repeat the same replacements); exact, since other items can never fire and sympy
+    # orders dict items canonically per item
     subsCache = {}
 
     def subsMemo(e, smap):
@@ -3526,13 +3817,10 @@ def compileObservabilityTapeMulti(model, observation, conditionSubs, conditionIC
              if c < len(conditionTimes) and conditionTimes[c] is not None else None
              for c in range(K)]
 
-    # power/Hill recast: replace base^exp (exp a parameter) by a state E with
-    # E' = exp*E*base'/base and a companion L = log(base). E and L are appended as
-    # coordinates and tied to (base, exp) by an algebraic relation downstream, so f
-    # stays rational and the log enters only through the generic L coordinate (sound
-    # by the algebraic independence of base, log(base) and base^exp). This applies to
-    # BOTH the equilibrate path (E held generic in the f = 0 solve) and the transient
-    # path (E, L are free-initial-value leaves tied by the recast relation in R).
+    # power/Hill recast: base^exp (exp a parameter) becomes a state E with
+    # E' = exp*E*base'/base plus L = log(base), tied to (base, exp) downstream, so f
+    # stays rational (sound: base, log(base), base^exp are algebraically independent).
+    # E is held generic in the f = 0 solve, or a free-initial-value leaf when transient.
     nReal = nS
     powerRecast = []
     invSolveName = {}
@@ -3544,10 +3832,9 @@ def compileObservabilityTapeMulti(model, observation, conditionSubs, conditionIC
         S, perCond, powerRecast = _apply_power_recast(pairs, S, perCond)
         nS = len(S)
         if equilibrate:
-            # a base with a linear turnover term keeps its bare symbol in the
-            # steady-state balance and is solved directly; a base without one has a
-            # balance linear in E and is "inverted": E is solved, base and L stay
-            # generic with duals from the inverse chain rule.
+            # a base with a linear turnover term is solved directly; otherwise its
+            # balance is linear in E and it is "inverted": E is solved, base and L
+            # stay generic
             realSet = {str(X) for X in S[:nReal]}
             bareSyms = set()
             for (_f, _g, _ic, ss_r) in perCond:
@@ -3567,8 +3854,7 @@ def compileObservabilityTapeMulti(model, observation, conditionSubs, conditionIC
             invSolveName = {rc['base']: rc['E']
                             for rc in powerRecast if rc['inverted']}
         else:
-            # transient path: no steady-state solve, so no base is "inverted"; each
-            # recast atom is a free-initial-value leaf tied to (base, exp) in R.
+            # transient: no steady-state solve, so nothing is inverted
             for rc in powerRecast:
                 rc['inverted'] = False
 
@@ -3622,17 +3908,13 @@ def compileObservabilityTapeMulti(model, observation, conditionSubs, conditionIC
     if nonrational:
         return {'ok': False, 'nonrational': nonrational}
 
-    # a state carries a free initial-value leaf when its initial condition still
-    # depends on the state symbol itself (a bare free value, or a free value with
-    # an additive/multiplicative dose composed on top). In constraint mode no
-    # state is a free coordinate: every state is seeded numerically from the
-    # interior steady-state point per evaluation point and prime (icSeed).
+    # a state has a free initial-value leaf when its initial value still contains the
+    # state symbol (possibly under a dose); equilibrate-seeded states have none
     freeState = {str(X): False for X in S}
     for c, (f_c, g_c, ic_c, f_ss) in enumerate(perCond):
         if segEq[c]:
-            # joint/implicit mode: keep every equilibrate state as a free coordinate
-            # (its value is seeded on-manifold to x* by R, the steady-state constraint
-            # enters as stacked df rows) so the direction is low-degree in (x, theta).
+            # joint mode: states stay free coordinates (seeded to x* by R, constraint
+            # as stacked df rows), keeping directions low-degree in (x, theta)
             if jointSteadyState:
                 jfs = set(jointFixedStates or [])
                 for X in S:
@@ -3676,13 +3958,12 @@ def compileObservabilityTapeMulti(model, observation, conditionSubs, conditionIC
             paramset |= set(lpSub(pval(tm)).free_symbols)
     paramset -= set(S)
     paramset |= set(heldParamSyms)   # held-variable initial-value parameters
+    # coordinates a chart absorbed stay coordinates
+    paramset |= {local.get(str(n), spy.Symbol(str(n))) for n in _as_list(keepCoords)}
     params = sorted(paramset, key=spy.default_sort_key)
-    # A free-exponent base that appears ONLY under the exponent (a Michaelis constant
-    # Km in C^n/(Km^n+C^n)) was replaced by its recast atom E=Km^n and so dropped from
-    # the coordinates. Re-add it as a parameter coordinate so the recast relation
-    # E=base^exp ties it and the pool/Michaelis co-scaling is reported and closes as an
-    # exact scaling (rather than a doomed finite-field fit that under-reports Km). A state
-    # base (e.g. C3) is already a coordinate; forcings never scale.
+    # a base seen only under a free exponent (Km in C^n/(Km^n+C^n)) vanished into its
+    # recast atom; re-add it so the recast relation ties it and the Km co-scaling is
+    # reported as an exact scaling
     if powerRecast:
         known = set(str(s) for s in S) | set(str(s) for s in params) | set(forcings)
         for rc in powerRecast:
@@ -3712,9 +3993,8 @@ def compileObservabilityTapeMulti(model, observation, conditionSubs, conditionIC
                 emitted = _emit_tape_shared(f_c, g_c, slotOf, base)
             except _NotRational:
                 return {'ok': False}
-            # substituted dynamics and observation of this segment, serialised
-            # for the multi-condition scaling peel
-            # exponentials stay in these lines; the scaling engine reads them
+            # this segment's substituted model as lines for the scaling peel,
+            # exponentials kept
             f0, g0 = scalPerCond[c][0], scalPerCond[c][1]
             eNum = {spy.E: spy.exp(1, evaluate=False)}
             mLines = ['%s = %s' % (str(scalS[i]), spy.sympify(f0[i]).xreplace(eNum))
@@ -3735,24 +4015,16 @@ def compileObservabilityTapeMulti(model, observation, conditionSubs, conditionIC
             'obsLines': oLines,
         }
         if segEq[c] and jointSteadyState:
-            # joint/implicit mode: every non-forcing state is a free leaf whose
-            # order-0 value R seeds to the on-manifold resting value x* per sample.
-            # The IC tape aliases each state slot to its own leaf (identity), so the
-            # kernel gives each state an independent dual column. The resting model
-            # is kept so R can solve x* and read the df constraint rows [Jx|Jt].
+            # joint mode: each non-forcing state is an identity leaf that R seeds to
+            # x*; the resting model is kept so R can solve x* and read [Jx|Jt]
             jfs = set(jointFixedStates or [])
-            # a held-variable pivot is seeded from its initial-value parameter (heldMap),
-            # so its dual column is that shared parameter rather than a per-condition
-            # free-state column; forcings and forced-zero states start at 0; every other
-            # state is its own identity free leaf.
+            # held pivots seed from their parameter (heldMap), forcings and forced-zero
+            # states from 0
             icMap = {X: (heldMap[str(X)] if str(X) in heldMap
                          else X if (str(X) not in forcings and str(X) not in jfs)
                          else spy.Integer(0)) for X in S}
-            # steady state BEFORE the events: the t0 events (a dose at t0) are applied
-            # to the state COORDINATE x_ss here, so the observability jet starts at
-            # x0 = E(x_ss) while the df constraint is on the pre-event x_ss. R seeds
-            # the state leaf with the pre-event value (valBy), and the IC tape carries
-            # E with its chain-rule duals w.r.t. the leaves.
+            # t0 events act on the pre-event coordinate x_ss (seeded by R from valBy);
+            # the IC tape carries x0 = E(x_ss) with its chain-rule duals
             _compose_t0_events(icMap, conditionT0Events[c]
                                if conditionT0Events and c < len(conditionT0Events)
                                else [], pval, subsMap)
@@ -3767,12 +4039,9 @@ def compileObservabilityTapeMulti(model, observation, conditionSubs, conditionIC
                 '%s = %s' % (invSolveName.get(str(S[i]), str(S[i])),
                              spy.sympify(f_ss[i])) for i in range(nReal)]
         elif segEq[c]:
-            # equilibrate-seeded first segment. A generically-linear resting state
-            # (no recast) is solved symbolically and emitted as an IC tape, so the
-            # kernel seeds each state with its steady-state value and computes the
-            # parameter sensitivities by forward-mode duals; dead states fall out as
-            # 0 and forcings stay 0. Otherwise the state is seeded numerically per
-            # point from the interior steady-state point and its IFT duals (icSeed).
+            # equilibrate-seeded first segment: a generically linear resting state (no
+            # recast) is solved symbolically and emitted as an IC tape; otherwise R
+            # seeds it numerically per point with its IFT duals (icSeed)
             ssIC = None
             if not powerRecast and not _FORCE_CONSTRAINT_SEED:
                 sskey = tuple(f_ss)
@@ -3787,14 +4056,12 @@ def compileObservabilityTapeMulti(model, observation, conditionSubs, conditionIC
                     ssSol = _linear_solution(fssPolys, solveS)
                     ssSolCache[sskey] = ssSol
                 if ssSol is not None:
-                    # solved real states take their steady-state value; recast
-                    # coordinates E = base^exp and L = log base (states beyond nReal)
-                    # stay generic; forcings and dead states stay 0
+                    # recast coordinates (beyond nReal) stay generic; forcings and
+                    # dead states stay 0
                     icMap = {X: (ssSol[X] if X in ssSol
                                  else X if i >= nReal else spy.Integer(0))
                              for i, X in enumerate(S)}
-                    # t0 events (a dose at t0) compose onto the resting state; their
-                    # parameter sensitivities then come from the same forward-mode duals
+                    # t0 events compose onto the resting state
                     _compose_t0_events(icMap, conditionT0Events[c]
                                        if conditionT0Events and
                                        c < len(conditionT0Events) else [],
@@ -3827,9 +4094,8 @@ def compileObservabilityTapeMulti(model, observation, conditionSubs, conditionIC
             icOp, icA, icB, icCnum, icCden, icOut = icEmitted
             tape.update({'icOp': icOp, 'icA': icA, 'icB': icB,
                          'icCnum': icCnum, 'icCden': icCden, 'icOut': icOut})
-        # state-dose event map at this segment's left boundary, applied by the
-        # kernel to the propagated state (replace/add/multiply by a parametric
-        # value). The values are emitted as a small order-0 tape over the leaves.
+        # events at this segment's left boundary, applied by the kernel to the
+        # propagated state; their values as an order-0 tape over the leaves
         evs = evPer[c]
         if evs:
             idxOfState = {str(X): i for i, X in enumerate(S)}
@@ -3906,10 +4172,8 @@ def compileObservabilityTapeMulti(model, observation, conditionSubs, conditionIC
             # branch to seed on-manifold and stack the df constraint rows
             out['zStateNames'] = zStateNames
     elif powerRecast:
-        # transient path with a free power/Hill exponent: E = base^exp and L = log(base)
-        # are ordinary free-initial-value leaves (their own z-columns). R stacks the
-        # recast relation rows onto the observability codistribution and reports in the
-        # physical space (real states + parameters), with E, L as auxiliary coordinates.
+        # transient free exponent: E and L are free-initial-value leaves; R stacks the
+        # recast relation rows and reports in real states + parameters
         out['recastTransient'] = True
         out['stateNames'] = [str(X) for X in S]
         out['paramNames'] = [str(s) for s in params]
@@ -3930,18 +4194,35 @@ def compileObservabilityTapeMulti(model, observation, conditionSubs, conditionIC
 
 def _poly_monomials(expr, zvars):
     """Numerator and denominator monomial-exponent lists of expr over zvars
-    (other symbols are treated as weight-zero coefficients). Raises if expr is
-    not rational-polynomial in zvars."""
+    (other symbols are treated as weight-zero coefficients). Exponents may be
+    rational, as in sqrt(x). Raises if expr is not a ratio of such sums."""
+    zset = set(zvars)
+
+    def mons(poly):
+        out = []
+        for t in spy.Add.make_args(spy.expand(poly)):
+            d = t.as_powers_dict()
+            for k, v in d.items():
+                if k not in zset and k.free_symbols & zset:
+                    raise ValueError('not a monomial in the coordinates: %s' % t)
+            a = tuple(spy.Rational(d.get(z, 0)) for z in zvars)
+            if a not in out:
+                out.append(a)
+        return out
     e = spy.together(spy.sympify(expr))
     p, q = spy.fraction(e)
-    pe = spy.Poly(spy.expand(p), *zvars).as_dict()
-    qe = spy.Poly(spy.expand(q), *zvars).as_dict()
-    return list(pe.keys()), list(qe.keys())
+    try:
+        return (list(spy.Poly(spy.expand(p), *zvars).as_dict().keys()),
+                list(spy.Poly(spy.expand(q), *zvars).as_dict().keys()))
+    except Exception:
+        return mons(p), mons(q)
 
 
-def _exp_split(expr):
-    """expr with every exponential atom (exp(u), or b^u with a numeric base) replaced
-    by a fresh symbol, innermost first, and the list of exponents u."""
+def _exp_split(expr, logs=False):
+    """expr with every exponential atom (exp(u), or b^u with a numeric base), and
+    with `logs` every log(u), replaced by a fresh symbol, innermost first, and the
+    list of the u. Both are invariant exactly when u is:
+    log(lambda^w*u) = log(u) + w*log(lambda)."""
     exps = []
 
     def rec(e):
@@ -3951,20 +4232,23 @@ def _exp_split(expr):
         if be is not None:
             exps.append(rec(be[1]))
             return spy.Dummy('exp')
+        if logs and isinstance(e, spy.log):
+            exps.append(rec(e.args[0]))
+            return spy.Dummy('log')
         return e.func(*[rec(a) for a in e.args])
     return rec(_hyp_to_exp(expr)), exps
 
 
-def _scaling_rows(diffEquations, obsFunctions, m, zvars, interOffset):
-    """Sparse monomial-exponent rows of one (f, g) system for the scaling kernel:
-    weight columns 0..nz-1 are shared over zvars, intermediate columns run from
-    interOffset. Returns (rows, ninter, skipped); each row is a {col: coeff} map.
-    An exponential has weight zero and its exponent is an invariant, like an
-    observable."""
+def _scaling_rows(diffEquations, obsFunctions, m, zvars, interOffset, logs=False):
+    """Sparse {col: coeff} monomial-exponent rows of one (f, g) system for the scaling
+    kernel: weight columns 0..nz-1 over zvars, intermediate columns from interOffset.
+    Returns (rows, ninter, skipped). An exponential has weight zero and its exponent
+    is an invariant, like an observable; with `logs` so is the argument of a log(),
+    off for the power recast, which keeps log(base) as a coordinate."""
     nz = len(zvars)
     exprs = []          # (numer monomials, denom monomials, target weight vector)
     skipped = 0
-    split = [_exp_split(e) for e in list(obsFunctions) + list(diffEquations[:m])]
+    split = [_exp_split(e, logs) for e in list(obsFunctions) + list(diffEquations[:m])]
     obsFunctions = ([s[0] for s in split[:len(obsFunctions)]] +
                     [u for s in split for u in s[1]])
     diffEquations = [s[0] for s in split[len(split) - m:]] if m else []
@@ -3985,17 +4269,22 @@ def _scaling_rows(diffEquations, obsFunctions, m, zvars, interOffset):
         tvec[i] = 1     # state i is column i of zvars; x_i has weight c_i
         exprs.append((pmon, qmon, tvec))
 
+    def monRow(a, w):
+        # a . c - w = 0, times the lcm of the exponent denominators
+        D = 1
+        for x in a:
+            D = spy.ilcm(D, spy.Rational(x).q)
+        row = {j: int(a[j] * D) for j in range(nz) if a[j]}
+        row[w] = -int(D)
+        return row
+
     rows = []
     for k, (pmon, qmon, tvec) in enumerate(exprs):
         wp, wq = interOffset + 2 * k, interOffset + 2 * k + 1
-        for a in pmon:                       # a . c - wp = 0
-            row = {j: int(a[j]) for j in range(nz) if a[j]}
-            row[wp] = -1
-            rows.append(row)
-        for b in qmon:                       # b . c - wq = 0
-            row = {j: int(b[j]) for j in range(nz) if b[j]}
-            row[wq] = -1
-            rows.append(row)
+        for a in pmon:
+            rows.append(monRow(a, wp))
+        for b in qmon:
+            rows.append(monRow(b, wq))
         row = {j: -int(tvec[j]) for j in range(nz) if tvec[j]}  # wp - wq - t.c = 0
         row[wp], row[wq] = 1, -1
         rows.append(row)
@@ -4051,15 +4340,11 @@ def _scaling_nonid(gens, znames, nz):
 
 
 def _scaling_gens_recast(gens, znames, nz, recast):
-    """Impose the recast relations c_E = exp * c_base on the integer scaling lattice
-    span(gens) and return the PHYSICAL scaling generators, whose weights may involve
-    the exponent parameter. A free Hill exponent makes c_E = nhill * c_base, which no
-    integer weight can satisfy, so the plain integer kernel treats E as free and
-    misses (or over-reports) the Hill scaling. Solving span(gens) intersect {relations}
-    over Q(exp) recovers it exactly, e.g. xi_kinh = -nhill * kinh, xi_FB = FB -- no
-    finite-field sampling, so it is instant at any model size. E = base^exp holds in
-    both recast branches, so the same relation applies whether or not `inverted`.
-    Returns lists of sympy expressions (possibly symbolic in the exponents)."""
+    """Impose c_E = exp * c_base on the integer scaling lattice span(gens) and return
+    the physical generators, weights possibly symbolic in the exponent. No integer
+    weight satisfies c_E = nhill * c_base, so the plain kernel misses Hill scalings;
+    intersecting over Q(exp) recovers them exactly (e.g. xi_kinh = -nhill * kinh).
+    Holds for inverted and normal recasts alike."""
     if not gens:
         return []
     G = spy.Matrix(gens)                      # rows = basis vectors, cols = coords
@@ -4080,10 +4365,8 @@ def _scaling_gens_recast(gens, znames, nz, recast):
     for a in alphas:
         v = [spy.together(sum(a[i] * G[i, j] for i in range(G.rows)))
              for j in range(nz)]
-        # L = log(base) transforms ADDITIVELY under the scaling: it shifts by c_base
-        # (log(lam^{c_base} base) = c_base*log(lam) + L), so its generator weight is
-        # c_base. The multiplicative kernel above leaves L at 0; set it here so the
-        # generator matches the joint nullspace (which carries the L shift).
+        # L = log(base) shifts by c_base*log(lam) under the scaling; the kernel above
+        # leaves it at 0, the joint nullspace carries the shift
         for rc in recast:
             base, L = str(rc['base']), str(rc['L'])
             if base in idx and L in idx:
@@ -4101,18 +4384,16 @@ def _scaling_gens_recast(gens, znames, nz, recast):
 
 def scalingSymmetries(allVariables, diffEquations, obsFunctions, m, params,
                       fixed=(), verbose=True):
-    """Exact scaling (toric) symmetries z_i -> lam^{c_i} z_i via the integer
-    kernel of the monomial-exponent conditions: every observable is invariant
-    and every f_i scales with the weight of x_i. Pure linear algebra over the
-    integers, so it is exact and scales to large models with no expression
-    swell. Returns only the scaling part of the symmetry algebra. Symbols in
-    `fixed` are known and may not scale, so their weight is forced to zero."""
+    """Exact scaling symmetries z_i -> lam^{c_i} z_i from the integer kernel of the
+    monomial-exponent conditions (observables invariant, f_i scaling like x_i); no
+    expression swell. Symbols in `fixed` get weight zero."""
     zvars = list(allVariables[:m]) + list(params)
     nz = len(zvars)
     znames = [str(s) for s in zvars]
     fixedset = set(str(s) for s in fixed)
 
-    sparse, ninter, skipped = _scaling_rows(diffEquations, obsFunctions, m, zvars, nz)
+    sparse, ninter, skipped = _scaling_rows(diffEquations, obsFunctions, m, zvars, nz,
+                                            logs=True)
     ncols = nz + ninter
     rows = _materialize_rows(sparse, ncols)
     for j in range(nz):                      # a fixed coordinate does not scale
@@ -4141,14 +4422,11 @@ def scalingSymmetries(allVariables, diffEquations, obsFunctions, m, params,
 
 
 def scalingSymmetriesMulti(perCondModel, perCondObs, inputs=None, fixed=None,
-                           recast=None):
-    """Scaling symmetries common to every condition: the integer kernel of the
-    monomial-exponent conditions of all conditions, stacked over a shared weight
-    space (each condition contributes its own intermediate columns). The kernel
-    of the stack is the intersection of the per-condition scaling lattices, so a
-    returned scaling is a symmetry of every condition. Coordinates are the shared
-    dynamic states plus the parameters; `inputs` and `fixed` symbols do not scale.
-    Returns scalings keyed by coordinate name (states and parameters)."""
+                           recast=None, logs=False):
+    """Scaling symmetries common to every condition: the integer kernel of all
+    conditions' monomial-exponent rows stacked over a shared weight space (own
+    intermediate columns each), i.e. the intersection of the per-condition lattices.
+    Coordinates are states plus parameters; `inputs` and `fixed` do not scale."""
     perCondModel = [_as_list(m) for m in perCondModel]
     perCondObs = [_as_list(o) for o in perCondObs]
     inputset = set(_as_list(inputs))
@@ -4180,10 +4458,8 @@ def scalingSymmetriesMulti(perCondModel, perCondObs, inputs=None, fixed=None,
     paramset -= set(stateSyms)
     paramset -= {local.get(nm, spy.Symbol(nm)) for nm in inputset}
     params = sorted(paramset, key=spy.default_sort_key)
-    # re-add eliminated free-exponent bases (see compileObservabilityTapeMulti): a
-    # Michaelis constant Km in C^n/(Km^n+C^n) is dropped from the model by the recast
-    # but must stay a coordinate so _scaling_gens_recast can impose c_E = exp*c_base and
-    # recover the pool/Michaelis co-scaling exactly over Q(exp).
+    # re-add free-exponent bases the recast eliminated (Km in C^n/(Km^n+C^n)), so
+    # _scaling_gens_recast can impose c_E = exp*c_base on them
     for rc in _as_list(recast):
         b = local.get(str(rc['base']), spy.Symbol(str(rc['base'])))
         if (b not in set(stateSyms) and b not in params
@@ -4197,7 +4473,8 @@ def scalingSymmetriesMulti(perCondModel, perCondObs, inputs=None, fixed=None,
 
     rows, interOffset, skipped = [], nz, 0
     for c in range(K):
-        sparse, ninter, sk = _scaling_rows(perF[c], perG[c], m, zvars, interOffset)
+        sparse, ninter, sk = _scaling_rows(perF[c], perG[c], m, zvars, interOffset,
+                                           logs)
         rows.extend(sparse)
         interOffset += ninter
         skipped += sk
@@ -4213,9 +4490,7 @@ def scalingSymmetriesMulti(perCondModel, perCondObs, inputs=None, fixed=None,
             dense.append(row)
 
     gens = _scaling_gens(dense, ncols, nz)
-    # with a power/Hill recast, the integer kernel treats each E = base^exp as a free
-    # coordinate; impose c_E = exp*c_base to recover the parameter-weighted (Hill)
-    # scalings exactly over Q(exp), instead of leaving them to the rational fit.
+    # the integer kernel treats each recast E as free; recover the Hill scalings
     recast = _as_list(recast)
     if recast:
         physical = _scaling_gens_recast(gens, znames, nz, recast)
@@ -4233,28 +4508,22 @@ def scalingSymmetriesMulti(perCondModel, perCondObs, inputs=None, fixed=None,
 # ---- pure-symbolic observability cross-check -----------------------------------------
 
 def _lie_deriv(h, states, rhs):
-    """Lie derivative L_f h = sum_i (dh/dx_i) f_i along the flow (parameters are
-    constants of motion, so they do not contribute)."""
+    """Lie derivative L_f h = sum_i (dh/dx_i) f_i; parameters are constant."""
     return sum(spy.diff(h, states[i]) * rhs[i] for i in range(len(states)))
 
 
 def observabilitySympyMulti(model, observation, conditionSubs=None, conditionIC0=None,
                             fixed=None, parameters=None, inputs=None, backend='sympy',
                             conditionObs=None):
-    """Multi-condition pure-symbolic observability-identifiability -- the exact
-    cross-check of the modular multi-condition engine.
+    """Multi-condition pure-symbolic observability, the exact cross-check of the
+    modular multi-condition engine (same coordinate and substitution semantics as
+    compileObservabilityTapeMulti).
 
-    Each condition substitutes its per-condition values `conditionSubs[k]` into f and
-    g and seeds the observation jet at its own initial state `conditionIC0[k]`.
-    `conditionObs[k]` optionally replaces `observation` in condition k, for
-    observables measured in only a subset of the conditions. A
-    direction is non-identifiable iff it lies in the nullspace of EVERY condition's
-    observability matrix, i.e. the nullspace of the row-stacked O over one SHARED
-    coordinate space -- the intersection of the per-condition observability
-    codistributions. Mirrors the coordinate/substitution semantics of
-    compileObservabilityTapeMulti. Single-segment only (no later events / gaps) and
-    no equilibrate: supply a resting steady state explicitly through the model's
-    initial conditions (`trafo`), which is a plain substitution handled here."""
+    Condition k substitutes `conditionSubs[k]` into f and g, starts the jet at
+    `conditionIC0[k]` and may replace `observation` by `conditionObs[k]`. A direction
+    is non-identifiable iff it lies in the nullspace of the observability matrices
+    stacked over one shared coordinate space. Single segment only and no equilibrate;
+    give a steady state through the initial values (`trafo`)."""
     _select_backend(backend)
     asL = lambda v: list(v) if isinstance(v, (list, tuple)) else ([] if v is None else [v])
     model = [str(l) for l in asL(model)]
@@ -4305,10 +4574,8 @@ def observabilitySympyMulti(model, observation, conditionSubs=None, conditionIC0
             ic_c[X] = spy.sympify(e).subs(subsMap)
         perCond.append((f_c, g_c, ic_c))
 
-    # shared coordinate space: a state is a free coordinate iff its own symbol
-    # survives in its initial condition in SOME condition (a replace-dose or a
-    # forcing seeded to 0 drops it; no dose / an add-or-multiply dose keeps it).
-    # Parameters are the union of every condition's free symbols; both minus `fixed`.
+    # a state is a free coordinate iff its symbol survives in its initial value in
+    # some condition; parameters are all remaining free symbols; both minus `fixed`
     freeStates = [X for X in S
                   if any(X in ic_c[X].free_symbols for (_, _, ic_c) in perCond)]
     paramset = set()
@@ -4326,9 +4593,8 @@ def observabilitySympyMulti(model, observation, conditionSubs=None, conditionIC0
         return {'ok': True, 'rank': 0, 'dim': 0, 'lieOrder': 0,
                 'nonIdentifiable': [], 'identifiable': True, 'coordinates': []}
 
-    # stacked observability rows: at each Lie order, append every condition's row
-    # d/dz[ L_{f_c}^order g_c evaluated at that condition's initial state ic_c ];
-    # saturate to nz with a two-order-flat early exit (exact -> no truncation risk)
+    # per Lie order, each condition's rows d/dz[L_{f_c}^order g_c at ic_c]; stop at
+    # full rank or after two orders without rank gain
     rows = []
     jets = [list(g_c) for (f_c, g_c, ic_c) in perCond]     # order 0: the observables
     prev, flat, order = -1, 0, 0

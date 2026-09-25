@@ -12,15 +12,53 @@
   that is not declared positive moves by translation, as a state inside `exp()`
   does. Under a declared `positive` set, parameters that carry positive
   invariants count as positive.
-* New example `inst/examples/symmetryExponentials.R`: exponential degradation,
-  Hodgkin-Huxley, Morris-Lecar and a Boltzmann gate.
-* The documentation of `symmetryDetection()`, `symmetryReduction()` and their
-  control functions is shorter.
+* `symmetryReduction()` reduces blocks it gave up on before: wide blocks with an
+  exponential invariant, where its exp stage exceeded its size cap for every
+  denominator, blocks with more than two gauge coordinates, and blocks whose
+  exponential invariant `sympy` split into two factors. An exponential of a
+  real-valued argument is reported as that argument, and a real-valued carrier
+  needs a defined entry rather than a positive one.
+* `symmetryReduction()` on parameters given as `exp10(lk)` in the trafo: a
+  translation of `lk` no longer spoils the chart `10^lk` with a factor
+  `log(10)`, and `10^lk` counts as positive whatever `positive` says of `lk`.
+  The reduction is mapped back to `lk` as documented. A real gauge coordinate
+  that translates is pinned to 0, so a chart reads `x2 = 1` rather than
+  `x2 = exp(g12)`.
+* `symmetryDetection()` treats the symbol `time` in `f` or `g` as a clock that
+  starts at the known start of the analysis. It used to be an unknown constant,
+  which produced spurious directions such as a scaling of `time` against a rate.
+* `symmetryDetection()` accepts `log()`, fractional powers such as `sqrt()` and
+  `abs()` of coordinates declared `positive`, as in Gompertz growth
+  `a*x*log(K/x)`, a Nernst potential or `log(c + x)`. A logarithm of
+  `a + b*v`, affine in one symbol, is analysed in `L = log(a + b*v)`, where only
+  exponentials remain, and reported in `v` by the chain rule. Initial values and
+  `replace` or `multiply` events on such a state are carried along; the
+  logarithm of a known number enters exactly, as a sum of logarithms of primes
+  that are known constants. `max()`, `min()` and steps are refused, as is a
+  symbol inside two different logarithms. The scaling engine takes `log(u)` as
+  invariant exactly when `u` is, and no longer skips an equation with a
+  fractional power, which made it report scalings that were not there.
+* `symmetryDetection()` no longer fails with a missing value when a state under
+  a free exponent, `x^g`, has a given initial value; the state goes to the log
+  chart instead of the power recast.
+* `symmetryReduction()` reduces directions whose components contain `log(v)` of
+  a positive coordinate, as a Hill term with a free exponent produces, and
+  scalings with symbolic weights, as in an S-system, in the chart `log(v)` and
+  maps the result back.
 * `normL2()` no longer reads past a prediction the solver cut short. Its cached
   index of data points ignored the number of time points, so such a solve gave
   a value from memory beyond the matrix or a segfault inside `mstrust()`. It is
   now an error naming the time the solver reached, which `trust()` takes as a
   failed step.
+* New example `inst/examples/symmetryExponentials.R`: exponential degradation,
+  Hodgkin-Huxley, Morris-Lecar and a Boltzmann gate. Benches
+  `bench/symmetry_battery.R` (thermal abuse of a Li-ion cell, Arrhenius terms,
+  all positive) and `bench/symmetry_preBotC.R` (pre-Boetzinger pacemaker
+  neuron, mixed signs) run detection and reduction and check the reduced chart
+  against the full prediction.
+* The documentation of `symmetryDetection()`, `symmetryReduction()` and their
+  control functions is shorter, with formulas in LaTeX; messages of the
+  symmetry functions carry no dashes.
 
 # dMod2 0.8.0
 

@@ -22,9 +22,8 @@
 using namespace Rcpp;
 
 typedef uint64_t u64;
-// __int128 is a GCC/Clang extension (not ISO C++), used here for a 128-bit
-// accumulator in modular multiply / CRT. __extension__ marks the use as a
-// deliberate extension so -Wpedantic stays quiet without blanket-suppressing it.
+// __int128 (GCC/Clang extension) for 128-bit modular multiply and CRT;
+// __extension__ keeps -Wpedantic quiet without suppressing it globally.
 __extension__ typedef __int128 i128;
 __extension__ typedef unsigned __int128 u128;
 
@@ -605,13 +604,10 @@ bool build_obs_rows(std::vector<std::vector<u64> >& val,
   return true;
 }
 
-// Polyseries generalisation of build_obs_rows: every value is a width-(nMono*w)
-// block (a truncated power series in the gap lengths, each monomial a dual). The
-// time-Taylor recurrence mirrors build_obs_rows in structure; the scalar dual
-// operations become their polyseries versions. Computes the state and output coefficients
-// up to time order Nrun, emitting z-gradient rows for time orders 0..Ntemit and all
-// gap monomials. `val` slots must be pre-sized to (Nrun+1)*blk and the state slots
-// pre-seeded at time order 0.
+// Polyseries version of build_obs_rows: every value is a width-(nMono*w) block (a
+// truncated power series in the gap lengths, each monomial a dual). Runs to time
+// order Nrun and emits z-gradient rows for orders 0..Ntemit and all gap monomials.
+// `val` slots are pre-sized to (Nrun+1)*blk with states seeded at order 0.
 bool build_obs_rows_poly(std::vector<std::vector<u64> >& val,
                          const std::vector<int>& op, const std::vector<int>& a,
                          const std::vector<int>& b, const std::vector<u64>& cval,
@@ -695,13 +691,10 @@ bool build_obs_rows_poly(std::vector<std::vector<u64> >& val,
   return true;
 }
 
-// One experimental condition's tape in thread-safe plain C++: the instruction
-// stream and slot wiring as ints, the rational constants of the tape and the
-// initial-condition map kept as decimal strings so they can be reduced against
-// any prime, and an optional steady-state seed icSeed (constraint mode). Every
-// numeric constant is held raw (strings, or unreduced ints for icSeed) and
-// reduced per prime in build_one_condition, so a single extraction serves every
-// prime -- which the batch path relies on.
+// One condition's tape as thread-safe plain C++: instructions and slots as ints,
+// constants and the IC map as decimal strings, an optional steady-state seed
+// icSeed as raw ints. Constants are reduced per prime in build_one_condition, so
+// one extraction serves every prime (the batch path relies on this).
 struct CondRaw {
   std::vector<int> op, a, b, stateSlots, fOut, gOut, icLeaf, icOp, icA, icB, icOut;
   std::vector<std::string> cnum, cden, icCnum, icCden, icNum, icDen;
@@ -1134,19 +1127,11 @@ bool build_one_chain(const std::vector<SegRaw>& segs, int nLeaves, int nStates,
 }  // namespace
 
 // Multi-condition observability over a shared coordinate space. Each element of
-// `tapes` is one experimental condition compiled against the same slot layout:
-// leaves [0, nLeaves), states [nLeaves, nLeaves + nStates), then that
-// condition's own instructions. A condition supplies op/a/b/cnum/cden, its
-// integrated stateSlots (with aligned fOut), its gOut, and per-state initial
-// conditions as either a leaf slot (icLeaf >= 0, carrying that leaf's value and
-// dual) or a rational constant (icLeaf < 0, value icNum/icDen). The leaf point
-// and the dual seeding are shared across conditions, so a parameter is one
-// unknown everywhere; the observability rows of all conditions are stacked and
-// reduced once, giving the intersection nullspace: a direction is
-// non-identifiable only when every condition leaves it unobservable. ok is
-// FALSE when any condition hits a vanishing denominator at the point. The
-// per-condition Taylor build is independent across conditions, so it is run in
-// parallel over `cores` OpenMP threads; the rows are merged and reduced once.
+// `tapes` is one condition on the same slot layout: leaves [0, nLeaves), states
+// [nLeaves, nLeaves + nStates), then its own instructions. Initial values are a
+// leaf slot (icLeaf >= 0) or a rational constant icNum/icDen. Leaves and duals are
+// shared, so the stacked rows give the intersection nullspace. Conditions are built
+// in parallel over `cores` threads. ok is FALSE on a vanishing denominator.
 // [[Rcpp::export]]
 List symObsNullMulti(List tapes, int nLeaves, int nStates,
                      IntegerVector zSlots, IntegerVector point,
@@ -1166,10 +1151,7 @@ List symObsNullMulti(List tapes, int nLeaves, int nStates,
     if (dualCol[L] >= 0) leafVal[L][1 + dualCol[L]] = 1;
   }
 
-  // serial pre-pass: extract every condition's tape into thread-safe plain C++,
-  // so the parallel region below touches no R object (Rcpp/R is not thread-safe).
-  // A condition seeded directly from a numeric interior steady state carries its
-  // modular seed and IFT parameter-duals in icSeed (constraint mode).
+  // serial pre-pass into plain C++: the parallel region must touch no R object
   std::vector<CondRaw> td(T);
   for (int t = 0; t < T; ++t) td[t] = extract_cond_raw(tapes[t], nStates, w);
 
@@ -1203,14 +1185,10 @@ List symObsNullMulti(List tapes, int nLeaves, int nStates,
                       _["rank"] = rank, _["dim"] = nz);
 }
 
-// Batched single-segment observability: evaluate the shared condition tapes at
-// many (point, prime) pairs in one call, one OpenMP task per pair, so the rational
-// reconstruction's sample bank is built with full core occupancy. `points` is
-// nB x nLeaves and `primes` has length nB, each row carrying its own prime;
-// conditions within a pair are built serially and parallelism is over the batch.
-// The tapes carry an IC tape or constant ICs, seeded per prime from the leaves.
-// Returns a list of nB results, each shaped like symObsNullMulti (ok, R, pivots,
-// rank, dim); a pair with a vanishing denominator yields ok=FALSE.
+// Batched single-segment observability: the condition tapes at nB (point, prime)
+// pairs (rows of `points`, entries of `primes`), one OpenMP task per pair, for the
+// reconstruction's sample bank. Returns nB results shaped like symObsNullMulti; a
+// vanishing denominator yields ok=FALSE.
 // [[Rcpp::export]]
 List symObsNullBatch(List tapes, int nLeaves, int nStates, IntegerVector zSlots,
                      IntegerMatrix points, NumericVector primes, int Nt,
@@ -1222,9 +1200,8 @@ List symObsNullBatch(List tapes, int nLeaves, int nStates, IntegerVector zSlots,
   std::vector<int> dualCol(nLeaves, -1);
   for (int c = 0; c < nz; ++c) dualCol[zSlots[c]] = c;
 
-  // copy points and primes out of R into plain C++ so the parallel region below
-  // reads no R object; every constant (tape rationals and icSeed) is reduced per
-  // prime inside the build, so a single tape extraction serves every pair.
+  // copy out of R for the parallel region; constants are reduced per prime inside
+  // the build, so one extraction serves every pair
   std::vector<int> pts((size_t)nB * nLeaves);
   for (int bi = 0; bi < nB; ++bi)
     for (int L = 0; L < nLeaves; ++L) pts[(size_t)bi * nLeaves + L] = points(bi, L);
@@ -1314,18 +1291,13 @@ static List chain_result(const std::vector<std::vector<u64> >& R, const std::vec
                       _["atOne"] = atOne);
 }
 
-// Multi-segment observability with exact generic-timing propagation across events.
-// `chains` is one entry per condition: an ordered list of segments. Each segment
-// supplies its regime-substituted tape (op/a/b/cnum/cden, stateSlots, fOut, gOut);
-// the first additionally supplies an icSeed (nStates x w) anchoring the state at
-// the first event time. A condition with nSeg segments has K = nSeg-1 inter-event
-// gaps, each a formal length Delta t_i; the state is propagated across a gap by
-// promoting the segment's local-time Taylor coefficients into that gap's axis (an
-// identity event map: the regime change leaves the state continuous). Every
-// segment's output jet, expanded to total gap-degree Mtot, contributes its
-// z-gradient rows for every gap monomial; a direction is non-identifiable iff it is
-// annihilated at every monomial (a polynomial vanishing for generic gaps), so the
-// stacked rows are reduced once over GF(p) exactly as in the single-segment path.
+// Multi-segment observability with exact generic timing across events. `chains`
+// holds one ordered segment list per condition, each segment a regime-substituted
+// tape; the first may carry an icSeed. The nSeg-1 gaps are formal lengths Delta t_i:
+// the state crosses a gap by promoting its local-time Taylor coefficients into that
+// gap's axis. Each segment's output jet, to total gap-degree Mtot, contributes
+// z-gradient rows per gap monomial; a direction is non-identifiable iff every
+// monomial annihilates it, so the stacked rows are reduced once over GF(p).
 // [[Rcpp::export]]
 List symObsNullChain(List chains, int nLeaves, int nStates, IntegerVector zSlots,
                      IntegerVector point, double pIn, int Nt, int Mtot, int cores = 1) {
@@ -1335,8 +1307,7 @@ List symObsNullChain(List chains, int nLeaves, int nStates, IntegerVector zSlots
   for (int c = 0; c < nz; ++c) dualCol[zSlots[c]] = c;
   int T = chains.size();
 
-  // serial pre-pass: copy the leaf point and extract every condition's segments
-  // into thread-safe plain C++, so the parallel build below touches no R object.
+  // serial pre-pass into plain C++: the parallel build must touch no R object
   std::vector<int> leafPt(nLeaves);
   for (int L = 0; L < nLeaves; ++L) leafPt[L] = point[L];
   std::vector<std::vector<SegRaw> > chainsRaw(T);
@@ -1380,18 +1351,12 @@ List symObsNullChain(List chains, int nLeaves, int nStates, IntegerVector zSlots
   return chain_result(rows, pivots, nz, rankS, ser, N, atOne);
 }
 
-// Batched seeded single-chain observability: evaluate, for many (chain, seed, prime)
-// triples, one condition's multi-segment observability rows, one OpenMP task per
-// triple. This is the batched twin of the joint/equilibrate path's per-condition,
-// per-point symObsNullChain calls (which run serially, cores=1, one condition each):
-// the reconstruction sample bank supplies every (sample point, condition) pair with
-// its pre-solved steady-state seed, and they are evaluated in parallel here. `chains`
-// is a list of conditions' segment lists; evalChain[e] selects the chain for eval e;
-// `seeds` is nB x nLeaves (the seed leaf residues, states already written in); each
-// eval carries its own prime. Segments are extracted once per (chain, distinct prime)
-// in a serial pre-pass (extract_seg_raw reduces constants per prime and touches R).
-// Returns a list of nB results, each shaped like symObsNullChain (ok, R = rank x nz
-// reduced rows, pivots, rank, dim); a vanishing denominator yields ok = FALSE.
+// Batched twin of per-condition symObsNullChain calls on the joint/equilibrate path:
+// one OpenMP task per (chain, seed, prime) triple. evalChain[e] selects the chain,
+// `seeds` (nB x nLeaves) holds the leaf residues with states written in, `primes`
+// one prime per eval. Segments are extracted once per (chain, distinct prime).
+// Returns nB results shaped like symObsNullChain; a vanishing denominator yields
+// ok = FALSE.
 // [[Rcpp::export]]
 List symObsNullChainSeedBatch(List chains, IntegerVector evalChain,
                               IntegerMatrix seeds, NumericVector primes,
@@ -1417,8 +1382,7 @@ List symObsNullChainSeedBatch(List chains, IntegerVector evalChain,
   int nPr = (int)distinct.size();
   int N = Mtot + 1;
 
-  // serial pre-pass: extract every chain's segments per distinct prime into
-  // thread-safe plain C++, so the parallel build below touches no R object.
+  // serial pre-pass per distinct prime: the parallel build must touch no R object
   std::vector<std::vector<std::vector<SegRaw> > >
       segsRaw(nPr, std::vector<std::vector<SegRaw> >(T));
   for (int t = 0; t < T; ++t) {
@@ -1534,11 +1498,9 @@ SEXP symSolveMod(IntegerMatrix A, IntegerVector b, double pIn) {
   return x;
 }
 
-// Reduced row echelon form of a stacked GF(p) matrix. Entries arrive as doubles
-// already in [0, p) (they are log-normalised residues assembled in R); returns the
-// pivot (rank) rows in pivot-column order, the 0-based pivot columns, and the rank.
-// This is the compiled twin of R's .sym_rref_modp for the joint/equilibrate path,
-// where the final reduction runs per accepted sample point.
+// Compiled twin of R's .sym_rref_modp (joint/equilibrate path, per sample point).
+// Entries are doubles in [0, p); returns the pivot rows, 0-based pivot columns and
+// rank.
 // [[Rcpp::export]]
 List symRrefMod(NumericMatrix M, double pIn) {
   u64 p = (u64)pIn;
@@ -1560,17 +1522,12 @@ List symRrefMod(NumericMatrix M, double pIn) {
   return List::create(_["R"] = R, _["piv"] = piv, _["rank"] = rank);
 }
 
-// Fit a rational function num/den to samples of one nullspace entry over GF(p).
-// sampleU holds the values of the relevant variables at each sample; mons holds
-// the monomial exponents (row 0 is the constant monomial); rvals holds the entry
-// value at each sample. Monomials are formed modulo p here to avoid overflow.
-// The relation num - r*den = 0 is homogeneous in the 2*nMon coefficients, so its
-// solution is the kernel of the sample matrix; num and den share one scale that
-// cancels (this also fits denominators with no constant term). status is
-// "inconsistent" when only the trivial solution exists (raise the degree),
-// "ambiguous" when the kernel is more than one dimensional (degree too high),
-// and "ok" with the canonical kernel vector (free coefficient set to one) and
-// the free column index, which must agree across primes.
+// Fit num/den to samples of one nullspace entry over GF(p): sampleU holds the
+// variables per sample, mons the monomial exponents (row 0 constant), rvals the
+// entry values. num - r*den = 0 is homogeneous, so the fit is the kernel of the
+// sample matrix (denominators without constant term included). status is
+// "inconsistent" (degree too low), "ambiguous" (kernel dimension > 1) or "ok" with
+// the kernel vector (free coefficient one) and free column, to agree across primes.
 // [[Rcpp::export]]
 List symFitRational(IntegerMatrix sampleU, IntegerMatrix mons,
                     IntegerVector rvals, double pIn) {
@@ -1615,9 +1572,8 @@ List symFitRational(IntegerMatrix sampleU, IntegerMatrix mons,
 // [[Rcpp::export]]
 List symRatRecon(IntegerMatrix residues, IntegerVector primes) {
   int k = residues.nrow(), nprime = residues.ncol();
-  // the CRT accumulator holds the running prime product in u128; r + M*t stays
-  // below 2*product, so the product must fit under 2^127 to avoid silent
-  // overflow. Primes near 2^31 allow up to 4; guard exactly by summed bit length.
+  // r + M*t stays below 2*product, so the product must fit under 2^127 (four
+  // primes near 2^31); guarded by summed bit length
   int prodBits = 0;
   for (int j = 0; j < nprime; ++j) {
     u64 pj = (u64)primes[j];

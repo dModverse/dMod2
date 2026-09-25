@@ -19,8 +19,8 @@ polynomialControl(
 
 \item{pMax}{Maximum degree of the ansatz, at least 1.}
 
-\item{lieOrder}{Also require invariance of the Lie derivatives \verb{L^k g} for
-\verb{k = 1, ..., lieOrder}.}
+\item{lieOrder}{Also require invariance of the Lie derivatives \eqn{L^k g} for
+\eqn{k = 1, \dots,} \code{lieOrder}.}
 
 \item{exact}{Logical. Exact modular linear algebra (\code{TRUE}) or floating point.}
 

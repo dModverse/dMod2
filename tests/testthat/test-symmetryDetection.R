@@ -147,8 +147,9 @@ test_that("observability scales to a deep chain via the exact modular engine", {
 test_that("observability rejects a non-rational observable", {
   if (!.sympy_works()) skip("reticulate/sympy not available")
 
+  # sqrt(A) is carried by the log chart of a positive A, not otherwise
   expect_error(
-    symdet(.canonical(), eqnvec(Aobs = "sqrt(A)"),
+    symdet(.canonical(), eqnvec(Aobs = "sqrt(A)"), positive = FALSE,
                       method = "observability", reduceCQ = FALSE),
     "rational")
 })
@@ -186,7 +187,7 @@ test_that("reconstruct observability reconstructs a non-monomial direction", {
                            method = "observability", reconstruct = TRUE,
                            reduceCQ = FALSE)
   # the conserved-quantity direction, reported as its canonical polynomial-primitive
-  # generator: dB = A + B, dk1 = k2, dk2 = -k2 -- the same direction as the raw
+  # generator: dB = A + B, dk1 = k2, dk2 = -k2; the same direction as the raw
   # dk2 = 1, dk1 = -1, dB = -(A + B)/k2, cleared of its 1/k2 gauge. Not a scaling
   # (dB is not a multiple of B), hence "general"
   d <- Filter(function(d) all(c("B", "k1", "k2") %in% names(d$generator)) &&
@@ -498,7 +499,7 @@ test_that("the C++ steady-state seed reproduces the symbolic verdict", {
   fb <- eqnvec(R = "k_pr/(1 + k_fb*FB^nh) - k_dg*R", FB = "k_pf*R - k_df*FB",
                u = "0")
   # the seed is compared by rank and direction supports, so no reconstruction is
-  # needed here -- closed forms for this model are covered by the recast tests above
+  # needed here; closed forms for this model are covered by the recast tests above
   agree(fb, eqnvec(R_obs = "s1*R", FB_obs = "s2*FB"), method = "observability",
         equilibrate = TRUE, forcings = "u",
         events = addEvent(eventlist(), var = "u", time = -1, value = "var_u",
@@ -816,7 +817,7 @@ test_that("equilibrate reconstructs Hill directions in closed form via the recas
 
 
 # The Hill term above has a STATE base (p^nhill). A Michaelis constant K^n is a
-# PARAMETER base -- it appears only under the exponent -- which the recast handles
+# PARAMETER base (it appears only under the exponent), which the recast handles
 # differently (the "Michaelis co-scaling" relation, xi_base = -exp/base and -1/base).
 # That case had no coverage, which is why the parameter-base regression slipped
 # through. These two tests guard the verdict and the ground-truth direction.
@@ -852,7 +853,7 @@ test_that("modular reconstruct recovers the parameter-base (Michaelis) Hill dire
   # (each on a distinct physical anchor); the n-direction comes back in closed form
   # with its log(base) factor. The reported gauge differs from the symbolic engine's
   # (a valid alternative basis of the same residual space), so this only asserts that
-  # every direction closes and a log factor appears -- not the exact representative.
+  # every direction closes and a log factor appears; not the exact representative.
   hill <- eqnlist() |>
     addReaction("0",  "FB", "k_pr_FB")                     |>
     addReaction("FB", "0",  "d_FB * FB")                   |>
@@ -1208,7 +1209,7 @@ test_that("a gap dose is resolved in its OWN condition, not the last one", {
   if (!.sympy_works()) skip("reticulate/sympy not available")
 
   # The tape compiler used to re-substitute every condition's event values through
-  # whichever substitution map the condition loop happened to leave behind -- always
+  # whichever substitution map the condition loop happened to leave behind; always
   # the LAST condition's. It only showed when a resolved value still contained a
   # symbol that the last condition renames, i.e. when a grid column is named after
   # the symbol in its own first cell. The two runs below are the same model and
@@ -1242,7 +1243,7 @@ test_that("a per-condition `g` list keeps observables in their own conditions", 
   # B decays with a condition-specific rate and its readout exists only in the
   # second condition (an assay run in its own experiment). A single `g` is applied
   # to every condition, so it credits the first condition with a B measurement it
-  # never made and identifies q1 -- the optimistic, unsafe verdict. The list form
+  # never made and identifies q1; the optimistic, unsafe verdict. The list form
   # measures each observable where it was measured and reports q1 as free.
   f  <- eqnvec(A = "-k*A", B = "-q*B")
   cg <- data.frame(q = c("q1", "q2"), row.names = c("elisa", "wb"),
@@ -1343,7 +1344,7 @@ test_that("a post-t0 event opens a second segment, propagated exactly", {
                          conditions = cg, reconstruct = TRUE)
   expect_equal(r$info$conditions, 1L)
   expect_equal(r$info$segments, 2L)
-  expect_equal(r$dim, 3L)             # A(0), s, k -- no free carry coordinates
+  expect_equal(r$dim, 3L)             # A(0), s, k; no free carry coordinates
   expect_true(r$identifiable)         # the second dose's jump reveals the scale s
 })
 
@@ -1441,10 +1442,12 @@ test_that("log-parametrised parameters and logarithmic observables are rational"
   sy <- symdet(f, eqnvec(y = "log10(s*A)"), trafo = tr, symEngine = "symbolic")
   expect_equal(sy$rank, lg$rank)
 
-  # an offset on a log observable is a translation; a scale on it stays unsupported
+  # an offset on a log observable is a translation; a scale on it needs A > 0,
+  # where the log chart carries it
   off <- symdet(f, eqnvec(y = "log(A) + c"), reconstruct = TRUE)
   expect_equal(off$rank, 3L)
-  expect_error(symdet(f, eqnvec(y = "s*log(A)")), "a\\*log\\(h\\)")
+  expect_error(symdet(f, eqnvec(y = "s*log(A)"), positive = FALSE), "a\\*log\\(h\\)")
+  expect_no_error(symdet(f, eqnvec(y = "s*log(A)")))
 
   # a parameter that also enters outside an exponent stays a coordinate
   both <- symdet(eqnvec(A = "-exp(lk)*A + lk"), eqnvec(y = "A"))
@@ -1652,7 +1655,7 @@ test_that("the toric peel recovers a parameter-weighted (Hill) scaling over Q(nh
   # a free Hill exponent makes the inhibition k_inh * p^nhill invariant under
   # p -> lam*p, k_inh -> lam^(-nhill)*k_inh: a scaling whose WEIGHT is the exponent.
   # The toric peel imposes c_E = nhill*c_base and recovers it exactly over Q(nhill),
-  # as a scaling with weight -nhill on k_inh -- no rational fit, no sampling.
+  # as a scaling with weight -nhill on k_inh; no rational fit, no sampling.
   ev <- addEvent(eventlist(), var = "u", time = -1, value = "var_u", method = "replace")
   cond <- data.frame(var_u = c(0, 1), row.names = c("ctrl", "stim"))
   r <- symdet(
@@ -1708,7 +1711,7 @@ test_that("a pure constant shift comes back as a degree-zero general direction",
   if (!.sympy_works()) skip("reticulate/sympy not available")
 
   # a conserved moiety A + B with only the total observed: shifting A up and B
-  # down leaves the total unchanged -- a pure (constant) translation. Not a scaling,
+  # down leaves the total unchanged; a pure (constant) translation. Not a scaling,
   # so it is reported as general, with the constant components as its degree
   moi <- eqnvec(A = "-k1*A + k2*B", B = "k1*A - k2*B")
   r <- symdet(moi, eqnvec(y = "A + B"), method = "observability",
@@ -1748,13 +1751,13 @@ test_that("a state-named symbol on the right of a trafo is an initial value, not
 
   # steadyStates() writes the resting state in the state symbols themselves, and dMod
   # names a state's initial value after the state. Substituting k1 = k2*B/A into f as
-  # written reads those as the RUNNING states, and f cancels to 0 -- taking the model,
+  # written reads those as the RUNNING states, and f cancels to 0, taking the model,
   # its parameters and the analysis with it.
   ab <- eqnvec(A = "-k1*A + k2*B", B = "k1*A - k2*B")
   tr <- eqnvec(k1 = "k2*B/A")
 
   # started at the resting state and left alone the observable is constant, so only
-  # the product alpha*A is identifiable -- and B and k2 are still coordinates
+  # the product alpha*A is identifiable, and B and k2 are still coordinates
   r <- symdet(ab, eqnvec(Aobs = "alpha*A"), method = "observability",
               trafo = tr, reconstruct = TRUE, reduceCQ = FALSE)
   expect_setequal(r$info$coordinates, c("A", "B", "alpha", "k2"))

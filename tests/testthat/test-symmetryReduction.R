@@ -143,9 +143,9 @@ test_that("rational invariant via Darboux; degree cap gives a certificate", {
   # separable = FALSE and dPoly = 0 throughout: this generator IS separable, and
   # its invariant (x - y)/(x*y) sits in the rational stage's Laurent ansatz, so
   # both earlier stages would take the block before the factor stages ever run
-  # (covered elsewhere) -- here the point is what the factor stages do on their own
+  # (covered elsewhere); here the point is what the factor stages do on their own
   # cap 0 (and exp stage off): coordinate factors only, honest negative
-  # certificate -- with dExp > 0 this block now RESOLVES through exp(1/x - 1/y)
+  # certificate; with dExp > 0 this block now RESOLVES through exp(1/x - 1/y)
   red0 <- redquiet(obj, dPoly = 0L, dDarboux = 0L, dExp = 0L, separable = FALSE)
   b0 <- red0$blocks[[1]]
   expect_identical(b0$status, "unresolved")
@@ -187,7 +187,7 @@ test_that("module reduction collapses the M009-shaped pair", {
 test_that("multi-generator block: only common invariants survive", {
   if (!.sympy_works()) skip("reticulate/sympy not available")
   # X1 scales (a, b); X2 scales (b, c): the common monomial lattice is spanned by
-  # a*b*c (exponents alpha = beta = gamma) -- a*b is X1-invariant but not
+  # a*b*c (exponents alpha = beta = gamma); a*b is X1-invariant but not
   # X2-invariant, so the joint block must NOT report it
   obj <- .mkobj(list(.mkdir(list(a = "a", b = "-b"), "general"),
                      .mkdir(list(b = "b", c = "-c"), "general")),
@@ -263,14 +263,14 @@ test_that("print stays lean; summary carries the block report", {
   # Invariants list above, so they are not repeated, and no certificate is printed
   rep <- capture.output(summary(red))
   expect_true(any(grepl("^Blocks$", rep)))
-  # [^}] not . -- under an ASCII session charset the label subscript reaches the
+  # [^}] not .; under an ASCII session charset the label subscript reaches the
   # captured line as its raw bytes, which a byte-wise "." cannot span
   expect_true(any(grepl("\\{X[^}]+\\} scaling, reduced \\| transversal ktl = 1", rep)))
   expect_true(any(grepl("admissible", rep)))
   expect_false(any(grepl("ktx\\*ktl", rep)))
   expect_false(any(grepl("invariants  |certificate|certified", rep)))
   expect_lt(length(rep), 20L)
-  # verbose adds the admissible sets and the raw invariants -- still no certificates
+  # verbose adds the admissible sets and the raw invariants; still no certificates
   vrb <- capture.output(summary(red, verbose = TRUE))
   expect_true(any(grepl("admissible  \\{", vrb)))
   expect_true(any(grepl("invariants  ", vrb)))
@@ -425,7 +425,7 @@ test_that("EGF cascade with steady-state trafo: the rational stage finds the
   # the direction symmetryDetection(trafo = steadyStates(...), events = ...)
   # reports for the EGF/EGFR -> MEK/ERK cascade with an EGF dose event. Its 4th
   # invariant (EGFR^2*k_bind + EGFR*k_bind + EGFR*k_unbind + EGF_EGFR*k_unbind)/
-  # EGFR is polynomial over the single coordinate EGFR -- the rational (Laurent)
+  # EGFR is polynomial over the single coordinate EGFR; the rational (Laurent)
   # stage's case, which no other stage reaches at the default caps. The chart
   # needs the balance section EGFR = 1 and a certified offset on the carrier of
   # the 4th invariant (q_4 rides I_4 - 2*sqrt(I_1), positive by AM-GM).
@@ -586,9 +586,12 @@ test_that("positive declares the domain the certificates are proved over", {
     any(vapply(curved(all)$invariants, function(jv) .symExprEqual(iv, jv),
                logical(1))), logical(1))))
 
-  # one coordinate short of the full declaration is enough to lose the chart
+  # k_d left real carries the real invariant k_p + k_d; the balance P = pP is
+  # reached on every orbit of the rest of the domain, so the chart holds
   short <- redquiet(res, fixed = "s", positive = c("P", "pP", "k_p"))
-  expect_identical(curved(short)$status, "invariantOnly")
+  expect_identical(curved(short)$status, "reduced")
+  expect_true("real" %in% curved(short)$carrierDomain)
+  expect_true(symdet2(f, g, trafo = short$trafo, fixed = "s")$identifiable)
 
   expect_warning(symmetryReduction(res, positive = c("P", "nonesuch")),
                  "not a coordinate")
@@ -617,7 +620,7 @@ test_that("an unknown sign decides no sign, an even power still does", {
 test_that("root carrier: quadratic invariant solved with a fractional power", {
   if (!.sympy_works()) skip("reticulate/sympy not available")
   # the rotation a' = b, b' = -a has the single invariant a^2 + b^2. Pinning a = 1
-  # would solve b = sqrt(I - 1), a chart valid only for I > 1 -- the orbit is the
+  # would solve b = sqrt(I - 1), a chart valid only for I > 1; the orbit is the
   # circle of radius sqrt(I) and reaches a = 1 only when it is large enough. The
   # balance section a = b has no such wall: it meets every circle once, in the
   # positive quadrant, and puts both coordinates at sqrt(2*I)/2.
@@ -673,7 +676,7 @@ test_that("moved-only extactic basis: parameters no longer block the factor sear
   b <- red$blocks[[1]]
   # separable = FALSE and dPoly = 0: the generator decouples and its invariant is
   # Laurent, so the quadrature and rational stages would each answer before the
-  # extactic basis is ever built -- this test is about the basis
+  # extactic basis is ever built; this test is about the basis
   # 6 total variables used to hit "extactic skipped" (projected entry degree 13
   # over the all-variables basis); the moved-coordinate basis (2 coordinates)
   # passes the cap and finds the factor x - y
@@ -798,7 +801,7 @@ test_that("zero limits: unconditional ones reported, conditional ones stated", {
   flowP  <- function(e, z) (z[["P"]] + z[["pP"]]) * exp(e) - z[["pP"]]
 
   # k_p*(P + pP) is an invariant, strictly positive on the orthant: {k_p = 0} is
-  # off every orbit, whatever the point -- and the flow agrees, k_p only decays
+  # off every orbit, whatever the point; and the flow agrees, k_p only decays
   expect_identical(v["k_p", "verdict"], "no")
   # the other two are reachable on complementary halves of the parameter space
   expect_identical(unname(v[c("P", "k_d"), "verdict"]), c("if", "if"))
@@ -899,4 +902,65 @@ test_that("a log-parametrised direction is reduced in base^theta and mapped back
     comp <- cOde::replaceSymbols(nm, paste0("(", red$trafo[[nm]], ")"), comp)
   comp <- c(setNames(comp, names(tr)), red$trafo["A"])
   expect_true(symdet2(f, eqnvec(y = "log10(s*A)"), trafo = as.eqnvec(comp))$identifiable)
+})
+
+
+# two ohmic currents: one scaling and two general directions, three gauge
+# coordinates, real reversal potentials
+.fOhm <- eqnvec(V = "(gL*(EL - V) + gt*(Es - V))/C")
+
+test_that("surplus gauge coordinates are pinned before the balance search", {
+  if (!.sympy_works()) skip("reticulate/sympy not available")
+  skip_on_cran()
+  pos <- c("C", "gL", "gt")
+  r <- symdet2(.fOhm, eqnvec(y = "V"), positive = pos, reconstruct = TRUE)
+  red <- redquiet(r, positive = pos)
+  expect_length(red$remaining, 0L)
+  # the real invariant gL*EL + gt*Es is not hidden inside exp()
+  inv <- unlist(lapply(red$blocks, `[[`, "invariants"))
+  expect_false(any(grepl("exp(", inv, fixed = TRUE)))
+  expect_true(symdet2(.fOhm, eqnvec(y = "V"), trafo = red$trafo,
+                      positive = pos)$identifiable)
+})
+
+test_that("exp10() parameters: a translation is reduced in the chart 10^theta", {
+  if (!.sympy_works()) skip("reticulate/sympy not available")
+  skip_on_cran()
+  tr <- eqnvec(C = "exp10(lC)", gL = "exp10(lgL)", gt = "exp10(lgt)")
+  r <- symdet2(.fOhm, eqnvec(y = "V"), trafo = tr, positive = FALSE,
+               reconstruct = TRUE)
+  expect_length(r$symmetries, 3L)
+  # 10^theta is positive although theta is not
+  red <- redquiet(r, positive = FALSE)
+  expect_length(red$remaining, 0L)
+  comp <- as.character(tr)
+  for (nm in names(red$trafo))
+    comp <- cOde::replaceSymbols(nm, paste0("(", red$trafo[[nm]], ")"), comp)
+  comp <- c(setNames(comp, names(tr)), red$trafo[c("EL", "Es")])
+  expect_true(symdet2(.fOhm, eqnvec(y = "V"), trafo = as.eqnvec(comp),
+                      positive = FALSE)$identifiable)
+})
+
+test_that("a direction with log() of a positive coordinate is reduced in log(v)", {
+  if (!.sympy_works()) skip("reticulate/sympy not available")
+  skip_on_cran()
+  # Hill with a free exponent: n moves with log(u) and log(K)
+  f <- eqnvec(x = "v*u^n/(K^n + u^n) - d*x", u = "-e*u")
+  r <- symdet2(f, eqnvec(y = "x"), reconstruct = TRUE)
+  expect_true(any(vapply(r$symmetries, function(d)
+    any(grepl("log(", d$generator, fixed = TRUE)), logical(1))))
+  red <- redquiet(r)
+  expect_length(red$remaining, 0L)
+  expect_true(symdet2(f, eqnvec(y = "x"), trafo = red$trafo)$identifiable)
+})
+
+test_that("a scaling with symbolic weights is reduced in log coordinates", {
+  if (!.sympy_works()) skip("reticulate/sympy not available")
+  skip_on_cran()
+  # S-system: x2 moves with a1^g12 and b2^(h22 - 1)
+  f <- eqnvec(x1 = "a1*x2^g12 - b1*x1^h11", x2 = "a2*x1^g21 - b2*x2^h22")
+  r <- symdet2(f, eqnvec(y = "x1"), reconstruct = TRUE)
+  red <- redquiet(r)
+  expect_length(red$remaining, 0L)
+  expect_true(symdet2(f, eqnvec(y = "x1"), trafo = red$trafo)$identifiable)
 })

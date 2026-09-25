@@ -130,3 +130,111 @@ test_that("a translation gauge reduces a direction with real coordinates", {
   expect_length(red$remaining, 0L)
   expect_true(symdet(fAB(), gAB, trafo = red$trafo)$identifiable)
 })
+
+
+test_that("the exp stage reaches a wide block at a lower numerator degree", {
+  if (!.sympy_works()) skip("reticulate/sympy not available")
+  skip_on_cran()
+
+  # thermal abuse of a Li-ion cell (Hatchard et al. 2001), T measured: eight
+  # directions over 25 coordinates, one of them a translation of tsei
+  Rsei <- "Asei*exp(-Esei/T)*csei"
+  Rne  <- "Ane*exp(-tsei/tref)*exp(-Ene/T)*cneg"
+  Rpe  <- "Ape*exp(-Epe/T)*alpha*(1 - alpha)"
+  Re   <- "Ae*exp(-Ee/T)*ce"
+  f <- eqnvec(
+    csei = paste0("-", Rsei), cneg = paste0("-", Rne), tsei = Rne, alpha = Rpe,
+    ce = paste0("-", Re),
+    T = sprintf("(Hsei*Wc*%s + Hne*Wc*%s + Hpe*Wp*%s + He*We*%s - hA*(T - Ta))/rhocp",
+                Rsei, Rne, Rpe, Re))
+  obs <- symdet(f, eqnvec(y = "T"), reconstruct = TRUE)
+  expect_length(obs$symmetries, 8L)
+  red <- suppressWarnings(symmetryReduction(obs))
+  expect_length(red$remaining, 0L)
+  inv <- unlist(lapply(red$blocks, `[[`, "invariants"))
+  expect_true(any(grepl("exp(", inv, fixed = TRUE)))
+  expect_true(symdet(f, eqnvec(y = "T"), trafo = red$trafo)$identifiable)
+})
+
+
+test_that("time in f is a clock, not a parameter", {
+  if (!.sympy_works()) skip("reticulate/sympy not available")
+
+  f <- eqnvec(x = "A*exp(-lam*time) - d*x")
+  obs <- symdet(f, eqnvec(y = "s*x"), reconstruct = TRUE)
+  expect_false("time" %in% obs$info$coordinates)
+  expect_length(obs$symmetries, 1L)
+  expect_setequal(names(obs$symmetries[[1]]$generator), c("A", "s", "x"))
+  sc <- symdet(f, eqnvec(y = "s*x"), method = "scaling")
+  expect_length(sc$symmetries, 1L)
+  expect_setequal(names(sc$symmetries[[1]]$generator), c("A", "s", "x"))
+})
+
+
+test_that("log() and fractional powers of positive coordinates", {
+  if (!.sympy_works()) skip("reticulate/sympy not available")
+
+  # Gompertz growth: x and K scale together, the scale s inversely
+  gz <- eqnvec(x = "a*x*log(K/x)")
+  gg <- eqnvec(y = "s*x")
+  for (m in c("observability", "scaling")) {
+    r <- symdet(gz, gg, method = m, reconstruct = TRUE)
+    expect_length(r$symmetries, 1L)
+    expect_identical(r$symmetries[[1]]$type, "scaling")
+    w <- vapply(r$symmetries[[1]]$weights, as.numeric, numeric(1))
+    expect_equal(w[c("K", "s", "x")] / w[["K"]], c(K = 1, s = -1, x = 1),
+                 ignore_attr = TRUE)
+  }
+  obs <- symdet(gz, gg, reconstruct = TRUE)
+  expect_setequal(obs$info$coordinates, c("x", "K", "a", "s"))
+  red <- suppressWarnings(symmetryReduction(obs))
+  expect_length(red$remaining, 0L)
+  expect_true(symdet(gz, gg, trafo = red$trafo)$identifiable)
+  # log() needs the positive domain
+  expect_error(symdet(gz, gg, positive = FALSE), "positive")
+
+  # sqrt: x scales by lambda^2, k by lambda, s by lambda^-2
+  sq <- eqnvec(x = "-k*sqrt(x)")
+  for (m in c("observability", "scaling")) {
+    r <- symdet(sq, gg, method = m, reconstruct = TRUE)
+    expect_length(r$symmetries, 1L)
+    w <- vapply(r$symmetries[[1]]$weights, as.numeric, numeric(1))
+    expect_equal(w[c("k", "s", "x")] / w[["k"]], c(k = 1, s = -2, x = 2),
+                 ignore_attr = TRUE)
+  }
+})
+
+
+test_that("events, abs() and logarithms of sums in the log chart", {
+  if (!.sympy_works()) skip("reticulate/sympy not available")
+
+  gz <- eqnvec(x = "a*x*log(K/x)")
+  gg <- eqnvec(y = "s*x")
+  # a known dose separates s and K; log(2) enters exactly, as a known constant
+  dose <- addEvent(eventlist(), var = "x", time = 0, value = "2", method = "replace")
+  expect_true(symdet(gz, gg, events = dose)$identifiable)
+  # a dose in a parameter joins the chart
+  dD <- addEvent(eventlist(), var = "x", time = 0, value = "D", method = "replace")
+  r <- symdet(gz, gg, events = dD, reconstruct = TRUE)
+  expect_setequal(names(r$symmetries[[1]]$generator), c("D", "K", "s"))
+  expect_error(symdet(gz, gg, events = addEvent(eventlist(), var = "x", time = 3,
+                                                value = "1", method = "add")), "add")
+
+  # abs() of a positive state, max() refused
+  r <- symdet(eqnvec(x = "-k*abs(x)*x"), gg, reconstruct = TRUE)
+  expect_setequal(names(r$symmetries[[1]]$generator), c("k", "s", "x"))
+  expect_error(symdet(eqnvec(x = "-k*max(x, c)"), gg), "not analytic")
+
+  # log(c + x): c and x trade places, mapped back by the chain rule
+  fc <- eqnvec(x = "-k*log(c + x)")
+  gc <- eqnvec(y = "s*(c + x)")
+  r <- symdet(fc, gc, reconstruct = TRUE)
+  expect_length(r$symmetries, 1L)
+  gen <- r$symmetries[[1]]$generator
+  expect_setequal(names(gen), c("c", "x"))
+  expect_true(.symExprEqual(gen[["x"]], paste0("-(", gen[["c"]], ")")))
+  red <- suppressWarnings(symmetryReduction(r))
+  expect_true(symdet(fc, gc, trafo = red$trafo)$identifiable)
+  # two different logarithms of x
+  expect_error(symdet(eqnvec(x = "r*x*log(1 + K/x)"), gg), "two different")
+})

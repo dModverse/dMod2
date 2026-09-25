@@ -128,9 +128,9 @@ An object of class \code{symmetrydetection}:
 \item{\code{rank}, \code{dim}}{rank of the observability matrix and number of
 coordinates; \code{NA} for \code{"scaling"} and \code{"polynomial"}.}
 \item{\code{symmetries}}{the directions, each a generator
-\verb{X = sum_i eta_i d/dz_i} with \code{generator} (the components \code{eta_i} by
-coordinate), \code{weights} (integer weights of a scaling, else \code{NULL}), \code{type}
-(\code{"scaling"}, removed by fixing one coordinate of the support, or
+\eqn{X = \sum_i \eta_i \partial_{z_i}} with \code{generator} (the components
+\eqn{\eta_i} by coordinate), \code{weights} (integer weights of a scaling, else
+\code{NULL}), \code{type} (\code{"scaling"}, removed by fixing one coordinate of the support, or
 \code{"general"}, removed by \code{\link[=symmetryReduction]{symmetryReduction()}}), \code{degree} (\code{-1} if not
 polynomial), \code{support}, \code{explicit}, \code{reason}, \code{certified},
 \code{transformation} (\code{"polynomial"} only), \code{verified}, \code{display} (factored
@@ -165,7 +165,11 @@ with generators and finite transformations. The cost grows with
 }
 
 All engines accept \code{exp()}, \code{exp10()}, \code{b^x}, \code{sinh()}, \code{cosh()} and \code{tanh()}
-of states and parameters. Otherwise \code{"observability"} with \code{symEngine = "modular"} requires rational expressions, up to free power exponents \code{x^n} and
+of states and parameters. \code{log()}, fractional powers and \code{abs()} of
+coordinates declared \code{positive} are analysed in \eqn{L_v = \log v} and
+reported in \eqn{v}. The symbol \code{time} is the model time, known at the start
+of the analysis. Otherwise \code{"observability"} with \code{symEngine = "modular"}
+requires rational expressions, up to free power exponents \code{x^n} and
 observables \code{a*log(h) + c} with a number \code{a}. The methods are described in
 \code{vignette("Symmetries")}.
 }
