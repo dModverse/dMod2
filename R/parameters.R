@@ -263,10 +263,10 @@ P <- function(trafo = NULL, parameters = NULL, condition = NULL,
 #' @param compile,modelname,verbose Forwarded to [cppDE::cppFUN].
 #' @param deriv,deriv2 Attach `attr(., "deriv")` `[p, theta]` and/or
 #'   `attr(., "deriv2")` `[p, theta, theta]`. `deriv2` needs `deriv = TRUE`.
-#' @param derivMode Which derivative products to build, one or both of
-#'   `"forward"` (AD) and `"reverse"` (the vector-Jacobian product the reverse
-#'   sweep contracts against). The default `c("forward", "reverse")` builds
-#'   both directions.
+#' @param derivMode Which derivative products to build, any of `"forward"`
+#'   (AD, default), `"reverse"` (the vector-Jacobian product the reverse sweep
+#'   contracts against) and `"forward-reverse"` (its derivative along a tangent,
+#'   for the reverse sweep with `deriv2 = TRUE`).
 #' @param outdir Directory for the generated source and shared object,
 #'   default the working directory.
 #'
@@ -277,10 +277,10 @@ P <- function(trafo = NULL, parameters = NULL, condition = NULL,
 Pexpl <- function(trafo, parameters = NULL, attach.input = FALSE, condition = NULL,
                   compile = FALSE, modelname = NULL, verbose = FALSE,
                   deriv = TRUE, deriv2 = FALSE,
-                  derivMode = c("forward", "reverse"),
+                  derivMode = "forward",
                   outdir = getwd()) {
 
-  derivMode <- .matchDerivMode(derivMode, c("forward", "reverse"))
+  derivMode <- .matchDerivMode(derivMode, c("forward", "reverse", "forward-reverse"))
   emit_d1   <- isTRUE(deriv)
   emit_d2   <- isTRUE(deriv2)
   if (emit_d2 && !emit_d1)

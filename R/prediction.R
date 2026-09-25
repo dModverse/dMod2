@@ -986,13 +986,15 @@ Xd <- function(data, condition = NULL) {
 #' @param cores Number of parallel jobs used to generate the sources when
 #' `g` is a list; `NULL` auto-detects. Ignored for a single observation
 #' function, which is one source either way.
-#' @param derivMode Which derivative products to build. More than one may be
-#'   named; the default `c("forward", "reverse")` builds both.
+#' @param derivMode Which derivative products to build, any of `"forward"`
+#'   (default), `"reverse"` and `"forward-reverse"`.
 #'   * `"forward"`: forward-mode AD on `cppde::dual`. Faster for many
 #'     parameters and what the Jacobian path uses. Requires compiled code.
 #'   * `"reverse"`: the vector-Jacobian product the reverse sweep contracts
 #'     against, a second instantiation of the expression body. It is what
 #'     `obj(..., sweep = "reverse")` needs from an observation function.
+#'   * `"forward-reverse"`: its derivative along a tangent, what the reverse
+#'     sweep needs with `deriv2 = TRUE`.
 #'
 #'   Either way the observation function is evaluable only after compilation.
 #' @param deriv Logical. If `TRUE` (default), attach the first-order
@@ -1016,9 +1018,9 @@ Y <- function(g, f = NULL, states = NULL, parameters = NULL,
               condition = NULL, attach.input = FALSE,
               compile = FALSE, modelname = NULL, verbose = FALSE,
               cores = NULL, deriv = TRUE, deriv2 = FALSE,
-              derivMode = c("forward", "reverse"), outdir = getwd()) {
+              derivMode = "forward", outdir = getwd()) {
 
-  derivMode <- .matchDerivMode(derivMode, c("forward", "reverse"))
+  derivMode <- .matchDerivMode(derivMode, c("forward", "reverse", "forward-reverse"))
 
   # A named list of observable sets builds one obsfn per condition, generated
   # in parallel and compiled once, the way `P()` handles a trafo list.

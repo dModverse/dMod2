@@ -1,5 +1,7 @@
 # dMod2 (development version)
 
+* `Pexpl()` and `Y()` build `derivMode = "forward"` by default and accept
+  `"forward-reverse"`, which the reverse sweep with `deriv2 = TRUE` needs.
 * `symmetryDetection()` builds scaling rows without dense polynomials and reads an
   equation repeated across conditions once. Large models no longer run out of memory.
 * `symmetryDetection()` reports a direction that moves one coordinate as a scaling.

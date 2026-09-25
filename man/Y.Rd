@@ -17,7 +17,7 @@ Y(
   cores = NULL,
   deriv = TRUE,
   deriv2 = FALSE,
-  derivMode = c("forward", "reverse"),
+  derivMode = "forward",
   outdir = getwd()
 )
 }
@@ -66,14 +66,16 @@ sensitivity \code{attr(., "deriv")} of shape \verb{[time, observable, theta]}.}
 \code{attr(., "deriv2")} array of shape \verb{[time, observable, theta, theta]}.
 Requires \code{deriv = TRUE}. Default \code{FALSE}.}
 
-\item{derivMode}{Which derivative products to build. More than one may be
-named; the default \code{c("forward", "reverse")} builds both.
+\item{derivMode}{Which derivative products to build, any of \code{"forward"}
+(default), \code{"reverse"} and \code{"forward-reverse"}.
 \itemize{
 \item \code{"forward"}: forward-mode AD on \code{cppde::dual}. Faster for many
 parameters and what the Jacobian path uses. Requires compiled code.
 \item \code{"reverse"}: the vector-Jacobian product the reverse sweep contracts
 against, a second instantiation of the expression body. It is what
 \code{obj(..., sweep = "reverse")} needs from an observation function.
+\item \code{"forward-reverse"}: its derivative along a tangent, what the reverse
+sweep needs with \code{deriv2 = TRUE}.
 }
 
 Either way the observation function is evaluable only after compilation.}

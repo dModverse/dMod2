@@ -42,23 +42,24 @@ skip_on_cran()
 
     m <- odemodel(re, modelname = "rv_ode", deriv = TRUE, derivMode = fr,
                   outdir = d, compile = FALSE)
-    g <- Y(c(obsA = "s*A", obsB = "s*B"), re, modelname = "rv_obs", outdir = d)
+    g <- Y(c(obsA = "s*A", obsB = "s*B"), re, derivMode = fr, modelname = "rv_obs",
+           outdir = d)
     e <- Y(c(obsA = "sd_rel*obsA + sd_abs", obsB = "sd_rel*obsB + sd_abs"), g,
            states = c("obsA", "obsB"), parameters = c("sd_rel", "sd_abs"),
-           modelname = "rv_err", outdir = d)
-    p <- P(tr, condition = "C1", modelname = "rv_p", outdir = d)
+           derivMode = fr, modelname = "rv_err", outdir = d)
+    p <- P(tr, condition = "C1", derivMode = fr, modelname = "rv_p", outdir = d)
     pe <- P(c(tr, sd_rel = "exp(logsdrel)", sd_abs = "exp(logsdabs)"),
-            condition = "C1", modelname = "rv_pe", outdir = d)
+            condition = "C1", derivMode = fr, modelname = "rv_pe", outdir = d)
     # One trafo per condition, each with a parameter of its own.
     pc <- Reduce("+", lapply(c("C1", "C2"), function(cn)
-      P(repar(paste0("logk1 ~ logk1 + dk_", cn), tr), condition = cn,
+      P(repar(paste0("logk1 ~ logk1 + dk_", cn), tr), condition = cn, derivMode = fr,
         modelname = paste0("rv_p2_", cn), outdir = d)))
 
     ev <- eventlist(var = "A", time = "t_dose", value = "d_amt", method = "add")
     mev <- odemodel(re, events = ev, modelname = "rv_ev", deriv = TRUE,
                     derivMode = fr, outdir = d, compile = FALSE)
     pev <- P(c(tr, t_dose = "3", d_amt = "exp(logdose)"), condition = "C1",
-             modelname = "rv_pev", outdir = d)
+             derivMode = fr, modelname = "rv_pev", outdir = d)
     mnr <- odemodel(re, modelname = "rv_noRev", deriv = TRUE, outdir = d,
                     compile = FALSE)
 
@@ -71,7 +72,7 @@ skip_on_cran()
                                     roottol = 1e-12))
     pl <- P(c(k_in = "exp(logkin)", k_out = "exp(logkout)", B = "0",
               k1 = "exp(logk1)", k2 = "exp(logk2)", s = "exp(logs)"),
-            condition = "C1", modelname = "rv_pq", outdir = d)
+            condition = "C1", derivMode = fr, modelname = "rv_pq", outdir = d)
 
     sun <- if (isTRUE(cppDE:::cvodeConfig$available))
       odemodel(re, modelname = "rv_sun", deriv = TRUE, backend = "Sundials",
@@ -80,13 +81,13 @@ skip_on_cran()
     m2 <- odemodel(re, modelname = "rv2_ode", deriv = TRUE, deriv2 = TRUE,
                    outdir = d, compile = FALSE,
                    derivMode = c(fr, "forward-forward", "forward-reverse"))
-    g2 <- Y(c(obsA = "s*A", obsB = "s*B"), re, deriv2 = TRUE, derivMode = fr,
+    g2 <- Y(c(obsA = "s*A", obsB = "s*B"), re, deriv2 = TRUE, derivMode = c(fr, "forward-reverse"),
             modelname = "rv2_obs", outdir = d)
-    q <- P(tr, condition = "C1", deriv2 = TRUE, derivMode = fr,
+    q <- P(tr, condition = "C1", deriv2 = TRUE, derivMode = c(fr, "forward-reverse"),
            modelname = "rv2_p", outdir = d)
     # A second condition on the same ODE. The batched backward path only
     # engages with more than one live condition.
-    q2 <- q + P(tr, condition = "C2", deriv2 = TRUE, derivMode = fr,
+    q2 <- q + P(tr, condition = "C2", deriv2 = TRUE, derivMode = c(fr, "forward-reverse"),
                 modelname = "rv2_p2", outdir = d)
 
     compile(m, g, e, p, pe, pc, mev, pev, mnr, pq, pl, sun, m2, g2, q, q2,
