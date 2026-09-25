@@ -228,6 +228,7 @@ normL2 <- function(data, x, errmodel = NULL, times = NULL, t0 = 0,
   .meta_cache$meta_list        <- NULL
   .meta_cache$par_names_global <- NULL
   .meta_cache$signature        <- NULL  # used to invalidate on shape change
+  .meta_cache$shape            <- NULL
 
   # `.prediction` lets a caller that already batched the predictions hand them
   # in; see .objEvalMany().
@@ -308,12 +309,17 @@ normL2 <- function(data, x, errmodel = NULL, times = NULL, t0 = 0,
     # Determine current deriv signature (per-condition local par names);
     # empty for value-only (deriv = FALSE) evaluations.
     cur_sig <- lapply(prediction, function(pr) dimnames(attr(pr, "deriv"))[[3]])
+    # row counts too: a truncated solve has fewer rows than the cached indices
+    cur_shape <- c(vapply(prediction, NROW, integer(1)),
+                   vapply(err_list, NROW, integer(1)))
     if (is.null(.meta_cache$meta_list) ||
-        !identical(.meta_cache$signature, cur_sig)) {
+        !identical(.meta_cache$signature, cur_sig) ||
+        !identical(.meta_cache$shape, cur_shape)) {
       .meta_cache$par_names_global <- unique(unlist(cur_sig))
       .meta_cache$meta_list <- .build_normL2_meta(
         data, prediction, err_list, conditions, e.cond)
       .meta_cache$signature <- cur_sig
+      .meta_cache$shape <- cur_shape
     }
     par_names_global <- .meta_cache$par_names_global
     if (is.null(par_names_global)) par_names_global <- character(0)
@@ -437,6 +443,11 @@ normL2 <- function(data, x, errmodel = NULL, times = NULL, t0 = 0,
     o_idx_in_deriv <- if (has_deriv) match(dataI$name, d_dn[[2]])
                       else rep(0L, nrow(dataI))
 
+    if (anyNA(t_idx_in_pred) && !anyNA(o_idx_in_pred) &&
+        max(dataI$time) > max(prdfI[, "time"]))
+      stop(".build_normL2_meta: the prediction for condition '", cn, "' ends at t = ",
+           max(prdfI[, "time"]), ", before the last data point (the solver stopped early).",
+           call. = FALSE)
     if (anyNA(t_idx_in_pred) || anyNA(o_idx_in_pred) ||
         (has_deriv && anyNA(o_idx_in_deriv))) {
       stop(".build_normL2_meta: data point not found in prediction for condition '",

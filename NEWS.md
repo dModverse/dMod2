@@ -16,6 +16,11 @@
   Hodgkin-Huxley, Morris-Lecar and a Boltzmann gate.
 * The documentation of `symmetryDetection()`, `symmetryReduction()` and their
   control functions is shorter.
+* `normL2()` no longer reads past a prediction the solver cut short. Its cached
+  index of data points ignored the number of time points, so such a solve gave
+  a value from memory beyond the matrix or a segfault inside `mstrust()`. It is
+  now an error naming the time the solver reached, which `trust()` takes as a
+  failed step.
 
 # dMod2 0.8.0
 
