@@ -1,5 +1,7 @@
 # dMod2 (development version)
 
+* `steadyStates(testSteady = "fast")` checks mod p only. A residual it cannot
+  evaluate is an error with its reason, not a fallback to the symbolic test.
 * `Pexpl()` and `Y()` build `derivMode = "forward"` by default and accept
   `"forward-reverse"`, which the reverse sweep with `deriv2 = TRUE` needs.
 * `symmetryDetection()` builds scaling rows without dense polynomials and reads an

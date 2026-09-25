@@ -1178,17 +1178,16 @@ def _eval_exponent(e, env_int):
 def _eval_modp(expr, env, p):
     # Evaluate expr at the point env (symbol -> int) in GF(p). Raises
     # _ResampleModp on a zero denominator / non-residue sqrt, _UnsupportedModp
-    # on a node we do not model (caller falls back to the symbolic test).
+    # on a node we do not model.
     if expr.is_Integer:
         return int(expr) % p
     if expr.is_Rational:
         return (int(expr.p) * pow(int(expr.q), -1, p)) % p
     if expr.is_Symbol:
         if expr not in env:
-            # Used before it is defined -- the equations are not resolvable in
-            # the given order (a self-referential entry). Hand the residual to
-            # the symbolic test instead of dying with a KeyError.
-            raise _UnsupportedModp()
+            # Used before it is defined: the equations are not resolvable in
+            # the given order (a self-referential entry).
+            raise _UnsupportedModp(str(expr)+' is used before it is defined')
         return env[expr] % p
     if expr.is_Add:
         return sum(_eval_modp(a, env, p) for a in expr.args) % p
@@ -1222,16 +1221,16 @@ def _eval_modp(expr, env, p):
         v=sympy.nsimplify(expr)
         if v.is_Rational:
             return (int(v.p) * pow(int(v.q), -1, p)) % p
-    raise _UnsupportedModp()
+    raise _UnsupportedModp('unsupported node '+type(expr).__name__+': '+str(expr)[:200])
 
 def _steady_test_fast(ODE, eqOut, zeroStates, trials=3, primes=_MODP_PRIMES):
     # Schwartz-Zippel steady-state check WITHOUT symbolic substitution: the
     # solved symbols are evaluated in dependency order (eqOut is
     # topologically sorted, definitions first) into the same environment,
     # then every residual is evaluated at that point. Returns the sorted
-    # list of indices of ODEs with a provably nonzero residual, or None if
-    # a node is unsupported / no valid sample point was found (caller falls
-    # back to the exact symbolic test).
+    # list of indices of ODEs with a provably nonzero residual. Raises
+    # _UnsupportedModp if a node is unsupported or no valid sample point
+    # was found.
     pairs=[]
     for eq in eqOut:
         ls, rs=eq.split(' = ', 1)
@@ -1272,14 +1271,12 @@ def _steady_test_fast(ODE, eqOut, zeroStates, trials=3, primes=_MODP_PRIMES):
                 vals=[_eval_modp(o, env, p) for o in odes]
             except _ResampleModp:
                 continue
-            except _UnsupportedModp:
-                return None
             good+=1
             for i, v in enumerate(vals):
                 if v % p != 0:
                     bad.add(i)
         if good == 0:
-            return None
+            raise _UnsupportedModp('no valid sample point in GF('+str(p)+')')
     return sorted(bad)
 
 def _topo_sort_eqs(eqs):
@@ -2345,15 +2342,16 @@ def Alyssa(filename,
         if fast:
             # Environment extension over the topologically sorted equations;
             # no symbolic substitution into the ODEs at all.
-            bad=_steady_test_fast(ODE, eqOut, zeroStates)
+            try:
+                bad=_steady_test_fast(ODE, eqOut, zeroStates)
+            except _UnsupportedModp as err:
+                raise RuntimeError('steady-state test mod p failed: '+str(err))
             if bad:
                 for i in bad:
                     print('   Equation '+str(ODE[i]),flush=True)
                     print('   is nonzero at a random point in GF(p)',flush=True)
                 NonSteady=True
-            elif bad is None:
-                print('   (falling back to the exact symbolic test)',flush=True)
-        if not fast or bad is None:
+        if not fast:
             # Exact test: substitute dependents before their dependencies
             # (reverse topological order), so every reference resolves.
             subs_pairs=[(parse_expr(ls), parse_expr(rs))
