@@ -1,5 +1,12 @@
 # dMod2 (development version)
 
+* `symmetryDetection()` on a model with events expands each condition only to
+  the Lie order it needs jointly with the others, and runs the kernel samples
+  of a batch in one OpenMP call.
+* `symmetryDetection(gaugePreference = )`: rank and scalings first, then a gauge
+  from the scaling weights (a preference order, `*` as wildcard, or `NULL` for
+  any), then only the general directions, reconstructed in that gauge. `FALSE`
+  (default) keeps the one-step analysis.
 * `symmetryDetection()` builds scaling rows without dense polynomials and reads an
   equation repeated across conditions once. Large models no longer run out of memory.
 * `symmetryDetection()` reports a direction that moves one coordinate as a scaling.

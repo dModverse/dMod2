@@ -1300,7 +1300,8 @@ static List chain_result(const std::vector<std::vector<u64> >& R, const std::vec
 // monomial annihilates it, so the stacked rows are reduced once over GF(p).
 // [[Rcpp::export]]
 List symObsNullChain(List chains, int nLeaves, int nStates, IntegerVector zSlots,
-                     IntegerVector point, double pIn, int Nt, int Mtot, int cores = 1) {
+                     IntegerVector point, double pIn, int Nt, int Mtot, int cores = 1,
+                     IntegerVector NtChain = IntegerVector::create()) {
   u64 p = (u64)pIn;
   int nz = zSlots.size(), w = nz + 1;
   std::vector<int> dualCol(nLeaves, -1);
@@ -1310,6 +1311,11 @@ List symObsNullChain(List chains, int nLeaves, int nStates, IntegerVector zSlots
   // serial pre-pass into plain C++: the parallel build must touch no R object
   std::vector<int> leafPt(nLeaves);
   for (int L = 0; L < nLeaves; ++L) leafPt[L] = point[L];
+  // a chain whose rank saturated at a lower Lie order is built only to that order:
+  // its rows at Nt add nothing, and the jet cost grows with the order
+  std::vector<int> ntOf(T, Nt);
+  if (NtChain.size() == T)
+    for (int t = 0; t < T; ++t) ntOf[t] = std::min(Nt, (int)NtChain[t]);
   std::vector<std::vector<SegRaw> > chainsRaw(T);
   for (int t = 0; t < T; ++t) {
     List segs = chains[t];
@@ -1327,7 +1333,7 @@ List symObsNullChain(List chains, int nLeaves, int nStates, IntegerVector zSlots
           if (cores > 1 && T > 1)
   for (int t = 0; t < T; ++t)
     if (!build_one_chain(chainsRaw[t], nLeaves, nStates, nz, w, dualCol, leafPt,
-                         Nt, Mtot, p, perRows[t], perSer[t]))
+                         ntOf[t], Mtot, p, perRows[t], perSer[t]))
       okFlag[t] = 0;
 
   for (int t = 0; t < T; ++t)
@@ -1430,6 +1436,104 @@ List symObsNullChainSeedBatch(List chains, IntegerVector evalChain,
   List out(nB);
   for (int e = 0; e < nB; ++e) {
     if (!okFlag[e]) { out[e] = List::create(_["ok"] = false); continue; }
+    out[e] = chain_result(redRows[e], redPiv[e], nz, rankS[e], redSer[e], N, atOneE[e]);
+  }
+  return out;
+}
+
+// Batched twin of per-point symObsNullChain calls on the plain gap path: every
+// (point, chain) jet in one OpenMP loop, then each point's stacked rows reduced as
+// symObsNullChain does, again in parallel. `points` (nB x nLeaves) holds one leaf
+// point per evaluation and `primes` its prime; NtChain caps a chain's Lie order as in
+// symObsNullChain. Segments are extracted once per (chain, distinct prime).
+// [[Rcpp::export]]
+List symObsNullChainPointBatch(List chains, int nLeaves, int nStates, IntegerVector zSlots,
+                               IntegerMatrix points, NumericVector primes, int Nt, int Mtot,
+                               int cores = 1, IntegerVector NtChain = IntegerVector::create()) {
+  int nz = zSlots.size(), w = nz + 1;
+  int T = chains.size();
+  int nB = points.nrow();
+  std::vector<int> dualCol(nLeaves, -1);
+  for (int c = 0; c < nz; ++c) dualCol[zSlots[c]] = c;
+  std::vector<int> ntOf(T, Nt);
+  if (NtChain.size() == T)
+    for (int t = 0; t < T; ++t) ntOf[t] = std::min(Nt, (int)NtChain[t]);
+
+  std::vector<u64> pr(nB);
+  for (int e = 0; e < nB; ++e) pr[e] = (u64)primes[e];
+  std::vector<u64> distinct;
+  std::vector<int> primeIdx(nB);
+  for (int e = 0; e < nB; ++e) {
+    int idx = -1;
+    for (size_t k = 0; k < distinct.size(); ++k) if (distinct[k] == pr[e]) { idx = (int)k; break; }
+    if (idx < 0) { idx = (int)distinct.size(); distinct.push_back(pr[e]); }
+    primeIdx[e] = idx;
+  }
+  int nPr = (int)distinct.size();
+  int N = Mtot + 1;
+
+  // serial pre-pass: the parallel part must touch no R object
+  std::vector<std::vector<std::vector<SegRaw> > >
+      segsRaw(nPr, std::vector<std::vector<SegRaw> >(T));
+  for (int t = 0; t < T; ++t) {
+    List segs = chains[t];
+    int nSeg = segs.size();
+    for (int pi = 0; pi < nPr; ++pi) {
+      segsRaw[pi][t].reserve(nSeg);
+      for (int sj = 0; sj < nSeg; ++sj)
+        segsRaw[pi][t].push_back(extract_seg_raw(segs[sj], nStates, w, distinct[pi]));
+    }
+  }
+  std::vector<int> pts((size_t)nB * nLeaves);
+  for (int e = 0; e < nB; ++e)
+    for (int L = 0; L < nLeaves; ++L) pts[(size_t)e * nLeaves + L] = points(e, L);
+
+  // every (point, chain) jet
+  std::vector<std::vector<std::vector<u64> > > rowsET((size_t)nB * T), serET((size_t)nB * T);
+  std::vector<char> okET((size_t)nB * T, 1);
+  long nTask = (long)nB * T;
+  #pragma omp parallel for num_threads(cores > 0 ? cores : 1) schedule(dynamic) \
+          if (cores > 1 && nTask > 1)
+  for (long k = 0; k < nTask; ++k) {
+    int e = (int)(k / T), t = (int)(k % T);
+    std::vector<int> leafPt(pts.begin() + (size_t)e * nLeaves,
+                            pts.begin() + (size_t)(e + 1) * nLeaves);
+    if (!build_one_chain(segsRaw[primeIdx[e]][t], nLeaves, nStates, nz, w, dualCol, leafPt,
+                         ntOf[t], Mtot, pr[e], rowsET[k], serET[k]))
+      okET[k] = 0;
+  }
+
+  // per point: stack, reduce, series rank
+  std::vector<char> okE(nB, 1), atOneE(nB, 0);
+  std::vector<std::vector<std::vector<u64> > > redRows(nB), redSer(nB);
+  std::vector<std::vector<int> > redPiv(nB);
+  std::vector<int> rankS(nB, 0);
+  #pragma omp parallel for num_threads(cores > 0 ? cores : 1) schedule(dynamic) \
+          if (cores > 1 && nB > 1)
+  for (int e = 0; e < nB; ++e) {
+    std::vector<std::vector<u64> > rows, ser;
+    for (int t = 0; t < T; ++t) {
+      size_t k = (size_t)e * T + t;
+      if (!okET[k]) { okE[e] = 0; break; }
+      for (size_t i = 0; i < rowsET[k].size(); ++i) rows.push_back(std::move(rowsET[k][i]));
+      for (size_t i = 0; i < serET[k].size(); ++i) ser.push_back(std::move(serET[k][i]));
+    }
+    if (!okE[e]) continue;
+    u64 p = pr[e];
+    std::vector<int> pivots = rref_mod(rows, p);
+    rows.resize(pivots.size());
+    rankS[e] = rref_series_mod(ser, nz, N, p, std::vector<char>(nz, 1));
+    bool atOne;
+    kernel_at_one_or_keep(ser, rankS[e], nz, N, p, rows, pivots, atOne);
+    atOneE[e] = atOne;
+    redRows[e] = std::move(rows);
+    redPiv[e] = std::move(pivots);
+    redSer[e] = std::move(ser);
+  }
+
+  List out(nB);
+  for (int e = 0; e < nB; ++e) {
+    if (!okE[e]) { out[e] = List::create(_["ok"] = false); continue; }
     out[e] = chain_result(redRows[e], redPiv[e], nz, rankS[e], redSer[e], N, atOneE[e]);
   }
   return out;

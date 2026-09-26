@@ -8,10 +8,12 @@
 # either sign, and so do the slopes of the Boltzmann gates. Only the
 # capacitance, the conductances, the time constants and the gates are positive.
 # Voltage is measured. symmetryDetection() finds one scaling and two general
-# directions, symmetryReduction() removes all three on the declared domain. The
-# last part compares with exp10() in the trafo handed to the detection. A
-# spiking model is not fitted here: without multiple shooting the spike phase
-# makes the objective too rugged.
+# directions, symmetryReduction() removes all three on the declared domain.
+# Every direction is then flown both ways, as in bench/symmetry_AB.R: the
+# parameters move along the orbit, the currents they set move with them, and
+# the voltage does not. The last part compares with exp10() in the trafo handed
+# to the detection. A spiking model is not fitted here; see
+# bench/multipleShooting_preBotC.R.
 #
 # [AUTHOR]
 # Simon Beyer
@@ -125,7 +127,39 @@ p.red <- eqnvec() |>
   insert("x~exp10(x)", x = intersect(.currentSymbols, logRed)) |>
   P(modelname = "preBotC_pred", compile = FALSE, outdir = .outdir)
 
-compile(x, g, p.full, p.red, output = .modelname, cores = .cores)
+# The currents of the model, to watch what a direction moves; the voltage is
+# the observable.
+currents <- eqnvec(
+  INaP = sprintf("gNaP*%s*h*(V - ENa)", xinf("p")),
+  INa  = sprintf("gNa*(%s)^3*(1 - n)*(V - ENa)", xinf("m")),
+  IK   = "gK*n^4*(V - EK)",
+  IL   = "gL*(V - EL)",
+  Iton = "gton*(V - Esyn)")
+gI <- Y(c(observables, currents), f = x, modelname = "preBotC_currents",
+        compile = FALSE, outdir = .outdir)
+
+# One flow per direction, dz/deps = sgn*xi(z), in the chart of the prediction:
+# the positive coordinates a direction moves on log10, the others, which take
+# either sign, linear. The sign runs the same compiled model both ways.
+flowOf <- function(gen) {
+  pos <- intersect(names(gen), positive)
+  lin <- setdiff(names(gen), pos)
+  eq <- if (length(pos)) unclass(log10Transform(gen[pos])) else character(0)
+  if (length(lin)) {
+    el <- unclass(gen[lin])
+    if (length(pos))
+      el <- cOde::replaceSymbols(pos, sprintf("(10^(%s_l10))", pos), el)
+    eq <- c(eq, setNames(el, lin))
+  }
+  as.eqnvec(setNames(paste0("sgn*(", eq, ")"), names(eq)))
+}
+flow <- lapply(seq_along(res$symmetries), function(i)
+  Xf(odemodel(flowOf(as.eqnvec(res$symmetries[[i]]$completeGenerator)), deriv = FALSE,
+              modelname = paste0("preBotC_flow", i), compile = FALSE, outdir = .outdir),
+     condition = "flow", optionsOde = list(atol = 1e-12, rtol = 1e-12, maxsteps = 1e7)))
+
+do.call(compile, c(list(x, g, gI, p.full, p.red), flow,
+                   list(output = .modelname, cores = .cores)))
 
 prd     <- g*x*p.full
 prd.red <- g*x*p.red
@@ -148,6 +182,80 @@ truthO.red <- toOuter(truth.red, logRed)
 obs   <- pred0$name == "y"
 predR <- as.data.frame(prd.red(times, truthO.red, deriv = FALSE))
 max(abs(predR$value[obs] - pred0$value[obs]))
+
+
+# –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
+# Every direction, flown
+#
+# From the truth both ways, over a range that moves the parameters by up to
+# half a decade or 5 mV to first order. At every point of the orbit the model
+# is solved over one burst: the verdict is the largest deviation of the
+# voltage relative to its RMS, the plot shows voltage and currents coloured by
+# eps. X1 scales the capacitance and every conductance together, so every
+# current scales and V stays; X2 and X3 trade the leak against the tonic drive.
+# –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
+prdI  <- gI*x*p.full
+tw    <- seq(2000, 3000, by = 0.5)
+predI0 <- as.data.frame(prdI(tw, truthO, deriv = FALSE))
+obsI  <- predI0$name == "y"
+rmsV  <- sqrt(mean(predI0$value[obsI]^2))
+
+orbit <- function(i, n = 21) {
+  mv   <- names(res$symmetries[[i]]$completeGenerator)
+  pos  <- intersect(mv, positive); lin <- setdiff(mv, pos)
+  posL <- sprintf("%s_l10", pos)
+  z0   <- c(setNames(truthO[pos], posL), truth[lin], truth[setdiff(coords, mv)])
+  # first-order speed of the flow at the truth, per decade or per 5 mV
+  gen  <- flowOf(as.eqnvec(res$symmetries[[i]]$completeGenerator))
+  spd  <- abs(sapply(names(gen), function(k)
+    eval(parse(text = gsub("sgn", "1", gen[[k]])), as.list(c(z0, sgn = 1)))))
+  spd  <- spd / ifelse(names(spd) %in% lin, 10, 1)
+  emax <- 0.5 / max(spd)
+  eps  <- seq(0, emax, length.out = (n + 1) / 2)
+  zf <- flow[[i]](eps, c(z0, sgn =  1), deriv = FALSE)$flow
+  zb <- flow[[i]](eps, c(z0, sgn = -1), deriv = FALSE)$flow
+  z  <- rbind(zb[rev(seq_len(nrow(zb))), ], zf[-1, ])
+  z[, "time"] <- c(-rev(zb[, "time"]), zf[-1, "time"])
+  theta <- lapply(seq_len(nrow(z)), function(j) {
+    th <- truthO
+    th[pos] <- z[j, posL]
+    th[lin] <- z[j, lin]
+    th
+  })
+  list(eps = z[, "time"], z = z, theta = theta, moved = mv)
+}
+
+orbits <- lapply(seq_along(flow), orbit)
+for (i in seq_along(orbits)) {
+  o <- orbits[[i]]
+  d <- sapply(o$theta, function(th) {
+    q <- as.data.frame(prdI(tw, th, deriv = FALSE))
+    max(abs(q$value[q$name == "y"] - predI0$value[obsI])) / rmsV
+  })
+  moved <- max(abs(sapply(o$theta, function(th) max(abs(th - truthO)))))
+  cat(sprintf("X%d  %-8s on %-26s  eps [%+.3f, %+.3f]  moved %.2f  V deviates %.2e\n", i,
+              res$symmetries[[i]]$type, paste(o$moved, collapse = ","),
+              min(o$eps), max(o$eps), moved, max(d)))
+}
+
+# the currents move, the voltage does not
+flowPlot <- function(i) {
+  o <- orbits[[i]]
+  long <- do.call(rbind, Map(function(th, e) transform(as.data.frame(prdI(tw, th, deriv = FALSE)),
+                                                      eps = e), o$theta, o$eps))
+  long$name <- factor(ifelse(long$name == "y", "V [observed]", as.character(long$name)),
+                      c("V [observed]", names(currents)))
+  ggplot(long, aes(time, value, group = eps, colour = eps)) +
+    geom_line(linewidth = 0.3) +
+    facet_wrap(~ name, scales = "free_y", ncol = 2) +
+    scale_color_dMod_div(name = expression(epsilon)) +
+    labs(title = sprintf("pre-Boetzinger, X%d (%s)", i, res$symmetries[[i]]$type),
+         x = "time [ms]", y = NULL) +
+    theme_dMod(base_size = 9)
+}
+flowPlot(1)
+flowPlot(2)
+flowPlot(3)
 
 
 # –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––

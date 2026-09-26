@@ -3520,6 +3520,7 @@ symmetryReduction <- function(object, fixed = NULL, positive = TRUE, dPoly = 3L,
                    primes = .symPrimes, verifyPrime = .symVerifyPrime)
 
   coords <- .symRedCoordinates(object)
+  if (is.null(fixed)) fixed <- object$gauge
   fixed <- unique(as.character(fixed))
   unknown <- setdiff(fixed, coords)
   if (length(unknown))

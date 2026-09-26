@@ -11,6 +11,7 @@ symmetryDetection(
   method = c("observability", "polynomial", "scaling"),
   parameters = NULL,
   fixed = NULL,
+  gaugePreference = FALSE,
   forcings = NULL,
   events = NULL,
   conditions = NULL,
@@ -54,6 +55,19 @@ passed as it is. A parameter that enters only through \code{k = "exp(lk)"},
 \item{fixed}{Character vector of known symbols. For \code{"observability"} a fixed
 parameter is a known constant and a fixed state has no unknown initial value;
 for \code{"polynomial"} a fixed symbol does not transform.}
+
+\item{gaugePreference}{\code{"observability"} only. \code{FALSE} (default) reports every
+non-identifiable direction as it comes. Otherwise the analysis runs in two steps:
+rank and the exact scalings first, without reconstruction; then one coordinate per
+scaling is fixed (the gauge) and only the general directions are reconstructed,
+now over fewer parameters and in the gauge a fit would use. \code{NULL} chooses the
+gauge freely, a character vector ranks the coordinates to fix, most preferred
+first, with \code{*} as a wildcard (\code{"scale_*"}). Among equally ranked coordinates,
+those outside the general directions are fixed first, which leaves those
+directions untouched by the gauge. The gauge is always a valid one: a coordinate
+enters only if it adds to the rank of the scaling weights. The scalings are
+reported as found, the general directions in the gauge, and \verb{$gauge} names it;
+\code{print()}, \code{summary()} and \code{\link[=symmetryReduction]{symmetryReduction()}} use it as \code{fixed} by default.}
 
 \item{forcings}{Character vector of input states. For \code{"observability"} an input
 starts at 0 and is held at 0 in the steady state; for \code{"polynomial"} and

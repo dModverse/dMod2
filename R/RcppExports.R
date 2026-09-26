@@ -49,12 +49,16 @@ symObsNullBatch <- function(tapes, nLeaves, nStates, zSlots, points, primes, Nt,
     .Call(`_dMod2_symObsNullBatch`, tapes, nLeaves, nStates, zSlots, points, primes, Nt, cores)
 }
 
-symObsNullChain <- function(chains, nLeaves, nStates, zSlots, point, pIn, Nt, Mtot, cores = 1L) {
-    .Call(`_dMod2_symObsNullChain`, chains, nLeaves, nStates, zSlots, point, pIn, Nt, Mtot, cores)
+symObsNullChain <- function(chains, nLeaves, nStates, zSlots, point, pIn, Nt, Mtot, cores = 1L, NtChain = as.integer( c())) {
+    .Call(`_dMod2_symObsNullChain`, chains, nLeaves, nStates, zSlots, point, pIn, Nt, Mtot, cores, NtChain)
 }
 
 symObsNullChainSeedBatch <- function(chains, evalChain, seeds, primes, nLeaves, nStates, zSlots, Nt, Mtot, cores = 1L) {
     .Call(`_dMod2_symObsNullChainSeedBatch`, chains, evalChain, seeds, primes, nLeaves, nStates, zSlots, Nt, Mtot, cores)
+}
+
+symObsNullChainPointBatch <- function(chains, nLeaves, nStates, zSlots, points, primes, Nt, Mtot, cores = 1L, NtChain = as.integer( c())) {
+    .Call(`_dMod2_symObsNullChainPointBatch`, chains, nLeaves, nStates, zSlots, points, primes, Nt, Mtot, cores, NtChain)
 }
 
 symSeriesRank <- function(S, nz, N, pIn, cols, support = FALSE, atOneBelow = -1L) {

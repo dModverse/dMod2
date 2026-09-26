@@ -219,8 +219,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // symObsNullChain
-List symObsNullChain(List chains, int nLeaves, int nStates, IntegerVector zSlots, IntegerVector point, double pIn, int Nt, int Mtot, int cores);
-RcppExport SEXP _dMod2_symObsNullChain(SEXP chainsSEXP, SEXP nLeavesSEXP, SEXP nStatesSEXP, SEXP zSlotsSEXP, SEXP pointSEXP, SEXP pInSEXP, SEXP NtSEXP, SEXP MtotSEXP, SEXP coresSEXP) {
+List symObsNullChain(List chains, int nLeaves, int nStates, IntegerVector zSlots, IntegerVector point, double pIn, int Nt, int Mtot, int cores, IntegerVector NtChain);
+RcppExport SEXP _dMod2_symObsNullChain(SEXP chainsSEXP, SEXP nLeavesSEXP, SEXP nStatesSEXP, SEXP zSlotsSEXP, SEXP pointSEXP, SEXP pInSEXP, SEXP NtSEXP, SEXP MtotSEXP, SEXP coresSEXP, SEXP NtChainSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -233,7 +233,8 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< int >::type Nt(NtSEXP);
     Rcpp::traits::input_parameter< int >::type Mtot(MtotSEXP);
     Rcpp::traits::input_parameter< int >::type cores(coresSEXP);
-    rcpp_result_gen = Rcpp::wrap(symObsNullChain(chains, nLeaves, nStates, zSlots, point, pIn, Nt, Mtot, cores));
+    Rcpp::traits::input_parameter< IntegerVector >::type NtChain(NtChainSEXP);
+    rcpp_result_gen = Rcpp::wrap(symObsNullChain(chains, nLeaves, nStates, zSlots, point, pIn, Nt, Mtot, cores, NtChain));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -254,6 +255,26 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< int >::type Mtot(MtotSEXP);
     Rcpp::traits::input_parameter< int >::type cores(coresSEXP);
     rcpp_result_gen = Rcpp::wrap(symObsNullChainSeedBatch(chains, evalChain, seeds, primes, nLeaves, nStates, zSlots, Nt, Mtot, cores));
+    return rcpp_result_gen;
+END_RCPP
+}
+// symObsNullChainPointBatch
+List symObsNullChainPointBatch(List chains, int nLeaves, int nStates, IntegerVector zSlots, IntegerMatrix points, NumericVector primes, int Nt, int Mtot, int cores, IntegerVector NtChain);
+RcppExport SEXP _dMod2_symObsNullChainPointBatch(SEXP chainsSEXP, SEXP nLeavesSEXP, SEXP nStatesSEXP, SEXP zSlotsSEXP, SEXP pointsSEXP, SEXP primesSEXP, SEXP NtSEXP, SEXP MtotSEXP, SEXP coresSEXP, SEXP NtChainSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< List >::type chains(chainsSEXP);
+    Rcpp::traits::input_parameter< int >::type nLeaves(nLeavesSEXP);
+    Rcpp::traits::input_parameter< int >::type nStates(nStatesSEXP);
+    Rcpp::traits::input_parameter< IntegerVector >::type zSlots(zSlotsSEXP);
+    Rcpp::traits::input_parameter< IntegerMatrix >::type points(pointsSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type primes(primesSEXP);
+    Rcpp::traits::input_parameter< int >::type Nt(NtSEXP);
+    Rcpp::traits::input_parameter< int >::type Mtot(MtotSEXP);
+    Rcpp::traits::input_parameter< int >::type cores(coresSEXP);
+    Rcpp::traits::input_parameter< IntegerVector >::type NtChain(NtChainSEXP);
+    rcpp_result_gen = Rcpp::wrap(symObsNullChainPointBatch(chains, nLeaves, nStates, zSlots, points, primes, Nt, Mtot, cores, NtChain));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -431,8 +452,9 @@ static const R_CallMethodDef CallEntries[] = {
     {"_dMod2_residual_kernel_bloq", (DL_FUNC) &_dMod2_residual_kernel_bloq, 9},
     {"_dMod2_symObsNullMulti", (DL_FUNC) &_dMod2_symObsNullMulti, 8},
     {"_dMod2_symObsNullBatch", (DL_FUNC) &_dMod2_symObsNullBatch, 8},
-    {"_dMod2_symObsNullChain", (DL_FUNC) &_dMod2_symObsNullChain, 9},
+    {"_dMod2_symObsNullChain", (DL_FUNC) &_dMod2_symObsNullChain, 10},
     {"_dMod2_symObsNullChainSeedBatch", (DL_FUNC) &_dMod2_symObsNullChainSeedBatch, 10},
+    {"_dMod2_symObsNullChainPointBatch", (DL_FUNC) &_dMod2_symObsNullChainPointBatch, 10},
     {"_dMod2_symSeriesRank", (DL_FUNC) &_dMod2_symSeriesRank, 7},
     {"_dMod2_symSolveMod", (DL_FUNC) &_dMod2_symSolveMod, 3},
     {"_dMod2_symRrefMod", (DL_FUNC) &_dMod2_symRrefMod, 2},

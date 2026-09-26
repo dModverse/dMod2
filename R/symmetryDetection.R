@@ -59,6 +59,18 @@
 #' @param fixed Character vector of known symbols. For `"observability"` a fixed
 #'   parameter is a known constant and a fixed state has no unknown initial value;
 #'   for `"polynomial"` a fixed symbol does not transform.
+#' @param gaugePreference `"observability"` only. `FALSE` (default) reports every
+#'   non-identifiable direction as it comes. Otherwise the analysis runs in two steps:
+#'   rank and the exact scalings first, without reconstruction; then one coordinate per
+#'   scaling is fixed (the gauge) and only the general directions are reconstructed,
+#'   now over fewer parameters and in the gauge a fit would use. `NULL` chooses the
+#'   gauge freely, a character vector ranks the coordinates to fix, most preferred
+#'   first, with `*` as a wildcard (`"scale_*"`). Among equally ranked coordinates,
+#'   those outside the general directions are fixed first, which leaves those
+#'   directions untouched by the gauge. The gauge is always a valid one: a coordinate
+#'   enters only if it adds to the rank of the scaling weights. The scalings are
+#'   reported as found, the general directions in the gauge, and `$gauge` names it;
+#'   `print()`, `summary()` and [symmetryReduction()] use it as `fixed` by default.
 #' @param equilibrate Logical, `"observability"` only. Start at a steady state of
 #'   `f` with the inputs at 0 instead of at free initial values. The earliest events
 #'   apply on top; initial values in `trafo` are ignored. Not available for
@@ -187,8 +199,8 @@
 #' @export
 symmetryDetection <- function(f = NULL, g = NULL, trafo = NULL,
                               method = c("observability", "polynomial", "scaling"),
-                              parameters = NULL, fixed = NULL, forcings = NULL,
-                              events = NULL, conditions = NULL,
+                              parameters = NULL, fixed = NULL, gaugePreference = FALSE,
+                              forcings = NULL, events = NULL, conditions = NULL,
                               equilibrate = FALSE,
                               reduceCQ = FALSE, freeInitial = NULL,
                               reconstruct = FALSE, positive = TRUE,
@@ -205,6 +217,14 @@ symmetryDetection <- function(f = NULL, g = NULL, trafo = NULL,
   symEngine <- match.arg(symEngine)
   method <- match.arg(method)
   equilibrate <- isTRUE(equilibrate)
+  if (!isFALSE(gaugePreference)) {
+    if (method != "observability")
+      warning("symmetryDetection(): gaugePreference applies to method = ",
+              "\"observability\" only and is ignored.", call. = FALSE)
+    else
+      return(.symGaugedDetection(match.call(), parent.frame(), gaugePreference,
+                                   fixed, reconstruct, verbose))
+  }
   # for the summary header and the elapsed time
   .symCall <- match.call()
   .symT0 <- Sys.time()
@@ -2623,6 +2643,9 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
   # batched per-chunk evaluator for the coupled+gap reconstruction loop (set inside
   # the joint block below when hasGaps); NULL keeps the serial parMap fallback.
   kchunk <- NULL
+  # per-chain Lie order cap, set once the saturation knows each block's order (plain
+  # gap path): a block that saturated low is not expanded to the stacked order
+  NtCap <- integer(0)
 
   # kernel per tape or chain, where .symSaturateCertify() decides the Lie order; stacked
   # constant rows (df tangency, recast relations) stay out
@@ -3168,7 +3191,8 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
       pt <- as.integer(point)
       if (hasGaps)
         symObsNullChain(lapply(chainGroups, function(idx) tapes[idx]), nLeaves,
-                        nStates, zSlots, pt, p, as.integer(Nt), as.integer(Mtot), coresCall)
+                        nStates, zSlots, pt, p, as.integer(Nt), as.integer(Mtot), coresCall,
+                        NtCap)
       else
         symObsNullMulti(tapes, nLeaves, nStates, zSlots, pt, p, as.integer(Nt), coresCall)
     }
@@ -3194,6 +3218,33 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
               "constraint could not be evaluated.", call. = FALSE)
     return(NULL)
   }
+  # plain gap path: cap each chain at the order its own rank saturated at, plus the
+  # plateau the saturation required (DMOD_SYM_NOCAP keeps the stacked order everywhere)
+  if (hasGaps && !jointSS && !ssConstraint && length(sc$blockOrders) == length(chainGroups) &&
+      !nzchar(Sys.getenv("DMOD_SYM_NOCAP")))
+    NtCap <- as.integer(sc$blockOrders) +
+      max(1L, as.integer(Sys.getenv("DMOD_SYM_LIEPLATEAU", "3")))
+  # joint saturation: a block needs its order only while it adds to the STACKED rank.
+  # Lower the deepest blocks level by level and keep each step that leaves the stacked
+  # rank unchanged, one kernel call per step (a block observing only the end of a long
+  # loop saturates alone very late, jointly early)
+  if (length(NtCap) && !nzchar(Sys.getenv("DMOD_SYM_NOJOINTCAP"))) {
+    MtCap <- if (is.null(sc$MtotUsed)) 0L else as.integer(sc$MtotUsed)
+    capRank <- function() {
+      r <- tryCatch(kcall4(sc$point0, .symPrimes[1], sc$NtUsed, MtCap), error = function(e) NULL)
+      if (is.null(r) || !isTRUE(r$ok)) NA_real_ else as.numeric(.symRankScore(r))
+    }
+    ref <- capRank()
+    levels <- sort(unique(NtCap), decreasing = TRUE)
+    while (!is.na(ref) && length(levels) >= 2L) {
+      keep <- NtCap
+      NtCap[NtCap == levels[1]] <- levels[2]
+      if (!identical(capRank(), ref)) { NtCap <- keep; break }
+      levels <- levels[-1]
+    }
+    if (nzchar(Sys.getenv("DMOD_SYM_LIEDIAG")))
+      message("[liediag] joint block Lie orders: ", paste(NtCap, collapse = ","))
+  }
   # joint mode: log-normalised state columns have unit value, so their slots are set
   # to 1 for the peel; the solved point is kept for the verify guard
   point0Solved <- sc$point0
@@ -3218,6 +3269,14 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
         as.integer(pp[seq_len(nLeaves)])))
       symObsNullBatch(tapes, nLeaves, nStates, zSlots, M, as.numeric(primeVec),
                       as.integer(Nt), cores)
+    } else if (hasGaps && !ssConstraint && !jointSS && !recastTransient &&
+               length(pointList) > 0L && !nzchar(Sys.getenv("DMOD_SYM_NOPOINTBATCH"))) {
+      # plain gap path: every (point, chain) jet in one OpenMP batch, no fork
+      M <- do.call(rbind, lapply(pointList, function(pp)
+        as.integer(pp[seq_len(nLeaves)])))
+      symObsNullChainPointBatch(lapply(chainGroups, function(idx) tapes[idx]), nLeaves,
+                                nStates, zSlots, M, as.numeric(primeVec), as.integer(Nt),
+                                as.integer(MtotUsed), cores, NtCap)
     } else if (!is.null(kchunk) && length(pointList) > 0L &&
                !nzchar(Sys.getenv("DMOD_SYM_NOCHUNK"))) {
       # coupled + gap path in one OpenMP batch; DMOD_SYM_NOCHUNK forces the serial loop
@@ -3679,7 +3738,9 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
 # fit, coefficients lifted across primes. NULL if not a bounded Laurent polynomial.
 .symSparseEntry <- function(reli, supportCol, f, point0, leafNames, NtUsed,
                               kcall, pivots, residueFn = NULL,
-                              ctrl = reconstControl(), zSlots = NULL) {
+                              ctrl = reconstControl(), zSlots = NULL, kbatch = NULL) {
+  if (is.null(kbatch))
+    kbatch <- function(pl, pv, Nt) Map(function(pp, pr) kcall(pp, pr, Nt), pl, pv)
   nvar <- length(reli)
   bases <- .symSieve(nvar)
   np <- length(.symPrimes)
@@ -3692,20 +3753,26 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
   repeat {
     if (.symExpired(ctrl)) return(NULL)
     target <- min(if (have == 0L) 16L else 2L * have, maxLen)
+    # the whole stage over every prime in one kernel batch
+    pl <- list(); pv <- numeric(0); slot <- list()
     for (pj in seq_len(np)) {
       p <- .symPrimes[pj]
       for (k in (have + 1L):target) {
-        if (.symExpired(ctrl)) return(NULL)
         pt <- point0; pt[reli] <- cur[[pj]]
-        rp <- kcall(pt, p, NtUsed)
-        if (!isTRUE(rp$ok) || !identical(as.integer(rp$pivots), as.integer(pivots)))
-          return(NULL)
-        zv <- if (is.null(zSlots)) NULL else pt[zSlots + 1L]
-        nvp <- if (is.null(residueFn)) .symNullResidues(rp, f, p) else residueFn(rp, p, zv)
-        if (is.null(nvp)) return(NULL)
-        seqs[[pj]][k] <- nvp[supportCol + 1L]
+        pl[[length(pl) + 1L]] <- pt; pv <- c(pv, p); slot[[length(slot) + 1L]] <- c(pj, k)
         cur[[pj]] <- (cur[[pj]] * bases) %% p
       }
+    }
+    if (.symExpired(ctrl)) return(NULL)
+    res <- kbatch(pl, pv, NtUsed)
+    for (i in seq_along(pl)) {
+      rp <- res[[i]]; p <- pv[i]; pt <- pl[[i]]
+      if (is.null(rp) || !isTRUE(rp$ok) || !identical(as.integer(rp$pivots), as.integer(pivots)))
+        return(NULL)
+      zv <- if (is.null(zSlots)) NULL else pt[zSlots + 1L]
+      nvp <- if (is.null(residueFn)) .symNullResidues(rp, f, p) else residueFn(rp, p, zv)
+      if (is.null(nvp)) return(NULL)
+      seqs[[slot[[i]][1]]][slot[[i]][2]] <- nvp[supportCol + 1L]
     }
     have <- target
     if (2L * symBMorder(seqs[[1]], .symPrimes[1]) < have) break
@@ -3741,7 +3808,10 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
 # string, or NULL when no bounded-degree rational form fits.
 .symGeneralRationalEntry <- function(reli, supportCol, f, point0, leafNames,
                                         NtUsed, kcall, pivots, residueFn = NULL,
-                                        ctrl = reconstControl(), zSlots = NULL) {
+                                        ctrl = reconstControl(), zSlots = NULL,
+                                        kbatch = NULL) {
+  if (is.null(kbatch))
+    kbatch <- function(pl, pv, Nt) Map(function(pp, pr) kcall(pp, pr, Nt), pl, pv)
   nvar <- length(reli)
   np <- length(.symPrimes)
   bases <- .symSieve(nvar)
@@ -3757,27 +3827,53 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
     if (is.null(nvp)) return(NULL)
     nvp[supportCol + 1L]
   }
-  # value of (N(u)/D(s), D(u)/D(s)) at u over prime p, via the ray Cauchy fit
-  evalND <- function(uvec, p, dN, dD) {
-    v <- (uvec - s) %% p
+  # entry residues at many (relvals, prime) pairs in one kernel batch; NULL per failure
+  sampleMany <- function(rvList, pVec) {
+    pl <- lapply(seq_along(rvList), function(i) { pt <- point0; pt[reli] <- rvList[[i]] %% pVec[i]; pt })
+    res <- kbatch(pl, pVec, NtUsed)
+    lapply(seq_along(pl), function(i) {
+      rp <- res[[i]]; p <- pVec[i]; pt <- pl[[i]]
+      if (is.null(rp) || !isTRUE(rp$ok) || !identical(as.integer(rp$pivots), as.integer(pivots)))
+        return(NULL)
+      zv <- if (is.null(zSlots)) NULL else pt[zSlots + 1L]
+      nvp <- if (is.null(residueFn)) .symNullResidues(rp, f, p) else residueFn(rp, p, zv)
+      if (is.null(nvp)) NULL else nvp[supportCol + 1L]
+    })
+  }
+  # ray samples t = 0..nt at each u, all in one batch: a list of residue vectors
+  raySamples <- function(uList, pVec, nt) {
+    rv <- list(); pv <- numeric(0)
+    for (i in seq_along(uList)) {
+      v <- (uList[[i]] - s) %% pVec[i]
+      for (tj in 0:nt) { rv[[length(rv) + 1L]] <- (s + tj * v) %% pVec[i]; pv <- c(pv, pVec[i]) }
+    }
+    out <- sampleMany(rv, pv)
+    lapply(seq_along(uList), function(i) out[(i - 1L) * (nt + 1L) + seq_len(nt + 1L)])
+  }
+  # (N(u)/D(s), D(u)/D(s)) from ray samples via the Cauchy fit
+  fromRay <- function(rv, p, dN, dD) {
     tn <- 0:(dN + dD + 4L)
-    rv <- lapply(tn, function(tj) sampleR((s + tj * v) %% p, p))
+    rv <- rv[seq_along(tn)]
     if (any(vapply(rv, is.null, logical(1)))) return(NULL)
     res <- symCauchyEval(as.integer(tn), as.integer(unlist(rv)), dN, dD, p)
     if (!identical(res$status, "ok")) return(NULL)
     c(res$N, res$D)
   }
+  evalND <- function(uvec, p, dN, dD)
+    fromRay(raySamples(list(uvec), p, dN + dD + 4L)[[1]], p, dN, dD)
 
   # numerator/denominator degrees, probed once at a generic point
   P1 <- .symPrimes[1]
   u0 <- vapply(seq_len(nvar), function(i) (bases[i] * bases[i] + 3) %% P1, numeric(1))
   deg <- NULL
+  # one ray long enough for every degree pair, sampled once
+  ray0 <- raySamples(list(u0), P1, ctrl$generalDegNum + ctrl$generalDegDen + 4L)[[1]]
   for (tot in 2:(ctrl$generalDegNum + ctrl$generalDegDen)) {
     if (.symExpired(ctrl)) return(NULL)
     for (a in seq.int(max(1L, tot - ctrl$generalDegDen), min(tot - 1L, ctrl$generalDegNum))) {
       bD <- tot - a
       if (bD < 1L || bD > ctrl$generalDegDen) next
-      if (!is.null(evalND(u0, P1, a, bD))) { deg <- c(a, bD); break }
+      if (!is.null(fromRay(ray0, P1, a, bD))) { deg <- c(a, bD); break }
     }
     if (!is.null(deg)) break
   }
@@ -3797,15 +3893,21 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
   repeat {
     if (.symExpired(ctrl)) return(NULL)
     target <- min(if (have == 0L) 16L else 2L * have, maxLen)
+    # every ray of the stage over every prime in one kernel batch
+    uL <- list(); pV <- numeric(0); slot <- list()
     for (pj in seq_len(np)) {
       p <- .symPrimes[pj]
       for (k in (have + 1L):target) {
-        if (.symExpired(ctrl)) return(NULL)
-        e <- evalND(cur[[pj]], p, dN, dD)
-        if (is.null(e)) return(NULL)
-        Nseq[[pj]][k] <- e[1]; Dseq[[pj]][k] <- e[2]
+        uL[[length(uL) + 1L]] <- cur[[pj]]; pV <- c(pV, p); slot[[length(slot) + 1L]] <- c(pj, k)
         cur[[pj]] <- (cur[[pj]] * bases) %% p
       }
+    }
+    if (.symExpired(ctrl)) return(NULL)
+    rays <- raySamples(uL, pV, dN + dD + 4L)
+    for (i in seq_along(uL)) {
+      e <- fromRay(rays[[i]], pV[i], dN, dD)
+      if (is.null(e)) return(NULL)
+      Nseq[[slot[[i]][1]]][slot[[i]][2]] <- e[1]; Dseq[[slot[[i]][1]]][slot[[i]][2]] <- e[2]
     }
     have <- target
     if (2L * symBMorder(Nseq[[1]], P1) < have &&
@@ -4363,11 +4465,11 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
     if (length(reli) > ctrl$relevanceCap) {
       # single-monomial denominator (Laurent) first, then a general denominator
       e <- .symSparseEntry(reli, supportCols[i], f, point0, leafNames, NtUsed,
-                             kcall, pivots, residueFn, ctrl, zSlots)
+                             kcall, pivots, residueFn, ctrl, zSlots, kbatch)
       if (is.null(e))
         e <- .symGeneralRationalEntry(reli, supportCols[i], f, point0,
                                          leafNames, NtUsed, kcall, pivots,
-                                         residueFn, ctrl, zSlots)
+                                         residueFn, ctrl, zSlots, kbatch)
       if (is.null(e) && .symExpired(ctrl)) return(fallback(timedOut))
       if (is.null(e)) return(fallback(sprintf(
         paste("an entry couples %d variables and the sparse fit hit its caps",
@@ -5129,6 +5231,7 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
 # print() shows the result section only; summary() adds header and computation
 #' @export
 print.symmetrydetection <- function(x, fixed = NULL, width = getOption("width"), ...) {
+  if (is.null(fixed)) fixed <- x$gauge
   .symCatResult(x, fixed = fixed, width = width)
   invisible(x)
 }
@@ -5136,7 +5239,7 @@ print.symmetrydetection <- function(x, fixed = NULL, width = getOption("width"),
 #' @export
 summary.symmetrydetection <- function(object, verbose = FALSE, fixed = NULL,
                                       width = getOption("width"), ...)
-  .symReport(object, verbose, fixed, width)
+  .symReport(object, verbose, if (is.null(fixed)) object$gauge else fixed, width)
 
 
 # A result of the chart L = log(a + b*v) (logArgChart) reported in v, see
@@ -5182,4 +5285,66 @@ summary.symmetrydetection <- function(object, verbose = FALSE, fixed = NULL,
     raw$nonIdentifiable <- lapply(raw$nonIdentifiable, fixDir)
   else if (is.null(raw$rank) && is.null(raw$method)) raw <- lapply(raw, fixDir)
   raw
+}
+
+
+# ---- gaugePreference: scalings first, then the general directions in a gauge -------
+# Step 1 finds the rank and the exact scalings without reconstructing anything; the
+# gauge is a basis of the scaling weights chosen in preference order; step 2 fixes it
+# and reconstructs only the general directions, over fewer parameters.
+.symGaugedDetection <- function(mc, env, pref, fixed, reconstruct, verbose) {
+  mc[[1]] <- symmetryDetection
+  mc$gaugePreference <- FALSE
+  mc$verbose <- FALSE
+  t0 <- Sys.time()
+  mc1 <- mc; mc1$reconstruct <- FALSE
+  s1 <- eval(mc1, env)
+  scal <- Filter(function(d) identical(d$type, "scaling"), s1$symmetries)
+  gen  <- Filter(function(d) !identical(d$type, "scaling"), s1$symmetries)
+  gauge <- .symChooseGauge(scal, pref, avoid = unique(unlist(lapply(gen, `[[`, "support"))),
+                           fixed = as.character(fixed))
+  res <- s1
+  if (length(gen) && isTRUE(reconstruct)) {
+    mc2 <- mc; mc2$fixed <- unique(c(as.character(fixed), gauge))
+    s2 <- eval(mc2, env)
+    res$symmetries <- c(scal, Filter(function(d) !identical(d$type, "scaling"), s2$symmetries))
+    res$info$verification <- s2$info$verification
+  }
+  res$gauge <- gauge
+  res$info$settings$gaugePreference <- pref
+  res$info$elapsed <- as.numeric(Sys.time() - t0, units = "secs")
+  if (isTRUE(verbose)) print(res)
+  invisible(res)
+}
+
+# A basis of the scaling weights, one coordinate per scaling, taken greedily in
+# preference order: the pattern ranks of `pref` (NULL: none), then coordinates outside
+# `avoid`, then the rest. A coordinate enters only if it raises the weight rank, so the
+# gauge is valid whatever the order; fixed symbols are no candidates.
+.symChooseGauge <- function(scal, pref, avoid = character(0), fixed = character(0)) {
+  if (!length(scal)) return(character(0))
+  coords <- setdiff(unique(unlist(lapply(scal, function(d) names(d$weights)))), fixed)
+  W <- t(vapply(scal, function(d) {
+    w <- setNames(numeric(length(coords)), coords)
+    k <- intersect(names(d$weights), coords)
+    # weights are integers, rational ones arrive as strings ("1/2")
+    w[k] <- vapply(d$weights[k], function(v) as.numeric(eval(parse(text = as.character(v)))),
+                   numeric(1))
+    w }, numeric(length(coords))))
+  if (is.null(dim(W))) W <- matrix(W, nrow = 1L, dimnames = list(NULL, coords))
+  prefRank <- rep(length(pref) + 1L, length(coords))
+  for (i in rev(seq_along(pref)))
+    prefRank[grepl(utils::glob2rx(pref[i]), coords)] <- i
+  ord <- order(prefRank, coords %in% avoid, seq_along(coords))
+  chosen <- character(0)
+  for (k in coords[ord]) {
+    cand <- c(chosen, k)
+    if (qr(W[, cand, drop = FALSE])$rank > length(chosen)) chosen <- cand
+    if (length(chosen) == nrow(W)) break
+  }
+  if (length(chosen) < nrow(W))
+    warning("symmetryDetection(): the scaling weights have rank ", length(chosen),
+            " for ", nrow(W), " scalings; the gauge fixes ", length(chosen), ".",
+            call. = FALSE)
+  chosen
 }
