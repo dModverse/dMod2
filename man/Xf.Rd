@@ -54,5 +54,6 @@ the cppDE / Sundials backend.
 \details{
 Can be used to integrate additional quantities, e.g. fluxes, by
 adding them to \code{f}. All quantities not initialised by \code{pars} are initialised
-to 0. For more details and the return value see \link{Xs}.
+to 0. For more details and the return value see \link{Xs}, also for the controls
+the returned function keeps.
 }

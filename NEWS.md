@@ -1,3 +1,48 @@
+# dMod2 0.8.1
+
+* `steadyStates(version = "1.4")`: a new core on the same interface. Balances
+  are linear forms over the flux terms, and each unknown comes from a
+  combination of balances a linear program finds, so every solution is a ratio
+  of positive sums. Where no single unknown is left, one side of a balance
+  shares its sum by new flux ratios `r_*`. Needs `positive = TRUE`; volumes are
+  never unknowns, and `solveQuadratic`, `branches` and `givenCQs` do not apply.
+* `steadyStates(verbose = )`: `TRUE` (default) prints a few progress lines and
+  the result, `FALSE` the result only, `"full"` every step.
+* `steadyStates()` 1.3 solves linear balances directly instead of by
+  `solve()`, reads signs off the expression tree after a numeric screen, and
+  searches a block balance by balance when no pivot combination is positive.
+* `steadyStates()` solves a strongly connected block of states jointly where no
+  single balance stays positive, e.g. receptors recycling through endosomes.
+* `steadyStates()` solves every rate constant at most once. A symbol defined
+  twice, by itself or in a cycle is an error.
+* `steadyStates()` factors out common terms instead of cancelling the resolved
+  expressions, which stalled large models.
+* `steadyStates(testSteady = "fast")` checks mod p only. A residual it cannot
+  evaluate is an error with its reason, not a fallback to the symbolic test.
+* `normL2(t0 = )` takes one start per condition, named by condition.
+* `Pexpl()` and `Y()` build `derivMode = "forward"` by default and accept
+  `"forward-reverse"`, which the reverse sweep with `deriv2 = TRUE` needs.
+* `controls()` reaches every option an object uses at run time, and
+  `controls<-` changes it for the next call. `Pimpl()` (`keep.root`,
+  `controlsMS`, `controlsNleqslv`) and `Pexpl()` (`attach.input`) have controls
+  now; `Pequil()` reads `keep.root` and `attach.input` from them, and its memo
+  no longer answers a call made with other controls. `Xs()` and `Xf()` merge
+  the solver defaults at each call, so replacing `optionsOde` keeps the options
+  it does not name. The accessor walks `g * x * p`, the summands of a sum
+  (attribute `terms`) and the objective inside `%.*%` and `objfn * parfn`;
+  `condition = NULL` sets every condition, and an unknown name or condition is
+  an error.
+* `mstrust()` routes its arguments by the formals of `optmethod` instead of
+  those of `trust()`, and no longer passes `cautiousMode` to the objective.
+* **Bug fixes.** `normL2()` no longer reads past a prediction the solver cut
+  short, which gave a wrong value or a segfault; it is an error naming the time
+  the solver reached, which `trust()` takes as a failed step.
+  `Pexpl(attach.input = TRUE)` gives the inputs it passes through their forward
+  derivatives, so the forward gradient and Hessian along them are no longer
+  zero; inputs in `fixed` are handed on as constants. The name clash check of
+  `mstrust()` measures the intersection.
+* Requires cppDE 0.10.2.
+
 # dMod2 0.8.0
 
 * **Reverse mode.** `obj(pars, sweep = "reverse")` walks `normL2 -> Y -> Xs -> P`

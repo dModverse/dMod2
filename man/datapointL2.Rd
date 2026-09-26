@@ -33,6 +33,13 @@ L2 objective function for validation data point
 Computes the constraint value
 \deqn{\left(\frac{x(t)-\mu}{\sigma}\right)^2}{(pred-p[names(mu)])^2/sigma^2}
 and its derivatives with respect to p.
+
+The controls \code{mu} (the prediction name, named by the value parameter),
+\code{time}, \code{sigma} and \code{attr.name} are read at every call and can be changed
+with \code{\link[=controls]{controls()}}. The \code{parameters} attribute is the value parameter as
+given here, and so is the parameter set of every sum built from the
+objective: renaming the value parameter through \code{controls(x, "mu")} does
+not reach either, so build a new objective for another value parameter.
 }
 \examples{
 prediction <- list(a = matrix(c(0, 1), nrow = 1, dimnames = list(NULL, c("time", "A"))))

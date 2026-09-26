@@ -395,8 +395,8 @@ summary.prdfn <- function(object,...) {
       
       list(
         equations = attr(mappings[[C]], "equations"),
-        events = attr(mappings[[C]], "events"),
-        forcings = attr(mappings[[C]], "forcings"),
+        events = .kernelSetting(mappings[[C]], "events"),
+        forcings = .kernelSetting(mappings[[C]], "forcings"),
         parameters = attr(mappings[[C]], "parameters")
       )
       

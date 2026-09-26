@@ -100,7 +100,8 @@ P <- function(trafo = NULL, parameters = NULL, condition = NULL,
 ## Body of the parameter transformation built by Pexpl(). Package level, so
 ## one parfn per condition carries the state, not another copy of this code.
 
-.Pexpl_p2p <- function(st, pars, fixed = NULL, deriv = TRUE, deriv2 = FALSE, .ad_out = NULL) {
+.Pexpl_p2p <- function(st, pars, fixed = NULL, deriv = TRUE, deriv2 = FALSE, .ad_out = NULL,
+                       attach.input = FALSE) {
 
   if (deriv2 && !st$emit_d2)
     stop("Pexpl was built with deriv2 = FALSE; rebuild with deriv2 = TRUE.", call. = FALSE)
@@ -125,7 +126,7 @@ P <- function(trafo = NULL, parameters = NULL, condition = NULL,
     out <- if (!is.null(.ad_out)) .ad_out else
       st$evaluate(NULL, p[st$parameters], tangentX = NULL, tangentP = dP,
                   hessianX = NULL, hessianP = dP2,
-                  deriv2 = deriv2, attach.input = st$attach.input,
+                  deriv2 = deriv2, attach.input = attach.input,
                   fixed = intersect(names(fixed), st$parameters))
     pinnerVal <- out$y[1, ]
     tg <- out$tangent
@@ -136,8 +137,9 @@ P <- function(trafo = NULL, parameters = NULL, condition = NULL,
       Hess <- array(out$hessian, dim(out$hessian)[2:4],
                     dimnames = dimnames(out$hessian)[2:4])
   } else {
-    ## Values only (reverse-only build).
-    pinnerVal <- st$fun(NULL, p, attach.input = st$attach.input, fixed = names(fixed))[, ]
+    ## Values only (reverse-only build). The inputs are passed through below,
+    ## as on the derivative path, so both return the same names.
+    pinnerVal <- st$fun(NULL, p, fixed = names(fixed))[, ]
   }
 
   if (any(is.nan(pinnerVal)))
@@ -145,24 +147,99 @@ P <- function(trafo = NULL, parameters = NULL, condition = NULL,
          paste(names(pinnerVal)[is.nan(pinnerVal)], collapse = "\n\t"),
          ".\nLikely cause: division by zero or missing inputs.", call. = FALSE)
 
-  Jac_keep  <- if (deriv  && !is.null(Jac))  Jac[rowSums(Jac != 0) > 0, , drop = FALSE] else FALSE
-  Hess_keep <- if (deriv2 && !is.null(Hess))
-    (if (is.matrix(Jac_keep)) Hess[rownames(Jac_keep), , , drop = FALSE] else Hess) else FALSE
-  pinner <- as.parvec(pinnerVal, deriv = Jac_keep, deriv2 = Hess_keep)
+  ## attach.input appends every input the transformation does not map, a fixed
+  ## one included, as Pimpl and Pequil do.
+  through <- if (attach.input) setdiff(names(p), names(pinnerVal)) else character(0)
+  val <- if (length(through)) c(pinnerVal, .subset(p, through)) else pinnerVal
 
-  if (st$attach.input && !all(names(pars) %in% names(pinnerVal)))
-    pinner <- c(pinner, as.parvec(pars[setdiff(names(pars), names(pinnerVal))],
-                                  deriv  = if (deriv)  NULL else FALSE,
-                                  deriv2 = if (deriv2) NULL else FALSE))
-  pinner
+  ## A build without forward derivatives has none to give. Rows for the inputs
+  ## alone would mark every output as fixed.
+  if (!deriv || is.null(Jac))
+    return(as.parvec(val, deriv = FALSE, deriv2 = FALSE))
+
+  Jac  <- Jac[rowSums(Jac != 0) > 0, , drop = FALSE]
+  Hess <- if (deriv2 && !is.null(Hess)) Hess[rownames(Jac), , , drop = FALSE]
+
+  ## An input without a derivative row counts as fixed downstream, and the
+  ## forward gradient along it would be zero while the reverse path, which
+  ## hands each input its cotangent back, has it right. So every input that
+  ## varies keeps its row. What the caller fixed has none and stays fixed.
+  moving <- setdiff(through, names(fixed))
+  if (length(moving)) {
+    d <- .Pexpl_through(pars, moving, colnames(Jac), second = !is.null(Hess))
+    Jac <- .Pexpl_widen(Jac, d$theta)
+    Jac <- rbind(Jac, d$deriv)
+    if (!is.null(Hess))
+      Hess <- .Pexpl_bind3(.Pexpl_widen(Hess, d$theta), d$deriv2)
+  }
+  as.parvec(val, deriv = Jac, deriv2 = if (is.null(Hess)) FALSE else Hess)
+}
+
+
+# The derivatives of the inputs Pexpl passes through, in the basis `theta` of
+# the transformation's own Jacobian. An input carries its derivatives in; where
+# none come in, it is a parameter of the chain and its own direction, which the
+# basis gains if the transformation does not read it. An input that comes in
+# without a row was fixed further up and keeps no row.
+.Pexpl_through <- function(pars, moving, theta, second = FALSE) {
+  dP <- attr(pars, "deriv")
+  if (is.null(dP)) {
+    theta <- union(theta, moving)
+    D <- matrix(0, length(moving), length(theta), dimnames = list(moving, theta))
+    D[cbind(moving, moving)] <- 1
+    D2 <- if (second)
+      array(0, c(length(moving), length(theta), length(theta)),
+            dimnames = list(moving, theta, theta))
+    return(list(theta = theta, deriv = D, deriv2 = D2))
+  }
+  rows <- intersect(moving, rownames(dP))
+  D <- dP[rows, theta, drop = FALSE]
+  D2 <- NULL
+  if (second) {
+    D2 <- array(0, c(length(rows), length(theta), length(theta)),
+                dimnames = list(rows, theta, theta))
+    dP2 <- attr(pars, "deriv2")
+    have <- intersect(rows, dimnames(dP2)[[1L]])
+    if (length(have)) D2[have, , ] <- dP2[have, theta, theta, drop = FALSE]
+  }
+  list(theta = theta, deriv = D, deriv2 = D2)
+}
+
+# A Jacobian [p, theta] or a Hessian [p, theta, theta] zero-padded to a larger
+# basis, the columns it already has kept in place.
+.Pexpl_widen <- function(x, theta) {
+  have <- dimnames(x)[[2L]]
+  if (identical(have, theta)) return(x)
+  if (length(dim(x)) == 2L) {
+    out <- matrix(0, nrow(x), length(theta), dimnames = list(rownames(x), theta))
+    out[, have] <- x
+  } else {
+    out <- array(0, c(dim(x)[1L], length(theta), length(theta)),
+                 dimnames = list(dimnames(x)[[1L]], theta, theta))
+    out[, have, have] <- x
+  }
+  out
+}
+
+# Stack two Hessians [p, theta, theta] of one basis along their rows.
+.Pexpl_bind3 <- function(a, b) {
+  na <- dim(a)[1L]; nb <- dim(b)[1L]; nt <- dim(a)[2L]
+  out <- array(0, c(na + nb, nt, nt),
+               dimnames = list(c(dimnames(a)[[1L]], dimnames(b)[[1L]]),
+                               dimnames(a)[[2L]], dimnames(a)[[3L]]))
+  if (na) out[seq_len(na), , ] <- a
+  if (nb) out[na + seq_len(nb), , ] <- b
+  out
 }
 
 
 # One evaluateBatch over all conditions; the value-only path still loops.
-.Pexpl_batch <- function(st, parsList, fixedList, deriv, deriv2, cores) {
+.Pexpl_batch <- function(st, parsList, fixedList, deriv, deriv2, cores,
+                         attach.input = FALSE) {
   n <- length(parsList)
   loop <- function() lapply(seq_len(n), function(i)
-    .Pexpl_p2p(st, parsList[[i]], fixedList[[i]], deriv, deriv2))
+    .Pexpl_p2p(st, parsList[[i]], fixedList[[i]], deriv, deriv2,
+               attach.input = attach.input))
 
   eb <- st$evaluateBatch
   ad_ok <- st$use_ad && !is.null(st$evaluate) && is.loaded(st$ad_symbol)
@@ -179,19 +256,31 @@ P <- function(trafo = NULL, parameters = NULL, condition = NULL,
     list(vars = NULL, params = c(pars, fixed)[st$parameters],
          tangentX = NULL, tangentP = dP, hessianX = NULL,
          hessianP = if (deriv2) attr(pars, "deriv2") else NULL,
-         attach.input = st$attach.input,
+         attach.input = attach.input,
          fixed = intersect(names(fixed), st$parameters))
   })
   ad <- eb(sets, cores = cores, deriv2 = deriv2)
   lapply(seq_len(n), function(i)
     .Pexpl_p2p(st, parsList[[i]], fixedList[[i]], deriv, deriv2,
-               .ad_out = ad[[i]]))
+               .ad_out = ad[[i]], attach.input = attach.input))
 }
 
 
-.Pexpl_wrap <- function(st) {
-  function(pars, fixed = NULL, deriv = TRUE, deriv2 = FALSE)
-    .Pexpl_p2p(st, pars, fixed, deriv, deriv2)
+# The kernel with its batch and reverse entries. All three close over this
+# frame, which holds `st` and `controls` alone, and read `controls` when they
+# run: controls<- rebinds it here, so a change reaches every entry at once.
+.Pexpl_wrap <- function(st, controls) {
+  p2p <- function(pars, fixed = NULL, deriv = TRUE, deriv2 = FALSE)
+    .Pexpl_p2p(st, pars, fixed, deriv, deriv2,
+               attach.input = controls$attach.input)
+  attr(p2p, "vjpfn") <- function(pars, fixed = NULL, cotangent, condition = NULL)
+    .Pexpl_vjp(st, pars, fixed, cotangent, condition,
+               attach.input = controls$attach.input)
+  attr(p2p, "batchfn") <- function(parsList, fixedList, deriv, deriv2,
+                                   conditions, cores)
+    .Pexpl_batch(st, parsList, fixedList, deriv, deriv2, cores,
+                 attach.input = controls$attach.input)
+  p2p
 }
 
 # w' Jac, where the forward path forms Jac %*% dP. The transformation is one
@@ -200,7 +289,8 @@ P <- function(trafo = NULL, parameters = NULL, condition = NULL,
 #
 # attach.input passes the outer parameters through untouched, so their cotangent
 # adds to whatever the transformation itself puts on them.
-.Pexpl_vjp <- function(st, pars, fixed = NULL, cotangent, condition = NULL) {
+.Pexpl_vjp <- function(st, pars, fixed = NULL, cotangent, condition = NULL,
+                       attach.input = FALSE) {
   if (is.null(st$vjp))
     stop("Pexpl(): the reverse mode needs a vector-Jacobian product; rebuild ",
          "with derivMode = c(\"forward\", \"reverse\") and compile = TRUE.",
@@ -239,7 +329,7 @@ P <- function(trafo = NULL, parameters = NULL, condition = NULL,
   }
   wp <- .pickCotangent(u, names(pars))
 
-  if (st$attach.input) {
+  if (attach.input) {
     through <- setdiff(rownames(w), outnames)
     keep <- intersect(through, rownames(wp))
     if (length(keep))
@@ -258,15 +348,19 @@ P <- function(trafo = NULL, parameters = NULL, condition = NULL,
 #' @param trafo Named character / [eqnvec]; names are inner parameters,
 #'   values are expressions in the outer parameters.
 #' @param parameters Outer parameters; defaults to `getSymbols(trafo)`.
-#' @param attach.input Append outer inputs to the output.
+#' @param attach.input Append the outer inputs the transformation does not map
+#'   to the output, fixed ones included. An input that varies keeps its
+#'   derivatives, the identity when it enters the chain here, and one passed in
+#'   `fixed` stays fixed. Kept as a control of the returned function and read at
+#'   every call, see [controls()].
 #' @param condition Condition label.
 #' @param compile,modelname,verbose Forwarded to [cppDE::cppFUN].
 #' @param deriv,deriv2 Attach `attr(., "deriv")` `[p, theta]` and/or
 #'   `attr(., "deriv2")` `[p, theta, theta]`. `deriv2` needs `deriv = TRUE`.
-#' @param derivMode Which derivative products to build, one or both of
-#'   `"forward"` (AD) and `"reverse"` (the vector-Jacobian product the reverse
-#'   sweep contracts against). The default `c("forward", "reverse")` builds
-#'   both directions.
+#' @param derivMode Which derivative products to build, any of `"forward"`
+#'   (AD, default), `"reverse"` (the vector-Jacobian product the reverse sweep
+#'   contracts against) and `"forward-reverse"` (its derivative along a tangent,
+#'   for the reverse sweep with `deriv2 = TRUE`).
 #' @param outdir Directory for the generated source and shared object,
 #'   default the working directory.
 #'
@@ -277,10 +371,10 @@ P <- function(trafo = NULL, parameters = NULL, condition = NULL,
 Pexpl <- function(trafo, parameters = NULL, attach.input = FALSE, condition = NULL,
                   compile = FALSE, modelname = NULL, verbose = FALSE,
                   deriv = TRUE, deriv2 = FALSE,
-                  derivMode = c("forward", "reverse"),
+                  derivMode = "forward",
                   outdir = getwd()) {
 
-  derivMode <- .matchDerivMode(derivMode, c("forward", "reverse"))
+  derivMode <- .matchDerivMode(derivMode, c("forward", "reverse", "forward-reverse"))
   emit_d1   <- isTRUE(deriv)
   emit_d2   <- isTRUE(deriv2)
   if (emit_d2 && !emit_d1)
@@ -309,20 +403,15 @@ Pexpl <- function(trafo, parameters = NULL, attach.input = FALSE, condition = NU
   ad_symbol  <- paste0(modelname, "_eval_ad")
   ad2_symbol <- paste0(modelname, "_eval_ad2")
 
-  ## The wrapper closes over `st` alone, not over Pexpl's frame.
+  ## The wrapper closes over `st` and `controls` alone, not over Pexpl's frame.
   st <- list2env(list(fun = fun, jac = jac, hess = hess, evaluate = evaluate,
                       evaluateBatch = PEval$evaluateBatch, vjp = PEval$vjp,
                       outnames = names(trafo),
-                      parameters = parameters, attach.input = attach.input,
+                      parameters = parameters,
                       use_ad = use_ad, ad_symbol = ad_symbol,
                       ad2_symbol = ad2_symbol, emit_d1 = emit_d1,
                       emit_d2 = emit_d2), parent = emptyenv())
-  p2p <- .Pexpl_wrap(st)
-  attr(p2p, "vjpfn") <- function(pars, fixed = NULL, cotangent, condition = NULL)
-    .Pexpl_vjp(st, pars, fixed, cotangent, condition)
-  attr(p2p, "batchfn") <- function(parsList, fixedList, deriv, deriv2,
-                                   conditions, cores)
-    .Pexpl_batch(st, parsList, fixedList, deriv, deriv2, cores)
+  p2p <- .Pexpl_wrap(st, controls = list(attach.input = attach.input))
 
   attr(p2p, "equations")   <- as.eqnvec(trafo)
   attr(p2p, "parameters")  <- parameters
@@ -904,6 +993,27 @@ resetWarmStarts <- function(fn, verbose = TRUE) {
 }
 
 
+# Pimpl's multistart and nleqslv controls with their defaults filled in.
+# Biological steady-state magnitudes span ~10 orders when rate constants span
+# 2-3, hence the log-uniform default over [1e-5, 1e5] when positive = TRUE.
+.pimplMS <- function(controlsMS) {
+  ms <- modifyList(list(nStarts = 100L, positive = TRUE,
+                        lower = 1e-5, upper = 1e5, debugPlot = FALSE),
+                   as.list(controlsMS))
+  if (!ms$positive) {
+    if (identical(ms$lower, 1e-5)) ms$lower <- 0
+    if (identical(ms$upper, 1e5))  ms$upper <- 100
+  }
+  ms
+}
+
+.pimplNleqslv <- function(controlsNleqslv)
+  modifyList(list(method = "Newton", global = "dbldog", xscalm = "fixed",
+                  xtol = 1e-4, ftol = 1e-2, btol = 1e-3,
+                  cndtol = 1e-12, maxit = 200L, allowSingular = TRUE),
+             as.list(controlsNleqslv))
+
+
 #' Parameter transformation (implicit, root-finding)
 #'
 #' Returns a [parfn] over the outer inputs. On call, the parfn solves
@@ -943,6 +1053,12 @@ resetWarmStarts <- function(fn, verbose = TRUE) {
 #'   uniformly.
 #' @param outdir Directory for the generated source and shared object,
 #'   default the working directory.
+#'
+#' @details `keep.root`, `controlsMS` and `controlsNleqslv` are kept, as
+#' given, in the controls of the returned function and read at every call, so
+#' [controls()] can change them later. The two lists are merged over their
+#' defaults at every call, so a replacement only needs the entries it changes.
+#' With `keep.root` switched off, a root kept before is no longer used.
 #'
 #' @return A [parfn].
 #' @seealso [Pexpl], [Pequil], [P].
@@ -1007,19 +1123,12 @@ Pimpl <- function(trafo, parameters = NULL, forcings = NULL, condition = NULL,
 
   reg <- .warmstart_registry()
 
-  ## Biological SS magnitudes span ~10 orders when rate constants span 2-3:
-  ## default log-uniform sampling over [1e-5, 1e5] when positive = TRUE.
-  ms <- modifyList(list(nStarts = 100L, positive = TRUE,
-                        lower = 1e-5, upper = 1e5, debugPlot = FALSE),
-                   controlsMS)
-  if (!ms$positive) {
-    if (identical(ms$lower, 1e-5)) ms$lower <- 0
-    if (identical(ms$upper, 1e5))  ms$upper <- 100
-  }
-  nleq <- modifyList(list(method = "Newton", global = "dbldog", xscalm = "fixed",
-                          xtol = 1e-4, ftol = 1e-2, btol = 1e-3,
-                          cndtol = 1e-12, maxit = 200L, allowSingular = TRUE),
-                     controlsNleqslv)
+  # Kept as given and merged with the defaults at every call, so a change made
+  # by controls<- reads like the same argument given to Pimpl(). Merged once
+  # here too, which rejects a malformed argument when it is given.
+  controls <- list(keep.root = keep.root, controlsMS = controlsMS,
+                   controlsNleqslv = controlsNleqslv)
+  .pimplMS(controlsMS); .pimplNleqslv(controlsNleqslv)
   nleqslv_top <- c("method", "global", "xscalm")
 
   turnover <- function(x, pv)
@@ -1172,6 +1281,9 @@ Pimpl <- function(trafo, parameters = NULL, forcings = NULL, condition = NULL,
     dP  <- attr(p, "deriv")
     dP2 <- if (deriv2) attr(p, "deriv2") else NULL
 
+    keep.root <- controls$keep.root
+    ms   <- .pimplMS(controls$controlsMS)
+    nleq <- .pimplNleqslv(controls$controlsNleqslv)
     top  <- nleq[intersect(names(nleq), nleqslv_top)]
     ctrl <- nleq[setdiff(names(nleq), nleqslv_top)]
     positive  <- ms$positive
@@ -1204,7 +1316,8 @@ Pimpl <- function(trafo, parameters = NULL, forcings = NULL, condition = NULL,
                                  if (is.null(override)) top else override, ctrl),
                       error = function(e) NULL), label)
 
-    if (!is.null(cache$guess)) {
+    # A root kept while keep.root was on is not used once it is off.
+    if (keep.root && !is.null(cache$guess)) {
       x0 <- p[dependent]
       cd <- intersect(dependent, names(cache$guess))
       if (length(cd)) x0[cd] <- cache$guess[cd]
@@ -1310,15 +1423,14 @@ Pimpl <- function(trafo, parameters = NULL, forcings = NULL, condition = NULL,
 #' `C[, pivots]^{-1}`, independent of the starting distribution.
 #'
 #' @param norm Record from [.normalize_ss_inputs] with `fullsystem = TRUE`.
-#' @param ms Resolved multistart controls.
 #' @param emit_d1,emit_d2 Whether first/second-order sensitivities are built.
-#' @param attach.input,keep.root,controlsODE,compile,modelname,condition,verbose,start.time,end.time
+#' @param attach.input,keep.root,controlsODE,controlsMS,compile,modelname,condition,verbose,start.time,end.time
 #'   As in [Pequil].
 #' @param dotArgs Extra arguments forwarded to [cppDE::cppODE].
 #' @param outdir Directory for the generated source and shared object.
 #' @return A [parfn].
 #' @keywords internal
-.Pequil_totals <- function(norm, ms, emit_d1, emit_d2, attach.input, keep.root,
+.Pequil_totals <- function(norm, controlsMS, emit_d1, emit_d2, attach.input, keep.root,
                            controlsODE, compile, modelname, condition, verbose,
                            start.time, end.time, dotArgs, outdir = getwd()) {
   f           <- norm$trafo
@@ -1398,8 +1510,10 @@ Pimpl <- function(trafo, parameters = NULL, forcings = NULL, condition = NULL,
   ode_ctrl <- modifyList(list(abstol = 1e-6, reltol = 1e-6, maxsteps = 1e6L,
                               maxattemps = 100L, hini = 0, roottol = 1e-6, maxroot = 1L),
                          controlsODE)
+  # Read at every call, never from the arguments, so controls<- takes effect.
   controls <- c(list(keep.root = keep.root, attach.input = attach.input,
-                     start.time = start.time, end.time = end.time), ode_ctrl)
+                     start.time = start.time, end.time = end.time), ode_ctrl,
+                list(controlsMS = controlsMS))
 
   reg <- .warmstart_registry()
 
@@ -1421,12 +1535,19 @@ Pimpl <- function(trafo, parameters = NULL, forcings = NULL, condition = NULL,
     dP2 <- if (deriv2) attr(p, "deriv2") else NULL
     if (!is.null(fixed)) { p <- p[!names(p) %in% names(fixed)]; p <- c(p, fixed) }
 
+    keep.root    <- controls$keep.root
+    attach.input <- controls$attach.input
+    ms <- .pequilMS(controls$controlsMS)
+
     tot       <- p[total_names]
     emptypars <- setdiff(names(p), c(dependent, names(fixed)))
 
+    # The controls are part of the key: a result memoised under other
+    # tolerances or another output layout is not this call's result.
     pv_hash <- NULL
     if (keep.root) {
-      pv_hash <- digest::digest(list(tot, p[model_params], fixed, deriv, deriv2),
+      pv_hash <- digest::digest(list(tot, p[model_params], fixed, deriv, deriv2,
+                                     controls),
                                 algo = "xxhash64")
       if (!is.null(cache$last_hash) && identical(pv_hash, cache$last_hash) &&
           !is.null(cache$last_result))
@@ -1573,6 +1694,12 @@ Pimpl <- function(trafo, parameters = NULL, forcings = NULL, condition = NULL,
 }
 
 
+# Pequil's multistart controls with their defaults filled in.
+.pequilMS <- function(controlsMS)
+  modifyList(list(nStarts = 10L, positive = TRUE, lower = 1e-5, upper = 1e5),
+             as.list(controlsMS))
+
+
 # Internal: the solver error, with the non-finite parameters named. A missing
 # or overflowing value reaches the solver as a bare "'parms' must be finite",
 # which says nothing about where it came from.
@@ -1633,6 +1760,14 @@ Pimpl <- function(trafo, parameters = NULL, forcings = NULL, condition = NULL,
 #'   sensitivity can drift without ever settling and would then veto the
 #'   steady state.
 #'
+#' @details `attach.input`, `keep.root`, `start.time`, `end.time`, every entry
+#' of `controlsODE` (each a control of its own, with its default filled in)
+#' and `controlsMS` are kept in the controls of the returned function and read
+#' at every call, so [controls()] can change them later. `controlsMS` is
+#' merged over its defaults at every call. The controls are part of the key
+#' under which `keep.root` memoises a result, so a change is never answered
+#' from a result computed under the old setting.
+#'
 #' @return A [parfn].
 #' @seealso [Pexpl], [Pimpl], [P].
 #' @import cppDE
@@ -1645,8 +1780,9 @@ Pequil <- function(trafo, parameters = NULL, forcings = NULL, condition = NULL,
                    compile = FALSE, modelname = NULL, verbose = FALSE,
                    deriv = TRUE, deriv2 = FALSE, outdir = getwd(), ...) {
 
-  ms <- modifyList(list(nStarts = 10L, positive = TRUE,
-                        lower = 1e-5, upper = 1e5), controlsMS)
+  # Merged again at every call, where controls<- may have replaced it; merged
+  # here to reject a malformed argument when it is given.
+  .pequilMS(controlsMS)
 
   emit_d1 <- isTRUE(deriv)
   emit_d2 <- isTRUE(deriv2)
@@ -1658,7 +1794,7 @@ Pequil <- function(trafo, parameters = NULL, forcings = NULL, condition = NULL,
                                fullsystem = isTRUE(expressInTotals))
 
   if (!is.null(norm$pivots) && length(norm$pivots))
-    return(.Pequil_totals(norm, ms, emit_d1, emit_d2, attach.input, keep.root,
+    return(.Pequil_totals(norm, controlsMS, emit_d1, emit_d2, attach.input, keep.root,
                           controlsODE, compile, modelname, condition, verbose,
                           start.time, end.time, list(...), outdir = outdir))
 
@@ -1707,7 +1843,8 @@ Pequil <- function(trafo, parameters = NULL, forcings = NULL, condition = NULL,
           dimnames = list(dependent, all_sens, all_sens)) else NULL
 
   controls <- c(list(keep.root = keep.root, attach.input = attach.input,
-                     start.time = start.time, end.time = end.time), ode_ctrl)
+                     start.time = start.time, end.time = end.time), ode_ctrl,
+                list(controlsMS = controlsMS))
 
   # Everything the solve needs, shared by the single and the batched entry.
   # `memo` short-circuits an unchanged repeat call before any solving.
@@ -1720,9 +1857,12 @@ Pequil <- function(trafo, parameters = NULL, forcings = NULL, condition = NULL,
     }
     miss <- setdiff(dependent, names(p)); if (length(miss)) p[miss] <- 1
 
+    # The controls are part of the key: a result memoised under other
+    # tolerances or another output layout is not this call's result.
     pv_hash <- NULL; memo <- NULL
     if (controls$keep.root) {
-      pv_hash <- digest::digest(list(p[dependent], p[parms_all], fixed, deriv, deriv2),
+      pv_hash <- digest::digest(list(p[dependent], p[parms_all], fixed, deriv, deriv2,
+                                     controls),
                                 algo = "xxhash64")
       if (!is.null(cache$last_hash) && identical(pv_hash, cache$last_hash) &&
           !is.null(cache$last_result))
@@ -1767,6 +1907,7 @@ Pequil <- function(trafo, parameters = NULL, forcings = NULL, condition = NULL,
     cache <- ctx$cache; p <- ctx$p; pv_hash <- ctx$pv_hash
     keep.root    <- controls$keep.root
     attach.input <- controls$attach.input
+    ms <- .pequilMS(controls$controlsMS)
     dP  <- attr(pars, "deriv")
     dP2 <- if (deriv2) attr(pars, "deriv2") else NULL
     emptypars   <- setdiff(names(p), c(dependent, names(fixed)))

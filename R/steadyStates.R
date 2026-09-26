@@ -8,7 +8,12 @@
 #' spends each equation on whichever state or rate constant keeps the result a
 #' ratio of sums of positive terms. A state whose equation went to a rate
 #' constant is absent from the result and stays a free parameter of the
-#' transformation.
+#' transformation. Where no single balance stays positive, version `"1.3"`
+#' solves a strongly connected block of states jointly, so that differences
+#' cancel across its balances. If that fails, the block is searched balance
+#' by balance, spending each only on an unknown whose root stays positive once
+#' the balances solved before it are substituted. A state solved up front
+#' whose rate constants such a block needs is left to the block on a retry.
 #'
 #' @param model An `eqnlist`, or the name of a csv file describing the model.
 #' @param file Character, path the result is written to with `saveRDS()`, and
@@ -71,13 +76,23 @@
 #'   transformation substitutes all entries at once. `FALSE` keeps the compact
 #'   recurrent form. Versions `"1.2"` and later already resolve in the backend,
 #'   so this matters for `"1.0"` and `"1.1"`.
+#' @param verbose `TRUE` (default) reports the progress in a few lines and the
+#'   result, `FALSE` only the result, `"full"` traces every step of the solver.
+#'   Versions before `"1.3"` print their own output unless `verbose = FALSE`.
 #' @param version Character, backend version. One of `"1.0"` (original), `"1.1"`
 #'   (adds `testSteady`), `"1.2"` (sink-cluster detection, `walltime`,
 #'   priority-table cycle breaking, `simplify` toggle, optional quadratic
 #'   state-side solve), or `"1.3"` (default; same interface as `"1.2"`, but
 #'   solutions are recorded lazily and resolved once at output time, with a
 #'   lock guard replacing most rollbacks, typically orders of magnitude
-#'   faster on feedback-heavy networks).
+#'   faster on feedback-heavy networks). `"1.4"` is a new core on the same
+#'   interface: every balance is a linear form over the flux terms, and each
+#'   unknown (a state or a rate constant) is solved from a combination of
+#'   balances a linear program finds, so every solution is a ratio of positive
+#'   sums by construction and nothing is expanded. Where no single unknown is
+#'   left, one side of a balance shares its sum by new flux ratios `r_*`. It
+#'   needs `positive = TRUE` and `outputFormat = "R"`, and treats the model's
+#'   compartment volumes as fixed, never as unknowns.
 #'
 #' @return Named character vector of steady-state equations in dMod format, or
 #'   `0` if no solution was found. An entry whose value is its own name denotes a
@@ -97,12 +112,14 @@ steadyStates <- function(model, file = NULL, rates = NULL, forcings = NULL,
                          outputFormat = "R", testSteady = c("fast", "exact", "skip"),
                          walltime = 0L, simplify = TRUE, solveQuadratic = FALSE,
                          positive = TRUE, branches = FALSE, priority = NULL,
-                         version = "1.3", resolve = TRUE) {
+                         version = "1.3", resolve = TRUE, verbose = TRUE) {
 
   .require_ns("reticulate", "steadyStates()")
   # Validate version and verification mode
-  version <- match.arg(version, choices = c("1.0", "1.1", "1.2", "1.3"))
+  version <- match.arg(version, choices = c("1.0", "1.1", "1.2", "1.3", "1.4"))
   testSteady <- match.arg(testSteady)
+  if (!(isTRUE(verbose) || isFALSE(verbose) || identical(verbose, "full")))
+    stop("verbose must be TRUE, FALSE or \"full\".")
 
   # Forward customTotals() as givenCQs (the CSV drops totals metadata, so the
   # backend would otherwise re-derive an arbitrary conserved-quantity basis).
@@ -115,11 +132,14 @@ steadyStates <- function(model, file = NULL, rates = NULL, forcings = NULL,
   # Default sparsifyLevel depends on version: v1.0/v1.1 still use sparsify
   # (default 2), v1.2+ ignores it (default 0, avoids the info print).
   if (is.null(sparsifyLevel)) {
-    sparsifyLevel <- if (version %in% c("1.2", "1.3")) 0 else 2
+    sparsifyLevel <- if (version %in% c("1.2", "1.3", "1.4")) 0 else 2
   }
 
   # Check if model is an equation list
   if (inherits(model, "eqnlist")) {
+    # 1.4 would take a volume factor for a rate constant: volumes are not unknowns
+    if (version == "1.4" && length(model$volumes))
+      neglect <- union(neglect, getSymbols(unique(unlist(model$volumes))))
     if (is.null(file)) file <- "reactions_for_Alyssa"
     # Not write.eqnlist(): the backend never sees the volumes, so the
     # V_ref / V_X factors getFluxes() applies have to be folded in first.
@@ -137,11 +157,18 @@ steadyStates <- function(model, file = NULL, rates = NULL, forcings = NULL,
   # v1.2+ uses scipy.optimize.linprog for structural sink-cluster detection
   # (states whose combined mass leaks monotonically and must therefore be 0).
   # Older versions don't need scipy.
-  if (version %in% c("1.2", "1.3")) reticulate::py_require("scipy")
+  if (version %in% c("1.2", "1.3", "1.4")) reticulate::py_require("scipy")
 
   pymodule <- paste0("AlyssaPetit_ver", gsub("\\.", "_", version))
   ap <- reticulate::import_from_path(pymodule,
                                      path = system.file("code", package = "dMod2"))
+  # 1.3 honours verbose itself; the older backends are silenced from outside
+  alyssa <- function(...) {
+    if (version %in% c("1.3", "1.4") || !isFALSE(verbose)) return(ap$Alyssa(...))
+    res <- NULL
+    reticulate::py_capture_output(res <- ap$Alyssa(...))
+    res
+  }
 
   # Version-specific Python signatures:
   #   v1.0: Alyssa(filename, injections, givenCQs, neglect, sparsifyLevel, outputFormat)
@@ -159,7 +186,7 @@ steadyStates <- function(model, file = NULL, rates = NULL, forcings = NULL,
       message("Note: version 1.0 does not support solveQuadratic=TRUE, ignored.")
     if (length(priority) > 0)
       message("Note: version 1.0 does not support 'priority', ignored.")
-    m_ss <- ap$Alyssa(model, as.list(forcings), as.list(givenCQs),
+    m_ss <- alyssa(model, as.list(forcings), as.list(givenCQs),
                       as.list(neglect), sparsifyLevel, outputFormat)
 
   } else if (version == "1.1") {
@@ -170,12 +197,20 @@ steadyStates <- function(model, file = NULL, rates = NULL, forcings = NULL,
     if (testSteady == "fast")
       message("Note: version 1.1 has no 'fast' test, using 'exact' instead.")
     # v1.1 backend takes the legacy "T"/"F" tokens.
-    m_ss <- ap$Alyssa(model, as.list(forcings), as.list(givenCQs),
+    m_ss <- alyssa(model, as.list(forcings), as.list(givenCQs),
                       as.list(neglect), sparsifyLevel, outputFormat,
                       if (testSteady == "skip") "F" else "T")
 
   } else {
-    # v1.2 / v1.3 (shared signature)
+    # v1.2 / v1.3 / v1.4 (shared signature)
+    if (version == "1.4") {
+      if (isTRUE(solveQuadratic) || isTRUE(branches))
+        message("Note: version 1.4 solves every unknown linearly, solveQuadratic and branches are ignored.")
+      if (length(givenCQs) > 0)
+        message("Note: version 1.4 uses no conserved quantities, givenCQs is ignored.")
+      if (testSteady == "exact")
+        message("Note: version 1.4 has no 'exact' test, using 'fast' instead.")
+    }
     # simplify can be TRUE / FALSE / "full" -- pass through untouched so the
     # Python side sees either a Python bool or the literal string "full".
     if (is.character(simplify)) {
@@ -186,19 +221,21 @@ steadyStates <- function(model, file = NULL, rates = NULL, forcings = NULL,
     }
     # bool -> Python bool, character vector -> Python list of symbol names.
     positive_arg <- if (is.character(positive)) as.list(positive) else as.logical(positive)
-    m_ss <- ap$Alyssa(model,
-                      injections     = as.list(forcings),
-                      givenCQs       = as.list(givenCQs),
-                      neglect        = as.list(neglect),
-                      sparsifyLevel  = as.integer(sparsifyLevel),
-                      outputFormat   = outputFormat,
-                      testSteady     = testSteady,
-                      walltime       = as.integer(walltime),
-                      simplify       = simplify_arg,
-                      solveQuadratic = as.logical(solveQuadratic),
-                      positive       = positive_arg,
-                      branches       = as.logical(branches),
-                      priority       = as.list(as.character(priority)))
+    args <- list(model,
+                 injections     = as.list(forcings),
+                 givenCQs       = as.list(givenCQs),
+                 neglect        = as.list(neglect),
+                 sparsifyLevel  = as.integer(sparsifyLevel),
+                 outputFormat   = outputFormat,
+                 testSteady     = testSteady,
+                 walltime       = as.integer(walltime),
+                 simplify       = simplify_arg,
+                 solveQuadratic = as.logical(solveQuadratic),
+                 positive       = positive_arg,
+                 branches       = as.logical(branches),
+                 priority       = as.list(as.character(priority)))
+    if (version %in% c("1.3", "1.4")) args$verbose <- verbose
+    m_ss <- do.call(alyssa, args)
   }
 
   if (is.null(m_ss) || identical(m_ss, 0L)) return(0)

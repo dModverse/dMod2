@@ -56,6 +56,42 @@ match.fnargs <- function(arglist, choices) {
   st
 }
 
+# The raw kernels an fn evaluates, each as list(kernel, kind, condition),
+# outermost factor first. `condition` keeps the leaves that answer for it: a
+# `+` node asks the part that owns the condition, a `*` node asks both
+# factors, and a leaf built without a condition answers for every one. The
+# composed mappings hold nothing but the descriptor, so this is the way from a
+# composition to the closures that carry the controls. An fn without a
+# descriptor offers its mappings.
+.fnLeaves <- function(f, condition = NULL) {
+  st <- .fnNode(f)
+  if (is.null(st)) {
+    m <- attr(f, "mappings")
+    if (!length(m)) return(list())
+    conds <- names(m)
+    sel <- if (is.null(condition) || is.null(conds)) seq_along(m)
+           else which(conds %in% condition)
+    return(lapply(sel, function(i)
+      list(kernel = m[[i]], kind = .fnKind(f),
+           condition = if (is.null(conds)) NULL else conds[i])))
+  }
+  switch(st$op,
+    leaf = {
+      if (!is.null(condition) && !is.null(st$condition) &&
+          !any(condition %in% st$condition))
+        return(list())
+      list(list(kernel = st$kernel, kind = st$kind, condition = st$condition))
+    },
+    "*" = c(.fnLeaves(st$p1, condition), .fnLeaves(st$p2, condition)),
+    "+" = {
+      idx <- if (is.null(condition)) seq_along(st$parts)
+             else sort(unique(st$owner[intersect(condition, names(st$owner))]))
+      unlist(lapply(st$parts[idx], .fnLeaves, condition = condition),
+             recursive = FALSE)
+    },
+    list())
+}
+
 
 ## ---- Condition resolution ------------------------------------------------
 
@@ -774,7 +810,7 @@ match.fnargs <- function(arglist, choices) {
   sel <- if (is.null(cond) || is.null(names(m))) seq_along(m) else match(cond, names(m))
   sel <- sel[!is.na(sel)]
   for (i in sel) {
-    v <- attr(m[[i]], what)
+    v <- .kernelSetting(m[[i]], what)
     if (!is.null(v)) return(v)
   }
   NULL
@@ -860,6 +896,15 @@ match.fnargs <- function(arglist, choices) {
 
 
 ## General concatenation of functions ------------------------------------------
+
+# The summands of an objective: the flat list `+` recorded, or the objective
+# itself. An objective scaled by %.*% or composed with a parfn keeps what it
+# wraps in `wrapped`, which this does not read: the wrapper is one summand, not
+# the objective inside it.
+.objTerms <- function(f) {
+  t <- attr(f, "terms", exact = TRUE)
+  if (is.null(t)) list(f) else t
+}
 
 #' Direct sum of objective functions
 #'
@@ -977,6 +1022,9 @@ match.fnargs <- function(arglist, choices) {
     # error model, which is what reml() needs from a split objective.
     attr(outfn, "l2spec") <- c(attr(x1, "l2spec", exact = TRUE),
                                attr(x2, "l2spec", exact = TRUE))
+    # The summands themselves, flat however the sum was nested, so a caller
+    # can take a data term apart from the priors beside it.
+    attr(outfn, "terms") <- c(.objTerms(x1), .objTerms(x2))
     return(outfn)
 
   }
@@ -1049,6 +1097,10 @@ match.fnargs <- function(arglist, choices) {
     attr(outfn, "conditions") <- conditions12
     attr(outfn, "parameters") <- parameters12
     attr(outfn, "modelname") <- modelname12
+    # The objective inside, so controls() reaches its controls. Not `terms`:
+    # the scaled objective is not a sum, and .objTerms() must not take it for
+    # its inner objective.
+    attr(outfn, "wrapped") <- list(x2)
     return(outfn)
 
   } else {
@@ -1257,6 +1309,10 @@ test_conditions <- function(c1, c2) {
         tm$prdfn <- tryCatch(tm$prdfn * p2, error = function(e) tm$prdfn)
         tm
       })
+    # The objective inside, so controls() reaches its controls. Not `terms`:
+    # the objective now reads other parameters, and .objTerms() must not take
+    # it for the objective it wraps.
+    attr(outfn, "wrapped") <- list(p1)
   } else {
     attr(outfn, "mappings") <- .composeMappings(st, p1, p2, conditions.out, spec$out)
   }

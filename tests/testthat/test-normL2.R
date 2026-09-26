@@ -633,3 +633,27 @@ test_that("hessian = FALSE returns value and gradient but no Hessian", {
   expect_equal(comp(p, hessian = FALSE)$gradient, comp(p)$gradient)
   expect_equal(comp(p, hessian = FALSE)$value,    comp(p)$value)
 })
+
+
+test_that("a prediction cut short is an error, not a read past its rows", {
+  skip_if_no_compile()
+  bench <- fx_decay_compiled()
+  data <- fx_decay_data()
+  obj  <- normL2(data, bench$prd_id)
+  pars <- bench$outerpars_id
+  full <- bench$prd_id(sort(unique(data[[1]]$time)), pars)
+  v <- obj(pars, .prediction = full)$value
+
+  # what the solver returns when it stops early: the first rows only
+  cut <- full
+  pr  <- full[[1]]
+  keep <- seq_len(2L)
+  at <- attributes(pr)
+  short <- unclass(pr)[keep, , drop = FALSE]
+  for (a in setdiff(names(at), c("dim", "dimnames"))) attr(short, a) <- at[[a]]
+  attr(short, "deriv") <- attr(pr, "deriv")[keep, , , drop = FALSE]
+  cut[[1]] <- short
+  expect_error(obj(pars, .prediction = cut), "stopped early")
+  # and the full prediction afterwards still reads its own rows
+  expect_equal(obj(pars, .prediction = full)$value, v)
+})
