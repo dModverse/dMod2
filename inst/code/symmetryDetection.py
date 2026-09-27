@@ -3847,6 +3847,59 @@ def jetGenerator(conds, support, anchor, maxOrder=8, maxChars=200000,
     return {'ok': True, 'vector': vec, 'order': int(order)}
 
 
+def _lie_reach(f_c, g_c, S, ic_c, evs, f_ss=None):
+    """Structural first Lie order at which each symbol can enter the output jets of one
+    segment, a lower bound for the order its column first becomes nonzero: 0 for the
+    symbols of the observables, else one more than the least order of a state whose
+    right-hand side holds it (L_f^{k+1} h = sum_i dL_f^k h/dx_i f_i). An initial value
+    or an event value enters with its state; at an implicit steady state (f_ss) every
+    parameter of the balance may enter with the earliest state. Returns {name: order}."""
+    import collections
+    Sstr = [str(X) for X in S]
+    rhs = {}
+    for i, X in enumerate(Sstr):
+        try:
+            rhs[X] = {str(s) for s in spy.sympify(f_c[i]).free_symbols}
+        except Exception:
+            rhs[X] = set()
+    dist = {}
+    queue = collections.deque()
+    for e in g_c:
+        for s in spy.sympify(e).free_symbols:
+            if str(s) not in dist:
+                dist[str(s)] = 0
+                queue.append(str(s))
+    while queue:
+        u = queue.popleft()
+        for s in rhs.get(u, ()):
+            if s not in dist:
+                dist[s] = dist[u] + 1
+                queue.append(s)
+    out = dict(dist)
+
+    def lower(name, k):
+        if k < out.get(name, 10 ** 9):
+            out[name] = k
+
+    for X, e in dict(ic_c).items():
+        if str(X) in dist:
+            for s in spy.sympify(e).free_symbols:
+                lower(str(s), dist[str(X)])
+    for ev in evs or []:
+        X = str(ev['var'])
+        if X in dist:
+            for s in spy.sympify(ev['value']).free_symbols:
+                lower(str(s), dist[X])
+    if f_ss is not None:
+        reached = [dist[X] for X in Sstr if X in dist]
+        if reached:
+            k0 = min(reached)
+            for e in f_ss:
+                for s in spy.sympify(e).free_symbols:
+                    lower(str(s), k0)
+    return out
+
+
 def compileObservabilityTapeMulti(model, observation, conditionSubs, conditionIC0,
                                   fixed=None, parameters=None, backend='sympy',
                                   equilibrate=False, forcings=None,
@@ -4194,6 +4247,7 @@ def compileObservabilityTapeMulti(model, observation, conditionSubs, conditionIC
     base = nLeaves + nS
 
     tapes = []
+    reachCache = {}  # structural Lie reach per (model, initial values, events)
     emitCache = {}   # (f_c, g_c, obs names) recur across segments/conditions
     ssSolCache = {}  # linear resting-state solutions, keyed on the f_ss tuple
     icCache = {}     # emitted IC tapes, keyed on the seed-expression tuple
@@ -4218,6 +4272,17 @@ def compileObservabilityTapeMulti(model, observation, conditionSubs, conditionIC
             emitCache[ekey] = cached
         (op, a, b, cnum, cden, outslots), mLines, oLines = cached
         fOut = outslots[:nS]
+        # structural first Lie order of every symbol in this segment's jets; the R
+        # saturation counts no flat step before it (a readout behind a transit chain is
+        # flat at rank 0 until the chain has filled)
+        reachKey = (ekey, tuple(sorted((str(k), str(v)) for k, v in ic_c.items())),
+                    tuple((str(e['var']), str(e['value'])) for e in evPer[c]),
+                    bool(segEq[c]))
+        reach = reachCache.get(reachKey)
+        if reach is None:
+            reach = _lie_reach(f_c, g_c, S, ic_c, evPer[c],
+                               f_ss if segEq[c] else None)
+            reachCache[reachKey] = reach
         tape = {
             'op': op, 'a': a, 'b': b, 'cnum': cnum, 'cden': cden,
             'stateSlots': [nLeaves + i for i in range(nS)],
@@ -4342,12 +4407,17 @@ def compileObservabilityTapeMulti(model, observation, conditionSubs, conditionIC
                 return {'ok': False}
             tape.update({'tmOp': tmOp, 'tmA': tmA, 'tmB': tmB, 'tmCnum': tmCnum,
                          'tmCden': tmCden, 'tmOut': tmO})
+        tape['_reach'] = reach
         tapes.append(tape)
 
     zStateNames = [str(X) for X in freeStates if str(X) not in fixedNames]
     zParamNames = [str(s) for s in params if str(s) not in fixedNames]
     znames = zStateNames + zParamNames
     zSlots = [leafSlot[nm] for nm in znames]
+    # per tape, the first Lie order at which each coordinate can enter (-1: never)
+    for t in tapes:
+        r = t.pop('_reach', None) or {}
+        t['lieReach'] = [int(r.get(nm, -1)) for nm in znames]
 
     out = {
         'ok': True,
@@ -4864,7 +4934,11 @@ def observabilitySympyMulti(model, observation, conditionSubs=None, conditionIC0
                 'nonIdentifiable': [], 'identifiable': True, 'coordinates': []}
 
     # per Lie order, each condition's rows d/dz[L_{f_c}^order g_c at ic_c]; stop at
-    # full rank or after two orders without rank gain
+    # full rank or after two orders without rank gain, counted only past the
+    # structural first order (a readout behind a transit chain is flat until it fills)
+    reachPer = [_lie_reach(f_c, g_c, S, ic_c, []) for (f_c, g_c, ic_c) in perCond]
+    firstOrd = [min([r[nm] for r in reachPer if nm in r] or [-1]) for nm in znames]
+    lo0 = max([k for k in firstOrd if k >= 0] or [0])
     rows = []
     jets = [list(g_c) for (f_c, g_c, ic_c) in perCond]     # order 0: the observables
     prev, flat, order = -1, 0, 0
@@ -4874,8 +4948,11 @@ def observabilitySympyMulti(model, observation, conditionSubs=None, conditionIC0
                 he = spy.sympify(h).subs(ic_c)             # evaluate at x(0) = ic_c
                 rows.append([spy.diff(he, zj) for zj in z])
         rank = spy.Matrix(rows).rank()
-        flat = flat + 1 if rank == prev else 0
-        if rank >= nz or (flat >= 2 and order >= 1) or order >= nz:
+        if rank == prev:
+            flat = flat + 1 if order > lo0 else flat
+        else:
+            flat = 0
+        if rank >= nz or (flat >= 2 and order >= 1) or order >= nz + lo0:
             break
         prev = rank
         order += 1

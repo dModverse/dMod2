@@ -1822,13 +1822,13 @@ test_that("the Lie order saturates per condition, not on the stacked system", {
   expect_equal(res$info$lieOrderUsed, 5L)
   expect_equal(res$info$lieOrderDriver, 2L)     # the sparse condition sets the order
 
-  # the stacked plateau alone, for comparison: it stops at order 4 and reports a
-  # direction that is not there, which is what the saturation guard is for
+  # the stacked plateau alone used to stop at order 4 and report a direction that is
+  # not there; its flat steps now count only past the structural first order, and b
+  # cannot enter before order 5 (x5 -> x4 -> ... -> x1), so the stack gets there too
   withr::local_envvar(DMOD_SYM_LIEPLATEAU_BLOCK = "0")
-  expect_warning(stacked <- symdet(f, g, method = "observability", conditions = cg),
-                 "saturation guard")
-  expect_false(stacked$identifiable)
-  expect_false(stacked$info$verification$ok)
+  expect_silent(stacked <- symdet(f, g, method = "observability", conditions = cg))
+  expect_true(stacked$identifiable)
+  expect_gte(stacked$info$lieOrderUsed, 5L)
 })
 
 
@@ -2005,4 +2005,35 @@ test_that("the symbolic engine keeps a free Hill exponent as it is", {
                  symEngine = "symbolic", trafo = ss)
   expect_lt(as.numeric(Sys.time() - t0, units = "secs"), 120)
   expect_true(any(vapply(sres$symmetries, function(d) "n" %in% d$support, logical(1))))
+})
+
+
+test_that("the base point is generic beyond the prime pool", {
+  if (!.sympy_works()) skip("reticulate/sympy not available")
+  # the pool hands out kdg = 2, ksec = 3, kt = 5: kdg + ksec = kt is exactly where the
+  # two decay rates cannot be told apart, so the rank dropped from 3 to 2 there
+  f <- eqnvec(P = "ktl - (kdg + ksec)*P", T1 = "ksec*P - kt*T1")
+  res <- symdet(f, eqnvec(y = "T1"), trafo = eqnvec(P = "0", T1 = "0"),
+                method = "observability")
+  expect_equal(res$rank, 3L)
+  expect_equal(symdet(f, eqnvec(y = "T1"), trafo = eqnvec(P = "0", T1 = "0"),
+                      method = "observability", symEngine = "symbolic")$rank, 3L)
+})
+
+
+test_that("a readout behind a transit chain is not saturated early", {
+  if (!.sympy_works()) skip("reticulate/sympy not available")
+  # the output is exactly 0 up to Lie order n + 1: flat steps there are no evidence,
+  # the saturation starts counting at the structural first order
+  n <- 8L
+  f <- c(P = "ktl - (kdg + ksec)*P", T1 = "ksec*P - kt*T1")
+  for (i in 2:n) f[paste0("T", i)] <- paste0("kt*T", i - 1L, " - kt*T", i)
+  ic <- setNames(rep("0", length(f)), names(f))
+  args <- list(do.call(eqnvec, as.list(f)), eqnvec(y = paste0("T", n)),
+               trafo = do.call(eqnvec, as.list(ic)), method = "observability")
+  res <- do.call(symdet, c(args, list(reconstruct = TRUE)))
+  expect_equal(res$rank, 3L)
+  expect_gte(res$info$lieOrderUsed, n + 3L)
+  # the one direction left trades degradation against secretion
+  expect_setequal(res$symmetries[[1]]$support, c("kdg", "ksec", "ktl"))
 })

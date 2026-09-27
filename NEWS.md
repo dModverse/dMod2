@@ -1,5 +1,17 @@
 # dMod2 (development version)
 
+* `symmetryDetection()` checks the rank at a point of uniformly drawn residues as
+  well. The sample points come from a pool of small primes, which is
+  multiplicatively generic but not additively: on `P' = ktl - (kdg + ksec)*P`,
+  `T1' = ksec*P - kt*T1` the first point had kdg + ksec = kt (2 + 3 = 5), exactly
+  where the two decay rates cannot be told apart, and the rank came out 2 instead
+  of 3. Neither the cross-prime check nor the saturation guard saw it, since both
+  evaluate at the same point.
+* The Lie-order saturation counts flat steps only past the structural first order,
+  the least order at which every coordinate can enter the jets (a readout behind a
+  transit chain is exactly 0 until the chain has filled). A readout at the end of a
+  ten-step chain was reported with rank 0 of 4; the symbolic engine had the same
+  plateau rule and gets the same bound.
 * `symmetryReduction()`: the coordinates a face section keeps become fresh `q_<k>`
   parameters, like every other carrier of a general block. They hold the value
   they take where the orbit meets the face, an invariant, so keeping the old name

@@ -244,6 +244,54 @@
 .motifs$wide12 <- function() .wide(12)
 .motifs$wide30 <- function() .wide(30)
 
+# ---- outside the jet closed form -------------------------------------------------------
+# symmetryDetection() reads a general direction off the Lie derivatives of the first
+# segment of every condition, for supports of at most six coordinates, up to order 8, and
+# only where the initial values are explicit. Each motif below leaves one of those
+# limits, so its direction has to come from the fit (or from an extended jet form).
+
+# the degradation/secretion split of the autocrine loop, switched on at t = 5: before
+# the switch P stays at 0, so the first segment sees nothing of ktl, kdg, ksec
+.motifs$late_curved <- function() {
+  f <- eqnvec(P = "ktl*sw - (kdg + ksec)*P", L = "ksec*P - kL*L", sw = "0")
+  ev <- addEvent(eventlist(), var = "sw", time = 5, value = "1", method = "replace")
+  list(f = f, g = eqnvec(yL = "L"), events = ev,
+       trafo = eqnvec(P = "0", L = "L0", sw = "0"), nDir = 1L)
+}
+
+# one curved direction on seven coordinates: six observed decays, each fixing a sum or a
+# product of neighbouring rates, leave a1..a7 one joint freedom
+.motifs$support7 <- function() {
+  f <- eqnvec(x1 = "-(a1 + a2)*x1", x2 = "-a2*a3*x2", x3 = "-(a3 + a4)*x3",
+              x4 = "-a4*a5*x4", x5 = "-(a5 + a6)*x5", x6 = "-a6*a7*x6")
+  g <- eqnvec(y1 = "x1", y2 = "x2", y3 = "x3", y4 = "x4", y5 = "x5", y6 = "x6")
+  ic <- do.call(eqnvec, as.list(setNames(rep("1", 6), paste0("x", 1:6))))
+  list(f = f, g = g, trafo = ic, nDir = 1L)
+}
+
+# the resting state is implicit (a quadratic loss, equilibrate = TRUE), translation
+# stops at t = 0: no explicit initial values, hence no symbolic jets
+.motifs$equil_curved <- function() {
+  f <- eqnvec(P = "ktl*(1 - sw) - (kdg + ksec)*P - kq*P^2", L = "ksec*P - kL*L",
+              sw = "0")
+  ev <- addEvent(eventlist(), var = "sw", time = 0, value = "1", method = "replace")
+  list(f = f, g = eqnvec(yL = "L"), events = ev, equilibrate = TRUE,
+       forcings = "sw", nDir = 1L)
+}
+
+# the same split at the head of a ten-step transit chain: the readout at its end feels
+# ktl, kdg, ksec only from Lie order 11 on, beyond the jets' order cap
+.motifs$deep_chain <- function() {
+  n <- 10L
+  f <- c(P = "ktl*sw - (kdg + ksec)*P", T1 = "ksec*P - kt*T1")
+  for (i in 2:n) f[paste0("T", i)] <- paste0("kt*T", i - 1L, " - kt*T", i)
+  f["sw"] <- "0"
+  ic <- setNames(rep("0", length(f)), names(f))
+  ev <- addEvent(eventlist(), var = "sw", time = 0, value = "1", method = "replace")
+  list(f = do.call(eqnvec, as.list(f)), g = eqnvec(y = paste0("T", n)), events = ev,
+       trafo = do.call(eqnvec, as.list(ic)), nDir = 1L)
+}
+
 # steady states are computed once per motif and kept next to the results
 .motifCache <- function(key, fn) {
   dir <- file.path(Sys.getenv("DMOD_MOTIF_CACHE", tempdir()))

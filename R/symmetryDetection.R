@@ -1327,6 +1327,21 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
 
 # A stream of distinct primes used as generic evaluation coordinates; grows on
 # demand so the interpolation never runs out of sample points.
+# A sample point of residues drawn uniformly from [1, 2^31 - 2] by the MINSTD
+# generator (exact in doubles: 48271 * x < 2^53), deterministic in `seed`. Generic with
+# probability 1 - deg/p over GF(p), unlike the prime pool, whose small values satisfy
+# additive relations (2 + 3 = 5).
+.symRandomPoint <- function(n, seed = 1L) {
+  m <- 2147483647; x <- (1234567 * seed + 89) %% m
+  if (x == 0) x <- 1
+  out <- integer(n)
+  for (i in seq_len(n)) {
+    x <- (48271 * x) %% m
+    out[i] <- as.integer(x)
+  }
+  out
+}
+
 .symPool <- function() {
   cache <- .symSieve(1000L)
   function(k) {
@@ -2159,6 +2174,19 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
 .symRankScore <- function(r) r$rank + .symRankOf(r)
 
 
+# The structural first Lie order of a set of tapes (one block, or the whole stack):
+# per coordinate the least order any tape lets it enter (lieReach, from the tape
+# compiler), then the largest over the coordinates that enter at all. 0 without data.
+.symLieReachMax <- function(tapes) {
+  R <- lapply(tapes, function(t) as.integer(unlist(t$lieReach)))
+  R <- Filter(length, R)
+  if (!length(R) || length(unique(lengths(R))) != 1L) return(0L)
+  M <- do.call(rbind, R)
+  M[M < 0L] <- NA_integer_
+  first <- apply(M, 2, function(v) if (all(is.na(v))) NA_integer_ else min(v, na.rm = TRUE))
+  if (all(is.na(first))) 0L else as.integer(max(first, na.rm = TRUE))
+}
+
 # Find a generic base point of maximal rank and raise the Lie order (and the gap series
 # order Mtot) until the rank saturates. kcall(point, p, Nt, Mtot) returns the kernel list
 # (ok, R, pivots, rank, dim); `blockCall` the same per condition, where the Lie order is
@@ -2168,7 +2196,9 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
 .symSaturateCertify <- function(kcall, nLeaves, nz, maxM = 0L,
                                 warm = function(pts, primes) invisible(),
                                 probeBlock = 1L, blockCall = NULL,
-                                budget = NA_integer_, blockMap = NULL) {
+                                budget = NA_integer_, blockMap = NULL,
+                                ntMin = 0L, ntMinBlock = NULL) {
+  ntMin <- if (length(ntMin) == 1L && !is.na(ntMin)) as.integer(ntMin) else 0L
   P <- .symPrimes[1]
   pool <- .symPool()
   point0 <- pool(seq_len(nLeaves))
@@ -2196,8 +2226,10 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
   # Raise the Lie order until the rank is flat for `need` orders. Returns the last kernel
   # and `grew`, the last order that raised the rank. From `from` > 1 the rank is
   # monotone, so equal ends of [from, from + need] settle the block without the middle.
-  scanNt <- function(call1, point, Mtot, from, need, label) {
-    if (from > 1L) {
+  # `lo0` is the structural first order of the block: before it nothing has entered
+  # the jets yet, so flat steps there are no evidence of saturation
+  scanNt <- function(call1, point, Mtot, from, need, label, lo0 = 0L) {
+    if (from > 1L && from > lo0) {
       lo <- call1(point, P, from, Mtot)
       if (!isTRUE(lo$ok)) return(NULL)
       hi <- call1(point, P, from + need, Mtot)
@@ -2215,9 +2247,10 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
       r <- call1(point, P, Nt, Mtot)
       if (!isTRUE(r$ok)) return(NULL)
       res <- r; ranks <- c(ranks, as.integer(.symRankOf(r)))
-      # flat steps accumulate and are not reset by a growth
-      if (.symRankScore(r) == prev) flat <- flat + 1L else grew <- Nt
-      if (.symRankOf(r) >= nz || (flat >= need && Nt >= 2L) || Nt > nz + 1L) break
+      # flat steps accumulate and are not reset by a growth; none before the block's
+      # structural first order
+      if (.symRankScore(r) == prev) { if (Nt > lo0) flat <- flat + 1L } else grew <- Nt
+      if (.symRankOf(r) >= nz || (flat >= need && Nt >= 2L) || Nt > nz + 1L + lo0) break
       prev <- .symRankScore(r); Nt <- Nt + 1L
     }
     if (lieDiag) message("[liediag] ", label, " Mtot=", Mtot, " ranks from Lie order ",
@@ -2226,20 +2259,23 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
     list(res = res, Nt = Nt, grew = grew)
   }
 
+  loOf <- function(bi) if (is.null(ntMinBlock)) ntMin else as.integer(ntMinBlock[bi])
   saturateNt <- function(point, Mtot) {
-    if (!perBlock) return(scanNt(kcall, point, Mtot, 1L, needUsed, "stacked"))
+    if (!perBlock) return(scanNt(kcall, point, Mtot, 1L, needUsed, "stacked", ntMin))
     orders <- integer(length(blockCall)); Nt <- 1L; driver <- 1L
     if (!is.null(blockMap)) {
       # every block's filtration from order 1, the blocks in parallel: the same
       # plateau per block the certificate counts, and each block's own order
       sbs <- blockMap(seq_along(blockCall), function(bi)
-        scanNt(blockCall[[bi]], point, Mtot, 1L, needUsed, paste0("block ", bi)))
+        scanNt(blockCall[[bi]], point, Mtot, 1L, needUsed, paste0("block ", bi),
+               loOf(bi)))
       if (any(vapply(sbs, is.null, logical(1)))) return(NULL)
       orders <- vapply(sbs, function(sb) as.integer(sb$grew), integer(1))
       Nt <- max(1L, orders); driver <- which.max(orders)
     } else
     for (bi in seq_along(blockCall)) {
-      sb <- scanNt(blockCall[[bi]], point, Mtot, Nt, needUsed, paste0("block ", bi))
+      sb <- scanNt(blockCall[[bi]], point, Mtot, Nt, needUsed, paste0("block ", bi),
+                   loOf(bi))
       if (is.null(sb)) return(NULL)
       orders[bi] <- sb$grew
       if (sb$grew > Nt) { Nt <- sb$grew; driver <- bi }
@@ -2296,11 +2332,31 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
     rj <- kcall(point0, pj, NtUsed, MtotUsed)
     if (isTRUE(rj$ok)) rankMax <- max(rankMax, .symRankScore(rj))
   }
+  # and at a point of uniform residues: the prime pool is multiplicatively generic but
+  # not additively (2 + 3 = 5 put kdg + ksec = kt on the first point of a chain model and
+  # dropped its rank), which no second prime at the same point can see
+  randPts <- list(.symRandomPoint(nLeaves, 1L))
+  warm(randPts, rep(list(P), length(randPts)))
+  for (rp in randPts) {
+    rj <- tryCatch(kcall(rp, P, NtUsed, MtotUsed), error = function(e) NULL)
+    if (isTRUE(rj$ok)) rankMax <- max(rankMax, .symRankScore(rj))
+  }
+  tries <- 0L
   while (.symRankScore(sat$res) < rankMax) {
-    point0 <- pool(poolNext + seq_len(nLeaves) - 1L); poolNext <- poolNext + nLeaves
+    tries <- tries + 1L
+    # past a few pool points the uniform point itself becomes the base point
+    point0 <- if (tries <= 20L) pool(poolNext + seq_len(nLeaves) - 1L)
+              else randPts[[1L]]
+    if (tries <= 20L) poolNext <- poolNext + nLeaves
     sat <- saturateNt(point0, MtotUsed)
     if (is.null(sat)) return(NULL)
     NtUsed <- sat$Nt
+    # the new base point may raise the rank beyond what the check saw at the old order
+    for (rp in randPts) {
+      rj <- tryCatch(kcall(rp, P, NtUsed, MtotUsed), error = function(e) NULL)
+      if (isTRUE(rj$ok)) rankMax <- max(rankMax, .symRankScore(rj))
+    }
+    if (tries > 22L) break
   }
   list(ref = sat$res, NtUsed = NtUsed, MtotUsed = MtotUsed, saturatedM = saturatedM,
        point0 = point0, pool = pool, poolNext = poolNext,
@@ -3236,10 +3292,21 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
     function(xs, f) lapply(parallel::mclapply(xs, f, mc.cores = coresGLp,
                                               mc.preschedule = FALSE),
                            function(o) if (inherits(o, "try-error")) NULL else o)
+  # structural first Lie order per block and for the stack: no flat step counts before
+  # it, so a readout behind a transit chain (flat at rank 0 until the chain has filled)
+  # is not declared saturated early
+  reachIdx <- if (jointSS)
+    lapply(equilConds, function(ci) if (hasGaps) chainGroups[[chainOf[ci]]] else ci)
+    else if (hasGaps) chainGroups else as.list(seq_along(multi$tapes))
+  ntMinBlock <- vapply(reachIdx, function(idx) .symLieReachMax(multi$tapes[idx]),
+                       integer(1))
+  ntMin <- .symLieReachMax(multi$tapes)
+  if (length(ntMinBlock) != length(blockCall)) ntMinBlock <- NULL
   sc <- .symSaturateCertify(kcall4, nAug, nz, maxM, warm = warmProbe,
                             probeBlock = max(1L, min(8L, coresGLp)),
                             blockCall = blockCall, budget = satBudget,
-                            blockMap = blockMap)
+                            blockMap = blockMap, ntMin = ntMin,
+                            ntMinBlock = ntMinBlock)
   if (is.null(sc)) {
     if (ssConstraint && !is.null(ssWhy))
       warning("symmetryDetection(): no steady-state point over the finite field ",
