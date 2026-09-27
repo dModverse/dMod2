@@ -1547,13 +1547,52 @@
       else paste0("(", paste(glab[s], collapse = "+"), ")"), character(1))
     if (isTRUE(verbose))
       message("curved block {", paste(glab, collapse = ", "), "}: module reduction")
-    mr <- .symRedModuleReduce(fx$preps, glabK, sd, spy)
+    # compressions first, so the module reduction and the invariant search run in
+    # the fewest symbols: a moved coordinate seen together with unmoved ones only
+    # through their sum (Km + R1 + ... + Rn), and unmoved coordinates entering only
+    # through a few monomials (orbit constants). The invariants come back in the
+    # original symbols; verification and the chart get the generators mapped back.
+    tc <- tryCatch(.symRedTranslationCompress(fx$preps, spy), error = function(e) NULL)
+    if (!is.null(tc) && isTRUE(verbose))
+      message("  translation group(s): ", paste(tc$note, collapse = "; "))
+    p1 <- if (is.null(tc)) fx$preps else tc$preps
+    uc <- tryCatch(.symRedUnmovedCompress(p1, spy), error = function(e) NULL)
+    if (!is.null(uc) && isTRUE(verbose))
+      message("  unmoved monomial(s): ", paste(uc$note, collapse = "; "))
+    p2 <- if (is.null(uc)) p1 else uc$preps
+    decomp <- function(pr) {
+      if (!is.null(uc)) pr <- uc$backPrep(pr)
+      if (!is.null(tc)) pr <- tc$backPrep(pr)
+      pr
+    }
+    mr <- .symRedModuleReduce(p2, glabK, sd, spy)
     for (sub in .symRedGroupBy(lapply(mr$preps, `[[`, "support"))) {
       subLabs <- .symSort(unique(glab[unlist(fx$sources[unlist(mr$labelsOf[sub])])]))
-      sol <- .symRedSolveBlock(mr$preps[sub], dPoly, dDarboux, dExp, sd, spy,
-                               verbose, separable)
+      sol <- .symRedSolveBlock(mr$preps[sub], dPoly, dDarboux, dExp, sd, spy, verbose,
+                               separable)
+      faceInv <- NULL
+      if (length(sol$invariants)) {
+        # the face search can stay in the unmoved monomials: they are constants, never
+        # in a zero set, and its solve is far cheaper in W than in the product
+        if (!is.null(uc))
+          faceInv <- if (is.null(tc)) sol$invariants else tc$back(sol$invariants)
+        if (!is.null(uc)) {
+          sol$invariants <- uc$back(sol$invariants)
+          sol$certificates <- c(sol$certificates, paste0(
+            "searched in the unmoved monomial(s) ", paste(uc$note, collapse = "; "),
+            " (constants along every orbit), invariants substituted back"))
+        }
+        if (!is.null(tc)) {
+          sol$invariants <- tc$back(sol$invariants)
+          sol$certificates <- c(sol$certificates, paste0(
+            "searched in the translation-group sum(s) ", paste(tc$note, collapse = "; "),
+            ", invariants substituted back"))
+        }
+      }
+      prepsOrig <- if (is.null(uc) && is.null(tc)) mr$preps[sub]
+                   else lapply(mr$preps[sub], decomp)
       emit(list(labels = subLabs, type = "curved", kind = kindOf(subLabs),
-                support = .symSort(unique(unlist(lapply(mr$preps[sub], `[[`, "support")))),
+                support = .symSort(unique(unlist(lapply(prepsOrig, `[[`, "support")))),
                 stage = sol$stage, target = sol$target,
                 status = if (length(sol$invariants)) "invariantOnly" else "unresolved",
                 removedByFixed = if (fx$removed > 0L && !length(fixedLabs))
@@ -1562,7 +1601,8 @@
                 certificates = c(fixCert, sol$certificates),
                 reason = sol$reason, moduleCombos = mr$combos,
                 transversal = NULL, survivorMeaning = NULL, pins = NULL,
-                preps = mr$preps[sub]))
+                preps = prepsOrig, faceInvariants = faceInv,
+                faceBack = if (!is.null(uc)) uc$back))
     }
   }
   blocks
@@ -2301,9 +2341,12 @@
     den <- tryCatch(spy$fraction(spy$together(.symRedSympify(x, spy, locals)))[[2]],
                     error = function(e) NULL)
     if (is.null(den) || !length(.symRedFreeSyms(den))) next
-    for (fct in .symRedIter(spy$factor_list(den)[[2]], function(fm)
-      if (is.list(fm)) fm[[1]] else reticulate::py_get_item(fm, 0L)))
-      out[[length(out) + 1L]] <- fct
+    # the product as together() leaves it (powers by their base): a face kills the
+    # denominator iff it kills one of these, and no factorisation is needed for that
+    for (fct in .symRedIter(spy$Mul$make_args(den), function(x) x)) {
+      if (isTRUE(fct$is_Pow)) fct <- fct$base
+      if (length(.symRedFreeSyms(fct))) out[[length(out) + 1L]] <- fct
+    }
   }
   keys <- vapply(out, function(e) as.character(e), character(1))
   out[!duplicated(keys)]
@@ -2326,6 +2369,17 @@
   out <- list(solved = FALSE)
   if (!length(b$invariants) || any(grepl("exp\\(|log\\(", b$invariants)))
     return(out)
+  # searched in the block's unmoved monomials where it has them (see .symRedCurved);
+  # the survivor meanings are mapped back at the end
+  if (length(b$faceInvariants) == length(b$invariants) && is.function(b$faceBack)) {
+    res <- .symRedFaceSection(c(b[setdiff(names(b), c("invariants", "faceInvariants",
+                                                       "faceBack"))],
+                                list(invariants = b$faceInvariants)),
+                              pins, spy, dens, maxSets)
+    if (isTRUE(res$solved))
+      res$meaning <- setNames(b$faceBack(unname(res$meaning)), names(res$meaning))
+    return(res)
+  }
   supp <- b$support
   r <- length(supp) - length(b$invariants)
   if (r < 1L || (!is.null(b$target) && length(b$invariants) < b$target)) return(out)
@@ -2428,6 +2482,193 @@
     }
   }
   out
+}
+
+# Translation groups of a curved block: a moved coordinate v and unmoved symbols w
+# with d/dv xi - d/dw xi = 0 for every component of every generator. The block then
+# sees them only through v + w_1 + ... + w_k, so the invariant search runs over the
+# fresh sum U (v -> U - sum w in the components, the key v renamed to U: with the w
+# held fixed d/dv = d/dU), and every invariant found in U maps back by
+# U -> v + sum w. NULL when no group exists. `note` names the groups for the report.
+.symRedTranslationCompress <- function(preps, spy) {
+  supp <- unique(unlist(lapply(preps, `[[`, "support")))
+  vars <- unique(unlist(lapply(preps, `[[`, "vars")))
+  unmoved <- setdiff(vars, supp)
+  if (!length(unmoved)) return(NULL)
+  locals <- .symRedLocals(c(unlist(lapply(preps, `[[`, "comps")), vars), spy)
+  E <- lapply(preps, function(pr) lapply(pr$comps, function(x)
+    .symRedSympify(gsub("\\^", "**", x), spy, locals)))
+  dz <- function(e, a, b) isTRUE(spy$expand(spy$diff(e, spy$Symbol(a)) -
+                                              spy$diff(e, spy$Symbol(b)))$is_zero)
+  seen <- function(v) any(vapply(E, function(ex) any(vapply(ex, function(e)
+    v %in% .symRedFreeSyms(e), logical(1))), logical(1)))
+  groups <- list(); used <- character(0)
+  for (v in supp) {
+    if (!seen(v)) next
+    mem <- character(0)
+    for (w in setdiff(unmoved, used))
+      if (all(vapply(E, function(ex) all(vapply(ex, function(e) dz(e, v, w),
+                                                logical(1))), logical(1))))
+        mem <- c(mem, w)
+    if (length(mem)) { groups[[v]] <- mem; used <- c(used, mem) }
+  }
+  if (!length(groups)) return(NULL)
+  taken <- unique(c(vars, names(locals)))
+  U <- setNames(vapply(seq_along(groups), function(k) {
+    u <- paste0("dModU", k); while (u %in% taken) u <- paste0(u, "_"); u }, ""), names(groups))
+  fwd <- lapply(names(groups), function(v) reticulate::tuple(spy$Symbol(v),
+    spy$Symbol(U[[v]]) - Reduce(`+`, lapply(groups[[v]], spy$Symbol))))
+  newPreps <- lapply(seq_along(preps), function(i) {
+    pr <- preps[[i]]
+    ex <- lapply(E[[i]], function(e) spy$expand(e$subs(fwd)))
+    left <- unique(unlist(lapply(ex, .symRedFreeSyms)))
+    if (any(unlist(groups) %in% left)) stop("translation group did not separate")
+    comps <- vapply(ex, function(e) as.character(e), character(1))
+    keys <- names(pr$comps)
+    keys[keys %in% names(U)] <- U[keys[keys %in% names(U)]]
+    names(comps) <- keys
+    pr$comps <- comps
+    pr$support <- keys
+    pr$vars <- .symSort(unique(c(keys, left)))
+    pr$degree <- .symRedPrepDegree(comps, spy)
+    pr
+  })
+  bwd <- lapply(names(groups), function(v) reticulate::tuple(spy$Symbol(U[[v]]),
+    Reduce(`+`, lapply(c(v, groups[[v]]), spy$Symbol))))
+  back <- function(invs) vapply(invs, function(iv) {
+    loc <- .symRedLocals(c(iv, unname(U), names(groups), unlist(groups)), spy)
+    e <- spy$sympify(gsub("\\^", "**", iv), locals = loc)$subs(bwd)
+    gsub("\\*\\*", "^", as.character(spy$factor(spy$together(e))))
+  }, character(1), USE.NAMES = FALSE)
+  # a (module-reduced) generator in U, back in the original coordinates
+  keyBack <- setNames(names(U), unname(U))
+  backPrep <- function(pr) {
+    loc <- .symRedLocals(c(pr$comps, unname(U), names(groups), unlist(groups)), spy)
+    comps <- vapply(pr$comps, function(x) as.character(spy$expand(
+      spy$sympify(gsub("\\^", "**", x), locals = loc)$subs(bwd))), character(1))
+    keys <- names(pr$comps)
+    keys[keys %in% names(keyBack)] <- keyBack[keys[keys %in% names(keyBack)]]
+    names(comps) <- keys
+    pr$comps <- comps; pr$support <- keys
+    pr$vars <- .symSort(unique(c(keys, unlist(lapply(comps, function(x)
+      .symRedFreeSyms(spy$sympify(x, locals = loc)))))))
+    pr$degree <- .symRedPrepDegree(comps, spy)
+    pr
+  }
+  list(preps = newPreps, back = back, backPrep = backPrep,
+       note = vapply(names(groups), function(v)
+         paste(c(v, groups[[v]]), collapse = " + "), ""))
+}
+
+# total degree of a prep's components, as .symRedGenPrep records it
+.symRedPrepDegree <- function(comps, spy) {
+  loc <- .symRedLocals(comps, spy)
+  degs <- vapply(comps, function(x) {
+    dg <- tryCatch(suppressWarnings(as.integer(as.character(
+      spy$total_degree(.symRedSympify(gsub("\\^", "**", x), spy, loc))))),
+      error = function(err) NA_integer_)
+    if (length(dg) != 1L) NA_integer_ else dg
+  }, integer(1))
+  if (all(is.na(degs))) NA_integer_ else max(degs, na.rm = TRUE)
+}
+
+# Unmoved monomials of a curved block: coordinates no generator moves are constants
+# along every orbit, so when they enter the (expanded) components only through a few
+# monomials W_j = prod u^{e_j} (a product of site occupancies R1*...*Rn), the
+# invariant search runs over the W_j and the invariants map back by W_j -> prod
+# u^{e_j}. The exponent vectors of the unmoved part of every monomial must lie in
+# the non-negative integer span of at most three primitive vectors (found greedily
+# from the vectors themselves); NULL otherwise, or when nothing is saved.
+.symRedUnmovedCompress <- function(preps, spy) {
+  supp <- unique(unlist(lapply(preps, `[[`, "support")))
+  vars <- unique(unlist(lapply(preps, `[[`, "vars")))
+  unmoved <- .symSort(setdiff(vars, supp))
+  if (length(unmoved) < 2L) return(NULL)
+  locals <- .symRedLocals(c(unlist(lapply(preps, `[[`, "comps")), vars), spy)
+  usyms <- lapply(unmoved, function(u) spy$Symbol(u))
+  terms <- lapply(preps, function(pr) lapply(pr$comps, function(x) {
+    P <- do.call(spy$Poly, c(list(.symRedSympify(gsub("\\^", "**", x), spy, locals)),
+                             usyms))
+    tl <- .symRedIter(P$terms(), function(t) t)
+    lapply(tl, function(t) {
+      mon <- if (is.list(t)) t[[1]] else reticulate::py_get_item(t, 0L)
+      cf  <- if (is.list(t)) t[[2]] else reticulate::py_get_item(t, 1L)
+      list(e = as.integer(unlist(mon)), c = cf)
+    })
+  }))
+  E <- unique(do.call(rbind, lapply(unlist(unlist(terms, recursive = FALSE),
+                                          recursive = FALSE), `[[`, "e")))
+  E <- E[rowSums(E) > 0L, , drop = FALSE]
+  if (!nrow(E)) return(NULL)
+  gcdv <- function(v) Reduce(function(a, b) { a <- abs(a); b <- abs(b)
+    while (b) { t <- b; b <- a %% b; a <- t }; a }, v)
+  # primitive directions in order of increasing size, each vector a non-negative
+  # integer combination of them (greedy: works for the chains and the independent
+  # blocks the models produce, gives up otherwise)
+  prim <- unique(t(apply(E, 1L, function(v) v / gcdv(v))))
+  prim <- prim[order(rowSums(prim)), , drop = FALSE]
+  B <- prim[0L, , drop = FALSE]
+  coefOf <- function(v, B) {
+    if (!nrow(B)) return(if (all(v == 0L)) integer(0) else NULL)
+    sol <- tryCatch(qr.solve(t(B), v), error = function(e) NULL)
+    if (is.null(sol) || any(abs(sol - round(sol)) > 1e-9) || any(round(sol) < 0) ||
+        any(abs(t(B) %*% round(sol) - v) > 1e-9)) NULL else as.integer(round(sol))
+  }
+  for (i in seq_len(nrow(prim)))
+    if (is.null(coefOf(prim[i, ], B))) B <- rbind(B, prim[i, ])
+  if (nrow(B) > 3L || nrow(B) >= sum(colSums(E) > 0L)) return(NULL)
+  if (any(vapply(seq_len(nrow(E)), function(i) is.null(coefOf(E[i, ], B)), logical(1))))
+    return(NULL)
+  taken <- unique(c(vars, names(locals)))
+  W <- vapply(seq_len(nrow(B)), function(k) {
+    w <- paste0("dModW", k); while (w %in% taken) w <- paste0(w, "_"); w }, "")
+  wsyms <- lapply(W, function(w) spy$Symbol(w))
+  newPreps <- lapply(seq_along(preps), function(i) {
+    pr <- preps[[i]]
+    comps <- vapply(seq_along(pr$comps), function(j) {
+      e <- spy$Integer(0L)
+      for (tm in terms[[i]][[j]]) {
+        k <- coefOf(tm$e, B)
+        mono <- if (length(k)) Reduce(`*`, Map(function(ws, kk)
+                                        spy$Pow(ws, spy$Integer(as.integer(kk))), wsyms, k),
+                                      spy$Integer(1L)) else spy$Integer(1L)
+        e <- e + tm$c * mono
+      }
+      as.character(spy$expand(e))
+    }, character(1))
+    names(comps) <- names(pr$comps)
+    pr$comps <- comps
+    pr$degree <- .symRedPrepDegree(comps, spy)
+    pr$vars <- .symSort(unique(c(pr$support, setdiff(pr$vars, unmoved[colSums(E) > 0L]),
+      unlist(lapply(comps, function(x) .symRedFreeSyms(
+        .symRedSympify(x, spy, .symRedLocals(c(x, W), spy))))))))
+    pr
+  })
+  storage.mode(B) <- "integer"
+  bwd <- lapply(seq_len(nrow(B)), function(k) reticulate::tuple(wsyms[[k]],
+    Reduce(`*`, Map(function(u, ex) spy$Pow(u, spy$Integer(ex)), usyms[B[k, ] > 0L],
+                    as.list(B[k, B[k, ] > 0L])))))
+  back <- function(invs) vapply(invs, function(iv) {
+    loc <- .symRedLocals(c(iv, W, unmoved), spy)
+    e <- spy$sympify(gsub("\\^", "**", iv), locals = loc)$subs(bwd)
+    gsub("\\*\\*", "^", as.character(spy$factor(spy$together(e))))
+  }, character(1), USE.NAMES = FALSE)
+  backPrep <- function(pr) {
+    loc <- .symRedLocals(c(pr$comps, W, unmoved), spy)
+    comps <- vapply(pr$comps, function(x) as.character(spy$expand(
+      spy$sympify(gsub("\\^", "**", x), locals = loc)$subs(bwd))), character(1))
+    names(comps) <- names(pr$comps)
+    pr$comps <- comps
+    pr$vars <- .symSort(unique(c(pr$support, unlist(lapply(comps, function(x)
+      .symRedFreeSyms(spy$sympify(x, locals = loc)))))))
+    pr$degree <- .symRedPrepDegree(comps, spy)
+    pr
+  }
+  list(preps = newPreps, back = back, backPrep = backPrep,
+       note = vapply(seq_len(nrow(B)), function(k)
+         paste(ifelse(B[k, B[k, ] > 0L] == 1L, unmoved[B[k, ] > 0L],
+                      paste0(unmoved[B[k, ] > 0L], "^", B[k, B[k, ] > 0L])),
+               collapse = "*"), ""))
 }
 
 # A system of distinct representatives: one carrier per invariant from its admissible
@@ -3217,6 +3458,8 @@
     key <- paste(Z, collapse = ", ")
     if (key %in% seen) next
     seen <- c(seen, key)
+    if (isTRUE(b$face) && identical(key, paste(.symSort(b$transversal), collapse = ", ")))
+      next                             # certified below, by the face section itself
     rows <- rbind(rows, data.frame(
       coordinates = key, verdict = a$verdict,
       # the joint face is met at finite eps only if none of its coordinates is a
@@ -3226,6 +3469,17 @@
       certain = certain || identical(a$verdict, "no"),
       condition = if (is.null(a$condition)) "" else a$condition,
       at = if (is.null(a$at)) "" else a$at, stringsAsFactors = FALSE))
+  }
+  # a certified face section is a zero set every orbit reaches at finite eps, with
+  # the other coordinates positive: its landing point is the survivor meaning
+  if (isTRUE(b$face) && length(b$transversal)) {
+    Z <- .symSort(b$transversal)
+    at <- paste(c(paste0(Z, " = 0"),
+                  paste0(names(b$survivorMeaning), " = ", b$survivorMeaning)),
+                collapse = ", ")
+    rows <- rbind(data.frame(coordinates = paste(Z, collapse = ", "), verdict = "yes",
+                             limit = FALSE, certain = TRUE, condition = "", at = at,
+                             stringsAsFactors = FALSE), rows)
   }
   rows
 }
@@ -3623,9 +3877,25 @@ summary.symmetryreduction <- function(object, verbose = FALSE,
 #' degree `dPoly`, separable quadratures, rational with a monomial denominator,
 #' Darboux polynomials up to degree `dDarboux` and exponential factors up to degree
 #' `dExp`. Each stage that fails leaves a certificate. The invariants of a reduced
-#' block are carried by new parameters `q_<k>`.
+#' block are carried by new parameters `q_<k>`, or, where the block has a face
+#' section, by the remaining coordinates themselves.
 #'
-#' @details A chart is returned only if it is certified on the domain declared by
+#' @details A scaling that shares coordinates with a general direction is fixed on
+#'   a coordinate outside every general direction's support when one exists;
+#'   otherwise it joins that direction's block. Coordinates that a block's
+#'   generators see only through their sum, such as `Km + R1 + R2`, are searched
+#'   as one variable.
+#'
+#'   A block is first tried with a face section: `r` of its coordinates set to 0,
+#'   where `r` is the number of its directions. The face is taken when every orbit
+#'   of the positive orthant reaches it once with every other coordinate positive
+#'   (the face point, solved from the invariants, is certified positive), and no
+#'   denominator of the model vanishes on it. The chart then keeps every other
+#'   coordinate as it is and switches the face coordinates off, e.g. all leaks
+#'   of a compartment model but one. Otherwise the gauge is a section of monomial
+#'   balances, equal shares of a sum invariant, or constant pins.
+#'
+#'   A chart is returned only if it is certified on the domain declared by
 #'   `positive`: every solved entry must be positive for all admissible values of
 #'   the new parameters. An entry of a coordinate that is not declared positive only
 #'   needs to be real where the fixed coordinates of the block move by translation,
@@ -3880,6 +4150,7 @@ symmetryReduction <- function(object, fixed = NULL, positive = TRUE, dPoly = 3L,
       blocks[[bi]]$pins <- sol$pins
       blocks[[bi]]$transversal <- sol$gauge
       blocks[[bi]]$section <- sol$section
+      blocks[[bi]]$face <- isTRUE(sol$face)
       gaugeVal <- if (length(sol$gauge)) unique(sol$pins[sol$gauge]) else character(0)
       blocks[[bi]]$coverage <- sol$coverage
       blocks[[bi]]$carrierDomain <- sol$carrierDomain
@@ -3933,6 +4204,6 @@ symmetryReduction <- function(object, fixed = NULL, positive = TRUE, dPoly = 3L,
 
   trafo <- .symRedAssembleTrafo(blocks, coords)
   blocks <- lapply(blocks, function(b) { b$preps <- NULL; b$Wres <- NULL
-    b$invExps <- NULL; b })
+    b$invExps <- NULL; b$faceInvariants <- NULL; b$faceBack <- NULL; b })
   .symRedResult(object, blocks, trafo, coords, fixed, settings, .symCall)
 }

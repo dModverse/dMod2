@@ -1009,6 +1009,10 @@ test_that("a face section switches leaks off: catenary compartments", {
   expect_true(all(zeros %in% c("k01", "k02", "k03")))
   b <- Filter(function(b) identical(b$type, "curved"), red$blocks)[[1]]
   expect_true(any(grepl("face section", b$certificates)))
+  # the face is a zero set every orbit reaches: zero compatibility says so
+  zc <- redquiet(res, reportZeroCompatibility = TRUE)$blocks
+  zc <- Filter(function(b) identical(b$type, "curved"), zc)[[1]]$zeroCompatibility
+  expect_true(any(zc$verdict == "yes" & zc$coordinates == paste(sort(zeros), collapse = ", ")))
   tr2 <- do.call(eqnvec, as.list(c(tr, red$trafo[setdiff(names(red$trafo), names(tr))])))
   expect_true(symdet2(f, eqnvec(y = "x1"), trafo = tr2)$identifiable)
 })
@@ -1028,4 +1032,51 @@ test_that("no face section through a coordinate that divides in the model", {
   sol <- ns$.symRedFaceSection(b, character(0), spy)
   expect_true(sol$solved)
   expect_identical(sol$gauge, "k3")
+})
+
+
+test_that("a translation group is searched in its sum and substituted back", {
+  if (!.sympy_works()) skip("reticulate/sympy not available")
+  # the generators move Km and see Km, R1, R2 only through Km + R1 + R2 (a pool
+  # degraded at saturable sites): the invariant search runs in the sum
+  g1 <- list(Km = "Km + R1 + R2", kdg = "kdg")
+  g2 <- list(Km = "ksec*(Km + R1 + R2)^2", ksec = "kdg*ksec", ktl = "-kdg*ktl")
+  obj <- .mkobj(list(.mkdir(g1, "general"), .mkdir(g2, "general")),
+                c("Km", "kdg", "ksec", "ktl", "R1", "R2"))
+  red <- redquiet(obj)
+  expect_length(red$remaining, 0L)
+  cb <- Filter(function(b) identical(b$type, "curved"), red$blocks)[[1]]
+  expect_true(any(grepl("translation-group", cb$certificates)))
+  expect_true(any(vapply(cb$invariants, function(iv) .symExprEqual(
+    gsub("\\^", "**", iv), "kdg/(Km + R1 + R2) + ksec") ||
+    .symExprEqual(gsub("\\^", "**", iv), "(Km + R1 + R2)/(kdg + ksec*(Km + R1 + R2))"),
+    logical(1))))
+  pt <- c(Km = 0.7, kdg = 2.3, ksec = 1.9, ktl = 0.31, R1 = 1.7, R2 = 0.45)
+  for (iv in cb$invariants) {
+    expect_lt(abs(.lieAt(g1, iv, pt)), 1e-4)
+    expect_lt(abs(.lieAt(g2, iv, pt)), 1e-4)
+  }
+})
+
+
+test_that("unmoved coordinates seen through one monomial are searched as one symbol", {
+  if (!.sympy_works()) skip("reticulate/sympy not available")
+  # R1*R2*R3 never moves (an orbit constant) and enters only as a product: the search
+  # runs in W = R1*R2*R3, the invariants and the chart come back in the product
+  g1 <- list(Km = "Km + R1*R2*R3", kdg = "kdg")
+  g2 <- list(Km = "ksec*(Km + R1*R2*R3)^2", ksec = "R1*R2*R3*kdg*ksec",
+             ktl = "-R1*R2*R3*kdg*ktl")
+  obj <- .mkobj(list(.mkdir(g1, "general"), .mkdir(g2, "general")),
+                c("Km", "kdg", "ksec", "ktl", "R1", "R2", "R3"))
+  red <- redquiet(obj)
+  expect_length(red$remaining, 0L)
+  cb <- Filter(function(b) identical(b$type, "curved"), red$blocks)[[1]]
+  expect_true(any(grepl("unmoved monomial", cb$certificates)))
+  pt <- c(Km = 0.7, kdg = 2.3, ksec = 1.9, ktl = 0.31, R1 = 1.7, R2 = 0.45, R3 = 1.2)
+  for (iv in cb$invariants) {
+    expect_lt(abs(.lieAt(g1, iv, pt)), 1e-4)
+    expect_lt(abs(.lieAt(g2, iv, pt)), 1e-4)
+  }
+  expect_false(any(grepl("dModW", c(cb$invariants, unlist(red$trafo),
+                                     unlist(cb$survivorMeaning)))))
 })

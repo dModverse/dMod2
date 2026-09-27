@@ -82,9 +82,25 @@ exact invariant search of increasing complexity: monomial, polynomial up to
 degree \code{dPoly}, separable quadratures, rational with a monomial denominator,
 Darboux polynomials up to degree \code{dDarboux} and exponential factors up to degree
 \code{dExp}. Each stage that fails leaves a certificate. The invariants of a reduced
-block are carried by new parameters \verb{q_<k>}.
+block are carried by new parameters \verb{q_<k>}, or, where the block has a face
+section, by the remaining coordinates themselves.
 }
 \details{
+A scaling that shares coordinates with a general direction is fixed on
+a coordinate outside every general direction's support when one exists;
+otherwise it joins that direction's block. Coordinates that a block's
+generators see only through their sum, such as \code{Km + R1 + R2}, are searched
+as one variable.
+
+A block is first tried with a face section: \code{r} of its coordinates set to 0,
+where \code{r} is the number of its directions. The face is taken when every orbit
+of the positive orthant reaches it once with every other coordinate positive
+(the face point, solved from the invariants, is certified positive), and no
+denominator of the model vanishes on it. The chart then keeps every other
+coordinate as it is and switches the face coordinates off, e.g. all leaks
+of a compartment model but one. Otherwise the gauge is a section of monomial
+balances, equal shares of a sum invariant, or constant pins.
+
 A chart is returned only if it is certified on the domain declared by
 \code{positive}: every solved entry must be positive for all admissible values of
 the new parameters. An entry of a coordinate that is not declared positive only
