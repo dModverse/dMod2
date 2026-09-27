@@ -3558,15 +3558,34 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
              vector = lapply(jg$vector, function(x) gsub("\\*\\*", "^", x)),
              type = "general", closedForm = TRUE)
       }
-      e <- jetTry(as.numeric(Sys.getenv("DMOD_SYM_JETTIME", "20")))
-      if (!is.null(e)) groups <- list() else {
+      # jets first where the fit would be wide (more relevant leaves than the dense fit
+      # takes, after the groups), the fit first where it is narrow; the other one is
+      # the fallback
+      baseV <- resS(refS, P)
+      nRel <- sum(vapply(seq_len(nAug), function(li) {
+        rp <- relS[[li]]$rp
+        v <- if (!is.null(rp) && isTRUE(rp$ok)) resS(rp, P) else NULL
+        !is.null(v) && !is.null(baseV) && any(v != baseV)
+      }, logical(1)))
+      jetTime <- as.numeric(Sys.getenv("DMOD_SYM_JETTIME", "20"))
+      fitOne <- function() {
         dir <- .symInterpolateDirection(anchor, refS, refS$pivots, znames, zSlots,
                                         leafNamesAug, nAug, base0, sc$pool, poolNext,
                                         sc$NtUsed, kcS, spy, relS, resS, ctrl, kbS,
                                         auxLeaves = auxLeaves)
         poolNext <<- dir$poolNext
-        e <- dir$entry
-        e$relevantLeaves <- NULL
+        r <- dir$entry
+        r$relevantLeaves <- NULL
+        r
+      }
+      jetFirst <- nRel > ctrl$relevanceCap
+      e <- if (jetFirst) jetTry(jetTime) else NULL
+      if (!is.null(e)) groups <- list() else {
+        e <- fitOne()
+        if (!isTRUE(e$closedForm) && !jetFirst) {
+          ej <- jetTry(jetTime)
+          if (!is.null(ej)) { e <- ej; groups <- list() }
+        }
       }
       if (!isTRUE(e$closedForm)) return(e)
       if (length(groups) && !is.null(spy)) {

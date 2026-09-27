@@ -96,6 +96,7 @@ Switches: `DMOD_SYM_NOCAP`, `DMOD_SYM_NOJOINTCAP`, `DMOD_SYM_NOPOINTBATCH`, `DMO
 3. NEWS, reference docs, vignette section.
 
 ### Carried over
-- steadyStates 1.4: solves M011 with and without the autocrine ligand in ~20 s; leaves some
-  states free that 1.3 solved (C234, Smad7). Check against every TGFbModelling model before it
-  becomes the default.
+- ✅ steadyStates 1.4 vs 1.3 on TGFbModelling M001–M010 (`work/tgfb/battery/ss_compare.R`):
+  both solve every model positively, mod p test passed. 1.4 leaves 6–13 states free where 1.3
+  leaves 3 (it solves rate constants instead), 0.4–20 s against 1.2–8 s. No case for a new
+  default; 1.3 stays, 1.4 remains the option for models 1.3 does not finish (M011).

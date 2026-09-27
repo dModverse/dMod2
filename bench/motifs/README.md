@@ -7,7 +7,7 @@ slow or failed, one difficulty each (see `motifs.R`). Results and history: `dev/
 |---|---|
 | `motifs.R` | `.motifs$<name>()` returns the `symmetryDetection()` arguments |
 | `run_motif.R <name> [outdir] [extra args]` | detect with reconstruction, reduce, re-detect the reduced model; writes `<outdir>/<name>.rds` and one summary line |
-| `run_all.sh [names]` | all motifs (or the named ones) in parallel, each capped at `TMO` seconds (default 1200) |
+| `run_all.sh [names]` | all motifs (or the named ones), `PAR` at a time (default 6), each capped at `TMO` seconds (default 1200) |
 
 Environment: `DMOD_LOADER` (a script attaching dMod2, default `library(dMod2)`), `OUT`
 (result directory), `TMO`, `EXTRA` (extra `symmetryDetection()` arguments as R code),

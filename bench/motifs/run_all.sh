@@ -1,10 +1,9 @@
 #!/bin/bash
-# run every motif (or those given) in parallel, each capped at $TMO seconds
+# run every motif (or those given), PAR at a time (default 6), each capped at $TMO s
 cd "$(dirname "$0")"
-OUT=${OUT:-results}; TMO=${TMO:-1200}; mkdir -p $OUT
+OUT=${OUT:-results}; TMO=${TMO:-1200}; PAR=${PAR:-6}; mkdir -p $OUT
 MOTIFS=${@:-$(Rscript -e 'source("motifs.R"); cat(names(.motifs))')}
-for m in $MOTIFS; do
-  ( timeout $TMO Rscript run_motif.R $m $OUT "$EXTRA" > $OUT/$m.log 2>&1 || echo "$m TIMEOUT/FAIL rc=$?" >> $OUT/$m.log ) &
-done
-wait
+run() { timeout $TMO Rscript run_motif.R $1 $OUT "$EXTRA" > $OUT/$1.log 2>&1 || echo "$1 TIMEOUT/FAIL rc=$?" >> $OUT/$1.log; }
+export -f run; export OUT TMO EXTRA
+printf "%s\n" $MOTIFS | xargs -P $PAR -I{} bash -c 'run {}'
 tail -q -n 1 $OUT/*.log
