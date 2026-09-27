@@ -74,6 +74,13 @@ multistart otherwise. The IFT-derived Jacobian (and Hessian when
 \code{deriv2 = TRUE}) are attached to the result. For \link{eqnlist} inputs with
 conserved moieties, see \code{expressInTotals}.
 }
+\details{
+\code{keep.root}, \code{controlsMS} and \code{controlsNleqslv} are kept, as
+given, in the controls of the returned function and read at every call, so
+\code{\link[=controls]{controls()}} can change them later. The two lists are merged over their
+defaults at every call, so a replacement only needs the entries it changes.
+With \code{keep.root} switched off, a root kept before is no longer used.
+}
 \seealso{
 \link{Pexpl}, \link{Pequil}, \link{P}.
 }

@@ -21,7 +21,8 @@ steadyStates(
   branches = FALSE,
   priority = NULL,
   version = "1.3",
-  resolve = TRUE
+  resolve = TRUE,
+  verbose = TRUE
 )
 }
 \arguments{
@@ -102,13 +103,24 @@ priority-table cycle breaking, \code{simplify} toggle, optional quadratic
 state-side solve), or \code{"1.3"} (default; same interface as \code{"1.2"}, but
 solutions are recorded lazily and resolved once at output time, with a
 lock guard replacing most rollbacks, typically orders of magnitude
-faster on feedback-heavy networks).}
+faster on feedback-heavy networks). \code{"1.4"} is a new core on the same
+interface: every balance is a linear form over the flux terms, and each
+unknown (a state or a rate constant) is solved from a combination of
+balances a linear program finds, so every solution is a ratio of positive
+sums by construction and nothing is expanded. Where no single unknown is
+left, one side of a balance shares its sum by new flux ratios \verb{r_*}. It
+needs \code{positive = TRUE} and \code{outputFormat = "R"}, and treats the model's
+compartment volumes as fixed, never as unknowns.}
 
 \item{resolve}{Logical, whether the equations are passed through
 \code{\link[=resolveRecurrence]{resolveRecurrence()}} so that none refers to another, as a dMod parameter
 transformation substitutes all entries at once. \code{FALSE} keeps the compact
 recurrent form. Versions \code{"1.2"} and later already resolve in the backend,
 so this matters for \code{"1.0"} and \code{"1.1"}.}
+
+\item{verbose}{\code{TRUE} (default) reports the progress in a few lines and the
+result, \code{FALSE} only the result, \code{"full"} traces every step of the solver.
+Versions before \code{"1.3"} print their own output unless \code{verbose = FALSE}.}
 }
 \value{
 Named character vector of steady-state equations in dMod format, or
@@ -125,7 +137,12 @@ Rather than solving every balance equation for its own state, the solver
 spends each equation on whichever state or rate constant keeps the result a
 ratio of sums of positive terms. A state whose equation went to a rate
 constant is absent from the result and stays a free parameter of the
-transformation.
+transformation. Where no single balance stays positive, version \code{"1.3"}
+solves a strongly connected block of states jointly, so that differences
+cancel across its balances. If that fails, the block is searched balance
+by balance, spending each only on an unknown whose root stays positive once
+the balances solved before it are substituted. A state solved up front
+whose rate constants such a block needs is left to the block on a retry.
 }
 \examples{
 

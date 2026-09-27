@@ -33,13 +33,18 @@ controls(x, ...) <- value
 \item{value}{the new value}
 }
 \value{
-Either a print-out or the values of the control.
+Either a print-out or the values of the control. Listing the
+controls of an \code{fn} prints them per function and returns the names
+invisibly, as a list with one entry per function.
 }
 \description{
 Applies to objects of class \code{objfn},
 \code{parfn}, \code{prdfn} and \code{obsfn}. Allows to manipulate
 different arguments that have been set when creating the
-objects.
+objects. On a sum of objectives, a control is read from and written to
+every summand that has it. The same holds for an objective scaled by \verb{\%.*\%} and
+for an objective composed with a parameter transformation, which reach the
+controls of the objective inside.
 }
 \details{
 If called without further arguments, \code{controls(x)} lists the
@@ -47,6 +52,22 @@ available controls within an object. Calling \code{controls()} with \code{name}
 and \code{condition} returns the control value. The value can be overwritten. If
 a list or data.frame is returned, elements of those can be manipulated by the
 \code{$}- or \verb{[]}-operator.
+
+A control lives in the function that was built with it, which every sum or
+composition containing that function shares. A change made on \code{x} is
+therefore seen by every object built from \code{x}, and a change made on a
+composition reaches the factor it came from.
+
+On an \code{fn}, the control is looked up in the functions \code{x} is made of, so
+\code{g * x * p} reaches the controls of \code{g}, \code{x} and \code{p}. \code{condition} restricts
+the lookup to the functions that answer for that condition; a function built
+without a condition answers for all of them, so a control set on it for one
+condition applies to every condition. With \code{condition = NULL}, the getter
+returns the value of the first function that holds the control and the
+setter writes every function that holds it. A name that several factors
+share, \code{attach.input} for instance, is set on all of them; set it on the
+factor itself to reach that one alone. Setting a control that no function
+holds is an error, as is a condition \code{x} does not know.
 }
 \examples{
 \dontrun{

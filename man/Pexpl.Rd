@@ -24,7 +24,11 @@ values are expressions in the outer parameters.}
 
 \item{parameters}{Outer parameters; defaults to \code{getSymbols(trafo)}.}
 
-\item{attach.input}{Append outer inputs to the output.}
+\item{attach.input}{Append the outer inputs the transformation does not map
+to the output, fixed ones included. An input that varies keeps its
+derivatives, the identity when it enters the chain here, and one passed in
+\code{fixed} stays fixed. Kept as a control of the returned function and read at
+every call, see \code{\link[=controls]{controls()}}.}
 
 \item{condition}{Condition label.}
 

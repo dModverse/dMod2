@@ -318,3 +318,138 @@ test_that("a recycled pivot rate constant is resolved, not defined by itself", {
   expect_lt(max(abs(residual)), 1e-10)
 
 })
+
+test_that("a symbol defined twice or in a cycle is an error", {
+  reticulate::py_require(c("numpy", "sympy"))
+  ap <- reticulate::import_from_path("AlyssaPetit_ver1_3",
+                                     path = system.file("code", package = "dMod2"))
+  topo <- ap$`_topo_sort_eqs`
+  expect_equal(unlist(topo(list("a = b", "b = c", "c = c"))), c("b = c", "a = b", "c = c"))
+  expect_error(topo(list("a = b", "a = c")), "more than once")
+  expect_error(topo(list("a = 2*a")), "itself")
+  expect_error(topo(list("a = b + 1", "b = a")), "cyclically")
+})
+
+test_that("a block that no single balance resolves is solved jointly", {
+
+  # Receptors recycling through endosomes and a ligand-free complex: every
+  # balance alone leaves a difference; the balances together cancel it.
+  withr::local_dir(tempdir())
+  r <- eqnlist() |>
+    addReaction("", "R1", "k_transl_R1") |>
+    addReaction("", "R2", "k_transl_R2") |>
+    addReaction("R1", "R1_endo", "k_int_R1*R1") |>
+    addReaction("R1_endo", "R1", "k_rec_R1_endo*R1_endo") |>
+    addReaction("R1_endo", "", "k_dg_R1_endo*R1_endo") |>
+    addReaction("R2", "R2_endo", "k_int_R2*R2") |>
+    addReaction("R2_endo", "R2", "k_rec_R2_endo*R2_endo") |>
+    addReaction("R2_endo", "", "k_dg_R2_endo*R2_endo") |>
+    addReaction("R1 + R2", "R1_R2", "k_form_R1_R2*R1*R2") |>
+    addReaction("R1_R2", "R1 + R2", "k_dec_R1_R2*R1_R2") |>
+    addReaction("R1_R2", "R1_R2_int", "k_int_R1_R2*R1_R2") |>
+    addReaction("R1_R2_int", "R1_R2", "k_rec_R1_R2_int*R1_R2_int") |>
+    addReaction("R1_R2_int", "R1_endo + R2_endo", "k_dec_R1_R2_int*R1_R2_int") |>
+    addReaction("R1", "", "k_dg_R1_S7*R1*S7/(Km_S7 + R1)")
+
+  ss <- steadyStates(r)
+  expect_false(identical(ss, 0))
+  defs <- ss[trimws(ss) != names(ss)]
+  expect_false(any(grepl("-", defs, fixed = TRUE)))
+
+  odes <- as.eqnvec(r)
+  symbolsOf <- function(x) unique(unlist(lapply(x, function(e) all.vars(parse(text = e)))))
+  set.seed(7)
+  free <- setdiff(symbolsOf(c(as.character(odes), defs)), names(defs))
+  env <- as.list(setNames(stats::runif(length(free), 0.3, 2), free))
+  todo <- defs
+  while (length(todo)) {
+    ready <- vapply(todo, function(e) all(all.vars(parse(text = e)) %in% names(env)), TRUE)
+    if (!any(ready)) break
+    env[names(todo)[ready]] <- lapply(todo[ready], function(e) eval(parse(text = e), env))
+    todo <- todo[!ready]
+  }
+  expect_length(todo, 0)
+  expect_true(all(unlist(env[names(defs)]) > 0))
+  residual <- vapply(odes, function(e) eval(parse(text = e), env), numeric(1))
+  expect_lt(max(abs(residual)), 1e-10)
+})
+
+test_that("version 1.4 solves every model above positively", {
+
+  withr::local_dir(tempdir())
+  vol <- eqnlist() |>
+    addReaction("", "L", "k_pr_L", compartment = "ext") |>
+    addReaction("L", "", "k_dg_L*L", compartment = "ext") |>
+    addReaction("", "R", "k_pr_R", compartment = "cell") |>
+    addReaction("R", "", "k_dg_R*R", compartment = "cell") |>
+    addReaction("L + R", "LR", "k_on*L*R", compartment = "cell", rateCompartment = "cell") |>
+    addReaction("LR", "", "k_dg_LR*LR", compartment = "cell")
+  vol$compartments$cell$volume <- "Vc"
+  vol$compartments$ext$volume  <- "Ve"
+  models <- list(
+    transport = eqnlist() |>
+      addReaction("Tca_buffer", "Tca_cyto", "import_Tca*Tca_buffer") |>
+      addReaction("Tca_cyto", "Tca_buffer", "export_Tca_baso*Tca_cyto") |>
+      addReaction("Tca_cyto", "Tca_canalicular", "export_Tca_cana*Tca_cyto") |>
+      addReaction("Tca_canalicular", "Tca_buffer", "transport_Tca*Tca_canalicular"),
+    additive = eqnlist() |>
+      addReaction("", "B", "k_pr_B") |> addReaction("B", "", "k_dg_B*B") |>
+      addReaction("", "A", "(k_basal_A + k_ind_A*B)") |> addReaction("A", "", "k_dg_A*A"),
+    chain = eqnlist() |>
+      addReaction("", "R", "k_pr_R") |> addReaction("R", "", "k_dg_R*R") |>
+      addReaction("", "L", "k_pr_L") |> addReaction("L", "", "k_dg_L*L") |>
+      addReaction("", "K", "k_pr_K") |> addReaction("K", "", "k_dg_K*K") |>
+      addReaction("L + R", "LR", "k_on*L*R") |> addReaction("LR", "", "k_dg_LR*LR") |>
+      addReaction("LR + K", "LRK", "k_on2*LR*K") |> addReaction("LRK", "", "k_dg_LRK*LRK"),
+    volumes = vol,
+    basal = eqnlist() |>
+      addReaction("", "Src", "k_pr_Src") |> addReaction("Src", "Lig", "k_sec*Src") |>
+      addReaction("", "Rec", "(k_pr_Rec + k_basal_Rec)") |>
+      addReaction("Rec", "", "k_dg_Rec*Rec") |>
+      addReaction("Lig + Rec", "Cpx", "k_form*Lig*Rec/(Km + Rec)") |>
+      addReaction("Cpx", "", "k_dg_Cpx*Cpx"),
+    recycling = eqnlist() |>
+      addReaction("", "R1", "k_transl_R1") |> addReaction("", "R2", "k_transl_R2") |>
+      addReaction("R1", "R1_endo", "k_int_R1*R1") |>
+      addReaction("R1_endo", "R1", "k_rec_R1_endo*R1_endo") |>
+      addReaction("R1_endo", "", "k_dg_R1_endo*R1_endo") |>
+      addReaction("R2", "R2_endo", "k_int_R2*R2") |>
+      addReaction("R2_endo", "R2", "k_rec_R2_endo*R2_endo") |>
+      addReaction("R2_endo", "", "k_dg_R2_endo*R2_endo") |>
+      addReaction("R1 + R2", "R1_R2", "k_form_R1_R2*R1*R2") |>
+      addReaction("R1_R2", "R1 + R2", "k_dec_R1_R2*R1_R2") |>
+      addReaction("R1_R2", "R1_R2_int", "k_int_R1_R2*R1_R2") |>
+      addReaction("R1_R2_int", "R1_R2", "k_rec_R1_R2_int*R1_R2_int") |>
+      addReaction("R1_R2_int", "R1_endo + R2_endo", "k_dec_R1_R2_int*R1_R2_int") |>
+      addReaction("R1", "", "k_dg_R1_S7*R1*S7/(Km_S7 + R1)")
+  )
+  symbolsOf <- function(x) unique(unlist(lapply(x, function(e) all.vars(parse(text = e)))))
+
+  for (nm in names(models)) {
+    r <- models[[nm]]
+    ss <- steadyStates(r, version = "1.4", verbose = FALSE)
+    expect_false(identical(ss, 0), label = nm)
+    defs <- ss[trimws(ss) != names(ss)]
+    expect_false(any(grepl("-", defs, fixed = TRUE)), label = nm)
+    selfref <- mapply(function(n, e) n %in% all.vars(parse(text = e)), names(defs), defs)
+    expect_false(any(selfref), label = nm)
+
+    odes <- as.eqnvec(r)
+    set.seed(5)
+    free <- setdiff(symbolsOf(c(as.character(odes), defs)), names(defs))
+    env <- as.list(setNames(stats::runif(length(free), 0.3, 2), free))
+    for (n in names(defs)) env[[n]] <- eval(parse(text = defs[[n]]), env)
+    expect_true(all(unlist(env[names(defs)]) > 0), label = nm)
+    residual <- vapply(odes, function(e) eval(parse(text = e), env), numeric(1))
+    expect_lt(max(abs(residual)), 1e-10, label = nm)
+  }
+})
+
+test_that("version 1.4 names the arguments it ignores", {
+  withr::local_dir(tempdir())
+  r <- eqnlist() |> addReaction("", "A", "k_pr_A") |> addReaction("A", "", "k_dg_A*A")
+  expect_message(steadyStates(r, version = "1.4", verbose = FALSE, solveQuadratic = TRUE),
+                 "solveQuadratic and branches are ignored")
+  expect_message(steadyStates(r, version = "1.4", verbose = FALSE, testSteady = "exact"),
+                 "no 'exact' test")
+})
