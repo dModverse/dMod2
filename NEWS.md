@@ -22,6 +22,10 @@
   for supports up to six coordinates, bounded by `DMOD_SYM_JETTIME` seconds
   (default 20), verified like every other closed form; `DMOD_SYM_NOJET` switches
   it off.
+* `symmetryDetection(symEngine = "symbolic")` no longer passes the model through the
+  log chart for positive coordinates, which turned a free power such as `K^n` into
+  exponentials: the Hill example of the vignette took over 90 minutes instead of
+  7 seconds (a regression of the log charts).
 * `symmetryDetection()` accepts a per-condition `g` list named by condition; it
   reached Python as a dictionary and failed in the log chart (all TGFbModelling
   models M001 to M009 stopped there).

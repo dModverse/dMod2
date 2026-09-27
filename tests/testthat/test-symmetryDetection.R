@@ -1988,3 +1988,21 @@ test_that("jetGenerator reads a direction off the jets", {
   expect_true(.symExprEqual(jg3$vector[["k2"]], "-k2/k1"))
   expect_false("k3" %in% names(jg3$vector))
 })
+
+
+test_that("the symbolic engine keeps a free Hill exponent as it is", {
+  if (!.sympy_works()) skip("reticulate/sympy not available")
+  # the log chart for positive coordinates turned K^n into exponentials for the
+  # symbolic engine too, which then did not finish (seconds before, > 90 min after)
+  hill <- eqnlist() |>
+    addReaction("0",  "FB", "k_pr_FB") |> addReaction("FB", "0",  "d_FB * FB") |>
+    addReaction("0",  "x",  "k_pr_x * K^n / (K^n + FB^n)") |>
+    addReaction("x",  "0",  "d_x * x")
+  ss <- eqnvec(FB = "k_pr_FB/d_FB",
+               x  = "k_pr_x*K^n/(d_x*(K^n + (k_pr_FB/d_FB)^n))")
+  t0 <- Sys.time()
+  sres <- symdet(hill, eqnvec(xobs = "scale * x"), method = "observability",
+                 symEngine = "symbolic", trafo = ss)
+  expect_lt(as.numeric(Sys.time() - t0, units = "secs"), 120)
+  expect_true(any(vapply(sres$symmetries, function(d) "n" %in% d$support, logical(1))))
+})

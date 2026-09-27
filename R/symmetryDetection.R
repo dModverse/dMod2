@@ -580,8 +580,11 @@ symmetryDetection <- function(f = NULL, g = NULL, trafo = NULL,
 
   # log() or a fractional power of a positive v: analysed in log_v = log(v), where
   # only exponentials remain, and mapped back in deliver(). Not for the scaling
-  # engine, which takes log() itself and does not see translations.
-  if (!isFALSE(positive) && method != "scaling") {
+  # engine, which takes log() itself and does not see translations, and not for the
+  # symbolic engine, which carries base^n and log() natively: there the chart only
+  # turns K^n into exponentials (the Hill model of the vignette, 7 s -> > 90 min)
+  if (!isFALSE(positive) && method != "scaling" &&
+      !(method == "observability" && symEngine == "symbolic")) {
     toList <- function(e) if (is.null(e) || !length(e)) list() else
       as.list(setNames(as.character(e), names(e)))
     # replace and multiply events enter the chart like initial values
