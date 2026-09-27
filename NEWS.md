@@ -1,5 +1,53 @@
 # dMod2 (development version)
 
+* `symmetryDetection()` reconstructs each general direction on its narrow kernel:
+  a minimal-support direction is the only kernel vector on its support S, so
+  every sample needs the Lie-derivative gradients along S only (dual width
+  |S| + 1 instead of the number of coordinates), and the relevance probe runs on
+  the same narrow kernel. On TGFbModelling M011 (138 coordinates, 38
+  conditions) the general direction now closes in 94 s on 2 of 121 columns; it
+  had not finished after 9 minutes. `DMOD_SYM_NONARROW` switches it off.
+* `symmetryDetection()` finds translation groups: leaves that enter a direction
+  only through their sum, such as `Km + R1 + ... + Rn` in a saturable
+  degradation, are fitted as one variable and folded back. A direction with
+  such an entry over 32 leaves closes in seconds instead of hitting the
+  relevance caps. `DMOD_SYM_NOGROUP` switches it off.
+* `symmetryDetection()` also finds multiplicative groups: leaves that enter a
+  direction only through their product (`R1*R2*...*Rn`) are held at 1 during the
+  fit and folded back as the product.
+* `symmetryDetection()` reads a direction off the jets when that is cheaper than
+  sampling: every Lie derivative at the initial values is invariant, so the
+  direction on its support S is the generalised cross product of the S-gradients
+  of |S| - 1 jets (for |S| = 2, the Hamiltonian field of one jet). Tried first
+  for supports up to six coordinates, bounded by `DMOD_SYM_JETTIME` seconds
+  (default 20), verified like every other closed form; `DMOD_SYM_NOJET` switches
+  it off.
+* `symmetryDetection()` accepts a per-condition `g` list named by condition; it
+  reached Python as a dictionary and failed in the log chart (all TGFbModelling
+  models M001 to M009 stopped there).
+* `symmetryDetection()` no longer spends minutes simplifying the complete
+  generator or classifying a direction whose entries hold a power of a wide sum.
+* `symmetryReduction()` tries face sections first: `r` coordinates of a curved
+  block pinned to 0 when every orbit of the positive orthant reaches that face
+  with the other coordinates positive and crosses it once. Linear compartment
+  models reduce by switching leaks off (three catenary compartments: 2.7 s,
+  was 300 s without a chart). A face never makes a model denominator vanish,
+  and zero compatibility reports it as reached everywhere.
+* `symmetryReduction()` matches carriers to invariants by backtracking; the
+  greedy pick gave up on invariants such as `k3*ka`, `k4*kb`, `ka + kb`.
+* `symmetryReduction()` pins a scaling that overlaps a curved direction on a
+  coordinate outside every curved support when it can, instead of merging it
+  into the curved block, and reduces more than two gauge coordinates by equal
+  shares of a sum invariant (`r1 = ... = r4 = q/4`).
+* `symmetryReduction()` searches the invariants of a block in the sum of a
+  translation group and in the monomials through which unmoved coordinates
+  (constants along every orbit) enter, and substitutes them back. Both happen
+  before the module reduction, which no longer expands a product of thirty
+  factors.
+* `steadyStates()` accepts species and parameters that `sympy` would read as
+  its own objects (`Ci`, `Si`, `E`, `S`, `Q`, `gamma`, ...).
+* New bench `bench/motifs/`: small models on which the symmetry pipeline was
+  slow or failed, each run re-detected after the reduction.
 * `symmetryDetection()` on a model with events expands each condition only to
   the Lie order it needs jointly with the others, and runs the kernel samples
   of a batch in one OpenMP call.

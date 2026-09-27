@@ -457,6 +457,49 @@ denominator is first split by a univariate Cauchy fit along a ray, after which
 numerator and denominator are ordinary sparse polynomials. Anything beyond the
 degree caps falls back to its support rather than to a guess.
 
+**The narrow kernel.** A sample need not come from the full matrix. Let $v$ be a
+direction of minimal support $S$ (a cocircuit of the null space), normalised to 1
+at one of its coordinates. Every row of $\mathcal{O}$ annihilates $v$, and $v$ is
+the only null vector supported on $S$, so the columns of $\mathcal{O}$ in $S$ alone
+have rank $|S|-1$ and their one-dimensional kernel *is* $v$. The Taylor-mode kernel
+therefore needs the gradients of the jets along $S$ only: dual numbers of width
+$|S|+1$ instead of $n+1$, the cost of one sample falling by the factor $n/|S|$.
+Minimal-support representatives are taken first, which also keeps a scaling apart
+from a curved direction sharing some of its coordinates. On a model with 138
+coordinates and 38 conditions the general direction has $|S| = 2$ and closes in a
+minute and a half, where the full-width samples had not finished after nine.
+
+**Translation groups.** Entries often depend on many coordinates through one sum,
+a Michaelis constant with the pools of the sites it competes for,
+$\mathrm{Km} + R_1 + \dots + R_n$. The whole direction is then invariant under the
+exchange $z_a + t$, $z_b - t$ of two such coordinates, a translation along
+$\partial_a - \partial_b$, and this is tested on the narrow kernel at a random
+point. Coordinates that pass are held at their base values while one
+representative varies; the fit returns $G(z_a) = F(z_a + \sum_b z_b^\ast)$, and
+$F(u) = G(u - \sum_b z_b^\ast)$ restores the sum exactly. Invariance under the
+scaling $z_a \lambda$, $z_b/\lambda$ marks a product of site occupancies instead;
+its members are held at 1 during the fit, so that no product of base values enters
+the coefficients. The same holds in the reduction, where the invariants of a block
+are searched in the sum, and where coordinates no generator moves, constants along
+every orbit, are searched through the monomials in which they enter.
+
+**The jets themselves.** The direction also follows from the jets in closed
+form. Every jet $\Phi = L_f^k h$ at the initial values is
+invariant, $X(\Phi) = 0$, so $X_S$ is orthogonal to the $S$-gradients of all of
+them; with $|S|-1$ of independent gradients $\nabla_S\Phi_1, \dots,
+\nabla_S\Phi_{|S|-1}$,
+\begin{equation}
+X_i \;=\; (-1)^i \det\!\left(\frac{\partial(\Phi_1,\dots,\Phi_{|S|-1})}
+{\partial z_{S\setminus\{i\}}}\right),
+\label{eq:jetminor}
+\end{equation}
+the generalised cross product. For $|S| = 2$ this is $X \propto (\partial_b\Phi,
+-\partial_a\Phi)$, the Hamiltonian vector field of a single jet in the $(a,b)$
+plane. The lowest jets with independent gradients are taken, and the result is
+certified at a fresh prime like any other. Because it needs no sampling, this is
+tried first for small supports, within a time bound; the fit follows where the
+jets grow too large.
+
 **Lifting $\mathrm{GF}(p)$ back to $\mathbb{Q}$.** A single prime returns the
 coefficients only as residues. The Chinese Remainder Theorem combines residues
 modulo $p_1, \dots, p_r$ into one value modulo $M = p_1\cdots p_r$, and *rational
@@ -998,7 +1041,21 @@ generator then $r$ cannot return to a value it has taken, so the section is met
 exactly once, inside the positive orthant. Mixed signs admit tangencies and are
 dropped before any solve. With several gauge directions the *set* of sections must
 be transversal to all of them, which a rank test on the values of
-\eqref{eq:section} decides.
+\eqref{eq:section} decides. With more than two gauge coordinates the balances are
+the equal shares of a sum invariant, $r_1 = \dots = r_{k+1} = q/(k+1)$.
+
+Before any balance, a *face section* is tried: $k$ coordinates $Z$ set to 0, every
+other coordinate kept. The face $\{z_Z = 0\}$ of the positive orthant is a section
+when every orbit reaches it once with the other coordinates positive. The point it
+reaches solves $I(z') = I(z)$ with $z'_Z = 0$; the face is admitted when that solve
+has exactly one branch whose entries, composed into the *original* coordinates, are
+certified positive on the whole orthant, every other branch leaves the domain, and
+no denominator of the model vanishes on the face. The chart is then the identity on
+the remaining coordinates and switches the face coordinates off: a catenary of
+three compartments with leaks from each keeps one leak, $k_{02} = k_{03} = 0$, the
+classic identifiable form. A scaling that overlaps a curved block is pinned outside
+every curved support where it can be, so the curved block keeps only its own
+directions.
 
 **3. Eliminate.** Equations \eqref{eq:chart-names} and the section are $m$
 equations in $m$ unknowns, and the elimination is triangular. Each naming equation

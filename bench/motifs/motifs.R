@@ -180,11 +180,69 @@
                                row.names = c("ctrl", "knockdown", "unstim")))
 }
 
+# ---- wide entries: a pool degraded through n saturating sites --------------------------
+# M011's pattern on the autocrine loop: the unobserved pool P is lost by secretion
+# and by degradation kdg*P/(Km + R1 + ... + Rn), the site levels R_i are constant and
+# read out. Degradation and secretion trade off along a curved direction whose kdg
+# entry couples Km and every R_i. Resting state from steadyStates().
+.wide <- function(n) {
+  Rn <- paste0("R", seq_len(n))
+  Q <- paste0("(Km + ", paste(Rn, collapse = " + "), ")")
+  r <- .autocrineReactions()
+  r <- eqnlist() |>
+    addReaction("", "m", "ktx*(b0 + C)", "transcription") |>
+    addReaction("m", "", "dm*m", "mRNA decay") |>
+    addReaction("", "P", "ktl*m", "translation") |>
+    addReaction("P", "", paste0("kdg*P/", Q), "degradation at n sites") |>
+    addReaction("P", "L", "ksec*P", "secretion") |>
+    addReaction("L", "", "kL*L", "ligand decay") |>
+    addReaction("", "R", "ksR", "receptor synthesis") |>
+    addReaction("R", "", "kdR*R", "receptor turnover") |>
+    addReaction("L + R", "C", "kon*L*R", "binding") |>
+    addReaction("C", "L + R", "koff*C", "unbinding") |>
+    addReaction("C", "", "kint*C", "internalisation")
+  ss <- .motifCache(paste0("wide", n, "_steady"), function() steadyStates(r, verbose = FALSE))
+  ev <- addEvent(eventlist(), var = "L", time = 0, value = "dose", method = "add")
+  g <- c(ym = "sm*m", yC = "sC*C", yL = "L", setNames(Rn, paste0("y", Rn)))
+  list(f = r, g = do.call(eqnvec, as.list(g)), trafo = ss, events = ev,
+       conditions = data.frame(dose = c(0, 1), row.names = c("ctrl", "stim")))
+}
+# the same with a product of sites: kdg*P*Pi/(Km + Pi), Pi = R1*...*Rn. The entry is
+# no function of a sum; beyond the relevance caps it needs the jet closed form.
+.wideProd <- function(n) {
+  Rn <- paste0("R", seq_len(n))
+  Pi <- paste0("(", paste(Rn, collapse = "*"), ")")
+  r <- eqnlist() |>
+    addReaction("", "m", "ktx*(b0 + C)", "transcription") |>
+    addReaction("m", "", "dm*m", "mRNA decay") |>
+    addReaction("", "P", "ktl*m", "translation") |>
+    addReaction("P", "", paste0("kdg*P*", Pi, "/(Km + ", Pi, ")"), "degradation") |>
+    addReaction("P", "L", "ksec*P", "secretion") |>
+    addReaction("L", "", "kL*L", "ligand decay") |>
+    addReaction("", "R", "ksR", "receptor synthesis") |>
+    addReaction("R", "", "kdR*R", "receptor turnover") |>
+    addReaction("L + R", "C", "kon*L*R", "binding") |>
+    addReaction("C", "L + R", "koff*C", "unbinding") |>
+    addReaction("C", "", "kint*C", "internalisation")
+  ss <- .motifCache(paste0("wideprod", n, "_steady"), function() steadyStates(r, verbose = FALSE))
+  ev <- addEvent(eventlist(), var = "L", time = 0, value = "dose", method = "add")
+  g <- c(ym = "sm*m", yC = "sC*C", yL = "L", setNames(Rn, paste0("y", Rn)))
+  list(f = r, g = do.call(eqnvec, as.list(g)), trafo = ss, events = ev,
+       conditions = data.frame(dose = c(0, 1), row.names = c("ctrl", "stim")))
+}
+.motifs$wideprod8  <- function() .wideProd(8)
+.motifs$wideprod30 <- function() .wideProd(30)
+.motifs$wide4  <- function() .wide(4)
+.motifs$wide12 <- function() .wide(12)
+.motifs$wide30 <- function() .wide(30)
+
 # steady states are computed once per motif and kept next to the results
 .motifCache <- function(key, fn) {
   dir <- file.path(Sys.getenv("DMOD_MOTIF_CACHE", tempdir()))
   dir.create(dir, showWarnings = FALSE, recursive = TRUE)
   f <- file.path(dir, paste0(key, ".rds"))
   if (file.exists(f)) return(readRDS(f))
+  # steadyStates() writes its reaction table into the working directory
+  owd <- setwd(tempdir()); on.exit(setwd(owd))
   val <- fn(); saveRDS(val, f); val
 }
