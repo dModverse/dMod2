@@ -85,12 +85,17 @@ probe alone 266 s); now 94 s on 2 of 121 columns.
    groups on it.
 2. ✅ Closed form from jets (`jetGenerator`): m-1 lowest-order jets with independent
    S-gradients, their minors, verified exactly. Tried first, time-bounded.
-3. Narrow kernel on the equilibrate/joint and recast paths (the steady-state seed has full
-   width; restrict its columns).
+3. Deferred: narrow kernel on the equilibrate/joint and recast paths (restrict the
+   steady-state seed's and the recast relations' columns). No motif needs it: hillfree
+   (power recast) closes in 3.5 s, M011 takes its steady state as an explicit trafo.
 4. ✅ M011: `gaugePreference` end to end, small and full gene pool: the general direction
    closes and reduces (k_dg_TGFB1 = 0), the reduced model re-detected identifiable.
 
-### WP3 invariants: Lie structure in the cascade
+### WP3 invariants: Lie structure in the cascade (deferred)
+None of the motifs failed in the invariant search: the failures were charts (faces, carriers,
+outside gauges, equal shares), reconstruction (narrow kernel, exchange groups, jets) and speed.
+The Lie structure entered the search as compressions (translation groups, unmoved monomials).
+Kept for a motif that needs them:
 1. Jets as invariant candidates: first-segment output Taylor coefficients (identifiable by
    construction) seed the invariant search before the degree ladder.
 2. Lie multiplier stage: scaling symmetries of X itself (integer kernel over the exponents of
