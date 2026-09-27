@@ -30,7 +30,7 @@ if (inherits(res, "error")) {
   out$nDir <- length(res$symmetries); out$nDirExpected <- nDir
   out$dirs <- lapply(res$symmetries, function(d)
     list(type = d$type, support = d$support, explicit = isTRUE(d$explicit),
-         reason = d$reason, generator = d$generator))
+         reason = d$reason, generator = d$generator, route = d$route))
   out$nOpen <- sum(!vapply(out$dirs, `[[`, logical(1), "explicit"))
   cat(sprintf("[detect done %.1fs: rank %d/%d, %d dirs, %d open]\n", out$tDetect,
               out$rank, out$dim, out$nDir, out$nOpen))

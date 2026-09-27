@@ -3745,12 +3745,31 @@ def jetGenerator(conds, support, anchor, maxOrder=8, maxChars=200000,
     this is X = (d_b Phi, -d_a Phi), the Hamiltonian field of one jet Phi.
 
     `conds` holds per condition {'f': ['x = rhs', ...], 'g': [h, ...],
-    'ic': ['x = x0', ...]} over the leaves. Jets are taken order by order, lowest
-    first, rows kept greedily while they raise the rank at a random rational point.
-    Returns {'ok': True, 'vector': {z: entry}} normalised to 1 at `anchor`, or
-    {'ok': False, 'reason': ...}. The caller verifies the result."""
+    'ic': ['x = x0', ...]} over the leaves, or a chain {'segments': [...]} whose later
+    segments carry their boundary events ('ev') instead of initial values: at order 0
+    in every gap length the state does not move across a gap, so a later segment
+    starts from the earlier initial values with its events applied, and its jets
+    there are invariant like any other (each gap monomial of a row annihilates X).
+    A segment whose boundary time depends on the coordinates ends the chain. The
+    first segments are tried alone first (fewer, smaller jets); the later ones join
+    only when those fall short of the rank.
+    Jets are taken order by order, lowest first, rows kept greedily while they raise
+    the rank at a random rational point. Returns {'ok': True, 'vector': {z: entry}}
+    normalised to 1 at `anchor`, or {'ok': False, 'reason': ...}. The caller
+    verifies the result."""
     import time as _time
     t0 = _time.time()
+    primary, extra = _jet_expand_chains(conds)
+    res = _jet_core(primary, support, anchor, maxOrder, maxChars, timeLimit, t0)
+    if not res['ok'] and extra and str(res.get('reason', '')).startswith('rank'):
+        res = _jet_core(primary + extra, support, anchor, maxOrder, maxChars,
+                        timeLimit, t0)
+    return res
+
+
+def _jet_core(conds, support, anchor, maxOrder, maxChars, timeLimit, t0):
+    """jetGenerator() on a fixed list of jet conditions, within timeLimit from t0."""
+    import time as _time
     support = [str(s) for s in _as_list(support)]
     anchor = str(anchor)
     m = len(support)
@@ -3845,6 +3864,37 @@ def jetGenerator(conds, support, anchor, maxOrder=8, maxChars=200000,
         if _time.time() - t0 > timeLimit:
             return {'ok': False, 'reason': 'time limit'}
     return {'ok': True, 'vector': vec, 'order': int(order)}
+
+
+def _jet_expand_chains(conds):
+    """Chains of segments as independent jet conditions at gap order 0: segment k starts
+    from segment k-1's initial values with its own boundary events applied. Returns the
+    first segments and the later ones as two lists."""
+    out, extra = [], []
+    for c in _as_list(conds):
+        c = dict(c)
+        if 'segments' not in c:
+            out.append(c)
+            continue
+        segs = [dict(sg) for sg in _as_list(c['segments'])]
+        if not segs:
+            continue
+        ic = [str(l) for l in _as_list(segs[0]['ic'])]
+        out.append({'f': segs[0]['f'], 'g': segs[0]['g'], 'ic': ic})
+        for sg in segs[1:]:
+            if not sg.get('timeFixed', True):
+                break
+            icd = dict(l.split(' = ', 1) for l in ic)
+            for ev in _as_list(sg.get('ev', [])):
+                ev = dict(ev)
+                X, v, how = str(ev['var']), str(ev['value']), str(ev['method'])
+                old = icd.get(X, X)
+                icd[X] = ('(%s)' % v if how == 'replace' else
+                          '(%s) + (%s)' % (old, v) if how == 'add' else
+                          '(%s)*(%s)' % (old, v))
+            ic = ['%s = %s' % (X, e) for X, e in icd.items()]
+            extra.append({'f': sg['f'], 'g': sg['g'], 'ic': ic})
+    return out, extra
 
 
 def _lie_reach(f_c, g_c, S, ic_c, evs, f_ss=None):
@@ -4377,6 +4427,12 @@ def compileObservabilityTapeMulti(model, observation, conditionSubs, conditionIC
             tape['jetF'] = ['%s = %s' % (str(S[i]), str(f_c[i])) for i in range(nS)]
             tape['jetG'] = [str(e) for e in g_c]
             tape['jetIC'] = ['%s = %s' % (str(X), str(ic_c[str(X)])) for X in S]
+            # a later segment's boundary events, and whether its start time is free of
+            # the coordinates (the jets of a moving boundary need the time shift too)
+            tape['jetEv'] = [{'var': str(e['var']), 'method': str(e['method']),
+                              'value': str(e['value'])} for e in evPer[c]]
+            tape['jetTimeFixed'] = bool(tmPer[c] is None or
+                                        not spy.sympify(tmPer[c]).free_symbols)
         # events at this segment's left boundary, applied by the kernel to the
         # propagated state; their values as an order-0 tape over the leaves
         evs = evPer[c]

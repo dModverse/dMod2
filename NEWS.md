@@ -12,6 +12,18 @@
   transit chain is exactly 0 until the chain has filled). A readout at the end of a
   ten-step chain was reported with rank 0 of 4; the symbolic engine had the same
   plateau rule and gets the same bound.
+* `summary()` of a detection says for every general direction how its closed form
+  was obtained (`closed form: jets (order 2)`, `narrow fit (dense)`,
+  `fit (sparse Laurent)`, ...), kept on the object as `$route`.
+* The jet closed form can use every segment of a condition: when the first segments
+  fall short of the rank, the later ones join at gap order 0 (from the earlier
+  initial values with their boundary events applied), so a direction that acts only
+  after a switch closes from the jets too. The order cap follows the structural
+  first order of the support instead of a fixed 8 (a ten-step transit chain closes
+  at order 12). `DMOD_SYM_JETFIRST` tries the jets first for every direction. With
+  it, 34 of the 44 general directions of the motifs close from the jets; the other
+  ten need the fit (an implicit steady state, a free exponent, a support of seven,
+  and jets that outgrow the time or size bound).
 * `symmetryReduction()`: the coordinates a face section keeps become fresh `q_<k>`
   parameters, like every other carrier of a general block. They hold the value
   they take where the orbit meets the face, an invariant, so keeping the old name

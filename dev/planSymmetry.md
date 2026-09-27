@@ -66,6 +66,10 @@ model re-detected identifiable. Times are detection / reduction.
 | **Face carriers are `q_<k>`** (`.symRedFaceCarriers`): the coordinates a face keeps carry invariants, so they are renamed like every curved carrier | M011: `k_dg_TGFB1 = 0, TGFB1 = q_1` instead of `TGFB1 = TGFB1*(...)` |
 | **`Sections:` in print/summary** (`.symRedCatSections`): which section each block takes and why (face, balance, pin), pointing to the vignette; the vignette explains the section on the autocrine loop | the chart choice is visible without `summary(verbose = TRUE)` |
 | **`summary()` returns the object** marked for the report (`print.summary.*`) | `print(summary(res))` printed the report and then `print(res)` |
+| **Generic base point**: the rank is also checked at a point of uniform residues (`.symRandomPoint`) | the prime pool put kdg + ksec = kt (2 + 3 = 5) on a chain model: rank 2 instead of 3, unseen by the cross-prime check and the guard |
+| **Structural first Lie order** (`_lie_reach`, `lieReach` per tape, `.symLieReachMax`): no flat step counts before it | deep_chain (readout behind ten transit steps): rank 0/4 → 3/4; symbolic engine the same |
+| **Routes** on every general direction (`$route`, `closed form:` in `summary()`) | measured below |
+| **Jets over all segments** (later ones at gap order 0, only when the first fall short), order cap from the structural first order | late_curved and switch_late close from the jets, deep_chain at order 12; M011 still at order 2 in 5.1 min |
 
 Switches: `DMOD_SYM_NOCAP`, `DMOD_SYM_NOJOINTCAP`, `DMOD_SYM_NOPOINTBATCH`, `DMOD_SYM_NONARROW`, `DMOD_SYM_NOGROUP`.
 
@@ -93,6 +97,26 @@ probe alone 266 s); now 94 s on 2 of 121 columns.
    (power recast) closes in 3.5 s, M011 takes its steady state as an explicit trafo.
 4. ✅ M011: `gaugePreference` end to end, small and full gene pool: the general direction
    closes and reduces (k_dg_TGFB1 = 0), the reduced model re-detected identifiable.
+
+### WP6 does the fit stay? (routes on the motifs and M011)
+Default run: all 44 general directions of the 26 motifs close by the fit (narrow fit, dense,
+exchange groups where wide); the jets are tried first only where the fit would be wide. With
+`DMOD_SYM_JETFIRST` 34 close from the jets. The ten that need the fit:
+
+| Motif | Why the jets do not close it |
+|---|---|
+| equil_curved | implicit steady state (equilibrate): no explicit initial values, no symbolic jets |
+| hillfree | free exponent (power recast path, not the narrow kernel) |
+| support7 | support of seven coordinates (jets stop at six: minors of that size swell) |
+| autocrine_ss; the 3-coordinate direction of wide4/12/30, wideprod8/30 | jets outgrow the 20 s bound (steady-state initial values, (Km + ΣR)² entries) |
+| cat6, fifth direction | jet at order 11 larger than the size bound |
+
+M011 small: the one general direction closes from the order-2 jets (wide, so jets first).
+The fit stays: it is the fast route for narrow directions (0.1–1 s) and the only one for
+implicit steady states and free exponents.
+
+New motifs outside the jet form: late_curved, support7, equil_curved, deep_chain (all
+reduced, reduced models identifiable).
 
 ### WP3 invariants: Lie structure in the cascade (deferred)
 None of the motifs failed in the invariant search: the failures were charts (faces, carriers,

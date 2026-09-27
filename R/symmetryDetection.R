@@ -3633,25 +3633,47 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
       }
       for (gr in groups) for (v in gr$members) relS[[v]]$rp <- refS
       # the closed form from the jets first (X_S is the generalised cross product of
-      # the S-gradients of |S| - 1 jets), over the first segment of every condition:
-      # no sampling, bounded in time, and verified like any other closed form
+      # the S-gradients of |S| - 1 jets), over every segment of every condition (a later
+      # segment at gap order 0, from the earlier initial values and its events): no
+      # sampling, bounded in time, and verified like any other closed form. The order
+      # cap follows the structural first order of the support (a transit chain)
       jetTry <- function(limit) {
         if (is.null(sd) || nzchar(Sys.getenv("DMOD_SYM_NOJET")) || m > 6L) return(NULL)
-        conds <- lapply(multi$tapes[which(firstOfChain)], function(t)
-          if (is.null(t$jetF)) NULL
-          else list(f = as.character(t$jetF), g = as.character(t$jetG),
-                    ic = as.character(t$jetIC)))
+        # unnamed: a named list (split() names the chains) reaches Python as a dict
+        chains <- unname(if (hasGaps) chainGroups else as.list(seq_along(multi$tapes)))
+        conds <- lapply(chains, function(idx) {
+          segs <- list()
+          for (t in multi$tapes[idx]) {
+            if (is.null(t$jetF)) break
+            segs[[length(segs) + 1L]] <- list(
+              f = as.character(t$jetF), g = as.character(t$jetG),
+              ic = as.character(t$jetIC), ev = if (is.null(t$jetEv)) list() else t$jetEv,
+              timeFixed = !isFALSE(t$jetTimeFixed))
+          }
+          if (length(segs)) list(segments = segs) else NULL
+        })
         if (!length(conds) || any(vapply(conds, is.null, logical(1)))) return(NULL)
+        reachS <- vapply(cols + 1L, function(j) {
+          r <- unlist(lapply(multi$tapes, function(t) {
+            v <- as.integer(unlist(t$lieReach)); if (length(v) >= j) v[j] else NA }))
+          r <- r[!is.na(r) & r >= 0L]
+          if (length(r)) min(r) else 0L
+        }, integer(1))
+        maxOrd <- as.integer(min(24L, max(8L, max(reachS) + 2L * m)))
         jg <- tryCatch(sd$jetGenerator(conds, as.list(znames[cols + 1L]),
-                                       znames[anchor + 1L], timeLimit = limit),
-                       error = function(err) NULL)
+                                       znames[anchor + 1L], maxOrder = maxOrd,
+                                       timeLimit = limit),
+                       error = function(err) {
+                         .tlog(paste("narrow: jet error:", conditionMessage(err)))
+                         NULL })
         .tlog(sprintf("narrow: jet closed form %s", if (isTRUE(jg$ok))
           sprintf("found at order %d", as.integer(jg$order)) else
           paste0("not found (", if (is.null(jg)) "error" else jg$reason, ")")))
         if (!isTRUE(jg$ok)) return(NULL)
         list(support = .symSort(names(jg$vector)),
              vector = lapply(jg$vector, function(x) gsub("\\*\\*", "^", x)),
-             type = "general", closedForm = TRUE)
+             type = "general", closedForm = TRUE,
+             route = sprintf("jets (order %d)", as.integer(jg$order)))
       }
       # jets first where the fit would be wide (more relevant leaves than the dense fit
       # takes, after the groups), the fit first where it is narrow; the other one is
@@ -3671,9 +3693,13 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
         poolNext <<- dir$poolNext
         r <- dir$entry
         r$relevantLeaves <- NULL
+        if (isTRUE(r$closedForm))
+          r$route <- paste0("narrow fit", if (!is.null(r$fitHow)) paste0(" (", r$fitHow, ")"))
+        r$fitHow <- NULL
         r
       }
-      jetFirst <- nRel > ctrl$relevanceCap
+      # DMOD_SYM_JETFIRST: jets first for every direction (to see what they cover)
+      jetFirst <- nRel > ctrl$relevanceCap || nzchar(Sys.getenv("DMOD_SYM_JETFIRST"))
       e <- if (jetFirst) jetTry(jetTime) else NULL
       if (!is.null(e)) groups <- list() else {
         e <- fitOne()
@@ -3688,6 +3714,8 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
         if (is.null(e$vector))
           return(list(support = e$support, type = "general", closedForm = FALSE,
                       reason = "translation-group back-substitution failed"))
+        e$route <- paste0(e$route, ", ", length(groups), " exchange group",
+                          if (length(groups) > 1L) "s")
         .tlog(sprintf("narrow: %d exchange group(s) folded back (%s)", length(groups),
                       paste(vapply(groups, function(g) paste(leafNamesAug[c(g$rep, g$members)],
                         collapse = if (identical(g$type, "mul")) "*" else "+"), ""),
@@ -3808,6 +3836,13 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
                   reason = paste("a closed form was reconstructed but failed",
                                  "verification at a fresh prime"))
       }
+      if (isTRUE(e$closedForm)) {
+        e$route <- paste0(if (isTRUE(perPrime)) "fit per prime"
+                          else if (isTRUE(fastOnly)) "read-off" else "fit",
+                          if (logCoords) " in log coordinates",
+                          if (!is.null(e$fitHow)) paste0(" (", e$fitHow, ")"))
+        e$fitHow <- NULL
+      }
       if (isTRUE(e$closedForm) && length(recast) && !is.null(sd))
         e$vector <- .symRecastBacksub(e$vector, recast, sd)
       if (isTRUE(e$closedForm) && length(multi$expBack$names) && !is.null(sd)) {
@@ -3921,6 +3956,7 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
         if (length(fwdClosed) == length(residualFree) && length(fwdClosed)) {
           interp <- lapply(fwdClosed, function(e) {
             if (length(recast)) e$vector <- .symRecastBacksub(e$vector, recast, sd)
+            e$route <- "forward fit per prime"
             e })
           .tlog(sprintf("forward-multi closed %d residual direction(s)", length(fwdClosed)))
         }
@@ -4750,7 +4786,7 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
     entries[[znames[f + 1L]]] <- "1"
     return(list(poolNext = poolNext,
                 entry = list(support = .symSort(names(entries)), vector = entries,
-                             type = "general", closedForm = TRUE)))
+                             type = "general", closedForm = TRUE, fitHow = "constant")))
   }
 
   # pinned support: read Laurent-monomial entries (eta = -nhill) off the base point and
@@ -4848,22 +4884,27 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
   # reconstruct each entry over its own relevant variables: a constant from the
   # base point, a narrow entry by the dense fit, a wide one by sparse Laurent
   entries <- list()
+  how <- character(0)          # how each entry was fitted, for the direction's route
   for (i in seq_along(supportCols)) {
     reli <- relByEntry[[i]]
     if (!length(reli)) {
       e <- constEntry(supportCols[i])
       if (is.null(e)) return(fallback("a constant entry could not be lifted from its residues"))
       entries[[znames[supportCols[i] + 1L]]] <- e
+      how <- c(how, "constant")
       next
     }
     if (length(reli) > ctrl$relevanceCap) {
       # single-monomial denominator (Laurent) first, then a general denominator
       e <- .symSparseEntry(reli, supportCols[i], f, point0, leafNames, NtUsed,
                              kcall, pivots, residueFn, ctrl, zSlots, kbatch)
-      if (is.null(e))
+      how <- c(how, "sparse Laurent")
+      if (is.null(e)) {
         e <- .symGeneralRationalEntry(reli, supportCols[i], f, point0,
                                          leafNames, NtUsed, kcall, pivots,
                                          residueFn, ctrl, zSlots, kbatch)
+        how[length(how)] <- "sparse rational"
+      }
       if (is.null(e) && .symExpired(ctrl)) return(fallback(timedOut))
       if (is.null(e)) return(fallback(sprintf(
         paste("an entry couples %d variables and the sparse fit hit its caps",
@@ -4897,12 +4938,14 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
     expr <- if (denStr == "1") numStr else paste0("(", numStr, ")/(", denStr, ")")
     if (!is.null(spy)) expr <- .symSimplify(expr, spy)
     entries[[znames[supportCols[i] + 1L]]] <- expr
+    how <- c(how, "dense")
   }
 
   entries[[znames[f + 1L]]] <- "1"
   list(poolNext = poolNext,
        entry = list(support = .symSort(names(entries)), vector = entries,
-                    type = "general", closedForm = TRUE))
+                    type = "general", closedForm = TRUE,
+                    fitHow = paste(unique(how), collapse = ", ")))
 }
 
 
@@ -5237,7 +5280,8 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
 # Print the directions grouped by class under a legend, each a label line with notes
 # and its component table. Verbose adds the finite transformation and the reason a
 # closed form was missed.
-.symCatGenerators <- function(object, verbose = FALSE, width = getOption("width")) {
+.symCatGenerators <- function(object, verbose = FALSE, width = getOption("width"),
+                              showRoute = FALSE) {
   o <- .symOrdered(object)
   if (!length(o$syms)) return(invisible())
   cat("Generators  X = \u03a3\u1d62 \u03b7(i) \u2202\u1d62\n\n")
@@ -5258,6 +5302,9 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
     }
     cat(sub(" +$", "", paste0(lab, notes)), "\n", sep = "")
     cat(.symFormatGenerator(.symShown(d), ind, width), sep = "\n")
+    # summary(): how the closed form was obtained (jets, narrow or full-width fit)
+    if (isTRUE(showRoute) && !is.null(d$route) && !identical(d$type, "scaling"))
+      cat(ind, "closed form: ", d$route, "\n", sep = "")
     cat("\n")
     if (isTRUE(verbose) && !is.null(d$transformation)) {
       tr <- d$transformation
@@ -5375,7 +5422,7 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
                 .symPlural(n, "polynomial Lie-symmetry generator",
                             "polynomial Lie-symmetry generators")))
   }
-  .symCatGenerators(object, verbose, width)
+  .symCatGenerators(object, verbose, width, showRoute = isTRUE(fixing))
   # the reduction for summary() or an explicit `fixed`
   if (isTRUE(fixing) || !is.null(fixed)) .symCatReduction(object, fixed, width)
 }
@@ -5407,6 +5454,7 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
     # explicit iff a full generator exists, whichever engine produced it
     explicit       = !is.null(gen),
     reason         = d$reason,
+    route          = d$route,
     certified      = isTRUE(d$certified),
     transformation = d$transformation,
     verified       = if (is.null(d$verified)) NA else isTRUE(d$verified)
