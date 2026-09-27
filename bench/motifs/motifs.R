@@ -126,6 +126,14 @@
 .motifs$route3 <- function() .routes(3)
 .motifs$route4 <- function() .routes(4)
 
+# ---- free Hill exponent (power recast path) ------------------------------------------
+# a cascade with a Hill step of free exponent n; the readout scale and the unobserved
+# activator amount trade off against K along a curved, n-weighted direction
+.motifs$hillfree <- function() {
+  f <- eqnvec(u = "-ku*u", x = "V*u^n/(K^n + u^n) - d*x", y2 = "kt*x - d2*y2")
+  list(f = f, g = eqnvec(obs = "s*y2"), trafo = eqnvec(u = "u0", x = "0", y2 = "0"))
+}
+
 # ---- Hill-type production with an unobserved activator ------------------------------
 .motifs$hill <- function() {
   f <- eqnvec(u = "-ku*u", x = "V*u^2/(K^2 + u^2) - d*x", y2 = "kt*x - d2*y2")

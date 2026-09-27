@@ -74,6 +74,8 @@ Switches: `DMOD_SYM_NOCAP`, `DMOD_SYM_NOJOINTCAP`, `DMOD_SYM_NOPOINTBATCH`, `DMO
    such a certificate) instead of "unknown".
 
 ### WP2 detection: jets instead of full kernels
+M011 small, step 3 (gauge fixed): 0.8.1 still reconstructing after 30 min (full-width relevance
+probe alone 266 s); now 94 s on 2 of 121 columns.
 1. ✅ Narrow kernel for the minimal-support / free-column residual directions; ✅ translation
    groups on it.
 2. ✅ Closed form from jets (`jetGenerator`): m-1 lowest-order jets with independent
@@ -89,6 +91,22 @@ Switches: `DMOD_SYM_NOCAP`, `DMOD_SYM_NOJOINTCAP`, `DMOD_SYM_NOPOINTBATCH`, `DMO
 2. Lie multiplier stage: scaling symmetries of X itself (integer kernel over the exponents of
    its components) and generators with [X, Y] ∈ span(X) give 1/det(X, Y) as the integrating
    factor of Stage 5, and invariants Y(I) from a found I.
+
+### WP5 next: step 1 on large models
+Profile of M011 step 1 (rank and scalings, 10 min on 8 cores): 79 % in the chain kernel
+`symObsNullChain`, of which the per-block Lie-order scans (`saturateNt`/`scanNt`, one
+single-threaded call per order and block, each rebuilding the jets from order 0) take about
+half and the joint cap (`capRank`) and cross-prime checks most of the rest; 18 % in the
+Python scaling detection; 2 % in the tape compile. Candidates:
+1. A rank profile per order from one kernel call per block. Only exact where the rows of an
+   order do not depend on the propagation order (no later segments, or Mtot = 0 with the
+   same promotion), so it has to keep the certificate's filtration: needs care.
+2. ✅ Block scans in parallel, each from order 1 (forked, plain and recast paths), and the
+   joint cap by bisection over the levels: M011 step 1 10.3 → 8.2 min on a loaded machine,
+   block scans 387 s → 47 s, same rank and directions. Left: the stacked calls (cap
+   bisection, cross-prime checks, guard) and the scaling detection (20 %).
+3. The scaling detection on the condition regimes: one lattice per distinct regime is
+   already cached; profile the remaining Python time.
 
 ### WP4 evidence and hygiene
 1. Motif table above kept current; every reduced motif re-detected identifiable.

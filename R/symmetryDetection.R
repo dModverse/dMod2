@@ -2165,7 +2165,7 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
 .symSaturateCertify <- function(kcall, nLeaves, nz, maxM = 0L,
                                 warm = function(pts, primes) invisible(),
                                 probeBlock = 1L, blockCall = NULL,
-                                budget = NA_integer_) {
+                                budget = NA_integer_, blockMap = NULL) {
   P <- .symPrimes[1]
   pool <- .symPool()
   point0 <- pool(seq_len(nLeaves))
@@ -2226,6 +2226,15 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
   saturateNt <- function(point, Mtot) {
     if (!perBlock) return(scanNt(kcall, point, Mtot, 1L, needUsed, "stacked"))
     orders <- integer(length(blockCall)); Nt <- 1L; driver <- 1L
+    if (!is.null(blockMap)) {
+      # every block's filtration from order 1, the blocks in parallel: the same
+      # plateau per block the certificate counts, and each block's own order
+      sbs <- blockMap(seq_along(blockCall), function(bi)
+        scanNt(blockCall[[bi]], point, Mtot, 1L, needUsed, paste0("block ", bi)))
+      if (any(vapply(sbs, is.null, logical(1)))) return(NULL)
+      orders <- vapply(sbs, function(sb) as.integer(sb$grew), integer(1))
+      Nt <- max(1L, orders); driver <- which.max(orders)
+    } else
     for (bi in seq_along(blockCall)) {
       sb <- scanNt(blockCall[[bi]], point, Mtot, Nt, needUsed, paste0("block ", bi))
       if (is.null(sb)) return(NULL)
@@ -3217,9 +3226,17 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
   satBudget <- if (hasGaps || is.na(codimSpec)) NA_integer_
                else as.integer(codimSpec) + 2L * length(recast) +
                     as.integer(if (is.null(multi$expCodim)) 0L else multi$expCodim)
+  # the per-block scans fork across the blocks on the plain and recast paths (no
+  # steady-state solves in the block calls); DMOD_SYM_SERIALBLOCKS keeps them serial
+  blockMap <- if (!ssConstraint && coresGLp > 1L && .Platform$OS.type == "unix" &&
+                  length(blockCall) > 1L && !nzchar(Sys.getenv("DMOD_SYM_SERIALBLOCKS")))
+    function(xs, f) lapply(parallel::mclapply(xs, f, mc.cores = coresGLp,
+                                              mc.preschedule = FALSE),
+                           function(o) if (inherits(o, "try-error")) NULL else o)
   sc <- .symSaturateCertify(kcall4, nAug, nz, maxM, warm = warmProbe,
                             probeBlock = max(1L, min(8L, coresGLp)),
-                            blockCall = blockCall, budget = satBudget)
+                            blockCall = blockCall, budget = satBudget,
+                            blockMap = blockMap)
   if (is.null(sc)) {
     if (ssConstraint && !is.null(ssWhy))
       warning("symmetryDetection(): no steady-state point over the finite field ",
@@ -3244,12 +3261,20 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
       if (is.null(r) || !isTRUE(r$ok)) NA_real_ else as.numeric(.symRankScore(r))
     }
     ref <- capRank()
+    # lowering the top j levels to the (j+1)-th can only lower the rank, so the
+    # deepest step that keeps it is found by bisection over j (log2 of the levels in
+    # kernel calls instead of one per level)
     levels <- sort(unique(NtCap), decreasing = TRUE)
-    while (!is.na(ref) && length(levels) >= 2L) {
-      keep <- NtCap
-      NtCap[NtCap == levels[1]] <- levels[2]
-      if (!identical(capRank(), ref)) { NtCap <- keep; break }
-      levels <- levels[-1]
+    cap0 <- NtCap
+    capAt <- function(j) pmin(cap0, levels[j + 1L])
+    if (!is.na(ref) && length(levels) >= 2L) {
+      lo <- 0L; hi <- length(levels) - 1L          # step lo keeps the rank
+      while (lo < hi) {
+        mid <- (lo + hi + 1L) %/% 2L
+        NtCap <- capAt(mid)
+        if (identical(capRank(), ref)) lo <- mid else hi <- mid - 1L
+      }
+      NtCap <- if (lo > 0L) capAt(lo) else cap0
     }
     if (nzchar(Sys.getenv("DMOD_SYM_LIEDIAG")))
       message("[liediag] joint block Lie orders: ", paste(NtCap, collapse = ","))

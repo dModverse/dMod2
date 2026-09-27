@@ -25,6 +25,9 @@
 * `symmetryDetection()` accepts a per-condition `g` list named by condition; it
   reached Python as a dictionary and failed in the log chart (all TGFbModelling
   models M001 to M009 stopped there).
+* `symmetryDetection()` scans the Lie order of the conditions in parallel, each from
+  order 1, and finds the joint cap by bisection: step 1 on TGFbModelling M011
+  10.3 -> 8.2 min with the same result. `DMOD_SYM_SERIALBLOCKS` keeps the scans serial.
 * `symmetryDetection()` no longer spends minutes simplifying the complete
   generator or classifying a direction whose entries hold a power of a wide sum.
 * `symmetryReduction()` tries face sections first: `r` coordinates of a curved
