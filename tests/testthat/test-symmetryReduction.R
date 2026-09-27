@@ -109,20 +109,28 @@ test_that("curved polynomial invariant: solved and identifiable end-to-end", {
 })
 
 
-test_that("overlapping scaling and curved directions merge into one block", {
+test_that("a scaling overlapping a curved direction is gauged outside its support", {
   if (!.sympy_works()) skip("reticulate/sympy not available")
   f <- eqnvec(A = "-k1*A + k2*B", B = "k1*A - k2*B")
   g <- eqnvec(y = "alpha*A")
   res <- symdet2(f, g, method = "observability", reconstruct = TRUE)
 
-  # the scaling (A, B, alpha) shares B with the general direction, so the two are
-  # gauged together instead of through the weight lattice. The grouping is asserted
-  # with the search caps switched off; solving the joint invariant set over all five
-  # coordinates is the slow free path (see the opt-in test below).
-  merged <- redquiet(res, dPoly = 0L, dDarboux = 0L, dExp = 0L)
-  expect_length(merged$blocks, 1L)
-  expect_identical(merged$blocks[[1]]$type, "curved")
-  expect_length(merged$blocks[[1]]$labels, 2L)   # both directions, one block
+  # the scaling (A, B, alpha) shares B with the general direction; it is pinned on a
+  # coordinate the general direction does not move, which is then tangent to the
+  # section, so the two are gauged in separate blocks (the search caps switched off
+  # leave the curved block open, the grouping does not depend on them)
+  split <- redquiet(res, dPoly = 0L, dDarboux = 0L, dExp = 0L)
+  types <- vapply(split$blocks, `[[`, character(1), "type")
+  expect_setequal(types, c("scaling", "curved"))
+  sb <- split$blocks[[which(types == "scaling")]]
+  cb <- split$blocks[[which(types == "curved")]]
+  expect_identical(sb$status, "reduced")
+  expect_false(any(names(sb$pins) %in% cb$support))
+  expect_length(cb$labels, 1L)
+  # with the default caps both reduce, and the reduced model is identifiable
+  red0 <- redquiet(res)
+  expect_length(red0$remaining, 0L)
+  expect_true(symdet2(f, g, method = "observability", trafo = red0$trafo)$identifiable)
 
   # pre-gauging the readout leaves one curved direction, which reduces end-to-end
   red <- redquiet(res, fixed = "alpha")
@@ -295,19 +303,19 @@ test_that("EGF/MEK/ERK cascade: all four directions reduced end-to-end", {
   egf <- symdet2(reactions, observables, method = "observability",
                  reduceCQ = FALSE, reconstruct = TRUE)
   red <- redquiet(egf)
-  # two clean unit scalings plus the receptor scaling merged with the rational
-  # confounder into one curved block
+  # three unit scalings, each pinned on a coordinate the rational confounder does not
+  # move, and the confounder alone in its curved block
   types <- vapply(red$blocks, `[[`, character(1), "type")
-  expect_identical(sort(types), c("curved", "scaling", "scaling"))
+  expect_identical(sort(types), c("curved", "scaling", "scaling", "scaling"))
   cb <- red$blocks[[which(types == "curved")]]
-  expect_length(cb$labels, 2L)
-  expect_length(cb$invariants, 4L)
-  # the confounder invariant totalEGF*totalEGFR/EGF_EGFR^2 is among them
+  expect_length(cb$labels, 1L)
+  expect_length(cb$invariants, 2L)
+  # on the section EGF_EGFR = 1 the confounder invariant (EGF + EGF_EGFR)*(EGFR +
+  # EGF_EGFR)/EGF_EGFR^2 reads (EGF + 1)*(EGFR + 1), up to the constant
   expect_true(any(vapply(cb$invariants, function(iv) .symExprEqual(
-    gsub("\\^", "**", iv),
-    "(EGF + EGF_EGFR)*(EGFR + EGF_EGFR)/EGF_EGFR**2"), logical(1))))
+    gsub("\\^", "**", iv), "EGF*EGFR + EGF + EGFR"), logical(1))))
 
-  # the invariants obey sharp mutual bounds: a positive chart requires offsets
+  # the invariants obey a sharp mutual bound: a positive chart requires an offset
   expect_identical(cb$status, "reduced")
   expect_length(red$remaining, 0L)
   expect_true(any(grepl("carrier offset", cb$certificates)))
@@ -963,4 +971,61 @@ test_that("a scaling with symbolic weights is reduced in log coordinates", {
   red <- redquiet(r)
   expect_length(red$remaining, 0L)
   expect_true(symdet2(f, eqnvec(y = "x1"), trafo = red$trafo)$identifiable)
+})
+
+
+test_that("carriers are matched, not picked greedily: k3*ka, k4*kb, ka + kb", {
+  if (!.sympy_works()) skip("reticulate/sympy not available")
+  # two unobserved routes into one observed state; the greedy pick gave ka and kb to
+  # the products and left the sum without a carrier
+  f <- eqnvec(A = "-(ka + kb)*A", B1 = "ka*A - k1*B1", B2 = "kb*A - k2*B2",
+              C = "k3*B1 + k4*B2 - kc*C")
+  tr <- eqnvec(A = "A0", B1 = "0", B2 = "0", C = "0")
+  res <- symdet2(f, eqnvec(y = "C"), trafo = tr, fixed = "A0", reconstruct = TRUE)
+  red <- redquiet(res)
+  expect_length(red$remaining, 0L)
+  tr2 <- tr
+  tr2 <- do.call(eqnvec, as.list(c(tr, red$trafo)))
+  expect_true(symdet2(f, eqnvec(y = "C"), trafo = tr2, fixed = "A0")$identifiable)
+})
+
+
+test_that("a face section switches leaks off: catenary compartments", {
+  if (!.sympy_works()) skip("reticulate/sympy not available")
+  # three compartments in a chain, leaks from all, dose and readout in the first:
+  # two curved directions; every orbit reaches two leaks at zero
+  f <- eqnvec(x1 = "-(k01 + kf1)*x1 + kb1*x2",
+              x2 = "-(k02 + kf2 + kb1)*x2 + kf1*x1 + kb2*x3",
+              x3 = "-(k03 + kb2)*x3 + kf2*x2")
+  tr <- eqnvec(x1 = "D", x2 = "0", x3 = "0")
+  res <- symdet2(f, eqnvec(y = "x1"), trafo = tr, reconstruct = TRUE)
+  expect_length(res$symmetries, 2L)
+  t0 <- Sys.time()
+  red <- redquiet(res)
+  expect_lt(as.numeric(Sys.time() - t0, units = "secs"), 60)
+  expect_length(red$remaining, 0L)
+  zeros <- names(red$trafo)[red$trafo == "0"]
+  expect_length(zeros, 2L)
+  expect_true(all(zeros %in% c("k01", "k02", "k03")))
+  b <- Filter(function(b) identical(b$type, "curved"), red$blocks)[[1]]
+  expect_true(any(grepl("face section", b$certificates)))
+  tr2 <- do.call(eqnvec, as.list(c(tr, red$trafo[setdiff(names(red$trafo), names(tr))])))
+  expect_true(symdet2(f, eqnvec(y = "x1"), trafo = tr2)$identifiable)
+})
+
+
+test_that("no face section through a coordinate that divides in the model", {
+  if (!.sympy_works()) skip("reticulate/sympy not available")
+  spy <- reticulate::import("sympy", convert = TRUE)
+  ns <- asNamespace("dMod2")
+  den <- ns$.symRedDenominatorSyms(c("V*x/(K + x) - d*x", "s*x/vol"), spy)
+  expect_setequal(den, c("K", "x", "vol"))
+  # every coordinate sends an invariant to 0 on its face: no zero set at all
+  b <- list(invariants = c("k1*k2", "k2*k3"), support = c("k1", "k2", "k3"))
+  expect_false(ns$.symRedFaceSection(b, character(0), spy)$solved)
+  # k3 = 0 is reached: k1' = k1*k2/(k2 + k3), k2' = k2 + k3
+  b <- list(invariants = c("k1*k2", "k2 + k3"), support = c("k1", "k2", "k3"))
+  sol <- ns$.symRedFaceSection(b, character(0), spy)
+  expect_true(sol$solved)
+  expect_identical(sol$gauge, "k3")
 })

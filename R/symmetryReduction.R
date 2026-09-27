@@ -122,10 +122,14 @@
 # (deterministic: coordinates entering fewest rows first), the admissible family
 # (full enumeration when small, else the matroid description "one per RREF row,
 # choices independent"), and the survivor meanings z_j * prod_t z_t^{-M_tj}.
-.symRedTransversal <- function(Wres, fixed) {
+.symRedTransversal <- function(Wres, fixed, allowed = NULL) {
   k <- nrow(Wres)
   supp <- colnames(Wres)[colSums(Wres != 0L) > 0L]
   supp <- setdiff(supp, fixed)                     # fixed columns are already pinned
+  # pins restricted to `allowed` (outside every curved support, so the curved
+  # directions stay tangent to the section); the survivors still range over all of supp
+  suppAll <- supp
+  if (!is.null(allowed)) supp <- intersect(supp, allowed)
   out <- list(T = NULL, M = NULL, admissible = NULL, matroid = NULL,
               survivorMeaning = NULL)
   if (!k) return(out)
@@ -157,7 +161,7 @@
       supp[which(ref$R[r, ] != 0)])
   }
   if (!is.null(out$T)) {
-    surv <- setdiff(supp, out$T)
+    surv <- setdiff(suppAll, out$T)
     out$survivorMeaning <- setNames(vapply(surv, function(j) {
       ex <- setNames(integer(length(out$T) + 1L), c(j, out$T))
       ex[j] <- 1L; ex[out$T] <- -out$M[, j]
@@ -170,7 +174,7 @@
 # One scaling block end to end: fixed -> residual space -> invariant lattice ->
 # transversal -> pins. Status: "fixed" (nothing left), "reduced" (certified
 # transversal) or "invariantOnly" (no Laurent transversal; lattice still reported).
-.symRedScalingBlock <- function(W, labels, fixed, sd) {
+.symRedScalingBlock <- function(W, labels, fixed, sd, allowed = NULL) {
   fx <- .symRedScalingFixed(W, fixed, sd)
   Wres <- fx$Wres
   blk <- list(labels = labels, type = "scaling", support = colnames(W)[colSums(W != 0L) > 0L],
@@ -188,7 +192,7 @@
   blk$invExps <- K
   blk$invariants <- if (ncol(K)) vapply(seq_len(ncol(K)), function(j)
     .symRedMonoString(K[, j], blk$support), character(1)) else character(0)
-  tv <- .symRedTransversal(Wres, fixed)
+  tv <- .symRedTransversal(Wres, fixed, allowed)
   blk$transversal <- tv$T
   blk$admissible <- tv$admissible
   blk$matroid <- tv$matroid
@@ -2286,6 +2290,164 @@
 # emitted; a block whose invariants cannot be solved in that language stays
 # invariantOnly, its invariants still reported. preferReal tries undeclared
 # coordinates first, whose entries need no sign certificate.
+# The denominators of the model (f, g, trafo as recorded by symmetryDetection()), as
+# sympy expressions: a face section may not make one of them vanish identically.
+.symRedModelDenominators <- function(exprs, spy) {
+  if (!length(exprs)) return(list())
+  exprs <- gsub("\\^", "**", exprs)
+  locals <- .symRedLocals(exprs, spy)
+  out <- list()
+  for (x in exprs) {
+    den <- tryCatch(spy$fraction(spy$together(.symRedSympify(x, spy, locals)))[[2]],
+                    error = function(e) NULL)
+    if (is.null(den) || !length(.symRedFreeSyms(den))) next
+    for (fct in .symRedIter(spy$factor_list(den)[[2]], function(fm)
+      if (is.list(fm)) fm[[1]] else reticulate::py_get_item(fm, 0L)))
+      out[[length(out) + 1L]] <- fct
+  }
+  keys <- vapply(out, function(e) as.character(e), character(1))
+  out[!duplicated(keys)]
+}
+
+# Coordinates in some denominator (for reports and tests)
+.symRedDenominatorSyms <- function(exprs, spy)
+  unique(unlist(lapply(.symRedModelDenominators(exprs, spy), .symRedFreeSyms)))
+
+# Face section of a curved block: pin r = |support| - #invariants coordinates Z to 0
+# and keep every other coordinate as it is. It is a global chart when every orbit of
+# the positive orthant reaches the face with all other coordinates positive: the
+# face point is the solution z' of I(z') = I(z), z'_Z = 0, and each solved entry,
+# composed into the ORIGINAL coordinates, is certified positive on the whole
+# orthant. For a linear compartment model this is "switch every leak but one off".
+# Rational invariants only; Z must be declared positive (its face is a boundary of
+# the domain) and must not divide anywhere in the model. Returns the fields
+# .symRedSolveInvariants() returns, solved = FALSE when no Z certifies.
+.symRedFaceSection <- function(b, pins, spy, dens = list(), maxSets = 200L) {
+  out <- list(solved = FALSE)
+  if (!length(b$invariants) || any(grepl("exp\\(|log\\(", b$invariants)))
+    return(out)
+  supp <- b$support
+  r <- length(supp) - length(b$invariants)
+  if (r < 1L || (!is.null(b$target) && length(b$invariants) < b$target)) return(out)
+  zCand <- setdiff(supp, names(pins))
+  if (!is.null(.symPositive())) zCand <- intersect(zCand, .symPositive())
+  if (length(zCand) < r) return(out)
+  locals <- .symRedLocals(c(b$invariants, supp, names(pins), unlist(pins),
+                            paste0(supp, "_dModF")), spy)
+  Ies <- lapply(b$invariants, function(iv)
+    tryCatch(.symRedSympify(gsub("\\^", "**", iv), spy, locals), error = function(e) NULL))
+  if (any(vapply(Ies, is.null, logical(1)))) return(out)
+  pinPairs <- lapply(names(pins), function(nm)
+    reticulate::tuple(spy$Symbol(nm), .symRedSympify(pins[[nm]], spy, locals)))
+  if (length(pinPairs)) Ies <- lapply(Ies, function(e) e$subs(pinPairs))
+  # A single coordinate that sends an invariant to 0 or to a pole on its face can be
+  # in no zero set: the face would carry an invariant value no positive point has
+  # (k1*k2 on k1 = 0). Cheap, one substitution per coordinate and invariant.
+  zeroOK <- vapply(zCand, function(v) {
+    sub <- list(reticulate::tuple(spy$Symbol(v), spy$Integer(0L)))
+    all(vapply(Ies, function(Ie) {
+      e <- tryCatch(spy$cancel(Ie$subs(sub)), error = function(err) NULL)
+      !is.null(e) && !isTRUE(e$is_zero) && !isTRUE(e$has(spy$zoo, spy$nan, spy$oo))
+    }, logical(1)))
+  }, logical(1))
+  zCand <- zCand[zeroOK]
+  if (length(zCand) < r) return(out)
+  # prefer pinning parameters: znames order states first, so the end of the support
+  sets <- .symRedFirstSubsets(length(zCand), r, maxSets)
+  zOrd <- rev(zCand)
+  for (s in sets) {
+    Z <- zOrd[s]
+    # jointly: the whole zero set may still kill an invariant (k1 + k2 on both)
+    subZ <- lapply(Z, function(v) reticulate::tuple(spy$Symbol(v), spy$Integer(0L)))
+    if (!all(vapply(Ies, function(Ie) {
+      e <- tryCatch(spy$cancel(Ie$subs(subZ)), error = function(err) NULL)
+      !is.null(e) && !isTRUE(e$is_zero) && !isTRUE(e$has(spy$zoo, spy$nan, spy$oo))
+    }, logical(1)))) next
+    # the model stays defined on the face: no denominator vanishes identically there
+    if (!all(vapply(dens, function(d) {
+      e <- tryCatch(spy$expand(d$subs(subZ)), error = function(err) NULL)
+      !is.null(e) && !isTRUE(e$is_zero)
+    }, logical(1)))) next
+    U <- setdiff(supp, Z)
+    face <- c(lapply(Z, function(v) reticulate::tuple(spy$Symbol(v), spy$Integer(0L))),
+              lapply(U, function(v) reticulate::tuple(spy$Symbol(v),
+                                                        spy$Symbol(paste0(v, "_dModF")))))
+    eqs <- list(); okZ <- TRUE
+    for (Ie in Ies) {
+      Ief <- tryCatch(spy$together(Ie$subs(face)), error = function(e) NULL)
+      if (is.null(Ief) || isTRUE(Ief$has(spy$zoo, spy$nan, spy$oo))) { okZ <- FALSE; break }
+      eqs[[length(eqs) + 1L]] <- spy$together(Ief - Ie)
+    }
+    if (!okZ) next
+    brs <- .symRedTriSolve(eqs, paste0(U, "_dModF"), spy)
+    # Every orbit must cross the face exactly once: one branch certified positive,
+    # every other one certified to leave the domain (an entry negative or undefined).
+    # A second admissible branch makes the chart finite-to-one, an undecided one
+    # leaves that open; both reject Z.
+    good <- NULL; nOpen <- 0L
+    for (br in brs) {
+      if (length(br) < length(U)) next
+      vals <- lapply(paste0(U, "_dModF"), function(v) spy$cancel(br[[v]]))
+      if (any(vapply(vals, function(e) isTRUE(e$has(spy$zoo, spy$nan, spy$oo)) ||
+                       any(grepl("_dModF$", .symRedFreeSyms(e))), logical(1)))) next
+      # the branch solves every equation, denominators included
+      back <- lapply(seq_along(U), function(i)
+        reticulate::tuple(spy$Symbol(paste0(U[i], "_dModF")), vals[[i]]))
+      if (!all(vapply(eqs, function(e) {
+        fr <- tryCatch(spy$fraction(spy$together(e$subs(back))), error = function(err) NULL)
+        !is.null(fr) && isTRUE(spy$cancel(fr[[1]])$is_zero) &&
+          !isTRUE(spy$cancel(fr[[2]])$is_zero)
+      }, logical(1)))) next
+      sg <- vapply(vals, function(e) .symRedSgn(e, spy), integer(1))
+      if (any(sg == -1L)) next
+      if (all(sg == 1L) && is.null(good)) good <- vals else nOpen <- nOpen + 1L
+    }
+    if (is.null(good) || nOpen > 0L) next
+    # and the kept branch fixes the face pointwise (a face point is its own image)
+    idFace <- all(vapply(seq_along(U), function(i) {
+      e <- tryCatch(spy$cancel(good[[i]]$subs(subZ) - spy$Symbol(U[i])),
+                    error = function(err) NULL)
+      !is.null(e) && isTRUE(e$is_zero)
+    }, logical(1)))
+    if (!idFace) next
+    vals <- good
+    {
+      res <- out
+      res$solved <- TRUE
+      res$pins <- setNames(rep("0", length(Z)), Z)
+      res$gauge <- Z
+      res$section <- paste(Z, "= 0")
+      res$face <- TRUE
+      res$coverage <- "total"
+      res$carrierDomain <- setNames(character(0), character(0))
+      res$invNames <- character(0)
+      res$shifted <- character(0)
+      res$meaning <- setNames(vapply(vals, function(e)
+        gsub("\\*\\*", "^", as.character(spy$factor(e))), character(1)), U)
+      return(res)
+    }
+  }
+  out
+}
+
+# A system of distinct representatives: one carrier per invariant from its admissible
+# list, each list in preference order. Depth-first, so the first matching found is
+# the one the greedy pick would give wherever that pick leaves every later invariant
+# a carrier. NULL when no matching exists.
+.symRedMatchCarriers <- function(adm) {
+  n <- length(adm)
+  pick <- character(n)
+  go <- function(l, used) {
+    if (l > n) return(TRUE)
+    for (v in setdiff(adm[[l]], used)) {
+      pick[l] <<- v
+      if (go(l + 1L, c(used, v))) return(TRUE)
+    }
+    FALSE
+  }
+  if (go(1L, character(0))) pick else NULL
+}
+
 .symRedSolveInvariants <- function(b, pins, spy, coords = character(0),
                                    invStart = 0L, preferReal = FALSE) {
   out <- list(pins = NULL, meaning = NULL, solved = FALSE)
@@ -2323,9 +2485,13 @@
   # One carrier per invariant that no other invariant has claimed. Candidates are
   # tried from the END of the coordinate list first: znames orders states before
   # parameters, and states are better left to the gauge pins, which are constants.
-  used <- character(0); carriers <- character(0)
-  for (Ie in Ies) {
-    cand <- setdiff(b$support, used)
+  # The admissible carriers of every invariant are collected first and matched by
+  # backtracking: a greedy pick can take the only carrier a later invariant has
+  # (k3*ka, k4*kb, ka + kb: ka and kb to the products leave the sum without one).
+  adm <- vector("list", length(Ies))
+  for (l in seq_along(Ies)) {
+    Ie <- Ies[[l]]
+    cand <- b$support
     if (length(coords)) cand <- cand[order(-match(cand, coords, nomatch = 0L))]
     if (preferReal) cand <- cand[order(cand %in% .symPositive())]
     expA <- tryCatch(.symRedIter(Ie$atoms(spy$exp), function(a) a),
@@ -2348,20 +2514,18 @@
       length(setdiff(unique(c(dn, dd)), 0L)) == 1L
     }
     fracG <- if (!is.null(G)) spy$fraction(spy$cancel(spy$together(G)))
-    pick <- NA_character_
-    for (v in cand) {
+    ok <- vapply(cand, function(v) {
       if (v %in% gSyms) {
         # log solve: v only inside the exponential; G = log(c) is then a plain
         # rational equation, so the same pure-power test applies to G
-        if (v %in% rSyms) next
-        if (!powerOK(fracG, v)) next
-        pick <- v; break
-      }
-      if (powerOK(fracR, v)) { pick <- v; break }
-    }
-    if (is.na(pick)) return(out)
-    used <- c(used, pick); carriers <- c(carriers, pick)
+        !(v %in% rSyms) && powerOK(fracG, v)
+      } else powerOK(fracR, v)
+    }, logical(1))
+    adm[[l]] <- cand[ok]
+    if (!length(adm[[l]])) return(out)
   }
+  carriers <- .symRedMatchCarriers(adm)
+  if (is.null(carriers)) return(out)
   # joint solve of I_l = tmp_l for the carriers; tmp_l renamed to the carrier name
   # afterwards (the equation cannot hold the same symbol in both meanings)
   tmpN <- paste0("dModRedC", seq_along(Ies))
@@ -2397,6 +2561,10 @@
       keepSets <- c(keepSets, lapply(seq_len(ncol(cm)), function(j) cm[, j]))
     }
   if (length(gaugeAll) <= 2L) keepSets <- c(keepSets, list(gaugeAll))
+  # more than two gauge coordinates: the whole gauge set first, for the equal-share
+  # sections of a sum invariant (every summand the same share of it)
+  if (length(gaugeAll) > 2L && length(gPos) == length(gaugeAll))
+    keepSets <- c(list(gaugeAll), keepSets)
   keepSets <- unique(keepSets)
   # pins: 0 for a real coordinate, which must reach it on every orbit, 1 else
   pinVal <- function(v) if (.symRedIsReal(v)) "0" else "1"
@@ -2417,8 +2585,7 @@
   pin1 <- lapply(pinned1, function(v) reticulate::tuple(spy$Symbol(v),
                                                         spy$Integer(as.integer(pinVal(v)))))
   eqs <- if (length(pin1)) lapply(eqsIn, function(e) e$subs(pin1)) else eqsIn
-  if (length(gauge0) >= 1L && length(gauge0) <= 2L &&
-      !any(grepl("exp(", b$invariants, fixed = TRUE))) {
+  if (length(gauge0) >= 1L && !any(grepl("exp(", b$invariants, fixed = TRUE))) {
     scalPinPairs <- lapply(names(pins), function(nm)
       reticulate::tuple(spy$Symbol(nm), .symRedSympify(pins[[nm]], spy, locals)))
     allUnk <- c(carriers, gauge0)
@@ -2429,8 +2596,15 @@
     invSyms <- unique(unlist(lapply(Ies, .symRedFreeSyms)))
     secVars <- setdiff(.symSort(unique(c(b$support,
       if (length(coords)) intersect(invSyms, coords) else invSyms))), pinned1)
-    cands <- .symRedSectionCands(secVars,
-      lapply(Ies, function(Ie) .symRedInvSummands(Ie, spy)))
+    summands <- lapply(Ies, function(Ie) .symRedInvSummands(Ie, spy))
+    # r > 2 gauge coordinates: only the equal-share balances s_1 = s_j of a sum
+    # invariant with exactly r + 1 summands (a chain, one balance per coordinate)
+    shareSets <- if (length(gauge0) > 2L) {
+      lapply(Filter(function(sm) length(sm) == length(gauge0) + 1L, summands),
+             function(sm) lapply(sm[-1], function(sj) c(sm[1], sj)))
+    } else list()
+    cands <- if (length(gauge0) > 2L) unique(unlist(shareSets, recursive = FALSE))
+             else .symRedSectionCands(secVars, summands)
     touches <- function(pr) any(vapply(b$support, function(v)
       grepl(paste0("(?<![0-9A-Za-z_.])", v, "(?![0-9A-Za-z_.])"),
             paste(pr, collapse = " "), perl = TRUE), logical(1)))
@@ -2471,7 +2645,17 @@
       }
       cands <- keep
     }
-    sets <- if (length(gauge0) == 1L) lapply(cands, list)
+    sets <- if (length(gauge0) > 2L) {
+        # every balance of the chain certified monotone, the chain transversal
+        keyOf <- function(pr) paste(pr, collapse = " = ")
+        okKeys <- vapply(cands, keyOf, character(1))
+        Filter(function(st) {
+          ks <- vapply(st, keyOf, character(1))
+          all(ks %in% okKeys) && (is.null(rows) ||
+            ptRank(rows[match(ks, okKeys), , drop = FALSE]) >= length(gauge0))
+        }, shareSets)
+      }
+      else if (length(gauge0) == 1L) lapply(cands, list)
       else if (length(cands) > 1L) {
         cmb <- utils::combn(if (is.null(rows)) min(length(cands), 10L)
                             else length(cands), 2L)
@@ -3590,35 +3774,71 @@ symmetryReduction <- function(object, fixed = NULL, positive = TRUE, dPoly = 3L,
   # scalings join the curved block as generators (xi_i = w_i z_i, polynomial); the
   # scaling stage keeps only the components disjoint from every curved support.
   curvedIdx0 <- setdiff(seq_along(o$syms), wr$rows)
-  curvedSupp <- unique(unlist(lapply(o$syms[curvedIdx0], .symCoords)))
-  scalRows <- seq_len(nrow(wr$W))
-  demoted <- integer(0)
-  if (nrow(wr$W) && length(curvedSupp)) {
-    repeat {                       # transitive closure: demotion can extend the overlap
-      overlaps <- vapply(scalRows, function(r)
-        any(colnames(wr$W)[wr$W[r, ] != 0L] %in% curvedSupp), logical(1))
-      if (!any(overlaps)) break
-      hit <- scalRows[overlaps]
-      demoted <- c(demoted, hit)
-      curvedSupp <- unique(c(curvedSupp,
-        unlist(lapply(hit, function(r) colnames(wr$W)[wr$W[r, ] != 0L]))))
-      scalRows <- setdiff(scalRows, hit)
+  curvedSupp0 <- unique(unlist(lapply(o$syms[curvedIdx0], .symCoords)))
+  # The demotion as a function of the rows allowed to stay scalings: `outside` rows
+  # are gauged on a coordinate outside every curved support (the curved directions
+  # are then tangent to their section, and the pin removes them before the curved
+  # search); every other overlapping row joins the curved block, transitively.
+  demote <- function(outsideOK) {
+    curvedSupp <- curvedSupp0
+    scalRows <- seq_len(nrow(wr$W))
+    demoted <- integer(0)
+    kept <- integer(0)
+    if (nrow(wr$W) && length(curvedSupp)) {
+      repeat {                     # transitive closure: demotion can extend the overlap
+        overlaps <- vapply(scalRows, function(r)
+          any(colnames(wr$W)[wr$W[r, ] != 0L] %in% curvedSupp), logical(1))
+        if (!any(overlaps)) break
+        hit <- scalRows[overlaps]
+        keep <- integer(0)
+        if (outsideOK) {
+          # a maximal set of overlapping rows independent on the columns outside
+          out <- setdiff(colnames(wr$W), curvedSupp)
+          acc <- wr$W[integer(0), out, drop = FALSE]
+          for (r in hit) {
+            aug <- rbind(acc, wr$W[r, out])
+            if (length(out) && .symRedRankModP(t(aug)) > nrow(acc)) {
+              acc <- aug; keep <- c(keep, r)
+            }
+          }
+        }
+        down <- setdiff(hit, keep)
+        if (!length(down)) { kept <- union(kept, keep); break }
+        demoted <- c(demoted, down)
+        curvedSupp <- unique(c(curvedSupp,
+          unlist(lapply(down, function(r) colnames(wr$W)[wr$W[r, ] != 0L]))))
+        scalRows <- setdiff(scalRows, down)
+      }
     }
+    list(scalRows = scalRows, demoted = demoted, curvedSupp = curvedSupp,
+         allowed = if (length(curvedSupp)) setdiff(colnames(wr$W), curvedSupp) else NULL,
+         kept = kept)
   }
-
-  blocks <- list()
-  if (length(scalRows)) {
-    Wk <- wr$W[scalRows, , drop = FALSE]
-    for (cp in .symRedComponents(Wk)) {
-      rows <- scalRows[cp]
-      Wb <- wr$W[rows, colSums(wr$W[rows, , drop = FALSE] != 0L) > 0L, drop = FALSE]
-      if (isTRUE(verbose))
-        message("scaling block {", paste(o$labels[wr$rows[rows]], collapse = ", "),
-                "}: ", nrow(Wb), " direction(s)")
-      blocks[[length(blocks) + 1L]] <-
-        .symRedScalingBlock(Wb, o$labels[wr$rows[rows]], fixed, sd)
+  scalingBlocks <- function(dm) {
+    blocks <- list()
+    if (length(dm$scalRows)) {
+      Wk <- wr$W[dm$scalRows, , drop = FALSE]
+      for (cp in .symRedComponents(Wk)) {
+        rows <- dm$scalRows[cp]
+        Wb <- wr$W[rows, colSums(wr$W[rows, , drop = FALSE] != 0L) > 0L, drop = FALSE]
+        if (isTRUE(verbose))
+          message("scaling block {", paste(o$labels[wr$rows[rows]], collapse = ", "),
+                  "}: ", nrow(Wb), " direction(s)")
+        blocks[[length(blocks) + 1L]] <-
+          .symRedScalingBlock(Wb, o$labels[wr$rows[rows]], fixed, sd, dm$allowed)
+      }
     }
+    blocks
   }
+  dm <- demote(TRUE)
+  blocks <- scalingBlocks(dm)
+  # a scaling gauged outside must actually be reduced; otherwise the old demotion
+  if (length(dm$kept) && any(vapply(blocks, function(b)
+        !identical(b$status, "reduced") && !identical(b$status, "fixed"), logical(1)))) {
+    dm <- demote(FALSE)
+    blocks <- scalingBlocks(dm)
+  }
+  demoted <- dm$demoted
   curvedIdx <- sort(c(curvedIdx0, wr$rows[demoted]))
   # the scaling gauge goes in before the curved search, not only into its solve:
   # every scaling still standing on its own is disjoint from the curved supports,
@@ -3634,10 +3854,18 @@ symmetryReduction <- function(object, fixed = NULL, positive = TRUE, dPoly = 3L,
   blocks <- .symRedVerify(blocks, sd)
 
   invStart <- 0L
+  denSyms <- NULL
   for (bi in seq_along(blocks)) {
     b <- blocks[[bi]]
     if (!identical(b$type, "curved") || !length(b$invariants)) next
     if (!is.null(b$target) && length(b$invariants) < b$target) next  # partial set:
+    # a face section first: cheap, and where it exists it switches rates off instead
+    # of mixing the block into new parameters
+    if (is.null(denSyms))
+      denSyms <- .symRedModelDenominators(object$info$modelExprs, spy)
+    sol <- tryCatch(.symRedFaceSection(b, scalPins, spy, denSyms),
+                    error = function(e) list(solved = FALSE))
+    if (!sol$solved)
     sol <- .symRedSolveInvariants(b, scalPins, spy, coords,     # gauge pin would be lossy
                                   invStart)
     # a carrier outside the declared domain needs no positivity certificate
@@ -3670,7 +3898,12 @@ symmetryReduction <- function(object, fixed = NULL, positive = TRUE, dPoly = 3L,
       blocks[[bi]]$status <- "reduced"
       blocks[[bi]]$certificates <- c(b$certificates,
         "solved exactly: each invariant carried on a fresh q_<k> parameter",
-        if (!is.null(sol$section))
+        if (isTRUE(sol$face))
+          paste0("face section certified: every orbit reaches ",
+                 paste(sol$section, collapse = ", "), " with each other coordinate ",
+                 "positive (the face point, solved from the invariants, is positive ",
+                 "on the whole ", .symDomainName(), ")")
+        else if (!is.null(sol$section))
           "section pre-certified: balance ratio strictly monotone along every orbit",
         if (identical(sol$coverage, "partial"))
           paste0("chart certified for POSITIVE carrier values only: a carrier that ",
