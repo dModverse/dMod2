@@ -254,6 +254,7 @@ symmetryDetection <- function(f = NULL, g = NULL, trafo = NULL,
     res <- .symFinalize(raw, method, .symSettings, .symCall,
                          elapsed = as.numeric(Sys.time() - .symT0, units = "secs"),
                          coordinates = coordinates)
+    res$info$modelExprs <- .symModelExprs
     if (isTRUE(verbose)) print(res)
     invisible(res)
   }
@@ -297,6 +298,12 @@ symmetryDetection <- function(f = NULL, g = NULL, trafo = NULL,
   gChar  <- function() unlist(lapply(gset, as.character), use.names = FALSE)
   gNames <- function() unique(unlist(lapply(gset, names), use.names = FALSE))
   gLines <- function(k = 1L) .symEqnLines(gset[[k]])
+  # the model as given, for symmetryReduction(): a face section may not pin a
+  # coordinate that sits in a denominator of f, g or the trafo
+  .symModelExprs <- unique(c(as.character(fdyn), gChar(),
+    unlist(lapply(if (is.list(trafo) && !inherits(trafo, "eqnvec")) trafo else list(trafo),
+                  function(t) if (is.null(t)) character(0) else as.character(t)),
+           use.names = FALSE)))
   # applies a substitution to the optional model pieces; `fdyn` is handled per pass
   substModel <- function(fn) {
     gset <<- lapply(gset, fn)
@@ -3424,33 +3431,150 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
                       sprintf("fork, %d cores", coresGLp)
                     else sprintf("PSOCK pool, up to %d workers", coresGLp)))
     .tlog(sprintf("start: %d residual direction(s)", length(residualFree)))
-    # Relevance probe shared by all directions: one kernel per one-leaf perturbation,
-    # retried until the pivots match (a pivot shift would mark the leaf relevant everywhere).
     probeNext <- sc$poolNext
-    relProbe <- vector("list", nAug)
-    pending <- seq_len(nAug)
-    if (length(residualFree)) for (att in seq_len(ctrl$probeRetries)) {
-      if (!length(pending) || .symExpired(ctrl)) break
-      perts <- lapply(pending, function(li) {
-        pert <- sc$point0
-        pert[li] <- sc$pool(probeNext + (li - 1L) * ctrl$probeRetries + (att - 1L))
-        pert
-      })
-      # independent per-leaf kernels in one batch
-      cands <- kbatch(perts, rep(P, length(perts)), sc$NtUsed)
-      resolved <- logical(length(pending))
-      for (j in seq_along(pending)) {
-        li <- pending[j]; pert <- perts[[j]]; cand <- cands[[j]]
-        relProbe[[li]] <- list(
-          rp = cand, zvals = if (length(zSlots)) pert[zSlots + 1L] else NULL,
-          pertval = pert[li])
-        if (!is.null(cand) && isTRUE(cand$ok) &&
-            identical(as.integer(cand$pivots), as.integer(sc$pivots)))
-          resolved[j] <- TRUE
-      }
-      pending <- pending[!resolved]
-    }
     poolNext <- probeNext + nAug * ctrl$probeRetries
+    # One-leaf perturbation probe: one kernel per leaf, retried until the pivots match
+    # (a pivot shift would mark the leaf relevant everywhere). `kb` and `piv0` give the
+    # kernel and its reference pivots, so the probe runs on the full or a narrow kernel.
+    runProbe <- function(kb, piv0, first) {
+      rp <- vector("list", nAug)
+      pending <- seq_len(nAug)
+      for (att in seq_len(ctrl$probeRetries)) {
+        if (!length(pending) || .symExpired(ctrl)) break
+        perts <- lapply(pending, function(li) {
+          pert <- sc$point0
+          pert[li] <- sc$pool(first + (li - 1L) * ctrl$probeRetries + (att - 1L))
+          pert
+        })
+        # independent per-leaf kernels in one batch
+        cands <- kb(perts, rep(P, length(perts)), sc$NtUsed)
+        resolved <- logical(length(pending))
+        for (j in seq_along(pending)) {
+          li <- pending[j]; pert <- perts[[j]]; cand <- cands[[j]]
+          rp[[li]] <- list(
+            rp = cand, zvals = if (length(zSlots)) pert[zSlots + 1L] else NULL,
+            pertval = pert[li])
+          if (!is.null(cand) && isTRUE(cand$ok) &&
+              identical(as.integer(cand$pivots), as.integer(piv0)))
+            resolved[j] <- TRUE
+        }
+        pending <- pending[!resolved]
+      }
+      rp
+    }
+
+    # ==== support-restricted reconstruction ========================================
+    # A residual direction in the free-column gauge is the one kernel vector supported
+    # on its support S with entry 1 at the free column: every row of the observability
+    # matrix restricted to S annihilates it, and the restricted rows have rank |S| - 1.
+    # So each sample needs the Lie-derivative gradients along S only: the kernel runs
+    # with dual columns on S (width |S| + 1 instead of nz + 1), and the relevance probe
+    # and the interpolation reuse the free-column machinery through a residue function.
+    # Plain and plain-gap paths; DMOD_SYM_NONARROW switches it off.
+    narrowOK <- !nzchar(Sys.getenv("DMOD_SYM_NONARROW")) &&
+      (canBatch || (hasGaps && !ssConstraint && !jointSS && !recastTransient))
+    narrowOne <- function(bf, anchor) {
+      cols <- which(bf != 0) - 1L                  # 0-based, contains the anchor
+      m <- length(cols)
+      if (m < 2L) return(NULL)
+      zsS <- zSlots[cols + 1L]
+      kbS <- function(pointList, primeVec, Nt) {
+        if (!length(pointList)) return(list())
+        M <- do.call(rbind, lapply(pointList, function(pp)
+          as.integer(pp[seq_len(nLeaves)])))
+        if (hasGaps)
+          symObsNullChainPointBatch(lapply(chainGroups, function(idx) tapes[idx]),
+                                    nLeaves, nStates, zsS, M, as.numeric(primeVec),
+                                    as.integer(Nt), as.integer(MtotUsed), cores, NtCap)
+        else symObsNullBatch(tapes, nLeaves, nStates, zsS, M, as.numeric(primeVec),
+                             as.integer(Nt), cores)
+      }
+      kcS <- function(point, p, Nt) kbS(list(point), p, Nt)[[1]]
+      fpos <- match(anchor, cols)
+      resS <- function(rp, p, zvals = NULL) {
+        if (is.null(rp) || !isTRUE(rp$ok) || rp$rank != m - 1L) return(NULL)
+        piv <- as.integer(rp$pivots) + 1L
+        free <- setdiff(seq_len(m), piv)
+        v <- numeric(m); v[free] <- 1
+        for (ri in seq_along(piv)) v[piv[ri]] <- (p - as.numeric(rp$R[ri, free])) %% p
+        if (v[fpos] == 0) return(NULL)
+        inv <- .symInvmod(v[fpos], p)
+        out <- integer(nz)
+        out[cols + 1L] <- as.integer(vapply(v, function(x) .symMulmod(x, inv, p), numeric(1)))
+        out
+      }
+      attr(resS, "narrow") <- TRUE
+      refS <- kcS(sc$point0, P, sc$NtUsed)
+      base <- resS(refS, P)
+      want <- .symMulmod(as.numeric(bf) %% P, .symInvmod(as.numeric(bf[anchor + 1L]) %% P, P), P)
+      if (is.null(base) || !identical(as.integer(base), as.integer(want))) return(NULL)
+      .tlog(sprintf("narrow dir (anchor %s): support %d of %d columns",
+                    znames[anchor + 1L], m, nz))
+      relS <- runProbe(kbS, refS$pivots, poolNext)
+      poolNext <<- poolNext + nAug * ctrl$probeRetries
+      dir <- .symInterpolateDirection(anchor, refS, refS$pivots, znames, zSlots,
+                                      leafNamesAug, nAug, sc$point0, sc$pool, poolNext,
+                                      sc$NtUsed, kcS, spy, relS, resS, ctrl, kbS,
+                                      auxLeaves = auxLeaves)
+      poolNext <<- dir$poolNext
+      e <- dir$entry
+      e$relevantLeaves <- NULL
+      if (!isTRUE(e$closedForm)) return(e)
+      # a cocircuit normalised at its anchor is a kernel vector, not necessarily the
+      # free-column one: verified by nullspace membership at a fresh point
+      if (!.symVerifyInNullspace(e, anchor, znames, leafNamesAug, sc$point0, sc$NtUsed,
+                                 kcall, sc$pool, poolNext, nz, sd))
+        return(list(support = e$support, type = "general", closedForm = FALSE,
+                    reason = paste("a closed form was reconstructed but failed",
+                                   "verification at a fresh prime")))
+      if (length(multi$expBack$names) && !is.null(sd)) {
+        e$vector <- .symExpBacksub(e$vector, multi$expBack, sd)
+        v <- tryCatch(sd$dropMonomialContent(e$vector), error = function(err) NULL)
+        if (!is.null(v)) e$vector <- lapply(v[names(e$vector)], as.character)
+      }
+      e$narrowVector <- as.integer(bf)
+      e
+    }
+    narrowed <- list()
+    if (narrowOK && length(residualFree)) {
+      # minimal-support representatives first (a cocircuit is the only kernel vector on
+      # its support, so the narrow kernel applies to it as to a free-column vector, and
+      # it separates scalings from the curved directions); free-column vectors for the rest
+      ms0 <- tryCatch(.symMinsupportGauge(residualFree, scalRows, P, nz, sc, freeCols,
+                                          candCap = ctrl$minsupportCandCap),
+                      error = function(e) list())
+      cands <- list()
+      if (length(ms0$vectors))
+        for (gi in seq_len(ncol(ms0$vectors)))
+          cands[[length(cands) + 1L]] <- list(v = ms0$vectors[, gi], anchor = ms0$anchors[gi])
+      for (fc in residualFree)
+        cands[[length(cands) + 1L]] <- list(v = .symNullResidues(sc$ref, fc, P), anchor = fc)
+      span <- if (nrow(scalRows)) t(scalRows) else matrix(0L, nz, 0L)
+      k0 <- ncol(span)
+      for (cd in cands) {
+        if (length(narrowed) >= length(residualFree) || .symExpired(ctrl)) break
+        if (.symInSpan(span, cd$v, nz, P)) next
+        e <- tryCatch(narrowOne(cd$v, cd$anchor), error = function(err) NULL)
+        if (!is.null(e) && isTRUE(e$closedForm)) {
+          narrowed[[length(narrowed) + 1L]] <- e
+          span <- cbind(span, cd$v)
+        }
+      }
+      .tlog(sprintf("narrow: %d of %d closed", length(narrowed), length(residualFree)))
+      # the free columns still standing: a basis completion of the narrowed span
+      keepFree <- integer(0)
+      for (fc in residualFree) {
+        bf <- .symNullResidues(sc$ref, fc, P)
+        if (.symInSpan(span, bf, nz, P)) next
+        keepFree <- c(keepFree, fc); span <- cbind(span, bf)
+      }
+      residualFree <- keepFree
+      for (i in seq_along(narrowed)) narrowed[[i]]$narrowVector <- NULL
+    }
+
+    # Relevance probe shared by the remaining directions, on the full kernel
+    relProbe <- if (length(residualFree)) runProbe(kbatch, sc$pivots, probeNext)
+                else vector("list", nAug)
     .tlog("relevance probe done")
 
     zvals0 <- if (length(zSlots)) sc$point0[zSlots + 1L] else NULL
@@ -3527,8 +3651,9 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
     # peel minimal-support cocircuits that close by the cheap log-coordinate read-off
     # (e.g. a Hill-weighted scaling); only the rest reach the wide free-column fit
     peeled <- list()
-    msPeel <- .symMinsupportGauge(residualFree, scalRows, P, nz, sc, freeCols,
-                                    candCap = ctrl$minsupportCandCap)
+    msPeel <- if (length(residualFree))
+      .symMinsupportGauge(residualFree, scalRows, P, nz, sc, freeCols,
+                          candCap = ctrl$minsupportCandCap) else list()
     if (length(msPeel$anchors) && !is.null(msPeel$vectors)) {
       peelVec <- matrix(0L, nz, 0L)
       for (gi in seq_along(msPeel$anchors)) {
@@ -3555,8 +3680,9 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
 
     # minimal-support gauge over the remaining residual set, in log coordinates;
     # `fastOnly` reads a monomial off the base point and probe without sampling
-    ms <- .symMinsupportGauge(residualFree, scalRows, P, nz, sc, freeCols,
-                                candCap = ctrl$minsupportCandCap)
+    ms <- if (length(residualFree))
+      .symMinsupportGauge(residualFree, scalRows, P, nz, sc, freeCols,
+                          candCap = ctrl$minsupportCandCap) else list()
     msTry <- function(fastOnly) {
       if (length(ms$anchors) != length(residualFree) ||
           all(vapply(ms$residueFns, is.null, logical(1)))) return(NULL)
@@ -3567,7 +3693,7 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
     }
 
     # the no-sampling read-off first; it closes parameter-weighted scalings cheaply
-    interp <- msTry(TRUE)
+    interp <- if (length(residualFree)) msTry(TRUE) else list()
     .tlog(if (is.null(interp)) "ms fastOnly: no close, going dense"
           else "ms fastOnly: all closed")
     if (is.null(interp)) {
@@ -3657,7 +3783,7 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
     .tlog(sprintf("reconstruction done: %d/%d closed",
                   sum(vapply(interp, function(e) isTRUE(e$closedForm), logical(1))),
                   length(interp)))
-    result$nonIdentifiable <- c(scaling, peeled, interp, gapDirs)
+    result$nonIdentifiable <- c(scaling, narrowed, peeled, interp, gapDirs)
   } else {
     support <- lapply(residualFree, function(fc) {
       v <- .symNullResidues(sc$ref, fc, P)
@@ -3946,7 +4072,8 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
                         else residueFn(rp, p, zvals)
   # A pivot-shifted probe is unusable, not proof of relevance. The support-pinned and
   # free-column gauges skip it and rely on verification; canonical/log gauges count it.
-  optimistic <- isTRUE(attr(residueFn, "pinnedSupport")) || is.null(residueFn)
+  optimistic <- isTRUE(attr(residueFn, "pinnedSupport")) || is.null(residueFn) ||
+    isTRUE(attr(residueFn, "narrow"))
   base_nv <- nv(ref, P)
   if (is.null(base_nv)) base_nv <- .symNullResidues(ref, f, P)
   supportCols <- setdiff(which(base_nv != 0) - 1L, f)
