@@ -513,12 +513,13 @@ def _rref_mod_p(A, p):
         if piv != r:
             A[[r, piv]] = A[[piv, r]]
         inv = pow(int(A[r, c]), p - 2, p)
-        A[r] = (A[r] * inv) % p
+        # the pivot row is zero left of c, so the updates start at c
+        A[r, c:] = (A[r, c:] * inv) % p
         col = A[:, c].copy()
         col[r] = 0
         nzr = np.nonzero(col)[0]
         if nzr.size:
-            A[nzr] = (A[nzr] - np.outer(col[nzr], A[r])) % p
+            A[nzr, c:] = (A[nzr, c:] - np.outer(col[nzr], A[r, c:])) % p
         pivots.append(c)
         r += 1
         if r == nrows:
@@ -577,8 +578,17 @@ def _crt_nullspace(reduceModP, ncols):
     free = None
     residues = {}
     mods = []
+    # the first four primes reduce in parallel threads (the eliminations are numpy
+    # array operations, which release the GIL); further primes only on a pivot clash
+    first = list(_PRIMES[:4])
+    try:
+        from concurrent.futures import ThreadPoolExecutor
+        with ThreadPoolExecutor(max_workers=len(first)) as ex:
+            pre = dict(zip(first, ex.map(lambda q: _rref_mod_p(reduceModP(q), q), first)))
+    except Exception:
+        pre = {}
     for p in _PRIMES:
-        R, pivots = _rref_mod_p(reduceModP(p), p)
+        R, pivots = pre[p] if p in pre else _rref_mod_p(reduceModP(p), p)
         if ref_pivots is None:
             ref_pivots = pivots
             pivset = set(pivots)
@@ -4409,7 +4419,40 @@ def _poly_monomials(expr, zvars):
     zset = set(zvars)
     zero = spy.Integer(0)
 
+    zpos = {str(z): i for i, z in enumerate(zvars)}
+
+    def mons_se(poly):
+        # symengine expands a product of sums tens of times faster than sympy; the
+        # terms are read the same way, a coordinate inside anything but a power of
+        # itself is refused
+        import symengine as _se
+        ep = _se.expand(_se.sympify(poly))
+        terms = ep.args if isinstance(ep, _se.Add) else (ep,)
+        out = {}
+        for t in terms:
+            if t == 0:
+                continue
+            a = [zero] * len(zvars)
+            for k, v in t.as_powers_dict().items():
+                ks = str(k)
+                inExp = any(str(fs) in zpos for fs in getattr(v, 'free_symbols', ()))
+                if ks in zpos and not inExp:
+                    a[zpos[ks]] = spy.Rational(str(v))
+                elif inExp or any(str(fs) in zpos
+                                  for fs in getattr(k, 'free_symbols', ())):
+                    # a coordinate in an exponent (exp(x) is E**x here) or inside a
+                    # function
+                    raise ValueError('not a monomial in the coordinates: %s' % t)
+            out[tuple(a)] = None
+        return list(out)
+
     def mons(poly):
+        try:
+            return mons_se(poly)
+        except ValueError:
+            raise
+        except Exception:
+            pass
         out = {}
         for t in spy.Add.make_args(spy.expand(poly)):
             if t == 0:
@@ -4493,12 +4536,16 @@ def _scaling_rows(diffEquations, obsFunctions, m, zvars, interOffset, logs=False
         exprs.append((pmon, qmon, tvec))
 
     def monRow(a, w):
-        # a . c - w = 0, times the lcm of the exponent denominators
+        # a . c - w = 0, times the lcm of the exponent denominators; a monomial has
+        # few nonzero exponents, read as plain integers (p/q of a sympy Rational)
+        nzj = [(j, x) for j, x in enumerate(a) if x != 0]
         D = 1
-        for x in a:
-            D = spy.ilcm(D, spy.Rational(x).q)
-        row = {j: int(a[j] * D) for j in range(nz) if a[j]}
-        row[w] = -int(D)
+        for _, x in nzj:
+            q = int(getattr(x, 'q', 1))
+            if q != 1:
+                D = D * q // math.gcd(D, q)
+        row = {j: int(x * D) for j, x in nzj}
+        row[w] = -D
         return row
 
     rows = []

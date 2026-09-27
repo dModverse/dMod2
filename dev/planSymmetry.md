@@ -105,8 +105,11 @@ Python scaling detection; 2 % in the tape compile. Candidates:
    joint cap by bisection over the levels: M011 step 1 10.3 → 8.2 min on a loaded machine,
    block scans 387 s → 47 s, same rank and directions. Left: the stacked calls (cap
    bisection, cross-prime checks, guard) and the scaling detection (20 %).
-3. The scaling detection on the condition regimes: one lattice per distinct regime is
-   already cached; profile the remaining Python time.
+3. ✅ Kernel arithmetic: Barrett reduction in the dual products (`dual_mul_acc`) and in
+   `rref_mod` (which also starts at the pivot column); the chain kernel 618 s → 199 s.
+   Scaling detection: symengine expansion and sparse rows (rows 234 s → 41 s), numpy RREF
+   from the pivot column, the four primes in threads. M011 step 1: 10.3 → 3.0 min, the
+   same 18 directions. cat6 reduction 110 s → 56 s (modular RREF 63 s → 10 s).
 
 ### WP4 evidence and hygiene
 1. Motif table above kept current; every reduced motif re-detected identifiable.

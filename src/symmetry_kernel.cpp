@@ -33,7 +33,27 @@ const int OP_CONST = 0, OP_ADD = 1, OP_MUL = 2, OP_INV = 3;
 
 inline u64 addmod(u64 a, u64 b, u64 p) { u64 s = a + b; return s >= p ? s - p : s; }
 inline u64 submod(u64 a, u64 b, u64 p) { return a >= b ? a - b : a + p - b; }
-inline u64 mulmod(u64 a, u64 b, u64 p) { return (u64)((u128)a * b % p); }
+// Barrett reduction of any 64-bit x modulo a fixed p < 2^31: one 64x64->128 multiply
+// instead of a division (m = floor(2^64 / p); the quotient estimate is low by at
+// most 2, corrected by the subtractions).
+struct Barrett {
+  u64 p, m;
+  explicit Barrett(u64 p_) : p(p_), m((u64)((((u128)1) << 64) / p_)) {}
+  inline u64 red(u64 x) const {
+    u64 q = (u64)(((u128)x * m) >> 64);
+    u64 r = x - q * p;
+    while (r >= p) r -= p;
+    return r;
+  }
+};
+
+// Residues below 2^32 multiply within 64 bits (the primes are < 2^31), which a
+// hardware division reduces; the 128-bit path (a software __umodti3 call) is kept
+// for the odd unreduced argument. Same value either way.
+inline u64 mulmod(u64 a, u64 b, u64 p) {
+  if (((a | b) >> 32) == 0) return (a * b) % p;
+  return (u64)((u128)a * b % p);
+}
 
 u64 powmod(u64 a, u64 e, u64 p) {
   u64 r = 1;
@@ -85,11 +105,19 @@ inline u64 reduce_rational(const std::string& num, const std::string& den, u64 p
 // Accumulate the dual product of duals X and Y into o (width w: value at 0,
 // partial derivatives at 1..w-1).
 inline void dual_mul_acc(u64* o, const u64* X, const u64* Y, int w, u64 p) {
+  // all entries are residues below p < 2^31, so x*Y[c] + y*X[c] < 2^63 is reduced
+  // once, by Barrett (the constant cached per thread and prime)
+  static thread_local u64 cp = 0, cm = 0;
+  if (p != cp) { cp = p; cm = (u64)((((u128)1) << 64) / p); }
   u64 xv = X[0], yv = Y[0];
-  o[0] = addmod(o[0], mulmod(xv, yv, p), p);
+  u64 x0 = xv * yv, q0 = (u64)(((u128)x0 * cm) >> 64), r0 = x0 - q0 * p;
+  while (r0 >= p) r0 -= p;
+  o[0] = addmod(o[0], r0, p);
   for (int c = 1; c < w; ++c) {
-    u64 t = addmod(mulmod(xv, Y[c], p), mulmod(yv, X[c], p), p);
-    o[c] = addmod(o[c], t, p);
+    u64 x = xv * Y[c] + yv * X[c];
+    u64 q = (u64)(((u128)x * cm) >> 64), r = x - q * p;
+    while (r >= p) r -= p;
+    o[c] = addmod(o[c], r, p);
   }
 }
 
@@ -195,6 +223,7 @@ inline bool poly_inv(u64* B, const u64* A, const PolyBasis& pb, u64 p) {
 std::vector<int> rref_mod(std::vector<std::vector<u64> >& A, u64 p) {
   std::vector<int> pivots;
   if (A.empty()) return pivots;
+  const Barrett br(p);
   int nrows = (int)A.size(), ncols = (int)A[0].size(), r = 0;
   for (int c = 0; c < ncols && r < nrows; ++c) {
     int piv = -1;
@@ -202,14 +231,23 @@ std::vector<int> rref_mod(std::vector<std::vector<u64> >& A, u64 p) {
       if (A[i][c] % p != 0) { piv = i; break; }
     if (piv < 0) continue;
     std::swap(A[r], A[piv]);
-    u64 inv = invmod(A[r][c], p);
-    for (int j = 0; j < ncols; ++j) A[r][j] = mulmod(A[r][j], inv, p);
+    // the pivot row is zero left of c (earlier pivot columns eliminated, skipped
+    // columns zero from row r down), so every update starts at c; all entries are
+    // residues below p < 2^31, so a product fits 64 bits
+    u64* pr = A[r].data();
+    for (int j = c; j < ncols; ++j) pr[j] = br.red(pr[j] % p);
+    u64 inv = invmod(pr[c], p);
+    for (int j = c; j < ncols; ++j) pr[j] = br.red(pr[j] * inv);
     for (int i = 0; i < nrows; ++i) {
       if (i == r) continue;
-      u64 f = A[i][c] % p;
+      u64* ai = A[i].data();
+      u64 f = ai[c] % p;
       if (f == 0) continue;
-      for (int j = 0; j < ncols; ++j)
-        A[i][j] = submod(A[i][j], mulmod(f, A[r][j], p), p);
+      u64 nf = p - f;                              // a - f*b = a + (p - f)*b mod p
+      for (int j = c; j < ncols; ++j) {
+        if (pr[j] == 0) continue;
+        ai[j] = br.red(br.red(ai[j]) + nf * pr[j]);
+      }
     }
     pivots.push_back(c);
     ++r;
