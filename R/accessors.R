@@ -8,16 +8,37 @@
 #' @description Applies to objects of class `objfn`,
 #' `parfn`, `prdfn` and `obsfn`. Allows to manipulate
 #' different arguments that have been set when creating the
-#' objects.
+#' objects. On a sum of objectives, a control is read from and written to
+#' every summand that has it. The same holds for an objective scaled by `%.*%` and
+#' for an objective composed with a parameter transformation, which reach the
+#' controls of the objective inside.
 #' @details If called without further arguments, `controls(x)` lists the
 #' available controls within an object. Calling `controls()` with `name`
 #' and `condition` returns the control value. The value can be overwritten. If
 #' a list or data.frame is returned, elements of those can be manipulated by the
 #' `$`- or `[]`-operator.
 #'
+#' A control lives in the function that was built with it, which every sum or
+#' composition containing that function shares. A change made on `x` is
+#' therefore seen by every object built from `x`, and a change made on a
+#' composition reaches the factor it came from.
+#'
+#' On an `fn`, the control is looked up in the functions `x` is made of, so
+#' `g * x * p` reaches the controls of `g`, `x` and `p`. `condition` restricts
+#' the lookup to the functions that answer for that condition; a function built
+#' without a condition answers for all of them, so a control set on it for one
+#' condition applies to every condition. With `condition = NULL`, the getter
+#' returns the value of the first function that holds the control and the
+#' setter writes every function that holds it. A name that several factors
+#' share, `attach.input` for instance, is set on all of them; set it on the
+#' factor itself to reach that one alone. Setting a control that no function
+#' holds is an error, as is a condition `x` does not know.
+#'
 #' @param x function
 #' @param ... arguments going to the appropriate S3 methods
-#' @return Either a print-out or the values of the control.
+#' @return Either a print-out or the values of the control. Listing the
+#' controls of an `fn` prints them per function and returns the names
+#' invisibly, as a list with one entry per function.
 #' @examples
 #' \dontrun{
 #'   ## parfn with condition
@@ -41,22 +62,101 @@ controls <- function(x, ...) {
 
 .lscontrolsObjfn <- function(x) {
 
-  names(environment(x)$controls)
+  unique(unlist(lapply(.controlTargets(x), function(t) names(environment(t)$controls))))
 
+}
+
+# The objectives that hold a control: the objective itself, or every
+# objective it is built from whose controls carry `name` (any control when
+# `name` is NULL). A sum records its summands in `terms`; an objective scaled
+# by %.*% or composed with a parfn records the objective it wraps in `wrapped`.
+# Either is the closure that gets called, so a change there reaches the whole.
+#
+# `wrapped` is not `terms` on purpose: .objTerms() reads `terms` as the
+# summands of a sum, and a scaled objective is not a sum of its inner one.
+.controlTargets <- function(x, name = NULL) {
+  has <- function(f) {
+    ctl <- if (is.function(f) && !is.primitive(f)) environment(f)$controls
+    is.list(ctl) && (is.null(name) || name %in% names(ctl))
+  }
+  if (has(x)) return(list(x))
+  inner <- c(attr(x, "terms", exact = TRUE), attr(x, "wrapped", exact = TRUE))
+  unlist(lapply(inner, .controlTargets, name = name), recursive = FALSE)
+}
+
+# The controls environment of a kernel, NULL for a kernel without one. `$` on
+# an environment does not inherit, so a `controls` further up is not taken.
+.kernelControls <- function(k) {
+  e <- if (is.function(k) && !is.primitive(k)) environment(k)
+  if (is.null(e) || !is.list(e$controls)) return(NULL)
+  e
+}
+
+# A setting of a kernel that it may keep both as a control and as an
+# attribute, `forcings` or `events`. The attribute is a copy made when the
+# kernel was built, the control is what the kernel runs with and what
+# controls<- changes, so the control wins where there is one.
+.kernelSetting <- function(k, what) {
+  e <- .kernelControls(k)
+  if (!is.null(e) && what %in% names(e$controls)) e$controls[[what]]
+  else attr(k, what, exact = TRUE)
+}
+
+# The leaves of `x` that hold controls, each as list(env, kind, condition),
+# once per kernel. Restricted to the leaves answering `condition` and to those
+# holding `name`, where given.
+.fnControlLeaves <- function(x, condition = NULL, name = NULL) {
+  leaves <- lapply(.fnLeaves(x, condition), function(l) {
+    l$env <- .kernelControls(l$kernel)
+    l
+  })
+  leaves <- Filter(function(l) !is.null(l$env) &&
+                     (is.null(name) || name %in% names(l$env$controls)), leaves)
+  # One kernel can sit in several places; format() names an environment by its
+  # address, which keeps this linear in the number of leaves.
+  keys <- vapply(leaves, function(l) format(l$env), "")
+  leaves[!duplicated(keys)]
+}
+
+# The condition as a name, or NULL for all of them. A number picks a
+# condition by position, as `mappings[[i]]` used to.
+.controlCondition <- function(x, condition) {
+  if (is.null(condition)) return(NULL)
+  conds <- attr(x, "conditions")
+  if (is.numeric(condition)) {
+    n <- max(1L, length(conds))
+    if (any(condition < 1 | condition > n))
+      stop("controls: condition index ", paste(condition, collapse = ", "),
+           " is out of range, the object has ", n, " condition(s).", call. = FALSE)
+    return(if (is.null(conds)) NULL else conds[condition])
+  }
+  # An object without conditions answers for any condition.
+  bad <- setdiff(condition, conds)
+  if (!is.null(conds) && length(bad))
+    stop("controls: unknown condition ", paste0("'", bad, "'", collapse = ", "),
+         ". Available: ", paste(conds, collapse = ", "), ".", call. = FALSE)
+  condition
 }
 
 .lscontrolsFn <- function(x, condition = NULL) {
 
-  conditions <- attr(x, "conditions")
-  mappings <- attr(x, "mappings")
-
-
-  for (i in 1:length(mappings)) {
-    if (is.null(conditions) || is.null(condition) || conditions[i] %in% condition) {
-      cat(conditions[i], ":\n", sep = "")
-      print(names(environment(mappings[[i]])$controls))
-    }
+  leaves <- .fnControlLeaves(x, condition)
+  composed <- inherits(x, "composed")
+  label <- function(l) {
+    conds <- l$condition
+    if (!is.null(conds) && !is.null(condition)) conds <- intersect(conds, condition)
+    if (length(conds) > 3L)
+      conds <- c(conds[1:3], paste("and", length(conds) - 3L, "more"))
+    lab <- paste(conds, collapse = ", ")
+    if (composed) trimws(paste(l$kind, lab)) else lab
   }
+  out <- lapply(leaves, function(l) names(l$env$controls))
+  names(out) <- vapply(leaves, label, "")
+  for (i in seq_along(out)) {
+    cat(names(out)[i], ":\n", sep = "")
+    print(out[[i]])
+  }
+  invisible(out)
 
 }
 
@@ -65,7 +165,10 @@ controls <- function(x, ...) {
 #' @param name character, the name of the control
 controls.objfn <- function(x, name = NULL, ...) {
 
-  if (is.null(name)) .lscontrolsObjfn(x) else environment(x)$controls[[name]]
+  if (is.null(name)) return(.lscontrolsObjfn(x))
+  tg <- .controlTargets(x, name)
+  if (!length(tg)) return(NULL)
+  environment(tg[[1L]])$controls[[name]]
 }
 
 #' @export
@@ -73,17 +176,12 @@ controls.objfn <- function(x, name = NULL, ...) {
 #' @param condition character, the condition name
 controls.fn <- function(x, condition = NULL, name = NULL, ...) {
 
-  if (is.null(name)) {
+  condition <- .controlCondition(x, condition)
+  if (is.null(name)) return(.lscontrolsFn(x, condition))
 
-    .lscontrolsFn(x, condition)
-
-  } else {
-
-    mappings <- attr(x, "mappings")
-    if (is.null(condition)) y <- mappings[[1]] else y <- mappings[[condition]]
-    environment(y)$controls[[name]]
-
-  }
+  tg <- .fnControlLeaves(x, condition, name)
+  if (!length(tg)) return(NULL)
+  tg[[1L]]$env$controls[[name]]
 
 }
 
@@ -99,16 +197,32 @@ controls.fn <- function(x, condition = NULL, name = NULL, ...) {
 #' @param value the new value
 #' @rdname controls
 "controls<-.objfn" <- function(x, name, ..., value) {
-  environment(x)$controls[[name]] <- value
+  tg <- .controlTargets(x, name)
+  if (!length(tg))
+    stop("controls<-: the objective has no control '", name, "'. Available: ",
+         paste(.lscontrolsObjfn(x), collapse = ", "), ".", call. = FALSE)
+  # [<- keeps an entry set to NULL, where [[<- would drop it
+  for (t in tg) environment(t)$controls[name] <- list(value)
   return(x)
 }
 
 #' @export
 #' @rdname controls
 "controls<-.fn" <- function(x, condition = NULL, name, ..., value) {
-  mappings <- attr(x, "mappings")
-  if (is.null(condition)) y <- mappings[[1]] else y <- mappings[[condition]]
-  environment(y)$controls[[name]] <- value
+  condition <- .controlCondition(x, condition)
+  tg <- .fnControlLeaves(x, condition, name)
+  if (!length(tg)) {
+    avail <- unique(unlist(lapply(.fnControlLeaves(x, condition),
+                                  function(l) names(l$env$controls))))
+    stop("controls<-: no function in the object has a control '", name, "'",
+         if (!is.null(condition))
+           paste0(" for condition ", paste(condition, collapse = ", ")),
+         ". Available: ",
+         if (length(avail)) paste(avail, collapse = ", ") else "none", ".",
+         call. = FALSE)
+  }
+  # [<- keeps an entry set to NULL, where [[<- would drop it
+  for (l in tg) l$env$controls[name] <- list(value)
   return(x)
 }
 

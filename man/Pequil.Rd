@@ -90,6 +90,15 @@ come from cppDE's analytical sensitivity integration. Conserved
 quantities are detected; how they are parametrised is controlled by
 \code{expressInTotals}.
 }
+\details{
+\code{attach.input}, \code{keep.root}, \code{start.time}, \code{end.time}, every entry
+of \code{controlsODE} (each a control of its own, with its default filled in)
+and \code{controlsMS} are kept in the controls of the returned function and read
+at every call, so \code{\link[=controls]{controls()}} can change them later. \code{controlsMS} is
+merged over its defaults at every call. The controls are part of the key
+under which \code{keep.root} memoises a result, so a change is never answered
+from a result computed under the old setting.
+}
 \seealso{
 \link{Pexpl}, \link{Pimpl}, \link{P}.
 }

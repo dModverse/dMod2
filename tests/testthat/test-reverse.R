@@ -42,23 +42,24 @@ skip_on_cran()
 
     m <- odemodel(re, modelname = "rv_ode", deriv = TRUE, derivMode = fr,
                   outdir = d, compile = FALSE)
-    g <- Y(c(obsA = "s*A", obsB = "s*B"), re, modelname = "rv_obs", outdir = d)
+    g <- Y(c(obsA = "s*A", obsB = "s*B"), re, derivMode = fr, modelname = "rv_obs",
+           outdir = d)
     e <- Y(c(obsA = "sd_rel*obsA + sd_abs", obsB = "sd_rel*obsB + sd_abs"), g,
            states = c("obsA", "obsB"), parameters = c("sd_rel", "sd_abs"),
-           modelname = "rv_err", outdir = d)
-    p <- P(tr, condition = "C1", modelname = "rv_p", outdir = d)
+           derivMode = fr, modelname = "rv_err", outdir = d)
+    p <- P(tr, condition = "C1", derivMode = fr, modelname = "rv_p", outdir = d)
     pe <- P(c(tr, sd_rel = "exp(logsdrel)", sd_abs = "exp(logsdabs)"),
-            condition = "C1", modelname = "rv_pe", outdir = d)
+            condition = "C1", derivMode = fr, modelname = "rv_pe", outdir = d)
     # One trafo per condition, each with a parameter of its own.
     pc <- Reduce("+", lapply(c("C1", "C2"), function(cn)
-      P(repar(paste0("logk1 ~ logk1 + dk_", cn), tr), condition = cn,
+      P(repar(paste0("logk1 ~ logk1 + dk_", cn), tr), condition = cn, derivMode = fr,
         modelname = paste0("rv_p2_", cn), outdir = d)))
 
     ev <- eventlist(var = "A", time = "t_dose", value = "d_amt", method = "add")
     mev <- odemodel(re, events = ev, modelname = "rv_ev", deriv = TRUE,
                     derivMode = fr, outdir = d, compile = FALSE)
     pev <- P(c(tr, t_dose = "3", d_amt = "exp(logdose)"), condition = "C1",
-             modelname = "rv_pev", outdir = d)
+             derivMode = fr, modelname = "rv_pev", outdir = d)
     mnr <- odemodel(re, modelname = "rv_noRev", deriv = TRUE, outdir = d,
                     compile = FALSE)
 
@@ -71,7 +72,7 @@ skip_on_cran()
                                     roottol = 1e-12))
     pl <- P(c(k_in = "exp(logkin)", k_out = "exp(logkout)", B = "0",
               k1 = "exp(logk1)", k2 = "exp(logk2)", s = "exp(logs)"),
-            condition = "C1", modelname = "rv_pq", outdir = d)
+            condition = "C1", derivMode = fr, modelname = "rv_pq", outdir = d)
 
     sun <- if (isTRUE(cppDE:::cvodeConfig$available))
       odemodel(re, modelname = "rv_sun", deriv = TRUE, backend = "Sundials",
@@ -80,17 +81,28 @@ skip_on_cran()
     m2 <- odemodel(re, modelname = "rv2_ode", deriv = TRUE, deriv2 = TRUE,
                    outdir = d, compile = FALSE,
                    derivMode = c(fr, "forward-forward", "forward-reverse"))
-    g2 <- Y(c(obsA = "s*A", obsB = "s*B"), re, deriv2 = TRUE, derivMode = fr,
+    g2 <- Y(c(obsA = "s*A", obsB = "s*B"), re, deriv2 = TRUE, derivMode = c(fr, "forward-reverse"),
             modelname = "rv2_obs", outdir = d)
-    q <- P(tr, condition = "C1", deriv2 = TRUE, derivMode = fr,
+    q <- P(tr, condition = "C1", deriv2 = TRUE, derivMode = c(fr, "forward-reverse"),
            modelname = "rv2_p", outdir = d)
     # A second condition on the same ODE. The batched backward path only
     # engages with more than one live condition.
-    q2 <- q + P(tr, condition = "C2", deriv2 = TRUE, derivMode = fr,
+    q2 <- q + P(tr, condition = "C2", deriv2 = TRUE, derivMode = c(fr, "forward-reverse"),
                 modelname = "rv2_p2", outdir = d)
+    # k2 and s reach the prediction only through attach.input. qt hands them on
+    # at the head of the chain. qh maps k2 per condition and hands s on, and qb
+    # hands both on behind it, for two conditions in one batched call.
+    tr_ab <- tr[c("A", "B", "k1")]
+    qt <- P(tr_ab, condition = "C1", attach.input = TRUE, deriv2 = TRUE,
+            derivMode = c(fr, "forward-reverse"), modelname = "rv2_pt", outdir = d)
+    qh <- P(list(C1 = c(k2 = "exp(logk2)"), C2 = c(k2 = "2*exp(logk2)")),
+            attach.input = TRUE, deriv2 = TRUE, derivMode = c(fr, "forward-reverse"),
+            modelname = "rv2_ph", outdir = d)
+    qb <- P(tr_ab, attach.input = TRUE, deriv2 = TRUE,
+            derivMode = c(fr, "forward-reverse"), modelname = "rv2_pb", outdir = d)
 
     compile(m, g, e, p, pe, pc, mev, pev, mnr, pq, pl, sun, m2, g2, q, q2,
-            output = "rv_all", cores = 4L)
+            qt, qh, qb, output = "rv_all", cores = 4L)
 
     pars <- c(logA = log(2), logk1 = log(0.6), logk2 = log(0.3), logs = log(1.5))
     cache <<- list(
@@ -100,7 +112,7 @@ skip_on_cran()
                    mnr = mnr, pq = pq, pl = pl, sun = sun,
                    times = seq(0, 8, length.out = 41), pars = pars),
       second = list(x = Xs(m2, optionsOde = .rev_opt, optionsSens = .rev_opt),
-                    g = g2, p = q, p2 = q2,
+                    g = g2, p = q, p2 = q2, pt = qt, ph = qh, pb = qb,
                     times = seq(0, 8, length.out = 21), pars = pars))
     cache
   }
@@ -470,6 +482,92 @@ test_that("a summed objective keeps every term's curvature", {
   # vanish, so a total that dropped it would differ by exactly that much.
   bare <- normL2(dat, chain)(fx$pars, sweep = "reverse", deriv2 = TRUE)
   expect_gt(max(abs(rev$hessian - bare$hessian)), 1)
+})
+
+# ---------------------------------------------------------------------------
+#  Inputs a transformation passes through.
+#
+#  Pexpl(attach.input = TRUE) hands every input it does not map on untouched.
+#  Forward and backward, at first and second order, they keep a derivative,
+#  and both modes are checked against central differences: a forward mode that
+#  treated them as fixed and a backward one that carried no tangent for them
+#  would agree with each other on a zero.
+# ---------------------------------------------------------------------------
+
+# Central differences of `f` at `pars`, one column per parameter. Each value
+# is its own adaptive solve, off by O(tol) on a step sequence of its own, and
+# the difference quotient divides that by h: a narrower step than this one
+# measures the solver rather than the derivative.
+.rev_fd <- function(f, pars, h = 1e-4) {
+  vapply(names(pars), function(nm) {
+    up <- dn <- pars
+    up[nm] <- up[nm] + h
+    dn[nm] <- dn[nm] - h
+    (f(up) - f(dn)) / (2 * h)
+  }, f(pars))
+}
+
+test_that("an input passed through keeps its gradient, forwards and backwards", {
+  fx <- .rev2_fx()
+  fx$pars <- pars <- c(logA = log(2), logk1 = log(0.6), k2 = 0.3, s = 1.5)
+  chain <- fx$g * fx$x * fx$pt
+  obj <- normL2(.rev2_data(fx, chain, c("obsA", "obsB")), chain)
+
+  both <- expect_modes_agree(obj, pars)
+  fd <- .rev_fd(function(p) obj(p, deriv = FALSE)$value, pars)
+  expect_true(all(abs(fd[c("k2", "s")]) > 1e-3))
+  expect_equal(both$forward$gradient[names(pars)], fd, tolerance = 1e-5)
+
+  # A fixed s is handed on as a constant: it still scales the observation, and
+  # it has no gradient entry of its own in either direction.
+  ff <- obj(pars[-4], fixed = pars[4], deriv = TRUE)
+  fr <- obj(pars[-4], fixed = pars[4], deriv = TRUE, sweep = "reverse")
+  expect_equal(ff$value, both$forward$value, tolerance = 1e-10)
+  expect_setequal(names(ff$gradient), c("logA", "logk1", "k2"))
+  expect_equal(ff$gradient, both$forward$gradient[names(ff$gradient)],
+               tolerance = 1e-10)
+  expect_equal(unname(fr$gradient[names(ff$gradient)]), unname(ff$gradient),
+               tolerance = 1e-6)
+})
+
+test_that("an input passed through keeps its curvature, forwards and backwards", {
+  fx <- .rev2_fx()
+  fx$pars <- pars <- c(logA = log(2), logk1 = log(0.6), k2 = 0.3, s = 1.5)
+  chain <- fx$g * fx$x * fx$pt
+  obj <- normL2(.rev2_data(fx, chain, c("obsA", "obsB")), chain)
+
+  fwd <- obj(pars, deriv2 = TRUE)
+  rev <- obj(pars, sweep = "reverse", deriv2 = TRUE)
+  fdH <- .rev_fd(function(p) obj(p)$gradient[names(pars)], pars)
+  expect_true(all(abs(diag(fdH)[c("k2", "s")]) > 1e-3))
+  expect_equal(fwd$hessian[names(pars), names(pars)], fdH, tolerance = 1e-5)
+  expect_equal(rev$hessian, fwd$hessian, tolerance = 1e-4)
+})
+
+test_that("inputs passed through behind another transformation, batched", {
+  fx <- .rev2_fx()
+  fx$pars <- pars <- c(logA = log(2), logk1 = log(0.6), logk2 = log(0.3), s = 1.5)
+  chain <- fx$g * fx$x * fx$pb * fx$ph
+  obj <- normL2(.rev2_data(fx, chain, c("obsA", "obsB"),
+                           conditions = c("C1", "C2")), chain)
+
+  # Guard against a vacuous pass: qb is one kernel for both conditions, so it
+  # answers them through its batch entry, with the Jacobian qh hands it.
+  expect_false(is.null(attr(attr(fx$pb, "mappings")[[1L]], "batchfn")))
+  expect_length(chain(fx$times, pars), 2L)
+
+  fwd <- obj(pars, deriv2 = TRUE)
+  rev <- obj(pars, sweep = "reverse", deriv2 = TRUE)
+  fd  <- .rev_fd(function(p) obj(p, deriv = FALSE)$value, pars)
+  fdH <- .rev_fd(function(p) obj(p)$gradient[names(pars)], pars)
+  expect_true(all(abs(fd[c("logk2", "s")]) > 1e-3))
+  expect_equal(fwd$gradient[names(pars)], fd, tolerance = 1e-5)
+  expect_equal(rev$gradient, fwd$gradient, tolerance = 1e-3)
+  expect_equal(fwd$hessian[names(pars), names(pars)], fdH, tolerance = 1e-5)
+  expect_equal(rev$hessian, fwd$hessian, tolerance = 1e-4)
+
+  withr::local_options(dMod.batch.check = TRUE)
+  expect_equal(obj(pars, deriv2 = TRUE)$hessian, fwd$hessian, tolerance = 0)
 })
 
 test_that("trust drives the exact Hessian, forwards and backwards", {

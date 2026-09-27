@@ -42,8 +42,9 @@ also give each fit a condition axis. An inner axis selects a PSOCK
 backend: cppDE's batch runs serially inside a fork. Keep the product
 below your core count.}
 
-\item{optmethod}{Character. Name of the optimiser function to call via
-\code{do.call(optmethod, ...)}. Default \code{"trust"}.}
+\item{optmethod}{Character or function. The optimiser called via
+\code{do.call(optmethod, ...)}. Default \code{"trust"}. Arguments in \code{...} are
+routed by the formals of this optimiser, not by those of \code{\link[=trust]{trust()}}.}
 
 \item{samplefun}{Sampler for random initial values; must accept an \code{n}
 argument. Default \code{\link[=rnorm]{rnorm()}}. Extra named args from \code{...} matching
@@ -73,7 +74,8 @@ given and cannot be resampled).}
 \item{nTries}{Maximum number of attempts per fit slot, including the
 first. Default \code{10L}.}
 
-\item{...}{Forwarded to \code{\link[=trust]{trust()}}, \code{samplefun}, or \code{objfun} by name match.
+\item{...}{Forwarded to the optimiser \code{optmethod}, \code{samplefun}, or \code{objfun}
+by name match.
 Unmatched names go to \code{objfun}.}
 }
 \value{

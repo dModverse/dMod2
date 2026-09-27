@@ -165,8 +165,10 @@ evalConditionResidual <- function(dataI, predictionI, pars,
 #' @param times Optional numeric vector of additional time points at which the
 #'   prediction function is evaluated. If NULL, time points are taken from the
 #'   data. Event times should be included here if the prediction model uses events.
-#' @param t0 Numeric. Start of the time grid, i.e. the time at which initial
-#'   values take effect. Defaults to 0.
+#' @param t0 Numeric. Start of the time grid, where the initial values take
+#'   effect. Defaults to 0. A vector named by condition gives each condition
+#'   its own start and its own grid. Fixed-time events before a condition's
+#'   start do not fire.
 #' @param attr.name Character string. The objective value is additionally
 #'   returned as an attribute of this name, and the sum of squares behind it
 #'   under `chi2`. Adding objectives pools the terms sharing an `attr.name`,
@@ -207,9 +209,15 @@ normL2 <- function(data, x, errmodel = NULL, times = NULL, t0 = 0,
             call. = FALSE)
   opt.BLOQ <- match.arg(opt.BLOQ)
 
-  # `t0` anchors the time grid: the prediction starts there, and initial
-  # values take effect at that point.
-  timesD <- sort(unique(c(t0, unlist(lapply(data, `[[`, "time")), times)))
+  # The prediction starts at `t0`; named by condition, one grid each.
+  t0L <- .t0PerCondition(t0, names(data))
+  timesD <- if (is.null(t0L)) sort(unique(c(t0, unlist(lapply(data, `[[`, "time")), times))) else
+    lapply(setNames(nm = names(data)), function(cn) {
+      if (any(data[[cn]]$time < t0L[[cn]]))
+        stop("normL2: condition '", cn, "' has data before t0 = ", t0L[[cn]], ".", call. = FALSE)
+      sort(unique(c(t0L[[cn]], data[[cn]]$time, times[times >= t0L[[cn]]])))
+    })
+  .timesOf <- function(conds) if (is.list(timesD)) unname(timesD[conds]) else timesD
 
   x.cond <- names(attr(x, "mappings"))
   d.cond <- names(data)
@@ -228,6 +236,7 @@ normL2 <- function(data, x, errmodel = NULL, times = NULL, t0 = 0,
   .meta_cache$meta_list        <- NULL
   .meta_cache$par_names_global <- NULL
   .meta_cache$signature        <- NULL  # used to invalidate on shape change
+  .meta_cache$shape            <- NULL
 
   # `.prediction` lets a caller that already batched the predictions hand them
   # in; see .objEvalMany().
@@ -255,7 +264,7 @@ normL2 <- function(data, x, errmodel = NULL, times = NULL, t0 = 0,
         hessian = hessian,
         conditions = conditions,
         env = env, cores = cores, x = x, errmodel = errmodel, data = data,
-        timesD = timesD, e.cond = e.cond, opt.BLOQ = opt.BLOQ,
+        timesD = .timesOf(conditions), e.cond = e.cond, opt.BLOQ = opt.BLOQ,
         attr.name = attr.name))
     }
 
@@ -264,7 +273,7 @@ normL2 <- function(data, x, errmodel = NULL, times = NULL, t0 = 0,
     build_hessian <- hessian
 
     prediction <- if (!is.null(.prediction)) .prediction else
-      x(times = timesD, pars = pars, fixed = fixed,
+      x(times = .timesOf(conditions), pars = pars, fixed = fixed,
         deriv = deriv, deriv2 = deriv2, conditions = conditions,
         cores = cores)
     if (!is.null(.prediction) && !identical(names(prediction), conditions))
@@ -308,12 +317,17 @@ normL2 <- function(data, x, errmodel = NULL, times = NULL, t0 = 0,
     # Determine current deriv signature (per-condition local par names);
     # empty for value-only (deriv = FALSE) evaluations.
     cur_sig <- lapply(prediction, function(pr) dimnames(attr(pr, "deriv"))[[3]])
+    # row counts too: a truncated solve has fewer rows than the cached indices
+    cur_shape <- c(vapply(prediction, NROW, integer(1)),
+                   vapply(err_list, NROW, integer(1)))
     if (is.null(.meta_cache$meta_list) ||
-        !identical(.meta_cache$signature, cur_sig)) {
+        !identical(.meta_cache$signature, cur_sig) ||
+        !identical(.meta_cache$shape, cur_shape)) {
       .meta_cache$par_names_global <- unique(unlist(cur_sig))
       .meta_cache$meta_list <- .build_normL2_meta(
         data, prediction, err_list, conditions, e.cond)
       .meta_cache$signature <- cur_sig
+      .meta_cache$shape <- cur_shape
     }
     par_names_global <- .meta_cache$par_names_global
     if (is.null(par_names_global)) par_names_global <- character(0)
@@ -394,7 +408,10 @@ normL2 <- function(data, x, errmodel = NULL, times = NULL, t0 = 0,
     cn <- attr(o, "conditions")
     if (length(cn) == 1L) cn else NA_character_
   }, "")
-  times <- lapply(objs, attr, "timesD", exact = TRUE)
+  times <- lapply(seq_len(n), function(j) {
+    tj <- attr(objs[[j]], "timesD", exact = TRUE)
+    if (is.list(tj) && !is.na(conds[j])) tj[[conds[j]]] else tj
+  })
   if (is.null(prd) || is.null(.fnNode(prd)) ||
       anyNA(conds) || anyDuplicated(conds) > 0L ||
       any(vapply(times, is.null, TRUE)) ||
@@ -437,6 +454,11 @@ normL2 <- function(data, x, errmodel = NULL, times = NULL, t0 = 0,
     o_idx_in_deriv <- if (has_deriv) match(dataI$name, d_dn[[2]])
                       else rep(0L, nrow(dataI))
 
+    if (anyNA(t_idx_in_pred) && !anyNA(o_idx_in_pred) &&
+        max(dataI$time) > max(prdfI[, "time"]))
+      stop(".build_normL2_meta: the prediction for condition '", cn, "' ends at t = ",
+           max(prdfI[, "time"]), ", before the last data point (the solver stopped early).",
+           call. = FALSE)
     if (anyNA(t_idx_in_pred) || anyNA(o_idx_in_pred) ||
         (has_deriv && anyNA(o_idx_in_deriv))) {
       stop(".build_normL2_meta: data point not found in prediction for condition '",
@@ -883,6 +905,13 @@ constraintRayleigh <- function(sigma, attr.name = "prior", condition = NULL) {
 #' @details Computes the constraint value 
 #' \deqn{\left(\frac{x(t)-\mu}{\sigma}\right)^2}{(pred-p[names(mu)])^2/sigma^2}
 #' and its derivatives with respect to p.
+#'
+#' The controls `mu` (the prediction name, named by the value parameter),
+#' `time`, `sigma` and `attr.name` are read at every call and can be changed
+#' with [controls()]. The `parameters` attribute is the value parameter as
+#' given here, and so is the parameter set of every sum built from the
+#' objective: renaming the value parameter through `controls(x, "mu")` does
+#' not reach either, so build a new objective for another value parameter.
 #' @examples
 #' prediction <- list(a = matrix(c(0, 1), nrow = 1, dimnames = list(NULL, c("time", "A"))))
 #' derivs <- matrix(c(0, 1, 0.1), nrow = 1, dimnames = list(NULL, c("time", "A.A", "A.k1")))
@@ -1326,5 +1355,12 @@ objframe <- function(mydata, deriv = NULL, deriv.err = NULL,
 }
 
 
-
-
+# NULL for one start shared by all conditions, else a list named by condition.
+.t0PerCondition <- function(t0, conditions) {
+  if (!is.list(t0) && length(t0) == 1L && is.null(names(t0))) return(NULL)
+  miss <- setdiff(conditions, names(t0))
+  if (is.null(names(t0)) || length(miss))
+    stop("normL2: 't0' is named by condition and misses ",
+         paste(miss, collapse = ", "), ".", call. = FALSE)
+  lapply(as.list(t0)[conditions], function(v) as.numeric(v)[1L])
+}

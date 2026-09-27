@@ -22,8 +22,10 @@
     if (is.null(times))
       times <- sort(unique(c(0, unlist(lapply(term$data, `[[`, "time")))))
 
-    prediction <- term$prdfn(times, pars, fixed = fixed, deriv = TRUE,
-                             cores = cores)
+    prediction <- if (is.list(times))
+      term$prdfn(unname(times), pars, fixed = fixed, deriv = TRUE,
+                 conditions = names(times), cores = cores) else
+      term$prdfn(times, pars, fixed = fixed, deriv = TRUE, cores = cores)
     conditions <- intersect(names(prediction), names(term$data))
 
     for (cn in conditions) {

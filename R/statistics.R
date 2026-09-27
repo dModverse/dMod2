@@ -819,8 +819,9 @@ vcov <- function(fit, parupper = NULL, parlower = NULL) {
 #'   also give each fit a condition axis. An inner axis selects a PSOCK
 #'   backend: cppDE's batch runs serially inside a fork. Keep the product
 #'   below your core count.
-#' @param optmethod Character. Name of the optimiser function to call via
-#'   `do.call(optmethod, ...)`. Default `"trust"`.
+#' @param optmethod Character or function. The optimiser called via
+#'   `do.call(optmethod, ...)`. Default `"trust"`. Arguments in `...` are
+#'   routed by the formals of this optimiser, not by those of [trust()].
 #' @param start1stfromCenter Logical. If `TRUE`, the first fit starts exactly
 #'   at `center` (no random offset).
 #' @param samplefun Sampler for random initial values; must accept an `n`
@@ -828,7 +829,8 @@ vcov <- function(fit, parupper = NULL, parlower = NULL) {
 #'   `samplefun` parameters are forwarded.
 #' @param resultPath Output folder. Default `"."`.
 #' @param stats Logical. Print the summary statistics to the console.
-#' @param ... Forwarded to [trust()], `samplefun`, or `objfun` by name match.
+#' @param ... Forwarded to the optimiser `optmethod`, `samplefun`, or `objfun`
+#'   by name match.
 #'   Unmatched names go to `objfun`.
 #' @param output Logical. Write per-fit output to disk.
 #' @param cautiousMode Logical. Persist every fit deparsed (avoids RDA-version
@@ -896,15 +898,18 @@ mstrust <- function(objfun, center, rinit = .1, rmax = 10, fits = 20, cores = 1,
   # Second, check what trust() and samplefun() accept and check for name clashes.
   # Third, whatever is unused is passed to the objective function objfun().
   nameslocal <- c("name", "center", "fits", "cores", "optmethod", "samplefun",
-                  "resultPath", "stats", "narrowing", "output",
+                  "resultPath", "stats", "narrowing", "output", "cautiousMode",
                   "retry", "nTries")
   # A name that moved into one of trust()'s control lists is no longer a
   # formal, so without this it would silently be routed to objfun instead.
   .trustRejectMoved(names(argslist), "mstrust")
-  namestrust <- intersect(names(formals(trust)), names(argslist))
+  # Routed by the optimiser actually called: reading trust()'s formals sent
+  # every argument another optimiser has and trust() lacks to the objective.
+  optfun <- if (is.function(optmethod)) optmethod else match.fun(optmethod)
+  namestrust <- intersect(setdiff(names(formals(optfun)), "..."), names(argslist))
   namessample <- intersect(names(formals(samplefun)), names(argslist))
-  if (length(intersect(namestrust, namessample) != 0)) {
-    stop("Argument names of trust() and ", samplefun, "() clash.")
+  if (length(intersect(namestrust, namessample)) != 0) {
+    stop("Argument names of the optimiser and ", samplefun, "() clash.")
   }
   
   # Default optimizer

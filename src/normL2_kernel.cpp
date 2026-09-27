@@ -122,6 +122,20 @@ CondInputs gather_one_condition(
     perm[bloq_mask[i] == 0 ? a_pos++ : b_pos++] = i;
   }
 
+  // a truncated solve has fewer rows than the index
+  for (int i = 0; i < n_data; ++i) {
+    if (t_idx[i] < 1 || t_idx[i] > prdf.nrow() || o_idx[i] < 1 || o_idx[i] > prdf.ncol() ||
+        (n_par_local > 0 && (t_idx[i] > Dp0 || o_idx_d[i] < 1 || o_idx_d[i] > Dp1)))
+      throw std::runtime_error("normL2_kernel: data point outside the prediction "
+                               "(an incomplete solve?).");
+    if (sigma_is_na[i] && !err_mat_opt.isNull()) {
+      NumericMatrix em(err_mat_opt.get());
+      if (t_idx_err[i] < 1 || t_idx_err[i] > em.nrow() ||
+          o_idx_err[i] < 1 || o_idx_err[i] > em.ncol())
+        throw std::runtime_error("normL2_kernel: data point outside the error model.");
+    }
+  }
+
   // Gather scalar arrays.
   C.pred.resize(n_data);
   C.y_data.resize(n_data);

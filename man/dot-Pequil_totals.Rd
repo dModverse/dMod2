@@ -6,7 +6,7 @@
 \usage{
 .Pequil_totals(
   norm,
-  ms,
+  controlsMS,
   emit_d1,
   emit_d2,
   attach.input,
@@ -25,11 +25,9 @@
 \arguments{
 \item{norm}{Record from \link{.normalize_ss_inputs} with \code{fullsystem = TRUE}.}
 
-\item{ms}{Resolved multistart controls.}
-
 \item{emit_d1, emit_d2}{Whether first/second-order sensitivities are built.}
 
-\item{attach.input, keep.root, controlsODE, compile, modelname, condition, verbose, start.time, end.time}{As in \link{Pequil}.}
+\item{attach.input, keep.root, controlsODE, controlsMS, compile, modelname, condition, verbose, start.time, end.time}{As in \link{Pequil}.}
 
 \item{dotArgs}{Extra arguments forwarded to \link[cppDE:cppODE]{cppDE::cppODE}.}
 
