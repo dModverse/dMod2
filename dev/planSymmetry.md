@@ -23,21 +23,25 @@ Two benchmarks drive this plan:
 
 ## Motifs (bench/motifs)
 
-| Motif | Difficulty | Baseline (0.8.1) | Now |
+Final run (`results_final2`, installed code): every motif with directions reduced, every reduced
+model re-detected identifiable. Times are detection / reduction.
+
+| Motif | Difficulty | dMod2 0.8.1 (1c39a55) | Now |
 |---|---|---|---|
-| cat3 / cat4 / cat5 | catenary compartments, leaks everywhere: N-1 curved directions, invariants of degree up to N | reduction fails (300 s) / timeout / timeout | face section, 2.7 s / 7 s / 26 s, reduced model identifiable |
-| mam3 / mam4 | mammillary compartments | fails (245 s) / timeout | face section, 2.8 s / 6.6 s |
-| tworoute | two unobserved routes, invariants k3·ka, k4·kb, ka + kb | invariants found, not reduced (greedy carrier bug) | section ka = kb, 2.2 s |
-| autocrine_free | autocrine loop, free initial values: scalings entangled with a curved direction | reduction timeout | scalings pinned outside the curved support, face kdg = 0, 1 s |
-| route3 / route4 | n routes: invariants k_i·r_i and Σ r_i, no face | not reduced / not reduced | equal-share section r_i = q/n, 3.2 s / 4.1 s |
-| autocrine_ss | autocrine loop from steadyStates(), dose event | fine | face kdg = 0 instead of a balance |
-| wide4 / wide12 / wide30 | M011's pattern: degradation kdg·P/(Km + R1 + … + Rn), entry ksec·(Km + ΣR)² | reduction 185 s / 1 dir open / 2 dirs open | 34 s / detect 8 s + reduce 6 s / detect 9 s + reduce 47 s, all identifiable after reduction |
-| receptor_kd | knockdown switch long before the stimulus; species named Ci | steadyStates() crashed (Ci) | reduced, 1.5 s |
-| wideprod8 / wideprod30 | degradation kdg·P·Π/(Km + Π), Π = R1⋯Rn | open directions | detect 19 s / 19 s, reduce 10 s / 18 s, identifiable after reduction |
+| cat3 / cat4 / cat5 / cat6 | catenary compartments, leaks everywhere: N-1 curved directions | reduction fails (300 s) / timeout / timeout / timeout | face section (leaks off): 2 / 1.8 s, 2 / 4 s, 2 / 14 s, 3 / 60 s |
+| mam3 / mam4 | mammillary compartments | fails (245 s) / timeout | 2 / 1.8 s, 2 / 4 s |
+| tworoute | invariants k3·ka, k4·kb, ka + kb | not reduced (greedy carrier) | 2 / 1.5 s, section ka = kb |
+| route3 / route4 | n routes, invariants k_i·r_i and Σ r_i, no face | not reduced | 2.6 / 1.9 s, 2.6 / 2.6 s, equal shares r_i = q/n |
+| autocrine_free | scalings entangled with a curved direction | reduction timeout | 2 / 0.7 s: scalings pinned outside, face kdg = 0 |
+| autocrine_ss | autocrine loop from steadyStates(), dose event | fine | 2 / 0.6 s, face kdg = 0 instead of a balance |
+| receptor_kd | knockdown long before the stimulus; species Ci | steadyStates() crashed on Ci | 2 / 0.0 s |
+| wide4 / wide12 / wide30 | degradation kdg·P/(Km + R1 + … + Rn): entry ksec·(Km + ΣR)² | reduction 185 s / 1 dir open / 2 dirs open | 3 / 2 s, 3 / 4 s, 5 / 29 s (translation groups) |
+| wideprod8 / wideprod30 | the same with a product R1⋯Rn | 2 dirs open / 2 dirs open | 3 / 8 s, 5 / 14 s (multiplicative groups, unmoved monomials) |
+| hillfree | free Hill exponent (power recast) | 3 / 5 s | 3.5 / 5.6 s |
+| switch_late, hill, enzyme, cat2 | events after t0, Hill production, identifiable enzyme | fine | fine |
 | TGFbModelling M001–M010 (battery, `work/tgfb/battery`) | the real models, 38 conditions, gauges fixed by `fixed` | crash (named `g`) | all analysed, every reduced model identifiable |
 | TGFbModelling M011 small, `gaugePreference` end to end | 138 coordinates, 17 scalings + 1 general direction | step 1 9.4 min; step 3 unfinished after 30 min | 5.2 min for both steps (general direction from the order-2 jets in 15 s), 18 of 18 reduced in 5 s, k_dg_TGFB1 = 0 |
-| TGFbModelling M011 full gene pool, same | 283 coordinates, 49 scalings + 1 general direction | (not run) | 45 min with the first changes, now 10.7 min (jets, 25 s); 50 of 50 reduced in 6 s |
-| switch_late, hill, enzyme, cat2 | events after t0, Hill production, identifiable enzyme | fine | fine (faster) |
+| TGFbModelling M011 full gene pool, same | 283 coordinates, 49 scalings + 1 general direction | (not run) | 10.7 min (jets, 25 s); 50 of 50 reduced in 6 s |
 
 ## Done
 
