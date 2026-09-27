@@ -35,7 +35,8 @@ Two benchmarks drive this plan:
 | receptor_kd | knockdown switch long before the stimulus; species named Ci | steadyStates() crashed (Ci) | reduced, 1.5 s |
 | wideprod8 / wideprod30 | degradation kdg·P·Π/(Km + Π), Π = R1⋯Rn | open directions | detect 19 s / 19 s, reduce 10 s / 18 s, identifiable after reduction |
 | TGFbModelling M001–M010 (battery, `work/tgfb/battery`) | the real models, 38 conditions, gauges fixed by `fixed` | crash (named `g`) | all analysed, every reduced model identifiable |
-| TGFbModelling M011 full gene pool | 283 coordinates, 49 scalings + 1 general direction | (not run) | general direction on 2 of 234 columns with the translation group Km_Smad7 + four receptor pools, 109 s; 50 of 50 reduced in 6 s |
+| TGFbModelling M011 small, `gaugePreference` end to end | 138 coordinates, 17 scalings + 1 general direction | step 1 9.4 min; step 3 unfinished after 30 min | 5.2 min for both steps (general direction from the order-2 jets in 15 s), 18 of 18 reduced in 5 s, k_dg_TGFB1 = 0 |
+| TGFbModelling M011 full gene pool, same | 283 coordinates, 49 scalings + 1 general direction | (not run) | 45 min with the first changes, now 10.7 min (jets, 25 s); 50 of 50 reduced in 6 s |
 | switch_late, hill, enzyme, cat2 | events after t0, Hill production, identifiable enzyme | fine | fine (faster) |
 
 ## Done
