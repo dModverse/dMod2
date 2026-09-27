@@ -453,3 +453,23 @@ test_that("version 1.4 names the arguments it ignores", {
   expect_message(steadyStates(r, version = "1.4", verbose = FALSE, testSteady = "exact"),
                  "no 'exact' test")
 })
+
+
+test_that("species named like sympy objects (Ci, E, S, Q) are plain symbols", {
+  withr::local_dir(tempdir())
+  # Ci is sympy's cosine integral, E Euler's number, S the singleton registry, Q the
+  # assumption namespace; parse_expr() used to resolve them and fail on kdeg*Ci
+  r <- eqnlist() |>
+    addReaction("", "R", "ksR", "synthesis") |>
+    addReaction("R", "", "kdR*R", "turnover") |>
+    addReaction("R + E", "C", "kon*R*E", "binding") |>
+    addReaction("C", "Ci + E", "kint*C", "internalisation") |>
+    addReaction("Ci", "", "kdeg*Ci", "degradation") |>
+    addReaction("C + S", "C + Q", "kp*C*S", "phosphorylation") |>
+    addReaction("Q", "S", "kdp*Q", "dephosphorylation")
+  for (v in c("1.3", "1.4")) {
+    ss <- steadyStates(r, version = v, verbose = FALSE)
+    expect_false(identical(ss, 0))
+    expect_true(length(ss) > 0L)
+  }
+})

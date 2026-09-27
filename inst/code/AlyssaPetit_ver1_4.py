@@ -27,7 +27,20 @@ from fractions import Fraction
 
 import numpy
 import sympy
-from sympy.parsing.sympy_parser import parse_expr
+from sympy.parsing.sympy_parser import parse_expr as _parse_expr_sympy
+import re as _re_pe
+# Model names are symbols: every identifier that is not called is bound to a Symbol,
+# so species such as Ci, Si, E, S, Q or gamma do not resolve to sympy objects
+# (Symbol*Ci raised "unsupported operand type(s)" for a state named Ci).
+_PE_IDENT = _re_pe.compile(r'\b([A-Za-z_][A-Za-z0-9_]*)\b(?!\s*\()')
+
+
+def parse_expr(s, local_dict=None, **kwargs):
+    s = str(s)
+    ld = {nm: sympy.Symbol(nm) for nm in set(_PE_IDENT.findall(s))}
+    if local_dict:
+        ld.update(local_dict)
+    return _parse_expr_sympy(s, local_dict=ld, **kwargs)
 from scipy.optimize import linprog
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))

@@ -143,11 +143,27 @@ steadyStates <- function(model, file = NULL, rates = NULL, forcings = NULL,
     if (is.null(file)) file <- "reactions_for_Alyssa"
     # Not write.eqnlist(): the backend never sees the volumes, so the
     # V_ref / V_X factors getFluxes() applies have to be folded in first.
-    utils::write.csv(.volumeScaledReactions(model),
-                     file = paste0(file, "_model.csv"),
+    tab <- .volumeScaledReactions(model)
+    # Names sympy resolves to its own objects (Ci, Si, E, S, Q, gamma, ...) reach the
+    # backend under an alias: its implicit sympify() of strings would otherwise build
+    # Symbol*Ci and fail. Mapped back on the result below.
+    symAlias <- .ssSympyAliases(unique(c(names(tab)[-(1:2)], getSymbols(tab$Rate),
+                                         forcings, neglect, priority,
+                                         if (is.character(positive)) positive,
+                                         getSymbols(givenCQs))))
+    if (length(symAlias)) {
+      ren <- function(x) .ssRename(x, symAlias)
+      tab$Rate <- ren(tab$Rate)
+      hit <- names(tab) %in% names(symAlias)
+      names(tab)[hit] <- symAlias[names(tab)[hit]]
+      forcings <- ren(forcings); neglect <- ren(neglect); priority <- ren(priority)
+      if (is.character(positive)) positive <- ren(positive)
+      if (length(givenCQs)) givenCQs <- ren(givenCQs)
+    }
+    utils::write.csv(tab, file = paste0(file, "_model.csv"),
                      row.names = FALSE, na = "")
     model <- paste0(file, "_model.csv")
-  }
+  } else symAlias <- character(0)
   if (!is.null(givenCQs) && length(names(givenCQs)) > 0)
     stop("givenCQs must not have names. Please unname() them.")
 
@@ -249,6 +265,12 @@ steadyStates <- function(model, file = NULL, rates = NULL, forcings = NULL,
   }))
 
   if (length(m_ssChar) == 0) return(0)
+  if (length(symAlias)) {
+    back <- setNames(names(symAlias), symAlias)
+    m_ssChar <- setNames(.ssRename(m_ssChar, back),
+                         ifelse(names(m_ssChar) %in% names(back), back[names(m_ssChar)],
+                                names(m_ssChar)))
+  }
 
   # Versions 1.2+ resolve on the backend side; this covers the older ones. Only
   # rewrite when there is something to resolve, resolveRecurrence() reformats
@@ -275,4 +297,34 @@ steadyStates <- function(model, file = NULL, rates = NULL, forcings = NULL,
     saveRDS(object = m_ssChar, file = file)
 
   return(m_ssChar)
+}
+
+
+# Model names that sympy's sympify() turns into its own objects (functions, constants,
+# the S registry): each gets an alias that is a plain symbol and clashes with no other
+# name. Named character vector original -> alias; empty when nothing clashes.
+.ssSympyAliases <- function(names) {
+  names <- unique(names[nzchar(names)])
+  if (!length(names)) return(character(0))
+  spy <- tryCatch(reticulate::import("sympy", convert = FALSE), error = function(e) NULL)
+  if (is.null(spy)) return(character(0))
+  bad <- names[vapply(names, function(nm) {
+    ok <- tryCatch(reticulate::py_to_r(spy$sympify(nm)$is_Symbol),
+                   error = function(e) FALSE)
+    !isTRUE(ok) || !identical(reticulate::py_to_r(spy$sympify(nm)$name), nm)
+  }, logical(1))]
+  if (!length(bad)) return(character(0))
+  alias <- paste0(bad, "_dModSym")
+  while (any(alias %in% names)) alias <- paste0(alias, "_")
+  setNames(alias, bad)
+}
+
+# whole-name replacement old -> new in plain strings (also "a + b = tot")
+.ssRename <- function(x, map) {
+  if (!length(x) || !length(map)) return(x)
+  for (nm in names(map))
+    x <- gsub(paste0("(?<![A-Za-z0-9_.])", gsub(".", "\\.", nm, fixed = TRUE),
+                     "(?![A-Za-z0-9_.])"), map[[nm]], x,
+              perl = TRUE)
+  x
 }
