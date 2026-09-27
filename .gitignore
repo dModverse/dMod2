@@ -76,3 +76,7 @@ CLAUDE.md
 
 # Test-run artefact from a headless plot() call.
 tests/testthat/Rplots.pdf
+
+# raw outputs of the symmetry motif runs (bench/motifs/run_all.sh); the summary
+# lives in dev/planSymmetry.md
+bench/motifs/results*/

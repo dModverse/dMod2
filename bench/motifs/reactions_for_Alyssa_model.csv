@@ -1,0 +1,9 @@
+"Description","Rate","R","L","C","Ci_dModSym","S_dModSym","pS"
+"synthesis","ksR",1,,,,,
+"turnover","(kdR + kkd*bool_kd)*R",-1,,,,,
+"binding","kon*L*R",-1,-1,1,,,
+"unbinding","koff*C",1,1,-1,,,
+"internalisation","kint*C",,,-1,1,,
+"degradation","kdeg*Ci_dModSym",,,,-1,,
+"phosphorylation","kp*C*S_dModSym",,,,,-1,1
+"dephosphorylation","kdp*pS",,,,,1,-1
