@@ -28,6 +28,7 @@ import io
 import sys
 import math
 import tokenize
+import random
 from fractions import Fraction
 
 import numpy as np
@@ -869,6 +870,82 @@ def _canon_int_vector(prim, gens):
     return scaled
 
 
+def _factor_map(e):
+    """{irreducible factor: multiplicity} of a nonzero polynomial expression and its
+    rational content, without expanding a product that is already factored."""
+    c, fl = spy.factor_list(e)
+    out = {}
+    for f, m in fl:
+        # a factor fixed up to sign: keep one orientation, move the sign to c
+        if spy.Poly(f).LC() < 0:
+            f = -f
+            if m % 2:
+                c = -c
+        out[f] = out.get(f, 0) + int(m)
+    return c, out
+
+
+def _classify_factored(infis, gens):
+    """classifyDirection for wide directions: lcm of the denominators and gcd of the
+    numerators from factor lists (exact over Q), the canonical representative kept
+    as a product. None when a component is not rational."""
+    try:
+        nz = [i for i, e in enumerate(infis) if e != 0]
+        fr = [spy.fraction(spy.together(infis[i])) for i in nz]
+        num = [_factor_map(a) for a, _ in fr]
+        den = [_factor_map(b) for _, b in fr]
+        # lcm of the denominators, gcd of the numerators times lcm/den
+        L = {}
+        for _, dm in den:
+            for f, m in dm.items():
+                L[f] = max(L.get(f, 0), m)
+        cleared = []
+        for (cn, nm), (cd, dm) in zip(num, den):
+            fm = dict(nm)
+            for f, m in L.items():
+                fm[f] = fm.get(f, 0) + m - dm.get(f, 0)
+            cleared.append((cn / cd, {f: m for f, m in fm.items() if m}))
+        common = None
+        for _, fm in cleared:
+            common = dict(fm) if common is None else \
+                {f: min(m, fm.get(f, 0)) for f, m in common.items() if fm.get(f, 0)}
+        coeffs = [c for c, _ in cleared]
+        # integer-primitive: clear the rational coefficients, divide by their gcd
+        dl = 1
+        for c in coeffs:
+            dl = spy.ilcm(dl, spy.fraction(spy.nsimplify(c))[1])
+        ints = [int(c * dl) for c in coeffs]
+        g = 0
+        for v in ints:
+            g = spy.igcd(g, v)
+        g = g or 1
+        if ints[0] < 0:
+            g = -g
+        prim = {}
+        degs = []
+        for i, (c, fm) in zip(nz, cleared):
+            rest = {f: m - common.get(f, 0) for f, m in fm.items() if m - common.get(f, 0)}
+            e = spy.Integer(int(c * dl) // g)
+            d = 0
+            for f, m in rest.items():
+                e = e * f**m
+                d += m * spy.Poly(f, *gens).total_degree()
+            prim[i] = e
+            degs.append(d)
+        isScaling = all(degs[k] == 1 and prim[i].free_symbols == {gens[i]}
+                        and spy.Poly(prim[i], gens[i]).total_degree() == 1
+                        for k, i in enumerate(nz))
+        comp_out = {str(gens[i]): str(prim[i]) for i in nz}
+        if isScaling:
+            weights = {str(gens[i]): int(spy.Poly(prim[i], gens[i]).LC()) for i in nz}
+            return {'type': 'scaling', 'weights': weights,
+                    'components': comp_out, 'degree': 1}
+        return {'type': 'general', 'weights': None, 'components': comp_out,
+                'degree': int(max(degs)) if degs else 0}
+    except Exception:
+        return None
+
+
 def classifyDirection(vector):
     """Classify one non-identifiability direction and return its canonical
     poly-primitive differential generator.
@@ -912,6 +989,14 @@ def classifyDirection(vector):
     gens = sorted(varset, key=spy.default_sort_key)
     n = len(gens)
     infis = [comps.get(z, spy.Integer(0)) for z in gens]
+
+    # a wide direction (many symbols) goes through factor lists: the multivariate gcd
+    # of the expanded numerators costs minutes on an entry like
+    # ksec*(Km + R1 + ... + R30)**2, its factor list is read off the product
+    if n > 12:
+        wide = _classify_factored(infis, gens)
+        if wide is not None:
+            return wide
 
     # canonical poly-primitive representative (gauge fix): clear the common
     # denominator, then divide by the polynomial content of the numerators
@@ -3639,6 +3724,119 @@ def _compose_t0_events(icMap, t0evs, pval, subsMap):
     return icMap
 
 
+def jetGenerator(conds, support, anchor, maxOrder=8, maxChars=200000,
+                 timeLimit=60.0):
+    """A direction with support S in closed form from the jets.
+
+    Every Lie derivative L_f^k h evaluated at the initial values is invariant under
+    the direction X, so X_S is orthogonal to the S-gradient of every jet. With
+    |S| - 1 jets whose S-gradients are independent, X_S is their generalised cross
+    product: X_i = (-1)^i det(M without column i), M the gradient rows. For |S| = 2
+    this is X = (d_b Phi, -d_a Phi), the Hamiltonian field of one jet Phi.
+
+    `conds` holds per condition {'f': ['x = rhs', ...], 'g': [h, ...],
+    'ic': ['x = x0', ...]} over the leaves. Jets are taken order by order, lowest
+    first, rows kept greedily while they raise the rank at a random rational point.
+    Returns {'ok': True, 'vector': {z: entry}} normalised to 1 at `anchor`, or
+    {'ok': False, 'reason': ...}. The caller verifies the result."""
+    import time as _time
+    t0 = _time.time()
+    support = [str(s) for s in _as_list(support)]
+    anchor = str(anchor)
+    m = len(support)
+    if m < 2 or anchor not in support:
+        return {'ok': False, 'reason': 'support'}
+    lines = []
+    for c in conds:
+        lines += list(_as_list(c['f'])) + list(_as_list(c['ic'])) + \
+            [str(x) for x in _as_list(c['g'])]
+    lines += support
+    local, parse = _make_local_parse(lines)
+    zs = [local.get(s, spy.Symbol(s)) for s in support]
+    rng = random.Random(20260927)
+    point = {}
+
+    def num(e):
+        for sym in e.free_symbols:
+            if sym not in point:
+                point[sym] = spy.Integer(rng.randint(2, 997))
+        return e.xreplace(point)
+
+    parsed = []
+    for c in conds:
+        fl = [l.split(' = ', 1) for l in _as_list(c['f'])]
+        states = [local.get(a.strip(), spy.Symbol(a.strip())) for a, _ in fl]
+        rhs = [spy.sympify(parse(b)) for _, b in fl]
+        icd = {}
+        for l in _as_list(c['ic']):
+            a, b = l.split(' = ', 1)
+            icd[local.get(a.strip(), spy.Symbol(a.strip()))] = spy.sympify(parse(b))
+        gs = [spy.sympify(parse(str(x))) for x in _as_list(c['g'])]
+        parsed.append((states, rhs, icd, gs))
+    rows, numrows = [], []
+    rank = 0
+    jets = [list(p[3]) for p in parsed]
+    for order in range(maxOrder + 1):
+        for ci, (states, rhs, icd, gs) in enumerate(parsed):
+            for h in jets[ci]:
+                if _time.time() - t0 > timeLimit:
+                    return {'ok': False, 'reason': 'time limit'}
+                he = h.xreplace(icd) if icd else h
+                row = [spy.diff(he, z) for z in zs]
+                if all(r == 0 for r in row):
+                    continue
+                # a minor of rows this large does not simplify in bounded time
+                if sum(len(str(r)) for r in row) > maxChars // 20:
+                    continue
+                nr = [num(r) for r in row]
+                if spy.Matrix(numrows + [nr]).rank() > rank:
+                    rows.append(row); numrows.append(nr); rank += 1
+                    if rank == m - 1:
+                        break
+            if rank == m - 1:
+                break
+        if rank == m - 1:
+            break
+        if order == maxOrder:
+            break
+        for ci, (states, rhs, icd, gs) in enumerate(parsed):
+            new = []
+            for h in jets[ci]:
+                d = sum((spy.diff(h, states[i]) * rhs[i] for i in range(len(states))),
+                        spy.Integer(0))
+                if len(str(d)) > maxChars:
+                    return {'ok': False, 'reason': 'jet too large'}
+                new.append(d)
+            jets[ci] = new
+    if rank < m - 1:
+        return {'ok': False, 'reason': 'rank %d of %d within order %d' % (rank, m - 1, maxOrder)}
+    M = spy.Matrix(rows)
+    comps = []
+    for i in range(m):
+        sub = M[:, [j for j in range(m) if j != i]]
+        # the minor by cofactor expansion, kept as a product/sum tree (no expansion)
+        comps.append((-1) ** i * (sub.det(method='berkowitz') if m > 2 else sub[0, 0]))
+        if _time.time() - t0 > timeLimit:
+            return {'ok': False, 'reason': 'time limit'}
+    ia = support.index(anchor)
+    if comps[ia] == 0:
+        return {'ok': False, 'reason': 'anchor component vanishes'}
+    vec = {}
+    for i in range(m):
+        e = spy.together(comps[i] / comps[ia])
+        # cancel() and factor() only while they stay cheap; the caller verifies the
+        # entry modulo a fresh prime either way
+        if len(str(e)) <= maxChars // 40:
+            e = spy.factor(spy.cancel(e))
+        if len(str(e)) > maxChars:
+            return {'ok': False, 'reason': 'closed form too large'}
+        if e != 0:
+            vec[support[i]] = str(e)
+        if _time.time() - t0 > timeLimit:
+            return {'ok': False, 'reason': 'time limit'}
+    return {'ok': True, 'vector': vec, 'order': int(order)}
+
+
 def compileObservabilityTapeMulti(model, observation, conditionSubs, conditionIC0,
                                   fixed=None, parameters=None, backend='sympy',
                                   equilibrate=False, forcings=None,
@@ -4099,6 +4297,11 @@ def compileObservabilityTapeMulti(model, observation, conditionSubs, conditionIC
             icOp, icA, icB, icCnum, icCden, icOut = icEmitted
             tape.update({'icOp': icOp, 'icA': icA, 'icB': icB,
                          'icCnum': icCnum, 'icCden': icCden, 'icOut': icOut})
+            # the symbolic jets of this segment, for jetGenerator(): dynamics,
+            # observables and initial values over the leaves
+            tape['jetF'] = ['%s = %s' % (str(S[i]), str(f_c[i])) for i in range(nS)]
+            tape['jetG'] = [str(e) for e in g_c]
+            tape['jetIC'] = ['%s = %s' % (str(X), str(ic_c[str(X)])) for X in S]
         # events at this segment's left boundary, applied by the kernel to the
         # propagated state; their values as an order-0 tape over the leaves
         evs = evPer[c]

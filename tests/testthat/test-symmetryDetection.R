@@ -1899,3 +1899,92 @@ test_that("the complete generator has the same orbits and a flow for all s", {
   out <- c(capture.output(print(r)), capture.output(summary(r)))
   expect_false(any(grepl(gn$factor, out, fixed = TRUE)))
 })
+
+
+test_that("the narrow kernel reconstructs what the full kernel does", {
+  if (!.sympy_works()) skip("reticulate/sympy not available")
+  # autocrine loop with free initial values: two scalings and a curved direction
+  # sharing vol and ktl. Narrow reconstruction runs on minimal-support vectors, so it
+  # must keep the scalings apart from the curved direction, like the full kernel.
+  f <- eqnvec(m = "ktx*(b0 + C) - dm*m", P = "ktl*m - (kdg + ksec)*P",
+              L = "ksec*P/vol - kon*L*R + koff*C - kL*L",
+              R = "ksR - kdR*R - kon*L*R + koff*C", C = "kon*L*R - koff*C - kint*C")
+  g <- eqnvec(ym = "sm*m", yC = "sC*C", yL = "L")
+  tr <- eqnvec(m = "m0", P = "P0", L = "L0", R = "R0", C = "C0")
+  canon <- function(res) sort(vapply(res$symmetries, function(d)
+    paste0(d$type, ":", paste(sort(names(d$generator)), collapse = ",")), ""))
+  withr::local_envvar(DMOD_SYM_NONARROW = "")
+  narrow <- symdet(f, g, trafo = tr, reconstruct = TRUE)
+  withr::local_envvar(DMOD_SYM_NONARROW = "1")
+  full <- symdet(f, g, trafo = tr, reconstruct = TRUE)
+  expect_identical(canon(narrow), canon(full))
+  expect_true(all(vapply(narrow$symmetries, function(d) isTRUE(d$explicit), logical(1))))
+  cn <- Filter(function(d) d$type == "general", narrow$symmetries)[[1]]
+  cf <- Filter(function(d) d$type == "general", full$symmetries)[[1]]
+  for (v in names(cn$generator))
+    expect_true(.symExprEqual(cn$generator[[v]], cf$generator[[v]]))
+})
+
+
+test_that("a direction seen through a sum of leaves closes with a translation group", {
+  if (!.sympy_works()) skip("reticulate/sympy not available")
+  # autocrine pool degraded at three saturable sites: the curved direction trading
+  # kdg against ksec has the entry ksec*(Km + R1 + R2 + R3)^2. The translation group
+  # Km + R1 + R2 + R3 is fitted in one variable and folded back.
+  withr::local_dir(tempdir())
+  r <- eqnlist() |>
+    addReaction("", "m", "ktx*(b0 + C)") |> addReaction("m", "", "dm*m") |>
+    addReaction("", "P", "ktl*m") |>
+    addReaction("P", "", "kdg*P/(Km + R1 + R2 + R3)") |>
+    addReaction("P", "L", "ksec*P") |> addReaction("L", "", "kL*L") |>
+    addReaction("", "R", "ksR") |> addReaction("R", "", "kdR*R") |>
+    addReaction("L + R", "C", "kon*L*R") |> addReaction("C", "L + R", "koff*C") |>
+    addReaction("C", "", "kint*C")
+  ss <- steadyStates(r, verbose = FALSE)
+  ev <- addEvent(eventlist(), var = "L", time = 0, value = "dose", method = "add")
+  g <- eqnvec(ym = "sm*m", yC = "sC*C", yL = "L", yR1 = "R1", yR2 = "R2", yR3 = "R3")
+  grid <- data.frame(dose = c(0, 1), row.names = c("ctrl", "stim"))
+  withr::local_envvar(DMOD_SYM_NOGROUP = "")
+  res <- symdet(r, g, trafo = ss, events = ev, conditions = grid, reconstruct = TRUE)
+  expect_true(all(vapply(res$symmetries, function(d) isTRUE(d$explicit), logical(1))))
+  wide <- Filter(function(d) "ksec" %in% names(d$generator), res$symmetries)[[1]]
+  expect_true(.symExprEqual(
+    paste0("(", wide$generator[["Km"]], ")/(", wide$generator[["ksec"]], ")"),
+    "(Km + R1 + R2 + R3)**2/kdg"))
+  withr::local_envvar(DMOD_SYM_NOGROUP = "1")
+  res0 <- symdet(r, g, trafo = ss, events = ev, conditions = grid, reconstruct = TRUE)
+  w0 <- Filter(function(d) "ksec" %in% names(d$generator), res0$symmetries)[[1]]
+  for (v in names(wide$generator))
+    expect_true(.symExprEqual(wide$generator[[v]], w0$generator[[v]]))
+})
+
+
+test_that("a per-condition g list may be named by condition", {
+  if (!.sympy_works()) skip("reticulate/sympy not available")
+  # a named list reached Python as a dict and failed in the log chart
+  f <- eqnvec(A = "-k1*A", B = "-k2*B")
+  g <- list(elisa = eqnvec(yA = "sA*A"), wb = eqnvec(yB = "sB*B"))
+  res <- symdet(f, g, conditions = data.frame(row.names = c("elisa", "wb")))
+  res0 <- symdet(f, unname(g), conditions = data.frame(row.names = c("elisa", "wb")))
+  expect_identical(res$rank, res0$rank)
+  expect_identical(res$dim, res0$dim)
+})
+
+
+test_that("jetGenerator reads a direction off the jets", {
+  if (!.sympy_works()) skip("reticulate/sympy not available")
+  sd <- .sd_module()
+  # y = x, x' = -(k1 + k2)*x: only k1 + k2 is seen; X = (1, -1) on (k1, k2) is the
+  # Hamiltonian field of the first jet -(k1 + k2)*x0 in the (k1, k2) plane
+  cond <- list(list(f = list("x = -(k1 + k2)*x"), g = list("x"), ic = list("x = x0")))
+  jg <- sd$jetGenerator(cond, list("k1", "k2"), "k1")
+  expect_true(isTRUE(jg$ok))
+  expect_true(.symExprEqual(jg$vector[["k1"]], "1"))
+  expect_true(.symExprEqual(jg$vector[["k2"]], "-1"))
+  # three coordinates, one direction: the cross product of two jet gradients
+  cond3 <- list(list(f = list("x = -k1*k2*x + k3"), g = list("x"), ic = list("x = 0")))
+  jg3 <- sd$jetGenerator(cond3, list("k1", "k2", "k3"), "k1")
+  expect_true(isTRUE(jg3$ok))
+  expect_true(.symExprEqual(jg3$vector[["k2"]], "-k2/k1"))
+  expect_false("k3" %in% names(jg3$vector))
+})

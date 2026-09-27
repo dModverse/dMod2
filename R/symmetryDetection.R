@@ -288,7 +288,9 @@ symmetryDetection <- function(f = NULL, g = NULL, trafo = NULL,
   # `g` is one eqnvec for every condition or a list with one per condition (for
   # observables that differ between conditions). Held as the list `gset`.
   gPerCond <- !is.null(g) && is.list(g) && !inherits(g, "eqnvec")
-  gset <- if (gPerCond) lapply(g, as.eqnvec)
+  # positional: a named list (one entry per condition name) would reach Python as a
+  # dict and be iterated by its names
+  gset <- if (gPerCond) unname(lapply(g, as.eqnvec))
           else list(if (is.null(g)) NULL else as.eqnvec(g))
   if (gPerCond && !length(gset))
     stop("symmetryDetection(): `g` is an empty list; give one eqnvec per condition.",
@@ -3436,13 +3438,13 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
     # One-leaf perturbation probe: one kernel per leaf, retried until the pivots match
     # (a pivot shift would mark the leaf relevant everywhere). `kb` and `piv0` give the
     # kernel and its reference pivots, so the probe runs on the full or a narrow kernel.
-    runProbe <- function(kb, piv0, first) {
+    runProbe <- function(kb, piv0, first, base = sc$point0) {
       rp <- vector("list", nAug)
       pending <- seq_len(nAug)
       for (att in seq_len(ctrl$probeRetries)) {
         if (!length(pending) || .symExpired(ctrl)) break
         perts <- lapply(pending, function(li) {
-          pert <- sc$point0
+          pert <- base
           pert[li] <- sc$pool(first + (li - 1L) * ctrl$probeRetries + (att - 1L))
           pert
         })
@@ -3512,14 +3514,71 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
                     znames[anchor + 1L], m, nz))
       relS <- runProbe(kbS, refS$pivots, poolNext)
       poolNext <<- poolNext + nAug * ctrl$probeRetries
-      dir <- .symInterpolateDirection(anchor, refS, refS$pivots, znames, zSlots,
-                                      leafNamesAug, nAug, sc$point0, sc$pool, poolNext,
-                                      sc$NtUsed, kcS, spy, relS, resS, ctrl, kbS,
-                                      auxLeaves = auxLeaves)
-      poolNext <<- dir$poolNext
-      e <- dir$entry
-      e$relevantLeaves <- NULL
+      # Translation groups: leaves along which the whole direction is invariant under
+      # the exchange e_r - e_v enter it only through the sum r + v (Km + R1 + ... + Rn).
+      # Members are held at the base point during the fit (probe marked irrelevant) and
+      # the representative is shifted back afterwards: F(u) = G(u - sum of member bases).
+      groups <- if (nzchar(Sys.getenv("DMOD_SYM_NOGROUP"))) list()
+                else .symTranslationGroups(relS, refS, resS, kbS, sc, P, nLeaves)
+      poolNext <<- poolNext + 4L * nLeaves
+      # the members of a multiplicative group sit at 1 during the fit: held at the base
+      # point they would enter as the product of their values, a coefficient far beyond
+      # what four primes reconstruct once the group is large
+      base0 <- sc$point0
+      mulMembers <- unlist(lapply(Filter(function(g) identical(g$type, "mul"), groups),
+                                  `[[`, "members"))
+      if (length(mulMembers)) {
+        pt1 <- base0; pt1[mulMembers] <- 1
+        ref1 <- kcS(pt1, P, sc$NtUsed)
+        if (!is.null(resS(ref1, P))) {
+          base0 <- pt1; refS <- ref1
+          relS <- runProbe(kbS, refS$pivots, poolNext, base0)
+          poolNext <<- poolNext + nAug * ctrl$probeRetries
+        } else groups <- Filter(function(g) !identical(g$type, "mul"), groups)
+      }
+      for (gr in groups) for (v in gr$members) relS[[v]]$rp <- refS
+      # the closed form from the jets first (X_S is the generalised cross product of
+      # the S-gradients of |S| - 1 jets), over the first segment of every condition:
+      # no sampling, bounded in time, and verified like any other closed form
+      jetTry <- function(limit) {
+        if (is.null(sd) || nzchar(Sys.getenv("DMOD_SYM_NOJET")) || m > 6L) return(NULL)
+        conds <- lapply(multi$tapes[which(firstOfChain)], function(t)
+          if (is.null(t$jetF)) NULL
+          else list(f = as.character(t$jetF), g = as.character(t$jetG),
+                    ic = as.character(t$jetIC)))
+        if (!length(conds) || any(vapply(conds, is.null, logical(1)))) return(NULL)
+        jg <- tryCatch(sd$jetGenerator(conds, as.list(znames[cols + 1L]),
+                                       znames[anchor + 1L], timeLimit = limit),
+                       error = function(err) NULL)
+        .tlog(sprintf("narrow: jet closed form %s", if (isTRUE(jg$ok))
+          sprintf("found at order %d", as.integer(jg$order)) else
+          paste0("not found (", if (is.null(jg)) "error" else jg$reason, ")")))
+        if (!isTRUE(jg$ok)) return(NULL)
+        list(support = .symSort(names(jg$vector)),
+             vector = lapply(jg$vector, function(x) gsub("\\*\\*", "^", x)),
+             type = "general", closedForm = TRUE)
+      }
+      e <- jetTry(as.numeric(Sys.getenv("DMOD_SYM_JETTIME", "20")))
+      if (!is.null(e)) groups <- list() else {
+        dir <- .symInterpolateDirection(anchor, refS, refS$pivots, znames, zSlots,
+                                        leafNamesAug, nAug, base0, sc$pool, poolNext,
+                                        sc$NtUsed, kcS, spy, relS, resS, ctrl, kbS,
+                                        auxLeaves = auxLeaves)
+        poolNext <<- dir$poolNext
+        e <- dir$entry
+        e$relevantLeaves <- NULL
+      }
       if (!isTRUE(e$closedForm)) return(e)
+      if (length(groups) && !is.null(spy)) {
+        e$vector <- .symShiftGroups(e$vector, groups, leafNamesAug, base0, spy)
+        if (is.null(e$vector))
+          return(list(support = e$support, type = "general", closedForm = FALSE,
+                      reason = "translation-group back-substitution failed"))
+        .tlog(sprintf("narrow: %d exchange group(s) folded back (%s)", length(groups),
+                      paste(vapply(groups, function(g) paste(leafNamesAug[c(g$rep, g$members)],
+                        collapse = if (identical(g$type, "mul")) "*" else "+"), ""),
+                            collapse = "; ")))
+      }
       # a cocircuit normalised at its anchor is a kernel vector, not necessarily the
       # free-column one: verified by nullspace membership at a fresh point
       if (!.symVerifyInNullspace(e, anchor, znames, leafNamesAug, sc$point0, sc$NtUsed,
@@ -4424,6 +4483,100 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
 }
 
 
+# Exchange groups of a direction on its narrow kernel. Two relevant leaves r, v form
+# an additive group when the direction (every entry at once) is invariant under the
+# exchange z_r + t, z_v - t: it then depends on them only through z_r + z_v (Km + R1
+# + ... + Rn). They form a multiplicative group when it is invariant under z_r * a,
+# z_v / a: it then depends on them only through z_r * z_v (a product of site
+# occupancies). Tested at a random point and a random t or a (Schwartz-Zippel; the
+# division by a is its inverse modulo the probing prime), one batch per candidate
+# leaf against the current representatives, additive first. Returns
+# list(rep, members, type) per group with at least one member.
+.symTranslationGroups <- function(relS, refS, resS, kbS, sc, P, nLeaves,
+                                  first = sc$poolNext + 7919L) {
+  base <- resS(refS, P)
+  if (is.null(base)) return(list())
+  piv0 <- as.integer(refS$pivots)
+  relevant <- which(vapply(seq_along(relS), function(li) {
+    rp <- relS[[li]]$rp
+    if (is.null(rp) || !isTRUE(rp$ok) || !identical(as.integer(rp$pivots), piv0))
+      return(FALSE)
+    v <- resS(rp, P)
+    !is.null(v) && any(v != base)
+  }, logical(1)))
+  if (length(relevant) < 2L) return(list())
+  z1 <- as.numeric(sc$point0)
+  z1[seq_len(nLeaves)] <- sc$pool(first + seq_len(nLeaves))
+  tval <- sc$pool(first + nLeaves + 1L) %% 100003
+  aval <- (sc$pool(first + nLeaves + 2L) %% 99991) + 2
+  ainv <- .symInvmod(aval, P)
+  moves <- list(
+    add = function(z, r, v) { z[r] <- z[r] + tval; z[v] <- z[v] - tval; z },
+    mul = function(z, r, v) { z[r] <- .symMulmod(z[r] %% P, aval, P)
+                              z[v] <- .symMulmod(z[v] %% P, ainv, P); z })
+  groups <- list()
+  for (type in names(moves)) {
+    grouped <- unlist(lapply(groups, function(g) c(g$rep, g$members)))
+    reps <- integer(0); members <- list()
+    for (v in setdiff(relevant, grouped)) {
+      joined <- FALSE
+      if (length(reps)) {
+        pts <- c(list(z1), lapply(reps, function(r) moves[[type]](z1, r, v)))
+        out <- kbS(pts, rep(P, length(pts)), sc$NtUsed)
+        v1 <- resS(out[[1]], P)
+        if (!is.null(v1)) for (j in seq_along(reps)) {
+          v2 <- resS(out[[j + 1L]], P)
+          if (!is.null(v2) && identical(as.integer(out[[j + 1L]]$pivots),
+                                        as.integer(out[[1]]$pivots)) && all(v1 == v2)) {
+            members[[j]] <- c(members[[j]], v); joined <- TRUE; break
+          }
+        }
+      }
+      if (!joined) { reps <- c(reps, v); members[[length(reps)]] <- integer(0) }
+    }
+    for (j in which(lengths(members) > 0L))
+      groups[[length(groups) + 1L]] <- list(rep = reps[j], members = members[[j]],
+                                            type = type)
+  }
+  groups
+}
+
+# The entries reconstructed with the group members held at the base point are
+# G(z_rep) = F(z_rep + sum of member bases) for an additive group and
+# G(z_rep) = F(z_rep * product of member bases) for a multiplicative one; F follows by
+# z_rep -> U - sum (U / product), simplified in the few variables that leaves, and
+# U -> the sum (product) of the group, unexpanded. The bases enter as exact
+# integers. NULL when sympy refuses.
+.symShiftGroups <- function(vec, groups, leafNames, point0, spy) {
+  taken <- unique(c(names(vec), leafNames))
+  U <- vapply(seq_along(groups), function(k) {
+    u <- paste0("dModG", k); while (u %in% taken) u <- paste0(u, "_"); u }, "")
+  strs <- vapply(vec, as.character, character(1))
+  syms <- unique(c(names(vec), leafNames, U))
+  locals <- reticulate::dict(setNames(lapply(syms, function(x) spy$Symbol(x)), syms))
+  exact <- function(x) spy$Integer(format(as.numeric(x), scientific = FALSE))
+  out <- tryCatch(lapply(strs, function(s) {
+    e <- spy$sympify(gsub("\\^", "**", s), locals = locals)
+    shift <- lapply(seq_along(groups), function(k) {
+      g <- groups[[k]]
+      b <- lapply(point0[g$members], exact)
+      to <- if (identical(g$type, "mul")) spy$Symbol(U[k]) / Reduce(`*`, b)
+            else spy$Symbol(U[k]) - Reduce(`+`, b)
+      reticulate::tuple(spy$Symbol(leafNames[g$rep]), to)
+    })
+    e <- spy$factor(spy$cancel(e$subs(shift)))
+    back <- lapply(seq_along(groups), function(k) {
+      g <- groups[[k]]
+      zs <- lapply(leafNames[c(g$rep, g$members)], function(x) spy$Symbol(x))
+      reticulate::tuple(spy$Symbol(U[k]),
+                        if (identical(g$type, "mul")) Reduce(`*`, zs) else Reduce(`+`, zs))
+    })
+    gsub("\\*\\*", "^", as.character(e$subs(back)))
+  }), error = function(err) NULL)
+  if (is.null(out)) return(NULL)
+  setNames(out, names(vec))
+}
+
 .symInterpolateDirection <- function(f, ref, pivots, znames, zSlots, leafNames,
                                        nLeaves, point0, pool, poolNext, NtUsed,
                                        kcall, spy, relProbe = NULL,
@@ -5214,9 +5367,16 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
 # an expression in R's power syntax, cancelled by sympy when that makes it shorter
 .symTidy <- function(x, spy) {
   if (is.null(spy)) return(x)
+  # cancel() expands: on a power of a wide sum ((Km + R1 + ... + R12)^4 in the factor
+  # of a complete generator) that is thousands of terms and minutes of factor(), for
+  # a cosmetic rewrite. Wide or long expressions only get together(), which does not
+  # expand.
+  nSym <- length(unique(unlist(regmatches(x, gregexpr("[A-Za-z_.][A-Za-z0-9_.]*", x)))))
+  wide <- nSym > 10L || nchar(x) > 600L
   y <- tryCatch({
     e <- spy$sympify(gsub("\\^", "**", x), locals = .symRedLocals(x, spy))
-    gsub("\\*\\*", "^", as.character(spy$factor(spy$cancel(e))))
+    gsub("\\*\\*", "^", as.character(if (wide) spy$together(e)
+                                     else spy$factor(spy$cancel(e))))
   }, error = function(e) x)
   if (length(y) == 1L && !is.na(y) && nchar(y) < nchar(x)) y else x
 }
