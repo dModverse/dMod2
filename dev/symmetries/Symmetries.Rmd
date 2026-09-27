@@ -929,8 +929,10 @@ an invariant monomial, so it keeps its name. A curved carrier is an invariant
 *value* and not the coordinate it was solved from, so every invariant of a curved
 block gets a fresh parameter `q_<k>`: reusing a coordinate's name would suggest
 substitutions that do not exist, a pinned entry `z = 1` fixing the inner
-coordinate where `q_<k>` is free. The `Invariants:` block of the report gives the
-invariant behind each `q_<k>`. A scaling survivor is not listed: its monomial
+coordinate where `q_<k>` is free. That holds for a face section as well: the
+coordinates it keeps stay in the model but take a new meaning, so they are renamed
+too. The `Invariants:` block of the report gives the invariant behind each
+`q_<k>`. A scaling survivor is not listed: its monomial
 follows from the gauge above it, `k_phos_ERK` standing for $k_{phos,ERK} \cdot MEK$
 under `MEK = 1`. The full mapping is on the object, as `survivorMeaning`.
 
@@ -1015,6 +1017,22 @@ found and the caps it exhausted.
 
 ## The chart: the old parameters as functions of the new {#sec-chart}
 
+**Why a section.** The invariants say *which* orbit a parameter vector lies on,
+not *where* on it a fit should sit. A chart needs both: the invariants as new
+parameters, and a *section*, one equation per direction that picks exactly one
+point on every orbit. The choice matters. Take an unobserved pool lost by
+degradation $k_{dg}$ and by secretion $k_{sec}$ into a medium where the secreted
+ligand is measured (Section \ref{sec-autocrine}). The data fix the total turnover
+$\lambda = k_{dg} + k_{sec}$ but not how it splits, so along an orbit $\lambda$
+stays put while $k_{dg}$ runs from $0$ up to $\lambda$. A pin $k_{sec} = 1$ misses
+every orbit with $\lambda < 1$, a pin $k_{dg} = c > 0$ every orbit with
+$\lambda < c$. The face $k_{dg} = 0$ is met by every orbit exactly once, at
+$k_{sec} = \lambda$: the chart switches degradation off, and the secretion rate
+there becomes the new parameter $q_1 = k_{dg} + k_{sec}$, the whole turnover.
+`print()` of a reduction lists this under `Sections:`, one line per block with its
+section and the reason it was admitted; the kinds (face, balance, pin) are the
+subject of step 2 below.
+
 The invariants define the new parameters. The `trafo` runs the other way, each old
 coordinate as a function of them. That is one square system, in four steps.
 
@@ -1050,10 +1068,12 @@ when every orbit reaches it once with the other coordinates positive. The point 
 reaches solves $I(z') = I(z)$ with $z'_Z = 0$; the face is admitted when that solve
 has exactly one branch whose entries, composed into the *original* coordinates, are
 certified positive on the whole orthant, every other branch leaves the domain, and
-no denominator of the model vanishes on the face. The chart is then the identity on
-the remaining coordinates and switches the face coordinates off: a catenary of
-three compartments with leaks from each keeps one leak, $k_{02} = k_{03} = 0$, the
-classic identifiable form. A scaling that overlaps a curved block is pinned outside
+no denominator of the model vanishes on the face. The chart then switches the face
+coordinates off, and each remaining coordinate of the block holds the value it
+takes where its orbit meets the face, an invariant: by the naming rule it becomes a
+`q_<k>`, with that invariant under `Invariants:`. A catenary of three compartments
+with leaks from each keeps one leak, $k_{02} = k_{03} = 0$, the classic
+identifiable form, its five remaining rates carried by $q_1, \dots, q_5$. A scaling that overlaps a curved block is pinned outside
 every curved support where it can be, so the curved block keeps only its own
 directions.
 
@@ -1745,6 +1765,63 @@ c(identifiable = res$identifiable, rank = res$rank, dim = res$dim)
 # yet the modular interior point still delivers the verdict
 symmetryDetection(eqnvec(x = "b - a*x^2"), g, method = "observability",
                   equilibrate = TRUE)$rank
+```
+
+## An autocrine loop: switching a rate off {#sec-autocrine}
+
+A cell makes a ligand, secretes it into the medium, and the ligand drives its own
+transcription through a receptor complex: the pattern of the TGF-$\beta$ models,
+in small. The mRNA $m$ is transcribed under the complex $C$ and translated into an
+intracellular pool $P$, which is degraded at $k_{dg}$ or secreted at $k_{sec}$
+into the medium ligand $L$. The mRNA and the complex are read out on unknown
+scales, the ligand in absolute units, and the cell rests at its fixed point until a
+ligand dose arrives.
+
+```{r autocrine, eval = haveSympy}
+r <- eqnlist() |>
+  addReaction("", "m", "ktx*(b0 + C)", "transcription") |>
+  addReaction("m", "", "dm*m", "mRNA decay") |>
+  addReaction("", "P", "ktl*m", "translation") |>
+  addReaction("P", "", "kdg*P", "degradation") |>
+  addReaction("P", "L", "ksec*P", "secretion") |>
+  addReaction("L", "", "kL*L", "ligand decay") |>
+  addReaction("", "R", "ksR", "receptor synthesis") |>
+  addReaction("R", "", "kdR*R", "receptor turnover") |>
+  addReaction("L + R", "C", "kon*L*R", "binding") |>
+  addReaction("C", "L + R", "koff*C", "unbinding") |>
+  addReaction("C", "", "kint*C", "internalisation")
+ss   <- steadyStates(r, verbose = FALSE)
+obs  <- eqnvec(ym = "sm*m", yC = "sC*C", yL = "L")
+dose <- addEvent(eventlist(), var = "L", time = 0, value = "dose", method = "add")
+cond <- data.frame(dose = c(0, 1), row.names = c("ctrl", "stim"))
+res <- symmetryDetection(r, obs, trafo = ss, events = dose, conditions = cond,
+                         reconstruct = TRUE, verbose = FALSE)
+red <- symmetryReduction(res)
+red
+```
+
+Two directions remain. `X₁` is the transcription scaling, gauged by a pin. `X₂`
+moves $k_{dg}$, $k_{sec}$ and $k_{tl}$: the pool $P$ is never measured, only what
+leaves it into the medium, so the data see the turnover of the pool and the
+secreted share of translation, the invariants
+\begin{equation}
+q_1 = k_{dg} + k_{sec}, \qquad q_2 = \frac{k_{sec}\,k_{tl}}{k_{dg} + k_{sec}} ,
+\end{equation}
+but not how the turnover splits between degradation and secretion. For the
+section, a pin would miss orbits (Section \ref{sec-chart}); the face $k_{dg} = 0$
+meets every orbit once, and `Sections:` says so. The reduced model degrades
+nothing inside the cell and secretes at the whole turnover $q_1$. That is a choice
+of coordinates, not a claim about the cell: every parameter vector of the full
+model has a counterpart with $k_{dg} = 0$ and the same observables, and the
+reduced model is identifiable.
+
+```{r autocrine-check, eval = haveSympy}
+# the reduction composed into the steady-state trafo
+inner <- setNames(cOde::replaceSymbols(names(red$trafo), red$trafo, as.character(ss)),
+                  names(ss))
+tr <- do.call(eqnvec, as.list(c(inner, red$trafo[setdiff(names(red$trafo), names(ss))])))
+symmetryDetection(r, obs, trafo = tr, events = dose, conditions = cond,
+                  verbose = FALSE)$identifiable
 ```
 
 ## A transient channel made identifiable by exact propagation

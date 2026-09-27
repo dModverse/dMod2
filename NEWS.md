@@ -1,5 +1,19 @@
 # dMod2 (development version)
 
+* `symmetryReduction()`: the coordinates a face section keeps become fresh `q_<k>`
+  parameters, like every other carrier of a general block. They hold the value
+  they take where the orbit meets the face, an invariant, so keeping the old name
+  gave reports such as `TGFB1 = TGFB1*(...)` on TGFbModelling M011; now the trafo
+  reads `k_dg_TGFB1 = 0, TGFB1 = q_1` and `Invariants:` lists `q_1 = ...`.
+* `print()` and `summary()` of a reduction list the section of every block
+  under `Sections:`: which one (face, balance or pin) and why it meets every orbit
+  exactly once, with a pointer to the vignette. The vignette explains in a
+  paragraph why a chart needs a section and works an autocrine loop through, the
+  case where a face switches intracellular degradation off.
+* `summary()` of a detection or a reduction returns the object marked for the full
+  report, so `print(summary(res))` prints the report once instead of the report
+  followed by `print(res)`; `summary(res)$rank` and `symmetryReduction(summary(res))`
+  keep working.
 * `symmetryDetection()` reconstructs each general direction on its narrow kernel:
   a minimal-support direction is the only kernel vector on its support S, so
   every sample needs the Lie-derivative gradients along S only (dual width

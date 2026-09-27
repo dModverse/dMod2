@@ -5573,7 +5573,22 @@ print.symmetrydetection <- function(x, fixed = NULL, width = getOption("width"),
 #' @export
 summary.symmetrydetection <- function(object, verbose = FALSE, fixed = NULL,
                                       width = getOption("width"), ...)
-  .symReport(object, verbose, if (is.null(fixed)) object$gauge else fixed, width)
+  structure(object, class = unique(c("summary.symmetrydetection", class(object))),
+            summaryArgs = list(verbose = verbose, fixed = fixed, width = width))
+
+# summary() returns the result itself, marked for the full report: summary(res)$rank
+# still works, symmetryReduction(summary(res)) too, and print(summary(res)) prints
+# the report once
+#' @export
+print.summary.symmetrydetection <- function(x, ...) {
+  a <- attr(x, "summaryArgs")
+  y <- x
+  attr(y, "summaryArgs") <- NULL
+  class(y) <- setdiff(class(y), "summary.symmetrydetection")
+  .symReport(y, isTRUE(a$verbose), if (is.null(a$fixed)) y$gauge else a$fixed,
+             if (is.null(a$width)) getOption("width") else a$width)
+  invisible(x)
+}
 
 
 # A result of the chart L = log(a + b*v) (logArgChart) reported in v, see

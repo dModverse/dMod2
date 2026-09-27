@@ -53,8 +53,10 @@ An object of class \code{symmetryreduction}:
 \describe{
 \item{\code{blocks}}{one entry per set of coupled directions: \code{labels}, \code{type},
 \code{kind}, \code{support}, \code{stage}, \code{invariants}, \code{certificates}, \code{transversal},
-\code{pins}, \code{survivorMeaning} (the invariant each remaining coordinate or
-\verb{q_<k>} carries), \code{carrierDomain} (\code{"positive"} or \code{"real"} per \verb{q_<k>}),
+\code{pins}, \code{section} and \code{face} (the section of the chart and whether it is a
+face), \code{survivorMeaning} (the invariant each \verb{q_<k>} or, for a scaling,
+each remaining coordinate carries), \code{carrierDomain} (\code{"positive"} or
+\code{"real"} per \verb{q_<k>}),
 \code{coverage} (\code{"total"} or \code{"partial"}), \code{moduleCombos}, \code{status}
 (\code{"fixed"}, \code{"reduced"}, \code{"invariantOnly"} or \code{"unresolved"}), \code{reason}
 and \code{zeroCompatibility}.}
@@ -82,8 +84,9 @@ exact invariant search of increasing complexity: monomial, polynomial up to
 degree \code{dPoly}, separable quadratures, rational with a monomial denominator,
 Darboux polynomials up to degree \code{dDarboux} and exponential factors up to degree
 \code{dExp}. Each stage that fails leaves a certificate. The invariants of a reduced
-block are carried by new parameters \verb{q_<k>}, or, where the block has a face
-section, by the remaining coordinates themselves.
+general block are carried by new parameters \verb{q_<k>}; \code{print()} lists the
+invariant behind each \verb{q_<k>} and the section the chart takes, with the reason it
+was chosen.
 }
 \details{
 A scaling that shares coordinates with a general direction is fixed on
@@ -96,10 +99,11 @@ A block is first tried with a face section: \code{r} of its coordinates set to 0
 where \code{r} is the number of its directions. The face is taken when every orbit
 of the positive orthant reaches it once with every other coordinate positive
 (the face point, solved from the invariants, is certified positive), and no
-denominator of the model vanishes on it. The chart then keeps every other
-coordinate as it is and switches the face coordinates off, e.g. all leaks
-of a compartment model but one. Otherwise the gauge is a section of monomial
-balances, equal shares of a sum invariant, or constant pins.
+denominator of the model vanishes on it. The chart then switches the face
+coordinates off, e.g. all leaks of a compartment model but one, and each
+remaining coordinate of the block becomes a \verb{q_<k>} carrying the value it takes
+on the face. Otherwise the gauge is a section of monomial balances, equal shares
+of a sum invariant, or constant pins.
 
 A chart is returned only if it is certified on the domain declared by
 \code{positive}: every solved entry must be positive for all admissible values of

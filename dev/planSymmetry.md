@@ -63,6 +63,9 @@ model re-detected identifiable. Times are detection / reduction.
 | **Named per-condition `g`** unnamed on input | TGFbModelling M001–M009 crashed in the log chart; all now analysed and reduced |
 | **Sympy hygiene**: no factor(cancel()) of wide expressions in `.symTidy`; wide directions classified through factor lists (`_classify_factored`) | wide12 finalisation 520 s → 0.1 s; wide30 classification 12+ min → 0.6 s |
 | **steadyStates()**: names sympy resolves (Ci, S, E, Q, gamma) aliased | receptor motif with species Ci solved |
+| **Face carriers are `q_<k>`** (`.symRedFaceCarriers`): the coordinates a face keeps carry invariants, so they are renamed like every curved carrier | M011: `k_dg_TGFB1 = 0, TGFB1 = q_1` instead of `TGFB1 = TGFB1*(...)` |
+| **`Sections:` in print/summary** (`.symRedCatSections`): which section each block takes and why (face, balance, pin), pointing to the vignette; the vignette explains the section on the autocrine loop | the chart choice is visible without `summary(verbose = TRUE)` |
+| **`summary()` returns the object** marked for the report (`print.summary.*`) | `print(summary(res))` printed the report and then `print(res)` |
 
 Switches: `DMOD_SYM_NOCAP`, `DMOD_SYM_NOJOINTCAP`, `DMOD_SYM_NOPOINTBATCH`, `DMOD_SYM_NONARROW`, `DMOD_SYM_NOGROUP`.
 

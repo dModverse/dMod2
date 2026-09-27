@@ -1015,6 +1015,35 @@ test_that("a face section switches leaks off: catenary compartments", {
   expect_true(any(zc$verdict == "yes" & zc$coordinates == paste(sort(zeros), collapse = ", ")))
   tr2 <- do.call(eqnvec, as.list(c(tr, red$trafo[setdiff(names(red$trafo), names(tr))])))
   expect_true(symdet2(f, eqnvec(y = "x1"), trafo = tr2)$identifiable)
+  # the rates the face keeps carry invariants: each becomes a fresh q_<k>, listed
+  # under Invariants:, and Sections: says which section and why
+  kept <- setdiff(b$support, zeros)
+  expect_true(all(grepl("^q_[0-9]+$", red$trafo[kept])))
+  expect_setequal(names(b$survivorMeaning), unname(as.character(red$trafo[kept])))
+  expect_false(any(grepl("^q_", c(tr, red$trafo[setdiff(names(red$trafo), kept)]))))
+  out <- capture.output(print(red))
+  expect_true(any(grepl("^Sections:", out)))
+  expect_true(any(grepl("face: every orbit", out)))
+  expect_true(any(grepl("vignette(\"Symmetries\"", out, fixed = TRUE)))
+})
+
+
+test_that("summary() of a reduction prints its report once and keeps the object", {
+  if (!.sympy_works()) skip("reticulate/sympy not available")
+  f <- eqnvec(A = "k1 + u*k2 - kdeg*A")
+  res <- symdet2(f, eqnvec(y = "A"), fixed = "u", reconstruct = TRUE)
+  red <- redquiet(res)
+  s <- summary(red)
+  expect_s3_class(s, "symmetryreduction")
+  expect_identical(s$trafo, red$trafo)
+  out <- capture.output(print(s))
+  expect_equal(sum(grepl("^Reduced ", out)), 1L)
+  expect_true(any(grepl("^Blocks", out)))
+  expect_identical(capture.output(summary(red)), out)
+  # and the detection summary alike
+  out2 <- capture.output(print(summary(res)))
+  expect_equal(sum(grepl("^Result:", out2)), 1L)
+  expect_identical(summary(res)$rank, res$rank)
 })
 
 

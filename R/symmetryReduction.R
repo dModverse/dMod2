@@ -2484,6 +2484,35 @@
   out
 }
 
+# A face section switches the zero set off and keeps the rest of the block, but each
+# remaining coordinate then holds the value it takes where its orbit meets the face:
+# an invariant, not the coordinate. By the naming rule of the curved charts it becomes
+# a fresh q_<k> (trafo entry z = q_<k>, the invariant listed under q_<k>). A survivor
+# whose meaning is the coordinate itself keeps its name. Numbered from invStart,
+# skipping coordinate names, as .symRedSolveInvariants() numbers.
+.symRedFaceCarriers <- function(sol, coords, invStart) {
+  m <- sol$meaning
+  U <- names(m)
+  moved <- U[gsub("\\s", "", unname(m)) != U & U %in% coords]
+  m <- m[moved]
+  if (!length(moved)) { sol$meaning <- m; return(sol) }
+  qn <- character(length(moved))
+  k <- invStart
+  for (l in seq_along(moved)) {
+    repeat {
+      k <- k + 1L
+      if (!(paste0("q_", k) %in% coords)) break
+    }
+    qn[l] <- paste0("q_", k)
+  }
+  sol$pins <- c(sol$pins, setNames(qn, moved))
+  sol$invNames <- qn
+  sol$meaning <- setNames(unname(m), qn)
+  # the face point is certified positive, so each q_<k> ranges over (0, Inf)
+  sol$carrierDomain <- setNames(rep("positive", length(qn)), qn)
+  sol
+}
+
 # Translation groups of a curved block: a moved coordinate v and unmoved symbols w
 # with d/dv xi - d/dw xi = 0 for every component of every generator. The block then
 # sees them only through v + w_1 + ... + w_k, so the invariant search runs over the
@@ -3474,9 +3503,13 @@
   # the other coordinates positive: its landing point is the survivor meaning
   if (isTRUE(b$face) && length(b$transversal)) {
     Z <- .symSort(b$transversal)
-    at <- paste(c(paste0(Z, " = 0"),
-                  paste0(names(b$survivorMeaning), " = ", b$survivorMeaning)),
-                collapse = ", ")
+    # the meanings are listed under the q_<k> that carry them: the point is in the
+    # coordinates each q_<k> replaces (pins: coordinate = q_<k>)
+    sm <- b$survivorMeaning
+    cn <- names(sm)
+    hit <- match(cn, b$pins)
+    cn[!is.na(hit)] <- names(b$pins)[hit[!is.na(hit)]]
+    at <- paste(c(paste0(Z, " = 0"), paste0(cn, " = ", sm)), collapse = ", ")
     rows <- rbind(data.frame(coordinates = paste(Z, collapse = ", "), verdict = "yes",
                              limit = FALSE, certain = TRUE, condition = "", at = at,
                              stringsAsFactors = FALSE), rows)
@@ -3714,6 +3747,7 @@ print.symmetryreduction <- function(x, width = getOption("width"), ...) {
   }
   cat(.symRedVerdict(x), "\n", sep = "")
   .symRedCatChart(x, width)
+  .symRedCatSections(x, width)
   .symRedCatZeroCompat(x, width)
   for (b in x$blocks) if (!b$status %in% c("reduced", "fixed"))
     cat("\nNot reduced: ", paste(b$labels, collapse = ", "),
@@ -3725,9 +3759,22 @@ print.symmetryreduction <- function(x, width = getOption("width"), ...) {
 }
 
 #' @export
+# summary() returns the reduction itself, marked for the full report, so that
+# summary(red)$trafo still works and print(summary(red)) prints the report once
 summary.symmetryreduction <- function(object, verbose = FALSE,
                                      width = getOption("width"), ...)
-  .symRedReport(object, verbose, width)
+  structure(object, class = unique(c("summary.symmetryreduction", class(object))),
+            summaryArgs = list(verbose = verbose, width = width))
+
+#' @export
+print.summary.symmetryreduction <- function(x, ...) {
+  a <- attr(x, "summaryArgs")
+  y <- x
+  attr(y, "summaryArgs") <- NULL
+  class(y) <- setdiff(class(y), "summary.symmetryreduction")
+  .symRedReport(y, isTRUE(a$verbose), if (is.null(a$width)) getOption("width") else a$width)
+  invisible(x)
+}
 
 .symRedVerdict <- function(x) {
   nDir <- length(x$removed) + length(x$remaining)
@@ -3765,6 +3812,51 @@ summary.symmetryreduction <- function(object, verbose = FALSE,
       cat("  [real-valued] takes both signs on the ", .symDomainName(),
           "; fit it linearly, not on a log scale\n", sep = "")
   }
+}
+
+# Why each chart takes the section it does: the invariants name an orbit, the chart
+# needs one point on it, and which kind of section could be certified decides the
+# trafo. One entry per block reduced by a section or a pin; blocks the call's own
+# `fixed` removed are the user's gauge and not listed. Shared by print() and summary().
+.symRedCatSections <- function(x, width) {
+  rows <- list()
+  for (b in x$blocks) {
+    if (!identical(b$status, "reduced")) next
+    curved <- identical(b$type, "curved")
+    if (isTRUE(b$face)) {
+      what <- paste(b$section, collapse = ", ")
+      why <- paste0("face: every orbit in the ", .symDomainName(), " reaches it exactly ",
+                    "once, with every other coordinate positive. A face is tried first: ",
+                    "it switches rates off, and each remaining coordinate of the block ",
+                    "becomes the q_<k> carrying the value it takes there")
+    } else if (length(b$section)) {
+      what <- paste(b$section, collapse = ", ")
+      why <- paste0("balance: the ratio is strictly monotone along every orbit, so ",
+                    "each orbit meets it exactly once")
+    } else if (length(b$transversal)) {
+      pv <- if (!is.null(b$pins)) b$pins[b$transversal] else rep("1", length(b$transversal))
+      what <- paste(paste(b$transversal, "=", pv), collapse = ", ")
+      why <- if (!curved)
+        "pin: a scaling orbit is a ray, so any positive value meets it exactly once"
+      else if (identical(b$coverage, "partial"))
+        paste0("pin: reached by the orbits whose carriers are positive; the chart ",
+               "covers only those")
+      else paste0("pin: every orbit reaches this value (each solved entry is certified ",
+                  "positive for every admissible outer value)")
+    } else next
+    rows[[length(rows) + 1L]] <- c(paste0("{", paste(b$labels, collapse = ", "), "}"),
+                                   what, why)
+  }
+  if (!length(rows)) return(invisible(NULL))
+  cat("\nSections: the invariants name each orbit, the chart takes one point on it\n",
+      "  (vignette(\"Symmetries\", package = \"dMod2\"), section \"The chart\")\n",
+      sep = "")
+  ind <- "      "
+  for (r in rows) {
+    cat("  ", r[1], "  ", .symRedWrap(r[2], ind, width), "\n", sep = "")
+    cat(ind, .symRedWrap(r[3], ind, width, sep = " "), "\n", sep = "")
+  }
+  invisible(NULL)
 }
 
 # one line per block: what it is, which stage answered, how it was gauged. A block
@@ -3847,6 +3939,7 @@ summary.symmetryreduction <- function(object, verbose = FALSE,
                         collapse = ", "), "\n", sep = "")
   cat(.symRedVerdict(x), "\n", sep = "")
   .symRedCatChart(x, width)
+  .symRedCatSections(x, width)
   .symRedCatZeroCompat(x, width)
   cat("\nBlocks\n")
   famOf <- function(b) {
@@ -3877,8 +3970,9 @@ summary.symmetryreduction <- function(object, verbose = FALSE,
 #' degree `dPoly`, separable quadratures, rational with a monomial denominator,
 #' Darboux polynomials up to degree `dDarboux` and exponential factors up to degree
 #' `dExp`. Each stage that fails leaves a certificate. The invariants of a reduced
-#' block are carried by new parameters `q_<k>`, or, where the block has a face
-#' section, by the remaining coordinates themselves.
+#' general block are carried by new parameters `q_<k>`; `print()` lists the
+#' invariant behind each `q_<k>` and the section the chart takes, with the reason it
+#' was chosen.
 #'
 #' @details A scaling that shares coordinates with a general direction is fixed on
 #'   a coordinate outside every general direction's support when one exists;
@@ -3890,10 +3984,11 @@ summary.symmetryreduction <- function(object, verbose = FALSE,
 #'   where `r` is the number of its directions. The face is taken when every orbit
 #'   of the positive orthant reaches it once with every other coordinate positive
 #'   (the face point, solved from the invariants, is certified positive), and no
-#'   denominator of the model vanishes on it. The chart then keeps every other
-#'   coordinate as it is and switches the face coordinates off, e.g. all leaks
-#'   of a compartment model but one. Otherwise the gauge is a section of monomial
-#'   balances, equal shares of a sum invariant, or constant pins.
+#'   denominator of the model vanishes on it. The chart then switches the face
+#'   coordinates off, e.g. all leaks of a compartment model but one, and each
+#'   remaining coordinate of the block becomes a `q_<k>` carrying the value it takes
+#'   on the face. Otherwise the gauge is a section of monomial balances, equal shares
+#'   of a sum invariant, or constant pins.
 #'
 #'   A chart is returned only if it is certified on the domain declared by
 #'   `positive`: every solved entry must be positive for all admissible values of
@@ -3935,8 +4030,10 @@ summary.symmetryreduction <- function(object, verbose = FALSE,
 #'   \describe{
 #'     \item{`blocks`}{one entry per set of coupled directions: `labels`, `type`,
 #'       `kind`, `support`, `stage`, `invariants`, `certificates`, `transversal`,
-#'       `pins`, `survivorMeaning` (the invariant each remaining coordinate or
-#'       `q_<k>` carries), `carrierDomain` (`"positive"` or `"real"` per `q_<k>`),
+#'       `pins`, `section` and `face` (the section of the chart and whether it is a
+#'       face), `survivorMeaning` (the invariant each `q_<k>` or, for a scaling,
+#'       each remaining coordinate carries), `carrierDomain` (`"positive"` or
+#'       `"real"` per `q_<k>`),
 #'       `coverage` (`"total"` or `"partial"`), `moduleCombos`, `status`
 #'       (`"fixed"`, `"reduced"`, `"invariantOnly"` or `"unresolved"`), `reason`
 #'       and `zeroCompatibility`.}
@@ -4135,6 +4232,7 @@ symmetryReduction <- function(object, fixed = NULL, positive = TRUE, dPoly = 3L,
       denSyms <- .symRedModelDenominators(object$info$modelExprs, spy)
     sol <- tryCatch(.symRedFaceSection(b, scalPins, spy, denSyms),
                     error = function(e) list(solved = FALSE))
+    if (sol$solved) sol <- .symRedFaceCarriers(sol, coords, invStart)
     if (!sol$solved)
     sol <- .symRedSolveInvariants(b, scalPins, spy, coords,     # gauge pin would be lossy
                                   invStart)
@@ -4146,7 +4244,11 @@ symmetryReduction <- function(object, fixed = NULL, positive = TRUE, dPoly = 3L,
       if (solR$solved) sol <- solR
     }
     if (sol$solved) {
-      invStart <- invStart + length(sol$invNames)
+      # the next block numbers on from the highest q_<k> taken, which skips the
+      # coordinate names a q_<k> would collide with
+      invStart <- max(invStart + length(sol$invNames),
+                      suppressWarnings(as.integer(sub("^q_", "", sol$invNames))),
+                      na.rm = TRUE)
       blocks[[bi]]$pins <- sol$pins
       blocks[[bi]]$transversal <- sol$gauge
       blocks[[bi]]$section <- sol$section
