@@ -48,11 +48,17 @@ skip_if_no_compile <- function() {
                 derivMode = "forward", compile = FALSE,
                 modelname = "noparam_full_g")
 
+    # The mixed trafo again, passing every input it does not map through.
+    p_thru <- P(eqnvec(A = "a^2", k = "a * b"), condition = "C1",
+                attach.input = TRUE, deriv2 = TRUE,
+                modelname = "test_P_thru", compile = FALSE)
+
     compile(p_mix, p_rev, p_fwd, p_const_val, p_const_fwd, x_full, p_full, g_full,
-            output = "test_P_all", cores = 4L)
+            p_thru, output = "test_P_all", cores = 4L)
     cache <<- list(p_mix = p_mix, p_rev = p_rev, p_fwd = p_fwd,
                    p_const_val = p_const_val, p_const_fwd = p_const_fwd,
-                   x_full = x_full, p_full = p_full, g_full = g_full)
+                   x_full = x_full, p_full = p_full, g_full = g_full,
+                   p_thru = p_thru)
     cache
   }
 })
@@ -128,6 +134,109 @@ test_that("Pexpl derivMode 'reverse' and 'forward' agree on the value", {
   J <- attr(i_fwd, "deriv")
   expect_equal(unname(J[c("A", "k"), c("a", "b")]), diag(exp(c(0.3, -0.5))),
                tolerance = 1e-12)
+})
+
+
+## ---- attach.input: inputs passed through -------------------------------
+
+# A = a^2, k = a * b, and every input that is not A or k handed on untouched.
+# An input without a derivative row counts as fixed downstream, so a missing
+# row zeroes the forward gradient along it.
+
+test_that("Pexpl(attach.input = TRUE) gives every input it passes through its own row", {
+  skip_if_no_compile()
+  p <- .pexpl_fx()$p_thru
+  outer <- c(a = 1.3, b = 0.7, s = 2, u = -1)
+  out <- p(outer, deriv2 = TRUE)$C1
+
+  thru <- c("a", "b", "s", "u")
+  expect_identical(names(out), c("A", "k", thru))
+  expect_equal(unclass(out)[thru], outer[thru], ignore_attr = TRUE)
+  expect_null(attr(out, "fixed"))
+
+  # s and u are read by nothing, and are directions of their own all the same.
+  J <- attr(out, "deriv")
+  expect_identical(dimnames(J), list(names(out), thru))
+  expect_equal(unname(J["A", ]), c(2 * 1.3, 0, 0, 0))
+  expect_equal(unname(J["k", ]), c(0.7, 1.3, 0, 0))
+  expect_equal(unname(J[thru, ]), diag(4))
+
+  # The identity has no curvature; the trafo's own rows keep theirs.
+  H <- attr(out, "deriv2")
+  expect_identical(dimnames(H), list(names(out), thru, thru))
+  expect_equal(H[thru, , ], array(0, c(4, 4, 4)), ignore_attr = TRUE)
+  expect_equal(H["A", "a", "a"], 2)
+  expect_equal(H["k", "a", "b"], 1)
+  expect_equal(H["k", "b", "a"], 1)
+
+  # The value path hands on the same inputs, in the same order.
+  expect_identical(names(p(outer, deriv = FALSE)$C1), names(out))
+})
+
+test_that("an input passed through that the caller fixed stays fixed", {
+  skip_if_no_compile()
+  p <- .pexpl_fx()$p_thru
+
+  # One the trafo does not read is still handed on, as a constant.
+  out <- p(c(a = 1.3, b = 0.7, u = -1), fixed = c(s = 2), deriv2 = TRUE)$C1
+  expect_true("s" %in% names(out))
+  expect_equal(unclass(out)[["s"]], 2)
+  expect_identical(attr(out, "fixed"), "s")
+  J <- attr(out, "deriv")
+  expect_false("s" %in% rownames(J))
+  expect_false("s" %in% colnames(J))
+  expect_equal(unname(J["u", ]), c(0, 0, 1))
+  expect_false("s" %in% dimnames(attr(out, "deriv2"))[[1L]])
+
+  # One the trafo reads: A = a^2 no longer moves, k = a * b only along b.
+  out <- p(c(b = 0.7, s = 2), fixed = c(a = 1.3))$C1
+  expect_setequal(names(out), c("A", "k", "a", "b", "s"))
+  expect_setequal(attr(out, "fixed"), c("A", "a"))
+  J <- attr(out, "deriv")
+  expect_setequal(colnames(J), c("b", "s"))
+  expect_equal(J["k", "b"], 1.3)
+  expect_equal(unname(J[c("b", "s"), c("b", "s")]), diag(2))
+})
+
+test_that("behind another trafo an input passed through keeps what it brought", {
+  skip_if_no_compile()
+  p <- .pexpl_fx()$p_thru
+  J0 <- rbind(a = c(x = 1, y = 0), b = c(x = 0.5, y = 2), s = c(x = 3, y = -1))
+  H0 <- array(0, c(3, 2, 2), dimnames = list(rownames(J0), c("x", "y"), c("x", "y")))
+  H0["s", "x", "y"] <- H0["s", "y", "x"] <- 0.25
+  H0["b", "x", "x"] <- 0.5
+  pin <- as.parvec(c(a = 1.3, b = 0.7, s = 2), deriv = J0, deriv2 = H0)
+  out <- p(pin, deriv2 = TRUE)$C1
+
+  J <- attr(out, "deriv")
+  H <- attr(out, "deriv2")
+  expect_identical(colnames(J), c("x", "y"))
+  expect_equal(J[c("a", "b", "s"), ], J0)
+  expect_equal(H[c("a", "b", "s"), , ], H0)
+  # The chain rule on the trafo's own rows, for reference.
+  expect_equal(J["k", ], 0.7 * J0["a", ] + 1.3 * J0["b", ])
+  expect_equal(H["k", , ], outer(J0["a", ], J0["b", ]) + outer(J0["b", ], J0["a", ]) +
+                 1.3 * H0["b", , ])
+})
+
+test_that("the batched entry passes the inputs through as the kernel does", {
+  skip_if_no_compile()
+  kernel <- attr(.pexpl_fx()$p_thru, "mappings")$C1
+  bf <- attr(kernel, "batchfn")
+  pars  <- list(as.parvec(c(a = 1.3, b = 0.7, u = -1)),
+                as.parvec(c(a = 0.4, b = -2, u = 3)))
+  fixed <- list(as.parvec(c(s = 2)), as.parvec(c(s = 5)))
+
+  for (d2 in c(FALSE, TRUE)) {
+    res <- bf(pars, fixed, deriv = TRUE, deriv2 = d2,
+              conditions = list("C1", "C1"), cores = 1L)
+    for (i in 1:2) {
+      ref <- kernel(pars[[i]], fixed[[i]], deriv = TRUE, deriv2 = d2)
+      expect_equal(res[[i]], ref, tolerance = 1e-14, info = paste(d2, i))
+      expect_true("u" %in% rownames(attr(res[[i]], "deriv")))
+      expect_identical(attr(res[[i]], "fixed"), "s")
+    }
+  }
 })
 
 

@@ -14,7 +14,7 @@ Pexpl(
   verbose = FALSE,
   deriv = TRUE,
   deriv2 = FALSE,
-  derivMode = c("forward", "reverse"),
+  derivMode = "forward",
   outdir = getwd()
 )
 }
@@ -24,7 +24,11 @@ values are expressions in the outer parameters.}
 
 \item{parameters}{Outer parameters; defaults to \code{getSymbols(trafo)}.}
 
-\item{attach.input}{Append outer inputs to the output.}
+\item{attach.input}{Append the outer inputs the transformation does not map
+to the output, fixed ones included. An input that varies keeps its
+derivatives, the identity when it enters the chain here, and one passed in
+\code{fixed} stays fixed. Kept as a control of the returned function and read at
+every call, see \code{\link[=controls]{controls()}}.}
 
 \item{condition}{Condition label.}
 
@@ -33,10 +37,10 @@ values are expressions in the outer parameters.}
 \item{deriv, deriv2}{Attach \code{attr(., "deriv")} \verb{[p, theta]} and/or
 \code{attr(., "deriv2")} \verb{[p, theta, theta]}. \code{deriv2} needs \code{deriv = TRUE}.}
 
-\item{derivMode}{Which derivative products to build, one or both of
-\code{"forward"} (AD) and \code{"reverse"} (the vector-Jacobian product the reverse
-sweep contracts against). The default \code{c("forward", "reverse")} builds
-both directions.}
+\item{derivMode}{Which derivative products to build, any of \code{"forward"}
+(AD, default), \code{"reverse"} (the vector-Jacobian product the reverse sweep
+contracts against) and \code{"forward-reverse"} (its derivative along a tangent,
+for the reverse sweep with \code{deriv2 = TRUE}).}
 
 \item{outdir}{Directory for the generated source and shared object,
 default the working directory.}

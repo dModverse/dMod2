@@ -27,8 +27,10 @@ defined only for a subset of conditions.}
 prediction function is evaluated. If NULL, time points are taken from the
 data. Event times should be included here if the prediction model uses events.}
 
-\item{t0}{Numeric. Start of the time grid, i.e. the time at which initial
-values take effect. Defaults to 0.}
+\item{t0}{Numeric. Start of the time grid, where the initial values take
+effect. Defaults to 0. A vector named by condition gives each condition
+its own start and its own grid. Fixed-time events before a condition's
+start do not fire.}
 
 \item{attr.name}{Character string. The objective value is additionally
 returned as an attribute of this name, and the sum of squares behind it

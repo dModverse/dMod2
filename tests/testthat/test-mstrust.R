@@ -49,6 +49,37 @@ test_that("a multi-start reports the Hessian source handovers per fit", {
 })
 
 
+test_that("mstrust refuses an argument both the optimiser and the sampler take", {
+  # An argument is routed by name, so one that both could take has no single
+  # destination. The clash is caught before any fit starts.
+  obj <- constraintL2(mu = c(a = 1.0, b = -0.5), sigma = 1)
+  seen <- new.env()
+  myopt <- function(objfun, parinit, sd = 1, ...) {
+    seen$sd <- sd
+    list(argument = parinit, value = 0, converged = TRUE, iterations = 0L)
+  }
+
+  expect_error(mstrust(objfun = obj, center = c(a = 0, b = 0), fits = 1,
+                       optmethod = myopt, sd = 2, cores = 1),
+               "Argument names of the optimiser and rnorm\\(\\) clash")
+  expect_null(seen$sd)
+
+  # The sample size is always an argument, so an optimiser that takes `n`
+  # clashes with every sampler even when the caller passes nothing more.
+  nopt <- function(objfun, parinit, n = 1, ...)
+    list(argument = parinit, value = 0, converged = TRUE, iterations = 0L)
+  expect_error(mstrust(objfun = obj, center = c(a = 0, b = 0), fits = 1,
+                       optmethod = nopt, samplefun = "runif", cores = 1),
+               "Argument names of the optimiser and runif\\(\\) clash")
+
+  # A sampler without `sd` leaves it to the optimiser alone.
+  fits <- mstrust(objfun = obj, center = c(a = 0, b = 0), fits = 1,
+                  optmethod = myopt, samplefun = "runif", sd = 2, cores = 1)
+  expect_length(fits, 1L)
+  expect_equal(seen$sd, 2)
+})
+
+
 # ---- profile ------------------------------------------------------------
 
 test_that("profile on a 1D quadratic increases monotonically on both sides", {

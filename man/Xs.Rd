@@ -75,3 +75,12 @@ stored in \code{attr(., "deriv")} (which then differs from \code{"sensitivities"
 Interface to combine an ODE and its sensitivity equations
 into one model function \code{x(times, pars, deriv = TRUE)} returning ODE output and sensitivities.
 }
+\details{
+\code{forcings}, \code{names} and the solver options are kept, as given, in
+the controls of the returned function and read at every solve, so
+\code{\link[=controls]{controls()}} can change them later; on the \code{deSolve} backend \code{events} and
+\code{fcontrol} as well. On the \code{cppDE} backend the options are merged over
+their defaults at every solve, so a replaced \code{optionsOde} or \code{optionsSens}
+only needs the entries it changes, and an unknown entry draws the same
+warning as in the constructor.
+}
