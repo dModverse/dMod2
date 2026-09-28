@@ -24,7 +24,9 @@
 #'   held at zero and treated as exogenous.
 #' @param givenCQs Unnamed character vector of conserved quantities, either as
 #'   `c("A + pA = totA", "B + pB = totB")` or as `c("A + pA", "B + pB")`. `NULL`
-#'   (default) derives a basis automatically.
+#'   (default) derives a basis automatically. In `"1.4"` each given quantity
+#'   keeps one of its states free, the first by default. If that state's
+#'   balance cannot be spent elsewhere, the next state is kept instead.
 #' @param neglect Character vector, states and rate parameters the solver must
 #'   not resolve. A neglected state stays a free parameter of the transformation;
 #'   a neglected rate parameter is never used as a pivot.
@@ -46,10 +48,13 @@
 #'   but more compact. Version `"1.2"` and later.
 #' @param solveQuadratic Logical, whether a cycle whose final equation is
 #'   quadratic in its own state may be closed by the positive root of
-#'   `a*X^2 + b*X + c = 0` instead of by a rate-parameter pivot. This keeps the
-#'   pivoted rate constants out of the result, at the price of `sqrt(...)` terms
-#'   that some workflows cannot consume in a parameter transformation. Default
-#'   `FALSE`. Version `"1.2"` and later.
+#'   \eqn{a X^2 + b X + c = 0} instead of by a rate-parameter pivot. This keeps
+#'   the pivoted rate constants out of the result, at the price of `sqrt(...)`
+#'   terms that some workflows cannot consume in a parameter transformation.
+#'   Default `FALSE`. Version `"1.2"` and later. In `"1.4"` a state whose own
+#'   balance, denominators cleared, has \eqn{a} and \eqn{-c} sums of positive
+#'   terms takes the unique positive root
+#'   \eqn{X = 2|c| / (\sqrt{b^2 + 4 a |c|} + b)}, tried before any rate constant.
 #' @param positive Positivity assumption used for root and pivot selection.
 #'   `TRUE` (default) treats all parameters, initial values and totals as
 #'   positive, `FALSE` assumes nothing, and a character vector names the symbols
@@ -143,11 +148,27 @@ steadyStates <- function(model, file = NULL, rates = NULL, forcings = NULL,
     if (is.null(file)) file <- "reactions_for_Alyssa"
     # Not write.eqnlist(): the backend never sees the volumes, so the
     # V_ref / V_X factors getFluxes() applies have to be folded in first.
-    utils::write.csv(.volumeScaledReactions(model),
-                     file = paste0(file, "_model.csv"),
+    tab <- .volumeScaledReactions(model)
+    # Names sympy resolves to its own objects (Ci, Si, E, S, Q, gamma, ...) reach the
+    # backend under an alias: its implicit sympify() of strings would otherwise build
+    # Symbol*Ci and fail. Mapped back on the result below.
+    symAlias <- .ssSympyAliases(unique(c(names(tab)[-(1:2)], getSymbols(tab$Rate),
+                                         forcings, neglect, priority,
+                                         if (is.character(positive)) positive,
+                                         getSymbols(givenCQs))))
+    if (length(symAlias)) {
+      ren <- function(x) .ssRename(x, symAlias)
+      tab$Rate <- ren(tab$Rate)
+      hit <- names(tab) %in% names(symAlias)
+      names(tab)[hit] <- symAlias[names(tab)[hit]]
+      forcings <- ren(forcings); neglect <- ren(neglect); priority <- ren(priority)
+      if (is.character(positive)) positive <- ren(positive)
+      if (length(givenCQs)) givenCQs <- ren(givenCQs)
+    }
+    utils::write.csv(tab, file = paste0(file, "_model.csv"),
                      row.names = FALSE, na = "")
     model <- paste0(file, "_model.csv")
-  }
+  } else symAlias <- character(0)
   if (!is.null(givenCQs) && length(names(givenCQs)) > 0)
     stop("givenCQs must not have names. Please unname() them.")
 
@@ -203,13 +224,11 @@ steadyStates <- function(model, file = NULL, rates = NULL, forcings = NULL,
 
   } else {
     # v1.2 / v1.3 / v1.4 (shared signature)
+    # 1.4 reports what it ignores after its own summary, in one line
+    ignored <- character(0)
     if (version == "1.4") {
-      if (isTRUE(solveQuadratic) || isTRUE(branches))
-        message("Note: version 1.4 solves every unknown linearly, solveQuadratic and branches are ignored.")
-      if (length(givenCQs) > 0)
-        message("Note: version 1.4 uses no conserved quantities, givenCQs is ignored.")
-      if (testSteady == "exact")
-        message("Note: version 1.4 has no 'exact' test, using 'fast' instead.")
+      ignored <- c(if (isTRUE(branches)) "branches",
+                   if (testSteady == "exact") "testSteady = \"exact\" (runs \"fast\")")
     }
     # simplify can be TRUE / FALSE / "full" -- pass through untouched so the
     # Python side sees either a Python bool or the literal string "full".
@@ -236,6 +255,8 @@ steadyStates <- function(model, file = NULL, rates = NULL, forcings = NULL,
                  priority       = as.list(as.character(priority)))
     if (version %in% c("1.3", "1.4")) args$verbose <- verbose
     m_ss <- do.call(alyssa, args)
+    if (length(ignored))
+      message("  note: version 1.4 ignores ", paste(ignored, collapse = ", "))
   }
 
   if (is.null(m_ss) || identical(m_ss, 0L)) return(0)
@@ -249,6 +270,12 @@ steadyStates <- function(model, file = NULL, rates = NULL, forcings = NULL,
   }))
 
   if (length(m_ssChar) == 0) return(0)
+  if (length(symAlias)) {
+    back <- setNames(names(symAlias), symAlias)
+    m_ssChar <- setNames(.ssRename(m_ssChar, back),
+                         ifelse(names(m_ssChar) %in% names(back), back[names(m_ssChar)],
+                                names(m_ssChar)))
+  }
 
   # Versions 1.2+ resolve on the backend side; this covers the older ones. Only
   # rewrite when there is something to resolve, resolveRecurrence() reformats
@@ -275,4 +302,34 @@ steadyStates <- function(model, file = NULL, rates = NULL, forcings = NULL,
     saveRDS(object = m_ssChar, file = file)
 
   return(m_ssChar)
+}
+
+
+# Model names that sympy's sympify() turns into its own objects (functions, constants,
+# the S registry): each gets an alias that is a plain symbol and clashes with no other
+# name. Named character vector original -> alias; empty when nothing clashes.
+.ssSympyAliases <- function(names) {
+  names <- unique(names[nzchar(names)])
+  if (!length(names)) return(character(0))
+  spy <- tryCatch(reticulate::import("sympy", convert = FALSE), error = function(e) NULL)
+  if (is.null(spy)) return(character(0))
+  bad <- names[vapply(names, function(nm) {
+    ok <- tryCatch(reticulate::py_to_r(spy$sympify(nm)$is_Symbol),
+                   error = function(e) FALSE)
+    !isTRUE(ok) || !identical(reticulate::py_to_r(spy$sympify(nm)$name), nm)
+  }, logical(1))]
+  if (!length(bad)) return(character(0))
+  alias <- paste0(bad, "_dModSym")
+  while (any(alias %in% names)) alias <- paste0(alias, "_")
+  setNames(alias, bad)
+}
+
+# whole-name replacement old -> new in plain strings (also "a + b = tot")
+.ssRename <- function(x, map) {
+  if (!length(x) || !length(map)) return(x)
+  for (nm in names(map))
+    x <- gsub(paste0("(?<![A-Za-z0-9_.])", gsub(".", "\\.", nm, fixed = TRUE),
+                     "(?![A-Za-z0-9_.])"), map[[nm]], x,
+              perl = TRUE)
+  x
 }
