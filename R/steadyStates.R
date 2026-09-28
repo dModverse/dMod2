@@ -24,7 +24,9 @@
 #'   held at zero and treated as exogenous.
 #' @param givenCQs Unnamed character vector of conserved quantities, either as
 #'   `c("A + pA = totA", "B + pB = totB")` or as `c("A + pA", "B + pB")`. `NULL`
-#'   (default) derives a basis automatically.
+#'   (default) derives a basis automatically. In `"1.4"` each given quantity
+#'   keeps one of its states free, the first by default. If that state's
+#'   balance cannot be spent elsewhere, the next state is kept instead.
 #' @param neglect Character vector, states and rate parameters the solver must
 #'   not resolve. A neglected state stays a free parameter of the transformation;
 #'   a neglected rate parameter is never used as a pivot.
@@ -46,10 +48,13 @@
 #'   but more compact. Version `"1.2"` and later.
 #' @param solveQuadratic Logical, whether a cycle whose final equation is
 #'   quadratic in its own state may be closed by the positive root of
-#'   `a*X^2 + b*X + c = 0` instead of by a rate-parameter pivot. This keeps the
-#'   pivoted rate constants out of the result, at the price of `sqrt(...)` terms
-#'   that some workflows cannot consume in a parameter transformation. Default
-#'   `FALSE`. Version `"1.2"` and later.
+#'   \eqn{a X^2 + b X + c = 0} instead of by a rate-parameter pivot. This keeps
+#'   the pivoted rate constants out of the result, at the price of `sqrt(...)`
+#'   terms that some workflows cannot consume in a parameter transformation.
+#'   Default `FALSE`. Version `"1.2"` and later. In `"1.4"` a state whose own
+#'   balance, denominators cleared, has \eqn{a} and \eqn{-c} sums of positive
+#'   terms takes the unique positive root
+#'   \eqn{X = 2|c| / (\sqrt{b^2 + 4 a |c|} + b)}, tried before any rate constant.
 #' @param positive Positivity assumption used for root and pivot selection.
 #'   `TRUE` (default) treats all parameters, initial values and totals as
 #'   positive, `FALSE` assumes nothing, and a character vector names the symbols
@@ -219,13 +224,11 @@ steadyStates <- function(model, file = NULL, rates = NULL, forcings = NULL,
 
   } else {
     # v1.2 / v1.3 / v1.4 (shared signature)
+    # 1.4 reports what it ignores after its own summary, in one line
+    ignored <- character(0)
     if (version == "1.4") {
-      if (isTRUE(solveQuadratic) || isTRUE(branches))
-        message("Note: version 1.4 solves every unknown linearly, solveQuadratic and branches are ignored.")
-      if (length(givenCQs) > 0)
-        message("Note: version 1.4 uses no conserved quantities, givenCQs is ignored.")
-      if (testSteady == "exact")
-        message("Note: version 1.4 has no 'exact' test, using 'fast' instead.")
+      ignored <- c(if (isTRUE(branches)) "branches",
+                   if (testSteady == "exact") "testSteady = \"exact\" (runs \"fast\")")
     }
     # simplify can be TRUE / FALSE / "full" -- pass through untouched so the
     # Python side sees either a Python bool or the literal string "full".
@@ -252,6 +255,8 @@ steadyStates <- function(model, file = NULL, rates = NULL, forcings = NULL,
                  priority       = as.list(as.character(priority)))
     if (version %in% c("1.3", "1.4")) args$verbose <- verbose
     m_ss <- do.call(alyssa, args)
+    if (length(ignored))
+      message("  note: version 1.4 ignores ", paste(ignored, collapse = ", "))
   }
 
   if (is.null(m_ss) || identical(m_ss, 0L)) return(0)

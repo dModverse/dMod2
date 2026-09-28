@@ -1,3 +1,24 @@
+# dMod2 0.8.2
+
+* `steadyStates(version = "1.4")` prints the resolved expressions through sympy
+  again, as 1.3 does: no redundant brackets from the substitution, nothing
+  expanded.
+* `steadyStates(version = "1.4", solveQuadratic = TRUE)`: a state whose own
+  balance, denominators cleared, is quadratic with positive production and
+  quadratic consumption takes the unique positive root, tried before any rate
+  constant. A root that would take a balance another unknown needs is dropped
+  for the next attempt.
+* `steadyStates(version = "1.4", givenCQs = )`: each conserved quantity keeps
+  one of its states free, the first one whose balance can be spent elsewhere.
+  `customTotals()` reach it as before.
+* `steadyStates(version = "1.4")` never solves for a rate constant whose fluxes
+  all carry a `neglect`ed symbol, which would divide by that symbol.
+* `steadyStates(version = "1.4")` prints one line per attempt instead of the
+  intermediate expressions, notes after its summary, and on failure the
+  balances left.
+* `steadyStates()` handles species named like sympy objects (`Ci`, `E`, `S`,
+  `Q`, `gamma`).
+
 # dMod2 0.8.1
 
 * `steadyStates(version = "1.4")`: a new core on the same interface. Balances
