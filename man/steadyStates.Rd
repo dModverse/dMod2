@@ -39,7 +39,9 @@ held at zero and treated as exogenous.}
 
 \item{givenCQs}{Unnamed character vector of conserved quantities, either as
 \code{c("A + pA = totA", "B + pB = totB")} or as \code{c("A + pA", "B + pB")}. \code{NULL}
-(default) derives a basis automatically.}
+(default) derives a basis automatically. In \code{"1.4"} each given quantity
+keeps one of its states free, the first by default. If that state's
+balance cannot be spent elsewhere, the next state is kept instead.}
 
 \item{neglect}{Character vector, states and rate parameters the solver must
 not resolve. A neglected state stays a free parameter of the transformation;
@@ -68,10 +70,13 @@ but more compact. Version \code{"1.2"} and later.}
 
 \item{solveQuadratic}{Logical, whether a cycle whose final equation is
 quadratic in its own state may be closed by the positive root of
-\code{a*X^2 + b*X + c = 0} instead of by a rate-parameter pivot. This keeps the
-pivoted rate constants out of the result, at the price of \code{sqrt(...)} terms
-that some workflows cannot consume in a parameter transformation. Default
-\code{FALSE}. Version \code{"1.2"} and later.}
+\eqn{a X^2 + b X + c = 0} instead of by a rate-parameter pivot. This keeps
+the pivoted rate constants out of the result, at the price of \code{sqrt(...)}
+terms that some workflows cannot consume in a parameter transformation.
+Default \code{FALSE}. Version \code{"1.2"} and later. In \code{"1.4"} a state whose own
+balance, denominators cleared, has \eqn{a} and \eqn{-c} sums of positive
+terms takes the unique positive root
+\eqn{X = 2|c| / (\sqrt{b^2 + 4 a |c|} + b)}, tried before any rate constant.}
 
 \item{positive}{Positivity assumption used for root and pivot selection.
 \code{TRUE} (default) treats all parameters, initial values and totals as

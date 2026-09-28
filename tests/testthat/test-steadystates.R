@@ -448,8 +448,73 @@ test_that("version 1.4 solves every model above positively", {
 test_that("version 1.4 names the arguments it ignores", {
   withr::local_dir(tempdir())
   r <- eqnlist() |> addReaction("", "A", "k_pr_A") |> addReaction("A", "", "k_dg_A*A")
-  expect_message(steadyStates(r, version = "1.4", verbose = FALSE, solveQuadratic = TRUE),
-                 "solveQuadratic and branches are ignored")
+  expect_message(steadyStates(r, version = "1.4", verbose = FALSE, branches = TRUE),
+                 "1.4 ignores branches")
   expect_message(steadyStates(r, version = "1.4", verbose = FALSE, testSteady = "exact"),
-                 "no 'exact' test")
+                 "ignores testSteady = \"exact\"", fixed = TRUE)
+})
+
+test_that("version 1.4 takes the positive root with solveQuadratic", {
+  withr::local_dir(tempdir())
+  models <- list(
+    dimer = eqnlist() |> addReaction("", "A", "k_pr_A") |> addReaction("A", "", "k_dg_A*A") |>
+      addReaction("2*A", "D", "k_dim*A^2") |> addReaction("D", "", "k_dg_D*D"),
+    squareOnly = eqnlist() |> addReaction("", "A", "k_pr_A") |>
+      addReaction("2*A", "D", "k_dim*A^2") |> addReaction("D", "", "k_dg_D*D"),
+    saturating = eqnlist() |> addReaction("", "X", "k_pr_X") |> addReaction("X", "", "k_dg_X*X") |>
+      addReaction("X", "", "k_cat*E*X/(Km + X)") |>
+      addReaction("", "E", "k_pr_E") |> addReaction("E", "", "k_dg_E*E")
+  )
+  symbolsOf <- function(x) unique(unlist(lapply(x, function(e) all.vars(parse(text = e)))))
+  for (nm in names(models)) {
+    r <- models[[nm]]
+    ss <- steadyStates(r, version = "1.4", solveQuadratic = TRUE, verbose = FALSE)
+    defs <- ss[trimws(ss) != names(ss)]
+    # the state is a root, no rate constant was spent on its balance
+    expect_true(any(grepl("sqrt", defs)), label = nm)
+    odes <- as.eqnvec(r)
+    set.seed(6)
+    free <- setdiff(symbolsOf(c(as.character(odes), defs)), names(defs))
+    env <- as.list(setNames(stats::runif(length(free), 0.3, 2), free))
+    for (n in names(defs)) env[[n]] <- eval(parse(text = defs[[n]]), env)
+    expect_true(all(unlist(env[names(defs)]) > 0), label = nm)
+    residual <- vapply(odes, function(e) eval(parse(text = e), env), numeric(1))
+    expect_lt(max(abs(residual)), 1e-10, label = nm)
+  }
+  # a positive linear coefficient keeps the root free of subtractions
+  ss <- steadyStates(models$dimer, version = "1.4", solveQuadratic = TRUE, verbose = FALSE)
+  expect_false(any(grepl("-", ss, fixed = TRUE)))
+})
+
+test_that("version 1.4 keeps the first state of a given conserved quantity free", {
+  withr::local_dir(tempdir())
+  r <- eqnlist() |> addReaction("", "K", "k_pr_K") |> addReaction("K", "", "k_dg_K*K") |>
+    addReaction("A", "pA", "k_phos*K*A") |> addReaction("pA", "A", "k_dephos*pA")
+  rates <- c("k_phos", "k_dephos", "k_pr_K", "k_dg_K")
+  for (cq in c("A + pA = tA", "pA + A = tA")) {
+    ss <- steadyStates(r, version = "1.4", givenCQs = cq, neglect = rates, verbose = FALSE)
+    kept <- sub(" .*", "", cq)
+    expect_identical(ss[[kept]], kept)
+    expect_false(identical(ss[[setdiff(c("A", "pA"), kept)]], setdiff(c("A", "pA"), kept)))
+  }
+})
+
+
+test_that("species named like sympy objects (Ci, E, S, Q) are plain symbols", {
+  withr::local_dir(tempdir())
+  # Ci is sympy's cosine integral, E Euler's number, S the singleton registry, Q the
+  # assumption namespace; parse_expr() used to resolve them and fail on kdeg*Ci
+  r <- eqnlist() |>
+    addReaction("", "R", "ksR", "synthesis") |>
+    addReaction("R", "", "kdR*R", "turnover") |>
+    addReaction("R + E", "C", "kon*R*E", "binding") |>
+    addReaction("C", "Ci + E", "kint*C", "internalisation") |>
+    addReaction("Ci", "", "kdeg*Ci", "degradation") |>
+    addReaction("C + S", "C + Q", "kp*C*S", "phosphorylation") |>
+    addReaction("Q", "S", "kdp*Q", "dephosphorylation")
+  for (v in c("1.3", "1.4")) {
+    ss <- steadyStates(r, version = v, verbose = FALSE)
+    expect_false(identical(ss, 0))
+    expect_true(length(ss) > 0L)
+  }
 })
