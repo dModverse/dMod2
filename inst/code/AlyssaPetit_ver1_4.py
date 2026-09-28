@@ -53,9 +53,25 @@ def _trace(msg):
     if _VERBOSE>=2:
         print(msg, flush=True)
 
+_BLANK=[False]
+
 def _say(msg):
-    if _VERBOSE>=1:
-        print(msg, flush=True)
+    # progress; consecutive blank lines collapse into one
+    if _VERBOSE<1 or (msg=='' and _BLANK[0]):
+        return
+    _BLANK[0]=(msg=='')
+    print(msg, flush=True)
+
+# Notes are collected during the run and printed once, after the summary.
+_NOTES=[]
+_STUCK=[None]
+
+def _note(msg):
+    _NOTES.append(msg)
+
+def _print_notes():
+    for msg in _NOTES:
+        print('  note: '+msg, flush=True)
 
 
 # –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
@@ -152,10 +168,15 @@ def _candidates(states, atoms, neglect):
             occ.setdefault(s, []).append(a)
     cands={}
     nonlin={}
+    held={s for s in occ if str(s) in neglect}
     for s, idx in occ.items():
-        if str(s) in neglect:
+        if s in held:
             continue
         lin=[a for a in idx if _linear_factor(atoms[a], s)]
+        # a rate constant whose fluxes all carry a neglected symbol would be
+        # solved as a ratio over it, and that symbol may be 0
+        if lin and all(atoms[a].free_symbols & held for a in lin) and s not in states:
+            continue
         if lin:
             cands[s]=lin
             nonlin[s]={a for a in idx if a not in lin}
@@ -259,6 +280,76 @@ def _own_row(u, Au, B_rows, row_of, forced, span, basis):
     if w is None or not span.independent(w):
         return None
     return w, c
+
+def _sign_of_sum(e):
+    # +1 / -1 if every term of the expanded sum has that sign, 0 if mixed or zero.
+    terms=sympy.Add.make_args(sympy.expand(e))
+    if e==0:
+        return 0
+    signs={1 if t.as_coeff_Mul()[0].is_positive else -1 for t in terms}
+    return signs.pop() if len(signs)==1 else 0
+
+def _compact(e):
+    # A polynomial written with its most frequent symbol factored out, recursively:
+    # no expansion, and a sum of positive terms stays one.
+    f=sympy.factor(e)
+    if not f.is_Add:
+        return f
+    terms=list(sympy.Add.make_args(sympy.expand(e)))
+    count={}
+    for t in terms:
+        for x in t.free_symbols:
+            count[x]=count.get(x, 0)+1
+    best=max(sorted(count, key=str), key=lambda x: count[x], default=None)
+    if best is None or count[best]<2:
+        return sympy.Add(*terms)
+    inner=[t for t in terms if t.has(best)]
+    rest=[t for t in terms if not t.has(best)]
+    return best*_compact(sympy.expand(sympy.Add(*inner)/best))+_compact(sympy.Add(*rest))
+
+def _own_quadratic(u, atoms, B_rows, row_of, forced, span, basis):
+    """A state's own balance, quadratic in the state once its denominators are
+    cleared: a*u^2 = (P - N)*u + c with a, c, P, N positive sums. Returns
+    (w, root) or None.
+
+    The positive root is written 2*c/(sqrt((P - N)^2 + 4*a*c) + N - P), free of
+    subtractions outside the square when P = 0, and (P + sqrt(P^2 + 4*a*c))/(2*a)
+    when N = 0.
+    """
+    i=row_of.get(u)
+    if i is None:
+        return None
+    c=B_rows[i]
+    if not c or any(a in forced for a in c):
+        return None
+    w=_coords(c, basis)
+    if w is None or not span.independent(w):
+        return None
+    expr=sympy.Add(*[sympy.Rational(v.numerator, v.denominator)*atoms[a] for a, v in c.items()])
+    # the denominators are products of positive sums: the numerator keeps the sign
+    num, _=sympy.fraction(sympy.together(expr))
+    try:
+        poly=sympy.Poly(num, u)
+    except sympy.PolynomialError:
+        return None
+    if poly.degree()!=2 or any(s.has(u) for s in poly.free_symbols_in_domain):
+        return None
+    a2, a1, a0=poly.all_coeffs()
+    s2, s0=_sign_of_sum(a2), _sign_of_sum(a0)
+    if s2==0 or s0==0 or s2==s0:
+        return None
+    if s2>0:
+        a2, a1, a0=-a2, -a1, -a0
+    A, C=_compact(-a2), _compact(a0)
+    terms=sympy.Add.make_args(sympy.expand(a1))
+    P=_compact(sympy.Add(*[t for t in terms if t.as_coeff_Mul()[0].is_positive]))
+    N=_compact(-sympy.Add(*[t for t in terms if not t.as_coeff_Mul()[0].is_positive]))
+    if P==0 and N==0:
+        return w, sympy.sqrt(C/A)
+    root=sympy.sqrt((P-N)**2+4*A*C)
+    if N==0:
+        return w, (P+root)/(2*A)
+    return w, 2*C/(root+N-P)
 
 def _coords(c, basis):
     # Coordinates of the linear form c in the row basis (exact), or None.
@@ -419,9 +510,13 @@ def _group_unknown(order, cands, nonlin, atoms, atom_syms, basis, Rnp, span,
             return g0, [(p, rho[p]) for p in G[1:]], w, c, Au, phi
     return None
 
-def _greedy(order, cands, nonlin, atoms, basis, Rnp, r, check_time, B_rows, row_of):
+def _greedy(order, cands, nonlin, atoms, basis, Rnp, r, check_time, B_rows, row_of,
+            quadratic=(), roots=None):
     """Pick r unknowns, in `order`, each the first one an LP can isolate.
 
+    States in `quadratic` may take the positive root of their own balance; they
+    are tried before the first rate constant, so a root is preferred to a pivot;
+    the states that took one are appended to `roots`.
     Returns (solutions, None) or (None, blockers): the solved unknowns whose
     references alone kept a remaining candidate from an equation.
     """
@@ -431,14 +526,34 @@ def _greedy(order, cands, nonlin, atoms, basis, Rnp, r, check_time, B_rows, row_
     solved=[]
     ratios=[]
     state_set=set(row_of)
+    unknowns=set(cands)|state_set
     atom_syms=[at.free_symbols for at in atoms]
+
+    def root_of_some_state():
+        for y in quadratic:
+            if y in sol:
+                continue
+            bad={v for v in sol if _reaches(v, y, deps)}
+            forced={a for a in range(len(atoms)) if atom_syms[a] & bad}
+            res=_own_quadratic(y, atoms, B_rows, row_of, forced, span, basis)
+            if res is not None:
+                return y, res
+        return None
+
     while len(solved)<r:
         if check_time():
             return None, None
         picked=None
+        quad=None
+        tried_quad=not quadratic
         for u in order:
             if u in sol:
                 continue
+            if not tried_quad and u not in state_set:
+                tried_quad=True
+                quad=root_of_some_state()
+                if quad is not None:
+                    break
             # a solved symbol whose solution leads back to u must not appear
             bad={v for v in sol if _reaches(v, u, deps)}
             forced={a for a in range(len(atoms)) if atom_syms[a] & bad} | nonlin[u]
@@ -448,6 +563,17 @@ def _greedy(order, cands, nonlin, atoms, basis, Rnp, r, check_time, B_rows, row_
             if res is not None:
                 picked=(u, res)
                 break
+        if picked is None and quad is None and not tried_quad:
+            quad=root_of_some_state()
+        if quad is not None:
+            u, (w, f)=quad
+            span.add(w)
+            sol[u]=f
+            deps[u]={s for s in f.free_symbols if s in unknowns}
+            solved.append(u)
+            if roots is not None:
+                roots.append(u)
+            continue
         if picked is None:
             # no single unknown: let one side of a balance share a scale
             grp=_group_unknown(order, cands, nonlin, atoms, atom_syms, basis, Rnp,
@@ -459,14 +585,12 @@ def _greedy(order, cands, nonlin, atoms, basis, Rnp, r, check_time, B_rows, row_
                 span.add(w)
                 # flux_g0 * (1 + sum r) = num; flux_g = r_g * flux_g0
                 sol[g0]=num/(phi[g0]*(1+sympy.Add(*[rho for _, rho in others])))
-                deps[g0]={s for s in sol[g0].free_symbols if s in cands}
+                deps[g0]={s for s in sol[g0].free_symbols if s in unknowns}
                 solved.append(g0)
                 for p, rho in others:
                     sol[p]=rho*g0*phi[g0]/phi[p]
-                    deps[p]={s for s in sol[p].free_symbols if s in cands}
+                    deps[p]={s for s in sol[p].free_symbols if s in unknowns}
                     ratios.append((str(rho), str(p), str(g0)))
-                _trace('   '+str(g0)+' = '+str(sol[g0])+'  (with '+
-                       ', '.join(str(p)+' = '+str(sol[p]) for p, _ in others)+')')
                 continue
             # the smallest set of solutions whose references alone keep some
             # candidate from an equation: leave exactly those for later
@@ -480,16 +604,25 @@ def _greedy(order, cands, nonlin, atoms, basis, Rnp, r, check_time, B_rows, row_
                 if _solve_unknown(u, cands[u], basis, Rnp, nonlin[u], span) is not None:
                     blockers=bad
             blockers=blockers or set()
-            left=[str(u) for u in order if u not in sol and u in row_of]
-            _trace('   stuck with '+str(r-len(solved))+' balance(s) left; unsolved states: '+', '.join(left))
+            # the balances the used ones do not span, named by their state
+            state_of={i: y for y, i in row_of.items()}
+            rest=_Span(len(basis))
+            for w in span.vecs:
+                rest.add(w)
+            left=[]
+            for i, row in enumerate(B_rows):
+                w=_coords(row, basis) if row else None
+                if w is not None and rest.independent(w):
+                    rest.add(w)
+                    left.append(str(state_of[i]))
+            _STUCK[0]=(len(solved), left, [str(u) for u in solved])
             return None, blockers
         u, (w, c)=picked
         f=_formula(u, c, set(cands[u]), atoms)
         span.add(w)
         sol[u]=f
-        deps[u]={s for s in f.free_symbols if s in cands}
+        deps[u]={s for s in f.free_symbols if s in unknowns}
         solved.append(u)
-        _trace('   '+str(u)+' = '+str(f))
     extra=[(u, f) for u, f in sol.items() if u not in solved]
     return ([(u, sol[u]) for u in solved]+extra, ratios), None
 
@@ -514,6 +647,9 @@ def Alyssa(filename,
            verbose=True):
     global _VERBOSE
     _VERBOSE=2 if verbose=='full' else int(bool(verbose))
+    del _NOTES[:]
+    _BLANK[0]=False
+    _STUCK[0]=None
     t0=time.time()
     check_time=lambda: walltime>0 and time.time()-t0>walltime
     filename=str(filename)
@@ -533,16 +669,36 @@ def Alyssa(filename,
     basis=_row_basis(B, len(atoms))
     r=len(basis)
     Rnp=numpy.array([[float(row.get(a, 0)) for a in range(len(atoms))] for row in basis])
-    cands, nonlin=_candidates(states, atoms, neglect)
+    cands_all, nonlin=_candidates(states, atoms, neglect)
+    # a given conserved quantity keeps one of its states free, the first by
+    # default; if that state's balance is left, the next one is tried
+    cq_groups=[]
+    for cq in givenCQs:
+        lhs=str(cq).split('=')[0]
+        g=[sympy.Symbol(nm) for nm in re.findall(r'[A-Za-z_][A-Za-z0-9_]*', lhs)]
+        g=[x for x in dict.fromkeys(g) if x in states]
+        if g:
+            cq_groups.append(g)
+    cq_pick=[0]*len(cq_groups)
+
+    def keep_free():
+        free=[]
+        for g, k in zip(cq_groups, cq_pick):
+            rest=[x for x in g if x not in free]
+            if k<len(rest):
+                free.append(rest[k])
+        return free
+    cq_free=keep_free()
+    cands={x: v for x, v in cands_all.items() if x not in cq_free}
     _say('steadyStates: '+str(len(states))+' states'+
          (', '+str(len(zero))+' zero a priori' if zero else '')+
          ', '+str(r)+' independent balances over '+str(len(atoms))+' flux terms')
+    _say('')
 
-    known={str(s) for s in cands}
+    known={str(s) for s in cands_all}
     unknown=[p for p in priority if p not in known]
     if unknown:
-        print('Warning: priority entries match no state or rate parameter '
-              'and are ignored: '+str(unknown), flush=True)
+        _note('priority ignores '+', '.join(unknown)+' (no state or rate constant)')
     state_set=set(states)
     prio_rank={p: i for i, p in enumerate(priority)}
 
@@ -566,28 +722,89 @@ def Alyssa(filename,
                     s in defer, tier, str(s))
         return sorted(cands, key=key)
 
-    defer=set()
     ratios=[]
     solution=None
-    for attempt in range(4*len(cands)+1):
-        result, blockers=_greedy(ordering(defer), cands, nonlin, atoms, basis, Rnp, r, check_time,
-                                   B, {s: i for i, s in enumerate(states)})
-        solution=None if result is None else result[0]
-        if solution is not None or blockers is None:
-            ratios=result[1] if result is not None else []
+    blockers=None
+    no_root=set()
+    attempt=0
+    for rotation in range(1+sum(len(g) for g in cq_groups)):
+        defer=set()
+        no_root=set()
+        prev=set()
+        for _ in range(4*len(cands)+len(states)+1):
+            attempt+=1
+            order=ordering(defer)
+            quadratic=[]
+            if solveQuadratic:
+                quadratic=[s for s in order if s in state_set]+\
+                          sorted((s for s in states if s not in cands and str(s) not in neglect
+                                  and s not in cq_free), key=str)
+                quadratic=[s for s in quadratic if s not in no_root]
+            roots=[]
+            result, blockers=_greedy(order, cands, nonlin, atoms, basis, Rnp, r, check_time,
+                                     B, {s: i for i, s in enumerate(states)}, quadratic, roots)
+            solution=None if result is None else result[0]
+            if solution is not None or blockers is None:
+                ratios=result[1] if result is not None else []
+                break
+            n_used, left, used=_STUCK[0]
+            head='  attempt '+str(attempt)+': '+str(n_used)+'/'+str(r)+' balances, left '+', '.join(left)
+            # full trace: which unknowns this attempt solved differently
+            gained=[u for u in used if u not in prev]
+            lost=sorted(prev-set(used))
+            if prev and (gained or lost):
+                _trace('    '+' '.join(['+'+u for u in gained]+['-'+u for u in lost]))
+            prev=set(used)
+            # a kept state of a conserved quantity is changed before anything else
+            left_syms={sympy.Symbol(x) for x in left}
+            if any(cq_pick[i]+1<len(g) and set(g) & left_syms for i, g in enumerate(cq_groups)):
+                _say(head)
+                break
+            # a root spends a balance a pivot would not: those that blocked go first
+            if roots:
+                banned=[u for u in roots if u in blockers] or roots[-1:]
+                no_root|=set(banned)
+                _say(head+'; next: '+', '.join(str(u) for u in banned)+' not as a root')
+                continue
+            new=blockers-defer
+            if not new:
+                _say(head)
+                break
+            defer|=new
+            _say(head+'; next: '+', '.join(sorted(str(s) for s in new))+' last')
+        if solution is not None or blockers is None or check_time():
             break
-        new=blockers-defer
-        if not new:
+        # a conserved quantity whose kept state's balance is left moves on
+        left_syms={sympy.Symbol(x) for x in _STUCK[0][1]}
+        moved=next((i for i, g in enumerate(cq_groups)
+                    if cq_pick[i]+1<len(g) and set(g) & left_syms), None)
+        if moved is None:
             break
-        defer|=new
-        _say('  retrying with '+', '.join(sorted(str(s) for s in new))+
-             ' solved last')
+        old=cq_free[moved]
+        cq_pick[moved]+=1
+        cq_free=keep_free()
+        cands={x: v for x, v in cands_all.items() if x not in cq_free}
+        _say('  -> conserved quantity '+' + '.join(str(x) for x in cq_groups[moved])+': '+
+             str(cq_free[moved])+' free instead of '+str(old))
+        _say('')
+    if no_root and solution is not None:
+        _note('no root for '+', '.join(sorted(str(s) for s in no_root))+
+              ': it would take a balance another unknown needs')
+    if attempt>1:
+        _say('')
     if solution is None:
         if check_time():
             print('No positive steady state found: walltime exceeded.', flush=True)
+        elif _STUCK[0] is not None:
+            left=_STUCK[0][1]
+            print('No positive steady state found: the balance'+('s' if len(left)>1 else '')+
+                  ' of '+', '.join(left)+' '+('are' if len(left)>1 else 'is')+
+                  ' left without a positive unknown.', flush=True)
+            print('  neglect, priority'+('' if solveQuadratic else ' or solveQuadratic = TRUE')+
+                  ' change which unknowns are solved.', flush=True)
         else:
-            print('No positive steady state found: no positive combination of '
-                  'balances is left for the last unknowns.', flush=True)
+            print('No positive steady state found.', flush=True)
+        _print_notes()
         return 0
 
     n_state=sum(1 for u, _ in solution if u in state_set)
@@ -609,10 +826,10 @@ def Alyssa(filename,
         out=[]
         for eq in eqOut:
             ls, rs=eq.split(' = ', 1)
-            if ls!=rs:
+            # a root is built compact; simplifying it expands the discriminant
+            if ls!=rs and 'sqrt' not in rs:
                 if check_time():
-                    print('   Walltime exceeded while simplifying, leaving the rest '
-                          'as they are.', flush=True)
+                    _note('walltime exceeded while simplifying, the rest is left as it is')
                     simplify=False
                 else:
                     rs=_v13._finalSimplify(rs, full)
@@ -621,13 +838,14 @@ def Alyssa(filename,
 
     if testSteady in ('fast', 'modp', 'exact', 'T'):
         bad=_v13._steady_test_fast([str(o) for o in ODE], eqOut, zero)
-        for i in bad:
-            print('   not steady: d'+str(ODE_states[i])+'/dt = '+str(ODE[i]), flush=True)
+        if bad:
+            _note('not steady: '+', '.join('d'+str(ODE_states[i])+'/dt' for i in bad))
         test_status='FAILED' if bad else 'passed (mod p)'
     else:
         test_status='skipped'
 
     # resolve: a dMod trafo substitutes all entries at once
+    substituted=set()
     for i in range(len(eqOut)):
         ls, rs=eqOut[i].split(' = ', 1)
         if ls==rs:
@@ -638,6 +856,13 @@ def Alyssa(filename,
             new=pat.sub('('+rs+')', rs2)
             if new!=rs2:
                 eqOut[j]=ls2+' = '+new
+                substituted.add(j)
+    # reprinted by sympy, which drops the redundant brackets; factor_terms only
+    # pulls out common factors, cancel() would expand the nested sums
+    if simplify:
+        for j in sorted(substituted):
+            ls2, rs2=eqOut[j].split(' = ', 1)
+            eqOut[j]=ls2+' = '+str(sympy.factor_terms(parse_expr(rs2)))
 
     zero_names=[str(s) for s in zero]+[s for s in injections if s not in {str(z) for z in zero}]
     ret=[s+'=0' for s in zero_names]+[eq.replace(' = ', '=', 1) for eq in eqOut]
@@ -657,12 +882,16 @@ def Alyssa(filename,
 
     pivots=[str(u) for u, _ in solution if u not in state_set]
     free=[str(s) for s in states if str(s) not in solved_names]
+    _say('')
     print('Steady state: '+str(len(solution))+' expressions, '+str(len(zero_names))+
           ' states at 0, test '+test_status+', '+str(round(time.time()-t0))+' s', flush=True)
     if pivots:
         print('  rate constants solved for: '+', '.join(pivots), flush=True)
     if free:
-        print('  free states: '+', '.join(free), flush=True)
+        print('  free states: '+', '.join(free)+
+              (' ('+', '.join(str(s) for s in cq_free)+' by conserved quantities)' if cq_free else ''),
+              flush=True)
     if ratios:
         print('  new flux ratios: '+', '.join(rho for rho, _, _ in ratios), flush=True)
+    _print_notes()
     return ret
