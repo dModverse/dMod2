@@ -316,7 +316,7 @@ plotPars.parframe <- function(x, tol = 1, ...){
 # a triangle for one that stopped otherwise. Both levels stay in the legend even
 # when only one occurs, so several waterfall plots can be compared directly.
 .scaleConverged <- function()
-  scale_shape_manual(name = "converged",
+  scale_shape_manual(name = "Converged",
                      values = c(`TRUE` = 16, `FALSE` = 17),
                      limits = c("TRUE", "FALSE"),
                      labels = c("yes", "no"), drop = FALSE)
@@ -328,34 +328,42 @@ plotValues.parframe <- function(x, tol = 1, ..., showSteps = FALSE) {
 
   if (!missing(...)) x <- subset(x, ...)
 
-  jumps <- .stepDetect(x$value, tol)
-  y.range <- c(min(x$value), max(max(x$value), min(x$value) + tol))
-  y.jumps <- seq(y.range[2], y.range[1], length.out = length(jumps))
-
   pars <- x[order(x$value), ]
   pars[["index"]] <- seq_len(nrow(pars))
+  pars[["delta"]] <- pars$value - pars$value[1]
+  jumps <- .stepDetect(pars$value, tol)
+
+  # 0 and the decades up to the worst fit; pseudo-log is linear below 1, so 1
+  # would crowd 0 once there are higher decades
+  top <- max(pars$delta, 1)
+  decades <- 0:ceiling(log10(top))
+  breaks <- c(0, 10^(if (length(decades) > 1) decades[-1] else decades))
+  labels <- parse(text = ifelse(breaks == 0, "0", paste0("10^", log10(breaks))))
 
   stepLines <- stepLabels <- NULL
   if (showSteps) {
     stepLines <- geom_vline(xintercept = jumps, lty = 2)
-    stepLabels <- annotate("text", x = jumps + 1, y = y.jumps, label = jumps, hjust = 0, color = "firebrick", size = 3)
+    stepLabels <- annotate("text", x = jumps + 1, y = pars$delta[jumps], label = jumps,
+                           hjust = 0, vjust = -0.5, color = "firebrick", size = 3)
   }
 
-  P <- ggplot2::ggplot(pars, aes(x = index, y = value, pch = converged, color = iterations)) +
+  P <- ggplot2::ggplot(pars, aes(x = index, y = delta, pch = converged, color = iterations)) +
     stepLines +
     geom_point() +
     stepLabels +
-    xlab("index") + ylab("value") +
+    scale_y_continuous(trans = scales::pseudo_log_trans(sigma = 1, base = 10),
+                       breaks = breaks, labels = labels, limits = c(0, top)) +
+    labs(x = "Fit rank", y = expression(Delta * " objective value"),
+         color = "Iterations") +
     scale_color_gradient(low = "dodgerblue", high = "orange") +
     .scaleConverged() +
-    coord_cartesian(ylim = y.range) +
     theme_dMod()
-  
+
   attr(P, "data") <- pars
   attr(P, "jumps") <- jumps
-  
+
   return(P)
-  
+
 }
 
 

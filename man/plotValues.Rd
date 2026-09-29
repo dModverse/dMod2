@@ -23,10 +23,11 @@ dashed vertical lines and labelled by their index. Defaults to \code{FALSE}.}
 }
 \value{
 A \code{ggplot} object, with the plotted data attached as attribute
-\code{"data"}.
+\code{"data"}, the distance to the best fit in its column \code{delta}.
 }
 \description{
-Draws the waterfall plot of a fit collection: objective values in ascending
-order against their rank. A converged fit is marked by a circle and an
-unconverged one by a triangle, in every plot.
+Draws the waterfall plot of a fit collection: the objective values minus the
+best one, in ascending order against their rank, on a pseudo-log10 scale that
+is linear below 1 and logarithmic above. A converged fit is marked by a circle
+and an unconverged one by a triangle, in every plot.
 }

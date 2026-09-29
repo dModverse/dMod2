@@ -1,3 +1,12 @@
+# dMod2 0.9.2
+
+* `Pimpl()` runs a multistart when the warm starts and the initial guess fail:
+  `controlsPTC(nStarts = 20, startSd = 2, seed = 1)`, log-normal around the guess,
+  from a fixed seed and without touching the global RNG. If every start fails it
+  is an error.
+* `plotValues()` draws the objective values minus the best one on a
+  pseudo-log10 scale, linear below 1; `"data"` holds the distance in `delta`.
+
 # dMod2 0.9.1
 
 * `exportPEtab()` reads the parameter scale off `p`: a parameter entering only

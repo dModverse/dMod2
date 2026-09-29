@@ -732,13 +732,28 @@ test_that("Pimpl solves ERK <-> pERK to closed form in totals", {
 })
 
 
-test_that("Pimpl reports the arguments it no longer has", {
+test_that("Pimpl runs its random starts from a fixed seed and leaves the global RNG alone", {
+  skip_if_no_compile()
+  pf <- pp_models()$erk_im
+  on.exit(controls(pf, name = "controlsPTC") <- list(), add = TRUE)
+  pars <- c(k1 = 1, k2 = 3, totalERK = 4)
+  set.seed(7); before <- .Random.seed
+  resetWarmStarts(pf, verbose = FALSE)
+  controls(pf, name = "controlsPTC") <- list(maxit = 1L, nStarts = 3L)
+  expect_error(pf(pars, deriv = FALSE), "start3: ")
+  expect_identical(.Random.seed, before)
+  controls(pf, name = "controlsPTC") <- list(nStarts = 3L)
+  out <- pf(pars, deriv = FALSE)[[1]]
+  expect_equal(as.numeric(out[c("ERK", "pERK")]), c(3, 1), tolerance = 1e-10)
+  expect_identical(.Random.seed, before)
+})
+
+
+test_that("Pimpl rejects unknown arguments and controls", {
   el <- eqnlist() |>
     addReaction("ERK",  "pERK", "k1 * ERK") |>
     addReaction("pERK", "ERK",  "k2 * pERK")
-  expect_error(Pimpl(el, expressInTotals = FALSE), "expressInTotals` is gone")
-  expect_error(Pimpl(el, controlsMS = list(nStarts = 1L)), "controlsMS` is gone")
-  expect_error(Pimpl(el, controlsNleqslv = list(ftol = 1e-9)), "controlsPTC")
+  expect_error(Pimpl(el, expressInTotals = FALSE), "unused argument")
   expect_error(Pimpl(el, controlsPTC = list(ftol = 1e-9)), "unknown controlsPTC entry ftol")
 })
 

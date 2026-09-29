@@ -2,7 +2,7 @@
 % Please edit documentation in R/parameters.R
 \name{P}
 \alias{P}
-\title{Generate a parameter transformation function}
+\title{Parameter transformation}
 \usage{
 P(
   trafo = NULL,
@@ -21,32 +21,28 @@ P(
 \arguments{
 \item{trafo}{An \link{eqnvec}, named character, \link{eqnlist}, or list thereof.}
 
-\item{parameters}{Outer-parameter names.}
+\item{parameters}{Outer parameter names.}
 
 \item{condition}{Condition label.}
 
-\item{compile, modelname, verbose}{Forwarded to \link[cppDE:cppFUN]{cppDE::cppFUN}.}
+\item{compile, modelname, verbose}{Forwarded to \code{\link[cppDE:cppFUN]{cppDE::cppFUN()}}.}
 
-\item{method}{One of \code{"explicit"}, \code{"implicit"}, or \code{NULL}.}
+\item{method}{\code{"explicit"}, \code{"implicit"}, or \code{NULL} for \code{"implicit"} if
+\code{trafo} is an \link{eqnlist} and \code{"explicit"} otherwise.}
 
-\item{cores}{Per-condition \code{mclapply()} cores. \code{NULL} auto-detects via
-\link{detectFreeCores}; capped at 1 on Windows.}
+\item{cores}{Number of cores. \code{NULL} uses \code{\link[=detectFreeCores]{detectFreeCores()}}; 1 on Windows.}
 
-\item{deriv, deriv2}{Attach first/second-order sensitivities. \code{deriv2}
+\item{deriv, deriv2}{Attach first and second order sensitivities. \code{deriv2}
 requires \code{deriv = TRUE}.}
 
-\item{...}{Forwarded to the chosen backend. In particular \code{outdir}
-(directory for the generated sources and shared object, default the
-working directory).}
+\item{...}{Forwarded to the backend, e.g. \code{outdir}.}
 }
 \value{
 A \link{parfn}.
 }
 \description{
-Unified entry to the explicit (\link{Pexpl}, algebraic) and implicit (\link{Pimpl},
-root-finding) backends. \code{method = NULL} picks \code{"implicit"} for \link{eqnlist}
-entries, \code{"explicit"} otherwise.
+Builds a \link{parfn} with \code{\link[=Pexpl]{Pexpl()}} or \code{\link[=Pimpl]{Pimpl()}}.
 }
 \seealso{
-\link{Pexpl}, \link{Pimpl}, \link{parfn}
+\code{\link[=Pexpl]{Pexpl()}}, \code{\link[=Pimpl]{Pimpl()}}
 }
