@@ -2,7 +2,7 @@
 # deriv2 (Hessian) propagation through the dMod function stack.
 #
 # Section order follows the composition chain:
-#   Xs -> Y -> Pexpl -> Pequil -> (Y * Xs) -> res -> normL2 -> constraintL2
+#   Xs -> Y -> Pexpl -> Pimpl -> (Y * Xs) -> res -> normL2 -> constraintL2
 # ============================================================================
 
 
@@ -53,12 +53,10 @@ d2_models <- local({
                   modelname = nm("d2_pexpl_con"), deriv2 = TRUE,
                   derivMode = "forward")
 
-    peq <- Pequil(c(x = "-k * x + s"), parameters = c("k", "s"),
-                  modelname = equil, deriv2 = TRUE, attach.input = FALSE,
-                  verbose = FALSE)
-    peq_nod2 <- Pequil(c(x = "-k * x + s"), parameters = c("k", "s"),
-                       modelname = nm("d2_equil_nod2"), deriv2 = FALSE,
-                       attach.input = FALSE, verbose = FALSE)
+    peq <- Pimpl(c(x = "-k * x + s"), parameters = c("k", "s"), flow = TRUE,
+                 modelname = equil, deriv2 = TRUE, verbose = FALSE)
+    peq_nod2 <- Pimpl(c(x = "-k * x + s"), parameters = c("k", "s"), flow = TRUE,
+                      modelname = nm("d2_equil_nod2"), deriv2 = FALSE, verbose = FALSE)
 
     compile(m, xdes, yfwd, yobs, pabc, ppass, pnod2, plog, pid, pcon, peq,
             peq_nod2, output = nm("deriv2_models"), cores = 4L)
@@ -235,21 +233,21 @@ test_that("Pexpl(deriv2 = FALSE) refuses deriv2 = TRUE at call time", {
 })
 
 
-# ---- Pequil ---------------------------------------------------------------
+# ---- Pimpl ----------------------------------------------------------------
 
-test_that("Pequil deriv2 reproduces analytical equilibrium Hessian", {
+test_that("Pimpl deriv2 reproduces analytical equilibrium Hessian", {
   p <- d2_models()$peq
 
   pars <- c(k = 0.5, s = 2.0, x = 1.0)
   pinner <- p(pars, deriv = TRUE, deriv2 = TRUE)[[1]]
 
-  k <- pars["k"]; s <- pars["s"]
-  expect_equal(as.numeric(pinner), as.numeric(s / k), tolerance = 1e-6)
+  k <- pars[["k"]]; s <- pars[["s"]]
+  expect_equal(as.numeric(pinner["x"]), s / k, tolerance = 1e-10)
 
   J_ref <- matrix(c(-s / k^2, 1 / k), nrow = 1,
                   dimnames = list("x", c("k", "s")))
-  expect_equal(attr(pinner, "deriv")[, c("k", "s"), drop = FALSE],
-               J_ref, tolerance = 1e-6)
+  expect_equal(attr(pinner, "deriv")["x", c("k", "s"), drop = FALSE],
+               J_ref, tolerance = 1e-10)
 
   H_ref <- array(0, c(1, 2, 2),
                  dimnames = list("x", c("k", "s"), c("k", "s")))
@@ -257,18 +255,12 @@ test_that("Pequil deriv2 reproduces analytical equilibrium Hessian", {
   H_ref["x", "k", "s"] <- -1 / k^2
   H_ref["x", "s", "k"] <- -1 / k^2
   H_ref["x", "s", "s"] <- 0
-  expect_equal(attr(pinner, "deriv2")[, c("k", "s"), c("k", "s"), drop = FALSE],
-               H_ref, tolerance = 1e-6)
+  expect_equal(attr(pinner, "deriv2")["x", c("k", "s"), c("k", "s"), drop = FALSE],
+               H_ref, tolerance = 1e-10)
 })
 
-test_that("Pequil(deriv2 = TRUE) emits <m>, <m>_s, <m>_s2 and dispatches", {
-  d <- d2_models()
-  p <- d$peq
-  base <- file.path(d$dir, d$equil)
-  expect_true(file.exists(paste0(base,     ".cpp")))
-  expect_true(file.exists(paste0(base, "_s.cpp")))
-  expect_true(file.exists(paste0(base, "_s2.cpp")))
-
+test_that("Pimpl(deriv2 = TRUE) returns the Hessian only when asked", {
+  p <- d2_models()$peq
   pars <- c(k = 0.5, s = 2.0, x = 1.0)
   r1 <- p(pars, deriv = TRUE, deriv2 = FALSE)[[1]]
   r2 <- p(pars, deriv = TRUE, deriv2 = TRUE)[[1]]
@@ -278,7 +270,7 @@ test_that("Pequil(deriv2 = TRUE) emits <m>, <m>_s, <m>_s2 and dispatches", {
   expect_equal(attr(r1, "deriv"), attr(r2, "deriv"), tolerance = 1e-6)
 })
 
-test_that("Pequil(deriv2 = FALSE) refuses deriv2 = TRUE at call time", {
+test_that("Pimpl(deriv2 = FALSE) refuses deriv2 = TRUE at call time", {
   p <- d2_models()$peq_nod2
   expect_error(p(c(k = 0.5, s = 2, x = 1), deriv2 = TRUE),
                "deriv2 = TRUE")

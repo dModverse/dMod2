@@ -99,16 +99,16 @@ def _read_model(filename, injections):
     stoich=[[col[i] for i in keep] for col in stoich]
     return states, fluxes, stoich
 
-def _zero_states(states, fluxes, stoich):
+def _zero_states(states, fluxes, stoich, volumes):
     # States that are 0 at every steady state: a set whose mass only leaks
-    # (v1.3's linear program). They are removed and substituted by 0.
+    # (v1.3's linear program, in amounts). They are removed and substituted by 0.
     zero=[]
     while True:
         if not states or not fluxes:
             break
         SM=sympy.Matrix(len(states), len(fluxes),
                         lambda i, j: stoich[j][i])
-        cluster=_v13.FindSinkCluster(SM)
+        cluster=_v13.FindSinkCluster(SM, F=fluxes, X=states, volumes=volumes)
         if not cluster:
             break
         zs=[states[i] for i in cluster]
@@ -644,7 +644,8 @@ def Alyssa(filename,
            positive=True,
            branches=False,
            priority=[],
-           verbose=True):
+           verbose=True,
+           volumes={}):
     global _VERBOSE
     _VERBOSE=2 if verbose=='full' else int(bool(verbose))
     del _NOTES[:]
@@ -664,7 +665,8 @@ def Alyssa(filename,
     states, fluxes, stoich=_read_model(filename, injections)
     ODE_states=list(states)
     ODE=[sympy.Add(*[col[i]*f for f, col in zip(fluxes, stoich)]) for i in range(len(states))]
-    states, fluxes, stoich, zero=_zero_states(states, fluxes, stoich)
+    states, fluxes, stoich, zero=_zero_states(states, fluxes, stoich,
+                                              _v13.ParseVolumes(volumes))
     atoms, B=_atoms(states, fluxes, stoich)
     basis=_row_basis(B, len(atoms))
     r=len(basis)

@@ -288,7 +288,7 @@ getTotals <- function(eqnlist) {
 #' Set or reset user-defined conservation-quantity totals
 #'
 #' Attaches a named list of conservation expressions to the eqnlist; these
-#' override auto-detection and flow into [Pimpl] / [Pequil] as the new
+#' override auto-detection and flow into [Pimpl] as the new
 #' parameter basis. Each expression is validated against the stoichiometric
 #' matrix (must lie in the left null space of `S`) and the basis as a whole
 #' must have the same rank as `conservedQuantities(S)`. Pass `NULL` or
@@ -680,7 +680,8 @@ setCompartmentVolume <- function(eqnlist, ..., rules = NULL) {
 # Reactions as a data.frame for the steady-state backend, which sees only rates
 # and stoichiometry while getFluxes() scales every flux by V_ref / V_X. One csv
 # row carries one rate, so a reaction touching states at different ratios is
-# split into one row per ratio.
+# split into one row per ratio. Attribute "volumes": V_X per state, "1" for
+# amount states; rows of one reaction share rate * V_X.
 .volumeScaledReactions <- function(eqnlist) {
 
   data <- as.data.frame(eqnlist)
@@ -726,6 +727,7 @@ setCompartmentVolume <- function(eqnlist, ..., rules = NULL) {
 
   out <- do.call(rbind, unlist(rows, recursive = FALSE))
   rownames(out) <- NULL
+  attr(out, "volumes") <- vol
   out
 }
 

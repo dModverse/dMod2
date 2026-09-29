@@ -164,6 +164,46 @@ test_that("compartment volume ratios reach the steady-state backend", {
 
 })
 
+test_that("a leaking cluster across compartments is 0, a moiety listed first is not", {
+
+  # L binds R across compartments. The backend reads the binding as one row
+  # per volume ratio, a source of L and a feed of LR from R, and finds {L, LR}
+  # only in amounts. The LP support also takes the conserved A <-> Ap listed
+  # before it; only states that drain into a leaking reaction are 0.
+  withr::local_dir(tempdir())
+  toy <- function(Vc, Ve) eqnlist() |>
+    assignCompartment(L = "ext", volume = Ve) |>
+    addReaction("A", "Ap", "k_act*R*A", compartment = "cell") |>
+    addReaction("Ap", "A", "k_deact*Ap", compartment = "cell") |>
+    addReaction("", "R", "k_pr_R", compartment = "cell") |>
+    addReaction("R", "", "k_dg_R*R", compartment = "cell") |>
+    addReaction("L + R", "LR", "k_on*L*R", compartment = "cell", rateCompartment = "cell") |>
+    addReaction("LR", "L + R", "k_off*LR", compartment = "cell", rateCompartment = "cell") |>
+    addReaction("LR", "", "k_dg_LR*LR", compartment = "cell") |>
+    setCompartmentVolume(cell = Vc)
+  symbolsOf <- function(x) unique(unlist(lapply(x, function(e) all.vars(parse(text = e)))))
+
+  for (vols in list(c("Vc", "Ve"), c("1.4", "0.45"))) for (v in c("1.3", "1.4")) {
+    lab <- paste0("version ", v, ", volumes ", vols[1], "/", vols[2])
+    r <- toy(vols[1], vols[2])
+    ss <- steadyStates(r, version = v, verbose = FALSE)
+    expect_false(identical(ss, 0), label = lab)
+    if (identical(ss, 0)) next
+    expect_setequal(names(ss)[trimws(ss) == "0"], c("L", "LR"))
+
+    odes <- as.eqnvec(r)
+    defs <- ss[trimws(ss) != names(ss)]
+    set.seed(7)
+    free <- setdiff(symbolsOf(c(as.character(odes), defs)), names(defs))
+    env <- as.list(setNames(stats::runif(length(free), 0.3, 2), free))
+    for (n in names(defs)) env[[n]] <- eval(parse(text = defs[[n]]), env)
+    expect_true(all(unlist(env[c("A", "Ap", "R")]) > 0), label = lab)
+    residual <- vapply(odes, function(e) eval(parse(text = e), env), numeric(1))
+    expect_lt(max(abs(residual)), 1e-10, label = lab)
+  }
+
+})
+
 test_that("positive = TRUE spends the row on a rate constant, not on a difference", {
 
   # Rec's ODE is not affine in Rec, so the direct positive-solve pass skips it.

@@ -55,5 +55,5 @@ Jacobian and, optionally, the Hessian. It is evaluable only after
 compilation.
 }
 \seealso{
-\link{Pimpl}, \link{Pequil}, \link{P}.
+\link{Pimpl}, \link{P}.
 }
