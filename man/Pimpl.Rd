@@ -45,7 +45,8 @@ requires \code{deriv = TRUE}.}
 \describe{
 \item{\code{rtol}, \code{atol}}{Convergence tolerances, default \code{1e-10}, \code{1e-14}.}
 \item{\code{flowTol}}{Relative local error per pseudo-time step, default \code{1}.}
-\item{\code{maxit}}{Iterations per start, default \code{400}.}
+\item{\code{maxit}}{Iterations per start, default
+\code{ceiling(70 * log(n + 1))} for \code{n} states.}
 \item{\code{dtInit}}{Initial pseudo-time step relative to the fastest rate,
 default \code{1e-2}.}
 \item{\code{positive}}{Keep states positive, default \code{TRUE}.}
@@ -54,10 +55,15 @@ default \code{1e-2}.}
 \item{\code{archive}}{Roots kept per condition, default \code{8}.}
 \item{\code{nStarts}}{Random starts after the deterministic ones, default
 \code{20}.}
-\item{\code{startSd}}{Standard deviation of a random start in log10 around
-the initial guess, default \code{2}.}
-\item{\code{seed}}{Seed of the random starts, default \code{1}. The global RNG
-is left untouched.}
+\item{\code{startRange}}{Range of a random start, drawn uniformly per
+state on \code{startScale}, default \code{c(-5, 5)}.}
+\item{\code{startScale}}{\code{"log10"} or \code{"linear"}, default \code{"log10"} if
+\code{positive} and \code{"linear"} otherwise.}
+\item{\code{seed}}{Seed of the random starts, default \code{1}. Each warm-start
+cache (per condition, emptied by \code{\link[=resetWarmStarts]{resetWarmStarts()}} before every fit
+of \code{\link[=mstrust]{mstrust()}}) draws from its own stream, derived from \code{seed}, the
+condition and the global RNG state when the cache first needs one. The
+global RNG is read, not advanced.}
 }}
 
 \item{outdir}{Directory for the generated files.}

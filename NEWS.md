@@ -1,3 +1,14 @@
+# dMod2 0.10.1
+
+* `Pimpl()` draws its random starts uniformly over `startRange = c(-5, 5)` on
+  `startScale`, log10 by default and linear if `positive = FALSE`. Each
+  warm-start cache, i.e. each condition in each fit of `mstrust()`, draws from its
+  own stream; the global RNG is read, not advanced. `maxit` defaults to
+  `ceiling(70 * log(n + 1))` for `n` states (was 400).
+* Needs cppDE 0.11.2: `ptc()` scales a row by its largest partial derivative, so
+  a row whose own rate is tiny next to its partner's no longer stalls it, and it
+  builds on macOS.
+
 # dMod2 0.10.0
 
 * `normL2()` loses `t0`. `times` is a vector for all conditions or a list named

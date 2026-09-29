@@ -830,9 +830,9 @@ resetWarmStarts <- function(fn, verbose = TRUE) {
 
 # Pimpl solver controls merged over their defaults. Unknown names are an error.
 .pimplPTC <- function(controlsPTC) {
-  def <- list(rtol = 1e-10, atol = 1e-14, flowTol = 1, maxit = 400L, dtInit = 1e-2,
+  def <- list(rtol = 1e-10, atol = 1e-14, flowTol = 1, maxit = NULL, dtInit = 1e-2,
               positive = TRUE, stability = TRUE, archive = 8L,
-              nStarts = 20L, startSd = 2, seed = 1L)
+              nStarts = 20L, startRange = c(-5, 5), startScale = NULL, seed = 1L)
   given <- as.list(controlsPTC)
   if (length(given) && (is.null(names(given)) || any(!nzchar(names(given)))))
     stop("Pimpl: controlsPTC must be a named list.", call. = FALSE)
@@ -841,7 +841,14 @@ resetWarmStarts <- function(fn, verbose = TRUE) {
     stop("Pimpl: unknown controlsPTC entr", if (length(bad) > 1L) "ies " else "y ",
          paste(bad, collapse = ", "), ". Known: ", paste(names(def), collapse = ", "), ".",
          call. = FALSE)
-  modifyList(def, given)
+  ctrl <- modifyList(def, given, keep.null = TRUE)
+  if (is.null(ctrl$startScale)) ctrl$startScale <- if (ctrl$positive) "log10" else "linear"
+  ctrl$startScale <- match.arg(ctrl$startScale, c("log10", "linear"))
+  if (length(ctrl$startRange) != 2L || !(ctrl$startRange[1] < ctrl$startRange[2]))
+    stop("Pimpl: startRange must be c(lower, upper) with lower < upper.", call. = FALSE)
+  if (ctrl$positive && ctrl$startScale == "linear" && ctrl$startRange[1] < 0)
+    stop("Pimpl: a linear startRange below 0 needs positive = FALSE.", call. = FALSE)
+  ctrl
 }
 
 #' Implicit parameter transformation
@@ -866,7 +873,8 @@ resetWarmStarts <- function(fn, verbose = TRUE) {
 #'   \describe{
 #'     \item{`rtol`, `atol`}{Convergence tolerances, default `1e-10`, `1e-14`.}
 #'     \item{`flowTol`}{Relative local error per pseudo-time step, default `1`.}
-#'     \item{`maxit`}{Iterations per start, default `400`.}
+#'     \item{`maxit`}{Iterations per start, default
+#'       `ceiling(70 * log(n + 1))` for `n` states.}
 #'     \item{`dtInit`}{Initial pseudo-time step relative to the fastest rate,
 #'       default `1e-2`.}
 #'     \item{`positive`}{Keep states positive, default `TRUE`.}
@@ -875,10 +883,15 @@ resetWarmStarts <- function(fn, verbose = TRUE) {
 #'     \item{`archive`}{Roots kept per condition, default `8`.}
 #'     \item{`nStarts`}{Random starts after the deterministic ones, default
 #'       `20`.}
-#'     \item{`startSd`}{Standard deviation of a random start in log10 around
-#'       the initial guess, default `2`.}
-#'     \item{`seed`}{Seed of the random starts, default `1`. The global RNG
-#'       is left untouched.}
+#'     \item{`startRange`}{Range of a random start, drawn uniformly per
+#'       state on `startScale`, default `c(-5, 5)`.}
+#'     \item{`startScale`}{`"log10"` or `"linear"`, default `"log10"` if
+#'       `positive` and `"linear"` otherwise.}
+#'     \item{`seed`}{Seed of the random starts, default `1`. Each warm-start
+#'       cache (per condition, emptied by [resetWarmStarts()] before every fit
+#'       of [mstrust()]) draws from its own stream, derived from `seed`, the
+#'       condition and the global RNG state when the cache first needs one. The
+#'       global RNG is read, not advanced.}
 #'   }
 #' @param outdir Directory for the generated files.
 #'
@@ -1042,7 +1055,8 @@ Pimpl <- function(trafo, parameters = NULL, forcings = NULL, condition = NULL,
   }
 
   # starts in a fixed order, then the stability check
-  solveRoot <- function(pv, x_user, arch, ctrl) {
+  solveRoot <- function(pv, x_user, arch, ctrl, cache = NULL, condition = NULL) {
+    if (is.null(ctrl$maxit)) ctrl$maxit <- ceiling(70 * log(n_dep + 1))
     zero <- numericZeros(pv)
     act  <- setdiff(dependent, zero)
     if (!length(act)) return(list(x = setNames(rep(0, n_dep), dependent), zero = zero, how = "all zero"))
@@ -1088,17 +1102,25 @@ Pimpl <- function(trafo, parameters = NULL, forcings = NULL, condition = NULL,
                                       maxit = ctrl$maxit, dtInit = dt))
       list(x = r$x[act], ok = r$converged, iter = r$iterations, reason = r$message)
     }
-    # multistart: random starts log-normal around the guess, drawn from a fixed seed
-    # without touching the global RNG
+    # multistart: states uniform over startRange on startScale, from the stream of
+    # this warm-start cache; the global RNG is read, not advanced
     if (ctrl$nStarts > 0L) {
       oldSeed <- get0(".Random.seed", envir = globalenv(), inherits = FALSE)
       on.exit(if (is.null(oldSeed)) rm(".Random.seed", envir = globalenv())
               else assign(".Random.seed", oldSeed, envir = globalenv()), add = TRUE)
-      set.seed(ctrl$seed)
-      x0 <- x_user[dependent]; x0[!(x0 > 0)] <- 1
-      for (i in seq_len(ctrl$nStarts))
+      if (is.null(cache)) cache <- new.env(parent = emptyenv())
+      if (is.null(cache$msBase)) {
+        h <- digest::digest(list(ctrl$seed, condition, oldSeed), algo = "xxhash32")
+        cache$msBase <- strtoi(substr(h, 1, 7), 16L); cache$msCount <- 0L
+      }
+      cache$msCount <- cache$msCount + 1L
+      set.seed((cache$msBase + cache$msCount) %% .Machine$integer.max)
+      for (i in seq_len(ctrl$nStarts)) {
+        u <- stats::runif(n_dep, ctrl$startRange[1], ctrl$startRange[2])
         attempts[[paste0("start", i)]] <- list(
-          x = prep(x0 * 10^stats::rnorm(n_dep, 0, ctrl$startSd)), dt = if (flow) ctrl$dtInit else 1)
+          x = prep(setNames(if (ctrl$startScale == "log10") 10^u else u, dependent)),
+          dt = if (flow) ctrl$dtInit else 1)
+      }
     }
     for (nm in names(attempts)) {
       r <- run(attempts[[nm]]$x, attempts[[nm]]$dt, isTRUE(attempts[[nm]]$fine))
@@ -1226,7 +1248,8 @@ Pimpl <- function(trafo, parameters = NULL, forcings = NULL, condition = NULL,
     stats$calls <- stats$calls + 1L
     if (is.null(got)) {
       arch <- if (keep.root) cache$arch else NULL
-      got  <- solveRoot(pv, setNames(as.numeric(p[dependent]), dependent), arch, ctrl)
+      got  <- solveRoot(pv, setNames(as.numeric(p[dependent]), dependent), arch, ctrl,
+                        cache = cache, condition = condition)
       got$ift <- NULL
       stats$solves <- stats$solves + 1L
       stats$how[got$how] <- (if (is.na(stats$how[got$how])) 0L else stats$how[got$how]) + 1L
