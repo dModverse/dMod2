@@ -680,7 +680,8 @@ setCompartmentVolume <- function(eqnlist, ..., rules = NULL) {
 # Reactions as a data.frame for the steady-state backend, which sees only rates
 # and stoichiometry while getFluxes() scales every flux by V_ref / V_X. One csv
 # row carries one rate, so a reaction touching states at different ratios is
-# split into one row per ratio.
+# split into one row per ratio. Attribute "volumes": V_X per state, "1" for
+# amount states; rows of one reaction share rate * V_X.
 .volumeScaledReactions <- function(eqnlist) {
 
   data <- as.data.frame(eqnlist)
@@ -726,6 +727,7 @@ setCompartmentVolume <- function(eqnlist, ..., rules = NULL) {
 
   out <- do.call(rbind, unlist(rows, recursive = FALSE))
   rownames(out) <- NULL
+  attr(out, "volumes") <- vol
   out
 }
 

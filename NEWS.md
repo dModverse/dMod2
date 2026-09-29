@@ -1,3 +1,11 @@
+# dMod2 0.8.4
+
+* `steadyStates()` 1.3 and 1.4 detect structurally zero clusters that span
+  compartments, such as a ligand in the medium bound by a receptor in the
+  cell. The sink-cluster test runs in amounts, over reactions rather than the
+  rows per volume ratio the backend reads. As in 0.8.3, a conserved moiety in
+  the support of the test stays nonzero.
+
 # dMod2 0.8.3
 
 * Structurally zero states: a conserved moiety listed before a leaking cluster
