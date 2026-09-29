@@ -17,11 +17,16 @@
 #' `K_SBML = rate_dMod * V`.
 #'
 #' @param modelpath Path to the sbml file
+#' @param keep Parameter ids that keep their own symbol although the SBML sets
+#'   them by an `<initialAssignment>`, for a caller that assigns them
+#'   otherwise (the PEtab condition and parameter tables). A constant
+#'   assignment becomes their default value. Any other parameter's initial
+#'   assignment is substituted into the rates, initial values and observables.
 #'
 #' @return list of eqnlist, parameters and inits
 #' @export
 #' @importFrom stringr str_replace_all
-importSbml <- function(modelpath) {
+importSbml <- function(modelpath, keep = NULL) {
 
   .require_ns("reticulate", "SBML import")
   .require_ns("rjson", "SBML import")
@@ -141,6 +146,24 @@ importSbml <- function(modelpath) {
   # Iterate to a fixed point so chained rules resolve. After inlining, the
   # LHS symbols are no longer free parameters and are dropped from `pars`.
   rules <- json_content[["assignmentRules"]]
+  # An <initialAssignment> on a constant parameter is its value throughout, so
+  # it is substituted like a rule; a species in it stands for its initial
+  # value, as the assignment is evaluated once at the start. A parameter a
+  # RateRule drives is promoted to a state further down and keeps its own.
+  par_ia <- json_content[["parameterAssignments"]]
+  for (nm in intersect(keep, names(par_ia))) {
+    v0 <- tryCatch(eval(parse(text = .normalise_formula(par_ia[[nm]])), baseenv()),
+                   error = function(e) NULL)
+    if (is.numeric(v0) && length(v0) == 1L && nm %in% names(pars)) pars[[nm]] <- v0
+  }
+  ia_lhs <- setdiff(names(par_ia),
+                    c(names(rules), names(json_content[["rateRules"]]), keep))
+  if (length(ia_lhs)) {
+    ia_rhs <- .normalise_formula(unlist(par_ia[ia_lhs], use.names = FALSE))
+    if (length(states))
+      ia_rhs <- replaceSymbols(states, paste0("(", x0[states], ")"), ia_rhs)
+    rules <- c(rules, setNames(as.list(ia_rhs), ia_lhs))
+  }
   if (length(rules)) {
     rule_lhs <- names(rules)
     rule_rhs <- .normalise_formula(unlist(rules, use.names = FALSE))
@@ -456,8 +479,12 @@ exportSbml <- function(eqnlist, parameters = NULL, inits = NULL, filepath,
     # A compartment whose volume expression is its own symbol carries the
     # value in the parameter vector; write that as the size instead of a
     # self-referential assignment.
-    if (is.na(size) && identical(vol, cid) && cid %in% names(parameters))
+    if (is.na(size) && identical(vol, cid)) {
+      if (!cid %in% names(parameters))
+        stop("exportSbml: no size for compartment `", cid, "`; pass it in ",
+             "`parameters`.", call. = FALSE)
       size <- suppressWarnings(as.numeric(parameters[[cid]]))
+    }
     out <- list(id = cid, size = if (is.na(size)) 1.0 else size,
                 spatialDimensions = 3L,
                 constant = !(cid %in% ev_targets))
@@ -522,10 +549,16 @@ exportSbml <- function(eqnlist, parameters = NULL, inits = NULL, filepath,
 
     home_vol <- vref_vol[i]
     kinetic_law <- paste0("(", home_vol, ") * (", eqnlist$rates[i], ")")
+    # SBML requires every species in the kinetic law to be a reactant, a
+    # product or a declared modifier (a rate rule imported as a reaction
+    # names the other states only in its rate).
+    modifiers <- setdiff(intersect(getSymbols(eqnlist$rates[i]), eqnlist$states),
+                         eqnlist$states[c(educt_idx, product_idx)])
 
     list(id = paste0("r", i),
          reactants = educts,
          products = products,
+         modifiers = as.list(modifiers),
          kineticLaw = kinetic_law)
   })
 

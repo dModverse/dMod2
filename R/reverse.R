@@ -23,6 +23,8 @@
 # trailing direction axis of extent K: slice 1 is the cotangent itself, slices
 # 2..K are its derivatives along the directions the value pass carried. First
 # order is K = 1, the same storage plus a dim attribute and the same code path.
+# A walk in seed mode, `.bwdNode(..., seeds = TRUE)`, reads the same axis as
+# independent first-order seeds instead, each slice a cotangent of its own.
 .ct <- function(out = NULL, pars = NULL) {
   if (!is.null(pars) && is.null(dim(pars)))
     pars <- matrix(pars, ncol = 1L, dimnames = list(names(pars), NULL))
@@ -141,6 +143,28 @@
   cv <- array(0, c(n, length(full), 1L, K - 1L))
   if (length(hit)) cv[, match(hit, full), 1L, ] <- w[, hit, -1L, drop = FALSE]
   list(cotangent = W, curvature = cv)
+}
+
+# The seed-mode counterpart: every slice of the trailing axis is a cotangent of
+# its own, so all of them go to the solver as seed columns and nothing becomes a
+# curvature. The walk runs in this mode when it is handed `seeds = TRUE`; a
+# direction axis and a seed axis never meet in one sweep.
+.widenSeeds <- function(w, full, subset) {
+  n <- dim(w)[1L]
+  S <- .ctK(w)
+  W <- array(0, c(n, length(full), S), dimnames = list(NULL, full, NULL))
+  hit <- intersect(subset, full)
+  if (length(hit)) W[, hit, ] <- w[, hit, , drop = FALSE]
+  W
+}
+
+# The solver's answer to a multi-seed sweep, one column per seed.
+.adjointSeeds <- function(res) {
+  u <- res$cotangent
+  if (is.null(dim(u)))
+    u <- matrix(u, ncol = 1L, dimnames = list(names(u), NULL))
+  dimnames(u) <- list(rownames(u), NULL)
+  u
 }
 
 # A vjp is also called from outside the chain, where the natural shape of a

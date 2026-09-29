@@ -1,3 +1,143 @@
+# dMod2 0.10.1
+
+* `Pimpl()` draws its random starts uniformly over `startRange = c(-5, 5)` on
+  `startScale`, log10 by default and linear if `positive = FALSE`. Each
+  warm-start cache, i.e. each condition in each fit of `mstrust()`, draws from its
+  own stream; the global RNG is read, not advanced. `maxit` defaults to
+  `ceiling(70 * log(n + 1))` for `n` states (was 400).
+* Needs cppDE 0.11.2: `ptc()` scales a row by its largest partial derivative, so
+  a row whose own rate is tiny next to its partner's no longer stalls it, and it
+  builds on macOS.
+
+# dMod2 0.10.0
+
+* `normL2()` loses `t0`. `times` is a vector for all conditions or a list named
+  by condition, and a condition's prediction starts at the first time of its
+  grid, its data times and its `times`: `times = list(C1 = -10, C2 = 5)` is what
+  `t0 = c(C1 = -10, C2 = 5)` was. Without `times` the grid starts at the first
+  data point, which matters only for a model built with
+  `odemodel(..., includeTimeZero = FALSE)`; with the default the grid holds 0.
+  PEtab start times go through `times`, in one objective for all conditions.
+* **Multiple shooting.**
+  `normL2(data, g * x * p, multipleShootingControl = TRUE)`, or a list of
+  settings, makes `trust()` and `mstrust()` fit by Bock's generalised
+  Gauss-Newton method. The time axis is cut into segments with node values of
+  their own; continuity is a constraint, linearised and eliminated at every
+  iterate (condensing), so the subproblem keeps the single-shooting size and
+  box bounds work as before. At convergence the result is a stationary point
+  of the single-shooting objective, which the objective still is when called
+  as a function. The ODE model needs `odemodel(..., includeTimeZero = FALSE)`;
+  `profile()` re-optimises by single shooting.
+* The trust region bounds parameters and node values together. Steps are
+  accepted by a filter or an l2 merit function (`stepControl$acceptance`),
+  with a second-order correction (`stepControl$soc`) and a gap tolerance
+  (`tolControl$ctol`).
+* `stepControl$anneal` (default) first penalises the gaps, `f + w ||c||^2`
+  with `w` rising tenfold per stage, then hands over to the exact method. A
+  stage ends once a step gains less than a thousandth; the annealing ends
+  early where the penalty dominates and a stage no longer closes the gaps.
+* `nodes = "auto"` (default) starts from ten segments per condition, or one
+  per half oscillation of the data where that is more, and cuts a segment
+  where its propagation matrix grows by more than `growth`, where it misses its
+  data by more than `misfit` and by twice the median of its condition, or where
+  its solve fails. A misfit everywhere is left to the parameters, and each half
+  of a cut keeps `minPoints` data points, by default one more than the states.
+  Unobserved node values start from a run synchronised to the data. `charts`
+  puts node values on a log10, linear or angle scale per state; the gap of an
+  angle is taken modulo 2 pi. The scale of an unobserved linear state is the
+  largest range it covers within one segment. `hessianMethod = "bfgs"` or
+  `"sr1"` keeps one quasi-Newton block per segment.
+* The cost of an evaluation is linear in the number of segments: segment
+  parameters are built per condition, the annealing model is assembled in one
+  pass, and the values at new nodes come from one batched solve.
+  `fit$multipleShooting$cuts` counts the cuts by growth, misfit and failed
+  solve.
+* `c()` of one parameter vector, alone or beside `NULL` or an empty one, as
+  every prediction builds its `parameters`, skips the list machinery.
+* Methods of the Freiburg group (Bock; Horbelt, Timmer and Voss 2002; Peifer
+  and Timmer 2007; Voss, Timmer and Kurths 2004), off by default:
+  `stepControl$acceptance = "natural"` (damped Gauss-Newton on the natural
+  level function, needs a fixed sigma), `stepControl$twoPhase` (parameters
+  first, then nodes), `stepControl$regularise`, `stepControl$restore`
+  (restoration phase of the filter), `init = "spline"`, `minPoints`,
+  `nodes = "transitions"` (a node just before each fast change of the data)
+  and `breaks` (nodes without continuity).
+* Spiking data need tight integrator tolerances (1e-10); at 1e-8 the objective
+  is too noisy far from the optimum and the trust region collapses.
+* The objective returns the weighted residuals of each segment and their
+  Jacobian on request (`residuals = TRUE`). A trial point after a rejected
+  step is evaluated without sensitivities.
+* The reverse walk takes several first-order seeds at once, which `Xs()`
+  answers in one backward solve. Checkpoints serve any number of backward
+  sweeps.
+* New benches `bench/multipleShooting_preBotC.R` and
+  `bench/multipleShooting_macrospin.R`.
+
+# dMod2 0.9.2
+
+* `Pimpl()` runs a multistart when the warm starts and the initial guess fail:
+  `controlsPTC(nStarts = 20, startSd = 2, seed = 1)`, log-normal around the guess,
+  from a fixed seed and without touching the global RNG. If every start fails it
+  is an error.
+* `plotValues()` draws the objective values minus the best one on a
+  pseudo-log10 scale, linear below 1; `"data"` holds the distance in `delta`.
+
+# dMod2 0.9.1
+
+* `exportPEtab()` reads the parameter scale off `p`: a parameter entering only
+  as `exp(X)` is written with `parameterScale = log`, one entering only as
+  `10^(X)` or `exp10(X)` with `log10`, with linear nominal values and bounds
+  five decades around them. `parameterScale = NULL` is the new default. v2
+  writes the linear values.
+* `exportPEtab()` no longer writes self-referencing files for a trafo like
+  `A ~ exp(A)`. An outer parameter named like a state goes out as
+  `init_<state>` and the condition table sets the species to it; one named
+  like an inner parameter keeps its name under a pure scale wrap and becomes
+  `<name>_outer` otherwise. Symbolic initial values go to the condition table
+  instead of SBML `<initialAssignment>`. An export that would still refer an
+  assignment to its own target stops with an error.
+* `exportPEtabObject()` to v1 keeps preequilibration conditions in the
+  condition table, leaves condition targets and compartment sizes out of the
+  parameter table, writes observables in a v2 noise formula as their formula,
+  and refuses condition switches during a simulation, which v1 cannot hold.
+  A v2 experiment names no condition where the table has none.
+* `exportPEtabObject()` to v1 moves an expression that sets a species in every
+  condition into an SBML initial assignment and warns about per-condition
+  expressions, which v1 does not allow; start times after 0 stop the export.
+  Measurements name their conditions by id, as the condition table does.
+* `exportPEtabObject()` to v1 keeps the SBML constants of an imported problem
+  in the SBML, as v2 does. Listed in parameters.tsv they lost their role in a
+  preequilibration, where a constant at 0 idles its reaction, and the
+  reimport of Isensee_JCB2018 equilibrated to another state.
+* `exportPEtabObject()` declares condition targets and compartment sizes that
+  nothing else carries, with the SBML default recorded at import (a surface
+  compartment of Lang_PLOSComputBiol2024 went out sized by itself).
+* `exportPEtabObject()` writes a single measured sigma per observable as its
+  noise formula instead of per-row noise parameters.
+* `exportPEtabObject()` translates priors between the versions: v1 spells the
+  log families `logNormal`/`logLaplace`, and a v1 prior on the parameter scale
+  goes to v2 as the matching prior of the linear parameter. `importPEtab()`
+  reads the v1 spellings and truncates a prior on the parameter scale at the
+  bounds on that scale; it used the linear bounds (Schwen_PONE2014).
+* `importSbml()` substitutes the initial assignment of a constant parameter
+  wherever the parameter appears, with species at their initial values. It
+  kept the SBML default, so a condition that set the source parameter did not
+  reach the rates (Laske_PLOSComputBiol2019: `ModelValue_80 := k_syn_P`;
+  Bertozzi_PNAS2020: `beta_N := R0_*gamma_/N_`).
+* `repar()`, `insert()` and `define()` keep a trailing underscore in an
+  identifier. `gamma_` became `gamma`, so a PEtab condition that set `gamma_`,
+  `N_`, `I0_` or `R0_` in Bertozzi_PNAS2020 changed nothing.
+* `Y()` returns a NaN observable instead of stopping, and `normL2()` stops
+  only on a NaN at a data point. A ratio of states that all start at 0 is
+  undefined at t0 alone, where Laske_PLOSComputBiol2019 has no data, and the
+  objective could not be evaluated.
+* `importPEtab(derivMode = c("forward", "reverse"))` builds the observation,
+  error model and parameter transformation for the reverse sweep as well;
+  only the ODE model had it, so `obj(sweep = "reverse")` failed.
+* `exportSbml()` declares species that enter a rate without being consumed or
+  produced as modifiers, as SBML requires, and stops on a compartment sized
+  by its own symbol without a value.
+
 # dMod2 0.9.0
 
 * `Pimpl()` solves steady states by pseudo-transient continuation: implicit

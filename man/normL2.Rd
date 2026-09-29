@@ -9,10 +9,10 @@ normL2(
   x,
   errmodel = NULL,
   times = NULL,
-  t0 = 0,
   attr.name = "data",
   cores = 1L,
-  opt.BLOQ = c("M3", "M1", "M4NM", "M4BEAL")
+  opt.BLOQ = c("M3", "M1", "M4NM", "M4BEAL"),
+  multipleShootingControl = NULL
 )
 }
 \arguments{
@@ -23,14 +23,15 @@ normL2(
 \item{errmodel}{Optional object of class \link{obsfn}. The error model may be
 defined only for a subset of conditions.}
 
-\item{times}{Optional numeric vector of additional time points at which the
-prediction function is evaluated. If NULL, time points are taken from the
-data. Event times should be included here if the prediction model uses events.}
-
-\item{t0}{Numeric. Start of the time grid, where the initial values take
-effect. Defaults to 0. A vector named by condition gives each condition
-its own start and its own grid. Fixed-time events before a condition's
-start do not fire.}
+\item{times}{Optional time points at which the prediction is evaluated in
+addition to the data times: a numeric vector for all conditions, which then
+share one grid, or a list named by condition, which gives each condition
+its own grid. The prediction of a condition starts at the first time of its
+grid, where the initial values take effect, so a single time per condition
+sets its start. A model built with \code{odemodel(..., includeTimeZero = TRUE)},
+the default, has 0 in every grid and so starts at 0 at the latest.
+Fixed-time events before the start do not fire. Event times should be
+included if the model uses events.}
 
 \item{attr.name}{Character string. The objective value is additionally
 returned as an attribute of this name, and the sum of squares behind it
@@ -45,6 +46,79 @@ set \code{options(dMod.cores = )}.}
 (those with \code{value <= lloq} in the data). One of \code{"M1"} (drop BLOQ rows
 from the objective), \code{"M3"} (censored log-likelihood, default), \code{"M4NM"}
 or \code{"M4BEAL"} (truncated variants; require non-negative LOQ).}
+
+\item{multipleShootingControl}{\code{NULL} (default), \code{TRUE} or a list, which
+turns on multiple shooting in \code{\link[=trust]{trust()}}; \code{TRUE} is \code{list()}, every entry
+at its default. It is a control of the objective, so
+\code{controls(obj, "multipleShootingControl") <- list(...)} changes it and
+\verb{<- NULL} switches it off, on the objective or on a sum holding it:
+\describe{
+\item{\code{nodes}}{\code{"auto"} (default), \code{"transitions"}, or the times at
+which the time axis is cut into segments, a numeric vector for all
+conditions or a list named by condition. The start of a condition's
+grid is always a node; a node at or after the last data point of a
+condition is an error.
+\code{"auto"} starts from segments of equal length per condition, ten or
+one per half oscillation of the data where that is more (a turning
+point counts where the data reverse by more than five times their
+noise), and cuts a segment in two wherever its propagation matrix, the
+Jacobian of its end state in its start state, expands by more than
+\code{growth}, its solve fails, or it misses its data by more than
+\code{misfit}, before the first step and at every iterate after. \code{"transitions"} puts a node
+just before every fast change of the data, a spike or the jump of a
+relaxation oscillator, found as a run of samples whose rate lies more
+than eight robust deviations off its median; the even nodes of
+\code{"auto"} fill stretches without one, and the layout stays fixed. A
+change starts in each segment where the data have it, whatever the
+parameters, and a wrong timing shows as a gap. Without a fast change
+it is \code{"auto"}. Explicit times stay as they are.}
+\item{\code{growth}}{Largest spectral radius of a segment's propagation
+matrix that \code{"auto"} accepts, the factor by which the linearised flow
+of the segment expands. Independent of charts and scales. Default 10.
+A segment is never cut below half the finest spacing of its
+condition's data.}
+\item{\code{misfit}}{Root mean square of a segment's weighted residuals
+above which \code{"auto"} cuts it where the model misses its data locally,
+such as a spike it does not reproduce: above \code{misfit} and above twice
+the median of the segments of its condition. The new node takes the
+observed states from the data. Default 3.}
+\item{\code{charts}}{Named character, \code{"log10"}, \code{"linear"} or \code{"angle"}
+per state: the coordinate the node values of that state live in. A
+log10 chart keeps a positive state positive; on an angle chart, for a
+phase in radians, gaps are taken modulo \eqn{2\pi}, so that a
+trajectory one turn on is continuous. States not named are linear.}
+\item{\code{scale}}{Named numeric, the scale of each state's gap and node
+step in its chart, which the trust region and the acceptance of a
+step read. Default 1, a decade or a radian, for a log10 or an angle
+chart; for a linear one the range the state covers, in the data when
+it is observed, else the largest range within one segment of a
+simulation at the start.}
+\item{\code{init}}{Start of the node values: \code{"data"} (default) reads a
+state observed directly, through an observable that is the state
+itself, off the data, and every other state off a run of the model at
+the start parameters whose observed states are reset to the data at
+every data time, so that it follows the measured trajectory;
+\code{"spline"} does the same with a smoothing spline through the data in
+place of the data themselves, its roughness chosen by generalised
+cross-validation, as Horbelt, Timmer and Voss start their nodes;
+\code{"simulation"} takes all of them from a simulation at the start
+parameters; a list as \code{fit$multipleShooting$nodes} returns it starts
+from those values, and needs explicit \code{nodes}.}
+\item{\code{minPoints}}{Fewest data points either half of a cut segment
+keeps, so that \code{"auto"} never cuts a node that no data can tell.
+Default one more than the number of states.}
+\item{\code{breaks}}{Node times, for all conditions or a list named by
+condition, at which continuity is not enforced, as Voss, Timmer and
+Kurths propose for chaotic systems and for models that do not hold
+over the whole time axis. The node after a break is a variable of its
+own and its gap no constraint. With \code{nodes = "auto"} every break is a
+node; explicit \code{nodes} have to contain them. Needs
+\code{hessianMethod = "gn"}.}
+}
+\code{x} has to be a chain \code{g * x * p} of observation functions, one
+prediction function from \code{\link[=Xs]{Xs()}} and parameter transformations, and its ODE
+model has to be built with \code{odemodel(..., includeTimeZero = FALSE)}, so that
+a segment is integrated from its own start.}
 }
 \value{
 An object of class \code{objfn}, i.e. a function
@@ -55,6 +129,11 @@ for the exact one rather than the Gauss-Newton approximation, and \code{sweep}
 defaults to \code{NULL}, meaning "not asked": forward that is a Gauss-Newton
 Hessian, backwards none, and \code{deriv2 = TRUE} always implies one. What the
 model was built with decides what is available; see \link{odemodel}.
+
+With \code{multipleShootingControl}, the objective called as a function is still
+the single-shooting one described above, so evaluating, plotting and
+profiling it are unchanged; \code{\link[=trust]{trust()}} and hence \code{\link[=mstrust]{mstrust()}} read the control
+and optimise it by multiple shooting, also as a summand.
 }
 \description{
 Creates an objective function for parameter estimation based on the

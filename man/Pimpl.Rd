@@ -2,7 +2,7 @@
 % Please edit documentation in R/parameters.R
 \name{Pimpl}
 \alias{Pimpl}
-\title{Parameter transformation (implicit, root-finding)}
+\title{Implicit parameter transformation}
 \usage{
 Pimpl(
   trafo,
@@ -17,76 +17,73 @@ Pimpl(
   deriv = TRUE,
   deriv2 = FALSE,
   controlsPTC = list(),
-  outdir = getwd(),
-  ...
+  outdir = getwd()
 )
 }
 \arguments{
-\item{trafo}{Named character, \link{eqnvec} or \link{eqnlist}.}
+\item{trafo}{Named character, \link{eqnvec} or \link{eqnlist} defining \eqn{f}.}
 
-\item{parameters}{Outer parameters. Totals of conserved quantities are
-added.}
+\item{parameters}{Outer parameter names. For an \link{eqnlist} the totals
+\eqn{T} of the conserved quantities are added.}
 
-\item{forcings}{Forcing names; zeroed and removed.}
+\item{forcings}{Forcing names, set to 0.}
 
 \item{condition}{Condition label.}
 
-\item{keep.root}{Keep roots per condition as warm starts and answer
-repeated calls from memory.}
+\item{keep.root}{If \code{TRUE}, roots are kept per condition as initial guesses
+and repeated calls are answered from memory.}
 
-\item{flow}{If \code{TRUE}, \code{trafo} is the right-hand side of an ODE and the
-stable steady state is returned. If \code{FALSE}, any regular root. Defaults
-to \code{TRUE} for an \link{eqnlist}.}
+\item{flow}{If \code{TRUE}, \eqn{\dot{x} = f(x, p)}{dx/dt = f(x, p)} and a stable
+steady state is returned. If \code{FALSE}, any regular root.}
 
-\item{compile, modelname, verbose}{Forwarded to \link[cppDE:cppFUN]{cppDE::cppFUN}.}
+\item{compile, modelname, verbose}{Forwarded to \code{\link[cppDE:cppFUN]{cppDE::cppFUN()}}.}
 
-\item{deriv, deriv2}{Attach first/second-order sensitivities.}
+\item{deriv, deriv2}{Attach first and second order sensitivities. \code{deriv2}
+requires \code{deriv = TRUE}.}
 
 \item{controlsPTC}{Named list of solver controls:
 \describe{
-\item{\code{rtol}, \code{atol}}{Convergence tolerances, default \code{1e-10} and
-\code{1e-14}.}
-\item{\code{flowTol}}{Relative local error of the pseudo-time steps,
-default \code{1}. A start that fails is repeated with \code{flowTol / 10}.}
-\item{\code{maxit}}{Iterations per attempt, default \code{400}.}
+\item{\code{rtol}, \code{atol}}{Convergence tolerances, default \code{1e-10}, \code{1e-14}.}
+\item{\code{flowTol}}{Relative local error per pseudo-time step, default \code{1}.}
+\item{\code{maxit}}{Iterations per start, default
+\code{ceiling(70 * log(n + 1))} for \code{n} states.}
 \item{\code{dtInit}}{Initial pseudo-time step relative to the fastest rate,
 default \code{1e-2}.}
 \item{\code{positive}}{Keep states positive, default \code{TRUE}.}
 \item{\code{stability}}{Require a stable root if \code{flow = TRUE}, default
 \code{TRUE}.}
 \item{\code{archive}}{Roots kept per condition, default \code{8}.}
+\item{\code{nStarts}}{Random starts after the deterministic ones, default
+\code{20}.}
+\item{\code{startRange}}{Range of a random start, drawn uniformly per
+state on \code{startScale}, default \code{c(-5, 5)}.}
+\item{\code{startScale}}{\code{"log10"} or \code{"linear"}, default \code{"log10"} if
+\code{positive} and \code{"linear"} otherwise.}
+\item{\code{seed}}{Seed of the random starts, default \code{1}. Each warm-start
+cache (per condition, emptied by \code{\link[=resetWarmStarts]{resetWarmStarts()}} before every fit
+of \code{\link[=mstrust]{mstrust()}}) draws from its own stream, derived from \code{seed}, the
+condition and the global RNG state when the cache first needs one. The
+global RNG is read, not advanced.}
 }}
 
-\item{outdir}{Directory for the generated source and shared object.}
-
-\item{...}{Removed arguments (\code{controlsMS}, \code{controlsNleqslv},
-\code{expressInTotals}) raise an error.}
+\item{outdir}{Directory for the generated files.}
 }
 \value{
 A \link{parfn}.
 }
 \description{
-Returns a \link{parfn} that solves \code{f(x, p) = 0} for the dependent states by
-pseudo-transient continuation (\code{\link[cppDE:ptc]{cppDE::ptc()}}) and attaches first- and second-order
-sensitivities from the implicit function theorem.
+Solves \eqn{f(x, p) = 0} for the states \eqn{x} by pseudo-transient
+continuation (\code{\link[cppDE:ptc]{cppDE::ptc()}}) and returns a \link{parfn} with sensitivities from
+the implicit function theorem.
 }
 \details{
-Starts are tried in this order: the nearest kept root corrected by
-its sensitivities, the same root with a small initial pseudo-time step, the
-initial guess in \code{pars} (missing states start at 1), and 1 for all states.
-With \code{flow = TRUE} the last two are repeated with \code{flowTol / 10} if they
-fail.
-An unstable root is left along its unstable eigenvector if \code{flow} and
-\code{stability} are \code{TRUE}.
-
-Conserved quantities of an \link{eqnlist} enter as constraints \verb{C x = T}, with the
-totals \code{T} as parameters. States without influx at the given parameter
-values are set to 0. Calls with identical parameter values, also across
-conditions, are solved once.
-
-\code{keep.root} and \code{controlsPTC} are read at every call and can be changed with
-\code{\link[=controls]{controls()}}.
+Conserved quantities of an \link{eqnlist} enter as \eqn{C x = T}.
+States without influx are 0. Initial guesses are kept roots, then the
+states in \code{pars}, missing ones at 1, then \code{nStarts} random starts. If all
+fail, it is an error. Identical parameter values are solved
+once, also across conditions. \code{keep.root} and \code{controlsPTC} can be changed
+with \code{\link[=controls]{controls()}}.
 }
 \seealso{
-\link{Pexpl}, \link{P}
+\code{\link[=Pexpl]{Pexpl()}}, \code{\link[=P]{P()}}
 }

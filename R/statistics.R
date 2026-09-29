@@ -181,7 +181,9 @@ profile <- function(objfun, pars, whichPar, alpha = 0.05,
                             
                             
                             ## Functions needed during profile computation -----------------------
-                            obj.opt <- objfun
+                            # A profile step starts next to an optimum, where
+                            # single shooting is enough and cheaper.
+                            obj.opt <- .singleShooting(objfun)
                             obj.prof <- function(p, ...) {
                               out <- objfun(p, ...)
                               # If "identity", substitute hessian such that steps are in whichPar-direction.

@@ -691,6 +691,13 @@ test_that(".petab_classify_lhs collapses 10^0 -> 1 via eval_constant", {
 
 ## --- trafo-aware exportPEtab: native roundtrip ----------------------------
 
+# exportPEtab writes an outer parameter named like a state as init_<state>.
+.init_ids <- function(p) {
+  hit <- names(p) %in% c("A", "B")
+  names(p)[hit] <- paste0("init_", names(p)[hit])
+  p
+}
+
 test_that("native exportPEtab roundtrips outer pouter on log10 scale (1-cond)", {
 
   withr::local_dir(tempdir())
@@ -722,11 +729,11 @@ test_that("native exportPEtab roundtrips outer pouter on log10 scale (1-cond)", 
   petab <- importPEtab(yaml_out, backend = "deSolve",
                        modelname = "rt1_imp", cores = 4L)
 
-  expect_setequal(names(petab$bestfit), names(pouter))
+  expect_setequal(names(petab$bestfit), names(.init_ids(pouter)))
   expect_true(all(attr(petab$bestfit, "petab_scales") == "log10"))
 
   v_native <- obj_native(pouter, deriv = FALSE)$value
-  v_petab  <- petab$obj(pouter[names(petab$bestfit)], deriv = FALSE)$value
+  v_petab  <- petab$obj(.init_ids(pouter)[names(petab$bestfit)], deriv = FALSE)$value
   expect_lt(abs(v_native - v_petab), 1e-3)
 
   unlink("rt1_*"); unlink("*.c"); unlink("*.cpp")
@@ -769,10 +776,10 @@ test_that("native exportPEtab roundtrips per-condition k override (2-cond)", {
 
   petab <- importPEtab(yaml_out, backend = "deSolve",
                        modelname = "rt2_imp", cores = 4L)
-  expect_setequal(names(petab$bestfit), c("A", "B", "K", "K_OPEN"))
+  expect_setequal(names(petab$bestfit), c("init_A", "init_B", "K", "K_OPEN"))
 
   v_native <- obj_native(pouter, deriv = FALSE)$value
-  v_petab  <- petab$obj(pouter[names(petab$bestfit)], deriv = FALSE)$value
+  v_petab  <- petab$obj(.init_ids(pouter)[names(petab$bestfit)], deriv = FALSE)$value
   expect_lt(abs(v_native - v_petab), 1e-3)
 
   unlink("rt2_*"); unlink("*.c"); unlink("*.cpp")
@@ -857,7 +864,7 @@ test_that("native exportPEtab roundtrips per-row sigma via noiseParameters colum
   petab <- importPEtab(yaml_out, backend = "deSolve",
                        modelname = "rt_sig_imp", cores = 4L)
   v_native <- obj_native(pouter, deriv = FALSE)$value
-  v_petab  <- petab$obj(pouter[names(petab$bestfit)], deriv = FALSE)$value
+  v_petab  <- petab$obj(.init_ids(pouter)[names(petab$bestfit)], deriv = FALSE)$value
   expect_lt(abs(v_native - v_petab), 1e-3)
 
   unlink("rt_sig_*"); unlink("*.c"); unlink("*.cpp")
@@ -887,11 +894,13 @@ test_that("native exportPEtab roundtrips compound trafos like 10^(KM + 5)", {
   obj_native <- normL2(data, g * x * p)
 
   out_dir <- file.path(tempdir(), "petab_rt3")
-  yaml_out <- exportPEtab(
+  # v1 has no expressions in conditions.tsv; dMod reads them back.
+  expect_warning(yaml_out <- exportPEtab(
     data = data, reactions = reactions, observables = obs,
     p = p, pouter = pouter,
     parameterScale = "log10", modelID = "rt3_export",
-    formatVersion = "1", dir = out_dir, overwrite = TRUE)
+    formatVersion = "1", dir = out_dir, overwrite = TRUE),
+    "only numbers and parameter ids")
 
   # The conditions.tsv cell for k must contain the compensated form
   # `10^(log10(K) + 5)` so the importer's chain rule reproduces 10^(K+5).
@@ -902,11 +911,94 @@ test_that("native exportPEtab roundtrips compound trafos like 10^(KM + 5)", {
   petab <- importPEtab(yaml_out, backend = "deSolve",
                        modelname = "rt3_imp", cores = 4L)
   v_native <- obj_native(pouter, deriv = FALSE)$value
-  v_petab  <- petab$obj(pouter[names(petab$bestfit)], deriv = FALSE)$value
+  v_petab  <- petab$obj(.init_ids(pouter)[names(petab$bestfit)], deriv = FALSE)$value
   expect_lt(abs(v_native - v_petab), 1e-3)
 
   unlink("rt3_*"); unlink("*.c"); unlink("*.cpp")
   unlink("*.o"); unlink("*.so")
+})
+
+
+test_that("exportPEtab keeps log parametrisations free of self-references", {
+
+  withr::local_dir(tempdir())
+  if (!.libsbml_works()) skip("libsbml virtualenv not available")
+
+  reactions <- eqnlist() %>%
+    addReaction("A", "B", "k1*A", "A to B") %>%
+    addReaction("B", "A", "k2*B", "B to A")
+  x <- Xs(odemodel(reactions, modelname = "selfref_ode", backend = "deSolve"),
+          condition = "C1")
+  obs <- eqnvec(y = "log(B)")
+  g <- Y(obs, f = x, attach.input = TRUE, modelname = "selfref_obs",
+         compile = TRUE)
+  truth <- log(c(A = 1, B = 0.5, k1 = 0.25, k2 = 0.25))
+  times <- c(0.5, 1, 2, 4)
+
+  for (wrap in c("exp", "exp10")) {
+    p <- eqnvec() %>%
+      define("x~x", x = getParameters(g, x)) %>%
+      insert(sprintf("x~%s(x)", wrap), x = .currentSymbols) %>%
+      P(modelname = paste0("selfref_p_", wrap), condition = "C1",
+        compile = TRUE)
+    pars <- if (wrap == "exp") truth else truth / log(10)
+    prd <- g * x * p
+    pr <- prd(times, pars, deriv = FALSE)[["C1"]]
+    data <- as.datalist(data.frame(
+      name = "y", time = times, value = pr[match(times, pr[, "time"]), "y"],
+      sigma = 0.1, condition = "C1"))
+    obj_native <- normL2(data, prd)
+
+    for (fv in c("1", "2.0.0")) {
+      out_dir <- file.path(tempdir(), paste0("petab_selfref_", wrap, fv))
+      yaml_out <- suppressWarnings(suppressMessages(exportPEtab(
+        data, reactions, obs, p, pars, formatVersion = fv,
+        dir = out_dir, overwrite = TRUE)))
+
+      sbml <- readLines(file.path(out_dir, "dMod_export.xml"))
+      expect_false(any(grepl("initialAssignment", sbml)))
+      pt <- read.delim(file.path(out_dir, "parameters_dMod_export.tsv"),
+                       stringsAsFactors = FALSE)
+      nominal <- setNames(pt$nominalValue, pt$parameterId)
+      expect_equal(nominal[c("init_A", "init_B", "k1", "k2")],
+                   c(init_A = 1, init_B = 0.5, k1 = 0.25, k2 = 0.25))
+      if (fv == "1")
+        expect_true(all(pt$parameterScale ==
+                        if (wrap == "exp") "log" else "log10"))
+
+      cond <- read.delim(file.path(out_dir, "conditions_dMod_export.tsv"),
+                         stringsAsFactors = FALSE)
+      cond_map <- if (fv == "1") unlist(cond[1, c("A", "B")])
+                  else setNames(cond$targetValue, cond$targetId)
+      expect_equal(cond_map[c("A", "B")], c(A = "init_A", B = "init_B"))
+
+      petab <- suppressWarnings(importPEtab(
+        yaml_out, backend = "deSolve",
+        modelname = paste0("selfref_imp_", wrap, substr(fv, 1, 1))))
+      bf <- petab$bestfit
+      v_petab <- petab$obj(bf, deriv = FALSE)$value
+      expect_equal(v_petab, obj_native(pars, deriv = FALSE)$value,
+                   tolerance = 1e-4)
+    }
+  }
+
+  unlink("selfref_*"); unlink("*.c"); unlink("*.cpp")
+  unlink("*.o"); unlink("*.so")
+})
+
+
+test_that("exportPEtab rejects self-referencing assignments", {
+  expect_error(
+    dMod2:::.petab_check_self_refs(list(A = "exp(A)"),
+                                   data.frame(conditionId = "C1")),
+    "initialAssignment A = exp\\(A\\)")
+  expect_error(
+    dMod2:::.petab_check_self_refs(list(),
+                                   data.frame(conditionId = "C1",
+                                              k1 = "exp(k1)")),
+    "condition k1 = exp\\(k1\\)")
+  expect_true(dMod2:::.petab_check_self_refs(
+    list(A = "init_A"), data.frame(conditionId = "C1", k1 = "exp(logk1)")))
 })
 
 
@@ -1276,6 +1368,38 @@ test_that("a v1 conditionName column is metadata, not a condition target", {
 })
 
 
+test_that("a v1 export names conditions by id in every table", {
+  if (!.libsbml_works()) skip("libsbml virtualenv not available")
+  withr::local_dir(tempdir())
+
+  # Boehm keys its conditions by name; the tables on disk carry the id.
+  wd <- tempfile("v1_condid_"); dir.create(wd)
+  setwd(wd)
+  petab <- .petab_boehm_cppDE()
+  td <- file.path(wd, "export"); dir.create(td)
+  exportPEtabObject(petab, dir = td, formatVersion = "1", overwrite = TRUE,
+                    modelID = "condid")
+  cond <- utils::read.delim(file.path(td, "conditions_condid.tsv"),
+                            stringsAsFactors = FALSE)
+  meas <- utils::read.delim(file.path(td, "measurements_condid.tsv"),
+                            stringsAsFactors = FALSE)
+  withr::local_dir(tempdir())
+
+  expect_true(all(meas$simulationConditionId %in% cond$conditionId))
+})
+
+
+test_that("exportSbml refuses a compartment sized by its own symbol without a value", {
+  if (!.libsbml_works()) skip("libsbml virtualenv not available")
+  reactions <- eqnlist() %>%
+    addReaction("A", "B", "k*A", "A to B") %>%
+    assignCompartment(A = "cell", B = "cell", volume = "cell")
+  expect_error(exportSbml(reactions, parameters = c(k = 1), inits = c(A = 1, B = 0),
+                          filepath = tempfile(fileext = ".xml")),
+               "no size for compartment `cell`")
+})
+
+
 test_that("v2 PEtab test cases 0001/0002/0009 import and match published llh", {
   # Earlier tests may setwd() into a tempfile() dir that gets unlinked on
   # exit; reset to a guaranteed-existing cwd before any path lookup so
@@ -1357,6 +1481,27 @@ test_that("v2 priors add the truncated log density to the objective", {
 })
 
 
+test_that("v1 camel-case prior names parse like their v2 spellings", {
+  df <- data.frame(parameterId = c("a", "b"), estimate = 1L,
+                   objectivePriorType = c("logNormal", "logLaplace"),
+                   objectivePriorParameters = c("0;1", "0;2"))
+  specs <- dMod2:::.petab_parse_priors(df, c(a = "lin", b = "lin"))
+  expect_equal(vapply(specs, `[[`, character(1), "dist"),
+               c(a = "log-normal", b = "log-laplace"))
+  expect_equal(vapply(specs, `[[`, character(1), "declared"),
+               c(a = "logNormal", b = "logLaplace"))
+})
+
+
+test_that("a prior on the parameter scale is truncated on that scale", {
+  df <- data.frame(parameterId = "k", estimate = 1L, lowerBound = 1e-5,
+                   upperBound = 1e3, objectivePriorType = "parameterScaleNormal",
+                   objectivePriorParameters = "-4;3")
+  sp <- dMod2:::.petab_parse_priors(df, c(k = "log10"))$k
+  expect_equal(c(sp$lower, sp$upper), c(-5, 3))
+})
+
+
 test_that("a prior term honours hessian = FALSE", {
   # It did not, and the argument fell into `...` and was ignored. The cost was
   # not the wasted work: an objective summed with a prior handed back a zero
@@ -1415,6 +1560,126 @@ test_that("v2 export round-trips a mid-run condition switch on a compartment", {
   expect_equal(second$obj(second$bestfit, deriv = FALSE)$value,
                first$obj(first$bestfit, deriv = FALSE)$value,
                tolerance = 1e-6)
+})
+
+
+test_that("importPEtab builds a reverse sweep through every piece", {
+  withr::local_dir(tempdir())
+  petab_dir <- .petab_repo_dir()
+  if (!nzchar(petab_dir)) skip("PEtabTests/ not found -- set DMOD_PETABTESTS to the repo directory")
+  if (!.libsbml_works()) skip("libsbml virtualenv not available")
+
+  wd <- tempfile("petab_rev_"); dir.create(wd)
+  setwd(wd)
+  pp <- importPEtab(file.path(petab_dir, "0001", "_0001.yaml"), backend = "cppDE",
+                    derivMode = c("forward", "reverse"), modelname = "petab_rev",
+                    cores = 4L, optionsOde = list(atol = 1e-12, rtol = 1e-10),
+                    optionsSens = list(atol = 1e-10, rtol = 1e-8))
+  fwd <- pp$obj(pp$bestfit)
+  rev <- pp$obj(pp$bestfit, sweep = "reverse")
+  withr::local_dir(tempdir())
+  expect_equal(rev$value, fwd$value, tolerance = 1e-6)
+  expect_equal(rev$gradient[names(fwd$gradient)], fwd$gradient, tolerance = 1e-4)
+})
+
+
+test_that("a v1 export keeps the preequilibration condition", {
+  withr::local_dir(tempdir())
+  petab_dir <- .petab_repo_dir()
+  if (!nzchar(petab_dir)) skip("PEtabTests/ not found -- set DMOD_PETABTESTS to the repo directory")
+  if (!.libsbml_works()) skip("libsbml virtualenv not available")
+
+  wd <- tempfile("v1_rt_0009_"); dir.create(wd)
+  setwd(wd)
+  first <- .petab_case("v1_0009")
+  td <- file.path(wd, "export"); dir.create(td)
+  exported <- exportPEtabObject(first, dir = td, formatVersion = "1",
+                                overwrite = TRUE, modelID = "rt0009")
+
+  # k1 is set per condition, so it belongs to conditions.tsv only.
+  cond <- read.delim(file.path(td, "conditions_rt0009.tsv"),
+                     stringsAsFactors = FALSE)
+  expect_equal(setNames(cond$k1, cond$conditionId),
+               c(c0 = 0.8, preeq_c0 = 0.3)[cond$conditionId])
+  pars <- read.delim(file.path(td, "parameters_rt0009.tsv"),
+                     stringsAsFactors = FALSE)
+  expect_false("k1" %in% pars$parameterId)
+  # A single sigma per observable stays a plain noise formula.
+  obs <- read.delim(file.path(td, "observables_rt0009.tsv"),
+                    stringsAsFactors = FALSE)
+  expect_equal(as.character(obs$noiseFormula), "0.5")
+
+  setwd(td)
+  second <- importPEtab(exported, backend = "cppDE", modelname = "v1rt0009B",
+                        cores = 4L)
+  withr::local_dir(tempdir())
+  expect_equal(second$obj(second$bestfit, deriv = FALSE)$value,
+               first$obj(first$bestfit, deriv = FALSE)$value,
+               tolerance = 1e-6)
+})
+
+
+test_that("a v1 export refuses a condition switch during the simulation", {
+  withr::local_dir(tempdir())
+  petab_dir <- .petab_repo_dir()
+  if (!nzchar(petab_dir)) skip("PEtabTests/ not found -- set DMOD_PETABTESTS to the repo directory")
+  if (!file.exists(file.path(petab_dir, "v2", "0030", "_0030.yaml")))
+    skip("v2 case 0030 not present")
+  if (!.libsbml_works()) skip("libsbml virtualenv not available")
+
+  expect_error(
+    exportPEtabObject(.petab_case("v2_0030"), dir = tempfile("v1_sw_"),
+                      formatVersion = "1"),
+    "cannot express condition changes")
+})
+
+
+test_that("importSbml takes the initial assignment of a constant parameter", {
+  if (!.libsbml_works()) skip("libsbml virtualenv not available")
+
+  # COPASI writes `pcopy := p` as an initial assignment; a condition that sets
+  # `p` has to reach the rate through it (Laske_PLOSComputBiol2019).
+  f <- tempfile(fileext = ".xml")
+  writeLines(c(
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    '<sbml xmlns="http://www.sbml.org/sbml/level3/version2/core" level="3" version="2">',
+    '<model id="ia"><listOfCompartments>',
+    '<compartment id="c" size="1" constant="true" spatialDimensions="3"/></listOfCompartments>',
+    '<listOfSpecies><species id="A" compartment="c" initialConcentration="2" hasOnlySubstanceUnits="false" boundaryCondition="false" constant="false"/></listOfSpecies>',
+    '<listOfParameters><parameter id="p" value="3" constant="true"/>',
+    '<parameter id="pcopy" value="99" constant="true"/>',
+    '<parameter id="a0" value="99" constant="true"/></listOfParameters>',
+    '<listOfInitialAssignments>',
+    '<initialAssignment symbol="pcopy"><math xmlns="http://www.w3.org/1998/Math/MathML"><ci> p </ci></math></initialAssignment>',
+    '<initialAssignment symbol="a0"><math xmlns="http://www.w3.org/1998/Math/MathML"><ci> A </ci></math></initialAssignment>',
+    '</listOfInitialAssignments>',
+    '<listOfReactions><reaction id="r1" reversible="false"><listOfReactants>',
+    '<speciesReference species="A" stoichiometry="1" constant="true"/></listOfReactants>',
+    '<kineticLaw><math xmlns="http://www.w3.org/1998/Math/MathML"><apply><times/><ci> pcopy </ci><ci> a0 </ci><ci> A </ci></apply></math></kineticLaw>',
+    '</reaction></listOfReactions></model></sbml>'), f)
+  m <- importSbml(f)
+  syms <- getSymbols(m$reactions$rates)
+  expect_true("p" %in% syms)
+  expect_false(any(c("pcopy", "a0") %in% syms))
+  expect_false(any(c("pcopy", "a0") %in% names(m$pars)))
+})
+
+
+test_that("exportSbml declares rate species as modifiers", {
+  withr::local_dir(tempdir())
+  if (!.libsbml_works()) skip("libsbml virtualenv not available")
+
+  # A rate rule imported as a reaction: B enters the rate of A's production
+  # without being consumed or produced.
+  reactions <- eqnlist() %>%
+    addReaction("", "A", "k1*B - k2*A", "A from B") %>%
+    addReaction("B", "", "k3*B", "B decay")
+  f <- tempfile(fileext = ".xml")
+  exportSbml(reactions, parameters = c(k1 = 1, k2 = 1, k3 = 1),
+             inits = c(A = 0, B = 1), filepath = f)
+  sbml <- paste(readLines(f), collapse = "")
+  expect_match(sbml, "<modifierSpeciesReference species=\"B\"")
+  expect_no_match(sbml, "<modifierSpeciesReference species=\"A\"")
 })
 
 
