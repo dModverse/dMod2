@@ -177,9 +177,8 @@
   if (length(dim(m)) == 2L) m[, keep, drop = FALSE] else m[, keep, , drop = FALSE]
 }
 
-# A parfn whose Jacobian is a matrix it already builds -- Pimpl solves it by the
-# implicit function theorem, Pequil reads it off the endpoint sensitivity of a
-# nested steady-state solve. The vjp is that matrix transposed onto the
+# A parfn whose Jacobian is a matrix it already builds, as Pimpl does by the
+# implicit function theorem. The vjp is that matrix transposed onto the
 # cotangent.
 #
 # The split is deliberate and not a shortcut. What makes the forward mode
@@ -210,7 +209,7 @@
     if (is.null(J) || !is.matrix(J))
       stop("a transformation returned no Jacobian, so the backward pass has ",
            "nothing to contract here. A preceding warning usually names the ",
-           "cause; Pimpl and Pequil fall back to value only when the implicit ",
+           "cause; Pimpl falls back to value only when the implicit ",
            "function theorem cannot be applied at the current root.",
            call. = FALSE)
     wv <- .pickCotangent(w, rownames(J))

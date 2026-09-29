@@ -163,6 +163,44 @@
   control functions is shorter, with formulas in LaTeX; messages of the
   symmetry functions carry no dashes.
 
+# dMod2 0.9.0
+
+* `Pimpl()` solves steady states by pseudo-transient continuation: implicit
+  Euler steps under local error control that turn into Newton steps near the
+  root. It follows the flow to a stable steady state and checks the
+  eigenvalues on the conservation manifold; `flow = FALSE` returns any regular
+  root of plain equations. The iteration runs in C++, `cppDE::ptc()`.
+* `Pimpl()` keeps every species and adds the conservation rows `C x = T`
+  instead of eliminating pivot species. Iterates stay positive and on the
+  manifold. States without influx at the given parameter values are 0.
+* `Pimpl()` starts deterministically: the nearest kept root of the condition
+  corrected by its sensitivities, then the initial guess. Conditions with
+  identical inputs are solved once. A failed solve is an error.
+* `Pimpl()`: `controlsPTC` replaces `controlsMS` and `controlsNleqslv`,
+  `expressInTotals` is gone. nleqslv is no longer a dependency.
+* `Pequil()` is removed. `P()` builds an `eqnlist` with `Pimpl()`;
+  `method = "equilibrate"` is gone.
+* `importPEtab()` computes preequilibration with `Pimpl()`. Events do not act
+  during preequilibration (PEtab v2 case 0023).
+* `importPEtab()`: species a preequilibration cannot move keep their initial
+  values. They take part only in reactions idled by SBML constants at 0 or by
+  species that start and stay at 0, and the steady-state equations leave them
+  undetermined (Isensee_JCB2018: AC/pAC and PDE/pPDE).
+
+# dMod2 0.8.4
+
+* `steadyStates()` 1.3 and 1.4 detect structurally zero clusters that span
+  compartments, such as a ligand in the medium bound by a receptor in the
+  cell. The sink-cluster test runs in amounts, over reactions rather than the
+  rows per volume ratio the backend reads. As in 0.8.3, a conserved moiety in
+  the support of the test stays nonzero.
+
+# dMod2 0.8.3
+
+* Structurally zero states: a conserved moiety listed before a leaking cluster
+  was declared zero together with it, since the sink-cluster LP returns their
+  union. Only species that drain into a leaking reaction are zero now.
+
 # dMod2 0.8.2
 
 * `steadyStates(version = "1.4")` prints the resolved expressions through sympy

@@ -149,18 +149,22 @@ steadyStates <- function(model, file = NULL, rates = NULL, forcings = NULL,
     # Not write.eqnlist(): the backend never sees the volumes, so the
     # V_ref / V_X factors getFluxes() applies have to be folded in first.
     tab <- .volumeScaledReactions(model)
+    # State volumes let the backend test for sink clusters in amounts, across
+    # the rows a reaction is split into
+    volumes <- attr(tab, "volumes")
     # Names sympy resolves to its own objects (Ci, Si, E, S, Q, gamma, ...) reach the
     # backend under an alias: its implicit sympify() of strings would otherwise build
     # Symbol*Ci and fail. Mapped back on the result below.
     symAlias <- .ssSympyAliases(unique(c(names(tab)[-(1:2)], getSymbols(tab$Rate),
                                          forcings, neglect, priority,
                                          if (is.character(positive)) positive,
-                                         getSymbols(givenCQs))))
+                                         getSymbols(givenCQs), getSymbols(volumes))))
     if (length(symAlias)) {
       ren <- function(x) .ssRename(x, symAlias)
       tab$Rate <- ren(tab$Rate)
       hit <- names(tab) %in% names(symAlias)
       names(tab)[hit] <- symAlias[names(tab)[hit]]
+      volumes <- setNames(ren(volumes), ren(names(volumes)))
       forcings <- ren(forcings); neglect <- ren(neglect); priority <- ren(priority)
       if (is.character(positive)) positive <- ren(positive)
       if (length(givenCQs)) givenCQs <- ren(givenCQs)
@@ -168,7 +172,7 @@ steadyStates <- function(model, file = NULL, rates = NULL, forcings = NULL,
     utils::write.csv(tab, file = paste0(file, "_model.csv"),
                      row.names = FALSE, na = "")
     model <- paste0(file, "_model.csv")
-  } else symAlias <- character(0)
+  } else symAlias <- volumes <- character(0)
   if (!is.null(givenCQs) && length(names(givenCQs)) > 0)
     stop("givenCQs must not have names. Please unname() them.")
 
@@ -253,7 +257,10 @@ steadyStates <- function(model, file = NULL, rates = NULL, forcings = NULL,
                  positive       = positive_arg,
                  branches       = as.logical(branches),
                  priority       = as.list(as.character(priority)))
-    if (version %in% c("1.3", "1.4")) args$verbose <- verbose
+    if (version %in% c("1.3", "1.4")) {
+      args$verbose <- verbose
+      args$volumes <- as.list(volumes)
+    }
     m_ss <- do.call(alyssa, args)
     if (length(ignored))
       message("  note: version 1.4 ignores ", paste(ignored, collapse = ", "))

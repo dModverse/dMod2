@@ -27,7 +27,7 @@ P(
 
 \item{compile, modelname, verbose}{Forwarded to \link[cppDE:cppFUN]{cppDE::cppFUN}.}
 
-\item{method}{One of \code{"explicit"}, \code{"implicit"}, \code{"equilibrate"}, or \code{NULL}.}
+\item{method}{One of \code{"explicit"}, \code{"implicit"}, or \code{NULL}.}
 
 \item{cores}{Per-condition \code{mclapply()} cores. \code{NULL} auto-detects via
 \link{detectFreeCores}; capped at 1 on Windows.}
@@ -43,11 +43,10 @@ working directory).}
 A \link{parfn}.
 }
 \description{
-Unified entry to the three backends: explicit (\link{Pexpl}, algebraic),
-implicit (\link{Pimpl}, root-finding) and equilibrate (\link{Pequil}, ODE
-pre-integration). \code{method = NULL} picks \code{"equilibrate"} for
-\link{eqnlist} entries, \code{"explicit"} otherwise.
+Unified entry to the explicit (\link{Pexpl}, algebraic) and implicit (\link{Pimpl},
+root-finding) backends. \code{method = NULL} picks \code{"implicit"} for \link{eqnlist}
+entries, \code{"explicit"} otherwise.
 }
 \seealso{
-\link{Pexpl}, \link{Pimpl}, \link{Pequil}, \link{parfn}
+\link{Pexpl}, \link{Pimpl}, \link{parfn}
 }

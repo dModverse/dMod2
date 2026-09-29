@@ -36,21 +36,12 @@ ctl_models <- function() {
   # Leaves k and s to be passed through, which only attach.input does.
   pa <- P(list(C1 = c(A = "exp(A_log)"), C2 = c(A = "2*exp(A_log)")),
           derivMode = c("forward", "reverse"), modelname = "ctl_pa", outdir = d)
-  pd <- Pequil(c(A = "k_in - k_out * A"), parameters = c("k_in", "k_out"),
-               modelname = "ctl_pd", outdir = d, verbose = FALSE)
-  el_ERK <- eqnlist() |>
-    addReaction("ERK",  "pERK", "k1 * ERK") |>
-    addReaction("pERK", "ERK",  "k2 * pERK")
-  erk <- Pequil(el_ERK, parameters = c("k1", "k2"), expressInTotals = TRUE,
-                attach.input = TRUE, controlsMS = list(nStarts = 1L),
-                modelname = "ctl_erk", outdir = d, verbose = FALSE)
-  pim <- Pimpl(c(x = "x^2 - a"), parameters = "a", controlsMS = list(nStarts = 1L),
+  pim <- Pimpl(c(x = "x^2 - a"), parameters = "a",
                modelname = "ctl_pim", outdir = d, verbose = FALSE)
 
-  compile(m, mf, g, p, pa, pd, erk, pim, output = "ctl_all", cores = 4L)
+  compile(m, mf, g, p, pa, pim, output = "ctl_all", cores = 4L)
 
-  .ctl_env$models <- list(m = m, mf = mf, g = g, p = p, pa = pa, pd = pd,
-                          erk = erk, pim = pim)
+  .ctl_env$models <- list(m = m, mf = mf, g = g, p = p, pa = pa, pim = pim)
 }
 
 # The kernel of an unspecific leaf.
@@ -255,83 +246,6 @@ test_that("attach.input set through controls reaches both sweeps", {
 })
 
 
-## ---- Pequil ---------------------------------------------------------------
-
-test_that("Pequil does not answer a changed control from its memo", {
-  fx <- ctl_models()
-  pd <- fx$pd
-  on.exit({
-    controls(pd, NULL, "attach.input") <- TRUE
-    controls(pd, NULL, "roottol") <- 1e-6
-  }, add = TRUE)
-  pars <- c(k_in = 1, k_out = 3)
-
-  o1 <- pd(pars)[[1]]
-  expect_true(all(c("k_in", "k_out") %in% names(o1)))
-
-  # Same parameters, other controls: the memoised result no longer answers.
-  controls(pd, NULL, "attach.input") <- FALSE
-  o2 <- pd(pars)[[1]]
-  expect_identical(names(o2), "A")
-  expect_equal(as.numeric(o2["A"]), as.numeric(o1["A"]), tolerance = 1e-6)
-
-  # roottol also sets the digits the root is rounded to.
-  controls(pd, NULL, "roottol") <- 1e-2
-  a3 <- as.numeric(pd(pars)[[1]]["A"])
-  expect_equal(a3, round(a3, 3))
-  expect_false(isTRUE(all.equal(a3, as.numeric(o1["A"]), tolerance = 0)))
-})
-
-test_that("Pequil reads its multistart and time window from controls", {
-  fx <- ctl_models()
-  pd <- fx$pd
-  on.exit({
-    controls(pd, NULL, "end.time") <- 1e10
-    controls(pd, NULL, "controlsMS") <- list()
-  }, add = TRUE)
-  resetWarmStarts(pd, verbose = FALSE)
-  pars <- c(k_in = 1, k_out = 3, A = 100)
-
-  # Too short a window to reach the steady state from any start.
-  controls(pd, NULL, "end.time") <- 1e-6
-  controls(pd, NULL, "controlsMS") <- list(nStarts = 2L)
-  expect_error(pd(pars), "after 2 integration attempt")
-  controls(pd, NULL, "controlsMS") <- list()
-  expect_error(pd(pars), "after 10 integration attempt")
-
-  controls(pd, NULL, "end.time") <- 1e10
-  expect_equal(as.numeric(pd(pars)[[1]]["A"]), 1 / 3, tolerance = 1e-5)
-})
-
-test_that("Pequil in totals mode reads keep.root and attach.input from controls", {
-  fx <- ctl_models()
-  erk <- fx$erk
-  on.exit({
-    controls(erk, NULL, "attach.input") <- TRUE
-    controls(erk, NULL, "keep.root") <- TRUE
-  }, add = TRUE)
-  pars <- c(k1 = 1, k2 = 3, totalERK = 4, ERK = 1, pERK = 1)
-
-  o1 <- erk(pars)[[1]]
-  expect_true(all(c("k1", "k2", "totalERK") %in% names(o1)))
-  controls(erk, NULL, "attach.input") <- FALSE
-  o2 <- erk(pars)[[1]]
-  expect_setequal(names(o2), c("ERK", "pERK"))
-  expect_equal(as.numeric(o2["pERK"]), 1, tolerance = 1e-5)
-
-  resetWarmStarts(erk, verbose = FALSE)
-  cache <- environment(.ctl_kernel(erk))$reg$get(NULL)
-  controls(erk, NULL, "keep.root") <- FALSE
-  erk(pars)
-  expect_null(cache$yini)
-  expect_null(cache$last_result)
-  controls(erk, NULL, "keep.root") <- TRUE
-  erk(pars)
-  expect_false(is.null(cache$yini))
-  expect_false(is.null(cache$last_result))
-})
-
-
 ## ---- Pimpl --------------------------------------------------------------
 
 test_that("Pimpl reads keep.root and its solver options from controls", {
@@ -339,32 +253,28 @@ test_that("Pimpl reads keep.root and its solver options from controls", {
   pim <- fx$pim
   on.exit({
     controls(pim, NULL, "keep.root") <- TRUE
-    controls(pim, NULL, "controlsNleqslv") <- list()
-    controls(pim, NULL, "controlsMS") <- list(nStarts = 1L)
+    controls(pim, NULL, "controlsPTC") <- list()
   }, add = TRUE)
-  expect_identical(controls(pim, NULL, "controlsMS"), list(nStarts = 1L))
+  expect_identical(controls(pim, NULL, "controlsPTC"), list())
 
   resetWarmStarts(pim, verbose = FALSE)
   reg <- environment(.ctl_kernel(pim))$reg
   controls(pim, NULL, "keep.root") <- FALSE
-  expect_equal(as.numeric(pim(c(a = 4, x = 1))[[1]]["x"]), 2, tolerance = 1e-3)
-  expect_null(reg$get(NULL)$guess)
+  expect_equal(as.numeric(pim(c(a = 4, x = 1))[[1]]["x"]), 2, tolerance = 1e-8)
+  expect_null(reg$get(NULL)$arch)
   controls(pim, NULL, "keep.root") <- TRUE
   pim(c(a = 4, x = 1))
-  expect_false(is.null(reg$get(NULL)$guess))
+  expect_false(is.null(reg$get(NULL)$arch))
 
-  # One Newton step from far away does not reach the root, and with a single
-  # start there is nothing else to try.
+  # One damped Newton step from far away does not reach the root, and every
+  # attempt says so.
   resetWarmStarts(pim, verbose = FALSE)
-  controls(pim, NULL, "controlsNleqslv") <- list(maxit = 1L)
-  expect_error(pim(c(a = 4, x = 1e3)), "after 1 attempt")
-  set.seed(1)
-  controls(pim, NULL, "controlsMS") <- list(nStarts = 3L)
-  expect_error(pim(c(a = 4, x = 1e3)), "after 4 attempt")
+  controls(pim, NULL, "controlsPTC") <- list(maxit = 1L)
+  expect_error(pim(c(a = 4, x = 1e3)), "no convergence in 1 iteration")
 
   # A partial replacement keeps the other defaults.
-  controls(pim, NULL, "controlsNleqslv") <- list(ftol = 1e-10)
-  expect_equal(as.numeric(pim(c(a = 4, x = 1e3))[[1]]["x"]), 2, tolerance = 1e-8)
+  controls(pim, NULL, "controlsPTC") <- list(rtol = 1e-13)
+  expect_equal(as.numeric(pim(c(a = 4, x = 1e3))[[1]]["x"]), 2, tolerance = 1e-12)
 })
 
 

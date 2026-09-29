@@ -252,17 +252,53 @@ def is_number(s):
     except ValueError:
         return False
     
-def FindSinkCluster(SM, eps=1e-8, M=1e4):
+def ParseVolumes(volumes):
+    # State -> volume expression, as written by steadyStates() (1 for amounts).
+    return {parse_expr(str(k)): parse_expr(str(v)) for k, v in dict(volumes).items()}
+
+def _amount_key(flux):
+    # Floats to 12 significant digits: a numeric volume ratio times its
+    # denominator compares equal to its numerator.
+    return flux.xreplace({f: sympy.Rational(format(float(f), '.12g'))
+                          for f in flux.atoms(sympy.Float)})
+
+def _amount_columns(SM_np, F, X, volumes):
+    # Columns summed per amount flux, the flux times the volume of the states
+    # it touches. steadyStates() writes a reaction across compartments as one
+    # row per volume ratio; these rows share one amount flux and add up to the
+    # reaction's stoichiometry.
+    groups={}
+    for k in range(SM_np.shape[1]):
+        touched=numpy.nonzero(SM_np[:, k])[0]
+        if len(touched)==0:
+            continue
+        key=_amount_key(F[k]*volumes.get(X[int(touched[0])], 1))
+        groups.setdefault(key, []).append(k)
+    if not groups:
+        return numpy.zeros((SM_np.shape[0], 0))
+    return numpy.column_stack([SM_np[:, ks].sum(axis=1) for ks in groups.values()])
+
+def FindSinkCluster(SM, eps=1e-8, M=1e4, F=None, X=None, volumes=None):
     # Structural mass-balance test: find c >= 0, c != 0 such that
     # c^T * SM <= 0 componentwise with at least one strictly negative entry.
     # Support of such c is a subset of states whose total mass monotonically
     # leaks out of the system -> all of them must be zero in steady state.
     # Generalises checkNegRows (which only catches single-row sinks).
+    # The support may add a conserved moiety to a leaking cluster. Only its
+    # states that reach a leaking column along columns of the support are 0:
+    # educts of the leaking columns, then the educts of every column producing
+    # a state already found (as .zeroStatesFromSmatrix() in R).
+    # Given the fluxes F and the states X with their volumes, c weighs amounts
+    # and the columns of one amount flux are summed first.
     n_states=SM.rows
-    n_flux=SM.cols
-    if n_states==0 or n_flux==0:
+    if n_states==0 or SM.cols==0:
         return []
     SM_np=numpy.array(SM.tolist(), dtype=float)
+    if F is not None:
+        SM_np=_amount_columns(SM_np, F, X, volumes or {})
+    n_flux=SM_np.shape[1]
+    if n_flux==0:
+        return []
     A_ub=SM_np.T
     b_ub=numpy.zeros(n_flux)
     c_obj=SM_np.sum(axis=1)
@@ -270,8 +306,19 @@ def FindSinkCluster(SM, eps=1e-8, M=1e4):
         bounds=[(0.0, M)]*n_states
         bounds[i]=(1.0, 1.0)
         res=linprog(c=c_obj, A_ub=A_ub, b_ub=b_ub, bounds=bounds, method='highs')
-        if res.success and res.fun is not None and res.fun<-eps:
-            return [j for j in range(n_states) if res.x[j]>eps]
+        if not (res.success and res.fun is not None and res.fun<-eps):
+            continue
+        sup=res.x>eps
+        leak=SM_np.T.dot(res.x)<-eps
+        out=sup & (SM_np[:, leak]<0).any(axis=1)
+        while True:
+            feed=(SM_np[out, :]>0).any(axis=0)
+            add=sup & ~out & (SM_np[:, feed]<0).any(axis=1)
+            if not add.any():
+                break
+            out|=add
+        if out.any():
+            return [int(j) for j in numpy.nonzero(out)[0]]
     return []
 
 def _zero_out_state(row_idx, SM, F, X, zeroStates):
@@ -1550,6 +1597,7 @@ def Alyssa(filename,
           branches=False,
           priority=[],
           verbose=True,
+          volumes={},
           _block=False,
           _defer=()):
     filename=str(filename)
@@ -1592,6 +1640,8 @@ def Alyssa(filename,
     # once X and fluxpars exist -- see the check below the flux-parameter
     # extraction.
     priority=[str(pr) for pr in priority]
+    # State volumes for the sink-cluster test in amounts.
+    vol=ParseVolumes(volumes)
 
     # States a failed block needs unsolved: their direct solve locked a rate
     # constant of the block. The next retry leaves their balances to the block.
@@ -1610,13 +1660,14 @@ def Alyssa(filename,
             _say('  retrying with '+', '.join(sorted(new))+' left to the blocks')
             return Alyssa(filename, injections, _givenCQs, neglect, sparsifyLevel,
                           outputFormat, testSteady, walltime, simplify, solveQuadratic,
-                          positive, branches, priority, verbose=verbose, _block=True,
-                          _defer=tuple(sorted(_defer|new)))
+                          positive, branches, priority, verbose=verbose, volumes=volumes,
+                          _block=True, _defer=tuple(sorted(_defer|new)))
         _say('  '+(_DIAG[-1] if _DIAG else 'no positive pivot is left')+
              ', retrying with joint block solves')
         return Alyssa(filename, injections, _givenCQs, neglect, sparsifyLevel,
                       outputFormat, testSteady, walltime, simplify, solveQuadratic,
-                      positive, branches, priority, verbose=verbose, _block=True)
+                      positive, branches, priority, verbose=verbose, volumes=volumes,
+                      _block=True)
     file=csv.reader(open(filename), delimiter=',')
     _trace('Reading csv-file ...',flush=True)
     L=[]
@@ -1764,7 +1815,7 @@ def Alyssa(filename,
         # state in C must be zero in steady state. Classic example: TGFb alone
         # looks OK (binding/dissociation balance) but {TGFb, R1_TGFb} is a
         # sink because the complex degrades.
-        sink=FindSinkCluster(SM)
+        sink=FindSinkCluster(SM, F=F, X=X, volumes=vol)
         if not sink:
             break
         for row_idx in sorted(sink, reverse=True):

@@ -626,8 +626,7 @@ readPetabTables <- function(yamlPath) {
 }
 
 
-# The time a steady-state ("inf") measurement is evaluated at. Matches
-# Pequil()'s equilibration horizon.
+# The time a steady-state ("inf") measurement is evaluated at.
 .petab_ss_time <- 1e10
 
 
@@ -1172,9 +1171,8 @@ readPetabTables <- function(yamlPath) {
   if (length(log_idx))   val[log_idx]   <- log(val[log_idx])
   if (length(log10_idx)) val[log10_idx] <- log10(val[log10_idx])
 
-  # PEtab's `time = inf` asks for the steady state. dMod reaches one by
-  # pre-integration, so the row is placed at Pequil's equilibration horizon
-  # and mapped back to `inf` on export.
+  # PEtab's `time = inf` asks for the steady state. The row is placed at
+  # .petab_ss_time and mapped back to `inf` on export.
   meas_time <- as.numeric(m$time)
   meas_time[is.infinite(meas_time) & meas_time > 0] <- .petab_ss_time
 
@@ -1227,6 +1225,83 @@ readPetabTables <- function(yamlPath) {
 }
 
 
+# Internal: TRUE if the parsed expression `e` is 0 whatever its other symbols
+# are, once the symbols in `zero` are 0. Judged at two fixed positive points
+# with SBML's flat `piecewise(v1, c1, ..., otherwise)`; an expression that does
+# not evaluate counts as nonzero.
+.petab_vanishes <- function(e, zero = character(0)) {
+  if (is.null(e)) return(FALSE)
+  syms <- all.vars(e)
+  env  <- new.env(parent = baseenv())
+  env$piecewise <- function(...) {
+    a <- list(...); n <- length(a)
+    for (i in seq_len(n %/% 2L)) if (isTRUE(a[[2L * i]])) return(a[[2L * i - 1L]])
+    if (n %% 2L) a[[n]] else 0
+  }
+  k <- seq_along(syms)
+  for (probe in list(exp(sin(k)), exp(cos(k)))) {
+    vals <- setNames(as.list(probe), syms)
+    vals[intersect(syms, zero)] <- 0
+    v <- tryCatch(eval(e, vals, env), error = function(err) NA_real_)
+    if (!is.numeric(v) || length(v) != 1L || is.na(v) || v != 0) return(FALSE)
+  }
+  TRUE
+}
+
+
+# Internal: states an equilibration of `reactions` from the initial values
+# `init` (named character) cannot move. A reaction is idle if its rate vanishes
+# with the parameters `zero_pars` and the states `zero` at 0. `zero` is the
+# largest set of states that start at 0 and take part in idle reactions only,
+# so they stay at 0; `frozen` take part in idle reactions only and keep their
+# initial value. Returns list(zero, frozen, idle), `idle` by reaction.
+.petab_invariant_states <- function(reactions, init, zero_pars = character(0)) {
+  st <- reactions$states
+  S  <- reactions$smatrix
+  if (is.null(S) || !length(st))
+    return(list(zero = character(0), frozen = character(0), idle = logical(0)))
+  S  <- suppressWarnings(matrix(as.numeric(S), nrow(S), ncol(S), dimnames = list(NULL, st)))
+  involved <- !is.na(S) & S != 0
+  parse1 <- function(s) tryCatch(str2lang(s), error = function(err) NULL)
+  rates  <- lapply(as.character(reactions$rates), parse1)
+  starts0 <- vapply(st, function(s)
+    !is.na(init[s]) && .petab_vanishes(parse1(init[[s]]), zero_pars), logical(1))
+  idleWith <- function(z) vapply(rates, .petab_vanishes, logical(1), zero = c(zero_pars, z))
+  onlyIdle <- function(idle) colSums(involved[!idle, , drop = FALSE]) == 0
+  zero <- st[starts0]
+  repeat {
+    idle <- idleWith(zero)
+    keep <- zero[onlyIdle(idle)[zero]]
+    if (length(keep) == length(zero)) break
+    zero <- keep
+  }
+  list(zero = zero, frozen = setdiff(st[onlyIdle(idle)], zero), idle = idle)
+}
+
+
+# Internal: `reactions` without the reactions flagged in `drop_rx` and the
+# states `drop_st`, with the symbols `zero` set to 0 in the remaining rates.
+.petab_reduce_network <- function(reactions, drop_st, drop_rx, zero = character(0)) {
+  if (!length(drop_st) && !any(drop_rx)) return(reactions)
+  keep_st <- setdiff(reactions$states, drop_st)
+  keep_rx <- !drop_rx
+  rates <- reactions$rates[keep_rx]
+  z <- intersect(zero, unique(unlist(lapply(rates, getSymbols))))
+  if (length(z)) rates <- replaceSymbols(z, rep("0", length(z)), rates)
+  vol <- reactions$volumes
+  cof <- reactions$compartmentOf
+  rc  <- reactions$reactionCompartment
+  eqnlist(smatrix = reactions$smatrix[keep_rx, keep_st, drop = FALSE],
+          states = keep_st, rates = rates,
+          volumes = if (!is.null(vol)) vol[intersect(names(vol), keep_st)],
+          description = reactions$description[keep_rx],
+          compartments = reactions$compartments,
+          compartmentOf = if (!is.null(cof)) cof[intersect(names(cof), keep_st)],
+          reactionCompartment = if (!is.null(rc)) rc[keep_rx],
+          amountStates = intersect(reactions$amountStates, keep_st))
+}
+
+
 ## --- core trafo / observation / objective builders --------------------------
 
 # Build the per-condition parameter trafo (parfn).
@@ -1249,7 +1324,7 @@ readPetabTables <- function(yamlPath) {
 #   scales         named character "lin"/"log"/"log10" per parameterId
 #   obs_inner      character vector of inner observable parameters that
 #                  appear in observable / noise formulas (for substitution)
-#   reactions      eqnlist (used for Pequil composition if pre-eq present)
+#   reactions      eqnlist (steady state of the preequilibration condition)
 #
 # Returns a parfn that maps outer pars (estimated + fixed) to the inner-side
 # parameter set (states' initial values, inner_pars, obs_inner).
@@ -1293,7 +1368,7 @@ readPetabTables <- function(yamlPath) {
   apply_row_overrides <- function(tr, cond_id, scope) {
     # scope: "all" (apply every override column),
     #        "state-only" (only init-kind columns; parameter overrides handled
-    #         elsewhere, for the Pequil pre/post stages where parameter
+    #         elsewhere, for the preequilibration stages where parameter
     #         overrides are baked into the rates).
     if (!cond_id %in% rownames(conditions)) return(tr)
     for (cn in override_cols) {
@@ -1336,7 +1411,7 @@ readPetabTables <- function(yamlPath) {
   # joins the per-model chains with `+`. A second model gets its own
   # `p_post * p_eq * p_pre` and is summed in, never folded into this one.
   plain_tr <- list(); pre_tr <- list(); post_tr <- list()
-  eq_of    <- character(0); eq_model <- list()
+  eq_of    <- character(0); eq_model <- list(); eq_net <- list()
 
   for (sub in sub_cond_map$sub_condition) {
 
@@ -1358,7 +1433,7 @@ readPetabTables <- function(yamlPath) {
       next
     }
 
-    # ----- Pequil composition --------------------------------------------
+    # ----- preequilibration ---------------------------------------------
     # 1. Substitute peq-row's parameter overrides directly into the reaction
     #    rates -> peq_reactions. Parameter-scale chain rule must be applied
     #    *before* peq's parameter overrides, since peq overrides come from
@@ -1397,62 +1472,46 @@ readPetabTables <- function(yamlPath) {
     #    inner pars identity, observable/noise placeholders pre-substituted).
     tr_pre <- build_default()
     for (st in names(peq_state_subs)) tr_pre[st] <- peq_state_subs[[st]]
+
+    # The steady-state equations leave states the equilibration cannot move
+    # undetermined, so these leave the network and pass from p_pre to p_post
+    # with their initial values. Parameters outside parameters.tsv are SBML
+    # constants; at 0 they idle their reactions.
+    if (is.null(eq_net[[peq]])) {
+      zero_pars <- setdiff(names(fixed)[!is.na(fixed) & fixed == 0], names(scales))
+      inv <- .petab_invariant_states(peq_reactions, tr_pre[states], zero_pars)
+      eq_net[[peq]] <- .petab_reduce_network(peq_reactions, c(inv$zero, inv$frozen),
+                                             inv$idle, c(zero_pars, inv$zero))
+    }
+    peq_reactions <- eq_net[[peq]]
+
     tr_pre <- apply_petab_param_subs(tr_pre, obs_subs, noi_subs)
     tr_pre <- apply_scale_chain_rule(tr_pre)
 
-    # Pre-equilibration must integrate the FULL network to steady state, with
-    # every conserved moiety fixed by its initial total. When the network has
-    # conserved moieties Pequil therefore runs with expressInTotals = TRUE
-    # (which keeps all moiety species dynamical and pins each `total_i`) and
-    # supply each total from the scale-corrected species initials. The
-    # default expressInTotals = FALSE would instead hold a pivot species at
-    # its initial value, violating mass conservation.
-    # Pequil removes the structurally zero states before it derives the moiety
-    # totals, so the totals have to come from the same reduced network. Taken
-    # from the full one they differ in number and, under a name that happens to
-    # coincide, in meaning.
-    peq_totals <- getTotals(.zeroStatesFromSmatrix(peq_reactions)$eqnlist)
-    eq_in_totals <- length(peq_totals) > 0L &&
-      all(vapply(peq_totals, function(e)
-        all(getSymbols(e) %in% names(tr_pre)), logical(1)))
-    if (eq_in_totals) {
-      for (tn in names(peq_totals)) {
-        sp <- getSymbols(peq_totals[[tn]])
-        tr_pre[tn] <- replaceSymbols(sp, paste0("(", tr_pre[sp], ")"),
-                                     peq_totals[[tn]])
-      }
+    # Totals of the conserved quantities from the species initials, over the
+    # network without its structurally zero states, as Pimpl derives them.
+    peq_totals <- if (length(peq_reactions$states))
+      getTotals(.zeroStatesFromSmatrix(peq_reactions)$eqnlist)
+    for (tn in names(peq_totals)) {
+      sp <- getSymbols(peq_totals[[tn]])
+      if (!all(sp %in% names(tr_pre)))
+        stop("PEtab: the preequilibration total ", tn, " needs initial values for ",
+             paste(setdiff(sp, names(tr_pre)), collapse = ", "), ".", call. = FALSE)
+      tr_pre[tn] <- replaceSymbols(sp, paste0("(", tr_pre[sp], ")"), peq_totals[[tn]])
     }
 
     pre_tr[[sub]] <- tr_pre
 
-    # A symbol no outer parameter reaches is a constant, and differentiating
-    # it can produce a sensitivity that drifts for ever: a rate constant fixed
-    # at zero leaves the state stationary while its derivative stays a non-zero
-    # constant, which would veto every steady state.
-    eq_fixed <- setdiff(getParameters(peq_reactions),
-                        c(peq_reactions$states, pouter_names))
-
-    # 3. p_eq: integrate peq_reactions to steady state. attach.input ensures
-    #    parameters and observable/noise placeholders flow through unchanged.
-    # Model events act during the equilibration too: a steady state can be
-    # the one an event puts the system in.
-    eq_events <- if (is.null(events)) NULL else {
-      keep <- as.character(events$var) %in% peq_reactions$states
-      if (any(keep)) events[keep, , drop = FALSE] else NULL
-    }
-    # The equilibration model depends on the pre-equilibration condition alone,
-    # so every sub-condition sharing one reuses the same compiled object.
+    # 3. p_eq: stable steady state of peq_reactions, started from the initial
+    #    state. Parameters and placeholders pass through. Shared by all
+    #    sub-conditions with this preequilibration condition.
     eq_of[sub] <- peq
-    if (is.null(eq_model[[peq]]))
-      eq_model[[peq]] <- Pequil(peq_reactions, condition = NULL,
-                                attach.input = TRUE,
-                                expressInTotals = eq_in_totals,
-                                events = eq_events, start.time = peq_start,
-                                fixed = eq_fixed,
-                                compile = compile, outdir = outdir,
-                                modelname = paste(modelname,
-                                                  sanitizeConditions(peq),
-                                                  "eq", sep = "_"))
+    if (is.null(eq_model[[peq]]) && length(peq_reactions$states))
+      eq_model[[peq]] <- Pimpl(peq_reactions, condition = NULL,
+                               compile = compile, outdir = outdir,
+                               modelname = paste(modelname,
+                                                 sanitizeConditions(peq),
+                                                 "eq", sep = "_"))
 
     # 4. p_post: identity for states (using SS values from p_eq), apply
     #    sim-row overrides (which include parameter overrides like a
@@ -1474,8 +1533,8 @@ readPetabTables <- function(yamlPath) {
                 modelname = paste(modelname, tag, "pre",  sep = "_"))
     p_post <- P(post_tr[subs], compile = compile, outdir = outdir, cores = cores,
                 modelname = paste(modelname, tag, "post", sep = "_"))
-    parfns[[length(parfns) + 1L]] <-
-      p_post * .fnWithConditions(eq_model[[k]], subs) * p_pre
+    parfns[[length(parfns) + 1L]] <- if (is.null(eq_model[[k]])) p_post * p_pre
+      else p_post * .fnWithConditions(eq_model[[k]], subs) * p_pre
   }
 
   Reduce(`+`, parfns)

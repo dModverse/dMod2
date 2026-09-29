@@ -1,5 +1,4 @@
-# Constructor-level `deriv = TRUE/FALSE` gating for P, Pexpl, Pimpl,
-# Pequil, and Y. Symmetric with the existing `deriv2` flag: the
+# Constructor-level `deriv = TRUE/FALSE` gating for P, Pexpl, Pimpl and Y. Symmetric with the existing `deriv2` flag: the
 # constructor decides whether the artifact carries first-order
 # sensitivities, and the runtime call errors out if it asks for
 # something the construction didn't produce.
@@ -23,10 +22,6 @@ ctor_models <- local({
     pexpl <- Pexpl(c(A = "a * x", B = "b + y"), deriv = FALSE,
                    modelname = nm("test_pexpl_nod1"), derivMode = "forward",
                    verbose = FALSE)
-    pequil <- Pequil(c(A = "k_in - k_out * A"),
-                     parameters = c("k_in", "k_out"), deriv = FALSE,
-                     modelname = nm("test_pequil_nod1"), verbose = FALSE,
-                     attach.input = FALSE)
     pimpl <- Pimpl(c(x = "x - a"), parameters = "a", deriv = FALSE,
                    modelname = nm("test_pimpl_nod1"), verbose = FALSE)
     gfn <- Y(c(obs = "k * A"), states = c("A", "time"), parameters = "k",
@@ -35,10 +30,10 @@ ctor_models <- local({
     pdisp <- P(c(A = "a * x"), method = "explicit", deriv = FALSE,
                modelname = nm("test_P_nod1"), verbose = FALSE)
 
-    compile(pexpl, pequil, pimpl, gfn, pdisp, output = nm("ctor_models"),
+    compile(pexpl, pimpl, gfn, pdisp, output = nm("ctor_models"),
             cores = 4L)
 
-    cache <<- list(pexpl = pexpl, pequil = pequil, pimpl = pimpl, gfn = gfn,
+    cache <<- list(pexpl = pexpl, pimpl = pimpl, gfn = gfn,
                    pdisp = pdisp)
     cache
   }
@@ -54,14 +49,6 @@ test_that("Pexpl(deriv = FALSE) yields a parvec without deriv attribute", {
   # no error, just no deriv attribute on the result.
   out2 <- pf(c(a = 2, b = 3, x = 4, y = 5), deriv = TRUE)
   expect_null(attr(out2[[1]], "deriv"))
-})
-
-
-test_that("Pequil(deriv = FALSE) skips the sensitivity model", {
-  skip_if_no_compile()
-  pf <- ctor_models()$pequil
-  out <- pf(c(k_in = 1, k_out = 0.5, A = 0.1))
-  expect_null(attr(out[[1]], "deriv"))
 })
 
 
@@ -92,8 +79,7 @@ test_that("Constructors reject deriv = FALSE combined with deriv2 = TRUE", {
                "requires deriv = TRUE")
   expect_error(Pimpl(c(x = "x - a"), parameters = "a", deriv = FALSE, deriv2 = TRUE),
                "requires deriv = TRUE")
-  expect_error(Pequil(c(A = "k - A"), parameters = "k", deriv = FALSE, deriv2 = TRUE),
-               "requires deriv = TRUE")
+
   expect_error(Y(c(obs = "A"), states = c("A", "time"),
                  deriv = FALSE, deriv2 = TRUE),
                "requires deriv = TRUE")

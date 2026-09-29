@@ -4,38 +4,23 @@
 \alias{.normalize_ss_inputs}
 \title{Normalise steady-state inputs}
 \usage{
-.normalize_ss_inputs(
-  trafo,
-  parameters,
-  forcings,
-  expressInTotals = TRUE,
-  fullsystem = FALSE
-)
+.normalize_ss_inputs(trafo, parameters, forcings)
 }
 \arguments{
 \item{trafo}{An \link{eqnlist}, \link{eqnvec} or named character vector.}
 
 \item{parameters}{Outer parameters (may be \code{NULL}).}
 
-\item{forcings}{Forcing names; zeroed and removed.}
-
-\item{expressInTotals}{Passed to \link{.detect_and_substitute_cq} when
-\code{fullsystem = FALSE}.}
-
-\item{fullsystem}{If \code{TRUE}, skip substitution and return the full \code{f}
-plus \code{C_mat}, \code{pivots}, \code{moiety_species} and \code{totals}.}
+\item{forcings}{Forcing names.}
 }
 \value{
-A named list with the normalised \code{trafo}, \code{states}, \code{dependent},
-\code{parameters}, \code{parms_all}, \code{zero_states} and (mode-specific) CQ fields.
+A named list with \code{trafo}, \code{states}, \code{zero_states}, \code{dependent},
+\code{parameters}, \code{parms_all}, \code{totals}, \code{C_mat} (see \code{\link[=.cq_matrix]{.cq_matrix()}}) and,
+for an \link{eqnlist}, \code{influx}, the sum of the producing fluxes per state.
 }
 \description{
-Coerces \code{trafo} to an \code{eqnvec}, zeroes forcings, drops structurally-zero
-states and promotes constant-rhs states to parameters. In the default
-\code{fullsystem = FALSE} mode it eliminates conserved quantities via
-\link{.detect_and_substitute_cq} (used by \link{Pimpl} and \code{Pequil} without
-\code{expressInTotals}). In \code{fullsystem = TRUE} mode it leaves \code{f} intact and
-returns the CQ pivot decomposition so the caller can integrate the full
-system and inject the totals through initial conditions.
+Coerces \code{trafo} to an \code{eqnvec}, zeroes and removes forcings, removes states
+that are structurally zero at steady state and promotes states with a zero
+right-hand side to parameters.
 }
 \keyword{internal}

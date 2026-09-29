@@ -16,7 +16,7 @@ The eqnlist with \verb{$totals} updated.
 }
 \description{
 Attaches a named list of conservation expressions to the eqnlist; these
-override auto-detection and flow into \link{Pimpl} / \link{Pequil} as the new
+override auto-detection and flow into \link{Pimpl} as the new
 parameter basis. Each expression is validated against the stoichiometric
 matrix (must lie in the left null space of \code{S}) and the basis as a whole
 must have the same rank as \code{conservedQuantities(S)}. Pass \code{NULL} or

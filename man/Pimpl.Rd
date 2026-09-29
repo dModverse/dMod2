@@ -10,77 +10,83 @@ Pimpl(
   forcings = NULL,
   condition = NULL,
   keep.root = TRUE,
-  expressInTotals = TRUE,
+  flow = inherits(trafo, "eqnlist"),
   compile = FALSE,
   modelname = NULL,
   verbose = FALSE,
   deriv = TRUE,
   deriv2 = FALSE,
-  controlsMS = list(),
-  controlsNleqslv = list(),
-  outdir = getwd()
+  controlsPTC = list(),
+  outdir = getwd(),
+  ...
 )
 }
 \arguments{
-\item{trafo}{Named character / \link{eqnvec} / \link{eqnlist}.}
+\item{trafo}{Named character, \link{eqnvec} or \link{eqnlist}.}
 
-\item{parameters}{Outer parameters; auto-extended with the \verb{total_*}
-conserved-quantity parameters.}
+\item{parameters}{Outer parameters. Totals of conserved quantities are
+added.}
 
 \item{forcings}{Forcing names; zeroed and removed.}
 
 \item{condition}{Condition label.}
 
-\item{keep.root}{Cache the root as warm-start for the next call.}
+\item{keep.root}{Keep roots per condition as warm starts and answer
+repeated calls from memory.}
 
-\item{expressInTotals}{If \code{TRUE} (default), every conserved moiety stays a
-solve variable and one redundant rate equation per conserved quantity is
-replaced by the algebraic conservation constraint \verb{sum(c_k x_k) = total_X},
-adding \code{total_X} as a parameter. The moiety is solved in log space, so all
-species stay positive and none is reconstructed by subtraction; the
-conservation then holds to the solver tolerance (\code{controlsNleqslv$ftol}).
-If \code{FALSE}, the pivot species per conserved quantity becomes a pass-through
-parameter and its redundant equation is dropped.}
+\item{flow}{If \code{TRUE}, \code{trafo} is the right-hand side of an ODE and the
+stable steady state is returned. If \code{FALSE}, any regular root. Defaults
+to \code{TRUE} for an \link{eqnlist}.}
 
-\item{compile, modelname, verbose}{Forwarded to \link[cppDE:cppFUN]{cppDE::cppFUN}. The
-transformation is evaluable only after compilation.}
+\item{compile, modelname, verbose}{Forwarded to \link[cppDE:cppFUN]{cppDE::cppFUN}.}
 
-\item{deriv, deriv2}{Attach first/second-order IFT sensitivities.}
+\item{deriv, deriv2}{Attach first/second-order sensitivities.}
 
-\item{controlsMS}{Multistart controls. Recognised keys: \code{nStarts}
-(default \code{100L}; \code{1L} disables multistart), \code{positive} (default
-\code{TRUE}; selects nleqslv's log-space transform and log-uniform
-random starts), \code{lower}/\code{upper} (scalar or named vector of bounds
-for the random sweep), \code{debugPlot} (default \code{FALSE}; emit a
-waterfall plot of multistart termination codes).}
+\item{controlsPTC}{Named list of solver controls:
+\describe{
+\item{\code{rtol}, \code{atol}}{Convergence tolerances, default \code{1e-10} and
+\code{1e-14}.}
+\item{\code{flowTol}}{Relative local error of the pseudo-time steps,
+default \code{1}. A start that fails is repeated with \code{flowTol / 10}.}
+\item{\code{maxit}}{Iterations per attempt, default \code{400}.}
+\item{\code{dtInit}}{Initial pseudo-time step relative to the fastest rate,
+default \code{1e-2}.}
+\item{\code{positive}}{Keep states positive, default \code{TRUE}.}
+\item{\code{stability}}{Require a stable root if \code{flow = TRUE}, default
+\code{TRUE}.}
+\item{\code{archive}}{Roots kept per condition, default \code{8}.}
+}}
 
-\item{controlsNleqslv}{nleqslv tuning: \code{method}, \code{global}, \code{xscalm},
-\code{xtol}, \code{ftol}, \code{btol}, \code{cndtol}, \code{maxit}, \code{allowSingular}. Residuals
-are scaled per equation by their turnover \verb{sum_k |df_i/dx_k| |x_k|}, so
-\code{ftol} is a relative criterion that converges multi-scale systems
-uniformly.}
+\item{outdir}{Directory for the generated source and shared object.}
 
-\item{outdir}{Directory for the generated source and shared object,
-default the working directory.}
+\item{...}{Removed arguments (\code{controlsMS}, \code{controlsNleqslv},
+\code{expressInTotals}) raise an error.}
 }
 \value{
 A \link{parfn}.
 }
 \description{
-Returns a \link{parfn} over the outer inputs. On call, the parfn solves
-\code{f(x, p) = 0} for the dependent states via \link[nleqslv:nleqslv]{nleqslv::nleqslv}, warm
-starting from the cached root when available and falling back to
-multistart otherwise. The IFT-derived Jacobian (and Hessian when
-\code{deriv2 = TRUE}) are attached to the result. For \link{eqnlist} inputs with
-conserved moieties, see \code{expressInTotals}.
+Returns a \link{parfn} that solves \code{f(x, p) = 0} for the dependent states by
+pseudo-transient continuation (\code{\link[cppDE:ptc]{cppDE::ptc()}}) and attaches first- and second-order
+sensitivities from the implicit function theorem.
 }
 \details{
-\code{keep.root}, \code{controlsMS} and \code{controlsNleqslv} are kept, as
-given, in the controls of the returned function and read at every call, so
-\code{\link[=controls]{controls()}} can change them later. The two lists are merged over their
-defaults at every call, so a replacement only needs the entries it changes.
-With \code{keep.root} switched off, a root kept before is no longer used.
+Starts are tried in this order: the nearest kept root corrected by
+its sensitivities, the same root with a small initial pseudo-time step, the
+initial guess in \code{pars} (missing states start at 1), and 1 for all states.
+With \code{flow = TRUE} the last two are repeated with \code{flowTol / 10} if they
+fail.
+An unstable root is left along its unstable eigenvector if \code{flow} and
+\code{stability} are \code{TRUE}.
+
+Conserved quantities of an \link{eqnlist} enter as constraints \verb{C x = T}, with the
+totals \code{T} as parameters. States without influx at the given parameter
+values are set to 0. Calls with identical parameter values, also across
+conditions, are solved once.
+
+\code{keep.root} and \code{controlsPTC} are read at every call and can be changed with
+\code{\link[=controls]{controls()}}.
 }
 \seealso{
-\link{Pexpl}, \link{Pequil}, \link{P}.
+\link{Pexpl}, \link{P}
 }

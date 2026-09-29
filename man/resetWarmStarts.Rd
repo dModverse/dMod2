@@ -2,7 +2,7 @@
 % Please edit documentation in R/parameters.R
 \name{resetWarmStarts}
 \alias{resetWarmStarts}
-\title{Reset warm-start caches in \code{Pequil}/\code{Pimpl} parameter transformations}
+\title{Reset warm-start caches in \code{Pimpl} parameter transformations}
 \usage{
 resetWarmStarts(fn, verbose = TRUE)
 }
@@ -16,7 +16,7 @@ Invisibly, labels of the cleared caches (empty if none found).
 }
 \description{
 Walks \code{fn} and its closure environments and clears the warm-start
-cache on every reachable \link{Pequil} / \link{Pimpl} parfn. Use before workflows
+cache on every reachable \link{Pimpl} parfn. Use before workflows
 that cross basins of attraction (multistart, profile after a structural
 change) where a stale root pins the solver in the wrong region.
 }
