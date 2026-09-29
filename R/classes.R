@@ -250,7 +250,9 @@ match.fnargs <- function(arglist, choices) {
 
 # Report here, not three frames downstream.
 .checkPrediction <- function(out, conditions) {
-  bad <- is.na(out) | is.infinite(out)
+  # NaN passes: an observable can be undefined where no data sits (a ratio of
+  # states that all start at 0), and normL2 stops on a NaN at a data point.
+  bad <- (is.na(out) & !is.nan(out)) | is.infinite(out)
   if (!any(bad)) return(invisible(NULL))
   ai <- arrayInd(which(bad), dim(out))
   stop("Prediction is NA or Inf in condition ", paste0(conditions, collapse = ","),

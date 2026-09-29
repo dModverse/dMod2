@@ -465,6 +465,16 @@ normL2 <- function(data, x, errmodel = NULL, times = NULL, t0 = 0,
            cn, "'.", call. = FALSE)
     }
 
+    y_pred <- prdfI[cbind(t_idx_in_pred, o_idx_in_pred)]
+    if (any(is.nan(y_pred))) {
+      bad <- which(is.nan(y_pred))
+      stop("normL2: the prediction is NaN at data point(s) of condition '", cn, "': ",
+           paste0(unique(paste0(dataI$name[bad], " (t = ", format(dataI$time[bad]), ")")),
+                  collapse = ", "),
+           ". Likely cause: division by zero, missing inputs or a failed integration.",
+           call. = FALSE)
+    }
+
     sig <- if (!is.null(dataI$sigma)) dataI$sigma else rep(NA_real_, nrow(dataI))
     sigma_is_na <- is.na(sig)
     sigma_fixed <- ifelse(sigma_is_na, 0, sig)

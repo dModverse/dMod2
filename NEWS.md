@@ -1,3 +1,59 @@
+# dMod2 0.9.1
+
+* `exportPEtab()` reads the parameter scale off `p`: a parameter entering only
+  as `exp(X)` is written with `parameterScale = log`, one entering only as
+  `10^(X)` or `exp10(X)` with `log10`, with linear nominal values and bounds
+  five decades around them. `parameterScale = NULL` is the new default. v2
+  writes the linear values.
+* `exportPEtab()` no longer writes self-referencing files for a trafo like
+  `A ~ exp(A)`. An outer parameter named like a state goes out as
+  `init_<state>` and the condition table sets the species to it; one named
+  like an inner parameter keeps its name under a pure scale wrap and becomes
+  `<name>_outer` otherwise. Symbolic initial values go to the condition table
+  instead of SBML `<initialAssignment>`. An export that would still refer an
+  assignment to its own target stops with an error.
+* `exportPEtabObject()` to v1 keeps preequilibration conditions in the
+  condition table, leaves condition targets and compartment sizes out of the
+  parameter table, writes observables in a v2 noise formula as their formula,
+  and refuses condition switches during a simulation, which v1 cannot hold.
+  A v2 experiment names no condition where the table has none.
+* `exportPEtabObject()` to v1 moves an expression that sets a species in every
+  condition into an SBML initial assignment and warns about per-condition
+  expressions, which v1 does not allow; start times after 0 stop the export.
+  Measurements name their conditions by id, as the condition table does.
+* `exportPEtabObject()` to v1 keeps the SBML constants of an imported problem
+  in the SBML, as v2 does. Listed in parameters.tsv they lost their role in a
+  preequilibration, where a constant at 0 idles its reaction, and the
+  reimport of Isensee_JCB2018 equilibrated to another state.
+* `exportPEtabObject()` declares condition targets and compartment sizes that
+  nothing else carries, with the SBML default recorded at import (a surface
+  compartment of Lang_PLOSComputBiol2024 went out sized by itself).
+* `exportPEtabObject()` writes a single measured sigma per observable as its
+  noise formula instead of per-row noise parameters.
+* `exportPEtabObject()` translates priors between the versions: v1 spells the
+  log families `logNormal`/`logLaplace`, and a v1 prior on the parameter scale
+  goes to v2 as the matching prior of the linear parameter. `importPEtab()`
+  reads the v1 spellings and truncates a prior on the parameter scale at the
+  bounds on that scale; it used the linear bounds (Schwen_PONE2014).
+* `importSbml()` substitutes the initial assignment of a constant parameter
+  wherever the parameter appears, with species at their initial values. It
+  kept the SBML default, so a condition that set the source parameter did not
+  reach the rates (Laske_PLOSComputBiol2019: `ModelValue_80 := k_syn_P`;
+  Bertozzi_PNAS2020: `beta_N := R0_*gamma_/N_`).
+* `repar()`, `insert()` and `define()` keep a trailing underscore in an
+  identifier. `gamma_` became `gamma`, so a PEtab condition that set `gamma_`,
+  `N_`, `I0_` or `R0_` in Bertozzi_PNAS2020 changed nothing.
+* `Y()` returns a NaN observable instead of stopping, and `normL2()` stops
+  only on a NaN at a data point. A ratio of states that all start at 0 is
+  undefined at t0 alone, where Laske_PLOSComputBiol2019 has no data, and the
+  objective could not be evaluated.
+* `importPEtab(derivMode = c("forward", "reverse"))` builds the observation,
+  error model and parameter transformation for the reverse sweep as well;
+  only the ODE model had it, so `obj(sweep = "reverse")` failed.
+* `exportSbml()` declares species that enter a rate without being consumed or
+  produced as modifiers, as SBML requires, and stops on a compartment sized
+  by its own symbol without a value.
+
 # dMod2 0.9.0
 
 * `Pimpl()` solves steady states by pseudo-transient continuation: implicit

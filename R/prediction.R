@@ -1183,15 +1183,10 @@ Y <- function(g, f = NULL, states = NULL, parameters = NULL,
       # Values: evaluate() returns observables (and pass-through extras when
       # attach.input = TRUE) under attach.input semantics matching gfun.
       gAll <- ad_out$y
+      # A NaN stays in the prediction: a ratio of states that all start at 0
+      # is undefined at t0 only, where no data may sit (Laske_PLOSComputBiol2019).
+      # normL2 stops on a NaN at a data point.
       gVal <- gAll[, observables, drop = FALSE]
-      if (any(is.nan(gVal))) {
-        hit <- which(colSums(is.nan(gVal)) > 0)
-        when <- vapply(hit, function(j) out[which(is.nan(gVal[, j]))[1], "time"], 0)
-        stop("Observable(s) evaluate to NaN: ",
-             paste0(observables[hit], " (first at time ", format(when), ")",
-                    collapse = ", "),
-             "\nLikely cause: division by zero or missing inputs.")
-      }
       values <- cbind(time = out[, "time"], gVal)
       if (attach.input) values <- cbind(values, submatrix(out, cols = -1))
       myderivs <- ad_out$tangent
@@ -1233,16 +1228,6 @@ Y <- function(g, f = NULL, states = NULL, parameters = NULL,
     } else {
       # Values only (reverse-only build).
       gVal <- gfun(out[, obsStates, drop = FALSE], params[obsParams], attach.input, fixedObsParams)[, observables, drop = FALSE]
-
-      if (any(is.nan(gVal))) {
-        hit <- which(colSums(is.nan(gVal)) > 0)
-        when <- vapply(hit, function(j) out[which(is.nan(gVal[, j]))[1], "time"], 0)
-        stop("Observable(s) evaluate to NaN: ",
-             paste0(observables[hit], " (first at time ", format(when), ")",
-                    collapse = ", "),
-             "\nLikely cause: division by zero or missing inputs.")
-      }
-
       values <- cbind(time = out[, "time"], gVal)
       if (attach.input) values <- cbind(values, submatrix(out, cols = -1))
       myderivs <- NULL

@@ -1422,7 +1422,8 @@ branch <- function(trafo, table = NULL,
 
 
 ## Split compound identifiers into single symbols: "_" -> ":" inside names
-## only, digit-leading parts prefixed to stay syntactic. Inverted by .decolonize.
+## only, digit-leading and empty parts prefixed to stay syntactic. Inverted by
+## .decolonize.
 .numprefix <- "..dModnum.."
 
 .colonize <- function(x) {
@@ -1430,8 +1431,11 @@ branch <- function(trafo, table = NULL,
   regmatches(x, m) <- lapply(regmatches(x, m), function(ids) {
     vapply(ids, function(id) {
       parts <- strsplit(id, "_", fixed = TRUE)[[1]]
+      # strsplit() drops trailing empty parts; `gamma_` must not become `gamma`.
+      parts <- c(parts, rep("", attr(regexpr("_*$", id), "match.length")))
       digit <- grepl("^[0-9]", parts)
       parts[digit] <- paste0(.numprefix, parts[digit])
+      parts[parts == ""] <- .numprefix
       paste(parts, collapse = ":")
     }, character(1), USE.NAMES = FALSE)
   })
