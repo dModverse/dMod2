@@ -14,7 +14,7 @@ exportPEtab(
   lower = NULL,
   upper = NULL,
   fixed = NULL,
-  parameterScale = "log10",
+  parameterScale = NULL,
   observableTransformation = "lin",
   noiseDistribution = "normal",
   modelID = "dMod_export",
@@ -47,14 +47,17 @@ character vector, \link{eqnvec}, or a Y-built error function. If \code{NULL},
 defaults to \code{"1"} per observable (constant unit noise).}
 
 \item{lower, upper}{Named numeric vectors of bounds, on the same scale as
-\code{pouter}. If \code{NULL}, written as \code{-Inf}/\code{Inf}.}
+\code{pouter}. If \code{NULL}, five decades around \code{pouter} for log and log10
+parameters and \code{-Inf}/\code{Inf} for linear ones.}
 
 \item{fixed}{Optional named numeric vector of non-estimated parameters
 on the linear scale.}
 
-\item{parameterScale}{Scalar \code{"lin"}/\code{"log"}/\code{"log10"} (broadcast to all
-names in \code{pouter}) or a named character vector keyed by parameterId.
-Defaults to \code{"log10"} (matches dMod's \code{insert("x ~ 10^X", ...)} idiom).}
+\item{parameterScale}{\code{NULL} (default) reads the scale off \code{p}: a
+parameter entering only as \code{exp(X)} is \code{"log"}, one entering only as
+\code{10^(X)} or \code{exp10(X)} is \code{"log10"}, anything else \code{"lin"}. Otherwise a
+scalar \code{"lin"}/\code{"log"}/\code{"log10"} (broadcast to all names in \code{pouter}) or
+a named character vector keyed by parameterId.}
 
 \item{observableTransformation}{Scalar or named character --
 \code{"lin"}/\code{"log"}/\code{"log10"} per observableId.}
@@ -82,6 +85,13 @@ writes an experiments TSV). Output format is selected via
 \code{formatVersion} (default \code{"2.0.0"}). Parameter scales, fixed values,
 and per-condition overrides are read off \code{p} and written into the
 corresponding PEtab tables.
+}
+\details{
+An outer parameter named like a state (e.g. \code{A ~ exp(A)}) cannot
+share the species id in SBML. It is written as \verb{init_<state>} and the
+condition table sets the species to it. An outer parameter named
+like an inner parameter keeps its name when the trafo is a pure scale
+wrap; for any other mapping it is written as \verb{<name>_outer}.
 }
 \section{Limitations}{
 

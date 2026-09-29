@@ -84,63 +84,12 @@
     return(out)
   }
 
-  # --- scatter the seed back onto the two things it belongs to -------------
-  #
-  # The kernel orders its rows ALOQ first, then BLOQ, so the scatter follows
-  # the same permutation. A row with a fixed sigma has no sigma derivative at
-  # all, and its sigma seed is dropped rather than multiplied by a zero.
-  w_pred <- vector("list", length(conditions))
-  w_err  <- vector("list", length(conditions))
-  for (ci in seq_along(conditions)) {
-    m  <- meta_list[[ci]]
-    pr <- prediction[[conditions[ci]]]
-    ord <- c(which(m$bloq_mask == 0L), which(m$bloq_mask == 1L))
-
-    W <- matrix(0, nrow(pr), ncol(pr), dimnames = list(NULL, colnames(pr)))
-    sp <- kr$seed$pred[[ci]]
-    for (j in seq_along(ord)) {
-      r <- ord[j]
-      W[m$t_idx_in_pred[r], m$o_idx_in_pred[r]] <-
-        W[m$t_idx_in_pred[r], m$o_idx_in_pred[r]] + sp[j]
-    }
-    w_pred[[ci]] <- W
-
-    erm <- err_list[[ci]]
-    if (!is.null(erm) && any(m$sigma_is_na == 1L)) {
-      E <- matrix(0, nrow(erm), ncol(erm), dimnames = list(NULL, colnames(erm)))
-      ss <- kr$seed$sigma[[ci]]
-      for (j in seq_along(ord)) {
-        r <- ord[j]
-        if (m$sigma_is_na[r] != 1L) next
-        E[m$t_idx_in_err[r], m$o_idx_in_err[r]] <-
-          E[m$t_idx_in_err[r], m$o_idx_in_err[r]] + ss[j]
-      }
-      w_err[[ci]] <- E
-    }
-  }
-
-  # --- the error model backwards -------------------------------------------
-  #
-  # It reads the prediction's values and its parameters, so its cotangent lands
-  # on both, and the prediction's half adds to the seed above.
-  w_chain <- lapply(seq_along(conditions), function(ci)
-    .ct(out = .ctWiden(.ct(out = .dropTime(w_pred[[ci]]))$out, n_dir + 1L)))
-  if (!is.null(errmodel) && length(cn_eval)) {
-    evjp <- attr(.fnLeafKernel(errmodel), "vjpfn")
-    if (is.null(evjp))
-      stop("normL2: the error model has no vjp entry; rebuild it with ",
-           "Y(..., compile = TRUE).", call. = FALSE)
-    for (j in seq_along(cn_eval)) {
-      ci <- match(cn_eval[j], conditions)
-      if (is.null(w_err[[ci]])) next
-      u <- evjp(out = prediction[[cn_eval[j]]], pars = err_pars[[j]],
-                fixed = err_fixed[[j]],
-                cotangent = .ctWiden(.ct(out = .dropTime(w_err[[ci]]))$out,
-                                     n_dir + 1L))
-      w_chain[[ci]] <- .addCt(w_chain[[ci]], .ct(out = .dropTime(u$out),
-                                                 pars = u$pars))
-    }
-  }
+  # --- the seed as cotangents on the prediction, and through the error model
+  w_chain <- .normL2SeedCt(meta_list, prediction, err_list, kr, errmodel,
+                           err_idx = match(cn_eval, conditions),
+                           err_split = Map(function(a, b) list(pars = a, fixed = b),
+                                           err_pars, err_fixed),
+                           K = n_dir + 1L)
 
   # --- the chain backwards --------------------------------------------------
   u <- .bwdNode(fw$tape, w_chain, env, cores)
@@ -168,6 +117,70 @@
   env$prediction <- prediction
   attr(out, "env") <- env
   out
+}
+
+# The objective's seed as one cotangent per condition, positionally aligned
+# with `prediction`: on the prediction itself, and through the error model onto
+# the prediction and the inner parameters it read. `err_idx` are the positions
+# that carry an error model and `err_split` the (pars, fixed) the forward pass
+# handed it there. Shared by normL2 and the multiple-shooting objective.
+#
+# The kernel orders its rows ALOQ first, then BLOQ, so the scatter follows the
+# same permutation. A row with a fixed sigma has no sigma derivative at all, and
+# its sigma seed is dropped rather than multiplied by a zero.
+.normL2SeedCt <- function(meta_list, prediction, err_list, kr, errmodel,
+                          err_idx = NULL, err_split = NULL, K = 1L) {
+  n <- length(meta_list)
+  w_pred <- vector("list", n)
+  w_err  <- vector("list", n)
+  for (ci in seq_len(n)) {
+    m  <- meta_list[[ci]]
+    pr <- prediction[[ci]]
+    ord <- c(which(m$bloq_mask == 0L), which(m$bloq_mask == 1L))
+
+    W <- matrix(0, nrow(pr), ncol(pr), dimnames = list(NULL, colnames(pr)))
+    sp <- kr$seed$pred[[ci]]
+    for (j in seq_along(ord)) {
+      r <- ord[j]
+      W[m$t_idx_in_pred[r], m$o_idx_in_pred[r]] <-
+        W[m$t_idx_in_pred[r], m$o_idx_in_pred[r]] + sp[j]
+    }
+    w_pred[[ci]] <- W
+
+    erm <- if (is.null(err_list)) NULL else err_list[[ci]]
+    if (!is.null(erm) && any(m$sigma_is_na == 1L)) {
+      E <- matrix(0, nrow(erm), ncol(erm), dimnames = list(NULL, colnames(erm)))
+      ss <- kr$seed$sigma[[ci]]
+      for (j in seq_along(ord)) {
+        r <- ord[j]
+        if (m$sigma_is_na[r] != 1L) next
+        E[m$t_idx_in_err[r], m$o_idx_in_err[r]] <-
+          E[m$t_idx_in_err[r], m$o_idx_in_err[r]] + ss[j]
+      }
+      w_err[[ci]] <- E
+    }
+  }
+
+  # The error model reads the prediction's values and its parameters, so its
+  # cotangent lands on both, and the prediction's half adds to the seed above.
+  w_chain <- lapply(seq_len(n), function(ci)
+    .ct(out = .ctWiden(.ct(out = .dropTime(w_pred[[ci]]))$out, K)))
+  if (!is.null(errmodel) && length(err_idx)) {
+    evjp <- attr(.fnLeafKernel(errmodel), "vjpfn")
+    if (is.null(evjp))
+      stop("normL2: the error model has no vjp entry; rebuild it with ",
+           "Y(..., compile = TRUE).", call. = FALSE)
+    for (j in seq_along(err_idx)) {
+      ci <- err_idx[j]
+      if (is.null(w_err[[ci]])) next
+      u <- evjp(out = prediction[[ci]], pars = err_split[[j]]$pars,
+                fixed = err_split[[j]]$fixed,
+                cotangent = .ctWiden(.ct(out = .dropTime(w_err[[ci]]))$out, K))
+      w_chain[[ci]] <- .addCt(w_chain[[ci]], .ct(out = .dropTime(u$out),
+                                                 pars = u$pars))
+    }
+  }
+  w_chain
 }
 
 # The raw kernel behind a single-leaf fn, which is where the vjp attribute

@@ -4,10 +4,16 @@
 \alias{importSbml}
 \title{Import an SBML model}
 \usage{
-importSbml(modelpath)
+importSbml(modelpath, keep = NULL)
 }
 \arguments{
 \item{modelpath}{Path to the sbml file}
+
+\item{keep}{Parameter ids that keep their own symbol although the SBML sets
+them by an \verb{<initialAssignment>}, for a caller that assigns them
+otherwise (the PEtab condition and parameter tables). A constant
+assignment becomes their default value. Any other parameter's initial
+assignment is substituted into the rates, initial values and observables.}
 }
 \value{
 list of eqnlist, parameters and inits

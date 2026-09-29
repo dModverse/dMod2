@@ -42,7 +42,8 @@ Applies to objects of class \code{objfn},
 \code{parfn}, \code{prdfn} and \code{obsfn}. Allows to manipulate
 different arguments that have been set when creating the
 objects. On a sum of objectives, a control is read from and written to
-every summand that has it. The same holds for an objective scaled by \verb{\%.*\%} and
+every summand that has it, e.g. the \code{multipleShootingControl} of a
+\code{\link[=normL2]{normL2()}} term. The same holds for an objective scaled by \verb{\%.*\%} and
 for an objective composed with a parameter transformation, which reach the
 controls of the objective inside.
 }

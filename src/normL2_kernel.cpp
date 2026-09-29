@@ -320,7 +320,8 @@ List normL2_kernel(
     int threads,
     std::string bloq_mode = "M3",
     bool build_hessian = true,
-    bool want_seed = false) {
+    bool want_seed = false,
+    bool local_blocks = false) {
 
   const int n_cond = prediction.size();
   if ((int) meta_list.size() != n_cond)
@@ -352,7 +353,11 @@ List normL2_kernel(
   // Phase 2: accumulate (parallel-over-conditions)
   std::vector<double> grad_global(n_par_global, 0.0);
   std::vector<double> hess_global;
-  if (build_hessian)
+  // A caller that asks for the blocks of each condition assembles its own
+  // matrix from them, the way multiple shooting condenses them, and would
+  // only discard a global one of n_par_global^2.
+  const bool build_global_hessian = build_hessian && !local_blocks;
+  if (build_global_hessian)
     hess_global.assign((std::size_t) n_par_global * n_par_global, 0.0);
   double value_global = 0.0;
   double chi2_global  = 0.0;
@@ -472,7 +477,7 @@ List normL2_kernel(
       if (g < 0) continue;
       grad_global[g] += grad_c[c][p];
     }
-    if (build_hessian)
+    if (build_global_hessian)
     for (int p2 = 0; p2 < npl; ++p2) {
       const int g2 = C.par_idx_global[p2] - 1;
       if (g2 < 0) continue;
@@ -494,7 +499,7 @@ List normL2_kernel(
   // Skipped entirely under build_hessian = false: no matrix is allocated and
   // the result carries a NULL hessian, not a zero placeholder.
   RObject hess_R = R_NilValue;
-  if (build_hessian) {
+  if (build_global_hessian) {
     NumericMatrix H(n_par_global, n_par_global);
     if (n_par_global > 0) {
       std::memcpy(&H(0, 0), hess_global.data(),
@@ -514,10 +519,44 @@ List normL2_kernel(
     seed_R = List::create(Named("pred") = sp, Named("sigma") = ss);
   }
 
+  // Each condition in its own parameter space, named after the columns of its
+  // sensitivity block.
+  RObject local_R = R_NilValue;
+  if (local_blocks) {
+    List loc(n_cond);
+    for (int c = 0; c < n_cond; ++c) {
+      const CondInputs& C = conds[c];
+      const int npl = C.n_par_local;
+      CharacterVector nm(npl);
+      for (int p = 0; p < npl; ++p) {
+        const int g = C.par_idx_global[p] - 1;
+        nm[p] = (g < 0) ? String("") : String(par_names_global[g]);
+      }
+      NumericVector gl(grad_c[c].begin(), grad_c[c].end());
+      if (npl > 0) gl.names() = nm;
+      RObject hl = R_NilValue;
+      if (build_hessian) {
+        NumericMatrix H(npl, npl);
+        if (npl > 0) {
+          std::memcpy(&H(0, 0), hess_c[c].data(),
+                      sizeof(double) * (std::size_t) npl * npl);
+          H.attr("dimnames") = List::create(nm, nm);
+        }
+        hl = H;
+      }
+      loc[c] = List::create(Named("value")    = value_c[c],
+                            Named("chi2")     = chi2_c[c],
+                            Named("gradient") = gl,
+                            Named("hessian")  = hl);
+    }
+    local_R = loc;
+  }
+
   return List::create(
       Named("value")    = value_global,
       Named("chi2")     = chi2_global,
       Named("gradient") = grad_R,
       Named("hessian")  = hess_R,
-      Named("seed")     = seed_R);
+      Named("seed")     = seed_R,
+      Named("local")    = local_R);
 }
