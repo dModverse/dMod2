@@ -691,6 +691,23 @@ test_that("Sink cluster: TGFb + R_TGFb + R_TGFb_int (combined mass leaks)", {
 })
 
 
+test_that("Sink cluster: a conserved moiety listed first stays nonzero", {
+  skip_if_not_installed("lpSolve")
+  # A <-> Ap is conserved and comes first; the leaking cluster {L, RL} comes
+  # after it. Their union also passes the LP, but only {L, RL} drains.
+  el <- eqnlist() |>
+    addReaction("A",     "Ap",  "k1 * A") |>
+    addReaction("Ap",    "A",   "k2 * Ap") |>
+    addReaction("",      "R",   "k_pr_R") |>
+    addReaction("R",     "",    "k_dg_R * R") |>
+    addReaction("L + R", "RL",  "k_on * L * R") |>
+    addReaction("RL",    "L + R", "k_off * RL") |>
+    addReaction("RL",    "",    "k_dg * RL")
+  zs <- helper(el)
+  expect_setequal(zs$zero_states, c("L", "RL"))
+})
+
+
 ## ---- Layer 3 falls back when lpSolve is missing ------------------------
 
 test_that("FindSinkCluster degrades gracefully without lpSolve", {

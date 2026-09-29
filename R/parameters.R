@@ -687,8 +687,22 @@ Pexpl <- function(trafo, parameters = NULL, attach.input = FALSE, condition = NU
                     c(rep("<=", nF), rep(">=", nS), rep("<=", nS)),
                     c(rep(0,  nF), lb, ub)),
         error = function(e) NULL)
-      if (!is.null(res) && res$status == 0 && res$objval < -eps)
-        return(which(res$solution > eps))
+      if (is.null(res) || res$status != 0 || res$objval >= -eps) next
+      # The support may add a conserved moiety to a leaking cluster. Only its
+      # species that reach a leaking reaction along reactions of the support
+      # are 0: educts of the leaking reactions, then the educts of every
+      # reaction producing a species already found.
+      w    <- res$solution
+      sup  <- which(w > eps)
+      leak <- which(drop(M %*% w) < -eps)
+      out  <- intersect(sup, which(colSums(M[leak, , drop = FALSE] < 0) > 0))
+      repeat {
+        feed <- which(rowSums(M[, out, drop = FALSE] > 0) > 0)
+        add  <- setdiff(intersect(sup, which(colSums(M[feed, , drop = FALSE] < 0) > 0)), out)
+        if (!length(add)) break
+        out <- c(out, add)
+      }
+      if (length(out)) return(sort(out))
     }
     integer(0)
   }

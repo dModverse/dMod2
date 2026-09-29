@@ -1,3 +1,9 @@
+# dMod2 0.8.3
+
+* Structurally zero states: a conserved moiety listed before a leaking cluster
+  was declared zero together with it, since the sink-cluster LP returns their
+  union. Only species that drain into a leaking reaction are zero now.
+
 # dMod2 0.8.2
 
 * `steadyStates(version = "1.4")` prints the resolved expressions through sympy
