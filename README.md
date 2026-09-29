@@ -53,6 +53,32 @@ Working on the package itself is easier from a checkout.
 `cppDE` installs the same way and has to be built first: dMod2 compiles
 the generated model sources against its headers.
 
+### Optional system dependency: msolve
+
+`symmetryDetection(equilibrate = TRUE)` requires
+[msolve](https://msolve.lip6.fr) (0.10) for steady states with more than
+two coupled states. Install it as a system package,
+
+| Platform      | Command                   |
+|:--------------|:--------------------------|
+| Debian/Ubuntu | `sudo apt install msolve` |
+| Fedora        | `sudo dnf install msolve` |
+| macOS         | `brew install msolve`     |
+
+or build it into a per-user cache and re-install dMod2:
+
+``` r
+dMod2::install_libs("msolve")
+```
+
+`./configure` uses, in this order, `DMOD2_MSOLVE=<path>`, a build during
+the install (`DMOD2_BUILD_MSOLVE=1`), the per-user cache, and the
+`PATH`. Not available on Windows. To see what was detected:
+
+``` r
+writeLines(readLines(system.file("msolveConfig.dcf", package = "dMod2")))
+```
+
 ## Building a model
 
 Models are assembled from four kinds of function objects that compose

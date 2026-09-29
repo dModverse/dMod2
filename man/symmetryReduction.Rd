@@ -20,29 +20,21 @@ symmetryReduction(
 \arguments{
 \item{object}{A \code{symmetrydetection} result from \code{\link[=symmetryDetection]{symmetryDetection()}}.}
 
-\item{fixed}{Character vector of coordinates with known values, as in
-\code{summary(object, fixed = )}. Scaling directions they remove are dropped, and
-they are not used as gauge. Unknown names are ignored with a warning.}
+\item{fixed}{Coordinates with known values; scalings they remove are dropped.}
 
-\item{positive}{Coordinates known to be positive, the domain of every
-certificate: \code{TRUE} (default) for all, \code{FALSE} for none, or a character vector.
-Unknown names are ignored with a warning.}
+\item{positive}{Coordinates known to be positive: \code{TRUE} (default, all),
+\code{FALSE} (none) or a character vector.}
 
-\item{dPoly}{Degree bound of the polynomial invariant search and numerator
-degree bound of the rational search with a monomial denominator.}
+\item{dPoly}{Degree bound of polynomial and rational invariants.}
 
 \item{dDarboux}{Degree bound of the Darboux polynomials.}
 
-\item{dExp}{Numerator degree bound of the exponential factors
-\eqn{\exp(g/h)}{exp(g/h)}; \code{0} skips this stage. Its entries may contain
-\code{exp()} and \code{log()}, which \code{\link[=P]{P()}} accepts and \code{symmetryDetection(trafo = )}
-accepts without \code{log()}.}
+\item{dExp}{Numerator degree bound of exponential factors; \code{0} skips them.}
 
-\item{separable}{Logical (default \code{TRUE}). Solve blocks whose components depend
-only on their own coordinate by quadratures.}
+\item{separable}{Logical. Solve separable blocks by quadratures.}
 
-\item{reportZeroCompatibility}{Logical (default \code{FALSE}). Report the zero limits
-of each block, see Details. Needs one exact solve per coordinate.}
+\item{reportZeroCompatibility}{Logical. Report which coordinates each block can
+drive to 0.}
 
 \item{verbose}{Logical. Report the progress per block and stage.}
 
@@ -51,74 +43,32 @@ of each block, see Details. Needs one exact solve per coordinate.}
 \value{
 An object of class \code{symmetryreduction}:
 \describe{
-\item{\code{blocks}}{one entry per set of coupled directions: \code{labels}, \code{type},
-\code{kind}, \code{support}, \code{stage}, \code{invariants}, \code{certificates}, \code{transversal},
-\code{pins}, \code{section} and \code{face} (the section of the chart and whether it is a
-face), \code{survivorMeaning} (the invariant each \verb{q_<k>} or, for a scaling,
-each remaining coordinate carries), \code{carrierDomain} (\code{"positive"} or
-\code{"real"} per \verb{q_<k>}),
-\code{coverage} (\code{"total"} or \code{"partial"}), \code{moduleCombos}, \code{status}
-(\code{"fixed"}, \code{"reduced"}, \code{"invariantOnly"} or \code{"unresolved"}), \code{reason}
-and \code{zeroCompatibility}.}
-\item{\code{zeroCompatibility}}{\code{NULL} unless \code{reportZeroCompatibility = TRUE},
-else one row per set of coordinates that vanish together: \code{verdict}
-(\code{"yes"}, \code{"if"}, \code{"no"} or \code{"unknown"}), \code{limit} (\code{TRUE} if the zero is
-only approached asymptotically), \code{certain} (\code{FALSE} if the invariants are
-incomplete), \code{condition} and \code{at}.}
+\item{\code{blocks}}{one entry per set of coupled directions, with its
+\code{invariants}, \code{section}, \code{survivorMeaning} (the invariant each \verb{q_<k>}
+carries), \code{carrierDomain}, \code{coverage} and \code{status} (\code{"fixed"},
+\code{"reduced"}, \code{"invariantOnly"} or \code{"unresolved"}).}
+\item{\code{zeroCompatibility}}{with \code{reportZeroCompatibility = TRUE}, the sets of
+coordinates that can vanish together and the \code{condition} for it.}
 \item{\code{trafo}}{an \link{eqnvec} over all coordinates for \code{\link[=P]{P()}} or
 \code{symmetryDetection(trafo = )}; \code{NULL} if nothing was reduced.}
 \item{\code{family}}{the admissible gauges of each reduced block.}
 \item{\code{removed}, \code{remaining}}{labels of the directions.}
 \item{\code{coordinates}, \code{fixed}, \code{settings}, \code{call}}{provenance.}
 }
-\code{print()} shows the verdict, the trafo, the new parameters and the zero limits.
-\code{summary()} adds one line per block, \code{summary(verbose = TRUE)} the admissible
-gauges and the invariants.
+\code{print()} shows the verdict, the trafo and the new parameters, \code{summary()} one
+line per block.
 }
 \description{
 Turns the non-identifiable directions of a \code{\link[=symmetryDetection]{symmetryDetection()}} result into a
-parameter transformation that removes them. Scaling directions are removed
-through their integer weight lattice: one coordinate per independent weight is
-fixed to 1 and the others keep their names. General directions go through an
-exact invariant search of increasing complexity: monomial, polynomial up to
-degree \code{dPoly}, separable quadratures, rational with a monomial denominator,
-Darboux polynomials up to degree \code{dDarboux} and exponential factors up to degree
-\code{dExp}. Each stage that fails leaves a certificate. The invariants of a reduced
-general block are carried by new parameters \verb{q_<k>}; \code{print()} lists the
-invariant behind each \verb{q_<k>} and the section the chart takes, with the reason it
-was chosen.
+parameter transformation that removes them. A scaling fixes one coordinate to 1.
+A general direction is replaced by its invariants, carried by new parameters
+\verb{q_<k>}, searched up to the degree bounds \code{dPoly}, \code{dDarboux} and \code{dExp}.
 }
 \details{
-A scaling that shares coordinates with a general direction is fixed on
-a coordinate outside every general direction's support when one exists;
-otherwise it joins that direction's block. Coordinates that a block's
-generators see only through their sum, such as \code{Km + R1 + R2}, are searched
-as one variable.
-
-A block is first tried with a face section: \code{r} of its coordinates set to 0,
-where \code{r} is the number of its directions. The face is taken when every orbit
-of the positive orthant reaches it once with every other coordinate positive
-(the face point, solved from the invariants, is certified positive), and no
-denominator of the model vanishes on it. The chart then switches the face
-coordinates off, e.g. all leaks of a compartment model but one, and each
-remaining coordinate of the block becomes a \verb{q_<k>} carrying the value it takes
-on the face. Otherwise the gauge is a section of monomial balances, equal shares
-of a sum invariant, or constant pins.
-
-A chart is returned only if it is certified on the domain declared by
-\code{positive}: every solved entry must be positive for all admissible values of
-the new parameters. An entry of a coordinate that is not declared positive only
-needs to be real where the fixed coordinates of the block move by translation,
-as a state inside \code{exp()} does. An invariant that takes both signs gives a
-real-valued parameter, marked \verb{[real-valued]} and to be estimated on a linear
-scale; the gauge is then fixed at \eqn{1 + \sum_l q_l^2}{1 + sum_l q_l^2}. A
-chart certified only for positive values of such a parameter has
-\code{coverage = "partial"}.
-
-With \code{reportZeroCompatibility = TRUE} each block reports which coordinates the
-symmetry can drive to 0 without another coordinate diverging. Where this
-depends on the parameters, the condition is returned as an R expression in the
-coordinates.
+A chart is returned only if it is valid on the domain declared by
+\code{positive}. A \verb{q_<k>} that takes both signs is marked \verb{[real-valued]} and is
+estimated on a linear scale; a chart valid only for its positive values has
+\code{coverage = "partial"}. \code{print()} lists the invariant behind each \verb{q_<k>}.
 }
 \examples{
 \dontrun{

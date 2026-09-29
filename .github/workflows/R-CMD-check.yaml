@@ -71,6 +71,28 @@ jobs:
           # binaries zstd compressed and pak cannot unpack them.
           use-public-rspm: always
 
+      # msolve, cached per build script
+      - name: Locate the msolve cache
+        if: runner.os != 'Windows'
+        id: mscache
+        shell: bash
+        run: echo "dir=$(Rscript -e 'cat(tools::R_user_dir("dMod2", "cache"))')" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/cache@v4
+        if: runner.os != 'Windows'
+        with:
+          path: ${{ steps.mscache.outputs.dir }}
+          key: msolve-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('inst/tools/build-msolve.sh') }}
+
+      - name: Build msolve
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          if ! ls "${{ steps.mscache.outputs.dir }}"/deps-msolve-*/bin/msolve >/dev/null 2>&1; then
+            DMOD2_LIBS_CACHE="${{ steps.mscache.outputs.dir }}" DMOD2_JOBS=4 \
+              CC="$(R CMD config CC)" sh inst/tools/build-msolve.sh
+          fi
+
       - uses: r-lib/actions/setup-r-dependencies@v2
         with:
           extra-packages: any::rcmdcheck
@@ -123,9 +145,31 @@ jobs:
             harfbuzz-devel fribidi-devel freetype-devel libpng-devel \
             libtiff-devel libjpeg-turbo-devel pandoc \
             python3 python3-pip python3-sympy python3-numpy python3-scipy \
-            python3-libsbml
+            python3-libsbml m4 tar xz
 
       - uses: actions/checkout@v5
+
+      # msolve, cached per build script
+      - name: Locate the msolve cache
+        if: runner.os != 'Windows'
+        id: mscache
+        shell: bash
+        run: echo "dir=$(Rscript -e 'cat(tools::R_user_dir("dMod2", "cache"))')" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/cache@v4
+        if: runner.os != 'Windows'
+        with:
+          path: ${{ steps.mscache.outputs.dir }}
+          key: msolve-fedora-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('inst/tools/build-msolve.sh') }}
+
+      - name: Build msolve
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          if ! ls "${{ steps.mscache.outputs.dir }}"/deps-msolve-*/bin/msolve >/dev/null 2>&1; then
+            DMOD2_LIBS_CACHE="${{ steps.mscache.outputs.dir }}" DMOD2_JOBS=4 \
+              CC="$(R CMD config CC)" sh inst/tools/build-msolve.sh
+          fi
 
       - uses: r-lib/actions/setup-r-dependencies@v2
         with:

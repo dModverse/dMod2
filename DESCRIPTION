@@ -1,7 +1,7 @@
 Package: dMod2
 Type: Package
 Title: Dynamic Modeling and Parameter Estimation in ODE Models
-Version: 0.10.1
+Version: 0.10.2
 Date: 2026-09-29
 Authors@R: c(
     person("Simon", "Beyer", email = "simon.beyer@fdm.uni-freiburg.de",
@@ -62,6 +62,8 @@ Imports:
 Remotes:
     dModverse/cppDE,
     dkaschek/cOde
+SystemRequirements: msolve (optional; for symmetryDetection(equilibrate = TRUE)
+    when a steady state couples more than two states, see install_libs())
 Suggests:
     knitr,
     rmarkdown,

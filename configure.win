@@ -1,0 +1,5 @@
+#!/bin/sh
+# msolve is not supported on Windows.
+mkdir -p inst
+printf 'available: FALSE\n' > inst/msolveConfig.dcf
+exit 0

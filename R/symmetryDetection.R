@@ -15,16 +15,11 @@
 #'   * `"scaling"`: scaling symmetries only, from an exact integer kernel. Ignores
 #'     `equilibrate`.
 #'
-#'   All engines accept `exp()`, `exp10()`, `b^x`, `sinh()`, `cosh()` and `tanh()`
-#'   of states and parameters. `log()`, fractional powers and `abs()` of
-#'   coordinates declared `positive` are analysed in \eqn{L_v = \log v} and
-#'   reported in \eqn{v}. The symbol `time` is the model time, known at the start
-#'   of the analysis. Otherwise `"observability"` with `symEngine = "modular"`
-#'   requires rational expressions, up to free power exponents `x^n`, observables
-#'   `a*log(h) + c` with a number `a`, and `sin()`, `cos()`, `tan()`, `cot()`,
-#'   `sec()` and `csc()` of a rational argument whose constant part is a rational
-#'   number plus a multiple of `pi/2`. The methods are described in
-#'   `vignette("Symmetries")`.
+#'   All engines accept `exp()`, `exp10()`, `b^x` and hyperbolic functions, and
+#'   `log()`, fractional powers and `abs()` of `positive` coordinates. `time` is the
+#'   model time. `"observability"` with `symEngine = "modular"` otherwise requires
+#'   rational expressions, free exponents `x^n`, observables `a*log(h) + c` and
+#'   trigonometric functions of rational arguments. See `vignette("Symmetries")`.
 #'
 #' @param f Right-hand sides: an [eqnlist], an [eqnvec] or a named character vector.
 #'   `reduceCQ` needs an [eqnlist].
@@ -61,52 +56,36 @@
 #' @param fixed Character vector of known symbols. For `"observability"` a fixed
 #'   parameter is a known constant and a fixed state has no unknown initial value;
 #'   for `"polynomial"` a fixed symbol does not transform.
-#' @param gaugePreference `"observability"` only. `FALSE` (default) reports every
-#'   non-identifiable direction as it comes. Otherwise the analysis runs in two steps:
-#'   rank and the exact scalings first, without reconstruction; then one coordinate per
-#'   scaling is fixed (the gauge) and only the general directions are reconstructed,
-#'   now over fewer parameters and in the gauge a fit would use. `NULL` chooses the
-#'   gauge freely, a character vector ranks the coordinates to fix, most preferred
-#'   first, with `*` as a wildcard (`"scale_*"`). Among equally ranked coordinates,
-#'   those outside the general directions are fixed first, which leaves those
-#'   directions untouched by the gauge. The gauge is always a valid one: a coordinate
-#'   enters only if it adds to the rank of the scaling weights. The scalings are
-#'   reported as found, the general directions in the gauge, and `$gauge` names it;
-#'   `print()`, `summary()` and [symmetryReduction()] use it as `fixed` by default.
+#' @param gaugePreference `"observability"` only. `FALSE` (default) reconstructs
+#'   every direction. Otherwise one coordinate per scaling is fixed first and only
+#'   the general directions are reconstructed in that gauge. `NULL` chooses the
+#'   gauge, a character vector ranks the coordinates to fix (`*` as wildcard). The
+#'   gauge is returned as `$gauge` and used as `fixed` by `print()`, `summary()` and
+#'   [symmetryReduction()].
 #' @param equilibrate Logical, `"observability"` only. Start at a steady state of
-#'   `f` with the inputs at 0 instead of at free initial values. The earliest events
-#'   apply on top; initial values in `trafo` are ignored. Not available for
-#'   exponentials of states.
-#' @param reduceCQ Logical, [eqnlist] only. `FALSE` (default) keeps every species
-#'   and reports the freedom of a conserved moiety on the initial value of one
-#'   species. `TRUE` eliminates one species per conserved quantity and reports the
-#'   freedom on a total named after [getTotals()], which `fixed` or `trafo` can fix.
-#'   Both give the same verdict. Set to `FALSE` with a warning when `trafo` gives the
+#'   `f` with the inputs at 0 instead of at free initial values; the earliest events
+#'   apply on top and initial values in `trafo` are ignored. Not available for
+#'   exponentials of states. Steady states with more than two coupled states need
+#'   msolve, see [install_libs()].
+#' @param reduceCQ Logical, [eqnlist] only. `FALSE` (default) reports the freedom
+#'   of a conserved moiety on the initial value of one species, `TRUE` on its total,
+#'   named after [getTotals()]. Set to `FALSE` with a warning when `trafo` gives the
 #'   initial value of a moiety species.
-#' @param freeInitial Character vector of states, at most one per conserved
-#'   quantity, that carry the free resting value of their moiety under
-#'   `equilibrate = TRUE, reduceCQ = FALSE`. Invalid choices are dropped; ignored
-#'   with a warning otherwise.
-#' @param positive Coordinates known to be positive, as in [symmetryReduction()]:
-#'   `TRUE` (default) for all, `FALSE` for none, or a character vector. Sets the
-#'   domain on which `completeGenerator` has a flow for every `s`.
+#' @param freeInitial States, at most one per conserved quantity, carrying the free
+#'   resting value of their moiety under `equilibrate = TRUE, reduceCQ = FALSE`.
+#' @param positive Coordinates known to be positive: `TRUE` (default, all),
+#'   `FALSE` (none) or a character vector.
 #' @param reconstruct Logical, `"observability"` only. Return general directions as
-#'   exact rational functions instead of their support. A direction that cannot be
-#'   reconstructed or verified keeps `explicit = FALSE`.
-#' @param verify Logical (default `TRUE`), `"observability"` only. Where the Lie
-#'   order is not certified (`$info$lieCertified`), check that the rank has
-#'   saturated and warn if not. `DMOD_SYM_VERIFY_MARGIN` (default 6) sets how far
-#'   the check looks; the result is in `$info$verification`.
-#' @param cores Number of threads for `"observability"`, shared between the
-#'   steady-state solves and the kernel. `"polynomial"` and `"scaling"` run
-#'   serially.
+#'   exact rational functions instead of their support.
+#' @param verify Logical, `"observability"` only. Check that the rank has saturated
+#'   where the Lie order is not certified; the result is in `$info$verification`.
+#' @param cores Number of threads, `"observability"` only.
 #' @param control A [reconstControl()] list for the `"observability"` engine.
 #' @param polynomial A [polynomialControl()] list for the `"polynomial"` engine.
 #' @param scaling A [scalingControl()] list for the `"scaling"` engine.
-#' @param symEngine For `"observability"`: `"modular"` (default) computes over
-#'   finite fields and scales to large models; `"symbolic"` is an exact sympy
-#'   computation for small models, without `equilibrate` and later events.
-#' @param verbose Logical (default `TRUE`). Print the result on return.
+#' @param symEngine `"observability"` only: `"modular"` (default, finite fields) or
+#'   `"symbolic"` (sympy, small models, without `equilibrate` and later events).
+#' @param verbose Logical. Print the result.
 #'
 #' @return An object of class `symmetrydetection`:
 #'   \describe{
@@ -116,37 +95,24 @@
 #'     \item{`rank`, `dim`}{rank of the observability matrix and number of
 #'       coordinates; `NA` for `"scaling"` and `"polynomial"`.}
 #'     \item{`symmetries`}{the directions, each a generator
-#'       \eqn{X = \sum_i \eta_i \partial_{z_i}} with `generator` (the components
-#'       \eqn{\eta_i} by coordinate), `weights` (integer weights of a scaling, else
-#'       `NULL`), `type` (`"scaling"`, removed by fixing one coordinate of the support, or
-#'       `"general"`, removed by [symmetryReduction()]), `degree` (`-1` if not
-#'       polynomial), `support`, `explicit`, `reason`, `certified`,
-#'       `transformation` (`"polynomial"` only), `verified`, `display` (factored
-#'       components for printing), `completeGenerator` (`factor * generator`, with
-#'       a flow for every `s` on the domain set by `positive`) and `factor`.}
+#'       \eqn{X = \sum_i \eta_i \partial_{z_i}}: `generator` (\eqn{\eta} by
+#'       coordinate), `weights` (a scaling's integer weights), `type` (`"scaling"` or
+#'       `"general"`), `degree`, `support`, `explicit`, `reason`, `certified`,
+#'       `transformation` (`"polynomial"` only), `verified`, `display`,
+#'       `completeGenerator` and `factor`.}
 #'     \item{`info`}{`engine`, the Lie order and its certification
 #'       (`lieOrderUsed`, `lieOrderDriver`, `lieBudget`, `liePlateau`,
 #'       `lieCertified`), `gapOrderUsed`, `conditions`, `segments`, `coordinates`,
 #'       `settings`, `elapsed` and `verification`.}
 #'     \item{`call`}{the matched call.}
 #'   }
-#'   `print()` shows the verdict and the generators, `summary()` adds the
-#'   computation and `summary(verbose = TRUE)` the settings. Both take `fixed`, a
-#'   candidate set of fixed coordinates, and report whether it removes every
-#'   scaling direction, and `width`.
+#'   `print()` shows the verdict and the generators, `summary()` also the
+#'   computation. Both take `fixed`, coordinates to test as a gauge, and `width`.
 #'
-#' @details Events after the earliest one split the time line into segments. The
-#'   analysis starts at the earliest event, so only an event placed there shows its
-#'   transient. A dose on a species that `reduceCQ = TRUE` eliminates is not seen.
-#'
-#'   An exponential of a state enters the `"observability"` engine as an auxiliary
-#'   state whose initial value is a further coordinate, tied to the others by its
-#'   differential. The `"polynomial"` and `"scaling"` engines treat it as an
-#'   independent variable. Both are exact, since exponentials of exponents that are
-#'   linearly independent over the rationals are algebraically independent (Ax
-#'   1971). A trigonometric function of \eqn{u} enters the `"observability"` engine
-#'   the same way, through \eqn{\tan(u/2)}, in which sine and cosine are rational.
-#'   Directions are reported in \eqn{\sin} and \eqn{\cos} of the full angle.
+#' @details The analysis starts at the earliest event; later events split the time
+#'   line into segments. A dose on a species that `reduceCQ = TRUE` eliminates is not
+#'   seen. Exponentials and trigonometric functions of states enter as auxiliary
+#'   states; directions are reported in the original functions.
 #'
 #' @note The interface, defaults and output structure may still change.
 #'
@@ -154,8 +120,6 @@
 #'   Merkt B, Timmer J, Kaschek D (2015). Higher-order Lie symmetries in
 #'   identifiability and predictability analysis of dynamic models. Physical
 #'   Review E 92, 012920. \doi{10.1103/PhysRevE.92.012920}
-#'
-#'   Ax J (1971). On Schanuel's conjectures. Annals of Mathematics 93, 252-268.
 #'
 #' @examples
 #' \dontrun{
@@ -566,6 +530,7 @@ symmetryDetection <- function(f = NULL, g = NULL, trafo = NULL,
   sysmod <- reticulate::import("sys", convert = TRUE)
   if (!(code_dir %in% sysmod$path)) sysmod$path <- c(code_dir, sysmod$path)
   sd <- reticulate::import("symmetryDetection", convert = TRUE)
+  reticulate::py_set_attr(sd, "_MSOLVE_PATH", .msolvePath())
 
   # abs() and sign() resolved by the declared signs; max, min and steps refused
   if (any(grepl("\\b(abs|sign|max|min|pmax|pmin|ifelse|Heaviside)\\s*\\(",
@@ -1169,12 +1134,12 @@ symmetryDetection <- function(f = NULL, g = NULL, trafo = NULL,
 # the rest reconstructed as rational functions by interpolation per prime, Chinese
 # remaindering and rational reconstruction. No floating point.
 
-# four primes < 2^31 (their product < 2^124, within unsigned __int128)
-.symPrimes <- c(2147483647, 2147483629, 2147483587, 2147483579)
+# four primes below 1518500213, msolve's bound for FGLM
+.symPrimes <- c(1518500183, 1518500173, 1518500171, 1518500143)
 
 # a fifth prime, disjoint from the reconstruction primes, used only to certify a
 # reconstructed direction against the nullspace at a fresh evaluation
-.symVerifyPrime <- 2147483563
+.symVerifyPrime <- 1518500141
 
 # TRUE once the reconstruction is past reconstControl(timeout =); `deadline` is a
 # POSIXct set at its start, or NULL
@@ -1350,17 +1315,17 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
 
 # A stream of distinct primes used as generic evaluation coordinates; grows on
 # demand so the interpolation never runs out of sample points.
-# A sample point of residues drawn uniformly from [1, 2^31 - 2] by the MINSTD
-# generator (exact in doubles: 48271 * x < 2^53), deterministic in `seed`. Generic with
-# probability 1 - deg/p over GF(p), unlike the prime pool, whose small values satisfy
-# additive relations (2 + 3 = 5).
+# A sample point of residues below the smallest prime by the MINSTD generator (exact in
+# doubles), deterministic in `seed`. Generic with probability 1 - deg/p, unlike the prime
+# pool, whose small values satisfy additive relations (2 + 3 = 5).
 .symRandomPoint <- function(n, seed = 1L) {
   m <- 2147483647; x <- (1234567 * seed + 89) %% m
   if (x == 0) x <- 1
   out <- integer(n)
   for (i in seq_len(n)) {
     x <- (48271 * x) %% m
-    out[i] <- as.integer(x)
+    r <- x %% min(.symPrimes)
+    out[i] <- as.integer(if (r == 0) 1 else r)
   }
   out
 }
@@ -1834,8 +1799,8 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
                                   scaling, stateColNames, paramNames, recast, sd, spy, ctrl,
                                   physCols, models, realStateNames, solveParamNames, solveHeld,
                                   acIn = NULL, listAnchors = FALSE) {
-  # three 31-bit primes (~2^93) suffice for small coefficients; each costs a kernel pass
-  rp8 <- unique(as.integer(c(.symPrimes, 2147483563, 2147483549, 2147483543, 2147483497)))
+  # three 30-bit primes (~2^91) suffice for small coefficients; each costs a kernel pass
+  rp8 <- unique(as.integer(c(.symPrimes, 1518500141, 1518500131, 1518500101, 1518500077)))
   nPrimeFwd <- max(2L, min(3L, length(rp8) - 1L))
   primes <- rp8[seq_len(nPrimeFwd)]; qv <- rp8[length(primes) + 1L]; P1 <- primes[1]
   dirSupport <- NULL   # this direction's support, set once its anchor is known
@@ -2619,7 +2584,8 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
   # frame; returns TRUE or an error string
   codeDir <- system.file("code", package = "dMod2")
   pyPath  <- Sys.getenv("RETICULATE_PYTHON")
-  initFun <- function(codeDir, pyPath) {
+  msPath  <- .msolvePath()
+  initFun <- function(codeDir, pyPath, msPath) {
     tryCatch({
       if (!requireNamespace("reticulate", quietly = TRUE)) stop("no reticulate")
       if (nzchar(pyPath)) {
@@ -2631,13 +2597,14 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
       sysmod <- reticulate::import("sys", convert = TRUE)
       if (!(codeDir %in% sysmod$path)) sysmod$path <- c(codeDir, sysmod$path)
       # an option persists across tasks on the same node
-      options(dMod.sym.worker_sd =
-                reticulate::import("symmetryDetection", convert = TRUE))
+      sdw <- reticulate::import("symmetryDetection", convert = TRUE)
+      reticulate::py_set_attr(sdw, "_MSOLVE_PATH", msPath)
+      options(dMod.sym.worker_sd = sdw)
       TRUE
     }, error = function(e) conditionMessage(e))
   }
   environment(initFun) <- globalenv()
-  res <- tryCatch(parallel::clusterCall(cl, initFun, codeDir, pyPath),
+  res <- tryCatch(parallel::clusterCall(cl, initFun, codeDir, pyPath, msPath),
                   error = function(e) list(conditionMessage(e)))
   ok <- all(vapply(res, isTRUE, logical(1)))
   if (!isTRUE(ok)) {
@@ -2941,7 +2908,8 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
           recast = if (length(recast)) recast else NULL, lVals = pv$lVals,
           jointMode = TRUE,
           heldStates = if (length(heldNames)) pv$heldVals else NULL),
-          error = function(e) NULL)
+          # a missing msolve is an error, not a failed point
+          error = function(e) if (grepl("needs msolve", conditionMessage(e))) stop(e) else NULL)
         solveSecs <<- solveSecs + as.numeric(Sys.time() - .tSolve, units = "secs")
         solveN <<- solveN + 1L
         # per-solve trace, also from forked children

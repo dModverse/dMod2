@@ -25,6 +25,7 @@
 # symengine backend accelerates the symbolic build.
 
 import io
+import os
 import sys
 import math
 import tokenize
@@ -48,9 +49,9 @@ _EXACT = True
 _BACKEND = "sympy"
 _warned_symengine = False
 
-# primes < 2**31 so int64 products stay < 2**62 during modular elimination
-_PRIMES = [2147483647, 2147483629, 2147483587, 2147483579,
-           2147483563, 2147483549, 2147483543, 2147483497]
+# primes below 1518500213, msolve's bound for FGLM
+_PRIMES = [1518500183, 1518500173, 1518500171, 1518500143,
+           1518500141, 1518500131, 1518500101, 1518500077]
 
 
 # ---- utilities: parsing, symbol tables, modular nullspace & rational reconstruction --
@@ -1368,29 +1369,23 @@ def _emit_tape_shared(fexpr, gexpr, slotOf, base):
 
 
 _ssModularCache = {}
-# coupled-subsystem solutions keyed by the canonical system mod p, so a call whose
-# coupled part is unchanged (e.g. a probe perturbing an unrelated parameter) reuses
-# the solution instead of recomputing a Groebner basis
-_coupledCache = {}
 # compiled t0 event value/derivative term lists keyed by the event tuple and the
 # parameter order
 _eventCompileCache = {}
 
-# force the symbolic steady-state solve; a test seam to cross-check it against the
-# compiled linear plan
-_SS_FORCE_SYMPY = False
+# test seam: force the per-point solve
+_SS_FORCE_POINT = False
 
 # force the numeric per-point steady-state seed; a test seam to cross-check it
 # against the compiled steady-state IC tape
 _FORCE_CONSTRAINT_SEED = False
 
 
-def setSteadyStateForceSympy(on=True):
-    """Force the symbolic steady-state solve and return the previous setting; a test
-    seam to cross-check it against the compiled linear plan."""
-    global _SS_FORCE_SYMPY
-    prev = _SS_FORCE_SYMPY
-    _SS_FORCE_SYMPY = bool(on)
+def setSteadyStateForcePointSolve(on=True):
+    """Force the per-point steady-state solve; returns the previous setting."""
+    global _SS_FORCE_POINT
+    prev = _SS_FORCE_POINT
+    _SS_FORCE_POINT = bool(on)
     return prev
 
 
@@ -1446,23 +1441,6 @@ def _bipoly(expr, stateGens, paramGens):
         ct = _poly_terms(coef, paramGens)
         out.append((tuple(int(m) for m in sm), ct))
     return out
-
-
-def _eval_bipoly(bip, stateGens, paramvals, p):
-    """Rebuild the state-polynomial at numeric parameter values mod p: each
-    state-monomial scaled by its parameter coefficient, evaluated via _eval_terms
-    at `paramvals` (the coefficients are functions of the parameters only)."""
-    terms = []
-    for sm, ct in bip:
-        c = _eval_terms(ct, paramvals, p)
-        if c == 0:
-            continue
-        mono = spy.Integer(c)
-        for k, e in enumerate(sm):
-            if e:
-                mono = mono * stateGens[k] ** int(e)
-        terms.append(mono)
-    return spy.Add(*terms) if terms else spy.Integer(0)
 
 
 def _solve_mod(A, B, p):
@@ -1868,181 +1846,13 @@ def _compile_linear_plan(polys, solveStates, paramSyms):
     return True, [(str(s), _poly_terms(sol[s], paramSyms)) for s in solveStates]
 
 
-def _coupled_groebner(residPolys, remaining, p):
-    """Interior point of the coupled residual system (sympy polynomials in
-    `remaining` over GF(p)) by a saturated grevlex Groebner basis, FGLM to a
-    triangular lex basis (direct lex as fallback) and interior-root
-    back-substitution. Returns (sol-dict, None) or (None, failure-dict)."""
-    remaining = list(remaining)
-    try:
-        ckey = (p, tuple(str(v) for v in remaining), tuple(sorted(
-            tuple(sorted((tuple(int(e) for e in m), int(c) % p)
-                         for m, c in spy.Poly(pl, *remaining).terms()))
-            for pl in residPolys)))
-    except Exception:
-        ckey = None
-    cached = _coupledCache.get(ckey) if ckey is not None else None
-    if cached is not None:
-        if cached == 'NONE':
-            return None, {'ok': False, 'why': 'no consistent interior point'}
-        return {spy.Symbol(k): spy.Integer(val) for k, val in cached}, None
-    if len(remaining) == 1:
-        # one coupled variable: its interior value is a nonzero root of any residual
-        # that contains it at which all residuals vanish
-        v = remaining[0]
-        cand = next((pl for pl in residPolys
-                     if v in spy.sympify(pl).free_symbols), None)
-        if cand is not None:
-            try:
-                roots = spy.Poly(cand, v, modulus=p).ground_roots()
-            except Exception:
-                roots = {}
-            residE1 = [spy.sympify(pl) for pl in residPolys]
-            for r in roots:
-                rr = int(r) % p
-                if rr == 0:
-                    continue
-                if all(int(e.subs(v, rr)) % p == 0 for e in residE1):
-                    if ckey is not None:
-                        _coupledCache[ckey] = ((str(v), rr),)
-                    return {v: spy.Integer(rr)}, None
-    w = spy.Symbol('_w_sat_')
-    prod = spy.Integer(1)
-    for s in remaining:
-        prod = prod * s
-    sat = residPolys + [w * prod - 1]
-    try:
-        G = spy.groebner(sat, w, *remaining, order='grevlex', modulus=p)
-        basis = [g for g in G.fglm('lex')
-                 if w not in spy.sympify(g).free_symbols]
-    except Exception:
-        try:
-            G = spy.groebner(sat, w, *remaining, order='lex', modulus=p)
-        except Exception as e:
-            return None, {'ok': False, 'why': 'groebner: %s' % e}
-        basis = [g for g in G.exprs if w not in g.free_symbols]
-    rvars = list(reversed(remaining))
-    rset = set(remaining)
-    residE = [spy.sympify(pl) for pl in residPolys]
-
-    def backtrack(i, partial):
-        if i == len(rvars):
-            for e in residE:
-                if int(e.subs(partial)) % p != 0:
-                    return None
-            return partial
-        v = rvars[i]
-        cand = None
-        for g in basis:
-            gg = spy.sympify(g).subs(partial)
-            if gg.free_symbols & rset == {v}:
-                cand = gg
-                break
-        if cand is None:
-            return None
-        try:
-            roots = spy.Poly(cand, v, modulus=p).ground_roots()
-        except Exception:
-            return None
-        for r in roots:
-            rr = int(r) % p
-            if rr == 0:
-                continue
-            nxt = dict(partial)
-            nxt[v] = spy.Integer(rr)
-            got = backtrack(i + 1, nxt)
-            if got is not None:
-                return got
-        return None
-
-    rsol = backtrack(0, {})
-    if rsol is None:
-        if ckey is not None:
-            _coupledCache[ckey] = 'NONE'
-        return None, {'ok': False, 'why': 'no consistent interior point'}
-    if ckey is not None:
-        _coupledCache[ckey] = tuple((str(k), int(v) % p) for k, v in rsol.items())
-    return rsol, None
-
-
-def _solve_states_modular(polysN, solveStates, p):
-    """Interior point of f = 0 over GF(p) from the per-point specialized state
-    polynomials `polysN`. Eliminates linearly where possible; a coupled residual goes
-    to _solve_states_reduced, else to a saturated Groebner basis with interior-root
-    back-substitution. Returns (sol, None) on success or (None, failure-dict)."""
-    sol = {}
-    elim = []
-    remaining = list(solveStates)
-    remSet = set(remaining)
-    remPolys = list(polysN)
-    progress = True
-    while progress and remaining:
-        progress = False
-        for idx, pl in enumerate(remPolys):
-            if pl is None:
-                continue
-            present = pl.free_symbols & remSet
-            if not present:
-                continue
-            picked = None
-            # deterministic pivot order (by name), so the chosen interior point is
-            # reproducible across runs and matches _solve_states_fast bit-for-bit
-            for v in sorted(present, key=str):
-                pv = spy.Poly(pl, v)
-                if pv.degree() != 1:
-                    continue
-                a = pv.nth(1)
-                if a.free_symbols & remSet or int(a) % p == 0:
-                    continue
-                b = pv.nth(0)
-                expr = _reduce_modp(-b * pow(int(a) % p, p - 2, p), p)
-                picked = (v, expr)
-                break
-            if picked is None:
-                continue
-            v, expr = picked
-            elim.append((v, expr))
-            remPolys[idx] = None
-            for j in range(len(remPolys)):
-                if remPolys[j] is not None and v in remPolys[j].free_symbols:
-                    remPolys[j] = _reduce_modp(remPolys[j].subs(v, expr), p)
-            remaining.remove(v)
-            remSet.discard(v)
-            progress = True
-
-    # coupled residual: the reduced solve on the full system (as in _solve_states_fast),
-    # else the saturated Groebner basis
-    if remaining:
-        dps = []
-        for pl in polysN:
-            d = {}
-            for m, c in spy.Poly(pl, *solveStates).terms():
-                c = int(c) % p
-                if c:
-                    d[tuple(int(e) for e in m)] = c
-            dps.append(d)
-        red = _solve_states_reduced(dps, list(solveStates), p)
-        if red is not None:
-            return red
-        residPolys = [pl for pl in remPolys if pl is not None]
-        sol, fail = _coupled_groebner(residPolys, remaining, p)
-        if fail is not None:
-            return None, fail
-
-    # resolve the eliminated states to numbers, latest first
-    for v, expr in reversed(elim):
-        sol[v] = spy.Integer(_modp_rational(expr.subs(sol), p))
-    return sol, None
-
-
 # ---- fast numeric state solve (dict polynomials mod p, no sympy in the hot loop) ----
-# Same elimination as _solve_states_modular (same pivots, residual and root;
-# cross-checked via _SS_FORCE_SYMPY) on dicts {state-exponent-tuple: coeff mod p},
-# avoiding sympy per point; only a coupled residual goes to _solve_states_reduced, or
-# to _coupled_groebner for a core of more than two states.
+# Linear elimination on dict polynomials; a coupled core goes to _solve_states_reduced
+# (up to two states) or to msolve.
 
 def _eval_bipoly_dict(bip, paramvals, p):
-    """Dict analogue of _eval_bipoly: {state-exponent-tuple: coeff mod p}."""
+    """The state polynomial at numeric parameter values mod p, as a dict
+    {state-exponent-tuple: coeff}."""
     d = {}
     for sm, ct in bip:
         c = _eval_terms(ct, paramvals, p)
@@ -2087,10 +1897,10 @@ def _dp_subst(d, i, expr, nv, p):
 
 def _solve_states_fast(dps, solveStates, p):
     """Interior point of f = 0 over GF(p) from the per-point state polynomials in dict
-    form. Linear elimination by dict-polynomial substitution mod p, a coupled residual by
-    _solve_states_reduced or _coupled_groebner, then numeric back-substitution. Returns
-    (sol {Symbol: Integer}, None) or (None, fail-dict). Mirrors _solve_states_modular's
-    elimination exactly."""
+    form. Linear elimination by dict-polynomial substitution mod p, then numeric
+    back-substitution; a coupled residual goes to _solve_states_reduced (core of at most
+    two states) or _solve_states_msolve. Returns (sol {Symbol: Integer}, None) or
+    (None, fail-dict)."""
     nv = len(solveStates)
     dps0 = dps
     dps = [dict(d) for d in dps]
@@ -2144,23 +1954,7 @@ def _solve_states_fast(dps, solveStates, p):
         red = _solve_states_reduced(dps0, solveStates, p)
         if red is not None:
             return red
-        resid = []
-        for d in dps:
-            if not d:
-                continue
-            e = spy.Integer(0)
-            for m, c in d.items():
-                term = spy.Integer(c)
-                for i in coupledIdx:
-                    if m[i]:
-                        term = term * solveStates[i] ** int(m[i])
-                e = e + term
-            resid.append(e)
-        coupledSyms = [solveStates[i] for i in coupledIdx]
-        rsol, fail = _coupled_groebner(resid, coupledSyms, p)
-        if fail is not None:
-            return None, fail
-        sol.update({k: spy.Integer(int(v) % p) for k, v in rsol.items()})
+        return _solve_states_msolve(dps0, solveStates, p)
 
     valById = {i: int(sol[solveStates[i]]) % p for i in coupledIdx}
     for i, expr in reversed(elim):     # resolve eliminated vars numerically, latest first
@@ -2439,6 +2233,137 @@ def _solve_states_reduced(dps, solveStates, p):
     return None, {'ok': False, 'why': 'no consistent interior point'}
 
 
+# ---- coupled solve by msolve ----------------------------------------------------------
+# Constant pivots first (rational pivots add spurious components); the rest goes to
+# msolve, saturated by w * prod(x) - 1, as x_i = -p_i(t) / d(t) over the roots of h(t).
+
+_MSOLVE_TIMEOUT = 600
+_MSOLVE_PATH = ""        # set by R
+
+
+class MsolveMissing(RuntimeError):
+    pass
+
+
+def _msolve_binary():
+    """Path of the msolve executable."""
+    path = _MSOLVE_PATH or os.environ.get("DMOD_MSOLVE", "")
+    if not path or not os.path.isfile(path):
+        raise MsolveMissing(
+            "symmetryDetection(equilibrate = TRUE): this steady state needs msolve; "
+            "see dMod2::install_libs(\"msolve\").")
+    return path
+
+
+def _const_reduce(dps, nv, p):
+    """Eliminate pivots x_i = -b/a0 with constant a0. Returns (plan, rest), plan as
+    (i, b, 1/a0) in elimination order."""
+    dps = [dict(d) for d in dps if d]
+    plan = []
+    while True:
+        pick = None
+        for j, d in enumerate(dps):
+            for i in range(nv):
+                if not any(m[i] for m in d) or max(m[i] for m in d) != 1:
+                    continue
+                cs = _dp_coeffs(d, i)
+                a = cs[1]
+                if len(a) == 1 and not any(next(iter(a))):
+                    pick = (j, i, cs.get(0, {}), pow(next(iter(a.values())) % p, p - 2, p))
+                    break
+            if pick:
+                break
+        if pick is None:
+            return plan, dps
+        j, i, b, inv = pick
+        dps.pop(j)
+        plan.append((i, b, inv))
+        a1 = {tuple([0] * nv): 1}
+        b1 = {m: c * inv % p for m, c in b.items()}      # x_i = -(b * inv)
+        dps = [(_dp_subst_rat(d, i, a1, b1, nv, p) if any(m[i] for m in d) else d) for d in dps]
+        dps = [d for d in dps if d]
+
+
+def _msolve_points(polys, vars_idx, nv, p):
+    """Interior points of `polys` over GF(p). Returns a list of {index: value} or a
+    fail-dict."""
+    import ast, subprocess, tempfile
+    names = {i: "x%d" % i for i in vars_idx}
+
+    def pstr(d):
+        out = []
+        for m, c in d.items():
+            mono = "*".join(names[i] + ("^%d" % m[i] if m[i] > 1 else "") for i in vars_idx if m[i])
+            out.append("%d*%s" % (c % p, mono) if mono else "%d" % (c % p))
+        return "+".join(out) or "0"
+
+    eqs = [pstr(d) for d in polys] + ["w*" + "*".join(names[i] for i in vars_idx) + "-1"]
+    vs = [names[i] for i in vars_idx] + ["w"]
+    with tempfile.TemporaryDirectory() as td:
+        fi, fo = os.path.join(td, "in.ms"), os.path.join(td, "out.ms")
+        with open(fi, "w") as fh:
+            fh.write(", ".join(vs) + "\n" + str(p) + "\n" + ",\n".join(eqs) + "\n")
+        r = subprocess.run([_msolve_binary(), "-f", fi, "-o", fo, "-P", "1", "-t", "1"],
+                           capture_output=True, text=True, timeout=_MSOLVE_TIMEOUT)
+        txt = open(fo).read() if os.path.exists(fo) else ""
+    if r.returncode != 0 or "too large" in (r.stdout + r.stderr) or not txt.strip():
+        return {'ok': False, 'why': 'msolve failed: %s' % (r.stdout + r.stderr).strip()[-200:]}
+    data = ast.literal_eval(txt.strip().rstrip(":"))
+    if data[0] != 0:
+        return {'ok': False, 'why': 'positive-dimensional steady state'}
+    _, nvar, deg, vnames, lin, par = data[1]
+    if deg <= 0 or par[0] != 1:
+        return {'ok': False, 'why': 'no consistent interior point'}
+    elim, den, params = par[1][0][1], par[1][1][1], par[1][2]
+    lin = [int(c) % p for c in lin]
+    last = len(vnames) - 1
+    if lin[last] == 0:
+        return {'ok': False, 'why': 'msolve: unexpected linear form'}
+    idxOf = {names[i]: i for i in vars_idx}
+
+    def ev(coeffs, x):          # coefficients lowest degree first
+        acc = 0
+        for c in reversed(coeffs):
+            acc = (acc * x + c) % p
+        return acc
+
+    out = []
+    for t in _gf_roots(list(reversed([int(c) % p for c in elim])), p):
+        dv = ev(den, t)
+        if dv == 0:
+            continue
+        dinv = pow(dv, p - 2, p)
+        vals = {}
+        for k, q in enumerate(params):
+            vals[vnames[k]] = (-ev(q[0][1], t)) * dinv % p
+        # last variable from the linear form
+        rest = (t - sum(lin[k] * vals[vnames[k]] for k in range(last))) % p
+        vals[vnames[last]] = rest * pow(lin[last], p - 2, p) % p
+        out.append({idxOf[nm]: v for nm, v in vals.items() if nm in idxOf})
+    return out
+
+
+def _solve_states_msolve(dps, solveStates, p):
+    """Interior point of f = 0 over GF(p), checked against f."""
+    nv = len(solveStates)
+    plan, rest = _const_reduce(dps, nv, p)
+    varsLeft = sorted({i for d in rest for m in d for i in range(nv) if m[i]})
+    if rest and not varsLeft:
+        return None, {'ok': False, 'why': 'no consistent interior point'}
+    cands = _msolve_points(rest, varsLeft, nv, p) if rest else [{}]
+    if isinstance(cands, dict):
+        return None, cands
+    for cand in cands:
+        vals = [0] * nv
+        for i, v in cand.items():
+            vals[i] = v
+        for i, b, inv in reversed(plan):
+            vals[i] = (-_dp_value(b, vals, p)) * inv % p
+        if all(vals) and all(_dp_value(d, vals, p) == 0 for d in dps):
+            return {solveStates[i]: spy.Integer(vals[i]) for i in range(nv)}, None
+    return None, {'ok': False, 'why': 'no consistent interior point'}
+
+
 def _compile_t0events(events, paramNames):
     """Compile each t0 event's value and its parameter derivatives to
     prime-independent term lists over the parameters, so a point evaluates by
@@ -2561,7 +2486,7 @@ def solveSteadyStateModular(model, stateNames, paramNames, paramVals, prime,
         ppvals = [(heldStates[str(th)] if str(th) in heldStates
                    else int(paramVals.get(str(th), 0)) % p) for th in pointParams]
         sub = None
-        if pointGenericLinear and not _SS_FORCE_SYMPY:
+        if pointGenericLinear and not _SS_FORCE_POINT:
             sub = {}
             for nm, terms in pointLinTerms:
                 val = _eval_terms_guarded(terms, ppvals, p)
@@ -2583,7 +2508,7 @@ def solveSteadyStateModular(model, stateNames, paramNames, paramVals, prime,
         # evaluated in integer arithmetic; a vanishing pivot denominator mod p (None)
         # routes the point to the symbolic solve
         sol = None
-        if genericLinear and not _SS_FORCE_SYMPY:
+        if genericLinear and not _SS_FORCE_POINT:
             sol = {}
             for nm, terms in linTerms:
                 val = _eval_terms_guarded(terms, paramvals, p)
@@ -2592,12 +2517,8 @@ def solveSteadyStateModular(model, stateNames, paramNames, paramVals, prime,
                     break
                 sol[spy.Symbol(nm)] = spy.Integer(val)
         if sol is None:
-            if _SS_FORCE_SYMPY:
-                polysN = [_eval_bipoly(bip, list(solveStates), paramvals, p) for bip in polyBi]
-                sol, fail = _solve_states_modular(polysN, solveStates, p)
-            else:
-                dps = [_eval_bipoly_dict(bip, paramvals, p) for bip in polyBi]
-                sol, fail = _solve_states_fast(dps, list(solveStates), p)
+            dps = [_eval_bipoly_dict(bip, paramvals, p) for bip in polyBi]
+            sol, fail = _solve_states_fast(dps, list(solveStates), p)
             if fail is not None:
                 return fail
 

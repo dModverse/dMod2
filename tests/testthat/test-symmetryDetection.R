@@ -400,14 +400,14 @@ test_that("equilibrate applies a t0 dose on top of the resting state", {
 })
 
 
-test_that("the compiled steady-state seed matches the symbolic solve", {
+test_that("the compiled steady-state seed matches the per-point solve", {
   if (!.sympy_works()) skip("reticulate/sympy not available")
 
-  # The compiled linear-elimination seed must reproduce the symbolic solve
+  # The compiled linear-elimination seed must reproduce the per-point solve
   # bit-for-bit mod p, including the implicit-function parameter duals and t0
-  # event composition. setSteadyStateForceSympy toggles the symbolic path.
+  # event composition. setSteadyStateForcePointSolve toggles the per-point path.
   sd <- .sd_module()
-  primes <- c(2147483647, 2147483629, 2147483587)
+  primes <- c(1518500183, 1518500173, 1518500171)
   cases <- list(
     list(model = "x = b - a*x", states = "x", params = c("a", "b"), ev = NULL),
     list(model = c("x = b - a*x", "y = c*x - d*y"), states = c("x", "y"),
@@ -418,13 +418,13 @@ test_that("the compiled steady-state seed matches the symbolic solve", {
   for (cs in cases) for (p in primes) for (seed in 4:8) {
     pv <- as.list(setNames((seed * 7 + seq_along(cs$params) * 131 + 11) %% p,
                            cs$params))
-    sd$setSteadyStateForceSympy(FALSE)
+    sd$setSteadyStateForcePointSolve(FALSE)
     fast <- sd$solveSteadyStateModular(cs$model, cs$states, cs$params, pv, p,
                                        t0events = cs$ev)
-    sd$setSteadyStateForceSympy(TRUE)
+    sd$setSteadyStateForcePointSolve(TRUE)
     symb <- sd$solveSteadyStateModular(cs$model, cs$states, cs$params, pv, p,
                                        t0events = cs$ev)
-    sd$setSteadyStateForceSympy(FALSE)
+    sd$setSteadyStateForcePointSolve(FALSE)
     expect_identical(fast$ok, symb$ok)
     expect_identical(fast$xstar, symb$xstar)
     expect_identical(fast$dx, symb$dx)
@@ -432,39 +432,42 @@ test_that("the compiled steady-state seed matches the symbolic solve", {
 })
 
 
-test_that("the fast numeric solve matches the symbolic solve on a coupled steady state", {
+test_that("a coupled steady state is a root of f by the resultant and by msolve", {
   if (!.sympy_works()) skip("reticulate/sympy not available")
+  skip_if(!nzchar(dMod2:::.msolvePath()), "msolve not available")
 
-  # A steady state that is NOT generically linear (a bilinear A*B core, so the
-  # genericLinear/linTerms fast path does not fire) must still solve bit-for-bit mod p
-  # via the fast dict-polynomial numeric elimination (_solve_states_fast): linear
-  # states eliminated by modular arithmetic, the coupled residual by the reduced solve.
-  # setSteadyStateForceSympy toggles the reference symbolic path (_solve_states_modular).
+  # bilinear A*B core: the resultant and msolve each return an interior root
   sd <- .sd_module()
   model <- c("A = kp  - kd*A  - kf*A*B + kr*C",
              "B = kpB - kdB*B - kf*A*B + kr*C",
              "C = kf*A*B - kr*C - kdC*C")
   states <- c("A", "B", "C")
   params <- c("kp", "kd", "kf", "kr", "kpB", "kdB", "kdC")
-  on.exit(sd$setSteadyStateForceSympy(FALSE))
-
-  primes <- c(2147483647, 2147483629, 2147483587)
-  nfeasible <- 0L
-  for (p in primes) for (seed in 3:12) {
+  rhs <- sub("^[^=]*=\\s*", "", model)
+  py <- reticulate::py_run_string(paste(
+    "import symmetryDetection as _sdm",
+    "def _both(model, states, params, pv, p):",
+    "    c = _sdm._ss_compile(model, states, params, set())",
+    "    vals = [int(pv.get(str(th), 0)) % p for th in c[0]]",
+    "    dps = [_sdm._eval_bipoly_dict(b, vals, p) for b in c[8]]",
+    "    red = _sdm._solve_states_reduced(dps, list(c[1]), p)",
+    "    ms = _sdm._solve_states_msolve(dps, list(c[1]), p)",
+    "    f = lambda r: None if r is None or r[0] is None else {str(k): int(v) for k, v in r[0].items()}",
+    "    return f(red), f(ms)", sep = "\n"), convert = TRUE)
+  nboth <- 0L
+  for (p in c(1518500183, 1518500173)) for (seed in 3:12) {
     pv <- as.list(setNames((seed * (seq_along(params) + 3L) + 7L) %% p, params))
-    sd$setSteadyStateForceSympy(FALSE)
-    fast <- sd$solveSteadyStateModular(model, states, params, pv, p, jointMode = TRUE)
-    sd$setSteadyStateForceSympy(TRUE)
-    symb <- sd$solveSteadyStateModular(model, states, params, pv, p, jointMode = TRUE)
-    expect_identical(fast$ok, symb$ok)
-    if (isTRUE(fast$ok)) {
-      expect_identical(fast$valBy, symb$valBy)
-      expect_identical(fast$dfJx, symb$dfJx)
-      expect_identical(fast$dfJt, symb$dfJt)
-      nfeasible <- nfeasible + 1L
+    r <- py$`_both`(model, states, params, pv, as.integer(p))
+    for (sol in r) if (!is.null(sol)) {
+      x <- unlist(sol)[states]
+      expect_true(all(x != 0))
+      for (e in rhs)
+        expect_identical(sd$evalRationalMod(e, c(states, params), c(x, unlist(pv)), p), 0L)
     }
+    expect_identical(is.null(r[[1]]), is.null(r[[2]]))
+    if (!is.null(r[[2]])) nboth <- nboth + 1L
   }
-  expect_gt(nfeasible, 0L)   # at least some points exercised the coupled solve
+  expect_gt(nboth, 0L)
 })
 
 
@@ -473,7 +476,7 @@ test_that("a coupled steady state solves by substitution and a resultant", {
 
   # a receptor loop with a Michaelis-Menten degradation by its own inhibitor and an
   # output cascade: the output is peeled, the rest reduces to a core of two states,
-  # solved without a Groebner basis (_coupled_groebner is replaced by a failing stub)
+  # solved in process (_solve_states_msolve is replaced by a failing stub)
   sd <- .sd_module()
   model <- c("R  = ktr*M - kint*R + krec*Ri - kdeg*R*S/(Km + R + Ri)",
              "Ri = kint*R - krec*Ri - kdi*Ri - kdeg*Ri*S/(Km + R + Ri)",
@@ -486,14 +489,14 @@ test_that("a coupled steady state solves by substitution and a resultant", {
               "kdsm", "kpm", "kdm", "ko", "kdo")
   reticulate::py_run_string(paste(
     "import symmetryDetection as _sdm",
-    "_sdm._cg_saved = _sdm._coupled_groebner",
-    "def _cg_fail(*a, **k): raise RuntimeError('groebner')",
-    "_sdm._coupled_groebner = _cg_fail", sep = "\n"))
+    "_sdm._ms_saved = _sdm._solve_states_msolve",
+    "def _ms_fail(*a, **k): raise RuntimeError('msolve')",
+    "_sdm._solve_states_msolve = _ms_fail", sep = "\n"))
   on.exit(reticulate::py_run_string(
-    "import symmetryDetection as _sdm\n_sdm._coupled_groebner = _sdm._cg_saved"))
+    "import symmetryDetection as _sdm\n_sdm._solve_states_msolve = _sdm._ms_saved"))
   rhs <- sub("^[^=]*=\\s*", "", model)
   nok <- 0L
-  for (p in c(2147483647, 2147483629)) for (seed in 1:8) {
+  for (p in c(1518500183, 1518500173)) for (seed in 1:8) {
     pv <- as.list(setNames((seed * 104729 + seq_along(params) * 7919) %% p, params))
     out <- sd$solveSteadyStateModular(model, states, params, pv, p, jointMode = TRUE)
     if (!isTRUE(out$ok)) next
@@ -504,6 +507,53 @@ test_that("a coupled steady state solves by substitution and a resultant", {
       expect_identical(sd$evalRationalMod(e, c(states, params), c(x, unlist(pv)), p), 0L)
   }
   expect_gt(nok, 0L)
+})
+
+
+test_that("a steady state coupling more than two states is solved by msolve", {
+  if (!.sympy_works()) skip("reticulate/sympy not available")
+  skip_if(!nzchar(dMod2:::.msolvePath()), "msolve not available")
+
+  # no linear pivot: a core of three states
+  sd <- .sd_module()
+  model <- c("A = ka - k1*A^2*B^2 - k4*A^2*C^2 - kda*A^2",
+             "B = kb - k2*B^2*C^2 - k5*A^2*B^2 - kdb*B^2",
+             "C = kc - k3*C^2*A^2 - k6*B^2*C^2 - kdc*C^2")
+  states <- c("A", "B", "C")
+  params <- c("ka", "kb", "kc", "k1", "k2", "k3", "k4", "k5", "k6", "kda", "kdb", "kdc")
+  rhs <- sub("^[^=]*=\\s*", "", model)
+  nok <- 0L
+  for (p in c(1518500183L, 1518500173L)) for (seed in 1:6) {
+    pv <- as.list(setNames((seed * 104729 + seq_along(params) * 7919) %% p, params))
+    out <- sd$solveSteadyStateModular(model, states, params, pv, p, jointMode = TRUE)
+    if (!isTRUE(out$ok)) next
+    nok <- nok + 1L
+    x <- unlist(out$valBy)[states]
+    expect_true(all(x != 0))
+    for (e in rhs)
+      expect_identical(sd$evalRationalMod(e, c(states, params), c(x, unlist(pv)), p), 0L)
+  }
+  expect_gt(nok, 0L)
+})
+
+
+test_that("a coupled steady state without msolve stops with an install hint", {
+  if (!.sympy_works()) skip("reticulate/sympy not available")
+  sd <- .sd_module()
+  os <- reticulate::import("os")
+  old <- os$environ$get("PATH")
+  reticulate::py_set_attr(sd, "_MSOLVE_PATH", "")
+  os$environ$update(list(DMOD_MSOLVE = "", PATH = tempdir()))
+  on.exit({ os$environ$update(list(PATH = old))
+            reticulate::py_set_attr(sd, "_MSOLVE_PATH", dMod2:::.msolvePath()) })
+  model <- c("A = ka - k1*A^2*B^2 - k4*A^2*C^2 - kda*A^2",
+             "B = kb - k2*B^2*C^2 - k5*A^2*B^2 - kdb*B^2",
+             "C = kc - k3*C^2*A^2 - k6*B^2*C^2 - kdc*C^2")
+  params <- c("ka", "kb", "kc", "k1", "k2", "k3", "k4", "k5", "k6", "kda", "kdb", "kdc")
+  pv <- as.list(setNames(seq_along(params) * 7919 + 104729, params))
+  expect_error(sd$solveSteadyStateModular(model, c("A", "B", "C"), params, pv,
+                                          1518500183L, jointMode = TRUE),
+               "install_libs")
 })
 
 

@@ -81,3 +81,4 @@ tests/testthat/Rplots.pdf
 # lives in dev/planSymmetry.md
 bench/motifs/results*/
 bench/motifs/reactions_for_Alyssa*
+inst/msolveConfig.dcf

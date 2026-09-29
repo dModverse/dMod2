@@ -45,3 +45,4 @@
 ^[^/]+\.(o|so|dll)$
 ^Rplots\.pdf$
 ^examples$
+^inst/msolveConfig\.dcf$

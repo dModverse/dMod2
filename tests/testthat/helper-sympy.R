@@ -15,7 +15,9 @@
   code_dir <- system.file("code", package = "dMod2")
   sysmod <- reticulate::import("sys", convert = TRUE)
   if (!(code_dir %in% sysmod$path)) sysmod$path <- c(code_dir, sysmod$path)
-  reticulate::import("symmetryDetection", convert = TRUE)
+  sd <- reticulate::import("symmetryDetection", convert = TRUE)
+  reticulate::py_set_attr(sd, "_MSOLVE_PATH", dMod2:::.msolvePath())
+  sd
 }
 
 

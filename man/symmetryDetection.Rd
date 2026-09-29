@@ -56,18 +56,12 @@ passed as it is. A parameter that enters only through \code{k = "exp(lk)"},
 parameter is a known constant and a fixed state has no unknown initial value;
 for \code{"polynomial"} a fixed symbol does not transform.}
 
-\item{gaugePreference}{\code{"observability"} only. \code{FALSE} (default) reports every
-non-identifiable direction as it comes. Otherwise the analysis runs in two steps:
-rank and the exact scalings first, without reconstruction; then one coordinate per
-scaling is fixed (the gauge) and only the general directions are reconstructed,
-now over fewer parameters and in the gauge a fit would use. \code{NULL} chooses the
-gauge freely, a character vector ranks the coordinates to fix, most preferred
-first, with \code{*} as a wildcard (\code{"scale_*"}). Among equally ranked coordinates,
-those outside the general directions are fixed first, which leaves those
-directions untouched by the gauge. The gauge is always a valid one: a coordinate
-enters only if it adds to the rank of the scaling weights. The scalings are
-reported as found, the general directions in the gauge, and \verb{$gauge} names it;
-\code{print()}, \code{summary()} and \code{\link[=symmetryReduction]{symmetryReduction()}} use it as \code{fixed} by default.}
+\item{gaugePreference}{\code{"observability"} only. \code{FALSE} (default) reconstructs
+every direction. Otherwise one coordinate per scaling is fixed first and only
+the general directions are reconstructed in that gauge. \code{NULL} chooses the
+gauge, a character vector ranks the coordinates to fix (\code{*} as wildcard). The
+gauge is returned as \verb{$gauge} and used as \code{fixed} by \code{print()}, \code{summary()} and
+\code{\link[=symmetryReduction]{symmetryReduction()}}.}
 
 \item{forcings}{Character vector of input states. For \code{"observability"} an input
 starts at 0 and is held at 0 in the steady state; for \code{"polynomial"} and
@@ -88,38 +82,29 @@ initial value, one named like a constant state sets its value. A direction is
 reported only if it is non-identifiable in every condition.}
 
 \item{equilibrate}{Logical, \code{"observability"} only. Start at a steady state of
-\code{f} with the inputs at 0 instead of at free initial values. The earliest events
-apply on top; initial values in \code{trafo} are ignored. Not available for
-exponentials of states.}
+\code{f} with the inputs at 0 instead of at free initial values; the earliest events
+apply on top and initial values in \code{trafo} are ignored. Not available for
+exponentials of states. Steady states with more than two coupled states need
+msolve, see \code{\link[=install_libs]{install_libs()}}.}
 
-\item{reduceCQ}{Logical, \link{eqnlist} only. \code{FALSE} (default) keeps every species
-and reports the freedom of a conserved moiety on the initial value of one
-species. \code{TRUE} eliminates one species per conserved quantity and reports the
-freedom on a total named after \code{\link[=getTotals]{getTotals()}}, which \code{fixed} or \code{trafo} can fix.
-Both give the same verdict. Set to \code{FALSE} with a warning when \code{trafo} gives the
+\item{reduceCQ}{Logical, \link{eqnlist} only. \code{FALSE} (default) reports the freedom
+of a conserved moiety on the initial value of one species, \code{TRUE} on its total,
+named after \code{\link[=getTotals]{getTotals()}}. Set to \code{FALSE} with a warning when \code{trafo} gives the
 initial value of a moiety species.}
 
-\item{freeInitial}{Character vector of states, at most one per conserved
-quantity, that carry the free resting value of their moiety under
-\verb{equilibrate = TRUE, reduceCQ = FALSE}. Invalid choices are dropped; ignored
-with a warning otherwise.}
+\item{freeInitial}{States, at most one per conserved quantity, carrying the free
+resting value of their moiety under \verb{equilibrate = TRUE, reduceCQ = FALSE}.}
 
 \item{reconstruct}{Logical, \code{"observability"} only. Return general directions as
-exact rational functions instead of their support. A direction that cannot be
-reconstructed or verified keeps \code{explicit = FALSE}.}
+exact rational functions instead of their support.}
 
-\item{positive}{Coordinates known to be positive, as in \code{\link[=symmetryReduction]{symmetryReduction()}}:
-\code{TRUE} (default) for all, \code{FALSE} for none, or a character vector. Sets the
-domain on which \code{completeGenerator} has a flow for every \code{s}.}
+\item{positive}{Coordinates known to be positive: \code{TRUE} (default, all),
+\code{FALSE} (none) or a character vector.}
 
-\item{verify}{Logical (default \code{TRUE}), \code{"observability"} only. Where the Lie
-order is not certified (\verb{$info$lieCertified}), check that the rank has
-saturated and warn if not. \code{DMOD_SYM_VERIFY_MARGIN} (default 6) sets how far
-the check looks; the result is in \verb{$info$verification}.}
+\item{verify}{Logical, \code{"observability"} only. Check that the rank has saturated
+where the Lie order is not certified; the result is in \verb{$info$verification}.}
 
-\item{cores}{Number of threads for \code{"observability"}, shared between the
-steady-state solves and the kernel. \code{"polynomial"} and \code{"scaling"} run
-serially.}
+\item{cores}{Number of threads, \code{"observability"} only.}
 
 \item{control}{A \code{\link[=reconstControl]{reconstControl()}} list for the \code{"observability"} engine.}
 
@@ -127,11 +112,10 @@ serially.}
 
 \item{scaling}{A \code{\link[=scalingControl]{scalingControl()}} list for the \code{"scaling"} engine.}
 
-\item{symEngine}{For \code{"observability"}: \code{"modular"} (default) computes over
-finite fields and scales to large models; \code{"symbolic"} is an exact sympy
-computation for small models, without \code{equilibrate} and later events.}
+\item{symEngine}{\code{"observability"} only: \code{"modular"} (default, finite fields) or
+\code{"symbolic"} (sympy, small models, without \code{equilibrate} and later events).}
 
-\item{verbose}{Logical (default \code{TRUE}). Print the result on return.}
+\item{verbose}{Logical. Print the result.}
 }
 \value{
 An object of class \code{symmetrydetection}:
@@ -142,24 +126,19 @@ An object of class \code{symmetrydetection}:
 \item{\code{rank}, \code{dim}}{rank of the observability matrix and number of
 coordinates; \code{NA} for \code{"scaling"} and \code{"polynomial"}.}
 \item{\code{symmetries}}{the directions, each a generator
-\eqn{X = \sum_i \eta_i \partial_{z_i}} with \code{generator} (the components
-\eqn{\eta_i} by coordinate), \code{weights} (integer weights of a scaling, else
-\code{NULL}), \code{type} (\code{"scaling"}, removed by fixing one coordinate of the support, or
-\code{"general"}, removed by \code{\link[=symmetryReduction]{symmetryReduction()}}), \code{degree} (\code{-1} if not
-polynomial), \code{support}, \code{explicit}, \code{reason}, \code{certified},
-\code{transformation} (\code{"polynomial"} only), \code{verified}, \code{display} (factored
-components for printing), \code{completeGenerator} (\code{factor * generator}, with
-a flow for every \code{s} on the domain set by \code{positive}) and \code{factor}.}
+\eqn{X = \sum_i \eta_i \partial_{z_i}}: \code{generator} (\eqn{\eta} by
+coordinate), \code{weights} (a scaling's integer weights), \code{type} (\code{"scaling"} or
+\code{"general"}), \code{degree}, \code{support}, \code{explicit}, \code{reason}, \code{certified},
+\code{transformation} (\code{"polynomial"} only), \code{verified}, \code{display},
+\code{completeGenerator} and \code{factor}.}
 \item{\code{info}}{\code{engine}, the Lie order and its certification
 (\code{lieOrderUsed}, \code{lieOrderDriver}, \code{lieBudget}, \code{liePlateau},
 \code{lieCertified}), \code{gapOrderUsed}, \code{conditions}, \code{segments}, \code{coordinates},
 \code{settings}, \code{elapsed} and \code{verification}.}
 \item{\code{call}}{the matched call.}
 }
-\code{print()} shows the verdict and the generators, \code{summary()} adds the
-computation and \code{summary(verbose = TRUE)} the settings. Both take \code{fixed}, a
-candidate set of fixed coordinates, and report whether it removes every
-scaling direction, and \code{width}.
+\code{print()} shows the verdict and the generators, \code{summary()} also the
+computation. Both take \code{fixed}, coordinates to test as a gauge, and \code{width}.
 }
 \description{
 Finds the directions in parameters and initial values along which
@@ -178,30 +157,17 @@ with generators and finite transformations. The cost grows with
 \code{equilibrate}.
 }
 
-All engines accept \code{exp()}, \code{exp10()}, \code{b^x}, \code{sinh()}, \code{cosh()} and \code{tanh()}
-of states and parameters. \code{log()}, fractional powers and \code{abs()} of
-coordinates declared \code{positive} are analysed in \eqn{L_v = \log v} and
-reported in \eqn{v}. The symbol \code{time} is the model time, known at the start
-of the analysis. Otherwise \code{"observability"} with \code{symEngine = "modular"}
-requires rational expressions, up to free power exponents \code{x^n}, observables
-\code{a*log(h) + c} with a number \code{a}, and \code{sin()}, \code{cos()}, \code{tan()}, \code{cot()},
-\code{sec()} and \code{csc()} of a rational argument whose constant part is a rational
-number plus a multiple of \code{pi/2}. The methods are described in
-\code{vignette("Symmetries")}.
+All engines accept \code{exp()}, \code{exp10()}, \code{b^x} and hyperbolic functions, and
+\code{log()}, fractional powers and \code{abs()} of \code{positive} coordinates. \code{time} is the
+model time. \code{"observability"} with \code{symEngine = "modular"} otherwise requires
+rational expressions, free exponents \code{x^n}, observables \code{a*log(h) + c} and
+trigonometric functions of rational arguments. See \code{vignette("Symmetries")}.
 }
 \details{
-Events after the earliest one split the time line into segments. The
-analysis starts at the earliest event, so only an event placed there shows its
-transient. A dose on a species that \code{reduceCQ = TRUE} eliminates is not seen.
-
-An exponential of a state enters the \code{"observability"} engine as an auxiliary
-state whose initial value is a further coordinate, tied to the others by its
-differential. The \code{"polynomial"} and \code{"scaling"} engines treat it as an
-independent variable. Both are exact, since exponentials of exponents that are
-linearly independent over the rationals are algebraically independent (Ax
-1971). A trigonometric function of \eqn{u} enters the \code{"observability"} engine
-the same way, through \eqn{\tan(u/2)}, in which sine and cosine are rational.
-Directions are reported in \eqn{\sin} and \eqn{\cos} of the full angle.
+The analysis starts at the earliest event; later events split the time
+line into segments. A dose on a species that \code{reduceCQ = TRUE} eliminates is not
+seen. Exponentials and trigonometric functions of states enter as auxiliary
+states; directions are reported in the original functions.
 }
 \note{
 The interface, defaults and output structure may still change.
@@ -254,6 +220,4 @@ file.edit(system.file("examples", "symmetryExponentials.R", package = "dMod2"))
 Merkt B, Timmer J, Kaschek D (2015). Higher-order Lie symmetries in
 identifiability and predictability analysis of dynamic models. Physical
 Review E 92, 012920. \doi{10.1103/PhysRevE.92.012920}
-
-Ax J (1971). On Schanuel's conjectures. Annals of Mathematics 93, 252-268.
 }

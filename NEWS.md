@@ -1,13 +1,12 @@
 # dMod2 (development version)
 
-* `symmetryDetection(equilibrate = TRUE)` solves the coupled steady state without a
-  Groebner basis. Outputs (a state in a single balance) are peeled and solved last,
-  the rest is eliminated by substitution, rational where the pivot coefficient
-  depends on other states, and a core of up to two states is solved by a resultant
-  and univariate roots over GF(p). Every candidate is checked against f = 0; larger
-  cores keep the Groebner basis. On a TGF-beta model (43 states, 38 conditions) one
-  resting state takes 0.35 s instead of 280 s, and the detection finishes in 5 min
-  (rank 96 / 113, 17 scalings) where it ran over 60 min without a result.
+* `symmetryDetection(equilibrate = TRUE)` solves coupled steady states without a
+  sympy Groebner basis: linear elimination, a resultant for cores of up to two
+  states, msolve beyond. Without msolve such a steady state is an error.
+* New `install_libs()`: builds msolve into the per-user cache, or passes
+  `"sundials"` and `"suitesparse"` to `cppDE::install_libs()`.
+* `configure` locates msolve and records it in `inst/msolveConfig.dcf`.
+* The modular engine uses primes below 1518500213.
 * `symmetryDetection(equilibrate = TRUE)` holds a state at zero in the conditions
   whose substitutions force it there (a plasmid at 0 leaves its transcript at 0), by
   the test already used for the forcings (vanishing production or a sink cluster).
