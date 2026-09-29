@@ -308,8 +308,15 @@ Xs.cppDE <- function(odemodel, forcings = NULL, events = NULL, names = NULL, con
   # Checkpoints of the value pass, for the backward pass that replays the same
   # trajectory. Matched on the point they were taken at, which is what cppDE
   # fingerprints the store on, so one can never answer for another parameter.
+  #
+  # A store answers any number of backward sweeps, so a lookup leaves it in
+  # place: a second sweep over the same trajectory replays it instead of
+  # integrating again. The cache keeps the most recently used ones, at least
+  # twice the widest batch the value pass has taken, and evicts the oldest.
   scache <- new.env(parent = emptyenv())
   scache$items <- list()
+  scache$width <- 0L
+  storeCap <- function() max(64L, 2L * scache$width)
   storeFind <- function(times, params) {
     it <- scache$items
     for (k in seq_along(it))
@@ -320,17 +327,21 @@ Xs.cppDE <- function(odemodel, forcings = NULL, events = NULL, names = NULL, con
   storePut <- function(times, params, store) {
     if (is.null(store)) return(invisible(NULL))
     k <- storeFind(times, params)
-    e <- list(times = times, params = params, store = store)
-    if (is.na(k)) scache$items[[length(scache$items) + 1L]] <- e
-    else scache$items[[k]] <- e
+    if (!is.na(k)) scache$items[[k]] <- NULL
+    scache$items[[length(scache$items) + 1L]] <-
+      list(times = times, params = params, store = store)
+    excess <- length(scache$items) - storeCap()
+    if (excess > 0L) scache$items <- scache$items[-seq_len(excess)]
     invisible(NULL)
   }
-  storeTake <- function(times, params) {
+  storeGet <- function(times, params) {
     k <- storeFind(times, params)
     if (is.na(k)) return(NULL)
-    st <- scache$items[[k]]$store
+    e <- scache$items[[k]]
+    # most recently used goes to the back
     scache$items[[k]] <- NULL
-    st
+    scache$items[[length(scache$items) + 1L]] <- e
+    e$store
   }
 
   # lambda of the previous evaluation, weighting the next one's step size. It
@@ -488,6 +499,7 @@ Xs.cppDE <- function(odemodel, forcings = NULL, events = NULL, names = NULL, con
     timesL <- if (is.list(times)) times else rep(list(times), n)
 
     if (keepStore && !deriv && has_store) {
+      scache$width <- max(scache$width, n)
       o      <- solveOpts(FALSE)
       paramL <- lapply(seq_len(n), function(i)
         c(unclass(parsList[[i]]), unclass(fixedList[[i]])))
@@ -569,10 +581,25 @@ Xs.cppDE <- function(odemodel, forcings = NULL, events = NULL, names = NULL, con
   # A cotangent only exists after the chain above has been walked, so this is a
   # second call over the same trajectory. It integrates nothing where the value
   # pass left its checkpoints behind, and replays the recorded steps instead.
-  P2Xvjp <- function(times, pars, fixed = NULL, cotangent) {
+  #
+  # `seeds = TRUE` reads the trailing axis as independent first-order seeds
+  # rather than as directions, and answers all of them in one backward sweep:
+  # cppDE carries one adjoint per seed column on the same trajectory.
+  P2Xvjp <- function(times, pars, fixed = NULL, cotangent, seeds = FALSE) {
     forcs <- forcsOf(controls$forcings)
     w <- .asCtOut(cotangent)
     K <- .ctK(w)
+    if (seeds) {
+      .requireReverse(has_reverse, has_reverse2, 1L)
+      params <- c(unclass(pars), unclass(fixed))
+      res <- do.call(cppDE::solveODE, c(
+        list(reversed, times, params, fixed = NULL,
+             forcings = forcs,
+             cotangent = .widenSeeds(w, dim_names$variable, controls$names),
+             store = if (has_store) storeGet(times, params)), solveOpts(FALSE)))
+      .requireAdjoint(res)
+      return(.pickCotangent(.adjointSeeds(res), names(pars)))
+    }
     .requireReverse(has_reverse, has_reverse2, K)
     states <- dim_names$variable
     ct <- .widenCotangent(w, states, controls$names)
@@ -589,7 +616,7 @@ Xs.cppDE <- function(odemodel, forcings = NULL, events = NULL, names = NULL, con
                    forcings = forcs, cotangent = ct$cotangent,
                    errWeights = weightGet(NULL, times),
                    adjointGrid = weightOn()),
-              if (K > 1L) NULL else list(store = storeTake(times, pr$params)))
+              if (K > 1L) NULL else list(store = storeGet(times, pr$params)))
     if (K > 1L) {
       if (is.null(pr$tangent))
         stop("a second-order cotangent needs the tangents the value pass ",
@@ -608,19 +635,45 @@ Xs.cppDE <- function(odemodel, forcings = NULL, events = NULL, names = NULL, con
   # Every condition's backward solve in one call, the way P2Xbatch does the
   # forward ones. Falls back to a loop where cppDE predates the entry point.
   P2Xvjpbatch <- function(times, parsList, fixedList, cotangentList, conditions,
-                          cores) {
+                          cores, seeds = FALSE) {
     forcs <- forcsOf(controls$forcings)
     wList <- lapply(cotangentList, .asCtOut)
     K <- max(vapply(wList, .ctK, 1L))
-    .requireReverse(has_reverse, has_reverse2, K)
     n <- length(parsList)
     timesL <- if (is.list(times)) times else rep(list(times), n)
     states <- dim_names$variable
-    o <- solveOpts(K > 1L)
-
     batch <- get0("solveODEBatch", envir = asNamespace("cppDE"), inherits = FALSE)
     condOf <- function(i)
       if (is.null(conditions)) NULL else conditions[[i]]
+
+    # Independent first-order seeds, each request with its own number of them.
+    if (seeds) {
+      .requireReverse(has_reverse, has_reverse2, 1L)
+      o <- solveOpts(FALSE)
+      conds <- lapply(seq_len(n), function(i) {
+        params <- c(unclass(parsList[[i]]), unclass(fixedList[[i]]))
+        cd <- list(times = timesL[[i]], parms = params,
+                   forcings = forcs,
+                   cotangent = .widenSeeds(wList[[i]], states, controls$names))
+        if (has_store) cd$store <- storeGet(timesL[[i]], params)
+        cd
+      })
+      res <- if (is.null(batch))
+        lapply(conds, function(a)
+          do.call(cppDE::solveODE,
+                  c(list(reversed, a$times, a$parms, fixed = NULL,
+                         forcings = a$forcings, cotangent = a$cotangent,
+                         store = a$store), o)))
+      else
+        do.call(batch, c(list(reversed, conditions = conds, cores = cores), o))
+      return(lapply(seq_len(n), function(i) {
+        .requireAdjoint(res[[i]], condOf(i))
+        .pickCotangent(.adjointSeeds(res[[i]]), names(parsList[[i]]))
+      }))
+    }
+
+    .requireReverse(has_reverse, has_reverse2, K)
+    o <- solveOpts(K > 1L)
     conds <- lapply(seq_len(n), function(i) {
       pr <- prep1(parsList[[i]], fixedList[[i]], K > 1L, FALSE)
       ct <- .widenCotangent(wList[[i]], states, controls$names)
@@ -641,7 +694,7 @@ Xs.cppDE <- function(odemodel, forcings = NULL, events = NULL, names = NULL, con
       # Only the store is first order only: cppDE refuses one under
       # forward-reverse, because a checkpoint's tangents do not outlive the
       # solve that took them.
-      cd$store <- storeTake(timesL[[i]], pr$params)
+      cd$store <- storeGet(timesL[[i]], pr$params)
       cd
     })
 

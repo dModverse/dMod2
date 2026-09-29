@@ -162,13 +162,15 @@ evalConditionResidual <- function(dataI, predictionI, pars,
 #' @param x Object of class [prdfn].
 #' @param errmodel Optional object of class [obsfn]. The error model may be
 #'   defined only for a subset of conditions.
-#' @param times Optional numeric vector of additional time points at which the
-#'   prediction function is evaluated. If NULL, time points are taken from the
-#'   data. Event times should be included here if the prediction model uses events.
-#' @param t0 Numeric. Start of the time grid, where the initial values take
-#'   effect. Defaults to 0. A vector named by condition gives each condition
-#'   its own start and its own grid. Fixed-time events before a condition's
-#'   start do not fire.
+#' @param times Optional time points at which the prediction is evaluated in
+#'   addition to the data times: a numeric vector for all conditions, which then
+#'   share one grid, or a list named by condition, which gives each condition
+#'   its own grid. The prediction of a condition starts at the first time of its
+#'   grid, where the initial values take effect, so a single time per condition
+#'   sets its start. A model built with `odemodel(..., includeTimeZero = TRUE)`,
+#'   the default, has 0 in every grid and so starts at 0 at the latest.
+#'   Fixed-time events before the start do not fire. Event times should be
+#'   included if the model uses events.
 #' @param attr.name Character string. The objective value is additionally
 #'   returned as an attribute of this name, and the sum of squares behind it
 #'   under `chi2`. Adding objectives pools the terms sharing an `attr.name`,
@@ -180,6 +182,78 @@ evalConditionResidual <- function(dataI, predictionI, pars,
 #'   (those with `value <= lloq` in the data). One of `"M1"` (drop BLOQ rows
 #'   from the objective), `"M3"` (censored log-likelihood, default), `"M4NM"`
 #'   or `"M4BEAL"` (truncated variants; require non-negative LOQ).
+#' @param multipleShootingControl `NULL` (default), `TRUE` or a list, which
+#'   turns on multiple shooting in [trust()]; `TRUE` is `list()`, every entry
+#'   at its default. It is a control of the objective, so
+#'   `controls(obj, "multipleShootingControl") <- list(...)` changes it and
+#'   `<- NULL` switches it off, on the objective or on a sum holding it:
+#'   \describe{
+#'     \item{`nodes`}{`"auto"` (default), `"transitions"`, or the times at
+#'       which the time axis is cut into segments, a numeric vector for all
+#'       conditions or a list named by condition. The start of a condition's
+#'       grid is always a node; a node at or after the last data point of a
+#'       condition is an error.
+#'       `"auto"` starts from segments of equal length per condition, ten or
+#'       one per half oscillation of the data where that is more (a turning
+#'       point counts where the data reverse by more than five times their
+#'       noise), and cuts a segment in two wherever its propagation matrix, the
+#'       Jacobian of its end state in its start state, expands by more than
+#'       `growth`, its solve fails, or it misses its data by more than
+#'       `misfit`, before the first step and at every iterate after. `"transitions"` puts a node
+#'       just before every fast change of the data, a spike or the jump of a
+#'       relaxation oscillator, found as a run of samples whose rate lies more
+#'       than eight robust deviations off its median; the even nodes of
+#'       `"auto"` fill stretches without one, and the layout stays fixed. A
+#'       change starts in each segment where the data have it, whatever the
+#'       parameters, and a wrong timing shows as a gap. Without a fast change
+#'       it is `"auto"`. Explicit times stay as they are.}
+#'     \item{`growth`}{Largest spectral radius of a segment's propagation
+#'       matrix that `"auto"` accepts, the factor by which the linearised flow
+#'       of the segment expands. Independent of charts and scales. Default 10.
+#'       A segment is never cut below half the finest spacing of its
+#'       condition's data.}
+#'     \item{`misfit`}{Root mean square of a segment's weighted residuals
+#'       above which `"auto"` cuts it where the model misses its data locally,
+#'       such as a spike it does not reproduce: above `misfit` and above twice
+#'       the median of the segments of its condition. The new node takes the
+#'       observed states from the data. Default 3.}
+#'     \item{`charts`}{Named character, `"log10"`, `"linear"` or `"angle"`
+#'       per state: the coordinate the node values of that state live in. A
+#'       log10 chart keeps a positive state positive; on an angle chart, for a
+#'       phase in radians, gaps are taken modulo \eqn{2\pi}, so that a
+#'       trajectory one turn on is continuous. States not named are linear.}
+#'     \item{`scale`}{Named numeric, the scale of each state's gap and node
+#'       step in its chart, which the trust region and the acceptance of a
+#'       step read. Default 1, a decade or a radian, for a log10 or an angle
+#'       chart; for a linear one the range the state covers, in the data when
+#'       it is observed, else the largest range within one segment of a
+#'       simulation at the start.}
+#'     \item{`init`}{Start of the node values: `"data"` (default) reads a
+#'       state observed directly, through an observable that is the state
+#'       itself, off the data, and every other state off a run of the model at
+#'       the start parameters whose observed states are reset to the data at
+#'       every data time, so that it follows the measured trajectory;
+#'       `"spline"` does the same with a smoothing spline through the data in
+#'       place of the data themselves, its roughness chosen by generalised
+#'       cross-validation, as Horbelt, Timmer and Voss start their nodes;
+#'       `"simulation"` takes all of them from a simulation at the start
+#'       parameters; a list as `fit$multipleShooting$nodes` returns it starts
+#'       from those values, and needs explicit `nodes`.}
+#'     \item{`minPoints`}{Fewest data points either half of a cut segment
+#'       keeps, so that `"auto"` never cuts a node that no data can tell.
+#'       Default one more than the number of states.}
+#'     \item{`breaks`}{Node times, for all conditions or a list named by
+#'       condition, at which continuity is not enforced, as Voss, Timmer and
+#'       Kurths propose for chaotic systems and for models that do not hold
+#'       over the whole time axis. The node after a break is a variable of its
+#'       own and its gap no constraint. With `nodes = "auto"` every break is a
+#'       node; explicit `nodes` have to contain them. Needs
+#'       `hessianMethod = "gn"`.}
+#'   }
+#'   `x` has to be a chain `g * x * p` of observation functions, one
+#'   prediction function from [Xs()] and parameter transformations, and its ODE
+#'   model has to be built with `odemodel(..., includeTimeZero = FALSE)`, so that
+#'   a segment is integrated from its own start.
 #'
 #' @return
 #' An object of class `objfn`, i.e. a function
@@ -191,6 +265,11 @@ evalConditionResidual <- function(dataI, predictionI, pars,
 #' Hessian, backwards none, and `deriv2 = TRUE` always implies one. What the
 #' model was built with decides what is available; see [odemodel].
 #'
+#' With `multipleShootingControl`, the objective called as a function is still
+#' the single-shooting one described above, so evaluating, plotting and
+#' profiling it are unchanged; [trust()] and hence [mstrust()] read the control
+#' and optimise it by multiple shooting, also as a summand.
+#'
 #' @details
 #' Combine objectives with `+` (see [sumobjfn]). `cores` is a call-time
 #' argument: it sets the thread count for both the batched ODE integration and
@@ -198,10 +277,11 @@ evalConditionResidual <- function(dataI, predictionI, pars,
 #'
 #' @example inst/examples/normL2.R
 #' @export
-normL2 <- function(data, x, errmodel = NULL, times = NULL, t0 = 0,
+normL2 <- function(data, x, errmodel = NULL, times = NULL,
                    attr.name = "data",
                    cores = 1L,
-                   opt.BLOQ = c("M3", "M1", "M4NM", "M4BEAL")) {
+                   opt.BLOQ = c("M3", "M1", "M4NM", "M4BEAL"),
+                   multipleShootingControl = NULL) {
 
   if (!missing(cores))
     warning("normL2: 'cores' at construction time is deprecated and ignored. ",
@@ -209,14 +289,7 @@ normL2 <- function(data, x, errmodel = NULL, times = NULL, t0 = 0,
             call. = FALSE)
   opt.BLOQ <- match.arg(opt.BLOQ)
 
-  # The prediction starts at `t0`; named by condition, one grid each.
-  t0L <- .t0PerCondition(t0, names(data))
-  timesD <- if (is.null(t0L)) sort(unique(c(t0, unlist(lapply(data, `[[`, "time")), times))) else
-    lapply(setNames(nm = names(data)), function(cn) {
-      if (any(data[[cn]]$time < t0L[[cn]]))
-        stop("normL2: condition '", cn, "' has data before t0 = ", t0L[[cn]], ".", call. = FALSE)
-      sort(unique(c(t0L[[cn]], data[[cn]]$time, times[times >= t0L[[cn]]])))
-    })
+  timesD <- .normL2Grid(data, times)
   .timesOf <- function(conds) if (is.list(timesD)) unname(timesD[conds]) else timesD
 
   x.cond <- names(attr(x, "mappings"))
@@ -237,6 +310,15 @@ normL2 <- function(data, x, errmodel = NULL, times = NULL, t0 = 0,
   .meta_cache$par_names_global <- NULL
   .meta_cache$signature        <- NULL  # used to invalidate on shape change
   .meta_cache$shape            <- NULL
+
+  # Controls of the objective, changed later by controls<-. Multiple shooting
+  # is one: trust() reads it when it is called, and lays the segments out
+  # then. Laid out once here, so an error in it shows when the objective is
+  # built.
+  if (!is.null(multipleShootingControl))
+    .shootFromNormL2(data, x, errmodel, times, attr.name, opt.BLOQ,
+                     multipleShootingControl)
+  controls <- list(multipleShootingControl = multipleShootingControl)
 
   # `.prediction` lets a caller that already batched the predictions hand them
   # in; see .objEvalMany().
@@ -1365,12 +1447,20 @@ objframe <- function(mydata, deriv = NULL, deriv.err = NULL,
 }
 
 
-# NULL for one start shared by all conditions, else a list named by condition.
-.t0PerCondition <- function(t0, conditions) {
-  if (!is.list(t0) && length(t0) == 1L && is.null(names(t0))) return(NULL)
-  miss <- setdiff(conditions, names(t0))
-  if (is.null(names(t0)) || length(miss))
-    stop("normL2: 't0' is named by condition and misses ",
-         paste(miss, collapse = ", "), ".", call. = FALSE)
-  lapply(as.list(t0)[conditions], function(v) as.numeric(v)[1L])
+# The time grid of normL2: data times and `times`, one sorted vector for all
+# conditions, or with `times` a list named by condition one per condition. A
+# condition absent from the list gets its data times alone.
+.normL2Grid <- function(data, times) {
+  if (!is.list(times))
+    return(sort(unique(c(unlist(lapply(data, `[[`, "time")), as.numeric(times)))))
+  bad <- setdiff(names(times), names(data))
+  if (is.null(names(times)) || any(!nzchar(names(times))) || length(bad))
+    stop("normL2: 'times' as a list is named by the conditions of the data",
+         if (length(bad)) paste0(", not ", paste(bad, collapse = ", ")), ".",
+         call. = FALSE)
+  lapply(setNames(nm = names(data)), function(cn)
+    sort(unique(c(data[[cn]]$time, as.numeric(times[[cn]])))))
 }
+
+# The grid of condition `cn` from .normL2Grid().
+.gridOf <- function(grid, cn) if (is.list(grid)) grid[[cn]] else grid

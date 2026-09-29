@@ -310,8 +310,9 @@ Assignment rules are inlined into rates and initial expressions before the
 `(time, conditionId)` pairs. A leading `-inf` period is the
 preequilibration: the steady state of the autonomous system under that
 condition, computed by `Pimpl`. Events do not act during it. The first finite period
-sets the simulation start, passed to the objective as `normL2(t0 = )`, so
-initial values apply there rather than at zero. Each later period becomes
+sets the simulation start, passed to the objective as the first time of the
+condition's grid, `normL2(times = list(<condition> = <start>))`, so initial
+values apply there rather than at zero. Each later period becomes
 an event that applies its condition overrides at its start time. The number
 of periods is unlimited.
 

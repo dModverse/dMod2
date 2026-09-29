@@ -2068,19 +2068,13 @@ readPetabTables <- function(yamlPath) {
                collapse = ", "),
          " are not recognised.")
 
-  # Conditions may start at different times; each group gets its own anchored
-  # time grid and the terms add up over conditions.
+  # Every condition starts at the start time of its experiment: one grid for
+  # all when they share it, else a grid per condition beginning there.
   t0 <- attr(data, "t0")
   if (is.null(t0)) t0 <- setNames(rep(0, length(data)), names(data))
-  groups <- split(names(data), t0[names(data)])
-  base_obj <- NULL
-  for (g in names(groups)) {
-    sub <- data[groups[[g]]]
-    class(sub) <- "datalist"
-    term <- normL2(data = sub, x = prd, errmodel = errmodel,
-                   t0 = as.numeric(g))
-    base_obj <- if (is.null(base_obj)) term else base_obj + term
-  }
+  t0 <- t0[names(data)]
+  base_obj <- normL2(data = data, x = prd, errmodel = errmodel,
+                     times = if (length(unique(t0)) == 1L) unname(t0[1L]) else as.list(t0))
 
   # Data-coordinate Jacobian for log / log10 observable transformations.
   # PEtab's likelihood is on the linear y_obs:

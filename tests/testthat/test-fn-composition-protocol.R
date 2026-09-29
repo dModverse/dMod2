@@ -483,6 +483,13 @@ test_that("the parvec C++ kernel reproduces the R subsetting and concatenation",
     expect_identical(attr(got, "fixed"),
                      if (nrow(J) < length(got)) setdiff(names(got), rownames(J)))
   }
+  # one operand beside NULL or an empty one is as.parvec() of it
+  for (q in list(x, xf, xn, x0)) for (e in list(NULL, x0[integer(0)])) {
+    ref <- as.parvec(as.numeric(q), names = names(q), deriv = attr(q, "deriv") %||% FALSE,
+                     deriv2 = attr(q, "deriv2") %||% FALSE)
+    expect_identical(c(q, e), ref)
+    expect_identical(c(q), ref)
+  }
 })
 
 test_that("an objective is bit-identical across thread counts", {

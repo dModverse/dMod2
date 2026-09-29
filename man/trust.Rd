@@ -89,6 +89,10 @@ wrong, since \code{|f|} grows quadratically in the residuals while
 \item{\code{rmin}}{Lower limit on the trust radius; falling below it
 stops the run with \code{converged = FALSE}. Default \code{0},
 which disables it.}
+\item{\code{ctol}}{Multiple shooting only: the size of the gaps
+between segments, scaled per state, below which the trajectory counts
+as continuous. No stop fires before the gaps are below it. Default
+\code{1e-6}.}
 }}
 
 \item{qnControl}{List of quasi-Newton settings, merged into the defaults and
@@ -145,6 +149,59 @@ accepted that increases the objective. Default \code{0}, the monotone
 rule; \code{0.85} is the value Zhang and Hager report as generally
 best. The result reports the best iterate visited, which is the last
 one when \code{eta = 0}.}
+\item{\code{acceptance}}{Multiple shooting only: \code{"filter"}
+(default), Fletcher and Leyffer's filter on the objective and the size
+of the gaps; \code{"merit"}, the l2 exact penalty
+\code{f + mu ||c||} with an adaptive \code{mu}; or \code{"natural"},
+Bock's damped Gauss-Newton method as Peifer and Timmer describe it.
+There the full step, all linearised gaps closed, is damped by a factor
+that a predictor from the last curvature estimate proposes and a
+corrector cuts back, and a damped step is taken when the simplified
+step at its end, with the Jacobians of the current iterate, has
+shrunk: the natural level function, which carries the geometry of the
+problem rather than the weights of a merit function. Needs
+\code{hessianMethod = "gn"}, a fixed sigma and no error model. Where
+the damping finds no step, the filter takes over.}
+\item{\code{twoPhase}}{Multiple shooting only: whether the parameters
+are first fitted alone, the node values held at their start on the
+layout the run starts from, as Horbelt, Timmer and Voss do. Every
+segment then has to explain its data from a start the data give, so
+no node takes up misfit the parameters should remove. The nodes are
+laid out afresh at the parameters found and released; a first phase
+that ends where they cannot be laid out is dropped. Helps where noise
+in the node values would otherwise move the parameters, as on a
+spiking trace, at several times the cost elsewhere. Default
+\code{FALSE}.}
+\item{\code{restore}}{Multiple shooting only: whether a run whose
+steps keep being rejected with the gaps open enters a restoration
+phase, as Fletcher and Leyffer's filter does. The linearised gaps are
+closed at the parameters as they are, damped if need be; where that
+does not halve them, the nodes go onto the trajectory of these
+parameters. The point left enters the filter, and the run goes on
+from the restored one. At most five times per run; the result counts
+them in \code{nRestore}. Default \code{FALSE}: on a noisy spike train
+the nodes put onto the trajectory of wrong parameters let the
+automatic nodes cut far more segments, and fewer starts reach the
+optimum.}
+\item{\code{regularise}}{Multiple shooting only: a direction of the
+condensed problem whose singular value lies below \code{regularise}
+times the largest is held fixed in a step, as Peifer and Timmer
+propose for parameters that the data do not identify. Default
+\code{0}, off; \code{"natural"} always leaves out directions below
+\code{1e-7}.}
+\item{\code{soc}}{Multiple shooting only: whether a rejected step whose
+gaps did not close as predicted is retried once with the trial gaps
+condensed onto the nodes, a second-order correction that needs no new
+sensitivities. Default \code{TRUE}.}
+\item{\code{anneal}}{Multiple shooting only: whether the gaps are first
+priced rather than enforced. The run then minimises
+\code{f + w ||c||^2} over parameters and nodes, the gaps scaled per
+state, with \code{w} rising tenfold per stage until the gaps are
+small, and hands over to the exact method from there. It lets the
+parameters move where the dynamics at the start are in a regime the
+data never show, at about twice the cost of a run that needs no help.
+Needs forward sensitivities; without them the run starts with the
+exact method. Default \code{TRUE}.}
 }}
 
 \item{minimize}{If \code{TRUE} (default) minimise; if \code{FALSE}
@@ -254,6 +311,54 @@ the gradient tolerances sit below the noise floor; \code{max(abs(gradient))}
 of the result shows where it actually lies.
 }
 
+\section{Multiple shooting}{
+
+An objective from \code{\link{normL2}(..., multipleShootingControl = )},
+alone or in a sum, is optimised by
+Bock's generalised Gauss-Newton method: the time axis is cut into segments
+at the nodes, every segment starts from node values of its own, and
+continuity between the segments is a constraint. At every iterate the
+constraints are linearised and eliminated (condensing), which leaves a
+subproblem in the parameters alone, of the single-shooting size, solved as
+above, box bounds included. The node values follow each step through the
+linearisation, so the gaps close as the iteration converges; at convergence
+the trajectory is continuous and the result is a stationary point of the
+single-shooting objective.
+
+The trust region bounds the step of the parameters and of the node values
+together, the latter measured against the scale of each state's gaps. A step
+closes the linearised gaps in the proportion the region admits of the full
+Gauss-Newton step, completely once the radius no longer binds, which is
+Bock's own step. Where condensing would propagate a gap through a chain of
+expanding segments beyond a bound, that link of the linearisation is dropped
+for the step. With \code{nodes = "auto"} segments are cut where they expand
+too much, fail to solve or miss their data, before the first step and at
+every iterate. A step is accepted by a filter or a merit
+function (\code{stepControl$acceptance}) on the objective and the scaled
+size of the gaps. \code{hessianMethod = "gn"} uses the Gauss-Newton block of
+every segment; \code{"bfgs"} and \code{"sr1"} keep a quasi-Newton block per
+segment of its Lagrangian (partitioned quasi-Newton), which runs on
+gradients alone and so on \code{sweep = "reverse"}, one adjoint solve per
+segment. A summand other than the shooting term, a prior or a
+single-shooting \code{normL2} of other data, enters with its own value,
+gradient and Gauss-Newton Hessian.
+
+Not available with multiple shooting: \code{hessianMethod = "exact"}, a
+\code{hessianFallback}, \code{qnControl$hessianReseed},
+\code{qnControl$qnMemory}, \code{stepControl$nonmonotone},
+\code{boundary = "clip"}, \code{minimize = FALSE} and \code{traceFile}.
+A multiple-shooting run reports \code{converged = TRUE} only when the gaps
+have closed below \code{tolControl$ctol}; with open gaps the node values
+carry what the parameters do not explain, and the value of the data term
+is no measure of the fit.
+The result carries a list \code{multipleShooting} with the final
+\code{nodes}, the
+\code{gaps} per condition, their scaled size \code{violation}, the counts
+\code{nRelaxed} (iterations with a node step below the full one),
+\code{nSOC} (accepted second-order corrections) and \code{nSplit}
+(segments cut), and \code{trace} when \code{blather = TRUE}.
+}
+
 \references{
 Coleman, T. F. and Li, Y. (1996). An interior trust region
 approach for nonlinear minimization subject to bounds.
@@ -262,4 +367,23 @@ approach for nonlinear minimization subject to bounds.
 Fröhlich, F. and Sorger, P. K. (2022). Fides: Reliable trust-region
 optimization for parameter estimation of ODE models.
 \emph{PLoS Computational Biology} 18(7), e1010322.
+
+Bock, H. G. (1983). Recent advances in parameter identification
+techniques for ODE. In \emph{Numerical Treatment of Inverse Problems in
+Differential and Integral Equations}, 95-121. Birkhäuser.
+
+Fletcher, R. and Leyffer, S. (2002). Nonlinear programming without a
+penalty function. \emph{Mathematical Programming} 91, 239-269.
+
+Horbelt, W., Timmer, J. and Voss, H. U. (2002). Parameter estimation in
+nonlinear delayed feedback systems from noisy data.
+\emph{Physics Letters A} 299, 513-521.
+
+Voss, H. U., Timmer, J. and Kurths, J. (2004). Nonlinear dynamical system
+identification from uncertain and indirect measurements.
+\emph{International Journal of Bifurcation and Chaos} 14(6), 1905-1933.
+
+Peifer, M. and Timmer, J. (2007). Parameter estimation in ordinary
+differential equations for biochemical processes using the method of
+multiple shooting. \emph{IET Systems Biology} 1(2), 78-88.
 }

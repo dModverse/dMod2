@@ -356,32 +356,37 @@ test_that("controls on g * x * p reach the leaves of the composition", {
 
 test_that("controls reach through %.*% and objfn * parfn, which stay one term", {
   fx <- ctl_models()
-  vali  <- datapointL2("A", 2, "newpoint", condition = "C1")
-  vali2 <- datapointL2("A", 1, "otherpoint", condition = "C2")
+  x <- Xs(fx$m)
+  data <- as.datalist(data.frame(
+    name = "y", time = c(1, 2, 1, 2), value = c(0.6, 0.4, 1.2, 0.7),
+    sigma = 0.1, condition = c("C1", "C1", "C2", "C2")), split.by = "condition")
+  obj <- normL2(data, fx$g * x * fx$p)
 
-  sobj <- 2 %.*% vali
-  expect_setequal(controls(sobj), c("mu", "time", "sigma", "attr.name"))
-  controls(sobj, "sigma") <- 2
-  expect_identical(controls(vali, "sigma"), 2)
-  expect_identical(controls(sobj, "sigma"), 2)
+  sobj <- 2 %.*% obj
+  expect_true("multipleShootingControl" %in% controls(sobj))
+  controls(sobj, "multipleShootingControl") <- list(nodes = c(1, 3))
+  expect_identical(controls(obj, "multipleShootingControl"), list(nodes = c(1, 3)))
+  expect_identical(controls(sobj, "multipleShootingControl"), list(nodes = c(1, 3)))
   expect_error(controls(sobj, "bogus") <- 1, "no control 'bogus'")
 
-  op <- (vali + vali2) * fx$p
-  controls(op, "sigma") <- 3
-  expect_identical(controls(vali, "sigma"), 3)
-  expect_identical(controls(vali2, "sigma"), 3)
+  op <- obj * fx$p
+  controls(op, "multipleShootingControl") <- list(nodes = 2)
+  expect_identical(controls(obj, "multipleShootingControl"), list(nodes = 2))
 
-  # A scaled or composed objective is one summand, not the objective inside.
+  # Multiple shooting reads the terms of an objective as its summands; a
+  # scaled or composed objective is one of them, not the objective inside.
   terms <- dMod2:::.objTerms(sobj)
   expect_length(terms, 1L)
   expect_identical(terms[[1]], sobj)
   expect_identical(dMod2:::.objTerms(op)[[1]], op)
-  expect_length(dMod2:::.objTerms(sobj + vali), 2L)
-  expect_length(dMod2:::.objTerms(sobj + op + vali), 3L)
+  expect_length(dMod2:::.objTerms(sobj + obj), 2L)
+  expect_length(dMod2:::.objTerms(sobj + op + obj), 3L)
 
   # A sum of wrappers reaches every objective inside.
-  both <- sobj + 3 %.*% vali2
-  controls(both, "time") <- 1.5
-  expect_identical(controls(vali, "time"), 1.5)
-  expect_identical(controls(vali2, "time"), 1.5)
+  vali <- datapointL2("A", 2, "newpoint", condition = "C1")
+  both <- sobj + 3 %.*% vali
+  expect_setequal(controls(both), c("multipleShootingControl", "mu", "time",
+                                    "sigma", "attr.name"))
+  controls(both, "sigma") <- 2
+  expect_identical(controls(vali, "sigma"), 2)
 })

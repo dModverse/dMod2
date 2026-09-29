@@ -767,6 +767,27 @@ print.parvec <- function(x, ...) {
 #' @export
 c.parvec <- function(...) {
 
+  # One operand, alone or beside NULL or an empty one, as
+  # prdframe(parameters = c(pars, fixed)) has it for every condition: the same
+  # result as below, without the list machinery.
+  n <- ...length()
+  if ((n == 1L || (n == 2L && !length(..2))) && length(..1)) {
+    q <- ..1
+    nms <- names(q)
+    if (anyDuplicated(nms)) stop("Duplicated parameter names.")
+    D <- attr(q, "deriv")
+    D2 <- attr(q, "deriv2")
+    v <- as.numeric(q)
+    names(v) <- nms
+    if (is.matrix(D)) {
+      attr(v, "deriv") <- D
+    } else D <- NULL
+    if (is.array(D2) && length(dim(D2)) == 3L) attr(v, "deriv2") <- D2
+    if (!is.null(D) && nrow(D) < length(v)) attr(v, "fixed") <- .setdiffU(names(v), rownames(D))
+    class(v) <- c("parvec", "numeric")
+    return(v)
+  }
+
   p <- Filter(Negate(is.null), list(...))
   stopifnot(length(p) > 0)
   # An empty operand adds no name, value or derivative row, but it does push

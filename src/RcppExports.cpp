@@ -102,8 +102,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // normL2_kernel
-List normL2_kernel(List prediction, Nullable<List> err_list_opt, List meta_list, CharacterVector par_names_global, bool deriv2_requested, int threads, std::string bloq_mode, bool build_hessian, bool want_seed);
-RcppExport SEXP _dMod2_normL2_kernel(SEXP predictionSEXP, SEXP err_list_optSEXP, SEXP meta_listSEXP, SEXP par_names_globalSEXP, SEXP deriv2_requestedSEXP, SEXP threadsSEXP, SEXP bloq_modeSEXP, SEXP build_hessianSEXP, SEXP want_seedSEXP) {
+List normL2_kernel(List prediction, Nullable<List> err_list_opt, List meta_list, CharacterVector par_names_global, bool deriv2_requested, int threads, std::string bloq_mode, bool build_hessian, bool want_seed, bool local_blocks);
+RcppExport SEXP _dMod2_normL2_kernel(SEXP predictionSEXP, SEXP err_list_optSEXP, SEXP meta_listSEXP, SEXP par_names_globalSEXP, SEXP deriv2_requestedSEXP, SEXP threadsSEXP, SEXP bloq_modeSEXP, SEXP build_hessianSEXP, SEXP want_seedSEXP, SEXP local_blocksSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -116,7 +116,8 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< std::string >::type bloq_mode(bloq_modeSEXP);
     Rcpp::traits::input_parameter< bool >::type build_hessian(build_hessianSEXP);
     Rcpp::traits::input_parameter< bool >::type want_seed(want_seedSEXP);
-    rcpp_result_gen = Rcpp::wrap(normL2_kernel(prediction, err_list_opt, meta_list, par_names_global, deriv2_requested, threads, bloq_mode, build_hessian, want_seed));
+    Rcpp::traits::input_parameter< bool >::type local_blocks(local_blocksSEXP);
+    rcpp_result_gen = Rcpp::wrap(normL2_kernel(prediction, err_list_opt, meta_list, par_names_global, deriv2_requested, threads, bloq_mode, build_hessian, want_seed, local_blocks));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -220,6 +221,38 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// trust_step_impl
+List trust_step_impl(NumericVector x, NumericVector g, NumericMatrix H, double r, NumericVector lower, NumericVector upper, NumericVector parscale, double thetamax);
+RcppExport SEXP _dMod2_trust_step_impl(SEXP xSEXP, SEXP gSEXP, SEXP HSEXP, SEXP rSEXP, SEXP lowerSEXP, SEXP upperSEXP, SEXP parscaleSEXP, SEXP thetamaxSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type x(xSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type g(gSEXP);
+    Rcpp::traits::input_parameter< NumericMatrix >::type H(HSEXP);
+    Rcpp::traits::input_parameter< double >::type r(rSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type lower(lowerSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type upper(upperSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type parscale(parscaleSEXP);
+    Rcpp::traits::input_parameter< double >::type thetamax(thetamaxSEXP);
+    rcpp_result_gen = Rcpp::wrap(trust_step_impl(x, g, H, r, lower, upper, parscale, thetamax));
+    return rcpp_result_gen;
+END_RCPP
+}
+// qn_update_impl
+List qn_update_impl(NumericMatrix B, NumericVector s, NumericVector y, std::string method);
+RcppExport SEXP _dMod2_qn_update_impl(SEXP BSEXP, SEXP sSEXP, SEXP ySEXP, SEXP methodSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericMatrix >::type B(BSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type s(sSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type y(ySEXP);
+    Rcpp::traits::input_parameter< std::string >::type method(methodSEXP);
+    rcpp_result_gen = Rcpp::wrap(qn_update_impl(B, s, y, method));
+    return rcpp_result_gen;
+END_RCPP
+}
 
 static const R_CallMethodDef CallEntries[] = {
     {"_dMod2_bmm_lb", (DL_FUNC) &_dMod2_bmm_lb, 6},
@@ -227,12 +260,14 @@ static const R_CallMethodDef CallEntries[] = {
     {"_dMod2_bmm_bb", (DL_FUNC) &_dMod2_bmm_bb, 6},
     {"_dMod2_constraintL2_scalar_kernel", (DL_FUNC) &_dMod2_constraintL2_scalar_kernel, 12},
     {"_dMod2_datapointL2_kernel", (DL_FUNC) &_dMod2_datapointL2_kernel, 11},
-    {"_dMod2_normL2_kernel", (DL_FUNC) &_dMod2_normL2_kernel, 9},
+    {"_dMod2_normL2_kernel", (DL_FUNC) &_dMod2_normL2_kernel, 10},
     {"_dMod2_parvec_attach", (DL_FUNC) &_dMod2_parvec_attach, 3},
     {"_dMod2_parvec_concat", (DL_FUNC) &_dMod2_parvec_concat, 1},
     {"_dMod2_residual_kernel_aloq", (DL_FUNC) &_dMod2_residual_kernel_aloq, 9},
     {"_dMod2_residual_kernel_bloq", (DL_FUNC) &_dMod2_residual_kernel_bloq, 9},
     {"_dMod2_trust_impl", (DL_FUNC) &_dMod2_trust_impl, 28},
+    {"_dMod2_trust_step_impl", (DL_FUNC) &_dMod2_trust_step_impl, 8},
+    {"_dMod2_qn_update_impl", (DL_FUNC) &_dMod2_qn_update_impl, 4},
     {NULL, NULL, 0}
 };
 

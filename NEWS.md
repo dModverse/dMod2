@@ -1,3 +1,67 @@
+# dMod2 0.10.0
+
+* `normL2()` loses `t0`. `times` is a vector for all conditions or a list named
+  by condition, and a condition's prediction starts at the first time of its
+  grid, its data times and its `times`: `times = list(C1 = -10, C2 = 5)` is what
+  `t0 = c(C1 = -10, C2 = 5)` was. Without `times` the grid starts at the first
+  data point, which matters only for a model built with
+  `odemodel(..., includeTimeZero = FALSE)`; with the default the grid holds 0.
+  PEtab start times go through `times`, in one objective for all conditions.
+* **Multiple shooting.**
+  `normL2(data, g * x * p, multipleShootingControl = TRUE)`, or a list of
+  settings, makes `trust()` and `mstrust()` fit by Bock's generalised
+  Gauss-Newton method. The time axis is cut into segments with node values of
+  their own; continuity is a constraint, linearised and eliminated at every
+  iterate (condensing), so the subproblem keeps the single-shooting size and
+  box bounds work as before. At convergence the result is a stationary point
+  of the single-shooting objective, which the objective still is when called
+  as a function. The ODE model needs `odemodel(..., includeTimeZero = FALSE)`;
+  `profile()` re-optimises by single shooting.
+* The trust region bounds parameters and node values together. Steps are
+  accepted by a filter or an l2 merit function (`stepControl$acceptance`),
+  with a second-order correction (`stepControl$soc`) and a gap tolerance
+  (`tolControl$ctol`).
+* `stepControl$anneal` (default) first penalises the gaps, `f + w ||c||^2`
+  with `w` rising tenfold per stage, then hands over to the exact method. A
+  stage ends once a step gains less than a thousandth; the annealing ends
+  early where the penalty dominates and a stage no longer closes the gaps.
+* `nodes = "auto"` (default) starts from ten segments per condition, or one
+  per half oscillation of the data where that is more, and cuts a segment
+  where its propagation matrix grows by more than `growth`, where it misses its
+  data by more than `misfit` and by twice the median of its condition, or where
+  its solve fails. A misfit everywhere is left to the parameters, and each half
+  of a cut keeps `minPoints` data points, by default one more than the states.
+  Unobserved node values start from a run synchronised to the data. `charts`
+  puts node values on a log10, linear or angle scale per state; the gap of an
+  angle is taken modulo 2 pi. The scale of an unobserved linear state is the
+  largest range it covers within one segment. `hessianMethod = "bfgs"` or
+  `"sr1"` keeps one quasi-Newton block per segment.
+* The cost of an evaluation is linear in the number of segments: segment
+  parameters are built per condition, the annealing model is assembled in one
+  pass, and the values at new nodes come from one batched solve.
+  `fit$multipleShooting$cuts` counts the cuts by growth, misfit and failed
+  solve.
+* `c()` of one parameter vector, alone or beside `NULL` or an empty one, as
+  every prediction builds its `parameters`, skips the list machinery.
+* Methods of the Freiburg group (Bock; Horbelt, Timmer and Voss 2002; Peifer
+  and Timmer 2007; Voss, Timmer and Kurths 2004), off by default:
+  `stepControl$acceptance = "natural"` (damped Gauss-Newton on the natural
+  level function, needs a fixed sigma), `stepControl$twoPhase` (parameters
+  first, then nodes), `stepControl$regularise`, `stepControl$restore`
+  (restoration phase of the filter), `init = "spline"`, `minPoints`,
+  `nodes = "transitions"` (a node just before each fast change of the data)
+  and `breaks` (nodes without continuity).
+* Spiking data need tight integrator tolerances (1e-10); at 1e-8 the objective
+  is too noisy far from the optimum and the trust region collapses.
+* The objective returns the weighted residuals of each segment and their
+  Jacobian on request (`residuals = TRUE`). A trial point after a rejected
+  step is evaluated without sensitivities.
+* The reverse walk takes several first-order seeds at once, which `Xs()`
+  answers in one backward solve. Checkpoints serve any number of backward
+  sweeps.
+* New benches `bench/multipleShooting_preBotC.R` and
+  `bench/multipleShooting_macrospin.R`.
+
 # dMod2 0.9.2
 
 * `Pimpl()` runs a multistart when the warm starts and the initial guess fail:
