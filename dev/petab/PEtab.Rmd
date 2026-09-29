@@ -308,7 +308,8 @@ Assignment rules are inlined into rates and initial expressions before the
 
 **Experiments as period sequences.** An experiment is an ordered list of
 `(time, conditionId)` pairs. A leading `-inf` period is the
-preequilibration and becomes a `Pequil` stage. The first finite period
+preequilibration: the steady state of the autonomous system under that
+condition, computed by `Pimpl`. Events do not act during it. The first finite period
 sets the simulation start, passed to the objective as `normL2(t0 = )`, so
 initial values apply there rather than at zero. Each later period becomes
 an event that applies its condition overrides at its start time. The number
@@ -329,8 +330,7 @@ into the data column and leaves the error model `NULL`, `normL2`'s fast
 path; symbolic noise becomes an inner parameter of the trafo.
 
 **Steady-state measurements.** A measurement at `time = inf` is evaluated
-at the equilibration horizon that `Pequil` integrates to and exported as
-`inf`.
+at time `1e10` and exported as `inf`.
 
 # Priors
 
@@ -434,8 +434,9 @@ the period schedule from the simulation start times and the mid-run events.
 
 # Feature coverage
 
-All 31 v2 cases of the official PEtab test suite reproduce the published
-likelihood and pass an export-to-v2 and reimport round trip.
+30 of the 31 v2 cases of the official PEtab test suite reproduce the
+published likelihood and pass an export-to-v2 and reimport round trip. Case
+0023 fires an event during preequilibration, which dMod2 does not do.
 
 Of the 35 problems in the
 [Benchmark-Models](https://github.com/Benchmarking-Initiative/Benchmark-Models-PEtab)
@@ -474,6 +475,7 @@ that is zero at the initial time.
 | per-row `observableParameters`, `noiseParameters` | yes | numeric and symbolic |
 | noise formula naming its own observable | yes | resolved from the observable equations |
 | `experiments.tsv`, any number of periods | yes | preequilibration, start time, mid-run events |
+| event during preequilibration | no | preequilibration is a steady state |
 | measurement at `time = inf` | yes | evaluated at the equilibration horizon |
 | `mapping.tsv` | yes | textual rewrite of entity ids |
 | several models in one manifest | yes | composed with `+`, condition keys prefixed |

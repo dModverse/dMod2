@@ -1,17 +1,6 @@
-# Behavioral tests for Pequil() (steady-state parameter transformation)
-# and Pimpl() (implicit-equation parameter transformation).
-#
-# Pequil and Pimpl turn structural equations into parfn() objects whose
-# value is the solution of an equilibrium / implicit problem and whose
-# Jacobian comes from the implicit function theorem.
-#
-# Pequil(deriv2)'s Hessian on the linear x* = s/k system is covered by
-# test-deriv2.R. This file adds a second model (production-decay
-# A* = k_in / k_out) plus a Pimpl quadratic-root test, both validated
-# against closed-form solutions and their analytical Jacobians.
-#
-# The resetWarmStarts() cache-management tests live at the bottom (also
-# specific to Pequil/Pimpl, which are the only parfns that warm-start).
+# Tests for Pimpl() (implicit parameter transformation, steady states by
+# pseudo-transient continuation), structural zero-state detection and the
+# conserved-quantity basis of eqnlist objects.
 
 skip_if_no_compile <- function() {
   testthat::skip_if_not_installed("cppDE")
@@ -32,46 +21,14 @@ pp_models <- function() {
   stamp <- as.integer(Sys.time())
   mn <- function(x) paste0("test_pp_", x, "_", stamp)
 
-  ## Pequil. Objects that differ only in R-level controls share a modelname
-  ## and with it the compiled source, which each rebuild announces rewriting.
-  pd_variant <- function(...) suppressMessages(
-    Pequil(c(A = "k_in - k_out * A"), parameters = c("k_in", "k_out"),
-           modelname = mn("pd"), verbose = FALSE, ...))
-  pd       <- pd_variant(attach.input = FALSE)
-  pd_twin  <- pd_variant(attach.input = FALSE)
-  pd_ms    <- pd_variant(attach.input = FALSE,
-                         controlsMS = list(nStarts = 5L, positive = TRUE,
-                                           lower = 1e-3, upper = 1e3))
-  pd_input <- pd_variant(attach.input = TRUE)
-  pd_stall <- pd_variant(controlsODE = list(maxsteps = 1L, maxattemps = 1L))
-
-  unstable <- Pequil(c(A = "k * A"), parameters = "k", modelname = mn("unstable"),
-                     attach.input = FALSE, verbose = FALSE,
-                     controlsMS = list(nStarts = 3L, positive = TRUE,
-                                       lower = 1e-3, upper = 1e3))
-
-  el_pos <- eqnlist() |>
-    addReaction("A", "Ap", "ka*A") |>
-    addReaction("Ap", "A", "kap*Ap") |>
-    addReaction("Ap + B", "C", "kf*Ap*B") |>
-    addReaction("C", "Ap + B", "kr*C") |>
-    addReaction("B", "Bp", "kb*B") |>
-    addReaction("Bp", "B", "kbp*Bp")
-  pos <- Pequil(el_pos, expressInTotals = TRUE, modelname = mn("pos"),
-                controlsMS = list(nStarts = 30L))
-
   el_2moiety <- eqnlist() |>
     addReaction("A", "B", "k1*A") |> addReaction("B", "A", "k2*B") |>
     addReaction("C", "D", "k3*C") |> addReaction("D", "C", "k4*D")
-  moiety2_eq <- Pequil(el_2moiety, expressInTotals = TRUE,
-                       modelname = mn("2moiety_eq"), controlsMS = list(nStarts = 20L))
 
   el_dimer <- eqnlist() |>
     addReaction("2*M", "D", "ka*M^2") |>
     addReaction("D", "2*M", "kd*D") |>
     customTotals(list(total_MD = "M + 2*D"))
-  dimer_eq <- Pequil(el_dimer, expressInTotals = TRUE, modelname = mn("dimer_eq"),
-                     controlsMS = list(nStarts = 30L))
 
   el_zero <- eqnlist() |>
     addReaction("",       "R",  "k_pr_R") |>
@@ -79,114 +36,94 @@ pp_models <- function() {
     addReaction("L + R",  "LR", "k_on * L * R") |>
     addReaction("LR",     "L + R", "k_off * LR") |>
     addReaction("LR",     "",   "k_dg_LR * LR")
-  zero <- Pequil(el_zero, modelname = mn("zero"), verbose = FALSE)
+  zero <- Pimpl(el_zero, modelname = mn("zero"), verbose = FALSE)
 
   el_ERK <- eqnlist() |>
     addReaction("ERK",  "pERK", "k1 * ERK") |>
     addReaction("pERK", "ERK",  "k2 * pERK")
-  erk_variant <- function(...) suppressMessages(
-    Pequil(el_ERK, parameters = c("k1", "k2"), expressInTotals = TRUE,
-           modelname = mn("erk_eq"), verbose = FALSE, attach.input = TRUE, ...))
-  erk_eq   <- erk_variant(controlsMS = list(nStarts = 1L))
-  erk_eq10 <- erk_variant()
+
+  # production-decay, A* = k_in / k_out, two independent objects
+  el_pd <- eqnlist() |>
+    addReaction("", "A", "k_in") |> addReaction("A", "", "k_out * A")
+  pd  <- Pimpl(el_pd, modelname = mn("pd"), verbose = FALSE)
+  pd2 <- Pimpl(el_pd, modelname = mn("pd2"), verbose = FALSE)
+
+  # X exists only with the plasmid; Y is produced constitutively and from X
+  el_pl <- eqnlist() |>
+    addReaction("", "X", "k_tx * plasmid") |> addReaction("X", "", "k_dg * X") |>
+    addReaction("", "Y", "k_y + k_xy * X") |> addReaction("Y", "", "k_dy * Y")
+  plasmid <- Pimpl(el_pl, modelname = mn("plasmid"), verbose = FALSE)
+
+  # bistable: low and high stable steady state, unstable one between
+  el_bi <- eqnlist() |>
+    addReaction("", "X", "k0 + k1 * X^2 / (K^2 + X^2)") |>
+    addReaction("X", "", "d * X")
+  bistable <- Pimpl(el_bi, modelname = mn("bistable"), verbose = FALSE)
+
+  # x - a = 0 read as dx/dt: the only root is unstable
+  unstable <- Pimpl(c(x = "x - a"), parameters = "a", flow = TRUE,
+                    modelname = mn("unstable"), verbose = FALSE)
 
   ## Pimpl and Pexpl
-  lin <- Pimpl(c(x = "x - a"), parameters = "a", controlsMS = list(positive = TRUE),
-               modelname = mn("lin"), verbose = FALSE)
+  lin <- Pimpl(c(x = "x - a"), parameters = "a", modelname = mn("lin"), verbose = FALSE)
 
   d2 <- Pimpl(c(C = "k1*(totA - C)*(totB - C) - km*C"),
               parameters = c("k1","km","totA","totB"), deriv2 = TRUE,
-              modelname = mn("d2"), verbose = FALSE,
-              controlsMS = list(nStarts = 5L, positive = TRUE),
-              controlsNleqslv = list(ftol = 1e-12, xtol = 1e-12))
+              modelname = mn("d2"), verbose = FALSE, controlsPTC = list(rtol = 1e-13))
 
   d2_2 <- Pimpl(c(x1 = "a*x1 - b*x2 - 1", x2 = "x1*x2 - c"),
                 parameters = c("a","b","c"), deriv2 = TRUE,
-                modelname = mn("d2_2"), verbose = FALSE,
-                controlsMS = list(nStarts = 5L, positive = TRUE),
-                controlsNleqslv = list(ftol = 1e-12, xtol = 1e-12))
+                modelname = mn("d2_2"), verbose = FALSE, controlsPTC = list(rtol = 1e-13))
 
   el_AB <- eqnlist() |>
     addReaction("A", "B", "k*A") |>
     addReaction("B", "A", "km*B")
   d2_cq <- Pimpl(el_AB, parameters = c("k","km"), deriv2 = TRUE,
-                 modelname = mn("d2_cq"), verbose = FALSE,
-                 controlsMS = list(nStarts = 1L, positive = FALSE),
-                 controlsNleqslv = list(ftol = 1e-12, xtol = 1e-12))
+                 modelname = mn("d2_cq"), verbose = FALSE, controlsPTC = list(rtol = 1e-13))
 
-  moiety2_im <- Pimpl(el_2moiety, expressInTotals = TRUE,
-                      modelname = mn("2moiety_im"), controlsMS = list(nStarts = 20L))
+  moiety2_im <- Pimpl(el_2moiety, modelname = mn("2moiety_im"))
 
-  dimer_im <- Pimpl(el_dimer, expressInTotals = TRUE, modelname = mn("dimer_im"),
-                    controlsMS = list(nStarts = 30L),
-                    controlsNleqslv = list(ftol = 1e-12, xtol = 1e-12))
+  dimer_im <- Pimpl(el_dimer, modelname = mn("dimer_im"))
 
   el_recycle <- eqnlist() |>
     addReaction("G + S", "GS", "k1*G*S") |>
     addReaction("GS", "G + S", "k1r*GS") |>
     addReaction("GS", "G + P", "k1c*GS") |>
     addReaction("P", "S", "k3*P")
-  recycle <- Pimpl(el_recycle, expressInTotals = TRUE, modelname = mn("recycle"),
-                   controlsMS = list(nStarts = 50L),
-                   controlsNleqslv = list(ftol = 1e-12, xtol = 1e-12))
+  recycle <- Pimpl(el_recycle, modelname = mn("recycle"))
 
   sing <- Pimpl(c(x1 = "x1 + x2 - s", x2 = "x1 + x2 - s"), parameters = "s",
                 deriv2 = FALSE, modelname = mn("sing"), verbose = FALSE,
-                controlsMS = list(nStarts = 1L, positive = FALSE),
-                controlsNleqslv = list(ftol = 1e-12, xtol = 1e-12))
+                controlsPTC = list(positive = FALSE))
 
   noroot <- Pimpl(c(x = "x*x + 1"), parameters = character(0),
                   modelname = mn("noroot"), verbose = FALSE,
-                  controlsMS = list(nStarts = 5L, positive = FALSE),
-                  controlsNleqslv = list(ftol = 1e-6, xtol = 1e-6))
+                  controlsPTC = list(positive = FALSE, maxit = 50L))
 
   noparam <- Pimpl(c(A = "A - 1.0"), parameters = NULL, modelname = mn("noparam"))
 
   erk_im <- Pimpl(el_ERK, parameters = c("k1", "k2"),
-                  modelname = mn("erk_im"), verbose = FALSE,
-                  controlsMS = list(nStarts = 1L, positive = FALSE),
-                  controlsNleqslv = list(ftol = 1e-12, xtol = 1e-12))
+                  modelname = mn("erk_im"), verbose = FALSE)
 
   px <- P(list(C1 = c(k_in = "s",     k_out = "1", A = "1"),
                C2 = c(k_in = "2 * s", k_out = "1", A = "1")),
           modelname = mn("px"), verbose = FALSE)
+  # two conditions with the same steady-state inputs
+  px_same <- P(list(C1 = c(k_in = "s", k_out = "1", A = "1"),
+                    C2 = c(k_in = "s", k_out = "1", A = "1")),
+               modelname = mn("px_same"), verbose = FALSE)
 
-  compile(pd, pd_twin, pd_ms, pd_input, pd_stall, unstable, pos, moiety2_eq,
-          dimer_eq, zero, erk_eq, erk_eq10, output = mn("equil"), cores = 4L)
   compile(lin, d2, d2_2, d2_cq, moiety2_im, dimer_im, recycle, sing, noroot,
-          noparam, erk_im, px, output = mn("impl"), cores = 4L)
+          noparam, erk_im, px, px_same, zero, pd, pd2, plasmid, bistable, unstable,
+          output = mn("impl"), cores = 4L)
 
   .pp_env$models <- list(
-    pd = pd, pd_twin = pd_twin, pd_ms = pd_ms, pd_input = pd_input,
-    pd_stall = pd_stall, unstable = unstable, pos = pos, moiety2_eq = moiety2_eq,
-    dimer_eq = dimer_eq, zero = zero, erk_eq = erk_eq, erk_eq10 = erk_eq10,
     lin = lin, d2 = d2, d2_2 = d2_2, d2_cq = d2_cq, moiety2_im = moiety2_im,
     dimer_im = dimer_im, recycle = recycle, el_recycle = el_recycle, sing = sing,
-    noroot = noroot, noparam = noparam, erk_im = erk_im, px = px)
+    noroot = noroot, noparam = noparam, erk_im = erk_im, px = px, px_same = px_same,
+    zero = zero, pd = pd, pd2 = pd2, plasmid = plasmid, bistable = bistable,
+    unstable = unstable)
 }
-
-
-## ---- Pequil: production-decay -----------------------------------------
-
-test_that("Pequil on dA = k_in - k_out * A converges to A* = k_in / k_out", {
-  skip_if_no_compile()
-  pf <- pp_models()$pd
-
-  pars <- c(k_in = 1.5, k_out = 0.3, A = 0.1)  # A is the initial guess
-  out <- pf(pars, deriv = TRUE)[[1]]
-
-  expect_equal(as.numeric(out), as.numeric(pars[["k_in"]] / pars[["k_out"]]),
-               tolerance = 1e-5)
-
-  # Jacobian via IFT: A*(k_in, k_out) = k_in / k_out
-  #   dA*/dk_in  =  1 / k_out
-  #   dA*/dk_out = -k_in / k_out^2
-  J <- attr(out, "deriv")
-  expect_equal(J[, "k_in",  drop = TRUE], 1 / pars[["k_out"]],
-               tolerance = 1e-5, ignore_attr = TRUE)
-  expect_equal(J[, "k_out", drop = TRUE], -pars[["k_in"]] / pars[["k_out"]]^2,
-               tolerance = 1e-5, ignore_attr = TRUE)
-})
 
 
 ## ---- Pimpl: linear constraint (value) ---------------------------------
@@ -199,8 +136,7 @@ test_that("Pimpl on x - a = 0 returns x = a (root-finding correctness)", {
   out <- pf(pars, deriv = TRUE)[[1]]
 
   # Pimpl returns inner state plus pass-through inputs; pick by name.
-  # Tolerance reflects nleqslv solver default termination criterion.
-  expect_equal(as.numeric(out["x"]), pars[["a"]], tolerance = 1e-3)
+  expect_equal(as.numeric(out["x"]), pars[["a"]], tolerance = 1e-8)
 
   # IFT: x*(a) = a, so dx*/da = +1. (The legacy fn used to recycle a single
   # Jacobian entry across all columns, producing the wrong sign here; the
@@ -315,84 +251,37 @@ test_that("Pimpl(deriv2) propagates Hessian through CQ-eliminated species", {
 })
 
 
-## ---- getEquations under expressInTotals -------------------------------
+## ---- getEquations with conservation rows ------------------------------
 
-test_that("Pimpl(expressInTotals) solves the full system with a conservation residual", {
+test_that("Pimpl solves the full system together with the conservation rows", {
   skip_if_no_compile()
   oldwd <- setwd(.dmod_fx_workdir()); on.exit(setwd(oldwd), add = TRUE)
 
-  # A <-> B with CQ A + B = total_1. Pimpl keeps all moiety species (solved
-  # positive in log-space) and replaces one redundant ODE with the algebraic
-  # conservation residual; nothing is reconstructed by subtraction.
+  # A <-> B with CQ A + B = total_1. Pimpl keeps every moiety species and every
+  # rate equation and adds the conservation row; nothing is reconstructed by
+  # subtraction and no pivot species is chosen.
   el <- eqnlist()
   el <- addReaction(el, "A", "B", "k*A")
   el <- addReaction(el, "B", "A", "km*B")
 
-  pf <- Pimpl(el, parameters = c("k","km"), expressInTotals = TRUE,
+  pf <- Pimpl(el, parameters = c("k","km"),
               modelname = paste0("test_Pimpl_eq_", as.integer(Sys.time())),
-              compile = FALSE, controlsMS = list(nStarts = 3L))
+              compile = FALSE)
   eqs <- getEquations(pf)[[1]]
-  expect_length(eqs, 2L)
-  # one entry is the conservation residual (named by the total), the other a
-  # genuine rate equation for the surviving species
-  expect_true("total_1" %in% names(eqs))
+  expect_setequal(names(eqs), c("A", "B", "total_1"))
   expect_match(eqs[["total_1"]], "total_1", fixed = TRUE)
-  ode_name <- setdiff(names(eqs), "total_1")
-  expect_true(ode_name %in% c("A", "B"))
-  expect_true(grepl("k", eqs[[ode_name]]))
+  expect_true(grepl("k", eqs[["A"]]))
   expect_true("total_1" %in% getParameters(pf))
 })
-
-test_that("Pequil(expressInTotals) integrates the full system (no elimination)", {
-  skip_if_no_compile()
-  oldwd <- setwd(.dmod_fx_workdir()); on.exit(setwd(oldwd), add = TRUE)
-
-  # Pequil keeps every moiety species as a dynamical equation; the total
-  # enters through the initial conditions, not the rates.
-  el <- eqnlist()
-  el <- addReaction(el, "A", "B", "k*A")
-  el <- addReaction(el, "B", "A", "km*B")
-
-  pf <- Pequil(el, parameters = c("k","km"), expressInTotals = TRUE,
-               modelname = paste0("test_Pequil_eq_", as.integer(Sys.time())),
-               compile = FALSE, controlsMS = list(nStarts = 3L))
-  eqs <- getEquations(pf)[[1]]
-  expect_setequal(names(eqs), c("A","B"))
-  # both are genuine rate equations, no algebraic total_X - rest relation
-  expect_true(all(grepl("k", eqs)))
-  expect_false(any(grepl("total", eqs, fixed = TRUE)))
-  # total_1 is an outer parameter, supplied through the initial condition
-  expect_true("total_1" %in% getParameters(pf))
-})
-
-test_that("Pequil(expressInTotals) keeps reconstructed moiety species non-negative", {
-  skip_if_no_compile()
-  # Overlapping moieties sharing C: A+C and B+C. The full-system integration
-  # cannot produce a negative C the way linear elimination (C = total - rest)
-  # could.
-  pf <- pp_models()$pos
-  set.seed(11)
-  for (i in 1:8) {
-    resetWarmStarts(pf)
-    pin <- structure(10^runif(length(getParameters(pf)), -1, 1),
-                     names = getParameters(pf))
-    o <- tryCatch(pf(pin)[[1]], error = function(e) NULL)
-    if (is.null(o)) next
-    species <- intersect(c("A","Ap","B","Bp","C"), names(o))
-    expect_true(all(as.numeric(o[species]) >= -1e-8))
-  }
-})
-
 
 ## ---- CQ spectrum: independent / non-unit-coef / overlapping -----------
 
-# These exercise distinct branches of .detect_and_substitute_cq:
-#   B  two independent CQs            -> two pivots, two total_* params
-#   D  non-unit stoichiometry (2*D)   -> recon divides by coef_e = 2
-#   C  overlapping CQs, neg coef      -> Gaussian-elim pivots + nested
-#                                        recon (fixed-point substitution)
+# Conserved quantities enter as rows C x = T:
+#   B  two independent CQs            -> two rows, two total_* params
+#   D  non-unit stoichiometry (2*D)   -> coefficient 2 in C
+#   C  overlapping CQs                -> rows sharing species
 
-test_that("two independent conserved moieties solve to closed form (both backends)", {
+test_that("two independent conserved moieties solve to closed form", {
   skip_if_no_compile()
   # A <-> B  and  C <-> D : two disjoint moieties, total_1 = A+B, total_2 = C+D
   m <- pp_models()
@@ -402,11 +291,8 @@ test_that("two independent conserved moieties solve to closed form (both backend
   Bs <- p0[["k1"]] * p0[["total_1"]] / (p0[["k1"]] + p0[["k2"]]); As <- p0[["total_1"]] - Bs
   Ds <- p0[["k3"]] * p0[["total_2"]] / (p0[["k3"]] + p0[["k4"]]); Cs <- p0[["total_2"]] - Ds
 
-  for (pf in list(Pimpl = m$moiety2_im, Pequil = m$moiety2_eq)) {
-    o <- pf(p0)[[1]]
-    expect_equal(as.numeric(o[c("A","B","C","D")]),
-                 c(As, Bs, Cs, Ds), tolerance = 1e-3)
-  }
+  o <- m$moiety2_im(p0)[[1]]
+  expect_equal(as.numeric(o[c("A","B","C","D")]), c(As, Bs, Cs, Ds), tolerance = 1e-8)
 })
 
 test_that("non-unit stoichiometric coefficient is handled (2*M <-> D)", {
@@ -419,17 +305,10 @@ test_that("non-unit stoichiometric coefficient is handled (2*M <-> D)", {
   Ms <- (-1 + sqrt(1 + 8 * r * p0[["total_MD"]])) / (4 * r)   # 2 r M^2 + M - T = 0
   Ds <- r * Ms^2
 
-  # Pimpl conserves the moiety to the solver tolerance (constraint residual),
-  # so tighten ftol; Pequil conserves it exactly (ODE invariant).
   oi <- m$dimer_im(p0)[[1]]
-  expect_equal(as.numeric(oi["M"]), Ms, tolerance = 1e-4)
-  expect_equal(as.numeric(oi["D"]), Ds, tolerance = 1e-4)
-  expect_equal(as.numeric(oi["M"] + 2 * oi["D"]), p0[["total_MD"]], tolerance = 1e-6)
-
-  oe <- m$dimer_eq(p0)[[1]]
-  expect_equal(as.numeric(oe["M"]), Ms, tolerance = 1e-3)
-  expect_equal(as.numeric(oe["D"]), Ds, tolerance = 1e-3)
-  expect_equal(as.numeric(oe["M"] + 2 * oe["D"]), p0[["total_MD"]], tolerance = 1e-6)
+  expect_equal(as.numeric(oi["M"]), Ms, tolerance = 1e-8)
+  expect_equal(as.numeric(oi["D"]), Ds, tolerance = 1e-8)
+  expect_equal(as.numeric(oi["M"] + 2 * oi["D"]), p0[["total_MD"]], tolerance = 1e-12)
 })
 
 test_that("overlapping conserved quantities reconstruct consistently (recycle enzyme)", {
@@ -465,8 +344,7 @@ test_that("a fully open network (all states drain to zero) errors clearly", {
   el <- addReaction(el, "ES", "E + S", "k1r*ES")
   el <- addReaction(el, "ES", "E + P", "k1c*ES")
 
-  expect_error(Pimpl(el, expressInTotals = TRUE, compile = FALSE),
-               "structurally zero in steady state")
+  expect_error(Pimpl(el, compile = FALSE), "structurally zero in steady state")
 })
 
 
@@ -474,8 +352,8 @@ test_that("a fully open network (all states drain to zero) errors clearly", {
 
 test_that("Pimpl uses the pseudoinverse when df/dx is rank-deficient", {
   skip_if_no_compile()
-  # Two-state system with a hidden conservation law that .detect_and_substitute_cq
-  # cannot pick up because there is no `eqnlist` smatrix:
+  # Two-state system with a conservation law that Pimpl cannot detect without
+  # an `eqnlist`:
   #   f1 = x1 + x2 - s
   #   f2 = x1 + x2 - s    (same as f1 -> df/dx has rank 1)
   # The constraint manifold is the line x1 + x2 = s. The IFT does not apply
@@ -494,30 +372,7 @@ test_that("Pimpl uses the pseudoinverse when df/dx is rank-deficient", {
 })
 
 
-## ---- resetWarmStarts: clear Pequil / Pimpl cache ----------------------
-
-# Both Pequil and Pimpl cache the previous root (+ sensitivities) for
-# warm-starting the next call. After a structural change or a basin
-# jump, that cache becomes a liability -- resetWarmStarts() drops it.
-
-test_that("resetWarmStarts clears Pequil's cache by name", {
-  skip_if_no_compile()
-  pf <- pp_models()$pd
-  pars <- c(k_in = 1.5, k_out = 0.3, A = 0.1)
-  pf(pars)
-
-  # Warm-start caches are now kept per condition in a registry; a condition-less
-  # call lands in the "__default__" slot.
-  reset_env <- environment(attr(pf, "resetWarmStart"))$reg_ref$caches[["__default__"]]
-  expect_false(is.null(reset_env$yini))
-
-  labels <- resetWarmStarts(pf, verbose = FALSE)
-  expect_length(labels, 1L)
-  expect_match(labels, "^Pequil\\(")
-  expect_null(reset_env$yini)
-  expect_null(reset_env$last_hash)
-})
-
+## ---- resetWarmStarts ---------------------------------------------------
 
 test_that("resetWarmStarts clears Pimpl's cache by name", {
   skip_if_no_compile()
@@ -525,12 +380,12 @@ test_that("resetWarmStarts clears Pimpl's cache by name", {
   pf(c(a = 1, x = 0.5))
 
   reset_env <- environment(attr(pf, "resetWarmStart"))$reg_ref$caches[["__default__"]]
-  expect_false(is.null(reset_env$guess))
+  expect_false(is.null(reset_env$arch))
 
   labels <- resetWarmStarts(pf, verbose = FALSE)
   expect_length(labels, 1L)
   expect_match(labels, "^Pimpl\\(")
-  expect_null(reset_env$guess)
+  expect_null(reset_env$arch)
 })
 
 
@@ -539,46 +394,58 @@ test_that("resetWarmStarts walks into composed functions", {
   # resetWarmStarts() walks this frame through `wrap`, so no other
   # warm-starting object may sit in it.
   p1 <- pp_models()$pd
-  p2 <- pp_models()$pd_twin
+  p2 <- pp_models()$pd2
 
-  p1(c(k_in = 1, k_out = 0.5, A = 0.1))
-  p2(c(k_in = 2, k_out = 0.4, A = 0.2))
+  p1(c(k_in = 1, k_out = 0.5))
+  p2(c(k_in = 2, k_out = 0.4))
 
   ref1 <- environment(attr(p1, "resetWarmStart"))$reg_ref$caches[["__default__"]]
   ref2 <- environment(attr(p2, "resetWarmStart"))$reg_ref$caches[["__default__"]]
-  expect_false(is.null(ref1$yini))
-  expect_false(is.null(ref2$yini))
+  expect_false(is.null(ref1$arch))
+  expect_false(is.null(ref2$arch))
 
   wrap <- function(pars) list(p1 = p1(pars), p2 = p2(pars))
   labels <- resetWarmStarts(wrap, verbose = FALSE)
-  expect_setequal(sub("\\(.*", "", labels), c("Pequil", "Pequil"))
+  expect_setequal(sub("\\(.*", "", labels), c("Pimpl", "Pimpl"))
   expect_length(labels, 2L)
-  expect_null(ref1$yini)
-  expect_null(ref2$yini)
+  expect_null(ref1$arch)
+  expect_null(ref2$arch)
 })
 
 
-test_that("a condition-less Pequil keeps an independent warm start per condition", {
+test_that("a condition-less Pimpl keeps an independent warm start per condition", {
   skip_if_no_compile()
   m <- pp_models()
+  resetWarmStarts(m$pd, verbose = FALSE)
 
-  # Condition-less equilibration: SS A* = k_in / k_out.
-  g_eq <- m$pd_input
-  # Two conditions with different k_in -> different steady states (3 and 6).
-  px <- m$px
-
-  pf  <- g_eq * px
+  # A* = k_in / k_out: 3 in C1, 6 in C2
+  pf  <- m$pd * m$px
   out <- pf(c(s = 3), deriv = FALSE)
+  expect_equal(as.numeric(out$C1["A"]), 3, tolerance = 1e-10)
+  expect_equal(as.numeric(out$C2["A"]), 6, tolerance = 1e-10)
 
-  expect_equal(as.numeric(out$C1["A"]), 3, tolerance = 1e-4)
-  expect_equal(as.numeric(out$C2["A"]), 6, tolerance = 1e-4)
+  caches <- environment(attr(m$pd, "resetWarmStart"))$reg_ref$caches
+  expect_true(all(c("C1", "C2") %in% ls(caches)))
+  expect_equal(as.numeric(caches[["C1"]]$arch[[1]]$x["A"]), 3, tolerance = 1e-10)
+  expect_equal(as.numeric(caches[["C2"]]$arch[[1]]$x["A"]), 6, tolerance = 1e-10)
 
-  # The single Pequil closure must now hold one warm-start slot per condition,
-  # each cached at its own root -- not a single shared/overwritten cache.
-  caches <- environment(attr(g_eq, "resetWarmStart"))$reg_ref$caches
-  expect_setequal(ls(caches), c("C1", "C2"))
-  expect_equal(as.numeric(caches[["C1"]]$yini["A"]), 3, tolerance = 1e-4)
-  expect_equal(as.numeric(caches[["C2"]]$yini["A"]), 6, tolerance = 1e-4)
+  # the next call starts each condition from its own root
+  st <- environment(attr(m$pd, "mappings")[[1]])$stats
+  how0 <- st$how
+  pf(c(s = 3.3), deriv = FALSE)
+  expect_equal(unname(st$how["warm_newton"]) - (if (is.na(how0["warm_newton"])) 0 else unname(how0["warm_newton"])), 2)
+})
+
+test_that("conditions with identical steady-state inputs are solved once", {
+  skip_if_no_compile()
+  m <- pp_models()
+  resetWarmStarts(m$pd, verbose = FALSE)
+  E <- environment(attr(m$pd, "mappings")[[1]]); E$statsReset()
+  out <- (m$pd * m$px_same)(c(s = 2), deriv = TRUE)
+  expect_equal(as.numeric(out$C2["A"]), 2, tolerance = 1e-10)
+  expect_equal(E$stats$calls, 2L)
+  expect_equal(E$stats$solves, 1L)
+  expect_equal(E$stats$memo, 1L)
 })
 
 
@@ -595,43 +462,15 @@ test_that("resetWarmStarts rejects non-function inputs", {
 })
 
 
-## ---- Pequil multistart: bad init recovered by random sweep ------------
-
-test_that("Pequil multistart recovers from a bad initial guess", {
-  skip_if_no_compile()
-  # Stable: dA = k_in - k_out * A, SS A* = k_in / k_out = 5.
-  pf <- pp_models()$pd_ms
-
-  # Start with a wildly wrong (but legal) guess; integrator should still
-  # find the basin via warm-start, but force a fresh search by resetting.
-  resetWarmStarts(pf, verbose = FALSE)
-  pars <- c(k_in = 1.0, k_out = 0.2, A = 1e6)  # SS = 5
-  out  <- pf(pars, deriv = FALSE)[[1]]
-  expect_equal(as.numeric(out), 5, tolerance = 1e-3)
-})
-
-
-## ---- Pequil hard error when no steady state can be reached ------------
-
-test_that("Pequil throws when no integration attempt produces a root", {
-  skip_if_no_compile()
-  # Linear *unstable* system: dA = k * A with k > 0 has no finite SS.
-  pf <- pp_models()$unstable
-
-  resetWarmStarts(pf, verbose = FALSE)
-  expect_error(pf(c(k = 1.0, A = 0.5))[[1]], "no steady state reached")
-})
-
-
 ## ---- Pimpl hard error when residual cannot be driven below ftol -------
 
-test_that("Pimpl throws when no start brings the residual below ftol", {
+test_that("Pimpl throws when no attempt converges", {
   skip_if_no_compile()
-  # x^2 + 1 = 0 has no real root: nleqslv cannot reach zero residual.
+  # x^2 + 1 = 0 has no real root.
   pf <- pp_models()$noroot
 
   resetWarmStarts(pf, verbose = FALSE)
-  expect_error(pf(c(x = 0.1))[[1]], "exceeds ftol|all .*solve attempt")
+  expect_error(pf(c(x = 0.1))[[1]], "no root found")
 })
 
 
@@ -691,6 +530,23 @@ test_that("Sink cluster: TGFb + R_TGFb + R_TGFb_int (combined mass leaks)", {
 })
 
 
+test_that("Sink cluster: a conserved moiety listed first stays nonzero", {
+  skip_if_not_installed("lpSolve")
+  # A <-> Ap is conserved and comes first; the leaking cluster {L, RL} comes
+  # after it. Their union also passes the LP, but only {L, RL} drains.
+  el <- eqnlist() |>
+    addReaction("A",     "Ap",  "k1 * A") |>
+    addReaction("Ap",    "A",   "k2 * Ap") |>
+    addReaction("",      "R",   "k_pr_R") |>
+    addReaction("R",     "",    "k_dg_R * R") |>
+    addReaction("L + R", "RL",  "k_on * L * R") |>
+    addReaction("RL",    "L + R", "k_off * RL") |>
+    addReaction("RL",    "",    "k_dg * RL")
+  zs <- helper(el)
+  expect_setequal(zs$zero_states, c("L", "RL"))
+})
+
+
 ## ---- Layer 3 falls back when lpSolve is missing ------------------------
 
 test_that("FindSinkCluster degrades gracefully without lpSolve", {
@@ -727,9 +583,7 @@ test_that("Pure production-decay has no zero states", {
 })
 
 
-## ---- End-to-end: Pequil produces value = 0 for zero states -------------
-
-test_that("Pequil reports zero states with value 0 and drops them from getParameters()", {
+test_that("Pimpl reports zero states with value 0 and drops them from getParameters()", {
   skip_if_no_compile()
   # Receptor R alone has production + degradation (nonzero baseline).
   # Ligand L and complex LR form a sink cluster (LR degrades).
@@ -738,26 +592,55 @@ test_that("Pequil reports zero states with value 0 and drops them from getParame
   expect_false(any(c("L", "LR") %in% getParameters(pf)))
   pars <- c(k_pr_R = 2, k_dg_R = 0.5, k_on = 1, k_off = 0.5, k_dg_LR = 0.1)
   out  <- pf(pars)[[1]]
-  expect_equal(as.numeric(out["L"]),  0, tolerance = 1e-8)
-  expect_equal(as.numeric(out["LR"]), 0, tolerance = 1e-8)
-  expect_equal(as.numeric(out["R"]),  pars[["k_pr_R"]] / pars[["k_dg_R"]],
-               tolerance = 1e-5)
+  expect_identical(as.numeric(out[c("L", "LR")]), c(0, 0))
+  expect_equal(as.numeric(out["R"]), pars[["k_pr_R"]] / pars[["k_dg_R"]], tolerance = 1e-10)
+})
+
+test_that("a state without influx at the given parameters is exactly 0", {
+  skip_if_no_compile()
+  pf <- pp_models()$plasmid
+  p0 <- c(k_tx = 2, k_dg = 0.5, k_y = 1, k_xy = 3, k_dy = 0.25)
+
+  out <- pf(c(p0, plasmid = 0))[[1]]
+  expect_identical(as.numeric(out["X"]), 0)
+  expect_equal(as.numeric(out["Y"]), 4, tolerance = 1e-10)
+  # the sensitivity to the plasmid is still the one at plasmid > 0
+  J <- attr(out, "deriv")
+  expect_equal(unname(J["X", "plasmid"]), 4, tolerance = 1e-10)
+  expect_equal(unname(J["Y", "plasmid"]), 48, tolerance = 1e-10)
+
+  out1 <- pf(c(p0, plasmid = 1))[[1]]
+  expect_equal(as.numeric(out1[c("X", "Y")]), c(4, 52), tolerance = 1e-10)
+})
+
+test_that("Pimpl returns a stable steady state of a bistable system", {
+  skip_if_no_compile()
+  pf <- pp_models()$bistable
+  p0 <- c(k0 = 0.02, k1 = 1, K = 1, d = 0.4)
+  f  <- function(x) p0[["k0"]] + p0[["k1"]] * x^2 / (p0[["K"]]^2 + x^2) - p0[["d"]] * x
+  lo <- uniroot(f, c(0.01, 0.1), tol = 1e-14)$root
+  mi <- uniroot(f, c(0.1, 1), tol = 1e-14)$root
+  hi <- uniroot(f, c(1, 3), tol = 1e-14)$root
+
+  root <- function(x0) {
+    resetWarmStarts(pf, verbose = FALSE)
+    as.numeric(pf(c(p0, X = x0), deriv = FALSE)[[1]]["X"])
+  }
+  expect_equal(root(0.8 * mi), lo, tolerance = 1e-8)
+  expect_equal(root(1.2 * mi), hi, tolerance = 1e-8)
+  # started on the unstable root, it leaves along the unstable direction
+  expect_true(abs(root(mi) - lo) < 1e-8 || abs(root(mi) - hi) < 1e-8)
+})
+
+test_that("Pimpl with flow = TRUE refuses an unstable root", {
+  skip_if_no_compile()
+  pf <- pp_models()$unstable
+  resetWarmStarts(pf, verbose = FALSE)
+  expect_error(pf(c(a = 2, x = 1)), "no stable root found")
 })
 
 
 ## ---- No-progress: hard error instead of stale initial values -----------
-
-test_that("Pequil errors when the solver makes no progress", {
-  skip_if_no_compile()
-  # Force a no-progress condition by capping the total step budget so the
-  # solver can't even take one accepted step. Without the new guard,
-  # Pequil would silently return the initial values.
-  pf <- pp_models()$pd_stall
-  expect_error(
-    suppressWarnings(pf(c(k_in = 1, k_out = 1, A = 1))),
-    "no steady state reached")
-})
-
 
 # ============================================================================
 # Edge case: Pimpl with no outer parameters
@@ -773,11 +656,8 @@ test_that("Pimpl with no outer parameters does not crash in build_jacobian", {
 
 
 # ============================================================================
-# CQ harmonization: both Pimpl and Pequil accept `expressInTotals` to switch
-# between "total as parameter" (TRUE, Pimpl default) and "eliminated species
-# as pass-through parameter" (FALSE, Pequil default). Smart `totalXxx`
-# naming from the longest common substring of CQ species; `total_<index>`
-# fallback when no common substring exists.
+# Totals as parameters: smart `totalXxx` naming from the longest common
+# substring of the CQ species, `total_<index>` otherwise.
 # ============================================================================
 
 ## ---- Smart naming: pERK + ERK -> totalERK ----------------------------
@@ -813,9 +693,7 @@ test_that("Pimpl on A <-> B introduces total_1 (no common substring)", {
   pf <- Pimpl(el, parameters = c("k", "km"),
               modelname = paste0("test_Pimpl_smart_total1_",
                                  as.integer(Sys.time())),
-              compile = FALSE, verbose = FALSE,
-              controlsMS = list(nStarts = 1L, positive = FALSE),
-              controlsNleqslv = list(ftol = 1e-12, xtol = 1e-12))
+              compile = FALSE, verbose = FALSE)
   expect_true("total_1" %in% getParameters(pf))
 })
 
@@ -831,9 +709,7 @@ test_that("P(method='implicit') preserves the eqnlist smatrix for CQ detection",
     addReaction("pERK", "ERK",  "k2 * pERK")
 
   pf <- P(el, method = "implicit", compile = FALSE, verbose = FALSE,
-          modelname = paste0("test_P_implicit_cq_", as.integer(Sys.time())),
-          controlsMS = list(nStarts = 1L, positive = FALSE),
-          controlsNleqslv = list(ftol = 1e-12, xtol = 1e-12))
+          modelname = paste0("test_P_implicit_cq_", as.integer(Sys.time())))
   expect_true("totalERK" %in% getParameters(pf))
 })
 
@@ -846,109 +722,24 @@ test_that("Pimpl on ERK <-> pERK introduces totalERK via LCS", {
 })
 
 
-## ---- Pimpl == Pequil on CQ model with expressInTotals = TRUE --------
-
-test_that("Pimpl and Pequil produce identical parvec interface (totals mode)", {
+test_that("Pimpl solves ERK <-> pERK to closed form in totals", {
   skip_if_no_compile()
-  p_pimpl  <- pp_models()$erk_im
-  p_pequil <- pp_models()$erk_eq
-
-  expect_setequal(getParameters(p_pimpl), getParameters(p_pequil))
-
-  pars <- c(k1 = 1, k2 = 3, totalERK = 4, ERK = 1, pERK = 1)
-  out_pimpl  <- p_pimpl(pars, deriv = FALSE)[[1]]
-  out_pequil <- p_pequil(pars, deriv = FALSE)[[1]]
-
-  # Closed form: ERK* = k2 / (k1 + k2) * total = 3, pERK* = 1.
-  expect_equal(as.numeric(out_pimpl["pERK"]),  1, tolerance = 1e-3)
-  expect_equal(as.numeric(out_pimpl["ERK"]),   3, tolerance = 1e-3)
-  expect_equal(as.numeric(out_pequil["pERK"]), 1, tolerance = 1e-3)
-  expect_equal(as.numeric(out_pequil["ERK"]),  3, tolerance = 1e-3)
+  pf <- pp_models()$erk_im
+  pars <- c(k1 = 1, k2 = 3, totalERK = 4)
+  out  <- pf(pars, deriv = FALSE)[[1]]
+  # ERK* = k2 / (k1 + k2) * total = 3, pERK* = 1
+  expect_equal(as.numeric(out[c("ERK", "pERK")]), c(3, 1), tolerance = 1e-10)
 })
 
 
-## ---- Pequil Jacobian for eliminated species matches closed form -----
-
-test_that("Pequil chain-rules the eliminated species sensitivity correctly", {
-  skip_if_no_compile()
-  pf <- pp_models()$erk_eq10
-
-  pars <- c(k1 = 1, k2 = 3, totalERK = 4, ERK = 1, pERK = 1)
-  out  <- pf(pars, deriv = TRUE)[[1]]
-  J    <- attr(out, "deriv")
-
-  # Closed form: pERK = k1/(k1+k2) * total, ERK = total - pERK.
-  # d(pERK)/d(k1) = k2/(k1+k2)^2 * total = 3/16 * 4 = 0.75
-  # d(ERK)/d(k1)  = -d(pERK)/d(k1) = -0.75
-  # d(pERK)/d(totalERK) = k1/(k1+k2) = 0.25
-  # d(ERK)/d(totalERK)  = 1 - 0.25 = 0.75
-  expect_equal(unname(J["pERK", "k1"]),       0.75, tolerance = 1e-4)
-  expect_equal(unname(J["ERK",  "k1"]),      -0.75, tolerance = 1e-4)
-  expect_equal(unname(J["pERK", "totalERK"]), 0.25, tolerance = 1e-4)
-  expect_equal(unname(J["ERK",  "totalERK"]), 0.75, tolerance = 1e-4)
-})
-
-
-## ---- expressInTotals = FALSE: pivot is parameter, no total ----------
-
-test_that("Pimpl with expressInTotals = FALSE promotes pivot to parameter", {
-  skip_if_no_compile()
-  oldwd <- setwd(.dmod_fx_workdir()); on.exit(setwd(oldwd), add = TRUE)
-
+test_that("Pimpl reports the arguments it no longer has", {
   el <- eqnlist() |>
     addReaction("ERK",  "pERK", "k1 * ERK") |>
     addReaction("pERK", "ERK",  "k2 * pERK")
-
-  pf <- Pimpl(el, parameters = c("k1", "k2"),
-              expressInTotals = FALSE,
-              modelname = paste0("test_Pimpl_pivot_",
-                                 as.integer(Sys.time())),
-              compile = FALSE, verbose = FALSE,
-              controlsMS = list(nStarts = 1L, positive = FALSE),
-              controlsNleqslv = list(ftol = 1e-12, xtol = 1e-12))
-  params <- getParameters(pf)
-  expect_false(any(grepl("^total", params)))
-  # One of ERK/pERK is the pivot; both should be in the parvec interface
-  # (the pivot as a user-supplied parameter, the other as an output).
-  expect_true(all(c("k1", "k2") %in% params))
-})
-
-
-test_that("Pequil default (expressInTotals = FALSE) introduces no totals", {
-  skip_if_no_compile()
-  oldwd <- setwd(.dmod_fx_workdir()); on.exit(setwd(oldwd), add = TRUE)
-
-  el <- eqnlist() |>
-    addReaction("ERK",  "pERK", "k1 * ERK") |>
-    addReaction("pERK", "ERK",  "k2 * pERK")
-
-  pf <- Pequil(el, parameters = c("k1", "k2"),
-               modelname = paste0("test_Pequil_default_pivot_",
-                                  as.integer(Sys.time())),
-               compile = FALSE, verbose = FALSE)
-  expect_false(any(grepl("^total", getParameters(pf))))
-})
-
-
-test_that("Pequil with expressInTotals = FALSE matches Pimpl interface", {
-  skip_if_no_compile()
-  oldwd <- setwd(.dmod_fx_workdir()); on.exit(setwd(oldwd), add = TRUE)
-
-  el <- eqnlist() |>
-    addReaction("ERK",  "pERK", "k1 * ERK") |>
-    addReaction("pERK", "ERK",  "k2 * pERK")
-
-  ts <- as.integer(Sys.time())
-  p_pimpl <- Pimpl(el, parameters = c("k1", "k2"), expressInTotals = FALSE,
-                   modelname = paste0("test_harm_pivot_pimpl_", ts),
-                   compile = FALSE, verbose = FALSE,
-                   controlsMS = list(nStarts = 1L, positive = FALSE),
-                   controlsNleqslv = list(ftol = 1e-12, xtol = 1e-12))
-  p_pequil <- Pequil(el, parameters = c("k1", "k2"), expressInTotals = FALSE,
-                     modelname = paste0("test_harm_pivot_pequil_", ts),
-                     compile = FALSE, verbose = FALSE,
-                     controlsMS = list(nStarts = 1L))
-  expect_setequal(getParameters(p_pimpl), getParameters(p_pequil))
+  expect_error(Pimpl(el, expressInTotals = FALSE), "expressInTotals` is gone")
+  expect_error(Pimpl(el, controlsMS = list(nStarts = 1L)), "controlsMS` is gone")
+  expect_error(Pimpl(el, controlsNleqslv = list(ftol = 1e-9)), "controlsPTC")
+  expect_error(Pimpl(el, controlsPTC = list(ftol = 1e-9)), "unknown controlsPTC entry ftol")
 })
 
 
@@ -1048,8 +839,6 @@ test_that("is.eqnlist accepts pre-totals eqnlists (missing $totals field)", {
 })
 
 
-## ---- Pimpl/Pequil pick up customTotals ------------------------------
-
 test_that("Pimpl uses customTotals names in the parvec interface", {
   skip_if_no_compile()
   oldwd <- setwd(.dmod_fx_workdir()); on.exit(setwd(oldwd), add = TRUE)
@@ -1062,9 +851,7 @@ test_that("Pimpl uses customTotals names in the parvec interface", {
   pf <- Pimpl(el, parameters = c("k1", "k2"),
               modelname = paste0("test_Pimpl_custom_totals_",
                                  as.integer(Sys.time())),
-              compile = FALSE, verbose = FALSE,
-              controlsMS = list(nStarts = 1L, positive = FALSE),
-              controlsNleqslv = list(ftol = 1e-12, xtol = 1e-12))
+              compile = FALSE, verbose = FALSE)
   params <- getParameters(pf)
   expect_true("totalERKpool" %in% params)
   expect_false(any(grepl("^total[^E]", params)))  # no auto-named total slipped in

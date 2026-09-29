@@ -63,13 +63,9 @@ skip_on_cran()
     mnr <- odemodel(re, modelname = "rv_noRev", deriv = TRUE, outdir = d,
                     compile = FALSE)
 
-    # The steady state is solved twice on the reverse path, once for the value
-    # and once for the Jacobian; roottol keeps that sub-solve gap out of the way.
-    pq <- Pequil(c(A = "k_in - k_out * A"), parameters = c("k_in", "k_out"),
-                 modelname = "rv_equil", attach.input = TRUE, deriv = TRUE,
-                 outdir = d, verbose = FALSE,
-                 controlsODE = list(abstol = 1e-12, reltol = 1e-12,
-                                    roottol = 1e-12))
+    pq <- Pimpl(c(A = "k_in - k_out * A"), parameters = c("k_in", "k_out"),
+                flow = TRUE, modelname = "rv_equil", deriv = TRUE,
+                outdir = d, verbose = FALSE)
     pl <- P(c(k_in = "exp(logkin)", k_out = "exp(logkout)", B = "0",
               k1 = "exp(logk1)", k2 = "exp(logk2)", s = "exp(logs)"),
             condition = "C1", derivMode = fr, modelname = "rv_pq", outdir = d)

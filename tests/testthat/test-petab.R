@@ -62,7 +62,7 @@
         specs[[paste0("v1_", id)]] <- spec(file.path(petab_dir, id, paste0("_", id, ".yaml")),
                                            "deSolve", quiet = as.integer(id) >= 7L)
       }
-      for (case in c("0001", "0002", "0009", "0016", "0023", "0024", "0030"))
+      for (case in c("0001", "0002", "0009", "0016", "0024", "0030"))
         specs[[paste0("v2_", case)]] <- spec(
           file.path(petab_dir, "v2", case, paste0("_", case, ".yaml")),
           if (case %in% c("0001", "0002", "0009")) "deSolve" else "cppDE")
@@ -398,9 +398,8 @@ test_that("PEtab Stage-2 test cases 0007-0016 produce solution-matching llh", {
   if (!nzchar(petab_dir)) skip("PEtabTests/ not found -- set DMOD_PETABTESTS to the repo directory")
   if (!.libsbml_works())   skip("libsbml virtualenv not available")
 
-  # Cases 0007 (log10 trafo), 0008 (replicates), 0009/0010 (preequilibration --
-  # numeric Pequil fallback is exercised because steadyStates() leaves one
-  # state unresolved on the A↔B reaction), 0011-0013 (init / compartment /
+  # Cases 0007 (log10 trafo), 0008 (replicates), 0009/0010 (preequilibration
+  # by Pimpl), 0011-0013 (init / compartment /
   # parametric init overrides), 0014/0015 (numeric / symbolic noise parameter
   # overrides), 0016 (log trafo).
   for (id in sprintf("%04d", 7:16)) {
@@ -415,6 +414,71 @@ test_that("PEtab Stage-2 test cases 0007-0016 produce solution-matching llh", {
               max(0.01, abs(2 * sol$tol_llh)),
               label = paste0("case ", id, " -2*llh"))
   }
+})
+
+
+# Adenylyl cyclase and phosphodiesterase module of Isensee_JCB2018. With the
+# input Fsk and the SBML constants kp, kdp, kpp, kpd at 0, an equilibration
+# cannot move AC, pAC, ACF, PDE, pPDE.
+.petab_ac_module <- function()
+  eqnlist() |>
+    addReaction("AC",   "ACF",  "kf*Fsk*AC",        compartment = "cell") |>
+    addReaction("ACF",  "AC",   "kr*ACF",           compartment = "cell") |>
+    addReaction("AC",   "pAC",  "kp*AC",            compartment = "cell") |>
+    addReaction("pAC",  "AC",   "kdp*pAC",          compartment = "cell") |>
+    addReaction("",     "cAMP", "ks*(AC + xi*ACF)", compartment = "cell") |>
+    addReaction("cAMP", "",     "kd*cAMP*PDE",      compartment = "cell") |>
+    addReaction("PDE",  "pPDE", "kpp*cAMP*PDE",     compartment = "cell") |>
+    addReaction("pPDE", "PDE",  "kpd*pPDE",         compartment = "cell")
+
+test_that("states a preequilibration cannot move keep their initial values", {
+
+  withr::local_dir(tempdir())
+  if (!.libsbml_works()) skip("libsbml virtualenv not available")
+
+  # Isensee_JCB2018 pattern: the preequilibration keeps AC + pAC and
+  # PDE + pPDE split as they start, while the steady-state equations alone
+  # leave the split open.
+  d <- file.path(tempdir(), "petab_invariant")
+  dir.create(d, showWarnings = FALSE)
+  est <- c(ks = 0.6, kd = 2, kf = 1.5, kr = 0.5, xi = 3)
+  exportSbml(.petab_ac_module(),
+             parameters = c(est, Fsk = 0, kp = 0, kdp = 0, kpp = 0, kpd = 0, cell = 1),
+             inits = c(AC = 1, pAC = 0, ACF = 0, cAMP = 0.3, PDE = 1, pPDE = 0),
+             filepath = file.path(d, "model.xml"), modelID = "invariant")
+  tsv <- function(df, f)
+    utils::write.table(df, file.path(d, f), sep = "\t", quote = FALSE, row.names = FALSE)
+  tsv(data.frame(parameterId = names(est), parameterScale = "log10", lowerBound = 1e-3,
+                 upperBound = 1e3, nominalValue = est, estimate = 1), "parameters.tsv")
+  tsv(data.frame(conditionId = c("ctrl", "stim"), Fsk = c(0, 2)), "conditions.tsv")
+  tsv(data.frame(observableId = c("obs_cAMP", "obs_AC"),
+                 observableFormula = c("cAMP", "AC + ACF"), noiseFormula = 0.1),
+      "observables.tsv")
+  times <- c(0, 1, 5)
+  tsv(data.frame(observableId = rep(c("obs_cAMP", "obs_AC"), each = 3),
+                 preequilibrationConditionId = "ctrl", simulationConditionId = "stim",
+                 time = times, measurement = 1), "measurements.tsv")
+  writeLines(c("format_version: 1", "parameter_file: parameters.tsv", "problems:",
+               "- condition_files:", "  - conditions.tsv",
+               "  measurement_files:", "  - measurements.tsv",
+               "  observable_files:", "  - observables.tsv",
+               "  sbml_files:", "  - model.xml"), file.path(d, "problem.yaml"))
+
+  pp <- importPEtab(file.path(d, "problem.yaml"), backend = "deSolve",
+                    modelname = "petab_invariant",
+                    optionsOde = list(atol = 1e-12, rtol = 1e-10))
+  pred <- pp$prd(times, pp$bestfit, fixed = attr(pp, "petab_meta")$fixed,
+                 deriv = FALSE)[[1]]
+
+  # After the switch AC + ACF stays 1 and PDE 1; ACF relaxes to a at rate b
+  # and cAMP starts from ks / kd.
+  ks <- est[["ks"]]; kd <- est[["kd"]]; xi <- est[["xi"]]
+  a  <- 2 * est[["kf"]] / (2 * est[["kf"]] + est[["kr"]]); b <- 2 * est[["kf"]] + est[["kr"]]
+  c_inf <- ks * (1 + (xi - 1) * a) / kd
+  c_b   <- -ks * (xi - 1) * a / (kd - b)
+  camp  <- c_inf + c_b * exp(-b * times) + (ks / kd - c_inf - c_b) * exp(-kd * times)
+  expect_equal(unname(pred[, "obs_AC"]), rep(1, 3), tolerance = 1e-8)
+  expect_equal(unname(pred[, "obs_cAMP"]), camp, tolerance = 1e-8)
 })
 
 
@@ -528,6 +592,30 @@ test_that("exportSbml emits InitialAssignment for symbolic state initials", {
 ##
 ## The strip + classify decomposer should be unit-testable without libsbml
 ## because it operates only on character RHSes and named eqnvecs.
+
+test_that(".petab_invariant_states finds the states an equilibration cannot move", {
+  el   <- .petab_ac_module()
+  init <- c(AC = "1", pAC = "0", ACF = "0.0", cAMP = "0.3", PDE = "1", pPDE = "0")
+  inv  <- dMod2:::.petab_invariant_states(el, init, c("Fsk", "kp", "kdp", "kpp", "kpd"))
+  expect_setequal(inv$zero, c("pAC", "ACF", "pPDE"))
+  expect_setequal(inv$frozen, c("AC", "PDE"))
+  expect_equal(inv$idle, c(TRUE, TRUE, TRUE, TRUE, FALSE, FALSE, TRUE, TRUE))
+
+  red <- dMod2:::.petab_reduce_network(el, c(inv$zero, inv$frozen), inv$idle,
+                                       c("Fsk", "kp", "kdp", "kpp", "kpd", inv$zero))
+  expect_equal(red$states, "cAMP")
+  expect_setequal(setdiff(getSymbols(red$rates), "cAMP"), c("ks", "AC", "xi", "kd", "PDE"))
+
+  # With the input on, ACF is fed and AC moves; PDE still cannot.
+  inv <- dMod2:::.petab_invariant_states(el, init, c("kp", "kdp", "kpp", "kpd"))
+  expect_setequal(inv$zero, c("pAC", "pPDE"))
+  expect_setequal(inv$frozen, "PDE")
+  # A state that starts above 0 is never pinned at 0.
+  inv <- dMod2:::.petab_invariant_states(el, replace(init, "pAC", "0.2"),
+                                         c("Fsk", "kp", "kdp", "kpp", "kpd"))
+  expect_setequal(inv$zero, c("ACF", "pPDE"))
+  expect_setequal(inv$frozen, c("AC", "pAC", "PDE"))
+})
 
 test_that(".petab_strip_param_scale compensates the chain rule per-occurrence", {
   # Clean wrap stays clean (importer chain rule re-wraps it)
@@ -1226,8 +1314,9 @@ test_that("v2 experiment periods and promoted event targets match the published 
   if (!.libsbml_works()) skip("libsbml virtualenv not available")
 
   # 0016 and 0030 switch condition mid-run and resize a compartment from an
-  # SBML event, 0023 measures a steady state behind a preequilibration.
-  for (case in c("0016", "0023", "0030")) {
+  # SBML event. 0023 is left out: it fires an event during preequilibration,
+  # which is the steady state of the autonomous system here.
+  for (case in c("0016", "0030")) {
     yamlPath <- file.path(v2_dir, case, paste0("_", case, ".yaml"))
     if (!file.exists(yamlPath)) next
     sol <- yaml::read_yaml(file.path(v2_dir, case, paste0("_", case, "_solution.yaml")))
