@@ -258,7 +258,7 @@ match.fnargs <- function(arglist, choices) {
        paste0(capture.output(print(out[ai[, 1], c(1, ai[, 2])])), collapse = "\n"))
 }
 
-# `cond` is the slot's condition name; Pequil/Pimpl use it as warm-start key.
+# `cond` is the slot's condition name; Pimpl uses it as warm-start key.
 .callKernel <- function(st, b, i, cond, deriv, deriv2, keepStore = FALSE) {
   pf <- .splitParsFixed(.req_pars(b, i), .req_fixed(b, i))
   switch(st$kind,
@@ -327,7 +327,7 @@ match.fnargs <- function(arglist, choices) {
   res
 }
 
-# Warm-start key for Pequil/Pimpl. A leaf with its own condition keys by slot;
+# Warm-start key for Pimpl. A leaf with its own condition keys by slot;
 # an unspecific leaf answering several slots from ONE call has no single
 # condition and keys by NULL, as before the rebuild.
 .condKeys <- function(st, conds, shared) {

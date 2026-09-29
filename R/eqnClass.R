@@ -288,7 +288,7 @@ getTotals <- function(eqnlist) {
 #' Set or reset user-defined conservation-quantity totals
 #'
 #' Attaches a named list of conservation expressions to the eqnlist; these
-#' override auto-detection and flow into [Pimpl] / [Pequil] as the new
+#' override auto-detection and flow into [Pimpl] as the new
 #' parameter basis. Each expression is validated against the stoichiometric
 #' matrix (must lie in the left null space of `S`) and the basis as a whole
 #' must have the same rank as `conservedQuantities(S)`. Pass `NULL` or

@@ -1,3 +1,27 @@
+# dMod2 0.9.0
+
+* `Pimpl()` solves steady states by pseudo-transient continuation: implicit
+  Euler steps under local error control that turn into Newton steps near the
+  root. It follows the flow to a stable steady state and checks the
+  eigenvalues on the conservation manifold; `flow = FALSE` returns any regular
+  root of plain equations. The iteration runs in C++, `cppDE::ptc()`.
+* `Pimpl()` keeps every species and adds the conservation rows `C x = T`
+  instead of eliminating pivot species. Iterates stay positive and on the
+  manifold. States without influx at the given parameter values are 0.
+* `Pimpl()` starts deterministically: the nearest kept root of the condition
+  corrected by its sensitivities, then the initial guess. Conditions with
+  identical inputs are solved once. A failed solve is an error.
+* `Pimpl()`: `controlsPTC` replaces `controlsMS` and `controlsNleqslv`,
+  `expressInTotals` is gone. nleqslv is no longer a dependency.
+* `Pequil()` is removed. `P()` builds an `eqnlist` with `Pimpl()`;
+  `method = "equilibrate"` is gone.
+* `importPEtab()` computes preequilibration with `Pimpl()`. Events do not act
+  during preequilibration (PEtab v2 case 0023).
+* `importPEtab()`: species a preequilibration cannot move keep their initial
+  values. They take part only in reactions idled by SBML constants at 0 or by
+  species that start and stay at 0, and the steady-state equations leave them
+  undetermined (Isensee_JCB2018: AC/pAC and PDE/pPDE).
+
 # dMod2 0.8.4
 
 * `steadyStates()` 1.3 and 1.4 detect structurally zero clusters that span
