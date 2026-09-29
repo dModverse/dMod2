@@ -438,7 +438,7 @@ test_that("the fast numeric solve matches the symbolic solve on a coupled steady
   # A steady state that is NOT generically linear (a bilinear A*B core, so the
   # genericLinear/linTerms fast path does not fire) must still solve bit-for-bit mod p
   # via the fast dict-polynomial numeric elimination (_solve_states_fast): linear
-  # states eliminated by modular arithmetic, the small coupled residual by Groebner.
+  # states eliminated by modular arithmetic, the coupled residual by the reduced solve.
   # setSteadyStateForceSympy toggles the reference symbolic path (_solve_states_modular).
   sd <- .sd_module()
   model <- c("A = kp  - kd*A  - kf*A*B + kr*C",
@@ -465,6 +465,77 @@ test_that("the fast numeric solve matches the symbolic solve on a coupled steady
     }
   }
   expect_gt(nfeasible, 0L)   # at least some points exercised the coupled solve
+})
+
+
+test_that("a coupled steady state solves by substitution and a resultant", {
+  if (!.sympy_works()) skip("reticulate/sympy not available")
+
+  # a receptor loop with a Michaelis-Menten degradation by its own inhibitor and an
+  # output cascade: the output is peeled, the rest reduces to a core of two states,
+  # solved without a Groebner basis (_coupled_groebner is replaced by a failing stub)
+  sd <- .sd_module()
+  model <- c("R  = ktr*M - kint*R + krec*Ri - kdeg*R*S/(Km + R + Ri)",
+             "Ri = kint*R - krec*Ri - kdi*Ri - kdeg*Ri*S/(Km + R + Ri)",
+             "S  = kts*Sm - kds*S - kdeg*(R + Ri)*S/(Km + R + Ri)",
+             "Sm = ks0 + ks1*R - kdsm*Sm",
+             "M  = kpm - kdm*M",
+             "O  = ko*Sm - kdo*O")
+  states <- c("R", "Ri", "S", "Sm", "M", "O")
+  params <- c("ktr", "kint", "krec", "kdeg", "Km", "kdi", "kts", "kds", "ks0", "ks1",
+              "kdsm", "kpm", "kdm", "ko", "kdo")
+  reticulate::py_run_string(paste(
+    "import symmetryDetection as _sdm",
+    "_sdm._cg_saved = _sdm._coupled_groebner",
+    "def _cg_fail(*a, **k): raise RuntimeError('groebner')",
+    "_sdm._coupled_groebner = _cg_fail", sep = "\n"))
+  on.exit(reticulate::py_run_string(
+    "import symmetryDetection as _sdm\n_sdm._coupled_groebner = _sdm._cg_saved"))
+  rhs <- sub("^[^=]*=\\s*", "", model)
+  nok <- 0L
+  for (p in c(2147483647, 2147483629)) for (seed in 1:8) {
+    pv <- as.list(setNames((seed * 104729 + seq_along(params) * 7919) %% p, params))
+    out <- sd$solveSteadyStateModular(model, states, params, pv, p, jointMode = TRUE)
+    if (!isTRUE(out$ok)) next
+    nok <- nok + 1L
+    x <- unlist(out$valBy)[states]
+    expect_true(all(x != 0))
+    for (e in rhs)
+      expect_identical(sd$evalRationalMod(e, c(states, params), c(x, unlist(pv)), p), 0L)
+  }
+  expect_gt(nok, 0L)
+})
+
+
+test_that("a state a condition forces to zero is held at zero in that condition", {
+  if (!.sympy_works()) skip("reticulate/sympy not available")
+
+  # without the plasmid the transcript X rests at zero; the equilibrate verdict must
+  # match the explicit steady state passed per condition
+  f <- eqnlist() |>
+    addReaction("", "A", "k1", "") |>
+    addReaction("A", "", "d1*A", "") |>
+    addReaction("", "B", "k2*A", "") |>
+    addReaction("B", "", "d2*B", "") |>
+    addReaction("", "X", "kp*plasmid", "") |>
+    addReaction("X", "", "dx*X", "") |>
+    addReaction("", "A", "kx*X", "")
+  g <- eqnvec(yA = "s*(A + X)", yB = "B")
+  ev <- addEvent(eventlist(), var = "A", time = 0, value = "dose", method = "add")
+  grid <- data.frame(plasmid = c(0, 1), dose = c(1, 1), row.names = c("ctrl", "oe"))
+  eq <- symdet(f, g, conditions = grid, events = ev, method = "observability",
+               equilibrate = TRUE, reduceCQ = TRUE)
+  ss <- function(pl) eqnvec(X = sprintf("kp*%s/dx", pl),
+                            A = sprintf("(k1 + kx*kp*%s/dx)/d1", pl),
+                            B = sprintf("k2*(k1 + kx*kp*%s/dx)/(d1*d2)", pl),
+                            plasmid = as.character(pl))
+  ex <- symdet(f, g, trafo = list(ctrl = ss(0), oe = ss(1)), events = ev,
+               conditions = grid["dose"], method = "observability")
+  dirset <- function(r) sort(vapply(r$symmetries,
+    function(d) paste(sort(d$support), collapse = "+"), character(1)))
+  expect_identical(eq$rank, ex$rank)
+  expect_identical(eq$identifiable, ex$identifiable)
+  expect_identical(dirset(eq), dirset(ex))
 })
 
 

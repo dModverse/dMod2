@@ -20,8 +20,10 @@
 #'   coordinates declared `positive` are analysed in \eqn{L_v = \log v} and
 #'   reported in \eqn{v}. The symbol `time` is the model time, known at the start
 #'   of the analysis. Otherwise `"observability"` with `symEngine = "modular"`
-#'   requires rational expressions, up to free power exponents `x^n` and
-#'   observables `a*log(h) + c` with a number `a`. The methods are described in
+#'   requires rational expressions, up to free power exponents `x^n`, observables
+#'   `a*log(h) + c` with a number `a`, and `sin()`, `cos()`, `tan()`, `cot()`,
+#'   `sec()` and `csc()` of a rational argument whose constant part is a rational
+#'   number plus a multiple of `pi/2`. The methods are described in
 #'   `vignette("Symmetries")`.
 #'
 #' @param f Right-hand sides: an [eqnlist], an [eqnvec] or a named character vector.
@@ -142,7 +144,9 @@
 #'   differential. The `"polynomial"` and `"scaling"` engines treat it as an
 #'   independent variable. Both are exact, since exponentials of exponents that are
 #'   linearly independent over the rationals are algebraically independent (Ax
-#'   1971).
+#'   1971). A trigonometric function of \eqn{u} enters the `"observability"` engine
+#'   the same way, through \eqn{\tan(u/2)}, in which sine and cosine are rational.
+#'   Directions are reported in \eqn{\sin} and \eqn{\cos} of the full angle.
 #'
 #' @note The interface, defaults and output structure may still change.
 #'
@@ -710,6 +714,23 @@ symmetryDetection <- function(f = NULL, g = NULL, trafo = NULL,
                                    nCondObs = nCondObs)
     # one observation per segment, expanded along chainOf; NULL for a shared `g`
     segObs <- if (gPerCond) lapply(res$chainOf, gLines) else NULL
+    # per segment, the states the condition's substitutions force to zero at rest (a
+    # plasmid at 0 leaves its transcript at 0), held at zero in that condition only
+    condZeroStates <- if (equilibrate && !is.null(feqnlist)) {
+      zeroMemo <- list()
+      lapply(res$subs, function(sub) {
+        sub <- sub[setdiff(names(sub), forcings)]
+        key <- paste(names(sub), unlist(sub), sep = "=", collapse = ";")
+        if (is.null(zeroMemo[[key]])) {
+          fk <- feqnlist
+          if (length(sub))
+            fk$rates <- replaceSymbols(names(sub), as.character(unlist(sub)), fk$rates)
+          zeroMemo[[key]] <<- setdiff(intersect(.equil_zero_states(fk, forcings), states),
+                                      equilZeroStates)
+        }
+        zeroMemo[[key]]
+      })
+    } else list()
 
     # codimension of the specialisation, the budget of .symSaturateCertify(): each pinned
     # coordinate of (x0, theta) counts once; with equilibrate every state counts
@@ -787,7 +808,8 @@ symmetryDetection <- function(f = NULL, g = NULL, trafo = NULL,
         return(list(ok = FALSE, nonrational = multi$nonrational, why = multi$why))
       list(ok = TRUE, result = .symLogParamBack(.observability_analytic_multi(multi, spy = spy,
              closedForm = reconstruct, sd = sd, cores = cores,
-             equilZeroStates = equilZeroStates, t0events = res$events0,
+             equilZeroStates = equilZeroStates, condZeroStates = condZeroStates,
+             t0events = res$events0,
              nConditions = res$nConditions, chainOf = res$chainOf,
              nGaps = res$nGaps, implicitSteadyState = isTRUE(ui), control = control,
              verify = verify, codimSpec = codimSpec), multi$logParams, sd))
@@ -804,9 +826,10 @@ symmetryDetection <- function(f = NULL, g = NULL, trafo = NULL,
     if (isFALSE(ro$ok))
       stop("method = \"observability\" requires right-hand sides, observables and ",
            "initial conditions built from +, -, *, /, integer powers, exp(), b^x, ",
-           "hyperbolic functions and free power exponents x^n, log() and fractional ",
-           "powers of coordinates declared `positive`, and observables ",
-           "a*log(h) + offset with a number a; anything else is not rational.\n  ",
+           "hyperbolic and trigonometric functions, free power exponents x^n, ",
+           "log() and fractional powers of coordinates declared `positive`, and ",
+           "observables a*log(h) + offset with a number a; anything else is not ",
+           "rational.\n  ",
            paste(unlist(ro$nonrational), collapse = "\n  "),
            "\nUse symEngine = \"symbolic\" for other functions.", call. = FALSE)
     res <- ro$result
@@ -1701,14 +1724,21 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
   M
 }
 
-# Components in the exponential leaves back in the model symbols.
-.symExpBacksub <- function(vector, back, sd) {
+# Components in the exponential and half-angle leaves back in the model symbols,
+# rescaled by a common factor of the components outside the leaves `atoms`.
+.symExpBacksub <- function(vector, back, sd, atoms = NULL) {
   nm <- as.list(as.character(back$names)); vl <- as.list(as.character(back$values))
-  lapply(vector, function(x) {
+  vector <- lapply(vector, function(x) {
     out <- tryCatch(sd$expBacksub(as.character(x), nm, vl),
                     error = function(e) as.character(x))
     if (length(out) != 1L || is.na(out)) as.character(x) else out
   })
+  skip <- as.list(as.character(atoms))
+  for (tidy in list(sd$trigFullAngle, sd$dropMonomialContent)) {
+    v <- tryCatch(tidy(vector, skip), error = function(err) NULL)
+    if (!is.null(v)) vector <- lapply(v[names(vector)], as.character)
+  }
+  vector
 }
 
 
@@ -2533,8 +2563,10 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
 
 
 # Expand a scaling onto the per-condition joint coordinates: a state weight goes to each
-# of its K columns, a held pivot's weight to its initial-value parameter (heldParamOf).
-.symJointExpandScal <- function(scalRes, stateBase, Kc, heldParamOf = character(0)) {
+# of its K columns but the pinned ones (a state at zero in that condition), a held
+# pivot's weight to its initial-value parameter (heldParamOf).
+.symJointExpandScal <- function(scalRes, stateBase, Kc, heldParamOf = character(0),
+                                pinned = character(0)) {
   scalRes$nonIdentifiable <- lapply(scalRes$nonIdentifiable, function(d) {
     vec <- list()
     for (nm in names(d$vector)) {
@@ -2542,7 +2574,10 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
       if (nm %in% names(heldParamOf))
         vec[[heldParamOf[[nm]]]] <- w
       else if (nm %in% stateBase)
-        for (m in seq_len(Kc)) vec[[paste0(nm, "|c", m)]] <- w
+        for (m in seq_len(Kc)) {
+          wn <- paste0(nm, "|c", m)
+          if (!wn %in% pinned) vec[[wn]] <- w
+        }
       else vec[[nm]] <- w
     }
     d$vector <- vec
@@ -2563,7 +2598,8 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
   tryCatch(sd$solveSteadyStateModular(
     model = job$model, stateNames = cargs$stateNames,
     paramNames = cargs$paramNames, paramVals = job$paramVals, prime = job$p,
-    forcings = cargs$forcings, t0events = job$t0events,
+    forcings = if (!is.null(job$forcings)) job$forcings else cargs$forcings,
+    t0events = job$t0events,
     recast = cargs$recast, lVals = job$lVals, jointMode = TRUE,
     heldStates = job$heldVals),
     error = function(e) NULL)
@@ -2624,6 +2660,7 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
 .observability_analytic_multi <- function(multi, spy = NULL,
                                           closedForm = FALSE, sd = NULL, cores = 1,
                                           equilZeroStates = character(0),
+                                          condZeroStates = list(),
                                           t0events = list(), nConditions = NULL,
                                           chainOf = NULL, nGaps = 0L,
                                           implicitSteadyState = FALSE,
@@ -2747,8 +2784,13 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
     stateNames <- as.character(multi$stateNames)
     paramNames <- as.character(multi$paramNames)
     forcings <- if (is.null(multi$forcings)) character(0) else as.character(multi$forcings)
-    # forcings and forced-zero states are held at zero in the f = 0 solve
+    # forcings and forced-zero states are held at zero in the f = 0 solve, the states a
+    # condition forces to zero (condZeroStates) in that condition's solve only
     solveHeld <- union(forcings, as.character(equilZeroStates))
+    zeroOf <- function(ci) if (ci <= length(condZeroStates))
+      setdiff(intersect(as.character(condZeroStates[[ci]]), stateNames),
+              names(unlist(multi$heldStateParams))) else character(0)
+    heldOf <- function(ci) union(solveHeld, zeroOf(ci))
     models <- lapply(multi$tapes, function(t) as.character(t$constraintModel))
     # only the equilibrate-seeded segments are solved for a steady state; with
     # gaps only the first segment of each chain anchors (the rest are propagated)
@@ -2843,6 +2885,7 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
       # df columns allowed to map to no coordinate (held at 0 or fixed); any other
       # unmapped column is a lost constraint and traced under DMOD_JOINT_DIAG
       dfDroppable <- unique(c(as.character(forcings), as.character(equilZeroStates),
+                              as.character(unlist(condZeroStates)),
                               setdiff(as.character(leafNames), znames)))
       # df constraint rows for one condition over the nz znames columns
       dfRowsCond <- function(sol, p) {
@@ -2872,7 +2915,8 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
       jointSolveCache <- new.env(parent = emptyenv())
       # keyed on the substituted model, so conditions differing only outside f (a dose, a
       # scale) share a solve; in jointMode the t0 events do not enter the result
-      modelKey <- vapply(models, function(m) paste0(m, collapse = "\n"), character(1))
+      modelKey <- vapply(seq_along(models), function(ci)
+        paste0(c(models[[ci]], zeroOf(ci)), collapse = "\n"), character(1))
       if (nzchar(Sys.getenv("DMOD_SYM_TIMING")))
         message(sprintf("[sym] %d equilibrate condition(s), %d distinct steady state(s)",
                         Kc, length(unique(modelKey[equilConds]))))
@@ -2893,7 +2937,7 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
         out <- tryCatch(sd$solveSteadyStateModular(
           model = models[[ci]], stateNames = realStateNames,
           paramNames = solveParamNames, paramVals = pv$paramVals, prime = p,
-          forcings = if (length(solveHeld)) solveHeld else NULL, t0events = evC,
+          forcings = if (length(heldOf(ci))) heldOf(ci) else NULL, t0events = evC,
           recast = if (length(recast)) recast else NULL, lVals = pv$lVals,
           jointMode = TRUE,
           heldStates = if (length(heldNames)) pv$heldVals else NULL),
@@ -2965,6 +3009,7 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
               mkey = modelKey[[ci]],           # worker affinity: same model, same node
               model = models[[ci]], paramVals = pv$paramVals, lVals = pv$lVals,
               heldVals = if (length(heldNames)) pv$heldVals else NULL,
+              forcings = if (length(heldOf(ci))) heldOf(ci) else NULL,
               t0events = evC)
           }
         }
@@ -3008,6 +3053,7 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
           s <- slotOfName(realStateNames[k]); v <- vb[[realStateNames[k]]]
           if (!is.null(s) && !is.null(v)) ptc[s] <- as.numeric(v) %% p
         }
+        for (nm in zeroOf(ci)) { s <- slotOfName(nm); if (!is.null(s)) ptc[s] <- 0 }
         list(sol = sol, ptc = ptc)
       }
       # ---- the forward solve variant (states chosen, rates solved) -----------------
@@ -3018,7 +3064,7 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
         sv <- as.list(setNames(vapply(realStateNames, rd, numeric(1)), realStateNames))
         pv <- as.list(setNames(vapply(solveParamNames, rd, numeric(1)), solveParamNames))
         sol <- tryCatch(sd$solveForwardModular(models[[ci]], realStateNames, solveParamNames,
-                          sv, pv, p, forcings = if (length(solveHeld)) solveHeld else NULL,
+                          sv, pv, p, forcings = if (length(heldOf(ci))) heldOf(ci) else NULL,
                           solveRates = solveRates), error = function(e) NULL)
         if (is.null(sol) || !isTRUE(sol$ok)) return(NULL)
         ptc <- as.numeric(point[seq_len(nLeaves)])
@@ -3026,6 +3072,7 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
           if (!is.null(s)) ptc[s] <- as.numeric(sol$rates[[r]]) %% p }
         for (nm in realStateNames) { s <- slotOfName(nm); v <- sol$valBy[[nm]]
           if (!is.null(s) && !is.null(v)) ptc[s] <- as.numeric(v) %% p }
+        for (nm in zeroOf(ci)) { s <- slotOfName(nm); if (!is.null(s)) ptc[s] <- 0 }
         list(sol = sol, ptc = ptc)
       }
       # One condition's [Obs; df] blocks at its own resting state, state columns
@@ -3035,8 +3082,12 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
         if (!isTRUE(obs$ok)) return(NULL)
         oR <- matrix(as.numeric(obs$R), nrow = obs$rank, ncol = nzL)
         dR <- dfRowsCond(sc0$sol, p)
-        # a resting value 0 mod p degenerates its column; reject the point
+        # a state this condition forces to zero keeps its column unscaled and pinned
+        zc <- match(zeroOf(equilConds[mi]), znamesL)
+        zc <- zc[!is.na(zc)]
+        # any other resting value 0 mod p degenerates its column; reject the point
         xvals <- as.numeric(sc0$ptc[jointStateSlot]) %% p
+        xvals[logCols %in% zc] <- 1
         if (any(xvals == 0)) {
           if (nzchar(Sys.getenv("DMOD_SYM_FWDDIAG")))
             message("[fwddiag] zero log-normal coord at slots ",
@@ -3055,6 +3106,11 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
         if (nrow(dR)) {
           eD <- matrix(0, nrow(dR), nzWide); eD[, wc] <- dR
           bl[[length(bl) + 1L]] <- eD
+        }
+        if (length(zc)) {
+          eZ <- matrix(0, length(zc), nzWide)
+          eZ[cbind(seq_along(zc), wc[zc])] <- 1
+          bl[[length(bl) + 1L]] <- eZ
         }
         # recast relation rows at this condition's point
         for (rc in recastRel) {
@@ -3189,6 +3245,9 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
       multi$zStateNames <- zStateNamesWide
       jointStateBase <- stateBase        # original state names, for the scaling peel
       jointKc <- Kc
+      jointPinned <- unlist(lapply(seq_len(Kc), function(mi) {
+        z <- intersect(zeroOf(equilConds[mi]), stateBase)
+        if (length(z)) paste0(z, "|c", mi) else NULL }))
       # per-condition state and recast leaves are auxiliary and exempt from the
       # relevance gate; the dense-fit cap grows by the state count to match
       auxLeaves <- which(leafNamesAug %in% setdiff(leafNames, paramNames))
@@ -3492,7 +3551,7 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
     if (!is.null(scalRes)) {
       # state weights onto every per-condition column
       if (jointSS) scalRes <- .symJointExpandScal(scalRes, jointStateBase, jointKc,
-                                                     heldParamOf)
+                                                     heldParamOf, jointPinned)
       peel <- .symPeelScalings(scalRes, znames, nz, sc$point0[zSlots + 1L], P, N,
                                  sd = sd)
       scaling <- peel$scaling; Bmat <- peel$Bmat
@@ -3729,9 +3788,7 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
                     reason = paste("a closed form was reconstructed but failed",
                                    "verification at a fresh prime")))
       if (length(multi$expBack$names) && !is.null(sd)) {
-        e$vector <- .symExpBacksub(e$vector, multi$expBack, sd)
-        v <- tryCatch(sd$dropMonomialContent(e$vector), error = function(err) NULL)
-        if (!is.null(v)) e$vector <- lapply(v[names(e$vector)], as.character)
+        e$vector <- .symExpBacksub(e$vector, multi$expBack, sd, multi$expAtoms)
       }
       e$narrowVector <- as.integer(bf)
       e
@@ -3846,9 +3903,7 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
       if (isTRUE(e$closedForm) && length(recast) && !is.null(sd))
         e$vector <- .symRecastBacksub(e$vector, recast, sd)
       if (isTRUE(e$closedForm) && length(multi$expBack$names) && !is.null(sd)) {
-        e$vector <- .symExpBacksub(e$vector, multi$expBack, sd)
-        v <- tryCatch(sd$dropMonomialContent(e$vector), error = function(err) NULL)
-        if (!is.null(v)) e$vector <- lapply(v[names(e$vector)], as.character)
+        e$vector <- .symExpBacksub(e$vector, multi$expBack, sd, multi$expAtoms)
       }
       e
     }
@@ -3949,7 +4004,7 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
           .symPerprimeForwardMulti(residualFree, sc, kcall, kcallFwd, znames, zSlots,
             leafNamesAug, nz, scaling, as.character(multi$zStateNames),
             as.character(multi$paramNames), recast, sd, spy, ctrl, physColsPP,
-            models, realStateNames, solveParamNames, solveHeld),
+            models, realStateNames, solveParamNames, heldOf(1L)),
           error = function(e) NULL)
         fwdClosed <- if (is.null(fwd)) list()
                      else Filter(function(e) isTRUE(e$closedForm), fwd)

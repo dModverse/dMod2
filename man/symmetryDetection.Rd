@@ -183,8 +183,10 @@ of states and parameters. \code{log()}, fractional powers and \code{abs()} of
 coordinates declared \code{positive} are analysed in \eqn{L_v = \log v} and
 reported in \eqn{v}. The symbol \code{time} is the model time, known at the start
 of the analysis. Otherwise \code{"observability"} with \code{symEngine = "modular"}
-requires rational expressions, up to free power exponents \code{x^n} and
-observables \code{a*log(h) + c} with a number \code{a}. The methods are described in
+requires rational expressions, up to free power exponents \code{x^n}, observables
+\code{a*log(h) + c} with a number \code{a}, and \code{sin()}, \code{cos()}, \code{tan()}, \code{cot()},
+\code{sec()} and \code{csc()} of a rational argument whose constant part is a rational
+number plus a multiple of \code{pi/2}. The methods are described in
 \code{vignette("Symmetries")}.
 }
 \details{
@@ -197,7 +199,9 @@ state whose initial value is a further coordinate, tied to the others by its
 differential. The \code{"polynomial"} and \code{"scaling"} engines treat it as an
 independent variable. Both are exact, since exponentials of exponents that are
 linearly independent over the rationals are algebraically independent (Ax
-1971).
+1971). A trigonometric function of \eqn{u} enters the \code{"observability"} engine
+the same way, through \eqn{\tan(u/2)}, in which sine and cosine are rational.
+Directions are reported in \eqn{\sin} and \eqn{\cos} of the full angle.
 }
 \note{
 The interface, defaults and output structure may still change.

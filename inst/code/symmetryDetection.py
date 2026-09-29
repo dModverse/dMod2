@@ -34,6 +34,8 @@ from fractions import Fraction
 import numpy as np
 import sympy as spy
 from sympy.parsing.sympy_parser import parse_expr
+from sympy.polys import galoistools as _gft
+from sympy.polys.domains import ZZ as _ZZ
 
 try:
     import symengine as _seng
@@ -1413,12 +1415,22 @@ def _poly_terms(expr, gens):
     Prime-independent, so the compile is cached and only the per-prime reduction
     (in _eval_terms) repeats."""
     num, den = spy.fraction(spy.together(expr))
+    pos = {g: k for k, g in enumerate(gens)}
     def terms(e):
-        P = spy.Poly(e, *gens)
+        # the Poly over the generators present only; a dense one over all of them
+        # recurses through every level
+        used = [g for g in gens if g in e.free_symbols]
+        if not used:
+            r = spy.Rational(e)
+            return [(tuple([0] * len(gens)), (int(r.p), int(r.q)))]
+        P = spy.Poly(e, *used)
         out = []
         for monom, coef in P.terms():
             r = spy.Rational(coef)
-            out.append((tuple(int(m) for m in monom), (int(r.p), int(r.q))))
+            full = [0] * len(gens)
+            for g, m in zip(used, monom):
+                full[pos[g]] = int(m)
+            out.append((tuple(full), (int(r.p), int(r.q))))
         return out
     return terms(num), terms(den)
 
@@ -1955,8 +1967,8 @@ def _coupled_groebner(residPolys, remaining, p):
 
 def _solve_states_modular(polysN, solveStates, p):
     """Interior point of f = 0 over GF(p) from the per-point specialized state
-    polynomials `polysN`. Eliminates linearly where possible, then solves the
-    coupled residual by a saturated Groebner basis with interior-root
+    polynomials `polysN`. Eliminates linearly where possible; a coupled residual goes
+    to _solve_states_reduced, else to a saturated Groebner basis with interior-root
     back-substitution. Returns (sol, None) on success or (None, failure-dict)."""
     sol = {}
     elim = []
@@ -1998,8 +2010,20 @@ def _solve_states_modular(polysN, solveStates, p):
             remSet.discard(v)
             progress = True
 
-    # coupled residual solved by the saturated Groebner basis
+    # coupled residual: the reduced solve on the full system (as in _solve_states_fast),
+    # else the saturated Groebner basis
     if remaining:
+        dps = []
+        for pl in polysN:
+            d = {}
+            for m, c in spy.Poly(pl, *solveStates).terms():
+                c = int(c) % p
+                if c:
+                    d[tuple(int(e) for e in m)] = c
+            dps.append(d)
+        red = _solve_states_reduced(dps, list(solveStates), p)
+        if red is not None:
+            return red
         residPolys = [pl for pl in remPolys if pl is not None]
         sol, fail = _coupled_groebner(residPolys, remaining, p)
         if fail is not None:
@@ -2014,7 +2038,8 @@ def _solve_states_modular(polysN, solveStates, p):
 # ---- fast numeric state solve (dict polynomials mod p, no sympy in the hot loop) ----
 # Same elimination as _solve_states_modular (same pivots, residual and root;
 # cross-checked via _SS_FORCE_SYMPY) on dicts {state-exponent-tuple: coeff mod p},
-# avoiding sympy per point; only the coupled residual goes to _coupled_groebner.
+# avoiding sympy per point; only a coupled residual goes to _solve_states_reduced, or
+# to _coupled_groebner for a core of more than two states.
 
 def _eval_bipoly_dict(bip, paramvals, p):
     """Dict analogue of _eval_bipoly: {state-exponent-tuple: coeff mod p}."""
@@ -2062,10 +2087,12 @@ def _dp_subst(d, i, expr, nv, p):
 
 def _solve_states_fast(dps, solveStates, p):
     """Interior point of f = 0 over GF(p) from the per-point state polynomials in dict
-    form. Linear elimination by dict-polynomial substitution mod p, the coupled residual
-    by _coupled_groebner, then numeric back-substitution. Returns (sol {Symbol: Integer},
-    None) or (None, fail-dict). Mirrors _solve_states_modular's elimination exactly."""
+    form. Linear elimination by dict-polynomial substitution mod p, a coupled residual by
+    _solve_states_reduced or _coupled_groebner, then numeric back-substitution. Returns
+    (sol {Symbol: Integer}, None) or (None, fail-dict). Mirrors _solve_states_modular's
+    elimination exactly."""
     nv = len(solveStates)
+    dps0 = dps
     dps = [dict(d) for d in dps]
     remIdx = set(range(nv))
     elim = []                          # (var_index, expr dict poly over remaining vars)
@@ -2114,6 +2141,9 @@ def _solve_states_fast(dps, solveStates, p):
     sol = {}
     coupledIdx = [i for i in range(nv) if i in remIdx]
     if coupledIdx:
+        red = _solve_states_reduced(dps0, solveStates, p)
+        if red is not None:
+            return red
         resid = []
         for d in dps:
             if not d:
@@ -2144,6 +2174,269 @@ def _solve_states_fast(dps, solveStates, p):
         valById[i] = acc
         sol[solveStates[i]] = spy.Integer(acc)
     return sol, None
+
+
+# ---- reduced coupled solve: substitution to a small core, resultant, univariate roots ----
+# A state that enters a single balance, linearly, is an output of the network: it is
+# peeled and solved last. The rest is eliminated by linear pivots, rational where the
+# pivot coefficient depends on other states (x = -b/a, the other balances multiplied by
+# a^deg). A core of at most two states is solved by a resultant and root finding over
+# GF(p); every candidate is back-substituted and checked against f = 0.
+
+_REDUCE_TERMS_CAP = 20000   # give up the reduction past this polynomial size
+
+
+def _dp_add(a, b, p):
+    """Sum of two dict polynomials mod p."""
+    out = dict(a)
+    for m, c in b.items():
+        v = (out.get(m, 0) + c) % p
+        if v:
+            out[m] = v
+        elif m in out:
+            del out[m]
+    return out
+
+
+def _dp_coeffs(d, i):
+    """Coefficients {k: dict poly free of var i} of d as a polynomial in var i."""
+    cs = {}
+    for m, c in d.items():
+        cs.setdefault(m[i], {})[m[:i] + (0,) + m[i + 1:]] = c
+    return cs
+
+
+def _dp_subst_rat(d, i, a, b, nv, p):
+    """d at var i = -b/a, times a^deg_i(d): a dict polynomial free of var i."""
+    cs = _dp_coeffs(d, i)
+    deg = max(cs)
+    one = {tuple([0] * nv): 1}
+    nb = {m: (-c) % p for m, c in b.items()}
+    powA, powB = [one], [one]
+    for _ in range(deg):
+        powA.append(_dp_mul(powA[-1], a, nv, p))
+        powB.append(_dp_mul(powB[-1], nb, nv, p))
+    out = {}
+    for k, ck in cs.items():
+        out = _dp_add(out, _dp_mul(_dp_mul(ck, powB[k], nv, p), powA[deg - k], nv, p), p)
+    return out
+
+
+def _dp_value(d, vals, p):
+    """Value of a dict polynomial at the point `vals` (residues mod p)."""
+    acc = 0
+    for m, c in d.items():
+        t = c
+        for k, e in enumerate(m):
+            if e:
+                t = t * pow(vals[k], e, p) % p
+        acc = (acc + t) % p
+    return acc
+
+
+def _reduce_system(dps, nv, p):
+    """Peel outputs and eliminate linear pivots. Returns (plan, sinks, resid, core):
+    plan and sinks as (var, a, b) with var = -b/a, in elimination order; resid the
+    remaining balances over the core states. None past _REDUCE_TERMS_CAP."""
+    dps = [dict(d) for d in dps]
+    alive = [j for j in range(len(dps)) if dps[j]]
+    rem = set(range(nv))
+    sinks = []
+    changed = True
+    while changed:
+        changed = False
+        for i in sorted(rem):
+            js = [j for j in alive if any(m[i] for m in dps[j])]
+            if len(js) == 1 and max(m[i] for m in dps[js[0]]) == 1:
+                cs = _dp_coeffs(dps[js[0]], i)
+                sinks.append((i, cs[1], cs.get(0, {})))
+                alive.remove(js[0])
+                rem.discard(i)
+                changed = True
+                break
+    plan = []
+    while True:
+        # max degree of each remaining state per balance, and in how many it occurs
+        degOf = {}
+        for j in alive:
+            dg = {}
+            for m in dps[j]:
+                for i in rem:
+                    if m[i] > dg.get(i, 0):
+                        dg[i] = m[i]
+            degOf[j] = dg
+        occ = {i: sum(1 for j in alive if i in degOf[j]) for i in rem}
+        # constant pivot coefficients first, then a state's own balance, then the
+        # pivot touching the fewest balances with the lowest coefficient degree
+        best = None
+        for j in alive:
+            for i, dg in degOf[j].items():
+                if dg != 1:
+                    continue
+                cs = _dp_coeffs(dps[j], i)
+                a = cs[1]
+                key = (0 if all(not any(m) for m in a) else 1, 0 if i == j else 1,
+                       max(sum(m) for m in a) + occ[i] - 1,
+                       len(a) + len(cs.get(0, {})), i, j)
+                if best is None or key < best[0]:
+                    best = (key, j, i, a, cs.get(0, {}))
+        if best is None:
+            break
+        _, j, i, a, b = best
+        plan.append((i, a, b))
+        alive.remove(j)
+        rem.discard(i)
+        for k in alive:
+            if any(m[i] for m in dps[k]):
+                dps[k] = _dp_subst_rat(dps[k], i, a, b, nv, p)
+                if len(dps[k]) > _REDUCE_TERMS_CAP:
+                    return None
+    return plan, sinks, [dps[j] for j in alive if dps[j]], sorted(rem)
+
+
+def _gf_roots(f, p):
+    """Distinct nonzero roots in GF(p), ascending, of the dense univariate polynomial
+    f (highest degree first)."""
+    f = _gft.gf_strip([int(c) % p for c in f])
+    if len(f) <= 1:
+        return []
+    f = _gft.gf_monic(f, p, _ZZ)[1]
+    h = _gft.gf_sub(_gft.gf_pow_mod([1, 0], p, f, p, _ZZ), [1, 0], p, _ZZ)
+    g = _gft.gf_gcd(f, h, p, _ZZ)
+    if len(g) <= 1:
+        return []
+    lin = [g] if len(g) == 2 else _gft.gf_edf_zassenhaus(g, 1, p, _ZZ)
+    return sorted(r for r in ((-fac[1]) % p for fac in lin) if r)
+
+
+def _gf_resultant(f, g, p):
+    """Resultant of two dense univariate polynomials over GF(p) by Euclid."""
+    f, g = _gft.gf_strip(f), _gft.gf_strip(g)
+    if not f or not g:
+        return 0
+    res = 1
+    while True:
+        df, dg = len(f) - 1, len(g) - 1
+        if dg == 0:
+            return res * pow(g[0], df, p) % p
+        r = _gft.gf_rem(f, g, p, _ZZ)
+        if not r:
+            return 0
+        if df % 2 and dg % 2:
+            res = -res
+        res = res * pow(g[0], df - (len(r) - 1), p) % p
+        f, g = g, r
+
+
+def _gf_interpolate(xs, ys, p):
+    """Dense polynomial (highest degree first) through the points (xs, ys) over GF(p),
+    by Newton's divided differences."""
+    n = len(xs)
+    c = list(ys)
+    for j in range(1, n):
+        for i in range(n - 1, j - 1, -1):
+            c[i] = (c[i] - c[i - 1]) * pow((xs[i] - xs[i - j]) % p, p - 2, p) % p
+    poly = [c[-1]]
+    for i in range(n - 2, -1, -1):
+        poly = _gft.gf_add(_gft.gf_mul(poly, [1, (-xs[i]) % p], p, _ZZ), [c[i]], p, _ZZ)
+    return _gft.gf_strip(poly)
+
+
+def _bi_at_u(P, a, p):
+    """Dense polynomial in v of the bivariate dict polynomial P{(du, dv): c} at u = a."""
+    dv = max(k[1] for k in P)
+    out = [0] * (dv + 1)
+    for (i, j), c in P.items():
+        out[dv - j] = (out[dv - j] + c * pow(a, i, p)) % p
+    return _gft.gf_strip(out)
+
+
+def _core_candidates(resid, core, p):
+    """Candidate values (tuples aligned with `core`) of the core states, or None when
+    the core has more than two states."""
+    if not core:
+        return [()] if not resid else []
+    if len(core) > 2 or len(resid) != len(core):
+        return None
+    if len(core) == 1:
+        i = core[0]
+        g = None
+        for d in resid:
+            q = [0] * (max(m[i] for m in d) + 1)
+            for m, c in d.items():
+                q[len(q) - 1 - m[i]] = c
+            q = _gft.gf_strip(q)
+            g = q if g is None else _gft.gf_gcd(g, q, p, _ZZ)
+        return [(r,) for r in _gf_roots(g, p)]
+    # two states (u, v): the resultant in v by evaluation at u = a and interpolation.
+    # A common factor g of the balances (a cleared denominator) is divided out at each
+    # a through the gcd in v; the values stay polynomial in a (times a power of lc_v g)
+    iu, iv = core
+    P1, P2 = [{(m[iu], m[iv]): c for m, c in d.items()} for d in resid]
+    if max(k[1] for k in P1) < 1 or max(k[1] for k in P2) < 1:
+        return None
+    bound = max(sum(k) for k in P1) * max(sum(k) for k in P2)
+    rng = random.Random(p)
+    dg = min(len(_gft.gf_gcd(_bi_at_u(P1, a, p), _bi_at_u(P2, a, p), p, _ZZ)) - 1
+             for a in (rng.randrange(1, p), rng.randrange(1, p)))
+    n1, n2 = max(k[1] for k in P1), max(k[1] for k in P2)
+    xs, ys = [], []
+    a = 0
+    while len(xs) <= bound:
+        a += 1
+        f1, f2 = _bi_at_u(P1, a, p), _bi_at_u(P2, a, p)
+        if len(f1) - 1 != n1 or len(f2) - 1 != n2:
+            continue
+        G = _gft.gf_gcd(f1, f2, p, _ZZ)
+        if len(G) - 1 > dg:
+            r = 0                      # a common root on top of g: a root of the resultant
+        else:
+            r = _gf_resultant(_gft.gf_quo(f1, G, p, _ZZ), _gft.gf_quo(f2, G, p, _ZZ), p)
+        xs.append(a)
+        ys.append(r)
+    res = _gf_interpolate(xs, ys, p)
+    if not res:
+        return None
+    out = []
+    for a in _gf_roots(res, p):
+        G = _gft.gf_gcd(_bi_at_u(P1, a, p), _bi_at_u(P2, a, p), p, _ZZ)
+        out.extend((a, b) for b in _gf_roots(G, p))
+    return out
+
+
+def _solve_states_reduced(dps, solveStates, p):
+    """Interior point of f = 0 over GF(p) by _reduce_system and a resultant on the
+    core. Returns (sol, None), (None, fail-dict) when no candidate is an interior
+    point, or None when the core is too large for this solve."""
+    nv = len(solveStates)
+    red = _reduce_system(dps, nv, p)
+    if red is None:
+        return None
+    plan, sinks, resid, core = red
+    try:
+        cands = _core_candidates(resid, core, p)
+    except Exception:
+        return None
+    if cands is None:
+        return None
+    steps = list(reversed(plan)) + list(reversed(sinks))
+    for cp in cands:
+        vals = [0] * nv
+        for i, x in zip(core, cp):
+            vals[i] = x
+        ok = True
+        for i, a, b in steps:
+            av = _dp_value(a, vals, p)
+            if av == 0:
+                ok = False
+                break
+            vals[i] = (-_dp_value(b, vals, p)) * pow(av, p - 2, p) % p
+            if vals[i] == 0:
+                ok = False
+                break
+        if ok and all(_dp_value(d, vals, p) == 0 for d in dps):
+            return {solveStates[i]: spy.Integer(vals[i]) for i in range(nv)}, None
+    return None, {'ok': False, 'why': 'no consistent interior point'}
 
 
 def _compile_t0events(events, paramNames):
@@ -3657,6 +3950,291 @@ def _apply_exp_recast(S, perCond, evPer, tmPer, taken):
             'nAux': len(aux), 'codim': len(aux) + len(wAtoms)}
 
 
+# ---- trigonometric functions: half-angle states and generic half-angle leaves --------
+#
+# sin, cos and tan of u = c0 + k*pi/2 + sum q*t are rational in T = tan(phi/2), phi =
+# t/D a term of u, through e^(i*phi) = (1 + i*T)/(1 - i*T). A term in the states is
+# carried by an auxiliary state T' = (1 + T^2)/2 phi', a term in the leaves by a
+# generic leaf V with dV = (1 + V^2)/2 d(phi) (stacked like an exponential leaf), a
+# rational c0 by the fixed leaf tan(1/(2*M0)). Exact at a generic point by Ax (1971)
+# applied to e^(i*phi); real and imaginary exponents are independent of each other.
+
+_TRIG = (spy.sin, spy.cos, spy.tan)
+_TRIG_RECIPROCAL = {spy.cot: lambda a: spy.cos(a) / spy.sin(a),
+                    spy.sec: lambda a: 1 / spy.cos(a),
+                    spy.csc: lambda a: 1 / spy.sin(a)}
+
+
+def _has_trig(e):
+    e = spy.sympify(e)
+    return e.has(*_TRIG) or e.has(*_TRIG_RECIPROCAL)
+
+
+def _trig_basic(e, piSym):
+    """cot, sec and csc through sin and cos, a model symbol pi as the number."""
+    e = spy.sympify(e)
+    if piSym is not None:
+        e = e.xreplace({piSym: spy.pi})
+    return e.replace(lambda x: type(x) in _TRIG_RECIPROCAL,
+                     lambda x: _TRIG_RECIPROCAL[type(x)](x.args[0]))
+
+
+def _trig_terms(fn, u):
+    """fn(u) with u = c0 + cp*pi + sum q*t as (c0, cp, {t: q}), all rational; tan in
+    the doubled argument, tan(u) = sin(2u)/(1 + cos(2u)). None for another form."""
+    if fn is spy.tan:
+        u = 2 * u
+    u = spy.expand(spy.nsimplify(u, rational=True))
+    terms = dict(u.as_coefficients_dict())
+    c0 = terms.pop(spy.Integer(1), spy.Integer(0))
+    cp = terms.pop(spy.pi, spy.Integer(0))
+    if not (c0.is_Rational and cp.is_Rational and (2 * cp).is_Integer and
+            all(q.is_Rational for q in terms.values())):
+        return None
+    # an inner trig atom left in a term is one the later leaf pass resolves
+    if any(_has_exp(t) or not _is_rational_expr(
+            t.replace(lambda x: isinstance(x, _TRIG), lambda x: spy.Dummy())
+             .xreplace({spy.pi: 1})) for t in terms):
+        return None
+    return c0, cp, terms
+
+
+def _trig_value(fn, factors, k, rest):
+    """fn(u) for e^(i*v) = i^k e^(i*rest) prod ((1 + i*T)/(1 - i*T))^m over factors
+    [(T, m)], v = u or 2u for tan; cos and sin of rest stay as they are."""
+    I = spy.I
+    reps, A, n = {}, spy.Integer(1), spy.Integer(1)
+    for T, m in factors:
+        d = spy.Dummy(real=True)
+        reps[d] = T
+        A *= (1 + I * d) ** m if m > 0 else (1 - I * d) ** (-m)
+        n *= (1 + T ** 2) ** abs(m)
+    Z = I ** (int(k) % 4) * spy.expand(A ** 2)
+    if rest != 0:
+        C, Sn = spy.Dummy(real=True), spy.Dummy(real=True)
+        reps[C], reps[Sn] = spy.cos(rest), spy.sin(rest)
+        Z = Z * (C + I * Sn)
+    re, im = spy.expand(Z).as_real_imag()
+    re, im = re.xreplace(reps), im.xreplace(reps)
+    if fn is spy.tan:
+        return spy.cancel(im / (n + re))
+    return spy.cancel((im if fn is spy.sin else re) / n)
+
+
+def _trig_find(exprs, inScope, why):
+    """Innermost trig atoms of `exprs` whose argument `inScope` accepts, with their
+    decomposition; {'why': ...} for an unsupported argument."""
+    found = {}
+    for e in exprs:
+        for at in e.atoms(*_TRIG):
+            if at in found or not inScope(at):
+                continue
+            if any(inScope(a) for a in at.args[0].atoms(*_TRIG)):
+                continue
+            dec = _trig_terms(type(at), at.args[0])
+            if dec is None:
+                return {'why': why % at}
+            found[at] = dec
+    return found
+
+
+def _trig_den(found, keep):
+    """Per term t that `keep` takes the least D with q*D integer over all atoms."""
+    den = {}
+    for c0, cp, terms in found.values():
+        for t, q in terms.items():
+            if keep(t):
+                den[t] = spy.ilcm(den.get(t, 1), q.q)
+    return den
+
+
+def _apply_trig_recast(S, perCond, evPer, tmPer, taken):
+    """Replace every sin, cos and tan (and cot, sec, csc) in the per-condition model by
+    auxiliary half-angle states and generic half-angle leaves (see above). Arguments
+    and return as _apply_exp_recast, or {'why': ...} for an unsupported form."""
+    ctx = _ExpCtx(taken)
+    pis = ctx.fresh('_pi_', positive=True)
+    piSym = next((s for p in perCond
+                  for e in list(p[0]) + list(p[1]) + list(p[2].values())
+                  for s in spy.sympify(e).free_symbols if str(s) == 'pi'), None)
+    if piSym is not None and piSym in set(S):
+        piSym = None
+    tb = lambda e: _trig_basic(e, piSym)
+    S = list(S)
+    K = len(perCond)
+    f = [[tb(e) for e in p[0]] for p in perCond]
+    g = [[tb(e) for e in p[1]] for p in perCond]
+    ic = [{k: tb(v) for k, v in p[2].items()} for p in perCond]
+    fss = [[tb(e).xreplace({spy.pi: pis}) for e in p[3]] for p in perCond]
+    ev = [[dict(e, value=tb(e['value'])) for e in evs] for evs in evPer]
+    tm = [None if t is None else tb(t) for t in tmPer]
+    unsupported = ('the argument of %s is not supported by symEngine = "modular"; '
+                   'try symEngine = "symbolic"')
+
+    # ---- dynamics: auxiliary half-angle states, innermost first
+    aux = []                         # {'X', 'phi'}
+    while True:
+        states = set(S)
+        stateAtom = lambda a: bool(a.args[0].free_symbols & states)
+        found = _trig_find([e for c in range(K) for e in f[c] + g[c]], stateAtom,
+                           unsupported)
+        if 'why' in found:
+            return found
+        if not found:
+            break
+        den = _trig_den(found, lambda t: bool(t.free_symbols & states))
+        keyX = {}
+        for t, D in sorted(den.items(), key=lambda kv: str(kv[0])):
+            X = ctx.fresh('_tx%d_' % (len(aux) + 1))
+            keyX[t] = X
+            aux.append({'X': X, 'phi': t / D})
+        repl = {}
+        for at, (c0, cp, terms) in found.items():
+            factors = [(keyX[t], int(q * den[t]))
+                       for t, q in terms.items() if t in keyX]
+            rest = c0 + sum((q * t for t, q in terms.items() if t not in keyX),
+                            spy.Integer(0))
+            repl[at] = _trig_value(type(at), factors, 2 * cp, rest)
+        f = [[e.xreplace(repl) for e in fc] for fc in f]
+        g = [[e.xreplace(repl) for e in gc] for gc in g]
+        newAux = aux[len(aux) - len(keyX):]
+        for c in range(K):
+            rhsOf = dict(zip(S, f[c]))
+            for a in newAux:
+                phi = a['phi']
+                dphi = sum(spy.diff(phi, s) * rhsOf[s]
+                           for s in phi.free_symbols & states)
+                f[c].append(spy.expand((1 + a['X'] ** 2) * dphi / 2))
+                icSub = {s: ic[c][str(s)] for s in phi.free_symbols & states}
+                ic[c][str(a['X'])] = spy.tan(phi.xreplace(icSub) / 2)
+                fss[c].append(spy.Integer(0))
+        S += [a['X'] for a in newAux]
+
+    # an auxiliary state no observable depends on stays at 0 in that condition
+    nReal = len(S) - len(aux)
+    idx = {X: i for i, X in enumerate(S)}
+    for c in range(K):
+        used, front = set(), set()
+        for e in f[c][:nReal] + g[c]:
+            front |= e.free_symbols
+        while front:
+            nxt = set()
+            for a in aux:
+                if a['X'] in front and a['X'] not in used:
+                    used.add(a['X'])
+                    nxt |= f[c][idx[a['X']]].free_symbols
+            front = nxt - used
+        for a in aux:
+            if a['X'] not in used:
+                f[c][idx[a['X']]] = spy.Integer(0)
+                ic[c][str(a['X'])] = spy.Integer(0)
+
+    # a later replace event on a state inside an argument resets the auxiliary state
+    Sset = set(S)
+    for c in range(K):
+        out = []
+        for e in ev[c]:
+            out.append(e)
+            for a in aux:
+                phi = a['phi']
+                vs = [s for s in phi.free_symbols if str(s) == str(e['var'])]
+                if not vs or f[c][idx[a['X']]] == 0:
+                    continue
+                if e['method'] != 'replace' or (phi.free_symbols & Sset) - {vs[0]}:
+                    return {'why': 'an event (%s) on %s, which enters the argument of '
+                            'a trigonometric function, is not supported'
+                            % (e['method'], e['var'])}
+                out.append({'var': str(a['X']), 'method': 'replace',
+                            'value': spy.tan(phi.xreplace({vs[0]: e['value']}) / 2)})
+        ev[c] = out
+
+    # ---- leaf level: generic half-angle leaves V and the constant leaves
+    refs = ([('f', c, i) for c in range(K) for i in range(len(f[c]))] +
+            [('g', c, i) for c in range(K) for i in range(len(g[c]))] +
+            [('ic', c, k) for c in range(K) for k in ic[c]] +
+            [('ev', c, i) for c in range(K) for i in range(len(ev[c]))] +
+            [('tm', c, None) for c in range(K) if tm[c] is not None])
+    store = {'f': f, 'g': g, 'ic': ic}
+    vals = [ev[c][i]['value'] if kind == 'ev' else tm[c] if kind == 'tm'
+            else store[kind][c][i] for kind, c, i in refs]
+    # rational offsets c0 as powers of e^(i/M0), M0 over all arguments
+    atoms, M0 = [], 1
+    for e in vals:
+        for at in e.atoms(*_TRIG):
+            dec = _trig_terms(type(at), at.args[0])
+            if dec is not None:
+                M0 = spy.ilcm(M0, dec[0].q)
+    tc = ctx.fresh('_tc_', positive=True)
+    while True:
+        found = _trig_find(vals, lambda a: True, unsupported)
+        if 'why' in found:
+            return found
+        if not found:
+            break
+        den = _trig_den(found, lambda t: True)
+        keyV = {}
+        for t, D in sorted(den.items(), key=lambda kv: str(kv[0])):
+            V = ctx.fresh('_tw%d_' % (len(atoms) + 1))
+            keyV[t] = V
+            atoms.append({'V': V, 'phi': t / D})
+        repl = {}
+        for at, (c0, cp, terms) in found.items():
+            factors = [(keyV[t], int(q * den[t])) for t, q in terms.items()]
+            if c0 != 0:
+                if not (c0 * M0).is_Integer:
+                    return {'why': unsupported % at}
+                factors.append((tc, int(c0 * M0)))
+            repl[at] = _trig_value(type(at), factors, 2 * cp, spy.Integer(0))
+        vals = [e.xreplace(repl) for e in vals]
+    if not _terms_independent([(spy.E, a['phi'].xreplace({spy.pi: spy.Symbol('_pi_')}))
+                               for a in atoms]):
+        return {'why': 'arguments of trigonometric functions that are linearly '
+                'dependent over the rationals are not supported'}
+
+    vals = [e.xreplace({spy.pi: pis}) for e in vals]
+    for a in atoms:
+        a['phi'] = a['phi'].xreplace({spy.pi: pis})
+    for (kind, c, i), v in zip(refs, vals):
+        if kind == 'ev':
+            ev[c][i]['value'] = v
+        elif kind == 'tm':
+            tm[c] = v
+        else:
+            store[kind][c][i] = v
+
+    used = set()
+    for v in vals + [a['phi'] for a in atoms]:
+        used |= v.free_symbols
+    consts = {pis, tc} & used
+    rel = []
+    for a in atoms:
+        for z in sorted(a['phi'].free_symbols - consts, key=str):
+            rel.append((str(a['V']), str(z),
+                        spy.together((1 + a['V'] ** 2) * spy.diff(a['phi'], z) / 2)))
+    back = {str(a['V']): str(spy.tan(a['phi'].xreplace({pis: spy.pi}) / 2))
+            for a in atoms}
+    if pis in consts:
+        back[str(pis)] = 'pi'
+    if tc in consts:
+        back[str(tc)] = str(spy.tan(spy.Rational(1, 2 * M0)))
+    perCond = [(f[c], g[c], ic[c], fss[c]) for c in range(K)]
+    return {'S': S, 'perCond': perCond, 'evPer': ev, 'tmPer': tm, 'rel': rel,
+            'consts': sorted(str(s) for s in consts),
+            'atoms': [str(a['V']) for a in atoms], 'back': back,
+            'nAux': len(aux), 'codim': len(aux) + len(atoms)}
+
+
+def _merge_recast(a, b):
+    """Two recast results as one: b applied after a."""
+    if a is None or b is None:
+        return b if a is None else a
+    back = dict(a['back'])
+    back.update(b['back'])
+    return dict(b, rel=a['rel'] + b['rel'], atoms=a['atoms'] + b['atoms'], back=back,
+                consts=sorted(set(a['consts']) | set(b['consts'])),
+                nAux=a['nAux'] + b['nAux'], codim=a['codim'] + b['codim'])
+
+
 def _tidy_logs(e):
     """Common factors pulled out and each numeric sum of logs as one log."""
     e = spy.factor_terms(spy.cancel(e))
@@ -3664,22 +4242,27 @@ def _tidy_logs(e):
                      lambda x: spy.logcombine(x, force=True))
 
 
-def dropMonomialContent(vector):
+def dropMonomialContent(vector, skip=None):
     """A direction {coordinate: component} with denominators cleared, divided by the
     power product of symbols every component carries and signed so that the first
-    coordinate has a positive component: the same direction."""
+    coordinate has a positive component: the same direction. Components in `skip`
+    are scaled along but do not set the factor."""
+    skip = set(_as_list(skip)) if skip is not None else set()
     items = [(str(k), str(v)) for k, v in dict(vector).items()]
     local, parse = _make_local_parse([v for _, v in items])
     es = [spy.cancel(parse(v)) for _, v in items]
     L = spy.Integer(1)
-    for e in es:
-        L = spy.lcm(L, spy.fraction(e)[1])
+    for (k, _), e in zip(items, es):
+        if k not in skip:
+            L = spy.lcm(L, spy.fraction(e)[1])
     es = [spy.factor_terms(spy.cancel(e * L)) for e in es]
-    first = [e for (k, _), e in sorted(zip(items, es)) if e != 0]
+    first = [e for (k, _), e in sorted(zip(items, es)) if e != 0 and k not in skip]
     if first and first[0].could_extract_minus_sign():
         es = [-e for e in es]
     common = None
-    for e in es:
+    for (k, _), e in zip(items, es):
+        if k in skip:
+            continue
         pw = {}
         num, den = spy.fraction(e)
         for sgn, part in ((1, num), (-1, den)):
@@ -3711,6 +4294,56 @@ def expBacksub(expr, names, values):
             break
         e = e2
     return str(_tidy_logs(spy.powsimp(spy.cancel(e))))
+
+
+def trigFullAngle(vector, skip=None):
+    """A direction {coordinate: component} over half-angle leaves V = tan(u/2) in
+    sin(u) and cos(u): denominators cleared and common factors divided out in V, then
+    divided by (1 + V^2)^k with the least k that makes every component a polynomial
+    in sin(u) and cos(u). Components in `skip` are scaled along but do not set the
+    factor."""
+    skip = set(_as_list(skip)) if skip is not None else set()
+    items = [(str(k), str(v)) for k, v in dict(vector).items()]
+    local, parse = _make_local_parse([v for _, v in items])
+    es = [spy.sympify(parse(v)) for _, v in items]
+    halves = sorted(set().union(*[e.atoms(spy.tan) for e in es]), key=str)
+    if not halves:
+        return dict(items)
+    Vs = [spy.Dummy('V') for _ in halves]
+    es = [spy.cancel(e.xreplace(dict(zip(halves, Vs)))) for e in es]
+    keep = [k not in skip for k, _ in items]
+    L = spy.Integer(1)
+    for e, kp in zip(es, keep):
+        if kp:
+            L = spy.lcm(L, spy.fraction(e)[1])
+    es = [spy.cancel(e * L) for e in es]
+    G = spy.Integer(0)
+    for e, kp in zip(es, keep):
+        if kp and e != 0:
+            G = spy.gcd(G, e)
+    if G != 0:
+        es = [spy.cancel(e / G) for e in es]
+    # sin(u) = 2V/(1 + V^2), cos(u) = (1 - V^2)/(1 + V^2), 1 + V^2 = 2/(1 + cos(u))
+    rels, sub = [], {}
+    for h, V in zip(halves, Vs):
+        deg = max((spy.degree(e, V) for e, kp in zip(es, keep) if kp and e != 0),
+                  default=0)
+        es = [e / (1 + V ** 2) ** ((deg + 1) // 2) for e in es]
+        sn, cs = spy.sin(2 * h.args[0]), spy.cos(2 * h.args[0])
+        sub[V] = sn / (1 + cs)
+        rels.append((sn, cs))
+    out = {}
+    for (k, _), e in zip(items, es):
+        v = spy.cancel(spy.together(e.xreplace(sub)))
+        num, den = spy.fraction(v)
+        for sn, cs in rels:
+            num = spy.expand(num).subs(sn ** 2, 1 - cs ** 2)
+            den = spy.expand(den).subs(sn ** 2, 1 - cs ** 2)
+        v = spy.factor(spy.cancel(num / den))
+        if spy.count_ops(v) < 200:
+            v = spy.factor(spy.trigsimp(v))
+        out[k] = str(v)
+    return out
 
 
 # ---- observability tape compiler (multi-condition, shared coordinate space) ----------
@@ -4174,31 +4807,55 @@ def compileObservabilityTapeMulti(model, observation, conditionSubs, conditionIC
             for rc in powerRecast:
                 rc['inverted'] = False
 
-    # exponentials: auxiliary states and generic exponential leaves (_apply_exp_recast)
-    scalS, scalPerCond = list(S), perCond
-    expRecast = None
-    if any(_has_exp(e) for (f_c, g_c, ic_c, f_ss) in perCond
-           for e in list(f_c) + list(g_c) + list(ic_c.values())) or \
-            any(_has_exp(e['value']) for evs in evPer for e in evs) or \
-            any(t is not None and _has_exp(t) for t in tmPer):
-        if equilibrate:
-            return {'ok': False, 'why': 'equilibrate = TRUE does not support exp() '
-                    'or b^x of a state, or of a parameter that also enters elsewhere; '
-                    'give the steady state through `trafo` or start from free '
-                    'initial values'}
+    def anyIn(pred):
+        return (any(pred(e) for (f_c, g_c, ic_c, f_ss) in perCond
+                    for e in list(f_c) + list(g_c) + list(ic_c.values())) or
+                any(pred(e['value']) for evs in evPer for e in evs) or
+                any(t is not None and pred(t) for t in tmPer))
+
+    def takenNames():
         taken = {str(x) for x in S} | set(fixedNames) | {str(X) for X, _ in lp.values()}
         for (f_c, g_c, ic_c, f_ss) in perCond:
             for e in list(f_c) + list(g_c) + list(ic_c.values()) + list(f_ss):
                 taken |= {str(x) for x in spy.sympify(e).free_symbols}
         for e in lpExprs + evExprs:
             taken |= {str(x) for x in spy.sympify(e).free_symbols}
-        expRecast = _apply_exp_recast(S, perCond, evPer, tmPer, taken)
+        return taken
+
+    # trigonometric functions: half-angle states and leaves (_apply_trig_recast), before
+    # the exponentials so that an exponent may contain them
+    scalS, scalPerCond = list(S), perCond
+    trigRecast = None
+    if anyIn(_has_trig):
+        if equilibrate:
+            return {'ok': False, 'why': 'equilibrate = TRUE does not support '
+                    'trigonometric functions; give the steady state through `trafo` '
+                    'or start from free initial values'}
+        trigRecast = _apply_trig_recast(S, perCond, evPer, tmPer, takenNames())
+        if 'why' in trigRecast:
+            return {'ok': False, 'why': trigRecast['why']}
+        S, perCond = trigRecast['S'], trigRecast['perCond']
+        evPer, tmPer = trigRecast['evPer'], trigRecast['tmPer']
+        nS = len(S)
+        fixedNames |= set(trigRecast['consts'])
+
+    # exponentials: auxiliary states and generic exponential leaves (_apply_exp_recast)
+    expRecast = None
+    if anyIn(_has_exp):
+        if equilibrate:
+            return {'ok': False, 'why': 'equilibrate = TRUE does not support exp() '
+                    'or b^x of a state, or of a parameter that also enters elsewhere; '
+                    'give the steady state through `trafo` or start from free '
+                    'initial values'}
+        expRecast = _apply_exp_recast(S, perCond, evPer, tmPer, takenNames())
         if 'why' in expRecast:
             return {'ok': False, 'why': expRecast['why']}
         S, perCond = expRecast['S'], expRecast['perCond']
         evPer, tmPer = expRecast['evPer'], expRecast['tmPer']
         nS = len(S)
         fixedNames |= set(expRecast['consts'])
+    if trigRecast is not None:
+        expRecast = _merge_recast(trigRecast, expRecast)
 
     nonrational = []
     ratOK = set()            # deduped exprs recur across conditions; check each once
@@ -4266,8 +4923,10 @@ def compileObservabilityTapeMulti(model, observation, conditionSubs, conditionIC
         for e in evs:
             paramset |= set(spy.sympify(e['value']).free_symbols)
     if expRecast is not None:
+        byName = {str(x): x for x in paramset}
         for rl in expRecast['rel']:
             paramset |= set(rl[2].free_symbols)
+            paramset.add(byName.get(rl[1], spy.Symbol(rl[1])))
     # a segment's left boundary may sit at a time given in the parameters
     for c, tm in enumerate(conditionTimes):
         if tm is not None and c < K:
@@ -4596,10 +5255,10 @@ def _poly_monomials(expr, zvars):
 
 
 def _exp_split(expr, logs=False):
-    """expr with every exponential atom (exp(u), or b^u with a numeric base), and
-    with `logs` every log(u), replaced by a fresh symbol, innermost first, and the
-    list of the u. Both are invariant exactly when u is:
-    log(lambda^w*u) = log(u) + w*log(lambda)."""
+    """expr with every exponential atom (exp(u), or b^u with a numeric base), every
+    trigonometric function of u, and with `logs` every log(u), replaced by a fresh
+    symbol, innermost first, and the list of the u. Each is invariant exactly when u
+    is: log(lambda^w*u) = log(u) + w*log(lambda)."""
     exps = []
 
     def rec(e):
@@ -4609,6 +5268,9 @@ def _exp_split(expr, logs=False):
         if be is not None:
             exps.append(rec(be[1]))
             return spy.Dummy('exp')
+        if isinstance(e, _TRIG) or type(e) in _TRIG_RECIPROCAL:
+            exps.append(rec(e.args[0]))
+            return spy.Dummy('trig')
         if logs and isinstance(e, spy.log):
             exps.append(rec(e.args[0]))
             return spy.Dummy('log')

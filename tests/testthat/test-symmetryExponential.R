@@ -1,5 +1,5 @@
 # symmetryDetection() and symmetryReduction() on models with states inside
-# exponentials.
+# exponentials and trigonometric functions.
 
 symdet <- function(...) symmetryDetection(..., verbose = FALSE)
 
@@ -237,4 +237,39 @@ test_that("events, abs() and logarithms of sums in the log chart", {
   expect_true(symdet(fc, gc, trafo = red$trafo)$identifiable)
   # two different logarithms of x
   expect_error(symdet(eqnvec(x = "r*x*log(1 + K/x)"), gg), "two different")
+})
+
+
+test_that("trigonometric functions through the half angle", {
+  if (!.sympy_works()) skip("reticulate/sympy not available")
+
+  pend <- eqnvec(th = "om", om = "-grav/len*sin(th) - b*om")
+  r <- symdet(pend, eqnvec(y = "th"))
+  expect_equal(c(r$rank, r$dim), c(4L, 5L))
+  expect_setequal(names(r$symmetries[[1]]$generator), c("grav", "len"))
+  expect_identical(r$symmetries[[1]]$type, "scaling")
+
+  # pi is the number, not a coordinate
+  r <- symdet(eqnvec(x = "-k*x + A*cos(2*pi*w*time + ph)"), eqnvec(y = "c*x"))
+  expect_setequal(r$info$coordinates, c("x", "A", "c", "k", "w", "ph"))
+  expect_setequal(names(r$symmetries[[1]]$generator), c("A", "c", "x"))
+
+  # a direction that is no scaling comes back in the full angle
+  r <- symdet(eqnvec(x = "-k*x"), eqnvec(y = "sin(a)*x"), reconstruct = TRUE)
+  gen <- general(r)[[1]]$generator
+  expect_setequal(names(gen), c("a", "x"))
+  expect_false(grepl("tan", paste(gen, collapse = " ")))
+  expect_true(.symExprEqual(paste0("(", gen[["x"]], ")*sin(a)"),
+                            paste0("-x*cos(a)*(", gen[["a"]], ")")))
+  r <- symdet(eqnvec(x = "-k*x"), eqnvec(y = "cos(a + b)*x"))
+  expect_equal(c(r$rank, r$dim), c(2L, 4L))
+
+  # a state reset by a later event restarts its half angle; a shift does not
+  ev <- eventlist(var = c("x", "x"), time = c(0, 1), value = c("x0", "x1"),
+                  method = "replace")
+  fs <- eqnvec(x = "-k*sin(x)")
+  expect_true(symdet(fs, eqnvec(y = "c*x"), events = ev)$identifiable)
+  ev$method[2] <- "add"
+  expect_error(symdet(fs, eqnvec(y = "c*x"), events = ev), "add")
+  expect_error(symdet(eqnvec(x = "-k*sin(exp(x))"), eqnvec(y = "x")), "sin\\(exp")
 })
