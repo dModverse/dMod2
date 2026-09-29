@@ -9,7 +9,8 @@
 #' `parfn`, `prdfn` and `obsfn`. Allows to manipulate
 #' different arguments that have been set when creating the
 #' objects. On a sum of objectives, a control is read from and written to
-#' every summand that has it. The same holds for an objective scaled by `%.*%` and
+#' every summand that has it, e.g. the `multipleShootingControl` of a
+#' [normL2()] term. The same holds for an objective scaled by `%.*%` and
 #' for an objective composed with a parameter transformation, which reach the
 #' controls of the objective inside.
 #' @details If called without further arguments, `controls(x)` lists the

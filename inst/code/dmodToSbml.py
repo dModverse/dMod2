@@ -110,6 +110,9 @@ def build_sbml(spec):
             sref.setSpecies(product["species"])
             sref.setStoichiometry(float(product["stoich"]))
             sref.setConstant(True)
+        for species in r.get("modifiers", []):
+            mref = rxn.createModifier()
+            mref.setSpecies(species)
         kl = rxn.createKineticLaw()
         ast = libsbml.parseL3Formula(_l3(r["kineticLaw"]))
         if ast is None:

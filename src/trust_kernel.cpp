@@ -15,6 +15,7 @@
 #include <Rcpp.h>
 #include "trust_subproblem.h"
 #include "trust_driver.h"
+#include "trust_qn.h"
 #include <vector>
 #include <deque>
 #include <cmath>
@@ -26,6 +27,7 @@ using namespace Rcpp;
 using dmod::trust_internal::affine_scaling;
 using dmod::trust_internal::eigen_sym_local;
 using dmod::trust_internal::model_value;
+using dmod::trust_internal::qn_update_B;
 using dmod::trust_internal::stepback;
 using dmod::trust_internal::trust_sub;
 using dmod::trust_driver::Blather;
@@ -55,44 +57,6 @@ enum HessianMethod { HM_NONE = -1, HM_GN = 0, HM_BFGS = 1, HM_SR1 = 2,
 // derivative scheme can supply.
 enum HessianInit { HI_GN = 0, HI_IDENTITY = 1, HI_EXACT = 2 };
 enum HessianReseed { HR_NEVER = 0, HR_STALL = 1 };
-
-// Dense quasi-Newton update of `B` in place, all arguments in the minimised
-// sign convention phi = sgn*val and `s` in the x frame. BFGS is Powell-damped
-// and stays positive definite; SR1 may be indefinite.
-void qn_update_B(int kind, int K, std::vector<double>& B,
-                 const std::vector<double>& s, const std::vector<double>& y) {
-  std::vector<double> Bs(K, 0.0);
-  for (int j = 0; j < K; ++j) {
-    const double sj = s[j];
-    if (sj != 0.0)
-      for (int i = 0; i < K; ++i) Bs[i] += B[i + (std::size_t) j * K] * sj;
-  }
-  double sy = 0.0, sBs = 0.0;
-  for (int i = 0; i < K; ++i) { sy += s[i] * y[i]; sBs += s[i] * Bs[i]; }
-
-  if (kind == HM_BFGS) {
-    if (!(sBs > 0.0)) return;                 // no curvature reference; keep B
-    double theta = 1.0;
-    if (sy < 0.2 * sBs) theta = (0.8 * sBs) / (sBs - sy);
-    std::vector<double> rv(K);
-    for (int i = 0; i < K; ++i) rv[i] = theta * y[i] + (1.0 - theta) * Bs[i];
-    double sr = 0.0;
-    for (int i = 0; i < K; ++i) sr += s[i] * rv[i];
-    if (!(sr > 0.0)) return;
-    for (int j = 0; j < K; ++j)
-      for (int i = 0; i < K; ++i)
-        B[i + (std::size_t) j * K] += rv[i] * rv[j] / sr - Bs[i] * Bs[j] / sBs;
-  } else {  // HM_SR1
-    std::vector<double> w(K);
-    for (int i = 0; i < K; ++i) w[i] = y[i] - Bs[i];
-    double ws = 0.0, wn = 0.0, sn = 0.0;
-    for (int i = 0; i < K; ++i) { ws += w[i] * s[i]; wn += w[i] * w[i]; sn += s[i] * s[i]; }
-    if (std::fabs(ws) <= 1e-8 * std::sqrt(sn * wn) || !(wn > 0.0)) return;
-    for (int j = 0; j < K; ++j)
-      for (int i = 0; i < K; ++i)
-        B[i + (std::size_t) j * K] += w[i] * w[j] / ws;
-  }
-}
 
 // Same update, applied to the working Hessian `H` of `val` rather than of phi.
 void qn_update(int kind, int K, std::vector<double>& H,

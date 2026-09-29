@@ -732,14 +732,62 @@ test_that("Pimpl solves ERK <-> pERK to closed form in totals", {
 })
 
 
-test_that("Pimpl reports the arguments it no longer has", {
+test_that("Pimpl runs its random starts from a fixed seed and leaves the global RNG alone", {
+  skip_if_no_compile()
+  pf <- pp_models()$erk_im
+  on.exit(controls(pf, name = "controlsPTC") <- list(), add = TRUE)
+  pars <- c(k1 = 1, k2 = 3, totalERK = 4)
+  set.seed(7); before <- .Random.seed
+  resetWarmStarts(pf, verbose = FALSE)
+  controls(pf, name = "controlsPTC") <- list(maxit = 1L, nStarts = 3L)
+  expect_error(pf(pars, deriv = FALSE), "start3: ")
+  expect_identical(.Random.seed, before)
+  controls(pf, name = "controlsPTC") <- list(nStarts = 3L)
+  out <- pf(pars, deriv = FALSE)[[1]]
+  expect_equal(as.numeric(out[c("ERK", "pERK")]), c(3, 1), tolerance = 1e-10)
+  expect_identical(.Random.seed, before)
+
+  # one stream per warm-start cache: per condition, gone after resetWarmStarts()
+  env <- environment(attr(pf, "mappings")[[1]]); reg <- env$reg
+  resetWarmStarts(pf, verbose = FALSE)
+  controls(pf, name = "controlsPTC") <- list(maxit = 1L, nStarts = 2L)
+  for (cn in c("a", "b")) expect_error(env$p2p(pars, deriv = FALSE, condition = cn), "start2: ")
+  expect_false(identical(reg$get("a")$msBase, reg$get("b")$msBase))
+  expect_identical(reg$get("a")$msCount, 1L)
+  resetWarmStarts(pf, verbose = FALSE)
+  expect_null(reg$get("a")$msBase)
+})
+
+
+test_that("Pimpl solves a network whose R-Smad rows barely turn over", {
+  # TGF-beta model, 37 states: Smad2 is 3 and almost unphosphorylated, so its row
+  # turns over 1e-11 while the pSmad2 row carries the same flux with a diagonal of
+  # 1. Scaled by its own diagonal, the Smad2 row made the step matrix singular
+  # (condition 1e26) and ptc() only shrank dt.
+  skip_if_no_compile()
+  fx <- readRDS(test_path("fixtures", "pimpl_smad_row.rds"))
+  oldwd <- setwd(.dmod_fx_workdir()); on.exit(setwd(oldwd), add = TRUE)
+  mn <- paste0("test_pp_smadrow_", as.integer(Sys.time()))
+  pf <- Pimpl(fx$reactions, forcings = fx$forcings, deriv = FALSE, modelname = mn,
+              controlsPTC = list(nStarts = 0L))
+  compile(pf, output = mn, cores = 4L)
+  out <- pf(fx$pv, deriv = FALSE)[[1]]
+  expect_equal(out[["Smad2"]] + out[["pSmad2"]] + out[["C234"]], fx$pv[["tSmad2"]],
+               tolerance = 1e-10)
+})
+
+
+test_that("Pimpl rejects unknown arguments and controls", {
   el <- eqnlist() |>
     addReaction("ERK",  "pERK", "k1 * ERK") |>
     addReaction("pERK", "ERK",  "k2 * pERK")
-  expect_error(Pimpl(el, expressInTotals = FALSE), "expressInTotals` is gone")
-  expect_error(Pimpl(el, controlsMS = list(nStarts = 1L)), "controlsMS` is gone")
-  expect_error(Pimpl(el, controlsNleqslv = list(ftol = 1e-9)), "controlsPTC")
+  expect_error(Pimpl(el, expressInTotals = FALSE), "unused argument")
   expect_error(Pimpl(el, controlsPTC = list(ftol = 1e-9)), "unknown controlsPTC entry ftol")
+  ctl <- dMod2:::.pimplPTC
+  expect_identical(ctl(list())$startScale, "log10")
+  expect_identical(ctl(list(positive = FALSE))$startScale, "linear")
+  expect_error(ctl(list(startScale = "linear", startRange = c(-1, 1))), "needs positive = FALSE")
+  expect_error(ctl(list(startRange = c(5, -5))), "lower < upper")
 })
 
 

@@ -1,26 +1,22 @@
 ## Functions to generate parameter transformation ----
 
-#' Generate a parameter transformation function
+#' Parameter transformation
 #'
-#' Unified entry to the explicit ([Pexpl], algebraic) and implicit ([Pimpl],
-#' root-finding) backends. `method = NULL` picks `"implicit"` for [eqnlist]
-#' entries, `"explicit"` otherwise.
+#' Builds a [parfn] with [Pexpl()] or [Pimpl()].
 #'
 #' @param trafo An [eqnvec], named character, [eqnlist], or list thereof.
-#' @param parameters Outer-parameter names.
+#' @param parameters Outer parameter names.
 #' @param condition Condition label.
-#' @param compile,modelname,verbose Forwarded to [cppDE::cppFUN].
-#' @param method One of `"explicit"`, `"implicit"`, or `NULL`.
-#' @param cores Per-condition `mclapply()` cores. `NULL` auto-detects via
-#'   [detectFreeCores]; capped at 1 on Windows.
-#' @param deriv,deriv2 Attach first/second-order sensitivities. `deriv2`
+#' @param compile,modelname,verbose Forwarded to [cppDE::cppFUN()].
+#' @param method `"explicit"`, `"implicit"`, or `NULL` for `"implicit"` if
+#'   `trafo` is an [eqnlist] and `"explicit"` otherwise.
+#' @param cores Number of cores. `NULL` uses [detectFreeCores()]; 1 on Windows.
+#' @param deriv,deriv2 Attach first and second order sensitivities. `deriv2`
 #'   requires `deriv = TRUE`.
-#' @param ... Forwarded to the chosen backend. In particular `outdir`
-#'   (directory for the generated sources and shared object, default the
-#'   working directory).
+#' @param ... Forwarded to the backend, e.g. `outdir`.
 #'
 #' @return A [parfn].
-#' @seealso [Pexpl], [Pimpl], [parfn]
+#' @seealso [Pexpl()], [Pimpl()]
 #' @export
 P <- function(trafo = NULL, parameters = NULL, condition = NULL,
               compile = FALSE, modelname = NULL, method = NULL,
@@ -834,8 +830,9 @@ resetWarmStarts <- function(fn, verbose = TRUE) {
 
 # Pimpl solver controls merged over their defaults. Unknown names are an error.
 .pimplPTC <- function(controlsPTC) {
-  def <- list(rtol = 1e-10, atol = 1e-14, flowTol = 1, maxit = 400L, dtInit = 1e-2,
-              positive = TRUE, stability = TRUE, archive = 8L)
+  def <- list(rtol = 1e-10, atol = 1e-14, flowTol = 1, maxit = NULL, dtInit = 1e-2,
+              positive = TRUE, stability = TRUE, archive = 8L,
+              nStarts = 20L, startRange = c(-5, 5), startScale = NULL, seed = 1L)
   given <- as.list(controlsPTC)
   if (length(given) && (is.null(names(given)) || any(!nzchar(names(given)))))
     stop("Pimpl: controlsPTC must be a named list.", call. = FALSE)
@@ -844,70 +841,69 @@ resetWarmStarts <- function(fn, verbose = TRUE) {
     stop("Pimpl: unknown controlsPTC entr", if (length(bad) > 1L) "ies " else "y ",
          paste(bad, collapse = ", "), ". Known: ", paste(names(def), collapse = ", "), ".",
          call. = FALSE)
-  modifyList(def, given)
+  ctrl <- modifyList(def, given, keep.null = TRUE)
+  if (is.null(ctrl$startScale)) ctrl$startScale <- if (ctrl$positive) "log10" else "linear"
+  ctrl$startScale <- match.arg(ctrl$startScale, c("log10", "linear"))
+  if (length(ctrl$startRange) != 2L || !(ctrl$startRange[1] < ctrl$startRange[2]))
+    stop("Pimpl: startRange must be c(lower, upper) with lower < upper.", call. = FALSE)
+  if (ctrl$positive && ctrl$startScale == "linear" && ctrl$startRange[1] < 0)
+    stop("Pimpl: a linear startRange below 0 needs positive = FALSE.", call. = FALSE)
+  ctrl
 }
 
-# Removed Pimpl arguments and their replacement.
-.pimplRemoved <- c(
-  controlsMS      = "starts are deterministic, see ?Pimpl",
-  controlsNleqslv = "use controlsPTC",
-  expressInTotals = "conserved quantities are always expressed by their totals")
-
-
-#' Parameter transformation (implicit, root-finding)
+#' Implicit parameter transformation
 #'
-#' Returns a [parfn] that solves `f(x, p) = 0` for the dependent states by
-#' pseudo-transient continuation ([cppDE::ptc()]) and attaches first- and second-order
-#' sensitivities from the implicit function theorem.
+#' Solves \eqn{f(x, p) = 0} for the states \eqn{x} by pseudo-transient
+#' continuation ([cppDE::ptc()]) and returns a [parfn] with sensitivities from
+#' the implicit function theorem.
 #'
-#' @param trafo Named character, [eqnvec] or [eqnlist].
-#' @param parameters Outer parameters. Totals of conserved quantities are
-#'   added.
-#' @param forcings Forcing names; zeroed and removed.
+#' @param trafo Named character, [eqnvec] or [eqnlist] defining \eqn{f}.
+#' @param parameters Outer parameter names. For an [eqnlist] the totals
+#'   \eqn{T} of the conserved quantities are added.
+#' @param forcings Forcing names, set to 0.
 #' @param condition Condition label.
-#' @param keep.root Keep roots per condition as warm starts and answer
-#'   repeated calls from memory.
-#' @param flow If `TRUE`, `trafo` is the right-hand side of an ODE and the
-#'   stable steady state is returned. If `FALSE`, any regular root. Defaults
-#'   to `TRUE` for an [eqnlist].
-#' @param compile,modelname,verbose Forwarded to [cppDE::cppFUN].
-#' @param deriv,deriv2 Attach first/second-order sensitivities.
+#' @param keep.root If `TRUE`, roots are kept per condition as initial guesses
+#'   and repeated calls are answered from memory.
+#' @param flow If `TRUE`, \eqn{\dot{x} = f(x, p)}{dx/dt = f(x, p)} and a stable
+#'   steady state is returned. If `FALSE`, any regular root.
+#' @param compile,modelname,verbose Forwarded to [cppDE::cppFUN()].
+#' @param deriv,deriv2 Attach first and second order sensitivities. `deriv2`
+#'   requires `deriv = TRUE`.
 #' @param controlsPTC Named list of solver controls:
 #'   \describe{
-#'     \item{`rtol`, `atol`}{Convergence tolerances, default `1e-10` and
-#'       `1e-14`.}
-#'     \item{`flowTol`}{Relative local error of the pseudo-time steps,
-#'       default `1`. A start that fails is repeated with `flowTol / 10`.}
-#'     \item{`maxit`}{Iterations per attempt, default `400`.}
+#'     \item{`rtol`, `atol`}{Convergence tolerances, default `1e-10`, `1e-14`.}
+#'     \item{`flowTol`}{Relative local error per pseudo-time step, default `1`.}
+#'     \item{`maxit`}{Iterations per start, default
+#'       `ceiling(70 * log(n + 1))` for `n` states.}
 #'     \item{`dtInit`}{Initial pseudo-time step relative to the fastest rate,
 #'       default `1e-2`.}
 #'     \item{`positive`}{Keep states positive, default `TRUE`.}
 #'     \item{`stability`}{Require a stable root if `flow = TRUE`, default
 #'       `TRUE`.}
 #'     \item{`archive`}{Roots kept per condition, default `8`.}
+#'     \item{`nStarts`}{Random starts after the deterministic ones, default
+#'       `20`.}
+#'     \item{`startRange`}{Range of a random start, drawn uniformly per
+#'       state on `startScale`, default `c(-5, 5)`.}
+#'     \item{`startScale`}{`"log10"` or `"linear"`, default `"log10"` if
+#'       `positive` and `"linear"` otherwise.}
+#'     \item{`seed`}{Seed of the random starts, default `1`. Each warm-start
+#'       cache (per condition, emptied by [resetWarmStarts()] before every fit
+#'       of [mstrust()]) draws from its own stream, derived from `seed`, the
+#'       condition and the global RNG state when the cache first needs one. The
+#'       global RNG is read, not advanced.}
 #'   }
-#' @param outdir Directory for the generated source and shared object.
-#' @param ... Removed arguments (`controlsMS`, `controlsNleqslv`,
-#'   `expressInTotals`) raise an error.
+#' @param outdir Directory for the generated files.
 #'
-#' @details Starts are tried in this order: the nearest kept root corrected by
-#' its sensitivities, the same root with a small initial pseudo-time step, the
-#' initial guess in `pars` (missing states start at 1), and 1 for all states.
-#' With `flow = TRUE` the last two are repeated with `flowTol / 10` if they
-#' fail.
-#' An unstable root is left along its unstable eigenvector if `flow` and
-#' `stability` are `TRUE`.
-#'
-#' Conserved quantities of an [eqnlist] enter as constraints `C x = T`, with the
-#' totals `T` as parameters. States without influx at the given parameter
-#' values are set to 0. Calls with identical parameter values, also across
-#' conditions, are solved once.
-#'
-#' `keep.root` and `controlsPTC` are read at every call and can be changed with
-#' [controls()].
+#' @details Conserved quantities of an [eqnlist] enter as \eqn{C x = T}.
+#' States without influx are 0. Initial guesses are kept roots, then the
+#' states in `pars`, missing ones at 1, then `nStarts` random starts. If all
+#' fail, it is an error. Identical parameter values are solved
+#' once, also across conditions. `keep.root` and `controlsPTC` can be changed
+#' with [controls()].
 #'
 #' @return A [parfn].
-#' @seealso [Pexpl], [P]
+#' @seealso [Pexpl()], [P()]
 #' @export
 #' @import cppDE
 #' @importFrom digest digest
@@ -915,16 +911,8 @@ Pimpl <- function(trafo, parameters = NULL, forcings = NULL, condition = NULL,
                   keep.root = TRUE, flow = inherits(trafo, "eqnlist"),
                   compile = FALSE, modelname = NULL, verbose = FALSE,
                   deriv = TRUE, deriv2 = FALSE, controlsPTC = list(),
-                  outdir = getwd(), ...) {
+                  outdir = getwd()) {
 
-  dots <- list(...)
-  if (length(dots)) {
-    gone <- intersect(names(dots), names(.pimplRemoved))
-    if (length(gone))
-      stop("Pimpl: ", paste0("`", gone, "` is gone, ", .pimplRemoved[gone], collapse = "; "),
-           ".", call. = FALSE)
-    stop("Pimpl: unknown argument(s) ", paste(names(dots), collapse = ", "), ".", call. = FALSE)
-  }
   flow    <- isTRUE(flow)
   emit_d1 <- isTRUE(deriv)
   emit_d2 <- isTRUE(deriv2)
@@ -1067,7 +1055,8 @@ Pimpl <- function(trafo, parameters = NULL, forcings = NULL, condition = NULL,
   }
 
   # starts in a fixed order, then the stability check
-  solveRoot <- function(pv, x_user, arch, ctrl) {
+  solveRoot <- function(pv, x_user, arch, ctrl, cache = NULL, condition = NULL) {
+    if (is.null(ctrl$maxit)) ctrl$maxit <- ceiling(70 * log(n_dep + 1))
     zero <- numericZeros(pv)
     act  <- setdiff(dependent, zero)
     if (!length(act)) return(list(x = setNames(rep(0, n_dep), dependent), zero = zero, how = "all zero"))
@@ -1112,6 +1101,26 @@ Pimpl <- function(trafo, parameters = NULL, forcings = NULL, condition = NULL,
                                       flowTol = ctrl$flowTol / if (fine) 10 else 1,
                                       maxit = ctrl$maxit, dtInit = dt))
       list(x = r$x[act], ok = r$converged, iter = r$iterations, reason = r$message)
+    }
+    # multistart: states uniform over startRange on startScale, from the stream of
+    # this warm-start cache; the global RNG is read, not advanced
+    if (ctrl$nStarts > 0L) {
+      oldSeed <- get0(".Random.seed", envir = globalenv(), inherits = FALSE)
+      on.exit(if (is.null(oldSeed)) rm(".Random.seed", envir = globalenv())
+              else assign(".Random.seed", oldSeed, envir = globalenv()), add = TRUE)
+      if (is.null(cache)) cache <- new.env(parent = emptyenv())
+      if (is.null(cache$msBase)) {
+        h <- digest::digest(list(ctrl$seed, condition, oldSeed), algo = "xxhash32")
+        cache$msBase <- strtoi(substr(h, 1, 7), 16L); cache$msCount <- 0L
+      }
+      cache$msCount <- cache$msCount + 1L
+      set.seed((cache$msBase + cache$msCount) %% .Machine$integer.max)
+      for (i in seq_len(ctrl$nStarts)) {
+        u <- stats::runif(n_dep, ctrl$startRange[1], ctrl$startRange[2])
+        attempts[[paste0("start", i)]] <- list(
+          x = prep(setNames(if (ctrl$startScale == "log10") 10^u else u, dependent)),
+          dt = if (flow) ctrl$dtInit else 1)
+      }
     }
     for (nm in names(attempts)) {
       r <- run(attempts[[nm]]$x, attempts[[nm]]$dt, isTRUE(attempts[[nm]]$fine))
@@ -1239,7 +1248,8 @@ Pimpl <- function(trafo, parameters = NULL, forcings = NULL, condition = NULL,
     stats$calls <- stats$calls + 1L
     if (is.null(got)) {
       arch <- if (keep.root) cache$arch else NULL
-      got  <- solveRoot(pv, setNames(as.numeric(p[dependent]), dependent), arch, ctrl)
+      got  <- solveRoot(pv, setNames(as.numeric(p[dependent]), dependent), arch, ctrl,
+                        cache = cache, condition = condition)
       got$ift <- NULL
       stats$solves <- stats$solves + 1L
       stats$how[got$how] <- (if (is.na(stats$how[got$how])) 0L else stats$how[got$how]) + 1L
@@ -1422,7 +1432,8 @@ branch <- function(trafo, table = NULL,
 
 
 ## Split compound identifiers into single symbols: "_" -> ":" inside names
-## only, digit-leading parts prefixed to stay syntactic. Inverted by .decolonize.
+## only, digit-leading and empty parts prefixed to stay syntactic. Inverted by
+## .decolonize.
 .numprefix <- "..dModnum.."
 
 .colonize <- function(x) {
@@ -1430,8 +1441,11 @@ branch <- function(trafo, table = NULL,
   regmatches(x, m) <- lapply(regmatches(x, m), function(ids) {
     vapply(ids, function(id) {
       parts <- strsplit(id, "_", fixed = TRUE)[[1]]
+      # strsplit() drops trailing empty parts; `gamma_` must not become `gamma`.
+      parts <- c(parts, rep("", attr(regexpr("_*$", id), "match.length")))
       digit <- grepl("^[0-9]", parts)
       parts[digit] <- paste0(.numprefix, parts[digit])
+      parts[parts == ""] <- .numprefix
       paste(parts, collapse = ":")
     }, character(1), USE.NAMES = FALSE)
   })

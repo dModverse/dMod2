@@ -657,3 +657,29 @@ test_that("a prediction cut short is an error, not a read past its rows", {
   # and the full prediction afterwards still reads its own rows
   expect_equal(obj(pars, .prediction = full)$value, v)
 })
+
+
+test_that("an undefined observable counts only at a data point", {
+  skip_if_no_compile()
+  d <- file.path(tempdir(), "nl2_nan"); dir.create(d, showWarnings = FALSE)
+  oldwd <- setwd(d); on.exit(setwd(oldwd), add = TRUE)
+
+  # A and B start at 0, so their ratio is 0/0 at t = 0 only.
+  re <- eqnlist() |> addReaction("", "A", "k1") |> addReaction("", "B", "k2")
+  x <- Xs(odemodel(re, modelname = "nl2nan_ode", compile = TRUE), condition = "C1")
+  g <- Y(c(frac = "A/(A+B)"), re, modelname = "nl2nan_obs", compile = TRUE)
+  p <- P(eqnvec(A = "0", B = "0", k1 = "k1", k2 = "k2"), condition = "C1",
+         modelname = "nl2nan_p", compile = TRUE)
+  pars <- c(k1 = 1, k2 = 3)
+
+  later <- as.datalist(data.frame(name = "frac", time = c(1, 2), value = 0.25,
+                                  sigma = 0.1, condition = "C1"))
+  v <- normL2(later, g * x * p)(pars)
+  expect_true(is.finite(v$value))
+  expect_true(all(is.finite(v$gradient)))
+  expect_equal(v$value, 2 * log(2 * pi * 0.1^2), tolerance = 1e-8)
+
+  at0 <- as.datalist(data.frame(name = "frac", time = 0, value = 0.25,
+                                sigma = 0.1, condition = "C1"))
+  expect_error(normL2(at0, g * x * p)(pars), "NaN at data point\\(s\\) of condition 'C1': frac \\(t = 0\\)")
+})

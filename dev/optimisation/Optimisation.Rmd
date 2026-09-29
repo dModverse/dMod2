@@ -1,6 +1,6 @@
 ---
 title: "Optimisation in dMod2"
-subtitle: "Hessian sources, seeding and the cost of a multi-start"
+subtitle: "Hessian sources, seeding, the cost of a multi-start, and multiple shooting"
 author: "Simon Beyer"
 date: "`r format(Sys.Date(), '%Y-%m-%d')`"
 output:
@@ -628,6 +628,311 @@ count.
 The forward handover changes only where inside a basin a run stops; the
 reversed one restores a valid stopping test.
 
+# Multiple shooting
+
+Every method above integrates the model from its initial state across the whole
+time axis, single shooting. For an oscillating or spiking system this makes the
+objective rugged: a small change of a parameter shifts every later period, and
+once a peak has moved by more than its own width the residuals no longer tell
+in which direction it moved. The valleys around the optimum become narrow and
+the starting points that reach it rare.
+
+Multiple shooting [@bock1983recent; @baake1992fitting] cuts the time axis at
+nodes $\tau_1 < \dots < \tau_M$. Segment $j$ is integrated from node values
+$s_j$ of its own, the first one from the initial state the parameter
+transformation gives, and continuity becomes a constraint of the fit,
+
+$$c_j \;=\; x(\tau_{j+1};\, \tau_j, s_j, \theta) - s_{j+1} \;=\; 0 .$$
+
+The nodes start at the data wherever a state is observed, so every segment
+stays close to its data whatever the parameters are, and the gaps close only as
+the fit converges. At convergence the trajectory is continuous and the result
+is a stationary point of the single-shooting objective.
+
+In dMod2 multiple shooting is a control of the objective, not a different
+optimiser:
+
+```{r ms-usage, eval = FALSE}
+obj <- normL2(data, g * x * p, multipleShootingControl = TRUE)
+fit <- trust(obj, start)            # or mstrust(obj, ...)
+fit$multipleShooting$violation      # the scaled gaps at the end
+controls(obj, "multipleShootingControl") <- NULL   # single shooting again
+```
+
+Called as a function, `obj` is still the single-shooting objective, so
+evaluating, plotting and profiling it are unchanged. `trust()` reads the control
+and runs the method below; a sum with a prior keeps it. The ODE model has to be
+built with `odemodel(..., includeTimeZero = FALSE)`, so that a segment is
+integrated from its own start.
+
+## The condensed step
+
+Bock's generalised Gauss-Newton method linearises the constraints at the
+current iterate $(\theta, s)$. With $G_j = \partial x_j / \partial s_j$ and
+$P_j = \partial x_j / \partial \theta$ the sensitivities of the end state of
+segment $j$,
+
+$$\Delta s_{j+1} \;=\; \alpha\, c_j + G_j\, \Delta s_j + P_j\, \Delta \theta ,$$
+
+and the recursion from the first segment yields $\Delta s = \alpha z + S\,
+\Delta\theta$ for all nodes at once. Substituted into the linearised residuals
+of the segments, it leaves a Gauss-Newton model in $\Delta\theta$ alone
+(condensing). The subproblem thus keeps the size of the single-shooting one,
+and the Moré-Sorensen solver and the bound handling above take it unchanged.
+The nodes follow the step through the linearisation rather than a new
+simulation, so the gaps close as the iteration converges and not at every point
+it visits.
+
+The trust region bounds parameters and nodes together,
+
+$$\lVert D\, \Delta\theta \rVert^2 + \lVert V (\alpha z + S\, \Delta\theta) \rVert^2 \;\le\; r^2 ,$$
+
+with $V$ one over the scale of each state: the range of the data for an
+observed state, of a simulation otherwise, and a decade for a state in a log10
+chart. A region on $\theta$ alone does not bound $S\, \Delta\theta$, the
+linearised single-shooting response of a node, which across a spike is huge.
+$\alpha = 1$ closes the linearised gaps completely, Bock's own step. Under an
+active region the node step is damped with the parameter step: $\alpha$ is the
+share of the node part of the full Gauss-Newton step that the radius admits,
+capped at one.
+
+A step is accepted by the filter of Fletcher and Leyffer
+[@fletcher2002nonlinear] on the pair of data term $f$ and scaled gap size
+$h = \lVert V c \rVert$, or by the $\ell_2$ exact penalty $f + \mu h$
+(`stepControl$acceptance`). A rejected step whose gaps did not close as
+predicted gets one second-order correction (`stepControl$soc`), the trial gaps
+condensed with the sensitivities already at hand. A run reports
+`converged = TRUE` only when $h$ has fallen below `tolControl$ctol`; with open
+gaps the nodes absorb what the parameters do not explain, and the data term is
+no measure of the fit.
+
+`hessianMethod = "gn"` condenses the Gauss-Newton block of every segment.
+`"bfgs"` and `"sr1"` keep one quasi-Newton block per segment for the segment's
+Lagrangian, which gradients alone keep up to date, and so run on the adjoint
+gradients of `sweep = "reverse"`.
+
+## Annealing the continuity
+
+From a start far from the optimum, even the condensed step can be forced
+through a regime the data never show, such as a spike threshold the resting
+potential of the start never reaches. `stepControl$anneal`, on by default,
+therefore first prices the gaps instead of enforcing them: it minimises
+$f + w \lVert V c \rVert^2$ over parameters and nodes on the sparse
+Gauss-Newton matrix of the full problem, with $w$ rising tenfold per stage from
+one, until the gaps are small, and hands over to the exact method. This is the
+precision annealing of variational data assimilation [@ye2015improved] with a
+fixed schedule. A stage ends once a step gains less than a thousandth of the
+objective, and the annealing ends early where the penalty dominates and a whole
+stage no longer closes the gaps, which is the case where no weight will.
+
+## Nodes
+
+`nodes = "auto"`, the default, starts from ten segments per condition, or from
+one per half oscillation of the data where that is more, and cuts a segment in
+two wherever
+
+- the spectral radius of its propagation matrix $G_j$ exceeds `growth` (10). It
+  is the factor by which the linearised flow of the segment expands, the same
+  in every chart and under every scaling of the states;
+- the root mean square of its weighted residuals exceeds `misfit` (3) and twice
+  the median of its condition, where the model misses a feature of the data
+  locally;
+- or its solve fails.
+
+This happens before the first step and at every iterate, never below half the
+finest spacing of the data, and either half of a cut keeps one more data point
+than the model has states, so that no node can fit its segment alone.
+
+The growth of an oscillator stays near one: along a limit cycle the flow neither
+expands nor contracts, and a damped precession contracts. What grows over a
+long segment is the sensitivity of its phase to the frequency, linearly with
+the number of periods it spans, and from a start with the wrong frequency the
+phase slips by a whole period and the segment fits the data a period off. One
+segment per half oscillation, counted at the turning points of the data,
+bounds that slip without any look at the model. A misfit on every segment, as
+wrong parameters produce it, cuts nothing: no node removes it, and cutting
+there would refine the time axis down to the spacing of the data. An angle
+state goes on `charts = c(phi = "angle")`, where a gap counts modulo $2\pi$. A state observed directly starts at the data. The
+other states start at a run of the model whose observed states are reset to the
+data at every data time, replacement synchronisation
+[@pecora1990synchronization]. States driven by the observed ones, a gating
+variable driven by the voltage, forget where they started and follow the
+measured trajectory, instead of being carried from one noisy value per segment
+to the next.
+
+`nodes = "transitions"` puts a node just before every fast change of the data, a
+spike or the jump of a relaxation oscillator, found as a run of samples whose
+rate lies more than eight robust deviations off its median, and fills the rest
+with the even nodes of `"auto"`. The layout stays fixed. Each change then starts
+in its segment where the data have it, whatever the parameters are; the slow
+stretch behind it depends on them smoothly, and a wrong timing shows as a gap
+before the next node, a small difference of the state rather than a change in
+the wrong place.
+
+## Further methods of the Freiburg group
+
+Bock's own globalisation damps the full Gauss-Newton step, all linearised gaps
+closed, by a factor that a curvature estimate predicts and a corrector cuts back;
+a damped step is taken when the simplified step at its end, the Jacobians of the
+current iterate with the residuals and gaps of the trial, has shrunk. This
+natural level function carries the geometry of the problem rather than the
+weights of a merit function [@peifer2007parameter]; `stepControl$acceptance =
+"natural"` selects it, with the filter taking over where the damping finds no
+step. `stepControl$twoPhase` fits the parameters first with the node values
+held at their start [@horbelt2002parameter], `stepControl$regularise` holds
+directions fixed that the data do not identify [@peifer2007parameter],
+`multipleShootingControl$breaks` names nodes at which continuity is not
+enforced [@voss2004nonlinear], and `stepControl$restore` gives the filter its
+restoration phase. None is on by default: each helps on some problems and costs
+on others.
+
+## FitzHugh-Nagumo
+
+The FitzHugh-Nagumo oscillator [@fitzhugh1961impulses],
+
+$$\dot V = c\,(V - V^3/3 + R), \qquad \dot R = -(V - a + b R)/c ,$$
+
+is fitted to its voltage alone, 81 points on $[0, 20]$ with noise of $0.1$. Forty starts perturb the initial states by a standard deviation of 1.5
+and $a$, $b$ and $\log c$ by 1.
+
+```{r fhn-problem, results = "hide"}
+fhn <- eqnvec(V = "c*(V - V^3/3 + R)", R = "-(V - a + b*R)/c")
+tight <- list(atol = 1e-10, rtol = 1e-10)
+fhnModel <- odemodel(fhn, modelname = "fhn_ode", includeTimeZero = FALSE,
+                     compile = FALSE, outdir = .outdir)
+fx <- Xs(fhnModel, optionsOde = tight, optionsSens = tight)
+fg <- Y(c(y = "V"), f = fx, modelname = "fhn_obs", compile = FALSE,
+        outdir = .outdir)
+fp <- P(eqnvec(V = "V", R = "R", a = "a", b = "b", c = "exp(lc)"),
+        condition = "C", modelname = "fhn_p", compile = FALSE, outdir = .outdir)
+compile(fx, fg, fp, output = "fhn_vig", cores = 2)
+fhnPrd <- fg * fx * fp
+
+fhnTruth <- c(V = -1, R = 1, a = 0.2, b = 0.2, lc = log(3))
+tt <- seq(0, 20, by = 0.25)
+set.seed(1)
+yy <- fhnPrd(tt, fhnTruth, deriv = FALSE)[[1]][, "y"]
+fhnData <- as.datalist(data.frame(name = "y", time = tt,
+                                  value = yy + rnorm(length(tt), 0, 0.1),
+                                  sigma = 0.1, condition = "C"))
+
+fhnSS <- normL2(fhnData, fhnPrd)
+fhnMS <- normL2(fhnData, fhnPrd, multipleShootingControl = TRUE)
+```
+
+```{r fhn-runs}
+set.seed(7)
+fhnStarts <- parframe(do.call(rbind, lapply(1:40, function(i)
+  fhnTruth + c(rnorm(2, 0, 1.5), rnorm(3, 0, 1)))))
+fhnFit <- function(obj, ...)
+  as.parframe(mstrust(obj, center = fhnStarts, fits = nrow(fhnStarts),
+                      cores = .cores, rinit = 0.1, rmax = 10, iterlim = 300, ...))
+
+fhnRuns <- .fit("fhn", list(
+  "single shooting"           = fhnFit(fhnSS),
+  "multiple shooting, filter" = fhnFit(fhnMS),
+  "multiple shooting, merit"  = fhnFit(fhnMS, stepControl = list(acceptance = "merit"))))
+```
+
+A start is a hit when the single-shooting objective at its final parameters
+lies within `0.1` of the best one. It is evaluated anew rather than read off the
+fit, since a multiple-shooting run with open gaps reports a data term that can
+lie below the optimum.
+
+```{r fhn-table}
+fhnValue <- function(f) apply(as.matrix(f[, names(fhnTruth)]), 1, function(th)
+  fhnSS(th, deriv = FALSE)$value)
+fhnBest <- min(unlist(lapply(fhnRuns, fhnValue)))
+
+do.call(rbind, lapply(names(fhnRuns), function(method) {
+  f <- fhnRuns[[method]]
+  hits <- sum(fhnValue(f) <= fhnBest + 0.1)
+  data.frame(method, conv = sum(f$converged), hits,
+             medEval = stats::median(f$neval),
+             evalPerHit = if (hits > 0) round(sum(f$neval) / hits) else NA_real_)
+}))
+```
+
+Multiple shooting reaches the optimum from more than twice as many starts, at a
+quarter of the evaluations per optimum. Much of what either method spends goes
+into the starts it misses: most of those of single shooting run into the
+iteration limit, and the three starts multiple shooting misses take almost half
+of its evaluations. The evaluations of a multiple-shooting run include those of
+the annealing stages. One of them integrates every segment once, which covers
+the time axis once as a single-shooting evaluation does, with the sensitivities
+of each segment's node values on top of those of the parameters. The filter and the merit function reach the optimum from as many
+starts at nearly the same cost.
+
+## A spiking neuron
+
+The pacemaker neuron of the pre-Bötzinger complex [@butera1999models] is harder.
+Its voltage fires bursts of spikes about 2 ms wide. One burst, thirteen spikes in
+700 ms sampled at 10 kHz with noise of 0.25 mV, as a patch-clamp recording gives
+it, is fitted in the chart the symmetry reduction certifies, with the voltage as
+the only observable. A change of a parameter by a per cent moves the late spikes
+by more than their width, so the single-shooting objective breaks into narrow
+valleys, one for every way model spikes can pair with data spikes.
+`bench/multipleShooting_preBotC.R` runs the fits; its results are stored beside
+this document.
+
+Two things decide the outcome besides the method. The solver runs at `1e-10`:
+at `1e-8`, far from the optimum where misplaced spikes make the residuals large,
+the objective scatters by more than the descent a step predicts, and the trust
+region of either method collapses. And the nodes are `nodes = "transitions"`, one
+just before every spike:
+
+```{r prebotc-nodes}
+pb <- readRDS("prebotc.rds")
+round(pb$nodes, 1)
+```
+
+From the true parameters both methods reach the optimum, the single-shooting
+objective `ss` at the end of each run:
+
+```{r prebotc-truth}
+with(pb$truth, data.frame(run, ss = round(ss, 1), gaps = signif(gaps, 2)))
+```
+
+From ten starts at each of three distances from the truth, positive parameters
+perturbed on log10 by `scale` and the potentials, half-activations and slopes by
+a fifth of that relatively, a start is a hit when `ss` at its end lies within 1
+of the optimum:
+
+```{r prebotc-starts}
+with(pb$starts, data.frame(method, scale, hits, fits, sec = medianSec))
+```
+
+Single shooting reaches the optimum from
+`r sum(pb$starts$hits[pb$starts$method == "single shooting"])` of
+`r sum(pb$starts$fits[pb$starts$method == "single shooting"])` starts, multiple
+shooting from `r sum(pb$starts$hits[pb$starts$method == "multiple shooting"])`.
+Figure \ref{fig:prebotc-traj} shows a start at `r pb$pick$scale` decades: it
+stays silent, single shooting ends in one of the valleys with spikes too low
+and at the wrong times, and multiple shooting lays every spike onto the data.
+A miss of multiple shooting ends where single shooting ends, with spikes
+missing or added.
+
+```{r prebotc-traj, fig.width = 6.5, fig.height = 5, fig.cap = "One start, the fits of single and multiple shooting from it, against the data (grey, every fifth point)."}
+ggplot(pb$trajectories, aes(time, value)) +
+  geom_point(data = pb$data, size = 0.15, colour = "grey60") +
+  geom_line(linewidth = 0.3, colour = "#0072B2") +
+  facet_wrap(~run, ncol = 1) +
+  labs(x = "time [ms]", y = "V [mV]") +
+  theme_dMod()
+```
+
+Where the nodes sit decides. Ten even segments, the start of `"auto"`, carry
+several spikes each: a small error of the parameters moves them, the segments
+miss their data, and the automatic cuts pile nodes onto the spikes with the
+noise of the data in their values. A node just before a spike leaves the spike
+in place and hands its timing to the gap in front of the next node, a smooth
+function of the parameters. Close to the truth that turns a part of the starts
+single shooting misses into hits; farther off the method is still a local one,
+and the hits fall with the distance. The noise matters as well: with 1 mV at 1 kHz, one or two points
+on a spike, a node value off by the noise just before the upstroke moves the
+spike by more than its width, and the transition layout reached the optimum from
+none of fifteen such starts in our tests.
+
 # Reproducing the numbers
 
 The nine-parameter fits are stored in `dev/optimisation/results.rds` and reused,
@@ -647,5 +952,9 @@ the document, one file each:
 Without `BOEHM_NOPRIOR`, `bench_hessianSource.R` runs the nine-parameter
 comparison of the earlier sections over the whole catalogue rather than the
 subset shown here, with the per-start `stopReason` tables.
+
+The FitzHugh-Nagumo fits are part of `results.rds`. `prebotc.rds` comes from
+`bench/multipleShooting_preBotC.R` with the environment variable `MS_RESULTS`
+set to its path, and takes about half an hour on a machine with twenty cores.
 
 # References

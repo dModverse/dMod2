@@ -1,7 +1,7 @@
-# normL2(t0 = ) named by condition: each condition solves on its own grid, and
-# an event before a condition's start does not fire there.
+# normL2(times = ) as a list named by condition: each condition solves on its
+# own grid from its first time, and an event before that start does not fire.
 
-.t0_fx <- local({
+.times_fx <- local({
   cache <- NULL
   function() {
     if (!is.null(cache)) return(cache)
@@ -21,21 +21,21 @@
   }
 })
 
-.t0_data <- function() {
+.times_data <- function() {
   d <- function(cn, v) data.frame(name = "y", time = c(0, 1, 2), value = v,
                                   sigma = 0.1, condition = cn)
   as.datalist(rbind(d("C1", c(0.6, 0.4, 0.2)), d("C2", c(0.9, 0.5, 0.3))))
 }
 
-test_that("per-condition t0 matches one early start where the late condition has no effective event", {
+test_that("per-condition times start each condition at its own first time", {
   skip_if_not_installed("cppDE"); skip_on_cran()
-  prd  <- .t0_fx()$prd
-  data <- .t0_data()
+  prd  <- .times_fx()$prd
+  data <- .times_data()
   pars <- c(A0 = 1, k = 0.05, dose = 2)
 
-  early <- normL2(data, prd, t0 = -10)(pars, deriv = TRUE)
-  split <- normL2(data, prd, t0 = c(C1 = -10, C2 = 0))(pars, deriv = TRUE)
-  late  <- normL2(data, prd, t0 = 0)(pars, deriv = TRUE)
+  early <- normL2(data, prd, times = -10)(pars, deriv = TRUE)
+  split <- normL2(data, prd, times = list(C1 = -10, C2 = 0))(pars, deriv = TRUE)
+  late  <- normL2(data, prd)(pars, deriv = TRUE)
 
   # C2 decays from -10 to 0 under `early`, from 0 under `split`
   pr <- attr(split, "env")$prediction
@@ -49,20 +49,23 @@ test_that("per-condition t0 matches one early start where the late condition has
 
   expect_false(isTRUE(all.equal(split$value, early$value)))
   expect_false(isTRUE(all.equal(split$value, late$value)))
+  # a condition the list leaves out solves on its data times alone
+  expect_equal(normL2(data, prd, times = list(C1 = -10))(pars, deriv = TRUE)$value,
+               split$value)
 
   # gradient against central differences
   fd <- vapply(names(pars), function(nm) {
     h <- 1e-6; up <- dn <- pars; up[nm] <- up[nm] + h; dn[nm] <- dn[nm] - h
-    obj <- normL2(data, prd, t0 = c(C1 = -10, C2 = 0))
+    obj <- normL2(data, prd, times = list(C1 = -10, C2 = 0))
     (obj(up, deriv = FALSE)$value - obj(dn, deriv = FALSE)$value) / (2 * h)
   }, numeric(1))
   expect_equal(unname(split$gradient[names(pars)]), unname(fd), tolerance = 1e-4)
 })
 
-test_that("a named t0 must cover every condition and precede its data", {
+test_that("times as a list is named by the conditions of the data", {
   skip_if_not_installed("cppDE"); skip_on_cran()
-  prd  <- .t0_fx()$prd
-  data <- .t0_data()
-  expect_error(normL2(data, prd, t0 = c(C1 = -10)), "misses C2")
-  expect_error(normL2(data, prd, t0 = c(C1 = -10, C2 = 1)), "data before t0")
+  prd  <- .times_fx()$prd
+  data <- .times_data()
+  expect_error(normL2(data, prd, times = list(C1 = -10, C3 = 0)), "not C3")
+  expect_error(normL2(data, prd, times = list(-10, 0)), "named by the conditions")
 })

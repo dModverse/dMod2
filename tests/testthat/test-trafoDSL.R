@@ -20,6 +20,18 @@ test_that("compound identifiers may contain digit-leading parts", {
 
 })
 
+test_that("identifiers may end in an underscore", {
+
+  # SBML ids like `gamma_` lost the underscore and no longer matched.
+  trafo <- define(eqnvec(), "x~x", x = c("gamma_", "I0_", "a__b"))
+  trafo <- define(trafo, "S_ ~ N_ - I0_")
+
+  expect_equal(insert(trafo, "gamma_ ~ gamma_CA")[["gamma_"]], "gamma_CA")
+  expect_equal(repar("I0_ ~ I0_NY", trafo)[["S_"]], "N_-I0_NY")
+  expect_equal(insert(trafo, "x ~ exp(x)", x = "a__b")[["a__b"]], "exp(a__b)")
+
+})
+
 test_that("substitution into compound identifiers still works", {
 
   trafo <- define(eqnvec(), "x~x", x = c("alpha", "k_pr_21mRNA"))

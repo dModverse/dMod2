@@ -250,7 +250,9 @@ match.fnargs <- function(arglist, choices) {
 
 # Report here, not three frames downstream.
 .checkPrediction <- function(out, conditions) {
-  bad <- is.na(out) | is.infinite(out)
+  # NaN passes: an observable can be undefined where no data sits (a ratio of
+  # states that all start at 0), and normL2 stops on a NaN at a data point.
+  bad <- (is.na(out) & !is.nan(out)) | is.infinite(out)
   if (!any(bad)) return(invisible(NULL))
   ai <- arrayInd(which(bad), dim(out))
   stop("Prediction is NA or Inf in condition ", paste0(conditions, collapse = ","),
@@ -527,11 +529,15 @@ match.fnargs <- function(arglist, choices) {
 
 # ---------------------------------------------------------------------------
 
-.bwdNode <- function(tape, w, env, cores) {
+# `seeds = TRUE` reads the trailing axis of every cotangent as independent
+# first-order seeds instead of directions. A leaf that can take several seeds
+# at once gets them in one call, the ODE among them; every other leaf is linear
+# in its seed and answers slice by slice.
+.bwdNode <- function(tape, w, env, cores, seeds = FALSE) {
   switch(tape$op,
-    leaf = .bwdLeaf(tape, w, cores),
-    "*"  = .bwdProd(tape, w, env, cores),
-    "+"  = .bwdPlus(tape, w, env, cores),
+    leaf = .bwdLeaf(tape, w, cores, seeds),
+    "*"  = .bwdProd(tape, w, env, cores, seeds),
+    "+"  = .bwdPlus(tape, w, env, cores, seeds),
     stop(".bwdNode: unknown node op '", tape$op, "'.", call. = FALSE))
 }
 
@@ -544,7 +550,7 @@ match.fnargs <- function(arglist, choices) {
 # summing after and costs one solve instead of n. Where the slots are separate
 # requests and the leaf offers a batch entry, they go in one call, for the same
 # reason the forward path batches them.
-.bwdLeaf <- function(tape, w, cores) {
+.bwdLeaf <- function(tape, w, cores, seeds = FALSE) {
   st <- tape$st; b <- tape$b
   vjp <- st$vjpfn
   if (is.null(vjp))
@@ -586,16 +592,38 @@ match.fnargs <- function(arglist, choices) {
     r
   }
 
+  # Seed mode. A prediction whose vjp takes `seeds` answers every seed in one
+  # sweep; anything else is called once per seed and the answers are stacked,
+  # which is exact because a first-order vjp is linear in its seed.
+  vjp_seeds <- identical(st$kind, "prdfn") && "seeds" %in% names(formals(vjp))
+  call_seeds <- function(i, ws, cond) {
+    if (vjp_seeds) {
+      pf <- .splitParsFixed(.req_pars(b, i), .req_fixed(b, i))
+      S  <- max(.ctK(ws$pars), .ctK(ws$out))
+      r  <- if (is.null(ws$out)) .ct() else
+        .ct(pars = vjp(times = .req_times(b, i), pars = pf$pars,
+                       fixed = pf$fixed, cotangent = ws$out, seeds = TRUE))
+      return(.addCt(r, .ct(pars = .pickCotangent(ws$pars, names(pf$pars), S))))
+    }
+    S <- max(.ctK(ws$pars), .ctK(ws$out))
+    parts <- lapply(seq_len(S), function(k) call_one(i, .ct(
+      out  = if (is.null(ws$out))  NULL else ws$out[, , k, drop = FALSE],
+      pars = if (is.null(ws$pars)) NULL else ws$pars[, k, drop = FALSE]), cond))
+    .stackSeeds(parts)
+  }
+  if (seeds) call_one_mode <- call_seeds else call_one_mode <- call_one
+
   if (shared) {
     ws <- Reduce(.addCt, lapply(live, function(s) w[[s]]))
     cond <- if (is.null(res$conditions)) NULL else res$conditions[live[1L]]
-    out[[live[1L]]] <- call_one(1L, ws, cond)
+    out[[live[1L]]] <- call_one_mode(1L, ws, cond)
     return(out)
   }
 
   batchable <- identical(st$kind, "prdfn") && !is.null(st$vjpbatchfn) &&
                length(live) > 1L &&
-               all(vapply(live, function(s) !is.null(w[[s]]$out), TRUE))
+               all(vapply(live, function(s) !is.null(w[[s]]$out), TRUE)) &&
+               (!seeds || "seeds" %in% names(formals(st$vjpbatchfn)))
   if (batchable) {
     split <- lapply(live, function(s) .splitParsFixed(.req_pars(b, s),
                                                       .req_fixed(b, s)))
@@ -605,11 +633,16 @@ match.fnargs <- function(arglist, choices) {
       fixedList = lapply(split, `[[`, "fixed"),
       cotangentList = lapply(live, function(s) w[[s]]$out),
       conditions = if (is.null(res$conditions)) NULL else as.list(res$conditions[live]),
-      cores     = cores)
+      cores     = cores,
+      seeds     = seeds)
     if (isTRUE(getOption("dMod.batch.check", FALSE))) {
       ref <- lapply(seq_along(live), function(j)
-        vjp(times = .req_times(b, live[j]), pars = split[[j]]$pars,
-            fixed = split[[j]]$fixed, cotangent = w[[live[j]]]$out))
+        if (seeds)
+          vjp(times = .req_times(b, live[j]), pars = split[[j]]$pars,
+              fixed = split[[j]]$fixed, cotangent = w[[live[j]]]$out, seeds = TRUE)
+        else
+          vjp(times = .req_times(b, live[j]), pars = split[[j]]$pars,
+              fixed = split[[j]]$fixed, cotangent = w[[live[j]]]$out))
       cmp <- all.equal(vals, ref, tolerance = 0)
       if (!isTRUE(cmp))
         stop("dMod.batch.check: the batched vjp of a ", st$kind,
@@ -631,33 +664,53 @@ match.fnargs <- function(arglist, choices) {
 
   for (s in live) {
     cond <- if (is.null(res$conditions)) NULL else res$conditions[s]
-    out[[s]] <- call_one(s, w[[s]], cond)
+    out[[s]] <- call_one_mode(s, w[[s]], cond)
   }
   out
 }
 
-.bwdProd <- function(tape, w, env, cores) {
+# Per-seed answers of a leaf stacked back onto one seed axis: the out-halves
+# along their third axis, the pars-halves on the union of their rows.
+.stackSeeds <- function(parts) {
+  S <- length(parts)
+  outs <- lapply(parts, `[[`, "out")
+  out <- NULL
+  if (!all(vapply(outs, is.null, TRUE))) {
+    ref <- outs[[which(!vapply(outs, is.null, TRUE))[1L]]]
+    d <- dim(ref)
+    out <- array(0, c(d[1L], d[2L], S), dimnames = c(dimnames(ref)[1:2], list(NULL)))
+    for (k in seq_len(S)) if (!is.null(outs[[k]])) out[, , k] <- outs[[k]][, , 1L]
+  }
+  pl <- lapply(parts, `[[`, "pars")
+  rows <- unique(unlist(lapply(pl, rownames)))
+  pars <- if (!length(rows)) NULL else
+    do.call(cbind, lapply(pl, function(p) .pickCotangent(p, rows, 1L)))
+  if (!is.null(pars)) dimnames(pars) <- list(rows, NULL)
+  list(out = out, pars = pars)
+}
+
+.bwdProd <- function(tape, w, env, cores, seeds = FALSE) {
   st <- tape$st
   # A summed objective hands every term the same cotangent, because the sum's
   # derivative in each term is one.
   w1 <- if (identical(st$reduce, "sum")) rep(list(w[[1L]]), tape$n) else w
-  u1 <- .bwdNode(tape$t1, w1, env, cores)
+  u1 <- .bwdNode(tape$t1, w1, env, cores, seeds)
 
   if (tape$p2_is_par) {
     # p1 read p2's parvec as its parameters, and the outer `out` as its input.
     w2 <- lapply(u1, function(u) if (is.null(u)) NULL else .ct(pars = u$pars))
-    down <- .bwdNode(tape$t2, w2, env, cores)
+    down <- .bwdNode(tape$t2, w2, env, cores, seeds)
     outer_out <- lapply(u1, function(u) if (is.null(u)) NULL else .ct(out = u$out))
     return(.mergeCt(down, outer_out))
   }
   # p1 read p2's own output, values and parameters both.
-  .bwdNode(tape$t2, u1, env, cores)
+  .bwdNode(tape$t2, u1, env, cores, seeds)
 }
 
-.bwdPlus <- function(tape, w, env, cores) {
+.bwdPlus <- function(tape, w, env, cores, seeds = FALSE) {
   out <- vector("list", tape$n)
   for (p in tape$parts) {
-    u <- .bwdNode(p$tape, w[p$pos], env, cores)
+    u <- .bwdNode(p$tape, w[p$pos], env, cores, seeds)
     for (j in seq_along(p$pos)) out[[p$pos[j]]] <- u[[j]]
   }
   out
