@@ -568,52 +568,36 @@ them. A stacked rank grows only where some block grows, so this never stops earl
 a plateau taken on the stack, and it is cheaper, the deep orders being reached on one
 block instead of on all of them.
 
-### Specialised coordinates: the codimension budget {#sec-budget}
+### Special points: the generic rank bound {#sec-bound}
 
-The argument also assumes an unspecialised coordinate space. The analysis rarely works
-with $\Omega_k$ itself: an explicit steady state, a pinned initial value or a known parameter pulls it
-through $J = \partial(x_0,\theta)/\partial z$, and a constraint adds constant rows $C$,
-the resting-manifold tangency of `equilibrate` or the relations of a recast exponent. The
-rank is taken of $W_k = J^*\Omega_k + C$, and with $A = \ker J^*$,
-$a_k = \dim(\Omega_k \cap A)$ and $c_k = \dim(J^*\Omega_k \cap C)$,
-\begin{equation}
-\dim W_k \;=\; \dim\Omega_k \;-\; a_k \;+\; \dim C \;-\; c_k .
-\label{eq:specialised}
-\end{equation}
-Both $a_k$ and $c_k$ are non-decreasing and bounded by $\dim A$ and $\dim C$, so a flat
-step of $W$ while $\Omega$ still grows forces $a_k + c_k$ up, which can happen at most
-$\operatorname{codim} = \dim A + \dim C$ times over the whole run. A misleading flat step
-spends one unit of a finite budget.
+The argument holds over the function field, at a generic point. The analysis evaluates
+at special points: an initial value fixed to a number, a steady state, the state after a
+dose. There the rank can stay constant for several orders and grow again. With
+$\dot x = \theta$, $y = x^m$ and $x_0 = 0$ every row vanishes up to order $m-2$, and
+$\theta$ enters at order $m$.
 
-The rule that follows is to count flat steps cumulatively rather than consecutively, and
-to stop once more than $\operatorname{codim}$ of them have been seen: one was then a
-genuine flat step, and the rank is final. That is a proof in the specialised space, from
-the projected curve alone. Without a specialisation the budget is zero and a single flat
-step certifies, the statement of the previous section. Once the budget is spent,
-$A \subseteq \Omega_N$ and $C \subseteq J^*\Omega_N$, and \eqref{eq:specialised} makes the
-projected rank grow exactly where the unprojected one does, so one flat step certifies
-again.
-
-The budget needs no algebra, only a count: every coordinate of the unspecialised
-$(x_0,\theta)$ space that is not a free coordinate of $z$ contributes at most one, because
-the rows of $J$ belonging to the untouched coordinates are independent unit vectors. A
-`trafo` entry, an initial value pinned by the grid, an event or `fixed`, a known parameter
-and a constraint row each count once, per condition. Started at a steady state the budget
-is of the order of the state count, so the certificate is cheap on a small model and
-expensive on a large one. `DMOD_SYM_LIEPLATEAU` caps what is spent, and `summary()`
-reports which side of the bound a run ended on:
+Let $S$ be the smallest affine space of states through the start $q$ of a segment that
+the field leaves invariant, with the parameters at their values: a resting point, a
+subsystem at rest, a state that stays at zero, or a linear relation the dynamics keeps.
+A flat step at a random point of $S$ gives the rank $\rho$ over all orders there. Every
+$(\rho+1)$-minor of the rows vanishes on $S$, so at $q$ the rank never exceeds $\rho$ and
+is final once it reaches $\rho$. The specialisation $J$, the flow across a gap and the
+constraint rows $C$ are linear and keep this. The order is certified per segment, at gap
+order 0, which bounds every gap order:
 
 ```
-Lie order 5 (gap order 0), set by condition 2
-saturation: certified (plateau 3 > codimension 2)
+saturation: certified (every segment at the rank bound of its invariant space)
 ```
 
-Below the bound the verdict is provisional and the guard of Section \ref{sec-verify} is
-the backstop. The bound is the worst case in $\dim A$: after order $N$ the misleading
-steps left are $\operatorname{codim} - (\rho_N - r_N)$, where $\rho_N = \dim\Omega_N$ is
-the rank of the unspecialised system at the same order and $r_N = \dim W_N$ the reported
-one. That is one further rank on a tape built without the transformation, which the
-implementation does not compute.
+Where every direction is a scaling, the rank is proven without a stopping rule. A
+scaling under which every equation, initial value and event is exactly homogeneous is a
+symmetry at every order, so the rank is at most $d - k$ for $k$ independent ones, and a
+computed rank is at least as large as the true one. When the computed rank plus $k$
+equals $d$, both are the rank for every Lie and gap order, and `summary()` reports
+`rank: proven (k exact scalings)`.
+
+Proofs are in the manuscript, Supplementary Note S3. An event time among the parameters
+adds one column to the rows.
 
 ## Several stimuli in time: piecewise segments {#sec-segments}
 
@@ -675,22 +659,13 @@ exactly across the gap.
 
 ## Verifying the rank: the saturation guard {#sec-verify}
 
-Where the plateau is shorter than the budget of Section \ref{sec-budget} the verdict
-rests on a heuristic: the Lie order is raised only until the rank stops growing for a
-few orders, per condition. A rank can plateau and then climb again, a free Hill
-exponent and a constrained initial value being the typical cases, and stopping on a
-false plateau drops rows, which only enlarges $\ker\mathcal{O}$: the failure mode is a
-silent *over*-reporting. A certified saturation gets no guard, a provisional one
-does.
-
-`verify = TRUE`, the default, closes that gap, and runs only where the budget
-did not: it re-uses the kernel and the cached base point and extends the Lie
-order by `DMOD_SYM_VERIFY_MARGIN` further orders (default six). Only the jet grows; the expensive
-$f_{\mathrm{ss}} = 0$ solve is not repeated. The rank is monotone in the order, so
-the far end settles the whole window in a single call; the orders in between are
-built only when that call fails, to report where the growth starts. If the rank is
-still climbing, the guard FAILS and warns; if not, saturation is confirmed.
-`summary()` prints it:
+Where a segment neither reaches its bound of Section \ref{sec-bound} nor starts at
+rest, the order rests on a plateau and is provisional. A false plateau drops rows,
+which only enlarges $\ker\mathcal{O}$: the failure mode is an over-report.
+`verify = TRUE`, the default, then extends the Lie order by `DMOD_SYM_VERIFY_MARGIN`
+orders (default six), each per-condition cap raised with it. The $f_{\mathrm{ss}} = 0$
+solve is not repeated. If the rank still grows, the guard fails and warns. A passing
+guard is evidence, not a proof. `summary()` prints it:
 
 ```
 saturation guard: PASSED (rank 233 stable through Lie order 18
@@ -701,7 +676,7 @@ That rank is *not* the identifiability rank of the header line. The header's
 `rank r / dim d` is the rank after projecting onto the $d$ unknowns, so $d - r$ is
 the number of reported directions; the guard's rank is that of the raw kernel,
 whose columns span the full jet across all stacked conditions and can be many
-times $d$. Only its *constancy* certifies anything. For small models
+times $d$. Only its constancy matters. For small models
 `symEngine = "symbolic"` gives an independent cross-check over the exact
 rational-function field, with no guard needed.
 
@@ -774,15 +749,20 @@ Four things make the latter exact and cheap. The resting system is solved for th
 *states only*, the rates held as symbolic coefficients, because solving for a rate would
 express a globally shared rate through condition-specific quantities. States
 occurring linearly are eliminated by Gaussian elimination and substituted, leaving
-only the nonlinear core, which over $\mathrm{GF}(p)$ is triangulated by a Groebner
-basis (grevlex plus FGLM, since a lexicographic basis is ruinous on a coupled
-core). Degenerate branches where a species vanishes are removed by the
+only the nonlinear core, which over $\mathrm{GF}(p)$ goes to a resultant when it has
+at most two states and to msolve [@berthomieu2021msolve] beyond, or when the rational
+pivots swell. Degenerate branches where a species vanishes are removed by the
 Rabinowitsch trick, and the back-substitution accepts a point only when every core
-equation vanishes, so branches cannot be mixed. Finally, when the resting state is
-algebraic of degree $d$ its coordinates lie in $\mathrm{GF}(p)$ only at some
-points and primes, so generic points are drawn until one works for every
-condition. The parameter sensitivities come from the implicit function theorem,
-$J_x\,(\partial x_0/\partial\theta) = -J_\theta$, solved at that point.
+equation vanishes, so branches cannot be mixed. The parameter sensitivities come from
+the implicit function theorem, $J_x\,(\partial x_0/\partial\theta) = -J_\theta$,
+solved at that point.
+
+A resting state of degree $d$ has coordinates in $\mathrm{GF}(p)$ only at some points,
+and a point must serve every resting state. The first condition is therefore solved
+forward, as in [steadyStates]: its states are drawn and $f_{\mathrm{ss}} = 0$ is solved
+linearly for a set of rates, chosen by rank at a random point; a balance without a rate
+of its own is solved for its state. A later resting state without a root redraws only
+the parameters that occur in its model and in no other.
 
 The steady state is event-free; perturbations are applied on top of it. A switch
 is a `forcing`, zero at rest; a dose is a `t0` event composed onto the resting
