@@ -1,5 +1,26 @@
 # dMod2 (development version)
 
+* `symmetryDetection()` certifies the Lie order per segment by the generic rank on the
+  smallest invariant affine space of states through its start (manuscript,
+  Supplementary Note S3). The saturation guard runs only where it does not certify.
+* `symmetryDetection()` proves the rank when the computed rank plus the independent
+  exact scalings of the whole model equals the dimension (`info$rankProven`).
+* `symmetryDetection(equilibrate = TRUE)`:
+  - A resting model that differs from the first condition's by free parameters is
+    continued from the first resting state as a power series; it is solved directly
+    only where the continuation fails.
+  - The saturation eliminates each condition's state columns separately and stacks
+    only the rows on the parameters.
+  - The gap order stops rising once the series rank meets the bound set by the exact
+    scalings.
+  - Jets are computed in column blocks of bounded memory.
+  - Solve cache keys are hashed; large models exceeded the length of a name.
+  - msolve takes over from the rational elimination past 2000 terms.
+  - The first condition is solved forward (states drawn, rates solved linearly); a
+    resting state without a root redraws only its private parameters.
+  - Resting states are solved in parallel per point, block scans are forked, the
+    per-condition kernels run in one OpenMP batch with per-condition Lie orders.
+* The saturation guard raises each per-chain Lie-order cap with the order it checks.
 * `symmetryDetection(equilibrate = TRUE)` solves coupled steady states without a
   sympy Groebner basis: linear elimination, a resultant for cores of up to two
   states, msolve beyond. Without msolve such a steady state is an error.

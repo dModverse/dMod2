@@ -683,6 +683,40 @@ test_that("the batched chain kernel matches the serial path (joint + gap)", {
 })
 
 
+test_that("continuation, condition-local saturation and column blocks keep the rank", {
+  if (!.sympy_works()) skip("reticulate/sympy not available")
+
+  # a condition differing by a free parameter is continued; direct solves with the wide
+  # saturation and minimal column blocks give the same rank
+  f <- eqnvec(
+    bool_I = "0",
+    Rm = "k_tr*(1 + k_fb*F) - (k_dgm + k_si*si)*Rm",
+    R  = "k_tl*Rm - k_dgR*R - k_b*L*R + k_u*C",
+    L  = "-k_b*L*R + k_u*C - k_dL*L + k_sec*T",
+    C  = "k_b*L*R - k_u*C - k_in*C",
+    S  = "k_sS - k_p*C*S*(1 - bool_I) + k_dp*pS - k_dS*S",
+    pS = "k_p*C*S*(1 - bool_I) - k_dp*pS",
+    F  = "k_f*pS - k_dF*F",
+    Tm = "k_bT + k_tT*pS - k_dT*Tm",
+    T  = "k_tlT*Tm - k_sec*T")
+  g <- eqnvec(y1 = "pS", y2 = "R + C", y3 = "s_T*Tm", y4 = "L")
+  cg <- data.frame(row.names = c("ctrl", "kd", "inh"), si = c(0, 1, 0),
+                   var_I = c(0, 0, 1), var_dose = c(1, 1, 1))
+  ev <- eventlist() |>
+    addEvent(var = "bool_I", time = -30, value = "var_I", method = "replace") |>
+    addEvent(var = "L", time = 0, value = "var_dose", method = "add")
+  run <- function(...) withr::with_envvar(c(...),
+    symdet(f, g, forcings = "bool_I", events = ev, conditions = cg,
+           equilibrate = TRUE, reduceCQ = FALSE, gaugePreference = NULL))
+  wide    <- run(DMOD_SYM_NOCONT = "1", DMOD_SYM_WIDESAT = "1")
+  local   <- run()
+  blocked <- run(DMOD_SYM_BLOCKMB = "0.000001")
+  expect_identical(local$rank, wide$rank)
+  expect_identical(blocked$rank, wide$rank)
+  expect_identical(local$rank, 19L)
+})
+
+
 test_that("the parallel steady-state fill matches the serial path (joint)", {
   if (!.sympy_works()) skip("reticulate/sympy not available")
 
@@ -1953,34 +1987,61 @@ test_that("the Lie order saturates per condition, not on the stacked system", {
 })
 
 
-test_that("the saturation is certified against the codimension of the specialisation", {
+test_that("the Lie order is certified by the rank bound on an invariant set", {
   if (!.sympy_works()) skip("reticulate/sympy not available")
 
-  # Nothing specialised: free initial values, nothing substituted, no constraint rows.
-  # The budget is zero, so a single flat step is a proof and the run reports it as one.
+  # free initial values
   f <- eqnvec(A = "-k1*A", B = "k1*A - k2*B")
   g <- list(eqnvec(y = "s*A"), eqnvec(y = "s*B"))
   free <- symdet(f, g, method = "observability",
                  conditions = data.frame(row.names = c("c1", "c2")))
-  expect_equal(free$info$lieBudget, 0L)
-  expect_equal(free$info$liePlateau, 1L)
   expect_true(free$info$lieCertified)
 
-  # An explicit steady state pins both initial values and the grid bakes b: three
-  # coordinates of the unspecialised space are gone, so a plateau of 3 is not yet a proof
+  # a steady state as initial value
   fs <- eqnvec(x = "b - a*x", z = "a*x - c*z")
   tr <- eqnvec(x = "b/a", z = "b/c")
   cg <- data.frame(b = c(1, 2), row.names = c("c1", "c2"))
   ss <- symdet(fs, eqnvec(y = "s*x"), method = "observability", trafo = tr, conditions = cg)
-  expect_equal(ss$info$lieBudget, 3L)
-  expect_false(ss$info$lieCertified)
+  expect_true(ss$info$lieCertified)
 
-  # paying the full budget certifies the same verdict, it does not change it
-  withr::local_envvar(DMOD_SYM_LIEPLATEAU = "4")
-  ss4 <- symdet(fs, eqnvec(y = "s*x"), method = "observability", trafo = tr, conditions = cg)
-  expect_true(ss4$info$lieCertified)
-  expect_equal(ss4$rank, ss$rank)
-  expect_equal(ss4$dim, ss$dim)
+  # a fixed initial value at which the lower rows vanish
+  pin <- symdet(eqnvec(x = "th"), eqnvec(y = "x^5"), method = "observability",
+                trafo = eqnvec(x = "0", th = "th"))
+  expect_true(pin$info$lieCertified)
+  expect_true(pin$identifiable)
+  expect_equal(pin$info$lieOrderUsed, 5L)
+
+  # a state that stays at zero
+  zs <- symdet(eqnvec(x1 = "-k1*x1", x2 = "k1*x1 - k2*x2 + a*x3", x3 = "-k3*x3"),
+               eqnvec(y = "x2"), method = "observability",
+               trafo = eqnvec(x1 = "1", x2 = "0", x3 = "0", k1 = "k1", k2 = "k2",
+                              k3 = "k3", a = "a"))
+  expect_true(zs$info$lieCertified)
+  expect_equal(zs$rank, 2L)
+
+  # a start state on an invariant affine space of states
+  li <- symdet(eqnvec(x1 = "a - (d + f)*x1", x2 = "b - (d + f)*x2", f = "-c*f"),
+               eqnvec(y = "x1 + x2"), method = "observability",
+               trafo = eqnvec(x1 = "a/d", x2 = "b/d", f = "1", a = "a", b = "b",
+                              c = "c", d = "d"))
+  expect_true(li$info$lieCertified)
+  expect_equal(li$rank, 3L)
+
+  # exact scalings prove the rank; a scaling that holds only at rest does not
+  sw <- symdet(eqnvec(A = "-k1*A", B = "k1*A - k2*B"), eqnvec(y = "s*B"),
+               method = "observability",
+               trafo = eqnvec(A = "A0", B = "0", k1 = "k1", k2 = "k2", s = "s"))
+  expect_equal(sw$info$rankProven, 1L)
+  rs <- symdet(eqnvec(x = "k1 - k2*x"), eqnvec(y = "x"), method = "observability",
+               trafo = eqnvec(x = "k1/k2", k1 = "k1", k2 = "k2"))
+  expect_null(rs$info$rankProven)
+
+  # an event time among the coordinates
+  evd <- eventlist() |> addEvent(var = "A", time = "tau", value = "d", method = "add")
+  td <- symdet(eqnvec(A = "-k*A"), eqnvec(y = "A"), events = evd,
+               trafo = eqnvec(A = "0", k = "k", d = "d", tau = "tau"))
+  expect_true(td$info$lieCertified)
+  expect_true(td$identifiable)
 })
 
 

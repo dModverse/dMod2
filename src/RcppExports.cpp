@@ -220,8 +220,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // symObsNullChain
-List symObsNullChain(List chains, int nLeaves, int nStates, IntegerVector zSlots, IntegerVector point, double pIn, int Nt, int Mtot, int cores, IntegerVector NtChain);
-RcppExport SEXP _dMod2_symObsNullChain(SEXP chainsSEXP, SEXP nLeavesSEXP, SEXP nStatesSEXP, SEXP zSlotsSEXP, SEXP pointSEXP, SEXP pInSEXP, SEXP NtSEXP, SEXP MtotSEXP, SEXP coresSEXP, SEXP NtChainSEXP) {
+List symObsNullChain(List chains, int nLeaves, int nStates, IntegerVector zSlots, IntegerVector point, double pIn, int Nt, int Mtot, int cores, IntegerVector NtChain, SEXP pointSer);
+RcppExport SEXP _dMod2_symObsNullChain(SEXP chainsSEXP, SEXP nLeavesSEXP, SEXP nStatesSEXP, SEXP zSlotsSEXP, SEXP pointSEXP, SEXP pInSEXP, SEXP NtSEXP, SEXP MtotSEXP, SEXP coresSEXP, SEXP NtChainSEXP, SEXP pointSerSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -235,13 +235,32 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< int >::type Mtot(MtotSEXP);
     Rcpp::traits::input_parameter< int >::type cores(coresSEXP);
     Rcpp::traits::input_parameter< IntegerVector >::type NtChain(NtChainSEXP);
-    rcpp_result_gen = Rcpp::wrap(symObsNullChain(chains, nLeaves, nStates, zSlots, point, pIn, Nt, Mtot, cores, NtChain));
+    Rcpp::traits::input_parameter< SEXP >::type pointSer(pointSerSEXP);
+    rcpp_result_gen = Rcpp::wrap(symObsNullChain(chains, nLeaves, nStates, zSlots, point, pIn, Nt, Mtot, cores, NtChain, pointSer));
+    return rcpp_result_gen;
+END_RCPP
+}
+// symSegmentRanks
+List symSegmentRanks(List segs, int nLeaves, int nStates, IntegerVector zSlots, IntegerVector point, double pIn, int Nt, IntegerMatrix stateVals);
+RcppExport SEXP _dMod2_symSegmentRanks(SEXP segsSEXP, SEXP nLeavesSEXP, SEXP nStatesSEXP, SEXP zSlotsSEXP, SEXP pointSEXP, SEXP pInSEXP, SEXP NtSEXP, SEXP stateValsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< List >::type segs(segsSEXP);
+    Rcpp::traits::input_parameter< int >::type nLeaves(nLeavesSEXP);
+    Rcpp::traits::input_parameter< int >::type nStates(nStatesSEXP);
+    Rcpp::traits::input_parameter< IntegerVector >::type zSlots(zSlotsSEXP);
+    Rcpp::traits::input_parameter< IntegerVector >::type point(pointSEXP);
+    Rcpp::traits::input_parameter< double >::type pIn(pInSEXP);
+    Rcpp::traits::input_parameter< int >::type Nt(NtSEXP);
+    Rcpp::traits::input_parameter< IntegerMatrix >::type stateVals(stateValsSEXP);
+    rcpp_result_gen = Rcpp::wrap(symSegmentRanks(segs, nLeaves, nStates, zSlots, point, pIn, Nt, stateVals));
     return rcpp_result_gen;
 END_RCPP
 }
 // symObsNullChainSeedBatch
-List symObsNullChainSeedBatch(List chains, IntegerVector evalChain, IntegerMatrix seeds, NumericVector primes, int nLeaves, int nStates, IntegerVector zSlots, int Nt, int Mtot, int cores);
-RcppExport SEXP _dMod2_symObsNullChainSeedBatch(SEXP chainsSEXP, SEXP evalChainSEXP, SEXP seedsSEXP, SEXP primesSEXP, SEXP nLeavesSEXP, SEXP nStatesSEXP, SEXP zSlotsSEXP, SEXP NtSEXP, SEXP MtotSEXP, SEXP coresSEXP) {
+List symObsNullChainSeedBatch(List chains, IntegerVector evalChain, IntegerMatrix seeds, NumericVector primes, int nLeaves, int nStates, IntegerVector zSlots, int Nt, int Mtot, int cores, IntegerVector NtEval, SEXP seedSer);
+RcppExport SEXP _dMod2_symObsNullChainSeedBatch(SEXP chainsSEXP, SEXP evalChainSEXP, SEXP seedsSEXP, SEXP primesSEXP, SEXP nLeavesSEXP, SEXP nStatesSEXP, SEXP zSlotsSEXP, SEXP NtSEXP, SEXP MtotSEXP, SEXP coresSEXP, SEXP NtEvalSEXP, SEXP seedSerSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -255,7 +274,9 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< int >::type Nt(NtSEXP);
     Rcpp::traits::input_parameter< int >::type Mtot(MtotSEXP);
     Rcpp::traits::input_parameter< int >::type cores(coresSEXP);
-    rcpp_result_gen = Rcpp::wrap(symObsNullChainSeedBatch(chains, evalChain, seeds, primes, nLeaves, nStates, zSlots, Nt, Mtot, cores));
+    Rcpp::traits::input_parameter< IntegerVector >::type NtEval(NtEvalSEXP);
+    Rcpp::traits::input_parameter< SEXP >::type seedSer(seedSerSEXP);
+    rcpp_result_gen = Rcpp::wrap(symObsNullChainSeedBatch(chains, evalChain, seeds, primes, nLeaves, nStates, zSlots, Nt, Mtot, cores, NtEval, seedSer));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -280,8 +301,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // symSeriesRank
-List symSeriesRank(IntegerMatrix S, int nz, int N, double pIn, IntegerVector cols, bool support, int atOneBelow);
-RcppExport SEXP _dMod2_symSeriesRank(SEXP SSEXP, SEXP nzSEXP, SEXP NSEXP, SEXP pInSEXP, SEXP colsSEXP, SEXP supportSEXP, SEXP atOneBelowSEXP) {
+List symSeriesRank(IntegerMatrix S, int nz, int N, double pIn, IntegerVector cols, bool support, int atOneBelow, int cores, IntegerVector rowPrec);
+RcppExport SEXP _dMod2_symSeriesRank(SEXP SSEXP, SEXP nzSEXP, SEXP NSEXP, SEXP pInSEXP, SEXP colsSEXP, SEXP supportSEXP, SEXP atOneBelowSEXP, SEXP coresSEXP, SEXP rowPrecSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -292,7 +313,25 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< IntegerVector >::type cols(colsSEXP);
     Rcpp::traits::input_parameter< bool >::type support(supportSEXP);
     Rcpp::traits::input_parameter< int >::type atOneBelow(atOneBelowSEXP);
-    rcpp_result_gen = Rcpp::wrap(symSeriesRank(S, nz, N, pIn, cols, support, atOneBelow));
+    Rcpp::traits::input_parameter< int >::type cores(coresSEXP);
+    Rcpp::traits::input_parameter< IntegerVector >::type rowPrec(rowPrecSEXP);
+    rcpp_result_gen = Rcpp::wrap(symSeriesRank(S, nz, N, pIn, cols, support, atOneBelow, cores, rowPrec));
+    return rcpp_result_gen;
+END_RCPP
+}
+// symSeriesProject
+List symSeriesProject(IntegerMatrix S, int nz, int N, double pIn, IntegerVector first, int cores);
+RcppExport SEXP _dMod2_symSeriesProject(SEXP SSEXP, SEXP nzSEXP, SEXP NSEXP, SEXP pInSEXP, SEXP firstSEXP, SEXP coresSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< IntegerMatrix >::type S(SSEXP);
+    Rcpp::traits::input_parameter< int >::type nz(nzSEXP);
+    Rcpp::traits::input_parameter< int >::type N(NSEXP);
+    Rcpp::traits::input_parameter< double >::type pIn(pInSEXP);
+    Rcpp::traits::input_parameter< IntegerVector >::type first(firstSEXP);
+    Rcpp::traits::input_parameter< int >::type cores(coresSEXP);
+    rcpp_result_gen = Rcpp::wrap(symSeriesProject(S, nz, N, pIn, first, cores));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -485,10 +524,12 @@ static const R_CallMethodDef CallEntries[] = {
     {"_dMod2_residual_kernel_bloq", (DL_FUNC) &_dMod2_residual_kernel_bloq, 9},
     {"_dMod2_symObsNullMulti", (DL_FUNC) &_dMod2_symObsNullMulti, 8},
     {"_dMod2_symObsNullBatch", (DL_FUNC) &_dMod2_symObsNullBatch, 8},
-    {"_dMod2_symObsNullChain", (DL_FUNC) &_dMod2_symObsNullChain, 10},
-    {"_dMod2_symObsNullChainSeedBatch", (DL_FUNC) &_dMod2_symObsNullChainSeedBatch, 10},
+    {"_dMod2_symObsNullChain", (DL_FUNC) &_dMod2_symObsNullChain, 11},
+    {"_dMod2_symSegmentRanks", (DL_FUNC) &_dMod2_symSegmentRanks, 8},
+    {"_dMod2_symObsNullChainSeedBatch", (DL_FUNC) &_dMod2_symObsNullChainSeedBatch, 12},
     {"_dMod2_symObsNullChainPointBatch", (DL_FUNC) &_dMod2_symObsNullChainPointBatch, 10},
-    {"_dMod2_symSeriesRank", (DL_FUNC) &_dMod2_symSeriesRank, 7},
+    {"_dMod2_symSeriesRank", (DL_FUNC) &_dMod2_symSeriesRank, 9},
+    {"_dMod2_symSeriesProject", (DL_FUNC) &_dMod2_symSeriesProject, 6},
     {"_dMod2_symSolveMod", (DL_FUNC) &_dMod2_symSolveMod, 3},
     {"_dMod2_symRrefMod", (DL_FUNC) &_dMod2_symRrefMod, 2},
     {"_dMod2_symFitRational", (DL_FUNC) &_dMod2_symFitRational, 4},

@@ -65,8 +65,8 @@
 #' @param equilibrate Logical, `"observability"` only. Start at a steady state of
 #'   `f` with the inputs at 0 instead of at free initial values; the earliest events
 #'   apply on top and initial values in `trafo` are ignored. Not available for
-#'   exponentials of states. Steady states with more than two coupled states need
-#'   msolve, see [install_libs()].
+#'   exponentials of states. Coupled steady states may need msolve, see
+#'   [install_libs()].
 #' @param reduceCQ Logical, [eqnlist] only. `FALSE` (default) reports the freedom
 #'   of a conserved moiety on the initial value of one species, `TRUE` on its total,
 #'   named after [getTotals()]. Set to `FALSE` with a warning when `trafo` gives the
@@ -101,8 +101,10 @@
 #'       `transformation` (`"polynomial"` only), `verified`, `display`,
 #'       `completeGenerator` and `factor`.}
 #'     \item{`info`}{`engine`, the Lie order and its certification
-#'       (`lieOrderUsed`, `lieOrderDriver`, `lieBudget`, `liePlateau`,
-#'       `lieCertified`), `gapOrderUsed`, `conditions`, `segments`, `coordinates`,
+#'       (`lieOrderUsed`, `lieOrderDriver`, `liePlateau`, `lieCertified`: the order
+#'       is proven final, manuscript Supplementary Note S3), `rankProven` (the number
+#'       of exact scalings that prove the rank, if any), `gapOrderUsed`,
+#'       `conditions`, `segments`, `coordinates`,
 #'       `settings`, `elapsed` and `verification`.}
 #'     \item{`call`}{the matched call.}
 #'   }
@@ -1884,7 +1886,8 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
                    keepFree = as.list(keepFree)), error = function(e) NULL)
   if (is.null(ts) || !isTRUE(ts$ok)) return(fb(paste("forward: no turnover transversal;",
                                                      if (is.null(ts)) "solve error" else ts$why)))
-  solveRates <- as.character(ts$solveRates)
+  solveRates <- structure(as.character(ts$solveRates),
+                          stateSolve = as.character(unlist(ts$stateSolve)))
   if (rdiag) message(sprintf("[fwd] anchor=%s support=%d transversal(%d)={%s}",
                              znames[ac + 1L], length(suppNames), length(solveRates),
                              paste(solveRates, collapse = ",")))
@@ -2149,11 +2152,11 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
 # Attach the series rank of the stacked series blocks to a reduced kernel result. A
 # kernel that moves with the gap lengths and is polynomial in them replaces the rows
 # by their value at the actual gaps.
-.symSeriesStack <- function(res, sblocks, nz, N, p) {
+.symSeriesStack <- function(res, sblocks, nz, N, p, cores = 1L) {
   S <- do.call(rbind, sblocks)
   storage.mode(S) <- "integer"
   sr <- symSeriesRank(S, as.integer(nz), as.integer(N), p, integer(0),
-                      atOneBelow = as.integer(res$rank))
+                      atOneBelow = as.integer(res$rank), cores = as.integer(cores))
   res$rankS <- sr$rank; res$S <- sr$S; res$N <- N; res$atOne <- !is.null(sr$R)
   if (res$atOne) {
     res$R <- sr$R; res$pivots <- as.integer(sr$pivots); res$rank <- length(sr$pivots)
@@ -2188,11 +2191,293 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
 # decided; `budget` the codimension of the specialisation (NA: no certificate); `maxM`
 # caps the gap order. Returns NULL without a usable point, else the reference
 # reduction, the rank and the orders used.
+# Scalings of the whole model, exactly checked (manuscript, Supplementary Note S3): the
+# integer kernel of the homogeneity conditions of every equation, observable, initial
+# value, event and event time. Returns their weight vectors (name -> integer).
+.symExactScalingSet <- function(multi, fixed, sd) {
+  verKeys <- c("modelLines", "obsLines", "verIC", "verEv", "verT0", "verTime")
+  verTapes <- unique(lapply(multi$tapes, function(t) t[intersect(names(t), verKeys)]))
+  evLines <- function(t, add) unlist(lapply(c(t$verEv, t$verT0), function(e)
+    if ((e$method != "multiply") == add)
+      if (add) paste(e$var, "=", e$value) else paste("_ =", e$value)))
+  full <- tryCatch(sd$scalingSymmetriesMulti(
+    perCondModel = lapply(verTapes, function(t) as.character(t$modelLines)),
+    perCondObs = lapply(verTapes, function(t) as.character(t$obsLines)),
+    inputs = if (length(multi$forcings)) as.character(multi$forcings) else NULL,
+    fixed = if (length(fixed)) fixed else NULL,
+    extraModel = lapply(verTapes, function(t) c(as.character(t$verIC), evLines(t, TRUE))),
+    extraObs = lapply(verTapes, function(t)
+      c(evLines(t, FALSE), if (length(t$verTime) && nzchar(t$verTime))
+        paste("_ =", t$verTime)))),
+    error = function(e) NULL)
+  ws <- lapply(full$nonIdentifiable, function(d) d$vector)
+  ws <- ws[vapply(ws, function(v) all(grepl("^-?[0-9]+$", unlist(v))), logical(1))]
+  if (!length(ws)) return(list())
+  ok <- tryCatch(as.logical(unlist(sd$verifyScalings(ws, verTapes))),
+                 error = function(e) rep(FALSE, length(ws)))
+  if (nzchar(Sys.getenv("DMOD_SYM_LIEDIAG")))
+    message("[liediag] exact scalings: ", length(ws), " candidate(s), verified ",
+            paste(ok, collapse = ","))
+  ws[ok]
+}
+
+
+# Fields of each regime of an analysis: the generators of the unspecialised system (free
+# initial values) with a closed form, and the joins between consecutive segments of every
+# chain (events or a change of regime). Computed once per analysis.
+.symFieldSetup <- function(multi, chains, cores, fixed = NULL) {
+  tapes <- multi$tapes
+  keyOf <- vapply(tapes, function(t) paste(c(t$modelLines, "\x1f", t$obsLines),
+                                           collapse = "\n"), "")
+  rkeys <- unique(keyOf)
+  regimeOf <- match(keyOf, rkeys)
+  asEqn <- function(lines) {
+    sp <- regmatches(lines, regexpr("=", lines), invert = TRUE)
+    setNames(trimws(vapply(sp, `[`, "", 2L)), trimws(vapply(sp, `[`, "", 1L)))
+  }
+  regimes <- lapply(rkeys, function(k) {
+    t <- tapes[[match(k, keyOf)]]
+    list(f = as.character(t$modelLines), g = as.character(t$obsLines))
+  })
+  old <- options(dMod.sym.inner = TRUE)
+  on.exit(options(old), add = TRUE)
+  gens <- lapply(regimes, function(rg) {
+    fe <- as.eqnvec(asEqn(rg$f)); ge <- as.eqnvec(asEqn(rg$g))
+    # parameters outside the directions' support are known: no fields along them
+    fx <- setdiff(intersect(fixed, getSymbols(c(fe, ge))), names(fe))
+    r <- symmetryDetection(fe, ge, method = "observability", reconstruct = TRUE,
+                           verify = FALSE, cores = cores, verbose = FALSE,
+                           fixed = if (length(fx)) fx else NULL)
+    # a field without closed form is left out; if it is needed, (B) or (D) fails
+    lapply(Filter(function(d) !is.null(d$generator), r$symmetries), function(d)
+      as.list(setNames(as.character(d$generator), names(d$generator))))
+  })
+  joins <- list()
+  for (ci in seq_along(chains)) {
+    ch <- chains[[ci]]
+    for (j in seq_along(ch)[-1L]) {
+      a <- regimeOf[ch[j - 1L]]; b <- regimeOf[ch[j]]
+      ev <- tapes[[ch[j]]]$verEv
+      if (a != b || length(ev))
+        joins[[length(joins) + 1L]] <- list(from = a - 1L, to = b - 1L, ev = ev, chain = ci)
+    }
+  }
+  states <- unique(unlist(lapply(regimes, function(rg)
+    trimws(sub("=.*$", "", rg$f)))))
+  list(regimes = regimes, gens = gens, regimeOf = regimeOf, joins = joins, states = states,
+       tapes = tapes)
+}
+
+# Certificate (manuscript, Supplementary Note S3) that the kernel vectors, the columns of
+# V over `znames`, lie in the kernel of every order: lifted onto the start of every chain
+# they lie in the span of the fields, which Python checks for invariance. `joint` holds
+# the equilibrate conditions and their solve. Returns {ok, why}.
+.symFieldCheck <- function(setup, V, znames, leafNames, point, chains, joint, sd) {
+  P <- .symPrimes[1]
+  leafVal <- setNames(as.list(as.numeric(point[seq_along(leafNames)]) %% P), leafNames)
+  lifts <- list()
+  liftOf <- rep(NA_integer_, length(chains))
+  for (ci in seq_along(chains)) {
+    t1 <- setup$tapes[[chains[[ci]][1L]]]
+    # the initial values of a chain without a resting state already hold its t0 events
+    t0 <- if (is.null(joint)) list() else t1$verT0
+    if (is.null(joint)) {
+      base <- leafVal; stateCol <- NULL
+    } else {
+      mi <- match(chains[[ci]][1L], joint$conds)
+      if (is.na(mi)) next
+      sol <- joint$solve(point, P, joint$conds[mi])
+      if (is.null(sol)) stop("no resting state at the evaluation point")
+      xs <- unlist(sol$sol$valBy)
+      base <- c(leafVal, as.list(xs %% P))
+      stateCol <- paste0(names(xs), "|c", mi)
+    }
+    vecs <- lapply(seq_len(ncol(V)), function(k) {
+      v <- as.numeric(V[, k]) %% P
+      d <- list()
+      for (j in which(v != 0)) {
+        nm <- znames[j]
+        if (!is.null(stateCol) && nm %in% stateCol) {
+          st <- sub("\\|c[0-9]+$", "", nm)
+          d[[st]] <- .symMulmod(v[j], base[[st]], P)   # log-normalised column
+        } else if (!grepl("\\|c[0-9]+$", nm)) d[[nm]] <- v[j]
+      }
+      lf <- sd$liftStart(as.character(t1$verIC), t0, base, d, P, joint = !is.null(joint))
+      if (is.null(lf)) stop("the lift has a pole")
+      lf$vector
+    })
+    lf0 <- sd$liftStart(as.character(t1$verIC), t0, base, list(), P,
+                        joint = !is.null(joint))
+    times <- unlist(lapply(setup$tapes[chains[[ci]]], function(t)
+      if (length(t$verTime) && nzchar(t$verTime)) t$verTime))
+    liftOf[ci] <- length(lifts) + 1L
+    lifts[[length(lifts) + 1L]] <- list(regime = setup$regimeOf[chains[[ci]][1L]] - 1L,
+                                        point = lf0$point, vectors = vecs,
+                                        times = as.list(times))
+  }
+  # each join checks the kernel directions of its own chain
+  joins <- lapply(setup$joins, function(e) {
+    e$lift <- if (is.na(liftOf[e$chain])) NULL else liftOf[e$chain] - 1L
+    e$chain <- NULL
+    e })
+  sd$verifyDistribution(setup$regimes, setup$gens, joins, lifts, P)
+}
+
+# The kernel vectors of N proven by the fields of .symFieldSetup().
+.symFieldProof <- function(multi, N, znames, leafNames, point, chains, joint, sd, cores,
+                           setup = NULL, fixed = NULL) {
+  if (is.null(setup)) setup <- .symFieldSetup(multi, chains, cores, fixed = fixed)
+  .symFieldCheck(setup, N, znames, leafNames, point, chains, joint, sd)
+}
+
+# Closed forms of the residual kernel from the fields: the parameter part of a field of
+# the first regime whose value at the evaluation point lies in the kernel. Returns the
+# directions if they, with the scalings, span the kernel and pass .symFieldCheck(),
+# else NULL.
+.symFieldDirections <- function(setup, N, nRes, scalRows, znames, leafNames, point,
+                                 chains, joint, sd) {
+  P <- .symPrimes[1]
+  reg1 <- setup$regimeOf[chains[[1L]][1L]]
+  pCols <- which(!grepl("\\|c[0-9]+$", znames) & !(znames %in% setup$states))
+  pNames <- znames[pCols]
+  vals <- as.numeric(point[match(pNames, leafNames)]) %% P
+  # the fields extended to the parameters of the initial values and events of chain 1
+  t1 <- setup$tapes[[chains[[1L]][1L]]]
+  groups <- c(list(t1$verT0), lapply(setup$tapes[chains[[1L]]][-1L], function(t) t$verEv))
+  groups <- Filter(length, groups)
+  ext <- sd$extendFields(setup$gens[[reg1]], as.character(t1$verIC), groups, setup$states)
+  cand <- list()
+  for (g in ext) {
+    th <- g[intersect(names(g), pNames)]
+    if (!length(th)) next
+    # the parameter part must not depend on states
+    syms <- unique(unlist(regmatches(unlist(th), gregexpr("[A-Za-z._][A-Za-z0-9._]*",
+                                                         unlist(th)))))
+    if (any(syms %in% setup$states)) next
+    ev <- tryCatch(unlist(sd$evalRationalModBatch(unlist(th), pNames, list(vals), P)),
+                   error = function(e) NULL)
+    if (is.null(ev) || any(ev < 0)) next
+    x <- numeric(length(pNames)); x[match(names(th), pNames)] <- ev
+    cand[[length(cand) + 1L]] <- list(expr = th, val = x)
+  }
+  if (!length(cand)) return(NULL)
+  # the kernel projected onto the parameters, and the scalings there
+  Np <- matrix(as.numeric(N[pCols, , drop = FALSE]) %% P, length(pCols))
+  Sp <- if (nrow(scalRows)) matrix(as.numeric(scalRows[, pCols, drop = FALSE]) %% P,
+                                   nrow(scalRows)) else matrix(0, 0L, length(pCols))
+  rankOf <- function(M) if (!nrow(M)) 0L else symRrefMod(M, P)$rank
+  basis <- Sp; chosen <- list()
+  if (nzchar(Sys.getenv("DMOD_SYM_FIELDDIAG"))) {
+    message("[fielddiag] params: ", paste(pNames, collapse = ","))
+    for (c0 in cand) message("[fielddiag] cand ", paste(names(c0$expr), unlist(c0$expr), sep = "=", collapse = "; "),
+                             " | val ", paste(c0$val, collapse = ","))
+    message("[fielddiag] kernel param rows:\n", paste(apply(t(Np), 1, paste, collapse = ","), collapse = "\n"))
+  }
+  for (c0 in cand) {
+    inKer <- rankOf(rbind(t(Np), c0$val)) == rankOf(t(Np))
+    if (!inKer || rankOf(rbind(basis, c0$val)) == rankOf(basis)) next
+    basis <- rbind(basis, c0$val); chosen[[length(chosen) + 1L]] <- c0
+    if (length(chosen) == nRes) break
+  }
+  if (nzchar(Sys.getenv("DMOD_SYM_LIEDIAG")))
+    message(sprintf("[liediag] global symmetries: %d field(s), %d candidate(s), %d chosen of %d",
+                    length(ext), length(cand), length(chosen), nRes))
+  if (length(chosen) < nRes) return(NULL)
+  # the wide kernel vector of each chosen direction: N c with the parameter part matching
+  Vw <- vapply(chosen, function(c0) {
+    cc <- symSolveMod(matrix(as.integer(Np), nrow(Np)), as.integer(c0$val), P)
+    if (is.null(cc)) stop("a direction is not in the kernel")
+    as.numeric(Reduce(function(a, k) (a + .symMulmod(N[, k], cc[k], P)) %% P,
+                      seq_along(cc), numeric(nrow(N))))
+  }, numeric(nrow(N)))
+  chk <- .symFieldCheck(setup, matrix(Vw, nrow(N)), znames, leafNames, point, chains,
+                        joint, sd)
+  if (!isTRUE(chk$ok)) return(NULL)
+  lapply(chosen, function(c0) list(support = .symSort(names(c0$expr)), vector = c0$expr,
+                                   type = "general", closedForm = TRUE,
+                                   route = "global symmetry", certified = TRUE))
+}
+
+
+# Certified Lie order per block (manuscript, Supplementary Note S3): per segment, the
+# first order at which the rank at `seeds` reaches the generic rank on the smallest
+# invariant affine space of states through its start. NA: not reached.
+.symLieCertificate <- function(segs, seeds, nLeaves, nStates, zSlots, p, cap,
+                               mapFn = lapply) {
+  none <- matrix(0L, 0L, 0L)
+  flatAt <- function(r) { i <- which(diff(r) == 0L)[1]; if (is.na(i)) NA_integer_ else i - 1L }
+  reachAt <- function(r, rho) { i <- which(r >= rho)[1]; if (is.na(i)) NA_integer_ else i - 1L }
+  unlist(mapFn(seq_along(segs), function(b) {
+    seed <- as.integer(seeds[[b]])
+    nSeg <- length(segs[[b]])
+    base <- symSegmentRanks(segs[[b]], nLeaves, nStates, zSlots, seed, p, 0L, none)
+    if (!isTRUE(base$ok)) return(NA_integer_)
+    Q <- base$start
+    draw <- 0L
+    # a random point q + sum r_i V[i, ] of the affine space through q along the rows of V
+    randIn <- function(q, V) {
+      y <- as.numeric(q)
+      if (!nrow(V)) return(y)
+      draw <<- draw + 1L
+      r <- .symRandomPoint(nrow(V), 7919L * b + draw)
+      for (i in seq_len(nrow(V))) y <- (y + .symMulmod(V[i, ], r[i], p)) %% p
+      y
+    }
+    # Sigma_j: the affine space through the start of segment j, along the image of the
+    # directions of Sigma_(j-1) under the events, grown until the field of segment j
+    # at a random point of it lies in its directions
+    stG <- matrix(0L, nSeg, nStates)
+    V <- matrix(0, 0L, nStates)
+    for (j in seq_len(nSeg)) {
+      sg <- segs[[b]][[j]]
+      if (j > 1L && length(sg$evVarIdx)) {
+        V[, sg$evVarIdx[sg$evMethod == 0L] + 1L] <- 0
+        mult <- sg$evVarIdx[sg$evMethod == 2L] + 1L
+        if (length(mult)) V <- rbind(V, diag(nStates)[mult, , drop = FALSE])
+      }
+      repeat {
+        y <- randIn(Q[j, ], V)
+        Y <- Q[seq_len(j), , drop = FALSE]
+        Y[j, ] <- y
+        fz <- symSegmentRanks(segs[[b]][seq_len(j)], nLeaves, nStates, zSlots, seed, p,
+                              0L, matrix(as.integer(Y), j, nStates))
+        if (!isTRUE(fz$ok)) return(NA_integer_)
+        rr <- symRrefMod(rbind(V, as.numeric(fz$field[j, ])), p)
+        if (rr$rank == nrow(V)) break
+        V <- matrix(as.numeric(rr$R[seq_len(rr$rank), , drop = FALSE]), rr$rank, nStates)
+      }
+      stG[j, ] <- as.integer(y)
+    }
+    Nt <- 16L
+    repeat {
+      g <- symSegmentRanks(segs[[b]], nLeaves, nStates, zSlots, seed, p, Nt, stG)
+      q <- symSegmentRanks(segs[[b]], nLeaves, nStates, zSlots, seed, p, Nt, none)
+      if (!isTRUE(g$ok) || !isTRUE(q$ok)) return(NA_integer_)
+      gN <- vapply(seq_len(nSeg), function(s) flatAt(g$ranks[s, ]), integer(1))
+      ord <- vapply(seq_len(nSeg), function(s)
+        if (is.na(gN[s])) NA_integer_ else reachAt(q$ranks[s, ], g$ranks[s, gN[s] + 1L]),
+        integer(1))
+      if (nzchar(Sys.getenv("DMOD_SYM_LIEDIAG")))
+        message(sprintf("[liediag] certificate block %d at order %d: bound %s, reached %s", b, Nt,
+                        paste(vapply(seq_len(nSeg), function(s) {
+                          gN <- flatAt(g$ranks[s, ])
+                          if (is.na(gN)) "-" else as.character(g$ranks[s, gN + 1L]) }, ""), collapse = "/"),
+                        paste(q$ranks[, Nt + 1L], collapse = "/")))
+      if (!anyNA(ord)) return(max(ord))
+      # the bound is not reached within four times the generic order: not certified
+      if (Nt >= cap || (!anyNA(gN) && Nt >= 4L * max(gN) + 16L)) return(NA_integer_)
+      Nt <- as.integer(min(cap, 2L * Nt))
+    }
+  }))
+}
+
+
 .symSaturateCertify <- function(kcall, nLeaves, nz, maxM = 0L,
                                 warm = function(pts, primes) invisible(),
                                 probeBlock = 1L, blockCall = NULL,
                                 budget = NA_integer_, blockMap = NULL,
-                                ntMin = 0L, ntMinBlock = NULL) {
+                                ntMin = 0L, ntMinBlock = NULL, prep = NULL,
+                                rankCap = nz) {
   ntMin <- if (length(ntMin) == 1L && !is.na(ntMin)) as.integer(ntMin) else 0L
   P <- .symPrimes[1]
   pool <- .symPool()
@@ -2255,15 +2540,23 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
   }
 
   loOf <- function(bi) if (is.null(ntMinBlock)) ntMin else as.integer(ntMinBlock[bi])
-  saturateNt <- function(point, Mtot) {
-    if (!perBlock) return(scanNt(kcall, point, Mtot, 1L, needUsed, "stacked", ntMin))
+  # `fromOrders`: block orders of an earlier pass, where each parallel block scan starts
+  saturateNt <- function(point, Mtot, fromOrders = NULL) {
+    # `prep` returns the point prepared for the block calls, or NULL to reject it
+    if (!is.null(prep)) { point <- prep(point); if (is.null(point)) return(NULL) }
+    if (!perBlock) {
+      sb <- scanNt(kcall, point, Mtot, 1L, needUsed, "stacked", ntMin)
+      if (!is.null(sb)) sb$point <- point
+      return(sb)
+    }
     orders <- integer(length(blockCall)); Nt <- 1L; driver <- 1L
     if (!is.null(blockMap)) {
       # every block's filtration from order 1, the blocks in parallel: the same
       # plateau per block the certificate counts, and each block's own order
       sbs <- blockMap(seq_along(blockCall), function(bi)
-        scanNt(blockCall[[bi]], point, Mtot, 1L, needUsed, paste0("block ", bi),
-               loOf(bi)))
+        scanNt(blockCall[[bi]], point, Mtot,
+               if (length(fromOrders) == length(blockCall)) max(1L, fromOrders[bi]) else 1L,
+               needUsed, paste0("block ", bi), loOf(bi)))
       if (any(vapply(sbs, is.null, logical(1)))) return(NULL)
       orders <- vapply(sbs, function(sb) as.integer(sb$grew), integer(1))
       Nt <- max(1L, orders); driver <- which.max(orders)
@@ -2279,7 +2572,7 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
     if (!isTRUE(r$ok)) return(NULL)
     if (lieDiag) message("[liediag] block Lie orders: ", paste(orders, collapse = ","),
                          " -> stacked order ", Nt, ", rank ", r$rank)
-    list(res = r, Nt = Nt, blockOrders = orders, blockDriver = driver)
+    list(res = r, Nt = Nt, blockOrders = orders, blockDriver = driver, point = point)
   }
 
   # several generic points may be tried before one admits a steady-state point
@@ -2294,7 +2587,7 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
              else pool(poolNext + (k - 1L) * nLeaves + seq_len(nLeaves) - 1L)),
            rep(list(P), probeBlock))
     sat <- saturateNt(point0, 0L)
-    if (!is.null(sat)) break
+    if (!is.null(sat)) { point0 <- sat$point; break }
     point0 <- pool(poolNext + seq_len(nLeaves) - 1L); poolNext <- poolNext + nLeaves
   }
   if (is.null(sat)) return(NULL)
@@ -2302,10 +2595,11 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
 
   # raise the gap order until the rank stops growing (exact generic-timing rank);
   # if the cap is hit while still growing, the truncated rank is conservative
+  # rankCap: an upper bound of the rank; a lower bound that meets it proves the rank
   if (maxM > 0L) repeat {
-    if (.symRankOf(sat$res) >= nz) break
+    if (.symRankOf(sat$res) >= rankCap) break
     if (MtotUsed >= maxM) { saturatedM <- FALSE; break }
-    satM <- saturateNt(point0, MtotUsed + 1L)
+    satM <- saturateNt(point0, MtotUsed + 1L, sat$blockOrders)
     if (is.null(satM)) break
     MtotUsed <- MtotUsed + 1L
     if (.symRankScore(satM$res) <= .symRankScore(sat$res)) break
@@ -2314,23 +2608,28 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
 
   # a kernel that moves with the gap lengths is read at the actual gaps once it is known
   # as a polynomial in them, which takes further gap orders
-  while (.symRankOf(sat$res) < sat$res$rank && MtotUsed < maxM) {
+  while (.symRankOf(sat$res) < min(sat$res$rank, rankCap) && MtotUsed < maxM) {
     r <- kcall(point0, P, NtUsed, MtotUsed + 1L)
     if (!isTRUE(r$ok)) break
     MtotUsed <- MtotUsed + 1L; sat$res <- r
   }
 
-  # cross-prime rank check at the same point; the probes are warmed as one batch
-  warm(rep(list(point0), length(.symPrimes) - 1L), as.list(.symPrimes[-1]))
+  # cross-prime rank check at the same point (with `prep`, the point prepared at that
+  # prime); the probes are warmed as one batch
+  if (is.null(prep)) warm(rep(list(point0), length(.symPrimes) - 1L), as.list(.symPrimes[-1]))
   rankMax <- .symRankScore(sat$res)
   for (pj in .symPrimes[-1]) {
-    rj <- kcall(point0, pj, NtUsed, MtotUsed)
+    ptj <- if (is.null(prep)) point0 else prep(point0, pj)
+    if (is.null(ptj)) next
+    rj <- kcall(ptj, pj, NtUsed, MtotUsed)
     if (isTRUE(rj$ok)) rankMax <- max(rankMax, .symRankScore(rj))
   }
   # and at a point of uniform residues: the prime pool is multiplicatively generic but
   # not additively (2 + 3 = 5 put kdg + ksec = kt on the first point of a chain model and
   # dropped its rank), which no second prime at the same point can see
   randPts <- list(.symRandomPoint(nLeaves, 1L))
+  if (!is.null(prep))
+    randPts <- lapply(randPts, function(rp) { q <- prep(rp); if (is.null(q)) rp else q })
   warm(randPts, rep(list(P), length(randPts)))
   for (rp in randPts) {
     rj <- tryCatch(kcall(rp, P, NtUsed, MtotUsed), error = function(e) NULL)
@@ -2343,8 +2642,9 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
     point0 <- if (tries <= 20L) pool(poolNext + seq_len(nLeaves) - 1L)
               else randPts[[1L]]
     if (tries <= 20L) poolNext <- poolNext + nLeaves
-    sat <- saturateNt(point0, MtotUsed)
+    sat <- saturateNt(point0, MtotUsed, sat$blockOrders)
     if (is.null(sat)) return(NULL)
+    point0 <- sat$point
     NtUsed <- sat$Nt
     # the new base point may raise the rank beyond what the check saw at the old order
     for (rp in randPts) {
@@ -2658,6 +2958,8 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
                                      error = function(e) NULL), add = TRUE)
   # replaced in the jointSS block
   warmSolves <- function(pts, primes, conds = NULL) invisible()
+  satPrep <- NULL
+  fwdOn <- FALSE
   nLeaves <- as.integer(multi$nLeaves)
   nStates <- as.integer(multi$nStates)
   zSlots <- as.integer(multi$zSlots)
@@ -2857,24 +3159,28 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
       # df constraint rows for one condition over the nz znames columns
       dfRowsCond <- function(sol, p) {
         Jx <- sol$dfJx; Jt <- sol$dfJt
+        if (!length(Jx)) return(matrix(0, 0, nzL))
         scn <- as.character(sol$dfStateCols); pcn <- as.character(sol$dfParamCols)
-        rows <- vector("list", length(Jx))
-        for (i in seq_along(Jx)) {
-          row <- numeric(nzL); xi <- as.numeric(Jx[[i]])
-          for (j in seq_along(scn)) { col <- match(scn[j], znamesL)
-            if (!is.na(col)) row[col] <- (row[col] + xi[j]) %% p
-            else if (!scn[j] %in% dfDroppable && nzchar(Sys.getenv("DMOD_JOINT_DIAG")))
-              message("[jointdiag] df drops non-fixed state column: ", scn[j]) }
-          for (th in pcn) {
-            # a held pivot's column maps to its initial-value parameter
-            thz <- if (th %in% names(heldParamOf)) heldParamOf[[th]] else th
-            col <- match(thz, znamesL)
-            if (!is.na(col)) row[col] <- (row[col] + as.numeric(Jt[[th]])[i]) %% p
-            else if (!th %in% dfDroppable && nzchar(Sys.getenv("DMOD_JOINT_DIAG")))
-              message("[jointdiag] df drops non-fixed param column: ", th) }
-          rows[[i]] <- row
+        # a held pivot's column maps to its initial-value parameter
+        pcz <- vapply(pcn, function(th)
+          if (th %in% names(heldParamOf)) heldParamOf[[th]] else th, "")
+        cx <- match(scn, znamesL); ct <- match(pcz, znamesL)
+        if (nzchar(Sys.getenv("DMOD_JOINT_DIAG"))) {
+          for (nm in setdiff(scn[is.na(cx)], dfDroppable))
+            message("[jointdiag] df drops non-fixed state column: ", nm)
+          for (nm in setdiff(pcn[is.na(ct)], dfDroppable))
+            message("[jointdiag] df drops non-fixed param column: ", nm)
         }
-        if (!length(rows)) matrix(0, 0, nzL) else do.call(rbind, rows)
+        A <- cbind(do.call(rbind, lapply(Jx, function(v) as.numeric(v)[!is.na(cx)])),
+                   if (any(!is.na(ct)))
+                     do.call(cbind, lapply(pcn[!is.na(ct)], function(th) as.numeric(Jt[[th]]))))
+        cols <- c(cx[!is.na(cx)], ct[!is.na(ct)])
+        M <- matrix(0, length(Jx), nzL)
+        if (!length(cols)) return(M)
+        # columns hit twice are summed
+        S <- t(rowsum(t(A %% p), cols))
+        M[, as.integer(colnames(S))] <- S %% p
+        M
       }
       # ---- the coupled steady-state solve and its cache ----------------------------
       # A solve depends only on the solve parameters, log coordinates and held pivots,
@@ -2887,10 +3193,23 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
       if (nzchar(Sys.getenv("DMOD_SYM_TIMING")))
         message(sprintf("[sym] %d equilibrate condition(s), %d distinct steady state(s)",
                         Kc, length(unique(modelKey[equilConds]))))
+      # keyed on the parameters of the condition's own model
+      modelParams <- lapply(models, function(m) intersect(solveParamNames,
+        unlist(regmatches(m, gregexpr("[A-Za-z._][A-Za-z0-9._]*", m)))))
+      # hashed, as model text and values exceed the length of an environment name
       solveKey <- function(p, pv, ci)
-        paste(modelKey[[ci]], p, paste0(unlist(pv$paramVals), collapse = ","),
-              paste0(unlist(pv$lVals), collapse = ","),
-              paste0(unlist(pv$heldVals), collapse = ","), sep = "|")
+        digest::digest(paste(modelKey[[ci]], p,
+                             paste0(unlist(pv$paramVals[modelParams[[ci]]]), collapse = ","),
+                             paste0(unlist(pv$lVals), collapse = ","),
+                             paste0(unlist(pv$heldVals), collapse = ","), sep = "|"),
+                       algo = "xxhash64", serialize = FALSE)
+      # free parameters that occur in this resting model and in no other
+      privateOf <- lapply(seq_along(models), function(ci) {
+        if (!ci %in% equilConds) return(character(0))
+        other <- unique(unlist(modelParams[equilConds[modelKey[equilConds] != modelKey[[ci]]]]))
+        cand <- setdiff(modelParams[[ci]], c(other, lNames, unname(heldParamOf)))
+        cand[vapply(cand, function(nm) !is.null(slotOfName(nm)), logical(1))]
+      })
       # constant (point-independent) arguments of every solve, shipped once to the pool
       solveConst <- list(stateNames = realStateNames, paramNames = solveParamNames,
                          forcings = if (length(solveHeld)) solveHeld else NULL,
@@ -2968,6 +3287,7 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
           p <- primes[[idx]]; pt <- pts[[idx]]
           pv <- jointPV(pt, p)                      # independent of the condition
           for (ci in conds) {
+            if (contActive(ci)) next
             key <- solveKey(p, pv, ci)
             if (!is.null(jointSolveCache[[key]]) || !is.null(seen[[key]])) next
             seen[[key]] <- TRUE
@@ -3005,14 +3325,23 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
       # solve one equilibrate condition and return its solution plus the point with
       # this condition's on-manifold x* written into the state leaves (cache-backed)
       jointSolveCond <- function(point, p, ci) {
+        # a continuation that does not apply (models differing by numbers) solves backward
+        # continued where it applies; a condition whose continuation fails is solved
+        # directly from then on
+        if (contActive(ci)) {
+          cr <- jointContCond(point, p, ci)
+          contTrace(ci, !is.null(cr))
+          if (!is.null(cr)) return(cr)
+          contOff[ci] <<- TRUE
+        }
         pv <- jointPV(point, p)
         key <- solveKey(p, pv, ci)
         sol <- jointSolveCache[[key]]
         if (is.null(sol)) {
           sol <- solveRaw(p, pv, ci)
           jointSolveCache[[key]] <- if (is.null(sol) || !isTRUE(sol$ok)) list(ok = FALSE) else sol
-          if (is.null(sol) || !isTRUE(sol$ok)) return(NULL)
-        } else if (!isTRUE(sol$ok)) return(NULL)
+        }
+        if (!isTRUE(sol$ok)) return(NULL)
         ptc <- as.numeric(point[seq_len(nLeaves)])
         # seed the pre-event resting value: the IC tape applies the events, and df is
         # linearised at the same point
@@ -3033,7 +3362,8 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
         pv <- as.list(setNames(vapply(solveParamNames, rd, numeric(1)), solveParamNames))
         sol <- tryCatch(sd$solveForwardModular(models[[ci]], realStateNames, solveParamNames,
                           sv, pv, p, forcings = if (length(heldOf(ci))) heldOf(ci) else NULL,
-                          solveRates = solveRates), error = function(e) NULL)
+                          solveRates = solveRates, stateSolve = attr(solveRates, "stateSolve")),
+                        error = function(e) NULL)
         if (is.null(sol) || !isTRUE(sol$ok)) return(NULL)
         ptc <- as.numeric(point[seq_len(nLeaves)])
         for (r in names(sol$rates)) { s <- slotOfName(r)
@@ -3043,45 +3373,156 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
         for (nm in zeroOf(ci)) { s <- slotOfName(nm); if (!is.null(s)) ptc[s] <- 0 }
         list(sol = sol, ptc = ptc)
       }
-      # One condition's [Obs; df] blocks at its own resting state, state columns
-      # log-normalised by x*_c, embedded in the wide space. Shared by kcall4 and kchunk.
-      # NULL: degenerate point.
-      oneCondBlocks <- function(mi, obs, sc0, p) {
+      # ---- saturation points: forward seed, then per-state redraws ---------------
+      # The first condition is solved forward: states from the point, rates solved
+      # linearly and written into the point. Off with recast atoms or held pivots.
+      fwdCond <- equilConds[1]
+      fwdRates <- NULL
+      fwdOn <- !length(recast) && !length(heldNames) &&
+               !nzchar(Sys.getenv("DMOD_SYM_NOFWDSEED"))
+      fwdSeed <- function(point, p) {
+        sv <- as.list(setNames(vapply(realStateNames, function(nm) {
+          sl <- slotOfName(nm); if (is.null(sl)) 0 else as.numeric(point[sl]) %% p },
+          numeric(1)), realStateNames))
+        sol <- tryCatch(sd$solveForwardModular(models[[fwdCond]], realStateNames,
+                          solveParamNames, sv, jointPV(point, p)$paramVals, p,
+                          forcings = if (length(heldOf(fwdCond))) heldOf(fwdCond) else NULL,
+                          solveRates = fwdRates, stateSolve = attr(fwdRates, "stateSolve")),
+                        error = function(e) NULL)
+        if (is.null(sol) || !isTRUE(sol$ok)) {
+          if (is.null(fwdRates)) {
+            fwdOn <<- FALSE                             # no rate matching: backward only
+            if (nzchar(Sys.getenv("DMOD_SYM_TIMING")))
+              message("[sym] forward seed off: ", if (is.null(sol)) "solve error" else sol$why)
+          }
+          return(NULL)
+        }
+        if (is.null(fwdRates)) {
+          fwdRates <<- structure(as.character(unlist(sol$solveRates)),
+                                 stateSolve = as.character(unlist(sol$stateSolve)))
+          if (any(vapply(fwdRates, function(r) is.null(slotOfName(r)), logical(1)))) {
+            fwdOn <<- FALSE; return(NULL) }
+        }
+        rv <- vapply(fwdRates, function(r) as.numeric(sol$rates[[r]]) %% p, numeric(1))
+        if (any(rv == 0)) return(NULL)                  # degenerate rate: backward
+        for (k in seq_along(fwdRates)) point[slotOfName(fwdRates[k])] <- rv[k]
+        jointSolveCache[[solveKey(p, jointPV(point, p), fwdCond)]] <- sol
+        point
+      }
+      # ---- resting states by continuation from the forward-seeded one --------------
+      # A condition whose resting model differs from the first one's by terms with its
+      # own parameters is continued along them, eps times their value, from the first
+      # condition's resting state: its states and df rows are power series in eps.
+      contT <- max(1L, as.integer(ctrl$gapOrderCap))
+      contEligible <- function(ci) fwdOn && hasGaps && ci != fwdCond &&
+        modelKey[[ci]] != modelKey[[fwdCond]] && !length(heldNames) &&
+        !nzchar(Sys.getenv("DMOD_SYM_NOCONT"))
+      contOff <- rep(FALSE, max(equilConds))
+      contSeen <- rep(FALSE, max(equilConds))
+      contTrace <- function(ci, ok) {
+        if (contSeen[ci] || !nzchar(Sys.getenv("DMOD_SYM_TIMING"))) return(invisible())
+        contSeen[ci] <<- TRUE
+        message(sprintf("[sym] condition %d: %s", ci,
+                        if (ok) "continued" else "continuation failed, solved directly"))
+      }
+      contActive <- function(ci) contEligible(ci) && !contOff[ci]
+      # the parameters of a condition's resting model that the first one lacks
+      contParams <- function(ci) setdiff(modelParams[[ci]], modelParams[[fwdCond]])
+      jointContCond <- function(point, p, ci) {
+        pv <- jointPV(point, p)
+        key <- paste("cont", solveKey(p, pv, ci), contT)
+        sol <- jointSolveCache[[key]]
+        if (is.null(sol)) {
+          ref <- jointSolveCond(point, p, fwdCond)
+          if (is.null(ref)) return(NULL)
+          priv <- contParams(ci)
+          pv0 <- pv$paramVals; pv0[priv] <- 0
+          sol <- tryCatch(sd$continueRestingState(models[[ci]], realStateNames,
+                   solveParamNames, pv0, pv$paramVals[priv], ref$sol$valBy, p, contT,
+                   forcings = if (length(heldOf(ci))) heldOf(ci) else NULL),
+                   error = function(e) NULL)
+          ok <- !is.null(sol) && isTRUE(sol$ok)
+          jointSolveCache[[key]] <- if (ok) sol else list(ok = FALSE)
+          if (!ok) return(NULL)
+        } else if (!isTRUE(sol$ok)) return(NULL)
+        # the point at eps = 0 (private parameters 0) and the series of every leaf
+        ptc <- as.numeric(point[seq_len(nLeaves)])
+        ser <- matrix(0, nLeaves, contT)
+        for (nm in names(sol$valBy)) {
+          sl <- slotOfName(nm); if (is.null(sl)) next
+          v <- as.numeric(unlist(sol$valBy[[nm]])) %% p
+          ptc[sl] <- v[1]; ser[sl, ] <- v[1L + seq_len(contT)]
+        }
+        for (nm in contParams(ci)) {
+          sl <- slotOfName(nm); if (is.null(sl)) next
+          ser[sl, 1L] <- ptc[sl] %% p; ptc[sl] <- 0
+        }
+        for (nm in zeroOf(ci)) { sl <- slotOfName(nm); if (!is.null(sl)) ptc[sl] <- 0 }
+        list(sol = sol, ptc = ptc, ser = ser, cont = TRUE)
+      }
+      # the df payload of a continued solve at eps^k
+      solAt <- function(sol, k) list(
+        dfJx = lapply(sol$dfJx, function(r) vapply(r, function(x) as.numeric(x[[k + 1L]]), 0)),
+        dfJt = lapply(sol$dfJt, function(r) vapply(r, function(x) as.numeric(x[[k + 1L]]), 0)),
+        dfStateCols = sol$dfStateCols, dfParamCols = sol$dfParamCols)
+      # A point with every resting state solved at the first prime. A failed state
+      # redraws its private parameters; NULL when it has none.
+      redrawN <- 0L
+      satPrep <- function(point, P1 = .symPrimes[1]) {
+        for (round in 0:8) {
+          if (fwdOn) { fp <- fwdSeed(point, P1); if (!is.null(fp)) point <- fp }
+          failed <- if (is.null(jointSolveCond(point, P1, equilConds[1]))) equilConds[1]
+          if (!length(failed)) {
+            warmSolves(list(point), list(P1))
+            failed <- Filter(function(ci) is.null(jointSolveCond(point, P1, ci)),
+                             equilConds[-1])
+            if (!length(failed)) return(point)
+          }
+          ssWhy <<- "joint solve failed"
+          redraw <- unique(unlist(privateOf[failed]))
+          if (any(lengths(privateOf[failed]) == 0L)) return(NULL)
+          redrawN <<- redrawN + 1L
+          vals <- .symRandomPoint(length(redraw), seed = 7919L + redrawN)
+          for (k in seq_along(redraw)) point[slotOfName(redraw[k])] <- vals[k]
+          if (nzchar(Sys.getenv("DMOD_SYM_TIMING")))
+            message(sprintf("[sym] redraw %s for condition(s) %s", paste(redraw, collapse = ","),
+                            paste(unique(failed), collapse = ",")))
+        }
+        NULL
+      }
+      # One condition's rows over its local columns: observability, df, pinned zeros and
+      # recast relations, state columns scaled by x*_c unless scale = FALSE; with a
+      # series, the same rows as series (S, N). NULL rejects the point.
+      condLocal <- function(mi, obs, sc0, p, scale = TRUE) {
         if (!isTRUE(obs$ok)) return(NULL)
+        cont <- isTRUE(sc0$cont)
         oR <- matrix(as.numeric(obs$R), nrow = obs$rank, ncol = nzL)
-        dR <- dfRowsCond(sc0$sol, p)
+        dR <- dfRowsCond(if (cont) solAt(sc0$sol, 0L) else sc0$sol, p)
         # a state this condition forces to zero keeps its column unscaled and pinned
         zc <- match(zeroOf(equilConds[mi]), znamesL)
         zc <- zc[!is.na(zc)]
-        # any other resting value 0 mod p degenerates its column; reject the point
-        xvals <- as.numeric(sc0$ptc[jointStateSlot]) %% p
-        xvals[logCols %in% zc] <- 1
-        if (any(xvals == 0)) {
-          if (nzchar(Sys.getenv("DMOD_SYM_FWDDIAG")))
-            message("[fwddiag] zero log-normal coord at slots ",
-                    paste(jointStateSlot[xvals == 0], collapse = ","))
-          return(NULL) }
-        for (m in seq_along(logCols)) {
-          xv <- xvals[m]
-          oR[, logCols[m]] <- .symMulmod(oR[, logCols[m]], xv, p)
-          if (nrow(dR)) dR[, logCols[m]] <- .symMulmod(dR[, logCols[m]], xv, p)
+        eZ <- matrix(0, length(zc), nzL)
+        if (length(zc)) eZ[cbind(seq_along(zc), zc)] <- 1
+        # a continued condition is not log-normalised: a column scaling keeps the rank
+        scl <- rep(1, nzL)
+        if (!cont) {
+          # any other resting value 0 mod p degenerates its column; reject the point
+          xvals <- as.numeric(sc0$ptc[jointStateSlot]) %% p
+          xvals[logCols %in% zc] <- 1
+          if (any(xvals == 0)) {
+            if (nzchar(Sys.getenv("DMOD_SYM_FWDDIAG")))
+              message("[fwddiag] zero log-normal coord at slots ",
+                      paste(jointStateSlot[xvals == 0], collapse = ","))
+            return(NULL) }
+          if (scale) scl[logCols] <- xvals
         }
-        # state columns go to block mi, shared columns overlap
-        wc <- wideCols[[mi]]
-        bl <- list()
-        eO <- matrix(0, nrow(oR), nzWide); eO[, wc] <- oR
-        bl[[length(bl) + 1L]] <- eO
-        if (nrow(dR)) {
-          eD <- matrix(0, nrow(dR), nzWide); eD[, wc] <- dR
-          bl[[length(bl) + 1L]] <- eD
-        }
-        if (length(zc)) {
-          eZ <- matrix(0, length(zc), nzWide)
-          eZ[cbind(seq_along(zc), wc[zc])] <- 1
-          bl[[length(bl) + 1L]] <- eZ
+        for (m in which(scl[logCols] != 1)) {
+          oR[, logCols[m]] <- .symMulmod(oR[, logCols[m]], scl[logCols[m]], p)
+          if (nrow(dR)) dR[, logCols[m]] <- .symMulmod(dR[, logCols[m]], scl[logCols[m]], p)
         }
         # recast relation rows at this condition's point
-        for (rc in recastRel) {
+        rel <- list()
+        if (!cont) for (rc in recastRel) {
           expv <- as.numeric(sc0$ptc[rc$expSlot]) %% p
           Lv   <- as.numeric(sc0$ptc[rc$LSlot]) %% p
           # 1/base factor for a non-log-normalised parameter base (state base: 1)
@@ -3091,49 +3532,130 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
             if (bv == 0) return(NULL)                  # degenerate point, resample
             bScale <- .symInvmod(bv, p)
           }
-          r1 <- numeric(nzWide)                       # E = base^exp
-          r1[wc[rc$ECol]]    <- 1
-          r1[wc[rc$baseCol]] <- (p - .symMulmod(expv, bScale, p)) %% p   # -exp/base
-          r1[wc[rc$expCol]]  <- (-Lv) %% p
-          r2 <- numeric(nzWide)                       # L = log(base)
-          r2[wc[rc$LCol]]    <- 1
-          r2[wc[rc$baseCol]] <- (p - bScale) %% p                         # -1/base
-          bl[[length(bl) + 1L]] <- rbind(r1, r2)
+          r1 <- numeric(nzL)                          # E = base^exp
+          r1[rc$ECol]    <- 1
+          r1[rc$baseCol] <- (p - .symMulmod(expv, bScale, p)) %% p   # -exp/base
+          r1[rc$expCol]  <- (-Lv) %% p
+          r2 <- numeric(nzL)                          # L = log(base)
+          r2[rc$LCol]    <- 1
+          r2[rc$baseCol] <- (p - bScale) %% p                         # -1/base
+          rel[[length(rel) + 1L]] <- rbind(r1, r2)
         }
-        # the same blocks over the gap series: the chain's series rows scaled and
-        # embedded like oR, every other block constant
-        if (!is.null(obs$S)) {
-          scl <- rep(1, nzL); scl[logCols] <- xvals
-          S <- matrix(as.numeric(obs$S), nrow(obs$S), ncol(obs$S))
-          cst <- if (length(bl) > 1L) do.call(rbind, bl[-1]) else matrix(0, 0, nzWide)
-          attr(bl, "series") <- rbind(.symSeriesEmbed(S, obs$N, wc, nzWide, p, scl),
-                                      .symSeriesConst(cst, obs$N))
+        cst <- do.call(rbind, c(list(dR, eZ), rel))
+        out <- list(M = rbind(oR, cst), S = NULL, N = obs$N)
+        if (is.null(obs$S)) return(out)
+        N <- obs$N
+        S <- matrix(as.numeric(obs$S), nrow(obs$S), ncol(obs$S))
+        if (any(scl != 1)) S <- .symSeriesEmbed(S, N, seq_len(nzL), nzL, p, scl)
+        if (!cont) {
+          out$S <- rbind(S, .symSeriesConst(cst, N))
+          return(out)
         }
+        # the df rows of a continued solve at eps^k
+        dS <- matrix(0, nrow(dR), nzL * N)
+        for (k in seq_len(N) - 1L) {
+          dk <- dfRowsCond(solAt(sc0$sol, k), p)
+          for (c in seq_len(nzL))
+            if (any(dk[, c] != 0)) dS[, (c - 1L) * N + k + 1L] <- dk[, c]
+        }
+        out$S <- rbind(S, dS, .symSeriesConst(eZ, N))
+        out
+      }
+      # the local rows embedded in the wide space: state columns to block mi, shared
+      # columns overlap
+      oneCondBlocks <- function(mi, obs, sc0, p) {
+        loc <- condLocal(mi, obs, sc0, p)
+        if (is.null(loc)) return(NULL)
+        wc <- wideCols[[mi]]
+        W <- matrix(0, nrow(loc$M), nzWide); W[, wc] <- loc$M
+        bl <- list(W)
+        if (!is.null(loc$S)) attr(bl, "series") <- .symSeriesEmbed(loc$S, loc$N, wc, nzWide, p)
         bl
+      }
+      # Joint rank from the local rows: each condition eliminates its state columns
+      # first, only its rows free of them are stacked on the shared columns. Series rows
+      # carry the precision their reduction leaves exact.
+      jointRank <- function(locs, p, cores) {
+        stL <- perCondCols; shL <- sharedIdx; nFirst <- length(stL)
+        rP <- 0L; Q <- list(); rPS <- 0L; QS <- list(); prec <- integer(0)
+        series <- all(vapply(locs, function(l) !is.null(l$S), logical(1)))
+        for (loc in locs) {
+          rr <- symRrefMod(loc$M[, c(stL, shL), drop = FALSE], p)
+          isP <- rr$piv < nFirst
+          rP <- rP + sum(isP)
+          if (any(!isP)) Q[[length(Q) + 1L]] <- rr$R[!isP, nFirst + seq_along(shL), drop = FALSE]
+          if (!series) next
+          S <- loc$S; storage.mode(S) <- "integer"
+          sp <- symSeriesProject(S, as.integer(nzL), as.integer(loc$N), p,
+                                 as.integer(stL - 1L), as.integer(cores))
+          rPS <- rPS + sp$r1
+          QS[[length(QS) + 1L]] <- sp$Q; prec <- c(prec, sp$prec)
+        }
+        rQ <- if (length(Q)) symRrefMod(do.call(rbind, Q), p)$rank else 0L
+        res <- list(ok = TRUE, rank = as.integer(rP + rQ), dim = nzWide, blockRank = TRUE,
+                    pivots = integer(0))
+        if (!series) return(res)
+        N <- locs[[1]]$N
+        QS <- do.call(rbind, QS)
+        rQS <- if (nrow(QS)) symSeriesRank(QS, as.integer(length(shL)), as.integer(N), p,
+                                           integer(0), cores = as.integer(cores),
+                                           rowPrec = as.integer(prec))$rank else 0L
+        res$rankS <- as.integer(rPS + rQS); res$N <- N
+        res
       }
       # one condition's observability kernel at its seeded resting state: a chain of
       # segments across post-t0 event gaps, or the single equilibrate segment.
-      condObs <- function(ci, ptc, p, Nt, Mtot) {
+      condObs <- function(ci, ptc, p, Nt, Mtot, ser = NULL) {
         if (hasGaps)
           symObsNullChain(list(tapes[chainGroups[[chainOf[ci]]]]), nLeaves, nStates,
                           zSlotsL, as.integer(ptc %% p), p, as.integer(Nt),
-                          as.integer(Mtot), 1L)
+                          as.integer(Mtot), 1L, integer(0),
+                          if (is.null(ser)) NULL else matrix(as.integer(ser %% p), nLeaves))
         else
           symObsNullMulti(list(tapes[[ci]]), nLeaves, nStates, zSlotsL,
                           as.integer(ptc %% p), p, as.integer(Nt), 1L)
       }
-      kcall4 <- function(point, p, Nt, Mtot = 0L, solveFn = jointSolveCond) {
+      # condObs for every condition in one OpenMP batch
+      chainsList <- if (hasGaps) lapply(seq_len(Kc), function(mi)
+        tapes[chainGroups[[chainOf[equilConds[mi]]]]]) else NULL
+      condObsAll <- function(scs, p, Nt, Mtot) {
+        if (!hasGaps || Kc < 2L)
+          return(lapply(seq_len(Kc), function(mi)
+            condObs(equilConds[mi], scs[[mi]]$ptc, p, Nt, Mtot)))
+        seeds <- do.call(rbind, lapply(scs, function(sc) as.integer(sc$ptc %% p)))
+        sers <- lapply(scs, function(sc)
+          if (isTRUE(sc$cont)) matrix(as.integer(sc$ser %% p), nLeaves) else NULL)
+        symObsNullChainSeedBatch(chainsList, seq_len(Kc) - 1L, seeds, rep(p, Kc),
+                                 nLeaves, nStates, zSlotsL, as.integer(Nt),
+                                 as.integer(Mtot), as.integer(min(coresCall, Kc)),
+                                 if (length(NtCap) == Kc) as.integer(NtCap) else integer(0),
+                                 if (any(vapply(sers, Negate(is.null), TRUE))) sers else NULL)
+      }
+      kcall4 <- function(point, p, Nt, Mtot = 0L, solveFn = jointSolveCond,
+                         rankOnly = FALSE) {
         # Warm this point's Kc solves in parallel (backward solve only), but only after
         # the first condition solved serially: a degenerate point fails there.
         if (missing(solveFn) && Kc > 1L &&
             !is.null(jointSolveCond(point, p, equilConds[1])))
           warmSolves(list(point), list(p))
+        scs <- vector("list", Kc)
+        for (mi in seq_len(Kc)) {
+          sc0 <- solveFn(point, p, equilConds[mi])
+          if (is.null(sc0)) { ssWhy <<- "joint solve failed"; return(list(ok = FALSE)) }
+          scs[[mi]] <- sc0
+        }
+        obs <- condObsAll(scs, p, Nt, Mtot)
+        if (rankOnly) {
+          locs <- vector("list", Kc)
+          for (mi in seq_len(Kc)) {
+            locs[[mi]] <- condLocal(mi, obs[[mi]], scs[[mi]], p, scale = length(recastRel) > 0L)
+            if (is.null(locs[[mi]])) return(list(ok = FALSE))
+          }
+          return(jointRank(locs, p, coresCall))
+        }
         blocks <- list(); sblocks <- list()
         for (mi in seq_len(Kc)) {
-          ci <- equilConds[mi]
-          sc0 <- solveFn(point, p, ci)
-          if (is.null(sc0)) { ssWhy <<- "joint solve failed"; return(list(ok = FALSE)) }
-          b <- oneCondBlocks(mi, condObs(ci, sc0$ptc, p, Nt, Mtot), sc0, p)
+          b <- oneCondBlocks(mi, obs[[mi]], scs[[mi]], p)
           if (is.null(b)) return(list(ok = FALSE))
           sblocks <- c(sblocks, list(attr(b, "series")))
           blocks <- c(blocks, b)
@@ -3142,7 +3664,7 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
         rr <- symRrefMod(do.call(rbind, blocks), p)
         res <- list(ok = TRUE, R = rr$R,
                     pivots = as.integer(rr$piv), rank = as.integer(rr$rank), dim = nzWide)
-        if (hasGaps) res <- .symSeriesStack(res, sblocks, nzWide, Mtot + 1L, p)
+        if (hasGaps) res <- .symSeriesStack(res, sblocks, nzWide, Mtot + 1L, p, coresCall)
         res
       }
       # one condition's observability rows for the saturation, without the constant
@@ -3151,22 +3673,20 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
         function(point, p, Nt, Mtot = 0L) {
           sc0 <- jointSolveCond(point, p, equilConds[mi])
           if (is.null(sc0)) { ssWhy <<- "joint solve failed"; return(list(ok = FALSE)) }
-          condObs(equilConds[mi], sc0$ptc, p, Nt, Mtot)
+          condObs(equilConds[mi], sc0$ptc, p, Nt, Mtot, sc0$ser)
         } })
       # ---- the batched twin of the serial per-point loop ---------------------------
       # Coupled + gap path: solve every (point, condition) seed, evaluate all chain
       # kernels in one OpenMP batch, then assemble and reduce per point. Identical to
       # looping kcall4.
       if (hasGaps) {
-        chainsList <- lapply(seq_len(Kc), function(mi)
-          tapes[chainGroups[[chainOf[equilConds[mi]]]]])
         # no per-point fork here, so the batch takes the full `cores`
         coresChunk <- cores
         kchunk <- function(pointList, primeVec, Nt) {
           warmSolves(pointList, primeVec)
           nP <- length(pointList)
           perCond <- vector("list", nP)   # per point: list of Kc sc0, or NULL if any fails
-          seedRows <- list(); evChain <- integer(0); evPrime <- numeric(0)
+          seedRows <- list(); serRows <- list(); evChain <- integer(0); evPrime <- numeric(0)
           for (i in seq_len(nP)) {
             pt <- pointList[[i]]; pp <- primeVec[[i]]
             per <- vector("list", Kc); okAll <- TRUE
@@ -3179,6 +3699,8 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
             perCond[[i]] <- per
             for (mi in seq_len(Kc)) {
               seedRows[[length(seedRows) + 1L]] <- as.integer(per[[mi]]$ptc %% pp)
+              serRows[length(seedRows)] <- list(if (isTRUE(per[[mi]]$cont))
+                matrix(as.integer(per[[mi]]$ser %% pp), nLeaves) else NULL)
               evChain <- c(evChain, mi - 1L); evPrime <- c(evPrime, pp)
             }
           }
@@ -3186,7 +3708,10 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
             symObsNullChainSeedBatch(chainsList, as.integer(evChain),
               do.call(rbind, seedRows), as.numeric(evPrime), nLeaves, nStates,
               zSlotsL, as.integer(Nt), as.integer(MtotUsed),
-              as.integer(min(coresChunk, length(evChain))))
+              as.integer(min(coresChunk, length(evChain))),
+              if (length(NtCap) == Kc) as.integer(NtCap[evChain + 1L]) else integer(0),
+              if (length(serRows) && any(vapply(serRows, Negate(is.null), TRUE)))
+                serRows else NULL)
             else list()
           out <- vector("list", nP); e <- 0L
           for (i in seq_len(nP)) {
@@ -3202,7 +3727,7 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
               rr <- symRrefMod(do.call(rbind, blocks), primeVec[[i]])
               .symSeriesStack(list(ok = TRUE, R = rr$R, pivots = as.integer(rr$piv),
                                    rank = as.integer(rr$rank), dim = nzWide),
-                              sblocks, nzWide, MtotUsed + 1L, primeVec[[i]]) }
+                              sblocks, nzWide, MtotUsed + 1L, primeVec[[i]], coresChunk) }
           }
           out
         }
@@ -3285,7 +3810,7 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
                   rank = as.integer(rr$rank), dim = nz)
       if (hasGaps)
         res <- .symSeriesStack(res, list(matrix(as.numeric(o$S), nrow(o$S), ncol(o$S)),
-                                         .symSeriesConst(relM, o$N)), nz, o$N, p)
+                                         .symSeriesConst(relM, o$N)), nz, o$N, p, coresCall)
       res
     }
     blockCall <- obsBlockCalls()
@@ -3305,16 +3830,22 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
 
   # the saturation loop rejects a point on its first condition, so only that solve is
   # prefetched; kcall4 fills the rest once the point passes
+  # with the forward seed, warms every condition at the primes other than the first
   warmProbe <- if (jointSS)
-    function(pts, primes) warmSolves(pts, primes, conds = equilConds[1])
+    function(pts, primes) {
+      if (!fwdOn) return(warmSolves(pts, primes, conds = equilConds[1]))
+      other <- vapply(primes, function(q) q != .symPrimes[1], logical(1))
+      if (any(other)) warmSolves(pts[other], primes[other])
+    }
     else function(pts, primes) invisible()
+
   # recast rows add to the specialisation; a gap chain gets no budget
   satBudget <- if (hasGaps || is.na(codimSpec)) NA_integer_
                else as.integer(codimSpec) + 2L * length(recast) +
                     as.integer(if (is.null(multi$expCodim)) 0L else multi$expCodim)
-  # the per-block scans fork across the blocks on the plain and recast paths (no
-  # steady-state solves in the block calls); DMOD_SYM_SERIALBLOCKS keeps them serial
-  blockMap <- if (!ssConstraint && coresGLp > 1L && .Platform$OS.type == "unix" &&
+  # the per-block scans fork across the blocks (joint path: solves cached by satPrep);
+  # DMOD_SYM_SERIALBLOCKS keeps them serial
+  blockMap <- if ((!ssConstraint || jointSS) && coresGLp > 1L && .Platform$OS.type == "unix" &&
                   length(blockCall) > 1L && !nzchar(Sys.getenv("DMOD_SYM_SERIALBLOCKS")))
     function(xs, f) lapply(parallel::mclapply(xs, f, mc.cores = coresGLp,
                                               mc.preschedule = FALSE),
@@ -3329,11 +3860,28 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
                        integer(1))
   ntMin <- .symLieReachMax(multi$tapes)
   if (length(ntMinBlock) != length(blockCall)) ntMinBlock <- NULL
-  sc <- .symSaturateCertify(kcall4, nAug, nz, maxM, warm = warmProbe,
+  # with continued conditions the exact scalings bound the rank from above: the gap
+  # order stops rising once the series rank meets that bound
+  rankCap <- nz; scalWs <- NULL
+  if (jointSS && !is.null(sd) && any(vapply(equilConds, contEligible, logical(1)))) {
+    scalWs <- .symExactScalingSet(multi, setdiff(leafNames,
+                c(setdiff(znames, as.character(multi$zStateNames)), stateBase)), sd)
+    shNames <- znames[seq_len(nShared)]
+    W <- do.call(rbind, lapply(scalWs, function(v) {
+      x <- numeric(nShared); m <- match(names(v), shNames)
+      x[m[!is.na(m)]] <- as.numeric(unlist(v))[!is.na(m)] %% .symPrimes[1]
+      x }))
+    if (length(W)) rankCap <- nz - symRrefMod(W, .symPrimes[1])$rank
+  }
+  kcallSat <- if (jointSS && !nzchar(Sys.getenv("DMOD_SYM_WIDESAT")))
+    function(point, p, Nt, Mtot = 0L) kcall4(point, p, Nt, Mtot, rankOnly = TRUE)
+    else kcall4
+  sc <- .symSaturateCertify(kcallSat, nAug, nz, maxM, warm = warmProbe,
                             probeBlock = max(1L, min(8L, coresGLp)),
                             blockCall = blockCall, budget = satBudget,
                             blockMap = blockMap, ntMin = ntMin,
-                            ntMinBlock = ntMinBlock)
+                            ntMinBlock = ntMinBlock, prep = satPrep,
+                            rankCap = rankCap)
   if (is.null(sc)) {
     if (ssConstraint && !is.null(ssWhy))
       warning("symmetryDetection(): no steady-state point over the finite field ",
@@ -3341,11 +3889,67 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
               "constraint could not be evaluated.", call. = FALSE)
     return(NULL)
   }
-  # plain gap path: cap each chain at the order its own rank saturated at, plus the
-  # plateau the saturation required (DMOD_SYM_NOCAP keeps the stacked order everywhere)
-  if (hasGaps && !jointSS && !ssConstraint && length(sc$blockOrders) == length(chainGroups) &&
+  # the saturation ran on ranks only; the reference reduction is the wide one
+  if (isTRUE(sc$ref$blockRank)) {
+    rc <- kcall4(sc$point0, .symPrimes[1], sc$NtUsed,
+                 if (is.null(sc$MtotUsed)) 0L else sc$MtotUsed)
+    if (!isTRUE(rc$ok)) return(NULL)
+    sc$ref <- rc; sc$rank <- rc$rank; sc$rankS <- .symRankOf(rc); sc$pivots <- rc$pivots
+  }
+  # ==== certified Lie order (manuscript, Supplementary Note S3) ======================
+  # a rank at the bound of the exact scalings needs no Lie-order certificate
+  sc$certified <- rankCap < nz && .symRankOf(sc$ref) >= rankCap
+  if (!sc$certified && !nzchar(Sys.getenv("DMOD_SYM_NOCERT"))) {
+    certSegs <- if (jointSS) {
+      if (hasGaps) chainsList else lapply(equilConds, function(ci) list(tapes[[ci]]))
+    } else if (hasGaps) lapply(chainGroups, function(idx) tapes[idx])
+      else lapply(tapes, list)
+    P1 <- .symPrimes[1]
+    certSeeds <- if (jointSS) lapply(equilConds, function(ci) {
+        sc0 <- jointSolveCond(sc$point0, P1, ci)
+        if (is.null(sc0)) NULL else sc0$ptc })
+      else rep(list(sc$point0[seq_len(nLeaves)]), length(certSegs))
+    certMap <- if (coresGLp > 1L && .Platform$OS.type == "unix")
+      function(xs, f) parallel::mclapply(xs, f, mc.cores = coresGLp, mc.preschedule = FALSE)
+      else lapply
+    certOrd <- if (all(lengths(certSeeds) > 0L))
+      tryCatch(.symLieCertificate(certSegs, certSeeds, nLeaves, nStates,
+                                  if (jointSS) zSlotsL else zSlots, P1,
+                                  cap = max(64L, 4L * (length(zSlots) + nStates)),
+                                  mapFn = certMap),
+               error = function(e) {
+                 if (nzchar(Sys.getenv("DMOD_SYM_LIEDIAG")))
+                   message("[liediag] certificate failed: ", conditionMessage(e), " in ", deparse(conditionCall(e))[1])
+                 NULL })
+    if (length(certOrd) == length(certSegs) && is.numeric(certOrd) && !all(is.na(certOrd))) {
+      # an uncertified block keeps its plateau order
+      plat <- max(1L, as.integer(Sys.getenv("DMOD_SYM_LIEPLATEAU", "3")))
+      bo <- if (length(sc$blockOrders) == length(certOrd)) as.integer(sc$blockOrders)
+            else rep(as.integer(sc$NtUsed), length(certOrd))
+      ord <- ifelse(is.na(certOrd), bo + plat, as.integer(certOrd))
+      need <- max(1L, ord)
+      rc <- tryCatch(kcall4(sc$point0, P1, need, if (is.null(sc$MtotUsed)) 0L else sc$MtotUsed),
+                     error = function(e) NULL)
+      if (isTRUE(rc$ok)) {
+        sc$ref <- rc; sc$NtUsed <- need; sc$rank <- rc$rank
+        sc$rankS <- .symRankOf(rc); sc$pivots <- rc$pivots
+        sc$blockOrders <- as.integer(ord)
+        sc$blockDriver <- which.max(ord)
+        sc$certified <- !anyNA(certOrd)
+        sc$uncertified <- which(is.na(certOrd))
+        sc$certOrders <- TRUE
+      }
+    }
+    if (nzchar(Sys.getenv("DMOD_SYM_LIEDIAG")))
+      message("[liediag] certified block orders: ",
+              if (is.null(certOrd)) "none" else paste(certOrd, collapse = ","))
+  }
+  # gap paths: cap each chain at its own order, plus the plateau unless certified
+  # (DMOD_SYM_NOCAP keeps the stacked order everywhere)
+  if (hasGaps && ((!jointSS && !ssConstraint && length(sc$blockOrders) == length(chainGroups)) ||
+                  (jointSS && length(sc$blockOrders) == jointKc)) &&
       !nzchar(Sys.getenv("DMOD_SYM_NOCAP")))
-    NtCap <- as.integer(sc$blockOrders) +
+    NtCap <- as.integer(sc$blockOrders) + if (isTRUE(sc$certOrders)) 0L else
       max(1L, as.integer(Sys.getenv("DMOD_SYM_LIEPLATEAU", "3")))
   # joint saturation: a block needs its order only while it adds to the STACKED rank.
   # Lower the deepest blocks level by level and keep each step that leaves the stacked
@@ -3439,7 +4043,7 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
                  segments = nSegmentTapes, gapOrderUsed = MtotUsed,
                  identifiable = (sc$rankS == nz), rank = as.integer(sc$rankS),
                  dim = as.integer(nz), lieOrderUsed = as.integer(sc$NtUsed),
-                 lieOrderDriver = sc$blockDriver, lieBudget = sc$budget,
+                 lieOrderDriver = sc$blockDriver, lieUncertified = sc$uncertified,
                  liePlateau = sc$plateau, lieCertified = isTRUE(sc$certified),
                  nonIdentifiable = list())
   class(result) <- "symmetrydetection"
@@ -3463,7 +4067,7 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
   if (sc$rankS < sc$rank) {
     S <- sc$ref$S
     supp <- symSeriesRank(S, as.integer(nz), as.integer(sc$ref$N), .symPrimes[1],
-                          integer(0), support = TRUE)$support
+                          integer(0), support = TRUE, cores = as.integer(cores))$support
     gapDirs <- rep(list(list(support = .symSort(znames[supp + 1L]), type = "general",
                              closedForm = FALSE,
                              reason = "depends on the time between events")),
@@ -3471,6 +4075,38 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
   }
   if (sc$rankS == nz)
     return(result)
+  # baked leaves, which no scaling moves
+  scalFixed <- if (jointSS)
+    setdiff(leafNames, c(setdiff(znames, as.character(multi$zStateNames)), stateBase))
+    else setdiff(leafNames, znames)
+  # a continued condition leaves the kernel known over the Laurent series only: its
+  # dimension counts in parameter space (the df rows fix the state parts), and the exact
+  # scalings give the directions and, where they fill it, the proof
+  if (jointSS && !is.null(sd) && any(vapply(equilConds, contActive, logical(1)))) {
+    kerDim <- as.integer(nz - sc$rankS)
+    result$rank <- as.integer(result$dim - kerDim)
+    result$coordinates <- physParams0
+    ws <- if (!is.null(scalWs)) scalWs else .symExactScalingSet(multi, scalFixed, sd)
+    chosen <- list(); rows <- matrix(0, 0L, length(physParams0))
+    for (v in ws) {
+      x <- numeric(length(physParams0)); m <- match(names(v), physParams0)
+      x[m[!is.na(m)]] <- as.numeric(unlist(v))[!is.na(m)] %% .symPrimes[1]
+      r2 <- rbind(rows, x)
+      if (symRrefMod(r2, .symPrimes[1])$rank > nrow(rows)) { rows <- r2
+        vv <- unlist(v)[names(v) %in% physParams0]; vv <- vv[vv != "0"]
+        chosen[[length(chosen) + 1L]] <- list(support = .symSort(names(vv)),
+          vector = as.list(vv), type = "scaling", closedForm = TRUE) }
+      if (length(chosen) == kerDim) break
+    }
+    result$nonIdentifiable <- c(chosen, rep(list(list(support = character(0),
+      type = "general", closedForm = FALSE,
+      reason = "not reconstructed along the continuation")), kerDim - length(chosen)))
+    if (length(chosen) == kerDim) {
+      result$rankProven <- kerDim
+      result$rankProof <- "exact scalings"
+    }
+    return(result)
+  }
   # joint mode reports in parameter space, transient recast without its atoms
   reportPhysical <- function(result) {
     if (jointSS)
@@ -3539,6 +4175,15 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
               else matrix(0L, 0L, nz)
 
   # ==== closed-form reconstruction of the residual directions =======================
+  fieldSetup <- NULL
+  fieldChains <- if (hasGaps) chainGroups else as.list(seq_along(multi$tapes))
+  # the parameters no kernel direction moves
+  fieldFixed <- function(N) {
+    pr <- which(!grepl("\\|c[0-9]+$", znames))
+    znames[pr][rowSums(matrix(as.numeric(N[pr, , drop = FALSE]) %% .symPrimes[1] != 0,
+                              length(pr))) == 0L]
+  }
+  fieldJoint <- if (jointSS) list(conds = equilConds, solve = jointSolveCond) else NULL
   if (isTRUE(closedForm)) {
     .t0 <- Sys.time()
     to <- if (is.null(ctrl$timeout)) Inf else ctrl$timeout
@@ -3923,8 +4568,24 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
       if (allClosed(rec)) rec else NULL
     }
 
+    # with a steady-state constraint every sample costs a solve: the fields of the
+    # unspecialised regimes give the closed forms without sampling where they span
+    interp <- NULL
+    if (ssConstraint && length(residualFree) && !is.null(sd) && !length(recast) &&
+        !isTRUE(getOption("dMod.sym.inner")) && !nzchar(Sys.getenv("DMOD_SYM_NOFIELDS"))) {
+      fieldSetup <- tryCatch(.symFieldSetup(multi, fieldChains, cores,
+                                            fixed = fieldFixed(N)),
+                             error = function(e) NULL)
+      if (!is.null(fieldSetup))
+        interp <- tryCatch(.symFieldDirections(fieldSetup, N, length(residualFree),
+                                               scalRows, znames, leafNames, point0Solved,
+                                               fieldChains, fieldJoint, sd),
+                           error = function(e) NULL)
+      .tlog(sprintf("global symmetries: %s", if (is.null(interp)) "no close"
+                    else sprintf("%d direction(s) closed", length(interp))))
+    }
     # the no-sampling read-off first; it closes parameter-weighted scalings cheaply
-    interp <- if (length(residualFree)) msTry(TRUE) else list()
+    if (is.null(interp)) interp <- if (length(residualFree)) msTry(TRUE) else list()
     .tlog(if (is.null(interp)) "ms fastOnly: no close, going dense"
           else "ms fastOnly: all closed")
     if (is.null(interp)) {
@@ -4028,12 +4689,53 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
   # on the resting manifold, move to $stateVector. Transient recast drops only E and L
   # (already back-substituted); state initial values stay physical coordinates.
   result <- reportPhysical(result)
+  # ==== the rank proven by exact scalings: computed rank plus the independent scalings
+  # that leave every equation, initial value and event invariant equals the dimension
+  if (!is.null(sd) && !is.null(result$coordinates) && result$rank < result$dim) {
+    ws <- .symExactScalingSet(multi, scalFixed, sd)
+    if (length(ws)) {
+      coords <- as.character(result$coordinates)
+      V <- t(vapply(ws, function(v) {
+        x <- numeric(length(coords)); m <- match(names(v), coords)
+        x[m[!is.na(m)]] <- as.numeric(unlist(v))[!is.na(m)] %% .symPrimes[1]
+        x }, numeric(length(coords))))
+      k <- symRrefMod(matrix(V, ncol = length(coords)), .symPrimes[1])$rank
+      if (result$rank + k == result$dim) {
+        result$rankProven <- as.integer(k)
+        result$rankProof <- "exact scalings"
+      }
+    }
+  }
   # ==== the saturation guard (verify = TRUE) and the return value ===================
   # where the budget did not certify the Lie order, check that the rank does not grow
   # further up (no second analysis)
-  if (isTRUE(verify) && !isTRUE(sc$certified))
+  # ==== the rank proven by invariant fields: every kernel direction lies in the span
+  # of fields of the unspecialised system that annihilate the output, stay invariant
+  # under each regime's dynamics and map through the events (Supplementary Note S3)
+  if (is.null(result$rankProven) && result$rank < result$dim && !is.null(sd) &&
+      !length(recast) && !isTRUE(getOption("dMod.sym.inner")) &&
+      !nzchar(Sys.getenv("DMOD_SYM_NOFIELDS"))) {
+    proof <- tryCatch(.symFieldProof(multi, N, znames, leafNames, point0Solved,
+                                     fieldChains, fieldJoint, sd, cores, setup = fieldSetup,
+                                     fixed = fieldFixed(N)),
+                      error = function(e) list(ok = FALSE, why = conditionMessage(e)))
+    if (nzchar(Sys.getenv("DMOD_SYM_LIEDIAG")))
+      message("[liediag] invariant fields: ", if (isTRUE(proof$ok)) "proven" else proof$why)
+    if (isTRUE(proof$ok)) {
+      result$rankProven <- as.integer(result$dim - result$rank)
+      result$rankProof <- "invariant fields"
+    }
+  }
+  # the per-chain caps rise with the guard's orders
+  guardCall <- function(point, p, Nt) {
+    capSaved <- NtCap
+    on.exit(NtCap <<- capSaved)
+    if (length(NtCap)) NtCap <<- as.integer(NtCap + (Nt - sc$NtUsed))
+    kcall(point, p, Nt)
+  }
+  if (isTRUE(verify) && !isTRUE(sc$certified) && is.null(result$rankProven))
     result$verification <- tryCatch(
-      .symSzSaturationGuard(kcall, point0Solved, sc$NtUsed, sc$rankS),
+      .symSzSaturationGuard(guardCall, point0Solved, sc$NtUsed, sc$rankS),
       error = function(e) list(ok = NA, method = "saturation guard",
                                reason = conditionMessage(e)))
   result
@@ -5589,9 +6291,11 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
     engine       = engine,
     lieOrderUsed = raw$lieOrderUsed,
     lieOrderDriver = raw$lieOrderDriver,
-    lieBudget = raw$lieBudget,
     liePlateau = raw$liePlateau,
     lieCertified = raw$lieCertified,
+    lieUncertified = raw$lieUncertified,
+    rankProven = raw$rankProven,
+    rankProof = raw$rankProof,
     gapOrderUsed = raw$gapOrderUsed,
     conditions   = raw$conditions,
     segments     = raw$segments,
@@ -5675,14 +6379,17 @@ scalingControl <- function(backend = c("symengine", "sympy")) {
                             if (!is.null(info$gapOrderUsed)) info$gapOrderUsed else 0L,
                             if (!is.null(info$lieOrderDriver))
                               sprintf(", set by condition %d", info$lieOrderDriver) else ""))
-  if (isObs && !is.null(info$liePlateau))
+  if (isObs && !is.null(info$rankProven))
+    comp <- c(comp, sprintf("rank: proven (%d directions, %s)", info$rankProven,
+                            info$rankProof))
+  else if (isObs && !is.null(info$liePlateau))
     comp <- c(comp, if (isTRUE(info$lieCertified))
-        sprintf("saturation: certified (plateau %d > codimension %d)",
-                info$liePlateau, info$lieBudget)
-      else sprintf("saturation: provisional (plateau %d, %s)", info$liePlateau,
-                   if (is.null(info$lieBudget) || is.na(info$lieBudget))
-                     "no codimension bound available"
-                   else sprintf("codimension %d would certify", info$lieBudget)))
+        "saturation: certified (every segment at the rank bound of its invariant space)"
+      else if (length(info$lieUncertified))
+        sprintf("saturation: certified except condition %s (rank bound not reached)",
+                paste(info$lieUncertified, collapse = ", "))
+      else sprintf("saturation: provisional (plateau %d, no rank bound reached)",
+                   info$liePlateau))
   if (!is.null(info$conditions) && info$conditions > 1L)
     comp <- c(comp, paste0(.symPlural(info$conditions, "condition", "conditions"), ", ",
                            .symPlural(info$segments, "segment", "segments")))

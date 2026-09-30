@@ -1977,7 +1977,7 @@ def _solve_states_fast(dps, solveStates, p):
 # a^deg). A core of at most two states is solved by a resultant and root finding over
 # GF(p); every candidate is back-substituted and checked against f = 0.
 
-_REDUCE_TERMS_CAP = 20000   # give up the reduction past this polynomial size
+_REDUCE_TERMS_CAP = 2000    # past this polynomial size msolve is faster than the reduction
 
 
 def _dp_add(a, b, p):
@@ -2347,6 +2347,21 @@ def _solve_states_msolve(dps, solveStates, p):
     """Interior point of f = 0 over GF(p), checked against f."""
     nv = len(solveStates)
     plan, rest = _const_reduce(dps, nv, p)
+    # outputs: a state in a single remaining balance, linearly, is solved after msolve
+    sinks = []
+    while True:
+        occ = {}
+        for j, d in enumerate(rest):
+            for i in {i for m in d for i in range(nv) if m[i]}:
+                occ.setdefault(i, []).append(j)
+        pick = next(((i, js[0]) for i, js in sorted(occ.items()) if len(js) == 1 and
+                     max(m[i] for m in rest[js[0]]) == 1 and len(occ) > 1), None)
+        if pick is None:
+            break
+        i, j = pick
+        cs = _dp_coeffs(rest[j], i)
+        sinks.append((i, cs[1], cs.get(0, {})))
+        rest = rest[:j] + rest[j + 1:]
     varsLeft = sorted({i for d in rest for m in d for i in range(nv) if m[i]})
     if rest and not varsLeft:
         return None, {'ok': False, 'why': 'no consistent interior point'}
@@ -2357,6 +2372,15 @@ def _solve_states_msolve(dps, solveStates, p):
         vals = [0] * nv
         for i, v in cand.items():
             vals[i] = v
+        ok = True
+        for i, a, b in reversed(sinks):
+            av = _dp_value(a, vals, p)
+            if av == 0:
+                ok = False
+                break
+            vals[i] = (-_dp_value(b, vals, p)) * pow(av, p - 2, p) % p
+        if not ok:
+            continue
         for i, b, inv in reversed(plan):
             vals[i] = (-_dp_value(b, vals, p)) * inv % p
         if all(vals) and all(_dp_value(d, vals, p) == 0 for d in dps):
@@ -2721,16 +2745,140 @@ def _forward_rate_pick(rhsByName, solveStates, paramNames, forcings, keepFree=No
     return [assign[s] for s in solveStates]
 
 
+def _forward_plan(rhsByName, solveStates, paramNames, forcings, keepFree=None):
+    """Forward plan when balances share rates: a balance without a rate of its own is
+    solved for its own state, before the rates. Returns (stateSolve, solveRates), the
+    state-solved balances in dependency order and the rates, or None."""
+    keepFree = set(keepFree or [])
+    paramset = {spy.Symbol(pn) for pn in paramNames
+                if pn not in keepFree and not pn.startswith('_E_') and not pn.startswith('_L_')}
+    forc = {spy.Symbol(nm) for nm in forcings}
+    polys = {s: spy.sympify(rhsByName[s]) for s in solveStates}
+    params = {s: polys[s].free_symbols & paramset for s in solveStates}
+    cand = {}
+    for s in solveStates:
+        lst = []
+        for r in sorted(params[s] - forc, key=str):
+            try:
+                pv = spy.Poly(polys[s], r)
+            except spy.PolynomialError:
+                continue
+            if pv.degree() == 1 and r not in pv.nth(1).free_symbols:
+                lst.append(str(r))
+        cand[s] = lst
+    stateSet = set(solveStates)
+    # parameters sharing a monomial; no two of them are solve rates
+    pnames = {str(r) for r in paramset}
+    partners = {}
+    for s in solveStates:
+        for mono in spy.Add.make_args(spy.expand(polys[s])):
+            ps = [str(x) for x in mono.free_symbols if str(x) in pnames]
+            for a in ps:
+                partners.setdefault(a, set()).update(x for x in ps if x != a)
+    banned = set()
+    bs = []                                   # balances solved for their own state
+    while True:
+        forbidden = {str(r) for u in bs for r in params[u]} | banned
+        rest = [s for s in solveStates if s not in bs]
+        match = {}                            # rate -> balance, by augmenting paths
+        def augment(s, seen):
+            for r in cand[s]:
+                if r in forbidden or r in seen:
+                    continue
+                seen.add(r)
+                if r not in match or augment(match[r], seen):
+                    match[r] = s
+                    return True
+            return False
+        for s in sorted(rest, key=lambda s: len(cand[s])):
+            augment(s, set())
+        # ban the solve rate with the most partners among the chosen, then rematch
+        chosen = set(match)
+        clash = sorted((r for r in chosen if partners.get(r, set()) & chosen),
+                       key=lambda r: (-len(partners.get(r, ())), r))
+        if clash:
+            banned.add(clash[0])
+            continue
+        matched = set(match.values())
+        unmatched = [s for s in rest if s not in matched]
+        if not unmatched:
+            break
+        for u in unmatched:
+            try:
+                pu = spy.Poly(polys[u], spy.Symbol(u))
+            except spy.PolynomialError:
+                return None
+            if pu.degree() != 1 or spy.Symbol(u) in pu.nth(1).free_symbols:
+                return None
+        bs.extend(unmatched)
+    # dependency order: a state-solved balance reads the other states it contains
+    deps = {u: {str(x) for x in polys[u].free_symbols if str(x) in stateSet} & set(bs) - {u}
+            for u in bs}
+    order = []
+    while len(order) < len(bs):
+        ready = [u for u in bs if u not in order and deps[u] <= set(order)]
+        if not ready:
+            return None
+        order.extend(sorted(ready))
+    # rates as a column basis of the coefficient matrix at a random point, turnover
+    # rates first, so the rate system is nonsingular
+    rest = [s for s in solveStates if s not in bs]
+    forbidden = {str(r) for u in bs for r in params[u]}
+    Q = 2147483629
+    rng = random.Random(len(rest))
+    syms = set().union(*(polys[s].free_symbols for s in rest)) if rest else set()
+    pt = {x: rng.randrange(2, Q - 1) for x in syms}
+    def score(r):
+        best = 2
+        for s in rest:
+            if r not in cand[s]:
+                continue
+            coef = spy.Poly(polys[s], spy.Symbol(r)).nth(1)
+            if spy.Symbol(s) in coef.free_symbols:
+                best = min(best, 0 if coef.could_extract_minus_sign() else 1)
+        return best
+    cols = sorted({r for s in rest for r in cand[s]} - forbidden,
+                  key=lambda r: (score(r), sum(r in cand[s] for s in rest), r))
+    basis, chosen = [], []                    # echelon rows (pivot, vector) mod Q
+    for r in cols:
+        if partners.get(r, set()) & set(chosen):
+            continue
+        v = []
+        for s in rest:
+            if r in cand[s]:
+                e = spy.Poly(polys[s], spy.Symbol(r)).nth(1).xreplace(pt)
+                v.append(int(e) % Q)
+            else:
+                v.append(0)
+        for piv, b in basis:
+            if v[piv]:
+                fct = v[piv]
+                v = [(x - fct * y) % Q for x, y in zip(v, b)]
+        piv = next((i for i, x in enumerate(v) if x), None)
+        if piv is None:
+            continue
+        inv = pow(v[piv], Q - 2, Q)
+        basis.append((piv, [x * inv % Q for x in v]))
+        chosen.append(r)
+        if len(chosen) == len(rest):
+            break
+    if len(chosen) < len(rest):
+        return None
+    return order, chosen
+
+
 _forwardCache = {}
 
 
-def _forward_compile(model, stateNames, paramNames, forcings, solveRates):
+def _forward_compile(model, stateNames, paramNames, forcings, solveRates, stateSolve=()):
     """Cached prime-independent compile of the forward solve: each solve rate's coefficient
     and the rate-free constant per balance as term lists over rgens = (non-solve params) +
-    solve states, plus the steady-state Jacobian term lists. Returns {'bad': reason} if the
-    balances are not linear in the chosen rates."""
+    solve states, plus the steady-state Jacobian term lists. A balance in `stateSolve` is
+    compiled as its own state's coefficient and remainder instead. Returns {'bad': reason}
+    if the balances are not linear in the chosen rates."""
+    stateSolve = tuple(stateSolve)
     key = (tuple(model), tuple(stateNames), tuple(paramNames), tuple(sorted(forcings)),
-           tuple(solveRates))
+           tuple(solveRates), stateSolve)
     c = _forwardCache.get(key)
     if c is not None:
         return c
@@ -2739,8 +2887,17 @@ def _forward_compile(model, stateNames, paramNames, forcings, solveRates):
     solveSet = set(solveRates); rSyms = [spy.Symbol(r) for r in solveRates]
     rgens = [th for th in paramSyms if str(th) not in solveSet] + list(solveStates)
     rgenset = set(rgens)
+    idxOf = {str(st): i for i, st in enumerate(solveStates)}
+    stateT = []
+    for u in stateSolve:
+        pu = spy.Poly(spy.sympify(polys[idxOf[u]]), spy.Symbol(u))
+        c1, c0 = pu.nth(1).as_expr(), pu.nth(0).as_expr()
+        if (c1.free_symbols | c0.free_symbols) - rgenset:
+            return {'bad': 'state-solved balance %s holds a solve rate' % u}
+        stateT.append((u, _poly_terms(c1, rgens), _poly_terms(c0, rgens)))
+    rateRows = [i for i in range(len(solveStates)) if str(solveStates[i]) not in set(stateSolve)]
     coefT, constT = [], []
-    for i in range(len(solveStates)):
+    for i in rateRows:
         fexp = spy.sympify(polys[i]); row = []
         for r in rSyms:
             dexp = spy.diff(fexp, r)
@@ -2752,43 +2909,63 @@ def _forward_compile(model, stateNames, paramNames, forcings, solveRates):
             return {'bad': 'unsubstituted symbol in balance %s' % str(solveStates[i])}
         coefT.append(row); constT.append(_poly_terms(cexp, rgens))
     c = {'paramNames': [str(s) for s in paramSyms], 'solveStates': [str(s) for s in solveStates],
-         'rgens': [str(g) for g in rgens], 'coefT': coefT, 'constT': constT,
+         'rgens': [str(g) for g in rgens], 'coefT': coefT, 'constT': constT, 'stateT': stateT,
          'JxTerms': JxTerms, 'JtTerms': JtTerms, 'gens': [str(g) for g in gens0]}
     _forwardCache[key] = c
     return c
 
 
 def solveForwardModular(model, stateNames, paramNames, stateVals, paramVals, prime,
-                        forcings=None, solveRates=None, keepFree=None, backend='sympy'):
+                        forcings=None, solveRates=None, keepFree=None, backend='sympy',
+                        stateSolve=None):
     """Solve f = 0 over GF(prime) for a turnover subset of rates, given chosen resting
     `stateVals` and `paramVals` (residues; forcings held at 0). `solveRates` (one per
-    non-forcing state) is auto-picked avoiding `keepFree` if None. Returns the joint-mode
-    payload of the backward solve plus {'rates', 'solveRates'}, or {'ok': False, 'why'}."""
+    non-forcing state outside `stateSolve`) is auto-picked avoiding `keepFree` if None;
+    the balances in `stateSolve` are solved for their own state first. Returns the
+    joint-mode payload of the backward solve plus {'rates', 'solveRates', 'stateSolve'},
+    or {'ok': False, 'why'}."""
     _select_backend(backend)
     p = int(prime)
     model = _as_list(model); forcings = set(_as_list(forcings))
     stateNames = _as_list(stateNames); paramNames = _as_list(paramNames)
     svd = {str(k): int(v) % p for k, v in dict(stateVals).items()}
     pvd = {str(k): int(v) % p for k, v in dict(paramVals).items()}
+    stateSolve = [] if stateSolve is None else _as_list(stateSolve)
     if solveRates is None:
         (_ps, _ss, _polys, *_r) = _ss_compile(model, stateNames, paramNames, forcings)
         rhsByName = {str(_ss[i]): _polys[i] for i in range(len(_ss))}
-        solveRates = _forward_rate_pick(rhsByName, [str(s) for s in _ss], paramNames, forcings, keepFree=keepFree)
+        ssNames = [str(s) for s in _ss]
+        solveRates = _forward_rate_pick(rhsByName, ssNames, paramNames, forcings, keepFree=keepFree)
+        stateSolve = []
         if solveRates is None:
-            return {'ok': False, 'why': 'no complete forward rate matching'}
+            plan = _forward_plan(rhsByName, ssNames, paramNames, forcings, keepFree=keepFree)
+            if plan is None:
+                return {'ok': False, 'why': 'no complete forward rate matching'}
+            stateSolve, solveRates = plan
     solveRates = _as_list(solveRates)
-    c = _forward_compile(model, stateNames, paramNames, forcings, solveRates)
+    c = _forward_compile(model, stateNames, paramNames, forcings, solveRates, stateSolve)
     if 'bad' in c:
         return {'ok': False, 'why': c['bad']}
-    solveStates = c['solveStates']; nS = len(solveStates)
-    if len(solveRates) != nS:
-        return {'ok': False, 'why': 'rate/state count mismatch (%d rates, %d states)'
-                % (len(solveRates), nS)}
+    solveStates = c['solveStates']; nS = len(solveStates); nR = len(c['coefT'])
+    if len(solveRates) != nR:
+        return {'ok': False, 'why': 'rate/state count mismatch (%d rates, %d balances)'
+                % (len(solveRates), nR)}
     def cvfree(nm):
         return svd[nm] if nm in svd else (pvd[nm] if nm in pvd else 0)
+    rgIdx = {nm: k for k, nm in enumerate(c['rgens'])}
     rgv = [cvfree(nm) for nm in c['rgens']]
-    A = [[_eval_terms(c['coefT'][i][j], rgv, p) for j in range(len(solveRates))] for i in range(nS)]
-    b = [[(-_eval_terms(c['constT'][i], rgv, p)) % p] for i in range(nS)]
+    # state-solved balances first, each x = -c0/c1 at the values known so far
+    for u, c1T, c0T in c['stateT']:
+        c1 = _eval_terms(c1T, rgv, p)
+        if c1 == 0:
+            return {'ok': False, 'why': 'vanishing state pivot mod p at %s' % u}
+        xu = (-_eval_terms(c0T, rgv, p)) * pow(c1, p - 2, p) % p
+        if xu == 0:
+            return {'ok': False, 'why': 'zero resting state %s' % u}
+        svd[u] = xu
+        rgv[rgIdx[u]] = xu
+    A = [[_eval_terms(c['coefT'][i][j], rgv, p) for j in range(nR)] for i in range(nR)]
+    b = [[(-_eval_terms(c['constT'][i], rgv, p)) % p] for i in range(nR)]
     X = _solve_mod(A, b, p)
     if X is None:
         return {'ok': False, 'why': 'singular forward system mod p'}
@@ -2801,6 +2978,7 @@ def solveForwardModular(model, stateNames, paramNames, stateVals, paramVals, pri
     dfJt = {th: [_eval_terms(c['JtTerms'][th][i], ptvals, p) for i in range(nS)]
             for th in c['paramNames']}
     return {'ok': True, 'rates': ratesDict, 'solveRates': list(solveRates),
+            'stateSolve': list(stateSolve),
             'solveStates': list(solveStates), 'valBy': {s: cvfull(s) for s in solveStates},
             'dfJx': dfJx, 'dfJt': dfJt, 'dfStateCols': list(solveStates),
             'dfParamCols': list(c['paramNames'])}
@@ -4921,6 +5099,15 @@ def compileObservabilityTapeMulti(model, observation, conditionSubs, conditionIC
             'icLeaf': [-1] * nS, 'icNum': ['0'] * nS, 'icDen': ['1'] * nS,
             'modelLines': mLines,
             'obsLines': oLines,
+            # initial values, boundary events and start time, for verifyScalings()
+            'verIC': ['%s = %s' % (str(X), str(ic_c[str(X)])) for X in S if str(X) in ic_c],
+            'verEv': [{'var': str(e['var']), 'method': str(e['method']),
+                       'value': str(e['value'])} for e in evPer[c]],
+            'verT0': [{'var': str(e['var']), 'method': str(e['method']),
+                       'value': str(e['value'])} for e in
+                      (conditionT0Events[c] if conditionT0Events and
+                       c < len(conditionT0Events) else [])],
+            'verTime': '' if tmPer[c] is None else str(tmPer[c]),
         }
         if segEq[c] and jointSteadyState:
             # joint mode: each non-forcing state is an identity leaf that R seeds to
@@ -5307,6 +5494,630 @@ def _scaling_gens(rows, ncols, nz):
     return gens
 
 
+def _weighted_degree(e, w):
+    """Weighted degree of `e` with symbol weights `w` (name -> number, default 0), or None
+    when `e` is not weighted-homogeneous."""
+    if e.is_Number or e.is_NumberSymbol:
+        return 0
+    if e.is_Symbol:
+        return w.get(str(e), 0)
+    if e.is_Add:
+        ds = [_weighted_degree(a, w) for a in e.args]
+        return ds[0] if None not in ds and len(set(ds)) == 1 else None
+    if e.is_Mul:
+        tot = 0
+        for a in e.args:
+            d = _weighted_degree(a, w)
+            if d is None:
+                return None
+            tot += d
+        return tot
+    if e.is_Pow:
+        b, x = e.args
+        db = _weighted_degree(b, w)
+        if x.is_Number:
+            return None if db is None else db * x
+        return 0 if db == 0 and _weighted_degree(x, w) == 0 else None
+    if e.args:
+        return 0 if all(_weighted_degree(a, w) == 0 for a in e.args) else None
+    return None
+
+
+def verifyScalings(scalings, tapes):
+    """Exact check that each scaling (name -> weight) leaves every tape's model, observables,
+    initial values, events and start time invariant: a right-hand side has the weight of
+    its state, an observable weight 0, a replaced or added value the weight of its target,
+    a factor and a time weight 0. Returns one bool per scaling."""
+    lines = []
+    for t in tapes:
+        lines += _as_list(t.get('modelLines', [])) + _as_list(t.get('obsLines', []))
+        lines += _as_list(t.get('verIC', []))
+        lines += ['_ = %s' % e['value'] for e in _as_list(t.get('verEv', [])) +
+                  _as_list(t.get('verT0', []))]
+        if t.get('verTime'):
+            lines.append('_ = %s' % t['verTime'])
+    local, parse = _make_local_parse(lines)
+
+    def split(line):
+        lhs, rhs = _clean(line).split('=', 1)
+        return lhs.strip(), spy.sympify(parse(rhs))
+
+    checks = []                       # (expression, target: state name, None for 0)
+    for t in tapes:
+        for l in _as_list(t.get('modelLines', [])) + _as_list(t.get('verIC', [])):
+            if '=' in l:
+                x, e = split(l)
+                checks.append((e, x))
+        for l in _as_list(t.get('obsLines', [])):
+            if '=' in l:
+                checks.append((split(l)[1], None))
+        for ev in _as_list(t.get('verEv', [])) + _as_list(t.get('verT0', [])):
+            e = spy.sympify(parse(str(ev['value'])))
+            checks.append((e, None if str(ev['method']) == 'multiply' else str(ev['var'])))
+        if t.get('verTime'):
+            checks.append((spy.sympify(parse(t['verTime'])), None))
+    out = []
+    for sc in scalings:
+        w = {str(k): spy.Rational(str(v)) for k, v in dict(sc).items()}
+        ok = True
+        for e, target in checks:
+            if e == 0:                # zero has every weight
+                continue
+            d = _weighted_degree(e, w)
+            if d is None or d != (w.get(target, 0) if target else 0):
+                ok = False
+                if os.environ.get('DMOD_SYM_LIEDIAG'):
+                    print('[liediag] scaling fails at %s -> %s: degree %s' %
+                          (target, str(e)[:120], d), flush=True)
+                break
+        out.append(ok)
+    return out
+
+
+# ---- certificate for general directions: an invariant distribution ------------------
+# Fields X_j over (states, parameters) with X_j(h) = 0 and [F, X_j] in their span annihilate
+# every Lie derivative of h; the flow of F keeps the span. Checked at random points mod p.
+
+class _DistCheck:
+    """Rational expressions over the coordinates, evaluated exactly mod p."""
+
+    def __init__(self, lines):
+        self.local, self.parse = _make_local_parse(list(lines))
+        self.fns = {}
+
+    def expr(self, text):
+        return spy.sympify(self.parse(str(text)))
+
+    def value(self, e, syms, vals, p):
+        """e at the point vals (Fractions aligned with syms) mod p; None on a pole or a
+        non-rational value."""
+        key = (e, tuple(syms))
+        fn = self.fns.get(key)
+        if fn is None:
+            # decimals as exact rationals, rationals as Fraction: no float enters
+            ex = e.xreplace({x: spy.Rational(str(x)) for x in e.atoms(spy.Float)})
+            frac = spy.Function('Fraction')
+            ex = ex.xreplace({x: frac(x.p, x.q) for x in ex.atoms(spy.Rational)
+                              if not x.is_Integer})
+            fn = spy.lambdify(syms, ex, modules=[{'Fraction': Fraction}])
+            self.fns[key] = fn
+        try:
+            v = fn(*vals)
+        except ZeroDivisionError:
+            return None
+        if isinstance(v, int):
+            return v % p
+        if isinstance(v, Fraction):
+            if v.denominator % p == 0:
+                return None
+            return v.numerator % p * pow(v.denominator % p, p - 2, p) % p
+        return None
+
+
+def _rank_mod(rows, p):
+    """Rank of a list of rows (lists of ints) over GF(p)."""
+    m = [list(r) for r in rows]
+    rank, ncol = 0, (len(m[0]) if m else 0)
+    for c in range(ncol):
+        piv = next((i for i in range(rank, len(m)) if m[i][c] % p), None)
+        if piv is None:
+            continue
+        m[rank], m[piv] = m[piv], m[rank]
+        inv = pow(m[rank][c] % p, p - 2, p)
+        m[rank] = [x * inv % p for x in m[rank]]
+        for i in range(len(m)):
+            if i != rank and m[i][c] % p:
+                fct = m[i][c]
+                m[i] = [(a - fct * b) % p for a, b in zip(m[i], m[rank])]
+        rank += 1
+    return rank
+
+
+def _in_span(basis, v, p):
+    return _rank_mod(basis + [v], p) == _rank_mod(basis, p)
+
+
+def _coeffs(basis, v, p):
+    """Coefficients c with sum c_i basis_i = v over GF(p) for independent rows `basis`,
+    or None if v is not in their span."""
+    n = len(basis)
+    if n == 0:
+        return [] if not any(x % p for x in v) else None
+    m = len(v)
+    # columns: basis rows as unknowns; rows: coordinates
+    A = [[basis[k][r] % p for k in range(n)] + [v[r] % p] for r in range(m)]
+    piv, row = [], 0
+    for c in range(n):
+        pr = next((r for r in range(row, m) if A[r][c]), None)
+        if pr is None:
+            continue
+        A[row], A[pr] = A[pr], A[row]
+        inv = pow(A[row][c], p - 2, p)
+        A[row] = [x * inv % p for x in A[row]]
+        for r in range(m):
+            if r != row and A[r][c]:
+                fct = A[r][c]
+                A[r] = [(a - fct * b) % p for a, b in zip(A[r], A[row])]
+        piv.append(c)
+        row += 1
+    if any(A[r][n] for r in range(row, m)):
+        return None
+    c = [0] * n
+    for r, col in enumerate(piv):
+        c[col] = A[r][n]
+    return c
+
+
+def verifyDistribution(regimes, gens, events, lifts, p, npts=2, seed=1):
+    """Certificate that every direction of `lifts` lies in the kernel of all orders.
+
+    `regimes`: list of {'f': ["X = rhs"], 'g': ["y = h"]}; `gens[r]`: fields of regime r,
+    each a {coordinate: expression}; `lifts`: one per chain, {'regime': r, 'point':
+    {coordinate: int}, 'vectors': [{coordinate: int}], 'times': [expression]}, the start
+    state and the kernel directions lifted onto it; `events`: the joins between
+    consecutive segments in chain order, {'from', 'to', 'ev': [{var, method, value}],
+    'lift'}. Per chain the fields that the directions reach are closed under the
+    brackets with each regime's field and carried through the joins; (A) and (B) are
+    checked on them. Returns {'ok': bool, 'why': str}."""
+    p, npts = int(p), int(npts)
+    lines = []
+    for rg in regimes:
+        lines += list(_as_list(rg['f'])) + list(_as_list(rg['g']))
+    for gl in gens:
+        for gg in gl:
+            lines += ['_ = %s' % v for v in dict(gg).values()]
+    for ev in events:
+        lines += ['_ = %s' % e['value'] for e in _as_list(ev['ev'])]
+    ck = _DistCheck(lines)
+    rng = random.Random(seed)
+    states = []
+    for rg in regimes:
+        for l in _as_list(rg['f']):
+            nm = _clean(l).split('=', 1)[0].strip()
+            if nm not in states:
+                states.append(nm)
+    F, H = [], []
+    for rg in regimes:
+        rhs = {}
+        for l in _as_list(rg['f']):
+            lhs, e = _clean(l).split('=', 1)
+            rhs[lhs.strip()] = ck.expr(e)
+        F.append(rhs)
+        H.append([ck.expr(_clean(l).split('=', 1)[1]) for l in _as_list(rg['g'])])
+    Xm = [[{str(k): ck.expr(v) for k, v in dict(gg).items()} for gg in gl] for gl in gens]
+    syms = set()
+    for rhs in F:
+        for e in rhs.values():
+            syms |= e.free_symbols
+    for hs in H:
+        for e in hs:
+            syms |= e.free_symbols
+    for gl in Xm:
+        for gg in gl:
+            for e in gg.values():
+                syms |= e.free_symbols
+    for ev in events:
+        for e in _as_list(ev['ev']):
+            syms |= ck.expr(e['value']).free_symbols
+    for lf in lifts:
+        syms |= {spy.Symbol(str(k)) for k in dict(lf['point'])}
+        for v in _as_list(lf['vectors']):
+            syms |= {spy.Symbol(str(k)) for k in dict(v)}
+    coords = states + sorted({str(s) for s in syms} - set(states))
+    inModel = set()
+    for rhs in F:
+        for e in rhs.values():
+            inModel |= {str(x) for x in e.free_symbols}
+    for hs in H:
+        for e in hs:
+            inModel |= {str(x) for x in e.free_symbols}
+    free = [nm for nm in coords if nm not in states and nm not in inModel]
+    symList = [ck.local.get(nm, spy.Symbol(nm)) for nm in coords]
+    zero = spy.Integer(0)
+    U = [{nm: spy.Integer(1)} for nm in free]
+
+    def comp(field, nm):
+        return field.get(nm, zero)
+
+    def derivDir(e, field):
+        return sum((spy.diff(e, s) * comp(field, str(s)) for s in e.free_symbols
+                    if str(s) in field), zero)
+
+    def vec(exprs, vals):
+        out = []
+        for e in exprs:
+            v = ck.value(e, symList, vals, p)
+            if v is None:
+                return None
+            out.append(v)
+        return out
+
+    def fieldAt(x, vals):
+        return vec([comp(x, nm) for nm in coords], vals)
+
+    def randPoint():
+        return [Fraction(rng.randrange(2, p - 1)) for _ in coords]
+
+    bracketCache = {}
+
+    def bracket(r, j):
+        key = (r, j)
+        if key not in bracketCache:
+            x, Fr = Xm[r][j], {nm: F[r].get(nm, zero) for nm in states}
+            bracketCache[key] = [derivDir(comp(Fr, nm), x) - derivDir(comp(x, nm), Fr)
+                                 if nm in Fr else -derivDir(comp(x, nm), Fr)
+                                 for nm in coords]
+        return bracketCache[key]
+
+    def fieldsAt(r, vals):
+        """Values of the model fields of regime r and of the unit fields at a point."""
+        out = [fieldAt(x, vals) for x in Xm[r]]
+        if any(o is None for o in out):
+            return None
+        return out + [[1 if nm == u else 0 for nm in coords] for u in free]
+
+    def support(r, vals, v):
+        """Model fields of regime r in the decomposition of v at the point, or None."""
+        B = fieldsAt(r, vals)
+        if B is None:
+            return None
+        # an independent subset, model fields first
+        ind, rows = [], []
+        for k, b in enumerate(B):
+            if _rank_mod(rows + [b], p) > len(rows):
+                rows.append(b)
+                ind.append(k)
+        c = _coeffs(rows, v, p)
+        if c is None:
+            return None
+        nx = len(Xm[r])
+        return {ind[i] for i, ci in enumerate(c) if ci and ind[i] < nx}
+
+    def close(r, S):
+        """Close the field set S of regime r under brackets with F^(r); check (A), (B)."""
+        S, todo = set(S), list(S)
+        while todo:
+            j = todo.pop()
+            for _ in range(npts):
+                vals = randPoint()
+                a = vec([derivDir(h, Xm[r][j]) for h in H[r]], vals)
+                if a is None or any(a):
+                    return None, 'regime %d: a field changes the output' % (r + 1)
+                bv = vec(bracket(r, j), vals)
+                if bv is None:
+                    return None, 'regime %d: a bracket has a pole' % (r + 1)
+                sup = support(r, vals, bv)
+                if sup is None:
+                    return None, ('regime %d: the fields are not invariant under the '
+                                  'dynamics' % (r + 1))
+                for k in sup - S:
+                    S.add(k)
+                    todo.append(k)
+        return S, ''
+
+    def image(ev_list, vals, x):
+        """D E applied to the field or vector x at the point, and E of the point."""
+        valOf = dict(zip(coords, vals))
+        img = dict(valOf)
+        xd = dict(zip(coords, x))
+        for e in ev_list:
+            ve = ck.expr(e['value'])
+            v = ck.value(ve, symList, vals, p)
+            if v is None:
+                return None, None
+            dv = 0
+            for s_ in ve.free_symbols:
+                d = ck.value(spy.diff(ve, s_), symList, vals, p)
+                if d is None:
+                    return None, None
+                dv = (dv + d * x[coords.index(str(s_))]) % p if str(s_) in coords else dv
+            s0 = int(valOf[e['var']]) % p
+            img[e['var']] = Fraction({'replace': v, 'add': (s0 + v) % p,
+                                      'multiply': s0 * v % p}[e['method']])
+            xd[e['var']] = {'replace': dv, 'add': (xd[e['var']] + dv) % p,
+                            'multiply': (xd[e['var']] * v + s0 * dv) % p}[e['method']]
+        return [xd[nm] for nm in coords], [img[nm] for nm in coords]
+
+    joinsOf = {}
+    for ev in events:
+        if ev.get('lift') is not None:
+            joinsOf.setdefault(int(ev['lift']), []).append(ev)
+
+    for li, lf in enumerate(lifts):
+        r = int(lf['regime'])
+        pt = {str(k): int(v) for k, v in dict(lf['point']).items()}
+        vals0 = [Fraction(pt.get(nm, 0)) for nm in coords]
+        taus = [ck.expr(t) for t in _as_list(lf.get('times', []))]
+        vecs = [{str(k): int(x) % p for k, x in dict(v).items()}
+                for v in _as_list(lf['vectors'])]
+        # (D) the lifted directions in the span at the start, and the fields they reach
+        S = set()
+        for vd in vecs:
+            sup = support(r, vals0, [vd.get(nm, 0) for nm in coords])
+            if sup is None:
+                return {'ok': False, 'why': 'a kernel direction is not in the span of the fields'}
+            S |= sup
+            for tau in taus:
+                dv = [ck.value(spy.diff(tau, s_), symList, vals0, p) for s_ in tau.free_symbols]
+                if any(x is None for x in dv) or sum(
+                        x * vd.get(str(sy), 0) for x, sy in zip(dv, tau.free_symbols)) % p:
+                    return {'ok': False, 'why': 'a kernel direction moves an event time'}
+        S, why = close(r, S)
+        if S is None:
+            return {'ok': False, 'why': why}
+        us = [[vd.get(nm, 0) if nm in free else 0 for nm in coords] for vd in vecs]
+        # (C) the joins of the chain in order
+        for ev in joinsOf.get(li, []):
+            r2 = int(ev['to'])
+            evs = _as_list(ev['ev'])
+            S2 = set()
+            for _ in range(npts):
+                vals = randPoint()
+                items = [fieldAt(Xm[r][j], vals) for j in S] + us
+                for x in items:
+                    if x is None:
+                        return {'ok': False, 'why': 'a field has a pole before an event'}
+                    xi, zi = image(evs, vals, x)
+                    if xi is None:
+                        return {'ok': False, 'why': 'an event value has a pole'}
+                    sup = support(r2, zi, xi)
+                    if sup is None:
+                        return {'ok': False, 'why': 'an event leaves the span of the fields'}
+                    S2 |= sup
+            S, why = close(r2, S2)
+            if S is None:
+                return {'ok': False, 'why': why}
+            r = r2
+    return {'ok': True, 'why': ''}
+
+
+def extendFields(fields, icLines, eventGroups, states):
+    """Components of each field on the parameters that are the value of an initial value
+    or an event, from compatibility with that map. `eventGroups` holds the events of one
+    time each, applied together as E. x0 = X gives eta_X = eta_x(x0); an event x -> x + v,
+    v, x v on a state s gives eta_v = eta_s(E x) - eta_s(x), eta_s(E x),
+    (eta_s(E x) - v eta_s(x)) / x_s. A component that depends on the states means no
+    extension, and the field is dropped. Returns the extended fields."""
+    icLines = _as_list(icLines)
+    groups = [_as_list(g) for g in _as_list(eventGroups)]
+    lines = list(icLines) + ['_ = %s' % e['value'] for g in groups for e in g]
+    for fld in _as_list(fields):
+        lines += ['_ = %s' % v for v in dict(fld).values()]
+    local, parse = _make_local_parse(lines + ['_ = %s' % st for st in _as_list(states)])
+    stateSet = set(_as_list(states))
+    sym = lambda nm: local.get(nm, spy.Symbol(nm))
+    stateSyms = {sym(nm) for nm in stateSet}
+    out = []
+    for fld in _as_list(fields):
+        eta = {str(k): spy.sympify(parse(str(v))) for k, v in dict(fld).items()}
+        ext = {}
+        for l in icLines:
+            lhs, rhs = _clean(l).split('=', 1)
+            x, e = lhs.strip(), spy.sympify(parse(rhs))
+            if e.is_Symbol and str(e) not in stateSet:
+                ext[str(e)] = eta.get(x, spy.Integer(0)).subs(sym(x), e)
+        for g in groups:
+            vals = {str(ev['var']): spy.sympify(parse(str(ev['value']))) for ev in g}
+            E = {}
+            for ev in g:
+                s_, v = str(ev['var']), vals[str(ev['var'])]
+                xs = sym(s_)
+                E[xs] = {'add': xs + v, 'replace': v, 'multiply': xs * v}[ev['method']]
+            for ev in g:
+                s_, v = str(ev['var']), vals[str(ev['var'])]
+                if not (v.is_Symbol and str(v) not in stateSet):
+                    continue
+                xs = sym(s_)
+                es = eta.get(s_, spy.Integer(0))
+                eE = es.xreplace(E) if E else es
+                ext[str(v)] = {'add': eE - es, 'replace': eE,
+                               'multiply': (eE - v * es) / xs}[ev['method']]
+        ok = True
+        for k, val in ext.items():
+            val = spy.simplify(val)
+            if val.free_symbols & stateSyms:
+                ok = False
+                break
+            if val != 0:
+                eta[k] = val
+        if ok:
+            out.append({k: str(v) for k, v in eta.items()})
+    return out
+
+
+def _ser_mul(a, b, p, T):
+    out = [0] * (T + 1)
+    for i, x in enumerate(a):
+        if x:
+            for j in range(T + 1 - i):
+                if b[j]:
+                    out[i + j] = (out[i + j] + x * b[j]) % p
+    return out
+
+
+def _ser_inv(a, p, T):
+    """Inverse of a truncated power series with a unit constant term, or None."""
+    if a[0] % p == 0:
+        return None
+    b = [0] * (T + 1)
+    b[0] = pow(a[0] % p, p - 2, p)
+    for k in range(1, T + 1):
+        acc = sum(a[i] * b[k - i] for i in range(1, k + 1)) % p
+        b[k] = (-acc) * b[0] % p
+    return b
+
+
+def _ser_terms(terms, gser, p, T, pw):
+    """A term list at series values of the generators, truncated at eps^T; `pw` caches
+    the powers of each generator."""
+    out = [0] * (T + 1)
+    for expo, (cn, cd) in terms:
+        c = cn % p * pow(cd % p, p - 2, p) % p
+        if not c:
+            continue
+        acc = [c] + [0] * T
+        for g, e in enumerate(expo):
+            if e:
+                key = (g, e)
+                if key not in pw:
+                    s_ = [1] + [0] * T
+                    for _ in range(e):
+                        s_ = _ser_mul(s_, gser[g], p, T)
+                    pw[key] = s_
+                acc = _ser_mul(acc, pw[key], p, T)
+        out = [(x + y) % p for x, y in zip(out, acc)]
+    return out
+
+
+def _ser_value(numden, gser, p, T, pw):
+    num = _ser_terms(numden[0], gser, p, T, pw)
+    den = _ser_terms(numden[1], gser, p, T, pw)
+    if den == [1] + [0] * T:
+        return num
+    inv = _ser_inv(den, p, T)
+    return None if inv is None else _ser_mul(num, inv, p, T)
+
+
+_contCache = {}
+
+
+def continueRestingState(model, stateNames, paramNames, paramVals, dirs, restVals, prime,
+                         order, forcings=None):
+    """Resting state of `model` as a power series in eps along the parameters
+    paramVals + eps dirs, continued from restVals, a resting state at eps = 0, by
+    Newton steps: x_k = -J0^-1 [eps^k] f(x_<k). Returns {'ok', 'valBy': {state:
+    [x_0, ..., x_T]}, 'dfJx': [[series]], 'dfJt': {param: [series per balance]},
+    'dfStateCols', 'dfParamCols'} or {'ok': False, 'why'}."""
+    p, T = int(prime), int(order)
+    model = _as_list(model)
+    forcings = set(_as_list(forcings))
+    stateNames = _as_list(stateNames)
+    paramNames = _as_list(paramNames)
+    (paramSyms, solveStates, polys, Jx, Jt, gens, JxTerms, JtTerms, polyBi, genLin,
+     linTerms, pointPlan) = _ss_compile(model, stateNames, paramNames, forcings)
+    key = (tuple(model), tuple(stateNames), tuple(paramNames), tuple(sorted(forcings)))
+    cached = _contCache.get(key)
+    if cached is None:
+        fT = [_poly_terms(pl, gens) for pl in polys]
+        # Newton linearises the cleared numerators, not f
+        JnT = [[_poly_terms(spy.diff(pl, s_), gens) for s_ in solveStates] for pl in polys]
+        cached = (fT, JnT)
+        _contCache[key] = cached
+    fT, JnT = cached
+    pv = {str(k): int(v) % p for k, v in dict(paramVals).items()}
+    dv = {str(k): int(v) % p for k, v in dict(dirs).items()}
+    rv = {str(k): int(v) % p for k, v in dict(restVals).items()}
+    nS = len(solveStates)
+    pser = [[pv.get(str(th), 0)] + [dv.get(str(th), 0)] + [0] * (T - 1) if T >= 1
+            else [pv.get(str(th), 0)] for th in paramSyms]
+    xser = [[rv.get(str(s_), 0)] + [0] * T for s_ in solveStates]
+
+    def f_series():
+        pw = {}
+        out = []
+        for t in fT:
+            v = _ser_value(t, pser + xser, p, T, pw)
+            if v is None:
+                return None
+            out.append(v)
+        return out
+
+    f0 = f_series()
+    if f0 is None or any(v[0] for v in f0):
+        return {'ok': False, 'why': 'the start is not a resting state at eps = 0'}
+    g0 = [pv.get(str(th), 0) for th in paramSyms] + [rv.get(str(s_), 0) for s_ in solveStates]
+    J0 = [[_eval_terms(JnT[i][j], g0, p) for j in range(nS)] for i in range(nS)]
+    for k in range(1, T + 1):
+        fs = f_series()
+        if fs is None:
+            return {'ok': False, 'why': 'a pole along the continuation'}
+        X = _solve_mod(J0, [[(-fs[i][k]) % p] for i in range(nS)], p)
+        if X is None:
+            return {'ok': False, 'why': 'a singular resting Jacobian'}
+        for i in range(nS):
+            xser[i][k] = X[i][0] % p
+    pw = {}
+    gser = pser + xser
+
+    def ser_of(terms):
+        v = _ser_value(terms, gser, p, T, pw)
+        return v if v is not None else [0] * (T + 1)
+
+    dfJx = [[ser_of(JxTerms[i][j]) for j in range(nS)] for i in range(nS)]
+    dfJt = {str(th): [ser_of(JtTerms[str(th)][i]) for i in range(nS)] for th in paramSyms}
+    return {'ok': True, 'valBy': {str(solveStates[i]): xser[i] for i in range(nS)},
+            'dfJx': dfJx, 'dfJt': dfJt,
+            'dfStateCols': [str(x) for x in solveStates],
+            'dfParamCols': [str(x) for x in paramSyms]}
+
+
+def liftStart(icLines, t0events, point, vector, p, joint=False):
+    """Start state of a chain and a direction lifted onto it: the initial values `icLines`
+    ("X = e", unless `joint`, where the resting state and its direction are in `point`
+    and `vector`), then the t0 events. Returns {'point', 'vector'} over states and
+    parameters, or None on a pole."""
+    p = int(p)
+    icLines = _as_list(icLines)
+    evs = _as_list(t0events)
+    ck = _DistCheck(icLines + ['_ = %s' % e['value'] for e in evs] +
+                    ['_ = %s' % k for k in dict(point)])
+    pt = {str(k): int(v) % p for k, v in dict(point).items()}
+    vv = {str(k): int(v) % p for k, v in dict(vector).items()}
+    names = sorted(pt)
+    syms = [ck.local.get(n, spy.Symbol(n)) for n in names]
+    vals = [Fraction(pt[n]) for n in names]
+
+    def val_and_dir(e):
+        v = ck.value(e, syms, vals, p)
+        dv = 0
+        for s in e.free_symbols:
+            d = ck.value(spy.diff(e, s), syms, vals, p)
+            if d is None:
+                return None, None
+            dv = (dv + d * vv.get(str(s), 0)) % p
+        return v, dv
+
+    if not joint:
+        for l in icLines:
+            lhs, e = _clean(l).split('=', 1)
+            x, dx = val_and_dir(ck.expr(e))
+            if x is None:
+                return None
+            pt[lhs.strip()], vv[lhs.strip()] = x, dx
+    for e in evs:
+        v, dv = val_and_dir(ck.expr(e['value']))
+        if v is None:
+            return None
+        s0, d0 = pt.get(e['var'], 0), vv.get(e['var'], 0)
+        if e['method'] == 'replace':
+            pt[e['var']], vv[e['var']] = v, dv
+        elif e['method'] == 'add':
+            pt[e['var']], vv[e['var']] = (s0 + v) % p, (d0 + dv) % p
+        else:
+            pt[e['var']], vv[e['var']] = s0 * v % p, (d0 * v + s0 * dv) % p
+    return {'point': pt, 'vector': vv}
+
+
 def _scaling_nonid(gens, znames, nz):
     """Scaling entries (support, integer vector, type) from generators."""
     nonId = []
@@ -5401,13 +6212,17 @@ def scalingSymmetries(allVariables, diffEquations, obsFunctions, m, params,
 
 
 def scalingSymmetriesMulti(perCondModel, perCondObs, inputs=None, fixed=None,
-                           recast=None, logs=False):
+                           recast=None, logs=False, extraModel=None, extraObs=None):
     """Scaling symmetries common to every condition: the integer kernel of all
     conditions' monomial-exponent rows stacked over a shared weight space (own
     intermediate columns each), i.e. the intersection of the per-condition lattices.
-    Coordinates are states plus parameters; `inputs` and `fixed` do not scale."""
+    Coordinates are states plus parameters; `inputs` and `fixed` do not scale.
+    `extraModel` ("X = e", e of the weight of state X) and `extraObs` ("_ = e", e of
+    weight 0) add constraints per condition, such as initial values and events."""
     perCondModel = [_as_list(m) for m in perCondModel]
     perCondObs = [_as_list(o) for o in perCondObs]
+    extraModel = [_as_list(m) for m in (extraModel or [[] for _ in perCondModel])]
+    extraObs = [_as_list(o) for o in (extraObs or [[] for _ in perCondModel])]
     inputset = set(_as_list(inputs))
     fixedset = set(_as_list(fixed))
     K = len(perCondModel)
@@ -5415,7 +6230,8 @@ def scalingSymmetriesMulti(perCondModel, perCondObs, inputs=None, fixed=None,
         return {'method': 'scaling', 'count': 0, 'nonIdentifiable': [],
                 'coordinates': []}
 
-    all_lines = [l for lines in perCondModel + perCondObs for l in lines]
+    all_lines = [l for lines in perCondModel + perCondObs + extraModel + extraObs
+                 for l in lines]
     local, parse = _make_local_parse(all_lines)
 
     stateNames = [_clean(l).split('=', 1)[0].strip() for l in perCondModel[0]]
@@ -5433,6 +6249,20 @@ def scalingSymmetriesMulti(perCondModel, perCondObs, inputs=None, fixed=None,
         perG.append(g)
         for e in f + g:
             paramset |= set(spy.sympify(e).free_symbols)
+    perXF, perXG = [], []
+    for c in range(K):
+        xf = []
+        for l in extraModel[c]:
+            lhs, expr = _clean(l).split('=', 1)
+            if lhs.strip() in stateNames:
+                e = spy.sympify(parse(expr))
+                xf.append((stateNames.index(lhs.strip()), e))
+                paramset |= set(e.free_symbols)
+        xg = [spy.sympify(parse(_clean(l).split('=', 1)[1])) for l in extraObs[c]]
+        for e in xg:
+            paramset |= set(e.free_symbols)
+        perXF.append(xf)
+        perXG.append(xg)
 
     paramset -= set(stateSyms)
     paramset -= {local.get(nm, spy.Symbol(nm)) for nm in inputset}
@@ -5457,6 +6287,19 @@ def scalingSymmetriesMulti(perCondModel, perCondObs, inputs=None, fixed=None,
         rows.extend(sparse)
         interOffset += ninter
         skipped += sk
+        for i, e in perXF[c]:
+            fx = [spy.Integer(0)] * m
+            fx[i] = e
+            sparse, ninter, sk = _scaling_rows(fx, [], m, zvars, interOffset, logs, seen)
+            rows.extend(sparse)
+            interOffset += ninter
+            skipped += sk
+        if perXG[c]:
+            sparse, ninter, sk = _scaling_rows([spy.Integer(0)] * m, perXG[c], m, zvars,
+                                               interOffset, logs, seen)
+            rows.extend(sparse)
+            interOffset += ninter
+            skipped += sk
     if skipped:
         print('scalingSymmetriesMulti: %d non-polynomial term(s) skipped '
               '(a scaling they would forbid may be over-reported)' % skipped)

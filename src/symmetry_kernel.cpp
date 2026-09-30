@@ -11,6 +11,7 @@
 #include <vector>
 #include <string>
 #include <cstdint>
+#include <cstdlib>
 #include <algorithm>
 #include <map>
 #include <utility>
@@ -278,43 +279,85 @@ inline void ser_inv(u64* B, const u64* A, int n, u64 p) {
 
 // In place: the first `rank` rows of A become the echelon rows. Columns with
 // mask[c] == 0 are ignored.
+// `carry` updates the columns outside the mask as well. `prec` is each row's precision
+// (all N when absent); a reduced row is exact to min(prec_i, prec_r), ties in valuation
+// go to the more precise pivot. `cprec` receives the precision in the carried columns.
 int rref_series_mod(std::vector<std::vector<u64> >& A, int nz, int N, u64 p,
-                    const std::vector<char>& mask) {
+                    const std::vector<char>& mask, int threads = 1, bool carry = false,
+                    std::vector<int>* prec = nullptr, std::vector<int>* cprec = nullptr) {
   int nr = (int)A.size(), r = 0;
-  std::vector<char> used(nz, 0);
+  std::vector<char> used(nz, 0), piv(nz, 0);
   for (int c = 0; c < nz; ++c) if (!mask[c]) used[c] = 1;
-  std::vector<u64> uinv(N), q(N);
+  std::vector<int> P0, C0;
+  if (!prec) { P0.assign(nr, N); prec = &P0; }
+  if (!cprec) { C0.assign(nr, N); cprec = &C0; } else cprec->assign(prec->begin(), prec->end());
+  std::vector<int>& P = *prec;
+  std::vector<int>& CP = *cprec;
+  std::vector<u64> uinv(N);
+  std::vector<size_t> nzc;
+  auto swapRows = [&](int i, int j) {
+    std::swap(A[i], A[j]); std::swap(P[i], P[j]); std::swap(CP[i], CP[j]); };
   while (r < nr) {
     int bi = -1, bc = -1, bv = N;
-    for (int i = r; i < nr && bv > 0; ++i)
-      for (int c = 0; c < nz; ++c) {
+    // a row with no entry left in the eligible columns moves behind the active block
+    for (int i = r; i < nr && !(bv == 0 && P[bi] == N); ) {
+      int rv = P[i], rc = -1;
+      for (int c = 0; c < nz && rv > 0; ++c) {
         if (used[c]) continue;
-        int v = ser_val(A[i].data() + (size_t)c * N, bv);
-        if (v < bv) { bv = v; bi = i; bc = c; if (bv == 0) break; }
+        int v = ser_val(A[i].data() + (size_t)c * N, rv);
+        if (v < rv) { rv = v; rc = c; }
       }
+      if (rc < 0) { swapRows(i, nr - 1); --nr; continue; }
+      if (rv < bv || (rv == bv && P[i] > P[bi])) { bv = rv; bi = i; bc = rc; }
+      ++i;
+    }
     if (bi < 0) break;
-    std::swap(A[r], A[bi]);
-    int n = N - bv;
+    swapRows(r, bi);
+    int n = P[r] - bv;
     ser_inv(uinv.data(), A[r].data() + (size_t)bc * N + bv, n, p);
+    // below the pivot, used columns are zero and column bc becomes zero
+    nzc.clear();
+    for (int c = 0; c < nz; ++c) {
+      if (c == bc || piv[c] || (used[c] && !carry)) continue;
+      if (ser_val(A[r].data() + (size_t)c * N, N) < N) nzc.push_back((size_t)c * N);
+    }
+    const u64* pr = A[r].data();
+    const size_t off = (size_t)bc * N;
+    const int Pr = P[r], CPr = CP[r];
+    #pragma omp parallel for num_threads(threads > 0 ? threads : 1) schedule(dynamic, 8)
     for (int i = r + 1; i < nr; ++i) {
-      const u64* b = A[i].data() + (size_t)bc * N;
-      if (ser_val(b, N) == N) continue;
-      for (int d = 0; d < n; ++d) {
+      u64* row = A[i].data();
+      const u64* b = row + off;
+      if (ser_val(b, P[i]) >= P[i]) continue;
+      int Pn = std::min(P[i], Pr), nq = Pn - bv;
+      std::vector<u64> q(nq > 0 ? nq : 0);
+      for (int d = 0; d < nq; ++d) {
         u64 s = 0;
         for (int j = 0; j <= d; ++j) s = addmod(s, mulmod(b[bv + j], uinv[d - j], p), p);
         q[d] = s;
       }
-      for (int c = 0; c < nz; ++c) {
-        const u64* rc = A[r].data() + (size_t)c * N;
-        u64* ic = A[i].data() + (size_t)c * N;
-        for (int d = bv; d < N; ++d) {
+      int qn = nq;
+      while (qn > 0 && !q[qn - 1]) --qn;
+      for (size_t k = 0; k < nzc.size(); ++k) {
+        const u64* rc = pr + nzc[k];
+        u64* ic = row + nzc[k];
+        for (int d = 0; d < N; ++d) {
           if (!rc[d]) continue;
-          for (int e = 0; d + e < N; ++e)
+          for (int e = 0; e < qn && d + e < N; ++e)
             if (q[e]) ic[d + e] = submod(ic[d + e], mulmod(q[e], rc[d], p), p);
         }
       }
+      std::fill(row + off, row + off + N, (u64)0);
+      int CPn = std::min(CP[i], std::min(CPr, nq));
+      // coefficients past the precision are unknown: zero them
+      if (Pn < N || CPn < N)
+        for (int c = 0; c < nz; ++c) {
+          int lim = (used[c] && !piv[c]) ? CPn : Pn;
+          if (lim < N) std::fill(row + (size_t)c * N + std::max(lim, 0), row + (size_t)(c + 1) * N, (u64)0);
+        }
+      P[i] = Pn; CP[i] = CPn;
     }
-    used[bc] = 1;
+    used[bc] = 1; piv[bc] = 1;
     ++r;
   }
   return r;
@@ -453,7 +496,7 @@ void annihilator_rows(const std::vector<std::vector<u64> >& K, int nz, u64 p,
 // series row, monomial mu contributing lineC^mu at eps^|mu|.
 void rows_to_line(const std::vector<std::vector<u64> >& rows, size_t from,
                   const PolyBasis& pb, const std::vector<u64>& lineC, int nz, int N,
-                  u64 p, std::vector<std::vector<u64> >& srows) {
+                  u64 p, std::vector<std::vector<u64> >& srows, bool keepZero = false) {
   int nM = pb.nMono;
   std::vector<u64> coef(nM, 1);
   std::vector<int> deg(nM, 0);
@@ -476,7 +519,7 @@ void rows_to_line(const std::vector<std::vector<u64> >& rows, size_t from,
         any = true;
       }
     }
-    if (any) srows.push_back(s);
+    if (any || keepZero) srows.push_back(s);
   }
 }
 
@@ -896,6 +939,28 @@ SegRaw extract_seg_raw(List seg, int nStates, int w, u64 p) {
   return s;
 }
 
+// A straight-line tape (CONST/ADD/MUL/INV) evaluated on polyseries blocks at time order
+// 0: V holds one block per slot, leaves [0, nLeaves) filled. False on a zero reciprocal.
+bool eval_tape_poly(std::vector<std::vector<u64> >& V, const std::vector<int>& op,
+                    const std::vector<int>& a, const std::vector<int>& b,
+                    const std::vector<u64>& cval, int nLeaves, const PolyBasis& pb,
+                    u64 p) {
+  size_t blk = (size_t)pb.nMono * pb.w;
+  for (size_t i = 0; i < op.size(); ++i) {
+    u64* o = V[nLeaves + i].data();
+    std::fill(o, o + blk, (u64)0);
+    switch (op[i]) {
+      case OP_CONST: o[0] = cval[i]; break;
+      case OP_ADD:
+        for (size_t c = 0; c < blk; ++c) o[c] = addmod(V[a[i]][c], V[b[i]][c], p);
+        break;
+      case OP_MUL: poly_mul_acc(o, V[a[i]].data(), V[b[i]].data(), pb, p); break;
+      default: if (!poly_inv(o, V[a[i]].data(), pb, p)) return false;
+    }
+  }
+  return true;
+}
+
 // Build one condition's chain (all segments) at a single point/prime, propagating
 // the state across each gap as a formal power series and applying state-dose
 // events on the carry. leafPt holds the leaf residues; the z-leaves seed a dual
@@ -904,10 +969,17 @@ bool build_one_chain(const std::vector<SegRaw>& segs, int nLeaves, int nStates,
                      int nz, int w, const std::vector<int>& dualCol,
                      const std::vector<int>& leafPt, int Nt, int Mtot, u64 p,
                      std::vector<std::vector<u64> >& rows,
-                     std::vector<std::vector<u64> >& srows) {
+                     std::vector<std::vector<u64> >& srows,
+                     const std::vector<std::vector<u64> >* ser = nullptr,
+                     const std::vector<int>* lane = nullptr,
+                     const std::vector<char>* movesIn = nullptr) {
   int instrBase = nLeaves + nStates;
   int nSeg = (int)segs.size();
   int K = nSeg - 1; if (K < 1) K = 1;
+  // a continuation series in the leaves (coefficients of eps^1..eps^T) on one more axis,
+  // read on the line with coefficient 1
+  int serAxis = -1;
+  if (ser) { serAxis = K; K += 1; }
   PolyBasis pb(K, Mtot, w);
   int nM = pb.nMono, blk = nM * w;
 
@@ -916,6 +988,14 @@ bool build_one_chain(const std::vector<SegRaw>& segs, int nLeaves, int nStates,
     i128 pv = (i128)leafPt[L] % (i128)p; if (pv < 0) pv += p;
     leafVal[L][0] = (u64)pv;
     if (dualCol[L] >= 0) leafVal[L][1 + dualCol[L]] = 1;
+  }
+  if (ser) {
+    std::vector<int> mu(K, 0);
+    for (int L = 0; L < nLeaves; ++L)
+      for (int j = 1; j <= (int)(*ser)[L].size() && j <= Mtot; ++j) {
+        mu[serAxis] = j;
+        leafVal[L][(size_t)pb.slotOf.at(mu) * w] = (*ser)[L][j - 1] % p;
+      }
   }
 
   // each segment's left boundary time with its duals; the gaps between them set the
@@ -933,6 +1013,8 @@ bool build_one_chain(const std::vector<SegRaw>& segs, int nLeaves, int nStates,
     tau[sj] = tmVal[sg.tmOut[0]];
     for (int c = 1; c < w; ++c) if (tau[sj][c]) moves[sj] = 1;
   }
+  // with a column block, which boundaries move is decided over all columns
+  if (movesIn) moves = *movesIn;
   bool anyMoves = false;
   for (int sj = 0; sj < nSeg; ++sj) if (moves[sj]) anyMoves = true;
   std::vector<u64> lineC(K, 1);
@@ -957,7 +1039,12 @@ bool build_one_chain(const std::vector<SegRaw>& segs, int nLeaves, int nStates,
 
     std::vector<std::vector<u64> > icVal;
     bool useIcTape = (sj == 0) && !seg.hasIcSeed && seg.hasIcTape;
-    if (useIcTape) {
+    if (useIcTape && ser) {
+      icVal.assign(nLeaves + seg.icOp.size(), std::vector<u64>(blk, 0));
+      for (int L = 0; L < nLeaves; ++L) icVal[L] = leafVal[L];
+      if (!eval_tape_poly(icVal, seg.icOp, seg.icA, seg.icB, seg.icCval, nLeaves, pb, p))
+        return false;
+    } else if (useIcTape) {
       int nIc = (int)seg.icOp.size();
       icVal.assign(nLeaves + nIc, std::vector<u64>(w, 0));
       for (int L = 0; L < nLeaves; ++L)
@@ -968,11 +1055,12 @@ bool build_one_chain(const std::vector<SegRaw>& segs, int nLeaves, int nStates,
     for (int i = 0; i < nStates; ++i) {
       u64* st = val[nLeaves + i].data();
       if (sj == 0 && seg.hasIcSeed) {
-        for (int c = 0; c < w; ++c) st[c] = seg.icSeed[i][c];
+        st[0] = seg.icSeed[i][0];
+        for (int c = 1; c < w; ++c) st[c] = seg.icSeed[i][lane ? 1 + (*lane)[c - 1] : c];
       } else if (useIcTape) {
         const std::vector<u64>& s = seg.icOut[i] < nLeaves ? leafVal[seg.icOut[i]]
                                                            : icVal[seg.icOut[i]];
-        for (int c = 0; c < w; ++c) st[c] = s[c];
+        for (int c = 0; c < (ser ? blk : w); ++c) st[c] = s[c];
       } else {
         for (int c = 0; c < blk; ++c) st[c] = carry[i][c];
       }
@@ -982,7 +1070,7 @@ bool build_one_chain(const std::vector<SegRaw>& segs, int nLeaves, int nStates,
                              seg.stateSlots, seg.fOut, seg.gOut, pb, Nrun, Nt, p, rows,
                              moves[sj] ? tau[sj].data() + 1 : nullptr))
       return false;
-    rows_to_line(rows, from, pb, lineC, nz, Mtot + 1, p, srows);
+    rows_to_line(rows, from, pb, lineC, nz, Mtot + 1, p, srows, lane != nullptr);
     // where the output is not analytic across a moving boundary, the boundary time is
     // itself read off the output: its gradient joins the rows
     if (sj > 0 && moves[sj]) {
@@ -1050,7 +1138,26 @@ bool build_one_chain(const std::vector<SegRaw>& segs, int nLeaves, int nStates,
         for (size_t gi = 0; gi < seg.gOut.size(); ++gi) leftJet[gi] = valL[seg.gOut[gi]];
       }
       const SegRaw& nxt = segs[sj + 1];
-      if (nxt.hasEv) {
+      if (nxt.hasEv && ser) {
+        std::vector<std::vector<u64> > evVal(nLeaves + nxt.evOp.size(),
+                                             std::vector<u64>(blk, 0));
+        for (int L = 0; L < nLeaves; ++L) evVal[L] = leafVal[L];
+        if (!eval_tape_poly(evVal, nxt.evOp, nxt.evA, nxt.evB, nxt.evCval, nLeaves, pb, p))
+          return false;
+        for (int e = 0; e < (int)nxt.evVarIdx.size(); ++e) {
+          int s = nxt.evVarIdx[e], meth = nxt.evMethod[e];
+          const std::vector<u64>& vv = evVal[nxt.evOut[e]];
+          if (meth == 0) {
+            carry[s] = vv;
+          } else if (meth == 1) {
+            for (int c = 0; c < blk; ++c) carry[s][c] = addmod(carry[s][c], vv[c], p);
+          } else {
+            std::vector<u64> scaled(blk, 0);
+            poly_mul_acc(scaled.data(), carry[s].data(), vv.data(), pb, p);
+            carry[s] = scaled;
+          }
+        }
+      } else if (nxt.hasEv) {
         int nEv = (int)nxt.evOp.size();
         std::vector<std::vector<u64> > evVal(nLeaves + nEv, std::vector<u64>(w, 0));
         for (int L = 0; L < nLeaves; ++L)
@@ -1077,6 +1184,110 @@ bool build_one_chain(const std::vector<SegRaw>& segs, int nLeaves, int nStates,
         }
       }
     }
+  }
+  return true;
+}
+
+// Which segment boundaries move with the coordinates: the duals of each segment's start
+// time over all columns.
+bool chain_moves(const std::vector<SegRaw>& segs, int nLeaves, int w,
+                 const std::vector<int>& dualCol, const std::vector<int>& leafPt, u64 p,
+                 std::vector<char>& moves) {
+  int nSeg = (int)segs.size();
+  moves.assign(nSeg, 0);
+  for (int sj = 0; sj < nSeg; ++sj) {
+    const SegRaw& sg = segs[sj];
+    if (!sg.hasTm) continue;
+    std::vector<std::vector<u64> > tmVal(nLeaves + sg.tmOp.size(), std::vector<u64>(w, 0));
+    for (int L = 0; L < nLeaves; ++L) {
+      i128 pv = (i128)leafPt[L] % (i128)p; if (pv < 0) pv += p;
+      tmVal[L][0] = (u64)pv;
+      if (dualCol[L] >= 0) tmVal[L][1 + dualCol[L]] = 1;
+    }
+    if (!eval_ic_order0(tmVal, sg.tmOp, sg.tmA, sg.tmB, sg.tmCval, nLeaves, w, p))
+      return false;
+    const std::vector<u64>& t = tmVal[sg.tmOut[0]];
+    for (int c = 1; c < w; ++c) if (t[c]) moves[sj] = 1;
+  }
+  return true;
+}
+
+// Columns per block so that one block's Taylor values stay within `budget` bytes.
+int chain_block_size(const std::vector<SegRaw>& segs, int nLeaves, int nStates, int nz,
+                     int Nt, int Mtot, bool hasSer, double budget) {
+  size_t Sn = 0;
+  for (const SegRaw& sg : segs) Sn = std::max(Sn, (size_t)(nLeaves + nStates) + sg.op.size());
+  int K = std::max(1, (int)segs.size() - 1) + (hasSer ? 1 : 0);
+  double nMono = 1;                                    // binomial(K + Mtot, Mtot)
+  for (int i = 1; i <= Mtot; ++i) nMono = nMono * (K + i) / i;
+  double perLane = (double)Sn * (std::max(Nt, Mtot) + 2) * nMono * 8.0;
+  int B = (int)(budget / perLane) - 1;
+  return std::max(2, std::min(nz, B));
+}
+
+// Taylor values per column block, bytes; DMOD_SYM_BLOCKMB overrides (MB)
+double chain_block_bytes() {
+  const char* e = std::getenv("DMOD_SYM_BLOCKMB");
+  return (e && *e) ? std::atof(e) * 1048576.0 : 256.0 * 1048576.0;
+}
+
+// Threads inside one chain when `outer` chains share `cores`; nesting is enabled for it.
+int chain_inner_threads(int cores, int outer) {
+  int o = std::max(1, std::min(cores, outer));
+  int inner = std::max(1, cores / o);
+  if (inner > 1) omp_set_max_active_levels(2);
+  return inner;
+}
+
+// build_one_chain over column blocks: each block carries the value and its own dual
+// lanes, the rows are assembled over all columns. Rows and series rows keep the order
+// of the unblocked call, zero series rows dropped.
+bool build_chain_blocked(const std::vector<SegRaw>& segs, int nLeaves, int nStates,
+                         int nz, const std::vector<int>& dualCol,
+                         const std::vector<int>& leafPt, int Nt, int Mtot, u64 p,
+                         std::vector<std::vector<u64> >& rows,
+                         std::vector<std::vector<u64> >& srows,
+                         const std::vector<std::vector<u64> >* ser, int B, int threads) {
+  if (B >= nz)
+    return build_one_chain(segs, nLeaves, nStates, nz, nz + 1, dualCol, leafPt, Nt, Mtot,
+                           p, rows, srows, ser);
+  std::vector<char> moves;
+  if (!chain_moves(segs, nLeaves, nz + 1, dualCol, leafPt, p, moves)) return false;
+  int nb = (nz + B - 1) / B, N = Mtot + 1;
+  std::vector<std::vector<std::vector<u64> > > rB(nb), sB(nb);
+  std::vector<char> ok(nb, 1);
+  #pragma omp parallel for num_threads(threads > 0 ? threads : 1) schedule(dynamic) \
+          if (threads > 1)
+  for (int b = 0; b < nb; ++b) {
+    int s0 = b * B, s1 = std::min(nz, s0 + B), nzB = s1 - s0;
+    std::vector<int> dc(nLeaves, -1), lane(nzB);
+    for (int L = 0; L < nLeaves; ++L)
+      if (dualCol[L] >= s0 && dualCol[L] < s1) dc[L] = dualCol[L] - s0;
+    for (int j = 0; j < nzB; ++j) lane[j] = s0 + j;
+    ok[b] = build_one_chain(segs, nLeaves, nStates, nzB, nzB + 1, dc, leafPt, Nt, Mtot, p,
+                            rB[b], sB[b], ser, &lane, &moves);
+  }
+  for (int b = 0; b < nb; ++b)
+    if (!ok[b] || rB[b].size() != rB[0].size() || sB[b].size() != sB[0].size()) return false;
+  size_t r0 = rows.size();
+  rows.resize(r0 + rB[0].size(), std::vector<u64>(nz, 0));
+  for (int b = 0; b < nb; ++b) {
+    int s0 = b * B;
+    for (size_t i = 0; i < rB[b].size(); ++i)
+      std::copy(rB[b][i].begin(), rB[b][i].end(), rows[r0 + i].begin() + s0);
+  }
+  for (size_t i = 0; i < sB[0].size(); ++i) {
+    std::vector<u64> sr((size_t)nz * N, 0);
+    bool any = false;
+    for (int b = 0; b < nb; ++b) {
+      int s0 = b * B, nzB = (int)(sB[b][i].size() / N);
+      for (int c = 0; c < nzB; ++c)
+        for (int d = 0; d < N; ++d) {
+          u64 v = sB[b][i][(size_t)c * N + d];
+          if (v) { sr[(size_t)(s0 + c) * N + d] = v; any = true; }
+        }
+    }
+    if (any) srows.push_back(sr);
   }
   return true;
 }
@@ -1339,7 +1550,8 @@ static List chain_result(const std::vector<std::vector<u64> >& R, const std::vec
 // [[Rcpp::export]]
 List symObsNullChain(List chains, int nLeaves, int nStates, IntegerVector zSlots,
                      IntegerVector point, double pIn, int Nt, int Mtot, int cores = 1,
-                     IntegerVector NtChain = IntegerVector::create()) {
+                     IntegerVector NtChain = IntegerVector::create(),
+                     SEXP pointSer = R_NilValue) {
   u64 p = (u64)pIn;
   int nz = zSlots.size(), w = nz + 1;
   std::vector<int> dualCol(nLeaves, -1);
@@ -1362,17 +1574,32 @@ List symObsNullChain(List chains, int nLeaves, int nStates, IntegerVector zSlots
     for (int sj = 0; sj < nSeg; ++sj)
       chainsRaw[t].push_back(extract_seg_raw(segs[sj], nStates, w, p));
   }
+  // an optional continuation series of the leaves (nLeaves x T)
+  std::vector<std::vector<u64> > leafSer;
+  if (!Rf_isNull(pointSer)) {
+    IntegerMatrix M = as<IntegerMatrix>(pointSer);
+    if (M.nrow() == nLeaves && M.ncol() > 0) {
+      leafSer.assign(nLeaves, std::vector<u64>(M.ncol(), 0));
+      for (int L = 0; L < nLeaves; ++L)
+        for (int j = 0; j < M.ncol(); ++j) leafSer[L][j] = red(M(L, j), p);
+    }
+  }
 
   // parallel per-condition build: each thread owns its row block; a vanishing
   // denominator in any condition marks failure (no early return inside OpenMP).
   std::vector<std::vector<std::vector<u64> > > perRows(T), perSer(T);
   std::vector<char> okFlag(T, 1);
+  int inner = chain_inner_threads(cores, T);
   #pragma omp parallel for num_threads(cores > 0 ? cores : 1) schedule(dynamic) \
           if (cores > 1 && T > 1)
-  for (int t = 0; t < T; ++t)
-    if (!build_one_chain(chainsRaw[t], nLeaves, nStates, nz, w, dualCol, leafPt,
-                         ntOf[t], Mtot, p, perRows[t], perSer[t]))
+  for (int t = 0; t < T; ++t) {
+    int B = chain_block_size(chainsRaw[t], nLeaves, nStates, nz, ntOf[t], Mtot,
+                             !leafSer.empty(), chain_block_bytes());
+    if (!build_chain_blocked(chainsRaw[t], nLeaves, nStates, nz, dualCol, leafPt,
+                             ntOf[t], Mtot, p, perRows[t], perSer[t],
+                             leafSer.empty() ? nullptr : &leafSer, B, inner))
       okFlag[t] = 0;
+  }
 
   for (int t = 0; t < T; ++t)
     if (!okFlag[t]) return List::create(_["ok"] = false);
@@ -1395,17 +1622,137 @@ List symObsNullChain(List chains, int nLeaves, int nStates, IntegerVector zSlots
   return chain_result(rows, pivots, nz, rankS, ser, N, atOne);
 }
 
+// Rank of each segment's own rows at orders 0..Nt, at gap order 0, with a unit dual
+// column per state at the segment start and, where the start time depends on the
+// coordinates, a column -(k+1) y_{k+1}. `stateVals` (nSeg x nStates) replaces the start
+// states. Also returns the start states and the field at them.
+// [[Rcpp::export]]
+List symSegmentRanks(List segs, int nLeaves, int nStates, IntegerVector zSlots,
+                     IntegerVector point, double pIn, int Nt,
+                     IntegerMatrix stateVals = IntegerMatrix(0, 0)) {
+  u64 p = (u64)pIn;
+  int nz = zSlots.size(), nSeg = segs.size();
+  int wA = nz + nStates + 2, nzA = wA - 1, w0 = nz + 1;
+  std::vector<int> dualCol(nLeaves, -1);
+  for (int c = 0; c < nz; ++c) dualCol[zSlots[c]] = c;
+  std::vector<u64> leaf(nLeaves);
+  for (int L = 0; L < nLeaves; ++L) {
+    i128 pv = (i128)point[L] % (i128)p; if (pv < 0) pv += p;
+    leaf[L] = (u64)pv;
+  }
+  bool givenStates = stateVals.nrow() == nSeg && stateVals.ncol() == nStates;
+  IntegerMatrix ranks(nSeg, Nt + 1), start(nSeg, nStates), field(nSeg, nStates);
+  LogicalVector moves(nSeg);
+  std::vector<u64> q(nStates, 0);
+  for (int sj = 0; sj < nSeg; ++sj) {
+    SegRaw seg = extract_seg_raw(segs[sj], nStates, 1, p);
+    // start state at gap order 0
+    if (sj == 0) {
+      if (seg.hasIcSeed) {
+        for (int i = 0; i < nStates; ++i) q[i] = seg.icSeed[i][0];
+      } else if (seg.hasIcTape) {
+        std::vector<std::vector<u64> > icVal(nLeaves + seg.icOp.size(), std::vector<u64>(1, 0));
+        for (int L = 0; L < nLeaves; ++L) icVal[L][0] = leaf[L];
+        if (!eval_ic_order0(icVal, seg.icOp, seg.icA, seg.icB, seg.icCval, nLeaves, 1, p))
+          return List::create(_["ok"] = false);
+        for (int i = 0; i < nStates; ++i) q[i] = icVal[seg.icOut[i]][0];
+      } else {
+        return List::create(_["ok"] = false);
+      }
+    } else if (seg.hasEv) {
+      std::vector<std::vector<u64> > evVal(nLeaves + seg.evOp.size(), std::vector<u64>(1, 0));
+      for (int L = 0; L < nLeaves; ++L) evVal[L][0] = leaf[L];
+      if (!eval_ic_order0(evVal, seg.evOp, seg.evA, seg.evB, seg.evCval, nLeaves, 1, p))
+        return List::create(_["ok"] = false);
+      for (int e = 0; e < (int)seg.evVarIdx.size(); ++e) {
+        int st = seg.evVarIdx[e], meth = seg.evMethod[e];
+        u64 v = evVal[seg.evOut[e]][0] % p;
+        if (meth == 0) q[st] = v;
+        else if (meth == 1) q[st] = addmod(q[st], v, p);
+        else q[st] = mulmod(q[st], v, p);
+      }
+    }
+    // a segment whose start time depends on the coordinates
+    if (seg.hasTm) {
+      std::vector<std::vector<u64> > tmVal(nLeaves + seg.tmOp.size(), std::vector<u64>(w0, 0));
+      for (int L = 0; L < nLeaves; ++L) {
+        tmVal[L][0] = leaf[L];
+        if (dualCol[L] >= 0) tmVal[L][1 + dualCol[L]] = 1;
+      }
+      if (!eval_ic_order0(tmVal, seg.tmOp, seg.tmA, seg.tmB, seg.tmCval, nLeaves, w0, p))
+        return List::create(_["ok"] = false);
+      for (int c = 1; c < w0; ++c) if (tmVal[seg.tmOut[0]][c]) moves[sj] = true;
+    }
+    // rows in (coordinates, states)
+    PolyBasis pb(1, 0, wA);
+    int nInstr = (int)seg.op.size(), instrBase = nLeaves + nStates;
+    std::vector<std::vector<u64> > val(instrBase + nInstr,
+                                       std::vector<u64>((size_t)(Nt + 2) * wA, 0));
+    for (int L = 0; L < nLeaves; ++L) {
+      val[L][0] = leaf[L];
+      if (dualCol[L] >= 0) val[L][1 + dualCol[L]] = 1;
+    }
+    for (int i = 0; i < nStates; ++i) {
+      u64 qi = givenStates ? red(stateVals(sj, i), p) : q[i];
+      val[nLeaves + i][0] = qi;
+      val[nLeaves + i][1 + nz + i] = 1;
+      start(sj, i) = (int)qi;
+    }
+    std::vector<std::vector<u64> > rows;
+    if (!build_obs_rows_poly(val, seg.op, seg.a, seg.b, seg.cval, instrBase,
+                             seg.stateSlots, seg.fOut, seg.gOut, pb, Nt + 1, Nt, p, rows))
+      return List::create(_["ok"] = false);
+    for (int i = 0; i < nStates && i < (int)seg.fOut.size(); ++i)
+      field(sj, i) = (int)(val[seg.fOut[i]][0] % p);
+    if (moves[sj])
+      for (int gi = 0; gi < (int)seg.gOut.size(); ++gi)
+        for (int k = 0; k <= Nt; ++k) {
+          u64 y1 = val[seg.gOut[gi]][(size_t)(k + 1) * wA] % p;
+          rows[(size_t)gi * (Nt + 1) + k][nzA - 1] = submod(0, mulmod((u64)(k + 1) % p, y1, p), p);
+        }
+    // rows are ordered by output, then order; rank up to each order, incrementally
+    int nOut = (int)seg.gOut.size();
+    std::vector<std::vector<u64> > basis;
+    std::vector<int> pivCol;
+    for (int k = 0; k <= Nt; ++k) {
+      for (int gi = 0; gi < nOut; ++gi) {
+        std::vector<u64> r = rows[(size_t)gi * (Nt + 1) + k];
+        for (size_t b = 0; b < basis.size(); ++b) {
+          u64 f = r[pivCol[b]] % p;
+          if (!f) continue;
+          u64 nf = p - f;
+          for (int c = 0; c < nzA; ++c)
+            if (basis[b][c]) r[c] = addmod(r[c] % p, mulmod(nf, basis[b][c], p), p);
+        }
+        int pc = -1;
+        for (int c = 0; c < nzA; ++c) if (r[c] % p) { pc = c; break; }
+        if (pc < 0) continue;
+        u64 inv = invmod(r[pc] % p, p);
+        for (int c = 0; c < nzA; ++c) r[c] = mulmod(r[c] % p, inv, p);
+        basis.push_back(r);
+        pivCol.push_back(pc);
+      }
+      ranks(sj, k) = (int)basis.size();
+    }
+    if (givenStates) for (int i = 0; i < nStates; ++i) q[i] = red(stateVals(sj, i), p);
+  }
+  return List::create(_["ok"] = true, _["ranks"] = ranks, _["start"] = start,
+                      _["field"] = field, _["moves"] = moves);
+}
+
 // Batched twin of per-condition symObsNullChain calls on the joint/equilibrate path:
 // one OpenMP task per (chain, seed, prime) triple. evalChain[e] selects the chain,
 // `seeds` (nB x nLeaves) holds the leaf residues with states written in, `primes`
 // one prime per eval. Segments are extracted once per (chain, distinct prime).
 // Returns nB results shaped like symObsNullChain; a vanishing denominator yields
-// ok = FALSE.
+// ok = FALSE. `NtEval` (one per eval) caps an eval's Lie order below Nt.
 // [[Rcpp::export]]
 List symObsNullChainSeedBatch(List chains, IntegerVector evalChain,
                               IntegerMatrix seeds, NumericVector primes,
                               int nLeaves, int nStates, IntegerVector zSlots,
-                              int Nt, int Mtot, int cores = 1) {
+                              int Nt, int Mtot, int cores = 1,
+                              IntegerVector NtEval = IntegerVector::create(),
+                              SEXP seedSer = R_NilValue) {
   int nz = zSlots.size(), w = nz + 1;
   int T = chains.size();
   int nB = evalChain.size();
@@ -1439,8 +1786,25 @@ List symObsNullChainSeedBatch(List chains, IntegerVector evalChain,
     }
   }
 
-  std::vector<int> ec(nB);
+  std::vector<int> ec(nB), ntOf(nB, Nt);
   for (int e = 0; e < nB; ++e) ec[e] = evalChain[e];
+  // per eval an optional continuation series of the leaves (nLeaves x T), reduced here
+  std::vector<std::vector<std::vector<u64> > > serE(nB);
+  std::vector<char> hasSer(nB, 0);
+  if (!Rf_isNull(seedSer)) {
+    List sl(seedSer);
+    for (int e = 0; e < nB && e < sl.size(); ++e) {
+      if (Rf_isNull(sl[e])) continue;
+      IntegerMatrix M = as<IntegerMatrix>(sl[e]);
+      if (M.nrow() != nLeaves || M.ncol() == 0) continue;
+      hasSer[e] = 1;
+      serE[e].assign(nLeaves, std::vector<u64>(M.ncol(), 0));
+      for (int L = 0; L < nLeaves; ++L)
+        for (int j = 0; j < M.ncol(); ++j) serE[e][L][j] = red(M(L, j), pr[e]);
+    }
+  }
+  if (NtEval.size() == nB)
+    for (int e = 0; e < nB; ++e) ntOf[e] = std::min(Nt, (int)NtEval[e]);
   std::vector<int> sd((size_t)nB * nLeaves);
   for (int e = 0; e < nB; ++e)
     for (int L = 0; L < nLeaves; ++L) sd[(size_t)e * nLeaves + L] = seeds(e, L);
@@ -1451,6 +1815,7 @@ List symObsNullChainSeedBatch(List chains, IntegerVector evalChain,
   std::vector<std::vector<std::vector<u64> > > redSer(nB);
   std::vector<int> rankS(nB, 0);
   std::vector<char> atOneE(nB, 0);
+  int inner = chain_inner_threads(cores, nB);
   #pragma omp parallel for num_threads(cores > 0 ? cores : 1) schedule(dynamic) \
           if (cores > 1 && nB > 1)
   for (int e = 0; e < nB; ++e) {
@@ -1458,8 +1823,11 @@ List symObsNullChainSeedBatch(List chains, IntegerVector evalChain,
     std::vector<int> leafPt(nLeaves);
     for (int L = 0; L < nLeaves; ++L) leafPt[L] = sd[(size_t)e * nLeaves + L];
     std::vector<std::vector<u64> > rows;
-    if (!build_one_chain(segsRaw[primeIdx[e]][ec[e]], nLeaves, nStates, nz, w,
-                         dualCol, leafPt, Nt, Mtot, p, rows, redSer[e])) {
+    const std::vector<SegRaw>& segs = segsRaw[primeIdx[e]][ec[e]];
+    int B = chain_block_size(segs, nLeaves, nStates, nz, ntOf[e], Mtot, hasSer[e],
+                             chain_block_bytes());
+    if (!build_chain_blocked(segs, nLeaves, nStates, nz, dualCol, leafPt, ntOf[e], Mtot, p,
+                             rows, redSer[e], hasSer[e] ? &serE[e] : nullptr, B, inner)) {
       okFlag[e] = 0; continue; }
     std::vector<int> pivots = rref_mod(rows, p);
     rows.resize(pivots.size());
@@ -1530,14 +1898,18 @@ List symObsNullChainPointBatch(List chains, int nLeaves, int nStates, IntegerVec
   std::vector<std::vector<std::vector<u64> > > rowsET((size_t)nB * T), serET((size_t)nB * T);
   std::vector<char> okET((size_t)nB * T, 1);
   long nTask = (long)nB * T;
+  int inner = chain_inner_threads(cores, (int)std::min<long>(nTask, 1 << 20));
   #pragma omp parallel for num_threads(cores > 0 ? cores : 1) schedule(dynamic) \
           if (cores > 1 && nTask > 1)
   for (long k = 0; k < nTask; ++k) {
     int e = (int)(k / T), t = (int)(k % T);
     std::vector<int> leafPt(pts.begin() + (size_t)e * nLeaves,
                             pts.begin() + (size_t)(e + 1) * nLeaves);
-    if (!build_one_chain(segsRaw[primeIdx[e]][t], nLeaves, nStates, nz, w, dualCol, leafPt,
-                         ntOf[t], Mtot, pr[e], rowsET[k], serET[k]))
+    const std::vector<SegRaw>& segs = segsRaw[primeIdx[e]][t];
+    int B = chain_block_size(segs, nLeaves, nStates, nz, ntOf[t], Mtot, false,
+                             chain_block_bytes());
+    if (!build_chain_blocked(segs, nLeaves, nStates, nz, dualCol, leafPt, ntOf[t], Mtot,
+                             pr[e], rowsET[k], serET[k], nullptr, B, inner))
       okET[k] = 0;
   }
 
@@ -1583,7 +1955,8 @@ List symObsNullChainPointBatch(List chains, int nLeaves, int nStates, IntegerVec
 // kernel vector can move, those whose removal keeps the rank.
 // [[Rcpp::export]]
 List symSeriesRank(IntegerMatrix S, int nz, int N, double pIn, IntegerVector cols,
-                   bool support = false, int atOneBelow = -1) {
+                   bool support = false, int atOneBelow = -1, int cores = 1,
+                   IntegerVector rowPrec = IntegerVector()) {
   u64 p = (u64)pIn;
   int nr = S.nrow();
   std::vector<char> mask(nz, cols.size() ? 0 : 1);
@@ -1591,7 +1964,9 @@ List symSeriesRank(IntegerMatrix S, int nz, int N, double pIn, IntegerVector col
   std::vector<std::vector<u64> > A(nr, std::vector<u64>((size_t)nz * N));
   for (int i = 0; i < nr; ++i)
     for (int j = 0; j < nz * N; ++j) A[i][j] = red(S(i, j), p);
-  int rank = rref_series_mod(A, nz, N, p, mask);
+  std::vector<int> P(nr, N);
+  for (int i = 0; i < rowPrec.size() && i < nr; ++i) P[i] = std::min(N, (int)rowPrec[i]);
+  int rank = rref_series_mod(A, nz, N, p, mask, cores, false, &P);
   List out = List::create(_["rank"] = rank, _["S"] = series_matrix(A, rank, nz * N));
   // atOneBelow: the rank of the stacked coefficient rows; below it, try the kernel at
   // eps = 1 and return its reduced rows
@@ -1608,16 +1983,55 @@ List symSeriesRank(IntegerMatrix S, int nz, int N, double pIn, IntegerVector col
     }
   }
   if (support) {
-    std::vector<int> supp;
+    std::vector<char> keep(nz, 0);
+    #pragma omp parallel for num_threads(cores > 0 ? cores : 1) schedule(dynamic)
     for (int c = 0; c < nz; ++c) {
       if (!mask[c]) continue;
       std::vector<std::vector<u64> > B(A.begin(), A.begin() + rank);
       std::vector<char> m2 = mask; m2[c] = 0;
-      if (rref_series_mod(B, nz, N, p, m2) == rank) supp.push_back(c);
+      keep[c] = rref_series_mod(B, nz, N, p, m2) == rank;
     }
+    std::vector<int> supp;
+    for (int c = 0; c < nz; ++c) if (keep[c]) supp.push_back(c);
     out["support"] = IntegerVector(supp.begin(), supp.end());
   }
   return out;
+}
+
+// Series rows S (rows x nz*N) reduced on the columns `first` (0-based); the rows without
+// a pivot there, on the other columns, are Q (nOther*N wide, zero rows dropped) with
+// their precisions prec. Returns r1 (the pivots in `first`), Q and prec.
+// [[Rcpp::export]]
+List symSeriesProject(IntegerMatrix S, int nz, int N, double pIn, IntegerVector first,
+                      int cores = 1) {
+  u64 p = (u64)pIn;
+  int nr = S.nrow();
+  std::vector<char> mask(nz, 0);
+  for (int i = 0; i < first.size(); ++i) mask[first[i]] = 1;
+  std::vector<std::vector<u64> > A(nr, std::vector<u64>((size_t)nz * N));
+  for (int i = 0; i < nr; ++i)
+    for (int j = 0; j < nz * N; ++j) A[i][j] = red(S(i, j), p);
+  std::vector<int> P(nr, N), CP;
+  int r1 = rref_series_mod(A, nz, N, p, mask, cores, true, &P, &CP);
+  std::vector<int> other;
+  for (int c = 0; c < nz; ++c) if (!mask[c]) other.push_back(c);
+  int no = (int)other.size();
+  std::vector<int> keep;
+  for (int i = r1; i < nr; ++i) {
+    bool nzRow = false;
+    for (int k = 0; k < no && !nzRow; ++k)
+      for (int d = 0; d < CP[i] && !nzRow; ++d) nzRow = A[i][(size_t)other[k] * N + d] != 0;
+    if (nzRow) keep.push_back(i);
+  }
+  IntegerMatrix Q((int)keep.size(), no * N);
+  IntegerVector qp((int)keep.size());
+  for (size_t i = 0; i < keep.size(); ++i) {
+    qp[i] = CP[keep[i]];
+    for (int k = 0; k < no; ++k)
+      for (int d = 0; d < CP[keep[i]]; ++d)
+        Q((int)i, k * N + d) = (int)A[keep[i]][(size_t)other[k] * N + d];
+  }
+  return List::create(_["r1"] = r1, _["Q"] = Q, _["prec"] = qp);
 }
 
 // Solve A x = b over GF(p); returns the solution (free variables zero) or

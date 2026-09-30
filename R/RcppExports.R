@@ -49,20 +49,28 @@ symObsNullBatch <- function(tapes, nLeaves, nStates, zSlots, points, primes, Nt,
     .Call(`_dMod2_symObsNullBatch`, tapes, nLeaves, nStates, zSlots, points, primes, Nt, cores)
 }
 
-symObsNullChain <- function(chains, nLeaves, nStates, zSlots, point, pIn, Nt, Mtot, cores = 1L, NtChain = as.integer( c())) {
-    .Call(`_dMod2_symObsNullChain`, chains, nLeaves, nStates, zSlots, point, pIn, Nt, Mtot, cores, NtChain)
+symObsNullChain <- function(chains, nLeaves, nStates, zSlots, point, pIn, Nt, Mtot, cores = 1L, NtChain = as.integer( c()), pointSer = NULL) {
+    .Call(`_dMod2_symObsNullChain`, chains, nLeaves, nStates, zSlots, point, pIn, Nt, Mtot, cores, NtChain, pointSer)
 }
 
-symObsNullChainSeedBatch <- function(chains, evalChain, seeds, primes, nLeaves, nStates, zSlots, Nt, Mtot, cores = 1L) {
-    .Call(`_dMod2_symObsNullChainSeedBatch`, chains, evalChain, seeds, primes, nLeaves, nStates, zSlots, Nt, Mtot, cores)
+symSegmentRanks <- function(segs, nLeaves, nStates, zSlots, point, pIn, Nt, stateVals = matrix(0, 0)) {
+    .Call(`_dMod2_symSegmentRanks`, segs, nLeaves, nStates, zSlots, point, pIn, Nt, stateVals)
+}
+
+symObsNullChainSeedBatch <- function(chains, evalChain, seeds, primes, nLeaves, nStates, zSlots, Nt, Mtot, cores = 1L, NtEval = as.integer( c()), seedSer = NULL) {
+    .Call(`_dMod2_symObsNullChainSeedBatch`, chains, evalChain, seeds, primes, nLeaves, nStates, zSlots, Nt, Mtot, cores, NtEval, seedSer)
 }
 
 symObsNullChainPointBatch <- function(chains, nLeaves, nStates, zSlots, points, primes, Nt, Mtot, cores = 1L, NtChain = as.integer( c())) {
     .Call(`_dMod2_symObsNullChainPointBatch`, chains, nLeaves, nStates, zSlots, points, primes, Nt, Mtot, cores, NtChain)
 }
 
-symSeriesRank <- function(S, nz, N, pIn, cols, support = FALSE, atOneBelow = -1L) {
-    .Call(`_dMod2_symSeriesRank`, S, nz, N, pIn, cols, support, atOneBelow)
+symSeriesRank <- function(S, nz, N, pIn, cols, support = FALSE, atOneBelow = -1L, cores = 1L, rowPrec = integer()) {
+    .Call(`_dMod2_symSeriesRank`, S, nz, N, pIn, cols, support, atOneBelow, cores, rowPrec)
+}
+
+symSeriesProject <- function(S, nz, N, pIn, first, cores = 1L) {
+    .Call(`_dMod2_symSeriesProject`, S, nz, N, pIn, first, cores)
 }
 
 symSolveMod <- function(A, b, pIn) {

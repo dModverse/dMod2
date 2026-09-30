@@ -84,8 +84,8 @@ reported only if it is non-identifiable in every condition.}
 \item{equilibrate}{Logical, \code{"observability"} only. Start at a steady state of
 \code{f} with the inputs at 0 instead of at free initial values; the earliest events
 apply on top and initial values in \code{trafo} are ignored. Not available for
-exponentials of states. Steady states with more than two coupled states need
-msolve, see \code{\link[=install_libs]{install_libs()}}.}
+exponentials of states. Coupled steady states may need msolve, see
+\code{\link[=install_libs]{install_libs()}}.}
 
 \item{reduceCQ}{Logical, \link{eqnlist} only. \code{FALSE} (default) reports the freedom
 of a conserved moiety on the initial value of one species, \code{TRUE} on its total,
@@ -132,8 +132,10 @@ coordinate), \code{weights} (a scaling's integer weights), \code{type} (\code{"s
 \code{transformation} (\code{"polynomial"} only), \code{verified}, \code{display},
 \code{completeGenerator} and \code{factor}.}
 \item{\code{info}}{\code{engine}, the Lie order and its certification
-(\code{lieOrderUsed}, \code{lieOrderDriver}, \code{lieBudget}, \code{liePlateau},
-\code{lieCertified}), \code{gapOrderUsed}, \code{conditions}, \code{segments}, \code{coordinates},
+(\code{lieOrderUsed}, \code{lieOrderDriver}, \code{liePlateau}, \code{lieCertified}: the order
+is proven final, manuscript Supplementary Note S3), \code{rankProven} (the number
+of exact scalings that prove the rank, if any), \code{gapOrderUsed},
+\code{conditions}, \code{segments}, \code{coordinates},
 \code{settings}, \code{elapsed} and \code{verification}.}
 \item{\code{call}}{the matched call.}
 }
