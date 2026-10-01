@@ -2219,3 +2219,58 @@ test_that("a readout behind a transit chain is not saturated early", {
   # the one direction left trades degradation against secretion
   expect_setequal(res$symmetries[[1]]$support, c("kdg", "ksec", "ktl"))
 })
+
+
+# two pools of a messenger that gate one channel with a shared affinity: a scaling of
+# the affinity and both pools, and one curved direction per pool turnover
+.poolModel <- function() {
+  f <- eqnvec(P1 = "k1*(T1 - P1) - (l1 + c1*u)*P1", P2 = "k2*(T2 - P2) - (l2 + c2*u)*P2",
+              u = "0")
+  g <- eqnvec(y1 = "P1^2/(K^2 + P1^2)", y2 = "P2^2/(K^2 + P2^2)")
+  list(f = f, g = g, conditions = data.frame(u = c(0, 1), row.names = c("ctrl", "stim")))
+}
+
+test_that("summary() suggests the gauge that keeps the general directions small", {
+  if (!.sympy_works()) skip("reticulate/sympy not available")
+  skip_on_cran()
+  m <- .poolModel()
+  res <- symdet(m$f, m$g, conditions = m$conditions)
+  gs <- res$info$gaugeSuggestion
+  expect_false(is.null(gs))
+  expect_identical(gs$gauge, "K")
+  expect_true(max(gs$sizes) <= 3L)
+  expect_output(print(summary(res)), "gauge: fixing K")
+})
+
+test_that("a preferred gauge that couples the general directions warns", {
+  if (!.sympy_works()) skip("reticulate/sympy not available")
+  skip_on_cran()
+  m <- .poolModel()
+  expect_warning(res <- symdet(m$f, m$g, conditions = m$conditions, gaugePreference = "T1",
+                               reconstruct = TRUE),
+                 "leaves general directions on up to")
+  expect_identical(res$gauge, "T1")
+  res2 <- symdet(m$f, m$g, conditions = m$conditions, gaugePreference = NULL,
+                 reconstruct = TRUE)
+  expect_identical(res2$gauge, "K")
+  gen <- Filter(function(d) d$type == "general", res2$symmetries)
+  expect_true(all(lengths(lapply(gen, `[[`, "generator")) <= 3L))
+})
+
+test_that("a large model is proven on the stacked rank by its own fields", {
+  if (!.sympy_works()) skip("reticulate/sympy not available")
+  skip_on_cran()
+  m <- .poolModel()
+  ref <- symdet(m$f, m$g, conditions = m$conditions, reconstruct = TRUE)
+  withr::local_options(dMod.sym.stackedMin = 0L)
+  st <- symdet(m$f, m$g, conditions = m$conditions, reconstruct = TRUE)
+  expect_equal(st$rank, ref$rank)
+  expect_identical(st$info$rankProof, "invariant fields")
+  expect_equal(length(st$symmetries), length(ref$symmetries))
+  # the gauged detection takes its rank and proof from the second step
+  gd <- symdet(m$f, m$g, conditions = m$conditions, gaugePreference = NULL,
+               reconstruct = TRUE)
+  expect_equal(gd$rank, ref$rank)
+  expect_false(is.null(gd$info$rankProven))
+  expect_identical(gd$gauge, "K")
+})

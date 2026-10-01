@@ -59,8 +59,10 @@ for \code{"polynomial"} a fixed symbol does not transform.}
 \item{gaugePreference}{\code{"observability"} only. \code{FALSE} (default) reconstructs
 every direction. Otherwise one coordinate per scaling is fixed first and only
 the general directions are reconstructed in that gauge. \code{NULL} chooses the
-gauge, a character vector ranks the coordinates to fix (\code{*} as wildcard). The
-gauge is returned as \verb{$gauge} and used as \code{fixed} by \code{print()}, \code{summary()} and
+gauge that leaves the general directions on the fewest coordinates, which
+\code{summary()} also suggests under \code{FALSE}; a character vector ranks the coordinates
+to fix (\code{*} as wildcard) and warns if its gauge leaves them wider. The gauge is
+returned as \verb{$gauge} and used as \code{fixed} by \code{print()}, \code{summary()} and
 \code{\link[=symmetryReduction]{symmetryReduction()}}.}
 
 \item{forcings}{Character vector of input states. For \code{"observability"} an input

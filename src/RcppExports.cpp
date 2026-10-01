@@ -201,6 +201,43 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// symObsRankProfile
+List symObsRankProfile(List tapes, int nLeaves, int nStates, IntegerVector zSlots, IntegerVector point, double pIn, int Nt, int cores);
+RcppExport SEXP _dMod2_symObsRankProfile(SEXP tapesSEXP, SEXP nLeavesSEXP, SEXP nStatesSEXP, SEXP zSlotsSEXP, SEXP pointSEXP, SEXP pInSEXP, SEXP NtSEXP, SEXP coresSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< List >::type tapes(tapesSEXP);
+    Rcpp::traits::input_parameter< int >::type nLeaves(nLeavesSEXP);
+    Rcpp::traits::input_parameter< int >::type nStates(nStatesSEXP);
+    Rcpp::traits::input_parameter< IntegerVector >::type zSlots(zSlotsSEXP);
+    Rcpp::traits::input_parameter< IntegerVector >::type point(pointSEXP);
+    Rcpp::traits::input_parameter< double >::type pIn(pInSEXP);
+    Rcpp::traits::input_parameter< int >::type Nt(NtSEXP);
+    Rcpp::traits::input_parameter< int >::type cores(coresSEXP);
+    rcpp_result_gen = Rcpp::wrap(symObsRankProfile(tapes, nLeaves, nStates, zSlots, point, pIn, Nt, cores));
+    return rcpp_result_gen;
+END_RCPP
+}
+// symObsDirectional
+List symObsDirectional(List tapes, int nLeaves, int nStates, IntegerVector zSlots, IntegerVector point, double pIn, int Nt, NumericVector dir, int cores);
+RcppExport SEXP _dMod2_symObsDirectional(SEXP tapesSEXP, SEXP nLeavesSEXP, SEXP nStatesSEXP, SEXP zSlotsSEXP, SEXP pointSEXP, SEXP pInSEXP, SEXP NtSEXP, SEXP dirSEXP, SEXP coresSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< List >::type tapes(tapesSEXP);
+    Rcpp::traits::input_parameter< int >::type nLeaves(nLeavesSEXP);
+    Rcpp::traits::input_parameter< int >::type nStates(nStatesSEXP);
+    Rcpp::traits::input_parameter< IntegerVector >::type zSlots(zSlotsSEXP);
+    Rcpp::traits::input_parameter< IntegerVector >::type point(pointSEXP);
+    Rcpp::traits::input_parameter< double >::type pIn(pInSEXP);
+    Rcpp::traits::input_parameter< int >::type Nt(NtSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type dir(dirSEXP);
+    Rcpp::traits::input_parameter< int >::type cores(coresSEXP);
+    rcpp_result_gen = Rcpp::wrap(symObsDirectional(tapes, nLeaves, nStates, zSlots, point, pIn, Nt, dir, cores));
+    return rcpp_result_gen;
+END_RCPP
+}
 // symObsNullBatch
 List symObsNullBatch(List tapes, int nLeaves, int nStates, IntegerVector zSlots, IntegerMatrix points, NumericVector primes, int Nt, int cores);
 RcppExport SEXP _dMod2_symObsNullBatch(SEXP tapesSEXP, SEXP nLeavesSEXP, SEXP nStatesSEXP, SEXP zSlotsSEXP, SEXP pointsSEXP, SEXP primesSEXP, SEXP NtSEXP, SEXP coresSEXP) {
@@ -241,8 +278,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // symSegmentRanks
-List symSegmentRanks(List segs, int nLeaves, int nStates, IntegerVector zSlots, IntegerVector point, double pIn, int Nt, IntegerMatrix stateVals);
-RcppExport SEXP _dMod2_symSegmentRanks(SEXP segsSEXP, SEXP nLeavesSEXP, SEXP nStatesSEXP, SEXP zSlotsSEXP, SEXP pointSEXP, SEXP pInSEXP, SEXP NtSEXP, SEXP stateValsSEXP) {
+List symSegmentRanks(List segs, int nLeaves, int nStates, IntegerVector zSlots, IntegerVector point, double pIn, int Nt, IntegerMatrix stateVals, int threads);
+RcppExport SEXP _dMod2_symSegmentRanks(SEXP segsSEXP, SEXP nLeavesSEXP, SEXP nStatesSEXP, SEXP zSlotsSEXP, SEXP pointSEXP, SEXP pInSEXP, SEXP NtSEXP, SEXP stateValsSEXP, SEXP threadsSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -254,7 +291,8 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< double >::type pIn(pInSEXP);
     Rcpp::traits::input_parameter< int >::type Nt(NtSEXP);
     Rcpp::traits::input_parameter< IntegerMatrix >::type stateVals(stateValsSEXP);
-    rcpp_result_gen = Rcpp::wrap(symSegmentRanks(segs, nLeaves, nStates, zSlots, point, pIn, Nt, stateVals));
+    Rcpp::traits::input_parameter< int >::type threads(threadsSEXP);
+    rcpp_result_gen = Rcpp::wrap(symSegmentRanks(segs, nLeaves, nStates, zSlots, point, pIn, Nt, stateVals, threads));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -523,9 +561,11 @@ static const R_CallMethodDef CallEntries[] = {
     {"_dMod2_residual_kernel_aloq", (DL_FUNC) &_dMod2_residual_kernel_aloq, 9},
     {"_dMod2_residual_kernel_bloq", (DL_FUNC) &_dMod2_residual_kernel_bloq, 9},
     {"_dMod2_symObsNullMulti", (DL_FUNC) &_dMod2_symObsNullMulti, 8},
+    {"_dMod2_symObsRankProfile", (DL_FUNC) &_dMod2_symObsRankProfile, 8},
+    {"_dMod2_symObsDirectional", (DL_FUNC) &_dMod2_symObsDirectional, 9},
     {"_dMod2_symObsNullBatch", (DL_FUNC) &_dMod2_symObsNullBatch, 8},
     {"_dMod2_symObsNullChain", (DL_FUNC) &_dMod2_symObsNullChain, 11},
-    {"_dMod2_symSegmentRanks", (DL_FUNC) &_dMod2_symSegmentRanks, 8},
+    {"_dMod2_symSegmentRanks", (DL_FUNC) &_dMod2_symSegmentRanks, 9},
     {"_dMod2_symObsNullChainSeedBatch", (DL_FUNC) &_dMod2_symObsNullChainSeedBatch, 12},
     {"_dMod2_symObsNullChainPointBatch", (DL_FUNC) &_dMod2_symObsNullChainPointBatch, 10},
     {"_dMod2_symSeriesRank", (DL_FUNC) &_dMod2_symSeriesRank, 9},

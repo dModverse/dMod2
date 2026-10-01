@@ -1,5 +1,47 @@
 # dMod2 (development version)
 
+* `symmetryDetection(gaugePreference = NULL)` fixes the coordinates that leave the
+  general directions on the fewest coordinates, read off the kernel of the first step.
+  `summary()` suggests that gauge under `gaugePreference = FALSE`; a preferred gauge
+  that leaves the general directions wider warns. A gauge coordinate that a general
+  direction moves couples the direction to the scaling: on the ion-channel benchmark
+  with four dendrites the reduction took 28 min under such a gauge and 7 s without.
+* `symmetryDetection()` without a resting state:
+  - one jet per block gives the rank at every Lie order of the scan, and the Lie order
+    of a block with free initial values is certified by its first flat step;
+  - the gauged second step reuses the certified Lie orders of the first;
+  - the narrow kernel also runs on models with exponentials of states, at the lowest
+    order where the rows on its support reach full rank;
+  - a closed form is verified by jets along the direction alone;
+  - the rank is proven with the closed forms as fields before an analysis per regime;
+    the field certificate evaluates brackets on dual numbers where the right-hand
+    sides are rational (a field check of the 309-parameter benchmark: 8 min to 37 s);
+  - a large model takes the stacked rank at its plateau and proves it by its own
+    fields instead of driving every condition to its own Lie order;
+  - jets in column blocks on threads under a memory budget.
+* The exact scaling rows eliminate the intermediate column of each equation, so the
+  integer kernel runs over the weights alone (105 s to 25 s on the ion-channel
+  benchmark).
+* `symmetryDetection(equilibrate = TRUE)` analyses the regimes of the field
+  certificate in parallel.
+* `symmetryDetection(equilibrate = TRUE)` matches the rates of the forward seed by
+  augmenting paths and state-solves balances whose rates the partner rule blocks, so
+  saturable kinetics keep the forward seed.
+* `symmetryReduction()`:
+  - orbits that leave the positive orthant through two faces, by the sign of an
+    invariant, are cut by the product of the two face coordinates; the cAMP translation
+    of the ion-channel benchmark is reduced in seconds instead of reported after a
+    minute;
+  - a real coordinate solved through a square root is certified by its radicand, and
+    `a + c*sqrt(r)` takes the sign of `c` where `c^2 r > a^2`; a chart without a root
+    is preferred, and inside a log or exponential chart roots stay out;
+  - sign certificates are memoised per expression;
+  - invariants are verified only against the blocks whose directions move their symbols.
+* New `bench/symmetry_ionchannel.R` (multicompartment neuron, exponentials of states,
+  about 300 parameters at 12 dendrites) and `bench/symmetry_family.R` (signalling
+  networks of any size). `bench/symmetry_tgfb_phospho.R` takes Michaelis-Menten and Hill
+  transcription and saturable phosphorylation cycles.
+
 * `symmetryDetection()` certifies the Lie order per segment by the generic rank on the
   smallest invariant affine space of states through its start (manuscript,
   Supplementary Note S3). The saturation guard runs only where it does not certify.

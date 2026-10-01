@@ -1648,9 +1648,18 @@
     # An invariant may carry coordinates another block moves, and the trafo composes
     # the blocks, so it must hold for all of them. Scaling blocks need no pass: their
     # gauge went into the search.
-    other <- unlist(lapply(blocks[-bi], `[[`, "preps"), recursive = FALSE)
+    # only generators that move a symbol of the invariants can change them
     inv <- blocks[[bi]]$invariants
+    invSyms <- unique(unlist(regmatches(inv, gregexpr("[A-Za-z._][A-Za-z0-9._]*", inv))))
+    other <- unlist(lapply(blocks[-bi], `[[`, "preps"), recursive = FALSE)
     if (!length(other) || !length(inv)) next
+    other <- Filter(function(pr) length(intersect(pr$support, invSyms)) > 0L, other)
+    if (!length(other)) {
+      blocks[[bi]]$certificates <- c(blocks[[bi]]$certificates,
+        paste("verified: X(I) = 0 for every direction of every other block too, none of",
+              "which moves a symbol of these invariants"))
+      next
+    }
     keep <- chk(inv, other)
     if (any(!keep)) {
       blocks[[bi]]$certificates <- c(blocks[[bi]]$certificates, sprintf(
@@ -1712,6 +1721,9 @@
 .symDomain <- new.env(parent = emptyenv())
 .symDomain$positive <- NULL
 .symDomain$realCarriers <- character(0)
+# inside a log or exponential chart a root would land in an exponent, which the
+# detection does not take: the root rules stay off there
+.symDomain$noRoots <- FALSE
 
 .symPositive <- function() .symDomain$positive
 
@@ -1724,6 +1736,8 @@
 .symSetPositive <- function(x) {
   old <- .symDomain$positive
   .symDomain$positive <- x
+  # sign certificates hold on one domain only
+  .symDomain$sgnCache <- new.env(parent = emptyenv())
   invisible(old)
 }
 
@@ -1801,7 +1815,28 @@
 # Mul via factors, rational functions via num/den, and a + c*sqrt(r) via the
 # exact comparison a^2 - c^2 r (the larger magnitude carries the sign). Roots
 # split outermost-first, so nesting terminates. +1, -1, or 0 = not decided.
+# a cache key of bounded length for an expression string
+.symRedKey <- function(x) digest::digest(x, algo = "xxhash64", serialize = FALSE)
+
+# memoised per expression on the current domain: the chart search asks for the same
+# signs many times
 .symRedSgn <- function(pp, spy, depth = 0L) {
+  cache <- .symDomain$sgnCache
+  if (depth > 0L || is.null(cache)) return(.symRedSgnRaw(pp, spy, depth))
+  # the carriers declared real change what a sign means, so they are part of the key
+  key <- tryCatch(.symRedKey(paste0(isTRUE(.symDomain$noRoots), ":",
+                                    paste(sort(.symDomain$realCarriers), collapse = ","),
+                                    "|", as.character(spy$srepr(pp)))),
+                  error = function(err) NULL)
+  if (is.null(key)) return(.symRedSgnRaw(pp, spy, depth))
+  hit <- cache[[key]]
+  if (!is.null(hit)) return(hit)
+  v <- .symRedSgnRaw(pp, spy, depth)
+  assign(key, v, envir = cache)
+  v
+}
+
+.symRedSgnRaw <- function(pp, spy, depth = 0L) {
   if (depth > 8L) return(0L)
   ex <- tryCatch(spy$expand(pp), error = function(err) NULL)
   if (is.null(ex)) return(0L)
@@ -1857,7 +1892,14 @@
     sc <- .symRedSgn(cc, spy, depth + 1L)
     if (isTRUE(a$is_zero)) return(sc)
     sa <- .symRedSgn(a, spy, depth + 1L)
-    if (sa == 0L || sc == 0L) next
+    if (sc == 0L) next
+    # a radical term larger than |a| sets the sign whatever the sign of a
+    if (sa == 0L && isTRUE(.symDomain$noRoots)) next
+    if (sa == 0L) {
+      d2 <- tryCatch(spy$expand(cc**2L * s$base - a**2L), error = function(err) NULL)
+      if (!is.null(d2) && .symRedSgn(d2, spy, depth + 1L) == 1L) return(sc)
+      next
+    }
     if (sa == sc) return(sa)
     d <- tryCatch(spy$expand(a**2L - cc**2L * s$base), error = function(err) NULL)
     if (is.null(d)) next
@@ -1895,7 +1937,18 @@
   # unfactored, multiplicity 1/2), plus the factors of every radicand base, scanned
   # over the raw, half-power and conjugate-rationalised forms, each of which
   # exposes factors the others hide
+  # factorisations and solves recur across the candidate sections of a reduction
+  fbCache <- if (is.null(.symDomain$sgnCache)) new.env(parent = emptyenv()) else .symDomain$sgnCache
+  solveCache <- fbCache
   factorBases <- function(e0) {
+    key <- tryCatch(.symRedKey(paste0("fb:", as.character(spy$srepr(e0)))),
+                    error = function(err) NULL)
+    if (!is.null(key) && !is.null(fbCache[[key]])) return(fbCache[[key]])
+    out <- factorBasesRaw(e0)
+    if (!is.null(key)) assign(key, out, envir = fbCache)
+    out
+  }
+  factorBasesRaw <- function(e0) {
     out <- list(); seen <- character(0)
     push <- function(f) {
       k <- as.character(f)
@@ -1942,7 +1995,14 @@
                            error = function(err) NA_integer_)
             if (is.na(dg) || dg != 1L) next
           }
-          rt <- tryCatch(spy$solve(f, tsym[[tl]]), error = function(err) NULL)
+          sk <- .symRedKey(paste0("sv:", tl, ":",
+                                  tryCatch(as.character(spy$srepr(f)), error = function(err) "")))
+          rt <- solveCache[[sk]]
+          if (is.null(rt)) {
+            rt <- tryCatch(spy$solve(f, tsym[[tl]]), error = function(err) NULL)
+            if (is.null(rt)) rt <- list()
+            assign(sk, rt, envir = solveCache)
+          }
           if (is.null(rt) || length(rt) != 1L) next
           s <- .symRedRadNorm(rt[[1]], spy)
           if (.symRedSgn(s, spy) != 1L) next
@@ -2042,6 +2102,19 @@
 # DENOMINATOR). NULL when none certifies; the caller emits the certified form, which
 # is readable and free of spurious 0/0 points.
 .symRedPosForm <- function(e, spy) {
+  cache <- .symDomain$sgnCache
+  key <- if (!is.null(cache))
+    tryCatch(.symRedKey(paste0("pos:", isTRUE(.symDomain$noRoots), ":",
+                               paste(sort(.symDomain$realCarriers), collapse = ","),
+                               "|", as.character(spy$srepr(e)))), error = function(err) NULL)
+  if (!is.null(key) && exists(key, envir = cache, inherits = FALSE))
+    return(get(key, envir = cache))
+  f <- .symRedPosFormRaw(e, spy)
+  if (!is.null(key)) assign(key, f, envir = cache)
+  f
+}
+
+.symRedPosFormRaw <- function(e, spy) {
   forms <- list(tryCatch(spy$cancel(spy$together(e)), error = function(err) NULL),
                 tryCatch(.symRedHalfPow(e, spy), error = function(err) NULL),
                 tryCatch(.symRedRadNorm(e, spy), error = function(err) NULL))
@@ -2072,6 +2145,26 @@
   if (is.null(ex)) return(0L)
   present <- intersect(realSyms, .symRedFreeSyms(ex))
   if (!length(present)) return(.symRedSgn(ex, spy))
+  # a + c*sqrt(r): a positive radicand and c^2 r > a^2 give the sign of c
+  sq <- tryCatch(Filter(function(w) isTRUE(w$exp == spy$Rational(1L, 2L)) &&
+                          !isTRUE(w$base$is_number),
+                        .symRedIter(ex$atoms(spy$Pow), function(w) w)),
+                 error = function(err) list())
+  if (length(sq) == 1L && !isTRUE(.symDomain$noRoots)) {
+    w <- sq[[1]]
+    sp <- tryCatch(ex$as_independent(w, as_Add = TRUE), error = function(err) NULL)
+    cc <- if (!is.null(sp)) tryCatch(spy$cancel(sp[[2]] / w), error = function(err) NULL)
+    if (is.null(cc) || isTRUE(cc$has(w))) return(0L)
+    a <- sp[[1]]
+    if (.symRedSgnReal(w$base, spy, realSyms) != 1L) return(0L)
+    sc <- .symRedSgnReal(cc, spy, realSyms)
+    if (sc == 0L) return(0L)
+    if (isTRUE(a$is_zero)) return(sc)
+    d2 <- tryCatch(spy$expand(cc**2L * w$base - a**2L), error = function(err) NULL)
+    if (!is.null(d2) && .symRedSgnReal(d2, spy, realSyms) == 1L) return(sc)
+    return(if (.symRedSgnReal(a, spy, realSyms) == sc) sc else 0L)
+  }
+  if (length(sq) > 1L) return(0L)
   rest <- ex
   corr <- spy$Integer(0L)
   for (t in present) {
@@ -2155,7 +2248,18 @@
 
 .symRedRealForm <- function(e, spy, realSyms) {
   f <- tryCatch(spy$cancel(spy$together(e)), error = function(err) NULL)
-  if (is.null(f) || !identical(.symRedEntryClass(f, spy), "yes")) return(NULL)
+  if (is.null(f)) return(NULL)
+  cls <- .symRedEntryClass(f, spy)
+  # a root is real where its radicand is certified positive
+  if (identical(cls, "root") && isTRUE(.symDomain$noRoots)) return(NULL)
+  if (identical(cls, "root")) {
+    rads <- tryCatch(Filter(function(w) !isTRUE(w$exp$is_Integer) && !isTRUE(w$base$is_number),
+                            .symRedIter(f$atoms(spy$Pow), function(w) w)),
+                     error = function(err) list(NULL))
+    if (!length(rads) || any(vapply(rads, function(w)
+          is.null(w) || .symRedSgnReal(w$base, spy, realSyms) != 1L, logical(1))))
+      return(NULL)
+  } else if (!identical(cls, "yes")) return(NULL)
   if (length(.symRedIter(f$atoms(spy$log), function(a) a))) return(NULL)
   den <- spy$fraction(f)[[2]]
   if (.symRedSgnReal(den, spy, realSyms) != 1L &&
@@ -2409,6 +2513,7 @@
   # prefer pinning parameters: znames order states first, so the end of the support
   sets <- .symRedFirstSubsets(length(zCand), r, maxSets)
   zOrd <- rev(zCand)
+  conditional <- list()
   for (s in sets) {
     Z <- zOrd[s]
     # jointly: the whole zero set may still kill an invariant (k1 + k2 on both)
@@ -2439,6 +2544,8 @@
     # A second admissible branch makes the chart finite-to-one, an undecided one
     # leaves that open; both reject Z.
     good <- NULL; nOpen <- 0L
+    # entries of coordinates outside the declared domain carry no sign condition
+    posU <- if (is.null(.symPositive())) rep(TRUE, length(U)) else U %in% .symPositive()
     for (br in brs) {
       if (length(br) < length(U)) next
       vals <- lapply(paste0(U, "_dModF"), function(v) spy$cancel(br[[v]]))
@@ -2452,9 +2559,28 @@
         !is.null(fr) && isTRUE(spy$cancel(fr[[1]])$is_zero) &&
           !isTRUE(spy$cancel(fr[[2]])$is_zero)
       }, logical(1)))) next
-      sg <- vapply(vals, function(e) .symRedSgn(e, spy), integer(1))
+      sgAll <- vapply(vals, function(e) .symRedSgn(e, spy), integer(1))
+      if (any(sgAll == -1L)) next
+      if (all(sgAll == 1L) && is.null(good)) { good <- vals; next }
+      nOpen <- nOpen + 1L
+      sg <- sgAll; sg[!posU] <- 1L
       if (any(sg == -1L)) next
-      if (all(sg == 1L) && is.null(good)) good <- vals else nOpen <- nOpen + 1L
+      # the face is reached exactly where one invariant has one sign: each undecided
+      # entry is that invariant times a factor of fixed sign
+      if (length(brs) == 1L) {
+        cond <- lapply(vals[sg == 0L], function(e) {
+          for (k in seq_along(Ies)) {
+            q <- tryCatch(.symRedSgn(spy$cancel(e / Ies[[k]]), spy), error = function(err) 0L)
+            if (q != 0L) return(c(k, q))
+          }
+          NULL })
+        if (length(cond) && !any(vapply(cond, is.null, logical(1)))) {
+          cm <- do.call(rbind, cond)
+          if (length(unique(cm[, 1L])) == 1L && length(unique(cm[, 2L])) == 1L)
+            conditional[[length(conditional) + 1L]] <-
+              list(face = Z, inv = cm[1L, 1L], sign = cm[1L, 2L])
+        }
+      }
     }
     if (is.null(good) || nOpen > 0L) next
     # and the kept branch fixes the face pointwise (a face point is its own image)
@@ -2481,6 +2607,14 @@
       return(res)
     }
   }
+  # two faces reached under opposite signs of one invariant: the orbits leave the domain
+  # through different faces
+  for (a in conditional) for (c2 in conditional)
+    if (a$inv == c2$inv && a$sign == 1L && c2$sign == -1L) {
+      out$split <- list(invariant = gsub("\\*\\*", "^", as.character(Ies[[a$inv]])),
+                        positive = paste(a$face, "= 0"), negative = paste(c2$face, "= 0"))
+      return(out)
+    }
   out
 }
 
@@ -2719,11 +2853,12 @@
 }
 
 .symRedSolveInvariants <- function(b, pins, spy, coords = character(0),
-                                   invStart = 0L, preferReal = FALSE) {
+                                   invStart = 0L, preferReal = FALSE, splitPair = NULL) {
   out <- list(pins = NULL, meaning = NULL, solved = FALSE)
   # a chart certified only for positive values of a real-valued carrier still covers
   # part of the domain; it is kept as the fallback and reported as partial
   best <- NULL
+  bestRoot <- NULL
   if (!length(b$invariants)) return(out)
   locals <- .symRedLocals(c(b$invariants, b$support, names(pins), pins), spy)
   Ies <- lapply(b$invariants, function(iv)
@@ -2849,6 +2984,7 @@
   pinsIn <- pins
   eqsIn <- eqs
   for (gauge0 in keepSets) {
+  if (!is.null(bestRoot)) break
   pinned1 <- setdiff(gaugeAll, gauge0)
   pins <- c(pinsIn, setNames(vapply(pinned1, pinVal, ""), pinned1))
   # surplus pins substituted before the search
@@ -2875,6 +3011,9 @@
     } else list()
     cands <- if (length(gauge0) > 2L) unique(unlist(shareSets, recursive = FALSE))
              else .symRedSectionCands(secVars, summands)
+    # split orbits cross the product of the two faces' coordinates once
+    if (length(splitPair) == 2L && all(splitPair %in% secVars))
+      cands <- c(list(c(paste(splitPair, collapse = "*"), "1")), cands)
     touches <- function(pr) any(vapply(b$support, function(v)
       grepl(paste0("(?<![0-9A-Za-z_.])", v, "(?![0-9A-Za-z_.])"),
             paste(pr, collapse = " "), perl = TRUE), logical(1)))
@@ -2996,8 +3135,23 @@
           identical(isZero(fr[[1]]), TRUE)
       }, logical(1)))
     }
+    redDiag <- nzchar(Sys.getenv("DMOD_SYM_REDDIAG"))
+    # a section over positive coordinates only is crossed by every orbit on its own
+    # certificate; a real coordinate solved from it then needs a real value only
+    secPositive <- function(st) {
+      sy <- unique(unlist(regmatches(unlist(st), gregexpr("[A-Za-z._][A-Za-z0-9._]*",
+                                                         unlist(st)))))
+      length(sy) > 0L && (is.null(.symPositive()) || all(sy %in% .symPositive()))
+    }
+    if (redDiag) message("[reddiag] gauge {", paste(gauge0, collapse = ","), "} carriers {",
+                         paste(carriers, collapse = ","), "} ", length(sets), " section set(s): ",
+                         paste(vapply(sets[seq_len(min(5L, length(sets)))], function(st)
+                           paste(vapply(st, paste, "", collapse = "="), collapse = "&"), ""),
+                           collapse = " | "))
     for (st in sets[seq_len(min(length(sets), 40L))])
     for (order in c("carriers", "sections")) {
+      # past a chart with a root only the constant pin is tried
+      if (!is.null(bestRoot)) next
       # without carrier branches both orders are the same joint solve
       if (identical(order, "sections") && !length(carrBr)) next
       secEqs <- lapply(st, function(pr)
@@ -3033,12 +3187,17 @@
           # a fractional power is fine once certified positive (the certificate pins
           # the branch); the certified form is emitted. A real carrier needs a
           # defined entry, not a positive one.
-          e <- if (.symRedIsReal(v) && v %in% carriers)
+          e <- if (.symRedIsReal(v) && (v %in% carriers || secPositive(st)))
             .symRedRealForm(sh$es[[v]], spy, realBr)
           if (is.null(e)) e <- .symRedPosFormReal(sh$es[[v]], spy, realBr)
           if (is.null(e)) {
             e <- .symRedPosForm(sh$es[[v]], spy)   # positive values of the carrier only
-            if (is.null(e)) { okBr <- FALSE; break }
+            if (is.null(e)) {
+              if (redDiag) message("[reddiag]   ", paste(vapply(st, paste, "", collapse = "="),
+                                   collapse = "&"), ": ", v, " = ", as.character(sh$es[[v]]),
+                                   " not certified (real: ", paste(realBr, collapse = ","), ")")
+              okBr <- FALSE; break
+            }
             partial <- TRUE
           }
           cls <- .symRedEntryClass(e, spy)
@@ -3075,8 +3234,10 @@
         cand$coverage <- if (partial) "partial" else "total"
         cand$carrierDomain <- setNames(
           ifelse(tmpN %in% realBr, "real", "positive"), invN)
-        if (!partial) return(cand)
-        if (is.null(best)) best <- cand
+        # a chart without roots wins; one with a root waits for the constant pin
+        if (!partial && !hasRoot) return(cand)
+        if (!partial && is.null(bestRoot)) bestRoot <- cand
+        if (partial && is.null(best)) best <- cand
         next
       }
     }
@@ -3186,12 +3347,14 @@
       cand$coverage <- if (partial) "partial" else "total"
       cand$carrierDomain <- setNames(
         ifelse(tmpN %in% realPin, "real", "positive"), invN)
-      if (!partial) return(cand)
-      if (is.null(best)) best <- cand
+      if (!partial && !root) return(cand)
+      if (!partial && is.null(bestRoot)) bestRoot <- cand
+      if (partial && is.null(best)) best <- cand
     }
     }
     }
   }
+  if (!is.null(bestRoot)) return(bestRoot)
   if (!is.null(best)) return(best)
 
   # Nothing certified. An unchecked pin would give only a LOCAL chart (a curved
@@ -3755,6 +3918,10 @@ print.symmetryreduction <- function(x, width = getOption("width"), ...) {
           paste0(" | invariants: ",
                  .symRedWrap(b$invariants, "    ", width)) else "",
         "\n", sep = "")
+    if (!is.null(b$split))
+      cat("  ", .symRedWrap(paste0("split orbits: ", b$split$positive, " where ",
+                                   b$split$invariant, " > 0, ", b$split$negative,
+                                   " where it is < 0"), "    ", width), "\n", sep = "")
   invisible(x)
 }
 
@@ -4056,6 +4223,8 @@ symmetryReduction <- function(object, fixed = NULL, positive = TRUE, dPoly = 3L,
     # X = b^theta is positive for every real theta
     pos2 <- if (is.character(positive)) c(positive, lc$X)
             else if (isFALSE(positive)) lc$X else positive
+    oldNR <- .symDomain$noRoots; .symDomain$noRoots <- TRUE
+    on.exit(.symDomain$noRoots <- oldNR, add = TRUE)
     res <- symmetryReduction(lc$object, fixed = lc$ren(fixed), positive = pos2,
                              dPoly = dPoly, dDarboux = dDarboux, dExp = dExp,
                              separable = separable,
@@ -4071,6 +4240,8 @@ symmetryReduction <- function(object, fixed = NULL, positive = TRUE, dPoly = 3L,
   if (!is.null(ec)) {
     pos2 <- if (isTRUE(positive)) setdiff(ec$object$info$coordinates, ec$L)
             else setdiff(ec$ren(positive), ec$L)
+    oldNR <- .symDomain$noRoots; .symDomain$noRoots <- TRUE
+    on.exit(.symDomain$noRoots <- oldNR, add = TRUE)
     res <- symmetryReduction(ec$object, fixed = ec$ren(fixed),
                              positive = if (length(pos2)) pos2 else FALSE,
                              dPoly = dPoly, dDarboux = dDarboux, dExp = dExp,
@@ -4183,15 +4354,28 @@ symmetryReduction <- function(object, fixed = NULL, positive = TRUE, dPoly = 3L,
     sol <- tryCatch(.symRedFaceSection(b, scalPins, spy, denSyms),
                     error = function(e) list(solved = FALSE))
     if (sol$solved) sol <- .symRedFaceCarriers(sol, coords, invStart)
+    split <- sol$split
+    # orbits that leave through two faces by the sign of an invariant cross the product
+    # of the two face coordinates exactly once: that balance is tried first
     if (!sol$solved)
     sol <- .symRedSolveInvariants(b, scalPins, spy, coords,     # gauge pin would be lossy
-                                  invStart)
-    # a carrier outside the declared domain needs no positivity certificate
-    if (!sol$solved && !is.null(.symPositive()) &&
+                                  invStart, splitPair = if (!is.null(split))
+                                    sub(" = 0$", "", c(split$positive, split$negative)))
+    if (!sol$solved && !is.null(split))
+      sol$reason <- paste0(
+        "the orbits leave the ", .symDomainName(), " through ", split$positive,
+        " where ", split$invariant, " > 0 and through ", split$negative,
+        " where it is < 0; no face covers both, and no section was certified. ",
+        "An assumption on the sign of ", split$invariant, " selects the face")
+    # a carrier outside the declared domain needs no positivity certificate; a chart
+    # with a root gives way to one without
+    rooted <- sol$solved && !is.null(sol$rootNote)
+    if ((!sol$solved || rooted) && !is.null(.symPositive()) &&
         length(setdiff(b$support, .symPositive()))) {
       solR <- .symRedSolveInvariants(b, scalPins, spy, coords, invStart,
-                                     preferReal = TRUE)
-      if (solR$solved) sol <- solR
+                                     preferReal = TRUE, splitPair = if (!is.null(split))
+                                       sub(" = 0$", "", c(split$positive, split$negative)))
+      if (solR$solved && (!rooted || is.null(solR$rootNote))) sol <- solR
     }
     if (sol$solved) {
       # the next block numbers on from the highest q_<k> taken, which skips the
@@ -4241,6 +4425,7 @@ symmetryReduction <- function(object, fixed = NULL, positive = TRUE, dPoly = 3L,
           paste(sol$shifted, collapse = ", ")))
     } else {
       blocks[[bi]]$reason <- if (!is.null(sol$reason)) sol$reason else b$reason
+      blocks[[bi]]$split <- split
       if (isTRUE(verbose))
         message("general block {", paste(b$labels, collapse = ", "), "}: ",
                 blocks[[bi]]$reason, "; reported as invariantOnly")

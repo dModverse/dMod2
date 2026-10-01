@@ -45,6 +45,14 @@ symObsNullMulti <- function(tapes, nLeaves, nStates, zSlots, point, pIn, Nt, cor
     .Call(`_dMod2_symObsNullMulti`, tapes, nLeaves, nStates, zSlots, point, pIn, Nt, cores)
 }
 
+symObsRankProfile <- function(tapes, nLeaves, nStates, zSlots, point, pIn, Nt, cores = 1L) {
+    .Call(`_dMod2_symObsRankProfile`, tapes, nLeaves, nStates, zSlots, point, pIn, Nt, cores)
+}
+
+symObsDirectional <- function(tapes, nLeaves, nStates, zSlots, point, pIn, Nt, dir, cores = 1L) {
+    .Call(`_dMod2_symObsDirectional`, tapes, nLeaves, nStates, zSlots, point, pIn, Nt, dir, cores)
+}
+
 symObsNullBatch <- function(tapes, nLeaves, nStates, zSlots, points, primes, Nt, cores = 1L) {
     .Call(`_dMod2_symObsNullBatch`, tapes, nLeaves, nStates, zSlots, points, primes, Nt, cores)
 }
@@ -53,8 +61,8 @@ symObsNullChain <- function(chains, nLeaves, nStates, zSlots, point, pIn, Nt, Mt
     .Call(`_dMod2_symObsNullChain`, chains, nLeaves, nStates, zSlots, point, pIn, Nt, Mtot, cores, NtChain, pointSer)
 }
 
-symSegmentRanks <- function(segs, nLeaves, nStates, zSlots, point, pIn, Nt, stateVals = matrix(0, 0)) {
-    .Call(`_dMod2_symSegmentRanks`, segs, nLeaves, nStates, zSlots, point, pIn, Nt, stateVals)
+symSegmentRanks <- function(segs, nLeaves, nStates, zSlots, point, pIn, Nt, stateVals = matrix(0, 0), threads = 1L) {
+    .Call(`_dMod2_symSegmentRanks`, segs, nLeaves, nStates, zSlots, point, pIn, Nt, stateVals, threads)
 }
 
 symObsNullChainSeedBatch <- function(chains, evalChain, seeds, primes, nLeaves, nStates, zSlots, Nt, Mtot, cores = 1L, NtEval = as.integer( c()), seedSer = NULL) {

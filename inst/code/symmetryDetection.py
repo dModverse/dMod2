@@ -2740,15 +2740,53 @@ def _forward_rate_pick(rhsByName, solveStates, paramNames, forcings, keepFree=No
     for s in order:
         opts = sorted((sc, appear.get(r, 99), r) for sc, r in cand[s] if r not in used)
         if not opts:
-            return None
+            return _rate_matching(cand, appear, order)
         assign[s] = opts[0][2]; used.add(opts[0][2])
     return [assign[s] for s in solveStates]
+
+
+def _rate_matching(cand, appear, order):
+    """A complete matching of states to candidate rates by augmenting paths, each state
+    trying its rates in preference order; None if there is none."""
+    prefs = {s: [r for _, _, r in sorted((sc, appear.get(r, 99), r) for sc, r in cand[s])]
+             for s in order}
+    owner = {}
+    def augment(s, seen):
+        for r in prefs[s]:
+            if r in seen:
+                continue
+            seen.add(r)
+            if r not in owner or augment(owner[r], seen):
+                owner[r] = s
+                return True
+        return False
+    sys.setrecursionlimit(max(sys.getrecursionlimit(), 10 * len(order) + 100))
+    for s in order:
+        if not augment(s, set()):
+            return None
+    byState = {s: r for r, s in owner.items()}
+    return [byState[s] for s in cand]
 
 
 def _forward_plan(rhsByName, solveStates, paramNames, forcings, keepFree=None):
     """Forward plan when balances share rates: a balance without a rate of its own is
     solved for its own state, before the rates. Returns (stateSolve, solveRates), the
-    state-solved balances in dependency order and the rates, or None."""
+    state-solved balances in dependency order and the rates, or None. A balance whose
+    rate coefficients depend on the others' at a random point is state-solved too."""
+    pre = []
+    for _ in range(len(solveStates)):
+        r = _forward_plan_once(rhsByName, solveStates, paramNames, forcings, keepFree, pre)
+        if r is None or r[0] != 'dependent':
+            return r
+        new = [u for u in r[1] if u not in pre]
+        if not new:
+            return None
+        pre = pre + new[:1]
+    return None
+
+
+def _forward_plan_once(rhsByName, solveStates, paramNames, forcings, keepFree=None,
+                       preBs=()):
     keepFree = set(keepFree or [])
     paramset = {spy.Symbol(pn) for pn in paramNames
                 if pn not in keepFree and not pn.startswith('_E_') and not pn.startswith('_L_')}
@@ -2776,7 +2814,14 @@ def _forward_plan(rhsByName, solveStates, paramNames, forcings, keepFree=None):
             for a in ps:
                 partners.setdefault(a, set()).update(x for x in ps if x != a)
     banned = set()
-    bs = []                                   # balances solved for their own state
+    bs = list(preBs)                          # balances solved for their own state
+    for u in bs:
+        try:
+            pu = spy.Poly(polys[u], spy.Symbol(u))
+        except spy.PolynomialError:
+            return None
+        if pu.degree() != 1 or spy.Symbol(u) in pu.nth(1).free_symbols:
+            return None
     while True:
         forbidden = {str(r) for u in bs for r in params[u]} | banned
         rest = [s for s in solveStates if s not in bs]
@@ -2839,31 +2884,59 @@ def _forward_plan(rhsByName, solveStates, paramNames, forcings, keepFree=None):
         return best
     cols = sorted({r for s in rest for r in cand[s]} - forbidden,
                   key=lambda r: (score(r), sum(r in cand[s] for s in rest), r))
-    basis, chosen = [], []                    # echelon rows (pivot, vector) mod Q
-    for r in cols:
-        if partners.get(r, set()) & set(chosen):
-            continue
-        v = []
-        for s in rest:
-            if r in cand[s]:
-                e = spy.Poly(polys[s], spy.Symbol(r)).nth(1).xreplace(pt)
-                v.append(int(e) % Q)
-            else:
-                v.append(0)
-        for piv, b in basis:
-            if v[piv]:
-                fct = v[piv]
-                v = [(x - fct * y) % Q for x, y in zip(v, b)]
-        piv = next((i for i, x in enumerate(v) if x), None)
-        if piv is None:
-            continue
-        inv = pow(v[piv], Q - 2, Q)
-        basis.append((piv, [x * inv % Q for x in v]))
-        chosen.append(r)
+    colVec = {}
+    def vecOf(r):
+        if r not in colVec:
+            colVec[r] = [int(spy.Poly(polys[s], spy.Symbol(r)).nth(1).xreplace(pt)) % Q
+                         if r in cand[s] else 0 for s in rest]
+        return colVec[r]
+    def pickBasis(colOrder):
+        basis, chosen = [], []                # echelon rows (pivot, vector) mod Q
+        for r in colOrder:
+            if partners.get(r, set()) & set(chosen):
+                continue
+            v = list(vecOf(r))
+            for piv, b in basis:
+                if v[piv]:
+                    fct = v[piv]
+                    v = [(x - fct * y) % Q for x, y in zip(v, b)]
+            piv = next((i for i, x in enumerate(v) if x), None)
+            if piv is None:
+                continue
+            inv = pow(v[piv], Q - 2, Q)
+            basis.append((piv, [x * inv % Q for x in v]))
+            chosen.append(r)
+            if len(chosen) == len(rest):
+                break
+        return chosen
+    chosen = pickBasis(cols)
+    # the partner rule can block the greedy order: shuffles within each preference class
+    keyOf = {r: score(r) for r in cols}
+    for att in range(40):
         if len(chosen) == len(rest):
             break
+        rs = random.Random(att)
+        shuffled = sorted(cols, key=lambda r: (keyOf[r], rs.random()))
+        cand2 = pickBasis(shuffled)
+        if len(cand2) > len(chosen):
+            chosen = cand2
     if len(chosen) < len(rest):
-        return None
+        # the balances whose coefficient rows depend on the earlier ones
+        rows, dep = [], []
+        for s in rest:
+            v = [int(spy.Poly(polys[s], spy.Symbol(r)).nth(1).xreplace(pt)) % Q
+                 if r in cand[s] else 0 for r in cols]
+            for piv, b in rows:
+                if v[piv]:
+                    fct = v[piv]
+                    v = [(x - fct * y) % Q for x, y in zip(v, b)]
+            piv = next((i for i, x in enumerate(v) if x), None)
+            if piv is None:
+                dep.append(s)
+                continue
+            inv = pow(v[piv], Q - 2, Q)
+            rows.append((piv, [x * inv % Q for x in v]))
+        return ('dependent', dep)
     return order, chosen
 
 
@@ -3754,7 +3827,8 @@ def _terms_independent(atoms):
     rows, npts = [], 0
     for _ in range(4 * (m + 3)):
         pt = {s: spy.Integer(int(v)) for s, v in zip(syms, rng.integers(2, 997, len(syms)))}
-        vals = [spy.nsimplify(t.xreplace(pt)) for t in taus]
+        vals = [t.xreplace(pt) for t in taus]
+        vals = [v if v.is_Rational else spy.nsimplify(v) for v in vals]
         if not all(v.is_Rational for v in vals):
             continue
         for bi, b in enumerate(basis):
@@ -3763,7 +3837,16 @@ def _terms_independent(atoms):
         npts += 1
         if npts >= m + 3:
             break
-    return npts >= m + 1 and spy.Matrix(rows).rank() == m + nb
+    if npts < m + 1:
+        return False
+    # full rank over GF(p) implies full rank over Q
+    for p in (2147483629, 2147483587):
+        if any(spy.Rational(v).q % p == 0 for r in rows for v in r):
+            continue
+        modRows = [[_modp_rational(v, p) for v in r] for r in rows]
+        if _rank_mod(modRows, p) == m + nb:
+            return True
+    return spy.Matrix(rows).rank() == m + nb
 
 
 class _ExpCtx:
@@ -5431,30 +5514,38 @@ def _scaling_rows(diffEquations, obsFunctions, m, zvars, interOffset, logs=False
         tvec[i] = 1     # state i is column i of zvars; x_i has weight c_i
         exprs.append((pmon, qmon, tvec))
 
-    def monRow(a, w):
-        # a . c - w = 0, times the lcm of the exponent denominators; a monomial has
-        # few nonzero exponents, read as plain integers (p/q of a sympy Rational)
-        nzj = [(j, x) for j, x in enumerate(a) if x != 0]
+    def diffRow(a, b, t=None):
+        # (a - b - t) . c = 0 over the weight columns, times the lcm of the denominators
+        d = [x - y for x, y in zip(a, b)]
+        if t is not None:
+            d = [x - int(y) for x, y in zip(d, t)]
+        nzj = [(j, x) for j, x in enumerate(d) if x != 0]
+        if not nzj:
+            return None
         D = 1
         for _, x in nzj:
             q = int(getattr(x, 'q', 1))
             if q != 1:
                 D = D * q // math.gcd(D, q)
-        row = {j: int(x * D) for j, x in nzj}
-        row[w] = -D
-        return row
+        return {j: int(x * D) for j, x in nzj}
 
-    rows = []
-    for k, (pmon, qmon, tvec) in enumerate(exprs):
-        wp, wq = interOffset + 2 * k, interOffset + 2 * k + 1
-        for a in pmon:
-            rows.append(monRow(a, wp))
-        for b in qmon:
-            rows.append(monRow(b, wq))
-        row = {j: -int(tvec[j]) for j in range(nz) if tvec[j]}  # wp - wq - t.c = 0
-        row[wp], row[wq] = 1, -1
-        rows.append(row)
-    return rows, 2 * len(exprs), skipped
+    # every numerator monomial has the weight of the first, every denominator monomial
+    # that of the first denominator one, and the two differ by the target weight: the
+    # rows of the intermediate-column form with the intermediates eliminated
+    rows, keys = [], set()
+    for pmon, qmon, tvec in exprs:
+        cand = [diffRow(a, pmon[0]) for a in pmon[1:]] + \
+               [diffRow(b, qmon[0]) for b in qmon[1:]]
+        if pmon and qmon:
+            cand.append(diffRow(pmon[0], qmon[0], tvec))
+        for row in cand:
+            if row is None:
+                continue
+            k = tuple(sorted(row.items()))
+            if k not in keys:
+                keys.add(k)
+                rows.append(row)
+    return rows, 0, skipped
 
 
 def _materialize_rows(rows, ncols):
@@ -5588,10 +5679,11 @@ class _DistCheck:
     def expr(self, text):
         return spy.sympify(self.parse(str(text)))
 
-    def value(self, e, syms, vals, p):
+    def value(self, e, syms, vals, p, skey=None):
         """e at the point vals (Fractions aligned with syms) mod p; None on a pole or a
-        non-rational value."""
-        key = (e, tuple(syms))
+        non-rational value. `skey` names the symbol list in the cache key, which saves
+        hashing a long list of symbols on every call."""
+        key = (e, tuple(syms) if skey is None else skey)
         fn = self.fns.get(key)
         if fn is None:
             # decimals as exact rationals, rationals as Fraction: no float enters
@@ -5612,6 +5704,39 @@ class _DistCheck:
                 return None
             return v.numerator % p * pow(v.denominator % p, p - 2, p) % p
         return None
+
+
+def _span_coeffs(B, v, p):
+    """Coefficients of v over the vectors B (lists of residues) mod p, earlier vectors
+    first and dependent ones at zero, or None if v is not in their span. An incremental
+    echelon that carries each row's combination of B; p < 2^31 keeps products in int64."""
+    n = len(B)
+    rows = []
+    for k, b in enumerate(B):
+        x = np.asarray(b, dtype=np.int64) % p
+        comb = np.zeros(n, dtype=np.int64)
+        comb[k] = 1
+        for piv, r, cm in rows:
+            f = int(x[piv])
+            if f:
+                x = (x - f * r) % p
+                comb = (comb - f * cm) % p
+        nz = np.flatnonzero(x)
+        if nz.size == 0:
+            continue
+        piv = int(nz[0])
+        inv = pow(int(x[piv]), p - 2, p)
+        rows.append((piv, x * inv % p, comb * inv % p))
+    y = np.asarray(v, dtype=np.int64) % p
+    coef = np.zeros(n, dtype=np.int64)
+    for piv, r, cm in rows:
+        f = int(y[piv])
+        if f:
+            y = (y - f * r) % p
+            coef = (coef + f * cm) % p
+    if y.any():
+        return None
+    return [int(c) for c in coef]
 
 
 def _rank_mod(rows, p):
@@ -5666,6 +5791,75 @@ def _coeffs(basis, v, p):
     for r, col in enumerate(piv):
         c[col] = A[r][n]
     return c
+
+
+class _DualMod:
+    """a + b*eps over GF(p) with eps^2 = 0, for directional derivatives of lambdified
+    rational expressions; constants are ints or Fractions."""
+    __slots__ = ('a', 'b', 'p')
+
+    def __init__(self, a, b, p):
+        self.a, self.b, self.p = a % p, b % p, p
+
+    def _c(self, o):
+        if isinstance(o, _DualMod):
+            return o
+        if isinstance(o, Fraction):
+            if o.denominator % self.p == 0:
+                raise ZeroDivisionError
+            return _DualMod(o.numerator % self.p * pow(o.denominator % self.p, self.p - 2,
+                                                       self.p), 0, self.p)
+        if isinstance(o, int):
+            return _DualMod(o, 0, self.p)
+        raise TypeError('unsupported operand')
+
+    def __add__(self, o):
+        o = self._c(o)
+        return _DualMod(self.a + o.a, self.b + o.b, self.p)
+
+    __radd__ = __add__
+
+    def __neg__(self):
+        return _DualMod(-self.a, -self.b, self.p)
+
+    def __sub__(self, o):
+        o = self._c(o)
+        return _DualMod(self.a - o.a, self.b - o.b, self.p)
+
+    def __rsub__(self, o):
+        return self._c(o) - self
+
+    def __mul__(self, o):
+        o = self._c(o)
+        return _DualMod(self.a * o.a, self.a * o.b + self.b * o.a, self.p)
+
+    __rmul__ = __mul__
+
+    def __truediv__(self, o):
+        o = self._c(o)
+        if o.a % self.p == 0:
+            raise ZeroDivisionError
+        inv = pow(o.a, self.p - 2, self.p)
+        q = self.a * inv % self.p
+        return _DualMod(q, (self.b - q * o.b) * inv, self.p)
+
+    def __rtruediv__(self, o):
+        return self._c(o) / self
+
+    def __pow__(self, n):
+        if isinstance(n, Fraction) and n.denominator == 1:
+            n = n.numerator
+        if not isinstance(n, int):
+            raise TypeError('non-integer power')
+        if n < 0:
+            return _DualMod(1, 0, self.p) / (self ** (-n))
+        if n == 0:
+            return _DualMod(1, 0, self.p)
+        an = pow(self.a, n - 1, self.p)
+        return _DualMod(an * self.a, n * an * self.b, self.p)
+
+    def __pos__(self):
+        return self
 
 
 def verifyDistribution(regimes, gens, events, lifts, p, npts=2, seed=1):
@@ -5739,21 +5933,41 @@ def verifyDistribution(regimes, gens, events, lifts, p, npts=2, seed=1):
     def comp(field, nm):
         return field.get(nm, zero)
 
+    # regimes share most right-hand sides, so the partials are memoised per expression
+    dcache = {}
+
+    def dpart(e, s):
+        k = (e, s)
+        d = dcache.get(k)
+        if d is None:
+            d = dcache[k] = spy.diff(e, s)
+        return d
+
     def derivDir(e, field):
-        return sum((spy.diff(e, s) * comp(field, str(s)) for s in e.free_symbols
+        return sum((dpart(e, s) * comp(field, str(s)) for s in e.free_symbols
                     if str(s) in field), zero)
 
     def vec(exprs, vals):
         out = []
         for e in exprs:
-            v = ck.value(e, symList, vals, p)
+            v = ck.value(e, symList, vals, p, skey='vd')
             if v is None:
                 return None
             out.append(v)
         return out
 
+    posOf = {nm: k for k, nm in enumerate(coords)}
+
     def fieldAt(x, vals):
-        return vec([comp(x, nm) for nm in coords], vals)
+        out = [0] * len(coords)
+        for nm, e in x.items():
+            if nm not in posOf or e == zero:
+                continue
+            v = ck.value(e, symList, vals, p, skey='vd')
+            if v is None:
+                return None
+            out[posOf[nm]] = v
+        return out
 
     def randPoint():
         return [Fraction(rng.randrange(2, p - 1)) for _ in coords]
@@ -5781,17 +5995,96 @@ def verifyDistribution(regimes, gens, events, lifts, p, npts=2, seed=1):
         B = fieldsAt(r, vals)
         if B is None:
             return None
-        # an independent subset, model fields first
-        ind, rows = [], []
-        for k, b in enumerate(B):
-            if _rank_mod(rows + [b], p) > len(rows):
-                rows.append(b)
-                ind.append(k)
-        c = _coeffs(rows, v, p)
+        c = _span_coeffs(B, v, p)
         if c is None:
             return None
         nx = len(Xm[r])
-        return {ind[i] for i, ci in enumerate(c) if ci and ind[i] < nx}
+        return {k for k in range(nx) if c[k]}
+
+    # lambdified vector functions over the coordinates, evaluated on duals: the
+    # derivative of an expression list along a direction without symbolic brackets
+    lamCache = {}
+
+    def lam(key, exprs):
+        fn = lamCache.get(key)
+        if fn is None:
+            ex = []
+            frac = spy.Function('Fraction')
+            for e in exprs:
+                e = spy.sympify(e)
+                e = e.xreplace({x: spy.Rational(str(x)) for x in e.atoms(spy.Float)})
+                e = e.xreplace({x: frac(x.p, x.q) for x in e.atoms(spy.Rational)
+                                if not x.is_Integer})
+                ex.append(e)
+            fn = lamCache[key] = spy.lambdify(symList, ex, modules=[{'Fraction': Fraction}])
+        return fn
+
+    def along(key, exprs, vals, dirv):
+        """Values and derivatives of exprs at vals along dirv (residues), or None."""
+        args = [_DualMod(int(v.numerator) % p * pow(int(v.denominator) % p, p - 2, p),
+                         d, p) for v, d in zip(vals, dirv)]
+        try:
+            out = lam(key, exprs)(*args)
+        except Exception:
+            return None
+        res = []
+        for o in out:
+            if isinstance(o, _DualMod):
+                res.append((o.a, o.b))
+            elif isinstance(o, Fraction):
+                if o.denominator % p == 0:
+                    return None
+                res.append((o.numerator % p * pow(o.denominator % p, p - 2, p), 0))
+            elif isinstance(o, int):
+                res.append((o % p, 0))
+            else:
+                return None
+        return res
+
+    # the rational right-hand sides of a regime go through duals; one with a function
+    # (exp) is differentiated symbolically, where the terms along a field cancel
+    ratOf = {}
+
+    def ratIdx(r):
+        if r not in ratOf:
+            ratOf[r] = [k for k, nm in enumerate(states)
+                        if not F[r].get(nm, zero).atoms(spy.Function)]
+        return ratOf[r]
+
+    def bracketAt(r, j, vals):
+        """[X_j, F^(r)] at vals, or None on a pole: DF.X - DX.F over the coordinates."""
+        X = Xm[r][j]
+        x = fieldAt(X, vals)
+        if x is None:
+            return None
+        nS = len(states)
+        ri = ratIdx(r)
+        df = [0] * nS
+        fx = along(('F', r), [F[r].get(states[k], zero) for k in ri], vals, x)
+        if fx is None:
+            return None
+        for k, (_, d) in zip(ri, fx):
+            df[k] = d
+        supp = set(X)
+        for k in set(range(nS)) - set(ri):
+            e = F[r].get(states[k], zero)
+            if not supp & {str(t) for t in e.free_symbols}:
+                continue
+            v = ck.value(derivDir(e, X), symList, vals, p, skey='vd')
+            if v is None:
+                return None
+            df[k] = v
+        Fr = {nm: F[r].get(nm, zero) for nm in states}
+        out = []
+        for k, nm in enumerate(coords):
+            cx = comp(X, nm)
+            dx = 0
+            if cx != zero:
+                dx = ck.value(derivDir(cx, Fr), symList, vals, p, skey='vd')
+                if dx is None:
+                    return None
+            out.append(((df[k] if k < nS else 0) - dx) % p)
+        return out
 
     def close(r, S):
         """Close the field set S of regime r under brackets with F^(r); check (A), (B)."""
@@ -5800,10 +6093,14 @@ def verifyDistribution(regimes, gens, events, lifts, p, npts=2, seed=1):
             j = todo.pop()
             for _ in range(npts):
                 vals = randPoint()
-                a = vec([derivDir(h, Xm[r][j]) for h in H[r]], vals)
-                if a is None or any(a):
+                x = fieldAt(Xm[r][j], vals)
+                hr = [h for h in H[r] if not h.atoms(spy.Function)]
+                hs = [h for h in H[r] if h.atoms(spy.Function)]
+                ha = along(('H', r), hr, vals, x) if x is not None else None
+                hb = vec([derivDir(h, Xm[r][j]) for h in hs], vals) if hs else []
+                if ha is None or hb is None or any(d for _, d in ha) or any(hb):
                     return None, 'regime %d: a field changes the output' % (r + 1)
-                bv = vec(bracket(r, j), vals)
+                bv = bracketAt(r, j, vals)
                 if bv is None:
                     return None, 'regime %d: a bracket has a pole' % (r + 1)
                 sup = support(r, vals, bv)
@@ -5822,12 +6119,12 @@ def verifyDistribution(regimes, gens, events, lifts, p, npts=2, seed=1):
         xd = dict(zip(coords, x))
         for e in ev_list:
             ve = ck.expr(e['value'])
-            v = ck.value(ve, symList, vals, p)
+            v = ck.value(ve, symList, vals, p, skey='vd')
             if v is None:
                 return None, None
             dv = 0
             for s_ in ve.free_symbols:
-                d = ck.value(spy.diff(ve, s_), symList, vals, p)
+                d = ck.value(spy.diff(ve, s_), symList, vals, p, skey='vd')
                 if d is None:
                     return None, None
                 dv = (dv + d * x[coords.index(str(s_))]) % p if str(s_) in coords else dv
@@ -5858,7 +6155,7 @@ def verifyDistribution(regimes, gens, events, lifts, p, npts=2, seed=1):
                 return {'ok': False, 'why': 'a kernel direction is not in the span of the fields'}
             S |= sup
             for tau in taus:
-                dv = [ck.value(spy.diff(tau, s_), symList, vals0, p) for s_ in tau.free_symbols]
+                dv = [ck.value(spy.diff(tau, s_), symList, vals0, p, skey='vd') for s_ in tau.free_symbols]
                 if any(x is None for x in dv) or sum(
                         x * vd.get(str(sy), 0) for x, sy in zip(dv, tau.free_symbols)) % p:
                     return {'ok': False, 'why': 'a kernel direction moves an event time'}
@@ -6071,6 +6368,9 @@ def continueRestingState(model, stateNames, paramNames, paramVals, dirs, restVal
             'dfParamCols': [str(x) for x in paramSyms]}
 
 
+_LIFT_CACHE = {}
+
+
 def liftStart(icLines, t0events, point, vector, p, joint=False):
     """Start state of a chain and a direction lifted onto it: the initial values `icLines`
     ("X = e", unless `joint`, where the resting state and its direction are in `point`
@@ -6079,33 +6379,53 @@ def liftStart(icLines, t0events, point, vector, p, joint=False):
     p = int(p)
     icLines = _as_list(icLines)
     evs = _as_list(t0events)
-    ck = _DistCheck(icLines + ['_ = %s' % e['value'] for e in evs] +
-                    ['_ = %s' % k for k in dict(point)])
     pt = {str(k): int(v) % p for k, v in dict(point).items()}
     vv = {str(k): int(v) % p for k, v in dict(vector).items()}
     names = sorted(pt)
+    # parsed lines, lambdified values and derivatives are reused across points and primes
+    key = (tuple(icLines), tuple((e['var'], str(e['value']), e['method']) for e in evs),
+           tuple(names))
+    ck = _LIFT_CACHE.get(key)
+    if ck is None:
+        if len(_LIFT_CACHE) > 256:
+            _LIFT_CACHE.clear()
+        ck = _DistCheck(icLines + ['_ = %s' % e['value'] for e in evs] +
+                        ['_ = %s' % k for k in names])
+        ck.parsed, ck.derivs = {}, {}
+        _LIFT_CACHE[key] = ck
     syms = [ck.local.get(n, spy.Symbol(n)) for n in names]
     vals = [Fraction(pt[n]) for n in names]
 
+    def parsed(text):
+        e = ck.parsed.get(text)
+        if e is None:
+            e = ck.parsed[text] = ck.expr(text)
+        return e
+
+    skey = tuple(names)
+
     def val_and_dir(e):
-        v = ck.value(e, syms, vals, p)
+        v = ck.value(e, syms, vals, p, skey=skey)
+        ds = ck.derivs.get(e)
+        if ds is None:
+            ds = ck.derivs[e] = [(str(s), spy.diff(e, s)) for s in e.free_symbols]
         dv = 0
-        for s in e.free_symbols:
-            d = ck.value(spy.diff(e, s), syms, vals, p)
+        for s, de in ds:
+            d = ck.value(de, syms, vals, p, skey=skey)
             if d is None:
                 return None, None
-            dv = (dv + d * vv.get(str(s), 0)) % p
+            dv = (dv + d * vv.get(s, 0)) % p
         return v, dv
 
     if not joint:
         for l in icLines:
             lhs, e = _clean(l).split('=', 1)
-            x, dx = val_and_dir(ck.expr(e))
+            x, dx = val_and_dir(parsed(e))
             if x is None:
                 return None
             pt[lhs.strip()], vv[lhs.strip()] = x, dx
     for e in evs:
-        v, dv = val_and_dir(ck.expr(e['value']))
+        v, dv = val_and_dir(parsed(str(e['value'])))
         if v is None:
             return None
         s0, d0 = pt.get(e['var'], 0), vv.get(e['var'], 0)

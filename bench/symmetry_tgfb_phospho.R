@@ -35,6 +35,10 @@ if (!dir.exists(.outdir)) dir.create(.outdir, recursive = TRUE)
 
 # TGFB1 from the gene layer is secreted and binds the receptors
 .autocrine <- TRUE
+# transcription by its drivers: "linear", "mm" (Michaelis-Menten) or "hill" (exponent 2)
+.transcription <- "hill"
+# saturable phosphorylation and dephosphorylation in the non-canonical cycles
+.mmCycles <- TRUE
 
 
 # –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
@@ -158,9 +162,10 @@ cycle <- function(eq, from, to, kinase, inhibitor = NULL, phosphatase = NULL) {
   inh <- if (is.null(inhibitor)) "" else paste0(" * (1 - ", inhibitor, ")")
   back <- paste0("k_dephos_", to,
                  if (!is.null(phosphatase)) paste0(" + k_dephos_", to, "_", phosphatase, " * ", phosphatase))
+  sat <- function(x, km) if (.mmCycles) paste0(x, "/(", km, " + ", x, ")") else x
   eq |>
-    addRC(from, to, paste0("k_phos_", from, " * ", kinase, " * ", from, inh)) |>
-    addRC(to, from, paste0("(", back, ") * ", to))
+    addRC(from, to, paste0("k_phos_", from, " * ", kinase, " * ", sat(from, paste0("Km_phos_", from)), inh)) |>
+    addRC(to, from, paste0("(", back, ") * ", sat(to, paste0("Km_dephos_", to))))
 }
 
 reactions <- reactions |>
@@ -240,8 +245,13 @@ reactions <- reactions |>
 for (i in seq_len(nrow(.genes))) {
   gn  <- .genes$gene[i]
   drv <- strsplit(.genes$drive[i], "+", fixed = TRUE)[[1]]
+  K <- paste0("K_transcr_", gn, "mRNA_", drv)
+  act <- switch(.transcription,
+    linear = drv,
+    mm     = paste0(drv, "/(", K, " + ", drv, ")"),
+    hill   = paste0(drv, "^2/(", K, "^2 + ", drv, "^2)"))
   num <- paste(c(paste0("k_transcr_", gn, "mRNA_basal"),
-                 paste0("k_transcr_", gn, "mRNA_", drv, " * ", drv,
+                 paste0("k_transcr_", gn, "mRNA_", drv, " * ", act,
                         ifelse(drv == "pp38", " * (1 - bool_p38i)", ""))),
                collapse = " + ")
   den <- if (gn == "ID1") paste0(" / (1 + k_rep_ID1mRNA * ID1rep", .nREP, ")") else ""
