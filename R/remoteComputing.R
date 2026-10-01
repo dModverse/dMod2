@@ -99,6 +99,7 @@ detectFreeCores <- function(machine = NULL) {
   compileArgs <- character(0)
   needsCVODE <- FALSE
   needsKLU <- FALSE
+  needsLapack <- FALSE
 
   for (nm in ls(envir)) {
     o <- try(get(nm, envir = envir), silent = TRUE)
@@ -111,20 +112,26 @@ detectFreeCores <- function(machine = NULL) {
       ## Non-empty linkArgs mean the backend pulls external libraries
       ## (Sundials, and KLU on top of it for sparse CVODE models); those have
       ## to be resolved from the remote cppDE installation.
-      if (nzchar(trimws(e$linkArgs %||% ""))) needsCVODE <- TRUE
+      la <- e$linkArgs %||% ""
+      if (nzchar(trimws(la))) needsCVODE <- TRUE
+      if (grepl("sunlinsollapackdense", la, fixed = TRUE)) needsLapack <- TRUE
       if (isTRUE(e$sparse)) needsKLU <- TRUE
       if (nzchar(ca)) compileArgs <- c(compileArgs, strsplit(ca, "\\s+")[[1]])
     }
   }
 
-  compileArgs <- unique(compileArgs[nzchar(compileArgs)])
+  ## Path-valued flags point into the local library tree; the remote build
+  ## resolves its own from the cppDE installed there.
+  compileArgs <- unique(compileArgs[nzchar(compileArgs) &
+                                      !grepl("^-(I|L|l|Wl,|isystem)", compileArgs)])
   ## cppDE tags sparse models with -DKLUBTF/-DKLUAMD; compile() adds the
   ## -DKLU switch itself, so mirror that here.
   if (any(grepl("^-DKLU", compileArgs))) needsKLU <- TRUE
 
   list(compileArgs = paste(compileArgs, collapse = " "),
        needsCVODE  = needsCVODE,
-       needsKLU    = needsKLU)
+       needsKLU    = needsKLU,
+       needsLapack = needsLapack)
 }
 
 ## TRUE when naming every file on one command line would overrun the shell's
@@ -164,6 +171,7 @@ detectFreeCores <- function(machine = NULL) {
 ## uses locally, reading its inputs from `filelist`.
 .remoteBuildScript <- function(files, output, compileArgs = "",
                                needsCVODE = FALSE, needsKLU = FALSE,
+                               needsLapack = FALSE,
                                link = FALSE, cxx = FALSE, cores = 1,
                                workdir = NULL, filelist = NULL, chunkSize = 100,
                                bundle = 50) {
@@ -195,17 +203,32 @@ detectFreeCores <- function(machine = NULL) {
     "cat(if (is.environment(cfg)) paste(unlist(mget(c(", field, "), envir = cfg, ",
     "ifnotfound = \"\")), collapse = \" \") else \"\")")
 
+  cfgFields <- function(...) paste0("\"", c(...), "\"", collapse = ", ")
+
   extra_libs <- NULL
   if (needsKLU || needsCVODE) {
-    fields <- paste0(c(if (needsKLU) "\"klu_libs\"", if (needsCVODE) "\"libs\""),
-                     collapse = ", ")
+    fields <- cfgFields(if (needsKLU) "klu_libs",
+                        if (needsLapack) "cvode_lapack_libs",
+                        if (needsCVODE) "libs")
     extra_libs <- paste0("PKG_LIBS=\"$PKG_LIBS $(Rscript -e '", cfgExpr(fields), "')\"")
   }
 
-  ## KLU needs its include path at compile time, not just -DKLU.
-  klu_cppflags <- if (needsKLU)
+  ## Include paths, MPI's included when the remote SUNDIALS was built with it.
+  ext_cppflags <- if (needsKLU || needsCVODE)
     paste0("PKG_CPPFLAGS=\"$PKG_CPPFLAGS $(Rscript -e '",
-           cfgExpr("\"klu_cflags\""), "')\"")
+           cfgExpr(cfgFields(if (needsCVODE) "cflags", if (needsKLU) "klu_cflags")),
+           "')\"")
+
+  ## The generated source calls SUNLinSol_LapackDense when the submitting
+  ## machine had it, so the remote SUNDIALS must provide it too.
+  lapack_check <- if (needsLapack) c(
+    paste0("if [ -z \"$(Rscript -e '", cfgExpr(cfgFields("cvode_lapack_libs")), "')\" ]; then"),
+    "  echo \"dMod: the model uses SUNDIALS' LAPACK dense solver, which the\" >&2",
+    "  echo \"      SUNDIALS of this machine lacks. Build one with\" >&2",
+    "  echo \"      cppDE::install_libs() and reinstall cppDE here.\" >&2",
+    "  exit 1",
+    "fi",
+    "")
 
   ## Job count: a fixed `cores`, or whatever the remote machine reports.
   nproc <- if (is.null(cores)) "$NPROC" else as.character(max(1L, as.integer(cores)))
@@ -330,8 +353,9 @@ detectFreeCores <- function(machine = NULL) {
     "  exit 1",
     "fi",
     "",
+    lapack_check,
     "PKG_CPPFLAGS=\"-I$CPPDE_INC\"",
-    klu_cppflags,
+    ext_cppflags,
     paste0("PKG_CFLAGS=\"", cflags, "\""),
     paste0("PKG_CXXFLAGS=\"", cflags, "\""),
     "PKG_LIBS=\"$(R CMD config LAPACK_LIBS) $(R CMD config BLAS_LIBS)\"",
@@ -598,7 +622,8 @@ runbg <- function(..., machine = "localhost", filename = NULL, input = ls(.Globa
   # resolved on the remote machine (see .remoteBuildScript); here only
   # collect the portable, model-specific part and the file list. Everything is
   # written into a shell script to avoid quoting issues with nested SSH commands.
-  buildinfo <- list(compileArgs = "", needsCVODE = FALSE, needsKLU = FALSE)
+  buildinfo <- list(compileArgs = "", needsCVODE = FALSE, needsKLU = FALSE,
+                    needsLapack = FALSE)
   has_cxx <- FALSE
   if (compile || link) {
 
@@ -699,6 +724,7 @@ runbg <- function(..., machine = "localhost", filename = NULL, input = ls(.Globa
         compileArgs = buildinfo$compileArgs,
         needsCVODE  = buildinfo$needsCVODE,
         needsKLU    = buildinfo$needsKLU,
+        needsLapack = buildinfo$needsLapack,
         link        = link,
         cxx         = has_cxx,
         cores       = buildCores,
@@ -1325,6 +1351,7 @@ distributedComputing <- function(
       compileArgs = buildinfo$compileArgs,
       needsCVODE  = buildinfo$needsCVODE,
       needsKLU    = buildinfo$needsKLU,
+      needsLapack = buildinfo$needsLapack,
       link        = FALSE,
       cxx         = any(grepl("\\.cpp$", sourcefiles)),
       cores       = buildCores,
@@ -1358,6 +1385,7 @@ distributedComputing <- function(
       compileArgs = buildinfo$compileArgs,
       needsCVODE  = buildinfo$needsCVODE,
       needsKLU    = buildinfo$needsKLU,
+      needsLapack = buildinfo$needsLapack,
       link        = TRUE,
       cxx         = length(Sys.glob("*.cpp")) > 0,
       cores       = buildCores,

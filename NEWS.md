@@ -238,6 +238,14 @@
   control functions is shorter, with formulas in LaTeX; messages of the
   symmetry functions carry no dashes.
 
+# dMod2 0.10.2
+
+* `runbg()` and `distributedComputing()` with `compile = TRUE` take SUNDIALS'
+  include path, and MPI's if that SUNDIALS was built with it, from the cppDE
+  installed on the remote machine instead of the submitting one. A model using
+  SUNDIALS' LAPACK dense solver links it there too, and the build stops with a
+  message if the remote SUNDIALS lacks it.
+
 # dMod2 0.10.1
 
 * `Pimpl()` draws its random starts uniformly over `startRange = c(-5, 5)` on

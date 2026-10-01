@@ -2,7 +2,7 @@ Package: dMod2
 Type: Package
 Title: Dynamic Modeling and Parameter Estimation in ODE Models
 Version: 0.10.2
-Date: 2026-09-29
+Date: 2026-10-01
 Authors@R: c(
     person("Simon", "Beyer", email = "simon.beyer@fdm.uni-freiburg.de",
            role = c("aut", "cre")),
