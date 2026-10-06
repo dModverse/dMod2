@@ -1183,6 +1183,11 @@ datapointL2 <- function(name, time, value, sigma = 1, attr.name = "validation", 
     else for (n in names(chi2)) attr(out12, paste0("chi2_", n)) <- unname(chi2[n])
   }
 
+  # The direction the terms were evaluated in; a term without a reverse path
+  # has none, and terms that disagree leave the sum without one.
+  sw <- unique(c(attr(out1, "sweep", exact = TRUE), attr(out2, "sweep", exact = TRUE)))
+  if (length(sw) == 1L) attr(out12, "sweep") <- sw
+
   class(out12) <- "objlist"
 
   out12

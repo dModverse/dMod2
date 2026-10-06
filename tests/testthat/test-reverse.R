@@ -270,6 +270,8 @@ test_that("a summed objective passes the direction on", {
   # the sum is still the same number, and still has no Hessian.
   both <- expect_modes_agree(obj, fx$pars)
   expect_null(both$reverse$hessian)
+  # The data term's direction stays on the sum, a constraint having none.
+  expect_identical(attr(obj(fx$pars, sweep = "reverse"), "sweep"), "reverse")
 })
 
 test_that("a model without a reverse object says so", {

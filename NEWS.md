@@ -1,3 +1,14 @@
+# dMod2 0.10.7
+
+* A sum of objectives keeps the `sweep` attribute its terms agree on, so a
+  reverse objective with a prior says it was evaluated in reverse.
+* `importPEtab()` gains `sparse`, which pins the sparse (KLU) or dense linear
+  solver of the cppDE and Sundials backends.
+* `benchmarks/`, outside the built package: value, forward and reverse
+  gradients of PEtab benchmark problems by tier (`run-benchmarks.R --tier
+  tiny|medium|full`), with the scripts of `inst/benchmarks/` under
+  `benchmarks/scripts/`.
+
 # dMod2 0.10.6
 
 * `importPEtab()` gains `sparse`, which pins the sparse (KLU) or dense linear
