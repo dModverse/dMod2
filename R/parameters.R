@@ -92,7 +92,7 @@ P <- function(trafo = NULL, parameters = NULL, condition = NULL,
 
 
 ## Body of the parameter transformation built by Pexpl(). Package level, so
-## one parfn per condition carries the state, not another copy of this code.
+## one parfn per condition holds the state, not another copy of this code.
 
 .Pexpl_p2p <- function(st, pars, fixed = NULL, deriv = TRUE, deriv2 = FALSE, .ad_out = NULL,
                        attach.input = FALSE) {
@@ -171,7 +171,7 @@ P <- function(trafo = NULL, parameters = NULL, condition = NULL,
 
 
 # The derivatives of the inputs Pexpl passes through, in the basis `theta` of
-# the transformation's own Jacobian. An input carries its derivatives in; where
+# the transformation's own Jacobian. An input brings its derivatives in; where
 # none come in, it is a parameter of the chain and its own direction, which the
 # basis gains if the transformation does not read it. An input that comes in
 # without a row was fixed further up and keeps no row.
@@ -297,18 +297,24 @@ P <- function(trafo = NULL, parameters = NULL, condition = NULL,
   hit <- intersect(rownames(w), outnames)
   if (length(hit)) W[1L, hit] <- w[hit, 1L]
 
-  if (K == 1L) {
-    r <- st$vjp(NULL, p[st$parameters], W)
-    u <- matrix(r$cotangentP[, 1L], ncol = 1L,
-                dimnames = list(rownames(r$cotangentP), NULL))
+  dp <- attr(pars, "deriv")
+  if (K == 1L || is.null(dp) || !any(dp != 0)) {
+    # No tangent arrives, so every slice is pulled back as the first.
+    u <- NULL
+    for (k in seq_len(K)) {
+      Wk <- W
+      if (k > 1L) { Wk[] <- 0; if (length(hit)) Wk[1L, hit] <- w[hit, k] }
+      r <- st$vjp(NULL, p[st$parameters], Wk)
+      u <- cbind(u, r$cotangentP[, 1L])
+    }
+    dimnames(u) <- list(rownames(r$cotangentP), NULL)
   } else {
-    # The node has no variables, so only the parameters carry tangents in, and
+    # The node has no variables, so only the parameters bring tangents in, and
     # the cotangent brings its own. Both halves of d/dv (w' J) come back in one
     # pass; nothing here forms a Hessian.
     nd <- K - 1L
     V <- matrix(0, length(st$parameters), nd,
                 dimnames = list(st$parameters, NULL))
-    dp <- attr(pars, "deriv")
     if (!is.null(dp)) {
       take <- intersect(rownames(dp), st$parameters)
       if (length(take)) V[take, ] <- dp[take, seq_len(nd), drop = FALSE]
@@ -480,7 +486,7 @@ Pexpl <- function(trafo, parameters = NULL, attach.input = FALSE, condition = NU
 
   zero_states <- character(0)
 
-  # SBML rate rules may carry conditionals, so the structural probes below
+  # SBML rate rules may contain conditionals, so the structural probes below
   # evaluate them with SBML's flat `piecewise(v1, c1, ..., otherwise)`.
   ss_env <- new.env(parent = baseenv())
   ss_env$piecewise <- function(...) {
@@ -1081,11 +1087,11 @@ Pimpl <- function(trafo, parameters = NULL, forcings = NULL, condition = NULL,
     zero <- numericZeros(pv)
     act  <- setdiff(dependent, zero)
     if (!length(act)) return(list(x = setNames(rep(0, n_dep), dependent), zero = zero, how = "all zero"))
-    # totals carried by the dependent species
+    # totals held by the dependent species
     Teff <- if (length(tn)) -eval_G(setNames(rep(0, n_dep), dependent), pv)[1, tn] else numeric(0)
     Ca <- C_dep[, act, drop = FALSE]
     if (length(Teff) && any(Teff > 0 & rowSums(Ca != 0) == 0))
-      stop("Pimpl: a conserved total is positive but every species carrying it rests at 0.",
+      stop("Pimpl: a conserved total is positive but every species holding it rests at 0.",
            call. = FALSE)
     prep <- function(x) {
       x <- x[dependent]; x[zero] <- 0
@@ -1346,7 +1352,7 @@ Pimpl <- function(trafo, parameters = NULL, forcings = NULL, condition = NULL,
 #' @param trafo Named character / [eqnvec], or a list thereof.
 #' @param expr `"lhs ~ rhs"` formula string.
 #' @param table Condition table (row per condition, column per parameter)
-#'   carried as the `tree` attribute when branching.
+#'   stored as the `tree` attribute when branching.
 #' @param conditions Condition names; default `rownames(table)`.
 #' @param apply One of `"nothing"`, `"insert"`, `"define"`; how the
 #'   `table` entries are folded into each branch.

@@ -144,10 +144,10 @@ skip_if_no_compile <- function() {
 }
 
 
-## `...` carries the objects, so a misspelled argument name would be taken for
+## `...` holds the objects, so a misspelled argument name would be taken for
 ## one and dropped without a word.
 
-test_that("compile rejects a named argument that carries no sources", {
+test_that("compile rejects a named argument that has no sources", {
   fake <- structure(list(), class = c("obsfn", "fn"))
 
   expect_error(compile(fake, outout = "all"), "did you mean `output`")
@@ -196,7 +196,7 @@ test_that("output places the shared object where it says", {
   d <- file.path(tempdir(), paste0("cmp_", as.integer(runif(1, 1e6, 9e6))))
   dir.create(d)
 
-  # a name carrying a directory is taken as given
+  # a name with a directory is taken as given
   invisible(capture.output(
     compile(bench$gfn, bench$xfn, output = file.path(d, "combined"), cores = 1)))
   expect_true(file.exists(file.path(d, paste0("combined", so))))

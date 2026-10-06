@@ -9,7 +9,7 @@
 ## A cotangent travelling through the tree is the same shape whichever node it
 ## passes, because every node's output is the same pair:
 ##
-##   out    the matrix a prediction or an observation carries, NULL for a parfn
+##   out    the matrix a prediction or an observation returns, NULL for a parfn
 ##   pars   the parameters the node passes through on its `parameters` attribute
 ##
 ## Both halves are optional and both accumulate. The `pars` half is what makes
@@ -19,9 +19,9 @@
 ##
 ## Copyright (C) 2026 Simon Beyer
 
-# The cotangent one node hands to the node below it. Both halves carry a
+# The cotangent one node hands to the node below it. Both halves have a
 # trailing direction axis of extent K: slice 1 is the cotangent itself, slices
-# 2..K are its derivatives along the directions the value pass carried. First
+# 2..K are its derivatives along the directions the value pass propagated. First
 # order is K = 1, the same storage plus a dim attribute and the same code path.
 # A walk in seed mode, `.bwdNode(..., seeds = TRUE)`, reads the same axis as
 # independent first-order seeds instead, each slice a cotangent of its own.
@@ -36,16 +36,21 @@
   list(out = out, pars = pars)
 }
 
-# How many directions a half carries. Works on both shapes, [p, K] and
+# How many directions a half has. Works on both shapes, [p, K] and
 # [n, m, K], because the axis is the last one either way.
-.ctK <- function(x) if (is.null(x)) 1L else as.integer(utils::tail(dim(x), 1L))
+.ctK <- function(x) {
+  if (is.null(x)) return(1L)
+  d <- dim(x)
+  as.integer(d[length(d)])
+}
 
 .ctZero <- function(nms, K = 1L)
   matrix(0, length(nms), K, dimnames = list(nms, NULL))
 
 # The solver's answer as a K-column cotangent: the gradient in slice 1, its
 # directional derivatives beside it. The curvature's middle axis is the tangent
-# set the call was handed, which is exactly the directions the chain carries.
+# set the call was handed, which is exactly the set of directions the chain
+# differentiates along.
 .adjointCt <- function(res, K = 1L) {
   g <- res$cotangent[, 1L]
   u <- matrix(g, ncol = 1L, dimnames = list(names(g), NULL))
@@ -66,7 +71,7 @@
   if (is.null(a)) return(b)
   if (is.null(b)) return(a)
   if (ncol(a) != ncol(b))
-    stop("two cotangent halves carry ", ncol(a), " and ", ncol(b),
+    stop("two cotangent halves have ", ncol(a), " and ", ncol(b),
          " directions; a node handed on a width its neighbour does not have.",
          call. = FALSE)
   na <- rownames(a); nb <- rownames(b)
@@ -93,7 +98,7 @@
 # when it is not there. K > 1 is second order and needs the fifth compilation.
 .requireReverse <- function(has_reverse, has_reverse2, K) {
   if (K > 1L && !has_reverse2)
-    stop("the reverse mode carries directions here, which needs the ",
+    stop("the reverse mode propagates directions here, which needs the ",
          "forward-over-reverse object; rebuild via odemodel(..., derivMode = ",
          "c(\"forward\", \"forward-reverse\")).", call. = FALSE)
   if (K == 1L && !has_reverse)
@@ -113,7 +118,7 @@
 # One match() rather than an intersect() and two name lookups: this is the
 # hottest thing in a reverse objective that is not the solver.
 # `K` is the width the caller expects back, which is not always the width `w`
-# has: an absent half is zero at whatever width its neighbour carries.
+# has: an absent half is zero at the width of its neighbour.
 .pickCotangent <- function(w, nms, K = .ctK(w)) {
   out <- .ctZero(nms, K)
   if (is.null(w) || !length(nms)) return(out)
@@ -222,9 +227,12 @@
     # The incoming tangents, read before the strip below takes them off: at
     # second order they are what the node's curvature is contracted along.
     V <- if (K > 1L) attr(pars, "deriv") else NULL
+    # Directions with no tangent here meet no curvature: the further slices
+    # are pulled back as the first, without second derivatives.
+    curved <- K > 1L && !is.null(V) && any(V != 0)
     attr(pars, "deriv") <- NULL
     attr(pars, "deriv2") <- NULL
-    v <- p2p(pars, fixed = fixed, deriv = TRUE, deriv2 = (K > 1L),
+    v <- p2p(pars, fixed = fixed, deriv = TRUE, deriv2 = curved,
              condition = condition)
     J <- attr(v, "deriv")
     # Answering without a Jacobian used to read as a cotangent of zero, so a
@@ -239,7 +247,7 @@
     wv <- .pickCotangent(w, rownames(J))
     u  <- crossprod(J, wv)
     rownames(u) <- colnames(J)
-    if (K > 1L) {
+    if (curved) {
       H <- attr(v, "deriv2")
       if (is.null(H))
         stop("a second-order cotangent needs this transformation's own second ",

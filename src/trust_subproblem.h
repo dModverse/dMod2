@@ -154,7 +154,7 @@ inline void trust_sub(int K, const double* g,
   for (int j = 0; j < K; ++j) C3 += q[j] * q[j];
 
   // A gradient orthogonal to the min-eigenspace still projects onto it as
-  // O(eps * ||g||), because the eigenvector carrying it is only that accurate.
+  // O(eps * ||g||), because the eigenvector behind it is only that accurate.
   // Left in, the residue makes C2 > 0, routes the hard case through the easy
   // branch, and the root it then chases is of the size of the residue itself --
   // an arbitrary step along the null direction.
@@ -255,7 +255,7 @@ inline void trust_sub(int K, const double* g,
                   w.data(), &i_one, &d_zero, p_out, &i_one FCONE);
 
   // Extending along the min-eigendirection only pays against negative
-  // curvature. For lam_min >= -eig_tol that direction carries no model information
+  // curvature. For lam_min >= -eig_tol that direction holds no model information
   // (q_jmin == 0 by C2 == 0), so the minimum-norm step is the answer.
   double utry = 0.0;
   if (lam_min < -eig_tol) {

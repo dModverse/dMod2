@@ -112,7 +112,7 @@ then runs on gradients alone. It needs an objective that takes
 \item{\code{hessianReseed}}{What a stalled quasi-Newton phase does:
 \code{"never"} (default) stops, \code{"stall"} fetches a fresh
 Hessian of the same kind at the current iterate, clears the stored
-pairs and carries on. The source does not change; only the matrix it
+pairs and continues. The source does not change; only the matrix it
 updates from does. A stall consists of rejected steps, so a reseed is
 taken only after the iterate has moved; a run that stalls again without
 moving stops as \code{"never"} does. \code{nReseed} reports the
@@ -158,7 +158,7 @@ There the full step, all linearised gaps closed, is damped by a factor
 that a predictor from the last curvature estimate proposes and a
 corrector cuts back, and a damped step is taken when the simplified
 step at its end, with the Jacobians of the current iterate, has
-shrunk: the natural level function, which carries the geometry of the
+shrunk: the natural level function, which reflects the geometry of the
 problem rather than the weights of a merit function. Needs
 \code{hessianMethod = "gn"}, a fixed sigma and no error model. Where
 the damping finds no step, the filter takes over.}
@@ -295,7 +295,7 @@ is the last accepted one.
 \section{Choosing tolerances}{
 
 The optimiser can only resolve what the objective delivers. For an ODE model
-integrated at relative tolerance \code{rtol}, the value carries a relative
+integrated at relative tolerance \code{rtol}, the value has a relative
 error of roughly \code{rtol} and the forward sensitivities about an order
 more, giving the gradient a noise floor. Below it, further iterations chase
 integration error. As a starting point:
@@ -349,9 +349,9 @@ Not available with multiple shooting: \code{hessianMethod = "exact"}, a
 \code{boundary = "clip"}, \code{minimize = FALSE} and \code{traceFile}.
 A multiple-shooting run reports \code{converged = TRUE} only when the gaps
 have closed below \code{tolControl$ctol}; with open gaps the node values
-carry what the parameters do not explain, and the value of the data term
+absorb what the parameters do not explain, and the value of the data term
 is no measure of the fit.
-The result carries a list \code{multipleShooting} with the final
+The result contains a list \code{multipleShooting} with the final
 \code{nodes}, the
 \code{gaps} per condition, their scaled size \code{violation}, the counts
 \code{nRelaxed} (iterations with a node step below the full one),

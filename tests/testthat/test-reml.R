@@ -15,7 +15,7 @@ skip_if_no_compile <- function() {
 }
 
 
-# Decay chain with a constant error model. The observation carries a scale `s`,
+# Decay chain with a constant error model. The observation has a scale `s`,
 # an inner parameter of the error model; the `fixed` trafo fixes it, separating
 # the estimated parameter count from the inner one. One shared object for both.
 .reml_fx <- local({
@@ -33,7 +33,7 @@ skip_if_no_compile <- function() {
                 condition = "C1", modelname = "reml_p_free", compile = FALSE)
     p_fixed <- P(eqnvec(A = "A", k = "k", sigma_y = "sigma_y", s = "1"),
                  condition = "C1", modelname = "reml_p_fixed", compile = FALSE)
-    compile(gfn_s, e_const, p_free, p_fixed, output = "reml_all", cores = 4L)
+    compile(gfn_s, e_const, p_free, p_fixed, output = "reml_all", cores = test_cores())
 
     cache <<- list(
       free  = list(prd = gfn_s * bench$xfn * p_free,  e = e_const),
@@ -138,7 +138,7 @@ test_that("reml sees every term of a split objective", {
   split  <- normL2(d_a, ec$prd, errmodel = ec$e, times = tt) +
             normL2(d_b, ec$prd, errmodel = ec$e, times = tt)
 
-  # the split objective carries both terms, not just the first
+  # the split objective contains both terms, not just the first
   expect_length(attr(split, "l2spec"), 2L)
   expect_equal(nrow(remlLeverage(split, pars)), n)
   expect_equal(sum(remlLeverage(split, pars)$leverage),

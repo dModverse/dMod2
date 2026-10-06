@@ -38,7 +38,7 @@ are unioned (each dispatched separately).}
 
 \item{conditions}{character vector specifying the conditions to
 which \code{getParameters} is restricted (only honored by methods that
-carry per-condition parameter mappings).}
+have per-condition parameter mappings).}
 }
 \value{
 The parameters in a format that depends on the class of \code{x}.

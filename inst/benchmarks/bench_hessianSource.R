@@ -6,7 +6,7 @@
 # Compares the trust-region Hessian sources on Boehm2014 over one shared set of
 # starting points. The two metrics disagree, which is the point of the script:
 # scored per start a method can look good and still be expensive per hit,
-# because it carries hopeless starts a long way before it gives up.
+# because it pursues hopeless starts a long way before it gives up.
 #
 # [AUTHOR]
 # Simon Beyer

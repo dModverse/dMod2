@@ -982,7 +982,7 @@ mstrust <- function(objfun, center, rinit = .1, rmax = 10, fits = 20, cores = 1,
   
   
   # cores = c(fits = , conditions = ) splits the two axes. A forked outer axis
-  # cannot carry an inner one, cppDE's batch runs serially inside a fork --
+  # cannot nest an inner one, cppDE's batch runs serially inside a fork --
   # so an inner axis > 1 selects PSOCK.
   .cc <- .splitCores(cores, "fits")
   coresConditions <- .cc$conditions

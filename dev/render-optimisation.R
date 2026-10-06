@@ -6,7 +6,7 @@
 # worked example needs python-libsbml through reticulate; neither is available
 # on a standard CI runner. The source bundle (Rmd + bibliography + CSL) lives
 # under dev/optimisation/: that whole directory is .Rbuildignore'd, so the tarball
-# carries only the rendered PDF and the .asis stub.
+# contains only the rendered PDF and the .asis stub.
 #
 # Workflow: edit dev/optimisation/Optimisation.Rmd, install the package, run this script,
 # commit the regenerated vignettes/Optimisation.pdf alongside the source change.

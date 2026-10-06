@@ -293,7 +293,7 @@ default.
 The Gauss-Newton matrix omits the term of residuals times their second
 derivatives. Near the optimum the quadratic model therefore stops improving, and
 `ftol` or `mtol` fires short of the minimum. A quasi-Newton approximation infers
-curvature from the steps taken and carries no such bias.
+curvature from the steps taken and has no such bias.
 
 ## BFGS and SR1
 
@@ -396,7 +396,7 @@ affected: its rank-one update has no sign constraint and overwrites bad
 curvature outright, and the Moré-Sorensen subproblem solves the indefinite
 approximations that follow. `inst/benchmarks` compares both seeds.
 
-`qnMemory` limits the curvature carried forward. The default `0`, used in the
+`qnMemory` limits the curvature retained. The default `0`, used in the
 rest of this vignette, accumulates every update onto the seed. A positive value
 rebuilds the approximation in each iteration from $\gamma I$ and the most recent
 `qnMemory` pairs, where $\gamma$ is the scaling $y^{\mathsf T} y / s^{\mathsf T} y$
@@ -504,7 +504,7 @@ The curves fall into two shapes. Gauss-Newton and the two fallback runs track
 each other over the whole range, since a fallback is Gauss-Newton until a soft
 stop fires. They differ in the leading plateau: under Gauss-Newton it is not
 flat, because the model stops improving before the minimum, whereas the
-quasi-Newton phase carries those starts onto a common value. The identity-seeded
+quasi-Newton phase brings those starts to a common value. The identity-seeded
 runs form the second shape, with a longer leading plateau: they reach the global
 optimum from more starting points, and more of the remaining starts end high.
 Under `"bfgs"` this worsens the typical value, under `"sr1"` it does not.
@@ -542,7 +542,7 @@ forward handover matches `"gn"` on every count, as on Bachmann.
 # Bachmann, 113 parameters
 
 A dense quasi-Newton update needs of the order of $n_\theta$ accepted steps
-before it carries curvature along every direction, so its advantage should
+before it captures curvature along every direction, so its advantage should
 narrow as the problem grows. The JAK2-STAT5 model of Bachmann et al.
 [@bachmann2011division] tests this with 113 estimated parameters, 25 states, 20
 observables and 36 conditions. The fits ran on a SLURM cluster through
@@ -580,7 +580,7 @@ far from it. No source finds an optimum another misses. The sources differ in co
 Two differences are structural rather than statistical.
 
 For `"sr1"` an identity seed beats a Gauss-Newton seed, 79 starts against 65.
-The Gauss-Newton seed carries the curvature of a point the run is about to leave
+The Gauss-Newton seed brings the curvature of a point the run is about to leave
 into the first steps of an approximation that is rebuilt anyway, and SR1 has no
 damping to discard it.
 
@@ -622,11 +622,28 @@ Three findings carry over between the settings. No source reaches an optimum
 another misses; they differ in cost. A handover does not change the basin a
 run ends in, since the basin is chosen before a soft stop fires. A
 quasi-Newton phase needs of the order of $n_\theta$ accepted steps before it
-carries curvature everywhere, so its cost per optimum grows with the parameter
-count.
+covers every direction, so its cost per optimum grows with the parameter count.
 
 The forward handover changes only where inside a basin a run stops; the
 reversed one restores a valid stopping test.
+
+# The accuracy of a reverse gradient
+
+The quasi-Newton sources take the gradient alone, and a reverse objective
+(`sweep = "reverse"`) supplies it from one backward sweep instead of
+$n_\theta$ sensitivity columns. The value pass runs on the grid of a value
+solve, as the forward run of CVODES' adjoint analysis does. `Xs()` on cppDE
+controls the sweep through `optionsReverse`; the solver side is cppDE's
+`adjointControl()`, described in cppDE's Methods vignette, "Why the state
+error is not enough" and "Checking the sweep".
+
+**The control.** `refine = TRUE` holds each step of the sweep to the local
+error test of the CVODES backward problem under `abstol` and `reltol`, and a
+step that fails it is taken again in substeps. `gradtol` adds each step's share
+of the gradient to that test, as its absolute tolerance. A trust-region method
+converges with a gradient that is accurate relative to its own size
+[@carter1991global; @conn2000trust], so `gradtol` is a fraction of the
+gradient's scale.
 
 # Multiple shooting
 
@@ -757,7 +774,7 @@ other states start at a run of the model whose observed states are reset to the
 data at every data time, replacement synchronisation
 [@pecora1990synchronization]. States driven by the observed ones, a gating
 variable driven by the voltage, forget where they started and follow the
-measured trajectory, instead of being carried from one noisy value per segment
+measured trajectory, instead of being passed on from one noisy value per segment
 to the next.
 
 `nodes = "transitions"` puts a node just before every fast change of the data, a
@@ -775,7 +792,7 @@ Bock's own globalisation damps the full Gauss-Newton step, all linearised gaps
 closed, by a factor that a curvature estimate predicts and a corrector cuts back;
 a damped step is taken when the simplified step at its end, the Jacobians of the
 current iterate with the residuals and gaps of the trial, has shrunk. This
-natural level function carries the geometry of the problem rather than the
+natural level function reflects the geometry of the problem rather than the
 weights of a merit function [@peifer2007parameter]; `stepControl$acceptance =
 "natural"` selects it, with the filter taking over where the damping finds no
 step. `stepControl$twoPhase` fits the parameters first with the node values
@@ -921,7 +938,7 @@ ggplot(pb$trajectories, aes(time, value)) +
   theme_dMod()
 ```
 
-Where the nodes sit decides. Ten even segments, the start of `"auto"`, carry
+Where the nodes sit decides. Ten even segments, the start of `"auto"`, contain
 several spikes each: a small error of the parameters moves them, the segments
 miss their data, and the automatic cuts pile nodes onto the spikes with the
 noise of the data in their values. A node just before a spike leaves the spike

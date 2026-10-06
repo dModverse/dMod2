@@ -14,7 +14,7 @@
 # Sat 06 Sep 2026
 #
 # [Info]
-# Keys carry no spaces or commas: they travel as literals into the generated
+# Keys contain no spaces or commas: they travel as literals into the generated
 # SLURM array script. `hessianSourceLabels` holds the display form for tables.
 #
 # Usage:

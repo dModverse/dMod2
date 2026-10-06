@@ -1,3 +1,24 @@
+# dMod2 0.10.5
+
+* Breaking: `Xs()` on cppDE takes `refine` and `gradtol` in `optionsReverse`;
+  `floor` is gone, and so is the weighting of the backward grid by the
+  previous evaluation's adjoint. `refine = TRUE` holds each step of the
+  backward sweep to the error test of the CVODES backward problem under
+  `abstol` and `reltol`, through `cppDE::adjointControl(refine = TRUE)`, and
+  `gradtol` is then the absolute tolerance on each step's share of the
+  gradient. The reverse value pass takes the grid of a value solve.
+* `Xs()` on cppDE: `optionsSens = list(sensErrCon = FALSE)` takes the
+  sensitivities out of the error test.
+* `odemodel(backend = "Sundials", derivMode = "reverse")` takes events: the
+  reverse objective takes the adjoint and the gradient through each jump.
+* Reverse objectives run their solves through prepared batch handles,
+  evaluate the error model batched and keep the data-to-prediction indices
+  between evaluations. Under second order a transformation that no tangent
+  reaches skips its second derivatives.
+* `normL2()` with one condition evaluates the error model without derivatives
+  when none are requested.
+* Needs cppDE 0.12.0.
+
 # dMod2 0.10.4
 
 * `Xs()` on cppDE and Sundials stops on a failed solve, `onFailure = "stop"`,
@@ -143,7 +164,7 @@
   preequilibration, where a constant at 0 idles its reaction, and the
   reimport of Isensee_JCB2018 equilibrated to another state.
 * `exportPEtabObject()` declares condition targets and compartment sizes that
-  nothing else carries, with the SBML default recorded at import (a surface
+  nothing else states, with the SBML default recorded at import (a surface
   compartment of Lang_PLOSComputBiol2024 went out sized by itself).
 * `exportPEtabObject()` writes a single measured sigma per observable as its
   noise formula instead of per-row noise parameters.
@@ -223,7 +244,7 @@
   one of its states free, the first one whose balance can be spent elsewhere.
   `customTotals()` reach it as before.
 * `steadyStates(version = "1.4")` never solves for a rate constant whose fluxes
-  all carry a `neglect`ed symbol, which would divide by that symbol.
+  all contain a `neglect`ed symbol, which would divide by that symbol.
 * `steadyStates(version = "1.4")` prints one line per attempt instead of the
   intermediate expressions, notes after its summary, and on failure the
   balances left.
@@ -304,7 +325,7 @@
 * **Bug fixes.** A summed objective keeps the curvature of every term. An
   objective that declines a Hessian no longer crashes `trust()`. A backward
   solve without an answer is an error instead of a zero gradient. A PEtab prior
-  honours `hessian = FALSE`. The batched backward path carries more than one
+  honours `hessian = FALSE`. The batched backward path propagates more than one
   direction. `compile()` stays within the 8191-character command line of
   Windows.
 * New examples `inst/examples/example_ReverseAD.R`,
@@ -364,12 +385,12 @@
   run; `fallbackLimit` above one alternates back to the primary source at the
   next such stop, re-seeding a Gauss-Newton phase from a fresh Hessian at the
   cost of one evaluation. `hessianMethod = "hybrid"` is gone, not deprecated: a
-  run is a method and, optionally, a fallback, and no pair carries a name of its
+  run is a method and, optionally, a fallback, and no pair has a name of its
   own. It was `"gn"` with `hessianFallback = "bfgs"`, and `trust()` says so when
   it is passed.
-* `as.parframe()` carries `nSwitch`, the number of Hessian source handovers, so
+* `as.parframe()` includes `nSwitch`, the number of Hessian source handovers, so
   a multi-start can be scored on them.
-* `trustL1()` is gone. It carried its own trust-region driver, shared no
+* `trustL1()` is gone. It had its own trust-region driver, shared no
   acceptance semantics with `trust()` after the changes above, and had no caller
   left here: the L1 penalty, its clustering and the EM layer that use it live on
   `devel-EM`, and it returns with them once that layer lands, aligned with the
@@ -409,7 +430,7 @@
   until it stagnates, then switches to `"bfgs"` once. The quasi-Newton phase
   consumes only the gradient. Reflective boundary only.
 * Objective functions take a call-time `hessian` argument. With
-  `hessian = FALSE` the `J^T J` contraction never runs and the result carries a
+  `hessian = FALSE` the `J^T J` contraction never runs and the result has a
   `NULL` hessian. `trust()` uses this in the quasi-Newton phase, and it
   propagates through objective composition.
 * `trust()` reports `neval` and, under `blather`, the `hessianSource` per
@@ -502,7 +523,7 @@
   `constraintCauchy()`, `constraintGamma()`, `constraintExponential()`,
   `constraintChisq()` and `constraintRayleigh()`. Each is the `-2 log` density
   including its normalisation, unlike `constraintL2()`, which is the penalty
-  form, and each carries the chain rule so `constraint * P()` is exact.
+  form, and each applies the chain rule so `constraint * P()` is exact.
 * The multivariate-normal path of `constraintL2()` is gone, together with the
   `penaltySpec` plumbing and the `plotIndivs()` / `plotHistIndivs()` generics.
   All of them need an `omegaSpec` or a `penaltyspec`, which only the NLME layer
@@ -531,7 +552,7 @@
   that went through `loadDLL()` or `compile()`.
 * `loadDLL()` also searches the directories the sources were generated in, so a
   model compiled into a temporary folder is found rather than silently skipped.
-* `normL2()` carries `compileInfo`, as `*` and `+` already did, so `loadDLL()`
+* `normL2()` attaches `compileInfo`, as `*` and `+` already did, so `loadDLL()`
   and `compile()` reach the shared objects of a composed objective.
 
 # dMod2 0.6.1
@@ -540,7 +561,7 @@
   process. Unloading them nulled the native symbol pointers held by the
   prediction, observation and parameter functions built from them, leaving
   every later call without a way to resolve them again.
-* `Xs()` caches a prepared batch handle that carries such a pointer of its
+* `Xs()` caches a prepared batch handle that holds such a pointer of its
   own, which no symbol-cache flush reached. It is now rebuilt whenever the
   cache is flushed.
 
@@ -644,7 +665,7 @@
 
 # dMod2 0.5.5
 
-* `eqnlist` carries compartments and volumes; `assignCompartment()` and
+* `eqnlist` stores compartments and volumes; `assignCompartment()` and
   `setCompartmentVolume()` set them.
 * `conservedQuantities()` and `getTotals()` report the conserved moieties.
 

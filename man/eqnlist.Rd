@@ -56,7 +56,7 @@ May also name states that do not exist yet; see \code{\link[=assignCompartment]{
 \code{nrow(smatrix)}. Per-reaction reference compartment ID; use \code{NA} to infer
 from educts. Required when educts span multiple compartments.}
 
-\item{amountStates}{Optional character vector of states that carry substance
+\item{amountStates}{Optional character vector of states that have substance
 units (amounts) rather than concentrations, SBML's \code{hasOnlySubstanceUnits}.
 Their fluxes are not divided by a compartment volume.}
 

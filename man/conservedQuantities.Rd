@@ -19,7 +19,7 @@ than concentration. Requires \code{volumes} to be supplied as numeric.}
 aligned with \code{colnames(S)}. Only consulted when \code{weight = "volume"}.}
 }
 \value{
-Data frame with conserved quantities carrying an attribute with the
+Data frame with conserved quantities and an attribute with the
 number of conserved quantities.
 }
 \description{

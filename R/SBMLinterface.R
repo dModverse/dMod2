@@ -88,7 +88,7 @@ importSbml <- function(modelpath, keep = NULL) {
   spc_json  <- json_content[["speciesCompartments"]]
   if (!is.null(comp_json) && length(comp_json) > 0L) {
     for (c in comp_json) {
-      # Compartments with size = 1 (and no rule) carry no symbolic content --
+      # Compartments with size = 1 (and no rule) have no symbolic content --
       # storing them as the literal "1" keeps the compartment ID out of the
       # kinetic laws, which is what dMod's roundtrip expects when the source
       # eqnlist had volume "1". Otherwise use the SBML compartment ID as the
@@ -132,7 +132,7 @@ importSbml <- function(modelpath, keep = NULL) {
     if (all(is.na(reactionCompartment))) reactionCompartment <- NULL
   }
 
-  # SBML species with hasOnlySubstanceUnits carry amounts, not concentrations.
+  # SBML species with hasOnlySubstanceUnits hold amounts, not concentrations.
   amountStates <- intersect(unlist(json_content[["amountSpecies"]]), states)
 
   pars <- setNames(json_content[["p"]], json_content[["parameterNames"]])
@@ -191,7 +191,7 @@ importSbml <- function(modelpath, keep = NULL) {
     rr_lhs <- names(rate_rules)
     rr_rhs <- .normalise_formula(unlist(rate_rules, use.names = FALSE))
     # Inline assignment-rule LHSs into the rate-rule RHSs too, so a RateRule
-    # that references a rule-defined symbol doesn't carry it as a free var.
+    # that references a rule-defined symbol doesn't keep it as a free var.
     if (length(rules)) {
       for (it in seq_len(max_iter)) {
         new_rr <- replaceSymbols(rule_lhs, rule_rhs, rr_rhs)
@@ -270,7 +270,7 @@ importSbml <- function(modelpath, keep = NULL) {
   events_src <- NULL
   if (length(events_json)) {
     rows <- list()
-    # The source rows carry only what the SBML declared. The derived
+    # The source rows contain only what the SBML declared. The derived
     # compartment rescales are regenerated on the next import, so exporting
     # them would apply them twice.
     rows_src <- list()
@@ -338,7 +338,7 @@ importSbml <- function(modelpath, keep = NULL) {
 # SBML ids may start with an underscore or a digit, which R cannot parse, and
 # every symbolic step downstream goes through `parse()`. The rename happens on
 # the raw JSON, before anything reads a formula.
-# Reserved in C++, so a state or compartment carrying one of these names cannot
+# Reserved in C++, so a state or compartment with one of these names cannot
 # reach the code generator unrenamed.
 .CPP_KEYWORDS <- c(
   "alignas", "alignof", "and", "asm", "auto", "bool", "break", "case", "catch",
@@ -476,7 +476,7 @@ exportSbml <- function(eqnlist, parameters = NULL, inits = NULL, filepath,
     entry <- eqnlist$compartments[[cid]]
     vol <- entry$volume
     size <- suppressWarnings(as.numeric(vol))
-    # A compartment whose volume expression is its own symbol carries the
+    # A compartment whose volume expression is its own symbol has its
     # value in the parameter vector; write that as the size instead of a
     # self-referential assignment.
     if (is.na(size) && identical(vol, cid)) {

@@ -27,7 +27,7 @@ branch(
 \item{conditionMatch}{Regex on condition names; restricts the operation.}
 
 \item{table}{Condition table (row per condition, column per parameter)
-carried as the \code{tree} attribute when branching.}
+stored as the \code{tree} attribute when branching.}
 
 \item{conditions}{Condition names; default \code{rownames(table)}.}
 

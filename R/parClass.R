@@ -209,7 +209,7 @@ as.parframe.parlist <- function(x, sort.by = "value", ...) {
 
 #' Concatenate parameter lists
 #'
-#' @description Fitlists carry an fit index which must be held unique on merging
+#' @description Fitlists have a fit index which must be held unique on merging
 #' multiple fitlists.
 #'
 #' @author Wolfgang Mader, \email{Wolfgang.Mader@@fdm.uni-freiburg.de}
@@ -371,7 +371,7 @@ plotValues.parframe <- function(x, tol = 1, ..., showSteps = FALSE) {
 
 
 # Default lines of a profile plot: the chi-square thresholds, labelled with the
-# level they belong to. The names carry the labels, so a caller can hand in the
+# level they belong to. The names are the labels, so a caller can hand in the
 # thresholds its intervals are actually read at.
 .profileLines <- function() {
   c("68%" = 1, "90%" = qchisq(0.90, 1), "95%" = qchisq(0.95, 1))
@@ -570,7 +570,7 @@ unique.parframe <- function(x, incomparables = FALSE, tol = 1, ...) {
 #' Dispatch as.parvec.
 #'
 #' Creates an object of class \code{"parvec"} from a numeric vector, optionally
-#' carrying first-order derivatives. Existing derivatives may be inherited,
+#' with first-order derivatives. Existing derivatives may be inherited,
 #' replaced, or dropped; no derivatives are created automatically.
 #'
 #' Parameters missing from the derivative matrix are treated as fixed and
@@ -705,7 +705,7 @@ print.parvec <- function(x, ...) {
 #' @export
 "[.parvec" <- function(x, ..., drop = FALSE) {
 
-  # `.subset()` subsets without dispatch and without carrying the attributes:
+  # `.subset()` subsets without dispatch and without copying the attributes:
   # `unclass(x)[...]` duplicates the values and the deriv arrays first, only to
   # drop them again.
   out <- .subset(x, ...)
@@ -826,7 +826,7 @@ c.parvec <- function(...) {
   J_list <- Filter(Negate(is.null), d)
   J <- do.call(rbind, J_list)
 
-  # Concatenate deriv2 along the first axis if any input carries one.
+  # Concatenate deriv2 along the first axis if any input has one.
   d2 <- lapply(p, attr, "deriv2")
   has_d2 <- !vapply(d2, is.null, TRUE)
   H <- NULL

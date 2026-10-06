@@ -316,6 +316,7 @@ normL2 <- function(data, x, errmodel = NULL, times = NULL,
   .meta_cache$par_names_global <- NULL
   .meta_cache$signature        <- NULL  # used to invalidate on shape change
   .meta_cache$shape            <- NULL
+  .meta_cache_rev <- new.env(parent = emptyenv())
 
   # Controls of the objective, changed later by controls<-. Multiple shooting
   # is one: trust() reads it when it is called, and lays the segments out
@@ -345,7 +346,7 @@ normL2 <- function(data, x, errmodel = NULL, times = NULL,
     if (identical(sweep, "reverse")) {
       if (!is.null(.prediction))
         stop("normL2: a handed-in prediction is a forward-mode shortcut and ",
-             "carries no tape; the reverse mode has to walk the chain itself.",
+             "records no tape; the reverse mode has to walk the chain itself.",
              call. = FALSE)
       return(.normL2_reverse(
         pars = pars, fixed = fixed, deriv = deriv,
@@ -353,7 +354,7 @@ normL2 <- function(data, x, errmodel = NULL, times = NULL,
         conditions = conditions,
         env = env, cores = cores, x = x, errmodel = errmodel, data = data,
         timesD = .timesOf(conditions), e.cond = e.cond, opt.BLOQ = opt.BLOQ,
-        attr.name = attr.name))
+        attr.name = attr.name, meta_cache = .meta_cache_rev))
     }
 
     # The Hessian is only meaningful with deriv; when it is not wanted, the
@@ -395,7 +396,8 @@ normL2 <- function(data, x, errmodel = NULL, times = NULL,
       } else {
         lapply(seq_along(cn_eval), function(j)
           errmodel(out = prediction[[cn_eval[j]]], pars = split[[j]]$pars,
-                   fixed = split[[j]]$fixed, conditions = cn_eval[j])[[cn_eval[j]]])
+                   fixed = split[[j]]$fixed, deriv = deriv, deriv2 = deriv2,
+                   conditions = cn_eval[j])[[cn_eval[j]]])
       }
       # keep the NULL holes: .build_normL2_meta and the kernel index positionally
       err_list <- vector("list", length(conditions))
@@ -452,7 +454,7 @@ normL2 <- function(data, x, errmodel = NULL, times = NULL,
   err_pars <- if (!is.null(errmodel)) attr(errmodel, "parameters") else character(0)
   attr(myfn, "parameters") <- union(attr(x, "parameters"), err_pars)
   attr(myfn, "modelname") <- modelname(x, errmodel)
-  # Carried like `*` and `+` carry it, so loadDLL() and compile() can reach the
+  # Attached as `*` and `+` attach it, so loadDLL() and compile() can reach the
   # shared objects of a composed objective.
   attr(myfn, "compileInfo") <- .mergeCompileInfo(attr(x, "compileInfo"),
                                                  attr(errmodel, "compileInfo"))
@@ -734,7 +736,7 @@ constraintL2 <- function(mu, sigma = 1, attr.name = "prior", condition = NULL) {
     val <- sum(td$value)
 
     if (deriv) {
-      # Only the free parameters carry derivatives; the rest came in `fixed`.
+      # Only the free parameters have derivatives; the rest came in `fixed`.
       pos <- match(parnames[k], names(p))
       free <- !is.na(pos)
       gr[pos[free]] <- td$d1[free]
@@ -1134,8 +1136,9 @@ datapointL2 <- function(name, time, value, sigma = 1, attr.name = "validation", 
           else union(gn1, gn2)
 
   addVector <- function(target, x) {
-    i <- intersect(names(target), names(x))
-    target[i] <- target[i] + x[i]
+    i <- match(names(x), names(target))
+    ok <- !is.na(i)
+    target[i[ok]] <- target[i[ok]] + x[ok]
     target
   }
   addMatrix <- function(target, x) {
@@ -1149,7 +1152,7 @@ datapointL2 <- function(name, time, value, sigma = 1, attr.name = "validation", 
     value    = out1$value + out2$value,
     gradient = addVector(addVector(setNames(numeric(length(pars)), pars),
                                    out1$gradient), out2$gradient),
-    # A summand may carry a NULL hessian (built with hessian = FALSE); the sum
+    # A summand may return a NULL hessian (built with hessian = FALSE); the sum
     # is NULL only when both are, otherwise the present ones add.
     hessian  = if (is.null(out1$hessian) && is.null(out2$hessian)) NULL else {
       H <- matrix(0, length(pars), length(pars), dimnames = list(pars, pars))
@@ -1202,7 +1205,7 @@ datapointL2 <- function(name, time, value, sigma = 1, attr.name = "validation", 
 #' @export
 print.objlist <- function(x, n1 = 20, n2 = 6, ...) {
   cat("value\n", "==================\n",x$value, "\n")
-  # An objlist from a `deriv = FALSE` call carries the value alone.
+  # An objlist from a `deriv = FALSE` call holds the value alone.
   if (length(x$gradient)) {
     n1 <- min(n1, length(x$gradient))
     cat("gradient[1:",n1,"] (full length = ",length(x$gradient),")\n", "==================\n", sep = "")
@@ -1218,7 +1221,7 @@ print.objlist <- function(x, n1 = 20, n2 = 6, ...) {
   cat("\n")
   cat("attributes\n", "==================\n")
   # str() would prefix every line with the storage mode, and the chi2 tag with
-  # a line of its own. The attributes carry objective contributions, so what
+  # a line of its own. The attributes hold objective contributions, so what
   # matters is the name and the number.
   a <- attributes(x)[setdiff(names(attributes(x)), c("names", "class"))]
   if (length(a)) {

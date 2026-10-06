@@ -35,7 +35,7 @@ dir.create(outdir)
 
 ## Reactions
 
-Reactions are added one at a time and carry their compartment. The Epo stimulus decays exponentially and enters the phosphorylation rates in closed form, so `time` appears directly in a rate expression. Nuclear species are assigned before they are produced, so their compartment does not follow from the reactions that import them.
+Reactions are added one at a time, each with its compartment. The Epo stimulus decays exponentially and enters the phosphorylation rates in closed form, so `time` appears directly in a rate expression. Nuclear species are assigned before they are produced, so their compartment does not follow from the reactions that import them.
 
 ```{r reactions}
 epo <- "1.25e-7*exp(-Epo_degradation_BaF3*time)"

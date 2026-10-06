@@ -22,15 +22,15 @@
 #'   sensitivities. See section Solver options.
 #' @param optionsSens Named list of solver options for the solves with
 #'   sensitivities. See section Solver options.
-#' @param optionsReverse Named list weighting the step size of the backward
-#'   pass of `sweep = "reverse"` by the adjoint of the previous evaluation.
-#'   Needs `backend = "cppDE"` and a model built with
-#'   `derivMode = "reverse"`. `NULL`, the default, leaves the step size to
-#'   `atol` and `rtol`. Entries:
-#'   * `gradtol`: the accuracy asked of the gradient; turns the weighting on.
-#'   * `floor`: the smallest weight, as a fraction of the largest.
-#'
-#'   The weight enters under a maximum, so the grid only becomes finer.
+#' @param optionsReverse Named list controlling the backward pass of
+#'   `sweep = "reverse"`. Needs `backend = "cppDE"` and a model built with
+#'   `derivMode = "reverse"`. `NULL`, the default, sweeps the step grid of the
+#'   value pass. Entries:
+#'   * `refine`: `TRUE` holds each step of the sweep to the error test of the
+#'     CVODES backward problem under the tolerances of the solve, see
+#'     [cppDE::adjointControl()].
+#'   * `gradtol`: under `refine`, the absolute tolerance on each step's share
+#'     of the gradient.
 #' @param fcontrol `deSolve` backend only. List with the interpolation
 #'   settings of the forcings, `method`, `rule`, `f` and `ties` as in
 #'   [stats::approxfun()], passed to [deSolve::ode()] as its `fcontrol`.
@@ -54,6 +54,9 @@
 #'   so an objective sees fewer data points rather than a failure.
 #' * `traceFile`: CSV file the per-step trace is written to, default `NULL`;
 #'   needs `odemodel(..., stepTrace = TRUE)`.
+#' * `sensErrCon`: `optionsSens` only. `FALSE` takes the sensitivities out of
+#'   the error test, which is cheaper and gives less accurate sensitivities;
+#'   default `TRUE`.
 #'
 #' `optionsOde` applies to `deriv = FALSE` and to the value and backward pass
 #' of `sweep = "reverse"`, `optionsSens` to `deriv = TRUE` and to
@@ -203,7 +206,7 @@ Xs.deSolve <- function(odemodel, forcings = NULL, events = NULL, names = NULL, c
       out <- submatrix(outSens, cols = c("time", names))
 
       # Forcings live in `names` so the value matrix can return them, but the
-      # extended ODE only carries sensitivities for state variables. Restrict
+      # extended ODE only has sensitivities for state variables. Restrict
       # the deriv axis to states that are actually requested.
       svars <- intersect(names, variables)
 
@@ -322,8 +325,9 @@ Xs.cppDE <- function(odemodel, forcings = NULL, events = NULL, names = NULL, con
   optionsDefault <- list(atol = 1e-6, rtol = 1e-6, maxattemps = 50L, maxsteps = 1e6L,
                          hini = 0, roottol = 1e-6, maxroot = 1L,
                          onFailure = "stop", traceFile = NULL)
+  sensDefault <- c(optionsDefault, list(sensErrCon = TRUE))
   odeOf  <- .derivedControl(function(o) .cppdeOptions(o, optionsDefault, "optionsOde"))
-  sensOf <- .derivedControl(function(o) .cppdeOptions(o, optionsDefault, "optionsSens"))
+  sensOf <- .derivedControl(function(o) .cppdeOptions(o, sensDefault, "optionsSens"))
   odeOf(optionsOde); sensOf(optionsSens)
 
   func <- odemodel$func
@@ -358,14 +362,14 @@ Xs.cppDE <- function(odemodel, forcings = NULL, events = NULL, names = NULL, con
   has_reverse <- !is.null(reversed)
   has_reverse2 <- !is.null(reversed2)
   # CVODES holds its checkpoints inside the solver and runs the backward solve
-  # under its own step-size control, so both the shared store and the weighted
-  # grid are arrangements of the native backend alone. Checked when the options
-  # are read, which catches a setting made later through controls<- as well.
+  # under its own step-size control, so both the shared store and the checked
+  # sweep are arrangements of the native backend alone. Checked when the
+  # options are read, which catches a setting made later through controls<-.
   has_store <- has_reverse && !identical(attr(reversed, "backend"), "cvode")
   reverseOpts <- function() {
     o <- controls$optionsReverse
     if (!is.null(o) && !has_store)
-      stop("Xs: 'optionsReverse' weights the native backward pass. It needs ",
+      stop("Xs: 'optionsReverse' checks the native backward pass. It needs ",
            "odemodel(backend = \"cppDE\", derivMode = c(\"forward\", \"reverse\")); ",
            "the Sundials backend runs its own step-size control.", call. = FALSE)
     o
@@ -410,40 +414,11 @@ Xs.cppDE <- function(odemodel, forcings = NULL, events = NULL, names = NULL, con
     scache$items[[length(scache$items) + 1L]] <- e
     e$store
   }
-
-  # lambda of the previous evaluation, weighting the next one's step size. It
-  # is kept per condition rather than per point, because carrying it across a
-  # parameter change is the whole purpose: the weight enters under a maximum,
-  # so one that misses costs steps and never accuracy.
-  wcache <- new.env(parent = emptyenv())
-  wcache$items <- list()
-  weightOn <- function() {
+  # The checked sweep, under optionsReverse$refine.
+  sweepCtl <- function() {
     o <- reverseOpts()
-    !is.null(o) && !is.null(o$gradtol)
-  }
-  weightKey <- function(cond, times)
-    if (!is.null(cond) && length(cond) == 1L) as.character(cond)
-    else paste0("#", length(times))
-  # The cache keeps lambda, which only a solve can give; gradtol and floor
-  # come from the controls as they are now, so a change applies to the very
-  # next backward pass.
-  weightGet <- function(cond, times) {
-    if (!weightOn()) return(NULL)
-    w <- wcache$items[[weightKey(cond, times)]]
-    if (is.null(w)) return(NULL)
-    o <- reverseOpts()
-    c(w, list(gradtol = o$gradtol, floor = if (is.null(o$floor)) 0 else o$floor))
-  }
-  weightPut <- function(cond, times, res) {
-    g <- res$adjointGrid
-    if (is.null(g) || !length(g$time)) return(invisible(NULL))
-    # lambda jumps where the objective seeds it, so the interpolant must not
-    # span an observation time.
-    br <- unique(findInterval(times, g$time))
-    br <- br[br >= 1L & br <= length(g$time)]
-    wcache$items[[weightKey(cond, times)]] <- list(
-      time = g$time, lambda = g$lambda, breaks = br)
-    invisible(NULL)
+    if (!has_store || !isTRUE(o$refine)) return(NULL)
+    cppDE::adjointControl(refine = TRUE, gradtol = o$gradtol)
   }
 
   # Marshalling shared by the single and the batched entry: Phi'(theta) as the
@@ -498,17 +473,22 @@ Xs.cppDE <- function(odemodel, forcings = NULL, events = NULL, names = NULL, con
   }
 
   # Every solve reads its options here, so this is also where a reverse option
-  # set after construction meets the check the constructor makes.
-  solveOpts <- function(deriv) {
+  # set after construction meets the check the constructor makes. `sec`, the
+  # sensErrCon of a solve with tangents.
+  solveOpts <- function(deriv, sec = NULL) {
     reverseOpts()
     o <- if (deriv) sensOf(controls$optionsSens) else odeOf(controls$optionsOde)
-    list(abstol = o$atol, reltol = o$rtol, maxattemps = o$maxattemps,
-         maxsteps = o$maxsteps, hini = o$hini, roottol = o$roottol,
-         maxroot = o$maxroot, onFailure = o$onFailure, traceFile = o$traceFile)
+    out <- list(abstol = o$atol, reltol = o$rtol, maxattemps = o$maxattemps,
+                maxsteps = o$maxsteps, hini = o$hini, roottol = o$roottol,
+                maxroot = o$maxroot, onFailure = o$onFailure, traceFile = o$traceFile)
+    if (!is.null(sec)) out$sensErrCon <- sec
+    out
   }
+  # sensErrCon of a forward solve.
+  sensSec <- function() isTRUE(sensOf(controls$optionsSens)$sensErrCon)
 
   # Second order forward exists only where it was built, and only on cppDE:
-  # Sundials carries first order both ways, deSolve forward alone. Saying which
+  # Sundials provides first order both ways, deSolve forward alone. Saying which
   # rebuild would answer beats handing solveODE a NULL model.
   pickModel <- function(deriv, deriv2) {
     if (!deriv) return(func)
@@ -536,7 +516,8 @@ Xs.cppDE <- function(odemodel, forcings = NULL, events = NULL, names = NULL, con
       params <- c(unclass(pars), unclass(fixed))
       res <- do.call(cppDE::solveODE, c(
         list(reversed, times, params, fixed = NULL,
-             forcings = forcs, keepStore = TRUE), solveOpts(FALSE)))
+             forcings = forcs, keepStore = TRUE),
+        solveOpts(FALSE)))
       storePut(times, params, res$store)
       return(assemble1(res, pars, fixed, FALSE, FALSE))
     }
@@ -545,7 +526,7 @@ Xs.cppDE <- function(odemodel, forcings = NULL, events = NULL, names = NULL, con
     res <- do.call(cppDE::solveODE, c(
       list(pickModel(deriv, deriv2), times, prep$params,
            tangent = prep$tangent, hessian = prep$hessian, fixed = NULL,
-           forcings = forcs), solveOpts(deriv)))
+           forcings = forcs), solveOpts(deriv, if (deriv) sensSec())))
     assemble1(res, pars, fixed, deriv, deriv2)
 
   }
@@ -554,6 +535,23 @@ Xs.cppDE <- function(odemodel, forcings = NULL, events = NULL, names = NULL, con
   # conditions thousands of times with new numbers; preparing them once keeps
   # cppDE's argument marshalling out of the parallel region's critical path.
   bcache <- new.env(parent = emptyenv())
+  rcache <- new.env(parent = emptyenv())
+  vcache <- new.env(parent = emptyenv())
+
+  # A prepared handle for `model`, reused while `sig` holds; NULL where cppDE's
+  # solveBatch() lacks an argument in `need`.
+  batchHandle <- function(cache, sig, model, conds, opts, need = character(0)) {
+    ns <- asNamespace("cppDE")
+    prepFn  <- get0("prepareBatch", envir = ns, inherits = FALSE)
+    solveFn <- get0("solveBatch",   envir = ns, inherits = FALSE)
+    if (is.null(prepFn) || is.null(solveFn) ||
+        !all(need %in% names(formals(solveFn)))) return(NULL)
+    if (!identical(cache$sig, sig) || !.batchHandleLive(cache$handle)) {
+      cache$handle <- do.call(prepFn, c(list(model, conditions = conds()), opts))
+      cache$sig <- sig
+    }
+    cache$handle
+  }
 
   # One batched cppDE call over all requests. Falls back to a loop when cppDE
   # predates the entry point. A requested trace goes through: the batch writes
@@ -574,25 +572,33 @@ Xs.cppDE <- function(odemodel, forcings = NULL, events = NULL, names = NULL, con
       o      <- solveOpts(FALSE)
       paramL <- lapply(seq_len(n), function(i)
         c(unclass(parsList[[i]]), unclass(fixedList[[i]])))
-      conds  <- lapply(seq_len(n), function(i) list(
+      conds  <- function() lapply(seq_len(n), function(i) list(
         times = timesL[[i]], parms = paramL[[i]],
         forcings = forcs, keepStore = TRUE))
       batch <- get0("solveODEBatch", envir = asNamespace("cppDE"),
                     inherits = FALSE)
+      ob <- o[setdiff(names(o), c("traceFile", "onFailure"))]
+      h <- if (is.null(batch)) NULL else
+        batchHandle(rcache, list(times = timesL, forcings = forcs, opts = ob),
+                    reversed, conds, ob)
       res <- if (is.null(batch))
         lapply(seq_len(n), function(i) do.call(cppDE::solveODE, c(
           list(reversed, timesL[[i]], paramL[[i]], fixed = NULL,
                forcings = forcs, keepStore = TRUE), o)))
+      else if (!is.null(h))
+        cppDE::solveBatch(h, parms = paramL, cores = cores,
+                          traceFile = o$traceFile, onFailure = o$onFailure)
       else
-        do.call(batch, c(list(reversed, conditions = conds, cores = cores), o))
-      for (i in seq_len(n)) storePut(timesL[[i]], paramL[[i]], res[[i]]$store)
+        do.call(batch, c(list(reversed, conditions = conds(), cores = cores), o))
+      for (i in seq_len(n))
+        storePut(timesL[[i]], paramL[[i]], res[[i]]$store)
       return(lapply(seq_len(n), function(i)
         assemble1(res[[i]], parsList[[i]], fixedList[[i]], FALSE, FALSE)))
     }
     preps  <- lapply(seq_len(n), function(i)
       prep1(parsList[[i]], fixedList[[i]], deriv, deriv2))
     model <- pickModel(deriv, deriv2)
-    o     <- solveOpts(deriv)
+    o     <- solveOpts(deriv, if (deriv) sensSec())
 
     ns      <- asNamespace("cppDE")
     batch   <- get0("solveODEBatch", envir = ns, inherits = FALSE)
@@ -655,7 +661,7 @@ Xs.cppDE <- function(odemodel, forcings = NULL, events = NULL, names = NULL, con
   #
   # `seeds = TRUE` reads the trailing axis as independent first-order seeds
   # rather than as directions, and answers all of them in one backward sweep:
-  # cppDE carries one adjoint per seed column on the same trajectory.
+  # cppDE integrates one adjoint per seed column on the same trajectory.
   P2Xvjp <- function(times, pars, fixed = NULL, cotangent, seeds = FALSE) {
     forcs <- forcsOf(controls$forcings)
     w <- .asCtOut(cotangent)
@@ -671,33 +677,32 @@ Xs.cppDE <- function(odemodel, forcings = NULL, events = NULL, names = NULL, con
       .requireAdjoint(res)
       return(.pickCotangent(.adjointSeeds(res), names(pars)))
     }
-    .requireReverse(has_reverse, has_reverse2, K)
     states <- dim_names$variable
+    .requireReverse(has_reverse, has_reverse2, K)
     ct <- .widenCotangent(w, states, controls$names)
     # Second order sweeps over tangents, so it takes the directions the value
-    # pass carried, the same tangent prep1 builds for a forward solve. A store
-    # cannot help it: a checkpoint's tangents do not outlive the solve that
-    # took them, so the sweep integrates its own.
+    # pass propagated, the same tangent prep1 builds for a forward solve. A
+    # store cannot help it: a checkpoint's tangents do not outlive the solve
+    # that took them, so the sweep integrates its own.
     pr <- prep1(pars, fixed, K > 1L, FALSE)
     o <- solveOpts(K > 1L)
-    # The weighted backward grid is about which states the error test cares
-    # for, not about tangents, so it applies at either order. Only the store
-    # does not: cppDE refuses one under forward-reverse.
+    # The store and the control follow the value pass, which second order does
+    # not share: cppDE refuses a store under forward-reverse.
+    st <- if (K > 1L) NULL else storeGet(times, pr$params)
     call <- c(list(reversed, times, pr$params, fixed = NULL,
-                   forcings = forcs, cotangent = ct$cotangent,
-                   errWeights = weightGet(NULL, times),
-                   adjointGrid = weightOn()),
-              if (K > 1L) NULL else list(store = storeGet(times, pr$params)))
+                   forcings = forcs, cotangent = ct$cotangent),
+              if (K > 1L) NULL else
+                list(store = st,
+                     adjoint = sweepCtl()))
     if (K > 1L) {
       if (is.null(pr$tangent))
         stop("a second-order cotangent needs the tangents the value pass ",
-             "carried, and this input has none.", call. = FALSE)
+             "propagated, and this input has none.", call. = FALSE)
       call[[1L]] <- reversed2
       call$tangent <- pr$tangent
       call$curvature <- ct$curvature
     }
     res <- do.call(cppDE::solveODE, c(call, o))
-    if (weightOn()) weightPut(NULL, times, res)
     .requireAdjoint(res)
     .pickCotangent(.adjointCt(res, K), names(pars))
   }
@@ -751,13 +756,11 @@ Xs.cppDE <- function(odemodel, forcings = NULL, events = NULL, names = NULL, con
       cd <- list(times = timesL[[i]],
                  parms = pr$params,
                  forcings = forcs,
-                 cotangent = ct$cotangent,
-                 errWeights = weightGet(condOf(i), timesL[[i]]),
-                 adjointGrid = weightOn())
+                 cotangent = ct$cotangent)
       if (K > 1L) {
         if (is.null(pr$tangent))
           stop("a second-order cotangent needs the tangents the value pass ",
-               "carried, and condition ", i, " has none.", call. = FALSE)
+               "propagated, and condition ", i, " has none.", call. = FALSE)
         cd$tangent <- pr$tangent
         cd$curvature <- ct$curvature
         return(cd)
@@ -766,26 +769,38 @@ Xs.cppDE <- function(odemodel, forcings = NULL, events = NULL, names = NULL, con
       # forward-reverse, because a checkpoint's tangents do not outlive the
       # solve that took them.
       cd$store <- storeGet(timesL[[i]], pr$params)
+      cd$adjoint <- sweepCtl()
       cd
     })
 
     model <- if (K > 1L) reversed2 else reversed
-    res <- if (is.null(batch))
+    # First order without a control reuses a prepared handle.
+    h <- NULL
+    if (!is.null(batch) && K == 1L &&
+        all(vapply(conds, function(cd) is.null(cd$adjoint), TRUE))) {
+      ob <- o[setdiff(names(o), c("traceFile", "onFailure"))]
+      sig <- list(times = timesL, forcings = forcs, opts = ob,
+                  ct = lapply(conds, function(cd) dim(cd$cotangent)))
+      h <- batchHandle(vcache, sig, model, function() conds, ob, need = "store")
+    }
+    res <- if (!is.null(h))
+      cppDE::solveBatch(h, parms = lapply(conds, `[[`, "parms"),
+                        cotangent = lapply(conds, `[[`, "cotangent"),
+                        store = lapply(conds, function(cd) cd$store),
+                        cores = cores, traceFile = o$traceFile,
+                        onFailure = o$onFailure)
+    else if (is.null(batch))
       lapply(seq_len(n), function(i) {
         a <- conds[[i]]
         do.call(cppDE::solveODE,
                 c(list(model, a$times, a$parms, fixed = NULL,
                        forcings = forcs, cotangent = a$cotangent),
                   if (K > 1L) list(tangent = a$tangent, curvature = a$curvature)
-                  else list(store = a$store, errWeights = a$errWeights,
-                            adjointGrid = a$adjointGrid),
+                  else list(store = a$store, adjoint = a$adjoint),
                   o))
       })
     else
       do.call(batch, c(list(model, conditions = conds, cores = cores), o))
-
-    if (weightOn())
-      for (i in seq_len(n)) weightPut(condOf(i), timesL[[i]], res[[i]])
 
     lapply(seq_len(n), function(i) {
       .requireAdjoint(res[[i]], condOf(i))
@@ -864,7 +879,7 @@ Xf.deSolve <- function(odemodel, forcings = NULL, events = NULL, condition = NUL
     optionsOde <- controls$optionsOde
     fcontrol <- controls$fcontrol
 
-    # Xf carries no sensitivities, so fixed/free collapses to a single pars vector.
+    # Xf has no sensitivities, so fixed/free collapses to a single pars vector.
     pars <- c(unclass(pars), unclass(fixed))
 
     times <- sort(union(unique(events$time), times))
@@ -1123,7 +1138,7 @@ Xd <- function(data, condition = NULL) {
 #' @param condition Either `NULL` (generic prediction for any condition) or a character 
 #' string specifying the condition for which the function generates predictions.
 #' @param attach.input Logical, append the incoming states to the output.
-#'   Defaults to `FALSE`: carrying the state sensitivities through costs a
+#'   Defaults to `FALSE`: passing the state sensitivities through costs a
 #'   full array copy per condition and objective functions do not read them.
 #'   Set `TRUE` to plot states alongside observables. Can be changed with
 #'   [controls()].
@@ -1213,7 +1228,7 @@ Y <- function(g, f = NULL, states = NULL, parameters = NULL,
     states <- union(states, "time")
     parameters <- union(parameters, setdiff(symbols, states))
   } else if (inherits(f, "fn")) {
-    # From the leaves rather than the mappings: a composed mapping carries a
+    # From the leaves rather than the mappings: a composed mapping holds a
     # copy taken when it was composed, the leaf the forcings it runs with.
     myforcings <- Reduce(union, lapply(.fnLeaves(f), function(l)
       as.character(.kernelSetting(l$kernel, "forcings")$name)))
@@ -1283,7 +1298,7 @@ Y <- function(g, f = NULL, states = NULL, parameters = NULL,
       # AD path: evaluate() returns y and its tangent, chain-ruled via dX/dP.
       dX_full <- attr(out, "deriv")
       dX2_full <- attr(out, "deriv2")
-      # If no obsStates appear in dX's state dim, it carries no upstream state
+      # If no obsStates appear in dX's state dim, it contains no upstream state
       # sensitivity for this observation function. Suppress it to avoid
       # spurious theta mismatches against dP (e.g. Xt() returns a deriv array
       # with unrelated layout).
@@ -1368,7 +1383,7 @@ Y <- function(g, f = NULL, states = NULL, parameters = NULL,
         (deriv2 && !emit_d2) || is.null(gevaluate)) return(loop())
 
     # `obsStates`/`obsParams` are constants and the incoming name sets are the
-    # same for most conditions; carry the last result over instead of redoing
+    # same for most conditions; reuse the last result instead of redoing
     # the set algebra n times.
     sRef <- NULL; sKeep <- TRUE; fRef <- NULL; fVal <- NULL
     s2Ref <- NULL; s2Keep <- TRUE
@@ -1423,19 +1438,19 @@ Y <- function(g, f = NULL, states = NULL, parameters = NULL,
            "with Y(..., derivMode = c(\"forward\", \"reverse\"), ",
            "compile = TRUE).", call. = FALSE)
     params <- c(unclass(pars), unclass(fixed))
-    fixedObsParams <- intersect(union(attr(pars, "fixed"), names(fixed)), obsParams)
+    fixedObsParams <- .intersectU(c(attr(pars, "fixed"), names(fixed)), obsParams)
 
     K <- .ctK(w)
     wm <- .ctSlice(w)
-    w_obs <- wm[, intersect(colnames(wm), observables), drop = FALSE]
     W <- matrix(0, nrow(out), length(observables),
                 dimnames = list(NULL, observables))
-    if (ncol(w_obs)) W[, colnames(w_obs)] <- w_obs
+    iw <- match(observables, colnames(wm))
+    if (any(!is.na(iw))) W[, !is.na(iw)] <- wm[, iw[!is.na(iw)], drop = FALSE]
 
     if (K == 1L) {
       r <- gEval$vjp(out[, obsStates, drop = FALSE], params[obsParams], W)
     } else {
-      # The directions the value pass carried, on the two inputs this node
+      # The directions of the value pass, on the two inputs this node
       # reads: the prediction's own tangents and the parameters it passes
       # through. The cotangent brings its own beside them.
       nd <- K - 1L
@@ -1462,13 +1477,13 @@ Y <- function(g, f = NULL, states = NULL, parameters = NULL,
 
     w_out <- array(0, c(nrow(out), ncol(out), K),
                    dimnames = list(NULL, colnames(out), NULL))
-    hit <- intersect(obsStates, colnames(out))
+    hit <- .intersectU(obsStates, colnames(out))
     if (length(hit)) {
       w_out[, hit, 1L] <- r$cotangentX[, hit, 1L]
       if (K > 1L)
         w_out[, hit, -1L] <- r$curvatureX[, match(hit, obsStates), 1L, , drop = FALSE]
     }
-    # Everything attach.input carried through keeps whatever the caller put on
+    # Everything attach.input passed through keeps whatever the caller put on
     # it, the observables aside.
     if (controls$attach.input) {
       through <- intersect(setdiff(colnames(wm), c("time", observables)), colnames(out))
@@ -1483,8 +1498,9 @@ Y <- function(g, f = NULL, states = NULL, parameters = NULL,
       up <- cbind(up, matrix(r$curvatureP[, 1L, ], nrow = nrow(up)))
       rownames(up) <- rownames(r$cotangentP)
     }
-    w_pars <- .pickCotangent(up, setdiff(names(pars), fixedObsParams))
-    .ct(out = w_out, pars = .pickCotangent(w_pars, names(pars)))
+    w_pars <- .pickCotangent(up, names(pars))
+    w_pars[match(names(pars), fixedObsParams, 0L) > 0L, ] <- 0
+    .ct(out = w_out, pars = w_pars)
   }
 
   attr(X2Y, "vjpfn") <- X2Yvjp
@@ -1536,7 +1552,7 @@ Xt <- function(condition = NULL) {
             dimnames = list(NULL, "time", par_names, par_names))
     else NULL
 
-    # Fixed parameters carry no sensitivity but must stay visible downstream
+    # Fixed parameters have no sensitivity but must stay visible downstream
     # (an error model reads them off the prediction), as in Xs.
     prdframe(out, deriv = sens, deriv2 = sens2, parameters = c(pars, fixed))
   }

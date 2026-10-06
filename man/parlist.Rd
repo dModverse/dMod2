@@ -26,7 +26,7 @@ parlist(...)
 \item{object}{a parlist}
 }
 \description{
-Fitlists carry an fit index which must be held unique on merging
+Fitlists have a fit index which must be held unique on merging
 multiple fitlists.
 
 The special use of a parameter list is to save

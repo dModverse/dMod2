@@ -59,7 +59,7 @@ d2_models <- local({
                       modelname = nm("d2_equil_nod2"), deriv2 = FALSE, verbose = FALSE)
 
     compile(m, xdes, yfwd, yobs, pabc, ppass, pnod2, plog, pid, pcon, peq,
-            peq_nod2, output = nm("deriv2_models"), cores = 4L)
+            peq_nod2, output = nm("deriv2_models"), cores = test_cores())
 
     cache <<- list(dir = dir, decay = decay, equil = equil, m = m, xdes = xdes,
                    yfwd = yfwd, yobs = yobs, pabc = pabc, ppass = ppass,

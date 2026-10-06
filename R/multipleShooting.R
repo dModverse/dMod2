@@ -152,7 +152,7 @@
   maps <- attr(x, "mappings")
   eq <- if (length(maps)) attr(maps[[1L]], "equations") else NULL
   if (is.null(eq))
-    stop("multiple shooting: 'x' carries no equations; it has to come from Xs().", call. = FALSE)
+    stop("multiple shooting: 'x' has no equations; it has to come from Xs().", call. = FALSE)
   names(eq)
 }
 
@@ -255,14 +255,9 @@
 
 ## ---- Inner parameters of the segments ----------------------------------------
 
-# The inner parameter vectors the segments `which` start from: p's own for the
-# first segment of a condition, the node values in the state rows for every
-# other. With derivatives, the state rows of p's Jacobian are replaced by the
-# chart derivative on the node's own columns, so a solve carries exactly theta
-# and the node of its segment as sensitivity directions. With `x0cols` a first
-# segment carries directions along its initial state as well, for its growth;
-# they are no variable and leave the blocks again. Built per condition from one
-# template, so the cost per segment is a copy and a few entries.
+# Inner parameters of the segments `which`: p's own for a condition's first
+# segment, node values otherwise. With derivatives each solve integrates theta
+# and its node (with `x0cols` also the initial state) as directions.
 .shootSegmentParsAll <- function(pin, spec, nodes, deriv, x0cols = FALSE,
                                  which = seq_along(spec$segs)) {
   states <- spec$states
@@ -413,7 +408,7 @@
     pr <- preds[[k]]
     r <- nrow(pr)
     xe <- pr[r, states]
-    # a state of a log10 chart that the solve carries to zero or below, as a
+    # a state of a log10 chart that the solve drives to zero or below, as a
     # gating variable can under wild parameters, has no end value in its
     # chart: classed like a failed solve, so the driver cuts the segment
     bad <- spec$charts[states] == "log10" & !(xe > 0)
@@ -542,7 +537,7 @@
 }
 
 # The weighted residuals (prediction - data) / sigma of a segment's data, and
-# with `deriv` their Jacobian on the directions the prediction carries: what
+# with `deriv` their Jacobian on the directions of the prediction: what
 # the value 2 J'r and the Gauss-Newton block 2 J'J of the kernel are made of.
 # Bock's natural level function needs them apart. Fixed sigma only.
 .shootResiduals <- function(pr, dat, deriv) {
@@ -574,7 +569,7 @@
   out
 }
 
-# The end-state Jacobian of a first segment along its initial state, carried
+# The end-state Jacobian of a first segment along its initial state, mapped
 # into the chart of the nodes: d end / d s_1 = d end / d x_0 * T'(s_1).
 .shootChartGrowth <- function(J, pin, spec) {
   # T'(s_1) = ln(10) x_0 on a log10 chart, which is zero, not undefined, at a
@@ -592,7 +587,7 @@
 
 ## ---- Reverse evaluation ------------------------------------------------------
 ##
-## One backward sweep per segment carries 1 + n_x seeds: the data term, and the
+## One backward sweep per segment takes 1 + n_x seeds: the data term, and the
 ## end state of every state in its chart. The observation function and the
 ## error model are walked with the data seed alone; the state seeds sit on the
 ## prediction of the states directly. p is algebraic, so its forward Jacobian
@@ -1225,7 +1220,7 @@
 }
 
 # A new layout: the objective rebuilt on the node times `tau` (per condition,
-# the start included) and the node values carried over, the new ones from `fill`, a
+# the start included) and the node values kept, the new ones from `fill`, a
 # list per condition of chart values named by time.
 .shootRelayout <- function(sobj, tau, nodes, fill) {
   a <- attr(sobj, "args")
@@ -1288,7 +1283,7 @@
   Filter(function(t) !is.null(.shootControlOf(t)), .objTerms(objfun))
 
 # The multiple-shooting objective of a normL2, alone or as the one summand of
-# a sum that carries the control, laid out from the control as it is now.
+# a sum that holds the control, laid out from the control as it is now.
 .shootObjOf <- function(objfun) {
   tm <- .shootingTerms(objfun)
   if (length(tm) != 1L)
@@ -1300,7 +1295,7 @@
 }
 
 # The same objective, optimised by single shooting: a wrapper that answers as
-# it does and carries none of its terms or controls. The objective itself, and
+# it does and keeps none of its terms or controls. The objective itself, and
 # whoever else holds it, keeps its control.
 .singleShooting <- function(f) {
   if (!length(.shootingTerms(f))) return(f)

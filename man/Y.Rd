@@ -39,7 +39,7 @@ function the forcings count as states.}
 string specifying the condition for which the function generates predictions.}
 
 \item{attach.input}{Logical, append the incoming states to the output.
-Defaults to \code{FALSE}: carrying the state sensitivities through costs a
+Defaults to \code{FALSE}: passing the state sensitivities through costs a
 full array copy per condition and objective functions do not read them.
 Set \code{TRUE} to plot states alongside observables. Can be changed with
 \code{\link[=controls]{controls()}}.}

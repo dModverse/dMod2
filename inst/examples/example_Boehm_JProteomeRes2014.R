@@ -214,7 +214,7 @@ if (.fit) {
 # grow with n_theta. `sweep = "reverse"` is the whole of the caller's side.
 #
 # The two do not agree to machine precision, and the reason is not the adjoint.
-# A forward-sensitivity solve carries n_theta tangent columns and the
+# A forward-sensitivity solve integrates n_theta tangent columns and the
 # step-size controller's error norm takes the maximum over the state norm AND
 # every one of them; a maximum over a larger set is larger, so it steps finer
 # than a value-only run. The two modes therefore differentiate two different
@@ -240,7 +240,7 @@ cat(sprintf("value    %.10g vs %.10g\ngradient max relative difference %.2e\n",
             .fwd$value, .rev$value,
             max(abs(.fwd$gradient - .rev$gradient[names(.fwd$gradient)])) /
               max(abs(.fwd$gradient))))
-cat("the reverse objective carries no Hessian:", is.null(.rev$hessian), "\n")
+cat("the reverse objective has no Hessian:", is.null(.rev$hessian), "\n")
 
 # Nine parameters is around where the two are level on this model; the forward
 # line rises with n_theta and the reverse one does not, so which side wins is a

@@ -11,7 +11,7 @@ knitr::opts_chunk$set(echo = TRUE, fig.width = 7, fig.height = 3.5)
 ```
 
 
-Many of the objects in dMod carry attributes or special value within their environments. Here, we highlight the major functions to access this information and manipulate it.
+Many of the objects in dMod have attributes or special value within their environments. Here, we highlight the major functions to access this information and manipulate it.
 
 We start with setting up a small model, i.e. a prediction function `x` and a parameter transformation function `p`. The model describes a simple dissipative system that is excited by an external periodic force.
 

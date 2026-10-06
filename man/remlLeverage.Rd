@@ -14,7 +14,7 @@ remlLeverage(
 )
 }
 \arguments{
-\item{objfun}{objective function built by \link{normL2}, carrying its prediction
+\item{objfun}{objective function built by \link{normL2}, holding its prediction
 function, data and error model.}
 
 \item{pars}{named numeric parameter vector, usually a fit.}
@@ -40,7 +40,7 @@ Hat values of the weighted mean model,
 \eqn{h = \mathrm{diag}(W^{1/2} J (J^\top W J)^{-1} J^\top W^{1/2})} with
 \eqn{J = \partial\mu/\partial\theta} the prediction sensitivities and
 \eqn{W = \mathrm{diag}(1/\sigma_i^2)}. Each value is the share of the mean
-parameters carried by one data point, summed by observable.
+parameters attributable to one data point, summed by observable.
 
 Their sum is the numerical rank of the weighted sensitivity matrix, not the
 nominal parameter count: a non-identifiable direction contributes nothing.

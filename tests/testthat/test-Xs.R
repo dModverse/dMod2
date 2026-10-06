@@ -65,7 +65,7 @@ xs_models <- local({
 
     compile(m_cascade, p_cascade, p_C2, m_event, p_event, m_forc, p_forc,
             m_rep1, m_rep2, p_rep, p_rep_cl, p_rep_op,
-            output = nm("xs_models"), cores = 4L)
+            output = nm("xs_models"), cores = test_cores())
 
     cache <<- list(m_cascade = m_cascade, p_cascade = p_cascade, p_C2 = p_C2,
                    m_event = m_event, p_event = p_event, m_forc = m_forc,

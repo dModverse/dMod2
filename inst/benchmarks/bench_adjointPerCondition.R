@@ -232,9 +232,10 @@ rows <- lapply(conds, function(cn) {
     gr <- cppDE::solveODE(mC$reversed, tt, inner,
                           cotangent = array(1, c(length(tt),
                                                  length(attr(mC$func, "variables")), 1L)),
-                          adjointGrid = TRUE, abstol = TOL$atol, reltol = TOL$rtol,
+                          adjoint = cppDE::adjointControl(trace = TRUE),
+                          abstol = TOL$atol, reltol = TOL$rtol,
                           maxsteps = TOL$maxsteps)
-    length(gr$adjointGrid$h)
+    length(gr$adjoint$h)
   }, error = function(e) NA_integer_)
 
   data.frame(condition = cn, n_times = nrow(mydataL[[cn]]), steps = steps,

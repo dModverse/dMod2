@@ -11,7 +11,7 @@ skip_if_no_compile <- function() {
 ## ---- Shared models -----------------------------------------------------
 
 # Every model a test evaluates, generated once and compiled on first use. The
-# ODE sources carry -fopenmp and the algebraic ones do not, so each flag set
+# ODE sources need -fopenmp and the algebraic ones do not, so each flag set
 # gets its own shared object.
 .pp_env <- new.env(parent = emptyenv())
 
@@ -115,7 +115,7 @@ pp_models <- function() {
 
   compile(lin, d2, d2_2, d2_cq, moiety2_im, dimer_im, recycle, sing, noroot,
           noparam, erk_im, px, px_same, zero, pd, pd2, plasmid, bistable, unstable,
-          output = mn("impl"), cores = 4L)
+          output = mn("impl"), cores = test_cores())
 
   .pp_env$models <- list(
     lin = lin, d2 = d2, d2_2 = d2_2, d2_cq = d2_cq, moiety2_im = moiety2_im,
@@ -314,7 +314,7 @@ test_that("non-unit stoichiometric coefficient is handled (2*M <-> D)", {
 test_that("overlapping conserved quantities reconstruct consistently (recycle enzyme)", {
   skip_if_no_compile()
   # G + S <-> GS -> G + P, P -> S : closed catalytic cycle.
-  # Two overlapping CQs share G/GS; one auto-detected CQ carries a
+  # Two overlapping CQs share G/GS; one auto-detected CQ has a
   # negative coefficient on G, so the recon both divides by coef_g and
   # nests another eliminated species (fixed-point substitution).
   m <- pp_models()
@@ -761,7 +761,7 @@ test_that("Pimpl runs its random starts from a fixed seed and leaves the global 
 
 test_that("Pimpl solves a network whose R-Smad rows barely turn over", {
   # TGF-beta model, 37 states: Smad2 is 3 and almost unphosphorylated, so its row
-  # turns over 1e-11 while the pSmad2 row carries the same flux with a diagonal of
+  # turns over 1e-11 while the pSmad2 row has the same flux with a diagonal of
   # 1. Scaled by its own diagonal, the Smad2 row made the step matrix singular
   # (condition 1e26) and ptc() only shrank dt.
   skip_if_no_compile()
@@ -770,7 +770,7 @@ test_that("Pimpl solves a network whose R-Smad rows barely turn over", {
   mn <- paste0("test_pp_smadrow_", as.integer(Sys.time()))
   pf <- Pimpl(fx$reactions, forcings = fx$forcings, deriv = FALSE, modelname = mn,
               controlsPTC = list(nStarts = 0L))
-  compile(pf, output = mn, cores = 4L)
+  compile(pf, output = mn, cores = test_cores())
   out <- pf(fx$pv, deriv = FALSE)[[1]]
   expect_equal(out[["Smad2"]] + out[["pSmad2"]] + out[["C234"]], fx$pv[["tSmad2"]],
                tolerance = 1e-10)

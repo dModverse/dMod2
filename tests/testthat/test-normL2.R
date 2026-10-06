@@ -37,7 +37,7 @@ skip_if_no_compile <- function() {
                 modelname = "nl2_p_prop", compile = FALSE)
     p_C2 <- P(eqnvec(A = "A", k = "k"), condition = "C2",
               modelname = "nl2_p_id", compile = FALSE)
-    compile(e_const, p_sig, e_prop, p_prop, p_C2, output = "nl2_all", cores = 4L)
+    compile(e_const, p_sig, e_prop, p_prop, p_C2, output = "nl2_all", cores = test_cores())
 
     cache <<- list(
       const = list(prd = bench$gfn * bench$xfn * p_sig,  e = e_const),
@@ -566,7 +566,7 @@ test_that("terms sharing an attr.name pool their chi2, others split", {
 # Printing
 # ============================================================================
 
-test_that("print.objlist skips the blocks a deriv = FALSE call does not carry", {
+test_that("print.objlist skips the blocks a deriv = FALSE call lacks", {
   o <- structure(list(value = -480.3, gradient = NULL, hessian = NULL),
                  class = "objlist")
   attr(o, "data") <- -480.3
@@ -574,7 +574,7 @@ test_that("print.objlist skips the blocks a deriv = FALSE call does not carry", 
   out <- capture.output(print(o))
   expect_true(any(grepl("^value", out)))
   expect_false(any(grepl("^(gradient|hessian)\\[", out)))
-  # the attribute block carries names and numbers, not storage modes
+  # the attribute block shows names and numbers, not storage modes
   expect_true(any(grepl("^ chi2 +541", out)))
   expect_false(any(grepl("num |chr |List of", out)))
 

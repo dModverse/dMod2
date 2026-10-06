@@ -110,7 +110,7 @@ struct Reporter {
   ~Reporter() { if (ofs.is_open()) ofs.close(); }
 };
 
-// Per-iteration trace buffers. Every vector carries exactly one entry per
+// Per-iteration trace buffers. Every vector holds exactly one entry per
 // completed iteration, which `attach` relies on.
 struct Blather {
   std::vector<double> argpath, argtry;

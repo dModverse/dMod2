@@ -15,7 +15,7 @@ Named list mapping \code{total_name} -> conservation expression
 }
 \description{
 Returns the conservation expressions associated with the model. If the
-eqnlist carries user-defined \verb{$totals} (set via \link{customTotals}) those are
+eqnlist has user-defined \verb{$totals} (set via \link{customTotals}) those are
 returned verbatim; otherwise the auto-detected basis from
 \code{\link[=conservedQuantities]{conservedQuantities()}} is rendered with smart \code{totalXxx} names from the
 longest common substring of each CQ's species.

@@ -107,8 +107,8 @@ List constraintL2_scalar_kernel(
     bool build_hessian = true) {
 
   // Build allp lookup: name -> value
-  // pars carries the outer (theta) parameter values when dP is given;
-  // otherwise it carries the inner parameter values directly.
+  // pars holds the outer (theta) parameter values when dP is given;
+  // otherwise it has the inner parameter values directly.
   // For the sigma/log-sigma case (`est`), sigma values come from allp.
   const int n_inner_full = inner_par_names.size();
   // Build "allp" map from union of pars/fixed names.
@@ -216,7 +216,7 @@ List constraintL2_scalar_kernel(
 
   // Chain rule via dP / exact dP2 contribution. The Hessian sandwich (and its
   // dP2 term) is skipped entirely under build_hessian = false; only the
-  // gradient chain rule runs and the result carries a NULL hessian.
+  // gradient chain rule runs and the result has a NULL hessian.
   NumericVector grad_out;
   RObject hess_out = R_NilValue;
   CharacterVector theta_names;
@@ -381,7 +381,7 @@ List datapointL2_kernel(
   if (idx_value >= 0) dres_dp[idx_value] = -1.0;
 
   // 5. Gradient + Hessian. The Hessian (and its exact d2pred term) is skipped
-  // entirely under build_hessian = false; the result then carries a NULL hessian.
+  // entirely under build_hessian = false; the result then has a NULL hessian.
   std::vector<double> gr(n_p, 0.0);
   std::vector<double> hs;
   if (build_hessian) hs.assign((std::size_t) n_p * n_p, 0.0);

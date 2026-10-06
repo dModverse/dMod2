@@ -160,7 +160,7 @@
 #' Compiles model objects ([parfn], [obsfn], [prdfn]) related C/C++ files into shared libraries via `R CMD SHLIB`.
 #'
 #' @details
-#' Named arguments other than the ones below are an error: `...` carries the
+#' Named arguments other than the ones below are an error: `...` holds the
 #' objects to compile, so a misspelled argument name would otherwise be taken
 #' for an object and ignored.
 #'
@@ -171,7 +171,7 @@
 #'
 #' Per-file compile and link flags are taken from the `"compileInfo"`
 #' attribute that [odemodel()], [Xs()], [Xf()], [Y()] and [P()] attach to
-#' their return values. Each entry carries the source file together with the
+#' their return values. Each entry lists the source file together with the
 #' `compileArgs` and `linkArgs` reported by the backend that produced it
 #' (`cOde::funC`, `cppDE::cppODE`, `cppDE::cvode`, ...), so solver-specific
 #' libraries reach only the files that need them. Objects without
@@ -182,7 +182,7 @@
 #' @param output Optional name for a combined shared library. When set, all
 #'   files are linked into one object and the union of their `linkArgs` is
 #'   applied. A bare name places the object next to the generated sources; a
-#'   name carrying a directory is taken as given.
+#'   name with a directory is taken as given.
 #' @param args Additional compiler/linker flags applied to every file.
 #' @param cores Parallel compilation jobs (Unix only, requires `cores > 1`).
 #'   Defaults to [detectFreeCores()].
@@ -220,7 +220,7 @@ compile <- function(..., output = NULL, args = NULL, cores = detectFreeCores(),
   if (!length(objs)) stop("No objects")
 
   # `...` is the payload, so a misspelled argument name lands among the objects
-  # and is silently ignored. A named entry that carries no sources is one.
+  # and is silently ignored. A named entry that has no sources is one.
   .hasSources <- function(o)
     !is.null(attr(o, "compileInfo")) || !is.null(attr(o, "srcfile")) ||
     inherits(o, c("obsfn", "parfn", "prdfn", "odemodel"))
@@ -236,7 +236,7 @@ compile <- function(..., output = NULL, args = NULL, cores = detectFreeCores(),
         else paste0("`", n, "`")
       }, character(1))
       stop("compile: ", paste(hint, collapse = "; "),
-           " Objects to compile are passed through `...` and carry sources; ",
+           " Objects to compile are passed through `...` and contain sources; ",
            "everything else must match an argument name.", call. = FALSE)
     }
   }
@@ -254,7 +254,7 @@ compile <- function(..., output = NULL, args = NULL, cores = detectFreeCores(),
   is_cpp  <- vapply(objs, function(o) !is.null(attr(o, "srcfile")), logical(1))
 
   ## Collect per-file build info.
-  ## Primary source is `attr(o, "compileInfo")` carrying
+  ## Primary source is `attr(o, "compileInfo")` holding
   ## (srcfile, compileArgs, linkArgs) as reported by cOde/cppDE/CVODE.
   ## Falls back to modelname-based file discovery for objects that lack
   ## compileInfo, and to the bare `srcfile` attribute for raw cppDE objects.
@@ -309,7 +309,7 @@ compile <- function(..., output = NULL, args = NULL, cores = detectFreeCores(),
   files      <- vapply(info, function(e) e$srcfile, character(1))
 
   ## Where the combined shared object goes. A bare name lands next to the
-  ## sources, a name carrying a directory is honoured as given.
+  ## sources, a name that includes a directory is honoured as given.
   outfile <- NULL
   if (!is.null(output)) {
     if (length(output) != 1L || !is.character(output) || !nzchar(output))
@@ -752,7 +752,7 @@ getLocalDLLs <- function() {
 ## Loading a shared object that is already loaded is a no-op in R, so a rebuilt
 ## file would keep serving the old code. Entry points resolve by name, so
 ## unloading first is safe even for objects still in use.
-## A base name no loaded shared library carries: the desired one if it is
+## A base name no loaded shared library uses: the desired one if it is
 ## free, otherwise the smallest `<name>_<i>`, i >= 2, with a warning. Mirrors
 ## cppDE's `unique_modelname()`, which the model constructors apply to their
 ## own names; the two must stay in step.

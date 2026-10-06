@@ -39,7 +39,7 @@ ctl_models <- function() {
   pim <- Pimpl(c(x = "x^2 - a"), parameters = "a",
                modelname = "ctl_pim", outdir = d, verbose = FALSE)
 
-  compile(m, mf, g, p, pa, pim, output = "ctl_all", cores = 4L)
+  compile(m, mf, g, p, pa, pim, output = "ctl_all", cores = test_cores())
 
   .ctl_env$models <- list(m = m, mf = mf, g = g, p = p, pa = pa, pim = pim)
 }
@@ -142,32 +142,59 @@ test_that("Xf keeps its forcings and options as given, too", {
 
 test_that("optionsReverse set later meets the check the constructor makes", {
   fx <- ctl_models()
-  expect_error(Xs(fx$mf, optionsReverse = list(gradtol = 1e-3)), "optionsReverse")
+  expect_error(Xs(fx$mf, optionsReverse = list(refine = TRUE)), "optionsReverse")
   xf <- Xs(fx$mf, forcings = data.frame(name = "u", time = c(0, 100), value = 1))
-  controls(xf, NULL, "optionsReverse") <- list(gradtol = 1e-3)
+  controls(xf, NULL, "optionsReverse") <- list(refine = TRUE)
   expect_error(xf(.ctl_times, c(A = 0, k = 1)), "optionsReverse")
   controls(xf, NULL, "optionsReverse") <- NULL
   expect_silent(xf(.ctl_times, c(A = 0, k = 1)))
 })
 
-test_that("the reverse weight uses gradtol and floor as they are when it is used", {
+test_that("sensErrCon reaches the forward solver from optionsSens", {
   fx <- ctl_models()
-  x <- Xs(fx$m, optionsReverse = list(gradtol = 1e-4))
+  x <- Xs(fx$m)
   k <- .ctl_kernel(x)
+  p <- c(A = 1, k = 0.5)
+  seen <- list()
+  real <- cppDE::solveODE
+  local_mocked_bindings(solveODE = function(...) {
+    seen <<- c(seen, list(list(...)$sensErrCon))
+    real(...)
+  }, .package = "cppDE")
+
+  k(.ctl_times, p, deriv = FALSE)
+  k(.ctl_times, p, deriv = TRUE)
+  k(.ctl_times, p, deriv = FALSE, keepStore = TRUE)
   w <- matrix(1, length(.ctl_times), 1L, dimnames = list(NULL, "A"))
-  attr(k, "vjpfn")(.ctl_times, c(A = 1, k = 0.5), NULL, w)
+  attr(k, "vjpfn")(.ctl_times, p, NULL, w)
+  expect_identical(seen, list(NULL, TRUE, NULL, NULL))
 
-  wt <- environment(k)$weightGet(NULL, .ctl_times)
-  expect_false(is.null(wt$lambda))
-  expect_equal(wt$gradtol, 1e-4)
-  expect_equal(wt$floor, 0)
+  seen <- list()
+  controls(x, NULL, "optionsSens") <- list(sensErrCon = FALSE)
+  k(.ctl_times, p, deriv = FALSE)
+  k(.ctl_times, p, deriv = TRUE)
+  k(.ctl_times, p, deriv = FALSE, keepStore = TRUE)
+  attr(k, "vjpfn")(.ctl_times, p, NULL, w)
+  expect_identical(seen, list(NULL, FALSE, NULL, NULL))
 
-  # The weight kept from the last backward pass meets the new settings on the
-  # next one, not the ones it was recorded under.
-  controls(x, NULL, "optionsReverse") <- list(gradtol = 1e-6, floor = 0.1)
-  wt <- environment(k)$weightGet(NULL, .ctl_times)
-  expect_equal(wt$gradtol, 1e-6)
-  expect_equal(wt$floor, 0.1)
+  # A value solve takes no sensErrCon, so optionsOde does not know it.
+  expect_warning(controls(x, NULL, "optionsOde") <- list(sensErrCon = FALSE),
+                 NA)
+  expect_warning(k(.ctl_times, p, deriv = FALSE), "sensErrCon")
+})
+
+test_that("the reverse control uses refine and gradtol as they are when it is used", {
+  fx <- ctl_models()
+  x <- Xs(fx$m, optionsReverse = list(refine = TRUE, gradtol = 1e-4))
+  k <- .ctl_kernel(x)
+  ctl <- environment(k)$sweepCtl()
+  expect_true(ctl$refine)
+  expect_equal(ctl$gradtol, 1e-4)
+
+  controls(x, NULL, "optionsReverse") <- list(refine = TRUE, gradtol = 1e-6)
+  expect_equal(environment(k)$sweepCtl()$gradtol, 1e-6)
+  controls(x, NULL, "optionsReverse") <- NULL
+  expect_null(environment(k)$sweepCtl())
 })
 
 test_that("Xs keeps only user options in controls", {

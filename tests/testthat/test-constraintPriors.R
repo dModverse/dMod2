@@ -93,7 +93,7 @@ test_that("a duplicated parameter name is rejected", {
 })
 
 
-test_that("composing with a parfn carries the chain rule", {
+test_that("composing with a parfn applies the chain rule", {
   withr::local_dir(tempdir())
   p <- P(eqnvec(k = "exp(logk)"), condition = NULL, compile = TRUE,
          modelname = "constraintChain", deriv2 = TRUE)

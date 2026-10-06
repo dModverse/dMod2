@@ -9,7 +9,7 @@
 # script builds the routes side by side on one model and one parameter vector,
 # so the API that selects them is visible in isolation.
 #
-#   forward     sensitivity equations carried beside the states. One extra
+#   forward     sensitivity equations integrated beside the states. One extra
 #               trajectory per parameter, so the cost grows with n_theta.
 #   reverse     cppDE's written adjoint. The forward run keeps a checkpoint per
 #               accepted step; the backward walk applies each step's adjoint in
@@ -95,7 +95,7 @@ cat(length(mydataL), "conditions,", length(bestfit), "estimated parameters\n")
 # `derivMode` is the argument that decides. It is matched, so both directions in
 # one object is `c("forward", "reverse")`; asking for only one omits the other's
 # entry points and its compile time with them. The stepper is `method`, and it
-# is separate: every method carries both directions.
+# is separate: every method supports both directions.
 # –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
 mBDF <- odemodel(reactions, modelname = "bachRev_bdf", backend = "cppDE",
                  method = "bdf", derivMode = c("forward", "reverse"),
@@ -232,16 +232,14 @@ print(head(pred[[cond]][, 1:4], 3))
 # –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
 # The backward pass can be told how accurate to be
 #
-# `optionsReverse` weights the backward step size by the adjoint of the previous
-# evaluation: where lambda is large the grid becomes finer, and it can only
-# become finer, so a weight left over from a parameter the optimiser has since
-# moved away from costs steps and never accuracy. `gradtol` turns it on.
+# `optionsReverse$refine` holds each step of the backward sweep to an error
+# test; `gradtol` adds the step's share of the gradient to it.
 # –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
-xW   <- Xs(mBDF, optionsOde = TOL, optionsSens = TOL,
-           optionsReverse = list(gradtol = 1e-6, floor = 1e-3))
-objW <- normL2(mydataL, g * xW * p, e)
-g_w  <- objW(pars, deriv = TRUE, sweep = "reverse")$gradient
+xR   <- Xs(mBDF, optionsOde = TOL, optionsSens = TOL,
+           optionsReverse = list(refine = TRUE, gradtol = 1e-6))
+objR <- normL2(mydataL, g * xR * p, e)
+g_r  <- objR(pars, deriv = TRUE, sweep = "reverse")$gradient
 
-cat("\nweighted backward grid:",
-    format(tmin(function() objW(pars, deriv = TRUE, sweep = "reverse")), digits = 3),
-    "ms, 1 - cos against forward", format(cosgap(g_fwd, g_w), digits = 3), "\n")
+cat("\nchecked sweep:",
+    format(tmin(function() objR(pars, deriv = TRUE, sweep = "reverse")), digits = 3),
+    "ms, 1 - cos against forward", format(cosgap(g_fwd, g_r), digits = 3), "\n")

@@ -8,7 +8,7 @@
 # one ladder of solver tolerances, and reports the two numbers that decide
 # between them: how long each takes, and how far each sits from the others.
 #
-#   forward   sensitivity equations carried beside the states. One extra
+#   forward   sensitivity equations integrated beside the states. One extra
 #             trajectory per parameter, so the cost grows with n_theta.
 #   reverse   the discrete adjoint of cppDE: integrate in plain double, keep a
 #             checkpoint per step, replay each step backwards. One sweep,
@@ -75,7 +75,7 @@ tmin <- function(f, reps = 5L, target = 0.5) {
     system.time(for (j in seq_len(n)) f())[["elapsed"]] / n, 0.0))
 }
 
-# Worst relative deviation over the components that carry something. A gradient
+# Worst relative deviation over the components that matter. A gradient
 # component three decades below the largest contributes nothing to any use of
 # the gradient and would otherwise dominate a per-component ratio.
 relWorst <- function(g, ref) {
@@ -139,7 +139,7 @@ cat("   A gap that tracks the tolerance is the discretisation. One that does\n",
 # same pieces the import produced, namely data, observation function, error
 # model and transformation, and only `x` is swapped. The imported objective is
 # not used
-# for the timings: it carries a likelihood offset and per-condition data groups
+# for the timings: it includes a likelihood offset and per-condition data groups
 # that the hand-built one does not, and charging that to the backend is how the
 # first version of this script got the answer backwards.
 # -----------------------------------------------------------------------------
@@ -219,7 +219,7 @@ cat("  n_theta = ", length(p), "\n\n", sep = "")
 cat("  sec_1, sec_2   seconds for one gradient, two passes in the same order.\n")
 cat("  x_value        that time divided by one *objective* evaluation over all\n",
     "                conditions, not by a single ODE solve. Dimensionless.\n")
-cat("  deviation      worst relative gap over the gradient components carrying\n",
+cat("  deviation      worst relative gap over the gradient components of\n",
     "                at least 1e-6 of the largest, against forward\n",
     "                sensitivities at rtol = atol = 1e-15. Also dimensionless,\n",
     "                and 31 means a factor of 32 out, not 31 percent.\n\n")

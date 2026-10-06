@@ -61,7 +61,7 @@ match.fnargs <- function(arglist, choices) {
 # `+` node asks the part that owns the condition, a `*` node asks both
 # factors, and a leaf built without a condition answers for every one. The
 # composed mappings hold nothing but the descriptor, so this is the way from a
-# composition to the closures that carry the controls. An fn without a
+# composition to the closures that hold the controls. An fn without a
 # descriptor offers its mappings.
 .fnLeaves <- function(f, condition = NULL) {
   st <- .fnNode(f)
@@ -252,6 +252,7 @@ match.fnargs <- function(arglist, choices) {
 .checkPrediction <- function(out, conditions) {
   # NaN passes: an observable can be undefined where no data sits (a ratio of
   # states that all start at 0), and normL2 stops on a NaN at a data point.
+  if (all(is.finite(out))) return(invisible(NULL))
   bad <- (is.na(out) & !is.nan(out)) | is.infinite(out)
   if (!any(bad)) return(invisible(NULL))
   ai <- arrayInd(which(bad), dim(out))
@@ -284,7 +285,7 @@ match.fnargs <- function(arglist, choices) {
                         deriv2 = deriv2))
 }
 
-# Batch entry when the leaf has one, else a loop. Not mclapply: prdframes carry
+# Batch entry when the leaf has one, else a loop. Not mclapply: prdframes hold
 # 3-D and 4-D arrays whose trip through a fork pipe outweighs the solve.
 .callKernelMany <- function(st, b, idx, conds, deriv, deriv2, cores,
                             keepStore = FALSE) {
@@ -319,7 +320,7 @@ match.fnargs <- function(arglist, choices) {
 
   if (isTRUE(getOption("dMod.batch.check", FALSE))) {
     ref <- lapply(seq_along(idx), function(j)
-      .callKernel(st, b, idx[j], conds[[j]], deriv, deriv2))
+      .callKernel(st, b, idx[j], conds[[j]], deriv, deriv2, keepStore))
     cmp <- all.equal(res, ref, tolerance = 0)
     if (!isTRUE(cmp))
       stop("dMod.batch.check: batch entry of a ", st$kind,
@@ -449,7 +450,7 @@ match.fnargs <- function(arglist, choices) {
 ##   .bwdNode(tape, w, ...)    -> cotangent of the node's own input
 ##
 ## `w` is one .ct() per condition: `out` on the matrix a prediction or an
-## observation carries, `pars` on the parameters it passes through. The `pars`
+## observation returns, `pars` on the parameters it passes through. The `pars`
 ## half is what makes the tree a graph rather than a chain -- an observation
 ## function reads the prediction's parameters as well as its values -- and both
 ## halves accumulate.
@@ -458,7 +459,7 @@ match.fnargs <- function(arglist, choices) {
   switch(st$op,
     # The value pass of a reverse evaluation is the one whose trajectory the
     # backward pass replays, so a leaf that can keep its checkpoints does. Under
-    # second order it also carries tangents: they are the directions the
+    # second order it also propagates tangents: they are the directions the
     # backward half differentiates each node's vjp along.
     leaf = list(values = .evalLeaf(st, b, deriv, FALSE, cores,
                                    keepStore = isTRUE(st$keepstore)),
@@ -556,7 +557,7 @@ match.fnargs <- function(arglist, choices) {
   if (is.null(vjp))
     stop("reverse mode: the ", st$kind, " leaf has no vjp entry. A prediction ",
          "needs odemodel(derivMode = c(\"forward\", \"reverse\")) and Xs(); ",
-         "Xf() carries no derivatives in either direction, which is what it ",
+         "Xf() computes no derivatives in either direction, which is what it ",
          "is for. An observation or a ",
          "transformation needs derivMode = \"reverse\" and compile = TRUE.",
          call. = FALSE)
@@ -869,7 +870,7 @@ match.fnargs <- function(arglist, choices) {
   NULL
 }
 
-# Metadata a composed mapping carries. Without this getEquations, summary.*,
+# Metadata a composed mapping keeps. Without this getEquations, summary.*,
 # Y(f = <composed>), compare() and petabExport all see NULL.
 .composedMappingAttrs <- function(m, p1, p2, cond, p1kind, p2kind) {
   c1 <- .condFor(p1, cond); c2 <- .condFor(p2, cond)
@@ -1265,7 +1266,7 @@ out_conditions <- function(c1, c2) {
 test_conditions <- function(c1, c2) {
   if (is.null(c1)) return(NULL)
   if (is.null(c2)) return(NULL)
-  return(intersect(c1, c2))
+  .intersectU(c1, c2)
 }
 
 #' Concatenation of functions
@@ -1345,7 +1346,7 @@ test_conditions <- function(c1, c2) {
                                                   attr(p2, "compileInfo"))
 
   if (identical(spec$out, "objfn")) {
-    # An objfn carries no mappings; without these an objfn * parfn loses its
+    # An objfn has no mappings; without these an objfn * parfn loses its
     # parameter set, its model name and the reconstruction handles.
     attr(outfn, "modelname") <- union(attr(p1, "modelname"), attr(p2, "modelname"))
     for (.a in c("data", "errfn", "timesD")) {

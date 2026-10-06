@@ -27,7 +27,7 @@ as.eqnlist.data.frame <- function(data, volumes = NULL, compartments = NULL, com
   smatrix <- as.matrix(data[, states]); colnames(smatrix) <- states
 
   # An explicit `volumes` is the legacy way of stating the layout: it must not
-  # be overruled by a layout the data.frame merely carries along as attributes.
+  # be overruled by a layout the data.frame merely brings along as attributes.
   inherit_layout <- is.null(volumes)
   if (is.null(volumes))             volumes             <- attr(data, "volumes")
   if (is.null(compartments) && inherit_layout)  compartments  <- attr(data, "compartments")
@@ -50,7 +50,7 @@ is.eqnlist <- function(x) {
   required <- c("smatrix", "states", "rates", "volumes", "description",
                 "compartments", "compartmentOf", "reactionCompartment")
 
-  # A reaction-less list is valid and may already carry a compartment layout.
+  # A reaction-less list is valid and may already have a compartment layout.
   if (is.null(x$smatrix))
     return(length(x$states) == 0 &&
            length(x$rates) == 0 &&
@@ -100,7 +100,7 @@ is.eqnlist <- function(x) {
 #'   than concentration. Requires `volumes` to be supplied as numeric.
 #' @param volumes Optional named numeric vector of volume values keyed by state,
 #'   aligned with `colnames(S)`. Only consulted when `weight = "volume"`.
-#' @return Data frame with conserved quantities carrying an attribute with the
+#' @return Data frame with conserved quantities and an attribute with the
 #'   number of conserved quantities.
 #' @author Malenka Mader, \email{Malenka.Mader@@fdm.uni-freiburg.de}
 #'
@@ -132,7 +132,7 @@ conservedQuantities <- function(S, weight = c("none", "volume"), volumes = NULL)
     cq <- matrix(nrow = ncol(v), ncol = 1)
     for (iCol in 1:ncol(v)) {
       is.zero <- v[, iCol] == 0
-      # gsub, not sub: a kernel vector may carry more than one negative weight.
+      # gsub, not sub: a kernel vector may have more than one negative weight.
       cq[iCol, 1] <- gsub("+-", "-", paste0(v[!is.zero, iCol], "*", variables[!is.zero], collapse = "+"), fixed = TRUE)
     }
     
@@ -260,7 +260,7 @@ conservedQuantities <- function(S, weight = c("none", "volume"), volumes = NULL)
 #' Conservation-quantity basis of an `eqnlist`
 #'
 #' Returns the conservation expressions associated with the model. If the
-#' eqnlist carries user-defined `$totals` (set via [customTotals]) those are
+#' eqnlist has user-defined `$totals` (set via [customTotals]) those are
 #' returned verbatim; otherwise the auto-detected basis from
 #' [conservedQuantities()] is rendered with smart `totalXxx` names from the
 #' longest common substring of each CQ's species.
@@ -679,7 +679,7 @@ setCompartmentVolume <- function(eqnlist, ..., rules = NULL) {
 
 # Reactions as a data.frame for the steady-state backend, which sees only rates
 # and stoichiometry while getFluxes() scales every flux by V_ref / V_X. One csv
-# row carries one rate, so a reaction touching states at different ratios is
+# row holds one rate, so a reaction touching states at different ratios is
 # split into one row per ratio. Attribute "volumes": V_X per state, "1" for
 # amount states; rows of one reaction share rate * V_X.
 .volumeScaledReactions <- function(eqnlist) {
@@ -696,7 +696,7 @@ setCompartmentVolume <- function(eqnlist, ..., rules = NULL) {
   ruled <- names(compartments)[vapply(compartments,
     function(cmp) !is.null(cmp$rule) && nzchar(cmp$rule), logical(1))]
   if (length(ruled))
-    stop("Compartment(s) ", paste(ruled, collapse = ", "), " carry a volume ",
+    stop("Compartment(s) ", paste(ruled, collapse = ", "), " have a volume ",
          "rule, whose dilution term -[X]*V'/V is not a reaction flux.",
          call. = FALSE)
 
@@ -1510,7 +1510,7 @@ eqnvec <- function(...) {
 #' @param reactionCompartment Optional character vector of length
 #'   `nrow(smatrix)`. Per-reaction reference compartment ID; use `NA` to infer
 #'   from educts. Required when educts span multiple compartments.
-#' @param amountStates Optional character vector of states that carry substance
+#' @param amountStates Optional character vector of states that have substance
 #'   units (amounts) rather than concentrations, SBML's `hasOnlySubstanceUnits`.
 #'   Their fluxes are not divided by a compartment volume.
 #' @param totals Optional named list of user-defined conservation-quantity
@@ -1523,7 +1523,7 @@ eqnlist <- function(smatrix = NULL, states = colnames(smatrix), rates = NULL,
                     compartments = NULL, compartmentOf = NULL,
                     reactionCompartment = NULL, amountStates = NULL, totals = NULL) {
 
-  # A model without species carries no stoichiometry;
+  # A model without species has no stoichiometry;
   # canonicalise it to NULL so is.eqnlist() recognises the empty list.
   if (length(states) == 0L && length(rates) == 0L) smatrix <- NULL
 

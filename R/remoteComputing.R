@@ -75,7 +75,7 @@ detectFreeCores <- function(machine = NULL) {
 ## from the cppDE package tree, and the shared object gets linked against
 ## BLAS/LAPACK (plus Sundials/KLU for CVODE and sparse models). `compile()`
 ## assembles those flags from the `"compileInfo"` attribute that every model
-## object carries, but every path in there points into the *local* library
+## object has, but every path in there points into the *local* library
 ## tree and is meaningless on the cluster.
 ##
 ## `.remoteBuildInfo()` therefore keeps only the portable part of that
@@ -184,7 +184,7 @@ detectFreeCores <- function(machine = NULL) {
 
   ldflags <- character(0)
   if (link) {
-    ## Object files carry the *local* toolchain's LTO bytecode, which a remote
+    ## Object files contain the *local* toolchain's LTO bytecode, which a remote
     ## compiler of a different GCC generation refuses to read ("bytecode stream
     ## in file 'e.o' generated with LTO version 16.0 instead of the expected
     ## 13.1"). Fat LTO objects still contain ordinary machine code, so turning
@@ -401,7 +401,7 @@ detectFreeCores <- function(machine = NULL) {
 #' The remote build runs from a generated shell script that resolves all
 #' path-valued compiler flags (cppDE include directory, BLAS/LAPACK, and
 #' Sundials/KLU for CVODE and sparse models) *on the remote machine*, since
-#' the local library paths do not carry over. The model-specific `-D` macros
+#' the local library paths do not transfer. The model-specific `-D` macros
 #' are read from the `"compileInfo"` attribute of the model objects in the
 #' workspace. `cppDE` therefore has to be installed for the R that is on
 #' `PATH` on the remote machine. Only the files the chosen mode consumes are
@@ -1557,7 +1557,7 @@ profileParsPerNode <- function(parameters, fits_per_node, side = c("both", "spli
   if (cores == 1L)
     return(lapply(X, FUN))
 
-  # A forked worker cannot carry a condition axis: cppDE's batch runs serially
+  # A forked worker cannot split a condition axis: cppDE's batch runs serially
   # inside a fork, so an inner axis selects PSOCK.
   wants_inner <- !is.null(coresConditions) && coresConditions > 1L
   use_psock <- switch(strategy,

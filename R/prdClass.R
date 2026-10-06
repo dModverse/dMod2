@@ -648,7 +648,7 @@ obsfn <- function(X2Y, parameters = NULL, condition = NULL) {
 #' @description
 #' A prediction frame stores model predictions in a matrix along with sensitivity information.
 #' The columns of the prediction matrix are typically `"time"` and one column per state variable.
-#' The object carries several attributes containing sensitivities and parameter information:
+#' The object has several attributes containing sensitivities and parameter information:
 #' \itemize{
 #'   \item `"deriv"`: 3D array of first-order sensitivities with respect to outer parameters
 #'     (see [P]); dimensions: `(time, state, outer parameter)`

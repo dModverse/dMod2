@@ -136,7 +136,7 @@ reactions
 .pJAK2 <- "2 * (EpoRpJAK2 + p1EpoRpJAK2 + p2EpoRpJAK2 + p12EpoRpJAK2)"
 .pEpoR <- "16 * (p1EpoRpJAK2 + p2EpoRpJAK2 + p12EpoRpJAK2)"
 
-# scale_ and offset_ carry no experiment here; the transformation below resolves
+# scale_ and offset_ name no experiment here; the transformation below resolves
 # them per condition, which is what keeps one observation function for all of them
 observables <- do.call(eqnvec, c(list(
   pJAK2_au    = .log10(paste("offset_pJAK2 + scale_pJAK2 / init_EpoRJAK2 *", .pJAK2)),
@@ -254,7 +254,7 @@ trafo <- eqnvec() |>
   insert("STAT5 ~ init_STAT5") |>
   insert("SHP1 ~ init_SHP1 * (1 + SHP1oe * SHP1ProOE)") |>
 
-  # The model was written in parameters that carry their own reference scale, so
+  # The model was written in parameters that hold their own reference scale, so
   # the estimated ones are dimensionless. Each rule uses the raw parameter on its
   # right hand side, which is what fixes the order: a parameter is rewritten
   # before it is used, never after.
@@ -345,7 +345,7 @@ recorded <- unique(paste(bachmann$condition, bachmann$name))
   subset(paste(condition, name) %in% recorded)
 
 # One standard deviation of the error model, in the colour of its own line and
-# dashed at the edge. plotCombined() already carries the package colour scale,
+# dashed at the edge. plotCombined() already applies the package colour scale,
 # so only the fill has to be set to the same palette. `alpha` reaches the fill
 # only, which keeps the edge crisp.
 .band <- function(pl, df, colour = "condition", x = "time")
@@ -434,7 +434,7 @@ stopifnot(setequal(names(petab$bestfit), outerpars),
 
 # The two values differ by a constant: PEtab defines the likelihood on the
 # linear measurement, so importPEtab() adds the Jacobian of the log10 transform,
-# and it normalises the prior density. The sum of squares carries neither, so
+# and it normalises the prior density. The sum of squares contains neither, so
 # that is what the two models have to agree on.
 chi2 <- c(hand  = attr(obj(bestfit, deriv = FALSE),       "chi2"),
           PEtab = attr(petab$obj(bestfit, deriv = FALSE), "chi2"))

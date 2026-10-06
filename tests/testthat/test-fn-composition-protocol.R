@@ -172,7 +172,7 @@ test_that("a composed chain flattens nested sums into one node", {
 })
 
 
-test_that("composed mappings carry the metadata their consumers read", {
+test_that("composed mappings keep the metadata their consumers read", {
   skip_if_not_installed("cppDE")
   skip_on_cran()
 
@@ -322,7 +322,7 @@ test_that(".predictMany mixes repeated and distinct conditions", {
 # them. Tolerances are solver-level: fixing a parameter shrinks the
 # sensitivity system, so the integration is not bit-identical.
 
-# Values only: prdframes also carry `parameters`, whose `fixed` marker and
+# Values only: prdframes also have `parameters`, whose `fixed` marker and
 # ordering legitimately differ between the two calls.
 .vals <- function(z) { m <- unclass(z); attributes(m) <- list(dim = dim(m)); m }
 
@@ -466,7 +466,7 @@ test_that("the parvec C++ kernel reproduces the R subsetting and concatenation",
     expect_equal(v[i], sub_R(v, i), tolerance = 0)
   expect_equal(x0[c("p", "r")], sub_R(x0, c("p", "r")), tolerance = 0)
 
-  # concatenation, including a block that carries no deriv2 and one with a
+  # concatenation, including a block that has no deriv2 and one with a
   # deriv row missing
   parts <- list(
     list(mk(c("a", "b"), 4), mk(c("c", "d"), 4, tag = "t")),

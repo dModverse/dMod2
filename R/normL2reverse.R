@@ -14,7 +14,7 @@
 
 .normL2_reverse <- function(pars, fixed, deriv, conditions, env, cores,
                             x, errmodel, data, timesD, e.cond, opt.BLOQ,
-                            attr.name, hessian = FALSE) {
+                            attr.name, hessian = FALSE, meta_cache = NULL) {
 
   # The objective's Hessian splits along a line the residual kernel already
   # draws: J' H_rho J from the forward tangents, which is what the kernel
@@ -53,15 +53,33 @@
     })
     err_pars  <- lapply(split, `[[`, "pars")
     err_fixed <- lapply(split, `[[`, "fixed")
-    got <- lapply(seq_along(cn_eval), function(j)
-      errmodel(out = prediction[[cn_eval[j]]], pars = err_pars[[j]],
-               fixed = err_fixed[[j]], deriv = FALSE,
-               conditions = cn_eval[j])[[cn_eval[j]]])
+    est <- .fnNode(errmodel)
+    got <- if (!is.null(est) && length(cn_eval) > 1L) {
+      eb <- .bundle(conds = cn_eval,
+                    out   = lapply(cn_eval, function(cn) prediction[[cn]]),
+                    pars  = err_pars, fixed = err_fixed, shared = FALSE)
+      .evalNode(est, eb, FALSE, FALSE, NULL, cores)
+    } else {
+      lapply(seq_along(cn_eval), function(j)
+        errmodel(out = prediction[[cn_eval[j]]], pars = err_pars[[j]],
+                 fixed = err_fixed[[j]], deriv = FALSE,
+                 conditions = cn_eval[j])[[cn_eval[j]]])
+    }
     err_list <- vector("list", length(conditions))
     err_list[match(cn_eval, conditions)] <- got
   }
 
-  meta_list <- .build_normL2_meta(data, prediction, err_list, conditions, e.cond)
+  # The data-to-prediction indices hold while names, tangents and row counts do.
+  sig <- list(lapply(prediction, function(pr) dimnames(attr(pr, "deriv"))[[3]]),
+              vapply(prediction, NROW, integer(1)),
+              vapply(err_list, NROW, integer(1)))
+  hit <- !is.null(meta_cache) && identical(meta_cache$sig, sig)
+  meta_list <- if (hit) meta_cache$meta_list else
+    .build_normL2_meta(data, prediction, err_list, conditions, e.cond)
+  if (!hit && !is.null(meta_cache)) {
+    meta_cache$meta_list <- meta_list
+    meta_cache$sig <- sig
+  }
 
   kr <- normL2_kernel(
     prediction       = prediction,
@@ -122,7 +140,7 @@
 # The objective's seed as one cotangent per condition, positionally aligned
 # with `prediction`: on the prediction itself, and through the error model onto
 # the prediction and the inner parameters it read. `err_idx` are the positions
-# that carry an error model and `err_split` the (pars, fixed) the forward pass
+# that have an error model and `err_split` the (pars, fixed) the forward pass
 # handed it there. Shared by normL2 and the multiple-shooting objective.
 #
 # The kernel orders its rows ALOQ first, then BLOQ, so the scatter follows the
@@ -139,24 +157,17 @@
     ord <- c(which(m$bloq_mask == 0L), which(m$bloq_mask == 1L))
 
     W <- matrix(0, nrow(pr), ncol(pr), dimnames = list(NULL, colnames(pr)))
-    sp <- kr$seed$pred[[ci]]
-    for (j in seq_along(ord)) {
-      r <- ord[j]
-      W[m$t_idx_in_pred[r], m$o_idx_in_pred[r]] <-
-        W[m$t_idx_in_pred[r], m$o_idx_in_pred[r]] + sp[j]
-    }
+    pos <- m$t_idx_in_pred[ord] + (m$o_idx_in_pred[ord] - 1L) * nrow(pr)
+    W[] <- .scatterAdd(length(W), pos, kr$seed$pred[[ci]])
     w_pred[[ci]] <- W
 
     erm <- if (is.null(err_list)) NULL else err_list[[ci]]
     if (!is.null(erm) && any(m$sigma_is_na == 1L)) {
       E <- matrix(0, nrow(erm), ncol(erm), dimnames = list(NULL, colnames(erm)))
-      ss <- kr$seed$sigma[[ci]]
-      for (j in seq_along(ord)) {
-        r <- ord[j]
-        if (m$sigma_is_na[r] != 1L) next
-        E[m$t_idx_in_err[r], m$o_idx_in_err[r]] <-
-          E[m$t_idx_in_err[r], m$o_idx_in_err[r]] + ss[j]
-      }
+      j <- which(m$sigma_is_na[ord] == 1L)
+      r <- ord[j]
+      pe <- m$t_idx_in_err[r] + (m$o_idx_in_err[r] - 1L) * nrow(erm)
+      E[] <- .scatterAdd(length(E), pe, kr$seed$sigma[[ci]][j])
       w_err[[ci]] <- E
     }
   }
@@ -181,6 +192,20 @@
     }
   }
   w_chain
+}
+
+# A zero vector of length n with v added at the linear positions idx, repeated
+# positions summed.
+.scatterAdd <- function(n, idx, v) {
+  out <- numeric(n)
+  if (!length(idx)) return(out)
+  if (!anyDuplicated(idx)) {
+    out[idx] <- v
+    return(out)
+  }
+  s <- rowsum(v, idx)
+  out[as.integer(rownames(s))] <- s[, 1L]
+  out
 }
 
 # The raw kernel behind a single-leaf fn, which is where the vjp attribute

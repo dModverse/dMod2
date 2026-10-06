@@ -45,7 +45,7 @@
   }
 
   if (!length(frames))
-    stop("reml: the objective carries no data to evaluate.", call. = FALSE)
+    stop("reml: the objective holds no data to evaluate.", call. = FALSE)
   structure(frames, names = labels)
 }
 
@@ -61,7 +61,7 @@
   x    <- attr(objfun, "prdfn")
   data <- attr(objfun, "data")
   if (is.null(x) || is.null(data))
-    stop("objfun does not carry a prediction function and data. ",
+    stop("objfun does not hold a prediction function and data. ",
          "REML needs an objective built by normL2().", call. = FALSE)
   list(list(data = data, prdfn = x, errfn = attr(objfun, "errfn"),
             timesD = attr(objfun, "timesD")))
@@ -69,7 +69,7 @@
 
 
 # Stack the per-row derivative blocks of every frame into one matrix over
-# `cols`, filling with zero where a term does not carry a parameter.
+# `cols`, filling with zero where a term lacks a parameter.
 .remlBlocks <- function(frames, which, cols) {
 
   n <- vapply(frames, nrow, 0L)
@@ -103,12 +103,12 @@
 #' \eqn{h = \mathrm{diag}(W^{1/2} J (J^\top W J)^{-1} J^\top W^{1/2})} with
 #' \eqn{J = \partial\mu/\partial\theta} the prediction sensitivities and
 #' \eqn{W = \mathrm{diag}(1/\sigma_i^2)}. Each value is the share of the mean
-#' parameters carried by one data point, summed by observable.
+#' parameters attributable to one data point, summed by observable.
 #'
 #' Their sum is the numerical rank of the weighted sensitivity matrix, not the
 #' nominal parameter count: a non-identifiable direction contributes nothing.
 #'
-#' @param objfun objective function built by [normL2], carrying its prediction
+#' @param objfun objective function built by [normL2], holding its prediction
 #'   function, data and error model.
 #' @param pars named numeric parameter vector, usually a fit.
 #' @param meanpars character, the mean parameters spanning \eqn{J}. Defaults to

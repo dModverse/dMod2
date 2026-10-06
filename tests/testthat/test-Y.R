@@ -42,7 +42,7 @@ skip_if_no_compile <- function() {
               compile = FALSE, modelname = "noparam_y_obs")
 
     compile(g_sq, g_rev, g_dual, g_attach, x_np, g_np,
-            output = "test_Y_all", cores = 4L)
+            output = "test_Y_all", cores = test_cores())
     cache <<- list(bench = bench, g_sq = g_sq, g_rev = g_rev, g_dual = g_dual,
                    g_attach = g_attach, x_np = x_np, g_np = g_np)
     cache
@@ -99,7 +99,7 @@ test_that("Y derivMode 'reverse' and 'forward' agree on a nonlinear observable",
   o_dual <- prd_dual(times = times, pars = pars, deriv = TRUE)
 
   expect_equal(o_sym$C1[, "y"], o_dual$C1[, "y"], tolerance = 1e-12)
-  # The reverse build carries no forward entries, the forward one does.
+  # The reverse build has no forward entries, the forward one does.
   expect_null(attr(o_sym$C1, "deriv"))
   expect_false(is.null(attr(o_dual$C1, "deriv")))
 })

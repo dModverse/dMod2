@@ -78,8 +78,8 @@ print.odemodel <- function(x, ...) {
 #'   * `"reverse"`: the adjoint, whose cost does not grow with the number of
 #'     parameters; what `obj(..., sweep = "reverse")` needs. On
 #'     `backend = "cppDE"` it is the discrete adjoint of the integrator, on
-#'     `backend = "Sundials"` CVODES adjoint sensitivity analysis, which
-#'     refuses events. Not available on `backend = "deSolve"`.
+#'     `backend = "Sundials"` CVODES adjoint sensitivity analysis. Not
+#'     available on `backend = "deSolve"`.
 #'   * `"forward-forward"`: second-order sensitivities as nested duals.
 #'   * `"forward-reverse"`: the adjoint over tangents, which returns the
 #'     Hessian of the objective in one backward sweep; what
@@ -89,8 +89,7 @@ print.odemodel <- function(x, ...) {
 #' @param forcings Character vector, the names of the forcings in `f`. Their
 #'   data are given to [Xs()] or [Xf()].
 #' @param events An [eventlist], or a `data.frame` [as.eventlist()] accepts.
-#'   Defined here, they also act on the sensitivities and, on `cppDE`, the
-#'   adjoint.
+#'   Defined here, they also act on the sensitivities and the adjoint.
 #' @param fixed Character vector, the initial values and parameters without
 #'   sensitivities.
 #' @param modelname Character, the base name of the generated files and
@@ -313,7 +312,8 @@ odemodel <- function(f, deriv = TRUE, deriv2 = FALSE, derivMode = "forward",
       }
       # CVODES adjoint sensitivity analysis. A separate compilation, as on the
       # native backend, and with the same interface: solveODE(..., cotangent = W)
-      # returns $cotangent. It refuses events, which cppDE::cvode() reports.
+      # returns $cotangent. Events split the forward run; cppDE takes the
+      # adjoint through each jump.
       reversed <- NULL
       if (reverse) {
         reversed <- do.call(cppDE::cvode,

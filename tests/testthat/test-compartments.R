@@ -124,7 +124,7 @@ test_that("getFluxes emits cross-compartment volume ratio", {
     compartmentOf = c(A = "cyt", B = "nuc")
   )
   fl <- getFluxes(f)
-  # A (cyt, origin) should not carry a ratio; B (nuc, destin) should carry V_cyt/V_nuc.
+  # A (cyt, origin) should not get a ratio; B (nuc, destin) should get V_cyt/V_nuc.
   expect_false(grepl("V_cyt/V_nuc", fl$A))
   expect_true(grepl("V_cyt/V_nuc", fl$B))
 })
@@ -309,7 +309,7 @@ test_that("subset keeps a compartment that only a reaction frame references", {
   expect_equal(f_sub$reactionCompartment, "ext")
 })
 
-test_that("amount fluxes carry no dilution term", {
+test_that("amount fluxes have no dilution term", {
   f <- eqnlist(
     smatrix = matrix(c(-1, 1), nrow = 1, dimnames = list(NULL, c("A", "B"))),
     states = c("A", "B"), rates = "k*A", description = "r",
@@ -399,7 +399,7 @@ test_that("a compartment declared for a future state survives until it appears",
   expect_equal(unname(g$volumes[["TGFb"]]), "V_ext")
 })
 
-test_that("an explicit volumes argument beats a layout carried along as attribute", {
+test_that("an explicit volumes argument beats a layout attached as attribute", {
   f <- eqnlist(smatrix = matrix(c(-1, 1), nrow = 1, dimnames = list(NULL, c("A", "B"))),
                states = c("A", "B"), rates = "k1*A", description = "forward")
   g <- as.eqnlist(as.data.frame(f), volumes = c(A = "Vcyt", B = "Vnuc"))

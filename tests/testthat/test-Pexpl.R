@@ -54,7 +54,7 @@ skip_if_no_compile <- function() {
                 modelname = "test_P_thru", compile = FALSE)
 
     compile(p_mix, p_rev, p_fwd, p_const_val, p_const_fwd, x_full, p_full, g_full,
-            p_thru, output = "test_P_all", cores = 4L)
+            p_thru, output = "test_P_all", cores = test_cores())
     cache <<- list(p_mix = p_mix, p_rev = p_rev, p_fwd = p_fwd,
                    p_const_val = p_const_val, p_const_fwd = p_const_fwd,
                    x_full = x_full, p_full = p_full, g_full = g_full,
@@ -71,7 +71,7 @@ test_that("Pexpl identity trafo round-trips and has identity Jacobian", {
   bench <- fx_decay_compiled()
   outer <- c(A = 1.5, k = 0.3)
   inner <- bench$pfn_id(outer, deriv = TRUE)
-  # parlist[[C1]] is a parvec carrying value + "deriv" attr.
+  # parlist[[C1]] is a parvec with value + "deriv" attr.
   pv <- inner$C1
   expect_equal(as.numeric(pv), as.numeric(outer))
   J  <- attr(pv, "deriv")

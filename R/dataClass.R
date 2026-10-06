@@ -326,7 +326,7 @@ covariates.data.frame <- function(x, ...) {
 #' "time" (time points), "value" (data value), "sigma" (uncertainty, can be NA), and
 #' "lloq" (lower limit of quantification, `-Inf` by default).
 #'
-#' Datalists carry the attribute `condition.grid` which contains additional information about different
+#' Datalists have the attribute `condition.grid` which contains additional information about different
 #' conditions, such as dosing information for the experiment. It can be conveniently accessed by the [covariates]-function.
 #' Reassigning names to a datalist also renames the rows of the `condition.grid`.
 #' @param ... data.frame objects to be coerced into a list and additional arguments

@@ -19,7 +19,7 @@ compile(
 \item{output}{Optional name for a combined shared library. When set, all
 files are linked into one object and the union of their \code{linkArgs} is
 applied. A bare name places the object next to the generated sources; a
-name carrying a directory is taken as given.}
+name with a directory is taken as given.}
 
 \item{args}{Additional compiler/linker flags applied to every file.}
 
@@ -37,7 +37,7 @@ Invisibly \code{TRUE} on success.
 Compiles model objects (\link{parfn}, \link{obsfn}, \link{prdfn}) related C/C++ files into shared libraries via \verb{R CMD SHLIB}.
 }
 \details{
-Named arguments other than the ones below are an error: \code{...} carries the
+Named arguments other than the ones below are an error: \code{...} holds the
 objects to compile, so a misspelled argument name would otherwise be taken
 for an object and ignored.
 
@@ -48,7 +48,7 @@ bracket would name a command that never runs.
 
 Per-file compile and link flags are taken from the \code{"compileInfo"}
 attribute that \code{\link[=odemodel]{odemodel()}}, \code{\link[=Xs]{Xs()}}, \code{\link[=Xf]{Xf()}}, \code{\link[=Y]{Y()}} and \code{\link[=P]{P()}} attach to
-their return values. Each entry carries the source file together with the
+their return values. Each entry lists the source file together with the
 \code{compileArgs} and \code{linkArgs} reported by the backend that produced it
 (\code{cOde::funC}, \code{cppDE::cppODE}, \code{cppDE::cvode}, ...), so solver-specific
 libraries reach only the files that need them. Objects without

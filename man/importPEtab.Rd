@@ -69,7 +69,7 @@ PEtab \code{nominalValue} for every estimated parameter, for benchmark
 problems this is the published maximum-likelihood estimate
 transported through the manifest; for user-authored problems it is
 the current best estimate (and serves as the optimizer's starting
-point). The vector carries \code{attr(., "petab_scales")} recording each
+point). The vector has \code{attr(., "petab_scales")} recording each
 parameter's PEtab scale (the exporter reads it back). Internal
 metadata used by the exporter (\code{fixed}, \code{inits}, \code{modelID},
 \code{source_yaml}, \code{sub_cond_map}, \code{obs_meta}, \code{param_meta}) lives on

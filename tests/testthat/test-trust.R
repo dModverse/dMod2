@@ -854,7 +854,7 @@ test_that("an unknown Hessian source is rejected by name", {
 })
 
 # An objective may decline to build a Hessian, and NULL is how it says so.
-# `give` decides which evaluations carry one.
+# `give` decides which evaluations return one.
 .declining_objfn <- function(give = function(n) FALSE) {
   n <- 0L
   function(p, hessian = TRUE, ...) {

@@ -68,7 +68,7 @@ controls <- function(x, ...) {
 }
 
 # The objectives that hold a control: the objective itself, or every
-# objective it is built from whose controls carry `name` (any control when
+# objective it is built from whose controls include `name` (any control when
 # `name` is NULL). A sum records its summands in `terms`; an objective scaled
 # by %.*% or composed with a parfn records the objective it wraps in `wrapped`.
 # Either is the closure that gets called, so a change there reaches the whole.
@@ -464,7 +464,7 @@ getDerivs2.objlist <- function(x, ...) {
 #'   are unioned (each dispatched separately).
 #' @param conditions character vector specifying the conditions to
 #'   which `getParameters` is restricted (only honored by methods that
-#'   carry per-condition parameter mappings).
+#'   have per-condition parameter mappings).
 #' @return The parameters in a format that depends on the class of `x`.
 #' @export
 getParameters <- function(x, ..., conditions = NULL) {

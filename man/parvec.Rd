@@ -37,7 +37,7 @@ attributes:
 }
 \description{
 Creates an object of class \code{"parvec"} from a numeric vector, optionally
-carrying first-order derivatives. Existing derivatives may be inherited,
+with first-order derivatives. Existing derivatives may be inherited,
 replaced, or dropped; no derivatives are created automatically.
 
 A parameter vector is a named numeric vector (the parameter values)

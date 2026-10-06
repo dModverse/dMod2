@@ -84,7 +84,7 @@ CondInputs gather_one_condition(
   C.n_data = n_data;
 
   // Resolve par_local via the prdframe's deriv dimnames. A value-only
-  // evaluation (deriv = FALSE) carries no deriv attribute; then n_par_local
+  // evaluation (deriv = FALSE) has no deriv attribute; then n_par_local
   // is 0 and all derivative gathers below are skipped.
   RObject deriv_attr_sexp = prdf.attr("deriv");
   const bool has_deriv = !deriv_attr_sexp.isNULL();
@@ -497,7 +497,7 @@ List normL2_kernel(
   if (n_par_global > 0) grad_R.names() = par_names_global;
 
   // Skipped entirely under build_hessian = false: no matrix is allocated and
-  // the result carries a NULL hessian, not a zero placeholder.
+  // the result gets a NULL hessian, not a zero placeholder.
   RObject hess_R = R_NilValue;
   if (build_global_hessian) {
     NumericMatrix H(n_par_global, n_par_global);

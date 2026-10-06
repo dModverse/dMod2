@@ -55,7 +55,7 @@ theme_dMod <- function(base_size = 12, base_family = "", showGrid = FALSE) {
 
 # ---- palettes --------------------------------------------------------------
 #
-# Every palette below carries a measured number: the smallest pairwise CIE2000
+# Every palette below has a measured number: the smallest pairwise CIE2000
 # distance within it, taken as the WORST case over normal, deuteranopic,
 # protanopic and tritanopic vision (for ramps, between positions at least a
 # quarter of the domain apart). A palette counts as colorblind-safe at 10 or

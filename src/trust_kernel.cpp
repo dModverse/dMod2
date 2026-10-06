@@ -82,7 +82,7 @@ void qn_assemble(int kind, int K, std::vector<double>& H, double gamma,
 }
 
 // Li-Fukushima cautious update: a pair with negligible curvature along the step
-// carries no information. SR1 is exempt, negative curvature is legal there.
+// contains no information. SR1 is exempt, negative curvature is legal there.
 bool qn_pair_informative(int K, const std::vector<double>& s,
                          const std::vector<double>& y, double cautious) {
   if (!(cautious > 0.0)) return true;
@@ -239,7 +239,7 @@ List trust_reflective(Function objfun, NumericVector parinit,
       (fallback != HM_NONE && fallback != primary && fallbackLimit > 0);
   bool on_fallback = false, qn_dirty = false, reseed_gn = false;
   // "stall": a quasi-Newton phase that has stopped making progress fetches a
-  // fresh curvature at the current iterate rather than carrying an
+  // fresh curvature at the current iterate rather than keeping an
   // approximation that is no longer informative. It keeps its source; only the
   // matrix it starts from is replaced.
   const bool reseed_on_stall = (hessianReseed == HR_STALL);

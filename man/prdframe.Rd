@@ -25,7 +25,7 @@ sensitivities and the corresponding parameter vector as attributes.
 \description{
 A prediction frame stores model predictions in a matrix along with sensitivity information.
 The columns of the prediction matrix are typically \code{"time"} and one column per state variable.
-The object carries several attributes containing sensitivities and parameter information:
+The object has several attributes containing sensitivities and parameter information:
 \itemize{
 \item \code{"deriv"}: 3D array of first-order sensitivities with respect to outer parameters
 (see \link{P}); dimensions: \verb{(time, state, outer parameter)}

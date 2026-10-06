@@ -24,7 +24,7 @@
 #
 # [WHY THE TWO DO NOT AGREE TO MACHINE PRECISION]
 # They differ by O(tol), and not because of the adjoint. A forward-sensitivity
-# solve carries n_theta tangent columns, and the step-size controller's error
+# solve integrates n_theta tangent columns, and the step-size controller's error
 # norm takes the maximum over the state norm AND every one of those columns. A
 # maximum over a larger set is larger, so that run takes a finer step sequence
 # than a value-only run does. The two modes therefore differentiate two
@@ -124,7 +124,7 @@ r <- obj(pars, deriv = TRUE, sweep = "reverse")
 print(rbind(forward = f$gradient, reverse = r$gradient[names(f$gradient)]))
 cat("2. g * x * p       max |difference| =",
     format(max(abs(f$gradient - r$gradient[names(f$gradient)])), digits = 3),
-    "\n   the reverse objective carries no Hessian:", is.null(r$hessian), "\n\n")
+    "\n   the reverse objective has no Hessian:", is.null(r$hessian), "\n\n")
 
 
 # -----------------------------------------------------------------------------
@@ -268,7 +268,7 @@ rv <- obj_ev(pars_ev, deriv = TRUE, sweep = "reverse")
 print(rbind(forward = fv$gradient, reverse = rv$gradient[names(fv$gradient)]))
 cat("6. dosing event    max |difference| =",
     format(max(abs(fv$gradient - rv$gradient[names(fv$gradient)])), digits = 3),
-    "\n   the dose itself is estimated, so the jump has to carry a derivative.\n\n")
+    "\n   the dose itself is estimated, so the jump needs a derivative.\n\n")
 
 
 # -----------------------------------------------------------------------------
@@ -295,8 +295,8 @@ cat("   with", length(pars), "parameters. The ratio is what falls as they grow.\
 #
 # `deriv2 = TRUE` asks for the exact Hessian rather than the Gauss-Newton
 # approximation. `sweep` picks which way it is computed, exactly as it does for
-# the gradient: forward over forward carries n_theta^2 sensitivity trajectories,
-# forward over reverse carries n_theta tangents through one backward sweep.
+# the gradient: forward over forward solves n_theta^2 sensitivity trajectories,
+# forward over reverse takes n_theta tangents through one backward sweep.
 #
 # The model has to be built for it. `derivMode = "forward-forward"` builds the
 # nested dual, `"forward-reverse"` the sweep over tangents, and the observation

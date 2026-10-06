@@ -125,7 +125,7 @@ struct AccumOpts {
 //   hess_acc    [n_par * n_par] accumulator, column-major
 //   seed_pred   [n_obs], optional. dvalue/dpred, one entry per row: the
 //               cotangent the reverse mode seeds the prediction with. It is
-//               not the residual, because sigma carries theta as well.
+//               not the residual, because sigma depends on theta as well.
 //   seed_sigma  [n_obs], optional. dvalue/dsigma, likewise.
 //
 // Every row of every branch reduces to one shape,

@@ -1,5 +1,5 @@
 # Constructor-level `deriv = TRUE/FALSE` gating for P, Pexpl, Pimpl and Y. Symmetric with the existing `deriv2` flag: the
-# constructor decides whether the artifact carries first-order
+# constructor decides whether the artifact has first-order
 # sensitivities, and the runtime call errors out if it asks for
 # something the construction didn't produce.
 
@@ -31,7 +31,7 @@ ctor_models <- local({
                modelname = nm("test_P_nod1"), verbose = FALSE)
 
     compile(pexpl, pimpl, gfn, pdisp, output = nm("ctor_models"),
-            cores = 4L)
+            cores = test_cores())
 
     cache <<- list(pexpl = pexpl, pimpl = pimpl, gfn = gfn,
                    pdisp = pdisp)

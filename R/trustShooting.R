@@ -58,7 +58,7 @@
 # controls arrive merged by trust(); the settings trust() has and a
 # multiple-shooting run cannot honour are refused here rather than ignored.
 #
-# The shooting term is the one summand whose controls carry it. Every
+# The shooting term is the one summand whose controls hold it. Every
 # other summand, a prior or a single-shooting normL2 of other data, depends on
 # theta alone and enters the condensed problem with its own value, gradient and
 # Gauss-Newton Hessian.
@@ -128,7 +128,7 @@
 
   wantH <- hm == "gn"
   adaptive <- isTRUE(attr(sobj, "adaptive"))
-  # With deriv = FALSE a solve carries no sensitivities: what a trial point
+  # With deriv = FALSE a solve computes no sensitivities: what a trial point
   # needs to be judged, the data term and the gaps, at a fraction of the cost.
   ev <- function(th, nd, hessian = wantH, sw = sweep, quiet = FALSE, deriv = TRUE,
                  residuals = acc == "natural") {
@@ -470,7 +470,7 @@
     Bn[!is.na(hit)] <- B[hit[!is.na(hit)]]
     fresh <- which(is.na(hit))
     if (length(fresh)) Bn[fresh] <- seedBlocks(E, fresh)
-    # the same segment under its new index: node names carry the index, the
+    # the same segment under its new index: node names contain the index, the
     # order of the variables does not change
     for (k in which(!is.na(hit))) {
       v <- E$segments[[k]]$vars
@@ -525,7 +525,7 @@
   # and a corrector cuts back. A damped step is taken when the simplified step
   # at its end, the one the Jacobians of the current iterate give with the
   # residuals and gaps there, has shrunk: the natural level function, which
-  # carries the geometry of the problem instead of a merit function's weights.
+  # reflects the geometry of the problem instead of a merit function's weights.
   handedOver <- FALSE
   if (acc == "natural") {
     if (!is.null(attr(sobj, "args")$errmodel) ||
@@ -828,7 +828,7 @@
 
   if (is.null(C)) C <- condense(E)
   opt <- .shootOptimality(thx(theta), C$g0, lbx, ubx, psxOf())
-  # Open gaps are not a solution: the nodes then carry what the parameters do
+  # Open gaps are not a solution: the nodes then absorb what the parameters do
   # not explain, and the data term can sink below the one of the true
   # parameters. Whatever stopped the run, it has converged only with the
   # trajectory continuous.
@@ -960,7 +960,7 @@
         # Past a bound the propagated correction is the linearised single
         # shooting it was meant to avoid: a chain of expanding segments, as a
         # start of wrong parameters puts many of them on a spike threshold.
-        # A gap carried downstream to ten times a state's scale, or a
+        # A gap propagated downstream to ten times a state's scale, or a
         # sensitivity near overflow, is outside anything a linearisation
         # describes. The coupling to the node before is then dropped from
         # this link, an inexact step the acceptance judges on the true gaps.
@@ -1015,7 +1015,7 @@
     zp <- NULL
     for (i in seq_len(length(ks) - 1L)) {
       k <- ks[i]
-      # nothing is closed across a break, and nothing carried over it
+      # nothing is closed across a break, and nothing passed over it
       if (isTRUE(brk[[cn]][i])) zp <- numeric(length(spec$states))
       else if (i == 1L) zp <- as.numeric(gapsT[[cn]][i, spec$states])
       else {
@@ -1140,7 +1140,7 @@
 # ||D Delta theta||^2 + ||V (alpha z + S Delta theta)||^2 <= r^2.
 #
 # D is the parameter scale, divided by the Coleman-Li distance to the bound the
-# gradient pushes toward, and the model carries the Coleman-Li curvature, so a
+# gradient pushes toward, and the model includes the Coleman-Li curvature, so a
 # box on theta acts as in trust(); a step that would still leave the box is
 # truncated to stay interior.
 #
