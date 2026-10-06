@@ -1,3 +1,23 @@
+# dMod2 0.10.8
+
+* New `symmetryDetection()`, `reconstControl()` and `symmetryReduction()`:
+  structural non-identifiabilities of an ODE model, as generators of its
+  symmetries, and the parameter transformation that removes them. The
+  computation runs in the Python package symident through reticulate; R
+  arguments and fields are camelCase, `print()` and `summary()` are the
+  reports of symident. symident's switches are read from `SYMIDENT_*` and from
+  the options `dMod.sym.*`. msolve, for coupled steady states, comes from
+  `symident.install_msolve()` or `SYMIDENT_MSOLVE`.
+* reticulate no longer provisions symengine.
+* A sum of objectives keeps the `sweep` attribute its terms agree on, so a
+  reverse objective with a prior says it was evaluated in reverse.
+* `importPEtab()` gains `sparse`, which pins the sparse (KLU) or dense linear
+  solver of the cppDE and Sundials backends.
+* `benchmarks/`, outside the built package: value, forward and reverse
+  gradients of PEtab benchmark problems by tier (`run-benchmarks.R --tier
+  tiny|medium|full`), with the scripts of `inst/benchmarks/` under
+  `benchmarks/scripts/`.
+
 # dMod2 0.10.7
 
 * A sum of objectives keeps the `sweep` attribute its terms agree on, so a
