@@ -34,6 +34,7 @@
 ^README_files$
 ^notes$
 ^bench$
+^benchmarks$
 ^todo\.txt$
 ^tests/testthat/\.dMod_objects$
 

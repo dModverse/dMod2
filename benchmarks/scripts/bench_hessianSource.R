@@ -17,7 +17,8 @@
 # [Info]
 # The model is the one of inst/examples/example_Boehm_JProteomeRes2014.R, built
 # here so the script stands alone. The Gauss-Newton-seeded arms dominate the run
-# time, because they spend the whole iteration cap on most starts.
+# time, because they spend the whole iteration cap on most starts. Run from the
+# package root, which holds the shared catalogue of settings.
 # -------------------------------------------------------------------------#
 
 library(dMod2)
@@ -112,7 +113,7 @@ run <- function(...)
                       parlower = parlower, parupper = parupper, ...))
 
 # Every variant of the shared catalogue.
-source(system.file("benchmarks", "hessianSourceSettings.R", package = "dMod2"))
+source(file.path("benchmarks", "scripts", "hessianSourceSettings.R"))
 
 frames <- lapply(hessianSourceSettings, function(a) do.call(run, a))
 names(frames) <- hessianSourceLabels[names(hessianSourceSettings)]

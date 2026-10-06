@@ -1722,6 +1722,7 @@ readPetabTables <- function(yamlPath) {
                                   compile = TRUE,
                                   events = NULL,
                                   optionsOde = NULL, optionsSens = NULL,
+                                  sparse = NULL,
                                   deriv = TRUE, derivMode = "forward",
                                   outdir = getwd()) {
   # No species means no dynamics: Xt() supplies the time axis and the
@@ -1732,9 +1733,11 @@ readPetabTables <- function(yamlPath) {
   # A PEtab experiment may start after t = 0, and its initial values belong at
   # that start. The backends otherwise force 0 into the integration grid,
   # which would apply the initial values there instead.
-  m <- odemodel(reactions, modelname = modelname, backend = backend,
-                events = events, compile = compile, includeTimeZero = FALSE,
-                deriv = deriv, derivMode = derivMode, outdir = outdir)
+  args <- list(reactions, modelname = modelname, backend = backend,
+               events = events, compile = compile, includeTimeZero = FALSE,
+               deriv = deriv, derivMode = derivMode, outdir = outdir)
+  if (!is.null(sparse) && backend != "deSolve") args$sparse <- sparse
+  m <- do.call(odemodel, args)
   opts <- list(m)
   if (!is.null(optionsOde))  opts$optionsOde  <- optionsOde
   if (!is.null(optionsSens)) opts$optionsSens <- optionsSens
@@ -1830,6 +1833,7 @@ readPetabTables <- function(yamlPath) {
                                       start_times = NULL,
                                       switches = NULL,
                                       optionsOde = NULL, optionsSens = NULL,
+                                      sparse = NULL,
                                       deriv = TRUE, derivMode = "forward", cores = 1L,
                                       outdir = getwd()) {
 
@@ -1983,6 +1987,7 @@ readPetabTables <- function(yamlPath) {
                                     events = all_events,
                                     optionsOde = optionsOde,
                                     optionsSens = optionsSens,
+                                    sparse = sparse,
                                     deriv = deriv, derivMode = derivMode,
                                     outdir = outdir)
   g <- .petab_build_observation_fn(obs_meta$obs, obs_meta$obs_trafo,
@@ -2193,6 +2198,9 @@ readPetabTables <- function(yamlPath) {
 #'   settings for the states and their sensitivities. `NULL` keeps the
 #'   backend's defaults, which are looser than a benchmark problem usually
 #'   needs.
+#' @param sparse `NULL` (default) lets the cppDE or Sundials backend choose a
+#'   sparse (KLU) or dense linear solver from the Jacobian pattern; `TRUE` or
+#'   `FALSE` pins it.
 #' @param outdir Directory the generated sources and the shared object are
 #'   written to. Defaults to the working directory, as [odemodel()] does; a
 #'   problem with many conditions writes one source per condition, so a
@@ -2218,7 +2226,7 @@ importPEtab <- function(yamlPath, backend,
                         compile = TRUE, cores = 1L, modelname = NULL,
                         deriv = TRUE, derivMode = "forward",
                         optionsOde = NULL, optionsSens = NULL,
-                        outdir = getwd()) {
+                        sparse = NULL, outdir = getwd()) {
 
   cores <- as.integer(cores)
   if (length(cores) != 1L || is.na(cores) || cores < 1L)
@@ -2324,6 +2332,7 @@ importPEtab <- function(yamlPath, backend,
       switches         = tables$switches,
       optionsOde       = optionsOde,
       optionsSens      = optionsSens,
+      sparse           = sparse,
       deriv            = deriv,
       derivMode        = derivMode,
       cores            = cores,

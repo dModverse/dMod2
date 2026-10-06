@@ -14,6 +14,7 @@ importPEtab(
   derivMode = "forward",
   optionsOde = NULL,
   optionsSens = NULL,
+  sparse = NULL,
   outdir = getwd()
 )
 }
@@ -52,6 +53,10 @@ cotangent width mismatch under it, so \code{derivMode} takes first order only.}
 settings for the states and their sensitivities. \code{NULL} keeps the
 backend's defaults, which are looser than a benchmark problem usually
 needs.}
+
+\item{sparse}{\code{NULL} (default) lets the cppDE or Sundials backend choose a
+sparse (KLU) or dense linear solver from the Jacobian pattern; \code{TRUE} or
+\code{FALSE} pins it.}
 
 \item{outdir}{Directory the generated sources and the shared object are
 written to. Defaults to the working directory, as \code{\link[=odemodel]{odemodel()}} does; a

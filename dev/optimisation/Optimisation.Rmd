@@ -394,7 +394,7 @@ wrong curvature keeps dominating the approximation; on this model those runs
 exhaust the iteration cap without reaching a termination test. `"sr1"` is not
 affected: its rank-one update has no sign constraint and overwrites bad
 curvature outright, and the Moré-Sorensen subproblem solves the indefinite
-approximations that follow. `inst/benchmarks` compares both seeds.
+approximations that follow. `benchmarks/scripts` compares both seeds.
 
 `qnMemory` limits the curvature retained. The default `0`, used in the
 rest of this vignette, accumulates every update onto the seed. A positive value
@@ -436,7 +436,7 @@ fitAll <- function(...)
                       cores = .cores, rinit = 0.1, rmax = 10, iterlim = 5000,
                       parlower = parlower, parupper = parupper, ...))
 
-source(system.file("benchmarks", "hessianSourceSettings.R", package = "dMod2"))
+source(file.path("benchmarks", "scripts", "hessianSourceSettings.R"))
 settings <- hessianSourceSettings[c("gn", "gn_bfgs", "gn_sr1", "bfgs_id", "sr1_id")]
 
 runs <- .fit("multistart", lapply(settings, function(a) do.call(fitAll, a)))
@@ -959,7 +959,7 @@ so this document renders in seconds and reproduces what it shows;
 The two larger comparisons are too expensive for a render and are stored beside
 the document, one file each:
 
-- `boehm_noprior.rds` comes from `bench_hessianSource.R` under `inst/benchmarks`
+- `boehm_noprior.rds` comes from `bench_hessianSource.R` under `benchmarks/scripts`
   with the environment variable `BOEHM_NOPRIOR` set, and takes minutes on one
   machine.
 - `bachmann.rds` comes from `bachmann_hessianSource.R` under `dev/optimisation`,

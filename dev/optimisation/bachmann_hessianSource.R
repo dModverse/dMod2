@@ -47,7 +47,7 @@ library(dMod2)
 
 # From the shared catalogue. Its keys are free of spaces and commas: they travel
 # to the nodes as literals in the generated array script.
-source(system.file("benchmarks", "hessianSourceSettings.R", package = "dMod2"))
+source(file.path("benchmarks", "scripts", "hessianSourceSettings.R"))
 settings <- hessianSourceSettings[c("gn", "gn_sr1", "sr1_id", "sr1_gn", "sr1_id_gn")]
 # BACHMANN_ONLY names a single source, which is how a source whose remote build
 # failed is sent again without touching the ones already in the queue.

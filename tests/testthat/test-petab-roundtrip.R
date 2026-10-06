@@ -210,3 +210,18 @@ test_that("importPEtab builds a reverse sweep through every piece", {
   expect_equal(rev$value, fwd$value, tolerance = 1e-6)
   expect_equal(rev$gradient[names(fwd$gradient)], fwd$gradient, tolerance = 1e-4)
 })
+
+test_that("importPEtab(sparse =) pins the linear solver of the model", {
+  if (!.libsbml_works()) skip("libsbml virtualenv not available")
+  withr::local_dir(tempdir())
+  auto <- .petab_boehm_cppDE()
+  d <- file.path(tempdir(), "dmod_petab_boehm_dense")
+  dir.create(d, showWarnings = FALSE)
+  dense <- importPEtab(.petab_boehm_yaml(), backend = "cppDE", modelname = "v1dense",
+                       sparse = FALSE, cores = test_cores(), outdir = d)
+  expect_false(isTRUE(attr(dense$odemodel$extended, "sparse")))
+  a <- auto$obj(auto$bestfit)
+  b <- dense$obj(dense$bestfit)
+  expect_equal(b$value, a$value, tolerance = 1e-6)
+  expect_equal(b$gradient, a$gradient, tolerance = 1e-4)
+})
