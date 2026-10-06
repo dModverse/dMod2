@@ -137,7 +137,7 @@ of symident are read from the environment variables \verb{SYMIDENT_*} and from t
 options \verb{dMod.sym.*}.
 }
 \examples{
-# Worked examples for symmetryDetection(); derivations in vignette("Symmetries").
+# Worked examples for symmetryDetection().
 
 library(dMod2)
 setwd(tempdir())
