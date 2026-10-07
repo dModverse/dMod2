@@ -52,6 +52,8 @@ trustL1(
   traceFile = NULL,
   fterm,
   mterm,
+  gate = NULL,
+  fuse = NULL,
   ...
 )
 }
@@ -216,6 +218,22 @@ its tolerances stay flat, it does not take the control lists of
 \code{trust}.}
 
 \item{fterm, mterm}{Deprecated aliases for \code{ftol} and \code{mtol}.}
+
+\item{gate}{Character, names in \code{mu} whose penalty is the gate
+\code{lambda * (p - mu)} with \code{p >= mu}: the parameter can sit exactly
+on \code{mu} and leaves it only upward. Starts below \code{mu} are moved
+onto it.}
+
+\item{fuse}{List of fusion blocks. A block penalises
+\code{lambda * sum_{i<j} w_ij |p_i - p_j|} over its parameters, plus
+\code{lambda * w_ia |p_i - a|} toward an optional anchor \code{a}.
+Parameters with equal values move as one and split again when the data
+pull them apart. A block is a character vector of parameter names or a
+list with \code{pars}, and optionally \code{lambda} (default: the scalar
+\code{lambda}), \code{anchor} (default none) and \code{weights}, an
+\code{(m+1) x (m+1)} matrix whose last row and column refer to the
+anchor (default all 1). Fused parameters must not appear in \code{mu}; if
+\code{fuse} is given and \code{mu} is not, \code{mu} is empty.}
 }
 \value{
 A list of class \code{trustfit} with components

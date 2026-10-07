@@ -123,64 +123,20 @@ sel <- sparsify(obj, center, fixed = fixed, method = "focei",
 print(sel)
 stopifnot(setequal(sel$support, c("kon", "ke")))     # the parsimonious model
 
-## 6. Baseline: the classical trustL1 lambda-scan + BIC (what sparsify saves).
-##    20 lambdas x 50 starts = 1000 fits, versus sparsify's ~K+1 marginal fits.
-obj_data  <- normL2(dlist, prd, errmodel = e)
+## 6. Baseline: the classical L1 scan (Hauber et al. 2023) with scanL1().
+##    A penalised multistart fit per lambda, an unpenalised refit per distinct
+##    support, the largest lambda the likelihood ratio test does not reject.
 eta_names <- as.vector(pen$subjectEtas)              # line-B deviations
-mu_pen    <- setNames(rep(0, length(eta_names)), eta_names)
-N         <- nrow(dl_rows)
-p_struct  <- length(cand) + 1L                       # candidate mu's + sigma
-lam_grid  <- 10^seq(-5, 5, length.out = 20)
-scan_center <- c(st[paste0("log_", cand)], log_sigma = log(0.1),
-                 setNames(rep(0, length(eta_names)), eta_names))
-
-## 6a. regularisation path: which deviations survive at each lambda. ----------
-path <- do.call(rbind, lapply(lam_grid, function(lam) {
-  ms <- mstrust(obj_data, center = scan_center, studyname = "scan",
-                optmethod = "trustL1", lambda = lam, mu = mu_pen, fixed = fixed,
-                fits = 50, cores = 4, sd = 0.3, rinit = 1, rmax = 10,
-                iterlim = 400, resultPath = tempdir(), output = FALSE)
-  keep <- abs(as.parvec(as.parframe(ms), index = 1)[eta_names]) > 1e-4
-  data.frame(lambda = lam, nnz = sum(keep),
-             support = paste(sort(gsub("^eta_|_B$", "", eta_names[keep])),
-                             collapse = ","), stringsAsFactors = FALSE)
-}))
-print(path, row.names = FALSE)
-
-## 6b. BIC over the DISTINCT supports the path visits. Compute BIC from an
-##     UNPENALISED (relaxed) refit of each support: at a shrinking lambda the
-##     deviations are biased toward 0, so scoring supports at the penalised fit
-##     is apples-to-oranges across lambda; the post-selection refit is the
-##     standard way to BIC-score a lasso support (relaxed lasso, Meinshausen 2007).
-relaxRefit <- function(S) {                          # clean data -2 log L for S
-  eta_in  <- if (length(S)) as.vector(pen$subjectEtas[, paste0("eta_", S),
-                                                      drop = FALSE]) else character(0)
-  eta_out <- setdiff(eta_names, eta_in)
-  fixedS  <- c(fixed, setNames(rep(0, length(eta_out)), eta_out))
-  start   <- c(st[paste0("log_", cand)], log_sigma = log(0.1),
-               setNames(rep(0, length(eta_in)), eta_in))
-  ms <- mstrust(obj_data, center = start, studyname = "relax", optmethod = "trust",
-                fixed = fixedS, fits = 12, cores = 4, sd = 0.3, rinit = 1,
-                rmax = 10, iterlim = 400, resultPath = tempdir(), output = FALSE)
-  obj_data(as.parvec(as.parframe(ms), index = 1), fixed = fixedS,
-           deriv = FALSE)$value
-}
-supports <- unique(lapply(strsplit(path$support, ","), function(s) s[nzchar(s)]))
-bic_vals <- vapply(supports,
-                   function(S) relaxRefit(S) + log(N) * (p_struct + length(S)), 0.0)
-bic_tab  <- data.frame(
-  support = vapply(supports, function(S)
-    if (length(S)) paste(sort(S), collapse = ",") else "(none)", ""),
-  size = lengths(supports), BIC = bic_vals, stringsAsFactors = FALSE)
-bic_tab  <- bic_tab[order(bic_vals), ]
-bic_tab$sel <- ifelse(bic_tab$BIC == min(bic_tab$BIC), "<= BIC min", "")
-print(bic_tab, row.names = FALSE)
-
-## sparsify finds the SAME parsimonious model the BIC-scan selects. ----------
-bic_support <- supports[[which.min(bic_vals)]]
-cat(sprintf(paste0("\nregSelect  S_hat = {%s}\nBIC-scan   S     = {%s}\n",
-                   "(sparsify: ~%d marginal fits;  scan: %d x %d = %d fits)\n"),
+scan <- scanL1(normL2(dlist, prd, errmodel = e),
+               c(st[paste0("log_", cand)], log_sigma = log(0.1),
+                 setNames(rep(0, length(eta_names)), eta_names)),
+               reference = eta_names, fixed = fixed,
+               lambda = 10^seq(-1, 4, length.out = 16), fits = 10, cores = 4,
+               sd = 0.3)
+print(scan)
+print(plot(scan))
+indiv <- setdiff(eta_names, scan$structure[[scan$selected]]$removed)
+cat(sprintf("\nsparsify  S = {%s}\nscanL1    S = {%s}\n",
             paste(sort(sel$support), collapse = ","),
-            paste(sort(bic_support), collapse = ","),
-            length(cand) + 1L, length(lam_grid), 50L, length(lam_grid) * 50L))
+            paste(sort(gsub("^eta_|_B$", "", indiv)), collapse = ",")))
 }

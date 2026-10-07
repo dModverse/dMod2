@@ -190,3 +190,69 @@ test_that("trustL1 boundary = 'clip' reproduces the historical pinning", {
   expect_identical(unname(clip$argument[["b"]]), 0)
   expect_equal(unname(refl$argument), unname(clip$argument), tolerance = 1e-8)
 })
+
+
+## ---- gates and fusion blocks --------------------------------------------
+
+test_that("a gate stays on its kink unless the data pull it upward", {
+  for (case in list(c(y = -1, s = 0), c(y = 0.3, s = 0), c(y = 2, s = 1.5))) {
+    fit <- trustL1(.quadratic_objfn(c(s = case[["y"]])), parinit = c(s = 1),
+                   mu = c(s = 0), lambda = 1, gate = "s")
+    expect_identical(fit$argument[["s"]] == 0, case[["s"]] == 0)
+    expect_equal(fit$argument[["s"]], case[["s"]], tolerance = 1e-6)
+  }
+  start_below <- trustL1(.quadratic_objfn(c(s = -1)), parinit = c(s = -0.5),
+                         mu = c(s = 0), lambda = 1, gate = "s")
+  expect_identical(start_below$argument[["s"]], 0)
+})
+
+test_that("a fusion block shrinks toward fused values and fuses exactly", {
+  y   <- c(a = 0, b = 1, c = 5)
+  obj <- .quadratic_objfn(y)
+  fit <- function(lambda, start = c(a = 0.5, b = -1, c = 2))
+    trustL1(obj, parinit = start, fuse = list(names(y)), lambda = lambda,
+            rinit = 0.5, rmax = 5, iterlim = 200)$argument
+
+  # No fusion: each value moves by lambda/2 per neighbour above minus below.
+  expect_equal(unname(fit(0.8)), c(0.8, 1, 4.2), tolerance = 1e-6)
+
+  # a and b fuse and stay fused; c keeps its own value.
+  p <- fit(1.2)
+  expect_identical(p[["a"]], p[["b"]])
+  expect_equal(unname(p), c(1.1, 1.1, 3.8), tolerance = 1e-6)
+
+  # Strong penalty: everything at the mean, also from a fused start.
+  expect_equal(unname(fit(10)), rep(2, 3), tolerance = 1e-6)
+  p <- fit(1.2, start = c(a = 2, b = 2, c = 2))
+  expect_equal(unname(p), c(1.1, 1.1, 3.8), tolerance = 1e-6)
+})
+
+test_that("an anchored block soft-thresholds toward its anchor", {
+  y <- c(a = 0.3, b = -2)
+  w <- matrix(1, 3, 3); w[1:2, 1:2] <- 0
+  fit <- trustL1(.quadratic_objfn(y), parinit = c(a = 0, b = 0),
+                 fuse = list(list(pars = names(y), anchor = 0, weights = w)),
+                 lambda = 1, rinit = 0.5, rmax = 5)
+  expect_identical(fit$argument[["a"]], 0)
+  expect_equal(fit$argument[["b"]], -1.5, tolerance = 1e-6)
+})
+
+test_that("an anchored fused block releases only the members the data pull away", {
+  y <- c(a = 0.1, b = 0.2, c = 3)
+  w <- matrix(1, 4, 4); w[4, 1:2] <- w[1:2, 4] <- 3
+  fit <- trustL1(.quadratic_objfn(y), parinit = c(a = 0, b = 0, c = 0),
+                 fuse = list(list(pars = names(y), anchor = 0, weights = w)),
+                 lambda = 0.3, rinit = 0.5, rmax = 5, iterlim = 200)
+  expect_identical(fit$argument[["a"]], 0)
+  expect_identical(fit$argument[["b"]], 0)
+  # c feels the anchor and both pinned members: 2 (c - 3) + 3 * 0.3 = 0.
+  expect_equal(fit$argument[["c"]], 3 - 0.45, tolerance = 1e-6)
+})
+
+test_that("gates and fuse blocks reject the clip boundary and overlap with mu", {
+  obj <- .quadratic_objfn(c(a = 1, b = 2))
+  expect_error(trustL1(obj, c(a = 0, b = 0), fuse = list(c("a", "b")),
+                       boundary = "clip"), "reflective")
+  expect_error(trustL1(obj, c(a = 0, b = 0), mu = c(a = 0),
+                       fuse = list(c("a", "b"))), "both in mu")
+})

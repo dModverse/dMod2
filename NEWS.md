@@ -1,3 +1,17 @@
+# dMod2 (devel-EM)
+
+* New `scanL1()`: L1 selection over a grid of penalty strengths in the
+  manner of Hauber, Rosenblatt and Timmer (2023). A penalised multistart fit
+  per `lambda`, an unpenalised refit of each distinct structure, and the
+  choice by likelihood ratio test against the full model or by BIC. Penalties
+  pull gates to zero, fold changes to zero, or fuse parameters of a block
+  pairwise; `q < 1` by reweighted L1. `gateL1()` inserts the gates, so a
+  parameter in a log parametrisation can reach exactly zero.
+* `trustL1()` gains `gate`, a penalty that keeps a parameter on or above its
+  kink, and `fuse`, blocks with a pairwise penalty whose members move as one
+  while equal. It accepts the curvature request of the trust kernel again,
+  so objectives without `...` work.
+
 # dMod2 0.11.0
 
 * Breaking: `Xs()` on cppDE takes `refine` and `gradtol` in `optionsReverse`;
