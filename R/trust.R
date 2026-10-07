@@ -498,12 +498,10 @@ trustL1 <- function(objfun, parinit, mu = 0 * parinit, one.sided = FALSE, lambda
     lambda <- lambda[names(mu)]
   }
 
+  # The kernel passes what it wants as a second argument; trustL1 always
+  # takes value, gradient and Hessian, so the request is dropped here.
   dots <- list(...)
-  fn <- if (length(dots) > 0L) {
-    function(x) do.call(objfun, c(list(x), dots))
-  } else {
-    objfun
-  }
+  fn <- function(x, want = 2L) do.call(objfun, c(list(x), dots))
 
   mu <- structure(as.numeric(mu), names = names(mu))
   lambda <- structure(as.numeric(lambda), names = names(lambda))

@@ -4,7 +4,7 @@
 \alias{plotIndivs.em}
 \title{Per-subject individual fits for an EM}
 \usage{
-plotIndivs.em(
+\method{plotIndivs}{em}(
   x,
   times = NULL,
   ncol = 4L,

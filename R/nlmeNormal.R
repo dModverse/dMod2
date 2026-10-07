@@ -814,7 +814,8 @@ emObjfn <- function(obj, control = list()) {
   K  <- om$K
   chol_pars <- om$cholPars
   if (is.null(epsQuadLevels)) epsQuadLevels <- K + 1:3
-  cm1 <- .trustControl(list(rinit = 1, rmax = 10, ftol = 1e-6, mtol = 1e-6),
+  cm1 <- .trustControl(list(rinit = 1, rmax = 10,
+                            tolControl = list(ftol = 1e-6, mtol = 1e-6)),
                        cm1Control, label = "cm1Control")
   psi <- init
   if (!all(chol_pars %in% names(psi)))
@@ -914,7 +915,8 @@ emObjfn <- function(obj, control = list()) {
   N  <- nrow(om$subjectEtas)
   chol_pars <- om$cholPars
   level <- K                       # single-node Smolyak == Laplace
-  cm1 <- .trustControl(list(rinit = 1, rmax = 10, ftol = 1e-6, mtol = 1e-6),
+  cm1 <- .trustControl(list(rinit = 1, rmax = 10,
+                            tolControl = list(ftol = 1e-6, mtol = 1e-6)),
                        cm1Control, label = "cm1Control")
   psi <- init
   if (!all(chol_pars %in% names(psi)))
@@ -1012,7 +1014,7 @@ emObjfn <- function(obj, control = list()) {
   chol_pars <- omega$cholPars
   structural_names <- setdiff(names(init), chol_pars)
   cm1 <- .trustControl(list(rinit = 1, rmax = 10, iterlim = 30,
-                            ftol = 1e-6, mtol = 1e-6),
+                            tolControl = list(ftol = 1e-6, mtol = 1e-6)),
                        cm1Control, label = "cm1Control")
 
   parsFull <- setNames(numeric(length(meta$pars_full_names)),

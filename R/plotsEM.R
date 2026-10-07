@@ -1,6 +1,29 @@
 ## NLME plotting and prediction methods for `em` fits.
 ## Split out of plots.R: these are methods for a class the core does not define.
 
+utils::globalVariables(c("IPRED", "PRED", "subject", "cluster", "centroid",
+                         "G", "score", "selected"))
+
+#' Per-subject individual fits (spaghetti plot)
+#'
+#' @description Faceted plot with one panel per subject: observed dots, IPRED
+#'   curve, and (optionally) the population PRED curve overlaid dashed.
+#' @param x Object to plot.
+#' @param ... Method-specific arguments.
+#' @return A ggplot.
+#' @export
+plotIndivs <- function(x, ...) UseMethod("plotIndivs", x)
+
+#' Random-effect distribution diagnostics
+#'
+#' @description Per-eta histogram against the estimated `N(0, Omega_kk)`
+#'   density plus a QQ-plot against the estimated normal.
+#' @param x Object to plot.
+#' @param ... Method-specific arguments.
+#' @return A ggplot (or a list of ggplots if `cowplot` is unavailable).
+#' @export
+plotHistIndivs <- function(x, ...) UseMethod("plotHistIndivs", x)
+
 #' Predictions from an EM object
 #'
 #' @description

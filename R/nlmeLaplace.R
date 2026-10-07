@@ -520,7 +520,7 @@
                         cm1 = list()),
                    if (is.null(control$saem)) list() else control$saem)
   cm1     <- .trustControl(list(rinit = 1, rmax = 10, iterlim = 30L,
-                                ftol = 1e-6, mtol = 1e-6),
+                                tolControl = list(ftol = 1e-6, mtol = 1e-6)),
                            sc$cm1, label = "control$saem$cm1")
   nBurnin <- as.integer(sc$nBurnin); nEM <- as.integer(sc$nEM)
   nMcmc   <- as.integer(sc$nMcmc)
@@ -768,7 +768,7 @@
   ## the one inside trustL1: this one works on the smooth marginal over (mu, sigma)
   ## with no L1 kink, trustL1's works on the per-subject L1-penalised mode.
   cm1 <- .trustControl(list(rinit = 1, rmax = 10, iterlim = 30L,
-                            ftol = 1e-6, mtol = 1e-6),
+                            tolControl = list(ftol = 1e-6, mtol = 1e-6)),
                        control$cm1, label = "control$cm1")
   maxOuter  <- if (is.null(control$maxOuter))  50L  else as.integer(control$maxOuter)
   epsPar    <- if (is.null(control$epsPar))    1e-4 else control$epsPar
@@ -1136,7 +1136,7 @@
           p0 <- p0 + do.call("rnorm", list(n = length(p0), sd = sd))
         f <- try(suppressWarnings(trust(
           obj_data, parinit = p0, fixed = fixed0, rinit = 1, rmax = 10,
-          iterlim = 200L, ftol = 1e-8, mtol = 1e-8)), silent = TRUE)
+          iterlim = 200L, tolControl = list(ftol = 1e-8, mtol = 1e-8))), silent = TRUE)
         if (!inherits(f, "try-error") && isTRUE(f$converged) &&
             (is.null(best) || f$value < best$value)) best <- f
       }

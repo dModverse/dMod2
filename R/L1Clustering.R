@@ -298,7 +298,7 @@ solveFusedComplete <- function(m, w, lambda) {
   mu_of  <- stats::setNames(paste0("log_", params), eta_cols)   # eta_<par> -> log_<par>
 
   cm1 <- .trustControl(list(rinit = 1, rmax = 10, iterlim = 30L,
-                            ftol = 1e-6, mtol = 1e-6),
+                            tolControl = list(ftol = 1e-6, mtol = 1e-6)),
                        control$cm1, label = "control$cm1")
   clc <- modifyList(list(maxit = 60L, tol = 1e-9),
                     if (is.null(control$cluster)) list() else control$cluster)
@@ -1056,7 +1056,7 @@ plot.sparsify <- function(x, type = c("grouping", "chain"), ...) {
                         cm1 = list()),
                    if (is.null(control$saem)) list() else control$saem)
   cm1 <- .trustControl(list(rinit = 1, rmax = 10, iterlim = 30L,
-                            ftol = 1e-6, mtol = 1e-6),
+                            tolControl = list(ftol = 1e-6, mtol = 1e-6)),
                        sc$cm1, label = "control$saem$cm1")
   nBurnin <- as.integer(sc$nBurnin); nEM <- as.integer(sc$nEM); nMcmc <- as.integer(sc$nMcmc)
 

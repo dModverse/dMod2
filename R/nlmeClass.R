@@ -302,7 +302,7 @@ updateOmegaChol <- function(MHatList, omega) {
   fit <- suppressMessages(trust(Q_objlist, parinit = start,
                                 rinit = 1, rmax = 10,
                                 iterlim = 50,
-                                ftol = 1e-10, mtol = 1e-10))
+                                tolControl = list(ftol = 1e-10, mtol = 1e-10)))
   setNames(as.numeric(fit$argument), chol_pars)
 }
 

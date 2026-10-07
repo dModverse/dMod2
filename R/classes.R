@@ -986,11 +986,17 @@ match.fnargs <- function(arglist, choices) {
     attr(outfn, "parameters") <- parameters12
     attr(outfn, "modelname") <- modelname12
     # Reconstruction handles, coalesced from either operand.
-    for (.a in c("prdfn", "data", "errfn", "timesD")) {
+    for (.a in c("prdfn", "data", "errfn", "timesD", "omegaSpec")) {
       .v <- attr(e1, .a, exact = TRUE)
       if (is.null(.v)) .v <- attr(e2, .a, exact = TRUE)
       if (!is.null(.v)) attr(outfn, .a) <- .v
     }
+    # Two constraintL1 terms combine their penalty blocks under one lambda.
+    .ps1 <- attr(e1, "penaltySpec", exact = TRUE)
+    .ps2 <- attr(e2, "penaltySpec", exact = TRUE)
+    .ps  <- if (is.null(.ps1)) .ps2 else if (is.null(.ps2)) .ps1
+            else .mergePenaltySpec(.ps1, .ps2)
+    if (!is.null(.ps)) attr(outfn, "penaltySpec") <- .ps
     # l2spec is CONCATENATED: every L2 term keeps its own data, prediction and
     # error model, which is what reml() needs from a split objective.
     attr(outfn, "l2spec") <- c(attr(e1, "l2spec", exact = TRUE),
@@ -1272,7 +1278,7 @@ test_conditions <- function(c1, c2) {
     # An objfn has no mappings; without these an objfn * parfn loses its
     # parameter set, its model name and the reconstruction handles.
     attr(outfn, "modelname") <- union(attr(e1, "modelname"), attr(e2, "modelname"))
-    for (.a in c("data", "errfn", "timesD")) {
+    for (.a in c("data", "errfn", "timesD", "omegaSpec", "penaltySpec")) {
       .v <- attr(e1, .a, exact = TRUE)
       if (!is.null(.v)) attr(outfn, .a) <- .v
     }

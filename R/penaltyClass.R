@@ -346,23 +346,22 @@ parnames.penaltyspec <- function(x, what = c("all", "eta", "lambda"), ...) {
 #' vanishes away from the kinks); the conditional-mode solve is handled by
 #' [trustL1] inside [EM], not by feeding this term to [trust].
 #'
-#' @param penalty A `penaltySpec` (with subject expansion) from [penaltyL1],
+#' @param mu A `penaltySpec` (with subject expansion) from [penaltyL1],
 #'   possibly combined with `+`.
 #' @param attr.name Name of the numeric attribute holding the penalty value.
 #'   Default `"prior_l1"` (distinct from constraintL2's `"prior"`, so the two
 #'   accumulate independently under `+`).
 #' @param condition Optional condition (default `NULL`, condition-unspecific).
+#' @param ... Not used.
 #' @return An `objfn` carrying `attr(., "penaltySpec")`.
 #' @seealso [penaltyL1], [EM], [sparsify], [constraintL2]
 #' @export
-constraintL1 <- function(penalty, attr.name = "prior_l1", condition = NULL) {
+constraintL1.penaltyspec <- function(mu, attr.name = "prior_l1", condition = NULL, ...) {
 
-  if (!inherits(penalty, "penaltyspec"))
-    stop("`penalty` must be a penaltySpec built by penaltyL1().")
-  if (is.null(penalty$subjectEtas))
-    stop("`penalty` must have subject expansion. Set subjects = ... .")
+  if (is.null(mu$subjectEtas))
+    stop("The penaltySpec must have subject expansion. Set subjects = ... .")
 
-  spec         <- penalty
+  spec         <- mu
   lambda_names <- spec$lambdaName
   terms        <- .penaltyTerms(spec)
   parnames     <- c(as.vector(spec$subjectEtas), lambda_names)

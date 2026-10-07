@@ -761,7 +761,8 @@ constraintL2.default <- function(mu, sigma = 1, attrName = "prior",
 #' @return An objective function of class `objfn`, called as
 #'   `obj(pars, ...)`, see [dModfn]. Its value is the full `-2 log` density,
 #'   while [constraintL2()] returns the penalty form without the constant.
-#' @seealso [constraintL2()]
+#' @seealso [constraintL2()]; [constraintL1.penaltyspec()] for the L1 penalty
+#'   over subject-level deviations.
 #' @examples
 #' prior <- constraintL1(mu = c(k1 = 0), sigma = 2)
 #' prior(pars = c(k1 = 1))$value
