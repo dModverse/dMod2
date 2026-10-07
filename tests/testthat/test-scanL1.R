@@ -90,3 +90,19 @@ test_that("scanL1 runs on a compiled dMod objective", {
   expect_identical(fit$fit[["A_log"]], 0)
   expect_lt(abs(fit$fit[["k_log"]] - log(0.5)), 0.1)
 })
+
+test_that("a multistart adds starts until the best value is hit often enough", {
+  set.seed(4)
+  run <- function(st) list(value = if (st[["a"]] > 0) 0 else 1, argument = st)
+  one <- dMod2:::.l1Multistart(run, c(a = -3), fits = 4, sd = 2, cores = 1, obj = NULL)
+  expect_identical(one$starts, 4L)
+  wf  <- dMod2:::.l1Multistart(run, c(a = -3), fits = 4, sd = 2, cores = 1, obj = NULL,
+                               wf = list(hits = 3, tol = 0.1, max = 400))
+  expect_gte(wf$hits, 3L)
+  expect_gt(wf$starts, 4L)
+  expect_identical(wf$value, 0)
+  spread <- function(st) list(value = abs(st[["a"]]), argument = st)
+  capped <- dMod2:::.l1Multistart(spread, c(a = -30), fits = 4, sd = 5, cores = 1, obj = NULL,
+                                  wf = list(hits = 3, tol = 1e-6, max = 12))
+  expect_identical(capped$starts, 12L)
+})

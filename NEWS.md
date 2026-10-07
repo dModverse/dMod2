@@ -20,6 +20,11 @@
   starts of the full model; a refit also starts from its penalised optimum.
   `plot()` shows the waterfall of the full model, the groups of every block
   over `lambda`, and the inclusion probabilities.
+* `scanL1()` gains the control entries `hits`, `tolHits` and `maxFits`: a
+  multistart of the full model, of a `lambda` or of a refit adds batches of
+  starts until its best value is reached by `hits` runs. Starts and hits are
+  reported per `lambda`, per refit and for the full model; `arguments` holds
+  all free parameters of every penalised fit.
 
 # dMod2 0.11.0
 

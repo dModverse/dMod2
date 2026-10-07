@@ -84,7 +84,10 @@ drawn around the full optimum.}
 default 0.01), \code{ndata} (data points for BIC, default from \code{obj}), \code{nem}
 (iterations of the spike-and-slab EM, default 50), \code{tolp} (change of the
 inclusion probabilities that ends the EM, default 1e-4), \code{nmerge} (merge
-moves per \code{lambda}, default 5, see Details).}
+moves per \code{lambda}, default 5, see Details), \code{hits} (runs that must reach
+the best value within \code{tolHits}, default 1 and 0.1, for the full model, a
+\code{lambda} and a refit; further batches of starts are added until then, up
+to \code{maxFits}, default ten times the batch).}
 }
 \value{
 Object of class \code{scanL1} with

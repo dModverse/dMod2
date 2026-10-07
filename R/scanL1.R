@@ -102,7 +102,10 @@ gateL1 <- function(trafo, pars, prefix = "s_") {
 #'   default 0.01), `ndata` (data points for BIC, default from `obj`), `nem`
 #'   (iterations of the spike-and-slab EM, default 50), `tolp` (change of the
 #'   inclusion probabilities that ends the EM, default 1e-4), `nmerge` (merge
-#'   moves per `lambda`, default 5, see Details).
+#'   moves per `lambda`, default 5, see Details), `hits` (runs that must reach
+#'   the best value within `tolHits`, default 1 and 0.1, for the full model, a
+#'   `lambda` and a refit; further batches of starts are added until then, up
+#'   to `maxFits`, default ten times the batch).
 #' @details With `ssl`, term `j` (a gate, a reference parameter or a pairwise
 #'   difference in a block) carries the prior
 #'   \deqn{\pi(d_j \mid \theta) = \theta\,\psi_1(d_j) + (1-\theta)\,\psi_0(d_j),
@@ -159,7 +162,9 @@ scanL1 <- function(obj, center, zero = NULL, reference = NULL, groups = NULL,
     stop("scanL1: ssl and q < 1 are two different penalties, give one.", call. = FALSE)
   ctl <- utils::modifyList(list(trust = list(rinit = 0.1, rmax = 10, iterlim = 200L),
                                 nq = 3L, eps = 0.01, ndata = NULL, nem = 50L,
-                                tolp = 1e-4, nmerge = 5L), control)
+                                tolp = 1e-4, nmerge = 5L, hits = 1L, tolHits = 0.1,
+                                maxFits = NULL), control)
+  wf <- if (ctl$hits > 1L) list(hits = ctl$hits, tol = ctl$tolHits, max = ctl$maxFits)
   if (.Platform$OS.type == "windows") cores <- 1L
 
   gates  <- names(zero)
@@ -175,7 +180,7 @@ scanL1 <- function(obj, center, zero = NULL, reference = NULL, groups = NULL,
   fixFull <- c(fixed, stats::setNames(rep(1, length(gates)), gates))
   full <- .l1Multistart(function(st) do.call(trust, c(list(obj, st), ctl$trust,
                                                       list(fixed = fixFull))),
-                        center, fits, sd, cores, obj)
+                        center, fits, sd, cores, obj, wf = wf)
   if (is.null(full)) stop("scanL1: every fit of the full model failed.", call. = FALSE)
   fullPars <- full$argument
   nFull    <- length(fullPars)
@@ -193,7 +198,7 @@ scanL1 <- function(obj, center, zero = NULL, reference = NULL, groups = NULL,
     ssl <- utils::modifyList(list(lambda1 = 1, a = 2, b = 2), ssl)
   pen1 <- function(start, l, n, extra)
     .l1Penalised(obj, start, lambda[l], gates, reference, groups, fixSel, q,
-                 ctl, n, sd, cores, extra, ssl)
+                 ctl, n, sd, cores, extra, ssl, if (n > 1L) wf)
   # Upward from the full optimum, then downward from each larger lambda's
   # optimum; a lambda keeps the better of the two.
   # With ssl the path is one chain of local modes: the spike density at zero
@@ -229,12 +234,14 @@ scanL1 <- function(obj, center, zero = NULL, reference = NULL, groups = NULL,
   pathArg <- lapply(path, `[[`, "argument")[!duplicated(keys)]
   rf <- Map(.l1Refit, structs, pathArg,
             MoreArgs = list(obj = obj, fullPars = fullPars, zero = zero, fixed = fixed,
-                            ctl = ctl, fits = pathFits, sd = sd, cores = cores))
+                            ctl = ctl, fits = pathFits, sd = sd, cores = cores, wf = wf))
   rf <- Filter(Negate(is.null), rf)
   if (!length(rf)) stop("scanL1: every refit failed.", call. = FALSE)
   refitTab <- data.frame(key = names(rf),
                          value = vapply(rf, `[[`, 0, "value"),
                          nfree = vapply(rf, `[[`, 0L, "nfree"),
+                         starts = vapply(rf, function(z) z$starts %||% NA_integer_, 0L),
+                         hits = vapply(rf, function(z) z$hits %||% NA_integer_, 0L),
                          stringsAsFactors = FALSE)
   refitTab$stat <- pmax(0, refitTab$value - full$value)
   refitTab$df   <- nFull - refitTab$nfree
@@ -252,6 +259,8 @@ scanL1 <- function(obj, center, zero = NULL, reference = NULL, groups = NULL,
     stringsAsFactors = FALSE)
   pathTab$p <- refitTab$p[match(pathTab$key, refitTab$key)]
   pathTab$converged <- vapply(path, function(z) isTRUE(z$converged), TRUE)
+  pathTab$starts <- vapply(path, function(z) z$starts %||% NA_integer_, 0L)
+  pathTab$hits   <- vapply(path, function(z) z$hits %||% NA_integer_, 0L)
   if (!is.null(ssl)) pathTab$em <- vapply(path, function(z) z$emIterations %||% NA_integer_, 0L)
   sel <- .l1Select(pathTab, refitTab, select, alpha)
 
@@ -267,7 +276,8 @@ scanL1 <- function(obj, center, zero = NULL, reference = NULL, groups = NULL,
   out <- list(path = pathTab, coefficients = cbind(lambda = pathTab$lambda, coefs),
               arguments = lapply(path, `[[`, "argument"),
               refits = refitTab,
-              full = list(value = full$value, argument = fullPars, values = full$values),
+              full = list(value = full$value, argument = fullPars, values = full$values,
+                          starts = full$starts, hits = full$hits),
               selected = sel$key, lambdaSelected = sel$lambda,
               structure = structs, select = select, alpha = alpha, q = q,
               fit = rf[[sel$key]]$argument, groups = groups, gates = gates,
@@ -279,30 +289,47 @@ scanL1 <- function(obj, center, zero = NULL, reference = NULL, groups = NULL,
 
 
 # Best of `fits` runs of `run(start)`: start 1 is `center`, the others are
-# drawn around it. `abs()` keeps gates non-negative. `values` holds the sorted
-# values of all runs that converged.
+# drawn around it. `abs()` keeps gates non-negative. With `wf`, batches of
+# `fits` further starts follow until `wf$hits` runs lie within `wf$tol` of the
+# best or `wf$max` starts are spent. `values` holds the sorted values of all
+# converged runs, `starts` and `hits` the counts.
 .l1Multistart <- function(run, center, fits, sd, cores, obj, extra = NULL,
-                          positive = character(0)) {
-  starts <- c(list(center), extra)
-  while (length(starts) < max(fits, 1L)) {
+                          positive = character(0), wf = NULL) {
+  draw <- function(n) lapply(seq_len(max(n, 0L)), function(i) {
     st <- center + stats::rnorm(length(center), 0, sd)
     st[positive] <- abs(st[positive])
-    starts <- c(starts, list(st))
-  }
+    st
+  })
   one <- function(st) {
     try(resetWarmStarts(obj, verbose = FALSE), silent = TRUE)
     # A start the solver cannot follow is dropped; its warnings say nothing more.
     f <- try(suppressWarnings(run(st)), silent = TRUE)
     if (inherits(f, "try-error") || !is.finite(f$value)) NULL else f
   }
-  res <- if (cores > 1L) parallel::mclapply(starts, one, mc.cores = cores,
-                                            mc.preschedule = FALSE)
-         else lapply(starts, one)
-  res <- Filter(function(f) is.list(f) && !is.null(f$value), res)
+  maxN   <- if (is.null(wf)) 0L else wf$max %||% (10L * max(fits, 1L))
+  starts <- c(list(center), extra)
+  starts <- c(starts, draw(max(fits, 1L) - length(starts)))
+  res <- list()
+  total <- 0L
+  repeat {
+    out <- if (cores > 1L) parallel::mclapply(starts, one, mc.cores = cores,
+                                              mc.preschedule = FALSE)
+           else lapply(starts, one)
+    total <- total + length(starts)
+    res  <- c(res, Filter(function(f) is.list(f) && !is.null(f$value), out))
+    hits <- if (length(res)) {
+      v <- vapply(res, `[[`, 0, "value")
+      sum(v <= min(v) + (wf$tol %||% 0))
+    } else 0L
+    if (is.null(wf) || hits >= wf$hits || total >= maxN) break
+    starts <- draw(min(max(fits, cores, 1L), maxN - total))
+  }
   if (!length(res)) return(NULL)
   vals <- vapply(res, `[[`, 0, "value")
   best <- res[[which.min(vals)]]
   best$values <- sort(vals)
+  best$starts <- total
+  best$hits   <- hits
   best
 }
 
@@ -310,7 +337,8 @@ scanL1 <- function(obj, center, zero = NULL, reference = NULL, groups = NULL,
 # ones around `start0`; q < 1 by reweighting the best L1 fit, `ssl` by the EM
 # of the spike-and-slab lasso from every start.
 .l1Penalised <- function(obj, start0, lambda, gates, reference, groups,
-                         fixed, q, ctl, fits, sd, cores, extra = NULL, ssl = NULL) {
+                         fixed, q, ctl, fits, sd, cores, extra = NULL, ssl = NULL,
+                         wf = NULL) {
   singles <- c(gates, reference)
   mu <- stats::setNames(rep(0, length(singles)), singles)
   wS <- stats::setNames(rep(1, length(singles)), singles)
@@ -330,7 +358,7 @@ scanL1 <- function(obj, center, zero = NULL, reference = NULL, groups = NULL,
                          positive = gates))
   }
   best <- .l1Multistart(function(st) run(st, wS, wB), start0, fits, sd, cores, obj,
-                        extra = extra, positive = gates)
+                        extra = extra, positive = gates, wf = wf)
   if (is.null(best) || q == 1) return(best)
   for (k in seq_len(ctl$nq)) {
     th <- best$argument
@@ -341,6 +369,7 @@ scanL1 <- function(obj, center, zero = NULL, reference = NULL, groups = NULL,
     })
     nxt <- try(run(th, wS, wB), silent = TRUE)
     if (inherits(nxt, "try-error")) break
+    nxt[c("values", "starts", "hits")] <- best[c("values", "starts", "hits")]
     best <- nxt
   }
   best
@@ -503,7 +532,8 @@ scanL1 <- function(obj, center, zero = NULL, reference = NULL, groups = NULL,
 # Unpenalised refit of one structure from the full optimum and from `start`,
 # the penalised optimum. Returns value, number of free parameters and the full
 # named parameter vector.
-.l1Refit <- function(st, start, obj, fullPars, zero, fixed, ctl, fits, sd, cores) {
+.l1Refit <- function(st, start, obj, fullPars, zero, fixed, ctl, fits, sd, cores,
+                     wf = NULL) {
   gates   <- names(zero)
   offGate <- intersect(st$removed, gates)
   fixR <- c(fixed,
@@ -530,11 +560,13 @@ scanL1 <- function(obj, center, zero = NULL, reference = NULL, groups = NULL,
   warm[both] <- start[both]
   r <- .l1Multistart(function(s) do.call(trust, c(list(objR, s), ctl$trust,
                                                   list(fixed = fixR))),
-                     fullPars[free], fits, sd, cores, obj, extra = list(warm[free]))
+                     fullPars[free], fits, sd, cores, obj, extra = list(warm[free]),
+                     wf = wf)
   if (is.null(r)) return(NULL)
   arg <- r$argument
   for (rep in names(ties)) arg[ties[[rep]]] <- arg[[rep]]
-  list(value = r$value, nfree = length(free), argument = c(arg, fixR))
+  list(value = r$value, nfree = length(free), argument = c(arg, fixR),
+       starts = r$starts, hits = r$hits)
 }
 
 # Objective over one representative per tied group: gradient and Hessian are
