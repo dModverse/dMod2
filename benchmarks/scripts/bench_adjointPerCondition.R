@@ -104,16 +104,25 @@ mR <- odemodel(reactions, modelname = "bench_rb4", backend = "cppDE",
                compile = FALSE, outdir = .bdir)
 xR <- Xs(mR, optionsOde = TOL, optionsSens = TOL)
 
+# The observation, error and parameter functions again, with the
+# vector-Jacobian product the reverse mode reads.
+p <- P(trafo, modelname = "bench_trafo", derivMode = c("forward", "reverse"),
+       compile = FALSE, outdir = .bdir)
+g <- Y(observables, x, modelname = "bench_obs", attach.input = FALSE,
+       derivMode = c("forward", "reverse"), compile = FALSE, outdir = .bdir)
+e <- Y(errorModels, g, modelname = "bench_err", attach.input = FALSE,
+       derivMode = c("forward", "reverse"), compile = FALSE, outdir = .bdir)
+
 xS <- NULL
 if (hasASA) {
   mS <- odemodel(reactions, modelname = "bench_sun", backend = "Sundials",
                  derivMode = c("forward", "reverse"), compile = FALSE,
                  outdir = .bdir)
   xS <- Xs(mS, optionsOde = TOL, optionsSens = TOL)
-  compile(xC, xR, xS, output = "bench_adjoint", cores = 12)
+  compile(g, e, p, xC, xR, xS, output = "bench_adjoint", cores = 12)
 } else {
   cat("SUNDIALS absent or cvode() has no reverse direction: ASA column is NA.\n")
-  compile(xC, xR, output = "bench_adjoint", cores = 12)
+  compile(g, e, p, xC, xR, output = "bench_adjoint", cores = 12)
 }
 
 # normL2 alone, not the example's objective: its prior term is one scalar over
