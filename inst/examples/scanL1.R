@@ -29,4 +29,13 @@ fit <- scanL1(obj, c(log10_k1 = 0, log10_k2 = -0.5, log10_k3 = 0),
 fit
 plot(fit)
 plot(fit, type = "test")
+
+## Spike-and-slab lasso: one multistart of the full model, then one chain over
+## the spike strength; the structure is the one the chain settles on.
+fitS <- scanL1(obj, c(log10_k1 = 0, log10_k2 = -0.5, log10_k3 = 0),
+               zero = attr(trafo, "gates"), lambda = 10^seq(0, 4, length.out = 13),
+               fits = 4, pathFits = 1, ssl = list(lambda1 = 1), select = "plateau")
+fitS
+plot(fitS, type = "inclusion")
+plot(fitS, type = "waterfall")
 }

@@ -11,6 +11,15 @@
   kink, and `fuse`, blocks with a pairwise penalty whose members move as one
   while equal. It accepts the curvature request of the trust kernel again,
   so objectives without `...` work.
+* `scanL1()` gains `ssl`, the spike-and-slab lasso of Rockova and George
+  (2018): every penalised term comes from a slab or a spike, an EM alternates
+  closed-form inclusion probabilities with weighted `trustL1()` fits, and one
+  warm-started chain over the spike strength replaces the multistart per
+  `lambda`. `select = "plateau"` takes the structure the chain settles on.
+  `pathFits` sets the starts per `lambda` and per refit apart from `fits`, the
+  starts of the full model; a refit also starts from its penalised optimum.
+  `plot()` shows the waterfall of the full model, the groups of every block
+  over `lambda`, and the inclusion probabilities.
 
 # dMod2 0.11.0
 

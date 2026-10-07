@@ -4,13 +4,17 @@
 \alias{plot.scanL1}
 \title{Plot an L1 scan}
 \usage{
-\method{plot}{scanL1}(x, type = c("path", "test"), ...)
+\method{plot}{scanL1}(x, type = c("path", "test", "waterfall", "clusters", "inclusion"), ...)
 }
 \arguments{
 \item{x}{A \code{scanL1} result.}
 
 \item{type}{\code{"path"}: penalised estimates over \code{lambda}. \code{"test"}: p-value of
-each refit over \code{lambda}, with the level of the test.}
+each refit over \code{lambda}, with the level of the test. \code{"waterfall"}: sorted
+values of the starts of the full model. \code{"clusters"}: per
+block, the group every member (and the anchor) belongs to at each
+\code{lambda}. \code{"inclusion"}: inclusion probabilities of the spike-and-slab
+lasso over \code{lambda}.}
 
 \item{...}{Ignored.}
 }

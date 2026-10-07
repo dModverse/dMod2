@@ -74,51 +74,92 @@ gateL1 <- function(trafo, pars, prefix = "s_") {
 #' @param fixed Named numeric, parameters fixed throughout.
 #' @param q Exponent of the penalty. `q < 1` (e.g. 0.8) is approximated by
 #'   reweighted L1 fits.
+#' @param ssl `NULL`, or a list with `lambda1` (slab strength, default 1), `a`
+#'   and `b` (Beta prior of the slab share, default 2 and 2, which keeps the
+#'   share away from zero). Switches to the spike-and-slab lasso: every
+#'   penalised term is drawn from the slab with strength `lambda1` or from the
+#'   spike with strength `lambda`, and `lambda` becomes the spike strength of
+#'   the path. See Details.
 #' @param select `"lrt"`: the largest `lambda` whose refit the likelihood ratio
 #'   test against the full model does not reject at level `alpha`. `"bic"`: the
-#'   refit with the smallest BIC.
+#'   refit with the smallest BIC. `"plateau"`: the structure at the largest
+#'   `lambda`, meant for `ssl`, where the structure stops changing once the
+#'   spike is strong enough.
 #' @param alpha Level of the likelihood ratio test.
-#' @param fits Number of starts per `lambda` and per refit. For a `lambda`
+#' @param fits Number of starts of the full model.
+#' @param pathFits Number of starts per `lambda` and per refit. For a `lambda`
 #'   they include the optimum of the next smaller `lambda` and the sparse point
 #'   (every gate and reference at zero, every block at its anchor or mean); a
 #'   downward pass then restarts each `lambda` from the optimum of the next
-#'   larger one and keeps the better fit. A refit starts from the full optimum.
-#'   The remaining starts are drawn around the full optimum.
+#'   larger one and keeps the better fit. A refit starts from the full optimum
+#'   and from the penalised optimum of its structure. The remaining starts are
+#'   drawn around the full optimum.
 #' @param cores Number of forked processes for the starts.
 #' @param sd Standard deviation of the start perturbation.
 #' @param control List: `trust` (arguments of [trustL1] and [trust], default
 #'   `rinit = 0.1, rmax = 10, iterlim = 200`), `nq` (reweighting rounds for
 #'   `q < 1`, default 3), `eps` (floor of `|difference|` in the reweighting,
-#'   default 0.01), `ndata` (data points for BIC, default from `obj`).
+#'   default 0.01), `ndata` (data points for BIC, default from `obj`), `nem`
+#'   (iterations of the spike-and-slab EM, default 50), `tolp` (change of the
+#'   inclusion probabilities that ends the EM, default 1e-4), `nmerge` (merge
+#'   moves per `lambda`, default 5, see Details).
+#' @details With `ssl`, term `j` (a gate, a reference parameter or a pairwise
+#'   difference in a block) carries the prior
+#'   \deqn{\pi(d_j \mid \theta) = \theta\,\psi_1(d_j) + (1-\theta)\,\psi_0(d_j),
+#'   \quad \psi_i(d) = \tfrac{\lambda_i}{4} e^{-\lambda_i |d| / 2},}
+#'   so that `-2 log` of each component is `lambda_i * |d|` up to a constant,
+#'   the scale of `obj`. The posterior mode at one spike strength `lambda` is
+#'   found by EM: the E-step gives the inclusion probability
+#'   \eqn{p_j = \theta\psi_1(d_j) / \pi(d_j \mid \theta)} and
+#'   \eqn{\theta = (\sum_j p_j + a - 1)/(J + a + b - 2)}, the M-step is an
+#'   L1 fit by [trustL1] with weight \eqn{p_j \lambda_1 + (1 - p_j) \lambda}
+#'   on term `j`. Terms with \eqn{p_j < 1/2} that the weighted fit leaves
+#'   off their kink are then put onto it and the EM is rerun; the merge is kept
+#'   if it lowers the `-2 log` posterior. The path is one chain over the
+#'   increasing grid, each
+#'   `lambda` started from the optimum of the previous one (Rockova and George
+#'   2018); `pathFits` then only applies to the refits.
 #' @return Object of class `scanL1` with
 #'   \describe{
 #'     \item{`path`}{one row per `lambda`: penalised value, structure key,
-#'       number of removed parameters and of free parameters in the refit.}
+#'       number of removed parameters, p-value of its refit, convergence of the
+#'       penalised fit and, with `ssl`, the number of EM iterations.}
 #'     \item{`coefficients`}{penalised estimates per `lambda`.}
+#'     \item{`arguments`}{all free parameters of the penalised fit per `lambda`.}
 #'     \item{`refits`}{one row per distinct structure: `-2 log L`, free
 #'       parameters, LRT statistic, degrees of freedom, p-value, BIC.}
-#'     \item{`full`}{the full fit: value and parameters.}
+#'     \item{`full`}{the full fit: value, parameters and the sorted values of
+#'       all its starts.}
 #'     \item{`selected`, `lambdaSelected`}{the chosen structure and the
 #'       `lambda` it was chosen at.}
 #'     \item{`structure`}{per key: removed parameters and groups.}
 #'     \item{`fit`}{named parameters of the chosen refit, fixed ones included.}
+#'     \item{`inclusion`, `theta`}{with `ssl`: inclusion probability of every
+#'       penalised term and slab share per `lambda`.}
 #'   }
 #' @references Hauber AL, Rosenblatt M, Timmer J (2023). Uncovering specific
 #'   mechanisms across cell types in dynamical models. PLoS Comput Biol 19(9):
 #'   e1010867.
+#'
+#'   Rockova V, George EI (2018). The spike-and-slab LASSO. J Am Stat Assoc
+#'   113(521): 431-444.
 #' @seealso [gateL1], [trustL1]
 #' @example inst/examples/scanL1.R
 #' @export
 scanL1 <- function(obj, center, zero = NULL, reference = NULL, groups = NULL,
                    lambda = 10^seq(-3, 3, length.out = 25), fixed = NULL,
-                   q = 1, select = c("lrt", "bic"), alpha = 0.05,
-                   fits = 10, cores = 1, sd = 0.5, control = list()) {
+                   q = 1, ssl = NULL, select = c("lrt", "bic", "plateau"),
+                   alpha = 0.05, fits = 10, pathFits = fits, cores = 1, sd = 0.5,
+                   control = list()) {
   select <- match.arg(select)
   if (!length(zero) && !length(reference) && !length(groups))
     stop("scanL1: give at least one of zero, reference, groups.", call. = FALSE)
   if (q <= 0 || q > 1) stop("scanL1: q must lie in (0, 1].", call. = FALSE)
+  if (!is.null(ssl) && q < 1)
+    stop("scanL1: ssl and q < 1 are two different penalties, give one.", call. = FALSE)
   ctl <- utils::modifyList(list(trust = list(rinit = 0.1, rmax = 10, iterlim = 200L),
-                                nq = 3L, eps = 0.01, ndata = NULL), control)
+                                nq = 3L, eps = 0.01, ndata = NULL, nem = 50L,
+                                tolp = 1e-4, nmerge = 5L), control)
   if (.Platform$OS.type == "windows") cores <- 1L
 
   gates  <- names(zero)
@@ -148,18 +189,23 @@ scanL1 <- function(obj, center, zero = NULL, reference = NULL, groups = NULL,
   sparse    <- start0
   sparse[c(gates, reference)] <- 0
   for (b in groups) sparse[b$pars] <- b$anchor %||% mean(start0[b$pars])
+  if (!is.null(ssl))
+    ssl <- utils::modifyList(list(lambda1 = 1, a = 2, b = 2), ssl)
   pen1 <- function(start, l, n, extra)
     .l1Penalised(obj, start, lambda[l], gates, reference, groups, fixSel, q,
-                 ctl, n, sd, cores, extra)
+                 ctl, n, sd, cores, extra, ssl)
   # Upward from the full optimum, then downward from each larger lambda's
   # optimum; a lambda keeps the better of the two.
+  # With ssl the path is one chain of local modes: the spike density at zero
+  # grows with lambda, so posterior values of different supports do not compare.
   fitsL <- vector("list", length(lambda))
   warm  <- start0
   for (l in seq_along(lambda)) {
-    fitsL[[l]] <- pen1(start0, l, fits, list(warm, sparse))
+    fitsL[[l]] <- if (is.null(ssl)) pen1(start0, l, pathFits, list(warm, sparse))
+                  else pen1(warm, l, 1L, NULL)
     if (!is.null(fitsL[[l]])) warm <- fitsL[[l]]$argument
   }
-  for (l in rev(seq_along(lambda))[-1]) {
+  if (is.null(ssl)) for (l in rev(seq_along(lambda))[-1]) {
     up <- fitsL[[l + 1L]]
     if (is.null(up)) next
     down <- pen1(up$argument, l, 1L, NULL)
@@ -180,8 +226,10 @@ scanL1 <- function(obj, center, zero = NULL, reference = NULL, groups = NULL,
   structs <- lapply(path, `[[`, "structure")[!duplicated(keys)]
   names(structs) <- unique(keys)
   ndata <- ctl$ndata %||% .l1Ndata(obj)
-  rf <- lapply(structs, .l1Refit, obj = obj, fullPars = fullPars, zero = zero,
-               fixed = fixed, ctl = ctl, fits = fits, sd = sd, cores = cores)
+  pathArg <- lapply(path, `[[`, "argument")[!duplicated(keys)]
+  rf <- Map(.l1Refit, structs, pathArg,
+            MoreArgs = list(obj = obj, fullPars = fullPars, zero = zero, fixed = fixed,
+                            ctl = ctl, fits = pathFits, sd = sd, cores = cores))
   rf <- Filter(Negate(is.null), rf)
   if (!length(rf)) stop("scanL1: every refit failed.", call. = FALSE)
   refitTab <- data.frame(key = names(rf),
@@ -203,23 +251,36 @@ scanL1 <- function(obj, center, zero = NULL, reference = NULL, groups = NULL,
     removed = vapply(path, function(z) length(z$structure$removed), 0L),
     stringsAsFactors = FALSE)
   pathTab$p <- refitTab$p[match(pathTab$key, refitTab$key)]
+  pathTab$converged <- vapply(path, function(z) isTRUE(z$converged), TRUE)
+  if (!is.null(ssl)) pathTab$em <- vapply(path, function(z) z$emIterations %||% NA_integer_, 0L)
   sel <- .l1Select(pathTab, refitTab, select, alpha)
 
   coefs <- do.call(rbind, lapply(path, function(z) z$argument[c(gates, pen)]))
   rownames(coefs) <- NULL
 
+  if (!is.null(ssl)) {
+    incl <- do.call(rbind, lapply(path, `[[`, "inclusion"))
+    out_ssl <- list(inclusion = cbind(lambda = pathTab$lambda, incl),
+                    theta = vapply(path, `[[`, 0, "theta"), ssl = ssl)
+  } else out_ssl <- NULL
+
   out <- list(path = pathTab, coefficients = cbind(lambda = pathTab$lambda, coefs),
-              refits = refitTab, full = list(value = full$value, argument = fullPars),
+              arguments = lapply(path, `[[`, "argument"),
+              refits = refitTab,
+              full = list(value = full$value, argument = fullPars, values = full$values),
               selected = sel$key, lambdaSelected = sel$lambda,
               structure = structs, select = select, alpha = alpha, q = q,
-              fit = rf[[sel$key]]$argument)
+              fit = rf[[sel$key]]$argument, groups = groups, gates = gates,
+              reference = reference)
+  out <- c(out, out_ssl)
   class(out) <- "scanL1"
   out
 }
 
 
 # Best of `fits` runs of `run(start)`: start 1 is `center`, the others are
-# drawn around it. `abs()` keeps gates non-negative.
+# drawn around it. `abs()` keeps gates non-negative. `values` holds the sorted
+# values of all runs that converged.
 .l1Multistart <- function(run, center, fits, sd, cores, obj, extra = NULL,
                           positive = character(0)) {
   starts <- c(list(center), extra)
@@ -239,13 +300,17 @@ scanL1 <- function(obj, center, zero = NULL, reference = NULL, groups = NULL,
          else lapply(starts, one)
   res <- Filter(function(f) is.list(f) && !is.null(f$value), res)
   if (!length(res)) return(NULL)
-  res[[which.min(vapply(res, `[[`, 0, "value"))]]
+  vals <- vapply(res, `[[`, 0, "value")
+  best <- res[[which.min(vals)]]
+  best$values <- sort(vals)
+  best
 }
 
 # One penalised fit at `lambda` from `start0`, the `extra` starts and random
-# ones around `start0`; q < 1 by reweighting the best L1 fit.
+# ones around `start0`; q < 1 by reweighting the best L1 fit, `ssl` by the EM
+# of the spike-and-slab lasso from every start.
 .l1Penalised <- function(obj, start0, lambda, gates, reference, groups,
-                         fixed, q, ctl, fits, sd, cores, extra = NULL) {
+                         fixed, q, ctl, fits, sd, cores, extra = NULL, ssl = NULL) {
   singles <- c(gates, reference)
   mu <- stats::setNames(rep(0, length(singles)), singles)
   wS <- stats::setNames(rep(1, length(singles)), singles)
@@ -258,6 +323,11 @@ scanL1 <- function(obj, center, zero = NULL, reference = NULL, groups = NULL,
     if (length(mu)) args <- c(args, list(mu = mu, lambda = lambda * wS[names(mu)],
                                          gate = if (length(gates)) gates))
     do.call(trustL1, args)
+  }
+  if (!is.null(ssl)) {
+    em <- function(st) .sslEM(run, st, singles, groups, lambda, ssl, ctl)
+    return(.l1Multistart(em, start0, fits, sd, cores, obj, extra = extra,
+                         positive = gates))
   }
   best <- .l1Multistart(function(st) run(st, wS, wB), start0, fits, sd, cores, obj,
                         extra = extra, positive = gates)
@@ -274,6 +344,136 @@ scanL1 <- function(obj, center, zero = NULL, reference = NULL, groups = NULL,
     best <- nxt
   }
   best
+}
+
+# Absolute penalised terms of `th`: the singles, then the upper triangle of
+# every block's pairwise differences (anchor last), named "a:b".
+.sslTerms <- function(th, singles, groups) {
+  d <- abs(th[singles])
+  for (b in groups) {
+    v <- c(th[b$pars], if (!is.null(b$anchor)) stats::setNames(b$anchor, "anchor"))
+    ut <- which(upper.tri(diag(length(v))), arr.ind = TRUE)
+    d <- c(d, stats::setNames(abs(v[ut[, 1]] - v[ut[, 2]]),
+                              paste0(names(v)[ut[, 1]], ":", names(v)[ut[, 2]])))
+  }
+  d
+}
+
+# Log densities of the slab and spike components on the -2 log L scale:
+# psi_i(d) = lambda_i / 4 exp(-lambda_i |d| / 2).
+.sslLogPsi <- function(d, l) log(l / 4) - l * d / 2
+
+# Inclusion probabilities of terms `d` and the slab share `theta`, iterated to
+# their joint fixed point at fixed `d`.
+.sslEstep <- function(d, lambda0, ssl, theta = 0.5, maxit = 100L, tol = 1e-10) {
+  l1 <- .sslLogPsi(d, ssl$lambda1)
+  l0 <- .sslLogPsi(d, lambda0)
+  J <- length(d)
+  for (i in seq_len(maxit)) {
+    p <- stats::plogis(log(theta) - log1p(-theta) + l1 - l0)
+    thNew <- (sum(p) + ssl$a - 1) / (J + ssl$a + ssl$b - 2)
+    thNew <- min(max(thNew, 1e-12), 1 - 1e-12)
+    done <- abs(thNew - theta) < tol
+    theta <- thNew
+    if (done) break
+  }
+  p <- stats::plogis(log(theta) - log1p(-theta) + l1 - l0)
+  list(p = p, theta = theta)
+}
+
+# -2 log prior of the terms and the slab share, up to a constant.
+.sslPenalty <- function(d, theta, lambda0, ssl) {
+  l1 <- log(theta) + .sslLogPsi(d, ssl$lambda1)
+  l0 <- log1p(-theta) + .sslLogPsi(d, lambda0)
+  mx <- pmax(l1, l0)
+  -2 * sum(mx + log(exp(l1 - mx) + exp(l0 - mx))) -
+    2 * ((ssl$a - 1) * log(theta) + (ssl$b - 1) * log1p(-theta))
+}
+
+# EM of the spike-and-slab lasso from one start. Terms the E-step assigns to
+# the spike but the weighted fit leaves off their kink (strongly curved data
+# terms) are merged onto it; the merge is kept when it lowers the -2 log
+# posterior, as the exact threshold of the linear spike-and-slab lasso does.
+.sslEM <- function(run, st, singles, groups, lambda0, ssl, ctl) {
+  fit <- .sslLoop(run, st, singles, groups, lambda0, ssl, ctl)
+  for (m in seq_len(ctl$nmerge)) {
+    st2 <- .sslMerge(fit$argument, fit$inclusion, singles, groups)
+    if (is.null(st2)) break
+    alt <- try(.sslLoop(run, st2, singles, groups, lambda0, ssl, ctl), silent = TRUE)
+    if (inherits(alt, "try-error") || alt$value >= fit$value) break
+    alt$merges <- (fit$merges %||% 0L) + 1L
+    fit <- alt
+  }
+  fit
+}
+
+# EM iterations from one start: E-step on the current terms, M-step a trustL1
+# fit with the weights p lambda1 + (1 - p) lambda0. Returns the last fit with
+# `value` the -2 log posterior, `inclusion` and `theta`.
+.sslLoop <- function(run, st, singles, groups, lambda0, ssl, ctl) {
+  th <- st
+  es <- .sslEstep(.sslTerms(th, singles, groups), lambda0, ssl)
+  fit <- NULL
+  for (k in seq_len(ctl$nem)) {
+    w   <- es$p * ssl$lambda1 / lambda0 + (1 - es$p)
+    wS  <- w[singles]
+    off <- length(singles)
+    wB  <- lapply(groups, function(b) {
+      m  <- length(b$pars) + 1L
+      n  <- m - is.null(b$anchor)
+      W  <- matrix(1, m, m)
+      ut <- which(upper.tri(diag(n)), arr.ind = TRUE)
+      W[ut] <- w[off + seq_len(nrow(ut))]
+      W[ut[, 2:1, drop = FALSE]] <- W[ut]
+      off <<- off + nrow(ut)
+      W
+    })
+    fit <- run(th, wS, wB)
+    th  <- fit$argument
+    d   <- .sslTerms(th, singles, groups)
+    pen <- lambda0 * sum(w * d)
+    esNew <- .sslEstep(d, lambda0, ssl, es$theta)
+    done <- max(abs(esNew$p - es$p)) < ctl$tolp
+    es <- esNew
+    if (done) break
+  }
+  fit$value <- fit$value - pen + .sslPenalty(d, es$theta, lambda0, ssl)
+  fit$emIterations <- k
+  fit$inclusion <- es$p
+  fit$theta <- es$theta
+  fit
+}
+
+# Start with every spike term (p < 1/2) that is off its kink put onto it:
+# singles to zero, block members joined by spike pairs to their anchor or to
+# their mean. NULL if there is nothing to merge.
+.sslMerge <- function(th, p, singles, groups) {
+  d <- .sslTerms(th, singles, groups)
+  spike <- p < 0.5 & d > 0
+  if (!any(spike)) return(NULL)
+  s <- singles[spike[seq_along(singles)]]
+  th[s] <- 0
+  off <- length(singles)
+  for (b in groups) {
+    v  <- c(b$pars, if (!is.null(b$anchor)) "anchor")
+    ut <- which(upper.tri(diag(length(v))), arr.ind = TRUE)
+    sp <- spike[off + seq_len(nrow(ut))]
+    off <- off + nrow(ut)
+    lab <- seq_along(v)
+    repeat {
+      old <- lab
+      for (i in which(sp)) lab[ut[i, ]] <- min(lab[ut[i, ]])
+      for (i in seq_along(lab)) lab[i] <- lab[lab[i]]
+      if (identical(old, lab)) break
+    }
+    for (cl in unique(lab)) {
+      mem <- v[lab == cl]
+      if (length(mem) < 2L) next
+      pars <- setdiff(mem, "anchor")
+      th[pars] <- if ("anchor" %in% mem) b$anchor else mean(th[pars])
+    }
+  }
+  th
 }
 
 # Removed parameters and fused groups of a penalised optimum, as exact
@@ -300,9 +500,10 @@ scanL1 <- function(obj, center, zero = NULL, reference = NULL, groups = NULL,
        key = paste(c(rm, grpKey), collapse = " "))
 }
 
-# Unpenalised refit of one structure. Returns value, number of free parameters
-# and the full named parameter vector.
-.l1Refit <- function(st, obj, fullPars, zero, fixed, ctl, fits, sd, cores) {
+# Unpenalised refit of one structure from the full optimum and from `start`,
+# the penalised optimum. Returns value, number of free parameters and the full
+# named parameter vector.
+.l1Refit <- function(st, start, obj, fullPars, zero, fixed, ctl, fits, sd, cores) {
   gates   <- names(zero)
   offGate <- intersect(st$removed, gates)
   fixR <- c(fixed,
@@ -324,9 +525,12 @@ scanL1 <- function(obj, center, zero = NULL, reference = NULL, groups = NULL,
   tied  <- unlist(lapply(ties, `[`, -1L))
   free  <- setdiff(names(fullPars), c(names(fixR), tied))
   objR  <- .l1Tie(obj, ties)
+  warm  <- fullPars
+  both  <- intersect(names(start), names(warm))
+  warm[both] <- start[both]
   r <- .l1Multistart(function(s) do.call(trust, c(list(objR, s), ctl$trust,
                                                   list(fixed = fixR))),
-                     fullPars[free], fits, sd, cores, obj)
+                     fullPars[free], fits, sd, cores, obj, extra = list(warm[free]))
   if (is.null(r)) return(NULL)
   arg <- r$argument
   for (rep in names(ties)) arg[ties[[rep]]] <- arg[[rep]]
@@ -365,6 +569,10 @@ scanL1 <- function(obj, center, zero = NULL, reference = NULL, groups = NULL,
     key <- refitTab$key[which.min(refitTab$bic)]
     return(list(key = key, lambda = max(pathTab$lambda[pathTab$key == key])))
   }
+  if (select == "plateau") {
+    l <- which.max(pathTab$lambda)
+    return(list(key = pathTab$key[l], lambda = pathTab$lambda[l]))
+  }
   ok <- which(!is.na(pathTab$p) & pathTab$p >= alpha)
   l  <- if (length(ok)) max(ok) else which.min(pathTab$lambda)
   list(key = pathTab$key[l], lambda = pathTab$lambda[l])
@@ -377,10 +585,15 @@ print.scanL1 <- function(x, ...) {
               nrow(x$path), nrow(x$refits), toupper(x$select)))
   if (x$select == "lrt") cat(sprintf(" (alpha = %g)", x$alpha))
   if (x$q < 1) cat(sprintf(", q = %g", x$q))
+  if (!is.null(x$ssl)) cat(sprintf(", spike-and-slab with lambda1 = %g", x$ssl$lambda1))
+  rt  <- x$refits
+  ids <- paste0("S", seq_len(nrow(rt)))
   cat("\n\nRefits:\n")
-  print(x$refits, row.names = FALSE, digits = 4)
-  cat(sprintf("\nSelected at lambda = %.4g:\n  %s\n", x$lambdaSelected,
-              if (nzchar(x$selected)) x$selected else "(full model)"))
+  print(data.frame(id = ids, rt[setdiff(names(rt), "key")]), row.names = FALSE, digits = 4)
+  cat("\nStructures:\n")
+  cat(sprintf("  %s  %s\n", ids, ifelse(nzchar(rt$key), rt$key, "(full model)")), sep = "")
+  cat(sprintf("\nSelected at lambda = %.4g: %s\n", x$lambdaSelected,
+              ids[match(x$selected, rt$key)]))
   invisible(x)
 }
 
@@ -388,12 +601,28 @@ print.scanL1 <- function(x, ...) {
 #'
 #' @param x A `scanL1` result.
 #' @param type `"path"`: penalised estimates over `lambda`. `"test"`: p-value of
-#'   each refit over `lambda`, with the level of the test.
+#'   each refit over `lambda`, with the level of the test. `"waterfall"`: sorted
+#'   values of the starts of the full model. `"clusters"`: per
+#'   block, the group every member (and the anchor) belongs to at each
+#'   `lambda`. `"inclusion"`: inclusion probabilities of the spike-and-slab
+#'   lasso over `lambda`.
 #' @param ... Ignored.
 #' @return A ggplot.
 #' @export
-plot.scanL1 <- function(x, type = c("path", "test"), ...) {
+plot.scanL1 <- function(x, type = c("path", "test", "waterfall", "clusters", "inclusion"),
+                        ...) {
   type <- match.arg(type)
+  vline <- ggplot2::geom_vline(xintercept = x$lambdaSelected, linetype = 2)
+  if (type == "waterfall") {
+    v <- x$full$values
+    return(ggplot2::ggplot(data.frame(index = seq_along(v), value = v - v[1]),
+                           ggplot2::aes(index, value)) +
+             ggplot2::geom_point() +
+             ggplot2::scale_y_continuous(trans = "log1p", breaks = c(0, 10^(0:6))) +
+             ggplot2::labs(x = "start, sorted",
+                           y = "-2 log L of the full model above the best") +
+             theme_dMod())
+  }
   if (type == "path") {
     cf <- x$coefficients
     df <- data.frame(lambda = rep(cf[, "lambda"], ncol(cf) - 1L),
@@ -401,16 +630,55 @@ plot.scanL1 <- function(x, type = c("path", "test"), ...) {
                      value = as.vector(cf[, -1, drop = FALSE]))
     return(ggplot2::ggplot(df, ggplot2::aes(lambda, value, colour = parameter)) +
              ggplot2::geom_line() + ggplot2::geom_point(size = 0.8) +
-             ggplot2::scale_x_log10() +
-             ggplot2::geom_vline(xintercept = x$lambdaSelected, linetype = 2) +
+             ggplot2::scale_x_log10() + vline +
              ggplot2::labs(x = "lambda", y = "penalised estimate") +
+             theme_dMod())
+  }
+  if (type == "clusters") {
+    if (!length(x$groups)) stop("plot.scanL1: no blocks to cluster.", call. = FALSE)
+    df <- .l1ClusterTable(x)
+    br <- seq(floor(log10(min(df$lambda))), ceiling(log10(max(df$lambda))))
+    br <- br[seq(1, length(br), by = ceiling(length(br) / 3))]
+    return(ggplot2::ggplot(df, ggplot2::aes(log10(lambda), member, fill = cluster)) +
+             ggplot2::geom_tile(colour = "white") +
+             ggplot2::facet_wrap(~block, scales = "free_y") +
+             ggplot2::scale_x_continuous(breaks = br, labels = paste0("1e", br)) +
+             ggplot2::geom_vline(xintercept = log10(x$lambdaSelected), linetype = 2) +
+             ggplot2::labs(x = "lambda", y = NULL, fill = "group") +
+             theme_dMod())
+  }
+  if (type == "inclusion") {
+    if (is.null(x$inclusion)) stop("plot.scanL1: not a spike-and-slab scan.", call. = FALSE)
+    ic <- x$inclusion
+    df <- data.frame(lambda = rep(ic[, "lambda"], ncol(ic) - 1L),
+                     term = rep(colnames(ic)[-1], each = nrow(ic)),
+                     p = as.vector(ic[, -1, drop = FALSE]))
+    return(ggplot2::ggplot(df, ggplot2::aes(lambda, p, group = term)) +
+             ggplot2::geom_line(alpha = 0.6) +
+             ggplot2::scale_x_log10() + vline +
+             ggplot2::labs(x = "lambda", y = "inclusion probability") +
              theme_dMod())
   }
   ggplot2::ggplot(x$path, ggplot2::aes(lambda, p)) +
     ggplot2::geom_step() + ggplot2::geom_point(size = 0.8) +
     ggplot2::scale_x_log10() + ggplot2::scale_y_log10() +
-    ggplot2::geom_hline(yintercept = x$alpha, linetype = 2) +
-    ggplot2::geom_vline(xintercept = x$lambdaSelected, linetype = 2) +
+    ggplot2::geom_hline(yintercept = x$alpha, linetype = 2) + vline +
     ggplot2::labs(x = "lambda", y = "p-value of the refit against the full model") +
     theme_dMod()
+}
+
+# Long table of group labels per block, member and lambda. Groups are numbered
+# by first appearance with the anchor first, so the anchor group is always 1.
+.l1ClusterTable <- function(x) {
+  cf <- x$coefficients
+  bn <- names(x$groups) %||% paste0("block", seq_along(x$groups))
+  bn[!nzchar(bn)] <- paste0("block", which(!nzchar(bn)))
+  do.call(rbind, lapply(seq_along(x$groups), function(i) {
+    b <- x$groups[[i]]
+    do.call(rbind, lapply(seq_len(nrow(cf)), function(l) {
+      v <- c(if (!is.null(b$anchor)) c(anchor = b$anchor), cf[l, b$pars])
+      data.frame(lambda = unname(cf[l, "lambda"]), block = bn[i], member = names(v),
+                 cluster = factor(match(v, unique(v))), stringsAsFactors = FALSE)
+    }))
+  }))
 }

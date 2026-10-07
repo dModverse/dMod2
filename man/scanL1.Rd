@@ -13,9 +13,11 @@ scanL1(
   lambda = 10^seq(-3, 3, length.out = 25),
   fixed = NULL,
   q = 1,
-  select = c("lrt", "bic"),
+  ssl = NULL,
+  select = c("lrt", "bic", "plateau"),
   alpha = 0.05,
   fits = 10,
+  pathFits = fits,
   cores = 1,
   sd = 0.5,
   control = list()
@@ -47,18 +49,30 @@ pulled toward, e.g. 0 for the reference cell type.}
 \item{q}{Exponent of the penalty. \code{q < 1} (e.g. 0.8) is approximated by
 reweighted L1 fits.}
 
+\item{ssl}{\code{NULL}, or a list with \code{lambda1} (slab strength, default 1), \code{a}
+and \code{b} (Beta prior of the slab share, default 2 and 2, which keeps the
+share away from zero). Switches to the spike-and-slab lasso: every
+penalised term is drawn from the slab with strength \code{lambda1} or from the
+spike with strength \code{lambda}, and \code{lambda} becomes the spike strength of
+the path. See Details.}
+
 \item{select}{\code{"lrt"}: the largest \code{lambda} whose refit the likelihood ratio
 test against the full model does not reject at level \code{alpha}. \code{"bic"}: the
-refit with the smallest BIC.}
+refit with the smallest BIC. \code{"plateau"}: the structure at the largest
+\code{lambda}, meant for \code{ssl}, where the structure stops changing once the
+spike is strong enough.}
 
 \item{alpha}{Level of the likelihood ratio test.}
 
-\item{fits}{Number of starts per \code{lambda} and per refit. For a \code{lambda}
+\item{fits}{Number of starts of the full model.}
+
+\item{pathFits}{Number of starts per \code{lambda} and per refit. For a \code{lambda}
 they include the optimum of the next smaller \code{lambda} and the sparse point
 (every gate and reference at zero, every block at its anchor or mean); a
 downward pass then restarts each \code{lambda} from the optimum of the next
-larger one and keeps the better fit. A refit starts from the full optimum.
-The remaining starts are drawn around the full optimum.}
+larger one and keeps the better fit. A refit starts from the full optimum
+and from the penalised optimum of its structure. The remaining starts are
+drawn around the full optimum.}
 
 \item{cores}{Number of forked processes for the starts.}
 
@@ -67,21 +81,29 @@ The remaining starts are drawn around the full optimum.}
 \item{control}{List: \code{trust} (arguments of \link{trustL1} and \link{trust}, default
 \verb{rinit = 0.1, rmax = 10, iterlim = 200}), \code{nq} (reweighting rounds for
 \code{q < 1}, default 3), \code{eps} (floor of \verb{|difference|} in the reweighting,
-default 0.01), \code{ndata} (data points for BIC, default from \code{obj}).}
+default 0.01), \code{ndata} (data points for BIC, default from \code{obj}), \code{nem}
+(iterations of the spike-and-slab EM, default 50), \code{tolp} (change of the
+inclusion probabilities that ends the EM, default 1e-4), \code{nmerge} (merge
+moves per \code{lambda}, default 5, see Details).}
 }
 \value{
 Object of class \code{scanL1} with
 \describe{
 \item{\code{path}}{one row per \code{lambda}: penalised value, structure key,
-number of removed parameters and of free parameters in the refit.}
+number of removed parameters, p-value of its refit, convergence of the
+penalised fit and, with \code{ssl}, the number of EM iterations.}
 \item{\code{coefficients}}{penalised estimates per \code{lambda}.}
+\item{\code{arguments}}{all free parameters of the penalised fit per \code{lambda}.}
 \item{\code{refits}}{one row per distinct structure: \verb{-2 log L}, free
 parameters, LRT statistic, degrees of freedom, p-value, BIC.}
-\item{\code{full}}{the full fit: value and parameters.}
+\item{\code{full}}{the full fit: value, parameters and the sorted values of
+all its starts.}
 \item{\code{selected}, \code{lambdaSelected}}{the chosen structure and the
 \code{lambda} it was chosen at.}
 \item{\code{structure}}{per key: removed parameters and groups.}
 \item{\code{fit}}{named parameters of the chosen refit, fixed ones included.}
+\item{\code{inclusion}, \code{theta}}{with \code{ssl}: inclusion probability of every
+penalised term and slab share per \code{lambda}.}
 }
 }
 \description{
@@ -102,6 +124,24 @@ removes its parameter.}
 \verb{lambda * sum_\{i<j\} |r_i - r_j|}; members with equal values form one
 group.}
 }
+}
+\details{
+With \code{ssl}, term \code{j} (a gate, a reference parameter or a pairwise
+difference in a block) carries the prior
+\deqn{\pi(d_j \mid \theta) = \theta\,\psi_1(d_j) + (1-\theta)\,\psi_0(d_j),
+  \quad \psi_i(d) = \tfrac{\lambda_i}{4} e^{-\lambda_i |d| / 2},}
+so that \verb{-2 log} of each component is \verb{lambda_i * |d|} up to a constant,
+the scale of \code{obj}. The posterior mode at one spike strength \code{lambda} is
+found by EM: the E-step gives the inclusion probability
+\eqn{p_j = \theta\psi_1(d_j) / \pi(d_j \mid \theta)} and
+\eqn{\theta = (\sum_j p_j + a - 1)/(J + a + b - 2)}, the M-step is an
+L1 fit by \link{trustL1} with weight \eqn{p_j \lambda_1 + (1 - p_j) \lambda}
+on term \code{j}. Terms with \eqn{p_j < 1/2} that the weighted fit leaves
+off their kink are then put onto it and the EM is rerun; the merge is kept
+if it lowers the \verb{-2 log} posterior. The path is one chain over the
+increasing grid, each
+\code{lambda} started from the optimum of the previous one (Rockova and George
+2018); \code{pathFits} then only applies to the refits.
 }
 \examples{
 \dontrun{
@@ -135,12 +175,24 @@ fit <- scanL1(obj, c(log10_k1 = 0, log10_k2 = -0.5, log10_k3 = 0),
 fit
 plot(fit)
 plot(fit, type = "test")
+
+## Spike-and-slab lasso: one multistart of the full model, then one chain over
+## the spike strength; the structure is the one the chain settles on.
+fitS <- scanL1(obj, c(log10_k1 = 0, log10_k2 = -0.5, log10_k3 = 0),
+               zero = attr(trafo, "gates"), lambda = 10^seq(0, 4, length.out = 13),
+               fits = 4, pathFits = 1, ssl = list(lambda1 = 1), select = "plateau")
+fitS
+plot(fitS, type = "inclusion")
+plot(fitS, type = "waterfall")
 }
 }
 \references{
 Hauber AL, Rosenblatt M, Timmer J (2023). Uncovering specific
 mechanisms across cell types in dynamical models. PLoS Comput Biol 19(9):
 e1010867.
+
+Rockova V, George EI (2018). The spike-and-slab LASSO. J Am Stat Assoc
+113(521): 431-444.
 }
 \seealso{
 \link{gateL1}, \link{trustL1}
