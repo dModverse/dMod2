@@ -7,25 +7,25 @@
 \method{predict}{prdfn}(object, ..., times, pars, data = NULL)
 }
 \arguments{
-\item{object}{prediction function}
+\item{object}{object of class \code{prdfn}.}
 
-\item{...}{Further arguments going to the prediction function}
+\item{...}{further arguments going to the prediction function, e.g.
+\code{conditions}.}
 
-\item{times}{numeric vector of time points}
+\item{times}{numeric vector of time points.}
 
-\item{pars}{parameter frame, e.g. output from \link{mstrust} or
-\link{profile}}
+\item{pars}{a \link{parframe}, e.g. \code{as.parframe(mstrust(...))} or the result
+of \code{\link[=profile]{profile()}}.}
 
-\item{data}{data list object. If data is passed, its condition.grid
-attribute is used to augment the output dataframe by additional
-columns. \code{"data"} itself is returned as an attribute.}
+\item{data}{object of class \code{datalist}. Default \code{NULL}. Its condition grid
+adds covariate columns to the output.}
 }
 \value{
-A data frame
+A data frame in long format with one block per row of \code{pars}. The
+non-parameter columns of \code{pars} are added with a leading dot, e.g.
+\code{.value}. The data, as a data frame, is returned as the attribute
+\code{"data"}.
 }
 \description{
-Make a model prediction for times and a parameter frame. The
-function is a generalization of the standard prediction by a
-prediction function object in that it allows to pass a parameter
-frame instead of a single parameter vector.
+Evaluates a prediction function for every row of a parameter frame.
 }

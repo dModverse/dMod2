@@ -2,7 +2,7 @@
 % Please edit documentation in R/objClass.R
 \name{normL2}
 \alias{normL2}
-\title{L2 norm between data and model prediction}
+\title{L2 Norm Between Data and Model Prediction}
 \usage{
 normL2(
   data,
@@ -40,8 +40,7 @@ under \code{chi2}. Adding objectives pools the terms sharing an \code{attr.name}
 so \code{chi2} stays one number; where two \code{attr.name}s meet it splits into
 \verb{chi2_<attr.name>} per contribution.}
 
-\item{cores}{Deprecated and ignored. Pass \code{cores} to the objective call, or
-set \code{options(dMod.cores = )}.}
+\item{cores}{Deprecated and ignored, see section Lifecycle.}
 
 \item{opt.BLOQ}{Character. NONMEM-style treatment of below-LOQ rows
 (those with \code{value <= lloq} in the data). One of \code{"M1"} (drop BLOQ rows
@@ -50,103 +49,121 @@ or \code{"M4BEAL"} (truncated variants; require non-negative LOQ).}
 
 \item{multipleShootingControl}{\code{NULL} (default), \code{TRUE} or a list, which
 turns on multiple shooting in \code{\link[=trust]{trust()}}; \code{TRUE} is \code{list()}, every entry
-at its default. It is a control of the objective, so
-\code{controls(obj, "multipleShootingControl") <- list(...)} changes it and
-\verb{<- NULL} switches it off, on the objective or on a sum holding it:
-\describe{
-\item{\code{nodes}}{\code{"auto"} (default), \code{"transitions"}, or the times at
-which the time axis is cut into segments, a numeric vector for all
-conditions or a list named by condition. The start of a condition's
-grid is always a node; a node at or after the last data point of a
-condition is an error.
-\code{"auto"} starts from segments of equal length per condition, ten or
-one per half oscillation of the data where that is more (a turning
-point counts where the data reverse by more than five times their
-noise), and cuts a segment in two wherever its propagation matrix, the
-Jacobian of its end state in its start state, expands by more than
-\code{growth}, its solve fails, or it misses its data by more than
-\code{misfit}, before the first step and at every iterate after. \code{"transitions"} puts a node
-just before every fast change of the data, a spike or the jump of a
-relaxation oscillator, found as a run of samples whose rate lies more
-than eight robust deviations off its median; the even nodes of
-\code{"auto"} fill stretches without one, and the layout stays fixed. A
-change starts in each segment where the data have it, whatever the
-parameters, and a wrong timing shows as a gap. Without a fast change
-it is \code{"auto"}. Explicit times stay as they are.}
-\item{\code{growth}}{Largest spectral radius of a segment's propagation
-matrix that \code{"auto"} accepts, the factor by which the linearised flow
-of the segment expands. Independent of charts and scales. Default 10.
-A segment is never cut below half the finest spacing of its
-condition's data.}
-\item{\code{misfit}}{Root mean square of a segment's weighted residuals
-above which \code{"auto"} cuts it where the model misses its data locally,
-such as a spike it does not reproduce: above \code{misfit} and above twice
-the median of the segments of its condition. The new node takes the
-observed states from the data. Default 3.}
-\item{\code{charts}}{Named character, \code{"log10"}, \code{"linear"} or \code{"angle"}
-per state: the coordinate the node values of that state live in. A
-log10 chart keeps a positive state positive; on an angle chart, for a
-phase in radians, gaps are taken modulo \eqn{2\pi}, so that a
-trajectory one turn on is continuous. States not named are linear.}
-\item{\code{scale}}{Named numeric, the scale of each state's gap and node
-step in its chart, which the trust region and the acceptance of a
-step read. Default 1, a decade or a radian, for a log10 or an angle
-chart; for a linear one the range the state covers, in the data when
-it is observed, else the largest range within one segment of a
-simulation at the start.}
-\item{\code{init}}{Start of the node values: \code{"data"} (default) reads a
-state observed directly, through an observable that is the state
-itself, off the data, and every other state off a run of the model at
-the start parameters whose observed states are reset to the data at
-every data time, so that it follows the measured trajectory;
-\code{"spline"} does the same with a smoothing spline through the data in
-place of the data themselves, its roughness chosen by generalised
-cross-validation, as Horbelt, Timmer and Voss start their nodes;
-\code{"simulation"} takes all of them from a simulation at the start
-parameters; a list as \code{fit$multipleShooting$nodes} returns it starts
-from those values, and needs explicit \code{nodes}.}
-\item{\code{minPoints}}{Fewest data points either half of a cut segment
-keeps, so that \code{"auto"} never cuts a node that no data can tell.
-Default one more than the number of states.}
-\item{\code{breaks}}{Node times, for all conditions or a list named by
-condition, at which continuity is not enforced, as Voss, Timmer and
-Kurths propose for chaotic systems and for models that do not hold
-over the whole time axis. The node after a break is a variable of its
-own and its gap no constraint. With \code{nodes = "auto"} every break is a
-node; explicit \code{nodes} have to contain them. Needs
-\code{hessianMethod = "gn"}.}
+at its default. Can be changed, or switched off with \code{NULL}, by
+\verb{controls(obj, "multipleShootingControl") <-}, also on a sum holding the
+objective. An unknown entry is an error. Entries:
+\itemize{
+\item \code{nodes}: \code{"auto"} (default), \code{"transitions"}, or node times, a numeric
+vector for all conditions or a list named by condition. \code{"auto"} cuts
+segments where they grow, fail or miss their data; \code{"transitions"}
+places a node before every fast change of the data and keeps the
+layout fixed.
+\item \code{growth}: largest spectral radius of a segment's propagation matrix
+that \code{"auto"} accepts, default \code{10}.
+\item \code{misfit}: root mean square of a segment's weighted residuals above
+which \code{"auto"} cuts it, default \code{3}.
+\item \code{charts}: named character, \code{"log10"}, \code{"linear"} or \code{"angle"} per
+state, the coordinate of its node values. Default \code{NULL}, all linear.
+\item \code{scale}: named numeric, the scale of each state's gaps and node steps.
+Default \code{1} on a log10 or angle chart, else the range of the state in
+the data or, unobserved, in a simulation at the start.
+\item \code{init}: start of the node values, \code{"data"} (default), \code{"spline"},
+\code{"simulation"}, or a list as \code{fit$multipleShooting$nodes} returns it,
+which needs explicit \code{nodes}.
+\item \code{minPoints}: fewest data points either half of a cut segment keeps.
+Default one more than the number of states.
+\item \code{breaks}: node times at which continuity is not enforced, for all
+conditions or a list named by condition. Default \code{NULL}. Needs
+\code{hessianMethod = "gn"} in \code{\link[=trust]{trust()}}.
 }
-\code{x} has to be a chain \code{g * x * p} of observation functions, one
-prediction function from \code{\link[=Xs]{Xs()}} and parameter transformations, and its ODE
-model has to be built with \code{odemodel(..., includeTimeZero = FALSE)}, so that
-a segment is integrated from its own start.}
+
+\code{x} has to be a chain \code{g * x * p} with one prediction function from
+\code{\link[=Xs]{Xs()}}, built on \code{odemodel(..., includeTimeZero = FALSE)}. The method
+and the node layout are described in
+\code{vignette("Optimisation", package = "dMod2")}.}
 }
 \value{
-An object of class \code{objfn}, i.e. a function
-\code{obj(pars, fixed, deriv, deriv2, hessian, conditions, env, cores, sweep)} returning
-an \link{objlist}. \code{deriv} asks for a gradient, \code{hessian} for a Hessian, \code{deriv2}
-for the exact one rather than the Gauss-Newton approximation, and \code{sweep}
-(\code{"forward"} or \code{"reverse"}) says which way all of it is computed. \code{hessian}
-defaults to \code{NULL}, meaning "not asked": forward that is a Gauss-Newton
-Hessian, backwards none, and \code{deriv2 = TRUE} always implies one. What the
-model was built with decides what is available; see \link{odemodel}.
-
-With \code{multipleShootingControl}, the objective called as a function is still
-the single-shooting one described above, so evaluating, plotting and
-profiling it are unchanged; \code{\link[=trust]{trust()}} and hence \code{\link[=mstrust]{mstrust()}} read the control
-and optimise it by multiple shooting, also as a summand.
+An objective function of class \code{objfn}, called as \code{obj(pars, ...)}, see
+section Calling a dMod function. It returns an \link{objlist} whose value is
+the sum of the weighted squared residuals and, for error models and
+censored data, of the further terms of \verb{-2 log} likelihood. With
+\code{multipleShootingControl} the objective called as a function is still the
+single-shooting one; \code{\link[=trust]{trust()}} and \code{\link[=mstrust]{mstrust()}} optimise it by multiple
+shooting, also as a summand.
 }
 \description{
-Creates an objective function for parameter estimation based on the
-(negative log-likelihood) L2 norm between observed data and model predictions.
-The returned objective function can be used with optimizers such as
-\link{mstrust} and supports aggregation over multiple experimental conditions.
+Builds the objective function of a fit: the \verb{-2 log} likelihood of the
+data given the prediction, up to a constant, summed over the conditions of
+the data.
 }
 \details{
-Combine objectives with \code{+} (see \link{sumobjfn}). \code{cores} is a call-time
-argument: it sets the thread count for both the batched ODE integration and
-the C++ residual kernel. It defaults to \code{getOption("dMod.cores", 1L)}.
+Combine objectives with \code{+}, see \link{sumobjfn}.
 }
+\section{Lifecycle}{
+
+The argument \code{cores} is deprecated and ignored; pass \code{cores} to the
+objective call or set \code{options(dMod.cores = )}.
+}
+
+\section{Calling a dMod function}{
+
+The leading arguments depend on the class and are matched by position or
+by name:
+\itemize{
+\item prediction function: \code{x(times, pars, ...)}, returning a \link{prdlist};
+\item observation function: \code{g(out, pars, ...)} with a \link{prdlist} \code{out},
+returning a \link{prdlist};
+\item parameter transformation: \code{p(pars, ...)}, returning a list with one
+\link{parvec} per condition;
+\item objective function: \code{obj(pars, ...)}, returning an \link{objlist}.
+}
+
+\code{pars} is a named numeric vector. If it has a \code{deriv} attribute, as the
+output of a parameter transformation does, the derivatives are taken with
+respect to the parameters behind it. A composition is called as its class:
+\code{g * x * p} is a prediction function, \code{(g * x * p)(times, pars)}.
+
+The other arguments are named:
+\itemize{
+\item \code{fixed}: named numeric vector of parameters that enter the evaluation
+without derivatives. Default \code{NULL}.
+\item \code{deriv}: \code{TRUE} (default) returns first derivatives with respect to
+\code{pars}.
+\item \code{deriv2}: \code{TRUE} returns second derivatives as well. Default \code{FALSE}.
+Every function of the chain has to be built for them, see the arguments
+\code{deriv2} and \code{derivMode} of \code{\link[=odemodel]{odemodel()}}, \code{\link[=Y]{Y()}} and \code{\link[=P]{P()}}.
+\item \code{hessian}: objective functions only, see the table below. Default
+\code{NULL}.
+\item \code{sweep}: objective functions only. \code{"forward"} (default) propagates the
+sensitivities through the chain; \code{"reverse"} computes the gradient in one
+backward pass, whose cost does not grow with the number of parameters.
+\code{"reverse"} needs every function of the chain built with
+\code{derivMode = "reverse"}, and with \code{"forward-reverse"} for \code{deriv2 = TRUE}.
+\item \code{conditions}: character vector, the conditions to evaluate. Default all
+conditions of the function.
+\item \code{env}: environment for intermediate results. Default \code{NULL}, a new one.
+An objective function stores its prediction there as \code{prediction} and
+returns the environment as attribute \code{env}.
+\item \code{cores}: number of threads for the ODE solves and the residual kernel.
+Default \code{getOption("dMod.cores", 1L)}.
+}
+
+Prediction, observation and parameter functions accept \code{hessian} and
+\code{sweep} and ignore them. With \code{deriv = TRUE} an objective function returns
+this Hessian:
+
+\tabular{llll}{
+\code{sweep} \tab \code{hessian} \tab \code{deriv2 = FALSE} \tab \code{deriv2 = TRUE} \cr
+\code{"forward"} \tab \code{NULL}, \code{TRUE} \tab Gauss-Newton \tab exact \cr
+\code{"forward"} \tab \code{FALSE} \tab none \tab none, with a warning \cr
+\code{"reverse"} \tab \code{NULL} \tab none \tab exact \cr
+\code{"reverse"} \tab \code{TRUE} \tab none, with a warning \tab exact \cr
+\code{"reverse"} \tab \code{FALSE} \tab none \tab none, with a warning \cr
+}
+
+With \code{deriv = FALSE} it returns the value alone.
+}
+
 \examples{
 \donttest{
   ## Generate a prediction function
@@ -171,4 +188,7 @@ the C++ residual kernel. It defaults to \code{getOption("dMod.cores", 1L)}.
   myfit <- trust(obj, pars, rinit = 1, rmax = 10)
   plot(x(times, myfit$argument), data)
 }
+}
+\seealso{
+\code{\link[=datapointL2]{datapointL2()}}, \code{\link[=constraintL2]{constraintL2()}}, \code{\link[=res]{res()}}
 }

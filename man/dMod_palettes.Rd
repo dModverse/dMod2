@@ -2,21 +2,22 @@
 % Please edit documentation in R/plots.R
 \name{dMod_palettes}
 \alias{dMod_palettes}
-\title{Overview of the dMod palettes}
+\title{Overview of the dMod Palettes}
 \usage{
 dMod_palettes(type = NULL)
 }
 \arguments{
-\item{type}{restrict to \code{"qualitative"}, \code{"sequential"} or \code{"diverging"}.}
+\item{type}{\code{NULL} (default) for all palettes, or any of \code{"qualitative"},
+\code{"sequential"} and \code{"diverging"}.}
 }
 \value{
-A data frame with columns \code{name}, \code{type}, \code{n}, \code{colorblind}, \code{dE}.
+A data frame with columns \code{name}, \code{type}, \code{n} (number of seed
+colors), \code{dE} (smallest pairwise CIE2000 color distance under normal and
+simulated dichromatic vision) and \code{colorblind} (\code{dE >= 10}).
 }
 \description{
-One row per palette, with the measured worst-case CIE2000 distance under
-simulated dichromacy and the resulting colorblind verdict. Pass any of the
-names as \verb{palette =} to \code{\link[=dMod_palette]{dMod_palette()}}, \code{\link[=scale_color_dMod]{scale_color_dMod()}},
-\code{\link[=scale_color_dMod_c]{scale_color_dMod_c()}} or \code{\link[=scale_color_dMod_div]{scale_color_dMod_div()}}.
+One row per palette. Pass any of the names as \code{palette} to \code{\link[=dMod_palette]{dMod_palette()}},
+\code{\link[=scale_color_dMod]{scale_color_dMod()}}, \code{\link[=scale_color_dMod_c]{scale_color_dMod_c()}} or \code{\link[=scale_color_dMod_div]{scale_color_dMod_div()}}.
 }
 \examples{
 dMod_palettes()

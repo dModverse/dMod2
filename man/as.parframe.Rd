@@ -3,64 +3,29 @@
 \name{as.parframe.parlist}
 \alias{as.parframe.parlist}
 \alias{as.parframe}
-\title{Coerce object to a parameter frame}
+\title{Coerce to a Parameter Frame}
 \usage{
 \method{as.parframe}{parlist}(x, sort.by = "value", ...)
 
 as.parframe(x, ...)
 }
 \arguments{
-\item{x}{object to be coerced}
+\item{x}{object to be coerced, e.g. a \code{parlist}.}
 
-\item{sort.by}{character indicating by which column the returned parameter frame
-should be sorted. Defaults to \code{"value"}.}
+\item{sort.by}{character, the column by which the returned parameter frame
+is sorted. Default \code{"value"}.}
 
-\item{...}{other arguments}
+\item{...}{not used.}
 }
 \value{
-object of class \link{parframe}.
+Object of class \link{parframe}. For a \code{parlist}, the meta-information
+columns are \code{index}, \code{value}, \code{converged} and \code{iterations}, plus the
+termination and evaluation counts the fits report.
 }
 \description{
-Coerce object to a parameter frame
+Coerce to a Parameter Frame
 }
-\examples{
-\dontrun{
-  ## Generate a prediction function
-  regfn <- c(y = "sin(a*time)")
-  
-  g <- Y(regfn, parameters = "a")
-  x <- Xt(condition = "C1")
-  
-  ## Generate data
-  data <- datalist(
-    C1 = data.frame(
-      name = "y",
-      time = 1:5,
-      value = sin(1:5) + rnorm(5, 0, .1),
-      sigma = .1
-    )
-  )
-  
-  ## Initialize parameters and time 
-  pars <- c(a = 1)
-  times <- seq(0, 5, .1)
-  
-  plot((g*x)(times, pars), data)
-  
-  ## Do many fits from random positions and store them into parlist
-  out <- as.parlist(lapply(1:50, function(i) {
-    trust(normL2(data, g*x), pars + rnorm(length(pars), 0, 1), rinit = 1, rmax = 10)
-  }))
-  
-  summary(out)
-  
-  ## Reduce parlist to parframe
-  parframe <- as.parframe(out)
-  plotValues(parframe)
-  
-  ## Reduce parframe to best fit
-  bestfit <- as.parvec(parframe)
-  plot((g*x)(times, bestfit), data)
-  
-}
+\seealso{
+\code{\link[=parframe]{parframe()}}, \code{\link[=as.parvec.parframe]{as.parvec.parframe()}}, and \code{\link[=parlist]{parlist()}} for an
+example.
 }

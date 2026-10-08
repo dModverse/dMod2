@@ -2,32 +2,33 @@
 % Please edit documentation in R/objClass.R
 \name{objlist}
 \alias{objlist}
-\title{Generate objective list}
+\title{Objective List}
 \usage{
 objlist(value, gradient, hessian)
 }
 \arguments{
-\item{value}{numeric of length 1}
+\item{value}{Numeric of length 1.}
 
-\item{gradient}{named numeric}
+\item{gradient}{Named numeric vector, or \code{NULL}.}
 
-\item{hessian}{matrix with rownames and colnames according to gradient names}
+\item{hessian}{Matrix with row and column names those of \code{gradient}, or
+\code{NULL}.}
 }
 \value{
-Object of class \code{objlist}
+An object of class \code{objlist}.
 }
 \description{
-An objective list contains an objective value, a gradient, and a Hessian matrix.
-
-Objective lists can contain additional numeric attributes that are preserved or
-combined with the corresponding attributes of another objective list when
-both are added by the "+" operator, see \link{sumobjlist}.
-
-Objective lists are returned by objective functions as being generated
-by \link{normL2}, \link{constraintL2} and \link{datapointL2}.
+An objective list holds an objective value, its gradient and
+its Hessian, as objective functions such as \code{\link[=normL2]{normL2()}}, \code{\link[=constraintL2]{constraintL2()}}
+and \code{\link[=datapointL2]{datapointL2()}} return them. Further numeric attributes are added
+along when two objective lists are added with \code{+}, see \link{sumobjlist}.
 }
 \examples{
-# objlist(1, c(a = 1, b = 2),
-#         matrix(2, nrow = 2, ncol = 2,
-#                dimnames = list(c("a", "b"), c("a", "b"))))
+a <- objlist(1, c(a = 1, b = 2),
+             matrix(2, nrow = 2, ncol = 2,
+                    dimnames = list(c("a", "b"), c("a", "b"))))
+a + a
+}
+\seealso{
+\code{\link[=as.objlist]{as.objlist()}}
 }

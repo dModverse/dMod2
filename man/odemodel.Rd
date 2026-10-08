@@ -2,7 +2,7 @@
 % Please edit documentation in R/odeClass.R
 \name{odemodel}
 \alias{odemodel}
-\title{Compiled ODE model}
+\title{Compiled ODE Model}
 \usage{
 odemodel(
   f,
@@ -23,50 +23,49 @@ odemodel(
 \item{f}{Named character vector, \link{eqnvec} or \link{eqnlist} with the right-hand
 sides; the names are the states.}
 
-\item{deriv}{Logical. Build first-order sensitivities. \code{FALSE} builds the
-states alone, for \code{\link[=Xf]{Xf()}}, and leaves \code{derivMode} without effect.}
+\item{deriv}{logical, build first-order sensitivities. Default \code{TRUE}.
+\code{FALSE} builds the states alone, for \code{\link[=Xf]{Xf()}}, and \code{derivMode} has no
+effect.}
 
-\item{deriv2}{Logical. Build second-order sensitivities, the same as
-\code{"forward-forward"} in \code{derivMode}. Needs \code{backend = "cppDE"} and implies
-\code{deriv = TRUE}.}
+\item{deriv2}{logical, build second-order sensitivities. Default \code{FALSE}.
+\code{TRUE} is the same as adding \code{"forward-forward"} to \code{derivMode}, needs
+\code{backend = "cppDE"} and implies \code{deriv = TRUE}.}
 
-\item{derivMode}{Which derivative directions to build. More than one may be
-named; the default is \code{"forward"} alone.
+\item{derivMode}{character, the derivative directions to build, one or
+more of:
 \itemize{
-\item \code{"forward"}: sensitivity equations integrated alongside the states.
-\item \code{"reverse"}: the adjoint, whose cost does not grow with the number of
-parameters; what \code{obj(..., sweep = "reverse")} needs. On
-\code{backend = "cppDE"} it is the discrete adjoint of the integrator, on
-\code{backend = "Sundials"} CVODES adjoint sensitivity analysis. Not
-available on \code{backend = "deSolve"}.
-\item \code{"forward-forward"}: second-order sensitivities as nested duals.
-\item \code{"forward-reverse"}: the adjoint over tangents, which returns the
-Hessian of the objective in one backward sweep; what
-\code{obj(..., sweep = "reverse", deriv2 = TRUE)} needs. \code{cppDE} only.
+\item \code{"forward"} (default): sensitivity equations.
+\item \code{"reverse"}: adjoint gradient, needed for \code{obj(..., sweep = "reverse")}.
+Not available on \code{backend = "deSolve"}.
+\item \code{"forward-forward"}: second-order sensitivities.
+\item \code{"forward-reverse"}: adjoint Hessian, needed for
+\code{obj(..., sweep = "reverse", deriv2 = TRUE)}. \code{backend = "cppDE"} only.
 }
 
-Each direction is a compilation of its own.}
+Each direction is compiled separately.}
 
-\item{forcings}{Character vector, the names of the forcings in \code{f}. Their
-data are given to \code{\link[=Xs]{Xs()}} or \code{\link[=Xf]{Xf()}}.}
+\item{forcings}{character, the names of the forcings in \code{f}. Default
+\code{NULL}. Their data are given to \code{\link[=Xs]{Xs()}} or \code{\link[=Xf]{Xf()}}.}
 
-\item{events}{An \link{eventlist}, or a \code{data.frame} \code{\link[=as.eventlist]{as.eventlist()}} accepts.
-Defined here, they also act on the sensitivities and the adjoint.}
+\item{events}{an \link{eventlist}, or a \code{data.frame} accepted by
+\code{\link[=as.eventlist]{as.eventlist()}}. Default \code{NULL}. Events defined here also act on the
+sensitivities and the adjoint.}
 
-\item{fixed}{Character vector, the initial values and parameters without
-sensitivities.}
+\item{fixed}{character, the initial values and parameters without
+sensitivities. Default \code{NULL}.}
 
-\item{modelname}{Character, the base name of the generated files and
-symbols.}
+\item{modelname}{character, the base name of the generated files and
+symbols. Default \code{"odemodel"}. Files of the same name in \code{outdir} are
+overwritten.}
 
 \item{backend}{\code{"cppDE"} (default), \code{"Sundials"} or \code{"deSolve"}: the
 integrators of \pkg{cppDE}, CVODE(S) through \pkg{cppDE}, or \pkg{deSolve}
 through \pkg{cOde}.}
 
-\item{verbose}{Logical. Print the compiler output.}
+\item{verbose}{logical, print the compiler output. Default \code{FALSE}.}
 
-\item{outdir}{Directory for the generated sources and shared objects,
-default \code{getOption("dMod.outdir")}, else the working directory.
+\item{outdir}{directory for the generated sources and shared objects.
+Default \code{getOption("dMod.outdir")}, else the working directory.
 \code{backend = "deSolve"} writes to the working directory only.}
 
 \item{...}{Passed to \code{\link[cppDE:cppODE]{cppDE::cppODE()}}, \code{\link[cppDE:cvode]{cppDE::cvode()}} or
@@ -74,7 +73,7 @@ default \code{getOption("dMod.outdir")}, else the working directory.
 \itemize{
 \item \code{method}: the integration method, \code{"bdf"} (default), \code{"adams"},
 \code{"rb4"} or \code{"tsit5"} on \code{cppDE}; \code{"bdf"} or \code{"adams"} on \code{Sundials}.
-On \code{deSolve} it is \code{optionsOde$method} of \code{\link[=Xs]{Xs()}} instead.
+On \code{deSolve} it is \code{options$method} of \code{\link[=Xs]{Xs()}} instead.
 \item \code{rootfunc}: \code{"equilibrate"} or expressions whose roots end the
 integration (\code{cppDE}, \code{Sundials}).
 \item \code{includeTimeZero}: integrate from 0 rather than from the first
@@ -83,8 +82,8 @@ requested time, default \code{TRUE}.
 Jacobian (\code{cppDE}, \code{Sundials}).
 \item \code{stepTrace}: record per-step diagnostics, see \code{traceFile} in \code{\link[=Xs]{Xs()}}
 (\code{cppDE}, \code{Sundials}).
-\item \code{compile}: \code{FALSE} writes the sources only, \code{\link[=compile]{compile()}} builds them
-later.
+\item \code{compile}: default \code{TRUE}. \code{FALSE} writes the sources only;
+\code{\link[=compile]{compile()}} builds them later.
 \item \code{estimate}, \code{outputs}, \code{gridpoints}: the parameters with
 sensitivities, additional outputs and spline nodes of the forcings
 (\code{deSolve}).
@@ -98,36 +97,39 @@ An object of class \code{odemodel}: a list with the compiled objects
 \code{"compileInfo"} holds the sources and compiler flags \code{\link[=compile]{compile()}} uses.
 }
 \description{
-Generates and compiles the code of an ODE system and, as asked for, of its
-first- and second-order sensitivities and its adjoint. The result is turned
-into a prediction function by \code{\link[=Xs]{Xs()}} or \code{\link[=Xf]{Xf()}}.
+Generates and compiles the code of an ODE system and, as requested, of its
+first- and second-order sensitivities and its adjoint. \code{\link[=Xs]{Xs()}} or \code{\link[=Xf]{Xf()}} turn
+the result into a prediction function.
 }
 \examples{
 \donttest{
 ## A model with a forcing F, no sensitivities for "switch"
 f <- eqnvec(A = "-k*A + switch*F")
 model <- odemodel(f, forcings = "F", fixed = "switch", modelname = "odemodel_F",
-                  outdir = tempdir())
+                  outdir = tempdir(), compile = FALSE)
 print(model)
 
 ## The same model from an equation list
-f <- addReaction(NULL, from = "", to = "A", rate = "switch*F", description = "production")
-f <- addReaction(f, from = "A", to = "", rate = "k*A", description = "degradation")
-print(f)
-model <- odemodel(f, forcings = "F", fixed = "switch", modelname = "odemodel_F2",
-                  outdir = tempdir())
+f2 <- addReaction(NULL, from = "", to = "A", rate = "switch*F", description = "production")
+f2 <- addReaction(f2, from = "A", to = "", rate = "k*A", description = "degradation")
+print(f2)
+model2 <- odemodel(f2, forcings = "F", fixed = "switch", modelname = "odemodel_F2",
+                   outdir = tempdir(), compile = FALSE)
 
 ## One prediction per forcing; the data of each forcing cover the time range
 tF <- seq(0, 5, 0.1)
 x <- Xs(model, data.frame(name = "F", time = tF, value = sin(tF)), condition = "sin") +
-  Xs(model, data.frame(name = "F", time = tF, value = exp(-tF)), condition = "exp") +
-  Xs(model, data.frame(name = "F", time = c(0, 5), value = 0.1), condition = "const")
+  Xs(model, data.frame(name = "F", time = tF, value = exp(-tF)), condition = "exp")
+x2 <- Xs(model2, data.frame(name = "F", time = c(0, 5), value = 0.1), condition = "const")
+
+## Compile both models into one shared object
+compile(x, x2, output = "odemodel_ex")
 
 pars <- c(A = 1, k = 0.5, switch = 1)
-plot(x(seq(0, 5, 0.01), pars))
+plot((x + x2)(seq(0, 5, 0.01), pars))
 }
 }
 \seealso{
-\code{\link[=Xs]{Xs()}}, \code{\link[=Xf]{Xf()}}, \code{\link[cppDE:cppODE]{cppDE::cppODE()}}, \code{\link[cppDE:cvode]{cppDE::cvode()}},
-\code{\link[cOde:funC]{cOde::funC()}}
+\code{\link[=Xs]{Xs()}}, \code{\link[=Xf]{Xf()}}, \code{\link[=compile]{compile()}}, \code{\link[=eventlist]{eventlist()}}, \code{\link[cppDE:cppODE]{cppDE::cppODE()}},
+\code{\link[cppDE:cvode]{cppDE::cvode()}}, \code{\link[cOde:funC]{cOde::funC()}}
 }

@@ -3,30 +3,44 @@
 \docType{data}
 \name{bachmann}
 \alias{bachmann}
-\title{Time-course data for JAK2-STAT5 signalling in CFU-E cells}
+\title{Time-Course Data for JAK2-STAT5 Signaling in CFU-E Cells}
+\format{
+A data frame with 541 rows and 11 columns:
+\describe{
+\item{\code{time}}{minutes after stimulation.}
+\item{\code{name}}{observable, 20 levels.}
+\item{\code{value}}{signal divided by the maximum of its observable.}
+\item{\code{sigma}}{\code{NA} throughout; the errors are estimated in the fit.}
+\item{\code{condition}}{one of 36 experimental conditions.}
+\item{\code{experiment}}{one of 13 experiments; selects the scale and offset
+parameters.}
+\item{\code{epo_level}}{Epo dose.}
+\item{\code{ActD}}{1 where actinomycin D was added, else 0. The PEtab copy
+of the problem codes it the other way round.}
+\item{\code{CISoe}, \code{SOCS3oe}, \code{SHP1oe}}{1 where CIS, SOCS3 or SHP1 is
+overexpressed, else 0.}
+}
+}
 \source{
 Bachmann J, Raue A, Schilling M, Boehm ME, Kreutz C, Kaschek D,
 Busch H, Gretz N, Lehmann WD, Timmer J, Klingmueller U (2011),
 Division of labor by dual feedback regulators controls JAK2/STAT5
 signaling over broad ligand range. Mol Syst Biol 7:516. Values as
 distributed in the PEtab benchmark collection, model
-\code{Bachmann_MSB2011}, which ships with the package as
-\code{inst/extdata/petab_bachmann}.
+\code{Bachmann_MSB2011}, which is installed with the package, see
+\code{system.file("extdata", "petab_bachmann", package = "dMod2")}.
 }
 \description{
 541 measurements from thirteen experiments on Epo stimulated erythroid
 progenitor cells: phosphorylated JAK2 and Epo receptor, total and
 phosphorylated STAT5, the feedback proteins CIS, SOCS3 and SHP1, their
-transcripts, and dose responses at four times. \code{value} is the recorded
-signal divided by the maximum of its own column, so the scale parameters
-are estimated in that gauge; \code{sigma} is \code{NA} throughout, the standard
-deviations belong to the fit. \code{condition} keys the 36 experimental
-conditions, \code{experiment} names the recording each one comes from and
-selects its scale and offset parameters. \code{ActD} is 1 where actinomycin D
-was added, which inverts the column of the same name in the PEtab copy of
-the problem.
+transcripts, and dose responses at four times.
+}
+\examples{
+data(bachmann)
+head(bachmann)
 }
 \seealso{
-\code{inst/examples/example_BachmannMSB2011.R} builds the model.
+\code{system.file("examples", "example_BachmannMSB2011.R", package = "dMod2")} builds the model.
 }
 \keyword{data}

@@ -2,18 +2,29 @@
 % Please edit documentation in R/plots.R
 \name{theme_dMod}
 \alias{theme_dMod}
-\title{Standard plotting theme of dMod}
+\title{Standard Plotting Theme of dMod}
 \usage{
 theme_dMod(base_size = 12, base_family = "", showGrid = FALSE)
 }
 \arguments{
-\item{base_size}{numeric, font-size}
+\item{base_size}{Numeric, base font size. Defaults to 12.}
 
-\item{base_family}{character, font-name}
+\item{base_family}{Character, font family. Defaults to \code{""}.}
 
-\item{showGrid}{logical, keep the panel grid. \code{FALSE} (the default) drops it;
-\code{TRUE} leaves \code{\link[ggplot2:theme_bw]{ggplot2::theme_bw()}}'s grid in place.}
+\item{showGrid}{Logical, keep the panel grid. \code{FALSE} (default) drops it;
+\code{TRUE} keeps the grid of \code{\link[ggplot2:theme_bw]{ggplot2::theme_bw()}}.}
+}
+\value{
+A \code{ggplot2} theme.
 }
 \description{
-Standard plotting theme of dMod
+Standard Plotting Theme of dMod
+}
+\examples{
+library(ggplot2)
+ggplot(data.frame(x = 1:10, y = (1:10)^2), aes(x, y)) +
+  geom_line() + theme_dMod()
+}
+\seealso{
+\code{\link[=scale_color_dMod]{scale_color_dMod()}}
 }

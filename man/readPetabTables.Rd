@@ -2,26 +2,32 @@
 % Please edit documentation in R/PEtabInterface.R
 \name{readPetabTables}
 \alias{readPetabTables}
-\title{Read PEtab TSV tables (no SBML)}
+\title{Read the Tables of a PEtab Problem}
 \usage{
 readPetabTables(yamlPath)
 }
 \arguments{
-\item{yamlPath}{Path to the PEtab YAML manifest.}
+\item{yamlPath}{Path to the PEtab YAML file.}
 }
 \value{
-A list with \code{parameters}, \code{conditions}, \code{measurements},
-\code{observables}, optional \code{experiments} and \code{mapping} (data frames or
-\code{NULL}), \code{sbmlPath} (the first / canonical SBML path), \code{sbmlPaths}
-(named character vector keyed by modelId; length 1 for single-model
-problems), and \code{formatVersion} (integer).
+A list with the data frames \code{parameters}, \code{conditions},
+\code{measurements}, \code{observables}, \code{experiments} and \code{mapping} (each \code{NULL}
+when the problem has no such table), \code{sbmlPath}, the path of the first
+model, \code{sbmlPaths}, the SBML path of every model id, and \code{formatVersion}
+(integer).
 }
 \description{
-Reads the PEtab tables referenced by a YAML manifest into base R data
-frames. Useful for inspecting a problem without touching the SBML model.
+Reads the TSV tables named in a PEtab YAML file into data frames. The SBML
+model is not read.
 }
-\details{
-For v2 manifests, \code{experiments} and \code{mapping} slots are populated when
-the corresponding files are present, otherwise \code{NULL}. The \code{conditions}
-slot is also \code{NULL} when v2 declares no condition file.
+\examples{
+\dontshow{if (requireNamespace("yaml", quietly = TRUE)) withAutoprint(\{ # examplesIf}
+yaml <- system.file("extdata/petab_boehm/Boehm.yaml", package = "dMod2")
+tables <- readPetabTables(yaml)
+head(tables$measurements)
+tables$parameters
+\dontshow{\}) # examplesIf}
+}
+\seealso{
+\code{\link[=readPetabYaml]{readPetabYaml()}}, \code{\link[=importPEtab]{importPEtab()}}
 }

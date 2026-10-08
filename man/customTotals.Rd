@@ -2,23 +2,25 @@
 % Please edit documentation in R/eqnClass.R
 \name{customTotals}
 \alias{customTotals}
-\title{Set or reset user-defined conservation-quantity totals}
+\title{Set or Reset User-Defined Conserved Quantities}
 \usage{
 customTotals(eqnlist, totals)
 }
 \arguments{
-\item{eqnlist}{An \link{eqnlist}.}
+\item{eqnlist}{object of class \link{eqnlist}.}
 
-\item{totals}{Named list of expressions, or \code{NULL} / \code{list()} to reset.}
+\item{totals}{named list of expressions, or \code{NULL} or \code{list()} to return to
+the detected basis.}
 }
 \value{
 The eqnlist with \verb{$totals} updated.
 }
 \description{
-Attaches a named list of conservation expressions to the eqnlist; these
-override auto-detection and flow into \link{Pimpl} as the new
-parameter basis. Each expression is validated against the stoichiometric
-matrix (must lie in the left null space of \code{S}) and the basis as a whole
-must have the same rank as \code{conservedQuantities(S)}. Pass \code{NULL} or
-\code{list()} to reset to auto-detection.
+Attaches a named list of conservation expressions to the eqnlist. They
+replace the detected basis, also as parameters of \code{\link[=Pimpl]{Pimpl()}}. Each
+expression must be linear in the states and conserved by the reactions, and
+together they must span as many quantities as \code{\link[=conservedQuantities]{conservedQuantities()}} finds.
+}
+\seealso{
+\code{\link[=getTotals]{getTotals()}}
 }

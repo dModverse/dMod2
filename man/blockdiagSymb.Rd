@@ -2,20 +2,22 @@
 % Please edit documentation in R/symbolics.R
 \name{blockdiagSymb}
 \alias{blockdiagSymb}
-\title{Embed two matrices into one blockdiagonal matrix}
+\title{Embed Two Matrices into One Block Diagonal Matrix}
 \usage{
 blockdiagSymb(M, N)
 }
 \arguments{
-\item{M}{matrix of type character}
+\item{M}{Matrix, or \code{NULL}.}
 
-\item{N}{matrix of type character}
+\item{N}{Matrix, or \code{NULL}.}
 }
 \value{
-Matrix of type character containing M and N as upper left and lower right block
+Matrix with \code{M} as upper left and \code{N} as lower right block and 0
+elsewhere, with the dimnames of both. If one argument is \code{NULL}, the
+other; if both are, \code{NULL}.
 }
 \description{
-Embed two matrices into one blockdiagonal matrix
+Embed Two Matrices into One Block Diagonal Matrix
 }
 \examples{
 M <- matrix(1:9, 3, 3, dimnames = list(letters[1:3], letters[1:3]))

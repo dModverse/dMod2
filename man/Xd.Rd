@@ -2,26 +2,87 @@
 % Please edit documentation in R/prediction.R
 \name{Xd}
 \alias{Xd}
-\title{Model prediction function from data.frame}
+\title{Prediction Function Interpolating Parameters}
 \usage{
 Xd(data, condition = NULL)
 }
 \arguments{
-\item{data}{data.frame with columns "name", "time", and row names that
-are taken as parameter names. The data frame can contain a column "value"
-to initialize the parameters.}
+\item{data}{\code{data.frame} with columns \code{name} (the state) and \code{time}, one
+row per grid point. The row names are the parameter names. An optional
+column \code{value} holds start values, kept as attribute \code{pouter} of the
+mapping.}
 
-\item{condition}{either NULL (generic prediction for any condition) or a character, denoting
-the condition for which the function makes a prediction.}
+\item{condition}{\code{NULL} for a prediction valid in every condition, or the
+name of the condition it belongs to.}
 }
 \value{
-A \link{prdfn}, called as \code{x(times, pars, fixed = NULL, deriv = TRUE)},
-that interpolates the parameter values linearly in time. Its parameters
-are the row names of \code{data}. Second-order derivatives are not available.
+A \link{prdfn}, called as \code{x(times, pars, ...)}, see section Calling a
+dMod function. Outside its grid a state holds the value of the first or
+the last point. Second-order derivatives are not available.
 }
 \description{
-Model prediction function from data.frame
+Builds a prediction function whose states are the linear
+interpolation in time of one parameter per grid point.
 }
+\section{Calling a dMod function}{
+
+The leading arguments depend on the class and are matched by position or
+by name:
+\itemize{
+\item prediction function: \code{x(times, pars, ...)}, returning a \link{prdlist};
+\item observation function: \code{g(out, pars, ...)} with a \link{prdlist} \code{out},
+returning a \link{prdlist};
+\item parameter transformation: \code{p(pars, ...)}, returning a list with one
+\link{parvec} per condition;
+\item objective function: \code{obj(pars, ...)}, returning an \link{objlist}.
+}
+
+\code{pars} is a named numeric vector. If it has a \code{deriv} attribute, as the
+output of a parameter transformation does, the derivatives are taken with
+respect to the parameters behind it. A composition is called as its class:
+\code{g * x * p} is a prediction function, \code{(g * x * p)(times, pars)}.
+
+The other arguments are named:
+\itemize{
+\item \code{fixed}: named numeric vector of parameters that enter the evaluation
+without derivatives. Default \code{NULL}.
+\item \code{deriv}: \code{TRUE} (default) returns first derivatives with respect to
+\code{pars}.
+\item \code{deriv2}: \code{TRUE} returns second derivatives as well. Default \code{FALSE}.
+Every function of the chain has to be built for them, see the arguments
+\code{deriv2} and \code{derivMode} of \code{\link[=odemodel]{odemodel()}}, \code{\link[=Y]{Y()}} and \code{\link[=P]{P()}}.
+\item \code{hessian}: objective functions only, see the table below. Default
+\code{NULL}.
+\item \code{sweep}: objective functions only. \code{"forward"} (default) propagates the
+sensitivities through the chain; \code{"reverse"} computes the gradient in one
+backward pass, whose cost does not grow with the number of parameters.
+\code{"reverse"} needs every function of the chain built with
+\code{derivMode = "reverse"}, and with \code{"forward-reverse"} for \code{deriv2 = TRUE}.
+\item \code{conditions}: character vector, the conditions to evaluate. Default all
+conditions of the function.
+\item \code{env}: environment for intermediate results. Default \code{NULL}, a new one.
+An objective function stores its prediction there as \code{prediction} and
+returns the environment as attribute \code{env}.
+\item \code{cores}: number of threads for the ODE solves and the residual kernel.
+Default \code{getOption("dMod.cores", 1L)}.
+}
+
+Prediction, observation and parameter functions accept \code{hessian} and
+\code{sweep} and ignore them. With \code{deriv = TRUE} an objective function returns
+this Hessian:
+
+\tabular{llll}{
+\code{sweep} \tab \code{hessian} \tab \code{deriv2 = FALSE} \tab \code{deriv2 = TRUE} \cr
+\code{"forward"} \tab \code{NULL}, \code{TRUE} \tab Gauss-Newton \tab exact \cr
+\code{"forward"} \tab \code{FALSE} \tab none \tab none, with a warning \cr
+\code{"reverse"} \tab \code{NULL} \tab none \tab exact \cr
+\code{"reverse"} \tab \code{TRUE} \tab none, with a warning \tab exact \cr
+\code{"reverse"} \tab \code{FALSE} \tab none \tab none, with a warning \cr
+}
+
+With \code{deriv = FALSE} it returns the value alone.
+}
+
 \examples{
 # Generate a data.frame and corresponding prediction function
 timesD <- seq(0, 2*pi, 0.5)
@@ -34,4 +95,7 @@ times <- seq(0, 2*pi, 0.01)
 pouter <- structure(mydata$value, names = rownames(mydata))
 prediction <- x(times, pouter)
 plot(prediction)
+}
+\seealso{
+\code{\link[=Xs]{Xs()}}
 }

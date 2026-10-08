@@ -2,7 +2,7 @@
 % Please edit documentation in R/prediction.R
 \name{Y}
 \alias{Y}
-\title{Observation functions}
+\title{Observation Function}
 \usage{
 Y(
   g,
@@ -35,20 +35,20 @@ function the forcings count as states.}
 \item{parameters}{Character vector of parameters, added to the symbols of
 \code{g} and \code{f} that are neither states nor \code{time}.}
 
-\item{condition}{Either \code{NULL} (generic prediction for any condition) or a character
-string specifying the condition for which the function generates predictions.}
+\item{condition}{\code{NULL} for an observation function valid in every
+condition, or the name of the condition it belongs to.}
 
 \item{attach.input}{Logical, append the incoming states to the output.
-Defaults to \code{FALSE}: passing the state sensitivities through costs a
-full array copy per condition and objective functions do not read them.
-Set \code{TRUE} to plot states alongside observables. Can be changed with
-\code{\link[=controls]{controls()}}.}
+Default \code{FALSE}; set \code{TRUE} to plot states alongside observables. Can be
+changed with \code{\link[=controls]{controls()}}.}
 
 \item{compile}{Logical. \code{TRUE} compiles the generated code now, \code{FALSE}
-leaves it to \code{\link[=compile]{compile()}}. The function is evaluable only compiled.}
+(default) leaves it to \code{\link[=compile]{compile()}}. The function is evaluable only
+compiled.}
 
 \item{modelname}{Character, the base name of the generated C++ file and
-shared object, default \code{"obsfn"}, followed by \verb{_<condition>}.}
+shared object. Default \code{NULL}, which is \code{"obsfn"}, followed by
+\verb{_<condition>}.}
 
 \item{verbose}{Logical, print compiler output to the R console.}
 
@@ -56,70 +56,127 @@ shared object, default \code{"obsfn"}, followed by \verb{_<condition>}.}
 \code{g} is a list; \code{NULL} auto-detects. Ignored for a single observation
 function, which is one source either way.}
 
-\item{deriv}{Logical. If \code{TRUE} (default), attach the first-order
-sensitivity \code{attr(., "deriv")} of shape \verb{[time, observable, theta]}.}
+\item{deriv}{Logical. If \code{TRUE} (default), build the first derivatives,
+returned as \code{attr(, "deriv")}, \verb{[time, observable, parameter]}, when the
+call has \code{deriv = TRUE} and \code{derivMode} contains \code{"forward"}. \code{FALSE}
+returns none, whatever the call asks.}
 
-\item{deriv2}{Logical. If \code{TRUE}, attach a second-order derivative
-\code{attr(., "deriv2")} array of shape \verb{[time, observable, theta, theta]}.
-Requires \code{deriv = TRUE}. Default \code{FALSE}.}
+\item{deriv2}{Logical. If \code{TRUE}, build the second derivatives, returned
+as \code{attr(, "deriv2")}, \verb{[time, observable, parameter, parameter]}, when
+the call has \code{deriv2 = TRUE}; on a function built without them that call
+is an error. Requires \code{deriv = TRUE}. Default \code{FALSE}.}
 
-\item{derivMode}{Which derivative products to build, any of \code{"forward"}
+\item{derivMode}{Which derivative code to build, any of \code{"forward"}
 (default), \code{"reverse"} and \code{"forward-reverse"}.
 \itemize{
-\item \code{"forward"}: the Jacobian by forward-mode AD. Without it the function
-returns no \code{deriv} attribute.
-\item \code{"reverse"}: the vector-Jacobian product the reverse sweep contracts
-against, a second instantiation of the expression body. It is what
-\code{obj(..., sweep = "reverse")} needs from an observation function.
-\item \code{"forward-reverse"}: its derivative along a tangent, what the reverse
-sweep needs with \code{deriv2 = TRUE}.
-}
-
-Either way the observation function is evaluable only after compilation.}
+\item \code{"forward"}: the Jacobian; without it the function returns no \code{deriv}
+attribute.
+\item \code{"reverse"}: needed for \code{sweep = "reverse"}.
+\item \code{"forward-reverse"}: needed for \code{sweep = "reverse"} with
+\code{deriv2 = TRUE}.
+}}
 
 \item{outdir}{Character. Directory for the generated C++ source and the
-compiled shared object, default \code{getOption("dMod.outdir")}, else the
-working directory.}
+shared object, default \code{getOption("dMod.outdir")}, else the working
+directory.}
 }
 \value{
-An \link{obsfn}, called as \code{g(out, pars, fixed = NULL, deriv = TRUE, deriv2 = FALSE, conditions, env = NULL)} with a \link{prdlist} \code{out}, or
-composed as \code{g * x}. It returns a \link{prdlist} of the observables and their
-derivatives.
+An \link{obsfn}, called as \code{g(out, pars, ...)} with a \link{prdlist} \code{out}, see
+section Calling a dMod function, or composed as \code{g * x}. It returns a
+\link{prdlist} of the observables and their derivatives.
 }
 \description{
-Creates an object of type \link{obsfn} that evaluates an observation function
-and, if requested, its first and second derivatives based on the output of a model
-prediction function, see \link{prdfn}, as e.g. produced by \link{Xs}.
+Builds an \link{obsfn} that evaluates observables, and their first and second
+derivatives, on the output of a prediction function such as \code{\link[=Xs]{Xs()}}.
 }
+\section{Calling a dMod function}{
+
+The leading arguments depend on the class and are matched by position or
+by name:
+\itemize{
+\item prediction function: \code{x(times, pars, ...)}, returning a \link{prdlist};
+\item observation function: \code{g(out, pars, ...)} with a \link{prdlist} \code{out},
+returning a \link{prdlist};
+\item parameter transformation: \code{p(pars, ...)}, returning a list with one
+\link{parvec} per condition;
+\item objective function: \code{obj(pars, ...)}, returning an \link{objlist}.
+}
+
+\code{pars} is a named numeric vector. If it has a \code{deriv} attribute, as the
+output of a parameter transformation does, the derivatives are taken with
+respect to the parameters behind it. A composition is called as its class:
+\code{g * x * p} is a prediction function, \code{(g * x * p)(times, pars)}.
+
+The other arguments are named:
+\itemize{
+\item \code{fixed}: named numeric vector of parameters that enter the evaluation
+without derivatives. Default \code{NULL}.
+\item \code{deriv}: \code{TRUE} (default) returns first derivatives with respect to
+\code{pars}.
+\item \code{deriv2}: \code{TRUE} returns second derivatives as well. Default \code{FALSE}.
+Every function of the chain has to be built for them, see the arguments
+\code{deriv2} and \code{derivMode} of \code{\link[=odemodel]{odemodel()}}, \code{\link[=Y]{Y()}} and \code{\link[=P]{P()}}.
+\item \code{hessian}: objective functions only, see the table below. Default
+\code{NULL}.
+\item \code{sweep}: objective functions only. \code{"forward"} (default) propagates the
+sensitivities through the chain; \code{"reverse"} computes the gradient in one
+backward pass, whose cost does not grow with the number of parameters.
+\code{"reverse"} needs every function of the chain built with
+\code{derivMode = "reverse"}, and with \code{"forward-reverse"} for \code{deriv2 = TRUE}.
+\item \code{conditions}: character vector, the conditions to evaluate. Default all
+conditions of the function.
+\item \code{env}: environment for intermediate results. Default \code{NULL}, a new one.
+An objective function stores its prediction there as \code{prediction} and
+returns the environment as attribute \code{env}.
+\item \code{cores}: number of threads for the ODE solves and the residual kernel.
+Default \code{getOption("dMod.cores", 1L)}.
+}
+
+Prediction, observation and parameter functions accept \code{hessian} and
+\code{sweep} and ignore them. With \code{deriv = TRUE} an objective function returns
+this Hessian:
+
+\tabular{llll}{
+\code{sweep} \tab \code{hessian} \tab \code{deriv2 = FALSE} \tab \code{deriv2 = TRUE} \cr
+\code{"forward"} \tab \code{NULL}, \code{TRUE} \tab Gauss-Newton \tab exact \cr
+\code{"forward"} \tab \code{FALSE} \tab none \tab none, with a warning \cr
+\code{"reverse"} \tab \code{NULL} \tab none \tab exact \cr
+\code{"reverse"} \tab \code{TRUE} \tab none, with a warning \tab exact \cr
+\code{"reverse"} \tab \code{FALSE} \tab none \tab none, with a warning \cr
+}
+
+With \code{deriv = FALSE} it returns the value alone.
+}
+
 \examples{
+## A prediction function interpolating parameter values piecewise linearly
+times <- 0:5
+grid <- data.frame(name = "A", time = times, row.names = paste0("p", times))
+x <- Xd(grid)
+
+## An observation function
+g <- Y(c(Aobs = "s*A"), states = "A", parameters = "s",
+       modelname = "prediction_obs", outdir = tempdir())
+
+## One parameter transformation per condition
+innerpars <- c(getParameters(x), getParameters(g))
+trafo <- setNames(innerpars, innerpars)
+p <- P(list(C1 = replaceSymbols(innerpars, paste0(innerpars, "_C1"), trafo),
+            C2 = replaceSymbols(innerpars, paste0(innerpars, "_C2"), trafo)),
+       modelname = "prediction_p", outdir = tempdir())
+
 \donttest{
-  # A prediction function interpolating parameter values piecewise linearly
-  times <- 0:5
-  grid <- data.frame(name = "A", time = times, row.names = paste0("p", times))
-  x <- Xd(grid)
+## Compile the observation function and the transformations together
+compile(g, p, output = "prediction_ex")
 
-  # An observable and its observation function
-  observables <- eqnvec(Aobs = "s*A")
-  g <- Y(g = observables, f = NULL, states = "A", parameters = "s",
-         compile = TRUE, modelname = "prediction_obs", outdir = tempdir())
+outerpars <- getParameters(p)
+pars <- setNames(seq(0.1, 1, length.out = length(outerpars)), outerpars)
 
-  # One parameter transformation per experimental condition
-  innerpars <- c(getParameters(x), getParameters(g))
-  trafo <- structure(innerpars, names = innerpars)
-  trafo_C1 <- cOde::replaceSymbols(innerpars, paste(innerpars, "C1", sep = "_"), trafo)
-  trafo_C2 <- cOde::replaceSymbols(innerpars, paste(innerpars, "C2", sep = "_"), trafo)
-
-  p <- P(trafo = trafo_C1, condition = "C1", compile = TRUE,
-         modelname = "prediction_p1", outdir = tempdir()) +
-    P(trafo = trafo_C2, condition = "C2", compile = TRUE,
-      modelname = "prediction_p2", outdir = tempdir())
-
-  # Outer parameters at random values
-  outerpars <- getParameters(p)
-  pars <- structure(runif(length(outerpars), 0, 1), names = outerpars)
-
-  # Unobserved states, then observables
-  plot((x*p)(times, pars))
-  plot((g*x*p)(times, pars))
+## Unobserved states, then observables
+plot((x * p)(times, pars))
+plot((g * x * p)(times, pars))
 }
+}
+\seealso{
+\code{\link[=compile]{compile()}}, \code{\link[=controls]{controls()}}
 }

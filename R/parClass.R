@@ -937,6 +937,7 @@ summary.parfn <- function(object, ...) {
 #'   `"mappings"`, the list of `p2p` functions, `"parameters"`, the union of
 #'   their parameters, and `"conditions"`.
 #' @seealso [+.fn], [P()]
+#' @inheritSection dModfn Calling a dMod function
 #' @example inst/examples/prediction.R
 #' @export
 parfn <- function(p2p, parameters = NULL, condition = NULL) {

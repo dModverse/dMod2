@@ -2,38 +2,28 @@
 % Please edit documentation in R/parClass.R
 \name{as.parvec.parframe}
 \alias{as.parvec.parframe}
-\title{Select a parameter vector from a parameter frame.}
+\title{Select a Parameter Vector from a Parameter Frame}
 \usage{
 \method{as.parvec}{parframe}(x, index = 1, ...)
 }
 \arguments{
-\item{x}{A parameter frame, e.g., the output of
-\code{\link[=as.parframe]{as.parframe()}}.}
+\item{x}{object of class \code{parframe}, e.g. from \code{\link[=as.parframe]{as.parframe()}}.}
 
-\item{index}{Integer, the parameter vector with the \code{index}-th lowest
-objective value.}
+\item{index}{integer, select the row with the \code{index}-th lowest objective
+value. Default 1, the best fit. Without a \code{value} column, the \code{index}-th
+row.}
 
-\item{...}{not used right now}
+\item{...}{not used.}
 }
 \value{
-The parameter vector with the \option{index}-th lowest objective
-value.
+Object of class \code{parvec} with the parameter columns of the selected
+row. A warning is issued if that fit did not converge.
 }
 \description{
-Obtain a parameter vector from a parameter frame.
+Select a Parameter Vector from a Parameter Frame
 }
-\details{
-With this command, additional information included in the parameter
-frame as the objective value and the convergence state are removed and a
-parameter vector is returned. This parameter vector can be used to e.g.,
-evaluate an objective function.
-
-On selection, the parameters in the parameter frame are ordered such, that
-the parameter vector with the lowest objective value is at \option{index}
-\enumerate{
-\item Thus, the parameter vector with the \option{index}-th lowest objective
-value is easily obtained.
-}
+\seealso{
+\code{\link[=as.parframe]{as.parframe()}}, \code{\link[=parvec]{parvec()}}
 }
 \author{
 Wolfgang Mader, \email{Wolfgang.Mader@fdm.uni-freiburg.de}

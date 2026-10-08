@@ -2,15 +2,21 @@
 % Please edit documentation in R/classes.R
 \name{match.fnargs}
 \alias{match.fnargs}
-\title{dMod match function arguments}
+\title{Match Function Arguments to Choices}
 \usage{
 match.fnargs(arglist, choices)
 }
 \arguments{
-\item{arglist}{list}
+\item{arglist}{list of arguments, as from \code{list(...)}.}
 
-\item{choices}{character}
+\item{choices}{character, the argument names to match.}
+}
+\value{
+Integer vector of the positions in \code{arglist} matching \code{choices},
+\code{NA} where a choice is absent.
 }
 \description{
-The function is exported for dependency reasons
+Assigns unnamed entries of \code{arglist} to the entries of \code{choices} that are
+not named in it, in order. Named entries not in \code{choices} are dropped.
 }
+\keyword{internal}

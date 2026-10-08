@@ -2,19 +2,35 @@
 % Please edit documentation in R/statistics.R
 \name{vcov}
 \alias{vcov}
-\title{Get variance-covariance matrix from trust result}
+\title{Variance-Covariance Matrix of a Fit}
 \usage{
 vcov(fit, parupper = NULL, parlower = NULL)
 }
 \arguments{
-\item{fit}{return from trust or selected fit from parlist}
+\item{fit}{A result of \code{\link[=trust]{trust()}}, or one fit of a parlist.}
 
-\item{parupper}{upper limit for parameter values. Parameters
-are considered fixed when exceeding these limits.}
-
-\item{parlower}{lower limit for parameter values. Parameters
-are considered fixed when exceeding these limits.}
+\item{parupper, parlower}{Named upper and lower bounds. Parameters at or
+beyond a bound count as fixed, as do those that \code{fit$atBound} marks.
+Default \code{NULL}.}
+}
+\value{
+Square matrix with the parameter names as dimnames: the inverse of
+half the Hessian of \code{fit} (pseudo-inverse when singular), with rows and
+columns of fixed parameters set to zero. All \code{NA} when \code{fit} has no
+Hessian, \code{NULL} when it has no \code{argument}.
 }
 \description{
-Get variance-covariance matrix from trust result
+Variance-Covariance Matrix of a Fit
+}
+\examples{
+obj <- function(x, ...) {
+  list(value = sum(x^2 / c(1, 4)),
+       gradient = 2 * x / c(1, 4),
+       hessian = diag(2 / c(1, 4)))
+}
+fit <- trust(obj, c(a = 1, b = 1))
+vcov(fit)
+}
+\seealso{
+\code{\link[=trust]{trust()}}
 }

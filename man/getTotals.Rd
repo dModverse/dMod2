@@ -2,21 +2,22 @@
 % Please edit documentation in R/eqnClass.R
 \name{getTotals}
 \alias{getTotals}
-\title{Conservation-quantity basis of an \code{eqnlist}}
+\title{Conserved Quantities of an Equation List}
 \usage{
 getTotals(eqnlist)
 }
 \arguments{
-\item{eqnlist}{An \link{eqnlist}.}
+\item{eqnlist}{object of class \link{eqnlist}.}
 }
 \value{
-Named list mapping \code{total_name} -> conservation expression
-(character). Empty list when the smatrix admits no CQs.
+Named list of conservation expressions (character). Empty list when
+the stoichiometric matrix admits no conserved quantities.
 }
 \description{
-Returns the conservation expressions associated with the model. If the
-eqnlist has user-defined \verb{$totals} (set via \link{customTotals}) those are
-returned verbatim; otherwise the auto-detected basis from
-\code{\link[=conservedQuantities]{conservedQuantities()}} is rendered with smart \code{totalXxx} names from the
-longest common substring of each CQ's species.
+Returns the user-defined totals set by \code{\link[=customTotals]{customTotals()}}, otherwise the
+basis found by \code{\link[=conservedQuantities]{conservedQuantities()}}. Totals without a user name are
+named after their species.
+}
+\seealso{
+\code{\link[=customTotals]{customTotals()}}, \code{\link[=conservedQuantities]{conservedQuantities()}}
 }

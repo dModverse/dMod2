@@ -4,7 +4,7 @@
 \alias{Xs}
 \alias{Xs.deSolve}
 \alias{Xs.cppDE}
-\title{Prediction function of an ODE model with sensitivities}
+\title{Prediction Function of an ODE Model with Sensitivities}
 \usage{
 Xs(odemodel, ...)
 
@@ -14,8 +14,8 @@ Xs(odemodel, ...)
   events = NULL,
   names = NULL,
   condition = NULL,
-  optionsOde = list(method = "lsoda"),
-  optionsSens = list(method = "lsodes"),
+  options = list(),
+  optionsSens = list(),
   fcontrol = NULL,
   ...
 )
@@ -26,7 +26,7 @@ Xs(odemodel, ...)
   events = NULL,
   names = NULL,
   condition = NULL,
-  optionsOde = list(),
+  options = list(),
   optionsSens = list(),
   optionsReverse = NULL,
   ...
@@ -35,7 +35,8 @@ Xs(odemodel, ...)
 \arguments{
 \item{odemodel}{An \code{\link[=odemodel]{odemodel()}}. Its backend decides which method runs.}
 
-\item{...}{Not used.}
+\item{...}{\code{optionsOde}, the deprecated name of \code{options}, is still
+accepted with a warning.}
 
 \item{forcings}{\code{data.frame} with columns \code{name} (character or factor),
 \code{time} and \code{value}, one row per data point of a forcing declared in
@@ -53,11 +54,12 @@ returns all states followed by the forcings.}
 \item{condition}{\code{NULL} for a prediction valid in every condition, or the
 name of the condition it belongs to.}
 
-\item{optionsOde}{Named list of solver options for the solves without
-sensitivities. See section Solver options.}
+\item{options}{Named list of solver options for every solve. See section
+Solver options.}
 
 \item{optionsSens}{Named list of solver options for the solves with
-sensitivities. See section Solver options.}
+sensitivities, overriding the entries of \code{options} it names. See section
+Solver options.}
 
 \item{fcontrol}{\code{deSolve} backend only. List with the interpolation
 settings of the forcings, \code{method}, \code{rule}, \code{f} and \code{ties} as in
@@ -66,23 +68,23 @@ settings of the forcings, \code{method}, \code{rule}, \code{f} and \code{ties} a
 \item{optionsReverse}{Named list controlling the backward pass of
 \code{sweep = "reverse"}. Needs \code{backend = "cppDE"} and a model built with
 \code{derivMode = "reverse"}. \code{NULL}, the default, sweeps the step grid of the
-value pass. Entries:
+value pass. An unknown entry is ignored with a warning. Entries:
 \itemize{
-\item \code{refine}: \code{TRUE} holds each step of the sweep to the error test of the
-CVODES backward problem under the tolerances of the solve, see
-\code{\link[cppDE:adjointControl]{cppDE::adjointControl()}}.
+\item \code{refine}: \code{TRUE} checks each step of the sweep against the tolerances
+of the solve and sweeps a failing step again in substeps, see
+\code{\link[cppDE:adjointControl]{cppDE::adjointControl()}}. Default \code{FALSE}.
 \item \code{gradtol}: under \code{refine}, the absolute tolerance on each step's share
-of the gradient.
+of the gradient. Default \code{NULL}, no check on the gradient.
 }}
 }
 \value{
-A \link{prdfn}, called as \code{x(times, pars, fixed = NULL, deriv = TRUE, deriv2 = FALSE)}. It returns a \link{prdlist} with one \link{prdframe} per
+A \link{prdfn}, called as \code{x(times, pars, ...)}, see section Calling
+a dMod function. It returns a \link{prdlist} with one \link{prdframe} per
 condition: the states over \code{times}, with the sensitivities in
 \code{attr(, "deriv")}, \verb{[time, state, parameter]}, when \code{deriv = TRUE}, and
-the second-order sensitivities in \code{attr(, "deriv2")} when \code{deriv2 = TRUE}
-(\code{cppDE} backend, model built with \code{deriv2 = TRUE}). If \code{pars} has a
-\code{deriv} attribute, as the output of a \link{parfn} does, the sensitivities are
-taken with respect to the outer parameters.
+the second-order sensitivities in \code{attr(, "deriv2")},
+\verb{[time, state, parameter, parameter]}, when \code{deriv2 = TRUE} (\code{cppDE}
+backend, model built with \code{deriv2 = TRUE}).
 }
 \description{
 Turns an \code{\link[=odemodel]{odemodel()}} into a prediction function that
@@ -90,9 +92,9 @@ integrates the states and, with \code{deriv = TRUE}, their sensitivities.
 }
 \section{Solver options}{
 
-On the \code{cppDE} and \code{Sundials} backends \code{optionsOde} and \code{optionsSens} take
-the entries below and pass them to \code{\link[cppDE:solveODE]{cppDE::solveODE()}}. An entry not given
-keeps its default; an unknown entry is ignored with a warning.
+On the \code{cppDE} and \code{Sundials} backends the lists take the entries below and
+pass them to \code{\link[cppDE:solveODE]{cppDE::solveODE()}}. An entry not given keeps its default; an
+unknown entry is ignored with a warning.
 \itemize{
 \item \code{atol}, \code{rtol}: absolute and relative error tolerance, default \code{1e-6}.
 \item \code{maxsteps}: largest number of steps of one solve, default \code{1e6}.
@@ -112,16 +114,18 @@ the error test, which is cheaper and gives less accurate sensitivities;
 default \code{TRUE}.
 }
 
-\code{optionsOde} applies to \code{deriv = FALSE} and to the value and backward pass
-of \code{sweep = "reverse"}, \code{optionsSens} to \code{deriv = TRUE} and to
-\code{sweep = "reverse"} with \code{deriv2 = TRUE}. A fit with the default forward
-sweep therefore runs under \code{optionsSens}. The integration
-method is fixed when the model is built, \code{odemodel(..., method = )}.
+\code{options} applies to every solve. The solves with sensitivities, those of
+\code{deriv = TRUE} and of \code{sweep = "reverse"} with \code{deriv2 = TRUE}, take
+\code{optionsSens} merged over \code{options}. A fit with the default forward sweep
+therefore runs under \code{optionsSens}, and the value and backward pass of
+\code{sweep = "reverse"} under \code{options} alone. The integration method is fixed
+when the model is built, \code{odemodel(..., method = )}.
 
-On the \code{deSolve} backend both lists are arguments of \code{\link[deSolve:ode]{deSolve::ode()}},
-among them \code{method} (default \code{"lsoda"} for \code{optionsOde} and \code{"lsodes"} for
-\code{optionsSens}), \code{atol}, \code{rtol}, \code{maxsteps} and \code{hini}. A list given there
-replaces the default, so it names \code{method} if it needs one.
+On the \code{deSolve} backend the entries of both lists are arguments of
+\code{\link[deSolve:ode]{deSolve::ode()}}, among them \code{method}, \code{atol}, \code{rtol}, \code{maxsteps} and
+\code{hini}, merged the same way. \code{method} defaults to \code{"lsoda"} for the solves
+without sensitivities and to \code{"lsodes"} for those with, unless \code{options} or
+\code{optionsSens} names it.
 }
 
 \section{Forcings}{
@@ -146,9 +150,69 @@ come from one \code{Xs()} per condition, joined by \code{+}.
 \code{forcings}, \code{names} and the solver options are kept, as given, in the
 controls of the returned function and read at every solve, so \code{\link[=controls]{controls()}}
 can change them later; on the \code{deSolve} backend \code{events} and \code{fcontrol} as
-well. On the \code{cppDE} and \code{Sundials} backends a replaced \code{optionsOde} or
-\code{optionsSens} is merged over the defaults, so it only needs the entries it
-changes.
+well. The controls are named after the arguments, \code{options}, \code{optionsSens}
+and \code{optionsReverse}; \code{optionsOde} is accepted as a deprecated alias of
+\code{options}. A replaced list is merged as described in section Solver
+options, so it only needs the entries it changes.
+}
+
+\section{Calling a dMod function}{
+
+The leading arguments depend on the class and are matched by position or
+by name:
+\itemize{
+\item prediction function: \code{x(times, pars, ...)}, returning a \link{prdlist};
+\item observation function: \code{g(out, pars, ...)} with a \link{prdlist} \code{out},
+returning a \link{prdlist};
+\item parameter transformation: \code{p(pars, ...)}, returning a list with one
+\link{parvec} per condition;
+\item objective function: \code{obj(pars, ...)}, returning an \link{objlist}.
+}
+
+\code{pars} is a named numeric vector. If it has a \code{deriv} attribute, as the
+output of a parameter transformation does, the derivatives are taken with
+respect to the parameters behind it. A composition is called as its class:
+\code{g * x * p} is a prediction function, \code{(g * x * p)(times, pars)}.
+
+The other arguments are named:
+\itemize{
+\item \code{fixed}: named numeric vector of parameters that enter the evaluation
+without derivatives. Default \code{NULL}.
+\item \code{deriv}: \code{TRUE} (default) returns first derivatives with respect to
+\code{pars}.
+\item \code{deriv2}: \code{TRUE} returns second derivatives as well. Default \code{FALSE}.
+Every function of the chain has to be built for them, see the arguments
+\code{deriv2} and \code{derivMode} of \code{\link[=odemodel]{odemodel()}}, \code{\link[=Y]{Y()}} and \code{\link[=P]{P()}}.
+\item \code{hessian}: objective functions only, see the table below. Default
+\code{NULL}.
+\item \code{sweep}: objective functions only. \code{"forward"} (default) propagates the
+sensitivities through the chain; \code{"reverse"} computes the gradient in one
+backward pass, whose cost does not grow with the number of parameters.
+\code{"reverse"} needs every function of the chain built with
+\code{derivMode = "reverse"}, and with \code{"forward-reverse"} for \code{deriv2 = TRUE}.
+\item \code{conditions}: character vector, the conditions to evaluate. Default all
+conditions of the function.
+\item \code{env}: environment for intermediate results. Default \code{NULL}, a new one.
+An objective function stores its prediction there as \code{prediction} and
+returns the environment as attribute \code{env}.
+\item \code{cores}: number of threads for the ODE solves and the residual kernel.
+Default \code{getOption("dMod.cores", 1L)}.
+}
+
+Prediction, observation and parameter functions accept \code{hessian} and
+\code{sweep} and ignore them. With \code{deriv = TRUE} an objective function returns
+this Hessian:
+
+\tabular{llll}{
+\code{sweep} \tab \code{hessian} \tab \code{deriv2 = FALSE} \tab \code{deriv2 = TRUE} \cr
+\code{"forward"} \tab \code{NULL}, \code{TRUE} \tab Gauss-Newton \tab exact \cr
+\code{"forward"} \tab \code{FALSE} \tab none \tab none, with a warning \cr
+\code{"reverse"} \tab \code{NULL} \tab none \tab exact \cr
+\code{"reverse"} \tab \code{TRUE} \tab none, with a warning \tab exact \cr
+\code{"reverse"} \tab \code{FALSE} \tab none \tab none, with a warning \cr
+}
+
+With \code{deriv = FALSE} it returns the value alone.
 }
 
 \examples{
@@ -165,10 +229,11 @@ plot(pred)
 dim(attr(pred[[1]], "deriv"))
 
 ## Change the options of the existing prediction function
-controls(x, NULL, "optionsOde") <- list(atol = 1e-10, rtol = 1e-10)
+controls(x, NULL, "options") <- list(atol = 1e-10, rtol = 1e-10)
 head(x(times, pars, deriv = FALSE)[[1]])
 }
 }
 \seealso{
-\code{\link[=Xf]{Xf()}} for predictions without sensitivities, \code{\link[cppDE:solveODE]{cppDE::solveODE()}}.
+\code{\link[=Xf]{Xf()}} for predictions without sensitivities, \code{\link[=controls]{controls()}},
+\code{\link[cppDE:solveODE]{cppDE::solveODE()}}.
 }

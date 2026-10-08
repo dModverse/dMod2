@@ -2,30 +2,43 @@
 % Please edit documentation in R/linalg.R
 \name{rref}
 \alias{rref}
-\title{Transform a matrix into reduced row echelon form}
+\title{Reduced Row Echelon Form of a Matrix}
 \usage{
 rref(A, tol = sqrt(.Machine$double.eps), verbose = FALSE, fractions = FALSE)
 }
 \arguments{
-\item{A}{Numeric matrix for which the reduced row echelon form is computed.}
+\item{A}{Numeric matrix.}
 
-\item{tol}{Numeric tolerance used to identify pivot elements. Defaults to \code{sqrt(.Machine$double.eps)}.}
+\item{tol}{Numeric tolerance below which a pivot counts as zero. Defaults to
+\code{sqrt(.Machine$double.eps)}.}
 
-\item{verbose}{Logical. If \code{TRUE}, prints detailed information during computation.}
+\item{verbose}{Logical. Not used.}
 
-\item{fractions}{Logical. Currently not used.}
+\item{fractions}{Logical. Not used.}
 }
 \value{
-A list with two elements:
-\itemize{
-\item \code{[[1]]}: The reduced row echelon form of \code{A}.
-\item \code{[[2]]}: The indices of the columns in which pivots were found.
-}
+An unnamed list with two elements: the reduced row echelon form of
+\code{A}, and the indices of the pivot columns as a one-row matrix (\code{NULL} if
+there is none).
 }
 \description{
-This function computes the reduced row echelon form (RREF) of a numeric matrix.
-It is written along the lines of the MATLAB function \code{rref}.
+Computes the reduced row echelon form of a numeric matrix by Gauss-Jordan
+elimination with partial pivoting, like the MATLAB function \code{rref}.
+}
+\examples{
+A <- rbind(c(1, 2, 3), c(2, 4, 7), c(1, 2, 4))
+rref(A)
+
+}
+\references{
+John Fox, \code{rref()}, R-help mailing list, posted by Scott Hyde,
+2007-09-01,
+\url{https://stat.ethz.ch/pipermail/r-help/2007-September/139923.html}.
+}
+\seealso{
+\code{\link[=nullZ]{nullZ()}}
 }
 \author{
-Malenka Mader, \email{Malenka.Mader@fdm.uni-freiburg.de}
+Malenka Mader, \email{Malenka.Mader@fdm.uni-freiburg.de}. The
+signature and the argument check follow the function \code{rref()} by John Fox.
 }

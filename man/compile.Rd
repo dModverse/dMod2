@@ -2,7 +2,7 @@
 % Please edit documentation in R/compile.R
 \name{compile}
 \alias{compile}
-\title{Compile model-related C/C++ code}
+\title{Compile Model-Related C/C++ Code}
 \usage{
 compile(
   ...,
@@ -14,61 +14,57 @@ compile(
 )
 }
 \arguments{
-\item{...}{One or more model objects.}
+\item{...}{one or more model objects.}
 
-\item{output}{Optional name for a combined shared library. When set, all
-files are linked into one object and the union of their \code{linkArgs} is
-applied. A bare name places the object next to the generated sources; a
-name with a directory is taken as given.}
+\item{output}{character, the name of a combined shared object. Default
+\code{NULL}. A bare name places it next to the generated sources, a name with
+a directory is taken as given.}
 
-\item{args}{Additional compiler/linker flags applied to every file.}
+\item{args}{character, additional compiler and linker flags for every
+file. Default \code{NULL}.}
 
-\item{cores}{Parallel compilation jobs (Unix only, requires \code{cores > 1}).
-Defaults to \code{\link[=detectFreeCores]{detectFreeCores()}}.}
+\item{cores}{integer, parallel compilation jobs (Unix only). Default
+\code{\link[=detectFreeCores]{detectFreeCores()}}.}
 
-\item{chunkSize}{Maximum number of files per archiver call, see Details.}
+\item{chunkSize}{integer, the maximum number of object files per archiver
+call when the link command would exceed the command-line limit. Default
+100.}
 
-\item{verbose}{If \code{TRUE}, print compiler commands.}
+\item{verbose}{logical, print the compiler commands. Default \code{FALSE}.}
 }
 \value{
-Invisibly \code{TRUE} on success.
+\code{TRUE}, invisibly.
 }
 \description{
-Compiles model objects (\link{parfn}, \link{obsfn}, \link{prdfn}) related C/C++ files into shared libraries via \verb{R CMD SHLIB}.
+Compiles the generated sources of model objects (\link{parfn}, \link{obsfn},
+\link{prdfn}, \code{\link[=odemodel]{odemodel()}}) into shared objects with \verb{R CMD SHLIB} and loads
+them.
 }
 \details{
-Named arguments other than the ones below are an error: \code{...} holds the
-objects to compile, so a misspelled argument name would otherwise be taken
-for an object and ignored.
+Compile and link flags are taken per source from the \code{"compileInfo"}
+attribute of the objects. Objects without it are matched to sources in the
+working directory by model name. Unchanged sources are not recompiled.
 
-The toolchain report prints the flag set every source gets, then each
-further set with the number of sources that declare it. Compile flags are
-per file, \code{-fopenmp} reaching only the ODE sources for instance, so a single
-bracket would name a command that never runs.
+Without \code{output}, each source becomes a shared object named after it, i.e.
+after the model name. With \code{output}, all sources are linked into one shared
+object of that name, and the model name of every object passed as a plain
+variable is set to \code{output}, see \code{\link[=modelname]{modelname()}}. If a shared object of that
+name is already loaded, a suffix \verb{_2}, \verb{_3}, ... is appended with a warning.
+With many sources, set \code{output}: R limits the number of loaded shared
+objects.
 
-Per-file compile and link flags are taken from the \code{"compileInfo"}
-attribute that \code{\link[=odemodel]{odemodel()}}, \code{\link[=Xs]{Xs()}}, \code{\link[=Xf]{Xf()}}, \code{\link[=Y]{Y()}} and \code{\link[=P]{P()}} attach to
-their return values. Each entry lists the source file together with the
-\code{compileArgs} and \code{linkArgs} reported by the backend that produced it
-(\code{cOde::funC}, \code{cppDE::cppODE}, \code{cppDE::cvode}, ...), so solver-specific
-libraries reach only the files that need them. Objects without
-\code{compileInfo} fall back to modelname-based file discovery in the current
-working directory.
+Named arguments other than the ones below are an error.
 }
-\section{Many conditions}{
-
-Sources are always compiled one file per command, but naming every object on
-the final \verb{R CMD SHLIB} command line overruns the shell's argument limit at
-roughly a thousand files. Beyond that, \code{compile()} bundles the objects into a
-static archive in chunks of \code{chunkSize} and links it whole; the result is
-identical. This needs \code{output} to be set, since one shared object per source
-would exceed \code{R_MAX_NUM_DLLS} first.
-
-Objects are reused when the source bytes and the compile command are
-unchanged, recorded in a \code{.dMod_objects} index next to them: the code
-generators rewrite every source on each run, so file times say nothing about
-whether a recompile is needed. Where the sources share their include block,
-it is precompiled once and prepended, which is what dominates the compile of
-the short generated files.
+\examples{
+\donttest{
+g <- Y(c(y = "s * x"), parameters = "s", modelname = "compile_ex_obs",
+       outdir = tempdir())
+p <- P(c(s = "exp(log_s)"), modelname = "compile_ex_par",
+       outdir = tempdir())
+compile(g, p, output = "compile_ex", cores = 1)
+modelname(g)
 }
-
+}
+\seealso{
+\code{\link[=odemodel]{odemodel()}}, \code{\link[=loadDLL]{loadDLL()}}, \code{\link[=modelname]{modelname()}}
+}

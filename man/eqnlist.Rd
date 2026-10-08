@@ -5,7 +5,7 @@
 \alias{as.eqnlist.data.frame}
 \alias{is.eqnlist}
 \alias{eqnlist}
-\title{Coerce to an equation list}
+\title{Generate or Coerce to an Equation List}
 \usage{
 as.eqnlist(data, volumes, ...)
 
@@ -35,61 +35,62 @@ eqnlist(
 )
 }
 \arguments{
-\item{data}{data.frame with columns Description, Rate, and one column for each state
-reflecting the stoichiometric matrix}
+\item{data}{data frame with the columns "Description", "Rate" and one
+column per state.}
 
-\item{volumes}{Named character of state volumes (kept for back-compat; when
-supplied without \code{compartments}/\code{compartmentOf}, distinct expressions are
-auto-assigned IDs \code{c1}, \code{c2}, ...).}
+\item{volumes}{named character of state volumes. Without \code{compartments}
+and \code{compartmentOf}, each distinct expression becomes a compartment with
+ID \code{c1}, \code{c2}, ...}
 
-\item{...}{additional arguments to be passed to or from methods.}
+\item{...}{not used.}
 
-\item{compartments}{Named list keyed by compartment ID; each entry is a
+\item{compartments}{named list keyed by compartment ID; each entry is a
 volume expression (character) or a list with fields \code{volume} and \code{rule}
-(\code{rule} reserved for future dynamic-volume support, must be \code{NULL}).}
+(\code{dV/dt}, see \code{\link[=setCompartmentVolume]{setCompartmentVolume()}}).}
 
-\item{compartmentOf}{Named character vector mapping state → compartment ID.
+\item{compartmentOf}{named character vector mapping states to compartment IDs.
 States not listed default to compartment \code{"defaultComp"} with volume \code{"1"}.
 May also name states that do not exist yet; see \code{\link[=assignCompartment]{assignCompartment()}}.}
 
-\item{reactionCompartment}{Optional character vector of length
-\code{nrow(smatrix)}. Per-reaction reference compartment ID; use \code{NA} to infer
-from educts. Required when educts span multiple compartments.}
+\item{reactionCompartment}{character of length \code{nrow(smatrix)}, the
+compartment in whose frame each rate is given; \code{NA} infers it from the
+educts. Required for reactions whose educts span several compartments.
+Default \code{NULL}.}
 
-\item{amountStates}{Optional character vector of states that have substance
-units (amounts) rather than concentrations, SBML's \code{hasOnlySubstanceUnits}.
-Their fluxes are not divided by a compartment volume.}
+\item{amountStates}{character, the states given in amounts rather than
+concentrations (SBML's \code{hasOnlySubstanceUnits}). Their fluxes are not
+divided by a compartment volume. Default \code{NULL}.}
 
-\item{x}{object of class \code{eqnlist}}
+\item{x}{object to test.}
 
-\item{smatrix}{Numeric stoichiometric matrix; one row per reaction, one
-column per state.}
+\item{smatrix}{numeric stoichiometric matrix, one row per reaction and one
+column per state. Default \code{NULL} gives an empty equation list.}
 
-\item{states}{Character vector of state names.}
+\item{states}{character, the state names. Default \code{colnames(smatrix)}.}
 
-\item{rates}{Character vector of rate expressions.}
+\item{rates}{character, the rate expressions, one per reaction.}
 
-\item{description}{Character vector describing each reaction.}
+\item{description}{character, one description per reaction. Default
+\code{NULL} numbers the reactions.}
 
-\item{totals}{Optional named list of user-defined conservation-quantity
-expressions, as produced by \link{customTotals}. \code{NULL} leaves the basis to be
-auto-detected from the stoichiometric matrix.}
+\item{totals}{named list of user-defined conservation expressions, see
+\code{\link[=customTotals]{customTotals()}}. Default \code{NULL} uses the detected basis.}
 }
 \value{
-Object of class \link{eqnlist}
-
-An object of class \code{eqnlist}, basically a list.
+Object of class \code{eqnlist}, a list with the entries above and the
+per-state \code{volumes}. \code{is.eqnlist()} returns a logical.
 }
 \description{
-Translates a reaction network, e.g. defined by a data.frame, into an equation list object.
-
-The eqnlist object stores an ODE as a stoichiometric matrix,
-rate expressions, state names, and compartment information.
+An eqnlist stores an ODE as a stoichiometric matrix, rate
+expressions, state names and compartment information. \code{eqnlist()} builds
+one from these parts, \code{as.eqnlist()} from a data frame of reactions.
 }
 \details{
-If \code{data} is a \code{data.frame}, it must contain columns "Description" (character),
-"Rate" (character), and one column per ODE state with the state names.
-The state columns correspond to the stoichiometric matrix.
+The data frame for \code{as.eqnlist()} contains the columns
+"Description" (character), "Rate" (character) and one column per state,
+the columns of the stoichiometric matrix. Layout attributes of the data
+frame, as set by \code{\link[=as.data.frame.eqnlist]{as.data.frame.eqnlist()}}, are used unless \code{volumes} is
+given.
 }
 \examples{
 # Generate eqnlist from the constructor
@@ -107,13 +108,13 @@ print(f)
 fdata <- as.data.frame(f)
 print(fdata)
 
-# Legacy path: flat `volumes` gets auto-translated into compartments c1, c2
+# Flat `volumes`: each distinct expression becomes a compartment c1, c2, ...
 f <- as.eqnlist(fdata, volumes = c(A = "Vcyt", B = "Vnuc"))
 print(f)
 print(as.eqnvec(f))
 print(as.eqnvec(f, type = "amount"))
 
-# First-class compartments: name each compartment and assign states explicitly.
+# Named compartments with explicit state assignment
 f2 <- eqnlist(
   smatrix = S, rates = rates, description = description,
   compartments = list(cyt = "Vcyt", nuc = "Vnuc"),
@@ -121,4 +122,8 @@ f2 <- eqnlist(
 )
 print(f2)
 print(as.eqnvec(f2))
+}
+\seealso{
+\code{\link[=addReaction]{addReaction()}}, \code{\link[=as.eqnlist]{as.eqnlist()}}, \code{\link[=assignCompartment]{assignCompartment()}},
+\code{\link[=setCompartmentVolume]{setCompartmentVolume()}}
 }

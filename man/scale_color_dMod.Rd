@@ -3,20 +3,23 @@
 \name{scale_color_dMod}
 \alias{scale_color_dMod}
 \alias{scale_fill_dMod}
-\title{Discrete dMod colour scales}
+\title{Discrete dMod Color Scales}
 \usage{
 scale_color_dMod(..., palette = "okabe")
 
 scale_fill_dMod(..., palette = "okabe")
 }
 \arguments{
-\item{...}{arguments forwarded to \code{\link[ggplot2:discrete_scale]{ggplot2::discrete_scale()}}.}
+\item{...}{Arguments passed to \code{\link[ggplot2:discrete_scale]{ggplot2::discrete_scale()}}.}
 
-\item{palette}{name of a qualitative palette, see \code{\link[=dMod_palettes]{dMod_palettes()}}. The
-default is colorblind-safe.}
+\item{palette}{Name of a qualitative palette, see \code{\link[=dMod_palettes]{dMod_palettes()}}.
+Defaults to the colorblind-safe \code{"okabe"}.}
+}
+\value{
+A discrete \code{ggplot2} scale.
 }
 \description{
-Discrete dMod colour scales
+Discrete dMod Color Scales
 }
 \examples{
 library(ggplot2)
@@ -29,4 +32,7 @@ data <- data.frame(
 )
 ggplot(data, aes(time, value, colour = group)) + geom_line() +
    theme_dMod() + scale_color_dMod()
+}
+\seealso{
+\code{\link[=scale_color_dMod_c]{scale_color_dMod_c()}}, \code{\link[=dMod_palette]{dMod_palette()}}
 }

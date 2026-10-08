@@ -3,7 +3,7 @@
 \name{constraintL1}
 \alias{constraintL1}
 \alias{constraintL1.default}
-\title{Soft L1 constraint on parameters}
+\title{Soft L1 Constraint on Parameters}
 \usage{
 constraintL1(mu, ...)
 
@@ -15,33 +15,35 @@ constrained parameters.}
 
 \item{...}{Passed to the method.}
 
-\item{sigma}{Numeric, scalar or named and aligned with \code{mu}. The Laplace
-scale, i.e. the reciprocal penalty strength.}
+\item{sigma}{Numeric, scalar or named and aligned with \code{mu}, default \code{1}.
+The Laplace scale, the reciprocal penalty strength.}
 
-\item{attr.name}{Character. Name of the attribute storing the constraint value.}
+\item{attr.name}{Character. Name of the attribute holding the constraint
+value, default \code{"prior"}.}
 
 \item{condition}{Character vector, the conditions of a sum of objectives
-in which the term is evaluated. \code{NULL} evaluates it in every one.}
+in which the term is evaluated. \code{NULL} (default) evaluates it in every
+one.}
 }
 \value{
-Object of class \code{objfn}.
+An objective function of class \code{objfn}, called as
+\code{obj(pars, ...)}, see \link{dModfn}. Its value is the full \verb{-2 log} density,
+while \code{\link[=constraintL2]{constraintL2()}} returns the penalty form without the constant.
 }
 \description{
-Soft L1 constraint on parameters
+Builds a Laplace prior on parameters as an objective
+function.
 }
 \details{
 Computes the Laplace prior on the \verb{-2 log} scale,
 \deqn{2\log(2\sigma) + 2|p-\mu|/\sigma,}
-the L1 counterpart of \link{constraintL2}. Note the difference in normalisation:
-this constructor and its siblings are the full \verb{-2 log} density, while
-\link{constraintL2} is the penalty form and drops the Gaussian's constant.
-The term is not differentiable at \eqn{p = \mu}, where the gradient is
-reported as 0, so it scores a posterior rather than driving a fit.
+the L1 counterpart of \code{\link[=constraintL2]{constraintL2()}}. At \eqn{p = \mu} the term is not
+differentiable and its gradient is returned as 0.
 }
 \examples{
 prior <- constraintL1(mu = c(k1 = 0), sigma = 2)
 prior(pars = c(k1 = 1))$value
 }
 \seealso{
-\link{constraintL2}
+\code{\link[=constraintL2]{constraintL2()}}
 }

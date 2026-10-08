@@ -2,7 +2,7 @@
 % Please edit documentation in R/statistics.R
 \name{fitErrorModel}
 \alias{fitErrorModel}
-\title{Fit an error model using maximum likelihood estimation}
+\title{Fit an Error Model to Replicate Data}
 \usage{
 fitErrorModel(
   data,
@@ -17,70 +17,61 @@ fitErrorModel(
 )
 }
 \arguments{
-\item{data}{A data frame containing reduced replicate data. Must include
-columns "value" (mean of replicates), "sigma" (sample standard deviation),
-and "n" (number of replicates per condition).}
+\item{data}{A data frame as returned by \code{\link[=reduceReplicates]{reduceReplicates()}}, with columns
+\code{value} (mean of the replicates), \code{sigma} (standard error of the mean) and
+\code{n} (number of replicates).}
 
-\item{factors}{Character vector specifying the columns in \option{data}
-that define pooling conditions. The model is fit separately for each unique
-combination of these factors.}
+\item{factors}{Character vector, the columns of \code{data} whose value
+combinations define groups. The model is fitted separately per group.}
 
-\item{errorModel}{A character string defining the error model in terms of
-variance. The mean is referenced as \kbd{x}, e.g., "exp(s0) + exp(srel) * x^2".}
+\item{errorModel}{Character, the variance of a single measurement as an
+expression in the mean \code{x} and the parameters. Default
+\code{"exp(s0)+exp(srel)*x^2"}.}
 
-\item{par}{Named numeric vector of initial values for the parameters in
-\option{errorModel}.}
+\item{par}{Named numeric vector of starting values for the parameters of
+\code{errorModel}. Default \code{c(s0 = 1, srel = 0.1)}.}
 
-\item{lower}{Optional named numeric vector specifying lower bounds for
-parameters. Defaults to \code{NULL} (no bounds).}
+\item{lower, upper}{Bounds on the parameters, named or in the order of
+\code{par}. Default \code{NULL}, unbounded.}
 
-\item{upper}{Optional named numeric vector specifying upper bounds for
-parameters. Defaults to \code{NULL} (no bounds).}
+\item{plotting}{Logical. If \code{TRUE} (default), plot the variances, the fitted
+model and its 68 and 95 percent bands per group.}
 
-\item{plotting}{Logical. If \code{TRUE}, a plot of the pooled variance and
-the fitted error model is displayed.}
+\item{blather}{Logical. If \code{TRUE}, return the extended data frame described
+under Value. Default \code{FALSE}.}
 
-\item{blather}{Logical. If \code{TRUE}, additional information is returned,
-including fitted parameter values, original \code{sigma} values, and confidence intervals.}
-
-\item{...}{Additional arguments passed to the optimizer \code{optimx::optimr()}.}
+\item{...}{Further arguments passed to \code{optimx::optimr()}, which runs
+\code{"L-BFGS-B"}.}
 }
 \value{
-By default, a data frame is returned, containing the original data
-with updated \code{sigma} values estimated from the error model.
+\code{data} with \code{sigma} replaced by the standard error of the mean that
+the fitted model gives.
 
-If \option{blather = TRUE}, additional information is returned, including:
-\itemize{
-\item The fitted parameter values.
-\item The error model used.
-\item Confidence intervals for \code{sigma} at 68\\% and 95\\% levels.
-\item Effective pooling conditions.
-}
+With \code{blather = TRUE}, a data frame with the columns of \code{data}, \code{sigma}
+replaced as above, one column per parameter of \code{errorModel} with its
+fitted value, the variance bands \code{cbLower68}, \code{cbUpper68}, \code{cbLower95} and
+\code{cbUpper95}, the group label \code{condidnt} and the input \code{sigma} as
+\code{sigmaLS}. Its attribute \code{"errorModel"} holds \code{errorModel}.
 }
 \description{
-Fit an error model to reduced replicate data using maximum
-likelihood estimation (MLE). The model estimates the variance of replicate
-measurements as a function of the mean, based on a chi-square distribution.
+Fits the variance of replicate measurements as a function of
+their mean by maximum likelihood, assuming that the sample variance follows
+a scaled \eqn{\chi^2} distribution with \eqn{n - 1} degrees of freedom.
+Requires the package \pkg{optimx}.
 }
-\details{
-The model assumes that the sample variance of replicate measurements
-follows a chi-square distribution with \eqn{n-1} degrees of freedom. The
-variance is estimated by maximizing the log-likelihood function derived
-from this distribution. Given multiple replicates, the variance can be
-modeled as a function of the mean.
-
-The \option{errorModel} parameter defines this functional relationship.
-It should be expressed as a character string, using \kbd{x} to represent
-the mean.
-
-The optimization is performed using \code{optimx::optimr()} with the
-\code{"L-BFGS-B"} method, which supports bound constraints. If \option{lower}
-and \option{upper} are not specified, the parameters are assumed to be
-unconstrained.
-
-If \option{plotting = TRUE}, the function produces a log-scale variance
-plot for each condition, showing the pooled variance, the fitted model,
-and 68\\% and 95\\% confidence bounds.
+\examples{
+\dontshow{if (requireNamespace("optimx", quietly = TRUE)) withAutoprint(\{ # examplesIf}
+set.seed(1)
+mu <- rep(c(0.1, 1, 10, 100), each = 4)
+data <- data.frame(name = "y", time = rep(1:4, each = 4), condition = "ctrl",
+                   value = mu + rnorm(16, sd = sqrt(0.01 + 0.04 * mu^2)))
+reduced <- reduceReplicates(data)
+fitErrorModel(reduced, factors = "name", par = c(s0 = -4, srel = -3),
+              plotting = FALSE)
+\dontshow{\}) # examplesIf}
+}
+\seealso{
+\code{\link[=reduceReplicates]{reduceReplicates()}}
 }
 \author{
 Wolfgang Mader, \email{Wolfgang.Mader@fdm.uni-freiburg.de}

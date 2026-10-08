@@ -2,20 +2,20 @@
 % Please edit documentation in R/objClass.R
 \name{as.objlist}
 \alias{as.objlist}
-\title{Generate objective list from numeric vector}
+\title{Zero Objective List}
 \usage{
 as.objlist(p)
 }
 \arguments{
-\item{p}{Named numeric vector}
+\item{p}{Named numeric vector.}
 }
 \value{
-list with entries value (\code{0}),
-gradient (\code{rep(0, length(p))}) and
-hessian (\code{matrix(0, length(p), length(p))}) of class \code{obj}.
+An \link{objlist} with value \code{0}, gradient \code{rep(0, length(p))} and
+Hessian \code{matrix(0, length(p), length(p))}, named by \code{p}.
 }
 \description{
-Generate objective list from numeric vector
+Builds an \link{objlist} with value, gradient and Hessian zero for
+the parameters of \code{p}.
 }
 \examples{
 p <- c(A = 1, B = 2)

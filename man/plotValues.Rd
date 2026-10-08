@@ -3,32 +3,40 @@
 \name{plotValues.parframe}
 \alias{plotValues.parframe}
 \alias{plotValues}
-\title{Plotting objective values of a collection of fits}
+\title{Plot Objective Values of a Collection of Fits}
 \usage{
 \method{plotValues}{parframe}(x, tol = 1, ..., showSteps = FALSE)
 
 plotValues(x, ...)
 }
 \arguments{
-\item{x}{data.frame with columns "value", "converged" and "iterations", e.g.
-a \link{parframe}.}
+\item{x}{Data frame with columns \code{value}, \code{converged} and \code{iterations},
+e.g. a \link{parframe}.}
 
-\item{tol}{maximal allowed difference between neighboring objective values
-to be recognized as one.}
+\item{tol}{Maximal difference between neighboring objective values that
+still counts as one step. Defaults to 1.}
 
-\item{...}{arguments for subsetting of x}
+\item{...}{Logical expressions to subset \code{x}.}
 
-\item{showSteps}{logical, if \code{TRUE}, the detected steps are indicated by
-dashed vertical lines and labelled by their index. Defaults to \code{FALSE}.}
+\item{showSteps}{Logical. \code{TRUE} marks the detected steps by dashed
+vertical lines labelled by their index. Defaults to \code{FALSE}.}
 }
 \value{
-A \code{ggplot} object, with the plotted data attached as attribute
-\code{"data"}, the distance to the best fit in its column \code{delta}.
+A \code{ggplot} object with the plotted data frame as attribute
+\code{"data"}; its column \code{delta} is the distance to the best fit.
 }
 \description{
 Draws the waterfall plot of a fit collection: the objective values minus the
 best one, in ascending order against their rank, on a pseudo-log10 scale
-that is linear below 1 and logarithmic above, with a break at 0 and at each
-decade from 10 on. A converged fit is marked
-by a circle and an unconverged one by a triangle, in every plot.
+that is linear below 1. A converged fit is drawn as a circle, an
+unconverged one as a triangle.
+}
+\examples{
+fits <- parframe(data.frame(value = c(10, 10.2, 15, 40), converged = TRUE,
+                            iterations = 20, a = c(1, 1.1, 2, 3)),
+                 parameters = "a")
+plotValues(fits)
+}
+\seealso{
+\code{\link[=mstrust]{mstrust()}}, \code{\link[=as.parframe]{as.parframe()}}, \code{\link[=plotPars]{plotPars()}}
 }

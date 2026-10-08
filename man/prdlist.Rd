@@ -4,7 +4,7 @@
 \alias{as.prdlist}
 \alias{as.prdlist.list}
 \alias{prdlist}
-\title{Prediction list}
+\title{Prediction List}
 \usage{
 as.prdlist(x, ...)
 
@@ -13,15 +13,21 @@ as.prdlist(x, ...)
 prdlist(...)
 }
 \arguments{
-\item{x}{list of prediction frames}
+\item{x}{list of prediction frames. Default \code{NULL} gives an empty list.}
 
-\item{...}{objects of class \link{prdframe}
-conditions.}
+\item{...}{for \code{prdlist()}, objects of class \link{prdframe}; unnamed entries
+are named \code{"1"}, \code{"2"}, ... For \code{as.prdlist()}, not used.}
 
-\item{names}{character vector, the list names, e.g. the names of the experimental}
+\item{names}{character, the list names, e.g. the condition names. Default
+\code{NULL} keeps \code{names(x)}.}
+}
+\value{
+Object of class \code{prdlist}.
 }
 \description{
-A prediction list is used to store a list of model predictions
-from different prediction functions or the same prediction function with different
-parameter specifications. Each entry of the list is a \link{prdframe}.
+A prediction list holds model predictions, one \link{prdframe} per
+condition or parameter set. Prediction functions return prediction lists.
+}
+\seealso{
+\code{\link[=prdfn]{prdfn()}}, \code{\link[=plotCombined]{plotCombined()}}
 }

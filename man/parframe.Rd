@@ -5,7 +5,7 @@
 \alias{[.parframe}
 \alias{subset.parframe}
 \alias{parframe}
-\title{Generate a parameter frame}
+\title{Generate a Parameter Frame}
 \usage{
 is.parframe(x)
 
@@ -21,31 +21,36 @@ parframe(
 )
 }
 \arguments{
-\item{x}{data.frame.}
+\item{x}{data frame. Default \code{NULL} gives an empty parameter frame.}
 
-\item{i}{row index in any format}
+\item{i}{row index in any format. Default \code{NULL} keeps all rows.}
 
-\item{j}{column index in any format}
+\item{j}{column index in any format. Default \code{NULL} keeps all columns.}
 
-\item{drop}{logical. If TRUE the result is coerced to the lowest possible dimension}
+\item{drop}{logical. Default \code{FALSE}. \code{TRUE} returns a plain data frame or
+vector instead of a \code{parframe}.}
 
-\item{...}{additional arguments}
+\item{...}{for \code{subset()}, a logical expression in the columns of \code{x}.}
 
-\item{parameters}{character vector, the names of the parameter columns.}
+\item{parameters}{character, the names of the parameter columns. Default
+\code{colnames(x)}.}
 
-\item{metanames}{character vector, the names of the meta-information columns.}
+\item{metanames}{character, the names of the meta-information columns.
+Default \code{NULL}.}
 
-\item{obj.attributes}{character vector, the names of the objective function attributes.}
+\item{obj.attributes}{character, the names of the objective function
+attributes. Default \code{NULL}.}
 }
 \value{
-An object of class \code{parframe}, i.e. a data.frame with attributes for the
-different names. Inherits from data.frame.
+Object of class \code{parframe}, a data frame with the attributes
+\code{parameters}, \code{metanames} and \code{obj.attributes}. \code{is.parframe()} returns a
+logical.
 }
 \description{
-A parameter frame is a data.frame where the rows correspond to different
-parameter specifications. The columns are divided into three parts. (1) the meta-information
-columns (e.g. index, value, constraint, etc.), (2) the attributes of an objective function
-(e.g. data contribution and prior contribution) and (3) the parameters.
+A parameter frame is a data frame with one parameter set per
+row. Its columns fall into three groups: meta-information (e.g. index,
+value, converged), attributes of an objective function (e.g. data and prior
+contribution) and the parameters.
 }
 \details{
 Parameter frames can be subsetted either by \verb{[ , ]} or by \code{subset}. If
@@ -53,46 +58,11 @@ Parameter frames can be subsetted either by \verb{[ , ]} or by \code{subset}. If
 the corresponding attributes, i.e. metanames, obj.attributes and parameters.
 }
 \examples{
-\dontrun{
-  ## Generate a prediction function
-  regfn <- c(y = "sin(a*time)")
-  
-  g <- Y(regfn, parameters = "a")
-  x <- Xt(condition = "C1")
-  
-  ## Generate data
-  data <- datalist(
-    C1 = data.frame(
-      name = "y",
-      time = 1:5,
-      value = sin(1:5) + rnorm(5, 0, .1),
-      sigma = .1
-    )
-  )
-  
-  ## Initialize parameters and time 
-  pars <- c(a = 1)
-  times <- seq(0, 5, .1)
-  
-  plot((g*x)(times, pars), data)
-  
-  ## Do many fits from random positions and store them into parlist
-  out <- as.parlist(lapply(1:50, function(i) {
-    trust(normL2(data, g*x), pars + rnorm(length(pars), 0, 1), rinit = 1, rmax = 10)
-  }))
-  
-  summary(out)
-  
-  ## Reduce parlist to parframe
-  parframe <- as.parframe(out)
-  plotValues(parframe)
-  
-  ## Reduce parframe to best fit
-  bestfit <- as.parvec(parframe)
-  plot((g*x)(times, bestfit), data)
-  
-}
+pf <- parframe(data.frame(value = c(3, 1, 2), a = c(1, 2, 3), b = c(0, 1, 0)),
+               parameters = c("a", "b"), metanames = "value")
+pf[pf$value < 3, ]
+as.parvec(pf)
 }
 \seealso{
-\link{profile}, \link{mstrust}
+\code{\link[=as.parframe]{as.parframe()}}, \code{\link[=profile]{profile()}}, \code{\link[=mstrust]{mstrust()}}
 }

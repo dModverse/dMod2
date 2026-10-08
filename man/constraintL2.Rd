@@ -3,7 +3,7 @@
 \name{constraintL2}
 \alias{constraintL2}
 \alias{constraintL2.default}
-\title{Soft L2 constraint on parameters}
+\title{Soft L2 Constraint on Parameters}
 \usage{
 constraintL2(mu, ...)
 
@@ -15,30 +15,92 @@ constrained parameters.}
 
 \item{...}{Passed to the method.}
 
-\item{sigma}{Named numeric vector of fixed standard deviations, or
-named character vector of parameters, on log scale, that estimate them.
-One kind for all entries.}
+\item{sigma}{Numeric standard deviations, scalar or named and aligned with
+\code{mu}, default \code{1}; or a character vector of parameter names that
+estimate them on log scale, \eqn{\sigma = \exp(s)}. One kind for all
+entries.}
 
-\item{attr.name}{Character. Name of the attribute storing the constraint value.}
+\item{attr.name}{Character. Name of the attribute holding the constraint
+value, default \code{"prior"}.}
 
 \item{condition}{Character vector, the conditions of a sum of objectives
-in which the term is evaluated. \code{NULL} evaluates it in every one.}
+in which the term is evaluated. \code{NULL} (default) evaluates it in every
+one.}
 }
 \value{
-Object of class \code{objfn}.
+An objective function of class \code{objfn}, called as
+\code{obj(pars, ...)}, see section Calling a dMod function. Its value is the
+penalty form, without the constant of the Gaussian density; the other
+\verb{constraint*()} functions return the full \verb{-2 log} density.
 }
 \description{
-Soft L2 constraint on parameters
+Builds a Gaussian prior on parameters as an objective
+function, to be added to a data term such as \code{\link[=normL2]{normL2()}}.
 }
 \details{
-Computes, depending on which path is selected,
-\deqn{(p-\mu)^2 / \sigma^2}
-or, if sigma is estimated,
-\deqn{(p-\mu)^2 / \sigma^2 + 2\log(\sigma)},
-with sigma internally transformed via \code{exp()}. This is the penalty
-form and drops the Gaussian's normalisation; \link{constraintL1} and its siblings
-are the full \verb{-2 log} density.
+The value is the sum over the constrained parameters of
+\deqn{(p-\mu)^2 / \sigma^2,}
+plus \eqn{2\log\sigma} per parameter if \code{sigma} is estimated.
 }
+\section{Calling a dMod function}{
+
+The leading arguments depend on the class and are matched by position or
+by name:
+\itemize{
+\item prediction function: \code{x(times, pars, ...)}, returning a \link{prdlist};
+\item observation function: \code{g(out, pars, ...)} with a \link{prdlist} \code{out},
+returning a \link{prdlist};
+\item parameter transformation: \code{p(pars, ...)}, returning a list with one
+\link{parvec} per condition;
+\item objective function: \code{obj(pars, ...)}, returning an \link{objlist}.
+}
+
+\code{pars} is a named numeric vector. If it has a \code{deriv} attribute, as the
+output of a parameter transformation does, the derivatives are taken with
+respect to the parameters behind it. A composition is called as its class:
+\code{g * x * p} is a prediction function, \code{(g * x * p)(times, pars)}.
+
+The other arguments are named:
+\itemize{
+\item \code{fixed}: named numeric vector of parameters that enter the evaluation
+without derivatives. Default \code{NULL}.
+\item \code{deriv}: \code{TRUE} (default) returns first derivatives with respect to
+\code{pars}.
+\item \code{deriv2}: \code{TRUE} returns second derivatives as well. Default \code{FALSE}.
+Every function of the chain has to be built for them, see the arguments
+\code{deriv2} and \code{derivMode} of \code{\link[=odemodel]{odemodel()}}, \code{\link[=Y]{Y()}} and \code{\link[=P]{P()}}.
+\item \code{hessian}: objective functions only, see the table below. Default
+\code{NULL}.
+\item \code{sweep}: objective functions only. \code{"forward"} (default) propagates the
+sensitivities through the chain; \code{"reverse"} computes the gradient in one
+backward pass, whose cost does not grow with the number of parameters.
+\code{"reverse"} needs every function of the chain built with
+\code{derivMode = "reverse"}, and with \code{"forward-reverse"} for \code{deriv2 = TRUE}.
+\item \code{conditions}: character vector, the conditions to evaluate. Default all
+conditions of the function.
+\item \code{env}: environment for intermediate results. Default \code{NULL}, a new one.
+An objective function stores its prediction there as \code{prediction} and
+returns the environment as attribute \code{env}.
+\item \code{cores}: number of threads for the ODE solves and the residual kernel.
+Default \code{getOption("dMod.cores", 1L)}.
+}
+
+Prediction, observation and parameter functions accept \code{hessian} and
+\code{sweep} and ignore them. With \code{deriv = TRUE} an objective function returns
+this Hessian:
+
+\tabular{llll}{
+\code{sweep} \tab \code{hessian} \tab \code{deriv2 = FALSE} \tab \code{deriv2 = TRUE} \cr
+\code{"forward"} \tab \code{NULL}, \code{TRUE} \tab Gauss-Newton \tab exact \cr
+\code{"forward"} \tab \code{FALSE} \tab none \tab none, with a warning \cr
+\code{"reverse"} \tab \code{NULL} \tab none \tab exact \cr
+\code{"reverse"} \tab \code{TRUE} \tab none, with a warning \tab exact \cr
+\code{"reverse"} \tab \code{FALSE} \tab none \tab none, with a warning \cr
+}
+
+With \code{deriv = FALSE} it returns the value alone.
+}
+
 \examples{
 prior <- constraintL2(mu = c(k1 = 0, k2 = 0), sigma = 2)
 prior(pars = c(k1 = 1, k2 = -0.5))
@@ -46,4 +108,7 @@ prior(pars = c(k1 = 1, k2 = -0.5))
 ## A common sigma, estimated on log scale by the parameter s
 prior_s <- constraintL2(mu = c(k1 = 0, k2 = 0), sigma = "s")
 prior_s(pars = c(k1 = 1, k2 = -0.5, s = 0))$gradient
+}
+\seealso{
+\code{\link[=constraintL1]{constraintL1()}}, \code{\link[=constraintCauchy]{constraintCauchy()}}, \code{\link[=normL2]{normL2()}}
 }

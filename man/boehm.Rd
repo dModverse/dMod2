@@ -3,7 +3,12 @@
 \docType{data}
 \name{boehm}
 \alias{boehm}
-\title{Time-course data for STAT5 dimerisation in BaF3-EpoR cells}
+\title{Time-Course Data for STAT5 Dimerization in BaF3-EpoR Cells}
+\format{
+A data frame with 48 rows and the columns \code{time} (minutes),
+\code{name}, \code{value}, \code{sigma} (\code{NA} throughout; the errors are estimated in
+the fit) and \code{condition} (\code{"Boehm2014"}).
+}
 \source{
 Boehm ME, Adlung L, Schilling M, Roth S, Klingmueller U, Lehmann WD
 (2014), Identification of isoform-specific dynamics in
@@ -16,7 +21,12 @@ Values as distributed in the PEtab benchmark collection, model
 Relative amounts of phosphorylated STAT5A (\code{pSTAT5A_rel}), phosphorylated
 STAT5B (\code{pSTAT5B_rel}) and of STAT5A within the total STAT5 pool
 (\code{rSTAT5A_rel}), measured at 16 time points after stimulation with Epo.
-\code{sigma} is \code{NA} throughout: the measurement uncertainties are estimated
-along with the model parameters.
+}
+\examples{
+data(boehm)
+plotData(as.datalist(boehm))
+}
+\seealso{
+\code{system.file("examples", "example_Boehm_JProteomeRes2014.R", package = "dMod2")} builds the model.
 }
 \keyword{data}

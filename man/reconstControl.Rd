@@ -2,7 +2,7 @@
 % Please edit documentation in R/symmetryDetection.R
 \name{reconstControl}
 \alias{reconstControl}
-\title{Settings of the observability engine}
+\title{Settings of the Observability Engine}
 \usage{
 reconstControl(
   relevanceCap = 6L,
@@ -26,54 +26,59 @@ reconstControl(
 }
 \arguments{
 \item{relevanceCap}{Maximum number of coordinates in one entry of a direction
-for the dense fit; wider entries use sparse interpolation.}
+for the dense fit; wider entries use sparse interpolation. Defaults to 6.}
 
 \item{relevanceCapDir}{Maximum number of coordinates in one direction; a wider
-one is reported by its support.}
+one is reported by its support. Defaults to 24.}
 
 \item{relevanceCapSparse}{Maximum number of coordinates in one entry for the
-sparse (Ben-Or/Tiwari) fit; a wider entry is reported by its support.}
+sparse (Ben-Or/Tiwari) fit; a wider entry is reported by its support.
+Defaults to 30.}
 
-\item{degreeCap}{Total degree bound of the dense rational fit.}
+\item{degreeCap}{Total degree bound of the dense rational fit. Defaults to 4.}
 
-\item{sampleSlack}{Number of samples beyond the minimum of the fit.}
+\item{sampleSlack}{Number of samples beyond the minimum of the fit. Defaults
+to 5.}
 
 \item{probeRetries}{Number of retries of the relevance probe when a
-perturbation changes the pivots.}
+perturbation changes the pivots. Defaults to 8.}
 
 \item{laurentDegNum, laurentDegDen}{Numerator degree and monomial denominator
-degree bounds of the sparse Laurent fit.}
+degree bounds of the sparse Laurent fit. Default to 4 and 2.}
 
 \item{laurentCandCap}{Maximum number of candidate monomials of the Laurent and
-general sparse fits.}
+general sparse fits. Defaults to 200000.}
 
-\item{termCap}{Maximum number of terms of a sparse entry.}
+\item{termCap}{Maximum number of terms of a sparse entry. Defaults to 60.}
 
 \item{generalDegNum, generalDegDen}{Numerator and denominator degree bounds of the
-general sparse rational fit.}
+general sparse rational fit. Default to 4 and 3.}
 
 \item{gapOrderCap}{Maximum order of the power series in the time between
-events.}
+events. Defaults to 8.}
 
 \item{minsupportCandCap}{Maximum number of column subsets searched for
-directions with small support.}
+directions with small support. Defaults to 20000.}
 
 \item{perprimeCap}{Maximum number of samples per prime for the reconstruction
-under \code{equilibrate = TRUE}.}
+under \code{equilibrate = TRUE}. Defaults to 120.}
 
 \item{perprimeMinPrimes}{Minimum number of primes with samples for a
-reconstruction under \code{equilibrate = TRUE}.}
+reconstruction under \code{equilibrate = TRUE}. Defaults to 3.}
 
 \item{timeout}{Time limit in seconds for the reconstruction. Directions not
 finished in time are reported by their support. \code{Inf} (default) sets no limit.}
 }
 \value{
-A \code{reconstControl} list.
+A list of class \code{reconstcontrol} with the settings.
 }
 \description{
 Saturation and closed-form reconstruction settings for
 \code{symmetryDetection(control = reconstControl())}. Raise the caps to reconstruct
 wide or high-degree directions, at the cost of more samples.
+}
+\examples{
+reconstControl(degreeCap = 6L, timeout = 60)
 }
 \seealso{
 \code{\link[=symmetryDetection]{symmetryDetection()}}

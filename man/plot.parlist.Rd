@@ -2,24 +2,29 @@
 % Please edit documentation in R/parClass.R
 \name{plot.parlist}
 \alias{plot.parlist}
-\title{Plot a parameter list.}
+\title{Plot a Parameter List}
 \usage{
 \method{plot}{parlist}(x, path = FALSE, ...)
 }
 \arguments{
-\item{x}{fitlist obtained from mstrust}
+\item{x}{object of class \code{parlist}, e.g. from \code{\link[=mstrust]{mstrust()}}.}
 
-\item{path}{print path of parameters from initials to convergence. For this
-option to be TRUE \code{\link[=mstrust]{mstrust()}} must have had the option
-\option{blather}.}
+\item{path}{logical, plot the path of the parameters from the initial
+values to convergence. Default \code{FALSE}. \code{path = TRUE} needs fits run with
+\code{trust(..., blather = TRUE)} or \code{mstrust(..., blather = TRUE)}.}
 
-\item{...}{additional arguments}
+\item{...}{not used.}
+}
+\value{
+A \code{ggplot} object.
 }
 \description{
-Plot a parameter list.
+Plots, for the converged fits, the converged against the initial value of
+each parameter, or with \code{path = TRUE} the parameter values over the
+iterations.
 }
-\details{
-If path=TRUE:
+\seealso{
+\code{\link[=parlist]{parlist()}}, \code{\link[=plotValues]{plotValues()}}
 }
 \author{
 Malenka Mader, \email{Malenka.Mader@fdm.uni-freiburg.de}

@@ -4,7 +4,7 @@
 \alias{getConditions}
 \alias{getConditions.list}
 \alias{getConditions.fn}
-\title{Extract the conditions of an object}
+\title{Extract the Conditions of an Object}
 \usage{
 getConditions(x, ...)
 
@@ -13,13 +13,14 @@ getConditions(x, ...)
 \method{getConditions}{fn}(x, ...)
 }
 \arguments{
-\item{x}{object from which the conditions should be extracted}
+\item{x}{object of class \code{fn} or a named list such as a \code{datalist}.}
 
-\item{...}{additional arguments (not used right now)}
+\item{...}{not used.}
 }
 \value{
-The conditions in a format that depends on the class of \code{x}.
+Character vector of condition names, \code{NULL} for a function defined
+for every condition.
 }
 \description{
-Extract the conditions of an object
+Extract the Conditions of an Object
 }

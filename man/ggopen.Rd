@@ -2,17 +2,21 @@
 % Please edit documentation in R/plots.R
 \name{ggopen}
 \alias{ggopen}
-\title{Open last plot in external pdf viewer}
+\title{Open a Plot in an External PDF Viewer}
 \usage{
 ggopen(plot = last_plot(), command = "xdg-open", ...)
 }
 \arguments{
-\item{plot}{\code{ggplot2} plot object.}
+\item{plot}{A \code{ggplot2} plot object. Defaults to \code{\link[ggplot2:last_plot]{ggplot2::last_plot()}}.}
 
-\item{command}{character, indicating which pdf viewer is started.}
+\item{command}{Character, the shell command that opens the PDF file.
+Defaults to \code{"xdg-open"}, which exists on Linux; use \code{"open"} on macOS.}
 
-\item{...}{arguments going to \code{ggsave}.}
+\item{...}{Arguments passed to \code{\link[ggplot2:ggsave]{ggplot2::ggsave()}}.}
+}
+\value{
+The path of the PDF file, invisibly.
 }
 \description{
-Convenience function to show last plot in an external viewer.
+Saves a plot as PDF in \code{\link[=tempdir]{tempdir()}} and opens it with an external command.
 }

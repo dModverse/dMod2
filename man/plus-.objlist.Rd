@@ -3,24 +3,24 @@
 \name{+.objlist}
 \alias{+.objlist}
 \alias{sumobjlist}
-\title{Add two lists element by element}
+\title{Add Two Objective Lists}
 \usage{
 \method{+}{objlist}(out1, out2)
 }
 \arguments{
-\item{out1}{List of numerics or matrices}
-
-\item{out2}{List with the same structure as out1 (there will be no warning when mismatching)}
+\item{out1, out2}{\link{objlist}s, or \code{NULL}, which returns the other.}
 }
 \value{
-List of length of out1.
+An \link{objlist}.
 }
 \description{
-Add two lists element by element
+Add Two Objective Lists
 }
 \details{
-If out1 has names, out2 is assumed to share these names. Each element of the list out1
-is inspected. If it has a \code{names} attributed, it is used to do a matching between out1 and out2.
-The same holds for the attributed \code{dimnames}. In all other cases, the "+" operator is applied
-the corresponding elements of out1 and out2 as they are.
+Gradients and Hessians are matched by parameter name; a parameter
+missing in one operand counts as zero there, and a \code{NULL} Hessian is left
+out. Numeric attributes are added, an absent one counting as zero. The
+\code{chi2} contributions are summed per \code{attr.name} of their objective: one
+\code{attr.name} gives one attribute \code{chi2}, several give \verb{chi2_<attr.name>}
+each.
 }

@@ -2,19 +2,27 @@
 % Please edit documentation in R/symbolics.R
 \name{getElements}
 \alias{getElements}
-\title{Get Symbols and Numeric constants from a character}
+\title{Get Symbols and Numeric Constants from a Character}
 \usage{
 getElements(char, exclude = NULL)
 }
 \arguments{
-\item{char}{Character vector (e.g. equation)}
+\item{char}{Character vector of expressions. Entries \code{"0"} are skipped.}
 
-\item{exclude}{Character vector, the symbols to be excluded from the return value}
+\item{exclude}{Character vector of symbols to drop from the result.
+Defaults to \code{NULL}.}
+}
+\value{
+Character vector of the symbols and numeric constants in order of
+appearance, with repetitions; \code{NULL} if \code{char} is \code{NULL}.
 }
 \description{
-Get Symbols and Numeric constants from a character
+Get Symbols and Numeric Constants from a Character
 }
 \examples{
 getElements(c("A*AB+B^2"))
 
+}
+\seealso{
+\code{\link[=getSymbols]{getSymbols()}}
 }

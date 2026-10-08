@@ -4,7 +4,7 @@
 \alias{plotProfile.parframe}
 \alias{plotProfile.list}
 \alias{plotProfile}
-\title{Profile likelihood plot}
+\title{Profile Likelihood Plot}
 \usage{
 \method{plotProfile}{parframe}(
   profs,
@@ -27,29 +27,39 @@
 plotProfile(profs, ...)
 }
 \arguments{
-\item{profs}{Lists of profiles as being returned by \link{profile}.}
+\item{profs}{A \link{parframe} of profiles as returned by \code{\link[=profile]{profile()}}, or a
+list of those.}
 
-\item{...}{logical going to subset before plotting.}
+\item{...}{Logical expressions to subset the plotted data.}
 
-\item{maxvalue}{Numeric, the value where profiles are cut off.}
+\item{maxvalue}{Numeric, the value of the objective difference at which
+profiles are cut off. Defaults to 5.}
 
-\item{parlist}{Matrix or data.frame with columns for the parameters to be added to the plot as points.
-If a "value" column is contained, deltas are calculated with respect to lowest chisquare of profiles.}
+\item{parlist}{Matrix or data frame with parameter columns, drawn as points.
+With a \code{value} column, its differences to the lowest profile value are
+used.}
 
-\item{ncol}{Number of columns in the resulting plot grid.}
+\item{ncol}{Number of columns of the plot grid. \code{NULL} (default) lets
+\code{\link[ggplot2:facet_wrap]{ggplot2::facet_wrap()}} choose.}
 
-\item{threshold}{Numeric, the horizontal lines and the y-axis breaks on top
-of the optimum the profiles start from, which is always drawn. Defaults to the
-chi-square thresholds for 68\%, 90\% and 95\%. Names are used as axis labels.
-Pass the value \link{profileThreshold} returns for the calibration the intervals
-are read at, so the line and \link{confint.parframe} agree.}
+\item{threshold}{Numeric, the horizontal lines and y-axis breaks above the
+optimum, which is always drawn. Defaults to the chi-square thresholds for
+68\%, 90\% and 95\%. Names are used as axis labels. Pass the value of
+\code{\link[=profileThreshold]{profileThreshold()}} to match \code{\link[=confint.parframe]{confint.parframe()}}.}
 }
 \value{
-A plot object of class \code{ggplot}.
+A \code{ggplot} object with the plotted data frame as attribute \code{"data"}.
 }
 \description{
-Profile likelihood plot
+Profile Likelihood Plot
 }
-\details{
-See \link{profile} for examples.
+\examples{
+pars <- c(a = 1, b = 0.5)
+obj <- constraintL2(mu = pars, sigma = 0.1)
+profs <- profile(obj, pars, whichPar = c("a", "b"), limits = c(-1, 1),
+                 cores = 1)
+plotProfile(profs)
+}
+\seealso{
+\code{\link[=profile]{profile()}}, \code{\link[=plotPaths]{plotPaths()}}
 }

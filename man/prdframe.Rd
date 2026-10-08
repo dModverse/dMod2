@@ -2,37 +2,38 @@
 % Please edit documentation in R/prdClass.R
 \name{prdframe}
 \alias{prdframe}
-\title{Prediction frame}
+\title{Prediction Frame}
 \usage{
 prdframe(prediction = NULL, deriv = NULL, deriv2 = NULL, parameters = NULL)
 }
 \arguments{
-\item{prediction}{Numeric matrix of model predictions.}
+\item{prediction}{numeric matrix of model predictions. Default \code{NULL} gives
+an empty matrix.}
 
-\item{deriv}{3D numeric array of first-order sensitivities with respect to outer parameters.}
+\item{deriv}{3D numeric array \verb{[time, variable, parameter]} of first-order
+sensitivities. Default \code{NULL}.}
 
-\item{deriv2}{4D numeric array of second-order sensitivities with respect to
-outer parameters; dimensions: \verb{(time, variable, theta, theta)}. Symmetric
-in the last two axes. Optional; only set when the upstream pipeline
-provides second-order information.}
+\item{deriv2}{4D numeric array \verb{[time, variable, parameter, parameter]} of
+second-order sensitivities, symmetric in the last two axes. Default
+\code{NULL}.}
 
-\item{parameters}{Named numeric vector of the inner parameters used for the prediction.}
+\item{parameters}{named numeric vector of the inner parameters. Default
+\code{NULL}.}
 }
 \value{
-An object of class \code{"prdframe"} (inheriting from \code{"matrix"}) with attached arrays of
-sensitivities and the corresponding parameter vector as attributes.
+Object of class \code{prdframe}, a matrix with the attributes above.
 }
 \description{
-A prediction frame stores model predictions in a matrix along with sensitivity information.
-The columns of the prediction matrix are typically \code{"time"} and one column per state variable.
-The object has several attributes containing sensitivities and parameter information:
-\itemize{
-\item \code{"deriv"}: 3D array of first-order sensitivities with respect to outer parameters
-(see \link{P}); dimensions: \verb{(time, state, outer parameter)}
-\item \code{"parameters"}: vector of the inner parameters used to generate the prediction
-}
+A prediction frame stores model predictions as a matrix with the column
+\code{"time"} and one column per variable. Its attributes are \code{"deriv"}, the
+first-order sensitivities with respect to the outer parameters (see \code{\link[=P]{P()}}),
+\code{"deriv2"}, the second-order sensitivities, and \code{"parameters"}, the inner
+parameters used for the prediction.
 
-Prediction frames are usually elements of prediction lists (\link{prdlist}), produced by
-\link{Xs}, \link{Xd}, or \link{Xf}. When defining custom prediction functions
-(see \code{P2X} in \link{prdfn}), the result should be returned as a prediction frame.
+Prediction lists (\link{prdlist}) returned by \code{\link[=Xs]{Xs()}}, \code{\link[=Xd]{Xd()}} or \code{\link[=Xf]{Xf()}} consist
+of prediction frames. A custom prediction function (see \code{P2X} in \code{\link[=prdfn]{prdfn()}})
+returns one.
+}
+\seealso{
+\code{\link[=getDerivs]{getDerivs()}}, \code{\link[=getDerivs2]{getDerivs2()}}
 }

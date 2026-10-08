@@ -2,7 +2,7 @@
 % Please edit documentation in R/eqnClass.R
 \name{assignCompartment}
 \alias{assignCompartment}
-\title{Assign states to compartments}
+\title{Assign States to Compartments}
 \usage{
 assignCompartment(eqnlist, ..., volume = NULL, rule = NULL)
 }
@@ -17,24 +17,17 @@ created with volume \code{"1"}.}
 allowed when \code{...} names a single compartment; use \code{\link[=setCompartmentVolume]{setCompartmentVolume()}}
 for several.}
 
-\item{rule}{Optional volume rule (\code{dV/dt}) for the target compartment, see
-\link{eqnlist}.}
+\item{rule}{optional volume rule (\code{dV/dt}) for the target compartment, see
+\code{\link[=setCompartmentVolume]{setCompartmentVolume()}}. Default \code{NULL}.}
 }
 \value{
 An object of class \link{eqnlist}.
 }
 \description{
-Declares which compartment a state lives in, independently of
-the reactions that use it. \code{\link[=addReaction]{addReaction()}} only ever assigns states it
-introduces, so without an explicit declaration a species inherits the
-compartment of whichever reaction happens to mention it first, which makes
-the model depend on the order in which it is written. \code{assignCompartment()}
-removes that dependency: it works before the state exists (the declaration is
-remembered and applied when the reaction arrives) as well as afterwards.
+Declares the compartment of a state, before or after the state
+is introduced by \code{\link[=addReaction]{addReaction()}}.
 }
 \examples{
-# TGFb belongs to the extracellular space although the first reaction that
-# mentions it is a cell-surface binding step.
 f <- eqnlist() |>
   assignCompartment(TGFb = "extraCell", volume = "V_ext") |>
   addReaction("R + TGFb", "R_TGFb", "k_on*R*TGFb", compartment = "Cell")

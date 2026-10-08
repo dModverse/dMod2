@@ -2,7 +2,7 @@
 % Please edit documentation in R/remoteComputing.R
 \name{runbg}
 \alias{runbg}
-\title{Run an R expression in the background (only on UNIX)}
+\title{Run an R Expression in the Background}
 \usage{
 runbg(
   ...,
@@ -20,136 +20,109 @@ runbg(
 )
 }
 \arguments{
-\item{...}{Some R code.}
+\item{...}{R code.}
 
-\item{machine}{Character vector, e.g. \code{"localhost"} or \code{"knecht1.fdm.uni-freiburg.de"}
-or \code{c("localhost", "localhost")}.}
+\item{machine}{Character vector of SSH hosts, e.g. \code{"localhost"},
+\code{"user@host"} or \code{c("localhost", "localhost")}. Defaults to
+\code{"localhost"}.}
 
-\item{filename}{Character, defining the filename of the temporary file. A random
-file name is chosen if \code{NULL}.}
+\item{filename}{Character, the base name of the job files. \code{NULL} (default)
+picks a random name.}
 
-\item{input}{Character vector, the objects in the workspace that are stored
-into an R data file and copied to the remote machine.}
+\item{input}{Character vector, the objects of the global environment that are
+saved and copied to the remote machines. Defaults to all.}
 
-\item{compile}{Logical. If \code{TRUE}, C/C++ source files (\code{.c}, \code{.cpp}) are
-transferred to the remote machine and fully recompiled into a shared object
-(\code{.so}). If set to \code{TRUE}, this overrides \code{link = TRUE}. Sources, objects and
-shared objects are taken from the working directory, so call it from
-\code{getOption("dMod.outdir")} when that is set.}
+\item{compile}{Logical. \code{TRUE} transfers the C/C++ sources (\code{.c}, \code{.cpp}) of
+the working directory and compiles them on each machine into one shared
+object; overrides \code{link}. Call it from \code{getOption("dMod.outdir")} when that
+is set. Defaults to \code{FALSE}.}
 
-\item{link}{Logical. If \code{TRUE}, only existing object files (\code{.o}) are
-transferred to the remote machine and linked into a shared object (\code{.so}),
-skipping compilation. If no \code{.o} files are found, an error is raised.
-This option is ignored if \code{compile = TRUE}. Object files are toolchain
-specific, so this only works when the remote compiler is ABI-compatible
-with the local one; prefer \code{compile = TRUE} when the two machines run
-different compiler generations.}
+\item{link}{Logical. \code{TRUE} transfers the object files (\code{.o}) of the working
+directory and links them on each machine; an error is raised if there are
+none. Needs a remote compiler compatible with the local one. Ignored if
+\code{compile = TRUE}. Defaults to \code{FALSE}.}
 
-\item{buildCores}{Number of compiler processes the build on each remote
-machine runs in parallel, before the job starts there. \code{NULL} (default) lets
-the build use what the machine reports, capped at 16.}
+\item{buildCores}{Number of parallel compiler processes of the build on each
+remote machine. \code{NULL} (default) uses the cores the machine reports, at most
+16.}
 
 \item{buildBundle}{Number of generated sources the remote build puts into one
-translation unit, as in \code{\link[=distributedComputing]{distributedComputing()}}. Only used above the shell's
-argument limit. \code{1} compiles one file at a time.}
+translation unit, as in \code{\link[=distributedComputing]{distributedComputing()}}. Only used for builds with
+more files than the shell accepts as arguments. \code{1} compiles one file at a
+time. Defaults to 50.}
 
-\item{wait}{Logical. Wait until executed. If \code{TRUE}, the code checks if the
-result file is already present in which case it is loaded. If not present,
-\code{runbg()} starts, produces the result and loads it as \code{.runbgOutput} directly
-into the workspace. If \code{wait = FALSE}, \code{runbg()} starts in the background
-and the result is only loaded into the workspace when the \code{get()} function
-is called, see Value section.}
+\item{wait}{Logical. \code{TRUE} waits for the job and loads the result as
+\code{.runbgOutput} into the global environment; if the local result files exist
+already, they are loaded without running the job. \code{FALSE} (default) returns
+at once; the result is loaded by \code{get()}.}
 
-\item{recover}{Logical. This option is useful to recover the functions
-\code{check()}, \code{get()}, \code{purge()} and \code{terminate()}, e.g. when a session has
-crashed. Then, the functions are recreated without restarting the job. They
-can then be used to get the results of a job without having to do it manually.
-Requires the correct filename, so if the previous \code{runbg()} was run with
-\code{filename = NULL}, you have to specify the filename manually.}
+\item{recover}{Logical. \code{TRUE} returns the functions \code{check()}, \code{get()},
+\code{purge()} and \code{terminate()} of an earlier job without starting it again,
+e.g. after a crashed session. Needs the \code{filename} of that job. Defaults to
+\code{FALSE}.}
 
-\item{walltime}{Optional character. Maximum runtime in the format \code{"HH:MM:SS"}.
-If exceeded, the job will be terminated.}
+\item{walltime}{Optional character, the maximum runtime as \code{"HH:MM:SS"},
+after which the job is terminated. \code{NULL} (default) sets no limit.}
 
 \item{libs}{Optional character vector of library paths put in front of the
-remote R's library search path, for the job and the remote build, so that a
-development installation can run next to the default one. The remote shell
-expands them, so \code{~} is the remote home.}
+remote library search path, for the job and the remote build. The remote
+shell expands them, so \code{~} is the remote home.}
 }
 \value{
-List of functions \code{check()}, \code{get()}, \code{purge()} and \code{terminate()}.
-\code{check()} checks if the result is ready.
-\code{get()} copies the result file
-to the working directory and loads it into the workspace as an object called \code{.runbgOutput}.
-This object is a list named according to the machines that contains the results returned by each
-machine.
-\code{purge()} deletes the temporary folder
-from the working directory and the remote machines.
-\code{terminate()} kills all running processes associated with this job on the remote machines.
+A list of functions:
+\describe{
+\item{\code{check()}}{reports whether the results are ready and returns
+\code{TRUE} or \code{FALSE}.}
+\item{\code{get()}}{copies the result files to the working directory and
+assigns the results, a list named by machine, to \code{.runbgOutput} in the
+global environment.}
+\item{\code{purge()}}{deletes the job folders on the remote machines and the
+job files in the local working directory.}
+\item{\code{terminate()}}{kills the processes of the job on the remote
+machines.}
+}
 }
 \description{
-Generate an R code of the expression that is copied via \code{scp}
-to any machine (ssh-key needed). Then collect the results.
+Saves the objects named in \code{input} to a workspace, copies it with \code{scp} to
+each machine, runs the expression there with \code{Rscript} and returns
+functions to collect the results. Requires a Unix-like system and \code{ssh}
+key authentication on every machine.
 }
 \details{
-\code{runbg()} generates a workspace from the \code{input} argument
-and copies the workspace to the remote machines via \code{scp}. This will only
-work if \emph{an ssh-key had been generated and added to the authorized keys
-on the remote machine}. The code snippet, i.e. the \code{...} argument, can
-include several intermediate results but only the last call which is not
-redirected into a variable is returned via the variable \code{.runbgOutput},
-see example below.
+The value of the last expression in \code{...} is the result of a
+machine. \code{get()} assigns the list of these results to \code{.runbgOutput} in
+the global environment.
 
-Depending on the \code{compile} and \code{link} arguments, build-related files are
-handled as follows:
+Build-related files are handled as follows:
 \itemize{
 \item \code{compile = TRUE}: C/C++ source files are transferred and compiled
 remotely via \verb{R CMD SHLIB}.
-\item \code{link = TRUE}: Pre-compiled object files (\code{.o}) are transferred and
-linked remotely.
-\item Both \code{FALSE} (default): Existing shared objects (\code{.so}) are copied
-directly.
+\item \code{link = TRUE}: object files (\code{.o}) are transferred and linked
+remotely.
+\item Both \code{FALSE} (default): shared objects (\code{.so}) are copied.
 }
-When \code{compile} or \code{link} is \code{TRUE}, objects of class \code{obsfn}, \code{parfn}, or
-\code{prdfn} in the workspace automatically get their \code{modelname} updated to
-point to the newly built shared object.
-
-The remote build runs from a generated shell script that resolves all
-path-valued compiler flags (cppDE include directory, BLAS/LAPACK, and
-Sundials/KLU for CVODE and sparse models) \emph{on the remote machine}, since
-the local library paths do not transfer. The model-specific \code{-D} macros
-are read from the \code{"compileInfo"} attribute of the model objects in the
-workspace. \code{cppDE} therefore has to be installed for the R that is on
-\code{PATH} on the remote machine. Only the files the chosen mode consumes are
-transferred, and beyond the shell's argument limit the script switches to
-the chunked static-archive build of \code{\link[=compile]{compile()}}.
+With \code{compile} or \code{link}, the \code{modelname} of \link{obsfn}, \link{parfn} and \link{prdfn}
+objects in the workspace is set to the newly built shared object. The
+remote build needs cppDE installed for the R on the \code{PATH} of the remote
+machine.
 }
 \examples{
 \dontrun{
-out_job1 <- runbg({
-         M <- matrix(rnorm(1e2), 10, 10)
-         solve(M)
-         }, machine = c("localhost", "localhost"), filename = "job1")
-out_job1$check()          
-out_job1$get()
+job <- runbg({
+  M <- matrix(rnorm(1e2), 10, 10)
+  solve(M)
+}, machine = c("user@host", "user@host"), filename = "job1")
+job$check()
+job$get()
 result <- .runbgOutput
-print(result)
-out_job1$purge()
+job$purge()
+
+# Recover the functions of a running job, e.g. after a crashed session
+job <- runbg(NULL, machine = c("user@host", "user@host"),
+             filename = "job1", recover = TRUE)
+job$get()
 }
-\dontrun{
-# Recover a runbg job with the option "recover"
-out_job1 <- runbg({
-         M <- matrix(rnorm(1e2), 10, 10)
-         solve(M)
-         }, machine = c("localhost", "localhost"), filename = "job1")
-Sys.sleep(1)
-remove(out_job1)
-try(out_job1$check())
-out_job1 <- runbg({
-  "This code is not run"
-}, machine = c("localhost", "localhost"), filename = "job1", recover = TRUE)
-out_job1$get()
-result <- .runbgOutput
-print(result)
-out_job1$purge()
 }
+\seealso{
+\code{\link[=distributedComputing]{distributedComputing()}}
 }

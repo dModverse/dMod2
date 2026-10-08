@@ -2,21 +2,30 @@
 % Please edit documentation in R/parameters.R
 \name{resetWarmStarts}
 \alias{resetWarmStarts}
-\title{Reset warm-start caches in \code{Pimpl} parameter transformations}
+\title{Reset Warm Starts of Implicit Transformations}
 \usage{
 resetWarmStarts(fn, verbose = TRUE)
 }
 \arguments{
-\item{fn}{A \code{parfn}, \code{prdfn}, \code{obsfn}, \code{objfn}, or composed \code{fn}.}
+\item{fn}{A \link{parfn}, \link{prdfn}, \link{obsfn}, objective function, or a
+composition of those.}
 
-\item{verbose}{Print one-line summary of cleared caches.}
+\item{verbose}{Logical. Print a summary of the cleared caches, default
+\code{TRUE}.}
 }
 \value{
-Invisibly, labels of the cleared caches (empty if none found).
+Invisibly, the labels of the cleared caches, empty if none was
+found.
 }
 \description{
-Walks \code{fn} and its closure environments and clears the warm-start
-cache on every reachable \link{Pimpl} parfn. Use before workflows
-that cross basins of attraction (multistart, profile after a structural
-change) where a stale root pins the solver in the wrong region.
+Clears the stored roots of every \code{\link[=Pimpl]{Pimpl()}} inside \code{fn}.
+}
+\examples{
+f <- eqnvec(A = "k2*B - k1*A", B = "k1*A - k2*B")
+p <- Pimpl(f, parameters = "A", modelname = "reset_example",
+           outdir = tempdir())
+resetWarmStarts(p)
+}
+\seealso{
+\code{\link[=Pimpl]{Pimpl()}}
 }

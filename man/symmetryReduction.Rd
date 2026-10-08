@@ -2,7 +2,7 @@
 % Please edit documentation in R/symmetryReduction.R
 \name{symmetryReduction}
 \alias{symmetryReduction}
-\title{Remove detected symmetries by reparametrisation}
+\title{Remove Detected Symmetries by Reparametrisation}
 \usage{
 symmetryReduction(
   object,
@@ -23,30 +23,33 @@ symmetryReduction(
 \item{object}{A \code{symmetrydetection} result from \code{\link[=symmetryDetection]{symmetryDetection()}}.}
 
 \item{fixed}{Coordinates with known values; scalings they remove are dropped.
-Defaults to the gauge of \code{object}.}
+\code{NULL} (default) uses the gauge of \code{object}.}
 
-\item{positive}{Coordinates known to be positive: \code{TRUE} (default, all),
-\code{FALSE} (none) or a character vector.}
+\item{positive}{Coordinates known to be positive: \code{TRUE} (default, all), \code{FALSE}
+(none) or a character vector.}
 
-\item{dPoly}{Degree bound of polynomial and rational invariants.}
+\item{dPoly}{Degree bound of polynomial and rational invariants. Defaults
+to 3.}
 
-\item{dDarboux}{Degree bound of the Darboux polynomials.}
+\item{dDarboux}{Degree bound of the Darboux polynomials. Defaults to 2.}
 
-\item{dExp}{Numerator degree bound of exponential factors; \code{0} skips them.}
+\item{dExp}{Numerator degree bound of exponential factors; \code{0} skips them.
+Defaults to 2.}
 
-\item{separable}{Logical. Solve separable blocks by quadratures.}
+\item{separable}{Logical. Solve separable blocks by quadratures. Defaults to
+\code{TRUE}.}
 
 \item{reportZeroCompatibility}{Logical. Report which coordinates each block can
-drive to 0.}
+drive to 0. Defaults to \code{FALSE}.}
 
-\item{alternatives}{Logical. Also build the charts of the other admissible pins
-and list them in \verb{$alternatives}; they are built anyway when the first chart
-holds a root that does not simplify.}
+\item{alternatives}{Logical. Also return the charts of the other admissible
+pins in \verb{$alternatives}. Defaults to \code{FALSE}.}
 
 \item{timeout}{Time limit in seconds for the chart search of one block; a block not
-solved in time keeps its invariants (\code{"invariantOnly"}).}
+solved in time keeps its invariants (\code{"invariantOnly"}). Defaults to 600.}
 
-\item{verbose}{Logical. Report the progress per block and stage.}
+\item{verbose}{Logical. Report the progress per block and stage. Defaults to
+\code{FALSE}.}
 
 \item{...}{Not used.}
 }
@@ -88,110 +91,16 @@ estimated on a linear scale; a chart valid only for its positive values has
 \code{coverage = "partial"}. \code{print()} lists the invariant behind each \verb{q_<k>}.
 }
 \examples{
-\dontrun{
-  library(dMod2)
-
-  ## gene cascade observed through the protein: one scaling direction
-  f <- eqnvec(m = "ktx - dm*m", p = "ktl*m - dp*p")
-  g <- eqnvec(y = "p")
-  res <- symmetryDetection(f, g, reconstruct = TRUE)
-  red <- symmetryReduction(res)
-  red                             # terse: trafo plus what the outer names stand for
-  summary(red)                    # invariants, stages, certificates, families
-  red$trafo                       # ready for P() or symmetryDetection(trafo = )
-  symmetryDetection(f, g, trafo = red$trafo)$identifiable
-
-  ## pre-gauge with your own fixing; redundant fixings are reported
-  symmetryReduction(res, fixed = "ktl")
-
-  ## curved direction: the polynomial stage finds k1 + u*k2
-  f2 <- eqnvec(A = "k1 + u*k2 - kdeg*A")
-  res2 <- symmetryDetection(f2, eqnvec(y = "A"), fixed = "u", reconstruct = TRUE)
-  red2 <- symmetryReduction(res2)
-  red2
-  red2$trafo
-
-  ## capped search: negative certificates instead of silence
-  symmetryReduction(res2, dPoly = 0L, dDarboux = 0L, dExp = 0L)
-
-  ## zero limits: k1 + u*k2 is the invariant, so either production term can be
-  ## switched off from any point
-  symmetryReduction(res2, reportZeroCompatibility = TRUE)$zeroCompatibility
-
-  ## P <-> pP through s*pP: neither zero holds everywhere, so a condition decides
-  pp <- eqnlist() |>
-    addReaction("P",  "pP", "k_p*P",  "phosphorylation") |>
-    addReaction("pP", "P",  "k_d*pP", "dephosphorylation")
-  resPP <- symmetryDetection(pp, eqnvec(y = "s*pP"), reconstruct = TRUE)
-  redPP <- symmetryReduction(resPP, fixed = "s", reportZeroCompatibility = TRUE)
-  redPP                           # k_d and P each "where ...", k_p "nowhere"
-  ## the conditions are R expressions in the coordinates: above the steady state
-  ## k_d can vanish, below it P
-  cond <- setNames(redPP$zeroCompatibility$condition, redPP$zeroCompatibility$coordinates)
-  sapply(cond[c("P", "k_d")], function(cc)
-    eval(parse(text = cc), list(P = 1, pP = 0.2, k_p = 0.3, k_d = 0.05)))
-  sapply(cond[c("P", "k_d")], function(cc)
-    eval(parse(text = cc), list(P = 0.2, pP = 1, k_p = 0.05, k_d = 0.3)))
-
-  ## scaling entangled with a general direction: one joint curved block
-  f3 <- eqnvec(A = "-k1*A + k2*B", B = "k1*A - k2*B")
-  g3 <- eqnvec(y = "alpha*A")
-  res3 <- symmetryDetection(f3, g3, reconstruct = TRUE)
-  red3 <- symmetryReduction(res3)
-  symmetryDetection(f3, g3, trafo = red3$trafo)$identifiable
-
-  ## rational invariant via the separable quadrature stage
-  f4 <- eqnvec(x = "-(b - a)/(a*b)*x")
-  res4 <- symmetryDetection(f4, eqnvec(y = "x"), reconstruct = TRUE)
-  red4 <- symmetryReduction(res4)
-  red4$blocks[[1]]$stage          # "separable"
-  red4$blocks[[1]]$invariants     # "(a - b)/(a*b)"
-
-  ## the factor stages reach it too: Darboux with the quadrature switched off
-  symmetryReduction(res4, dDarboux = 1L, separable = FALSE)$blocks[[1]]$invariants
-
-  ## both capped: the exp stage finds it (log entries suit P() only)
-  symmetryReduction(res4, dDarboux = 0L, separable = FALSE)$blocks[[1]]$invariants
-
-  ## EGF/EGFR -> MEK/ERK cascade: the invariants of the curved block are
-  ## held by new parameters q_<k>
-  reactions <- eqnlist() |>
-    addReaction("EGF + EGFR", "EGF_EGFR", "k_bind * EGF * EGFR")   |>
-    addReaction("EGF_EGFR", "EGF + EGFR", "k_unbind * EGF_EGFR")   |>
-    addReaction("MEK", "pMEK", "k_phos_MEK * EGF_EGFR * MEK")      |>
-    addReaction("pMEK", "MEK", "k_dephos_MEK * pMEK")              |>
-    addReaction("ERK", "pERK", "k_phos_ERK * pMEK * ERK")          |>
-    addReaction("pERK", "ERK", "k_dephos_ERK * pERK")
-  
-  reactions <- customTotals(reactions, list(
-    totalEGF = "EGF + EGF_EGFR", totalEGFR = "EGFR + EGF_EGFR",
-    totalMEK = "MEK + pMEK",
-    totalERK = "ERK + pERK"))
-  
-  observables <- eqnvec(pMEK_obs = "pMEK",
-                        pERK_obs = "pERK")
-  
-  mysteadies <- steadyStates(reactions)
-  
-  events <- eventlist() |> 
-    addEvent(var = "EGF", time = 0, value = "1", method = "add")
-  
-  egf <- symmetryDetection(reactions, observables, events = events,
-                           trafo = as.eqnvec(mysteadies), reduceCQ = FALSE, reconstruct = TRUE)
-  
-  redEgf <- symmetryReduction(egf, verbose = TRUE)
-  summary(redEgf)                 # the certificates behind the positive chart
-  redEgf$trafo                    # positive chart, ready for P()
-
-  ## a state inside exp(): A and kA declared real, A is fixed by a translation
-  fE <- eqnvec(A = "kA - kd*A", B = "kB - kE*exp(A)*B")
-  resE <- symmetryDetection(fE, eqnvec(y = "s*B"), reconstruct = TRUE)
-  redE <- symmetryReduction(resE, positive = c("B", "kB", "kd", "kE", "s"))
-  redE$trafo
-  file.edit(system.file("examples", "symmetryExponentials.R", package = "dMod2"))
-}
-
+\dontshow{if (requireNamespace("reticulate", quietly = TRUE) && reticulate::py_module_available("symident")) withAutoprint(\{ # examplesIf}
+f <- eqnvec(m = "ktx - dm*m", p = "ktl*m - dp*p")
+g <- eqnvec(y = "p")
+res <- symmetryDetection(f, g, reconstruct = TRUE, verbose = FALSE)
+red <- symmetryReduction(res)
+red
+red$trafo
+symmetryDetection(f, g, trafo = red$trafo, verbose = FALSE)$identifiable
+\dontshow{\}) # examplesIf}
 }
 \seealso{
-\code{\link[=symmetryDetection]{symmetryDetection()}}
+\code{\link[=symmetryDetection]{symmetryDetection()}}, \code{\link[=P]{P()}}
 }

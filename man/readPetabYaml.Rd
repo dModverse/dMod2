@@ -2,32 +2,32 @@
 % Please edit documentation in R/PEtabInterface.R
 \name{readPetabYaml}
 \alias{readPetabYaml}
-\title{Read a PEtab YAML manifest}
+\title{Read a PEtab YAML File}
 \usage{
 readPetabYaml(yamlPath)
 }
 \arguments{
-\item{yamlPath}{Path to the PEtab YAML manifest.}
+\item{yamlPath}{Path to the PEtab YAML file.}
 }
 \value{
 A list with \code{baseDir}, \code{formatVersion} (integer major version),
-\code{parameterFile}, and a one-element \code{problems} list whose entry holds
-resolved (absolute) paths for \code{sbmlFile}, \code{conditionFile},
-\code{measurementFile}, \code{observableFile}. v2 manifests additionally fill
-\code{experimentFile}, \code{mappingFile} (both possibly \code{NULL}), \code{modelID}
-(the first / canonical model id), and \code{models} (a named character
-vector mapping every model id from \code{model_files} to its resolved SBML
-path; length 1 in single-model problems). PEtab allows multiple
-problems per file; the reader supports a single problem entry but any
-number of v2 model_files inside it.
+\code{parameterFile}, and a one-element list \code{problems} whose entry holds the
+absolute paths \code{sbmlFile}, \code{conditionFile}, \code{measurementFile} and
+\code{observableFile}. For v2 the entry also holds \code{experimentFile} and
+\code{mappingFile} (possibly \code{NULL}), \code{modelID}, the first model id, and
+\code{models}, the SBML path of every model id.
 }
 \description{
-Parses a PEtab v1 or v2 YAML file and resolves the paths of the referenced
-tables. No SBML or TSV is touched at this stage.
+Reads a PEtab v1 or v2 YAML file, as selected by its \code{format_version}, and
+resolves the paths of the files it names. Only one problem per file is
+supported.
 }
-\details{
-Dispatch is on the YAML \code{format_version} key: values starting with "1"
-use the v1 schema (\code{problems} list, \code{sbml_files} per problem); values
-starting with "2" use the v2 schema (flat top-level \code{model_files},
-optional \code{experiment_files} and \code{mapping_files}).
+\examples{
+\dontshow{if (requireNamespace("yaml", quietly = TRUE)) withAutoprint(\{ # examplesIf}
+yaml <- system.file("extdata/petab_boehm/Boehm.yaml", package = "dMod2")
+str(readPetabYaml(yaml))
+\dontshow{\}) # examplesIf}
+}
+\seealso{
+\code{\link[=readPetabTables]{readPetabTables()}}, \code{\link[=importPEtab]{importPEtab()}}
 }

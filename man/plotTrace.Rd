@@ -2,7 +2,7 @@
 % Please edit documentation in R/plots.R
 \name{plotTrace}
 \alias{plotTrace}
-\title{Convergence trace of an iterative fit}
+\title{Convergence Trace of an Iterative Fit}
 \usage{
 plotTrace(x, ...)
 }
@@ -12,9 +12,10 @@ plotTrace(x, ...)
 \item{...}{Method-specific arguments.}
 }
 \value{
-A ggplot.
+A \code{ggplot} object, as returned by the method.
 }
 \description{
-Generic. Methods plot the quantities their fitting method
-iterates on, one panel each.
+Generic for plotting the quantities an iterative fitting method records,
+one panel each. dMod2 defines no method for it; packages and extensions
+that return iterative fit objects do.
 }

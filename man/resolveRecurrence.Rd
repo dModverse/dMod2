@@ -2,22 +2,20 @@
 % Please edit documentation in R/symbolics.R
 \name{resolveRecurrence}
 \alias{resolveRecurrence}
-\title{Place top elements into bottom elements}
+\title{Substitute Earlier Entries into Later Ones}
 \usage{
 resolveRecurrence(variables)
 }
 \arguments{
-\item{variables}{named character vector}
+\item{variables}{Named character vector.}
 }
 \value{
-named character vector of the same length as \code{variables}
+Named character vector of the same length as \code{variables}.
 }
 \description{
-Place top elements into bottom elements
-}
-\details{
-If the names of top vector elements occur in the bottom of the vector,
-they are replaced by the character of the top entry. Useful for steady state conditions.
+Replaces, for each entry, its name in all later entries by the entry in
+parentheses, so that no entry depends on an earlier name, e.g. for steady
+state expressions.
 }
 \examples{
 resolveRecurrence(c(A = "k1*B/k2", C = "A*k3+k4", D="A*C*k5"))

@@ -3,20 +3,34 @@
 \name{plotPars.parframe}
 \alias{plotPars.parframe}
 \alias{plotPars}
-\title{Plot parameter values for a fitlist}
+\title{Plot Parameter Values of a Collection of Fits}
 \usage{
 \method{plotPars}{parframe}(x, tol = 1, ...)
 
 plotPars(x, ...)
 }
 \arguments{
-\item{x}{parameter frame as obtained by as.parframe(mstrust)}
+\item{x}{A \link{parframe}, e.g. from \code{as.parframe(mstrust(...))}.}
 
-\item{tol}{maximal allowed difference between neighboring objective values
-to be recognized as one.}
+\item{tol}{Maximal difference between neighboring objective values that
+still counts as one step. Defaults to 1.}
 
-\item{...}{arguments for subsetting of x}
+\item{...}{Logical expressions to subset \code{x}.}
+}
+\value{
+A \code{ggplot} object with the plotted data frame as attribute \code{"data"}.
 }
 \description{
-Plot parameter values for a fitlist
+Draws one box per parameter, colored by the step of the objective value the
+fits belong to.
+}
+\examples{
+fits <- parframe(data.frame(value = c(10, 10.2, 15, 40), converged = TRUE,
+                            iterations = 20, a = c(1, 1.1, 2, 3),
+                            b = c(0, 0.1, 1, 2)),
+                 parameters = c("a", "b"))
+plotPars(fits)
+}
+\seealso{
+\code{\link[=plotValues]{plotValues()}}, \code{\link[=mstrust]{mstrust()}}
 }

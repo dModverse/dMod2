@@ -2,20 +2,24 @@
 % Please edit documentation in R/linalg.R
 \name{submatrix}
 \alias{submatrix}
-\title{Submatrix of a matrix returning ALWAYS a matrix}
+\title{Submatrix That Stays a Matrix}
 \usage{
 submatrix(M, rows = 1:nrow(M), cols = 1:ncol(M))
 }
 \arguments{
-\item{M}{matrix}
+\item{M}{A matrix.}
 
-\item{rows}{Index vector}
+\item{rows}{Index vector of rows. Defaults to all.}
 
-\item{cols}{Index vector}
+\item{cols}{Index vector of columns. Defaults to all.}
 }
 \value{
-The matrix \code{M[rows, cols]}, keeping/adjusting attributes like ncol nrow and dimnames.
+The matrix \code{M[rows, cols, drop = FALSE]}, with its dimnames.
 }
 \description{
-Submatrix of a matrix returning ALWAYS a matrix
+Submatrix That Stays a Matrix
+}
+\examples{
+M <- matrix(1:6, 2, 3, dimnames = list(c("a", "b"), c("x", "y", "z")))
+submatrix(M, rows = 1)
 }

@@ -2,7 +2,7 @@
 % Please edit documentation in R/eqnClass.R
 \name{.validateTotals}
 \alias{.validateTotals}
-\title{Validate a list of conservation expressions against an eqnlist}
+\title{Validate Conservation Expressions Against an Eqnlist}
 \usage{
 .validateTotals(totals, eqnlist, tol = 1e-08)
 }

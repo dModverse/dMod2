@@ -2,7 +2,7 @@
 % Please edit documentation in R/PEtabInterface.R
 \name{exportPEtab}
 \alias{exportPEtab}
-\title{Export a dMod problem to PEtab v1 or v2}
+\title{Export a dMod Problem to PEtab}
 \usage{
 exportPEtab(
   data,
@@ -26,7 +26,7 @@ exportPEtab(
 \arguments{
 \item{data}{A \link{datalist} (or a list of data.frames keyed by condition,
 each with \code{name}, \code{time}, \code{value} columns; or a long-format data.frame
-that \code{\link[=as.datalist]{as.datalist()}} accepts). Only used as the measurement source --
+that \code{\link[=as.datalist]{as.datalist()}} accepts). Only used for the measurements;
 \code{attr(data, "condition.grid")} is ignored.}
 
 \item{reactions}{An \link{eqnlist} describing the ODE network.}
@@ -44,14 +44,15 @@ chosen \code{parameterScale}. Names become \code{parameterId}s in parameters.tsv
 
 \item{errors}{Noise formulas keyed by observableId. Accepts a named
 character vector, \link{eqnvec}, or a Y-built error function. If \code{NULL},
-defaults to \code{"1"} per observable (constant unit noise).}
+defaults to \code{"1"} per observable, or to the column \code{sigma} of the data
+where it is given.}
 
 \item{lower, upper}{Named numeric vectors of bounds, on the same scale as
-\code{pouter}. If \code{NULL}, five decades around \code{pouter} for log and log10
-parameters and \code{-Inf}/\code{Inf} for linear ones.}
+\code{pouter}. Default \code{NULL}: five decades around \code{pouter} for log and log10
+parameters, \code{-Inf} and \code{Inf} for linear ones.}
 
-\item{fixed}{Optional named numeric vector of non-estimated parameters
-on the linear scale.}
+\item{fixed}{Named numeric vector of parameters that are not estimated, on
+the linear scale. Default \code{NULL}.}
 
 \item{parameterScale}{\code{NULL} (default) reads the scale off \code{p}: a
 parameter entering only as \code{exp(X)} is \code{"log"}, one entering only as
@@ -59,32 +60,30 @@ parameter entering only as \code{exp(X)} is \code{"log"}, one entering only as
 scalar \code{"lin"}/\code{"log"}/\code{"log10"} (broadcast to all names in \code{pouter}) or
 a named character vector keyed by parameterId.}
 
-\item{observableTransformation}{Scalar or named character --
-\code{"lin"}/\code{"log"}/\code{"log10"} per observableId.}
+\item{observableTransformation}{\code{"lin"} (default), \code{"log"} or \code{"log10"},
+a single value or one per observableId.}
 
-\item{noiseDistribution}{Scalar or named character, \code{"normal"}/
-\code{"laplace"}/\code{"log-normal"} per observableId.}
+\item{noiseDistribution}{\code{"normal"} (default), \code{"laplace"} or
+\code{"log-normal"}, a single value or one per observableId. For v2,
+\code{"laplace"} with a log transformation is written as \code{"log-laplace"}.}
 
-\item{modelID}{SBML model identifier; defaults to \code{"dMod_export"}.}
+\item{modelID}{SBML model identifier. Default \code{"dMod_export"}.}
 
-\item{formatVersion}{Output format. One of \code{"2.0.0"} (default) or
-\code{"1"}. Forwarded to \code{\link[=exportPEtabObject]{exportPEtabObject()}}.}
+\item{formatVersion}{\code{"2.0.0"} (default) or \code{"1"}.}
 
-\item{dir}{Output directory; created if missing.}
+\item{dir}{Output directory, created if missing.}
 
-\item{overwrite}{Whether to overwrite existing PEtab files in \code{dir}.}
+\item{overwrite}{Logical, whether existing files in \code{dir} are overwritten.
+Default \code{FALSE}.}
 }
 \value{
 Path to the written YAML manifest, invisibly.
 }
 \description{
-Symbolically decomposes a dMod parameter transformation \code{p} and writes
-the corresponding PEtab problem (parameters / observables / conditions
-/ measurements TSVs, an SBML model, and a YAML manifest; v2 additionally
-writes an experiments TSV). Output format is selected via
-\code{formatVersion} (default \code{"2.0.0"}). Parameter scales, fixed values,
-and per-condition overrides are read off \code{p} and written into the
-corresponding PEtab tables.
+Writes a PEtab v1 or v2 problem to \code{dir}: the parameter, observable,
+condition and measurement tables, for v2 also the experiment table, an SBML
+model and a YAML file. Parameter scales, fixed values and per-condition
+values are read off the parameter transformation \code{p}.
 }
 \details{
 An outer parameter named like a state (e.g. \code{A ~ exp(A)}) cannot
@@ -100,7 +99,21 @@ Pre-equilibration cannot be expressed through the trafo \code{p} alone, use
 written with \code{parameterScale = "lin"}.
 }
 
+\examples{
+\dontshow{if (requireNamespace("reticulate", quietly = TRUE) && requireNamespace("rjson", quietly = TRUE) && requireNamespace("yaml", quietly = TRUE) && reticulate::py_module_available("libsbml")) withAutoprint(\{ # examplesIf}
+f <- addReaction(eqnlist(), from = "A", to = "", rate = "k*A")
+p <- P(eqnvec(A = "exp(logA)", k = "exp(logk)"), condition = "C1",
+       modelname = "petab_export_p", compile = FALSE, outdir = tempdir())
+data <- datalist(C1 = data.frame(name = "y", time = 0:4, sigma = 0.1,
+                                 value = c(2.1, 1.2, 0.7, 0.5, 0.3)))
+yaml <- exportPEtab(data, f, observables = c(y = "A"), p = p,
+                    pouter = c(logA = log(2), logk = log(0.5)),
+                    dir = file.path(tempdir(), "petab_decay"),
+                    formatVersion = "1")
+readPetabTables(yaml)$parameters
+\dontshow{\}) # examplesIf}
+}
 \seealso{
-\code{\link[=exportPEtabObject]{exportPEtabObject()}} for the lower-level entry that takes a
-pre-assembled \code{petabProblem} list. \code{\link[=importPEtab]{importPEtab()}} for the inverse.
+\code{\link[=exportPEtabObject]{exportPEtabObject()}} for a problem returned by \code{\link[=importPEtab]{importPEtab()}},
+\code{\link[=importPEtab]{importPEtab()}}.
 }

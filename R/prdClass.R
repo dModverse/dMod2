@@ -539,6 +539,7 @@ predict.prdfn <- function(object, ..., times, pars, data = NULL) {
 #' @return Object of class `"prdfn"`, i.e. a function
 #' `x(..., fixed, deriv, deriv2, hessian, conditions, env, cores, sweep)` returning a [prdlist].
 #' The arguments `times` and `pars` should be passed via `...`, in this order.
+#' @inheritSection dModfn Calling a dMod function
 #'
 #' @example inst/examples/prediction.R
 #' @export
@@ -570,6 +571,7 @@ prdfn <- function(P2X, parameters = NULL, condition = NULL) {
 #' @return Object of class `obsfn`, i.e. a function `x(..., fixed, deriv, deriv2, hessian, conditions, env, cores, sweep)`
 #' which returns a [prdlist]. The arguments `out` (prediction) and `pars` (parameter values)
 #' should be passed via the `...` argument.
+#' @inheritSection dModfn Calling a dMod function
 #' @example inst/examples/prediction.R
 #' @export
 obsfn <- function(X2Y, parameters = NULL, condition = NULL) {

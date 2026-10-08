@@ -2,22 +2,21 @@
 % Please edit documentation in R/parClass.R
 \name{[.parvec}
 \alias{[.parvec}
-\title{Subset a parameter vector}
+\title{Subset a Parameter Vector}
 \usage{
 \method{[}{parvec}(x, ..., drop = FALSE)
 }
 \arguments{
-\item{x}{A \code{parvec} object.}
+\item{x}{object of class \code{parvec}.}
 
-\item{...}{Subsetting indices.}
+\item{...}{subsetting indices.}
 
-\item{drop}{Logical; drop derivative columns that are zero after subsetting.}
+\item{drop}{logical, drop derivative columns that are zero after
+subsetting. Default \code{FALSE}.}
 }
 \value{
-A subsetted \code{parvec} object.
+Object of class \code{parvec}.
 }
 \description{
-Subsets a \code{parvec} object and propagates first-order derivatives.
-Derivatives are restricted to retained parameters and optionally dropped
-if they become identically zero.
+Subsets a \code{parvec} and its derivatives.
 }
