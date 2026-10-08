@@ -1,3 +1,8 @@
+# dMod2 0.10.9
+
+* `constraintL1()` and `constraintL2()` are S3 generics; the default methods
+  are the priors on named parameters.
+
 # dMod2 0.10.8
 
 * New `symmetryDetection()`, `reconstControl()` and `symmetryReduction()`:

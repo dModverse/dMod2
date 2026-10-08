@@ -2,13 +2,18 @@
 % Please edit documentation in R/objClass.R
 \name{constraintL1}
 \alias{constraintL1}
+\alias{constraintL1.default}
 \title{Soft L1 constraint on parameters}
 \usage{
-constraintL1(mu, sigma = 1, attr.name = "prior", condition = NULL)
+constraintL1(mu, ...)
+
+\method{constraintL1}{default}(mu, sigma = 1, attr.name = "prior", condition = NULL, ...)
 }
 \arguments{
 \item{mu}{Named numeric vector of prior locations. Its names select the
 constrained parameters.}
+
+\item{...}{Passed to the method.}
 
 \item{sigma}{Numeric, scalar or named and aligned with \code{mu}. The Laplace
 scale, i.e. the reciprocal penalty strength.}

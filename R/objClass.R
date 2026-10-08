@@ -636,7 +636,12 @@ normL2 <- function(data, x, errmodel = NULL, times = NULL,
 #' prior_s <- constraintL2(mu = c(k1 = 0, k2 = 0), sigma = "s")
 #' prior_s(pars = c(k1 = 1, k2 = -0.5, s = 0))$gradient
 #' @export
-constraintL2 <- function(mu, sigma = 1, attr.name = "prior", condition = NULL) {
+constraintL2 <- function(mu, ...) UseMethod("constraintL2")
+
+#' @rdname constraintL2
+#' @param ... Passed to the method.
+#' @export
+constraintL2.default <- function(mu, sigma = 1, attr.name = "prior", condition = NULL, ...) {
 
   # c(a = "s_a", b = 2) arrives as character with "2" in it
   if (!is.numeric(sigma) &&
@@ -805,7 +810,12 @@ constraintL2 <- function(mu, sigma = 1, attr.name = "prior", condition = NULL) {
 #' prior <- constraintL1(mu = c(k1 = 0), sigma = 2)
 #' prior(pars = c(k1 = 1))$value
 #' @export
-constraintL1 <- function(mu, sigma = 1, attr.name = "prior", condition = NULL) {
+constraintL1 <- function(mu, ...) UseMethod("constraintL1")
+
+#' @rdname constraintL1
+#' @param ... Passed to the method.
+#' @export
+constraintL1.default <- function(mu, sigma = 1, attr.name = "prior", condition = NULL, ...) {
 
   parnames <- names(mu)
   mu    <- .constraintArg(mu,    parnames, "mu",    "constraintL1")

@@ -2,13 +2,18 @@
 % Please edit documentation in R/objClass.R
 \name{constraintL2}
 \alias{constraintL2}
+\alias{constraintL2.default}
 \title{Soft L2 constraint on parameters}
 \usage{
-constraintL2(mu, sigma = 1, attr.name = "prior", condition = NULL)
+constraintL2(mu, ...)
+
+\method{constraintL2}{default}(mu, sigma = 1, attr.name = "prior", condition = NULL, ...)
 }
 \arguments{
 \item{mu}{Named numeric vector of prior means. Its names select the
 constrained parameters.}
+
+\item{...}{Passed to the method.}
 
 \item{sigma}{Named numeric vector of fixed standard deviations, or
 named character vector of parameters, on log scale, that estimate them.
