@@ -67,15 +67,15 @@ test_that("Xs solves with the optionsOde set through controls, defaults kept", {
   expect_identical(controls(x, NULL, "optionsOde"), list(atol = 1e-2, rtol = 1e-2))
 
   # A replacement names the entries it changes. The others are the defaults,
-  # among them onFailure = "warn", which turns a failed solve into a warning.
-  controls(x, NULL, "optionsOde") <- list(maxsteps = 2L, onFailure = "stop")
-  expect_error(x(.ctl_times, inner, deriv = FALSE), "Maximum number of steps")
+  # among them onFailure = "stop".
   controls(x, NULL, "optionsOde") <- list(maxsteps = 2L)
+  expect_error(x(.ctl_times, inner, deriv = FALSE), "Maximum number of steps")
+  controls(x, NULL, "optionsOde") <- list(maxsteps = 2L, onFailure = "warn")
   expect_warning(x(.ctl_times, inner, deriv = FALSE), "Maximum number of steps")
 
   # The sensitivity solve reads its own entry.
   controls(x, NULL, "optionsOde") <- list()
-  controls(x, NULL, "optionsSens") <- list(maxsteps = 2L, onFailure = "stop")
+  controls(x, NULL, "optionsSens") <- list(maxsteps = 2L)
   expect_error(x(.ctl_times, inner, deriv = TRUE), "Maximum number of steps")
   expect_silent(x(.ctl_times, inner, deriv = FALSE))
 })
@@ -135,7 +135,7 @@ test_that("Xf keeps its forcings and options as given, too", {
   controls(xf, NULL, "forcings") <- transform(u1, value = 2)
   expect_equal(xf(.ctl_times, inner)[[1]][, "A"], 2 * a1, tolerance = 1e-5)
 
-  # Xf defaults to onFailure = "stop", which a partial replacement keeps.
+  # A partial replacement keeps the default onFailure = "stop".
   controls(xf, NULL, "optionsOde") <- list(maxsteps = 2L)
   expect_error(xf(.ctl_times, inner), "Maximum number of steps")
 })

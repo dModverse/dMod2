@@ -1,3 +1,10 @@
+# dMod2 0.10.4
+
+* `Xs()` on cppDE and Sundials stops on a failed solve, `onFailure = "stop"`,
+  as `Xf()` does. Before, it warned and returned the trajectory up to the
+  failure, which an objective read as fewer data points. A fit takes the
+  error as a rejected step.
+
 # dMod2 0.10.3
 
 * The help pages of the constructors (`odemodel()`, `Xs()`, `Xf()`, `Xd()`,

@@ -49,8 +49,9 @@
 #' * `roottol`: tolerance of root-triggered events and of
 #'   `rootfunc = "equilibrate"`, default `1e-6`.
 #' * `maxroot`: number of times a root event may fire, default `1`.
-#' * `onFailure`: `"stop"`, `"warn"` (default) or `"silent"` on a failed
-#'   solve. With `"warn"` and `"silent"` the result ends at the time reached.
+#' * `onFailure`: `"stop"` (default), `"warn"` or `"silent"` on a failed
+#'   solve. With `"warn"` and `"silent"` the result ends at the time reached,
+#'   so an objective sees fewer data points rather than a failure.
 #' * `traceFile`: CSV file the per-step trace is written to, default `NULL`;
 #'   needs `odemodel(..., stepTrace = TRUE)`.
 #'
@@ -320,7 +321,7 @@ Xs.cppDE <- function(odemodel, forcings = NULL, events = NULL, names = NULL, con
 
   optionsDefault <- list(atol = 1e-6, rtol = 1e-6, maxattemps = 50L, maxsteps = 1e6L,
                          hini = 0, roottol = 1e-6, maxroot = 1L,
-                         onFailure = "warn", traceFile = NULL)
+                         onFailure = "stop", traceFile = NULL)
   odeOf  <- .derivedControl(function(o) .cppdeOptions(o, optionsDefault, "optionsOde"))
   sensOf <- .derivedControl(function(o) .cppdeOptions(o, optionsDefault, "optionsSens"))
   odeOf(optionsOde); sensOf(optionsSens)
@@ -817,9 +818,7 @@ Xs.cppDE <- function(odemodel, forcings = NULL, events = NULL, names = NULL, con
 #'
 #' @param odemodel An [odemodel()]. Its backend decides which method runs.
 #' @param forcings,events,condition As in [Xs()].
-#' @param optionsOde Named list of solver options, as `optionsOde` of [Xs()],
-#'   except that `onFailure` defaults to `"stop"` on the `cppDE` and `Sundials`
-#'   backends.
+#' @param optionsOde Named list of solver options, as `optionsOde` of [Xs()].
 #' @param fcontrol `deSolve` backend only, as in [Xs()].
 #' @param ... Not used.
 #'
