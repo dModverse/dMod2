@@ -46,7 +46,7 @@ flatTarget <- function(likObj, priorObj = NULL, priorSample = NULL) {
 #' [EM] path with `method = "focei"`.
 #'
 #' @param obj A joint `objfn`, conventionally
-#'   `normL2(data, prdfn) + constraintL2(mu = 0, Omega = omegaSpec)`.
+#'   `normL2(data, prdfn) + constraintL2(omegaSpec)`.
 #' @param omegaSpec An `omegaSpec` from [omega()] with subject expansion.
 #' @param prdfn The prediction function used inside `obj`.
 #' @param data The [datalist] used inside `obj`.
@@ -100,7 +100,7 @@ bayesNLMEMarginal <- function(obj, omegaSpec, prdfn, data,
                                        errfn   = NULL,
                                        control = list()) {
   if (!inherits(obj, "objfn"))
-    stop("bayesNLMEMarginal: obj must be an objfn (normL2 + constraintL2(Omega = ...)).")
+    stop("bayesNLMEMarginal: obj must be an objfn (normL2 + constraintL2(<omegaspec>)).")
   if (!inherits(omegaSpec, "omegaspec"))
     stop("bayesNLMEMarginal: omegaSpec must come from omega().")
   if (is.null(omegaSpec$subjectEtas))

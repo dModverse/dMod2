@@ -12,7 +12,7 @@
   m   <- odemodel(reactions, modelname = "mcmc_decay_m",
                   backend = "cppDE", deriv2 = TRUE, compile = TRUE)
   xfn <- Xs(m)
-  gfn <- Y(c(y = "A"), f = xfn, condition = NULL, attach.input = FALSE,
+  gfn <- Y(c(y = "A"), f = xfn, condition = NULL, attachInput = FALSE,
            modelname = "mcmc_decay_obs", compile = TRUE, deriv2 = TRUE)
   pfn <- Pexpl(c(A = "A", k = "k"), parameters = NULL,
                modelname = "mcmc_decay_p", compile = TRUE, deriv2 = TRUE,
@@ -114,7 +114,7 @@
     name = "y", time = 0, sigma = 0.2, value = y_nlme,
     condition = subjects, stringsAsFactors = FALSE))
   om  <- omega(eta = "eta", subjects = subjects)
-  obj_nlme <- normL2(data_nlme, prd_nlme) + constraintL2(mu = 0, Omega = om)
+  obj_nlme <- normL2(data_nlme, prd_nlme) + constraintL2(om)
 
   priorTheta    <- constraintL2(c(mu_pop = 2.0), sigma = 5.0)
   priorOmegaObj <- priorOmega(om, kind = "LKJHalfNormal", scaleSD = 1.0)

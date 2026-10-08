@@ -434,7 +434,7 @@ test_that("mcmc(target, chains = N) returns expected shape and R-hat", {
     value = y_obs, condition = subjects,
     stringsAsFactors = FALSE))
   om <- omega(eta = "eta", subjects = subjects)
-  obj <- normL2(data, g * x * p) + constraintL2(mu = 0, Omega = om)
+  obj <- normL2(data, g * x * p) + constraintL2(om)
 
   priorTheta    <- constraintL2(c(mu_pop = 2.0), sigma = 5.0)
   priorOmegaObj <- priorOmega(om, kind = "LKJHalfNormal", scaleSD = 1.0)

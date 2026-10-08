@@ -19,7 +19,7 @@ bayesNLMEMarginal(
 }
 \arguments{
 \item{obj}{A joint \code{objfn}, conventionally
-\code{normL2(data, prdfn) + constraintL2(mu = 0, Omega = omegaSpec)}.}
+\code{normL2(data, prdfn) + constraintL2(omegaSpec)}.}
 
 \item{omegaSpec}{An \code{omegaSpec} from \code{\link[=omega]{omega()}} with subject expansion.}
 

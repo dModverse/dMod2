@@ -39,7 +39,7 @@
     stringsAsFactors = FALSE))
 
   om <- omega(eta = "eta", subjects = subjects)
-  obj <- normL2(data, g * x * p) + constraintL2(mu = 0, Omega = om)
+  obj <- normL2(data, g * x * p) + constraintL2(om)
   list(g = g, x = x, p = p, prd = g * x * p,
        data = data, om = om, obj = obj,
        subjects = subjects, true_mu = true_mu, y_obs = y_obs)
@@ -454,10 +454,10 @@ skip_if_no_compile <- function() {
                 backend = "cppDE", deriv2 = TRUE, nStack = 4L, verbose = FALSE)
   ode_opts <- list(atol = 1e-12, rtol = 1e-12)
   xfn <- Xs(m, condition = "C1",
-            optionsOde = ode_opts, optionsSens = ode_opts)
+            options = ode_opts, optionsSens = ode_opts)
   gfn <- Y(c(y = "A"), f = f, parameters = "A",
            modelname = paste0("md_decay_obs_", tag),
-           compile = TRUE, deriv2 = TRUE, attach.input = FALSE,
+           compile = TRUE, deriv2 = TRUE, attachInput = FALSE,
            condition = "C1")
   pfn <- Pexpl(c(A = "A", k = "k"), parameters = NULL,
                modelname = paste0("md_decay_p_", tag),
