@@ -4,13 +4,13 @@
 \alias{constraintL1.penaltyspec}
 \title{L1 / Laplace regularisation constraint over subject-level deviations}
 \usage{
-\method{constraintL1}{penaltyspec}(mu, attr.name = "prior_l1", condition = NULL, ...)
+\method{constraintL1}{penaltyspec}(mu, attrName = "prior_l1", condition = NULL, ...)
 }
 \arguments{
 \item{mu}{A \code{penaltySpec} (with subject expansion) from \link{penaltyL1},
 possibly combined with \code{+}.}
 
-\item{attr.name}{Name of the numeric attribute holding the penalty value.
+\item{attrName}{Name of the numeric attribute holding the penalty value.
 Default \code{"prior_l1"} (distinct from constraintL2's \code{"prior"}, so the two
 accumulate independently under \code{+}).}
 

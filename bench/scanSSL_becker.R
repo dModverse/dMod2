@@ -33,7 +33,7 @@ obs <- as.eqnvec(c(y_ext = "log10(offset + scale * (Epo + dEpo_e))",
 
 x <- Xs(odemodel(reactions, modelname = "beckerSSL", compile = FALSE, outdir = outdir),
         compile = FALSE)
-g <- Y(obs, x, modelname = "beckerSSL_obs", compile = FALSE, attach.input = FALSE,
+g <- Y(obs, x, modelname = "beckerSSL_obs", compile = FALSE, attachInput = FALSE,
        outdir = outdir)
 
 lines <- paste0("CL", 1:5)

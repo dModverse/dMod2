@@ -171,7 +171,7 @@ omega <- function(eta,
 #'
 #' @param mu An `omegaspec` from [omega()] with `subjects`.
 #' @param mean Mean of the random effects, a scalar or one value per eta.
-#' @param attr.name Character. Name of the attribute storing the constraint value.
+#' @param attrName Character. Name of the attribute storing the constraint value.
 #' @param condition Character vector, the conditions of a sum of objectives in
 #'   which the term is evaluated. `NULL` evaluates it in every one.
 #' @param ... Not used.
@@ -186,7 +186,7 @@ omega <- function(eta,
 #' pars[om$cholPars] <- 0
 #' prior(pars = pars)$value
 #' @export
-constraintL2.omegaspec <- function(mu, mean = 0, attr.name = "prior", condition = NULL, ...) {
+constraintL2.omegaspec <- function(mu, mean = 0, attrName = "prior", condition = NULL, ...) {
 
   spec <- mu
   if (is.null(spec$subjectEtas))
@@ -214,7 +214,7 @@ constraintL2.omegaspec <- function(mu, mean = 0, attr.name = "prior", condition 
       out <- objlist(value = v, gradient = setNames(numeric(length(p)), names(p)),
                      hessian = if (cv$hessian) matrix(0, length(p), length(p),
                                                       dimnames = list(names(p), names(p))))
-      attr(out, attr.name) <- v
+      attr(out, attrName) <- v
       attr(out, "env") <- env
       out
     }
@@ -277,7 +277,7 @@ constraintL2.omegaspec <- function(mu, mean = 0, attr.name = "prior", condition 
     }
 
     out <- objlist(value = value, gradient = gr, hessian = hs)
-    attr(out, attr.name) <- value
+    attr(out, attrName) <- value
     attr(out, "env") <- env
     out
   }

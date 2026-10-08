@@ -54,10 +54,10 @@ g <- Y(eqnvec(y_ext = "log(Epo + dEpo_e + 1)",
               y_mem = "log(Epo_EpoR + 1)",
               y_int = "log(Epo_EpoR_i + dEpo_i + 1)"),
        x, modelname = "becker_obs", compile = FALSE, deriv2 = TRUE,
-       attach.input = FALSE, outdir = outdir)
+       attachInput = FALSE, outdir = outdir)
 e <- Y(eqnvec(y_ext = "sigma", y_mem = "sigma", y_int = "sigma"), g,
        modelname = "becker_err", compile = FALSE, deriv2 = TRUE,
-       attach.input = FALSE, outdir = outdir)
+       attachInput = FALSE, outdir = outdir)
 
 ## 2. Reference encoding: candidates kon,koff,kt,ke carry a line-B deviation.
 dose  <- 1347.49                                       # init_Epo

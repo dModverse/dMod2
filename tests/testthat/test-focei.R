@@ -51,7 +51,7 @@
                         backend = "cppDE", deriv2 = TRUE))
     th_g <- Y(c(y = "Cc"), th_x, modelname = "theoph_cppreg_obs",
               compile = FALSE, deriv2 = TRUE)
-    th_err <- Y(eqnvec(y = "sigma_add"), th_g, attach.input = FALSE,
+    th_err <- Y(eqnvec(y = "sigma_add"), th_g, attachInput = FALSE,
                 compile = FALSE, modelname = "theoph_cppreg_err")
     th_p <- subjTrafo(
       eqnvec(Ka = "exp(tka + eta_Ka)", V = "exp(tv  + eta_V)",
@@ -70,7 +70,7 @@
                         backend = "cppDE", deriv2 = FALSE))
     se_g <- Y(c(y = "Cc"), se_x, modelname = "sigeta_obs", compile = FALSE,
               deriv2 = FALSE)
-    se_err <- Y(eqnvec(y = "sigma_prop * y"), se_g, attach.input = FALSE,
+    se_err <- Y(eqnvec(y = "sigma_prop * y"), se_g, attachInput = FALSE,
                 compile = FALSE, modelname = "sigeta_err")
     se_p <- subjTrafo(
       eqnvec(V = "exp(tv + eta_V)", Cl = "exp(tcl)",
@@ -88,7 +88,7 @@
                         backend = "cppDE", deriv2 = FALSE))
     mo_g <- Y(c(yA = "A", yB = "B"), mo_x, modelname = "mo_obs", compile = FALSE,
               deriv2 = FALSE)
-    mo_err <- Y(eqnvec(yA = "sigA", yB = "sigB"), mo_g, attach.input = FALSE,
+    mo_err <- Y(eqnvec(yA = "sigA", yB = "sigB"), mo_g, attachInput = FALSE,
                 compile = FALSE, modelname = "mo_err")
     mo_p <- subjTrafo(
       eqnvec(ka = "exp(tka + eta_ka)", ke = "exp(tke + eta_ke)", A = "A0",

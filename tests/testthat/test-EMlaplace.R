@@ -102,9 +102,9 @@ test_that(".laplaceSubjectMarginal is GN-exact on a quadratic objfun", {
                   backend = "cppDE", compile = FALSE, deriv2 = TRUE)
     x <- Xs(m)
     g <- Y(eqnvec(y = "log(A + 1)"), x, modelname = "reg_obs",
-           compile = FALSE, deriv2 = TRUE, attach.input = FALSE)
+           compile = FALSE, deriv2 = TRUE, attachInput = FALSE)
     e <- Y(eqnvec(y = "sigma"), g, modelname = "reg_err",
-           compile = FALSE, deriv2 = TRUE, attach.input = FALSE)
+           compile = FALSE, deriv2 = TRUE, attachInput = FALSE)
     pTab <- function(trafo, tab, name)
       P(branch(trafo, table = tab, apply = "insert"), method = "explicit",
         modelname = name, compile = FALSE, deriv2 = TRUE)

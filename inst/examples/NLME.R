@@ -54,7 +54,7 @@ m <- odemodel(reactions, modelname = "theoph_ode", backend = "cppDE",
 x <- Xs(m)
 g <- Y(c(y = "log(Cc + 1e-9)"), x, modelname = "theoph_obs",
        compile = FALSE, deriv2 = TRUE, outdir = outdir)
-e <- Y(eqnvec(y = "sigma_add"), g, attach.input = FALSE,
+e <- Y(eqnvec(y = "sigma_add"), g, attachInput = FALSE,
        modelname = "theoph_err", compile = FALSE, deriv2 = TRUE, outdir = outdir)
 
 ## 3. Per-subject parameter transformation. branch(apply = "insert") expands

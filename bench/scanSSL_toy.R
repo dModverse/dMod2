@@ -8,7 +8,7 @@ outdir <- tempdir()
 x <- Xs(odemodel(eqnvec(x = "-p * x"), modelname = "toySSL", compile = FALSE,
                  outdir = outdir), compile = FALSE)
 g <- Y(eqnvec(y = "x"), x, modelname = "toySSL_obs", compile = FALSE,
-       attach.input = FALSE, outdir = outdir)
+       attachInput = FALSE, outdir = outdir)
 types <- c("c1", "c2", "c3")
 trafo <- setNames(lapply(types, function(ct) eqnvec(
   x = "1", p = if (ct == "c1") "10^lp" else paste0("10^(lp + r_", ct, ")"))), types)

@@ -22,10 +22,10 @@ x <- Xs(odemodel(reactions, modelname = "beckerL1", compile = FALSE, outdir = ou
         compile = FALSE)
 g <- Y(eqnvec(y_ext = "log(Epo + dEpo_e + 1)", y_mem = "log(Epo_EpoR + 1)",
               y_int = "log(Epo_EpoR_i + dEpo_i + 1)"),
-       x, modelname = "beckerL1_obs", compile = FALSE, attach.input = FALSE,
+       x, modelname = "beckerL1_obs", compile = FALSE, attachInput = FALSE,
        outdir = outdir)
 e <- Y(eqnvec(y_ext = "sigma", y_mem = "sigma", y_int = "sigma"), g,
-       modelname = "beckerL1_err", compile = FALSE, attach.input = FALSE,
+       modelname = "beckerL1_err", compile = FALSE, attachInput = FALSE,
        outdir = outdir)
 
 ## Fold changes r_<par>_<line> on the log scale, zero for the reference line.

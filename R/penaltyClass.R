@@ -348,7 +348,7 @@ parnames.penaltyspec <- function(x, what = c("all", "eta", "lambda"), ...) {
 #'
 #' @param mu A `penaltySpec` (with subject expansion) from [penaltyL1],
 #'   possibly combined with `+`.
-#' @param attr.name Name of the numeric attribute holding the penalty value.
+#' @param attrName Name of the numeric attribute holding the penalty value.
 #'   Default `"prior_l1"` (distinct from constraintL2's `"prior"`, so the two
 #'   accumulate independently under `+`).
 #' @param condition Optional condition (default `NULL`, condition-unspecific).
@@ -356,7 +356,7 @@ parnames.penaltyspec <- function(x, what = c("all", "eta", "lambda"), ...) {
 #' @return An `objfn` with `attr(., "penaltySpec")`.
 #' @seealso [penaltyL1], [EM], [sparsify], [constraintL2]
 #' @export
-constraintL1.penaltyspec <- function(mu, attr.name = "prior_l1", condition = NULL, ...) {
+constraintL1.penaltyspec <- function(mu, attrName = "prior_l1", condition = NULL, ...) {
 
   if (is.null(mu$subjectEtas))
     stop("The penaltySpec must have subject expansion. Set subjects = ... .")
@@ -419,7 +419,7 @@ constraintL1.penaltyspec <- function(mu, attr.name = "prior_l1", condition = NUL
     out <- objlist(value = val, gradient = gr,
                    hessian = matrix(0, length(p), length(p),
                                     dimnames = list(np, np)))
-    attr(out, attr.name) <- val
+    attr(out, attrName) <- val
     attr(out, "env") <- env
     out
   }

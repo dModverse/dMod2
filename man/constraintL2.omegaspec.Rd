@@ -4,14 +4,14 @@
 \alias{constraintL2.omegaspec}
 \title{Multivariate normal prior over random effects}
 \usage{
-\method{constraintL2}{omegaspec}(mu, mean = 0, attr.name = "prior", condition = NULL, ...)
+\method{constraintL2}{omegaspec}(mu, mean = 0, attrName = "prior", condition = NULL, ...)
 }
 \arguments{
 \item{mu}{An \code{omegaspec} from \code{\link[=omega]{omega()}} with \code{subjects}.}
 
 \item{mean}{Mean of the random effects, a scalar or one value per eta.}
 
-\item{attr.name}{Character. Name of the attribute storing the constraint value.}
+\item{attrName}{Character. Name of the attribute storing the constraint value.}
 
 \item{condition}{Character vector, the conditions of a sum of objectives in
 which the term is evaluated. \code{NULL} evaluates it in every one.}
