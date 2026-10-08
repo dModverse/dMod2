@@ -35,7 +35,7 @@ test_that("states a preequilibration cannot move keep their initial values", {
 
   pp <- importPEtab(file.path(d, "problem.yaml"), backend = "deSolve",
                     modelname = "petab_invariant",
-                    optionsOde = list(atol = 1e-12, rtol = 1e-10))
+                    options = list(atol = 1e-12, rtol = 1e-10))
   pred <- pp$prd(times, pp$bestfit, fixed = attr(pp, "petab_meta")$fixed,
                  deriv = FALSE)[[1]]
 
@@ -202,7 +202,7 @@ test_that("importPEtab builds a reverse sweep through every piece", {
   setwd(wd)
   pp <- importPEtab(file.path(petab_dir, "0001", "_0001.yaml"), backend = "cppDE",
                     derivMode = c("forward", "reverse"), modelname = "petab_rev",
-                    cores = test_cores(), optionsOde = list(atol = 1e-12, rtol = 1e-10),
+                    cores = test_cores(), options = list(atol = 1e-12, rtol = 1e-10),
                     optionsSens = list(atol = 1e-10, rtol = 1e-8))
   fwd <- pp$obj(pp$bestfit)
   rev <- pp$obj(pp$bestfit, sweep = "reverse")

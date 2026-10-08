@@ -106,11 +106,11 @@ skip_on_cran()
     pars <- c(logA = log(2), logk1 = log(0.6), logk2 = log(0.3), logs = log(1.5))
     cache <<- list(
       first = list(dir = d, m = m,
-                   x = Xs(m, optionsOde = .rev_opt, optionsSens = .rev_opt),
+                   x = Xs(m, options = .rev_opt),
                    g = g, e = e, p = p, pe = pe, pc = pc, mev = mev, pev = pev,
                    mnr = mnr, pq = pq, pl = pl, sun = sun, sunev = sunev,
                    times = seq(0, 8, length.out = 41), pars = pars),
-      second = list(x = Xs(m2, optionsOde = .rev_opt, optionsSens = .rev_opt),
+      second = list(x = Xs(m2, options = .rev_opt),
                     g = g2, p = q, p2 = q2, pt = qt, ph = qh, pb = qb,
                     times = seq(0, 8, length.out = 21), pars = pars))
     cache
@@ -219,7 +219,7 @@ test_that("optionsReverse refine checks the sweep", {
   dat <- .rev_data(fx, prd, fx$pars)
   ref <- normL2(dat, prd)(th, deriv = TRUE, sweep = "reverse")$gradient
   grad <- function(opt, sweep) {
-    x <- Xs(fx$m, optionsOde = lo, optionsSens = lo, optionsReverse = opt)
+    x <- Xs(fx$m, options = lo, optionsReverse = opt)
     normL2(dat, fx$g * x * fx$p)(th, deriv = TRUE, sweep = sweep)$gradient
   }
   err <- function(g) max(abs(g - ref[names(g)])) / max(abs(ref))
@@ -236,7 +236,7 @@ test_that("the gap to the forward mode is the discretisation, not the adjoint", 
 
   rel <- vapply(10^-c(4, 10), function(tt) {
     o  <- list(atol = tt, rtol = tt)
-    xx <- Xs(fx$m, optionsOde = o, optionsSens = o)
+    xx <- Xs(fx$m, options = o)
     oo <- normL2(data, fx$g * xx * fx$p)
     a  <- oo(fx$pars, deriv = TRUE)
     b  <- oo(fx$pars, deriv = TRUE, sweep = "reverse")
@@ -250,7 +250,7 @@ test_that("the gap to the forward mode is the discretisation, not the adjoint", 
 
 test_that("an event with an estimated dose goes backwards too", {
   fx <- .rev_fx()
-  xv <- Xs(fx$mev, optionsOde = .rev_opt, optionsSens = .rev_opt)
+  xv <- Xs(fx$mev, options = .rev_opt)
 
   pars <- c(fx$pars, logdose = log(0.8))
   prd  <- fx$g * xv * fx$pev
@@ -346,7 +346,7 @@ test_that("the Sundials backend goes backwards too", {
   m <- fx$sun
   expect_false(is.null(m$reversed))
 
-  x   <- Xs(m, optionsOde = .rev_opt, optionsSens = .rev_opt)
+  x   <- Xs(m, options = .rev_opt)
   prd <- fx$g * x * fx$p
   obj <- normL2(.rev_data(fx, fx$g * fx$x * fx$p, fx$pars), prd)
 
@@ -364,7 +364,7 @@ test_that("the Sundials reverse object takes the adjoint across an event", {
               "CVODE backend not available")
   fx <- .rev_fx()
   expect_false(is.null(fx$sunev$reversed))
-  xs <- Xs(fx$sunev, optionsOde = .rev_opt, optionsSens = .rev_opt)
+  xs <- Xs(fx$sunev, options = .rev_opt)
 
   pars <- c(fx$pars, logdose = log(0.8))
   prd  <- fx$g * xs * fx$pev

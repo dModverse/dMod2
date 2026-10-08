@@ -79,12 +79,11 @@ dir.easy$generator
 # Two conditions, "easy" (Hx = 0) and "tilt". Fields known, ph0 = 0, the tilt
 # th0 after the pump unknown per condition. mx and my are predicted only.
 # –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
-myOptionsODE  <- list(atol = 1e-8, rtol = 1e-8, maxsteps = 1e5)
-myOptionsSens <- myOptionsODE
+myOptions <- list(atol = 1e-8, rtol = 1e-8, maxsteps = 1e5)
 
 model <- odemodel(f, modelname = "macrospin_ode", compile = FALSE, outdir = .outdir,
                   method = "tsit5", includeTimeZero = FALSE)
-x <- Xs(model, optionsOde = myOptionsODE, optionsSens = myOptionsSens)
+x <- Xs(model, options = myOptions)
 
 g <- Y(c(observables, eqnvec(mx = "sin(th)*cos(ph)", my = "sin(th)*sin(ph)")),
        f = x, modelname = "macrospin_obs", compile = FALSE, outdir = .outdir)
@@ -109,7 +108,7 @@ fl <- log10Transform(dir.easy$completeGenerator)
 flow <- Xf(odemodel(as.eqnvec(setNames(paste0("sgn*(", fl, ")"), names(fl))),
                     deriv = FALSE, modelname = "macrospin_flow", compile = FALSE,
                     outdir = .outdir),
-           condition = "flow", optionsOde = list(atol = 1e-12, rtol = 1e-12, maxsteps = 1e7))
+           condition = "flow", options = list(atol = 1e-12, rtol = 1e-12, maxsteps = 1e7))
 
 compile(x, g, p, flow, output = .modelname, cores = .cores)
 
@@ -299,7 +298,7 @@ summary(res.stt.all)
 # –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
 model.stt <- odemodel(f.stt, events = ev.stt, modelname = "mtj_ode", compile = FALSE,
                       outdir = .outdir, method = "tsit5")
-x.stt <- Xs(model.stt, optionsOde = myOptionsODE, optionsSens = myOptionsSens)
+x.stt <- Xs(model.stt, options = myOptions)
 
 g.stt <- Y(c(observables, eqnvec(mx = "sin(th)*cos(ph)", my = "sin(th)*sin(ph)")),
            f = x.stt, modelname = "mtj_obs", compile = FALSE, outdir = .outdir)
@@ -325,7 +324,7 @@ flows.stt <- lapply(seq_along(dirs.stt), function(i) {
               deriv = FALSE, modelname = paste0("mtj_flow", i), compile = FALSE,
               outdir = .outdir),
      condition = paste0("flow", i),
-     optionsOde = list(atol = 1e-12, rtol = 1e-12, maxsteps = 1e7))
+     options = list(atol = 1e-12, rtol = 1e-12, maxsteps = 1e7))
 })
 
 do.call(compile, c(list(x.stt, g.stt, p.stt), flows.stt,

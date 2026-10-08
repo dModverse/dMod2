@@ -11,6 +11,6 @@ plot(pred)
 dim(attr(pred[[1]], "deriv"))
 
 ## Change the options of the existing prediction function
-controls(x, NULL, "optionsOde") <- list(atol = 1e-10, rtol = 1e-10)
+controls(x, NULL, "options") <- list(atol = 1e-10, rtol = 1e-10)
 head(x(times, pars, deriv = FALSE)[[1]])
 }

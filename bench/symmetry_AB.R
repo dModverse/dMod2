@@ -58,11 +58,10 @@ summary(red)
 #
 # The ODE is integrated in linear states, the parameters live on log10.
 # –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
-myOptionsODE  <- list(atol = 1e-10, rtol = 1e-10, maxsteps = 1e7)
-myOptionsSens <- myOptionsODE
+myOptions <- list(atol = 1e-10, rtol = 1e-10, maxsteps = 1e7)
 
 model <- odemodel(reactions, modelname = "AB_ode", compile = FALSE, outdir = .outdir)
-x <- Xs(model, condition = "C1", optionsOde = myOptionsODE, optionsSens = myOptionsSens)
+x <- Xs(model, condition = "C1", options = myOptions)
 
 # attach.input adds the states to the output for the flow plots; the
 # objective reads only the observable
@@ -102,7 +101,7 @@ flow <- lapply(seq_along(res$symmetries), function(i) {
               deriv = FALSE, modelname = paste0("AB_flow", i), compile = FALSE,
               outdir = .outdir),
      condition = "flow",
-     optionsOde = list(atol = 1e-12, rtol = 1e-12, maxsteps = 1e7))
+     options = list(atol = 1e-12, rtol = 1e-12, maxsteps = 1e7))
 })
 
 do.call(compile, c(list(x, g, p.flow, p.lin, p.red), flow,

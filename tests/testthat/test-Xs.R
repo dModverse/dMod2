@@ -389,3 +389,13 @@ test_that("a forcing of one point is a constant", {
   expect_equal(out[, "A"], (0.1 - 2) * exp(-0.3 * times) + 2, tolerance = 1e-4,
                ignore_attr = TRUE)
 })
+
+test_that("deSolve solves take optionsSens over options over the default method", {
+  f <- dMod2:::.deSolveOptions
+  expect_identical(f(list(), list(), "lsoda"), list(method = "lsoda"))
+  expect_identical(f(list(rtol = 1e-8), list(), "lsodes"),
+                   list(method = "lsodes", rtol = 1e-8))
+  expect_identical(f(list(method = "bdf"), list(), "lsodes")$method, "bdf")
+  expect_identical(f(list(method = "bdf"), list(method = "lsoda"), "lsodes")$method,
+                   "lsoda")
+})

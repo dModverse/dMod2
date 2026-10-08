@@ -52,10 +52,10 @@ reactions <- eqnlist() |>
 
 # The optimiser can only resolve what the integrator delivers, so the tolerances
 # are set explicitly rather than left at their defaults.
-myOptionsODE <- list(atol = 1e-8, rtol = 1e-6, maxattemps = 100L, maxsteps = 1e6)
+myOptions <- list(atol = 1e-8, rtol = 1e-6, maxattemps = 100L, maxsteps = 1e6)
 model <- odemodel(reactions, modelname = "boehm_ode", compile = FALSE,
                   outdir = .outdir)
-x <- Xs(model, optionsOde = myOptionsODE, optionsSens = myOptionsODE)
+x <- Xs(model, options = myOptions)
 
 observables <- eqnvec(
   pSTAT5A_rel = "(100*pApB + 200*pApA*specC17)/(pApB + STAT5A*specC17 + 2*pApA*specC17)",

@@ -94,7 +94,7 @@ hasASA <- isTRUE(.cfg$available) &&
 mC <- odemodel(reactions, modelname = "bench_cpp", backend = "cppDE",
                derivMode = c("forward", "reverse"), compile = FALSE,
                outdir = .bdir)
-xC <- Xs(mC, optionsOde = TOL, optionsSens = TOL)
+xC <- Xs(mC, options = TOL)
 
 # The same model on the Rosenbrock stepper. Its adjoint is a different piece of
 # arithmetic: six direct solves transposed, against a corrector's implicit
@@ -102,7 +102,7 @@ xC <- Xs(mC, optionsOde = TOL, optionsSens = TOL)
 mR <- odemodel(reactions, modelname = "bench_rb4", backend = "cppDE",
                method = "rb4", derivMode = c("forward", "reverse"),
                compile = FALSE, outdir = .bdir)
-xR <- Xs(mR, optionsOde = TOL, optionsSens = TOL)
+xR <- Xs(mR, options = TOL)
 
 # The observation, error and parameter functions again, with the
 # vector-Jacobian product the reverse mode reads.
@@ -118,7 +118,7 @@ if (hasASA) {
   mS <- odemodel(reactions, modelname = "bench_sun", backend = "Sundials",
                  derivMode = c("forward", "reverse"), compile = FALSE,
                  outdir = .bdir)
-  xS <- Xs(mS, optionsOde = TOL, optionsSens = TOL)
+  xS <- Xs(mS, options = TOL)
   compile(g, e, p, xC, xR, xS, output = "bench_adjoint", cores = 12)
 } else {
   cat("SUNDIALS absent or cvode() has no reverse direction: ASA column is NA.\n")

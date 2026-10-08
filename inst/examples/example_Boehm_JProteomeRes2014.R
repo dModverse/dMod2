@@ -75,8 +75,7 @@ reactions <- eqnlist() |>
   addReaction("nucpBpB", "2*STAT5B", "k_exp_homo*nucpBpB", "pBpB export", compartment = "nuc") |>
   setCompartmentVolume(cyt = "1.4")
 
-myOptionsODE  <- list(atol = 1e-8, rtol = 1e-6, maxattemps = 100L, maxsteps = 1e6)
-myOptionsSens <- myOptionsODE
+myOptions <- list(atol = 1e-8, rtol = 1e-6, maxattemps = 100L, maxsteps = 1e6)
 
 # `derivMode = c("forward", "reverse")` compiles a fourth object beside func,
 # extended and extended2: the states in plain double with a checkpoint per step,
@@ -84,7 +83,7 @@ myOptionsSens <- myOptionsODE
 # at the bottom needs; without it that section errors and nothing else changes.
 model <- odemodel(reactions, modelname = "boehm_ode", compile = FALSE,
                   derivMode = c("forward", "reverse"), outdir = .outdir)
-x <- Xs(model, optionsOde = myOptionsODE, optionsSens = myOptionsSens)
+x <- Xs(model, options = myOptions)
 
 # Only relative quantities were measured, mixed by the isotope ratio specC17.
 observables <- eqnvec(
@@ -279,7 +278,7 @@ plot(prd(times, bestfit, deriv = FALSE), mydataL) +
 petab <- importPEtab(file.path(.petabDir, "Boehm.yaml"),
                      backend = "cppDE", cores = 4, modelname = "boehm_petab",
                      outdir = .outdir,
-                     optionsOde = myOptionsODE, optionsSens = myOptionsSens)
+                     options = myOptions)
 
 stopifnot(setequal(names(petab$bestfit), outerpars))
 chi2 <- c(hand  = attr(obj(bestfit, deriv = FALSE),       "chi2"),

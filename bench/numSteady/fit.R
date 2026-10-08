@@ -21,7 +21,7 @@ setwd(outdir)
 
 # ---- model ------------------------------------------------------------------
 x <- odemodel(m$reactions, events = m$events, modelname = "ns_x", compile = FALSE) |>
-  Xs(optionsOde = list(atol = 1e-10, rtol = 1e-8), optionsSens = list(atol = 1e-6, rtol = 1e-4))
+  Xs(options = list(atol = 1e-10, rtol = 1e-8), optionsSens = list(atol = 1e-6, rtol = 1e-4))
 g <- Y(m$observables, f = x, attach.input = FALSE, compile = FALSE, modelname = "ns_g")
 pSS <- Pimpl(m$reactions, forcings = m$forcings, compile = FALSE, modelname = "ns_ss")
 

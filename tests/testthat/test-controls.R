@@ -52,41 +52,68 @@ ctl_models <- function() {
 
 ## ---- Xs (cppDE): options and forcings -------------------------------------
 
-test_that("Xs solves with the optionsOde set through controls, defaults kept", {
+test_that("Xs solves with the options set through controls, defaults kept", {
   fx <- ctl_models()
   x <- Xs(fx$m)
   inner <- c(A = 1, k = 0.5)
   exact <- exp(-0.5 * .ctl_times)
   err <- function() max(abs(x(.ctl_times, inner, deriv = FALSE)[[1]][, "A"] - exact))
 
-  controls(x, NULL, "optionsOde") <- list(atol = 1e-12, rtol = 1e-12)
+  controls(x, NULL, "options") <- list(atol = 1e-12, rtol = 1e-12)
   expect_lt(err(), 1e-9)
-  controls(x, NULL, "optionsOde") <- list(atol = 1e-2, rtol = 1e-2)
+  controls(x, NULL, "options") <- list(atol = 1e-2, rtol = 1e-2)
   expect_gt(err(), 1e-5)
   # The control holds what was set, not the merged list.
-  expect_identical(controls(x, NULL, "optionsOde"), list(atol = 1e-2, rtol = 1e-2))
+  expect_identical(controls(x, NULL, "options"), list(atol = 1e-2, rtol = 1e-2))
 
   # A replacement names the entries it changes. The others are the defaults,
   # among them onFailure = "stop".
-  controls(x, NULL, "optionsOde") <- list(maxsteps = 2L)
+  controls(x, NULL, "options") <- list(maxsteps = 2L)
   expect_error(x(.ctl_times, inner, deriv = FALSE), "Maximum number of steps")
-  controls(x, NULL, "optionsOde") <- list(maxsteps = 2L, onFailure = "warn")
+  controls(x, NULL, "options") <- list(maxsteps = 2L, onFailure = "warn")
   expect_warning(x(.ctl_times, inner, deriv = FALSE), "Maximum number of steps")
 
-  # The sensitivity solve reads its own entry.
-  controls(x, NULL, "optionsOde") <- list()
+  # options reaches the sensitivity solve, optionsSens overrides it there.
+  controls(x, NULL, "options") <- list(maxsteps = 2L)
+  expect_error(x(.ctl_times, inner, deriv = TRUE), "Maximum number of steps")
+  controls(x, NULL, "optionsSens") <- list(maxsteps = 1e6L)
+  expect_silent(x(.ctl_times, inner, deriv = TRUE))
+  controls(x, NULL, "options") <- list()
   controls(x, NULL, "optionsSens") <- list(maxsteps = 2L)
   expect_error(x(.ctl_times, inner, deriv = TRUE), "Maximum number of steps")
   expect_silent(x(.ctl_times, inner, deriv = FALSE))
+})
+
+test_that("optionsOde is a deprecated alias of options", {
+  fx <- ctl_models()
+  inner <- c(A = 1, k = 0.5)
+  expect_warning(x <- Xs(fx$m, optionsOde = list(maxsteps = 2L)),
+                 "'optionsOde' is deprecated")
+  expect_identical(controls(x, NULL, "options"), list(maxsteps = 2L))
+  expect_error(x(.ctl_times, inner, deriv = FALSE), "Maximum number of steps")
+  expect_warning(Xs(fx$m, options = list(), optionsOde = list(rtol = 1e-8)),
+                 "'optionsOde' is deprecated")
+  expect_error(Xs(fx$m, options = list(rtol = 1e-8), optionsOde = list()),
+               "give 'options' only")
+
+  expect_warning(controls(x, NULL, "optionsOde") <- list(),
+                 "'optionsOde' is deprecated")
+  expect_identical(controls(x, NULL, "options"), list())
+  expect_warning(expect_identical(controls(x, NULL, "optionsOde"), list()),
+                 "'optionsOde' is deprecated")
+
+  expect_warning(xf <- Xf(fx$m, optionsOde = list(maxsteps = 2L)),
+                 "'optionsOde' is deprecated")
+  expect_error(xf(.ctl_times, inner), "Maximum number of steps")
 })
 
 test_that("Xs warns about an unknown option set through controls, once", {
   fx <- ctl_models()
   x <- Xs(fx$m)
   inner <- c(A = 1, k = 0.5)
-  controls(x, NULL, "optionsOde") <- list(rtol = 1e-8, bogus = 1)
+  controls(x, NULL, "options") <- list(rtol = 1e-8, bogus = 1)
   expect_warning(x(.ctl_times, inner, deriv = FALSE),
-                 "optionsOde: Ignoring unknown option\\(s\\): bogus")
+                 "options: Ignoring unknown option\\(s\\): bogus")
   expect_no_warning(x(.ctl_times, inner, deriv = FALSE))
 })
 
@@ -136,7 +163,7 @@ test_that("Xf keeps its forcings and options as given, too", {
   expect_equal(xf(.ctl_times, inner)[[1]][, "A"], 2 * a1, tolerance = 1e-5)
 
   # A partial replacement keeps the default onFailure = "stop".
-  controls(xf, NULL, "optionsOde") <- list(maxsteps = 2L)
+  controls(xf, NULL, "options") <- list(maxsteps = 2L)
   expect_error(xf(.ctl_times, inner), "Maximum number of steps")
 })
 
@@ -148,6 +175,20 @@ test_that("optionsReverse set later meets the check the constructor makes", {
   expect_error(xf(.ctl_times, c(A = 0, k = 1)), "optionsReverse")
   controls(xf, NULL, "optionsReverse") <- NULL
   expect_silent(xf(.ctl_times, c(A = 0, k = 1)))
+})
+
+test_that("optionsReverse warns about an unknown entry, once", {
+  fx <- ctl_models()
+  expect_warning(x <- Xs(fx$m, optionsReverse = list(refine = TRUE, gradtoll = 1)),
+                 "optionsReverse: Ignoring unknown option\\(s\\): gradtoll")
+  k <- .ctl_kernel(x)
+  expect_true(environment(k)$sweepCtl()$refine)
+
+  controls(x, NULL, "optionsReverse") <- list(refin = TRUE)
+  expect_warning(ctl <- environment(k)$sweepCtl(),
+                 "optionsReverse: Ignoring unknown option\\(s\\): refin")
+  expect_null(ctl)
+  expect_no_warning(environment(k)$sweepCtl())
 })
 
 test_that("sensErrCon reaches the forward solver from optionsSens", {
@@ -177,8 +218,8 @@ test_that("sensErrCon reaches the forward solver from optionsSens", {
   attr(k, "vjpfn")(.ctl_times, p, NULL, w)
   expect_identical(seen, list(NULL, FALSE, NULL, NULL))
 
-  # A value solve takes no sensErrCon, so optionsOde does not know it.
-  expect_warning(controls(x, NULL, "optionsOde") <- list(sensErrCon = FALSE),
+  # sensErrCon belongs to optionsSens alone, so options does not know it.
+  expect_warning(controls(x, NULL, "options") <- list(sensErrCon = FALSE),
                  NA)
   expect_warning(k(.ctl_times, p, deriv = FALSE), "sensErrCon")
 })
@@ -201,7 +242,7 @@ test_that("Xs keeps only user options in controls", {
   fx <- ctl_models()
   x <- Xs(fx$m)
   capture.output(nm <- controls(x))
-  expect_setequal(nm[[1]], c("forcings", "names", "optionsOde", "optionsSens",
+  expect_setequal(nm[[1]], c("forcings", "names", "options", "optionsSens",
                              "optionsReverse"))
 })
 
@@ -247,7 +288,7 @@ test_that("attach.input set through controls reaches both sweeps", {
   controls(pa, NULL, "attach.input") <- TRUE
 
   tight <- list(atol = 1e-11, rtol = 1e-11)
-  x <- Xs(fx$m, optionsOde = tight, optionsSens = tight)
+  x <- Xs(fx$m, options = tight)
   prd <- fx$g * x * pa
   pars <- c(A_log = 0, k = 0.5, s = 2)
   data <- as.datalist(data.frame(
@@ -355,17 +396,17 @@ test_that("controls on g * x * p reach the leaves of the composition", {
 
   capture.output(nm <- controls(gxp))
   expect_identical(names(nm), c("obsfn", "prdfn", "parfn C1", "parfn C2"))
-  expect_true("optionsOde" %in% nm$prdfn)
+  expect_true("options" %in% nm$prdfn)
   capture.output(nm <- controls(gxp, "C2"))
   expect_identical(names(nm), c("obsfn", "prdfn", "parfn C2"))
 
   # Set on the composition, seen on the leaf and used by the composition.
-  controls(gxp, NULL, "optionsOde") <- list(maxsteps = 2L, onFailure = "stop")
-  expect_identical(controls(x, NULL, "optionsOde"),
+  controls(gxp, NULL, "options") <- list(maxsteps = 2L, onFailure = "stop")
+  expect_identical(controls(x, NULL, "options"),
                    list(maxsteps = 2L, onFailure = "stop"))
   expect_error(gxp(.ctl_times, pars, deriv = FALSE), "did not complete")
-  controls(x, NULL, "optionsOde") <- list()
-  expect_identical(controls(gxp, "C1", "optionsOde"), list())
+  controls(x, NULL, "options") <- list()
+  expect_identical(controls(gxp, "C1", "options"), list())
 
   # A name several factors share is set on every one that answers the
   # condition: the observation function, which answers all of them, and the

@@ -139,6 +139,13 @@ controls <- function(x, ...) {
   condition
 }
 
+# A control under its deprecated name answers under the current one.
+.controlAlias <- function(name) {
+  if (!identical(name, "optionsOde")) return(name)
+  warning("controls: 'optionsOde' is deprecated, use 'options'.", call. = FALSE)
+  "options"
+}
+
 .lscontrolsFn <- function(x, condition = NULL) {
 
   leaves <- .fnControlLeaves(x, condition)
@@ -178,6 +185,7 @@ controls.objfn <- function(x, name = NULL, ...) {
 controls.fn <- function(x, condition = NULL, name = NULL, ...) {
 
   condition <- .controlCondition(x, condition)
+  name <- .controlAlias(name)
   if (is.null(name)) return(.lscontrolsFn(x, condition))
 
   tg <- .fnControlLeaves(x, condition, name)
@@ -211,6 +219,7 @@ controls.fn <- function(x, condition = NULL, name = NULL, ...) {
 #' @rdname controls
 "controls<-.fn" <- function(x, condition = NULL, name, ..., value) {
   condition <- .controlCondition(x, condition)
+  name <- .controlAlias(name)
   tg <- .fnControlLeaves(x, condition, name)
   if (!length(tg)) {
     avail <- unique(unlist(lapply(.fnControlLeaves(x, condition),

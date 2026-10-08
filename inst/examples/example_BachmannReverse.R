@@ -115,9 +115,9 @@ mASA <- if (hasASA)
            derivMode = c("forward", "reverse"), compile = FALSE,
            outdir = .outdir) else NULL
 
-xBDF <- Xs(mBDF, optionsOde = TOL, optionsSens = TOL)
-xRB4 <- Xs(mRB4, optionsOde = TOL, optionsSens = TOL)
-xASA <- if (hasASA) Xs(mASA, optionsOde = TOL, optionsSens = TOL) else NULL
+xBDF <- Xs(mBDF, options = TOL)
+xRB4 <- Xs(mRB4, options = TOL)
+xASA <- if (hasASA) Xs(mASA, options = TOL) else NULL
 
 # One compile call for all of them, so the sources share a build.
 if (hasASA) {
@@ -235,7 +235,7 @@ print(head(pred[[cond]][, 1:4], 3))
 # `optionsReverse$refine` holds each step of the backward sweep to an error
 # test; `gradtol` adds the step's share of the gradient to it.
 # –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
-xR   <- Xs(mBDF, optionsOde = TOL, optionsSens = TOL,
+xR   <- Xs(mBDF, options = TOL,
            optionsReverse = list(refine = TRUE, gradtol = 1e-6))
 objR <- normL2(mydataL, g * xR * p, e)
 g_r  <- objR(pars, deriv = TRUE, sweep = "reverse")$gradient

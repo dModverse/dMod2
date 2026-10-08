@@ -70,8 +70,7 @@ Only relative quantities were measured, mixed by the isotope ratio `specC17`. Th
 ```{r model}
 model <- odemodel(reactions, modelname = "boehm_ode", compile = FALSE, outdir = outdir)
 x <- Xs(model, 
-        optionsOde = list(atol = 1e-8, rtol = 1e-6, maxattemps = 100L, maxsteps = 1e6), 
-        optionsSens = list(atol = 1e-8, rtol = 1e-6, maxattemps = 100L, maxsteps = 1e6))
+        options = list(atol = 1e-8, rtol = 1e-6, maxattemps = 100L, maxsteps = 1e6))
 
 observables <- eqnvec(
   pSTAT5A_rel = "(100*pApB + 200*pApA*specC17)/(pApB + STAT5A*specC17 + 2*pApA*specC17)",

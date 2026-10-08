@@ -51,7 +51,7 @@
         addEvent(var = "A", time = "t_A_thres", value = "1", root = "A - A_thres"),
       estimate = estimate
     ) 
-  x <- model %>% Xs(optionsOde = list(method = "lsoda"), optionsSens = list(method = "lsoda", rtol = 1e-10, atol = 1e-10))
+  x <- model %>% Xs(optionsSens = list(method = "lsoda", rtol = 1e-10, atol = 1e-10))
   
   innerpars <- getParameters(x)
   
@@ -104,7 +104,7 @@
         addEvent(var = "Fcure", time = "tPLcure", value = "0", root = "PL - PLcure"),
       estimate = estimate
     ) 
-  x <- model2 %>% Xs(optionsOde = list(method = "lsoda"), optionsSens = list(method = "lsoda", rtol = 1e-10, atol = 1e-10))
+  x <- model2 %>% Xs(optionsSens = list(method = "lsoda", rtol = 1e-10, atol = 1e-10))
   
   innerpars <- getParameters(x)
   

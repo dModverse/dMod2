@@ -73,8 +73,7 @@ d2_models <- local({
 # ---- Xs -------------------------------------------------------------------
 
 test_that("Xs.cppDE deriv2 reproduces linear-decay analytical Hessian", {
-  xfn <- Xs(d2_models()$m, optionsOde = list(atol = 1e-10, rtol = 1e-10),
-            optionsSens = list(atol = 1e-10, rtol = 1e-10))
+  xfn <- Xs(d2_models()$m, options = list(atol = 1e-10, rtol = 1e-10))
 
   times <- c(0.0, 0.5, 1.0, 1.5)
   pars <- c(x = 2.0, k = 0.7)
@@ -109,8 +108,7 @@ test_that("odemodel(deriv2 = TRUE) emits <m>, <m>_s, <m>_s2 and Xs.cppDE dispatc
   expect_false(isTRUE(attr(m$extended,  "deriv2")))
   expect_true(isTRUE(attr(m$extended2, "deriv2")))
 
-  xfn <- Xs(m, optionsOde = list(atol = 1e-12, rtol = 1e-12),
-            optionsSens = list(atol = 1e-12, rtol = 1e-12))
+  xfn <- Xs(m, options = list(atol = 1e-12, rtol = 1e-12))
   times <- c(0.0, 0.5, 1.0)
   pars <- c(x = 2.0, k = 0.7)
   r1 <- xfn(times, pars, deriv = TRUE, deriv2 = FALSE)[[1]]
@@ -281,8 +279,7 @@ test_that("Pimpl(deriv2 = FALSE) refuses deriv2 = TRUE at call time", {
 
 test_that("(Y * Xs)(times, pars, deriv2 = TRUE) chain-rule matches analytical", {
   d <- d2_models()
-  xfn <- Xs(d$m, optionsOde = list(atol = 1e-10, rtol = 1e-10),
-            optionsSens = list(atol = 1e-10, rtol = 1e-10))
+  xfn <- Xs(d$m, options = list(atol = 1e-10, rtol = 1e-10))
   prd <- d$yobs * xfn
 
   times <- c(0.0, 0.5, 1.0)
@@ -354,7 +351,7 @@ test_that("normL2 gradient is identical for deriv2 = FALSE and deriv2 = TRUE", {
   d <- d2_models()
   ode_opts <- list(atol = 1e-12, rtol = 1e-12)
   xfn <- Xs(d$m, condition = "C1",
-            optionsOde = ode_opts, optionsSens = ode_opts)
+            options = ode_opts)
   prd <- d$yobs * xfn * d$plog
 
   times_d <- c(0.5, 1.0, 1.5)
@@ -393,7 +390,7 @@ test_that("normL2(deriv2 = TRUE) adds residual times d^2 pred / sigma^2", {
   d <- d2_models()
   ode_opts <- list(atol = 1e-12, rtol = 1e-12)
   xfn <- Xs(d$m, condition = "C1",
-            optionsOde = ode_opts, optionsSens = ode_opts)
+            options = ode_opts)
   prd <- d$yobs * xfn * d$pid
 
   times_d <- c(0.5, 1.0, 1.5)

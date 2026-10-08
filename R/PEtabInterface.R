@@ -1716,12 +1716,12 @@ readPetabTables <- function(yamlPath) {
 # chosen backend. `compile` is forwarded to cOde::funC / cppDE::cppODE so
 # the importer can defer linking until a single batched compile(). `events`
 # (an eventlist or NULL) is what `importSbml()` reads from <event> blocks.
-# `optionsOde` / `optionsSens` reach `Xs()` untouched; NULL keeps its defaults.
+# `options` / `optionsSens` reach `Xs()` untouched; NULL keeps its defaults.
 .petab_build_odemodel <- function(reactions, backend,
                                   modelname = "petab_model",
                                   compile = TRUE,
                                   events = NULL,
-                                  optionsOde = NULL, optionsSens = NULL,
+                                  options = NULL, optionsSens = NULL,
                                   sparse = NULL,
                                   deriv = TRUE, derivMode = "forward",
                                   outdir = .dmodOutdir()) {
@@ -1739,7 +1739,7 @@ readPetabTables <- function(yamlPath) {
   if (!is.null(sparse) && backend != "deSolve") args$sparse <- sparse
   m <- do.call(odemodel, args)
   opts <- list(m)
-  if (!is.null(optionsOde))  opts$optionsOde  <- optionsOde
+  if (!is.null(options))     opts$options     <- options
   if (!is.null(optionsSens)) opts$optionsSens <- optionsSens
   list(odemodel = m, x = do.call(Xs, opts))
 }
@@ -1832,7 +1832,7 @@ readPetabTables <- function(yamlPath) {
                                       sub_cond_prefix = "",
                                       start_times = NULL,
                                       switches = NULL,
-                                      optionsOde = NULL, optionsSens = NULL,
+                                      options = NULL, optionsSens = NULL,
                                       sparse = NULL,
                                       deriv = TRUE, derivMode = "forward", cores = 1L,
                                       outdir = .dmodOutdir()) {
@@ -1985,7 +1985,7 @@ readPetabTables <- function(yamlPath) {
                                     modelname = paste0(modelname, "_ode"),
                                     compile = compile,
                                     events = all_events,
-                                    optionsOde = optionsOde,
+                                    options = options,
                                     optionsSens = optionsSens,
                                     sparse = sparse,
                                     deriv = deriv, derivMode = derivMode,
@@ -2194,10 +2194,10 @@ readPetabTables <- function(yamlPath) {
 #'   equations, which is much cheaper to generate and compile. The objective
 #'   then returns its value only, so use it when the likelihood is to be
 #'   evaluated rather than optimised.
-#' @param optionsOde,optionsSens Optional lists forwarded to [Xs()] as solver
-#'   settings for the states and their sensitivities. `NULL` keeps the
-#'   backend's defaults, which are looser than a benchmark problem usually
-#'   needs.
+#' @param options,optionsSens Optional lists forwarded to [Xs()] as its
+#'   solver options for every solve and the overrides for the solves with
+#'   sensitivities. `NULL` keeps the backend's defaults, which are looser than
+#'   a benchmark problem usually needs.
 #' @param sparse `NULL` (default) lets the cppDE or Sundials backend choose a
 #'   sparse (KLU) or dense linear solver from the Jacobian pattern; `TRUE` or
 #'   `FALSE` pins it.
@@ -2221,13 +2221,18 @@ readPetabTables <- function(yamlPath) {
 #'   metadata used by the exporter (`fixed`, `inits`, `modelID`,
 #'   `source_yaml`, `sub_cond_map`, `obs_meta`, `param_meta`) lives on
 #'   `attr(., "petab_meta")`.
+#' @param optionsOde Deprecated name of `options`, accepted with a warning.
 #' @export
 #' @example inst/examples/PEtabInterface.R
 importPEtab <- function(yamlPath, backend,
                         compile = TRUE, cores = 1L, modelname = NULL,
                         deriv = TRUE, derivMode = "forward",
-                        optionsOde = NULL, optionsSens = NULL,
-                        sparse = NULL, outdir = .dmodOutdir()) {
+                        options = NULL, optionsSens = NULL,
+                        sparse = NULL, outdir = .dmodOutdir(), optionsOde = NULL) {
+
+  if (!is.null(optionsOde))
+    options <- .optionsOdeAlias(options, list(optionsOde = optionsOde),
+                                "importPEtab")
 
   cores <- as.integer(cores)
   if (length(cores) != 1L || is.na(cores) || cores < 1L)
@@ -2331,7 +2336,7 @@ importPEtab <- function(yamlPath, backend,
       sub_cond_prefix  = sc_prefix,
       start_times      = tables$startTimes,
       switches         = tables$switches,
-      optionsOde       = optionsOde,
+      options          = options,
       optionsSens      = optionsSens,
       sparse           = sparse,
       deriv            = deriv,

@@ -92,11 +92,10 @@ red.phys$trafo
 
 # The ODE is integrated in linear coordinates. Both parameter trafos switch to
 # log10 after the reduction, since its chart is certified positive.
-myOptionsODE  <- list(atol = 1e-12, rtol = 1e-12, maxsteps = 1e7)
-myOptionsSens <- myOptionsODE
+myOptions <- list(atol = 1e-12, rtol = 1e-12, maxsteps = 1e7)
 
 model <- odemodel(f, modelname = "battery_ode", compile = FALSE, outdir = .outdir)
-x <- Xs(model, condition = "oven", optionsOde = myOptionsODE, optionsSens = myOptionsSens)
+x <- Xs(model, condition = "oven", options = myOptions)
 g <- Y(observables, f = x, attach.input = TRUE,
        modelname = "battery_obs", compile = FALSE, outdir = .outdir)
 
@@ -123,7 +122,7 @@ flow <- lapply(seq_along(res$symmetries), function(i) {
               deriv = FALSE, modelname = paste0("battery_flow", i), compile = FALSE,
               outdir = .outdir),
      condition = "flow",
-     optionsOde = list(atol = 1e-12, rtol = 1e-12, maxsteps = 1e7))
+     options = list(atol = 1e-12, rtol = 1e-12, maxsteps = 1e7))
 })
 
 do.call(compile, c(list(x, g, p.full, p.red), flow,

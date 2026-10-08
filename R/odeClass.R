@@ -105,7 +105,7 @@ print.odemodel <- function(x, ...) {
 #'   [cOde::funC()], according to `backend`. Among them:
 #'   * `method`: the integration method, `"bdf"` (default), `"adams"`,
 #'     `"rb4"` or `"tsit5"` on `cppDE`; `"bdf"` or `"adams"` on `Sundials`.
-#'     On `deSolve` it is `optionsOde$method` of [Xs()] instead.
+#'     On `deSolve` it is `options$method` of [Xs()] instead.
 #'   * `rootfunc`: `"equilibrate"` or expressions whose roots end the
 #'     integration (`cppDE`, `Sundials`).
 #'   * `includeTimeZero`: integrate from 0 rather than from the first

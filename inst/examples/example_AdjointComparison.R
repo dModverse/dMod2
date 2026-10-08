@@ -93,7 +93,7 @@ importAt <- function(tol, tag = "cmp") {
   importPEtab(.yaml, backend = "cppDE", cores = 6,
               modelname = paste0("adjcmp_", tag),
               derivMode = c("forward", "reverse"),
-              optionsOde = o, optionsSens = o, outdir = .outdir)
+              options = o, outdir = .outdir)
 }
 
 
@@ -164,7 +164,7 @@ if (.hasASA) {
   mS <- odemodel(pet$reactions, modelname = "adjcmp_sun", backend = "Sundials",
                  derivMode = c("forward", "reverse"), compile = TRUE,
                  outdir = .outdir)
-  objS <- mkobj(Xs(mS, optionsOde = o8, optionsSens = o8))
+  objS <- mkobj(Xs(mS, options = o8))
 } else {
   cat("   ASA skipped: no SUNDIALS, or cvode() has no reverse direction.\n")
 }

@@ -18,14 +18,15 @@
 #'   returns all states followed by the forcings.
 #' @param condition `NULL` for a prediction valid in every condition, or the
 #'   name of the condition it belongs to.
-#' @param optionsOde Named list of solver options for the solves without
-#'   sensitivities. See section Solver options.
+#' @param options Named list of solver options for every solve. See section
+#'   Solver options.
 #' @param optionsSens Named list of solver options for the solves with
-#'   sensitivities. See section Solver options.
+#'   sensitivities, overriding the entries of `options` it names. See section
+#'   Solver options.
 #' @param optionsReverse Named list controlling the backward pass of
 #'   `sweep = "reverse"`. Needs `backend = "cppDE"` and a model built with
 #'   `derivMode = "reverse"`. `NULL`, the default, sweeps the step grid of the
-#'   value pass. Entries:
+#'   value pass. An unknown entry is ignored with a warning. Entries:
 #'   * `refine`: `TRUE` holds each step of the sweep to the error test of the
 #'     CVODES backward problem under the tolerances of the solve, see
 #'     [cppDE::adjointControl()].
@@ -34,12 +35,13 @@
 #' @param fcontrol `deSolve` backend only. List with the interpolation
 #'   settings of the forcings, `method`, `rule`, `f` and `ties` as in
 #'   [stats::approxfun()], passed to [deSolve::ode()] as its `fcontrol`.
-#' @param ... Not used.
+#' @param ... `optionsOde`, the deprecated name of `options`, is still
+#'   accepted with a warning.
 #'
 #' @section Solver options:
-#' On the `cppDE` and `Sundials` backends `optionsOde` and `optionsSens` take
-#' the entries below and pass them to [cppDE::solveODE()]. An entry not given
-#' keeps its default; an unknown entry is ignored with a warning.
+#' On the `cppDE` and `Sundials` backends the lists take the entries below and
+#' pass them to [cppDE::solveODE()]. An entry not given keeps its default; an
+#' unknown entry is ignored with a warning.
 #'
 #' * `atol`, `rtol`: absolute and relative error tolerance, default `1e-6`.
 #' * `maxsteps`: largest number of steps of one solve, default `1e6`.
@@ -58,16 +60,18 @@
 #'   the error test, which is cheaper and gives less accurate sensitivities;
 #'   default `TRUE`.
 #'
-#' `optionsOde` applies to `deriv = FALSE` and to the value and backward pass
-#' of `sweep = "reverse"`, `optionsSens` to `deriv = TRUE` and to
-#' `sweep = "reverse"` with `deriv2 = TRUE`. A fit with the default forward
-#' sweep therefore runs under `optionsSens`. The integration
-#' method is fixed when the model is built, `odemodel(..., method = )`.
+#' `options` applies to every solve. The solves with sensitivities, those of
+#' `deriv = TRUE` and of `sweep = "reverse"` with `deriv2 = TRUE`, take
+#' `optionsSens` merged over `options`. A fit with the default forward sweep
+#' therefore runs under `optionsSens`, and the value and backward pass of
+#' `sweep = "reverse"` under `options` alone. The integration method is fixed
+#' when the model is built, `odemodel(..., method = )`.
 #'
-#' On the `deSolve` backend both lists are arguments of [deSolve::ode()],
-#' among them `method` (default `"lsoda"` for `optionsOde` and `"lsodes"` for
-#' `optionsSens`), `atol`, `rtol`, `maxsteps` and `hini`. A list given there
-#' replaces the default, so it names `method` if it needs one.
+#' On the `deSolve` backend the entries of both lists are arguments of
+#' [deSolve::ode()], among them `method`, `atol`, `rtol`, `maxsteps` and
+#' `hini`, merged the same way. `method` defaults to `"lsoda"` for the solves
+#' without sensitivities and to `"lsodes"` for those with, unless `options` or
+#' `optionsSens` names it.
 #'
 #' @section Forcings:
 #' On the `cppDE` and `Sundials` backends each forcing is the monotone cubic
@@ -88,9 +92,10 @@
 #' `forcings`, `names` and the solver options are kept, as given, in the
 #' controls of the returned function and read at every solve, so [controls()]
 #' can change them later; on the `deSolve` backend `events` and `fcontrol` as
-#' well. On the `cppDE` and `Sundials` backends a replaced `optionsOde` or
-#' `optionsSens` is merged over the defaults, so it only needs the entries it
-#' changes.
+#' well. The controls are named after the arguments, `options`, `optionsSens`
+#' and `optionsReverse`; `optionsOde` is accepted as a deprecated alias of
+#' `options`. A replaced list is merged as described in section Solver
+#' options, so it only needs the entries it changes.
 #'
 #' @return A [prdfn], called as `x(times, pars, fixed = NULL, deriv = TRUE,
 #'   deriv2 = FALSE)`. It returns a [prdlist] with one [prdframe] per
@@ -111,9 +116,10 @@ Xs <- function(odemodel, ...) {
 #' @export
 #' @rdname Xs
 Xs.deSolve <- function(odemodel, forcings = NULL, events = NULL, names = NULL, condition = NULL,
-                       optionsOde = list(method = "lsoda"), optionsSens = list(method = "lsodes"),
+                       options = list(), optionsSens = list(),
                        fcontrol = NULL, ...) {
-  
+
+  options <- .optionsOdeAlias(options, list(...), "Xs")
   func <- odemodel$func
   extended <- odemodel$extended
   if (is.null(extended)) warning("Element 'extended' empty. ODE model does not contain sensitivities.")
@@ -153,7 +159,7 @@ Xs.deSolve <- function(odemodel, forcings = NULL, events = NULL, names = NULL, c
     forcings = myforcings,
     events = myevents,
     names = names,
-    optionsOde = optionsOde,
+    options = options,
     optionsSens = optionsSens,
     fcontrol = myfcontrol
   )
@@ -170,8 +176,8 @@ Xs.deSolve <- function(odemodel, forcings = NULL, events = NULL, names = NULL, c
     
     forcings <- controls$forcings
     events <- controls$events
-    optionsOde <- controls$optionsOde
-    optionsSens <- controls$optionsSens
+    optsOde <- .deSolveOptions(controls$options, list(), "lsoda")
+    optsSens <- .deSolveOptions(controls$options, controls$optionsSens, "lsodes")
     fcontrol <- controls$fcontrol
     names <- controls$names
     
@@ -191,7 +197,7 @@ Xs.deSolve <- function(odemodel, forcings = NULL, events = NULL, names = NULL, c
       if (!is.null(forcings)) forc <- setForcings(func, forcings) else forc <- NULL
       out <- suppressWarnings(do.call(odeC, c(list(y = unclass(yini), times = times, func = func, 
                                                    parms = mypars, forcings = forc, 
-                                                   events = list(data = events), fcontrol = fcontrol), optionsOde)))
+                                                   events = list(data = events), fcontrol = fcontrol), optsOde)))
       out <- submatrix(out, cols = c("time", names))
       
     } else {
@@ -201,7 +207,7 @@ Xs.deSolve <- function(odemodel, forcings = NULL, events = NULL, names = NULL, c
       outSens <- suppressWarnings(do.call(odeC, c(list(y = c(unclass(yini), yiniSens), times = times, 
                                                        func = extended, parms = mypars, 
                                                        forcings = forc, fcontrol = fcontrol,
-                                                       events = list(data = events)), optionsSens)))
+                                                       events = list(data = events)), optsSens)))
       
       out <- submatrix(outSens, cols = c("time", names))
 
@@ -279,13 +285,31 @@ Xs.deSolve <- function(odemodel, forcings = NULL, events = NULL, names = NULL, c
 }
 
 # Solver options as given, merged over the defaults, warning about any name
-# the solver does not know.
-.cppdeOptions <- function(options, defaults, label) {
+# outside `known`.
+.cppdeOptions <- function(options, defaults, label, known = names(defaults)) {
   options <- as.list(options)
-  bad <- setdiff(names(options), names(defaults))
+  bad <- setdiff(names(options), known)
   if (length(bad) > 0)
     warning(sprintf("%s: Ignoring unknown option(s): %s", label, paste(bad, collapse = ", ")))
   modifyList(defaults, options)
+}
+
+# The arguments of deSolve::ode() for one solve: `sens` merged over `options`,
+# merged over the backend's default method.
+.deSolveOptions <- function(options, sens, method) {
+  modifyList(modifyList(list(method = method), as.list(options)), as.list(sens))
+}
+
+# `optionsOde`, the former name of `options`, given in the dots of a
+# constructor. Taken with a warning; given together with `options` it is an
+# error.
+.optionsOdeAlias <- function(options, dots, label) {
+  if (!"optionsOde" %in% names(dots)) return(options)
+  if (length(options))
+    stop(label, ": give 'options' only; 'optionsOde' is its deprecated name.",
+         call. = FALSE)
+  warning(label, ": 'optionsOde' is deprecated, use 'options'.", call. = FALSE)
+  dots$optionsOde
 }
 
 # A cppDE leaf keeps its forcings and solver options in `controls` the way the
@@ -310,8 +334,10 @@ Xs.deSolve <- function(odemodel, forcings = NULL, events = NULL, names = NULL, c
 #' @export
 #' @rdname Xs
 Xs.cppDE <- function(odemodel, forcings = NULL, events = NULL, names = NULL, condition = NULL,
-                      optionsOde = list(), optionsSens = list(),
+                      options = list(), optionsSens = list(),
                       optionsReverse = NULL, ...) {
+
+  options <- .optionsOdeAlias(options, list(...), "Xs")
 
   # Derived at every solve from what `controls` holds; derived here as well,
   # which checks the arguments and warns about unknown options when given.
@@ -325,10 +351,17 @@ Xs.cppDE <- function(odemodel, forcings = NULL, events = NULL, names = NULL, con
   optionsDefault <- list(atol = 1e-6, rtol = 1e-6, maxattemps = 50L, maxsteps = 1e6L,
                          hini = 0, roottol = 1e-6, maxroot = 1L,
                          onFailure = "stop", traceFile = NULL)
-  sensDefault <- c(optionsDefault, list(sensErrCon = TRUE))
-  odeOf  <- .derivedControl(function(o) .cppdeOptions(o, optionsDefault, "optionsOde"))
-  sensOf <- .derivedControl(function(o) .cppdeOptions(o, sensDefault, "optionsSens"))
-  odeOf(optionsOde); sensOf(optionsSens)
+  sensKnown <- c(names(optionsDefault), "sensErrCon")
+  odeOf <- .derivedControl(function(o) .cppdeOptions(o, optionsDefault, "options"))
+  # `o` is list(options, optionsSens); the second is merged over the first.
+  sensOf <- .derivedControl(function(o)
+    .cppdeOptions(o[[2L]], c(odeOf(o[[1L]]), list(sensErrCon = TRUE)),
+                  "optionsSens", sensKnown))
+  sensOpts <- function() sensOf(list(controls$options, controls$optionsSens))
+  revOf <- .derivedControl(function(o)
+    if (is.null(o)) NULL
+    else .cppdeOptions(o, list(refine = FALSE, gradtol = NULL), "optionsReverse"))
+  odeOf(options); sensOf(list(options, optionsSens)); revOf(optionsReverse)
 
   func <- odemodel$func
   extended <- odemodel$extended
@@ -353,7 +386,7 @@ Xs.cppDE <- function(odemodel, forcings = NULL, events = NULL, names = NULL, con
   controls <- list(
     forcings = forcings,
     names = names,
-    optionsOde = optionsOde,
+    options = options,
     optionsSens = optionsSens,
     optionsReverse = optionsReverse
   )
@@ -372,7 +405,7 @@ Xs.cppDE <- function(odemodel, forcings = NULL, events = NULL, names = NULL, con
       stop("Xs: 'optionsReverse' checks the native backward pass. It needs ",
            "odemodel(backend = \"cppDE\", derivMode = c(\"forward\", \"reverse\")); ",
            "the Sundials backend runs its own step-size control.", call. = FALSE)
-    o
+    revOf(o)
   }
   reverseOpts()
 
@@ -477,7 +510,7 @@ Xs.cppDE <- function(odemodel, forcings = NULL, events = NULL, names = NULL, con
   # sensErrCon of a solve with tangents.
   solveOpts <- function(deriv, sec = NULL) {
     reverseOpts()
-    o <- if (deriv) sensOf(controls$optionsSens) else odeOf(controls$optionsOde)
+    o <- if (deriv) sensOpts() else odeOf(controls$options)
     out <- list(abstol = o$atol, reltol = o$rtol, maxattemps = o$maxattemps,
                 maxsteps = o$maxsteps, hini = o$hini, roottol = o$roottol,
                 maxroot = o$maxroot, onFailure = o$onFailure, traceFile = o$traceFile)
@@ -485,7 +518,7 @@ Xs.cppDE <- function(odemodel, forcings = NULL, events = NULL, names = NULL, con
     out
   }
   # sensErrCon of a forward solve.
-  sensSec <- function() isTRUE(sensOf(controls$optionsSens)$sensErrCon)
+  sensSec <- function() isTRUE(sensOpts()$sensErrCon)
 
   # Second order forward exists only where it was built, and only on cppDE:
   # Sundials provides first order both ways, deSolve forward alone. Saying which
@@ -833,12 +866,15 @@ Xs.cppDE <- function(odemodel, forcings = NULL, events = NULL, names = NULL, con
 #'
 #' @param odemodel An [odemodel()]. Its backend decides which method runs.
 #' @param forcings,events,condition As in [Xs()].
-#' @param optionsOde Named list of solver options, as `optionsOde` of [Xs()].
+#' @param options Named list of solver options, as `options` of [Xs()]; see
+#'   its section Solver options. On the `deSolve` backend `method` defaults to
+#'   `"lsoda"`.
 #' @param fcontrol `deSolve` backend only, as in [Xs()].
-#' @param ... Not used.
+#' @param ... `optionsOde`, the deprecated name of `options`, is still
+#'   accepted with a warning.
 #'
 #' @return A [prdfn], called as `x(times, pars, fixed = NULL)`, returning a
-#'   [prdlist] without derivatives. `forcings` and `optionsOde` can be changed
+#'   [prdlist] without derivatives. `forcings` and `options` can be changed
 #'   with [controls()].
 #' @seealso [Xs()]
 #' @export
@@ -849,7 +885,9 @@ Xf <- function(odemodel, ...) {
 #' @export
 #' @rdname Xf
 Xf.deSolve <- function(odemodel, forcings = NULL, events = NULL, condition = NULL,
-                       optionsOde = list(method = "lsoda"), fcontrol = NULL, ...) {
+                       options = list(), fcontrol = NULL, ...) {
+
+  options <- .optionsOdeAlias(options, list(...), "Xf")
 
   func <- odemodel$func
 
@@ -865,7 +903,7 @@ Xf.deSolve <- function(odemodel, forcings = NULL, events = NULL, condition = NUL
   controls <- list(
     forcings = myforcings,
     events = myevents,
-    optionsOde = optionsOde,
+    options = options,
     fcontrol = myfcontrol
   )
 
@@ -876,7 +914,7 @@ Xf.deSolve <- function(odemodel, forcings = NULL, events = NULL, condition = NUL
 
     events <- controls$events
     forcings <- controls$forcings
-    optionsOde <- controls$optionsOde
+    opts <- .deSolveOptions(controls$options, list(), "lsoda")
     fcontrol <- controls$fcontrol
 
     # Xf has no sensitivities, so fixed/free collapses to a single pars vector.
@@ -891,7 +929,7 @@ Xf.deSolve <- function(odemodel, forcings = NULL, events = NULL, condition = NUL
     out <- suppressWarnings(do.call(odeC, c(list(y = yini, times = times, func = func,
                                                  parms = mypars, forcings = forc,
                                                  events = list(data = events),
-                                                 fcontrol = fcontrol), optionsOde)))
+                                                 fcontrol = fcontrol), opts)))
 
     prdframe(out, deriv = NULL, parameters = pars)
   }
@@ -911,7 +949,9 @@ Xf.deSolve <- function(odemodel, forcings = NULL, events = NULL, condition = NUL
 # Xf is the no-derivative prediction, so it has no vjp either -- not an
 # omission, the point of it. A chain that needs a gradient uses Xs().
 Xf.cppDE <- function(odemodel, forcings = NULL, events = NULL, condition = NULL,
-                      optionsOde = list(), ...) {
+                      options = list(), ...) {
+
+  options <- .optionsOdeAlias(options, list(...), "Xf")
 
   # `controls` keeps the arguments as given; the solver's forms are derived
   # from them at every solve, and here, which checks them once when given.
@@ -924,13 +964,13 @@ Xf.cppDE <- function(odemodel, forcings = NULL, events = NULL, condition = NULL,
   optionsDefault <- list(atol = 1e-6, rtol = 1e-6, maxattemps = 50L, maxsteps = 1e6L,
                          hini = 0, roottol = 1e-6, maxroot = 1L,
                          onFailure = "stop", traceFile = NULL)
-  odeOf <- .derivedControl(function(o) .cppdeOptions(o, optionsDefault, "optionsOde"))
-  odeOf(optionsOde)
+  odeOf <- .derivedControl(function(o) .cppdeOptions(o, optionsDefault, "options"))
+  odeOf(options)
 
   func <- odemodel$func
   paramNames <- c(attr(func, "variables"), attr(func, "parameters"))
 
-  controls <- list(forcings = forcings, optionsOde = optionsOde)
+  controls <- list(forcings = forcings, options = options)
 
   P2X <- function(times, pars, fixed = NULL, deriv = TRUE, deriv2 = FALSE) {
 
@@ -941,19 +981,19 @@ Xf.cppDE <- function(odemodel, forcings = NULL, events = NULL, condition = NULL,
     unset <- setdiff(attr(func, "variables"), names(params))
     params[unset] <- 0
     forcings <- forcsOf(controls$forcings)
-    optionsOde <- odeOf(controls$optionsOde)
+    o <- odeOf(controls$options)
 
     out <- cppDE::solveODE(func, times, params,
                             tangent = NULL, hessian = NULL, fixed = NULL,
                             forcings = forcings,
-                            abstol = optionsOde$atol, reltol = optionsOde$rtol,
-                            maxattemps = optionsOde$maxattemps,
-                            maxsteps = optionsOde$maxsteps,
-                            hini = optionsOde$hini,
-                            roottol = optionsOde$roottol,
-                            maxroot = optionsOde$maxroot,
-                            onFailure = optionsOde$onFailure,
-                            traceFile = optionsOde$traceFile)
+                            abstol = o$atol, reltol = o$rtol,
+                            maxattemps = o$maxattemps,
+                            maxsteps = o$maxsteps,
+                            hini = o$hini,
+                            roottol = o$roottol,
+                            maxroot = o$maxroot,
+                            onFailure = o$onFailure,
+                            traceFile = o$traceFile)
 
     out <- cbind(out$time, out$variable,
                  if (length(forcings)) cppDE::forcingValues(out$time, forcings))

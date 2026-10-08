@@ -99,10 +99,10 @@ reactions <- eqnlist() |>
 
 # The optimiser can only resolve what the integrator delivers, so the tolerances
 # are set explicitly rather than left at their defaults.
-myOptionsODE <- list(atol = 1e-8, rtol = 1e-6, maxattemps = 100L, maxsteps = 1e6)
+myOptions <- list(atol = 1e-8, rtol = 1e-6, maxattemps = 100L, maxsteps = 1e6)
 model <- odemodel(reactions, modelname = "boehm_ode", compile = FALSE,
                   outdir = .outdir)
-x <- Xs(model, optionsOde = myOptionsODE, optionsSens = myOptionsODE)
+x <- Xs(model, options = myOptions)
 
 observables <- eqnvec(
   pSTAT5A_rel = paste0("(100*pApB + 200*pApA*specC17)/",
@@ -817,7 +817,7 @@ fhn <- eqnvec(V = "c*(V - V^3/3 + R)", R = "-(V - a + b*R)/c")
 tight <- list(atol = 1e-10, rtol = 1e-10)
 fhnModel <- odemodel(fhn, modelname = "fhn_ode", includeTimeZero = FALSE,
                      compile = FALSE, outdir = .outdir)
-fx <- Xs(fhnModel, optionsOde = tight, optionsSens = tight)
+fx <- Xs(fhnModel, options = tight)
 fg <- Y(c(y = "V"), f = fx, modelname = "fhn_obs", compile = FALSE,
         outdir = .outdir)
 fp <- P(eqnvec(V = "V", R = "R", a = "a", b = "b", c = "exp(lc)"),

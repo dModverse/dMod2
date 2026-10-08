@@ -28,8 +28,8 @@ skip_on_cran()
     m <- odemodel(f, modelname = "ms_fhn", derivMode = fr,
                   includeTimeZero = FALSE, compile = FALSE, outdir = d)
     m0 <- odemodel(f, modelname = "ms_fhn0", compile = FALSE, outdir = d)
-    x <- Xs(m, optionsOde = .ms_tol, optionsSens = .ms_tol)
-    x0 <- Xs(m0, optionsOde = .ms_tol, optionsSens = .ms_tol)
+    x <- Xs(m, options = .ms_tol)
+    x0 <- Xs(m0, options = .ms_tol)
     g <- Y(c(y = "V"), f = x, modelname = "ms_fhn_obs", compile = FALSE,
            derivMode = fr)
     p <- P(eqnvec(V = "V", R = "R", a = "a", b = "b", c = "exp(lc)"),
@@ -40,7 +40,7 @@ skip_on_cran()
                       "B", "", "k2*B", "decay")
     mc <- odemodel(re, modelname = "ms_chain", derivMode = fr,
                    includeTimeZero = FALSE, compile = FALSE, outdir = d)
-    xc <- Xs(mc, optionsOde = .ms_tol, optionsSens = .ms_tol)
+    xc <- Xs(mc, options = .ms_tol)
     gc <- Y(c(yA = "s*A", yB = "s*B"), f = xc, modelname = "ms_chain_obs",
             compile = FALSE, derivMode = fr)
     pc <- P(eqnvec(A = "exp(lA)", B = "0", k1 = "exp(lk1)", k2 = "exp(lk2)",
@@ -65,7 +65,7 @@ skip_on_cran()
                      method = c("add", "add"))
     md <- odemodel(re, modelname = "ms_dose", events = evd, derivMode = fr,
                    includeTimeZero = FALSE, compile = FALSE, outdir = d)
-    xd <- Xs(md, optionsOde = .ms_tol, optionsSens = .ms_tol)
+    xd <- Xs(md, options = .ms_tol)
     gd <- Y(c(yA = "s*A", yB = "s*B"), f = xd, modelname = "ms_dose_obs",
             compile = FALSE, derivMode = fr)
     pd <- P(eqnvec(A = "exp(lA)", B = "0", k1 = "exp(lk1)", k2 = "exp(lk2)",

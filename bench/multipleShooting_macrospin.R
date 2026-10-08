@@ -60,7 +60,7 @@ f <- eqnvec(
 opts <- list(atol = 1e-8, rtol = 1e-8, maxsteps = 1e5)
 model <- odemodel(f, modelname = "msMacro_ode", compile = FALSE, outdir = .outdir,
                   method = "tsit5", includeTimeZero = FALSE)
-x <- Xs(model, optionsOde = opts, optionsSens = opts)
+x <- Xs(model, options = opts)
 g <- Y(eqnvec(y = "s*cos(th)"), f = x, modelname = "msMacro_obs", compile = FALSE,
        outdir = .outdir)
 
@@ -161,7 +161,7 @@ fc <- eqnvec(mx = sprintf("-gam/(1 + al^2)*(%s + al*%s)", mxH[["mx"]], mmxH[["mx
 
 modelc <- odemodel(fc, modelname = "msMacroC_ode", compile = FALSE, outdir = .outdir,
                    method = "tsit5", includeTimeZero = FALSE)
-xc <- Xs(modelc, optionsOde = opts, optionsSens = opts)
+xc <- Xs(modelc, options = opts)
 gc <- Y(eqnvec(y = "s*mz"), f = xc, modelname = "msMacroC_obs", compile = FALSE,
         outdir = .outdir)
 pc <- Reduce(`+`, lapply(rownames(fields), function(cn) {

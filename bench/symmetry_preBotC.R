@@ -103,11 +103,10 @@ symmetryDetection(f, observables, trafo = red$trafo, positive = positive,
 # –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
 
 # spikes last about 2 ms; the check of the reduced chart needs tight solves
-myOptionsODE  <- list(atol = 1e-12, rtol = 1e-12, maxsteps = 1e7)
-myOptionsSens <- myOptionsODE
+myOptions <- list(atol = 1e-12, rtol = 1e-12, maxsteps = 1e7)
 
 model <- odemodel(f, modelname = "preBotC_ode", compile = FALSE, outdir = .outdir)
-x <- Xs(model, condition = "clamp", optionsOde = myOptionsODE, optionsSens = myOptionsSens)
+x <- Xs(model, condition = "clamp", options = myOptions)
 g <- Y(observables, f = x, attach.input = TRUE,
        modelname = "preBotC_obs", compile = FALSE, outdir = .outdir)
 
@@ -150,7 +149,7 @@ flowEq <- lapply(res$symmetries, function(s) {
 flow <- lapply(seq_along(flowEq), function(i)
   Xf(odemodel(flowEq[[i]], deriv = FALSE, modelname = paste0("preBotC_flow", i),
               compile = FALSE, outdir = .outdir),
-     condition = "flow", optionsOde = myOptionsODE))
+     condition = "flow", options = myOptions))
 
 do.call(compile, c(list(x, g, gI, p.full, p.red), flow,
                    list(output = .modelname, cores = .cores)))

@@ -123,7 +123,6 @@ names(trafoLTot) <- conditions
 
 trafoL <- trafoLTot[conditions]
 p <- x <- NULL
-optionsOde = list(method = "lsoda")
 optionsSens = list(method = "lsodes", rtol = 1e-8, atol = 1e-8)
 
 for (C in conditions) {
@@ -132,7 +131,7 @@ for (C in conditions) {
   if (C == "pds_nP"){
     events=data.frame(var = "Fad", time = 31, value = 0.15, method = "add")
   }
-  x <- x + Xs(model0, optionsOde = optionsOde, optionsSens = optionsSens, condition = C, events = events)
+  x <- x + Xs(model0, optionsSens = optionsSens, condition = C, events = events)
 }
 
 ## Data ----------------------------------------------------------------------

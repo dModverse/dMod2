@@ -48,8 +48,8 @@ petab_import <- function(entry, outdir, backend = "cppDE", cores = 1L, tol = 1e-
   pet <- dMod2::importPEtab(entry$yaml, backend = backend, cores = cores,
                             modelname = paste0("bm_", gsub("[^A-Za-z0-9]", "", entry$short),
                                                if (backend == "Sundials") "_asa" else ""),
-                            derivMode = c("forward", "reverse"), optionsOde = o,
-                            optionsSens = o, sparse = sparse, outdir = od)
+                            derivMode = c("forward", "reverse"), options = o,
+                            sparse = sparse, outdir = od)
   attr(pet, "compile_s") <- proc.time()[["elapsed"]] - t0
   pet
 }
@@ -57,7 +57,6 @@ petab_import <- function(entry, outdir, backend = "cppDE", cores = 1L, tol = 1e-
 ##  Solver tolerances of every Xs() in the problem, as one setting.
 petab_tolerance <- function(pet, atol, rtol) {
   o <- list(atol = atol, rtol = rtol)
-  dMod2::controls(pet$x, name = "optionsOde") <- o
-  dMod2::controls(pet$x, name = "optionsSens") <- o
+  dMod2::controls(pet$x, name = "options") <- o
   invisible(pet)
 }

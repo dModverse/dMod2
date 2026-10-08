@@ -1,3 +1,16 @@
+# dMod2 0.10.12
+
+* Breaking: `Xs()` takes its solver options as `options`, which applies to
+  every solve, and `optionsSens`, which now holds only the entries that
+  override `options` for the solves with sensitivities. `Xf()` and
+  `importPEtab()` take `options` as well, and the controls are named
+  `options`, `optionsSens` and `optionsReverse`. `optionsOde` is still
+  accepted as an argument and by `controls()`, with a deprecation warning.
+  On deSolve the default methods stay `"lsoda"` and, for the solves with
+  sensitivities, `"lsodes"`.
+* `Xs()` on cppDE warns about an unknown entry of `optionsReverse`, given to
+  the constructor or set through `controls()`.
+
 # dMod2 0.10.11
 
 * The option `dMod.outdir` sets where `odemodel()`, `P()`, `Pimpl()`, `Y()` and the

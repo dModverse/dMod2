@@ -232,11 +232,10 @@ attr(mydataL, "condition.grid") <- cond.grid
 # –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
 # Build
 # –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
-myOptionsODE  <- list(atol = 1e-11, rtol = 1e-8, maxsteps = 1e7L, maxattemps = 100L)
-myOptionsSens <- list(atol = 1e-11, rtol = 1e-8, maxsteps = 1e7L, maxattemps = 100L)
+myOptions <- list(atol = 1e-11, rtol = 1e-8, maxsteps = 1e7L, maxattemps = 100L)
 
 model <- odemodel(reactions, modelname = "bachmann_ode", compile = FALSE, outdir = .outdir)
-x <- Xs(model, optionsOde = myOptionsODE, optionsSens = myOptionsSens)
+x <- Xs(model, options = myOptions)
 g <- Y(observables, x, modelname = "bachmann_obs", attach.input = FALSE,
        compile = FALSE, outdir = .outdir)
 e <- Y(errorModels, g, modelname = "bachmann_err", attach.input = FALSE,
@@ -427,7 +426,7 @@ ggplot(.drPred, aes(epo_level, value, colour = experiment, fill = experiment)) +
 # –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
 petab <- importPEtab(file.path(.petabDir, "Bachmann_MSB2011.yaml"),
                      backend = "cppDE", cores = 4, outdir = .outdir,
-                     optionsOde = myOptionsODE, optionsSens = myOptionsSens)
+                     options = myOptions)
 
 stopifnot(setequal(names(petab$bestfit), outerpars),
           isTRUE(all.equal(petab$bestfit[outerpars], bestfit[outerpars])))

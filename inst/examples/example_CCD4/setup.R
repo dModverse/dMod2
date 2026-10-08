@@ -146,9 +146,8 @@ for (C in conditions) {
   p <- p + P(trafoLTot[[C]], condition = C)
 }
 
-optionsOde = list(method = "lsoda")#, lrw = 524)
 optionsSens = list(method = "lsodes", rtol = 1e-8, atol = 1e-8)
-x <- Xs(model0, optionsOde = optionsOde, optionsSens = optionsSens)
+x <- Xs(model0, optionsSens = optionsSens)
 
 trafoL <- trafoLTot[conditions]
 

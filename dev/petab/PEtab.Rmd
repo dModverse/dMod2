@@ -93,7 +93,7 @@ and returns an object of class `petabproblem`.
 | `cores` | conditions evaluated in parallel inside one objective call |
 | `modelname` | base name for the generated sources |
 | `outdir` | where the generated sources and the shared object are written |
-| `optionsOde`, `optionsSens` | solver settings, forwarded to `Xs()` |
+| `options`, `optionsSens` | solver settings, forwarded to `Xs()` |
 
 `outdir` defaults to the working directory. A problem with many conditions
 writes one source per condition, so a scratch folder is preferable. Solver

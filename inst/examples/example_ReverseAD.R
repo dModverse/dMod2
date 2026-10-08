@@ -73,7 +73,7 @@ model <- odemodel(reactions, modelname = "rev_ode", deriv = TRUE, deriv2 = TRUE,
                                 "forward-reverse"),
                   outdir = .outdir, compile = TRUE)
 
-x     <- Xs(model, optionsOde = tight, optionsSens = tight)
+x     <- Xs(model, options = tight)
 inner <- c(A = 2, B = 0, k1 = 0.6, k2 = 0.3)
 times <- seq(0, 8, length.out = 41)
 
@@ -202,7 +202,7 @@ cat("4. error model     max |difference| =",
 # -----------------------------------------------------------------------------
 gap <- t(vapply(10^-c(4, 6, 8, 10, 12), function(tt) {
   o  <- list(atol = tt, rtol = tt)
-  xx <- Xs(model, optionsOde = o, optionsSens = o)
+  xx <- Xs(model, options = o)
   oo <- normL2(as.datalist(dat), g * xx * p)
   a  <- oo(pars, deriv = TRUE)
   b  <- oo(pars, deriv = TRUE, sweep = "reverse")
@@ -255,7 +255,7 @@ ev <- eventlist(var = "A", time = "t_dose", value = "d_amt", method = "add")
 model_ev <- odemodel(reactions, events = ev, modelname = "rev_ev",
                      deriv = TRUE, derivMode = c("forward", "reverse"), outdir = .outdir,
                      compile = TRUE)
-x_ev <- Xs(model_ev, optionsOde = tight, optionsSens = tight)
+x_ev <- Xs(model_ev, options = tight)
 p_ev <- P(c(A = "exp(logA)", B = "0", k1 = "exp(logk1)", k2 = "exp(logk2)",
             s = "exp(logs)", t_dose = "3", d_amt = "exp(logdose)"),
           condition = "C1", compile = TRUE, modelname = "rev_pev",
