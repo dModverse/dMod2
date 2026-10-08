@@ -88,7 +88,7 @@ compile(g, p, output = "plotting_example")
 ## Evaluate prediction
 times <- seq(0, 1, .01)
 pars <- structure(seq(1, 2, length.out = 3), names = getParameters(p))
-prediction <- (g*x*p)(times, pars, deriv = FALSE)
+prediction <- (g*x*p)(times, pars)
 
 ## Plot prediction
 plotPrediction(prediction)
