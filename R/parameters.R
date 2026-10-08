@@ -1,29 +1,35 @@
 ## Functions to generate parameter transformation ----
 
-#' Parameter transformation
+#' Parameter Transformation
 #'
-#' Builds a [parfn] with [Pexpl()] or [Pimpl()].
+#' @description Builds a [parfn] with [Pexpl()] or [Pimpl()].
 #'
 #' @param trafo An [eqnvec], named character or [eqnlist], or a list of
 #'   those named by condition, which builds one transformation per condition.
-#'   `NULL` returns `NULL`.
-#' @param parameters Outer parameter names.
-#' @param condition Condition label of a single `trafo`; a list takes its
-#'   names instead.
+#'   `NULL` (default) returns `NULL`.
+#' @param parameters Outer parameter names. Default `NULL`, the symbols of
+#'   `trafo`.
+#' @param condition Condition label of a single `trafo`, default `NULL`; a
+#'   list takes its names instead.
 #' @param compile Logical. `TRUE` compiles all conditions into one shared
-#'   object named `modelname`, `FALSE` leaves it to [compile()].
-#' @param modelname,verbose Passed to [Pexpl()] or [Pimpl()].
-#' @param method `"explicit"`, `"implicit"`, or `NULL` for `"implicit"` if
-#'   `trafo` is an [eqnlist] and `"explicit"` otherwise.
-#' @param cores Number of cores. `NULL` uses [detectFreeCores()]; 1 on Windows.
-#' @param deriv,deriv2 Attach first and second order sensitivities. `deriv2`
-#'   requires `deriv = TRUE`.
+#'   object named `modelname`, `FALSE` (default) leaves it to [compile()].
+#' @param modelname Base name of the generated files, default `NULL`, which
+#'   is `"expl_parfn"` or `"impl_parfn"`, followed by `_<condition>`.
+#' @param verbose Logical. Print the compiler output, default `FALSE`.
+#' @param method `"explicit"`, `"implicit"`, or `NULL` (default) for
+#'   `"implicit"` if `trafo` is an [eqnlist] and `"explicit"` otherwise.
+#' @param cores Number of parallel jobs generating the sources of a list.
+#'   `NULL` (default) uses [detectFreeCores()]; 1 on Windows.
+#' @param deriv,deriv2 Build first and second derivatives, default `TRUE` and
+#'   `FALSE`. `deriv2` requires `deriv = TRUE`.
 #' @param ... Further arguments of [Pexpl()] (`attach.input`, `derivMode`,
 #'   `outdir`) or [Pimpl()] (`forcings`, `keep.root`, `flow`, `controlsPTC`,
 #'   `outdir`), as `method` selects.
 #'
-#' @return A [parfn].
-#' @seealso [Pexpl()], [Pimpl()]
+#' @return A [parfn], called as `p(pars, ...)`, see section Calling a dMod
+#'   function.
+#' @inheritSection dModfn Calling a dMod function
+#' @seealso [Pexpl()], [Pimpl()], [define()]
 #' @example inst/examples/P.R
 #' @export
 P <- function(trafo = NULL, parameters = NULL, condition = NULL,
@@ -338,39 +344,42 @@ P <- function(trafo = NULL, parameters = NULL, condition = NULL,
   wp
 }
 
-#' Parameter transformation (explicit, algebraic)
+#' Explicit Parameter Transformation
 #'
-#' Builds `p_inner = f(p_outer)` from symbolic expressions via
-#' [cppDE::cppFUN], with derivatives by AD. The returned [parfn] attaches the
-#' Jacobian and, optionally, the Hessian. It is evaluable only after
-#' compilation.
+#' @description Builds a [parfn] that evaluates inner parameters as
+#' expressions in outer parameters, with their derivatives. It is evaluable
+#' only after compilation.
 #'
-#' @param trafo Named character / [eqnvec]; names are inner parameters,
+#' @param trafo Named character or [eqnvec]; names are inner parameters,
 #'   values are expressions in the outer parameters.
-#' @param parameters Outer parameters; defaults to `getSymbols(trafo)`.
-#'   Names given here that `trafo` does not map pass through as identity.
-#' @param attach.input Append the outer inputs the transformation does not map
-#'   to the output, fixed ones included. An input that varies keeps its
-#'   derivatives, the identity when it enters the chain here, and one passed in
-#'   `fixed` stays fixed. Kept as a control of the returned function and read at
-#'   every call, see [controls()].
-#' @param condition Condition label.
-#' @param compile Logical. `TRUE` compiles now, `FALSE` leaves it to
-#'   [compile()]. The function is evaluable only compiled.
-#' @param modelname Base name of the generated files, default
-#'   `"expl_parfn"`, followed by `_<condition>`.
-#' @param verbose Logical. Print the compiler output.
-#' @param deriv,deriv2 Attach `attr(., "deriv")` `[p, theta]` and/or
-#'   `attr(., "deriv2")` `[p, theta, theta]`. `deriv2` needs `deriv = TRUE`.
-#' @param derivMode Which derivative products to build, any of `"forward"`
-#'   (AD, default), `"reverse"` (the vector-Jacobian product the reverse sweep
-#'   contracts against) and `"forward-reverse"` (its derivative along a tangent,
-#'   for the reverse sweep with `deriv2 = TRUE`).
+#' @param parameters Outer parameters; default `NULL`, the symbols of
+#'   `trafo`. Names given here that `trafo` does not map pass through as
+#'   identity.
+#' @param attach.input Logical. Append the inputs that `trafo` does not map;
+#'   varying ones with identity derivatives, fixed ones as fixed. Default
+#'   `FALSE`. Can be changed with [controls()].
+#' @param condition `NULL` (default) for a transformation valid in every
+#'   condition, or the name of the condition it belongs to.
+#' @param compile Logical. `TRUE` compiles now, `FALSE` (default) leaves it
+#'   to [compile()].
+#' @param modelname Base name of the generated files, default `NULL`, which
+#'   is `"expl_parfn"`, followed by `_<condition>`.
+#' @param verbose Logical. Print the compiler output, default `FALSE`.
+#' @param deriv,deriv2 Build the first derivatives, `attr(, "deriv")`,
+#'   `[inner, outer]`, and the second, `attr(, "deriv2")`,
+#'   `[inner, outer, outer]`. Default `TRUE` and `FALSE`; `deriv2` needs
+#'   `deriv = TRUE`.
+#' @param derivMode Which derivative code to build, any of `"forward"`
+#'   (default), `"reverse"` and `"forward-reverse"`. `"reverse"` is needed for
+#'   `sweep = "reverse"`, `"forward-reverse"` for `sweep = "reverse"` with
+#'   `deriv2 = TRUE`.
 #' @param outdir Directory for the generated source and shared object,
 #'   default `getOption("dMod.outdir")`, else the working directory.
 #'
-#' @return A [parfn].
-#' @seealso [Pimpl], [P].
+#' @return A [parfn], called as `p(pars, ...)`, see section Calling a dMod
+#'   function.
+#' @inheritSection dModfn Calling a dMod function
+#' @seealso [Pimpl()], [P()]
 #' @example inst/examples/Pexpl.R
 #' @importFrom cppDE cppFUN
 #' @export
@@ -651,16 +660,22 @@ Pexpl <- function(trafo, parameters = NULL, attach.input = FALSE, condition = NU
 }
 
 
-#' Reset warm-start caches in `Pimpl` parameter transformations
+#' Reset Warm Starts of Implicit Transformations
 #'
-#' Walks `fn` and its closure environments and clears the warm-start
-#' cache on every reachable [Pimpl] parfn. Use before workflows
-#' that cross basins of attraction (multistart, profile after a structural
-#' change) where a stale root pins the solver in the wrong region.
+#' @description Clears the stored roots of every [Pimpl()] inside `fn`.
 #'
-#' @param fn A `parfn`, `prdfn`, `obsfn`, `objfn`, or composed `fn`.
-#' @param verbose Print one-line summary of cleared caches.
-#' @return Invisibly, labels of the cleared caches (empty if none found).
+#' @param fn A [parfn], [prdfn], [obsfn], objective function, or a
+#'   composition of those.
+#' @param verbose Logical. Print a summary of the cleared caches, default
+#'   `TRUE`.
+#' @return Invisibly, the labels of the cleared caches, empty if none was
+#'   found.
+#' @seealso [Pimpl()]
+#' @examples
+#' f <- eqnvec(A = "k2*B - k1*A", B = "k1*A - k2*B")
+#' p <- Pimpl(f, parameters = "A", modelname = "reset_example",
+#'            outdir = tempdir())
+#' resetWarmStarts(p)
 #' @export
 resetWarmStarts <- function(fn, verbose = TRUE) {
   if (!is.function(fn))
@@ -871,9 +886,9 @@ resetWarmStarts <- function(fn, verbose = TRUE) {
   ctrl
 }
 
-#' Implicit parameter transformation
+#' Implicit Parameter Transformation
 #'
-#' Solves \eqn{f(x, p) = 0} for the states \eqn{x} by pseudo-transient
+#' @description Solves \eqn{f(x, p) = 0} for the states \eqn{x} by pseudo-transient
 #' continuation ([cppDE::ptc()]) and returns a [parfn] with sensitivities from
 #' the implicit function theorem.
 #'
@@ -882,20 +897,23 @@ resetWarmStarts <- function(fn, verbose = TRUE) {
 #'   \eqn{T} of the conserved quantities are added.
 #'   States named here are held at their value instead of solved for, and a
 #'   state whose right-hand side is `"0"` becomes a parameter.
-#' @param forcings Forcing names, set to 0.
-#' @param condition Condition label.
-#' @param keep.root If `TRUE`, roots are kept per condition as initial guesses
-#'   and repeated calls are answered from memory.
+#' @param forcings Forcing names, set to 0. Default `NULL`.
+#' @param condition `NULL` (default) for a transformation valid in every
+#'   condition, or the name of the condition it belongs to.
+#' @param keep.root If `TRUE` (default), roots are kept per condition as
+#'   initial guesses and repeated calls are answered from memory.
 #' @param flow If `TRUE`, \eqn{\dot{x} = f(x, p)}{dx/dt = f(x, p)} and a stable
-#'   steady state is returned. If `FALSE`, any regular root.
-#' @param compile Logical. `TRUE` compiles now, `FALSE` leaves it to
-#'   [compile()].
-#' @param modelname Base name of the generated files, default
-#'   `"impl_parfn"`, followed by `_<condition>`.
-#' @param verbose Logical. Print the compiler output.
-#' @param deriv,deriv2 Attach first and second order sensitivities. `deriv2`
-#'   requires `deriv = TRUE`.
-#' @param controlsPTC Named list of solver controls:
+#'   steady state is returned. If `FALSE`, any regular root. Default `TRUE`
+#'   for an [eqnlist], else `FALSE`.
+#' @param compile Logical. `TRUE` compiles now, `FALSE` (default) leaves it
+#'   to [compile()].
+#' @param modelname Base name of the generated files, default `NULL`, which
+#'   is `"impl_parfn"`, followed by `_<condition>`.
+#' @param verbose Logical. Print the compiler output, default `FALSE`.
+#' @param deriv,deriv2 Build first and second derivatives, default `TRUE` and
+#'   `FALSE`. `deriv2` requires `deriv = TRUE`.
+#' @param controlsPTC Named list of solver controls; an entry not given keeps
+#'   its default, an unknown entry is an error:
 #'   \describe{
 #'     \item{`rtol`, `atol`}{Convergence tolerances, default `1e-10`, `1e-14`.}
 #'     \item{`flowTol`}{Relative local error per pseudo-time step, default `1`.}
@@ -913,11 +931,8 @@ resetWarmStarts <- function(fn, verbose = TRUE) {
 #'       state on `startScale`, default `c(-5, 5)`.}
 #'     \item{`startScale`}{`"log10"` or `"linear"`, default `"log10"` if
 #'       `positive` and `"linear"` otherwise.}
-#'     \item{`seed`}{Seed of the random starts, default `1`. Each warm-start
-#'       cache (per condition, emptied by [resetWarmStarts()] before every fit
-#'       of [mstrust()]) draws from its own stream, derived from `seed`, the
-#'       condition and the global RNG state when the cache first needs one. The
-#'       global RNG is read, not advanced.}
+#'     \item{`seed`}{Seed of the random starts, default `1`; the global RNG
+#'       is not advanced.}
 #'   }
 #' @param outdir Directory for the generated files, default
 #'   `getOption("dMod.outdir")`, else the working directory.
@@ -929,8 +944,10 @@ resetWarmStarts <- function(fn, verbose = TRUE) {
 #' once, also across conditions. `keep.root` and `controlsPTC` can be changed
 #' with [controls()].
 #'
-#' @return A [parfn].
-#' @seealso [Pexpl()], [P()]
+#' @return A [parfn], called as `p(pars, ...)`, see section Calling a dMod
+#'   function.
+#' @inheritSection dModfn Calling a dMod function
+#' @seealso [Pexpl()], [P()], [resetWarmStarts()]
 #' @example inst/examples/Pimpl.R
 #' @export
 #' @import cppDE
@@ -1339,28 +1356,41 @@ Pimpl <- function(trafo, parameters = NULL, forcings = NULL, condition = NULL,
 }
 
 
-#' Construct and modify parameter transformations
+#' Construct and Modify Parameter Transformations
 #'
-#' Symbolic helpers used by [P()] and [Xs()] to build, substitute, and
-#' branch transformation rules. The condition table from [branch()] is
-#' stored on `attr(., "tree")`.
+#' @description Build, change and branch the symbolic transformations that
+#' [P()] turns into a [parfn].
 #'
-#' - `define` resets the LHS of `expr` to its RHS.
-#' - `insert` substitutes the RHS for the LHS wherever it occurs.
-#' - `branch` duplicates a trafo across conditions, optionally applying
-#'   per-condition substitutions taken from `table`.
+#' - `define()` sets the entry named by the left-hand side of `expr` to its
+#'   right-hand side, adding it if missing.
+#' - `insert()` replaces the left-hand side by the right-hand side wherever it
+#'   occurs in the expressions.
+#' - `branch()` copies `trafo` once per condition and keeps `table` as
+#'   attribute `tree`.
 #'
-#' @param trafo Named character / [eqnvec], or a list thereof.
-#' @param expr `"lhs ~ rhs"` formula string.
-#' @param table Condition table (row per condition, column per parameter)
-#'   stored as the `tree` attribute when branching.
+#' @param trafo Named character or [eqnvec], or a list of those named by
+#'   condition as `branch()` returns it. `NULL` starts a new one.
+#' @param expr `"lhs ~ rhs"` string. Its symbols are replaced by the
+#'   arguments in `...` of the same name; see [repar()].
+#' @param table `data.frame` with one row per condition, row names the
+#'   conditions. Kept as attribute `tree`; its columns can be read in `...`
+#'   by name.
 #' @param conditions Condition names; default `rownames(table)`.
-#' @param apply One of `"nothing"`, `"insert"`, `"define"`; how the
-#'   `table` entries are folded into each branch.
-#' @param conditionMatch Regex on condition names; restricts the operation.
-#' @param ... Named values to substitute into `expr` symbols.
+#' @param apply One of `"nothing"` (default), `"insert"` and `"define"`: what
+#'   is done with every non-missing entry `table[condition, column]`, with
+#'   the column name as left-hand side and the entry as right-hand side.
+#' @param conditionMatch Regular expression; only the conditions whose names
+#'   match are changed. Default `NULL`, all.
+#' @param ... Named vectors replacing the symbols of `expr` of the same name,
+#'   one substitution per element. They are evaluated per condition, with
+#'   the columns of `attr(trafo, "tree")`, `.currentTrafo` (the
+#'   transformation of the condition) and `.currentSymbols` (its symbols) in
+#'   scope. An unnamed logical argument of `insert()` selects the conditions
+#'   where it is `TRUE`.
 #'
-#' @return Same shape as `trafo` (or a per-condition list if branched).
+#' @return Same shape as `trafo`, or a list named by condition for
+#'   `branch()`.
+#' @seealso [repar()], [P()]
 #' @export
 #' @example inst/examples/define.R
 define <- function(trafo, expr, ..., conditionMatch = NULL) {
@@ -1486,19 +1516,21 @@ branch <- function(trafo, table = NULL,
 
 #' Reparameterization
 #'
-#' Replaces symbols on either side of `"lhs ~ rhs"`. With `reset = TRUE`
-#' the LHS entry of `trafo` is overwritten by the RHS (per row when `...`
-#' supplies vector replacements); otherwise the LHS is substituted into
-#' `trafo` wherever it occurs. Symbols separated by `_` are recognised as
-#' compound identifiers, e.g. `Delta_x` -> symbols `"Delta"` and `"x"`.
+#' @description Replaces the left-hand side of `"lhs ~ rhs"` by the
+#' right-hand side in `trafo`, after the symbols of `expr` are replaced by the
+#' arguments in `...`. [define()] and [insert()] build on it.
 #'
-#' @param expr `"lhs ~ rhs"` string (or a formula).
-#' @param trafo Character / [eqnvec] / list. `NULL` builds a fresh trafo
-#'   from the LHS.
-#' @param ... Named character/numeric vectors; each row supplies one
-#'   substitution.
-#' @param reset Overwrite (`TRUE`) or substitute into (`FALSE`).
+#' @param expr `"lhs ~ rhs"` string or formula. Inside a name, `_` separates
+#'   symbols, so `"Delta_x"` with `x = "a"` becomes `"Delta_a"`.
+#' @param trafo Named character, [eqnvec] or a list of those. Default `NULL`
+#'   returns the identity of the left-hand sides.
+#' @param ... Named character or numeric vectors of equal length, replacing
+#'   the symbols of `expr` of the same name; element `i` of each gives the
+#'   `i`-th substitution.
+#' @param reset `FALSE` (default) replaces the left-hand side wherever it
+#'   occurs in the expressions, `TRUE` sets the entry it names.
 #' @return Same shape as `trafo`.
+#' @seealso [define()], [insert()]
 #' @export
 #' @importFrom stats as.formula
 #' @examples

@@ -775,7 +775,10 @@ data at every data time, replacement synchronisation
 [@pecora1990synchronization]. States driven by the observed ones, a gating
 variable driven by the voltage, forget where they started and follow the
 measured trajectory, instead of being passed on from one noisy value per segment
-to the next.
+to the next. `init = "spline"` does the same with a smoothing spline through the
+data, its roughness chosen by generalised cross-validation
+[@horbelt2002parameter], and `init = "simulation"` takes every node value from a
+simulation at the start parameters.
 
 `nodes = "transitions"` puts a node just before every fast change of the data, a
 spike or the jump of a relaxation oscillator, found as a run of samples whose

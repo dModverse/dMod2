@@ -6,12 +6,14 @@
 
 
 
-#' Generate objective list from numeric vector
-#' 
-#' @param p Named numeric vector
-#' @return list with entries value (\code{0}), 
-#' gradient (\code{rep(0, length(p))}) and 
-#' hessian (\code{matrix(0, length(p), length(p))}) of class \code{obj}.
+#' Zero Objective List
+#'
+#' @description Builds an [objlist] with value, gradient and Hessian zero for
+#' the parameters of `p`.
+#'
+#' @param p Named numeric vector.
+#' @return An [objlist] with value `0`, gradient `rep(0, length(p))` and
+#'   Hessian `matrix(0, length(p), length(p))`, named by `p`.
 #' @examples
 #' p <- c(A = 1, B = 2)
 #' as.objlist(p)
@@ -25,30 +27,30 @@ as.objlist <- function(p) {
 }
 
 
-#' Per-condition residual contribution to an L2 objective
+#' L2 Objective of One Condition
 #'
-#' @description
-#' Computes the negative-log-likelihood residual contribution of a single
-#' condition (with optional error model). Exposed so quadrature node-loops
-#' can evaluate one condition without paying the per-call cost of
-#' [normL2]'s multi-condition setup.
+#' @description Computes the contribution of one condition to [normL2()].
 #'
-#' @param dataI datalist entry for one condition (data.frame with
-#'   `name`, `time`, `value`, `sigma` columns).
-#' @param predictionI prdframe for that condition (typically `prediction[[cn]]`
-#'   from a prdfn call).
-#' @param pars Named numeric parameter vector at which to evaluate.
-#' @param errfn Optional obsfn defining a parameter-dependent error model.
-#' @param fixed Optional fixed-parameter vector (passed through to `errfn`).
-#' @param cn Character condition name. Required when `errfn` is set, used
-#'   for errmodel condition routing.
-#' @param eCondNames Optional character vector of condition names that have
-#'   an errmodel mapping. NULL means `errfn` applies to all.
-#' @param deriv,deriv2 Logical. Whether to return gradient/Hessian.
-#' @param opt.BLOQ Character. BLOQ likelihood treatment (see [normL2]).
-#'   One of `"M1"`, `"M3"` (default), `"M4NM"`, `"M4BEAL"`.
+#' @param dataI `data.frame` of one condition of a [datalist], with columns
+#'   `name`, `time`, `value` and `sigma`.
+#' @param predictionI [prdframe] of that condition.
+#' @param pars Named numeric parameter vector.
+#' @param errfn Optional [obsfn], the error model. Default `NULL`.
+#' @param fixed Optional named numeric vector of fixed parameters, passed to
+#'   `errfn`. Default `NULL`.
+#' @param cn Character, the condition name. Required when `errfn` is set.
+#' @param eCondNames Character vector, the conditions `errfn` is defined for.
+#'   Default `NULL`, all.
+#' @param deriv Logical. `TRUE` (default) returns the gradient and the
+#'   Gauss-Newton Hessian.
+#' @param deriv2 Logical. `TRUE` returns the exact Hessian, from the second
+#'   derivatives of the prediction. Default `FALSE`.
+#' @param opt.BLOQ Character, the treatment of data below the limit of
+#'   quantification, as in [normL2()]. Default `"M3"`.
 #'
-#' @return An [objlist] for the single condition's contribution.
+#' @return An [objlist].
+#' @seealso [normL2()]
+#' @keywords internal
 #' @export
 evalConditionResidual <- function(dataI, predictionI, pars,
                                   errfn      = NULL,
@@ -150,13 +152,12 @@ evalConditionResidual <- function(dataI, predictionI, pars,
 }
 
 
-#' L2 norm between data and model prediction
+#' L2 Norm Between Data and Model Prediction
 #'
 #' @description
-#' Creates an objective function for parameter estimation based on the
-#' (negative log-likelihood) L2 norm between observed data and model predictions.
-#' The returned objective function can be used with optimizers such as
-#' [mstrust] and supports aggregation over multiple experimental conditions.
+#' Builds the objective function of a fit: the `-2 log` likelihood of the
+#' data given the prediction, up to a constant, summed over the conditions of
+#' the data.
 #'
 #' @param data Object of class [datalist]. Each of its conditions has to be
 #'   a condition of `x`.
@@ -177,105 +178,62 @@ evalConditionResidual <- function(dataI, predictionI, pars,
 #'   under `chi2`. Adding objectives pools the terms sharing an `attr.name`,
 #'   so `chi2` stays one number; where two `attr.name`s meet it splits into
 #'   `chi2_<attr.name>` per contribution.
-#' @param cores Deprecated and ignored. Pass `cores` to the objective call, or
-#'   set `options(dMod.cores = )`.
+#' @param cores Deprecated and ignored, see section Lifecycle.
 #' @param opt.BLOQ Character. NONMEM-style treatment of below-LOQ rows
 #'   (those with `value <= lloq` in the data). One of `"M1"` (drop BLOQ rows
 #'   from the objective), `"M3"` (censored log-likelihood, default), `"M4NM"`
 #'   or `"M4BEAL"` (truncated variants; require non-negative LOQ).
 #' @param multipleShootingControl `NULL` (default), `TRUE` or a list, which
 #'   turns on multiple shooting in [trust()]; `TRUE` is `list()`, every entry
-#'   at its default. It is a control of the objective, so
-#'   `controls(obj, "multipleShootingControl") <- list(...)` changes it and
-#'   `<- NULL` switches it off, on the objective or on a sum holding it:
-#'   \describe{
-#'     \item{`nodes`}{`"auto"` (default), `"transitions"`, or the times at
-#'       which the time axis is cut into segments, a numeric vector for all
-#'       conditions or a list named by condition. The start of a condition's
-#'       grid is always a node; a node at or after the last data point of a
-#'       condition is an error.
-#'       `"auto"` starts from segments of equal length per condition, ten or
-#'       one per half oscillation of the data where that is more (a turning
-#'       point counts where the data reverse by more than five times their
-#'       noise), and cuts a segment in two wherever its propagation matrix, the
-#'       Jacobian of its end state in its start state, expands by more than
-#'       `growth`, its solve fails, or it misses its data by more than
-#'       `misfit`, before the first step and at every iterate after. `"transitions"` puts a node
-#'       just before every fast change of the data, a spike or the jump of a
-#'       relaxation oscillator, found as a run of samples whose rate lies more
-#'       than eight robust deviations off its median; the even nodes of
-#'       `"auto"` fill stretches without one, and the layout stays fixed. A
-#'       change starts in each segment where the data have it, whatever the
-#'       parameters, and a wrong timing shows as a gap. Without a fast change
-#'       it is `"auto"`. Explicit times stay as they are.}
-#'     \item{`growth`}{Largest spectral radius of a segment's propagation
-#'       matrix that `"auto"` accepts, the factor by which the linearised flow
-#'       of the segment expands. Independent of charts and scales. Default 10.
-#'       A segment is never cut below half the finest spacing of its
-#'       condition's data.}
-#'     \item{`misfit`}{Root mean square of a segment's weighted residuals
-#'       above which `"auto"` cuts it where the model misses its data locally,
-#'       such as a spike it does not reproduce: above `misfit` and above twice
-#'       the median of the segments of its condition. The new node takes the
-#'       observed states from the data. Default 3.}
-#'     \item{`charts`}{Named character, `"log10"`, `"linear"` or `"angle"`
-#'       per state: the coordinate the node values of that state live in. A
-#'       log10 chart keeps a positive state positive; on an angle chart, for a
-#'       phase in radians, gaps are taken modulo \eqn{2\pi}, so that a
-#'       trajectory one turn on is continuous. States not named are linear.}
-#'     \item{`scale`}{Named numeric, the scale of each state's gap and node
-#'       step in its chart, which the trust region and the acceptance of a
-#'       step read. Default 1, a decade or a radian, for a log10 or an angle
-#'       chart; for a linear one the range the state covers, in the data when
-#'       it is observed, else the largest range within one segment of a
-#'       simulation at the start.}
-#'     \item{`init`}{Start of the node values: `"data"` (default) reads a
-#'       state observed directly, through an observable that is the state
-#'       itself, off the data, and every other state off a run of the model at
-#'       the start parameters whose observed states are reset to the data at
-#'       every data time, so that it follows the measured trajectory;
-#'       `"spline"` does the same with a smoothing spline through the data in
-#'       place of the data themselves, its roughness chosen by generalised
-#'       cross-validation, as Horbelt, Timmer and Voss start their nodes;
-#'       `"simulation"` takes all of them from a simulation at the start
-#'       parameters; a list as `fit$multipleShooting$nodes` returns it starts
-#'       from those values, and needs explicit `nodes`.}
-#'     \item{`minPoints`}{Fewest data points either half of a cut segment
-#'       keeps, so that `"auto"` never cuts a node that no data can tell.
-#'       Default one more than the number of states.}
-#'     \item{`breaks`}{Node times, for all conditions or a list named by
-#'       condition, at which continuity is not enforced, as Voss, Timmer and
-#'       Kurths propose for chaotic systems and for models that do not hold
-#'       over the whole time axis. The node after a break is a variable of its
-#'       own and its gap no constraint. With `nodes = "auto"` every break is a
-#'       node; explicit `nodes` have to contain them. Needs
-#'       `hessianMethod = "gn"`.}
-#'   }
-#'   `x` has to be a chain `g * x * p` of observation functions, one
-#'   prediction function from [Xs()] and parameter transformations, and its ODE
-#'   model has to be built with `odemodel(..., includeTimeZero = FALSE)`, so that
-#'   a segment is integrated from its own start.
+#'   at its default. Can be changed, or switched off with `NULL`, by
+#'   `controls(obj, "multipleShootingControl") <-`, also on a sum holding the
+#'   objective. An unknown entry is an error. Entries:
+#'   * `nodes`: `"auto"` (default), `"transitions"`, or node times, a numeric
+#'     vector for all conditions or a list named by condition. `"auto"` cuts
+#'     segments where they grow, fail or miss their data; `"transitions"`
+#'     places a node before every fast change of the data and keeps the
+#'     layout fixed.
+#'   * `growth`: largest spectral radius of a segment's propagation matrix
+#'     that `"auto"` accepts, default `10`.
+#'   * `misfit`: root mean square of a segment's weighted residuals above
+#'     which `"auto"` cuts it, default `3`.
+#'   * `charts`: named character, `"log10"`, `"linear"` or `"angle"` per
+#'     state, the coordinate of its node values. Default `NULL`, all linear.
+#'   * `scale`: named numeric, the scale of each state's gaps and node steps.
+#'     Default `1` on a log10 or angle chart, else the range of the state in
+#'     the data or, unobserved, in a simulation at the start.
+#'   * `init`: start of the node values, `"data"` (default), `"spline"`,
+#'     `"simulation"`, or a list as `fit$multipleShooting$nodes` returns it,
+#'     which needs explicit `nodes`.
+#'   * `minPoints`: fewest data points either half of a cut segment keeps.
+#'     Default one more than the number of states.
+#'   * `breaks`: node times at which continuity is not enforced, for all
+#'     conditions or a list named by condition. Default `NULL`. Needs
+#'     `hessianMethod = "gn"` in [trust()].
+#'
+#'   `x` has to be a chain `g * x * p` with one prediction function from
+#'   [Xs()], built on `odemodel(..., includeTimeZero = FALSE)`. The method
+#'   and the node layout are described in
+#'   `vignette("Optimisation", package = "dMod2")`.
 #'
 #' @return
-#' An object of class `objfn`, i.e. a function
-#' \code{obj(pars, fixed, deriv, deriv2, hessian, conditions, env, cores, sweep)} returning
-#' an [objlist]. `deriv` asks for a gradient, `hessian` for a Hessian, `deriv2`
-#' for the exact one rather than the Gauss-Newton approximation, and `sweep`
-#' (`"forward"` or `"reverse"`) says which way all of it is computed. `hessian`
-#' defaults to `NULL`, meaning "not asked": forward that is a Gauss-Newton
-#' Hessian, backwards none, and `deriv2 = TRUE` always implies one. What the
-#' model was built with decides what is available; see [odemodel].
-#'
-#' With `multipleShootingControl`, the objective called as a function is still
-#' the single-shooting one described above, so evaluating, plotting and
-#' profiling it are unchanged; [trust()] and hence [mstrust()] read the control
-#' and optimise it by multiple shooting, also as a summand.
+#' An objective function of class `objfn`, called as `obj(pars, ...)`, see
+#' section Calling a dMod function. It returns an [objlist] whose value is
+#' the sum of the weighted squared residuals and, for error models and
+#' censored data, of the further terms of `-2 log` likelihood. With
+#' `multipleShootingControl` the objective called as a function is still the
+#' single-shooting one; [trust()] and [mstrust()] optimise it by multiple
+#' shooting, also as a summand.
 #'
 #' @details
-#' Combine objectives with `+` (see [sumobjfn]). `cores` is a call-time
-#' argument: it sets the thread count for both the batched ODE integration and
-#' the C++ residual kernel. It defaults to `getOption("dMod.cores", 1L)`.
+#' Combine objectives with `+`, see [sumobjfn].
 #'
+#' @section Lifecycle:
+#' The argument `cores` is deprecated and ignored; pass `cores` to the
+#' objective call or set `options(dMod.cores = )`.
+#'
+#' @inheritSection dModfn Calling a dMod function
+#' @seealso [datapointL2()], [constraintL2()], [res()]
 #' @example inst/examples/normL2.R
 #' @export
 normL2 <- function(data, x, errmodel = NULL, times = NULL,
@@ -607,27 +565,34 @@ normL2 <- function(data, x, errmodel = NULL, times = NULL,
 
 
 
-#' Soft L2 constraint on parameters
+#' Soft L2 Constraint on Parameters
+#'
+#' @description Builds a Gaussian prior on parameters as an objective
+#' function, to be added to a data term such as [normL2()].
 #'
 #' @param mu Named numeric vector of prior means. Its names select the
 #'   constrained parameters.
-#' @param sigma Named numeric vector of fixed standard deviations, or
-#'   named character vector of parameters, on log scale, that estimate them.
-#'   One kind for all entries.
-#' @param attr.name Character. Name of the attribute storing the constraint value.
+#' @param sigma Numeric standard deviations, scalar or named and aligned with
+#'   `mu`, default `1`; or a character vector of parameter names that
+#'   estimate them on log scale, \eqn{\sigma = \exp(s)}. One kind for all
+#'   entries.
+#' @param attr.name Character. Name of the attribute holding the constraint
+#'   value, default `"prior"`.
 #' @param condition Character vector, the conditions of a sum of objectives
-#'   in which the term is evaluated. `NULL` evaluates it in every one.
+#'   in which the term is evaluated. `NULL` (default) evaluates it in every
+#'   one.
 #'
 #' @details
-#' Computes, depending on which path is selected,
-#' \deqn{(p-\mu)^2 / \sigma^2}
-#' or, if sigma is estimated,
-#' \deqn{(p-\mu)^2 / \sigma^2 + 2\log(\sigma)},
-#' with sigma internally transformed via \code{exp()}. This is the penalty
-#' form and drops the Gaussian's normalisation; [constraintL1] and its siblings
-#' are the full `-2 log` density.
+#' The value is the sum over the constrained parameters of
+#' \deqn{(p-\mu)^2 / \sigma^2,}
+#' plus \eqn{2\log\sigma} per parameter if `sigma` is estimated.
 #'
-#' @return Object of class \code{objfn}.
+#' @return An objective function of class `objfn`, called as
+#'   `obj(pars, ...)`, see section Calling a dMod function. Its value is the
+#'   penalty form, without the constant of the Gaussian density; the other
+#'   `constraint*()` functions return the full `-2 log` density.
+#' @inheritSection dModfn Calling a dMod function
+#' @seealso [constraintL1()], [constraintCauchy()], [normL2()]
 #' @examples
 #' prior <- constraintL2(mu = c(k1 = 0, k2 = 0), sigma = 2)
 #' prior(pars = c(k1 = 1, k2 = -0.5))
@@ -785,27 +750,31 @@ constraintL2.default <- function(mu, sigma = 1, attr.name = "prior", condition =
 }
 
 
-#' Soft L1 constraint on parameters
+#' Soft L1 Constraint on Parameters
+#'
+#' @description Builds a Laplace prior on parameters as an objective
+#' function.
 #'
 #' @param mu Named numeric vector of prior locations. Its names select the
 #'   constrained parameters.
-#' @param sigma Numeric, scalar or named and aligned with `mu`. The Laplace
-#'   scale, i.e. the reciprocal penalty strength.
-#' @param attr.name Character. Name of the attribute storing the constraint value.
+#' @param sigma Numeric, scalar or named and aligned with `mu`, default `1`.
+#'   The Laplace scale, the reciprocal penalty strength.
+#' @param attr.name Character. Name of the attribute holding the constraint
+#'   value, default `"prior"`.
 #' @param condition Character vector, the conditions of a sum of objectives
-#'   in which the term is evaluated. `NULL` evaluates it in every one.
+#'   in which the term is evaluated. `NULL` (default) evaluates it in every
+#'   one.
 #'
 #' @details
 #' Computes the Laplace prior on the `-2 log` scale,
 #' \deqn{2\log(2\sigma) + 2|p-\mu|/\sigma,}
-#' the L1 counterpart of [constraintL2]. Note the difference in normalisation:
-#' this constructor and its siblings are the full `-2 log` density, while
-#' [constraintL2] is the penalty form and drops the Gaussian's constant.
-#' The term is not differentiable at \eqn{p = \mu}, where the gradient is
-#' reported as 0, so it scores a posterior rather than driving a fit.
+#' the L1 counterpart of [constraintL2()]. At \eqn{p = \mu} the term is not
+#' differentiable and its gradient is returned as 0.
 #'
-#' @return Object of class \code{objfn}.
-#' @seealso [constraintL2]
+#' @return An objective function of class `objfn`, called as
+#'   `obj(pars, ...)`, see [dModfn]. Its value is the full `-2 log` density,
+#'   while [constraintL2()] returns the penalty form without the constant.
+#' @seealso [constraintL2()]
 #' @examples
 #' prior <- constraintL1(mu = c(k1 = 0), sigma = 2)
 #' prior(pars = c(k1 = 1))$value
@@ -829,15 +798,17 @@ constraintL1.default <- function(mu, sigma = 1, attr.name = "prior", condition =
 }
 
 
-#' Soft Cauchy constraint on parameters
+#' Soft Cauchy Constraint on Parameters
 #'
 #' @param mu Named numeric vector of prior locations. Its names select the
 #'   constrained parameters.
-#' @param sigma Numeric, scalar or named and aligned with `mu`. The Cauchy
-#'   scale.
-#' @param attr.name Character. Name of the attribute storing the constraint value.
+#' @param sigma Numeric, scalar or named and aligned with `mu`, default `1`.
+#'   The Cauchy scale.
+#' @param attr.name Character. Name of the attribute holding the constraint
+#'   value, default `"prior"`.
 #' @param condition Character vector, the conditions of a sum of objectives
-#'   in which the term is evaluated. `NULL` evaluates it in every one.
+#'   in which the term is evaluated. `NULL` (default) evaluates it in every
+#'   one.
 #'
 #' @details
 #' Computes the Cauchy prior on the `-2 log` scale,
@@ -846,7 +817,8 @@ constraintL1.default <- function(mu, sigma = 1, attr.name = "prior", condition =
 #' parameter far from `mu` is pulled far more weakly than a Gaussian would
 #' pull it.
 #'
-#' @return Object of class \code{objfn}.
+#' @return An objective function of class `objfn`, called as
+#'   `obj(pars, ...)`, see [dModfn]. Its value is the full `-2 log` density.
 #' @seealso [constraintL2], [constraintL1]
 #' @examples
 #' prior <- constraintCauchy(mu = c(k1 = 0), sigma = 2)
@@ -867,15 +839,17 @@ constraintCauchy <- function(mu, sigma = 1, attr.name = "prior", condition = NUL
 }
 
 
-#' Soft gamma constraint on positive parameters
+#' Soft Gamma Constraint on Positive Parameters
 #'
 #' @param shape Named numeric vector of shape parameters. Its names select the
 #'   constrained parameters.
-#' @param scale Numeric, scalar or named and aligned with `shape`. The gamma
-#'   scale, not the rate.
-#' @param attr.name Character. Name of the attribute storing the constraint value.
+#' @param scale Numeric, scalar or named and aligned with `shape`, default
+#'   `1`. The gamma scale, not the rate.
+#' @param attr.name Character. Name of the attribute holding the constraint
+#'   value, default `"prior"`.
 #' @param condition Character vector, the conditions of a sum of objectives
-#'   in which the term is evaluated. `NULL` evaluates it in every one.
+#'   in which the term is evaluated. `NULL` (default) evaluates it in every
+#'   one.
 #'
 #' @details
 #' Computes the gamma prior on the `-2 log` scale,
@@ -883,7 +857,8 @@ constraintCauchy <- function(mu, sigma = 1, attr.name = "prior", condition = NUL
 #' with shape \eqn{a} and scale \eqn{s}. The value is `Inf` for a
 #' non-positive parameter.
 #'
-#' @return Object of class \code{objfn}.
+#' @return An objective function of class `objfn`, called as
+#'   `obj(pars, ...)`, see [dModfn]. Its value is the full `-2 log` density.
 #' @seealso [constraintExponential], [constraintChisq]
 #' @examples
 #' prior <- constraintGamma(shape = c(k1 = 3), scale = 5)
@@ -908,13 +883,15 @@ constraintGamma <- function(shape, scale = 1, attr.name = "prior", condition = N
 }
 
 
-#' Soft exponential constraint on positive parameters
+#' Soft Exponential Constraint on Positive Parameters
 #'
 #' @param scale Named numeric vector of scale parameters, not rates. Its names
 #'   select the constrained parameters.
-#' @param attr.name Character. Name of the attribute storing the constraint value.
+#' @param attr.name Character. Name of the attribute holding the constraint
+#'   value, default `"prior"`.
 #' @param condition Character vector, the conditions of a sum of objectives
-#'   in which the term is evaluated. `NULL` evaluates it in every one.
+#'   in which the term is evaluated. `NULL` (default) evaluates it in every
+#'   one.
 #'
 #' @details
 #' Computes the exponential prior on the `-2 log` scale,
@@ -923,7 +900,8 @@ constraintGamma <- function(shape, scale = 1, attr.name = "prior", condition = N
 #' constant force, which makes it the smooth one-sided counterpart of an L1
 #' penalty at `mu = 0`. The value is `Inf` for a negative parameter.
 #'
-#' @return Object of class \code{objfn}.
+#' @return An objective function of class `objfn`, called as
+#'   `obj(pars, ...)`, see [dModfn]. Its value is the full `-2 log` density.
 #' @seealso [constraintGamma], [constraintL1]
 #' @examples
 #' prior <- constraintExponential(scale = c(k1 = 3))
@@ -944,13 +922,15 @@ constraintExponential <- function(scale, attr.name = "prior", condition = NULL) 
 }
 
 
-#' Soft chi-squared constraint on positive parameters
+#' Soft Chi-Squared Constraint on Positive Parameters
 #'
 #' @param df Named numeric vector of degrees of freedom. Its names select the
 #'   constrained parameters.
-#' @param attr.name Character. Name of the attribute storing the constraint value.
+#' @param attr.name Character. Name of the attribute holding the constraint
+#'   value, default `"prior"`.
 #' @param condition Character vector, the conditions of a sum of objectives
-#'   in which the term is evaluated. `NULL` evaluates it in every one.
+#'   in which the term is evaluated. `NULL` (default) evaluates it in every
+#'   one.
 #'
 #' @details
 #' Computes the chi-squared prior on the `-2 log` scale,
@@ -958,7 +938,8 @@ constraintExponential <- function(scale, attr.name = "prior", condition = NULL) 
 #' with `k` degrees of freedom. The value is `Inf` for a non-positive
 #' parameter.
 #'
-#' @return Object of class \code{objfn}.
+#' @return An objective function of class `objfn`, called as
+#'   `obj(pars, ...)`, see [dModfn]. Its value is the full `-2 log` density.
 #' @seealso [constraintGamma]
 #' @examples
 #' prior <- constraintChisq(df = c(k1 = 4))
@@ -981,13 +962,15 @@ constraintChisq <- function(df, attr.name = "prior", condition = NULL) {
 }
 
 
-#' Soft Rayleigh constraint on positive parameters
+#' Soft Rayleigh Constraint on Positive Parameters
 #'
 #' @param sigma Named numeric vector of scale parameters. Its names select the
 #'   constrained parameters.
-#' @param attr.name Character. Name of the attribute storing the constraint value.
+#' @param attr.name Character. Name of the attribute holding the constraint
+#'   value, default `"prior"`.
 #' @param condition Character vector, the conditions of a sum of objectives
-#'   in which the term is evaluated. `NULL` evaluates it in every one.
+#'   in which the term is evaluated. `NULL` (default) evaluates it in every
+#'   one.
 #'
 #' @details
 #' Computes the Rayleigh prior on the `-2 log` scale,
@@ -995,7 +978,8 @@ constraintChisq <- function(df, attr.name = "prior", condition = NULL) {
 #' Unlike the exponential it vanishes at 0, so it keeps a parameter away from
 #' both 0 and large values. The value is `Inf` for a non-positive parameter.
 #'
-#' @return Object of class \code{objfn}.
+#' @return An objective function of class `objfn`, called as
+#'   `obj(pars, ...)`, see [dModfn]. Its value is the full `-2 log` density.
 #' @seealso [constraintGamma], [constraintExponential]
 #' @examples
 #' prior <- constraintRayleigh(sigma = c(k1 = 3))
@@ -1017,32 +1001,34 @@ constraintRayleigh <- function(sigma, attr.name = "prior", condition = NULL) {
   }, attr.name, condition)
 }
 
-#' L2 objective function for validation data point
-#' 
-#' @param name character, the name of the prediction, e.g. a state name.
-#' @param time Numeric of length 1, the time of the data point.
-#' @param value Character of length 1, the name of the parameter that holds
-#'   the value of the data point.
-#' @param sigma Numeric of length 1, the uncertainty of the data point.
-#' @param attr.name character. The constraint value is additionally returned in
-#' an attribute of this name. Being a squared standardised residual already, it
-#' is also the term's `chi2` contribution, which pools with [normL2]'s under the
-#' rules described there.
-#' @param condition character, the condition for which the prediction is made.
-#' @return An `objfn` returning an [objlist]. It reads the prediction from
-#'   `env`, so it is evaluated after, or summed with, an objective that
-#'   predicts.
-#' @seealso [normL2], [constraintL2]
-#' @details Computes the constraint value 
-#' \deqn{\left(\frac{x(t)-\mu}{\sigma}\right)^2}{(pred-p[names(mu)])^2/sigma^2}
-#' and its derivatives with respect to p.
+#' L2 Objective of a Validation Data Point
 #'
-#' The controls `mu` (the prediction name, named by the value parameter),
-#' `time`, `sigma` and `attr.name` are read at every call and can be changed
-#' with [controls()]. The `parameters` attribute is the value parameter as
-#' given here, and so is the parameter set of every sum built from the
-#' objective: renaming the value parameter through `controls(x, "mu")` does
-#' not reach either, so build a new objective for another value parameter.
+#' @description Builds an objective function that compares the prediction
+#' of one quantity at one time with a data value held by a parameter.
+#'
+#' @param name Character, the name of the predicted quantity, a state or an
+#'   observable.
+#' @param time Numeric of length 1, the time of the data point.
+#' @param value Character of length 1, the name of the parameter holding the
+#'   data value.
+#' @param sigma Numeric of length 1, the standard deviation of the data
+#'   point, default `1`.
+#' @param attr.name Character. Name of the attribute holding the value,
+#'   default `"validation"`. The value is also returned as `chi2`
+#'   contribution, see `attr.name` in [normL2()].
+#' @param condition Character, the condition of the prediction. No default.
+#' @details The value is
+#' \deqn{\left(\frac{x(t) - v}{\sigma}\right)^2}{((x(t) - v)/sigma)^2}
+#' with the prediction \eqn{x(t)} and the value parameter \eqn{v}. The
+#' prediction is read from `env`, where [normL2()] stores it, so the
+#' objective is evaluated as summand of an objective that predicts, or with
+#' its `env`. `time`, `sigma` and `attr.name` can be changed with
+#' [controls()].
+#' @return An objective function of class `objfn`, called as
+#'   `obj(pars, ...)`, see section Calling a dMod function. It returns an
+#'   [objlist] with the prediction as attribute `prediction`.
+#' @inheritSection dModfn Calling a dMod function
+#' @seealso [normL2()], [constraintL2()]
 #' @examples
 #' prediction <- list(a = matrix(c(0, 1), nrow = 1, dimnames = list(NULL, c("time", "A"))))
 #' attr(prediction$a, "deriv") <- array(c(1, 0.1), c(1, 1, 2),
@@ -1120,18 +1106,19 @@ datapointL2 <- function(name, time, value, sigma = 1, attr.name = "validation", 
 }
 
 
-#' Add two lists element by element
-#' 
-#' @param out1 List of numerics or matrices
-#' @param out2 List with the same structure as out1 (there will be no warning when mismatching)
-#' @details If out1 has names, out2 is assumed to share these names. Each element of the list out1
-#' is inspected. If it has a \code{names} attributed, it is used to do a matching between out1 and out2.
-#' The same holds for the attributed \code{dimnames}. In all other cases, the "+" operator is applied
-#' the corresponding elements of out1 and out2 as they are.
-#' @return List of length of out1. 
+#' Add Two Objective Lists
+#'
+#' @param out1,out2 [objlist]s, or `NULL`, which returns the other.
+#' @details Gradients and Hessians are matched by parameter name; a parameter
+#' missing in one operand counts as zero there, and a `NULL` Hessian is left
+#' out. Numeric attributes are added, an absent one counting as zero. The
+#' `chi2` contributions are summed per `attr.name` of their objective: one
+#' `attr.name` gives one attribute `chi2`, several give `chi2_<attr.name>`
+#' each.
+#' @return An [objlist].
 #' @aliases sumobjlist
 #' @export
-#' 
+#'
 "+.objlist" <- function(out1, out2) {
 
   if (is.null(out1)) return(out2)
@@ -1300,30 +1287,31 @@ summary.objfn <- function(object, ...) {
 
 ## res (moved from data.R) ---------------------------------------------------
 
-#' Compute residuals between data and model prediction
+#' Residuals Between Data and Model Prediction
 #'
-#' Matches data to predictions by time and observable, computes (weighted)
-#' residuals, and propagates parameter derivatives. Values below `lloq` are
-#' censored via `pmax(value, lloq)`.
+#' @description Matches data to the prediction by time and name and computes
+#' the residuals and their derivatives. Values below `lloq` are set to
+#' `lloq`.
 #'
-#' @md
-#' @param data Data frame with columns `time`, `name`, `value`, `sigma`, `lloq`.
-#'   Rows with `sigma = NA` are filled from `err`.
-#' @param out Prediction matrix (first column = time, remaining = observables).
-#'   Optional `"deriv"` attribute: `[name, param, time]` array.
-#' @param err Optional error-model matrix (same layout as `out`).
-#'   Optional `"deriv"` attribute: `[name, param, time]` array.
+#' @param data `data.frame` with columns `time`, `name`, `value`, `sigma`
+#'   and `lloq`, one row per data point. Rows with `sigma = NA` take it from
+#'   `err`.
+#' @param out Prediction matrix, a [prdframe]: column `time`, then one column
+#'   per observable. Optional attributes `"deriv"`,
+#'   `[time, name, parameter]`, and `"deriv2"`,
+#'   `[time, name, parameter, parameter]`.
+#' @param err Optional error-model matrix, in the layout of `out`. Default
+#'   `NULL`.
 #'
-#' @details
-#' The returned `"deriv"` and `"deriv.err"` matrices have shape
-#' \eqn{n \times p}{n x p} (residuals x parameters), extracted from the
-#' `[name, param, time]` arrays on `out` and `err`.
+#' @return An [objframe()] with one row per data point and columns `time`,
+#'   `name`, `value`, `prediction`, `sigma`, `residual`, `weighted.residual`,
+#'   `bloq` and `weighted.0`. Attributes `"deriv"` and `"deriv.err"` are the
+#'   derivatives of the prediction and of `sigma`, `[data point, parameter]`;
+#'   `"deriv2"` and `"deriv2.err"`, `[data point, parameter, parameter]`, the
+#'   second derivatives when `out` or `err` have them. Each is `NULL` when
+#'   missing on the input.
 #'
-#' @return An [objframe()] with columns `time`, `name`, `value`, `prediction`,
-#'   `sigma`, `residual`, `weighted.residual`, `bloq`, `weighted.0` and
-#'   attributes `"deriv"` and `"deriv.err"`.
-#'
-#' @seealso [objframe()]
+#' @seealso [objframe()], [normL2()]
 #' @export
 res <- function(data, out, err = NULL) {
   
@@ -1422,26 +1410,26 @@ res <- function(data, out, err = NULL) {
 ## Objective classes ---------------------------------------------------------
 
 
-#' Generate objective list
+#' Objective List
 #'
-#' @description An objective list contains an objective value, a gradient, and a Hessian matrix.
+#' @description An objective list holds an objective value, its gradient and
+#' its Hessian, as objective functions such as [normL2()], [constraintL2()]
+#' and [datapointL2()] return them. Further numeric attributes are added
+#' along when two objective lists are added with `+`, see [sumobjlist].
 #'
-#' Objective lists can contain additional numeric attributes that are preserved or
-#' combined with the corresponding attributes of another objective list when
-#' both are added by the "+" operator, see [sumobjlist].
-#'
-#' Objective lists are returned by objective functions as being generated
-#' by [normL2], [constraintL2] and [datapointL2].
-#' @param value numeric of length 1
-#' @param gradient named numeric
-#' @param hessian matrix with rownames and colnames according to gradient names
-#' @return Object of class `objlist`
+#' @param value Numeric of length 1.
+#' @param gradient Named numeric vector, or `NULL`.
+#' @param hessian Matrix with row and column names those of `gradient`, or
+#'   `NULL`.
+#' @return An object of class `objlist`.
+#' @seealso [as.objlist()]
 #' @export
-#' 
+#'
 #' @examples
-#' # objlist(1, c(a = 1, b = 2),
-#' #         matrix(2, nrow = 2, ncol = 2,
-#' #                dimnames = list(c("a", "b"), c("a", "b"))))
+#' a <- objlist(1, c(a = 1, b = 2),
+#'              matrix(2, nrow = 2, ncol = 2,
+#'                     dimnames = list(c("a", "b"), c("a", "b"))))
+#' a + a
 objlist <- function(value, gradient, hessian) {
 
   out <- list(value = value, gradient = gradient, hessian = hessian)
@@ -1451,7 +1439,7 @@ objlist <- function(value, gradient, hessian) {
 }
 
 
-#' Objective frame
+#' Objective Frame
 #'
 #' @description
 #' An objective frame stores residuals and their derivatives with respect to parameters.

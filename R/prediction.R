@@ -1,6 +1,72 @@
 
+#' Calling dMod Functions
+#'
+#' @description Prediction functions ([prdfn]), observation functions
+#' ([obsfn]), parameter transformations ([parfn]) and objective functions
+#' (class `objfn`, built by [normL2()], [datapointL2()] and the
+#' `constraint*()` functions) share one calling convention.
+#'
+#' @section Calling a dMod function:
+#' The leading arguments depend on the class and are matched by position or
+#' by name:
+#' * prediction function: `x(times, pars, ...)`, returning a [prdlist];
+#' * observation function: `g(out, pars, ...)` with a [prdlist] `out`,
+#'   returning a [prdlist];
+#' * parameter transformation: `p(pars, ...)`, returning a list with one
+#'   [parvec] per condition;
+#' * objective function: `obj(pars, ...)`, returning an [objlist].
+#'
+#' `pars` is a named numeric vector. If it has a `deriv` attribute, as the
+#' output of a parameter transformation does, the derivatives are taken with
+#' respect to the parameters behind it. A composition is called as its class:
+#' `g * x * p` is a prediction function, `(g * x * p)(times, pars)`.
+#'
+#' The other arguments are named:
+#' * `fixed`: named numeric vector of parameters that enter the evaluation
+#'   without derivatives. Default `NULL`.
+#' * `deriv`: `TRUE` (default) returns first derivatives with respect to
+#'   `pars`.
+#' * `deriv2`: `TRUE` returns second derivatives as well. Default `FALSE`.
+#'   Every function of the chain has to be built for them, see the arguments
+#'   `deriv2` and `derivMode` of [odemodel()], [Y()] and [P()].
+#' * `hessian`: objective functions only, see the table below. Default
+#'   `NULL`.
+#' * `sweep`: objective functions only. `"forward"` (default) propagates the
+#'   sensitivities through the chain; `"reverse"` computes the gradient in one
+#'   backward pass, whose cost does not grow with the number of parameters.
+#'   `"reverse"` needs every function of the chain built with
+#'   `derivMode = "reverse"`, and with `"forward-reverse"` for `deriv2 = TRUE`.
+#' * `conditions`: character vector, the conditions to evaluate. Default all
+#'   conditions of the function.
+#' * `env`: environment for intermediate results. Default `NULL`, a new one.
+#'   An objective function stores its prediction there as `prediction` and
+#'   returns the environment as attribute `env`.
+#' * `cores`: number of threads for the ODE solves and the residual kernel.
+#'   Default `getOption("dMod.cores", 1L)`.
+#'
+#' Prediction, observation and parameter functions accept `hessian` and
+#' `sweep` and ignore them. With `deriv = TRUE` an objective function returns
+#' this Hessian:
+#'
+#' \tabular{llll}{
+#'   \code{sweep} \tab \code{hessian} \tab \code{deriv2 = FALSE} \tab \code{deriv2 = TRUE} \cr
+#'   \code{"forward"} \tab \code{NULL}, \code{TRUE} \tab Gauss-Newton \tab exact \cr
+#'   \code{"forward"} \tab \code{FALSE} \tab none \tab none, with a warning \cr
+#'   \code{"reverse"} \tab \code{NULL} \tab none \tab exact \cr
+#'   \code{"reverse"} \tab \code{TRUE} \tab none, with a warning \tab exact \cr
+#'   \code{"reverse"} \tab \code{FALSE} \tab none \tab none, with a warning \cr
+#' }
+#'
+#' With `deriv = FALSE` it returns the value alone.
+#'
+#' @seealso [controls()] to change the settings of a function after it is
+#'   built.
+#' @name dModfn
+#' @keywords documentation
+NULL
 
-#' Prediction function of an ODE model with sensitivities
+
+#' Prediction Function of an ODE Model with Sensitivities
 #'
 #' @description Turns an [odemodel()] into a prediction function that
 #' integrates the states and, with `deriv = TRUE`, their sensitivities.
@@ -27,11 +93,11 @@
 #'   `sweep = "reverse"`. Needs `backend = "cppDE"` and a model built with
 #'   `derivMode = "reverse"`. `NULL`, the default, sweeps the step grid of the
 #'   value pass. An unknown entry is ignored with a warning. Entries:
-#'   * `refine`: `TRUE` holds each step of the sweep to the error test of the
-#'     CVODES backward problem under the tolerances of the solve, see
-#'     [cppDE::adjointControl()].
+#'   * `refine`: `TRUE` checks each step of the sweep against the tolerances
+#'     of the solve and sweeps a failing step again in substeps, see
+#'     [cppDE::adjointControl()]. Default `FALSE`.
 #'   * `gradtol`: under `refine`, the absolute tolerance on each step's share
-#'     of the gradient.
+#'     of the gradient. Default `NULL`, no check on the gradient.
 #' @param fcontrol `deSolve` backend only. List with the interpolation
 #'   settings of the forcings, `method`, `rule`, `f` and `ties` as in
 #'   [stats::approxfun()], passed to [deSolve::ode()] as its `fcontrol`.
@@ -97,16 +163,17 @@
 #' `options`. A replaced list is merged as described in section Solver
 #' options, so it only needs the entries it changes.
 #'
-#' @return A [prdfn], called as `x(times, pars, fixed = NULL, deriv = TRUE,
-#'   deriv2 = FALSE)`. It returns a [prdlist] with one [prdframe] per
+#' @return A [prdfn], called as `x(times, pars, ...)`, see section Calling
+#'   a dMod function. It returns a [prdlist] with one [prdframe] per
 #'   condition: the states over `times`, with the sensitivities in
 #'   `attr(, "deriv")`, `[time, state, parameter]`, when `deriv = TRUE`, and
-#'   the second-order sensitivities in `attr(, "deriv2")` when `deriv2 = TRUE`
-#'   (`cppDE` backend, model built with `deriv2 = TRUE`). If `pars` has a
-#'   `deriv` attribute, as the output of a [parfn] does, the sensitivities are
-#'   taken with respect to the outer parameters.
+#'   the second-order sensitivities in `attr(, "deriv2")`,
+#'   `[time, state, parameter, parameter]`, when `deriv2 = TRUE` (`cppDE`
+#'   backend, model built with `deriv2 = TRUE`).
 #'
-#' @seealso [Xf()] for predictions without sensitivities, [cppDE::solveODE()].
+#' @inheritSection dModfn Calling a dMod function
+#' @seealso [Xf()] for predictions without sensitivities, [controls()],
+#'   [cppDE::solveODE()].
 #' @example inst/examples/Xs.R
 #' @export
 Xs <- function(odemodel, ...) {
@@ -857,7 +924,7 @@ Xs.cppDE <- function(odemodel, forcings = NULL, events = NULL, names = NULL, con
 }
 
 
-#' Prediction function of an ODE model without sensitivities
+#' Prediction Function of an ODE Model without Sensitivities
 #'
 #' @description Turns an [odemodel()] into a prediction function that
 #' integrates the states alone. States missing from `pars` start at 0, so
@@ -874,9 +941,11 @@ Xs.cppDE <- function(odemodel, forcings = NULL, events = NULL, names = NULL, con
 #'   accepted with a warning.
 #'
 #' @return A [prdfn], called as `x(times, pars, fixed = NULL)`, returning a
-#'   [prdlist] without derivatives. `forcings` and `options` can be changed
-#'   with [controls()].
-#' @seealso [Xs()]
+#'   [prdlist] without derivatives; the other arguments of section Calling a
+#'   dMod function are accepted and ignored. `forcings` and `options` can be
+#'   changed with [controls()].
+#' @inheritSection dModfn Calling a dMod function
+#' @seealso [Xs()], [controls()]
 #' @export
 Xf <- function(odemodel, ...) {
   UseMethod("Xf", odemodel)
@@ -1013,16 +1082,22 @@ Xf.cppDE <- function(odemodel, forcings = NULL, events = NULL, condition = NULL,
 }
 
 
-#' Model prediction function from data.frame
-#' 
-#' @param data data.frame with columns "name", "time", and row names that 
-#' are taken as parameter names. The data frame can contain a column "value"
-#' to initialize the parameters.
-#' @param condition either NULL (generic prediction for any condition) or a character, denoting
-#' the condition for which the function makes a prediction.
-#' @return A [prdfn], called as `x(times, pars, fixed = NULL, deriv = TRUE)`,
-#'   that interpolates the parameter values linearly in time. Its parameters
-#'   are the row names of `data`. Second-order derivatives are not available.
+#' Prediction Function Interpolating Parameters
+#'
+#' @description Builds a prediction function whose states are the linear
+#' interpolation in time of one parameter per grid point.
+#'
+#' @param data `data.frame` with columns `name` (the state) and `time`, one
+#'   row per grid point. The row names are the parameter names. An optional
+#'   column `value` holds start values, kept as attribute `pouter` of the
+#'   mapping.
+#' @param condition `NULL` for a prediction valid in every condition, or the
+#'   name of the condition it belongs to.
+#' @return A [prdfn], called as `x(times, pars, ...)`, see section Calling a
+#'   dMod function. Outside its grid a state holds the value of the first or
+#'   the last point. Second-order derivatives are not available.
+#' @inheritSection dModfn Calling a dMod function
+#' @seealso [Xs()]
 #' @examples
 #' # Generate a data.frame and corresponding prediction function
 #' timesD <- seq(0, 2*pi, 0.5)
@@ -1159,13 +1234,12 @@ Xd <- function(data, condition = NULL) {
 }
 
 
-#' Observation functions
+#' Observation Function
 #'
-#' @description 
-#' Creates an object of type [obsfn] that evaluates an observation function
-#' and, if requested, its first and second derivatives based on the output of a model 
-#' prediction function, see [prdfn], as e.g. produced by [Xs].
-#' 
+#' @description
+#' Builds an [obsfn] that evaluates observables, and their first and second
+#' derivatives, on the output of a prediction function such as [Xs()].
+#'
 #' @param g Named character vector or [eqnvec] defining the observation
 #' function, or a list of those named by condition, which builds one
 #' observation function per condition in a single call.
@@ -1175,47 +1249,47 @@ Xd <- function(data, condition = NULL) {
 #' @param states Character vector of states, added to those read off `f`.
 #' @param parameters Character vector of parameters, added to the symbols of
 #'   `g` and `f` that are neither states nor `time`.
-#' @param condition Either `NULL` (generic prediction for any condition) or a character 
-#' string specifying the condition for which the function generates predictions.
+#' @param condition `NULL` for an observation function valid in every
+#'   condition, or the name of the condition it belongs to.
 #' @param attach.input Logical, append the incoming states to the output.
-#'   Defaults to `FALSE`: passing the state sensitivities through costs a
-#'   full array copy per condition and objective functions do not read them.
-#'   Set `TRUE` to plot states alongside observables. Can be changed with
-#'   [controls()].
+#'   Default `FALSE`; set `TRUE` to plot states alongside observables. Can be
+#'   changed with [controls()].
 #' @param compile Logical. `TRUE` compiles the generated code now, `FALSE`
-#'   leaves it to [compile()]. The function is evaluable only compiled.
+#'   (default) leaves it to [compile()]. The function is evaluable only
+#'   compiled.
 #' @param modelname Character, the base name of the generated C++ file and
-#'   shared object, default `"obsfn"`, followed by `_<condition>`.
+#'   shared object. Default `NULL`, which is `"obsfn"`, followed by
+#'   `_<condition>`.
 #' @param verbose Logical, print compiler output to the R console.
 #' @param cores Number of parallel jobs used to generate the sources when
 #' `g` is a list; `NULL` auto-detects. Ignored for a single observation
 #' function, which is one source either way.
-#' @param derivMode Which derivative products to build, any of `"forward"`
+#' @param derivMode Which derivative code to build, any of `"forward"`
 #'   (default), `"reverse"` and `"forward-reverse"`.
-#'   * `"forward"`: the Jacobian by forward-mode AD. Without it the function
-#'     returns no `deriv` attribute.
-#'   * `"reverse"`: the vector-Jacobian product the reverse sweep contracts
-#'     against, a second instantiation of the expression body. It is what
-#'     `obj(..., sweep = "reverse")` needs from an observation function.
-#'   * `"forward-reverse"`: its derivative along a tangent, what the reverse
-#'     sweep needs with `deriv2 = TRUE`.
-#'
-#'   Either way the observation function is evaluable only after compilation.
-#' @param deriv Logical. If `TRUE` (default), attach the first-order
-#'   sensitivity `attr(., "deriv")` of shape `[time, observable, theta]`.
-#' @param deriv2 Logical. If `TRUE`, attach a second-order derivative
-#'   `attr(., "deriv2")` array of shape `[time, observable, theta, theta]`.
-#'   Requires `deriv = TRUE`. Default `FALSE`.
+#'   * `"forward"`: the Jacobian; without it the function returns no `deriv`
+#'     attribute.
+#'   * `"reverse"`: needed for `sweep = "reverse"`.
+#'   * `"forward-reverse"`: needed for `sweep = "reverse"` with
+#'     `deriv2 = TRUE`.
+#' @param deriv Logical. If `TRUE` (default), build the first derivatives,
+#'   returned as `attr(, "deriv")`, `[time, observable, parameter]`, when the
+#'   call has `deriv = TRUE` and `derivMode` contains `"forward"`. `FALSE`
+#'   returns none, whatever the call asks.
+#' @param deriv2 Logical. If `TRUE`, build the second derivatives, returned
+#'   as `attr(, "deriv2")`, `[time, observable, parameter, parameter]`, when
+#'   the call has `deriv2 = TRUE`; on a function built without them that call
+#'   is an error. Requires `deriv = TRUE`. Default `FALSE`.
 #' @param outdir Character. Directory for the generated C++ source and the
-#'   compiled shared object, default `getOption("dMod.outdir")`, else the
-#'   working directory.
+#'   shared object, default `getOption("dMod.outdir")`, else the working
+#'   directory.
 #'
 #' @return
-#' An [obsfn], called as `g(out, pars, fixed = NULL, deriv = TRUE,
-#' deriv2 = FALSE, conditions, env = NULL)` with a [prdlist] `out`, or
-#' composed as `g * x`. It returns a [prdlist] of the observables and their
-#' derivatives.
-#' 
+#' An [obsfn], called as `g(out, pars, ...)` with a [prdlist] `out`, see
+#' section Calling a dMod function, or composed as `g * x`. It returns a
+#' [prdlist] of the observables and their derivatives.
+#'
+#' @inheritSection dModfn Calling a dMod function
+#' @seealso [compile()], [controls()]
 #' @example inst/examples/prediction.R
 #' 
 #' @importFrom cppDE cppFUN
@@ -1557,13 +1631,18 @@ Y <- function(g, f = NULL, states = NULL, parameters = NULL,
 }
 
  
-#' Generate a prediction function that returns times
+#' Prediction Function Returning Time
 #'
-#' Function to deal with non-ODE models within the framework of dMod. See example.
+#' @description Builds a prediction function whose only state is `time`, so
+#' that an observation function can define a model as an explicit function of
+#' time, without an ODE.
 #'
-#' @param condition  either NULL (generic prediction for any condition) or a character, denoting
-#' the condition for which the function makes a prediction.
-#' @return Object of class [prdfn].
+#' @param condition `NULL` for a prediction valid in every condition, or the
+#'   name of the condition it belongs to.
+#' @return A [prdfn], called as `x(times, pars, ...)`, see section Calling a
+#'   dMod function. Its derivatives are zero.
+#' @inheritSection dModfn Calling a dMod function
+#' @seealso [Y()]
 #' @examples
 #' \donttest{
 #' x <- Xt()
@@ -1610,9 +1689,11 @@ Xt <- function(condition = NULL) {
 }
 
 
-#' An identity function which vanishes upon concatenation of fns
+#' Identity Function
 #'
-#' @return fn of class idfn
+#' @description `Id() * f` and `f * Id()` return `f`.
+#'
+#' @return A function of class `idfn`.
 #' @export
 #'
 #' @examples
