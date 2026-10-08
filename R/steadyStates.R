@@ -1,106 +1,78 @@
-#' Calculate analytical steady states
+#' Analytical Steady States
 #'
-#' Computes symbolic steady-state expressions tailored to parameter estimation,
-#' following the AlyssaPetit method \[1\], \[2\]. The solver itself is a Python
-#' module (Python 3.x), called through reticulate.
+#' Computes symbolic steady-state expressions for use in a parameter
+#' transformation, following the AlyssaPetit method \[1\], \[2\]. Each balance
+#' equation is solved for a state or a rate constant such that the result is
+#' a ratio of sums of positive terms. A state whose equation was spent on a
+#' rate constant stays a free parameter. The solver is a Python module called
+#' through \pkg{reticulate}; it needs \pkg{numpy}, \pkg{sympy} and, from
+#' version `"1.2"`, \pkg{scipy}.
 #'
-#' Rather than solving every balance equation for its own state, the solver
-#' spends each equation on whichever state or rate constant keeps the result a
-#' ratio of sums of positive terms. A state whose equation went to a rate
-#' constant is absent from the result and stays a free parameter of the
-#' transformation. Where no single balance stays positive, version `"1.3"`
-#' solves a strongly connected block of states jointly, so that differences
-#' cancel across its balances. If that fails, the block is searched balance
-#' by balance, spending each only on an unknown whose root stays positive once
-#' the balances solved before it are substituted. A state solved up front
-#' whose rate constants such a block needs is left to the block on a retry.
-#'
-#' @param model An `eqnlist`, or the name of a csv file describing the model.
-#' @param file Character, path the result is written to with `saveRDS()`, and
-#'   base name of the intermediate csv handed to the backend. For an `eqnlist`
-#'   model it defaults to `"reactions_for_Alyssa"`.
-#' @param rates Unused, retained for backward compatibility.
-#' @param forcings Character vector, names of the forcings. These states are
-#'   held at zero and treated as exogenous.
+#' @param model An [eqnlist], or the path of a csv file describing the model.
+#' @param file Character, path of the RDS file the result is written to with
+#'   `saveRDS()`. For an `eqnlist` the model is also written to
+#'   `<file>_model.csv` for the solver. Default `NULL`: for an `eqnlist` this
+#'   is `"reactions_for_Alyssa"`, so both files land in the working directory;
+#'   for a csv model nothing is written.
+#' @param rates Not used.
+#' @param forcings Character vector, names of forcings. These states are held
+#'   at zero and treated as exogenous. Default `NULL`.
 #' @param givenCQs Unnamed character vector of conserved quantities, either as
-#'   `c("A + pA = totA", "B + pB = totB")` or as `c("A + pA", "B + pB")`. `NULL`
-#'   (default) derives a basis automatically. In `"1.4"` each given quantity
-#'   keeps one of its states free, the first by default. If that state's
-#'   balance cannot be spent elsewhere, the next state is kept instead.
+#'   `c("A + pA = totA", "B + pB = totB")` or as `c("A + pA", "B + pB")`.
+#'   Default `NULL`: a basis is derived, or taken from [customTotals()] when the
+#'   `eqnlist` has them. In `"1.4"` each given quantity keeps one of its states
+#'   free, the first where possible.
 #' @param neglect Character vector, states and rate parameters the solver must
-#'   not resolve. A neglected state stays a free parameter of the transformation;
-#'   a neglected rate parameter is never used as a pivot.
+#'   not solve for. Default `NULL`.
 #' @param sparsifyLevel Numeric, upper bound on the length of the linear
-#'   combinations used to simplify the stoichiometric matrix. Versions `"1.0"`
-#'   and `"1.1"` only.
-#' @param outputFormat Character, `"R"` (default) for dMod-compatible output, or
-#'   `"M"` for d2d \[3\].
-#' @param testSteady Character, how the solution is verified. One of `"fast"`
-#'   (default; probabilistic Schwartz-Zippel check over GF(p), with negligible
-#'   error probability), `"exact"` (symbolic substitution, slow on large `sqrt`
-#'   solutions) or `"skip"`. `"fast"` requires version `"1.2"` or later and
-#'   falls back to `"exact"` on `"1.1"`; version `"1.0"` always tests.
-#' @param walltime Integer, wall-clock budget in seconds for the solver, `0`
-#'   (default) for unlimited. Version `"1.2"` and later.
-#' @param simplify Final-simplification mode. `TRUE` (default) applies
-#'   `sympy.simplify` once per expression, `FALSE` skips it and returns bulkier
-#'   output, `"full"` adds a `cancel`/`posify`/`factor` pipeline that is slower
-#'   but more compact. Version `"1.2"` and later.
-#' @param solveQuadratic Logical, whether a cycle whose final equation is
-#'   quadratic in its own state may be closed by the positive root of
-#'   \eqn{a X^2 + b X + c = 0} instead of by a rate-parameter pivot. This keeps
-#'   the pivoted rate constants out of the result, at the price of `sqrt(...)`
-#'   terms that some workflows cannot consume in a parameter transformation.
-#'   Default `FALSE`. Version `"1.2"` and later. In `"1.4"` a state whose own
-#'   balance, denominators cleared, has \eqn{a} and \eqn{-c} sums of positive
-#'   terms takes the unique positive root
-#'   \eqn{X = 2|c| / (\sqrt{b^2 + 4 a |c|} + b)}, tried before any rate constant.
-#' @param positive Positivity assumption used for root and pivot selection.
-#'   `TRUE` (default) treats all parameters, initial values and totals as
-#'   positive, `FALSE` assumes nothing, and a character vector names the symbols
-#'   to treat as positive. Version `"1.2"` and later.
+#'   combinations used to simplify the stoichiometric matrix. Default `NULL`:
+#'   `2` for versions `"1.0"` and `"1.1"`, unused from `"1.2"`.
+#' @param outputFormat `"R"` (default) for dMod, or `"M"` for d2d \[3\].
+#' @param testSteady How the solution is verified: `"fast"` (default), a
+#'   probabilistic check modulo a prime; `"exact"`, symbolic substitution;
+#'   `"skip"`.
+#' @param walltime Integer, time budget of the solver in seconds, `0`
+#'   (default) for none.
+#' @param simplify `TRUE` (default) simplifies every expression once with
+#'   sympy, `FALSE` skips it, `"full"` simplifies further at a higher cost.
+#' @param solveQuadratic Logical, whether a balance quadratic in its own state
+#'   may be solved by its positive root instead of for a rate constant, which
+#'   introduces `sqrt()` terms. Default `FALSE`.
+#' @param positive Positivity assumption for root and pivot selection: `TRUE`
+#'   (default) all symbols are positive, `FALSE` none, or a character vector of
+#'   the positive symbols. With `TRUE` no result contains a subtraction.
+#' @param branches Logical. If `TRUE`, a quadratic with two positive roots is
+#'   returned with a selector symbol `branch_<state>` taking `-1` or `+1`.
+#'   Requires `solveQuadratic = TRUE`. Default `FALSE`.
+#' @param priority Character vector of state and rate-parameter names, most
+#'   preferred first: named states are solved earlier, named rate parameters
+#'   are preferred as pivots. Default `NULL`.
+#' @param resolve Logical, whether the result is passed through
+#'   [resolveRecurrence()] so that no equation refers to another. Default
+#'   `TRUE`.
+#' @param verbose `TRUE` (default) reports progress in a few lines and the
+#'   result, `FALSE` only the result, `"full"` every step of the solver.
+#' @param version Solver version, one of `"1.0"`, `"1.1"`, `"1.2"`, `"1.3"`
+#'   (default) and `"1.4"`. `"1.4"` solves every unknown from a combination of
+#'   balances, so every result is a ratio of positive sums; it needs
+#'   `positive = TRUE` and `outputFormat = "R"` and treats compartment volumes
+#'   as fixed.
 #'
-#'   With `TRUE` the result is manifestly non-negative: no expression contains a
-#'   subtraction, so no parameter choice can drive a state negative. Where
-#'   solving for a state would yield a difference, its equation is spent on one
-#'   of its own rate constants instead. That solve is linear and therefore has a
-#'   unique root, which is why a pivot, not root selection, is the remedy. If no
-#'   pivot succeeds either, a diagnosis is printed and `0` returned.
-#' @param branches Logical, whether a quadratic with two positive roots
-#'   (bistability) is emitted with a selector symbol `branch_<state>` taking
-#'   `-1` or `+1` to recover both steady states. Requires
-#'   `solveQuadratic = TRUE`. `FALSE` (default) emits only the provably unique
-#'   positive root and pivots ambiguous cases. Version `"1.2"` and later.
-#' @param priority Character vector of state and rate-parameter names,
-#'   most-preferred first, biasing the resolution order: a named state is
-#'   resolved earlier, a named rate parameter is preferred as pivot. Structural
-#'   constraints take precedence, so this is a preference, not a guarantee.
-#'   Unmatched names are reported and ignored. Version `"1.2"` and later.
-#' @param resolve Logical, whether the equations are passed through
-#'   [resolveRecurrence()] so that none refers to another, as a dMod parameter
-#'   transformation substitutes all entries at once. `FALSE` keeps the compact
-#'   recurrent form. Versions `"1.2"` and later already resolve in the backend,
-#'   so this matters for `"1.0"` and `"1.1"`.
-#' @param verbose `TRUE` (default) reports the progress in a few lines and the
-#'   result, `FALSE` only the result, `"full"` traces every step of the solver.
-#'   Versions before `"1.3"` print their own output unless `verbose = FALSE`.
-#' @param version Character, backend version. One of `"1.0"` (original), `"1.1"`
-#'   (adds `testSteady`), `"1.2"` (sink-cluster detection, `walltime`,
-#'   priority-table cycle breaking, `simplify` toggle, optional quadratic
-#'   state-side solve), or `"1.3"` (default; same interface as `"1.2"`, but
-#'   solutions are recorded lazily and resolved once at output time, with a
-#'   lock guard replacing most rollbacks, typically orders of magnitude
-#'   faster on feedback-heavy networks). `"1.4"` is a new core on the same
-#'   interface: every balance is a linear form over the flux terms, and each
-#'   unknown (a state or a rate constant) is solved from a combination of
-#'   balances a linear program finds, so every solution is a ratio of positive
-#'   sums by construction and nothing is expanded. Where no single unknown is
-#'   left, one side of a balance shares its sum by new flux ratios `r_*`. It
-#'   needs `positive = TRUE` and `outputFormat = "R"`, and treats the model's
-#'   compartment volumes as fixed, never as unknowns.
+#' @details
+#' Arguments by version:
+#' \tabular{ll}{
+#'   `"1.0"` \tab `sparsifyLevel`; the solution is always tested.\cr
+#'   `"1.1"` \tab adds `testSteady` (`"fast"` runs as `"exact"`).\cr
+#'   `"1.2"`, `"1.3"` \tab add `walltime`, `simplify`, `solveQuadratic`,
+#'     `positive`, `branches`, `priority`; `sparsifyLevel` is unused.\cr
+#'   `"1.3"`, `"1.4"` \tab honour `verbose` themselves; older versions are
+#'     silenced with `verbose = FALSE`.\cr
+#'   `"1.4"` \tab ignores `branches`; `testSteady = "exact"` runs as
+#'     `"fast"`.\cr
+#' }
 #'
 #' @return Named character vector of steady-state equations in dMod format, or
-#'   `0` if no solution was found. An entry whose value is its own name denotes a
+#'   `0` if no solution was found. An entry whose value is its own name is a
 #'   free parameter.
 #'
 #' @references \[1\] <https://pmc.ncbi.nlm.nih.gov/articles/PMC4863410/>
@@ -109,9 +81,30 @@
 #'
 #' @author Marcus Rosenblatt, \email{marcus.rosenblatt@@fdm.uni-freiburg.de}
 #'
+#' @seealso [repar()], [P()]
+#'
 #' @export
 #' @importFrom utils write.table
-#' @example inst/examples/steadystates.R
+#' @examplesIf requireNamespace("reticulate", quietly = TRUE) && reticulate::py_module_available("sympy") && reticulate::py_module_available("scipy")
+#' reactions <- eqnlist()
+#' reactions <- addReaction(reactions, "Tca_buffer", "Tca_cyto",
+#'                          "import_Tca*Tca_buffer", "Basolateral uptake")
+#' reactions <- addReaction(reactions, "Tca_cyto", "Tca_buffer",
+#'                          "export_Tca_baso*Tca_cyto", "Basolateral efflux")
+#' reactions <- addReaction(reactions, "Tca_cyto", "Tca_canalicular",
+#'                          "export_Tca_cana*Tca_cyto", "Canalicular efflux")
+#' reactions <- addReaction(reactions, "Tca_canalicular", "Tca_buffer",
+#'                          "transport_Tca*Tca_canalicular", "Transport bile")
+#'
+#' steadies <- steadyStates(reactions, file = file.path(tempdir(), "steady"),
+#'                          verbose = FALSE)
+#' steadies
+#'
+#' # Parameter transformation that puts the model in steady state
+#' parameters <- getParameters(reactions)
+#' trafo <- repar("x ~ y", eqnvec(setNames(parameters, parameters)),
+#'                x = names(steadies), y = steadies)
+#' trafo
 steadyStates <- function(model, file = NULL, rates = NULL, forcings = NULL,
                          givenCQs = NULL, neglect = NULL, sparsifyLevel = NULL,
                          outputFormat = "R", testSteady = c("fast", "exact", "skip"),

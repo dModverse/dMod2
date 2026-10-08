@@ -1,29 +1,42 @@
-#' Import an SBML model
+#' Import an SBML Model
 #'
-#' Reads an SBML Level 3 file via a Python helper (`inst/code/sbmlImport.py`)
-#' that uses `python-libsbml`. The Python environment is provisioned
-#' automatically by `reticulate` on first use, no manual venv setup is
-#' required. Users who want to point dMod at an existing interpreter
-#' (e.g. a hand-managed venv or conda env) can set the
-#' `DMOD_LIBSBML_PYTHON` environment variable to its absolute path; that
-#' bypasses reticulate entirely.
+#' Reads an SBML Level 3 file. Requires \pkg{reticulate}, which provides a
+#' Python with `python-libsbml`; set the environment variable
+#' `DMOD_LIBSBML_PYTHON` to the path of a Python interpreter to use that one
+#' instead. Kinetic laws are divided by the volume of their compartment.
 #'
-#' Kinetic laws coming out of SBML are **extensive** (amount/time) by SBML
-#' convention, whereas dMod stores rates in **concentration-style**. On import,
-#' each kinetic law `K` is divided by the volume of its home compartment (the
-#' compartment shared by the educts, or the product compartment for pure
-#' synthesis) to produce `rate_dMod = K / V`. Combined with the volume-ratio
-#' factors emitted by [getFluxes()], this preserves the SBML semantics:
-#' `K_SBML = rate_dMod * V`.
-#'
-#' @param modelpath Path to the sbml file
+#' @param modelpath Path to the SBML file.
 #' @param keep Parameter ids that keep their own symbol although the SBML sets
-#'   them by an `<initialAssignment>`, for a caller that assigns them
-#'   otherwise (the PEtab condition and parameter tables). A constant
-#'   assignment becomes their default value. Any other parameter's initial
-#'   assignment is substituted into the rates, initial values and observables.
+#'   them by an `<initialAssignment>`; a constant assignment becomes their
+#'   default value. Any other initial assignment is substituted into the rates,
+#'   initial values and observables. Default `NULL`.
 #'
-#' @return list of eqnlist, parameters and inits
+#' @return A list with components
+#'   \describe{
+#'     \item{`reactions`}{The model as an [eqnlist].}
+#'     \item{`pars`}{Named numeric, the parameter values.}
+#'     \item{`inits`}{Named character, the initial value of each state.}
+#'     \item{`observables`}{Named list of observable formulas, possibly
+#'       empty.}
+#'     \item{`assignmentRules`}{Named list of assignment rule formulas,
+#'       already substituted into rates, initial values and observables.}
+#'     \item{`events`}{An [eventlist] or `NULL`, including the rescaling of
+#'       states when an event changes a compartment volume.}
+#'     \item{`eventsSource`}{An [eventlist] or `NULL`, the event assignments
+#'       of the SBML file only.}
+#'     \item{`renamed`}{Named character, the new ids of SBML ids that are no
+#'       valid R or C++ names, named by the old ids.}
+#'   }
+#' @seealso [exportSbml()], [importPEtab()]
+#' @examplesIf requireNamespace("reticulate", quietly = TRUE) && requireNamespace("rjson", quietly = TRUE) && reticulate::py_module_available("libsbml")
+#' f <- addReaction(eqnlist(), from = "A", to = "B", rate = "k1*A")
+#' f <- addReaction(f, from = "B", to = "", rate = "k2*B")
+#' file <- file.path(tempdir(), "model.xml")
+#' exportSbml(f, parameters = c(k1 = 0.5, k2 = 0.1), inits = c(A = 1, B = 0),
+#'            filepath = file)
+#' model <- importSbml(file)
+#' model$reactions
+#' model$pars
 #' @export
 #' @importFrom stringr str_replace_all
 importSbml <- function(modelpath, keep = NULL) {
@@ -426,35 +439,35 @@ importSbml <- function(modelpath, keep = NULL) {
 }
 
 
-#' Export an eqnlist to an SBML Level 3 file
+#' Export an Equation List to SBML
 #'
-#' Serialises an [eqnlist] plus parameter values and initial concentrations to
-#' SBML Level 3 Version 2. Each reaction's kinetic law is emitted as
-#' `V_ref * rate_dMod` to restore SBML's extensive-flux convention
-#' (`K_SBML = rate_dMod * V_ref`). Symbolic volumes are written as an
-#' `<initialAssignment>` on the compartment. Requires a Python environment with `libsbml`
-#' installed; the default location matches the one used by [importSbml()].
+#' Writes an [eqnlist] with parameter values and initial values to an SBML
+#' Level 3 Version 2 file. Kinetic laws are multiplied by the volume of their
+#' compartment. Symbolic volumes are written as an `<initialAssignment>` of the
+#' compartment. Requires the same Python environment as [importSbml()].
 #'
 #' @param eqnlist Object of class [eqnlist] to export.
 #' @param parameters Named numeric vector of parameter values (including any
 #'   compartment-size parameters referenced in `eqnlist$compartments`). An entry
 #'   whose name is a compartment or a species is that element's size or initial
-#'   value, not a separate `<parameter>`. Pass `NULL` to write parameters
-#'   without values.
+#'   value, not a separate `<parameter>`. Default `NULL`: parameters are
+#'   written without values.
 #' @param inits Named numeric *or* character vector of initial values keyed
 #'   by state name. Numeric entries (or character entries that parse as
 #'   numeric) are written as `initialConcentration`, `initialAmount` for
 #'   states listed in `eqnlist$amountStates`; non-numeric character
 #'   entries are emitted as `<initialAssignment>` formulas and let the SBML
 #'   simulator resolve the expression against `parameters` at sim time.
-#'   Missing states default to 0.
-#' @param filepath Path to the SBML output file.
+#'   Missing states default to 0. Default `NULL`.
+#' @param filepath Path of the SBML file to write.
 #' @param modelID SBML model identifier. Defaults to `"dMod_export"`.
 #' @param events Object of class [eventlist] to emit as `<listOfEvents>`, or
 #'   `NULL`. Rows sharing a trigger become one `<event>`, since SBML applies an
 #'   event's assignments together. A compartment an event assigns to is written
-#'   as non-constant.
+#'   as non-constant. Default `NULL`.
 #' @return `filepath`, invisibly.
+#' @seealso [importSbml()], [exportPEtab()]
+#' @inherit importSbml examples
 #' @export
 exportSbml <- function(eqnlist, parameters = NULL, inits = NULL, filepath,
                          modelID = "dMod_export", events = NULL) {

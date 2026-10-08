@@ -268,6 +268,16 @@ which counts rejected steps instead of reading the model, or on `radius`. The
 gradient norm is the termination criterion usually recommended for quasi-Newton
 methods [@nocedal2006numerical].
 
+The tolerances are bounded below by what the objective resolves. For an ODE
+model integrated at relative tolerance $\epsilon$, the value has a relative error
+of roughly $\epsilon$ and the forward sensitivities about an order more, which
+gives the gradient a noise floor. `ftol` therefore belongs at or above
+$\epsilon \lvert f \rvert$, and `gtol` at the noise floor of the gradient, which
+for a poorly scaled problem is easier to read off a first run than to predict.
+The integrator is tightened before either tolerance. A run ending on
+`stagnation` rather than `gradient` indicates tolerances below the noise floor;
+`max(abs(fit$gradient))` shows where it lies.
+
 # The source of the model Hessian
 
 `hessianMethod` selects the source of $H$. The subproblem solver, the scaling
@@ -618,7 +628,7 @@ Hessian, and a source that infers curvature from steps costs extra evaluations
 without improving the model. Where they are large, so is the omitted term, the
 Gauss-Newton model stops improving early, and its tests fire far from the minimum.
 
-Three findings carry over between the settings. No source reaches an optimum
+Three findings hold across the settings. No source reaches an optimum
 another misses; they differ in cost. A handover does not change the basin a
 run ends in, since the basin is chosen before a soft stop fires. A
 quasi-Newton phase needs of the order of $n_\theta$ accepted steps before it
@@ -711,7 +721,11 @@ linearised single-shooting response of a node, which across a spike is huge.
 $\alpha = 1$ closes the linearised gaps completely, Bock's own step. Under an
 active region the node step is damped with the parameter step: $\alpha$ is the
 share of the node part of the full Gauss-Newton step that the radius admits,
-capped at one.
+capped at one. Where condensing would propagate a gap through a chain of
+expanding segments beyond a bound, that link of the linearisation is dropped
+for the step. A summand other than the shooting term, a prior or a
+single-shooting `normL2` of other data, enters with its own value, gradient and
+Gauss-Newton Hessian.
 
 A step is accepted by the filter of Fletcher and Leyffer
 [@fletcher2002nonlinear] on the pair of data term $f$ and scaled gap size
@@ -805,6 +819,16 @@ directions fixed that the data do not identify [@peifer2007parameter],
 enforced [@voss2004nonlinear], and `stepControl$restore` gives the filter its
 restoration phase. None is on by default: each helps on some problems and costs
 on others.
+
+With `twoPhase` every segment has to explain its data from a start the data
+give, so no node takes up misfit the parameters should remove; the nodes are
+then laid out afresh at the parameters found and released. This helps where
+noise in the node values would otherwise move the parameters, as on a spiking
+trace, at several times the cost elsewhere. `restore` first closes the
+linearised gaps at the current parameters, damped if need be, and where that
+does not halve them puts the nodes onto the trajectory of these parameters. On
+a noisy spike train, nodes put onto the trajectory of wrong parameters let the
+automatic layout cut far more segments, and fewer starts reach the optimum.
 
 ## FitzHugh-Nagumo
 

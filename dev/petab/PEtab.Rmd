@@ -502,5 +502,7 @@ The supported noise distributions follow from dMod2's objective, `normL2`.
 | `log10` observable transformation on a v2 export | rewritten as `log-normal` noise; v2 has no `log10` |
 | `<algebraicRule>` in the source model | absent from the dMod model and therefore from any SBML written back |
 | experiment identity | experiments are keyed by their starting condition, so the exported `experimentId` need not match the imported one |
+| initial values set per condition in the trafo only | not written to a v2 condition table; a v1 export keeps them |
+| parameter scales of a hand-built problem | read from `attr(bestfit, "petab_scales")`, `lin` without it |
 
 # References
