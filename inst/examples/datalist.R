@@ -14,7 +14,7 @@ data <- datalist(C1 = mydata1, C2 = mydata2)
 print(data)
 plot(data)
 
-## Generate datalist from singla data.frame
+## Generate datalist from a single data.frame
 times <- seq(0, 2*pi, length.out = 20)
 mydata <- data.frame(name = "A", 
                      time = times, 

@@ -154,57 +154,52 @@
 }
 
 
-#' Compile model-related C/C++ code
+#' Compile Model-Related C/C++ Code
 #'
 #' @description
-#' Compiles model objects ([parfn], [obsfn], [prdfn]) related C/C++ files into shared libraries via `R CMD SHLIB`.
+#' Compiles the generated sources of model objects ([parfn], [obsfn],
+#' [prdfn], [odemodel()]) into shared objects with `R CMD SHLIB` and loads
+#' them.
 #'
 #' @details
-#' Named arguments other than the ones below are an error: `...` holds the
-#' objects to compile, so a misspelled argument name would otherwise be taken
-#' for an object and ignored.
+#' Compile and link flags are taken per source from the `"compileInfo"`
+#' attribute of the objects. Objects without it are matched to sources in the
+#' working directory by model name. Unchanged sources are not recompiled.
 #'
-#' The toolchain report prints the flag set every source gets, then each
-#' further set with the number of sources that declare it. Compile flags are
-#' per file, `-fopenmp` reaching only the ODE sources for instance, so a single
-#' bracket would name a command that never runs.
+#' Without `output`, each source becomes a shared object named after it, i.e.
+#' after the model name. With `output`, all sources are linked into one shared
+#' object of that name, and the model name of every object passed as a plain
+#' variable is set to `output`, see [modelname()]. If a shared object of that
+#' name is already loaded, a suffix `_2`, `_3`, ... is appended with a warning.
+#' With many sources, set `output`: R limits the number of loaded shared
+#' objects.
 #'
-#' Per-file compile and link flags are taken from the `"compileInfo"`
-#' attribute that [odemodel()], [Xs()], [Xf()], [Y()] and [P()] attach to
-#' their return values. Each entry lists the source file together with the
-#' `compileArgs` and `linkArgs` reported by the backend that produced it
-#' (`cOde::funC`, `cppDE::cppODE`, `cppDE::cvode`, ...), so solver-specific
-#' libraries reach only the files that need them. Objects without
-#' `compileInfo` fall back to modelname-based file discovery in the current
-#' working directory.
+#' Named arguments other than the ones below are an error.
 #'
-#' @param ... One or more model objects.
-#' @param output Optional name for a combined shared library. When set, all
-#'   files are linked into one object and the union of their `linkArgs` is
-#'   applied. A bare name places the object next to the generated sources; a
-#'   name with a directory is taken as given.
-#' @param args Additional compiler/linker flags applied to every file.
-#' @param cores Parallel compilation jobs (Unix only, requires `cores > 1`).
-#'   Defaults to [detectFreeCores()].
-#' @param chunkSize Maximum number of files per archiver call, see Details.
-#' @param verbose If `TRUE`, print compiler commands.
+#' @param ... one or more model objects.
+#' @param output character, the name of a combined shared object. Default
+#'   `NULL`. A bare name places it next to the generated sources, a name with
+#'   a directory is taken as given.
+#' @param args character, additional compiler and linker flags for every
+#'   file. Default `NULL`.
+#' @param cores integer, parallel compilation jobs (Unix only). Default
+#'   [detectFreeCores()].
+#' @param chunkSize integer, the maximum number of object files per archiver
+#'   call when the link command would exceed the command-line limit. Default
+#'   100.
+#' @param verbose logical, print the compiler commands. Default `FALSE`.
 #'
-#' @section Many conditions:
-#' Sources are always compiled one file per command, but naming every object on
-#' the final `R CMD SHLIB` command line overruns the shell's argument limit at
-#' roughly a thousand files. Beyond that, `compile()` bundles the objects into a
-#' static archive in chunks of `chunkSize` and links it whole; the result is
-#' identical. This needs `output` to be set, since one shared object per source
-#' would exceed `R_MAX_NUM_DLLS` first.
-#'
-#' Objects are reused when the source bytes and the compile command are
-#' unchanged, recorded in a `.dMod_objects` index next to them: the code
-#' generators rewrite every source on each run, so file times say nothing about
-#' whether a recompile is needed. Where the sources share their include block,
-#' it is precompiled once and prepended, which is what dominates the compile of
-#' the short generated files.
-#'
-#' @return Invisibly `TRUE` on success.
+#' @return `TRUE`, invisibly.
+#' @seealso [odemodel()], [loadDLL()], [modelname()]
+#' @examples
+#' \donttest{
+#' g <- Y(c(y = "s * x"), parameters = "s", modelname = "compile_ex_obs",
+#'        outdir = tempdir())
+#' p <- P(c(s = "exp(log_s)"), modelname = "compile_ex_par",
+#'        outdir = tempdir())
+#' compile(g, p, output = "compile_ex", cores = 1)
+#' modelname(g)
+#' }
 #' @export
 compile <- function(..., output = NULL, args = NULL, cores = detectFreeCores(),
                     chunkSize = 100, verbose = FALSE) {
@@ -734,9 +729,14 @@ compile <- function(..., output = NULL, args = NULL, cores = detectFreeCores(),
 
 
 
-#' Determine loaded DLLs available in working directory
-#' 
-#' @return Character vector with the names of the loaded DLLs available in the working directory
+#' Loaded Shared Objects in the Working Directory
+#'
+#' Only the working directory is searched, not `getOption("dMod.outdir")` or
+#' the directories the objects were generated in.
+#'
+#' @return Character vector with the names of the loaded shared objects whose
+#'   path lies in the working directory.
+#' @seealso [loadDLL()]
 #' @export
 getLocalDLLs <- function() {
   
@@ -801,21 +801,23 @@ getLocalDLLs <- function() {
 }
 
 
-#' Load shared object for a dMod object
+#' Load Shared Objects for dMod Objects
 #'
-#' Usually when restarting the R session, although all objects are saved in
-#' the workspace, the dynamic libraries are not linked any more. `loadDLL`
-#' is a wrapper for `dyn.load` that uses the "modelname" attribute of
-#' dMod objects like prediction functions, observation functions, etc. to
-#' load the corresponding shared object. Searched are the directories the
-#' objects were generated in and the working directory.
+#' Loads the shared objects of dMod functions by their model names, e.g.
+#' after restoring a workspace in a new R session. Searched are the working
+#' directory, `getOption("dMod.outdir")` and the directories the sources were
+#' generated in. Shared objects already loaded are skipped.
 #'
-#' Shared objects already loaded in the current process are skipped, so
-#' calling `loadDLL` repeatedly is a no-op.
+#' @param ... objects of class `prdfn`, `obsfn`, `parfn` or `objfn`.
 #'
-#' @param ... objects of class prdfn, obsfn, parfn, objfn, ...
-#'
-#' @return Invisibly, the character vector of files loaded by this call.
+#' @return Character vector of the files loaded by this call, invisibly.
+#' @seealso [compile()], [modelname()]
+#' @examples
+#' \donttest{
+#' g <- Y(c(y = "s * x"), parameters = "s", modelname = "loadDLL_ex",
+#'        compile = TRUE, outdir = tempdir())
+#' loadDLL(g)
+#' }
 #'
 #' @export
 loadDLL <- function(...) {

@@ -1,8 +1,7 @@
 ## Methods for the class parlist -----------------------------------------------
 
-#' Parameter list
-#' 
-#' @param x list of lists, as returned by `trust`
+#' @param x list of fit results, each as returned by [trust()]. Default `NULL`
+#'   returns `NULL`.
 #' @rdname parlist
 #' @export
 as.parlist <- function(x = NULL) {
@@ -36,7 +35,7 @@ print.parlist <- function(x, ...) {
 }
 
 #' @export
-#' @param object a parlist
+#' @param object object of class `parlist`.
 #' @rdname parlist
 summary.parlist <- function(object, ...) {
   
@@ -119,15 +118,19 @@ summary.parlist <- function(object, ...) {
 }
 
 
-#' Plot a parameter list.
-#' 
-#' @param x fitlist obtained from mstrust
-#' @param ... additional arguments
-#' @param path print path of parameters from initials to convergence. For this
-#'   option to be TRUE [mstrust()] must have had the option
-#'   \option{blather}.
-#' 
-#' @details If path=TRUE:        
+#' Plot a Parameter List
+#'
+#' Plots, for the converged fits, the converged against the initial value of
+#' each parameter, or with `path = TRUE` the parameter values over the
+#' iterations.
+#'
+#' @param x object of class `parlist`, e.g. from [mstrust()].
+#' @param path logical, plot the path of the parameters from the initial
+#'   values to convergence. Default `FALSE`. `path = TRUE` needs fits run with
+#'   `trust(..., blather = TRUE)` or `mstrust(..., blather = TRUE)`.
+#' @param ... not used.
+#' @return A `ggplot` object.
+#' @seealso [parlist()], [plotValues()]
 #' @author Malenka Mader, \email{Malenka.Mader@@fdm.uni-freiburg.de}
 #'   
 #' @export
@@ -149,7 +152,7 @@ plot.parlist <- function(x, path = FALSE, ...) {
     ggplot(data=ddata)+facet_wrap(~ parameter)+geom_point(aes(x=x,y=y))
   } else {
     if (!any (names(fl[[1]]) == "argpath")){
-      stop("No path information in the output of mstrust. Restart mstrust with option blather.")
+      stop("No path information in the fits. Run trust() or mstrust() with blather = TRUE.")
     }
     parNames <- names(fl[[1]]$parinit)
     
@@ -168,8 +171,8 @@ plot.parlist <- function(x, path = FALSE, ...) {
 #' @export
 #' @importFrom data.table as.data.table rbindlist
 #' @rdname as.parframe
-#' @param sort.by character indicating by which column the returned parameter frame
-#' should be sorted. Defaults to `"value"`.
+#' @param sort.by character, the column by which the returned parameter frame
+#' is sorted. Default `"value"`.
 as.parframe.parlist <- function(x, sort.by = "value", ...) {
   m_stat <- .statParlist(x)
   m_metanames <- c("index", "value", "converged", "iterations")
@@ -207,11 +210,6 @@ as.parframe.parlist <- function(x, sort.by = "value", ...) {
 
 
 
-#' Concatenate parameter lists
-#'
-#' @description Fitlists have a fit index which must be held unique on merging
-#' multiple fitlists.
-#'
 #' @author Wolfgang Mader, \email{Wolfgang.Mader@@fdm.uni-freiburg.de}
 #'
 #' @rdname parlist
@@ -235,41 +233,33 @@ c.parlist <- function(...) {
 ## Methods for the class parframe ----
 
 
-#' Coerce object to a parameter frame
+#' Coerce to a Parameter Frame
 #' 
-#' @param x object to be coerced
-#' @param ... other arguments
-#' @return object of class [parframe].
-#' @example inst/examples/parlist.R
+#' @param x object to be coerced, e.g. a `parlist`.
+#' @param ... not used.
+#' @return Object of class [parframe]. For a `parlist`, the meta-information
+#' columns are `index`, `value`, `converged` and `iterations`, plus the
+#' termination and evaluation counts the fits report.
+#' @seealso [parframe()], [as.parvec.parframe()], and [parlist()] for an
+#'   example.
 #' @export
 as.parframe <- function(x, ...) {
   UseMethod("as.parframe", x)
 }
 
 
-#' Select a parameter vector from a parameter frame.
-#' 
-#' @description Obtain a parameter vector from a parameter frame.
-#' 
-#' @param x A parameter frame, e.g., the output of
-#'   [as.parframe()].
-#' @param index Integer, the parameter vector with the `index`-th lowest
-#'   objective value.
-#' @param ... not used right now
-#'   
-#' @details With this command, additional information included in the parameter
-#'   frame as the objective value and the convergence state are removed and a
-#'   parameter vector is returned. This parameter vector can be used to e.g.,
-#'   evaluate an objective function.
-#'   
-#'   On selection, the parameters in the parameter frame are ordered such, that
-#'   the parameter vector with the lowest objective value is at \option{index}
-#'   1. Thus, the parameter vector with the \option{index}-th lowest objective
-#'   value is easily obtained.
-#'   
-#' @return The parameter vector with the \option{index}-th lowest objective
-#'   value.
-#'   
+#' Select a Parameter Vector from a Parameter Frame
+#'
+#' @param x object of class `parframe`, e.g. from [as.parframe()].
+#' @param index integer, select the row with the `index`-th lowest objective
+#'   value. Default 1, the best fit. Without a `value` column, the `index`-th
+#'   row.
+#' @param ... not used.
+#'
+#' @return Object of class `parvec` with the parameter columns of the selected
+#'   row. A warning is issued if that fit did not converge.
+#' @seealso [as.parframe()], [parvec()]
+#'
 #' @author Wolfgang Mader, \email{Wolfgang.Mader@@fdm.uni-freiburg.de}
 #'   
 #' @export
@@ -509,9 +499,10 @@ is.parframe <- function(x) {
 }
 
 #' @export
-#' @param i row index in any format
-#' @param j column index in any format
-#' @param drop logical. If TRUE the result is coerced to the lowest possible dimension
+#' @param i row index in any format. Default `NULL` keeps all rows.
+#' @param j column index in any format. Default `NULL` keeps all columns.
+#' @param drop logical. Default `FALSE`. `TRUE` returns a plain data frame or
+#'   vector instead of a `parframe`.
 #' @rdname parframe
 "[.parframe" <- function(x, i = NULL, j = NULL, drop = FALSE){
   
@@ -535,19 +526,19 @@ is.parframe <- function(x) {
 
 
 #' @export
-#' @param ... additional arguments
+#' @param ... for `subset()`, a logical expression in the columns of `x`.
 #' @rdname parframe
 subset.parframe <- function(x, ...) {
 
-  # The condition names columns of `x` and may name variables of the frame it
-  # was written in, so it is evaluated against the columns first and the caller
-  # second.
+  # Columns of `x` first, then the caller's frame.
   condition <- eval(substitute(alist(...)))[[1L]]
   x[eval(condition, as.list(x), parent.frame()), ]
 
 }
 
-#' Extract those lines of a parameter frame with unique elements in the value column
+#' Rows of a Parameter Frame with Unique Values
+#'
+#' Keeps one row per distinct objective value.
 #' @param x parameter frame
 #' @param incomparables not used. Argument exists for compatibility with S3 generic.
 #' @param tol tolerance to decide when values are assumed to be equal, see [plotValues()].
@@ -567,24 +558,11 @@ unique.parframe <- function(x, incomparables = FALSE, tol = 1, ...) {
 
 ## Methods for the class parvec ------------------------------------------------
 
-#' Dispatch as.parvec.
-#'
-#' Creates an object of class \code{"parvec"} from a numeric vector, optionally
-#' with first-order derivatives. Existing derivatives may be inherited,
-#' replaced, or dropped; no derivatives are created automatically.
-#'
-#' Parameters missing from the derivative matrix are treated as fixed and
-#' stored in the \code{"fixed"} attribute.
-#'
-#' @param x Numeric vector of parameter values.
-#' @param names Optional parameter names.
-#' @param deriv Optional Jacobian matrix, \code{NULL} to inherit or
-#'   \code{FALSE} to drop.
-#' @param deriv2 Optional 3D Hessian array, \code{NULL} to inherit or
-#'   \code{FALSE} to drop.
-#' @param ... Further arguments passed to methods.
-#'
-#' @return A numeric vector of class \code{c("parvec", "numeric")}.
+#' @param x numeric vector of parameter values.
+#' @param names character, the parameter names. Default `NULL` uses
+#'   `names(x)`.
+#' @param deriv2 3D array of second derivatives, `[parameter, theta, theta]`.
+#'   Default `NULL` keeps the `"deriv2"` attribute of `x`, `FALSE` drops it.
 #'
 #' @export
 #' @rdname parvec
@@ -640,13 +618,14 @@ as.parvec.numeric <- function(x, names = NULL, deriv = NULL, deriv2 = NULL, ...)
 
 
 
-#' Pretty printing for parvec objects
+#' Print Parameter Vectors
 #'
-#' Prints a parameter vector along with information about
-#' its attached derivatives and information about constant parameters in 'fixed'.
+#' Prints a parameter vector with information about its derivatives and its
+#' fixed parameters.
 #'
-#' @param x parvec object
-#' @param ... Currently ignored.
+#' @param x object of class `parvec`.
+#' @param ... not used.
+#' @return `x`, invisibly.
 #' @export
 print.parvec <- function(x, ...) {
   
@@ -690,17 +669,16 @@ print.parvec <- function(x, ...) {
 }
 
 
-#' Subset a parameter vector
+#' Subset a Parameter Vector
 #'
-#' Subsets a \code{parvec} object and propagates first-order derivatives.
-#' Derivatives are restricted to retained parameters and optionally dropped
-#' if they become identically zero.
+#' Subsets a `parvec` and its derivatives.
 #'
-#' @param x A \code{parvec} object.
-#' @param ... Subsetting indices.
-#' @param drop Logical; drop derivative columns that are zero after subsetting.
+#' @param x object of class `parvec`.
+#' @param ... subsetting indices.
+#' @param drop logical, drop derivative columns that are zero after
+#'   subsetting. Default `FALSE`.
 #'
-#' @return A subsetted \code{parvec} object.
+#' @return Object of class `parvec`.
 #'
 #' @export
 "[.parvec" <- function(x, ..., drop = FALSE) {
@@ -758,14 +736,13 @@ print.parvec <- function(x, ...) {
   out
 }
 
-#' Concatenate parameter vectors
+#' Concatenate Parameter Vectors
 #'
-#' Concatenates multiple \code{parvec} objects, combining values and
-#' propagating first-order derivatives when present.
+#' Concatenates `parvec` objects with their derivatives.
 #'
-#' @param ... \code{parvec} objects (or \code{NULL}, which are ignored).
+#' @param ... objects of class `parvec`. `NULL` entries are ignored.
 #'
-#' @return A combined \code{parvec} object.
+#' @return Object of class `parvec`.
 #'
 #' @export
 c.parvec <- function(...) {
@@ -875,10 +852,11 @@ c.parvec <- function(...) {
 
 ## Methods for the class parfn--------------------------------------------------
 
-#' Pretty printing parameter transformations
-#' 
-#' @param x prediction function
-#' @param ... additional arguments
+#' Print Parameter Transformations
+#'
+#' @param x object of class `parfn`.
+#' @param ... not used.
+#' @return `x`, invisibly.
 #' @author Wolfgang Mader, \email{Wolfgang.Mader@@fdm.uni-freiburg.de}
 #' 
 #' @export
@@ -893,6 +871,7 @@ print.parfn <- function(x, ...) {
   cat("\n")
   cat("... conditions:", paste0(conditions, collapse = ", "), "\n")
   cat("... parameters:", paste0(parameters, collapse = ", "), "\n")
+  invisible(x)
 }
 
 #' @export
@@ -939,29 +918,25 @@ summary.parfn <- function(object, ...) {
 ## Body of the parfn dispatcher. Package level for the same reason as
 ## .Pexpl_p2p(): one parfn per condition should cost state, not code.
 
-#' Parameter transformation function
+#' Parameter Transformation Function
 #'
-#' Generate functions that transform one parameter vector into another
-#' by means of a transformation, pushing forward the Jacobian matrix
-#' of the original parameter.
-#' Usually, this function is called internally, e.g. by \link{P}.
-#' However, you can use it to add your own specialized parameter
-#' transformations to the general framework.
-#' @param p2p a transformation function for one condition, i.e. a function
-#' \code{p2p(p, fixed, deriv)} which translates a parameter vector \code{p}
-#' and a vector of fixed parameter values \code{fixed} into a new parameter
-#' vector. If \code{deriv = TRUE}, the function should return an attribute
-#' \code{deriv} with the Jacobian matrix of the parameter transformation.
-#' @param parameters character vector, the parameters accepted by the function
-#' @param condition character, the condition for which the transformation is defined
-#' @return object of class \code{parfn}, i.e. a function \code{p(..., fixed, deriv,
-#'  deriv2, hessian, conditions, env, cores, sweep)}. The argument \code{pars} should be passed via the \code{...}
-#'  argument.
-#'
-#' Contains attributes "mappings", a list of \code{p2p}
-#' functions, "parameters", the union of parameters accepted by the mappings and
-#' "conditions", the total set of conditions.
-#' @seealso \link{sumfn}, \link{P}
+#' Builds a function that transforms one parameter vector into another and
+#' propagates the Jacobian. [P()] calls it internally; use it directly for a
+#' transformation of your own.
+#' @param p2p transformation for one condition, a function
+#'   `p2p(p, fixed, deriv)` that maps the parameter vector `p` and the fixed
+#'   values `fixed` to a new parameter vector. With `deriv = TRUE` the result
+#'   has the attribute `deriv`, the Jacobian of the transformation.
+#' @param parameters character, the parameters accepted by the function.
+#'   Default `NULL`.
+#' @param condition character, the condition for which the transformation is
+#'   defined. Default `NULL`, every condition.
+#' @return Object of class `parfn`, a function
+#'   `p(..., fixed, deriv, deriv2, hessian, conditions, env, cores, sweep)`
+#'   that takes the parameter vector `pars` through `...`. Its attributes are
+#'   `"mappings"`, the list of `p2p` functions, `"parameters"`, the union of
+#'   their parameters, and `"conditions"`.
+#' @seealso [+.fn], [P()]
 #' @example inst/examples/prediction.R
 #' @export
 parfn <- function(p2p, parameters = NULL, condition = NULL) {
@@ -982,23 +957,31 @@ parfn <- function(p2p, parameters = NULL, condition = NULL) {
 
 
 
-#' Generate a parameter frame
+#' Generate a Parameter Frame
 #'
-#' @description A parameter frame is a data.frame where the rows correspond to different
-#' parameter specifications. The columns are divided into three parts. (1) the meta-information
-#' columns (e.g. index, value, constraint, etc.), (2) the attributes of an objective function
-#' (e.g. data contribution and prior contribution) and (3) the parameters.
-#' @seealso [profile], [mstrust]
-#' @param x data.frame.
-#' @param parameters character vector, the names of the parameter columns.
-#' @param metanames character vector, the names of the meta-information columns.
-#' @param obj.attributes character vector, the names of the objective function attributes.
-#' @return An object of class `parframe`, i.e. a data.frame with attributes for the
-#' different names. Inherits from data.frame.
+#' @description A parameter frame is a data frame with one parameter set per
+#' row. Its columns fall into three groups: meta-information (e.g. index,
+#' value, converged), attributes of an objective function (e.g. data and prior
+#' contribution) and the parameters.
+#' @seealso [as.parframe()], [profile()], [mstrust()]
+#' @param x data frame. Default `NULL` gives an empty parameter frame.
+#' @param parameters character, the names of the parameter columns. Default
+#'   `colnames(x)`.
+#' @param metanames character, the names of the meta-information columns.
+#'   Default `NULL`.
+#' @param obj.attributes character, the names of the objective function
+#'   attributes. Default `NULL`.
+#' @return Object of class `parframe`, a data frame with the attributes
+#' `parameters`, `metanames` and `obj.attributes`. `is.parframe()` returns a
+#' logical.
 #' @details Parameter frames can be subsetted either by `[ , ]` or by `subset`. If
 #' `[ , index]` is used, the names of the removed columns will also be removed from
 #' the corresponding attributes, i.e. metanames, obj.attributes and parameters.
-#' @example inst/examples/parlist.R
+#' @examples
+#' pf <- parframe(data.frame(value = c(3, 1, 2), a = c(1, 2, 3), b = c(0, 1, 0)),
+#'                parameters = c("a", "b"), metanames = "value")
+#' pf[pf$value < 3, ]
+#' as.parvec(pf)
 #' @export
 parframe <- function(x = NULL, parameters = colnames(x), metanames = NULL, obj.attributes = NULL) {
 
@@ -1018,15 +1001,18 @@ parframe <- function(x = NULL, parameters = colnames(x), metanames = NULL, obj.a
 
 }
 
-#' Parameter list
+#' Parameter List
 #'
-#' @description The special use of a parameter list is to save
-#' the outcome of multiple optimization runs provided by [mstrust],
-#' into one list.
-#' @param ... Objects to be coerced to parameter list.
+#' @description A parameter list holds the results of several optimisation
+#' runs, as returned by [mstrust()]. `c()` renumbers the fit index of the
+#' combined list.
+#' @param ... for `parlist()` and `c()`, fit results or parameter lists; for
+#'   `print()` and `summary()`, not used.
+#' @return Object of class `parlist`. `print()` and `summary()` return their
+#'   argument invisibly.
 #' @export
 #' @example inst/examples/parlist.R
-#' @seealso [load.parlist], [plot.parlist]
+#' @seealso [load.parlist()], [plot.parlist()], [as.parframe()]
 parlist <- function(...) {
 
   mylist <- list(...)
@@ -1036,25 +1022,26 @@ parlist <- function(...) {
 
 
 
-#' Parameter vector
+#' Parameter Vector
 #'
-#' @description 
-#' A parameter vector is a named numeric vector (the parameter values)
-#' together with derivative attributes describing how it was generated by
-#' a parameter transformation. The first derivative (Jacobian) is stored in 
-#' the `"deriv"` attribute.
+#' @description
+#' A parameter vector is a named numeric vector with the Jacobian of the
+#' transformation that generated it in the attribute `"deriv"` and, optionally,
+#' second derivatives in `"deriv2"`. Parameters without a row in the Jacobian
+#' are listed in the attribute `"fixed"`. `parvec()` builds one from numbers,
+#' `as.parvec()` from a numeric vector; use `as.parvec()` to set `deriv2`.
 #'
-#' @param ... Objects to be concatenated.
-#' @param deriv Matrix with row names corresponding to the names of `...`
-#'   and column names corresponding to the parameters by which the vector
-#'   was generated (the Jacobian).
+#' @param ... for `parvec()`, numbers to be concatenated; unnamed ones are
+#'   named `par1`, `par2`, ... For `as.parvec()`, not used.
+#' @param deriv Jacobian matrix with one row per parameter and one column per
+#'   parameter by which the vector was generated. Default `NULL`: none for
+#'   `parvec()`, the `"deriv"` attribute of `x` for `as.parvec()`. `FALSE`
+#'   drops it.
 #'
-#' @return 
-#' An object of class `"parvec"`, i.e. a named numeric vector with
-#' attributes:
-#' \itemize{
-#'   \item `attr(x, "deriv")`, Jacobian matrix
-#' }
+#' @return Object of class `parvec`, a named numeric vector with the
+#'   attributes `"deriv"`, `"deriv2"` and `"fixed"`. `parvec()` without
+#'   arguments returns `NULL`.
+#' @seealso [getDerivs()], [as.parvec.parframe()]
 #'
 #' @example inst/examples/parvec.R
 #' @export

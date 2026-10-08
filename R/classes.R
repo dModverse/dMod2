@@ -1,12 +1,15 @@
 ## Function classes ------------------------------------------------------
 
-#' dMod match function arguments
-#' 
-#' The function is exported for dependency reasons
-#' 
-#' @param arglist list
-#' @param choices character
-#' 
+#' Match Function Arguments to Choices
+#'
+#' Assigns unnamed entries of `arglist` to the entries of `choices` that are
+#' not named in it, in order. Named entries not in `choices` are dropped.
+#'
+#' @param arglist list of arguments, as from `list(...)`.
+#' @param choices character, the argument names to match.
+#' @return Integer vector of the positions in `arglist` matching `choices`,
+#'   `NA` where a choice is absent.
+#' @keywords internal
 #' @export
 match.fnargs <- function(arglist, choices) {
 
@@ -960,17 +963,13 @@ match.fnargs <- function(arglist, choices) {
   if (is.null(t)) list(f) else t
 }
 
-#' Direct sum of objective functions
+#' Direct Sum of Objective Functions
 #'
-#' @param x1 function of class `objfn`
-#' @param x2 function of class `objfn`
-#' @details The objective functions are evaluated and their results as added. Sometimes,
-#' the evaluation of an objective function depends on results that have been computed
-#' internally in a preceding objective function. Therefore, environments are forwarded
-#' and all evaluations take place in the same environment. The first objective function
-#' in a sum of functions generates a new environment.
-#' @return Object of class `objfn`.
-#' @seealso [normL2], [constraintL2], [datapointL2]
+#' @param x1 function of class `objfn`.
+#' @param x2 function of class `objfn`.
+#' @return Object of class `objfn` whose value, gradient and Hessian are the
+#'   sums of those of `x1` and `x2`.
+#' @seealso [normL2()], [constraintL2()], [datapointL2()], \code{\link{\%.*\%}}
 #' @aliases sumobjfn
 #' @example inst/examples/objective.R
 #' @export
@@ -1087,15 +1086,21 @@ match.fnargs <- function(arglist, choices) {
 }
 
 
-#' Multiplication of objective functions with scalars
+#' Multiplication of Objective Functions with Scalars
 #'
-#' @description The `\%.*\%` operator allows to multiply objects of class objlist or objfn with
-#' a scalar.
+#' @description \code{x1 \%.*\% x2} multiplies an object of class `objfn` or
+#' `objlist` by a scalar.
 #'
-#' @param x1 object of class objfn or objlist.
-#' @param x2 numeric of length one.
-#' @return An objective function or objlist object.
-#'
+#' @param x1 numeric of length one.
+#' @param x2 object of class `objfn` or `objlist`.
+#' @return For an `objfn`, an `objfn` whose value, gradient and Hessian are
+#'   scaled by `x1`. For an `objlist`, the `objlist` with every numeric entry
+#'   and attribute scaled. Otherwise `x1 * x2`.
+#' @seealso [+.objfn]
+#' @examples
+#' obj <- constraintL2(mu = c(a = 0, b = 0), sigma = 1)
+#' obj2 <- 2 %.*% obj
+#' obj2(c(a = 1, b = 2))$value
 #' @export
 "%.*%" <- function(x1, x2) {
 
@@ -1166,18 +1171,20 @@ match.fnargs <- function(arglist, choices) {
 }
 
 
-#' Direct sum of functions
+#' Direct Sum of Functions
 #'
-#' Used to add prediction function, parameter transformation functions or observation functions.
+#' Adds prediction functions, parameter transformations or observation
+#' functions of the same class.
 #'
-#' @param x1 function of class `obsfn`, `prdfn` or `parfn`
-#' @param x2 function of class `obsfn`, `prdfn` or `parfn`
-#' @details Each prediction function is associated to a number of conditions. Adding functions
-#' means merging or overwriting the set of conditions.
-#' @return Object of the same class as `x1` and `x2` which returns results for the
-#' union of conditions.
+#' @param x1 function of class `obsfn`, `prdfn` or `parfn`.
+#' @param x2 function of the same class as `x1`.
+#' @details Each function is defined for a set of conditions. The sum is
+#' defined for their union. A condition present in both is taken from `x2`,
+#' with a warning.
+#' @return Object of the same class as `x1` and `x2`, defined for the union of
+#' conditions.
 #' @aliases sumfn
-#' @seealso [P], [Y], [Xs]
+#' @seealso [P()], [Y()], [Xs()], [*.fn]
 #' @example inst/examples/prediction.R
 #' @export
 "+.fn" <- function(x1, x2) {
@@ -1213,17 +1220,16 @@ match.fnargs <- function(arglist, choices) {
 }
 
 
-#' Direct sum of datasets
+#' Direct Sum of Datasets
 #'
-#' Used to merge datasets with overlapping conditions.
+#' Combines two datalists.
 #'
-#' @param data1 dataset of class `datalist`
-#' @param data2 dataset of class `datalist`
-#' @details Each data list contains data frames for a number of conditions.
-#' The direct sum of datalist is meant as merging the two data lists and
-#' returning the overarching datalist.
-#' @return Object of class `datalist` for the
-#' union of conditions.
+#' @param data1 object of class `datalist`.
+#' @param data2 object of class `datalist`.
+#' @details A condition present in both datalists is taken from `data2`, with
+#' a warning. The condition grids are combined.
+#' @return Object of class `datalist` for the union of conditions.
+#' @seealso [as.datalist()]
 #' @aliases sumdatalist
 #' @example inst/examples/sumdatalist.R
 #' @export
@@ -1269,13 +1275,20 @@ test_conditions <- function(c1, c2) {
   .intersectU(c1, c2)
 }
 
-#' Concatenation of functions
+#' Concatenation of Functions
 #'
-#' Used to concatenate observation functions, prediction functions and parameter transformation functions.
+#' Concatenates observation functions, prediction functions and parameter
+#' transformations: `(p1 * p2)(times, pars)` evaluates `p2` first and passes
+#' its output to `p1`.
 #'
-#' @param p1 function of class `obsfn`, `prdfn`, `parfn` or `idfn`
-#' @param p2 function of class `obsfn`, `prdfn`, `parfn` or `idfn`
-#' @return Object of the same class as `x1` and `x2`.
+#' @param p1 function of class `objfn`, `obsfn`, `prdfn`, `parfn` or `idfn`.
+#' @param p2 function of class `obsfn`, `prdfn`, `parfn` or `idfn`.
+#' @details Both functions must be defined for the same conditions, or one of
+#' them for no specific condition (`conditions = NULL`).
+#' @return `obsfn * obsfn` and `obsfn * parfn` return an `obsfn`,
+#'   `obsfn * prdfn` and `prdfn * parfn` a `prdfn`, `parfn * parfn` a `parfn`
+#'   and `objfn * parfn` an `objfn`. `Id() * f` and `f * Id()` return `f`.
+#' @seealso [+.fn], [Id()]
 #' @aliases prodfn
 #' @example inst/examples/prediction.R
 #' @export

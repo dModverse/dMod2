@@ -3,57 +3,50 @@
 
 ## General purpose functions for different dMod classes ------------------------------
 
-#' List, get and set controls for different functions
+#' List, Get and Set Controls
 #'
-#' @description Applies to objects of class `objfn`,
-#' `parfn`, `prdfn` and `obsfn`. Allows to manipulate
-#' different arguments that have been set when creating the
-#' objects. On a sum of objectives, a control is read from and written to
-#' every summand that has it, e.g. the `multipleShootingControl` of a
-#' [normL2()] term. The same holds for an objective scaled by `%.*%` and
-#' for an objective composed with a parameter transformation, which reach the
-#' controls of the objective inside.
-#' @details If called without further arguments, `controls(x)` lists the
-#' available controls within an object. Calling `controls()` with `name`
-#' and `condition` returns the control value. The value can be overwritten. If
-#' a list or data.frame is returned, elements of those can be manipulated by the
-#' `$`- or `[]`-operator.
+#' @description Reads and changes the settings an object of class `objfn`,
+#' `parfn`, `prdfn` or `obsfn` was built with. `controls(x)` lists the
+#' available controls; with `name`, the value of that control is returned or
+#' replaced. Elements of a list or data frame value can be changed with `$` or
+#' `[]`.
 #'
-#' A control lives in the function that was built with it, which every sum or
-#' composition containing that function shares. A change made on `x` is
-#' therefore seen by every object built from `x`, and a change made on a
-#' composition reaches the factor it came from.
+#' @details A control belongs to the function built with it and is shared by
+#' every sum or composition that contains this function. Changing it on one of
+#' them changes it for all of them.
 #'
-#' On an `fn`, the control is looked up in the functions `x` is made of, so
-#' `g * x * p` reaches the controls of `g`, `x` and `p`. `condition` restricts
-#' the lookup to the functions that answer for that condition; a function built
-#' without a condition answers for all of them, so a control set on it for one
-#' condition applies to every condition. With `condition = NULL`, the getter
-#' returns the value of the first function that holds the control and the
-#' setter writes every function that holds it. A name that several factors
-#' share, `attach.input` for instance, is set on all of them; set it on the
-#' factor itself to reach that one alone. Setting a control that no function
-#' holds is an error, as is a condition `x` does not know.
+#' On an `fn`, the lookup covers the functions `x` is made of, e.g. the
+#' factors of `g * x * p`. `condition` restricts it to the functions defined
+#' for that condition; a function built without a condition counts for every
+#' condition. With `condition = NULL`, the getter returns the value of the
+#' first function that holds the control and the setter changes every function
+#' that holds it. On an `objfn`, including sums, scaled objectives and
+#' objectives composed with a parameter transformation, the same holds for the
+#' objective terms. Setting a control that no function holds is an error, as
+#' is an unknown condition.
 #'
-#' @param x function
-#' @param ... arguments going to the appropriate S3 methods
-#' @return Either a print-out or the values of the control. Listing the
-#' controls of an `fn` prints them per function and returns the names
-#' invisibly, as a list with one entry per function.
+#' The second positional argument is `name` for an `objfn` and `condition`
+#' for an `fn`; name both arguments to avoid confusion.
+#'
+#' @param x object of class `objfn` or `fn`.
+#' @param ... not used.
+#' @return `controls(x)` prints the available controls and returns their names
+#' invisibly; for an `fn`, as a list with one entry per function. With `name`,
+#' the value of the control, or `NULL` if no function holds it. The setter
+#' returns `x`.
+#' @seealso [normL2()], [P()], [Y()]
 #' @examples
-#' \dontrun{
-#'   ## parfn with condition
-#'   p <- P(eqnvec(x = "-a*x"), method = "implicit", condition = "C1")
-#'   controls(p)
-#'   controls(p, "C1", "keep.root")
-#'   controls(p, "C1", "keep.root") <- FALSE
-#'   
-#'   ## obsfn with NULL condition
-#'   g <- Y(g = eqnvec(y = "s*x"), f = NULL, states = "x", parameters = "s")
-#'   controls(g)
-#'   controls(g, NULL, "attach.input")
-#'   controls(g, NULL, "attach.input") <- FALSE
-#' }
+#' ## parfn with condition
+#' p <- P(eqnvec(x = "-a*x"), method = "implicit", condition = "C1")
+#' controls(p)
+#' controls(p, condition = "C1", name = "keep.root")
+#' controls(p, condition = "C1", name = "keep.root") <- FALSE
+#'
+#' ## obsfn without condition
+#' g <- Y(g = eqnvec(y = "s*x"), f = NULL, states = "x", parameters = "s")
+#' controls(g)
+#' controls(g, name = "attach.input")
+#' controls(g, name = "attach.input") <- TRUE
 #' @export
 controls <- function(x, ...) {
   UseMethod("controls", x)
@@ -170,7 +163,8 @@ controls <- function(x, ...) {
 
 #' @export
 #' @rdname controls
-#' @param name character, the name of the control
+#' @param name character, the name of the control. Default `NULL` lists the
+#'   controls.
 controls.objfn <- function(x, name = NULL, ...) {
 
   if (is.null(name)) return(.lscontrolsObjfn(x))
@@ -181,7 +175,8 @@ controls.objfn <- function(x, name = NULL, ...) {
 
 #' @export
 #' @rdname controls
-#' @param condition character, the condition name
+#' @param condition character, the condition name. Default `NULL`, every
+#'   condition.
 controls.fn <- function(x, condition = NULL, name = NULL, ...) {
 
   condition <- .controlCondition(x, condition)
@@ -203,7 +198,7 @@ controls.fn <- function(x, condition = NULL, name = NULL, ...) {
 
 
 #' @export
-#' @param value the new value
+#' @param value the new value of the control.
 #' @rdname controls
 "controls<-.objfn" <- function(x, name, ..., value) {
   tg <- .controlTargets(x, name)
@@ -237,35 +232,27 @@ controls.fn <- function(x, condition = NULL, name = NULL, ...) {
 }
 
 
-#' Extract the first derivatives of an object
+#' Extract the First Derivatives of an Object
 #'
-#' Generic function to extract first-order derivatives
-#' from various model-related objects such as `parvec`, `prdframe`, or lists thereof.
+#' @param x object of class `parvec`, `prdframe`, `prdlist`, `objlist`, or a
+#'   list of such objects.
+#' @param ... not used.
 #'
-#' The output format depends on the class of the input object.
+#' @return Depends on the class of `x`:
+#' * `parvec`: the Jacobian matrix.
+#' * `prdframe`: a `prdframe` with the column `time` and one column per pair
+#'   of variable and parameter.
+#' * `prdlist`: a `prdlist` of such `prdframe`s.
+#' * `objlist`: the gradient, a named numeric vector.
+#' * `list`: a list with the result for each element.
 #'
-#' @param x Object from which the first derivatives should be extracted.
-#'   Supported classes are `parvec`, `prdframe`, `prdlist`, and `list`.
-#' @param ... Additional arguments passed to specific methods (currently unused).
-#'
-#' @return The structure of the returned object depends on the class of `x`:
-#' \itemize{
-#'   \item `parvec`: a matrix containing first-order parameter derivatives.
-#'   \item `prdframe`: a `prdframe` containing time and first-order sensitivities
-#'     of each model variable with respect to all parameters.
-#'   \item `prdlist`: a `prdlist` whose elements are first-derivative `prdframe`s.
-#'   \item `list`: a list of derivative objects, depending on the elements.
-#'   \item `objlist`: directly returns the stored gradient (named numeric vector).
-#' }
+#' An error is raised if `x` has no first derivatives.
+#' @seealso [getDerivs2()], [parvec()]
 #'
 #' @examples
-#' \dontrun{
-#' # Extract sensitivities from a model prediction frame:
-#' d1 <- getDerivs(myprdframe)
-#'
-#' # Extract parameter derivatives from a parameter vector:
-#' getDerivs(myparvec)
-#' }
+#' J <- matrix(c(1, 0, 0, 2), 2, dimnames = list(c("a", "b"), c("x", "y")))
+#' p <- as.parvec(c(a = 1, b = 2), deriv = J)
+#' getDerivs(p)
 #'
 #' @export
 getDerivs <- function(x, ...) {
@@ -349,30 +336,29 @@ getDerivs.objlist <- function(x, ...) {
 }
 
 
-#' Extract second-order derivatives from an object
+#' Extract the Second Derivatives of an Object
 #'
-#' Generic accessor for the `deriv2` attribute (or `hessian` field, in the
-#' case of `objlist`) attached to dMod objects.
+#' @param x object of class `parvec`, `prdframe`, `prdlist`, `objlist`, or a
+#'   list of such objects.
+#' @param ... not used.
 #'
-#' @param x Object from which the second derivatives should be extracted.
-#'   Supported classes are `parvec`, `prdframe`, `prdlist`, `list`, and
-#'   `objlist`.
-#' @param ... Additional arguments passed to specific methods (currently unused).
+#' @return Depends on the class of `x`:
+#' * `parvec`: a 3D array `[parameter, theta, theta]`.
+#' * `prdframe`: a `prdframe` with the column `time` and one column per
+#'   variable and pair of parameters, for the upper triangle including the
+#'   diagonal.
+#' * `prdlist`: a `prdlist` of such `prdframe`s.
+#' * `objlist`: the Hessian matrix.
+#' * `list`: a list with the result for each element.
 #'
-#' @return The structure of the returned object depends on the class of `x`:
-#' \itemize{
-#'   \item `parvec`: a 3D array `[p, theta, theta]` of second derivatives.
-#'   \item `prdframe`: a 4D array `[time, variable, theta, theta]`.
-#'   \item `prdlist`: a list of `prdframe` second-derivative arrays.
-#'   \item `objlist`: the stored `hessian` matrix.
-#'   \item `list`: a list of derivative objects, depending on the elements.
-#' }
+#' An error is raised if `x` has no second derivatives.
+#' @seealso [getDerivs()]
 #'
 #' @examples
-#' \dontrun{
-#' d2 <- getDerivs2(myprdframe)
-#' getDerivs2(myparvec)
-#' }
+#' H <- array(0, dim = c(1, 2, 2), dimnames = list("a", c("x", "y"), c("x", "y")))
+#' H["a", "x", "y"] <- H["a", "y", "x"] <- 1
+#' p <- as.parvec(c(a = 1), deriv2 = H)
+#' getDerivs2(p)
 #'
 #' @export
 getDerivs2 <- function(x, ...) {
@@ -466,15 +452,14 @@ getDerivs2.objlist <- function(x, ...) {
 }
 
 
-#' Extract the parameters of an object
+#' Extract the Parameters of an Object
 #'
-#' @param x object from which the parameters are extracted
-#' @param ... further objects; when supplied, parameters of all objects
-#'   are unioned (each dispatched separately).
-#' @param conditions character vector specifying the conditions to
-#'   which `getParameters` is restricted (only honored by methods that
-#'   have per-condition parameter mappings).
-#' @return The parameters in a format that depends on the class of `x`.
+#' @param x object from which the parameters are extracted.
+#' @param ... further objects; their parameters are added to the result.
+#' @param conditions character, restrict the result to these conditions.
+#'   Default `NULL`. Used by the methods for `fn` and `prdlist`.
+#' @return Character vector of parameter names. For an `odemodel`, the states
+#'   and parameters; for a `prdlist`, a list with one entry per condition.
 #' @export
 getParameters <- function(x, ..., conditions = NULL) {
   if (...length() > 0L) {
@@ -570,11 +555,12 @@ getParameters.eqnvec <- function(x, ..., conditions = NULL) {
   getSymbols(x)
 }
 
-#' Extract the conditions of an object
+#' Extract the Conditions of an Object
 #'
-#' @param x object from which the conditions should be extracted
-#' @param ... additional arguments (not used right now)
-#' @return The conditions in a format that depends on the class of `x`.
+#' @param x object of class `fn` or a named list such as a `datalist`.
+#' @param ... not used.
+#' @return Character vector of condition names, `NULL` for a function defined
+#'   for every condition.
 #' @export
 getConditions <- function(x, ...) {
   UseMethod("getConditions", x)
@@ -598,19 +584,19 @@ getConditions.fn <- function(x, ...) {
 
 }
 
-#' Get and set modelname
+#' Get and Set Modelname
 #'
-#' @description The modelname attribute refers to the name of a C file associated with
-#' a dMod function object like prediction-, parameter transformation- or
-#' objective functions.
+#' @description The model name is the base name of the generated sources and
+#' shared objects of a function such as a prediction function, parameter
+#' transformation or objective function.
 #'
-#' @param x object of type `prdfn`, `parfn`, `objfn`, or a character naming
-#'   such an object in the calling environment.
-#' @param ... further objects; when supplied, model names of all objects
-#'   are unioned (each dispatched separately).
-#' @param conditions character vector of conditions
-#' @return character vector of model names, corresponding to C files
-#' in the local directory.
+#' @param x object of class `prdfn`, `parfn`, `obsfn` or `objfn`, or a
+#'   character naming such an object in the calling environment.
+#' @param ... further objects; their model names are added to the result.
+#' @param conditions character, restrict the result to these conditions.
+#'   Default `NULL`.
+#' @return Character vector of model names. The setter returns `x`.
+#' @seealso [compile()], [loadDLL()]
 #'
 #' @export
 modelname <- function(x = NULL, ..., conditions = NULL) {
@@ -659,7 +645,7 @@ modelname.fn <- function(x = NULL, ..., conditions = NULL) {
 
 #' @export
 #' @rdname modelname
-#' @param value character, the new modelname (does not change the C file)
+#' @param value character, the new model name. Files are not renamed.
 "modelname<-" <- function(x, ..., value) {
   UseMethod("modelname<-", x)
 }
@@ -722,13 +708,13 @@ modelname.fn <- function(x = NULL, ..., conditions = NULL) {
 
 
 
-#' Extract the equations of an object
+#' Extract the Equations of an Object
 #'
-#' @param x object from which the equations should be extracted
-#' @param conditions character or numeric vector specifying the conditions to
-#' which `getEquations` is restricted. If `conditions` has length one,
-#' the result is not returned as a list.
-#' @return The equations as list of `eqnvec` objects.
+#' @param x object of class `odemodel` or `fn`.
+#' @param conditions character or numeric, restrict the result to these
+#'   conditions. Default `NULL`.
+#' @return A list of `eqnvec` objects, one per condition. If `conditions` has
+#'   length one, the `eqnvec` itself. For an `odemodel`, its `eqnvec`.
 #' @export
 getEquations <- function(x, conditions = NULL) {
 
@@ -795,11 +781,13 @@ getEquations.fn <- function(x, conditions = NULL) {
 
 }
 
-#' Extract the observables of an object
+#' Extract the Observables of an Object
 #'
-#' @param x object from which the equations should be extracted
-#' @param ... not used
-#' @return The equations as a character.
+#' Generic without methods in dMod2; other packages can provide them.
+#'
+#' @param x object from which the observables are extracted.
+#' @param ... not used.
+#' @return The observables, as a character vector.
 #' @export
 getObservables <- function(x, ...) {
   UseMethod("getObservables", x)

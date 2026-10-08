@@ -2,11 +2,10 @@
 ## Class "datalist" and its constructor ------------------------------------------
 
 
-#' @param x object of class `data.frame` or `list`. Data frames are required to
-#' provide "name", "time" and "value" as columns. Columns "sigma" and "lloq" can be provided.
-#' If "sigma" and "lloq" are missing, they
-#' are imputed with `NA` and `-Inf`, respectively. 
-#' @return Object of class [datalist]
+#' @param x object of class `data.frame` or `list` of data frames. Data frames
+#' must provide the columns "name", "time" and "value". The columns "sigma"
+#' and "lloq" are optional and default to `NA` and `-Inf`.
+#' @return Object of class `datalist`. `is.datalist()` returns a logical.
 #' @export
 #' @example inst/examples/datalist.R
 #' @rdname datalist
@@ -15,10 +14,11 @@ as.datalist <- function(x, ...) {
 }
 
 #' @export
-#' @param split.by vector of columns names which yield a unique identifier (conditions). If NULL, all
-#' columns except for the expected standard columns "name", "time", "value", "sigma" and "lloq" will be
-#' selected.
-#' @param keep.covariates vector of additional column names which should be kept in the condition.grid.
+#' @param split.by character, the columns whose combined values identify a
+#' condition. Default `NULL` uses all columns except "name", "time",
+#' "value", "sigma" and "lloq".
+#' @param keep.covariates character, additional columns kept in the
+#' condition grid. Default `NULL`.
 #' @rdname datalist
 as.datalist.data.frame <- function(x, split.by = NULL, keep.covariates = NULL, ...) {
 
@@ -52,8 +52,11 @@ as.datalist.data.frame <- function(x, split.by = NULL, keep.covariates = NULL, .
 }
 
 #' @export
-#' @param names optional names vector, otherwise names are taken from `mylist`
-#' @param condition.grid Optionally, to manually specify a condition.grid
+#' @param names character, the condition names. Default `NULL` takes them
+#' from `names(x)`.
+#' @param condition.grid data frame with one row per condition. Default is the
+#' `condition.grid` attribute of `x`; if that is `NULL`, a grid with the
+#' single column `condition`.
 #' @rdname datalist
 as.datalist.list <- function(x, names = NULL, ..., condition.grid = attr(x, "condition.grid")) {
 
@@ -87,7 +90,8 @@ as.datalist.list <- function(x, names = NULL, ..., condition.grid = attr(x, "con
 
 ## Methods for class datalist ---------------------------------------
 
-#' @param value The new condition names of the datalist and its condition.grid
+#' @param value character, the new condition names. The rows of the
+#' condition grid are renamed accordingly.
 #' @export
 #' @rdname datalist
 "names<-.datalist" <- function(x, value) {
@@ -147,44 +151,43 @@ subset.datalist <- function(x, ...){
   return(out)
 }
 
-#' Plot observed data
+#' Plot Observed Data
 #'
 #' @description
-#' Creates a plot of observed data with error bars and below limit of 
-#' quantification (BLoQ) indicators. Supports flexible faceting and 
-#' coordinate transformations.
+#' Plots data with error bars and marks values below the limit of
+#' quantification (BLoQ).
 #'
-#' @param data A \code{datalist} object containing observed values with columns
-#'   \code{name}, \code{time}, \code{value}, and \code{sigma}.
-#' @param ... Filter expressions passed to \code{dplyr::filter} for subsetting
-#'   the data.
-#' @param scales Scale specification for facets, passed to facet functions.
-#'   One of \code{"free"}, \code{"fixed"}, \code{"free_x"}, or \code{"free_y"}.
-#'   Default is \code{"free"}.
-#' @param facet Faceting style. One of:
-#'   \itemize{
-#'     \item \code{"wrap"}: Facet by name, color by condition (default)
-#'     \item \code{"grid"}: Facet grid with name as rows, condition as columns
-#'     \item \code{"wrap_plain"}: Facet wrap by name and condition combined
-#'   }
-#' @param transform Optional transformation function applied to coordinates
-#'   via \code{coordTransform}.
+#' @param data object of class `datalist`, or a data frame with the columns
+#'   `name`, `time`, `value` and `sigma`.
+#' @param ... filter expressions passed to [dplyr::filter()]. They can refer
+#'   to the columns of the data and of the condition grid.
+#' @param scales the `scales` argument of [ggplot2::facet_wrap()] or
+#'   [ggplot2::facet_grid()]: `"free"` (default), `"fixed"`, `"free_x"` or
+#'   `"free_y"`.
+#' @param facet `"wrap"` (default): one panel per name, colour by condition.
+#'   `"grid"`: names as rows, conditions as columns. `"wrap_plain"`: one panel
+#'   per combination of name and condition.
+#' @param transform list of transformations for the states, see
+#'   [coordTransform()]. Default `NULL`.
 #'
-#' @return A \code{ggplot} object with an additional \code{"data"} attribute
-#'   containing the processed data frame.
+#' @return A `ggplot` object. Its attribute `"data"` holds the plotted data
+#'   frame.
+#' @seealso [plotCombined()], [plotPrediction()]
 #'
 #' @examples
-#' \dontrun{
-#' plotData(mydata, time < 100)
-#' plotData(mydata, facet = "grid")
-#' }
+#' data <- datalist(
+#'   C1 = data.frame(name = "A", time = 0:5, value = 0:5, sigma = 0.1),
+#'   C2 = data.frame(name = "A", time = 0:5, value = sin(0:5), sigma = 0.1)
+#' )
+#' plotData(data, time < 4)
+#' plotData(data, facet = "grid")
 #'
 #' @export
 #' @rdname plotData
 #' @importFrom dplyr filter
-plotData.datalist <- function(data, scales = "free", 
-                              facet = c("wrap", "grid", "wrap_plain"), 
-                              transform = NULL, ...) {
+plotData.datalist <- function(data, ..., scales = "free",
+                              facet = c("wrap", "grid", "wrap_plain"),
+                              transform = NULL) {
   
   facet <- match.arg(facet)
   
@@ -230,13 +233,13 @@ plotData.datalist <- function(data, scales = "free",
 }
 
 
-#' @describeIn plotData S3 plot method for datalist objects
-#' @param x A \code{datalist} object.
+#' @describeIn plotData S3 plot method for `datalist` objects.
+#' @param x object of class `datalist`.
 #' @export
-plot.datalist <- function(x, scales = "free", 
-                          facet = c("wrap", "grid", "wrap_plain"), 
-                          transform = NULL, ...) {
-  plotData.datalist(data = x, scales = scales, facet = facet, transform = transform, ...)
+plot.datalist <- function(x, ..., scales = "free",
+                          facet = c("wrap", "grid", "wrap_plain"),
+                          transform = NULL) {
+  plotData.datalist(data = x, ..., scales = scales, facet = facet, transform = transform)
 }
 
 
@@ -266,14 +269,16 @@ as.data.frame.datalist <- function(x, ...) {
 }
 
 
-#' Access the covariates in the data
+#' Access the Covariates in the Data
 #'
-#' @param x Either a [datalist] or a `data.frame` with mandatory
-#' columns `c("name", "time", "value", "sigma", "lloq")`.
-#' @param ... Additional arguments forwarded to methods (e.g. `hypothesis`
-#'   for the `tbl_df` method).
+#' @param x a [datalist] or a `data.frame` with the columns
+#' `c("name", "time", "value", "sigma", "lloq")`.
+#' @param ... not used.
 #'
-#' @return The `condition.grid` of the data
+#' @return A data frame with one row per condition: the `condition.grid` of a
+#' datalist, or the unique combinations of the non-standard columns of a data
+#' frame.
+#' @seealso [as.datalist()]
 #' @export
 covariates <- function(x, ...) {
   UseMethod("covariates", x)
@@ -314,23 +319,21 @@ covariates.data.frame <- function(x, ...) {
 
 ## Data classes ----------------------------------------------------------------
 
-#' Generate a datalist object
+#' Generate a Datalist Object
 #'
-#' @description The datalist object stores time-course data in a list of data.frames.
-#' The names of the list serve as identifiers, e.g. of an experimental condition, etc.
-#' @details Datalists can be plotted, see [plotData] and merged, see [sumdatalist].
-#' They are the basic structure when combining model prediction and data via the [normL2]
-#' objective function.
-#' 
-#' The standard columns of the datalist data frames are "name" (observable name), 
-#' "time" (time points), "value" (data value), "sigma" (uncertainty, can be NA), and
-#' "lloq" (lower limit of quantification, `-Inf` by default).
+#' @description A datalist stores time-course data as a named list of data
+#' frames, one per condition.
+#' @details The standard columns of the data frames are "name" (observable
+#' name), "time", "value", "sigma" (uncertainty, can be `NA`) and "lloq"
+#' (lower limit of quantification, `-Inf` by default).
 #'
-#' Datalists have the attribute `condition.grid` which contains additional information about different
-#' conditions, such as dosing information for the experiment. It can be conveniently accessed by the [covariates]-function.
-#' Reassigning names to a datalist also renames the rows of the `condition.grid`.
-#' @param ... data.frame objects to be coerced into a list and additional arguments
+#' The attribute `condition.grid` holds one row per condition with further
+#' information such as doses; see [covariates()]. Renaming a datalist renames
+#' the rows of its condition grid.
+#' @param ... for `datalist()` and `c()`, named data frames or datalists; for
+#' the `as.datalist()` methods, not used.
 #' @return Object of class `datalist`.
+#' @seealso [plotData()], [+.datalist], [normL2()]
 #' @export
 datalist <- function(...) {
   mylist <- list(...)
