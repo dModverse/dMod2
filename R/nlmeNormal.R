@@ -989,9 +989,26 @@ emObjfn <- function(obj, control = list()) {
 }
 
 
-# Stochastic-approximation EM (SAEM). Reuses the Bayesian per-subject eta
-# sampler (.buildBayesSubjectMeta + .makeSubjectEtaObj + .run_single_chain) for
-# a stochastic E-step, and updateOmegaChol for the closed-form Omega M-step.
+# Random-walk Metropolis on the etas of one subject, with target exp(-value / 2)
+# under the -2 log L convention. The last draw and the acceptance rate.
+.rwmEta <- function(objfun, eta, n, stepsize) {
+  val <- objfun(eta, deriv = FALSE)$value
+  accepted <- 0L
+  for (s in seq_len(n)) {
+    prop <- eta + stepsize * stats::rnorm(length(eta))
+    pv <- tryCatch(objfun(prop, deriv = FALSE)$value, error = function(e) Inf)
+    if (!is.finite(pv) || log(stats::runif(1)) >= (val - pv) / 2) next
+    eta <- prop
+    val <- pv
+    accepted <- accepted + 1L
+  }
+  list(eta = eta, accept = accepted / n)
+}
+
+
+# Stochastic-approximation EM (SAEM). Uses the per-subject eta objectives
+# (.buildBayesSubjectMeta + .makeSubjectEtaObj) with .rwmEta for a stochastic
+# E-step, and updateOmegaChol for the closed-form Omega M-step.
 # Per iteration k:
 #   E-step (stochastic): draw eta_i ~ p(eta_i | y_i, theta, Omega) with a short
 #     random-walk-Metropolis chain (nMcmc steps), one draw per subject.
@@ -1049,16 +1066,9 @@ emObjfn <- function(obj, control = list()) {
                            extra = list(.pars_full = parsFull,
                                         .Omega_inv = Omega_inv,
                                         .Omega_log_det = Omega_log_det))
-      raw <- tryCatch(.run_single_chain(
-        bake, parsFull[meta$eta_names[[i]]], n = nMcmc, warmup = 0L,
-        moveType = "mh",
-        moveControl = list(stepsize = eta_step[i], proposalCov = "identity"),
-        metricControl = list(), bounds = list(upper = rep(Inf, K),
-                                              lower = rep(-Inf, K)),
-        parscale = rep(1, K), dG_cb = NULL), error = function(e) NULL)
-      if (is.null(raw)) return(list(eta = parsFull[meta$eta_names[[i]]],
-                                    accept = 0))
-      list(eta = raw$samples[nMcmc, ], accept = mean(raw$accept))
+      eta0 <- parsFull[meta$eta_names[[i]]]
+      tryCatch(.rwmEta(bake, eta0, nMcmc, eta_step[i]),
+               error = function(e) list(eta = eta0, accept = 0))
     }
     res <- if (cores > 1L)
              parallel::mclapply(seq_len(N), draw_one, mc.cores = cores)

@@ -240,7 +240,8 @@ test_that("EM(method='saem') runs end-to-end and returns a sensible fit", {
   expect_s3_class(fit, "em")
   expect_equal(fit$method, "saem")
   expect_true(is.finite(fit$value))
-  expect_true(fit$Omega[1, 1] > 0)                 # positive-definite Omega
+  # drawn etas spread, so Omega stays near its FOCEI value instead of collapsing
+  expect_gt(fit$Omega[1, 1], 0.01)
   expect_equal(dim(fit$etaModes), c(6L, 1L))
   expect_false(is.null(fit$stageTrace))
   expect_true(all(fit$stageTrace$phase %in% c("burnin", "converge")))
