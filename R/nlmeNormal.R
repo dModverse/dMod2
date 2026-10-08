@@ -254,7 +254,7 @@
 #' with `method = "focei"`.
 #'
 #' @param obj An \code{objfn} of the form
-#'   `normL2(data, g*x*p, errmodel = err) + constraintL2(mu = 0, Omega = om)`.
+#'   `normL2(data, g*x*p, errmodel = err) + constraintL2(om)`.
 #'   The prediction function, data, error model, and omega spec are recovered
 #'   from it automatically.
 #' @param control Named list with `level` (Smolyak depth, default 4),
@@ -1136,7 +1136,7 @@ emObjfn <- function(obj, control = list()) {
 # Recover the model pieces (prdfn, data, errfn, omegaSpec) from a composed
 # objective. normL2() and constraintL2_mvn() stamp these as attributes at
 # construction and +.objfn coalesces them, so a well-formed NLME objective
-# `normL2(data, g*x*p, errmodel = e) + constraintL2(mu = 0, Omega = om)`
+# `normL2(data, g*x*p, errmodel = e) + constraintL2(om)`
 # self-describes and callers never re-pass the pieces.
 .normalReconstruct <- function(obj) {
   if (!inherits(obj, "objfn"))
@@ -1148,11 +1148,11 @@ emObjfn <- function(obj, control = list()) {
   if (is.null(prdfn) || is.null(data))
     stop(".fitNormal: could not recover the prediction function and data from ",
          "`obj`. Build it as ",
-         "normL2(data, g*x*p, errmodel = e) + constraintL2(mu = 0, Omega = om).",
+         "normL2(data, g*x*p, errmodel = e) + constraintL2(om).",
          call. = FALSE)
   if (is.null(omega))
     stop(".fitNormal: `obj` carries no random-effects prior. Add ",
-         "+ constraintL2(mu = 0, Omega = omega(..., subjects = ...)).",
+         "+ constraintL2(omega(..., subjects = ...)).",
          call. = FALSE)
   if (is.null(omega$subjectEtas))
     stop(".fitNormal: the omega in `obj` has no subject expansion. Build it with ",
@@ -1255,7 +1255,7 @@ emObjfn <- function(obj, control = list()) {
 #' [plot.em], [plotIndivs] etc.
 #'
 #' @param obj An \code{objfn} of the form
-#'   `normL2(data, g*x*p, errmodel = err) + constraintL2(mu = 0, Omega = om)`.
+#'   `normL2(data, g*x*p, errmodel = err) + constraintL2(om)`.
 #'   Its model pieces are extracted automatically.
 #' @param init Named numeric starting parameter vector. Must contain all
 #'   structural parameters and all `omega$cholPars`; build it with [emInit].
@@ -1805,7 +1805,7 @@ print.summary.em <- function(x, digits = 4, ...) {
 #' the multi-modality of the marginal likelihood and pick the best optimum.
 #'
 #' @param obj An `objfn` passed straight to [EM] (typically
-#'   `normL2(data, g*x*p, errmodel = e) + constraintL2(mu = 0, Omega = om)`).
+#'   `normL2(data, g*x*p, errmodel = e) + constraintL2(om)`).
 #'   The model pieces are recovered from it automatically.
 #' @param center Named numeric or [parframe]. If numeric, the population
 #'   parameter vector around which random starts are sampled (structural pars

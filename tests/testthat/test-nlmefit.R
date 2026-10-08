@@ -62,7 +62,7 @@
                                  value = y_obs, condition = subjects,
                                  stringsAsFactors = FALSE))
   om <- omega(eta = "eta", subjects = subjects)
-  obj <- normL2(data, prdfn) + constraintL2(mu = 0, Omega = om)
+  obj <- normL2(data, prdfn) + constraintL2(om)
   list(obj = obj, om = om, prdfn = prdfn, data = data,
        subjects = subjects, true_mu = true_mu, true_om = true_om,
        y_obs = y_obs)
@@ -390,7 +390,7 @@ test_that("msEM handles per-fit failures without aborting the run", {
   }))
   data <- as.datalist(obs_rows)
   om <- omega(eta = "eta", subjects = subjects)
-  obj <- normL2(data, prdfn) + constraintL2(mu = 0, Omega = om)
+  obj <- normL2(data, prdfn) + constraintL2(om)
   list(obj = obj, om = om, prdfn = prdfn, data = data,
        subjects = subjects)
 }

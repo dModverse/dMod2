@@ -668,7 +668,7 @@
 #' [trustL1]. See `notes/laplace_nlme_theory.Rmd`.
 #'
 #' The objective is assembled like an [EM] objective, with [constraintL1]
-#' in place of `constraintL2(Omega = )`:
+#' in place of `constraintL2(<omegaspec>)`:
 #' `obj <- normL2(data, g*x*p, errmodel = e) + constraintL1(pen)`.
 #'
 #' @param obj Composed objective carrying the model pieces and the `penaltySpec`.

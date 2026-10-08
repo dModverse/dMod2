@@ -162,6 +162,134 @@ omega <- function(eta,
 }
 
 
+#' Multivariate normal prior over random effects
+#'
+#' The prior of the subject-level random effects of an [omega()] specification,
+#' \deqn{\sum_i (\eta_i - m)^T \Omega^{-1} (\eta_i - m) + N \log|\Omega|,}
+#' with \eqn{\Omega = L L^T} parametrised by its Cholesky factor, log-scale on
+#' the diagonal.
+#'
+#' @param mu An `omegaspec` from [omega()] with `subjects`.
+#' @param mean Mean of the random effects, a scalar or one value per eta.
+#' @param attr.name Character. Name of the attribute storing the constraint value.
+#' @param condition Character vector, the conditions of a sum of objectives in
+#'   which the term is evaluated. `NULL` evaluates it in every one.
+#' @param ... Not used.
+#'
+#' @return Object of class `objfn` with value, gradient and Gauss-Newton
+#'   Hessian. Parameters absent from `pars` and `fixed` make the term 0.
+#' @seealso [omega()], [EM()], [constraintL2()]
+#' @examples
+#' om <- omega(eta = "eta", subjects = c("s1", "s2"))
+#' prior <- constraintL2(om)
+#' pars <- c(eta_s1 = 0.1, eta_s2 = -0.2)
+#' pars[om$cholPars] <- 0
+#' prior(pars = pars)$value
+#' @export
+constraintL2.omegaspec <- function(mu, mean = 0, attr.name = "prior", condition = NULL, ...) {
+
+  spec <- mu
+  if (is.null(spec$subjectEtas))
+    stop("constraintL2(): the omegaspec needs subjects, omega(..., subjects = ).",
+         call. = FALSE)
+  K <- spec$K
+  N <- nrow(spec$subjectEtas)
+  if (length(mean) == 1L) mean <- rep(mean, K)
+  if (length(mean) != K)
+    stop("constraintL2(): `mean` has length 1 or one value per eta.", call. = FALSE)
+  etaNames <- as.vector(spec$subjectEtas)
+  chol     <- spec$cholPars
+  parnames <- c(etaNames, chol)
+  loc      <- cbind(spec$cholLoc[, 1L], spec$cholLoc[, 2L])
+  dg       <- unname(spec$isDiag)
+
+  myfn <- function(..., fixed = NULL, deriv = TRUE, deriv2 = FALSE, hessian = NULL,
+                   conditions = condition, env = NULL,
+                   cores = getOption("dMod.cores", 1L)) {
+
+    p    <- list(...)[[match.fnargs(list(...), "pars")]]
+    cv   <- .resolveCurvature(deriv, deriv2, hessian, "forward")
+    allp <- c(p, fixed)
+    zero <- function(v) {
+      out <- objlist(value = v, gradient = setNames(numeric(length(p)), names(p)),
+                     hessian = if (cv$hessian) matrix(0, length(p), length(p),
+                                                      dimnames = list(names(p), names(p))))
+      attr(out, attr.name) <- v
+      attr(out, "env") <- env
+      out
+    }
+    if (!all(parnames %in% names(allp))) return(zero(0))
+
+    # Residuals in whitened coordinates, Z = L^-1 (eta_i - m), one column per subject
+    L <- spec$buildL(allp[chol])
+    Z <- forwardsolve(L, t(matrix(allp[etaNames], N, K)) - mean)
+    W <- backsolve(t(L), Z)
+    value <- sum(Z * Z) + 2 * N * sum(log(diag(L)))
+    if (!deriv) return(zero(value))
+
+    # Inner gradient over etas (index (k - 1) * N + i) and Cholesky entries
+    WZ <- W %*% t(Z)
+    gc <- -2 * WZ[loc]
+    gc[dg] <- gc[dg] * L[loc][dg] + 2 * N
+    gi <- setNames(c(2 * as.vector(t(W)), gc), parnames)
+
+    hi <- NULL
+    if (cv$hessian) {
+      # Gauss-Newton on Z: eta-eta 2 Omega^-1 per subject, Cholesky terms by the
+      # derivative of Z along each entry
+      Linv <- forwardsolve(L, diag(K))
+      Oinv <- crossprod(Linv)
+      coef <- t(Z[loc[, 2L], , drop = FALSE])
+      coef[, dg] <- -coef[, dg] * rep(L[loc][dg], each = N)
+      coef[, !dg] <- -coef[, !dg]
+      km <- loc[, 1L]
+      hcc <- 2 * crossprod(coef) * Oinv[km, km, drop = FALSE]
+      hec <- 2 * vapply(seq_along(chol), function(m) as.vector(outer(coef[, m], Oinv[, km[m]])),
+                        numeric(N * K))
+      hi <- rbind(cbind(2 * kronecker(Oinv, diag(N)), hec), cbind(t(hec), hcc))
+      dimnames(hi) <- list(parnames, parnames)
+    }
+
+    # Restricted to the free parameters, then through the upstream Jacobian
+    free <- intersect(names(p), parnames)
+    gr <- setNames(numeric(length(p)), names(p))
+    gr[free] <- gi[free]
+    hs <- NULL
+    if (cv$hessian) {
+      hs <- matrix(0, length(p), length(p), dimnames = list(names(p), names(p)))
+      hs[free, free] <- hi[free, free]
+    }
+    dP <- attr(p, "deriv", exact = TRUE)
+    if (!is.null(dP)) {
+      g0 <- gr
+      gr <- setNames(drop(g0 %*% dP), colnames(dP))
+      if (cv$hessian) {
+        hs <- t(dP) %*% hs %*% dP
+        dP2 <- if (cv$deriv2) attr(p, "deriv2", exact = TRUE)
+        common <- if (!is.null(dP2)) intersect(names(g0), dimnames(dP2)[[1]])
+        if (length(common)) {
+          th <- colnames(dP)
+          hs <- hs + matrix(crossprod(matrix(dP2[common, th, th, drop = FALSE],
+                                             nrow = length(common)), g0[common]), length(th))
+        }
+        dimnames(hs) <- list(colnames(dP), colnames(dP))
+      }
+    }
+
+    out <- objlist(value = value, gradient = gr, hessian = hs)
+    attr(out, attr.name) <- value
+    attr(out, "env") <- env
+    out
+  }
+
+  class(myfn) <- c("objfn", "fn")
+  attr(myfn, "conditions") <- condition
+  attr(myfn, "parameters") <- parnames
+  attr(myfn, "omegaSpec")  <- spec
+  myfn
+}
+
+
 
 #' Print method for omega
 #'

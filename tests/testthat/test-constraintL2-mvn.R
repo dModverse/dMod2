@@ -1,11 +1,11 @@
-# constraintL2(Omega = ) -- the multivariate-normal path.
+# constraintL2() on an omegaspec: the multivariate-normal prior over random effects.
 # Needs omega() from the NLME layer, so these live with it.
 
 test_that("MVN value matches direct computation for diagonal Omega", {
   set.seed(2)
   subjects <- paste0("s", 1:5)
   om <- omega(eta = c("eta_a", "eta_b"), subjects = subjects)
-  obj <- constraintL2(mu = 0, Omega = om)
+  obj <- constraintL2(om)
 
   eta_vals <- runif(10, -0.5, 0.5)
   names(eta_vals) <- as.vector(om$subjectEtas)
@@ -30,7 +30,7 @@ test_that("MVN gradient (diagonal Omega) follows analytic closed form", {
 
   subjects <- paste0("s", 1:4)
   om <- omega(eta = c("eta_a", "eta_b"), subjects = subjects)
-  obj <- constraintL2(mu = 0, Omega = om)
+  obj <- constraintL2(om)
 
   eta_vals <- rnorm(8, sd = 0.3)
   names(eta_vals) <- as.vector(om$subjectEtas)
@@ -62,7 +62,7 @@ test_that("MVN gradient eta-block (full Omega) equals 2 * Omega^-1 * eta_i per s
   subjects <- paste0("s", 1:6)
   om <- omega(eta = c("eta_Cl", "eta_V", "eta_Ka"),
               structure = "full", subjects = subjects)
-  obj <- constraintL2(mu = 0, Omega = om)
+  obj <- constraintL2(om)
 
   eta_vals <- rnorm(18, sd = 0.4)
   names(eta_vals) <- as.vector(om$subjectEtas)
@@ -90,7 +90,7 @@ test_that("MVN gradient eta-block (selective correlation) equals 2 * Omega^-1 * 
   om <- omega(eta = c("eta_Cl", "eta_V", "eta_Ka"),
               correlate = list(c("eta_Cl", "eta_V")),
               subjects = subjects)
-  obj <- constraintL2(mu = 0, Omega = om)
+  obj <- constraintL2(om)
 
   eta_vals <- rnorm(15, sd = 0.3)
   names(eta_vals) <- as.vector(om$subjectEtas)
@@ -119,7 +119,7 @@ test_that("MVN Hessian eta-block at eta = 0 equals 2 * Omega^-1 block-diagonal p
 
   subjects <- paste0("s", 1:3)
   om <- omega(eta = c("eta_a", "eta_b"), structure = "full", subjects = subjects)
-  obj <- constraintL2(mu = 0, Omega = om)
+  obj <- constraintL2(om)
 
   eta_vals <- rep(0, 6)
   names(eta_vals) <- as.vector(om$subjectEtas)
@@ -142,11 +142,11 @@ test_that("MVN Hessian eta-block at eta = 0 equals 2 * Omega^-1 block-diagonal p
                unname(H_ref), tolerance = 1e-10)
 })
 
-test_that("MVN value uses mu correctly when mu != 0", {
+test_that("MVN value uses a nonzero mean", {
   set.seed(7)
   subjects <- paste0("s", 1:3)
   om <- omega(eta = c("eta_a", "eta_b"), subjects = subjects)
-  obj <- constraintL2(mu = c(eta_a = 0.1, eta_b = -0.05), Omega = om)
+  obj <- constraintL2(om, mean = c(eta_a = 0.1, eta_b = -0.05))
 
   eta_vals <- c(eta_a_s1 = 0.1, eta_b_s1 = -0.05,
                 eta_a_s2 = 0.1, eta_b_s2 = -0.05,
@@ -161,7 +161,7 @@ test_that("MVN value uses mu correctly when mu != 0", {
 
 test_that("MVN errors helpfully when subject expansion is missing", {
   om <- omega(eta = c("eta_a", "eta_b"))   # no subjects
-  expect_error(constraintL2(mu = 0, Omega = om), "subject expansion")
+  expect_error(constraintL2(om), "needs subjects")
 })
 
 test_that("MVN summable with normL2-style objfn via +.objfn", {
@@ -169,7 +169,7 @@ test_that("MVN summable with normL2-style objfn via +.objfn", {
   om <- omega(eta = c("eta_a"), subjects = subjects)
 
   obj_theta <- constraintL2(mu = c(theta_a = 0))
-  obj_mvn   <- constraintL2(mu = 0, Omega = om)
+  obj_mvn   <- constraintL2(om)
   obj_sum   <- obj_theta + obj_mvn
 
   pars <- c(theta_a = 1.5,

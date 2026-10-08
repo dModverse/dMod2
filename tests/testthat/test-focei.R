@@ -136,7 +136,7 @@ test_that("EM(method='focei') runs on a minimal one-eta NLME prdfn", {
     stringsAsFactors = FALSE))
 
   om <- omega(eta = "eta", subjects = subjects)
-  obj <- normL2(data, g * x * p) + constraintL2(mu = 0, Omega = om)
+  obj <- normL2(data, g * x * p) + constraintL2(om)
 
   outer_init <- c(mu_pop = 2.0, omega_eta_eta = log(0.3))
 
@@ -204,7 +204,7 @@ test_that("EM(method='focei') matches the pre-rewrite Theoph baseline", {
 
   om <- omega(eta = c("eta_Ka", "eta_V", "eta_Cl"), subjects = subjects)
   obj <- normL2(dlist, prdfn, errmodel = err) +
-           constraintL2(mu = 0, Omega = om)
+           constraintL2(om)
 
   fit <- EM(obj, ref$init,
                  method   = "focei",

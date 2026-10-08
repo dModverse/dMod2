@@ -255,7 +255,7 @@ test_that("normL2 still produces the same OFV after eval_condition refactor", {
                                  value = y_obs, condition = subjects,
                                  stringsAsFactors = FALSE))
   om <- omega(eta = "eta", subjects = subjects)
-  obj <- normL2(data, g * x * p) + constraintL2(mu = 0, Omega = om)
+  obj <- normL2(data, g * x * p) + constraintL2(om)
 
   init <- c(mu_pop = 2.0, omega_eta_eta = log(0.3),
             setNames(rep(0, 4), paste0("eta_", subjects)))
@@ -504,7 +504,7 @@ test_that("rank-deficient S triggers ridge warning but does not crash", {
                                  value = y_obs, condition = subjects,
                                  stringsAsFactors = FALSE))
   om <- omega(eta = "eta", subjects = subjects)
-  obj <- normL2(data, g * x * p) + constraintL2(mu = 0, Omega = om)
+  obj <- normL2(data, g * x * p) + constraintL2(om)
   list(g = g, x = x, p = p, data = data, om = om, obj = obj,
        prdfn = g * x * p, subjects = subjects)
 }

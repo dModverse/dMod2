@@ -85,7 +85,7 @@ compile(prd, e, cores = 4)
 ## and they are never passed again.
 om  <- omega(eta = c("eta_Ka", "eta_V", "eta_Cl"), subjects = subjects)
 obj <- normL2(dlist, prd, errmodel = e) +
-         constraintL2(mu = 0, Omega = om)
+         constraintL2(om)
 
 ## emInit() fills in the omega Cholesky entries (here sd = 0.3 on each
 ## diagonal) around the named structural starting values.
