@@ -1460,6 +1460,16 @@ print.em <- function(x, ...) {
 coef.em <- function(object, ...) object$argument
 
 
+#' Covariance of the structural parameter estimates of an EM
+#'
+#' @param object An `EM` object (see [EM]).
+#' @param ... `parupper`, `parlower`, passed to [vcov()][vcov.trustfit].
+#' @return The inverse of half the outer Hessian, with the structural
+#'   parameters as dimnames, as [vcov()][vcov.trustfit] returns it for a fit.
+#' @export
+vcov.em <- function(object, ...) vcov.trustfit(object, ...)
+
+
 #' Wald confidence intervals for an EM
 #'
 #' Symmetric confidence intervals from the observed-information matrix
