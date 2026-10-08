@@ -1,6 +1,6 @@
 ## Spike-and-slab lasso path of scanL1() on the toy decay of Hauber, Rosenblatt
 ## and Timmer (2023, Fig 2): dx/dt = -p x, x(0) = 1, three cell types with
-## log10 p = -1.5, -1.3, -1.2. Types 2 and 3 carry a common mutation that
+## log10 p = -1.5, -1.3, -1.2. Types 2 and 3 share a mutation that
 ## differs slightly; the reference value of p is known.
 library(dMod2)
 outdir <- tempdir()

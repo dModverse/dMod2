@@ -19,7 +19,7 @@ accumulate independently under \code{+}).}
 \item{...}{Not used.}
 }
 \value{
-An \code{objfn} carrying \code{attr(., "penaltySpec")}.
+An \code{objfn} with \code{attr(., "penaltySpec")}.
 }
 \description{
 The L1 counterpart of \link{constraintL2} with an \code{Omega}. Given a \link{penaltyL1}

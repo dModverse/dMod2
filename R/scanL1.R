@@ -110,7 +110,7 @@ gateL1 <- function(trafo, pars, prefix = "s_") {
 #'   to `maxFits`, default ten times the batch).
 #' @details With `ssl`, term `j` (a gate, a reference parameter, or in a block
 #'   the gap between neighbours of the sorted values, anchor included, as in
-#'   Ke, Fan and Wu 2015) carries the prior
+#'   Ke, Fan and Wu 2015) has the prior
 #'   \deqn{\pi(d_j \mid \theta) = \theta\,\psi_1(d_j) + (1-\theta)\,\psi_0(d_j),
 #'   \quad \psi_i(d) = \tfrac{\lambda_i}{4} e^{-\lambda_i |d| / 2},}
 #'   so that `-2 log` of each component is `lambda_i * |d|` up to a constant,
@@ -207,9 +207,8 @@ scanL1 <- function(obj, center, zero = NULL, reference = NULL, groups = NULL,
     .l1Penalised(obj, start, lambda[l], gates, reference, groups, fixSel, q,
                  ctl, n, sd, cores, extra, ssl, if (n > 1L) wf, prior)
   # Upward from the full optimum, then downward from each larger lambda's
-  # optimum; a lambda keeps the better of the two.
-  # With ssl the path is one chain of local modes: the spike density at zero
-  # grows with lambda, so posterior values of different supports do not compare.
+  # optimum; a lambda keeps the better of the two. With ssl the path is one
+  # chain of local modes, since posteriors of different supports do not compare.
   fitsL <- vector("list", length(lambda))
   warm  <- start0
   for (l in seq_along(lambda)) {
@@ -308,12 +307,9 @@ scanL1 <- function(obj, center, zero = NULL, reference = NULL, groups = NULL,
   a[setdiff(names(a), tol)]
 }
 
-# Best of `fits` runs of `run(start)`: start 1 is `center`, the others are
-# drawn around it. `abs()` keeps gates non-negative. With `wf`, batches of
-# `fits` further starts follow until `wf$hits` runs lie within `wf$tol` of the
-# best or `wf$max` starts are spent. `prior` carries earlier runs (`fits`,
-# `values`, `starts`) into the count. `values` holds the sorted values of all
-# converged runs, `starts` and `hits` the counts.
+# Best of `fits` runs of `run(start)` from `center` and starts drawn around it.
+# With `wf`, further batches follow until `wf$hits` runs lie within `wf$tol` of
+# the best or `wf$max` starts are spent; `prior` adds earlier runs to the count.
 .l1Multistart <- function(run, center, fits, sd, cores, obj, extra = NULL,
                           positive = character(0), wf = NULL, prior = NULL) {
   draw <- function(n) lapply(seq_len(max(n, 0L)), function(i) {
@@ -356,9 +352,8 @@ scanL1 <- function(obj, center, zero = NULL, reference = NULL, groups = NULL,
 }
 
 # One penalised fit at `lambda` from `start0`, the `extra` starts and random
-# ones around `start0`; q < 1 by reweighting the L1 fit of every start, with
-# the Lq objective as value, `ssl` by the EM of the spike-and-slab lasso from
-# every start.
+# ones; q < 1 reweights the L1 fit of every start and scores by the Lq
+# objective, `ssl` runs the EM of the spike-and-slab lasso from every start.
 .l1Penalised <- function(obj, start0, lambda, gates, reference, groups,
                          fixed, q, ctl, fits, sd, cores, extra = NULL, ssl = NULL,
                          wf = NULL, prior = NULL) {
@@ -450,8 +445,7 @@ scanL1 <- function(obj, center, zero = NULL, reference = NULL, groups = NULL,
 }
 
 # Terms of the spike-and-slab lasso: the singles, then per block the gaps
-# between neighbours of the sorted values (anchor included), so that a block
-# of m members has m terms and a split costs one slab term. `d` holds the
+# between neighbours of the sorted values, anchor included. `d` holds the
 # gaps, `edges` per block the index pairs into members and anchor.
 .sslEdges <- function(th, singles, groups) {
   d <- abs(th[singles])
@@ -481,10 +475,9 @@ scanL1 <- function(obj, center, zero = NULL, reference = NULL, groups = NULL,
   unname(d)
 }
 
-# EM of the spike-and-slab lasso from one start. Terms the E-step assigns to
-# the spike but the weighted fit leaves off their kink (strongly curved data
-# terms) are merged onto it; the merge is kept when it lowers the -2 log
-# posterior, as the exact threshold of the linear spike-and-slab lasso does.
+# EM of the spike-and-slab lasso from one start. Spike terms the weighted fit
+# leaves off their kink are merged onto it; the merge is kept when it lowers
+# the -2 log posterior.
 .sslEM <- function(run, st, singles, groups, lambda0, ssl, ctl) {
   fit <- .sslLoop(run, st, singles, groups, lambda0, ssl, ctl)
   snap <- function(f) {
@@ -504,11 +497,9 @@ scanL1 <- function(obj, center, zero = NULL, reference = NULL, groups = NULL,
   fit
 }
 
-# EM iterations from one start: E-step on the current terms, M-step a trustL1
-# fit with the weights p lambda1 + (1 - p) lambda0 on the edges, zero on the
-# other pairs. Returns the last fit with `value` the -2 log posterior,
-# `edgeP` the inclusion of the edges, `inclusion` that of all pairwise terms
-# at the final `theta`, and `theta`.
+# EM from one start: E-step on the current terms, M-step a trustL1 fit with
+# weights p lambda1 + (1 - p) lambda0 on the edges. Returns the last fit with
+# the -2 log posterior as `value`, `edgeP`, `inclusion` and `theta`.
 .sslLoop <- function(run, st, singles, groups, lambda0, ssl, ctl) {
   th <- st
   ed <- .sslEdges(th, singles, groups)

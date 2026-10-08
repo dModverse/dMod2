@@ -134,7 +134,7 @@ group.}
 \details{
 With \code{ssl}, term \code{j} (a gate, a reference parameter, or in a block
 the gap between neighbours of the sorted values, anchor included, as in
-Ke, Fan and Wu 2015) carries the prior
+Ke, Fan and Wu 2015) has the prior
 \deqn{\pi(d_j \mid \theta) = \theta\,\psi_1(d_j) + (1-\theta)\,\psi_0(d_j),
   \quad \psi_i(d) = \tfrac{\lambda_i}{4} e^{-\lambda_i |d| / 2},}
 so that \verb{-2 log} of each component is \verb{lambda_i * |d|} up to a constant,
@@ -152,7 +152,7 @@ increasing grid, each
 }
 \examples{
 \dontrun{
-## A decays into B, B decays. The model also carries a direct loss of A that
+## A decays into B, B decays. The model also has a direct loss of A that
 ## the data do not need; its gate is pulled to exactly zero.
 outdir <- tempdir()
 f <- eqnvec(A = "-k1 * A - k2 * A", B = "k1 * A - k3 * B")

@@ -57,7 +57,7 @@ e <- Y(eqnvec(y_ext = "sigma", y_mem = "sigma", y_int = "sigma"), g,
        modelname = "beckerc_err", compile = FALSE, deriv2 = TRUE,
        attach.input = FALSE, outdir = outdir)
 
-## 2. Clustered encoding: every line carries a deviation for each candidate.
+## 2. Clustered encoding: every line has a deviation for each candidate.
 ##    Unlike the 2-line reference encoding (EMlaplace.R), the complete-graph fusion
 ##    needs an eta for ALL subjects; the mean level is anchored into log_<par>.
 dose  <- 1347.49                                       # init_Epo
@@ -108,10 +108,9 @@ fixed <- st[c("log_koff", "log_kex", "log_kdi", "log_kde", "log_EpoR_rel")]
 init  <- emInit(c(st[paste0("log_", cand)], log_sigma = log(0.03)), pen,
                  lambda = 5)
 
-## 5. Recover the groupings. One all-separate structural fit provides the FOCE
-##    linearisation; the clustered marginal then scores the cluster path and the
-##    JOINT selector fixes each parameter's grouping using the full cross-
-##    parameter covariance. Cost: O(1) ODE fit, no per-lambda multistart.
+## 5. Recover the groupings. One all-separate fit gives the FOCE linearisation;
+##    the clustered marginal scores the cluster path and the joint selector fixes
+##    each parameter's grouping from the full cross-parameter covariance.
 sel <- sparsify(obj, init, fixed = fixed,
                         fits = 8, cores = 4, sd = 0.3, verbose = TRUE)
 print(sel)

@@ -64,19 +64,17 @@ sdlog <- c(y_ext = -2.074558, y_mem = -1.320326, y_int = -1.256882, y_bind = -1.
 
 times <- c(0.82, 5.82, 20.82, 60.82, 120.82, 180.82, 240.82, 300.82)
 pred  <- prd(times, c(base, r_true), deriv = FALSE)
-simulate <- function(pred) {
-  d <- wide2long(pred)
-  tc <- d[d$name %in% c("y_ext", "y_mem", "y_int"), ]
-  tc <- tc[rep(seq_len(nrow(tc)), 3), ]
-  bd <- d[grepl("^y_bind", d$name) & d$time == times[1], ]
-  bd <- bd[rep(seq_len(nrow(bd)), efN[as.integer(sub("y_bind", "", bd$name))]), ]
-  d  <- rbind(tc, bd)
-  key <- ifelse(grepl("^y_bind", d$name), "y_bind", as.character(d$name))
-  d$sigma <- 10^sdlog[key]
-  d$value <- d$value + rnorm(nrow(d), 0, d$sigma)
-  as.datalist(d)
-}
-data <- simulate(pred)
+## Time courses in triplicate, the binding curve at the first time point
+d  <- wide2long(pred)
+tc <- d[d$name %in% c("y_ext", "y_mem", "y_int"), ]
+tc <- tc[rep(seq_len(nrow(tc)), 3), ]
+bd <- d[grepl("^y_bind", d$name) & d$time == times[1], ]
+bd <- bd[rep(seq_len(nrow(bd)), efN[as.integer(sub("y_bind", "", bd$name))]), ]
+d  <- rbind(tc, bd)
+key <- ifelse(grepl("^y_bind", d$name), "y_bind", as.character(d$name))
+d$sigma <- 10^sdlog[key]
+d$value <- d$value + rnorm(nrow(d), 0, d$sigma)
+data <- as.datalist(d)
 plot(prd(seq(0, 310, 5), c(base, r_true)), data)
 
 obj    <- normL2(data, prd)

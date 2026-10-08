@@ -353,7 +353,7 @@ parnames.penaltyspec <- function(x, what = c("all", "eta", "lambda"), ...) {
 #'   accumulate independently under `+`).
 #' @param condition Optional condition (default `NULL`, condition-unspecific).
 #' @param ... Not used.
-#' @return An `objfn` carrying `attr(., "penaltySpec")`.
+#' @return An `objfn` with `attr(., "penaltySpec")`.
 #' @seealso [penaltyL1], [EM], [sparsify], [constraintL2]
 #' @export
 constraintL1.penaltyspec <- function(mu, attr.name = "prior_l1", condition = NULL, ...) {

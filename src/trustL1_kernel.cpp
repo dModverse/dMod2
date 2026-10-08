@@ -150,10 +150,9 @@ struct RCoord {
   bool single = true;   // a coordinate outside every block: the original path
 };
 
-// Fusion blocks: lambda * sum_{p<q} w_pq |theta_p - theta_q| over the members
-// of a block, plus lambda * w_pa |theta_p - a| toward an optional anchor a.
-// Members with exactly equal values form a class that moves as one coordinate;
-// a class equal to the anchor is pinned until a subset of it is released.
+// Fusion blocks: lambda * sum_{p<q} w_pq |theta_p - theta_q| plus lambda * w_pa
+// |theta_p - a| toward an optional anchor. Equal members move as one class; a
+// class at the anchor stays pinned until a subset of it is released.
 struct FuseBlock {
   std::vector<int>    idx;
   double              lambda = 0.0;
@@ -236,9 +235,8 @@ struct FuseSpec {
   }
 
   // Classes of every block as reduced coordinates. A class splits, or a pinned
-  // class releases a subset, when the subset's net force exceeds what the
-  // penalty terms across that cut can hold. For a complete graph with equal
-  // weights the worst cut is a prefix of the members sorted by force.
+  // one releases a subset, when the subset's net force exceeds the penalty
+  // across the cut; with equal weights the worst cut is a prefix by force.
   void classes(const std::vector<double>& th, const std::vector<double>& g,
                const std::vector<double>& ps, std::vector<RCoord>& rc) const {
     for (const FuseBlock& B : blocks) {

@@ -1,5 +1,5 @@
 \dontrun{
-## A decays into B, B decays. The model also carries a direct loss of A that
+## A decays into B, B decays. The model also has a direct loss of A that
 ## the data do not need; its gate is pulled to exactly zero.
 outdir <- tempdir()
 f <- eqnvec(A = "-k1 * A - k2 * A", B = "k1 * A - k3 * B")
