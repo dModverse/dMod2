@@ -4,7 +4,7 @@
 \alias{constraintGamma}
 \title{Soft Gamma Constraint on Positive Parameters}
 \usage{
-constraintGamma(shape, scale = 1, attr.name = "prior", condition = NULL)
+constraintGamma(shape, scale = 1, attrName = "prior", condition = NULL, ...)
 }
 \arguments{
 \item{shape}{Named numeric vector of shape parameters. Its names select the
@@ -13,12 +13,14 @@ constrained parameters.}
 \item{scale}{Numeric, scalar or named and aligned with \code{shape}, default
 \code{1}. The gamma scale, not the rate.}
 
-\item{attr.name}{Character. Name of the attribute holding the constraint
+\item{attrName}{Character. Name of the attribute holding the constraint
 value, default \code{"prior"}.}
 
 \item{condition}{Character vector, the conditions of a sum of objectives
 in which the term is evaluated. \code{NULL} (default) evaluates it in every
 one.}
+
+\item{...}{\code{attr.name} is deprecated, use \code{attrName}.}
 }
 \value{
 An objective function of class \code{objfn}, called as

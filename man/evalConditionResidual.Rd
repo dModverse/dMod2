@@ -14,7 +14,8 @@ evalConditionResidual(
   eCondNames = NULL,
   deriv = TRUE,
   deriv2 = FALSE,
-  opt.BLOQ = c("M3", "M1", "M4NM", "M4BEAL")
+  optBLOQ = c("M3", "M1", "M4NM", "M4BEAL"),
+  ...
 )
 }
 \arguments{
@@ -41,8 +42,10 @@ Gauss-Newton Hessian.}
 \item{deriv2}{Logical. \code{TRUE} returns the exact Hessian, from the second
 derivatives of the prediction. Default \code{FALSE}.}
 
-\item{opt.BLOQ}{Character, the treatment of data below the limit of
+\item{optBLOQ}{Character, the treatment of data below the limit of
 quantification, as in \code{\link[=normL2]{normL2()}}. Default \code{"M3"}.}
+
+\item{...}{\code{opt.BLOQ} is deprecated, use \code{optBLOQ}.}
 }
 \value{
 An \link{objlist}.

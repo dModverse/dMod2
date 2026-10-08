@@ -7,20 +7,20 @@
 \usage{
 constraintL2(mu, ...)
 
-\method{constraintL2}{default}(mu, sigma = 1, attr.name = "prior", condition = NULL, ...)
+\method{constraintL2}{default}(mu, sigma = 1, attrName = "prior", condition = NULL, ...)
 }
 \arguments{
 \item{mu}{Named numeric vector of prior means. Its names select the
 constrained parameters.}
 
-\item{...}{Passed to the method.}
+\item{...}{Passed to the method. \code{attr.name} is deprecated, use \code{attrName}.}
 
 \item{sigma}{Numeric standard deviations, scalar or named and aligned with
 \code{mu}, default \code{1}; or a character vector of parameter names that
 estimate them on log scale, \eqn{\sigma = \exp(s)}. One kind for all
 entries.}
 
-\item{attr.name}{Character. Name of the attribute holding the constraint
+\item{attrName}{Character. Name of the attribute holding the constraint
 value, default \code{"prior"}.}
 
 \item{condition}{Character vector, the conditions of a sum of objectives

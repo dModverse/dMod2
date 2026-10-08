@@ -28,5 +28,5 @@ finite-sample threshold \eqn{n\log(1 + F_{1,\nu,1-\alpha}/\nu)},
 out and the generalisation of the classical t interval.
 }
 \seealso{
-\code{\link[=profile]{profile()}}, \code{\link[=confint.parframe]{confint.parframe()}}
+\link[=profile.objfn]{profile()}, \code{\link[=confint.parframe]{confint.parframe()}}
 }

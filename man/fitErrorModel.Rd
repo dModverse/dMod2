@@ -11,7 +11,7 @@ fitErrorModel(
   par = c(s0 = 1, srel = 0.1),
   lower = NULL,
   upper = NULL,
-  plotting = TRUE,
+  plotting = FALSE,
   blather = FALSE,
   ...
 )
@@ -34,8 +34,8 @@ expression in the mean \code{x} and the parameters. Default
 \item{lower, upper}{Bounds on the parameters, named or in the order of
 \code{par}. Default \code{NULL}, unbounded.}
 
-\item{plotting}{Logical. If \code{TRUE} (default), plot the variances, the fitted
-model and its 68 and 95 percent bands per group.}
+\item{plotting}{Logical. If \code{TRUE}, plot the variances, the fitted model
+and its 68 and 95 percent bands per group. Default \code{FALSE}.}
 
 \item{blather}{Logical. If \code{TRUE}, return the extended data frame described
 under Value. Default \code{FALSE}.}
@@ -66,8 +66,7 @@ mu <- rep(c(0.1, 1, 10, 100), each = 4)
 data <- data.frame(name = "y", time = rep(1:4, each = 4), condition = "ctrl",
                    value = mu + rnorm(16, sd = sqrt(0.01 + 0.04 * mu^2)))
 reduced <- reduceReplicates(data)
-fitErrorModel(reduced, factors = "name", par = c(s0 = -4, srel = -3),
-              plotting = FALSE)
+fitErrorModel(reduced, factors = "name", par = c(s0 = -4, srel = -3))
 \dontshow{\}) # examplesIf}
 }
 \seealso{

@@ -4,7 +4,7 @@
 \alias{rref}
 \title{Reduced Row Echelon Form of a Matrix}
 \usage{
-rref(A, tol = sqrt(.Machine$double.eps), verbose = FALSE, fractions = FALSE)
+rref(A, tol = sqrt(.Machine$double.eps), verbose = FALSE, ...)
 }
 \arguments{
 \item{A}{Numeric matrix.}
@@ -14,12 +14,12 @@ rref(A, tol = sqrt(.Machine$double.eps), verbose = FALSE, fractions = FALSE)
 
 \item{verbose}{Logical. Not used.}
 
-\item{fractions}{Logical. Not used.}
+\item{...}{\code{fractions} is deprecated and ignored.}
 }
 \value{
-An unnamed list with two elements: the reduced row echelon form of
-\code{A}, and the indices of the pivot columns as a one-row matrix (\code{NULL} if
-there is none).
+A list with the elements \code{rref}, the reduced row echelon form of
+\code{A}, and \code{pivots}, the indices of the pivot columns as a one-row matrix
+(\code{NULL} if there is none).
 }
 \description{
 Computes the reduced row echelon form of a numeric matrix by Gauss-Jordan

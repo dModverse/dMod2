@@ -4,14 +4,14 @@
 \alias{repar}
 \title{Reparameterization}
 \usage{
-repar(expr, trafo = NULL, ..., reset = FALSE)
+repar(trafo = NULL, expr, ..., reset = FALSE)
 }
 \arguments{
-\item{expr}{\code{"lhs ~ rhs"} string or formula. Inside a name, \verb{_} separates
-symbols, so \code{"Delta_x"} with \code{x = "a"} becomes \code{"Delta_a"}.}
-
 \item{trafo}{Named character, \link{eqnvec} or a list of those. Default \code{NULL}
 returns the identity of the left-hand sides.}
+
+\item{expr}{\code{"lhs ~ rhs"} string or formula. Inside a name, \verb{_} separates
+symbols, so \code{"Delta_x"} with \code{x = "a"} becomes \code{"Delta_a"}.}
 
 \item{...}{Named character or numeric vectors of equal length, replacing
 the symbols of \code{expr} of the same name; element \code{i} of each gives the
@@ -28,15 +28,21 @@ Replaces the left-hand side of \code{"lhs ~ rhs"} by the
 right-hand side in \code{trafo}, after the symbols of \code{expr} are replaced by the
 arguments in \code{...}. \code{\link[=define]{define()}} and \code{\link[=insert]{insert()}} build on it.
 }
+\section{Lifecycle}{
+
+The order \code{repar(expr, trafo)} is deprecated. It is recognised by an
+expression in first place and accepted with a warning.
+}
+
 \examples{
 innerpars   <- letters[1:3]
 constraints <- c(a = "b + c")
 mycondition <- "cond1"
-trafo <- repar("x ~ x",        x = innerpars)
-trafo <- repar("x ~ y",        trafo, x = names(constraints), y = constraints)
-trafo <- repar("x ~ exp(x)",   trafo, x = innerpars)
-trafo <- repar("x ~ x + Delta_x_condition",
-               trafo, x = innerpars, condition = mycondition)
+trafo <- repar(NULL,  "x ~ x",      x = innerpars)
+trafo <- repar(trafo, "x ~ y",      x = names(constraints), y = constraints)
+trafo <- repar(trafo, "x ~ exp(x)", x = innerpars)
+trafo <- repar(trafo, "x ~ x + Delta_x_condition",
+               x = innerpars, condition = mycondition)
 }
 \seealso{
 \code{\link[=define]{define()}}, \code{\link[=insert]{insert()}}

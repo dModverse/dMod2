@@ -17,7 +17,8 @@ parframe(
   x = NULL,
   parameters = colnames(x),
   metanames = NULL,
-  obj.attributes = NULL
+  objAttributes = NULL,
+  ...
 )
 }
 \arguments{
@@ -30,7 +31,7 @@ parframe(
 \item{drop}{logical. Default \code{FALSE}. \code{TRUE} returns a plain data frame or
 vector instead of a \code{parframe}.}
 
-\item{...}{for \code{subset()}, a logical expression in the columns of \code{x}.}
+\item{...}{\code{obj.attributes} is deprecated, use \code{objAttributes}.}
 
 \item{parameters}{character, the names of the parameter columns. Default
 \code{colnames(x)}.}
@@ -38,7 +39,7 @@ vector instead of a \code{parframe}.}
 \item{metanames}{character, the names of the meta-information columns.
 Default \code{NULL}.}
 
-\item{obj.attributes}{character, the names of the objective function
+\item{objAttributes}{character, the names of the objective function
 attributes. Default \code{NULL}.}
 }
 \value{
@@ -64,5 +65,5 @@ pf[pf$value < 3, ]
 as.parvec(pf)
 }
 \seealso{
-\code{\link[=as.parframe]{as.parframe()}}, \code{\link[=profile]{profile()}}, \code{\link[=mstrust]{mstrust()}}
+\code{\link[=as.parframe]{as.parframe()}}, \link[=profile.objfn]{profile()}, \code{\link[=mstrust]{mstrust()}}
 }

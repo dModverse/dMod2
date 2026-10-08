@@ -4,7 +4,15 @@
 \alias{datapointL2}
 \title{L2 Objective of a Validation Data Point}
 \usage{
-datapointL2(name, time, value, sigma = 1, attr.name = "validation", condition)
+datapointL2(
+  name,
+  time,
+  parameter,
+  sigma = 1,
+  attrName = "validation",
+  condition,
+  ...
+)
 }
 \arguments{
 \item{name}{Character, the name of the predicted quantity, a state or an
@@ -12,17 +20,20 @@ observable.}
 
 \item{time}{Numeric of length 1, the time of the data point.}
 
-\item{value}{Character of length 1, the name of the parameter holding the
-data value.}
+\item{parameter}{Character of length 1, the name of the parameter holding
+the data value.}
 
 \item{sigma}{Numeric of length 1, the standard deviation of the data
 point, default \code{1}.}
 
-\item{attr.name}{Character. Name of the attribute holding the value,
+\item{attrName}{Character. Name of the attribute holding the value,
 default \code{"validation"}. The value is also returned as \code{chi2}
-contribution, see \code{attr.name} in \code{\link[=normL2]{normL2()}}.}
+contribution, see \code{attrName} in \code{\link[=normL2]{normL2()}}.}
 
 \item{condition}{Character, the condition of the prediction. No default.}
+
+\item{...}{\code{value} and \code{attr.name} are deprecated names of \code{parameter} and
+\code{attrName}.}
 }
 \value{
 An objective function of class \code{objfn}, called as
@@ -36,10 +47,10 @@ of one quantity at one time with a data value held by a parameter.
 \details{
 The value is
 \deqn{\left(\frac{x(t) - v}{\sigma}\right)^2}{((x(t) - v)/sigma)^2}
-with the prediction \eqn{x(t)} and the value parameter \eqn{v}. The
+with the prediction \eqn{x(t)} and the value of \code{parameter}, \eqn{v}. The
 prediction is read from \code{env}, where \code{\link[=normL2]{normL2()}} stores it, so the
 objective is evaluated as summand of an objective that predicts, or with
-its \code{env}. \code{time}, \code{sigma} and \code{attr.name} can be changed with
+its \code{env}. \code{time}, \code{sigma} and \code{attrName} can be changed with
 \code{\link[=controls]{controls()}}.
 }
 \section{Calling a dMod function}{
@@ -107,7 +118,8 @@ attr(prediction$a, "deriv") <- array(c(1, 0.1), c(1, 1, 2),
   dimnames = list(NULL, "A", c("A", "k1")))
 p0 <- c(A = 1, k1 = 2)
 
-vali <- datapointL2(name = "A", time = 0, value = "newpoint", sigma = 1, condition = "a")
+vali <- datapointL2(name = "A", time = 0, parameter = "newpoint", sigma = 1,
+                    condition = "a")
 vali(pars = c(p0, newpoint = 2), env = .GlobalEnv)
 }
 \seealso{

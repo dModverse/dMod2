@@ -1,3 +1,8 @@
+# dMod2 0.10.16
+
+* Breaking: `Pimpl(controlsPTC)` takes the tolerances as `reltol` and `abstol`,
+  as `cppDE::ptc()` does; `rtol` and `atol` are deprecated.
+
 # dMod2 0.10.15
 
 * Breaking: arguments in dot case are camelCase. `Y()` and `Pexpl()` take

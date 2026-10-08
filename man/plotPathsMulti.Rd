@@ -4,25 +4,29 @@
 \alias{plotPathsMulti}
 \title{Profile Likelihood: Plot All Parameter Paths of One Profile Together}
 \usage{
-plotPathsMulti(profs, whichpars, npars = 5, normalizePaths = FALSE)
+plotPathsMulti(profs, whichPar, nPars = 5, normalizePaths = FALSE, ...)
 }
 \arguments{
-\item{profs}{A \link{parframe} of profiles as returned by \code{\link[=profile]{profile()}}.}
+\item{profs}{A \link{parframe} of profiles as returned by
+\link[=profile.objfn]{profile()}.}
 
-\item{whichpars}{Character vector, the profiled parameters to draw.}
+\item{whichPar}{Character vector, the profiled parameters to draw.}
 
-\item{npars}{Integer, number of colored and named paths. Defaults to 5.}
+\item{nPars}{Integer, number of colored and named paths. Defaults to 5.}
 
 \item{normalizePaths}{Logical. \code{TRUE} scales each path to a maximum
 absolute value of 1. Defaults to \code{FALSE}.}
+
+\item{...}{\code{whichpars} and \code{npars} are deprecated, use \code{whichPar} and
+\code{nPars}.}
 }
 \value{
-A \code{ggplot} object; for several \code{whichpars} the grid of
+A \code{ggplot} object; for several \code{whichPar} the grid of
 \code{\link[cowplot:plot_grid]{cowplot::plot_grid()}}.
 }
 \description{
 Draws, for each profiled parameter, the changes of all other parameters
-along its profile in one panel. The \code{npars} parameters with the largest
+along its profile in one panel. The \code{nPars} parameters with the largest
 change are colored and named, the others are gray. Requires the package
 cowplot.
 }
@@ -32,7 +36,7 @@ pars <- c(a = 1, b = 0.5, c = 2)
 obj <- constraintL2(mu = pars, sigma = 0.1)
 profs <- profile(obj, pars, whichPar = c("a", "b"), limits = c(-1, 1),
                  cores = 1)
-plotPathsMulti(profs, c("a", "b"), npars = 2)
+plotPathsMulti(profs, c("a", "b"), nPars = 2)
 \dontshow{\}) # examplesIf}
 }
 \seealso{

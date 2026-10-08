@@ -76,7 +76,7 @@ dataset <- wide2long(prediction)
 dataset <- dataset[seq(1, nrow(dataset), 5), ]
 dataset$value <- dataset$value + rnorm(nrow(dataset), 0, .1)
 dataset$sigma <- 0.1
-data <- as.datalist(dataset, split.by = "condition")
+data <- as.datalist(dataset, splitBy = "condition")
 
 ## Plot data, and data with prediction
 plotData(data)

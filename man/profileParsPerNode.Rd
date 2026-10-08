@@ -4,17 +4,19 @@
 \alias{profileParsPerNode}
 \title{Split Parameters into Ranges for Distributed Profiles}
 \usage{
-profileParsPerNode(parameters, fits_per_node, side = c("both", "split"))
+profileParsPerNode(parameters, parsPerNode, side = c("both", "split"), ...)
 }
 \arguments{
 \item{parameters}{Named vector or list of parameters; only its length is
 used.}
 
-\item{fits_per_node}{Integer, number of parameters per node.}
+\item{parsPerNode}{Integer, number of parameters per node.}
 
 \item{side}{\code{"both"} (default) for one entry per range, or \code{"split"} for two
 entries per range, labelled \code{"left"} and \code{"right"}, to compute the two
 sides of each profile on separate nodes.}
+
+\item{...}{\code{fits_per_node} is deprecated, use \code{parsPerNode}.}
 }
 \value{
 A list with the integer vectors \code{from} and \code{to}, the first and last
@@ -31,5 +33,5 @@ profileParsPerNode(parameters, 4, side = "split")
 
 }
 \seealso{
-\code{\link[=distributedComputing]{distributedComputing()}}, \code{\link[=profile]{profile()}}
+\code{\link[=distributedComputing]{distributedComputing()}}, \link[=profile.objfn]{profile()}
 }

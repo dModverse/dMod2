@@ -18,10 +18,11 @@ reconstControl(
   generalDegNum = 4L,
   generalDegDen = 3L,
   gapOrderCap = 8L,
-  minsupportCandCap = 20000L,
-  perprimeCap = 120L,
-  perprimeMinPrimes = 3L,
-  timeout = Inf
+  minSupportCandCap = 20000L,
+  perPrimeCap = 120L,
+  perPrimeMinPrimes = 3L,
+  timeout = Inf,
+  ...
 )
 }
 \arguments{
@@ -57,17 +58,20 @@ general sparse rational fit. Default to 4 and 3.}
 \item{gapOrderCap}{Maximum order of the power series in the time between
 events. Defaults to 8.}
 
-\item{minsupportCandCap}{Maximum number of column subsets searched for
+\item{minSupportCandCap}{Maximum number of column subsets searched for
 directions with small support. Defaults to 20000.}
 
-\item{perprimeCap}{Maximum number of samples per prime for the reconstruction
+\item{perPrimeCap}{Maximum number of samples per prime for the reconstruction
 under \code{equilibrate = TRUE}. Defaults to 120.}
 
-\item{perprimeMinPrimes}{Minimum number of primes with samples for a
+\item{perPrimeMinPrimes}{Minimum number of primes with samples for a
 reconstruction under \code{equilibrate = TRUE}. Defaults to 3.}
 
 \item{timeout}{Time limit in seconds for the reconstruction. Directions not
 finished in time are reported by their support. \code{Inf} (default) sets no limit.}
+
+\item{...}{\code{minsupportCandCap}, \code{perprimeCap} and \code{perprimeMinPrimes} are
+deprecated, use \code{minSupportCandCap}, \code{perPrimeCap} and \code{perPrimeMinPrimes}.}
 }
 \value{
 A list of class \code{reconstcontrol} with the settings.

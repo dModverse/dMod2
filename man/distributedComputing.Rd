@@ -10,19 +10,19 @@ distributedComputing(
   partition = "single",
   cores = 16,
   nodes = 1,
-  mem_per_core = 2,
+  memPerCore = 2,
   walltime = "01:00:00",
-  ssh_passwd = NULL,
+  sshPasswd = NULL,
   machine = "cluster",
-  var_values = NULL,
-  no_rep = NULL,
-  recover = TRUE,
-  purge_local = FALSE,
+  varValues = NULL,
+  nRep = NULL,
+  recover = FALSE,
+  purgeLocal = FALSE,
   compile = FALSE,
   link = FALSE,
   buildCores = NULL,
   buildBundle = 50,
-  custom_folders = NULL,
+  customFolders = NULL,
   resetSeeds = TRUE,
   returnAll = TRUE,
   input = ls(.GlobalEnv, all.names = TRUE),
@@ -31,7 +31,10 @@ distributedComputing(
 }
 \arguments{
 \item{...}{R code to be executed remotely. Variables that change between
-tasks are named \code{var_i}, see Details.}
+tasks are named \code{var_i}, see Details. \code{mem_per_core}, \code{ssh_passwd},
+\code{var_values}, \code{no_rep}, \code{purge_local} and \code{custom_folders} are deprecated
+names of \code{memPerCore}, \code{sshPasswd}, \code{varValues}, \code{nRep}, \code{purgeLocal} and
+\code{customFolders}.}
 
 \item{jobname}{Character, unique name of the job. A job with the same name
 is overwritten.}
@@ -42,27 +45,27 @@ is overwritten.}
 
 \item{nodes}{Number of nodes per task. Defaults to 1.}
 
-\item{mem_per_core}{Memory per core in GB. Defaults to 2.}
+\item{memPerCore}{Memory per core in GB. Defaults to 2.}
 
 \item{walltime}{Maximum runtime per task as \code{"hh:mm:ss"}. Defaults to
 \code{"01:00:00"}.}
 
-\item{ssh_passwd}{Optional password for \code{sshpass}. \code{NULL} (default) uses
+\item{sshPasswd}{Optional password for \code{sshpass}. \code{NULL} (default) uses
 \code{ssh} key authentication, which is recommended.}
 
 \item{machine}{SSH address of the remote system, e.g. \code{"user@host"}.
 Defaults to \code{"cluster"}.}
 
-\item{var_values}{List of vectors, one per variable \code{var_i}, all of the
-same length: the number of array tasks. Exclusive with \code{no_rep}.}
+\item{varValues}{List of vectors, one per variable \code{var_i}, all of the
+same length: the number of array tasks. Exclusive with \code{nRep}.}
 
-\item{no_rep}{Integer, number of repetitions. Exclusive with \code{var_values}.}
+\item{nRep}{Integer, number of repetitions. Exclusive with \code{varValues}.}
 
-\item{recover}{Logical. \code{TRUE} (default) submits nothing and returns the
-functions for a job submitted earlier under \code{jobname}. Pass \code{FALSE} to
-submit a job.}
+\item{recover}{Logical. \code{TRUE} submits nothing and returns the functions
+for a job submitted earlier under \code{jobname}. Default \code{FALSE}, which
+submits the job.}
 
-\item{purge_local}{Logical, the default of the argument of the same name of
+\item{purgeLocal}{Logical, the default of the argument of the same name of
 \code{purge()}. Defaults to \code{FALSE}.}
 
 \item{compile}{Logical. \code{TRUE} transfers the C/C++ sources (\verb{*.c},
@@ -83,7 +86,7 @@ cores the login node reports, at most 16.}
 translation unit. Only used for builds with more files than the shell
 accepts as arguments. \code{1} compiles one file at a time. Defaults to 50.}
 
-\item{custom_folders}{Named character vector with the entries \code{"compiled"},
+\item{customFolders}{Named character vector with the entries \code{"compiled"},
 \code{"output"} and \code{"tmp"}, relative paths for compiled files, results and
 temporary files. \code{NULL} (default) uses the working directory.}
 
@@ -107,10 +110,9 @@ A list of functions:
 \item{\code{check()}}{reports how many results are ready and returns \code{TRUE}
 when all are.}
 \item{\code{get()}}{copies the results into \verb{<jobname>_folder/results/} and
-assigns them, a list with one entry per task, to \code{cluster_result} in
-the global environment.}
-\item{\code{purge(purge_local)}}{deletes the job folder on the remote system,
-with \code{purge_local = TRUE} also the local one.}
+returns them, a list with one entry per task.}
+\item{\code{purge(purgeLocal)}}{deletes the job folder on the remote system,
+with \code{purgeLocal = TRUE} also the local one.}
 }
 }
 \description{
@@ -120,17 +122,16 @@ Returns functions to check, collect and delete the results.
 }
 \details{
 The value of \code{...} on each array task is its result. \code{get()}
-assigns the list of results, one per task, to \code{cluster_result} in the global
-environment.
+returns the list of results, one per task.
 
-Repetitions of the same code are requested with \code{no_rep}. Code that varies
+Repetitions of the same code are requested with \code{nRep}. Code that varies
 between tasks reads the variables \code{var_1}, \code{var_2}, ..., whose values on
-each task are taken from the corresponding vectors of \code{var_values}.
+each task are taken from the corresponding vectors of \code{varValues}.
 
 The workspace is compressed with \code{zstd} if it is available locally. The job
 script loads the environment modules \code{compiler/gnu/13.3} and \code{math/R}; the
 remote build needs cppDE installed for that R. A job is only submitted if
-the remote build succeeds. Without \code{ssh} key authentication, \code{ssh_passwd} is
+the remote build succeeds. Without \code{ssh} key authentication, \code{sshPasswd} is
 passed to \code{sshpass}, which must be installed locally.
 }
 \examples{
@@ -141,11 +142,10 @@ job <- distributedComputing(
     mstrust(obj, center = pars, fits = 48, cores = 16, sd = 4)
   },
   jobname = "fits", machine = "user@host", partition = "single",
-  cores = 16, walltime = "02:00:00", no_rep = 20, recover = FALSE
+  cores = 16, walltime = "02:00:00", nRep = 20
 )
 job$check()
-job$get()
-fits <- cluster_result
+fits <- job$get()
 job$purge()
 
 # Profiles, a range of parameters per task
@@ -156,11 +156,9 @@ job <- distributedComputing(
             limits = c(-5, 5), cores = 16)
   },
   jobname = "profiles", machine = "user@host", cores = 16,
-  walltime = "02:00:00", var_values = ranges[c("from", "to")],
-  recover = FALSE
+  walltime = "02:00:00", varValues = ranges[c("from", "to")]
 )
-job$get()
-profiles <- do.call(rbind, cluster_result)
+profiles <- do.call(rbind, job$get())
 job$purge()
 }
 

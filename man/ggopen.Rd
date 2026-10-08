@@ -4,13 +4,14 @@
 \alias{ggopen}
 \title{Open a Plot in an External PDF Viewer}
 \usage{
-ggopen(plot = last_plot(), command = "xdg-open", ...)
+ggopen(plot = last_plot(), command = NULL, ...)
 }
 \arguments{
 \item{plot}{A \code{ggplot2} plot object. Defaults to \code{\link[ggplot2:last_plot]{ggplot2::last_plot()}}.}
 
 \item{command}{Character, the shell command that opens the PDF file.
-Defaults to \code{"xdg-open"}, which exists on Linux; use \code{"open"} on macOS.}
+Default \code{NULL} opens it with the viewer of the platform: \code{"open"} on
+macOS, \code{"xdg-open"} on Linux and \code{shell.exec()} on Windows.}
 
 \item{...}{Arguments passed to \code{\link[ggplot2:ggsave]{ggplot2::ggsave()}}.}
 }

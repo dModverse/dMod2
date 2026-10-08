@@ -64,10 +64,11 @@ over once and run the fallback to the end. A higher value alternates
 between the two sources, \code{0} disables the fallback. The result
 reports the count as \code{nSwitch}.}
 
-\item{parscale}{Optional numeric of length \code{length(parinit)}, named or
-unnamed. The trust region works on the parameters multiplied by
-\code{parscale}, so the trust radius and \code{xtol} are measured there.
-Default \code{NULL}, no scaling.}
+\item{parscale}{Deprecated. Optional numeric of length
+\code{length(parinit)}, named or unnamed. The trust region works on the
+parameters multiplied by \code{parscale}, so the trust radius and
+\code{xtol} are measured there. Default \code{NULL}, no scaling. Fit on
+log scale instead.}
 
 \item{parupper, parlower}{Upper and lower bounds. Unnamed: the first element
 applies to all parameters. Named: entries are matched by name, missing
@@ -123,7 +124,7 @@ defaults.
 \describe{
 \item{\code{boundary}}{Box-bound handling, \code{"reflective"} (default)
 or \code{"clip"}. See section Box bounds.}
-\item{\code{theta.max}}{Largest fraction of the distance to a bound a
+\item{\code{thetaMax}}{Largest fraction of the distance to a bound a
 step may use. Default \code{0.99995}. \code{boundary = "reflective"}
 only.}
 \item{\code{nonmonotone}}{Zhang-Hager relaxation in \code{[0, 1)}: a
@@ -169,7 +170,7 @@ iteration, objective value and parameters. Default \code{NULL}, no file.}
 \item{...}{Further named arguments passed to \code{objfun}.}
 }
 \value{
-A list with components
+A list of class \code{trustfit} with components
 \describe{
 \item{\code{argument}}{Named numeric, the best iterate.}
 \item{\code{value}, \code{gradient}, \code{hessian}}{Objective value,
@@ -332,7 +333,7 @@ differential equations for biochemical processes using the method of
 multiple shooting. \emph{IET Systems Biology} 1(2), 78-88.
 }
 \seealso{
-\code{\link[=mstrust]{mstrust()}} for multi-start fits, \code{\link[=profile]{profile()}} for profile
-likelihoods, \code{\link[=normL2]{normL2()}} for the objective,
+\code{\link[=mstrust]{mstrust()}} for multi-start fits, \link[=profile.objfn]{profile()} for
+profile likelihoods, \code{\link[=normL2]{normL2()}} for the objective,
 \code{vignette("Optimisation", package = "dMod2")} for the method.
 }

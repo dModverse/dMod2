@@ -15,7 +15,7 @@ parameter uncertainty is assessed by profile likelihoods.
 \seealso{
 Models: \code{\link[=eqnlist]{eqnlist()}}, \code{\link[=addReaction]{addReaction()}}, \code{\link[=odemodel]{odemodel()}}, \code{\link[=Xs]{Xs()}}, \code{\link[=Y]{Y()}}, \code{\link[=P]{P()}}.
 Data and objectives: \code{\link[=as.datalist]{as.datalist()}}, \code{\link[=normL2]{normL2()}}, \code{\link[=constraintL2]{constraintL2()}}.
-Fitting and uncertainty: \code{\link[=trust]{trust()}}, \code{\link[=mstrust]{mstrust()}}, \code{\link[=profile]{profile()}},
+Fitting and uncertainty: \code{\link[=trust]{trust()}}, \code{\link[=mstrust]{mstrust()}}, \link[=profile.objfn]{profile()},
 \code{\link[=plotProfile]{plotProfile()}}. Exchange formats: \code{\link[=importPEtab]{importPEtab()}}, \code{\link[=exportPEtab]{exportPEtab()}}.
 Identifiability: \code{\link[=symmetryDetection]{symmetryDetection()}}.
 }

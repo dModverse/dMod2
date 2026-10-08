@@ -14,8 +14,8 @@ plotPaths(
 )
 }
 \arguments{
-\item{profs}{A \link{parframe} of profiles as returned by \code{\link[=profile]{profile()}}, or a
-list of those.}
+\item{profs}{A \link{parframe} of profiles as returned by
+\link[=profile.objfn]{profile()}, or a list of those.}
 
 \item{...}{Logical expressions to subset the plotted data.}
 
@@ -45,5 +45,5 @@ plotPaths(profs)
 plotPaths(profs, whichPar = "a")
 }
 \seealso{
-\code{\link[=profile]{profile()}}, \code{\link[=plotProfile]{plotProfile()}}, \code{\link[=plotPathsMulti]{plotPathsMulti()}}
+\link[=profile.objfn]{profile()}, \code{\link[=plotProfile]{plotProfile()}}, \code{\link[=plotPathsMulti]{plotPathsMulti()}}
 }

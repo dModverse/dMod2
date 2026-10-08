@@ -5,12 +5,12 @@
 \alias{sumdatalist}
 \title{Direct Sum of Datasets}
 \usage{
-\method{+}{datalist}(data1, data2)
+\method{+}{datalist}(e1, e2)
 }
 \arguments{
-\item{data1}{object of class \code{datalist}.}
+\item{e1}{object of class \code{datalist}.}
 
-\item{data2}{object of class \code{datalist}.}
+\item{e2}{object of class \code{datalist}.}
 }
 \value{
 Object of class \code{datalist} for the union of conditions.
@@ -19,7 +19,7 @@ Object of class \code{datalist} for the union of conditions.
 Combines two datalists.
 }
 \details{
-A condition present in both datalists is taken from \code{data2}, with
+A condition present in both datalists is taken from \code{e2}, with
 a warning. The condition grids are combined.
 }
 \examples{
@@ -41,8 +41,8 @@ mydata2 <- data.frame(
   dose = "0.1"
 )
 
-data1 <- as.datalist(mydata1, split.by = c("compound", "dose"))
-data2 <- as.datalist(mydata2, split.by = c("compound", "dose"))
+data1 <- as.datalist(mydata1, splitBy = c("compound", "dose"))
+data2 <- as.datalist(mydata2, splitBy = c("compound", "dose"))
 
 ## Condition APAP_0.1 is taken from data2, with a warning
 data <- data1 + data2

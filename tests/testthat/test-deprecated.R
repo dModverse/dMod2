@@ -153,3 +153,9 @@ test_that("plot functions and remote helpers take the renamed arguments", {
   expect_error(dMod2:::.droppedArgs(list(rates = 1, bogus = 2), "rates", "f") |>
                  suppressWarnings(), "unused argument")
 })
+
+test_that("Pimpl controlsPTC takes rtol and atol as deprecated names", {
+  expect_warning(ctrl <- dMod2:::.pimplPTC(list(rtol = 1e-9, atol = 1e-12)), "reltol")
+  expect_equal(ctrl$reltol, 1e-9)
+  expect_equal(ctrl$abstol, 1e-12)
+})

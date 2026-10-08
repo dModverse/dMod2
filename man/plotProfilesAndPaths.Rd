@@ -6,22 +6,23 @@
 \usage{
 plotProfilesAndPaths(
   profs,
-  whichpars,
-  npars = 5,
-  ncols = 3,
+  whichPar,
+  nPars = 5,
+  ncol = 3,
   normalizePaths = FALSE,
   modes = c("data", "prior"),
   ...
 )
 }
 \arguments{
-\item{profs}{A \link{parframe} of profiles as returned by \code{\link[=profile]{profile()}}.}
+\item{profs}{A \link{parframe} of profiles as returned by
+\link[=profile.objfn]{profile()}.}
 
-\item{whichpars}{Character vector, the profiled parameters to draw.}
+\item{whichPar}{Character vector, the profiled parameters to draw.}
 
-\item{npars}{Integer, number of colored and named paths. Defaults to 5.}
+\item{nPars}{Integer, number of colored and named paths. Defaults to 5.}
 
-\item{ncols}{Number of columns of the plot grid. Defaults to 3.}
+\item{ncol}{Number of columns of the plot grid. Defaults to 3.}
 
 \item{normalizePaths}{Logical. \code{TRUE} scales each path to a maximum
 absolute value of 1. Defaults to \code{FALSE}.}
@@ -29,7 +30,9 @@ absolute value of 1. Defaults to \code{FALSE}.}
 \item{modes}{Character vector, the contributions to the objective drawn in
 the profile plot besides the total. Defaults to \code{c("data", "prior")}.}
 
-\item{...}{Further arguments passed to \code{\link[cowplot:plot_grid]{cowplot::plot_grid()}}.}
+\item{...}{Further arguments passed to \code{\link[cowplot:plot_grid]{cowplot::plot_grid()}}.
+\code{whichpars}, \code{npars} and \code{ncols} are deprecated, use \code{whichPar}, \code{nPars}
+and \code{ncol}.}
 }
 \value{
 A \code{ggplot} object, the grid of \code{\link[cowplot:plot_grid]{cowplot::plot_grid()}}.
@@ -44,7 +47,7 @@ pars <- c(a = 1, b = 0.5, c = 2)
 obj <- constraintL2(mu = pars, sigma = 0.1)
 profs <- profile(obj, pars, whichPar = c("a", "b"), limits = c(-1, 1),
                  cores = 1)
-plotProfilesAndPaths(profs, c("a", "b"), npars = 2, ncols = 2)
+plotProfilesAndPaths(profs, c("a", "b"), nPars = 2, ncol = 2)
 \dontshow{\}) # examplesIf}
 }
 \seealso{

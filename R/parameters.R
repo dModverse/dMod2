@@ -868,10 +868,17 @@ resetWarmStarts <- function(fn, verbose = FALSE) {
 
 # Pimpl solver controls merged over their defaults. Unknown names are an error.
 .pimplPTC <- function(controlsPTC) {
-  def <- list(rtol = 1e-10, atol = 1e-14, flowTol = 1, maxit = NULL, dtInit = 1e-2,
+  def <- list(reltol = 1e-10, abstol = 1e-14, flowTol = 1, maxit = NULL, dtInit = 1e-2,
               positive = TRUE, stability = TRUE, archive = 8L,
               nStarts = 20L, startRange = c(-5, 5), startScale = NULL, seed = 1L)
   given <- as.list(controlsPTC)
+  old <- intersect(names(given), c("rtol", "atol"))
+  if (length(old)) {
+    warning("Pimpl: controlsPTC entries 'rtol' and 'atol' are deprecated; use 'reltol' ",
+            "and 'abstol'.", call. = FALSE)
+    names(given)[names(given) == "rtol"] <- "reltol"
+    names(given)[names(given) == "atol"] <- "abstol"
+  }
   if (length(given) && (is.null(names(given)) || any(!nzchar(names(given)))))
     stop("Pimpl: controlsPTC must be a named list.", call. = FALSE)
   bad <- setdiff(names(given), names(def))
@@ -918,7 +925,7 @@ resetWarmStarts <- function(fn, verbose = FALSE) {
 #' @param controlsPTC Named list of solver controls; an entry not given keeps
 #'   its default, an unknown entry is an error:
 #'   \describe{
-#'     \item{`rtol`, `atol`}{Convergence tolerances, default `1e-10`, `1e-14`.}
+#'     \item{`reltol`, `abstol`}{Convergence tolerances, default `1e-10`, `1e-14`.}
 #'     \item{`flowTol`}{Relative local error per pseudo-time step, default `1`.}
 #'     \item{`maxit`}{Iterations per start, default
 #'       `ceiling(70 * log(n + 1))` for `n` states.}
@@ -1148,7 +1155,7 @@ Pimpl <- function(trafo, parameters = NULL, forcings = NULL, condition = NULL,
       r <- cppDE::ptc(PEval, x = x[dependent], parms = pv[parms_all], solve = act,
                       rows = act, C = if (length(Teff)) Ca, total = Teff, flow = flow,
                       positive = ctrl$positive,
-                      controls = list(rtol = ctrl$rtol, atol = ctrl$atol,
+                      controls = list(reltol = ctrl$reltol, abstol = ctrl$abstol,
                                       flowTol = ctrl$flowTol / if (fine) 10 else 1,
                                       maxit = ctrl$maxit, dtInit = dt))
       list(x = r$x[act], ok = r$converged, iter = r$iterations, reason = r$message)

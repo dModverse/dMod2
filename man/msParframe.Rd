@@ -33,8 +33,8 @@ A parframe without metanames, one column per parameter.
 }
 \description{
 Draws a parframe of starting points for the \code{center} argument of
-\code{\link[=mstrust]{mstrust()}}. Calls \code{set.seed(seed)}, which also sets the state of the
-global random number generator.
+\code{\link[=mstrust]{mstrust()}} from the seed \code{seed}. The state of the global random number
+generator is left unchanged.
 }
 \examples{
 msParframe(c(a = 0, b = 100000), 5)

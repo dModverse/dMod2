@@ -5,16 +5,16 @@
 \alias{sumobjfn}
 \title{Direct Sum of Objective Functions}
 \usage{
-\method{+}{objfn}(x1, x2)
+\method{+}{objfn}(e1, e2)
 }
 \arguments{
-\item{x1}{function of class \code{objfn}.}
+\item{e1}{function of class \code{objfn}.}
 
-\item{x2}{function of class \code{objfn}.}
+\item{e2}{function of class \code{objfn}.}
 }
 \value{
 Object of class \code{objfn} whose value, gradient and Hessian are the
-sums of those of \code{x1} and \code{x2}.
+sums of those of \code{e1} and \code{e2}.
 }
 \description{
 Direct Sum of Objective Functions
@@ -23,9 +23,9 @@ Direct Sum of Objective Functions
 ## Three objective functions
 prior <- structure(rep(0, 5), names = letters[1:5])
 
-obj1 <- constraintL2(mu = prior, attr.name = "center")
-obj2 <- constraintL2(mu = prior + 1, attr.name = "right")
-obj3 <- constraintL2(mu = prior - 1, attr.name = "left")
+obj1 <- constraintL2(mu = prior, attrName = "center")
+obj2 <- constraintL2(mu = prior + 1, attrName = "right")
+obj3 <- constraintL2(mu = prior - 1, attrName = "left")
 
 ## Evaluate the first objective function on a random vector
 set.seed(1)

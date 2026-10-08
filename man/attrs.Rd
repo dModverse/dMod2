@@ -4,17 +4,19 @@
 \alias{attrs}
 \title{Select Attributes}
 \usage{
-attrs(x, atr = NULL, keep = TRUE)
+attrs(x, which = NULL, keep = TRUE, ...)
 }
 \arguments{
 \item{x}{An object.}
 
-\item{atr}{Character vector of attribute names. \code{NULL} (default) stands for
+\item{which}{Character vector of attribute names. \code{NULL} (default) stands for
 \code{"class"}, \code{"dim"}, \code{"dimnames"}, \code{"names"}, \code{"col.names"} and
 \code{"row.names"}.}
 
-\item{keep}{Logical. \code{TRUE} (default) keeps the attributes in \code{atr} and
-removes all others; \code{FALSE} removes those in \code{atr}.}
+\item{keep}{Logical. \code{TRUE} (default) keeps the attributes in \code{which} and
+removes all others; \code{FALSE} removes those in \code{which}.}
+
+\item{...}{\code{atr} is deprecated, use \code{which}.}
 }
 \value{
 \code{x} with the selected attributes.

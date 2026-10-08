@@ -4,14 +4,14 @@
 \alias{resetWarmStarts}
 \title{Reset Warm Starts of Implicit Transformations}
 \usage{
-resetWarmStarts(fn, verbose = TRUE)
+resetWarmStarts(fn, verbose = FALSE)
 }
 \arguments{
 \item{fn}{A \link{parfn}, \link{prdfn}, \link{obsfn}, objective function, or a
 composition of those.}
 
 \item{verbose}{Logical. Print a summary of the cleared caches, default
-\code{TRUE}.}
+\code{FALSE}.}
 }
 \value{
 Invisibly, the labels of the cleared caches, empty if none was

@@ -99,11 +99,11 @@ plot(petab$prd(times, c(petab$bestfit, fixed)), petab$dataList)
 # Write the problem back to PEtab
 yamlOut <- exportPEtabObject(petab, file.path(tempdir(), "boehm"),
                              formatVersion = "1")
-readPetabTables(yamlOut)$parameters
+readPEtabTables(yamlOut)$parameters
 }
 \dontshow{\}) # examplesIf}
 }
 \seealso{
-\code{\link[=exportPEtabObject]{exportPEtabObject()}}, \code{\link[=readPetabTables]{readPetabTables()}}, \code{\link[=importSbml]{importSbml()}},
+\code{\link[=exportPEtabObject]{exportPEtabObject()}}, \code{\link[=readPEtabTables]{readPEtabTables()}}, \code{\link[=importSbml]{importSbml()}},
 \code{vignette("PEtab", package = "dMod2")}
 }

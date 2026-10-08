@@ -15,7 +15,7 @@
 \item{times}{numeric vector of time points.}
 
 \item{pars}{a \link{parframe}, e.g. \code{as.parframe(mstrust(...))} or the result
-of \code{\link[=profile]{profile()}}.}
+of \link[=profile.objfn]{profile()}.}
 
 \item{data}{object of class \code{datalist}. Default \code{NULL}. Its condition grid
 adds covariate columns to the output.}

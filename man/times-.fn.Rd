@@ -5,12 +5,12 @@
 \alias{prodfn}
 \title{Concatenation of Functions}
 \usage{
-\method{*}{fn}(p1, p2)
+\method{*}{fn}(e1, e2)
 }
 \arguments{
-\item{p1}{function of class \code{objfn}, \code{obsfn}, \code{prdfn}, \code{parfn} or \code{idfn}.}
+\item{e1}{function of class \code{objfn}, \code{obsfn}, \code{prdfn}, \code{parfn} or \code{idfn}.}
 
-\item{p2}{function of class \code{obsfn}, \code{prdfn}, \code{parfn} or \code{idfn}.}
+\item{e2}{function of class \code{obsfn}, \code{prdfn}, \code{parfn} or \code{idfn}.}
 }
 \value{
 \code{obsfn * obsfn} and \code{obsfn * parfn} return an \code{obsfn},
@@ -19,8 +19,8 @@ and \code{objfn * parfn} an \code{objfn}. \code{Id() * f} and \code{f * Id()} re
 }
 \description{
 Concatenates observation functions, prediction functions and parameter
-transformations: \code{(p1 * p2)(times, pars)} evaluates \code{p2} first and passes
-its output to \code{p1}.
+transformations: \code{(e1 * e2)(times, pars)} evaluates \code{e2} first and passes
+its output to \code{e1}.
 }
 \details{
 Both functions must be defined for the same conditions, or one of

@@ -7,7 +7,6 @@
 steadyStates(
   model,
   file = NULL,
-  rates = NULL,
   forcings = NULL,
   givenCQs = NULL,
   neglect = NULL,
@@ -22,7 +21,8 @@ steadyStates(
   priority = NULL,
   version = "1.3",
   resolve = TRUE,
-  verbose = TRUE
+  verbose = FALSE,
+  ...
 )
 }
 \arguments{
@@ -30,11 +30,8 @@ steadyStates(
 
 \item{file}{Character, path of the RDS file the result is written to with
 \code{saveRDS()}. For an \code{eqnlist} the model is also written to
-\verb{<file>_model.csv} for the solver. Default \code{NULL}: for an \code{eqnlist} this
-is \code{"reactions_for_Alyssa"}, so both files land in the working directory;
-for a csv model nothing is written.}
-
-\item{rates}{Not used.}
+\verb{<file>_model.csv} for the solver. Default \code{NULL} writes nothing; the
+solver then reads the model from a temporary file.}
 
 \item{forcings}{Character vector, names of forcings. These states are held
 at zero and treated as exogenous. Default \code{NULL}.}
@@ -90,8 +87,10 @@ as fixed.}
 \code{\link[=resolveRecurrence]{resolveRecurrence()}} so that no equation refers to another. Default
 \code{TRUE}.}
 
-\item{verbose}{\code{TRUE} (default) reports progress in a few lines and the
-result, \code{FALSE} only the result, \code{"full"} every step of the solver.}
+\item{verbose}{\code{TRUE} reports progress in a few lines and the result,
+\code{FALSE} (default) only the result, \code{"full"} every step of the solver.}
+
+\item{...}{\code{rates} is deprecated and ignored.}
 }
 \value{
 Named character vector of steady-state equations in dMod format, or
@@ -132,13 +131,12 @@ reactions <- addReaction(reactions, "Tca_cyto", "Tca_canalicular",
 reactions <- addReaction(reactions, "Tca_canalicular", "Tca_buffer",
                          "transport_Tca*Tca_canalicular", "Transport bile")
 
-steadies <- steadyStates(reactions, file = file.path(tempdir(), "steady"),
-                         verbose = FALSE)
+steadies <- steadyStates(reactions)
 steadies
 
 # Parameter transformation that puts the model in steady state
 parameters <- getParameters(reactions)
-trafo <- repar("x ~ y", eqnvec(setNames(parameters, parameters)),
+trafo <- repar(eqnvec(setNames(parameters, parameters)), "x ~ y",
                x = names(steadies), y = steadies)
 trafo
 \dontshow{\}) # examplesIf}

@@ -12,7 +12,7 @@
 \usage{
 as.datalist(x, ...)
 
-\method{as.datalist}{data.frame}(x, split.by = NULL, keep.covariates = NULL, ...)
+\method{as.datalist}{data.frame}(x, splitBy = NULL, keepCovariates = NULL, ...)
 
 \method{as.datalist}{list}(x, names = NULL, ..., condition.grid = attr(x, "condition.grid"))
 
@@ -30,13 +30,14 @@ must provide the columns "name", "time" and "value". The columns "sigma"
 and "lloq" are optional and default to \code{NA} and \code{-Inf}.}
 
 \item{...}{for \code{datalist()} and \code{c()}, named data frames or datalists; for
-the \code{as.datalist()} methods, not used.}
+the \code{as.datalist()} methods, not used; \code{split.by} and \code{keep.covariates}
+are deprecated names of \code{splitBy} and \code{keepCovariates}.}
 
-\item{split.by}{character, the columns whose combined values identify a
+\item{splitBy}{character, the columns whose combined values identify a
 condition. Default \code{NULL} uses all columns except "name", "time",
 "value", "sigma" and "lloq".}
 
-\item{keep.covariates}{character, additional columns kept in the
+\item{keepCovariates}{character, additional columns kept in the
 condition grid. Default \code{NULL}.}
 
 \item{names}{character, the condition names. Default \code{NULL} takes them
@@ -94,7 +95,7 @@ mydata <- data.frame(name = "A",
                      phase = rep(c("first", "second"), each = 20),
                      amplitude = rep(c(1,1.5), each = 20))
 
-data <- as.datalist(mydata, split.by = c("stage", "phase"), keep.covariates = "amplitude")
+data <- as.datalist(mydata, splitBy = c("stage", "phase"), keepCovariates = "amplitude")
 print(data)
 plot(data)
 

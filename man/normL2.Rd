@@ -9,10 +9,11 @@ normL2(
   x,
   errmodel = NULL,
   times = NULL,
-  attr.name = "data",
+  attrName = "data",
   cores = 1L,
-  opt.BLOQ = c("M3", "M1", "M4NM", "M4BEAL"),
-  multipleShootingControl = NULL
+  optBLOQ = c("M3", "M1", "M4NM", "M4BEAL"),
+  multipleShootingControl = NULL,
+  ...
 )
 }
 \arguments{
@@ -34,15 +35,15 @@ the default, has 0 in every grid and so starts at 0 at the latest.
 Fixed-time events before the start do not fire. Event times should be
 included if the model uses events.}
 
-\item{attr.name}{Character string. The objective value is additionally
+\item{attrName}{Character string. The objective value is additionally
 returned as an attribute of this name, and the sum of squares behind it
-under \code{chi2}. Adding objectives pools the terms sharing an \code{attr.name},
-so \code{chi2} stays one number; where two \code{attr.name}s meet it splits into
-\verb{chi2_<attr.name>} per contribution.}
+under \code{chi2}. Adding objectives pools the terms sharing an \code{attrName},
+so \code{chi2} stays one number; where two \code{attrName}s meet it splits into
+\verb{chi2_<attrName>} per contribution.}
 
 \item{cores}{Deprecated and ignored, see section Lifecycle.}
 
-\item{opt.BLOQ}{Character. NONMEM-style treatment of below-LOQ rows
+\item{optBLOQ}{Character. NONMEM-style treatment of below-LOQ rows
 (those with \code{value <= lloq} in the data). One of \code{"M1"} (drop BLOQ rows
 from the objective), \code{"M3"} (censored log-likelihood, default), \code{"M4NM"}
 or \code{"M4BEAL"} (truncated variants; require non-negative LOQ).}
@@ -81,6 +82,9 @@ conditions or a list named by condition. Default \code{NULL}. Needs
 \code{\link[=Xs]{Xs()}}, built on \code{odemodel(..., includeTimeZero = FALSE)}. The method
 and the node layout are described in
 \code{vignette("Optimisation", package = "dMod2")}.}
+
+\item{...}{\code{attr.name} and \code{opt.BLOQ} are deprecated, use \code{attrName} and
+\code{optBLOQ}.}
 }
 \value{
 An objective function of class \code{objfn}, called as \code{obj(pars, ...)}, see

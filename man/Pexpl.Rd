@@ -7,7 +7,7 @@
 Pexpl(
   trafo,
   parameters = NULL,
-  attach.input = FALSE,
+  attachInput = FALSE,
   condition = NULL,
   compile = FALSE,
   modelname = NULL,
@@ -15,7 +15,8 @@ Pexpl(
   deriv = TRUE,
   deriv2 = FALSE,
   derivMode = "forward",
-  outdir = .dmodOutdir()
+  outdir = .dmodOutdir(),
+  ...
 )
 }
 \arguments{
@@ -26,7 +27,7 @@ values are expressions in the outer parameters.}
 \code{trafo}. Names given here that \code{trafo} does not map pass through as
 identity.}
 
-\item{attach.input}{Logical. Append the inputs that \code{trafo} does not map;
+\item{attachInput}{Logical. Append the inputs that \code{trafo} does not map;
 varying ones with identity derivatives, fixed ones as fixed. Default
 \code{FALSE}. Can be changed with \code{\link[=controls]{controls()}}.}
 
@@ -53,6 +54,8 @@ is \code{"expl_parfn"}, followed by \verb{_<condition>}.}
 
 \item{outdir}{Directory for the generated source and shared object,
 default \code{getOption("dMod.outdir")}, else the working directory.}
+
+\item{...}{\code{attach.input} is deprecated, use \code{attachInput}.}
 }
 \value{
 A \link{parfn}, called as \code{p(pars, ...)}, see section Calling a dMod

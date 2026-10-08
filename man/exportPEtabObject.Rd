@@ -68,7 +68,7 @@ plot(petab$prd(times, c(petab$bestfit, fixed)), petab$dataList)
 # Write the problem back to PEtab
 yamlOut <- exportPEtabObject(petab, file.path(tempdir(), "boehm"),
                              formatVersion = "1")
-readPetabTables(yamlOut)$parameters
+readPEtabTables(yamlOut)$parameters
 }
 \dontshow{\}) # examplesIf}
 }

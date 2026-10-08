@@ -5,8 +5,8 @@
 \title{Structural Non-Identifiabilities of an ODE Model}
 \usage{
 symmetryDetection(
-  f = NULL,
-  g = NULL,
+  f,
+  g,
   trafo = NULL,
   parameters = NULL,
   fixed = NULL,
@@ -24,7 +24,7 @@ symmetryDetection(
   control = reconstControl(),
   scalingsOnly = FALSE,
   symEngine = c("modular", "symbolic"),
-  verbose = TRUE
+  verbose = FALSE
 )
 }
 \arguments{
@@ -95,7 +95,7 @@ kernel; \code{identifiable}, \code{rank} and \code{dim} are \code{NA}. Defaults 
 \item{symEngine}{\code{"modular"} (default, finite fields) or \code{"symbolic"} (sympy, small
 models without \code{equilibrate} and later events).}
 
-\item{verbose}{Logical. Print the result. Defaults to \code{TRUE}.}
+\item{verbose}{Logical. Print the result. Defaults to \code{FALSE}.}
 }
 \value{
 An object of class \code{symmetrydetection}:
@@ -150,6 +150,7 @@ symident documentation at \url{https://dmodverse.github.io/symident/}.
 f <- eqnvec(m = "ktx - dm*m", p = "ktl*m - dp*p")
 g <- eqnvec(y = "p")
 res <- symmetryDetection(f, g, reconstruct = TRUE)
+res
 summary(res)
 res$identifiable
 \dontshow{\}) # examplesIf}

@@ -5,10 +5,10 @@
 \alias{sumobjlist}
 \title{Add Two Objective Lists}
 \usage{
-\method{+}{objlist}(out1, out2)
+\method{+}{objlist}(e1, e2)
 }
 \arguments{
-\item{out1, out2}{\link{objlist}s, or \code{NULL}, which returns the other.}
+\item{e1, e2}{\link{objlist}s, or \code{NULL}, which returns the other.}
 }
 \value{
 An \link{objlist}.
@@ -20,7 +20,7 @@ Add Two Objective Lists
 Gradients and Hessians are matched by parameter name; a parameter
 missing in one operand counts as zero there, and a \code{NULL} Hessian is left
 out. Numeric attributes are added, an absent one counting as zero. The
-\code{chi2} contributions are summed per \code{attr.name} of their objective: one
-\code{attr.name} gives one attribute \code{chi2}, several give \verb{chi2_<attr.name>}
+\code{chi2} contributions are summed per \code{attrName} of their objective: one
+\code{attrName} gives one attribute \code{chi2}, several give \verb{chi2_<attrName>}
 each.
 }

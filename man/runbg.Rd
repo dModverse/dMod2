@@ -51,10 +51,10 @@ translation unit, as in \code{\link[=distributedComputing]{distributedComputing(
 more files than the shell accepts as arguments. \code{1} compiles one file at a
 time. Defaults to 50.}
 
-\item{wait}{Logical. \code{TRUE} waits for the job and loads the result as
-\code{.runbgOutput} into the global environment; if the local result files exist
-already, they are loaded without running the job. \code{FALSE} (default) returns
-at once; the result is loaded by \code{get()}.}
+\item{wait}{Logical. \code{TRUE} waits for the job and returns its results as
+\code{get()} does; if the local result files exist already, they are loaded
+without running the job. \code{FALSE} (default) returns at once; the results are
+fetched by \code{get()}.}
 
 \item{recover}{Logical. \code{TRUE} returns the functions \code{check()}, \code{get()},
 \code{purge()} and \code{terminate()} of an earlier job without starting it again,
@@ -69,13 +69,12 @@ remote library search path, for the job and the remote build. The remote
 shell expands them, so \code{~} is the remote home.}
 }
 \value{
-A list of functions:
+With \code{wait = TRUE} the results, else a list of functions:
 \describe{
 \item{\code{check()}}{reports whether the results are ready and returns
 \code{TRUE} or \code{FALSE}.}
 \item{\code{get()}}{copies the result files to the working directory and
-assigns the results, a list named by machine, to \code{.runbgOutput} in the
-global environment.}
+returns the results, a list named by machine.}
 \item{\code{purge()}}{deletes the job folders on the remote machines and the
 job files in the local working directory.}
 \item{\code{terminate()}}{kills the processes of the job on the remote
@@ -90,8 +89,7 @@ key authentication on every machine.
 }
 \details{
 The value of the last expression in \code{...} is the result of a
-machine. \code{get()} assigns the list of these results to \code{.runbgOutput} in
-the global environment.
+machine. \code{get()} returns the list of these results.
 
 Build-related files are handled as follows:
 \itemize{
@@ -113,8 +111,7 @@ job <- runbg({
   solve(M)
 }, machine = c("user@host", "user@host"), filename = "job1")
 job$check()
-job$get()
-result <- .runbgOutput
+result <- job$get()
 job$purge()
 
 # Recover the functions of a running job, e.g. after a crashed session

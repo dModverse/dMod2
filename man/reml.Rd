@@ -11,7 +11,7 @@ reml(
   fixed = NULL,
   iterlim = 25L,
   tol = 1e-06,
-  rank.tol = 1e-08,
+  rankTol = 1e-08,
   optimizer = trust,
   control = NULL,
   cores = getOption("dMod.cores", 1L),
@@ -33,7 +33,7 @@ symbols of the error equations that appear in \code{pars}.}
 \item{tol}{Convergence threshold on the largest change of an error parameter
 between two rounds. Default \code{1e-6}.}
 
-\item{rank.tol}{Passed to \code{\link[=remlLeverage]{remlLeverage()}}. Default \code{1e-8}.}
+\item{rankTol}{Passed to \code{\link[=remlLeverage]{remlLeverage()}}. Default \code{1e-8}.}
 
 \item{optimizer}{Optimiser for the mean step, called as
 \code{optimizer(objfun, parinit, fixed = , ...)}. Default \code{\link[=trust]{trust()}}.}
@@ -44,7 +44,8 @@ between two rounds. Default \code{1e-6}.}
 \item{cores}{Passed to the prediction and the objective. Default
 \code{getOption("dMod.cores", 1)}.}
 
-\item{...}{Further arguments for \code{objfun}.}
+\item{...}{Further arguments for \code{objfun}. \code{rank.tol} is deprecated, use
+\code{rankTol}.}
 }
 \value{
 A list with components
@@ -80,9 +81,9 @@ REML condition; \code{reml()} warns when it finds one.
 old <- options(dMod.outdir = tempdir())
 f <- addReaction(eqnlist(), from = "A", to = "", rate = "k*A")
 x <- Xs(odemodel(f, modelname = "reml_x", compile = FALSE))
-g <- Y(c(y = "A"), f = x, attach.input = FALSE, modelname = "reml_g",
+g <- Y(c(y = "A"), f = x, attachInput = FALSE, modelname = "reml_g",
        compile = FALSE)
-e <- Y(c(y = "sigma_y"), f = g, attach.input = FALSE, condition = "C1",
+e <- Y(c(y = "sigma_y"), f = g, attachInput = FALSE, condition = "C1",
        modelname = "reml_e", compile = FALSE)
 p <- P(eqnvec(A = "exp(logA)", k = "exp(logk)", sigma_y = "sigma_y"),
        condition = "C1", modelname = "reml_p", compile = FALSE)

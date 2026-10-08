@@ -18,7 +18,7 @@ mstrust(
   stats = FALSE,
   output = FALSE,
   cautiousMode = FALSE,
-  start1stfromCenter = FALSE,
+  startFromCenter = FALSE,
   retry = TRUE,
   nTries = 10L,
   ...
@@ -60,7 +60,7 @@ Default \code{FALSE}.}
 \item{cautiousMode}{Logical, also write every fit deparsed to an \code{.R} file
 and keep the intermediate files. Default \code{FALSE}.}
 
-\item{start1stfromCenter}{Logical. If \code{TRUE}, the first fit starts at
+\item{startFromCenter}{Logical. If \code{TRUE}, the first fit starts at
 \code{center} without offset. Default \code{FALSE}.}
 
 \item{retry}{Logical. If \code{TRUE} (default), a fit that fails with an error
@@ -72,7 +72,7 @@ Default \code{10}.}
 
 \item{...}{Arguments passed by name to \code{optmethod}, \code{samplefun} or
 \code{objfun}. Names matching neither the optimiser nor the sampler go to
-\code{objfun}.}
+\code{objfun}. \code{start1stfromCenter} is deprecated, use \code{startFromCenter}.}
 }
 \value{
 A parlist with one entry per fit, failed fits included. Each entry

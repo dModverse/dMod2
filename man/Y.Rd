@@ -10,7 +10,7 @@ Y(
   states = NULL,
   parameters = NULL,
   condition = NULL,
-  attach.input = FALSE,
+  attachInput = FALSE,
   compile = FALSE,
   modelname = NULL,
   verbose = FALSE,
@@ -18,7 +18,8 @@ Y(
   deriv = TRUE,
   deriv2 = FALSE,
   derivMode = "forward",
-  outdir = .dmodOutdir()
+  outdir = .dmodOutdir(),
+  ...
 )
 }
 \arguments{
@@ -38,7 +39,7 @@ function the forcings count as states.}
 \item{condition}{\code{NULL} for an observation function valid in every
 condition, or the name of the condition it belongs to.}
 
-\item{attach.input}{Logical, append the incoming states to the output.
+\item{attachInput}{Logical, append the incoming states to the output.
 Default \code{FALSE}; set \code{TRUE} to plot states alongside observables. Can be
 changed with \code{\link[=controls]{controls()}}.}
 
@@ -79,6 +80,8 @@ attribute.
 \item{outdir}{Character. Directory for the generated C++ source and the
 shared object, default \code{getOption("dMod.outdir")}, else the working
 directory.}
+
+\item{...}{\code{attach.input} is deprecated, use \code{attachInput}.}
 }
 \value{
 An \link{obsfn}, called as \code{g(out, pars, ...)} with a \link{prdlist} \code{out}, see

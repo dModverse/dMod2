@@ -4,18 +4,20 @@
 \alias{constraintChisq}
 \title{Soft Chi-Squared Constraint on Positive Parameters}
 \usage{
-constraintChisq(df, attr.name = "prior", condition = NULL)
+constraintChisq(df, attrName = "prior", condition = NULL, ...)
 }
 \arguments{
 \item{df}{Named numeric vector of degrees of freedom. Its names select the
 constrained parameters.}
 
-\item{attr.name}{Character. Name of the attribute holding the constraint
+\item{attrName}{Character. Name of the attribute holding the constraint
 value, default \code{"prior"}.}
 
 \item{condition}{Character vector, the conditions of a sum of objectives
 in which the term is evaluated. \code{NULL} (default) evaluates it in every
 one.}
+
+\item{...}{\code{attr.name} is deprecated, use \code{attrName}.}
 }
 \value{
 An objective function of class \code{objfn}, called as

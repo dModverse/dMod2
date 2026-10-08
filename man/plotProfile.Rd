@@ -27,8 +27,8 @@
 plotProfile(profs, ...)
 }
 \arguments{
-\item{profs}{A \link{parframe} of profiles as returned by \code{\link[=profile]{profile()}}, or a
-list of those.}
+\item{profs}{A \link{parframe} of profiles as returned by
+\link[=profile.objfn]{profile()}, or a list of those.}
 
 \item{...}{Logical expressions to subset the plotted data.}
 
@@ -61,5 +61,5 @@ profs <- profile(obj, pars, whichPar = c("a", "b"), limits = c(-1, 1),
 plotProfile(profs)
 }
 \seealso{
-\code{\link[=profile]{profile()}}, \code{\link[=plotPaths]{plotPaths()}}
+\link[=profile.objfn]{profile()}, \code{\link[=plotPaths]{plotPaths()}}
 }

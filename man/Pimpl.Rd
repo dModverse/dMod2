@@ -9,7 +9,7 @@ Pimpl(
   parameters = NULL,
   forcings = NULL,
   condition = NULL,
-  keep.root = TRUE,
+  keepRoot = TRUE,
   flow = inherits(trafo, "eqnlist"),
   compile = FALSE,
   modelname = NULL,
@@ -17,7 +17,8 @@ Pimpl(
   deriv = TRUE,
   deriv2 = FALSE,
   controlsPTC = list(),
-  outdir = .dmodOutdir()
+  outdir = .dmodOutdir(),
+  ...
 )
 }
 \arguments{
@@ -33,7 +34,7 @@ state whose right-hand side is \code{"0"} becomes a parameter.}
 \item{condition}{\code{NULL} (default) for a transformation valid in every
 condition, or the name of the condition it belongs to.}
 
-\item{keep.root}{If \code{TRUE} (default), roots are kept per condition as
+\item{keepRoot}{If \code{TRUE} (default), roots are kept per condition as
 initial guesses and repeated calls are answered from memory.}
 
 \item{flow}{If \code{TRUE}, \eqn{\dot{x} = f(x, p)}{dx/dt = f(x, p)} and a stable
@@ -54,7 +55,7 @@ is \code{"impl_parfn"}, followed by \verb{_<condition>}.}
 \item{controlsPTC}{Named list of solver controls; an entry not given keeps
 its default, an unknown entry is an error:
 \describe{
-\item{\code{rtol}, \code{atol}}{Convergence tolerances, default \code{1e-10}, \code{1e-14}.}
+\item{\code{reltol}, \code{abstol}}{Convergence tolerances, default \code{1e-10}, \code{1e-14}.}
 \item{\code{flowTol}}{Relative local error per pseudo-time step, default \code{1}.}
 \item{\code{maxit}}{Iterations per start, default
 \code{ceiling(70 * log(n + 1))} for \code{n} states.}
@@ -76,6 +77,8 @@ is not advanced.}
 
 \item{outdir}{Directory for the generated files, default
 \code{getOption("dMod.outdir")}, else the working directory.}
+
+\item{...}{\code{keep.root} is deprecated, use \code{keepRoot}.}
 }
 \value{
 A \link{parfn}, called as \code{p(pars, ...)}, see section Calling a dMod
@@ -91,7 +94,7 @@ Conserved quantities of an \link{eqnlist} enter as \eqn{C x = T}.
 States without influx are 0. Initial guesses are kept roots, then the
 states in \code{pars}, missing ones at 1, then \code{nStarts} random starts. If all
 fail, it is an error. Identical parameter values are solved
-once, also across conditions. \code{keep.root} and \code{controlsPTC} can be changed
+once, also across conditions. \code{keepRoot} and \code{controlsPTC} can be changed
 with \code{\link[=controls]{controls()}}.
 }
 \section{Calling a dMod function}{

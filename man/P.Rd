@@ -46,8 +46,8 @@ is \code{"expl_parfn"} or \code{"impl_parfn"}, followed by \verb{_<condition>}.}
 \item{deriv, deriv2}{Build first and second derivatives, default \code{TRUE} and
 \code{FALSE}. \code{deriv2} requires \code{deriv = TRUE}.}
 
-\item{...}{Further arguments of \code{\link[=Pexpl]{Pexpl()}} (\code{attach.input}, \code{derivMode},
-\code{outdir}) or \code{\link[=Pimpl]{Pimpl()}} (\code{forcings}, \code{keep.root}, \code{flow}, \code{controlsPTC},
+\item{...}{Further arguments of \code{\link[=Pexpl]{Pexpl()}} (\code{attachInput}, \code{derivMode},
+\code{outdir}) or \code{\link[=Pimpl]{Pimpl()}} (\code{forcings}, \code{keepRoot}, \code{flow}, \code{controlsPTC},
 \code{outdir}), as \code{method} selects.}
 }
 \value{

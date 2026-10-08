@@ -69,14 +69,14 @@ for an \code{fn}; name both arguments to avoid confusion.
 ## parfn with condition
 p <- P(eqnvec(x = "-a*x"), method = "implicit", condition = "C1")
 controls(p)
-controls(p, condition = "C1", name = "keep.root")
-controls(p, condition = "C1", name = "keep.root") <- FALSE
+controls(p, condition = "C1", name = "keepRoot")
+controls(p, condition = "C1", name = "keepRoot") <- FALSE
 
 ## obsfn without condition
 g <- Y(g = eqnvec(y = "s*x"), f = NULL, states = "x", parameters = "s")
 controls(g)
-controls(g, name = "attach.input")
-controls(g, name = "attach.input") <- TRUE
+controls(g, name = "attachInput")
+controls(g, name = "attachInput") <- TRUE
 }
 \seealso{
 \code{\link[=normL2]{normL2()}}, \code{\link[=P]{P()}}, \code{\link[=Y]{Y()}}

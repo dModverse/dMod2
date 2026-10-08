@@ -5,14 +5,14 @@
 \alias{as.parframe}
 \title{Coerce to a Parameter Frame}
 \usage{
-\method{as.parframe}{parlist}(x, sort.by = "value", ...)
+\method{as.parframe}{parlist}(x, sortBy = "value", ...)
 
 as.parframe(x, ...)
 }
 \arguments{
 \item{x}{object to be coerced, e.g. a \code{parlist}.}
 
-\item{sort.by}{character, the column by which the returned parameter frame
+\item{sortBy}{character, the column by which the returned parameter frame
 is sorted. Default \code{"value"}.}
 
 \item{...}{not used.}

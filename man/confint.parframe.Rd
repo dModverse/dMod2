@@ -16,7 +16,7 @@
 )
 }
 \arguments{
-\item{object}{A \code{parframe} returned by \code{\link[=profile]{profile()}}.}
+\item{object}{A \code{parframe} returned by \link[=profile.objfn]{profile()}.}
 
 \item{parm}{Names of the parameters to give intervals for. Default \code{NULL},
 all profiled parameters.}
@@ -49,5 +49,5 @@ profile does not reach the threshold, the last part of it is extrapolated
 linearly.
 }
 \seealso{
-\code{\link[=profile]{profile()}}, \code{\link[=profileThreshold]{profileThreshold()}}
+\link[=profile.objfn]{profile()}, \code{\link[=profileThreshold]{profileThreshold()}}
 }

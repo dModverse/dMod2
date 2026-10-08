@@ -110,7 +110,7 @@ yaml <- exportPEtab(data, f, observables = c(y = "A"), p = p,
                     pouter = c(logA = log(2), logk = log(0.5)),
                     dir = file.path(tempdir(), "petab_decay"),
                     formatVersion = "1")
-readPetabTables(yaml)$parameters
+readPEtabTables(yaml)$parameters
 \dontshow{\}) # examplesIf}
 }
 \seealso{

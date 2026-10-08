@@ -5,15 +5,15 @@
 \alias{sumfn}
 \title{Direct Sum of Functions}
 \usage{
-\method{+}{fn}(x1, x2)
+\method{+}{fn}(e1, e2)
 }
 \arguments{
-\item{x1}{function of class \code{obsfn}, \code{prdfn} or \code{parfn}.}
+\item{e1}{function of class \code{obsfn}, \code{prdfn} or \code{parfn}.}
 
-\item{x2}{function of the same class as \code{x1}.}
+\item{e2}{function of the same class as \code{e1}.}
 }
 \value{
-Object of the same class as \code{x1} and \code{x2}, defined for the union of
+Object of the same class as \code{e1} and \code{e2}, defined for the union of
 conditions.
 }
 \description{
@@ -22,7 +22,7 @@ functions of the same class.
 }
 \details{
 Each function is defined for a set of conditions. The sum is
-defined for their union. A condition present in both is taken from \code{x2},
+defined for their union. A condition present in both is taken from \code{e2},
 with a warning.
 }
 \examples{

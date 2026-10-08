@@ -4,7 +4,7 @@
 \alias{plotFluxes}
 \title{Plot Fluxes Given a List of Flux Equations}
 \usage{
-plotFluxes(pouter, x, times, fluxEquations, nameFlux = "Fluxes:", ...)
+plotFluxes(pouter, x, times, fluxEquations, legendTitle = "Fluxes:", ...)
 }
 \arguments{
 \item{pouter}{Named numeric vector of outer parameters.}
@@ -17,9 +17,10 @@ plotFluxes(pouter, x, times, fluxEquations, nameFlux = "Fluxes:", ...)
 states and inner parameters, e.g. the \code{rates} of an \link{eqnlist}. Names are
 shown in the legend; without names the expressions are.}
 
-\item{nameFlux}{Character, the legend title. Defaults to \code{"Fluxes:"}.}
+\item{legendTitle}{Character, the legend title. Defaults to \code{"Fluxes:"}.}
 
-\item{...}{Further arguments passed to \code{x}, such as \code{fixed} or \code{conditions}.}
+\item{...}{Further arguments passed to \code{x}, such as \code{fixed} or \code{conditions}.
+\code{nameFlux} is deprecated, use \code{legendTitle}.}
 }
 \value{
 A \code{ggplot} object with the flux data frame as attribute \code{"out"}.

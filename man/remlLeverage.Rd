@@ -9,8 +9,9 @@ remlLeverage(
   pars,
   meanpars = NULL,
   fixed = NULL,
-  rank.tol = 1e-08,
-  cores = getOption("dMod.cores", 1L)
+  rankTol = 1e-08,
+  cores = getOption("dMod.cores", 1L),
+  ...
 )
 }
 \arguments{
@@ -24,11 +25,13 @@ function, data and error model.}
 
 \item{fixed}{Named numeric, passed to the prediction. Default \code{NULL}.}
 
-\item{rank.tol}{Relative threshold on the singular values of the weighted
+\item{rankTol}{Relative threshold on the singular values of the weighted
 sensitivity matrix below which a direction counts as absent. Default
 \code{1e-8}.}
 
 \item{cores}{Passed to the prediction. Default \code{getOption("dMod.cores", 1)}.}
+
+\item{...}{\code{rank.tol} is deprecated, use \code{rankTol}.}
 }
 \value{
 A data frame with one row per data point and columns \code{condition},
@@ -50,9 +53,9 @@ non-identifiable direction contributes nothing.
 old <- options(dMod.outdir = tempdir())
 f <- addReaction(eqnlist(), from = "A", to = "", rate = "k*A")
 x <- Xs(odemodel(f, modelname = "reml_x", compile = FALSE))
-g <- Y(c(y = "A"), f = x, attach.input = FALSE, modelname = "reml_g",
+g <- Y(c(y = "A"), f = x, attachInput = FALSE, modelname = "reml_g",
        compile = FALSE)
-e <- Y(c(y = "sigma_y"), f = g, attach.input = FALSE, condition = "C1",
+e <- Y(c(y = "sigma_y"), f = g, attachInput = FALSE, condition = "C1",
        modelname = "reml_e", compile = FALSE)
 p <- P(eqnvec(A = "exp(logA)", k = "exp(logk)", sigma_y = "sigma_y"),
        condition = "C1", modelname = "reml_p", compile = FALSE)

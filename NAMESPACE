@@ -113,6 +113,9 @@ S3method(print,summary.symmetrydetection)
 S3method(print,summary.symmetryreduction)
 S3method(print,symmetrydetection)
 S3method(print,symmetryreduction)
+S3method(print,trustfit)
+S3method(profile,"function")
+S3method(profile,objfn)
 S3method(reduceReplicates,character)
 S3method(reduceReplicates,data.frame)
 S3method(subset,datalist)
@@ -127,6 +130,7 @@ S3method(summary,prdfn)
 S3method(summary,symmetrydetection)
 S3method(summary,symmetryreduction)
 S3method(unique,parframe)
+S3method(vcov,trustfit)
 S3method(wide2long,data.frame)
 S3method(wide2long,list)
 S3method(wide2long,matrix)
@@ -256,10 +260,11 @@ export(plotValues)
 export(prdfn)
 export(prdframe)
 export(prdlist)
-export(profile)
 export(profileParsPerNode)
 export(profileThreshold)
 export(progressBar)
+export(readPEtabTables)
+export(readPEtabYaml)
 export(readPetabTables)
 export(readPetabYaml)
 export(reconstControl)
@@ -287,7 +292,6 @@ export(symmetryDetection)
 export(symmetryReduction)
 export(theme_dMod)
 export(trust)
-export(vcov)
 export(wide2long)
 export(write.eqnlist)
 import(cppDE)
@@ -343,12 +347,14 @@ importFrom(stats,
   median,
   optim,
   predict,
+  profile,
   qchisq,
   qf,
   rnorm,
   runif,
   sd,
-  setNames
+  setNames,
+  vcov
 )
 importFrom(stringr,str_replace_all)
 importFrom(tidyselect,all_of)

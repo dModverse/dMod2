@@ -69,17 +69,17 @@ pp_models <- function() {
 
   d2 <- Pimpl(c(C = "k1*(totA - C)*(totB - C) - km*C"),
               parameters = c("k1","km","totA","totB"), deriv2 = TRUE,
-              modelname = mn("d2"), verbose = FALSE, controlsPTC = list(rtol = 1e-13))
+              modelname = mn("d2"), verbose = FALSE, controlsPTC = list(reltol = 1e-13))
 
   d2_2 <- Pimpl(c(x1 = "a*x1 - b*x2 - 1", x2 = "x1*x2 - c"),
                 parameters = c("a","b","c"), deriv2 = TRUE,
-                modelname = mn("d2_2"), verbose = FALSE, controlsPTC = list(rtol = 1e-13))
+                modelname = mn("d2_2"), verbose = FALSE, controlsPTC = list(reltol = 1e-13))
 
   el_AB <- eqnlist() |>
     addReaction("A", "B", "k*A") |>
     addReaction("B", "A", "km*B")
   d2_cq <- Pimpl(el_AB, parameters = c("k","km"), deriv2 = TRUE,
-                 modelname = mn("d2_cq"), verbose = FALSE, controlsPTC = list(rtol = 1e-13))
+                 modelname = mn("d2_cq"), verbose = FALSE, controlsPTC = list(reltol = 1e-13))
 
   moiety2_im <- Pimpl(el_2moiety, modelname = mn("2moiety_im"))
 

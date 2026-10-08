@@ -12,13 +12,14 @@ plotArray(
   direction = c("up", "down"),
   covtable,
   ...,
-  nsimus = 4
+  nSim = 4
 )
 }
 \arguments{
 \item{par}{Character, the profiled parameter.}
 
-\item{profs}{A \link{parframe} of profiles as returned by \code{\link[=profile]{profile()}}.}
+\item{profs}{A \link{parframe} of profiles as returned by
+\link[=profile.objfn]{profile()}.}
 
 \item{prd}{A prediction function, e.g. \code{g*x*p}, called as
 \code{prd(times, pars, deriv = FALSE)}.}
@@ -33,9 +34,9 @@ predictions by condition so that \code{...} can refer to its columns, or
 \code{NULL}. Has no default.}
 
 \item{...}{Logical expressions to subset the plotted data; used only with
-a \code{covtable}.}
+a \code{covtable}. \code{nsimus} is deprecated, use \code{nSim}.}
 
-\item{nsimus}{Number of trajectories. Defaults to 4.}
+\item{nSim}{Number of trajectories. Defaults to 4.}
 }
 \value{
 A \code{ggplot} object.

@@ -341,7 +341,7 @@ test_that("Pimpl reads keepRoot and its solver options from controls", {
   expect_error(pim(c(a = 4, x = 1e3)), "no convergence in 1 iteration")
 
   # A partial replacement keeps the other defaults.
-  controls(pim, NULL, "controlsPTC") <- list(rtol = 1e-13)
+  controls(pim, NULL, "controlsPTC") <- list(reltol = 1e-13)
   expect_equal(as.numeric(pim(c(a = 4, x = 1e3))[[1]]["x"]), 2, tolerance = 1e-12)
 })
 
