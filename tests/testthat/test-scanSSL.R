@@ -70,6 +70,9 @@ test_that("the spike-and-slab path fuses and anchors from one start per lambda",
   expect_identical(fit$selected, "{r_B=0 | r_C,r_D}")
   # the last third of the grid holds one structure
   expect_true(all(tail(fit$path$key, 4) == fit$selected))
+  # each lambda runs the EM from the previous mode and from the sparse point,
+  # the downward pass from the mode above
+  expect_true(all(fit$path$starts %in% 1:2) && any(fit$path$starts == 2L))
   # on the plateau only the weak slab shrinks: the estimate is close to the refit
   last <- fit$coefficients[nrow(fit$coefficients), c("r_B", "r_C", "r_D")]
   expect_equal(unname(last), unname(fit$fit[c("r_B", "r_C", "r_D")]), tolerance = 0.01)

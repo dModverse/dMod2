@@ -148,7 +148,9 @@ off their kink are then put onto it and the EM is rerun; the merge is kept
 if it lowers the \verb{-2 log} posterior. The path is one chain over the
 increasing grid, each
 \code{lambda} started from the optimum of the previous one (Rockova and George
-2018); \code{pathFits} then only applies to the refits.
+2018) and from the sparse point, then one chain back down; each \code{lambda}
+keeps the mode of smaller \verb{-2 log} posterior. \code{pathFits} then only
+applies to the refits.
 }
 \examples{
 \dontrun{

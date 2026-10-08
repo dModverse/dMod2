@@ -124,7 +124,9 @@ gateL1 <- function(trafo, pars, prefix = "s_") {
 #'   if it lowers the `-2 log` posterior. The path is one chain over the
 #'   increasing grid, each
 #'   `lambda` started from the optimum of the previous one (Rockova and George
-#'   2018); `pathFits` then only applies to the refits.
+#'   2018) and from the sparse point, then one chain back down; each `lambda`
+#'   keeps the mode of smaller `-2 log` posterior. `pathFits` then only
+#'   applies to the refits.
 #' @return Object of class `scanL1` with
 #'   \describe{
 #'     \item{`path`}{one row per `lambda`: penalised value, structure key,
@@ -207,23 +209,23 @@ scanL1 <- function(obj, center, zero = NULL, reference = NULL, groups = NULL,
     .l1Penalised(obj, start, lambda[l], gates, reference, groups, fixSel, q,
                  ctl, n, sd, cores, extra, ssl, if (n > 1L) wf, prior)
   # Upward from the full optimum, then downward from each larger lambda's
-  # optimum; a lambda keeps the better of the two. With ssl the path is one
-  # chain of local modes, since posteriors of different supports do not compare.
+  # optimum; a lambda keeps the better of the two. With ssl both are chains of
+  # EM runs, upward from the previous mode and from the sparse point.
   fitsL <- vector("list", length(lambda))
   warm  <- start0
   for (l in seq_along(lambda)) {
     fitsL[[l]] <- if (is.null(ssl)) pen1(start0, l, pathFits, list(warm, sparse))
-                  else pen1(warm, l, 1L, NULL)
+                  else pen1(warm, l, 2L, list(sparse))
     if (!is.null(fitsL[[l]])) warm <- fitsL[[l]]$argument
   }
-  if (is.null(ssl)) for (l in rev(seq_along(lambda))[-1]) {
+  for (l in rev(seq_along(lambda))[-1]) {
     up <- fitsL[[l + 1L]]
     if (is.null(up)) next
     down <- pen1(up$argument, l, 1L, NULL)
     cur  <- fitsL[[l]]
     if (is.null(down) || (!is.null(cur) && down$value >= cur$value)) next
     # A better optimum from above: more starts until the waterfall reaches it.
-    fitsL[[l]] <- if (is.null(wf) || is.null(cur)) down
+    fitsL[[l]] <- if (!is.null(ssl) || is.null(wf) || is.null(cur)) down
       else pen1(start0, l, pathFits, NULL,
                 list(fits = list(down), values = cur$values, starts = cur$starts + 1L))
   }

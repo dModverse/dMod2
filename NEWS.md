@@ -34,6 +34,9 @@
   starts are added until the waterfall reaches it.
 * `control$trust` of `scanL1()` takes `ftol`, `mtol` and `gtol` for both
   `trust()` and `trustL1()`.
+* The spike-and-slab path of `scanL1()` runs the EM at each `lambda` from the
+  previous mode and from the sparse point and keeps the smaller `-2 log`
+  posterior, followed by the downward pass that `q < 1` uses.
 
 # dMod2 0.11.0
 
