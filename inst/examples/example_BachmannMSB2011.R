@@ -232,7 +232,7 @@ attr(mydataL, "condition.grid") <- cond.grid
 # –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
 # Build
 # –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
-myOptions <- list(atol = 1e-11, rtol = 1e-8, maxsteps = 1e7L, maxattemps = 100L)
+myOptions <- list(atol = 1e-11, rtol = 1e-8, maxsteps = 1e7L, maxattempts = 100L)
 
 model <- odemodel(reactions, modelname = "bachmann_ode", compile = FALSE, outdir = .outdir)
 x <- Xs(model, options = myOptions)

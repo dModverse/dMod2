@@ -111,7 +111,7 @@ NULL
 #'
 #' * `atol`, `rtol`: absolute and relative error tolerance, default `1e-6`.
 #' * `maxsteps`: largest number of steps of one solve, default `1e6`.
-#' * `maxattemps`: consecutive rejected steps before the solve fails,
+#' * `maxattempts`: consecutive rejected steps before the solve fails,
 #'   default `50`.
 #' * `hini`: first step size, default `0`, which estimates it.
 #' * `roottol`: tolerance of root-triggered events and of
@@ -415,7 +415,7 @@ Xs.cppDE <- function(odemodel, forcings = NULL, events = NULL, names = NULL, con
     stop("Events should be passed to odemodel() when using backend = 'cppDE'")
   }
 
-  optionsDefault <- list(atol = 1e-6, rtol = 1e-6, maxattemps = 50L, maxsteps = 1e6L,
+  optionsDefault <- list(atol = 1e-6, rtol = 1e-6, maxattempts = 50L, maxsteps = 1e6L,
                          hini = 0, roottol = 1e-6, maxroot = 1L,
                          onFailure = "stop", traceFile = NULL)
   sensKnown <- c(names(optionsDefault), "sensErrCon")
@@ -578,7 +578,7 @@ Xs.cppDE <- function(odemodel, forcings = NULL, events = NULL, names = NULL, con
   solveOpts <- function(deriv, sec = NULL) {
     reverseOpts()
     o <- if (deriv) sensOpts() else odeOf(controls$options)
-    out <- list(abstol = o$atol, reltol = o$rtol, maxattemps = o$maxattemps,
+    out <- list(abstol = o$atol, reltol = o$rtol, maxattempts = o$maxattempts,
                 maxsteps = o$maxsteps, hini = o$hini, roottol = o$roottol,
                 maxroot = o$maxroot, onFailure = o$onFailure, traceFile = o$traceFile)
     if (!is.null(sec)) out$sensErrCon <- sec
@@ -1030,7 +1030,7 @@ Xf.cppDE <- function(odemodel, forcings = NULL, events = NULL, condition = NULL,
   if (!is.null(events))
     stop("Events must be passed to odemodel() for backend = 'cppDE' / 'Sundials'.")
 
-  optionsDefault <- list(atol = 1e-6, rtol = 1e-6, maxattemps = 50L, maxsteps = 1e6L,
+  optionsDefault <- list(atol = 1e-6, rtol = 1e-6, maxattempts = 50L, maxsteps = 1e6L,
                          hini = 0, roottol = 1e-6, maxroot = 1L,
                          onFailure = "stop", traceFile = NULL)
   odeOf <- .derivedControl(function(o) .cppdeOptions(o, optionsDefault, "options"))
@@ -1056,7 +1056,7 @@ Xf.cppDE <- function(odemodel, forcings = NULL, events = NULL, condition = NULL,
                             tangent = NULL, hessian = NULL, fixed = NULL,
                             forcings = forcings,
                             abstol = o$atol, reltol = o$rtol,
-                            maxattemps = o$maxattemps,
+                            maxattempts = o$maxattempts,
                             maxsteps = o$maxsteps,
                             hini = o$hini,
                             roottol = o$roottol,

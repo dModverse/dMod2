@@ -71,7 +71,7 @@ dir.create(.outdir, recursive = TRUE, showWarnings = FALSE)
 
 # atol under rtol under the observables' own floor: the three have to hold in
 # that order, or the gradient is measuring the floor rather than the model.
-TOL <- list(atol = 1e-11, rtol = 1e-9, maxsteps = 1e7L, maxattemps = 100L)
+TOL <- list(atol = 1e-11, rtol = 1e-9, maxsteps = 1e7L, maxattempts = 100L)
 
 
 # –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––

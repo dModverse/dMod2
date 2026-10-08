@@ -98,7 +98,7 @@ unknown entry is ignored with a warning.
 \itemize{
 \item \code{atol}, \code{rtol}: absolute and relative error tolerance, default \code{1e-6}.
 \item \code{maxsteps}: largest number of steps of one solve, default \code{1e6}.
-\item \code{maxattemps}: consecutive rejected steps before the solve fails,
+\item \code{maxattempts}: consecutive rejected steps before the solve fails,
 default \code{50}.
 \item \code{hini}: first step size, default \code{0}, which estimates it.
 \item \code{roottol}: tolerance of root-triggered events and of

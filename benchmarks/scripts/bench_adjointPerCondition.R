@@ -53,7 +53,7 @@ options(dMod.cores = 1, cppDE.cores = 1)
 
 # atol under rtol under the observables' own floor: the three have to hold in
 # that order, or the gradient is measuring the floor.
-TOL <- list(atol = 1e-11, rtol = 1e-9, maxsteps = 1e7L, maxattemps = 100L)
+TOL <- list(atol = 1e-11, rtol = 1e-9, maxsteps = 1e7L, maxattempts = 100L)
 
 # The machine scatters badly, so report the minimum over repetitions rather
 # than the mean or the median. One condition is two orders of magnitude cheaper

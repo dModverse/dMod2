@@ -75,7 +75,7 @@ reactions <- eqnlist() |>
   addReaction("nucpBpB", "2*STAT5B", "k_exp_homo*nucpBpB", "pBpB export", compartment = "nuc") |>
   setCompartmentVolume(cyt = "1.4")
 
-myOptions <- list(atol = 1e-8, rtol = 1e-6, maxattemps = 100L, maxsteps = 1e6)
+myOptions <- list(atol = 1e-8, rtol = 1e-6, maxattempts = 100L, maxsteps = 1e6)
 
 # `derivMode = c("forward", "reverse")` compiles a fourth object beside func,
 # extended and extended2: the states in plain double with a checkpoint per step,

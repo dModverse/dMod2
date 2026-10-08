@@ -1,3 +1,8 @@
+# dMod2 0.10.13
+
+* The solver option for the limit of consecutive rejected steps is
+  `maxattempts`, as in cppDE.
+
 # dMod2 0.10.12
 
 * Breaking: `Xs()` takes its solver options as `options`, which applies to
