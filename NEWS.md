@@ -1,3 +1,7 @@
+# dMod2 0.10.10
+
+* `getSymbols()` and `replaceSymbols()` are reexported from cOde.
+
 # dMod2 0.10.9
 
 * New `symmetryDetection()`, `reconstControl()` and `symmetryReduction()`:
