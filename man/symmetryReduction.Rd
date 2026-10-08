@@ -55,7 +55,7 @@ An object of class \code{symmetryreduction}:
 \describe{
 \item{\code{blocks}}{one entry per set of coupled directions, with its
 \code{invariants}, \code{section}, \code{survivorMeaning} (the invariant each \verb{q_<k>}
-carries), \code{carrierDomain}, \code{coverage} and \code{status} (\code{"fixed"},
+holds), \code{carrierDomain}, \code{coverage} and \code{status} (\code{"fixed"},
 \code{"reduced"}, \code{"invariantOnly"} or \code{"unresolved"}).}
 \item{\code{zeroCompatibility}}{with \code{reportZeroCompatibility = TRUE}, the sets of
 coordinates that can vanish together and the \code{condition} for it.}
@@ -77,7 +77,7 @@ line per block. Both take \code{width}, \code{summary()} also \code{verbose}.
 \description{
 Turns the non-identifiable directions of a \code{\link[=symmetryDetection]{symmetryDetection()}} result into a
 parameter transformation that removes them. A scaling fixes one coordinate to 1.
-A general direction is replaced by its invariants, carried by new parameters
+A general direction is replaced by its invariants, held by new parameters
 \verb{q_<k>}, searched up to the degree bounds \code{dPoly}, \code{dDarboux} and \code{dExp}. The
 computation runs in the Python package \code{symident}.
 }
@@ -96,7 +96,7 @@ estimated on a linear scale; a chart valid only for its positive values has
   g <- eqnvec(y = "p")
   res <- symmetryDetection(f, g, reconstruct = TRUE)
   red <- symmetryReduction(res)
-  red                             # terse: trafo plus what the outer names carry
+  red                             # terse: trafo plus what the outer names stand for
   summary(red)                    # invariants, stages, certificates, families
   red$trafo                       # ready for P() or symmetryDetection(trafo = )
   symmetryDetection(f, g, trafo = red$trafo)$identifiable
@@ -154,7 +154,7 @@ estimated on a linear scale; a chart valid only for its positive values has
   symmetryReduction(res4, dDarboux = 0L, separable = FALSE)$blocks[[1]]$invariants
 
   ## EGF/EGFR -> MEK/ERK cascade: the invariants of the curved block are
-  ## carried by new parameters q_<k>
+  ## held by new parameters q_<k>
   reactions <- eqnlist() |>
     addReaction("EGF + EGFR", "EGF_EGFR", "k_bind * EGF * EGFR")   |>
     addReaction("EGF_EGFR", "EGF + EGFR", "k_unbind * EGF_EGFR")   |>

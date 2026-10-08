@@ -34,9 +34,7 @@ Xf(odemodel, ...)
 
 \item{forcings, events, condition}{As in \code{\link[=Xs]{Xs()}}.}
 
-\item{optionsOde}{Named list of solver options, as \code{optionsOde} of \code{\link[=Xs]{Xs()}},
-except that \code{onFailure} defaults to \code{"stop"} on the \code{cppDE} and \code{Sundials}
-backends.}
+\item{optionsOde}{Named list of solver options, as \code{optionsOde} of \code{\link[=Xs]{Xs()}}.}
 
 \item{fcontrol}{\code{deSolve} backend only, as in \code{\link[=Xs]{Xs()}}.}
 }

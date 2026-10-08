@@ -130,7 +130,7 @@ test_that("exportPEtabObject v2 writes nominalValue verbatim (no parameterScale 
   on.exit(unlink(td, recursive = TRUE), add = TRUE)
 
   # A v2 export of a log10-scaled v1 problem is silent: the trafo already
-  # carries the scale as 10^(...), which v2 keeps.
+  # has the scale as 10^(...), which v2 keeps.
   expect_silent(
     exportPEtabObject(pp, dir = td, formatVersion = "2.0.0",
                       overwrite = TRUE))

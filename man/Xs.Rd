@@ -4,7 +4,7 @@
 \alias{Xs}
 \alias{Xs.deSolve}
 \alias{Xs.cppDE}
-\title{Model prediction function for ODE models.}
+\title{Prediction function of an ODE model with sensitivities}
 \usage{
 Xs(odemodel, ...)
 
@@ -33,59 +33,142 @@ Xs(odemodel, ...)
 )
 }
 \arguments{
-\item{odemodel}{object of class 'odemodel' or 'odemodel++', see \link{odemodel}}
+\item{odemodel}{An \code{\link[=odemodel]{odemodel()}}. Its backend decides which method runs.}
 
-\item{...}{Additional arguments passed to methods.}
+\item{...}{Not used.}
 
-\item{forcings}{data.frame with columns name (factor), time (numeric) and value (numeric).
-The ODE forcings. Forcing support for the cppDE / Sundials backends depends
-on the chosen stepper method; see \code{\link[cppDE:cppODE]{cppDE::cppODE()}}.}
+\item{forcings}{\code{data.frame} with columns \code{name} (character or factor),
+\code{time} and \code{value}, one row per data point of a forcing declared in
+\code{odemodel(forcings = )}. See section Forcings.}
 
-\item{events}{An \link{eventlist} (or \code{data.frame} coercible via \link{as.eventlist}).
-Applied to the forward simulation only, sensitivities are not corrected.
-Define events on \code{\link[=odemodel]{odemodel()}} unless the prediction is used purely for
-forward simulation.}
+\item{events}{\code{deSolve} backend only. An \link{eventlist}, or a \code{data.frame}
+\code{\link[=as.eventlist]{as.eventlist()}} accepts. Applied to the states only, the sensitivities
+are not corrected, so define events in \code{\link[=odemodel]{odemodel()}} unless the prediction
+is used for simulation alone. The other backends take events only from
+\code{\link[=odemodel]{odemodel()}}.}
 
-\item{names}{character vector with the states to be returned. If NULL, all states are returned.}
+\item{names}{Character vector, the states and forcings to return. \code{NULL}
+returns all states followed by the forcings.}
 
-\item{condition}{either NULL (generic prediction for any condition) or a character, denoting
-the condition for which the function makes a prediction.}
+\item{condition}{\code{NULL} for a prediction valid in every condition, or the
+name of the condition it belongs to.}
 
-\item{optionsOde}{list with arguments to be passed to odeC() for the ODE integration.}
+\item{optionsOde}{Named list of solver options for the solves without
+sensitivities. See section Solver options.}
 
-\item{optionsSens}{list of solver options for the solve with sensitivities,
-passed to \code{odeC()} on the \code{deSolve} backend. On the \code{cppDE} backend \code{sensErrCon = FALSE} takes the sensitivities out of
-the error test, see \code{\link[cppDE:solveODE]{cppDE::solveODE()}}.}
+\item{optionsSens}{Named list of solver options for the solves with
+sensitivities. See section Solver options.}
 
-\item{fcontrol}{list with additional fine-tuning arguments for the forcing interpolation.
-See \link[stats:approxfun]{approxfun} for possible arguments.}
+\item{fcontrol}{\code{deSolve} backend only. List with the interpolation
+settings of the forcings, \code{method}, \code{rule}, \code{f} and \code{ties} as in
+\code{\link[stats:approxfun]{stats::approxfun()}}, passed to \code{\link[deSolve:ode]{deSolve::ode()}} as its \code{fcontrol}.}
 
-\item{optionsReverse}{list controlling the native backward pass, \code{cppDE}
-backend only. \code{NULL}, the default, sweeps the grid of the value pass.
-Entries:
+\item{optionsReverse}{Named list controlling the backward pass of
+\code{sweep = "reverse"}. Needs \code{backend = "cppDE"} and a model built with
+\code{derivMode = "reverse"}. \code{NULL}, the default, sweeps the step grid of the
+value pass. Entries:
 \itemize{
 \item \code{refine}: \code{TRUE} holds each step of the sweep to the error test of the
-CVODES backward problem under \code{abstol} and \code{reltol}, see
+CVODES backward problem under the tolerances of the solve, see
 \code{\link[cppDE:adjointControl]{cppDE::adjointControl()}}.
 \item \code{gradtol}: under \code{refine}, the absolute tolerance on each step's share
 of the gradient.
 }}
 }
 \value{
-Object of class \link{prdfn}. When called with transformed parameters
-(see \link{P}), the chain rule is applied automatically; the result is
-stored in \code{attr(., "deriv")} (which then differs from \code{"sensitivities"}).
+A \link{prdfn}, called as \code{x(times, pars, fixed = NULL, deriv = TRUE, deriv2 = FALSE)}. It returns a \link{prdlist} with one \link{prdframe} per
+condition: the states over \code{times}, with the sensitivities in
+\code{attr(, "deriv")}, \verb{[time, state, parameter]}, when \code{deriv = TRUE}, and
+the second-order sensitivities in \code{attr(, "deriv2")} when \code{deriv2 = TRUE}
+(\code{cppDE} backend, model built with \code{deriv2 = TRUE}). If \code{pars} has a
+\code{deriv} attribute, as the output of a \link{parfn} does, the sensitivities are
+taken with respect to the outer parameters.
 }
 \description{
-Interface to combine an ODE and its sensitivity equations
-into one model function \code{x(times, pars, deriv = TRUE)} returning ODE output and sensitivities.
+Turns an \code{\link[=odemodel]{odemodel()}} into a prediction function that
+integrates the states and, with \code{deriv = TRUE}, their sensitivities.
 }
-\details{
-\code{forcings}, \code{names} and the solver options are kept, as given, in
-the controls of the returned function and read at every solve, so
-\code{\link[=controls]{controls()}} can change them later; on the \code{deSolve} backend \code{events} and
-\code{fcontrol} as well. On the \code{cppDE} backend the options are merged over
-their defaults at every solve, so a replaced \code{optionsOde} or \code{optionsSens}
-only needs the entries it changes, and an unknown entry draws the same
-warning as in the constructor.
+\section{Solver options}{
+
+On the \code{cppDE} and \code{Sundials} backends \code{optionsOde} and \code{optionsSens} take
+the entries below and pass them to \code{\link[cppDE:solveODE]{cppDE::solveODE()}}. An entry not given
+keeps its default; an unknown entry is ignored with a warning.
+\itemize{
+\item \code{atol}, \code{rtol}: absolute and relative error tolerance, default \code{1e-6}.
+\item \code{maxsteps}: largest number of steps of one solve, default \code{1e6}.
+\item \code{maxattemps}: consecutive rejected steps before the solve fails,
+default \code{50}.
+\item \code{hini}: first step size, default \code{0}, which estimates it.
+\item \code{roottol}: tolerance of root-triggered events and of
+\code{rootfunc = "equilibrate"}, default \code{1e-6}.
+\item \code{maxroot}: number of times a root event may fire, default \code{1}.
+\item \code{onFailure}: \code{"stop"} (default), \code{"warn"} or \code{"silent"} on a failed
+solve. With \code{"warn"} and \code{"silent"} the result ends at the time reached,
+so an objective sees fewer data points rather than a failure.
+\item \code{traceFile}: CSV file the per-step trace is written to, default \code{NULL};
+needs \code{odemodel(..., stepTrace = TRUE)}.
+\item \code{sensErrCon}: \code{optionsSens} only. \code{FALSE} takes the sensitivities out of
+the error test, which is cheaper and gives less accurate sensitivities;
+default \code{TRUE}.
+}
+
+\code{optionsOde} applies to \code{deriv = FALSE} and to the value and backward pass
+of \code{sweep = "reverse"}, \code{optionsSens} to \code{deriv = TRUE} and to
+\code{sweep = "reverse"} with \code{deriv2 = TRUE}. A fit with the default forward
+sweep therefore runs under \code{optionsSens}. The integration
+method is fixed when the model is built, \code{odemodel(..., method = )}.
+
+On the \code{deSolve} backend both lists are arguments of \code{\link[deSolve:ode]{deSolve::ode()}},
+among them \code{method} (default \code{"lsoda"} for \code{optionsOde} and \code{"lsodes"} for
+\code{optionsSens}), \code{atol}, \code{rtol}, \code{maxsteps} and \code{hini}. A list given there
+replaces the default, so it names \code{method} if it needs one.
+}
+
+\section{Forcings}{
+
+On the \code{cppDE} and \code{Sundials} backends each forcing is the monotone cubic
+Hermite interpolant (PCHIP) of its data points, see
+\code{\link[cppDE:forcingValues]{cppDE::forcingValues()}}. Outside the points it holds the value of the
+first and the last one; a single point gives a constant. The integrator
+does not stop at the points, so a jump is best given by an event or by
+two close points.
+
+On the \code{deSolve} backend the forcings are interpolated linearly and held
+constant outside their data, unless \code{fcontrol} says otherwise.
+
+The forcings are returned after the states, without derivatives, so
+observables of \code{\link[=Y]{Y()}} can contain them. Different forcings per condition
+come from one \code{Xs()} per condition, joined by \code{+}.
+}
+
+\section{Controls}{
+
+\code{forcings}, \code{names} and the solver options are kept, as given, in the
+controls of the returned function and read at every solve, so \code{\link[=controls]{controls()}}
+can change them later; on the \code{deSolve} backend \code{events} and \code{fcontrol} as
+well. On the \code{cppDE} and \code{Sundials} backends a replaced \code{optionsOde} or
+\code{optionsSens} is merged over the defaults, so it only needs the entries it
+changes.
+}
+
+\examples{
+\donttest{
+f <- eqnvec(A = "-k1*A", B = "k1*A - k2*B")
+model <- odemodel(f, modelname = "Xs_AB", outdir = tempdir())
+
+## Tighter tolerances for the solves with sensitivities, as used in a fit
+x <- Xs(model, optionsSens = list(atol = 1e-8, rtol = 1e-8))
+times <- seq(0, 10, 0.1)
+pars <- c(A = 1, B = 0, k1 = 0.5, k2 = 0.2)
+pred <- x(times, pars)
+plot(pred)
+dim(attr(pred[[1]], "deriv"))
+
+## Change the options of the existing prediction function
+controls(x, NULL, "optionsOde") <- list(atol = 1e-10, rtol = 1e-10)
+head(x(times, pars, deriv = FALSE)[[1]])
+}
+}
+\seealso{
+\code{\link[=Xf]{Xf()}} for predictions without sensitivities, \code{\link[cppDE:solveODE]{cppDE::solveODE()}}.
 }

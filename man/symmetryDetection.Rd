@@ -71,7 +71,7 @@ the earliest events apply on top. Coupled steady states may need msolve, which
 \item{reduceCQ}{Logical, \link{eqnlist} only. Report the freedom of a conserved moiety
 on its total (\code{TRUE}) or on the initial value of one species (\code{FALSE}).}
 
-\item{freeInitial}{States, at most one per conserved quantity, carrying the free
+\item{freeInitial}{States, at most one per conserved quantity, holding the free
 resting value of their moiety under \verb{equilibrate = TRUE, reduceCQ = FALSE}.}
 
 \item{reconstruct}{Logical. Return general directions as exact rational functions
@@ -122,7 +122,8 @@ the observations of a model do not change: the nullspace of the observability
 matrix over finite fields, with certified rank and exact closed forms. The model
 \code{f}, the observables \code{g} and an optional \code{trafo} are equations in any form
 \code{\link[=as.eqnvec]{as.eqnvec()}} accepts. The computation runs in the Python package \code{symident}
-through \code{reticulate}.
+through \code{reticulate}, installed on first use from
+\url{https://github.com/dModverse/symident}.
 
 Right-hand sides, observables and initial values may contain \code{exp()},
 \code{exp10()}, \code{b^x}, hyperbolic and trigonometric functions, free exponents \code{x^n},
@@ -207,7 +208,7 @@ hill <- eqnlist() |>
   addReaction("x",  "0",  "d_x * x")
 out <- symmetryDetection(hill, eqnvec(xobs = "scale * x"),
                          reconstruct = TRUE)
-summary(out)   # the n-direction carries a log(base) factor
+summary(out)   # the n-direction has a log(base) factor
 
 ev <- addEvent(eventlist(), var = "u", time = -1, value = "1", method = "replace")
 out <- symmetryDetection(eqnvec(x = "kpr - dp*x^q + kin*u", u = "0"),

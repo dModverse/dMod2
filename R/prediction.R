@@ -97,7 +97,7 @@
 #'   condition: the states over `times`, with the sensitivities in
 #'   `attr(, "deriv")`, `[time, state, parameter]`, when `deriv = TRUE`, and
 #'   the second-order sensitivities in `attr(, "deriv2")` when `deriv2 = TRUE`
-#'   (`cppDE` backend, model built with `deriv2 = TRUE`). If `pars` carries a
+#'   (`cppDE` backend, model built with `deriv2 = TRUE`). If `pars` has a
 #'   `deriv` attribute, as the output of a [parfn] does, the sensitivities are
 #'   taken with respect to the outer parameters.
 #'

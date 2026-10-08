@@ -6,7 +6,7 @@
   g <- eqnvec(y = "p")
   res <- symmetryDetection(f, g, reconstruct = TRUE)
   red <- symmetryReduction(res)
-  red                             # terse: trafo plus what the outer names carry
+  red                             # terse: trafo plus what the outer names stand for
   summary(red)                    # invariants, stages, certificates, families
   red$trafo                       # ready for P() or symmetryDetection(trafo = )
   symmetryDetection(f, g, trafo = red$trafo)$identifiable
@@ -64,7 +64,7 @@
   symmetryReduction(res4, dDarboux = 0L, separable = FALSE)$blocks[[1]]$invariants
 
   ## EGF/EGFR -> MEK/ERK cascade: the invariants of the curved block are
-  ## carried by new parameters q_<k>
+  ## held by new parameters q_<k>
   reactions <- eqnlist() |>
     addReaction("EGF + EGFR", "EGF_EGFR", "k_bind * EGF * EGFR")   |>
     addReaction("EGF_EGFR", "EGF + EGFR", "k_unbind * EGF_EGFR")   |>

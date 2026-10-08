@@ -68,7 +68,7 @@ hill <- eqnlist() |>
   addReaction("x",  "0",  "d_x * x")
 out <- symmetryDetection(hill, eqnvec(xobs = "scale * x"),
                          reconstruct = TRUE)
-summary(out)   # the n-direction carries a log(base) factor
+summary(out)   # the n-direction has a log(base) factor
 
 ev <- addEvent(eventlist(), var = "u", time = -1, value = "1", method = "replace")
 out <- symmetryDetection(eqnvec(x = "kpr - dp*x^q + kin*u", u = "0"),

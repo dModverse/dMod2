@@ -30,7 +30,7 @@ collection instead; both its layouts are read. `--help` lists the options.
 
 A tier is an explicit list, so runs compare across commits. Problems are
 chosen by what they exercise, not by size, and a run prints how many of its
-problems carry each trait, with a warning for a trait none covers:
+problems have each trait, with a warning for a trait none covers:
 
 | trait | what it exercises |
 |---|---|

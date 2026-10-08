@@ -45,7 +45,7 @@
 #'   `symident.install_msolve()` builds or `SYMIDENT_MSOLVE` points to.
 #' @param reduceCQ Logical, [eqnlist] only. Report the freedom of a conserved moiety
 #'   on its total (`TRUE`) or on the initial value of one species (`FALSE`).
-#' @param freeInitial States, at most one per conserved quantity, carrying the free
+#' @param freeInitial States, at most one per conserved quantity, holding the free
 #'   resting value of their moiety under `equilibrate = TRUE, reduceCQ = FALSE`.
 #' @param reconstruct Logical. Return general directions as exact rational functions
 #'   instead of their support.
@@ -254,7 +254,7 @@ reconstControl <- function(relevanceCap = 6L, relevanceCapDir = 24L, relevanceCa
 .symRaw <- function(x) {
   raw <- attr(x, "symident")
   if (is.null(raw))
-    stop("the object does not carry the symident result it was built from.", call. = FALSE)
+    stop("the object does not hold the symident result it was built from.", call. = FALSE)
   raw
 }
 

@@ -28,6 +28,7 @@
 # -------------------------------------------------------------------------#
 
 library(dMod2)
+library(cOde)
 
 .cores <- detectFreeCores()
 .nRep  <- 1L

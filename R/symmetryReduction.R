@@ -2,7 +2,7 @@
 #'
 #' Turns the non-identifiable directions of a [symmetryDetection()] result into a
 #' parameter transformation that removes them. A scaling fixes one coordinate to 1.
-#' A general direction is replaced by its invariants, carried by new parameters
+#' A general direction is replaced by its invariants, held by new parameters
 #' `q_<k>`, searched up to the degree bounds `dPoly`, `dDarboux` and `dExp`. The
 #' computation runs in the Python package `symident`.
 #'
@@ -34,7 +34,7 @@
 #'   \describe{
 #'     \item{`blocks`}{one entry per set of coupled directions, with its
 #'       `invariants`, `section`, `survivorMeaning` (the invariant each `q_<k>`
-#'       carries), `carrierDomain`, `coverage` and `status` (`"fixed"`,
+#'       holds), `carrierDomain`, `coverage` and `status` (`"fixed"`,
 #'       `"reduced"`, `"invariantOnly"` or `"unresolved"`).}
 #'     \item{`zeroCompatibility`}{with `reportZeroCompatibility = TRUE`, the sets of
 #'       coordinates that can vanish together and the `condition` for it.}
