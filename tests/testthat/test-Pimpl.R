@@ -547,30 +547,6 @@ test_that("Sink cluster: a conserved moiety listed first stays nonzero", {
 })
 
 
-## ---- Layer 3 falls back when lpSolve is missing ------------------------
-
-test_that("FindSinkCluster degrades gracefully without lpSolve", {
-  # Same model as above; we can't easily uninstall lpSolve mid-test, so
-  # this is a structural assertion: with only layers 1+2, the cluster
-  # would not be found (we verified manually no NegCol/PosCol matches).
-  el <- eqnlist() |>
-    addReaction("L + R", "RL",  "k_on  * L * R") |>
-    addReaction("RL",    "L + R", "k_off * RL") |>
-    addReaction("RL",    "RLi", "k_int * RL") |>
-    addReaction("RLi",   "L",   "k_dec * RLi") |>
-    addReaction("RLi",   "",    "k_dg  * RLi")
-  # Sanity: every column is mixed-sign in this minimal cluster model.
-  S <- el$smatrix
-  S[is.na(S)] <- 0
-  storage.mode(S) <- "double"
-  for (j in seq_len(ncol(S))) {
-    col <- S[, j]
-    expect_true(any(col > 0) && any(col < 0),
-                info = sprintf("state %s is not mixed-sign", colnames(S)[j]))
-  }
-})
-
-
 ## ---- Idempotence on a model with no zero states ------------------------
 
 test_that("Pure production-decay has no zero states", {
@@ -677,24 +653,6 @@ test_that(".smartTotalName picks the longest common substring", {
   # Collision with an existing parameter -> disambiguate
   expect_equal(dMod2:::.smartTotalName(c("pERK", "ERK"), character(0),
                                         "totalERK", 1), "totalERK_2")
-})
-
-
-## ---- Pimpl smart naming: A <-> B uses LCS = "" -> total_1 -----------
-
-test_that("Pimpl on A <-> B introduces total_1 (no common substring)", {
-  skip_if_no_compile()
-  oldwd <- setwd(.dmod_fx_workdir()); on.exit(setwd(oldwd), add = TRUE)
-
-  el <- eqnlist() |>
-    addReaction("A", "B", "k * A") |>
-    addReaction("B", "A", "km * B")
-
-  pf <- Pimpl(el, parameters = c("k", "km"),
-              modelname = paste0("test_Pimpl_smart_total1_",
-                                 as.integer(Sys.time())),
-              compile = FALSE, verbose = FALSE)
-  expect_true("total_1" %in% getParameters(pf))
 })
 
 

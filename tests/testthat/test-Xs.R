@@ -11,69 +11,62 @@ skip_if_no_compile <- function() {
   testthat::skip_on_cran()
 }
 
-# The models of this file beyond the shared decay fixture, generated with
-# compile = FALSE on first use and linked into one shared object.
-xs_models <- local({
-  cache <- NULL
-  function() {
-    if (!is.null(cache)) return(cache)
-    dir <- file.path(tempdir(), "xs_models")
-    dir.create(dir, showWarnings = FALSE, recursive = TRUE)
-    withr::local_dir(dir)
-    nm <- function(x) paste0(x, "_", as.integer(Sys.time()))
+# The models of this file beyond the shared decay fixture, linked into the
+# fixture's single compile.
+fx_register(extra = function(bench) {
+  cascade <- eqnlist() |>
+    addReaction("A", "B", "k1 * A") |>
+    addReaction("B", "C", "k2 * B")
+  m_cascade <- odemodel(cascade, modelname = "xs_cascade", compile = FALSE)
+  p_cascade <- P(eqnvec(A = "A", B = "0", C = "0", k1 = "k1", k2 = "k2"),
+                 condition = "C1", modelname = "xs_cascade_p",
+                 compile = FALSE)
 
-    cascade <- eqnlist() |>
-      addReaction("A", "B", "k1 * A") |>
-      addReaction("B", "C", "k2 * B")
-    m_cascade <- odemodel(cascade, modelname = nm("xs_cascade"), compile = FALSE)
-    p_cascade <- P(eqnvec(A = "A", B = "0", C = "0", k1 = "k1", k2 = "k2"),
-                   condition = "C1", modelname = nm("xs_cascade_p"),
-                   compile = FALSE)
+  p_C2 <- P(eqnvec(A = "A_C2", k = "k_C2"), condition = "C2",
+            modelname = "xs_p", compile = FALSE)
 
-    p_C2 <- P(eqnvec(A = "A_C2", k = "k_C2"), condition = "C2",
-              modelname = nm("xs_p"), compile = FALSE)
+  m_event <- odemodel(eqnlist() |> addReaction("A", "", "k * A", "decay"),
+                      events = eventlist(var = "A", time = 5, value = "A_add",
+                                         method = "add"),
+                      modelname = "xs_event", compile = FALSE)
+  p_event <- P(eqnvec(A = "A", k = "k", A_add = "A_add"), condition = "C1",
+               modelname = "xs_event_p", compile = FALSE)
 
-    m_event <- odemodel(eqnlist() |> addReaction("A", "", "k * A", "decay"),
-                        events = eventlist(var = "A", time = 5, value = "A_add",
-                                           method = "add"),
-                        modelname = nm("xs_event"), compile = FALSE)
-    p_event <- P(eqnvec(A = "A", k = "k", A_add = "A_add"), condition = "C1",
-                 modelname = nm("xs_event_p"), compile = FALSE)
+  forced <- eqnlist() |>
+    addReaction("",  "A", "F",     "production by forcing") |>
+    addReaction("A", "",  "k * A", "decay")
+  m_forc <- odemodel(forced, forcings = "F", modelname = "xs_forc",
+                     compile = FALSE)
+  p_forc <- P(eqnvec(A = "A", k = "k"), condition = "C1",
+              modelname = "xs_forc_p", compile = FALSE)
 
-    forced <- eqnlist() |>
-      addReaction("",  "A", "F",     "production by forcing") |>
-      addReaction("A", "",  "k * A", "decay")
-    m_forc <- odemodel(forced, forcings = "F", modelname = nm("xs_forc"),
-                       compile = FALSE)
-    p_forc <- P(eqnvec(A = "A", k = "k"), condition = "C1",
-                modelname = nm("xs_forc_p"), compile = FALSE)
+  # Two separate builds of one model, compared against each other.
+  f <- c(A = "-k1*A + k2*B",
+         B =  "k1*A - k2*B")
+  m_rep1 <- odemodel(f, modelname = "xs_rep_v1", backend = "cppDE",
+                     compile = FALSE)
+  m_rep2 <- odemodel(f, modelname = "xs_rep_v2", backend = "cppDE",
+                     compile = FALSE)
+  trafo <- c(A = "A", B = "B", k1 = "exp(log_k1)", k2 = "exp(log_k2)")
+  p_rep <- P(trafo, modelname = "xs_rep_trafo", compile = FALSE)
+  p_rep_cl <- P(trafo, condition = "closed",
+                modelname = "xs_rep_trafo_cl", compile = FALSE)
+  p_rep_op <- P(c(A = "A", B = "B", k1 = "exp(log_k_open)", k2 = "exp(log_k2)"),
+                condition = "open", modelname = "xs_rep_trafo_op",
+                compile = FALSE)
 
-    # Two separate builds of one model, compared against each other.
-    f <- c(A = "-k1*A + k2*B",
-           B =  "k1*A - k2*B")
-    m_rep1 <- odemodel(f, modelname = nm("xs_rep_v1"), backend = "cppDE",
-                       compile = FALSE)
-    m_rep2 <- odemodel(f, modelname = nm("xs_rep_v2"), backend = "cppDE",
-                       compile = FALSE)
-    trafo <- c(A = "A", B = "B", k1 = "exp(log_k1)", k2 = "exp(log_k2)")
-    p_rep <- P(trafo, modelname = nm("xs_rep_trafo"), compile = FALSE)
-    p_rep_cl <- P(trafo, condition = "closed",
-                  modelname = nm("xs_rep_trafo_cl"), compile = FALSE)
-    p_rep_op <- P(c(A = "A", B = "B", k1 = "exp(log_k_open)", k2 = "exp(log_k2)"),
-                  condition = "open", modelname = nm("xs_rep_trafo_op"),
-                  compile = FALSE)
+  # Observes a forcing, which enters the observable like a state.
+  g_forc <- Y(c(o = "F * A"), f = NULL, states = c("A", "F"),
+              modelname = "xs_obs_forc", compile = FALSE)
 
-    compile(m_cascade, p_cascade, p_C2, m_event, p_event, m_forc, p_forc,
-            m_rep1, m_rep2, p_rep, p_rep_cl, p_rep_op,
-            output = nm("xs_models"), cores = test_cores())
-
-    cache <<- list(m_cascade = m_cascade, p_cascade = p_cascade, p_C2 = p_C2,
-                   m_event = m_event, p_event = p_event, m_forc = m_forc,
-                   p_forc = p_forc, m_rep1 = m_rep1, m_rep2 = m_rep2,
-                   p_rep = p_rep, p_rep_cl = p_rep_cl, p_rep_op = p_rep_op)
-    cache
-  }
+  list(m_cascade = m_cascade, p_cascade = p_cascade, p_C2 = p_C2,
+       m_event = m_event, p_event = p_event, m_forc = m_forc,
+       p_forc = p_forc, m_rep1 = m_rep1, m_rep2 = m_rep2,
+       p_rep = p_rep, p_rep_cl = p_rep_cl, p_rep_op = p_rep_op,
+       g_forc = g_forc)
 })
+
+xs_models <- function() fx_extra()
 
 
 # ---- Xs: state trajectories (closed-form) -------------------------------
@@ -372,8 +365,7 @@ test_that("Xs returns the forcings after the states and Y can observe them", {
   expect_equal(unname(out[, "F"]), c(0.2, 0.4, 0.6, 0.6))
   expect_equal(dimnames(attr(out, "deriv"))[[2]], "A")
 
-  g <- Y(c(o = "F * A"), x, compile = TRUE, modelname = "xs_obs_forc",
-         outdir = tempdir())
+  g <- mods$g_forc
   pred <- (g * x)(times, c(A = 0.1, k = 0.3))$C1
   expect_equal(unname(pred[, "o"]), unname(out[, "F"] * out[, "A"]))
   expect_equal(unname(attr(pred, "deriv")[, "o", "A"]),
@@ -398,4 +390,38 @@ test_that("deSolve solves take optionsSens over options over the default method"
   expect_identical(f(list(method = "bdf"), list(), "lsodes")$method, "bdf")
   expect_identical(f(list(method = "bdf"), list(method = "lsoda"), "lsodes")$method,
                    "lsoda")
+})
+
+
+# ---- Xt and Id ----------------------------------------------------------
+
+test_that("Xt returns time with zero sensitivities and Id is neutral in *", {
+  x <- Xt()
+  times <- c(0, 1.5, 4)
+  out <- x(times, c(a = 1, b = 2), deriv2 = TRUE)[[1]]
+  expect_equal(unname(out[, "time"]), times)
+  expect_equal(dim(attr(out, "deriv")), c(3L, 1L, 2L))
+  expect_true(all(attr(out, "deriv") == 0))
+  expect_true(all(attr(out, "deriv2") == 0))
+  expect_identical(Id() * x, x)
+  expect_identical(x * Id(), x)
+})
+
+
+# ---- plots of an Xd prediction ------------------------------------------
+
+test_that("prediction and data plots draw every point they are given", {
+  times <- 0:5
+  grid <- data.frame(name = "A", time = times, row.names = paste0("A", times))
+  x <- Xd(grid, condition = "C1")
+  pars <- structure(exp(-times / 2), names = getParameters(x))
+  pred <- x(seq(0, 5, by = 0.5), pars)
+  data <- as.datalist(data.frame(name = "A", time = times, value = unname(pars),
+                                 sigma = 0.1, condition = "C1"))
+
+  layer_rows <- function(p) vapply(ggplot2::ggplot_build(p)$data, nrow, 1L)
+  expect_equal(layer_rows(plotPrediction(pred)), 11L)
+  expect_equal(layer_rows(plotData(data)), c(6L, 6L))
+  expect_equal(layer_rows(plotCombined(pred, data)), c(11L, 6L, 6L))
+  expect_s3_class(plot(pred, data), "ggplot")
 })

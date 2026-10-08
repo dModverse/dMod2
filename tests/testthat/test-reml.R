@@ -18,29 +18,25 @@ skip_if_no_compile <- function() {
 # Decay chain with a constant error model. The observation has a scale `s`,
 # an inner parameter of the error model; the `fixed` trafo fixes it, separating
 # the estimated parameter count from the inner one. One shared object for both.
-.reml_fx <- local({
-  cache <- NULL
-  function() {
-    if (!is.null(cache)) return(cache)
-    bench <- fx_decay_compiled()
-    oldwd <- setwd(.dmod_fx_workdir()); on.exit(setwd(oldwd), add = TRUE)
-
-    gfn_s <- Y(c(y = "s*A"), f = bench$xfn, attachInput = FALSE,
-               modelname = "reml_obs_s", compile = FALSE)
-    e_const <- Y(c(y = "sigma_y"), f = gfn_s, attachInput = FALSE,
-                 condition = "C1", modelname = "reml_err", compile = FALSE)
-    p_free <- P(eqnvec(A = "A", k = "k", sigma_y = "sigma_y", s = "s"),
-                condition = "C1", modelname = "reml_p_free", compile = FALSE)
-    p_fixed <- P(eqnvec(A = "A", k = "k", sigma_y = "sigma_y", s = "1"),
-                 condition = "C1", modelname = "reml_p_fixed", compile = FALSE)
-    compile(gfn_s, e_const, p_free, p_fixed, output = "reml_all", cores = test_cores())
-
-    cache <<- list(
-      free  = list(prd = gfn_s * bench$xfn * p_free,  e = e_const),
-      fixed = list(prd = gfn_s * bench$xfn * p_fixed, e = e_const))
-    cache
-  }
+fx_register(extra = function(bench) {
+  gfn_s <- Y(c(y = "s*A"), f = bench$xfn, attachInput = FALSE,
+             modelname = "reml_obs_s", compile = FALSE)
+  list(
+    reml_gfn_s = gfn_s,
+    reml_e = Y(c(y = "sigma_y"), f = gfn_s, attachInput = FALSE,
+               condition = "C1", modelname = "reml_err", compile = FALSE),
+    reml_p_free = P(eqnvec(A = "A", k = "k", sigma_y = "sigma_y", s = "s"),
+                    condition = "C1", modelname = "reml_p_free", compile = FALSE),
+    reml_p_fixed = P(eqnvec(A = "A", k = "k", sigma_y = "sigma_y", s = "1"),
+                     condition = "C1", modelname = "reml_p_fixed", compile = FALSE))
 })
+
+.reml_fx <- function() {
+  xfn <- fx_decay_compiled()$xfn
+  x <- fx_extra()
+  list(free  = list(prd = x$reml_gfn_s * xfn * x$reml_p_free,  e = x$reml_e),
+       fixed = list(prd = x$reml_gfn_s * xfn * x$reml_p_fixed, e = x$reml_e))
+}
 
 
 test_that("leverages are hat values: in [0, 1] and summing to the rank", {

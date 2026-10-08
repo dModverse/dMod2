@@ -1,15 +1,5 @@
-# ============================================================================
-# Behavioral tests for normL2() against mathematical ground truth.
-#
-# Every value / gradient claim is checked against a closed-form analytic
-# formula (Gaussian log-likelihood, decay sensitivities composed by chain
-# rule, errmodel propagation). No finite-difference reference is used.
-#
-# Hessian and second-order chain-rule semantics live in test-deriv2.R.
-#
-# All blocks run under both objfn backends (R reference and C++ kernel)
-# via for_each_backend(); the info= tag distinguishes failures.
-# ============================================================================
+# normL2() against closed-form likelihoods, gradients and error models, BLOQ
+# treatments, chi2 bookkeeping and argument checks. Hessians live in test-deriv2.R.
 
 skip_if_no_compile <- function() {
   testthat::skip_if_not_installed("cppDE")
@@ -37,12 +27,20 @@ skip_if_no_compile <- function() {
                 modelname = "nl2_p_prop", compile = FALSE)
     p_C2 <- P(eqnvec(A = "A", k = "k"), condition = "C2",
               modelname = "nl2_p_id", compile = FALSE)
-    compile(e_const, p_sig, e_prop, p_prop, p_C2, output = "nl2_all", cores = test_cores())
+    # Two sources from 0, so the observed ratio is 0/0 at t = 0 only.
+    re <- eqnlist() |> addReaction("", "A", "k1") |> addReaction("", "B", "k2")
+    x_nan <- Xs(odemodel(re, modelname = "nl2nan_ode", compile = FALSE), condition = "C1")
+    g_nan <- Y(c(frac = "A/(A+B)"), re, modelname = "nl2nan_obs", compile = FALSE)
+    p_nan <- P(eqnvec(A = "0", B = "0", k1 = "k1", k2 = "k2"), condition = "C1",
+               modelname = "nl2nan_p", compile = FALSE)
+    compile(e_const, p_sig, e_prop, p_prop, p_C2, x_nan, g_nan, p_nan,
+            output = "nl2_all", cores = test_cores())
 
     cache <<- list(
       const = list(prd = bench$gfn * bench$xfn * p_sig,  e = e_const),
       prop  = list(prd = bench$gfn * bench$xfn * p_prop, e = e_prop),
-      pfn_C2 = p_C2)
+      pfn_C2 = p_C2,
+      nan = g_nan * x_nan * p_nan)
     cache
   }
 })
@@ -58,33 +56,9 @@ test_that("normL2 value equals sum(wr^2) + sum(log(2*pi*sigma^2)) at a known poi
   prd_at <- bench$prd_id(times = data$C1$time, pars = bench$outerpars_id)
   closed <- truth_nll_aloq(prd_at$C1[, "y"], data$C1$value, data$C1$sigma)
 
-  for_each_backend(function(cpp) {
-    obj <- normL2(data, bench$prd_id)
-    o <- obj(bench$outerpars_id)
-    expect_equal(o$value, closed, tolerance = 1e-10,
-                 info = paste0("cpp=", cpp))
-  })
-})
-
-
-test_that("normL2 value scales as 1/sigma^2 when sigma is rescaled", {
-  skip_if_no_compile()
-  bench <- fx_decay_compiled()
-
-  c1 <- 0.1; c2 <- 0.2
-  data1 <- fx_decay_data(sigma = c1)
-  data2 <- data1
-  data2$C1$value <- data1$C1$value
-  data2$C1$sigma <- c2
-
-  for_each_backend(function(cpp) {
-    o1 <- normL2(data1, bench$prd_id)(bench$outerpars_id)
-    o2 <- normL2(data2, bench$prd_id)(bench$outerpars_id)
-    chi1 <- o1$value - sum(log(2 * pi * data1$C1$sigma^2))
-    chi2 <- o2$value - sum(log(2 * pi * data2$C1$sigma^2))
-    expect_equal(chi2 * (c2 / c1)^2, chi1, tolerance = 1e-10,
-                 info = paste0("cpp=", cpp))
-  })
+  obj <- normL2(data, bench$prd_id)
+  o <- obj(bench$outerpars_id)
+  expect_equal(o$value, closed, tolerance = 1e-10)
 })
 
 
@@ -104,12 +78,10 @@ test_that("normL2 gradient equals 2 * Jt * (pred - y) / sigma^2 (analytic decay 
   g_ref <- c(A = 2 * sum(wr * J_A / sigma_vec),
              k = 2 * sum(wr * J_k / sigma_vec))
 
-  for_each_backend(function(cpp) {
-    obj <- normL2(data, bench$prd_id)
-    g_ana <- obj(pars)$gradient
-    expect_equal(unname(g_ana[names(g_ref)]), unname(g_ref),
-                 tolerance = 1e-4, info = paste0("cpp=", cpp))
-  })
+  obj <- normL2(data, bench$prd_id)
+  g_ana <- obj(pars)$gradient
+  expect_equal(unname(g_ana[names(g_ref)]), unname(g_ref),
+               tolerance = 1e-4)
 })
 
 
@@ -127,12 +99,9 @@ test_that("sigma from data column == sigma from errmodel, constant case", {
   ec <- .nl2_fx()$const
   pars_em <- c(bench$outerpars_id, sigma_y = sigma_const)
 
-  for_each_backend(function(cpp) {
-    o_col <- normL2(data_col, ec$prd)(pars_em)
-    o_em  <- normL2(data_em,  ec$prd, errmodel = ec$e)(pars_em)
-    expect_equal(o_em$value, o_col$value, tolerance = 1e-10,
-                 info = paste0("cpp=", cpp))
-  })
+  o_col <- normL2(data_col, ec$prd)(pars_em)
+  o_em  <- normL2(data_em,  ec$prd, errmodel = ec$e)(pars_em)
+  expect_equal(o_em$value, o_col$value, tolerance = 1e-10)
 })
 
 
@@ -149,67 +118,14 @@ test_that("normL2 sums per-condition contributions across two conditions", {
 
   pars <- c(A = 1.0, k = 0.7)
 
-  for_each_backend(function(cpp) {
-    o_joint <- normL2(data_multi, prd_multi)(pars)
-    o_C1 <- normL2(data_multi["C1"], prd_multi)(pars)
-    o_C2 <- normL2(data_multi["C2"], prd_multi)(pars)
-    expect_equal(o_joint$value, o_C1$value + o_C2$value, tolerance = 1e-10,
-                 info = paste0("cpp=", cpp))
-  })
+  o_joint <- normL2(data_multi, prd_multi)(pars)
+  o_C1 <- normL2(data_multi["C1"], prd_multi)(pars)
+  o_C2 <- normL2(data_multi["C2"], prd_multi)(pars)
+  expect_equal(o_joint$value, o_C1$value + o_C2$value, tolerance = 1e-10)
 })
 
 
 # ---- BLOQ: closed-form value (M3) ---------------------------------------
-
-test_that("normL2 with BLOQ rows adds -2 * sum(log Phi(-wr_bloq)) (M3) over ALOQ value", {
-  skip_if_no_compile()
-  bench <- fx_decay_compiled()
-
-  data <- fx_decay_data_bloq(sigma = 0.05, lloq = 0.1,
-                             times = seq(0, 10, by = 1))
-  pars <- bench$outerpars_id
-
-  prd_at <- bench$prd_id(times = data$C1$time, pars = pars,
-                         deriv = FALSE)$C1
-  pred <- prd_at[, "y"]
-  sigma_vec <- data$C1$sigma
-  lloq_vec  <- data$C1$lloq
-  val_post  <- pmax(data$C1$value, lloq_vec)
-  is_bloq   <- val_post <= lloq_vec
-
-  closed_aloq <- truth_nll_aloq(pred[!is_bloq], data$C1$value[!is_bloq],
-                                sigma_vec[!is_bloq])
-  closed_bloq <- truth_nll_bloq_m3(pred[is_bloq], lloq_vec[is_bloq],
-                                   sigma_vec[is_bloq])
-  expected <- closed_aloq + closed_bloq
-
-  for_each_backend(function(cpp) {
-    obj <- normL2(data, bench$prd_id)
-    o   <- obj(pars)
-    expect_equal(o$value, expected, tolerance = 1e-4,
-                 info = paste0("cpp=", cpp))
-  })
-})
-
-
-test_that("adding a BLOQ row to data strictly increases the normL2 value", {
-  skip_if_no_compile()
-  bench <- fx_decay_compiled()
-
-  raw_pars <- bench$outerpars_id
-  data_no <- fx_decay_data(pars = raw_pars, sigma = 0.05,
-                           times = seq(0, 10, by = 1), seed = 7L)
-  data_yes <- data_no
-  data_yes$C1$lloq <- 0.1
-
-  for_each_backend(function(cpp) {
-    o_no  <- normL2(data_no,  bench$prd_id)(raw_pars)
-    o_yes <- normL2(data_yes, bench$prd_id)(raw_pars)
-    expect_gt(o_yes$value, o_no$value,
-              label = paste0("cpp=", cpp, " bloq monotonicity"))
-  })
-})
-
 
 test_that("normL2 gradient on a BLOQ dataset equals analytic ALOQ + M3 BLOQ contributions", {
   skip_if_no_compile()
@@ -241,33 +157,14 @@ test_that("normL2 gradient on a BLOQ dataset equals analytic ALOQ + M3 BLOQ cont
   }
   g_ref <- c(A = grad_aloq_A + grad_bloq_A, k = grad_aloq_k + grad_bloq_k)
 
-  for_each_backend(function(cpp) {
-    obj <- normL2(data, bench$prd_id)
-    g_ana <- obj(pars)$gradient
-    expect_equal(unname(g_ana[names(g_ref)]), unname(g_ref),
-                 tolerance = 1e-3, info = paste0("cpp=", cpp))
-  })
+  obj <- normL2(data, bench$prd_id)
+  g_ana <- obj(pars)$gradient
+  expect_equal(unname(g_ana[names(g_ref)]), unname(g_ref),
+               tolerance = 1e-3)
 })
 
 
-test_that("R and C++ backends give the same value on a BLOQ dataset", {
-  skip_if_no_compile()
-  bench <- fx_decay_compiled()
-  data  <- fx_decay_data_bloq(sigma = 0.05, lloq = 0.1,
-                              times = seq(0, 10, by = 1))
-  pars <- bench$outerpars_id
-
-  with_cpp_backend(FALSE, {
-    v_R <- normL2(data, bench$prd_id)(pars)$value
-  })
-  with_cpp_backend(TRUE, {
-    v_C <- normL2(data, bench$prd_id)(pars)$value
-  })
-  expect_equal(v_C, v_R, tolerance = 1e-9)
-})
-
-
-test_that("normL2(optBLOQ = ...) selects the BLOQ method on both backends", {
+test_that("normL2(optBLOQ = ...) selects the BLOQ method", {
   skip_if_no_compile()
   bench <- fx_decay_compiled()
   data  <- fx_decay_data_bloq(sigma = 0.05, lloq = 0.1,
@@ -298,25 +195,13 @@ test_that("normL2(optBLOQ = ...) selects the BLOQ method on both backends", {
     M4BEAL = aloq_value + m4beal_aloq_correction + bloq_m4
   )
 
-  for_each_backend(function(cpp) {
-    for (mode in names(expected)) {
-      obj <- normL2(data, bench$prd_id, optBLOQ = mode)
-      o   <- obj(pars)
-      expect_equal(o$value, expected[[mode]], tolerance = 1e-3,
-                   info = paste0("cpp=", cpp, " mode=", mode))
-    }
-  })
-
-  for (mode in c("M1", "M3", "M4NM", "M4BEAL")) {
-    with_cpp_backend(FALSE, {
-      g_R <- normL2(data, bench$prd_id, optBLOQ = mode)(pars)$gradient
-    })
-    with_cpp_backend(TRUE, {
-      g_C <- normL2(data, bench$prd_id, optBLOQ = mode)(pars)$gradient
-    })
-    expect_equal(g_C, g_R, tolerance = 1e-9,
-                 info = paste0("gradient parity, mode=", mode))
+  for (mode in names(expected)) {
+    obj <- normL2(data, bench$prd_id, optBLOQ = mode)
+    o   <- obj(pars)
+    expect_equal(o$value, expected[[mode]], tolerance = 1e-3, info = mode)
   }
+  # M3 is the default
+  expect_equal(normL2(data, bench$prd_id)(pars)$value, expected[["M3"]], tolerance = 1e-3)
 })
 
 
@@ -348,12 +233,9 @@ test_that("normL2 with sigma = srel*y matches the proportional-error log-likelih
   sigma_pred <- pars[["srel"]] * pred
   expected <- truth_nll_aloq(pred, data$C1$value, sigma_pred)
 
-  for_each_backend(function(cpp) {
-    obj <- normL2(data, ec$prd, errmodel = ec$e)
-    o   <- obj(pars)
-    expect_equal(o$value, expected, tolerance = 1e-4,
-                 info = paste0("cpp=", cpp))
-  })
+  obj <- normL2(data, ec$prd, errmodel = ec$e)
+  o   <- obj(pars)
+  expect_equal(o$value, expected, tolerance = 1e-4)
 })
 
 
@@ -378,12 +260,10 @@ test_that("normL2 gradient with proportional errmodel follows the analytic close
   dwr <- (dpred * sigma_vec - (pred - obs) * dsigma) / sigma_vec^2
   g_ref <- colSums(2 * wr * dwr) + colSums(2 * dlog_sigma)
 
-  for_each_backend(function(cpp) {
-    obj <- normL2(data, ec$prd, errmodel = ec$e)
-    g_ana <- obj(pars)$gradient
-    expect_equal(unname(g_ana[names(g_ref)]), unname(g_ref),
-                 tolerance = 1e-3, info = paste0("cpp=", cpp))
-  })
+  obj <- normL2(data, ec$prd, errmodel = ec$e)
+  g_ana <- obj(pars)$gradient
+  expect_equal(unname(g_ana[names(g_ref)]), unname(g_ref),
+               tolerance = 1e-3)
 })
 
 
@@ -397,23 +277,14 @@ test_that("rows with explicit sigma keep it; NA rows fall through to errmodel", 
   n <- nrow(data$C1)
   data$C1$sigma <- ifelse(seq_len(n) <= n %/% 2, NA_real_, 0.05)
 
-  for_each_backend(function(cpp) {
-    obj <- normL2(data, ec$prd, errmodel = ec$e)
-    o   <- obj(pars)
-    expect_true(is.finite(o$value),
-                label = paste0("cpp=", cpp, " mixed sigma finite"))
-  })
-
   data_na <- data; data_na$C1 <- data_na$C1[is.na(data$C1$sigma), ]
   data_ex <- data; data_ex$C1 <- data_ex$C1[!is.na(data$C1$sigma), ]
   # Use a common time grid across all three so the adaptive integrator
   # produces bit-identical predictions at the shared data times.
   all_times <- sort(unique(data$C1$time))
-  with_cpp_backend(FALSE, {
-    v_full <- normL2(data,    ec$prd, errmodel = ec$e, times = all_times)(pars)$value
-    v_na   <- normL2(data_na, ec$prd, errmodel = ec$e, times = all_times)(pars)$value
-    v_ex   <- normL2(data_ex, ec$prd, errmodel = ec$e, times = all_times)(pars)$value
-  })
+  v_full <- normL2(data,    ec$prd, errmodel = ec$e, times = all_times)(pars)$value
+  v_na   <- normL2(data_na, ec$prd, errmodel = ec$e, times = all_times)(pars)$value
+  v_ex   <- normL2(data_ex, ec$prd, errmodel = ec$e, times = all_times)(pars)$value
   expect_equal(v_full, v_na + v_ex, tolerance = 1e-9)
 })
 
@@ -513,29 +384,6 @@ test_that("normL2 BLOQ M4 + proportional errmodel: value and gradient match", {
 
 
 # ============================================================================
-# Cross-backend parity (C++ kernel vs R reference)
-# ============================================================================
-
-test_that("normL2 cpp kernel agrees with R reference on the linear-decay fixture", {
-  testthat::skip_if_not_installed("cppDE")
-  testthat::skip_on_cran()
-  bench <- fx_decay_compiled()
-  data  <- fx_decay_data(sigma = 0.05)
-  pars  <- bench$outerpars_id
-
-  with_cpp_backend(FALSE, {
-    o_R <- normL2(data, bench$prd_id)(pars)
-  })
-  with_cpp_backend(TRUE, {
-    o_C <- normL2(data, bench$prd_id)(pars)
-  })
-  expect_equal(o_C$value,    o_R$value,    tolerance = 1e-9)
-  expect_equal(o_C$gradient, o_R$gradient, tolerance = 1e-8)
-  expect_equal(o_C$hessian,  o_R$hessian,  tolerance = 1e-8)
-})
-
-
-# ============================================================================
 # chi2 attribute
 # ============================================================================
 
@@ -611,18 +459,15 @@ test_that("normL2 gradient and Hessian follow the order of the parameter vector"
   p1 <- bench$outerpars_id
   p2 <- p1[rev(names(p1))]
 
-  for_each_backend(function(cpp) {
-    obj <- normL2(data, bench$prd_id)
-    o1 <- obj(p1)
-    o2 <- obj(p2)
+  obj <- normL2(data, bench$prd_id)
+  o1 <- obj(p1)
+  o2 <- obj(p2)
 
-    expect_identical(names(o1$gradient), names(p1), info = paste0("cpp=", cpp))
-    expect_identical(names(o2$gradient), names(p2), info = paste0("cpp=", cpp))
-    expect_equal(o1$value, o2$value, info = paste0("cpp=", cpp))
-    expect_equal(o1$gradient[names(p2)], o2$gradient, info = paste0("cpp=", cpp))
-    expect_equal(o1$hessian[names(p2), names(p2)], o2$hessian,
-                 info = paste0("cpp=", cpp))
-  })
+  expect_identical(names(o1$gradient), names(p1))
+  expect_identical(names(o2$gradient), names(p2))
+  expect_equal(o1$value, o2$value)
+  expect_equal(o1$gradient[names(p2)], o2$gradient)
+  expect_equal(o1$hessian[names(p2), names(p2)], o2$hessian)
 })
 
 
@@ -677,25 +522,17 @@ test_that("a prediction cut short is an error, not a read past its rows", {
 
 test_that("an undefined observable counts only at a data point", {
   skip_if_no_compile()
-  d <- file.path(tempdir(), "nl2_nan"); dir.create(d, showWarnings = FALSE)
-  oldwd <- setwd(d); on.exit(setwd(oldwd), add = TRUE)
-
-  # A and B start at 0, so their ratio is 0/0 at t = 0 only.
-  re <- eqnlist() |> addReaction("", "A", "k1") |> addReaction("", "B", "k2")
-  x <- Xs(odemodel(re, modelname = "nl2nan_ode", compile = TRUE), condition = "C1")
-  g <- Y(c(frac = "A/(A+B)"), re, modelname = "nl2nan_obs", compile = TRUE)
-  p <- P(eqnvec(A = "0", B = "0", k1 = "k1", k2 = "k2"), condition = "C1",
-         modelname = "nl2nan_p", compile = TRUE)
+  prd  <- .nl2_fx()$nan
   pars <- c(k1 = 1, k2 = 3)
 
   later <- as.datalist(data.frame(name = "frac", time = c(1, 2), value = 0.25,
                                   sigma = 0.1, condition = "C1"))
-  v <- normL2(later, g * x * p)(pars)
+  v <- normL2(later, prd)(pars)
   expect_true(is.finite(v$value))
   expect_true(all(is.finite(v$gradient)))
   expect_equal(v$value, 2 * log(2 * pi * 0.1^2), tolerance = 1e-8)
 
   at0 <- as.datalist(data.frame(name = "frac", time = 0, value = 0.25,
                                 sigma = 0.1, condition = "C1"))
-  expect_error(normL2(at0, g * x * p)(pars), "NaN at data point\\(s\\) of condition 'C1': frac \\(t = 0\\)")
+  expect_error(normL2(at0, prd)(pars), "NaN at data point\\(s\\) of condition 'C1': frac \\(t = 0\\)")
 })

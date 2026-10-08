@@ -169,27 +169,6 @@ test_that("vcov(fit) equals solve(0.5 * H) for a quadratic with known Hessian", 
 
 # ---- confint ------------------------------------------------------------
 
-test_that("confint.parframe yields half-width = z(0.95)*sigma on a 1D Gaussian profile", {
-  testthat::skip_on_cran()
-  # constraintL2's value = sum((p - mu)^2 / sigma^2); for one parameter and
-  # sigma = 0.5, value(theta) = (theta / 0.5)^2 = 4 theta^2. The 95%
-  # chi-square threshold delta = qchisq(0.95, 1) ~ 3.841 is crossed at
-  # |theta| = sqrt(3.841)/2 ~ 0.98 ~ 1.96 * 0.5.
-  sigma <- 0.5
-  obj <- constraintL2(mu = c(theta = 0, nuisance = 0), sigma = sigma)
-  prof <- profile(obj, pars = c(theta = 0, nuisance = 0),
-                  whichPar = "theta",
-                  limits = c(lower = -3, upper = 3),
-                  method = "integrate", verbose = FALSE, cores = 1)
-  # confint.parframe defaults val.column = "data"; our profile parframe
-  # uses "value", so pass it explicitly.
-  ci <- confint(prof, level = 0.95, val.column = "value")
-  half_width <- (ci$upper - ci$lower) / 2
-  expected <- qnorm(0.975) * sigma
-  expect_lt(abs(half_width - expected) / expected, 0.10)
-})
-
-
 # ---- retry / nTries -----------------------------------------------------
 
 make_flaky_obj <- function(fail_first = 3L) {

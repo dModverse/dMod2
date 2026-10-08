@@ -558,3 +558,22 @@ test_that("species named like sympy objects (Ci, E, S, Q) are plain symbols", {
     expect_true(length(ss) > 0L)
   }
 })
+
+
+test_that("steadyStates writes nothing without file and writes the RDS with it", {
+  dir <- withr::local_tempdir()
+  withr::local_dir(dir)
+  el <- eqnlist() |>
+    addReaction("", "A", "k_in") |>
+    addReaction("A", "", "k_out * A")
+  before <- list.files(tempdir(), pattern = "^steadyStates")
+
+  ss <- steadyStates(el)
+  expect_equal(list.files(dir), character(0))
+  expect_setequal(list.files(tempdir(), pattern = "^steadyStates"), before)
+
+  ss2 <- steadyStates(el, file = "ss.rds")
+  expect_true(file.exists("ss.rds"))
+  expect_identical(readRDS("ss.rds"), ss2)
+  expect_identical(ss2, ss)
+})

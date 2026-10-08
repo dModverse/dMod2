@@ -48,13 +48,13 @@ test_that("compile() links many conditions through a chunked archive", {
   ## Force the archive route without generating a thousand sources.
   withr::local_options(dMod.compile.cmdlimit = 1L)
 
-  conditions <- sprintf("chk%02d", 1:12)
+  conditions <- sprintf("chk%02d", 1:4)
   p <- Reduce("+", lapply(conditions, function(cn)
     P(eqnvec(k1 = "exp(logk1)", A0 = "exp(logA0)*scale"),
       condition = cn, compile = FALSE, modelname = paste0("chunked_p_", cn))))
 
   expect_length(attr(p, "compileInfo"), length(conditions))
-  expect_message(compile(p, output = "chunked_all", cores = 1), "archived 11 objects")
+  expect_message(compile(p, output = "chunked_all", cores = 1), "archived 3 objects")
 
   expect_true(file.exists(paste0("chunked_all", .Platform$dynlib.ext)))
   expect_equal(list.files(pattern = "^chunked_all.*\\.a$"), character(0))

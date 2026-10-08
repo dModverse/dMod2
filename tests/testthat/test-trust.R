@@ -4,17 +4,16 @@
 #   * convergence to the exact minimum of a quadratic in one trust step
 #   * recovery of simulated-truth parameters from a noisy decay dataset
 #   * extra objfun args passed via closure binding (no more ... forwarding)
-#   * parscale rescaling lands at the same minimum
+#   * parscale is deprecated and does not move the optimum
 #   * parupper clamps a single component
 #   * blather returns the per-iter trace
-#
-# Trust is also exercised end-to-end via normL2 -> trust in
-# test-mstrust-profile.R and the existing FOCEI tests.
 
 skip_if_no_compile <- function() {
   testthat::skip_if_not_installed("cppDE")
   testthat::skip_on_cran()
 }
+
+fx_register(multicond = TRUE)
 
 
 # Synthetic quadratic objective in arbitrary dimension. Minimum at `target`.
@@ -95,24 +94,6 @@ test_that("trust honors fixed = ... (held parameters unchanged in argument)", {
 
 
 ## ---- parscale invariance --------------------------------------------
-
-test_that("trust with parscale lands at the same minimum as the unscaled run", {
-  target <- c(a = 1.0, b = -0.5, c = 2.3)
-  obj <- .quadratic_objfn(target)
-  init <- c(a = 0, b = 0, c = 0)
-
-  fit_plain <- trust(obj, init, rinit = 1, rmax = 100, iterlim = 50,
-                     printIter = FALSE)
-  expect_warning(
-    fit_scaled <- trust(obj, init, parscale = c(a = 2, b = 0.5, c = 10),
-                        rinit = 1, rmax = 100, iterlim = 50,
-                        printIter = FALSE),
-    "'parscale' is deprecated")
-  expect_equal(unname(fit_scaled$argument[names(target)]),
-               unname(fit_plain$argument[names(target)]),
-               tolerance = 1e-6)
-})
-
 
 ## ---- bounds clamp the optimum ---------------------------------------
 
@@ -412,11 +393,12 @@ test_that("bounds compose with parscale, parinit on a bound, and minimize = FALS
   # parscale must not move the optimum.
   # Tight tolerances so both runs reach the optimum rather than stopping at
   # their own frame-dependent distance from the bound.
-  scaled <- suppressWarnings(
-    trust(.quadratic_objfn(target), c(x = 0, y = 0),
-          rinit = 1, rmax = 10, parupper = c(x = 1, y = Inf),
-          parscale = c(10, 0.1), iterlim = 200,
-          tolControl = list(gtol = 1e-12)))
+  expect_warning(
+    scaled <- trust(.quadratic_objfn(target), c(x = 0, y = 0),
+                    rinit = 1, rmax = 10, parupper = c(x = 1, y = Inf),
+                    parscale = c(10, 0.1), iterlim = 200,
+                    tolControl = list(gtol = 1e-12)),
+    "'parscale' is deprecated")
   plain  <- trust(.quadratic_objfn(target), c(x = 0, y = 0),
                   rinit = 1, rmax = 10, parupper = c(x = 1, y = Inf),
                   iterlim = 200, tolControl = list(gtol = 1e-12))

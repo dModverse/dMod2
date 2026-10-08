@@ -33,7 +33,7 @@ fx_loaddll <- local({
       data.frame(name = "yB", time = p[, "time"], value = p[, "yB"] + 0.01,
                  sigma = 0.1)))
 
-    cache <<- list(dir = dir, x = x, prd = prd, pouter = pouter,
+    cache <<- list(dir = dir, x = x, g = g, prd = prd, pouter = pouter,
                    obj = normL2(data, prd),
                    # dyn.unload() matches the path string dyn.load() was given.
                    # compile() loads a normalised path and names the library by
@@ -146,4 +146,21 @@ test_that("compiling into a loaded output name yields a fresh library", {
   # Both models stay callable, which is the point of not displacing.
   expect_equal(unname(x1(0:2, c(A = 1, k = 1))[[1]][3, "A"]), exp(-2),
                tolerance = 1e-4)
+})
+
+
+test_that("a multi-condition trafo compiled on its own is named by its modelname", {
+  fx <- fx_loaddll()
+  oldwd <- setwd(fx$dir); on.exit(setwd(oldwd), add = TRUE)
+
+  trafo <- list(a = eqnvec(A = "A0", B = "0", k1 = "k1", k2 = "k2", s = "s_a"),
+                b = eqnvec(A = "A0", B = "0", k1 = "k1", k2 = "k2", s = "s_b"))
+  p <- suppressMessages(P(trafo, modelname = "ld_pmc", compile = TRUE, cores = 1))
+  expect_equal(modelname(p), "ld_pmc")
+
+  # Leaves from another shared object compose with it unchanged.
+  pars <- c(A0 = 1, k1 = 0.5, k2 = 0.3, s_a = 1, s_b = 2)
+  pred <- (fx$g * fx$x * p)(0:2, pars)
+  expect_named(pred, c("a", "b"))
+  expect_equal(unname(pred$b[, "yB"]), 2 * unname(pred$a[, "yB"]))
 })

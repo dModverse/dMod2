@@ -15,39 +15,41 @@ skip_if_no_compile <- function() {
 }
 
 
-# Every observation function the file needs, compiled into one shared object on
-# first use. Prediction and trafo of the decay chain come from the shared fixture.
-.y_fx <- local({
-  cache <- NULL
-  function() {
-    if (!is.null(cache)) return(cache)
-    bench <- fx_decay_compiled()
-    oldwd <- setwd(.dmod_fx_workdir()); on.exit(setwd(oldwd), add = TRUE)
-
-    g_sq <- Y(c(y = "A^2"), f = bench$xfn, condition = NULL,
-              attachInput = FALSE, modelname = "test_Y_sq", compile = FALSE)
-    g_rev <- Y(c(y = "A^2"), f = bench$xfn, condition = NULL,
-               attachInput = FALSE, derivMode = "reverse",
-               modelname = "test_Y_dm_rev", compile = FALSE)
-    g_dual <- Y(c(y = "A^2"), f = bench$xfn, condition = NULL,
-                attachInput = FALSE, derivMode = "forward",
-                modelname = "test_Y_dm_dual", compile = FALSE)
-    g_attach <- Y(c(y = "A"), f = bench$xfn, condition = NULL,
-                  attachInput = TRUE, modelname = "test_Y_attach", compile = FALSE)
-
-    x_np <- Xs(odemodel(as.eqnvec(c(A = "-k*A")), modelname = "noparam_y_ode",
-                        compile = FALSE, backend = "cppDE"))
-    g_np <- Y(c(y1 = "1.0"), f = NULL, states = c("A"),
-              parameters = character(0), derivMode = "forward",
-              compile = FALSE, modelname = "noparam_y_obs")
-
-    compile(g_sq, g_rev, g_dual, g_attach, x_np, g_np,
-            output = "test_Y_all", cores = test_cores())
-    cache <<- list(bench = bench, g_sq = g_sq, g_rev = g_rev, g_dual = g_dual,
-                   g_attach = g_attach, x_np = x_np, g_np = g_np)
-    cache
-  }
+# Every observation function the file needs, linked into the shared fixture's
+# single compile. Prediction and trafo of the decay chain come from the fixture.
+fx_register(extra = function(bench) {
+  g <- Y(c(y = "a*exp(-k*time)"), f = NULL, parameters = c("a", "k"),
+         modelname = "test_Y_xt", compile = FALSE)
+  tr <- function(k) eqnvec(a = "exp(a_log)", k = paste0("exp(", k, ")"), s = "s")
+  list(
+    g_sq = Y(c(y = "A^2"), f = bench$xfn, condition = NULL,
+             attachInput = FALSE, modelname = "test_Y_sq", compile = FALSE),
+    g_rev = Y(c(y = "A^2"), f = bench$xfn, condition = NULL,
+              attachInput = FALSE, derivMode = "reverse",
+              modelname = "test_Y_dm_rev", compile = FALSE),
+    g_dual = Y(c(y = "A^2"), f = bench$xfn, condition = NULL,
+               attachInput = FALSE, derivMode = "forward",
+               modelname = "test_Y_dm_dual", compile = FALSE),
+    g_attach = Y(c(y = "A"), f = bench$xfn, condition = NULL,
+                 attachInput = TRUE, modelname = "test_Y_attach", compile = FALSE),
+    x_np = Xs(odemodel(as.eqnvec(c(A = "-k*A")), modelname = "noparam_y_ode",
+                       compile = FALSE, backend = "cppDE")),
+    g_np = Y(c(y1 = "1.0"), f = NULL, states = c("A"),
+             parameters = character(0), derivMode = "forward",
+             compile = FALSE, modelname = "noparam_y_obs"),
+    g = g,
+    e = Y(c(y = "exp(s)*y"), f = g, attachInput = FALSE,
+          modelname = "test_Y_xt_err", compile = FALSE),
+    e0 = Y(c(y = "exp(s)"), f = NULL, parameters = "s",
+           modelname = "test_Y_xt_err0", compile = FALSE),
+    p = P(list(C1 = tr("k1_log"), C2 = tr("k2_log")),
+          modelname = "test_Y_xt_p", compile = FALSE),
+    gs = Y(c(y = "s*A"), f = bench$xfn, attachInput = FALSE,
+           modelname = "test_Y_scale", compile = FALSE))
 })
+
+.y_fx <- function() c(list(bench = fx_decay_compiled()), fx_extra())
+.y_xt_fx <- .y_fx
 
 
 ## ---- Value: linear observable ------------------------------------------
@@ -168,32 +170,6 @@ test_that("Y with pure-numeric observable composes with an Xs prediction", {
 # Parameter derivatives the prediction does not provide
 # ============================================================================
 
-# Observables of time alone (on Xt()) with a two-condition log trafo and error
-# models, plus a scaled observable on the decay ODE. One shared object.
-.y_xt_fx <- local({
-  cache <- NULL
-  function() {
-    if (!is.null(cache)) return(cache)
-    bench <- fx_decay_compiled()
-    oldwd <- setwd(.dmod_fx_workdir()); on.exit(setwd(oldwd), add = TRUE)
-
-    g <- Y(c(y = "a*exp(-k*time)"), f = NULL, parameters = c("a", "k"),
-           modelname = "test_Y_xt", compile = FALSE)
-    e <- Y(c(y = "exp(s)*y"), f = g, attachInput = FALSE,
-           modelname = "test_Y_xt_err", compile = FALSE)
-    e0 <- Y(c(y = "exp(s)"), f = NULL, parameters = "s",
-            modelname = "test_Y_xt_err0", compile = FALSE)
-    tr <- function(k) eqnvec(a = "exp(a_log)", k = paste0("exp(", k, ")"), s = "s")
-    p <- P(list(C1 = tr("k1_log"), C2 = tr("k2_log")),
-           modelname = "test_Y_xt_p", compile = FALSE)
-    gs <- Y(c(y = "s*A"), f = bench$xfn, attachInput = FALSE,
-            modelname = "test_Y_scale", compile = FALSE)
-    compile(g, e, e0, p, gs, output = "test_Y_xt_all", cores = test_cores())
-    cache <<- list(bench = bench, g = g, e = e, e0 = e0, p = p, gs = gs)
-    cache
-  }
-})
-
 test_that("g * Xt() * P() differentiates by the outer parameters", {
   skip_if_no_compile()
   withr::local_options(dMod.batch.check = TRUE)
@@ -270,4 +246,16 @@ test_that("normL2 on g * Xt() * P() takes fixed parameters", {
   part <- obj(pars[-4], fixed = pars[4])
   expect_equal(part$value, full$value)
   expect_equal(part$gradient, full$gradient[names(pars)[-4]])
+})
+
+
+test_that("generated sources go to dMod.outdir when it is set", {
+  out <- withr::local_tempdir()
+  cwd <- withr::local_tempdir()
+  withr::local_dir(cwd)
+  withr::local_options(dMod.outdir = out)
+  Y(c(y = "a*x"), f = NULL, states = "x", parameters = "a",
+    modelname = "test_Y_outdir", compile = FALSE)
+  expect_equal(list.files(cwd), character(0))
+  expect_true(any(startsWith(list.files(out), "test_Y_outdir")))
 })
