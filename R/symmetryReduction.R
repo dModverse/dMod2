@@ -1,4 +1,4 @@
-#' Remove detected symmetries by reparametrisation
+#' Remove Detected Symmetries by Reparametrisation
 #'
 #' Turns the non-identifiable directions of a [symmetryDetection()] result into a
 #' parameter transformation that removes them. A scaling fixes one coordinate to 1.
@@ -13,21 +13,23 @@
 #'
 #' @param object A `symmetrydetection` result from [symmetryDetection()].
 #' @param fixed Coordinates with known values; scalings they remove are dropped.
-#'   Defaults to the gauge of `object`.
-#' @param positive Coordinates known to be positive: `TRUE` (default, all),
-#'   `FALSE` (none) or a character vector.
+#'   `NULL` (default) uses the gauge of `object`.
+#' @inheritParams symmetryDetection
 #' @param reportZeroCompatibility Logical. Report which coordinates each block can
-#'   drive to 0.
-#' @param dPoly Degree bound of polynomial and rational invariants.
-#' @param dDarboux Degree bound of the Darboux polynomials.
+#'   drive to 0. Defaults to `FALSE`.
+#' @param dPoly Degree bound of polynomial and rational invariants. Defaults
+#'   to 3.
+#' @param dDarboux Degree bound of the Darboux polynomials. Defaults to 2.
 #' @param dExp Numerator degree bound of exponential factors; `0` skips them.
-#' @param separable Logical. Solve separable blocks by quadratures.
-#' @param alternatives Logical. Also build the charts of the other admissible pins
-#'   and list them in `$alternatives`; they are built anyway when the first chart
-#'   holds a root that does not simplify.
+#'   Defaults to 2.
+#' @param separable Logical. Solve separable blocks by quadratures. Defaults to
+#'   `TRUE`.
+#' @param alternatives Logical. Also return the charts of the other admissible
+#'   pins in `$alternatives`. Defaults to `FALSE`.
 #' @param timeout Time limit in seconds for the chart search of one block; a block not
-#'   solved in time keeps its invariants (`"invariantOnly"`).
-#' @param verbose Logical. Report the progress per block and stage.
+#'   solved in time keeps its invariants (`"invariantOnly"`). Defaults to 600.
+#' @param verbose Logical. Report the progress per block and stage. Defaults to
+#'   `FALSE`.
 #' @param ... Not used.
 #'
 #' @return An object of class `symmetryreduction`:
@@ -53,8 +55,15 @@
 #'   `print()` shows the verdict, the trafo and the new parameters, `summary()` one
 #'   line per block. Both take `width`, `summary()` also `verbose`.
 #'
-#' @seealso [symmetryDetection()]
-#' @example inst/examples/symmetryReduction.R
+#' @seealso [symmetryDetection()], [P()]
+#' @examplesIf requireNamespace("reticulate", quietly = TRUE) && reticulate::py_module_available("symident")
+#' f <- eqnvec(m = "ktx - dm*m", p = "ktl*m - dp*p")
+#' g <- eqnvec(y = "p")
+#' res <- symmetryDetection(f, g, reconstruct = TRUE, verbose = FALSE)
+#' red <- symmetryReduction(res)
+#' red
+#' red$trafo
+#' symmetryDetection(f, g, trafo = red$trafo, verbose = FALSE)$identifiable
 #' @export
 symmetryReduction <- function(object, fixed = NULL, positive = TRUE, dPoly = 3L,
                               dDarboux = 2L, dExp = 2L, separable = TRUE,

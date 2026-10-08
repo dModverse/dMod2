@@ -1,65 +1,104 @@
-#' Time-course data for the JAK-STAT cell signaling pathway
+#' Time-Course Data for the JAK-STAT Signaling Pathway
 #'
-#' Phosphorylated Epo receptor (pEpoR), phosphorylated STAT in the
-#' cytoplasm (tpSTAT) and total STAT (tSTAT) in the cytoplasm have been 
-#' measured at times 0, ..., 60.
+#' Phosphorylated Epo receptor (`pEpoR`), total phosphorylated STAT in the
+#' cytoplasm (`tpSTAT`) and total STAT in the cytoplasm (`tSTAT`), measured
+#' between minute 0 and 60 after stimulation with Epo.
 #'
+#' @format A data frame with 47 rows and the columns `time` (minutes),
+#'   `name`, `value`, `sigma` and `condition` (`"Epo"`).
+#' @source Swameye I, Mueller TG, Timmer J, Sandra O, Klingmueller U (2003),
+#'   Identification of nucleocytoplasmic cycling as a remote sensor in cellular
+#'   signaling by databased modeling. PNAS 100(3):1028-1033.
+#' @seealso [as.datalist()]
+#' @examples
+#' data(jakstat)
+#' plotData(as.datalist(jakstat))
 #' @name jakstat
 #' @docType data
 #' @keywords data
 NULL
 
 
-#' Time-course data for the Bile-Acid demonstration model
+#' Time-Course Data for the Bile Acid Demonstration Model
 #'
+#' Bile acid amounts in the buffer (`buffer`) and in the cells (`cellular`)
+#' between 0.1 and 41 time units, in two conditions, `"closed"` and `"open"`.
+#'
+#' @format A data frame with 32 rows and the columns `name`, `time`, `value`,
+#'   `sigma`, `lloq` (lower limit of quantification, `-Inf` throughout) and
+#'   `condition`.
+#' @seealso `system.file("examples", "BA_transport.R", package = "dMod2")`
+#'   builds and fits the model.
+#' @examples
+#' data(badata)
+#' plotData(as.datalist(badata))
 #' @name badata
 #' @docType data
 #' @keywords data
 NULL
 
 
-#' Time-course data for JAK2-STAT5 signalling in CFU-E cells
+#' Time-Course Data for JAK2-STAT5 Signaling in CFU-E Cells
 #'
 #' 541 measurements from thirteen experiments on Epo stimulated erythroid
 #' progenitor cells: phosphorylated JAK2 and Epo receptor, total and
 #' phosphorylated STAT5, the feedback proteins CIS, SOCS3 and SHP1, their
-#' transcripts, and dose responses at four times. `value` is the recorded
-#' signal divided by the maximum of its own column, so the scale parameters
-#' are estimated in that gauge; `sigma` is `NA` throughout, the standard
-#' deviations belong to the fit. `condition` keys the 36 experimental
-#' conditions, `experiment` names the recording each one comes from and
-#' selects its scale and offset parameters. `ActD` is 1 where actinomycin D
-#' was added, which inverts the column of the same name in the PEtab copy of
-#' the problem.
+#' transcripts, and dose responses at four times.
+#'
+#' @format A data frame with 541 rows and 11 columns:
+#' \describe{
+#'   \item{`time`}{minutes after stimulation.}
+#'   \item{`name`}{observable, 20 levels.}
+#'   \item{`value`}{signal divided by the maximum of its observable.}
+#'   \item{`sigma`}{`NA` throughout; the errors are estimated in the fit.}
+#'   \item{`condition`}{one of 36 experimental conditions.}
+#'   \item{`experiment`}{one of 13 experiments; selects the scale and offset
+#'     parameters.}
+#'   \item{`epo_level`}{Epo dose.}
+#'   \item{`ActD`}{1 where actinomycin D was added, else 0. The PEtab copy
+#'     of the problem codes it the other way round.}
+#'   \item{`CISoe`, `SOCS3oe`, `SHP1oe`}{1 where CIS, SOCS3 or SHP1 is
+#'     overexpressed, else 0.}
+#' }
 #'
 #' @source Bachmann J, Raue A, Schilling M, Boehm ME, Kreutz C, Kaschek D,
 #' Busch H, Gretz N, Lehmann WD, Timmer J, Klingmueller U (2011),
 #' Division of labor by dual feedback regulators controls JAK2/STAT5
 #' signaling over broad ligand range. Mol Syst Biol 7:516. Values as
 #' distributed in the PEtab benchmark collection, model
-#' `Bachmann_MSB2011`, which ships with the package as
-#' `inst/extdata/petab_bachmann`.
-#' @seealso `inst/examples/example_BachmannMSB2011.R` builds the model.
+#' `Bachmann_MSB2011`, which is installed with the package, see
+#' `system.file("extdata", "petab_bachmann", package = "dMod2")`.
+#' @seealso `system.file("examples", "example_BachmannMSB2011.R", package =
+#'   "dMod2")` builds the model.
+#' @examples
+#' data(bachmann)
+#' head(bachmann)
 #' @name bachmann
 #' @docType data
 #' @keywords data
 NULL
 
 
-#' Time-course data for STAT5 dimerisation in BaF3-EpoR cells
+#' Time-Course Data for STAT5 Dimerization in BaF3-EpoR Cells
 #'
 #' Relative amounts of phosphorylated STAT5A (`pSTAT5A_rel`), phosphorylated
 #' STAT5B (`pSTAT5B_rel`) and of STAT5A within the total STAT5 pool
 #' (`rSTAT5A_rel`), measured at 16 time points after stimulation with Epo.
-#' `sigma` is `NA` throughout: the measurement uncertainties are estimated
-#' along with the model parameters.
 #'
+#' @format A data frame with 48 rows and the columns `time` (minutes),
+#'   `name`, `value`, `sigma` (`NA` throughout; the errors are estimated in
+#'   the fit) and `condition` (`"Boehm2014"`).
 #' @source Boehm ME, Adlung L, Schilling M, Roth S, Klingmueller U, Lehmann WD
 #' (2014), Identification of isoform-specific dynamics in
 #' phosphorylation-dependent STAT5 dimerization by quantitative mass
 #' spectrometry and mathematical modeling. J Proteome Res 13(12):5685-5694.
 #' Values as distributed in the PEtab benchmark collection, model
 #' `Boehm_JProteomeRes2014`.
+#' @seealso `system.file("examples", "example_Boehm_JProteomeRes2014.R",
+#'   package = "dMod2")` builds the model.
+#' @examples
+#' data(boehm)
+#' plotData(as.datalist(boehm))
 #' @name boehm
 #' @docType data
 #' @keywords data
@@ -69,15 +108,15 @@ NULL
 
 ## combine (moved from tools.R) ----------------------------------------------
 
-#' Combine several data.frames by rowbind
-#' 
-#' @param ... data.frames or matrices with not necessarily overlapping colnames
-#' @details This function is useful when separating models into independent csv model files,
-#' e.g.~a receptor model and several downstream pathways. Then, the models can be recombined 
-#' into one model by `combine()`.
-#' 
-#' @return A `data.frame`
-#' @export
+#' Combine Data Frames or Matrices by Rows
+#'
+#' Binds data frames or matrices by rows after adding the columns each one
+#' lacks: `NA` for data frames, 0 for matrices.
+#'
+#' @param ... Data frames or matrices, with column names that need not
+#'   overlap. `NULL` entries are dropped.
+#'
+#' @return A data frame or matrix with the union of the column names.
 #' @examples
 #' data1 <- data.frame(Description = "reaction 1", Rate = "k1*A", A = -1, B = 1)
 #' data2 <- data.frame(Description = "reaction 2", Rate = "k2*B", B = -1, C = 1)
@@ -128,29 +167,29 @@ combine <- function(...) {
 
 ## wide2long (moved from tools.R) --------------------------------------------
 
-#' Translate wide output format (e.g., from ODE solver) into long format
+#' Translate Wide Format into Long Format
 #'
-#' Converts simulation output in wide format into a tidy long format suitable for
-#' plotting or further analysis (e.g., with \pkg{ggplot2}). The function assumes
-#' that the first column of \code{out} represents a time-like variable and the
-#' remaining columns contain values.
+#' Converts output in wide format, e.g. of a prediction, into long format with
+#' one row per value.
 #'
-#' @param out A \code{data.frame}, \code{matrix}, or a \code{list} of matrices in wide format.
-#' @param keep Integer vector specifying the column indices to keep (default is \code{1}).
-#' @param na.rm Logical. If \code{TRUE}, missing values are removed in the long-format output.
+#' @param out A data frame, matrix, or list of those, in wide format.
+#' @param keep Integer vector, the columns kept as identifiers. Defaults to 1,
+#'   the time column.
+#' @param na.rm Logical. `TRUE` removes rows with missing values. Defaults to
+#'   `FALSE`.
 #'
-#' @details
-#' If \code{out} is a list, the list names are added as an additional column named
-#' \code{"condition"}. This is particularly useful for plotting results from multiple
-#' simulation conditions with \pkg{ggplot2}.
-#'
-#' @return A \code{data.frame} in long format with the following columns:
-#' \itemize{
-#'   \item \code{"time"} -- values from \code{out[, 1]}.
-#'   \item \code{"name"} -- column names from \code{out[, -1]}.
-#'   \item \code{"value"} -- corresponding numeric values.
-#'   \item \code{"condition"} -- if \code{out} was a list, contains the list names.
+#' @return A data frame with the kept columns and the columns
+#' \describe{
+#'   \item{`name`}{the column names of the other columns of `out`.}
+#'   \item{`value`}{their values.}
+#'   \item{`condition`}{for a list, its names, or the list positions if it
+#'     has none.}
 #' }
+#' @seealso [long2wide()]
+#' @examples
+#' out <- cbind(time = 0:2, A = c(1, 0.5, 0.25), B = c(0, 0.5, 0.75))
+#' wide2long(out)
+#' wide2long(list(C1 = out, C2 = out))
 #'
 #' @export
 wide2long <- function(out, keep = 1, na.rm = FALSE) {
@@ -216,10 +255,17 @@ wide2long.list <- function(out, keep = 1, na.rm = FALSE) {
 
 ## long2wide (moved from tools.R) --------------------------------------------
 
-#' Translate long to wide format (inverse of wide2long.matrix) 
-#' 
-#' @param out data.frame in long format 
-#' @return data.frame in wide format 
+#' Translate Long Format into Wide Format
+#'
+#' Inverse of [wide2long()] for a single condition.
+#'
+#' @param out Data frame in long format with time, name and value as its
+#'   first three columns, each name having a value at every time.
+#' @return A matrix in wide format, one column per name after the time column.
+#' @seealso [wide2long()]
+#' @examples
+#' out <- cbind(time = 0:2, A = c(1, 0.5, 0.25), B = c(0, 0.5, 0.75))
+#' long2wide(wide2long(out))
 #' @export
 long2wide <- function(out) {
   
@@ -239,12 +285,15 @@ long2wide <- function(out) {
 
 ## lbind (moved from tools.R) ------------------------------------------------
 
-#' Bind named list of data.frames into one data.frame
-#' 
-#' @param mylist A named list of data.frame. The data.frames are expected to have the same structure.
-#' @details Each data.frame is augmented by a "condition" column containing the name attribute of
-#' the list entry. Subsequently, the augmented data.frames are bound together by `rbind`.
-#' @return data.frame with the original columns augmented by a "condition" column.
+#' Bind a Named List of Data Frames into One Data Frame
+#'
+#' Adds to each data frame a column `condition` with its name in the list and
+#' binds them by rows.
+#'
+#' @param mylist A named list of data frames with the same columns.
+#' @return A data frame with the original columns and `condition`.
+#' @examples
+#' lbind(list(C1 = data.frame(x = 1:2), C2 = data.frame(x = 3)))
 #' @export
 lbind <- function(mylist) {
   

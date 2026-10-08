@@ -19,7 +19,9 @@ Authors@R: c(
     person("Marcus", "Rosenblatt", email = "marcus.rosenblatt@gmail.com",
            role = "ctb"),
     person("Svenja", "Kemmer", email = "svenja.kemmer@fdm.uni-freiburg.de",
-           role = "ctb"))
+           role = "ctb"),
+    person("John", "Fox", role = "ctb",
+           comment = "Signature and argument check of rref()"))
 Description: Tools for dynamic modeling and parameter estimation in ordinary
     differential equation (ODE) models of reaction networks. Models are built
     symbolically and compiled to C/C++ with first- and second-order

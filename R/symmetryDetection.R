@@ -1,4 +1,4 @@
-#' Structural non-identifiabilities of an ODE model
+#' Structural Non-Identifiabilities of an ODE Model
 #'
 #' @description Finds the directions in parameters and initial values along which
 #'   the observations of a model do not change: the nullspace of the observability
@@ -42,24 +42,26 @@
 #'   direction is reported only if it is non-identifiable in every condition.
 #' @param equilibrate Logical. Start at a steady state of `f` with the inputs at 0;
 #'   the earliest events apply on top. Coupled steady states may need msolve, which
-#'   `symident.install_msolve()` builds or `SYMIDENT_MSOLVE` points to.
+#'   `symident.install_msolve()` builds or `SYMIDENT_MSOLVE` points to. Defaults
+#'   to `FALSE`.
 #' @param reduceCQ Logical, [eqnlist] only. Report the freedom of a conserved moiety
-#'   on its total (`TRUE`) or on the initial value of one species (`FALSE`).
+#'   on its total (`TRUE`) or on the initial value of one species (`FALSE`,
+#'   default).
 #' @param freeInitial States, at most one per conserved quantity, holding the free
 #'   resting value of their moiety under `equilibrate = TRUE, reduceCQ = FALSE`.
 #' @param reconstruct Logical. Return general directions as exact rational functions
-#'   instead of their support.
+#'   instead of their support. Defaults to `FALSE`.
 #' @param positive Coordinates known to be positive: `TRUE` (default, all), `FALSE`
 #'   (none) or a character vector.
 #' @param verify Logical. Check that the rank has saturated where the Lie order is
-#'   not certified; the result is in `$info$verification`.
-#' @param cores Number of threads and worker processes.
+#'   not certified; the result is in `$info$verification`. Defaults to `TRUE`.
+#' @param cores Number of threads and worker processes. Defaults to 1.
 #' @param control A [reconstControl()] list.
 #' @param scalingsOnly Logical. Only the scaling symmetries, from an exact integer
-#'   kernel; `identifiable`, `rank` and `dim` are `NA`.
+#'   kernel; `identifiable`, `rank` and `dim` are `NA`. Defaults to `FALSE`.
 #' @param symEngine `"modular"` (default, finite fields) or `"symbolic"` (sympy, small
 #'   models without `equilibrate` and later events).
-#' @param verbose Logical. Print the result.
+#' @param verbose Logical. Print the result. Defaults to `TRUE`.
 #'
 #' @return An object of class `symmetrydetection`:
 #'   \describe{
@@ -82,12 +84,24 @@
 #'   computation. Both take `verbose` and `width`.
 #'
 #' @details The analysis starts at the earliest event; later events split the time
-#'   line into segments. Exponentials and trigonometric functions of states enter as
-#'   auxiliary states; directions are reported in the original functions. Switches
-#'   of symident are read from the environment variables `SYMIDENT_*` and from the
-#'   options `dMod.sym.*`.
+#'   line into segments. Directions are reported in the original coordinates.
 #'
-#' @example inst/examples/symmetryDetection.R
+#'   Every environment variable `SYMIDENT_<NAME>` and every option
+#'   `dMod.sym.<name>` set in R is passed to symident for the call, the option
+#'   name converted to snake case. The environment variables a user may need
+#'   are `SYMIDENT_MSOLVE`, the path of the msolve executable (unset by
+#'   default, msolve is then searched in the symident cache and on the
+#'   `PATH`), and `SYMIDENT_CACHE`, the directory of that cache (by default
+#'   `~/.cache/symident` on Linux). The other switches are diagnostic, see the
+#'   symident documentation at <https://dmodverse.github.io/symident/>.
+#'
+#' @seealso [symmetryReduction()], [reconstControl()]
+#' @examplesIf requireNamespace("reticulate", quietly = TRUE) && reticulate::py_module_available("symident")
+#' f <- eqnvec(m = "ktx - dm*m", p = "ktl*m - dp*p")
+#' g <- eqnvec(y = "p")
+#' res <- symmetryDetection(f, g, reconstruct = TRUE)
+#' summary(res)
+#' res$identifiable
 #' @export
 symmetryDetection <- function(f = NULL, g = NULL, trafo = NULL, parameters = NULL,
                               fixed = NULL, gaugePreference = FALSE, forcings = NULL,
@@ -122,42 +136,46 @@ symmetryDetection <- function(f = NULL, g = NULL, trafo = NULL, parameters = NUL
   invisible(res)
 }
 
-#' Settings of the observability engine
+#' Settings of the Observability Engine
 #'
 #' Saturation and closed-form reconstruction settings for
 #' `symmetryDetection(control = reconstControl())`. Raise the caps to reconstruct
 #' wide or high-degree directions, at the cost of more samples.
 #'
 #' @param relevanceCap Maximum number of coordinates in one entry of a direction
-#'   for the dense fit; wider entries use sparse interpolation.
+#'   for the dense fit; wider entries use sparse interpolation. Defaults to 6.
 #' @param relevanceCapDir Maximum number of coordinates in one direction; a wider
-#'   one is reported by its support.
+#'   one is reported by its support. Defaults to 24.
 #' @param relevanceCapSparse Maximum number of coordinates in one entry for the
 #'   sparse (Ben-Or/Tiwari) fit; a wider entry is reported by its support.
-#' @param degreeCap Total degree bound of the dense rational fit.
-#' @param sampleSlack Number of samples beyond the minimum of the fit.
+#'   Defaults to 30.
+#' @param degreeCap Total degree bound of the dense rational fit. Defaults to 4.
+#' @param sampleSlack Number of samples beyond the minimum of the fit. Defaults
+#'   to 5.
 #' @param probeRetries Number of retries of the relevance probe when a
-#'   perturbation changes the pivots.
+#'   perturbation changes the pivots. Defaults to 8.
 #' @param laurentDegNum,laurentDegDen Numerator degree and monomial denominator
-#'   degree bounds of the sparse Laurent fit.
+#'   degree bounds of the sparse Laurent fit. Default to 4 and 2.
 #' @param laurentCandCap Maximum number of candidate monomials of the Laurent and
-#'   general sparse fits.
-#' @param termCap Maximum number of terms of a sparse entry.
+#'   general sparse fits. Defaults to 200000.
+#' @param termCap Maximum number of terms of a sparse entry. Defaults to 60.
 #' @param generalDegNum,generalDegDen Numerator and denominator degree bounds of the
-#'   general sparse rational fit.
+#'   general sparse rational fit. Default to 4 and 3.
 #' @param gapOrderCap Maximum order of the power series in the time between
-#'   events.
+#'   events. Defaults to 8.
 #' @param minsupportCandCap Maximum number of column subsets searched for
-#'   directions with small support.
+#'   directions with small support. Defaults to 20000.
 #' @param perprimeCap Maximum number of samples per prime for the reconstruction
-#'   under `equilibrate = TRUE`.
+#'   under `equilibrate = TRUE`. Defaults to 120.
 #' @param perprimeMinPrimes Minimum number of primes with samples for a
-#'   reconstruction under `equilibrate = TRUE`.
+#'   reconstruction under `equilibrate = TRUE`. Defaults to 3.
 #' @param timeout Time limit in seconds for the reconstruction. Directions not
 #'   finished in time are reported by their support. `Inf` (default) sets no limit.
-#' @return A `reconstControl` list.
+#' @return A list of class `reconstcontrol` with the settings.
 #' @seealso [symmetryDetection()]
 #' @export
+#' @examples
+#' reconstControl(degreeCap = 6L, timeout = 60)
 reconstControl <- function(relevanceCap = 6L, relevanceCapDir = 24L, relevanceCapSparse = 30L,
                            degreeCap = 4L, sampleSlack = 5L, probeRetries = 8L,
                            laurentDegNum = 4L, laurentDegDen = 2L, laurentCandCap = 200000L,

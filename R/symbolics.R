@@ -1,9 +1,24 @@
-#' Return some useful forcing functions as strings
-#' 
-#' @param type Which function to be returned
-#' @param parameters Named vector, character or numeric. Replace parameters by the corresponding values
-#' in `parameters`.
-#' @return String with the function
+#' Forcing Functions as Strings
+#'
+#' Returns the expression of a common input function of `time`:
+#' \describe{
+#'   \item{`"Gauss"`}{Gaussian peak with parameters `scale`, `mu`, `tau`.}
+#'   \item{`"Fermi"`}{decreasing step with parameters `scale`, `mu`, `tau`.}
+#'   \item{`"1-Fermi"`}{increasing step with parameters `scale`, `mu`, `tau`.}
+#'   \item{`"MM"`}{saturating increase with parameters `slope`, `vmax`.}
+#'   \item{`"Signal"`}{rise and decay with parameters `max1`, `max2`, `tau1`,
+#'     `tau2`.}
+#'   \item{`"Dose"`}{smooth box of total amount `Dose` from `Tlag + Tinit`
+#'     to `Tlag + Tinit + Tduration`.}
+#' }
+#'
+#' @param type The function, one of the names above. Defaults to `"Gauss"`.
+#' @param parameters Named character or numeric vector. Replaces the
+#'   parameters named by it with its values. Defaults to `NULL`.
+#' @return A character string with the expression.
+#' @examples
+#' forcingsSymb("Gauss")
+#' forcingsSymb("Fermi", parameters = c(scale = 1, tau = "0.5"))
 #' @export
 forcingsSymb <- function(type =c("Gauss", "Fermi", "1-Fermi", "MM", "Signal", "Dose"), parameters = NULL) {
   
@@ -43,10 +58,11 @@ forcingsSymb <- function(type =c("Gauss", "Fermi", "1-Fermi", "MM", "Signal", "D
 
 
 #' Get coefficients from a character
-#' 
+#'
 #' @param char character, e.g. "2*x + y"
 #' @param symbol single character, e.g. "x" or "y"
 #' @return numeric vector with the coefficients
+#' @noRd
 getCoefficients <- function(char, symbol) {
   
   pdata <- getParseData(parse(text = char, keep.source = TRUE))
@@ -67,12 +83,14 @@ getCoefficients <- function(char, symbol) {
 }
 
 
-#' Place top elements into bottom elements
-#' 
-#' @param variables named character vector
-#' @details If the names of top vector elements occur in the bottom of the vector, 
-#' they are replaced by the character of the top entry. Useful for steady state conditions.
-#' @return named character vector of the same length as `variables`
+#' Substitute Earlier Entries into Later Ones
+#'
+#' Replaces, for each entry, its name in all later entries by the entry in
+#' parentheses, so that no entry depends on an earlier name, e.g. for steady
+#' state expressions.
+#'
+#' @param variables Named character vector.
+#' @return Named character vector of the same length as `variables`.
 #' @examples resolveRecurrence(c(A = "k1*B/k2", C = "A*k3+k4", D="A*C*k5"))
 #' @export
 resolveRecurrence <- function (variables) {
@@ -94,11 +112,14 @@ resolveRecurrence <- function (variables) {
 
 ## getElements (moved from toolsMarcus.R) ------------------------------------
 
-#' Get Symbols and Numeric constants from a character
+#' Get Symbols and Numeric Constants from a Character
 #'
-#' @param char Character vector (e.g. equation)
-#' @param exclude Character vector, the symbols to be excluded from the return value
-#' 
+#' @param char Character vector of expressions. Entries `"0"` are skipped.
+#' @param exclude Character vector of symbols to drop from the result.
+#'   Defaults to `NULL`.
+#' @return Character vector of the symbols and numeric constants in order of
+#'   appearance, with repetitions; `NULL` if `char` is `NULL`.
+#' @seealso [getSymbols()]
 #' @export
 #' 
 #' @examples getElements(c("A*AB+B^2"))
@@ -121,11 +142,13 @@ getElements <- function (char, exclude = NULL)
 
 ## blockdiagSymb (moved from tools.R) ----------------------------------------
 
-#' Embed two matrices into one blockdiagonal matrix
-#' 
-#' @param M matrix of type character
-#' @param N matrix of type character
-#' @return Matrix of type character containing M and N as upper left and lower right block
+#' Embed Two Matrices into One Block Diagonal Matrix
+#'
+#' @param M Matrix, or `NULL`.
+#' @param N Matrix, or `NULL`.
+#' @return Matrix with `M` as upper left and `N` as lower right block and 0
+#'   elsewhere, with the dimnames of both. If one argument is `NULL`, the
+#'   other; if both are, `NULL`.
 #' @examples
 #' M <- matrix(1:9, 3, 3, dimnames = list(letters[1:3], letters[1:3]))
 #' N <- matrix(1:4, 2, 2, dimnames = list(LETTERS[1:2], LETTERS[1:2]))

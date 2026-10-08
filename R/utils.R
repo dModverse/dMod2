@@ -6,19 +6,20 @@
 
 ## utils.R, general-purpose utility functions
 
-#' Compare two objects and return differences
-#' 
-#' Works either on a list or on two arguments. In case of a list,
-#' comparison is done with respect to a reference entry. Besides the
-#' objects themselves also some of their attributes are compared,
-#' i.e. "equations", "parameters" and "events" and "forcings".
-#' 
-#' @param vec1 object of class [eqnvec], `character` or
-#' `data.frame`. Alternatively, a list of such objects.
-#' @param vec2 same as vec1. Not used if vec1 is a list.
-#' @param reference numeric of length one, the reference entry.
-#' @param ... arguments going to the corresponding methods
-#' @return `data.frame` or list of data.frames with the differences. 
+#' Compare Two Objects and Return Differences
+#'
+#' Works on two objects or on a list of objects. A list is compared entry by
+#' entry with a reference entry, including the attributes `"equations"`,
+#' `"parameters"`, `"events"` and `"forcings"` of the entries.
+#'
+#' @param vec1 An [eqnvec], character vector or data frame, or a list of such
+#'   objects or of objects with the attributes above.
+#' @param vec2 Same as `vec1`. Not used if `vec1` is a list.
+#' @param reference Integer, the reference entry of a list. Defaults to 1.
+#' @param ... Arguments passed to the methods.
+#' @return A data frame of the entries that differ, are missing in `vec2`
+#'   or are additional in `vec2`, or `NULL` if there are none. For a list, a
+#'   list of those per compared object and attribute.
 #' 
 #' @export
 #' @examples
@@ -171,6 +172,7 @@ compare.data.frame <- function(vec1, vec2 = NULL, ...) {
 #' @param seq1 Vector, numeric or character
 #' @param seq2 Vector, numeric or character
 #' @return Matrix of combinations of elements of `seq1` and `seq2`
+#' @noRd
 expand.grid.alt <- function(seq1, seq2) {
   cbind(Var1=rep.int(seq1, length(seq2)), Var2=rep(seq2, each=length(seq1)))
 }
@@ -178,18 +180,21 @@ expand.grid.alt <- function(seq1, seq2) {
 
 
 
-#' Print list of dMod objects in .GlobalEnv
-#' 
-#' @description Lists the objects for a set of classes.
-#'   
-#' @param classlist List of object classes to print.
-#' @param envir Alternative environment to search for objects.
-#' @examples 
-#' \dontrun{
-#' lsdMod()
-#' lsdMod(classlist = "prdfn", envir = environment(obj)) 
-#' }
-#' 
+#' List dMod Objects in an Environment
+#'
+#' @param classlist Character vector of classes. Defaults to `"odemodel"`,
+#'   `"parfn"`, `"prdfn"`, `"obsfn"`, `"objfn"` and `"datalist"`.
+#' @param envir Environment to search. Defaults to the global environment.
+#' @return Named character vector of the names of the objects of each class;
+#'   the names of the vector are the classes, numbered when a class has more
+#'   than one object.
+#' @examples
+#' env <- new.env()
+#' assign("data", as.datalist(data.frame(name = "A", time = 0, value = 1,
+#'                                       sigma = 1, condition = "C1")),
+#'        envir = env)
+#' lsdMod(envir = env)
+#'
 #' @export
 lsdMod <- function(classlist = c("odemodel", "parfn", "prdfn", "obsfn", "objfn", "datalist"), envir = .GlobalEnv){
   glist <- as.list(envir)
@@ -210,17 +215,22 @@ lsdMod <- function(classlist = c("odemodel", "parfn", "prdfn", "obsfn", "objfn",
 
 
 
-#' Select attributes.
-#' 
-#' @description Select or discard attributes from an object.
-#'   
-#' @param x The object to work on
-#' @param atr An optional list of attributes which are either kept or removed. 
-#'   This parameter defaults to dim, dimnames, names,  col.names, and row.names.
-#' @param keep For keep = TRUE, atr is a positive list on attributes which are 
-#'   kept, for keep = FALSE, \option{atr} are removed.
-#'   
-#' @return x with selected attributes.
+#' Select Attributes
+#'
+#' Keeps or removes attributes of an object.
+#'
+#' @param x An object.
+#' @param atr Character vector of attribute names. `NULL` (default) stands for
+#'   `"class"`, `"dim"`, `"dimnames"`, `"names"`, `"col.names"` and
+#'   `"row.names"`.
+#' @param keep Logical. `TRUE` (default) keeps the attributes in `atr` and
+#'   removes all others; `FALSE` removes those in `atr`.
+#'
+#' @return `x` with the selected attributes.
+#' @examples
+#' x <- structure(1:3, names = c("a", "b", "c"), note = "temporary")
+#' attrs(x)
+#' attrs(x, "note", keep = FALSE)
 #'   
 #' @author Wolfgang Mader, \email{Wolfgang.Mader@@fdm.uni-freiburg.de}
 #' @author Mirjam Fehling-Kaschek, \email{mirjam.fehling@@physik.uni-freiburg.de}

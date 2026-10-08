@@ -1,3 +1,20 @@
+#' dMod2: Dynamic Modeling and Parameter Estimation in ODE Models
+#'
+#' Models are built from reactions or equations, compiled to C++ with
+#' sensitivities, and composed from observation, prediction and parameter
+#' transformation functions as `g * x * p`. Objective functions over several
+#' experimental conditions are minimized by trust-region optimization, and
+#' parameter uncertainty is assessed by profile likelihoods.
+#'
+#' @seealso
+#' Models: [eqnlist()], [addReaction()], [odemodel()], [Xs()], [Y()], [P()].
+#' Data and objectives: [as.datalist()], [normL2()], [constraintL2()].
+#' Fitting and uncertainty: [trust()], [mstrust()], [profile()],
+#' [plotProfile()]. Exchange formats: [importPEtab()], [exportPEtab()].
+#' Identifiability: [symmetryDetection()].
+#'
+"_PACKAGE"
+
 #' @useDynLib dMod2, .registration = TRUE
 #' @importFrom Rcpp sourceCpp
 #' @importFrom cOde getSymbols replaceSymbols prodSymb sensitivitiesSymb
