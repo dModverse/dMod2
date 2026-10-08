@@ -1,3 +1,18 @@
+# dMod2 0.10.14
+
+* Fix: `constraintL2() * P()` takes `fixed`, and with it `trust(fixed = )` and
+  `profile()` on such priors.
+* Fix: `Xt()` returns its sensitivities by the outer parameters, so
+  `g * Xt() * p` has derivatives and `normL2()` on it takes `fixed`.
+* Fix: `Y()` differentiates by its own parameters when no transformation
+  precedes the prediction: `g * x` lacked the derivatives by observation and
+  error parameters that are not parameters of `x`.
+* Fix: `normL2()` takes an error model whose parameters are all fixed.
+* Fix: `as.datalist()` stores a `sigma` or `lloq` column of `NA` alone as
+  numeric.
+* Fix: `mstrust(cautiousMode = TRUE)` removes the `.Rda` fits of its own run
+  rather than files of that name in the working directory.
+
 # dMod2 0.10.13
 
 * The solver option for the limit of consecutive rejected steps is

@@ -25,6 +25,7 @@
 #include <stdexcept>
 #include <cmath>
 #include <cstring>
+#include <unordered_map>
 
 using namespace Rcpp;
 
@@ -88,13 +89,42 @@ void sandwich_hess(const double* dP, int n_inner, int n_theta,
                   &beta2, hess_theta_colmajor, &n_theta FCONE FCONE);
 }
 
+// dP on the rows of `inner`, matched by name. A parameter without a row
+// depends on no free parameter (it is fixed) and gets a zero row.
+NumericMatrix align_dP_rows(NumericMatrix dP, const CharacterVector& inner) {
+  const int n_inner = inner.size();
+  const int n_theta = dP.ncol();
+  List dn = dP.attr("dimnames");
+  if (dn.size() < 1 || Rf_isNull(dn[0])) {
+    if (dP.nrow() != n_inner)
+      throw std::runtime_error("constraintL2_scalar: dP has neither row names nor one row per parameter.");
+    return dP;
+  }
+  CharacterVector rows = dn[0];
+  std::unordered_map<std::string, int> at;
+  for (int i = 0; i < rows.size(); ++i) at.emplace(as<std::string>(rows[i]), i);
+  bool same = rows.size() == n_inner;
+  for (int p = 0; same && p < n_inner; ++p)
+    same = as<std::string>(rows[p]) == as<std::string>(inner[p]);
+  if (same) return dP;
+
+  NumericMatrix out(n_inner, n_theta);
+  for (int p = 0; p < n_inner; ++p) {
+    auto it = at.find(as<std::string>(inner[p]));
+    if (it == at.end()) continue;
+    for (int k = 0; k < n_theta; ++k) out(p, k) = dP(it->second, k);
+  }
+  out.attr("dimnames") = List::create(inner, dn.size() >= 2 ? dn[1] : R_NilValue);
+  return out;
+}
+
 }  // namespace
 
 
 // [[Rcpp::export]]
 List constraintL2_scalar_kernel(
     NumericVector pars,                 // free params (length n_theta if dP, else n_inner)
-    Nullable<NumericMatrix> dP_opt,     // [n_inner, n_theta] col-major, or NULL (identity)
+    Nullable<NumericMatrix> dP_opt,     // [inner, theta], rows matched by name, or NULL (identity)
     Nullable<NumericVector> dP2_opt,    // 3D array [n_inner, n_theta, n_theta], or NULL
     CharacterVector inner_par_names,    // names of inner pars (length n_inner)
     Nullable<NumericVector> fixed_opt,  // any fixed values needed for `allp` lookup
@@ -222,13 +252,11 @@ List constraintL2_scalar_kernel(
   CharacterVector theta_names;
 
   if (dP_opt.isNotNull()) {
-    NumericMatrix dP(dP_opt.get());
-    const int dP_n_inner = dP.nrow();
-    const int n_theta    = dP.ncol();
-    if (dP_n_inner != n_inner_full)
-      throw std::runtime_error("constraintL2_scalar: dP nrow mismatch.");
+    NumericMatrix dP = align_dP_rows(NumericMatrix(dP_opt.get()), inner_par_names);
+    const int n_theta = dP.ncol();
     List dP_dimnames = dP.attr("dimnames");
-    theta_names = (dP_dimnames.size() >= 2) ? dP_dimnames[1] : CharacterVector(n_theta);
+    theta_names = (dP_dimnames.size() >= 2 && !Rf_isNull(dP_dimnames[1]))
+      ? CharacterVector(dP_dimnames[1]) : CharacterVector(n_theta);
 
     // grad = dP^T * gi
     std::vector<double> grad_theta(n_theta, 0.0);

@@ -61,6 +61,14 @@ inline int match_name(const CharacterVector& haystack, const std::string& s) {
   return -1;
 }
 
+// Parameter axis of a deriv array. R drops zero-length dimnames, so an array
+// over no parameters has NULL there.
+inline CharacterVector par_axis_names(const NumericVector& d) {
+  List dn = d.attr("dimnames");
+  if (dn.size() < 3 || Rf_isNull(dn[2])) return CharacterVector(0);
+  return dn[2];
+}
+
 CondInputs gather_one_condition(
     NumericMatrix prdf,
     Nullable<NumericMatrix> err_mat_opt,
@@ -94,8 +102,7 @@ CondInputs gather_one_condition(
   if (has_deriv) {
     dpred_flat = NumericVector(deriv_attr_sexp);
     IntegerVector deriv_dim = dpred_flat.attr("dim");
-    List deriv_dimnames     = dpred_flat.attr("dimnames");
-    par_local_names = deriv_dimnames[2];
+    par_local_names = par_axis_names(dpred_flat);
     Dp0 = deriv_dim[0];
     Dp1 = deriv_dim[1];
     n_par_local = par_local_names.size();
@@ -213,8 +220,7 @@ CondInputs gather_one_condition(
       IntegerVector ed_dim = ed_attr.attr("dim");
       const int Ed0 = ed_dim[0];
       const int Ed1 = ed_dim[1];
-      List ed_dimnames = ed_attr.attr("dimnames");
-      CharacterVector err_par_names = ed_dimnames[2];
+      CharacterVector err_par_names = par_axis_names(ed_attr);
       const int n_err_par = err_par_names.size();
       std::vector<int> err_to_local(n_err_par, -1);
       for (int q = 0; q < n_err_par; ++q) {

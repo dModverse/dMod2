@@ -141,6 +141,52 @@ test_that("backwards compatibility: existing scalar/diagonal path still works", 
 
 
 # ============================================================================
+# Composition with a parameter transformation
+# ============================================================================
+
+# Log trafos for one and for two conditions, compiled together on first use.
+.cl2_p <- local({
+  cache <- NULL
+  function() {
+    if (!is.null(cache)) return(cache)
+    oldwd <- setwd(.dmod_fx_workdir()); on.exit(setwd(oldwd), add = TRUE)
+    tr <- function(k) eqnvec(A = "exp(A_log)", k = paste0("exp(", k, ")"))
+    p1 <- P(tr("k_log"), condition = "C1", modelname = "test_cl2_p1",
+            compile = FALSE)
+    p2 <- P(list(C1 = tr("k_log"), C2 = tr("k2_log")), modelname = "test_cl2_p2",
+            compile = FALSE)
+    compile(p1, p2, output = "test_cl2_p", cores = test_cores())
+    cache <<- list(p1 = p1, p2 = p2)
+    cache
+  }
+})
+
+test_that("constraintL2 * P takes fixed outer parameters", {
+  skip_on_cran()
+  withr::local_options(dMod.batch.check = TRUE)
+  fx <- .cl2_p()
+  prior <- constraintL2(mu = c(A = 1, k = 0.5), sigma = 0.5)
+  all <- c(A_log = 0.2, k_log = -0.4, k2_log = 0.1)
+
+  for (p in list(fx$p1, fx$p2)) {
+    obj <- prior * p
+    pars <- all[getParameters(p)]
+    free <- setdiff(names(pars), "A_log")
+    full <- obj(pars)
+    part <- obj(pars[free], fixed = pars["A_log"])
+    expect_equal(part$value, full$value)
+    expect_equal(part$gradient, full$gradient[free])
+    expect_equal(part$hessian, full$hessian[free, free, drop = FALSE])
+  }
+
+  fit <- trust(prior * fx$p1, all["k_log"], rinit = 1, rmax = 10,
+               fixed = all["A_log"])
+  expect_true(fit$converged)
+  expect_equal(fit$argument[["k_log"]], log(0.5), tolerance = 1e-6)
+})
+
+
+# ============================================================================
 # Cross-backend parity (C++ kernel vs R reference)
 # ============================================================================
 

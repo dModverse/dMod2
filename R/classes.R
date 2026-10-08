@@ -209,7 +209,11 @@ match.fnargs <- function(arglist, choices) {
 
 .handoff_prd_innerfixed <- function(v, fixed) {        # obsfn * prdfn  (:568)
   p <- attr(v, "parameters")
-  list(pars = p, fixed = p[attr(p, "fixed")])
+  f <- attr(p, "fixed")
+  # Without a parameter derivative there is no transformation in between, so
+  # the outer fixed parameters are the inner ones.
+  if (is.null(attr(p, "deriv"))) f <- union(f, intersect(names(p), names(fixed)))
+  list(pars = p, fixed = p[f])
 }
 
 .handoff_par_outerfixed <- function(v, fixed)          # obsfn * parfn  (:516)

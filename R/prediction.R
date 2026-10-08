@@ -1234,6 +1234,44 @@ Xd <- function(data, condition = NULL) {
 }
 
 
+# Seeds of the AD chain through an observation function. Parameters without
+# attr(pars, "deriv") are their own basis, unless fixed. All seeds share one
+# parameter axis, the union of theirs; a missing column has zero sensitivity.
+.obsSeeds <- function(dX, dX2, pars, fixedObs, obsParams, deriv2) {
+  dP  <- attr(pars, "deriv")
+  dP2 <- if (deriv2) attr(pars, "deriv2") else NULL
+  if (is.null(dX) && is.null(dX2))
+    return(list(tangentX = NULL, tangentP = dP, hessianX = NULL, hessianP = dP2))
+  if (is.null(dP)) {
+    free <- setdiff(intersect(obsParams, names(pars)), fixedObs)
+    if (length(free)) {
+      dP <- diag(1, length(free))
+      dimnames(dP) <- list(free, free)
+    }
+  }
+  theta <- union(dimnames(if (is.null(dX)) dX2 else dX)[[3L]], colnames(dP))
+  list(tangentX = .padTheta(dX, theta, 3L),
+       tangentP = .padTheta(dP, theta, 2L),
+       hessianX = .padTheta(dX2, theta, 3:4),
+       hessianP = .padTheta(dP2, theta, 2:3))
+}
+
+# Zero-pad the parameter axes `axes` of a sensitivity array to `theta`.
+.padTheta <- function(a, theta, axes) {
+  if (is.null(a)) return(NULL)
+  cur <- dimnames(a)[[axes[1L]]]
+  if (identical(cur, theta)) return(a)
+  d <- dim(a)
+  dn <- dimnames(a)
+  if (is.null(dn)) dn <- vector("list", length(d))
+  d[axes] <- length(theta)
+  dn[axes] <- list(theta)
+  pos <- match(cur, theta)
+  idx <- lapply(seq_along(d), function(i) if (i %in% axes) pos else seq_len(d[i]))
+  do.call(`[<-`, c(list(array(0, d, dn)), idx, list(value = a)))
+}
+
+
 #' Observation Function
 #'
 #' @description
@@ -1423,12 +1461,15 @@ Y <- function(g, f = NULL, states = NULL, parameters = NULL,
       dX2 <- dX2_full
       if (!is.null(dX2) && !any(match(obsStates, dimnames(dX2)[[2]], 0L) > 0L))
         dX2 <- NULL
-      ad_out <- if (!is.null(.ad_out)) .ad_out else
-        gevaluate(out[, obsStates, drop = FALSE], params[obsParams],
-                  tangentX = dX, tangentP = attr(pars, "deriv"),
-                  hessianX = dX2, hessianP = attr(pars, "deriv2"),
-                  deriv2 = deriv2,
-                  attach.input = attach.input, fixed = fixedObsParams)
+      ad_out <- .ad_out
+      if (is.null(ad_out)) {
+        sd <- .obsSeeds(dX, dX2, pars, fixedObsParams, obsParams, deriv2)
+        ad_out <- gevaluate(out[, obsStates, drop = FALSE], params[obsParams],
+                            tangentX = sd$tangentX, tangentP = sd$tangentP,
+                            hessianX = sd$hessianX, hessianP = sd$hessianP,
+                            deriv2 = deriv2,
+                            attach.input = attach.input, fixed = fixedObsParams)
+      }
       # Values: evaluate() returns observables (and pass-through extras when
       # attach.input = TRUE) under attach.input semantics matching gfun.
       gAll <- ad_out$y
@@ -1527,9 +1568,10 @@ Y <- function(g, f = NULL, states = NULL, parameters = NULL,
         fRef <<- key
         fVal <<- intersect(union(attr(pars, "fixed"), fnm), obsParams)
       }
+      sd <- .obsSeeds(dX, dX2, pars, fVal, obsParams, deriv2)
       list(vars = out[, obsStates, drop = FALSE], params = params[obsParams],
-           tangentX = dX, tangentP = attr(pars, "deriv"), hessianX = dX2,
-           hessianP = if (deriv2) attr(pars, "deriv2") else NULL,
+           tangentX = sd$tangentX, tangentP = sd$tangentP,
+           hessianX = sd$hessianX, hessianP = sd$hessianP,
            attach.input = controls$attach.input, fixed = fVal)
     })
     ad <- eb(sets, cores = cores, deriv2 = deriv2)
@@ -1658,7 +1700,10 @@ Y <- function(g, f = NULL, states = NULL, parameters = NULL,
 Xt <- function(condition = NULL) {
   P2X <- function(times, pars, fixed = NULL, deriv = TRUE, deriv2 = FALSE) {
     n_times <- length(times)
-    par_names <- names(pars)
+    # Sensitivities are with respect to the outer parameters, as after a chain
+    # rule through attr(pars, "deriv").
+    dP <- attr(pars, "deriv")
+    par_names <- if (is.null(dP)) names(pars) else colnames(dP)
     n_pars <- length(par_names)
 
     out <- matrix(times, ncol = 1, dimnames = list(NULL, "time"))

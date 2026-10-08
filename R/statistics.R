@@ -1225,7 +1225,7 @@ mstrust <- function(objfun, center, rinit = .1, rmax = 10, fits = 20, cores = 1,
     if (!cautiousMode) {
       unlink(interResultFolder, recursive = TRUE)
     } else {
-      for (f in list.files(interResultFolder, "Rda$")) unlink(f)
+      unlink(list.files(interResultFolder, "\\.Rda$", full.names = TRUE))
     }
   }
   

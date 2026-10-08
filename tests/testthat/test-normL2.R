@@ -418,6 +418,22 @@ test_that("rows with explicit sigma keep it; NA rows fall through to errmodel", 
 })
 
 
+test_that("a sigma column of NA alone is numeric and falls through to errmodel", {
+  skip_if_no_compile()
+  ec <- .nl2_fx()$prop
+  pars <- c(A = 1.0, k = 0.5, srel = 0.1)
+  d <- fx_decay_data(pars = pars[c("A", "k")])$C1
+  d$sigma <- NA
+  lgl <- as.datalist(list(C1 = d))
+  d$sigma <- NA_real_
+  dbl <- as.datalist(list(C1 = d))
+
+  expect_type(lgl$C1$sigma, "double")
+  expect_equal(normL2(lgl, ec$prd, errmodel = ec$e)(pars),
+               normL2(dbl, ec$prd, errmodel = ec$e)(pars))
+})
+
+
 test_that("getParameters(normL2(..., errmodel = ec$e)) includes errmodel pars", {
   skip_if_no_compile()
   bench <- fx_decay_compiled()

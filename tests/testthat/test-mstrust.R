@@ -281,6 +281,24 @@ test_that("mstrust writes nothing unless asked", {
 })
 
 
+test_that("cautiousMode removes the .Rda fits of its own run only", {
+  obj <- constraintL2(mu = c(a = 1.0, b = -0.5), sigma = 1)
+  d <- file.path(tempdir(), paste0("ms_cautious_", as.integer(runif(1, 1e6, 9e6))))
+  dir.create(d)
+  oldwd <- setwd(d); on.exit(setwd(oldwd), add = TRUE)
+  saveRDS(1, "fit-1.Rda")
+
+  invisible(mstrust(objfun = obj, center = c(a = 0, b = 0), resultPath = d,
+                    name = "cautious", rinit = 1, rmax = 10, iterlim = 100,
+                    fits = 2, sd = 1, cores = 1, output = TRUE, cautiousMode = TRUE))
+  inter <- list.files(d, recursive = TRUE)
+  inter <- inter[grepl("^cautious/.*/interRes/", inter)]
+  expect_true(file.exists(file.path(d, "fit-1.Rda")))
+  expect_false(any(grepl("\\.Rda$", inter)))
+  expect_true(all(c("fit-1.R", "fit-2.R") %in% basename(inter)))
+})
+
+
 test_that("subset() on a parframe sees the calling frame", {
   pf <- parframe(data.frame(value = c(1, 5, 9), a = c(0.1, 0.2, 0.3)),
                  parameters = "a", metanames = "value")

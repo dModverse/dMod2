@@ -162,3 +162,112 @@ test_that("Y with pure-numeric observable composes with an Xs prediction", {
   expect_true(all(pred[, "y1"] == 1.0))
   expect_equal(pred[, "time"], c(0, 2.5, 5))
 })
+
+
+# ============================================================================
+# Parameter derivatives the prediction does not provide
+# ============================================================================
+
+# Observables of time alone (on Xt()) with a two-condition log trafo and error
+# models, plus a scaled observable on the decay ODE. One shared object.
+.y_xt_fx <- local({
+  cache <- NULL
+  function() {
+    if (!is.null(cache)) return(cache)
+    bench <- fx_decay_compiled()
+    oldwd <- setwd(.dmod_fx_workdir()); on.exit(setwd(oldwd), add = TRUE)
+
+    g <- Y(c(y = "a*exp(-k*time)"), f = NULL, parameters = c("a", "k"),
+           modelname = "test_Y_xt", compile = FALSE)
+    e <- Y(c(y = "exp(s)*y"), f = g, attach.input = FALSE,
+           modelname = "test_Y_xt_err", compile = FALSE)
+    e0 <- Y(c(y = "exp(s)"), f = NULL, parameters = "s",
+            modelname = "test_Y_xt_err0", compile = FALSE)
+    tr <- function(k) eqnvec(a = "exp(a_log)", k = paste0("exp(", k, ")"), s = "s")
+    p <- P(list(C1 = tr("k1_log"), C2 = tr("k2_log")),
+           modelname = "test_Y_xt_p", compile = FALSE)
+    gs <- Y(c(y = "s*A"), f = bench$xfn, attach.input = FALSE,
+            modelname = "test_Y_scale", compile = FALSE)
+    compile(g, e, e0, p, gs, output = "test_Y_xt_all", cores = test_cores())
+    cache <<- list(bench = bench, g = g, e = e, e0 = e0, p = p, gs = gs)
+    cache
+  }
+})
+
+test_that("g * Xt() * P() differentiates by the outer parameters", {
+  skip_if_no_compile()
+  withr::local_options(dMod.batch.check = TRUE)
+  fx <- .y_xt_fx()
+  prd <- fx$g * Xt() * fx$p
+  times <- c(0, 0.5, 2)
+  pars <- c(a_log = 0.3, k1_log = -0.2, k2_log = 0.4, s = 0)
+  kname <- c(C1 = "k1_log", C2 = "k2_log")
+
+  for (cn in list(NULL, "C2")) {
+    out <- prd(times, pars, conditions = cn)
+    for (cnd in names(out)) {
+      y <- out[[cnd]][, "y"]
+      d <- attr(out[[cnd]], "deriv")
+      k <- exp(pars[[kname[[cnd]]]])
+      expect_equal(d[, "y", "a_log"], y)
+      expect_equal(d[, "y", kname[[cnd]]], -times * k * y)
+      expect_false("k" %in% dimnames(d)[[3]])
+    }
+  }
+
+  out <- prd(times, pars[-1], fixed = pars[1])
+  d <- attr(out$C1, "deriv")
+  expect_false("a_log" %in% dimnames(d)[[3]])
+  expect_equal(d[, "y", "k1_log"], -times * exp(pars[["k1_log"]]) * out$C1[, "y"])
+})
+
+test_that("Y differentiates its own parameters without a trafo upstream", {
+  skip_if_no_compile()
+  fx <- .y_xt_fx()
+  times <- c(0, 0.5, 2)
+
+  d <- attr((fx$g * Xt())(times, c(a = 2, k = 0.5))[[1]], "deriv")
+  expect_equal(d[, "y", "a"], exp(-0.5 * times))
+  expect_equal(d[, "y", "k"], -times * 2 * exp(-0.5 * times))
+  d <- attr((fx$g * Xt())(times, c(k = 0.5), fixed = c(a = 2))[[1]], "deriv")
+  expect_identical(dimnames(d)[[3]], "k")
+
+  prd <- fx$gs * fx$bench$xfn
+  d <- attr(prd(times, c(A = 1, k = 0.5, s = 2))[[1]], "deriv")
+  expect_equal(d[, "y", "s"], exp(-0.5 * times), tolerance = 1e-5)
+  expect_equal(d[, "y", "A"], 2 * exp(-0.5 * times), tolerance = 1e-5)
+  d <- attr(prd(times, c(A = 1, k = 0.5), fixed = c(s = 2))[[1]], "deriv")
+  expect_setequal(dimnames(d)[[3]], c("A", "k"))
+})
+
+test_that("normL2 on g * Xt() * P() takes fixed parameters", {
+  skip_if_no_compile()
+  withr::local_options(dMod.batch.check = TRUE)
+  fx <- .y_xt_fx()
+  prd <- fx$g * Xt() * fx$p
+  times <- c(0.5, 1, 2)
+  data <- as.datalist(data.frame(name = "y", time = rep(times, 2),
+                                 value = c(1.1, 0.8, 0.5, 1.0, 0.6, 0.2),
+                                 sigma = NA, condition = rep(c("C1", "C2"), each = 3)),
+                      split.by = "condition")
+  pars <- c(a_log = 0.3, k1_log = -0.2, k2_log = 0.4, s = -1)
+
+  for (cn in list(c("C1", "C2"), "C2")) {
+    obj <- normL2(data[cn], prd, errmodel = fx$e)
+    full <- obj(pars)
+    num <- numDeriv::grad(function(q) obj(setNames(q, names(pars)), deriv = FALSE)$value,
+                          pars)
+    expect_equal(full$gradient[names(pars)], setNames(num, names(pars)),
+                 tolerance = 1e-6)
+    part <- obj(pars[-1], fixed = pars[1])
+    expect_equal(part$value, full$value)
+    expect_equal(part$gradient, full$gradient[names(pars)[-1]])
+  }
+
+  # An error model whose parameters are all fixed has no derivatives at all.
+  obj <- normL2(data, prd, errmodel = fx$e0)
+  full <- obj(pars)
+  part <- obj(pars[-4], fixed = pars[4])
+  expect_equal(part$value, full$value)
+  expect_equal(part$gradient, full$gradient[names(pars)[-4]])
+})
