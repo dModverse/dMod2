@@ -27,7 +27,8 @@ A \code{ggplot} object, with the plotted data attached as attribute
 }
 \description{
 Draws the waterfall plot of a fit collection: the objective values minus the
-best one, in ascending order against their rank, on a pseudo-log10 scale that
-is linear below 1 and logarithmic above. A converged fit is marked by a circle
-and an unconverged one by a triangle, in every plot.
+best one, in ascending order against their rank, on a pseudo-log10 scale
+that is linear below 1 and logarithmic above, with a break at 0 and at each
+decade from 10 on. A converged fit is marked
+by a circle and an unconverged one by a triangle, in every plot.
 }

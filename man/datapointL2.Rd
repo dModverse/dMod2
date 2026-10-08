@@ -9,12 +9,12 @@ datapointL2(name, time, value, sigma = 1, attr.name = "validation", condition)
 \arguments{
 \item{name}{character, the name of the prediction, e.g. a state name.}
 
-\item{time}{numeric, the time-point associated to the prediction}
+\item{time}{Numeric of length 1, the time of the data point.}
 
-\item{value}{character, the name of the parameter which contains the
-prediction value.}
+\item{value}{Character of length 1, the name of the parameter that holds
+the value of the data point.}
 
-\item{sigma}{numeric, the uncertainty of the introduced test data point}
+\item{sigma}{Numeric of length 1, the uncertainty of the data point.}
 
 \item{attr.name}{character. The constraint value is additionally returned in
 an attribute of this name. Being a squared standardised residual already, it
@@ -24,7 +24,9 @@ rules described there.}
 \item{condition}{character, the condition for which the prediction is made.}
 }
 \value{
-List of class \code{objlist}, i.e. objective value, gradient and Hessian as list.
+An \code{objfn} returning an \link{objlist}. It reads the prediction from
+\code{env}, so it is evaluated after, or summed with, an objective that
+predicts.
 }
 \description{
 L2 objective function for validation data point
@@ -43,12 +45,12 @@ not reach either, so build a new objective for another value parameter.
 }
 \examples{
 prediction <- list(a = matrix(c(0, 1), nrow = 1, dimnames = list(NULL, c("time", "A"))))
-derivs <- matrix(c(0, 1, 0.1), nrow = 1, dimnames = list(NULL, c("time", "A.A", "A.k1")))
-attr(prediction$a, "deriv") <- derivs
+attr(prediction$a, "deriv") <- array(c(1, 0.1), c(1, 1, 2),
+  dimnames = list(NULL, "A", c("A", "k1")))
 p0 <- c(A = 1, k1 = 2)
 
 vali <- datapointL2(name = "A", time = 0, value = "newpoint", sigma = 1, condition = "a")
-vali(pars = c(p0, newpoint = 1), env = .GlobalEnv)
+vali(pars = c(p0, newpoint = 2), env = .GlobalEnv)
 }
 \seealso{
 \link{normL2}, \link{constraintL2}

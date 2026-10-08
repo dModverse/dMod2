@@ -15,17 +15,14 @@ to initialize the parameters.}
 the condition for which the function makes a prediction.}
 }
 \value{
-Object of class \link{prdfn}, i.e.
-a function \verb{x(times pars, deriv = TRUE, conditions = NULL)},
-see also \link{Xs}. Attributes are "parameters", the parameter names (row names of
-the data frame), and possibly "pouter", a named numeric vector which is generated
-from \code{data$value}.
+A \link{prdfn}, called as \code{x(times, pars, fixed = NULL, deriv = TRUE)},
+that interpolates the parameter values linearly in time. Its parameters
+are the row names of \code{data}. Second-order derivatives are not available.
 }
 \description{
 Model prediction function from data.frame
 }
 \examples{
-\dontrun{
 # Generate a data.frame and corresponding prediction function
 timesD <- seq(0, 2*pi, 0.5)
 mydata <- data.frame(name = "A", time = timesD, value = sin(timesD), 
@@ -37,6 +34,4 @@ times <- seq(0, 2*pi, 0.01)
 pouter <- structure(mydata$value, names = rownames(mydata))
 prediction <- x(times, pouter)
 plot(prediction)
-
-}
 }

@@ -59,74 +59,75 @@ print.odemodel <- function(x, ...) {
 }
 
 
-#' Generate model objects for use in Xs (models with sensitivities)
+#' Compiled ODE model
 #'
-#' Creates and compiles model objects for systems of ordinary differential equations (ODEs)
-#' with optional first- and second-order sensitivities. Depending on the selected backend,
-#' the function interfaces either to [cOde::funC()] (for `backend = "deSolve"`)
-#' or to [cppDE::cppODE()] / [cppDE::cvode()] (for `backend = "cppDE"` or
-#' `backend = "Sundials"`).
+#' Generates and compiles the code of an ODE system and, as asked for, of its
+#' first- and second-order sensitivities and its adjoint. The result is turned
+#' into a prediction function by [Xs()] or [Xf()].
 #'
-#' @param f Something that can be converted to [eqnvec], e.g. a named character vector
-#'   specifying the right-hand sides of the ODE system.
-#' @param deriv Logical. If `TRUE`, generate first-order sensitivities.
-#'   Defaults to `TRUE`.
-#' @param deriv2 Logical. If `TRUE`, also generate second-order sensitivities
-#'   (requires `backend = "cppDE"`). Implies `deriv = TRUE`. Defaults to
-#'   `FALSE`.
-#' @param forcings Character vector with the names of external forcings.
-#' @param events An [eventlist] (or `data.frame` coercible via [as.eventlist]).
-#'   Must be defined here, not on [Xs()] -- so that the sensitivity equations
-#'   are extended consistently.
-#' @param fixed Character vector with the names of parameters (initial values and dynamic)
-#'   for which no sensitivities are required (this speeds up integration).
-#' @param modelname Character. The base name of the generated C/C++ file.
-#' @param backend Character string selecting the code-generation and integration
-#'   backend. One of `"cppDE"`, `"Sundials"` or `"deSolve"`. The stepper itself
-#'   is chosen separately (`method` for `"cppDE"`, `optionsOde$method` for
-#'   `"deSolve"`).
-#' @param verbose Logical. If `TRUE`, print compiler output to the R console.
-#' @param outdir Character. Directory for the generated C/C++ sources and the
-#'   compiled shared object. Defaults to the working directory. Only honoured
-#'   for `backend = "cppDE"` / `"Sundials"`; the `deSolve` backend always
-#'   writes to the working directory, so a non-default `outdir` errors there.
-#' @param ... Additional arguments passed to [cppDE::cppODE()], [cppDE::cvode()]
-#'   or [cOde::funC()].
+#' @param f Named character vector, [eqnvec] or [eqnlist] with the right-hand
+#'   sides; the names are the states.
+#' @param deriv Logical. Build first-order sensitivities. `FALSE` builds the
+#'   states alone, for [Xf()], and leaves `derivMode` without effect.
+#' @param deriv2 Logical. Build second-order sensitivities, the same as
+#'   `"forward-forward"` in `derivMode`. Needs `backend = "cppDE"` and implies
+#'   `deriv = TRUE`.
+#' @param derivMode Which derivative directions to build. More than one may be
+#'   named; the default is `"forward"` alone.
+#'   * `"forward"`: sensitivity equations integrated alongside the states.
+#'   * `"reverse"`: the adjoint, whose cost does not grow with the number of
+#'     parameters; what `obj(..., sweep = "reverse")` needs. On
+#'     `backend = "cppDE"` it is the discrete adjoint of the integrator, on
+#'     `backend = "Sundials"` CVODES adjoint sensitivity analysis, which
+#'     refuses events. Not available on `backend = "deSolve"`.
+#'   * `"forward-forward"`: second-order sensitivities as nested duals.
+#'   * `"forward-reverse"`: the adjoint over tangents, which returns the
+#'     Hessian of the objective in one backward sweep; what
+#'     `obj(..., sweep = "reverse", deriv2 = TRUE)` needs. `cppDE` only.
 #'
-#' @return list with \code{func} (ODE object) and \code{extended} (ODE+Sensitivities object).
-#'   Carries a \code{"compileInfo"} attribute listing source files and per-file
-#'   compile/link flags collected from \code{func} and \code{extended}. This is
-#'   consumed by [compile()] when the model is later compiled via a prediction
-#'   function, so backend-specific linker requirements (e.g. Sundials libraries
-#'   for \code{backend = "Sundials"}) are applied to the right files only.
+#'   Each direction is a compilation of its own.
+#' @param forcings Character vector, the names of the forcings in `f`. Their
+#'   data are given to [Xs()] or [Xf()].
+#' @param events An [eventlist], or a `data.frame` [as.eventlist()] accepts.
+#'   Defined here, they also act on the sensitivities and, on `cppDE`, the
+#'   adjoint.
+#' @param fixed Character vector, the initial values and parameters without
+#'   sensitivities.
+#' @param modelname Character, the base name of the generated files and
+#'   symbols.
+#' @param backend `"cppDE"` (default), `"Sundials"` or `"deSolve"`: the
+#'   integrators of \pkg{cppDE}, CVODE(S) through \pkg{cppDE}, or \pkg{deSolve}
+#'   through \pkg{cOde}.
+#' @param verbose Logical. Print the compiler output.
+#' @param outdir Directory for the generated sources and shared objects.
+#'   `backend = "deSolve"` writes to the working directory only.
+#' @param ... Passed to [cppDE::cppODE()], [cppDE::cvode()] or
+#'   [cOde::funC()], according to `backend`. Among them:
+#'   * `method`: the integration method, `"bdf"` (default), `"adams"`,
+#'     `"rb4"` or `"tsit5"` on `cppDE`; `"bdf"` or `"adams"` on `Sundials`.
+#'     On `deSolve` it is `optionsOde$method` of [Xs()] instead.
+#'   * `rootfunc`: `"equilibrate"` or expressions whose roots end the
+#'     integration (`cppDE`, `Sundials`).
+#'   * `includeTimeZero`: integrate from 0 rather than from the first
+#'     requested time, default `TRUE`.
+#'   * `sparse`: sparse or dense linear algebra, `NULL` chooses from the
+#'     Jacobian (`cppDE`, `Sundials`).
+#'   * `stepTrace`: record per-step diagnostics, see `traceFile` in [Xs()]
+#'     (`cppDE`, `Sundials`).
+#'   * `compile`: `FALSE` writes the sources only, [compile()] builds them
+#'     later.
+#'   * `estimate`, `outputs`, `gridpoints`: the parameters with
+#'     sensitivities, additional outputs and spline nodes of the forcings
+#'     (`deSolve`).
 #'
-#' @param derivMode Which derivative directions to compile. More than one may
-#'   be named; the default is `"forward"` alone.
-#'   * `"forward"`: sensitivity equations carried alongside the states, the
-#'     object `deriv` fills.
-#'   * `"reverse"`: a further object whose derivatives come from one backward
-#'     sweep, so their cost does not grow with the number of parameters. It is
-#'     a separate compilation and not a flag on the others, so asking for it
-#'     costs build time; it is what `obj(..., sweep = "reverse")` needs. On
-#'     `backend = "cppDE"` it is the discrete adjoint, which replays each step
-#'     backwards and carries events; on `backend = "Sundials"` it is CVODES
-#'     adjoint sensitivity analysis, which solves the adjoint as its own ODE
-#'     over checkpointed states and therefore refuses events. Not available
-#'     under `backend = "deSolve"`.
-#'   * `"forward-forward"`: second derivatives of every state, carried as a
-#'     nested dual. The older spelling is `deriv2 = TRUE` and still selects it.
-#'   * `"forward-reverse"`: the backward sweep run over tangents, so the
-#'     gradient comes back with its own derivatives. That is the Hessian of the
-#'     seeded functional in one sweep rather than one per direction. `cppDE`
-#'     only. This is what `obj(pars, sweep = "reverse", deriv2 = TRUE)` needs;
-#'     the forward spelling of the same Hessian is `"forward-forward"`, and
-#'     `sweep` picks between them at the call.
+#' @return An object of class `odemodel`: a list with the compiled objects
+#'   `func` (states), `extended` (first-order sensitivities), and on
+#'   `cppDE` / `Sundials` `extended2` (second order) and `reversed`,
+#'   `reversed2` (adjoints), each `NULL` where not built. The attribute
+#'   `"compileInfo"` holds the sources and compiler flags [compile()] uses.
 #'
-#'   `derivMode = c("forward", "reverse")` builds both, which is what a session
-#'   that compares the two directions needs. `deriv = FALSE` turns first
-#'   derivatives off altogether and leaves `derivMode` without effect.
-#'
-#' @seealso [cOde::funC()], [cppDE::cppODE()], [cppDE::cvode()]
+#' @seealso [Xs()], [Xf()], [cppDE::cppODE()], [cppDE::cvode()],
+#'   [cOde::funC()]
 #'
 #' @example inst/examples/odemodel.R
 #' @export

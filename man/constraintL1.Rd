@@ -15,7 +15,8 @@ scale, i.e. the reciprocal penalty strength.}
 
 \item{attr.name}{Character. Name of the attribute storing the constraint value.}
 
-\item{condition}{Optional character vector of conditions.}
+\item{condition}{Character vector, the conditions of a sum of objectives
+in which the term is evaluated. \code{NULL} evaluates it in every one.}
 }
 \value{
 Object of class \code{objfn}.

@@ -153,3 +153,8 @@ test_that("constraintL2 cpp kernel agrees with R reference on a small diagonal c
   expect_equal(o_C$gradient, o_R$gradient, tolerance = 1e-12)
   expect_equal(o_C$hessian,  o_R$hessian,  tolerance = 1e-12)
 })
+
+test_that("constraintL2 refuses numbers among sigma parameter names", {
+  expect_error(constraintL2(c(a = 0, b = 0), sigma = c(a = "s_a", b = 2)),
+               "all numbers or all parameter names")
+})

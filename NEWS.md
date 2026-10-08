@@ -1,3 +1,21 @@
+# dMod2 0.10.3
+
+* The help pages of the constructors (`odemodel()`, `Xs()`, `Xf()`, `Xd()`,
+  `Xt()`, `Y()`, `P()`, `Pexpl()`, `Pimpl()`, `normL2()`, `datapointL2()`,
+  the `constraint*()` priors) and of the function classes are rewritten, with
+  examples for `Xs()`, `P()`, `Pexpl()` and `Pimpl()`.
+* `Xs()` and `Xf()` on cppDE and Sundials return the forcings after the
+  states, so observables can contain them, and take forcing names as factor.
+  A forcing holds its first and last value outside its points and may be a
+  single point.
+* `Xf()` on cppDE and Sundials starts states missing from `pars` at 0.
+* `datapointL2()` returns an `objlist`.
+* `constraintL2()` stops on a `sigma` that mixes numbers and parameter names.
+* `normL2()` names the data conditions `x` does not have.
+* `plotValues()` puts its breaks at 0 and at the decades from 10 on and no
+  longer fixes the limits of the y axis.
+* Needs cppDE 0.11.3.
+
 # dMod2 0.10.2
 
 * `runbg()` and `distributedComputing()` with `compile = TRUE` take SUNDIALS'

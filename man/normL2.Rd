@@ -16,7 +16,8 @@ normL2(
 )
 }
 \arguments{
-\item{data}{Object of class \link{datalist}.}
+\item{data}{Object of class \link{datalist}. Each of its conditions has to be
+a condition of \code{x}.}
 
 \item{x}{Object of class \link{prdfn}.}
 
@@ -122,7 +123,7 @@ a segment is integrated from its own start.}
 }
 \value{
 An object of class \code{objfn}, i.e. a function
-\code{obj(pars, fixed, deriv, hessian, deriv2, sweep, env, cores)} returning
+\code{obj(pars, fixed, deriv, deriv2, hessian, conditions, env, cores, sweep)} returning
 an \link{objlist}. \code{deriv} asks for a gradient, \code{hessian} for a Hessian, \code{deriv2}
 for the exact one rather than the Gauss-Newton approximation, and \code{sweep}
 (\code{"forward"} or \code{"reverse"}) says which way all of it is computed. \code{hessian}
@@ -147,7 +148,7 @@ argument: it sets the thread count for both the batched ODE integration and
 the C++ residual kernel. It defaults to \code{getOption("dMod.cores", 1L)}.
 }
 \examples{
-\dontrun{
+\donttest{
   ## Generate a prediction function
   
   times <- 0:5

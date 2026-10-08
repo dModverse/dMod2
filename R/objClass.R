@@ -158,7 +158,8 @@ evalConditionResidual <- function(dataI, predictionI, pars,
 #' The returned objective function can be used with optimizers such as
 #' [mstrust] and supports aggregation over multiple experimental conditions.
 #'
-#' @param data Object of class [datalist].
+#' @param data Object of class [datalist]. Each of its conditions has to be
+#'   a condition of `x`.
 #' @param x Object of class [prdfn].
 #' @param errmodel Optional object of class [obsfn]. The error model may be
 #'   defined only for a subset of conditions.
@@ -257,7 +258,7 @@ evalConditionResidual <- function(dataI, predictionI, pars,
 #'
 #' @return
 #' An object of class `objfn`, i.e. a function
-#' \code{obj(pars, fixed, deriv, hessian, deriv2, sweep, env, cores)} returning
+#' \code{obj(pars, fixed, deriv, deriv2, hessian, conditions, env, cores, sweep)} returning
 #' an [objlist]. `deriv` asks for a gradient, `hessian` for a Hessian, `deriv2`
 #' for the exact one rather than the Gauss-Newton approximation, and `sweep`
 #' (`"forward"` or `"reverse"`) says which way all of it is computed. `hessian`
@@ -294,7 +295,12 @@ normL2 <- function(data, x, errmodel = NULL, times = NULL,
 
   x.cond <- names(attr(x, "mappings"))
   d.cond <- names(data)
-  stopifnot(all(d.cond %in% x.cond))
+  miss <- setdiff(d.cond, x.cond)
+  if (length(miss))
+    stop("normL2: the data conditions ", paste(miss, collapse = ", "),
+         " are not conditions of x, which has ",
+         if (length(x.cond)) paste(x.cond, collapse = ", ") else "none",
+         ". Give each Xs(), P() or Y() its condition.", call. = FALSE)
 
   e.cond <- if (!is.null(errmodel)) names(attr(errmodel, "mappings")) else NULL
   conditions.obj <- intersect(x.cond, d.cond)
@@ -603,10 +609,12 @@ normL2 <- function(data, x, errmodel = NULL, times = NULL,
 #'
 #' @param mu Named numeric vector of prior means. Its names select the
 #'   constrained parameters.
-#' @param sigma Named numeric or character vector. Character entries indicate
-#'   log-scale sigma parameters to be estimated.
+#' @param sigma Named numeric vector of fixed standard deviations, or
+#'   named character vector of parameters, on log scale, that estimate them.
+#'   One kind for all entries.
 #' @param attr.name Character. Name of the attribute storing the constraint value.
-#' @param condition Optional character vector of conditions.
+#' @param condition Character vector, the conditions of a sum of objectives
+#'   in which the term is evaluated. `NULL` evaluates it in every one.
 #'
 #' @details
 #' Computes, depending on which path is selected,
@@ -618,9 +626,20 @@ normL2 <- function(data, x, errmodel = NULL, times = NULL,
 #' are the full `-2 log` density.
 #'
 #' @return Object of class \code{objfn}.
+#' @examples
+#' prior <- constraintL2(mu = c(k1 = 0, k2 = 0), sigma = 2)
+#' prior(pars = c(k1 = 1, k2 = -0.5))
+#'
+#' ## A common sigma, estimated on log scale by the parameter s
+#' prior_s <- constraintL2(mu = c(k1 = 0, k2 = 0), sigma = "s")
+#' prior_s(pars = c(k1 = 1, k2 = -0.5, s = 0))$gradient
 #' @export
 constraintL2 <- function(mu, sigma = 1, attr.name = "prior", condition = NULL) {
 
+  # c(a = "s_a", b = 2) arrives as character with "2" in it
+  if (!is.numeric(sigma) &&
+      (!is.character(sigma) || any(!is.na(suppressWarnings(as.numeric(sigma))))))
+    stop("constraintL2: 'sigma' is all numbers or all parameter names.", call. = FALSE)
   est <- is.character(sigma)
   if (length(sigma) == 1) sigma <- setNames(rep(sigma, length(mu)), names(mu))
   if (is.null(names(sigma))) names(sigma) <- names(mu)
@@ -766,7 +785,8 @@ constraintL2 <- function(mu, sigma = 1, attr.name = "prior", condition = NULL) {
 #' @param sigma Numeric, scalar or named and aligned with `mu`. The Laplace
 #'   scale, i.e. the reciprocal penalty strength.
 #' @param attr.name Character. Name of the attribute storing the constraint value.
-#' @param condition Optional character vector of conditions.
+#' @param condition Character vector, the conditions of a sum of objectives
+#'   in which the term is evaluated. `NULL` evaluates it in every one.
 #'
 #' @details
 #' Computes the Laplace prior on the `-2 log` scale,
@@ -804,7 +824,8 @@ constraintL1 <- function(mu, sigma = 1, attr.name = "prior", condition = NULL) {
 #' @param sigma Numeric, scalar or named and aligned with `mu`. The Cauchy
 #'   scale.
 #' @param attr.name Character. Name of the attribute storing the constraint value.
-#' @param condition Optional character vector of conditions.
+#' @param condition Character vector, the conditions of a sum of objectives
+#'   in which the term is evaluated. `NULL` evaluates it in every one.
 #'
 #' @details
 #' Computes the Cauchy prior on the `-2 log` scale,
@@ -841,7 +862,8 @@ constraintCauchy <- function(mu, sigma = 1, attr.name = "prior", condition = NUL
 #' @param scale Numeric, scalar or named and aligned with `shape`. The gamma
 #'   scale, not the rate.
 #' @param attr.name Character. Name of the attribute storing the constraint value.
-#' @param condition Optional character vector of conditions.
+#' @param condition Character vector, the conditions of a sum of objectives
+#'   in which the term is evaluated. `NULL` evaluates it in every one.
 #'
 #' @details
 #' Computes the gamma prior on the `-2 log` scale,
@@ -879,7 +901,8 @@ constraintGamma <- function(shape, scale = 1, attr.name = "prior", condition = N
 #' @param scale Named numeric vector of scale parameters, not rates. Its names
 #'   select the constrained parameters.
 #' @param attr.name Character. Name of the attribute storing the constraint value.
-#' @param condition Optional character vector of conditions.
+#' @param condition Character vector, the conditions of a sum of objectives
+#'   in which the term is evaluated. `NULL` evaluates it in every one.
 #'
 #' @details
 #' Computes the exponential prior on the `-2 log` scale,
@@ -914,7 +937,8 @@ constraintExponential <- function(scale, attr.name = "prior", condition = NULL) 
 #' @param df Named numeric vector of degrees of freedom. Its names select the
 #'   constrained parameters.
 #' @param attr.name Character. Name of the attribute storing the constraint value.
-#' @param condition Optional character vector of conditions.
+#' @param condition Character vector, the conditions of a sum of objectives
+#'   in which the term is evaluated. `NULL` evaluates it in every one.
 #'
 #' @details
 #' Computes the chi-squared prior on the `-2 log` scale,
@@ -950,7 +974,8 @@ constraintChisq <- function(df, attr.name = "prior", condition = NULL) {
 #' @param sigma Named numeric vector of scale parameters. Its names select the
 #'   constrained parameters.
 #' @param attr.name Character. Name of the attribute storing the constraint value.
-#' @param condition Optional character vector of conditions.
+#' @param condition Character vector, the conditions of a sum of objectives
+#'   in which the term is evaluated. `NULL` evaluates it in every one.
 #'
 #' @details
 #' Computes the Rayleigh prior on the `-2 log` scale,
@@ -983,16 +1008,18 @@ constraintRayleigh <- function(sigma, attr.name = "prior", condition = NULL) {
 #' L2 objective function for validation data point
 #' 
 #' @param name character, the name of the prediction, e.g. a state name.
-#' @param time numeric, the time-point associated to the prediction
-#' @param value character, the name of the parameter which contains the
-#' prediction value.
-#' @param sigma numeric, the uncertainty of the introduced test data point
+#' @param time Numeric of length 1, the time of the data point.
+#' @param value Character of length 1, the name of the parameter that holds
+#'   the value of the data point.
+#' @param sigma Numeric of length 1, the uncertainty of the data point.
 #' @param attr.name character. The constraint value is additionally returned in
 #' an attribute of this name. Being a squared standardised residual already, it
 #' is also the term's `chi2` contribution, which pools with [normL2]'s under the
 #' rules described there.
 #' @param condition character, the condition for which the prediction is made.
-#' @return List of class \code{objlist}, i.e. objective value, gradient and Hessian as list.
+#' @return An `objfn` returning an [objlist]. It reads the prediction from
+#'   `env`, so it is evaluated after, or summed with, an objective that
+#'   predicts.
 #' @seealso [normL2], [constraintL2]
 #' @details Computes the constraint value 
 #' \deqn{\left(\frac{x(t)-\mu}{\sigma}\right)^2}{(pred-p[names(mu)])^2/sigma^2}
@@ -1006,12 +1033,12 @@ constraintRayleigh <- function(sigma, attr.name = "prior", condition = NULL) {
 #' not reach either, so build a new objective for another value parameter.
 #' @examples
 #' prediction <- list(a = matrix(c(0, 1), nrow = 1, dimnames = list(NULL, c("time", "A"))))
-#' derivs <- matrix(c(0, 1, 0.1), nrow = 1, dimnames = list(NULL, c("time", "A.A", "A.k1")))
-#' attr(prediction$a, "deriv") <- derivs
+#' attr(prediction$a, "deriv") <- array(c(1, 0.1), c(1, 1, 2),
+#'   dimnames = list(NULL, "A", c("A", "k1")))
 #' p0 <- c(A = 1, k1 = 2)
 #' 
 #' vali <- datapointL2(name = "A", time = 0, value = "newpoint", sigma = 1, condition = "a")
-#' vali(pars = c(p0, newpoint = 1), env = .GlobalEnv)
+#' vali(pars = c(p0, newpoint = 2), env = .GlobalEnv)
 #' @export
 datapointL2 <- function(name, time, value, sigma = 1, attr.name = "validation", condition) {
 
@@ -1072,7 +1099,6 @@ datapointL2 <- function(name, time, value, sigma = 1, attr.name = "validation", 
     attr(out, "chi2")       <- setNames(out$value, attr.name)
     attr(out, "prediction") <- kr$prediction
     attr(out, "env")        <- env
-    class(out) <- NULL
     out
   }
   class(myfn)             <- c("objfn", "fn")

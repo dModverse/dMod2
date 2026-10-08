@@ -19,13 +19,19 @@ P(
 )
 }
 \arguments{
-\item{trafo}{An \link{eqnvec}, named character, \link{eqnlist}, or list thereof.}
+\item{trafo}{An \link{eqnvec}, named character or \link{eqnlist}, or a list of
+those named by condition, which builds one transformation per condition.
+\code{NULL} returns \code{NULL}.}
 
 \item{parameters}{Outer parameter names.}
 
-\item{condition}{Condition label.}
+\item{condition}{Condition label of a single \code{trafo}; a list takes its
+names instead.}
 
-\item{compile, modelname, verbose}{Forwarded to \code{\link[cppDE:cppFUN]{cppDE::cppFUN()}}.}
+\item{compile}{Logical. \code{TRUE} compiles all conditions into one shared
+object named \code{modelname}, \code{FALSE} leaves it to \code{\link[=compile]{compile()}}.}
+
+\item{modelname, verbose}{Passed to \code{\link[=Pexpl]{Pexpl()}} or \code{\link[=Pimpl]{Pimpl()}}.}
 
 \item{method}{\code{"explicit"}, \code{"implicit"}, or \code{NULL} for \code{"implicit"} if
 \code{trafo} is an \link{eqnlist} and \code{"explicit"} otherwise.}
@@ -35,13 +41,26 @@ P(
 \item{deriv, deriv2}{Attach first and second order sensitivities. \code{deriv2}
 requires \code{deriv = TRUE}.}
 
-\item{...}{Forwarded to the backend, e.g. \code{outdir}.}
+\item{...}{Further arguments of \code{\link[=Pexpl]{Pexpl()}} (\code{attach.input}, \code{derivMode},
+\code{outdir}) or \code{\link[=Pimpl]{Pimpl()}} (\code{forcings}, \code{keep.root}, \code{flow}, \code{controlsPTC},
+\code{outdir}), as \code{method} selects.}
 }
 \value{
 A \link{parfn}.
 }
 \description{
 Builds a \link{parfn} with \code{\link[=Pexpl]{Pexpl()}} or \code{\link[=Pimpl]{Pimpl()}}.
+}
+\examples{
+\donttest{
+## One transformation per condition, all compiled into one shared object
+trafo <- list(
+  ctrl  = eqnvec(k1 = "exp(log_k1)", k2 = "exp(log_k2)", A = "A0"),
+  treat = eqnvec(k1 = "exp(log_k1 + log_fold)", k2 = "exp(log_k2)", A = "A0"))
+p <- P(trafo, compile = TRUE, modelname = "P_example", outdir = tempdir())
+getParameters(p)
+p(c(log_k1 = 0, log_k2 = -1, A0 = 2, log_fold = log(3)))
+}
 }
 \seealso{
 \code{\link[=Pexpl]{Pexpl()}}, \code{\link[=Pimpl]{Pimpl()}}

@@ -312,6 +312,14 @@ plotPars.parframe <- function(x, tol = 1, ...){
 }
 
 
+# 0 and the decades from 10 up to the largest absolute limit, both signs. On a
+# pseudo-log axis, which is linear below 1, a break at 1 would crowd 0.
+.decadeBreaks <- function(lims) {
+  p <- 10^seq_len(max(1, ceiling(log10(max(abs(lims), 1)))))
+  sort(unique(c(-p, 0, p)))
+}
+
+
 # Convergence always reads the same way, a filled circle for a converged fit and
 # a triangle for one that stopped otherwise. Both levels stay in the legend even
 # when only one occurs, so several waterfall plots can be compared directly.
@@ -333,12 +341,8 @@ plotValues.parframe <- function(x, tol = 1, ..., showSteps = FALSE) {
   pars[["delta"]] <- pars$value - pars$value[1]
   jumps <- .stepDetect(pars$value, tol)
 
-  # 0 and the decades up to the worst fit; pseudo-log is linear below 1, so 1
-  # would crowd 0 once there are higher decades
-  top <- max(pars$delta, 1)
-  decades <- 0:ceiling(log10(top))
-  breaks <- c(0, 10^(if (length(decades) > 1) decades[-1] else decades))
-  labels <- parse(text = ifelse(breaks == 0, "0", paste0("10^", log10(breaks))))
+  yScale <- scale_y_continuous(trans = scales::pseudo_log_trans(base = 10),
+                               breaks = .decadeBreaks)
 
   stepLines <- stepLabels <- NULL
   if (showSteps) {
@@ -351,8 +355,7 @@ plotValues.parframe <- function(x, tol = 1, ..., showSteps = FALSE) {
     stepLines +
     geom_point() +
     stepLabels +
-    scale_y_continuous(trans = scales::pseudo_log_trans(sigma = 1, base = 10),
-                       breaks = breaks, labels = labels, limits = c(0, top)) +
+    yScale +
     labs(x = "Fit rank", y = expression(Delta * " objective value"),
          color = "Iterations") +
     scale_color_gradient(low = "dodgerblue", high = "orange") +
@@ -952,7 +955,7 @@ summary.parfn <- function(object, ...) {
 #' @param parameters character vector, the parameters accepted by the function
 #' @param condition character, the condition for which the transformation is defined
 #' @return object of class \code{parfn}, i.e. a function \code{p(..., fixed, deriv,
-#'  conditions, env)}. The argument \code{pars} should be passed via the \code{...}
+#'  deriv2, hessian, conditions, env, cores, sweep)}. The argument \code{pars} should be passed via the \code{...}
 #'  argument.
 #'
 #' Contains attributes "mappings", a list of \code{p2p}

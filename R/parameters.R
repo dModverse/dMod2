@@ -4,19 +4,27 @@
 #'
 #' Builds a [parfn] with [Pexpl()] or [Pimpl()].
 #'
-#' @param trafo An [eqnvec], named character, [eqnlist], or list thereof.
+#' @param trafo An [eqnvec], named character or [eqnlist], or a list of
+#'   those named by condition, which builds one transformation per condition.
+#'   `NULL` returns `NULL`.
 #' @param parameters Outer parameter names.
-#' @param condition Condition label.
-#' @param compile,modelname,verbose Forwarded to [cppDE::cppFUN()].
+#' @param condition Condition label of a single `trafo`; a list takes its
+#'   names instead.
+#' @param compile Logical. `TRUE` compiles all conditions into one shared
+#'   object named `modelname`, `FALSE` leaves it to [compile()].
+#' @param modelname,verbose Passed to [Pexpl()] or [Pimpl()].
 #' @param method `"explicit"`, `"implicit"`, or `NULL` for `"implicit"` if
 #'   `trafo` is an [eqnlist] and `"explicit"` otherwise.
 #' @param cores Number of cores. `NULL` uses [detectFreeCores()]; 1 on Windows.
 #' @param deriv,deriv2 Attach first and second order sensitivities. `deriv2`
 #'   requires `deriv = TRUE`.
-#' @param ... Forwarded to the backend, e.g. `outdir`.
+#' @param ... Further arguments of [Pexpl()] (`attach.input`, `derivMode`,
+#'   `outdir`) or [Pimpl()] (`forcings`, `keep.root`, `flow`, `controlsPTC`,
+#'   `outdir`), as `method` selects.
 #'
 #' @return A [parfn].
 #' @seealso [Pexpl()], [Pimpl()]
+#' @example inst/examples/P.R
 #' @export
 P <- function(trafo = NULL, parameters = NULL, condition = NULL,
               compile = FALSE, modelname = NULL, method = NULL,
@@ -334,13 +342,18 @@ P <- function(trafo = NULL, parameters = NULL, condition = NULL,
 #' @param trafo Named character / [eqnvec]; names are inner parameters,
 #'   values are expressions in the outer parameters.
 #' @param parameters Outer parameters; defaults to `getSymbols(trafo)`.
+#'   Names given here that `trafo` does not map pass through as identity.
 #' @param attach.input Append the outer inputs the transformation does not map
 #'   to the output, fixed ones included. An input that varies keeps its
 #'   derivatives, the identity when it enters the chain here, and one passed in
 #'   `fixed` stays fixed. Kept as a control of the returned function and read at
 #'   every call, see [controls()].
 #' @param condition Condition label.
-#' @param compile,modelname,verbose Forwarded to [cppDE::cppFUN].
+#' @param compile Logical. `TRUE` compiles now, `FALSE` leaves it to
+#'   [compile()]. The function is evaluable only compiled.
+#' @param modelname Base name of the generated files, default
+#'   `"expl_parfn"`, followed by `_<condition>`.
+#' @param verbose Logical. Print the compiler output.
 #' @param deriv,deriv2 Attach `attr(., "deriv")` `[p, theta]` and/or
 #'   `attr(., "deriv2")` `[p, theta, theta]`. `deriv2` needs `deriv = TRUE`.
 #' @param derivMode Which derivative products to build, any of `"forward"`
@@ -352,6 +365,7 @@ P <- function(trafo = NULL, parameters = NULL, condition = NULL,
 #'
 #' @return A [parfn].
 #' @seealso [Pimpl], [P].
+#' @example inst/examples/Pexpl.R
 #' @importFrom cppDE cppFUN
 #' @export
 Pexpl <- function(trafo, parameters = NULL, attach.input = FALSE, condition = NULL,
@@ -860,13 +874,19 @@ resetWarmStarts <- function(fn, verbose = TRUE) {
 #' @param trafo Named character, [eqnvec] or [eqnlist] defining \eqn{f}.
 #' @param parameters Outer parameter names. For an [eqnlist] the totals
 #'   \eqn{T} of the conserved quantities are added.
+#'   States named here are held at their value instead of solved for, and a
+#'   state whose right-hand side is `"0"` becomes a parameter.
 #' @param forcings Forcing names, set to 0.
 #' @param condition Condition label.
 #' @param keep.root If `TRUE`, roots are kept per condition as initial guesses
 #'   and repeated calls are answered from memory.
 #' @param flow If `TRUE`, \eqn{\dot{x} = f(x, p)}{dx/dt = f(x, p)} and a stable
 #'   steady state is returned. If `FALSE`, any regular root.
-#' @param compile,modelname,verbose Forwarded to [cppDE::cppFUN()].
+#' @param compile Logical. `TRUE` compiles now, `FALSE` leaves it to
+#'   [compile()].
+#' @param modelname Base name of the generated files, default
+#'   `"impl_parfn"`, followed by `_<condition>`.
+#' @param verbose Logical. Print the compiler output.
 #' @param deriv,deriv2 Attach first and second order sensitivities. `deriv2`
 #'   requires `deriv = TRUE`.
 #' @param controlsPTC Named list of solver controls:
@@ -904,6 +924,7 @@ resetWarmStarts <- function(fn, verbose = TRUE) {
 #'
 #' @return A [parfn].
 #' @seealso [Pexpl()], [P()]
+#' @example inst/examples/Pimpl.R
 #' @export
 #' @import cppDE
 #' @importFrom digest digest

@@ -219,6 +219,28 @@ test_that("Xs with constant forcing input matches the closed-form linear ODE sol
             abs(A0 - u_const / k) * exp(-k * 20) * 2)
 })
 
+test_that("Xs takes forcing names as factor or character alike", {
+  skip_if_no_compile()
+  mods <- xs_models()
+  forc <- data.frame(name = "F", time = c(0, 10), value = 0.6)
+  forcF <- transform(forc, name = factor(name))
+  pars <- c(A = 0.1, k = 0.3)
+  out_c <- Xs(mods$m_forc, forcings = forc, condition = "C1")(0:10, pars)$C1
+  out_f <- Xs(mods$m_forc, forcings = forcF, condition = "C1")(0:10, pars)$C1
+  expect_equal(unclass(out_f), unclass(out_c))
+})
+
+test_that("Xf starts states missing from pars at 0", {
+  # dA/dt = F - k*A, A(0) = 0: A(t) = F/k * (1 - exp(-k*t)).
+  skip_if_no_compile()
+  mods <- xs_models()
+  forc <- data.frame(name = "F", time = c(0, 10), value = 0.6)
+  times <- c(0, 1, 5, 10)
+  out <- Xf(mods$m_forc, forcings = forc, condition = "C1")(times, c(k = 0.3))$C1
+  expect_equal(out[match(times, out[, "time"]), "A"],
+               0.6 / 0.3 * (1 - exp(-0.3 * times)), tolerance = 1e-4)
+})
+
 
 # ---- Xd: linear-interpolation grid prediction ---------------------------
 
@@ -336,4 +358,34 @@ test_that("Heap/stack parity holds with per-condition varying theta subsets", {
     expect_equal(as.numeric(arr1), as.numeric(arr2), tolerance = 1e-6,
                  info = paste("values mismatch for condition", cond))
   }
+})
+
+test_that("Xs returns the forcings after the states and Y can observe them", {
+  skip_if_no_compile()
+  mods <- xs_models()
+  forc <- data.frame(name = "F", time = c(0, 5), value = c(0.2, 0.6))
+  x <- Xs(mods$m_forc, forcings = forc, condition = "C1")
+  times <- c(0, 2.5, 5, 8)
+  out <- x(times, c(A = 0.1, k = 0.3))$C1
+  expect_equal(colnames(out), c("time", "A", "F"))
+  # linear data: PCHIP is the line inside, the end value beyond
+  expect_equal(unname(out[, "F"]), c(0.2, 0.4, 0.6, 0.6))
+  expect_equal(dimnames(attr(out, "deriv"))[[2]], "A")
+
+  g <- Y(c(o = "F * A"), x, compile = TRUE, modelname = "xs_obs_forc",
+         outdir = tempdir())
+  pred <- (g * x)(times, c(A = 0.1, k = 0.3))$C1
+  expect_equal(unname(pred[, "o"]), unname(out[, "F"] * out[, "A"]))
+  expect_equal(unname(attr(pred, "deriv")[, "o", "A"]),
+               unname(out[, "F"] * attr(out, "deriv")[, "A", "A"]))
+})
+
+test_that("a forcing of one point is a constant", {
+  skip_if_no_compile()
+  mods <- xs_models()
+  times <- c(0, 1, 5, 10)
+  out <- Xs(mods$m_forc, forcings = data.frame(name = "F", time = 3, value = 0.6),
+            condition = "C1")(times, c(A = 0.1, k = 0.3))$C1
+  expect_equal(out[, "A"], (0.1 - 2) * exp(-0.3 * times) + 2, tolerance = 1e-4,
+               ignore_attr = TRUE)
 })

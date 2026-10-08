@@ -10,12 +10,14 @@ constraintL2(mu, sigma = 1, attr.name = "prior", condition = NULL)
 \item{mu}{Named numeric vector of prior means. Its names select the
 constrained parameters.}
 
-\item{sigma}{Named numeric or character vector. Character entries indicate
-log-scale sigma parameters to be estimated.}
+\item{sigma}{Named numeric vector of fixed standard deviations, or
+named character vector of parameters, on log scale, that estimate them.
+One kind for all entries.}
 
 \item{attr.name}{Character. Name of the attribute storing the constraint value.}
 
-\item{condition}{Optional character vector of conditions.}
+\item{condition}{Character vector, the conditions of a sum of objectives
+in which the term is evaluated. \code{NULL} evaluates it in every one.}
 }
 \value{
 Object of class \code{objfn}.
@@ -31,4 +33,12 @@ or, if sigma is estimated,
 with sigma internally transformed via \code{exp()}. This is the penalty
 form and drops the Gaussian's normalisation; \link{constraintL1} and its siblings
 are the full \verb{-2 log} density.
+}
+\examples{
+prior <- constraintL2(mu = c(k1 = 0, k2 = 0), sigma = 2)
+prior(pars = c(k1 = 1, k2 = -0.5))
+
+## A common sigma, estimated on log scale by the parameter s
+prior_s <- constraintL2(mu = c(k1 = 0, k2 = 0), sigma = "s")
+prior_s(pars = c(k1 = 1, k2 = -0.5, s = 0))$gradient
 }

@@ -1,41 +1,104 @@
 
 
-#' Model prediction function for ODE models. 
-#' @description Interface to combine an ODE and its sensitivity equations
-#' into one model function `x(times, pars, deriv = TRUE)` returning ODE output and sensitivities.
-#' @param odemodel object of class 'odemodel' or 'odemodel++', see [odemodel]
-#' @param forcings data.frame with columns name (factor), time (numeric) and value (numeric).
-#' The ODE forcings. Forcing support for the cppDE / Sundials backends depends
-#' on the chosen stepper method; see [cppDE::cppODE()].
-#' @param events An [eventlist] (or `data.frame` coercible via [as.eventlist]).
-#' Applied to the forward simulation only, sensitivities are not corrected.
-#' Define events on [odemodel()] unless the prediction is used purely for
-#' forward simulation.
-#' @param names character vector with the states to be returned. If NULL, all states are returned.
-#' @param condition either NULL (generic prediction for any condition) or a character, denoting
-#' the condition for which the function makes a prediction.
-#' @param optionsOde list with arguments to be passed to odeC() for the ODE integration.
-#' @param optionsSens list with arguments to be passed to odeC() for integration of the extended system
-#' @param optionsReverse list weighting the backward pass's step size by the
-#' adjoint of the previous evaluation, `cppDE` backend only. `NULL`, the
-#' default, leaves the step size to `abstol` and `reltol` alone. `gradtol` is
-#' the accuracy asked of the gradient and turns the weighting on; `floor` is
-#' the smallest weight as a fraction of the largest. The term enters under a
-#' maximum, so the grid can only become finer: a weight from a parameter the
-#' optimiser has since left costs steps and never accuracy.
-#' @param fcontrol list with additional fine-tuning arguments for the forcing interpolation.
-#' See [approxfun][stats::approxfun] for possible arguments.
-#' @param ... Additional arguments passed to methods.
-#' @details `forcings`, `names` and the solver options are kept, as given, in
-#' the controls of the returned function and read at every solve, so
-#' [controls()] can change them later; on the `deSolve` backend `events` and
-#' `fcontrol` as well. On the `cppDE` backend the options are merged over
-#' their defaults at every solve, so a replaced `optionsOde` or `optionsSens`
-#' only needs the entries it changes, and an unknown entry draws the same
-#' warning as in the constructor.
-#' @return Object of class [prdfn]. When called with transformed parameters
-#'   (see [P]), the chain rule is applied automatically; the result is
-#'   stored in `attr(., "deriv")` (which then differs from `"sensitivities"`).
+#' Prediction function of an ODE model with sensitivities
+#'
+#' @description Turns an [odemodel()] into a prediction function that
+#' integrates the states and, with `deriv = TRUE`, their sensitivities.
+#'
+#' @param odemodel An [odemodel()]. Its backend decides which method runs.
+#' @param forcings `data.frame` with columns `name` (character or factor),
+#'   `time` and `value`, one row per data point of a forcing declared in
+#'   `odemodel(forcings = )`. See section Forcings.
+#' @param events `deSolve` backend only. An [eventlist], or a `data.frame`
+#'   [as.eventlist()] accepts. Applied to the states only, the sensitivities
+#'   are not corrected, so define events in [odemodel()] unless the prediction
+#'   is used for simulation alone. The other backends take events only from
+#'   [odemodel()].
+#' @param names Character vector, the states and forcings to return. `NULL`
+#'   returns all states followed by the forcings.
+#' @param condition `NULL` for a prediction valid in every condition, or the
+#'   name of the condition it belongs to.
+#' @param optionsOde Named list of solver options for the solves without
+#'   sensitivities. See section Solver options.
+#' @param optionsSens Named list of solver options for the solves with
+#'   sensitivities. See section Solver options.
+#' @param optionsReverse Named list weighting the step size of the backward
+#'   pass of `sweep = "reverse"` by the adjoint of the previous evaluation.
+#'   Needs `backend = "cppDE"` and a model built with
+#'   `derivMode = "reverse"`. `NULL`, the default, leaves the step size to
+#'   `atol` and `rtol`. Entries:
+#'   * `gradtol`: the accuracy asked of the gradient; turns the weighting on.
+#'   * `floor`: the smallest weight, as a fraction of the largest.
+#'
+#'   The weight enters under a maximum, so the grid only becomes finer.
+#' @param fcontrol `deSolve` backend only. List with the interpolation
+#'   settings of the forcings, `method`, `rule`, `f` and `ties` as in
+#'   [stats::approxfun()], passed to [deSolve::ode()] as its `fcontrol`.
+#' @param ... Not used.
+#'
+#' @section Solver options:
+#' On the `cppDE` and `Sundials` backends `optionsOde` and `optionsSens` take
+#' the entries below and pass them to [cppDE::solveODE()]. An entry not given
+#' keeps its default; an unknown entry is ignored with a warning.
+#'
+#' * `atol`, `rtol`: absolute and relative error tolerance, default `1e-6`.
+#' * `maxsteps`: largest number of steps of one solve, default `1e6`.
+#' * `maxattemps`: consecutive rejected steps before the solve fails,
+#'   default `50`.
+#' * `hini`: first step size, default `0`, which estimates it.
+#' * `roottol`: tolerance of root-triggered events and of
+#'   `rootfunc = "equilibrate"`, default `1e-6`.
+#' * `maxroot`: number of times a root event may fire, default `1`.
+#' * `onFailure`: `"stop"`, `"warn"` (default) or `"silent"` on a failed
+#'   solve. With `"warn"` and `"silent"` the result ends at the time reached.
+#' * `traceFile`: CSV file the per-step trace is written to, default `NULL`;
+#'   needs `odemodel(..., stepTrace = TRUE)`.
+#'
+#' `optionsOde` applies to `deriv = FALSE` and to the value and backward pass
+#' of `sweep = "reverse"`, `optionsSens` to `deriv = TRUE` and to
+#' `sweep = "reverse"` with `deriv2 = TRUE`. A fit with the default forward
+#' sweep therefore runs under `optionsSens`. The integration
+#' method is fixed when the model is built, `odemodel(..., method = )`.
+#'
+#' On the `deSolve` backend both lists are arguments of [deSolve::ode()],
+#' among them `method` (default `"lsoda"` for `optionsOde` and `"lsodes"` for
+#' `optionsSens`), `atol`, `rtol`, `maxsteps` and `hini`. A list given there
+#' replaces the default, so it names `method` if it needs one.
+#'
+#' @section Forcings:
+#' On the `cppDE` and `Sundials` backends each forcing is the monotone cubic
+#' Hermite interpolant (PCHIP) of its data points, see
+#' [cppDE::forcingValues()]. Outside the points it holds the value of the
+#' first and the last one; a single point gives a constant. The integrator
+#' does not stop at the points, so a jump is best given by an event or by
+#' two close points.
+#'
+#' On the `deSolve` backend the forcings are interpolated linearly and held
+#' constant outside their data, unless `fcontrol` says otherwise.
+#'
+#' The forcings are returned after the states, without derivatives, so
+#' observables of [Y()] can contain them. Different forcings per condition
+#' come from one `Xs()` per condition, joined by `+`.
+#'
+#' @section Controls:
+#' `forcings`, `names` and the solver options are kept, as given, in the
+#' controls of the returned function and read at every solve, so [controls()]
+#' can change them later; on the `deSolve` backend `events` and `fcontrol` as
+#' well. On the `cppDE` and `Sundials` backends a replaced `optionsOde` or
+#' `optionsSens` is merged over the defaults, so it only needs the entries it
+#' changes.
+#'
+#' @return A [prdfn], called as `x(times, pars, fixed = NULL, deriv = TRUE,
+#'   deriv2 = FALSE)`. It returns a [prdlist] with one [prdframe] per
+#'   condition: the states over `times`, with the sensitivities in
+#'   `attr(, "deriv")`, `[time, state, parameter]`, when `deriv = TRUE`, and
+#'   the second-order sensitivities in `attr(, "deriv2")` when `deriv2 = TRUE`
+#'   (`cppDE` backend, model built with `deriv2 = TRUE`). If `pars` carries a
+#'   `deriv` attribute, as the output of a [parfn] does, the sensitivities are
+#'   taken with respect to the outer parameters.
+#'
+#' @seealso [Xf()] for predictions without sensitivities, [cppDE::solveODE()].
+#' @example inst/examples/Xs.R
 #' @export
 Xs <- function(odemodel, ...) {
   UseMethod("Xs", odemodel)
@@ -203,7 +266,8 @@ Xs.deSolve <- function(odemodel, forcings = NULL, events = NULL, names = NULL, c
   required_cols <- c("name", "time", "value")
   if (!all(required_cols %in% names(forcings)))
     stop("'forcings' must contain columns: ", paste(required_cols, collapse = ", "))
-  if (!is.character(forcings$name)) stop("'name' must be a character")
+  if (is.factor(forcings$name)) forcings$name <- as.character(forcings$name)
+  if (!is.character(forcings$name)) stop("'name' must be character or factor")
   if (!is.numeric(forcings$time)) stop("'time' must be numeric")
   if (!is.numeric(forcings$value)) stop("'value' must be numeric")
   if (anyNA(forcings[, required_cols])) stop("'forcings' contains NA values")
@@ -274,8 +338,10 @@ Xs.cppDE <- function(odemodel, forcings = NULL, events = NULL, names = NULL, con
   inner_names <- c(attr(func, "variables"), attr(func, "parameters"))
 
   # Only a subset of all variables is returned
-  if (is.null(names)) names <- dim_names$variable else names <- intersect(dim_names$variable, names)
-  if (length(names) == 0) stop(paste("Valid names are:", paste(dim_names$variable, collapse = ", ")))
+  forcNames <- attr(func, "forcings")
+  outNames <- c(dim_names$variable, forcNames)
+  if (is.null(names)) names <- outNames else names <- intersect(outNames, names)
+  if (length(names) == 0) stop(paste("Valid names are:", paste(outNames, collapse = ", ")))
 
   # Controls to be modified from outside, as the user gave them. Every entry is
   # read when the leaf runs.
@@ -410,12 +476,16 @@ Xs.cppDE <- function(odemodel, forcings = NULL, events = NULL, names = NULL, con
   }
 
   # Subsetting to `names` copies the whole sensitivity array. When `names` is
-  # the full variable set, the default, the copy buys nothing.
+  # the full variable set, the default, the copy buys nothing. Forcings come
+  # after the states, as values without derivatives.
   assemble1 <- function(res, pars, fixed, deriv, deriv2) {
-    nms <- controls$names
+    nms <- intersect(controls$names, colnames(res$variable))
+    fnms <- intersect(controls$names, forcNames)
     keepAll <- identical(nms, colnames(res$variable))
     out <- cbind(res$time,
-                 if (keepAll) res$variable else submatrix(res$variable, cols = nms))
+                 if (keepAll) res$variable else submatrix(res$variable, cols = nms),
+                 if (length(fnms))
+                   cppDE::forcingValues(res$time, forcsOf(controls$forcings)[fnms]))
     colnames(out)[1] <- "time"
     dX <- dX2 <- NULL
     if (deriv) {
@@ -738,25 +808,25 @@ Xs.cppDE <- function(odemodel, forcings = NULL, events = NULL, names = NULL, con
 }
 
 
-#' Model prediction function for ODE models without sensitivities.
-#' @description Reduced version of [Xs] that returns the ODE output without
-#' first- or second-order sensitivities. Dispatches on the [odemodel] class:
-#' the `deSolve` method drives the cOde backend, the `cppDE` method drives
-#' the cppDE / Sundials backend.
-#' @param odemodel Object of class [odemodel].
-#' @param forcings see [Xs].
-#' @param events see [Xs].
-#' @param condition either NULL (generic prediction for any condition) or a
-#' character denoting the condition for which the function makes a prediction.
-#' @param optionsOde list with arguments passed to the ODE integrator (deSolve
-#' or [cppDE::solveODE]).
-#' @param fcontrol list with additional fine-tuning arguments for the forcing
-#' interpolation (cOde backend only). See [approxfun][stats::approxfun].
-#' @param ... not used.
-#' @details Can be used to integrate additional quantities, e.g. fluxes, by
-#' adding them to `f`. All quantities not initialised by `pars` are initialised
-#' to 0. For more details and the return value see [Xs], also for the controls
-#' the returned function keeps.
+#' Prediction function of an ODE model without sensitivities
+#'
+#' @description Turns an [odemodel()] into a prediction function that
+#' integrates the states alone. States missing from `pars` start at 0, so
+#' further quantities, such as fluxes, can be integrated by adding them to the
+#' equations.
+#'
+#' @param odemodel An [odemodel()]. Its backend decides which method runs.
+#' @param forcings,events,condition As in [Xs()].
+#' @param optionsOde Named list of solver options, as `optionsOde` of [Xs()],
+#'   except that `onFailure` defaults to `"stop"` on the `cppDE` and `Sundials`
+#'   backends.
+#' @param fcontrol `deSolve` backend only, as in [Xs()].
+#' @param ... Not used.
+#'
+#' @return A [prdfn], called as `x(times, pars, fixed = NULL)`, returning a
+#'   [prdlist] without derivatives. `forcings` and `optionsOde` can be changed
+#'   with [controls()].
+#' @seealso [Xs()]
 #' @export
 Xf <- function(odemodel, ...) {
   UseMethod("Xf", odemodel)
@@ -854,6 +924,8 @@ Xf.cppDE <- function(odemodel, forcings = NULL, events = NULL, condition = NULL,
       stop("Xf: second-order sensitivities are not implemented (use Xs() for deriv2).")
 
     params <- c(unclass(pars), unclass(fixed))
+    unset <- setdiff(attr(func, "variables"), names(params))
+    params[unset] <- 0
     forcings <- forcsOf(controls$forcings)
     optionsOde <- odeOf(controls$optionsOde)
 
@@ -869,7 +941,8 @@ Xf.cppDE <- function(odemodel, forcings = NULL, events = NULL, condition = NULL,
                             onFailure = optionsOde$onFailure,
                             traceFile = optionsOde$traceFile)
 
-    out <- cbind(out$time, out$variable)
+    out <- cbind(out$time, out$variable,
+                 if (length(forcings)) cppDE::forcingValues(out$time, forcings))
     colnames(out)[1] <- "time"
 
     prdframe(out, deriv = NULL, parameters = c(pars, fixed))
@@ -893,13 +966,10 @@ Xf.cppDE <- function(odemodel, forcings = NULL, events = NULL, condition = NULL,
 #' to initialize the parameters.
 #' @param condition either NULL (generic prediction for any condition) or a character, denoting
 #' the condition for which the function makes a prediction.
-#' @return Object of class [prdfn], i.e. 
-#' a function `x(times pars, deriv = TRUE, conditions = NULL)`, 
-#' see also [Xs]. Attributes are "parameters", the parameter names (row names of
-#' the data frame), and possibly "pouter", a named numeric vector which is generated
-#' from `data$value`.
+#' @return A [prdfn], called as `x(times, pars, fixed = NULL, deriv = TRUE)`,
+#'   that interpolates the parameter values linearly in time. Its parameters
+#'   are the row names of `data`. Second-order derivatives are not available.
 #' @examples
-#' \dontrun{
 #' # Generate a data.frame and corresponding prediction function
 #' timesD <- seq(0, 2*pi, 0.5)
 #' mydata <- data.frame(name = "A", time = timesD, value = sin(timesD), 
@@ -911,8 +981,6 @@ Xf.cppDE <- function(odemodel, forcings = NULL, events = NULL, condition = NULL,
 #' pouter <- structure(mydata$value, names = rownames(mydata))
 #' prediction <- x(times, pouter)
 #' plot(prediction)
-#' 
-#' }
 #' @export
 Xd <- function(data, condition = NULL) {
   
@@ -1047,34 +1115,31 @@ Xd <- function(data, condition = NULL) {
 #' @param g Named character vector or [eqnvec] defining the observation
 #' function, or a list of those named by condition, which builds one
 #' observation function per condition in a single call.
-#' @param f Named character vector of equations or an object that can be converted 
-#' to [eqnvec], or an object of class 'fn'. If `f` is provided, states and parameters 
-#' are automatically inferred from `f`.
-#' @param states Character vector, alternative definition of state variables, usually 
-#' the names of `f`. If both `f` and `states` are provided, the `states` argument 
-#' overrides those derived from `f`.
-#' @param parameters Character vector, alternative definition of parameters, usually 
-#' the symbols contained in `g` and `f` except for `states` and the keyword `time`. 
-#' If both `f` and `parameters` are provided, the `parameters` argument overrides those 
-#' derived from `f` and `g`.
+#' @param f Equations, anything [as.eqnvec()] accepts, or a prediction
+#'   function. The states and parameters are read off `f`; for a prediction
+#'   function the forcings count as states.
+#' @param states Character vector of states, added to those read off `f`.
+#' @param parameters Character vector of parameters, added to the symbols of
+#'   `g` and `f` that are neither states nor `time`.
 #' @param condition Either `NULL` (generic prediction for any condition) or a character 
 #' string specifying the condition for which the function generates predictions.
 #' @param attach.input Logical, append the incoming states to the output.
 #'   Defaults to `FALSE`: carrying the state sensitivities through costs a
 #'   full array copy per condition and objective functions do not read them.
-#'   Set `TRUE` to plot states alongside observables.
-#' @param compile Logical, if `TRUE`, the function is compiled (see
-#'   [cppDE::cppFUN]).
-#' @param modelname Character, used if `compile = TRUE`, specifies a fixed
-#'   filename for the generated C file.
+#'   Set `TRUE` to plot states alongside observables. Can be changed with
+#'   [controls()].
+#' @param compile Logical. `TRUE` compiles the generated code now, `FALSE`
+#'   leaves it to [compile()]. The function is evaluable only compiled.
+#' @param modelname Character, the base name of the generated C++ file and
+#'   shared object, default `"obsfn"`, followed by `_<condition>`.
 #' @param verbose Logical, print compiler output to the R console.
 #' @param cores Number of parallel jobs used to generate the sources when
 #' `g` is a list; `NULL` auto-detects. Ignored for a single observation
 #' function, which is one source either way.
 #' @param derivMode Which derivative products to build, any of `"forward"`
 #'   (default), `"reverse"` and `"forward-reverse"`.
-#'   * `"forward"`: forward-mode AD on `cppde::dual`. Faster for many
-#'     parameters and what the Jacobian path uses. Requires compiled code.
+#'   * `"forward"`: the Jacobian by forward-mode AD. Without it the function
+#'     returns no `deriv` attribute.
 #'   * `"reverse"`: the vector-Jacobian product the reverse sweep contracts
 #'     against, a second instantiation of the expression body. It is what
 #'     `obj(..., sweep = "reverse")` needs from an observation function.
@@ -1091,8 +1156,10 @@ Xd <- function(data, condition = NULL) {
 #'   compiled shared object. Defaults to the working directory.
 #'
 #' @return
-#' An object of class [obsfn], i.e. a function  `g(..., fixed = NULL, deriv = TRUE, condition = NULL, env = NULL)`
-#' returning predictions for observables and its derivatives.
+#' An [obsfn], called as `g(out, pars, fixed = NULL, deriv = TRUE,
+#' deriv2 = FALSE, conditions, env = NULL)` with a [prdlist] `out`, or
+#' composed as `g * x`. It returns a [prdlist] of the observables and their
+#' derivatives.
 #' 
 #' @example inst/examples/prediction.R
 #' 
@@ -1442,10 +1509,10 @@ Y <- function(g, f = NULL, states = NULL, parameters = NULL,
 #' the condition for which the function makes a prediction.
 #' @return Object of class [prdfn].
 #' @examples
-#' \dontrun{
+#' \donttest{
 #' x <- Xt()
 #' g <- Y(c(y = "a*time^2+b"), f = NULL, parameters = c("a", "b"),
-#'        compile = TRUE, modelname = "Xt_example_obs")
+#'        compile = TRUE, modelname = "Xt_example_obs", outdir = tempdir())
 #'
 #' times <- seq(-1, 1, by = .05)
 #' pars <- c(a = .1, b = 1)

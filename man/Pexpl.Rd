@@ -22,7 +22,8 @@ Pexpl(
 \item{trafo}{Named character / \link{eqnvec}; names are inner parameters,
 values are expressions in the outer parameters.}
 
-\item{parameters}{Outer parameters; defaults to \code{getSymbols(trafo)}.}
+\item{parameters}{Outer parameters; defaults to \code{getSymbols(trafo)}.
+Names given here that \code{trafo} does not map pass through as identity.}
 
 \item{attach.input}{Append the outer inputs the transformation does not map
 to the output, fixed ones included. An input that varies keeps its
@@ -32,7 +33,13 @@ every call, see \code{\link[=controls]{controls()}}.}
 
 \item{condition}{Condition label.}
 
-\item{compile, modelname, verbose}{Forwarded to \link[cppDE:cppFUN]{cppDE::cppFUN}.}
+\item{compile}{Logical. \code{TRUE} compiles now, \code{FALSE} leaves it to
+\code{\link[=compile]{compile()}}. The function is evaluable only compiled.}
+
+\item{modelname}{Base name of the generated files, default
+\code{"expl_parfn"}, followed by \verb{_<condition>}.}
+
+\item{verbose}{Logical. Print the compiler output.}
 
 \item{deriv, deriv2}{Attach \code{attr(., "deriv")} \verb{[p, theta]} and/or
 \code{attr(., "deriv2")} \verb{[p, theta, theta]}. \code{deriv2} needs \code{deriv = TRUE}.}
@@ -53,6 +60,16 @@ Builds \code{p_inner = f(p_outer)} from symbolic expressions via
 \link[cppDE:cppFUN]{cppDE::cppFUN}, with derivatives by AD. The returned \link{parfn} attaches the
 Jacobian and, optionally, the Hessian. It is evaluable only after
 compilation.
+}
+\examples{
+\donttest{
+trafo <- eqnvec(k1 = "exp(log_k1)", k2 = "exp(log_k2)", A = "A0")
+p <- Pexpl(trafo, condition = "C1", compile = TRUE,
+           modelname = "Pexpl_example", outdir = tempdir())
+out <- p(c(log_k1 = 0, log_k2 = -1, A0 = 2))
+out$C1
+attr(out$C1, "deriv")
+}
 }
 \seealso{
 \link{Pimpl}, \link{P}.

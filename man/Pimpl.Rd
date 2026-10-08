@@ -24,7 +24,9 @@ Pimpl(
 \item{trafo}{Named character, \link{eqnvec} or \link{eqnlist} defining \eqn{f}.}
 
 \item{parameters}{Outer parameter names. For an \link{eqnlist} the totals
-\eqn{T} of the conserved quantities are added.}
+\eqn{T} of the conserved quantities are added.
+States named here are held at their value instead of solved for, and a
+state whose right-hand side is \code{"0"} becomes a parameter.}
 
 \item{forcings}{Forcing names, set to 0.}
 
@@ -36,7 +38,13 @@ and repeated calls are answered from memory.}
 \item{flow}{If \code{TRUE}, \eqn{\dot{x} = f(x, p)}{dx/dt = f(x, p)} and a stable
 steady state is returned. If \code{FALSE}, any regular root.}
 
-\item{compile, modelname, verbose}{Forwarded to \code{\link[cppDE:cppFUN]{cppDE::cppFUN()}}.}
+\item{compile}{Logical. \code{TRUE} compiles now, \code{FALSE} leaves it to
+\code{\link[=compile]{compile()}}.}
+
+\item{modelname}{Base name of the generated files, default
+\code{"impl_parfn"}, followed by \verb{_<condition>}.}
+
+\item{verbose}{Logical. Print the compiler output.}
 
 \item{deriv, deriv2}{Attach first and second order sensitivities. \code{deriv2}
 requires \code{deriv = TRUE}.}
@@ -83,6 +91,20 @@ states in \code{pars}, missing ones at 1, then \code{nStarts} random starts. If 
 fail, it is an error. Identical parameter values are solved
 once, also across conditions. \code{keep.root} and \code{controlsPTC} can be changed
 with \code{\link[=controls]{controls()}}.
+}
+\examples{
+\donttest{
+## Steady state of A <-> B; the total of A and B enters as a parameter
+r <- addReaction(NULL, "A", "B", "k1*A")
+r <- addReaction(r, "B", "A", "k2*B")
+p <- Pimpl(r, condition = "C1", compile = TRUE,
+           modelname = "Pimpl_example", outdir = tempdir())
+getParameters(p)
+pars <- setNames(c(1, 0.5, 3), getParameters(p))
+out <- p(pars)
+out$C1
+attr(out$C1, "deriv")
+}
 }
 \seealso{
 \code{\link[=Pexpl]{Pexpl()}}, \code{\link[=P]{P()}}

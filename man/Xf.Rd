@@ -4,7 +4,7 @@
 \alias{Xf}
 \alias{Xf.deSolve}
 \alias{Xf.cppDE}
-\title{Model prediction function for ODE models without sensitivities.}
+\title{Prediction function of an ODE model without sensitivities}
 \usage{
 Xf(odemodel, ...)
 
@@ -28,32 +28,29 @@ Xf(odemodel, ...)
 )
 }
 \arguments{
-\item{odemodel}{Object of class \link{odemodel}.}
+\item{odemodel}{An \code{\link[=odemodel]{odemodel()}}. Its backend decides which method runs.}
 
-\item{...}{not used.}
+\item{...}{Not used.}
 
-\item{forcings}{see \link{Xs}.}
+\item{forcings, events, condition}{As in \code{\link[=Xs]{Xs()}}.}
 
-\item{events}{see \link{Xs}.}
+\item{optionsOde}{Named list of solver options, as \code{optionsOde} of \code{\link[=Xs]{Xs()}},
+except that \code{onFailure} defaults to \code{"stop"} on the \code{cppDE} and \code{Sundials}
+backends.}
 
-\item{condition}{either NULL (generic prediction for any condition) or a
-character denoting the condition for which the function makes a prediction.}
-
-\item{optionsOde}{list with arguments passed to the ODE integrator (deSolve
-or \link[cppDE:solveODE]{cppDE::solveODE}).}
-
-\item{fcontrol}{list with additional fine-tuning arguments for the forcing
-interpolation (cOde backend only). See \link[stats:approxfun]{approxfun}.}
+\item{fcontrol}{\code{deSolve} backend only, as in \code{\link[=Xs]{Xs()}}.}
+}
+\value{
+A \link{prdfn}, called as \code{x(times, pars, fixed = NULL)}, returning a
+\link{prdlist} without derivatives. \code{forcings} and \code{optionsOde} can be changed
+with \code{\link[=controls]{controls()}}.
 }
 \description{
-Reduced version of \link{Xs} that returns the ODE output without
-first- or second-order sensitivities. Dispatches on the \link{odemodel} class:
-the \code{deSolve} method drives the cOde backend, the \code{cppDE} method drives
-the cppDE / Sundials backend.
+Turns an \code{\link[=odemodel]{odemodel()}} into a prediction function that
+integrates the states alone. States missing from \code{pars} start at 0, so
+further quantities, such as fluxes, can be integrated by adding them to the
+equations.
 }
-\details{
-Can be used to integrate additional quantities, e.g. fluxes, by
-adding them to \code{f}. All quantities not initialised by \code{pars} are initialised
-to 0. For more details and the return value see \link{Xs}, also for the controls
-the returned function keeps.
+\seealso{
+\code{\link[=Xs]{Xs()}}
 }

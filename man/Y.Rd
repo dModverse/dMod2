@@ -26,18 +26,14 @@ Y(
 function, or a list of those named by condition, which builds one
 observation function per condition in a single call.}
 
-\item{f}{Named character vector of equations or an object that can be converted
-to \link{eqnvec}, or an object of class 'fn'. If \code{f} is provided, states and parameters
-are automatically inferred from \code{f}.}
+\item{f}{Equations, anything \code{\link[=as.eqnvec]{as.eqnvec()}} accepts, or a prediction
+function. The states and parameters are read off \code{f}; for a prediction
+function the forcings count as states.}
 
-\item{states}{Character vector, alternative definition of state variables, usually
-the names of \code{f}. If both \code{f} and \code{states} are provided, the \code{states} argument
-overrides those derived from \code{f}.}
+\item{states}{Character vector of states, added to those read off \code{f}.}
 
-\item{parameters}{Character vector, alternative definition of parameters, usually
-the symbols contained in \code{g} and \code{f} except for \code{states} and the keyword \code{time}.
-If both \code{f} and \code{parameters} are provided, the \code{parameters} argument overrides those
-derived from \code{f} and \code{g}.}
+\item{parameters}{Character vector of parameters, added to the symbols of
+\code{g} and \code{f} that are neither states nor \code{time}.}
 
 \item{condition}{Either \code{NULL} (generic prediction for any condition) or a character
 string specifying the condition for which the function generates predictions.}
@@ -45,13 +41,14 @@ string specifying the condition for which the function generates predictions.}
 \item{attach.input}{Logical, append the incoming states to the output.
 Defaults to \code{FALSE}: carrying the state sensitivities through costs a
 full array copy per condition and objective functions do not read them.
-Set \code{TRUE} to plot states alongside observables.}
+Set \code{TRUE} to plot states alongside observables. Can be changed with
+\code{\link[=controls]{controls()}}.}
 
-\item{compile}{Logical, if \code{TRUE}, the function is compiled (see
-\link[cppDE:cppFUN]{cppDE::cppFUN}).}
+\item{compile}{Logical. \code{TRUE} compiles the generated code now, \code{FALSE}
+leaves it to \code{\link[=compile]{compile()}}. The function is evaluable only compiled.}
 
-\item{modelname}{Character, used if \code{compile = TRUE}, specifies a fixed
-filename for the generated C file.}
+\item{modelname}{Character, the base name of the generated C++ file and
+shared object, default \code{"obsfn"}, followed by \verb{_<condition>}.}
 
 \item{verbose}{Logical, print compiler output to the R console.}
 
@@ -69,8 +66,8 @@ Requires \code{deriv = TRUE}. Default \code{FALSE}.}
 \item{derivMode}{Which derivative products to build, any of \code{"forward"}
 (default), \code{"reverse"} and \code{"forward-reverse"}.
 \itemize{
-\item \code{"forward"}: forward-mode AD on \code{cppde::dual}. Faster for many
-parameters and what the Jacobian path uses. Requires compiled code.
+\item \code{"forward"}: the Jacobian by forward-mode AD. Without it the function
+returns no \code{deriv} attribute.
 \item \code{"reverse"}: the vector-Jacobian product the reverse sweep contracts
 against, a second instantiation of the expression body. It is what
 \code{obj(..., sweep = "reverse")} needs from an observation function.
@@ -84,8 +81,9 @@ Either way the observation function is evaluable only after compilation.}
 compiled shared object. Defaults to the working directory.}
 }
 \value{
-An object of class \link{obsfn}, i.e. a function  \code{g(..., fixed = NULL, deriv = TRUE, condition = NULL, env = NULL)}
-returning predictions for observables and its derivatives.
+An \link{obsfn}, called as \code{g(out, pars, fixed = NULL, deriv = TRUE, deriv2 = FALSE, conditions, env = NULL)} with a \link{prdlist} \code{out}, or
+composed as \code{g * x}. It returns a \link{prdlist} of the observables and their
+derivatives.
 }
 \description{
 Creates an object of type \link{obsfn} that evaluates an observation function
@@ -93,42 +91,34 @@ and, if requested, its first and second derivatives based on the output of a mod
 prediction function, see \link{prdfn}, as e.g. produced by \link{Xs}.
 }
 \examples{
-\dontrun{
-  # Define a time grid on which to make a prediction by peace-wise linear function.
-  # Then define a (generic) prediction function based on thid grid.
+\donttest{
+  # A prediction function interpolating parameter values piecewise linearly
   times <- 0:5
   grid <- data.frame(name = "A", time = times, row.names = paste0("p", times))
   x <- Xd(grid)
-  
-  # Define an observable and an observation function
+
+  # An observable and its observation function
   observables <- eqnvec(Aobs = "s*A")
-  g <- Y(g = observables, f = NULL, states = "A", parameters = "s")
-  
-  # Collect parameters and define an overarching parameter transformation
-  # for two "experimental condtions".
-  dynpars <- attr(x, "parameters")
-  obspars <- attr(g, "parameters")
-  innerpars <- c(dynpars, obspars)
-  
+  g <- Y(g = observables, f = NULL, states = "A", parameters = "s",
+         compile = TRUE, modelname = "prediction_obs", outdir = tempdir())
+
+  # One parameter transformation per experimental condition
+  innerpars <- c(getParameters(x), getParameters(g))
   trafo <- structure(innerpars, names = innerpars)
-  trafo_C1 <- replaceSymbols(innerpars, paste(innerpars, "C1", sep = "_"), trafo)
-  trafo_C2 <- replaceSymbols(innerpars, paste(innerpars, "C2", sep = "_"), trafo)
-  
-  p <- NULL
-  p <- p + P(trafo = trafo_C1, condition = "C1")
-  p <- p + P(trafo = trafo_C2, condition = "C2")
-  
-  # Collect outer (overarching) parameters and 
-  # initialize with random values
-  outerpars <- attr(p, "parameters")
+  trafo_C1 <- cOde::replaceSymbols(innerpars, paste(innerpars, "C1", sep = "_"), trafo)
+  trafo_C2 <- cOde::replaceSymbols(innerpars, paste(innerpars, "C2", sep = "_"), trafo)
+
+  p <- P(trafo = trafo_C1, condition = "C1", compile = TRUE,
+         modelname = "prediction_p1", outdir = tempdir()) +
+    P(trafo = trafo_C2, condition = "C2", compile = TRUE,
+      modelname = "prediction_p2", outdir = tempdir())
+
+  # Outer parameters at random values
+  outerpars <- getParameters(p)
   pars <- structure(runif(length(outerpars), 0, 1), names = outerpars)
-  
-  # Predict internal/unobserved states
-  out1 <- (x*p)(times, pars)
-  plot(out1)
-  
-  # Predict observed states in addition to unobserved
-  out2 <- (g*x*p)(times, pars)
-  plot(out2)
+
+  # Unobserved states, then observables
+  plot((x*p)(times, pars))
+  plot((g*x*p)(times, pars))
 }
 }
