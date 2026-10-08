@@ -210,3 +210,18 @@ test_that("output places the shared object where it says", {
                "does not exist")
   expect_error(compile(bench$gfn, output = character(0)), "single non-empty name")
 })
+
+test_that("compile() restores the environment and writes no symbol table", {
+  skip_if_no_compile()
+  bench <- fx_decay_compiled()
+  d <- file.path(tempdir(), paste0("cmp_env_", as.integer(runif(1, 1e6, 9e6))))
+  dir.create(d)
+  withr::local_dir(d)
+  withr::local_envvar(PKG_CFLAGS = "-DDMOD_PRESET",
+                      `_R_SHLIB_BUILD_OBJECTS_SYMBOL_TABLES_` = "TRUE")
+
+  suppressMessages(compile(bench$gfn, bench$xfn, output = file.path(d, "env"), cores = 1))
+  expect_identical(Sys.getenv("PKG_CFLAGS"), "-DDMOD_PRESET")
+  expect_identical(Sys.getenv("_R_SHLIB_BUILD_OBJECTS_SYMBOL_TABLES_"), "TRUE")
+  expect_false(file.exists(file.path(d, "symbols.rds")))
+})

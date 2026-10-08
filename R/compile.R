@@ -204,12 +204,15 @@
 compile <- function(..., output = NULL, args = NULL, cores = detectFreeCores(),
                     chunkSize = 100, verbose = FALSE) {
 
-  ## save & restore env
-  old <- Sys.getenv(c("PKG_CFLAGS","PKG_CXXFLAGS","PKG_CPPFLAGS","PKG_LIBS"), unset = NA)
+  ## save & restore env; R CMD check asks SHLIB for symbol tables, which it
+  ## writes as symbols.rds into the working directory
+  old <- Sys.getenv(c("PKG_CFLAGS", "PKG_CXXFLAGS", "PKG_CPPFLAGS", "PKG_LIBS",
+                      "_R_SHLIB_BUILD_OBJECTS_SYMBOL_TABLES_"), unset = NA)
   on.exit({
     for (n in names(old))
-      if (is.na(old[n])) Sys.unsetenv(n) else Sys.setenv(structure(old[n], names = n))
+      if (is.na(old[n])) Sys.unsetenv(n) else do.call(Sys.setenv, as.list(old[n]))
   }, add = TRUE)
+  Sys.setenv(`_R_SHLIB_BUILD_OBJECTS_SYMBOL_TABLES_` = "FALSE")
 
   objs <- list(...)
   if (!length(objs)) stop("No objects")

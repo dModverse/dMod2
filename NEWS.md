@@ -1,3 +1,8 @@
+# dMod2 0.10.17
+
+* `compile()` restores `PKG_*` flags set before the call without an error,
+  and leaves no `symbols.rds` in the working directory under `R CMD check`.
+
 # dMod2 0.10.16
 
 * Breaking: `Pimpl(controlsPTC)` takes the tolerances as `reltol` and `abstol`,
