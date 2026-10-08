@@ -4,7 +4,7 @@
 \alias{format.eqnvec}
 \title{Format Equation Vector with Spaces}
 \usage{
-format.eqnvec(x, ...)
+\method{format}{eqnvec}(x, ...)
 }
 \arguments{
 \item{x}{object of class \link{eqnvec}, or a named parsable character vector.}

@@ -10,9 +10,9 @@
 \usage{
 as.parlist(x = NULL)
 
-print.parlist(x, ...)
+\method{print}{parlist}(x, ...)
 
-summary.parlist(object, ...)
+\method{summary}{parlist}(object, ...)
 
 \method{c}{parlist}(...)
 

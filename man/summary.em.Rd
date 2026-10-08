@@ -4,7 +4,7 @@
 \alias{summary.em}
 \title{Summarise an EM}
 \usage{
-summary.em(object, ...)
+\method{summary}{em}(object, ...)
 }
 \arguments{
 \item{object}{An \code{EM} object (see \link{EM}).}

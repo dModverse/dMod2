@@ -4,7 +4,7 @@
 \alias{print.parfn}
 \title{Print Parameter Transformations}
 \usage{
-print.parfn(x, ...)
+\method{print}{parfn}(x, ...)
 }
 \arguments{
 \item{x}{object of class \code{parfn}.}

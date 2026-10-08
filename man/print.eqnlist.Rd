@@ -4,7 +4,7 @@
 \alias{print.eqnlist}
 \title{Print or Pander Equation List}
 \usage{
-print.eqnlist(x, pander = FALSE, ...)
+\method{print}{eqnlist}(x, pander = FALSE, ...)
 }
 \arguments{
 \item{x}{object of class \link{eqnlist}.}

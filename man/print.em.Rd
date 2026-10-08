@@ -4,7 +4,7 @@
 \alias{print.em}
 \title{Print a mixed-effects fit}
 \usage{
-print.em(x, ...)
+\method{print}{em}(x, ...)
 }
 \arguments{
 \item{x}{An \code{EM} object (see \link{EM}).}

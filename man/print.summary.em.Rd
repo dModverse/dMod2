@@ -4,7 +4,7 @@
 \alias{print.summary.em}
 \title{Print a summary.em}
 \usage{
-print.summary.em(x, digits = 4, ...)
+\method{print}{summary.em}(x, digits = 4, ...)
 }
 \arguments{
 \item{x}{A \code{summary.em} object.}

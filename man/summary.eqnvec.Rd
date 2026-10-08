@@ -4,7 +4,7 @@
 \alias{summary.eqnvec}
 \title{Summary of an Equation Vector}
 \usage{
-summary.eqnvec(object, ...)
+\method{summary}{eqnvec}(object, ...)
 }
 \arguments{
 \item{object}{object of class \link{eqnvec}.}

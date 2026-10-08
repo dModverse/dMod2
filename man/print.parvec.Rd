@@ -4,7 +4,7 @@
 \alias{print.parvec}
 \title{Print Parameter Vectors}
 \usage{
-print.parvec(x, ...)
+\method{print}{parvec}(x, ...)
 }
 \arguments{
 \item{x}{object of class \code{parvec}.}

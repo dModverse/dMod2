@@ -4,7 +4,7 @@
 \alias{print.petabproblem}
 \title{Print a PEtab Problem}
 \usage{
-print.petabproblem(x, ...)
+\method{print}{petabproblem}(x, ...)
 }
 \arguments{
 \item{x}{A \code{petabproblem} returned by \code{\link[=importPEtab]{importPEtab()}}.}

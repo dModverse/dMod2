@@ -4,7 +4,7 @@
 \alias{print.eqnvec}
 \title{Print Equation Vector}
 \usage{
-print.eqnvec(x, width = 140, pander = FALSE, ...)
+\method{print}{eqnvec}(x, width = 140, pander = FALSE, ...)
 }
 \arguments{
 \item{x}{object of class \link{eqnvec}.}
