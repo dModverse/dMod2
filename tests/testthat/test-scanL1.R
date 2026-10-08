@@ -75,6 +75,18 @@ test_that("scanL1 fuses equal fold changes and anchors the shared ones", {
 
   q08 <- scanL1(obj, start, groups = block, lambda = grid, fits = 3, q = 0.8)
   expect_identical(q08$selected, "{r_B=0 | r_C,r_D}")
+  # Path values are the Lq objective at the reported optimum.
+  th <- q08$arguments[[3]]
+  v  <- c(th[c("r_B", "r_C", "r_D")], 0)
+  d  <- abs(outer(v, v, `-`))[upper.tri(diag(4))]
+  expect_equal(q08$path$value[3],
+               obj(th[names(start)])$value + q08$path$lambda[3] * sum(d^0.8),
+               tolerance = 1e-8)
+
+  wf <- scanL1(obj, start, groups = block, lambda = grid, fits = 3, q = 0.8,
+               control = list(hits = 2L, tolHits = 1e-3, maxFits = 30L))
+  expect_identical(wf$selected, "{r_B=0 | r_C,r_D}")
+  expect_true(all(wf$path$hits >= 2L))
 
   expect_error(scanL1(obj, start), "at least one")
   expect_error(scanL1(obj, start, reference = "r_X"), "not among")
@@ -105,4 +117,11 @@ test_that("a multistart adds starts until the best value is hit often enough", {
   capped <- dMod2:::.l1Multistart(spread, c(a = -30), fits = 4, sd = 5, cores = 1, obj = NULL,
                                   wf = list(hits = 3, tol = 1e-6, max = 12))
   expect_identical(capped$starts, 12L)
+})
+
+test_that("the flat trustL1 tolerances reach trust() as tolControl", {
+  a <- dMod2:::.l1TrustArgs(list(rinit = 0.1, ftol = 1e-4, gtol = 1e-3))
+  expect_identical(a$tolControl, list(ftol = 1e-4, gtol = 1e-3))
+  expect_false(any(c("ftol", "gtol") %in% names(a)))
+  expect_identical(dMod2:::.l1TrustArgs(list(rinit = 0.1)), list(rinit = 0.1))
 })

@@ -32,18 +32,27 @@ test_that("pairwise terms and fuse weights follow the same order", {
   expect_equal(unname(d), c(0.5, 0.3, 0.3, 0, 0.1, 0.4, 0.4))
 })
 
+test_that("the spike-and-slab terms of a block are the gaps of sorted neighbours", {
+  th <- c(r_B = 0.1, r_C = 0.4, r_D = -0.2, s_k = 0.5)
+  g  <- list(list(pars = c("r_B", "r_C", "r_D"), anchor = 0))
+  ed <- dMod2:::.sslEdges(th, "s_k", g)
+  expect_identical(names(ed$d), c("s_k", "r_D:anchor", "anchor:r_B", "r_B:r_C"))
+  expect_equal(unname(ed$d), c(0.5, 0.2, 0.1, 0.3))
+  expect_equal(dMod2:::.sslGaps(th, "s_k", g, ed$edges), unname(ed$d))
+})
+
 test_that("a merge puts spike terms onto their kink, transitively", {
-  th <- c(s_k = 0.01, s_m = 0.8, r_B = 0.004, r_C = 0.5, r_D = 0.52, r_E = 0.9)
+  th <- c(s_k = 0.01, s_m = 0.8, r_B = 0.004, r_C = 0.5, r_D = 0.52, r_E = 0.53)
   g  <- list(list(pars = c("r_B", "r_C", "r_D", "r_E"), anchor = 0))
-  d  <- dMod2:::.sslTerms(th, c("s_k", "s_m"), g)
+  d  <- dMod2:::.sslEdges(th, c("s_k", "s_m"), g)$d
   p  <- stats::setNames(rep(1, length(d)), names(d))
-  p[c("s_k", "r_B:anchor", "r_C:r_D")] <- 0
+  p[c("s_k", "anchor:r_B", "r_C:r_D", "r_D:r_E")] <- 0
   m  <- dMod2:::.sslMerge(th, p, c("s_k", "s_m"), g)
   expect_identical(unname(m[c("s_k", "s_m", "r_B")]), c(0, 0.8, 0))
-  expect_equal(unname(m[c("r_C", "r_D")]), c(0.51, 0.51))
-  expect_identical(m[["r_E"]], 0.9)
+  expect_equal(unname(m[c("r_C", "r_D", "r_E")]), rep(mean(c(0.5, 0.52, 0.53)), 3))
   # nothing to merge once every spike term sits on its kink
-  expect_null(dMod2:::.sslMerge(m, p, c("s_k", "s_m"), g))
+  p2 <- stats::setNames(c(0, 1, 0, 1, 0, 0), names(dMod2:::.sslEdges(m, c("s_k", "s_m"), g)$d))
+  expect_null(dMod2:::.sslMerge(m, p2, c("s_k", "s_m"), g))
 })
 
 test_that("the spike-and-slab path fuses and anchors from one start per lambda", {
@@ -104,4 +113,21 @@ test_that("the toy decay of Hauber et al. clusters the two mutated cell types", 
                 lambda = 10^seq(0, 4, length.out = 13), fits = 5, pathFits = 1,
                 ssl = list(lambda1 = 1), select = "plateau")
   expect_identical(fit$selected, "{r_c2,r_c3}")
+})
+
+test_that("spike terms within the snap distance are put onto their kink", {
+  th <- c(r_B = 1e-9, r_C = 0.5, r_D = 0.5 + 1e-8)
+  g  <- list(list(pars = c("r_B", "r_C", "r_D"), anchor = 0))
+  p  <- c(0, 1, 0)
+  m  <- dMod2:::.sslMerge(th, p, character(0), g, gap = 1e-6)
+  expect_identical(m[["r_B"]], 0)
+  expect_identical(m[["r_C"]], m[["r_D"]])
+  expect_null(dMod2:::.sslMerge(c(r_B = 0.01, r_C = 0.5, r_D = 0.6), p, character(0), g, 1e-6))
+})
+
+test_that("a merge joins through spike edges that already sit on their kink", {
+  th <- c(r_B = -2e-22, r_C = -1e-22, r_D = -1e-22, r_E = 0)
+  g  <- list(list(pars = c("r_B", "r_C", "r_D", "r_E"), anchor = 0))
+  m  <- dMod2:::.sslMerge(th, rep(0, 4), character(0), g, gap = 1e-6)
+  expect_identical(unname(m), rep(0, 4))
 })

@@ -25,6 +25,15 @@
   starts until its best value is reached by `hits` runs. Starts and hits are
   reported per `lambda`, per refit and for the full model; `arguments` holds
   all free parameters of every penalised fit.
+* The spike-and-slab lasso of `scanL1()` puts its block terms on the gaps
+  between neighbours of the sorted values (Ke, Fan and Wu 2015), so that a
+  split costs one slab term whatever the cluster sizes; spike terms within
+  `control$snap` of their kink are put onto it.
+* With `q < 1`, every start of a `scanL1()` multistart is reweighted and
+  compared on the Lq objective; when the downward pass finds a better optimum,
+  starts are added until the waterfall reaches it.
+* `control$trust` of `scanL1()` takes `ftol`, `mtol` and `gtol` for both
+  `trust()` and `trustL1()`.
 
 # dMod2 0.11.0
 

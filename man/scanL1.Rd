@@ -84,7 +84,9 @@ drawn around the full optimum.}
 default 0.01), \code{ndata} (data points for BIC, default from \code{obj}), \code{nem}
 (iterations of the spike-and-slab EM, default 50), \code{tolp} (change of the
 inclusion probabilities that ends the EM, default 1e-4), \code{nmerge} (merge
-moves per \code{lambda}, default 5, see Details), \code{hits} (runs that must reach
+moves per \code{lambda}, default 5, see Details), \code{snap} (spike terms closer
+to their kink than this are put onto it without a refit, default 1e-6),
+\code{hits} (runs that must reach
 the best value within \code{tolHits}, default 1 and 0.1, for the full model, a
 \code{lambda} and a refit; further batches of starts are added until then, up
 to \code{maxFits}, default ten times the batch).}
@@ -106,7 +108,8 @@ all its starts.}
 \item{\code{structure}}{per key: removed parameters and groups.}
 \item{\code{fit}}{named parameters of the chosen refit, fixed ones included.}
 \item{\code{inclusion}, \code{theta}}{with \code{ssl}: inclusion probability of every
-penalised term and slab share per \code{lambda}.}
+gate, reference parameter and pairwise difference at the final slab
+share, and that share, per \code{lambda}.}
 }
 }
 \description{
@@ -129,8 +132,9 @@ group.}
 }
 }
 \details{
-With \code{ssl}, term \code{j} (a gate, a reference parameter or a pairwise
-difference in a block) carries the prior
+With \code{ssl}, term \code{j} (a gate, a reference parameter, or in a block
+the gap between neighbours of the sorted values, anchor included, as in
+Ke, Fan and Wu 2015) carries the prior
 \deqn{\pi(d_j \mid \theta) = \theta\,\psi_1(d_j) + (1-\theta)\,\psi_0(d_j),
   \quad \psi_i(d) = \tfrac{\lambda_i}{4} e^{-\lambda_i |d| / 2},}
 so that \verb{-2 log} of each component is \verb{lambda_i * |d|} up to a constant,
@@ -139,7 +143,7 @@ found by EM: the E-step gives the inclusion probability
 \eqn{p_j = \theta\psi_1(d_j) / \pi(d_j \mid \theta)} and
 \eqn{\theta = (\sum_j p_j + a - 1)/(J + a + b - 2)}, the M-step is an
 L1 fit by \link{trustL1} with weight \eqn{p_j \lambda_1 + (1 - p_j) \lambda}
-on term \code{j}. Terms with \eqn{p_j < 1/2} that the weighted fit leaves
+on term \code{j}, the neighbours taken at the current values. Terms with \eqn{p_j < 1/2} that the weighted fit leaves
 off their kink are then put onto it and the EM is rerun; the merge is kept
 if it lowers the \verb{-2 log} posterior. The path is one chain over the
 increasing grid, each
@@ -193,6 +197,9 @@ plot(fitS, type = "waterfall")
 Hauber AL, Rosenblatt M, Timmer J (2023). Uncovering specific
 mechanisms across cell types in dynamical models. PLoS Comput Biol 19(9):
 e1010867.
+
+Ke ZT, Fan J, Wu Y (2015). Homogeneity pursuit. J Am Stat Assoc
+110(509):175-194.
 
 Rockova V, George EI (2018). The spike-and-slab LASSO. J Am Stat Assoc
 113(521): 431-444.
