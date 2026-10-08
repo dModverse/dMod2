@@ -1,3 +1,9 @@
+# dMod2 0.10.11
+
+* The option `dMod.outdir` sets where `odemodel()`, `P()`, `Pimpl()`, `Y()` and the
+  PEtab import write generated sources and shared objects; unset, it is the
+  working directory as before.
+
 # dMod2 0.10.10
 
 * `getSymbols()` and `replaceSymbols()` are reexported from cOde.

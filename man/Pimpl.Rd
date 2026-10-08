@@ -17,7 +17,7 @@ Pimpl(
   deriv = TRUE,
   deriv2 = FALSE,
   controlsPTC = list(),
-  outdir = getwd()
+  outdir = .dmodOutdir()
 )
 }
 \arguments{
@@ -74,7 +74,8 @@ condition and the global RNG state when the cache first needs one. The
 global RNG is read, not advanced.}
 }}
 
-\item{outdir}{Directory for the generated files.}
+\item{outdir}{Directory for the generated files, default
+\code{getOption("dMod.outdir")}, else the working directory.}
 }
 \value{
 A \link{parfn}.

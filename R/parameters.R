@@ -367,7 +367,7 @@ P <- function(trafo = NULL, parameters = NULL, condition = NULL,
 #'   contracts against) and `"forward-reverse"` (its derivative along a tangent,
 #'   for the reverse sweep with `deriv2 = TRUE`).
 #' @param outdir Directory for the generated source and shared object,
-#'   default the working directory.
+#'   default `getOption("dMod.outdir")`, else the working directory.
 #'
 #' @return A [parfn].
 #' @seealso [Pimpl], [P].
@@ -378,7 +378,7 @@ Pexpl <- function(trafo, parameters = NULL, attach.input = FALSE, condition = NU
                   compile = FALSE, modelname = NULL, verbose = FALSE,
                   deriv = TRUE, deriv2 = FALSE,
                   derivMode = "forward",
-                  outdir = getwd()) {
+                  outdir = .dmodOutdir()) {
 
   derivMode <- .matchDerivMode(derivMode, c("forward", "reverse", "forward-reverse"))
   emit_d1   <- isTRUE(deriv)
@@ -919,7 +919,8 @@ resetWarmStarts <- function(fn, verbose = TRUE) {
 #'       condition and the global RNG state when the cache first needs one. The
 #'       global RNG is read, not advanced.}
 #'   }
-#' @param outdir Directory for the generated files.
+#' @param outdir Directory for the generated files, default
+#'   `getOption("dMod.outdir")`, else the working directory.
 #'
 #' @details Conserved quantities of an [eqnlist] enter as \eqn{C x = T}.
 #' States without influx are 0. Initial guesses are kept roots, then the
@@ -938,7 +939,7 @@ Pimpl <- function(trafo, parameters = NULL, forcings = NULL, condition = NULL,
                   keep.root = TRUE, flow = inherits(trafo, "eqnlist"),
                   compile = FALSE, modelname = NULL, verbose = FALSE,
                   deriv = TRUE, deriv2 = FALSE, controlsPTC = list(),
-                  outdir = getwd()) {
+                  outdir = .dmodOutdir()) {
 
   flow    <- isTRUE(flow)
   emit_d1 <- isTRUE(deriv)

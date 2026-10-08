@@ -15,7 +15,7 @@ Pexpl(
   deriv = TRUE,
   deriv2 = FALSE,
   derivMode = "forward",
-  outdir = getwd()
+  outdir = .dmodOutdir()
 )
 }
 \arguments{
@@ -50,7 +50,7 @@ contracts against) and \code{"forward-reverse"} (its derivative along a tangent,
 for the reverse sweep with \code{deriv2 = TRUE}).}
 
 \item{outdir}{Directory for the generated source and shared object,
-default the working directory.}
+default \code{getOption("dMod.outdir")}, else the working directory.}
 }
 \value{
 A \link{parfn}.

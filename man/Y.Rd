@@ -18,7 +18,7 @@ Y(
   deriv = TRUE,
   deriv2 = FALSE,
   derivMode = "forward",
-  outdir = getwd()
+  outdir = .dmodOutdir()
 )
 }
 \arguments{
@@ -78,7 +78,8 @@ sweep needs with \code{deriv2 = TRUE}.
 Either way the observation function is evaluable only after compilation.}
 
 \item{outdir}{Character. Directory for the generated C++ source and the
-compiled shared object. Defaults to the working directory.}
+compiled shared object, default \code{getOption("dMod.outdir")}, else the
+working directory.}
 }
 \value{
 An \link{obsfn}, called as \code{g(out, pars, fixed = NULL, deriv = TRUE, deriv2 = FALSE, conditions, env = NULL)} with a \link{prdlist} \code{out}, or

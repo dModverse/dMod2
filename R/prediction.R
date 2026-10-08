@@ -1167,7 +1167,8 @@ Xd <- function(data, condition = NULL) {
 #'   `attr(., "deriv2")` array of shape `[time, observable, theta, theta]`.
 #'   Requires `deriv = TRUE`. Default `FALSE`.
 #' @param outdir Character. Directory for the generated C++ source and the
-#'   compiled shared object. Defaults to the working directory.
+#'   compiled shared object, default `getOption("dMod.outdir")`, else the
+#'   working directory.
 #'
 #' @return
 #' An [obsfn], called as `g(out, pars, fixed = NULL, deriv = TRUE,
@@ -1184,7 +1185,7 @@ Y <- function(g, f = NULL, states = NULL, parameters = NULL,
               condition = NULL, attach.input = FALSE,
               compile = FALSE, modelname = NULL, verbose = FALSE,
               cores = NULL, deriv = TRUE, deriv2 = FALSE,
-              derivMode = "forward", outdir = getwd()) {
+              derivMode = "forward", outdir = .dmodOutdir()) {
 
   derivMode <- .matchDerivMode(derivMode, c("forward", "reverse", "forward-reverse"))
 

@@ -15,7 +15,7 @@ importPEtab(
   optionsOde = NULL,
   optionsSens = NULL,
   sparse = NULL,
-  outdir = getwd()
+  outdir = .dmodOutdir()
 )
 }
 \arguments{
@@ -59,7 +59,8 @@ sparse (KLU) or dense linear solver from the Jacobian pattern; \code{TRUE} or
 \code{FALSE} pins it.}
 
 \item{outdir}{Directory the generated sources and the shared object are
-written to. Defaults to the working directory, as \code{\link[=odemodel]{odemodel()}} does; a
+written to, default \code{getOption("dMod.outdir")}, else the working
+directory, as \code{\link[=odemodel]{odemodel()}} does; a
 problem with many conditions writes one source per condition, so a
 scratch directory is usually the better choice.}
 }

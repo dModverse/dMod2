@@ -788,14 +788,16 @@ getLocalDLLs <- function() {
   normalizePath(paths, winslash = "/", mustWork = FALSE)
 }
 
+# Default directory of generated sources and shared objects
+.dmodOutdir <- function() getOption("dMod.outdir", getwd())
+
 ## Directories to search for an object's shared libraries: where its sources
-## were generated, plus the working directory. A model compiled into a temp
-## folder is not findable from the modelname alone.
+## were generated, the default output directory and the working directory.
 .dllSearchDirs <- function(objects) {
   dirs <- unlist(lapply(objects, function(o)
     vapply(attr(o, "compileInfo") %||% list(),
            function(e) dirname(e$srcfile[1]), character(1))))
-  unique(c(getwd(), dirs[nzchar(dirs)]))
+  unique(c(getwd(), .dmodOutdir(), dirs[nzchar(dirs)]))
 }
 
 

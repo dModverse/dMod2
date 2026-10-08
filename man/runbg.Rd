@@ -33,7 +33,9 @@ into an R data file and copied to the remote machine.}
 
 \item{compile}{Logical. If \code{TRUE}, C/C++ source files (\code{.c}, \code{.cpp}) are
 transferred to the remote machine and fully recompiled into a shared object
-(\code{.so}). If set to \code{TRUE}, this overrides \code{link = TRUE}.}
+(\code{.so}). If set to \code{TRUE}, this overrides \code{link = TRUE}. Sources, objects and
+shared objects are taken from the working directory, so call it from
+\code{getOption("dMod.outdir")} when that is set.}
 
 \item{link}{Logical. If \code{TRUE}, only existing object files (\code{.o}) are
 transferred to the remote machine and linked into a shared object (\code{.so}),

@@ -66,7 +66,8 @@ deletes local result files.}
 
 \item{compile}{Logical; if \code{TRUE}, all C/C++ source files (\verb{*.c}, \verb{*.cpp})
 are transferred to the cluster and fully recompiled into shared objects (\code{.so}).
-If set to \code{TRUE}, this overrides \code{link = TRUE}. The build runs from a
+If set to \code{TRUE}, this overrides \code{link = TRUE}. Files are taken from the
+working directory, so call it from \code{getOption("dMod.outdir")} when that is set. The build runs from a
 generated shell script that resolves all path-valued compiler flags
 (cppDE include directory, BLAS/LAPACK, and Sundials/KLU for CVODE and
 sparse models) on the cluster, so \code{cppDE} has to be installed for the R

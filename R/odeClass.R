@@ -98,7 +98,8 @@ print.odemodel <- function(x, ...) {
 #'   integrators of \pkg{cppDE}, CVODE(S) through \pkg{cppDE}, or \pkg{deSolve}
 #'   through \pkg{cOde}.
 #' @param verbose Logical. Print the compiler output.
-#' @param outdir Directory for the generated sources and shared objects.
+#' @param outdir Directory for the generated sources and shared objects,
+#'   default `getOption("dMod.outdir")`, else the working directory.
 #'   `backend = "deSolve"` writes to the working directory only.
 #' @param ... Passed to [cppDE::cppODE()], [cppDE::cvode()] or
 #'   [cOde::funC()], according to `backend`. Among them:
@@ -133,7 +134,7 @@ print.odemodel <- function(x, ...) {
 odemodel <- function(f, deriv = TRUE, deriv2 = FALSE, derivMode = "forward",
                      forcings=NULL, events = NULL,
                      fixed = NULL, modelname = "odemodel", backend = c("cppDE", "Sundials", "deSolve"),
-                     verbose = FALSE, outdir = getwd(), ...) {
+                     verbose = FALSE, outdir = .dmodOutdir(), ...) {
 
   f <- as.eqnvec(f)
   backend <- match.arg(backend)

@@ -416,7 +416,9 @@ detectFreeCores <- function(machine = NULL) {
 #' into an R data file and copied to the remote machine.
 #' @param compile Logical. If `TRUE`, C/C++ source files (`.c`, `.cpp`) are
 #' transferred to the remote machine and fully recompiled into a shared object
-#' (`.so`). If set to `TRUE`, this overrides `link = TRUE`.
+#' (`.so`). If set to `TRUE`, this overrides `link = TRUE`. Sources, objects and
+#' shared objects are taken from the working directory, so call it from
+#' `getOption("dMod.outdir")` when that is set.
 #' @param link Logical. If `TRUE`, only existing object files (`.o`) are
 #' transferred to the remote machine and linked into a shared object (`.so`),
 #' skipping compilation. If no `.o` files are found, an error is raised.
@@ -814,7 +816,8 @@ runbg <- function(..., machine = "localhost", filename = NULL, input = ls(.Globa
 #' deletes local result files.
 #' @param compile Logical; if `TRUE`, all C/C++ source files (`*.c`, `*.cpp`)
 #' are transferred to the cluster and fully recompiled into shared objects (`.so`).
-#' If set to `TRUE`, this overrides `link = TRUE`. The build runs from a
+#' If set to `TRUE`, this overrides `link = TRUE`. Files are taken from the
+#' working directory, so call it from `getOption("dMod.outdir")` when that is set. The build runs from a
 #' generated shell script that resolves all path-valued compiler flags
 #' (cppDE include directory, BLAS/LAPACK, and Sundials/KLU for CVODE and
 #' sparse models) on the cluster, so `cppDE` has to be installed for the R

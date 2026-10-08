@@ -1345,7 +1345,7 @@ readPetabTables <- function(yamlPath) {
                                events = NULL,
                                compile = TRUE,
                                modelname = "petab_trafo",
-                               cores = 1L, outdir = getwd(),
+                               cores = 1L, outdir = .dmodOutdir(),
                                derivMode = "forward") {
 
   # Inner side that the trafo must produce per condition.
@@ -1622,7 +1622,7 @@ readPetabTables <- function(yamlPath) {
 .petab_build_observation_fn <- function(obs, obs_trafo, reactions,
                                         compile = TRUE,
                                         modelname = "petab_obs",
-                                        outdir = getwd(),
+                                        outdir = .dmodOutdir(),
                                         keepStates = character(),
                                         derivMode = "forward") {
   obs_eqn <- mapply(function(formula, trafo) {
@@ -1664,7 +1664,7 @@ readPetabTables <- function(yamlPath) {
 # and normL2's fast path handles the likelihood without an error model.
 .petab_build_error_fn <- function(obs_meta, sub_cond_map, reactions,
                                   compile = TRUE, modelname = "petab_err",
-                                  outdir = getwd(), derivMode = "forward") {
+                                  outdir = .dmodOutdir(), derivMode = "forward") {
 
   obs_subs <- attr(sub_cond_map, "obs_subs") %||% list()
   noi_subs <- attr(sub_cond_map, "noi_subs") %||% list()
@@ -1724,7 +1724,7 @@ readPetabTables <- function(yamlPath) {
                                   optionsOde = NULL, optionsSens = NULL,
                                   sparse = NULL,
                                   deriv = TRUE, derivMode = "forward",
-                                  outdir = getwd()) {
+                                  outdir = .dmodOutdir()) {
   # No species means no dynamics: Xt() supplies the time axis and the
   # observables are evaluated from parameters alone.
   if (length(reactions$states) == 0L)
@@ -1835,7 +1835,7 @@ readPetabTables <- function(yamlPath) {
                                       optionsOde = NULL, optionsSens = NULL,
                                       sparse = NULL,
                                       deriv = TRUE, derivMode = "forward", cores = 1L,
-                                      outdir = getwd()) {
+                                      outdir = .dmodOutdir()) {
 
   # `importSbml` renames ids that R cannot parse or that C++ reserves. The PEtab
   # tables name the same entities and are renamed with the same map, otherwise
@@ -2202,7 +2202,8 @@ readPetabTables <- function(yamlPath) {
 #'   sparse (KLU) or dense linear solver from the Jacobian pattern; `TRUE` or
 #'   `FALSE` pins it.
 #' @param outdir Directory the generated sources and the shared object are
-#'   written to. Defaults to the working directory, as [odemodel()] does; a
+#'   written to, default `getOption("dMod.outdir")`, else the working
+#'   directory, as [odemodel()] does; a
 #'   problem with many conditions writes one source per condition, so a
 #'   scratch directory is usually the better choice.
 #' @return A list with class `"petabproblem"` holding `dataList`,
@@ -2226,7 +2227,7 @@ importPEtab <- function(yamlPath, backend,
                         compile = TRUE, cores = 1L, modelname = NULL,
                         deriv = TRUE, derivMode = "forward",
                         optionsOde = NULL, optionsSens = NULL,
-                        sparse = NULL, outdir = getwd()) {
+                        sparse = NULL, outdir = .dmodOutdir()) {
 
   cores <- as.integer(cores)
   if (length(cores) != 1L || is.na(cores) || cores < 1L)

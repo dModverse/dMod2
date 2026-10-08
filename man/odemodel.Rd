@@ -15,7 +15,7 @@ odemodel(
   modelname = "odemodel",
   backend = c("cppDE", "Sundials", "deSolve"),
   verbose = FALSE,
-  outdir = getwd(),
+  outdir = .dmodOutdir(),
   ...
 )
 }
@@ -65,7 +65,8 @@ through \pkg{cOde}.}
 
 \item{verbose}{Logical. Print the compiler output.}
 
-\item{outdir}{Directory for the generated sources and shared objects.
+\item{outdir}{Directory for the generated sources and shared objects,
+default \code{getOption("dMod.outdir")}, else the working directory.
 \code{backend = "deSolve"} writes to the working directory only.}
 
 \item{...}{Passed to \code{\link[cppDE:cppODE]{cppDE::cppODE()}}, \code{\link[cppDE:cvode]{cppDE::cvode()}} or
