@@ -168,6 +168,40 @@ test_that("makeSubjectNodes positive mass dominates negative", {
 })
 
 
+# ---- Models ---------------------------------------------------------------
+
+# One-eta observation function and the per-subject trafos of this file, keyed
+# by subject set, generated with compile = FALSE and linked into one shared
+# object on first use. Building leaves the RNG state untouched.
+.quad_models <- local({
+  cache <- NULL
+  function() {
+    if (!is.null(cache)) return(cache)
+    withr::local_preserve_seed()
+    dir <- file.path(tempdir(), "quadrature_models")
+    dir.create(dir, showWarnings = FALSE, recursive = TRUE)
+    withr::local_dir(dir)
+    g <- Y(c(y = "intercept"), f = NULL, parameters = "intercept",
+           compile = FALSE, modelname = "quad_obs")
+    pSubj <- function(mu, subjects, name) {
+      trafo <- eqnvec(intercept = paste(mu, "* exp(eta)"))
+      subj_table <- data.frame(eta = paste0("eta_", subjects),
+                               row.names = subjects)
+      P(branch(trafo, table = subj_table, apply = "insert"),
+        method = "explicit", compile = FALSE, modelname = name)
+    }
+    c2  <- pSubj("mu", c("c1", "c2"), "quad_p_c2")
+    s1  <- pSubj("mu", "s1", "quad_p_s1")
+    s2  <- pSubj("mu_pop", paste0("s", 1:2), "quad_p_s2")
+    s3  <- pSubj("mu_pop", paste0("s", 1:3), "quad_p_s3")
+    s4  <- pSubj("mu_pop", paste0("s", 1:4), "quad_p_s4")
+    compile(g, c2, s1, s2, s3, s4, output = "quadrature_models", cores = 2)
+    cache <<- list(g = g, c2 = c2, s1 = s1, s2 = s2, s3 = s3, s4 = s4)
+    cache
+  }
+})
+
+
 # ---- evalConditionResidual ------------------------------------------------
 
 test_that("evalConditionResidual matches the in-normL2 closure (no errfn)", {
@@ -175,16 +209,11 @@ test_that("evalConditionResidual matches the in-normL2 closure (no errfn)", {
   oldwd <- setwd(tempdir())
   on.exit(setwd(oldwd))
 
-  g <- Y(c(y = "intercept"), f = NULL, parameters = "intercept",
-         compile = TRUE, modelname = "ecr_simple_obs")
+  g <- .quad_models()$g
   x <- Xt()
 
   subjects <- c("c1", "c2")
-  trafo <- eqnvec(intercept = "mu * exp(eta)")
-  subj_table <- data.frame(eta = paste0("eta_", subjects),
-                           row.names = subjects)
-  trafos <- branch(trafo, table = subj_table, apply = "insert")
-  p <- P(trafos, method = "explicit", compile = TRUE, modelname = "ecr_simple_p")
+  p <- .quad_models()$c2
 
   y_obs <- c(2.1, 1.8)
   data <- as.datalist(data.frame(name = "y", time = 0, sigma = 0.2,
@@ -214,15 +243,10 @@ test_that("normL2 still produces the same OFV after eval_condition refactor", {
   oldwd <- setwd(tempdir())
   on.exit(setwd(oldwd))
 
-  g <- Y(c(y = "intercept"), f = NULL, parameters = "intercept",
-         compile = TRUE, modelname = "ecr_regr_obs")
+  g <- .quad_models()$g
   x <- Xt()
-  trafo <- eqnvec(intercept = "mu_pop * exp(eta)")
   subjects <- c("s1", "s2", "s3", "s4")
-  subj_table <- data.frame(eta = paste0("eta_", subjects),
-                           row.names = subjects)
-  trafos <- branch(trafo, table = subj_table, apply = "insert")
-  p <- P(trafos, method = "explicit", compile = TRUE, modelname = "ecr_regr_p")
+  p <- .quad_models()$s4
 
   true_mu  <- 2.0; true_om <- 0.3
   true_eta <- rnorm(length(subjects), 0, true_om)
@@ -248,15 +272,10 @@ test_that("logLhat at level L recovers the 1D-integrate truth for a one-eta prdf
   oldwd <- setwd(tempdir())
   on.exit(setwd(oldwd))
 
-  g <- Y(c(y = "intercept"), f = NULL, parameters = "intercept",
-         compile = TRUE, modelname = "ecmeval_obs")
+  g <- .quad_models()$g
   x <- Xt()
-  trafo <- eqnvec(intercept = "mu_pop * exp(eta)")
   subjects <- c("s1", "s2")
-  subj_table <- data.frame(eta = paste0("eta_", subjects),
-                           row.names = subjects)
-  trafos <- branch(trafo, table = subj_table, apply = "insert")
-  p <- P(trafos, method = "explicit", compile = TRUE, modelname = "ecmeval_p")
+  p <- .quad_models()$s2
   xPred <- g * x * p
 
   y_obs <- c(2.0, 1.6)
@@ -317,15 +336,10 @@ test_that("gradient at outer params matches numDeriv on the one-eta prdfn", {
   oldwd <- setwd(tempdir())
   on.exit(setwd(oldwd))
 
-  g <- Y(c(y = "intercept"), f = NULL, parameters = "intercept",
-         compile = TRUE, modelname = "ecmgrad_obs")
+  g <- .quad_models()$g
   x <- Xt()
-  trafo <- eqnvec(intercept = "mu_pop * exp(eta)")
   subjects <- c("s1", "s2", "s3")
-  subj_table <- data.frame(eta = paste0("eta_", subjects),
-                           row.names = subjects)
-  trafos <- branch(trafo, table = subj_table, apply = "insert")
-  p <- P(trafos, method = "explicit", compile = TRUE, modelname = "ecmgrad_p")
+  p <- .quad_models()$s3
   xPred <- g * x * p
 
   y_obs <- c(2.1, 1.6, 2.5)
@@ -373,13 +387,9 @@ test_that("frozen-node guarantee: nodesSubj does not change between em calls", {
   oldwd <- setwd(tempdir())
   on.exit(setwd(oldwd))
 
-  g <- Y(c(y = "intercept"), f = NULL, parameters = "intercept",
-         compile = TRUE, modelname = "ecmfreeze_obs")
+  g <- .quad_models()$g
   x <- Xt()
-  trafo <- eqnvec(intercept = "mu * exp(eta)")
-  subj_table <- data.frame(eta = "eta_s1", row.names = "s1")
-  trafos <- branch(trafo, table = subj_table, apply = "insert")
-  p <- P(trafos, method = "explicit", compile = TRUE, modelname = "ecmfreeze_p")
+  p <- .quad_models()$s1
   xPred <- g * x * p
 
   data <- as.datalist(data.frame(name = "y", time = 0, sigma = 0.3,
@@ -484,16 +494,10 @@ test_that("rank-deficient S triggers ridge warning but does not crash", {
 
 .build_quad_setup <- function(seed = 1L) {
   set.seed(seed)
-  g <- Y(c(y = "intercept"), f = NULL, parameters = "intercept",
-         compile = TRUE, modelname = paste0("emqd_obs_", seed))
+  g <- .quad_models()$g
   x <- Xt()
   subjects <- c("s1", "s2", "s3")
-  trafo <- eqnvec(intercept = "mu_pop * exp(eta)")
-  subj_table <- data.frame(eta = paste0("eta_", subjects),
-                           row.names = subjects)
-  trafos <- branch(trafo, table = subj_table, apply = "insert")
-  p <- P(trafos, method = "explicit", compile = TRUE,
-         modelname = paste0("emqd_p_", seed))
+  p <- .quad_models()$s3
   y_obs <- 2.0 * exp(rnorm(length(subjects), 0, 0.3)) +
            rnorm(length(subjects), 0, 0.2)
   data <- as.datalist(data.frame(name = "y", time = 0, sigma = 0.2,

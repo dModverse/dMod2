@@ -86,29 +86,67 @@ test_that(".laplaceSubjectMarginal is GN-exact on a quadratic objfun", {
 
 # ---- end-to-end EM + sparsify on a tiny decay ODE -------------------
 
+# Decay ODE with its observation and error functions plus the cell-line trafos
+# of the three fixtures below, generated with compile = FALSE and linked into
+# one shared object on first use.
+.reg_models <- local({
+  cache <- NULL
+  function() {
+    if (!is.null(cache)) return(cache)
+    dir <- file.path(tempdir(), "emlaplace_models")
+    dir.create(dir, showWarnings = FALSE, recursive = TRUE)
+    withr::local_dir(dir)
+    reactions <- addReaction(NULL, from = "A", to = "", rate = "k * A",
+                             description = "decay")
+    m <- odemodel(reactions, modelname = "reg_decay",
+                  backend = "cppDE", compile = FALSE, deriv2 = TRUE)
+    x <- Xs(m)
+    g <- Y(eqnvec(y = "log(A + 1)"), x, modelname = "reg_obs",
+           compile = FALSE, deriv2 = TRUE, attach.input = FALSE)
+    e <- Y(eqnvec(y = "sigma"), g, modelname = "reg_err",
+           compile = FALSE, deriv2 = TRUE, attach.input = FALSE)
+    pTab <- function(trafo, tab, name)
+      P(branch(trafo, table = tab, apply = "insert"), method = "explicit",
+        modelname = name, compile = FALSE, deriv2 = TRUE)
+
+    lines2 <- c("A", "B")
+    pSmoke <- pTab(eqnvec(k = "exp(log_k + eta_k)", A = "exp(log_A0 + eta_A0)",
+                          sigma = "exp(log_sigma)"),
+                   data.frame(eta_k  = c("0", "eta_k_B"),
+                              eta_A0 = c("0", "eta_A0_B"),
+                              row.names = lines2, stringsAsFactors = FALSE),
+                   "reg_p_smoke")
+    lines4 <- c("A", "B", "C", "D")
+    pCluster <- pTab(eqnvec(k = "exp(log_k + eta_k)", A = "exp(log_A0)",
+                            sigma = "exp(log_sigma)"),
+                     data.frame(eta_k = paste0("eta_k_", lines4), row.names = lines4,
+                                stringsAsFactors = FALSE),
+                     "reg_p_cluster")
+    subj <- paste0("s", 1:4)
+    pManyline <- pTab(eqnvec(k = "exp(log_k + eta_k)", A = "exp(log_A0 + eta_A0)",
+                             sigma = "exp(log_sigma)"),
+                      data.frame(eta_k  = paste0("eta_k_",  subj),
+                                 eta_A0 = paste0("eta_A0_", subj),
+                                 row.names = subj, stringsAsFactors = FALSE),
+                      "reg_p_manyline")
+
+    compile(x, g, e, pSmoke, pCluster, pManyline, output = "emlaplace_models",
+            cores = 2)
+    cache <<- list(x = x, g = g, e = e, pSmoke = pSmoke, pCluster = pCluster,
+                   pManyline = pManyline)
+    cache
+  }
+})
+
 # One-state decay dA/dt = -k A, observed as log(A+1); 2 cell lines A/B with the
-# reference encoding (line A = baseline, line B carries the deviations). Truth:
+# reference encoding (line A = baseline, line B holds the deviations). Truth:
 # k is individual (line B differs), A0 is shared.
 .build_reg_smoke <- function(tag = "reg", seed = 1L) {
+  mods <- .reg_models()
   set.seed(seed)
-  reactions <- addReaction(NULL, from = "A", to = "", rate = "k * A",
-                           description = "decay")
-  m <- odemodel(reactions, modelname = paste0("regsmoke_", tag),
-                backend = "cppDE", compile = TRUE, deriv2 = TRUE)
-  x <- Xs(m, compile = TRUE)
-  g <- Y(eqnvec(y = "log(A + 1)"), x, modelname = paste0("regsmoke_obs_", tag),
-         compile = TRUE, deriv2 = TRUE, attach.input = FALSE)
-  e <- Y(eqnvec(y = "sigma"), g, modelname = paste0("regsmoke_err_", tag),
-         compile = TRUE, deriv2 = TRUE, attach.input = FALSE)
-  trafo <- eqnvec(k = "exp(log_k + eta_k)", A = "exp(log_A0 + eta_A0)",
-                  sigma = "exp(log_sigma)")
+  e <- mods$e
   lines <- c("A", "B")
-  cl_table <- data.frame(eta_k  = c("0", "eta_k_B"),
-                         eta_A0 = c("0", "eta_A0_B"),
-                         row.names = lines, stringsAsFactors = FALSE)
-  p <- P(branch(trafo, table = cl_table, apply = "insert"), method = "explicit",
-         modelname = paste0("regsmoke_p_", tag), compile = TRUE, deriv2 = TRUE)
-  prd <- g * x * p
+  prd <- mods$g * mods$x * mods$pSmoke
 
   st     <- c(log_k = log(0.3), log_A0 = log(10), log_sigma = log(0.05))
   d_true <- c(eta_k_B = 0.8, eta_A0_B = 0)
@@ -305,24 +343,11 @@ test_that("solveFusedComplete matches exhaustive brute force + limits", {
 # 4 cell lines A/B/C/D, one clustered parameter k; truth two clusters
 # {A,B} (eta 0.35) and {C,D} (eta -0.35). Reuses the decay ODE.
 .build_reg_cluster <- function(tag = "cl", seed = 3L) {
+  mods <- .reg_models()
   set.seed(seed)
-  reactions <- addReaction(NULL, from = "A", to = "", rate = "k * A",
-                           description = "decay")
-  m <- odemodel(reactions, modelname = paste0("regcl_", tag),
-                backend = "cppDE", compile = TRUE, deriv2 = TRUE)
-  x <- Xs(m, compile = TRUE)
-  g <- Y(eqnvec(y = "log(A + 1)"), x, modelname = paste0("regcl_obs_", tag),
-         compile = TRUE, deriv2 = TRUE, attach.input = FALSE)
-  e <- Y(eqnvec(y = "sigma"), g, modelname = paste0("regcl_err_", tag),
-         compile = TRUE, deriv2 = TRUE, attach.input = FALSE)
+  e <- mods$e
   lines <- c("A", "B", "C", "D")
-  trafo <- eqnvec(k = "exp(log_k + eta_k)", A = "exp(log_A0)",
-                  sigma = "exp(log_sigma)")
-  cl_table <- data.frame(eta_k = paste0("eta_k_", lines), row.names = lines,
-                         stringsAsFactors = FALSE)
-  p <- P(branch(trafo, table = cl_table, apply = "insert"), method = "explicit",
-         modelname = paste0("regcl_p_", tag), compile = TRUE, deriv2 = TRUE)
-  prd <- g * x * p
+  prd <- mods$g * mods$x * mods$pCluster
   st     <- c(log_k = log(0.3), log_A0 = log(10), log_sigma = log(0.05))
   d_true <- c(eta_k_A = 0.35, eta_k_B = 0.35, eta_k_C = -0.35, eta_k_D = -0.35)
   times  <- c(0.5, 1, 2, 3, 4, 6, 8, 10)
@@ -543,25 +568,11 @@ test_that("penalty machinery supports per-parameter and merged strengths", {
 
 # 4-subject fixture: parameter k is individual (two groups +-0.6), A0 is shared.
 .build_reg_manyline <- function(tag = "ml", seed = 3L) {
+  mods <- .reg_models()
   set.seed(seed)
-  reactions <- addReaction(NULL, from = "A", to = "", rate = "k * A",
-                           description = "decay")
-  m <- odemodel(reactions, modelname = paste0("regml_", tag),
-                backend = "cppDE", compile = TRUE, deriv2 = TRUE)
-  x <- Xs(m, compile = TRUE)
-  g <- Y(eqnvec(y = "log(A + 1)"), x, modelname = paste0("regml_obs_", tag),
-         compile = TRUE, deriv2 = TRUE, attach.input = FALSE)
-  e <- Y(eqnvec(y = "sigma"), g, modelname = paste0("regml_err_", tag),
-         compile = TRUE, deriv2 = TRUE, attach.input = FALSE)
-  subj  <- paste0("s", 1:4)
-  trafo <- eqnvec(k = "exp(log_k + eta_k)", A = "exp(log_A0 + eta_A0)",
-                  sigma = "exp(log_sigma)")
-  tab <- data.frame(eta_k  = paste0("eta_k_",  subj),
-                    eta_A0 = paste0("eta_A0_", subj),
-                    row.names = subj, stringsAsFactors = FALSE)
-  p <- P(branch(trafo, table = tab, apply = "insert"), method = "explicit",
-         modelname = paste0("regml_p_", tag), compile = TRUE, deriv2 = TRUE)
-  prd <- g * x * p
+  e <- mods$e
+  subj <- paste0("s", 1:4)
+  prd <- mods$g * mods$x * mods$pManyline
   st  <- c(log_k = log(0.3), log_A0 = log(10), log_sigma = log(0.05))
   dev <- c(s1 = 0.6, s2 = -0.6, s3 = 0.55, s4 = -0.55)
   times <- c(0.5, 1, 2, 3, 4, 6, 8, 10)

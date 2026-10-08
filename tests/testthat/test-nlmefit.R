@@ -14,20 +14,47 @@
 ## Context: "EM + msEM + diagnostic plots"  (context() is deprecated in testthat 3e; kept as a note)
 
 
-# Shared one-eta NLME fixture builder.
+# One-eta NLME models for every subject count the file uses, generated with
+# compile = FALSE and linked into one shared object on first use. The model
+# depends on the subject count only, so builders differ in their data alone.
+.nlme_models <- local({
+  cache <- NULL
+  function() {
+    if (!is.null(cache)) return(cache)
+    dir <- file.path(tempdir(), "nlmefit_models")
+    dir.create(dir, showWarnings = FALSE, recursive = TRUE)
+    withr::local_dir(dir)
+    g <- Y(c(y = "intercept"), f = NULL, parameters = "intercept",
+           compile = FALSE, deriv2 = TRUE, modelname = "nlmefit_obs")
+    trafo <- eqnvec(intercept = "mu_pop * exp(eta)")
+    pN <- function(N) {
+      subjects <- paste0("s", seq_len(N))
+      subj_table <- data.frame(eta = paste0("eta_", subjects),
+                               row.names = subjects)
+      P(branch(trafo, table = subj_table, apply = "insert"),
+        method = "explicit", compile = FALSE, deriv2 = TRUE,
+        modelname = paste0("nlmefit_p_", N))
+    }
+    p4 <- pN(4L); p5 <- pN(5L); p6 <- pN(6L)
+    compile(g, p4, p5, p6, output = "nlmefit_models", cores = 2)
+    cache <<- list(g = g, p = list(`4` = p4, `5` = p5, `6` = p6))
+    cache
+  }
+})
+
+# Prediction function g * x * p for N subjects, built from the cached models.
+.nlme_prdfn <- function(N) {
+  mods <- .nlme_models()
+  p <- mods$p[[as.character(N)]]
+  if (is.null(p)) stop("no cached one-eta model for N = ", N, call. = FALSE)
+  mods$g * Xt() * p
+}
+
+# Shared one-eta NLME fixture builder; `tag` only labels the call site.
 .build_one_eta <- function(seed = 1L, N = 4L, tag = "nlmef") {
+  prdfn <- .nlme_prdfn(N)
   set.seed(seed)
-  g <- Y(c(y = "intercept"), f = NULL, parameters = "intercept",
-         compile = TRUE, deriv2 = TRUE,
-         modelname = paste0("nlmefit_obs_", tag, "_", seed))
-  x <- Xt()
   subjects <- paste0("s", seq_len(N))
-  trafo <- eqnvec(intercept = "mu_pop * exp(eta)")
-  subj_table <- data.frame(eta = paste0("eta_", subjects),
-                           row.names = subjects)
-  trafos <- branch(trafo, table = subj_table, apply = "insert")
-  p <- P(trafos, method = "explicit", compile = TRUE, deriv2 = TRUE,
-         modelname = paste0("nlmefit_p_", tag, "_", seed))
   true_mu  <- 2.0; true_om <- 0.3
   true_eta <- rnorm(N, 0, true_om)
   y_obs    <- true_mu * exp(true_eta) + rnorm(N, 0, 0.2)
@@ -35,8 +62,8 @@
                                  value = y_obs, condition = subjects,
                                  stringsAsFactors = FALSE))
   om <- omega(eta = "eta", subjects = subjects)
-  obj <- normL2(data, g * x * p) + constraintL2(mu = 0, Omega = om)
-  list(obj = obj, om = om, prdfn = g * x * p, data = data,
+  obj <- normL2(data, prdfn) + constraintL2(mu = 0, Omega = om)
+  list(obj = obj, om = om, prdfn = prdfn, data = data,
        subjects = subjects, true_mu = true_mu, true_om = true_om,
        y_obs = y_obs)
 }
@@ -351,17 +378,9 @@ test_that("msEM handles per-fit failures without aborting the run", {
 
 # Plots fixture: more times so plotIndivs has a curve to draw.
 .build_for_plots <- function(seed = 1L) {
+  prdfn <- .nlme_prdfn(4L)
   set.seed(seed)
-  g <- Y(c(y = "intercept"), f = NULL, parameters = "intercept",
-         compile = TRUE, deriv2 = TRUE, modelname = paste0("plt_obs_", seed))
-  x <- Xt()
   subjects <- paste0("s", 1:4)
-  trafo <- eqnvec(intercept = "mu_pop * exp(eta)")
-  subj_table <- data.frame(eta = paste0("eta_", subjects),
-                           row.names = subjects)
-  trafos <- branch(trafo, table = subj_table, apply = "insert")
-  p <- P(trafos, method = "explicit", compile = TRUE, deriv2 = TRUE,
-         modelname = paste0("plt_p_", seed))
   true_eta <- rnorm(4, 0, 0.3)
   obs_rows <- do.call(rbind, lapply(seq_along(subjects), function(i) {
     ts <- c(0, 1, 2)
@@ -371,8 +390,8 @@ test_that("msEM handles per-fit failures without aborting the run", {
   }))
   data <- as.datalist(obs_rows)
   om <- omega(eta = "eta", subjects = subjects)
-  obj <- normL2(data, g * x * p) + constraintL2(mu = 0, Omega = om)
-  list(obj = obj, om = om, prdfn = g * x * p, data = data,
+  obj <- normL2(data, prdfn) + constraintL2(mu = 0, Omega = om)
+  list(obj = obj, om = om, prdfn = prdfn, data = data,
        subjects = subjects)
 }
 
