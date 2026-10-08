@@ -198,7 +198,7 @@ pouter[.moved] <- round(.published[.moved])
 # published informative prior.
 .weak <- setdiff(outerpars,
                  c(grep("^sd_", outerpars, value = TRUE), "init_EpoRJAK2"))
-obj <- obj + constraintL2(pouter[.weak], sigma = 4, attr.name = "prior")
+obj <- obj + constraintL2(pouter[.weak], sigma = 4, attrName = "prior")
 
 
 # –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
@@ -249,14 +249,14 @@ if (.submit) {
       partition    = "cpu-single",
       cores        = .cores,
       nodes        = 1,
-      mem_per_core = 2,
+      memPerCore   = 2,
       # Set by the slowest arm, not the typical one: a quasi-Newton method from
       # an identity seed needs of the order of n_theta accepted steps, and a
       # truncated arm shrinks the shared block set for every other arm too.
       walltime     = "03:00:00",
       machine      = "helix",
-      var_values   = list(seq_len(.blocks)),
-      no_rep       = NULL,
+      varValues    = list(seq_len(.blocks)),
+      nRep         = NULL,
       compile      = TRUE,
       recover      = .recover,
       resetSeeds   = FALSE,

@@ -87,10 +87,10 @@ test_that("as.data.frame joins the error model by observable, not by row order",
   reactions <- addReaction(eqnlist(), "A", "B", "k*A")
   m <- odemodel(reactions, modelname = "adf_ode", compile = FALSE)
   x <- Xs(m)
-  g <- Y(eqnvec(obsA = "A", obsB = "B"), x, attach.input = FALSE,
+  g <- Y(eqnvec(obsA = "A", obsB = "B"), x, attachInput = FALSE,
          modelname = "adf_obs", compile = FALSE)
   # the error model lists its observables the other way round
-  e <- Y(eqnvec(obsB = "sB", obsA = "sA"), g, attach.input = FALSE,
+  e <- Y(eqnvec(obsB = "sB", obsA = "sA"), g, attachInput = FALSE,
          modelname = "adf_err", compile = FALSE)
   compile(x, g, e, output = "adf_all", cores = test_cores())
 

@@ -57,7 +57,7 @@ forcings <- NULL
 g <- Y(observables, as.eqnvec(f), modelname = "obs_mono", compile=TRUE)
 err <- NULL
 if (!is.null(errors)) err <- Y(errors, c(observables, as.eqnvec(f)), states = names(errors), 
-                               attach.input = FALSE, modelname = "err", compile = TRUE)
+                               attachInput = FALSE, modelname = "err", compile = TRUE)
 
 
 # Generate the model C files, compile them and return a list with func and extended.
@@ -155,7 +155,7 @@ set.seed(2)
 prior <- rep(0, length(outerpars)); names(prior) <- outerpars
 pouter <- rnorm(length(prior), prior, 1); names(pouter) <- outerpars
 cOuter <- constraintL2(mu = prior, sigma = 10) # general prior for all parameters -> removed for final results
-cOuterSL <- constraintL2(mu = scalings_ls[names(scalings_ls) %in% outerpars], sigma = sigma_ls[names(scalings_ls) %in% outerpars],attr.name = "dataSC")
+cOuterSL <- constraintL2(mu = scalings_ls[names(scalings_ls) %in% outerpars], sigma = sigma_ls[names(scalings_ls) %in% outerpars],attrName = "dataSC")
 
 # Objective function for trust()
 obj <- normL2(data, g*x*p) + cOuterSL  #+ cOuter

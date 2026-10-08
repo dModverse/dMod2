@@ -27,7 +27,7 @@ fixed <- NULL
 forcings <- NULL 
 
 # Add observable ODEs to the original ODEs or use an observation function
-g <- Y(observables, as.eqnvec(f), compile = TRUE,modelname = "obs", attach.input = FALSE)
+g <- Y(observables, as.eqnvec(f), compile = TRUE,modelname = "obs", attachInput = FALSE)
 
 # Generate the model C files, compile them and return a list with func and extended.
 do.compile <- TRUE

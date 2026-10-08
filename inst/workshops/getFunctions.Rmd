@@ -111,7 +111,7 @@ getParameters(prediction)
 
 Usually, when dMod objects (e.g. functions) are created, the user can supply additional options that control the behavior of the functions. These options are saved in the environment of the function as `controls` and can be accessed with the `controls()` command.
 
-For example parameter transformtion functions can be created with the argument `attach.input = TRUE` or `FALSE`. We see this option when we call:
+For example parameter transformtion functions can be created with the argument `attachInput = TRUE` or `FALSE`. We see this option when we call:
 
 
 ```{r}
@@ -121,13 +121,13 @@ controls(p)
 Here, we see that `p` is composed and each function has its own controls. We access a specific control in this way:
 
 ```{r}
-controls(p, "First_harmonic", "attach.input")
+controls(p, "First_harmonic", "attachInput")
 ```
 
 The option also can be changed:
 
 ```{r}
-controls(p, "First_harmonic", "attach.input") <- TRUE
+controls(p, "First_harmonic", "attachInput") <- TRUE
 ```
 
 When we call `p` again after changing the option, the result is:
@@ -135,7 +135,7 @@ When we call `p` again after changing the option, the result is:
 ```{r}
 p(pars)
 ```
-For the first condition, incoming parameters are attached. The second transformation still has the default behavior of only returning the explicitly defined parameters. Prominent examples for the `attach.input` option are observation functions. To save time during parameter estimation, `attach.input` would be switched off. When simulating with parameters, one might be interested in the observations and the internal states. With `controls()`, `attach.input` can be switched back on.
+For the first condition, incoming parameters are attached. The second transformation still has the default behavior of only returning the explicitly defined parameters. Prominent examples for the `attachInput` option are observation functions. To save time during parameter estimation, `attachInput` would be switched off. When simulating with parameters, one might be interested in the observations and the internal states. With `controls()`, `attachInput` can be switched back on.
 
 
 Prediction functions have some more options:

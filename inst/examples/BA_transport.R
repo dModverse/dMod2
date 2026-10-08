@@ -33,7 +33,7 @@ x <- Xs(mymodel)
 
 # Define observables buffer and cellular
 observables <- eqnvec(buffer = "s*TCA_buffer", cellular = "s*(TCA_cana + TCA_cell)")
-g <- Y(observables, f = x, condition = NULL, compile = F, modelname = "obsfn_bamodel", attach.input = T)
+g <- Y(observables, f = x, condition = NULL, compile = F, modelname = "obsfn_bamodel", attachInput = T)
 
 # Define parameter transformations using define(), insert() and branch(). Old function repar also avaiable!
 innerpars <- getParameters(x,g)
@@ -111,9 +111,7 @@ outms |> summary()
 #   mstrust(obj, pouter, sd = 4, name = "bamodelms", cores=detectFreeCores(), fits=100, iterlim = 1e3)
 # }, machine = "knecht1", filename = "bamodelms", link = T)
 # outknecht$check()
-# outknecht$get()
-# 
-# outms <- .runbgOutput$knecht1
+# outms <- outknecht$get()$knecht1
 
 out_frame <- as.parframe(outms)
 plotValues(out_frame) # Show "Waterfall" plot
@@ -169,7 +167,7 @@ p(pouter)
 plot((g*x*p)(times, pouter), data)
 
 # Objective function
-obj <- normL2(data, g*x*p, attr.name = "data") + constraintL2(pouter, sigma = 20, attr.name = "prior")
+obj <- normL2(data, g*x*p, attrName = "data") + constraintL2(pouter, sigma = 20, attrName = "prior")
 
 # Multistart fit
 outms <- mstrust(obj, pouter, sd = 4, iterlim = 1e3, name = "bamodel_ss", cores = detectFreeCores(), fits = 50)
@@ -213,8 +211,8 @@ p <- P(trafo, modelname = "prdfn_bamodel_final", compile = TRUE)
 ## Prediction uncertainty taken from validation profile --------------------------------------------------------------------------
 
 # choose sigma below 1 percent of the prediction in order to pull the prediction strongly towards d1
-obj.validation <- normL2(data, g * x * p, times = c(20), attr.name = "data") +
-  datapointL2(name = "TCA_cell", time = 20, value = "v", sigma = 0.01, attr.name = "validation", condition = "closed")
+obj.validation <- normL2(data, g * x * p, times = c(20), attrName = "data") +
+  datapointL2(name = "TCA_cell", time = 20, parameter = "v", sigma = 0.01, attrName = "validation", condition = "closed")
 
 # If sigma is not known, and you therefore decide to calculate prediction confidence intervals, just choose a very small sigma, in order to "pull strongly" on the trajectory
 obj.validation(c(v = 180, bestfit[getParameters(p)]))
@@ -238,7 +236,7 @@ plotProfile(validation_profile, mode %in% c("validation", "data")) # Plots only 
 confint(validation_profile, val.column = "value")
 
 
-plotProfilesAndPaths(validation_profile, "v", ncols = 1)
+plotProfilesAndPaths(validation_profile, "v", ncol = 1)
 ## Prediction band (prediction uncertainty for several time points) --------------------------------------------------------------
 # Here we calculate a prediction CI for different timepoints. In the end we interpolate to a "prediction band"
 library(parallel)
@@ -247,8 +245,8 @@ prediction_band <- do.call(rbind, mclapply(c(0,1,2,3,4,seq(5, 50, 2)), function(
   
   cat("Computing prediction profile for t =", t, "\n")
   
-  obj.validation <- normL2(data, g * x * p, times = c(t), attr.name = "data") +
-    datapointL2(name = "TCA_cell", time = t, value = "v", sigma = 0.1, attr.name = "validation", condition = "closed")
+  obj.validation <- normL2(data, g * x * p, times = c(t), attrName = "data") +
+    datapointL2(name = "TCA_cell", time = t, parameter = "v", sigma = 0.1, attrName = "validation", condition = "closed")
   
   refit <- trust(obj.validation, parinit = c(v = 190, bestfit), rinit = 1, rmax = 10, iterlim = 1000)
   

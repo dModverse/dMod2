@@ -139,12 +139,12 @@ test_that(".petab_parse_measurements unfolds per-row observableParameters", {
 
 
 
-test_that("readPetabYaml resolves manifest paths correctly", {
+test_that("readPEtabYaml resolves manifest paths correctly", {
 
   petab_dir <- .petab_repo_dir()
   if (!nzchar(petab_dir)) skip("PEtabTests/ not found -- set DMOD_PETABTESTS to the repo directory")
 
-  y <- readPetabYaml(file.path(petab_dir, "0001", "_0001.yaml"))
+  y <- readPEtabYaml(file.path(petab_dir, "0001", "_0001.yaml"))
   expect_equal(y$formatVersion, 1L)
   expect_true(file.exists(y$problems[[1]]$sbmlFile))
   expect_true(file.exists(y$problems[[1]]$measurementFile))
@@ -152,11 +152,11 @@ test_that("readPetabYaml resolves manifest paths correctly", {
 
 
 
-test_that("readPetabTables returns the expected slots for v1", {
+test_that("readPEtabTables returns the expected slots for v1", {
   petab_dir <- .petab_repo_dir()
   if (!nzchar(petab_dir)) skip("PEtabTests/ not found -- set DMOD_PETABTESTS to the repo directory")
 
-  tabs <- readPetabTables(file.path(petab_dir, "0001", "_0001.yaml"))
+  tabs <- readPEtabTables(file.path(petab_dir, "0001", "_0001.yaml"))
   expect_named(tabs, c("parameters", "conditions", "measurements",
                        "observables", "experiments", "mapping",
                        "sbmlPath", "sbmlPaths", "formatVersion"))
@@ -455,7 +455,7 @@ test_that("exportPEtab errors on undeclared free symbol after strip", {
   x <- Xs(m)
   obs <- eqnvec(obs_a = "A")
   g <- Y(obs, f = x, compile = FALSE, modelname = "err1_obs",
-         attach.input = FALSE)
+         attachInput = FALSE)
   trafo <- as.eqnvec(c(A = "10^(A)", B = "10^(B)",
                        k = "10^(K) + UNDECLARED"))
   p <- P(trafo, condition = "c1", compile = FALSE, modelname = "err1_par")
@@ -780,7 +780,7 @@ test_that(".petab_v2_normalize_tables applies mapping table substitutions", {
 
 
 
-test_that("readPetabYaml dispatches v1 vs v2 schema", {
+test_that("readPEtabYaml dispatches v1 vs v2 schema", {
   td <- tempfile("petab_v2_"); dir.create(td)
   on.exit(unlink(td, recursive = TRUE), add = TRUE)
 
@@ -807,7 +807,7 @@ test_that("readPetabYaml dispatches v1 vs v2 schema", {
     experiment_files  = list("experiments.tsv")
   ), file.path(td, "problem.yaml"))
 
-  m <- readPetabYaml(file.path(td, "problem.yaml"))
+  m <- readPEtabYaml(file.path(td, "problem.yaml"))
   expect_identical(m$formatVersion, 2L)
   expect_equal(m$problems[[1]]$modelID, "my_model")
   expect_match(m$problems[[1]]$sbmlFile,        "model\\.xml$")
@@ -817,7 +817,7 @@ test_that("readPetabYaml dispatches v1 vs v2 schema", {
 
 
 
-test_that("readPetabYaml errors on non-SBML model language", {
+test_that("readPEtabYaml errors on non-SBML model language", {
   td <- tempfile("petab_v2_"); dir.create(td)
   on.exit(unlink(td, recursive = TRUE), add = TRUE)
   writeLines("dummy", file.path(td, "model.bngl"))
@@ -832,7 +832,7 @@ test_that("readPetabYaml errors on non-SBML model language", {
     measurement_files = list("m.tsv")
   ), file.path(td, "problem.yaml"))
 
-  expect_error(readPetabYaml(file.path(td, "problem.yaml")),
+  expect_error(readPEtabYaml(file.path(td, "problem.yaml")),
                regexp = "SBML")
 })
 

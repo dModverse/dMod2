@@ -4,7 +4,7 @@
 ## SBML interface (R/SBMLinterface.R) and high-level APIs (Y, P, normL2, ...).
 ##
 ## Public API: importPEtab, exportPEtab, exportPEtabObject,
-##             readPetabYaml, readPetabTables.
+##             readPEtabYaml, readPEtabTables.
 ## Internal helpers prefixed `.petab_*` are unexported and may change shape.
 ##
 ## v2 strategy: the YAML reader dispatches on `format_version`. The v2 path
@@ -32,6 +32,33 @@
 }
 
 
+#' Deprecated PEtab Readers
+#'
+#' `readPetabYaml()` and `readPetabTables()` are deprecated, use
+#' [readPEtabYaml()] and [readPEtabTables()].
+#'
+#' @param yamlPath Path to the PEtab YAML file.
+#' @return As [readPEtabYaml()] and [readPEtabTables()].
+#' @keywords internal
+#' @name readPetab-deprecated
+NULL
+
+#' @rdname readPetab-deprecated
+#' @export
+readPetabYaml <- function(yamlPath) {
+  warning("'readPetabYaml' is deprecated, use 'readPEtabYaml'.", call. = FALSE)
+  readPEtabYaml(yamlPath)
+}
+
+#' @rdname readPetab-deprecated
+#' @export
+readPetabTables <- function(yamlPath) {
+  warning("'readPetabTables' is deprecated, use 'readPEtabTables'.",
+          call. = FALSE)
+  readPEtabTables(yamlPath)
+}
+
+
 ## --- low-level YAML / TSV readers ------------------------------------------
 
 #' Read a PEtab YAML File
@@ -47,12 +74,12 @@
 #'   `observableFile`. For v2 the entry also holds `experimentFile` and
 #'   `mappingFile` (possibly `NULL`), `modelID`, the first model id, and
 #'   `models`, the SBML path of every model id.
-#' @seealso [readPetabTables()], [importPEtab()]
+#' @seealso [readPEtabTables()], [importPEtab()]
 #' @examplesIf requireNamespace("yaml", quietly = TRUE)
 #' yaml <- system.file("extdata/petab_boehm/Boehm.yaml", package = "dMod2")
-#' str(readPetabYaml(yaml))
+#' str(readPEtabYaml(yaml))
 #' @export
-readPetabYaml <- function(yamlPath) {
+readPEtabYaml <- function(yamlPath) {
 
   .require_ns("yaml", "PEtab import")
   yamlPath <- normalizePath(yamlPath, mustWork = TRUE)
@@ -166,16 +193,16 @@ readPetabYaml <- function(yamlPath) {
 #'   when the problem has no such table), `sbmlPath`, the path of the first
 #'   model, `sbmlPaths`, the SBML path of every model id, and `formatVersion`
 #'   (integer).
-#' @seealso [readPetabYaml()], [importPEtab()]
+#' @seealso [readPEtabYaml()], [importPEtab()]
 #' @examplesIf requireNamespace("yaml", quietly = TRUE)
 #' yaml <- system.file("extdata/petab_boehm/Boehm.yaml", package = "dMod2")
-#' tables <- readPetabTables(yaml)
+#' tables <- readPEtabTables(yaml)
 #' head(tables$measurements)
 #' tables$parameters
 #' @export
-readPetabTables <- function(yamlPath) {
+readPEtabTables <- function(yamlPath) {
 
-  m  <- readPetabYaml(yamlPath)
+  m  <- readPEtabYaml(yamlPath)
   pr <- m$problems[[1]]
 
   list(
@@ -775,7 +802,7 @@ readPetabTables <- function(yamlPath) {
 # prior to the mass between the parameter bounds. That constant does not
 # depend on the parameter, so it shifts the value and leaves gradient and
 # Hessian alone.
-.petab_prior_objective <- function(specs, attr.name = "prior",
+.petab_prior_objective <- function(specs, attrName = "prior",
                                    condition = NULL) {
 
   one <- function(sp) {
@@ -783,19 +810,19 @@ readPetabTables <- function(yamlPath) {
     b  <- if (length(sp$pars) > 1L) sp$pars[2L] else NA_real_
     switch(sp$dist,
       normal      = constraintL2(setNames(a, id), sigma = b,
-                                 attr.name = attr.name, condition = condition),
+                                 attrName = attrName, condition = condition),
       laplace     = constraintL1(setNames(a, id), sigma = b,
-                                 attr.name = attr.name, condition = condition),
+                                 attrName = attrName, condition = condition),
       cauchy      = constraintCauchy(setNames(a, id), sigma = b,
-                                     attr.name = attr.name, condition = condition),
+                                     attrName = attrName, condition = condition),
       gamma       = constraintGamma(setNames(a, id), scale = b,
-                                    attr.name = attr.name, condition = condition),
+                                    attrName = attrName, condition = condition),
       exponential = constraintExponential(setNames(a, id),
-                                          attr.name = attr.name, condition = condition),
+                                          attrName = attrName, condition = condition),
       chisquare   = constraintChisq(setNames(a, id),
-                                    attr.name = attr.name, condition = condition),
+                                    attrName = attrName, condition = condition),
       rayleigh    = constraintRayleigh(setNames(a, id),
-                                       attr.name = attr.name, condition = condition),
+                                       attrName = attrName, condition = condition),
       NULL)
   }
 
@@ -845,7 +872,7 @@ readPetabTables <- function(yamlPath) {
     out <- objlist(value = unname(value),
                    gradient = if (deriv) grad else NULL,
                    hessian  = if (build_hessian) hess else NULL)
-    attr(out, attr.name) <- out$value
+    attr(out, attrName) <- out$value
     attr(out, "env") <- env
     out
   }
@@ -1368,8 +1395,8 @@ readPetabTables <- function(yamlPath) {
     # The replacement has to be parenthesised as a whole: `^` is right
     # associative, so substituting into `K^2` would give `10^(K^2)` instead of
     # `(10^K)^2`.
-    if (length(log_pars))   tr <- repar("x ~ (exp(x))", tr, x = log_pars)
-    if (length(log10_pars)) tr <- repar("x ~ (10^(x))", tr, x = log10_pars)
+    if (length(log_pars))   tr <- repar(tr, "x ~ (exp(x))", x = log_pars)
+    if (length(log10_pars)) tr <- repar(tr, "x ~ (10^(x))", x = log10_pars)
     tr
   }
 
@@ -1388,7 +1415,7 @@ readPetabTables <- function(yamlPath) {
       if (kind == "init") {
         tr[cn] <- v
       } else if (identical(scope, "all")) {
-        tr <- repar(paste0(cn, " ~ ", v), tr)
+        tr <- repar(tr, paste0(cn, " ~ ", v))
       }
     }
     tr
@@ -1636,7 +1663,7 @@ readPetabTables <- function(yamlPath) {
     parameters = if (stateless)
                    setdiff(unique(unlist(lapply(obs_eqn, getSymbols))), "time")
                  else NULL,
-    attach.input = length(keepStates) > 0L,
+    attachInput = length(keepStates) > 0L,
     compile    = compile,
     modelname  = modelname,
     outdir     = outdir,
@@ -1702,7 +1729,7 @@ readPetabTables <- function(yamlPath) {
   Y(g            = as.eqnvec(obs_meta$noise),
     f            = c(reactions_eqnvec, obs_eqnvec),
     states       = c(names(obs_eqnvec), .petab_noise_states(obs_meta, reactions)),
-    attach.input = FALSE,
+    attachInput  = FALSE,
     compile      = compile,
     modelname    = modelname,
     outdir       = outdir,
@@ -2018,7 +2045,7 @@ readPetabTables <- function(yamlPath) {
           compile = compile, modelname = paste0(modelname, "_trafo"),
           cores = cores, outdir = outdir, derivMode = derivMode)
 
-  dataList <- as.datalist(meas_info$data, split.by = "condition")
+  dataList <- as.datalist(meas_info$data, splitBy = "condition")
 
   # Each sub-condition inherits the simulation start of its condition, so the
   # objective can anchor the time grid where the experiment actually begins.
@@ -2185,7 +2212,7 @@ readPetabTables <- function(yamlPath) {
 #'   estimated parameter, with the PEtab scales in its attribute
 #'   `"petab_scales"`. The attribute `"petab_meta"` of the list holds what
 #'   [exportPEtabObject()] needs, among it the fixed parameters as `fixed`.
-#' @seealso [exportPEtabObject()], [readPetabTables()], [importSbml()],
+#' @seealso [exportPEtabObject()], [readPEtabTables()], [importSbml()],
 #'   \code{vignette("PEtab", package = "dMod2")}
 #' @examplesIf requireNamespace("reticulate", quietly = TRUE) && requireNamespace("rjson", quietly = TRUE) && requireNamespace("yaml", quietly = TRUE) && reticulate::py_module_available("libsbml")
 #' \donttest{
@@ -2204,7 +2231,7 @@ readPetabTables <- function(yamlPath) {
 #' # Write the problem back to PEtab
 #' yamlOut <- exportPEtabObject(petab, file.path(tempdir(), "boehm"),
 #'                              formatVersion = "1")
-#' readPetabTables(yamlOut)$parameters
+#' readPEtabTables(yamlOut)$parameters
 #' }
 #' @export
 importPEtab <- function(yamlPath, backend,
@@ -2248,7 +2275,7 @@ importPEtab <- function(yamlPath, backend,
     }
   }
 
-  tables <- readPetabTables(yamlPath)
+  tables <- readPEtabTables(yamlPath)
   if (identical(tables$formatVersion, 2L))
     tables <- .petab_v2_normalize_tables(tables)
   else
@@ -2388,7 +2415,7 @@ importPEtab <- function(yamlPath, backend,
     }, lapply(per_model, `[[`, "fixed"))
 
     # Use a representative odemodel / sbml / sub_cond_map / cond_grid /
-    # col_kind for the returned PEtabProblem slots. Multi-model fits surface
+    # col_kind for the returned PEtab problem. Multi-model fits surface
     # all per-model pieces under `attr(., "petab_meta")$models` for callers
     # that need the disaggregated view.
     odeobj <- per_model[[1L]]$odemodel
@@ -2525,7 +2552,7 @@ print.petabproblem <- function(x, ...) {
   mid_label <- if (length(meta$modelID) > 1L)
                  paste(meta$modelID, collapse = ", ")
                else (meta$modelID %||% "")
-  cat("<PEtabProblem ", mid_label, ">\n", sep = "")
+  cat("<PEtab problem ", mid_label, ">\n", sep = "")
   if (!is.null(meta$sourceYaml))
     cat("  source:        ", meta$sourceYaml, "\n", sep = "")
   if (!is.null(models))
@@ -2951,7 +2978,7 @@ print.petabproblem <- function(x, ...) {
 #'                     pouter = c(logA = log(2), logk = log(0.5)),
 #'                     dir = file.path(tempdir(), "petab_decay"),
 #'                     formatVersion = "1")
-#' readPetabTables(yaml)$parameters
+#' readPEtabTables(yaml)$parameters
 #' @export
 exportPEtab <- function(data, reactions, observables, p, pouter,
                         errors = NULL,

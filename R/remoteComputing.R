@@ -371,8 +371,7 @@ detectFreeCores <- function(machine = NULL) {
 #' key authentication on every machine.
 #'
 #' @details The value of the last expression in `...` is the result of a
-#' machine. `get()` assigns the list of these results to `.runbgOutput` in
-#' the global environment.
+#' machine. `get()` returns the list of these results.
 #'
 #' Build-related files are handled as follows:
 #' \itemize{
@@ -409,10 +408,10 @@ detectFreeCores <- function(machine = NULL) {
 #' translation unit, as in [distributedComputing()]. Only used for builds with
 #' more files than the shell accepts as arguments. `1` compiles one file at a
 #' time. Defaults to 50.
-#' @param wait Logical. `TRUE` waits for the job and loads the result as
-#' `.runbgOutput` into the global environment; if the local result files exist
-#' already, they are loaded without running the job. `FALSE` (default) returns
-#' at once; the result is loaded by `get()`.
+#' @param wait Logical. `TRUE` waits for the job and returns its results as
+#' `get()` does; if the local result files exist already, they are loaded
+#' without running the job. `FALSE` (default) returns at once; the results are
+#' fetched by `get()`.
 #' @param recover Logical. `TRUE` returns the functions `check()`, `get()`,
 #' `purge()` and `terminate()` of an earlier job without starting it again,
 #' e.g. after a crashed session. Needs the `filename` of that job. Defaults to
@@ -422,13 +421,12 @@ detectFreeCores <- function(machine = NULL) {
 #' @param libs Optional character vector of library paths put in front of the
 #' remote library search path, for the job and the remote build. The remote
 #' shell expands them, so `~` is the remote home.
-#' @return A list of functions:
+#' @return With `wait = TRUE` the results, else a list of functions:
 #' \describe{
 #'   \item{`check()`}{reports whether the results are ready and returns
 #'     `TRUE` or `FALSE`.}
 #'   \item{`get()`}{copies the result files to the working directory and
-#'     assigns the results, a list named by machine, to `.runbgOutput` in the
-#'     global environment.}
+#'     returns the results, a list named by machine.}
 #'   \item{`purge()`}{deletes the job folders on the remote machines and the
 #'     job files in the local working directory.}
 #'   \item{`terminate()`}{kills the processes of the job on the remote
@@ -443,8 +441,7 @@ detectFreeCores <- function(machine = NULL) {
 #'   solve(M)
 #' }, machine = c("user@@host", "user@@host"), filename = "job1")
 #' job$check()
-#' job$get()
-#' result <- .runbgOutput
+#' result <- job$get()
 #' job$purge()
 #'
 #' # Recover the functions of a running job, e.g. after a crashed session
@@ -500,9 +497,7 @@ runbg <- function(..., machine = "localhost", filename = NULL, input = ls(.Globa
       check <- try(load(file = paste0(filename[m], "_result.RData")), silent = TRUE) 
       if (!inherits(check, "try-error")) result[[m]] <- .runbgOutput
     }
-    
-    .GlobalEnv$.runbgOutput <- result
-    
+    result
   }
   
   # Remove temporary folders and files on remote machines and locally
@@ -566,11 +561,11 @@ runbg <- function(..., machine = "localhost", filename = NULL, input = ls(.Globa
     
     result <- structure(vector(mode = "list", length = nmachines), names = machine)
     for (m in 1:nmachines) {
+      .runbgOutput <- NULL
       load(file = resultfile[m])
       result[[m]] <- .runbgOutput
     }
-    .GlobalEnv$.runbgOutput <- result
-    return(out)
+    return(result)
   }
   
   # Save current workspace to be transferred to remote machines
@@ -714,13 +709,10 @@ runbg <- function(..., machine = "localhost", filename = NULL, input = ls(.Globa
     ), intern = FALSE, wait = wait)
   }
   
-  if (wait) {
-    out$get()
-    out$purge()
-  } else {
-    return(out)
-  }
-  
+  if (!wait) return(out)
+  result <- out$get()
+  out$purge()
+  result
 }
 
 
@@ -734,40 +726,42 @@ runbg <- function(..., machine = "localhost", filename = NULL, input = ls(.Globa
 #' Returns functions to check, collect and delete the results.
 #'
 #' @details The value of `...` on each array task is its result. `get()`
-#' assigns the list of results, one per task, to `cluster_result` in the global
-#' environment.
+#' returns the list of results, one per task.
 #'
-#' Repetitions of the same code are requested with `no_rep`. Code that varies
+#' Repetitions of the same code are requested with `nRep`. Code that varies
 #' between tasks reads the variables `var_1`, `var_2`, ..., whose values on
-#' each task are taken from the corresponding vectors of `var_values`.
+#' each task are taken from the corresponding vectors of `varValues`.
 #'
 #' The workspace is compressed with `zstd` if it is available locally. The job
 #' script loads the environment modules `compiler/gnu/13.3` and `math/R`; the
 #' remote build needs cppDE installed for that R. A job is only submitted if
-#' the remote build succeeds. Without `ssh` key authentication, `ssh_passwd` is
+#' the remote build succeeds. Without `ssh` key authentication, `sshPasswd` is
 #' passed to `sshpass`, which must be installed locally.
 #'
 #' @param ... R code to be executed remotely. Variables that change between
-#'   tasks are named `var_i`, see Details.
+#'   tasks are named `var_i`, see Details. `mem_per_core`, `ssh_passwd`,
+#'   `var_values`, `no_rep`, `purge_local` and `custom_folders` are deprecated
+#'   names of `memPerCore`, `sshPasswd`, `varValues`, `nRep`, `purgeLocal` and
+#'   `customFolders`.
 #' @param jobname Character, unique name of the job. A job with the same name
 #'   is overwritten.
 #' @param partition SLURM partition. Defaults to `"single"`.
 #' @param cores Number of cores per node. Defaults to 16.
 #' @param nodes Number of nodes per task. Defaults to 1.
-#' @param mem_per_core Memory per core in GB. Defaults to 2.
+#' @param memPerCore Memory per core in GB. Defaults to 2.
 #' @param walltime Maximum runtime per task as `"hh:mm:ss"`. Defaults to
 #'   `"01:00:00"`.
-#' @param ssh_passwd Optional password for `sshpass`. `NULL` (default) uses
+#' @param sshPasswd Optional password for `sshpass`. `NULL` (default) uses
 #'   `ssh` key authentication, which is recommended.
 #' @param machine SSH address of the remote system, e.g. `"user@@host"`.
 #'   Defaults to `"cluster"`.
-#' @param var_values List of vectors, one per variable `var_i`, all of the
-#'   same length: the number of array tasks. Exclusive with `no_rep`.
-#' @param no_rep Integer, number of repetitions. Exclusive with `var_values`.
-#' @param recover Logical. `TRUE` (default) submits nothing and returns the
-#'   functions for a job submitted earlier under `jobname`. Pass `FALSE` to
-#'   submit a job.
-#' @param purge_local Logical, the default of the argument of the same name of
+#' @param varValues List of vectors, one per variable `var_i`, all of the
+#'   same length: the number of array tasks. Exclusive with `nRep`.
+#' @param nRep Integer, number of repetitions. Exclusive with `varValues`.
+#' @param recover Logical. `TRUE` submits nothing and returns the functions
+#'   for a job submitted earlier under `jobname`. Default `FALSE`, which
+#'   submits the job.
+#' @param purgeLocal Logical, the default of the argument of the same name of
 #'   `purge()`. Defaults to `FALSE`.
 #' @param compile Logical. `TRUE` transfers the C/C++ sources (`*.c`,
 #'   `*.cpp`) of the working directory and compiles them on the remote system
@@ -783,7 +777,7 @@ runbg <- function(..., machine = "localhost", filename = NULL, input = ls(.Globa
 #' @param buildBundle Number of generated sources the remote build puts into one
 #'   translation unit. Only used for builds with more files than the shell
 #'   accepts as arguments. `1` compiles one file at a time. Defaults to 50.
-#' @param custom_folders Named character vector with the entries `"compiled"`,
+#' @param customFolders Named character vector with the entries `"compiled"`,
 #'   `"output"` and `"tmp"`, relative paths for compiled files, results and
 #'   temporary files. `NULL` (default) uses the working directory.
 #' @param input Character vector, the objects of the global environment to
@@ -802,10 +796,9 @@ runbg <- function(..., machine = "localhost", filename = NULL, input = ls(.Globa
 #'   \item{`check()`}{reports how many results are ready and returns `TRUE`
 #'     when all are.}
 #'   \item{`get()`}{copies the results into `<jobname>_folder/results/` and
-#'     assigns them, a list with one entry per task, to `cluster_result` in
-#'     the global environment.}
-#'   \item{`purge(purge_local)`}{deletes the job folder on the remote system,
-#'     with `purge_local = TRUE` also the local one.}
+#'     returns them, a list with one entry per task.}
+#'   \item{`purge(purgeLocal)`}{deletes the job folder on the remote system,
+#'     with `purgeLocal = TRUE` also the local one.}
 #' }
 #'
 #' @seealso [runbg()], [profileParsPerNode()]
@@ -818,11 +811,10 @@ runbg <- function(..., machine = "localhost", filename = NULL, input = ls(.Globa
 #'     mstrust(obj, center = pars, fits = 48, cores = 16, sd = 4)
 #'   },
 #'   jobname = "fits", machine = "user@@host", partition = "single",
-#'   cores = 16, walltime = "02:00:00", no_rep = 20, recover = FALSE
+#'   cores = 16, walltime = "02:00:00", nRep = 20
 #' )
 #' job$check()
-#' job$get()
-#' fits <- cluster_result
+#' fits <- job$get()
 #' job$purge()
 #'
 #' # Profiles, a range of parameters per task
@@ -833,11 +825,9 @@ runbg <- function(..., machine = "localhost", filename = NULL, input = ls(.Globa
 #'             limits = c(-5, 5), cores = 16)
 #'   },
 #'   jobname = "profiles", machine = "user@@host", cores = 16,
-#'   walltime = "02:00:00", var_values = ranges[c("from", "to")],
-#'   recover = FALSE
+#'   walltime = "02:00:00", varValues = ranges[c("from", "to")]
 #' )
-#' job$get()
-#' profiles <- do.call(rbind, cluster_result)
+#' profiles <- do.call(rbind, job$get())
 #' job$purge()
 #' }
 #'
@@ -848,35 +838,45 @@ distributedComputing <- function(
     partition = "single",
     cores = 16,
     nodes = 1,
-    mem_per_core = 2,
+    memPerCore = 2,
     walltime = "01:00:00",
-    ssh_passwd = NULL,
+    sshPasswd = NULL,
     machine = "cluster",
-    var_values = NULL,
-    no_rep = NULL,
-    recover = TRUE,
-    purge_local = FALSE,
+    varValues = NULL,
+    nRep = NULL,
+    recover = FALSE,
+    purgeLocal = FALSE,
     compile = FALSE,
     link = FALSE,
     buildCores = NULL,
     buildBundle = 50,
-    custom_folders = NULL,
+    customFolders = NULL,
     resetSeeds = TRUE,
     returnAll = TRUE,
     input = ls(.GlobalEnv, all.names = TRUE),
     libs = NULL
 ){
+  # The dots hold the code, unevaluated, and the deprecated argument names.
+  dots <- match.call(expand.dots = FALSE)$...
+  renames <- c(mem_per_core = "memPerCore", ssh_passwd = "sshPasswd",
+               var_values = "varValues", no_rep = "nRep",
+               purge_local = "purgeLocal", custom_folders = "customFolders")
+  old <- intersect(names(dots), names(renames))
+  callerEnv <- parent.frame()
+  .renameArgs(lapply(dots[old], eval, envir = callerEnv), renames,
+              "distributedComputing")
+  code <- if (length(old)) dots[!names(dots) %in% old] else dots
   original_wd <- getwd()
-  if (is.null(custom_folders)) {
+  if (is.null(customFolders)) {
     output_folder_abs <- "./"
-  } else if(!is.null(custom_folders) & !all(length(custom_folders) == 3 & sort(names(custom_folders)) == c("compiled", "output", "tmp"))) {
-    warning("'custom_folders' must be named vector with exact three elements:\n
+  } else if(!is.null(customFolders) & !all(length(customFolders) == 3 & sort(names(customFolders)) == c("compiled", "output", "tmp"))) {
+    warning("'customFolders' must be named vector with exact three elements:\n
             'compiled', 'output', 'tmp', containing relative paths to the resp folders\n
             input is wrong, ignored.\n")
   } else {
-    compiled_folder <- custom_folders["compiled"]
-    output_folder <- custom_folders["output"]
-    tmp_folder <- custom_folders["tmp"]
+    compiled_folder <- customFolders["compiled"]
+    output_folder <- customFolders["output"]
+    tmp_folder <- customFolders["tmp"]
     
     system(paste0("cp ", compiled_folder, "* ", tmp_folder))
     
@@ -900,17 +900,17 @@ distributedComputing <- function(
   wd_path <- paste0("./",jobname, "_folder/")
   
   # number of repetitions
-  if(!is.null(no_rep) & is.null(var_values)) {
-    num_nodes <- no_rep - 1
-  } else if(is.null(no_rep) & !is.null(var_values)) {
-    num_nodes <- length(var_values[[1]]) - 1
+  if(!is.null(nRep) & is.null(varValues)) {
+    num_nodes <- nRep - 1
+  } else if(is.null(nRep) & !is.null(varValues)) {
+    num_nodes <- length(varValues[[1]]) - 1
   } else {
-    stop("I dont know what you want how often done. Please set either 'no_rep' or pass 'var_values' (_not_ both!)")
+    stop("I dont know what you want how often done. Please set either 'nRep' or pass 'varValues' (_not_ both!)")
   }
   
   # define the ssh command depending on 'sshpass' being used
-  ssh_command <- if (is.null(ssh_passwd)) "ssh "
-                 else paste0("sshpass -p ", ssh_passwd, " ssh ")
+  ssh_command <- if (is.null(sshPasswd)) "ssh "
+                 else paste0("sshpass -p ", sshPasswd, " ssh ")
   
   # - output functions - #
   # Structure of the output 
@@ -995,14 +995,16 @@ distributedComputing <- function(
       else
         result_list[[slot[i]]] <- cluster_result
     }
-    .GlobalEnv$cluster_result <- result_list
+    result_list
   }
   
   
   
   # purge function, its default taken from the argument of distributedComputing()
-  purgeLocalDefault <- purge_local
-  out[[3]] <- function (purge_local = purgeLocalDefault) {
+  purgeLocalDefault <- purgeLocal
+  out[[3]] <- function (purgeLocal = purgeLocalDefault, ...) {
+    .renameArgs(list(...), c(purge_local = "purgeLocal"), "purge",
+                strict = TRUE)
     # remove files remote
     system(
       paste0(
@@ -1010,7 +1012,7 @@ distributedComputing <- function(
       )
     )
     # also remove local files if want so
-    if (purge_local) {
+    if (purgeLocal) {
       system(
         paste0("rm -rf ", output_folder_abs, "/", jobname,"_folder")
       )
@@ -1073,15 +1075,15 @@ distributedComputing <- function(
   
   
   # generate parameter lists
-  if (!is.null(var_values)) {
+  if (!is.null(varValues)) {
     var_list <- paste(
       lapply(
-        seq(1,length(var_values)),
+        seq(1,length(varValues)),
         function(i) {
-          if (is.character(var_values[[i]])) {
-            paste0("var_values_", i, "=c('", paste(var_values[[i]], collapse="','"),"')")
+          if (is.character(varValues[[i]])) {
+            paste0("var_values_", i, "=c('", paste(varValues[[i]], collapse="','"),"')")
           } else {
-            paste0("var_values_", i, "=c(", paste(var_values[[i]], collapse=","),")")
+            paste0("var_values_", i, "=c(", paste(varValues[[i]], collapse=","),")")
           }
           
           
@@ -1092,12 +1094,12 @@ distributedComputing <- function(
     # cat(variable_list)
     
     # List of all names of parameters that will be changes between runs
-    var_names <- paste(lapply(seq(1,length(var_values)), function(i) paste0("var_",i)))
+    var_names <- paste(lapply(seq(1,length(varValues)), function(i) paste0("var_",i)))
     
     # Variables per run
     var_per_run <- paste(
       lapply(
-        seq(1, length(var_values)),
+        seq(1, length(varValues)),
         function(i) {
           paste0("var_", i, "=var_values_",i,"[(as.numeric(Sys.getenv('SLURM_ARRAY_TASK_ID')) + 1)]")
         }
@@ -1122,7 +1124,9 @@ distributedComputing <- function(
   
   
   # WRITE R
-  expr <- as.expression(substitute(...))
+  if (!length(code))
+    stop("distributedComputing: no R code to run.", call. = FALSE)
+  expr <- as.expression(code[[1L]])
   cat(
     paste(
       "#!/usr/bin/env Rscript",
@@ -1187,7 +1191,7 @@ distributedComputing <- function(
       "# Define of repetition",
       paste0("#SBATCH -a 0-", num_nodes),
       "# memory per CPU core",
-      paste0("#SBATCH --mem-per-cpu=", mem_per_core, "gb"),
+      paste0("#SBATCH --mem-per-cpu=", memPerCore, "gb"),
       "",
       "",
       "# Load compiler modules",
@@ -1332,38 +1336,39 @@ distributedComputing <- function(
 #'
 #' @param parameters Named vector or list of parameters; only its length is
 #'   used.
-#' @param fits_per_node Integer, number of parameters per node.
+#' @param parsPerNode Integer, number of parameters per node.
 #' @param side `"both"` (default) for one entry per range, or `"split"` for two
 #'   entries per range, labelled `"left"` and `"right"`, to compute the two
 #'   sides of each profile on separate nodes.
+#' @param ... `fits_per_node` is deprecated, use `parsPerNode`.
 #'
 #' @return A list with the integer vectors `from` and `to`, the first and last
 #'   parameter index of each node, and the character vector `side`.
-#' @seealso [distributedComputing()], [profile()]
+#' @seealso [distributedComputing()], [profile()][profile.objfn]
 #' @examples
 #' parameters <- setNames(1:10, letters[1:10])
 #' profileParsPerNode(parameters, 4)
 #' profileParsPerNode(parameters, 4, side = "split")
 #'
 #' @export
-profileParsPerNode <- function(parameters, fits_per_node, side = c("both", "split")) {
+profileParsPerNode <- function(parameters, parsPerNode, side = c("both", "split"),
+                               ...) {
 
+  .renameArgs(list(...), c(fits_per_node = "parsPerNode"), "profileParsPerNode",
+              strict = TRUE)
   side <- match.arg(side)
 
   # get the number of parameters
   n_pars <- length(parameters)
   
-  # Get number of fits per node
-  fits_per_node <- fits_per_node
-  
   # determine the number of nodes necessary
-  no_nodes <- 1:ceiling(n_pars/fits_per_node)
+  no_nodes <- 1:ceiling(n_pars/parsPerNode)
   
   # generate the lists which parameters are send to which node
-  pars_from <- fits_per_node
-  pars_to_vec <- fits_per_node
+  pars_from <- parsPerNode
+  pars_to_vec <- parsPerNode
   while (pars_from < (n_pars)) {
-    pars_from <- pars_from + fits_per_node
+    pars_from <- pars_from + parsPerNode
     pars_to_vec <- c(pars_to_vec, pars_from)
   }
   pars_to_vec[length(pars_to_vec)] <- n_pars

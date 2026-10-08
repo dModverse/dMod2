@@ -23,8 +23,8 @@ test_that("Direct sum of datalists", {
   )
  
   # Create datalists from dataframes
-  data1 <- as.datalist(mydata1, split.by = c("compound", "dose")) 
-  data2 <- as.datalist(mydata2, split.by = c("compound", "dose")) 
+  data1 <- as.datalist(mydata1, splitBy = c("compound", "dose")) 
+  data2 <- as.datalist(mydata2, splitBy = c("compound", "dose")) 
   
   # Direct sum of datalists
   #-! data <- data1 + data2

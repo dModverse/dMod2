@@ -122,7 +122,7 @@ test_that("datapointL2 value equals ((pred - target) / sigma)^2 at a known point
   data  <- fx_decay_data(sigma = 0.1)
 
   obj_main <- normL2(data, bench$prd_id)
-  obj_val  <- datapointL2(name = "y", time = 2.0, value = "newpoint",
+  obj_val  <- datapointL2(name = "y", time = 2.0, parameter = "newpoint",
                           sigma = 0.05, condition = "C1")
   obj <- obj_main + obj_val
 
@@ -143,7 +143,7 @@ test_that("normL2 + datapointL2 value equals the sum of the parts", {
   data  <- fx_decay_data(sigma = 0.1)
 
   obj_main <- normL2(data, bench$prd_id)
-  obj_val  <- datapointL2(name = "y", time = 5.0, value = "vtarget",
+  obj_val  <- datapointL2(name = "y", time = 5.0, parameter = "vtarget",
                           sigma = 0.1, condition = "C1")
   obj <- obj_main + obj_val
   pars <- c(bench$outerpars_id, vtarget = 0.08)
@@ -164,7 +164,7 @@ test_that("datapointL2 contribution to the combined gradient follows the closed 
   data  <- fx_decay_data(sigma = 0.1)
 
   obj_main <- normL2(data, bench$prd_id)
-  obj_val  <- datapointL2(name = "y", time = 3.0, value = "target",
+  obj_val  <- datapointL2(name = "y", time = 3.0, parameter = "target",
                           sigma = 0.05, condition = "C1")
   obj <- obj_main + obj_val
   pars <- c(A = 1.0, k = 0.5, target = 0.2)

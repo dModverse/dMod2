@@ -103,9 +103,11 @@ test_that("trust with parscale lands at the same minimum as the unscaled run", {
 
   fit_plain <- trust(obj, init, rinit = 1, rmax = 100, iterlim = 50,
                      printIter = FALSE)
-  fit_scaled <- trust(obj, init, parscale = c(a = 2, b = 0.5, c = 10),
-                      rinit = 1, rmax = 100, iterlim = 50,
-                      printIter = FALSE)
+  expect_warning(
+    fit_scaled <- trust(obj, init, parscale = c(a = 2, b = 0.5, c = 10),
+                        rinit = 1, rmax = 100, iterlim = 50,
+                        printIter = FALSE),
+    "'parscale' is deprecated")
   expect_equal(unname(fit_scaled$argument[names(target)]),
                unname(fit_plain$argument[names(target)]),
                tolerance = 1e-6)
@@ -410,10 +412,11 @@ test_that("bounds compose with parscale, parinit on a bound, and minimize = FALS
   # parscale must not move the optimum.
   # Tight tolerances so both runs reach the optimum rather than stopping at
   # their own frame-dependent distance from the bound.
-  scaled <- trust(.quadratic_objfn(target), c(x = 0, y = 0),
-                  rinit = 1, rmax = 10, parupper = c(x = 1, y = Inf),
-                  parscale = c(10, 0.1), iterlim = 200,
-                  tolControl = list(gtol = 1e-12))
+  scaled <- suppressWarnings(
+    trust(.quadratic_objfn(target), c(x = 0, y = 0),
+          rinit = 1, rmax = 10, parupper = c(x = 1, y = Inf),
+          parscale = c(10, 0.1), iterlim = 200,
+          tolControl = list(gtol = 1e-12)))
   plain  <- trust(.quadratic_objfn(target), c(x = 0, y = 0),
                   rinit = 1, rmax = 10, parupper = c(x = 1, y = Inf),
                   iterlim = 200, tolControl = list(gtol = 1e-12))

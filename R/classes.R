@@ -969,33 +969,33 @@ match.fnargs <- function(arglist, choices) {
 
 #' Direct Sum of Objective Functions
 #'
-#' @param x1 function of class `objfn`.
-#' @param x2 function of class `objfn`.
+#' @param e1 function of class `objfn`.
+#' @param e2 function of class `objfn`.
 #' @return Object of class `objfn` whose value, gradient and Hessian are the
-#'   sums of those of `x1` and `x2`.
+#'   sums of those of `e1` and `e2`.
 #' @seealso [normL2()], [constraintL2()], [datapointL2()], \code{\link{\%.*\%}}
 #' @aliases sumobjfn
 #' @example inst/examples/objective.R
 #' @export
-"+.objfn" <- function(x1, x2) {
+"+.objfn" <- function(e1, e2) {
 
-  if (is.null(x1)) return(x2)
+  if (is.null(e1)) return(e2)
 
-  conditions.x1 <- attr(x1, "conditions")
-  conditions.x2 <- attr(x2, "conditions")
+  conditions.x1 <- attr(e1, "conditions")
+  conditions.x2 <- attr(e2, "conditions")
   conditions12 <- union(conditions.x1, conditions.x2)
 
-  parameters.x1 <- attr(x1, "parameters")
-  parameters.x2 <- attr(x2, "parameters")
+  parameters.x1 <- attr(e1, "parameters")
+  parameters.x2 <- attr(e2, "parameters")
   parameters12 <- union(parameters.x1, parameters.x2)
 
-  modelname.x1 <- attr(x1, "modelname")
-  modelname.x2 <- attr(x2, "modelname")
+  modelname.x1 <- attr(e1, "modelname")
+  modelname.x2 <- attr(e2, "modelname")
   modelname12 <- union(modelname.x1, modelname.x2)
 
 
   # objfn + objfn
-  if (inherits(x1, "objfn") & inherits(x2, "objfn")) {
+  if (inherits(e1, "objfn") & inherits(e2, "objfn")) {
 
     outfn <- function(..., fixed = NULL, deriv = TRUE, deriv2 = FALSE, hessian = NULL,
                       conditions = conditions12, env = NULL,
@@ -1036,15 +1036,15 @@ match.fnargs <- function(arglist, choices) {
       # 3. If not null & intersection is empty, don't evaluate xi at all
       v1 <- v2 <- NULL
       if (is.null(conditions.x1)) {
-        v1 <- .call(x1, conditions.x1, env)
+        v1 <- .call(e1, conditions.x1, env)
       } else if (any(conditions %in% conditions.x1)) {
-        v1 <- .call(x1, intersect(conditions, conditions.x1), env)
+        v1 <- .call(e1, intersect(conditions, conditions.x1), env)
       }
 
       if (is.null(conditions.x2)) {
-        v2 <- .call(x2, conditions.x2, env)
+        v2 <- .call(e2, conditions.x2, env)
       } else if (any(conditions %in% conditions.x2)) {
-        v2 <- .call(x2, intersect(conditions, conditions.x2), attr(v1, "env"))
+        v2 <- .call(e2, intersect(conditions, conditions.x2), attr(v1, "env"))
       }
 
       # .sumobjlist adds an absent Hessian as zero. That is right when neither
@@ -1071,17 +1071,17 @@ match.fnargs <- function(arglist, choices) {
     # model pieces regardless of term order or nesting. Coalesce from either
     # operand.
     for (.a in c("prdfn", "data", "errfn", "timesD")) {
-      .v <- attr(x1, .a, exact = TRUE)
-      if (is.null(.v)) .v <- attr(x2, .a, exact = TRUE)
+      .v <- attr(e1, .a, exact = TRUE)
+      if (is.null(.v)) .v <- attr(e2, .a, exact = TRUE)
       if (!is.null(.v)) attr(outfn, .a) <- .v
     }
     # l2spec is CONCATENATED: every L2 term keeps its own data, prediction and
     # error model, which is what reml() needs from a split objective.
-    attr(outfn, "l2spec") <- c(attr(x1, "l2spec", exact = TRUE),
-                               attr(x2, "l2spec", exact = TRUE))
+    attr(outfn, "l2spec") <- c(attr(e1, "l2spec", exact = TRUE),
+                               attr(e2, "l2spec", exact = TRUE))
     # The summands themselves, flat however the sum was nested, so a caller
     # can take a data term apart from the priors beside it.
-    attr(outfn, "terms") <- c(.objTerms(x1), .objTerms(x2))
+    attr(outfn, "terms") <- c(.objTerms(e1), .objTerms(e2))
     return(outfn)
 
   }
@@ -1180,43 +1180,43 @@ match.fnargs <- function(arglist, choices) {
 #' Adds prediction functions, parameter transformations or observation
 #' functions of the same class.
 #'
-#' @param x1 function of class `obsfn`, `prdfn` or `parfn`.
-#' @param x2 function of the same class as `x1`.
+#' @param e1 function of class `obsfn`, `prdfn` or `parfn`.
+#' @param e2 function of the same class as `e1`.
 #' @details Each function is defined for a set of conditions. The sum is
-#' defined for their union. A condition present in both is taken from `x2`,
+#' defined for their union. A condition present in both is taken from `e2`,
 #' with a warning.
-#' @return Object of the same class as `x1` and `x2`, defined for the union of
+#' @return Object of the same class as `e1` and `e2`, defined for the union of
 #' conditions.
 #' @aliases sumfn
 #' @seealso [P()], [Y()], [Xs()], [*.fn]
 #' @example inst/examples/prediction.R
 #' @export
-"+.fn" <- function(x1, x2) {
+"+.fn" <- function(e1, e2) {
 
-  if (is.null(x1)) return(x2)
+  if (is.null(e1)) return(e2)
 
-  k1 <- .fnKind(x1); k2 <- .fnKind(x2)
+  k1 <- .fnKind(e1); k2 <- .fnKind(e2)
   if (is.null(k1) || is.null(k2) || !identical(k1, k2))
-    stop("\"+.fn\": cannot add ", paste(class(x1), collapse = "/"), " and ",
-         paste(class(x2), collapse = "/"), ".", call. = FALSE)
+    stop("\"+.fn\": cannot add ", paste(class(e1), collapse = "/"), " and ",
+         paste(class(e2), collapse = "/"), ".", call. = FALSE)
 
-  own <- .mergeOwnership(x1, x2)
+  own <- .mergeOwnership(e1, e2)
 
   st <- list2env(list(op = "+", kind = k1, parts = own$parts, owner = own$owner,
                       default_conditions = own$conditions), parent = emptyenv())
   outfn <- .fnWrap(st)
 
   attr(outfn, "mappings")    <- own$mappings
-  attr(outfn, "parameters")  <- union(attr(x1, "parameters"), attr(x2, "parameters"))
-  attr(outfn, "compileInfo") <- .mergeCompileInfo(attr(x1, "compileInfo"),
-                                                  attr(x2, "compileInfo"))
+  attr(outfn, "parameters")  <- union(attr(e1, "parameters"), attr(e2, "parameters"))
+  attr(outfn, "compileInfo") <- .mergeCompileInfo(attr(e1, "compileInfo"),
+                                                  attr(e2, "compileInfo"))
   attr(outfn, "conditions")  <- own$conditions
   attr(outfn, "forcings")    <- .unionMappingAttr(own$mappings, "forcings")
 
   # Keep "composed" only when a composed operand went in, so summary() keeps
   # its detail branch for a sum of leaves and drops it for a sum of chains.
   cls <- c(k1, "fn")
-  if (inherits(x1, "composed") || inherits(x2, "composed")) cls <- c(cls, "composed")
+  if (inherits(e1, "composed") || inherits(e2, "composed")) cls <- c(cls, "composed")
   class(outfn) <- cls
 
   outfn
@@ -1228,29 +1228,29 @@ match.fnargs <- function(arglist, choices) {
 #'
 #' Combines two datalists.
 #'
-#' @param data1 object of class `datalist`.
-#' @param data2 object of class `datalist`.
-#' @details A condition present in both datalists is taken from `data2`, with
+#' @param e1 object of class `datalist`.
+#' @param e2 object of class `datalist`.
+#' @details A condition present in both datalists is taken from `e2`, with
 #' a warning. The condition grids are combined.
 #' @return Object of class `datalist` for the union of conditions.
 #' @seealso [as.datalist()]
 #' @aliases sumdatalist
 #' @example inst/examples/sumdatalist.R
 #' @export
-"+.datalist" <- function(data1, data2) {
+"+.datalist" <- function(e1, e2) {
 
-  overlap <- names(data2)[names(data2) %in% names(data1)]
+  overlap <- names(e2)[names(e2) %in% names(e1)]
   if (length(overlap) > 0) {
     warning(paste("Condition", overlap, "existed and has been overwritten."))
-    data1 <- data1[!names(data1) %in% names(data2)]
+    e1 <- e1[!names(e1) %in% names(e2)]
   }
 
-  conditions <- union(names(data1), names(data2))
-  data <- lapply(conditions, function(C) rbind(data1[[C]], data2[[C]]))
+  conditions <- union(names(e1), names(e2))
+  data <- lapply(conditions, function(C) rbind(e1[[C]], e2[[C]]))
   names(data) <- conditions
 
-  grid1 <- attr(data1, "condition.grid")
-  grid2 <- attr(data2, "condition.grid")
+  grid1 <- attr(e1, "condition.grid")
+  grid2 <- attr(e2, "condition.grid")
 
   grid <- combine(grid1, grid2)
 
@@ -1282,11 +1282,11 @@ test_conditions <- function(c1, c2) {
 #' Concatenation of Functions
 #'
 #' Concatenates observation functions, prediction functions and parameter
-#' transformations: `(p1 * p2)(times, pars)` evaluates `p2` first and passes
-#' its output to `p1`.
+#' transformations: `(e1 * e2)(times, pars)` evaluates `e2` first and passes
+#' its output to `e1`.
 #'
-#' @param p1 function of class `objfn`, `obsfn`, `prdfn`, `parfn` or `idfn`.
-#' @param p2 function of class `obsfn`, `prdfn`, `parfn` or `idfn`.
+#' @param e1 function of class `objfn`, `obsfn`, `prdfn`, `parfn` or `idfn`.
+#' @param e2 function of class `obsfn`, `prdfn`, `parfn` or `idfn`.
 #' @details Both functions must be defined for the same conditions, or one of
 #' them for no specific condition (`conditions = NULL`).
 #' @return `obsfn * obsfn` and `obsfn * parfn` return an `obsfn`,
@@ -1296,7 +1296,7 @@ test_conditions <- function(c1, c2) {
 #' @aliases prodfn
 #' @example inst/examples/prediction.R
 #' @export
-"*.fn" <- function(p1, p2) {
+"*.fn" <- function(e1, e2) {
 
   # ============================================================
   # Global consistency check for condition handling
@@ -1310,8 +1310,8 @@ test_conditions <- function(c1, c2) {
   #   with a multi-condition function.
   # ============================================================
 
-  conditions.p1 <- attr(p1, "conditions")
-  conditions.p2 <- attr(p2, "conditions")
+  conditions.p1 <- attr(e1, "conditions")
+  conditions.p2 <- attr(e2, "conditions")
 
   is_unspecific <- function(x) is.null(x)
   is_specific   <- function(x) !is.null(x) && length(x) == 1
@@ -1339,53 +1339,53 @@ test_conditions <- function(c1, c2) {
     }
   }
 
-  if (inherits(p1, "idfn")) return(p2)
-  if (inherits(p2, "idfn")) return(p1)
+  if (inherits(e1, "idfn")) return(e2)
+  if (inherits(e2, "idfn")) return(e1)
 
-  key  <- paste(.fnKind(p1), .fnKind(p2), sep = ".")
+  key  <- paste(.fnKind(e1), .fnKind(e2), sep = ".")
   spec <- if (length(key) == 1L) .prodSpec[[key]] else NULL
   if (is.null(spec))
     stop("\"*.fn\": no composition defined for ",
-         paste(class(p1), collapse = "/"), " * ",
-         paste(class(p2), collapse = "/"), ".", call. = FALSE)
+         paste(class(e1), collapse = "/"), " * ",
+         paste(class(e2), collapse = "/"), ".", call. = FALSE)
 
   conditions.out <- out_conditions(conditions.p1, conditions.p2)
 
-  st <- list2env(list(op = "*", kind = spec$out, p1 = p1, p2 = p2,
-                      p1kind = .fnKind(p1), p2kind = .fnKind(p2),
+  st <- list2env(list(op = "*", kind = spec$out, p1 = e1, p2 = e2,
+                      p1kind = .fnKind(e1), p2kind = .fnKind(e2),
                       handoff = spec$handoff, reduce = spec$reduce,
                       default_conditions = NULL), parent = emptyenv())
   outfn <- .fnWrap(st)
 
   attr(outfn, "conditions")  <- conditions.out
-  attr(outfn, "parameters")  <- attr(p2, "parameters")
-  attr(outfn, "compileInfo") <- .mergeCompileInfo(attr(p1, "compileInfo"),
-                                                  attr(p2, "compileInfo"))
+  attr(outfn, "parameters")  <- attr(e2, "parameters")
+  attr(outfn, "compileInfo") <- .mergeCompileInfo(attr(e1, "compileInfo"),
+                                                  attr(e2, "compileInfo"))
 
   if (identical(spec$out, "objfn")) {
     # An objfn has no mappings; without these an objfn * parfn loses its
     # parameter set, its model name and the reconstruction handles.
-    attr(outfn, "modelname") <- union(attr(p1, "modelname"), attr(p2, "modelname"))
+    attr(outfn, "modelname") <- union(attr(e1, "modelname"), attr(e2, "modelname"))
     for (.a in c("data", "errfn", "timesD")) {
-      .v <- attr(p1, .a, exact = TRUE)
+      .v <- attr(e1, .a, exact = TRUE)
       if (!is.null(.v)) attr(outfn, .a) <- .v
     }
     # The reconstructed prediction has to live in the outer coordinates.
-    .prd <- attr(p1, "prdfn", exact = TRUE)
+    .prd <- attr(e1, "prdfn", exact = TRUE)
     if (!is.null(.prd))
-      attr(outfn, "prdfn") <- tryCatch(.prd * p2, error = function(e) .prd)
-    .l2 <- attr(p1, "l2spec", exact = TRUE)
+      attr(outfn, "prdfn") <- tryCatch(.prd * e2, error = function(e) .prd)
+    .l2 <- attr(e1, "l2spec", exact = TRUE)
     if (!is.null(.l2))
       attr(outfn, "l2spec") <- lapply(.l2, function(tm) {
-        tm$prdfn <- tryCatch(tm$prdfn * p2, error = function(e) tm$prdfn)
+        tm$prdfn <- tryCatch(tm$prdfn * e2, error = function(e) tm$prdfn)
         tm
       })
     # The objective inside, so controls() reaches its controls. Not `terms`:
     # the objective now reads other parameters, and .objTerms() must not take
     # it for the objective it wraps.
-    attr(outfn, "wrapped") <- list(p1)
+    attr(outfn, "wrapped") <- list(e1)
   } else {
-    attr(outfn, "mappings") <- .composeMappings(st, p1, p2, conditions.out, spec$out)
+    attr(outfn, "mappings") <- .composeMappings(st, e1, e2, conditions.out, spec$out)
   }
 
   class(outfn) <- c(spec$out, "fn", "composed")

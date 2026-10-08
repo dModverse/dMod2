@@ -103,11 +103,11 @@ nullZ <- function(A, tol=sqrt(.Machine$double.eps)) {
 #' @param tol Numeric tolerance below which a pivot counts as zero. Defaults to
 #'   `sqrt(.Machine$double.eps)`.
 #' @param verbose Logical. Not used.
-#' @param fractions Logical. Not used.
+#' @param ... `fractions` is deprecated and ignored.
 #'
-#' @return An unnamed list with two elements: the reduced row echelon form of
-#'   `A`, and the indices of the pivot columns as a one-row matrix (`NULL` if
-#'   there is none).
+#' @return A list with the elements `rref`, the reduced row echelon form of
+#'   `A`, and `pivots`, the indices of the pivot columns as a one-row matrix
+#'   (`NULL` if there is none).
 #'
 #' @author Malenka Mader, \email{Malenka.Mader@@fdm.uni-freiburg.de}. The
 #'   signature and the argument check follow the function `rref()` by John Fox.
@@ -120,7 +120,8 @@ nullZ <- function(A, tol=sqrt(.Machine$double.eps)) {
 #' rref(A)
 #'
 #' @export
-rref <- function(A, tol=sqrt(.Machine$double.eps), verbose=FALSE, fractions=FALSE){
+rref <- function(A, tol=sqrt(.Machine$double.eps), verbose=FALSE, ...){
+  .droppedArgs(list(...), "fractions", "rref")
   ## Signature and argument check after John Fox
   if ((!is.matrix(A)) || (!is.numeric(A)))
     stop("argument must be a numeric matrix")
@@ -159,7 +160,7 @@ rref <- function(A, tol=sqrt(.Machine$double.eps), verbose=FALSE, fractions=FALS
       j = j + 1;
     }
   }
-  return (list(A,pivcol))
+  list(rref = A, pivots = pivcol)
 }
 
 

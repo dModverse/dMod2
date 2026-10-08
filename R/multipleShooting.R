@@ -1290,8 +1290,8 @@
     stop("trust: an objective may hold one multiple-shooting term, this one ",
          "holds ", length(tm), ".", call. = FALSE)
   e <- environment(tm[[1L]])
-  .shootFromNormL2(e$data, e$x, e$errmodel, e$times, e$attr.name,
-                   e$opt.BLOQ, e$controls$multipleShootingControl)
+  .shootFromNormL2(e$data, e$x, e$errmodel, e$times, e$attrName,
+                   e$optBLOQ, e$controls$multipleShootingControl)
 }
 
 # The same objective, optimised by single shooting: a wrapper that answers as

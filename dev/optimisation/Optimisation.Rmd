@@ -116,9 +116,9 @@ errorModels <- eqnvec(pSTAT5A_rel = "sd_pSTAT5A_rel",
                       pSTAT5B_rel = "sd_pSTAT5B_rel",
                       rSTAT5A_rel = "sd_rSTAT5A_rel")
 
-g <- Y(observables, x, modelname = "boehm_obs", attach.input = FALSE,
+g <- Y(observables, x, modelname = "boehm_obs", attachInput = FALSE,
        compile = FALSE, outdir = .outdir)
-e <- Y(errorModels, g, modelname = "boehm_err", attach.input = FALSE,
+e <- Y(errorModels, g, modelname = "boehm_err", attachInput = FALSE,
        compile = FALSE, outdir = .outdir)
 
 innerpars <- getParameters(model, g, e)
@@ -237,7 +237,7 @@ so the model steepens towards a bound and the step turns away from it. The
 first-order optimality measure that `gtol` reads, $\max_i \lvert v_i g_i \rvert$,
 vanishes both at an interior stationary point and at a bound the gradient pushes
 into. A step that would still leave the box is truncated to a fraction
-`theta.max` of the distance, reflected off the blocking faces, or replaced by
+`thetaMax` of the distance, reflected off the blocking faces, or replaced by
 the scaled steepest-descent step, whichever the model rates best.
 
 ## Termination

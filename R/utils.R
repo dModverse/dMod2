@@ -4,6 +4,44 @@
 .setdiffU <- function(a, b) a[match(a, b, 0L) == 0L]
 .intersectU <- function(a, b) a[match(a, b, 0L) > 0L]
 
+# Moves arguments given under a deprecated name, `renames` maps old to new,
+# onto the current name in the calling frame with one warning each; both
+# names together are an error. Returns `dots` without the old names.
+.renameArgs <- function(dots, renames, label, strict = FALSE,
+                        env = parent.frame()) {
+  old <- intersect(names(dots), names(renames))
+  for (o in old) {
+    new <- renames[[o]]
+    if (!eval(call("missing", as.name(new)), env))
+      stop(sprintf("%s: give '%s' only; '%s' is its deprecated name.",
+                   label, new, o), call. = FALSE)
+    warning(sprintf("%s: '%s' is deprecated, use '%s'.", label, o, new),
+            call. = FALSE)
+    assign(new, dots[[o]], envir = env)
+  }
+  if (length(old)) dots <- dots[!names(dots) %in% old]
+  if (strict && length(dots)) {
+    nm <- names(dots)
+    if (is.null(nm)) nm <- rep("", length(dots))
+    stop(sprintf("%s: unused argument(s) %s.", label,
+                 paste(ifelse(nzchar(nm), nm, "<unnamed>"), collapse = ", ")),
+         call. = FALSE)
+  }
+  dots
+}
+
+# Arguments that no longer have an effect: each warns once, anything else left
+# in `dots` is an error.
+.droppedArgs <- function(dots, dropped, label) {
+  nm <- names(dots)
+  if (is.null(nm)) nm <- rep("", length(dots))
+  for (d in intersect(nm, dropped))
+    warning(sprintf("%s: '%s' is deprecated and ignored.", label, d),
+            call. = FALSE)
+  .renameArgs(dots[!nm %in% dropped], character(0), label, strict = TRUE)
+  invisible(NULL)
+}
+
 ## utils.R, general-purpose utility functions
 
 #' Compare Two Objects and Return Differences
@@ -220,11 +258,12 @@ lsdMod <- function(classlist = c("odemodel", "parfn", "prdfn", "obsfn", "objfn",
 #' Keeps or removes attributes of an object.
 #'
 #' @param x An object.
-#' @param atr Character vector of attribute names. `NULL` (default) stands for
+#' @param which Character vector of attribute names. `NULL` (default) stands for
 #'   `"class"`, `"dim"`, `"dimnames"`, `"names"`, `"col.names"` and
 #'   `"row.names"`.
-#' @param keep Logical. `TRUE` (default) keeps the attributes in `atr` and
-#'   removes all others; `FALSE` removes those in `atr`.
+#' @param keep Logical. `TRUE` (default) keeps the attributes in `which` and
+#'   removes all others; `FALSE` removes those in `which`.
+#' @param ... `atr` is deprecated, use `which`.
 #'
 #' @return `x` with the selected attributes.
 #' @examples
@@ -236,17 +275,19 @@ lsdMod <- function(classlist = c("odemodel", "parfn", "prdfn", "obsfn", "objfn",
 #' @author Mirjam Fehling-Kaschek, \email{mirjam.fehling@@physik.uni-freiburg.de}
 #'   
 #' @export
-attrs <- function(x, atr = NULL, keep = TRUE) {
+attrs <- function(x, which = NULL, keep = TRUE, ...) {
 
-  if (is.null(atr)) {
-    atr <- c("class", "dim", "dimnames", "names", "col.names", "row.names")
+  .renameArgs(list(...), c(atr = "which"), "attrs", strict = TRUE)
+
+  if (is.null(which)) {
+    which <- c("class", "dim", "dimnames", "names", "col.names", "row.names")
   }
   
   xattr <- names(attributes(x))
   if (keep == TRUE) {
-    attributes(x)[!xattr %in% atr] <- NULL
+    attributes(x)[!xattr %in% which] <- NULL
   } else {
-    attributes(x)[xattr %in% atr] <- NULL
+    attributes(x)[xattr %in% which] <- NULL
   }
   
   return(x)

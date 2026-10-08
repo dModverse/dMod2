@@ -41,16 +41,16 @@ skip_if_no_compile <- function() {
                           compile = FALSE, backend = "cppDE"))
     p_full <- Pexpl(c(A = "1.0", k = "0.5"), derivMode = "forward",
                     compile = FALSE, modelname = "noparam_full_p")
-    # attach.input keeps the state alongside the observable, which is what the
+    # attachInput keeps the state alongside the observable, which is what the
     # full-chain test compares.
     g_full <- Y(c(y1 = "A"), f = NULL, states = c("A"),
-                parameters = character(0), attach.input = TRUE,
+                parameters = character(0), attachInput = TRUE,
                 derivMode = "forward", compile = FALSE,
                 modelname = "noparam_full_g")
 
     # The mixed trafo again, passing every input it does not map through.
     p_thru <- P(eqnvec(A = "a^2", k = "a * b"), condition = "C1",
-                attach.input = TRUE, deriv2 = TRUE,
+                attachInput = TRUE, deriv2 = TRUE,
                 modelname = "test_P_thru", compile = FALSE)
 
     compile(p_mix, p_rev, p_fwd, p_const_val, p_const_fwd, x_full, p_full, g_full,
@@ -137,13 +137,13 @@ test_that("Pexpl derivMode 'reverse' and 'forward' agree on the value", {
 })
 
 
-## ---- attach.input: inputs passed through -------------------------------
+## ---- attachInput: inputs passed through -------------------------------
 
 # A = a^2, k = a * b, and every input that is not A or k handed on untouched.
 # An input without a derivative row counts as fixed downstream, so a missing
 # row zeroes the forward gradient along it.
 
-test_that("Pexpl(attach.input = TRUE) gives every input it passes through its own row", {
+test_that("Pexpl(attachInput = TRUE) gives every input it passes through its own row", {
   skip_if_no_compile()
   p <- .pexpl_fx()$p_thru
   outer <- c(a = 1.3, b = 0.7, s = 2, u = -1)

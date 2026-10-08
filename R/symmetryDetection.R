@@ -61,7 +61,7 @@
 #'   kernel; `identifiable`, `rank` and `dim` are `NA`. Defaults to `FALSE`.
 #' @param symEngine `"modular"` (default, finite fields) or `"symbolic"` (sympy, small
 #'   models without `equilibrate` and later events).
-#' @param verbose Logical. Print the result. Defaults to `TRUE`.
+#' @param verbose Logical. Print the result. Defaults to `FALSE`.
 #'
 #' @return An object of class `symmetrydetection`:
 #'   \describe{
@@ -100,20 +100,24 @@
 #' f <- eqnvec(m = "ktx - dm*m", p = "ktl*m - dp*p")
 #' g <- eqnvec(y = "p")
 #' res <- symmetryDetection(f, g, reconstruct = TRUE)
+#' res
 #' summary(res)
 #' res$identifiable
 #' @export
-symmetryDetection <- function(f = NULL, g = NULL, trafo = NULL, parameters = NULL,
+symmetryDetection <- function(f, g, trafo = NULL, parameters = NULL,
                               fixed = NULL, gaugePreference = FALSE, forcings = NULL,
                               events = NULL, conditions = NULL, equilibrate = FALSE,
                               reduceCQ = FALSE, freeInitial = NULL, reconstruct = FALSE,
                               positive = TRUE, verify = TRUE, cores = 1,
                               control = reconstControl(), scalingsOnly = FALSE,
-                              symEngine = c("modular", "symbolic"), verbose = TRUE) {
+                              symEngine = c("modular", "symbolic"), verbose = FALSE) {
   symEngine <- match.arg(symEngine)
-  if (is.null(f))
-    stop("Provide the model right-hand sides via `f` ",
+  if (missing(f) || is.null(f))
+    stop("symmetryDetection: give the right-hand sides `f` ",
          "(eqnlist, eqnvec or named character vector).", call. = FALSE)
+  if (missing(g))
+    stop("symmetryDetection: give the observables `g` ",
+         "(eqnvec, named character vector or a list of those).", call. = FALSE)
   spec <- .symSpec(f, g, trafo, conditions, events)
   syms <- list(parameters = parameters, fixed = fixed, forcings = forcings,
                free_initial = freeInitial)
@@ -130,7 +134,7 @@ symmetryDetection <- function(f = NULL, g = NULL, trafo = NULL, parameters = NUL
   spec$sym_engine <- symEngine
   spec$cores <- as.integer(max(1L, cores))
   spec$control <- setNames(lapply(unclass(control), function(x)
-    if (is.numeric(x) && is.infinite(x)) "Inf" else x), .symSnake(names(control)))
+    if (is.numeric(x) && is.infinite(x)) "Inf" else x), .symControlSnake(names(control)))
   res <- .symFromPy(.symCall("detect_json", spec), match.call())
   if (isTRUE(verbose)) print(res)
   invisible(res)
@@ -163,14 +167,16 @@ symmetryDetection <- function(f = NULL, g = NULL, trafo = NULL, parameters = NUL
 #'   general sparse rational fit. Default to 4 and 3.
 #' @param gapOrderCap Maximum order of the power series in the time between
 #'   events. Defaults to 8.
-#' @param minsupportCandCap Maximum number of column subsets searched for
+#' @param minSupportCandCap Maximum number of column subsets searched for
 #'   directions with small support. Defaults to 20000.
-#' @param perprimeCap Maximum number of samples per prime for the reconstruction
+#' @param perPrimeCap Maximum number of samples per prime for the reconstruction
 #'   under `equilibrate = TRUE`. Defaults to 120.
-#' @param perprimeMinPrimes Minimum number of primes with samples for a
+#' @param perPrimeMinPrimes Minimum number of primes with samples for a
 #'   reconstruction under `equilibrate = TRUE`. Defaults to 3.
 #' @param timeout Time limit in seconds for the reconstruction. Directions not
 #'   finished in time are reported by their support. `Inf` (default) sets no limit.
+#' @param ... `minsupportCandCap`, `perprimeCap` and `perprimeMinPrimes` are
+#'   deprecated, use `minSupportCandCap`, `perPrimeCap` and `perPrimeMinPrimes`.
 #' @return A list of class `reconstcontrol` with the settings.
 #' @seealso [symmetryDetection()]
 #' @export
@@ -180,14 +186,18 @@ reconstControl <- function(relevanceCap = 6L, relevanceCapDir = 24L, relevanceCa
                            degreeCap = 4L, sampleSlack = 5L, probeRetries = 8L,
                            laurentDegNum = 4L, laurentDegDen = 2L, laurentCandCap = 200000L,
                            termCap = 60L, generalDegNum = 4L, generalDegDen = 3L,
-                           gapOrderCap = 8L, minsupportCandCap = 20000L, perprimeCap = 120L,
-                           perprimeMinPrimes = 3L, timeout = Inf) {
+                           gapOrderCap = 8L, minSupportCandCap = 20000L, perPrimeCap = 120L,
+                           perPrimeMinPrimes = 3L, timeout = Inf, ...) {
+  .renameArgs(list(...), c(minsupportCandCap = "minSupportCandCap",
+                           perprimeCap = "perPrimeCap",
+                           perprimeMinPrimes = "perPrimeMinPrimes"),
+              "reconstControl", strict = TRUE)
   stopifnot(relevanceCap >= 0L, relevanceCapDir >= 1L,
             relevanceCapSparse >= relevanceCap, degreeCap >= 0L,
             sampleSlack >= 0L, probeRetries >= 1L, termCap >= 1L,
             laurentDegNum >= 1L, laurentDegDen >= 0L, laurentCandCap >= 1L,
             generalDegNum >= 1L, generalDegDen >= 1L, gapOrderCap >= 0L,
-            minsupportCandCap >= 1L, perprimeCap >= 1L, perprimeMinPrimes >= 2L,
+            minSupportCandCap >= 1L, perPrimeCap >= 1L, perPrimeMinPrimes >= 2L,
             is.numeric(timeout), timeout > 0)
   structure(list(relevanceCap = as.integer(relevanceCap),
                  relevanceCapDir = as.integer(relevanceCapDir),
@@ -200,9 +210,9 @@ reconstControl <- function(relevanceCap = 6L, relevanceCapDir = 24L, relevanceCa
                  generalDegNum = as.integer(generalDegNum),
                  generalDegDen = as.integer(generalDegDen),
                  gapOrderCap = as.integer(gapOrderCap),
-                 minsupportCandCap = as.integer(minsupportCandCap),
-                 perprimeCap = as.integer(perprimeCap),
-                 perprimeMinPrimes = as.integer(perprimeMinPrimes), timeout = timeout),
+                 minSupportCandCap = as.integer(minSupportCandCap),
+                 perPrimeCap = as.integer(perPrimeCap),
+                 perPrimeMinPrimes = as.integer(perPrimeMinPrimes), timeout = timeout),
             class = c("reconstcontrol", "list"))
 }
 
@@ -229,6 +239,13 @@ reconstControl <- function(relevanceCap = 6L, relevanceCapDir = 24L, relevanceCa
 
 # camelCase to snake_case, the argument names of symident
 .symSnake <- function(x) tolower(gsub("([a-z0-9])([A-Z])", "\\1_\\2", x))
+
+# The names of reconstControl() in symident, where three differ from the snake case
+.symControlSnake <- function(x) {
+  py <- c(minSupportCandCap = "minsupport_cand_cap", perPrimeCap = "perprime_cap",
+          perPrimeMinPrimes = "perprime_min_primes")
+  ifelse(x %in% names(py), py[x], .symSnake(x))
+}
 
 # snake_case to camelCase, the field names of the R objects
 .symCamel <- function(x) gsub("_([a-z0-9])", "\\U\\1", x, perl = TRUE)

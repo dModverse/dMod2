@@ -63,9 +63,9 @@ myOptions <- list(atol = 1e-10, rtol = 1e-10, maxsteps = 1e7)
 model <- odemodel(reactions, modelname = "AB_ode", compile = FALSE, outdir = .outdir)
 x <- Xs(model, condition = "C1", options = myOptions)
 
-# attach.input adds the states to the output for the flow plots; the
+# attachInput adds the states to the output for the flow plots; the
 # objective reads only the observable
-g <- Y(eqnvec(y = "log2(s*B)"), f = x, attach.input = TRUE,
+g <- Y(eqnvec(y = "log2(s*B)"), f = x, attachInput = TRUE,
        modelname = "AB_obs", compile = FALSE, outdir = .outdir)
 
 innerpars <- getParameters(g, x)
@@ -230,7 +230,7 @@ mydataL <- data.frame(
   value = rep(sim$value, each = .nrep) + rnorm(.nrep * nrow(sim), 0, .sigma),
   sigma = NA, condition = "C1") |>
   reduceReplicates() |>
-  as.datalist(split.by = "condition")
+  as.datalist(splitBy = "condition")
 
 plot(prd.lin(times, truth.fit, deriv = FALSE), mydataL)
 

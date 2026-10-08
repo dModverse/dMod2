@@ -1289,7 +1289,7 @@ Xd <- function(data, condition = NULL) {
 #'   `g` and `f` that are neither states nor `time`.
 #' @param condition `NULL` for an observation function valid in every
 #'   condition, or the name of the condition it belongs to.
-#' @param attach.input Logical, append the incoming states to the output.
+#' @param attachInput Logical, append the incoming states to the output.
 #'   Default `FALSE`; set `TRUE` to plot states alongside observables. Can be
 #'   changed with [controls()].
 #' @param compile Logical. `TRUE` compiles the generated code now, `FALSE`
@@ -1320,6 +1320,7 @@ Xd <- function(data, condition = NULL) {
 #' @param outdir Character. Directory for the generated C++ source and the
 #'   shared object, default `getOption("dMod.outdir")`, else the working
 #'   directory.
+#' @param ... `attach.input` is deprecated, use `attachInput`.
 #'
 #' @return
 #' An [obsfn], called as `g(out, pars, ...)` with a [prdlist] `out`, see
@@ -1334,10 +1335,12 @@ Xd <- function(data, condition = NULL) {
 #' @importFrom abind abind
 #' @export
 Y <- function(g, f = NULL, states = NULL, parameters = NULL,
-              condition = NULL, attach.input = FALSE,
+              condition = NULL, attachInput = FALSE,
               compile = FALSE, modelname = NULL, verbose = FALSE,
               cores = NULL, deriv = TRUE, deriv2 = FALSE,
-              derivMode = "forward", outdir = .dmodOutdir()) {
+              derivMode = "forward", outdir = .dmodOutdir(), ...) {
+
+  .renameArgs(list(...), c(attach.input = "attachInput"), "Y", strict = TRUE)
 
   derivMode <- .matchDerivMode(derivMode, c("forward", "reverse", "forward-reverse"))
 
@@ -1352,7 +1355,7 @@ Y <- function(g, f = NULL, states = NULL, parameters = NULL,
              else min(detectFreeCores(), cores)
     result <- Reduce("+", parallel::mclapply(seq_along(g), function(i)
       Y(g[[i]], f = f, states = states, parameters = parameters,
-        condition = names(g)[i], attach.input = attach.input,
+        condition = names(g)[i], attachInput = attachInput,
         compile = FALSE, modelname = modelname, verbose = verbose,
         deriv = deriv, deriv2 = deriv2, derivMode = derivMode, outdir = outdir),
       mc.cores = cores))
@@ -1429,7 +1432,7 @@ Y <- function(g, f = NULL, states = NULL, parameters = NULL,
   gevaluate  <- gEval$evaluate
   use_ad     <- "forward" %in% derivMode
 
-  controls <- list(attach.input = attach.input)
+  controls <- list(attachInput = attachInput)
 
   # Core observation mapping function
   # `.ad_out` lets the batched entry hand in a precomputed AD result; the rest
@@ -1442,7 +1445,7 @@ Y <- function(g, f = NULL, states = NULL, parameters = NULL,
     if (!emit_d1) deriv <- FALSE
     if (deriv2 && !deriv) deriv <- TRUE
 
-    attach.input <- controls$attach.input
+    attachInput <- controls$attachInput
     fixedObsParams <- if (!is.null(.fixedObs)) .fixedObs else
       intersect(union(attr(pars, "fixed"), names(fixed)), obsParams)
     params <- c(unclass(pars), unclass(fixed))
@@ -1468,23 +1471,23 @@ Y <- function(g, f = NULL, states = NULL, parameters = NULL,
                             tangentX = sd$tangentX, tangentP = sd$tangentP,
                             hessianX = sd$hessianX, hessianP = sd$hessianP,
                             deriv2 = deriv2,
-                            attach.input = attach.input, fixed = fixedObsParams)
+                            attach.input = attachInput, fixed = fixedObsParams)
       }
       # Values: evaluate() returns observables (and pass-through extras when
-      # attach.input = TRUE) under attach.input semantics matching gfun.
+      # attachInput = TRUE) under attachInput semantics matching gfun.
       gAll <- ad_out$y
       # A NaN stays in the prediction: a ratio of states that all start at 0
       # is undefined at t0 only, where no data may sit (Laske_PLOSComputBiol2019).
       # normL2 stops on a NaN at a data point.
       gVal <- gAll[, observables, drop = FALSE]
       values <- cbind(time = out[, "time"], gVal)
-      if (attach.input) values <- cbind(values, submatrix(out, cols = -1))
+      if (attachInput) values <- cbind(values, submatrix(out, cols = -1))
       myderivs <- ad_out$tangent
       myderivs2 <- if (deriv2) ad_out$hessian else NULL
       # Append pass-through state sensitivities for states that are attached
       # but not consumed by the observables; the AD path only emits sensitivities
       # for obsStates and would otherwise leave those rows missing.
-      if (attach.input && !is.null(myderivs) && !is.null(dX_full)) {
+      if (attachInput && !is.null(myderivs) && !is.null(dX_full)) {
         theta <- dimnames(myderivs)[[3]]
         outer_theta <- theta %||% dimnames(dX_full)[[3]]
         missing <- setdiff(outer_theta, dimnames(dX_full)[[3]])
@@ -1494,7 +1497,7 @@ Y <- function(g, f = NULL, states = NULL, parameters = NULL,
         if (length(add_states))
           myderivs <- abind::abind(myderivs, dX_full[, add_states, outer_theta, drop = FALSE], along = 2)
       }
-      if (attach.input && !is.null(myderivs2) && !is.null(dX2_full)) {
+      if (attachInput && !is.null(myderivs2) && !is.null(dX2_full)) {
         theta <- dimnames(myderivs2)[[3]]
         outer_theta <- theta %||% dimnames(dX2_full)[[3]]
         missing <- setdiff(outer_theta, dimnames(dX2_full)[[3]])
@@ -1517,9 +1520,9 @@ Y <- function(g, f = NULL, states = NULL, parameters = NULL,
       }
     } else {
       # Values only (reverse-only build).
-      gVal <- gfun(out[, obsStates, drop = FALSE], params[obsParams], attach.input, fixedObsParams)[, observables, drop = FALSE]
+      gVal <- gfun(out[, obsStates, drop = FALSE], params[obsParams], attachInput, fixedObsParams)[, observables, drop = FALSE]
       values <- cbind(time = out[, "time"], gVal)
-      if (attach.input) values <- cbind(values, submatrix(out, cols = -1))
+      if (attachInput) values <- cbind(values, submatrix(out, cols = -1))
       myderivs <- NULL
       myderivs2 <- NULL
     }
@@ -1572,7 +1575,7 @@ Y <- function(g, f = NULL, states = NULL, parameters = NULL,
       list(vars = out[, obsStates, drop = FALSE], params = params[obsParams],
            tangentX = sd$tangentX, tangentP = sd$tangentP,
            hessianX = sd$hessianX, hessianP = sd$hessianP,
-           attach.input = controls$attach.input, fixed = fVal)
+           attach.input = controls$attachInput, fixed = fVal)
     })
     ad <- eb(sets, cores = cores, deriv2 = deriv2)
     lapply(seq_len(n), function(i)
@@ -1586,7 +1589,7 @@ Y <- function(g, f = NULL, states = NULL, parameters = NULL,
   # parameters. Two contractions where the forward path does two matrix
   # products, and neither of them is n_theta wide.
   #
-  # attach.input passes states through untouched, so their cotangent goes
+  # attachInput passes states through untouched, so their cotangent goes
   # straight back onto the prediction.
   X2Yvjp <- function(out, pars, fixed = NULL, cotangent) {
     w <- .asCtOut(cotangent)
@@ -1640,9 +1643,9 @@ Y <- function(g, f = NULL, states = NULL, parameters = NULL,
       if (K > 1L)
         w_out[, hit, -1L] <- r$curvatureX[, match(hit, obsStates), 1L, , drop = FALSE]
     }
-    # Everything attach.input passed through keeps whatever the caller put on
+    # Everything attachInput passed through keeps whatever the caller put on
     # it, the observables aside.
-    if (controls$attach.input) {
+    if (controls$attachInput) {
       through <- intersect(setdiff(colnames(wm), c("time", observables)), colnames(out))
       if (length(through))
         w_out[, through, ] <- w_out[, through, , drop = FALSE] +

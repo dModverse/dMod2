@@ -12,14 +12,21 @@ utils::globalVariables(c("predicted", "observed", "sd_est", "iter", "level"))
 #'
 #' @param plot A `ggplot2` plot object. Defaults to [ggplot2::last_plot()].
 #' @param command Character, the shell command that opens the PDF file.
-#'   Defaults to `"xdg-open"`, which exists on Linux; use `"open"` on macOS.
+#'   Default `NULL` opens it with the viewer of the platform: `"open"` on
+#'   macOS, `"xdg-open"` on Linux and `shell.exec()` on Windows.
 #' @param ... Arguments passed to [ggplot2::ggsave()].
 #' @return The path of the PDF file, invisibly.
 #' @export
-ggopen <- function(plot = last_plot(), command = "xdg-open", ...) {
+ggopen <- function(plot = last_plot(), command = NULL, ...) {
   filename <- tempfile(pattern = "Rplot", fileext = ".pdf")
   ggsave(filename = filename, plot = plot, ...)
-  system(command = paste(command, filename))
+  if (is.null(command) && .Platform$OS.type == "windows") {
+    get("shell.exec", envir = baseenv())(filename)
+    return(invisible(filename))
+  }
+  if (is.null(command))
+    command <- if (Sys.info()[["sysname"]] == "Darwin") "open" else "xdg-open"
+  system(command = paste(command, shQuote(filename)))
   invisible(filename)
 }
 
@@ -481,8 +488,8 @@ plotData.data.frame <- function(data, ...) {
 
 #' Profile Likelihood Plot
 #'
-#' @param profs A [parframe] of profiles as returned by [profile()], or a
-#'   list of those.
+#' @param profs A [parframe] of profiles as returned by
+#'   [profile()][profile.objfn], or a list of those.
 #' @param ... Logical expressions to subset the plotted data.
 #' @param maxvalue Numeric, the value of the objective difference at which
 #'   profiles are cut off. Defaults to 5.
@@ -496,7 +503,7 @@ plotData.data.frame <- function(data, ...) {
 #'   68%, 90% and 95%. Names are used as axis labels. Pass the value of
 #'   [profileThreshold()] to match [confint.parframe()].
 #' @return A `ggplot` object with the plotted data frame as attribute `"data"`.
-#' @seealso [profile()], [plotPaths()]
+#' @seealso [profile()][profile.objfn], [plotPaths()]
 #' @export
 #' @examples
 #' pars <- c(a = 1, b = 0.5)
@@ -511,8 +518,8 @@ plotProfile <- function(profs,...) {
 
 #' Profile Likelihood: Plot of the Parameter Paths
 #'
-#' @param profs A [parframe] of profiles as returned by [profile()], or a
-#'   list of those.
+#' @param profs A [parframe] of profiles as returned by
+#'   [profile()][profile.objfn], or a list of those.
 #' @param ... Logical expressions to subset the plotted data.
 #' @param whichPar Character or index vector, the profiled parameters whose
 #'   paths are drawn. `NULL` (default) takes all.
@@ -522,7 +529,7 @@ plotProfile <- function(profs,...) {
 #'   optimum.
 #' @param scales Character, `"fixed"` (default) or `"free"`.
 #' @return A `ggplot` object with the plotted data frame as attribute `"data"`.
-#' @seealso [profile()], [plotProfile()], [plotPathsMulti()]
+#' @seealso [profile()][profile.objfn], [plotProfile()], [plotPathsMulti()]
 #' @export
 #' @examples
 #' pars <- c(a = 1, b = 0.5)
@@ -632,8 +639,9 @@ plotPaths <- function(profs, ..., whichPar = NULL, sort = FALSE, relative = TRUE
 #' @param fluxEquations Character vector or list of flux expressions in the
 #'   states and inner parameters, e.g. the `rates` of an [eqnlist]. Names are
 #'   shown in the legend; without names the expressions are.
-#' @param nameFlux Character, the legend title. Defaults to `"Fluxes:"`.
+#' @param legendTitle Character, the legend title. Defaults to `"Fluxes:"`.
 #' @param ... Further arguments passed to `x`, such as `fixed` or `conditions`.
+#'   `nameFlux` is deprecated, use `legendTitle`.
 #'
 #' @return A `ggplot` object with the flux data frame as attribute `"out"`.
 #' @seealso [subset.eqnlist()] to select reactions.
@@ -645,7 +653,9 @@ plotPaths <- function(profs, ..., whichPar = NULL, sort = FALSE, relative = TRUE
 #' plotFluxes(pars, x, seq(0, 5, 0.1),
 #'            c(production = "0.2", degradation = "0.5*A"))
 #' @export
-plotFluxes <- function(pouter, x, times, fluxEquations, nameFlux = "Fluxes:", ...){
+plotFluxes <- function(pouter, x, times, fluxEquations, legendTitle = "Fluxes:", ...){
+
+  dots <- .renameArgs(list(...), c(nameFlux = "legendTitle"), "plotFluxes")
 
   if (is.null(names(fluxEquations))) names(fluxEquations) <- fluxEquations
 
@@ -662,7 +672,7 @@ plotFluxes <- function(pouter, x, times, fluxEquations, nameFlux = "Fluxes:", ..
     }), parent = baseenv())
   flux <- function(values, n)
     do.call(cbind, lapply(exprs, function(e) rep_len(as.numeric(eval(e, values, fluxEnv)), n)))
-  prediction.all <- x(times, pouter, deriv = FALSE, ...)
+  prediction.all <- do.call(x, c(list(times, pouter, deriv = FALSE), dots))
   names.prediction.all <- names(prediction.all)
   if (is.null(names.prediction.all)) names.prediction.all <- paste0("C", 1:length(prediction.all))
 
@@ -679,7 +689,7 @@ plotFluxes <- function(pouter, x, times, fluxEquations, nameFlux = "Fluxes:", ..
                  "#D55E00", "#CC79A7","#CC6666", "#9999CC", "#66CC99","red", "blue", "green","black")
 
   P <- ggplot(out, aes(x = time, y = value, group = name, fill = name, log = "y")) +
-    facet_wrap(~condition) + scale_fill_manual(values = cbPalette, name = nameFlux) +
+    facet_wrap(~condition) + scale_fill_manual(values = cbPalette, name = legendTitle) +
     geom_density(stat = "identity", position = "stack", alpha = 0.3, color = "darkgrey", linewidth = 0.4) +
     xlab("time") + ylab("flux contribution")
 
@@ -914,7 +924,8 @@ plotPairs <- function(x, ...) UseMethod("plotPairs", x)
 #' parameter. Requires the package purrr.
 #'
 #' @param par Character, the profiled parameter.
-#' @param profs A [parframe] of profiles as returned by [profile()].
+#' @param profs A [parframe] of profiles as returned by
+#'   [profile()][profile.objfn].
 #' @param prd A prediction function, e.g. `g*x*p`, called as
 #'   `prd(times, pars, deriv = FALSE)`.
 #' @param times Numeric vector of time points for the prediction.
@@ -924,8 +935,8 @@ plotPairs <- function(x, ...) UseMethod("plotPairs", x)
 #'   predictions by condition so that `...` can refer to its columns, or
 #'   `NULL`. Has no default.
 #' @param ... Logical expressions to subset the plotted data; used only with
-#'   a `covtable`.
-#' @param nsimus Number of trajectories. Defaults to 4.
+#'   a `covtable`. `nsimus` is deprecated, use `nSim`.
+#' @param nSim Number of trajectories. Defaults to 4.
 #'
 #' @return A `ggplot` object.
 #' @author Svenja Kemmer, \email{svenja.kemmer@@fdm.uni-freiburg.de}
@@ -940,9 +951,19 @@ plotPairs <- function(x, ...) UseMethod("plotPairs", x)
 #' plotArray("A2", profs, x, seq(0, 5, 0.1), covtable = NULL)
 #' @export
 #' @import data.table
-plotArray <- function (par, profs, prd, times, direction = c("up", "down"), covtable, ..., nsimus = 4) {
+plotArray <- function (par, profs, prd, times, direction = c("up", "down"), covtable, ..., nSim = 4) {
 
   direction <- match.arg(direction)
+  # The dots are subset expressions, so they stay unevaluated.
+  dots <- match.call(expand.dots = FALSE)$...
+  if ("nsimus" %in% names(dots)) {
+    if (!missing(nSim))
+      stop("plotArray: give 'nSim' only; 'nsimus' is its deprecated name.",
+           call. = FALSE)
+    warning("plotArray: 'nsimus' is deprecated, use 'nSim'.", call. = FALSE)
+    nSim <- eval(dots$nsimus, parent.frame())
+    dots$nsimus <- NULL
+  }
 
   # select subframe from profiles
   mysub <- profs %>% as.data.table() %>% .[whichPar == par, ]
@@ -954,7 +975,7 @@ plotArray <- function (par, profs, prd, times, direction = c("up", "down"), covt
   if(direction == "down") mysubF <- mysub[ID <= bestID]
   
   # select rows according to simulation number
-  partable <- mysubF[seq(1, nrow(mysubF), (round(nrow(mysubF)/nsimus)))]
+  partable <- mysubF[seq(1, nrow(mysubF), (round(nrow(mysubF)/nSim)))]
   
   # remove non_parameter names
   no_pars <- c("value", "constraint", "stepsize", "gamma", "whichPar", "data", "condition_obj", "AIC", "BIC", "prior", "ID", "chisquare")
@@ -971,7 +992,8 @@ plotArray <- function (par, profs, prd, times, direction = c("up", "down"), covt
       covtable <- as.data.table(covtable, keep.rownames = "condition")
     } else covtable <- as.data.table(covtable)
     out_plot <- merge(out_plot, covtable, by = "condition")
-    out_plot <- out_plot[...]
+    if (length(dots))
+      out_plot <- eval(as.call(c(as.name("["), list(out_plot), dots)))
   }
   
   # plot
@@ -1191,17 +1213,20 @@ PlotPaths <- function(profs=myprofiles, ..., whichPar, sort = FALSE, relative = 
 #' Profile Likelihood: Plot All Parameter Paths of One Profile Together
 #'
 #' Draws, for each profiled parameter, the changes of all other parameters
-#' along its profile in one panel. The `npars` parameters with the largest
+#' along its profile in one panel. The `nPars` parameters with the largest
 #' change are colored and named, the others are gray. Requires the package
 #' cowplot.
 #'
-#' @param profs A [parframe] of profiles as returned by [profile()].
-#' @param whichpars Character vector, the profiled parameters to draw.
-#' @param npars Integer, number of colored and named paths. Defaults to 5.
+#' @param profs A [parframe] of profiles as returned by
+#'   [profile()][profile.objfn].
+#' @param whichPar Character vector, the profiled parameters to draw.
+#' @param nPars Integer, number of colored and named paths. Defaults to 5.
 #' @param normalizePaths Logical. `TRUE` scales each path to a maximum
 #'   absolute value of 1. Defaults to `FALSE`.
+#' @param ... `whichpars` and `npars` are deprecated, use `whichPar` and
+#'   `nPars`.
 #'
-#' @return A `ggplot` object; for several `whichpars` the grid of
+#' @return A `ggplot` object; for several `whichPar` the grid of
 #'   [cowplot::plot_grid()].
 #' @author Svenja Kemmer, \email{svenja.kemmer@@fdm.uni-freiburg.de}
 #' @seealso [plotPaths()], [plotProfilesAndPaths()]
@@ -1210,19 +1235,22 @@ PlotPaths <- function(profs=myprofiles, ..., whichPar, sort = FALSE, relative = 
 #' obj <- constraintL2(mu = pars, sigma = 0.1)
 #' profs <- profile(obj, pars, whichPar = c("a", "b"), limits = c(-1, 1),
 #'                  cores = 1)
-#' plotPathsMulti(profs, c("a", "b"), npars = 2)
+#' plotPathsMulti(profs, c("a", "b"), nPars = 2)
 #' @export
 #' @import data.table
-plotPathsMulti <- function(profs, whichpars, npars = 5, normalizePaths = FALSE) {
+plotPathsMulti <- function(profs, whichPar, nPars = 5, normalizePaths = FALSE,
+                           ...) {
+  .renameArgs(list(...), c(whichpars = "whichPar", npars = "nPars"),
+              "plotPathsMulti", strict = TRUE)
   .require_ns("cowplot", "plotPathsMulti()")
-  if(length(whichpars) == 1){
-    p <- PlotPaths(profs=profs, whichPar = whichpars, n_pars = npars, normalizePaths = normalizePaths)
+  if(length(whichPar) == 1){
+    p <- PlotPaths(profs=profs, whichPar = whichPar, n_pars = nPars, normalizePaths = normalizePaths)
     return(p)
   } else {
     PlotList <- NULL
-    for(i in 1:length(whichpars)){
-      par <- whichpars[i]
-      p <- PlotPaths(profs=profs, whichPar = par, n_pars = npars, normalizePaths = normalizePaths)
+    for(i in 1:length(whichPar)){
+      par <- whichPar[i]
+      p <- PlotPaths(profs=profs, whichPar = par, n_pars = nPars, normalizePaths = normalizePaths)
       PlotList[[i]] <- p
     }
     pl <- cowplot::plot_grid(plotlist = PlotList)
@@ -1236,15 +1264,18 @@ plotPathsMulti <- function(profs, whichpars, npars = 5, normalizePaths = FALSE) 
 #' For each profiled parameter, draws the profile above the paths of
 #' [plotPathsMulti()]. Requires the package cowplot.
 #'
-#' @param profs A [parframe] of profiles as returned by [profile()].
-#' @param whichpars Character vector, the profiled parameters to draw.
-#' @param npars Integer, number of colored and named paths. Defaults to 5.
-#' @param ncols Number of columns of the plot grid. Defaults to 3.
+#' @param profs A [parframe] of profiles as returned by
+#'   [profile()][profile.objfn].
+#' @param whichPar Character vector, the profiled parameters to draw.
+#' @param nPars Integer, number of colored and named paths. Defaults to 5.
+#' @param ncol Number of columns of the plot grid. Defaults to 3.
 #' @param normalizePaths Logical. `TRUE` scales each path to a maximum
 #'   absolute value of 1. Defaults to `FALSE`.
 #' @param modes Character vector, the contributions to the objective drawn in
 #'   the profile plot besides the total. Defaults to `c("data", "prior")`.
 #' @param ... Further arguments passed to [cowplot::plot_grid()].
+#'   `whichpars`, `npars` and `ncols` are deprecated, use `whichPar`, `nPars`
+#'   and `ncol`.
 #'
 #' @return A `ggplot` object, the grid of [cowplot::plot_grid()].
 #' @seealso [plotProfile()], [plotPathsMulti()]
@@ -1253,17 +1284,21 @@ plotPathsMulti <- function(profs, whichpars, npars = 5, normalizePaths = FALSE) 
 #' obj <- constraintL2(mu = pars, sigma = 0.1)
 #' profs <- profile(obj, pars, whichPar = c("a", "b"), limits = c(-1, 1),
 #'                  cores = 1)
-#' plotProfilesAndPaths(profs, c("a", "b"), npars = 2, ncols = 2)
+#' plotProfilesAndPaths(profs, c("a", "b"), nPars = 2, ncol = 2)
 #'
 #' @export
-plotProfilesAndPaths <- function(profs, whichpars, npars = 5, ncols = 3, normalizePaths = FALSE, modes = c("data", "prior"), ...) {
+plotProfilesAndPaths <- function(profs, whichPar, nPars = 5, ncol = 3,
+                                 normalizePaths = FALSE,
+                                 modes = c("data", "prior"), ...) {
+  dots <- .renameArgs(list(...), c(whichpars = "whichPar", npars = "nPars",
+                                   ncols = "ncol"), "plotProfilesAndPaths")
   .require_ns("cowplot", "plotProfilesAndPaths()")
 
   # Save original obj.attributes before any subsetting drops them
   orig_oa <- attr(profs, "obj.attributes")
   filtered_oa <- if (!is.null(orig_oa)) intersect(orig_oa, modes) else NULL
   
-  profs <- profs[profs$whichPar %in% whichpars]
+  profs <- profs[profs$whichPar %in% whichPar]
   
   cleanProfilePlot <- function(prof_sub) {
     # Remove columns for unwanted modes, so plotProfile cannot plot them
@@ -1300,14 +1335,14 @@ plotProfilesAndPaths <- function(profs, whichpars, npars = 5, ncols = 3, normali
       theme(legend.position = "none")
   }
   
-  stacked_list <- vector("list", length(whichpars))
+  stacked_list <- vector("list", length(whichPar))
   
-  for (z in seq_along(whichpars)) {
-    prof_sub <- profs[profs$whichPar == whichpars[z]]
+  for (z in seq_along(whichPar)) {
+    prof_sub <- profs[profs$whichPar == whichPar[z]]
     
     p_prof_noleg <- cleanProfilePlot(prof_sub)
     
-    p_paths <- plotPathsMulti(prof_sub, whichpars[z], npars, normalizePaths = normalizePaths) +
+    p_paths <- plotPathsMulti(prof_sub, whichPar[z], nPars, normalizePaths = normalizePaths) +
       theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())
     
     aligned_pair <- cowplot::align_plots(p_prof_noleg, p_paths, align = "v", axis = "tb")
@@ -1315,7 +1350,8 @@ plotProfilesAndPaths <- function(profs, whichpars, npars = 5, ncols = 3, normali
                                             ncol = 1, rel_heights = c(1, 0.7), align = "v", axis = "tb")
   }
   
-  body <- cowplot::plot_grid(plotlist = stacked_list, ncol = ncols, ...)
+  body <- do.call(cowplot::plot_grid,
+                  c(list(plotlist = stacked_list, ncol = ncol), dots))
   
   return(body)
 }

@@ -61,7 +61,7 @@ test_that("exportPEtab keeps log parametrisations free of self-references", {
   x <- Xs(odemodel(reactions, modelname = "selfref_ode", backend = "deSolve"),
           condition = "C1")
   obs <- eqnvec(y = "log(B)")
-  g <- Y(obs, f = x, attach.input = TRUE, modelname = "selfref_obs",
+  g <- Y(obs, f = x, attachInput = TRUE, modelname = "selfref_obs",
          compile = TRUE)
   truth <- log(c(A = 1, B = 0.5, k1 = 0.25, k2 = 0.25))
   times <- c(0.5, 1, 2, 4)

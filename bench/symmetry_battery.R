@@ -96,7 +96,7 @@ myOptions <- list(atol = 1e-12, rtol = 1e-12, maxsteps = 1e7)
 
 model <- odemodel(f, modelname = "battery_ode", compile = FALSE, outdir = .outdir)
 x <- Xs(model, condition = "oven", options = myOptions)
-g <- Y(observables, f = x, attach.input = TRUE,
+g <- Y(observables, f = x, attachInput = TRUE,
        modelname = "battery_obs", compile = FALSE, outdir = .outdir)
 
 innerpars <- getParameters(g, x)

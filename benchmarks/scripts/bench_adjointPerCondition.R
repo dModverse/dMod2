@@ -108,9 +108,9 @@ xR <- Xs(mR, options = TOL)
 # vector-Jacobian product the reverse mode reads.
 p <- P(trafo, modelname = "bench_trafo", derivMode = c("forward", "reverse"),
        compile = FALSE, outdir = .bdir)
-g <- Y(observables, x, modelname = "bench_obs", attach.input = FALSE,
+g <- Y(observables, x, modelname = "bench_obs", attachInput = FALSE,
        derivMode = c("forward", "reverse"), compile = FALSE, outdir = .bdir)
-e <- Y(errorModels, g, modelname = "bench_err", attach.input = FALSE,
+e <- Y(errorModels, g, modelname = "bench_err", attachInput = FALSE,
        derivMode = c("forward", "reverse"), compile = FALSE, outdir = .bdir)
 
 xS <- NULL

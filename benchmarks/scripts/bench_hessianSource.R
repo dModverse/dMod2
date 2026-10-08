@@ -65,9 +65,9 @@ errorModels <- eqnvec(pSTAT5A_rel = "sd_pSTAT5A_rel",
                       pSTAT5B_rel = "sd_pSTAT5B_rel",
                       rSTAT5A_rel = "sd_rSTAT5A_rel")
 
-g <- Y(observables, x, modelname = "boehm_obs", attach.input = FALSE,
+g <- Y(observables, x, modelname = "boehm_obs", attachInput = FALSE,
        compile = FALSE, outdir = .outdir)
-e <- Y(errorModels, g, modelname = "boehm_err", attach.input = FALSE,
+e <- Y(errorModels, g, modelname = "boehm_err", attachInput = FALSE,
        compile = FALSE, outdir = .outdir)
 
 innerpars <- getParameters(model, g, e)

@@ -4,7 +4,7 @@
 #   * value: observable g(states) evaluates correctly
 #   * composition: (Y * Xs)(...) equals Y applied to Xs output
 #   * derivMode: "reverse" and "forward" builds agree on the value
-#   * attach.input: pass-through of inputs alongside outputs
+#   * attachInput: pass-through of inputs alongside outputs
 #   * gradient: analytic chain rule on y = A^2 (no numDeriv)
 #
 # Second-order chain rule is covered by test-deriv2-Y.R.
@@ -25,15 +25,15 @@ skip_if_no_compile <- function() {
     oldwd <- setwd(.dmod_fx_workdir()); on.exit(setwd(oldwd), add = TRUE)
 
     g_sq <- Y(c(y = "A^2"), f = bench$xfn, condition = NULL,
-              attach.input = FALSE, modelname = "test_Y_sq", compile = FALSE)
+              attachInput = FALSE, modelname = "test_Y_sq", compile = FALSE)
     g_rev <- Y(c(y = "A^2"), f = bench$xfn, condition = NULL,
-               attach.input = FALSE, derivMode = "reverse",
+               attachInput = FALSE, derivMode = "reverse",
                modelname = "test_Y_dm_rev", compile = FALSE)
     g_dual <- Y(c(y = "A^2"), f = bench$xfn, condition = NULL,
-                attach.input = FALSE, derivMode = "forward",
+                attachInput = FALSE, derivMode = "forward",
                 modelname = "test_Y_dm_dual", compile = FALSE)
     g_attach <- Y(c(y = "A"), f = bench$xfn, condition = NULL,
-                  attach.input = TRUE, modelname = "test_Y_attach", compile = FALSE)
+                  attachInput = TRUE, modelname = "test_Y_attach", compile = FALSE)
 
     x_np <- Xs(odemodel(as.eqnvec(c(A = "-k*A")), modelname = "noparam_y_ode",
                         compile = FALSE, backend = "cppDE"))
@@ -105,9 +105,9 @@ test_that("Y derivMode 'reverse' and 'forward' agree on a nonlinear observable",
 })
 
 
-## ---- attach.input ------------------------------------------------------
+## ---- attachInput ------------------------------------------------------
 
-test_that("Y with attach.input = TRUE returns inputs and outputs", {
+test_that("Y with attachInput = TRUE returns inputs and outputs", {
   skip_if_no_compile()
   fx <- .y_fx()
   bench <- fx$bench
@@ -120,7 +120,7 @@ test_that("Y with attach.input = TRUE returns inputs and outputs", {
   cn <- colnames(out$C1)
   expect_true("y" %in% cn)
   expect_true("A" %in% cn)
-  # When attach.input is TRUE, the observable column should equal the input
+  # When attachInput is TRUE, the observable column should equal the input
   # column for the identity observable.
   expect_equal(out$C1[, "y"], out$C1[, "A"], tolerance = 1e-12)
 })
@@ -179,14 +179,14 @@ test_that("Y with pure-numeric observable composes with an Xs prediction", {
 
     g <- Y(c(y = "a*exp(-k*time)"), f = NULL, parameters = c("a", "k"),
            modelname = "test_Y_xt", compile = FALSE)
-    e <- Y(c(y = "exp(s)*y"), f = g, attach.input = FALSE,
+    e <- Y(c(y = "exp(s)*y"), f = g, attachInput = FALSE,
            modelname = "test_Y_xt_err", compile = FALSE)
     e0 <- Y(c(y = "exp(s)"), f = NULL, parameters = "s",
             modelname = "test_Y_xt_err0", compile = FALSE)
     tr <- function(k) eqnvec(a = "exp(a_log)", k = paste0("exp(", k, ")"), s = "s")
     p <- P(list(C1 = tr("k1_log"), C2 = tr("k2_log")),
            modelname = "test_Y_xt_p", compile = FALSE)
-    gs <- Y(c(y = "s*A"), f = bench$xfn, attach.input = FALSE,
+    gs <- Y(c(y = "s*A"), f = bench$xfn, attachInput = FALSE,
             modelname = "test_Y_scale", compile = FALSE)
     compile(g, e, e0, p, gs, output = "test_Y_xt_all", cores = test_cores())
     cache <<- list(bench = bench, g = g, e = e, e0 = e0, p = p, gs = gs)
@@ -249,7 +249,7 @@ test_that("normL2 on g * Xt() * P() takes fixed parameters", {
   data <- as.datalist(data.frame(name = "y", time = rep(times, 2),
                                  value = c(1.1, 0.8, 0.5, 1.0, 0.6, 0.2),
                                  sigma = NA, condition = rep(c("C1", "C2"), each = 3)),
-                      split.by = "condition")
+                      splitBy = "condition")
   pars <- c(a_log = 0.3, k1_log = -0.2, k2_log = 0.4, s = -1)
 
   for (cn in list(c("C1", "C2"), "C2")) {

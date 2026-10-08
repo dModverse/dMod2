@@ -33,7 +33,7 @@ ctl_models <- function() {
   p  <- P(list(C1 = c(A = "exp(A_log)", k = "exp(k_log)", s = "1"),
                C2 = c(A = "exp(A_log)", k = "exp(k_log)", s = "2")),
           modelname = "ctl_p", outdir = d)
-  # Leaves k and s to be passed through, which only attach.input does.
+  # Leaves k and s to be passed through, which only attachInput does.
   pa <- P(list(C1 = c(A = "exp(A_log)"), C2 = c(A = "2*exp(A_log)")),
           derivMode = c("forward", "reverse"), modelname = "ctl_pa", outdir = d)
   pim <- Pimpl(c(x = "x^2 - a"), parameters = "a",
@@ -249,17 +249,17 @@ test_that("Xs keeps only user options in controls", {
 
 ## ---- Pexpl --------------------------------------------------------------
 
-test_that("Pexpl reads attach.input from controls in every entry", {
+test_that("Pexpl reads attachInput from controls in every entry", {
   fx <- ctl_models()
   pa <- fx$pa
-  on.exit(controls(pa, NULL, "attach.input") <- FALSE, add = TRUE)
+  on.exit(controls(pa, NULL, "attachInput") <- FALSE, add = TRUE)
   pars <- c(A_log = 0, k = 0.5, s = 2)
 
-  expect_false(controls(pa, "C1", "attach.input"))
+  expect_false(controls(pa, "C1", "attachInput"))
   out <- pa(pars)
   expect_false(any(c("k", "s") %in% names(out$C1)))
 
-  controls(pa, "C1", "attach.input") <- TRUE
+  controls(pa, "C1", "attachInput") <- TRUE
   out <- pa(pars)
   expect_true(all(c("k", "s") %in% names(out$C1)))
   expect_false(any(c("k", "s") %in% names(out$C2)))
@@ -276,16 +276,16 @@ test_that("Pexpl reads attach.input from controls in every entry", {
   vjp <- attr(attr(pa, "mappings")$C1, "vjpfn")
   ct <- vjp(pars, NULL, c(A = 1, k = 3, s = 0))
   expect_equal(unname(ct["k", 1L]), 3)
-  controls(pa, "C1", "attach.input") <- FALSE
+  controls(pa, "C1", "attachInput") <- FALSE
   ct <- vjp(pars, NULL, c(A = 1, k = 3, s = 0))
   expect_equal(unname(ct["k", 1L]), 0)
 })
 
-test_that("attach.input set through controls reaches both sweeps", {
+test_that("attachInput set through controls reaches both sweeps", {
   fx <- ctl_models()
   pa <- fx$pa
-  on.exit(controls(pa, NULL, "attach.input") <- FALSE, add = TRUE)
-  controls(pa, NULL, "attach.input") <- TRUE
+  on.exit(controls(pa, NULL, "attachInput") <- FALSE, add = TRUE)
+  controls(pa, NULL, "attachInput") <- TRUE
 
   tight <- list(atol = 1e-11, rtol = 1e-11)
   x <- Xs(fx$m, options = tight)
@@ -294,10 +294,10 @@ test_that("attach.input set through controls reaches both sweeps", {
   data <- as.datalist(data.frame(
     name = "y", time = c(1, 2, 4, 1, 2, 4),
     value = c(1.1, 0.8, 0.3, 2.3, 1.4, 0.6), sigma = 0.1,
-    condition = rep(c("C1", "C2"), each = 3)), split.by = "condition")
+    condition = rep(c("C1", "C2"), each = 3)), splitBy = "condition")
   obj <- normL2(data, prd)
 
-  # k and s reach the prediction only through attach.input, in the value pass
+  # k and s reach the prediction only through attachInput, in the value pass
   # as in either derivative pass. The oracle is the value itself.
   f <- obj(pars, deriv = TRUE)
   r <- obj(pars, deriv = TRUE, sweep = "reverse")
@@ -316,21 +316,21 @@ test_that("attach.input set through controls reaches both sweeps", {
 
 ## ---- Pimpl --------------------------------------------------------------
 
-test_that("Pimpl reads keep.root and its solver options from controls", {
+test_that("Pimpl reads keepRoot and its solver options from controls", {
   fx <- ctl_models()
   pim <- fx$pim
   on.exit({
-    controls(pim, NULL, "keep.root") <- TRUE
+    controls(pim, NULL, "keepRoot") <- TRUE
     controls(pim, NULL, "controlsPTC") <- list()
   }, add = TRUE)
   expect_identical(controls(pim, NULL, "controlsPTC"), list())
 
   resetWarmStarts(pim, verbose = FALSE)
   reg <- environment(.ctl_kernel(pim))$reg
-  controls(pim, NULL, "keep.root") <- FALSE
+  controls(pim, NULL, "keepRoot") <- FALSE
   expect_equal(as.numeric(pim(c(a = 4, x = 1))[[1]]["x"]), 2, tolerance = 1e-8)
   expect_null(reg$get(NULL)$arch)
-  controls(pim, NULL, "keep.root") <- TRUE
+  controls(pim, NULL, "keepRoot") <- TRUE
   pim(c(a = 4, x = 1))
   expect_false(is.null(reg$get(NULL)$arch))
 
@@ -351,27 +351,27 @@ test_that("Pimpl reads keep.root and its solver options from controls", {
 test_that("condition = NULL sets every condition, and gets the first", {
   fx <- ctl_models()
   p <- fx$p
-  on.exit(controls(p, NULL, "attach.input") <- FALSE, add = TRUE)
+  on.exit(controls(p, NULL, "attachInput") <- FALSE, add = TRUE)
 
-  controls(p, "C2", "attach.input") <- TRUE
-  expect_false(controls(p, NULL, "attach.input"))
-  expect_false(controls(p, "C1", "attach.input"))
-  expect_true(controls(p, "C2", "attach.input"))
-  expect_true(controls(p, 2, "attach.input"))
+  controls(p, "C2", "attachInput") <- TRUE
+  expect_false(controls(p, NULL, "attachInput"))
+  expect_false(controls(p, "C1", "attachInput"))
+  expect_true(controls(p, "C2", "attachInput"))
+  expect_true(controls(p, 2, "attachInput"))
 
-  controls(p, NULL, "attach.input") <- TRUE
-  expect_true(controls(p, "C1", "attach.input"))
-  expect_true(controls(p, "C2", "attach.input"))
+  controls(p, NULL, "attachInput") <- TRUE
+  expect_true(controls(p, "C1", "attachInput"))
+  expect_true(controls(p, "C2", "attachInput"))
 })
 
 test_that("the setter refuses unknown controls and conditions", {
   fx <- ctl_models()
   p <- fx$p
   expect_error(controls(p, NULL, "bogus") <- 1, "no function .* control 'bogus'")
-  expect_error(controls(p, "C1", "bogus") <- 1, "Available: attach.input")
-  expect_error(controls(p, "C3", "attach.input") <- TRUE, "unknown condition 'C3'")
-  expect_error(controls(p, "C3", "attach.input"), "unknown condition 'C3'")
-  expect_error(controls(p, 3, "attach.input") <- TRUE, "out of range")
+  expect_error(controls(p, "C1", "bogus") <- 1, "Available: attachInput")
+  expect_error(controls(p, "C3", "attachInput") <- TRUE, "unknown condition 'C3'")
+  expect_error(controls(p, "C3", "attachInput"), "unknown condition 'C3'")
+  expect_error(controls(p, 3, "attachInput") <- TRUE, "out of range")
   expect_null(controls(p, "C1", "bogus"))
   capture.output(nm <- controls(p))
   expect_identical(names(nm), c("C1", "C2"))
@@ -388,8 +388,8 @@ test_that("controls on g * x * p reach the leaves of the composition", {
   x <- Xs(fx$m)
   g <- fx$g; p <- fx$p
   on.exit({
-    controls(g, NULL, "attach.input") <- FALSE
-    controls(p, NULL, "attach.input") <- FALSE
+    controls(g, NULL, "attachInput") <- FALSE
+    controls(p, NULL, "attachInput") <- FALSE
   }, add = TRUE)
   gxp <- g * x * p
   pars <- c(A_log = 0, k_log = log(0.5))
@@ -411,14 +411,14 @@ test_that("controls on g * x * p reach the leaves of the composition", {
   # A name several factors share is set on every one that answers the
   # condition: the observation function, which answers all of them, and the
   # C2 transformation, not the C1 one.
-  controls(gxp, "C2", "attach.input") <- TRUE
-  expect_true(controls(g, NULL, "attach.input"))
-  expect_true(controls(p, "C2", "attach.input"))
-  expect_false(controls(p, "C1", "attach.input"))
+  controls(gxp, "C2", "attachInput") <- TRUE
+  expect_true(controls(g, NULL, "attachInput"))
+  expect_true(controls(p, "C2", "attachInput"))
+  expect_false(controls(p, "C1", "attachInput"))
   out <- gxp(.ctl_times, pars, deriv = FALSE)
   expect_true("A" %in% colnames(out$C1))
 
-  expect_error(controls(gxp, "C3", "attach.input") <- TRUE, "unknown condition")
+  expect_error(controls(gxp, "C3", "attachInput") <- TRUE, "unknown condition")
   expect_error(controls(gxp, NULL, "bogus") <- TRUE, "no function")
 })
 
@@ -427,7 +427,7 @@ test_that("controls reach through %.*% and objfn * parfn, which stay one term", 
   x <- Xs(fx$m)
   data <- as.datalist(data.frame(
     name = "y", time = c(1, 2, 1, 2), value = c(0.6, 0.4, 1.2, 0.7),
-    sigma = 0.1, condition = c("C1", "C1", "C2", "C2")), split.by = "condition")
+    sigma = 0.1, condition = c("C1", "C1", "C2", "C2")), splitBy = "condition")
   obj <- normL2(data, fx$g * x * fx$p)
 
   sobj <- 2 %.*% obj
@@ -454,7 +454,7 @@ test_that("controls reach through %.*% and objfn * parfn, which stay one term", 
   vali <- datapointL2("A", 2, "newpoint", condition = "C1")
   both <- sobj + 3 %.*% vali
   expect_setequal(controls(both), c("multipleShootingControl", "mu", "time",
-                                    "sigma", "attr.name"))
+                                    "sigma", "attrName"))
   controls(both, "sigma") <- 2
   expect_identical(controls(vali, "sigma"), 2)
 })

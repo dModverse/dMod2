@@ -26,7 +26,7 @@ ctor_models <- local({
                    modelname = nm("test_pimpl_nod1"), verbose = FALSE)
     gfn <- Y(c(obs = "k * A"), states = c("A", "time"), parameters = "k",
              deriv = FALSE, modelname = nm("test_y_nod1"),
-             derivMode = "forward", verbose = FALSE, attach.input = FALSE)
+             derivMode = "forward", verbose = FALSE, attachInput = FALSE)
     pdisp <- P(c(A = "a * x"), method = "explicit", deriv = FALSE,
                modelname = nm("test_P_nod1"), verbose = FALSE)
 

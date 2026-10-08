@@ -89,8 +89,8 @@ test_that("constraintL2 only constrains parameters whose names appear in mu", {
 
 test_that("(constraintL2(mu1) + constraintL2(mu2))(pars) sums per-element", {
   mu1 <- c(a = 0.0, b = 0.0); mu2 <- c(a = 1.0, b = 1.0)
-  obj <- constraintL2(mu = mu1, sigma = 1, attr.name = "c1") +
-         constraintL2(mu = mu2, sigma = 1, attr.name = "c2")
+  obj <- constraintL2(mu = mu1, sigma = 1, attrName = "c1") +
+         constraintL2(mu = mu2, sigma = 1, attrName = "c2")
   p <- c(a = 0.3, b = 0.7)
 
   for_each_backend(function(cpp) {

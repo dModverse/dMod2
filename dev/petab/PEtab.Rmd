@@ -134,7 +134,7 @@ fit <- trust(petab$obj, petab$bestfit, rinit = 1, rmax = 10,
 Reading the SBML model requires `python-libsbml`, which dMod2 provisions on
 first use in a Python environment managed by `reticulate`. Setting
 `DMOD_LIBSBML_PYTHON` to an existing interpreter uses that one instead. The
-YAML and TSV readers, `readPetabYaml()` and `readPetabTables()`, work
+YAML and TSV readers, `readPEtabYaml()` and `readPEtabTables()`, work
 without libsbml.
 
 # Exporting a problem
@@ -187,7 +187,7 @@ The manifest and tables can be inspected before compilation:
 
 ```{r example-tables}
 yamlPath <- file.path(petab_dir, "Boehm.yaml")
-tables   <- readPetabTables(yamlPath)
+tables   <- readPEtabTables(yamlPath)
 
 obs <- tables$observables
 data.frame(id = obs$observableId, noise = obs$noiseFormula)

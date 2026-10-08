@@ -46,8 +46,8 @@ data(bachmann)
 bachmann$value[.logFitted] <- log10(bachmann$value[.logFitted])
 
 .covariates <- c("experiment", "epo_level", "ActD", "CISoe", "SOCS3oe", "SHP1oe")
-mydataL   <- as.datalist(bachmann, split.by = "condition",
-                         keep.covariates = .covariates)
+mydataL   <- as.datalist(bachmann, splitBy = "condition",
+                         keepCovariates = .covariates)
 cond.grid <- covariates(mydataL)
 
 cat(sprintf("%d points, %d conditions, %d observables\n", nrow(bachmann),
@@ -236,9 +236,9 @@ myOptions <- list(atol = 1e-11, rtol = 1e-8, maxsteps = 1e7L, maxattempts = 100L
 
 model <- odemodel(reactions, modelname = "bachmann_ode", compile = FALSE, outdir = .outdir)
 x <- Xs(model, options = myOptions)
-g <- Y(observables, x, modelname = "bachmann_obs", attach.input = FALSE,
+g <- Y(observables, x, modelname = "bachmann_obs", attachInput = FALSE,
        compile = FALSE, outdir = .outdir)
-e <- Y(errorModels, g, modelname = "bachmann_err", attach.input = FALSE,
+e <- Y(errorModels, g, modelname = "bachmann_err", attachInput = FALSE,
        compile = FALSE, outdir = .outdir)
 
 # only the receptor, SHP1 and STAT5 pools are stocked; the overexpression
@@ -305,7 +305,7 @@ cat(length(outerpars), "estimated parameters\n")
 
 obj <- normL2(mydataL, prd, e) +
   constraintL2(setNames(.prior[1], "init_EpoRJAK2"), sigma = .prior[2],
-               attr.name = "prior")
+               attrName = "prior")
 
 # the published optimum, on the log10 scale the table declares
 bestfit <- setNames(log10(.pars$nominalValue), .pars$parameterId)

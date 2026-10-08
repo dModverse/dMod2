@@ -30,9 +30,9 @@ d2_models <- local({
 
     yfwd <- Y(c(y = "a*x^2 + b*x"), states = "x", parameters = c("a", "b"),
               modelname = nm("d2_obs_fwd"), deriv2 = TRUE,
-              derivMode = "forward", attach.input = FALSE)
+              derivMode = "forward", attachInput = FALSE)
     yobs <- Y(c(y = "a*x^2 + b*x"), f = f, parameters = c("a", "b"),
-              modelname = nm("d2_obs"), deriv2 = TRUE, attach.input = FALSE)
+              modelname = nm("d2_obs"), deriv2 = TRUE, attachInput = FALSE)
 
     pabc <- Pexpl(c(a = "exp(la)", b = "la^2 + lb", c = "la*lb"),
                   parameters = NULL, modelname = nm("d2_pexpl"),

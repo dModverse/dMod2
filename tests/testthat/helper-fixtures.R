@@ -65,7 +65,7 @@ fx_decay_compiled <- function() {
     m <- odemodel(reactions, modelname = "fx_decay", compile = FALSE)
     xfn <- Xs(m)
 
-    gfn <- Y(c(y = "A"), f = xfn, condition = NULL, attach.input = FALSE,
+    gfn <- Y(c(y = "A"), f = xfn, condition = NULL, attachInput = FALSE,
              modelname = "fx_decay_obs", compile = FALSE)
 
     trafo_id  <- eqnvec(A = "A",         k = "k")
@@ -113,7 +113,7 @@ fx_decay_multicond_compiled <- function() {
   conds <- paste0("C", 1:4)
 
   .dmod_with_fx_workdir({
-    gfn <- Y(c(y = "s*A"), f = base$xfn, condition = NULL, attach.input = FALSE,
+    gfn <- Y(c(y = "s*A"), f = base$xfn, condition = NULL, attachInput = FALSE,
              modelname = "fx_mc_obs", compile = FALSE)
 
     trafo <- eqnvec(A = "exp(A_log)", k = "exp(k_log)", s = "exp(s_log)")
@@ -158,7 +158,7 @@ fx_decay_data <- function(pars  = c(A = 1.0, k = 0.5),
     sigma     = sigma,
     condition = condition,
     seed      = seed)
-  as.datalist(df, split.by = "condition")
+  as.datalist(df, splitBy = "condition")
 }
 
 # Two-condition decay dataset: same model, two different "true" k values
@@ -179,7 +179,7 @@ fx_decay_data_multi <- function(parslist = list(C1 = c(A = 1.0, k = 0.5),
                sigma = sigma, condition = cn,
                stringsAsFactors = FALSE)
   }))
-  as.datalist(out, split.by = "condition")
+  as.datalist(out, splitBy = "condition")
 }
 
 
@@ -204,7 +204,7 @@ fx_decay_data_bloq <- function(pars  = c(A = 1.0, k = 0.5),
     condition = condition,
     lloq      = lloq,
     seed      = seed)
-  as.datalist(df, split.by = "condition")
+  as.datalist(df, splitBy = "condition")
 }
 
 

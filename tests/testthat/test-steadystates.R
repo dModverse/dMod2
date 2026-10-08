@@ -1,8 +1,8 @@
 ## Context: "SteadyStates"  (context() is deprecated in testthat 3e; kept as a note)
 test_that("steady_states_are_steady", {
 
-  # Run inside tempdir so steadyStates() (writes reactions_for_Alyssa*) and
-  # the Pexpl + odemodel codegen don't pollute tests/testthat/.
+  # Run inside tempdir so the Pexpl + odemodel codegen does not pollute
+  # tests/testthat/.
   withr::local_dir(tempdir())
 
   #-!Start example code
@@ -22,7 +22,7 @@ test_that("steady_states_are_steady", {
 
   parameters <- getParameters(x)
   trafo <- `names<-`(parameters, parameters)
-  trafo <- repar("inner~steadyEqn", trafo, inner = names(mysteadies), steadyEqn = mysteadies)
+  trafo <- repar(trafo, "inner~steadyEqn", inner = names(mysteadies), steadyEqn = mysteadies)
 
   pSS <- P(trafo, condition = "steady", compile = FALSE)
   compile(x, pSS, output = "ssTest_all", cores = test_cores())

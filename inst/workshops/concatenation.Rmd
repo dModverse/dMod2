@@ -156,11 +156,11 @@ A less common application of the `*` operator is the concatenation of objective 
 
 ```{r}
 
-obj <- constraintL2(mu = c(p1 = -1, p2 = 1), sigma = 1, attr.name = "data")
+obj <- constraintL2(mu = c(p1 = -1, p2 = 1), sigma = 1, attrName = "data")
 
 ```
 
-We assume to know the parameters `p1` and `p2` with uncertainty 1. Because we would combine this prior information with other data-derived objective functions, we set `attr.name = "data"`.
+We assume to know the parameters `p1` and `p2` with uncertainty 1. Because we would combine this prior information with other data-derived objective functions, we set `attrName = "data"`.
 
 When parameters are estimated on a log-scale, we still would like to use the prior information as it was defined. Therefore, we can combine the parmeter transformation with the objective function:
 

@@ -187,7 +187,7 @@ sim$value <- sim$value + rnorm(nrow(sim), 0, .sigma)
 sim$sigma <- .sigma
 
 mydata <- as.datalist(sim[, c("name", "time", "value", "sigma", "condition")],
-                      split.by = "condition")
+                      splitBy = "condition")
 plot(prd(times, truth, deriv = FALSE), mydata)
 
 

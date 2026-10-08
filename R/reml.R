@@ -112,10 +112,11 @@
 #' @param meanpars Character, the mean parameters spanning \eqn{J}. Default
 #'   `NULL`: `names(pars)` without the error-model parameters.
 #' @param fixed Named numeric, passed to the prediction. Default `NULL`.
-#' @param rank.tol Relative threshold on the singular values of the weighted
+#' @param rankTol Relative threshold on the singular values of the weighted
 #'   sensitivity matrix below which a direction counts as absent. Default
 #'   `1e-8`.
 #' @param cores Passed to the prediction. Default `getOption("dMod.cores", 1)`.
+#' @param ... `rank.tol` is deprecated, use `rankTol`.
 #'
 #' @return A data frame with one row per data point and columns `condition`,
 #'   `time`, `name`, `sigma`, `residual` and `leverage`. Attributes: `"rank"`,
@@ -128,8 +129,10 @@
 #' @importFrom stats setNames
 #' @export
 remlLeverage <- function(objfun, pars, meanpars = NULL, fixed = NULL,
-                         rank.tol = 1e-8,
-                         cores = getOption("dMod.cores", 1L)) {
+                         rankTol = 1e-8,
+                         cores = getOption("dMod.cores", 1L), ...) {
+
+  .renameArgs(list(...), c(rank.tol = "rankTol"), "remlLeverage", strict = TRUE)
 
   frames <- .remlFrames(objfun, pars, fixed = fixed, cores = cores)
   if (is.null(meanpars)) meanpars <- setdiff(names(pars), .remlErrpars(objfun, pars))
@@ -147,7 +150,7 @@ remlLeverage <- function(objfun, pars, meanpars = NULL, fixed = NULL,
   J <- J / sigma
 
   s <- svd(J)
-  k <- sum(s$d > rank.tol * max(s$d))
+  k <- sum(s$d > rankTol * max(s$d))
   h <- rowSums(s$u[, seq_len(k), drop = FALSE]^2)
   # log det(J' W J) over the directions that are present, the penalty of the
   # restricted likelihood. J' W J has the squared singular values as eigenvalues.
@@ -208,14 +211,15 @@ remlLeverage <- function(objfun, pars, meanpars = NULL, fixed = NULL,
 #' @param iterlim Maximum number of rounds. Default `25`.
 #' @param tol Convergence threshold on the largest change of an error parameter
 #'   between two rounds. Default `1e-6`.
-#' @param rank.tol Passed to [remlLeverage()]. Default `1e-8`.
+#' @param rankTol Passed to [remlLeverage()]. Default `1e-8`.
 #' @param optimizer Optimiser for the mean step, called as
 #'   `optimizer(objfun, parinit, fixed = , ...)`. Default [trust()].
 #' @param control Named list of arguments for `optimizer`, merged into
 #'   `list(rinit = 0.1, rmax = 10)`. Default `NULL`.
 #' @param cores Passed to the prediction and the objective. Default
 #'   `getOption("dMod.cores", 1)`.
-#' @param ... Further arguments for `objfun`.
+#' @param ... Further arguments for `objfun`. `rank.tol` is deprecated, use
+#'   `rankTol`.
 #'
 #' @return A list with components
 #'   \describe{
@@ -240,9 +244,9 @@ remlLeverage <- function(objfun, pars, meanpars = NULL, fixed = NULL,
 #' old <- options(dMod.outdir = tempdir())
 #' f <- addReaction(eqnlist(), from = "A", to = "", rate = "k*A")
 #' x <- Xs(odemodel(f, modelname = "reml_x", compile = FALSE))
-#' g <- Y(c(y = "A"), f = x, attach.input = FALSE, modelname = "reml_g",
+#' g <- Y(c(y = "A"), f = x, attachInput = FALSE, modelname = "reml_g",
 #'        compile = FALSE)
-#' e <- Y(c(y = "sigma_y"), f = g, attach.input = FALSE, condition = "C1",
+#' e <- Y(c(y = "sigma_y"), f = g, attachInput = FALSE, condition = "C1",
 #'        modelname = "reml_e", compile = FALSE)
 #' p <- P(eqnvec(A = "exp(logA)", k = "exp(logk)", sigma_y = "sigma_y"),
 #'        condition = "C1", modelname = "reml_p", compile = FALSE)
@@ -264,10 +268,11 @@ remlLeverage <- function(objfun, pars, meanpars = NULL, fixed = NULL,
 #' @importFrom stats optim
 #' @export
 reml <- function(objfun, pars, errpars = NULL, fixed = NULL,
-                 iterlim = 25L, tol = 1e-6, rank.tol = 1e-8,
+                 iterlim = 25L, tol = 1e-6, rankTol = 1e-8,
                  optimizer = trust, control = NULL,
                  cores = getOption("dMod.cores", 1L), ...) {
 
+  dots <- .renameArgs(list(...), c(rank.tol = "rankTol"), "reml")
   if (is.null(attr(objfun, "errfn")))
     stop("reml: the objective has no error model to estimate.", call. = FALSE)
   if (is.null(names(pars)))
@@ -296,11 +301,11 @@ reml <- function(objfun, pars, errpars = NULL, fixed = NULL,
     fit <- do.call(optimizer,
                    c(list(objfun, pars[meanpars],
                           fixed = c(fixed, pars[errpars]), cores = cores),
-                     ctrl, list(...)))
+                     ctrl, dots))
     pars[meanpars] <- fit$argument[meanpars]
 
     lev <- remlLeverage(objfun, pars, meanpars = meanpars, fixed = fixed,
-                        rank.tol = rank.tol, cores = cores)
+                        rankTol = rankTol, cores = cores)
 
     # The sigma step solves the stationarity condition of the data term. Anything
     # else acting on the error parameters, a prior for instance, is not in it.
@@ -317,7 +322,7 @@ reml <- function(objfun, pars, errpars = NULL, fixed = NULL,
   }
 
   lev <- remlLeverage(objfun, pars, meanpars = meanpars, fixed = fixed,
-                      rank.tol = rank.tol, cores = cores)
+                      rankTol = rankTol, cores = cores)
 
   value.plain <- objfun(pars, fixed = fixed, cores = cores)$value
 

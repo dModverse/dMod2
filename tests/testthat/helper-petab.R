@@ -112,11 +112,11 @@
 
     obs_ab <- eqnvec(obs_a = "A", obs_b = "B")
     obs_a  <- eqnvec(obs_a = "A")
-    g_0  <- Y(g = c(obs_a = "A"), f = ab, attach.input = FALSE,
+    g_0  <- Y(g = c(obs_a = "A"), f = ab, attachInput = FALSE,
               modelname = "nat_obs_0")
-    g_ab <- Y(obs_ab, f = x_ab, condition = NULL, attach.input = FALSE,
+    g_ab <- Y(obs_ab, f = x_ab, condition = NULL, attachInput = FALSE,
               modelname = "nat_obs_ab")
-    g_a  <- Y(obs_a, f = x_a, condition = NULL, attach.input = FALSE,
+    g_a  <- Y(obs_a, f = x_a, condition = NULL, attachInput = FALSE,
               modelname = "nat_obs_a")
 
     innerpars <- getParameters(x_ab)

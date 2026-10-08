@@ -1,3 +1,69 @@
+# dMod2 0.10.15
+
+* Breaking: arguments in dot case are camelCase. `Y()` and `Pexpl()` take
+  `attachInput` (was `attach.input`), `Pimpl()` `keepRoot` (was
+  `keep.root`); both are also the names of the controls.
+* Breaking: `normL2()`, `datapointL2()` and the `constraint*()` priors take
+  `attrName` (was `attr.name`), also as control of `datapointL2()`;
+  `normL2()` and `evalConditionResidual()` take `optBLOQ` (was `opt.BLOQ`).
+* Breaking: `datapointL2()` takes `parameter` (was `value`), the name of the
+  parameter holding the data value.
+* Breaking: `as.datalist()` takes `splitBy` and `keepCovariates` (were
+  `split.by` and `keep.covariates`), `as.parframe()` `sortBy` (was `sort.by`),
+  `parframe()` `objAttributes` (was `obj.attributes`; the attribute keeps its
+  name).
+* Breaking: `reml()` and `remlLeverage()` take `rankTol` (was `rank.tol`).
+* Breaking: `trust(stepControl = )` takes `thetaMax` (was `theta.max`);
+  `mstrust()` takes `startFromCenter` (was `start1stfromCenter`).
+* Breaking: `distributedComputing()` takes `memPerCore`, `sshPasswd`,
+  `varValues`, `nRep`, `purgeLocal` and `customFolders` (were `mem_per_core`,
+  `ssh_passwd`, `var_values`, `no_rep`, `purge_local` and `custom_folders`);
+  its `purge()` takes `purgeLocal`.
+* Breaking: `plotPathsMulti()` and `plotProfilesAndPaths()` take `whichPar`
+  and `nPars` (were `whichpars` and `npars`), `plotProfilesAndPaths()` `ncol`
+  (was `ncols`), `plotArray()` `nSim` (was `nsimus`), `plotFluxes()`
+  `legendTitle` (was `nameFlux`), `attrs()` `which` (was `atr`) and
+  `profileParsPerNode()` `parsPerNode` (was `fits_per_node`).
+* Breaking: `reconstControl()` takes `minSupportCandCap`, `perPrimeCap` and
+  `perPrimeMinPrimes` (were `minsupportCandCap`, `perprimeCap` and
+  `perprimeMinPrimes`).
+* Breaking: `readPEtabYaml()` and `readPEtabTables()` replace
+  `readPetabYaml()` and `readPetabTables()`. An imported problem prints as
+  `<PEtab problem ...>`.
+* Breaking: `repar(trafo, expr)` takes the transformation first, as
+  `define()` and `insert()` do. The order `repar(expr, trafo)` is recognised
+  by an expression in first place.
+* Breaking: `profile()` and `vcov()` are methods of the generics of stats,
+  which dMod2 no longer masks. `profile()` dispatches on objective functions
+  and plain R functions, first argument `fitted` (was `objfun`). `trust()`
+  returns a list of class `trustfit`, kept by `mstrust()`, on which `vcov()`
+  dispatches, first argument `object` (was `fit`); a fit stored before needs
+  `class(fit) <- c("trustfit", "list")`.
+* Breaking: the operands of `+` and `*` on dMod functions, objectives,
+  objlists and datalists are named `e1` and `e2`.
+* The old names above are accepted with a deprecation warning; giving the old
+  and the new name together is an error.
+* Breaking: `distributedComputing()` submits by default (`recover = FALSE`).
+  The `get()` of `distributedComputing()` and `runbg()` returns the results
+  instead of assigning `cluster_result` or `.runbgOutput` in the global
+  environment; `runbg(wait = TRUE)` returns them too. The former behaviour is
+  `cluster_result <- job$get()`.
+* Breaking: `steadyStates()` writes nothing unless `file` is given; the model
+  for the solver goes to a temporary file. Its unused argument `rates` is
+  deprecated and ignored, and `verbose` defaults to `FALSE`.
+* Breaking: `fitErrorModel()` plots only with `plotting = TRUE`;
+  `resetWarmStarts()` and `symmetryDetection()` print only with
+  `verbose = TRUE`.
+* Breaking: `symmetryDetection()` requires `f` and `g`.
+* `ggopen()` opens the PDF with the viewer of the platform by default:
+  `open` on macOS, `xdg-open` on Linux, `shell.exec()` on Windows.
+* `trust(parscale = )` is deprecated and warns; it still scales the trust
+  region. Fit on log scale instead.
+* `msParframe()` leaves the global random number generator as it was.
+  `mstrust()` takes `samplefun` as a function as well as its name.
+* `rref()` returns a list named `rref` and `pivots`; its unused argument
+  `fractions` is deprecated and ignored.
+
 # dMod2 0.10.14
 
 * Fix: `constraintL2() * P()` takes `fixed`, and with it `trust(fixed = )` and

@@ -39,14 +39,14 @@
 #' ## parfn with condition
 #' p <- P(eqnvec(x = "-a*x"), method = "implicit", condition = "C1")
 #' controls(p)
-#' controls(p, condition = "C1", name = "keep.root")
-#' controls(p, condition = "C1", name = "keep.root") <- FALSE
+#' controls(p, condition = "C1", name = "keepRoot")
+#' controls(p, condition = "C1", name = "keepRoot") <- FALSE
 #'
 #' ## obsfn without condition
 #' g <- Y(g = eqnvec(y = "s*x"), f = NULL, states = "x", parameters = "s")
 #' controls(g)
-#' controls(g, name = "attach.input")
-#' controls(g, name = "attach.input") <- TRUE
+#' controls(g, name = "attachInput")
+#' controls(g, name = "attachInput") <- TRUE
 #' @export
 controls <- function(x, ...) {
   UseMethod("controls", x)
@@ -134,9 +134,12 @@ controls <- function(x, ...) {
 
 # A control under its deprecated name answers under the current one.
 .controlAlias <- function(name) {
-  if (!identical(name, "optionsOde")) return(name)
-  warning("controls: 'optionsOde' is deprecated, use 'options'.", call. = FALSE)
-  "options"
+  renames <- c(optionsOde = "options", attach.input = "attachInput",
+               keep.root = "keepRoot", attr.name = "attrName")
+  if (length(name) != 1L || !name %in% names(renames)) return(name)
+  warning(sprintf("controls: '%s' is deprecated, use '%s'.", name,
+                  renames[[name]]), call. = FALSE)
+  renames[[name]]
 }
 
 .lscontrolsFn <- function(x, condition = NULL) {
@@ -167,6 +170,7 @@ controls <- function(x, ...) {
 #'   controls.
 controls.objfn <- function(x, name = NULL, ...) {
 
+  name <- .controlAlias(name)
   if (is.null(name)) return(.lscontrolsObjfn(x))
   tg <- .controlTargets(x, name)
   if (!length(tg)) return(NULL)
@@ -201,6 +205,7 @@ controls.fn <- function(x, condition = NULL, name = NULL, ...) {
 #' @param value the new value of the control.
 #' @rdname controls
 "controls<-.objfn" <- function(x, name, ..., value) {
+  name <- .controlAlias(name)
   tg <- .controlTargets(x, name)
   if (!length(tg))
     stop("controls<-: the objective has no control '", name, "'. Available: ",

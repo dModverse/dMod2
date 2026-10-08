@@ -138,7 +138,7 @@ conds <- c("C1", "C2")
 trafo2 <- c(A = "exp(logA)", B = "0", k1 = "exp(logk1)", k2 = "exp(logk2)",
             s = "exp(logs)")
 p2 <- Reduce("+", lapply(conds, function(cn)
-  P(repar(paste0("logk1 ~ logk1 + dk_", cn), trafo2), condition = cn,
+  P(repar(trafo2, paste0("logk1 ~ logk1 + dk_", cn)), condition = cn,
     compile = TRUE, modelname = paste0("rev_p2_", cn), outdir = .outdir)))
 
 pars2 <- c(pars, dk_C1 = 0.1, dk_C2 = -0.15)

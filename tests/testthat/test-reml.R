@@ -25,9 +25,9 @@ skip_if_no_compile <- function() {
     bench <- fx_decay_compiled()
     oldwd <- setwd(.dmod_fx_workdir()); on.exit(setwd(oldwd), add = TRUE)
 
-    gfn_s <- Y(c(y = "s*A"), f = bench$xfn, attach.input = FALSE,
+    gfn_s <- Y(c(y = "s*A"), f = bench$xfn, attachInput = FALSE,
                modelname = "reml_obs_s", compile = FALSE)
-    e_const <- Y(c(y = "sigma_y"), f = gfn_s, attach.input = FALSE,
+    e_const <- Y(c(y = "sigma_y"), f = gfn_s, attachInput = FALSE,
                  condition = "C1", modelname = "reml_err", compile = FALSE)
     p_free <- P(eqnvec(A = "A", k = "k", sigma_y = "sigma_y", s = "s"),
                 condition = "C1", modelname = "reml_p_free", compile = FALSE)
@@ -103,7 +103,7 @@ test_that("confint takes the finite-sample F threshold", {
                whichPar = "p1", data = grid^2, p1 = grid),
     parameters = "p1",
     metanames = c("value", "constraint", "stepsize", "gamma", "whichPar"),
-    obj.attributes = "data")
+    objAttributes = "data")
 
   ci_chisq <- confint(prof, level = 0.95)
   expect_equal(ci_chisq$upper, sqrt(qchisq(0.95, 1)), tolerance = 1e-3)

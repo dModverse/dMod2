@@ -1,9 +1,9 @@
 ## Three objective functions
 prior <- structure(rep(0, 5), names = letters[1:5])
 
-obj1 <- constraintL2(mu = prior, attr.name = "center")
-obj2 <- constraintL2(mu = prior + 1, attr.name = "right")
-obj3 <- constraintL2(mu = prior - 1, attr.name = "left")
+obj1 <- constraintL2(mu = prior, attrName = "center")
+obj2 <- constraintL2(mu = prior + 1, attrName = "right")
+obj3 <- constraintL2(mu = prior - 1, attrName = "left")
 
 ## Evaluate the first objective function on a random vector
 set.seed(1)

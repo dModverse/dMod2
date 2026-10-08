@@ -14,13 +14,16 @@ as.datalist <- function(x, ...) {
 }
 
 #' @export
-#' @param split.by character, the columns whose combined values identify a
+#' @param splitBy character, the columns whose combined values identify a
 #' condition. Default `NULL` uses all columns except "name", "time",
 #' "value", "sigma" and "lloq".
-#' @param keep.covariates character, additional columns kept in the
+#' @param keepCovariates character, additional columns kept in the
 #' condition grid. Default `NULL`.
 #' @rdname datalist
-as.datalist.data.frame <- function(x, split.by = NULL, keep.covariates = NULL, ...) {
+as.datalist.data.frame <- function(x, splitBy = NULL, keepCovariates = NULL, ...) {
+
+  .renameArgs(list(...), c(split.by = "splitBy",
+                           keep.covariates = "keepCovariates"), "as.datalist")
 
   # Sanitize data and get names
   x <- sanitizeData(x)
@@ -29,13 +32,13 @@ as.datalist.data.frame <- function(x, split.by = NULL, keep.covariates = NULL, .
   all.names <- colnames(dataframe)
   
   # Get splitting information
-  if (is.null(split.by)) split.by <- setdiff(all.names, standard.names)
-  conditions <- lapply(split.by, function(n) dataframe[, n])
+  if (is.null(splitBy)) splitBy <- setdiff(all.names, standard.names)
+  conditions <- lapply(splitBy, function(n) dataframe[, n])
   splits <- do.call(paste, c(conditions, list(sep = "_")))
 
 
   # condition grid
-  conditionframe <- dataframe[!duplicated(splits), union(split.by, keep.covariates), drop = FALSE]
+  conditionframe <- dataframe[!duplicated(splits), union(splitBy, keepCovariates), drop = FALSE]
   rownames(conditionframe) <- splits[!duplicated(splits)]
 
 
@@ -331,7 +334,8 @@ covariates.data.frame <- function(x, ...) {
 #' information such as doses; see [covariates()]. Renaming a datalist renames
 #' the rows of its condition grid.
 #' @param ... for `datalist()` and `c()`, named data frames or datalists; for
-#' the `as.datalist()` methods, not used.
+#' the `as.datalist()` methods, not used; `split.by` and `keep.covariates`
+#' are deprecated names of `splitBy` and `keepCovariates`.
 #' @return Object of class `datalist`.
 #' @seealso [plotData()], [+.datalist], [normL2()]
 #' @export

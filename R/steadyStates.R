@@ -11,10 +11,8 @@
 #' @param model An [eqnlist], or the path of a csv file describing the model.
 #' @param file Character, path of the RDS file the result is written to with
 #'   `saveRDS()`. For an `eqnlist` the model is also written to
-#'   `<file>_model.csv` for the solver. Default `NULL`: for an `eqnlist` this
-#'   is `"reactions_for_Alyssa"`, so both files land in the working directory;
-#'   for a csv model nothing is written.
-#' @param rates Not used.
+#'   `<file>_model.csv` for the solver. Default `NULL` writes nothing; the
+#'   solver then reads the model from a temporary file.
 #' @param forcings Character vector, names of forcings. These states are held
 #'   at zero and treated as exogenous. Default `NULL`.
 #' @param givenCQs Unnamed character vector of conserved quantities, either as
@@ -50,13 +48,14 @@
 #' @param resolve Logical, whether the result is passed through
 #'   [resolveRecurrence()] so that no equation refers to another. Default
 #'   `TRUE`.
-#' @param verbose `TRUE` (default) reports progress in a few lines and the
-#'   result, `FALSE` only the result, `"full"` every step of the solver.
+#' @param verbose `TRUE` reports progress in a few lines and the result,
+#'   `FALSE` (default) only the result, `"full"` every step of the solver.
 #' @param version Solver version, one of `"1.0"`, `"1.1"`, `"1.2"`, `"1.3"`
 #'   (default) and `"1.4"`. `"1.4"` solves every unknown from a combination of
 #'   balances, so every result is a ratio of positive sums; it needs
 #'   `positive = TRUE` and `outputFormat = "R"` and treats compartment volumes
 #'   as fixed.
+#' @param ... `rates` is deprecated and ignored.
 #'
 #' @details
 #' Arguments by version:
@@ -96,22 +95,23 @@
 #' reactions <- addReaction(reactions, "Tca_canalicular", "Tca_buffer",
 #'                          "transport_Tca*Tca_canalicular", "Transport bile")
 #'
-#' steadies <- steadyStates(reactions, file = file.path(tempdir(), "steady"),
-#'                          verbose = FALSE)
+#' steadies <- steadyStates(reactions)
 #' steadies
 #'
 #' # Parameter transformation that puts the model in steady state
 #' parameters <- getParameters(reactions)
-#' trafo <- repar("x ~ y", eqnvec(setNames(parameters, parameters)),
+#' trafo <- repar(eqnvec(setNames(parameters, parameters)), "x ~ y",
 #'                x = names(steadies), y = steadies)
 #' trafo
-steadyStates <- function(model, file = NULL, rates = NULL, forcings = NULL,
+steadyStates <- function(model, file = NULL, forcings = NULL,
                          givenCQs = NULL, neglect = NULL, sparsifyLevel = NULL,
                          outputFormat = "R", testSteady = c("fast", "exact", "skip"),
                          walltime = 0L, simplify = TRUE, solveQuadratic = FALSE,
                          positive = TRUE, branches = FALSE, priority = NULL,
-                         version = "1.3", resolve = TRUE, verbose = TRUE) {
+                         version = "1.3", resolve = TRUE, verbose = FALSE,
+                         ...) {
 
+  .droppedArgs(list(...), "rates", "steadyStates")
   .require_ns("reticulate", "steadyStates()")
   # Validate version and verification mode
   version <- match.arg(version, choices = c("1.0", "1.1", "1.2", "1.3", "1.4"))
@@ -138,7 +138,7 @@ steadyStates <- function(model, file = NULL, rates = NULL, forcings = NULL,
     # 1.4 would take a volume factor for a rate constant: volumes are not unknowns
     if (version == "1.4" && length(model$volumes))
       neglect <- union(neglect, getSymbols(unique(unlist(model$volumes))))
-    if (is.null(file)) file <- "reactions_for_Alyssa"
+    csvBase <- if (is.null(file)) tempfile("steadyStates") else file
     # Not write.eqnlist(): the backend never sees the volumes, so the
     # V_ref / V_X factors getFluxes() applies have to be folded in first.
     tab <- .volumeScaledReactions(model)
@@ -162,9 +162,9 @@ steadyStates <- function(model, file = NULL, rates = NULL, forcings = NULL,
       if (is.character(positive)) positive <- ren(positive)
       if (length(givenCQs)) givenCQs <- ren(givenCQs)
     }
-    utils::write.csv(tab, file = paste0(file, "_model.csv"),
-                     row.names = FALSE, na = "")
-    model <- paste0(file, "_model.csv")
+    model <- paste0(csvBase, "_model.csv")
+    utils::write.csv(tab, file = model, row.names = FALSE, na = "")
+    if (is.null(file)) on.exit(unlink(model), add = TRUE)
   } else symAlias <- volumes <- character(0)
   if (!is.null(givenCQs) && length(names(givenCQs)) > 0)
     stop("givenCQs must not have names. Please unname() them.")

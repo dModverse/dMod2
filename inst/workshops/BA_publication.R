@@ -9,7 +9,7 @@ theme_set(theme_dMod())
 data(BAdata)
 data <- BAdata %>% 
   filter(experiment == "exp1") %>%
-  as.datalist(split.by = c("experiment", "cations", "compound", "dose", "tca_time", "drug_time"))
+  as.datalist(splitBy = c("experiment", "cations", "compound", "dose", "tca_time", "drug_time"))
 covtable <- covariates(data)
 print(covtable)
 

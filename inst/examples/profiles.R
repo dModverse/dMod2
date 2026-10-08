@@ -4,7 +4,7 @@ old <- options(dMod.outdir = tempdir())
 ## Decay model, observation and parameter transformation, compiled together
 f <- addReaction(eqnlist(), from = "A", to = "", rate = "k*A")
 x <- Xs(odemodel(f, modelname = "profile_x", compile = FALSE))
-g <- Y(c(y = "A"), f = x, attach.input = FALSE, modelname = "profile_g",
+g <- Y(c(y = "A"), f = x, attachInput = FALSE, modelname = "profile_g",
        compile = FALSE)
 p <- P(eqnvec(A = "exp(logA)", k = "exp(logk)"), condition = "C1",
        modelname = "profile_p", compile = FALSE)

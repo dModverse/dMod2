@@ -85,7 +85,7 @@ test_that("mstrust refuses an argument both the optimiser and the sampler take",
 test_that("profile on a 1D quadratic increases monotonically on both sides", {
   obj <- constraintL2(mu = c(theta = 0.0, nuisance = 0.0), sigma = 1)
 
-  prof <- profile(objfun = obj, pars = c(theta = 0, nuisance = 0),
+  prof <- profile(obj, pars = c(theta = 0, nuisance = 0),
                   whichPar = "theta",
                   limits = c(lower = -2, upper = 2),
                   method = "integrate",

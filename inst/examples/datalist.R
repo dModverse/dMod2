@@ -24,7 +24,7 @@ mydata <- data.frame(name = "A",
                      phase = rep(c("first", "second"), each = 20),
                      amplitude = rep(c(1,1.5), each = 20))
 
-data <- as.datalist(mydata, split.by = c("stage", "phase"), keep.covariates = "amplitude")
+data <- as.datalist(mydata, splitBy = c("stage", "phase"), keepCovariates = "amplitude")
 print(data)
 plot(data)
 

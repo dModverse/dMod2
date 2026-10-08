@@ -22,7 +22,7 @@ setwd(outdir)
 # ---- model ------------------------------------------------------------------
 x <- odemodel(m$reactions, events = m$events, modelname = "ns_x", compile = FALSE) |>
   Xs(options = list(atol = 1e-10, rtol = 1e-8), optionsSens = list(atol = 1e-6, rtol = 1e-4))
-g <- Y(m$observables, f = x, attach.input = FALSE, compile = FALSE, modelname = "ns_g")
+g <- Y(m$observables, f = x, attachInput = FALSE, compile = FALSE, modelname = "ns_g")
 pSS <- Pimpl(m$reactions, forcings = m$forcings, compile = FALSE, modelname = "ns_ss")
 
 # condition layer: inputs of pSS and x, log10 outer parameters
@@ -47,7 +47,7 @@ center[grepl("^offset_", outer)] <- 0
 center[grepl("^tSmad", outer)] <- log10(0.4)
 
 obj <- normL2(m$data, prd, t0 = m$t0) +
-  constraintL2(center, sigma = 3, attr.name = "prior")
+  constraintL2(center, sigma = 3, attrName = "prior")
 
 ss <- environment(attr(pSS, "mappings")[[1]])$stats
 showStats <- function(label) {

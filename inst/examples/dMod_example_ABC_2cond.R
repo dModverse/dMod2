@@ -72,7 +72,7 @@
         300.00000, "B_obs", 0.9615111, "treatment"
       )
     ),
-    split.by = "condition"
+    splitBy = "condition"
   )
   
   

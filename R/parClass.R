@@ -171,9 +171,10 @@ plot.parlist <- function(x, path = FALSE, ...) {
 #' @export
 #' @importFrom data.table as.data.table rbindlist
 #' @rdname as.parframe
-#' @param sort.by character, the column by which the returned parameter frame
+#' @param sortBy character, the column by which the returned parameter frame
 #' is sorted. Default `"value"`.
-as.parframe.parlist <- function(x, sort.by = "value", ...) {
+as.parframe.parlist <- function(x, sortBy = "value", ...) {
+  .renameArgs(list(...), c(sort.by = "sortBy"), "as.parframe")
   m_stat <- .statParlist(x)
   m_metanames <- c("index", "value", "converged", "iterations")
   m_idx <- which("error" != m_stat)
@@ -203,7 +204,7 @@ as.parframe.parlist <- function(x, sort.by = "value", ...) {
   m_parframe <- cbind(m_parframe, parameters)
   
   # Sort by value
-  m_parframe <- m_parframe[order(m_parframe[[sort.by]]),]
+  m_parframe <- m_parframe[order(m_parframe[[sortBy]]),]
   
   parframe(m_parframe, parameters = names(parameters), metanames = m_metanames)
 }
@@ -520,7 +521,7 @@ is.parframe <- function(x) {
   obj.attributes <- intersect(obj.attributes, colnames(out))
   parameters <- intersect(parameters, colnames(out))
   
-  parframe(out, parameters = parameters, metanames = metanames, obj.attributes = obj.attributes)
+  parframe(out, parameters = parameters, metanames = metanames, objAttributes = obj.attributes)
   
 }
 
@@ -964,14 +965,15 @@ parfn <- function(p2p, parameters = NULL, condition = NULL) {
 #' row. Its columns fall into three groups: meta-information (e.g. index,
 #' value, converged), attributes of an objective function (e.g. data and prior
 #' contribution) and the parameters.
-#' @seealso [as.parframe()], [profile()], [mstrust()]
+#' @seealso [as.parframe()], [profile()][profile.objfn], [mstrust()]
 #' @param x data frame. Default `NULL` gives an empty parameter frame.
 #' @param parameters character, the names of the parameter columns. Default
 #'   `colnames(x)`.
 #' @param metanames character, the names of the meta-information columns.
 #'   Default `NULL`.
-#' @param obj.attributes character, the names of the objective function
+#' @param objAttributes character, the names of the objective function
 #'   attributes. Default `NULL`.
+#' @param ... `obj.attributes` is deprecated, use `objAttributes`.
 #' @return Object of class `parframe`, a data frame with the attributes
 #' `parameters`, `metanames` and `obj.attributes`. `is.parframe()` returns a
 #' logical.
@@ -984,7 +986,11 @@ parfn <- function(p2p, parameters = NULL, condition = NULL) {
 #' pf[pf$value < 3, ]
 #' as.parvec(pf)
 #' @export
-parframe <- function(x = NULL, parameters = colnames(x), metanames = NULL, obj.attributes = NULL) {
+parframe <- function(x = NULL, parameters = colnames(x), metanames = NULL,
+                     objAttributes = NULL, ...) {
+
+  .renameArgs(list(...), c(obj.attributes = "objAttributes"), "parframe",
+              strict = TRUE)
 
   if (!is.null(x)) {
     rownames(x) <- NULL
@@ -995,7 +1001,7 @@ parframe <- function(x = NULL, parameters = colnames(x), metanames = NULL, obj.a
 
   attr(out, "parameters") <- parameters
   attr(out, "metanames") <- metanames
-  attr(out, "obj.attributes") <- obj.attributes
+  attr(out, "obj.attributes") <- objAttributes
   class(out) <- c("parframe", "data.frame")
 
   return(out)

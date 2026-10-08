@@ -52,7 +52,7 @@ skip_on_cran()
             condition = "C1", derivMode = fr, modelname = "rv_pe", outdir = d)
     # One trafo per condition, each with a parameter of its own.
     pc <- Reduce("+", lapply(c("C1", "C2"), function(cn)
-      P(repar(paste0("logk1 ~ logk1 + dk_", cn), tr), condition = cn, derivMode = fr,
+      P(repar(tr, paste0("logk1 ~ logk1 + dk_", cn)), condition = cn, derivMode = fr,
         modelname = paste0("rv_p2_", cn), outdir = d)))
 
     ev <- eventlist(var = "A", time = "t_dose", value = "d_amt", method = "add")
@@ -92,12 +92,12 @@ skip_on_cran()
     # at the head of the chain. qh maps k2 per condition and hands s on, and qb
     # hands both on behind it, for two conditions in one batched call.
     tr_ab <- tr[c("A", "B", "k1")]
-    qt <- P(tr_ab, condition = "C1", attach.input = TRUE, deriv2 = TRUE,
+    qt <- P(tr_ab, condition = "C1", attachInput = TRUE, deriv2 = TRUE,
             derivMode = c(fr, "forward-reverse"), modelname = "rv2_pt", outdir = d)
     qh <- P(list(C1 = c(k2 = "exp(logk2)"), C2 = c(k2 = "2*exp(logk2)")),
-            attach.input = TRUE, deriv2 = TRUE, derivMode = c(fr, "forward-reverse"),
+            attachInput = TRUE, deriv2 = TRUE, derivMode = c(fr, "forward-reverse"),
             modelname = "rv2_ph", outdir = d)
-    qb <- P(tr_ab, attach.input = TRUE, deriv2 = TRUE,
+    qb <- P(tr_ab, attachInput = TRUE, deriv2 = TRUE,
             derivMode = c(fr, "forward-reverse"), modelname = "rv2_pb", outdir = d)
 
     compile(m, g, e, p, pe, pc, mev, pev, mnr, pq, pl, sun, sunev, m2, g2, q,
@@ -317,7 +317,7 @@ test_that("censored rows go backwards on every BLOQ treatment", {
   dl <- as.datalist(d)
 
   for (mode in c("M3", "M4NM", "M4BEAL", "M1")) {
-    obj <- normL2(dl, prd, opt.BLOQ = mode)
+    obj <- normL2(dl, prd, optBLOQ = mode)
     expect_modes_agree(obj, fx$pars, info = mode)
   }
 })
@@ -507,7 +507,7 @@ test_that("a summed objective keeps every term's curvature", {
 # ---------------------------------------------------------------------------
 #  Inputs a transformation passes through.
 #
-#  Pexpl(attach.input = TRUE) hands every input it does not map on untouched.
+#  Pexpl(attachInput = TRUE) hands every input it does not map on untouched.
 #  Forward and backward, at first and second order, they keep a derivative,
 #  and both modes are checked against central differences: a forward mode that
 #  treated them as fixed and a backward one that propagated no tangent for them

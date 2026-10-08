@@ -27,11 +27,11 @@ skip_if_no_compile <- function() {
     bench <- fx_decay_compiled()
     oldwd <- setwd(.dmod_fx_workdir()); on.exit(setwd(oldwd), add = TRUE)
 
-    e_const <- Y(c(y = "sigma_y"), f = bench$gfn, attach.input = FALSE,
+    e_const <- Y(c(y = "sigma_y"), f = bench$gfn, attachInput = FALSE,
                  condition = "C1", modelname = "nl2_err_const", compile = FALSE)
     p_sig <- P(eqnvec(A = "A", k = "k", sigma_y = "sigma_y"), condition = "C1",
                modelname = "nl2_p_sig", compile = FALSE)
-    e_prop <- Y(c(y = "srel * y"), f = bench$gfn, attach.input = FALSE,
+    e_prop <- Y(c(y = "srel * y"), f = bench$gfn, attachInput = FALSE,
                 condition = "C1", modelname = "nl2_err_prop", compile = FALSE)
     p_prop <- P(eqnvec(A = "A", k = "k", srel = "srel"), condition = "C1",
                 modelname = "nl2_p_prop", compile = FALSE)
@@ -267,7 +267,7 @@ test_that("R and C++ backends give the same value on a BLOQ dataset", {
 })
 
 
-test_that("normL2(opt.BLOQ = ...) selects the BLOQ method on both backends", {
+test_that("normL2(optBLOQ = ...) selects the BLOQ method on both backends", {
   skip_if_no_compile()
   bench <- fx_decay_compiled()
   data  <- fx_decay_data_bloq(sigma = 0.05, lloq = 0.1,
@@ -300,7 +300,7 @@ test_that("normL2(opt.BLOQ = ...) selects the BLOQ method on both backends", {
 
   for_each_backend(function(cpp) {
     for (mode in names(expected)) {
-      obj <- normL2(data, bench$prd_id, opt.BLOQ = mode)
+      obj <- normL2(data, bench$prd_id, optBLOQ = mode)
       o   <- obj(pars)
       expect_equal(o$value, expected[[mode]], tolerance = 1e-3,
                    info = paste0("cpp=", cpp, " mode=", mode))
@@ -309,10 +309,10 @@ test_that("normL2(opt.BLOQ = ...) selects the BLOQ method on both backends", {
 
   for (mode in c("M1", "M3", "M4NM", "M4BEAL")) {
     with_cpp_backend(FALSE, {
-      g_R <- normL2(data, bench$prd_id, opt.BLOQ = mode)(pars)$gradient
+      g_R <- normL2(data, bench$prd_id, optBLOQ = mode)(pars)$gradient
     })
     with_cpp_backend(TRUE, {
-      g_C <- normL2(data, bench$prd_id, opt.BLOQ = mode)(pars)$gradient
+      g_C <- normL2(data, bench$prd_id, optBLOQ = mode)(pars)$gradient
     })
     expect_equal(g_C, g_R, tolerance = 1e-9,
                  info = paste0("gradient parity, mode=", mode))
@@ -320,14 +320,14 @@ test_that("normL2(opt.BLOQ = ...) selects the BLOQ method on both backends", {
 })
 
 
-test_that("normL2 rejects unknown opt.BLOQ values", {
+test_that("normL2 rejects unknown optBLOQ values", {
   skip_if_no_compile()
   bench <- fx_decay_compiled()
   data  <- fx_decay_data_bloq(sigma = 0.05, lloq = 0.1,
                               times = seq(0, 10, by = 1))
   # match.arg() rejects the unknown value; assert on the listed choices rather
   # than the "should be one of" prefix, which match.arg translates per locale.
-  expect_error(normL2(data, bench$prd_id, opt.BLOQ = "M2"),
+  expect_error(normL2(data, bench$prd_id, optBLOQ = "M2"),
                "M4BEAL")
 })
 
@@ -461,7 +461,7 @@ test_that("normL2 BLOQ M3 + proportional errmodel: value and gradient match", {
   data$C1$sigma <- NA_real_   # both ALOQ and BLOQ rows draw sigma from errmodel
 
   d   <- data$C1
-  obj <- normL2(data, ec$prd, errmodel = ec$e, opt.BLOQ = "M3")
+  obj <- normL2(data, ec$prd, errmodel = ec$e, optBLOQ = "M3")
   o <- obj(pars)
 
   # Use the exact prediction normL2 integrated (its env), so the closed-form
@@ -493,7 +493,7 @@ test_that("normL2 BLOQ M4 + proportional errmodel: value and gradient match", {
   data$C1$sigma <- NA_real_
 
   d   <- data$C1
-  obj <- normL2(data, ec$prd, errmodel = ec$e, opt.BLOQ = "M4NM")
+  obj <- normL2(data, ec$prd, errmodel = ec$e, optBLOQ = "M4NM")
   o <- obj(pars)
 
   env_pred <- attr(o, "env")$prediction[["C1"]]
@@ -553,7 +553,7 @@ test_that("normL2 reports the sum of squares as a chi2 attribute", {
 })
 
 
-test_that("terms sharing an attr.name pool their chi2, others split", {
+test_that("terms sharing an attrName pool their chi2, others split", {
   skip_if_no_compile()
   bench <- fx_decay_compiled()
   data  <- fx_decay_data(sigma = 0.1)
@@ -565,13 +565,13 @@ test_that("terms sharing an attr.name pool their chi2, others split", {
   expect_equal(unname(attr(same, "chi2")), 2 * chi1, tolerance = 1e-9)
   expect_null(attr(same, "chi2_data"))
 
-  split <- (one + normL2(data, bench$prd_id, attr.name = "validation"))(bench$outerpars_id)
+  split <- (one + normL2(data, bench$prd_id, attrName = "validation"))(bench$outerpars_id)
   expect_null(attr(split, "chi2"))
   expect_equal(unname(attr(split, "chi2_data")), chi1, tolerance = 1e-9)
   expect_equal(unname(attr(split, "chi2_validation")), chi1, tolerance = 1e-9)
 
   # a third term folds back into the contribution it belongs to
-  three <- (one + normL2(data, bench$prd_id, attr.name = "validation") +
+  three <- (one + normL2(data, bench$prd_id, attrName = "validation") +
               normL2(data, bench$prd_id))(bench$outerpars_id)
   expect_equal(unname(attr(three, "chi2_data")), 2 * chi1, tolerance = 1e-9)
   expect_equal(unname(attr(three, "chi2_validation")), chi1, tolerance = 1e-9)

@@ -22,8 +22,8 @@
 #'   `NULL` (default) uses [detectFreeCores()]; 1 on Windows.
 #' @param deriv,deriv2 Build first and second derivatives, default `TRUE` and
 #'   `FALSE`. `deriv2` requires `deriv = TRUE`.
-#' @param ... Further arguments of [Pexpl()] (`attach.input`, `derivMode`,
-#'   `outdir`) or [Pimpl()] (`forcings`, `keep.root`, `flow`, `controlsPTC`,
+#' @param ... Further arguments of [Pexpl()] (`attachInput`, `derivMode`,
+#'   `outdir`) or [Pimpl()] (`forcings`, `keepRoot`, `flow`, `controlsPTC`,
 #'   `outdir`), as `method` selects.
 #'
 #' @return A [parfn], called as `p(pars, ...)`, see section Calling a dMod
@@ -272,14 +272,14 @@ P <- function(trafo = NULL, parameters = NULL, condition = NULL,
 .Pexpl_wrap <- function(st, controls) {
   p2p <- function(pars, fixed = NULL, deriv = TRUE, deriv2 = FALSE)
     .Pexpl_p2p(st, pars, fixed, deriv, deriv2,
-               attach.input = controls$attach.input)
+               attach.input = controls$attachInput)
   attr(p2p, "vjpfn") <- function(pars, fixed = NULL, cotangent, condition = NULL)
     .Pexpl_vjp(st, pars, fixed, cotangent, condition,
-               attach.input = controls$attach.input)
+               attach.input = controls$attachInput)
   attr(p2p, "batchfn") <- function(parsList, fixedList, deriv, deriv2,
                                    conditions, cores)
     .Pexpl_batch(st, parsList, fixedList, deriv, deriv2, cores,
-                 attach.input = controls$attach.input)
+                 attach.input = controls$attachInput)
   p2p
 }
 
@@ -355,7 +355,7 @@ P <- function(trafo = NULL, parameters = NULL, condition = NULL,
 #' @param parameters Outer parameters; default `NULL`, the symbols of
 #'   `trafo`. Names given here that `trafo` does not map pass through as
 #'   identity.
-#' @param attach.input Logical. Append the inputs that `trafo` does not map;
+#' @param attachInput Logical. Append the inputs that `trafo` does not map;
 #'   varying ones with identity derivatives, fixed ones as fixed. Default
 #'   `FALSE`. Can be changed with [controls()].
 #' @param condition `NULL` (default) for a transformation valid in every
@@ -375,6 +375,7 @@ P <- function(trafo = NULL, parameters = NULL, condition = NULL,
 #'   `deriv2 = TRUE`.
 #' @param outdir Directory for the generated source and shared object,
 #'   default `getOption("dMod.outdir")`, else the working directory.
+#' @param ... `attach.input` is deprecated, use `attachInput`.
 #'
 #' @return A [parfn], called as `p(pars, ...)`, see section Calling a dMod
 #'   function.
@@ -383,11 +384,13 @@ P <- function(trafo = NULL, parameters = NULL, condition = NULL,
 #' @example inst/examples/Pexpl.R
 #' @importFrom cppDE cppFUN
 #' @export
-Pexpl <- function(trafo, parameters = NULL, attach.input = FALSE, condition = NULL,
+Pexpl <- function(trafo, parameters = NULL, attachInput = FALSE, condition = NULL,
                   compile = FALSE, modelname = NULL, verbose = FALSE,
                   deriv = TRUE, deriv2 = FALSE,
                   derivMode = "forward",
-                  outdir = .dmodOutdir()) {
+                  outdir = .dmodOutdir(), ...) {
+
+  .renameArgs(list(...), c(attach.input = "attachInput"), "Pexpl", strict = TRUE)
 
   derivMode <- .matchDerivMode(derivMode, c("forward", "reverse", "forward-reverse"))
   emit_d1   <- isTRUE(deriv)
@@ -426,7 +429,7 @@ Pexpl <- function(trafo, parameters = NULL, attach.input = FALSE, condition = NU
                       use_ad = use_ad, ad_symbol = ad_symbol,
                       ad2_symbol = ad2_symbol, emit_d1 = emit_d1,
                       emit_d2 = emit_d2), parent = emptyenv())
-  p2p <- .Pexpl_wrap(st, controls = list(attach.input = attach.input))
+  p2p <- .Pexpl_wrap(st, controls = list(attachInput = attachInput))
 
   attr(p2p, "equations")   <- as.eqnvec(trafo)
   attr(p2p, "parameters")  <- parameters
@@ -667,7 +670,7 @@ Pexpl <- function(trafo, parameters = NULL, attach.input = FALSE, condition = NU
 #' @param fn A [parfn], [prdfn], [obsfn], objective function, or a
 #'   composition of those.
 #' @param verbose Logical. Print a summary of the cleared caches, default
-#'   `TRUE`.
+#'   `FALSE`.
 #' @return Invisibly, the labels of the cleared caches, empty if none was
 #'   found.
 #' @seealso [Pimpl()]
@@ -677,7 +680,7 @@ Pexpl <- function(trafo, parameters = NULL, attach.input = FALSE, condition = NU
 #'            outdir = tempdir())
 #' resetWarmStarts(p)
 #' @export
-resetWarmStarts <- function(fn, verbose = TRUE) {
+resetWarmStarts <- function(fn, verbose = FALSE) {
   if (!is.function(fn))
     stop("`fn` must be a function (parfn / prdfn / obsfn / objfn / composed fn).",
          call. = FALSE)
@@ -900,7 +903,7 @@ resetWarmStarts <- function(fn, verbose = TRUE) {
 #' @param forcings Forcing names, set to 0. Default `NULL`.
 #' @param condition `NULL` (default) for a transformation valid in every
 #'   condition, or the name of the condition it belongs to.
-#' @param keep.root If `TRUE` (default), roots are kept per condition as
+#' @param keepRoot If `TRUE` (default), roots are kept per condition as
 #'   initial guesses and repeated calls are answered from memory.
 #' @param flow If `TRUE`, \eqn{\dot{x} = f(x, p)}{dx/dt = f(x, p)} and a stable
 #'   steady state is returned. If `FALSE`, any regular root. Default `TRUE`
@@ -936,12 +939,13 @@ resetWarmStarts <- function(fn, verbose = TRUE) {
 #'   }
 #' @param outdir Directory for the generated files, default
 #'   `getOption("dMod.outdir")`, else the working directory.
+#' @param ... `keep.root` is deprecated, use `keepRoot`.
 #'
 #' @details Conserved quantities of an [eqnlist] enter as \eqn{C x = T}.
 #' States without influx are 0. Initial guesses are kept roots, then the
 #' states in `pars`, missing ones at 1, then `nStarts` random starts. If all
 #' fail, it is an error. Identical parameter values are solved
-#' once, also across conditions. `keep.root` and `controlsPTC` can be changed
+#' once, also across conditions. `keepRoot` and `controlsPTC` can be changed
 #' with [controls()].
 #'
 #' @return A [parfn], called as `p(pars, ...)`, see section Calling a dMod
@@ -953,10 +957,12 @@ resetWarmStarts <- function(fn, verbose = TRUE) {
 #' @import cppDE
 #' @importFrom digest digest
 Pimpl <- function(trafo, parameters = NULL, forcings = NULL, condition = NULL,
-                  keep.root = TRUE, flow = inherits(trafo, "eqnlist"),
+                  keepRoot = TRUE, flow = inherits(trafo, "eqnlist"),
                   compile = FALSE, modelname = NULL, verbose = FALSE,
                   deriv = TRUE, deriv2 = FALSE, controlsPTC = list(),
-                  outdir = .dmodOutdir()) {
+                  outdir = .dmodOutdir(), ...) {
+
+  .renameArgs(list(...), c(keep.root = "keepRoot"), "Pimpl", strict = TRUE)
 
   flow    <- isTRUE(flow)
   emit_d1 <- isTRUE(deriv)
@@ -1038,7 +1044,7 @@ Pimpl <- function(trafo, parameters = NULL, forcings = NULL, condition = NULL,
   }
 
   # read at every call, see controls()
-  controls <- list(keep.root = keep.root, controlsPTC = controlsPTC)
+  controls <- list(keepRoot = keepRoot, controlsPTC = controlsPTC)
 
   # States whose producing fluxes vanish and whose right-hand side is negative
   # at two fixed positive probes rest at 0. Repeated with the states found set
@@ -1270,7 +1276,7 @@ Pimpl <- function(trafo, parameters = NULL, forcings = NULL, condition = NULL,
     if (!emit_d1) deriv <- FALSE
     if (deriv2 && !deriv) deriv <- TRUE
 
-    keep.root <- controls$keep.root
+    keepRoot <- controls$keepRoot
     ctrl  <- .pimplPTC(controls$controlsPTC)
     cache <- reg$get(condition)
     p   <- pars
@@ -1289,10 +1295,10 @@ Pimpl <- function(trafo, parameters = NULL, forcings = NULL, condition = NULL,
 
     # memo key: parameter values and solver controls
     key <- digest::digest(list(unname(pv), ctrl), algo = "xxhash64")
-    got <- if (keep.root) get0(key, envir = solved, inherits = FALSE) else NULL
+    got <- if (keepRoot) get0(key, envir = solved, inherits = FALSE) else NULL
     stats$calls <- stats$calls + 1L
     if (is.null(got)) {
-      arch <- if (keep.root) cache$arch else NULL
+      arch <- if (keepRoot) cache$arch else NULL
       got  <- solveRoot(pv, setNames(as.numeric(p[dependent]), dependent), arch, ctrl,
                         cache = cache, condition = condition)
       got$ift <- NULL
@@ -1308,7 +1314,7 @@ Pimpl <- function(trafo, parameters = NULL, forcings = NULL, condition = NULL,
         NULL
       })
     }
-    if (keep.root) {
+    if (keepRoot) {
       remember(key, got)
       entry <- list(pv = pv, x = root, dxdp = got$ift$dxdp)
       cache$arch <- c(list(entry), Filter(function(a) !identical(a$pv, pv), cache$arch))
@@ -1520,16 +1526,19 @@ branch <- function(trafo, table = NULL,
 #' right-hand side in `trafo`, after the symbols of `expr` are replaced by the
 #' arguments in `...`. [define()] and [insert()] build on it.
 #'
-#' @param expr `"lhs ~ rhs"` string or formula. Inside a name, `_` separates
-#'   symbols, so `"Delta_x"` with `x = "a"` becomes `"Delta_a"`.
 #' @param trafo Named character, [eqnvec] or a list of those. Default `NULL`
 #'   returns the identity of the left-hand sides.
+#' @param expr `"lhs ~ rhs"` string or formula. Inside a name, `_` separates
+#'   symbols, so `"Delta_x"` with `x = "a"` becomes `"Delta_a"`.
 #' @param ... Named character or numeric vectors of equal length, replacing
 #'   the symbols of `expr` of the same name; element `i` of each gives the
 #'   `i`-th substitution.
 #' @param reset `FALSE` (default) replaces the left-hand side wherever it
 #'   occurs in the expressions, `TRUE` sets the entry it names.
 #' @return Same shape as `trafo`.
+#' @section Lifecycle:
+#' The order `repar(expr, trafo)` is deprecated. It is recognised by an
+#' expression in first place and accepted with a warning.
 #' @seealso [define()], [insert()]
 #' @export
 #' @importFrom stats as.formula
@@ -1537,12 +1546,19 @@ branch <- function(trafo, table = NULL,
 #' innerpars   <- letters[1:3]
 #' constraints <- c(a = "b + c")
 #' mycondition <- "cond1"
-#' trafo <- repar("x ~ x",        x = innerpars)
-#' trafo <- repar("x ~ y",        trafo, x = names(constraints), y = constraints)
-#' trafo <- repar("x ~ exp(x)",   trafo, x = innerpars)
-#' trafo <- repar("x ~ x + Delta_x_condition",
-#'                trafo, x = innerpars, condition = mycondition)
-repar <- function(expr, trafo = NULL, ..., reset = FALSE) {
+#' trafo <- repar(NULL,  "x ~ x",      x = innerpars)
+#' trafo <- repar(trafo, "x ~ y",      x = names(constraints), y = constraints)
+#' trafo <- repar(trafo, "x ~ exp(x)", x = innerpars)
+#' trafo <- repar(trafo, "x ~ x + Delta_x_condition",
+#'                x = innerpars, condition = mycondition)
+repar <- function(trafo = NULL, expr, ..., reset = FALSE) {
+  if (.isReparExpr(trafo) && (missing(expr) || !.isReparExpr(expr))) {
+    warning("repar: the order is repar(trafo, expr); repar(expr, trafo) is ",
+            "deprecated.", call. = FALSE)
+    old <- trafo
+    trafo <- if (missing(expr)) NULL else expr
+    expr <- old
+  }
   if (inherits(expr, "formula")) expr <- deparse(expr)
   parsed <- as.character(stats::as.formula(.colonize(expr)))
   lhs <- parsed[2]; rhs <- parsed[3]
@@ -1565,5 +1581,11 @@ repar <- function(expr, trafo = NULL, ..., reset = FALSE) {
   else if (is.list(trafo)      &&  reset)       lapply(trafo, function(t) { t[lhs] <- rhs; t })
   else { trafo[lhs] <- rhs; trafo }
 }
+
+# A `"lhs ~ rhs"` string or a formula, as opposed to a transformation.
+.isReparExpr <- function(x)
+  inherits(x, "formula") ||
+    (is.character(x) && length(x) == 1L && is.null(names(x)) &&
+       grepl("~", x, fixed = TRUE))
 
 paste_ <- function(...) paste(..., sep = "_")

@@ -45,8 +45,9 @@ as.objlist <- function(p) {
 #'   Gauss-Newton Hessian.
 #' @param deriv2 Logical. `TRUE` returns the exact Hessian, from the second
 #'   derivatives of the prediction. Default `FALSE`.
-#' @param opt.BLOQ Character, the treatment of data below the limit of
+#' @param optBLOQ Character, the treatment of data below the limit of
 #'   quantification, as in [normL2()]. Default `"M3"`.
+#' @param ... `opt.BLOQ` is deprecated, use `optBLOQ`.
 #'
 #' @return An [objlist].
 #' @seealso [normL2()]
@@ -59,8 +60,11 @@ evalConditionResidual <- function(dataI, predictionI, pars,
                                   eCondNames = NULL,
                                   deriv      = TRUE,
                                   deriv2     = FALSE,
-                                  opt.BLOQ   = c("M3", "M1", "M4NM", "M4BEAL")) {
-  opt.BLOQ <- match.arg(opt.BLOQ)
+                                  optBLOQ    = c("M3", "M1", "M4NM", "M4BEAL"),
+                                  ...) {
+  .renameArgs(list(...), c(opt.BLOQ = "optBLOQ"), "evalConditionResidual",
+              strict = TRUE)
+  optBLOQ <- match.arg(optBLOQ)
   err_cn <- NULL
   if (!is.null(errfn) && (is.null(eCondNames) || cn %in% eCondNames)) {
     if (is.null(cn))
@@ -89,7 +93,7 @@ evalConditionResidual <- function(dataI, predictionI, pars,
     par_names_global = par_names_global,
     deriv2_requested = isTRUE(deriv2),
     threads          = 1L,
-    bloq_mode        = opt.BLOQ
+    bloq_mode        = optBLOQ
   )
   if (deriv)
     objlist(value = kr$value, gradient = kr$gradient, hessian = kr$hessian)
@@ -173,13 +177,13 @@ evalConditionResidual <- function(dataI, predictionI, pars,
 #'   the default, has 0 in every grid and so starts at 0 at the latest.
 #'   Fixed-time events before the start do not fire. Event times should be
 #'   included if the model uses events.
-#' @param attr.name Character string. The objective value is additionally
+#' @param attrName Character string. The objective value is additionally
 #'   returned as an attribute of this name, and the sum of squares behind it
-#'   under `chi2`. Adding objectives pools the terms sharing an `attr.name`,
-#'   so `chi2` stays one number; where two `attr.name`s meet it splits into
-#'   `chi2_<attr.name>` per contribution.
+#'   under `chi2`. Adding objectives pools the terms sharing an `attrName`,
+#'   so `chi2` stays one number; where two `attrName`s meet it splits into
+#'   `chi2_<attrName>` per contribution.
 #' @param cores Deprecated and ignored, see section Lifecycle.
-#' @param opt.BLOQ Character. NONMEM-style treatment of below-LOQ rows
+#' @param optBLOQ Character. NONMEM-style treatment of below-LOQ rows
 #'   (those with `value <= lloq` in the data). One of `"M1"` (drop BLOQ rows
 #'   from the objective), `"M3"` (censored log-likelihood, default), `"M4NM"`
 #'   or `"M4BEAL"` (truncated variants; require non-negative LOQ).
@@ -215,6 +219,8 @@ evalConditionResidual <- function(dataI, predictionI, pars,
 #'   [Xs()], built on `odemodel(..., includeTimeZero = FALSE)`. The method
 #'   and the node layout are described in
 #'   `vignette("Optimisation", package = "dMod2")`.
+#' @param ... `attr.name` and `opt.BLOQ` are deprecated, use `attrName` and
+#'   `optBLOQ`.
 #'
 #' @return
 #' An objective function of class `objfn`, called as `obj(pars, ...)`, see
@@ -237,16 +243,18 @@ evalConditionResidual <- function(dataI, predictionI, pars,
 #' @example inst/examples/normL2.R
 #' @export
 normL2 <- function(data, x, errmodel = NULL, times = NULL,
-                   attr.name = "data",
+                   attrName = "data",
                    cores = 1L,
-                   opt.BLOQ = c("M3", "M1", "M4NM", "M4BEAL"),
-                   multipleShootingControl = NULL) {
+                   optBLOQ = c("M3", "M1", "M4NM", "M4BEAL"),
+                   multipleShootingControl = NULL, ...) {
 
+  .renameArgs(list(...), c(attr.name = "attrName", opt.BLOQ = "optBLOQ"),
+              "normL2", strict = TRUE)
   if (!missing(cores))
     warning("normL2: 'cores' at construction time is deprecated and ignored. ",
             "Pass cores = to the objective call, or set options(dMod.cores = ).",
             call. = FALSE)
-  opt.BLOQ <- match.arg(opt.BLOQ)
+  optBLOQ <- match.arg(optBLOQ)
 
   timesD <- .normL2Grid(data, times)
   .timesOf <- function(conds) if (is.list(timesD)) unname(timesD[conds]) else timesD
@@ -281,7 +289,7 @@ normL2 <- function(data, x, errmodel = NULL, times = NULL,
   # then. Laid out once here, so an error in it shows when the objective is
   # built.
   if (!is.null(multipleShootingControl))
-    .shootFromNormL2(data, x, errmodel, times, attr.name, opt.BLOQ,
+    .shootFromNormL2(data, x, errmodel, times, attrName, optBLOQ,
                      multipleShootingControl)
   controls <- list(multipleShootingControl = multipleShootingControl)
 
@@ -311,8 +319,8 @@ normL2 <- function(data, x, errmodel = NULL, times = NULL,
         hessian = hessian,
         conditions = conditions,
         env = env, cores = cores, x = x, errmodel = errmodel, data = data,
-        timesD = .timesOf(conditions), e.cond = e.cond, opt.BLOQ = opt.BLOQ,
-        attr.name = attr.name, meta_cache = .meta_cache_rev))
+        timesD = .timesOf(conditions), e.cond = e.cond, opt.BLOQ = optBLOQ,
+        attr.name = attrName, meta_cache = .meta_cache_rev))
     }
 
     # The Hessian is only meaningful with deriv; when it is not wanted, the
@@ -387,7 +395,7 @@ normL2 <- function(data, x, errmodel = NULL, times = NULL,
       par_names_global = par_names_global,
       deriv2_requested = isTRUE(deriv2),
       threads          = as.integer(cores),
-      bloq_mode        = opt.BLOQ,
+      bloq_mode        = optBLOQ,
       build_hessian    = build_hessian
     )
     out <- if (deriv)
@@ -395,11 +403,11 @@ normL2 <- function(data, x, errmodel = NULL, times = NULL,
                             hessian = kr$hessian), names(pars))
     else
       objlist(value = kr$value, gradient = NULL, hessian = NULL)
-    attr(out, attr.name) <- out$value
+    attr(out, attrName) <- out$value
     # The sum of squares alone, tagged with the contribution it belongs to.
-    # Summing objectives pools terms sharing an `attr.name` into one `chi2` and
-    # splits the rest into `chi2_<attr.name>`.
-    attr(out, "chi2") <- setNames(kr$chi2, attr.name)
+    # Summing objectives pools terms sharing an `attrName` into one `chi2` and
+    # splits the rest into `chi2_<attrName>`.
+    attr(out, "chi2") <- setNames(kr$chi2, attrName)
     env$prediction <- prediction
     attr(out, "env") <- env
     out
@@ -576,7 +584,7 @@ normL2 <- function(data, x, errmodel = NULL, times = NULL,
 #'   `mu`, default `1`; or a character vector of parameter names that
 #'   estimate them on log scale, \eqn{\sigma = \exp(s)}. One kind for all
 #'   entries.
-#' @param attr.name Character. Name of the attribute holding the constraint
+#' @param attrName Character. Name of the attribute holding the constraint
 #'   value, default `"prior"`.
 #' @param condition Character vector, the conditions of a sum of objectives
 #'   in which the term is evaluated. `NULL` (default) evaluates it in every
@@ -604,9 +612,11 @@ normL2 <- function(data, x, errmodel = NULL, times = NULL,
 constraintL2 <- function(mu, ...) UseMethod("constraintL2")
 
 #' @rdname constraintL2
-#' @param ... Passed to the method.
+#' @param ... Passed to the method. `attr.name` is deprecated, use `attrName`.
 #' @export
-constraintL2.default <- function(mu, sigma = 1, attr.name = "prior", condition = NULL, ...) {
+constraintL2.default <- function(mu, sigma = 1, attrName = "prior",
+                                 condition = NULL, ...) {
+  .renameArgs(list(...), c(attr.name = "attrName"), "constraintL2")
 
   # c(a = "s_a", b = 2) arrives as character with "2" in it
   if (!is.numeric(sigma) &&
@@ -646,7 +656,7 @@ constraintL2.default <- function(mu, sigma = 1, attr.name = "prior", condition =
     )
 
     out <- objlist(value = kr$value, gradient = kr$gradient, hessian = kr$hessian)
-    attr(out, attr.name) <- out$value
+    attr(out, attrName) <- out$value
     attr(out, "env") <- env
     out
   }
@@ -759,7 +769,7 @@ constraintL2.default <- function(mu, sigma = 1, attr.name = "prior", condition =
 #'   constrained parameters.
 #' @param sigma Numeric, scalar or named and aligned with `mu`, default `1`.
 #'   The Laplace scale, the reciprocal penalty strength.
-#' @param attr.name Character. Name of the attribute holding the constraint
+#' @param attrName Character. Name of the attribute holding the constraint
 #'   value, default `"prior"`.
 #' @param condition Character vector, the conditions of a sum of objectives
 #'   in which the term is evaluated. `NULL` (default) evaluates it in every
@@ -782,9 +792,11 @@ constraintL2.default <- function(mu, sigma = 1, attr.name = "prior", condition =
 constraintL1 <- function(mu, ...) UseMethod("constraintL1")
 
 #' @rdname constraintL1
-#' @param ... Passed to the method.
+#' @param ... Passed to the method. `attr.name` is deprecated, use `attrName`.
 #' @export
-constraintL1.default <- function(mu, sigma = 1, attr.name = "prior", condition = NULL, ...) {
+constraintL1.default <- function(mu, sigma = 1, attrName = "prior",
+                                 condition = NULL, ...) {
+  .renameArgs(list(...), c(attr.name = "attrName"), "constraintL1")
 
   parnames <- names(mu)
   mu    <- .constraintArg(mu,    parnames, "mu",    "constraintL1")
@@ -794,7 +806,7 @@ constraintL1.default <- function(mu, sigma = 1, attr.name = "prior", condition =
     d <- x - mu[k]; s <- sigma[k]
     list(value = 2 * log(2 * s) + 2 * abs(d) / s,
          d1 = 2 * sign(d) / s, d2 = numeric(length(x)))
-  }, attr.name, condition)
+  }, attrName, condition)
 }
 
 
@@ -804,11 +816,12 @@ constraintL1.default <- function(mu, sigma = 1, attr.name = "prior", condition =
 #'   constrained parameters.
 #' @param sigma Numeric, scalar or named and aligned with `mu`, default `1`.
 #'   The Cauchy scale.
-#' @param attr.name Character. Name of the attribute holding the constraint
+#' @param attrName Character. Name of the attribute holding the constraint
 #'   value, default `"prior"`.
 #' @param condition Character vector, the conditions of a sum of objectives
 #'   in which the term is evaluated. `NULL` (default) evaluates it in every
 #'   one.
+#' @param ... `attr.name` is deprecated, use `attrName`.
 #'
 #' @details
 #' Computes the Cauchy prior on the `-2 log` scale,
@@ -824,7 +837,9 @@ constraintL1.default <- function(mu, sigma = 1, attr.name = "prior", condition =
 #' prior <- constraintCauchy(mu = c(k1 = 0), sigma = 2)
 #' prior(pars = c(k1 = 1))$value
 #' @export
-constraintCauchy <- function(mu, sigma = 1, attr.name = "prior", condition = NULL) {
+constraintCauchy <- function(mu, sigma = 1, attrName = "prior", condition = NULL,
+                             ...) {
+  .renameArgs(list(...), c(attr.name = "attrName"), "constraintCauchy", strict = TRUE)
 
   parnames <- names(mu)
   mu    <- .constraintArg(mu,    parnames, "mu",    "constraintCauchy")
@@ -835,7 +850,7 @@ constraintCauchy <- function(mu, sigma = 1, attr.name = "prior", condition = NUL
     list(value = 2 * log(pi * s) + 2 * log1p(t^2),
          d1 = 4 * t / (s * (1 + t^2)),
          d2 = 4 * (1 - t^2) / (s^2 * (1 + t^2)^2))
-  }, attr.name, condition)
+  }, attrName, condition)
 }
 
 
@@ -845,11 +860,12 @@ constraintCauchy <- function(mu, sigma = 1, attr.name = "prior", condition = NUL
 #'   constrained parameters.
 #' @param scale Numeric, scalar or named and aligned with `shape`, default
 #'   `1`. The gamma scale, not the rate.
-#' @param attr.name Character. Name of the attribute holding the constraint
+#' @param attrName Character. Name of the attribute holding the constraint
 #'   value, default `"prior"`.
 #' @param condition Character vector, the conditions of a sum of objectives
 #'   in which the term is evaluated. `NULL` (default) evaluates it in every
 #'   one.
+#' @param ... `attr.name` is deprecated, use `attrName`.
 #'
 #' @details
 #' Computes the gamma prior on the `-2 log` scale,
@@ -864,7 +880,9 @@ constraintCauchy <- function(mu, sigma = 1, attr.name = "prior", condition = NUL
 #' prior <- constraintGamma(shape = c(k1 = 3), scale = 5)
 #' prior(pars = c(k1 = 5))$value
 #' @export
-constraintGamma <- function(shape, scale = 1, attr.name = "prior", condition = NULL) {
+constraintGamma <- function(shape, scale = 1, attrName = "prior", condition = NULL,
+                            ...) {
+  .renameArgs(list(...), c(attr.name = "attrName"), "constraintGamma", strict = TRUE)
 
   parnames <- names(shape)
   shape <- .constraintArg(shape, parnames, "shape", "constraintGamma")
@@ -879,7 +897,7 @@ constraintGamma <- function(shape, scale = 1, attr.name = "prior", condition = N
     d1[ok] <- -2 * (ao - 1) / xo + 2 / so
     d2[ok] <- 2 * (ao - 1) / xo^2
     list(value = value, d1 = d1, d2 = d2)
-  }, attr.name, condition)
+  }, attrName, condition)
 }
 
 
@@ -887,11 +905,12 @@ constraintGamma <- function(shape, scale = 1, attr.name = "prior", condition = N
 #'
 #' @param scale Named numeric vector of scale parameters, not rates. Its names
 #'   select the constrained parameters.
-#' @param attr.name Character. Name of the attribute holding the constraint
+#' @param attrName Character. Name of the attribute holding the constraint
 #'   value, default `"prior"`.
 #' @param condition Character vector, the conditions of a sum of objectives
 #'   in which the term is evaluated. `NULL` (default) evaluates it in every
 #'   one.
+#' @param ... `attr.name` is deprecated, use `attrName`.
 #'
 #' @details
 #' Computes the exponential prior on the `-2 log` scale,
@@ -907,7 +926,9 @@ constraintGamma <- function(shape, scale = 1, attr.name = "prior", condition = N
 #' prior <- constraintExponential(scale = c(k1 = 3))
 #' prior(pars = c(k1 = 5))$value
 #' @export
-constraintExponential <- function(scale, attr.name = "prior", condition = NULL) {
+constraintExponential <- function(scale, attrName = "prior", condition = NULL,
+                                  ...) {
+  .renameArgs(list(...), c(attr.name = "attrName"), "constraintExponential", strict = TRUE)
 
   parnames <- names(scale)
   scale <- .constraintArg(scale, parnames, "scale", "constraintExponential")
@@ -918,7 +939,7 @@ constraintExponential <- function(scale, attr.name = "prior", condition = NULL) 
     value[ok] <- 2 * x[ok] / s[ok] + 2 * log(s[ok])
     d1[ok] <- 2 / s[ok]
     list(value = value, d1 = d1, d2 = d2)
-  }, attr.name, condition)
+  }, attrName, condition)
 }
 
 
@@ -926,11 +947,12 @@ constraintExponential <- function(scale, attr.name = "prior", condition = NULL) 
 #'
 #' @param df Named numeric vector of degrees of freedom. Its names select the
 #'   constrained parameters.
-#' @param attr.name Character. Name of the attribute holding the constraint
+#' @param attrName Character. Name of the attribute holding the constraint
 #'   value, default `"prior"`.
 #' @param condition Character vector, the conditions of a sum of objectives
 #'   in which the term is evaluated. `NULL` (default) evaluates it in every
 #'   one.
+#' @param ... `attr.name` is deprecated, use `attrName`.
 #'
 #' @details
 #' Computes the chi-squared prior on the `-2 log` scale,
@@ -945,7 +967,9 @@ constraintExponential <- function(scale, attr.name = "prior", condition = NULL) 
 #' prior <- constraintChisq(df = c(k1 = 4))
 #' prior(pars = c(k1 = 5))$value
 #' @export
-constraintChisq <- function(df, attr.name = "prior", condition = NULL) {
+constraintChisq <- function(df, attrName = "prior", condition = NULL,
+                            ...) {
+  .renameArgs(list(...), c(attr.name = "attrName"), "constraintChisq", strict = TRUE)
 
   parnames <- names(df)
   df <- .constraintArg(df, parnames, "df", "constraintChisq")
@@ -958,7 +982,7 @@ constraintChisq <- function(df, attr.name = "prior", condition = NULL) {
     d1[ok] <- -(vo - 2) / xo + 1
     d2[ok] <- (vo - 2) / xo^2
     list(value = value, d1 = d1, d2 = d2)
-  }, attr.name, condition)
+  }, attrName, condition)
 }
 
 
@@ -966,11 +990,12 @@ constraintChisq <- function(df, attr.name = "prior", condition = NULL) {
 #'
 #' @param sigma Named numeric vector of scale parameters. Its names select the
 #'   constrained parameters.
-#' @param attr.name Character. Name of the attribute holding the constraint
+#' @param attrName Character. Name of the attribute holding the constraint
 #'   value, default `"prior"`.
 #' @param condition Character vector, the conditions of a sum of objectives
 #'   in which the term is evaluated. `NULL` (default) evaluates it in every
 #'   one.
+#' @param ... `attr.name` is deprecated, use `attrName`.
 #'
 #' @details
 #' Computes the Rayleigh prior on the `-2 log` scale,
@@ -985,7 +1010,9 @@ constraintChisq <- function(df, attr.name = "prior", condition = NULL) {
 #' prior <- constraintRayleigh(sigma = c(k1 = 3))
 #' prior(pars = c(k1 = 5))$value
 #' @export
-constraintRayleigh <- function(sigma, attr.name = "prior", condition = NULL) {
+constraintRayleigh <- function(sigma, attrName = "prior", condition = NULL,
+                               ...) {
+  .renameArgs(list(...), c(attr.name = "attrName"), "constraintRayleigh", strict = TRUE)
 
   parnames <- names(sigma)
   sigma <- .constraintArg(sigma, parnames, "sigma", "constraintRayleigh")
@@ -998,7 +1025,7 @@ constraintRayleigh <- function(sigma, attr.name = "prior", condition = NULL) {
     d1[ok] <- -2 / xo + 2 * xo / so^2
     d2[ok] <- 2 / xo^2 + 2 / so^2
     list(value = value, d1 = d1, d2 = d2)
-  }, attr.name, condition)
+  }, attrName, condition)
 }
 
 #' L2 Objective of a Validation Data Point
@@ -1009,20 +1036,22 @@ constraintRayleigh <- function(sigma, attr.name = "prior", condition = NULL) {
 #' @param name Character, the name of the predicted quantity, a state or an
 #'   observable.
 #' @param time Numeric of length 1, the time of the data point.
-#' @param value Character of length 1, the name of the parameter holding the
-#'   data value.
+#' @param parameter Character of length 1, the name of the parameter holding
+#'   the data value.
 #' @param sigma Numeric of length 1, the standard deviation of the data
 #'   point, default `1`.
-#' @param attr.name Character. Name of the attribute holding the value,
+#' @param attrName Character. Name of the attribute holding the value,
 #'   default `"validation"`. The value is also returned as `chi2`
-#'   contribution, see `attr.name` in [normL2()].
+#'   contribution, see `attrName` in [normL2()].
 #' @param condition Character, the condition of the prediction. No default.
+#' @param ... `value` and `attr.name` are deprecated names of `parameter` and
+#'   `attrName`.
 #' @details The value is
 #' \deqn{\left(\frac{x(t) - v}{\sigma}\right)^2}{((x(t) - v)/sigma)^2}
-#' with the prediction \eqn{x(t)} and the value parameter \eqn{v}. The
+#' with the prediction \eqn{x(t)} and the value of `parameter`, \eqn{v}. The
 #' prediction is read from `env`, where [normL2()] stores it, so the
 #' objective is evaluated as summand of an objective that predicts, or with
-#' its `env`. `time`, `sigma` and `attr.name` can be changed with
+#' its `env`. `time`, `sigma` and `attrName` can be changed with
 #' [controls()].
 #' @return An objective function of class `objfn`, called as
 #'   `obj(pars, ...)`, see section Calling a dMod function. It returns an
@@ -1035,16 +1064,20 @@ constraintRayleigh <- function(sigma, attr.name = "prior", condition = NULL) {
 #'   dimnames = list(NULL, "A", c("A", "k1")))
 #' p0 <- c(A = 1, k1 = 2)
 #' 
-#' vali <- datapointL2(name = "A", time = 0, value = "newpoint", sigma = 1, condition = "a")
+#' vali <- datapointL2(name = "A", time = 0, parameter = "newpoint", sigma = 1,
+#'                     condition = "a")
 #' vali(pars = c(p0, newpoint = 2), env = .GlobalEnv)
 #' @export
-datapointL2 <- function(name, time, value, sigma = 1, attr.name = "validation", condition) {
+datapointL2 <- function(name, time, parameter, sigma = 1,
+                        attrName = "validation", condition, ...) {
 
+  .renameArgs(list(...), c(value = "parameter", attr.name = "attrName"),
+              "datapointL2", strict = TRUE)
   controls <- list(
-    mu        = structure(name, names = value)[1], # only one data point is allowed
-    time      = time[1],
-    sigma     = sigma[1],
-    attr.name = attr.name
+    mu       = structure(name, names = parameter)[1], # one data point only
+    time     = time[1],
+    sigma    = sigma[1],
+    attrName = attrName
   )
 
   myfn <- function(..., fixed = NULL, deriv = TRUE, deriv2 = FALSE, hessian = NULL,
@@ -1056,7 +1089,7 @@ datapointL2 <- function(name, time, value, sigma = 1, attr.name = "validation", 
     mu        <- controls$mu
     t         <- controls$time
     sigma     <- controls$sigma
-    attr.name <- controls$attr.name
+    attrName  <- controls$attrName
 
     arglist <- list(...)
     arglist <- arglist[match.fnargs(arglist, "pars")]
@@ -1092,40 +1125,40 @@ datapointL2 <- function(name, time, value, sigma = 1, attr.name = "validation", 
     )
 
     out <- objlist(value = kr$value, gradient = kr$gradient, hessian = kr$hessian)
-    attr(out, attr.name)    <- out$value
+    attr(out, attrName)    <- out$value
     # The value is the squared standardised residual itself, no normaliser.
-    attr(out, "chi2")       <- setNames(out$value, attr.name)
+    attr(out, "chi2")       <- setNames(out$value, attrName)
     attr(out, "prediction") <- kr$prediction
     attr(out, "env")        <- env
     out
   }
   class(myfn)             <- c("objfn", "fn")
   attr(myfn, "conditions") <- condition
-  attr(myfn, "parameters") <- value[1]
+  attr(myfn, "parameters") <- parameter[1]
   myfn
 }
 
 
 #' Add Two Objective Lists
 #'
-#' @param out1,out2 [objlist]s, or `NULL`, which returns the other.
+#' @param e1,e2 [objlist]s, or `NULL`, which returns the other.
 #' @details Gradients and Hessians are matched by parameter name; a parameter
 #' missing in one operand counts as zero there, and a `NULL` Hessian is left
 #' out. Numeric attributes are added, an absent one counting as zero. The
-#' `chi2` contributions are summed per `attr.name` of their objective: one
-#' `attr.name` gives one attribute `chi2`, several give `chi2_<attr.name>`
+#' `chi2` contributions are summed per `attrName` of their objective: one
+#' `attrName` gives one attribute `chi2`, several give `chi2_<attrName>`
 #' each.
 #' @return An [objlist].
 #' @aliases sumobjlist
 #' @export
 #'
-"+.objlist" <- function(out1, out2) {
+"+.objlist" <- function(e1, e2) {
 
-  if (is.null(out1)) return(out2)
-  if (is.null(out2)) return(out1)
+  if (is.null(e1)) return(e2)
+  if (is.null(e2)) return(e1)
 
-  gn1 <- names(out1$gradient)
-  gn2 <- names(out2$gradient)
+  gn1 <- names(e1$gradient)
+  gn2 <- names(e2$gradient)
 
   # Layout of the sum: the operand spanning the other, else their union.
   pars <- if (all(gn2 %in% gn1)) gn1
@@ -1144,36 +1177,36 @@ datapointL2 <- function(name, time, value, sigma = 1, attr.name = "validation", 
     target
   }
 
-  what <- intersect(c("value", "gradient", "hessian"), c(names(out1), names(out2)))
+  what <- intersect(c("value", "gradient", "hessian"), c(names(e1), names(e2)))
   out12 <- lapply(what, function(w) switch(w,
-    value    = out1$value + out2$value,
+    value    = e1$value + e2$value,
     gradient = addVector(addVector(setNames(numeric(length(pars)), pars),
-                                   out1$gradient), out2$gradient),
+                                   e1$gradient), e2$gradient),
     # A summand may return a NULL hessian (built with hessian = FALSE); the sum
     # is NULL only when both are, otherwise the present ones add.
-    hessian  = if (is.null(out1$hessian) && is.null(out2$hessian)) NULL else {
+    hessian  = if (is.null(e1$hessian) && is.null(e2$hessian)) NULL else {
       H <- matrix(0, length(pars), length(pars), dimnames = list(pars, pars))
-      if (!is.null(out1$hessian)) H <- addMatrix(H, out1$hessian)
-      if (!is.null(out2$hessian)) H <- addMatrix(H, out2$hessian)
+      if (!is.null(e1$hessian)) H <- addMatrix(H, e1$hessian)
+      if (!is.null(e2$hessian)) H <- addMatrix(H, e2$hessian)
       H
     }))
   names(out12) <- what
 
   # Numeric attributes are summed, an absent one counting as zero. The chi2
-  # contributions are kept apart from that: they are pooled by the `attr.name`
+  # contributions are kept apart from that: they are pooled by the `attrName`
   # they belong to, not by the attribute they happen to sit under.
   numeric_attrs <- function(x) {
     a <- attributes(x)
     a <- a[vapply(a, is.numeric, logical(1))]
     a[!grepl("^chi2($|_)", names(a))]
   }
-  a1 <- numeric_attrs(out1)
-  a2 <- numeric_attrs(out2)
+  a1 <- numeric_attrs(e1)
+  a2 <- numeric_attrs(e2)
   for (n in union(names(a1), names(a2)))
     attr(out12, n) <- (if (is.null(a1[[n]])) 0 else a1[[n]]) +
                       (if (is.null(a2[[n]])) 0 else a2[[n]])
 
-  chi2 <- c(.chi2Contributions(out1), .chi2Contributions(out2))
+  chi2 <- c(.chi2Contributions(e1), .chi2Contributions(e2))
   if (length(chi2)) {
     chi2 <- vapply(split(unname(chi2), names(chi2)), sum, 0)
     if (length(chi2) == 1L) attr(out12, "chi2") <- chi2
@@ -1182,7 +1215,7 @@ datapointL2 <- function(name, time, value, sigma = 1, attr.name = "validation", 
 
   # The direction the terms were evaluated in; a term without a reverse path
   # has none, and terms that disagree leave the sum without one.
-  sw <- unique(c(attr(out1, "sweep", exact = TRUE), attr(out2, "sweep", exact = TRUE)))
+  sw <- unique(c(attr(e1, "sweep", exact = TRUE), attr(e2, "sweep", exact = TRUE)))
   if (length(sw) == 1L) attr(out12, "sweep") <- sw
 
   class(out12) <- "objlist"

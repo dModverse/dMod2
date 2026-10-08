@@ -9,7 +9,7 @@
 #' @seealso
 #' Models: [eqnlist()], [addReaction()], [odemodel()], [Xs()], [Y()], [P()].
 #' Data and objectives: [as.datalist()], [normL2()], [constraintL2()].
-#' Fitting and uncertainty: [trust()], [mstrust()], [profile()],
+#' Fitting and uncertainty: [trust()], [mstrust()], [profile()][profile.objfn],
 #' [plotProfile()]. Exchange formats: [importPEtab()], [exportPEtab()].
 #' Identifiability: [symmetryDetection()].
 #'

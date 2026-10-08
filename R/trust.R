@@ -87,10 +87,11 @@
 #'   over once and run the fallback to the end. A higher value alternates
 #'   between the two sources, \code{0} disables the fallback. The result
 #'   reports the count as \code{nSwitch}.
-#' @param parscale Optional numeric of length \code{length(parinit)}, named or
-#'   unnamed. The trust region works on the parameters multiplied by
-#'   \code{parscale}, so the trust radius and \code{xtol} are measured there.
-#'   Default \code{NULL}, no scaling.
+#' @param parscale Deprecated. Optional numeric of length
+#'   \code{length(parinit)}, named or unnamed. The trust region works on the
+#'   parameters multiplied by \code{parscale}, so the trust radius and
+#'   \code{xtol} are measured there. Default \code{NULL}, no scaling. Fit on
+#'   log scale instead.
 #' @param parupper,parlower Upper and lower bounds. Unnamed: the first element
 #'   applies to all parameters. Named: entries are matched by name, missing
 #'   parameters are unbounded. Default \code{NULL}, unbounded.
@@ -142,7 +143,7 @@
 #'   \describe{
 #'     \item{\code{boundary}}{Box-bound handling, \code{"reflective"} (default)
 #'       or \code{"clip"}. See section Box bounds.}
-#'     \item{\code{theta.max}}{Largest fraction of the distance to a bound a
+#'     \item{\code{thetaMax}}{Largest fraction of the distance to a bound a
 #'       step may use. Default \code{0.99995}. \code{boundary = "reflective"}
 #'       only.}
 #'     \item{\code{nonmonotone}}{Zhang-Hager relaxation in \code{[0, 1)}: a
@@ -182,7 +183,7 @@
 #'   iteration, objective value and parameters. Default \code{NULL}, no file.
 #' @param ... Further named arguments passed to \code{objfun}.
 #'
-#' @return A list with components
+#' @return A list of class \code{trustfit} with components
 #'   \describe{
 #'     \item{\code{argument}}{Named numeric, the best iterate.}
 #'     \item{\code{value}, \code{gradient}, \code{hessian}}{Objective value,
@@ -225,8 +226,8 @@
 #'   \code{mu} (merit) or \code{filterSize} (filter), and \code{trace} when
 #'   \code{blather = TRUE}.
 #'
-#' @seealso [mstrust()] for multi-start fits, [profile()] for profile
-#'   likelihoods, [normL2()] for the objective,
+#' @seealso [mstrust()] for multi-start fits, [profile()][profile.objfn] for
+#'   profile likelihoods, [normL2()] for the objective,
 #'   \code{vignette("Optimisation", package = "dMod2")} for the method.
 #'
 #' @examples
@@ -302,6 +303,10 @@ trust <- function(objfun, parinit, rinit = 0.1, rmax = 10,
   hessianFallback <- match.arg(hessianFallback)
   dots <- list(...)
   .trustRejectMoved(names(dots), "trust")
+  if (!is.null(parscale))
+    warning("trust: 'parscale' is deprecated; fit on log scale instead.",
+            call. = FALSE)
+  stepControl <- .stepControlAlias(stepControl, "trust")
 
   ctl  <- .trustDefaults(hessianMethod, hessianFallback)
   tol  <- .mergeControl(ctl$tolControl,  tolControl,  "tolControl")
@@ -315,10 +320,10 @@ trust <- function(objfun, parinit, rinit = 0.1, rmax = 10,
   # The objective decides: a normL2 with a multipleShootingControl, alone or
   # in a sum, is optimised by multiple shooting, with the same controls.
   if (length(.shootingTerms(objfun)))
-    return(.trustShooting(objfun, parinit, rinit, rmax, iterlim,
+    return(.trustFit(.trustShooting(objfun, parinit, rinit, rmax, iterlim,
                           hessianMethod, hessianFallback, fallbackLimit,
                           parscale, parupper, parlower, tol, qn, step,
-                          minimize, blather, printIter, traceFile, dots))
+                          minimize, blather, printIter, traceFile, dots)))
 
   # The kernel names what it wants, 0 value, 1 gradient, 2 Gauss-Newton, 3
   # exact, and the translation into an objective's own arguments happens here,
@@ -342,13 +347,26 @@ trust <- function(objfun, parinit, rinit = 0.1, rmax = 10,
     if (want >= 3L) args$deriv2 <- TRUE
     do.call(objfun, c(args, dots))
   }
-  trust_impl(fn, parinit, rinit, rmax, parscale, as.integer(iterlim),
-             tol$ftol, tol$mtol, tol$gtol, tol$xtol, tol$rmin, step$theta.max,
+  .trustFit(trust_impl(fn, parinit, rinit, rmax, parscale, as.integer(iterlim),
+             tol$ftol, tol$mtol, tol$gtol, tol$xtol, tol$rmin, step$thetaMax,
              boundary, hessianMethod, hessianFallback,
              as.integer(fallbackLimit), hessianInit, hessianReseed,
              as.integer(qn$qnMemory), qn$qnCautious, isTRUE(qn$qnRejected),
              step$nonmonotone, minimize, blather,
-             parupper, parlower, printIter, traceFile)
+             parupper, parlower, printIter, traceFile))
+}
+
+# A fit is a list of class `trustfit`, so vcov() dispatches on it.
+.trustFit <- function(fit) {
+  if (!is.list(fit) || inherits(fit, "trustfit")) return(fit)
+  class(fit) <- c("trustfit", "list")
+  fit
+}
+
+#' @export
+print.trustfit <- function(x, ...) {
+  print(unclass(x), ...)
+  invisible(x)
 }
 
 
@@ -365,7 +383,7 @@ trust <- function(objfun, parinit, rinit = 0.1, rmax = 10,
     tolControl  = list(ftol = 1e-6, mtol = 1e-6, gtol = 1e-6,
                        xtol = 0, rmin = 0, ctol = 1e-6),
     qnControl   = qn,
-    stepControl = list(boundary = "reflective", theta.max = 0.99995,
+    stepControl = list(boundary = "reflective", thetaMax = 0.99995,
                        nonmonotone = 0, acceptance = "filter", soc = TRUE,
                        anneal = TRUE, twoPhase = FALSE, regularise = 0,
                        restore = FALSE))
@@ -383,8 +401,20 @@ trust <- function(objfun, parinit, rinit = 0.1, rmax = 10,
   hessianInit = "qnControl$hessianInit", qnMemory   = "qnControl$qnMemory",
   hessianReseed = "qnControl$hessianReseed",
   qnCautious  = "qnControl$qnCautious",  qnRejected = "qnControl$qnRejected",
-  boundary    = "stepControl$boundary",  theta.max  = "stepControl$theta.max",
-  nonmonotone = "stepControl$nonmonotone")
+  boundary    = "stepControl$boundary",  thetaMax   = "stepControl$thetaMax",
+  theta.max   = "stepControl$thetaMax",  nonmonotone = "stepControl$nonmonotone")
+
+# `theta.max`, the former name of stepControl$thetaMax, with a warning.
+.stepControlAlias <- function(stepControl, who) {
+  if (!"theta.max" %in% names(stepControl)) return(stepControl)
+  if ("thetaMax" %in% names(stepControl))
+    stop(who, ": give stepControl$thetaMax only; 'theta.max' is its ",
+         "deprecated name.", call. = FALSE)
+  warning(who, ": stepControl$theta.max is deprecated, use thetaMax.",
+          call. = FALSE)
+  names(stepControl)[names(stepControl) == "theta.max"] <- "thetaMax"
+  stepControl
+}
 
 .trustRejectMoved <- function(nms, who) {
   hit <- intersect(nms, names(.trustMoved))

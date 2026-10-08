@@ -641,7 +641,7 @@
     }
 
     znorm <- C$znorm
-    st <- .shootStep(thx(theta), C, r, lbx, ubx, psx, step$theta.max, opt$measure,
+    st <- .shootStep(thx(theta), C, r, lbx, ubx, psx, step$thetaMax, opt$measure,
                      step$regularise %||% 0)
     alpha <- st$alpha
     if (alpha < 1 && znorm > 0) nRelaxed <- nRelaxed + 1L

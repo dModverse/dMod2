@@ -17,8 +17,8 @@ skip_if_no_compile <- function() {
 test_that("(constraintL2(mu1) + constraintL2(mu2))(p)$value = sum of parts", {
   mu1 <- c(a = 0, b = 0)
   mu2 <- c(a = 1, b = -1)
-  o1 <- constraintL2(mu1, sigma = 1, attr.name = "p1")
-  o2 <- constraintL2(mu2, sigma = 1, attr.name = "p2")
+  o1 <- constraintL2(mu1, sigma = 1, attrName = "p1")
+  o2 <- constraintL2(mu2, sigma = 1, attrName = "p2")
   obj <- o1 + o2
 
   p <- c(a = 0.3, b = 0.4)
@@ -30,8 +30,8 @@ test_that("(constraintL2(mu1) + constraintL2(mu2))(p)$value = sum of parts", {
 
 test_that("(o1 + o2)$gradient sums per-parameter contributions", {
   mu1 <- c(a = 0, b = 0); mu2 <- c(a = 1, b = -1)
-  o1 <- constraintL2(mu1, sigma = 1, attr.name = "p1")
-  o2 <- constraintL2(mu2, sigma = 1, attr.name = "p2")
+  o1 <- constraintL2(mu1, sigma = 1, attrName = "p1")
+  o2 <- constraintL2(mu2, sigma = 1, attrName = "p2")
   obj <- o1 + o2
   p <- c(a = 0.3, b = 0.4)
 

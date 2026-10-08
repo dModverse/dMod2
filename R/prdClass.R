@@ -441,7 +441,7 @@ summary.obsfn <- function(object, ...) {
 #'   `conditions`.
 #' @param times numeric vector of time points.
 #' @param pars a [parframe], e.g. `as.parframe(mstrust(...))` or the result
-#'   of [profile()].
+#'   of [profile()][profile.objfn].
 #' @param data object of class `datalist`. Default `NULL`. Its condition grid
 #'   adds covariate columns to the output.
 #' @return A data frame in long format with one block per row of `pars`. The

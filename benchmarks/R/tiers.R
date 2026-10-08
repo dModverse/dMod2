@@ -25,7 +25,7 @@ BENCH_TRAITS <- c(
 ##  The traits of an imported problem, from the problem itself.
 bench_traits <- function(pet, entry) {
   meta <- attr(pet, "petab_meta")
-  tabs <- tryCatch(dMod2::readPetabTables(entry$yaml), error = function(e) NULL)
+  tabs <- tryCatch(dMod2::readPEtabTables(entry$yaml), error = function(e) NULL)
   meas <- tabs$measurements
   preeq <- !is.null(meas$preequilibrationConditionId) &&
     any(nzchar(stats::na.omit(as.character(meas$preequilibrationConditionId))))

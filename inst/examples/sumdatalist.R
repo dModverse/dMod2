@@ -16,8 +16,8 @@ mydata2 <- data.frame(
   dose = "0.1"
 )
 
-data1 <- as.datalist(mydata1, split.by = c("compound", "dose"))
-data2 <- as.datalist(mydata2, split.by = c("compound", "dose"))
+data1 <- as.datalist(mydata1, splitBy = c("compound", "dose"))
+data2 <- as.datalist(mydata2, splitBy = c("compound", "dose"))
 
 ## Condition APAP_0.1 is taken from data2, with a warning
 data <- data1 + data2
