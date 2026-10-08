@@ -1,3 +1,5 @@
+utils::globalVariables(c("lambda", "parameter", "member", "term"))
+
 #' Gate parameters for an L1 selection toward zero
 #'
 #' @description Multiplies each named entry of a parameter transformation by a
