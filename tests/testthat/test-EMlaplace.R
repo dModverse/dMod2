@@ -726,8 +726,9 @@ test_that("clusterMarginalCpp reproduces the R .clusterParamMarginal", {
 })
 
 test_that("the C++ toggle does not change the clustered grouping selection", {
-  Hd <- rep(40, 5); m <- c(0.5, 0.55, 0.52, -0.5, -0.55)
-  paths <- list(as.list(1:5), list(1:3, 4:5), list(1:5))
+  # Three subjects: the R node loop grows as nq^(G-1) and takes minutes at five.
+  Hd <- rep(40, 3); m <- c(0.5, 0.55, -0.5)
+  paths <- list(as.list(1:3), list(1:2, 3), list(1:3))
   score <- function(useCpp) {
     op <- options(laplaceUseCpp = useCpp); on.exit(options(op))
     vapply(paths, function(P) .clusterGroupScore(P, Hd, m, rule = "auto")$value, 0.0)
