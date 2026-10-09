@@ -49,9 +49,7 @@ test_that("constraintL2 takes sigma = 1 by default", {
 })
 
 
-# ============================================================================
-# Composition with a parameter transformation
-# ============================================================================
+# ---- Composition with a parameter transformation ------------------------
 
 # Log trafos for one and for two conditions, compiled together on first use.
 .cl2_p <- local({

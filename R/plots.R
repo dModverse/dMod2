@@ -71,10 +71,8 @@ theme_dMod <- function(base_size = 12, base_family = "", showGrid = FALSE) {
 }
 
 # ---- palettes --------------------------------------------------------------
-#
-# dE is the smallest pairwise CIE2000 distance over normal and simulated
-# dichromatic vision; 10 or above counts as colorblind-safe. Re-derive with
-# colorspace::deutan/protan/tritan and farver::compare_colour().
+# dE: smallest pairwise CIE2000 distance over normal and simulated dichromatic
+# vision (colorspace, farver::compare_colour()); 10 or above is colorblind-safe.
 
 #' Seed Colors of the dMod Palette
 #'
@@ -245,10 +243,9 @@ dMod_palette <- function(n, palette = "okabe") {
       }
     }, add = TRUE)
     set.seed(123L)
-    # createPalette() shifts the seeds slightly to maximize distinctness across
-    # the whole set; keep the original seeds verbatim and only borrow the tail.
-    # `range` caps the luminance: unconstrained, the tail wanders up to ~224 and
-    # those colors are invisible as lines on a white panel.
+    # createPalette() shifts the seeds, so keep them verbatim and borrow only the
+    # tail. `range` caps the luminance so tail colors stay visible as lines on a
+    # white panel.
     extended <- unname(Polychrome::createPalette(n, seedcolors = seeds,
                                                  range = c(25, 70)))
     return(c(seeds, extended[(length(seeds) + 1L):n]))
@@ -570,7 +567,7 @@ plotPaths <- function(profs, ..., whichPar = NULL, sort = FALSE, relative = TRUE
     if (is.numeric(whichPar)) whichPar <- names(proflist)[whichPar]
     
     subdata <- do.call(rbind, lapply(whichPar, function(n) {
-      # matirx
+      # matrix
       paths <- as.matrix(proflist[[n]][, parameters])
       values <- proflist[[n]][, "value"]
       origin <- which.min(abs(proflist[[n]][, "constraint"]))
@@ -916,7 +913,7 @@ plotPairs <- function(x, ...) UseMethod("plotPairs", x)
 
 
 
-## ---- profile / parameter-path plotting (moved from toolsSvenja.R) ---------
+## ---- profile / parameter-path plotting ---------
 #' Plot an Array of Trajectories Along the Profile of a Parameter
 #'
 #' Predicts the model at parameter sets taken along one profile, starting at
@@ -1153,7 +1150,6 @@ PlotPaths <- function(profs=myprofiles, ..., whichPar, sort = FALSE, relative = 
   
   if (normalizePaths == TRUE) {
     data[, y := (ifelse(max(abs(y)) == 0, 0, y / abs(max(abs(y))))), by = combination] # if path is y, just return 0
-    # data[, y := (2 * (y - min(y)) / (max(y) - min(y))) - 1, by = combination]
     removedCombinations <- unique(data[!is.finite(y), combination])
     data <- data[is.finite(y)]
     

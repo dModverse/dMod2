@@ -188,15 +188,9 @@ steadyStates <- function(model, file = NULL, forcings = NULL,
     res
   }
 
-  # Version-specific Python signatures:
-  #   v1.0: Alyssa(filename, injections, givenCQs, neglect, sparsifyLevel, outputFormat)
-  #   v1.1: Alyssa(filename, injections, givenCQs, neglect, sparsifyLevel, outputFormat, testSteady)
-  #   v1.2/v1.3 (same signature): Alyssa(filename, injections, givenCQs, neglect, sparsifyLevel, outputFormat, testSteady, walltime, simplify, solveQuadratic, positive, branches, priority)
-  #        -- v1.2 additionally runs structural sink-cluster detection a priori,
-  #          and (when `solveQuadratic=TRUE`) attempts a closed-form quadratic
-  #          state-side solve before resorting to flux-parameter pivots.
-  #        -- v1.3 records solutions lazily (one textual resolution at output
-  #          time) and guards direct solves against lock deadlocks.
+  # Alyssa() signatures: v1.0 (filename, injections, givenCQs, neglect, sparsifyLevel,
+  # outputFormat), v1.1 adds testSteady, v1.2+ adds walltime, simplify,
+  # solveQuadratic, positive, branches, priority.
   if (version == "1.0") {
     if (testSteady == "skip")
       message("Note: version 1.0 does not support testSteady='skip', test will always run.")
@@ -227,8 +221,8 @@ steadyStates <- function(model, file = NULL, forcings = NULL,
       ignored <- c(if (isTRUE(branches)) "branches",
                    if (testSteady == "exact") "testSteady = \"exact\" (runs \"fast\")")
     }
-    # simplify can be TRUE / FALSE / "full" -- pass through untouched so the
-    # Python side sees either a Python bool or the literal string "full".
+    # simplify is TRUE, FALSE or "full", passed on as a Python bool or the
+    # literal string "full".
     if (is.character(simplify)) {
       simplify <- match.arg(tolower(simplify), choices = "full")
       simplify_arg <- simplify

@@ -142,8 +142,7 @@
     compile = FALSE
   )
 
-  # Compile all native code together via dMod's compile() so the build
-  # uses the -w convention and avoids cOde's default -Wall noise.
+  # Compile all native code together via dMod's compile()
   compile(g, x, p, e)
 
 

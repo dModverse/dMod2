@@ -1,9 +1,5 @@
-# ============================================================================
-# deriv2 (Hessian) propagation through the dMod function stack.
-#
-# Section order follows the composition chain:
-#   Xs -> Y -> Pexpl -> Pimpl -> (Y * Xs) -> res -> normL2 -> constraintL2
-# ============================================================================
+# deriv2 (Hessian) propagation through the function stack, in the order of the
+# composition chain: Xs, Y, Pexpl, Pimpl, Y * Xs, res, normL2, constraintL2.
 
 
 # ---- Models ---------------------------------------------------------------
@@ -186,9 +182,8 @@ test_that("Pexpl deriv2 (AD) reproduces analytical Hessian", {
 })
 
 test_that("Pexpl deriv2 (AD) handles identity pass-through entries", {
-  # Regression: with `parameters` supplied, identity entries (e.g. la = "la")
-  # are appended to the trafo; the compiled AD2 entry must propagate dual2nd
-  # values through them without corrupting derivatives.
+  # With `parameters` supplied, identity entries are appended to the trafo; the
+  # compiled AD2 entry propagates second-order values through them unchanged.
   p <- d2_models()$ppass
 
   pars <- c(la = 0.3, lb = 0.5)
@@ -344,10 +339,8 @@ test_that("res() reduces 4D deriv2 attribute to 3D [n_residuals, p, p]", {
 # ---- normL2 ---------------------------------------------------------------
 
 test_that("normL2 gradient is identical for deriv2 = FALSE and deriv2 = TRUE", {
-  # Regression for the [.parvec / c.parvec deriv2-drop bug. With deriv2 = TRUE,
-  # the upstream Hessian seed must reach Xs.cppDE so the _s2 integration
-  # produces the same first-order sensitivities as the _s integration. If
-  # subsetting drops attr(., "deriv2") the gradient diverges silently.
+  # Subsetting a parvec keeps attr "deriv2", so the second-order integration
+  # yields the same first-order sensitivities as the first-order one.
   d <- d2_models()
   ode_opts <- list(atol = 1e-12, rtol = 1e-12)
   xfn <- Xs(d$m, condition = "C1",
@@ -408,7 +401,8 @@ test_that("normL2(deriv2 = TRUE) adds residual times d^2 pred / sigma^2", {
   expect_equal(res_ex$value, res_gn$value, tolerance = 1e-8)
   expect_equal(res_ex$gradient, res_gn$gradient, tolerance = 1e-8)
 
-  # Analytical Hessian addition: 2/sigma^2 * sum_i r_i * d^2 y_i / dtheta^2.
+  # The exact Hessian adds the residual-weighted observable curvature to the
+  # Gauss-Newton one.
   r <- -noise
   x0 <- pars["x"]; k <- pars["k"]; a <- pars["a"]; b <- pars["b"]
   H_add_terms <- function(t) {
@@ -436,8 +430,8 @@ test_that("normL2(deriv2 = TRUE) adds residual times d^2 pred / sigma^2", {
 # ---- constraintL2 ---------------------------------------------------------
 
 test_that("constraintL2 deriv2 adds gi . dP2 chain term after Pexpl", {
-  # Pexpl: a = exp(la). constraintL2(mu = mu_a, sigma = s) on `a`,
-  # composed via attr(p, "deriv") and attr(p, "deriv2") from Pexpl.
+  # The constraint on the inner parameter composes with the trafo's deriv and
+  # deriv2 attributes.
   pfn <- d2_models()$pcon
 
   mu <- c(a = 1.0); sg <- 0.5
@@ -449,7 +443,6 @@ test_that("constraintL2 deriv2 adds gi . dP2 chain term after Pexpl", {
   res_gn <- cfn(pinner, deriv = TRUE, deriv2 = FALSE)
   res_ex <- cfn(pinner, deriv = TRUE, deriv2 = TRUE)
 
-  # L = ((exp(la) - mu) / sg)^2 with closed-form gradient/Hessian.
   la <- pars["la"]
   ref_grad <- unname(2 * (exp(la) - mu) * exp(la) / sg^2)
   ref_hess_GN <- unname(2 * exp(la)^2 / sg^2)

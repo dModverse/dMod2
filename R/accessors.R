@@ -1,5 +1,5 @@
 ## Accessors for dMod objects -------------------------------------------------
-## get*/controls/modelname layer, split out of classes.R.
+## get*, controls and modelname accessors.
 
 ## General purpose functions for different dMod classes ------------------------------
 
@@ -36,6 +36,8 @@
 #' returns `x`.
 #' @seealso [normL2()], [P()], [Y()]
 #' @examples
+#' old <- options(dMod.outdir = tempdir())
+#'
 #' ## parfn with condition
 #' p <- P(eqnvec(x = "-a*x"), method = "implicit", condition = "C1")
 #' controls(p)
@@ -47,6 +49,8 @@
 #' controls(g)
 #' controls(g, name = "attachInput")
 #' controls(g, name = "attachInput") <- TRUE
+#'
+#' options(old)
 #' @export
 controls <- function(x, ...) {
   UseMethod("controls", x)
@@ -60,14 +64,9 @@ controls <- function(x, ...) {
 
 }
 
-# The objectives that hold a control: the objective itself, or every
-# objective it is built from whose controls include `name` (any control when
-# `name` is NULL). A sum records its summands in `terms`; an objective scaled
-# by %.*% or composed with a parfn records the objective it wraps in `wrapped`.
-# Either is the closure that gets called, so a change there reaches the whole.
-#
-# `wrapped` is not `terms` on purpose: .objTerms() reads `terms` as the
-# summands of a sum, and a scaled objective is not a sum of its inner one.
+# The objectives holding control `name` (any control if NULL): `x` itself, or
+# the summands in `terms` and the wrapped objective in `wrapped` (kept apart
+# from `terms` because .objTerms() reads `terms` as the summands of a sum).
 .controlTargets <- function(x, name = NULL) {
   has <- function(f) {
     ctl <- if (is.function(f) && !is.primitive(f)) environment(f)$controls
@@ -86,10 +85,9 @@ controls <- function(x, ...) {
   e
 }
 
-# A setting of a kernel that it may keep both as a control and as an
-# attribute, `forcings` or `events`. The attribute is a copy made when the
-# kernel was built, the control is what the kernel runs with and what
-# controls<- changes, so the control wins where there is one.
+# A kernel setting (`forcings`, `events`) kept as control and as attribute.
+# The attribute is a build-time copy and the control is what the kernel runs
+# with, so the control wins where there is one.
 .kernelSetting <- function(k, what) {
   e <- .kernelControls(k)
   if (!is.null(e) && what %in% names(e$controls)) e$controls[[what]]
@@ -113,7 +111,7 @@ controls <- function(x, ...) {
 }
 
 # The condition as a name, or NULL for all of them. A number picks a
-# condition by position, as `mappings[[i]]` used to.
+# condition by position.
 .controlCondition <- function(x, condition) {
   if (is.null(condition)) return(NULL)
   conds <- attr(x, "conditions")
@@ -672,10 +670,8 @@ modelname.fn <- function(x = NULL, ..., conditions = NULL) {
         modelname(m) <- value[i %% length(value) + 1]  # recursive
       } else {
         attr(m, "modelname") <- value[i %% length(value) + 1]
-        # A deSolve leaf keeps the compiled model in its closure, and cOde
-        # reads the shared object to load from there while the entry point
-        # names come from the object's own value. The rename therefore has to
-        # reach the closure, including when the leaf sits inside a composition.
+        # A deSolve leaf keeps the compiled model in its closure, from which
+        # cOde reads the shared object to load, so the rename must reach it.
         e <- if (is.function(m)) environment(m) else NULL
         if (!is.null(e)) {
           if (!is.null(e[["func"]]))

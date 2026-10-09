@@ -6,7 +6,7 @@ test_that("PEtab test cases 0001-0006 import and produce solution-matching llh",
 
   withr::local_dir(tempdir())
   petab_dir <- .petab_repo_dir()
-  if (!nzchar(petab_dir)) skip("PEtabTests/ not found -- set DMOD_PETABTESTS to the repo directory")
+  if (!nzchar(petab_dir)) skip("PEtabTests/ not found: set DMOD_PETABTESTS to the repo directory")
   if (!.libsbml_works())   skip("libsbml virtualenv not available")
 
   for (id in sprintf("%04d", 1:6)) {
@@ -31,7 +31,7 @@ test_that("PEtab Stage-2 test cases 0007-0016 produce solution-matching llh", {
 
   withr::local_dir(tempdir())
   petab_dir <- .petab_repo_dir()
-  if (!nzchar(petab_dir)) skip("PEtabTests/ not found -- set DMOD_PETABTESTS to the repo directory")
+  if (!nzchar(petab_dir)) skip("PEtabTests/ not found: set DMOD_PETABTESTS to the repo directory")
   if (!.libsbml_works())   skip("libsbml virtualenv not available")
 
   # 0007 log10, 0008 replicates, 0009/0010 preequilibration, 0011-0013 init
@@ -56,7 +56,7 @@ test_that("two-condition roundtrip preserves objective value", {
 
   withr::local_dir(tempdir())
   petab_dir <- .petab_repo_dir()
-  if (!nzchar(petab_dir)) skip("PEtabTests/ not found -- set DMOD_PETABTESTS to the repo directory")
+  if (!nzchar(petab_dir)) skip("PEtabTests/ not found: set DMOD_PETABTESTS to the repo directory")
   if (!.libsbml_works())   skip("libsbml virtualenv not available")
 
   # Two conditions and InitialAssignments, which the roundtrip has to keep.
@@ -84,10 +84,8 @@ test_that("two-condition roundtrip preserves objective value", {
 
 
 ## --- real-world benchmark: Boehm_JProteomeRes2014 -------------------------
-##
-## Published JAK/STAT5 benchmark: log10 scales, <power/> MathML, an assignment
-## rule input and per-observable noise symbols. At the published optimum
-## -log L reproduces the benchmark value 138.22 (Hass et al. 2019).
+## log10 scales, <power/> MathML, an assignment rule input and per-observable
+## noise symbols (Hass et al. 2019).
 
 test_that("the bundled Boehm problem imports and matches the published optimum", {
 
@@ -110,9 +108,7 @@ test_that("the bundled Boehm problem imports and matches the published optimum",
 
   out <- petab$obj(petab$bestfit, deriv = FALSE)
 
-  # Published optimum: -log L = 138.22 (Hass et al. 2019, "Benchmark
-  # problems for dynamic modeling of intracellular processes"). dMod's
-  # normL2 returns -2*log L, so we compare against ~276.44.
+  # normL2 returns -2 log L, compared against the published optimum.
   expect_lt(abs(out$value - 2 * 138.22), 0.5,
             label = "Boehm -2*logL at published optimum")
 })
@@ -122,7 +118,7 @@ test_that("the bundled Boehm problem imports and matches the published optimum",
 test_that("exportPEtabObject v2 writes nominalValue verbatim (no parameterScale linearisation)", {
   if (!.libsbml_works()) skip("libsbml virtualenv not available")
   petab_dir <- .petab_repo_dir()
-  if (!nzchar(petab_dir)) skip("PEtabTests/ not found -- set DMOD_PETABTESTS to the repo directory")
+  if (!nzchar(petab_dir)) skip("PEtabTests/ not found: set DMOD_PETABTESTS to the repo directory")
 
   withr::local_dir(tempdir())
   pp <- .petab_case("v1_0001")
@@ -150,7 +146,7 @@ test_that("exportPEtabObject v2 writes nominalValue verbatim (no parameterScale 
 test_that("exportPEtabObject v2 writes long-format conditions and experiments", {
   if (!.libsbml_works()) skip("libsbml virtualenv not available")
   petab_dir <- .petab_repo_dir()
-  if (!nzchar(petab_dir)) skip("PEtabTests/ not found -- set DMOD_PETABTESTS to the repo directory")
+  if (!nzchar(petab_dir)) skip("PEtabTests/ not found: set DMOD_PETABTESTS to the repo directory")
 
   withr::local_dir(tempdir())
   # 0001 has a single condition; trivial v2 export should produce one
@@ -179,7 +175,7 @@ test_that("exportPEtabObject v2 writes long-format conditions and experiments", 
 test_that("v2 export → v2 import roundtrips the objective on case 0001", {
   if (!.libsbml_works()) skip("libsbml virtualenv not available")
   petab_dir <- .petab_repo_dir()
-  if (!nzchar(petab_dir)) skip("PEtabTests/ not found -- set DMOD_PETABTESTS to the repo directory")
+  if (!nzchar(petab_dir)) skip("PEtabTests/ not found: set DMOD_PETABTESTS to the repo directory")
 
   withr::local_dir(tempdir())
   pp1 <- .petab_case("v1_0001")
@@ -202,7 +198,7 @@ test_that("v2 export → v2 import roundtrips the objective on case 0001", {
 test_that("v2 PEtab test cases 0001/0002/0009 import and match published llh", {
   withr::local_dir(tempdir())
   petab_dir <- .petab_repo_dir()
-  if (!nzchar(petab_dir)) skip("PEtabTests/ not found -- set DMOD_PETABTESTS to the repo directory")
+  if (!nzchar(petab_dir)) skip("PEtabTests/ not found: set DMOD_PETABTESTS to the repo directory")
   v2_dir <- file.path(petab_dir, "v2")
   if (!dir.exists(v2_dir)) skip("PEtabTests/v2/ not present")
   if (!.libsbml_works()) skip("libsbml virtualenv not available")
@@ -229,7 +225,7 @@ test_that("v2 PEtab test cases 0001/0002/0009 import and match published llh", {
 test_that("v2 experiment periods and promoted event targets match the published llh", {
   withr::local_dir(tempdir())
   petab_dir <- .petab_repo_dir()
-  if (!nzchar(petab_dir)) skip("PEtabTests/ not found -- set DMOD_PETABTESTS to the repo directory")
+  if (!nzchar(petab_dir)) skip("PEtabTests/ not found: set DMOD_PETABTESTS to the repo directory")
   v2_dir <- file.path(petab_dir, "v2")
   if (!dir.exists(v2_dir)) skip("PEtabTests/v2/ not present")
   if (!.libsbml_works()) skip("libsbml virtualenv not available")
@@ -259,7 +255,7 @@ test_that("v2 experiment periods and promoted event targets match the published 
 test_that("v2 priors add the truncated log density to the objective", {
   withr::local_dir(tempdir())
   petab_dir <- .petab_repo_dir()
-  if (!nzchar(petab_dir)) skip("PEtabTests/ not found -- set DMOD_PETABTESTS to the repo directory")
+  if (!nzchar(petab_dir)) skip("PEtabTests/ not found: set DMOD_PETABTESTS to the repo directory")
   yamlPath <- file.path(petab_dir, "v2", "0024", "_0024.yaml")
   if (!file.exists(yamlPath)) skip("v2 case 0024 not present")
   if (!.libsbml_works()) skip("libsbml virtualenv not available")
@@ -283,7 +279,7 @@ test_that("v2 priors add the truncated log density to the objective", {
 test_that("v2 export round-trips a mid-run condition switch on a compartment", {
   withr::local_dir(tempdir())
   petab_dir <- .petab_repo_dir()
-  if (!nzchar(petab_dir)) skip("PEtabTests/ not found -- set DMOD_PETABTESTS to the repo directory")
+  if (!nzchar(petab_dir)) skip("PEtabTests/ not found: set DMOD_PETABTESTS to the repo directory")
   yamlPath <- file.path(petab_dir, "v2", "0030", "_0030.yaml")
   if (!file.exists(yamlPath)) skip("v2 case 0030 not present")
   if (!.libsbml_works()) skip("libsbml virtualenv not available")
@@ -316,7 +312,7 @@ test_that("v2 export round-trips a mid-run condition switch on a compartment", {
 test_that("a v1 export keeps the preequilibration condition", {
   withr::local_dir(tempdir())
   petab_dir <- .petab_repo_dir()
-  if (!nzchar(petab_dir)) skip("PEtabTests/ not found -- set DMOD_PETABTESTS to the repo directory")
+  if (!nzchar(petab_dir)) skip("PEtabTests/ not found: set DMOD_PETABTESTS to the repo directory")
   if (!.libsbml_works()) skip("libsbml virtualenv not available")
 
   wd <- tempfile("v1_rt_0009_"); dir.create(wd)
@@ -353,7 +349,7 @@ test_that("a v1 export keeps the preequilibration condition", {
 test_that("a v1 export refuses a condition switch during the simulation", {
   withr::local_dir(tempdir())
   petab_dir <- .petab_repo_dir()
-  if (!nzchar(petab_dir)) skip("PEtabTests/ not found -- set DMOD_PETABTESTS to the repo directory")
+  if (!nzchar(petab_dir)) skip("PEtabTests/ not found: set DMOD_PETABTESTS to the repo directory")
   if (!file.exists(file.path(petab_dir, "v2", "0030", "_0030.yaml")))
     skip("v2 case 0030 not present")
   if (!.libsbml_works()) skip("libsbml virtualenv not available")

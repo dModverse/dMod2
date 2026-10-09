@@ -45,7 +45,7 @@
 
 
 
-## nullZ (moved from symbolics.R) --------------------------------------------
+## nullZ --------------------------------------------
 
 #' Null Space Basis from the Reduced Row Echelon Form
 #'
@@ -92,7 +92,7 @@ nullZ <- function(A, tol=sqrt(.Machine$double.eps)) {
 
 
 
-## rref (moved from symbolics.R) ---------------------------------------------
+## rref ---------------------------------------------
 
 #' Reduced Row Echelon Form of a Matrix
 #'
@@ -166,7 +166,7 @@ rref <- function(A, tol=sqrt(.Machine$double.eps), verbose=FALSE, ...){
 
 
 
-## submatrix (moved from tools.R) --------------------------------------------
+## submatrix --------------------------------------------
 
 #' Submatrix That Stays a Matrix
 #'
@@ -185,7 +185,7 @@ submatrix <- function(M, rows = 1:nrow(M), cols = 1:ncol(M)) {
 
 
 
-## .matchNum (moved from data.R) ---------------------------------------------
+## .matchNum ---------------------------------------------
 
 # Match with numeric tolerance 
 .matchNum <- function(x, y, tol = 1e-8) {

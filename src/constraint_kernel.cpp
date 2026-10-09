@@ -42,10 +42,9 @@ inline int find_name(const CharacterVector& haystack, const std::string& s) {
   return -1;
 }
 
-// Build a row-major contraction H[k1, k2] += sum_p w[p] * dP2[p, k1, k2]
-// where dP2 is provided as a flat numeric vector with col-major dims
-// [n_inner, n_theta, n_theta] and `inner_idx` selects which inner-par
-// rows to contract (1-based; -1 = skip).
+// Row-major H[k1, k2] += sum_p w[p] * dP2[p, k1, k2], dP2 flat col-major
+// [n_inner, n_theta, n_theta]; `inner_idx` selects the inner-par rows to
+// contract (-1 = skip).
 void apply_dP2_exact(
     const double* dP2_flat,
     const IntegerVector& dP2_dim,
@@ -136,12 +135,9 @@ List constraintL2_scalar_kernel(
     bool deriv = true,
     bool build_hessian = true) {
 
-  // Build allp lookup: name -> value
-  // pars holds the outer (theta) parameter values when dP is given;
-  // otherwise it has the inner parameter values directly.
-  // For the sigma/log-sigma case (`est`), sigma values come from allp.
+  // allp: name -> value over pars and fixed. pars are outer (theta) values when
+  // dP is given, inner values otherwise; under `est` sigma comes from allp too.
   const int n_inner_full = inner_par_names.size();
-  // Build "allp" map from union of pars/fixed names.
   std::vector<std::string> allp_names;
   std::vector<double>      allp_vals;
   if (dP_opt.isNotNull()) {

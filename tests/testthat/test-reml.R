@@ -1,13 +1,5 @@
-# ============================================================================
-# Restricted maximum likelihood for the error model.
-#
-# The claims are checked against the stationarity condition itself,
-#
-#   sum_i [ 1 - h_ii - r_i^2/sigma_i^2 ] d log sigma_i^2 / d phi = 0,
-#
-# not against another dMod code path. For one constant sigma per observable
-# that is sigma^2 = RSS/(n - sum h), which is checked in the same block.
-# ============================================================================
+# Restricted maximum likelihood for the error model, checked against the REML
+# stationarity condition itself rather than another code path.
 
 skip_if_no_compile <- function() {
   testthat::skip_if_not_installed("cppDE")
@@ -53,7 +45,7 @@ test_that("leverages are hat values: in [0, 1] and summing to the rank", {
   expect_equal(nrow(lev), nrow(data$C1))
   expect_true(all(lev$leverage >= 0 & lev$leverage <= 1))
   expect_equal(sum(lev$leverage), attr(lev, "rank"), tolerance = 1e-8)
-  # s and A enter only as their product, so one direction is absent
+  # scale and initial amount enter only as their product, so one direction is absent
   expect_equal(attr(lev, "rank"), 2L)
   expect_equal(as.numeric(attr(lev, "dof")),
                nrow(data$C1) - sum(lev$leverage), tolerance = 1e-8)
@@ -182,7 +174,7 @@ test_that("profile runs to the threshold it is given", {
 
   expect_gte(max(p1$value), d_chisq)
   expect_gte(max(p2$value), d_F)
-  # the profile of a is exactly a^2, so it turns around just past sqrt(delta)
+  # an exactly quadratic profile turns around just past sqrt(delta)
   expect_gt(max(abs(p2$constraint)), max(abs(p1$constraint)))
   expect_gte(max(abs(p2$constraint)), sqrt(d_F))
   expect_lt(max(abs(p2$constraint)), 2 * sqrt(d_F))

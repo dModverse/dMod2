@@ -195,7 +195,7 @@ test_that("a v1 export names conditions by id in every table", {
 test_that("importPEtab builds a reverse sweep through every piece", {
   withr::local_dir(tempdir())
   petab_dir <- .petab_repo_dir()
-  if (!nzchar(petab_dir)) skip("PEtabTests/ not found -- set DMOD_PETABTESTS to the repo directory")
+  if (!nzchar(petab_dir)) skip("PEtabTests/ not found: set DMOD_PETABTESTS to the repo directory")
   if (!.libsbml_works()) skip("libsbml virtualenv not available")
 
   wd <- tempfile("petab_rev_"); dir.create(wd)

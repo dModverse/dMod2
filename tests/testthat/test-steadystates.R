@@ -1,13 +1,8 @@
-## Context: "SteadyStates"  (context() is deprecated in testthat 3e; kept as a note)
 test_that("steady_states_are_steady", {
 
   # Run inside tempdir so the Pexpl + odemodel codegen does not pollute
   # tests/testthat/.
   withr::local_dir(tempdir())
-
-  #-!Start example code
-  #-! library(dMod2)
-  #-! setwd(tempdir())
 
   reactions <- eqnlist()
   reactions <-   addReaction(reactions, "Tca_buffer", "Tca_cyto", "import_Tca*Tca_buffer", "Basolateral uptake")
@@ -16,7 +11,6 @@ test_that("steady_states_are_steady", {
   reactions <-   addReaction(reactions, "Tca_canalicular", "Tca_buffer", "transport_Tca*Tca_canalicular", "Transport bile")
 
   mysteadies <- steadyStates(reactions)
-  #-! print(mysteadies)
 
   x <- Xs(odemodel(reactions, modelname = "ssTest", compile = FALSE))
 
@@ -31,8 +25,6 @@ test_that("steady_states_are_steady", {
   pars <- structure(runif( length(getParameters(pSS)), 0,1), names = getParameters(pSS))
 
   prediction <- (x*pSS)(seq(0,10, 0.1), pars, deriv = F)
-  #-! plot(prediction)
-  #-!End example code
 
   is_steady <- function(prediction) {
     mypred <- wide2long(prediction)
@@ -42,7 +34,6 @@ test_that("steady_states_are_steady", {
     return(all(steady_conds))
   }
 
-  # Define your expectations here
   expect_length(mysteadies, 3)
   expect_true(is_steady(prediction))
 
@@ -51,8 +42,7 @@ test_that("steady_states_are_steady", {
 test_that("additive fluxes are split instead of derailing the solver", {
 
   # A production with a basal and an induced arm has no rate constant of its
-  # own, which used to leave fluxpars one entry short of the flux columns --
-  # every later fluxpars[column] lookup shifted.
+  # own; fluxpars must still align with the flux columns.
   withr::local_dir(tempdir())
 
   reactions <- eqnlist()
@@ -65,7 +55,7 @@ test_that("additive fluxes are split instead of derailing the solver", {
 
   expect_setequal(names(mysteadies), c("A", "B"))
 
-  # B = k_pr_B/k_dg_B and A = (k_basal_A + k_ind_A*B)/k_dg_A
+  # both states match the closed form
   pars <- c(k_pr_B = 0.7, k_dg_B = 0.3, k_basal_A = 0.2, k_ind_A = 1.3, k_dg_A = 0.9)
   ss <- lapply(mysteadies, function(eqn) eval(parse(text = eqn), as.list(pars)))
   B_expected <- unname(pars["k_pr_B"] / pars["k_dg_B"])
@@ -77,10 +67,8 @@ test_that("additive fluxes are split instead of derailing the solver", {
 
 test_that("a locked rate constant never costs the solution its positivity", {
 
-  # Solving R, K and LRK up front locks k_on and k_on2, which leaves LR with no
-  # usable pivot side. Dropping a locked constant from the side instead of
-  # disqualifying it made LR's two-flux side look safe, and the solve returned
-  # influx - other_outflux -- a rate that can go negative.
+  # States solved up front lock rate constants. A pivot side holding a locked
+  # constant is disqualified, so the solve never returns a difference of fluxes.
   withr::local_dir(tempdir())
 
   reactions <- eqnlist()
@@ -127,9 +115,8 @@ test_that("a locked rate constant never costs the solution its positivity", {
 
 test_that("compartment volume ratios reach the steady-state backend", {
 
-  # getFluxes() scales every flux by V_ref / V_X, but the backend sees only
-  # rates and stoichiometry. Without folding the ratios in, steadyStates()
-  # silently returned the fixed point of the unscaled system.
+  # getFluxes() scales fluxes by volume ratios the backend does not see, so the
+  # ratios must be folded in before solving.
   withr::local_dir(tempdir())
 
   reactions <- eqnlist()
@@ -166,10 +153,9 @@ test_that("compartment volume ratios reach the steady-state backend", {
 
 test_that("a leaking cluster across compartments is 0, a moiety listed first is not", {
 
-  # L binds R across compartments. The backend reads the binding as one row
-  # per volume ratio, a source of L and a feed of LR from R, and finds {L, LR}
-  # only in amounts. The LP support also takes the conserved A <-> Ap listed
-  # before it; only states that drain into a leaking reaction are 0.
+  # A binding across compartments leaks as a cluster only in amounts. A conserved
+  # moiety listed before it stays nonzero; only states draining into a leaking
+  # reaction are 0.
   withr::local_dir(tempdir())
   toy <- function(Vc, Ve) eqnlist() |>
     assignCompartment(L = "ext", volume = Ve) |>
@@ -206,11 +192,9 @@ test_that("a leaking cluster across compartments is 0, a moiety listed first is 
 
 test_that("positive = TRUE spends the row on a rate constant, not on a difference", {
 
-  # Rec's ODE is not affine in Rec, so the direct positive-solve pass skips it.
-  # By the time this phase reaches it Lig is substituted and the Lig-driven sink
-  # has become the constant secretion flux, so solving for Rec would give
-  # (k_pr_Rec - k_pr_Src)/k_dg_Rec. Linear in Rec, so there is no second root to
-  # pick: only the pivot onto k_pr_Rec keeps the result a sum.
+  # A state skipped by the direct positive-solve pass reaches a later phase where
+  # solving for it gives a difference; only the pivot onto a rate constant keeps
+  # the result a sum.
   withr::local_dir(tempdir())
 
   reactions <- eqnlist()
@@ -258,13 +242,9 @@ test_that("positive = TRUE spends the row on a rate constant, not on a differenc
 
 test_that("a sign-indefinite fixed point is refused (1.2) or repaired (1.3)", {
 
-  # With a basal arm the additive flux is split, so no single rate constant
-  # can absorb the row. Version 1.2 substitutes solutions eagerly: by the
-  # time Rec is reached, the Lig-driven sink has become a constant, every
-  # candidate pivot is a difference, and the backend must refuse rather than
-  # return a negative-capable trafo. Version 1.3 keeps the fluxes symbolic,
-  # so the two production arms are still available as a ratio-parameter
-  # pivot and the model is solved manifestly positively.
+  # With a basal arm the additive flux is split and no single rate constant
+  # absorbs the row. Symbolic fluxes leave the production arms as a
+  # ratio-parameter pivot, so the model is solved manifestly positively.
   withr::local_dir(tempdir())
 
   reactions <- eqnlist()
@@ -302,13 +282,8 @@ test_that("a sign-indefinite fixed point is refused (1.2) or repaired (1.3)", {
 
 test_that("a recycled pivot rate constant is resolved, not defined by itself", {
 
-  # Cpx_int is removed first and spends its row on its two out-fluxes, so the
-  # recycling column in Cpx's row is replaced by the influx it was solved
-  # against -- k_int*Cpx. Cpx's own influx sum then contains k_int, which is
-  # also the first pivot Cpx spends its row on, so distributing that sum used
-  # to emit k_int = f(..., k_int): a trafo defined in terms of itself. The sum
-  # is linear in k_int and has to be resolved against the pivot relations
-  # first.
+  # A pivot rate constant that reappears in a later row's influx sum is resolved
+  # against the pivot relations first, never defined in terms of itself.
   withr::local_dir(tempdir())
 
   reactions <- eqnlist()
@@ -542,8 +517,7 @@ test_that("version 1.4 keeps the first state of a given conserved quantity free"
 
 test_that("species named like sympy objects (Ci, E, S, Q) are plain symbols", {
   withr::local_dir(tempdir())
-  # Ci is sympy's cosine integral, E Euler's number, S the singleton registry, Q the
-  # assumption namespace; parse_expr() used to resolve them and fail on kdeg*Ci
+  # Names of sympy objects must not resolve to those objects.
   r <- eqnlist() |>
     addReaction("", "R", "ksR", "synthesis") |>
     addReaction("R", "", "kdR*R", "turnover") |>

@@ -318,7 +318,7 @@ covariates.data.frame <- function(x, ...) {
 }
 
 
-## datalist constructor (moved from classes.R) ----------------------------------------
+## datalist constructor ----------------------------------------
 
 ## Data classes ----------------------------------------------------------------
 

@@ -1,13 +1,5 @@
 # Behavioral tests for the explicit parameter transformation Pexpl() / P().
-#
-# Verifies:
-#   * identity trafo round-trips (value + Jacobian)
-#   * log trafo gives Jacobian = diag(exp(theta)) = diag(p)
-#   * a mixed nonlinear trafo's Jacobian matches the algebraic derivative
-#   * derivMode "reverse" and "forward" agree on the value
-#   * getParameters() consistency through composition (Y * Xs * P)
-#
-# Second-order chain rule is covered by test-deriv2-Pexpl.R.
+# The second-order chain rule is covered by test-deriv2-Pexpl.R.
 
 skip_if_no_compile <- function() {
   testthat::skip_if_not_installed("cppDE")
@@ -104,8 +96,6 @@ test_that("Pexpl log trafo maps theta -> exp(theta) with Jacobian diag(exp(theta
 test_that("Pexpl Jacobian on a mixed nonlinear trafo equals the algebraic derivative", {
   skip_if_no_compile()
 
-  # Mixed trafo: A = a^2, k = a * b
-  # Analytical Jacobian: J[1,] = (2a, 0), J[2,] = (b, a).
   pfn <- .pexpl_fx()$p_mix
 
   outer <- c(a = 1.3, b = 0.7)
@@ -139,9 +129,9 @@ test_that("Pexpl derivMode 'reverse' and 'forward' agree on the value", {
 
 ## ---- attachInput: inputs passed through -------------------------------
 
-# A = a^2, k = a * b, and every input that is not A or k handed on untouched.
-# An input without a derivative row counts as fixed downstream, so a missing
-# row zeroes the forward gradient along it.
+# Inputs the trafo does not map are handed on untouched. An input without a
+# derivative row counts as fixed downstream, so a missing row would zero the
+# forward gradient along it.
 
 test_that("Pexpl(attachInput = TRUE) gives every input it passes through its own row", {
   skip_if_no_compile()
@@ -188,7 +178,7 @@ test_that("an input passed through that the caller fixed stays fixed", {
   expect_equal(unname(J["u", ]), c(0, 0, 1))
   expect_false("s" %in% dimnames(attr(out, "deriv2"))[[1L]])
 
-  # One the trafo reads: A = a^2 no longer moves, k = a * b only along b.
+  # Fixing an input the trafo reads removes its direction from the trafo's rows.
   out <- p(c(b = 0.7, s = 2), fixed = c(a = 1.3))$C1
   expect_setequal(names(out), c("A", "k", "a", "b", "s"))
   expect_setequal(attr(out, "fixed"), c("A", "a"))
@@ -250,9 +240,7 @@ test_that("getParameters(Y * Xs * P) equals getParameters(P) (outer-pars view)",
 })
 
 
-# ============================================================================
-# Edge case: Pexpl with pure-numeric trafo (no outer parameters)
-# ============================================================================
+## ---- Edge case: pure-numeric trafo, no outer parameters ----------------
 
 test_that("Pexpl with pure-numeric trafo evaluates (values and forward)", {
   fx <- .pexpl_fx()

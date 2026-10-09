@@ -1,10 +1,6 @@
-# Multiple shooting: normL2(shooting = ) and trust() on the objective it returns.
-#
-# The oracle is single shooting. With nodes read off one continuous trajectory
-# the gaps vanish, the data term is the single-shooting value, and the condensed
-# gradient and Gauss-Newton Hessian are the single-shooting ones. The segment
-# blocks are checked against finite differences, the reverse sweep against the
-# forward one, and a converged fit against the single-shooting fit.
+# Multiple shooting: normL2(shooting = ) and trust() on its objective. With
+# nodes on one continuous trajectory the gaps vanish and value, condensed
+# gradient and Gauss-Newton Hessian equal the single-shooting ones.
 
 skip_on_cran()
 
@@ -372,7 +368,7 @@ test_that("several conditions share theta and keep nodes of their own", {
   fit <- trust(obj, mo$truth2 + 0.2, iterlim = 200)
   expect_true(fit$converged)
   expect_equal(fit$value, ref$value, tolerance = 1e-6)
-  # y = s*A sees the scale and the initial amounts only as products
+  # the observable sees the scale and the initial amounts only as products
   ident <- function(a) c(a[["lA"]] + a[["ls"]], a[["lA2"]] + a[["ls"]],
                          a[["lk1"]], a[["lk2"]])
   expect_equal(ident(fit$argument), ident(ref$argument), tolerance = 1e-4)

@@ -4,12 +4,7 @@
   library(ggplot2)
   setwd(tempdir())
   
-  #' Check function to check sensitivities
-  #'
-  #' @param p pars for the prediction function
-  #' @param whichpar names of pars to check
-  #' @param cond indexing for condition
-  #' @param step stepsize for finite difference
+  # Compare sensitivities of parameter whichpar against a finite difference of size step
   checkSensitivities <- function(p, whichpar, cond = 1, step = 0.1) {
     h <- rep(0, length(p))
     h[which(names(p) == whichpar)] <- step
@@ -32,9 +27,7 @@
     
   }
   
-  # -------------------------------------------------------------------------#
   # Check parametric events with root finding ----
-  # -------------------------------------------------------------------------#
   
   ## check with root-triggered events
   estimate <- c("A_thres", "A", "t_A_thres", "kon", "koff", "degrad")
@@ -88,8 +81,6 @@
   
   
   
-  # (GR-EMAX*((Ce+yps)^hill/((Ce+yps)^hill+EC50^hill)))*Gcure
-  # (Fcure-1)*Gcure
   
   
   ## check with root-triggered events
@@ -146,9 +137,7 @@
   
   
   
-  # -------------------------------------------------------------------------#
   # Check parametric events without root finding ----
-  # -------------------------------------------------------------------------#
   
   
   ## Do the check with method = "replace"
@@ -296,9 +285,7 @@
   
   
   
-  # -------------------------------------------------------------------------#
   # Check lag time estimation ----
-  # -------------------------------------------------------------------------#
   
   ODEs <- c(
     Ad= "-ka*Ad+Fabs*INPUT1",

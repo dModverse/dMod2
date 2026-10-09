@@ -1,67 +1,13 @@
 ## Trust-region multiple shooting ------------------------------------------------
-##
-## Bock's generalised Gauss-Newton method on a trust region. At an iterate
-## (theta, s) the continuity constraints are linearised,
-##
-##     Delta s_{j+1} = alpha c_j + G_j Delta s_j + P_j Delta theta,
-##
-## and eliminated by the recursion Delta s = alpha z + S Delta theta
-## (condensing). What remains is a subproblem in Delta theta alone, the size of
-## the single-shooting one, which the Moré-Sorensen solver of trust() takes
-## unchanged, box bounds on theta included. The nodes follow the step through
-## the linearisation instead of a new simulation, which is the lifting: the
-## gaps between segments close as the iteration converges, not at every point
-## it visits.
-##
-## The trust region lives in the full space of parameters and nodes,
-## ||D Delta theta||^2 + ||V Delta s||^2 <= r^2, with D the parameter scale and
-## V one over the scale of each state's gap. A region on theta alone does not
-## bound S Delta theta, and S, the condensed sensitivity of a node, is the
-## linearised single-shooting response: across a spike or a chaotic stretch it
-## is huge, and the nodes would jump by it. On the condensed problem the region
-## is an ellipsoid in Delta theta, which a Cholesky factor maps onto a ball for
-## the Moré-Sorensen solver.
-##
-## alpha = 1 closes the linearised gaps completely, Bock's own step. It is the
-## right step only together with the full Gauss-Newton step in theta; Bock damps
-## both at once. So alpha is the fraction of the node step of the full
-## Gauss-Newton step the radius admits, capped at 1: an inactive trust region
-## takes Bock's step, an active one damps the node step with the parameter
-## step. Only the node part counts, a sloppy parameter direction lengthens the
-## step without moving a node. The theta step is then the best one in what is
-## left of the region. Closing the gaps with alpha = 1 under a region on theta alone moved
-## the nodes onto the trajectories of a wrong theta; on FitzHugh-Nagumo it lost
-## every one of 40 starts.
-##
-## Condensing propagates a gap through every segment downstream, which is the
-## linearised single shooting again. Where the propagated sensitivity leaves a
-## bound, as a chain of segments on a spike threshold makes it at a start of
-## wrong parameters, the link to the node before is dropped from the
-## linearisation: an inexact step, judged by the acceptance on the true gaps,
-## and one that is exact again once the trajectory is near continuous.
-##
-## Acceptance is either Fletcher and Leyffer's filter, on the data term and the
-## scaled size of the gaps, or the l2 exact penalty f + mu ||c||, whose
-## predicted decrease reads the gaps the linearisation leaves. A rejected step
-## whose gaps did not close as predicted gets one second-order correction: the
-## trial gaps condensed with the Jacobians already at hand, no new sensitivities.
-##
-## The model Hessian of each segment is its Gauss-Newton block, or a BFGS or SR1
-## approximation per segment of the segment's Lagrangian (partitioned
-## quasi-Newton, as in Bock and Plitt), which gradients alone keep up to date
-## and which therefore runs on the adjoint gradients of sweep = "reverse".
-##
+## Bock's generalised Gauss-Newton method, condensed onto theta, on a trust region
+## over parameters and nodes; acceptance by filter, l2 penalty or natural level.
+
 ## Copyright (C) 2026 Simon Beyer
 
 
-# trust() on an objective holding a normL2 with a multipleShootingControl. The
-# controls arrive merged by trust(); the settings trust() has and a
-# multiple-shooting run cannot honour are refused here rather than ignored.
-#
-# The shooting term is the one summand whose controls hold it. Every
-# other summand, a prior or a single-shooting normL2 of other data, depends on
-# theta alone and enters the condensed problem with its own value, gradient and
-# Gauss-Newton Hessian.
+# trust() on an objective holding a normL2 with a multipleShootingControl.
+# Settings a shooting run cannot honour are refused. Every other summand enters
+# the condensed problem with its own value, gradient and Gauss-Newton Hessian.
 .trustShooting <- function(objfun, parinit, rinit, rmax, iterlim,
                            hessianMethod, hessianFallback, fallbackLimit,
                            parscale, parupper, parlower, tol, qn, step,
@@ -173,9 +119,7 @@
           else .shootNodes(sobj, th, fixed = fixed,
                            observed = !identical(init, "simulation"), cores = cores,
                            smooth = identical(init, "spline"))
-    # With the observed states read off the data, the unobserved ones follow
-    # a run synchronised to the data, so that they start where the data put
-    # them and the gaps sit where the data anchor the nodes.
+    # Unobserved states follow a run synchronised to the data.
     if (is.character(init) && init %in% c("data", "spline"))
       nd <- .shootSweep(sobj, th, nd, fixed, cores)
     nd
@@ -185,10 +129,8 @@
   neval <- 0L
 
   # --- continuity breaks ------------------------------------------------------
-  # Voss, Timmer and Kurths (2004): at a break the node after it is free, its
-  # values join the parameters of the condensed problem and its gap is no
-  # constraint. The extended variables are the parameters and then the break
-  # nodes, per condition in time.
+  # Voss, Timmer and Kurths (2004): the node after a break joins the parameters
+  # and its gap is no constraint. Extended variables: theta, then break nodes.
   breakTimes <- attr(sobj, "breaks")
   nBreak <- length(unlist(breakTimes))
   if (nBreak && hm != "gn")
@@ -231,13 +173,8 @@
   }
 
   # --- two phases -------------------------------------------------------------
-  # Horbelt, Timmer and Voss (2002): with the nodes held at their start
-  # values, the parameters are fitted alone first, on the layout the run
-  # starts from. Every segment then has to explain its data from a start the
-  # data give, and no node can take up misfit the parameters should remove.
-  # The nodes are laid out afresh at the parameters found and released from
-  # there. A first phase that fails, or ends where the nodes cannot be laid
-  # out and evaluated, is dropped.
+  # Horbelt, Timmer and Voss (2002): theta is fitted first with the nodes held,
+  # then the nodes are laid out afresh and released. A failing phase is dropped.
   start0 <- NULL
   if (isTRUE(step$twoPhase)) {
     ph <- .shootPhaseOne(sobj, theta, nodes, fixed, cores, pv, lb, ub, ps,
@@ -260,10 +197,8 @@
   }
 
   # --- adaptive nodes -------------------------------------------------------
-  # Segments too long for the linearisation are cut in two: where the scaled
-  # propagation matrix grows beyond `growth`, or where the solve fails. The new
-  # node takes the segment's own state there, or, when the segment cannot be
-  # solved, its start value with the observed states read off the data.
+  # A segment whose propagation matrix exceeds `growth` or whose solve fails is
+  # cut; the new node takes its own state, or the start value and the data.
   kappa <- attr(sobj, "growth")
   misfit <- attr(sobj, "misfit")
   minLen <- attr(sobj, "minLength")
@@ -278,10 +213,8 @@
     sg <- spec$segs[[k]]
     !is.na(.shootSplitTime(sg, minLen[[sg$cond]], minPoints = minPts))
   }
-  # The spectral radius, not a norm: it is the same in every chart and under
-  # every scaling of the states, and it is the rate at which the linearised
-  # flow of the segment expands. A norm reads the coupling between states of
-  # different scales as growth where the flow contracts.
+  # The spectral radius, not a norm: it is invariant under chart and state
+  # scaling, and is the rate the linearised flow expands at.
   growthOf <- function(E) vapply(E$segments, function(sg) {
     G <- sg$growth
     if (is.null(G)) return(0)
@@ -491,11 +424,8 @@
   n_fail <- 0L; n_stall <- 0L; nRelaxed <- 0L; nSOC <- 0L; qnSkipped <- 0L
   nRejRow <- 0L; nRestore <- 0L
 
-  # Restoration, the phase Fletcher and Leyffer's filter enters when steps
-  # keep being rejected with the gaps open. First the linearised gaps are
-  # closed at the parameters as they are, damped if need be; where that does
-  # not halve them, every node goes onto the trajectory of these parameters,
-  # which closes them exactly (without breaks). NULL when neither works.
+  # Filter restoration: close the linearised gaps at theta, damped if needed;
+  # failing that, put every node on theta's trajectory. NULL when neither works.
   restoreGaps <- function(C) {
     for (a in c(1, 0.5, 0.25)) {
       ndR <- .shootStepNodes(nodes, C, a, numeric(Kx))
@@ -519,13 +449,8 @@
   C <- NULL
 
   # --- Bock's damped Gauss-Newton method on the natural level function -------
-  # Peifer and Timmer (2007), sec. 3.4. The full step closes the linearised
-  # gaps and takes the Gauss-Newton step on the parameters; it is damped by a
-  # factor lambda that a predictor from the last curvature estimate proposes
-  # and a corrector cuts back. A damped step is taken when the simplified step
-  # at its end, the one the Jacobians of the current iterate give with the
-  # residuals and gaps there, has shrunk: the natural level function, which
-  # reflects the geometry of the problem instead of a merit function's weights.
+  # Peifer and Timmer (2007), sec. 3.4: predictor-corrector damping; a step is
+  # taken when the simplified step at its end has shrunk.
   handedOver <- FALSE
   if (acc == "natural") {
     if (!is.null(attr(sobj, "args")$errmodel) ||
@@ -654,9 +579,8 @@
     # unless a link was decoupled
     hl <- .shootLinViolation(E, spec, dthx, nodes, nodesT, scale, tx, bkOf()$brk)
 
-    # after a rejection the next trial is likely rejected too, and values are
-    # all it needs; after an acceptance it likely is taken, and one solve
-    # with sensitivities serves both the judgement and the next model
+    # after an acceptance, one solve with sensitivities serves both the
+    # judgement and the next model; after a rejection values suffice
     withD <- trialDeriv || lastAccepted
     ET <- ev(thetaT, nodesT, quiet = TRUE, deriv = withD)
     neval <- neval + 1L
@@ -828,10 +752,8 @@
 
   if (is.null(C)) C <- condense(E)
   opt <- .shootOptimality(thx(theta), C$g0, lbx, ubx, psxOf())
-  # Open gaps are not a solution: the nodes then absorb what the parameters do
-  # not explain, and the data term can sink below the one of the true
-  # parameters. Whatever stopped the run, it has converged only with the
-  # trajectory continuous.
+  # Converged only with a continuous trajectory: open gaps let the nodes absorb
+  # misfit the parameters do not explain.
   if (h > tol$ctol) converged <- FALSE
 
   # trust()'s own fields first, so mstrust() and the parframe tools read a
@@ -892,11 +814,8 @@
 
 
 ## ---- Condensing ----------------------------------------------------------------
-##
-## Per condition, forwards through its segments. L_k maps Delta theta onto the
-## local variables of segment k, (theta_loc, s_j), and zhat_k is the part of
-## the local step that alpha scales. The end-state Jacobian A_k of a segment
-## propagates both to the next node: S_{j+1} = A_k L_k, z_{j+1} = c_j + A_k zhat_k.
+## Forwards through each condition's segments: S_{j+1} = A_k L_k and
+## z_{j+1} = c_j + A_k zhat_k, with A_k the end-state Jacobian of segment k.
 
 .shootCondense <- function(E, H, spec, tnames, scale, zbound = 10, sbound = 1e8,
                            brk = NULL, bcol = NULL) {
@@ -957,14 +876,9 @@
         Ac[[i]] <- A
         S_cur <- A %*% Lk
         z_cur <- as.numeric(E$gaps[[cn]][i, spec$states]) + as.numeric(A %*% zk)
-        # Past a bound the propagated correction is the linearised single
-        # shooting it was meant to avoid: a chain of expanding segments, as a
-        # start of wrong parameters puts many of them on a spike threshold.
-        # A gap propagated downstream to ten times a state's scale, or a
-        # sensitivity near overflow, is outside anything a linearisation
-        # describes. The coupling to the node before is then dropped from
-        # this link, an inexact step the acceptance judges on the true gaps.
-        # At a near continuous trajectory neither bound is reached.
+        # A propagated gap or sensitivity past its bound is outside the
+        # linearisation: the link to the node before is dropped, an inexact
+        # step the acceptance judges on the true gaps.
         if (i > 1L && (max(abs(z_cur / scale[spec$states])) > zbound ||
                        max(abs(S_cur / scale[spec$states])) > sbound)) {
           np <- match(spec$segs[[k]]$nodeNames, vars)
@@ -1060,11 +974,8 @@
 
 
 ## ---- Partitioned quasi-Newton ------------------------------------------------
-##
-## The multipliers of the linearised constraints follow from the step by a
-## backward recursion, lambda_{j-1} = grad_{s_j} m_j + G_j' lambda_j, with m_j
-## the segment's model at the step. The pair of segment j is its local step and
-## the change of the gradient of its Lagrangian f_j + lambda_j' end_j.
+## Multipliers by lambda_{j-1} = grad_{s_j} m_j + G_j' lambda_j; segment j's pair
+## is its local step and the change of the gradient of f_j + lambda_j' end_j.
 
 .shootQNUpdate <- function(B, E, ET, C, alpha, dth, nodes, nodesT, spec, hm, cautious) {
   skipped <- 0L
@@ -1136,31 +1047,9 @@
 
 ## ---- Small helpers -------------------------------------------------------------
 
-# One step of the condensed problem in the full-space trust region
-# ||D Delta theta||^2 + ||V (alpha z + S Delta theta)||^2 <= r^2.
-#
-# D is the parameter scale, divided by the Coleman-Li distance to the bound the
-# gradient pushes toward, and the model includes the Coleman-Li curvature, so a
-# box on theta acts as in trust(); a step that would still leave the box is
-# truncated to stay interior.
-#
-# The region is ||M Delta theta + alpha q||^2 <= r^2 with M = [D; V S] and
-# q = [0; V z]. M is never squared: S is the linearised single-shooting
-# response and can span many decades, and M'M would lose half of them. A QR
-# factorisation of M gives the Cholesky factor of M'M, the centre of the
-# ellipsoid as a least-squares solution and its offset as a residual.
-#
-# alpha is the fraction of the node step of the full Gauss-Newton step,
-# alpha = 1, that fits into the region, measured at no less than the smallest
-# full-space step that closes the gaps, the residual norm of the least-squares
-# problem. So rho^2 = r^2 - alpha^2 ||res||^2 never goes negative and
-# Delta theta = 0 always lies inside.
-# The full generalised Gauss-Newton step of the condensed problem, alpha = 1:
-# the parameter step on the pseudo-inverse of the condensed matrix, directions
-# below reg (or below 1e-7 of the largest singular value) left out, and its
-# vector in the scaled full space, parameters and node values. With `g` and
-# `Vz` from another linearisation and the spectrum `eig` of this one, the
-# simplified step of the natural level function.
+# The full generalised Gauss-Newton step (alpha = 1) on the pseudo-inverse,
+# directions below reg dropped, and its scaled full-space vector. With `g`, `Vz`
+# of another linearisation, the simplified step of the natural level function.
 .shootFullStep <- function(C, theta, lb, ub, ps, reg, g = C$g0 + C$gz, Vz = C$Vz,
                            eig = NULL, truncate = TRUE) {
   if (is.null(eig)) {
@@ -1184,6 +1073,9 @@
   list(dth = dth, vec = vec, norm = sqrt(sum(vec^2)), eig = eig)
 }
 
+# One step in the region ||M Delta theta + alpha q||^2 <= r^2, M = [D; V S],
+# q = [0; V z], D scaled Coleman-Li. M is factored by QR, never squared, as S
+# can span many decades; alpha is the node fraction of the full step that fits.
 .shootStep <- function(theta, C, r, lb, ub, ps, thetamax, optMeasure, reg = 0) {
   K <- length(theta)
   gz0 <- C$g0 / ps
@@ -1196,8 +1088,7 @@
   q <- c(numeric(K), C$Vz)
   qm <- qr(M, LAPACK = TRUE)
   # M = Q Rf with Rf = R P' for the column pivoting P, so Rf^-1 = D^-1 Q_theta
-  # from the first K rows of Q: no triangular solve on a factor that spans
-  # many decades
+  # from the first K rows of Q, without a triangular solve
   Q <- qr.Q(qm)
   Rinv <- Q[seq_len(K), , drop = FALSE] / (ps / sqrt(absv))
   qq <- qr.qty(qm, q)
@@ -1213,9 +1104,8 @@
   lmax <- max(abs(ev$values), .Machine$double.eps)
   dGN <- -as.numeric(ev$vectors %*% (crossprod(ev$vectors, g1) /
                                         pmax(ev$values, 1e-10 * lmax)))
-  # Only the node part of that step measures how far the gaps may close: a
-  # sloppy parameter direction stretches the Gauss-Newton step without moving
-  # a node, and would hold the closure back for nothing.
+  # Only the node part of that step measures how far the gaps may close; a
+  # sloppy parameter direction lengthens it without moving a node.
   nGN <- sqrt(sum(((M %*% dGN + q)[-seq_len(K)])^2))
   alpha <- if (C$znorm == 0) 0 else min(1, r / max(nGN, sqrt(res2)))
 
@@ -1225,10 +1115,8 @@
   rho <- sqrt(max(0, r^2 - alpha^2 * res2))
   gu <- crossprod(Rinv, ga - Hm %*% w0)
   Hu <- crossprod(Rinv, Hm %*% Rinv)
-  # Peifer and Timmer (2007), sec. 4: a direction whose singular value lies
-  # below reg times the largest is not identifiable here. Its gradient is
-  # dropped and it is damped so heavily that the step leaves it alone, as if
-  # the parameters along it were fixed.
+  # Peifer and Timmer (2007), sec. 4: a direction with singular value below
+  # reg times the largest loses its gradient and is damped as if fixed.
   if (reg > 0) {
     eh <- eigen(0.5 * (Hu + t(Hu)), symmetric = TRUE)
     lmax <- max(abs(eh$values), .Machine$double.eps)
@@ -1291,13 +1179,9 @@
        atBound = setNames(fin & abs(absv * gz) <= btol & abs(gz) > btol, names(x)))
 }
 
-# The scale of each state's gap: 1 on a log10 or an angle chart, a decade or a
-# radian; on a linear chart the range the state covers, read off the data for
-# an observed state and otherwise off a simulation of the whole time axis at the
-# start, as the largest range within one segment: a gap is a mismatch at a
-# segment's end, and a state that drifts, a phase, covers a range that grows
-# with the time axis. The nodes alone are too few to tell, ten of them in the
-# quiet stretch of a bursting neuron span a few millivolts of a spike's hundred.
+# The scale of each state's gap: 1 on a log10 or angle chart; on a linear
+# chart the largest range within one segment, from the data for an observed
+# state, else from a simulation of the whole time axis at the start.
 .shootScale <- function(scale, nodes, spec, sobj = NULL, theta = NULL,
                         fixed = NULL, cores = 1L) {
   states <- spec$states
@@ -1341,21 +1225,8 @@
 
 
 ## ---- Annealing of the continuity ---------------------------------------------
-##
-## Before the gaps are enforced, a start of wrong parameters may leave the
-## model in a regime the data never show: a spike threshold below the measured
-## rest, so that every segment that starts at a data node fires. Linearised
-## continuity then ties every parameter step to node moves by S Delta theta,
-## huge across spikes, and the step shrinks to nothing. So the gaps are first
-## only priced, f + w ||V c||^2 over parameters and nodes alike, with w rising
-## by a factor ten per stage (precision annealing, Ye and Abarbanel): the
-## parameters move to where the dynamics follow the data locally, the gaps
-## close as w grows, and the exact method takes over.
-##
-## Nothing is condensed here. The Gauss-Newton matrix of the full problem is
-## sparse, an arrow of the parameters over the blocks of the segments and the
-## continuity between neighbours, and the trust-region subproblem is solved by
-## the Moré-Sorensen iteration on sparse Cholesky factors of H + lambda I.
+## Precision annealing (Ye and Abarbanel): f + w ||V c||^2 over parameters and
+## nodes, uncondensed and sparse, with w rising per stage before the exact method.
 
 # Gauss-Newton model of f + w ||V c||^2 in the scaled variables
 # y = (ps * theta, s / scale), as a sparse matrix and a gradient.
@@ -1453,11 +1324,9 @@
   list(step = p, lambda = lam)
 }
 
-# The annealing stages. Every stage minimises f + w ||V c||^2 on a trust region
-# in the scaled variables until a step gains less than `ftol` relatively, then
-# w grows tenfold, until the root mean square gap per node has fallen below
-# `hnode` in its scale, w has reached `wmax`, or a stage with the penalty
-# dominant left the gaps. Returns the point the exact method starts from.
+# Annealing stages, each minimising f + w ||V c||^2 until a step gains less
+# than `ftol`, until the RMS gap per node is below `hnode`, w reaches `wmax`, or
+# the gaps stall. Returns the point the exact method starts from.
 .shootAnneal <- function(evGN, spec, theta, nodes, tnames, ps, scale, pv, lb, ub,
                          r, rmax, printIter = FALSE, w0 = 1, factor = 10,
                          wmax = 1e10, hnode = 1e-3, itStage = 30L, ftol = 1e-3,
@@ -1541,9 +1410,8 @@
       } else r <- 0.25 * min(r, sqrt(sum(dy^2)))
     }
     if (sqrt(Mdl$cont / nnode) <= hnode || w >= wmax) break
-    # the penalty dominates and the stage shrank the gaps by less than a tenth:
-    # they cannot be closed from here, and a larger weight only stiffens the
-    # problem
+    # with the penalty dominant and the gaps barely shrunk, a larger weight
+    # only stiffens the problem
     if (w * Mdl$cont > max(1, abs(Mdl$value - w * Mdl$cont)) && Mdl$cont > 0.81 * cont0) break
     w <- w * factor
   }

@@ -41,11 +41,9 @@
   unname(split(x, factor(grp, levels = seq_len(g))))
 }
 
-## Pull every archive member into the shared object: R resolves the entry points
-## by name at run time, so unreferenced members would otherwise be dropped.
-## Windows needs --export-all-symbols on top: R writes the export .def with
-## `nm` over the objects it is handed, only the anchor, and a .def file
-## switches ld's auto-export off, so the members would link in unexported.
+## Pull every archive member into the shared object, as R resolves entry points
+## by name at run time. On Windows R's .def lists only the anchor's symbols and
+## turns off auto-export, hence --export-all-symbols.
 .compileWholeArchive <- function(lib) {
   if (Sys.info()[["sysname"]] == "Darwin")
     return(paste0("-Wl,-force_load,", shQuote(lib)))
@@ -102,7 +100,7 @@
 
 ## cppDE remembers which shared object exports which generated entry point.
 ## Loading one under a name it has already seen makes that pairing stale.
-## Guarded, to stay loadable against a cppDE that predates the function.
+## Guarded for a cppDE without the function.
 .clearSymbols <- function() {
   f <- get0("clearNativeSymbols", envir = asNamespace("cppDE"), inherits = FALSE)
   if (is.function(f)) f()
@@ -128,9 +126,8 @@
 }
 
 
-## Point every cOde model inside `x` at the shared object `output`. Walks the
-## evaluation tree rather than the `mappings` attribute, which a composition
-## does not keep in step with its leaves.
+## Point every cOde model inside `x` at the shared object `output`, walking the
+## evaluation tree since `mappings` may lag behind the leaves.
 .retargetCode <- function(x, output) {
   st <- .fnNode(x)
   if (is.null(st)) return(invisible(NULL))
@@ -251,11 +248,8 @@ compile <- function(..., output = NULL, args = NULL, cores = detectFreeCores(),
   fn_objs <- objs[is_dmod]
   is_cpp  <- vapply(objs, function(o) !is.null(attr(o, "srcfile")), logical(1))
 
-  ## Collect per-file build info.
-  ## Primary source is `attr(o, "compileInfo")` holding
-  ## (srcfile, compileArgs, linkArgs) as reported by cOde/cppDE/CVODE.
-  ## Falls back to modelname-based file discovery for objects that lack
-  ## compileInfo, and to the bare `srcfile` attribute for raw cppDE objects.
+  ## Per-file build info from `attr(o, "compileInfo")`, else from modelname-based
+  ## file discovery, or the bare `srcfile` attribute of raw cppDE objects.
   info_from_compileInfo <- unlist(
     lapply(objs, function(o) attr(o, "compileInfo")),
     recursive = FALSE
@@ -330,11 +324,9 @@ compile <- function(..., output = NULL, args = NULL, cores = detectFreeCores(),
   pic  <- if (.Platform$OS.type == "windows") "" else "-fPIC"
   base <- paste("-O2 -DNDEBUG -w", pic)
 
-  ## KLU flags for sparse models, mirroring cppDE::compile(). The flag lives on
-  ## the cppDE object inside an odemodel, so a bare `attr(o, "sparse")` on the
-  ## dMod fn objects handed to compile() never sees it, go through the
-  ## per-file info. The `-DKLU*` fallback covers objects whose compileInfo was
-  ## built before `sparse` was recorded there.
+  ## KLU flags for sparse models, mirroring cppDE::compile(). The flag is read
+  ## from the per-file info, as fn objects do not hold it; `-DKLU` in the
+  ## compile arguments counts as well.
   uses_klu <- any(vapply(objs, function(o) isTRUE(attr(o, "sparse")), logical(1))) ||
     any(vapply(info, function(e) isTRUE(e$sparse) ||
                  grepl("(^|\\s)-DKLU", e$compileArgs %||% ""), logical(1)))
@@ -343,7 +335,7 @@ compile <- function(..., output = NULL, args = NULL, cores = detectFreeCores(),
     cfgCppDE <- .cppDE_config()
     if (!isTRUE(cfgCppDE$klu_available))
       stop("A sparse Jacobian was requested, but cppDE was installed without the ",
-           "KLU linear solver.\n  Install SuiteSparse/KLU and re-install cppDE -- ",
+           "KLU linear solver.\n  Install SuiteSparse/KLU and re-install cppDE, ",
            "see cppDE::install_libs(\"suitesparse\").", call. = FALSE)
     klu_flag <- trimws(paste("-DKLU", cfgCppDE$klu_cflags))
     klu_lib  <- cfgCppDE$klu_libs
@@ -356,18 +348,10 @@ compile <- function(..., output = NULL, args = NULL, cores = detectFreeCores(),
     base     <- paste(base,     extra_args)
     cxx_base <- paste(cxx_base, extra_args)
   }
-  ## BLAS/LAPACK: on Windows `R CMD config BLAS_LIBS` returns a value with
-  ## unexpanded `$(R_HOME)`/`$(R_ARCH)` references. Those go into PKG_LIBS as
-  ## an env var, and make should re-expand them, but in practice the
-  ## expansion is unreliable inside SHLIB-generated link commands, the
-  ## final g++ invocation comes out without any BLAS libs. Sidestepped
-  ## by building an absolute -L path here and skipping `R CMD config`.
+  ## On Windows `R CMD config BLAS_LIBS` holds unexpanded `$(R_HOME)` references
+  ## that SHLIB's link command does not reliably expand, so the -L path is built
+  ## here. R.home("bin") is the arch-specific dir holding Rblas.dll and Rlapack.dll.
   if (.Platform$OS.type == "windows") {
-    ## R.home("bin") already resolves to the arch-specific bin dir (.../bin/x64)
-    ## on R >= 4.2, which is where Rblas.dll / Rlapack.dll live. Appending
-    ## .Platform$r_arch again produced a bogus .../bin/x64/x64 -L path (it only
-    ## ever linked by accident, via the default -L.../bin/x64 that -lR adds).
-    ## dMod requires R >= 4.5.0, so R.home("bin") is always the correct dir.
     r_bin   <- R.home("bin")
     blaslapack <- paste0("-L", shQuote(r_bin), " -lRlapack -lRblas")
   } else {
@@ -376,9 +360,8 @@ compile <- function(..., output = NULL, args = NULL, cores = detectFreeCores(),
   base_libs <- paste(klu_lib, blaslapack)
   cppflags  <- paste0("-I", system.file("include", package = "cppDE"))
 
-  ## Compiler invocation bits cached up front so parallel forks don't each
-  ## re-spawn R-CMD-config. Used by compile_one_obj() for the direct
-  ## $CC/$CXX -c path.
+  ## Compiler settings read once, so parallel forks do not each call
+  ## `R CMD config`.
   cc_bin      <- cfg("CC")
   cxx_bin     <- cfg("CXX")
   cflags_R    <- cfg("CFLAGS")
@@ -425,11 +408,6 @@ compile <- function(..., output = NULL, args = NULL, cores = detectFreeCores(),
     if (roots[i] %in% names(loaded)) try(dyn.unload(loaded[[roots[i]]][["path"]]), silent = TRUE)
   if (!is.null(outfile)) try(dyn.unload(outfile), silent = TRUE)
 
-  ## Compile one file with its own compile/link flags applied via PKG_*.
-  ## Each invocation sets the env just before shelling out to R CMD SHLIB,
-  ## so per-file linkArgs (e.g. Sundials libs for CVODE) reach only the
-  ## files that need them. Works inside mclapply because each fork has its
-  ## own env.
   # A backend's compileArgs can repeat a flag the base already sets (-fopenmp).
   # Compile flags only: repeated -l on a link line can be load-bearing.
   .mergeFlags <- function(...) {
@@ -440,6 +418,8 @@ compile <- function(..., output = NULL, args = NULL, cores = detectFreeCores(),
     paste(unique(tok), collapse = " ")
   }
 
+  ## Compile one file with its own flags set via PKG_*, so per-file linkArgs
+  ## reach only the files that need them. Each mclapply fork has its own env.
   compile_one <- function(entry) {
     extra_c <- entry$compileArgs %||% ""
     pkg_c  <- .mergeFlags(base,     extra_c)
@@ -466,9 +446,8 @@ compile <- function(..., output = NULL, args = NULL, cores = detectFreeCores(),
         unlink(mv)
       }, add = TRUE)
 
-      ## As in the combined-output link: env PKG_LIBS can vanish from SHLIB's
-      ## link command on some R/rtools combinations, so also drop a Makevars.win
-      ## next to the source. compile_one runs serially on Windows, no race.
+      ## PKG_LIBS from the env can vanish from SHLIB's link command on some
+      ## R/rtools combinations, hence the Makevars.win. Serial on Windows.
       mv_path <- file.path(dirname(entry$srcfile), "Makevars.win")
       mv_pre  <- if (file.exists(mv_path)) readLines(mv_path, warn = FALSE) else NULL
       writeLines(c(
@@ -482,9 +461,8 @@ compile <- function(..., output = NULL, args = NULL, cores = detectFreeCores(),
         else                 try(writeLines(mv_pre, mv_path), silent = TRUE)
       }, add = TRUE)
     }
-    ## Use system2() with piped stdout/stderr, not a `2>&1` token: R's system()
-    ## on Windows runs without a shell, so `2>&1` reaches R CMD SHLIB as the make
-    ## override PKG_LIBS=2>&1, stripping all libs and breaking the link.
+    ## system2() with pipes, not a `2>&1` token: without a shell on Windows the
+    ## token reaches R CMD SHLIB as the make override PKG_LIBS=2>&1.
     Rexe <- file.path(R.home("bin"), "R")
     shlib_args <- c("CMD", "SHLIB", shQuote(entry$srcfile))
     if (verbose) cat(shQuote(Rexe), paste(shlib_args, collapse = " "), "\n")
@@ -497,8 +475,6 @@ compile <- function(..., output = NULL, args = NULL, cores = detectFreeCores(),
   }
 
   ## Command compiling a single source to a .o via a direct $CC/$CXX -c call.
-  ## The combined-output path runs these in parallel; the subsequent
-  ## R CMD SHLIB link then sees the objects are up to date and only links.
   obj_cmd <- function(entry, pch = NULL) {
     src     <- entry$srcfile
     extra_c <- entry$compileArgs %||% ""
@@ -514,9 +490,8 @@ compile <- function(..., output = NULL, args = NULL, cores = detectFreeCores(),
 
   compile_one_obj <- function(job) {
     if (verbose) cat(job$cmd, "\n")
-    ## system2() with piped streams, not a `2>&1` token: R's system() on Windows
-    ## has no shell, so the token reaches the compiler as an input file and the
-    ## object never builds. The pipes keep the diagnostics of a failed build.
+    ## system2() with pipes, not a `2>&1` token, which on Windows reaches the
+    ## compiler as an input file. The pipes keep the diagnostics of a failure.
     toks <- .tok(job$cmd)
     out  <- suppressWarnings(system2(toks[1], toks[-1], stdout = TRUE, stderr = TRUE))
     if (verbose && length(out)) writeLines(out)
@@ -528,8 +503,8 @@ compile <- function(..., output = NULL, args = NULL, cores = detectFreeCores(),
   }
 
   if (is.null(output)) {
-    ## One shared object per source, all dyn.load()ed, refuse up front rather
-    ## than failing halfway through a long build.
+    ## One shared object per source, all dyn.load()ed: refuse up front when R
+    ## cannot load that many.
     budget <- .compileDLLBudget()
     if (length(info) > budget)
       stop(length(info), " source files would need as many shared objects, but R can ",
@@ -541,19 +516,9 @@ compile <- function(..., output = NULL, args = NULL, cores = detectFreeCores(),
     for (r in roots_full) .reloadDLL(paste0(r, so))
     .clearSymbols()
   } else {
-    ## Combined output: per-file compile to .o (parallel on Unix when cores>1,
-    ## serial otherwise, including on Windows), then a single R CMD SHLIB
-    ## link over the original sources. Because every .o is freshly written
-    ## above, make sees them as up-to-date and only runs the link recipe;
-    ## passing the source list lets SHLIB pick the C++ linker when any
-    ## source is .cpp, which a .o-only invocation would miss. The pre-compile
-    ## also has to run on Windows: the single-call SHLIB (compile + link in
-    ## one go) was occasionally producing .dll files that LoadLibrary
-    ## couldn't resolve when the source pulled in BLAS; splitting compile and
-    ## link sidesteps that.
-    ## A precompiled header is keyed to one flag set, so it is only built when
-    ## every C++ source shares its compile arguments and there are enough of
-    ## them to amortise it.
+    ## Combined output: each source compiled to a .o, then one R CMD SHLIB link
+    ## over the sources, so SHLIB picks the C++ linker. A precompiled header
+    ## needs one flag set over enough C++ sources.
     is_cxx <- grepl("\\.cpp$", files, ignore.case = TRUE)
     cxxArgs <- unique(vapply(info[is_cxx], function(e) e$compileArgs %||% "", ""))
     pch <- NULL
@@ -592,8 +557,7 @@ compile <- function(..., output = NULL, args = NULL, cores = detectFreeCores(),
     if (any(bad)) stop(as.character(res[bad][[1]]), call. = FALSE)
     try(saveRDS(keys, cachefile), silent = TRUE)
 
-    ## Link step: union of every entry's linkArgs (dedup) so Sundials-dependent
-    ## files still pull their libs.
+    ## The link takes the union of every entry's linkArgs.
     all_link <- unique(unlist(lapply(info, function(e) strsplit(trimws(e$linkArgs %||% ""), "\\s+")[[1]])))
     all_link <- all_link[nzchar(all_link)]
     all_compile <- unique(unlist(lapply(info, function(e) strsplit(trimws(e$compileArgs %||% ""), "\\s+")[[1]])))
@@ -601,10 +565,9 @@ compile <- function(..., output = NULL, args = NULL, cores = detectFreeCores(),
 
     output <- basename(sub(paste0("\\", so, "$"), "", output))
 
-    ## Past the argument limit the objects go into a static archive, appended in
-    ## chunks, and SHLIB gets one anchor source plus the archive. The anchor is a
-    ## C++ source when there is one: SHLIB picks the C++ linker from the sources
-    ## it is handed, not from the archive contents.
+    ## Past the argument limit the objects go into a static archive in chunks,
+    ## and SHLIB gets one anchor source plus the archive. The anchor is C++ when
+    ## possible, as SHLIB picks the linker from the sources only.
     link_files <- files
     if (nchar(paste(shQuote(files), collapse = " ")) > .compileCmdLimit()) {
       anchor <- if (any(is_cxx)) which(is_cxx)[1] else 1L
@@ -644,12 +607,9 @@ compile <- function(..., output = NULL, args = NULL, cores = detectFreeCores(),
       PKG_LIBS     = pkg_libs
     )
 
-    ## Belt-and-suspenders for Windows: env-imported PKG_LIBS has been
-    ## observed to vanish from SHLIB's generated link command on some R/rtools
-    ## combinations, leaving the .dll unlinked against BLAS/LAPACK. Drop a
-    ## per-link Makevars(.win) alongside the source files so make picks it up
-    ## even if the environment doesn't make it through. It is removed after
-    ## the link so the directory state stays hermetic.
+    ## PKG_LIBS from the env can vanish from SHLIB's link command on some
+    ## R/rtools combinations, so a Makevars(.win) next to the sources repeats
+    ## the flags. It is restored after the link.
     mv_dir  <- dirname(files[1])
     mv_name <- if (.Platform$OS.type == "windows") "Makevars.win" else "Makevars"
     mv_path <- file.path(mv_dir, mv_name)
@@ -685,17 +645,9 @@ compile <- function(..., output = NULL, args = NULL, cores = detectFreeCores(),
     out <- outfile
     try(dyn.unload(out), silent = TRUE)
     if (file.exists(out)) unlink(out)
-    ## Link, capturing stdout+stderr via system2() pipes. Strip the compiler
-    ## banner afterwards: the .o files are already fresh from compile_one_obj,
-    ## so make only runs the link recipe and "using C/C++ compiler:" would be
-    ## misleading. The streams go through system2(stdout/stderr = TRUE)
-    ## rather than appending a `2>&1` token to a command string: on Windows
-    ## that trailing token is not consumed by a shell but swallowed by
-    ## R CMD SHLIB as the make override `PKG_LIBS=2>&1`, which beats every
-    ## Makevars/R_MAKEVARS_USER assignment and strips the BLAS/LAPACK libs
-    ## (breaking the link of any model that calls them with "undefined
-    ## reference to dgemm_"). system2() keeps the argument vector clean and is identical on
-    ## Linux/macOS, where the shell would have consumed the redirection anyway.
+    ## Link through system2() pipes, not a `2>&1` token, which on Windows
+    ## becomes the make override PKG_LIBS=2>&1. The compiler banner is dropped,
+    ## as only the link recipe runs.
     Rexe <- file.path(R.home("bin"), "R")
     shlib_args <- c("CMD", "SHLIB", shQuote(link_files), "-o", shQuote(out))
     if (verbose) cat(shQuote(Rexe), paste(shlib_args, collapse = " "), "\n")
@@ -714,10 +666,8 @@ compile <- function(..., output = NULL, args = NULL, cores = detectFreeCores(),
            paste(out_lines, collapse = "\n"))
     .reloadDLL(out)
     .clearSymbols()
-    ## A deSolve leaf keeps its cOde model in the kernel's closure. cOde takes
-    ## the entry point names from the model's own value but the shared object
-    ## to load from its `modelname`, so that attribute has to name the batched
-    ## object now.
+    ## cOde loads a deSolve leaf's entry points from the shared object its
+    ## `modelname` names, which must now be the combined one.
     for (o in fn_objs) .retargetCode(o, output)
     ## Only arguments passed as a plain variable can have their modelname
     ## updated in the caller; an expression has nothing to assign back to.
@@ -752,13 +702,9 @@ getLocalDLLs <- function() {
 
 
 
-## Loading a shared object that is already loaded is a no-op in R, so a rebuilt
-## file would keep serving the old code. Entry points resolve by name, so
-## unloading first is safe even for objects still in use.
 ## A base name no loaded shared library uses: the desired one if it is
-## free, otherwise the smallest `<name>_<i>`, i >= 2, with a warning. Mirrors
-## cppDE's `unique_modelname()`, which the model constructors apply to their
-## own names; the two must stay in step.
+## free, otherwise the smallest `<name>_<i>`, i >= 2, with a warning. Must
+## match cppDE's `unique_modelname()`.
 .uniqueLibname <- function(name) {
   loaded <- names(getLoadedDLLs())
   if (!name %in% loaded) return(name)
@@ -776,6 +722,8 @@ getLocalDLLs <- function() {
 }
 
 
+## Loading an already loaded shared object is a no-op in R, so a rebuilt file is
+## unloaded first. Entry points resolve by name, so this is safe for objects in use.
 .reloadDLL <- function(path) {
   p <- normalizePath(path, winslash = "/", mustWork = FALSE)
   if (p %in% .loadedDLLPaths()) try(dyn.unload(p), silent = TRUE)
@@ -841,16 +789,9 @@ loadDLL <- function(...) {
 }
 
 
-## compileInfo plumbing (moved from classes.R) ----------------------------------------
+## compileInfo plumbing ----------------------------------------------------------------
 
 ## ODE model class -------------------------------------------------------------------
-
-## Collect per-sub-object build info from ODE model pieces.
-## Each backend (cOde::funC, cppDE::cppODE, cppDE::cvode) may attach
-## `srcfile`, `compileArgs`, and `linkArgs` to its func/extended result. For
-## backends that don't (cOde), the fallback is modelname-based file discovery
-## in the current working directory. The resulting list is the single
-## authoritative source consulted by `compile()` when given dMod fn objects.
 
 ## Dedup keys, cached on the list: merging is pairwise, so recomputing them
 ## every time would make summing a few thousand conditions quadratic.
@@ -861,10 +802,8 @@ loadDLL <- function(...) {
                         else NA_character_, character(1))
 }
 
-## Merge two compileInfo lists, deduplicating by srcfile (per file, the first
-## occurrence wins, that keeps the originating compile/link flags). Returns
-## NULL when both inputs are empty so the attribute stays absent on objects
-## that never had native code to begin with.
+## Merge two compileInfo lists by srcfile, the first occurrence winning. NULL
+## when both are empty, so objects without native code have no attribute.
 .mergeCompileInfo <- function(a, b) {
   if (!length(a) && !length(b)) return(NULL)
   ka <- .compileInfoKeys(a)
@@ -877,6 +816,8 @@ loadDLL <- function(...) {
   out
 }
 
+## Build info of ODE model pieces from their `srcfile`, `compileArgs` and
+## `linkArgs`, else from modelname-based file discovery in the working directory.
 .collectCompileInfo <- function(...) {
   objs <- list(...)
   objs <- objs[!vapply(objs, is.null, logical(1))]
@@ -899,8 +840,7 @@ loadDLL <- function(...) {
       srcfile     = src,
       compileArgs = attr(o, "compileArgs") %||% "",
       linkArgs    = attr(o, "linkArgs")    %||% "",
-      ## cppDE flags a sparse-Jacobian model here; the flag has to travel with
-      ## the file because `compile()` only ever sees the wrapping dMod fn.
+      ## Sparse-Jacobian flag, per file, as `compile()` sees only the dMod fn.
       sparse      = isTRUE(attr(o, "sparse"))
     )
   }

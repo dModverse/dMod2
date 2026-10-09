@@ -148,11 +148,9 @@ SEXP rows_for(SEXP arr, SEXP nms, bool three_d) {
 
 }  // namespace
 
-// Attach the derivative attributes of a parvec to an already-subset numeric.
-// `out` holds the values and names; `deriv`/`deriv2` are the originals, whose
-// rows are restricted to those names. Returns R_NilValue for shapes it does not
-// handle so `[.parvec` can fall back. Index semantics stay in R: this never
-// looks at how `out` was selected.
+// Attach `deriv`/`deriv2`, restricted to the names of the already-subset `out`.
+// Index semantics stay in R; R_NilValue for shapes it does not handle, so
+// `[.parvec` can fall back.
 // [[Rcpp::export]]
 SEXP parvec_attach(SEXP out, SEXP deriv, SEXP deriv2) {
   if (TYPEOF(out) != REALSXP) return R_NilValue;
@@ -254,7 +252,7 @@ SEXP parvec_concat(SEXP lst) {
 
   int nprot = 2;
   if (any_deriv) {
-    // Rows of the blocks that have a deriv, stacked in order -- rbind().
+    // Rows of the blocks that have a deriv, stacked in order as rbind() does.
     R_xlen_t nr = 0;
     for (R_xlen_t k = 0; k < m; ++k) {
       SEXP d = Rf_getAttrib(VECTOR_ELT(lst, k), Rf_install("deriv"));

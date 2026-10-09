@@ -1,13 +1,5 @@
-# Behavioral tests for Y() (observation function).
-#
-# Verifies:
-#   * value: observable g(states) evaluates correctly
-#   * composition: (Y * Xs)(...) equals Y applied to Xs output
-#   * derivMode: "reverse" and "forward" builds agree on the value
-#   * attachInput: pass-through of inputs alongside outputs
-#   * gradient: analytic chain rule on y = A^2 (no numDeriv)
-#
-# Second-order chain rule is covered by test-deriv2-Y.R.
+# Behavioral tests for the observation function Y(). The second-order chain
+# rule is covered by test-deriv2-Y.R.
 
 skip_if_no_compile <- function() {
   testthat::skip_if_not_installed("cppDE")
@@ -128,7 +120,7 @@ test_that("Y with attachInput = TRUE returns inputs and outputs", {
 })
 
 
-## ---- Gradient: analytic chain rule on y = A^2 --------------------------
+## ---- Gradient: analytic chain rule on a nonlinear observable -----------
 
 test_that("Y gradient on y = A^2 follows the analytic chain rule dy/dtheta = 2 A * dA/dtheta", {
   skip_if_no_compile()
@@ -141,10 +133,6 @@ test_that("Y gradient on y = A^2 follows the analytic chain rule dy/dtheta = 2 A
   out <- prd_sq(times = times, pars = pars, deriv = TRUE)
   d <- attr(out$C1, "deriv")  # [time, var, par]
 
-  # Closed form: A(t) = A0 * exp(-k * t), y(t) = A(t)^2.
-  #   dy/dA0 = 2 * A * (dA/dA0) = 2 * A0 * exp(-k*t) * exp(-k*t) = 2 * A0 * exp(-2 k t)
-  #   dy/dk  = 2 * A * (dA/dk)  = 2 * A0 * exp(-k*t) * (-t * A0 * exp(-k*t))
-  #                              = -2 * t * A0^2 * exp(-2 k t)
   A0 <- pars[["A"]]; k <- pars[["k"]]
   ref_dA <- 2 * A0 * exp(-2 * k * times)
   ref_dk <- -2 * times * A0^2 * exp(-2 * k * times)
@@ -153,9 +141,7 @@ test_that("Y gradient on y = A^2 follows the analytic chain rule dy/dtheta = 2 A
 })
 
 
-# ============================================================================
-# Edge case: Y with pure-numeric observable (no outer parameters)
-# ============================================================================
+## ---- Edge case: pure-numeric observable, no outer parameters -----------
 
 test_that("Y with pure-numeric observable composes with an Xs prediction", {
   fx <- .y_fx()
@@ -166,9 +152,7 @@ test_that("Y with pure-numeric observable composes with an Xs prediction", {
 })
 
 
-# ============================================================================
-# Parameter derivatives the prediction does not provide
-# ============================================================================
+## ---- Parameter derivatives the prediction does not provide -------------
 
 test_that("g * Xt() * P() differentiates by the outer parameters", {
   skip_if_no_compile()

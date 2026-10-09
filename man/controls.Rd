@@ -66,6 +66,8 @@ The second positional argument is \code{name} for an \code{objfn} and \code{cond
 for an \code{fn}; name both arguments to avoid confusion.
 }
 \examples{
+old <- options(dMod.outdir = tempdir())
+
 ## parfn with condition
 p <- P(eqnvec(x = "-a*x"), method = "implicit", condition = "C1")
 controls(p)
@@ -77,6 +79,8 @@ g <- Y(g = eqnvec(y = "s*x"), f = NULL, states = "x", parameters = "s")
 controls(g)
 controls(g, name = "attachInput")
 controls(g, name = "attachInput") <- TRUE
+
+options(old)
 }
 \seealso{
 \code{\link[=normL2]{normL2()}}, \code{\link[=P]{P()}}, \code{\link[=Y]{Y()}}

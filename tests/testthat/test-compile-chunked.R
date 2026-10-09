@@ -96,9 +96,7 @@ test_that("compile() reuses objects whose source and command are unchanged", {
 
   ## The index keys on source bytes and compile command, so the shared object
   ## may take a fresh name each time and the objects are still reused.
-  # expect_no_match() forces its argument twice (quasi_label, then
-  # check_character), which would compile and load a second time, so the
-  # side-effecting call is evaluated once into a variable first.
+  # expect_no_match() forces its argument twice, so compile runs once into a variable.
   p <- mk()
   out1 <- capture.output(compile(p, output = "reuse_all_1", cores = 1), type = "message")
   expect_no_match(out1, "reusing")

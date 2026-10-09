@@ -106,7 +106,7 @@ NULL
 
 
 
-## combine (moved from tools.R) ----------------------------------------------
+## combine ----------------------------------------------
 
 #' Combine Data Frames or Matrices by Rows
 #'
@@ -165,7 +165,7 @@ combine <- function(...) {
 
 
 
-## wide2long (moved from tools.R) --------------------------------------------
+## wide2long --------------------------------------------
 
 #' Translate Wide Format into Long Format
 #'
@@ -253,7 +253,7 @@ wide2long.list <- function(out, keep = 1, na.rm = FALSE) {
 
 
 
-## long2wide (moved from tools.R) --------------------------------------------
+## long2wide --------------------------------------------
 
 #' Translate Long Format into Wide Format
 #'
@@ -283,7 +283,7 @@ long2wide <- function(out) {
 
 
 
-## lbind (moved from tools.R) ------------------------------------------------
+## lbind ------------------------------------------------
 
 #' Bind a Named List of Data Frames into One Data Frame
 #'

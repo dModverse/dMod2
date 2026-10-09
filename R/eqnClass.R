@@ -29,8 +29,8 @@ as.eqnlist.data.frame <- function(data, volumes = NULL, compartments = NULL, com
   states <- setdiff(colnames(data), c("Description", "Rate"))
   smatrix <- as.matrix(data[, states]); colnames(smatrix) <- states
 
-  # An explicit `volumes` is the legacy way of stating the layout: it must not
-  # be overruled by a layout the data.frame merely brings along as attributes.
+  # An explicit `volumes` states the layout and is not overruled by a layout
+  # the data.frame brings along as attributes.
   inherit_layout <- is.null(volumes)
   if (is.null(volumes))             volumes             <- attr(data, "volumes")
   if (is.null(compartments) && inherit_layout)  compartments  <- attr(data, "compartments")
@@ -192,10 +192,9 @@ conservedQuantities <- function(S, weight = c("none", "volume"), volumes = NULL)
   .uniqueName(paste0("total", lcs), c(used, parameters))
 }
 
-## Extract the linear coefficient vector of `expr` over `states` via 1-hot
-## evaluation, then verify linearity by re-evaluating at the all-twos point
-## (linear sum must equal 2 * sum(coefs); any product term breaks this).
-## Returns NULL on unknown symbols or detected nonlinearity.
+## Linear coefficients of `expr` over `states` by 1-hot evaluation, checked
+## for linearity at the all-twos point (value must equal 2 * sum(coefs)).
+## NULL on unknown symbols or nonlinearity.
 #' @keywords internal
 .linearCoefs <- function(expr, states, tol = 1e-8) {
   syms <- getSymbols(expr)
@@ -664,11 +663,9 @@ setCompartmentVolume <- function(eqnlist, ..., rules = NULL) {
 }
 
 
-# Reactions as a data.frame for the steady-state backend, which sees only rates
-# and stoichiometry while getFluxes() scales every flux by V_ref / V_X. One csv
-# row holds one rate, so a reaction touching states at different ratios is
-# split into one row per ratio. Attribute "volumes": V_X per state, "1" for
-# amount states; rows of one reaction share rate * V_X.
+# Reactions for the steady-state backend, with getFluxes()' V_ref / V_X scaling
+# split into one row per distinct ratio of a reaction. Attribute "volumes": V_X
+# per state, "1" for amount states; rows of one reaction share rate * V_X.
 .volumeScaledReactions <- function(eqnlist) {
 
   data <- as.data.frame(eqnlist)
@@ -756,11 +753,9 @@ getFluxes <- function(eqnlist, type = c("conc", "amount")) {
   isAmount <- setNames(variables %in% eqnlist$amountStates, variables)
   volumes[isAmount] <- "1"
 
-  # Resolve per-reaction reference compartment V_ref (concentration-rate frame).
-  # Priority: (1) user-supplied reactionCompartment[i] if non-NA, (2) unique
-  # educt compartment, (3) unique product compartment for pure synthesis.
-  # When educts span multiple compartments and no annotation is given, the
-  # call errors with a message pointing at `reactionCompartment`.
+  # Reference compartment V_ref per reaction: reactionCompartment[i] if non-NA,
+  # else the unique educt compartment, else the unique product compartment for
+  # pure synthesis. Educts in several compartments without annotation error.
   vref_cid <- .refCompartments(SMatrix, compOf, reactionCompartment, description)
   vref_vol <- .refVolumes(vref_cid, compartments)
 
@@ -1269,7 +1264,6 @@ format.eqnvec <- function(x, ...) {
   eqns <- sapply(eqnvec, function(eqn) {
     parser.out <- getParseData(parse(text = eqn, keep.source = TRUE))
     parser.out <- subset(parser.out, terminal == TRUE)
-    # parser.out$text[parser.out$text == "*"] <- "*" (avoid non-ASCII characters for CRAN)
     out <- paste(parser.out$text, collapse = "")
     return(out)
   })
@@ -1345,7 +1339,7 @@ print.eqnvec <- function(x, width = 140, pander = FALSE, ...) {
     pander::panderOptions("table.split.table", Inf)
     pander::panderOptions("table.split.cells", Inf)
     out <- as.data.frame(unclass(eqnvec), stringsAsFactors = FALSE)
-    colnames(out) <- "" #  as.character(substitute(eqnvec))
+    colnames(out) <- ""
     out[, 1] <- format.eqnvec(out[, 1])
     pander::pander(out)
 
@@ -1450,7 +1444,7 @@ getLinVars <- function(eqnvec) {
 
 
 
-## eqnvec / eqnlist constructors (moved from classes.R) ----------------------------------------
+## eqnvec / eqnlist constructors ----------------------------------------
 
 ## Equation classes -------------------------------------------------------
 
@@ -1703,7 +1697,7 @@ log10Transform <- function(f, suffix = "_l10", simplify = TRUE) {
     quotient <- paste0("(", f[[k]], ")/(", k, ")")
     if (!is.null(spy)) {
       # cancel removes the state where it divides out, expand then distributes
-      # what is left over the division: (-A*k1 + B*k2)/A becomes -k1 + B*k2/A
+      # the remainder over the division.
       cancelled <- tryCatch(
         gsub("\\*\\*", "^", as.character(
           spy$expand(spy$cancel(spy$sympify(gsub("\\^", "**", quotient)))))),

@@ -240,8 +240,6 @@ lsdMod <- function(classlist = c("odemodel", "parfn", "prdfn", "obsfn", "objfn",
   for (a in classlist) {
     flist <- which(sapply(glist, function(f) any(class(f) == a)))
     out[[a]] <- names(glist[flist])
-    #cat(a,": ")
-    #cat(paste(out[[a]], collapse = ", "),"\n")
   }
   
   unlist(out)

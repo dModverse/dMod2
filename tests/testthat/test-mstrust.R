@@ -1,12 +1,5 @@
-# ============================================================================
-# mstrust() (multi-start trust), profile() (profile likelihood),
-# vcov() (variance-covariance), and confint.parframe() (profile CIs).
-#
-# All four interact closely. We use convex-quadratic / Gaussian objectives
-# (constraintL2) so the expected behaviour is closed-form. Real-fit
-# scenarios are covered by the FOCEI / ECM suite in test-focei.R and
-# test-nlmefit.R.
-# ============================================================================
+# mstrust(), profile(), vcov() and confint.parframe() on quadratic objectives
+# (constraintL2), so the expected behaviour has a closed form.
 
 
 # ---- mstrust ------------------------------------------------------------
@@ -100,9 +93,6 @@ test_that("profile on a 1D quadratic increases monotonically on both sides", {
 
 
 test_that("profile on a 1D Gaussian crosses chi^2 = 3.84 at +/- z(0.95)*sigma", {
-  # constraintL2(mu = 0, sigma = sigma) value at theta is (theta/sigma)^2.
-  # 95% chi-square threshold qchisq(0.95, 1) ~ 3.84 crosses at
-  # theta = +/- sqrt(3.84) * sigma = +/- 1.96 * sigma.
   sigma <- 0.4
   obj <- constraintL2(mu = c(theta = 0, nuisance = 0), sigma = sigma)
   prof <- profile(obj, pars = c(theta = 0, nuisance = 0),
@@ -118,8 +108,8 @@ test_that("profile on a 1D Gaussian crosses chi^2 = 3.84 at +/- z(0.95)*sigma", 
 
 
 test_that("profile respects limits on a flat direction", {
-  # Objective (a+b)^2 + c^2 is exactly flat along a - b, so the stepsize
-  # doubles every step; limits must clamp the last step, not be overshot.
+  # Along an exactly flat direction the stepsize doubles every step; limits
+  # clamp the last step rather than being overshot.
   nm <- c("a", "b", "c")
   obj <- function(pars, fixed = NULL, deriv = TRUE, ...) {
     pp <- c(pars, fixed)[nm]
@@ -148,8 +138,6 @@ test_that("profile respects limits on a flat direction", {
 # ---- vcov ---------------------------------------------------------------
 
 test_that("vcov(fit) equals solve(0.5 * H) for a quadratic with known Hessian", {
-  # constraintL2 with sigma = 1: obj(p) = sum((p - mu)^2), Hessian = 2 I.
-  # After trust converges to p = mu, vcov = (0.5 * 2 I)^-1 = I.
   mu <- c(a = 0.5, b = -0.3)
   obj <- constraintL2(mu = mu, sigma = 1)
   fit <- trust(obj, parinit = c(a = 0, b = 0),
@@ -157,7 +145,6 @@ test_that("vcov(fit) equals solve(0.5 * H) for a quadratic with known Hessian", 
   V <- vcov(fit)
   expect_equal(unname(V), diag(2), tolerance = 1e-6)
 
-  # sigma != 1: H = 2 / sigma^2, vcov = sigma^2 * I.
   mu2 <- c(a = 0.0, b = 0.0)
   obj2 <- constraintL2(mu = mu2, sigma = 0.5)
   fit2 <- trust(obj2, parinit = c(a = 0.2, b = -0.2),

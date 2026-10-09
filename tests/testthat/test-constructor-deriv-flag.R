@@ -1,7 +1,6 @@
-# Constructor-level `deriv = TRUE/FALSE` gating for P, Pexpl, Pimpl and Y. Symmetric with the existing `deriv2` flag: the
-# constructor decides whether the artifact has first-order
-# sensitivities, and the runtime call errors out if it asks for
-# something the construction didn't produce.
+# Constructor-level `deriv` gating for P, Pexpl, Pimpl and Y, as for `deriv2`:
+# the constructor decides whether first-order sensitivities exist, and a call
+# asking for what was not built errors.
 
 skip_if_no_compile <- function() {
   testthat::skip_if_not_installed("cppDE")

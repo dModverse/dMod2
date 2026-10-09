@@ -59,12 +59,8 @@ importSbml <- function(modelpath, keep = NULL) {
   json_content <- rjson::fromJSON(file = tmpfile_json)
   json_content <- .renameNonSyntactic(json_content)
 
-  # `S` from the python side is a list-of-lists with shape
-  # `[n_species][n_reactions]`. rjson::fromJSON collapses fully-nested
-  # arrays whose inner length is 1 into a bare vector, which breaks
-  # `cbind`'s list-of-columns contract. The reshape goes against the known
-  # state/reaction counts so the resulting matrix is always
-  # `[n_reactions rows x n_states cols]`, matching `eqnlist`'s convention.
+  # rjson collapses inner arrays of length 1 into a bare vector, so `S` is
+  # reshaped from the known counts into `[n_reactions x n_states]`.
   S_raw <- json_content[["S"]]
   n_states <- length(json_content[["stateNames"]])
   n_rxns   <- length(json_content[["v"]])
@@ -78,11 +74,8 @@ importSbml <- function(modelpath, keep = NULL) {
     S[S == 0] <- NA
   }
 
-  # libsbml L3 emits natural log as `ln(x)`, but both R's stats::D() and the
-  # C math library expect `log(x)` for natural log. Apply this normalisation
-  # to every formula channel, rates, initial-value expressions, and
-  # AssignmentRule RHSs, at a single point. The leading boundary
-  # `(^|[^A-Za-z0-9_.])` prevents matching `eln`, `arcln`, etc.
+  # libsbml writes natural log as `ln(x)`, R and C expect `log(x)`. Every
+  # formula passes through here; the leading boundary leaves `eln` intact.
   .normalise_formula <- function(s) {
     if (length(s) == 0L) return(s)
     s <- stringr::str_replace_all(s, "\\*\\*", "^")
@@ -101,11 +94,8 @@ importSbml <- function(modelpath, keep = NULL) {
   spc_json  <- json_content[["speciesCompartments"]]
   if (!is.null(comp_json) && length(comp_json) > 0L) {
     for (c in comp_json) {
-      # Compartments with size = 1 (and no rule) have no symbolic content --
-      # storing them as the literal "1" keeps the compartment ID out of the
-      # kinetic laws, which is what dMod's roundtrip expects when the source
-      # eqnlist had volume "1". Otherwise use the SBML compartment ID as the
-      # volume symbol so the trafo can override it.
+      # A unit-size compartment becomes the literal "1", keeping its id out of
+      # the kinetic laws; otherwise the id is a volume symbol the trafo can set.
       trivial <- !is.null(c$size) && is.numeric(c$size) && isTRUE(c$size == 1)
       # An InitialAssignment on the compartment is its symbolic volume.
       volume <- if (!is.null(c$sizeAssignment)) .normalise_formula(c$sizeAssignment)
@@ -122,10 +112,9 @@ importSbml <- function(modelpath, keep = NULL) {
     compartmentOf <- NULL
   }
 
-  # Normalize each kinetic law: rate_dMod = K / V_ref. Any compartment works as
-  # V_ref, getFluxes() multiplies it back in, as long as the choice is
-  # recorded, which is what `reactionCompartment` is for. The educt compartment
-  # is the natural one; pure-synthesis reactions fall back to the product side.
+  # rate_dMod = K / V_ref. Any compartment works as V_ref once recorded in
+  # `reactionCompartment`; the educt side is preferred, the product side is the
+  # fallback for pure synthesis.
   reactionCompartment <- NULL
   if (!is.null(compartmentOf) && !is.null(S)) {
     reactionCompartment <- rep(NA_character_, length(v))
@@ -152,17 +141,12 @@ importSbml <- function(modelpath, keep = NULL) {
   x0 <- setNames(.normalise_formula(json_content[["x0"]]),
                  json_content[["stateNames"]])
 
-  # Inline AssignmentRules from the SBML model. Each rule `lhs := rhs` becomes
-  # an algebraic substitution applied to all rates and species initials. PEtab
-  # benchmark models (e.g. Boehm_JProteomeRes2014) use rules to encode
-  # time-varying inputs like `BaF3_Epo := 1.25e-7 * exp(-k * time)`.
-  # Iterate to a fixed point so chained rules resolve. After inlining, the
-  # LHS symbols are no longer free parameters and are dropped from `pars`.
+  # AssignmentRules `lhs := rhs` are inlined into rates and initials up to a
+  # fixed point, so chained rules resolve; their LHS are dropped from `pars`.
   rules <- json_content[["assignmentRules"]]
-  # An <initialAssignment> on a constant parameter is its value throughout, so
-  # it is substituted like a rule; a species in it stands for its initial
-  # value, as the assignment is evaluated once at the start. A parameter a
-  # RateRule drives is promoted to a state further down and keeps its own.
+  # An initialAssignment on a constant parameter is substituted like a rule,
+  # with species standing for their initial values. A parameter driven by a
+  # RateRule is promoted to a state below instead.
   par_ia <- json_content[["parameterAssignments"]]
   for (nm in intersect(keep, names(par_ia))) {
     v0 <- tryCatch(eval(parse(text = .normalise_formula(par_ia[[nm]])), baseenv()),
@@ -180,8 +164,7 @@ importSbml <- function(modelpath, keep = NULL) {
   if (length(rules)) {
     rule_lhs <- names(rules)
     rule_rhs <- .normalise_formula(unlist(rules, use.names = FALSE))
-    # Wrap each RHS in parens so substitution into a sub-expression keeps
-    # operator precedence intact (e.g. `1.25e-7 * exp(...)` inside `a * lhs`).
+    # Parenthesised so substitution into a sub-expression keeps precedence.
     rule_rhs <- paste0("(", rule_rhs, ")")
     max_iter <- length(rule_lhs) + 1L
     for (it in seq_len(max_iter)) {
@@ -193,12 +176,9 @@ importSbml <- function(modelpath, keep = NULL) {
     pars <- pars[setdiff(names(pars), rule_lhs)]
   }
 
-  # --- rate rules ---
-  # `<rateRule variable="X">` defines dX/dt = rhs. Per SBML spec, X cannot
-  # also be produced/consumed by reactions, so the new column is independent
-  # of existing kinetic laws. dC/dt is intensive already, so the rate is
-  # appended AFTER the volume-division loop above (no /V wrap). RateRules on
-  # non-species (parameter / compartment) are skipped with a warning.
+  # ---- rate rules ----
+  # A RateRule defines dX/dt = rhs and SBML forbids reactions on X. It is added
+  # after the volume division above, since dC/dt is already intensive.
   rate_rules <- json_content[["rateRules"]]
   if (length(rate_rules)) {
     rr_lhs <- names(rate_rules)
@@ -212,10 +192,9 @@ importSbml <- function(modelpath, keep = NULL) {
         rr_rhs <- new_rr
       }
     }
-    # A RateRule may target a non-constant parameter or compartment. That is a
-    # dynamic quantity, so promote it to a state: its SBML value becomes the
-    # initial condition and the rule becomes its rate. States without a
-    # compartment land in the unit-volume default, which leaves dX/dt = rhs.
+    # A RateRule on a non-constant parameter or compartment promotes it to a
+    # state with its SBML value as initial condition. Without a compartment it
+    # gets unit volume, so dX/dt = rhs.
     promote <- setdiff(rr_lhs, states)
     if (length(promote)) {
       par_ia <- json_content[["parameterAssignments"]]
@@ -233,10 +212,8 @@ importSbml <- function(modelpath, keep = NULL) {
 
     for (k in seq_along(rr_lhs)) {
       var <- rr_lhs[k]; rhs <- rr_rhs[k]
-      # Append a virtual reaction: stoichiometry +1 on `var`, 0 elsewhere;
-      # rate string = rhs. After eqnlist construction this contributes
-      # +rhs to the RHS row of `var`, which is exactly the rate rule.
-      # An amount species has V_X = 1, so divide its volume out to leave dn/dt = rhs.
+      # A virtual reaction with stoichiometry +1 on `var` and rate rhs. An amount
+      # species has V_X = 1, so its volume is divided out to leave dn/dt = rhs.
       if (var %in% amountStates && !is.null(compartmentOf)) {
         var_vol <- compartments[[unname(compartmentOf[var])]]$volume
         if (!identical(var_vol, "1")) rhs <- paste0("(", rhs, ")/(", var_vol, ")")
@@ -272,12 +249,9 @@ importSbml <- function(modelpath, keep = NULL) {
     observables <- setNames(as.list(obs_chr), names(observables))
   }
 
-  # --- events ---
-  # SBML <event> -> dMod eventlist (one row per <eventAssignment>). Triggers
-  # of the form `time >=/== T` (numeric or symbolic T) populate `time`; other
-  # triggers fall back to a root expression of the form `lhs - (rhs)` so the
-  # ODE solver can detect the zero crossing. Method is always "replace"
-  # (SBML eventAssignments are assignment-style by spec).
+  # ---- events ----
+  # One "replace" row per eventAssignment. A `time >= T` trigger sets `time`,
+  # any other trigger becomes the root `lhs - (rhs)`.
   events_json <- json_content[["events"]]
   events_df <- NULL
   events_src <- NULL
@@ -348,9 +322,6 @@ importSbml <- function(modelpath, keep = NULL) {
 }
 
 
-# SBML ids may start with an underscore or a digit, which R cannot parse, and
-# every symbolic step downstream goes through `parse()`. The rename happens on
-# the raw JSON, before anything reads a formula.
 # Reserved in C++, so a state or compartment with one of these names cannot
 # reach the code generator unrenamed.
 .CPP_KEYWORDS <- c(
@@ -394,6 +365,8 @@ importSbml <- function(modelpath, keep = NULL) {
   x
 }
 
+# SBML ids may start with an underscore or a digit, which R cannot parse. They
+# are renamed on the raw JSON, before anything reads a formula.
 .renameNonSyntactic <- function(js) {
   ids <- unique(c(
     unlist(js[c("stateNames", "parameterNames")], use.names = FALSE),
@@ -548,10 +521,7 @@ exportSbml <- function(eqnlist, parameters = NULL, inits = NULL, filepath,
               else unname(which(apply(!is.na(smatrix), 1L, any)))
   rxn_list <- lapply(rxn_rows, function(i) {
     row_i <- smatrix[i, ]
-    # `which()` on a named vector preserves names, which would propagate
-    # through lapply() into a *named* list, rjson then serialises it as
-    # a JSON object, breaking the array-of-dicts contract dmodToSbml.py
-    # expects. unname() the indices.
+    # Unnamed indices, so rjson writes arrays rather than objects.
     educt_idx <- unname(which(!is.na(row_i) & row_i < 0))
     product_idx <- unname(which(!is.na(row_i) & row_i > 0))
 
@@ -616,8 +586,7 @@ exportSbml <- function(eqnlist, parameters = NULL, inits = NULL, filepath,
 
 
 .dmod_libsbml_python <- function() {
-  # Explicit override wins (existing user envs, conda, CI with prebuilt
-  # interpreters, ...). Skip reticulate provisioning entirely.
+  # An explicit interpreter bypasses reticulate provisioning.
   override <- Sys.getenv("DMOD_LIBSBML_PYTHON", unset = "")
   python <- if (nzchar(override)) {
     if (!file.exists(override))
@@ -641,11 +610,8 @@ exportSbml <- function(eqnlist, parameters = NULL, inits = NULL, filepath,
     })
   }
 
-  # Probe `import libsbml` once per session. For the override path this
-  # catches a wrong interpreter early; for the reticulate path it is a
-  # cheap sanity check that the requirement actually resolved. Cached via
-  # an env var so the ~30 ms python spawn does not repeat across
-  # importSbml / exportSbml calls.
+  # `import libsbml` is probed once per session, cached in an env var, to catch
+  # a wrong interpreter or an unresolved requirement early.
   if (!identical(Sys.getenv("DMOD_LIBSBML_OK", unset = ""), "1")) {
     status <- suppressWarnings(
       system2(python, args = c("-c", shQuote("import libsbml")),

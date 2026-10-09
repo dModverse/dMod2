@@ -98,7 +98,7 @@ summary.parlist <- function(object, ...) {
 
 
 ## Termination reason per fit, as reported by trust()$stopReason. NA for fits
-## that errored or predate the field. "gradient" is the only certified stop;
+## that errored or lack the field. "gradient" is the only certified stop;
 ## "stagnation" and "iterlim" mean the run ran out of resolution or budget.
 .stopReasonParlist <- function(x) {
   vapply(x, function(fit) {
@@ -898,7 +898,6 @@ summary.parfn <- function(object, ...) {
     })
     names(output) <- conditions
     
-    #print(output, ...)
     output
     
   } else {
@@ -911,7 +910,7 @@ summary.parfn <- function(object, ...) {
 
 
 
-## parfn / parframe / parlist / parvec constructors (moved from classes.R) ----------------------------------------
+## parfn / parframe / parlist / parvec constructors ----------------------------------------
 
 ## Parameter classes --------------------------------------------------------
 

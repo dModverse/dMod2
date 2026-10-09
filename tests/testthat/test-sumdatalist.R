@@ -1,7 +1,5 @@
-## Context: "Sumdatalist"  (context() is deprecated in testthat 3e; kept as a note)
 test_that("Direct sum of datalists", {
   
-  #-!Start example code
   
   # Start with two data frames
   mydata1 <- data.frame(
@@ -26,20 +24,12 @@ test_that("Direct sum of datalists", {
   data1 <- as.datalist(mydata1, splitBy = c("compound", "dose")) 
   data2 <- as.datalist(mydata2, splitBy = c("compound", "dose")) 
   
-  # Direct sum of datalists
-  #-! data <- data1 + data2
-  #-! print(data)
   
-  # Check the condition.grid (if available)
-  #-! condition.grid <- attr(data, "condition.grid")
-  #-! print(condition.grid)
 
-  #-!End example code
   
   data <- suppressWarnings(data1 + data2)
   condition.grid <- attr(data, "condition.grid")
   
-  # Define your expectations here and fix the example
   expect_equal(nrow(condition.grid), 3)
   expect_equal(length(data), 3)
   expect_warning(data1 + data2, "Condition .* existed and has been overwritten.")

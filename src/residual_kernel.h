@@ -69,14 +69,9 @@ struct AccumOpts {
   // Hessian sources, which maintain their own approximation.
   bool build_hessian = true;
 
-  // If true, adds the exact second-order pred and sigma contributions to the
-  // Hessian:
-  //   H += sum_i w_pred_i * d^2 pred_i / d theta^2
-  //     +  sum_i w_sig_i  * d^2 sigma_i / d theta^2     (if d2sigma != nullptr)
-  // where the per-row weights depend on the row partition (see math reference
-  // above). The d2sigma term requires sigma_depends_on_par = true and a
-  // non-null d2sigma buffer; otherwise it is skipped (and is mathematically
-  // zero anyway).
+  // If true, H += sum_i w_pred_i d^2 pred_i / d theta^2 + w_sig_i d^2 sigma_i /
+  // d theta^2 with the per-row weights of the math reference above. The d2sigma
+  // term needs sigma_depends_on_par and a non-null d2sigma buffer.
   bool use_deriv2_exact = false;
 
   // Selects BLOQ likelihood treatment. Has no effect on accumulate_aloq.
@@ -101,67 +96,32 @@ struct AccumOpts {
   bool bloq_part3 = true;
 };
 
-// Accumulate ALOQ-row contributions for one condition into value/grad/hess.
-//
-// Inputs:
-//   n_obs    number of ALOQ data rows
-//   n_par    parameter dimension (the gradient and Hessian span this set)
-//   pred     [n_obs]                   predicted observable per row
-//   dpred    [n_obs * n_par]            row-major Jacobian d pred / d par
-//   d2pred   [n_obs * n_par * n_par]    row-major Hessian, or nullptr
-//   y_data   [n_obs]                    measured value per row
-//   sigma    [n_obs]                    sigma per row
-//   dsigma   [n_obs * n_par]            or nullptr if sigma_depends_on_par=false
-//   d2sigma  [n_obs * n_par * n_par]    or nullptr
-//   lloq     [n_obs]                    LOQ threshold per row (used by M4BEAL
-//                                       to compute w0); pass nullptr if NONE.
-//   opts     algorithm flags (see AccumOpts)
-//
-// In/out:
-//   value_acc   scalar accumulator
-//   chi2_acc    scalar accumulator over wr^2 alone. Censored rows contribute
-//               nothing to it, so it stays the classical sum of squares.
-//   grad_acc    [n_par] accumulator
-//   hess_acc    [n_par * n_par] accumulator, column-major
-//   seed_pred   [n_obs], optional. dvalue/dpred, one entry per row: the
-//               cotangent the reverse mode seeds the prediction with. It is
-//               not the residual, because sigma depends on theta as well.
-//   seed_sigma  [n_obs], optional. dvalue/dsigma, likewise.
-//
-// Every row of every branch reduces to one shape,
-//
-//   grad = A * dwr + B * dw0 + C * dlogs,
-//
-// with dwr, dw0 and dlogs linear in dpred and dsigma. The seeds are what falls
-// out of that when the chain rule is stopped one step earlier, so they are the
-// same arithmetic and not a second derivation.
+// Accumulate ALOQ-row contributions for one condition; accumulators are in/out.
+// Every row reduces to grad = A * dwr + B * dw0 + C * dlogs, with dwr, dw0, dlogs
+// linear in dpred and dsigma, so the seeds stop that chain rule one step earlier.
 void accumulate_aloq_residual(
-    int n_obs,
-    int n_par,
-    const double* pred,
-    const double* dpred,
-    const double* d2pred,
-    const double* y_data,
-    const double* sigma,
-    const double* dsigma,
-    const double* d2sigma,
-    const double* lloq,
+    int n_obs,                 // ALOQ data rows
+    int n_par,                 // parameters spanned by gradient and Hessian
+    const double* pred,        // [n_obs]
+    const double* dpred,       // [n_obs * n_par], row-major
+    const double* d2pred,      // [n_obs * n_par * n_par], row-major, or nullptr
+    const double* y_data,      // [n_obs]
+    const double* sigma,       // [n_obs]
+    const double* dsigma,      // [n_obs * n_par], nullptr unless sigma_depends_on_par
+    const double* d2sigma,     // [n_obs * n_par * n_par] or nullptr
+    const double* lloq,        // [n_obs], w0 for M4BEAL; nullptr under NONE
     const AccumOpts& opts,
     double& value_acc,
-    double& chi2_acc,
-    double* grad_acc,
-    double* hess_acc,
-    double* seed_pred = nullptr,
-    double* seed_sigma = nullptr);
+    double& chi2_acc,          // sum of wr^2 alone, censored rows excluded
+    double* grad_acc,          // [n_par]
+    double* hess_acc,          // [n_par * n_par], column-major
+    double* seed_pred = nullptr,   // [n_obs] dvalue/dpred, the reverse-mode seed
+    double* seed_sigma = nullptr); // [n_obs] dvalue/dsigma
 
 
-// Accumulate BLOQ-row contributions for one condition. No-op when
-// opts.bloq_mode == NONE or M1. The caller is responsible for partitioning
-// data into ALOQ and BLOQ rows (val > lloq vs val <= lloq).
-//
-// Inputs/outputs match accumulate_aloq_residual; the y_data argument is the
-// LOQ-substituted value (i.e. lloq for the BLOQ rows, matching R's
-// `val <- pmax(data$value, data$lloq)` convention from res()).
+// Accumulate BLOQ-row (val <= lloq) contributions for one condition, no-op under
+// NONE or M1. Arguments as in accumulate_aloq_residual; y_data is LOQ-substituted
+// as in res(), `pmax(value, lloq)`.
 void accumulate_bloq_residual(
     int n_obs,
     int n_par,

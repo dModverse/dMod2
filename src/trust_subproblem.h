@@ -98,20 +98,18 @@ inline void trust_sub(int K, const double* g,
   F77_CALL(dgemv)("T", &K, &K, &d_one, vecs, &K,
                   g, &i_one, &d_zero, q.data(), &i_one FCONE);
 
-  // Noise floor of the eigen decomposition. Eigenvalues that agree to within it
-  // are the same eigenvalue, and one that sits inside it is a zero of
-  // unresolvable sign -- both differ between LAPACK builds, which is what made
-  // the branch selection below platform-dependent.
+  // Noise floor of the eigen decomposition: eigenvalues within it of each other
+  // are equal, and one inside it is a zero of unresolvable sign. Deciding on it
+  // keeps the branch selection independent of the LAPACK build.
   double lam_absmax = 0.0;
   for (int j = 0; j < K; ++j)
     if (std::fabs(vals[j]) > lam_absmax) lam_absmax = std::fabs(vals[j]);
   const double eig_tol =
     8.0 * K * std::numeric_limits<double>::epsilon() * lam_absmax;
 
-  // Newton: take if H is positive definite in double precision AND
-  // ||H^{-1} g|| <= r. A singular H whose zero eigenvalue happens to come back
-  // just above zero would otherwise pass, and q_j / vals_j then amplifies the
-  // roundoff in q_j into a full-size step along the null direction.
+  // Newton if all eigenvalues exceed the noise floor and ||H^{-1} g|| <= r. A
+  // zero eigenvalue rounded just above zero must not pass, or q_j / vals_j turns
+  // roundoff into a full-size step along the null direction.
   bool all_pos = true;
   for (int j = 0; j < K; ++j) {
     if (!(vals[j] > eig_tol)) { all_pos = false; break; }
@@ -154,10 +152,8 @@ inline void trust_sub(int K, const double* g,
   for (int j = 0; j < K; ++j) C3 += q[j] * q[j];
 
   // A gradient orthogonal to the min-eigenspace still projects onto it as
-  // O(eps * ||g||), because the eigenvector behind it is only that accurate.
-  // Left in, the residue makes C2 > 0, routes the hard case through the easy
-  // branch, and the root it then chases is of the size of the residue itself --
-  // an arbitrary step along the null direction.
+  // O(eps * ||g||). Left in, that residue makes C2 > 0 and sends the hard case
+  // through the easy branch, chasing an arbitrary step along the null direction.
   const double q_tol =
     8.0 * K * std::numeric_limits<double>::epsilon() * std::sqrt(C3);
   for (int j = 0; j < K; ++j)
@@ -283,14 +279,11 @@ inline void trust_sub(int K, const double* g,
   *predicted_red = -m_val;
 }
 
-// ---------------------------------------------------------------------------
-// Coleman-Li interior trust-region-reflective boundary layer
-// ---------------------------------------------------------------------------
+// ---- Coleman-Li interior trust-region-reflective boundary layer -----------
 
-// |v_i| is the distance to the bound the gradient pushes toward, or 1 when that
-// direction is unbounded; jv_i = |d|v_i|/dtheta_i| is 1 exactly when that bound
-// is finite. Mirrors fides' get_affine_scaling. Note jv_i * g_i = |g_i|, which
-// is why the curvature correction C = diag(|g| * jv) is positive semi-definite.
+// |v_i|: distance to the bound the gradient pushes toward, 1 if unbounded; jv_i
+// = |d|v_i|/dtheta_i| is 1 exactly when that bound is finite, so C = diag(|g| *
+// jv) is positive semi-definite. Mirrors fides' get_affine_scaling.
 inline void affine_scaling(int K, const double* theta, const double* g,
                            const double* lb, const double* ub,
                            double* absv, double* jv) {
@@ -383,13 +376,9 @@ inline double line_min(int K, const double* ghat, const double* Bhat,
   return (b < 0.0) ? tmax : 0.0;
 }
 
-// Choose the best in-box step. `shat` is the trust-region solution in the
-// scaled frame (||shat|| <= r); `sqrt_absv` is diag(D). Candidates -- the
-// truncated step, its single reflection off the blocking faces, and the scaled
-// steepest-descent step -- are all scored with `model_value`, so `*m_out` is
-// the predicted change for exactly the step returned in `shat_out` / `s_out`.
-// `theta_frac` in (0, 1] is the fraction of the distance to a face that may be
-// used, and is what keeps the iterate strictly interior.
+// Best in-box step among the truncated trust-region step `shat`, its reflection
+// and the scaled steepest-descent step, scored by `model_value`; `sqrt_absv` is
+// diag(D). `theta_frac` in (0, 1] of the distance to a face keeps it interior.
 inline void stepback(int K, const double* theta,
                      const double* lb, const double* ub,
                      const double* sqrt_absv,

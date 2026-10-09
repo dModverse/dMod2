@@ -26,10 +26,9 @@
 
 ## ---- Registration ---------------------------------------------------------
 
-# A test file names, before first use, what it links into the fixture's shared
-# object: `extra` maps the uncompiled fixture to a named list of fn objects,
-# `multicond` adds the four-condition chain. Everything then builds in one go.
-# A process that has built the fixture for an earlier file builds them apart.
+# A test file registers, before first use, what it links into the fixture's
+# shared object: `extra` maps the uncompiled fixture to named fn objects,
+# `multicond` adds the four-condition chain. All of it builds in one compile.
 fx_register <- function(extra = NULL, multicond = FALSE) {
   cache <- .dmod_fx_cache()
   if (is.null(cache$decay)) {
@@ -65,9 +64,9 @@ fx_extra <- function() {
 
 ## ---- Linear decay ----------------------------------------------------------
 
-# One-state decay dA/dt = -k*A observed as y = A, with an identity and a log
-# trafo for condition C1. Elements: m, xfn, gfn, pfn_id, pfn_log, prd_id,
-# prd_log, outerpars_id, outerpars_log.
+# One-state linear decay observed directly, with an identity and a log trafo
+# for condition C1. Elements: m, xfn, gfn, pfn_id, pfn_log, prd_id, prd_log,
+# outerpars_id, outerpars_log.
 fx_decay_compiled <- function() {
   cache <- .dmod_fx_cache()
   if (!is.null(cache$decay)) return(cache$decay)
@@ -106,10 +105,9 @@ fx_decay_compiled <- function() {
 
 ## ---- Four conditions -------------------------------------------------------
 
-# The decay chain branched over C1..C4 with a scale s_<C>_log of its own per
-# condition, so every condition has a different derivative basis. Two or more
-# conditions put every leaf on its batched entry. Elements: conditions, m, xfn,
-# gfn (y = s*A), pfn, prd, outerpars.
+# The decay chain over C1..C4 with a scale of its own per condition, so each
+# condition has a different derivative basis and every leaf runs batched.
+# Elements: conditions, m, xfn, gfn, pfn, prd, outerpars.
 .fx_multicond_parts <- function(base) {
   conds <- paste0("C", 1:4)
   gfn <- Y(c(y = "s*A"), f = base$xfn, condition = NULL, attachInput = FALSE,
@@ -146,7 +144,7 @@ fx_decay_multicond_compiled <- function() {
 
 ## ---- Data ------------------------------------------------------------------
 
-# Noisy decay data for one condition, closed-form A(t) plus Gaussian noise.
+# Noisy decay data for one condition, closed form plus Gaussian noise.
 fx_decay_data <- function(pars  = c(A = 1.0, k = 0.5),
                           times = seq(0, 10, by = 1),
                           sigma = 0.05,

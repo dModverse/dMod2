@@ -325,14 +325,9 @@ trust <- function(objfun, parinit, rinit = 0.1, rmax = 10,
                           parscale, parupper, parlower, tol, qn, step,
                           minimize, blather, printIter, traceFile, dots)))
 
-  # The kernel names what it wants, 0 value, 1 gradient, 2 Gauss-Newton, 3
-  # exact, and the translation into an objective's own arguments happens here,
-  # where its formals are visible. One that only knows `hessian` gets the
-  # logical it always got. `sweep` is not chosen here; it stays the caller's.
-  #
-  # The exact request is checked before the run rather than inside fn, where a
-  # stop() is caught by the kernel's evaluation handler and reported as
-  # "parinit not feasible".
+  # `want` (0 value, 1 gradient, 2 Gauss-Newton, 3 exact) becomes the objective's
+  # own arguments here, where its formals are visible. The exact request is checked
+  # up front, since a stop() inside fn reads as "parinit not feasible".
   .fml   <- names(formals(objfun))
   .wants_exact <- identical(hessianMethod, "exact") ||
                   identical(hessianInit, "exact")
@@ -390,9 +385,8 @@ print.trustfit <- function(x, ...) {
 }
 
 
-# Arguments that used to be flat, and the control member they became. Reported
-# by name so a stale call says where its argument went instead of routing it to
-# objfun.
+# Deprecated flat arguments and the control member replacing each, reported by
+# name instead of being routed to objfun.
 .trustMoved <- c(
   ftol = "tolControl$ftol",   mtol  = "tolControl$mtol",
   gtol = "tolControl$gtol",   xtol  = "tolControl$xtol",

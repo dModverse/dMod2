@@ -1,4 +1,3 @@
-## Context: "odemodel"  (context() is deprecated in testthat 3e; kept as a note)
 test_that("Basic ODE model integration with forcings", {
 
   # Run inside tempdir so the odemodel() / Xs() / Xf() codegen

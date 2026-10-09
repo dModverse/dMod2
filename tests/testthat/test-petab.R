@@ -4,11 +4,8 @@
 
 test_that(".dmod_libsbml_python resolves a usable interpreter", {
 
-  # Deliberately not behind .libsbml_works(): that helper turns every failure
-  # into FALSE, so a resolver returning an empty path made the libsbml tests
-  # skip instead of fail. Nothing starts Python before the call either: the bug
-  # lives in the uninitialised state, so a guard that initialises first would
-  # let the old code pass here.
+  # Not behind .libsbml_works(), which turns every failure into a skip, and with
+  # Python uninitialised before the call, since that state is the one under test.
   skip_if_not_installed("reticulate")
   withr::local_envvar(c(DMOD_LIBSBML_PYTHON = NA, DMOD_LIBSBML_OK = NA))
 
@@ -23,11 +20,9 @@ test_that(".dmod_libsbml_python resolves a usable interpreter", {
 
 test_that(".petab_parse_parameters splits estimated / fixed and tracks scales", {
 
-  # PEtab v1: nominalValue / lowerBound / upperBound are written on the
-  # linear scale regardless of parameterScale. The parser pre-transforms
-  # estimated parameters and bounds to the parameter scale (dMod's pouter
-  # convention); fixed parameters stay on the linear scale because the
-  # trafo's scale chain rule only wraps estimated outer parameters.
+  # PEtab v1 writes values and bounds on the linear scale. Estimated parameters
+  # and bounds move to the parameter scale; fixed ones stay linear because the
+  # scale chain rule wraps only estimated outer parameters.
   df <- data.frame(
     parameterId    = c("a", "b", "c"),
     parameterScale = c("lin", "log10", "log"),
@@ -40,8 +35,7 @@ test_that(".petab_parse_parameters splits estimated / fixed and tracks scales", 
   pm <- dMod2:::.petab_parse_parameters(df)
 
   expect_equal(names(pm$pouter), c("a", "b"))
-  # a (lin)   = 1.0
-  # b (log10) = log10(100) = 2  -- pouter on parameter scale
+  # pouter on the parameter scale
   expect_equal(unname(pm$pouter), c(1.0, 2.0))
   expect_equal(names(pm$fixed),  c("c"))
   # c is fixed → stays on linear scale (no scale chain rule wraps it).
@@ -49,7 +43,7 @@ test_that(".petab_parse_parameters splits estimated / fixed and tracks scales", 
   expect_equal(pm$scales[["a"]], "lin")
   expect_equal(pm$scales[["b"]], "log10")
   expect_equal(pm$scales[["c"]], "log")
-  # lower["b"] = log10(1e-3) = -3
+  # bounds on the parameter scale
   expect_equal(unname(pm$lower["b"]), -3)
   expect_equal(unname(pm$upper["b"]), 3)
 })
@@ -75,7 +69,7 @@ test_that(".petab_parse_observables defaults to lin/normal and parses noise", {
 test_that(".petab_parse_conditions classifies columns as init / parameter", {
 
   # Case 0002 shape: a0 is in conditions and is a parameter symbol that also
-  # parameterises species A's initial. We expect "parameter" classification.
+  # parameterises species A's initial. It classifies as "parameter".
   df <- data.frame(conditionId = c("c0", "c1"),
                    a0          = c(0.8, 0.9),
                    stringsAsFactors = FALSE)
@@ -142,7 +136,7 @@ test_that(".petab_parse_measurements unfolds per-row observableParameters", {
 test_that("readPEtabYaml resolves manifest paths correctly", {
 
   petab_dir <- .petab_repo_dir()
-  if (!nzchar(petab_dir)) skip("PEtabTests/ not found -- set DMOD_PETABTESTS to the repo directory")
+  if (!nzchar(petab_dir)) skip("PEtabTests/ not found: set DMOD_PETABTESTS to the repo directory")
 
   y <- readPEtabYaml(file.path(petab_dir, "0001", "_0001.yaml"))
   expect_equal(y$formatVersion, 1L)
@@ -154,7 +148,7 @@ test_that("readPEtabYaml resolves manifest paths correctly", {
 
 test_that("readPEtabTables returns the expected slots for v1", {
   petab_dir <- .petab_repo_dir()
-  if (!nzchar(petab_dir)) skip("PEtabTests/ not found -- set DMOD_PETABTESTS to the repo directory")
+  if (!nzchar(petab_dir)) skip("PEtabTests/ not found: set DMOD_PETABTESTS to the repo directory")
 
   tabs <- readPEtabTables(file.path(petab_dir, "0001", "_0001.yaml"))
   expect_named(tabs, c("parameters", "conditions", "measurements",
@@ -195,16 +189,11 @@ test_that("readPEtabYaml and readPEtabTables read the bundled Boehm problem", {
 
 
 ## --- end-to-end fixture test (no SBML import required) -------------------
-##
-## We hand-build the eqnlist that matches PEtab test case 0001's SBML model
-## and verify the trafo+objective machinery against the published solution.
-## This avoids a libsbml dependency on every test run.
+## A hand-built eqnlist for PEtab case 0001, checked against the published solution.
 
 test_that("hand-built case-0001 fixture produces solution-matching llh", {
 
-  # Reaction network identical to PEtabTests/0001/_model.xml after libsbml
-  # would have inlined the kinetic law's compartment factor, i.e. with a unit
-  # compartment.
+  # The reaction network of PEtabTests/0001 with a unit compartment.
   nat <- .petab_native()
   x <- nat$x_ab
   g <- nat$g_0
@@ -228,10 +217,8 @@ test_that("hand-built case-0001 fixture produces solution-matching llh", {
 
   out <- obj(pouter, deriv = FALSE)
 
-  # PEtab _0001_solution.yaml gives llh = -0.8475016971318833 and
-  # chi2 = 0.7918379836848569. dMod's normL2 returns the *full* Gaussian
-  # negative log-likelihood multiplied by 2 (i.e. -2*log L), which equals
-  # chi2 + sum(log(2*pi*sigma^2)) per data point. We compare against -2*llh.
+  # normL2 returns the full Gaussian -2 log L, so it matches -2 * llh of the
+  # published solution.
   expect_lt(abs(out$value - (-2 * -0.8475016971318833)), 0.001)
 })
 
@@ -268,9 +255,6 @@ test_that("exportSbml emits InitialAssignment for symbolic state initials", {
 
 
 ## --- trafo-aware exportPEtab: pure-R helper unit tests --------------------
-##
-## The strip + classify decomposer should be unit-testable without libsbml
-## because it operates only on character RHSes and named eqnvecs.
 
 test_that(".petab_invariant_states finds the states an equilibration cannot move", {
   el   <- .petab_ac_module()
@@ -328,7 +312,7 @@ test_that(".petab_strip_param_scale compensates the chain rule per-occurrence", 
     dMod2:::.petab_strip_param_scale("K1 * K2 + offset",
       c(K1 = "log10", K2 = "log10", offset = "lin")),
     "log10(K1) * log10(K2) + offset")
-  # Pure numeric literal -- passes through
+  # Pure numeric literal passes through
   expect_equal(
     dMod2:::.petab_strip_param_scale("0", c()), "0")
 })
@@ -514,8 +498,8 @@ test_that("native exportPEtab roundtrips per-row sigma via noiseParameters colum
   g   <- nat$g_a
   p   <- nat$p_sig
 
-  # Three measurements with three different sigmas -- exercise the
-  # noiseParameter1_<obsId> placeholder + per-row noiseParameters path.
+  # Three measurements with three different sigmas exercise the
+  # noiseParameter1_<obsId> placeholder and the per-row noiseParameters path.
   data <- as.datalist(data.frame(
     name = "obs_a", time = c(1, 2, 3),
     value = c(0.5, 0.3, 0.2), sigma = c(0.5, 1.0, 2.0),
@@ -558,8 +542,7 @@ test_that("native exportPEtab roundtrips compound trafos like 10^(KM + 5)", {
   withr::local_dir(tempdir())
   if (!.libsbml_works()) skip("libsbml virtualenv not available")
 
-  # 1-state, 1-reaction with a non-trivial compound mapping for the rate:
-  #   k = 10^(K + 5) -- chain-rule "compensation" path, not strippable.
+  # A compound rate mapping takes the chain-rule compensation path, not the strip path.
   nat <- .petab_native()
   reactions <- nat$a
   obs <- nat$obs_a
@@ -583,8 +566,8 @@ test_that("native exportPEtab roundtrips compound trafos like 10^(KM + 5)", {
     formatVersion = "1", dir = out_dir, overwrite = TRUE),
     "only numbers and parameter ids")
 
-  # The conditions.tsv cell for k must contain the compensated form
-  # `10^(log10(K) + 5)` so the importer's chain rule reproduces 10^(K+5).
+  # The conditions.tsv cell holds the compensated form, so the importer's chain
+  # rule reproduces the mapping.
   cond_df <- read.delim(file.path(out_dir, "conditions_rt3_export.tsv"),
                         stringsAsFactors = FALSE)
   expect_match(as.character(cond_df$k[[1L]]), "log10\\(K\\)")
@@ -897,11 +880,8 @@ test_that("a prior on the parameter scale is truncated on that scale", {
 
 
 test_that("a prior term honours hessian = FALSE", {
-  # It did not, and the argument fell into `...` and was ignored. The cost was
-  # not the wasted work: an objective summed with a prior handed back a zero
-  # Hessian to a caller that asked for none, so a reverse-swept objective,
-  # which cannot produce one, looked as though it had. That is exactly the
-  # invariant a caller uses to check the direction actually arrived.
+  # A missing Hessian tells a caller that a reverse-swept term cannot produce
+  # one, so a term asked for none must not return a zero matrix.
   specs <- list(list(id = "a", dist = "normal", pars = c(0, 1),
                      lower = -Inf, upper = Inf))
   pf <- dMod2:::.petab_prior_objective(specs)
@@ -916,9 +896,8 @@ test_that("a prior term honours hessian = FALSE", {
   expect_equal(none$gradient, full$gradient)
   expect_equal(none$value, full$value)
 
-  # And through the sum, where it mattered: a term that declares `sweep` is
-  # asked for a Hessian, one that does not is asked for none, and a zero matrix
-  # from the second used to make the total look Hessian-bearing.
+  # Through the sum: a term that declares `sweep` is asked for a Hessian, one
+  # that does not is asked for none.
   base <- constraintL2(c(a = 0, b = 0), sigma = 1)
   total <- base + pf
   expect_null(total(pars, deriv = TRUE, hessian = FALSE)$hessian)

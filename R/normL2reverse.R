@@ -1,27 +1,17 @@
 ## normL2 backwards --------------------------------------------------------
-##
-## The forward objective asks the prediction chain for dX/dtheta and contracts
-## it with the residuals. The reverse one asks for values only, works out what
-## the objective's derivative in those values is, and pushes that back through
-## the chain. The gradient is then one sweep wide instead of n_theta.
-##
-## The seed is not the residual vector. The error model depends on theta too,
-## so every data row seeds two things, the prediction and sigma, and the kernel
-## hands both back: see `want_seed` in src/residual_kernel.cpp, where they fall
-## out of the same per-row coefficients the gradient is built from.
-##
 ## Copyright (C) 2026 Simon Beyer
+
+## Values forward, the objective's derivative in them pulled back through the
+## chain: one sweep instead of n_theta. Every data row seeds both prediction and
+## sigma, see `want_seed` in src/residual_kernel.cpp.
 
 .normL2_reverse <- function(pars, fixed, deriv, conditions, env, cores,
                             x, errmodel, data, timesD, e.cond, opt.BLOQ,
                             attr.name, hessian = FALSE, meta_cache = NULL) {
 
-  # The objective's Hessian splits along a line the residual kernel already
-  # draws: J' H_rho J from the forward tangents, which is what the kernel
-  # computes when it is handed no second derivatives, plus the prediction's own
-  # curvature weighted by the seed, which is what a dual sweep with a constant
-  # seed returns. The seed and that weight are the same number by construction,
-  # see src/residual_kernel.h.
+  # Hessian: J' H_rho J from the forward tangents (the kernel without second
+  # derivatives) plus the prediction's curvature weighted by the seed (a dual
+  # sweep with constant seed), see src/residual_kernel.h.
   n_dir <- if (isTRUE(hessian)) length(pars) else 0L
   if (n_dir > 0L) {
     nm <- names(pars)
@@ -29,8 +19,7 @@
     dimnames(attr(pars, "deriv")) <- list(nm, nm)
   }
 
-  # --- forward, keeping the tape, and the tangents when second order needs
-  #     them: they are the directions every node's vjp is differentiated along
+  # --- forward with tape, plus tangents as the vjp directions for second order
   b <- .bundle_from_call(conditions, times = timesD, out = NULL,
                          pars = pars, fixed = fixed)
   fw <- .fwdMany(x, b, env, cores, deriv = n_dir > 0L)
@@ -129,23 +118,16 @@
                        names(pars))
   attr(out, attr.name) <- out$value
   attr(out, "chi2") <- setNames(kr$chi2, attr.name)
-  # Which direction answered. A caller used to read that off an absent Hessian,
-  # which stops being a signal the moment the reverse mode can return one.
+  # Which direction answered; reverse mode can return a Hessian too.
   attr(out, "sweep") <- if (n_dir > 0L) "forward-reverse" else "reverse"
   env$prediction <- prediction
   attr(out, "env") <- env
   out
 }
 
-# The objective's seed as one cotangent per condition, positionally aligned
-# with `prediction`: on the prediction itself, and through the error model onto
-# the prediction and the inner parameters it read. `err_idx` are the positions
-# that have an error model and `err_split` the (pars, fixed) the forward pass
-# handed it there. Shared by normL2 and the multiple-shooting objective.
-#
-# The kernel orders its rows ALOQ first, then BLOQ, so the scatter follows the
-# same permutation. A row with a fixed sigma has no sigma derivative at all, and
-# its sigma seed is dropped rather than multiplied by a zero.
+# The seed as one cotangent per condition aligned with `prediction`, direct and
+# through the error model at positions `err_idx` with inputs `err_split`. Rows
+# follow the kernel's ALOQ-then-BLOQ order; fixed-sigma rows get no sigma seed.
 .normL2SeedCt <- function(meta_list, prediction, err_list, kr, errmodel,
                           err_idx = NULL, err_split = NULL, K = 1L) {
   n <- length(meta_list)

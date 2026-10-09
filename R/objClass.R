@@ -103,11 +103,9 @@ evalConditionResidual <- function(dataI, predictionI, pars,
 
 
 
-# Internal: gradient and Hessian in the order of the parameter vector the
-# objective was called with. The kernel names them after the union of the
-# per-condition sensitivity blocks, while `trust()` and `optim()` read them
-# positionally against their own start vector. A parameter the objective does
-# not depend on gets a zero derivative rather than being left out.
+# Internal: gradient and Hessian in the order of `pnames`, since `trust()` and
+# `optim()` read them positionally. A parameter the objective does not depend
+# on gets a zero derivative rather than being left out.
 .alignObjlist <- function(out, pnames) {
   g <- out$gradient
   if (is.null(g) || !length(pnames) || identical(names(g), pnames)) return(out)
@@ -124,14 +122,9 @@ evalConditionResidual <- function(dataI, predictionI, pars,
   }
   out
 }
-# Resolve the three nested derivative switches, deriv -> hessian -> deriv2.
-#
-# `hessian` is a tri-state: NULL means not asked and resolves to TRUE forward,
-# FALSE backwards, TRUE whenever deriv2 asks for one. Only an explicit value can
-# contradict something, and a contradiction resolves to the cheaper answer with
-# a warning. Two exist: deriv2 = TRUE with hessian = FALSE, and hessian = TRUE
-# backwards without deriv2, which would need the sensitivities the reverse mode
-# exists not to build.
+# Resolve deriv -> hessian -> deriv2. `hessian = NULL` means TRUE forward, FALSE
+# backwards, TRUE under deriv2. A contradicting explicit value (deriv2 with
+# hessian = FALSE, or hessian backwards without deriv2) warns and takes the cheaper.
 .resolveCurvature <- function(deriv, deriv2, hessian, sweep) {
   reverse <- identical(sweep, "reverse")
   asked   <- !is.null(hessian)
@@ -274,20 +267,18 @@ normL2 <- function(data, x, errmodel = NULL, times = NULL,
   # Force early binding
   force(errmodel); force(conditions.obj); force(timesD)
 
-  # Lazy meta cache for the C++ kernel path. Built on first call; rebuilt
-  # if the deriv column set changes (e.g. when `fixed` toggles between
-  # calls - uncommon, but cheap to detect via length+name compare).
+  # Lazy meta cache for the C++ kernel path, rebuilt when the deriv column set
+  # changes, e.g. when `fixed` toggles between calls.
   .meta_cache <- new.env(parent = emptyenv())
   .meta_cache$meta_list        <- NULL
   .meta_cache$par_names_global <- NULL
-  .meta_cache$signature        <- NULL  # used to invalidate on shape change
+  .meta_cache$signature        <- NULL  # invalidates on shape change
   .meta_cache$shape            <- NULL
   .meta_cache_rev <- new.env(parent = emptyenv())
 
-  # Controls of the objective, changed later by controls<-. Multiple shooting
-  # is one: trust() reads it when it is called, and lays the segments out
-  # then. Laid out once here, so an error in it shows when the objective is
-  # built.
+  # Controls of the objective, changed later by controls<-. trust() lays out the
+  # shooting segments when called; laying them out once here surfaces errors at
+  # build time.
   if (!is.null(multipleShootingControl))
     .shootFromNormL2(data, x, errmodel, times, attrName, optBLOQ,
                      multipleShootingControl)
@@ -334,10 +325,7 @@ normL2 <- function(data, x, errmodel = NULL, times = NULL,
     if (!is.null(.prediction) && !identical(names(prediction), conditions))
       prediction <- prediction[conditions]
 
-    # Build errmodel output per condition (if any). One batched evaluation
-    # rather than one public obsfn call per condition: the shim, the bundle
-    # and the prdlist wrapping were paid 32 times for 32 scalar kernel calls,
-    # and the leaf's batch entry never saw more than one request.
+    # Error model output for all conditions in one batched evaluation.
     err_list <- NULL
     if (!is.null(errmodel)) {
       cn_eval <- if (is.null(e.cond)) conditions else intersect(conditions, e.cond)
@@ -424,12 +412,9 @@ normL2 <- function(data, x, errmodel = NULL, times = NULL,
   # shared objects of a composed objective.
   attr(myfn, "compileInfo") <- .mergeCompileInfo(attr(x, "compileInfo"),
                                                  attr(errmodel, "compileInfo"))
-  # Reconstruction handles: recover the model pieces from a composed objective
-  # instead of re-demanding them as arguments. Setting an attribute to NULL is
-  # a no-op, so "errfn" is simply absent when there is no error model.
-  # One entry per L2 term. The single handles below are first-wins on
-  # composition, so a split objective would otherwise expose only its first
-  # term, and reml() needs every one of them.
+  # Reconstruction handles for the model pieces of a composed objective.
+  # `l2spec` has one entry per L2 term, since the single handles below are
+  # first-wins on composition; "errfn" is absent without an error model.
   attr(myfn, "l2spec") <- list(list(data = data, prdfn = x, errfn = errmodel,
                                     timesD = timesD))
   attr(myfn, "prdfn") <- x
@@ -440,15 +425,9 @@ normL2 <- function(data, x, errmodel = NULL, times = NULL,
 }
 
 
-# Evaluate a set of single-condition objectives, one parameter vector each, with
-# the predictions gathered into one batched request. A loop over objectives
-# built on a shared prdfn is one ODE solve per objective per pass; the
-# condition axis is exactly what the batch parallelises.
-#
-# Falls back to the loop whenever the batch cannot reproduce it: a missing
-# reconstruction handle, objectives from different prdfns, a condition owned by
-# more than one objective, or a failing batch. The loop is the reference, so the
-# fallback is always correct, only slower.
+# Evaluate single-condition objectives, one parameter vector each, with the
+# predictions in one batched request. Falls back to the reference loop on a
+# missing handle, mixed prdfns, a condition owned twice, or a failing batch.
 .objEvalMany <- function(objList, parsList, deriv = TRUE, deriv2 = FALSE,
                          cores = getOption("dMod.cores", 1L)) {
   n <- length(parsList)
@@ -688,11 +667,9 @@ constraintL2.default <- function(mu, sigma = 1, attrName = "prior",
 }
 
 
-# Internal: shared assembly for the soft constraints below. `term(x, k)` takes
-# the current values of the constrained parameters present in the call and the
-# indices they occupy, and returns the -2 log density plus its first two
-# derivatives, one entry per parameter. A parameter passed in `fixed`
-# contributes to the value but not to gradient or Hessian.
+# Internal: shared assembly for the soft constraints below. `term(x, k)` maps
+# values and indices of the constrained parameters to the -2 log density and its
+# first two derivatives. A `fixed` parameter enters the value only.
 .constraintTerms <- function(parnames, term, attr.name, condition) {
 
   myfn <- function(..., fixed = NULL, deriv = TRUE, deriv2 = FALSE, hessian = NULL,
@@ -1318,7 +1295,7 @@ summary.objfn <- function(object, ...) {
 
 
 
-## res (moved from data.R) ---------------------------------------------------
+## res ---------------------------------------------------
 
 #' Residuals Between Data and Model Prediction
 #'
@@ -1438,7 +1415,7 @@ res <- function(data, out, err = NULL) {
 }
 
 
-## objlist / objframe constructors (moved from classes.R) ----------------------------------------
+## objlist / objframe constructors ----------------------------------------
 
 ## Objective classes ---------------------------------------------------------
 

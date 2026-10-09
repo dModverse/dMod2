@@ -39,9 +39,8 @@ detectFreeCores <- function(machine = NULL) {
       nCores <- as.numeric(cmd("nproc --all"))
     }
     
-    # Floor at 1: callers feed `free` straight into mclapply(mc.cores = ...)
-    # which rejects 0. Under heavy load the 1-min average can exceed nCores;
-    # reporting 1 means "serialise, don't die" instead of crashing.
+    # Floor at 1: mclapply(mc.cores = 0) fails, and under heavy load the
+    # 1-min average can exceed nCores.
     list(free = max(1L, round(nCores - occupied)), nCores = nCores, occupied = occupied)
   }
   
@@ -57,10 +56,8 @@ detectFreeCores <- function(machine = NULL) {
     attr(freeCores, "used") <- res$occupied
   }
 
-  # CRAN policy: R CMD check sets _R_CHECK_LIMIT_CORES_ and parallel forbids
-  # mc.cores > 2 in that mode. Cap before returning so all mclapply callsites
-  # (P, normL2, compile) stay legal under check without each having to
-  # know about the env var.
+  # Under R CMD check, _R_CHECK_LIMIT_CORES_ forbids mc.cores > 2; capping here
+  # keeps every mclapply caller legal.
   chk <- tolower(Sys.getenv("_R_CHECK_LIMIT_CORES_", ""))
   if (nzchar(chk) && chk != "false") {
     if (length(freeCores) > 0L) freeCores[] <- pmin(freeCores, 2L)
@@ -71,12 +68,9 @@ detectFreeCores <- function(machine = NULL) {
 
 
 ## Remote build helpers --------------------------------------------------------
-##
-## The remote build keeps the portable part of "compileInfo" (the -D macros) and
-## resolves every path-valued flag through the R on the remote PATH.
+## The remote build keeps the -D macros of "compileInfo" and resolves every
+## path-valued flag through the R on the remote PATH.
 
-## Scan a workspace for model objects and return the portable build settings
-## needed to rebuild their C/C++ sources elsewhere.
 ## Shell command that puts `libs` in front of the remote R's library path. The
 ## paths are expanded by the remote shell, so `~` is the remote home.
 .remoteLibs <- function(libs) {
@@ -85,6 +79,8 @@ detectFreeCores <- function(machine = NULL) {
   paste0('export R_LIBS="', paste(paths, collapse = ":"), '${R_LIBS:+:$R_LIBS}"; ')
 }
 
+## Scan a workspace for model objects and return the portable build settings
+## needed to rebuild their C/C++ sources elsewhere.
 .remoteBuildInfo <- function(envir = .GlobalEnv) {
 
   compileArgs <- character(0)
@@ -100,9 +96,8 @@ detectFreeCores <- function(machine = NULL) {
     if (is.null(info)) next
     for (e in info) {
       ca <- trimws(e$compileArgs %||% "")
-      ## Non-empty linkArgs mean the backend pulls external libraries
-      ## (Sundials, and KLU on top of it for sparse CVODE models); those have
-      ## to be resolved from the remote cppDE installation.
+      ## Non-empty linkArgs mean external libraries (Sundials, KLU), resolved
+      ## from the remote cppDE installation.
       la <- e$linkArgs %||% ""
       if (nzchar(trimws(la))) needsCVODE <- TRUE
       if (grepl("sunlinsollapackdense", la, fixed = TRUE)) needsLapack <- TRUE
@@ -130,10 +125,8 @@ detectFreeCores <- function(machine = NULL) {
 .remoteNeedsChunking <- function(files)
   sum(nchar(files) + 1L) > .compileCmdLimit()
 
-## Write the job workspace through zstd. Uncompressed it hits the disk in full
-## only for tar to read it back and compress it, and with one parfn per condition
-## that is several GB. zstd is already required for the transfer; the fallback
-## covers a submitting machine without the binary. Returns the file written.
+## Write the job workspace through zstd, as an uncompressed one can be several
+## GB; without the binary it is saved uncompressed. Returns the file written.
 .saveWorkspace <- function(input, file, envir = .GlobalEnv, level = 3L) {
 
   zstd <- Sys.which("zstd")
@@ -156,10 +149,9 @@ detectFreeCores <- function(machine = NULL) {
   out
 }
 
-## Generate the bash script that builds the shared object on the remote machine.
-## `files` are the sources, or the object files when `link = TRUE`. Beyond the
-## argument limit the script switches to the chunked archive build compile()
-## uses locally, reading its inputs from `filelist`.
+## Bash script that builds the shared object on the remote machine from the
+## sources, or the object files when `link = TRUE`. Beyond the argument limit it
+## uses compile()'s chunked archive build, reading its inputs from `filelist`.
 .remoteBuildScript <- function(files, output, compileArgs = "",
                                needsCVODE = FALSE, needsKLU = FALSE,
                                needsLapack = FALSE,
@@ -175,20 +167,16 @@ detectFreeCores <- function(machine = NULL) {
 
   ldflags <- character(0)
   if (link) {
-    ## Object files contain the *local* toolchain's LTO bytecode, which a remote
-    ## compiler of a different GCC generation refuses to read ("bytecode stream
-    ## in file 'e.o' generated with LTO version 16.0 instead of the expected
-    ## 13.1"). Fat LTO objects still contain ordinary machine code, so turning
-    ## LTO and the linker plugin off lets the link fall back to it.
+    ## A remote compiler of another GCC generation refuses the local LTO
+    ## bytecode; with LTO off the link uses the fat objects' machine code.
     ldflags <- c(ldflags, "-fno-lto", "-fno-use-linker-plugin")
     ## With only .o inputs R CMD SHLIB links via the C driver, which would not
     ## pull in the C++ runtime the cppDE-generated code needs.
     if (cxx) ldflags <- c(ldflags, "-lstdc++")
   }
 
-  ## SUNDIALS/KLU flags come from the *remote* cppDE install, so they are
-  ## resolved by Rscript inside the generated script. Embedded in a
-  ## single-quoted shell string, must contain no single quotes.
+  ## SUNDIALS/KLU flags come from the remote cppDE install, read by Rscript in
+  ## the script. Embedded in a single-quoted shell string: no single quotes.
   cfgExpr <- function(field) paste0(
     "cfg <- get0(\"cvodeConfig\", envir = asNamespace(\"cppDE\"), inherits = FALSE); ",
     "cat(if (is.environment(cfg)) paste(unlist(mget(c(", field, "), envir = cfg, ",
@@ -228,9 +216,8 @@ detectFreeCores <- function(machine = NULL) {
     c("NPROC=$(env -u OMP_NUM_THREADS -u OMP_THREAD_LIMIT nproc 2>/dev/null || echo 1)",
       "if [ \"$NPROC\" -gt 16 ]; then NPROC=16; fi", "")
 
-  ## Precompiled header, decided here because the prologue check needs the
-  ## sources. A missing .gch is harmless, the header then just includes what
-  ## the sources include anyway.
+  ## Precompiled header; a missing .gch is harmless, the sources then include
+  ## the headers themselves.
   cxxSrc <- files[grepl("\\.cpp$", files, ignore.case = TRUE)]
   pchInc <- if (!link && length(cxxSrc) >= 8L) .compilePCHIncludes(cxxSrc)
   toolchain <- if (!is.null(filelist) || !is.null(pchInc)) c(
@@ -247,9 +234,8 @@ detectFreeCores <- function(machine = NULL) {
           "-x c++-header dMod_pch.hpp -o dMod_pch.hpp.gch || true"),
     "PKG_CXXFLAGS=\"$PKG_CXXFLAGS -include dMod_pch.hpp\"", "")
 
-  ## Compile off the file list in parallel, then link. Asking make to
-  ## parallelise R CMD SHLIB via MAKEFLAGS does not work, so the objects are
-  ## built here and SHLIB only links them.
+  ## Compile off the file list in parallel, then link: R CMD SHLIB does not
+  ## parallelise via MAKEFLAGS.
   chunked <- !is.null(filelist) && .remoteNeedsChunking(files)
   isCxx   <- grepl("\\.cpp$", files, ignore.case = TRUE)
 
@@ -260,9 +246,8 @@ detectFreeCores <- function(machine = NULL) {
   anchorLine <- if (chunked)
     paste0("ANCHOR=", shQuote(files[if (any(isCxx)) which(isCxx)[1] else 1L]))
 
-  ## The sources hold one small function each and all pull in the same headers,
-  ## so bundling them into few translation units parses those headers once per
-  ## bundle. Every generated function survives; only the compiler runs less.
+  ## Bundling the small generated sources into few translation units parses the
+  ## shared headers once per bundle.
   bundleBlock <- if (doBundle) c(
     paste0("BUNDLE=", max(2L, as.integer(bundle))),
     "grep -i -e '\\.cpp$' \"$WORK\" > dmod_cxx.lst || true",
@@ -571,17 +556,14 @@ runbg <- function(..., machine = "localhost", filename = NULL, input = ls(.Globa
   # Save current workspace to be transferred to remote machines
   save(list = input, file = paste0(filename0, ".RData"), envir = .GlobalEnv)
   
-  # The transferred objects dispatch on dMod2 classes, so that is what the
-  # remote script needs. Replicating whatever the submitting session happened
-  # to attach makes a job depend on it; anything else belongs in the expression.
+  # The remote script attaches dMod2 only, not the submitting session's
+  # packages; anything else belongs in the expression.
   pack <- "library(dMod2)"
   
   output <- ".runbgOutput"
   
-  # Compiler flags mirroring compile() in compile.R. The flags themselves are
-  # resolved on the remote machine (see .remoteBuildScript); here only
-  # collect the portable, model-specific part and the file list. Everything is
-  # written into a shell script to avoid quoting issues with nested SSH commands.
+  # The portable, model-specific flags and the file list; the rest is resolved
+  # on the remote machine by the script .remoteBuildScript() writes.
   buildinfo <- list(compileArgs = "", needsCVODE = FALSE, needsKLU = FALSE,
                     needsLapack = FALSE)
   has_cxx <- FALSE
@@ -717,7 +699,7 @@ runbg <- function(..., machine = "localhost", filename = NULL, input = ls(.Globa
 
 
 
-## ---- HPC/SLURM distributed computing (moved from toolsSeverin.R) ----------
+## ---- HPC/SLURM distributed computing --------------------------------------
 
 #' Run R Code on a Remote HPC System with SLURM
 #'
@@ -895,7 +877,7 @@ distributedComputing <- function(
   
   # - definitions - #
   
-  # relative path to the working directory, will now allways be used
+  # relative path to the working directory
   
   wd_path <- paste0("./",jobname, "_folder/")
   
@@ -1058,9 +1040,8 @@ distributedComputing <- function(
   # WRITE R
   
   
-  # The transferred objects dispatch on dMod2 classes, so that is what the node
-  # script needs. Replicating whatever the submitting session happened to
-  # attach makes a job depend on it; anything else belongs in the expression.
+  # The node script attaches dMod2 only, not the submitting session's
+  # packages; anything else belongs in the expression.
   package_list <- "library(dMod2)"
   if (compile || link) {
     objfns <- 'obj.fns <- ls()[sapply(ls(), function(nm) inherits(get(nm, envir=.GlobalEnv), c("obsfn", "parfn", "prdfn", "objfn")))]'
@@ -1091,8 +1072,6 @@ distributedComputing <- function(
       ),
       collapse = "\n"
     )
-    # cat(variable_list)
-    
     # List of all names of parameters that will be changes between runs
     var_names <- paste(lapply(seq(1,length(varValues)), function(i) paste0("var_",i)))
     
@@ -1110,8 +1089,6 @@ distributedComputing <- function(
     var_list <- ""
     var_per_run <- ""
   }
-  
-  # cat(var_per_run)
   
   
   # define fixed pars
@@ -1198,9 +1175,8 @@ distributedComputing <- function(
       "module load compiler/gnu/13.3",
       "# Load R modules",
       "module load math/R",
-      # paste0("export OPENBLAS_NUM_THREADS=",cores),
-      paste0("export OMP_NUM_THREADS=","1"), # paste0("export OMP_NUM_THREADS=",cores),
-      paste0("export MKL_NUM_THREADS=", "1"), # paste0("export MKL_NUM_THREADS=",cores),
+      paste0("export OMP_NUM_THREADS=","1"),
+      paste0("export MKL_NUM_THREADS=", "1"),
       .remoteLibs(libs),
       "",
       "# Run R script",
@@ -1211,18 +1187,15 @@ distributedComputing <- function(
   )
   
   
-  # The remote build reads its flags from a script that is shipped inside the
-  # job folder; a bare `R CMD SHLIB` misses the cppDE include path and the
-  # BLAS/LAPACK libraries. The script is chained with `&&` so a failed build
-  # skips the sbatch instead of queueing a job that cannot run.
+  # The build script ships in the job folder, as a bare `R CMD SHLIB` misses
+  # cppDE's includes and BLAS/LAPACK; `&&` makes a failed build skip the sbatch.
   build_script_file <- paste0(jobname, "_build.sh")
   filelist_file <- paste0(jobname, "_files.txt")
   module_cmd <- paste0("module load compiler/gnu/13.3 2>/dev/null; module load math/R; ",
                        .remoteLibs(libs))
 
-  ## Names travel as a list, not on the command line: tar and its remote
-  ## counterpart share one `system()` string. The list lives in the job folder
-  ## and therefore ships inside the same archive.
+  ## File names go in a list in the job folder, not on the command line that
+  ## both tar calls share.
   transferCmds <- function(files) {
     writeLines(files, paste0(wd_path, filelist_file))
     list(locale = paste0("tar -I 'zstd -T0' -cf - -T ", wd_path, filelist_file,
@@ -1268,9 +1241,6 @@ distributedComputing <- function(
             "This requires the cluster toolchain to be ABI-compatible with the ",
             "local one; if the link or dyn.load() fails, resubmit with compile = TRUE.")
 
-    # Remove any old .so files before linking
-    # unlink(list.files(pattern = "(\\.so)$"))
-
     tarCmds    <- transferCmds(object_files)
     tar_locale <- tarCmds$locale
     tar_remote <- tarCmds$remote
@@ -1300,7 +1270,6 @@ distributedComputing <- function(
     compile_remote <- ""
   }
   
-  ##
   # transfer and run files
   status <- system(
     paste0(
@@ -1393,11 +1362,7 @@ profileParsPerNode <- function(parameters, parsPerNode, side = c("both", "split"
 
 
 
-## Use Julia to calculate steady states -----------------------------------------
-
-
-
-## .sanitizeCores (moved from tools.R) ----------------------------------------
+## .sanitizeCores ----------------------------------------------------------------
 
 # Split a two-axis core budget. `cores` is a single number (outer axis only)
 # or a named vector such as c(fits = 10, conditions = 5). The product is
@@ -1426,16 +1391,13 @@ profileParsPerNode <- function(parameters, parsPerNode, side = c("both", "split"
   
   max.cores <- parallel::detectCores()
   min(max.cores, cores)
- #  
- # if (Sys.info()[['sysname']] == "Windows") cores <- 1
- # return(cores)
   
 }
 
 
 
 
-## .parallelLapply (moved from tools.R) --------------------------------------
+## .parallelLapply ---------------------------------------------------------------
 
 # Cross-platform parallel-apply. Unix forks via doParallel; Windows uses a
 # PSOCK cluster with explicit library-path + variable export. Driven through

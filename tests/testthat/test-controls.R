@@ -1,10 +1,6 @@
-# Behavioral tests for controls() / controls<-.
-#
-# Every construction option a function reads when it runs lives in the
-# `controls` list of its kernel, is read from there at every call, and is
-# reachable through controls() on the function itself and on anything summed
-# or composed from it. The tests change controls, so every object they touch
-# is built here rather than taken from the shared fixtures.
+# controls() / controls<-: run-time options live in the kernel's `controls`
+# list, read at every call and reachable through sums and compositions. Tests
+# mutate controls, so every object is built here, not taken from fixtures.
 
 skip_on_cran()
 testthat::skip_if_not_installed("cppDE")

@@ -94,7 +94,7 @@ test_that("a duplicated parameter name is rejected", {
 })
 
 
-# An R-level log trafo k = exp(logk), with its own Jacobian and Hessian.
+# An R-level log trafo with its own Jacobian and Hessian.
 .priorLogTrafo <- function() {
   p2p <- function(pars, fixed = NULL, deriv = TRUE, deriv2 = FALSE) {
     k <- exp(pars[["logk"]])

@@ -1,27 +1,6 @@
-# -------------------------------------------------------------------------#
-# Hodgkin-Huxley squid axon: current pulses and conductance fit
-# -------------------------------------------------------------------------#
-#
-# [PURPOSE]
-# The Hodgkin-Huxley (1952) model with piecewise() in its right-hand side,
-# once on time and once on a state. The stimulus is a current pulse,
-# piecewise in time; the solver stops at its edges. The opening rates of the
-# m and n gates are 0/0 at one voltage each, and piecewise on V supplies the
-# limit there. The three maximal conductances are fitted to a simulated
-# membrane potential under a weak and a strong pulse.
-#
-# [AUTHOR]
-# Simon Beyer
-#
-# [Date]
-# Thu 08 Oct 2026
-#
-# [Info]
-# Modern sign convention, V in mV with rest near -65 mV, time in ms, currents
-# in uA/cm^2. A piecewise() on a state is safe only where the right-hand side
-# is continuous across the switch, as it is here: the solver does not locate
-# a switch on a state, and the sensitivities would miss the jump.
-# -------------------------------------------------------------------------#
+# Hodgkin-Huxley squid axon with piecewise() on time (current pulse) and on V
+# (removable 0/0 gate rates); fits the three maximal conductances.
+# piecewise() on a state is safe only where the right-hand side is continuous.
 
 library(dMod2)
 
@@ -29,9 +8,7 @@ library(dMod2)
 if (!dir.exists(.outdir)) dir.create(.outdir, recursive = TRUE)
 
 
-# –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
-# Model
-# –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
+## Model -------------------------------------------------------------------
 alpha_m <- "piecewise(1, V == -40, 0.1*(V + 40)/(1 - exp(-(V + 40)/10)))"
 beta_m  <- "4*exp(-(V + 65)/18)"
 alpha_h <- "0.07*exp(-(V + 65)/20)"
@@ -55,9 +32,7 @@ model <- odemodel(f, modelname = "hh_ode", compile = FALSE, outdir = .outdir)
 x <- Xs(model)
 
 
-# –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
-# Parameters
-# –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
+## Parameters --------------------------------------------------------------
 # The gates start at their steady state at -65 mV
 gateAtRest <- function(alpha, beta, V = -65) {
   env <- list(V = V, piecewise = function(value, condition, otherwise)
@@ -85,9 +60,7 @@ compile(x, p, output = "hodgkinHuxley")
 pars_true <- c(lg_Na = log10(120), lg_K = log10(36), lg_L = log10(0.3))
 
 
-# –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
-# Simulated data
-# –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
+## Simulated data ----------------------------------------------------------
 times <- seq(0, 20, by = 0.02)
 plot((x*p)(times, pars_true))
 
@@ -99,9 +72,7 @@ data$value <- data$value + rnorm(nrow(data), sd = data$sigma)
 data <- as.datalist(data)
 
 
-# –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
-# Fit
-# –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
+## Fit ---------------------------------------------------------------------
 obj <- normL2(data, x*p)
 
 starts <- msParframe(pars_true, n = 20, seed = 2, sd = 0.5)
@@ -115,8 +86,6 @@ rbind(true = pars_true, fit = bestfit)
 plotCombined((x*p)(times, bestfit), data, name == "V")
 
 
-# –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
-# Profiles
-# –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
+## Profiles ----------------------------------------------------------------
 profiles <- profile(obj, bestfit, names(bestfit))
 plotProfile(profiles)

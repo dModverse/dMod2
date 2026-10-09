@@ -1,10 +1,5 @@
-# ============================================================================
-# Behavioral tests for the prediction functions Xs / Xd / Xf.
-#
-# Closed-form analytical references throughout (linear decay, two-step
-# cascade, Xd grid recovery, forced linear ODE). Hessian and second-order
-# chain-rule semantics live in test-deriv2.R.
-# ============================================================================
+# Behavioral tests for the prediction functions Xs / Xd / Xf against closed
+# forms. Second-order semantics live in test-deriv2.R.
 
 skip_if_no_compile <- function() {
   testthat::skip_if_not_installed("cppDE")
@@ -161,10 +156,6 @@ test_that("Xs sensitivities match the analytical decay formulas at non-integer t
 # ---- Xs: events ---------------------------------------------------------
 
 test_that("Xs with an 'add' event reproduces the analytical post-event trajectory", {
-  # Linear decay with an additive jump at t0:
-  #   pre   A(t)        = A0 * exp(-k * t)
-  #   at t0 A(t0)       = A0 * exp(-k * t0) + Delta
-  #   post  A(t)        = (A0 * exp(-k * t0) + Delta) * exp(-k * (t - t0))
   skip_if_no_compile()
   mods <- xs_models()
   prd <- Xs(mods$m_event) * mods$p_event
@@ -188,7 +179,6 @@ test_that("Xs with an 'add' event reproduces the analytical post-event trajector
 # ---- Xs: forcings -------------------------------------------------------
 
 test_that("Xs with constant forcing input matches the closed-form linear ODE solution", {
-  # dA/dt = F - k*A with constant F gives A(t) = (A0 - F/k)*exp(-k*t) + F/k.
   skip_if_no_compile()
   mods <- xs_models()
 
@@ -224,7 +214,6 @@ test_that("Xs takes forcing names as factor or character alike", {
 })
 
 test_that("Xf starts states missing from pars at 0", {
-  # dA/dt = F - k*A, A(0) = 0: A(t) = F/k * (1 - exp(-k*t)).
   skip_if_no_compile()
   mods <- xs_models()
   forc <- data.frame(name = "F", time = c(0, 10), value = 0.6)
@@ -284,15 +273,11 @@ test_that("Xf reproduces the linear-decay closed form and emits no deriv attribu
 })
 
 
-# ============================================================================
-# Xs.cppDE theta-sensitivity path: heap vs stack AD slab parity
-# (Phi'(theta) as tangent; per-condition varying theta counts via two-condition setup)
-# ============================================================================
+# ---- Xs.cppDE theta sensitivities: heap vs stack AD slab parity ---------
 
 test_that("Heap and stack AD slabs match on a single-condition linear model", {
 
-  # Default heap slab vs explicit stack slab (B,log_k1,log_k2}), same
-  # parameter transformation for both.
+  # Default heap slab against an explicit stack slab, same trafo for both.
   mods <- xs_models()
   tight <- list(atol = 1e-10, rtol = 1e-10)
   x1 <- Xs(mods$m_rep1, optionsSens = tight) * mods$p_rep
@@ -322,9 +307,8 @@ test_that("Heap and stack AD slabs match on a single-condition linear model", {
 
 test_that("Heap/stack parity holds with per-condition varying theta subsets", {
 
-  # Stack upper bound: any condition may activate up to 4 thetas.
-  # Condition "closed" uses log_k1; condition "open" uses log_k_open instead.
-  # Global theta set has 5 elements; each condition activates 4.
+  # Each condition activates a different subset of the global thetas, as many
+  # as the stack bound admits.
   mods <- xs_models()
   p <- mods$p_rep_cl + mods$p_rep_op
 

@@ -31,13 +31,13 @@ jobs:
     env:
       # cppDE is a private repo in the same org and GITHUB_TOKEN is scoped to
       # this repo alone, so pak cannot resolve the Remote with it. DMODVERSE_PAT
-      # carries Contents:read on dModverse/cppDE. The fallback keeps outside
+      # grants Contents:read on dModverse/cppDE. The fallback keeps outside
       # forks running as far as they can get.
       GITHUB_PAT: ${{ secrets.DMODVERSE_PAT || secrets.GITHUB_TOKEN }}
       R_KEEP_PKG_SOURCE: yes
       # skip_on_cran() guards 13 test files; our own jobs opt in.
       NOT_CRAN: true
-      # PEtabTests/ is .Rbuildignore'd but tracked, so the checkout carries it
+      # PEtabTests/ is .Rbuildignore'd but tracked, so the checkout has it
       # and the conformance tests run here.
       DMOD_PETABTESTS: ${{ github.workspace }}/PEtabTests
 
@@ -103,7 +103,7 @@ jobs:
       GITHUB_PAT: ${{ secrets.DMODVERSE_PAT || secrets.GITHUB_TOKEN }}
       R_KEEP_PKG_SOURCE: yes
       NOT_CRAN: true
-      # the distro packages below carry sympy, numpy, scipy and libsbml, so
+      # the distro packages below provide sympy, numpy, scipy and libsbml, so
       # point reticulate at the system interpreter rather than provisioning one.
       RETICULATE_PYTHON: /usr/bin/python3
       DMOD_PETABTESTS: ${{ github.workspace }}/PEtabTests

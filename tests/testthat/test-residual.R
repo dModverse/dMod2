@@ -1,19 +1,8 @@
-# ============================================================================
-# Residual / per-data-point likelihood primitives.
-#
-# Sections:
-#   * res()         - data <-> prediction residual operator
-#   * datapointL2() - validation-point L2 constraint that reuses
-#                     env$prediction populated by an upstream normL2
-#   * C++ residual kernel (accumulate_aloq / accumulate_bloq) - FD-validated
-#
-# These tests build prediction matrices by hand to keep the math
-# transparent. End-to-end coverage is in test-normL2.R.
-# ============================================================================
+# res(), datapointL2() and the C++ residual kernel on hand-built predictions.
+# End-to-end coverage is in test-normL2.R.
 
 
-# Shared helper: prediction matrix for A(t) = exp(-0.5 * t) with analytical
-# sensitivities dA/dA_par, dA/dk_par.
+# Hand-built decay prediction with analytical sensitivities.
 .make_prdframe <- function(times = c(0, 1, 2)) {
   prdf <- matrix(c(times, exp(-0.5 * times)),
                  nrow = length(times), ncol = 2,
@@ -169,10 +158,6 @@ test_that("datapointL2 contribution to the combined gradient follows the closed 
   obj <- obj_main + obj_val
   pars <- c(A = 1.0, k = 0.5, target = 0.2)
 
-  # val_pt = ((pred(3) - target) / sigma_pt)^2 with pred(t) = A * exp(-k*t).
-  # dpt/dA      =  2 (pred - target) * exp(-k*t) / sigma_pt^2
-  # dpt/dk      =  2 (pred - target) * (-t * A * exp(-k*t)) / sigma_pt^2
-  # dpt/dtarget = -2 (pred - target) / sigma_pt^2
   t_pt <- 3.0; sigma_pt <- 0.05
   pred_pt <- pars[["A"]] * exp(-pars[["k"]] * t_pt)
   r <- pred_pt - pars[["target"]]
@@ -193,9 +178,7 @@ test_that("datapointL2 contribution to the combined gradient follows the closed 
 })
 
 
-# ============================================================================
-# C++ residual kernel parity (src/residual_kernel.{h,cpp})
-# ============================================================================
+# ---- C++ residual kernel parity (src/residual_kernel.{h,cpp}) -----------
 
 # Helper: build a randomized residual-kernel test problem with quadratic
 # pred/sigma dependence so d2pred is non-trivial and FD-Hessian tests make
@@ -289,10 +272,9 @@ default_opts <- function() {
   )
 }
 
-# ---- BLOQ-deriv2-exact: FD validation (new functionality) ----
-# With BOTH d2pred and d2sigma propagated, the kernel produces the analytical
-# Hessian and matches FD to Richardson order for both the sigma-independent
-# and sigma-dependent (curved sigma) cases.
+# ---- BLOQ-deriv2-exact: FD validation ----
+# With d2pred and d2sigma propagated the BLOQ Hessian is exact, for constant
+# and curved sigma.
 test_that("BLOQ M3 + use_deriv2_exact Hessian matches finite-difference Hessian", {
   skip_if_not_installed("numDeriv")
   for (sigma_dep in c(FALSE, TRUE)) {
@@ -325,11 +307,8 @@ test_that("BLOQ M3 + use_deriv2_exact Hessian matches finite-difference Hessian"
 })
 
 
-# The M4* BLOQ contribution -2 log(1 - Phi(wr)/Phi(w0)) has an exact analytic
-# Hessian (not a Gauss-Newton surrogate). Validate it against finite differences
-# for both M4NM and M4BEAL (which share the BLOQ formula) and for fixed and
-# parameter-dependent (curved) sigma. This also exercises the d2pred / d2sigma
-# exact-Hessian path.
+# The M4NM / M4BEAL BLOQ contribution has an exact Hessian, not a Gauss-Newton
+# surrogate, checked against finite differences for constant and curved sigma.
 test_that("BLOQ M4NM/M4BEAL + use_deriv2_exact Hessian matches finite-difference Hessian", {
   skip_if_not_installed("numDeriv")
   for (mode in c("M4NM", "M4BEAL")) {
@@ -366,8 +345,6 @@ test_that("BLOQ M4NM/M4BEAL + use_deriv2_exact Hessian matches finite-difference
 
 
 # ---- ALOQ d2sigma-exact: FD validation ----
-# Verify against the true Hessian of the ALOQ objective when both pred and
-# sigma are quadratic in theta.
 test_that("ALOQ d2sigma + d2pred Hessian matches finite-difference Hessian", {
   skip_if_not_installed("numDeriv")
   setup <- make_setup(n_obs = 10, n_par = 3, sigma_dep = TRUE,
@@ -397,10 +374,8 @@ test_that("ALOQ d2sigma + d2pred Hessian matches finite-difference Hessian", {
 
 
 # ---- M4BEAL ALOQ correction: exact second-order FD validation ----
-# M4BEAL adds +2 log Phi(w0) to every ALOQ row (truncation of the normal at 0).
-# Its gradient and full Hessian, including the d2pred / d2sigma exact terms, are
-# analytic and must match the finite-difference Hessian of the truncated
-# objective wr^2 + log(2 pi sigma^2) + 2 log Phi(pred/sigma).
+# The truncation term M4BEAL adds to every ALOQ row has an exact gradient and
+# Hessian, including the d2pred / d2sigma terms.
 test_that("ALOQ M4BEAL + use_deriv2_exact Hessian matches finite-difference Hessian", {
   skip_if_not_installed("numDeriv")
   setup <- make_setup(n_obs = 8, n_par = 3, sigma_dep = TRUE,

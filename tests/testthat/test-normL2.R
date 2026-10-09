@@ -317,11 +317,8 @@ test_that("getParameters(normL2(..., errmodel = ec$e)) includes errmodel pars", 
 
 
 # ---- BLOQ + error model: end-to-end wiring ------------------------------
-# The errmodel-derived sigma (and its parameter derivatives) must reach the
-# BLOQ partition of the kernel, not only the ALOQ rows. Validate the M3 value
-# against the closed form built with sigma = srel * pred on both partitions,
-# and the full gradient against finite differences (this exercises dsigma
-# propagation into the BLOQ rows).
+# The errmodel sigma and its derivatives reach the BLOQ rows as well as the
+# ALOQ rows: M3 value against the closed form, gradient against differences.
 test_that("normL2 BLOQ M3 + proportional errmodel: value and gradient match", {
   skip_if_no_compile()
   ec <- .nl2_fx()$prop
@@ -383,9 +380,7 @@ test_that("normL2 BLOQ M4 + proportional errmodel: value and gradient match", {
 })
 
 
-# ============================================================================
-# chi2 attribute
-# ============================================================================
+# ---- chi2 attribute -----------------------------------------------------
 
 test_that("normL2 reports the sum of squares as a chi2 attribute", {
   skip_if_no_compile()
@@ -426,9 +421,7 @@ test_that("terms sharing an attrName pool their chi2, others split", {
 })
 
 
-# ============================================================================
-# Printing
-# ============================================================================
+# ---- Printing -----------------------------------------------------------
 
 test_that("print.objlist skips the blocks a deriv = FALSE call lacks", {
   o <- structure(list(value = -480.3, gradient = NULL, hessian = NULL),

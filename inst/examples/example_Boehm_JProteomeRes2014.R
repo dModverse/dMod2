@@ -1,34 +1,12 @@
-# -------------------------------------------------------------------------#
-# STAT5 dimerisation after Epo stimulation
-# -------------------------------------------------------------------------#
-#
-# [PURPOSE]
-# Boehm et al. (2014) in dMod2: STAT5A/STAT5B are phosphorylated, form the
-# dimers ApA, ApB and BpB, shuttle into the nucleus and back. 48 measurements,
-# one condition, 9 estimated parameters. The multi-start section fits the model
-# with the trust-region Hessian sources gn and bfgs, and a gn run handing over
-# to bfgs, over one
-# shared set of starting points.
-#
-# [AUTHOR]
-# Simon Beyer
-#
-# [Date]
-# Fri 05 Sep 2026
-#
-# [Info]
-# The data ship with the package as `boehm`, the PEtab form as
-# inst/extdata/petab_boehm. The last section imports that one and checks the two
-# against each other. Parameters are on log10, so the coordinates are already
-# comparable and the trust region needs no parscale.
-# -------------------------------------------------------------------------#
+# STAT5 dimerisation after Epo stimulation: multi-start comparison of the gn and
+# bfgs Hessian sources, reverse-mode gradient, PEtab cross-check.
+# Boehm et al. (2014) J Proteome Res; PEtab copy in inst/extdata/petab_boehm.
 
 library(dMod2)
 library(ggplot2)
 
 .modelname <- "boehm"
-# every generated source, object and shared library goes here, never into the
-# working directory
+# generated sources, objects and libraries go here, not the working directory
 .outdir    <- file.path(tempdir(), .modelname)
 .fit       <- TRUE   # multi-start comparison
 
@@ -36,13 +14,8 @@ if (!dir.exists(.outdir)) dir.create(.outdir, recursive = TRUE)
 .petabDir <- system.file("extdata", "petab_boehm", package = "dMod2")
 
 
-# –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
-# Load data
-#
-# Relative quantities from mass spectrometry, one condition (Boehm2014). The
-# standard deviations are estimated, so `sigma` is NA and the error model below
-# supplies it.
-# –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
+# Load data ---------------------------------------------------------------------
+# Standard deviations are estimated: `sigma` is NA and the error model supplies it.
 data(boehm)
 mydataL <- as.datalist(boehm)
 
@@ -50,13 +23,9 @@ cat(sprintf("%d points, %d condition, %d observables\n", nrow(boehm),
             length(mydataL), length(unique(boehm$name))))
 
 
-# –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
-# Model
-#
-# The Epo stimulus decays exponentially and enters the phosphorylation rates in
-# closed form, so `time` appears directly in a rate. Nuclear species are
-# assigned their compartment before they are produced.
-# –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
+# Model -------------------------------------------------------------------------
+# The Epo stimulus enters the rates in closed form, so `time` appears in a rate.
+# Nuclear species are assigned their compartment before they are produced.
 epo <- "1.25e-7*exp(-Epo_degradation_BaF3*time)"
 
 reactions <- eqnlist() |>
@@ -77,10 +46,8 @@ reactions <- eqnlist() |>
 
 myOptions <- list(atol = 1e-8, rtol = 1e-6, maxattempts = 100L, maxsteps = 1e6)
 
-# `derivMode = c("forward", "reverse")` compiles a fourth object beside func,
-# extended and extended2: the states in plain double with a checkpoint per step,
-# and one backward sweep for the derivatives. It is what the reverse section
-# at the bottom needs; without it that section errors and nothing else changes.
+# `derivMode = c("forward", "reverse")` adds the checkpointed value solve and
+# backward sweep the reverse section needs.
 model <- odemodel(reactions, modelname = "boehm_ode", compile = FALSE,
                   derivMode = c("forward", "reverse"), outdir = .outdir)
 x <- Xs(model, options = myOptions)
@@ -103,12 +70,9 @@ e <- Y(errorModels, g, modelname = "boehm_err", attachInput = FALSE,
        compile = FALSE, outdir = .outdir)
 
 
-# –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
-# Parameter transformation
-#
-# Fix the initial dimers to zero, split the total STAT5 pool by the measured
-# ratio, and put every estimated parameter on log10.
-# –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
+# Parameter transformation ------------------------------------------------------
+# Initial dimers are zero, the STAT5 pool is split by the measured ratio, and
+# every estimated parameter is on log10.
 innerpars <- getParameters(model, g, e)
 estimated <- c("Epo_degradation_BaF3", "k_exp_hetero", "k_exp_homo", "k_imp_hetero",
                "k_imp_homo", "k_phos", "sd_pSTAT5A_rel", "sd_pSTAT5B_rel", "sd_rSTAT5A_rel")
@@ -130,13 +94,9 @@ prd       <- g*x*p
 outerpars <- getParameters(prd)
 
 
-# –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
-# Objective
-#
-# Two directions are practically non-identifiable, so a weak prior on the
-# dynamic parameters keeps them finite; it stays off the sd_*. Bounds and the
-# published optimum come from the PEtab parameter table.
-# –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
+# Objective ---------------------------------------------------------------------
+# A weak prior on the dynamic parameters keeps the non-identifiable directions
+# finite; bounds and the published optimum come from the PEtab parameter table.
 .pars <- read.delim(file.path(.petabDir, "parameters_Boehm_JProteomeRes2014.tsv"))
 .pars <- .pars[.pars$estimate == 1, ]
 .lower <- setNames(log10(.pars$lowerBound), .pars$parameterId)[outerpars]
@@ -151,19 +111,9 @@ bestfit <- setNames(log10(.pars$nominalValue), .pars$parameterId)[outerpars]
 stopifnot(setequal(names(bestfit), outerpars))
 
 
-# –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
-# Multi-start fit: gn vs bfgs vs a gn run handing over to bfgs
-#
-# One set of 100 starting points, drawn once with msParframe() and handed to
-# every method as the `center`, so the three fits differ only in their Hessian
-# source. neval counts objective (gradient) evaluations, qnEval the share of
-# them spent on a quasi-Newton Hessian.
-#
-# `iterlim` is one shared evaluation limit. gn and the handover never come near
-# it, they finish under 1200; bfgs loses about three quarters of the starts and
-# would otherwise run the limit out on starts that are already worse, which
-# would measure the limit rather than the method.
-# –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
+# Multi-start fit: gn vs bfgs vs a gn run handing over to bfgs ------------------
+# All methods share one set of starts and one evaluation limit, so they differ
+# only in their Hessian source; qnEval counts quasi-Newton evaluations.
 if (.fit) {
   # A run is a Hessian source and, optionally, a fallback it hands over to.
   .methods <- list(gn        = list(hessianMethod = "gn"),
@@ -178,9 +128,8 @@ if (.fit) {
                             parlower = .lower, parupper = .upper), a)))
   frames <- lapply(runs, as.parframe)
 
-  # Best value seen anywhere is the reference optimum; a start "succeeds" if it
-  # lands within 0.1 of it. `converged` separates a method that misses the
-  # optimum from one that never stops looking.
+  # The best value over all methods is the reference; a start succeeds within
+  # 0.1 of it, and `converged` separates a miss from a run that never stops.
   .best <- min(vapply(frames, function(f) min(f$value), 0.0))
   summary <- do.call(rbind, lapply(.methods, function(hm) {
     f  <- frames[[hm]]
@@ -204,32 +153,9 @@ if (.fit) {
 }
 
 
-# –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
-# The gradient the other way round
-#
-# The forward mode integrates 1 + n_theta copies of the system and reads the
-# gradient off the sensitivities. The reverse mode integrates the states alone,
-# keeps a checkpoint per step, and sweeps one tape backwards; its cost does not
-# grow with n_theta. `sweep = "reverse"` is the whole of the caller's side.
-#
-# The two do not agree to machine precision, and the reason is not the adjoint.
-# A forward-sensitivity solve integrates n_theta tangent columns and the
-# step-size controller's error norm takes the maximum over the state norm AND
-# every one of them; a maximum over a larger set is larger, so it steps finer
-# than a value-only run. The two modes therefore differentiate two different
-# discretisations, each of them exactly, and the gap is the O(tol) between them.
-# Tightening the tolerance closes it -- see section 5 of
-# inst/examples/example_ReverseAD.R, which measures that over eight decades.
-#
-# The corollary is in reverse's favour: its gradient belongs to the trajectory
-# a value-only prediction produces, so value and gradient are consistent with
-# each other, which under forward sensitivities they are not.
-#
-# The Hessian is the point of the exercise. The reverse objective returns none,
-# because there is no J to contract; that is exactly what a quasi-Newton
-# Hessian source wants, and `sr1` from an identity seed is the arm that leaves
-# the plateau on the larger benchmarks.
-# –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
+# The gradient the other way round ----------------------------------------------
+# Reverse integrates the states alone and sweeps one tape back. It agrees with
+# forward up to O(tol) and returns no Hessian, see example_ReverseAD.R.
 .fwd <- obj(bestfit, deriv = TRUE)
 .rev <- obj(bestfit, deriv = TRUE, sweep = "reverse")
 
@@ -241,9 +167,8 @@ cat(sprintf("value    %.10g vs %.10g\ngradient max relative difference %.2e\n",
               max(abs(.fwd$gradient))))
 cat("the reverse objective has no Hessian:", is.null(.rev$hessian), "\n")
 
-# Nine parameters is around where the two are level on this model; the forward
-# line rises with n_theta and the reverse one does not, so which side wins is a
-# property of the problem and not of the implementation.
+# Forward cost rises with n_theta and reverse cost does not, so which side wins
+# is a property of the problem.
 .reps <- 10
 .tf <- system.time(for (i in seq_len(.reps)) obj(bestfit, deriv = TRUE))[["elapsed"]]
 .tr <- system.time(for (i in seq_len(.reps))
@@ -252,9 +177,7 @@ cat(sprintf("%d gradients at %d parameters: forward %.2fs, reverse %.2fs\n",
             .reps, length(outerpars), .tf, .tr))
 
 
-# –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
-# Fit and uncertainty band
-# –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
+# Fit and uncertainty band ------------------------------------------------------
 times  <- seq(0, 240, length.out = 200)
 prdout <- as.data.frame(prd(times, bestfit, deriv = FALSE), errfn = e)
 
@@ -265,16 +188,9 @@ plot(prd(times, bestfit, deriv = FALSE), mydataL) +
        title = "STAT5 dimerisation, Boehm 2014")
 
 
-# –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
-# Cross-check against the PEtab form of the same problem
-#
-# The benchmark collection distributes Boehm as PEtab, and the package ships
-# that copy. Importing it builds the model a second time, from SBML and the
-# tables instead of from the reactions above. An explicit modelname keeps its
-# sources and shared object apart from the hand-built "boehm" ones -- the YAML
-# basename would default to "Boehm", which collides on a case-insensitive
-# filesystem.
-# –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
+# Cross-check against the PEtab form of the same problem ------------------------
+# The explicit modelname keeps the import's files apart from the hand-built ones,
+# which the YAML basename would clash with on a case-insensitive filesystem.
 petab <- importPEtab(file.path(.petabDir, "Boehm.yaml"),
                      backend = "cppDE", cores = 4, modelname = "boehm_petab",
                      outdir = .outdir,

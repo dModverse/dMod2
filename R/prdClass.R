@@ -19,7 +19,6 @@ as.prdlist.list <- function(x = NULL, names = NULL, ...) {
   if (is.null(x)) x <- list()
   if (is.null(names)) mynames <- names(x) else mynames <- names 
 
-  # if (length(mynames) != length(x)) stop("names argument has wrong length")
 
   ## Prepare output
   names(x) <- mynames
@@ -348,7 +347,6 @@ summary.prdfn <- function(object,...) {
     })
     names(output) <- conditions
     
-    #print(output, ...)
     output
     
   } else {
@@ -396,7 +394,6 @@ summary.obsfn <- function(object, ...) {
     })
     names(output) <- conditions
     
-    #print(output, ...)
     output
     
   } else {
@@ -516,7 +513,7 @@ predict.prdfn <- function(object, ..., times, pars, data = NULL) {
 
 
 
-## prdfn / obsfn / prdframe / prdlist constructors (moved from classes.R) ----------------------------------------
+## prdfn / obsfn / prdframe / prdlist constructors ----------------------------------------
 
 ## Prediction classes ----------------------------------------------------
 

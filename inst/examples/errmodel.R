@@ -84,7 +84,7 @@ profiles <- profile(obj,
 plotProfile(profiles, mode == "data")
 
 
-# Annotation: This code is outdated and does not work atm
+# Prediction profile, not functional with the current interface
 # ## Compute prediction profile
 # datapoint <- datapointL2(name = "A", time = 10, parameter = "d1", sigma = .05, condition = "C1")
 # par <- trust(normL2(data, g*x*p, e) + datapoint, c(ptrue, d1 = 0), rinit = 1, rmax = 10)$argument

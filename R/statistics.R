@@ -292,10 +292,9 @@ profile.objfn <- function(fitted, pars, whichPar, alpha = 0.05,
                                 warning(paste0("Iteration ", i, ": Impossible to invert Hessian. Trying to optimize instead."))
                               }
                               
-                              # Numeric attributes of the objective value become
-                              # profile modes, and those have to add up to the
-                              # total. chi2 is a decomposition of one of them,
-                              # not a term next to it.
+                              # Numeric attributes become profile modes that add
+                              # up to the total; chi2 decomposes one of them and
+                              # is not a mode of its own.
                               out.attributes <- attributes(out)[sapply(attributes(out), is.numeric)]
                               out.attributes <- out.attributes[
                                 !grepl("^chi2($|_)", names(out.attributes))]
@@ -319,7 +318,6 @@ profile.objfn <- function(fitted, pars, whichPar, alpha = 0.05,
                               optimize <- aControl$reoptimize
                               # Check for error in evaluation of lagrange()
                               if(is.na(dy[1])) {
-                                #cat("Evaluation of lagrange() not successful. Will optimize instead.\n")
                                 optimize <- TRUE
                                 y.try <- y
                                 y.try[whichIndex] <- y[whichIndex] + direction*stepsize
@@ -393,7 +391,6 @@ profile.objfn <- function(fitted, pars, whichPar, alpha = 0.05,
                                 progressBar(percentage)
                                 
                                 
-                                #cat("diff.thres:", diff.thres, "diff.steps:", diff.steps, "diff.limit:", diff.limit)
                                 myvalue <- format(substr(lagrange.out$value  , 0, 8), width = 8)
                                 myconst <- format(substr(constraint.out$value, 0, 8), width = 8)
                                 mygamma <- format(substr(gamma               , 0, 8), width = 8)
@@ -825,11 +822,9 @@ vcov.trustfit <- function(object, parupper = NULL, parlower = NULL, ...) {
     return(vcov__)
   }
   
-  # Which parameters are held by a bound rather than determined by the data.
-  # `stepControl$boundary = "reflective"` keeps iterates strictly inside the
-  # box, so an exact comparison against the bound never fires; it reports the
-  # activity itself. The comparison below is the fallback for fits without that
-  # field, and is relaxed to a relative tolerance for the same reason.
+  # Parameters held by a bound rather than by the data. A reflective boundary
+  # keeps iterates strictly inside and reports `atBound` itself; otherwise the
+  # bounds are compared with a relative tolerance.
   fixed <- NULL
   atBound__ <- fit[["atBound"]]
   if (!is.null(atBound__) && !is.null(names(atBound__)))
@@ -852,9 +847,6 @@ vcov.trustfit <- function(object, parupper = NULL, parlower = NULL, ...) {
   subvcov__ <- try(solve(0.5*subhessian__), silent = TRUE)
   if (inherits(subvcov__, "try-error")) subvcov__ <- MASS::ginv(0.5*subhessian__)
   vcov__[!is_fixed__, !is_fixed__] <- subvcov__
-  
-  # This part should not be necessary due to regularization usually done
-  # Perform identifiability check based on
   
   return(vcov__) 
   
@@ -969,18 +961,15 @@ mstrust <- function(objfun, center, rinit = .1, rmax = 10, fits = 20, cores = 1,
   # Add extra arguments
   argslist$n <- length(center) # How many inital values do we need?
   
-  # Determine target function for each function argument.
-  # First, define argument names used locally in mstrust().
-  # Second, check what trust() and samplefun() accept and check for name clashes.
-  # Third, whatever is unused is passed to the objective function objfun().
+  # Route each argument: names local to mstrust(), then those the optimiser and
+  # samplefun() accept (which must not clash), the rest to the objective.
   nameslocal <- c("name", "center", "fits", "cores", "optmethod", "samplefun",
                   "resultPath", "stats", "narrowing", "output", "cautiousMode",
                   "retry", "nTries")
-  # A name that moved into one of trust()'s control lists is no longer a
-  # formal, so without this it would silently be routed to objfun instead.
+  # A name that belongs in one of trust()'s control lists is not a formal and
+  # would otherwise reach objfun.
   .trustRejectMoved(names(argslist), "mstrust")
-  # Routed by the optimiser actually called: reading trust()'s formals sent
-  # every argument another optimiser has and trust() lacks to the objective.
+  # Routed by the formals of the optimiser actually called.
   optfun <- if (is.function(optmethod)) optmethod else match.fun(optmethod)
   namestrust <- intersect(setdiff(names(formals(optfun)), "..."), names(argslist))
   namessample <- intersect(names(formals(samplefun)), names(argslist))
@@ -1038,7 +1027,6 @@ mstrust <- function(objfun, center, rinit = .1, rmax = 10, fits = 20, cores = 1,
                   strpad("mstrust", 12),                        ": ", paste0(nameslocal, collapse = ", "), "\n",
                   strpad("trust", 12),                          ": ", paste0(namestrust, collapse = ", "), "\n",
                   strpad(samplefunName, 12), ": ", paste0(namessample, collapse = ", "), "\n\n")
-    #strpad(as.character(argslist$objfun), 12),    ": ", paste0(namesobj, collapse = ", "), "\n\n")
     if (!is.null(logfile)) { writeLines(msg, logfile); flush(logfile) }
   }
   
@@ -1055,9 +1043,8 @@ mstrust <- function(objfun, center, rinit = .1, rmax = 10, fits = 20, cores = 1,
   }
   
   
-  # cores = c(fits = , conditions = ) splits the two axes. A forked outer axis
-  # cannot nest an inner one, cppDE's batch runs serially inside a fork --
-  # so an inner axis > 1 selects PSOCK.
+  # cores = c(fits = , conditions = ) splits the two axes. cppDE's batch runs
+  # serially inside a fork, so an inner axis > 1 selects PSOCK.
   .cc <- .splitCores(cores, "fits")
   coresConditions <- .cc$conditions
   cores <- min(fits, .cc$outer)
@@ -1129,10 +1116,9 @@ mstrust <- function(objfun, center, rinit = .1, rmax = 10, fits = 20, cores = 1,
     # (cores = 1) or of the parent process (cores > 1, forked).
     try(resetWarmStarts(objfun, verbose = FALSE), silent = TRUE)
 
-    # Retry loop: a try-error or fit$error triggers re-sampling parinit and
-    # re-running optmethod, up to nTries times. parframe-supplied centers
-    # are skipped (rows are taken as given). Warm-start caches are reset
-    # between attempts.
+    # Up to nTries attempts, each resampling parinit after a try-error or
+    # fit$error and resetting warm starts. Rows of a parframe center are taken as
+    # given and never retried.
     max_tries <- if (isTRUE(retry) && !is.parframe(center)) as.integer(nTries) else 1L
     fit <- NULL
     for (try_i in seq_len(max_tries)) {
@@ -1165,10 +1151,7 @@ mstrust <- function(objfun, center, rinit = .1, rmax = 10, fits = 20, cores = 1,
     if (output) {
       saveRDS(fit, file = file.path(interResultFolder, paste0("fit-", i, ".Rda")))
       if (cautiousMode) dput(fit[c("value", "argument", "iterations", "converged")], file = file.path(interResultFolder, paste0("fit-", i, ".R")))
-      # Reporting
-      # With concurent jobs and everyone reporting, this is a classic race
-      # condition. Assembling the message beforhand lowers the risk of interleaved
-      # output to the log.
+      # Assembled before writing, so concurrent jobs interleave less in the log.
       msgSep <- "-------"
       if (any(names(fit) == "error")) {
         msg <- paste0(msgSep, "\n",
@@ -1204,16 +1187,9 @@ mstrust <- function(objfun, center, rinit = .1, rmax = 10, fits = 20, cores = 1,
   
   
   
-  # Cull failed and completed fits Two kinds of errors occure. The first returns
-  # an object of class "try-error". The reason for these failures are unknown to
-  # me. The second returns a list of results from trust(), where one name of the
-  # list is error holding an object of class "try-error". These abortions are 
-  # due to errors which are captured within trust(). Completed fits return with 
-  # a valid result list from trust(), with "error" not part of its names. These
-  # fits, can still be unconverged, if the maximim number of iterations was the
-  # reason for the return of trust(). Be also aware of fits which converge due
-  # to the trust radius hitting rmin. Such fits are reported as converged but
-  # are not in truth.
+  # A fit fails as a "try-error" object or as a trust() result with an `error`
+  # entry. A completed fit may still be unconverged (iteration limit), and one
+  # stopped by the trust radius reaching rmin is reported converged without being so.
   m_trustFlags.converged = 0
   m_trustFlags.unconverged = 1
   m_trustFlags.error = 2
@@ -1576,7 +1552,7 @@ reduceReplicates.character <- function(data, select = "condition", datatrans = N
 #' @importFrom ggplot2 ggplot aes geom_point geom_line geom_ribbon ylab facet_wrap scale_y_log10 theme
 fitErrorModel <- function(data, factors, errorModel = "exp(s0)+exp(srel)*x^2",
                           par = c(s0 = 1, srel = .1),
-                          lower = NULL, upper = NULL,  # Optional: Parametergrenzen
+                          lower = NULL, upper = NULL,  # optional parameter bounds
                           plotting = FALSE, blather = FALSE, ...) {
 
   .require_ns("optimx", "fitErrorModel()")
@@ -1594,7 +1570,7 @@ fitErrorModel <- function(data, factors, errorModel = "exp(s0)+exp(srel)*x^2",
     n <- subdata$n
     y <- subdata$sigma * sqrt(n)
     
-    # Zielfunktion mit der analytischen Maximum-Likelihood
+    # Objective: the analytic maximum likelihood
     obj <- function(par) {
       with(as.list(par), {
         sigma2 <- eval(parse(text = errorModel)) 

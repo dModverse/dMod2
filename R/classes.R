@@ -16,7 +16,7 @@ match.fnargs <- function(arglist, choices) {
   # Catch the case of names == NULL
   if (is.null(names(arglist))) names(arglist) <- rep("", length(arglist))
 
-  # exlude named arguments which are not in choices
+  # exclude named arguments which are not in choices
   arglist <- arglist[names(arglist) %in% c(choices, "")]
 
   # determine available arguments
@@ -33,23 +33,12 @@ match.fnargs <- function(arglist, choices) {
 
 
 ## Evaluation protocol for fn objects -------------------------------------
-##
-## Moves the loop over conditions from outside a chain into the leaves, so a
-## leaf sees every condition at once and can batch them.
-##
-##   st        structure descriptor ("leaf" / "*" / "+") in a state env, the
-##             pattern parfn already uses. Not an attribute: modelname<-.fn and
-##             the PEtab relabeller rewrite `mappings` by hand.
-##   bundle    one (times, pars, fixed, out) per condition, plus `shared`.
-##   .evalMany recursive evaluator; shared bundle + one condition reduces to
-##             the pre-rebuild call sequence.
-##
-## Conditions flow UP through `*`: "*.fn" passes `conditions` only to p2 and
-## calls p1 with names(<p2 result>), which is NULL when both are unspecific.
+## The condition loop sits in the leaves, so a leaf sees all conditions at once.
+## Conditions flow up through `*`: p2 gets `conditions`, p1 the names of p2's result.
 
 
-# Structure descriptor, or NULL for objects built before the rebuild. The
-# `op` check also excludes parfn's legacy `st`.
+# Structure descriptor ("leaf", "*", "+") in the closure's state env, or NULL
+# for an fn without one. The `op` check excludes parfn's own `st`.
 .fnNode <- function(f) {
   if (!is.function(f)) return(NULL)
   e <- environment(f)
@@ -60,12 +49,8 @@ match.fnargs <- function(arglist, choices) {
 }
 
 # The raw kernels an fn evaluates, each as list(kernel, kind, condition),
-# outermost factor first. `condition` keeps the leaves that answer for it: a
-# `+` node asks the part that owns the condition, a `*` node asks both
-# factors, and a leaf built without a condition answers for every one. The
-# composed mappings hold nothing but the descriptor, so this is the way from a
-# composition to the closures that hold the controls. An fn without a
-# descriptor offers its mappings.
+# outermost factor first, restricted to the leaves answering for `condition`.
+# This is the way from a composition to the closures that hold the controls.
 .fnLeaves <- function(f, condition = NULL) {
   st <- .fnNode(f)
   if (is.null(st)) {
@@ -98,14 +83,9 @@ match.fnargs <- function(arglist, choices) {
 
 ## ---- Condition resolution ------------------------------------------------
 
-# The truth table every leaf reproduces (own = leaf's condition):
-#
-#   own    conditions    -> slots filled
-#   NULL   NULL             one unnamed slot
-#   NULL   c("C1","C2")     both, same result replicated
-#   "C1"   NULL             one slot named "C1"
-#   "C1"   c("C1","C2")     "C1" only; "C2" stays NULL
-#   "C1"   "C2"             nothing evaluated; one NULL slot
+# Slots a leaf with condition `own` fills: all requested ones when `own` is
+# NULL (one unnamed slot if none are), else those named `own`, and nothing when
+# the request names other conditions only.
 .resolveConditions <- function(conditions, own) {
   overlap <- test_conditions(conditions, own)
   # union() would drop repeats, and a request may name the same condition more
@@ -129,13 +109,9 @@ match.fnargs <- function(arglist, choices) {
 
 ## ---- Bundles -------------------------------------------------------------
 
-# One entry per condition, or a single entry when `conds` is NULL.
-#
-# shared = TRUE: pars/fixed/out are n references to one object. A leaf must
-# then evaluate once and replicate, batching would turn one solve into n.
-#
-# times is one vector for all requests, or a list of n for per-request grids;
-# every composition call site shares one.
+# One entry per condition, or a single entry when `conds` is NULL. `shared`:
+# all entries reference one request, so a leaf evaluates once and replicates.
+# `times` is one vector, or a list of n for per-request grids.
 .bundle <- function(conds = NULL, times = NULL, out = NULL, pars = NULL,
                     fixed = NULL, shared = FALSE) {
   list(conds = conds, times = times, out = out, pars = pars,
@@ -200,14 +176,12 @@ match.fnargs <- function(arglist, choices) {
   objfn = list(inputs = "pars",             result = "objlist")
 )
 
-# How one element of p2's output becomes p1's (pars, fixed). Five behaviours
-# across six branches; named rather than unified because at least one is
-# probably wrong and changing that needs its own oracle. Lines are pre-rebuild
-# classes.R.
-.handoff_prd_outerfixed <- function(v, fixed)          # obsfn * obsfn  (:464)
+# How one element of p2's output becomes p1's (pars, fixed), per pair of kinds.
+# Kept apart rather than unified: changing one needs its own test.
+.handoff_prd_outerfixed <- function(v, fixed)          # obsfn * obsfn
   list(pars = attr(v, "parameters"), fixed = fixed)
 
-.handoff_prd_innerfixed <- function(v, fixed) {        # obsfn * prdfn  (:568)
+.handoff_prd_innerfixed <- function(v, fixed) {        # obsfn * prdfn
   p <- attr(v, "parameters")
   f <- attr(p, "fixed")
   # Without a parameter derivative there is no transformation in between, so
@@ -216,15 +190,15 @@ match.fnargs <- function(arglist, choices) {
   list(pars = p, fixed = p[f])
 }
 
-.handoff_par_outerfixed <- function(v, fixed)          # obsfn * parfn  (:516)
+.handoff_par_outerfixed <- function(v, fixed)          # obsfn * parfn
   list(pars = v, fixed = fixed)
 
-.handoff_par_innerfixed <- function(v, fixed) {        # prdfn|parfn * parfn (:627)
+.handoff_par_innerfixed <- function(v, fixed) {        # prdfn|parfn * parfn
   f <- attr(v, "fixed")
   list(pars = v[.setdiffU(names(v), f)], fixed = v[f])
 }
 
-.handoff_par_nofixed <- function(v, fixed)             # objfn * parfn  (:730)
+.handoff_par_nofixed <- function(v, fixed)             # objfn * parfn
   list(pars = v, fixed = NULL)
 
 .prodSpec <- list(
@@ -337,9 +311,8 @@ match.fnargs <- function(arglist, choices) {
   res
 }
 
-# Warm-start key for Pimpl. A leaf with its own condition keys by slot;
-# an unspecific leaf answering several slots from ONE call has no single
-# condition and keys by NULL, as before the rebuild.
+# Warm-start key for Pimpl. A leaf with its own condition keys by slot; an
+# unspecific leaf answering several slots from one call keys by NULL.
 .condKeys <- function(st, conds, shared) {
   if (!is.null(st$condition) || length(conds) == 1L || !shared) return(conds)
   rep(list(NULL), length(conds))
@@ -440,34 +413,13 @@ match.fnargs <- function(arglist, choices) {
 
 
 ## ---- Reverse evaluation --------------------------------------------------
-##
-## The forward pass threads a Jacobian: a leaf reads dP/dtheta off its input and
-## returns dX/dtheta on its output, so the chain rule happens inside the leaves
-## and everything in flight is n_theta wide. The reverse pass threads a
-## cotangent the other way and is as wide as the number of seeds, which for a
-## gradient is one.
-##
-## A `*` node cannot be walked in one recursion: p2 has to be evaluated before
-## p1 can run at all, and p2 cannot be differentiated before p1 has been. So the
-## protocol is two phases with an explicit tape between them, built on the way
-## down and consumed on the way up. The tape holds the forward values of every
-## node, which is what a reverse pass needs anyway; nothing is recomputed.
-##
-##   .fwdNode(st, b, ...)      -> list(values, tape)
-##   .bwdNode(tape, w, ...)    -> cotangent of the node's own input
-##
-## `w` is one .ct() per condition: `out` on the matrix a prediction or an
-## observation returns, `pars` on the parameters it passes through. The `pars`
-## half is what makes the tree a graph rather than a chain -- an observation
-## function reads the prediction's parameters as well as its values -- and both
-## halves accumulate.
+## Two phases: .fwdNode() returns values and a tape of every node's forward
+## values, .bwdNode() walks the tape back with one .ct() cotangent per condition.
 
 .fwdNode <- function(st, b, env, cores, deriv = FALSE) {
   switch(st$op,
-    # The value pass of a reverse evaluation is the one whose trajectory the
-    # backward pass replays, so a leaf that can keep its checkpoints does. Under
-    # second order it also propagates tangents: they are the directions the
-    # backward half differentiates each node's vjp along.
+    # A leaf keeps its checkpoints for the backward pass to replay. Under
+    # second order it propagates the tangents each vjp is differentiated along.
     leaf = list(values = .evalLeaf(st, b, deriv, FALSE, cores,
                                    keepStore = isTRUE(st$keepstore)),
                 tape   = list(op = "leaf", st = st, b = b)),
@@ -535,12 +487,8 @@ match.fnargs <- function(arglist, choices) {
                    n = length(slotnames)))
 }
 
-# ---------------------------------------------------------------------------
-
 # `seeds = TRUE` reads the trailing axis of every cotangent as independent
-# first-order seeds instead of directions. A leaf that can take several seeds
-# at once gets them in one call, the ODE among them; every other leaf is linear
-# in its seed and answers slice by slice.
+# first-order seeds instead of directions.
 .bwdNode <- function(tape, w, env, cores, seeds = FALSE) {
   switch(tape$op,
     leaf = .bwdLeaf(tape, w, cores, seeds),
@@ -549,15 +497,9 @@ match.fnargs <- function(arglist, choices) {
     stop(".bwdNode: unknown node op '", tape$op, "'.", call. = FALSE))
 }
 
-# The leaf's own vjp. A leaf that answered no slot contributes nothing, which is
-# the same NULL hole the forward pass leaves.
-#
-# Two shapes rather than one loop. Where one request stands behind several slots
-# the leaf saw one input, so their cotangents are added first and the vjp runs
-# once: it is linear in the seed, so summing before is the same answer as
-# summing after and costs one solve instead of n. Where the slots are separate
-# requests and the leaf offers a batch entry, they go in one call, for the same
-# reason the forward path batches them.
+# The leaf's own vjp; a leaf that answered no slot leaves a NULL hole. Slots
+# behind one shared request have their cotangents summed and take one vjp, as
+# the vjp is linear in its seed; separate requests go through the batch entry.
 .bwdLeaf <- function(tape, w, cores, seeds = FALSE) {
   st <- tape$st; b <- tape$b
   vjp <- st$vjpfn
@@ -579,8 +521,7 @@ match.fnargs <- function(arglist, choices) {
   if (!length(live)) return(out)
 
   # One vjp call at input index i, seeded with ws. A node reached only through
-  # the parameters it passes on has nothing to solve for: the pass-through below
-  # is then the whole of its cotangent.
+  # the parameters it passes on solves nothing.
   call_one <- function(i, ws, cond) {
     pf <- .splitParsFixed(.req_pars(b, i), .req_fixed(b, i))
     r <- if (!identical(st$kind, "parfn") && is.null(ws$out)) .ct() else
@@ -600,9 +541,8 @@ match.fnargs <- function(arglist, choices) {
     r
   }
 
-  # Seed mode. A prediction whose vjp takes `seeds` answers every seed in one
-  # sweep; anything else is called once per seed and the answers are stacked,
-  # which is exact because a first-order vjp is linear in its seed.
+  # Seed mode: a prediction whose vjp takes `seeds` answers all in one sweep,
+  # any other leaf is called once per seed and the answers are stacked.
   vjp_seeds <- identical(st$kind, "prdfn") && "seeds" %in% names(formals(vjp))
   call_seeds <- function(i, ws, cond) {
     if (vjp_seeds) {
@@ -657,9 +597,8 @@ match.fnargs <- function(arglist, choices) {
              " leaf disagrees with the scalar one:\n  ",
              paste(cmp, collapse = "\n  "), call. = FALSE)
     }
-    # Same width rule as call_one: the pass-through half is picked at the width
-    # the node hands on, not at its own. A leaf whose pars-half is absent reads
-    # as one direction otherwise, and second order then meets a K-column answer.
+    # As in call_one, the pass-through half is picked at the width the node
+    # hands on, not at its own.
     for (j in seq_along(live)) {
       wj <- w[[live[j]]]
       K  <- max(.ctK(wj$pars), .ctK(wj$out))
@@ -731,9 +670,8 @@ match.fnargs <- function(arglist, choices) {
 
 ## ---- Public shim ---------------------------------------------------------
 
-# Every fn object is this: a thin wrapper over its descriptor. The signature
-# is the pre-rebuild one plus `cores`, which must be a formal, match.fnargs
-# drops named arguments it does not know, so a `cores` in `...` would vanish.
+# Every fn object is a thin wrapper over its descriptor. `cores` must be a
+# formal: match.fnargs drops unknown named arguments from `...`.
 .fnWrap <- function(st) {
   function(..., fixed = NULL, deriv = TRUE, deriv2 = FALSE, hessian = TRUE,
            conditions = st$default_conditions, env = NULL,
@@ -754,10 +692,9 @@ match.fnargs <- function(arglist, choices) {
   if (identical(spec$result, "prdlist")) as.prdlist(out) else out
 }
 
-# Evaluate a prediction chain for many parameter sets in one batch.
-# `conditions` names one condition per parameter set and MAY repeat: quadrature
-# nodes and parameter-frame rows both send the same condition several times.
-# `times` is one grid, or a list of one per request.
+# Evaluate a prediction chain for many parameter sets in one batch. One
+# condition per parameter set, which may repeat; `times` is one grid, or a
+# list of one per request.
 .predictMany <- function(x, times, parsList, conditions, fixed = NULL,
                          deriv = TRUE, deriv2 = FALSE, env = NULL,
                          cores = getOption("dMod.cores", 1L)) {
@@ -788,7 +725,7 @@ match.fnargs <- function(arglist, choices) {
            parent = emptyenv())
 }
 
-# Pre-rebuild path: drive an fn without a descriptor one condition at a time.
+# Drives an fn without a descriptor one condition at a time.
 .evalLegacy <- function(f, b, deriv, deriv2, env, hessian = TRUE,
                         sweep = "forward") {
   kind <- .fnKind(f)
@@ -824,9 +761,8 @@ match.fnargs <- function(arglist, choices) {
 
 ## ---- Composition bookkeeping ---------------------------------------------
 
-# A `+` node contributes its parts; anything else is one part owning all of
-# its conditions. Flattening keeps a+b+c one node rather than two nested ones,
-# which matters for P()'s Reduce("+", .) over thousands of conditions.
+# A `+` node contributes its parts, anything else is one part owning all of
+# its conditions. Flattening keeps a long Reduce("+", .) one node.
 .fnParts <- function(f) {
   st <- .fnNode(f)
   if (!is.null(st) && identical(st$op, "+"))
@@ -835,7 +771,7 @@ match.fnargs <- function(arglist, choices) {
   list(parts = list(f), owner = setNames(rep(1L, length(conds)), conds))
 }
 
-# Overlapping conditions: later operand wins, as before the rebuild.
+# Overlapping conditions: the later operand wins.
 .mergeOwnership <- function(x1, x2) {
   m1 <- attr(x1, "mappings"); m2 <- attr(x2, "mappings")
   if (is.null(names(m1)) || is.null(names(m2)))
@@ -896,8 +832,7 @@ match.fnargs <- function(arglist, choices) {
   m
 }
 
-# Per-condition callable, kept so the 25+ consumers that walk `mappings` and
-# the external callers that invoke them keep working.
+# Per-condition callables for the consumers that walk `mappings`.
 .composeMapping <- function(st, cond, kind) {
   force(cond)
   switch(kind,
@@ -925,10 +860,8 @@ match.fnargs <- function(arglist, choices) {
   setNames(out, conditions)
 }
 
-# Relabel a leaf so it answers for several conditions through one kernel.
-# Rewriting only the `mappings` attribute is not enough: `+` dispatches on the
-# descriptor, and a leaf that still says condition = NULL would evaluate once
-# and replicate instead of answering per condition.
+# Relabel a leaf so it answers for several conditions through one kernel. The
+# descriptor is relabelled too, as `+` dispatches on it, not on `mappings`.
 .fnWithConditions <- function(fn, conds) {
   st <- .fnNode(fn)
   if (is.null(st) || !identical(st$op, "leaf"))
@@ -959,9 +892,7 @@ match.fnargs <- function(arglist, choices) {
 ## General concatenation of functions ------------------------------------------
 
 # The summands of an objective: the flat list `+` recorded, or the objective
-# itself. An objective scaled by %.*% or composed with a parfn keeps what it
-# wraps in `wrapped`, which this does not read: the wrapper is one summand, not
-# the objective inside it.
+# itself. A wrapper (%.*%, objfn * parfn) is one summand, `wrapped` is not read.
 .objTerms <- function(f) {
   t <- attr(f, "terms", exact = TRUE)
   if (is.null(t)) list(f) else t
@@ -1006,21 +937,9 @@ match.fnargs <- function(arglist, choices) {
       arglist <- arglist[match.fnargs(arglist, c("pars"))]
       pars <- arglist[[1]]
 
-      # 1. If conditions.xi is null, always evaluate xi, but only once
-
-      # A term that has no reverse path of its own keeps the forward one: a
-      # constraint's gradient is a line of algebra and costs nothing either
-      # way, and the sum is the same number however each half got there.
-      #
-      # Under an exact request such a term is still asked for its curvature,
-      # which is a line of algebra. Left out, a prior drops out of the total
-      # while the data term stays in it.
-      #
-      # `sweep` in the formals is what says a term understands the direction. A
-      # wrapper that forwards it through `...` without naming it reads here as a
-      # term with no reverse path, and the sum would then return a forward
-      # gradient without anyone noticing, so every wrapper in this package
-      # declares it.
+      # A term understands `sweep` only if it names it as a formal; one that
+      # does not runs forward, and under an exact request still returns its
+      # Hessian. Every wrapper in this package declares `sweep`.
       .call <- function(f, conds, e) {
         if (identical(sweep, "reverse") && "sweep" %in% names(formals(f)))
           f(pars = pars, fixed = fixed, deriv = deriv, deriv2 = deriv2,
@@ -1032,8 +951,8 @@ match.fnargs <- function(arglist, choices) {
                       else hessian,
             conditions = conds, env = e, cores = cores)
       }
-      # 2. If not null, evaluate at intersection with conditions
-      # 3. If not null & intersection is empty, don't evaluate xi at all
+      # A term without conditions is evaluated once, any other on its
+      # intersection with `conditions`, and not at all when that is empty.
       v1 <- v2 <- NULL
       if (is.null(conditions.x1)) {
         v1 <- .call(e1, conditions.x1, env)
@@ -1047,9 +966,8 @@ match.fnargs <- function(arglist, choices) {
         v2 <- .call(e2, intersect(conditions, conditions.x2), attr(v1, "env"))
       }
 
-      # .sumobjlist adds an absent Hessian as zero. That is right when neither
-      # term has one, and wrong when only one does: the total would then miss
-      # the other term's curvature with nothing to show for it.
+      # .sumobjlist adds an absent Hessian as zero, which is wrong when only
+      # one term has one.
       .h <- function(v) !is.null(v) && !is.null(v$hessian)
       if (!is.null(v1) && !is.null(v2) && xor(.h(v1), .h(v2)))
         stop("a summed objective got a Hessian from ",
@@ -1067,9 +985,7 @@ match.fnargs <- function(arglist, choices) {
     attr(outfn, "conditions") <- conditions12
     attr(outfn, "parameters") <- parameters12
     attr(outfn, "modelname") <- modelname12
-    # Propagate the reconstruction handles so a composed objective exposes its
-    # model pieces regardless of term order or nesting. Coalesce from either
-    # operand.
+    # Reconstruction handles, coalesced from either operand.
     for (.a in c("prdfn", "data", "errfn", "timesD")) {
       .v <- attr(e1, .a, exact = TRUE)
       if (is.null(.v)) .v <- attr(e2, .a, exact = TRUE)
@@ -1160,9 +1076,8 @@ match.fnargs <- function(arglist, choices) {
     attr(outfn, "conditions") <- conditions12
     attr(outfn, "parameters") <- parameters12
     attr(outfn, "modelname") <- modelname12
-    # The objective inside, so controls() reaches its controls. Not `terms`:
-    # the scaled objective is not a sum, and .objTerms() must not take it for
-    # its inner objective.
+    # The objective inside, for controls(). Not `terms`: a scaled objective
+    # is not a sum.
     attr(outfn, "wrapped") <- list(x2)
     return(outfn)
 
@@ -1298,17 +1213,8 @@ test_conditions <- function(c1, c2) {
 #' @export
 "*.fn" <- function(e1, e2) {
 
-  # ============================================================
-  # Global consistency check for condition handling
-  #
-  # Rules:
-  # - A condition-unspecific function (conditions = NULL) may be
-  #   combined with any other function.
-  # - Two condition-specific functions must cover the same set
-  #   of conditions.
-  # - It is NOT allowed to combine a single-condition function
-  #   with a multi-condition function.
-  # ============================================================
+  # An unspecific function combines with any other; two specific ones must
+  # share their conditions, and one condition never combines with several.
 
   conditions.p1 <- attr(e1, "conditions")
   conditions.p2 <- attr(e2, "conditions")
@@ -1380,9 +1286,8 @@ test_conditions <- function(c1, c2) {
         tm$prdfn <- tryCatch(tm$prdfn * e2, error = function(e) tm$prdfn)
         tm
       })
-    # The objective inside, so controls() reaches its controls. Not `terms`:
-    # the objective now reads other parameters, and .objTerms() must not take
-    # it for the objective it wraps.
+    # The objective inside, for controls(). Not `terms`: the composition
+    # reads other parameters than the objective it wraps.
     attr(outfn, "wrapped") <- list(e1)
   } else {
     attr(outfn, "mappings") <- .composeMappings(st, e1, e2, conditions.out, spec$out)

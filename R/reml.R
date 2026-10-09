@@ -1,10 +1,8 @@
 ## Restricted maximum likelihood for the error model -------------------------
-##
-## The error parameters solve the maximum-likelihood equation with every data
-## point charged its own leverage h_ii:
-##   sum_i [ 1 - h_ii - r_i^2/sigma_i^2 ] d log sigma_i^2 / d phi_k = 0
-## Only first-order sensitivities enter, and the fixed point is exact although
-## each step freezes h.
+
+## Error parameters solve sum_i [1 - h_ii - r_i^2/sigma_i^2] d log sigma_i^2 / d phi_k = 0
+## with leverages h_ii. Only first-order sensitivities enter; the fixed point is
+## exact although each step freezes h.
 
 
 # One evaluation of the whole chain per L2 term, returned per term and

@@ -71,10 +71,9 @@ P <- function(trafo = NULL, parameters = NULL, condition = NULL,
 }
 
 
-## Per-condition warm-start caches of a Pimpl. A condition-less Pimpl composed
-## with a condition-specific Pexpl is called once per condition; each condition
-## keeps its own cache, keyed by the condition parfn() passes on. A NULL or
-## empty key uses a shared slot.
+## Per-condition warm-start caches of a Pimpl, keyed by the condition parfn()
+## passes on, so a condition-less Pimpl behind a condition-specific Pexpl keeps
+## one cache per condition. A NULL or empty key uses a shared slot.
 .warmstart_registry <- function() {
   caches <- new.env(parent = emptyenv())
   get_cache <- function(key) {
@@ -160,10 +159,9 @@ P <- function(trafo = NULL, parameters = NULL, condition = NULL,
   Jac  <- Jac[rowSums(Jac != 0) > 0, , drop = FALSE]
   Hess <- if (deriv2 && !is.null(Hess)) Hess[rownames(Jac), , , drop = FALSE]
 
-  ## An input without a derivative row counts as fixed downstream, and the
-  ## forward gradient along it would be zero while the reverse path, which
-  ## hands each input its cotangent back, has it right. So every input that
-  ## varies keeps its row. What the caller fixed has none and stays fixed.
+  ## Every varying input keeps a derivative row: without one it counts as fixed
+  ## downstream and the forward gradient along it would be zero. What the caller
+  ## fixed has no row and stays fixed.
   moving <- setdiff(through, names(fixed))
   if (length(moving)) {
     d <- .Pexpl_through(pars, moving, colnames(Jac), second = !is.null(Hess))
@@ -176,11 +174,9 @@ P <- function(trafo = NULL, parameters = NULL, condition = NULL,
 }
 
 
-# The derivatives of the inputs Pexpl passes through, in the basis `theta` of
-# the transformation's own Jacobian. An input brings its derivatives in; where
-# none come in, it is a parameter of the chain and its own direction, which the
-# basis gains if the transformation does not read it. An input that comes in
-# without a row was fixed further up and keeps no row.
+# Derivatives of the inputs Pexpl passes through, in the basis `theta` of its
+# Jacobian. Without incoming derivatives an input is its own direction, added to
+# the basis if needed; an incoming input without a row was fixed and keeps none.
 .Pexpl_through <- function(pars, moving, theta, second = FALSE) {
   dP <- attr(pars, "deriv")
   if (is.null(dP)) {
@@ -283,12 +279,9 @@ P <- function(trafo = NULL, parameters = NULL, condition = NULL,
   p2p
 }
 
-# w' Jac, where the forward path forms Jac %*% dP. The transformation is one
-# evaluation with no variables and one observation, so the vjp is the same call
-# the observation functions make, with the cotangent on the inner parameters.
-#
-# attach.input passes the outer parameters through untouched, so their cotangent
-# adds to whatever the transformation itself puts on them.
+# w' Jac, the reverse of the forward Jac %*% dP: the observation functions' vjp
+# call with no variables and the cotangent on the inner parameters. Under
+# attach.input the passed-through outer parameters add their own cotangent.
 .Pexpl_vjp <- function(st, pars, fixed = NULL, cotangent, condition = NULL,
                        attach.input = FALSE) {
   if (is.null(st$vjp))
@@ -583,10 +576,9 @@ Pexpl <- function(trafo, parameters = NULL, attachInput = FALSE, condition = NUL
                     c(rep(0,  nF), lb, ub)),
         error = function(e) NULL)
       if (is.null(res) || res$status != 0 || res$objval >= -eps) next
-      # The support may add a conserved moiety to a leaking cluster. Only its
-      # species that reach a leaking reaction along reactions of the support
-      # are 0: educts of the leaking reactions, then the educts of every
-      # reaction producing a species already found.
+      # Only species of the support reaching a leaking reaction along support
+      # reactions are 0: educts of the leaking reactions, then the educts of
+      # every reaction producing a species already found.
       w    <- res$solution
       sup  <- which(w > eps)
       leak <- which(drop(M %*% w) < -eps)
@@ -737,10 +729,9 @@ resetWarmStarts <- function(fn, verbose = FALSE) {
 }
 
 
-## Solve A X = B, A square or tall with consistent rows, by QR on A scaled to
-## relative coordinates: columns by cs, rows by their norm in those columns. A
-## rank-deficient A uses the pseudoinverse (minimum-norm sensitivity) and warns
-## with the null-space directions.
+## Solve A X = B (A square or tall, consistent) by QR on A with columns scaled by
+## cs and rows by their norm. A rank-deficient A takes the pseudoinverse
+## (minimum-norm sensitivity) and warns with the null-space directions.
 #' @keywords internal
 .pimpl_solve_dfdx <- function(A, B, cs = rep(1, ncol(A))) {
   if (ncol(A) == 0L) return(B[0L, , drop = FALSE])
@@ -767,10 +758,9 @@ resetWarmStarts <- function(fn, verbose = FALSE) {
   X
 }
 
-## Zero forcing symbols in all rates and drop their equations, then return
-## an eqnvec. Forcings (a state held at 0) leave the equation set so they
-## are never solved for. Shared by the steady-state preamble and by
-## symmetryDetection().
+## Zero forcing symbols in all rates and drop their equations, so forcings are
+## never solved for; returns an eqnvec. Shared by the steady-state preamble and
+## by symmetryDetection().
 #' @keywords internal
 .zero_and_drop_forcings <- function(trafo, forcings) {
   if (is.null(forcings) || !length(forcings)) return(as.eqnvec(trafo))
@@ -1034,7 +1024,6 @@ Pimpl <- function(trafo, parameters = NULL, forcings = NULL, condition = NULL,
 
   reg    <- .warmstart_registry()
   solved <- new.env(parent = emptyenv())   # roots and sensitivities by parameter values
-  # solve counts and successful starts
   stats  <- new.env(parent = emptyenv())
   statsReset <- function() {
     stats$calls <- 0L; stats$memo <- 0L; stats$solves <- 0L; stats$iter <- 0L

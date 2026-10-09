@@ -259,9 +259,8 @@ CondInputs gather_one_condition(
           IntegerVector ed2_dim = ed2_attr.attr("dim");
           if (ed2_dim.size() == 4) {
             const int E0 = ed2_dim[0], E1 = ed2_dim[1], E2 = ed2_dim[2];
-            // Assume dimnames(deriv2)[[3]] == dimnames(deriv2)[[4]] ==
-            // err_par_names (the err deriv parameter order). We reuse the
-            // err_to_local mapping computed above.
+            // Assumes dimnames(deriv2)[[3]] == dimnames(deriv2)[[4]] ==
+            // err_par_names, so the err_to_local mapping above applies.
             const std::size_t N2 = (std::size_t) n_par_local
                                    * (std::size_t) n_par_local;
             C.d2sigma.assign((std::size_t) n_data * N2, 0.0);
@@ -381,16 +380,8 @@ List normL2_kernel(
   base_opts.bloq_mode        = bmode;
   base_opts.build_hessian    = build_hessian;
 
-  // Per-thread slots merged in thread order after the region, not in a
-  // critical section: a critical merge follows the scheduler, so the same
-  // call could round differently from run to run. Slots make the result
-  // reproducible for a given thread count. Across thread counts it still
-  // differs, because the conditions group differently -- that is inherent to
-  // a parallel reduction, not scheduler noise.
-  // One slot per condition in its LOCAL parameter space, allocated here so the
-  // workers neither allocate nor share. sum(npl^2) over the conditions is a
-  // fraction of one global Hessian, where a per-thread global accumulator was
-  // n_par_global^2 per thread and had to be zeroed on every call.
+  // One slot per condition in its local parameter space, allocated here so the
+  // workers neither allocate nor share; merged serially after the region.
   std::vector<double> value_c(n_cond, 0.0);
   std::vector<double> chi2_c(n_cond, 0.0);
   std::vector<std::vector<double> > grad_c(n_cond), hess_c(n_cond);
@@ -470,9 +461,8 @@ List normL2_kernel(
     }
   }
 
-  // Scatter local -> global, serially and in condition order. The summation
-  // order therefore no longer depends on the thread count, so a given
-  // objective value is the same however many threads computed it.
+  // Scatter local -> global serially in condition order, so the result does
+  // not depend on the thread count.
   for (int c = 0; c < n_cond; ++c) {
     const CondInputs& C = conds[c];
     const int npl = C.n_par_local;

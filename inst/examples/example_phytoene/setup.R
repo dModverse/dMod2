@@ -9,7 +9,7 @@ conditions <-c(
 ## Model Definition ------------------------------------------------------
 
 nmodel <- "simple_pfcoop" #pub model
-#nmodel <- "simple_pfc_nopfc" # pub ohne coop
+#nmodel <- "simple_pfc_nopfc" # published model without cooperativity
 
 # Read in model csv
 reactionlist <- read.csv(paste0("inst/examples/example_phytoene/phyto_",nmodel,".csv") )
@@ -146,7 +146,7 @@ if(!do.fiterrors)
 # Initalize parameters 
 outerpars <- getSymbols(do.call(c, trafoL[conditions]))
 
-# ratios of scaling factors were determined in a previous fit to avoid that the model mis-uses the scaling factors l1 = s3/s1; l2 = s3/s2
+# Fixed ratios of scaling factors keep the model from misusing them: l1 = s3/s1; l2 = s3/s2
 scalings_ls <- c(logl1_new = log(1.06), logl2_new = log(0.614),logl1 = log(1.08), logl2 = log(0.8),logl1_WT = log(1.26), logl2_WT = log(0.898), logl1_dpq = log(1),logl2_dpq = log(1))
 sigma_ls <- c(0.04,0.03,0.1,0.05,0.1,0.1, 0.05,0.05)
 names(sigma_ls) <- names(scalings_ls)

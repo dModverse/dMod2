@@ -1,17 +1,5 @@
-# Behavioral tests for reduceReplicates() and fitErrorModel().
-#
-# reduceReplicates aggregates multi-replicate (name, time, condition) data
-# down to a per-group mean and standard error. fitErrorModel fits a
-# parametric variance model to the reduced data.
-#
-# Tests:
-#   reduceReplicates: synthetic n-replicate samples with known mean and
-#     standard deviation; the reduction should produce mean(value) and
-#     standard error (= sd / sqrt(n)) up to a tolerance set by N(0,1)
-#     sampling noise.
-#   fitErrorModel: feed the reduced data to a constant-variance error
-#     model and check that the recovered sigma equals the simulated
-#     sigma_true within the n-replicates sampling envelope.
+# reduceReplicates() reduces replicates to per-group mean and standard error;
+# fitErrorModel() recovers the simulated sigma within the sampling envelope.
 
 
 ## ---- reduceReplicates: mean and standard error -----------------------
@@ -62,22 +50,18 @@ test_that("fitErrorModel recovers exp(s0) ~ sigma_true^2 for constant variance",
   }))
   red <- reduceReplicates(raw)
 
-  # Constant variance error model: sigma^2 = exp(s0). Optimum: s0 ~ log(sigma_true^2).
   fit <- fitErrorModel(red, factors = "condition",
                        errorModel = "exp(s0)",
                        par = c(s0 = log(0.01)),
                        plotting = FALSE, blather = TRUE)
   s0_hat <- unique(fit$s0)[1]
   sigma_hat_sq <- exp(s0_hat)
-  # Variance of sample variance with N-1 dof ~= 2 * sigma^4 / (N - 1).
-  # Across 10 time points * 20 replicates we expect ~5% accuracy.
+  # The bound is several times the sampling spread of the variance estimate.
   expect_lt(abs(sqrt(sigma_hat_sq) - sigma_true) / sigma_true, 0.20)
 })
 
 
-# ============================================================================
-# as.data.frame(<prdlist>, errfn = )
-# ============================================================================
+## ---- as.data.frame(<prdlist>, errfn = ) --------------------------------
 
 test_that("as.data.frame joins the error model by observable, not by row order", {
   skip_if_not_installed("cppDE")

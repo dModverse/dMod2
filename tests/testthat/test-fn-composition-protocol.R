@@ -1,7 +1,6 @@
-# Evaluation protocol behind the composition operators (R/fnProtocol.R):
-# condition truth table, bundle alignment, and protocol-vs-ordinary equality.
-# Also the operators themselves: sums of objectives, chains of fns, and the
-# cached batch handle of a leaf.
+# Evaluation protocol behind the composition operators (R/fnProtocol.R): condition
+# truth table, bundle alignment, protocol-vs-ordinary equality, sums of
+# objectives, chains of fns and the cached batch handle of a leaf.
 
 skip_if_no_compile <- function() {
   testthat::skip_if_not_installed("cppDE")
@@ -48,7 +47,7 @@ test_that(".resolveConditions reproduces the leaf truth table", {
 
 
 test_that(".resolveConditions handles a leaf owning several conditions", {
-  # Not reachable before the rebuild; the PEtab relabeller produces it.
+  # The PEtab relabeller produces this case.
   r <- dMod2:::.resolveConditions(c("C1", "C2", "C3"), c("C1", "C3"))
   expect_true(r$evaluate)
   expect_identical(r$slots, c(1L, 3L))
@@ -245,9 +244,8 @@ test_that("deriv2 and cores survive a sum of objectives", {
   pri <- constraintL2(mu = fx$outerpars_log * 0, sigma = 10)
   p   <- fx$outerpars_log
 
-  # Before the fix match.fnargs dropped deriv2 and the sum silently returned
-  # the Gauss-Newton Hessian. Now it reaches the chain, which was built
-  # without deriv2 and says so.
+  # deriv2 reaches the chain, which was built without it and says so, rather
+  # than the sum returning the Gauss-Newton Hessian.
   expect_error((obj + pri)(p, deriv = TRUE, deriv2 = TRUE), "deriv2")
   expect_error(obj(p, deriv = TRUE, deriv2 = TRUE), "deriv2")
 
@@ -269,7 +267,7 @@ test_that(".fnWithConditions relabels a leaf so + can dispatch on it", {
   expect_identical(dMod2:::.fnNode(relabelled)$condition, c("A", "B"))
   expect_identical(class(relabelled), class(fx$gfn))
 
-  # and it now answers per condition rather than replicating one call
+  # it answers per condition rather than replicating one call
   pred <- fx$xfn(seq(0, 2, 0.5), c(A = 1, k = 0.5), deriv = FALSE)
   out  <- relabelled(pred[[1]], c(A = 1, k = 0.5), deriv = FALSE)
   expect_identical(names(out), c("A", "B"))
@@ -325,11 +323,9 @@ test_that(".predictMany mixes repeated and distinct conditions", {
 
 ## ---- fixed handling across composition shapes ----------------------------
 
-# `fixed` is handed from one operand to the next in five different ways across
-# the six `*` branches. These pin what each shape actually does, so a future
-# unification has to decide the differences deliberately rather than inherit
-# them. Tolerances are solver-level: fixing a parameter shrinks the
-# sensitivity system, so the integration is not bit-identical.
+# `fixed` is handed on in five different ways across the six `*` branches, and
+# these tests pin each shape. Tolerances are solver-level, since fixing a
+# parameter shrinks the sensitivity system.
 
 # Values only: prdframes also have `parameters`, whose `fixed` marker and
 # ordering legitimately differ between the two calls.
@@ -362,10 +358,8 @@ test_that("without a trafo, fixed does NOT leave the derivative basis", {
   skip_if_not_installed("cppDE")
   skip_on_cran()
 
-  # Xs seeds the identity over its full parameter set and hands the solver
-  # fixed = NULL, so a run-time `fixed` only removes the value from `pars`.
-  # With a trafo in the chain the parameter disappears through the trafo's
-  # Jacobian instead. The two paths therefore disagree; pinned, not endorsed.
+  # Xs drops a run-time `fixed` only from `pars`, while a trafo in the chain
+  # removes it through its Jacobian. The two paths disagree; pinned, not endorsed.
   fx <- fx_decay_compiled()
   gx <- fx$gfn * fx$xfn
   times <- seq(0, 4, by = 0.5)
@@ -429,8 +423,8 @@ test_that("normL2 + constraintL2 restricts both terms to the same conditions", {
 })
 
 test_that("the parvec C++ kernel reproduces the R subsetting and concatenation", {
-  # `[.parvec` and `c.parvec` delegate to parvec_attach()/parvec_concat(); these
-  # are the R bodies they replaced, kept here as the reference.
+  # R reference implementations of `[.parvec` and `c.parvec`, whose kernels are
+  # parvec_attach() and parvec_concat().
   sub_R <- function(x, i) {
     out <- .subset(x, i); nms <- names(out)
     deriv <- attr(x, "deriv")
@@ -573,10 +567,7 @@ test_that("(g * x)(times, pars) equals g(x(times, pars)) for the decay chain", {
 
   out_chain <- (bench$gfn * bench$xfn * bench$pfn_id)(times, pars,
                                                      deriv = FALSE)
-  # Compute the same via the intermediate state directly. We can't easily
-  # call gfn(prdframe, pars) outside the chain, so instead we check that
-  # the chained y-value equals the closed-form expression for our observable
-  # y = A and the analytical decay solution.
+  # The chained observable matches the closed-form decay.
   expect_equal(out_chain$C1[, "y"], pars[["A"]] * exp(-pars[["k"]] * times),
                tolerance = 1e-5)
 })
@@ -598,7 +589,7 @@ test_that("normL2 + constraintL2 value equals normL2 + prior penalty (closed)", 
   p <- c(A = 1.2, k = 0.4)
   v_total <- obj(p)$value
   v_main  <- obj_main(p)$value
-  v_prior <- sum((p - mu)^2)  # since sigma = 1
+  v_prior <- sum((p - mu)^2)
   expect_equal(unname(v_total), unname(v_main + v_prior), tolerance = 1e-9)
 })
 
@@ -633,9 +624,8 @@ test_that("(o1 + o2)(p) equals (o2 + o1)(p) at the value level", {
 
 ## ---- Cached batch handle ---------------------------------------------------
 
-# The prepared cppDE batch handle in Xs.cppDE names the shared object it
-# resolved its entry point from. Renaming the model, or reopening a saved
-# workspace where that object does not exist, leaves the cache pointing at a
+# The cached cppDE batch handle names the shared object of its entry point.
+# Renaming the model or reopening a saved workspace leaves it pointing at a
 # .so that cannot be called.
 
 test_that("a batch handle whose shared object is gone is re-prepared", {
@@ -685,8 +675,8 @@ test_that("modelname<- drops the cached batch handle", {
 
 ## ---- Batch check -----------------------------------------------------------
 
-# An R-level k = exp(logk) whose batch entry adds `shift` to logk first, so a
-# nonzero shift makes the batch disagree with the scalar kernel.
+# A log trafo whose batch entry shifts its input by `shift`, so a nonzero shift
+# makes the batch disagree with the scalar kernel.
 .shiftedBatchTrafo <- function(shift) {
   p2p <- function(pars, fixed = NULL, deriv = TRUE, deriv2 = FALSE) {
     k <- exp(pars[["logk"]])
@@ -702,7 +692,7 @@ test_that("modelname<- drops the cached batch handle", {
   parfn(p2p, "logk", NULL)
 }
 
-# logk = a + offset for one condition.
+# A constant offset trafo for one condition.
 .conditionOffset <- function(condition, offset) {
   p2p <- function(pars, fixed = NULL, deriv = TRUE, deriv2 = FALSE)
     as.parvec(c(logk = pars[["a"]] + offset),

@@ -66,7 +66,7 @@ forcingsSymb <- function(type =c("Gauss", "Fermi", "1-Fermi", "MM", "Signal", "D
 getCoefficients <- function(char, symbol) {
   
   pdata <- getParseData(parse(text = char, keep.source = TRUE))
-  pdata <- pdata[pdata$terminal == TRUE, ] #  subset(pdata, terminal == TRUE)
+  pdata <- pdata[pdata$terminal == TRUE, ]
   symbolPos <- which(pdata$text == symbol)
   coefficients <- rep(1, length(symbolPos))
   
@@ -110,7 +110,7 @@ resolveRecurrence <- function (variables) {
 
 
 
-## getElements (moved from toolsMarcus.R) ------------------------------------
+## getElements ------------------------------------
 
 #' Get Symbols and Numeric Constants from a Character
 #'
@@ -140,7 +140,7 @@ getElements <- function (char, exclude = NULL)
 
 
 
-## blockdiagSymb (moved from tools.R) ----------------------------------------
+## blockdiagSymb ----------------------------------------
 
 #' Embed Two Matrices into One Block Diagonal Matrix
 #'
