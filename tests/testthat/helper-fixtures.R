@@ -1,5 +1,5 @@
-# Compiled fixtures shared by the test files. testthat sources helpers once per
-# file and process, so the cache lives in globalenv and holds one build per file.
+# Compiled fixtures shared by the test files. The cache lives in globalenv, so
+# it outlives a file when one process runs several, as R CMD check does.
 
 .dmod_fx_cache <- function() {
   if (!exists("..dmod_fx_cache..", envir = globalenv(), inherits = FALSE))
@@ -29,13 +29,31 @@
 # A test file names, before first use, what it links into the fixture's shared
 # object: `extra` maps the uncompiled fixture to a named list of fn objects,
 # `multicond` adds the four-condition chain. Everything then builds in one go.
+# A process that has built the fixture for an earlier file builds them apart.
 fx_register <- function(extra = NULL, multicond = FALSE) {
   cache <- .dmod_fx_cache()
-  if (!is.null(cache$decay))
-    stop("fx_register() has to run before the fixture is built")
-  if (!is.null(extra)) cache$extraFns <- c(cache$extraFns, list(extra))
-  if (multicond) cache$wantMulticond <- TRUE
+  if (is.null(cache$decay)) {
+    if (!is.null(extra)) cache$extraFns <- c(cache$extraFns, list(extra))
+    if (multicond) cache$wantMulticond <- TRUE
+    return(invisible(NULL))
+  }
+  if (multicond) fx_decay_multicond_compiled()
+  if (!is.null(extra)) .fx_build_extra(extra)
   invisible(NULL)
+}
+
+# Extras registered after the fixture was built, in a shared object of their
+# own. They go first, so a name this file reuses finds its own object.
+.fx_build_extra <- function(extra) {
+  cache <- .dmod_fx_cache()
+  base <- cache$decay[c("m", "xfn", "gfn", "pfn_id", "pfn_log")]
+  cache$nLate <- if (is.null(cache$nLate)) 1L else cache$nLate + 1L
+  .dmod_with_fx_workdir({
+    objs <- extra(base)
+    do.call(compile, c(unname(objs), list(output = paste0("fx_late_", cache$nLate),
+                                          cores = test_cores())))
+  })
+  cache$extra <- c(objs, cache$extra)
 }
 
 # The registered extra objects, compiled.

@@ -169,6 +169,29 @@ test_that("readPEtabTables returns the expected slots for v1", {
   expect_identical(tabs$formatVersion, 1L)
 })
 
+test_that("readPEtabYaml and readPEtabTables read the bundled Boehm problem", {
+  skip_if_not_installed("yaml")
+  yaml <- system.file("extdata/petab_boehm/Boehm.yaml", package = "dMod2")
+
+  y <- readPEtabYaml(yaml)
+  expect_identical(y$formatVersion, 1L)
+  expect_identical(normalizePath(y$baseDir), normalizePath(dirname(yaml)))
+  pr <- y$problems[[1]]
+  files <- unlist(pr[c("sbmlFile", "conditionFile", "measurementFile", "observableFile")])
+  expect_true(all(file.exists(c(y$parameterFile, files))))
+  expect_null(pr$experimentFile)
+
+  tabs <- readPEtabTables(yaml)
+  expect_identical(tabs$sbmlPath, pr$sbmlFile)
+  expect_equal(nrow(tabs$parameters), 11L)
+  expect_equal(sum(tabs$parameters$estimate), 9)
+  expect_equal(nrow(tabs$conditions), 1L)
+  expect_equal(nrow(tabs$measurements), 48L)
+  expect_identical(tabs$observables$observableId,
+                   c("pSTAT5A_rel", "pSTAT5B_rel", "rSTAT5A_rel"))
+  expect_true(all(tabs$measurements$observableId %in% tabs$observables$observableId))
+})
+
 
 
 ## --- end-to-end fixture test (no SBML import required) -------------------

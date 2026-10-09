@@ -681,3 +681,41 @@ test_that("modelname<- drops the cached batch handle", {
   expect_true(all(is.finite(out$C1[, "y"])))
 
 })
+
+
+## ---- Batch check -----------------------------------------------------------
+
+# An R-level k = exp(logk) whose batch entry adds `shift` to logk first, so a
+# nonzero shift makes the batch disagree with the scalar kernel.
+.shiftedBatchTrafo <- function(shift) {
+  p2p <- function(pars, fixed = NULL, deriv = TRUE, deriv2 = FALSE) {
+    k <- exp(pars[["logk"]])
+    as.parvec(c(k = k),
+              deriv = if (deriv) matrix(k, 1, 1, dimnames = list("k", "logk")) else FALSE)
+  }
+  attr(p2p, "batchfn") <- function(parsList, fixedList, deriv, deriv2, conditions, cores)
+    lapply(seq_along(parsList), function(i) {
+      pars <- parsList[[i]]
+      pars[["logk"]] <- pars[["logk"]] + shift
+      p2p(pars, fixedList[[i]], deriv, deriv2)
+    })
+  parfn(p2p, "logk", NULL)
+}
+
+# logk = a + offset for one condition.
+.conditionOffset <- function(condition, offset) {
+  p2p <- function(pars, fixed = NULL, deriv = TRUE, deriv2 = FALSE)
+    as.parvec(c(logk = pars[["a"]] + offset),
+              deriv = if (deriv) matrix(1, 1, 1, dimnames = list("logk", "a")) else FALSE)
+  parfn(p2p, "a", condition)
+}
+
+test_that("dMod.batch.check passes an agreeing batch and stops a disagreeing one", {
+  inner <- .conditionOffset("C1", 0) + .conditionOffset("C2", 1)
+  withr::local_options(dMod.batch.check = TRUE)
+
+  out <- (.shiftedBatchTrafo(0) * inner)(c(a = 0.2))
+  expect_equal(unname(unlist(lapply(out, unclass))), exp(c(0.2, 1.2)), tolerance = 1e-14)
+  expect_error((.shiftedBatchTrafo(1e-3) * inner)(c(a = 0.2)),
+               "batch entry of a parfn leaf disagrees with the scalar kernel")
+})
