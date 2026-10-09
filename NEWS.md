@@ -1,21 +1,72 @@
-# dMod2 0.10.18
+# dMod2 0.11.0
 
-* `reconstControl(homotopy = )` switches the last reconstruction route of
-  symident, which fits directions still open under `equilibrate = TRUE` along
-  lines in parameter space; on by default.
-
-# dMod2 0.10.17
-
-* `compile()` restores `PKG_*` flags set before the call without an error,
-  and leaves no `symbols.rds` in the working directory under `R CMD check`.
-
-# dMod2 0.10.16
-
-* Breaking: `Pimpl(controlsPTC)` takes the tolerances as `reltol` and `abstol`,
-  as `cppDE::ptc()` does; `rtol` and `atol` are deprecated.
-
-# dMod2 0.10.15
-
+* Breaking: `Xs()` on cppDE takes `refine` and `gradtol` in `optionsReverse`;
+  `floor` is gone, and so is the weighting of the backward grid by the
+  previous evaluation's adjoint. `refine = TRUE` holds each step of the
+  backward sweep to the error test of the CVODES backward problem under
+  `abstol` and `reltol`, through `cppDE::adjointControl(refine = TRUE)`, and
+  `gradtol` is then the absolute tolerance on each step's share of the
+  gradient. The reverse value pass takes the grid of a value solve.
+* New `symmetryDetection()`, `reconstControl()` and `symmetryReduction()`:
+  structural non-identifiabilities of an ODE model, as generators of its
+  symmetries, and the parameter transformation that removes them. The
+  computation runs in the Python package symident through reticulate, which
+  installs it on first use from <https://github.com/dModverse/symident>; R
+  arguments and fields are camelCase, `print()` and `summary()` are the
+  reports of symident. symident's switches are read from `SYMIDENT_*` and from
+  the options `dMod.sym.*`. msolve, for coupled steady states, comes from
+  `symident.install_msolve()` or `SYMIDENT_MSOLVE`.
+* reticulate no longer provisions symengine.
+* `Xs()` on cppDE and Sundials stops on a failed solve (`onFailure = "stop"`),
+  as `Xf()` does; a fit takes the error as a rejected step.
+* `Xs()` on cppDE: `optionsSens = list(sensErrCon = FALSE)` takes the
+  sensitivities out of the error test.
+* `odemodel(backend = "Sundials", derivMode = "reverse")` takes events: the
+  reverse objective takes the adjoint and the gradient through each jump.
+* Reverse objectives run their solves through prepared batch handles,
+  evaluate the error model batched and keep the data-to-prediction indices
+  between evaluations. Under second order a transformation that no tangent
+  reaches skips its second derivatives.
+* `normL2()` with one condition evaluates the error model without derivatives
+  when none are requested.
+* `importPEtab()` gains `sparse`, which pins the sparse (KLU) or dense linear
+  solver of the cppDE and Sundials backends.
+* `benchmarks/`, outside the built package: value, forward and reverse
+  gradients of PEtab benchmark problems by tier (`run-benchmarks.R --tier
+  tiny|medium|full`), with the scripts of `inst/benchmarks/` under
+  `benchmarks/scripts/`.
+* A sum of objectives keeps the `sweep` attribute its terms agree on, so a
+  reverse objective with a prior says it was evaluated in reverse.
+* `constraintL1()` and `constraintL2()` are S3 generics; the default methods
+  are the priors on named parameters.
+* The option `dMod.outdir` sets where `odemodel()`, `P()`, `Pimpl()`, `Y()` and the
+  PEtab import write generated sources and shared objects; unset, it is the
+  working directory as before.
+* `getSymbols()` and `replaceSymbols()` are reexported from cOde.
+* Breaking: `Xs()` takes its solver options as `options`, which applies to
+  every solve, and `optionsSens`, which now holds only the entries that
+  override `options` for the solves with sensitivities. `Xf()` and
+  `importPEtab()` take `options` as well, and the controls are named
+  `options`, `optionsSens` and `optionsReverse`. `optionsOde` is still
+  accepted as an argument and by `controls()`, with a deprecation warning.
+  On deSolve the default methods stay `"lsoda"` and, for the solves with
+  sensitivities, `"lsodes"`.
+* `Xs()` on cppDE warns about an unknown entry of `optionsReverse`, given to
+  the constructor or set through `controls()`.
+* The solver option for the limit of consecutive rejected steps is
+  `maxattempts`, as in cppDE.
+* Fix: `constraintL2() * P()` takes `fixed`, and with it `trust(fixed = )` and
+  `profile()` on such priors.
+* Fix: `Xt()` returns its sensitivities by the outer parameters, so
+  `g * Xt() * p` has derivatives and `normL2()` on it takes `fixed`.
+* Fix: `Y()` differentiates by its own parameters when no transformation
+  precedes the prediction: `g * x` lacked the derivatives by observation and
+  error parameters that are not parameters of `x`.
+* Fix: `normL2()` takes an error model whose parameters are all fixed.
+* Fix: `as.datalist()` stores a `sigma` or `lloq` column of `NA` alone as
+  numeric.
+* Fix: `mstrust(cautiousMode = TRUE)` removes the `.Rda` fits of its own run
+  rather than files of that name in the working directory.
 * Breaking: arguments in dot case are camelCase. `Y()` and `Pexpl()` take
   `attachInput` (was `attach.input`), `Pimpl()` `keepRoot` (was
   `keep.root`); both are also the names of the controls.
@@ -79,101 +130,14 @@
   `mstrust()` takes `samplefun` as a function as well as its name.
 * `rref()` returns a list named `rref` and `pivots`; its unused argument
   `fractions` is deprecated and ignored.
-
-# dMod2 0.10.14
-
-* Fix: `constraintL2() * P()` takes `fixed`, and with it `trust(fixed = )` and
-  `profile()` on such priors.
-* Fix: `Xt()` returns its sensitivities by the outer parameters, so
-  `g * Xt() * p` has derivatives and `normL2()` on it takes `fixed`.
-* Fix: `Y()` differentiates by its own parameters when no transformation
-  precedes the prediction: `g * x` lacked the derivatives by observation and
-  error parameters that are not parameters of `x`.
-* Fix: `normL2()` takes an error model whose parameters are all fixed.
-* Fix: `as.datalist()` stores a `sigma` or `lloq` column of `NA` alone as
-  numeric.
-* Fix: `mstrust(cautiousMode = TRUE)` removes the `.Rda` fits of its own run
-  rather than files of that name in the working directory.
-
-# dMod2 0.10.13
-
-* The solver option for the limit of consecutive rejected steps is
-  `maxattempts`, as in cppDE.
-
-# dMod2 0.10.12
-
-* Breaking: `Xs()` takes its solver options as `options`, which applies to
-  every solve, and `optionsSens`, which now holds only the entries that
-  override `options` for the solves with sensitivities. `Xf()` and
-  `importPEtab()` take `options` as well, and the controls are named
-  `options`, `optionsSens` and `optionsReverse`. `optionsOde` is still
-  accepted as an argument and by `controls()`, with a deprecation warning.
-  On deSolve the default methods stay `"lsoda"` and, for the solves with
-  sensitivities, `"lsodes"`.
-* `Xs()` on cppDE warns about an unknown entry of `optionsReverse`, given to
-  the constructor or set through `controls()`.
-
-# dMod2 0.10.11
-
-* The option `dMod.outdir` sets where `odemodel()`, `P()`, `Pimpl()`, `Y()` and the
-  PEtab import write generated sources and shared objects; unset, it is the
-  working directory as before.
-
-# dMod2 0.10.10
-
-* `getSymbols()` and `replaceSymbols()` are reexported from cOde.
-
-# dMod2 0.10.9
-
-* New `symmetryDetection()`, `reconstControl()` and `symmetryReduction()`:
-  structural non-identifiabilities of an ODE model, as generators of its
-  symmetries, and the parameter transformation that removes them. The
-  computation runs in the Python package symident through reticulate, which
-  installs it on first use from <https://github.com/dModverse/symident>; R
-  arguments and fields are camelCase, `print()` and `summary()` are the
-  reports of symident. symident's switches are read from `SYMIDENT_*` and from
-  the options `dMod.sym.*`. msolve, for coupled steady states, comes from
-  `symident.install_msolve()` or `SYMIDENT_MSOLVE`.
-* reticulate no longer provisions symengine.
-* `Xs()` on cppDE and Sundials stops on a failed solve (`onFailure = "stop"`),
-  as `Xf()` does; a fit takes the error as a rejected step.
-* `constraintL1()` and `constraintL2()` are S3 generics; the default methods
-  are the priors on named parameters.
+* Breaking: `Pimpl(controlsPTC)` takes the tolerances as `reltol` and `abstol`,
+  as `cppDE::ptc()` does; `rtol` and `atol` are deprecated.
+* `compile()` restores `PKG_*` flags set before the call without an error,
+  and leaves no `symbols.rds` in the working directory under `R CMD check`.
+* `reconstControl(homotopy = )` switches the last reconstruction route of
+  symident, which fits directions still open under `equilibrate = TRUE` along
+  lines in parameter space; on by default.
 * Needs cppDE 0.12.0.
-
-# dMod2 0.10.7
-
-* A sum of objectives keeps the `sweep` attribute its terms agree on, so a
-  reverse objective with a prior says it was evaluated in reverse.
-
-# dMod2 0.10.6
-
-* `importPEtab()` gains `sparse`, which pins the sparse (KLU) or dense linear
-  solver of the cppDE and Sundials backends.
-* `benchmarks/`, outside the built package: value, forward and reverse
-  gradients of PEtab benchmark problems by tier (`run-benchmarks.R --tier
-  tiny|medium|full`), with the scripts of `inst/benchmarks/` under
-  `benchmarks/scripts/`.
-
-# dMod2 0.10.5
-
-* Breaking: `Xs()` on cppDE takes `refine` and `gradtol` in `optionsReverse`;
-  `floor` is gone, and so is the weighting of the backward grid by the
-  previous evaluation's adjoint. `refine = TRUE` holds each step of the
-  backward sweep to the error test of the CVODES backward problem under
-  `abstol` and `reltol`, through `cppDE::adjointControl(refine = TRUE)`, and
-  `gradtol` is then the absolute tolerance on each step's share of the
-  gradient. The reverse value pass takes the grid of a value solve.
-* `Xs()` on cppDE: `optionsSens = list(sensErrCon = FALSE)` takes the
-  sensitivities out of the error test.
-* `odemodel(backend = "Sundials", derivMode = "reverse")` takes events: the
-  reverse objective takes the adjoint and the gradient through each jump.
-* Reverse objectives run their solves through prepared batch handles,
-  evaluate the error model batched and keep the data-to-prediction indices
-  between evaluations. Under second order a transformation that no tangent
-  reaches skips its second derivatives.
-* `normL2()` with one condition evaluates the error model without derivatives
-  when none are requested.
 
 # dMod2 0.10.3
 
