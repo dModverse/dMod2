@@ -1,3 +1,9 @@
+# dMod2 0.10.18
+
+* `reconstControl(homotopy = )` switches the last reconstruction route of
+  symident, which fits directions still open under `equilibrate = TRUE` along
+  lines in parameter space; on by default.
+
 # dMod2 0.10.17
 
 * `compile()` restores `PKG_*` flags set before the call without an error,

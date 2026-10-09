@@ -18,6 +18,13 @@ test_that("argument names go to snake_case and field names back to camelCase", {
   expect_identical(names(y$symmetries[[1]]$generator), "k_off")
 })
 
+test_that("reconstControl() passes homotopy to symident as a flag", {
+  expect_true(reconstControl()$homotopy)
+  expect_false(reconstControl(homotopy = FALSE)$homotopy)
+  expect_error(reconstControl(homotopy = NA))
+  expect_identical(dMod2:::.symControlSnake("homotopy"), "homotopy")
+})
+
 test_that("the specification holds reactions, totals, conditions and events", {
   r <- eqnlist() |>
     addReaction("A", "B", "k1 * A") |>

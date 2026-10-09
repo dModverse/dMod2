@@ -21,6 +21,7 @@ reconstControl(
   minSupportCandCap = 20000L,
   perPrimeCap = 120L,
   perPrimeMinPrimes = 3L,
+  homotopy = TRUE,
   timeout = Inf,
   ...
 )
@@ -66,6 +67,9 @@ under \code{equilibrate = TRUE}. Defaults to 120.}
 
 \item{perPrimeMinPrimes}{Minimum number of primes with samples for a
 reconstruction under \code{equilibrate = TRUE}. Defaults to 3.}
+
+\item{homotopy}{Whether directions still open under \code{equilibrate = TRUE} are
+fitted along lines in parameter space as a last route. Defaults to \code{TRUE}.}
 
 \item{timeout}{Time limit in seconds for the reconstruction. Directions not
 finished in time are reported by their support. \code{Inf} (default) sets no limit.}

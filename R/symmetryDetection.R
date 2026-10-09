@@ -173,6 +173,8 @@ symmetryDetection <- function(f, g, trafo = NULL, parameters = NULL,
 #'   under `equilibrate = TRUE`. Defaults to 120.
 #' @param perPrimeMinPrimes Minimum number of primes with samples for a
 #'   reconstruction under `equilibrate = TRUE`. Defaults to 3.
+#' @param homotopy Whether directions still open under `equilibrate = TRUE` are
+#'   fitted along lines in parameter space as a last route. Defaults to `TRUE`.
 #' @param timeout Time limit in seconds for the reconstruction. Directions not
 #'   finished in time are reported by their support. `Inf` (default) sets no limit.
 #' @param ... `minsupportCandCap`, `perprimeCap` and `perprimeMinPrimes` are
@@ -187,7 +189,7 @@ reconstControl <- function(relevanceCap = 6L, relevanceCapDir = 24L, relevanceCa
                            laurentDegNum = 4L, laurentDegDen = 2L, laurentCandCap = 200000L,
                            termCap = 60L, generalDegNum = 4L, generalDegDen = 3L,
                            gapOrderCap = 8L, minSupportCandCap = 20000L, perPrimeCap = 120L,
-                           perPrimeMinPrimes = 3L, timeout = Inf, ...) {
+                           perPrimeMinPrimes = 3L, homotopy = TRUE, timeout = Inf, ...) {
   .renameArgs(list(...), c(minsupportCandCap = "minSupportCandCap",
                            perprimeCap = "perPrimeCap",
                            perprimeMinPrimes = "perPrimeMinPrimes"),
@@ -198,7 +200,7 @@ reconstControl <- function(relevanceCap = 6L, relevanceCapDir = 24L, relevanceCa
             laurentDegNum >= 1L, laurentDegDen >= 0L, laurentCandCap >= 1L,
             generalDegNum >= 1L, generalDegDen >= 1L, gapOrderCap >= 0L,
             minSupportCandCap >= 1L, perPrimeCap >= 1L, perPrimeMinPrimes >= 2L,
-            is.numeric(timeout), timeout > 0)
+            isTRUE(homotopy) || isFALSE(homotopy), is.numeric(timeout), timeout > 0)
   structure(list(relevanceCap = as.integer(relevanceCap),
                  relevanceCapDir = as.integer(relevanceCapDir),
                  relevanceCapSparse = as.integer(relevanceCapSparse),
@@ -212,7 +214,8 @@ reconstControl <- function(relevanceCap = 6L, relevanceCapDir = 24L, relevanceCa
                  gapOrderCap = as.integer(gapOrderCap),
                  minSupportCandCap = as.integer(minSupportCandCap),
                  perPrimeCap = as.integer(perPrimeCap),
-                 perPrimeMinPrimes = as.integer(perPrimeMinPrimes), timeout = timeout),
+                 perPrimeMinPrimes = as.integer(perPrimeMinPrimes), homotopy = homotopy,
+                 timeout = timeout),
             class = c("reconstcontrol", "list"))
 }
 
