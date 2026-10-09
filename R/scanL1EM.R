@@ -139,8 +139,9 @@
   if (is.null(best)) stop("scanL1: every EM run failed.", call. = FALSE)
   # Stepwise refits from the MAP structure: every present term, weakest first,
   # is tested against the current structure and dropped unless its removal is
-  # rejected at `alpha`; then every absent term, largest posterior size first,
-  # is added if its addition is significant.
+  # rejected at `alpha` (divided by the number of terms with "bonferroni");
+  # then every absent term, largest posterior size first, is added if its
+  # addition is significant.
   terms <- names(family)
   u <- abs(best$argument[terms]) / scale[terms]
   Eq <- stats::setNames(best$terms$Eq, best$terms$term)[terms]
@@ -162,6 +163,7 @@
     stat <- max(0, small$r$value - large$r$value)
     c(stat = stat, df = df, p = if (df > 0) stats::pchisq(stat, df, lower.tail = FALSE) else 1)
   }
+  a0 <- if (identical(ctl$em$adjust, "bonferroni")) alpha / length(terms) else alpha
   steps <- NULL
   cur <- refit(terms[u > 0])
   if (is.null(cur)) stop("scanL1: the refit of the MAP structure failed.", call. = FALSE)
@@ -169,7 +171,7 @@
     nb <- refit(setdiff(cur$on, j))
     if (is.null(nb)) next
     t <- lrt(nb, cur)
-    drop <- t[["p"]] >= alpha
+    drop <- t[["p"]] >= a0
     steps <- rbind(steps, data.frame(term = j, step = "remove", stat = t[["stat"]],
                                      df = t[["df"]], p = t[["p"]], accepted = drop))
     if (drop) cur <- nb
@@ -178,7 +180,7 @@
     nb <- refit(c(cur$on, j))
     if (is.null(nb)) next
     t <- lrt(cur, nb)
-    add <- t[["p"]] < alpha
+    add <- t[["p"]] < a0
     steps <- rbind(steps, data.frame(term = j, step = "add", stat = t[["stat"]],
                                      df = t[["df"]], p = t[["p"]], accepted = add))
     if (add) cur <- nb

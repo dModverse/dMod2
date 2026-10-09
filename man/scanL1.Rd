@@ -92,7 +92,9 @@ the best value within \code{tolHits}, default 1 and 0.1, for the full model, a
 \code{lambda} and a refit; further batches of starts are added until then, up
 to \code{maxFits}, default ten times the batch), \code{em} (with \code{lambda = "em"}:
 \code{init} start strength, \code{a} and \code{b} of its Gamma prior, \code{tol} on the change
-of \verb{log lambda}, \code{adaptive}, default 1, 1, 0, 1e-3 and \code{TRUE}).}
+of \verb{log lambda}, \code{adaptive}, default 1, 1, 0, 1e-3 and \code{TRUE}, and
+\code{adjust}, \code{"none"} or \code{"bonferroni"}: level of the stepwise tests \code{alpha}
+or \code{alpha} over the number of terms).}
 }
 \value{
 Object of class \code{scanL1} with

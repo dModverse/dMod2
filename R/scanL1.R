@@ -112,7 +112,9 @@ gateL1 <- function(trafo, pars, prefix = "s_") {
 #'   `lambda` and a refit; further batches of starts are added until then, up
 #'   to `maxFits`, default ten times the batch), `em` (with `lambda = "em"`:
 #'   `init` start strength, `a` and `b` of its Gamma prior, `tol` on the change
-#'   of `log lambda`, `adaptive`, default 1, 1, 0, 1e-3 and `TRUE`).
+#'   of `log lambda`, `adaptive`, default 1, 1, 0, 1e-3 and `TRUE`, and
+#'   `adjust`, `"none"` or `"bonferroni"`: level of the stepwise tests `alpha`
+#'   or `alpha` over the number of terms).
 #' @details With `lambda = "em"`, the penalty \eqn{\lambda |u_j|^q} on term
 #'   \eqn{u_j = \beta_j / a_j} is the exponential power prior
 #'   \eqn{p(u) \propto \exp(-\lambda |u|^q)}, one-sided for gates. A gate is
@@ -207,7 +209,8 @@ scanL1 <- function(obj, center, zero = NULL, reference = NULL, groups = NULL,
                                 nq = 3L, eps = 0.01, ndata = NULL, nem = 50L,
                                 tolp = 1e-4, nmerge = 5L, snap = 1e-6, hits = 1L,
                                 tolHits = 0.1, maxFits = NULL,
-                                em = list(init = 1, a = 1, b = 0, tol = 1e-3, adaptive = TRUE)),
+                                em = list(init = 1, a = 1, b = 0, tol = 1e-3, adaptive = TRUE,
+                                          adjust = "none")),
                            control)
   wf <- if (ctl$hits > 1L) list(hits = ctl$hits, tol = ctl$tolHits, max = ctl$maxFits)
   if (.Platform$OS.type == "windows") cores <- 1L
