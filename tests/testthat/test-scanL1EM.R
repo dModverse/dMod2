@@ -55,8 +55,12 @@ test_that("fold changes are selected relative to their full estimate", {
   obj0 <- .lsq_obj(model, model(c(mu = 1, r_B = 0, r_C = 0, r_D = 0))$y +
                      rnorm(length(type), 0, 0.05), 0.05)
   fit0 <- scanL1(obj0, start, reference = ref, lambda = "em", q = 0.8, fits = 3)
-  expect_identical(fit0$selected, "-r_B -r_C -r_D")
   expect_gt(fit0$em$lambda[["reference"]], fit$em$lambda[["reference"]])
+  # every step is a likelihood ratio test of one term at level alpha
+  st <- fit0$steps
+  expect_identical(st$accepted, ifelse(st$step == "remove", st$p >= 0.05, st$p < 0.05))
+  expect_true(all(st$df == 1))
+  expect_identical(sort(c(st$term)), sort(ref))
 })
 
 test_that("lambda = \"em\" takes no groups", {

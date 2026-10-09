@@ -122,8 +122,8 @@
   fit
 }
 
-# The EM variant of scanL1(): one multistart of the EM, then refits without
-# penalty along the terms ordered by their size at the best run.
+# The EM variant of scanL1(): one multistart of the EM, then stepwise refits
+# without penalty from the structure of the best run.
 .l1EmScan <- function(obj, start0, sparse, gates, reference, fixSel, q, ctl, fits, sd,
                       cores, wf, full, fullPars, zero, fixed, alpha) {
   family <- c(stats::setNames(rep("gate", length(gates)), gates),
@@ -137,48 +137,65 @@
                         start0, fits, sd, cores, obj, extra = list(sparse),
                         positive = gates, wf = wf, levelTol = ctl$tolHits)
   if (is.null(best)) stop("scanL1: every EM run failed.", call. = FALSE)
-  # Refits along the terms ordered by their penalised size: from the MAP
-  # structure, terms are removed while the test against the full model does
-  # not reject, and added back while it does.
+  # Stepwise refits from the MAP structure: every present term, weakest first,
+  # is tested against the current structure and dropped unless its removal is
+  # rejected at `alpha`; then every absent term, largest posterior size first,
+  # is added if its addition is significant.
   terms <- names(family)
   u <- abs(best$argument[terms]) / scale[terms]
-  ord <- terms[order(-u)]
-  nOn <- sum(u > 0)
+  Eq <- stats::setNames(best$terms$Eq, best$terms$term)[terms]
   nFull <- length(fullPars)
-  refit <- function(k) {
-    th <- best$argument
-    th[setdiff(terms, ord[seq_len(k)])] <- 0
-    th[intersect(ord[seq_len(k)], terms[th[terms] == 0])] <- 1
-    st <- .l1Structure(th, gates, reference, list())
-    r <- .l1Refit(st, best$argument, obj, fullPars, zero, fixed, ctl, fits, sd, cores, wf)
-    if (is.null(r)) return(NULL)
-    df <- nFull - r$nfree
-    stat <- max(0, r$value - full$value)
-    list(st = st, r = r, row = data.frame(key = st$key, value = r$value, nfree = r$nfree,
-         starts = r$starts %||% NA_integer_, hits = r$hits %||% NA_integer_, stat = stat,
-         df = df, p = if (df > 0) stats::pchisq(stat, df, lower.tail = FALSE) else 1,
-         bic = NA_real_, size = k, stringsAsFactors = FALSE))
-  }
   cache <- list()
-  get <- function(k) {
-    kk <- as.character(k)
-    if (is.null(cache[[kk]])) cache[[kk]] <<- refit(k)
-    cache[[kk]]
+  refit <- function(on) {
+    th <- best$argument
+    th[setdiff(terms, on)] <- 0
+    th[intersect(on, terms[th[terms] == 0])] <- 1
+    st <- .l1Structure(th, gates, reference, list())
+    if (!is.null(cache[[st$key]])) return(cache[[st$key]])
+    r <- .l1Refit(st, best$argument, obj, fullPars, zero, fixed, ctl, fits, sd, cores, wf)
+    res <- if (is.null(r)) NULL else list(st = st, r = r, on = on)
+    cache[[st$key]] <<- res
+    res
   }
-  pass <- function(k) { g <- get(k); !is.null(g) && g$row$p >= alpha }
-  k <- nOn
-  if (pass(k)) {
-    while (k > 0L && pass(k - 1L)) k <- k - 1L
-  } else {
-    while (k < length(terms) && !pass(k)) k <- k + 1L
+  lrt <- function(small, large) {
+    df <- large$r$nfree - small$r$nfree
+    stat <- max(0, small$r$value - large$r$value)
+    c(stat = stat, df = df, p = if (df > 0) stats::pchisq(stat, df, lower.tail = FALSE) else 1)
+  }
+  steps <- NULL
+  cur <- refit(terms[u > 0])
+  if (is.null(cur)) stop("scanL1: the refit of the MAP structure failed.", call. = FALSE)
+  for (j in terms[u > 0][order(u[u > 0])]) {
+    nb <- refit(setdiff(cur$on, j))
+    if (is.null(nb)) next
+    t <- lrt(nb, cur)
+    drop <- t[["p"]] >= alpha
+    steps <- rbind(steps, data.frame(term = j, step = "remove", stat = t[["stat"]],
+                                     df = t[["df"]], p = t[["p"]], accepted = drop))
+    if (drop) cur <- nb
+  }
+  for (j in terms[u == 0][order(-Eq[u == 0])]) {
+    nb <- refit(c(cur$on, j))
+    if (is.null(nb)) next
+    t <- lrt(cur, nb)
+    add <- t[["p"]] < alpha
+    steps <- rbind(steps, data.frame(term = j, step = "add", stat = t[["stat"]],
+                                     df = t[["df"]], p = t[["p"]], accepted = add))
+    if (add) cur <- nb
   }
   done <- Filter(Negate(is.null), cache)
-  if (!length(done)) stop("scanL1: every refit failed.", call. = FALSE)
-  refitTab <- do.call(rbind, lapply(done, `[[`, "row"))
-  refitTab <- refitTab[order(refitTab$size), ]
+  refitTab <- do.call(rbind, lapply(done, function(d) {
+    df <- nFull - d$r$nfree
+    stat <- max(0, d$r$value - full$value)
+    data.frame(key = d$st$key, value = d$r$value, nfree = d$r$nfree,
+               starts = d$r$starts %||% NA_integer_, hits = d$r$hits %||% NA_integer_,
+               stat = stat, df = df,
+               p = if (df > 0) stats::pchisq(stat, df, lower.tail = FALSE) else 1,
+               bic = NA_real_, stringsAsFactors = FALSE)
+  }))
   rownames(refitTab) <- NULL
-  selR <- get(k)
-  key <- if (is.null(selR)) "" else selR$st$key
+  selR <- cur
+  key <- selR$st$key
   structs <- stats::setNames(lapply(done, `[[`, "st"), vapply(done, function(d) d$st$key, ""))
   mapKey <- .l1Structure(best$argument, gates, reference, list())$key
   lev <- c(list(best), best$level)
@@ -196,7 +213,7 @@
                           starts = full$starts, hits = full$hits),
               selected = key, lambdaSelected = NA_real_,
               structure = structs, select = "lrt", alpha = alpha, q = q,
-              fit = if (is.null(selR)) fullPars else selR$r$argument,
+              fit = selR$r$argument, steps = steps,
               groups = list(), gates = gates, reference = reference,
               em = list(lambda = best$lambdaEM, terms = best$terms, trace = best$emTrace,
                         values = best$values, scale = scale))

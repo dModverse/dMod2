@@ -154,9 +154,11 @@ and the closed-form strength per family
 \deqn{\lambda = \frac{J/q + a - 1}{\sum_j E|u_j|^q + b},}
 as for a variance component. The runs of a multistart of this EM are
 compared by their approximate marginal likelihood, so one waterfall
-replaces the grid. The terms are then ordered by \eqn{|u_j|} at the best
-run, and refits without penalty go from its structure down while the test
-against the full model does not reject at \code{alpha}, up while it does.
+replaces the grid. Refits without penalty then start from the structure
+of the best run: every present term, smallest \eqn{|u_j|} first, is
+removed unless the likelihood ratio test of its removal rejects at
+\code{alpha}; every absent term, largest \eqn{E|u_j|^q} first, is added if the
+test of its addition rejects. The tests are listed in \code{steps}.
 \code{groups} and \code{ssl} are not available with \code{lambda = "em"}.
 
 With \code{ssl}, term \code{j} (a gate, a reference parameter, or in a block
