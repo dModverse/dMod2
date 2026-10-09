@@ -1,0 +1,167 @@
+---
+title: "Structure selection with an estimated penalty: selectEB"
+author: "Simon Beyer"
+date: "`r format(Sys.Date(), '%Y-%m-%d')`"
+output:
+  rmarkdown::pdf_document:
+    toc: false
+    number_sections: true
+    keep_tex: false
+    latex_engine: xelatex
+header-includes:
+  - \usepackage{amsmath,amssymb}
+vignette: >
+  %\VignetteIndexEntry{Structure selection with an estimated penalty}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>", eval = FALSE, echo = TRUE)
+```
+
+# Problem
+
+A model has $J$ candidate terms, each of which is either present or exactly
+absent. Two cases share the same mathematics:
+
+* **Mechanism.** A rate constant $k_j$ enters through a gate,
+  $k_j = 10^{\ell_j} s_j$ (see `gateL1()`); absent means $s_j = 0$.
+* **Differences between individuals.** A parameter of cell line $i$ is the
+  reference value plus $\delta_i$; absent means $\delta_i = 0$.
+
+Fitting all $2^J$ structures with a multistart each is out of reach beyond a
+handful of candidates. An L1 penalty avoids the enumeration, but the problem
+is not convex, and every penalty strength needs a multistart of its own.
+`selectEB()` estimates the penalty with the structure, so a single multistart
+of a single problem remains.
+
+# Score of a structure
+
+Let $z \in \{0,1\}^J$ be the structure, $D_z$ the minimal $-2\log L$ with the
+absent candidates fixed at 0, $p_z$ the number of parameters of the present
+candidates, and $D_0$ the value of the structure without candidates. All other
+parameters (initial values, error model, rates that are certainly present) are
+fitted in every structure.
+
+**Slab.** The effects $\beta$ of the present candidates (the rate $k_j$, the
+difference $\delta_i$) follow Zellner's g-prior,
+$$\beta \mid z, g \sim N\!\left(0,\; g\, I_z^{-1}\right),$$
+with $I_z$ the Fisher information of $\beta$. The prior is $g$ times as wide as
+the uncertainty of the estimate, so $g$ is the squared effect size in units of
+its standard error. It is dimensionless and does not change when a rate is
+given in other units or fitted on another scale, which a slab on $\log k$ or
+on $k$ with a fixed width cannot offer. A slab on $\log k$ also places mass
+on rates too small to have an effect, so a present candidate at such a rate
+costs nothing, and the selection no longer separates present from absent.
+
+**Marginal likelihood.** For a linear model with known noise, integrating
+$\beta$ gives exactly
+$$-2\log m(y \mid z, g) = \frac{g\,D_z + D_0}{1+g} + p_z \log(1+g) + \text{const}.$$
+For a nonlinear model the same expression follows from the Gaussian
+approximation of the likelihood in $\beta$, with the likelihood ratio
+$D_0 - D_z$ in place of the Wald statistic.
+
+**Priors.** The structure prior integrates the share $\theta_c$ of present
+candidates of family $c$ under a $\mathrm{Beta}(a, b)$ prior, which gives the
+beta-binomial probability $p(z) = \prod_c B(n_c + a, J_c - n_c + b)/B(a,b)$.
+With $a = 1$ and $b = J_c$ it favours sparse structures and corrects for the
+number of candidates: a further null candidate does not raise the chance of a
+false inclusion. The hyper-g prior $p(g) \propto (1+g)^{-a_g/2}$, $a_g = 3$,
+keeps $g$ from growing with few present candidates. The score is
+$$G(z, g) = \frac{g\,D_z + D_0}{1+g} + (p_z + a_g)\log(1+g) - 2\log p(z).$$
+
+# Estimating the penalty
+
+At fixed $z$, $G$ is minimal at
+$$1 + \hat g = \frac{D_0 - D_z}{p_z + a_g},$$
+and $\hat g = 0$ when the present candidates gain less than their number. This
+is the M-step. The search over $z$ at fixed $g$ is the E-step in its mode
+form: starting from a structure, every candidate is switched in random order,
+each switch a fit warm-started from the current optimum, and a switch is kept
+when it lowers $G$. Both steps alternate until neither lowers $G$; every
+accepted step lowers it, so a start ends after finitely many fits.
+
+The fits do not depend on $g$: one fit per structure and start suffices, and
+the update of $g$ costs nothing. The best fit of a structure over all starts
+enters its score, so starts profit from each other.
+
+**Penalty per candidate.** A candidate with $p_j$ parameters is present iff its
+gain $\Delta_j = D_{z,\text{off}} - D_{z,\text{on}}$ exceeds
+$$\lambda_j = \frac{1+\hat g}{\hat g}\left(p_j \log(1+\hat g) -
+  2\log\frac{p(z_\text{on})}{p(z_\text{off})}\right),$$
+an L0 penalty whose strength is estimated: $\log(1+g)$ per parameter and the
+correction for the number of candidates. For $g = n$ the first part is the
+penalty of the BIC. The conditional inclusion probability is
+$\mathrm{plogis}((G_\text{off} - G_\text{on})/2)$, and $\lambda_j$ is exceeded
+iff it is above 0.5.
+
+**Rule alpha.** With `rule = "alpha"` the score is $D_z + q\,p_z$ with
+$q$ the $1-\alpha$ quantile of $\chi^2_1$. Each candidate then enters iff its
+likelihood ratio test at level $\alpha$ rejects, so the error of the first
+kind is $\alpha$ per candidate and up to $J\alpha$ over all of them.
+
+# Multistart
+
+Starts draw the structure (each candidate present with probability one half)
+and the parameters around `center`; the first start has all candidates present
+from the full optimum, the second none. The final scores are comparable across
+starts because model, data and priors are the same. Batches of starts follow
+until `control$hits` starts end within `control$tolHits` of the best.
+
+```{r}
+fit <- selectEB(obj, center, zero = attr(trafo, "gates"), fits = 10,
+                control = list(hits = 3))
+fit
+plot(fit, type = "terms")
+plot(fit, type = "waterfall")
+```
+
+# Final decision by refits
+
+The candidates are ordered by their gain above the threshold, present ones
+first, which for `rule = "pip"` is the order of the inclusion probabilities. The
+structures along this order are refitted without priors, starting at the size
+of the best structure, and tested against the full model by a likelihood ratio
+test. The smallest structure the test does not reject at level `alpha` is
+selected. With `lrt = "data"` the test uses the attribute `"data"` of the
+objective value, so a prior term in the objective does not enter.
+
+# Candidates that replace each other
+
+In ODE models two candidates often have the same effect on the observables,
+for example two parallel paths. The score handles this without special
+treatment: both present gain as much as one, but cost twice, so one of them is
+selected. Which one is arbitrary, and the result reports it in two ways:
+
+* `alternatives` lists every evaluated structure within `control$window` of
+  the best score. With `control$swaps = TRUE` every exchange of a present
+  against an absent candidate is evaluated, so a substitute appears there.
+* `nonidentifiable` lists groups of present candidates whose parameters are
+  close to collinear at the best structure: eigenvectors of the correlation
+  form of the profile Hessian with eigenvalue below `control$kappa`.
+
+The score needs no determinant of the Hessian, so a singular direction does
+not distort it.
+
+# Limits
+
+* $D_0$ is the structure without any candidate. If the candidates include
+  terms that are certainly present, $D_0$ is far from all reasonable
+  structures, $\hat g$ becomes large and the threshold for weak terms rises
+  with $\log \hat g$. Terms that are certainly present belong in the model,
+  not among the candidates.
+* One $g$ applies to all candidates: strong and weak effects share one slab.
+  A few strong effects raise the threshold for weak ones.
+* The marginal likelihood is exact for linear models; for nonlinear ones it
+  uses the likelihood ratio in a Gaussian approximation.
+* The final refits test against the full model with many degrees of freedom
+  and have less power than the score for a single weak candidate.
+
+# Comparison with the L1 path
+
+`scanL1()` minimises $D + \lambda \sum_j |\beta_j|$ over a grid of $\lambda$, with
+a multistart per grid point or a continuation along the grid, and selects by
+refits. `selectEB()` replaces the grid by the estimate of $g$, the soft
+threshold by an exact zero, and the multistart per $\lambda$ by one multistart
+over structures. The cost is about $J$ fits per sweep, a few sweeps per start.

@@ -2,6 +2,7 @@
 % Please edit documentation in R/selectEB.R
 \name{selectEB}
 \alias{selectEB}
+\alias{plot.selectEB}
 \title{Structure selection by empirical Bayes}
 \usage{
 selectEB(
@@ -19,6 +20,8 @@ selectEB(
   sd = 0.5,
   control = list()
 )
+
+\method{plot}{selectEB}(x, type = c("terms", "waterfall", "trace"), ...)
 }
 \arguments{
 \item{obj}{Objective function on the \eqn{-2 \log L} scale, called as
@@ -63,6 +66,13 @@ default \code{fits}), \code{kappa} (eigenvalue bound of the correlation of the
 present parameters, default 0.01), \code{window} (default 2), \code{swaps}
 (evaluate the exchange of every present with every absent candidate at
 the best structure, default \code{TRUE}), \code{tol} (default 1e-3), \code{seed}.}
+
+\item{x}{Object of class \code{selectEB}.}
+
+\item{type}{\code{"terms"}: gain and threshold per candidate. \code{"waterfall"}: final
+score of every start above the best. \code{"trace"}: score along the best start.}
+
+\item{...}{Not used.}
 }
 \value{
 Object of class \code{selectEB}, a list with
@@ -81,6 +91,8 @@ of freedom and p-value.}
 \item{\code{full}, \code{empty}, \code{best}}{fits of the full and the empty structure,
 and the best start.}
 }
+
+A ggplot.
 }
 \description{
 Selects which candidate terms of a model are present: gated parameters

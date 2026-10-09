@@ -86,6 +86,7 @@ test_that("a gated linear model is selected with thresholds consistent with the 
   expect_equal(fit$hyper$penalty, (1 + g) / g * log1p(g))
   expect_true(all(fit$structures$G >= fit$best$G - 1e-8))
   expect_output(print(fit), "selected after refits")
+  for (type in c("terms", "waterfall", "trace")) expect_s3_class(plot(fit, type = type), "ggplot")
 })
 
 test_that("rule alpha thresholds every present parameter at the chi-square quantile", {
@@ -94,6 +95,7 @@ test_that("rule alpha thresholds every present parameter at the chi-square quant
                   control = list(seed = 1, swaps = FALSE))
   expect_equal(fit$terms$threshold, rep(qchisq(0.99, 1), 8), tolerance = 1e-8)
   expect_identical(fit$terms$on, fit$terms$gain > qchisq(0.99, 1))
+  expect_true(all(is.na(fit$terms$pip)))
   expect_identical(fit$best$key, f$truth)
 })
 

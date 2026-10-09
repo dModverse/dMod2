@@ -39,9 +39,10 @@
 #' `rule = "alpha"`, every present parameter costs `qchisq(1 - alpha, 1)`
 #' instead.
 #'
-#' The final structure comes from refits along the candidates ordered by
-#' inclusion probability: the smallest structure that a likelihood ratio test
-#' against the full model does not reject at level `alpha`.
+#' The final structure comes from refits along the candidates ordered by their
+#' gain above the threshold, present ones first: the smallest structure that a
+#' likelihood ratio test against the full model does not reject at level
+#' `alpha`.
 #'
 #' Candidates whose parameters are close to collinear at the best structure
 #' are reported in `nonidentifiable`, and structures whose score is within
@@ -80,7 +81,8 @@
 #' @return Object of class `selectEB`, a list with
 #'   \describe{
 #'     \item{`terms`}{per candidate: family, `on` at the best structure, `gain`,
-#'       `threshold`, `pip`, `selected` after the refits.}
+#'       `threshold`, `pip` (`NA` with `rule = "alpha"`), `selected` after the
+#'       refits.}
 #'     \item{`hyper`}{\eqn{\hat g}, the penalty \eqn{(1 + g)/g \log(1 + g)} per
 #'       parameter, and per family the posterior mean share of present
 #'       candidates.}
@@ -395,7 +397,7 @@ selectEB <- function(obj, center, zero = NULL, reference = NULL, class = NULL,
     gain <- out$D - inn$D
     data.frame(candidate = spec$cand[j], family = spec$family[[j]], on = best$z[j],
                gain = gain, threshold = gain - (out$G - inn$G) / w,
-               pip = stats::plogis((out$G - inn$G) / 2))
+               pip = if (env$rule == "pip") stats::plogis((out$G - inn$G) / 2) else NA_real_)
   })
   do.call(rbind, rows)
 }
@@ -469,13 +471,13 @@ selectEB <- function(obj, center, zero = NULL, reference = NULL, class = NULL,
   (P + t(P)) / 2
 }
 
-# Refits along the candidates ordered by inclusion probability, from the size
+# Refits along the candidates ordered by gain above threshold, from the size
 # of the best structure down while the test against the full model does not
 # reject, up while it does.
 .ebRefits <- function(env, best, terms, full, center, sd, cores, alpha, lrt) {
   spec <- env$spec
   ctl  <- env$ctl
-  cand <- terms$candidate[order(!terms$on, -terms$pip)]
+  cand <- terms$candidate[order(!terms$on, terms$threshold - terms$gain)]
   J <- length(cand)
   Dfull <- .ebDataValue(env, full$argument, rep(TRUE, J), lrt)
   nFull <- sum(lengths(spec$pars))
@@ -540,4 +542,41 @@ print.selectEB <- function(x, ...) {
     cat(sprintf("near-collinear (eigenvalue %.2g): %s\n", g$eigenvalue,
                 paste(g$candidates, collapse = ", ")))
   invisible(x)
+}
+
+utils::globalVariables(c("candidate", "gain", "threshold", "decision", "start", "G", "step"))
+
+#' @param x Object of class `selectEB`.
+#' @param type `"terms"`: gain and threshold per candidate. `"waterfall"`: final
+#'   score of every start above the best. `"trace"`: score along the best start.
+#' @param ... Not used.
+#' @return A ggplot.
+#' @rdname selectEB
+#' @export
+plot.selectEB <- function(x, type = c("terms", "waterfall", "trace"), ...) {
+  type <- match.arg(type)
+  if (type == "waterfall") {
+    s <- x$structures
+    s$start <- seq_len(nrow(s))
+    return(ggplot2::ggplot(s, ggplot2::aes(start, G - min(G), colour = key)) +
+             ggplot2::geom_point() +
+             ggplot2::scale_y_continuous(trans = "log1p", breaks = c(0, 10^(0:6))) +
+             ggplot2::labs(x = "start, sorted", y = "score above the best", colour = NULL) +
+             theme_dMod() + ggplot2::theme(legend.position = "bottom", legend.direction = "vertical"))
+  }
+  if (type == "trace") {
+    tr <- x$best$trace
+    return(ggplot2::ggplot(data.frame(step = seq_along(tr) - 1L, G = tr), ggplot2::aes(step, G)) +
+             ggplot2::geom_step() + ggplot2::geom_point(size = 0.8) +
+             ggplot2::labs(x = "accepted move", y = "score G") + theme_dMod())
+  }
+  tm <- x$terms
+  tm$candidate <- factor(tm$candidate, levels = rev(tm$candidate))
+  tm$decision <- ifelse(tm$selected, "selected", "not selected")
+  ggplot2::ggplot(tm, ggplot2::aes(y = candidate)) +
+    ggplot2::geom_point(ggplot2::aes(x = pmax(gain, 0), colour = decision)) +
+    ggplot2::geom_point(ggplot2::aes(x = pmin(pmax(threshold, 0), 1e6)), shape = 124, size = 4) +
+    ggplot2::scale_x_continuous(trans = "log1p", breaks = c(0, 10^(0:6))) +
+    ggplot2::labs(x = "gain in -2 log L, threshold as bar", y = NULL, colour = NULL) +
+    theme_dMod()
 }

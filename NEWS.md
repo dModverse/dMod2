@@ -7,7 +7,17 @@
   `control$em$adaptive`, a reference parameter is penalised relative to its
   full estimate. Refits along the terms ordered by their penalised size make
   the final choice by likelihood ratio test.
-
+* New `selectEB()`: selects which gated parameters and which reference
+  parameters are present, with the penalty estimated instead of scanned. The
+  slab is a g-prior on the effects, the share of present candidates is
+  integrated under a beta-binomial prior, and a multistart over structures
+  alternates single switches of candidates with the closed-form update of
+  `g`. Per candidate it reports the gain in -2 log L, the threshold and the
+  inclusion probability; `rule = "alpha"` thresholds at the chi-square
+  quantile instead. Refits with a likelihood ratio test against the full model
+  make the final choice, on the data term with `lrt = "data"`. Substitutes are
+  reported as alternative structures and near-collinear groups. Vignette
+  "Structure selection with an estimated penalty".
 * New `scanL1()`: L1 selection over a grid of penalty strengths in the
   manner of Hauber, Rosenblatt and Timmer (2023). A penalised multistart fit
   per `lambda`, an unpenalised refit of each distinct structure, and the
