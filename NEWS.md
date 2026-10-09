@@ -1,5 +1,13 @@
 # dMod2 (devel-EM)
 
+* `scanL1()` gains `lambda = "em"`: the strength of the L1 or Lq penalty is
+  estimated per family (gates, reference parameters) by an EM on the marginal
+  likelihood, as a variance component, instead of scanned over a grid. One
+  multistart of the EM replaces the multistart per `lambda`. With
+  `control$em$adaptive`, a reference parameter is penalised relative to its
+  full estimate. Refits along the terms ordered by their penalised size make
+  the final choice by likelihood ratio test.
+
 * New `scanL1()`: L1 selection over a grid of penalty strengths in the
   manner of Hauber, Rosenblatt and Timmer (2023). A penalised multistart fit
   per `lambda`, an unpenalised refit of each distinct structure, and the
