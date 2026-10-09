@@ -120,9 +120,8 @@
   fit
 }
 
-# The EM variant of scanL1(): one multistart of the EM, the structures of the
-# runs on the lowest level of its waterfall refitted without penalty, and the
-# smallest of them the test against the full model does not reject.
+# The EM variant of scanL1(): one multistart of the EM, then refits without
+# penalty along the terms ordered by their size at the best run.
 .l1EmScan <- function(obj, start0, sparse, gates, reference, fixSel, q, ctl, fits, sd,
                       cores, wf, full, fullPars, zero, fixed, alpha) {
   family <- c(stats::setNames(rep("gate", length(gates)), gates),
@@ -136,33 +135,55 @@
                         start0, fits, sd, cores, obj, extra = list(sparse),
                         positive = gates, wf = wf, levelTol = ctl$tolHits)
   if (is.null(best)) stop("scanL1: every EM run failed.", call. = FALSE)
-  lev <- c(list(best), best$level)
-  st  <- lapply(lev, function(f) .l1Structure(f$argument, gates, reference, list()))
-  keys <- vapply(st, `[[`, "", "key")
-  structs <- st[!duplicated(keys)]
-  names(structs) <- unique(keys)
-  rf <- Map(.l1Refit, structs, lapply(lev, `[[`, "argument")[!duplicated(keys)],
-            MoreArgs = list(obj = obj, fullPars = fullPars, zero = zero, fixed = fixed,
-                            ctl = ctl, fits = fits, sd = sd, cores = cores, wf = wf))
-  rf <- Filter(Negate(is.null), rf)
-  if (!length(rf)) stop("scanL1: every refit failed.", call. = FALSE)
+  # Refits along the terms ordered by their penalised size: from the MAP
+  # structure, terms are removed while the test against the full model does
+  # not reject, and added back while it does.
+  terms <- names(family)
+  u <- abs(best$argument[terms]) / scale[terms]
+  ord <- terms[order(-u)]
+  nOn <- sum(u > 0)
   nFull <- length(fullPars)
-  refitTab <- data.frame(key = names(rf), value = vapply(rf, `[[`, 0, "value"),
-                         nfree = vapply(rf, `[[`, 0L, "nfree"),
-                         starts = vapply(rf, function(z) z$starts %||% NA_integer_, 0L),
-                         hits = vapply(rf, function(z) z$hits %||% NA_integer_, 0L),
-                         stringsAsFactors = FALSE)
-  refitTab$stat <- pmax(0, refitTab$value - full$value)
-  refitTab$df   <- nFull - refitTab$nfree
-  refitTab$p    <- ifelse(refitTab$df > 0,
-                          stats::pchisq(refitTab$stat, refitTab$df, lower.tail = FALSE), 1)
-  refitTab$bic  <- NA_real_
+  refit <- function(k) {
+    th <- best$argument
+    th[setdiff(terms, ord[seq_len(k)])] <- 0
+    th[intersect(ord[seq_len(k)], terms[th[terms] == 0])] <- 1
+    st <- .l1Structure(th, gates, reference, list())
+    r <- .l1Refit(st, best$argument, obj, fullPars, zero, fixed, ctl, fits, sd, cores, wf)
+    if (is.null(r)) return(NULL)
+    df <- nFull - r$nfree
+    stat <- max(0, r$value - full$value)
+    list(st = st, r = r, row = data.frame(key = st$key, value = r$value, nfree = r$nfree,
+         starts = r$starts %||% NA_integer_, hits = r$hits %||% NA_integer_, stat = stat,
+         df = df, p = if (df > 0) stats::pchisq(stat, df, lower.tail = FALSE) else 1,
+         bic = NA_real_, size = k, stringsAsFactors = FALSE))
+  }
+  cache <- list()
+  get <- function(k) {
+    kk <- as.character(k)
+    if (is.null(cache[[kk]])) cache[[kk]] <<- refit(k)
+    cache[[kk]]
+  }
+  pass <- function(k) { g <- get(k); !is.null(g) && g$row$p >= alpha }
+  k <- nOn
+  if (pass(k)) {
+    while (k > 0L && pass(k - 1L)) k <- k - 1L
+  } else {
+    while (k < length(terms) && !pass(k)) k <- k + 1L
+  }
+  done <- Filter(Negate(is.null), cache)
+  if (!length(done)) stop("scanL1: every refit failed.", call. = FALSE)
+  refitTab <- do.call(rbind, lapply(done, `[[`, "row"))
+  refitTab <- refitTab[order(refitTab$size), ]
   rownames(refitTab) <- NULL
-  ok  <- refitTab[refitTab$p >= alpha, ]
-  key <- if (nrow(ok)) ok$key[which.max(ok$df)] else ""
-  pathTab <- data.frame(lambda = NA_real_, value = best$value, key = keys[1],
-                        removed = length(st[[1]]$removed),
-                        p = refitTab$p[match(keys[1], refitTab$key)],
+  selR <- get(k)
+  key <- if (is.null(selR)) "" else selR$st$key
+  structs <- stats::setNames(lapply(done, `[[`, "st"), vapply(done, function(d) d$st$key, ""))
+  mapKey <- .l1Structure(best$argument, gates, reference, list())$key
+  lev <- c(list(best), best$level)
+  keys <- vapply(lev, function(f) .l1Structure(f$argument, gates, reference, list())$key, "")
+  pathTab <- data.frame(lambda = NA_real_, value = best$value, key = mapKey,
+                        removed = sum(u == 0),
+                        p = refitTab$p[match(mapKey, refitTab$key)],
                         converged = isTRUE(best$converged), starts = best$starts,
                         hits = best$hits, em = best$emIterations, stringsAsFactors = FALSE)
   out <- list(path = pathTab, coefficients = NULL, arguments = list(best$argument),
@@ -173,8 +194,7 @@
                           starts = full$starts, hits = full$hits),
               selected = key, lambdaSelected = NA_real_,
               structure = structs, select = "lrt", alpha = alpha, q = q,
-              fit = if (is.na(match(key, refitTab$key))) fullPars
-                    else rf[[match(key, refitTab$key)]]$argument,
+              fit = if (is.null(selR)) fullPars else selR$r$argument,
               groups = list(), gates = gates, reference = reference,
               em = list(lambda = best$lambdaEM, terms = best$terms, trace = best$emTrace,
                         values = best$values, scale = scale))
