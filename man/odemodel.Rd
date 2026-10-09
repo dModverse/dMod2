@@ -21,7 +21,8 @@ odemodel(
 }
 \arguments{
 \item{f}{Named character vector, \link{eqnvec} or \link{eqnlist} with the right-hand
-sides; the names are the states.}
+sides; the names are the states. The functions and operators an equation
+may use are listed in \link[cppDE:expressions]{cppDE::expressions}.}
 
 \item{deriv}{logical, build first-order sensitivities. Default \code{TRUE}.
 \code{FALSE} builds the states alone, for \code{\link[=Xf]{Xf()}}, and \code{derivMode} has no
@@ -130,6 +131,6 @@ plot((x + x2)(seq(0, 5, 0.01), pars))
 }
 }
 \seealso{
-\code{\link[=Xs]{Xs()}}, \code{\link[=Xf]{Xf()}}, \code{\link[=compile]{compile()}}, \code{\link[=eventlist]{eventlist()}}, \code{\link[cppDE:cppODE]{cppDE::cppODE()}},
-\code{\link[cppDE:cvode]{cppDE::cvode()}}, \code{\link[cOde:funC]{cOde::funC()}}
+\code{\link[=Xs]{Xs()}}, \code{\link[=Xf]{Xf()}}, \code{\link[=compile]{compile()}}, \code{\link[=eventlist]{eventlist()}}, \link[cppDE:expressions]{cppDE::expressions},
+\code{\link[cppDE:cppODE]{cppDE::cppODE()}}, \code{\link[cppDE:cvode]{cppDE::cvode()}}, \code{\link[cOde:funC]{cOde::funC()}}
 }

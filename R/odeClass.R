@@ -66,7 +66,8 @@ print.odemodel <- function(x, ...) {
 #' the result into a prediction function.
 #'
 #' @param f Named character vector, [eqnvec] or [eqnlist] with the right-hand
-#'   sides; the names are the states.
+#'   sides; the names are the states. The functions and operators an equation
+#'   may use are listed in [cppDE::expressions].
 #' @param deriv logical, build first-order sensitivities. Default `TRUE`.
 #'   `FALSE` builds the states alone, for [Xf()], and `derivMode` has no
 #'   effect.
@@ -125,8 +126,8 @@ print.odemodel <- function(x, ...) {
 #'   `reversed2` (adjoints), each `NULL` where not built. The attribute
 #'   `"compileInfo"` holds the sources and compiler flags [compile()] uses.
 #'
-#' @seealso [Xs()], [Xf()], [compile()], [eventlist()], [cppDE::cppODE()],
-#'   [cppDE::cvode()], [cOde::funC()]
+#' @seealso [Xs()], [Xf()], [compile()], [eventlist()], [cppDE::expressions],
+#'   [cppDE::cppODE()], [cppDE::cvode()], [cOde::funC()]
 #'
 #' @example inst/examples/odemodel.R
 #' @export
