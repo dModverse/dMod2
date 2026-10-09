@@ -12,6 +12,8 @@
 # prior constant, and E|b|^q.
 .l1EmTerm <- function(b, g, c, lambda, q, oneSided) {
   s0 <- lambda^(-1 / q)
+  # Data without curvature on the scale of the prior: the posterior is the prior.
+  if (c * s0^2 < 1e-8) { c <- 0; g <- 0 }
   m  <- if (c > 0) b - g / c else b
   w  <- if (c > 0) min(10 / sqrt(c), 1e3 * s0 + abs(m)) else 1e3 * s0 + abs(m)
   lo <- if (oneSided) 0 else min(m - w, -20 * s0)
