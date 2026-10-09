@@ -175,10 +175,15 @@ scanL1 <- function(obj, center, zero = NULL, reference = NULL, groups = NULL,
   if (q <= 0 || q > 1) stop("scanL1: q must lie in (0, 1].", call. = FALSE)
   if (!is.null(ssl) && q < 1)
     stop("scanL1: ssl and q < 1 are two different penalties, give one.", call. = FALSE)
+  if (identical(lambda, "em") && (length(groups) || !is.null(ssl)))
+    stop("scanL1: lambda = \"em\" takes gates and reference parameters, no groups or ssl.",
+         call. = FALSE)
   ctl <- utils::modifyList(list(trust = list(rinit = 0.1, rmax = 10, iterlim = 200L),
                                 nq = 3L, eps = 0.01, ndata = NULL, nem = 50L,
                                 tolp = 1e-4, nmerge = 5L, snap = 1e-6, hits = 1L,
-                                tolHits = 0.1, maxFits = NULL), control)
+                                tolHits = 0.1, maxFits = NULL,
+                                em = list(init = 1, a = 1, b = 0, tol = 1e-3, adaptive = TRUE)),
+                           control)
   wf <- if (ctl$hits > 1L) list(hits = ctl$hits, tol = ctl$tolHits, max = ctl$maxFits)
   if (.Platform$OS.type == "windows") cores <- 1L
 
@@ -205,10 +210,13 @@ scanL1 <- function(obj, center, zero = NULL, reference = NULL, groups = NULL,
   fixSel    <- c(fixed, fullPars[gatedPars])
   start0    <- c(fullPars[setdiff(names(fullPars), gatedPars)],
                  stats::setNames(rep(1, length(gates)), gates))
-  lambda    <- sort(lambda)
   sparse    <- start0
   sparse[c(gates, reference)] <- 0
   for (b in groups) sparse[b$pars] <- b$anchor %||% mean(start0[b$pars])
+  if (identical(lambda, "em"))
+    return(.l1EmScan(obj, start0, sparse, gates, reference, fixSel, q, ctl, pathFits,
+                     sd, cores, wf, full, fullPars, zero, fixed, alpha))
+  lambda    <- sort(lambda)
   if (!is.null(ssl))
     ssl <- utils::modifyList(list(lambda1 = 1, a = 2, b = 2), ssl)
   pen1 <- function(start, l, n, extra, prior = NULL)
@@ -713,14 +721,19 @@ print.scanL1 <- function(x, ...) {
   if (x$select == "lrt") cat(sprintf(" (alpha = %g)", x$alpha))
   if (x$q < 1) cat(sprintf(", q = %g", x$q))
   if (!is.null(x$ssl)) cat(sprintf(", spike-and-slab with lambda1 = %g", x$ssl$lambda1))
+  if (!is.null(x$em)) {
+    cat(sprintf(", lambda by EM: %s\n\nTerms:\n",
+                paste(sprintf("%s %.4g", names(x$em$lambda), x$em$lambda), collapse = ", ")))
+    print(x$em$terms, row.names = FALSE, digits = 4)
+  }
   rt  <- x$refits
   ids <- paste0("S", seq_len(nrow(rt)))
   cat("\n\nRefits:\n")
   print(data.frame(id = ids, rt[setdiff(names(rt), "key")]), row.names = FALSE, digits = 4)
   cat("\nStructures:\n")
   cat(sprintf("  %s  %s\n", ids, ifelse(nzchar(rt$key), rt$key, "(full model)")), sep = "")
-  cat(sprintf("\nSelected at lambda = %.4g: %s\n", x$lambdaSelected,
-              ids[match(x$selected, rt$key)]))
+  sel <- if (is.null(x$em)) sprintf(" at lambda = %.4g", x$lambdaSelected) else ""
+  cat(sprintf("\nSelected%s: %s\n", sel, ids[match(x$selected, rt$key)]))
   invisible(x)
 }
 
