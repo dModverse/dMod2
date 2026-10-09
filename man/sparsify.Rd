@@ -69,28 +69,9 @@ scan needs a lambda grid plus an information criterion to approximate.
 \examples{
 \dontrun{
 
-## ---------------------------------------------------------------------------
-## Clustered marginal-likelihood cell-type identification: which individuals
-## SHARE a parameter value, and which form their own group? (Becker et al. 2010,
-## Epo receptor; 6 synthetic cell lines.)
-##
-## penaltyL1(method = "lasso")/sparsify handle the binary "shared vs individual"
-## question. The clustered penalty penaltyL1(method = "clustered") asks the
-## richer one: it
-## penalises the complete-graph pairwise differences sum_{i<j} |eta_i - eta_j|,
-## so individuals crystallise into an unknown NUMBER of groups that share a
-## value. sparsify recovers that grouping per candidate parameter by
-## exact-marginal model selection over the cluster path (no lambda scan of full
-## ODE fits) and, with several candidates, selects them JOINTLY so cross-
-## attribution between correlated parameters cannot force a spurious split.
-##
-## Ground truth here (three DIFFERENT grouping structures at once):
-##   kon : shared by all six lines            -> G = 1
-##   ke  : {A,B,C} high vs {D,E,F} low         -> G = 2
-##   kt  : {A,B} {C,D} {E,F} three pairs       -> G = 3
-## A cheaper head-to-head against the classical Hauber-et-al-2023 penalty scan is
-## bench/bench_laplace_hauber.R.
-## ---------------------------------------------------------------------------
+## Which of six cell lines share a parameter value (Becker et al. 2010, Epo
+## receptor)? The clustered penalty fuses all pairwise differences, and sparsify
+## selects each parameter's grouping by exact-marginal model selection.
 
 library(dMod2)
 outdir <- tempdir()          # keep generated C/C++ + shared objects out of the tree

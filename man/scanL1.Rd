@@ -99,6 +99,10 @@ number of removed parameters, p-value of its refit, convergence of the
 penalised fit and, with \code{ssl}, the number of EM iterations.}
 \item{\code{coefficients}}{penalised estimates per \code{lambda}.}
 \item{\code{arguments}}{all free parameters of the penalised fit per \code{lambda}.}
+\item{\code{level}}{one row per \code{lambda} and structure on the lowest level of
+its waterfall, the runs within \code{tolHits} of the best value: structure
+key, best value and number of runs.}
+\item{\code{levelFits}}{per \code{lambda}, these runs: free parameters and value.}
 \item{\code{refits}}{one row per distinct structure: \verb{-2 log L}, free
 parameters, LRT statistic, degrees of freedom, p-value, BIC.}
 \item{\code{full}}{the full fit: value, parameters and the sorted values of

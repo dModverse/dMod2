@@ -37,6 +37,9 @@
 * The spike-and-slab path of `scanL1()` runs the EM at each `lambda` from the
   previous mode and from the sparse point and keeps the smaller `-2 log`
   posterior, followed by the downward pass that `q < 1` uses.
+* `scanL1()` returns `level` and `levelFits`: per `lambda`, the runs on the
+  lowest level of the waterfall, within `tolHits` of the best value, and the
+  structures they take.
 
 # dMod2 0.11.0
 

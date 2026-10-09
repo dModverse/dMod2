@@ -47,30 +47,9 @@ The outer marginal is FOCE(I) / EM / SAEM; the inner conditional mode uses
 \examples{
 \dontrun{
 
-## ---------------------------------------------------------------------------
-## Marginal-likelihood L1/Laplace model selection: which parameters are
-## cell-line specific? (Becker et al. 2010, Epo receptor; 2 cell lines.)
-##
-## Classical workflow: L1-penalise the per-line parameter deviations, SCAN the
-## penalty strength lambda over a grid, run a multistart fit at every grid
-## point, and pick lambda by BIC. Cost: O(grid x multistart) fits.
-##
-## EM reframes the penalised fit as a nonlinear mixed-effects model with a
-## Laplace random-effect density: the deviations are random effects and the
-## single lambda is ESTIMATED by marginal maximum likelihood (one fit, no grid).
-## sparsify then walks a short nested chain of supports and keeps the one with
-## the smallest marginal -2 log L. It recovers the same parsimonious model the
-## BIC-scan would, at O(K) fits instead of O(grid x multistart). Theory:
-## notes/laplace_nlme_theory.Rmd.
-##
-## Reference encoding (Hauber et al. 2023 style): line A is the baseline
-## (theta = exp(mu)); line B has the deviation d (theta = exp(mu + d)) and
-## |d| is penalised. d is a single coordinate, so trustL1 drives the deviation
-## of a shared parameter cleanly to zero.
-##
-## Ground truth here: kon and ke differ between the two lines (individual),
-## koff and kt are shared. Candidates = {kon, koff, kt, ke}.
-## ---------------------------------------------------------------------------
+## Which parameters are cell-line specific (Becker et al. 2010, Epo receptor)?
+## EM treats the penalised deviations as Laplace random effects and estimates
+## lambda by marginal likelihood; sparsify keeps the most parsimonious support.
 
 library(dMod2)
 outdir <- tempdir()          # keep generated C/C++ + shared objects out of the tree
@@ -161,9 +140,8 @@ cat("estimated lambda:", fit$lambda, "\n")
 print(round(fit$etaModes, 4))              # line-B deviations d_hat
 
 ## 5b. sparsify: nested-support chain, pick min marginal -2 log L. -----------
-##     The marginal integrates the deviations out, so a spurious individual
-##     parameter LOWERS the data -2logL but RAISES the marginal (Occam factor);
-##     the minimum of the chain is the parsimonious model.
+##     A spurious individual parameter lowers the data -2 log L but raises the
+##     marginal (Occam factor).
 sel <- sparsify(obj, center, fixed = fixed, method = "focei",
                  control = list(cm1 = list(iterlim = 50L)),
                  fits = 12, cores = 4, sd = 0.5, verbose = TRUE)
@@ -189,17 +167,9 @@ cat(sprintf("\nsparsify  S = {\%s}\nscanL1    S = {\%s}\n",
 }
 \dontrun{
 
-## ---------------------------------------------------------------------------
-## Nonlinear mixed-effects walkthrough: Theophylline (12 subjects, oral PK).
-##
-## Structural model, on the log scale so positivity is automatic:
-##   Ka_i = exp(tka + eta_Ka_i), V_i = exp(tv + eta_V_i), Cl_i = exp(tcl + eta_Cl_i)
-## Residual model, the usual lognormal / constant-CV PK convention:
-##   log(DV_ij) = log(Cc_ij) + eps_ij,   eps_ij ~ N(0, sigma_add^2)
-##
-## Reference values (Pinheiro & Bates 2000): Ka_pop ~ 1.5 1/h, V_pop ~ 32 L,
-## Cl_pop ~ 3.0 L/h; sd(eta) ~ 0.5 / 0.1 / 0.3.
-## ---------------------------------------------------------------------------
+## Nonlinear mixed-effects walkthrough: Theophylline, 12 subjects, oral PK,
+## log-normal parameters and residuals. Reference (Pinheiro & Bates 2000):
+## Ka_pop ~ 1.5 1/h, V_pop ~ 32 L, Cl_pop ~ 3.0 L/h; sd(eta) ~ 0.5 / 0.1 / 0.3.
 
 library(dMod2)
 
@@ -300,10 +270,7 @@ plotIndivs    (fit)   # per-subject IPRED / PRED curves over the data
 plotResiduals (fit)   # IWRES vs IPRED and IWRES vs TIME
 plotHistIndivs(fit)   # eta histograms with QQ line vs N(0, Omega_kk)
 
-## ---------------------------------------------------------------------------
-## Other estimators. All share this objective, this init, and the fit layout;
-## only the E-step and the outer loop differ.
-## ---------------------------------------------------------------------------
+## ---- Other estimators: same objective, init and fit layout, other E-step ----
 
 ## Sparse-grid Gauss-Hermite refinement, warm-started from FOCEI. Use it as a
 ## confirmatory step once the model structure is settled: it removes the
