@@ -664,7 +664,7 @@ print.noncenteredomega <- function(x, ...) {
 #'   subject, representing \eqn{H_i^{-1}} at the inner optimum.
 #'
 #' @return A named numeric vector of length `length(omegaSpec$cholPars)`
-#'   carrying \eqn{\partial \mathrm{OFV} / \partial \omega_{cholPar}}.
+#'   holding \eqn{\partial \mathrm{OFV} / \partial \omega_{cholPar}}.
 #'
 #' @seealso [priorOmega()] (which supplies the Hessian metric on the Omega
 #'   axis in Bayesian use)

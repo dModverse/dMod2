@@ -1,5 +1,4 @@
-## Plotting methods for mcmc / smc results.
-## Split out of plots.R: these are methods for classes the core does not define.
+## Plot methods for the mcmc and smc result classes.
 
 #' Plot the marginal posterior distributions of an [mcmc()] result
 #'

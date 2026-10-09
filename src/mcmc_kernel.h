@@ -30,7 +30,7 @@ enum class PreCond {
 };
 
 // What state the kernel returns from one objfn call. Sized to the parameter
-// dimension K; grad / G / L all carry par names as Rcpp dimnames so the
+// dimension K; grad / G / L all have par names as Rcpp dimnames so the
 // caller can re-index by name.
 struct LogPState {
   double logp;                  // log target density at theta
@@ -60,19 +60,15 @@ void da_init(DAState& da, double eps0, double target,
 
 void da_update(DAState& da, double alpha, int t);
 
-// Cholesky with adaptive ridge: tries G + ridge*I, doubling ridge up to
-// max_iter times if dpotrf fails. Writes the upper factor into L_out
-// (column-major K*K), and the actual ridge used into ridge_out.
-// Returns true on success.
+// Cholesky of G + ridge*I, doubling ridge up to max_iter times while dpotrf
+// fails. Writes the upper factor (column-major K*K) to L_out and the ridge
+// used to ridge_out; returns true on success.
 bool chol_with_ridge(const double* G, int K, double ridge0, int max_iter,
                      double* L_out, double* ridge_out);
 
-// Natural-gradient drift d = G^{-1} grad. With non-null dG (K*K*K
-// row-major), adds the Xifara-corrected geodesic terms:
-//   d = G^{-1} grad - 2 * termB + termA,
-//   termA_j = (G^{-1} v)_j,  v_k = tr(G^{-1} dG_k),
-//   termB_k = sum_j (G^{-1} dG_k G^{-1})_{j,k}.
-// The eps/2 multiplier is applied by the caller.
+// Natural-gradient drift d = G^{-1} grad; non-null dG (K*K*K, row-major) adds the Xifara
+// terms d += termA - 2 termB, termA = G^{-1} v, v_k = tr(G^{-1} dG_k),
+// termB_k = sum_j (G^{-1} dG_k G^{-1})_{j,k}. The caller applies the eps/2 factor.
 void mala_drift(const double* grad, const double* L_upper, int K,
                 const double* dG_row_major,        // K*K*K or nullptr
                 double* drift_out);
@@ -96,15 +92,9 @@ double mala_log_q(const double* theta_new, const double* theta_old,
 void mh_propose(const double* theta_old, const double* L_upper, int K,
                 double eps, double* z_buf, double* theta_new);
 
-// Leapfrog integrator for HMC. Mass matrix is given through its inverse
-// Cholesky factor (M = LM^T LM, Minv = LM^{-1} LM^{-T}). The kernel
-// invokes grad_cb once per half-step (twice per full step except at the
-// trajectory endpoints, where the half-steps share). p and theta are
-// updated in place. grad_lp is filled with the gradient at the final
-// theta. Returns true on success.
-//
-// grad_cb(theta) must return a LogPState with at least logp + grad
-// populated (G and L need not be touched).
+// HMC leapfrog with Minv given by its upper factor; consecutive half-steps share one
+// grad_cb call, which must fill logp and grad. Updates p and theta in place and
+// leaves the gradient at the final theta in grad_lp; returns true on success.
 bool leapfrog(double* theta, double* p, double* grad_lp,
               const double* Minv_chol_upper,   // K x K, upper U with Minv = U^T U
               int K, double eps, int n_steps,

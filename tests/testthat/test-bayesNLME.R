@@ -1,17 +1,7 @@
-# ============================================================================
-# Bayesian NLME end-to-end tests.
-#
-# Sections:
-#   * bayesNLMEMarginal -- FOCEI Laplace marginal target, used with SMC.
-#   * bayesNLMEJoint    -- Particle-Gibbs target on (theta, omega, {eta_i}).
-#
-# Both targets are built on the same minimal one-eta NLME fixture (also
-# used in test-focei.R / test-nlmefit.R) so the Bayesian build can be
-# cross-checked against a converged FOCEI MAP.
-# ============================================================================
+# Bayesian NLME targets: bayesNLMEMarginal (FOCEI Laplace marginal, SMC) and bayesNLMEJoint (Particle-Gibbs).
 
 
-# Shared fixture: 4-subject one-eta NLME at intercept * exp(eta).
+# Shared one-eta NLME fixture.
 .makeBayesNLMEFixture <- function(tag = "bnlme") {
   set.seed(1)
   oldwd <- setwd(tempdir())
@@ -187,11 +177,8 @@ test_that("mcmc(bayesNLMEJoint(...)) runs and returns expected shape", {
   expect_equal(dim(chain$etaSamples)[3L], 1L)
   expect_true(all(is.finite(chain$samples)))
 
-  # 200 sweeps on a tiny fixture verifies the orchestrator is exploring
-  # rather than converged. The chain is high-dim relative to the trajectory
-  # length (P_outer + N * K_eta = 6 parameters, 200 samples post-burn-in);
-  # the meaningful assertions are finiteness, structural shape, and a
-  # non-trivial acceptance rate.
+  # A short chain explores rather than converges: assert finiteness, shape
+  # and a non-trivial acceptance rate.
   pm <- colMeans(chain$samples)
   expect_true(is.finite(pm["mu_pop"]))
   expect_lt(abs(pm["mu_pop"] - fit$argument["mu_pop"]), 15.0)
@@ -309,9 +296,8 @@ test_that("priorOmega: Hessian is symmetric and block-diagonal by row of L", {
 
 
 test_that("priorOmega: gradient at the prior mode is small", {
-  # For half-Normal(0, 1) on each sigma_k with diag-only omega, the gradient
-  # of -2 log p at omega_kk = 0 (-> sigma_k = 1) is
-  #   d/d omega_kk = -2 * (1 - L_kk^2 / tau^2) = -2 * (1 - 1) = 0.
+  # With unit-scale half-Normal priors on a diagonal omega, omega = 0 is the
+  # prior mode.
   om <- omega(eta = c("eta_A", "eta_B"), structure = "diag")
   pr <- priorOmega(om, kind = "LKJHalfNormal", lkjEta = 2.0, scaleSD = 1.0)
   pars <- c(omega_A_A = 0, omega_B_B = 0)
@@ -322,11 +308,8 @@ test_that("priorOmega: gradient at the prior mode is small", {
 
 # ---- foceiOmegaGradient -------------------------------------------------
 
-# Setup: invent N subject mode vectors eta_hat_i and per-subject data
-# Hessian contributions H_GN_data_i. The OFV-as-a-function-of-omega is
-#   f(omega) = sum_i [ eta_i^T Omega(omega)^-1 eta_i
-#                    + log|Omega(omega)|
-#                    + log|H_GN_data_i + 2 Omega(omega)^-1| ]
+# Random eta modes and data Hessians H_i for
+#   OFV(omega) = sum_i [eta_i' Omega^-1 eta_i + log|Omega| + log|H_i + 2 Omega^-1|].
 .make_toy_omega_problem <- function(K, N, seed = 1L) {
   set.seed(seed)
   eta <- paste0("eta_", letters[seq_len(K)])
@@ -420,11 +403,7 @@ test_that("foceiOmegaGradient: K=1 reduces to closed-form", {
 
   oc <- c(omega_a_a = log(0.4))
   Omega_inv <- exp(-2 * oc)
-  # Analytical d OFV / d omega_aa (full hand-derivation, K=1 case):
-  #   q_i = eta_i^2 Omega_inv,  d q_i / d omega = -2 q_i
-  #   log|Omega| = 2 omega,     d / d omega = 2
-  #   H_i = H_data_i + 2 Omega_inv, d H_i / d omega = -4 Omega_inv
-  #   d log|H_i|/d omega = -4 Omega_inv / H_i
+  # Closed-form derivative for a single diagonal eta.
   H_inv <- lapply(H_data, function(H_d) 1 / (H_d + 2 * Omega_inv))
   g_ana <- foceiOmegaGradient(oc, om, etaModes, H_inv)
 

@@ -1,9 +1,6 @@
 \dontrun{
-  ## Bayesian posterior sampling examples for the unified mcmc() entry.
-  ## Demonstrates three problem types:
-  ##   (1) flat target (likelihood + Gaussian prior) with Langevin moves
-  ##   (2) sequential SMC tempering on the same posterior
-  ##   (3) hierarchical NLME: marginal (Pfad A) and joint (Pfad B)
+  ## Posterior sampling with mcmc(): (1) single chains on a flat target, (2) SMC tempering,
+  ## (3) hierarchical NLME, marginal (Pfad A) and joint (Pfad B), (4) multiple chains.
 
 
   ## ----- Problem (1) and (2): ODE decay model ---------------------------
@@ -30,7 +27,7 @@
   priorObj <- constraintL2(c(A = 1.0, k = 0.5), sigma = 5)
   obj      <- likObj + priorObj
 
-  ## MAP via trust gives a starting point + Hessian for the fixed-G chain
+  ## MAP via trust gives a starting point and the Hessian for the fixed-G chain
   mapfit <- trust(obj, c(A = 1.2, k = 0.4), rinit = 0.1, rmax = 10)
 
 
@@ -94,7 +91,6 @@
 
 
   ## ----- (3) Hierarchical NLME: marginal (Pfad A) and joint (Pfad B) ----
-  ## Same one-eta fixture as test-bayesNLME-marginal.R / test-bayesNLME-joint.R.
   g <- Y(c(y = "intercept"), f = NULL, parameters = "intercept",
          compile = TRUE, deriv2 = TRUE, modelname = "mcmc_bnlme_obs")
   x <- Xt()
@@ -158,7 +154,7 @@
   ## Pfad A logEvidence is available for Bayesian model comparison
   chainA$logEvidence
 
-  ## Diagnostic + posterior plots
+  ## Diagnostic and posterior plots
   plot(chainA);       plotTrace(chainA);  plotPairs(chainA)
   plot(chainB);       plotTrace(chainB)
 

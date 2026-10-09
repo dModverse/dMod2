@@ -100,7 +100,7 @@ initialisation, including the first. Default \code{10L}.}
 }
 \value{
 An object of class \code{c("mcmcresult", ...)}, subclassed to
-\code{mcmcResultSingle}, \code{mcmcResultSequential} (carries \code{logEvidence},
+\code{mcmcResultSingle}, \code{mcmcResultSequential} (with \code{logEvidence},
 \code{betaPath}, \code{ESSPath}, \code{acceptRates}, \code{stepsizePath}, \code{nLevels}),
 \code{mcmcResultBlocked} (adds \code{etaSamples}, \code{acceptOuter}, \code{acceptEta}),
 or \code{mcmcResultMulti} (adds \code{chainId}, \code{rHat}) depending on the run

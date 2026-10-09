@@ -20,7 +20,7 @@ subject, representing \eqn{H_i^{-1}} at the inner optimum.}
 }
 \value{
 A named numeric vector of length \code{length(omegaSpec$cholPars)}
-carrying \eqn{\partial \mathrm{OFV} / \partial \omega_{cholPar}}.
+holding \eqn{\partial \mathrm{OFV} / \partial \omega_{cholPar}}.
 }
 \description{
 Closed-form gradient of the Laplace-approximated marginal

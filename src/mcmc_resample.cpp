@@ -10,11 +10,8 @@
 using namespace Rcpp;
 
 
-// Stratified resampling. Divides [0, 1) into N equal strata and draws one
-// uniform from each stratum, then maps via the inverse CDF (cumulative
-// weights). Lower variance than multinomial, slightly higher than
-// systematic. O(N).
-//
+// Stratified resampling: one uniform per stratum of [0, 1), mapped through the
+// inverse CDF. O(N), variance between systematic and multinomial.
 // [[Rcpp::export(name = "mcmcStratifiedResample")]]
 IntegerVector mcmc_stratified_resample(const NumericVector& weights) {
   const int N = weights.size();
@@ -34,10 +31,8 @@ IntegerVector mcmc_stratified_resample(const NumericVector& weights) {
 }
 
 
-// Residual resampling. Deterministic part: each particle gets
-// floor(N * w_i) copies. Remainder of weights (length R) is resampled
-// multinomially to fill the rest.
-//
+// Residual resampling: floor(N * w_i) copies per particle, the remaining slots
+// drawn multinomially from the residual weights.
 // [[Rcpp::export(name = "mcmcResidualResample")]]
 IntegerVector mcmc_residual_resample(const NumericVector& weights) {
   const int N = weights.size();
@@ -85,9 +80,7 @@ IntegerVector mcmc_residual_resample(const NumericVector& weights) {
 }
 
 
-// Plain multinomial resampling via the inverse CDF. O(N log N) due to
-// binary search; useful as a reference / when variance is not a concern.
-//
+// Multinomial resampling via the inverse CDF, O(N log N); the reference scheme.
 // [[Rcpp::export(name = "mcmcMultinomialResample")]]
 IntegerVector mcmc_multinomial_resample(const NumericVector& weights) {
   const int N = weights.size();

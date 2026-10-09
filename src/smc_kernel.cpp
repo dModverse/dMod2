@@ -1,8 +1,5 @@
-// SMC sampler helper kernels: stable log-sum-exp, ESS, systematic
-// resampling, and adaptive beta bisection. Each function is a thin Rcpp
-// wrapper around a numerically robust C++ implementation; the SMC R
-// orchestrator (R/sampleSMC.R) calls these to keep per-iteration overhead
-// out of the R interpreter even for nParticles in the thousands.
+// SMC helper kernels: stable log-sum-exp, ESS, systematic resampling and
+// adaptive beta bisection.
 
 #include <Rcpp.h>
 #include <algorithm>
@@ -13,7 +10,6 @@ using namespace Rcpp;
 
 
 // Stable log-sum-exp over a numeric vector.
-//
 // [[Rcpp::export(name = "smcLogSumExp")]]
 double smc_log_sum_exp(const NumericVector& x) {
   const int n = x.size();
@@ -27,9 +23,7 @@ double smc_log_sum_exp(const NumericVector& x) {
 }
 
 
-// Effective sample size from log-weights.
-// ESS = (sum w)^2 / sum w^2 = exp(2*LSE(logw) - LSE(2*logw))
-//
+// Effective sample size from log-weights, ESS = exp(2 LSE(logw) - LSE(2 logw)).
 // [[Rcpp::export(name = "smcESS")]]
 double smc_ess(const NumericVector& logw) {
   const int n = logw.size();
@@ -42,10 +36,8 @@ double smc_ess(const NumericVector& logw) {
 }
 
 
-// O(N) systematic resampling. `weights` must be normalised. `u` is a single
-// U[0,1) variate; offsets u/N, (u+1)/N, ... pick indices via the inverse
-// CDF (cumulative sum). Returns 1-based indices for direct R use.
-//
+// O(N) systematic resampling of normalised `weights`: offsets u/N, (u+1)/N, ...
+// for one U[0,1) variate `u` pick indices via the inverse CDF. Returns 1-based indices.
 // [[Rcpp::export(name = "smcSystematicResample")]]
 IntegerVector smc_systematic_resample(const NumericVector& weights, double u) {
   const int N = weights.size();
@@ -65,12 +57,9 @@ IntegerVector smc_systematic_resample(const NumericVector& weights, double u) {
 }
 
 
-// Adaptive beta step (Jasra et al. 2011): bisection on
-//   ESS(logw_prev + (beta_new - beta_old) * (-value_lik / 2)) = targetESS
-// where `logL = -value_lik / 2`. Returns delta = beta_new - beta_old,
-// clamped to [0, 1 - beta_old]. If even delta = 1 - beta_old keeps ESS
-// above the target, returns 1 - beta_old.
-//
+// Adaptive tempering step (Jasra et al. 2011): bisection for delta in [0, 1 - beta_old]
+// with ESS(logw_prev + delta * logL) = targetESS; returns 1 - beta_old when that step
+// keeps ESS above the target.
 // [[Rcpp::export(name = "smcBetaBisect")]]
 double smc_beta_bisect(const NumericVector& logL,
                        const NumericVector& logwPrev,

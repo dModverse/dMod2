@@ -1,6 +1,5 @@
-## Sampler entry, control constructors, dispatcher and run drivers for
-## mcmc(). Target / metric / Omega class definitions live in R/mcmcClass.R;
-## plot methods on mcmcResult* are in R/plots.R.
+## Sampler entry, control constructors, dispatcher and run drivers for mcmc().
+## Target, metric and Omega classes live in R/mcmcClass.R, plot methods in R/plotsMCMC.R.
 
 
 #' Control constructors for [mcmc()]
@@ -402,7 +401,7 @@ metricControl <- function(metricContext = NULL,
     stop(".run_smc: priorSample(N) must return exactly N rows.")
   par_names <- colnames(particles)
   if (is.null(par_names))
-    stop(".run_smc: priorSample output must carry parameter names as colnames.")
+    stop(".run_smc: priorSample output must have parameter names as colnames.")
   K <- ncol(particles)
 
   call_lik <- function(theta) {
@@ -452,7 +451,6 @@ metricControl <- function(metricContext = NULL,
   targetESS  <- sequenceControl$essThreshold * N
   malaSteps  <- sequenceControl$malaSteps
 
-  # Fixed schedule (if requested).
   fixed_betas <- NULL
   if (sequenceSchedule == "fixed") {
     if (!length(sequenceControl$schedule))
@@ -493,7 +491,7 @@ metricControl <- function(metricContext = NULL,
     logL      <- logL[ix]
     logw      <- rep(0.0, N)
 
-    # ---- MCMC move per particle ---------------------------------------
+    # MCMC move per particle.
     target_temp <- .smc_make_tempered_obj(likObj, priorObj, beta)
     move_one <- function(i) {
       theta_i <- setNames(particles[i, ], par_names)
@@ -652,7 +650,7 @@ metricControl <- function(metricContext = NULL,
   if (!all(outer_names %in% names(init_draw)))
     stop(".run_pgibbs: priorSample must include all outer names.")
   parsFull[outer_names] <- init_draw[outer_names]
-  # etas start at 0
+  # eta entries keep their initial value 0.
 
   subjEtaObjList <- lapply(seq_len(N), function(i) {
     .makeSubjectEtaObj(i, meta, prdfn, errfn, parsFull,
@@ -865,7 +863,7 @@ metricControl <- function(metricContext = NULL,
 #' @param ... Additional arguments forwarded as dots into the objfn.
 #'
 #' @return An object of class `c("mcmcresult", ...)`, subclassed to
-#'   `mcmcResultSingle`, `mcmcResultSequential` (carries `logEvidence`,
+#'   `mcmcResultSingle`, `mcmcResultSequential` (with `logEvidence`,
 #'   `betaPath`, `ESSPath`, `acceptRates`, `stepsizePath`, `nLevels`),
 #'   `mcmcResultBlocked` (adds `etaSamples`, `acceptOuter`, `acceptEta`),
 #'   or `mcmcResultMulti` (adds `chainId`, `rHat`) depending on the run
@@ -908,7 +906,6 @@ mcmc <- function(target,
   metric           <- match.arg(metric)
   call_capture     <- sys.call()
 
-  # Default warmup: 500 for single chains, 0 for SMC tempering.
   if (is.null(warmup))
     warmup <- if (sequenceType == "sequential") 0L else 500L
 
@@ -919,7 +916,6 @@ mcmc <- function(target,
     stop("sequenceSchedule = 'learned' is a slot for future work and is ",
          "not yet implemented. Use 'fixed' or 'adaptiveEss'.")
 
-  # Resolve default controls.
   if (is.null(moveControl)) {
     moveControl <- switch(moveType,
                           mh        = mhControl(),
@@ -927,15 +923,14 @@ mcmc <- function(target,
                           hmc       = hmcControl(),
                           nuts      = nutsControl())
   }
-  # S3 class names are lowercase, so mhControl() carries class "mhcontrol".
+  # S3 class names are lowercase, so mhControl() has class "mhcontrol".
   expected_class <- paste0(moveType, "control")
   if (!inherits(moveControl, expected_class))
     stop("mcmc: moveControl is not of class '", expected_class, "'.")
   if (is.null(metricControl)) metricControl <- metricControl()
   if (is.null(sequenceControl)) sequenceControl <- smcControl()
 
-  # Wire metric into the move control where it changes the kernel's
-  # preconditioner / mass-matrix choice.
+  # The metric selects the kernel's preconditioner or mass matrix.
   if (moveType == "langevin") {
     if (metric == "euclidean")        moveControl$preconditioner <- "identity"
     else if (metric == "fixed")       moveControl$preconditioner <- "fixed"
@@ -947,10 +942,9 @@ mcmc <- function(target,
     else                             moveControl$massMatrix <- "fisher"
   }
 
-  # Normalise the target.
   target_obj <- .normalise_target(target)
 
-  # Branch: blocked (Particle-Gibbs) target.
+  # Blocked (Particle-Gibbs) target.
   if (inherits(target_obj, "bayesnlmejoint")) {
     if (sequenceType != "single")
       stop("mcmc: bayesNLMEJoint targets only support sequenceType = 'single'.")
@@ -980,7 +974,7 @@ mcmc <- function(target,
     return(.finish_pgibbs(raw, call_capture))
   }
 
-  # Flat target -> single chain or sequential.
+  # Flat target: single chain or sequential.
   par_names <- target_obj$parNames
   if (is.null(par_names) && !is.null(parinit)) par_names <- names(parinit)
 

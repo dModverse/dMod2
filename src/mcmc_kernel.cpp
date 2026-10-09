@@ -128,9 +128,8 @@ void mala_drift(const double* grad, const double* L_upper, int K,
     for (int i = j + 1; i < K; ++i)
       Ginv[i + j * K] = Ginv[j + i * K];
 
-  // v_k = tr(G^{-1} dG_k); dG is row-major [K, K, K], indexed (a, b, k) ->
-  // [a*K*K + b*K + k]. Reference R uses dG[, , k] which means slice by k
-  // last dimension.
+  // v_k = tr(G^{-1} dG_k); dG is row-major [K, K, K], (a, b, k) at
+  // a*K*K + b*K + k, with k the differentiation index.
   std::vector<double> v(K, 0.0);
   for (int k = 0; k < K; ++k) {
     double tr = 0.0;

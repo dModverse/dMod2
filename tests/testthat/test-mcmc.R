@@ -1,17 +1,4 @@
-# ============================================================================
-# Tests for the unified mcmc() sampler API.
-#
-# Sections:
-#   * Linear-Gaussian fixtures (no ODE)        - exact closed-form posterior
-#   * Langevin moves                            - single + ODE end-to-end
-#   * Sequential / SMC                          - logZ + bimodality
-#   * Multi-chain (chains = N)                   - R-hat shape check
-#   * Plot helpers                              - smoke tests on fake outputs
-#
-# The Bayesian NLME target constructors (bayesNLMEMarginal / Joint) are
-# tested in test-bayesNLME.R; here we exercise the sampler kernels and
-# generic plot dispatch.
-# ============================================================================
+# Sampler kernels and plot dispatch of mcmc(); the bayesNLME targets are tested in test-bayesNLME.R.
 
 
 # ---- Linear-Gaussian fixtures -------------------------------------------
@@ -206,8 +193,7 @@ test_that("mcmc respects parlower / parupper", {
 
 
 test_that("fixed-vs-local-Fisher agree on a constant-G linear-Gauss toy", {
-  # For linear-Gauss, G is constant in theta. Fixed and local should produce
-  # the same chain up to MC noise.
+  # With a constant metric, fixed and local Fisher agree up to MC noise.
   mu  <- c(a = 0.0, b = 0.0, c = 0.0)
   Sig <- diag(rep(1, 3)); dimnames(Sig) <- list(names(mu), names(mu))
   obj <- .makeLinGaussObj(mu, Sig)
@@ -226,11 +212,9 @@ test_that("fixed-vs-local-Fisher agree on a constant-G linear-Gauss toy", {
 
 
 test_that("mcmc/langevin on ODE-based decay model runs end-to-end", {
-  # Structural smoke test: the C++ chain runner must integrate cleanly with
-  # a real ODE-backed objfn (normL2 -> cppDE solver -> back to objfn).
-  # Quantitative posterior recovery on this fixture is fragile because dual
-  # averaging can overshoot when the metric eigenvalues are O(100-1000);
-  # quantitative checks are done on the linear-Gauss fixtures above.
+  # Smoke test of the C++ chain runner on an ODE-backed objective. Posterior
+  # recovery is checked on the linear-Gaussian fixtures, since dual averaging
+  # can overshoot when the metric eigenvalues are large.
   testthat::skip_if_not_installed("cppDE")
   testthat::skip_on_cran()
   bench <- fx_decay_compiled()

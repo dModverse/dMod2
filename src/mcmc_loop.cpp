@@ -96,10 +96,8 @@ static bool decode_objout(const List& out,
 }
 
 
-// Invoke objfun(pars = theta, deriv = TRUE, deriv2 = FALSE). Any user
-// "dots" must be baked into the objfun closure at the R level before it
-// reaches this driver (cleaner than reconstructing variadic R calls in
-// C++). Returns false on R-side error or non-finite value.
+// Invoke objfun(pars = theta, deriv = TRUE, deriv2 = FALSE); user dots must be
+// baked into the closure in R. Returns false on R-side error or non-finite value.
 static bool eval_objfun(Function& objfun,
                         const NumericVector& theta,
                         const CharacterVector& par_names,
@@ -120,10 +118,9 @@ static bool eval_objfun(Function& objfun,
 }
 
 
-// Build the metric G and its upper Cholesky L given the preconditioner
-// code: 0 = LOCAL (use objfun hessian, already in G_buf), 1 = FIXED
-// (overwrite G with GFixed/2), 2 = IDENTITY. Returns the success flag of
-// the Cholesky decomposition and writes ridge_used.
+// Metric G and its upper Cholesky L for precond_code 0 = LOCAL (hessian already
+// in G_buf), 1 = FIXED (GFixed/2), 2 = IDENTITY. Returns the Cholesky success
+// flag and writes ridge_used.
 static bool build_metric(int precond_code, int K,
                          std::vector<double>& G_buf,
                          const double* GFixed_half,
@@ -181,14 +178,8 @@ static bool inside_bounds(const double* theta, const double* lower,
 }
 
 
-// Heuristic initial step size for preconditioned MALA. Since the proposal
-// covariance is eps * G^{-1}, the "natural" scale is already in the
-// preconditioning; Roberts-Rosenthal (1998) suggests eps ~ K^{-1/3} for
-// the optimal acceptance regime in this preconditioned coordinate. Using
-// a trace(G^{-1})/K factor (the previous heuristic) makes eps too small
-// when G has large eigenvalues, causing dual averaging to overshoot
-// during warmup. The L argument is kept for the signature but no longer
-// consulted.
+// Initial MALA step size eps ~ K^{-1/3} (Roberts-Rosenthal 1998): the proposal
+// covariance eps * G^{-1} already contains the scale of G, so L is unused.
 static double heuristic_eps(int K, const std::vector<double>& /*L*/) {
   double eps = 0.5 * std::pow(static_cast<double>(K), -1.0 / 3.0);
   if (!std::isfinite(eps) || eps <= 0) eps = 0.1;
