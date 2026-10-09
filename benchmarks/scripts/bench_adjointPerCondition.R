@@ -53,7 +53,7 @@ options(dMod.cores = 1, cppDE.cores = 1)
 
 # atol under rtol under the observables' own floor: the three have to hold in
 # that order, or the gradient is measuring the floor.
-TOL <- list(atol = 1e-11, rtol = 1e-9, maxsteps = 1e7L, maxattemps = 100L)
+TOL <- list(atol = 1e-11, rtol = 1e-9, maxsteps = 1e7L, maxattempts = 100L)
 
 # The machine scatters badly, so report the minimum over repetitions rather
 # than the mean or the median. One condition is two orders of magnitude cheaper
@@ -94,7 +94,7 @@ hasASA <- isTRUE(.cfg$available) &&
 mC <- odemodel(reactions, modelname = "bench_cpp", backend = "cppDE",
                derivMode = c("forward", "reverse"), compile = FALSE,
                outdir = .bdir)
-xC <- Xs(mC, optionsOde = TOL, optionsSens = TOL)
+xC <- Xs(mC, options = TOL)
 
 # The same model on the Rosenbrock stepper. Its adjoint is a different piece of
 # arithmetic: six direct solves transposed, against a corrector's implicit
@@ -102,18 +102,27 @@ xC <- Xs(mC, optionsOde = TOL, optionsSens = TOL)
 mR <- odemodel(reactions, modelname = "bench_rb4", backend = "cppDE",
                method = "rb4", derivMode = c("forward", "reverse"),
                compile = FALSE, outdir = .bdir)
-xR <- Xs(mR, optionsOde = TOL, optionsSens = TOL)
+xR <- Xs(mR, options = TOL)
+
+# The observation, error and parameter functions again, with the
+# vector-Jacobian product the reverse mode reads.
+p <- P(trafo, modelname = "bench_trafo", derivMode = c("forward", "reverse"),
+       compile = FALSE, outdir = .bdir)
+g <- Y(observables, x, modelname = "bench_obs", attachInput = FALSE,
+       derivMode = c("forward", "reverse"), compile = FALSE, outdir = .bdir)
+e <- Y(errorModels, g, modelname = "bench_err", attachInput = FALSE,
+       derivMode = c("forward", "reverse"), compile = FALSE, outdir = .bdir)
 
 xS <- NULL
 if (hasASA) {
   mS <- odemodel(reactions, modelname = "bench_sun", backend = "Sundials",
                  derivMode = c("forward", "reverse"), compile = FALSE,
                  outdir = .bdir)
-  xS <- Xs(mS, optionsOde = TOL, optionsSens = TOL)
-  compile(xC, xR, xS, output = "bench_adjoint", cores = 12)
+  xS <- Xs(mS, options = TOL)
+  compile(g, e, p, xC, xR, xS, output = "bench_adjoint", cores = 12)
 } else {
   cat("SUNDIALS absent or cvode() has no reverse direction: ASA column is NA.\n")
-  compile(xC, xR, output = "bench_adjoint", cores = 12)
+  compile(g, e, p, xC, xR, output = "bench_adjoint", cores = 12)
 }
 
 # normL2 alone, not the example's objective: its prior term is one scalar over
@@ -232,9 +241,10 @@ rows <- lapply(conds, function(cn) {
     gr <- cppDE::solveODE(mC$reversed, tt, inner,
                           cotangent = array(1, c(length(tt),
                                                  length(attr(mC$func, "variables")), 1L)),
-                          adjointGrid = TRUE, abstol = TOL$atol, reltol = TOL$rtol,
+                          adjoint = cppDE::adjointControl(trace = TRUE),
+                          abstol = TOL$atol, reltol = TOL$rtol,
                           maxsteps = TOL$maxsteps)
-    length(gr$adjointGrid$h)
+    length(gr$adjoint$h)
   }, error = function(e) NA_integer_)
 
   data.frame(condition = cn, n_times = nrow(mydataL[[cn]]), steps = steps,

@@ -3,10 +3,9 @@ library(dplyr)
 
 setwd(tempdir())
 
-# Define Model and error model (compile via dMod's compile() so all native
-# code goes through the same -w build path).
+# Define model and error model, compiled together via dMod's compile()
 x <- eqnvec(A = "k*A - exp(-time)") %>% odemodel(modelname = "testBLOQ", compile = FALSE) %>% Xs()
-e <- eqnvec(A = "sigma_rel * A") %>% Y(x, attach.input = FALSE, modelname = "errmodel", compile = FALSE)
+e <- eqnvec(A = "sigma_rel * A") %>% Y(x, attachInput = FALSE, modelname = "errmodel", compile = FALSE)
 
 innerpars <- getParameters(x, e)
 times <- seq(0, 15, .1)

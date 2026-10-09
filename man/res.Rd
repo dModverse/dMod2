@@ -2,35 +2,37 @@
 % Please edit documentation in R/objClass.R
 \name{res}
 \alias{res}
-\title{Compute residuals between data and model prediction}
+\title{Residuals Between Data and Model Prediction}
 \usage{
 res(data, out, err = NULL)
 }
 \arguments{
-\item{data}{Data frame with columns \code{time}, \code{name}, \code{value}, \code{sigma}, \code{lloq}.
-Rows with \code{sigma = NA} are filled from \code{err}.}
+\item{data}{\code{data.frame} with columns \code{time}, \code{name}, \code{value}, \code{sigma}
+and \code{lloq}, one row per data point. Rows with \code{sigma = NA} take it from
+\code{err}.}
 
-\item{out}{Prediction matrix (first column = time, remaining = observables).
-Optional \code{"deriv"} attribute: \verb{[name, param, time]} array.}
+\item{out}{Prediction matrix, a \link{prdframe}: column \code{time}, then one column
+per observable. Optional attributes \code{"deriv"},
+\verb{[time, name, parameter]}, and \code{"deriv2"},
+\verb{[time, name, parameter, parameter]}.}
 
-\item{err}{Optional error-model matrix (same layout as \code{out}).
-Optional \code{"deriv"} attribute: \verb{[name, param, time]} array.}
+\item{err}{Optional error-model matrix, in the layout of \code{out}. Default
+\code{NULL}.}
 }
 \value{
-An \code{\link[=objframe]{objframe()}} with columns \code{time}, \code{name}, \code{value}, \code{prediction},
-\code{sigma}, \code{residual}, \code{weighted.residual}, \code{bloq}, \code{weighted.0} and
-attributes \code{"deriv"} and \code{"deriv.err"}.
+An \code{\link[=objframe]{objframe()}} with one row per data point and columns \code{time},
+\code{name}, \code{value}, \code{prediction}, \code{sigma}, \code{residual}, \code{weighted.residual},
+\code{bloq} and \code{weighted.0}. Attributes \code{"deriv"} and \code{"deriv.err"} are the
+derivatives of the prediction and of \code{sigma}, \verb{[data point, parameter]};
+\code{"deriv2"} and \code{"deriv2.err"}, \verb{[data point, parameter, parameter]}, the
+second derivatives when \code{out} or \code{err} have them. Each is \code{NULL} when
+missing on the input.
 }
 \description{
-Matches data to predictions by time and observable, computes (weighted)
-residuals, and propagates parameter derivatives. Values below \code{lloq} are
-censored via \code{pmax(value, lloq)}.
-}
-\details{
-The returned \code{"deriv"} and \code{"deriv.err"} matrices have shape
-\eqn{n \times p}{n x p} (residuals x parameters), extracted from the
-\verb{[name, param, time]} arrays on \code{out} and \code{err}.
+Matches data to the prediction by time and name and computes
+the residuals and their derivatives. Values below \code{lloq} are set to
+\code{lloq}.
 }
 \seealso{
-\code{\link[=objframe]{objframe()}}
+\code{\link[=objframe]{objframe()}}, \code{\link[=normL2]{normL2()}}
 }

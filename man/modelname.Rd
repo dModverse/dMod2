@@ -9,7 +9,7 @@
 \alias{modelname<-}
 \alias{modelname<-.fn}
 \alias{modelname<-.objfn}
-\title{Get and set modelname}
+\title{Get and Set Modelname}
 \usage{
 modelname(x = NULL, ..., conditions = NULL)
 
@@ -28,22 +28,24 @@ modelname(x, ...) <- value
 \method{modelname}{objfn}(x, conditions = NULL, ...) <- value
 }
 \arguments{
-\item{x}{object of type \code{prdfn}, \code{parfn}, \code{objfn}, or a character naming
-such an object in the calling environment.}
+\item{x}{object of class \code{prdfn}, \code{parfn}, \code{obsfn} or \code{objfn}, or a
+character naming such an object in the calling environment.}
 
-\item{...}{further objects; when supplied, model names of all objects
-are unioned (each dispatched separately).}
+\item{...}{further objects; their model names are added to the result.}
 
-\item{conditions}{character vector of conditions}
+\item{conditions}{character, restrict the result to these conditions.
+Default \code{NULL}.}
 
-\item{value}{character, the new modelname (does not change the C file)}
+\item{value}{character, the new model name. Files are not renamed.}
 }
 \value{
-character vector of model names, corresponding to C files
-in the local directory.
+Character vector of model names. The setter returns \code{x}.
 }
 \description{
-The modelname attribute refers to the name of a C file associated with
-a dMod function object like prediction-, parameter transformation- or
-objective functions.
+The model name is the base name of the generated sources and
+shared objects of a function such as a prediction function, parameter
+transformation or objective function.
+}
+\seealso{
+\code{\link[=compile]{compile()}}, \code{\link[=loadDLL]{loadDLL()}}
 }

@@ -1,7 +1,5 @@
-# Smoke tests for the cross-platform parallel-apply helper. Mirrors the
-# pattern used by mstrust / profile() (foreach + doParallel under the
-# hood) so we can be confident the Windows path works without an actual
-# Windows runner.
+# Smoke tests for the cross-platform parallel-apply helper behind mstrust()
+# and profile(), covering the PSOCK path a Windows runner would take.
 
 
 test_that(".parallelLapply with cores=1 falls back to lapply", {
@@ -11,9 +9,7 @@ test_that(".parallelLapply with cores=1 falls back to lapply", {
 
 
 test_that(".parallelLapply with cores>1 returns correct results", {
-  # Either Unix fork via doParallel or PSOCK via makeCluster -- both go
-  # through the same %dopar% loop and must produce identical results to
-  # the serial path.
+  # Fork and PSOCK backends share one %dopar% loop and match the serial path.
   out_par <- dMod2:::.parallelLapply(1:8, function(i) i^2, cores = 2L)
   out_ser <- lapply(1:8, function(i) i^2)
   expect_identical(out_par, out_ser)
@@ -21,9 +17,8 @@ test_that(".parallelLapply with cores>1 returns correct results", {
 
 
 test_that(".parallelLapply preserves order across workers", {
-  # R CMD check caps cores at 2 via _R_CHECK_LIMIT_CORES_, so honour that
-  # ceiling here. 2 workers across 20 items still exercises the order-
-  # preservation property of the foreach %dopar% backend.
+  # R CMD check caps cores at 2 via _R_CHECK_LIMIT_CORES_; two workers over 20
+  # items still exercise order preservation.
   n_cores <- if (nzchar(Sys.getenv("_R_CHECK_LIMIT_CORES_"))) 2L else 4L
   set.seed(7L)
   X <- as.list(rnorm(20))
@@ -33,8 +28,7 @@ test_that(".parallelLapply preserves order across workers", {
 
 
 test_that(".parallelLapply propagates worker errors", {
-  # foreach surfaces worker errors as a regular R error -- the inner
-  # stop("kaboom") should reach the caller via tryCatch.
+  # A worker error reaches the caller as a regular R error.
   err <- tryCatch(dMod2:::.parallelLapply(1:3, function(i) {
     if (i == 2L) stop("kaboom") else i
   }, cores = 2L), error = function(e) e)

@@ -95,7 +95,7 @@ observables <- eqnvec(
 
 # Define the observation function. Information about states and dynamic parameters
 # is contained in reactions
-g <- Y(observables, r, modelname = "obsfn", compile = TRUE, attach.input = FALSE)
+g <- Y(observables, r, modelname = "obsfn", compile = TRUE, attachInput = FALSE)
 ```
 
 To predict the observables, observation and prediction function need to be concatenated. What mathematically looks like $(g\circ x)(t, p)$ is translated into code using the `*` operator.
@@ -170,7 +170,7 @@ This data frame is converted into a data list that can readily be plotted:
 
 ```{r, fig.width = 6, fig.height = 2}
 data(jakstat)
-data <- as.datalist(jakstat, split.by = "condition")
+data <- as.datalist(jakstat, splitBy = "condition")
 plot(data)
 ```
 
@@ -236,7 +236,7 @@ In our case we find several local optima in the proximity of the original fit. S
 
 ```{r, fig.width = 10, fig.height = 3.5}
 
-controls(g, NULL, "attach.input") <- TRUE
+controls(g, NULL, "attachInput") <- TRUE
 prediction <- predict(g*x*p, 
                       times = 0:60, 
                       pars = unique(pars[pars$converged, ], tol = .1), 

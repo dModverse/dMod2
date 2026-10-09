@@ -4,7 +4,7 @@
 \alias{print.sparsify}
 \title{Print a sparsify (structural model selection) result}
 \usage{
-\method{print}{sparsify}(x, ...)
+print.sparsify(x, ...)
 }
 \arguments{
 \item{x}{A \code{sparsify} object from \link{sparsify}.}

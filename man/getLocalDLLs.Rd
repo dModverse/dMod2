@@ -2,13 +2,18 @@
 % Please edit documentation in R/compile.R
 \name{getLocalDLLs}
 \alias{getLocalDLLs}
-\title{Determine loaded DLLs available in working directory}
+\title{Loaded Shared Objects in the Working Directory}
 \usage{
 getLocalDLLs()
 }
 \value{
-Character vector with the names of the loaded DLLs available in the working directory
+Character vector with the names of the loaded shared objects whose
+path lies in the working directory.
 }
 \description{
-Determine loaded DLLs available in working directory
+Only the working directory is searched, not \code{getOption("dMod.outdir")} or
+the directories the objects were generated in.
+}
+\seealso{
+\code{\link[=loadDLL]{loadDLL()}}
 }

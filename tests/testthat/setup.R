@@ -7,14 +7,9 @@ if (requireNamespace("withr", quietly = TRUE)) {
   withr::defer(setwd(.dmod_initial_wd), testthat::teardown_env())
 }
 
-# Resolve fixture directories that live OUTSIDE the installed package
-# (PEtabTests/ is .Rbuildignore'd because of its size). Tests look them up
-# via env vars; we set those here once, before any test_that block runs
-# `setwd()` / `withr::local_dir(tempdir())` and breaks cwd-relative
-# discovery.
-#
-# Walk up from the current wd looking for a dir of the given name. Caps at
-# 8 levels so a missing fixture cannot loop to filesystem root forever.
+# Fixture directories outside the installed package (PEtabTests/ is
+# .Rbuildignore'd) are resolved into env vars once, before any test changes wd.
+# Walks up at most 8 levels from the initial wd looking for the named dir.
 .dmod_find_fixture <- function(name, start = .dmod_initial_wd) {
   here <- normalizePath(start, mustWork = FALSE, winslash = "/")
   for (i in seq_len(8)) {

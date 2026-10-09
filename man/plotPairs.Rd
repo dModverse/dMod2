@@ -2,19 +2,20 @@
 % Please edit documentation in R/plots.R
 \name{plotPairs}
 \alias{plotPairs}
-\title{Pair (corner-style) plot for \code{mcmc()} outputs}
+\title{Pair Plot of Parameter Samples}
 \usage{
 plotPairs(x, ...)
 }
 \arguments{
-\item{x}{An \code{mcmcResult} (or subclass) object.}
+\item{x}{Object holding parameter samples.}
 
 \item{...}{Method-specific arguments.}
 }
 \value{
-A ggplot.
+A \code{ggplot} object, as returned by the method.
 }
 \description{
-Lower triangle: 2D scatter of post-warmup samples. Diagonal: 1D
-marginal density.
+Generic for a corner plot of sampled parameters: scatter plots of pairs in
+the lower triangle, marginal densities on the diagonal. dMod2 defines no
+method for it; packages and extensions that return samples do.
 }

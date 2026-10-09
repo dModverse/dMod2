@@ -61,6 +61,14 @@ inline int match_name(const CharacterVector& haystack, const std::string& s) {
   return -1;
 }
 
+// Parameter axis of a deriv array. R drops zero-length dimnames, so an array
+// over no parameters has NULL there.
+inline CharacterVector par_axis_names(const NumericVector& d) {
+  List dn = d.attr("dimnames");
+  if (dn.size() < 3 || Rf_isNull(dn[2])) return CharacterVector(0);
+  return dn[2];
+}
+
 CondInputs gather_one_condition(
     NumericMatrix prdf,
     Nullable<NumericMatrix> err_mat_opt,
@@ -84,7 +92,7 @@ CondInputs gather_one_condition(
   C.n_data = n_data;
 
   // Resolve par_local via the prdframe's deriv dimnames. A value-only
-  // evaluation (deriv = FALSE) carries no deriv attribute; then n_par_local
+  // evaluation (deriv = FALSE) has no deriv attribute; then n_par_local
   // is 0 and all derivative gathers below are skipped.
   RObject deriv_attr_sexp = prdf.attr("deriv");
   const bool has_deriv = !deriv_attr_sexp.isNULL();
@@ -94,8 +102,7 @@ CondInputs gather_one_condition(
   if (has_deriv) {
     dpred_flat = NumericVector(deriv_attr_sexp);
     IntegerVector deriv_dim = dpred_flat.attr("dim");
-    List deriv_dimnames     = dpred_flat.attr("dimnames");
-    par_local_names = deriv_dimnames[2];
+    par_local_names = par_axis_names(dpred_flat);
     Dp0 = deriv_dim[0];
     Dp1 = deriv_dim[1];
     n_par_local = par_local_names.size();
@@ -213,8 +220,7 @@ CondInputs gather_one_condition(
       IntegerVector ed_dim = ed_attr.attr("dim");
       const int Ed0 = ed_dim[0];
       const int Ed1 = ed_dim[1];
-      List ed_dimnames = ed_attr.attr("dimnames");
-      CharacterVector err_par_names = ed_dimnames[2];
+      CharacterVector err_par_names = par_axis_names(ed_attr);
       const int n_err_par = err_par_names.size();
       std::vector<int> err_to_local(n_err_par, -1);
       for (int q = 0; q < n_err_par; ++q) {
@@ -253,9 +259,8 @@ CondInputs gather_one_condition(
           IntegerVector ed2_dim = ed2_attr.attr("dim");
           if (ed2_dim.size() == 4) {
             const int E0 = ed2_dim[0], E1 = ed2_dim[1], E2 = ed2_dim[2];
-            // Assume dimnames(deriv2)[[3]] == dimnames(deriv2)[[4]] ==
-            // err_par_names (the err deriv parameter order). We reuse the
-            // err_to_local mapping computed above.
+            // Assumes dimnames(deriv2)[[3]] == dimnames(deriv2)[[4]] ==
+            // err_par_names, so the err_to_local mapping above applies.
             const std::size_t N2 = (std::size_t) n_par_local
                                    * (std::size_t) n_par_local;
             C.d2sigma.assign((std::size_t) n_data * N2, 0.0);
@@ -375,16 +380,8 @@ List normL2_kernel(
   base_opts.bloq_mode        = bmode;
   base_opts.build_hessian    = build_hessian;
 
-  // Per-thread slots merged in thread order after the region, not in a
-  // critical section: a critical merge follows the scheduler, so the same
-  // call could round differently from run to run. Slots make the result
-  // reproducible for a given thread count. Across thread counts it still
-  // differs, because the conditions group differently -- that is inherent to
-  // a parallel reduction, not scheduler noise.
-  // One slot per condition in its LOCAL parameter space, allocated here so the
-  // workers neither allocate nor share. sum(npl^2) over the conditions is a
-  // fraction of one global Hessian, where a per-thread global accumulator was
-  // n_par_global^2 per thread and had to be zeroed on every call.
+  // One slot per condition in its local parameter space, allocated here so the
+  // workers neither allocate nor share; merged serially after the region.
   std::vector<double> value_c(n_cond, 0.0);
   std::vector<double> chi2_c(n_cond, 0.0);
   std::vector<std::vector<double> > grad_c(n_cond), hess_c(n_cond);
@@ -464,9 +461,8 @@ List normL2_kernel(
     }
   }
 
-  // Scatter local -> global, serially and in condition order. The summation
-  // order therefore no longer depends on the thread count, so a given
-  // objective value is the same however many threads computed it.
+  // Scatter local -> global serially in condition order, so the result does
+  // not depend on the thread count.
   for (int c = 0; c < n_cond; ++c) {
     const CondInputs& C = conds[c];
     const int npl = C.n_par_local;
@@ -497,7 +493,7 @@ List normL2_kernel(
   if (n_par_global > 0) grad_R.names() = par_names_global;
 
   // Skipped entirely under build_hessian = false: no matrix is allocated and
-  // the result carries a NULL hessian, not a zero placeholder.
+  // the result gets a NULL hessian, not a zero placeholder.
   RObject hess_R = R_NilValue;
   if (build_global_hessian) {
     NumericMatrix H(n_par_global, n_par_global);

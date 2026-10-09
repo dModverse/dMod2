@@ -10,15 +10,15 @@ as.prdlist <- function(x, ...) {
 }
 
 #' @export
-#' @param x list of prediction frames
-#' @param names character vector, the list names, e.g. the names of the experimental
+#' @param x list of prediction frames. Default `NULL` gives an empty list.
+#' @param names character, the list names, e.g. the condition names. Default
+#'   `NULL` keeps `names(x)`.
 #' @rdname prdlist
 as.prdlist.list <- function(x = NULL, names = NULL, ...) {
 
   if (is.null(x)) x <- list()
   if (is.null(names)) mynames <- names(x) else mynames <- names 
 
-  # if (length(mynames) != length(x)) stop("names argument has wrong length")
 
   ## Prepare output
   names(x) <- mynames
@@ -68,9 +68,11 @@ print.prdlist <- function(x, ...) {
 
 
 #' @export
-#' @param data data list object
-#' @param errfn obsfn object, the error model function to predict sigma
-#' @param ... not used right now
+#' @param data object of class `datalist`. Default `NULL`. Its condition grid
+#'   adds covariate columns to the output.
+#' @param errfn object of class `obsfn`, the error model that predicts the
+#'   column `sigma`. Default `NULL` sets `sigma` to `NaN`.
+#' @param ... not used.
 #' @rdname as.data.frame.dMod
 as.data.frame.prdlist <- function(x, ..., data = NULL, errfn = NULL) {
   
@@ -115,7 +117,7 @@ as.data.frame.prdlist <- function(x, ..., data = NULL, errfn = NULL) {
 } 
 
 #' @export
-#' @param x prediction
+#' @param x object of class `prdlist` or `prdframe`.
 #' @rdname plotCombined
 plot.prdlist <- function(x, data = NULL, ..., scales = "free", facet = c("wrap", "grid", "wrap_plain"), transform = NULL) {
   
@@ -129,42 +131,6 @@ plot.prdlist <- function(x, data = NULL, ..., scales = "free", facet = c("wrap",
 }
 
 
-#' Plot combined prediction and data
-#'
-#' @description
-#' Creates a combined plot of model predictions and observed data with flexible
-#' faceting options. Supports error bars, below limit of quantification (BLoQ) 
-#' indicators, and coordinate transformations.
-#'
-#' @param prediction A \code{prdlist} object containing model predictions.
-#' @param data Optional data object with observed values. If provided, will be 
-#'   merged with covariate information and displayed as points with error bars.
-#' @param ... Filter expressions passed to \code{dplyr::filter} for subsetting
-#'   both prediction and data.
-#' @param scales Scale specification for facets, passed to facet functions.
-#'   Default is \code{"free"}.
-#' @param facet Faceting style. One of:
-#'   \itemize{
-#'     \item \code{"wrap"}: Facet by name, color by condition (default)
-#'     \item \code{"grid"}: Facet grid with name as rows, condition as columns
-#'     \item \code{"wrap_plain"}: Facet wrap by name and condition combined
-#'   }
-#' @param transform Optional transformation function applied to coordinates
-#'   via \code{coordTransform}.
-#' @param aesthetics Optional named list of aesthetic mappings (as strings) to
-#'   override defaults. Default aesthetics include x, y, ymin, ymax, and 
-#'   conditionally group and color.
-#'
-#' @return A \code{ggplot} object with an additional \code{"data"} attribute
-#'   containing a list with the processed \code{data} and \code{prediction} 
-#'   data frames.
-#'
-#' @examples
-#' \dontrun{
-#' plotCombined(pred, mydata, time < 100, facet = "grid")
-#' plotCombined(pred, mydata, aesthetics = list(color = "treatment"))
-#' }
-#'
 #' @export
 #' @rdname plotCombined
 #' @importFrom dplyr filter
@@ -256,30 +222,8 @@ plotCombined.prdlist <- function(prediction, data = NULL, ...,
 }
 
 
-#' Plot model predictions
-#'
-#' @description
-#' Creates a plot of model predictions with optional error bands from an error
-#' model function. Supports flexible faceting and coordinate transformations.
-#'
-#' @param prediction A \code{prdlist} object containing model predictions.
-#' @param ... Filter expressions passed to \code{dplyr::filter} for subsetting
-#'   the predictions.
-#' @param errfn Optional error model function. If provided, predictions are
-#'   augmented with sigma values and displayed with ribbon error bands.
-#' @param scales Scale specification for facets, passed to facet functions.
-#'   Default is \code{"free"}.
-#' @param facet Faceting style. One of:
-#'   \itemize{
-#'     \item \code{"wrap"}: Facet by name, color by condition (default)
-#'     \item \code{"grid"}: Facet grid with name as rows, condition as columns
-#'   }
-#' @param transform Optional transformation function applied to coordinates
-#'   via \code{coordTransform}.
-#'
-#' @return A \code{ggplot} object with an additional \code{"data"} attribute
-#'   containing the processed prediction data frame.
-#'
+#' @param errfn object of class `obsfn`, an error model. Default `NULL`. If
+#'   given, the predicted `sigma` is drawn as a band around the prediction.
 #' @export
 #' @rdname plotPrediction
 #' @importFrom dplyr filter
@@ -403,7 +347,6 @@ summary.prdfn <- function(object,...) {
     })
     names(output) <- conditions
     
-    #print(output, ...)
     output
     
   } else {
@@ -451,7 +394,6 @@ summary.obsfn <- function(object, ...) {
     })
     names(output) <- conditions
     
-    #print(output, ...)
     output
     
   } else {
@@ -489,20 +431,20 @@ summary.obsfn <- function(object, ...) {
 
 #' Model Predictions
 #' 
-#' Make a model prediction for times and a parameter frame. The
-#' function is a generalization of the standard prediction by a
-#' prediction function object in that it allows to pass a parameter
-#' frame instead of a single parameter vector.
-#' 
-#' @param object prediction function
-#' @param ... Further arguments going to the prediction function
-#' @param times numeric vector of time points
-#' @param pars parameter frame, e.g. output from [mstrust] or 
-#' [profile]
-#' @param data data list object. If data is passed, its condition.grid
-#' attribute is used to augment the output dataframe by additional 
-#' columns. `"data"` itself is returned as an attribute.
-#' @return A data frame
+#' Evaluates a prediction function for every row of a parameter frame.
+#'
+#' @param object object of class `prdfn`.
+#' @param ... further arguments going to the prediction function, e.g.
+#'   `conditions`.
+#' @param times numeric vector of time points.
+#' @param pars a [parframe], e.g. `as.parframe(mstrust(...))` or the result
+#'   of [profile()][profile.objfn].
+#' @param data object of class `datalist`. Default `NULL`. Its condition grid
+#'   adds covariate columns to the output.
+#' @return A data frame in long format with one block per row of `pars`. The
+#'   non-parameter columns of `pars` are added with a leading dot, e.g.
+#'   `.value`. The data, as a data frame, is returned as the attribute
+#'   `"data"`.
 #' @export
 predict.prdfn <- function(object, ..., times, pars, data = NULL) {
   
@@ -571,30 +513,30 @@ predict.prdfn <- function(object, ..., times, pars, data = NULL) {
 
 
 
-## prdfn / obsfn / prdframe / prdlist constructors (moved from classes.R) ----------------------------------------
+## prdfn / obsfn / prdframe / prdlist constructors ----------------------------------------
 
 ## Prediction classes ----------------------------------------------------
 
-#' Prediction function
+#' Prediction Function
 #'
 #' @description A prediction function is a function 
-#' `x(..., fixed, deriv, conditions, env)`.
+#' `x(..., fixed, deriv, deriv2, hessian, conditions, env, cores, sweep)`.
 #' Prediction functions are generated by [Xs()], [Xf()] or [Xd()].
 #'
 #' @param P2X Transformation function as produced by [Xs()], [Xf()] or [Xd()].
-#' @param parameters Character vector with parameter names.
-#' @param condition Character, the condition name.
+#' @param parameters character, the parameter names. Default `NULL`.
+#' @param condition character, the condition name. Default `NULL`, every
+#'   condition.
 #'
 #' @details
-#' Prediction functions can be "added" by the "+" operator, see [sumfn()]. 
-#' Thereby, predictions for different conditions are merged or overwritten. 
-#' Prediction functions can also be composed with other functions, 
-#' e.g. observation functions ([obsfn()]) or parameter transformation 
-#' functions ([parfn()]) by the "*" operator, see [prodfn()].
+#' Prediction functions for different conditions are added by `+`, see
+#' [+.fn]. They are composed with observation functions ([obsfn()]) and
+#' parameter transformations ([parfn()]) by `*`, see [*.fn].
 #'
 #' @return Object of class `"prdfn"`, i.e. a function
-#' `x(..., fixed, deriv, conditions, env)` returning a [prdlist].
+#' `x(..., fixed, deriv, deriv2, hessian, conditions, env, cores, sweep)` returning a [prdlist].
 #' The arguments `times` and `pars` should be passed via `...`, in this order.
+#' @inheritSection dModfn Calling a dMod function
 #'
 #' @example inst/examples/prediction.R
 #' @export
@@ -611,22 +553,22 @@ prdfn <- function(P2X, parameters = NULL, condition = NULL) {
 
 }
 
-#' Observation function
+#' Observation Function
 #'
-#' @description An observation function is a function is that is concatenated
-#' with a prediction function via [prodfn] to yield a new prediction function,
-#' see [prdfn]. Observation functions are generated by [Y]. Handling
-#' of the conditions is then organized by the `obsfn` object.
-#' @param X2Y the low-level observation function generated e.g. by [Y].
-#' @param parameters character vector with parameter names
-#' @param condition character, the condition name
-#' @details Observation functions can be "added" by the "+" operator, see [sumfn]. Thereby,
-#' observations for different conditions are merged or, overwritten. Observation functions can
-#' also be concatenated with other functions, e.g. observation functions ([obsfn]) or
-#' prediction functions ([prdfn]) by the "*" operator, see [prodfn].
-#' @return Object of class `obsfn`, i.e. a function `x(..., fixed, deriv, conditions, env)`
+#' @description An observation function is concatenated with a prediction
+#' function by `*` to yield a new prediction function, see [prdfn()].
+#' Observation functions are generated by [Y()].
+#' @param X2Y the low-level observation function, e.g. generated by [Y()].
+#' @param parameters character, the parameter names. Default `NULL`.
+#' @param condition character, the condition name. Default `NULL`, every
+#'   condition.
+#' @details Observation functions for different conditions are added by `+`,
+#' see [+.fn]. They are composed with observation functions, prediction
+#' functions and parameter transformations by `*`, see [*.fn].
+#' @return Object of class `obsfn`, i.e. a function `x(..., fixed, deriv, deriv2, hessian, conditions, env, cores, sweep)`
 #' which returns a [prdlist]. The arguments `out` (prediction) and `pars` (parameter values)
 #' should be passed via the `...` argument.
+#' @inheritSection dModfn Calling a dMod function
 #' @example inst/examples/prediction.R
 #' @export
 obsfn <- function(X2Y, parameters = NULL, condition = NULL) {
@@ -643,33 +585,31 @@ obsfn <- function(X2Y, parameters = NULL, condition = NULL) {
 }
 
 
-#' Prediction frame
+#' Prediction Frame
 #'
 #' @description
-#' A prediction frame stores model predictions in a matrix along with sensitivity information.
-#' The columns of the prediction matrix are typically `"time"` and one column per state variable.
-#' The object carries several attributes containing sensitivities and parameter information:
-#' \itemize{
-#'   \item `"deriv"`: 3D array of first-order sensitivities with respect to outer parameters
-#'     (see [P]); dimensions: `(time, state, outer parameter)`
-#'   \item `"parameters"`: vector of the inner parameters used to generate the prediction
-#' }
+#' A prediction frame stores model predictions as a matrix with the column
+#' `"time"` and one column per variable. Its attributes are `"deriv"`, the
+#' first-order sensitivities with respect to the outer parameters (see [P()]),
+#' `"deriv2"`, the second-order sensitivities, and `"parameters"`, the inner
+#' parameters used for the prediction.
 #'
-#' Prediction frames are usually elements of prediction lists ([prdlist]), produced by
-#' [Xs], [Xd], or [Xf]. When defining custom prediction functions
-#' (see `P2X` in [prdfn]), the result should be returned as a prediction frame.
+#' Prediction lists ([prdlist]) returned by [Xs()], [Xd()] or [Xf()] consist
+#' of prediction frames. A custom prediction function (see `P2X` in [prdfn()])
+#' returns one.
 #'
-#' @param prediction Numeric matrix of model predictions.
-#' @param deriv 3D numeric array of first-order sensitivities with respect to outer parameters.
-#' @param deriv2 4D numeric array of second-order sensitivities with respect to
-#'   outer parameters; dimensions: `(time, variable, theta, theta)`. Symmetric
-#'   in the last two axes. Optional; only set when the upstream pipeline
-#'   provides second-order information.
-#' @param parameters Named numeric vector of the inner parameters used for the prediction.
+#' @param prediction numeric matrix of model predictions. Default `NULL` gives
+#'   an empty matrix.
+#' @param deriv 3D numeric array `[time, variable, parameter]` of first-order
+#'   sensitivities. Default `NULL`.
+#' @param deriv2 4D numeric array `[time, variable, parameter, parameter]` of
+#'   second-order sensitivities, symmetric in the last two axes. Default
+#'   `NULL`.
+#' @param parameters named numeric vector of the inner parameters. Default
+#'   `NULL`.
 #'
-#' @return
-#' An object of class `"prdframe"` (inheriting from `"matrix"`) with attached arrays of
-#' sensitivities and the corresponding parameter vector as attributes.
+#' @return Object of class `prdframe`, a matrix with the attributes above.
+#' @seealso [getDerivs()], [getDerivs2()]
 #'
 #' @export
 prdframe <- function(prediction = NULL,
@@ -688,13 +628,14 @@ prdframe <- function(prediction = NULL,
 }
 
 
-#' Prediction list
+#' Prediction List
 #'
-#' @description A prediction list is used to store a list of model predictions
-#' from different prediction functions or the same prediction function with different
-#' parameter specifications. Each entry of the list is a [prdframe].
-#' @param ... objects of class [prdframe]
-#' conditions.
+#' @description A prediction list holds model predictions, one [prdframe] per
+#' condition or parameter set. Prediction functions return prediction lists.
+#' @param ... for `prdlist()`, objects of class [prdframe]; unnamed entries
+#'   are named `"1"`, `"2"`, ... For `as.prdlist()`, not used.
+#' @return Object of class `prdlist`.
+#' @seealso [prdfn()], [plotCombined()]
 #' @export
 prdlist <- function(...) {
   mylist <- list(...)

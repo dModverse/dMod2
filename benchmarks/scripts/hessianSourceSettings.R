@@ -14,11 +14,11 @@
 # Sat 06 Sep 2026
 #
 # [Info]
-# Keys carry no spaces or commas: they travel as literals into the generated
+# Keys contain no spaces or commas: they travel as literals into the generated
 # SLURM array script. `hessianSourceLabels` holds the display form for tables.
 #
 # Usage:
-#   source(system.file("benchmarks", "hessianSourceSettings.R", package = "dMod2"))
+#   source(file.path("benchmarks", "scripts", "hessianSourceSettings.R"))
 #   settings <- hessianSourceSettings[c("gn", "gn_bfgs", "bfgs_id", "sr1_id")]
 # -------------------------------------------------------------------------#
 

@@ -2,27 +2,26 @@
 % Please edit documentation in R/eqnClass.R
 \name{getLinVars}
 \alias{getLinVars}
-\title{Identify linear variables in an equation vector using sympy}
+\title{Identify Linear Variables in an Equation Vector}
 \usage{
 getLinVars(eqnvec)
 }
 \arguments{
-\item{eqnvec}{An object of class \code{eqnvec}, representing a set of equations.}
+\item{eqnvec}{object of class \code{eqnvec}.}
 }
 \value{
-A character vector of variables that occur linearly in all equations.
+Character vector of the variables that occur linearly in all
+equations.
 }
 \description{
-Identify linear variables in an equation vector using sympy
-}
-\details{
-This function calls Python's \code{sympy} library via \code{reticulate} to symbolically analyze equations and determine if variables appear linearly in all equations.
+Requires the Python module \code{sympy}, accessed through \pkg{reticulate}.
 }
 \examples{
+\dontshow{if (reticulate::py_module_available("sympy")) withAutoprint(\{ # examplesIf}
 eqnvec <- as.eqnvec(
   c("-k1*A", "k1*A - k2*B", "-k3*B*C/(Km+C) + k4*pC", "k3*B*C/(Km+C) - k4*pC"),
   names = c("A", "B", "C", "pC")
 )
 getLinVars(eqnvec)
-
+\dontshow{\}) # examplesIf}
 }

@@ -4,7 +4,7 @@
 \alias{as.eventlist}
 \alias{as.eventlist.list}
 \alias{as.eventlist.data.frame}
-\title{Coerce to eventlist}
+\title{Coerce to Eventlist}
 \usage{
 as.eventlist(x, ...)
 
@@ -13,10 +13,17 @@ as.eventlist(x, ...)
 \method{as.eventlist}{data.frame}(x, ...)
 }
 \arguments{
-\item{x}{list, data.frame}
+\item{x}{list or data frame with the entries \code{var}, \code{time}, \code{value} and
+\code{method}, and optionally \code{root} (default \code{NA}).}
 
-\item{...}{not used}
+\item{...}{not used.}
+}
+\value{
+Object of class \code{eventlist}.
 }
 \description{
-Coerce to eventlist
+Coerce to Eventlist
+}
+\seealso{
+\code{\link[=eventlist]{eventlist()}}
 }

@@ -2,15 +2,15 @@
 % Please edit documentation in R/prediction.R
 \name{Id}
 \alias{Id}
-\title{An identity function which vanishes upon concatenation of fns}
+\title{Identity Function}
 \usage{
 Id()
 }
 \value{
-fn of class idfn
+A function of class \code{idfn}.
 }
 \description{
-An identity function which vanishes upon concatenation of fns
+\code{Id() * f} and \code{f * Id()} return \code{f}.
 }
 \examples{
 x <- Xt()

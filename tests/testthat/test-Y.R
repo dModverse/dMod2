@@ -1,13 +1,5 @@
-# Behavioral tests for Y() (observation function).
-#
-# Verifies:
-#   * value: observable g(states) evaluates correctly
-#   * composition: (Y * Xs)(...) equals Y applied to Xs output
-#   * derivMode: "reverse" and "forward" builds agree on the value
-#   * attach.input: pass-through of inputs alongside outputs
-#   * gradient: analytic chain rule on y = A^2 (no numDeriv)
-#
-# Second-order chain rule is covered by test-deriv2-Y.R.
+# Behavioral tests for the observation function Y(). The second-order chain
+# rule is covered by test-deriv2-Y.R.
 
 skip_if_no_compile <- function() {
   testthat::skip_if_not_installed("cppDE")
@@ -15,39 +7,41 @@ skip_if_no_compile <- function() {
 }
 
 
-# Every observation function the file needs, compiled into one shared object on
-# first use. Prediction and trafo of the decay chain come from the shared fixture.
-.y_fx <- local({
-  cache <- NULL
-  function() {
-    if (!is.null(cache)) return(cache)
-    bench <- fx_decay_compiled()
-    oldwd <- setwd(.dmod_fx_workdir()); on.exit(setwd(oldwd), add = TRUE)
-
-    g_sq <- Y(c(y = "A^2"), f = bench$xfn, condition = NULL,
-              attach.input = FALSE, modelname = "test_Y_sq", compile = FALSE)
-    g_rev <- Y(c(y = "A^2"), f = bench$xfn, condition = NULL,
-               attach.input = FALSE, derivMode = "reverse",
-               modelname = "test_Y_dm_rev", compile = FALSE)
-    g_dual <- Y(c(y = "A^2"), f = bench$xfn, condition = NULL,
-                attach.input = FALSE, derivMode = "forward",
-                modelname = "test_Y_dm_dual", compile = FALSE)
-    g_attach <- Y(c(y = "A"), f = bench$xfn, condition = NULL,
-                  attach.input = TRUE, modelname = "test_Y_attach", compile = FALSE)
-
-    x_np <- Xs(odemodel(as.eqnvec(c(A = "-k*A")), modelname = "noparam_y_ode",
-                        compile = FALSE, backend = "cppDE"))
-    g_np <- Y(c(y1 = "1.0"), f = NULL, states = c("A"),
-              parameters = character(0), derivMode = "forward",
-              compile = FALSE, modelname = "noparam_y_obs")
-
-    compile(g_sq, g_rev, g_dual, g_attach, x_np, g_np,
-            output = "test_Y_all", cores = 4L)
-    cache <<- list(bench = bench, g_sq = g_sq, g_rev = g_rev, g_dual = g_dual,
-                   g_attach = g_attach, x_np = x_np, g_np = g_np)
-    cache
-  }
+# Every observation function the file needs, linked into the shared fixture's
+# single compile. Prediction and trafo of the decay chain come from the fixture.
+fx_register(extra = function(bench) {
+  g <- Y(c(y = "a*exp(-k*time)"), f = NULL, parameters = c("a", "k"),
+         modelname = "test_Y_xt", compile = FALSE)
+  tr <- function(k) eqnvec(a = "exp(a_log)", k = paste0("exp(", k, ")"), s = "s")
+  list(
+    g_sq = Y(c(y = "A^2"), f = bench$xfn, condition = NULL,
+             attachInput = FALSE, modelname = "test_Y_sq", compile = FALSE),
+    g_rev = Y(c(y = "A^2"), f = bench$xfn, condition = NULL,
+              attachInput = FALSE, derivMode = "reverse",
+              modelname = "test_Y_dm_rev", compile = FALSE),
+    g_dual = Y(c(y = "A^2"), f = bench$xfn, condition = NULL,
+               attachInput = FALSE, derivMode = "forward",
+               modelname = "test_Y_dm_dual", compile = FALSE),
+    g_attach = Y(c(y = "A"), f = bench$xfn, condition = NULL,
+                 attachInput = TRUE, modelname = "test_Y_attach", compile = FALSE),
+    x_np = Xs(odemodel(as.eqnvec(c(A = "-k*A")), modelname = "noparam_y_ode",
+                       compile = FALSE, backend = "cppDE")),
+    g_np = Y(c(y1 = "1.0"), f = NULL, states = c("A"),
+             parameters = character(0), derivMode = "forward",
+             compile = FALSE, modelname = "noparam_y_obs"),
+    g = g,
+    e = Y(c(y = "exp(s)*y"), f = g, attachInput = FALSE,
+          modelname = "test_Y_xt_err", compile = FALSE),
+    e0 = Y(c(y = "exp(s)"), f = NULL, parameters = "s",
+           modelname = "test_Y_xt_err0", compile = FALSE),
+    p = P(list(C1 = tr("k1_log"), C2 = tr("k2_log")),
+          modelname = "test_Y_xt_p", compile = FALSE),
+    gs = Y(c(y = "s*A"), f = bench$xfn, attachInput = FALSE,
+           modelname = "test_Y_scale", compile = FALSE))
 })
+
+.y_fx <- function() c(list(bench = fx_decay_compiled()), fx_extra())
+.y_xt_fx <- .y_fx
 
 
 ## ---- Value: linear observable ------------------------------------------
@@ -99,15 +93,15 @@ test_that("Y derivMode 'reverse' and 'forward' agree on a nonlinear observable",
   o_dual <- prd_dual(times = times, pars = pars, deriv = TRUE)
 
   expect_equal(o_sym$C1[, "y"], o_dual$C1[, "y"], tolerance = 1e-12)
-  # The reverse build carries no forward entries, the forward one does.
+  # The reverse build has no forward entries, the forward one does.
   expect_null(attr(o_sym$C1, "deriv"))
   expect_false(is.null(attr(o_dual$C1, "deriv")))
 })
 
 
-## ---- attach.input ------------------------------------------------------
+## ---- attachInput ------------------------------------------------------
 
-test_that("Y with attach.input = TRUE returns inputs and outputs", {
+test_that("Y with attachInput = TRUE returns inputs and outputs", {
   skip_if_no_compile()
   fx <- .y_fx()
   bench <- fx$bench
@@ -120,13 +114,13 @@ test_that("Y with attach.input = TRUE returns inputs and outputs", {
   cn <- colnames(out$C1)
   expect_true("y" %in% cn)
   expect_true("A" %in% cn)
-  # When attach.input is TRUE, the observable column should equal the input
+  # When attachInput is TRUE, the observable column should equal the input
   # column for the identity observable.
   expect_equal(out$C1[, "y"], out$C1[, "A"], tolerance = 1e-12)
 })
 
 
-## ---- Gradient: analytic chain rule on y = A^2 --------------------------
+## ---- Gradient: analytic chain rule on a nonlinear observable -----------
 
 test_that("Y gradient on y = A^2 follows the analytic chain rule dy/dtheta = 2 A * dA/dtheta", {
   skip_if_no_compile()
@@ -139,10 +133,6 @@ test_that("Y gradient on y = A^2 follows the analytic chain rule dy/dtheta = 2 A
   out <- prd_sq(times = times, pars = pars, deriv = TRUE)
   d <- attr(out$C1, "deriv")  # [time, var, par]
 
-  # Closed form: A(t) = A0 * exp(-k * t), y(t) = A(t)^2.
-  #   dy/dA0 = 2 * A * (dA/dA0) = 2 * A0 * exp(-k*t) * exp(-k*t) = 2 * A0 * exp(-2 k t)
-  #   dy/dk  = 2 * A * (dA/dk)  = 2 * A0 * exp(-k*t) * (-t * A0 * exp(-k*t))
-  #                              = -2 * t * A0^2 * exp(-2 k t)
   A0 <- pars[["A"]]; k <- pars[["k"]]
   ref_dA <- 2 * A0 * exp(-2 * k * times)
   ref_dk <- -2 * times * A0^2 * exp(-2 * k * times)
@@ -151,9 +141,7 @@ test_that("Y gradient on y = A^2 follows the analytic chain rule dy/dtheta = 2 A
 })
 
 
-# ============================================================================
-# Edge case: Y with pure-numeric observable (no outer parameters)
-# ============================================================================
+## ---- Edge case: pure-numeric observable, no outer parameters -----------
 
 test_that("Y with pure-numeric observable composes with an Xs prediction", {
   fx <- .y_fx()
@@ -161,4 +149,97 @@ test_that("Y with pure-numeric observable composes with an Xs prediction", {
   pred <- out[[1]]
   expect_true(all(pred[, "y1"] == 1.0))
   expect_equal(pred[, "time"], c(0, 2.5, 5))
+})
+
+
+## ---- Parameter derivatives the prediction does not provide -------------
+
+test_that("g * Xt() * P() differentiates by the outer parameters", {
+  skip_if_no_compile()
+  withr::local_options(dMod.batch.check = TRUE)
+  fx <- .y_xt_fx()
+  prd <- fx$g * Xt() * fx$p
+  times <- c(0, 0.5, 2)
+  pars <- c(a_log = 0.3, k1_log = -0.2, k2_log = 0.4, s = 0)
+  kname <- c(C1 = "k1_log", C2 = "k2_log")
+
+  for (cn in list(NULL, "C2")) {
+    out <- prd(times, pars, conditions = cn)
+    for (cnd in names(out)) {
+      y <- out[[cnd]][, "y"]
+      d <- attr(out[[cnd]], "deriv")
+      k <- exp(pars[[kname[[cnd]]]])
+      expect_equal(d[, "y", "a_log"], y)
+      expect_equal(d[, "y", kname[[cnd]]], -times * k * y)
+      expect_false("k" %in% dimnames(d)[[3]])
+    }
+  }
+
+  out <- prd(times, pars[-1], fixed = pars[1])
+  d <- attr(out$C1, "deriv")
+  expect_false("a_log" %in% dimnames(d)[[3]])
+  expect_equal(d[, "y", "k1_log"], -times * exp(pars[["k1_log"]]) * out$C1[, "y"])
+})
+
+test_that("Y differentiates its own parameters without a trafo upstream", {
+  skip_if_no_compile()
+  fx <- .y_xt_fx()
+  times <- c(0, 0.5, 2)
+
+  d <- attr((fx$g * Xt())(times, c(a = 2, k = 0.5))[[1]], "deriv")
+  expect_equal(d[, "y", "a"], exp(-0.5 * times))
+  expect_equal(d[, "y", "k"], -times * 2 * exp(-0.5 * times))
+  d <- attr((fx$g * Xt())(times, c(k = 0.5), fixed = c(a = 2))[[1]], "deriv")
+  expect_identical(dimnames(d)[[3]], "k")
+
+  prd <- fx$gs * fx$bench$xfn
+  d <- attr(prd(times, c(A = 1, k = 0.5, s = 2))[[1]], "deriv")
+  expect_equal(d[, "y", "s"], exp(-0.5 * times), tolerance = 1e-5)
+  expect_equal(d[, "y", "A"], 2 * exp(-0.5 * times), tolerance = 1e-5)
+  d <- attr(prd(times, c(A = 1, k = 0.5), fixed = c(s = 2))[[1]], "deriv")
+  expect_setequal(dimnames(d)[[3]], c("A", "k"))
+})
+
+test_that("normL2 on g * Xt() * P() takes fixed parameters", {
+  skip_if_no_compile()
+  withr::local_options(dMod.batch.check = TRUE)
+  fx <- .y_xt_fx()
+  prd <- fx$g * Xt() * fx$p
+  times <- c(0.5, 1, 2)
+  data <- as.datalist(data.frame(name = "y", time = rep(times, 2),
+                                 value = c(1.1, 0.8, 0.5, 1.0, 0.6, 0.2),
+                                 sigma = NA, condition = rep(c("C1", "C2"), each = 3)),
+                      splitBy = "condition")
+  pars <- c(a_log = 0.3, k1_log = -0.2, k2_log = 0.4, s = -1)
+
+  for (cn in list(c("C1", "C2"), "C2")) {
+    obj <- normL2(data[cn], prd, errmodel = fx$e)
+    full <- obj(pars)
+    num <- numDeriv::grad(function(q) obj(setNames(q, names(pars)), deriv = FALSE)$value,
+                          pars)
+    expect_equal(full$gradient[names(pars)], setNames(num, names(pars)),
+                 tolerance = 1e-6)
+    part <- obj(pars[-1], fixed = pars[1])
+    expect_equal(part$value, full$value)
+    expect_equal(part$gradient, full$gradient[names(pars)[-1]])
+  }
+
+  # An error model whose parameters are all fixed has no derivatives at all.
+  obj <- normL2(data, prd, errmodel = fx$e0)
+  full <- obj(pars)
+  part <- obj(pars[-4], fixed = pars[4])
+  expect_equal(part$value, full$value)
+  expect_equal(part$gradient, full$gradient[names(pars)[-4]])
+})
+
+
+test_that("generated sources go to dMod.outdir when it is set", {
+  out <- withr::local_tempdir()
+  cwd <- withr::local_tempdir()
+  withr::local_dir(cwd)
+  withr::local_options(dMod.outdir = out)
+  Y(c(y = "a*x"), f = NULL, states = "x", parameters = "a",
+    modelname = "test_Y_outdir", compile = FALSE)
+  expect_equal(list.files(cwd), character(0))
+  expect_true(any(startsWith(list.files(out), "test_Y_outdir")))
 })

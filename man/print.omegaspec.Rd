@@ -4,7 +4,7 @@
 \alias{print.omegaspec}
 \title{Print method for omega}
 \usage{
-\method{print}{omegaspec}(x, ...)
+print.omegaspec(x, ...)
 }
 \arguments{
 \item{x}{An \code{omegaSpec} object.}

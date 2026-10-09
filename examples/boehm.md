@@ -22,7 +22,7 @@ dir.create(outdir)
 
 ## Reactions
 
-Reactions are added one at a time and carry their compartment. The Epo
+Reactions are added one at a time, each with its compartment. The Epo
 stimulus decays exponentially and enters the phosphorylation rates in
 closed form, so `time` appears directly in a rate expression. Nuclear
 species are assigned before they are produced, so their compartment does

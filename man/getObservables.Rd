@@ -2,18 +2,18 @@
 % Please edit documentation in R/accessors.R
 \name{getObservables}
 \alias{getObservables}
-\title{Extract the observables of an object}
+\title{Extract the Observables of an Object}
 \usage{
 getObservables(x, ...)
 }
 \arguments{
-\item{x}{object from which the equations should be extracted}
+\item{x}{object from which the observables are extracted.}
 
-\item{...}{not used}
+\item{...}{not used.}
 }
 \value{
-The equations as a character.
+The observables, as a character vector.
 }
 \description{
-Extract the observables of an object
+Generic without methods in dMod2; other packages can provide them.
 }

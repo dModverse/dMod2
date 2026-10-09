@@ -2,7 +2,7 @@
 % Please edit documentation in R/plots.R
 \name{plotPaths}
 \alias{plotPaths}
-\title{Profile likelihood: plot of the parameter paths.}
+\title{Profile Likelihood: Plot of the Parameter Paths}
 \usage{
 plotPaths(
   profs,
@@ -14,25 +14,36 @@ plotPaths(
 )
 }
 \arguments{
-\item{profs}{profile or list of profiles as being returned by \link{profile}}
+\item{profs}{A \link{parframe} of profiles as returned by
+\link[=profile.objfn]{profile()}, or a list of those.}
 
-\item{...}{arguments going to subset}
+\item{...}{Logical expressions to subset the plotted data.}
 
-\item{whichPar}{Character or index vector, indicating the parameters that are taken as possible reference (x-axis)}
+\item{whichPar}{Character or index vector, the profiled parameters whose
+paths are drawn. \code{NULL} (default) takes all.}
 
-\item{sort}{Logical. If paths from different parameter profiles are plotted together, possible
-combinations are either sorted or all combinations are taken as they are.}
+\item{sort}{Logical. \code{TRUE} sorts each pair of parameters so that a pair
+appears once; \code{FALSE} (default) keeps both orders.}
 
-\item{relative}{logical indicating whether the origin should be shifted.}
+\item{relative}{Logical. \code{TRUE} (default) shifts each path to start at the
+optimum.}
 
-\item{scales}{character, either \code{"free"} or \code{"fixed"}.}
+\item{scales}{Character, \code{"fixed"} (default) or \code{"free"}.}
 }
 \value{
-A plot object of class \code{ggplot}.
+A \code{ggplot} object with the plotted data frame as attribute \code{"data"}.
 }
 \description{
-Profile likelihood: plot of the parameter paths.
+Profile Likelihood: Plot of the Parameter Paths
 }
-\details{
-See \link{profile} for examples.
+\examples{
+pars <- c(a = 1, b = 0.5)
+obj <- constraintL2(mu = pars, sigma = 0.1)
+profs <- profile(obj, pars, whichPar = c("a", "b"), limits = c(-1, 1),
+                 cores = 1)
+plotPaths(profs)
+plotPaths(profs, whichPar = "a")
+}
+\seealso{
+\link[=profile.objfn]{profile()}, \code{\link[=plotProfile]{plotProfile()}}, \code{\link[=plotPathsMulti]{plotPathsMulti()}}
 }

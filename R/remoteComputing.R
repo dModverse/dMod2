@@ -1,14 +1,16 @@
-#' Detect number of free cores
+#' Detect Number of Free Cores
 #'
-#' @description Estimates free cores from the 1-min load average.
-#' Supports Linux, macOS, and remote machines via SSH.
-#' On Windows, returns 1 with a warning (no load average available).
-#' Result is floored at 1 so it can be fed straight into
-#' `mclapply(mc.cores = ...)` without crashing under heavy load.
-#' @param machine character vector of SSH hosts, e.g. "user@@localhost".
-#' NULL (default) for the local machine.
-#' @return numeric vector of free cores (>= 1) with attributes "ncores" and "used".
+#' Estimates the free cores as the number of cores minus the 1-minute load
+#' average, at least 1. Works on Linux and macOS, locally or on remote
+#' machines via `ssh`. On Windows it returns 1 with a warning. Under
+#' `R CMD check` with `_R_CHECK_LIMIT_CORES_` set, the result is at most 2.
+#' @param machine Character vector of SSH hosts, e.g. `"user@@host"`. `NULL`
+#'   (default) for the local machine.
+#' @return Numeric vector of free cores, one per machine, with attributes
+#'   `"ncores"` (number of cores) and `"used"` (load average).
 #' @export
+#' @examples
+#' detectFreeCores()
 detectFreeCores <- function(machine = NULL) {
   
   .getLoadAndCores <- function(prefix = NULL) {
@@ -37,9 +39,8 @@ detectFreeCores <- function(machine = NULL) {
       nCores <- as.numeric(cmd("nproc --all"))
     }
     
-    # Floor at 1: callers feed `free` straight into mclapply(mc.cores = ...)
-    # which rejects 0. Under heavy load the 1-min average can exceed nCores;
-    # reporting 1 means "serialise, don't die" instead of crashing.
+    # Floor at 1: mclapply(mc.cores = 0) fails, and under heavy load the
+    # 1-min average can exceed nCores.
     list(free = max(1L, round(nCores - occupied)), nCores = nCores, occupied = occupied)
   }
   
@@ -55,10 +56,8 @@ detectFreeCores <- function(machine = NULL) {
     attr(freeCores, "used") <- res$occupied
   }
 
-  # CRAN policy: R CMD check sets _R_CHECK_LIMIT_CORES_ and parallel forbids
-  # mc.cores > 2 in that mode. Cap before returning so all mclapply callsites
-  # (P, normL2, compile) stay legal under check without each having to
-  # know about the env var.
+  # Under R CMD check, _R_CHECK_LIMIT_CORES_ forbids mc.cores > 2; capping here
+  # keeps every mclapply caller legal.
   chk <- tolower(Sys.getenv("_R_CHECK_LIMIT_CORES_", ""))
   if (nzchar(chk) && chk != "false") {
     if (length(freeCores) > 0L) freeCores[] <- pmin(freeCores, 2L)
@@ -69,23 +68,9 @@ detectFreeCores <- function(machine = NULL) {
 
 
 ## Remote build helpers --------------------------------------------------------
-##
-## Rebuilding a dMod model on a remote machine takes more than a bare
-## `R CMD SHLIB`: the cppDE backend emits sources that `#include <cppde/...>`
-## from the cppDE package tree, and the shared object gets linked against
-## BLAS/LAPACK (plus Sundials/KLU for CVODE and sparse models). `compile()`
-## assembles those flags from the `"compileInfo"` attribute that every model
-## object carries, but every path in there points into the *local* library
-## tree and is meaningless on the cluster.
-##
-## `.remoteBuildInfo()` therefore keeps only the portable part of that
-## information (the `-D` macro flags plus which optional backends are in play),
-## and `.remoteBuildScript()` writes a build script that resolves every
-## path-valued flag on the remote machine itself, by asking the R installation
-## that is on PATH there.
+## The remote build keeps the -D macros of "compileInfo" and resolves every
+## path-valued flag through the R on the remote PATH.
 
-## Scan a workspace for model objects and return the portable build settings
-## needed to rebuild their C/C++ sources elsewhere.
 ## Shell command that puts `libs` in front of the remote R's library path. The
 ## paths are expanded by the remote shell, so `~` is the remote home.
 .remoteLibs <- function(libs) {
@@ -94,6 +79,8 @@ detectFreeCores <- function(machine = NULL) {
   paste0('export R_LIBS="', paste(paths, collapse = ":"), '${R_LIBS:+:$R_LIBS}"; ')
 }
 
+## Scan a workspace for model objects and return the portable build settings
+## needed to rebuild their C/C++ sources elsewhere.
 .remoteBuildInfo <- function(envir = .GlobalEnv) {
 
   compileArgs <- character(0)
@@ -109,9 +96,8 @@ detectFreeCores <- function(machine = NULL) {
     if (is.null(info)) next
     for (e in info) {
       ca <- trimws(e$compileArgs %||% "")
-      ## Non-empty linkArgs mean the backend pulls external libraries
-      ## (Sundials, and KLU on top of it for sparse CVODE models); those have
-      ## to be resolved from the remote cppDE installation.
+      ## Non-empty linkArgs mean external libraries (Sundials, KLU), resolved
+      ## from the remote cppDE installation.
       la <- e$linkArgs %||% ""
       if (nzchar(trimws(la))) needsCVODE <- TRUE
       if (grepl("sunlinsollapackdense", la, fixed = TRUE)) needsLapack <- TRUE
@@ -139,10 +125,8 @@ detectFreeCores <- function(machine = NULL) {
 .remoteNeedsChunking <- function(files)
   sum(nchar(files) + 1L) > .compileCmdLimit()
 
-## Write the job workspace through zstd. Uncompressed it hits the disk in full
-## only for tar to read it back and compress it, and with one parfn per condition
-## that is several GB. zstd is already required for the transfer; the fallback
-## covers a submitting machine without the binary. Returns the file written.
+## Write the job workspace through zstd, as an uncompressed one can be several
+## GB; without the binary it is saved uncompressed. Returns the file written.
 .saveWorkspace <- function(input, file, envir = .GlobalEnv, level = 3L) {
 
   zstd <- Sys.which("zstd")
@@ -165,10 +149,9 @@ detectFreeCores <- function(machine = NULL) {
   out
 }
 
-## Generate the bash script that builds the shared object on the remote machine.
-## `files` are the sources, or the object files when `link = TRUE`. Beyond the
-## argument limit the script switches to the chunked archive build compile()
-## uses locally, reading its inputs from `filelist`.
+## Bash script that builds the shared object on the remote machine from the
+## sources, or the object files when `link = TRUE`. Beyond the argument limit it
+## uses compile()'s chunked archive build, reading its inputs from `filelist`.
 .remoteBuildScript <- function(files, output, compileArgs = "",
                                needsCVODE = FALSE, needsKLU = FALSE,
                                needsLapack = FALSE,
@@ -184,20 +167,16 @@ detectFreeCores <- function(machine = NULL) {
 
   ldflags <- character(0)
   if (link) {
-    ## Object files carry the *local* toolchain's LTO bytecode, which a remote
-    ## compiler of a different GCC generation refuses to read ("bytecode stream
-    ## in file 'e.o' generated with LTO version 16.0 instead of the expected
-    ## 13.1"). Fat LTO objects still contain ordinary machine code, so turning
-    ## LTO and the linker plugin off lets the link fall back to it.
+    ## A remote compiler of another GCC generation refuses the local LTO
+    ## bytecode; with LTO off the link uses the fat objects' machine code.
     ldflags <- c(ldflags, "-fno-lto", "-fno-use-linker-plugin")
     ## With only .o inputs R CMD SHLIB links via the C driver, which would not
     ## pull in the C++ runtime the cppDE-generated code needs.
     if (cxx) ldflags <- c(ldflags, "-lstdc++")
   }
 
-  ## SUNDIALS/KLU flags come from the *remote* cppDE install, so they are
-  ## resolved by Rscript inside the generated script. Embedded in a
-  ## single-quoted shell string, must contain no single quotes.
+  ## SUNDIALS/KLU flags come from the remote cppDE install, read by Rscript in
+  ## the script. Embedded in a single-quoted shell string: no single quotes.
   cfgExpr <- function(field) paste0(
     "cfg <- get0(\"cvodeConfig\", envir = asNamespace(\"cppDE\"), inherits = FALSE); ",
     "cat(if (is.environment(cfg)) paste(unlist(mget(c(", field, "), envir = cfg, ",
@@ -237,9 +216,8 @@ detectFreeCores <- function(machine = NULL) {
     c("NPROC=$(env -u OMP_NUM_THREADS -u OMP_THREAD_LIMIT nproc 2>/dev/null || echo 1)",
       "if [ \"$NPROC\" -gt 16 ]; then NPROC=16; fi", "")
 
-  ## Precompiled header, decided here because the prologue check needs the
-  ## sources. A missing .gch is harmless, the header then just includes what
-  ## the sources include anyway.
+  ## Precompiled header; a missing .gch is harmless, the sources then include
+  ## the headers themselves.
   cxxSrc <- files[grepl("\\.cpp$", files, ignore.case = TRUE)]
   pchInc <- if (!link && length(cxxSrc) >= 8L) .compilePCHIncludes(cxxSrc)
   toolchain <- if (!is.null(filelist) || !is.null(pchInc)) c(
@@ -256,9 +234,8 @@ detectFreeCores <- function(machine = NULL) {
           "-x c++-header dMod_pch.hpp -o dMod_pch.hpp.gch || true"),
     "PKG_CXXFLAGS=\"$PKG_CXXFLAGS -include dMod_pch.hpp\"", "")
 
-  ## Compile off the file list in parallel, then link. Asking make to
-  ## parallelise R CMD SHLIB via MAKEFLAGS does not work, so the objects are
-  ## built here and SHLIB only links them.
+  ## Compile off the file list in parallel, then link: R CMD SHLIB does not
+  ## parallelise via MAKEFLAGS.
   chunked <- !is.null(filelist) && .remoteNeedsChunking(files)
   isCxx   <- grepl("\\.cpp$", files, ignore.case = TRUE)
 
@@ -269,9 +246,8 @@ detectFreeCores <- function(machine = NULL) {
   anchorLine <- if (chunked)
     paste0("ANCHOR=", shQuote(files[if (any(isCxx)) which(isCxx)[1] else 1L]))
 
-  ## The sources hold one small function each and all pull in the same headers,
-  ## so bundling them into few translation units parses those headers once per
-  ## bundle. Every generated function survives; only the compiler runs less.
+  ## Bundling the small generated sources into few translation units parses the
+  ## shared headers once per bundle.
   bundleBlock <- if (doBundle) c(
     paste0("BUNDLE=", max(2L, as.integer(bundle))),
     "grep -i -e '\\.cpp$' \"$WORK\" > dmod_cxx.lst || true",
@@ -335,7 +311,7 @@ detectFreeCores <- function(machine = NULL) {
 
   paste(c(
     "#!/bin/bash",
-    "# Generated by dMod -- rebuilds the model shared object on this machine.",
+    "# Generated by dMod: rebuilds the model shared object on this machine.",
     "# All path-valued compiler flags are resolved here, not on the submitting",
     "# machine, because the library trees differ.",
     "set -e",
@@ -372,120 +348,91 @@ detectFreeCores <- function(machine = NULL) {
 }
 
 
-#' Run an R expression in the background (only on UNIX)
-#' 
-#' @description Generate an R code of the expression that is copied via `scp`
-#' to any machine (ssh-key needed). Then collect the results.
-#' @details `runbg()` generates a workspace from the `input` argument
-#' and copies the workspace to the remote machines via `scp`. This will only
-#' work if *an ssh-key had been generated and added to the authorized keys
-#' on the remote machine*. The code snippet, i.e. the `...` argument, can
-#' include several intermediate results but only the last call which is not
-#' redirected into a variable is returned via the variable `.runbgOutput`,
-#' see example below.
+#' Run an R Expression in the Background
 #'
-#' Depending on the `compile` and `link` arguments, build-related files are
-#' handled as follows:
+#' Saves the objects named in `input` to a workspace, copies it with `scp` to
+#' each machine, runs the expression there with `Rscript` and returns
+#' functions to collect the results. Requires a Unix-like system and `ssh`
+#' key authentication on every machine.
+#'
+#' @details The value of the last expression in `...` is the result of a
+#' machine. `get()` returns the list of these results.
+#'
+#' Build-related files are handled as follows:
 #' \itemize{
 #'   \item `compile = TRUE`: C/C++ source files are transferred and compiled
 #'         remotely via `R CMD SHLIB`.
-#'   \item `link = TRUE`: Pre-compiled object files (`.o`) are transferred and
-#'         linked remotely.
-#'   \item Both `FALSE` (default): Existing shared objects (`.so`) are copied
-#'         directly.
+#'   \item `link = TRUE`: object files (`.o`) are transferred and linked
+#'         remotely.
+#'   \item Both `FALSE` (default): shared objects (`.so`) are copied.
 #' }
-#' When `compile` or `link` is `TRUE`, objects of class `obsfn`, `parfn`, or
-#' `prdfn` in the workspace automatically get their `modelname` updated to
-#' point to the newly built shared object.
-#'
-#' The remote build runs from a generated shell script that resolves all
-#' path-valued compiler flags (cppDE include directory, BLAS/LAPACK, and
-#' Sundials/KLU for CVODE and sparse models) *on the remote machine*, since
-#' the local library paths do not carry over. The model-specific `-D` macros
-#' are read from the `"compileInfo"` attribute of the model objects in the
-#' workspace. `cppDE` therefore has to be installed for the R that is on
-#' `PATH` on the remote machine. Only the files the chosen mode consumes are
-#' transferred, and beyond the shell's argument limit the script switches to
-#' the chunked static-archive build of [compile()].
-#' @param ... Some R code.
-#' @param machine Character vector, e.g. `"localhost"` or `"knecht1.fdm.uni-freiburg.de"`
-#' or `c("localhost", "localhost")`.
-#' @param filename Character, defining the filename of the temporary file. A random
-#' file name is chosen if `NULL`.
-#' @param input Character vector, the objects in the workspace that are stored
-#' into an R data file and copied to the remote machine.
-#' @param compile Logical. If `TRUE`, C/C++ source files (`.c`, `.cpp`) are
-#' transferred to the remote machine and fully recompiled into a shared object
-#' (`.so`). If set to `TRUE`, this overrides `link = TRUE`.
-#' @param link Logical. If `TRUE`, only existing object files (`.o`) are
-#' transferred to the remote machine and linked into a shared object (`.so`),
-#' skipping compilation. If no `.o` files are found, an error is raised.
-#' This option is ignored if `compile = TRUE`. Object files are toolchain
-#' specific, so this only works when the remote compiler is ABI-compatible
-#' with the local one; prefer `compile = TRUE` when the two machines run
-#' different compiler generations.
-#' @param buildCores Number of compiler processes the build on each remote
-#' machine runs in parallel, before the job starts there. `NULL` (default) lets
-#' the build use what the machine reports, capped at 16.
-#' @param buildBundle Number of generated sources the remote build puts into one
-#' translation unit, as in [distributedComputing()]. Only used above the shell's
-#' argument limit. `1` compiles one file at a time.
-#' @param wait Logical. Wait until executed. If `TRUE`, the code checks if the
-#' result file is already present in which case it is loaded. If not present,
-#' `runbg()` starts, produces the result and loads it as `.runbgOutput` directly
-#' into the workspace. If `wait = FALSE`, `runbg()` starts in the background
-#' and the result is only loaded into the workspace when the `get()` function
-#' is called, see Value section.
-#' @param recover Logical. This option is useful to recover the functions
-#' `check()`, `get()`, `purge()` and `terminate()`, e.g. when a session has
-#' crashed. Then, the functions are recreated without restarting the job. They
-#' can then be used to get the results of a job without having to do it manually.
-#' Requires the correct filename, so if the previous `runbg()` was run with
-#' `filename = NULL`, you have to specify the filename manually.
-#' @param walltime Optional character. Maximum runtime in the format `"HH:MM:SS"`.
-#' If exceeded, the job will be terminated.
-#' @param libs Optional character vector of library paths put in front of the
-#' remote R's library search path, for the job and the remote build, so that a
-#' development installation can run next to the default one. The remote shell
-#' expands them, so `~` is the remote home.
-#' @return List of functions `check()`, `get()`, `purge()` and `terminate()`. 
-#' `check()` checks if the result is ready.
-#' `get()` copies the result file
-#' to the working directory and loads it into the workspace as an object called `.runbgOutput`. 
-#' This object is a list named according to the machines that contains the results returned by each
+#' With `compile` or `link`, the `modelname` of [obsfn], [parfn] and [prdfn]
+#' objects in the workspace is set to the newly built shared object. The
+#' remote build needs cppDE installed for the R on the `PATH` of the remote
 #' machine.
-#' `purge()` deletes the temporary folder
-#' from the working directory and the remote machines.
-#' `terminate()` kills all running processes associated with this job on the remote machines.
+#' @param ... R code.
+#' @param machine Character vector of SSH hosts, e.g. `"localhost"`,
+#'   `"user@@host"` or `c("localhost", "localhost")`. Defaults to
+#'   `"localhost"`.
+#' @param filename Character, the base name of the job files. `NULL` (default)
+#' picks a random name.
+#' @param input Character vector, the objects of the global environment that are
+#' saved and copied to the remote machines. Defaults to all.
+#' @param compile Logical. `TRUE` transfers the C/C++ sources (`.c`, `.cpp`) of
+#' the working directory and compiles them on each machine into one shared
+#' object; overrides `link`. Call it from `getOption("dMod.outdir")` when that
+#' is set. Defaults to `FALSE`.
+#' @param link Logical. `TRUE` transfers the object files (`.o`) of the working
+#' directory and links them on each machine; an error is raised if there are
+#' none. Needs a remote compiler compatible with the local one. Ignored if
+#' `compile = TRUE`. Defaults to `FALSE`.
+#' @param buildCores Number of parallel compiler processes of the build on each
+#' remote machine. `NULL` (default) uses the cores the machine reports, at most
+#' 16.
+#' @param buildBundle Number of generated sources the remote build puts into one
+#' translation unit, as in [distributedComputing()]. Only used for builds with
+#' more files than the shell accepts as arguments. `1` compiles one file at a
+#' time. Defaults to 50.
+#' @param wait Logical. `TRUE` waits for the job and returns its results as
+#' `get()` does; if the local result files exist already, they are loaded
+#' without running the job. `FALSE` (default) returns at once; the results are
+#' fetched by `get()`.
+#' @param recover Logical. `TRUE` returns the functions `check()`, `get()`,
+#' `purge()` and `terminate()` of an earlier job without starting it again,
+#' e.g. after a crashed session. Needs the `filename` of that job. Defaults to
+#' `FALSE`.
+#' @param walltime Optional character, the maximum runtime as `"HH:MM:SS"`,
+#' after which the job is terminated. `NULL` (default) sets no limit.
+#' @param libs Optional character vector of library paths put in front of the
+#' remote library search path, for the job and the remote build. The remote
+#' shell expands them, so `~` is the remote home.
+#' @return With `wait = TRUE` the results, else a list of functions:
+#' \describe{
+#'   \item{`check()`}{reports whether the results are ready and returns
+#'     `TRUE` or `FALSE`.}
+#'   \item{`get()`}{copies the result files to the working directory and
+#'     returns the results, a list named by machine.}
+#'   \item{`purge()`}{deletes the job folders on the remote machines and the
+#'     job files in the local working directory.}
+#'   \item{`terminate()`}{kills the processes of the job on the remote
+#'     machines.}
+#' }
+#' @seealso [distributedComputing()]
 #' @export
 #' @examples
 #' \dontrun{
-#' out_job1 <- runbg({
-#'          M <- matrix(rnorm(1e2), 10, 10)
-#'          solve(M)
-#'          }, machine = c("localhost", "localhost"), filename = "job1")
-#' out_job1$check()          
-#' out_job1$get()
-#' result <- .runbgOutput
-#' print(result)
-#' out_job1$purge()
-#' }
-#' \dontrun{
-#' # Recover a runbg job with the option "recover"
-#' out_job1 <- runbg({
-#'          M <- matrix(rnorm(1e2), 10, 10)
-#'          solve(M)
-#'          }, machine = c("localhost", "localhost"), filename = "job1")
-#' Sys.sleep(1)
-#' remove(out_job1)
-#' try(out_job1$check())
-#' out_job1 <- runbg({
-#'   "This code is not run"
-#' }, machine = c("localhost", "localhost"), filename = "job1", recover = TRUE)
-#' out_job1$get()
-#' result <- .runbgOutput
-#' print(result)
-#' out_job1$purge()
+#' job <- runbg({
+#'   M <- matrix(rnorm(1e2), 10, 10)
+#'   solve(M)
+#' }, machine = c("user@@host", "user@@host"), filename = "job1")
+#' job$check()
+#' result <- job$get()
+#' job$purge()
+#'
+#' # Recover the functions of a running job, e.g. after a crashed session
+#' job <- runbg(NULL, machine = c("user@@host", "user@@host"),
+#'              filename = "job1", recover = TRUE)
+#' job$get()
 #' }
 runbg <- function(..., machine = "localhost", filename = NULL, input = ls(.GlobalEnv), compile = FALSE, link = FALSE, buildCores = NULL, buildBundle = 50, wait = FALSE, recover = FALSE, walltime = NULL, libs = NULL) {
   
@@ -535,9 +482,7 @@ runbg <- function(..., machine = "localhost", filename = NULL, input = ls(.Globa
       check <- try(load(file = paste0(filename[m], "_result.RData")), silent = TRUE) 
       if (!inherits(check, "try-error")) result[[m]] <- .runbgOutput
     }
-    
-    .GlobalEnv$.runbgOutput <- result
-    
+    result
   }
   
   # Remove temporary folders and files on remote machines and locally
@@ -601,27 +546,24 @@ runbg <- function(..., machine = "localhost", filename = NULL, input = ls(.Globa
     
     result <- structure(vector(mode = "list", length = nmachines), names = machine)
     for (m in 1:nmachines) {
+      .runbgOutput <- NULL
       load(file = resultfile[m])
       result[[m]] <- .runbgOutput
     }
-    .GlobalEnv$.runbgOutput <- result
-    return(out)
+    return(result)
   }
   
   # Save current workspace to be transferred to remote machines
   save(list = input, file = paste0(filename0, ".RData"), envir = .GlobalEnv)
   
-  # The transferred objects dispatch on dMod2 classes, so that is what the
-  # remote script needs. Replicating whatever the submitting session happened
-  # to attach makes a job depend on it; anything else belongs in the expression.
+  # The remote script attaches dMod2 only, not the submitting session's
+  # packages; anything else belongs in the expression.
   pack <- "library(dMod2)"
   
   output <- ".runbgOutput"
   
-  # Compiler flags mirroring compile() in compile.R. The flags themselves are
-  # resolved on the remote machine (see .remoteBuildScript); here only
-  # collect the portable, model-specific part and the file list. Everything is
-  # written into a shell script to avoid quoting issues with nested SSH commands.
+  # The portable, model-specific flags and the file list; the rest is resolved
+  # on the remote machine by the script .remoteBuildScript() writes.
   buildinfo <- list(compileArgs = "", needsCVODE = FALSE, needsKLU = FALSE,
                     needsLapack = FALSE)
   has_cxx <- FALSE
@@ -749,206 +691,128 @@ runbg <- function(..., machine = "localhost", filename = NULL, input = ls(.Globa
     ), intern = FALSE, wait = wait)
   }
   
-  if (wait) {
-    out$get()
-    out$purge()
-  } else {
-    return(out)
-  }
-  
+  if (!wait) return(out)
+  result <- out$get()
+  out$purge()
+  result
 }
 
 
 
-## ---- HPC/SLURM distributed computing (moved from toolsSeverin.R) ----------
+## ---- HPC/SLURM distributed computing --------------------------------------
 
-#' Run any R function on a remote HPC system with SLURM
+#' Run R Code on a Remote HPC System with SLURM
 #'
-#' @description
-#' Generates R and bash scripts, transfers them to a remote HPC system via SSH,
-#' and executes the given R code in parallel using the SLURM batch manager.
-#' The function handles workspace export, job submission, and result retrieval.
+#' Saves the workspace, copies it with generated R and shell scripts to a
+#' remote system via `ssh`, and submits the R code there as a SLURM array job.
+#' Returns functions to check, collect and delete the results.
 #'
-#' @details
-#' `distributedComputing()` generates R and bash scripts designed to run
-#' on an HPC system managed by SLURM. The current R workspace together with the
-#' scripts are exported and transferred to the remote system via SSH.  
-#' If ssh-key authentication is not possible, the SSH password can be provided and
-#' is used by `sshpass` (which must be installed locally).
+#' @details The value of `...` on each array task is its result. `get()`
+#' returns the list of results, one per task.
 #'
-#' The code to be executed remotely is passed to the `...` argument; its final
-#' output is stored in `cluster_result`, which can be loaded in the local
-#' workspace via the `get()` function.
+#' Repetitions of the same code are requested with `nRep`. Code that varies
+#' between tasks reads the variables `var_1`, `var_2`, ..., whose values on
+#' each task are taken from the corresponding vectors of `varValues`.
 #'
-#' It is possible to run multiple repetitions of the same program (via `no_rep`)
-#' or to pass a list of parameter arrays through `var_values`. Parameters that
-#' vary between runs must be named `var_i`, where *i* matches the index
-#' of the corresponding array in `var_values`.
+#' The workspace is compressed with `zstd` if it is available locally. The job
+#' script loads the environment modules `compiler/gnu/13.3` and `math/R`; the
+#' remote build needs cppDE installed for that R. A job is only submitted if
+#' the remote build succeeds. Without `ssh` key authentication, `sshPasswd` is
+#' passed to `sshpass`, which must be installed locally.
 #'
-#' The workspace is serialised through `zstd` and expanded again on the cluster
-#' before the build starts, so it is written and transferred once, compressed.
-#' With one parameter transformation per condition it is the bulk of the upload.
-#' Without `zstd` locally it is written uncompressed; the archive is compressed
-#' either way.
-#'
-#' @param ... R code to be remotely executed. Parameters to be changed for each run
-#' must be named `var_i` (see "Details").
-#' @param jobname Unique name (character) for the run. Existing runs with the same
-#' name will be overwritten. Must not contain the string "Minus".
-#' @param partition SLURM partition name to use. Default is `"single"`.
-#' @param cores Number of cores per node. Values above 16 may limit available nodes.
-#' @param nodes Number of nodes per task. Default is 1; typically should not be changed.
-#' @param mem_per_core Memory per CPU core in GB. Default is 2 GB.
-#' @param walltime Maximum runtime in format `"hh:mm:ss"`. Default is 1 hour.
-#' @param ssh_passwd Password string for SSH authentication via `sshpass`.
-#' Optional, and only used if key-based authentication is unavailable.
-#' @param machine SSH address of the remote HPC system, e.g. `"user@@cluster"`.
-#' @param var_values List of parameter arrays. Each array corresponds to one variable
-#' `var_i`. The length of each array determines the number of SLURM array jobs.
-#' Mutually exclusive with `no_rep`.
-#' @param no_rep Integer number of repetitions (mutually exclusive with `var_values`).
-#' @param recover Logical; if `TRUE`, no computation is performed. Instead,
-#' the returned list of functions `check()`, `get()`, and `purge()`
-#' can be used to interact with previously submitted jobs.
-#' @param purge_local Logical; if `TRUE`, the `purge()` function also
-#' deletes local result files.
-#' @param compile Logical; if `TRUE`, all C/C++ source files (`*.c`, `*.cpp`)
-#' are transferred to the cluster and fully recompiled into shared objects (`.so`).
-#' If set to `TRUE`, this overrides `link = TRUE`. The build runs from a
-#' generated shell script that resolves all path-valued compiler flags
-#' (cppDE include directory, BLAS/LAPACK, and Sundials/KLU for CVODE and
-#' sparse models) on the cluster, so `cppDE` has to be installed for the R
-#' that `module load math/R` provides there. The job is only submitted if the
-#' build succeeds. Beyond the shell's argument limit the script switches to the
-#' chunked static-archive build of [compile()].
-#' @param link Logical; if `TRUE`, only existing object files (`*.o`) are
-#' transferred to the cluster and linked into shared objects (`.so`),
-#' skipping compilation. If no `.o` files are found, an error is raised.
-#' This option is ignored if `compile = TRUE`. Object files are toolchain
-#' specific, so this only works when the cluster compiler is ABI-compatible
-#' with the local one, in particular, `.o` files produced with link-time
-#' optimisation by a newer GCC cannot be read by an older one. Prefer
-#' `compile = TRUE` when the two machines run different compiler generations.
-#' @param buildCores Number of compiler processes the remote build runs in
-#' parallel. The build happens on the login node, before the job is queued, so
-#' this is unrelated to `cores`, which sizes the SLURM allocation. `NULL`
-#' (default) lets the build use what the login node reports, capped at 16.
+#' @param ... R code to be executed remotely. Variables that change between
+#'   tasks are named `var_i`, see Details. `mem_per_core`, `ssh_passwd`,
+#'   `var_values`, `no_rep`, `purge_local` and `custom_folders` are deprecated
+#'   names of `memPerCore`, `sshPasswd`, `varValues`, `nRep`, `purgeLocal` and
+#'   `customFolders`.
+#' @param jobname Character, unique name of the job. A job with the same name
+#'   is overwritten.
+#' @param partition SLURM partition. Defaults to `"single"`.
+#' @param cores Number of cores per node. Defaults to 16.
+#' @param nodes Number of nodes per task. Defaults to 1.
+#' @param memPerCore Memory per core in GB. Defaults to 2.
+#' @param walltime Maximum runtime per task as `"hh:mm:ss"`. Defaults to
+#'   `"01:00:00"`.
+#' @param sshPasswd Optional password for `sshpass`. `NULL` (default) uses
+#'   `ssh` key authentication, which is recommended.
+#' @param machine SSH address of the remote system, e.g. `"user@@host"`.
+#'   Defaults to `"cluster"`.
+#' @param varValues List of vectors, one per variable `var_i`, all of the
+#'   same length: the number of array tasks. Exclusive with `nRep`.
+#' @param nRep Integer, number of repetitions. Exclusive with `varValues`.
+#' @param recover Logical. `TRUE` submits nothing and returns the functions
+#'   for a job submitted earlier under `jobname`. Default `FALSE`, which
+#'   submits the job.
+#' @param purgeLocal Logical, the default of the argument of the same name of
+#'   `purge()`. Defaults to `FALSE`.
+#' @param compile Logical. `TRUE` transfers the C/C++ sources (`*.c`,
+#'   `*.cpp`) of the working directory and compiles them on the remote system
+#'   into one shared object; overrides `link`. Call it from
+#'   `getOption("dMod.outdir")` when that is set. Defaults to `FALSE`.
+#' @param link Logical. `TRUE` transfers the object files (`*.o`) of the working
+#'   directory and links them on the remote system; an error is raised if
+#'   there are none. Needs a remote compiler compatible with the local one.
+#'   Ignored if `compile = TRUE`. Defaults to `FALSE`.
+#' @param buildCores Number of parallel compiler processes of the remote build,
+#'   which runs on the login node before submission. `NULL` (default) uses the
+#'   cores the login node reports, at most 16.
 #' @param buildBundle Number of generated sources the remote build puts into one
-#' translation unit. They hold one small function each and all include the same
-#' headers, so bundling parses those once per bundle instead of once per file;
-#' every generated function is kept either way. Only used above the shell's
-#' argument limit, where the build goes through a static archive. `1` compiles
-#' one file at a time.
-#' @param custom_folders Named vector with exactly three elements: `"compiled"`,
-#' `"output"`, and `"tmp"`. Each value is a relative path specifying where
-#' compiled files, temporary data, and output results should be stored.
-#' If `NULL`, all operations occur in the current working directory.
-#' @param input Character vector of object names in the global environment to
-#' transfer. Defaults to the whole workspace; naming only what the expression
-#' uses keeps the transferred `.RData` small.
-#' @param resetSeeds Logical; if `TRUE` (default), removes `.Random.seed`
-#' from the transferred workspace to ensure each node has independent random seeds.
-#' @param returnAll Logical; if `TRUE` (default), retrieves everything the job
-#' produced, excluding the uploaded workspace and the build artefacts, which
-#' are already local. If `FALSE`, only result files (`*result.RData`) are
-#' fetched.
+#'   translation unit. Only used for builds with more files than the shell
+#'   accepts as arguments. `1` compiles one file at a time. Defaults to 50.
+#' @param customFolders Named character vector with the entries `"compiled"`,
+#'   `"output"` and `"tmp"`, relative paths for compiled files, results and
+#'   temporary files. `NULL` (default) uses the working directory.
+#' @param input Character vector, the objects of the global environment to
+#'   transfer. Defaults to all.
+#' @param resetSeeds Logical. `TRUE` (default) removes `.Random.seed` from the
+#'   transferred workspace and seeds each task with its SLURM job ID.
+#' @param returnAll Logical. `TRUE` (default) makes `get()` fetch all files the
+#'   job produced except the uploaded workspace and build files; `FALSE` only
+#'   the result files.
 #' @param libs Optional character vector of library paths put in front of the
-#' remote R's library search path, for the jobs and the remote build, so that a
-#' development installation can run next to the default one. The remote shell
-#' expands them, so `~` is the remote home.
+#'   remote library search path, for the jobs and the remote build. The remote
+#'   shell expands them, so `~` is the remote home.
 #'
-#' @return
-#' A list containing three functions:
-#' \itemize{
-#'   \item `check()` - Checks whether all remote results are complete.
-#'   \item `get()` - Downloads results and loads them into
-#'         `cluster_result` in the local workspace.
-#'   \item `purge()` - Deletes temporary remote files; optionally removes local ones.
+#' @return A list of functions:
+#' \describe{
+#'   \item{`check()`}{reports how many results are ready and returns `TRUE`
+#'     when all are.}
+#'   \item{`get()`}{copies the results into `<jobname>_folder/results/` and
+#'     returns them, a list with one entry per task.}
+#'   \item{`purge(purgeLocal)`}{deletes the job folder on the remote system,
+#'     with `purgeLocal = TRUE` also the local one.}
 #' }
+#'
+#' @seealso [runbg()], [profileParsPerNode()]
 #'
 #' @examples
 #' \dontrun{
-#' outDistributedComputing <- distributedComputing(
-#' {
-#'   mstrust(
-#'     objfun=objective_function,
-#'     center=outer_pars,
-#'     name = "study",
-#'     rinit = 1,
-#'     rmax = 10,
-#'     fits = 48,
-#'     cores = 16,
-#'     iterlim = 700,
-#'     sd = 4
-#'   )
-#' },
-#' jobname = "my_name",
-#' partition = "single",
-#' cores = 16,
-#' nodes = 1,
-#' mem_per_core = 2,
-#' walltime = "02:00:00",
-#' ssh_passwd = "password",
-#' machine = "cluster",
-#' var_values = NULL,
-#' no_rep = 20,
-#' recover = F,
-#' compile = F,
-#' link = F
-#' )
-#' outDistributedComputing$check()
-#' outDistributedComputing$get()
-#' outDistributedComputing$purge()
-#' result <- cluster_result
-#' print(result)
-#' 
-#' 
-#' # calculate profiles
-#' var_list <- profileParsPerNode(best_fit, 4)
-#' profile_jobname <- paste0(fit_filename,"_profiles_opt")
-#' method <- "optimize"
-#' profilesDistributedComputing <- distributedComputing(
+#' # Multi-start fits, 20 tasks
+#' job <- distributedComputing(
 #'   {
-#'     profile(
-#'       obj = obj,
-#'       pars =  best_fit,
-#'       whichPar = (as.numeric(var_1):as.numeric(var_2)),
-#'       limits = c(-5, 5),
-#'       cores = 16,
-#'       method = method,
-#'       stepControl = list(
-#'         stepsize = 1e-6,
-#'         min = 1e-4, 
-#'         max = Inf, 
-#'         atol = 1e-2,
-#'         rtol = 1e-2, 
-#'         limit = 100
-#'       ),
-#'       optControl = list(iterlim = 20)
-#'     )
+#'     mstrust(obj, center = pars, fits = 48, cores = 16, sd = 4)
 #'   },
-#'   jobname = profile_jobname,
-#'   partition = "single",
-#'   cores = 16,
-#'   nodes = 1,
-#'   walltime = "02:00:00",
-#'   ssh_passwd = "password",
-#'   machine = "cluster",
-#'   var_values = var_list,
-#'   no_rep = NULL,
-#'   recover = F,
-#'   compile = F,
-#'   link = F
+#'   jobname = "fits", machine = "user@@host", partition = "single",
+#'   cores = 16, walltime = "02:00:00", nRep = 20
 #' )
-#' profilesDistributedComputing$check()
-#' profilesDistributedComputing$get()
-#' profilesDistributedComputing$purge()
-#' profiles  <- NULL
-#' for (i in cluster_result) {
-#'   profiles <- rbind(profiles, i)
+#' job$check()
+#' fits <- job$get()
+#' job$purge()
+#'
+#' # Profiles, a range of parameters per task
+#' ranges <- profileParsPerNode(bestfit, 4)
+#' job <- distributedComputing(
+#'   {
+#'     profile(obj, bestfit, whichPar = as.numeric(var_1):as.numeric(var_2),
+#'             limits = c(-5, 5), cores = 16)
+#'   },
+#'   jobname = "profiles", machine = "user@@host", cores = 16,
+#'   walltime = "02:00:00", varValues = ranges[c("from", "to")]
+#' )
+#' profiles <- do.call(rbind, job$get())
+#' job$purge()
 #' }
-#' }
-#' 
+#'
 #' @export
 distributedComputing <- function(
     ...,
@@ -956,35 +820,45 @@ distributedComputing <- function(
     partition = "single",
     cores = 16,
     nodes = 1,
-    mem_per_core = 2,
+    memPerCore = 2,
     walltime = "01:00:00",
-    ssh_passwd = NULL,
+    sshPasswd = NULL,
     machine = "cluster",
-    var_values = NULL,
-    no_rep = NULL,
-    recover = TRUE,
-    purge_local = FALSE,
+    varValues = NULL,
+    nRep = NULL,
+    recover = FALSE,
+    purgeLocal = FALSE,
     compile = FALSE,
     link = FALSE,
     buildCores = NULL,
     buildBundle = 50,
-    custom_folders = NULL,
+    customFolders = NULL,
     resetSeeds = TRUE,
     returnAll = TRUE,
     input = ls(.GlobalEnv, all.names = TRUE),
     libs = NULL
 ){
+  # The dots hold the code, unevaluated, and the deprecated argument names.
+  dots <- match.call(expand.dots = FALSE)$...
+  renames <- c(mem_per_core = "memPerCore", ssh_passwd = "sshPasswd",
+               var_values = "varValues", no_rep = "nRep",
+               purge_local = "purgeLocal", custom_folders = "customFolders")
+  old <- intersect(names(dots), names(renames))
+  callerEnv <- parent.frame()
+  .renameArgs(lapply(dots[old], eval, envir = callerEnv), renames,
+              "distributedComputing")
+  code <- if (length(old)) dots[!names(dots) %in% old] else dots
   original_wd <- getwd()
-  if (is.null(custom_folders)) {
+  if (is.null(customFolders)) {
     output_folder_abs <- "./"
-  } else if(!is.null(custom_folders) & !all(length(custom_folders) == 3 & sort(names(custom_folders)) == c("compiled", "output", "tmp"))) {
-    warning("'custom_folders' must be named vector with exact three elements:\n
+  } else if(!is.null(customFolders) & !all(length(customFolders) == 3 & sort(names(customFolders)) == c("compiled", "output", "tmp"))) {
+    warning("'customFolders' must be named vector with exact three elements:\n
             'compiled', 'output', 'tmp', containing relative paths to the resp folders\n
             input is wrong, ignored.\n")
   } else {
-    compiled_folder <- custom_folders["compiled"]
-    output_folder <- custom_folders["output"]
-    tmp_folder <- custom_folders["tmp"]
+    compiled_folder <- customFolders["compiled"]
+    output_folder <- customFolders["output"]
+    tmp_folder <- customFolders["tmp"]
     
     system(paste0("cp ", compiled_folder, "* ", tmp_folder))
     
@@ -1003,22 +877,22 @@ distributedComputing <- function(
   
   # - definitions - #
   
-  # relative path to the working directory, will now allways be used
+  # relative path to the working directory
   
   wd_path <- paste0("./",jobname, "_folder/")
   
   # number of repetitions
-  if(!is.null(no_rep) & is.null(var_values)) {
-    num_nodes <- no_rep - 1
-  } else if(is.null(no_rep) & !is.null(var_values)) {
-    num_nodes <- length(var_values[[1]]) - 1
+  if(!is.null(nRep) & is.null(varValues)) {
+    num_nodes <- nRep - 1
+  } else if(is.null(nRep) & !is.null(varValues)) {
+    num_nodes <- length(varValues[[1]]) - 1
   } else {
-    stop("I dont know what you want how often done. Please set either 'no_rep' or pass 'var_values' (_not_ both!)")
+    stop("I dont know what you want how often done. Please set either 'nRep' or pass 'varValues' (_not_ both!)")
   }
   
   # define the ssh command depending on 'sshpass' being used
-  ssh_command <- if (is.null(ssh_passwd)) "ssh "
-                 else paste0("sshpass -p ", ssh_passwd, " ssh ")
+  ssh_command <- if (is.null(sshPasswd)) "ssh "
+                 else paste0("sshpass -p ", sshPasswd, " ssh ")
   
   # - output functions - #
   # Structure of the output 
@@ -1103,13 +977,16 @@ distributedComputing <- function(
       else
         result_list[[slot[i]]] <- cluster_result
     }
-    .GlobalEnv$cluster_result <- result_list
+    result_list
   }
   
   
   
-  # purge function
-  out[[3]] <- function (purge_local = FALSE) {
+  # purge function, its default taken from the argument of distributedComputing()
+  purgeLocalDefault <- purgeLocal
+  out[[3]] <- function (purgeLocal = purgeLocalDefault, ...) {
+    .renameArgs(list(...), c(purge_local = "purgeLocal"), "purge",
+                strict = TRUE)
     # remove files remote
     system(
       paste0(
@@ -1117,7 +994,7 @@ distributedComputing <- function(
       )
     )
     # also remove local files if want so
-    if (purge_local) {
+    if (purgeLocal) {
       system(
         paste0("rm -rf ", output_folder_abs, "/", jobname,"_folder")
       )
@@ -1163,9 +1040,8 @@ distributedComputing <- function(
   # WRITE R
   
   
-  # The transferred objects dispatch on dMod2 classes, so that is what the node
-  # script needs. Replicating whatever the submitting session happened to
-  # attach makes a job depend on it; anything else belongs in the expression.
+  # The node script attaches dMod2 only, not the submitting session's
+  # packages; anything else belongs in the expression.
   package_list <- "library(dMod2)"
   if (compile || link) {
     objfns <- 'obj.fns <- ls()[sapply(ls(), function(nm) inherits(get(nm, envir=.GlobalEnv), c("obsfn", "parfn", "prdfn", "objfn")))]'
@@ -1180,15 +1056,15 @@ distributedComputing <- function(
   
   
   # generate parameter lists
-  if (!is.null(var_values)) {
+  if (!is.null(varValues)) {
     var_list <- paste(
       lapply(
-        seq(1,length(var_values)),
+        seq(1,length(varValues)),
         function(i) {
-          if (is.character(var_values[[i]])) {
-            paste0("var_values_", i, "=c('", paste(var_values[[i]], collapse="','"),"')")
+          if (is.character(varValues[[i]])) {
+            paste0("var_values_", i, "=c('", paste(varValues[[i]], collapse="','"),"')")
           } else {
-            paste0("var_values_", i, "=c(", paste(var_values[[i]], collapse=","),")")
+            paste0("var_values_", i, "=c(", paste(varValues[[i]], collapse=","),")")
           }
           
           
@@ -1196,15 +1072,13 @@ distributedComputing <- function(
       ),
       collapse = "\n"
     )
-    # cat(variable_list)
-    
     # List of all names of parameters that will be changes between runs
-    var_names <- paste(lapply(seq(1,length(var_values)), function(i) paste0("var_",i)))
+    var_names <- paste(lapply(seq(1,length(varValues)), function(i) paste0("var_",i)))
     
     # Variables per run
     var_per_run <- paste(
       lapply(
-        seq(1, length(var_values)),
+        seq(1, length(varValues)),
         function(i) {
           paste0("var_", i, "=var_values_",i,"[(as.numeric(Sys.getenv('SLURM_ARRAY_TASK_ID')) + 1)]")
         }
@@ -1215,8 +1089,6 @@ distributedComputing <- function(
     var_list <- ""
     var_per_run <- ""
   }
-  
-  # cat(var_per_run)
   
   
   # define fixed pars
@@ -1229,7 +1101,9 @@ distributedComputing <- function(
   
   
   # WRITE R
-  expr <- as.expression(substitute(...))
+  if (!length(code))
+    stop("distributedComputing: no R code to run.", call. = FALSE)
+  expr <- as.expression(code[[1L]])
   cat(
     paste(
       "#!/usr/bin/env Rscript",
@@ -1294,16 +1168,15 @@ distributedComputing <- function(
       "# Define of repetition",
       paste0("#SBATCH -a 0-", num_nodes),
       "# memory per CPU core",
-      paste0("#SBATCH --mem-per-cpu=", mem_per_core, "gb"),
+      paste0("#SBATCH --mem-per-cpu=", memPerCore, "gb"),
       "",
       "",
       "# Load compiler modules",
       "module load compiler/gnu/13.3",
       "# Load R modules",
       "module load math/R",
-      # paste0("export OPENBLAS_NUM_THREADS=",cores),
-      paste0("export OMP_NUM_THREADS=","1"), # paste0("export OMP_NUM_THREADS=",cores),
-      paste0("export MKL_NUM_THREADS=", "1"), # paste0("export MKL_NUM_THREADS=",cores),
+      paste0("export OMP_NUM_THREADS=","1"),
+      paste0("export MKL_NUM_THREADS=", "1"),
       .remoteLibs(libs),
       "",
       "# Run R script",
@@ -1314,18 +1187,15 @@ distributedComputing <- function(
   )
   
   
-  # The remote build reads its flags from a script that is shipped inside the
-  # job folder; a bare `R CMD SHLIB` misses the cppDE include path and the
-  # BLAS/LAPACK libraries. The script is chained with `&&` so a failed build
-  # skips the sbatch instead of queueing a job that cannot run.
+  # The build script ships in the job folder, as a bare `R CMD SHLIB` misses
+  # cppDE's includes and BLAS/LAPACK; `&&` makes a failed build skip the sbatch.
   build_script_file <- paste0(jobname, "_build.sh")
   filelist_file <- paste0(jobname, "_files.txt")
   module_cmd <- paste0("module load compiler/gnu/13.3 2>/dev/null; module load math/R; ",
                        .remoteLibs(libs))
 
-  ## Names travel as a list, not on the command line: tar and its remote
-  ## counterpart share one `system()` string. The list lives in the job folder
-  ## and therefore ships inside the same archive.
+  ## File names go in a list in the job folder, not on the command line that
+  ## both tar calls share.
   transferCmds <- function(files) {
     writeLines(files, paste0(wd_path, filelist_file))
     list(locale = paste0("tar -I 'zstd -T0' -cf - -T ", wd_path, filelist_file,
@@ -1371,9 +1241,6 @@ distributedComputing <- function(
             "This requires the cluster toolchain to be ABI-compatible with the ",
             "local one; if the link or dyn.load() fails, resubmit with compile = TRUE.")
 
-    # Remove any old .so files before linking
-    # unlink(list.files(pattern = "(\\.so)$"))
-
     tarCmds    <- transferCmds(object_files)
     tar_locale <- tarCmds$locale
     tar_remote <- tarCmds$remote
@@ -1403,7 +1270,6 @@ distributedComputing <- function(
     compile_remote <- ""
   }
   
-  ##
   # transfer and run files
   status <- system(
     paste0(
@@ -1432,47 +1298,46 @@ distributedComputing <- function(
 
 
 
-#' Generate parameter list for distributed profile calculation
-#' 
-#' @description Generates list of `WhichPar` entries to facilitate distributed
-#' profile calculation.
-#' @details Lists to split the parameters for which the profiles are calculated
-#' on the different nodes.
-#' 
-#' @param parameters list of parameters 
-#' @param fits_per_node numerical, number of parameters that will be send to each node.
-#' @param side determine if both sides are calculated (default) or if the profiles are split in 'left' and 'right' for calculation
-#' 
-#' @return List with two arrays: `from` contains the number of the starting
-#' parameter, while `to` stores the respective upper end of the parameter list
-#' per node.
+#' Split Parameters into Ranges for Distributed Profiles
+#'
+#' Splits the parameter indices into consecutive ranges, one per node, for
+#' profile calculation with [distributedComputing()].
+#'
+#' @param parameters Named vector or list of parameters; only its length is
+#'   used.
+#' @param parsPerNode Integer, number of parameters per node.
+#' @param side `"both"` (default) for one entry per range, or `"split"` for two
+#'   entries per range, labelled `"left"` and `"right"`, to compute the two
+#'   sides of each profile on separate nodes.
+#' @param ... `fits_per_node` is deprecated, use `parsPerNode`.
+#'
+#' @return A list with the integer vectors `from` and `to`, the first and last
+#'   parameter index of each node, and the character vector `side`.
+#' @seealso [distributedComputing()], [profile()][profile.objfn]
 #' @examples
-#' \dontrun{
-#' parameter_list <- setNames(1:10, letters[1:10])
-#' var_list <- profileParsPerNode(parameter_list, 4)
-#' }
-#' 
+#' parameters <- setNames(1:10, letters[1:10])
+#' profileParsPerNode(parameters, 4)
+#' profileParsPerNode(parameters, 4, side = "split")
+#'
 #' @export
-profileParsPerNode <- function(parameters, fits_per_node, side = c("both", "split")[1]) {
-  # sanitize side input: must be either "left", "right" or "both"
-  if (!(side %in% c("both", "split"))) {
-    stop("'side' must be either 'both' or 'split'")
-  }
-  
+profileParsPerNode <- function(parameters, parsPerNode, side = c("both", "split"),
+                               ...) {
+
+  .renameArgs(list(...), c(fits_per_node = "parsPerNode"), "profileParsPerNode",
+              strict = TRUE)
+  side <- match.arg(side)
+
   # get the number of parameters
   n_pars <- length(parameters)
   
-  # Get number of fits per node
-  fits_per_node <- fits_per_node
-  
   # determine the number of nodes necessary
-  no_nodes <- 1:ceiling(n_pars/fits_per_node)
+  no_nodes <- 1:ceiling(n_pars/parsPerNode)
   
   # generate the lists which parameters are send to which node
-  pars_from <- fits_per_node
-  pars_to_vec <- fits_per_node
+  pars_from <- parsPerNode
+  pars_to_vec <- parsPerNode
   while (pars_from < (n_pars)) {
-    pars_from <- pars_from + fits_per_node
+    pars_from <- pars_from + parsPerNode
     pars_to_vec <- c(pars_to_vec, pars_from)
   }
   pars_to_vec[length(pars_to_vec)] <- n_pars
@@ -1497,11 +1362,7 @@ profileParsPerNode <- function(parameters, fits_per_node, side = c("both", "spli
 
 
 
-## Use Julia to calculate steady states -----------------------------------------
-
-
-
-## .sanitizeCores (moved from tools.R) ----------------------------------------
+## .sanitizeCores ----------------------------------------------------------------
 
 # Split a two-axis core budget. `cores` is a single number (outer axis only)
 # or a named vector such as c(fits = 10, conditions = 5). The product is
@@ -1530,16 +1391,13 @@ profileParsPerNode <- function(parameters, fits_per_node, side = c("both", "spli
   
   max.cores <- parallel::detectCores()
   min(max.cores, cores)
- #  
- # if (Sys.info()[['sysname']] == "Windows") cores <- 1
- # return(cores)
   
 }
 
 
 
 
-## .parallelLapply (moved from tools.R) --------------------------------------
+## .parallelLapply ---------------------------------------------------------------
 
 # Cross-platform parallel-apply. Unix forks via doParallel; Windows uses a
 # PSOCK cluster with explicit library-path + variable export. Driven through
@@ -1557,7 +1415,7 @@ profileParsPerNode <- function(parameters, fits_per_node, side = c("both", "spli
   if (cores == 1L)
     return(lapply(X, FUN))
 
-  # A forked worker cannot carry a condition axis: cppDE's batch runs serially
+  # A forked worker cannot split a condition axis: cppDE's batch runs serially
   # inside a fork, so an inner axis selects PSOCK.
   wants_inner <- !is.null(coresConditions) && coresConditions > 1L
   use_psock <- switch(strategy,

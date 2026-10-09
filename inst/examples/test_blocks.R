@@ -2,10 +2,7 @@
 \dontrun{
 
 
-################################################################  
-## Walk through the most frequently used functions in
-## connection with ODE models
-################################################################  
+## Walk through the most frequently used functions for ODE models -----------
   
 library(deSolve)
 
@@ -53,7 +50,7 @@ for (C in conditions) {
   x <- x + Xs(model, events = events[[C]], condition = C)
 }
 
-# Single combined compile through dMod's compile() (matches -w convention).
+# Single combined compile through dMod's compile()
 compile(g, x, p0, pSS)
 
 ## Process data

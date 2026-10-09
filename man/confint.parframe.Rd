@@ -2,7 +2,7 @@
 % Please edit documentation in R/statistics.R
 \name{confint.parframe}
 \alias{confint.parframe}
-\title{Profile uncertainty extraction}
+\title{Confidence Intervals from Profiles}
 \usage{
 \method{confint}{parframe}(
   object,
@@ -16,28 +16,38 @@
 )
 }
 \arguments{
-\item{object}{object of class \code{parframe}, returned from \link{profile} function.}
+\item{object}{A \code{parframe} returned by \link[=profile.objfn]{profile()}.}
 
-\item{parm}{a specification of which parameters are to be given confidence intervals,
-either a vector of numbers or a vector of names. If missing, all parameters are considered.}
+\item{parm}{Names of the parameters to give intervals for. Default \code{NULL},
+all profiled parameters.}
 
-\item{level}{the confidence level required.}
+\item{level}{The confidence level. Default \code{0.95}.}
 
-\item{...}{not used right now.}
+\item{...}{Not used.}
 
-\item{val.column}{the value column used in the parframe, usually 'data'.}
+\item{val.column}{Column of the profile the threshold applies to, for
+example \code{"value"} or \code{"data"}. Default \code{"data"}.}
 
-\item{method}{calibration of the threshold. \code{"chisq"} (default) uses the
-asymptotic \eqn{\chi^2_1} quantile. \code{"F"} uses the finite-sample threshold
-\eqn{n\log(1 + F_{1,\nu,1-\alpha}/\nu)}, \eqn{\nu = n - p}, which is exact
-for Gaussian errors with a single sigma profiled out and requires \code{n} and \code{p}.}
+\item{method}{Calibration of the threshold, \code{"chisq"} (default) or \code{"F"},
+see \code{\link[=profileThreshold]{profileThreshold()}}.}
 
 \item{n}{number of data points. Only for \code{method = "F"}.}
 
-\item{p}{number of estimated mean parameters, that is without the error-model
-parameters. Only for \code{method = "F"}. \link{remlLeverage} reports the effective
-count, which is what to pass when directions are non-identifiable.}
+\item{p}{number of estimated mean parameters, that is without the
+error-model parameters. Only for \code{method = "F"}. \link{remlLeverage} reports the
+effective count, which is what to pass when directions are non-identifiable.}
+}
+\value{
+A data frame with one row per parameter and columns \code{name},
+\code{value} (the value at the optimum), \code{lower} and \code{upper}. A bound is \code{NA}
+or infinite when the profile on that side is too short or does not rise
+towards the threshold.
 }
 \description{
-extract parameter uncertainties from profiles
+Reads confidence intervals off profile likelihoods. Where a
+profile does not reach the threshold, the last part of it is extrapolated
+linearly.
+}
+\seealso{
+\link[=profile.objfn]{profile()}, \code{\link[=profileThreshold]{profileThreshold()}}
 }

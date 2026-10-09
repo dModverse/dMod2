@@ -1,51 +1,13 @@
 ## Multiple shooting ------------------------------------------------------------
-##
-## The time axis of every condition is cut at nodes tau_1 < tau_2 < ... <
-## tau_M. Segment j is integrated on [tau_j, tau_{j+1}] from its own initial
-## state: segment 1 from what the parameter transformation p says, every later
-## one from a node variable s_j, one per state. The data of a segment are fitted
-## by that segment alone, and continuity is a constraint between neighbours,
-##
-##     c_j = phi(x_j(tau_{j+1}; theta, s_j)) - s_{j+1} = 0,
-##
-## with phi the chart the nodes live in, log10, linear or an angle per state;
-## the gap of an angle is taken modulo 2 pi.
-##
-## The objective here does not fold the constraints into one number. It returns
-## what the segments are made of, per segment: the gradient of its data term and
-## a Hessian block on (theta, s_j), and the chart value of its end state with the
-## Jacobian of that value. The driver .trustShooting() condenses them onto theta
-## the way Bock's generalised Gauss-Newton method does.
-##
-## Nothing is recompiled for it. The nodes enter behind p, in the states of the
-## inner parameter vector each segment starts from, so g, x and p are the very
-## objects a single-shooting normL2() would be built from, and a segment is one
-## more request for x with its own time grid.
-##
+## Segment j starts from node s_j, continuity c_j = phi(x_j(tau_{j+1})) - s_{j+1}
+## in the chart phi. Nodes enter as inner initial states; nothing recompiles.
+
 ## Copyright (C) 2026 Simon Beyer
 
 
-# The multiple-shooting objective behind trust(shootingControl = ): the data
-# term of every segment on its own, and continuity between neighbouring
-# segments as a constraint. Built from the pieces of a normL2 objective by
-# .shootFromObjective(); the parameters are those of that objective.
-#
-# The function returned is obj(pars, nodes, fixed, deriv, hessian, sweep,
-# cores). `nodes` is a list named by condition with one matrix each, a row per
-# node after the start, a column per state, in chart coordinates. It returns the data
-# term `value`, the gaps per condition and, with `deriv`, per segment the
-# gradient and a Hessian block on its local variables (theta_loc, s_j) and the
-# chart value of its end state with that value's Jacobian. `sweep = "reverse"`
-# builds the gradients and Jacobians by one adjoint solve per segment, with no
-# Hessian.
-#
-# Segment j covers [tau_j, tau_{j+1}) of its data; a data point on a node
-# belongs to the segment that starts there. Its grid holds its data times and
-# both ends. A model has to be built with odemodel(includeTimeZero = FALSE),
-# which .shootCheckGrid() checks. A fixed-time event fires in the segment
-# whose window [start, end) holds it, as cppDE (>= 0.10.2) handles a solve's
-# window, so an event on a node acts at the start of the segment that begins
-# there, once, as it does in a single solve.
+# obj(pars, nodes, ...) returning the data term, the gaps and, per segment, the
+# blocks on (theta_loc, s_j) and the end state's chart value with its Jacobian.
+# Segment j holds the data and fixed-time events in [tau_j, tau_{j+1}).
 .shootObjective <- function(data, x, p, g = NULL, errmodel = NULL, nodes,
                             charts = NULL, times = NULL,
                             attr.name = "data", opt.BLOQ = "M3") {
@@ -152,7 +114,7 @@
   maps <- attr(x, "mappings")
   eq <- if (length(maps)) attr(maps[[1L]], "equations") else NULL
   if (is.null(eq))
-    stop("multiple shooting: 'x' carries no equations; it has to come from Xs().", call. = FALSE)
+    stop("multiple shooting: 'x' has no equations; it has to come from Xs().", call. = FALSE)
   names(eq)
 }
 
@@ -255,14 +217,9 @@
 
 ## ---- Inner parameters of the segments ----------------------------------------
 
-# The inner parameter vectors the segments `which` start from: p's own for the
-# first segment of a condition, the node values in the state rows for every
-# other. With derivatives, the state rows of p's Jacobian are replaced by the
-# chart derivative on the node's own columns, so a solve carries exactly theta
-# and the node of its segment as sensitivity directions. With `x0cols` a first
-# segment carries directions along its initial state as well, for its growth;
-# they are no variable and leave the blocks again. Built per condition from one
-# template, so the cost per segment is a copy and a few entries.
+# Inner parameters of the segments `which`: p's own for a condition's first
+# segment, node values otherwise. With derivatives each solve integrates theta
+# and its node (with `x0cols` also the initial state) as directions.
 .shootSegmentParsAll <- function(pin, spec, nodes, deriv, x0cols = FALSE,
                                  which = seq_along(spec$segs)) {
   states <- spec$states
@@ -413,7 +370,7 @@
     pr <- preds[[k]]
     r <- nrow(pr)
     xe <- pr[r, states]
-    # a state of a log10 chart that the solve carries to zero or below, as a
+    # a state of a log10 chart that the solve drives to zero or below, as a
     # gating variable can under wild parameters, has no end value in its
     # chart: classed like a failed solve, so the driver cuts the segment
     bad <- spec$charts[states] == "log10" & !(xe > 0)
@@ -541,10 +498,9 @@
   out
 }
 
-# The weighted residuals (prediction - data) / sigma of a segment's data, and
-# with `deriv` their Jacobian on the directions the prediction carries: what
-# the value 2 J'r and the Gauss-Newton block 2 J'J of the kernel are made of.
-# Bock's natural level function needs them apart. Fixed sigma only.
+# Weighted residuals (prediction - data) / sigma of a segment and, with
+# `deriv`, their Jacobian on the prediction's directions, for Bock's natural
+# level function. Fixed sigma only.
 .shootResiduals <- function(pr, dat, deriv) {
   if (!NROW(dat)) return(list(r = numeric(0), J = NULL))
   ti <- match(dat$time, pr[, "time"])
@@ -574,7 +530,7 @@
   out
 }
 
-# The end-state Jacobian of a first segment along its initial state, carried
+# The end-state Jacobian of a first segment along its initial state, mapped
 # into the chart of the nodes: d end / d s_1 = d end / d x_0 * T'(s_1).
 .shootChartGrowth <- function(J, pin, spec) {
   # T'(s_1) = ln(10) x_0 on a log10 chart, which is zero, not undefined, at a
@@ -591,12 +547,8 @@
 
 
 ## ---- Reverse evaluation ------------------------------------------------------
-##
-## One backward sweep per segment carries 1 + n_x seeds: the data term, and the
-## end state of every state in its chart. The observation function and the
-## error model are walked with the data seed alone; the state seeds sit on the
-## prediction of the states directly. p is algebraic, so its forward Jacobian
-## maps the inner cotangents onto theta at no cost that grows with the solve.
+## One backward sweep per segment with 1 + n_x seeds, the data term and each end
+## state; p's forward Jacobian maps the inner cotangents onto theta.
 
 .shootReverse <- function(spec, cache, pars, nodes, fixed, cores, env, attr.name) {
   segs <- spec$segs
@@ -706,11 +658,9 @@
 }
 
 
-# The trajectory of an observed state as the data give it, a function of
-# time: the data interpolated linearly, or with `smooth` a smoothing spline
-# through them whose roughness generalised cross-validation chooses; Horbelt,
-# Timmer and Voss (2002) start their nodes from splines fitted to the data.
-# Replicates enter as their mean.
+# An observed state's trajectory as a function of time: the replicate means
+# interpolated linearly, or with `smooth` a GCV smoothing spline (Horbelt,
+# Timmer and Voss 2002).
 .shootObservedCurve <- function(di, smooth = FALSE) {
   ag <- stats::aggregate(di$value, list(time = di$time), mean)
   if (nrow(ag) == 1L) return(function(t) rep(ag$x, length(t)))
@@ -721,12 +671,9 @@
   function(t) stats::approx(ag$time, ag$x, xout = t, rule = 2)$y
 }
 
-# Start values of the nodes. States the data observe directly, through an
-# observable whose equation is the state itself, are read off the data by
-# linear interpolation; every other state off a single-shooting simulation at
-# `pars`. Where that simulation fails, a node it did not reach keeps the last
-# state it did reach, or the initial value from p. Returned in chart
-# coordinates, one matrix per condition.
+# Start values of the nodes in chart coordinates, one matrix per condition:
+# directly observed states from the data, others from a simulation at `pars`,
+# or where that fails the last state reached or p's initial value.
 .shootNodes <- function(objfun, pars, fixed = NULL, observed = TRUE,
                         cores = getOption("dMod.cores", 1L), smooth = FALSE) {
   spec <- attr(objfun, "spec")
@@ -743,11 +690,9 @@
     init <- unclass(p0)[states]
     X <- matrix(rep(init, each = length(tau) - 1L), length(tau) - 1L,
                 dimnames = list(tau[-1L], states))
-    # A node is the state a segment starts from, before the events at its
-    # time, which the segment applies itself. The solver reports a state at an
-    # event time after the event, and so do the data, so a node on an event
-    # reads the state just before it and the observed states keep the data
-    # less the jump the simulation shows there.
+    # A node is the state before the events at its time, which its segment
+    # applies. Solver and data report it after, so a node on an event reads the
+    # state just before and observed states subtract the simulated jump.
     evt <- .shootEventTimes(spec, p0)
     onEvent <- tau[-1L] %in% evt
     dt <- 1e-8 * max(1, abs(tau))
@@ -790,14 +735,9 @@
   out
 }
 
-# One forward pass that sets the unobserved states of every node, by
-# replacement synchronisation: the model runs from the initial state of p and
-# the observed states are reset to the data at every data time on the way, so
-# the others follow the measured trajectory rather than one the model makes up
-# from a single noisy value per segment. Gating variables and other states
-# driven by the observed ones forget where they started and settle onto the
-# values the data imply. Observed states keep their data values. Where a solve
-# fails the pass restarts from the next node as it was.
+# Sets the unobserved states of every node by replacement synchronisation: one
+# run from p's initial state with observed states reset to the data at every
+# data time. A failed solve restarts from the next node as it was.
 .shootSweep <- function(sobj, theta, nodes, fixed, cores) {
   spec <- attr(sobj, "spec")
   smooth <- identical(attr(sobj, "init"), "spline")
@@ -841,12 +781,9 @@
   list(time = tt, value = V)
 }
 
-# The states at the times `at` (increasing, after `a`) of a run from state `x`
-# at `a` whose observed states are reset to the data at every data time in
-# between. Each entry is the state before any reset or event at that time,
-# NULL where the run failed on the way. With `restart`, the node matrix in
-# chart coordinates, a failed run resumes at the next time in `at` from the
-# node there.
+# States at the increasing times `at` of a run from `x` at `a`, observed states
+# reset to the data on the way; each before any reset or event, NULL past a
+# failure. With `restart` (node matrix), a failed run resumes at the next node.
 .shootSyncTrack <- function(spec, p0, cn, x, a, at, cores, restart = NULL,
                             smooth = FALSE) {
   events <- .shootEventTimes(spec, p0)
@@ -1033,28 +970,8 @@
 }
 
 ## ---- Adaptive nodes -----------------------------------------------------------
-##
-## nodes = "auto" starts from segments of equal length per condition, ten or
-## one per half oscillation of the data if that is more, and lets the driver
-## split a segment where it is too long:
-##
-##  - for the linearisation, where the spectral radius of its propagation
-##    matrix G_j = d end_j / d s_j exceeds `growth`, or where
-##    its solve fails. A long segment across a spike or a chaotic stretch is
-##    exactly where G_j blows up and the lifted step degenerates into single
-##    shooting (Bock; Deuflhard). The new node takes the state of the segment's
-##    own trajectory, so the split opens no gap.
-##  - for the data, where the root mean square of its weighted residuals
-##    exceeds `misfit` and twice the median of its condition: the model does
-##    not follow the data there, a spike it misses or a burst it places
-##    elsewhere, and only a node anchored at the data lets the segment pick
-##    them up. The new node takes the observed states from the data and the
-##    others from the trajectory. A misfit everywhere is one of the
-##    parameters, which no node removes.
-##
-## Either half of a cut keeps `minPoints` data points, by default one more than
-## the node has states: fewer, and the node alone could fit its segment's data
-## whatever the parameters.
+## The driver splits a segment on growth beyond `growth`, a failed solve, or a
+## local misfit; each half keeps `minPoints` data points.
 
 .shootAutoNodes <- function(data, x, times, n = 10L, oscillations = FALSE,
                             minPoints = 1L) {
@@ -1072,10 +989,8 @@
   }), conds)
 }
 
-# The number of turning points of the data of a condition, the most of any
-# observable: extrema of the data, averaged over replicates, from which the
-# data reverse by more than `k` times their noise. One segment per half
-# oscillation bounds the phase a wrong frequency can build up within one.
+# Turning points of a condition's data, the most of any observable: extrema of
+# the replicate means the data reverse from by more than `k` times their noise.
 .shootTurns <- function(d, k = 5) {
   best <- 0L
   for (nm in unique(as.character(d$name))) {
@@ -1101,16 +1016,9 @@
   best
 }
 
-# Nodes just before the fast changes of the data: a spike, the jump of a
-# relaxation oscillator. The time a change happens at is what single shooting
-# gets wrong from a start a little off, and a node right before it starts the
-# change where the data have it, whatever the parameters are; the slow stretch
-# behind it depends on them smoothly, and a wrong timing shows as a gap before
-# the next node. A change is a run of consecutive samples of one observable
-# whose rate lies more than `k` robust deviations off its median; the node
-# goes a twentieth of the median interval between changes before its first
-# sample, at least two data spacings. The even layout of "auto" fills
-# stretches without a change. NULL when no condition shows one.
+# Nodes just before fast changes of the data, where an observable's rate lies
+# more than `k` robust deviations off its median, a twentieth of the median
+# interval before the change. NULL when no condition shows one.
 .shootTransitionNodes <- function(data, x, times, k = 8, n = 10L) {
   base <- .shootAutoNodes(data, x, times, n)
   span <- .shootSpan(data, times, names(base))
@@ -1141,9 +1049,8 @@
     te <- max(d$time)
     if (!length(onsets)) return(base[[cn]])
     found <<- TRUE
-    # A spike sampled finely shows its rise and its fall as two runs; changes
-    # closer than a quarter of the typical interval, the median of the longer
-    # half of the intervals, are one.
+    # Changes closer than a quarter of the median of the longer half of the
+    # intervals are one, such as a spike's rise and fall.
     if (length(onsets) > 2L) {
       di <- diff(onsets)
       typical <- stats::median(di[di >= stats::median(di)])
@@ -1225,7 +1132,7 @@
 }
 
 # A new layout: the objective rebuilt on the node times `tau` (per condition,
-# the start included) and the node values carried over, the new ones from `fill`, a
+# the start included) and the node values kept, the new ones from `fill`, a
 # list per condition of chart values named by time.
 .shootRelayout <- function(sobj, tau, nodes, fill) {
   a <- attr(sobj, "args")
@@ -1288,19 +1195,19 @@
   Filter(function(t) !is.null(.shootControlOf(t)), .objTerms(objfun))
 
 # The multiple-shooting objective of a normL2, alone or as the one summand of
-# a sum that carries the control, laid out from the control as it is now.
+# a sum that holds the control, laid out from the control as it is now.
 .shootObjOf <- function(objfun) {
   tm <- .shootingTerms(objfun)
   if (length(tm) != 1L)
     stop("trust: an objective may hold one multiple-shooting term, this one ",
          "holds ", length(tm), ".", call. = FALSE)
   e <- environment(tm[[1L]])
-  .shootFromNormL2(e$data, e$x, e$errmodel, e$times, e$attr.name,
-                   e$opt.BLOQ, e$controls$multipleShootingControl)
+  .shootFromNormL2(e$data, e$x, e$errmodel, e$times, e$attrName,
+                   e$optBLOQ, e$controls$multipleShootingControl)
 }
 
 # The same objective, optimised by single shooting: a wrapper that answers as
-# it does and carries none of its terms or controls. The objective itself, and
+# it does and keeps none of its terms or controls. The objective itself, and
 # whoever else holds it, keeps its control.
 .singleShooting <- function(f) {
   if (!length(.shootingTerms(f))) return(f)

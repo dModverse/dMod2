@@ -2,25 +2,24 @@
 % Please edit documentation in R/plots.R
 \name{coordTransform}
 \alias{coordTransform}
-\title{Coordinate transformation for data frames}
+\title{Coordinate Transformation for Data Frames}
 \usage{
 coordTransform(data, transformations)
 }
 \arguments{
-\item{data}{data frame with at least columns "name" (character) and
-"value" (numeric). Can optionally contain a column "sigma" (numeric).}
+\item{data}{Data frame with columns \code{name} (character) and \code{value}
+(numeric), optionally \code{sigma} (numeric).}
 
-\item{transformations}{character (the transformation) or named list of
-characters. In this case, the list names must be a subset of those
-contained in the "name" column.}
+\item{transformations}{Character, one transformation for all names, or a
+named list of characters, one per entry of the \code{name} column. Each
+transformation is an expression in a single symbol, e.g. \code{"log(x)"}.}
 }
 \value{
-The data frame with the transformed values and sigma uncertainties.
+The data frame with transformed \code{value} and \code{sigma}.
 }
 \description{
-Applies a symbolically defined transformation to the \code{value}
-column of a data frame. Additionally, if a \code{sigma} column is
-present, those values are transformed according to Gaussian error
+Applies a symbolically defined transformation to the \code{value} column of a
+data frame. A \code{sigma} column is transformed by first-order error
 propagation.
 }
 \examples{

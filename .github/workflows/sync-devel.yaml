@@ -20,10 +20,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        branch: [devel-symmetry, devel-EM, devel-bayes]
+        branch: [devel-EM, devel-bayes]
 
     steps:
-      # GITHUB_TOKEN, not DMODVERSE_PAT: the PAT carries Contents:read only, so a
+      # GITHUB_TOKEN, not DMODVERSE_PAT: the PAT grants Contents:read only, so a
       # push with it is refused. A GITHUB_TOKEN push triggers no further workflow.
       - uses: actions/checkout@v4
         with:

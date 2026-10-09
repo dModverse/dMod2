@@ -2,33 +2,41 @@
 % Please edit documentation in R/plots.R
 \name{plotFluxes}
 \alias{plotFluxes}
-\title{Plot Fluxes given a list of flux Equations}
+\title{Plot Fluxes Given a List of Flux Equations}
 \usage{
-plotFluxes(pouter, x, times, fluxEquations, nameFlux = "Fluxes:", ...)
+plotFluxes(pouter, x, times, fluxEquations, legendTitle = "Fluxes:", ...)
 }
 \arguments{
-\item{pouter}{parameters}
+\item{pouter}{Named numeric vector of outer parameters.}
 
-\item{x}{The model prediction function \code{x(times, pouter, fixed, ...)}}
+\item{x}{A prediction function, called as \code{x(times, pouter, deriv = FALSE, ...)}.}
 
-\item{times}{Numeric vector of time points for the model prediction}
+\item{times}{Numeric vector of time points for the prediction.}
 
-\item{fluxEquations}{list of chars containing expressions for the fluxes,
-if names are given, they are shown in the legend. Easy to obtain via \link{subset.eqnlist}, see Examples.}
+\item{fluxEquations}{Character vector or list of flux expressions in the
+states and inner parameters, e.g. the \code{rates} of an \link{eqnlist}. Names are
+shown in the legend; without names the expressions are.}
 
-\item{nameFlux}{character, name of the legend.}
+\item{legendTitle}{Character, the legend title. Defaults to \code{"Fluxes:"}.}
 
-\item{...}{Further arguments going to x, such as \code{fixed} or \code{conditions}}
+\item{...}{Further arguments passed to \code{x}, such as \code{fixed} or \code{conditions}.
+\code{nameFlux} is deprecated, use \code{legendTitle}.}
 }
 \value{
-A plot object of class \code{ggplot}.
+A \code{ggplot} object with the flux data frame as attribute \code{"out"}.
 }
 \description{
-Plot Fluxes given a list of flux Equations
+Evaluates flux expressions along a model prediction and draws them stacked
+per condition.
 }
 \examples{
-\dontrun{
-
-plotFluxes(bestfit, x, times, subset(f, "B"\%in\%Product)$rates, nameFlux = "B production")
+times <- 0:5
+grid <- data.frame(name = "A", time = times, row.names = paste0("A", times))
+x <- Xd(grid)
+pars <- structure(exp(-times / 2), names = getParameters(x))
+plotFluxes(pars, x, seq(0, 5, 0.1),
+           c(production = "0.2", degradation = "0.5*A"))
 }
+\seealso{
+\code{\link[=subset.eqnlist]{subset.eqnlist()}} to select reactions.
 }

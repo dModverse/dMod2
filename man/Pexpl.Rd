@@ -2,12 +2,12 @@
 % Please edit documentation in R/parameters.R
 \name{Pexpl}
 \alias{Pexpl}
-\title{Parameter transformation (explicit, algebraic)}
+\title{Explicit Parameter Transformation}
 \usage{
 Pexpl(
   trafo,
   parameters = NULL,
-  attach.input = FALSE,
+  attachInput = FALSE,
   condition = NULL,
   compile = FALSE,
   modelname = NULL,
@@ -15,45 +15,126 @@ Pexpl(
   deriv = TRUE,
   deriv2 = FALSE,
   derivMode = "forward",
-  outdir = getwd()
+  outdir = .dmodOutdir(),
+  ...
 )
 }
 \arguments{
-\item{trafo}{Named character / \link{eqnvec}; names are inner parameters,
+\item{trafo}{Named character or \link{eqnvec}; names are inner parameters,
 values are expressions in the outer parameters.}
 
-\item{parameters}{Outer parameters; defaults to \code{getSymbols(trafo)}.}
+\item{parameters}{Outer parameters; default \code{NULL}, the symbols of
+\code{trafo}. Names given here that \code{trafo} does not map pass through as
+identity.}
 
-\item{attach.input}{Append the outer inputs the transformation does not map
-to the output, fixed ones included. An input that varies keeps its
-derivatives, the identity when it enters the chain here, and one passed in
-\code{fixed} stays fixed. Kept as a control of the returned function and read at
-every call, see \code{\link[=controls]{controls()}}.}
+\item{attachInput}{Logical. Append the inputs that \code{trafo} does not map;
+varying ones with identity derivatives, fixed ones as fixed. Default
+\code{FALSE}. Can be changed with \code{\link[=controls]{controls()}}.}
 
-\item{condition}{Condition label.}
+\item{condition}{\code{NULL} (default) for a transformation valid in every
+condition, or the name of the condition it belongs to.}
 
-\item{compile, modelname, verbose}{Forwarded to \link[cppDE:cppFUN]{cppDE::cppFUN}.}
+\item{compile}{Logical. \code{TRUE} compiles now, \code{FALSE} (default) leaves it
+to \code{\link[=compile]{compile()}}.}
 
-\item{deriv, deriv2}{Attach \code{attr(., "deriv")} \verb{[p, theta]} and/or
-\code{attr(., "deriv2")} \verb{[p, theta, theta]}. \code{deriv2} needs \code{deriv = TRUE}.}
+\item{modelname}{Base name of the generated files, default \code{NULL}, which
+is \code{"expl_parfn"}, followed by \verb{_<condition>}.}
 
-\item{derivMode}{Which derivative products to build, any of \code{"forward"}
-(AD, default), \code{"reverse"} (the vector-Jacobian product the reverse sweep
-contracts against) and \code{"forward-reverse"} (its derivative along a tangent,
-for the reverse sweep with \code{deriv2 = TRUE}).}
+\item{verbose}{Logical. Print the compiler output, default \code{FALSE}.}
+
+\item{deriv, deriv2}{Build the first derivatives, \code{attr(, "deriv")},
+\verb{[inner, outer]}, and the second, \code{attr(, "deriv2")},
+\verb{[inner, outer, outer]}. Default \code{TRUE} and \code{FALSE}; \code{deriv2} needs
+\code{deriv = TRUE}.}
+
+\item{derivMode}{Which derivative code to build, any of \code{"forward"}
+(default), \code{"reverse"} and \code{"forward-reverse"}. \code{"reverse"} is needed for
+\code{sweep = "reverse"}, \code{"forward-reverse"} for \code{sweep = "reverse"} with
+\code{deriv2 = TRUE}.}
 
 \item{outdir}{Directory for the generated source and shared object,
-default the working directory.}
+default \code{getOption("dMod.outdir")}, else the working directory.}
+
+\item{...}{\code{attach.input} is deprecated, use \code{attachInput}.}
 }
 \value{
-A \link{parfn}.
+A \link{parfn}, called as \code{p(pars, ...)}, see section Calling a dMod
+function.
 }
 \description{
-Builds \code{p_inner = f(p_outer)} from symbolic expressions via
-\link[cppDE:cppFUN]{cppDE::cppFUN}, with derivatives by AD. The returned \link{parfn} attaches the
-Jacobian and, optionally, the Hessian. It is evaluable only after
-compilation.
+Builds a \link{parfn} that evaluates inner parameters as
+expressions in outer parameters, with their derivatives. It is evaluable
+only after compilation.
+}
+\section{Calling a dMod function}{
+
+The leading arguments depend on the class and are matched by position or
+by name:
+\itemize{
+\item prediction function: \code{x(times, pars, ...)}, returning a \link{prdlist};
+\item observation function: \code{g(out, pars, ...)} with a \link{prdlist} \code{out},
+returning a \link{prdlist};
+\item parameter transformation: \code{p(pars, ...)}, returning a list with one
+\link{parvec} per condition;
+\item objective function: \code{obj(pars, ...)}, returning an \link{objlist}.
+}
+
+\code{pars} is a named numeric vector. If it has a \code{deriv} attribute, as the
+output of a parameter transformation does, the derivatives are taken with
+respect to the parameters behind it. A composition is called as its class:
+\code{g * x * p} is a prediction function, \code{(g * x * p)(times, pars)}.
+
+The other arguments are named:
+\itemize{
+\item \code{fixed}: named numeric vector of parameters that enter the evaluation
+without derivatives. Default \code{NULL}.
+\item \code{deriv}: \code{TRUE} (default) returns first derivatives with respect to
+\code{pars}.
+\item \code{deriv2}: \code{TRUE} returns second derivatives as well. Default \code{FALSE}.
+Every function of the chain has to be built for them, see the arguments
+\code{deriv2} and \code{derivMode} of \code{\link[=odemodel]{odemodel()}}, \code{\link[=Y]{Y()}} and \code{\link[=P]{P()}}.
+\item \code{hessian}: objective functions only, see the table below. Default
+\code{NULL}.
+\item \code{sweep}: objective functions only. \code{"forward"} (default) propagates the
+sensitivities through the chain; \code{"reverse"} computes the gradient in one
+backward pass, whose cost does not grow with the number of parameters.
+\code{"reverse"} needs every function of the chain built with
+\code{derivMode = "reverse"}, and with \code{"forward-reverse"} for \code{deriv2 = TRUE}.
+\item \code{conditions}: character vector, the conditions to evaluate. Default all
+conditions of the function.
+\item \code{env}: environment for intermediate results. Default \code{NULL}, a new one.
+An objective function stores its prediction there as \code{prediction} and
+returns the environment as attribute \code{env}.
+\item \code{cores}: number of threads for the ODE solves and the residual kernel.
+Default \code{getOption("dMod.cores", 1L)}.
+}
+
+Prediction, observation and parameter functions accept \code{hessian} and
+\code{sweep} and ignore them. With \code{deriv = TRUE} an objective function returns
+this Hessian:
+
+\tabular{llll}{
+\code{sweep} \tab \code{hessian} \tab \code{deriv2 = FALSE} \tab \code{deriv2 = TRUE} \cr
+\code{"forward"} \tab \code{NULL}, \code{TRUE} \tab Gauss-Newton \tab exact \cr
+\code{"forward"} \tab \code{FALSE} \tab none \tab none, with a warning \cr
+\code{"reverse"} \tab \code{NULL} \tab none \tab exact \cr
+\code{"reverse"} \tab \code{TRUE} \tab none, with a warning \tab exact \cr
+\code{"reverse"} \tab \code{FALSE} \tab none \tab none, with a warning \cr
+}
+
+With \code{deriv = FALSE} it returns the value alone.
+}
+
+\examples{
+\donttest{
+trafo <- eqnvec(k1 = "exp(log_k1)", k2 = "exp(log_k2)", A = "A0")
+p <- Pexpl(trafo, condition = "C1", compile = TRUE,
+           modelname = "Pexpl_example", outdir = tempdir())
+out <- p(c(log_k1 = 0, log_k2 = -1, A0 = 2))
+out$C1
+attr(out$C1, "deriv")
+}
 }
 \seealso{
-\link{Pimpl}, \link{P}.
+\code{\link[=Pimpl]{Pimpl()}}, \code{\link[=P]{P()}}
 }

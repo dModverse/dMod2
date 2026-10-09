@@ -4,7 +4,7 @@
 \alias{Xf}
 \alias{Xf.deSolve}
 \alias{Xf.cppDE}
-\title{Model prediction function for ODE models without sensitivities.}
+\title{Prediction Function of an ODE Model without Sensitivities}
 \usage{
 Xf(odemodel, ...)
 
@@ -13,7 +13,7 @@ Xf(odemodel, ...)
   forcings = NULL,
   events = NULL,
   condition = NULL,
-  optionsOde = list(method = "lsoda"),
+  options = list(),
   fcontrol = NULL,
   ...
 )
@@ -23,37 +23,95 @@ Xf(odemodel, ...)
   forcings = NULL,
   events = NULL,
   condition = NULL,
-  optionsOde = list(),
+  options = list(),
   ...
 )
 }
 \arguments{
-\item{odemodel}{Object of class \link{odemodel}.}
+\item{odemodel}{An \code{\link[=odemodel]{odemodel()}}. Its backend decides which method runs.}
 
-\item{...}{not used.}
+\item{...}{\code{optionsOde}, the deprecated name of \code{options}, is still
+accepted with a warning.}
 
-\item{forcings}{see \link{Xs}.}
+\item{forcings, events, condition}{As in \code{\link[=Xs]{Xs()}}.}
 
-\item{events}{see \link{Xs}.}
+\item{options}{Named list of solver options, as \code{options} of \code{\link[=Xs]{Xs()}}; see
+its section Solver options. On the \code{deSolve} backend \code{method} defaults to
+\code{"lsoda"}.}
 
-\item{condition}{either NULL (generic prediction for any condition) or a
-character denoting the condition for which the function makes a prediction.}
-
-\item{optionsOde}{list with arguments passed to the ODE integrator (deSolve
-or \link[cppDE:solveODE]{cppDE::solveODE}).}
-
-\item{fcontrol}{list with additional fine-tuning arguments for the forcing
-interpolation (cOde backend only). See \link[stats:approxfun]{approxfun}.}
+\item{fcontrol}{\code{deSolve} backend only, as in \code{\link[=Xs]{Xs()}}.}
+}
+\value{
+A \link{prdfn}, called as \code{x(times, pars, fixed = NULL)}, returning a
+\link{prdlist} without derivatives; the other arguments of section Calling a
+dMod function are accepted and ignored. \code{forcings} and \code{options} can be
+changed with \code{\link[=controls]{controls()}}.
 }
 \description{
-Reduced version of \link{Xs} that returns the ODE output without
-first- or second-order sensitivities. Dispatches on the \link{odemodel} class:
-the \code{deSolve} method drives the cOde backend, the \code{cppDE} method drives
-the cppDE / Sundials backend.
+Turns an \code{\link[=odemodel]{odemodel()}} into a prediction function that
+integrates the states alone. States missing from \code{pars} start at 0, so
+further quantities, such as fluxes, can be integrated by adding them to the
+equations.
 }
-\details{
-Can be used to integrate additional quantities, e.g. fluxes, by
-adding them to \code{f}. All quantities not initialised by \code{pars} are initialised
-to 0. For more details and the return value see \link{Xs}, also for the controls
-the returned function keeps.
+\section{Calling a dMod function}{
+
+The leading arguments depend on the class and are matched by position or
+by name:
+\itemize{
+\item prediction function: \code{x(times, pars, ...)}, returning a \link{prdlist};
+\item observation function: \code{g(out, pars, ...)} with a \link{prdlist} \code{out},
+returning a \link{prdlist};
+\item parameter transformation: \code{p(pars, ...)}, returning a list with one
+\link{parvec} per condition;
+\item objective function: \code{obj(pars, ...)}, returning an \link{objlist}.
+}
+
+\code{pars} is a named numeric vector. If it has a \code{deriv} attribute, as the
+output of a parameter transformation does, the derivatives are taken with
+respect to the parameters behind it. A composition is called as its class:
+\code{g * x * p} is a prediction function, \code{(g * x * p)(times, pars)}.
+
+The other arguments are named:
+\itemize{
+\item \code{fixed}: named numeric vector of parameters that enter the evaluation
+without derivatives. Default \code{NULL}.
+\item \code{deriv}: \code{TRUE} (default) returns first derivatives with respect to
+\code{pars}.
+\item \code{deriv2}: \code{TRUE} returns second derivatives as well. Default \code{FALSE}.
+Every function of the chain has to be built for them, see the arguments
+\code{deriv2} and \code{derivMode} of \code{\link[=odemodel]{odemodel()}}, \code{\link[=Y]{Y()}} and \code{\link[=P]{P()}}.
+\item \code{hessian}: objective functions only, see the table below. Default
+\code{NULL}.
+\item \code{sweep}: objective functions only. \code{"forward"} (default) propagates the
+sensitivities through the chain; \code{"reverse"} computes the gradient in one
+backward pass, whose cost does not grow with the number of parameters.
+\code{"reverse"} needs every function of the chain built with
+\code{derivMode = "reverse"}, and with \code{"forward-reverse"} for \code{deriv2 = TRUE}.
+\item \code{conditions}: character vector, the conditions to evaluate. Default all
+conditions of the function.
+\item \code{env}: environment for intermediate results. Default \code{NULL}, a new one.
+An objective function stores its prediction there as \code{prediction} and
+returns the environment as attribute \code{env}.
+\item \code{cores}: number of threads for the ODE solves and the residual kernel.
+Default \code{getOption("dMod.cores", 1L)}.
+}
+
+Prediction, observation and parameter functions accept \code{hessian} and
+\code{sweep} and ignore them. With \code{deriv = TRUE} an objective function returns
+this Hessian:
+
+\tabular{llll}{
+\code{sweep} \tab \code{hessian} \tab \code{deriv2 = FALSE} \tab \code{deriv2 = TRUE} \cr
+\code{"forward"} \tab \code{NULL}, \code{TRUE} \tab Gauss-Newton \tab exact \cr
+\code{"forward"} \tab \code{FALSE} \tab none \tab none, with a warning \cr
+\code{"reverse"} \tab \code{NULL} \tab none \tab exact \cr
+\code{"reverse"} \tab \code{TRUE} \tab none, with a warning \tab exact \cr
+\code{"reverse"} \tab \code{FALSE} \tab none \tab none, with a warning \cr
+}
+
+With \code{deriv = FALSE} it returns the value alone.
+}
+
+\seealso{
+\code{\link[=Xs]{Xs()}}, \code{\link[=controls]{controls()}}
 }

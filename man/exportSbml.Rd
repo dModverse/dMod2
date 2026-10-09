@@ -2,7 +2,7 @@
 % Please edit documentation in R/SBMLinterface.R
 \name{exportSbml}
 \alias{exportSbml}
-\title{Export an eqnlist to an SBML Level 3 file}
+\title{Export an Equation List to SBML}
 \usage{
 exportSbml(
   eqnlist,
@@ -19,8 +19,8 @@ exportSbml(
 \item{parameters}{Named numeric vector of parameter values (including any
 compartment-size parameters referenced in \code{eqnlist$compartments}). An entry
 whose name is a compartment or a species is that element's size or initial
-value, not a separate \verb{<parameter>}. Pass \code{NULL} to write parameters
-without values.}
+value, not a separate \verb{<parameter>}. Default \code{NULL}: parameters are
+written without values.}
 
 \item{inits}{Named numeric \emph{or} character vector of initial values keyed
 by state name. Numeric entries (or character entries that parse as
@@ -28,25 +28,38 @@ numeric) are written as \code{initialConcentration}, \code{initialAmount} for
 states listed in \code{eqnlist$amountStates}; non-numeric character
 entries are emitted as \verb{<initialAssignment>} formulas and let the SBML
 simulator resolve the expression against \code{parameters} at sim time.
-Missing states default to 0.}
+Missing states default to 0. Default \code{NULL}.}
 
-\item{filepath}{Path to the SBML output file.}
+\item{filepath}{Path of the SBML file to write.}
 
 \item{modelID}{SBML model identifier. Defaults to \code{"dMod_export"}.}
 
 \item{events}{Object of class \link{eventlist} to emit as \verb{<listOfEvents>}, or
 \code{NULL}. Rows sharing a trigger become one \verb{<event>}, since SBML applies an
 event's assignments together. A compartment an event assigns to is written
-as non-constant.}
+as non-constant. Default \code{NULL}.}
 }
 \value{
 \code{filepath}, invisibly.
 }
 \description{
-Serialises an \link{eqnlist} plus parameter values and initial concentrations to
-SBML Level 3 Version 2. Each reaction's kinetic law is emitted as
-\code{V_ref * rate_dMod} to restore SBML's extensive-flux convention
-(\code{K_SBML = rate_dMod * V_ref}). Symbolic volumes are written as an
-\verb{<initialAssignment>} on the compartment. Requires a Python environment with \code{libsbml}
-installed; the default location matches the one used by \code{\link[=importSbml]{importSbml()}}.
+Writes an \link{eqnlist} with parameter values and initial values to an SBML
+Level 3 Version 2 file. Kinetic laws are multiplied by the volume of their
+compartment. Symbolic volumes are written as an \verb{<initialAssignment>} of the
+compartment. Requires the same Python environment as \code{\link[=importSbml]{importSbml()}}.
+}
+\examples{
+\dontshow{if (requireNamespace("reticulate", quietly = TRUE) && requireNamespace("rjson", quietly = TRUE) && reticulate::py_module_available("libsbml")) withAutoprint(\{ # examplesIf}
+f <- addReaction(eqnlist(), from = "A", to = "B", rate = "k1*A")
+f <- addReaction(f, from = "B", to = "", rate = "k2*B")
+file <- file.path(tempdir(), "model.xml")
+exportSbml(f, parameters = c(k1 = 0.5, k2 = 0.1), inits = c(A = 1, B = 0),
+           filepath = file)
+model <- importSbml(file)
+model$reactions
+model$pars
+\dontshow{\}) # examplesIf}
+}
+\seealso{
+\code{\link[=importSbml]{importSbml()}}, \code{\link[=exportPEtab]{exportPEtab()}}
 }

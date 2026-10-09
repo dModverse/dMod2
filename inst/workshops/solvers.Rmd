@@ -46,11 +46,11 @@ model <- odemodel(equations, events = events, modelname = "linear_chain")
 
 ```
 
-From the structure of the model it can be seen that the Jacobian of the ODEs is quite sparse. Therefore, we might simulate the model more efficiently with a sparse ODE solver rather than the standard solver LSODA. We select the solver with the `optionsOde` argument in `Xs()`:
+From the structure of the model it can be seen that the Jacobian of the ODEs is quite sparse. Therefore, we might simulate the model more efficiently with a sparse ODE solver rather than the standard solver LSODA. We select the solver with the `options` argument in `Xs()`:
 
 ```{r}
-x.sparse <- Xs(model, optionsOde = list(method = "lsodes"))
-x.standard <- Xs(model, optionsOde = list(method = "lsoda"))
+x.sparse <- Xs(model, options = list(method = "lsodes"))
+x.standard <- Xs(model, options = list(method = "lsoda"))
 ```
 
 First, we check if both ODE solver return comparable results:
@@ -80,7 +80,7 @@ Here, we chose `deriv = FALSE` to avoid that the sensitivity equations are solve
 
 ## Some remarks
 
-* Have a look at `?cOde::funC` to learn more about specifying the Jacobian of ODEs which can be used by some solvers. Have a look at `?deSolve::lsoda` and `?deSolve::lsodes` to learn all about the possible options that can be passed to the solver via `optionsOde` or `optionsSens`.
+* Have a look at `?cOde::funC` to learn more about specifying the Jacobian of ODEs which can be used by some solvers. Have a look at `?deSolve::lsoda` and `?deSolve::lsodes` to learn all about the possible options that can be passed to the solver via `options` or `optionsSens`.
 
 * When the ODE and the sensitivity equations are solved simultaneously (with `deriv = TRUE`), dMod uses `lsodes` by default because it is really faster for large ODE systems!
 

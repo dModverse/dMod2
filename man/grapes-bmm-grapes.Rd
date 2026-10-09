@@ -7,23 +7,29 @@
 A \%bmm\% B
 }
 \arguments{
-\item{A}{Numeric matrix or 3D array}
+\item{A}{Numeric matrix or 3D array.}
 
-\item{B}{Numeric matrix or 3D array}
+\item{B}{Numeric matrix or 3D array.}
 }
 \value{
-Numeric 3D array with dim \code{[B, M, N]}
+Numeric 3D array with dimensions \code{c(B, M, N)}.
 }
 \description{
-Efficient batched matrix multiplication with BLAS-backend.
-Batch index is the FIRST dimension.
+Multiplies matrices batch by batch through BLAS. The batch index is the
+first dimension of a 3D array.
 }
-\section{Supported Contractions}{
+\section{Supported Shapes}{
 
 \describe{
-\item{\code{[B,M,K] x [K,N] -> [B,M,N]}}{Left batched}
-\item{\code{[M,K] x [B,K,N] -> [B,M,N]}}{Right batched}
-\item{\code{[B,M,K] x [B,K,N] -> [B,M,N]}}{Both batched}
+\item{\verb{[B,M,K] x [K,N] -> [B,M,N]}}{left operand batched}
+\item{\verb{[M,K] x [B,K,N] -> [B,M,N]}}{right operand batched}
+\item{\verb{[B,M,K] x [B,K,N] -> [B,M,N]}}{both operands batched}
 }
 }
 
+\examples{
+A <- array(rnorm(2 * 3 * 4), c(2, 3, 4))
+M <- matrix(rnorm(4 * 5), 4, 5)
+dim(A \%bmm\% M)
+all.equal((A \%bmm\% M)[1, , ], A[1, , ] \%*\% M)
+}

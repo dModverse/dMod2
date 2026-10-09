@@ -1,30 +1,9 @@
 ## Reverse-mode helpers -----------------------------------------------------
-##
-## The forward chain threads a Jacobian: every leaf receives dP/dtheta on its
-## input and returns dX/dtheta on its output, so the chain rule happens inside
-## the leaves and the width of everything in flight is n_theta. The reverse
-## chain threads a cotangent the other way, and its width is the number of
-## seeds, which for an objective gradient is one.
-##
-## A cotangent travelling through the tree is the same shape whichever node it
-## passes, because every node's output is the same pair:
-##
-##   out    the matrix a prediction or an observation carries, NULL for a parfn
-##   pars   the parameters the node passes through on its `parameters` attribute
-##
-## Both halves are optional and both accumulate. The `pars` half is what makes
-## the tree a graph rather than a chain: an observation function reads the
-## prediction's parameters as well as its values, so its cotangent lands on the
-## same vector the prediction's own vjp writes to.
-##
 ## Copyright (C) 2026 Simon Beyer
 
-# The cotangent one node hands to the node below it. Both halves carry a
-# trailing direction axis of extent K: slice 1 is the cotangent itself, slices
-# 2..K are its derivatives along the directions the value pass carried. First
-# order is K = 1, the same storage plus a dim attribute and the same code path.
-# A walk in seed mode, `.bwdNode(..., seeds = TRUE)`, reads the same axis as
-# independent first-order seeds instead, each slice a cotangent of its own.
+# A cotangent: `out` on the node's output matrix, `pars` on its parameters,
+# both optional and additive. The trailing axis of extent K holds the cotangent
+# in slice 1 and its directional derivatives after it, or K seeds in seed mode.
 .ct <- function(out = NULL, pars = NULL) {
   if (!is.null(pars) && is.null(dim(pars)))
     pars <- matrix(pars, ncol = 1L, dimnames = list(names(pars), NULL))
@@ -36,16 +15,19 @@
   list(out = out, pars = pars)
 }
 
-# How many directions a half carries. Works on both shapes, [p, K] and
+# How many directions a half has. Works on both shapes, [p, K] and
 # [n, m, K], because the axis is the last one either way.
-.ctK <- function(x) if (is.null(x)) 1L else as.integer(utils::tail(dim(x), 1L))
+.ctK <- function(x) {
+  if (is.null(x)) return(1L)
+  d <- dim(x)
+  as.integer(d[length(d)])
+}
 
 .ctZero <- function(nms, K = 1L)
   matrix(0, length(nms), K, dimnames = list(nms, NULL))
 
 # The solver's answer as a K-column cotangent: the gradient in slice 1, its
-# directional derivatives beside it. The curvature's middle axis is the tangent
-# set the call was handed, which is exactly the directions the chain carries.
+# directional derivatives along the chain's tangents beside it.
 .adjointCt <- function(res, K = 1L) {
   g <- res$cotangent[, 1L]
   u <- matrix(g, ncol = 1L, dimnames = list(names(g), NULL))
@@ -58,15 +40,13 @@
 
 .ct_null <- function(w) is.null(w) || (is.null(w$out) && is.null(w$pars))
 
-# Adds two row-named matrices on the union of their rows. Cheaper than a merge
-# and it keeps the order of the first, which is the order a caller expects back.
-# Positions are resolved once with match(); indexing by name resolves them again
-# on every use, and this runs once per node per condition.
+# Adds two row-named matrices on the union of their rows, keeping the order of
+# the first. Positions are resolved once with match(), as this runs per node.
 .addNamed <- function(a, b) {
   if (is.null(a)) return(b)
   if (is.null(b)) return(a)
   if (ncol(a) != ncol(b))
-    stop("two cotangent halves carry ", ncol(a), " and ", ncol(b),
+    stop("two cotangent halves have ", ncol(a), " and ", ncol(b),
          " directions; a node handed on a width its neighbour does not have.",
          call. = FALSE)
   na <- rownames(a); nb <- rownames(b)
@@ -85,15 +65,11 @@
   .ct(o, .addNamed(a$pars, b$pars))
 }
 
-# A named vector on exactly `nms`, zero where the cotangent says nothing.
-# A seeded solve that returns no cotangent has failed, and an absent
-# cotangent reads as a zero one everywhere above. Saying so beats a gradient
-# that is quietly zero in the directions the solver dropped.
-# Which object a cotangent of width K asks the prediction for, and what to say
-# when it is not there. K > 1 is second order and needs the fifth compilation.
+# Which object a cotangent of width K needs from the prediction. K > 1 is
+# second order and needs the forward-over-reverse object.
 .requireReverse <- function(has_reverse, has_reverse2, K) {
   if (K > 1L && !has_reverse2)
-    stop("the reverse mode carries directions here, which needs the ",
+    stop("the reverse mode propagates directions here, which needs the ",
          "forward-over-reverse object; rebuild via odemodel(..., derivMode = ",
          "c(\"forward\", \"forward-reverse\")).", call. = FALSE)
   if (K == 1L && !has_reverse)
@@ -102,6 +78,8 @@
   invisible(NULL)
 }
 
+# A seeded solve without a cotangent has failed; a silent zero would drop
+# its block of the gradient.
 .requireAdjoint <- function(res, condition = NULL) {
   if (!is.null(res$cotangent)) return(invisible(NULL))
   stop("the backward solve returned no cotangent",
@@ -110,10 +88,8 @@
        "backend fault rather than a modelling one.", call. = FALSE)
 }
 
-# One match() rather than an intersect() and two name lookups: this is the
-# hottest thing in a reverse objective that is not the solver.
-# `K` is the width the caller expects back, which is not always the width `w`
-# has: an absent half is zero at whatever width its neighbour carries.
+# A matrix on exactly the rows `nms`, zero where `w` has none. `K` is the width
+# expected back: an absent half is zero at the width of its neighbour.
 .pickCotangent <- function(w, nms, K = .ctK(w)) {
   out <- .ctZero(nms, K)
   if (is.null(w) || !length(nms)) return(out)
@@ -123,13 +99,9 @@
   out
 }
 
-# A cotangent on a subset of columns, widened to the full set with zeros. The
-# solver answers on every state; a leaf may only return some of them.
-#
-# This is the one place the chain's direction axis and the solver's seed axis
-# meet, and they are not the same thing: a seed column is its own functional and
-# costs a whole sweep, a direction rides inside the dual. So slice 1 becomes the
-# solver's `cotangent` and the rest its `curvature`, NULL at first order.
+# A cotangent on a subset of columns, widened to the full state set with zeros.
+# Slice 1 becomes the solver's `cotangent`, the further direction slices its
+# `curvature` (NULL at first order), since a seed column costs a whole sweep.
 .widenCotangent <- function(w, full, subset) {
   n <- dim(w)[1L]
   K <- .ctK(w)
@@ -138,17 +110,14 @@
   hit <- intersect(subset, full)
   if (length(hit)) W[, hit, 1L] <- w[, hit, 1L, drop = FALSE]
   if (K == 1L) return(list(cotangent = W, curvature = NULL))
-  # The curvature is positional: it has no dimnames of its own, and the
-  # cotangent's column order is `full`.
+  # The curvature is positional, in the column order of `full`.
   cv <- array(0, c(n, length(full), 1L, K - 1L))
   if (length(hit)) cv[, match(hit, full), 1L, ] <- w[, hit, -1L, drop = FALSE]
   list(cotangent = W, curvature = cv)
 }
 
-# The seed-mode counterpart: every slice of the trailing axis is a cotangent of
-# its own, so all of them go to the solver as seed columns and nothing becomes a
-# curvature. The walk runs in this mode when it is handed `seeds = TRUE`; a
-# direction axis and a seed axis never meet in one sweep.
+# Seed-mode counterpart: every slice of the trailing axis goes to the solver
+# as a seed column of its own, none becomes a curvature.
 .widenSeeds <- function(w, full, subset) {
   n <- dim(w)[1L]
   S <- .ctK(w)
@@ -167,15 +136,13 @@
   u
 }
 
-# A vjp is also called from outside the chain, where the natural shape of a
-# cotangent is the matrix or the named vector it was before the direction axis.
-# Normalising at the leaf keeps both callers on one path.
+# A vjp called from outside the chain may get a plain matrix or named vector;
+# these add the direction axis.
 .asCtOut  <- function(w) if (is.null(w) || length(dim(w)) == 3L) w else .ct(out = w)$out
 .asCtPars <- function(w) if (is.null(w) || !is.null(dim(w))) w else .ct(pars = w)$pars
 
-# A cotangent widened to K directions with zeros. The objective's seed is a
-# constant of the functional it seeds, so its own tangents vanish and only the
-# width has to travel.
+# A cotangent widened to K directions with zeros: an objective's seed is a
+# constant, so its tangents vanish.
 .ctWiden <- function(w, K) {
   if (K <= 1L) return(w)
   d <- dim(w)
@@ -192,8 +159,7 @@
   m
 }
 
-# The "time" column is a label, not an output: nothing differentiates it and no
-# leaf seeds it. Dropping it here keeps every vjp free of the special case.
+# The "time" column is a label, not an output, and never takes a cotangent.
 .dropTime <- function(m) {
   if (is.null(m) || length(dim(m)) < 2L) return(m)
   keep <- dimnames(m)[[2L]] != "time"
@@ -201,35 +167,25 @@
   if (length(dim(m)) == 2L) m[, keep, drop = FALSE] else m[, keep, , drop = FALSE]
 }
 
-# A parfn whose Jacobian is a matrix it already builds, as Pimpl does by the
-# implicit function theorem. The vjp is that matrix transposed onto the
-# cotangent.
-#
-# The split is deliberate and not a shortcut. What makes the forward mode
-# expensive is that its width is n_theta, and the outer chain is where n_theta
-# lives; a nested transformation's width is its own parameter set, which does
-# not grow when the outer parametrisation does. So the trajectory goes backwards
-# and the sub-problem stays forward, and the cost of the whole is still
-# independent of n_theta.
-#
-# `deriv` is stripped off `pars` first: in a reverse chain the forward pass ran
-# without one, and a leftover would chain the Jacobian to the outer parameters
-# here instead of one node further down, where it belongs.
+# Vjp of a parfn that builds its own Jacobian, as Pimpl does by the implicit
+# function theorem: the transposed Jacobian applied to the cotangent. The
+# Jacobian's width is the node's own parameter set, not n_theta.
 .parfnVjpFromJacobian <- function(p2p) {
   function(pars, fixed = NULL, cotangent, condition = NULL) {
     w <- .asCtPars(cotangent)
     K <- .ctK(w)
-    # The incoming tangents, read before the strip below takes them off: at
-    # second order they are what the node's curvature is contracted along.
+    # Incoming tangents: the node's curvature is contracted along them. `deriv`
+    # is then stripped so the Jacobian is not chained to the outer parameters.
     V <- if (K > 1L) attr(pars, "deriv") else NULL
+    # Directions with no tangent here meet no curvature: the further slices
+    # are pulled back as the first, without second derivatives.
+    curved <- K > 1L && !is.null(V) && any(V != 0)
     attr(pars, "deriv") <- NULL
     attr(pars, "deriv2") <- NULL
-    v <- p2p(pars, fixed = fixed, deriv = TRUE, deriv2 = (K > 1L),
+    v <- p2p(pars, fixed = fixed, deriv = TRUE, deriv2 = curved,
              condition = condition)
     J <- attr(v, "deriv")
-    # Answering without a Jacobian used to read as a cotangent of zero, so a
-    # Pimpl whose IFT fell back to value only zeroed this node's whole block of
-    # the gradient and the Hessian. An error, as a missing cotangent is.
+    # A missing Jacobian is an error, not a zero cotangent.
     if (is.null(J) || !is.matrix(J))
       stop("a transformation returned no Jacobian, so the backward pass has ",
            "nothing to contract here. A preceding warning usually names the ",
@@ -239,7 +195,7 @@
     wv <- .pickCotangent(w, rownames(J))
     u  <- crossprod(J, wv)
     rownames(u) <- colnames(J)
-    if (K > 1L) {
+    if (curved) {
       H <- attr(v, "deriv2")
       if (is.null(H))
         stop("a second-order cotangent needs this transformation's own second ",

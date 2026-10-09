@@ -3,10 +3,26 @@
 \docType{data}
 \name{jakstat}
 \alias{jakstat}
-\title{Time-course data for the JAK-STAT cell signaling pathway}
+\title{Time-Course Data for the JAK-STAT Signaling Pathway}
+\format{
+A data frame with 47 rows and the columns \code{time} (minutes),
+\code{name}, \code{value}, \code{sigma} and \code{condition} (\code{"Epo"}).
+}
+\source{
+Swameye I, Mueller TG, Timmer J, Sandra O, Klingmueller U (2003),
+Identification of nucleocytoplasmic cycling as a remote sensor in cellular
+signaling by databased modeling. PNAS 100(3):1028-1033.
+}
 \description{
-Phosphorylated Epo receptor (pEpoR), phosphorylated STAT in the
-cytoplasm (tpSTAT) and total STAT (tSTAT) in the cytoplasm have been
-measured at times 0, ..., 60.
+Phosphorylated Epo receptor (\code{pEpoR}), total phosphorylated STAT in the
+cytoplasm (\code{tpSTAT}) and total STAT in the cytoplasm (\code{tSTAT}), measured
+between minute 0 and 60 after stimulation with Epo.
+}
+\examples{
+data(jakstat)
+plotData(as.datalist(jakstat))
+}
+\seealso{
+\code{\link[=as.datalist]{as.datalist()}}
 }
 \keyword{data}

@@ -1,27 +1,17 @@
 ## normL2 backwards --------------------------------------------------------
-##
-## The forward objective asks the prediction chain for dX/dtheta and contracts
-## it with the residuals. The reverse one asks for values only, works out what
-## the objective's derivative in those values is, and pushes that back through
-## the chain. The gradient is then one sweep wide instead of n_theta.
-##
-## The seed is not the residual vector. The error model depends on theta too,
-## so every data row seeds two things, the prediction and sigma, and the kernel
-## hands both back: see `want_seed` in src/residual_kernel.cpp, where they fall
-## out of the same per-row coefficients the gradient is built from.
-##
 ## Copyright (C) 2026 Simon Beyer
+
+## Values forward, the objective's derivative in them pulled back through the
+## chain: one sweep instead of n_theta. Every data row seeds both prediction and
+## sigma, see `want_seed` in src/residual_kernel.cpp.
 
 .normL2_reverse <- function(pars, fixed, deriv, conditions, env, cores,
                             x, errmodel, data, timesD, e.cond, opt.BLOQ,
-                            attr.name, hessian = FALSE) {
+                            attr.name, hessian = FALSE, meta_cache = NULL) {
 
-  # The objective's Hessian splits along a line the residual kernel already
-  # draws: J' H_rho J from the forward tangents, which is what the kernel
-  # computes when it is handed no second derivatives, plus the prediction's own
-  # curvature weighted by the seed, which is what a dual sweep with a constant
-  # seed returns. The seed and that weight are the same number by construction,
-  # see src/residual_kernel.h.
+  # Hessian: J' H_rho J from the forward tangents (the kernel without second
+  # derivatives) plus the prediction's curvature weighted by the seed (a dual
+  # sweep with constant seed), see src/residual_kernel.h.
   n_dir <- if (isTRUE(hessian)) length(pars) else 0L
   if (n_dir > 0L) {
     nm <- names(pars)
@@ -29,8 +19,7 @@
     dimnames(attr(pars, "deriv")) <- list(nm, nm)
   }
 
-  # --- forward, keeping the tape, and the tangents when second order needs
-  #     them: they are the directions every node's vjp is differentiated along
+  # --- forward with tape, plus tangents as the vjp directions for second order
   b <- .bundle_from_call(conditions, times = timesD, out = NULL,
                          pars = pars, fixed = fixed)
   fw <- .fwdMany(x, b, env, cores, deriv = n_dir > 0L)
@@ -53,15 +42,33 @@
     })
     err_pars  <- lapply(split, `[[`, "pars")
     err_fixed <- lapply(split, `[[`, "fixed")
-    got <- lapply(seq_along(cn_eval), function(j)
-      errmodel(out = prediction[[cn_eval[j]]], pars = err_pars[[j]],
-               fixed = err_fixed[[j]], deriv = FALSE,
-               conditions = cn_eval[j])[[cn_eval[j]]])
+    est <- .fnNode(errmodel)
+    got <- if (!is.null(est) && length(cn_eval) > 1L) {
+      eb <- .bundle(conds = cn_eval,
+                    out   = lapply(cn_eval, function(cn) prediction[[cn]]),
+                    pars  = err_pars, fixed = err_fixed, shared = FALSE)
+      .evalNode(est, eb, FALSE, FALSE, NULL, cores)
+    } else {
+      lapply(seq_along(cn_eval), function(j)
+        errmodel(out = prediction[[cn_eval[j]]], pars = err_pars[[j]],
+                 fixed = err_fixed[[j]], deriv = FALSE,
+                 conditions = cn_eval[j])[[cn_eval[j]]])
+    }
     err_list <- vector("list", length(conditions))
     err_list[match(cn_eval, conditions)] <- got
   }
 
-  meta_list <- .build_normL2_meta(data, prediction, err_list, conditions, e.cond)
+  # The data-to-prediction indices hold while names, tangents and row counts do.
+  sig <- list(lapply(prediction, function(pr) dimnames(attr(pr, "deriv"))[[3]]),
+              vapply(prediction, NROW, integer(1)),
+              vapply(err_list, NROW, integer(1)))
+  hit <- !is.null(meta_cache) && identical(meta_cache$sig, sig)
+  meta_list <- if (hit) meta_cache$meta_list else
+    .build_normL2_meta(data, prediction, err_list, conditions, e.cond)
+  if (!hit && !is.null(meta_cache)) {
+    meta_cache$meta_list <- meta_list
+    meta_cache$sig <- sig
+  }
 
   kr <- normL2_kernel(
     prediction       = prediction,
@@ -111,23 +118,16 @@
                        names(pars))
   attr(out, attr.name) <- out$value
   attr(out, "chi2") <- setNames(kr$chi2, attr.name)
-  # Which direction answered. A caller used to read that off an absent Hessian,
-  # which stops being a signal the moment the reverse mode can return one.
+  # Which direction answered; reverse mode can return a Hessian too.
   attr(out, "sweep") <- if (n_dir > 0L) "forward-reverse" else "reverse"
   env$prediction <- prediction
   attr(out, "env") <- env
   out
 }
 
-# The objective's seed as one cotangent per condition, positionally aligned
-# with `prediction`: on the prediction itself, and through the error model onto
-# the prediction and the inner parameters it read. `err_idx` are the positions
-# that carry an error model and `err_split` the (pars, fixed) the forward pass
-# handed it there. Shared by normL2 and the multiple-shooting objective.
-#
-# The kernel orders its rows ALOQ first, then BLOQ, so the scatter follows the
-# same permutation. A row with a fixed sigma has no sigma derivative at all, and
-# its sigma seed is dropped rather than multiplied by a zero.
+# The seed as one cotangent per condition aligned with `prediction`, direct and
+# through the error model at positions `err_idx` with inputs `err_split`. Rows
+# follow the kernel's ALOQ-then-BLOQ order; fixed-sigma rows get no sigma seed.
 .normL2SeedCt <- function(meta_list, prediction, err_list, kr, errmodel,
                           err_idx = NULL, err_split = NULL, K = 1L) {
   n <- length(meta_list)
@@ -139,24 +139,17 @@
     ord <- c(which(m$bloq_mask == 0L), which(m$bloq_mask == 1L))
 
     W <- matrix(0, nrow(pr), ncol(pr), dimnames = list(NULL, colnames(pr)))
-    sp <- kr$seed$pred[[ci]]
-    for (j in seq_along(ord)) {
-      r <- ord[j]
-      W[m$t_idx_in_pred[r], m$o_idx_in_pred[r]] <-
-        W[m$t_idx_in_pred[r], m$o_idx_in_pred[r]] + sp[j]
-    }
+    pos <- m$t_idx_in_pred[ord] + (m$o_idx_in_pred[ord] - 1L) * nrow(pr)
+    W[] <- .scatterAdd(length(W), pos, kr$seed$pred[[ci]])
     w_pred[[ci]] <- W
 
     erm <- if (is.null(err_list)) NULL else err_list[[ci]]
     if (!is.null(erm) && any(m$sigma_is_na == 1L)) {
       E <- matrix(0, nrow(erm), ncol(erm), dimnames = list(NULL, colnames(erm)))
-      ss <- kr$seed$sigma[[ci]]
-      for (j in seq_along(ord)) {
-        r <- ord[j]
-        if (m$sigma_is_na[r] != 1L) next
-        E[m$t_idx_in_err[r], m$o_idx_in_err[r]] <-
-          E[m$t_idx_in_err[r], m$o_idx_in_err[r]] + ss[j]
-      }
+      j <- which(m$sigma_is_na[ord] == 1L)
+      r <- ord[j]
+      pe <- m$t_idx_in_err[r] + (m$o_idx_in_err[r] - 1L) * nrow(erm)
+      E[] <- .scatterAdd(length(E), pe, kr$seed$sigma[[ci]][j])
       w_err[[ci]] <- E
     }
   }
@@ -181,6 +174,20 @@
     }
   }
   w_chain
+}
+
+# A zero vector of length n with v added at the linear positions idx, repeated
+# positions summed.
+.scatterAdd <- function(n, idx, v) {
+  out <- numeric(n)
+  if (!length(idx)) return(out)
+  if (!anyDuplicated(idx)) {
+    out[idx] <- v
+    return(out)
+  }
+  s <- rowsum(v, idx)
+  out[as.integer(rownames(s))] <- s[, 1L]
+  out
 }
 
 # The raw kernel behind a single-leaf fn, which is where the vjp attribute

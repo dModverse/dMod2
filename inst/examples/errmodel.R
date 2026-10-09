@@ -19,10 +19,10 @@ errors <- eqnvec(B_obs = "sigma_abs")
 
 # Generate dMod objects
 model <- odemodel(f, modelname = "errtest", compile = FALSE, backend = "deSolve")
-x     <- Xs(model, optionsSens = list(method = "lsoda"), optionsOde = list(method = "lsodes"))
+x     <- Xs(model, options = list(method = "lsodes"), optionsSens = list(method = "lsoda"))
 g     <- Y(observables, x, 
            compile = FALSE, modelname = "obsfn")
-e     <- Y(errors, g, attach.input = FALSE,
+e     <- Y(errors, g, attachInput = FALSE,
            compile = FALSE, modelname = "errfn")
 
 # Generate parameter transformation
@@ -84,9 +84,9 @@ profiles <- profile(obj,
 plotProfile(profiles, mode == "data")
 
 
-# Annotation: This code is outdated and does not work atm
+# Prediction profile, not functional with the current interface
 # ## Compute prediction profile
-# datapoint <- datapointL2(name = "A", time = 10, value = "d1", sigma = .05, condition = "C1")
+# datapoint <- datapointL2(name = "A", time = 10, parameter = "d1", sigma = .05, condition = "C1")
 # par <- trust(normL2(data, g*x*p, e) + datapoint, c(ptrue, d1 = 0), rinit = 1, rmax = 10)$argument
 # 
 # profile_pred <- profile(normL2(data, g*x*p, e) + datapoint, par, "d1", limits = c(-10, 10), stepControl = list(stop = "data"))

@@ -63,7 +63,7 @@ xPD <- odemodel(odesPD, events = eventsPD, fixed = noSens, modelname = "BA_PDmod
 gPD <- eqnvec(
   buffer = "s*Tca_buffer",
   cellular = "s*(Tca_cyto + Tca_canalicular)") %>%
-  Y(f = xPD, attach.input = FALSE, modelname = "obsfnPD", compile = TRUE)
+  Y(f = xPD, attachInput = FALSE, modelname = "obsfnPD", compile = TRUE)
 
 
 # Parameterize the model

@@ -82,7 +82,7 @@ void qn_assemble(int kind, int K, std::vector<double>& H, double gamma,
 }
 
 // Li-Fukushima cautious update: a pair with negligible curvature along the step
-// carries no information. SR1 is exempt, negative curvature is legal there.
+// contains no information. SR1 is exempt, negative curvature is legal there.
 bool qn_pair_informative(int K, const std::vector<double>& s,
                          const std::vector<double>& y, double cautious) {
   if (!(cautious > 0.0)) return true;
@@ -112,9 +112,7 @@ inline int hessian_source_slot(bool qn_active, int qn_kind, int primary) {
   return 1;
 }
 
-// -------------------------------------------------------------------------
-// Coleman-Li interior trust-region-reflective
-// -------------------------------------------------------------------------
+// ---- Coleman-Li interior trust-region-reflective --------------------------
 List trust_reflective(Function objfun, NumericVector parinit,
                       double rinit, double rmax,
                       Nullable<NumericVector> parscale,
@@ -238,10 +236,8 @@ List trust_reflective(Function objfun, NumericVector parinit,
   const bool has_fallback =
       (fallback != HM_NONE && fallback != primary && fallbackLimit > 0);
   bool on_fallback = false, qn_dirty = false, reseed_gn = false;
-  // "stall": a quasi-Newton phase that has stopped making progress fetches a
-  // fresh curvature at the current iterate rather than carrying an
-  // approximation that is no longer informative. It keeps its source; only the
-  // matrix it starts from is replaced.
+  // "stall": a stalled quasi-Newton phase fetches fresh curvature at the current
+  // iterate, keeping its source and replacing only the matrix it starts from.
   const bool reseed_on_stall = (hessianReseed == HR_STALL);
   // "exact" is a Newton run: the objective's own Hessian at every iterate, the
   // way gn passes J^T J through, and the subproblem solver takes an indefinite
@@ -279,7 +275,7 @@ List trust_reflective(Function objfun, NumericVector parinit,
     for (int i = 0; i < K; ++i)
       opt_measure = std::max(opt_measure, std::fabs(absv[i] * g_z[i]));
     // A coordinate counts as bound-active when only the scaling makes it
-    // stationary -- its own gradient is still well away from zero. Set before
+    // stationary, its own gradient still well away from zero. Set before
     // the convergence break, which is exactly when it matters.
     const double btol = std::max(gtol, 1e-10);
     for (int i = 0; i < K; ++i)
@@ -347,7 +343,7 @@ List trust_reflective(Function objfun, NumericVector parinit,
               shat.data(), &pred_unused, &is_newton, &is_hard, &is_easy);
 
     // Let the iterate approach a face as the optimality measure falls, but
-    // never reach it -- |v| = 0 would freeze that coordinate for good.
+    // never reach it: |v| = 0 would freeze that coordinate for good.
     const double theta_frac =
         std::min(std::max(thetamax, 1.0 - opt_measure), 1.0 - 1e-12);
 
@@ -580,9 +576,7 @@ List trust_reflective(Function objfun, NumericVector parinit,
   return result;
 }
 
-// -------------------------------------------------------------------------
-// Legacy: active-set reduction plus componentwise clipping
-// -------------------------------------------------------------------------
+// ---- "clip": active-set reduction plus componentwise clipping --------------
 List trust_clip(Function objfun, NumericVector parinit,
                 double rinit, double rmax,
                 Nullable<NumericVector> parscale,

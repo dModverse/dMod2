@@ -2,23 +2,29 @@
 % Please edit documentation in R/objClass.R
 \name{constraintChisq}
 \alias{constraintChisq}
-\title{Soft chi-squared constraint on positive parameters}
+\title{Soft Chi-Squared Constraint on Positive Parameters}
 \usage{
-constraintChisq(df, attr.name = "prior", condition = NULL)
+constraintChisq(df, attrName = "prior", condition = NULL, ...)
 }
 \arguments{
 \item{df}{Named numeric vector of degrees of freedom. Its names select the
 constrained parameters.}
 
-\item{attr.name}{Character. Name of the attribute storing the constraint value.}
+\item{attrName}{Character. Name of the attribute holding the constraint
+value, default \code{"prior"}.}
 
-\item{condition}{Optional character vector of conditions.}
+\item{condition}{Character vector, the conditions of a sum of objectives
+in which the term is evaluated. \code{NULL} (default) evaluates it in every
+one.}
+
+\item{...}{\code{attr.name} is deprecated, use \code{attrName}.}
 }
 \value{
-Object of class \code{objfn}.
+An objective function of class \code{objfn}, called as
+\code{obj(pars, ...)}, see \link{dModfn}. Its value is the full \verb{-2 log} density.
 }
 \description{
-Soft chi-squared constraint on positive parameters
+Soft Chi-Squared Constraint on Positive Parameters
 }
 \details{
 Computes the chi-squared prior on the \verb{-2 log} scale,

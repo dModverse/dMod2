@@ -3,66 +3,57 @@
 \name{+.fn}
 \alias{+.fn}
 \alias{sumfn}
-\title{Direct sum of functions}
+\title{Direct Sum of Functions}
 \usage{
-\method{+}{fn}(x1, x2)
+\method{+}{fn}(e1, e2)
 }
 \arguments{
-\item{x1}{function of class \code{obsfn}, \code{prdfn} or \code{parfn}}
+\item{e1}{function of class \code{obsfn}, \code{prdfn} or \code{parfn}.}
 
-\item{x2}{function of class \code{obsfn}, \code{prdfn} or \code{parfn}}
+\item{e2}{function of the same class as \code{e1}.}
 }
 \value{
-Object of the same class as \code{x1} and \code{x2} which returns results for the
-union of conditions.
+Object of the same class as \code{e1} and \code{e2}, defined for the union of
+conditions.
 }
 \description{
-Used to add prediction function, parameter transformation functions or observation functions.
+Adds prediction functions, parameter transformations or observation
+functions of the same class.
 }
 \details{
-Each prediction function is associated to a number of conditions. Adding functions
-means merging or overwriting the set of conditions.
+Each function is defined for a set of conditions. The sum is
+defined for their union. A condition present in both is taken from \code{e2},
+with a warning.
 }
 \examples{
-\dontrun{
-  # Define a time grid on which to make a prediction by peace-wise linear function.
-  # Then define a (generic) prediction function based on thid grid.
-  times <- 0:5
-  grid <- data.frame(name = "A", time = times, row.names = paste0("p", times))
-  x <- Xd(grid)
-  
-  # Define an observable and an observation function
-  observables <- eqnvec(Aobs = "s*A")
-  g <- Y(g = observables, f = NULL, states = "A", parameters = "s")
-  
-  # Collect parameters and define an overarching parameter transformation
-  # for two "experimental condtions".
-  dynpars <- attr(x, "parameters")
-  obspars <- attr(g, "parameters")
-  innerpars <- c(dynpars, obspars)
-  
-  trafo <- structure(innerpars, names = innerpars)
-  trafo_C1 <- replaceSymbols(innerpars, paste(innerpars, "C1", sep = "_"), trafo)
-  trafo_C2 <- replaceSymbols(innerpars, paste(innerpars, "C2", sep = "_"), trafo)
-  
-  p <- NULL
-  p <- p + P(trafo = trafo_C1, condition = "C1")
-  p <- p + P(trafo = trafo_C2, condition = "C2")
-  
-  # Collect outer (overarching) parameters and 
-  # initialize with random values
-  outerpars <- attr(p, "parameters")
-  pars <- structure(runif(length(outerpars), 0, 1), names = outerpars)
-  
-  # Predict internal/unobserved states
-  out1 <- (x*p)(times, pars)
-  plot(out1)
-  
-  # Predict observed states in addition to unobserved
-  out2 <- (g*x*p)(times, pars)
-  plot(out2)
+## A prediction function interpolating parameter values piecewise linearly
+times <- 0:5
+grid <- data.frame(name = "A", time = times, row.names = paste0("p", times))
+x <- Xd(grid)
+
+## An observation function
+g <- Y(c(Aobs = "s*A"), states = "A", parameters = "s",
+       modelname = "prediction_obs", outdir = tempdir())
+
+## One parameter transformation per condition
+innerpars <- c(getParameters(x), getParameters(g))
+trafo <- setNames(innerpars, innerpars)
+p <- P(list(C1 = replaceSymbols(innerpars, paste0(innerpars, "_C1"), trafo),
+            C2 = replaceSymbols(innerpars, paste0(innerpars, "_C2"), trafo)),
+       modelname = "prediction_p", outdir = tempdir())
+
+\donttest{
+## Compile the observation function and the transformations together
+compile(g, p, output = "prediction_ex")
+
+outerpars <- getParameters(p)
+pars <- setNames(seq(0.1, 1, length.out = length(outerpars)), outerpars)
+
+## Unobserved states, then observables
+plot((x * p)(times, pars))
+plot((g * x * p)(times, pars))
 }
 }
 \seealso{
-\link{P}, \link{Y}, \link{Xs}
+\code{\link[=P]{P()}}, \code{\link[=Y]{Y()}}, \code{\link[=Xs]{Xs()}}, \link{*.fn}
 }

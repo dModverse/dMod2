@@ -2,14 +2,17 @@
 % Please edit documentation in R/plots.R
 \name{dMod_colors_cb}
 \alias{dMod_colors_cb}
-\title{Colorblind-safe seed colors}
+\title{Colorblind-Safe Seed Colors}
+\format{
+A character vector of 20 hex color codes.
+}
 \usage{
 dMod_colors_cb
 }
 \description{
-The Okabe-Ito palette, extended to twenty. The first eight are Okabe-Ito
-itself; the rest were chosen greedily to maximise the worst-case pairwise
-distance under simulated dichromacy, subject to every color also keeping a
-distance of 25 to the white background. The worst case stays at Okabe-Ito's
-own 11.1 for all n up to twenty, so the twelve extra colors cost nothing.
+Okabe-Ito palette, extended to twenty colorblind-safe colors. The first
+eight are the Okabe-Ito colors.
+}
+\seealso{
+\link{dMod_colors}, \code{\link[=dMod_palette]{dMod_palette()}}
 }

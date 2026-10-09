@@ -72,7 +72,7 @@ an objective [@kaschek2019dmod]. The importer fills these slots:
 
 PEtab declares a scale per parameter (`lin`, `log`, `log10`). dMod2 wraps
 `p` so that the optimiser sees each parameter on its scale and the chain
-rule carries through the composition; `bestfit` is therefore on the PEtab
+rule applies through the composition; `bestfit` is therefore on the PEtab
 scale, not the linear one.
 
 # Importing a problem
@@ -93,7 +93,7 @@ and returns an object of class `petabproblem`.
 | `cores` | conditions evaluated in parallel inside one objective call |
 | `modelname` | base name for the generated sources |
 | `outdir` | where the generated sources and the shared object are written |
-| `optionsOde`, `optionsSens` | solver settings, forwarded to `Xs()` |
+| `options`, `optionsSens` | solver settings, forwarded to `Xs()` |
 
 `outdir` defaults to the working directory. A problem with many conditions
 writes one source per condition, so a scratch folder is preferable. Solver
@@ -134,7 +134,7 @@ fit <- trust(petab$obj, petab$bestfit, rinit = 1, rmax = 10,
 Reading the SBML model requires `python-libsbml`, which dMod2 provisions on
 first use in a Python environment managed by `reticulate`. Setting
 `DMOD_LIBSBML_PYTHON` to an existing interpreter uses that one instead. The
-YAML and TSV readers, `readPetabYaml()` and `readPetabTables()`, work
+YAML and TSV readers, `readPEtabYaml()` and `readPEtabTables()`, work
 without libsbml.
 
 # Exporting a problem
@@ -187,7 +187,7 @@ The manifest and tables can be inspected before compilation:
 
 ```{r example-tables}
 yamlPath <- file.path(petab_dir, "Boehm.yaml")
-tables   <- readPetabTables(yamlPath)
+tables   <- readPEtabTables(yamlPath)
 
 obs <- tables$observables
 data.frame(id = obs$observableId, noise = obs$noiseFormula)
@@ -324,7 +324,7 @@ default as initial value; export reverses the promotion.
 **Placeholders per observable.** `measurements.tsv` may override
 `observableParameter${k}_${id}` and `noiseParameter${k}_${id}` per row. The
 observable id suffix keeps substitutions from colliding across observables.
-The rows of one condition merge into one sub-condition whose trafo carries
+The rows of one condition merge into one sub-condition whose trafo applies
 one substitution per observable; a further sub-condition is created only
 when an observable appears with conflicting values. Numeric noise is folded
 into the data column and leaves the error model `NULL`, `normL2`'s fast
@@ -362,7 +362,7 @@ Boehm declares no prior, so the attribute is absent and `total` equals
 **Bounds are not a prior.** `lowerBound` and `upperBound` reach the fit as
 `parlower` and `parupper` and never enter the objective, so a parameter
 without a declared distribution contributes nothing. Implementations that
-read bounds as an implicit uniform prior report a posterior that carries a
+read bounds as an implicit uniform prior report a posterior that includes a
 constant dMod2 leaves out.
 
 **Truncation.** PEtab truncates every prior to the parameter bounds and
@@ -382,7 +382,7 @@ but not gradient or Hessian, so the fit is unaffected.
 | `exponential` | **scale** | not a rate |
 | `gamma` | shape, **scale** | not a rate |
 | `rayleigh` | sigma | |
-| `log-normal` | meanlog, sdlog | density in the parameter, so it carries the change of variables |
+| `log-normal` | meanlog, sdlog | density in the parameter, so it includes the change of variables |
 | `log-laplace` | mu, b | likewise |
 | `log-uniform` | a, b | likewise |
 
@@ -502,5 +502,7 @@ The supported noise distributions follow from dMod2's objective, `normL2`.
 | `log10` observable transformation on a v2 export | rewritten as `log-normal` noise; v2 has no `log10` |
 | `<algebraicRule>` in the source model | absent from the dMod model and therefore from any SBML written back |
 | experiment identity | experiments are keyed by their starting condition, so the exported `experimentId` need not match the imported one |
+| initial values set per condition in the trafo only | not written to a v2 condition table; a v1 export keeps them |
+| parameter scales of a hand-built problem | read from `attr(bestfit, "petab_scales")`, `lin` without it |
 
 # References

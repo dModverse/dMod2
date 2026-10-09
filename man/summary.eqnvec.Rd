@@ -2,17 +2,20 @@
 % Please edit documentation in R/eqnClass.R
 \name{summary.eqnvec}
 \alias{summary.eqnvec}
-\title{Summary of an equation vector}
+\title{Summary of an Equation Vector}
 \usage{
-\method{summary}{eqnvec}(object, ...)
+summary.eqnvec(object, ...)
 }
 \arguments{
-\item{object}{of class \link{eqnvec}.}
+\item{object}{object of class \link{eqnvec}.}
 
-\item{...}{additional arguments}
+\item{...}{not used.}
+}
+\value{
+\code{object}, invisibly.
 }
 \description{
-Summary of an equation vector
+Prints, for each equation, the symbols it depends on.
 }
 \author{
 Wolfgang Mader, \email{Wolfgang.Mader@fdm.uni-freiburg.de}

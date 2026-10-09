@@ -2,7 +2,7 @@
 % Please edit documentation in R/statistics.R
 \name{mstrust}
 \alias{mstrust}
-\title{Non-Linear Optimization, multi start}
+\title{Non-Linear Optimisation, Multi-Start}
 \usage{
 mstrust(
   objfun,
@@ -18,7 +18,7 @@ mstrust(
   stats = FALSE,
   output = FALSE,
   cautiousMode = FALSE,
-  start1stfromCenter = FALSE,
+  startFromCenter = FALSE,
   retry = TRUE,
   nTries = 10L,
   ...
@@ -27,83 +27,95 @@ mstrust(
 \arguments{
 \item{objfun}{Objective function, see \code{\link[=trust]{trust()}}.}
 
-\item{center}{Parameter centre. Initial values are \code{center + samplefun(...)}.
-May also be a parframe (rows are then used directly; \code{fits} is overwritten).
-Use \code{\link[=msParframe]{msParframe()}} for reproducible random starts.}
+\item{center}{Named numeric parameter centre, or a parframe whose rows are
+used as starting points; \code{fits} is then the number of rows. \code{\link[=msParframe]{msParframe()}}
+gives reproducible starts.}
 
-\item{rinit}{Starting trust-region radius, see \code{\link[=trust]{trust()}}.}
+\item{rinit, rmax}{Initial and maximum trust-region radius, see \code{\link[=trust]{trust()}}.
+Default \code{0.1} and \code{10}.}
 
-\item{rmax}{Maximum trust-region radius, see \code{\link[=trust]{trust()}}.}
-
-\item{fits}{Number of fits.}
+\item{fits}{Number of fits. Default \code{20}.}
 
 \item{cores}{Number of parallel fits, or \code{c(fits = , conditions = )} to
-also give each fit a condition axis. An inner axis selects a PSOCK
-backend: cppDE's batch runs serially inside a fork. Keep the product
-below your core count.}
+also give each fit a condition axis, which selects a PSOCK backend. Keep
+the product below the number of cores. Default \code{1}.}
 
-\item{optmethod}{Character or function. The optimiser called via
+\item{optmethod}{Optimiser, a function or its name, called via
 \code{do.call(optmethod, ...)}. Default \code{"trust"}. Arguments in \code{...} are
-routed by the formals of this optimiser, not by those of \code{\link[=trust]{trust()}}.}
+routed by the formals of this optimiser.}
 
-\item{samplefun}{Sampler for random initial values; must accept an \code{n}
-argument. Default \code{\link[=rnorm]{rnorm()}}. Extra named args from \code{...} matching
-\code{samplefun} parameters are forwarded.}
+\item{samplefun}{Sampler for the random offsets, a function or its name,
+with an argument \code{n}, the number of parameters. Default \code{"rnorm"}.}
 
-\item{resultPath}{Output folder. Default \code{"."}.}
+\item{resultPath}{Folder under which files are written. Default \code{"."}, the
+working directory.}
 
-\item{name}{Character. Folder stem for on-disk results, under \code{resultPath}.
-Only consulted when something is actually written.}
+\item{name}{Folder name under \code{resultPath}. Default \code{"mstrust"}.}
 
-\item{stats}{Logical. Print the summary statistics to the console.}
+\item{stats}{Logical, print the summary to the console. Default \code{FALSE}.}
 
-\item{output}{Logical. Write per-fit output to disk.}
+\item{output}{Logical, write every fit and the final parlist to disk.
+Default \code{FALSE}.}
 
-\item{cautiousMode}{Logical. Persist every fit deparsed (avoids RDA-version
-pitfalls) and keep intermediate files.}
+\item{cautiousMode}{Logical, also write every fit deparsed to an \code{.R} file
+and keep the intermediate files. Default \code{FALSE}.}
 
-\item{start1stfromCenter}{Logical. If \code{TRUE}, the first fit starts exactly
-at \code{center} (no random offset).}
+\item{startFromCenter}{Logical. If \code{TRUE}, the first fit starts at
+\code{center} without offset. Default \code{FALSE}.}
 
-\item{retry}{Logical. If \code{TRUE} (default), a fit that fails (with a
-\code{try-error} or with a \code{fit$error} element) is re-attempted with a
-freshly sampled \code{parinit} up to \code{nTries} times before being recorded
-as failed. Ignored when \code{center} is a parframe (rows are taken as
-given and cannot be resampled).}
+\item{retry}{Logical. If \code{TRUE} (default), a fit that fails with an error
+is repeated from a new random start, up to \code{nTries} attempts. Not used
+when \code{center} is a parframe.}
 
-\item{nTries}{Maximum number of attempts per fit slot, including the
-first. Default \code{10L}.}
+\item{nTries}{Maximum number of attempts per fit, including the first.
+Default \code{10}.}
 
-\item{...}{Forwarded to the optimiser \code{optmethod}, \code{samplefun}, or \code{objfun}
-by name match.
-Unmatched names go to \code{objfun}.}
+\item{...}{Arguments passed by name to \code{optmethod}, \code{samplefun} or
+\code{objfun}. Names matching neither the optimiser nor the sampler go to
+\code{objfun}. \code{start1stfromCenter} is deprecated, use \code{startFromCenter}.}
 }
 \value{
-A parlist holding errored and converged fits.
+A parlist with one entry per fit, failed fits included. Each entry
+is the result of the optimiser plus \code{parinit}, its starting point, or a
+list with element \code{error} for a fit that failed. \code{\link[=as.parframe]{as.parframe()}} turns
+it into a table.
 }
 \description{
-Wrapper around \code{\link[=trust]{trust()}} allowing for multiple fits
-from randomly chosen initial values.
+Runs \code{\link[=trust]{trust()}} from several starting points: \code{center} plus
+random offsets drawn by \code{samplefun}, or the rows of a parframe.
 }
 \details{
-Runs \code{fits} independent \code{\link[=trust]{trust()}} optimisations from random
-starts (sampled by \code{samplefun}, default \code{\link[=rnorm]{rnorm()}}) added to \code{center},
-exploring the chi-square landscape.
+Nothing is written to disk unless \code{output}, \code{cautiousMode} or a
+\code{traceFile} argument for \code{\link[=trust]{trust()}} asks for it. Files then go to
+\verb{<resultPath>/<name>/trial-<k>-<date>/}: the per-fit files in its
+subfolder \verb{interRes/}, which is removed on completion unless
+\code{cautiousMode = TRUE}, the final \code{parameterList.Rda} (with \code{output}) and
+the log \code{mstrust.log}. \code{\link[=load.parlist]{load.parlist()}} reads the fits from \verb{interRes/}.
+}
+\examples{
+rosenbrock <- function(x, ...) {
+  a <- x[["a"]]
+  b <- x[["b"]]
+  list(value = 100 * (b - a^2)^2 + (1 - a)^2,
+       gradient = c(a = -400 * a * (b - a^2) - 2 * (1 - a),
+                    b = 200 * (b - a^2)),
+       hessian = matrix(c(1200 * a^2 - 400 * b + 2, -400 * a, -400 * a, 200),
+                        2, 2, dimnames = list(c("a", "b"), c("a", "b"))))
+}
 
-Nothing reaches the disk unless \code{output}, \code{cautiousMode} or \code{traceFile}
-asks for it. When one of them does, results go to
-\verb{<resultPath>/<name>/trial-x-<date>/}: intermediate fits are removed on
-successful completion, the final \code{parameterList.Rda} and \code{mstrust.log}
-are kept.
+# Random starts around center, sd goes to rnorm()
+fits <- mstrust(rosenbrock, center = c(a = 0, b = 0), fits = 5, sd = 2,
+                iterlim = 200)
+as.parframe(fits)
+
+# Reproducible starts from a parframe
+starts <- msParframe(c(a = 0, b = 0), n = 5, sd = 2)
+fits <- mstrust(rosenbrock, center = starts, iterlim = 200)
+as.parframe(fits)
+
 }
 \seealso{
-\enumerate{
-\item \code{\link[=trust]{trust()}}, for the used optimizer,
-\item \code{\link[=rnorm]{rnorm()}}, \code{\link[=runif]{runif()}} for two common sampling functions,
-\item \code{\link[=msParframe]{msParframe()}} for passing a reproducible set of random initial
-guesses to mstrust,
-\item \code{\link[=as.parframe]{as.parframe()}} for formatting the output to a handy table
-}
+\code{\link[=trust]{trust()}}, \code{\link[=msParframe]{msParframe()}}, \code{\link[=as.parframe]{as.parframe()}}, \code{\link[=load.parlist]{load.parlist()}}
 }
 \author{
 Wolfgang Mader, \email{Wolfgang.Mader@fdm.uni-freiburg.de}

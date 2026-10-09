@@ -13,13 +13,13 @@ print(f)
 fdata <- as.data.frame(f)
 print(fdata)
 
-# Legacy path: flat `volumes` gets auto-translated into compartments c1, c2
+# Flat `volumes`: each distinct expression becomes a compartment c1, c2, ...
 f <- as.eqnlist(fdata, volumes = c(A = "Vcyt", B = "Vnuc"))
 print(f)
 print(as.eqnvec(f))
 print(as.eqnvec(f, type = "amount"))
 
-# First-class compartments: name each compartment and assign states explicitly.
+# Named compartments with explicit state assignment
 f2 <- eqnlist(
   smatrix = S, rates = rates, description = description,
   compartments = list(cyt = "Vcyt", nuc = "Vnuc"),

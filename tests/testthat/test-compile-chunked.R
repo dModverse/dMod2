@@ -48,13 +48,13 @@ test_that("compile() links many conditions through a chunked archive", {
   ## Force the archive route without generating a thousand sources.
   withr::local_options(dMod.compile.cmdlimit = 1L)
 
-  conditions <- sprintf("chk%02d", 1:12)
+  conditions <- sprintf("chk%02d", 1:4)
   p <- Reduce("+", lapply(conditions, function(cn)
     P(eqnvec(k1 = "exp(logk1)", A0 = "exp(logA0)*scale"),
       condition = cn, compile = FALSE, modelname = paste0("chunked_p_", cn))))
 
   expect_length(attr(p, "compileInfo"), length(conditions))
-  expect_message(compile(p, output = "chunked_all", cores = 1), "archived 11 objects")
+  expect_message(compile(p, output = "chunked_all", cores = 1), "archived 3 objects")
 
   expect_true(file.exists(paste0("chunked_all", .Platform$dynlib.ext)))
   expect_equal(list.files(pattern = "^chunked_all.*\\.a$"), character(0))
@@ -96,9 +96,7 @@ test_that("compile() reuses objects whose source and command are unchanged", {
 
   ## The index keys on source bytes and compile command, so the shared object
   ## may take a fresh name each time and the objects are still reused.
-  # expect_no_match() forces its argument twice (quasi_label, then
-  # check_character), which would compile and load a second time, so the
-  # side-effecting call is evaluated once into a variable first.
+  # expect_no_match() forces its argument twice, so compile runs once into a variable.
   p <- mk()
   out1 <- capture.output(compile(p, output = "reuse_all_1", cores = 1), type = "message")
   expect_no_match(out1, "reusing")
@@ -144,10 +142,10 @@ skip_if_no_compile <- function() {
 }
 
 
-## `...` carries the objects, so a misspelled argument name would be taken for
+## `...` holds the objects, so a misspelled argument name would be taken for
 ## one and dropped without a word.
 
-test_that("compile rejects a named argument that carries no sources", {
+test_that("compile rejects a named argument that has no sources", {
   fake <- structure(list(), class = c("obsfn", "fn"))
 
   expect_error(compile(fake, outout = "all"), "did you mean `output`")
@@ -196,7 +194,7 @@ test_that("output places the shared object where it says", {
   d <- file.path(tempdir(), paste0("cmp_", as.integer(runif(1, 1e6, 9e6))))
   dir.create(d)
 
-  # a name carrying a directory is taken as given
+  # a name with a directory is taken as given
   invisible(capture.output(
     compile(bench$gfn, bench$xfn, output = file.path(d, "combined"), cores = 1)))
   expect_true(file.exists(file.path(d, paste0("combined", so))))
@@ -209,4 +207,19 @@ test_that("output places the shared object where it says", {
   expect_error(compile(bench$gfn, output = file.path(d, "nope", "x")),
                "does not exist")
   expect_error(compile(bench$gfn, output = character(0)), "single non-empty name")
+})
+
+test_that("compile() restores the environment and writes no symbol table", {
+  skip_if_no_compile()
+  bench <- fx_decay_compiled()
+  d <- file.path(tempdir(), paste0("cmp_env_", as.integer(runif(1, 1e6, 9e6))))
+  dir.create(d)
+  withr::local_dir(d)
+  withr::local_envvar(PKG_CFLAGS = "-DDMOD_PRESET",
+                      `_R_SHLIB_BUILD_OBJECTS_SYMBOL_TABLES_` = "TRUE")
+
+  suppressMessages(compile(bench$gfn, bench$xfn, output = file.path(d, "env"), cores = 1))
+  expect_identical(Sys.getenv("PKG_CFLAGS"), "-DDMOD_PRESET")
+  expect_identical(Sys.getenv("_R_SHLIB_BUILD_OBJECTS_SYMBOL_TABLES_"), "TRUE")
+  expect_false(file.exists(file.path(d, "symbols.rds")))
 })

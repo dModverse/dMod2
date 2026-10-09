@@ -6,76 +6,75 @@
 \alias{summary.parlist}
 \alias{c.parlist}
 \alias{parlist}
-\title{Parameter list}
+\title{Parameter List}
 \usage{
 as.parlist(x = NULL)
 
-\method{print}{parlist}(x, ...)
+print.parlist(x, ...)
 
-\method{summary}{parlist}(object, ...)
+summary.parlist(object, ...)
 
 \method{c}{parlist}(...)
 
 parlist(...)
 }
 \arguments{
-\item{x}{list of lists, as returned by \code{trust}}
+\item{x}{list of fit results, each as returned by \code{\link[=trust]{trust()}}. Default \code{NULL}
+returns \code{NULL}.}
 
-\item{...}{Objects to be coerced to parameter list.}
+\item{...}{for \code{parlist()} and \code{c()}, fit results or parameter lists; for
+\code{print()} and \code{summary()}, not used.}
 
-\item{object}{a parlist}
+\item{object}{object of class \code{parlist}.}
+}
+\value{
+Object of class \code{parlist}. \code{print()} and \code{summary()} return their
+argument invisibly.
 }
 \description{
-Fitlists carry an fit index which must be held unique on merging
-multiple fitlists.
-
-The special use of a parameter list is to save
-the outcome of multiple optimization runs provided by \link{mstrust},
-into one list.
+A parameter list holds the results of several optimisation
+runs, as returned by \code{\link[=mstrust]{mstrust()}}. \code{c()} renumbers the fit index of the
+combined list.
 }
 \examples{
-\dontrun{
-  ## Generate a prediction function
-  regfn <- c(y = "sin(a*time)")
-  
-  g <- Y(regfn, parameters = "a")
-  x <- Xt(condition = "C1")
-  
-  ## Generate data
-  data <- datalist(
-    C1 = data.frame(
-      name = "y",
-      time = 1:5,
-      value = sin(1:5) + rnorm(5, 0, .1),
-      sigma = .1
-    )
+\donttest{
+## Prediction function
+regfn <- c(y = "sin(a*time)")
+g <- Y(regfn, parameters = "a", compile = TRUE, modelname = "parlist_obs",
+       outdir = tempdir())
+x <- Xt(condition = "C1")
+
+## Data
+set.seed(1)
+data <- datalist(
+  C1 = data.frame(
+    name = "y",
+    time = 1:5,
+    value = sin(1:5) + rnorm(5, 0, .1),
+    sigma = .1
   )
-  
-  ## Initialize parameters and time 
-  pars <- c(a = 1)
-  times <- seq(0, 5, .1)
-  
-  plot((g*x)(times, pars), data)
-  
-  ## Do many fits from random positions and store them into parlist
-  out <- as.parlist(lapply(1:50, function(i) {
-    trust(normL2(data, g*x), pars + rnorm(length(pars), 0, 1), rinit = 1, rmax = 10)
-  }))
-  
-  summary(out)
-  
-  ## Reduce parlist to parframe
-  parframe <- as.parframe(out)
-  plotValues(parframe)
-  
-  ## Reduce parframe to best fit
-  bestfit <- as.parvec(parframe)
-  plot((g*x)(times, bestfit), data)
-  
+)
+
+pars <- c(a = 1)
+times <- seq(0, 5, .1)
+plot((g*x)(times, pars), data)
+
+## Fits from random starts, stored in a parlist
+obj <- normL2(data, g*x)
+out <- as.parlist(lapply(1:5, function(i) {
+  trust(obj, pars + rnorm(length(pars), 0, 1), rinit = 1, rmax = 10)
+}))
+summary(out)
+
+## Parameter frame and best fit
+parframe <- as.parframe(out)
+plotValues(parframe)
+bestfit <- as.parvec(parframe)
+plot((g*x)(times, bestfit), data)
 }
 }
 \seealso{
-\link{load.parlist}, \link{plot.parlist}
+\code{\link[=load.parlist]{load.parlist()}}, \code{\link[=plot.parlist]{plot.parlist()}}, \code{\link[=as.parframe]{as.parframe()}}
 }
 \author{
 Wolfgang Mader, \email{Wolfgang.Mader@fdm.uni-freiburg.de}

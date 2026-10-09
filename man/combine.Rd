@@ -2,23 +2,20 @@
 % Please edit documentation in R/data.R
 \name{combine}
 \alias{combine}
-\title{Combine several data.frames by rowbind}
+\title{Combine Data Frames or Matrices by Rows}
 \usage{
 combine(...)
 }
 \arguments{
-\item{...}{data.frames or matrices with not necessarily overlapping colnames}
+\item{...}{Data frames or matrices, with column names that need not
+overlap. \code{NULL} entries are dropped.}
 }
 \value{
-A \code{data.frame}
+A data frame or matrix with the union of the column names.
 }
 \description{
-Combine several data.frames by rowbind
-}
-\details{
-This function is useful when separating models into independent csv model files,
-e.g.~a receptor model and several downstream pathways. Then, the models can be recombined
-into one model by \code{combine()}.
+Binds data frames or matrices by rows after adding the columns each one
+lacks: \code{NA} for data frames, 0 for matrices.
 }
 \examples{
 data1 <- data.frame(Description = "reaction 1", Rate = "k1*A", A = -1, B = 1)

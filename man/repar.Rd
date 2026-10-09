@@ -4,36 +4,46 @@
 \alias{repar}
 \title{Reparameterization}
 \usage{
-repar(expr, trafo = NULL, ..., reset = FALSE)
+repar(trafo = NULL, expr, ..., reset = FALSE)
 }
 \arguments{
-\item{expr}{\code{"lhs ~ rhs"} string (or a formula).}
+\item{trafo}{Named character, \link{eqnvec} or a list of those. Default \code{NULL}
+returns the identity of the left-hand sides.}
 
-\item{trafo}{Character / \link{eqnvec} / list. \code{NULL} builds a fresh trafo
-from the LHS.}
+\item{expr}{\code{"lhs ~ rhs"} string or formula. Inside a name, \verb{_} separates
+symbols, so \code{"Delta_x"} with \code{x = "a"} becomes \code{"Delta_a"}.}
 
-\item{...}{Named character/numeric vectors; each row supplies one
-substitution.}
+\item{...}{Named character or numeric vectors of equal length, replacing
+the symbols of \code{expr} of the same name; element \code{i} of each gives the
+\code{i}-th substitution.}
 
-\item{reset}{Overwrite (\code{TRUE}) or substitute into (\code{FALSE}).}
+\item{reset}{\code{FALSE} (default) replaces the left-hand side wherever it
+occurs in the expressions, \code{TRUE} sets the entry it names.}
 }
 \value{
 Same shape as \code{trafo}.
 }
 \description{
-Replaces symbols on either side of \code{"lhs ~ rhs"}. With \code{reset = TRUE}
-the LHS entry of \code{trafo} is overwritten by the RHS (per row when \code{...}
-supplies vector replacements); otherwise the LHS is substituted into
-\code{trafo} wherever it occurs. Symbols separated by \verb{_} are recognised as
-compound identifiers, e.g. \code{Delta_x} -> symbols \code{"Delta"} and \code{"x"}.
+Replaces the left-hand side of \code{"lhs ~ rhs"} by the
+right-hand side in \code{trafo}, after the symbols of \code{expr} are replaced by the
+arguments in \code{...}. \code{\link[=define]{define()}} and \code{\link[=insert]{insert()}} build on it.
 }
+\section{Lifecycle}{
+
+The order \code{repar(expr, trafo)} is deprecated. It is recognised by an
+expression in first place and accepted with a warning.
+}
+
 \examples{
 innerpars   <- letters[1:3]
 constraints <- c(a = "b + c")
 mycondition <- "cond1"
-trafo <- repar("x ~ x",        x = innerpars)
-trafo <- repar("x ~ y",        trafo, x = names(constraints), y = constraints)
-trafo <- repar("x ~ exp(x)",   trafo, x = innerpars)
-trafo <- repar("x ~ x + Delta_x_condition",
-               trafo, x = innerpars, condition = mycondition)
+trafo <- repar(NULL,  "x ~ x",      x = innerpars)
+trafo <- repar(trafo, "x ~ y",      x = names(constraints), y = constraints)
+trafo <- repar(trafo, "x ~ exp(x)", x = innerpars)
+trafo <- repar(trafo, "x ~ x + Delta_x_condition",
+               x = innerpars, condition = mycondition)
+}
+\seealso{
+\code{\link[=define]{define()}}, \code{\link[=insert]{insert()}}
 }

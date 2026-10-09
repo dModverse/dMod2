@@ -3,58 +3,58 @@
 \name{*.fn}
 \alias{*.fn}
 \alias{prodfn}
-\title{Concatenation of functions}
+\title{Concatenation of Functions}
 \usage{
-\method{*}{fn}(p1, p2)
+\method{*}{fn}(e1, e2)
 }
 \arguments{
-\item{p1}{function of class \code{obsfn}, \code{prdfn}, \code{parfn} or \code{idfn}}
+\item{e1}{function of class \code{objfn}, \code{obsfn}, \code{prdfn}, \code{parfn} or \code{idfn}.}
 
-\item{p2}{function of class \code{obsfn}, \code{prdfn}, \code{parfn} or \code{idfn}}
+\item{e2}{function of class \code{obsfn}, \code{prdfn}, \code{parfn} or \code{idfn}.}
 }
 \value{
-Object of the same class as \code{x1} and \code{x2}.
+\code{obsfn * obsfn} and \code{obsfn * parfn} return an \code{obsfn},
+\code{obsfn * prdfn} and \code{prdfn * parfn} a \code{prdfn}, \code{parfn * parfn} a \code{parfn}
+and \code{objfn * parfn} an \code{objfn}. \code{Id() * f} and \code{f * Id()} return \code{f}.
 }
 \description{
-Used to concatenate observation functions, prediction functions and parameter transformation functions.
+Concatenates observation functions, prediction functions and parameter
+transformations: \code{(e1 * e2)(times, pars)} evaluates \code{e2} first and passes
+its output to \code{e1}.
+}
+\details{
+Both functions must be defined for the same conditions, or one of
+them for no specific condition (\code{conditions = NULL}).
 }
 \examples{
-\dontrun{
-  # Define a time grid on which to make a prediction by peace-wise linear function.
-  # Then define a (generic) prediction function based on thid grid.
-  times <- 0:5
-  grid <- data.frame(name = "A", time = times, row.names = paste0("p", times))
-  x <- Xd(grid)
-  
-  # Define an observable and an observation function
-  observables <- eqnvec(Aobs = "s*A")
-  g <- Y(g = observables, f = NULL, states = "A", parameters = "s")
-  
-  # Collect parameters and define an overarching parameter transformation
-  # for two "experimental condtions".
-  dynpars <- attr(x, "parameters")
-  obspars <- attr(g, "parameters")
-  innerpars <- c(dynpars, obspars)
-  
-  trafo <- structure(innerpars, names = innerpars)
-  trafo_C1 <- replaceSymbols(innerpars, paste(innerpars, "C1", sep = "_"), trafo)
-  trafo_C2 <- replaceSymbols(innerpars, paste(innerpars, "C2", sep = "_"), trafo)
-  
-  p <- NULL
-  p <- p + P(trafo = trafo_C1, condition = "C1")
-  p <- p + P(trafo = trafo_C2, condition = "C2")
-  
-  # Collect outer (overarching) parameters and 
-  # initialize with random values
-  outerpars <- attr(p, "parameters")
-  pars <- structure(runif(length(outerpars), 0, 1), names = outerpars)
-  
-  # Predict internal/unobserved states
-  out1 <- (x*p)(times, pars)
-  plot(out1)
-  
-  # Predict observed states in addition to unobserved
-  out2 <- (g*x*p)(times, pars)
-  plot(out2)
+## A prediction function interpolating parameter values piecewise linearly
+times <- 0:5
+grid <- data.frame(name = "A", time = times, row.names = paste0("p", times))
+x <- Xd(grid)
+
+## An observation function
+g <- Y(c(Aobs = "s*A"), states = "A", parameters = "s",
+       modelname = "prediction_obs", outdir = tempdir())
+
+## One parameter transformation per condition
+innerpars <- c(getParameters(x), getParameters(g))
+trafo <- setNames(innerpars, innerpars)
+p <- P(list(C1 = replaceSymbols(innerpars, paste0(innerpars, "_C1"), trafo),
+            C2 = replaceSymbols(innerpars, paste0(innerpars, "_C2"), trafo)),
+       modelname = "prediction_p", outdir = tempdir())
+
+\donttest{
+## Compile the observation function and the transformations together
+compile(g, p, output = "prediction_ex")
+
+outerpars <- getParameters(p)
+pars <- setNames(seq(0.1, 1, length.out = length(outerpars)), outerpars)
+
+## Unobserved states, then observables
+plot((x * p)(times, pars))
+plot((g * x * p)(times, pars))
 }
+}
+\seealso{
+\link{+.fn}, \code{\link[=Id]{Id()}}
 }

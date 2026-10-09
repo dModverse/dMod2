@@ -10,7 +10,7 @@
 \alias{getParameters.eqnlist}
 \alias{getParameters.eventlist}
 \alias{getParameters.eqnvec}
-\title{Extract the parameters of an object}
+\title{Extract the Parameters of an Object}
 \usage{
 getParameters(x, ..., conditions = NULL)
 
@@ -31,18 +31,17 @@ getParameters(x, ..., conditions = NULL)
 \method{getParameters}{eqnvec}(x, ..., conditions = NULL)
 }
 \arguments{
-\item{x}{object from which the parameters are extracted}
+\item{x}{object from which the parameters are extracted.}
 
-\item{...}{further objects; when supplied, parameters of all objects
-are unioned (each dispatched separately).}
+\item{...}{further objects; their parameters are added to the result.}
 
-\item{conditions}{character vector specifying the conditions to
-which \code{getParameters} is restricted (only honored by methods that
-carry per-condition parameter mappings).}
+\item{conditions}{character, restrict the result to these conditions.
+Default \code{NULL}. Used by the methods for \code{fn} and \code{prdlist}.}
 }
 \value{
-The parameters in a format that depends on the class of \code{x}.
+Character vector of parameter names. For an \code{odemodel}, the states
+and parameters; for a \code{prdlist}, a list with one entry per condition.
 }
 \description{
-Extract the parameters of an object
+Extract the Parameters of an Object
 }

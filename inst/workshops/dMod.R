@@ -49,7 +49,7 @@ observables <- eqnvec(
 
 # Define the observation function. Information about states and dynamic parameters
 # is contained in reactions
-g <- Y(observables, reactions, modelname = "obsfn", compile = TRUE, attach.input = FALSE)
+g <- Y(observables, reactions, modelname = "obsfn", compile = TRUE, attachInput = FALSE)
 
 ## ---- fig.width = 6, fig.height = 2.5------------------------------------
 # Make a prediction of the observables based on random parameter values
@@ -92,7 +92,7 @@ plot(prediction)
 
 ## ---- fig.width = 6, fig.height = 2--------------------------------------
 datasheet <- read.csv("pnas_data_original.csv")
-data <- as.datalist(datasheet, split.by = "condition")
+data <- as.datalist(datasheet, splitBy = "condition")
 plot(data)
 
 ## ------------------------------------------------------------------------
@@ -121,7 +121,7 @@ plotPars(subset(pars, converged))
 
 ## ---- fig.width = 6, fig.height = 5--------------------------------------
 
-controls(g, NULL, "attach.input") <- TRUE
+controls(g, NULL, "attachInput") <- TRUE
 plotArray(subset(pars, converged), g*x*p, 0:60, data, !grepl("prediction", name))
 
 

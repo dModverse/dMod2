@@ -4,7 +4,7 @@
 \alias{print.penaltyspec}
 \title{Print method for a penalty specification}
 \usage{
-\method{print}{penaltyspec}(x, ...)
+print.penaltyspec(x, ...)
 }
 \arguments{
 \item{x}{A \code{penaltySpec} object.}

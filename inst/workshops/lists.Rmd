@@ -10,7 +10,7 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE, fig.width = 7, fig.height = 3.5)
 ```
 
-dMod provides several list objects, i.e., objects which are organized as lists but carry their own class. This vignette is about the typical dMod list objects
+dMod provides several list objects, i.e., objects which are organized as lists but have their own class. This vignette is about the typical dMod list objects
 
 * `datalist`
 * `prdlist`

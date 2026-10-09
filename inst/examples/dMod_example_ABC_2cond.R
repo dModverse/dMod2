@@ -72,7 +72,7 @@
         300.00000, "B_obs", 0.9615111, "treatment"
       )
     ),
-    split.by = "condition"
+    splitBy = "condition"
   )
   
   
@@ -142,8 +142,7 @@
     compile = FALSE
   )
 
-  # Compile all native code together via dMod's compile() so the build
-  # uses the -w convention and avoids cOde's default -Wall noise.
+  # Compile all native code together via dMod's compile()
   compile(g, x, p, e)
 
 

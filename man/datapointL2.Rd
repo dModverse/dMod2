@@ -2,54 +2,126 @@
 % Please edit documentation in R/objClass.R
 \name{datapointL2}
 \alias{datapointL2}
-\title{L2 objective function for validation data point}
+\title{L2 Objective of a Validation Data Point}
 \usage{
-datapointL2(name, time, value, sigma = 1, attr.name = "validation", condition)
+datapointL2(
+  name,
+  time,
+  parameter,
+  sigma = 1,
+  attrName = "validation",
+  condition,
+  ...
+)
 }
 \arguments{
-\item{name}{character, the name of the prediction, e.g. a state name.}
+\item{name}{Character, the name of the predicted quantity, a state or an
+observable.}
 
-\item{time}{numeric, the time-point associated to the prediction}
+\item{time}{Numeric of length 1, the time of the data point.}
 
-\item{value}{character, the name of the parameter which contains the
-prediction value.}
+\item{parameter}{Character of length 1, the name of the parameter holding
+the data value.}
 
-\item{sigma}{numeric, the uncertainty of the introduced test data point}
+\item{sigma}{Numeric of length 1, the standard deviation of the data
+point, default \code{1}.}
 
-\item{attr.name}{character. The constraint value is additionally returned in
-an attribute of this name. Being a squared standardised residual already, it
-is also the term's \code{chi2} contribution, which pools with \link{normL2}'s under the
-rules described there.}
+\item{attrName}{Character. Name of the attribute holding the value,
+default \code{"validation"}. The value is also returned as \code{chi2}
+contribution, see \code{attrName} in \code{\link[=normL2]{normL2()}}.}
 
-\item{condition}{character, the condition for which the prediction is made.}
+\item{condition}{Character, the condition of the prediction. No default.}
+
+\item{...}{\code{value} and \code{attr.name} are deprecated names of \code{parameter} and
+\code{attrName}.}
 }
 \value{
-List of class \code{objlist}, i.e. objective value, gradient and Hessian as list.
+An objective function of class \code{objfn}, called as
+\code{obj(pars, ...)}, see section Calling a dMod function. It returns an
+\link{objlist} with the prediction as attribute \code{prediction}.
 }
 \description{
-L2 objective function for validation data point
+Builds an objective function that compares the prediction
+of one quantity at one time with a data value held by a parameter.
 }
 \details{
-Computes the constraint value
-\deqn{\left(\frac{x(t)-\mu}{\sigma}\right)^2}{(pred-p[names(mu)])^2/sigma^2}
-and its derivatives with respect to p.
-
-The controls \code{mu} (the prediction name, named by the value parameter),
-\code{time}, \code{sigma} and \code{attr.name} are read at every call and can be changed
-with \code{\link[=controls]{controls()}}. The \code{parameters} attribute is the value parameter as
-given here, and so is the parameter set of every sum built from the
-objective: renaming the value parameter through \code{controls(x, "mu")} does
-not reach either, so build a new objective for another value parameter.
+The value is
+\deqn{\left(\frac{x(t) - v}{\sigma}\right)^2}{((x(t) - v)/sigma)^2}
+with the prediction \eqn{x(t)} and the value of \code{parameter}, \eqn{v}. The
+prediction is read from \code{env}, where \code{\link[=normL2]{normL2()}} stores it, so the
+objective is evaluated as summand of an objective that predicts, or with
+its \code{env}. \code{time}, \code{sigma} and \code{attrName} can be changed with
+\code{\link[=controls]{controls()}}.
 }
+\section{Calling a dMod function}{
+
+The leading arguments depend on the class and are matched by position or
+by name:
+\itemize{
+\item prediction function: \code{x(times, pars, ...)}, returning a \link{prdlist};
+\item observation function: \code{g(out, pars, ...)} with a \link{prdlist} \code{out},
+returning a \link{prdlist};
+\item parameter transformation: \code{p(pars, ...)}, returning a list with one
+\link{parvec} per condition;
+\item objective function: \code{obj(pars, ...)}, returning an \link{objlist}.
+}
+
+\code{pars} is a named numeric vector. If it has a \code{deriv} attribute, as the
+output of a parameter transformation does, the derivatives are taken with
+respect to the parameters behind it. A composition is called as its class:
+\code{g * x * p} is a prediction function, \code{(g * x * p)(times, pars)}.
+
+The other arguments are named:
+\itemize{
+\item \code{fixed}: named numeric vector of parameters that enter the evaluation
+without derivatives. Default \code{NULL}.
+\item \code{deriv}: \code{TRUE} (default) returns first derivatives with respect to
+\code{pars}.
+\item \code{deriv2}: \code{TRUE} returns second derivatives as well. Default \code{FALSE}.
+Every function of the chain has to be built for them, see the arguments
+\code{deriv2} and \code{derivMode} of \code{\link[=odemodel]{odemodel()}}, \code{\link[=Y]{Y()}} and \code{\link[=P]{P()}}.
+\item \code{hessian}: objective functions only, see the table below. Default
+\code{NULL}.
+\item \code{sweep}: objective functions only. \code{"forward"} (default) propagates the
+sensitivities through the chain; \code{"reverse"} computes the gradient in one
+backward pass, whose cost does not grow with the number of parameters.
+\code{"reverse"} needs every function of the chain built with
+\code{derivMode = "reverse"}, and with \code{"forward-reverse"} for \code{deriv2 = TRUE}.
+\item \code{conditions}: character vector, the conditions to evaluate. Default all
+conditions of the function.
+\item \code{env}: environment for intermediate results. Default \code{NULL}, a new one.
+An objective function stores its prediction there as \code{prediction} and
+returns the environment as attribute \code{env}.
+\item \code{cores}: number of threads for the ODE solves and the residual kernel.
+Default \code{getOption("dMod.cores", 1L)}.
+}
+
+Prediction, observation and parameter functions accept \code{hessian} and
+\code{sweep} and ignore them. With \code{deriv = TRUE} an objective function returns
+this Hessian:
+
+\tabular{llll}{
+\code{sweep} \tab \code{hessian} \tab \code{deriv2 = FALSE} \tab \code{deriv2 = TRUE} \cr
+\code{"forward"} \tab \code{NULL}, \code{TRUE} \tab Gauss-Newton \tab exact \cr
+\code{"forward"} \tab \code{FALSE} \tab none \tab none, with a warning \cr
+\code{"reverse"} \tab \code{NULL} \tab none \tab exact \cr
+\code{"reverse"} \tab \code{TRUE} \tab none, with a warning \tab exact \cr
+\code{"reverse"} \tab \code{FALSE} \tab none \tab none, with a warning \cr
+}
+
+With \code{deriv = FALSE} it returns the value alone.
+}
+
 \examples{
 prediction <- list(a = matrix(c(0, 1), nrow = 1, dimnames = list(NULL, c("time", "A"))))
-derivs <- matrix(c(0, 1, 0.1), nrow = 1, dimnames = list(NULL, c("time", "A.A", "A.k1")))
-attr(prediction$a, "deriv") <- derivs
+attr(prediction$a, "deriv") <- array(c(1, 0.1), c(1, 1, 2),
+  dimnames = list(NULL, "A", c("A", "k1")))
 p0 <- c(A = 1, k1 = 2)
 
-vali <- datapointL2(name = "A", time = 0, value = "newpoint", sigma = 1, condition = "a")
-vali(pars = c(p0, newpoint = 1), env = .GlobalEnv)
+vali <- datapointL2(name = "A", time = 0, parameter = "newpoint", sigma = 1,
+                    condition = "a")
+vali(pars = c(p0, newpoint = 2), env = .GlobalEnv)
 }
 \seealso{
-\link{normL2}, \link{constraintL2}
+\code{\link[=normL2]{normL2()}}, \code{\link[=constraintL2]{constraintL2()}}
 }

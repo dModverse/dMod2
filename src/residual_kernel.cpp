@@ -36,15 +36,9 @@ inline double G_by_Phi(double w1, double w2) {
   return std::exp(phi_log(w1) - Phi_log(w2));
 }
 
-// Symmetric add y += A^T x where A is a per-row [n_par, n_par] block stored
-// row-major (i.e. col-major [n_par*n_par, n_obs] when viewed as a flat array).
-// `W` is the per-row weight; the contracted result is added into col-major
-// hess_acc[k1 + k2*n_par]. Since the per-row block is symmetric in (k1, k2),
-// the row-major (k1, k2) index aligns with col-major hess by symmetry.
-//
-// Uses dgemv when n_obs * n_par * n_par is large enough to pay the BLAS
-// dispatch cost (~32 doubles); otherwise a plain loop is faster and avoids
-// the workspace allocation. Reused for both d2pred and d2sigma contractions.
+// hess_acc (col-major) += sum over rows of W[i] times the row's symmetric
+// [n_par, n_par] block, so row- and col-major indices agree. dgemv once the
+// size pays the BLAS dispatch cost, a plain loop below that.
 void contract_d2_block(int n_obs, int n_par,
                        const double* d2_block, const double* W,
                        double* hess_acc, std::vector<double>& scratch) {
@@ -177,18 +171,9 @@ void accumulate_aloq_residual(
     if (seed_pred)  seed_pred[i]  += inv_s * (A + B);
     if (seed_sigma) seed_sigma[i] += inv_s * (C - A * wr - B * w0);
 
-    // Combine all per-row Hessian additions into a single (k1, k2) loop with
-    // pre-merged coefficients. Each term contributes a fixed bilinear form
-    // (dwr⊗dwr, dpred⊗dsigma symmetric, dsigma⊗dsigma, or dw0⊗dw0); the
-    // per-form coefficients sum across the Hessian Parts and the optional
-    // M4BEAL corrections.
-    //
-    //   coef_dwr2:   dwr ⊗ dwr      (always; ALOQ Part0)
-    //   coef_cross:  dpred ⊗ dsigma + dsigma ⊗ dpred
-    //                (ALOQ Part1 if has_dsig, plus M4BEAL cross if has_dsig)
-    //   coef_dsig2:  dsigma ⊗ dsigma
-    //                (ALOQ Part2 + Part3, plus M4BEAL Part1-gated tail)
-    //   coef_dw02:   dw0 ⊗ dw0      (M4BEAL only)
+    // All per-row Hessian terms as four bilinear forms with pre-merged
+    // coefficients: dwr⊗dwr (Part0), symmetrised dpred⊗dsigma (Part1, M4BEAL),
+    // dsigma⊗dsigma (Part2, Part3, M4BEAL) and dw0⊗dw0 (M4BEAL only).
     const double coef_dwr2 = 2.0;
     double coef_cross = 0.0;
     double coef_dsig2 = 0.0;
@@ -352,11 +337,8 @@ void accumulate_bloq_residual(
     }
 
     // ---- Gradient ----
-    // M3:  grad += 2 G(-wr) dwr
-    // M4*: grad += 2 (c1 dwr - c2 dw0 + c3 dw0)
-    //   with c1 = phi(wr) / (Phi(w0) - Phi(wr))   ("stable" form for numerical safety)
-    //        c2 = phi(w0) / (Phi(w0) - Phi(wr))
-    //        c3 = G(w0, w0)
+    // M3: 2 G(-wr) dwr. M4*: 2 (c1 dwr + (c3 - c2) dw0) with c1 = phi(wr) / D,
+    // c2 = phi(w0) / D, c3 = G(w0, w0), D = Phi(w0) - Phi(wr).
     double w_deriv2 = 0.0;  // per-row weight for the d2pred exact contribution
     double w_deriv2_sig = 0.0;  // per-row weight for the d2sigma exact contribution
     double A_row = 0.0, B_row = 0.0;   // the same shape as the ALOQ branch
@@ -372,11 +354,7 @@ void accumulate_bloq_residual(
         if (has_d2sig) w_deriv2_sig = -2.0 * wr * G_neg_wr * inv_s;
       }
     } else {
-      // c1 = 1 / (1/G(wr,w0) - 1/G(wr,wr))
-      // c2 = 1 / (1/G(w0,w0) - 1/G(w0,wr))
-      // c3 = G(w0,w0)
-      // Closed form: c1 = phi(wr) / (Phi(w0) - Phi(wr)); c2 = phi(w0) / same.
-      // Stable closed form, avoiding the indirect "1/(1/G - 1/G)" expression.
+      // Closed form of c1 and c2, stabler than 1 / (1/G - 1/G).
       const double dP   = Phi(w0) - Phi(wr);
       const double phi_wr = std::exp(phi_log(wr));
       const double phi_w0 = std::exp(phi_log(w0));
@@ -409,10 +387,8 @@ void accumulate_bloq_residual(
 
     // ---- Hessian ----
     if (is_m3) {
-      // M3 Hessian: combined single (k1,k2) loop over Parts 1/2/3.
-      //   coef_dwr2:  2 * (-wr*G + G^2) * dwr ⊗ dwr        (BLOQ_part1)
-      //   coef_cross: -2 * G_neg_wr * inv_s^2 * symm-cross (BLOQ_part2)
-      //   coef_dsig2: +4 * G_neg_wr * wr * inv_s^2 * dsigma⊗dsigma (BLOQ_part3)
+      // M3 Hessian, BLOQ Parts 1/2/3 in one (k1, k2) loop: dwr⊗dwr, the
+      // symmetrised dpred⊗dsigma cross term and dsigma⊗dsigma.
       const double G_neg_wr = G_by_Phi(-wr, -wr);
       const double coef_dwr2_m3  = opts.bloq_part1
           ? 2.0 * (-wr * G_neg_wr + G_neg_wr * G_neg_wr)
@@ -440,12 +416,9 @@ void accumulate_bloq_residual(
         }
       }
     } else {
-      // M4* branch: exact Hessian of f = -2 log(Phi(w0) - Phi(wr)) + 2 log Phi(w0).
-      // First derivatives: df = a dwr + b dw0 with a = 2 phi(wr)/D and
-      // b = 2 phi(w0) (1/Phi(w0) - 1/D), D = Phi(w0) - Phi(wr). The Hessian is
-      // the exact d(a dwr + b dw0): the dwr/dw0 quadratic forms plus the
-      // a*d2wr + b*d2w0 chain-rule terms (whose d2pred / d2sigma parts are the
-      // w_deriv2 / w_deriv2_sig weights computed above).
+      // M4*: exact Hessian of f = -2 log(Phi(w0) - Phi(wr)) + 2 log Phi(w0), df =
+      // a dwr + b dw0: the dwr/dw0 quadratic forms plus the a*d2wr + b*d2w0 terms,
+      // whose d2pred / d2sigma parts are the w_deriv2 / w_deriv2_sig weights.
       const double dP     = Phi(w0) - Phi(wr);
       const double phi_wr = std::exp(phi_log(wr));
       const double phi_w0 = std::exp(phi_log(w0));

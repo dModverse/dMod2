@@ -1,14 +1,5 @@
-# publised in https://www.ncbi.nlm.nih.gov/pubmed/27811075
-# D2D: model named Bruno
-# simple model: sort of A -> B -> C, conditions differ by initial values of A, B, C
-# bcar/betacar: symmetric carotene build of three pieces bio-middle-bio
-# 1. cut off one end: bcar -> b10 + bio where b10=bio-middle
-# 2. cut off second end: b10 -> bio + middle
-# -> measure bcar and b10
-# bcry/betacry: one modified end ohbio-middle-obio
-# zea: both ends modified ohbio-middle-ohbio
-# -> modified rates for cutting modified ends
-# no error model fitting, observation function without scalings and offsets
+# CCD4 carotenoid cleavage: fit and profile likelihood of a sequential cleavage model
+# Reference: https://www.ncbi.nlm.nih.gov/pubmed/27811075 (D2D model "Bruno")
 
 source("inst/examples/example_CCD4/setup.R")
 do.profs <- FALSE

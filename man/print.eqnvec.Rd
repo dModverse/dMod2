@@ -2,21 +2,24 @@
 % Please edit documentation in R/eqnClass.R
 \name{print.eqnvec}
 \alias{print.eqnvec}
-\title{Print equation vector}
+\title{Print Equation Vector}
 \usage{
-\method{print}{eqnvec}(x, width = 140, pander = FALSE, ...)
+print.eqnvec(x, width = 140, pander = FALSE, ...)
 }
 \arguments{
 \item{x}{object of class \link{eqnvec}.}
 
-\item{width}{numeric, width of the print-out}
+\item{width}{numeric, width of the print-out. Default 140.}
 
-\item{pander}{logical, use pander for output (used with R markdown)}
+\item{pander}{logical, use pander for output (R Markdown). Default \code{FALSE}.}
 
-\item{...}{not used right now}
+\item{...}{not used.}
+}
+\value{
+\code{x}, invisibly.
 }
 \description{
-Print equation vector
+Print Equation Vector
 }
 \author{
 Wolfgang Mader, \email{Wolfgang.Mader@fdm.uni-freiburg.de}

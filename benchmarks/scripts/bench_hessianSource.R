@@ -6,7 +6,7 @@
 # Compares the trust-region Hessian sources on Boehm2014 over one shared set of
 # starting points. The two metrics disagree, which is the point of the script:
 # scored per start a method can look good and still be expensive per hit,
-# because it carries hopeless starts a long way before it gives up.
+# because it pursues hopeless starts a long way before it gives up.
 #
 # [AUTHOR]
 # Simon Beyer
@@ -17,7 +17,8 @@
 # [Info]
 # The model is the one of inst/examples/example_Boehm_JProteomeRes2014.R, built
 # here so the script stands alone. The Gauss-Newton-seeded arms dominate the run
-# time, because they spend the whole iteration cap on most starts.
+# time, because they spend the whole iteration cap on most starts. Run from the
+# package root, which holds the shared catalogue of settings.
 # -------------------------------------------------------------------------#
 
 library(dMod2)
@@ -51,10 +52,10 @@ reactions <- eqnlist() |>
 
 # The optimiser can only resolve what the integrator delivers, so the tolerances
 # are set explicitly rather than left at their defaults.
-myOptionsODE <- list(atol = 1e-8, rtol = 1e-6, maxattemps = 100L, maxsteps = 1e6)
+myOptions <- list(atol = 1e-8, rtol = 1e-6, maxattempts = 100L, maxsteps = 1e6)
 model <- odemodel(reactions, modelname = "boehm_ode", compile = FALSE,
                   outdir = .outdir)
-x <- Xs(model, optionsOde = myOptionsODE, optionsSens = myOptionsODE)
+x <- Xs(model, options = myOptions)
 
 observables <- eqnvec(
   pSTAT5A_rel = "(100*pApB + 200*pApA*specC17)/(pApB + STAT5A*specC17 + 2*pApA*specC17)",
@@ -64,9 +65,9 @@ errorModels <- eqnvec(pSTAT5A_rel = "sd_pSTAT5A_rel",
                       pSTAT5B_rel = "sd_pSTAT5B_rel",
                       rSTAT5A_rel = "sd_rSTAT5A_rel")
 
-g <- Y(observables, x, modelname = "boehm_obs", attach.input = FALSE,
+g <- Y(observables, x, modelname = "boehm_obs", attachInput = FALSE,
        compile = FALSE, outdir = .outdir)
-e <- Y(errorModels, g, modelname = "boehm_err", attach.input = FALSE,
+e <- Y(errorModels, g, modelname = "boehm_err", attachInput = FALSE,
        compile = FALSE, outdir = .outdir)
 
 innerpars <- getParameters(model, g, e)
@@ -112,7 +113,7 @@ run <- function(...)
                       parlower = parlower, parupper = parupper, ...))
 
 # Every variant of the shared catalogue.
-source(system.file("benchmarks", "hessianSourceSettings.R", package = "dMod2"))
+source(file.path("benchmarks", "scripts", "hessianSourceSettings.R"))
 
 frames <- lapply(hessianSourceSettings, function(a) do.call(run, a))
 names(frames) <- hessianSourceLabels[names(hessianSourceSettings)]

@@ -1,46 +1,6 @@
-# -------------------------------------------------------------------------#
-# Reverse-mode derivatives through the whole chain
-# -------------------------------------------------------------------------#
-#
-# [PURPOSE]
-# The forward mode threads a Jacobian: every object in a chain receives
-# dP/dtheta on its input and returns dX/dtheta on its output, so everything in
-# flight is n_theta wide and the ODE integrates 1 + n_theta copies of itself.
-# The reverse mode threads a cotangent the other way and is as wide as the
-# number of seeds, which for a gradient is one. Its cost does not grow with the
-# number of parameters.
-#
-# This file walks the chain piece by piece on toy models small enough to check
-# by hand, and each section states what its own oracle is. Every section stands
-# alone.
-#
-# [WHAT IT TAKES]
-# One extra compilation on the ODE,
-# `odemodel(..., derivMode = c("forward", "reverse"))`, and `compile = TRUE` on
-# the observation and transformation functions, because the reverse path has
-# no interpreted fallback. Then:
-#
-#     obj(pars, sweep = "reverse")
-#
-# [WHY THE TWO DO NOT AGREE TO MACHINE PRECISION]
-# They differ by O(tol), and not because of the adjoint. A forward-sensitivity
-# solve carries n_theta tangent columns, and the step-size controller's error
-# norm takes the maximum over the state norm AND every one of those columns. A
-# maximum over a larger set is larger, so that run takes a finer step sequence
-# than a value-only run does. The two modes therefore differentiate two
-# different discretisations, each exactly. The gap falls with the tolerance,
-# which section 5 measures.
-#
-# The corollary is in reverse's favour: its gradient belongs to the trajectory a
-# value-only prediction produces, so value and gradient are consistent with each
-# other. Under forward sensitivities they are not.
-#
-# [AUTHOR]
-# Simon Beyer
-#
-# [Date]
-# Mon 08 Sep 2026
-# -------------------------------------------------------------------------#
+# Reverse-mode derivatives through the whole chain, checked on toy models.
+# Needs `derivMode = c("forward", "reverse")` on the odemodel, `compile = TRUE` on
+# g and p, and then `obj(pars, sweep = "reverse")`.
 
 library(dMod2)
 
@@ -57,23 +17,15 @@ reactions <- eqnlist() |>
   addReaction("B", "", "k2*B", "decay")
 
 
-# -----------------------------------------------------------------------------
-# 1. The solver alone
-#
-# Xs() backwards is one value solve with a checkpoint per step, then one
-# backward sweep. What goes in is a cotangent on the prediction; what comes out
-# is a cotangent on the model's own parameters, which is the row set a forward
-# tangent is seeded on.
-#
-# The oracle is the forward sensitivity contracted with the same cotangent: the
-# two compute w' S from opposite ends.
-# -----------------------------------------------------------------------------
+# 1. The solver alone ---------------------------------------------------------
+# One value solve with checkpoints, then one backward sweep from a cotangent on
+# the prediction to one on the model parameters; the oracle is w' S from forward.
 model <- odemodel(reactions, modelname = "rev_ode", deriv = TRUE, deriv2 = TRUE,
                   derivMode = c("forward", "reverse", "forward-forward",
                                 "forward-reverse"),
                   outdir = .outdir, compile = TRUE)
 
-x     <- Xs(model, optionsOde = tight, optionsSens = tight)
+x     <- Xs(model, options = tight)
 inner <- c(A = 2, B = 0, k1 = 0.6, k2 = 0.3)
 times <- seq(0, 8, length.out = 41)
 
@@ -92,14 +44,9 @@ cat("1. solver          max |difference| =",
     format(max(abs(ref - got[names(ref)])), digits = 3), "\n\n")
 
 
-# -----------------------------------------------------------------------------
-# 2. The whole chain, g * x * p
-#
-# normL2 turns the residuals into a seed -- not the residual vector itself, see
-# section 4 -- and pushes it back through the observation function, the solver
-# and the transformation in one pass. `sweep = "reverse"` is the only thing the
-# caller says.
-# -----------------------------------------------------------------------------
+# 2. The whole chain, g * x * p -----------------------------------------------
+# normL2 seeds the residual cotangent and pushes it back through g, x and p in
+# one pass.
 g <- Y(c(obsA = "s*A", obsB = "s*B"), reactions, compile = TRUE, deriv2 = TRUE,
        modelname = "rev_obs", outdir = .outdir)
 p <- P(c(A = "exp(logA)", B = "0", k1 = "exp(logk1)", k2 = "exp(logk2)",
@@ -124,21 +71,17 @@ r <- obj(pars, deriv = TRUE, sweep = "reverse")
 print(rbind(forward = f$gradient, reverse = r$gradient[names(f$gradient)]))
 cat("2. g * x * p       max |difference| =",
     format(max(abs(f$gradient - r$gradient[names(f$gradient)])), digits = 3),
-    "\n   the reverse objective carries no Hessian:", is.null(r$hessian), "\n\n")
+    "\n   the reverse objective has no Hessian:", is.null(r$hessian), "\n\n")
 
 
-# -----------------------------------------------------------------------------
-# 3. Several conditions, and a parameter that only one of them has
-#
-# Conditions are independent, so the backward pass walks each branch of the `+`
-# and the cotangents meet again on the shared parameters. dk_C1 and dk_C2 reach
-# one condition each and must come back with a contribution from that one only.
-# -----------------------------------------------------------------------------
+# 3. Several conditions, and a parameter only one of them has -----------------
+# Cotangents of the `+` branches meet on shared parameters; a condition-specific
+# parameter receives a contribution from its own condition only.
 conds <- c("C1", "C2")
 trafo2 <- c(A = "exp(logA)", B = "0", k1 = "exp(logk1)", k2 = "exp(logk2)",
             s = "exp(logs)")
 p2 <- Reduce("+", lapply(conds, function(cn)
-  P(repar(paste0("logk1 ~ logk1 + dk_", cn), trafo2), condition = cn,
+  P(repar(trafo2, paste0("logk1 ~ logk1 + dk_", cn)), condition = cn,
     compile = TRUE, modelname = paste0("rev_p2_", cn), outdir = .outdir)))
 
 pars2 <- c(pars, dk_C1 = 0.1, dk_C2 = -0.15)
@@ -159,19 +102,9 @@ cat("3. two conditions  max |difference| =",
     "\n\n")
 
 
-# -----------------------------------------------------------------------------
-# 4. An estimated error model
-#
-# This is where the seed stops being the residual vector. sigma depends on theta
-# as well, so a data row seeds two things: the prediction, and the error model's
-# own output. The second one then travels back through the error model, which
-# reads the prediction, so it lands on the prediction a second time as well as
-# on sd_rel and sd_abs.
-#
-# Leaving that second channel out would still produce a gradient, and it would
-# be wrong only in the sd_* directions -- which is exactly the kind of error a
-# finite-difference check at 1e-3 does not catch.
-# -----------------------------------------------------------------------------
+# 4. An estimated error model -------------------------------------------------
+# A sigma that depends on theta seeds the error model's output as well, which
+# reaches the prediction a second time and the error parameters.
 e <- Y(c(obsA = "sd_rel*obsA + sd_abs", obsB = "sd_rel*obsB + sd_abs"), g,
        states = c("obsA", "obsB"), parameters = c("sd_rel", "sd_abs"),
        compile = TRUE, modelname = "rev_err", outdir = .outdir)
@@ -193,16 +126,12 @@ cat("4. error model     max |difference| =",
     "\n\n")
 
 
-# -----------------------------------------------------------------------------
-# 5. Why the two do not agree to machine precision
-#
-# The gap is the difference between two discretisations, so it falls with the
-# solver tolerance and not with anything about the adjoint. A missing channel in
-# the reverse pass would leave a floor here instead.
-# -----------------------------------------------------------------------------
+# 5. Why the two do not agree to machine precision ----------------------------
+# Each mode differentiates its own discretisation exactly, so the gap falls with
+# the tolerance; a missing channel in the reverse pass would leave a floor.
 gap <- t(vapply(10^-c(4, 6, 8, 10, 12), function(tt) {
   o  <- list(atol = tt, rtol = tt)
-  xx <- Xs(model, optionsOde = o, optionsSens = o)
+  xx <- Xs(model, options = o)
   oo <- normL2(as.datalist(dat), g * xx * p)
   a  <- oo(pars, deriv = TRUE)
   b  <- oo(pars, deriv = TRUE, sweep = "reverse")
@@ -216,46 +145,19 @@ cat("\n5. the gap tracks the tolerance over eight decades, so it is the\n",
     "  discretisation and not the adjoint.\n\n")
 
 
-# -----------------------------------------------------------------------------
-# 5b. An observable no gradient can be trusted through
-#
-# The two modes disagreeing is a useful instrument, and on a real model it can
-# point at the model rather than at either of them. Bachmann observes
-#
-#     log10(CIS + 1e-15)
-#
-# and CIS is zero over part of the run, so the derivative there is
-# 1/(1e-15 * ln 10), about 4e14. An epsilon of 1e-15 sits below anything a
-# double-precision solve can resolve, so the observable multiplies whatever
-# noise the integration leaves by fifteen decades. At that model's default
-# tolerance the two modes differ by 1.76 relative; at 1e-12 they agree to 2.6e-6
-# and their gradients are parallel to ten digits.
-#
-# The forward gradient is no better there. It is the same amplification of the
-# same noise; it simply has no second opinion to disagree with, which is what
-# makes a mismatch between the two worth reading rather than suppressing.
-#
-# The fix belongs in the model: an epsilon above the integration's own noise
-# floor and a tolerance under it. log10(state + 1e-9) with atol = 1e-11 and
-# rtol = 1e-9 bounds the derivative at about 4e8 and keeps the state's own error
-# two decades below the epsilon.
-# -----------------------------------------------------------------------------
+# 5b. A log observable with an epsilon below the solver's noise floor amplifies
+# integration noise in both modes; a forward/reverse mismatch exposes it. The fix
+# is in the model: an epsilon above the noise floor, a tolerance below it.
 
 
-# -----------------------------------------------------------------------------
-# 6. Events, and why they need no second derivation
-#
-# A jump is replayed backwards through the very function that applied it
-# forwards -- the saltation transport is written over the scalar type, so the
-# reverse type takes the same branch the forward one does. What the reverse pass
-# reads back is which events fired and where a root sat, because those are
-# control decisions and not arithmetic.
-# -----------------------------------------------------------------------------
+# 6. Events -------------------------------------------------------------------
+# A jump is replayed backwards through the same scalar-generic function that
+# applied it; the reverse pass only reads back which events fired and when.
 ev <- eventlist(var = "A", time = "t_dose", value = "d_amt", method = "add")
 model_ev <- odemodel(reactions, events = ev, modelname = "rev_ev",
                      deriv = TRUE, derivMode = c("forward", "reverse"), outdir = .outdir,
                      compile = TRUE)
-x_ev <- Xs(model_ev, optionsOde = tight, optionsSens = tight)
+x_ev <- Xs(model_ev, options = tight)
 p_ev <- P(c(A = "exp(logA)", B = "0", k1 = "exp(logk1)", k2 = "exp(logk2)",
             s = "exp(logs)", t_dose = "3", d_amt = "exp(logdose)"),
           condition = "C1", compile = TRUE, modelname = "rev_pev",
@@ -268,20 +170,12 @@ rv <- obj_ev(pars_ev, deriv = TRUE, sweep = "reverse")
 print(rbind(forward = fv$gradient, reverse = rv$gradient[names(fv$gradient)]))
 cat("6. dosing event    max |difference| =",
     format(max(abs(fv$gradient - rv$gradient[names(fv$gradient)])), digits = 3),
-    "\n   the dose itself is estimated, so the jump has to carry a derivative.\n\n")
+    "\n   the dose itself is estimated, so the jump needs a derivative.\n\n")
 
 
-# -----------------------------------------------------------------------------
-# 7. What it costs
-#
-# The forward gradient integrates 1 + n_theta copies of the system; the reverse
-# one integrates the states twice -- once for the values, once inside the sweep
-# -- and sweeps a tape one step wide. So the forward line rises with n_theta and
-# the reverse line does not, and where they cross is a property of the model.
-#
-# Four parameters is far too few for reverse to win. The point of the number
-# below is the shape, not the winner.
-# -----------------------------------------------------------------------------
+# 7. What it costs ------------------------------------------------------------
+# Forward cost grows with n_theta, reverse cost does not; four parameters are
+# too few for reverse to win, the ratio is what falls as they grow.
 reps <- 20
 tf <- system.time(for (i in seq_len(reps)) obj(pars, deriv = TRUE))[["elapsed"]]
 tr <- system.time(for (i in seq_len(reps))
@@ -290,24 +184,9 @@ cat(sprintf("7. %d gradients    forward %.3fs   reverse %.3fs   ratio %.2f\n",
             reps, tf, tr, tr / tf))
 cat("   with", length(pars), "parameters. The ratio is what falls as they grow.\n")
 
-# -----------------------------------------------------------------------------
-# 8. The second order, and what it costs
-#
-# `deriv2 = TRUE` asks for the exact Hessian rather than the Gauss-Newton
-# approximation. `sweep` picks which way it is computed, exactly as it does for
-# the gradient: forward over forward carries n_theta^2 sensitivity trajectories,
-# forward over reverse carries n_theta tangents through one backward sweep.
-#
-# The model has to be built for it. `derivMode = "forward-forward"` builds the
-# nested dual, `"forward-reverse"` the sweep over tangents, and the observation
-# and transformation functions need `deriv2 = TRUE` so their own curvature is
-# there to contract.
-#
-# What it buys is not a cheaper Hessian at one point. It is a Hessian cheap
-# enough to seed an optimiser with, after which the descent runs on gradients
-# alone. See `hessianInit = "exact"` below, and `hessianReseed = "stall"` for
-# fetching a fresh one when the approximation stops informing.
-# -----------------------------------------------------------------------------
+# 8. The exact Hessian --------------------------------------------------------
+# `sweep` picks forward over forward or forward over reverse; the model needs the
+# matching `derivMode` entries, and g and p need `deriv2 = TRUE`.
 hf <- obj(pars, deriv2 = TRUE)
 hr <- obj(pars, sweep = "reverse", deriv2 = TRUE)
 cat(sprintf("8. exact Hessian   forward vs reverse: max|difference| %.2e\n",
@@ -315,21 +194,16 @@ cat(sprintf("8. exact Hessian   forward vs reverse: max|difference| %.2e\n",
 cat("   attr(., \"sweep\") says which answered:",
     attr(hr, "sweep"), "\n")
 
-# The three requests, told apart. `hessian` asks for a Hessian at all, `deriv2`
-# says it should be exact rather than Gauss-Newton, and a contradiction is
-# resolved to the cheaper answer with a warning rather than in silence.
+# `hessian` asks for a Hessian at all, `deriv2` for the exact one rather than
+# Gauss-Newton; a contradiction resolves to the cheaper answer with a warning.
 gn <- obj(pars, hessian = TRUE)
 cat(sprintf("   Gauss-Newton vs exact: max|difference| %.2e  (they are not the ",
             max(abs(gn$hessian - hf$hessian))))
 cat("same matrix)\n")
 
-# -----------------------------------------------------------------------------
-# 9. An optimiser that chooses per evaluation
-#
-# One exact Hessian at the start, then a quasi-Newton descent on reverse
-# gradients. On a model this small it does not pay; the crossover is where the
-# gradient ratio in step 7 crosses one, which is tens of parameters.
-# -----------------------------------------------------------------------------
+# 9. An optimiser that chooses per evaluation ---------------------------------
+# One exact Hessian at the start, then quasi-Newton on reverse gradients. It pays
+# only past the crossover of section 7, at tens of parameters.
 start <- pars + 0.3
 fit_gn <- trust(obj, start, iterlim = 100L)
 fit_ex <- trust(obj, start, iterlim = 100L, hessianMethod = "sr1",

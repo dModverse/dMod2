@@ -3,7 +3,7 @@
 \name{trust}
 \alias{trust}
 \alias{trustL1}
-\title{Non-linear optimisation via a trust-region method}
+\title{Non-Linear Optimisation by a Trust-Region Method}
 \usage{
 trust(
   objfun,
@@ -56,198 +56,147 @@ trustL1(
 )
 }
 \arguments{
-\item{objfun}{R function whose first argument is a numeric vector of
-parameters. Must return a list with components \code{value},
-\code{gradient}, \code{hessian}. Extra arguments accepted by
-\code{objfun} can be supplied via \code{...}.}
+\item{objfun}{Function whose first argument is a numeric vector of
+parameters, returning a list with components \code{value},
+\code{gradient} and \code{hessian}. It is called with the logical
+arguments \code{deriv} and \code{hessian}, and with \code{deriv2 = TRUE}
+when an exact Hessian is requested, so it must accept them or
+\code{...}.}
 
 \item{parinit}{Named numeric starting vector. Must be finite. Values
 outside \code{[parlower, parupper]} are clipped with a warning; with
-\code{boundary = "reflective"} the result is additionally nudged just
-inside the box.}
+\code{boundary = "reflective"} they are moved just inside the box.}
 
-\item{rinit}{Initial trust-region radius.}
+\item{rinit}{Initial trust-region radius. Default \code{0.1}.}
 
-\item{rmax}{Maximum allowed trust-region radius.}
+\item{rmax}{Maximum trust-region radius. Default \code{10}.}
 
-\item{iterlim}{Maximum number of outer trust-region iterations.}
+\item{iterlim}{Maximum number of trust-region iterations. Default
+\code{100}.}
 
-\item{hessianMethod}{Source of the model Hessian the run starts on:
-\code{"gn"} (default) uses the objective's Gauss-Newton Hessian,
-\code{"bfgs"} and \code{"sr1"} maintain a quasi-Newton update seeded from
-it, and \code{"exact"} asks the objective for its true Hessian at every
-iterate. \code{"exact"} needs an objective that takes \code{deriv2}.
-A run is a method and, optionally, the \code{hessianFallback} it hands
-over to. Quasi-Newton methods require
-\code{stepControl$boundary = "reflective"}. Also selects the control
-defaults below.}
+\item{hessianMethod}{Source of the model Hessian at the start of the run:
+\code{"gn"} (default) the Gauss-Newton Hessian of the objective,
+\code{"bfgs"} or \code{"sr1"} a quasi-Newton update seeded as
+\code{qnControl$hessianInit} says, \code{"exact"} the true Hessian at
+every iterate, which needs an objective that takes \code{deriv2}.
+Quasi-Newton methods require \code{stepControl$boundary = "reflective"}.
+Also selects the control defaults below.}
 
-\item{hessianFallback}{Source the run hands over to at the first value,
-model, step or stagnation stop, instead of ending there. \code{"none"}
-(default) never hands over. A handover restarts the trust region at
-\code{rinit} and discards the quasi-Newton pairs, keeping the working
-Hessian. Handing back to \code{"gn"} costs one extra objective
-evaluation.}
+\item{hessianFallback}{Hessian source the run hands over to at the first
+value, model, step or stagnation stop: \code{"none"} (default),
+\code{"bfgs"}, \code{"sr1"} or \code{"gn"}. A handover restarts the trust
+region at \code{rinit}, discards the quasi-Newton pairs and keeps the
+working Hessian.}
 
-\item{fallbackLimit}{Number of handovers allowed. \code{1} (default) hands
-over once and runs the fallback to the end; a higher value alternates back
-and forth, each time at the next soft stop. \code{0} disables the fallback.
-The result reports the count as \code{nSwitch}.}
+\item{fallbackLimit}{Number of handovers allowed. Default \code{1}: hand
+over once and run the fallback to the end. A higher value alternates
+between the two sources, \code{0} disables the fallback. The result
+reports the count as \code{nSwitch}.}
 
-\item{parscale}{Optional named or unnamed numeric of length
-\code{length(parinit)} for parameter rescaling. The subproblem
-operates on \code{g / parscale} and
-\code{H / outer(parscale, parscale)}; the trust radius and \code{xtol}
-are measured in that frame.}
+\item{parscale}{Deprecated. Optional numeric of length
+\code{length(parinit)}, named or unnamed. The trust region works on the
+parameters multiplied by \code{parscale}, so the trust radius and
+\code{xtol} are measured there. Default \code{NULL}, no scaling. Fit on
+log scale instead.}
 
-\item{parupper, parlower}{Named or scalar numeric bounds. If unnamed,
-the first element broadcasts to all parameters; if named, the
-entries slot by name into a length-K vector defaulting to
-\code{+/- Inf}.}
+\item{parupper, parlower}{Upper and lower bounds. Unnamed: the first element
+applies to all parameters. Named: entries are matched by name, missing
+parameters are unbounded. Default \code{NULL}, unbounded.}
 
 \item{tolControl}{List of convergence thresholds, merged into the defaults.
 \describe{
-\item{\code{ftol}}{Change in objective value. Default \code{1e-6}.}
+\item{\code{ftol}}{Change in objective value. Default \code{1e-6}. For
+an ODE model integrated at relative tolerance \code{rtol}, use a value
+at or above \code{rtol * abs(f)}.}
 \item{\code{mtol}}{Predicted model decrease. Default \code{1e-6}.}
-\item{\code{gtol}}{First-order optimality measure. Default \code{1e-6}.
-Deliberately absolute: scaling a gradient by the objective value is not
-meaningful for a general objective, and for a sum of squares it is
-wrong, since \code{|f|} grows quadratically in the residuals while
-\code{|g|} grows linearly. Pass \code{gtol = x * |f|} for that.}
-\item{\code{xtol}}{Step norm. Default \code{0}, which disables it.}
+\item{\code{gtol}}{First-order optimality measure, absolute. Default
+\code{1e-6}. For a relative test pass \code{gtol = x * abs(f)}.}
+\item{\code{xtol}}{Step norm. Default \code{0}, disabled.}
 \item{\code{rmin}}{Lower limit on the trust radius; falling below it
 stops the run with \code{converged = FALSE}. Default \code{0},
-which disables it.}
-\item{\code{ctol}}{Multiple shooting only: the size of the gaps
-between segments, scaled per state, below which the trajectory counts
-as continuous. No stop fires before the gaps are below it. Default
-\code{1e-6}.}
+disabled.}
+\item{\code{ctol}}{Multiple shooting only: scaled gap size below which
+the trajectory counts as continuous; no other test stops the run
+before. Default \code{1e-6}.}
 }}
 
 \item{qnControl}{List of quasi-Newton settings, merged into the defaults and
-read only by \code{"bfgs"}, \code{"sr1"} and a quasi-Newton fallback
-phase.
+read only in a \code{"bfgs"} or \code{"sr1"} phase.
 \describe{
 \item{\code{hessianInit}}{Seed of the approximation: \code{"gn"}
-(default) the objective's Gauss-Newton Hessian at \code{parinit},
-\code{"identity"} the identity, which also stops \code{trust} asking
-for a Hessian at all, or \code{"exact"} the objective's true Hessian
-there. Read only when the run starts quasi-Newton, so it is inert for
-\code{"gn"}. \code{"exact"} is what makes a reverse sweep worth its
-price: one expensive evaluation buys a true curvature and the descent
-then runs on gradients alone. It needs an objective that takes
-\code{deriv2} and a model built for it, see \code{derivMode} in
-\code{\link{odemodel}}.}
-\item{\code{hessianReseed}}{What a stalled quasi-Newton phase does:
-\code{"never"} (default) stops, \code{"stall"} fetches a fresh
-Hessian of the same kind at the current iterate, clears the stored
-pairs and carries on. The source does not change; only the matrix it
-updates from does. A stall consists of rejected steps, so a reseed is
-taken only after the iterate has moved; a run that stalls again without
-moving stops as \code{"never"} does. \code{nReseed} reports the
-count.}
-\item{\code{qnMemory}}{Number of \code{(s, y)} pairs kept. \code{0}
-(default) accumulates every update onto the seed. A positive value
-rebuilds the approximation each iteration from the last
-\code{qnMemory} pairs and the Shanno-Phua scaling of the newest with
-positive curvature, discarding the seed. Costs
-\code{O(qnMemory * K^2)} per iteration and saves no memory, since the
-subproblem needs the explicit matrix.}
-\item{\code{qnCautious}}{Cautious-update threshold: a BFGS pair counts
-only when \code{s^T y > qnCautious * |s| * |y|}. Default \code{1e-8},
-\code{0} disables the test, \code{"sr1"} is exempt. \code{qnSkipped}
-counts the rejected pairs.}
-\item{\code{qnRejected}}{Whether \code{"sr1"} also takes its
-\code{(s, y)} pair from a rejected trial point. Default \code{TRUE}
-for \code{"sr1"}, \code{FALSE} otherwise; \code{"gn"} and
-\code{"bfgs"} are unaffected either way.}
+(default) the Gauss-Newton Hessian at \code{parinit};
+\code{"identity"} the identity matrix, after which no Hessian is
+requested from the objective; \code{"exact"} the true Hessian at
+\code{parinit}, then gradients only. \code{"exact"} needs
+\code{deriv2}, see \code{derivMode} in \code{\link[=odemodel]{odemodel()}}. Used only when
+\code{hessianMethod} is \code{"bfgs"} or \code{"sr1"}.}
+\item{\code{hessianReseed}}{\code{"never"} (default): a stalled
+quasi-Newton phase stops. \code{"stall"}: it continues from a fresh
+Hessian of the same source at the current iterate, provided the
+iterate moved since the last reseed. The result reports the count as
+\code{nReseed}.}
+\item{\code{qnMemory}}{Number of \code{(s, y)} pairs kept. Default
+\code{0}: every update accumulates onto the seed. A positive value
+rebuilds the approximation in each iteration from the last
+\code{qnMemory} pairs, without the seed.}
+\item{\code{qnCautious}}{A BFGS pair is used only when
+\eqn{s^\top y > c\,|s|\,|y|} with \eqn{c} = \code{qnCautious}. Default
+\code{1e-8}, \code{0} disables the test; \code{"sr1"} is exempt. The
+result reports the rejected pairs as \code{qnSkipped}.}
+\item{\code{qnRejected}}{Whether \code{"sr1"} also updates from a
+rejected trial point. Default \code{TRUE} when \code{hessianMethod}
+or \code{hessianFallback} is \code{"sr1"}, \code{FALSE} otherwise.}
 }}
 
 \item{stepControl}{List of step and acceptance settings, merged into the
 defaults.
 \describe{
 \item{\code{boundary}}{Box-bound handling, \code{"reflective"} (default)
-or \code{"clip"}. See Details.}
-\item{\code{theta.max}}{Largest fraction of the distance to a bound that
-a step may use, keeping iterates strictly interior. Default
-\code{0.99995}, used only by \code{boundary = "reflective"}.}
-\item{\code{nonmonotone}}{Zhang-Hager relaxation \code{eta} in
-\code{[0, 1)}. The step ratio is measured against a weighted average of
-past objective values instead of the current one, so a step may be
-accepted that increases the objective. Default \code{0}, the monotone
-rule; \code{0.85} is the value Zhang and Hager report as generally
-best. The result reports the best iterate visited, which is the last
-one when \code{eta = 0}.}
+or \code{"clip"}. See section Box bounds.}
+\item{\code{thetaMax}}{Largest fraction of the distance to a bound a
+step may use. Default \code{0.99995}. \code{boundary = "reflective"}
+only.}
+\item{\code{nonmonotone}}{Zhang-Hager relaxation in \code{[0, 1)}: a
+step is rated against a weighted average of past objective values and
+may increase the objective. Default \code{0}, monotone.}
 \item{\code{acceptance}}{Multiple shooting only: \code{"filter"}
-(default), Fletcher and Leyffer's filter on the objective and the size
-of the gaps; \code{"merit"}, the l2 exact penalty
-\code{f + mu ||c||} with an adaptive \code{mu}; or \code{"natural"},
-Bock's damped Gauss-Newton method as Peifer and Timmer describe it.
-There the full step, all linearised gaps closed, is damped by a factor
-that a predictor from the last curvature estimate proposes and a
-corrector cuts back, and a damped step is taken when the simplified
-step at its end, with the Jacobians of the current iterate, has
-shrunk: the natural level function, which carries the geometry of the
-problem rather than the weights of a merit function. Needs
-\code{hessianMethod = "gn"}, a fixed sigma and no error model. Where
-the damping finds no step, the filter takes over.}
-\item{\code{twoPhase}}{Multiple shooting only: whether the parameters
-are first fitted alone, the node values held at their start on the
-layout the run starts from, as Horbelt, Timmer and Voss do. Every
-segment then has to explain its data from a start the data give, so
-no node takes up misfit the parameters should remove. The nodes are
-laid out afresh at the parameters found and released; a first phase
-that ends where they cannot be laid out is dropped. Helps where noise
-in the node values would otherwise move the parameters, as on a
-spiking trace, at several times the cost elsewhere. Default
-\code{FALSE}.}
-\item{\code{restore}}{Multiple shooting only: whether a run whose
-steps keep being rejected with the gaps open enters a restoration
-phase, as Fletcher and Leyffer's filter does. The linearised gaps are
-closed at the parameters as they are, damped if need be; where that
-does not halve them, the nodes go onto the trajectory of these
-parameters. The point left enters the filter, and the run goes on
-from the restored one. At most five times per run; the result counts
-them in \code{nRestore}. Default \code{FALSE}: on a noisy spike train
-the nodes put onto the trajectory of wrong parameters let the
-automatic nodes cut far more segments, and fewer starts reach the
-optimum.}
-\item{\code{regularise}}{Multiple shooting only: a direction of the
-condensed problem whose singular value lies below \code{regularise}
-times the largest is held fixed in a step, as Peifer and Timmer
-propose for parameters that the data do not identify. Default
-\code{0}, off; \code{"natural"} always leaves out directions below
-\code{1e-7}.}
-\item{\code{soc}}{Multiple shooting only: whether a rejected step whose
-gaps did not close as predicted is retried once with the trial gaps
-condensed onto the nodes, a second-order correction that needs no new
-sensitivities. Default \code{TRUE}.}
-\item{\code{anneal}}{Multiple shooting only: whether the gaps are first
-priced rather than enforced. The run then minimises
-\code{f + w ||c||^2} over parameters and nodes, the gaps scaled per
-state, with \code{w} rising tenfold per stage until the gaps are
-small, and hands over to the exact method from there. It lets the
-parameters move where the dynamics at the start are in a regime the
-data never show, at about twice the cost of a run that needs no help.
-Needs forward sensitivities; without them the run starts with the
-exact method. Default \code{TRUE}.}
+(default), the filter of Fletcher and Leyffer on objective and gap
+size; \code{"merit"}, the l2 exact penalty; \code{"natural"}, Bock's
+natural level function, which needs \code{hessianMethod = "gn"}, a
+fixed sigma and no error model.}
+\item{\code{twoPhase}}{Multiple shooting only: if \code{TRUE}, the
+parameters are first fitted with the node values held fixed, then
+the nodes are laid out afresh and released. Default \code{FALSE}.}
+\item{\code{restore}}{Multiple shooting only: if \code{TRUE}, a run whose
+steps keep being rejected with open gaps enters a restoration phase,
+at most five times. Default \code{FALSE}.}
+\item{\code{regularise}}{Multiple shooting only: directions of the
+condensed problem with a singular value below \code{regularise} times
+the largest are held fixed in a step. Default \code{0}, off. With
+\code{acceptance = "natural"} directions below \code{1e-7} are always
+held fixed.}
+\item{\code{soc}}{Multiple shooting only: if \code{TRUE}, a rejected
+step whose gaps did not close as predicted is retried once with a
+second-order correction. Default \code{TRUE}.}
+\item{\code{anneal}}{Multiple shooting only: if \code{TRUE}, the run
+first minimises the objective plus a rising penalty on the gaps, then
+enforces continuity. Needs forward sensitivities and is skipped
+without them. Default \code{TRUE}.}
 }}
 
-\item{minimize}{If \code{TRUE} (default) minimise; if \code{FALSE}
+\item{minimize}{If \code{TRUE} (default) minimise, if \code{FALSE}
 maximise.}
 
-\item{blather}{If \code{TRUE} return the per-iteration trace
-(\code{argpath}, \code{argtry}, \code{steptype}, \code{stepback},
-\code{accept}, \code{r}, \code{rho}, \code{valpath}, \code{valtry},
-\code{preddiff}, \code{stepnorm}, \code{hessianSource}).}
+\item{blather}{If \code{TRUE}, the result also contains the per-iteration
+trace listed under Value. Default \code{FALSE}.}
 
-\item{printIter}{If \code{TRUE} print iteration count and objective
-value to the console at each function evaluation.}
+\item{printIter}{If \code{TRUE}, print iteration count and objective value
+at each evaluation. Default \code{FALSE}.}
 
-\item{traceFile}{Optional path. If non-\code{NULL}, CSV-log per
-evaluation \code{iter, value, p1, p2, ...}.}
+\item{traceFile}{Path of a CSV file written with one row per evaluation:
+iteration, objective value and parameters. Default \code{NULL}, no file.}
 
-\item{...}{Additional named arguments forwarded to \code{objfun}.}
+\item{...}{Further named arguments passed to \code{objfun}.}
 
 \item{mu}{Named numeric vector of reference values for the L1-penalised
 parameters. Names must be a subset of \code{names(parinit)}; only the
@@ -269,17 +218,48 @@ its tolerances stay flat, it does not take the control lists of
 \item{fterm, mterm}{Deprecated aliases for \code{ftol} and \code{mtol}.}
 }
 \value{
-A list with components \code{argument}, \code{value},
+A list of class \code{trustfit} with components
+\describe{
+\item{\code{argument}}{Named numeric, the best iterate.}
+\item{\code{value}, \code{gradient}, \code{hessian}}{Objective value,
+gradient and model Hessian at \code{argument}.}
+\item{\code{iterations}}{Number of iterations.}
+\item{\code{neval}}{Number of objective evaluations.}
+\item{\code{qnEval}}{Evaluations spent in a quasi-Newton phase.}
+\item{\code{qnSkipped}}{Pairs rejected by the cautious test.}
+\item{\code{nSwitch}}{Number of Hessian source handovers.}
+\item{\code{nReseed}}{Number of reseeds by
+\code{qnControl$hessianReseed = "stall"}.}
+\item{\code{evalBySource}}{Named integer, evaluations per Hessian
+source.}
+\item{\code{converged}}{Logical.}
+\item{\code{atBound}}{Named logical, the parameters held by a bound.}
+\item{\code{stopReason}}{The test that ended the run, see section
+Convergence.}
+}
+With \code{blather = TRUE} the list also contains the matrices
+\code{argpath} (accepted iterates) and \code{argtry} (trial points), one
+row per iteration, and the per-iteration vectors \code{steptype},
+\code{stepback}, \code{accept}, \code{r} (radius), \code{rho} (ratio of
+actual to predicted reduction), \code{valpath}, \code{valtry},
+\code{preddiff}, \code{stepnorm} and, when a quasi-Newton source is
+involved, \code{hessianSource}.
+
+\code{boundary = "clip"} returns only \code{argument}, \code{value},
+\code{gradient}, \code{hessian}, \code{iterations}, \code{converged},
+\code{atBound} and \code{stopReason}, plus the trace.
+
+A multiple-shooting run returns \code{argument}, \code{value},
 \code{gradient}, \code{hessian}, \code{iterations}, \code{neval},
-\code{qnEval} (evaluations spent in the quasi-Newton phase),
-\code{qnSkipped} (pairs the cautious test rejected),
-\code{nSwitch} (Hessian source handovers),
-\code{evalBySource} (named integer, evaluations per source),
-\code{converged}, \code{atBound} (named logical, which parameters are
-held by a bound) and \code{stopReason}. When \code{blather = TRUE} the
-list also contains \code{argpath}, \code{argtry}, \code{steptype},
-\code{stepback}, \code{accept}, \code{r}, \code{rho}, \code{valpath},
-\code{valtry}, \code{preddiff}, \code{stepnorm}.
+\code{qnSkipped}, \code{converged}, \code{stopReason}, \code{atBound} and
+a list \code{multipleShooting} with the final \code{nodes}, the
+\code{gaps} per condition, their scaled size \code{violation}, the counts
+\code{nRelaxed} (iterations with a node step below the full one),
+\code{nSOC} (accepted second-order corrections), \code{nSplit} (segments
+cut), \code{nRestore} (restoration phases) and \code{nStages} (annealing
+stages), the \code{cuts}, the \code{acceptance} and \code{sweep} used,
+\code{mu} (merit) or \code{filterSize} (filter), and \code{trace} when
+\code{blather = TRUE}.
 }
 \description{
 \code{trust} minimises (or maximises) a smooth objective function for which
@@ -289,124 +269,89 @@ Hessian.
 }
 \section{Box bounds}{
 
-\code{boundary = "reflective"} (default) uses the Coleman-Li interior
-trust-region-reflective scheme: the subproblem is solved in the scaled frame
-\code{D g}, \code{D H D + C} with \code{D = diag(|v|^(1/2))}, \code{|v_i|}
-being the distance to the bound the gradient pushes toward. A step leaving
-the box is truncated, reflected off the blocking faces, or replaced by the
-scaled steepest-descent step, whichever the model rates best. Iterates stay
-strictly inside the box and never land exactly on a bound, use
-\code{atBound} to test bound activity.
+\code{boundary = "reflective"} (default) uses the interior
+trust-region-reflective scheme of Coleman and Li. Iterates stay strictly
+inside the box and never land exactly on a bound; \code{atBound} in the
+result reports which parameters a bound holds.
 
-\code{boundary = "clip"} is the historical scheme (active-set reduction plus
-componentwise clipping), kept for reproducing earlier fits.
+\code{boundary = "clip"}: active-set reduction with componentwise clipping.
 }
 
 \section{Convergence}{
 
-The run stops as soon as any of the following holds. The gradient tests are
+The run stops as soon as one of the following holds. The gradient test is
 evaluated at the current iterate; the value, model and step tests count only
 on an accepted step.
 \itemize{
-\item \code{gtol}: \code{max(|v * g|) <= gtol}. This is the first-order
-optimality measure of the box problem and vanishes both at an interior
-stationary point and at a bound the gradient pushes into. Without bounds
-it is \code{max(|g|)}.
-\item \code{ftol}: \code{|f - f_try| < ftol}.
-\item \code{mtol}: predicted reduction
-\code{|g^T p + 0.5 * p^T H p| < mtol}, the quantity \code{blather} reports as
-\code{preddiff}.
-\item \code{xtol}: step norm below \code{xtol} (disabled when \code{0}).
-\item stagnation: five consecutive rejected steps that left the objective
+\item \code{gtol}: the first-order optimality measure
+\eqn{\max_i |v_i g_i|} is at most \code{gtol}, with \eqn{v_i} the
+distance to the bound the gradient points to, 1 if that bound is
+infinite. Without bounds it is \eqn{\max_i |g_i|}.
+\item \code{ftol}: \eqn{|f - f_{\mathrm{try}}| <} \code{ftol}.
+\item \code{mtol}: the predicted reduction
+\eqn{|g^\top p + \frac{1}{2} p^\top H p| <} \code{mtol}.
+\item \code{xtol}: the step norm is below \code{xtol}.
+\item stagnation: five consecutive rejected steps left the objective
 flat within \code{ftol}.
-\item \code{rmin}: trust radius below \code{rmin}. This one reports
-\code{converged = FALSE} (disabled when \code{0}).
+\item \code{rmin}: the trust radius is below \code{rmin}. Reports
+\code{converged = FALSE}.
 }
-\code{stopReason} in the result names which test fired: \code{"gradient"},
-\code{"fvalue"}, \code{"preddiff"}, \code{"step"}, \code{"stagnation"},
-\code{"radius"}, \code{"objfun"} or \code{"iterlim"}. Stagnation reports
-\code{converged = TRUE}; use \code{rmin} for a hard failure instead.
+\code{stopReason} in the result names the test that fired:
+\code{"gradient"}, \code{"fvalue"}, \code{"preddiff"}, \code{"step"},
+\code{"stagnation"}, \code{"radius"}, \code{"objfun"} (three failed
+evaluations in a row) or \code{"iterlim"}. Stagnation reports
+\code{converged = TRUE}.
 
-Only \code{gtol} tests first-order optimality; the other four read the last
-accepted step and a misleading Hessian can trip them far from a stationary
-point. \code{hessianFallback} uses that: the first of the four hands the
-Hessian source over instead of ending the run. In a quasi-Newton
-phase \code{"fvalue"}, \code{"preddiff"} and \code{"step"} do not end the
-run at all; it ends on \code{"gradient"}, \code{"stagnation"} or the radius.
+Only \code{gtol} tests first-order optimality. With a
+\code{hessianFallback}, the first \code{"fvalue"}, \code{"preddiff"},
+\code{"step"} or \code{"stagnation"} stop hands over to the fallback source
+instead of ending the run. In a quasi-Newton phase \code{"fvalue"},
+\code{"preddiff"} and \code{"step"} do not end the run.
 
-Whatever ends the run, \code{argument}, \code{value}, \code{gradient},
-\code{hessian} and \code{atBound} describe one and the same iterate: the
-best one visited, which under the default \code{stepControl$nonmonotone = 0}
-is the last accepted one.
-}
-
-\section{Choosing tolerances}{
-
-The optimiser can only resolve what the objective delivers. For an ODE model
-integrated at relative tolerance \code{rtol}, the value carries a relative
-error of roughly \code{rtol} and the forward sensitivities about an order
-more, giving the gradient a noise floor. Below it, further iterations chase
-integration error. As a starting point:
-\itemize{
-\item \code{ftol} at or above \code{rtol * |f|}.
-\item \code{gtol} at the gradient's noise floor, which for a poorly
-scaled problem is easier to read off a first run than to predict.
-\item Tighten the integrator before tightening either.
-}
-
-A run ending on \code{"stagnation"} rather than \code{"gradient"} indicates
-the gradient tolerances sit below the noise floor; \code{max(abs(gradient))}
-of the result shows where it actually lies.
+\code{argument}, \code{value}, \code{gradient}, \code{hessian} and
+\code{atBound} in the result belong to the best iterate visited, which is
+the last accepted one when \code{stepControl$nonmonotone = 0}.
 }
 
 \section{Multiple shooting}{
 
-An objective from \code{\link{normL2}(..., multipleShootingControl = )},
-alone or in a sum, is optimised by
-Bock's generalised Gauss-Newton method: the time axis is cut into segments
-at the nodes, every segment starts from node values of its own, and
-continuity between the segments is a constraint. At every iterate the
-constraints are linearised and eliminated (condensing), which leaves a
-subproblem in the parameters alone, of the single-shooting size, solved as
-above, box bounds included. The node values follow each step through the
-linearisation, so the gaps close as the iteration converges; at convergence
-the trajectory is continuous and the result is a stationary point of the
-single-shooting objective.
-
-The trust region bounds the step of the parameters and of the node values
-together, the latter measured against the scale of each state's gaps. A step
-closes the linearised gaps in the proportion the region admits of the full
-Gauss-Newton step, completely once the radius no longer binds, which is
-Bock's own step. Where condensing would propagate a gap through a chain of
-expanding segments beyond a bound, that link of the linearisation is dropped
-for the step. With \code{nodes = "auto"} segments are cut where they expand
-too much, fail to solve or miss their data, before the first step and at
-every iterate. A step is accepted by a filter or a merit
-function (\code{stepControl$acceptance}) on the objective and the scaled
-size of the gaps. \code{hessianMethod = "gn"} uses the Gauss-Newton block of
-every segment; \code{"bfgs"} and \code{"sr1"} keep a quasi-Newton block per
-segment of its Lagrangian (partitioned quasi-Newton), which runs on
-gradients alone and so on \code{sweep = "reverse"}, one adjoint solve per
-segment. A summand other than the shooting term, a prior or a
-single-shooting \code{normL2} of other data, enters with its own value,
-gradient and Gauss-Newton Hessian.
-
-Not available with multiple shooting: \code{hessianMethod = "exact"}, a
+An objective built by \code{\link{normL2}(..., multipleShootingControl = )},
+alone or in a sum, is optimised by multiple shooting with the same controls.
+Not available then: \code{hessianMethod = "exact"}, a
 \code{hessianFallback}, \code{qnControl$hessianReseed},
 \code{qnControl$qnMemory}, \code{stepControl$nonmonotone},
 \code{boundary = "clip"}, \code{minimize = FALSE} and \code{traceFile}.
-A multiple-shooting run reports \code{converged = TRUE} only when the gaps
-have closed below \code{tolControl$ctol}; with open gaps the node values
-carry what the parameters do not explain, and the value of the data term
-is no measure of the fit.
-The result carries a list \code{multipleShooting} with the final
-\code{nodes}, the
-\code{gaps} per condition, their scaled size \code{violation}, the counts
-\code{nRelaxed} (iterations with a node step below the full one),
-\code{nSOC} (accepted second-order corrections) and \code{nSplit}
-(segments cut), and \code{trace} when \code{blather = TRUE}.
+The run reports \code{converged = TRUE} only when the scaled gaps between
+the segments are below \code{tolControl$ctol}. The method is described in
+\code{vignette("Optimisation", package = "dMod2")}.
 }
 
+\examples{
+rosenbrock <- function(x, ...) {
+  a <- x[["a"]]
+  b <- x[["b"]]
+  list(value = 100 * (b - a^2)^2 + (1 - a)^2,
+       gradient = c(a = -400 * a * (b - a^2) - 2 * (1 - a),
+                    b = 200 * (b - a^2)),
+       hessian = matrix(c(1200 * a^2 - 400 * b + 2, -400 * a, -400 * a, 200),
+                        2, 2, dimnames = list(c("a", "b"), c("a", "b"))))
+}
+
+fit <- trust(rosenbrock, c(a = -1.2, b = 1), iterlim = 200)
+fit$argument
+fit$stopReason
+
+# With an upper bound on a
+fit <- trust(rosenbrock, c(a = -1.2, b = 1), parupper = c(a = 0.5),
+             iterlim = 200)
+fit$atBound
+
+# Quasi-Newton with a Gauss-Newton fallback
+fit <- trust(rosenbrock, c(a = -1.2, b = 1), hessianMethod = "bfgs",
+             hessianFallback = "gn", iterlim = 200)
+fit$evalBySource
+
+}
 \references{
 Coleman, T. F. and Li, Y. (1996). An interior trust region
 approach for nonlinear minimization subject to bounds.
@@ -434,4 +379,9 @@ identification from uncertain and indirect measurements.
 Peifer, M. and Timmer, J. (2007). Parameter estimation in ordinary
 differential equations for biochemical processes using the method of
 multiple shooting. \emph{IET Systems Biology} 1(2), 78-88.
+}
+\seealso{
+\code{\link[=mstrust]{mstrust()}} for multi-start fits, \link[=profile.objfn]{profile()} for
+profile likelihoods, \code{\link[=normL2]{normL2()}} for the objective,
+\code{vignette("Optimisation", package = "dMod2")} for the method.
 }

@@ -1,3 +1,162 @@
+# dMod2 0.11.0
+
+* Breaking: `Xs()` on cppDE takes `refine` and `gradtol` in `optionsReverse`;
+  `floor` is gone, and so is the weighting of the backward grid by the
+  previous evaluation's adjoint. `refine = TRUE` holds each step of the
+  backward sweep to the error test of the CVODES backward problem under
+  `abstol` and `reltol`, through `cppDE::adjointControl(refine = TRUE)`, and
+  `gradtol` is then the absolute tolerance on each step's share of the
+  gradient. The reverse value pass takes the grid of a value solve.
+* New `symmetryDetection()`, `reconstControl()` and `symmetryReduction()`:
+  structural non-identifiabilities of an ODE model, as generators of its
+  symmetries, and the parameter transformation that removes them. The
+  computation runs in the Python package symident through reticulate, which
+  installs it on first use from <https://github.com/dModverse/symident>; R
+  arguments and fields are camelCase, `print()` and `summary()` are the
+  reports of symident. symident's switches are read from `SYMIDENT_*` and from
+  the options `dMod.sym.*`. msolve, for coupled steady states, comes from
+  `symident.install_msolve()` or `SYMIDENT_MSOLVE`.
+* reticulate no longer provisions symengine.
+* `Xs()` on cppDE and Sundials stops on a failed solve (`onFailure = "stop"`),
+  as `Xf()` does; a fit takes the error as a rejected step.
+* `Xs()` on cppDE: `optionsSens = list(sensErrCon = FALSE)` takes the
+  sensitivities out of the error test.
+* `odemodel(backend = "Sundials", derivMode = "reverse")` takes events: the
+  reverse objective takes the adjoint and the gradient through each jump.
+* Reverse objectives run their solves through prepared batch handles,
+  evaluate the error model batched and keep the data-to-prediction indices
+  between evaluations. Under second order a transformation that no tangent
+  reaches skips its second derivatives.
+* `normL2()` with one condition evaluates the error model without derivatives
+  when none are requested.
+* `importPEtab()` gains `sparse`, which pins the sparse (KLU) or dense linear
+  solver of the cppDE and Sundials backends.
+* `benchmarks/`, outside the built package: value, forward and reverse
+  gradients of PEtab benchmark problems by tier (`run-benchmarks.R --tier
+  tiny|medium|full`), with the scripts of `inst/benchmarks/` under
+  `benchmarks/scripts/`.
+* A sum of objectives keeps the `sweep` attribute its terms agree on, so a
+  reverse objective with a prior says it was evaluated in reverse.
+* `constraintL1()` and `constraintL2()` are S3 generics; the default methods
+  are the priors on named parameters.
+* The option `dMod.outdir` sets where `odemodel()`, `P()`, `Pimpl()`, `Y()` and the
+  PEtab import write generated sources and shared objects; unset, it is the
+  working directory as before.
+* `getSymbols()` and `replaceSymbols()` are reexported from cOde.
+* Breaking: `Xs()` takes its solver options as `options`, which applies to
+  every solve, and `optionsSens`, which now holds only the entries that
+  override `options` for the solves with sensitivities. `Xf()` and
+  `importPEtab()` take `options` as well, and the controls are named
+  `options`, `optionsSens` and `optionsReverse`. `optionsOde` is still
+  accepted as an argument and by `controls()`, with a deprecation warning.
+  On deSolve the default methods stay `"lsoda"` and, for the solves with
+  sensitivities, `"lsodes"`.
+* `Xs()` on cppDE warns about an unknown entry of `optionsReverse`, given to
+  the constructor or set through `controls()`.
+* The solver option for the limit of consecutive rejected steps is
+  `maxattempts`, as in cppDE.
+* Fix: `constraintL2() * P()` takes `fixed`, and with it `trust(fixed = )` and
+  `profile()` on such priors.
+* Fix: `Xt()` returns its sensitivities by the outer parameters, so
+  `g * Xt() * p` has derivatives and `normL2()` on it takes `fixed`.
+* Fix: `Y()` differentiates by its own parameters when no transformation
+  precedes the prediction: `g * x` lacked the derivatives by observation and
+  error parameters that are not parameters of `x`.
+* Fix: `normL2()` takes an error model whose parameters are all fixed.
+* Fix: `as.datalist()` stores a `sigma` or `lloq` column of `NA` alone as
+  numeric.
+* Fix: `mstrust(cautiousMode = TRUE)` removes the `.Rda` fits of its own run
+  rather than files of that name in the working directory.
+* Breaking: arguments in dot case are camelCase. `Y()` and `Pexpl()` take
+  `attachInput` (was `attach.input`), `Pimpl()` `keepRoot` (was
+  `keep.root`); both are also the names of the controls.
+* Breaking: `normL2()`, `datapointL2()` and the `constraint*()` priors take
+  `attrName` (was `attr.name`), also as control of `datapointL2()`;
+  `normL2()` and `evalConditionResidual()` take `optBLOQ` (was `opt.BLOQ`).
+* Breaking: `datapointL2()` takes `parameter` (was `value`), the name of the
+  parameter holding the data value.
+* Breaking: `as.datalist()` takes `splitBy` and `keepCovariates` (were
+  `split.by` and `keep.covariates`), `as.parframe()` `sortBy` (was `sort.by`),
+  `parframe()` `objAttributes` (was `obj.attributes`; the attribute keeps its
+  name).
+* Breaking: `reml()` and `remlLeverage()` take `rankTol` (was `rank.tol`).
+* Breaking: `trust(stepControl = )` takes `thetaMax` (was `theta.max`);
+  `mstrust()` takes `startFromCenter` (was `start1stfromCenter`).
+* Breaking: `distributedComputing()` takes `memPerCore`, `sshPasswd`,
+  `varValues`, `nRep`, `purgeLocal` and `customFolders` (were `mem_per_core`,
+  `ssh_passwd`, `var_values`, `no_rep`, `purge_local` and `custom_folders`);
+  its `purge()` takes `purgeLocal`.
+* Breaking: `plotPathsMulti()` and `plotProfilesAndPaths()` take `whichPar`
+  and `nPars` (were `whichpars` and `npars`), `plotProfilesAndPaths()` `ncol`
+  (was `ncols`), `plotArray()` `nSim` (was `nsimus`), `plotFluxes()`
+  `legendTitle` (was `nameFlux`), `attrs()` `which` (was `atr`) and
+  `profileParsPerNode()` `parsPerNode` (was `fits_per_node`).
+* Breaking: `reconstControl()` takes `minSupportCandCap`, `perPrimeCap` and
+  `perPrimeMinPrimes` (were `minsupportCandCap`, `perprimeCap` and
+  `perprimeMinPrimes`).
+* Breaking: `readPEtabYaml()` and `readPEtabTables()` replace
+  `readPetabYaml()` and `readPetabTables()`. An imported problem prints as
+  `<PEtab problem ...>`.
+* Breaking: `repar(trafo, expr)` takes the transformation first, as
+  `define()` and `insert()` do. The order `repar(expr, trafo)` is recognised
+  by an expression in first place.
+* Breaking: `profile()` and `vcov()` are methods of the generics of stats,
+  which dMod2 no longer masks. `profile()` dispatches on objective functions
+  and plain R functions, first argument `fitted` (was `objfun`). `trust()`
+  returns a list of class `trustfit`, kept by `mstrust()`, on which `vcov()`
+  dispatches, first argument `object` (was `fit`); a fit stored before needs
+  `class(fit) <- c("trustfit", "list")`.
+* Breaking: the operands of `+` and `*` on dMod functions, objectives,
+  objlists and datalists are named `e1` and `e2`.
+* The old names above are accepted with a deprecation warning; giving the old
+  and the new name together is an error.
+* Breaking: `distributedComputing()` submits by default (`recover = FALSE`).
+  The `get()` of `distributedComputing()` and `runbg()` returns the results
+  instead of assigning `cluster_result` or `.runbgOutput` in the global
+  environment; `runbg(wait = TRUE)` returns them too. The former behaviour is
+  `cluster_result <- job$get()`.
+* Breaking: `steadyStates()` writes nothing unless `file` is given; the model
+  for the solver goes to a temporary file. Its unused argument `rates` is
+  deprecated and ignored, and `verbose` defaults to `FALSE`.
+* Breaking: `fitErrorModel()` plots only with `plotting = TRUE`;
+  `resetWarmStarts()` and `symmetryDetection()` print only with
+  `verbose = TRUE`.
+* Breaking: `symmetryDetection()` requires `f` and `g`.
+* `ggopen()` opens the PDF with the viewer of the platform by default:
+  `open` on macOS, `xdg-open` on Linux, `shell.exec()` on Windows.
+* `trust(parscale = )` is deprecated and warns; it still scales the trust
+  region. Fit on log scale instead.
+* `msParframe()` leaves the global random number generator as it was.
+  `mstrust()` takes `samplefun` as a function as well as its name.
+* `rref()` returns a list named `rref` and `pivots`; its unused argument
+  `fractions` is deprecated and ignored.
+* Breaking: `Pimpl(controlsPTC)` takes the tolerances as `reltol` and `abstol`,
+  as `cppDE::ptc()` does; `rtol` and `atol` are deprecated.
+* `compile()` restores `PKG_*` flags set before the call without an error,
+  and leaves no `symbols.rds` in the working directory under `R CMD check`.
+* `reconstControl(homotopy = )` switches the last reconstruction route of
+  symident, which fits directions still open under `equilibrate = TRUE` along
+  lines in parameter space; on by default.
+* Needs cppDE 0.12.0.
+
+# dMod2 0.10.3
+
+* The help pages of the constructors (`odemodel()`, `Xs()`, `Xf()`, `Xd()`,
+  `Xt()`, `Y()`, `P()`, `Pexpl()`, `Pimpl()`, `normL2()`, `datapointL2()`,
+  the `constraint*()` priors) and of the function classes are rewritten, with
+  examples for `Xs()`, `P()`, `Pexpl()` and `Pimpl()`.
+* `Xs()` and `Xf()` on cppDE and Sundials return the forcings after the
+  states, so observables can contain them, and take forcing names as factor.
+  A forcing holds its first and last value outside its points and may be a
+  single point.
+* `Xf()` on cppDE and Sundials starts states missing from `pars` at 0.
+* `datapointL2()` returns an `objlist`.
+* `constraintL2()` stops on a `sigma` that mixes numbers and parameter names.
+* `normL2()` names the data conditions `x` does not have.
+* `plotValues()` puts its breaks at 0 and at the decades from 10 on and no
+  longer fixes the limits of the y axis.
+* Needs cppDE 0.11.3.
+
 # dMod2 0.10.2
 
 * `runbg()` and `distributedComputing()` with `compile = TRUE` take SUNDIALS'
@@ -118,7 +277,7 @@
   preequilibration, where a constant at 0 idles its reaction, and the
   reimport of Isensee_JCB2018 equilibrated to another state.
 * `exportPEtabObject()` declares condition targets and compartment sizes that
-  nothing else carries, with the SBML default recorded at import (a surface
+  nothing else states, with the SBML default recorded at import (a surface
   compartment of Lang_PLOSComputBiol2024 went out sized by itself).
 * `exportPEtabObject()` writes a single measured sigma per observable as its
   noise formula instead of per-row noise parameters.
@@ -198,7 +357,7 @@
   one of its states free, the first one whose balance can be spent elsewhere.
   `customTotals()` reach it as before.
 * `steadyStates(version = "1.4")` never solves for a rate constant whose fluxes
-  all carry a `neglect`ed symbol, which would divide by that symbol.
+  all contain a `neglect`ed symbol, which would divide by that symbol.
 * `steadyStates(version = "1.4")` prints one line per attempt instead of the
   intermediate expressions, notes after its summary, and on failure the
   balances left.
@@ -279,7 +438,7 @@
 * **Bug fixes.** A summed objective keeps the curvature of every term. An
   objective that declines a Hessian no longer crashes `trust()`. A backward
   solve without an answer is an error instead of a zero gradient. A PEtab prior
-  honours `hessian = FALSE`. The batched backward path carries more than one
+  honours `hessian = FALSE`. The batched backward path propagates more than one
   direction. `compile()` stays within the 8191-character command line of
   Windows.
 * New examples `inst/examples/example_ReverseAD.R`,
@@ -339,12 +498,12 @@
   run; `fallbackLimit` above one alternates back to the primary source at the
   next such stop, re-seeding a Gauss-Newton phase from a fresh Hessian at the
   cost of one evaluation. `hessianMethod = "hybrid"` is gone, not deprecated: a
-  run is a method and, optionally, a fallback, and no pair carries a name of its
+  run is a method and, optionally, a fallback, and no pair has a name of its
   own. It was `"gn"` with `hessianFallback = "bfgs"`, and `trust()` says so when
   it is passed.
-* `as.parframe()` carries `nSwitch`, the number of Hessian source handovers, so
+* `as.parframe()` includes `nSwitch`, the number of Hessian source handovers, so
   a multi-start can be scored on them.
-* `trustL1()` is gone. It carried its own trust-region driver, shared no
+* `trustL1()` is gone. It had its own trust-region driver, shared no
   acceptance semantics with `trust()` after the changes above, and had no caller
   left here: the L1 penalty, its clustering and the EM layer that use it live on
   `devel-EM`, and it returns with them once that layer lands, aligned with the
@@ -384,7 +543,7 @@
   until it stagnates, then switches to `"bfgs"` once. The quasi-Newton phase
   consumes only the gradient. Reflective boundary only.
 * Objective functions take a call-time `hessian` argument. With
-  `hessian = FALSE` the `J^T J` contraction never runs and the result carries a
+  `hessian = FALSE` the `J^T J` contraction never runs and the result has a
   `NULL` hessian. `trust()` uses this in the quasi-Newton phase, and it
   propagates through objective composition.
 * `trust()` reports `neval` and, under `blather`, the `hessianSource` per
@@ -477,7 +636,7 @@
   `constraintCauchy()`, `constraintGamma()`, `constraintExponential()`,
   `constraintChisq()` and `constraintRayleigh()`. Each is the `-2 log` density
   including its normalisation, unlike `constraintL2()`, which is the penalty
-  form, and each carries the chain rule so `constraint * P()` is exact.
+  form, and each applies the chain rule so `constraint * P()` is exact.
 * The multivariate-normal path of `constraintL2()` is gone, together with the
   `penaltySpec` plumbing and the `plotIndivs()` / `plotHistIndivs()` generics.
   All of them need an `omegaSpec` or a `penaltyspec`, which only the NLME layer
@@ -506,7 +665,7 @@
   that went through `loadDLL()` or `compile()`.
 * `loadDLL()` also searches the directories the sources were generated in, so a
   model compiled into a temporary folder is found rather than silently skipped.
-* `normL2()` carries `compileInfo`, as `*` and `+` already did, so `loadDLL()`
+* `normL2()` attaches `compileInfo`, as `*` and `+` already did, so `loadDLL()`
   and `compile()` reach the shared objects of a composed objective.
 
 # dMod2 0.6.1
@@ -515,7 +674,7 @@
   process. Unloading them nulled the native symbol pointers held by the
   prediction, observation and parameter functions built from them, leaving
   every later call without a way to resolve them again.
-* `Xs()` caches a prepared batch handle that carries such a pointer of its
+* `Xs()` caches a prepared batch handle that holds such a pointer of its
   own, which no symbol-cache flush reached. It is now rebuilt whenever the
   cache is flushed.
 
@@ -619,7 +778,7 @@
 
 # dMod2 0.5.5
 
-* `eqnlist` carries compartments and volumes; `assignCompartment()` and
+* `eqnlist` stores compartments and volumes; `assignCompartment()` and
   `setCompartmentVolume()` set them.
 * `conservedQuantities()` and `getTotals()` report the conserved moieties.
 

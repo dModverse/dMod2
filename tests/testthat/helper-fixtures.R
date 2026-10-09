@@ -1,15 +1,5 @@
-# Compiled-model fixtures for behavioral tests.
-#
-# These functions build small dMod prediction / observation / trafo chains
-# once per R process and cache the result via a globalenv-based store
-# (testthat sources helper-*.R fresh per test_file, so a function-local
-# cache would not survive across files; globalenv does).
-#
-# Convention: every compiled artifact lives in <tempdir>/dmod_fx and is
-# named with a stable prefix so dyn.load can reuse it across calls.
-
-
-## ---- Cache + workdir machinery ------------------------------------------
+# Compiled fixtures shared by the test files. The cache lives in globalenv, so
+# it outlives a file when one process runs several, as R CMD check does.
 
 .dmod_fx_cache <- function() {
   if (!exists("..dmod_fx_cache..", envir = globalenv(), inherits = FALSE))
@@ -27,7 +17,6 @@
   cache$workdir
 }
 
-# Internal: setwd to the fixture workdir for the duration of `expr`.
 .dmod_with_fx_workdir <- function(expr) {
   oldwd <- setwd(.dmod_fx_workdir())
   on.exit(setwd(oldwd), add = TRUE)
@@ -35,116 +24,127 @@
 }
 
 
-## ---- Linear decay fixture -----------------------------------------------
+## ---- Registration ---------------------------------------------------------
 
-# Build (and cache) the compiled chain for a one-state linear-decay model.
-#   ODE:        d A / dt = -k * A
-#   Observable: y = A
-#   Trafo:      identity (A, k) or log (A = exp(A_log), k = exp(k_log))
-#
-# Returns a list with elements:
-#   m           odemodel
-#   xfn         prediction function from Xs(m)
-#   gfn         observation function Y(y = A, ...)
-#   pfn_id      identity parameter trafo, single condition C1
-#   pfn_log     log-trafo, single condition C1
-#   prd_id      gfn * xfn * pfn_id
-#   prd_log     gfn * xfn * pfn_log
-#   outerpars_id, outerpars_log:  default named parameter vectors
+# A test file registers, before first use, what it links into the fixture's
+# shared object: `extra` maps the uncompiled fixture to named fn objects,
+# `multicond` adds the four-condition chain. All of it builds in one compile.
+fx_register <- function(extra = NULL, multicond = FALSE) {
+  cache <- .dmod_fx_cache()
+  if (is.null(cache$decay)) {
+    if (!is.null(extra)) cache$extraFns <- c(cache$extraFns, list(extra))
+    if (multicond) cache$wantMulticond <- TRUE
+    return(invisible(NULL))
+  }
+  if (multicond) fx_decay_multicond_compiled()
+  if (!is.null(extra)) .fx_build_extra(extra)
+  invisible(NULL)
+}
+
+# Extras registered after the fixture was built, in a shared object of their
+# own. They go first, so a name this file reuses finds its own object.
+.fx_build_extra <- function(extra) {
+  cache <- .dmod_fx_cache()
+  base <- cache$decay[c("m", "xfn", "gfn", "pfn_id", "pfn_log")]
+  cache$nLate <- if (is.null(cache$nLate)) 1L else cache$nLate + 1L
+  .dmod_with_fx_workdir({
+    objs <- extra(base)
+    do.call(compile, c(unname(objs), list(output = paste0("fx_late_", cache$nLate),
+                                          cores = test_cores())))
+  })
+  cache$extra <- c(objs, cache$extra)
+}
+
+# The registered extra objects, compiled.
+fx_extra <- function() {
+  fx_decay_compiled()
+  .dmod_fx_cache()$extra
+}
+
+
+## ---- Linear decay ----------------------------------------------------------
+
+# One-state linear decay observed directly, with an identity and a log trafo
+# for condition C1. Elements: m, xfn, gfn, pfn_id, pfn_log, prd_id, prd_log,
+# outerpars_id, outerpars_log.
 fx_decay_compiled <- function() {
   cache <- .dmod_fx_cache()
   if (!is.null(cache$decay)) return(cache$decay)
 
   .dmod_with_fx_workdir({
-    reactions <- addReaction(eqnlist(), from = "A", to = "",
-                             rate = "k*A",
+    reactions <- addReaction(eqnlist(), from = "A", to = "", rate = "k*A",
                              description = "linear decay")
-    # Compile via dMod's `compile()` instead of cOde's internal compileAndLoad
-    # so the build flags include -w; otherwise R's default -Wall surfaces a
-    # constant pile of unused-variable noise from cOde-generated code.
     m <- odemodel(reactions, modelname = "fx_decay", compile = FALSE)
     xfn <- Xs(m)
-
-    gfn <- Y(c(y = "A"), f = xfn, condition = NULL, attach.input = FALSE,
+    gfn <- Y(c(y = "A"), f = xfn, condition = NULL, attachInput = FALSE,
              modelname = "fx_decay_obs", compile = FALSE)
-
-    trafo_id  <- eqnvec(A = "A",         k = "k")
-    trafo_log <- eqnvec(A = "exp(A_log)", k = "exp(k_log)")
-
-    pfn_id <- P(trafo_id,  condition = "C1",
-                modelname = "fx_decay_p_id",  compile = FALSE)
-    pfn_log <- P(trafo_log, condition = "C1",
+    pfn_id <- P(eqnvec(A = "A", k = "k"), condition = "C1",
+                modelname = "fx_decay_p_id", compile = FALSE)
+    pfn_log <- P(eqnvec(A = "exp(A_log)", k = "exp(k_log)"), condition = "C1",
                  modelname = "fx_decay_p_log", compile = FALSE)
+    base <- list(m = m, xfn = xfn, gfn = gfn, pfn_id = pfn_id, pfn_log = pfn_log)
 
-    compile(xfn, gfn, pfn_id, pfn_log, output = "fx_decay_all", cores = 4L)
+    mc <- if (isTRUE(cache$wantMulticond)) .fx_multicond_parts(base)
+    extra <- do.call(c, lapply(cache$extraFns, function(f) f(base)))
+    objs <- c(list(xfn, gfn, pfn_id, pfn_log), mc[c("gfn", "pfn")], unname(extra))
+    do.call(compile, c(Filter(Negate(is.null), objs),
+                       list(output = "fx_decay_all", cores = test_cores())))
 
-    cache$decay <- list(
-      m           = m,
-      xfn         = xfn,
-      gfn         = gfn,
-      pfn_id      = pfn_id,
-      pfn_log     = pfn_log,
-      prd_id      = gfn * xfn * pfn_id,
-      prd_log     = gfn * xfn * pfn_log,
+    cache$extra <- extra
+    if (!is.null(mc)) cache$decay_mc <- .fx_multicond_finish(base, mc)
+    cache$decay <- c(base, list(
+      prd_id        = gfn * xfn * pfn_id,
+      prd_log       = gfn * xfn * pfn_log,
       outerpars_id  = c(A = 1.0, k = 0.5),
-      outerpars_log = c(A_log = 0, k_log = log(0.5))
-    )
+      outerpars_log = c(A_log = 0, k_log = log(0.5))))
   })
 
   cache$decay
 }
 
 
-## ---- Multi-condition decay fixture --------------------------------------
+## ---- Four conditions -------------------------------------------------------
 
-# Decay model branched over four conditions with a condition-specific scale.
-# Shares odemodel and prediction function with fx_decay_compiled().
-#
-# Each condition depends on a different outer parameter set (A_log, k_log
-# shared; s_<C>_log not), so attr(pars, "deriv") has different column names
-# per condition -- the shape a batched ODE entry has to survive.
-#
-# Elements: conditions, m, xfn, gfn (y = s*A), pfn (branched), prd, outerpars.
+# The decay chain over C1..C4 with a scale of its own per condition, so each
+# condition has a different derivative basis and every leaf runs batched.
+# Elements: conditions, m, xfn, gfn, pfn, prd, outerpars.
+.fx_multicond_parts <- function(base) {
+  conds <- paste0("C", 1:4)
+  gfn <- Y(c(y = "s*A"), f = base$xfn, condition = NULL, attachInput = FALSE,
+           modelname = "fx_mc_obs", compile = FALSE)
+  tree <- data.frame(s_log = paste0("s_", conds, "_log"),
+                     row.names = conds, stringsAsFactors = FALSE)
+  pfn <- P(branch(eqnvec(A = "exp(A_log)", k = "exp(k_log)", s = "exp(s_log)"),
+                  table = tree, apply = "insert"),
+           method = "explicit", modelname = "fx_mc_p", compile = FALSE)
+  list(conditions = conds, gfn = gfn, pfn = pfn)
+}
+
+.fx_multicond_finish <- function(base, mc) {
+  list(conditions = mc$conditions, m = base$m, xfn = base$xfn, gfn = mc$gfn,
+       pfn = mc$pfn, prd = mc$gfn * base$xfn * mc$pfn,
+       outerpars = c(A_log = 0, k_log = log(0.5),
+                     setNames(seq(0, 0.3, length.out = 4),
+                              paste0("s_", mc$conditions, "_log"))))
+}
+
 fx_decay_multicond_compiled <- function() {
   cache <- .dmod_fx_cache()
   if (!is.null(cache$decay_mc)) return(cache$decay_mc)
-
   base <- fx_decay_compiled()
-  conds <- paste0("C", 1:4)
-
+  if (!is.null(cache$decay_mc)) return(cache$decay_mc)
   .dmod_with_fx_workdir({
-    gfn <- Y(c(y = "s*A"), f = base$xfn, condition = NULL, attach.input = FALSE,
-             modelname = "fx_mc_obs", compile = FALSE)
-
-    trafo <- eqnvec(A = "exp(A_log)", k = "exp(k_log)", s = "exp(s_log)")
-    tree  <- data.frame(s_log = paste0("s_", conds, "_log"),
-                        row.names = conds, stringsAsFactors = FALSE)
-    pfn <- P(branch(trafo, table = tree, apply = "insert"),
-             method = "explicit", modelname = "fx_mc_p", compile = FALSE)
-
-    compile(gfn, pfn, output = "fx_mc_all", cores = 4L)
-
-    outerpars <- c(A_log = 0, k_log = log(0.5),
-                   setNames(seq(0, 0.3, length.out = 4), paste0("s_", conds, "_log")))
-
-    cache$decay_mc <- list(
-      conditions = conds,
-      m          = base$m,
-      xfn        = base$xfn,
-      gfn        = gfn,
-      pfn        = pfn,
-      prd        = gfn * base$xfn * pfn,
-      outerpars  = outerpars
-    )
+    mc <- .fx_multicond_parts(base)
+    compile(mc$gfn, mc$pfn, output = "fx_mc_all", cores = test_cores())
+    cache$decay_mc <- .fx_multicond_finish(base, mc)
   })
-
   cache$decay_mc
 }
 
-# Build a noisy single-condition decay dataset using closed-form A(t) plus
-# Gaussian noise. Returns a datalist. Default times / sigma chosen so the
-# fit is well-conditioned and the gradient at truth is small but not zero
-# (good for numDeriv comparisons).
+
+## ---- Data ------------------------------------------------------------------
+
+# Noisy decay data for one condition, closed form plus Gaussian noise.
 fx_decay_data <- function(pars  = c(A = 1.0, k = 0.5),
                           times = seq(0, 10, by = 1),
                           sigma = 0.05,
@@ -152,18 +152,12 @@ fx_decay_data <- function(pars  = c(A = 1.0, k = 0.5),
                           seed  = 1L) {
   df <- make_noisy_data(
     truth_fn  = function(t, p) p["A"] * exp(-p["k"] * t),
-    pars      = pars,
-    times     = times,
-    name      = "y",
-    sigma     = sigma,
-    condition = condition,
-    seed      = seed)
-  as.datalist(df, split.by = "condition")
+    pars = pars, times = times, name = "y", sigma = sigma,
+    condition = condition, seed = seed)
+  as.datalist(df, splitBy = "condition")
 }
 
-# Two-condition decay dataset: same model, two different "true" k values
-# encoded in conditions C1 and C2. Used to validate multi-condition
-# aggregation in normL2 / objfn composition.
+# Noisy decay data for several conditions, one parameter set each.
 fx_decay_data_multi <- function(parslist = list(C1 = c(A = 1.0, k = 0.5),
                                                 C2 = c(A = 1.0, k = 1.0)),
                                 times = seq(0, 10, by = 1),
@@ -172,23 +166,16 @@ fx_decay_data_multi <- function(parslist = list(C1 = c(A = 1.0, k = 0.5),
   out <- do.call(rbind, lapply(seq_along(parslist), function(i) {
     set.seed(seed + i - 1L)
     p <- parslist[[i]]
-    cn <- names(parslist)[i]
     data.frame(name = "y", time = times,
                value = p["A"] * exp(-p["k"] * times) +
                  rnorm(length(times), 0, sigma),
-               sigma = sigma, condition = cn,
+               sigma = sigma, condition = names(parslist)[i],
                stringsAsFactors = FALSE)
   }))
-  as.datalist(out, split.by = "condition")
+  as.datalist(out, splitBy = "condition")
 }
 
-
-## ---- BLOQ-augmented decay dataset ---------------------------------------
-
-# Same decay simulation but with rows below a chosen LLOQ marked BLOQ.
-# The LLOQ defaults to a value that censors ~30% of late-time observations
-# (decay to small values), so all four BLOQ modes (M1 drop / M3 / M4NM /
-# M4BEAL) have non-trivial work to do.
+# Decay data with a lower limit of quantification that censors the late rows.
 fx_decay_data_bloq <- function(pars  = c(A = 1.0, k = 0.5),
                                times = seq(0, 10, by = 0.5),
                                sigma = 0.05,
@@ -197,25 +184,7 @@ fx_decay_data_bloq <- function(pars  = c(A = 1.0, k = 0.5),
                                seed  = 1L) {
   df <- make_noisy_data(
     truth_fn  = function(t, p) p["A"] * exp(-p["k"] * t),
-    pars      = pars,
-    times     = times,
-    name      = "y",
-    sigma     = sigma,
-    condition = condition,
-    lloq      = lloq,
-    seed      = seed)
-  as.datalist(df, split.by = "condition")
-}
-
-
-## ---- Backend parametrisation --------------------------------------------
-
-# The objective functions now have a single C++ backend; these shims keep
-# legacy call sites working by running each block once under that backend.
-for_each_backend <- function(fn) {
-  fn(TRUE)
-}
-
-with_cpp_backend <- function(enabled, code) {
-  force(code)
+    pars = pars, times = times, name = "y", sigma = sigma,
+    condition = condition, lloq = lloq, seed = seed)
+  as.datalist(df, splitBy = "condition")
 }

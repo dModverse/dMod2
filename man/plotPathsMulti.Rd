@@ -2,29 +2,45 @@
 % Please edit documentation in R/plots.R
 \name{plotPathsMulti}
 \alias{plotPathsMulti}
-\title{Profile likelihood: plot all parameter paths belonging to one profile in one plot}
+\title{Profile Likelihood: Plot All Parameter Paths of One Profile Together}
 \usage{
-plotPathsMulti(profs, whichpars, npars = 5, normalizePaths = FALSE)
+plotPathsMulti(profs, whichPar, nPars = 5, normalizePaths = FALSE, ...)
 }
 \arguments{
-\item{profs}{Lists of profiles as being returned by \link{profile}.}
+\item{profs}{A \link{parframe} of profiles as returned by
+\link[=profile.objfn]{profile()}.}
 
-\item{whichpars}{Character vector of parameter names for which the profile paths should be generated.}
+\item{whichPar}{Character vector, the profiled parameters to draw.}
 
-\item{npars}{Numeric vector of number of colored and named parameter paths.}
+\item{nPars}{Integer, number of colored and named paths. Defaults to 5.}
 
-\item{normalizePaths}{Logical indicating whether the paths should be normalized to absolute values of 1. Default \code{FALSE}; \code{TRUE} only useful in corner cases when you know why to do so.}
+\item{normalizePaths}{Logical. \code{TRUE} scales each path to a maximum
+absolute value of 1. Defaults to \code{FALSE}.}
+
+\item{...}{\code{whichpars} and \code{npars} are deprecated, use \code{whichPar} and
+\code{nPars}.}
 }
 \value{
-A plot object of class \code{ggplot} for length(whichpars) = 1 and otherwise an object of class \code{cowplot}.
+A \code{ggplot} object; for several \code{whichPar} the grid of
+\code{\link[cowplot:plot_grid]{cowplot::plot_grid()}}.
 }
 \description{
-Profile likelihood: plot all parameter paths belonging to one profile in one plot
+Draws, for each profiled parameter, the changes of all other parameters
+along its profile in one panel. The \code{nPars} parameters with the largest
+change are colored and named, the others are gray. Requires the package
+cowplot.
 }
 \examples{
-\dontrun{
- plotPathsMulti(myprofiles, c("mypar1", "mypar2"), npars = 5) 
+\dontshow{if (requireNamespace("cowplot", quietly = TRUE)) withAutoprint(\{ # examplesIf}
+pars <- c(a = 1, b = 0.5, c = 2)
+obj <- constraintL2(mu = pars, sigma = 0.1)
+profs <- profile(obj, pars, whichPar = c("a", "b"), limits = c(-1, 1),
+                 cores = 1)
+plotPathsMulti(profs, c("a", "b"), nPars = 2)
+\dontshow{\}) # examplesIf}
 }
+\seealso{
+\code{\link[=plotPaths]{plotPaths()}}, \code{\link[=plotProfilesAndPaths]{plotProfilesAndPaths()}}
 }
 \author{
 Svenja Kemmer, \email{svenja.kemmer@fdm.uni-freiburg.de}

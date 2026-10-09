@@ -2,7 +2,7 @@
 % Please edit documentation in R/reml.R
 \name{reml}
 \alias{reml}
-\title{Estimate the error model by restricted maximum likelihood}
+\title{Estimate the Error Model by Restricted Maximum Likelihood}
 \usage{
 reml(
   objfun,
@@ -11,7 +11,7 @@ reml(
   fixed = NULL,
   iterlim = 25L,
   tol = 1e-06,
-  rank.tol = 1e-08,
+  rankTol = 1e-08,
   optimizer = trust,
   control = NULL,
   cores = getOption("dMod.cores", 1L),
@@ -19,53 +19,90 @@ reml(
 )
 }
 \arguments{
-\item{objfun}{objective function built by \link{normL2}, with an error model.}
+\item{objfun}{Objective function built by \code{\link[=normL2]{normL2()}}, with an error model.}
 
-\item{pars}{named numeric starting vector covering mean and error parameters.}
+\item{pars}{Named numeric starting vector of mean and error parameters.}
 
-\item{errpars}{character, the error-model parameters. Defaults to the free
+\item{errpars}{Character, the error-model parameters. Default \code{NULL}: the
 symbols of the error equations that appear in \code{pars}.}
 
-\item{fixed}{named numeric held fixed throughout.}
+\item{fixed}{Named numeric, held fixed throughout. Default \code{NULL}.}
 
-\item{iterlim}{maximum number of outer rounds.}
+\item{iterlim}{Maximum number of rounds. Default \code{25}.}
 
-\item{tol}{convergence threshold on the largest change of an error parameter
-between two rounds.}
+\item{tol}{Convergence threshold on the largest change of an error parameter
+between two rounds. Default \code{1e-6}.}
 
-\item{rank.tol}{passed to \link{remlLeverage}.}
+\item{rankTol}{Passed to \code{\link[=remlLeverage]{remlLeverage()}}. Default \code{1e-8}.}
 
-\item{optimizer}{optimiser for the mean step, called as
-\code{optimizer(objfun, parinit, fixed = , ...)}.}
+\item{optimizer}{Optimiser for the mean step, called as
+\code{optimizer(objfun, parinit, fixed = , ...)}. Default \code{\link[=trust]{trust()}}.}
 
-\item{control}{named list of arguments for \code{optimizer}.}
+\item{control}{Named list of arguments for \code{optimizer}, merged into
+\code{list(rinit = 0.1, rmax = 10)}. Default \code{NULL}.}
 
-\item{cores}{passed on to the prediction and the objective.}
+\item{cores}{Passed to the prediction and the objective. Default
+\code{getOption("dMod.cores", 1)}.}
 
-\item{...}{further arguments for \code{objfun}.}
+\item{...}{Further arguments for \code{objfun}. \code{rank.tol} is deprecated, use
+\code{rankTol}.}
 }
 \value{
-A list with components \code{argument} (the full parameter vector),
-\code{value} (the objective at \code{argument}), \code{errpars}, \code{leverage} (the frame
-returned by \link{remlLeverage}), \code{dof} (effective degrees of freedom per
-observable), \code{iterations}, \code{converged} and \code{fit} (the last mean fit).
+A list with components
+\describe{
+\item{\code{argument}}{The full parameter vector.}
+\item{\code{value}}{The REML criterion, \code{value.plain + logdet}.}
+\item{\code{value.plain}}{The objective at \code{argument}.}
+\item{\code{logdet}}{Log determinant of \eqn{J^\top W J}, see
+\code{\link[=remlLeverage]{remlLeverage()}}.}
+\item{\code{errpars}}{The error-model parameters.}
+\item{\code{leverage}}{The data frame returned by \code{\link[=remlLeverage]{remlLeverage()}}.}
+\item{\code{dof}}{Effective degrees of freedom per observable.}
+\item{\code{rank}}{Effective number of mean parameters.}
+\item{\code{iterations}}{Number of rounds.}
+\item{\code{converged}}{Logical.}
+\item{\code{fit}}{The last mean fit.}
+}
 }
 \description{
 Alternates between fitting the mean parameters at a fixed error model and
 updating the error parameters from the REML stationarity condition, until
 the error parameters stop moving. Every data point enters with its own
-leverage rather than with the average \eqn{p/n}.
-
-The objective is left untouched, it stays the plain \eqn{-2\log L}. Every L2
-term of a composed objective is used, so a split
-\code{normL2(d1, ...) + normL2(d2, ...)} is handled as one dataset.
+leverage, see \code{\link[=remlLeverage]{remlLeverage()}}. Every L2 term of a composed objective is
+used, so \code{normL2(d1, ...) + normL2(d2, ...)} is handled as one dataset.
 }
 \details{
-Only first-order sensitivities are used. The condition solved is the data
-term's: a term acting on the error parameters from outside it, a prior for
-instance, is not part of it, and \code{reml()} warns when it finds one. Put such
-terms on the mean parameters.
+Only first-order sensitivities are used. A term acting on the error
+parameters from outside the data term, such as a prior, is not part of the
+REML condition; \code{reml()} warns when it finds one.
+}
+\examples{
+\donttest{
+old <- options(dMod.outdir = tempdir())
+f <- addReaction(eqnlist(), from = "A", to = "", rate = "k*A")
+x <- Xs(odemodel(f, modelname = "reml_x", compile = FALSE))
+g <- Y(c(y = "A"), f = x, attachInput = FALSE, modelname = "reml_g",
+       compile = FALSE)
+e <- Y(c(y = "sigma_y"), f = g, attachInput = FALSE, condition = "C1",
+       modelname = "reml_e", compile = FALSE)
+p <- P(eqnvec(A = "exp(logA)", k = "exp(logk)", sigma_y = "sigma_y"),
+       condition = "C1", modelname = "reml_p", compile = FALSE)
+compile(x, g, e, p, output = "reml_example", cores = 1)
+
+set.seed(1)
+times <- seq(0, 5, by = 0.25)
+data <- datalist(C1 = data.frame(
+  name = "y", time = times, sigma = NA_real_,
+  value = 2 * exp(-0.5 * times) + rnorm(length(times), sd = 0.1)))
+obj <- normL2(data, g * x * p, errmodel = e)
+
+fit <- reml(obj, c(logA = 0, logk = 0, sigma_y = 1))
+fit$argument
+fit$dof
+head(remlLeverage(obj, fit$argument))
+options(old)
+}
 }
 \seealso{
-\link{remlLeverage}, \link{normL2}
+\code{\link[=remlLeverage]{remlLeverage()}}, \code{\link[=normL2]{normL2()}}
 }

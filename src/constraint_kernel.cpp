@@ -25,6 +25,7 @@
 #include <stdexcept>
 #include <cmath>
 #include <cstring>
+#include <unordered_map>
 
 using namespace Rcpp;
 
@@ -41,10 +42,9 @@ inline int find_name(const CharacterVector& haystack, const std::string& s) {
   return -1;
 }
 
-// Build a row-major contraction H[k1, k2] += sum_p w[p] * dP2[p, k1, k2]
-// where dP2 is provided as a flat numeric vector with col-major dims
-// [n_inner, n_theta, n_theta] and `inner_idx` selects which inner-par
-// rows to contract (1-based; -1 = skip).
+// Row-major H[k1, k2] += sum_p w[p] * dP2[p, k1, k2], dP2 flat col-major
+// [n_inner, n_theta, n_theta]; `inner_idx` selects the inner-par rows to
+// contract (-1 = skip).
 void apply_dP2_exact(
     const double* dP2_flat,
     const IntegerVector& dP2_dim,
@@ -88,13 +88,42 @@ void sandwich_hess(const double* dP, int n_inner, int n_theta,
                   &beta2, hess_theta_colmajor, &n_theta FCONE FCONE);
 }
 
+// dP on the rows of `inner`, matched by name. A parameter without a row
+// depends on no free parameter (it is fixed) and gets a zero row.
+NumericMatrix align_dP_rows(NumericMatrix dP, const CharacterVector& inner) {
+  const int n_inner = inner.size();
+  const int n_theta = dP.ncol();
+  List dn = dP.attr("dimnames");
+  if (dn.size() < 1 || Rf_isNull(dn[0])) {
+    if (dP.nrow() != n_inner)
+      throw std::runtime_error("constraintL2_scalar: dP has neither row names nor one row per parameter.");
+    return dP;
+  }
+  CharacterVector rows = dn[0];
+  std::unordered_map<std::string, int> at;
+  for (int i = 0; i < rows.size(); ++i) at.emplace(as<std::string>(rows[i]), i);
+  bool same = rows.size() == n_inner;
+  for (int p = 0; same && p < n_inner; ++p)
+    same = as<std::string>(rows[p]) == as<std::string>(inner[p]);
+  if (same) return dP;
+
+  NumericMatrix out(n_inner, n_theta);
+  for (int p = 0; p < n_inner; ++p) {
+    auto it = at.find(as<std::string>(inner[p]));
+    if (it == at.end()) continue;
+    for (int k = 0; k < n_theta; ++k) out(p, k) = dP(it->second, k);
+  }
+  out.attr("dimnames") = List::create(inner, dn.size() >= 2 ? dn[1] : R_NilValue);
+  return out;
+}
+
 }  // namespace
 
 
 // [[Rcpp::export]]
 List constraintL2_scalar_kernel(
     NumericVector pars,                 // free params (length n_theta if dP, else n_inner)
-    Nullable<NumericMatrix> dP_opt,     // [n_inner, n_theta] col-major, or NULL (identity)
+    Nullable<NumericMatrix> dP_opt,     // [inner, theta], rows matched by name, or NULL (identity)
     Nullable<NumericVector> dP2_opt,    // 3D array [n_inner, n_theta, n_theta], or NULL
     CharacterVector inner_par_names,    // names of inner pars (length n_inner)
     Nullable<NumericVector> fixed_opt,  // any fixed values needed for `allp` lookup
@@ -106,12 +135,9 @@ List constraintL2_scalar_kernel(
     bool deriv = true,
     bool build_hessian = true) {
 
-  // Build allp lookup: name -> value
-  // pars carries the outer (theta) parameter values when dP is given;
-  // otherwise it carries the inner parameter values directly.
-  // For the sigma/log-sigma case (`est`), sigma values come from allp.
+  // allp: name -> value over pars and fixed. pars are outer (theta) values when
+  // dP is given, inner values otherwise; under `est` sigma comes from allp too.
   const int n_inner_full = inner_par_names.size();
-  // Build "allp" map from union of pars/fixed names.
   std::vector<std::string> allp_names;
   std::vector<double>      allp_vals;
   if (dP_opt.isNotNull()) {
@@ -216,19 +242,17 @@ List constraintL2_scalar_kernel(
 
   // Chain rule via dP / exact dP2 contribution. The Hessian sandwich (and its
   // dP2 term) is skipped entirely under build_hessian = false; only the
-  // gradient chain rule runs and the result carries a NULL hessian.
+  // gradient chain rule runs and the result has a NULL hessian.
   NumericVector grad_out;
   RObject hess_out = R_NilValue;
   CharacterVector theta_names;
 
   if (dP_opt.isNotNull()) {
-    NumericMatrix dP(dP_opt.get());
-    const int dP_n_inner = dP.nrow();
-    const int n_theta    = dP.ncol();
-    if (dP_n_inner != n_inner_full)
-      throw std::runtime_error("constraintL2_scalar: dP nrow mismatch.");
+    NumericMatrix dP = align_dP_rows(NumericMatrix(dP_opt.get()), inner_par_names);
+    const int n_theta = dP.ncol();
     List dP_dimnames = dP.attr("dimnames");
-    theta_names = (dP_dimnames.size() >= 2) ? dP_dimnames[1] : CharacterVector(n_theta);
+    theta_names = (dP_dimnames.size() >= 2 && !Rf_isNull(dP_dimnames[1]))
+      ? CharacterVector(dP_dimnames[1]) : CharacterVector(n_theta);
 
     // grad = dP^T * gi
     std::vector<double> grad_theta(n_theta, 0.0);
@@ -381,7 +405,7 @@ List datapointL2_kernel(
   if (idx_value >= 0) dres_dp[idx_value] = -1.0;
 
   // 5. Gradient + Hessian. The Hessian (and its exact d2pred term) is skipped
-  // entirely under build_hessian = false; the result then carries a NULL hessian.
+  // entirely under build_hessian = false; the result then has a NULL hessian.
   std::vector<double> gr(n_p, 0.0);
   std::vector<double> hs;
   if (build_hessian) hs.assign((std::size_t) n_p * n_p, 0.0);

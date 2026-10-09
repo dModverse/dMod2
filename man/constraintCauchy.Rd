@@ -2,26 +2,32 @@
 % Please edit documentation in R/objClass.R
 \name{constraintCauchy}
 \alias{constraintCauchy}
-\title{Soft Cauchy constraint on parameters}
+\title{Soft Cauchy Constraint on Parameters}
 \usage{
-constraintCauchy(mu, sigma = 1, attr.name = "prior", condition = NULL)
+constraintCauchy(mu, sigma = 1, attrName = "prior", condition = NULL, ...)
 }
 \arguments{
 \item{mu}{Named numeric vector of prior locations. Its names select the
 constrained parameters.}
 
-\item{sigma}{Numeric, scalar or named and aligned with \code{mu}. The Cauchy
-scale.}
+\item{sigma}{Numeric, scalar or named and aligned with \code{mu}, default \code{1}.
+The Cauchy scale.}
 
-\item{attr.name}{Character. Name of the attribute storing the constraint value.}
+\item{attrName}{Character. Name of the attribute holding the constraint
+value, default \code{"prior"}.}
 
-\item{condition}{Optional character vector of conditions.}
+\item{condition}{Character vector, the conditions of a sum of objectives
+in which the term is evaluated. \code{NULL} (default) evaluates it in every
+one.}
+
+\item{...}{\code{attr.name} is deprecated, use \code{attrName}.}
 }
 \value{
-Object of class \code{objfn}.
+An objective function of class \code{objfn}, called as
+\code{obj(pars, ...)}, see \link{dModfn}. Its value is the full \verb{-2 log} density.
 }
 \description{
-Soft Cauchy constraint on parameters
+Soft Cauchy Constraint on Parameters
 }
 \details{
 Computes the Cauchy prior on the \verb{-2 log} scale,

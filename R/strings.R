@@ -12,6 +12,7 @@
 #' @return Padded string of length <width>.
 #'
 #' @author Wolfgang Mader, \email{Wolfgang.Mader@@fdm.uni-freiburg.de}
+#' @noRd
 strpad <- function(string, width, where = "right", padding = " ", autoelide = FALSE) {
 
   # Check function arguments
@@ -70,11 +71,12 @@ strpad <- function(string, width, where = "right", padding = " ", autoelide = FA
 #'
 #' @details
 #' Elide a string to <width>. Eliding can happen at 'left', 'middle', or
-#' 'right'. #' If forcing = FALSE, which is the default, strings shorten than
+#' 'right'. If forcing = FALSE, which is the default, strings shorten than
 #' <width> are returned unaltered; forcing = TRUE inserts eliding symbols (...)
 #' in any case.
 #'
 #' @author Wolfgang Mader, \email{Wolfgang.Mader@@fdm.uni-freiburg.de}
+#' @noRd
 strelide <- function(string, width, where = "right", force = FALSE) {
 
   # Functions for eliding

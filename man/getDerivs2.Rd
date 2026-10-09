@@ -7,7 +7,7 @@
 \alias{getDerivs2.prdlist}
 \alias{getDerivs2.list}
 \alias{getDerivs2.objlist}
-\title{Extract second-order derivatives from an object}
+\title{Extract the Second Derivatives of an Object}
 \usage{
 getDerivs2(x, ...)
 
@@ -22,30 +22,35 @@ getDerivs2(x, ...)
 \method{getDerivs2}{objlist}(x, ...)
 }
 \arguments{
-\item{x}{Object from which the second derivatives should be extracted.
-Supported classes are \code{parvec}, \code{prdframe}, \code{prdlist}, \code{list}, and
-\code{objlist}.}
+\item{x}{object of class \code{parvec}, \code{prdframe}, \code{prdlist}, \code{objlist}, or a
+list of such objects.}
 
-\item{...}{Additional arguments passed to specific methods (currently unused).}
+\item{...}{not used.}
 }
 \value{
-The structure of the returned object depends on the class of \code{x}:
+Depends on the class of \code{x}:
 \itemize{
-\item \code{parvec}: a 3D array \verb{[p, theta, theta]} of second derivatives.
-\item \code{prdframe}: a 4D array \verb{[time, variable, theta, theta]}.
-\item \code{prdlist}: a list of \code{prdframe} second-derivative arrays.
-\item \code{objlist}: the stored \code{hessian} matrix.
-\item \code{list}: a list of derivative objects, depending on the elements.
-}
-}
-\description{
-Generic accessor for the \code{deriv2} attribute (or \code{hessian} field, in the
-case of \code{objlist}) attached to dMod objects.
-}
-\examples{
-\dontrun{
-d2 <- getDerivs2(myprdframe)
-getDerivs2(myparvec)
+\item \code{parvec}: a 3D array \verb{[parameter, theta, theta]}.
+\item \code{prdframe}: a \code{prdframe} with the column \code{time} and one column per
+variable and pair of parameters, for the upper triangle including the
+diagonal.
+\item \code{prdlist}: a \code{prdlist} of such \code{prdframe}s.
+\item \code{objlist}: the Hessian matrix.
+\item \code{list}: a list with the result for each element.
 }
 
+An error is raised if \code{x} has no second derivatives.
+}
+\description{
+Extract the Second Derivatives of an Object
+}
+\examples{
+H <- array(0, dim = c(1, 2, 2), dimnames = list("a", c("x", "y"), c("x", "y")))
+H["a", "x", "y"] <- H["a", "y", "x"] <- 1
+p <- as.parvec(c(a = 1), deriv2 = H)
+getDerivs2(p)
+
+}
+\seealso{
+\code{\link[=getDerivs]{getDerivs()}}
 }

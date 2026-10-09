@@ -2,16 +2,24 @@
 % Please edit documentation in R/data.R
 \name{long2wide}
 \alias{long2wide}
-\title{Translate long to wide format (inverse of wide2long.matrix)}
+\title{Translate Long Format into Wide Format}
 \usage{
 long2wide(out)
 }
 \arguments{
-\item{out}{data.frame in long format}
+\item{out}{Data frame in long format with time, name and value as its
+first three columns, each name having a value at every time.}
 }
 \value{
-data.frame in wide format
+A matrix in wide format, one column per name after the time column.
 }
 \description{
-Translate long to wide format (inverse of wide2long.matrix)
+Inverse of \code{\link[=wide2long]{wide2long()}} for a single condition.
+}
+\examples{
+out <- cbind(time = 0:2, A = c(1, 0.5, 0.25), B = c(0, 0.5, 0.75))
+long2wide(wide2long(out))
+}
+\seealso{
+\code{\link[=wide2long]{wide2long()}}
 }

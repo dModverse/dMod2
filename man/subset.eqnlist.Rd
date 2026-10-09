@@ -2,24 +2,25 @@
 % Please edit documentation in R/eqnClass.R
 \name{subset.eqnlist}
 \alias{subset.eqnlist}
-\title{subset of an equation list}
+\title{Subset of an Equation List}
 \usage{
 \method{subset}{eqnlist}(x, ...)
 }
 \arguments{
-\item{x}{the equation list}
+\item{x}{object of class \link{eqnlist}.}
 
-\item{...}{logical expression for subsetting}
+\item{...}{logical expression for subsetting.}
 }
 \value{
-An object of class \link{eqnlist}
+Object of class \link{eqnlist}.
 }
 \description{
-subset of an equation list
+Subset of an Equation List
 }
 \details{
-The argument \code{...} can contain "Educt", "Product", "Rate" and "Description".
-The "\%in\%" operator is modified to allow searches in Educt and Product (see examples).
+The expression in \code{...} can refer to \code{Educt}, \code{Product}, \code{Rate}
+and \code{Description}. Within it, \code{\%in\%} searches the educts and products of
+each reaction (see examples).
 }
 \examples{
 reactions <- data.frame(Description = c("Activation", "Deactivation"), 
@@ -28,4 +29,7 @@ f <- as.eqnlist(reactions)
 subset(f, "A" \%in\% Educt)
 subset(f, "pA" \%in\% Product)
 subset(f, grepl("act", Rate))
+}
+\seealso{
+\code{\link[=addReaction]{addReaction()}}, \code{\link[=as.eqnlist]{as.eqnlist()}}
 }

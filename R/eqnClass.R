@@ -2,13 +2,16 @@
 ## Class "eqnlist" and its constructor ------------------------------------------
 
 
-#' Coerce to an equation list
-#' @description Translates a reaction network, e.g. defined by a data.frame, into an equation list object.
-#' @param ... additional arguments to be passed to or from methods.
-#' @details If `data` is a `data.frame`, it must contain columns "Description" (character),
-#' "Rate" (character), and one column per ODE state with the state names.
-#' The state columns correspond to the stoichiometric matrix.
-#' @return Object of class [eqnlist]
+#' Generate or Coerce to an Equation List
+#' @description An eqnlist stores an ODE as a stoichiometric matrix, rate
+#' expressions, state names and compartment information. `eqnlist()` builds
+#' one from these parts, `as.eqnlist()` from a data frame of reactions.
+#' @param ... not used.
+#' @details The data frame for `as.eqnlist()` contains the columns
+#' "Description" (character), "Rate" (character) and one column per state,
+#' the columns of the stoichiometric matrix. Layout attributes of the data
+#' frame, as set by [as.data.frame.eqnlist()], are used unless `volumes` is
+#' given.
 #' @rdname eqnlist
 #' @export
 as.eqnlist <- function(data, volumes, ...) {
@@ -16,8 +19,8 @@ as.eqnlist <- function(data, volumes, ...) {
 }
 
 #' @export
-#' @param data data.frame with columns Description, Rate, and one column for each state
-#' reflecting the stoichiometric matrix
+#' @param data data frame with the columns "Description", "Rate" and one
+#' column per state.
 #' @rdname eqnlist
 as.eqnlist.data.frame <- function(data, volumes = NULL, compartments = NULL, compartmentOf = NULL,
                                    reactionCompartment = NULL, amountStates = NULL, ...) {
@@ -26,8 +29,8 @@ as.eqnlist.data.frame <- function(data, volumes = NULL, compartments = NULL, com
   states <- setdiff(colnames(data), c("Description", "Rate"))
   smatrix <- as.matrix(data[, states]); colnames(smatrix) <- states
 
-  # An explicit `volumes` is the legacy way of stating the layout: it must not
-  # be overruled by a layout the data.frame merely carries along as attributes.
+  # An explicit `volumes` states the layout and is not overruled by a layout
+  # the data.frame brings along as attributes.
   inherit_layout <- is.null(volumes)
   if (is.null(volumes))             volumes             <- attr(data, "volumes")
   if (is.null(compartments) && inherit_layout)  compartments  <- attr(data, "compartments")
@@ -44,13 +47,13 @@ as.eqnlist.data.frame <- function(data, volumes = NULL, compartments = NULL, com
 
 #' @export
 #' @rdname eqnlist
-#' @param x object of class `eqnlist`
+#' @param x object to test.
 is.eqnlist <- function(x) {
 
   required <- c("smatrix", "states", "rates", "volumes", "description",
                 "compartments", "compartmentOf", "reactionCompartment")
 
-  # A reaction-less list is valid and may already carry a compartment layout.
+  # A reaction-less list is valid and may already have a compartment layout.
   if (is.null(x$smatrix))
     return(length(x$states) == 0 &&
            length(x$rates) == 0 &&
@@ -90,8 +93,7 @@ is.eqnlist <- function(x) {
 
 ## Class "eqnlist" and its methods ------------------------------------------
 
-#' Determine conserved quantities by finding the kernel of the stoichiometric
-#' matrix
+#' Determine Conserved Quantities from the Stoichiometric Matrix
 #'
 #' @param S Stoichiometric matrix
 #' @param weight One of `"none"` (default) or `"volume"`. When `"volume"`, the
@@ -100,7 +102,7 @@ is.eqnlist <- function(x) {
 #'   than concentration. Requires `volumes` to be supplied as numeric.
 #' @param volumes Optional named numeric vector of volume values keyed by state,
 #'   aligned with `colnames(S)`. Only consulted when `weight = "volume"`.
-#' @return Data frame with conserved quantities carrying an attribute with the
+#' @return Data frame with conserved quantities and an attribute with the
 #'   number of conserved quantities.
 #' @author Malenka Mader, \email{Malenka.Mader@@fdm.uni-freiburg.de}
 #'
@@ -132,7 +134,7 @@ conservedQuantities <- function(S, weight = c("none", "volume"), volumes = NULL)
     cq <- matrix(nrow = ncol(v), ncol = 1)
     for (iCol in 1:ncol(v)) {
       is.zero <- v[, iCol] == 0
-      # gsub, not sub: a kernel vector may carry more than one negative weight.
+      # gsub, not sub: a kernel vector may have more than one negative weight.
       cq[iCol, 1] <- gsub("+-", "-", paste0(v[!is.zero, iCol], "*", variables[!is.zero], collapse = "+"), fixed = TRUE)
     }
     
@@ -190,10 +192,9 @@ conservedQuantities <- function(S, weight = c("none", "volume"), volumes = NULL)
   .uniqueName(paste0("total", lcs), c(used, parameters))
 }
 
-## Extract the linear coefficient vector of `expr` over `states` via 1-hot
-## evaluation, then verify linearity by re-evaluating at the all-twos point
-## (linear sum must equal 2 * sum(coefs); any product term breaks this).
-## Returns NULL on unknown symbols or detected nonlinearity.
+## Linear coefficients of `expr` over `states` by 1-hot evaluation, checked
+## for linearity at the all-twos point (value must equal 2 * sum(coefs)).
+## NULL on unknown symbols or nonlinearity.
 #' @keywords internal
 .linearCoefs <- function(expr, states, tol = 1e-8) {
   syms <- getSymbols(expr)
@@ -214,7 +215,7 @@ conservedQuantities <- function(S, weight = c("none", "volume"), volumes = NULL)
   v
 }
 
-#' Validate a list of conservation expressions against an eqnlist
+#' Validate Conservation Expressions Against an Eqnlist
 #'
 #' Each expression must be linear in `eqnlist$states` and a true conservation
 #' quantity (its coefficient vector lies in the left null space of the
@@ -257,17 +258,16 @@ conservedQuantities <- function(S, weight = c("none", "volume"), volumes = NULL)
   TRUE
 }
 
-#' Conservation-quantity basis of an `eqnlist`
+#' Conserved Quantities of an Equation List
 #'
-#' Returns the conservation expressions associated with the model. If the
-#' eqnlist carries user-defined `$totals` (set via [customTotals]) those are
-#' returned verbatim; otherwise the auto-detected basis from
-#' [conservedQuantities()] is rendered with smart `totalXxx` names from the
-#' longest common substring of each CQ's species.
+#' Returns the user-defined totals set by [customTotals()], otherwise the
+#' basis found by [conservedQuantities()]. Totals without a user name are
+#' named after their species.
 #'
-#' @param eqnlist An [eqnlist].
-#' @return Named list mapping `total_name` -> conservation expression
-#'   (character). Empty list when the smatrix admits no CQs.
+#' @param eqnlist object of class [eqnlist].
+#' @return Named list of conservation expressions (character). Empty list when
+#'   the stoichiometric matrix admits no conserved quantities.
+#' @seealso [customTotals()], [conservedQuantities()]
 #' @export
 getTotals <- function(eqnlist) {
   if (!is.null(eqnlist$totals)) return(eqnlist$totals)
@@ -285,18 +285,18 @@ getTotals <- function(eqnlist) {
   out
 }
 
-#' Set or reset user-defined conservation-quantity totals
+#' Set or Reset User-Defined Conserved Quantities
 #'
-#' Attaches a named list of conservation expressions to the eqnlist; these
-#' override auto-detection and flow into [Pimpl] as the new
-#' parameter basis. Each expression is validated against the stoichiometric
-#' matrix (must lie in the left null space of `S`) and the basis as a whole
-#' must have the same rank as `conservedQuantities(S)`. Pass `NULL` or
-#' `list()` to reset to auto-detection.
+#' Attaches a named list of conservation expressions to the eqnlist. They
+#' replace the detected basis, also as parameters of [Pimpl()]. Each
+#' expression must be linear in the states and conserved by the reactions, and
+#' together they must span as many quantities as [conservedQuantities()] finds.
 #'
-#' @param eqnlist An [eqnlist].
-#' @param totals Named list of expressions, or `NULL` / `list()` to reset.
+#' @param eqnlist object of class [eqnlist].
+#' @param totals named list of expressions, or `NULL` or `list()` to return to
+#'   the detected basis.
 #' @return The eqnlist with `$totals` updated.
+#' @seealso [getTotals()]
 #' @export
 customTotals <- function(eqnlist, totals) {
   if (is.null(totals) || (is.list(totals) && length(totals) == 0L)) {
@@ -310,7 +310,7 @@ customTotals <- function(eqnlist, totals) {
 }
 
 
-#' Generate a table of reactions (data.frame) from an equation list
+#' Generate a Table of Reactions from an Equation List
 #' 
 #' @param eqnlist object of class [eqnlist]
 #' @return `data.frame` with educts, products, rate and description. The first
@@ -372,7 +372,7 @@ getReactions <- function(eqnlist) {
 }
 
 
-#' Add reaction to reaction table
+#' Add Reaction to an Equation List
 #'
 #' @param eqnlist equation list, see [eqnlist]
 #' @param from character with the left hand side of the reaction, e.g. "2*A + B"
@@ -380,17 +380,13 @@ getReactions <- function(eqnlist) {
 #' @param rate character. The rate associated with the reaction. The name is employed as a description
 #' of the reaction.
 #' @param description Optional description instead of `names(rate)`.
-#' @param compartment Character, compartment ID for the states this reaction
-#' *introduces*, and the frame the reaction is written in. Defaults to
-#' `"defaultComp"`; created with volume `"1"` if new. States that already have a
-#' compartment keep it, use [assignCompartment()] to place a species that does
-#' not belong to the compartment of the reaction first mentioning it.
-#' @param rateCompartment Optional compartment ID naming the frame in which `rate`
-#' is a concentration-rate. Needed when educts span multiple compartments (e.g.
-#' membrane binding `L_ext + R_cyt -> Complex`); leave as `NA` (the default) to
-#' let [getFluxes()] infer the frame from the educts. When the educts do span
-#' compartments and `compartment` was given explicitly, that compartment is
-#' taken as the frame.
+#' @param compartment character, compartment ID for the states this reaction
+#' introduces. Default `"defaultComp"`, created with volume `"1"` if new.
+#' States that already have a compartment keep it; see [assignCompartment()].
+#' @param rateCompartment compartment ID of the frame in which `rate` is a
+#' concentration rate. Default `NA` lets [getFluxes()] infer the frame from the
+#' educts. If the educts span several compartments and `compartment` is given
+#' explicitly, `compartment` is the frame.
 #' @return An object of class [eqnlist].
 #' @examples
 #' f <- eqnlist()
@@ -519,15 +515,10 @@ addReaction <- function(eqnlist, from, to, rate, description = names(rate),
 }
 
 
-#' Assign states to compartments
+#' Assign States to Compartments
 #'
-#' @description Declares which compartment a state lives in, independently of
-#' the reactions that use it. [addReaction()] only ever assigns states it
-#' introduces, so without an explicit declaration a species inherits the
-#' compartment of whichever reaction happens to mention it first, which makes
-#' the model depend on the order in which it is written. `assignCompartment()`
-#' removes that dependency: it works before the state exists (the declaration is
-#' remembered and applied when the reaction arrives) as well as afterwards.
+#' @description Declares the compartment of a state, before or after the state
+#' is introduced by [addReaction()].
 #'
 #' @param eqnlist object of class [eqnlist]
 #' @param ... named arguments `state = "compartment"`, or a single named
@@ -536,13 +527,11 @@ addReaction <- function(eqnlist, from, to, rate, description = names(rate),
 #' @param volume Optional volume expression for the target compartment. Only
 #' allowed when `...` names a single compartment; use [setCompartmentVolume()]
 #' for several.
-#' @param rule Optional volume rule (`dV/dt`) for the target compartment, see
-#' [eqnlist].
+#' @param rule optional volume rule (`dV/dt`) for the target compartment, see
+#' [setCompartmentVolume()]. Default `NULL`.
 #' @return An object of class [eqnlist].
 #' @seealso [setCompartmentVolume()], [addReaction()]
 #' @examples
-#' # TGFb belongs to the extracellular space although the first reaction that
-#' # mentions it is a cell-surface binding step.
 #' f <- eqnlist() |>
 #'   assignCompartment(TGFb = "extraCell", volume = "V_ext") |>
 #'   addReaction("R + TGFb", "R_TGFb", "k_on*R*TGFb", compartment = "Cell")
@@ -581,13 +570,10 @@ assignCompartment <- function(eqnlist, ..., volume = NULL, rule = NULL) {
 }
 
 
-#' Set compartment volumes
+#' Set Compartment Volumes
 #'
-#' @description Changes the volume expression (and optionally the volume rule)
-#' of one or more compartments. Use this rather than assigning into
-#' `eqnlist$compartments` directly: the per-state `$volumes` view is derived
-#' from the layout and has to be recomputed, which in-place assignment does not
-#' do.
+#' @description Sets the volume expression, and optionally the volume rule, of
+#' one or more compartments and updates the per-state volumes.
 #'
 #' @param eqnlist object of class [eqnlist]
 #' @param ... named arguments `compartment = "volume expression"`, or a single
@@ -677,11 +663,9 @@ setCompartmentVolume <- function(eqnlist, ..., rules = NULL) {
 }
 
 
-# Reactions as a data.frame for the steady-state backend, which sees only rates
-# and stoichiometry while getFluxes() scales every flux by V_ref / V_X. One csv
-# row carries one rate, so a reaction touching states at different ratios is
-# split into one row per ratio. Attribute "volumes": V_X per state, "1" for
-# amount states; rows of one reaction share rate * V_X.
+# Reactions for the steady-state backend, with getFluxes()' V_ref / V_X scaling
+# split into one row per distinct ratio of a reaction. Attribute "volumes": V_X
+# per state, "1" for amount states; rows of one reaction share rate * V_X.
 .volumeScaledReactions <- function(eqnlist) {
 
   data <- as.data.frame(eqnlist)
@@ -696,7 +680,7 @@ setCompartmentVolume <- function(eqnlist, ..., rules = NULL) {
   ruled <- names(compartments)[vapply(compartments,
     function(cmp) !is.null(cmp$rule) && nzchar(cmp$rule), logical(1))]
   if (length(ruled))
-    stop("Compartment(s) ", paste(ruled, collapse = ", "), " carry a volume ",
+    stop("Compartment(s) ", paste(ruled, collapse = ", "), " have a volume ",
          "rule, whose dilution term -[X]*V'/V is not a reaction flux.",
          call. = FALSE)
 
@@ -732,12 +716,13 @@ setCompartmentVolume <- function(eqnlist, ..., rules = NULL) {
 }
 
 
-#' Generate list of fluxes from equation list
-#' 
+#' Generate List of Fluxes from Equation List
+#'
 #' @param eqnlist object of class [eqnlist].
-#' @param type "conc." or "amount" for fluxes in units of concentrations or
-#' number of molecules. 
-#' @return list of named characters, the in- and out-fluxes for each state.
+#' @param type `"conc"` (default) or `"amount"` for fluxes in units of
+#' concentration or of amount.
+#' @return Named list with one named character vector per state, its in- and
+#' out-fluxes.
 #' @example inst/examples/equations.R
 #' @export
 getFluxes <- function(eqnlist, type = c("conc", "amount")) {
@@ -768,11 +753,9 @@ getFluxes <- function(eqnlist, type = c("conc", "amount")) {
   isAmount <- setNames(variables %in% eqnlist$amountStates, variables)
   volumes[isAmount] <- "1"
 
-  # Resolve per-reaction reference compartment V_ref (concentration-rate frame).
-  # Priority: (1) user-supplied reactionCompartment[i] if non-NA, (2) unique
-  # educt compartment, (3) unique product compartment for pure synthesis.
-  # When educts span multiple compartments and no annotation is given, the
-  # call errors with a message pointing at `reactionCompartment`.
+  # Reference compartment V_ref per reaction: reactionCompartment[i] if non-NA,
+  # else the unique educt compartment, else the unique product compartment for
+  # pure synthesis. Educts in several compartments without annotation error.
   vref_cid <- .refCompartments(SMatrix, compOf, reactionCompartment, description)
   vref_vol <- .refVolumes(vref_cid, compartments)
 
@@ -831,16 +814,14 @@ getFluxes <- function(eqnlist, type = c("conc", "amount")) {
 
 
 
-#' Symbolic time derivative of equation vector given an equation list
+#' Symbolic Time Derivative of an Equation Vector
 #' 
-#' The time evolution of the internal states is defined in the equation list.
-#' Time derivatives of observation functions are expressed in terms of the
-#' rates of the internal states.
-#' 
-#' @param observable named character vector or object of type [eqnvec]
-#' @param eqnlist equation list
-#' @details Observables are translated into an ODE
-#' @return An object of class [eqnvec]
+#' Expresses the time derivatives of observables in terms of the right-hand
+#' sides of the ODE defined by an equation list.
+#'
+#' @param observable named character vector or object of class [eqnvec].
+#' @param eqnlist object of class [eqnlist].
+#' @return Object of class [eqnvec], the time derivatives of `observable`.
 #' @example inst/examples/equations.R
 #' @export
 dot <- function(observable, eqnlist) {
@@ -870,13 +851,14 @@ dot <- function(observable, eqnlist) {
 
 
 
-#' Coerce equation list into a data frame
+#' Coerce Equation List into a Data Frame
 #' 
-#' @param x object of class [eqnlist]
-#' @param ... other arguments
-#' @return a `data.frame` with columns "Description" (character), 
-#' "Rate" (character), and one column per ODE state with the state names. 
-#' The state columns correspond to the stoichiometric matrix.
+#' @param x object of class [eqnlist].
+#' @param ... not used.
+#' @return A `data.frame` with the columns "Description" (character),
+#' "Rate" (character) and one column per state, the columns of the
+#' stoichiometric matrix. The compartment layout is kept as attributes and
+#' read back by [as.eqnlist()]. `NULL` for an empty equation list.
 #' @export
 as.data.frame.eqnlist <- function(x, ...) {
 
@@ -898,11 +880,17 @@ as.data.frame.eqnlist <- function(x, ...) {
   return(data)
 }
 
-#' Write equation list into a csv file
-#' 
-#' @param eqnlist object of class [eqnlist]
-#' @param ... Arguments going to [write.table][utils::write.table]
-#' 
+#' Write Equation List into a CSV File
+#'
+#' Compartments and reaction frames are not written; a warning is issued if
+#' the equation list has any.
+#'
+#' @param eqnlist object of class [eqnlist].
+#' @param ... arguments going to [utils::write.csv()]. `row.names` defaults to
+#' `FALSE` and `na` to `""`.
+#' @return `NULL`, invisibly. Called for the file it writes.
+#' @seealso [as.data.frame.eqnlist()]
+#'
 #' @export
 #' @importFrom utils file.edit getParseData install.packages installed.packages read.csv str tail write.csv
 write.eqnlist <- function(eqnlist, ...) {
@@ -925,14 +913,16 @@ write.eqnlist <- function(eqnlist, ...) {
 }
 
 
-#' subset of an equation list
+#' Subset of an Equation List
 #' 
-#' @param x the equation list
-#' @param ... logical expression for subsetting
-#' @details The argument `...` can contain "Educt", "Product", "Rate" and "Description".
-#' The "%in%" operator is modified to allow searches in Educt and Product (see examples).
-#' 
-#' @return An object of class [eqnlist]
+#' @param x object of class [eqnlist].
+#' @param ... logical expression for subsetting.
+#' @details The expression in `...` can refer to `Educt`, `Product`, `Rate`
+#' and `Description`. Within it, `%in%` searches the educts and products of
+#' each reaction (see examples).
+#'
+#' @return Object of class [eqnlist].
+#' @seealso [addReaction()], [as.eqnlist()]
 #' @examples
 #' reactions <- data.frame(Description = c("Activation", "Deactivation"), 
 #'                         Rate = c("act*A", "deact*pA"), A=c(-1,1), pA=c(1, -1) )
@@ -1018,11 +1008,12 @@ subset.eqnlist <- function(x, ...) {
 }
 
 
-#' Print or pander equation list
-#' 
-#' @param x object of class [eqnlist]
-#' @param pander logical, use pander for output (used with R markdown)
-#' @param ... additional arguments
+#' Print or Pander Equation List
+#'
+#' @param x object of class [eqnlist].
+#' @param pander logical, use pander for output (R Markdown). Default `FALSE`.
+#' @param ... not used.
+#' @return `x`, invisibly.
 #' @author Wolfgang Mader, \email{Wolfgang.Mader@@fdm.uni-freiburg.de}
 #' @author Daniel Kaschek, \email{daniel.kaschek@@physik.uni-freiburg.de}
 #' 
@@ -1060,6 +1051,7 @@ print.eqnlist <- function(x, pander = FALSE, ...) {
   } else {
     print(r)
   }
+  invisible(x)
 }
 
 
@@ -1114,21 +1106,21 @@ print.eqnlist <- function(x, pander = FALSE, ...) {
 
 
 
-#' Coerce to an equation vector
-#' 
-#' @param x object of class `character` or `eqnlist`
-#' @param ... arguments going to the corresponding methods
-#' @details If `x` is of class `eqnlist`, [getFluxes] is called and coerced
-#' into a vector of equations.
-#' @return object of class [eqnvec].
+#' Coerce to an Equation Vector
+#'
+#' @param x object of class `character` or `eqnlist`.
+#' @param ... for the `eqnlist` method, arguments going to [getFluxes()],
+#' e.g. `type`; otherwise not used.
+#' @details For an `eqnlist`, the right-hand sides of the ODE are assembled
+#' from [getFluxes()].
+#' @return Object of class [eqnvec].
 #' @export
 as.eqnvec <- function(x, ...) {
   UseMethod("as.eqnvec", x)
 }
 
-#' Generate equation vector object
-#'
-#' @param names character, the left-hand sides of the equation
+#' @param names character, the left-hand sides of the equations. Default
+#' `NULL` uses `names(x)`.
 #' @rdname as.eqnvec
 #' @export
 as.eqnvec.character <- function(x = NULL, names = NULL, ...) {
@@ -1152,10 +1144,6 @@ as.eqnvec.character <- function(x = NULL, names = NULL, ...) {
 
 
 
-#' Transform equation list into vector of equations
-#' 
-#' @description An equation list stores an ODE in a list format. The function
-#' translates this list into the right-hand sides of the ODE.
 #' @rdname as.eqnvec
 #' @export
 as.eqnvec.eqnlist <- function(x, ...) {
@@ -1262,11 +1250,11 @@ is.eqnvec <- function(x) {
 
 
 
-#' Encode equation vector in format with sufficient spaces
+#' Format Equation Vector with Spaces
 #' 
-#' @param x object of class [eqnvec]. Alternatively, a named parsable character vector.
-#' @param ... additional arguments
-#' @return named character
+#' @param x object of class [eqnvec], or a named parsable character vector.
+#' @param ... not used.
+#' @return Named character vector with spaces around `+`, `-`, `*` and `/`.
 #' @export format.eqnvec
 #' @export
 format.eqnvec <- function(x, ...) {
@@ -1276,7 +1264,6 @@ format.eqnvec <- function(x, ...) {
   eqns <- sapply(eqnvec, function(eqn) {
     parser.out <- getParseData(parse(text = eqn, keep.source = TRUE))
     parser.out <- subset(parser.out, terminal == TRUE)
-    # parser.out$text[parser.out$text == "*"] <- "*" (avoid non-ASCII characters for CRAN)
     out <- paste(parser.out$text, collapse = "")
     return(out)
   })
@@ -1289,12 +1276,13 @@ format.eqnvec <- function(x, ...) {
   
 }
 
-#' Print equation vector
-#' 
+#' Print Equation Vector
+#'
 #' @param x object of class [eqnvec].
-#' @param width numeric, width of the print-out
-#' @param pander logical, use pander for output (used with R markdown)
-#' @param ... not used right now
+#' @param width numeric, width of the print-out. Default 140.
+#' @param pander logical, use pander for output (R Markdown). Default `FALSE`.
+#' @param ... not used.
+#' @return `x`, invisibly.
 #' 
 #' @author Wolfgang Mader, \email{Wolfgang.Mader@@fdm.uni-freiburg.de}
 #' 
@@ -1351,7 +1339,7 @@ print.eqnvec <- function(x, width = 140, pander = FALSE, ...) {
     pander::panderOptions("table.split.table", Inf)
     pander::panderOptions("table.split.cells", Inf)
     out <- as.data.frame(unclass(eqnvec), stringsAsFactors = FALSE)
-    colnames(out) <- "" #  as.character(substitute(eqnvec))
+    colnames(out) <- ""
     out[, 1] <- format.eqnvec(out[, 1])
     pander::pander(out)
 
@@ -1361,16 +1349,18 @@ print.eqnvec <- function(x, width = 140, pander = FALSE, ...) {
     out[, 1] <- format.eqnvec(out[, 1])
     print(out)
   }
-  
-
+  invisible(x)
 }
 
 
 
-#' Summary of an equation vector
-#' 
-#' @param object of class [eqnvec].
-#' @param ... additional arguments
+#' Summary of an Equation Vector
+#'
+#' Prints, for each equation, the symbols it depends on.
+#'
+#' @param object object of class [eqnvec].
+#' @param ... not used.
+#' @return `object`, invisibly.
 #' @author Wolfgang Mader, \email{Wolfgang.Mader@@fdm.uni-freiburg.de}
 #' 
 #' @export
@@ -1403,14 +1393,16 @@ c.eqnvec <- function(...) {
 
 
 
-#' Identify linear variables in an equation vector using sympy
+#' Identify Linear Variables in an Equation Vector
 #'
-#' @param eqnvec An object of class `eqnvec`, representing a set of equations.
-#' @details This function calls Python's `sympy` library via `reticulate` to symbolically analyze equations and determine if variables appear linearly in all equations.
+#' Requires the Python module `sympy`, accessed through \pkg{reticulate}.
 #'
-#' @return A character vector of variables that occur linearly in all equations.
+#' @param eqnvec object of class `eqnvec`.
 #'
-#' @examples
+#' @return Character vector of the variables that occur linearly in all
+#'   equations.
+#'
+#' @examplesIf reticulate::py_module_available("sympy")
 #' eqnvec <- as.eqnvec(
 #'   c("-k1*A", "k1*A - k2*B", "-k3*B*C/(Km+C) + k4*pC", "k3*B*C/(Km+C) - k4*pC"),
 #'   names = c("A", "B", "C", "pC")
@@ -1452,18 +1444,18 @@ getLinVars <- function(eqnvec) {
 
 
 
-## eqnvec / eqnlist constructors (moved from classes.R) ----------------------------------------
+## eqnvec / eqnlist constructors ----------------------------------------
 
 ## Equation classes -------------------------------------------------------
 
-#' Generate equation vector object
+#' Generate Equation Vector Object
 #'
 #' @description The eqnvec object stores explicit algebraic equations, like the
 #' right-hand sides of an ODE, observation functions or parameter transformations
 #' as named character vectors.
 #' @param ... mathematical expressions as characters to be coerced,
 #' the right-hand sides of the equations
-#' @return object of class `eqnvec`, basically a named character.
+#' @return Object of class `eqnvec`, a named character vector.
 #' @example inst/examples/eqnvec.R
 #' @seealso [eqnlist]
 #' @export
@@ -1488,42 +1480,43 @@ eqnvec <- function(...) {
 
 }
 
-#' Generate eqnlist object
-#'
-#' @description The eqnlist object stores an ODE as a stoichiometric matrix,
-#' rate expressions, state names, and compartment information.
+#' @rdname eqnlist
 #' @export
-#' @param smatrix Numeric stoichiometric matrix; one row per reaction, one
-#'   column per state.
-#' @param states Character vector of state names.
-#' @param rates Character vector of rate expressions.
-#' @param volumes Named character of state volumes (kept for back-compat; when
-#'   supplied without `compartments`/`compartmentOf`, distinct expressions are
-#'   auto-assigned IDs `c1`, `c2`, ...).
-#' @param description Character vector describing each reaction.
-#' @param compartments Named list keyed by compartment ID; each entry is a
+#' @param smatrix numeric stoichiometric matrix, one row per reaction and one
+#'   column per state. Default `NULL` gives an empty equation list.
+#' @param states character, the state names. Default `colnames(smatrix)`.
+#' @param rates character, the rate expressions, one per reaction.
+#' @param volumes named character of state volumes. Without `compartments`
+#'   and `compartmentOf`, each distinct expression becomes a compartment with
+#'   ID `c1`, `c2`, ...
+#' @param description character, one description per reaction. Default
+#'   `NULL` numbers the reactions.
+#' @param compartments named list keyed by compartment ID; each entry is a
 #'   volume expression (character) or a list with fields `volume` and `rule`
-#'   (`rule` reserved for future dynamic-volume support, must be `NULL`).
-#' @param compartmentOf Named character vector mapping state → compartment ID.
+#'   (`dV/dt`, see [setCompartmentVolume()]).
+#' @param compartmentOf named character vector mapping states to compartment IDs.
 #'   States not listed default to compartment `"defaultComp"` with volume `"1"`.
 #'   May also name states that do not exist yet; see [assignCompartment()].
-#' @param reactionCompartment Optional character vector of length
-#'   `nrow(smatrix)`. Per-reaction reference compartment ID; use `NA` to infer
-#'   from educts. Required when educts span multiple compartments.
-#' @param amountStates Optional character vector of states that carry substance
-#'   units (amounts) rather than concentrations, SBML's `hasOnlySubstanceUnits`.
-#'   Their fluxes are not divided by a compartment volume.
-#' @param totals Optional named list of user-defined conservation-quantity
-#'   expressions, as produced by [customTotals]. `NULL` leaves the basis to be
-#'   auto-detected from the stoichiometric matrix.
-#' @return An object of class `eqnlist`, basically a list.
+#' @param reactionCompartment character of length `nrow(smatrix)`, the
+#'   compartment in whose frame each rate is given; `NA` infers it from the
+#'   educts. Required for reactions whose educts span several compartments.
+#'   Default `NULL`.
+#' @param amountStates character, the states given in amounts rather than
+#'   concentrations (SBML's `hasOnlySubstanceUnits`). Their fluxes are not
+#'   divided by a compartment volume. Default `NULL`.
+#' @param totals named list of user-defined conservation expressions, see
+#'   [customTotals()]. Default `NULL` uses the detected basis.
+#' @return Object of class `eqnlist`, a list with the entries above and the
+#'   per-state `volumes`. `is.eqnlist()` returns a logical.
+#' @seealso [addReaction()], [as.eqnlist()], [assignCompartment()],
+#'   [setCompartmentVolume()]
 #' @example inst/examples/eqnlist.R
 eqnlist <- function(smatrix = NULL, states = colnames(smatrix), rates = NULL,
                     volumes = NULL, description = NULL,
                     compartments = NULL, compartmentOf = NULL,
                     reactionCompartment = NULL, amountStates = NULL, totals = NULL) {
 
-  # A model without species carries no stoichiometry;
+  # A model without species has no stoichiometry;
   # canonicalise it to NULL so is.eqnlist() recognises the empty list.
   if (length(states) == 0L && length(rates) == 0L) smatrix <- NULL
 
@@ -1671,42 +1664,22 @@ eqnlist <- function(smatrix = NULL, states = colnames(smatrix), rates = NULL,
 
 
 
-#' Transform an ODE to log10 coordinates
+#' Transform an ODE to log10 Coordinates
 #'
-#' Reads `f` as the right-hand side of \eqn{\dot x = f(x)} and returns the same
-#' system in \eqn{x_{l10} = \log_{10} x}. By the chain rule
+#' Takes `f` as the right-hand side of \eqn{\dot x = f(x)} and returns the
+#' same system in \eqn{x_{l10} = \log_{10} x},
+#' \deqn{\dot x_{l10} = \frac{f(x)}{\log(10)\, x}, \qquad x = 10^{x_{l10}}.}
+#' Read results back with `10^x_l10`.
 #'
-#' \deqn{\dot x_{l10} = \frac{f(x)}{\log(10)\, x}, \qquad x = 10^{x_{l10}}}
-#'
-#' so each right-hand side is divided by its own state and every remaining state
-#' replaced by `10^` of the transformed one. The division is cancelled
-#' symbolically first, which is what makes the result readable: `x = "-k*x"`
-#' becomes `x_l10 = "-k/log(10)"`, not a ratio that happens to simplify at
-#' runtime.
-#'
-#' Integrating in these coordinates cannot produce a negative state, since a power
-#' of ten is positive for every real exponent, positivity is the geometry of the
-#' chart rather than a constraint checked afterwards. Where a trajectory would have
-#' crossed \eqn{x = 0}, the transformed variable escapes to `-Inf` and the solver
-#' stops there instead.
-#'
-#' The back-substitution is written `(10^(x_l10))`, not `exp10(x_l10)`, although
-#' the latter reads better and works inside a [P()] transformation: `exp10` is a
-#' C99 function with no entry in R's derivatives table, so a model built on it has
-#' no symbolic Jacobian and [Xs()] cannot generate sensitivities. The parentheses
-#' are load-bearing, R's `^` is right-associative, so a bare `10^x_l10`
-#' substituted into `x^2` would mean `10^(x_l10^2)`.
-#'
-#' Read results back in R with `10^x_l10`.
-#'
-#' @param f `eqnvec` (or named character vector) holding the right-hand sides.
-#' @param suffix appended to each state name.
-#' @param simplify cancel the division symbolically with sympy. `FALSE`, or an
-#'   unavailable sympy, leaves the plain quotient, which is equivalent but wordy.
+#' @param f `eqnvec` or named character vector, the right-hand sides.
+#' @param suffix character appended to each state name. Default `"_l10"`.
+#' @param simplify logical, cancel the division symbolically with the Python
+#'   module `sympy`. Default `TRUE`. With `FALSE`, or without `sympy`, the
+#'   plain quotient is returned.
 #' @return An `eqnvec` over the renamed states.
-#' @seealso [odemodel()], which compiles the result.
+#' @seealso [odemodel()]
 #' @export
-#' @examples
+#' @examplesIf reticulate::py_module_available("sympy")
 #' log10Transform(eqnvec(x = "-k*x"))
 #' log10Transform(eqnvec(A = "-k1*A + k2*B", B = "k1*A - k2*B"))
 log10Transform <- function(f, suffix = "_l10", simplify = TRUE) {
@@ -1724,7 +1697,7 @@ log10Transform <- function(f, suffix = "_l10", simplify = TRUE) {
     quotient <- paste0("(", f[[k]], ")/(", k, ")")
     if (!is.null(spy)) {
       # cancel removes the state where it divides out, expand then distributes
-      # what is left over the division: (-A*k1 + B*k2)/A becomes -k1 + B*k2/A
+      # the remainder over the division.
       cancelled <- tryCatch(
         gsub("\\*\\*", "^", as.character(
           spy$expand(spy$cancel(spy$sympify(gsub("\\^", "**", quotient)))))),

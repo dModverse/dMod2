@@ -2,9 +2,12 @@
 % Please edit documentation in R/objClass.R, R/penaltyClass.R
 \name{constraintL1}
 \alias{constraintL1}
-\title{Soft L1 constraint on parameters}
+\alias{constraintL1.default}
+\title{Soft L1 Constraint on Parameters}
 \usage{
 constraintL1(penalty, attr.name = "prior_l1", condition = NULL)
+
+constraintL1.default(mu, sigma = 1, attrName = "prior", condition = NULL, ...)
 
 constraintL1(penalty, attr.name = "prior_l1", condition = NULL)
 }
@@ -21,15 +24,25 @@ accumulate independently under \code{+}).}
 \item{mu}{Named numeric vector of prior locations. Its names select the
 constrained parameters.}
 
-\item{sigma}{Numeric, scalar or named and aligned with \code{mu}. The Laplace
-scale, i.e. the reciprocal penalty strength.}
+\item{sigma}{Numeric, scalar or named and aligned with \code{mu}, default \code{1}.
+The Laplace scale, the reciprocal penalty strength.}
+
+\item{attrName}{Character. Name of the attribute holding the constraint
+value, default \code{"prior"}.}
+
+\item{...}{Passed to the method. \code{attr.name} is deprecated, use \code{attrName}.}
 }
 \value{
-Object of class \code{objfn}.
+An objective function of class \code{objfn}, called as
+\code{obj(pars, ...)}, see \link{dModfn}. Its value is the full \verb{-2 log} density,
+while \code{\link[=constraintL2]{constraintL2()}} returns the penalty form without the constant.
 
 An \code{objfn} carrying \code{attr(., "penaltySpec")}.
 }
 \description{
+Builds a Laplace prior on parameters as an objective
+function.
+
 The L1 counterpart of \link{constraintL2} with an \code{Omega}. Given a \link{penaltyL1}
 specification it contributes the penalty
 \eqn{\lambda \sum_t |(D\eta)_t|}, where the terms \eqn{(D\eta)_t} are the
@@ -47,18 +60,15 @@ vanishes away from the kinks); the conditional-mode solve is handled by
 \details{
 Computes the Laplace prior on the \verb{-2 log} scale,
 \deqn{2\log(2\sigma) + 2|p-\mu|/\sigma,}
-the L1 counterpart of \link{constraintL2}. Note the difference in normalisation:
-this constructor and its siblings are the full \verb{-2 log} density, while
-\link{constraintL2} is the penalty form and drops the Gaussian's constant.
-The term is not differentiable at \eqn{p = \mu}, where the gradient is
-reported as 0, so it scores a posterior rather than driving a fit.
+the L1 counterpart of \code{\link[=constraintL2]{constraintL2()}}. At \eqn{p = \mu} the term is not
+differentiable and its gradient is returned as 0.
 }
 \examples{
 prior <- constraintL1(mu = c(k1 = 0), sigma = 2)
 prior(pars = c(k1 = 1))$value
 }
 \seealso{
-\link{constraintL2}
+\code{\link[=constraintL2]{constraintL2()}}
 
 \link{penaltyL1}, \link{EM}, \link{sparsify}, \link{constraintL2}
 }

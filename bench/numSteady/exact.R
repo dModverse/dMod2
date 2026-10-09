@@ -24,7 +24,7 @@ bare <- numSteadyModel(here, ligand = FALSE)
 setwd(outdir)
 
 pss <- Pimpl(full$reactions, forcings = full$forcings, compile = TRUE, modelname = "nse_ss",
-             keep.root = FALSE)
+             keepRoot = FALSE)
 E   <- environment(attr(pss, "mappings")[[1]])
 dep <- E$dependent
 

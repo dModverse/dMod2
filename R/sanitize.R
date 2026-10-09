@@ -47,6 +47,10 @@ sanitizeData <- function(x, required = c("name", "time", "value"), imputed = c(s
     for (n in missing.imputed) x[[n]] <- imputed[n]
     
   }
+
+  # A column holding only NA reads in as logical; the numeric ones stay double.
+  for (n in intersect(setdiff(c(required, names(imputed)), "name"), names(x)))
+    if (is.logical(x[[n]])) x[[n]] <- as.double(x[[n]])
   
   list(data = x, columns = c(required, names(imputed)))
   

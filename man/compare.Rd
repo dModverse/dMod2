@@ -6,7 +6,7 @@
 \alias{compare.character}
 \alias{compare.eqnvec}
 \alias{compare.data.frame}
-\title{Compare two objects and return differences}
+\title{Compare Two Objects and Return Differences}
 \usage{
 compare(vec1, ...)
 
@@ -19,23 +19,24 @@ compare(vec1, ...)
 \method{compare}{data.frame}(vec1, vec2 = NULL, ...)
 }
 \arguments{
-\item{vec1}{object of class \link{eqnvec}, \code{character} or
-\code{data.frame}. Alternatively, a list of such objects.}
+\item{vec1}{An \link{eqnvec}, character vector or data frame, or a list of such
+objects or of objects with the attributes above.}
 
-\item{...}{arguments going to the corresponding methods}
+\item{...}{Arguments passed to the methods.}
 
-\item{vec2}{same as vec1. Not used if vec1 is a list.}
+\item{vec2}{Same as \code{vec1}. Not used if \code{vec1} is a list.}
 
-\item{reference}{numeric of length one, the reference entry.}
+\item{reference}{Integer, the reference entry of a list. Defaults to 1.}
 }
 \value{
-\code{data.frame} or list of data.frames with the differences.
+A data frame of the entries that differ, are missing in \code{vec2}
+or are additional in \code{vec2}, or \code{NULL} if there are none. For a list, a
+list of those per compared object and attribute.
 }
 \description{
-Works either on a list or on two arguments. In case of a list,
-comparison is done with respect to a reference entry. Besides the
-objects themselves also some of their attributes are compared,
-i.e. "equations", "parameters" and "events" and "forcings".
+Works on two objects or on a list of objects. A list is compared entry by
+entry with a reference entry, including the attributes \code{"equations"},
+\code{"parameters"}, \code{"events"} and \code{"forcings"} of the entries.
 }
 \examples{
 ## Compare equation vectors

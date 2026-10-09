@@ -1,7 +1,6 @@
-# Constructor-level `deriv = TRUE/FALSE` gating for P, Pexpl, Pimpl and Y. Symmetric with the existing `deriv2` flag: the
-# constructor decides whether the artifact carries first-order
-# sensitivities, and the runtime call errors out if it asks for
-# something the construction didn't produce.
+# Constructor-level `deriv` gating for P, Pexpl, Pimpl and Y, as for `deriv2`:
+# the constructor decides whether first-order sensitivities exist, and a call
+# asking for what was not built errors.
 
 skip_if_no_compile <- function() {
   testthat::skip_if_not_installed("cppDE")
@@ -26,12 +25,12 @@ ctor_models <- local({
                    modelname = nm("test_pimpl_nod1"), verbose = FALSE)
     gfn <- Y(c(obs = "k * A"), states = c("A", "time"), parameters = "k",
              deriv = FALSE, modelname = nm("test_y_nod1"),
-             derivMode = "forward", verbose = FALSE, attach.input = FALSE)
+             derivMode = "forward", verbose = FALSE, attachInput = FALSE)
     pdisp <- P(c(A = "a * x"), method = "explicit", deriv = FALSE,
                modelname = nm("test_P_nod1"), verbose = FALSE)
 
     compile(pexpl, pimpl, gfn, pdisp, output = nm("ctor_models"),
-            cores = 4L)
+            cores = test_cores())
 
     cache <<- list(pexpl = pexpl, pimpl = pimpl, gfn = gfn,
                    pdisp = pdisp)

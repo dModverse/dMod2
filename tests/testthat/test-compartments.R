@@ -1,7 +1,6 @@
-## Context: "compartments"  (context() is deprecated in testthat 3e; kept as a note)
 
 test_that("back-compat flat volumes auto-translate to compartment IDs", {
-  # Flat volumes c(A=V1, B=V1, C=V2) should produce two compartments c1, c2.
+  # Distinct flat volume expressions become one compartment each.
   f <- eqnlist(
     smatrix = matrix(c(-1, 1, 0, 0, -1, 1), nrow = 2, byrow = TRUE,
                      dimnames = list(NULL, c("A", "B", "C"))),
@@ -106,8 +105,7 @@ test_that("getFluxes produces identical output for legacy single-compartment mod
   f <- addReaction(f, "Compl", "Enz + Prod", "k3*Compl", "prod_product")
   f <- addReaction(f, "Enz", "", "k4*Enz", "deg_enzyme")
   fl <- getFluxes(f)
-  # No volume-ratio factors should appear -- every reaction lives in the same
-  # (default) compartment.
+  # Every reaction lives in the default compartment, so no volume ratio appears.
   flat <- unlist(fl)
   expect_false(any(grepl("\\(1/1\\)", flat)))
   # Structure matches expected states
@@ -124,7 +122,7 @@ test_that("getFluxes emits cross-compartment volume ratio", {
     compartmentOf = c(A = "cyt", B = "nuc")
   )
   fl <- getFluxes(f)
-  # A (cyt, origin) should not carry a ratio; B (nuc, destin) should carry V_cyt/V_nuc.
+  # Only the destination outside the reaction's compartment gets a volume ratio.
   expect_false(grepl("V_cyt/V_nuc", fl$A))
   expect_true(grepl("V_cyt/V_nuc", fl$B))
 })
@@ -139,7 +137,6 @@ test_that("getFluxes emits a dilution term when a compartment has a rule", {
     compartmentOf = c(A = "cyt", B = "cyt")
   )
   fl <- getFluxes(f)
-  # Dilution term: -(A)*(mu*V_cyt)/(V_cyt) and -(B)*(mu*V_cyt)/(V_cyt)
   expect_true(any(grepl("dilution", names(fl$A))))
   expect_true(any(grepl("dilution", names(fl$B))))
   expect_true(any(grepl("mu\\*V_cyt", fl$A)))
@@ -173,7 +170,6 @@ test_that("conservedQuantities accepts a weight argument", {
   weighted   <- conservedQuantities(S, weight = "volume",
                                     volumes = c(A = 2, B = 3))
   expect_true(!is.null(unweighted))
-  # For A <-> B with volumes (2, 3), mass conservation weights: 2*A + 3*B conserved
   expect_true(!is.null(weighted))
 
   expect_error(conservedQuantities(S, weight = "volume"), "volumes")
@@ -183,8 +179,8 @@ test_that("conservedQuantities accepts a weight argument", {
 })
 
 test_that("rateCompartment enables reactions with educts across compartments", {
-  # Membrane binding: L in extraCellular, R in cytosol. The rate expression
-  # k*L*R is a concentration-rate in V_ext.
+  # Membrane binding with educts in two compartments, rate given per volume of
+  # the rate compartment.
   f <- NULL
   f <- addReaction(f, "",          "L", "k_prod",       compartment = "extraCellular")
   f <- addReaction(f, "",          "R", "k_Rprod",      compartment = "cytosol")
@@ -197,14 +193,10 @@ test_that("rateCompartment enables reactions with educts across compartments", {
   expect_equal(f$reactionCompartment[3], "extraCellular")
   expect_true(is.na(f$reactionCompartment[1]))
 
-  # uniform flux formula: V_ref = V_ext for the binding reaction,
-  # so R (cytosol) is scaled by V_ext/V_cyt, and L (ext) has ratio 1.
+  # Species outside the rate compartment are scaled by the volume ratio.
   fl <- getFluxes(f)
-  # L_ext educt: no ratio (ratio is V_ext/V_ext == "")
   expect_true(any(grepl("-1\\*\\(k_on\\*L\\*R\\)$", fl$L)))
-  # R cytosol educt: scaled by V_ext/V_cyt
   expect_true(any(grepl("k_on\\*L\\*R\\)\\*\\(V_ext/V_cyt\\)", fl$R)))
-  # Compl cytosol product: same scaling
   expect_true(any(grepl("k_on\\*L\\*R\\)\\*\\(V_ext/V_cyt\\)", fl$Compl)))
 })
 
@@ -309,7 +301,7 @@ test_that("subset keeps a compartment that only a reaction frame references", {
   expect_equal(f_sub$reactionCompartment, "ext")
 })
 
-test_that("amount fluxes carry no dilution term", {
+test_that("amount fluxes have no dilution term", {
   f <- eqnlist(
     smatrix = matrix(c(-1, 1), nrow = 1, dimnames = list(NULL, c("A", "B"))),
     states = c("A", "B"), rates = "k*A", description = "r",
@@ -399,7 +391,7 @@ test_that("a compartment declared for a future state survives until it appears",
   expect_equal(unname(g$volumes[["TGFb"]]), "V_ext")
 })
 
-test_that("an explicit volumes argument beats a layout carried along as attribute", {
+test_that("an explicit volumes argument beats a layout attached as attribute", {
   f <- eqnlist(smatrix = matrix(c(-1, 1), nrow = 1, dimnames = list(NULL, c("A", "B"))),
                states = c("A", "B"), rates = "k1*A", description = "forward")
   g <- as.eqnlist(as.data.frame(f), volumes = c(A = "Vcyt", B = "Vnuc"))

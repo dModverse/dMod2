@@ -2,7 +2,7 @@
 % Please edit documentation in R/parameters.R
 \name{P}
 \alias{P}
-\title{Parameter transformation}
+\title{Parameter Transformation}
 \usage{
 P(
   trafo = NULL,
@@ -19,30 +19,114 @@ P(
 )
 }
 \arguments{
-\item{trafo}{An \link{eqnvec}, named character, \link{eqnlist}, or list thereof.}
+\item{trafo}{An \link{eqnvec}, named character or \link{eqnlist}, or a list of
+those named by condition, which builds one transformation per condition.
+\code{NULL} (default) returns \code{NULL}.}
 
-\item{parameters}{Outer parameter names.}
+\item{parameters}{Outer parameter names. Default \code{NULL}, the symbols of
+\code{trafo}.}
 
-\item{condition}{Condition label.}
+\item{condition}{Condition label of a single \code{trafo}, default \code{NULL}; a
+list takes its names instead.}
 
-\item{compile, modelname, verbose}{Forwarded to \code{\link[cppDE:cppFUN]{cppDE::cppFUN()}}.}
+\item{compile}{Logical. \code{TRUE} compiles all conditions into one shared
+object named \code{modelname}, \code{FALSE} (default) leaves it to \code{\link[=compile]{compile()}}.}
 
-\item{method}{\code{"explicit"}, \code{"implicit"}, or \code{NULL} for \code{"implicit"} if
-\code{trafo} is an \link{eqnlist} and \code{"explicit"} otherwise.}
+\item{modelname}{Base name of the generated files, default \code{NULL}, which
+is \code{"expl_parfn"} or \code{"impl_parfn"}, followed by \verb{_<condition>}.}
 
-\item{cores}{Number of cores. \code{NULL} uses \code{\link[=detectFreeCores]{detectFreeCores()}}; 1 on Windows.}
+\item{method}{\code{"explicit"}, \code{"implicit"}, or \code{NULL} (default) for
+\code{"implicit"} if \code{trafo} is an \link{eqnlist} and \code{"explicit"} otherwise.}
 
-\item{deriv, deriv2}{Attach first and second order sensitivities. \code{deriv2}
-requires \code{deriv = TRUE}.}
+\item{cores}{Number of parallel jobs generating the sources of a list.
+\code{NULL} (default) uses \code{\link[=detectFreeCores]{detectFreeCores()}}; 1 on Windows.}
 
-\item{...}{Forwarded to the backend, e.g. \code{outdir}.}
+\item{verbose}{Logical. Print the compiler output, default \code{FALSE}.}
+
+\item{deriv, deriv2}{Build first and second derivatives, default \code{TRUE} and
+\code{FALSE}. \code{deriv2} requires \code{deriv = TRUE}.}
+
+\item{...}{Further arguments of \code{\link[=Pexpl]{Pexpl()}} (\code{attachInput}, \code{derivMode},
+\code{outdir}) or \code{\link[=Pimpl]{Pimpl()}} (\code{forcings}, \code{keepRoot}, \code{flow}, \code{controlsPTC},
+\code{outdir}), as \code{method} selects.}
 }
 \value{
-A \link{parfn}.
+A \link{parfn}, called as \code{p(pars, ...)}, see section Calling a dMod
+function.
 }
 \description{
 Builds a \link{parfn} with \code{\link[=Pexpl]{Pexpl()}} or \code{\link[=Pimpl]{Pimpl()}}.
 }
+\section{Calling a dMod function}{
+
+The leading arguments depend on the class and are matched by position or
+by name:
+\itemize{
+\item prediction function: \code{x(times, pars, ...)}, returning a \link{prdlist};
+\item observation function: \code{g(out, pars, ...)} with a \link{prdlist} \code{out},
+returning a \link{prdlist};
+\item parameter transformation: \code{p(pars, ...)}, returning a list with one
+\link{parvec} per condition;
+\item objective function: \code{obj(pars, ...)}, returning an \link{objlist}.
+}
+
+\code{pars} is a named numeric vector. If it has a \code{deriv} attribute, as the
+output of a parameter transformation does, the derivatives are taken with
+respect to the parameters behind it. A composition is called as its class:
+\code{g * x * p} is a prediction function, \code{(g * x * p)(times, pars)}.
+
+The other arguments are named:
+\itemize{
+\item \code{fixed}: named numeric vector of parameters that enter the evaluation
+without derivatives. Default \code{NULL}.
+\item \code{deriv}: \code{TRUE} (default) returns first derivatives with respect to
+\code{pars}.
+\item \code{deriv2}: \code{TRUE} returns second derivatives as well. Default \code{FALSE}.
+Every function of the chain has to be built for them, see the arguments
+\code{deriv2} and \code{derivMode} of \code{\link[=odemodel]{odemodel()}}, \code{\link[=Y]{Y()}} and \code{\link[=P]{P()}}.
+\item \code{hessian}: objective functions only, see the table below. Default
+\code{NULL}.
+\item \code{sweep}: objective functions only. \code{"forward"} (default) propagates the
+sensitivities through the chain; \code{"reverse"} computes the gradient in one
+backward pass, whose cost does not grow with the number of parameters.
+\code{"reverse"} needs every function of the chain built with
+\code{derivMode = "reverse"}, and with \code{"forward-reverse"} for \code{deriv2 = TRUE}.
+\item \code{conditions}: character vector, the conditions to evaluate. Default all
+conditions of the function.
+\item \code{env}: environment for intermediate results. Default \code{NULL}, a new one.
+An objective function stores its prediction there as \code{prediction} and
+returns the environment as attribute \code{env}.
+\item \code{cores}: number of threads for the ODE solves and the residual kernel.
+Default \code{getOption("dMod.cores", 1L)}.
+}
+
+Prediction, observation and parameter functions accept \code{hessian} and
+\code{sweep} and ignore them. With \code{deriv = TRUE} an objective function returns
+this Hessian:
+
+\tabular{llll}{
+\code{sweep} \tab \code{hessian} \tab \code{deriv2 = FALSE} \tab \code{deriv2 = TRUE} \cr
+\code{"forward"} \tab \code{NULL}, \code{TRUE} \tab Gauss-Newton \tab exact \cr
+\code{"forward"} \tab \code{FALSE} \tab none \tab none, with a warning \cr
+\code{"reverse"} \tab \code{NULL} \tab none \tab exact \cr
+\code{"reverse"} \tab \code{TRUE} \tab none, with a warning \tab exact \cr
+\code{"reverse"} \tab \code{FALSE} \tab none \tab none, with a warning \cr
+}
+
+With \code{deriv = FALSE} it returns the value alone.
+}
+
+\examples{
+\donttest{
+## One transformation per condition, all compiled into one shared object
+trafo <- list(
+  ctrl  = eqnvec(k1 = "exp(log_k1)", k2 = "exp(log_k2)", A = "A0"),
+  treat = eqnvec(k1 = "exp(log_k1 + log_fold)", k2 = "exp(log_k2)", A = "A0"))
+p <- P(trafo, compile = TRUE, modelname = "P_example", outdir = tempdir())
+getParameters(p)
+p(c(log_k1 = 0, log_k2 = -1, A0 = 2, log_fold = log(3)))
+}
+}
 \seealso{
-\code{\link[=Pexpl]{Pexpl()}}, \code{\link[=Pimpl]{Pimpl()}}
+\code{\link[=Pexpl]{Pexpl()}}, \code{\link[=Pimpl]{Pimpl()}}, \code{\link[=define]{define()}}
 }

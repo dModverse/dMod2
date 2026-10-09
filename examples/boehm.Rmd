@@ -35,7 +35,7 @@ dir.create(outdir)
 
 ## Reactions
 
-Reactions are added one at a time and carry their compartment. The Epo stimulus decays exponentially and enters the phosphorylation rates in closed form, so `time` appears directly in a rate expression. Nuclear species are assigned before they are produced, so their compartment does not follow from the reactions that import them.
+Reactions are added one at a time, each with its compartment. The Epo stimulus decays exponentially and enters the phosphorylation rates in closed form, so `time` appears directly in a rate expression. Nuclear species are assigned before they are produced, so their compartment does not follow from the reactions that import them.
 
 ```{r reactions}
 epo <- "1.25e-7*exp(-Epo_degradation_BaF3*time)"
@@ -70,8 +70,7 @@ Only relative quantities were measured, mixed by the isotope ratio `specC17`. Th
 ```{r model}
 model <- odemodel(reactions, modelname = "boehm_ode", compile = FALSE, outdir = outdir)
 x <- Xs(model, 
-        optionsOde = list(atol = 1e-8, rtol = 1e-6, maxattemps = 100L, maxsteps = 1e6), 
-        optionsSens = list(atol = 1e-8, rtol = 1e-6, maxattemps = 100L, maxsteps = 1e6))
+        options = list(atol = 1e-8, rtol = 1e-6, maxattemps = 100L, maxsteps = 1e6))
 
 observables <- eqnvec(
   pSTAT5A_rel = "(100*pApB + 200*pApA*specC17)/(pApB + STAT5A*specC17 + 2*pApA*specC17)",
@@ -85,9 +84,9 @@ errors <- eqnvec(
   rSTAT5A_rel = "sd_rSTAT5A_rel"
 )
 
-g <- Y(observables, x, modelname = "boehm_obs", attach.input = FALSE,
+g <- Y(observables, x, modelname = "boehm_obs", attachInput = FALSE,
        compile = FALSE, outdir = outdir)
-e <- Y(errors, g, modelname = "boehm_err", attach.input = FALSE,
+e <- Y(errors, g, modelname = "boehm_err", attachInput = FALSE,
        compile = FALSE, outdir = outdir)
 ```
 

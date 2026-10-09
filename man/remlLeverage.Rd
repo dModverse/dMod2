@@ -2,49 +2,79 @@
 % Please edit documentation in R/reml.R
 \name{remlLeverage}
 \alias{remlLeverage}
-\title{Leverage of the data points in the mean model}
+\title{Leverage of the Data Points in the Mean Model}
 \usage{
 remlLeverage(
   objfun,
   pars,
   meanpars = NULL,
   fixed = NULL,
-  rank.tol = 1e-08,
-  cores = getOption("dMod.cores", 1L)
+  rankTol = 1e-08,
+  cores = getOption("dMod.cores", 1L),
+  ...
 )
 }
 \arguments{
-\item{objfun}{objective function built by \link{normL2}, carrying its prediction
+\item{objfun}{Objective function built by \code{\link[=normL2]{normL2()}}, with prediction
 function, data and error model.}
 
-\item{pars}{named numeric parameter vector, usually a fit.}
+\item{pars}{Named numeric parameter vector, usually a fit.}
 
-\item{meanpars}{character, the mean parameters spanning \eqn{J}. Defaults to
-\code{names(pars)} minus the error-model parameters.}
+\item{meanpars}{Character, the mean parameters spanning \eqn{J}. Default
+\code{NULL}: \code{names(pars)} without the error-model parameters.}
 
-\item{fixed}{named numeric passed on to the prediction.}
+\item{fixed}{Named numeric, passed to the prediction. Default \code{NULL}.}
 
-\item{rank.tol}{relative threshold on the singular values of the weighted
-sensitivity matrix below which a direction counts as absent.}
+\item{rankTol}{Relative threshold on the singular values of the weighted
+sensitivity matrix below which a direction counts as absent. Default
+\code{1e-8}.}
 
-\item{cores}{passed on to the prediction.}
+\item{cores}{Passed to the prediction. Default \code{getOption("dMod.cores", 1)}.}
+
+\item{...}{\code{rank.tol} is deprecated, use \code{rankTol}.}
 }
 \value{
-A \code{data.frame} with one row per data point, columns \code{condition},
-\code{time}, \code{name}, \code{sigma}, \code{residual} and \code{leverage}, and attributes
-\code{"rank"} (the effective number of mean parameters) and \code{"dof"} (a table of
-\eqn{n_g - \sum_{i \in g} h_{ii}} per observable).
+A data frame with one row per data point and columns \code{condition},
+\code{time}, \code{name}, \code{sigma}, \code{residual} and \code{leverage}. Attributes: \code{"rank"},
+the effective number of mean parameters; \code{"logdet"}, the log determinant
+of \eqn{J^\top W J} over the directions present; \code{"dof"}, per observable
+the number of data points minus the summed leverage.
 }
 \description{
 Hat values of the weighted mean model,
 \eqn{h = \mathrm{diag}(W^{1/2} J (J^\top W J)^{-1} J^\top W^{1/2})} with
 \eqn{J = \partial\mu/\partial\theta} the prediction sensitivities and
-\eqn{W = \mathrm{diag}(1/\sigma_i^2)}. Each value is the share of the mean
-parameters carried by one data point, summed by observable.
+\eqn{W = \mathrm{diag}(1/\sigma_i^2)}: the leverage of each data point.
+Their sum is the numerical rank of the weighted sensitivity matrix, so a
+non-identifiable direction contributes nothing.
+}
+\examples{
+\donttest{
+old <- options(dMod.outdir = tempdir())
+f <- addReaction(eqnlist(), from = "A", to = "", rate = "k*A")
+x <- Xs(odemodel(f, modelname = "reml_x", compile = FALSE))
+g <- Y(c(y = "A"), f = x, attachInput = FALSE, modelname = "reml_g",
+       compile = FALSE)
+e <- Y(c(y = "sigma_y"), f = g, attachInput = FALSE, condition = "C1",
+       modelname = "reml_e", compile = FALSE)
+p <- P(eqnvec(A = "exp(logA)", k = "exp(logk)", sigma_y = "sigma_y"),
+       condition = "C1", modelname = "reml_p", compile = FALSE)
+compile(x, g, e, p, output = "reml_example", cores = 1)
 
-Their sum is the numerical rank of the weighted sensitivity matrix, not the
-nominal parameter count: a non-identifiable direction contributes nothing.
+set.seed(1)
+times <- seq(0, 5, by = 0.25)
+data <- datalist(C1 = data.frame(
+  name = "y", time = times, sigma = NA_real_,
+  value = 2 * exp(-0.5 * times) + rnorm(length(times), sd = 0.1)))
+obj <- normL2(data, g * x * p, errmodel = e)
+
+fit <- reml(obj, c(logA = 0, logk = 0, sigma_y = 1))
+fit$argument
+fit$dof
+head(remlLeverage(obj, fit$argument))
+options(old)
+}
 }
 \seealso{
-\link{reml} uses these to correct the error model.
+\code{\link[=reml]{reml()}}
 }

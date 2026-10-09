@@ -2,24 +2,33 @@
 % Please edit documentation in R/utils.R
 \name{attrs}
 \alias{attrs}
-\title{Select attributes.}
+\title{Select Attributes}
 \usage{
-attrs(x, atr = NULL, keep = TRUE)
+attrs(x, which = NULL, keep = TRUE, ...)
 }
 \arguments{
-\item{x}{The object to work on}
+\item{x}{An object.}
 
-\item{atr}{An optional list of attributes which are either kept or removed.
-This parameter defaults to dim, dimnames, names,  col.names, and row.names.}
+\item{which}{Character vector of attribute names. \code{NULL} (default) stands for
+\code{"class"}, \code{"dim"}, \code{"dimnames"}, \code{"names"}, \code{"col.names"} and
+\code{"row.names"}.}
 
-\item{keep}{For keep = TRUE, atr is a positive list on attributes which are
-kept, for keep = FALSE, \option{atr} are removed.}
+\item{keep}{Logical. \code{TRUE} (default) keeps the attributes in \code{which} and
+removes all others; \code{FALSE} removes those in \code{which}.}
+
+\item{...}{\code{atr} is deprecated, use \code{which}.}
 }
 \value{
-x with selected attributes.
+\code{x} with the selected attributes.
 }
 \description{
-Select or discard attributes from an object.
+Keeps or removes attributes of an object.
+}
+\examples{
+x <- structure(1:3, names = c("a", "b", "c"), note = "temporary")
+attrs(x)
+attrs(x, "note", keep = FALSE)
+  
 }
 \author{
 Wolfgang Mader, \email{Wolfgang.Mader@fdm.uni-freiburg.de}
