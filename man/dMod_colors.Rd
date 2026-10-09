@@ -2,11 +2,17 @@
 % Please edit documentation in R/plots.R
 \name{dMod_colors}
 \alias{dMod_colors}
-\title{Seed colors of the dMod palette}
+\title{Seed Colors of the dMod Palette}
+\format{
+A character vector of hex color codes.
+}
 \usage{
 dMod_colors
 }
 \description{
-The ten qualitative house colors. Not colorblind-safe, its brown and red
-collapse under protanopia, see \code{\link[=dMod_palettes]{dMod_palettes()}} for the alternatives.
+The ten qualitative house colors. They are not colorblind-safe, see
+\code{\link[=dMod_palettes]{dMod_palettes()}} for alternatives.
+}
+\seealso{
+\link{dMod_colors_cb}, \code{\link[=dMod_palette]{dMod_palette()}}
 }

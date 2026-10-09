@@ -2,17 +2,22 @@
 % Please edit documentation in R/statistics.R
 \name{progressBar}
 \alias{progressBar}
-\title{Progress bar}
+\title{Progress Bar}
 \usage{
 progressBar(percentage, size = 50, number = TRUE)
 }
 \arguments{
-\item{percentage}{Numeric between 0 and 100}
+\item{percentage}{Numeric between 0 and 100.}
 
-\item{size}{Integer, the size of the bar print-out}
+\item{size}{Integer, width of the bar in characters. Default \code{50}.}
 
-\item{number}{Logical, Indicates whether the percentage should be printed out.}
+\item{number}{Logical, whether the percentage is printed after the bar.
+Default \code{TRUE}.}
+}
+\value{
+\code{NULL}, invisibly; called for its output.
 }
 \description{
-Progress bar
+Prints a progress bar on the current console line.
 }
+\keyword{internal}

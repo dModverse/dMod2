@@ -5,7 +5,7 @@
 \alias{getEquations.odemodel}
 \alias{getEquations.prdfn}
 \alias{getEquations.fn}
-\title{Extract the equations of an object}
+\title{Extract the Equations of an Object}
 \usage{
 getEquations(x, conditions = NULL)
 
@@ -16,15 +16,15 @@ getEquations(x, conditions = NULL)
 \method{getEquations}{fn}(x, conditions = NULL)
 }
 \arguments{
-\item{x}{object from which the equations should be extracted}
+\item{x}{object of class \code{odemodel} or \code{fn}.}
 
-\item{conditions}{character or numeric vector specifying the conditions to
-which \code{getEquations} is restricted. If \code{conditions} has length one,
-the result is not returned as a list.}
+\item{conditions}{character or numeric, restrict the result to these
+conditions. Default \code{NULL}.}
 }
 \value{
-The equations as list of \code{eqnvec} objects.
+A list of \code{eqnvec} objects, one per condition. If \code{conditions} has
+length one, the \code{eqnvec} itself. For an \code{odemodel}, its \code{eqnvec}.
 }
 \description{
-Extract the equations of an object
+Extract the Equations of an Object
 }

@@ -15,6 +15,6 @@ parnames(x, ...)
 Character vector of parameter names.
 }
 \description{
-Generic for extracting the parameter names carried by an object. See
+Generic for extracting the parameter names held by an object. See
 \link{parnames.omegaspec} for the random-effects spec method.
 }

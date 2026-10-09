@@ -5,71 +5,102 @@
   dput(parframe(frame,
                 parameters     = names(pars),
                 metanames      = c("value", "constraint", "stepsize", "gamma", "whichPar"),
-                obj.attributes = names(obj.attributes)),
+                objAttributes  = names(obj.attributes)),
        file = file.path(folder, paste0(name, "-", side, ".R")))
 }
 
 
-#' Profile-likelihood (PL) computation
-#' 
-#' @param objfun Objective function \code{objfun(pars, fixed, ...)} returning a list with "value",
-#' "gradient" and "hessian". If attribute "valueData" and/or "valuePrior are returned they are attached to the return value.
-#' @param pars Parameter vector corresponding to the log-likelihood optimum.
-#' @param whichPar Numeric or character vector. The parameters for which the profile is computed.
-#' @param alpha Numeric, the significance level based on the chisquare distribution with df=1
-#' @param delta Numeric, the rise in the objective at which a profile stops.
-#' Defaults to `qchisq(1 - alpha, 1)`. Pass [profileThreshold] with the same
-#' arguments used for [confint.parframe] so the profile reaches that threshold
-#' instead of leaving it to extrapolation.
-#' @param limits Numeric vector of length 2, the lower and upper deviance from the original 
-#' value of \code{pars[whichPar]}
-#' @param method Character, either \code{"integrate"} or \code{"optimize"}. This is a short-cut for
-#' setting stepControl, algoControl and optControl by hand.
-#' @param stepControl List of arguments controlling the step adaption. Defaults to integration set-up, i.e.
-#' \code{list(stepsize = 1e-4, min = 1e-4, max = Inf, atol = 1e-2, rtol = 1e-2, limit = 100)}
-#' @param algoControl List of arguments controlling the fast PL algorithm. defaults to
-#' \code{list(gamma = 1, W = "hessian", reoptimize = FALSE, correction = 1, reg = .Machine$double.eps)}
-#' @param optControl List of arguments controlling the \code{trust()} optimizer. Defaults to
-#' \code{list(rinit = .1, rmax = 10, iterlim = 10)}; any other argument of \link{trust},
-#' e.g. \code{ftol} or \code{parupper}, can be added. See \link{trust} for more details.
-#' @param verbose Logical, print verbose messages.
+#' Profile Likelihood
+#'
+#' Computes the profile likelihood of one or more parameters around an
+#' optimum. `method = "integrate"` follows the profile path by Euler steps of
+#' the path equation of the Lagrangian; `method = "optimize"` re-optimises the
+#' other parameters at every step. A method of [stats::profile()] for dMod
+#' objective functions and plain R functions.
+#'
+#' @param fitted Objective function \code{fitted(pars, fixed, ...)} returning a
+#'   list with \code{value}, \code{gradient} and \code{hessian}. Numeric
+#'   attributes of the result, such as \code{"data"} and \code{"prior"}, are
+#'   kept as columns of the profile.
+#' @param pars Named numeric parameter vector at the optimum.
+#' @param whichPar Numeric or character vector, the parameters to profile.
+#' @param alpha Significance level; the profile stops where the objective has
+#'   risen by \code{qchisq(1 - alpha, 1)}. Default \code{0.05}.
+#' @param delta Rise in the objective at which a profile stops. Default
+#'   \code{NULL}, which uses \code{qchisq(1 - alpha, 1)}. Pass
+#'   [profileThreshold()] with the arguments later given to
+#'   [confint.parframe()], so the profile reaches that threshold.
+#' @param limits Numeric of length 2, the lower and upper deviation from
+#'   \code{pars[whichPar]} at which a profile stops. Default
+#'   \code{c(lower = -Inf, upper = Inf)}.
+#' @param method \code{"integrate"} (default) or \code{"optimize"}. Selects the
+#'   defaults of \code{stepControl}, \code{algoControl} and \code{optControl}.
+#' @param stepControl List of step-size settings, merged into the defaults.
+#'   Defaults are given as \code{"integrate"} / \code{"optimize"}.
+#'   \describe{
+#'     \item{\code{stepsize}}{Initial step in the profiled parameter.
+#'       \code{1e-4} / \code{1e-2}.}
+#'     \item{\code{min}, \code{max}}{Bounds on the step size. \code{1e-4} and
+#'       \code{Inf} for both methods.}
+#'     \item{\code{atol}}{The step shrinks by a factor 1.5 when actual and
+#'       predicted change of the objective differ by more than \code{atol}.
+#'       \code{1e-2} / \code{1e-1}.}
+#'     \item{\code{rtol}}{The step doubles when the difference is below
+#'       \code{0.3 * atol}, or below \code{0.3 * rtol} relative to the actual
+#'       change. \code{1e-2} / \code{1e-1}.}
+#'     \item{\code{limit}}{Maximum number of steps per side. \code{500} /
+#'       \code{100}.}
+#'     \item{\code{stop}}{Component of the objective whose rise is compared
+#'       with \code{delta}: \code{"value"} or the name of a numeric attribute
+#'       such as \code{"data"}. \code{"value"} for both methods.}
+#'   }
+#' @param algoControl List of path settings, merged into the defaults.
+#'   Defaults are given as \code{"integrate"} / \code{"optimize"}.
+#'   \describe{
+#'     \item{\code{gamma}}{Initial factor of the correction towards the
+#'       optimum of the other parameters. \code{1} / \code{0}.}
+#'     \item{\code{W}}{Matrix in the path equation, \code{"hessian"} or
+#'       \code{"identity"}. \code{"hessian"} / \code{"identity"}.}
+#'     \item{\code{reoptimize}}{Whether every step is followed by a fit of the
+#'       other parameters with [trust()]. \code{FALSE} / \code{TRUE}.}
+#'     \item{\code{correction}}{Relative correction above which \code{gamma}
+#'       is halved; below half of it \code{gamma} doubles up to its initial
+#'       value. \code{1} for both methods.}
+#'     \item{\code{reg}}{Singular values below \code{reg} are dropped when the
+#'       Hessian is inverted. \code{.Machine$double.eps} / \code{0}.}
+#'   }
+#' @param optControl List of arguments for [trust()] in the re-optimisation,
+#'   merged into \code{list(rinit = 0.1, rmax = 10, iterlim = 10)} for
+#'   \code{"integrate"} and \code{list(rinit = 0.1, rmax = 10, iterlim = 100)}
+#'   for \code{"optimize"}. Any other argument of [trust()] can be added.
+#' @param verbose Logical, print progress. Default \code{FALSE}.
 #' @param cores Number of parallel workers over parameters, or
-#'   `c(pars = , conditions = )` to also give each worker a condition axis.
-#'   An inner axis selects a PSOCK backend: cppDE's batch runs serially inside
-#'   a fork. Used when computing profiles for several
-#' parameters. Multiplies with the OpenMP threads each objective function uses
-#' (its `cores` argument); keep the product below your core count.
-#' @param cautiousMode Logical, write every step to disk and don't delete intermediate results
-#' @param side either, "left", "right" or "both": determines the side of the profile which is calculated (useful for parallelization). default is "both"
-#' @param ... Arguments going to objfun()
-#' @details Computation of the profile likelihood is based on the method of Lagrangian multipliers
-#' and Euler integration of the corresponding differential equation of the profile likelihood paths.
-#' 
-#' \code{algoControl}: Since the Hessian which is needed for the differential equation is frequently misspecified, 
-#' the error in integration needs to be compensated by a correction factor \code{gamma}. Instead of the
-#' Hessian, an identity matrix can be used. To guarantee that the profile likelihood path stays on
-#' the true path, each point proposed by the differential equation can be used as starting point for
-#' an optimization run when \code{reoptimize = TRUE}. The correction factor \code{gamma} is adapted
-#' based on the amount of actual correction. If this exceeds the value \code{correction}, \code{gamma} is
-#' reduced. In some cases, the Hessian becomes singular. This leads to problems when inverting the
-#' Hessian. To avoid this problem, the pseudoinverse is computed by removing all singular values lower
-#' than \code{reg}.
-#' 
-#' \code{stepControl}: The Euler integration starts with \code{stepsize}. In each step the predicted change
-#' of the objective function is compared with the actual change. If this is larger than \code{atol}, the
-#' stepsize is reduced. For small deviations, either compared with the absolute tolerance \code{atol} or the
-#' relative tolerance \code{rtol}, the stepsize may be increased. \code{max} and \code{min} are upper and lower
-#' bounds for \code{stepsize}. \code{limit} is the maximum number of steps that are take for the profile computation.
-#' \code{stop} is a character, usually "value" or "data", for which the significance level \code{alpha}
-#' is evaluated.
-#' 
-#' @return Named list of length one. The name is the parameter name. The list entry is a
-#' matrix with columns "value" (the objective value), "constraint" (deviation of the profiled parameter from
-#' the original value), "stepsize" (the stepsize take for the iteration), "gamma" (the gamma value employed for the
-#' iteration), "valueData" and "valuePrior" (if specified in objfun), one column per parameter (the profile paths).
+#'   `c(pars = , conditions = )` to also give each worker a condition axis,
+#'   which selects a PSOCK backend. Multiplies with the threads each objective
+#'   evaluation uses; keep the product below the number of cores. Default
+#'   \code{1}.
+#' @param cautiousMode Logical. If \code{TRUE}, every step is written to
+#'   \code{profiles-interRes/<parameter>-<side>.R} in the working directory,
+#'   and the files are kept. Default \code{FALSE}.
+#' @param side \code{"both"} (default), \code{"left"} or \code{"right"}, the
+#'   side of the optimum to profile.
+#' @param ... Further arguments passed to \code{fitted}, for example
+#'   \code{fixed}. `objfun` is deprecated, use `fitted`.
+#'
+#' @return A [parframe()] with one row per profile point of all profiled
+#'   parameters, with metanames \code{value} (the objective), \code{constraint}
+#'   (deviation of the profiled parameter from its value in \code{pars}),
+#'   \code{stepsize}, \code{gamma} and \code{whichPar} (the profiled
+#'   parameter), columns for the numeric attributes of the objective, and one
+#'   column per parameter. Profiles that fail are dropped with a message.
+#'
+#' @seealso [confint.parframe()] for confidence intervals, [plotProfile()] and
+#'   [plotPaths()] for plots, [profileThreshold()].
 #' @example inst/examples/profiles.R
+#' @importFrom stats profile
+#' @rdname profile
 #' @export
-profile <- function(objfun, pars, whichPar, alpha = 0.05, 
+profile.objfn <- function(fitted, pars, whichPar, alpha = 0.05,
                     limits = c(lower = -Inf, upper = Inf), 
                     method = c("integrate", "optimize"),
                     stepControl = NULL, 
@@ -82,11 +113,11 @@ profile <- function(objfun, pars, whichPar, alpha = 0.05,
                     delta = NULL,
                     ...) {
 
-  # Ensure that objfun is defined in this environment such that it is copied to the parallel workers
-  force(objfun)
+  dotArgs <- .renameArgs(list(...), c(objfun = "fitted"), "profile")
+  # Bound in this frame, so the parallel workers receive it.
+  objfun <- fitted
 
   # Guarantee that pars is named numeric without deriv attribute
-  dotArgs <- list(...)
   sanePars <- sanitizePars(pars, dotArgs$fixed)
   pars <- sanePars$pars
   fixed <- sanePars$fixed
@@ -171,7 +202,7 @@ profile <- function(objfun, pars, whichPar, alpha = 0.05,
                           .inorder = TRUE,
                           .options.multicore = list(preschedule = FALSE)) %mydo% {
                             
-                            loadDLL(objfun)
+                            if (inherits(objfun, "fn")) loadDLL(objfun)
                             if (!is.null(coresConditions))
                               options(dMod.cores = coresConditions)
                             
@@ -261,10 +292,9 @@ profile <- function(objfun, pars, whichPar, alpha = 0.05,
                                 warning(paste0("Iteration ", i, ": Impossible to invert Hessian. Trying to optimize instead."))
                               }
                               
-                              # Numeric attributes of the objective value become
-                              # profile modes, and those have to add up to the
-                              # total. chi2 is a decomposition of one of them,
-                              # not a term next to it.
+                              # Numeric attributes become profile modes that add
+                              # up to the total; chi2 decomposes one of them and
+                              # is not a mode of its own.
                               out.attributes <- attributes(out)[sapply(attributes(out), is.numeric)]
                               out.attributes <- out.attributes[
                                 !grepl("^chi2($|_)", names(out.attributes))]
@@ -288,7 +318,6 @@ profile <- function(objfun, pars, whichPar, alpha = 0.05,
                               optimize <- aControl$reoptimize
                               # Check for error in evaluation of lagrange()
                               if(is.na(dy[1])) {
-                                #cat("Evaluation of lagrange() not successful. Will optimize instead.\n")
                                 optimize <- TRUE
                                 y.try <- y
                                 y.try[whichIndex] <- y[whichIndex] + direction*stepsize
@@ -362,7 +391,6 @@ profile <- function(objfun, pars, whichPar, alpha = 0.05,
                                 progressBar(percentage)
                                 
                                 
-                                #cat("diff.thres:", diff.thres, "diff.steps:", diff.steps, "diff.limit:", diff.limit)
                                 myvalue <- format(substr(lagrange.out$value  , 0, 8), width = 8)
                                 myconst <- format(substr(constraint.out$value, 0, 8), width = 8)
                                 mygamma <- format(substr(gamma               , 0, 8), width = 8)
@@ -544,7 +572,7 @@ profile <- function(objfun, pars, whichPar, alpha = 0.05,
                               out,
                               parameters = names(pars),
                               metanames = c("value", "constraint", "stepsize", "gamma", "whichPar"),
-                              obj.attributes = names(out.attributes)
+                              objAttributes = names(out.attributes)
                             )
                             
                           }
@@ -569,13 +597,22 @@ profile <- function(objfun, pars, whichPar, alpha = 0.05,
   
 }
 
+#' @rdname profile
+#' @export
+profile.function <- function(fitted, ...) profile.objfn(fitted, ...)
 
 
-#' Progress bar
-#' 
-#' @param percentage Numeric between 0 and 100
-#' @param size Integer, the size of the bar print-out
-#' @param number Logical, Indicates whether the percentage should be printed out.
+
+#' Progress Bar
+#'
+#' Prints a progress bar on the current console line.
+#'
+#' @param percentage Numeric between 0 and 100.
+#' @param size Integer, width of the bar in characters. Default \code{50}.
+#' @param number Logical, whether the percentage is printed after the bar.
+#'   Default \code{TRUE}.
+#' @return \code{NULL}, invisibly; called for its output.
+#' @keywords internal
 #' @export
 progressBar <- function(percentage, size = 50, number = TRUE) {
   
@@ -585,10 +622,10 @@ progressBar <- function(percentage, size = 50, number = TRUE) {
   out <- paste("\r|", paste(rep("=", round(size*percentage/100)), collapse=""), paste(rep(" ", size-round(size*percentage/100)), collapse=""), "|", sep="")
   cat(out)
   if(number) cat(format(paste(" ", round(percentage), "%", sep=""), width=5))
-  
+  invisible(NULL)
 }
 
-#' Threshold for a profile likelihood
+#' Threshold for a Profile Likelihood
 #'
 #' @description
 #' How far a profile has to rise for a parameter value to leave the confidence
@@ -605,9 +642,7 @@ progressBar <- function(percentage, size = 50, number = TRUE) {
 #' effective count, which is what to pass when directions are non-identifiable.
 #'
 #' @return A single number.
-#' @seealso [profile] takes it as `delta`, [confint.parframe] builds it from
-#' `method`, `n` and `p`. Passing the same one to both keeps the profile long
-#' enough for the interval to be read off rather than extrapolated.
+#' @seealso [profile()][profile.objfn], [confint.parframe()]
 #' @importFrom stats qf
 #' @export
 profileThreshold <- function(level = 0.95, method = c("chisq", "F"),
@@ -625,23 +660,26 @@ profileThreshold <- function(level = 0.95, method = c("chisq", "F"),
 }
 
 
-#' Profile uncertainty extraction
-#' 
-#' @description extract parameter uncertainties from profiles
-#' @param object object of class `parframe`, returned from [profile] function.
-#' @param parm a specification of which parameters are to be given confidence intervals, 
-#' either a vector of numbers or a vector of names. If missing, all parameters are considered.
-#' @param level the confidence level required.
-#' @param ... not used right now.
-#' @param val.column the value column used in the parframe, usually 'data'.
-#' @param method calibration of the threshold. `"chisq"` (default) uses the
-#' asymptotic \eqn{\chi^2_1} quantile. `"F"` uses the finite-sample threshold
-#' \eqn{n\log(1 + F_{1,\nu,1-\alpha}/\nu)}, \eqn{\nu = n - p}, which is exact
-#' for Gaussian errors with a single sigma profiled out and requires `n` and `p`.
-#' @param n number of data points. Only for `method = "F"`.
-#' @param p number of estimated mean parameters, that is without the error-model
-#' parameters. Only for `method = "F"`. [remlLeverage] reports the effective
-#' count, which is what to pass when directions are non-identifiable.
+#' Confidence Intervals from Profiles
+#'
+#' @description Reads confidence intervals off profile likelihoods. Where a
+#'   profile does not reach the threshold, the last part of it is extrapolated
+#'   linearly.
+#' @param object A `parframe` returned by [profile()][profile.objfn].
+#' @param parm Names of the parameters to give intervals for. Default `NULL`,
+#'   all profiled parameters.
+#' @param level The confidence level. Default `0.95`.
+#' @param ... Not used.
+#' @param val.column Column of the profile the threshold applies to, for
+#'   example `"value"` or `"data"`. Default `"data"`.
+#' @param method Calibration of the threshold, `"chisq"` (default) or `"F"`,
+#'   see [profileThreshold()].
+#' @inheritParams profileThreshold
+#' @return A data frame with one row per parameter and columns `name`,
+#'   `value` (the value at the optimum), `lower` and `upper`. A bound is `NA`
+#'   or infinite when the profile on that side is too short or does not rise
+#'   towards the threshold.
+#' @seealso [profile()][profile.objfn], [profileThreshold()]
 #' @importFrom stats qf
 #' @export
 confint.parframe <- function(object, parm = NULL, level = 0.95, ...,
@@ -743,17 +781,36 @@ confint.parframe <- function(object, parm = NULL, level = 0.95, ...,
 }
 
 
-#' Get variance-covariance matrix from trust result
-#' 
-#' @param fit return from trust or selected fit from parlist
-#' @param parupper upper limit for parameter values. Parameters
-#' are considered fixed when exceeding these limits.
-#' @param parlower lower limit for parameter values. Parameters
-#' are considered fixed when exceeding these limits.
-#' 
-#' @export 
-vcov <- function(fit, parupper = NULL, parlower = NULL) {
-  
+#' Variance-Covariance Matrix of a Fit
+#'
+#' A method of [stats::vcov()] for the result of [trust()].
+#'
+#' @param object A result of [trust()], class `trustfit`, or one fit of a
+#'   parlist.
+#' @param parupper,parlower Named upper and lower bounds. Parameters at or
+#'   beyond a bound count as fixed, as do those that `object$atBound` marks.
+#'   Default `NULL`.
+#' @param ... `fit` is deprecated, use `object`.
+#'
+#' @return Square matrix with the parameter names as dimnames: the inverse of
+#'   half the Hessian of `object` (pseudo-inverse when singular), with rows
+#'   and columns of fixed parameters set to zero. All `NA` when `object` has
+#'   no Hessian, `NULL` when it has no `argument`.
+#' @seealso [trust()]
+#' @examples
+#' obj <- function(x, ...) {
+#'   list(value = sum(x^2 / c(1, 4)),
+#'        gradient = 2 * x / c(1, 4),
+#'        hessian = diag(2 / c(1, 4)))
+#' }
+#' fit <- trust(obj, c(a = 1, b = 1))
+#' vcov(fit)
+#' @importFrom stats vcov
+#' @export
+vcov.trustfit <- function(object, parupper = NULL, parlower = NULL, ...) {
+
+  .renameArgs(list(...), c(fit = "object"), "vcov", strict = TRUE)
+  fit <- object
   hessian__ <- fit[["hessian"]]
   arg__ <- fit[["argument"]]
   
@@ -765,11 +822,9 @@ vcov <- function(fit, parupper = NULL, parlower = NULL) {
     return(vcov__)
   }
   
-  # Which parameters are held by a bound rather than determined by the data.
-  # `stepControl$boundary = "reflective"` keeps iterates strictly inside the
-  # box, so an exact comparison against the bound never fires; it reports the
-  # activity itself. The comparison below is the fallback for fits without that
-  # field, and is relaxed to a relative tolerance for the same reason.
+  # Parameters held by a bound rather than by the data. A reflective boundary
+  # keeps iterates strictly inside and reports `atBound` itself; otherwise the
+  # bounds are compared with a relative tolerance.
   fixed <- NULL
   atBound__ <- fit[["atBound"]]
   if (!is.null(atBound__) && !is.null(names(atBound__)))
@@ -793,9 +848,6 @@ vcov <- function(fit, parupper = NULL, parlower = NULL) {
   if (inherits(subvcov__, "try-error")) subvcov__ <- MASS::ginv(0.5*subhessian__)
   vcov__[!is_fixed__, !is_fixed__] <- subvcov__
   
-  # This part should not be necessary due to regularization usually done
-  # Perform identifiability check based on
-  
   return(vcov__) 
   
 }
@@ -803,86 +855,100 @@ vcov <- function(fit, parupper = NULL, parlower = NULL) {
 
 
 
-#' Non-Linear Optimization, multi start
-#' 
-#' @description Wrapper around [trust()] allowing for multiple fits 
-#'   from randomly chosen initial values.
-#'   
+#' Non-Linear Optimisation, Multi-Start
+#'
+#' @description Runs [trust()] from several starting points: `center` plus
+#'   random offsets drawn by `samplefun`, or the rows of a parframe.
+#'
 #' @param objfun Objective function, see [trust()].
-#' @param center Parameter centre. Initial values are `center + samplefun(...)`.
-#'   May also be a parframe (rows are then used directly; `fits` is overwritten).
-#'   Use [msParframe()] for reproducible random starts.
-#' @param name Character. Folder stem for on-disk results, under `resultPath`.
-#'   Only consulted when something is actually written.
-#' @param rinit Starting trust-region radius, see [trust()].
-#' @param rmax Maximum trust-region radius, see [trust()].
-#' @param fits Number of fits.
+#' @param center Named numeric parameter centre, or a parframe whose rows are
+#'   used as starting points; `fits` is then the number of rows. [msParframe()]
+#'   gives reproducible starts.
+#' @param rinit,rmax Initial and maximum trust-region radius, see [trust()].
+#'   Default `0.1` and `10`.
+#' @param fits Number of fits. Default `20`.
 #' @param cores Number of parallel fits, or `c(fits = , conditions = )` to
-#'   also give each fit a condition axis. An inner axis selects a PSOCK
-#'   backend: cppDE's batch runs serially inside a fork. Keep the product
-#'   below your core count.
-#' @param optmethod Character or function. The optimiser called via
+#'   also give each fit a condition axis, which selects a PSOCK backend. Keep
+#'   the product below the number of cores. Default `1`.
+#' @param optmethod Optimiser, a function or its name, called via
 #'   `do.call(optmethod, ...)`. Default `"trust"`. Arguments in `...` are
-#'   routed by the formals of this optimiser, not by those of [trust()].
-#' @param start1stfromCenter Logical. If `TRUE`, the first fit starts exactly
-#'   at `center` (no random offset).
-#' @param samplefun Sampler for random initial values; must accept an `n`
-#'   argument. Default [rnorm()]. Extra named args from `...` matching
-#'   `samplefun` parameters are forwarded.
-#' @param resultPath Output folder. Default `"."`.
-#' @param stats Logical. Print the summary statistics to the console.
-#' @param ... Forwarded to the optimiser `optmethod`, `samplefun`, or `objfun`
-#'   by name match.
-#'   Unmatched names go to `objfun`.
-#' @param output Logical. Write per-fit output to disk.
-#' @param cautiousMode Logical. Persist every fit deparsed (avoids RDA-version
-#'   pitfalls) and keep intermediate files.
-#' @param retry Logical. If `TRUE` (default), a fit that fails (with a
-#'   `try-error` or with a `fit$error` element) is re-attempted with a
-#'   freshly sampled `parinit` up to `nTries` times before being recorded
-#'   as failed. Ignored when `center` is a parframe (rows are taken as
-#'   given and cannot be resampled).
-#' @param nTries Maximum number of attempts per fit slot, including the
-#'   first. Default `10L`.
-#'   
-#' @details Runs `fits` independent [trust()] optimisations from random
-#'   starts (sampled by `samplefun`, default [rnorm()]) added to `center`,
-#'   exploring the chi-square landscape.
+#'   routed by the formals of this optimiser.
+#' @param samplefun Sampler for the random offsets, a function or its name,
+#'   with an argument `n`, the number of parameters. Default `"rnorm"`.
+#' @param resultPath Folder under which files are written. Default `"."`, the
+#'   working directory.
+#' @param name Folder name under `resultPath`. Default `"mstrust"`.
+#' @param stats Logical, print the summary to the console. Default `FALSE`.
+#' @param output Logical, write every fit and the final parlist to disk.
+#'   Default `FALSE`.
+#' @param cautiousMode Logical, also write every fit deparsed to an `.R` file
+#'   and keep the intermediate files. Default `FALSE`.
+#' @param startFromCenter Logical. If `TRUE`, the first fit starts at
+#'   `center` without offset. Default `FALSE`.
+#' @param retry Logical. If `TRUE` (default), a fit that fails with an error
+#'   is repeated from a new random start, up to `nTries` attempts. Not used
+#'   when `center` is a parframe.
+#' @param nTries Maximum number of attempts per fit, including the first.
+#'   Default `10`.
+#' @param ... Arguments passed by name to `optmethod`, `samplefun` or
+#'   `objfun`. Names matching neither the optimiser nor the sampler go to
+#'   `objfun`. `start1stfromCenter` is deprecated, use `startFromCenter`.
 #'
-#'   Nothing reaches the disk unless `output`, `cautiousMode` or `traceFile`
-#'   asks for it. When one of them does, results go to
-#'   `<resultPath>/<name>/trial-x-<date>/`: intermediate fits are removed on
-#'   successful completion, the final `parameterList.Rda` and `mstrust.log`
-#'   are kept.
+#' @details Nothing is written to disk unless `output`, `cautiousMode` or a
+#'   `traceFile` argument for [trust()] asks for it. Files then go to
+#'   `<resultPath>/<name>/trial-<k>-<date>/`: the per-fit files in its
+#'   subfolder `interRes/`, which is removed on completion unless
+#'   `cautiousMode = TRUE`, the final `parameterList.Rda` (with `output`) and
+#'   the log `mstrust.log`. [load.parlist()] reads the fits from `interRes/`.
 #'
-#' @return A parlist holding errored and converged fits.
-#'   
-#' @seealso 1. [trust()], for the used optimizer,
-#'   2. [rnorm()], [runif()] for two common sampling functions,
-#'   3. [msParframe()] for passing a reproducible set of random initial 
-#'   guesses to mstrust,
-#'   4. [as.parframe()] for formatting the output to a handy table
-#'   
+#' @return A parlist with one entry per fit, failed fits included. Each entry
+#'   is the result of the optimiser plus `parinit`, its starting point, or a
+#'   list with element `error` for a fit that failed. [as.parframe()] turns
+#'   it into a table.
+#'
+#' @seealso [trust()], [msParframe()], [as.parframe()], [load.parlist()]
+#'
 #' @author Wolfgang Mader, \email{Wolfgang.Mader@@fdm.uni-freiburg.de}
-#'  
+#'
+#' @examples
+#' rosenbrock <- function(x, ...) {
+#'   a <- x[["a"]]
+#'   b <- x[["b"]]
+#'   list(value = 100 * (b - a^2)^2 + (1 - a)^2,
+#'        gradient = c(a = -400 * a * (b - a^2) - 2 * (1 - a),
+#'                     b = 200 * (b - a^2)),
+#'        hessian = matrix(c(1200 * a^2 - 400 * b + 2, -400 * a, -400 * a, 200),
+#'                         2, 2, dimnames = list(c("a", "b"), c("a", "b"))))
+#' }
+#'
+#' # Random starts around center, sd goes to rnorm()
+#' fits <- mstrust(rosenbrock, center = c(a = 0, b = 0), fits = 5, sd = 2,
+#'                 iterlim = 200)
+#' as.parframe(fits)
+#'
+#' # Reproducible starts from a parframe
+#' starts <- msParframe(c(a = 0, b = 0), n = 5, sd = 2)
+#' fits <- mstrust(rosenbrock, center = starts, iterlim = 200)
+#' as.parframe(fits)
+#'
 #' @export
 #' @import parallel
 mstrust <- function(objfun, center, rinit = .1, rmax = 10, fits = 20, cores = 1, optmethod = "trust",
                     samplefun = "rnorm", resultPath = ".", name = "mstrust",
-                    stats = FALSE, output = FALSE, cautiousMode = FALSE, start1stfromCenter = FALSE,
-                    retry = TRUE, nTries = 10L,
+                    stats = FALSE, output = FALSE, cautiousMode = FALSE,
+                    startFromCenter = FALSE, retry = TRUE, nTries = 10L,
                     ...) {
 
   narrowing <- NULL
-  
-  
+  varargslist <- .renameArgs(list(...),
+                             c(start1stfromCenter = "startFromCenter"),
+                             "mstrust")
+  samplefunName <- if (is.character(samplefun)) samplefun else
+    paste(deparse(substitute(samplefun)), collapse = "")
+  samplefun <- match.fun(samplefun)
+
   # Check if on Windows
   cores <- .sanitizeCores(cores)
-  
-  
-  # Argument parsing, sorting, and enhancing
-  # Gather all function arguments
-  varargslist <- list(...)
   
   argslist <- list(
     objfun = objfun, center = center, name = name,
@@ -895,23 +961,20 @@ mstrust <- function(objfun, center, rinit = .1, rmax = 10, fits = 20, cores = 1,
   # Add extra arguments
   argslist$n <- length(center) # How many inital values do we need?
   
-  # Determine target function for each function argument.
-  # First, define argument names used locally in mstrust().
-  # Second, check what trust() and samplefun() accept and check for name clashes.
-  # Third, whatever is unused is passed to the objective function objfun().
+  # Route each argument: names local to mstrust(), then those the optimiser and
+  # samplefun() accept (which must not clash), the rest to the objective.
   nameslocal <- c("name", "center", "fits", "cores", "optmethod", "samplefun",
                   "resultPath", "stats", "narrowing", "output", "cautiousMode",
                   "retry", "nTries")
-  # A name that moved into one of trust()'s control lists is no longer a
-  # formal, so without this it would silently be routed to objfun instead.
+  # A name that belongs in one of trust()'s control lists is not a formal and
+  # would otherwise reach objfun.
   .trustRejectMoved(names(argslist), "mstrust")
-  # Routed by the optimiser actually called: reading trust()'s formals sent
-  # every argument another optimiser has and trust() lacks to the objective.
+  # Routed by the formals of the optimiser actually called.
   optfun <- if (is.function(optmethod)) optmethod else match.fun(optmethod)
   namestrust <- intersect(setdiff(names(formals(optfun)), "..."), names(argslist))
   namessample <- intersect(names(formals(samplefun)), names(argslist))
   if (length(intersect(namestrust, namessample)) != 0) {
-    stop("Argument names of the optimiser and ", samplefun, "() clash.")
+    stop("Argument names of the optimiser and ", samplefunName, "() clash.")
   }
   
   # Default optimizer
@@ -963,8 +1026,7 @@ mstrust <- function(objfun, center, rinit = .1, rmax = 10, fits = 20, cores = 1,
     msg <- paste0("Parameter assignment information\n",
                   strpad("mstrust", 12),                        ": ", paste0(nameslocal, collapse = ", "), "\n",
                   strpad("trust", 12),                          ": ", paste0(namestrust, collapse = ", "), "\n",
-                  strpad(as.character(argslist$samplefun), 12), ": ", paste0(namessample, collapse = ", "), "\n\n")
-    #strpad(as.character(argslist$objfun), 12),    ": ", paste0(namesobj, collapse = ", "), "\n\n")
+                  strpad(samplefunName, 12), ": ", paste0(namessample, collapse = ", "), "\n\n")
     if (!is.null(logfile)) { writeLines(msg, logfile); flush(logfile) }
   }
   
@@ -981,9 +1043,8 @@ mstrust <- function(objfun, center, rinit = .1, rmax = 10, fits = 20, cores = 1,
   }
   
   
-  # cores = c(fits = , conditions = ) splits the two axes. A forked outer axis
-  # cannot carry an inner one, cppDE's batch runs serially inside a fork --
-  # so an inner axis > 1 selects PSOCK.
+  # cores = c(fits = , conditions = ) splits the two axes. cppDE's batch runs
+  # serially inside a fork, so an inner axis > 1 selects PSOCK.
   .cc <- .splitCores(cores, "fits")
   coresConditions <- .cc$conditions
   cores <- min(fits, .cc$outer)
@@ -1028,14 +1089,15 @@ mstrust <- function(objfun, center, rinit = .1, rmax = 10, fits = 20, cores = 1,
                                            .options.multicore = list(preschedule = FALSE)
   ) %mydo% {
     
-    suppressMessages(loadDLL(objfun))
+    # A plain R function has no shared objects to load.
+    if (inherits(objfun, "fn")) suppressMessages(loadDLL(objfun))
     # PSOCK workers do not inherit options; forks do, harmlessly.
     if (!is.null(coresConditions)) options(dMod.cores = coresConditions)
     
     if(is.parframe(center)) {
       argstrust$parinit <- as.parvec(center, i)
     } else {
-      if (i == 1 & start1stfromCenter) {
+      if (i == 1 && startFromCenter) {
         # First fit always starts from center
         argstrust$parinit <- center
       } else {
@@ -1054,10 +1116,9 @@ mstrust <- function(objfun, center, rinit = .1, rmax = 10, fits = 20, cores = 1,
     # (cores = 1) or of the parent process (cores > 1, forked).
     try(resetWarmStarts(objfun, verbose = FALSE), silent = TRUE)
 
-    # Retry loop: a try-error or fit$error triggers re-sampling parinit and
-    # re-running optmethod, up to nTries times. parframe-supplied centers
-    # are skipped (rows are taken as given). Warm-start caches are reset
-    # between attempts.
+    # Up to nTries attempts, each resampling parinit after a try-error or
+    # fit$error and resetting warm starts. Rows of a parframe center are taken as
+    # given and never retried.
     max_tries <- if (isTRUE(retry) && !is.parframe(center)) as.integer(nTries) else 1L
     fit <- NULL
     for (try_i in seq_len(max_tries)) {
@@ -1073,6 +1134,7 @@ mstrust <- function(objfun, center, rinit = .1, rmax = 10, fits = 20, cores = 1,
     keep.attr <- sapply(attr.fit, is.numeric)
     fit <- fit[1:length(fit)] # deletes attributes
     if (any(keep.attr)) attributes(fit) <- c(attributes(fit), attr.fit[keep.attr]) # attach numeric attributes
+    if ("trustfit" %in% attr.fit$class) fit <- .trustFit(fit)
     
     
     # In some crashes a try-error object is returned which is not a list. Since
@@ -1089,10 +1151,7 @@ mstrust <- function(objfun, center, rinit = .1, rmax = 10, fits = 20, cores = 1,
     if (output) {
       saveRDS(fit, file = file.path(interResultFolder, paste0("fit-", i, ".Rda")))
       if (cautiousMode) dput(fit[c("value", "argument", "iterations", "converged")], file = file.path(interResultFolder, paste0("fit-", i, ".R")))
-      # Reporting
-      # With concurent jobs and everyone reporting, this is a classic race
-      # condition. Assembling the message beforhand lowers the risk of interleaved
-      # output to the log.
+      # Assembled before writing, so concurrent jobs interleave less in the log.
       msgSep <- "-------"
       if (any(names(fit) == "error")) {
         msg <- paste0(msgSep, "\n",
@@ -1128,16 +1187,9 @@ mstrust <- function(objfun, center, rinit = .1, rmax = 10, fits = 20, cores = 1,
   
   
   
-  # Cull failed and completed fits Two kinds of errors occure. The first returns
-  # an object of class "try-error". The reason for these failures are unknown to
-  # me. The second returns a list of results from trust(), where one name of the
-  # list is error holding an object of class "try-error". These abortions are 
-  # due to errors which are captured within trust(). Completed fits return with 
-  # a valid result list from trust(), with "error" not part of its names. These
-  # fits, can still be unconverged, if the maximim number of iterations was the
-  # reason for the return of trust(). Be also aware of fits which converge due
-  # to the trust radius hitting rmin. Such fits are reported as converged but
-  # are not in truth.
+  # A fit fails as a "try-error" object or as a trust() result with an `error`
+  # entry. A completed fit may still be unconverged (iteration limit), and one
+  # stopped by the trust radius reaching rmin is reported converged without being so.
   m_trustFlags.converged = 0
   m_trustFlags.unconverged = 1
   m_trustFlags.error = 2
@@ -1164,7 +1216,7 @@ mstrust <- function(objfun, center, rinit = .1, rmax = 10, fits = 20, cores = 1,
     if (!cautiousMode) {
       unlink(interResultFolder, recursive = TRUE)
     } else {
-      for (f in list.files(interResultFolder, "Rda$")) unlink(f)
+      unlink(list.files(interResultFolder, "\\.Rda$", full.names = TRUE))
     }
   }
   
@@ -1200,21 +1252,25 @@ mstrust <- function(objfun, center, rinit = .1, rmax = 10, fits = 20, cores = 1,
   return(m_parlist)
 }
 
-#' Reproducibly construct "random" parframes
-#' 
-#' The output of this function can be used for the `center` - argument of [mstrust()]
+#' Reproducible Random Starting Points
 #'
-#' @param pars Named vector. If `samplefun` has a "mean"-argument, values of pars will used as mean
-#' @param n Integer how many lines should the parframe have
-#' @param seed Seed for the random number generator
-#' @param samplefun random number generator: [rnorm()], [runif()], etc...
-#' @param keepfirst boolean, if set to `TRUE` the first row of the parframe will be the pars
-#' @param ... arguments going to samplefun
+#' Draws a parframe of starting points for the `center` argument of
+#' [mstrust()] from the seed `seed`. The state of the global random number
+#' generator is left unchanged.
 #'
-#' @return parframe (without metanames)
+#' @param pars Named numeric vector. If `samplefun` has an argument `mean`,
+#'   the draws are centred on `pars`.
+#' @param n Integer, number of rows. Default `20`.
+#' @param seed Seed for the random number generator. Default `12345`.
+#' @param samplefun Random number generator such as [rnorm()] or [runif()].
+#'   Default [stats::rnorm()].
+#' @param keepfirst Logical. If `TRUE` (default), the first row is `pars`.
+#' @param ... Arguments passed to `samplefun`.
+#'
+#' @return A parframe without metanames, one column per parameter.
 #' @export
-#' 
-#' @seealso [mstrust()] and [parframe()]
+#'
+#' @seealso [mstrust()], [parframe()]
 #'
 #' @examples
 #' msParframe(c(a = 0, b = 100000), 5)
@@ -1224,6 +1280,9 @@ mstrust <- function(objfun, center, rinit = .1, rmax = 10, fits = 20, cores = 1,
 msParframe <- function(pars, n = 20, seed = 12345, samplefun = stats::rnorm,
                        keepfirst = TRUE, ...) {
 
+  oldSeed <- get0(".Random.seed", envir = globalenv(), inherits = FALSE)
+  on.exit(if (is.null(oldSeed)) rm(".Random.seed", envir = globalenv())
+          else assign(".Random.seed", oldSeed, envir = globalenv()))
   set.seed(seed)
 
   if (keepfirst && n == 1) return(parframe(as.data.frame(t(pars))))
@@ -1242,20 +1301,15 @@ msParframe <- function(pars, n = 20, seed = 12345, samplefun = stats::rnorm,
 }
 
 
-#' Construct fitlist from temporary files.
+#' Load Fits Written by mstrust
 #'
-#' @description An aborted [mstrust()]
-#'   leaves behind results of already completed fits. This command loads these
-#'   fits into a fitlist.
+#' @description Reads the per-fit files that [mstrust()] writes with
+#'   `output = TRUE`, for example after an aborted run.
 #'
-#' @param folder Path to the folder where the fit has left its results.
+#' @param folder The folder `<resultPath>/<name>/trial-<k>-<date>/interRes`
+#'   of the run, which holds one `fit-<i>.Rda` per completed fit.
 #'
-#' @details The command [mstrust()] saves
-#'   each completed fit along the multi-start sequence such that the results can
-#'   be resurrected on abortion. This command loads a fitlist from these
-#'   intermediate results.
-#'
-#' @return An object of class parlist.
+#' @return A parlist.
 #'
 #' @seealso [mstrust()]
 #'
@@ -1264,7 +1318,7 @@ msParframe <- function(pars, n = 20, seed = 12345, samplefun = stats::rnorm,
 #' @export
 load.parlist <- function(folder) {
   # Read in all fits
-  m_fileList <- dir(folder, pattern = "*.Rda")
+  m_fileList <- dir(folder, pattern = "\\.Rda$")
   m_parVec <- lapply(m_fileList, function(file) {
     return(readRDS(file.path(folder, file)))
   })
@@ -1273,66 +1327,52 @@ load.parlist <- function(folder) {
 }
 
 
-#' Reduce replicated measurements to mean and standard deviation
+#' Reduce Replicates to Mean and Standard Error
 #'
 #' @description
-#' Obtain the mean and standard deviation from replicates per condition.
+#' Replaces the replicates of each condition by their mean and the standard
+#' error of the mean.
 #'
-#' @param data A data frame containing the measurements. See Format for details.
-#' @param select Names of the columns in the data frame used to define
-#'        conditions, see Details.
-#' @param datatrans Character vector describing a function to transform data.
-#'        Use \kbd{x} to refer to data.
-#' @param keep Character vector with columns that should not get dropped
-#' @param weighted Logical flag: if TRUE, calculate weighted standard deviation using 'sigma' column.
-#'
-#' @format
-#' The following columns are mandatory for the data frame:
-#' \describe{
-#'  \item{name}{Name of the observed species.}
-#'  \item{time}{Measurement time point.}
-#'  \item{value}{Measurement value.}
-#'  \item{condition}{The condition under which the observation was made.}
-#' }
-#'
-#' In addition to these columns, any number of columns can follow to allow a
-#' fine-grained definition of conditions. The values of all columns named in
-#' `select` are then merged to get the set of conditions.
+#' @param data A data frame with the columns `name` (observable), `time`,
+#'   `value` and `condition`, plus any further columns that define conditions.
+#'   Alternatively, the path of a `.csv`, `.xls` or `.xlsx` file with these
+#'   columns; Excel files need the package \pkg{openxlsx}.
+#' @param select Names of the columns whose values, together with `name`,
+#'   `time` and `condition`, define a condition. Default `"condition"`.
+#' @param datatrans Character, an expression in `x` applied to `value` before
+#'   the reduction, for example `"log(x)"`. Default `NULL`.
+#' @param keep Names of columns that are kept although their values differ
+#'   within a condition; the first value is used. Default `NULL`.
+#' @param weighted Logical. If `TRUE`, mean and standard error are weighted by
+#'   `1 / sigma^2` from the column `sigma` of `data`. Default `FALSE`.
 #'
 #' @details
-#' Experiments are usually repeated multiple times possibly under different
-#' conditions leading to replicated measurements. The column "condition" in the
-#' data allows grouping the data by their condition. However, sometimes, a more
-#' fine-grained grouping is desirable. In this case, any number of additional
-#' columns can be appended to the data. These columns are referred to as
-#' "condition identifiers". Which of the condition identifiers are used for
-#' grouping is user-defined by specifying their names in `select`. The mandatory
-#' column "condition" is always used. The total set of different conditions is
-#' thus defined by all combinations of values occurring in the selected condition
-#' identifiers. The replicates of each condition are then reduced to mean and 
-#' standard deviation. New condition names are derived by merging all conditions 
-#' which were used in mean and standard deviation. Columns that are not listed in
-#' `select` but have different values within grouped data are dropped. Columns
-#' that remain stable across all replicates are retained and horizontally attached
-#' to the resulting data frame.
+#' A column not in `select` is kept when its value is the same for all
+#' replicates of every condition, otherwise it is dropped with a message.
 #'
 #' @return
-#' A data frame of the following variables:
+#' A data frame with the columns
 #' \describe{
 #'  \item{time}{Measurement time point.}
-#'  \item{name}{Name of the observed species.}
-#'  \item{value}{Mean of replicates.}
-#'  \item{sigma}{Standard error of the mean, NA for single measurements.}
-#'  \item{n}{The number of replicates reduced.}
-#'  \item{condition}{The condition for which the value and sigma were calculated. If
-#'        more than one column was used to define the condition, this variable
-#'        holds the effective condition which is the combination of all applied
-#'        single conditions.}
-#'  \item{other columns}{Columns that were stable across replicates are retained and horizontally attached to the resulting data frame.}
+#'  \item{value}{Mean of the replicates.}
+#'  \item{sigma}{Standard error of the mean, `NA` for a single measurement.}
+#'  \item{n}{Number of replicates.}
+#'  \item{name}{Observable.}
+#'  \item{condition}{The values of the `select` columns other than `name` and
+#'    `time`, joined by `"_"`.}
 #' }
+#' followed by the kept columns.
+#'
+#' @seealso [fitErrorModel()]
 #'
 #' @author Wolfgang Mader, \email{Wolfgang.Mader@@fdm.uni-freiburg.de}
 #' @author Simon Beyer, \email{simon.beyer@@fdm.uni-freiburg.de}
+#'
+#' @examples
+#' data <- data.frame(name = "y", time = rep(c(0, 1, 2), each = 3),
+#'                    value = c(1.0, 1.2, 0.9, 0.6, 0.5, 0.7, 0.3, 0.2, 0.25),
+#'                    condition = "ctrl", replicate = rep(1:3, 3))
+#' reduceReplicates(data)
 #'
 #' @export
 reduceReplicates <- function(data, select = "condition", datatrans = NULL, keep = NULL, weighted = FALSE) {
@@ -1447,70 +1487,73 @@ reduceReplicates.character <- function(data, select = "condition", datatrans = N
 
 
 
-#' Fit an error model using maximum likelihood estimation
+# A bound vector in the order of `par`: unnamed bounds are positional, named
+# ones are matched by name and leave the other parameters unbounded.
+.parBound <- function(bound, par, default) {
+  if (is.null(bound)) return(rep(default, length(par)))
+  if (is.null(names(bound))) return(rep_len(bound, length(par)))
+  out <- setNames(rep(default, length(par)), names(par))
+  hit <- intersect(names(bound), names(par))
+  out[hit] <- bound[hit]
+  unname(out)
+}
+
+
+#' Fit an Error Model to Replicate Data
 #'
-#' @description Fit an error model to reduced replicate data using maximum 
-#' likelihood estimation (MLE). The model estimates the variance of replicate 
-#' measurements as a function of the mean, based on a chi-square distribution.
+#' @description Fits the variance of replicate measurements as a function of
+#' their mean by maximum likelihood, assuming that the sample variance follows
+#' a scaled \eqn{\chi^2} distribution with \eqn{n - 1} degrees of freedom.
+#' Requires the package \pkg{optimx}.
 #'
-#' @param data A data frame containing reduced replicate data. Must include 
-#'   columns "value" (mean of replicates), "sigma" (sample standard deviation), 
-#'   and "n" (number of replicates per condition).
-#' @param factors Character vector specifying the columns in \option{data} 
-#'   that define pooling conditions. The model is fit separately for each unique 
-#'   combination of these factors.
-#' @param errorModel A character string defining the error model in terms of 
-#'   variance. The mean is referenced as \kbd{x}, e.g., "exp(s0) + exp(srel) * x^2".
-#' @param par Named numeric vector of initial values for the parameters in 
-#'   \option{errorModel}.
-#' @param lower Optional named numeric vector specifying lower bounds for 
-#'   parameters. Defaults to `NULL` (no bounds).
-#' @param upper Optional named numeric vector specifying upper bounds for 
-#'   parameters. Defaults to `NULL` (no bounds).
-#' @param plotting Logical. If `TRUE`, a plot of the pooled variance and 
-#'   the fitted error model is displayed.
-#' @param blather Logical. If `TRUE`, additional information is returned, 
-#'   including fitted parameter values, original `sigma` values, and confidence intervals.
-#' @param ... Additional arguments passed to the optimizer `optimx::optimr()`.
+#' @param data A data frame as returned by [reduceReplicates()], with columns
+#'   `value` (mean of the replicates), `sigma` (standard error of the mean) and
+#'   `n` (number of replicates).
+#' @param factors Character vector, the columns of `data` whose value
+#'   combinations define groups. The model is fitted separately per group.
+#' @param errorModel Character, the variance of a single measurement as an
+#'   expression in the mean `x` and the parameters. Default
+#'   `"exp(s0)+exp(srel)*x^2"`.
+#' @param par Named numeric vector of starting values for the parameters of
+#'   `errorModel`. Default `c(s0 = 1, srel = 0.1)`.
+#' @param lower,upper Bounds on the parameters, named or in the order of
+#'   `par`. Default `NULL`, unbounded.
+#' @param plotting Logical. If `TRUE`, plot the variances, the fitted model
+#'   and its 68 and 95 percent bands per group. Default `FALSE`.
+#' @param blather Logical. If `TRUE`, return the extended data frame described
+#'   under Value. Default `FALSE`.
+#' @param ... Further arguments passed to `optimx::optimr()`, which runs
+#'   `"L-BFGS-B"`.
 #'
-#' @details The model assumes that the sample variance of replicate measurements 
-#'   follows a chi-square distribution with \eqn{n-1} degrees of freedom. The 
-#'   variance is estimated by maximizing the log-likelihood function derived 
-#'   from this distribution. Given multiple replicates, the variance can be 
-#'   modeled as a function of the mean.
+#' @return `data` with `sigma` replaced by the standard error of the mean that
+#'   the fitted model gives.
 #'
-#'   The \option{errorModel} parameter defines this functional relationship. 
-#'   It should be expressed as a character string, using \kbd{x} to represent 
-#'   the mean.
+#'   With `blather = TRUE`, a data frame with the columns of `data`, `sigma`
+#'   replaced as above, one column per parameter of `errorModel` with its
+#'   fitted value, the variance bands `cbLower68`, `cbUpper68`, `cbLower95` and
+#'   `cbUpper95`, the group label `condidnt` and the input `sigma` as
+#'   `sigmaLS`. Its attribute `"errorModel"` holds `errorModel`.
 #'
-#'   The optimization is performed using `optimx::optimr()` with the 
-#'   `"L-BFGS-B"` method, which supports bound constraints. If \option{lower} 
-#'   and \option{upper} are not specified, the parameters are assumed to be 
-#'   unconstrained.
-#'
-#'   If \option{plotting = TRUE}, the function produces a log-scale variance 
-#'   plot for each condition, showing the pooled variance, the fitted model, 
-#'   and 68\% and 95\% confidence bounds.
-#'
-#' @return By default, a data frame is returned, containing the original data 
-#'   with updated `sigma` values estimated from the error model.
-#'
-#'   If \option{blather = TRUE}, additional information is returned, including:
-#'   - The fitted parameter values.
-#'   - The error model used.
-#'   - Confidence intervals for `sigma` at 68\% and 95\% levels.
-#'   - Effective pooling conditions.
+#' @seealso [reduceReplicates()]
 #'
 #' @author Wolfgang Mader, \email{Wolfgang.Mader@@fdm.uni-freiburg.de}
 #' @author Simon Beyer, \email{simon.beyer@@fdm.uni-freiburg.de}
+#'
+#' @examplesIf requireNamespace("optimx", quietly = TRUE)
+#' set.seed(1)
+#' mu <- rep(c(0.1, 1, 10, 100), each = 4)
+#' data <- data.frame(name = "y", time = rep(1:4, each = 4), condition = "ctrl",
+#'                    value = mu + rnorm(16, sd = sqrt(0.01 + 0.04 * mu^2)))
+#' reduced <- reduceReplicates(data)
+#' fitErrorModel(reduced, factors = "name", par = c(s0 = -4, srel = -3))
 #'
 #' @export
 #' @importFrom stats qchisq
 #' @importFrom ggplot2 ggplot aes geom_point geom_line geom_ribbon ylab facet_wrap scale_y_log10 theme
 fitErrorModel <- function(data, factors, errorModel = "exp(s0)+exp(srel)*x^2",
                           par = c(s0 = 1, srel = .1),
-                          lower = NULL, upper = NULL,  # Optional: Parametergrenzen
-                          plotting = TRUE, blather = FALSE, ...) {
+                          lower = NULL, upper = NULL,  # optional parameter bounds
+                          plotting = FALSE, blather = FALSE, ...) {
 
   .require_ns("optimx", "fitErrorModel()")
   # Assemble conditions
@@ -1527,7 +1570,7 @@ fitErrorModel <- function(data, factors, errorModel = "exp(s0)+exp(srel)*x^2",
     n <- subdata$n
     y <- subdata$sigma * sqrt(n)
     
-    # Zielfunktion mit der analytischen Maximum-Likelihood
+    # Objective: the analytic maximum likelihood
     obj <- function(par) {
       with(as.list(par), {
         sigma2 <- eval(parse(text = errorModel)) 
@@ -1536,12 +1579,9 @@ fitErrorModel <- function(data, factors, errorModel = "exp(s0)+exp(srel)*x^2",
       })
     }
     
-    # Falls keine lower/upper-Bounds definiert sind, Standardwerte setzen
-    if (is.null(lower)) lower <- rep(-Inf, length(par))
-    if (is.null(upper)) upper <- rep(Inf, length(par))
-    
-    # Optimierung mit L-BFGS-B
-    fit <- optimx::optimr(par, obj, method = "L-BFGS-B", lower = lower, upper = upper, ...)
+    fit <- optimx::optimr(par, obj, method = "L-BFGS-B",
+                          lower = .parBound(lower, par, -Inf),
+                          upper = .parBound(upper, par, Inf), ...)
     
     sigma <- sqrt(with(as.list(fit$par), eval(parse(text = errorModel))))
     dataErrorModel[condidnt == cond, ]$sigma <- sigma 

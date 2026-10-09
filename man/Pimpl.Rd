@@ -2,14 +2,14 @@
 % Please edit documentation in R/parameters.R
 \name{Pimpl}
 \alias{Pimpl}
-\title{Implicit parameter transformation}
+\title{Implicit Parameter Transformation}
 \usage{
 Pimpl(
   trafo,
   parameters = NULL,
   forcings = NULL,
   condition = NULL,
-  keep.root = TRUE,
+  keepRoot = TRUE,
   flow = inherits(trafo, "eqnlist"),
   compile = FALSE,
   modelname = NULL,
@@ -17,33 +17,45 @@ Pimpl(
   deriv = TRUE,
   deriv2 = FALSE,
   controlsPTC = list(),
-  outdir = getwd()
+  outdir = .dmodOutdir(),
+  ...
 )
 }
 \arguments{
 \item{trafo}{Named character, \link{eqnvec} or \link{eqnlist} defining \eqn{f}.}
 
 \item{parameters}{Outer parameter names. For an \link{eqnlist} the totals
-\eqn{T} of the conserved quantities are added.}
+\eqn{T} of the conserved quantities are added.
+States named here are held at their value instead of solved for, and a
+state whose right-hand side is \code{"0"} becomes a parameter.}
 
-\item{forcings}{Forcing names, set to 0.}
+\item{forcings}{Forcing names, set to 0. Default \code{NULL}.}
 
-\item{condition}{Condition label.}
+\item{condition}{\code{NULL} (default) for a transformation valid in every
+condition, or the name of the condition it belongs to.}
 
-\item{keep.root}{If \code{TRUE}, roots are kept per condition as initial guesses
-and repeated calls are answered from memory.}
+\item{keepRoot}{If \code{TRUE} (default), roots are kept per condition as
+initial guesses and repeated calls are answered from memory.}
 
 \item{flow}{If \code{TRUE}, \eqn{\dot{x} = f(x, p)}{dx/dt = f(x, p)} and a stable
-steady state is returned. If \code{FALSE}, any regular root.}
+steady state is returned. If \code{FALSE}, any regular root. Default \code{TRUE}
+for an \link{eqnlist}, else \code{FALSE}.}
 
-\item{compile, modelname, verbose}{Forwarded to \code{\link[cppDE:cppFUN]{cppDE::cppFUN()}}.}
+\item{compile}{Logical. \code{TRUE} compiles now, \code{FALSE} (default) leaves it
+to \code{\link[=compile]{compile()}}.}
 
-\item{deriv, deriv2}{Attach first and second order sensitivities. \code{deriv2}
-requires \code{deriv = TRUE}.}
+\item{modelname}{Base name of the generated files, default \code{NULL}, which
+is \code{"impl_parfn"}, followed by \verb{_<condition>}.}
 
-\item{controlsPTC}{Named list of solver controls:
+\item{verbose}{Logical. Print the compiler output, default \code{FALSE}.}
+
+\item{deriv, deriv2}{Build first and second derivatives, default \code{TRUE} and
+\code{FALSE}. \code{deriv2} requires \code{deriv = TRUE}.}
+
+\item{controlsPTC}{Named list of solver controls; an entry not given keeps
+its default, an unknown entry is an error:
 \describe{
-\item{\code{rtol}, \code{atol}}{Convergence tolerances, default \code{1e-10}, \code{1e-14}.}
+\item{\code{reltol}, \code{abstol}}{Convergence tolerances, default \code{1e-10}, \code{1e-14}.}
 \item{\code{flowTol}}{Relative local error per pseudo-time step, default \code{1}.}
 \item{\code{maxit}}{Iterations per start, default
 \code{ceiling(70 * log(n + 1))} for \code{n} states.}
@@ -59,17 +71,18 @@ default \code{1e-2}.}
 state on \code{startScale}, default \code{c(-5, 5)}.}
 \item{\code{startScale}}{\code{"log10"} or \code{"linear"}, default \code{"log10"} if
 \code{positive} and \code{"linear"} otherwise.}
-\item{\code{seed}}{Seed of the random starts, default \code{1}. Each warm-start
-cache (per condition, emptied by \code{\link[=resetWarmStarts]{resetWarmStarts()}} before every fit
-of \code{\link[=mstrust]{mstrust()}}) draws from its own stream, derived from \code{seed}, the
-condition and the global RNG state when the cache first needs one. The
-global RNG is read, not advanced.}
+\item{\code{seed}}{Seed of the random starts, default \code{1}; the global RNG
+is not advanced.}
 }}
 
-\item{outdir}{Directory for the generated files.}
+\item{outdir}{Directory for the generated files, default
+\code{getOption("dMod.outdir")}, else the working directory.}
+
+\item{...}{\code{keep.root} is deprecated, use \code{keepRoot}.}
 }
 \value{
-A \link{parfn}.
+A \link{parfn}, called as \code{p(pars, ...)}, see section Calling a dMod
+function.
 }
 \description{
 Solves \eqn{f(x, p) = 0} for the states \eqn{x} by pseudo-transient
@@ -81,9 +94,82 @@ Conserved quantities of an \link{eqnlist} enter as \eqn{C x = T}.
 States without influx are 0. Initial guesses are kept roots, then the
 states in \code{pars}, missing ones at 1, then \code{nStarts} random starts. If all
 fail, it is an error. Identical parameter values are solved
-once, also across conditions. \code{keep.root} and \code{controlsPTC} can be changed
+once, also across conditions. \code{keepRoot} and \code{controlsPTC} can be changed
 with \code{\link[=controls]{controls()}}.
 }
+\section{Calling a dMod function}{
+
+The leading arguments depend on the class and are matched by position or
+by name:
+\itemize{
+\item prediction function: \code{x(times, pars, ...)}, returning a \link{prdlist};
+\item observation function: \code{g(out, pars, ...)} with a \link{prdlist} \code{out},
+returning a \link{prdlist};
+\item parameter transformation: \code{p(pars, ...)}, returning a list with one
+\link{parvec} per condition;
+\item objective function: \code{obj(pars, ...)}, returning an \link{objlist}.
+}
+
+\code{pars} is a named numeric vector. If it has a \code{deriv} attribute, as the
+output of a parameter transformation does, the derivatives are taken with
+respect to the parameters behind it. A composition is called as its class:
+\code{g * x * p} is a prediction function, \code{(g * x * p)(times, pars)}.
+
+The other arguments are named:
+\itemize{
+\item \code{fixed}: named numeric vector of parameters that enter the evaluation
+without derivatives. Default \code{NULL}.
+\item \code{deriv}: \code{TRUE} (default) returns first derivatives with respect to
+\code{pars}.
+\item \code{deriv2}: \code{TRUE} returns second derivatives as well. Default \code{FALSE}.
+Every function of the chain has to be built for them, see the arguments
+\code{deriv2} and \code{derivMode} of \code{\link[=odemodel]{odemodel()}}, \code{\link[=Y]{Y()}} and \code{\link[=P]{P()}}.
+\item \code{hessian}: objective functions only, see the table below. Default
+\code{NULL}.
+\item \code{sweep}: objective functions only. \code{"forward"} (default) propagates the
+sensitivities through the chain; \code{"reverse"} computes the gradient in one
+backward pass, whose cost does not grow with the number of parameters.
+\code{"reverse"} needs every function of the chain built with
+\code{derivMode = "reverse"}, and with \code{"forward-reverse"} for \code{deriv2 = TRUE}.
+\item \code{conditions}: character vector, the conditions to evaluate. Default all
+conditions of the function.
+\item \code{env}: environment for intermediate results. Default \code{NULL}, a new one.
+An objective function stores its prediction there as \code{prediction} and
+returns the environment as attribute \code{env}.
+\item \code{cores}: number of threads for the ODE solves and the residual kernel.
+Default \code{getOption("dMod.cores", 1L)}.
+}
+
+Prediction, observation and parameter functions accept \code{hessian} and
+\code{sweep} and ignore them. With \code{deriv = TRUE} an objective function returns
+this Hessian:
+
+\tabular{llll}{
+\code{sweep} \tab \code{hessian} \tab \code{deriv2 = FALSE} \tab \code{deriv2 = TRUE} \cr
+\code{"forward"} \tab \code{NULL}, \code{TRUE} \tab Gauss-Newton \tab exact \cr
+\code{"forward"} \tab \code{FALSE} \tab none \tab none, with a warning \cr
+\code{"reverse"} \tab \code{NULL} \tab none \tab exact \cr
+\code{"reverse"} \tab \code{TRUE} \tab none, with a warning \tab exact \cr
+\code{"reverse"} \tab \code{FALSE} \tab none \tab none, with a warning \cr
+}
+
+With \code{deriv = FALSE} it returns the value alone.
+}
+
+\examples{
+\donttest{
+## Steady state of A <-> B; the total of A and B enters as a parameter
+r <- addReaction(NULL, "A", "B", "k1*A")
+r <- addReaction(r, "B", "A", "k2*B")
+p <- Pimpl(r, condition = "C1", compile = TRUE,
+           modelname = "Pimpl_example", outdir = tempdir())
+getParameters(p)
+pars <- setNames(c(1, 0.5, 3), getParameters(p))
+out <- p(pars)
+out$C1
+attr(out$C1, "deriv")
+}
+}
 \seealso{
-\code{\link[=Pexpl]{Pexpl()}}, \code{\link[=P]{P()}}
+\code{\link[=Pexpl]{Pexpl()}}, \code{\link[=P]{P()}}, \code{\link[=resetWarmStarts]{resetWarmStarts()}}
 }

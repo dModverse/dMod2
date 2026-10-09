@@ -1,7 +1,6 @@
-## Cholesky parameter naming convention (load-bearing):
-##   diagonal:    paste0(prefix, "_", short, "_", short),  L_kk = exp(par)
-##   off-diag:    paste0(prefix, "_", short_k, "_", short_l) for k > l,  L_kl = par
-## where short = sub("^eta_", "", eta), so eta_Cl -> Cl, eta_V -> V, etc.
+## Cholesky parameter names: diagonal paste0(prefix, "_", s, "_", s) with
+## L_kk = exp(par), off-diagonal paste0(prefix, "_", s_k, "_", s_l) for k > l
+## with L_kl = par, where s = sub("^eta_", "", eta).
 
 
 
@@ -162,6 +161,134 @@ omega <- function(eta,
 }
 
 
+#' Multivariate normal prior over random effects
+#'
+#' The prior of the subject-level random effects of an [omega()] specification,
+#' \deqn{\sum_i (\eta_i - m)^T \Omega^{-1} (\eta_i - m) + N \log|\Omega|,}
+#' with \eqn{\Omega = L L^T} parametrised by its Cholesky factor, log-scale on
+#' the diagonal.
+#'
+#' @param mu An `omegaspec` from [omega()] with `subjects`.
+#' @param mean Mean of the random effects, a scalar or one value per eta.
+#' @param attrName Character. Name of the attribute storing the constraint value.
+#' @param condition Character vector, the conditions of a sum of objectives in
+#'   which the term is evaluated. `NULL` evaluates it in every one.
+#' @param ... Not used.
+#'
+#' @return Object of class `objfn` with value, gradient and Gauss-Newton
+#'   Hessian. Parameters absent from `pars` and `fixed` make the term 0.
+#' @seealso [omega()], [EM()], [constraintL2()]
+#' @examples
+#' om <- omega(eta = "eta", subjects = c("s1", "s2"))
+#' prior <- constraintL2(om)
+#' pars <- c(eta_s1 = 0.1, eta_s2 = -0.2)
+#' pars[om$cholPars] <- 0
+#' prior(pars = pars)$value
+#' @export
+constraintL2.omegaspec <- function(mu, mean = 0, attrName = "prior", condition = NULL, ...) {
+
+  spec <- mu
+  if (is.null(spec$subjectEtas))
+    stop("constraintL2(): the omegaspec needs subjects, omega(..., subjects = ).",
+         call. = FALSE)
+  K <- spec$K
+  N <- nrow(spec$subjectEtas)
+  if (length(mean) == 1L) mean <- rep(mean, K)
+  if (length(mean) != K)
+    stop("constraintL2(): `mean` has length 1 or one value per eta.", call. = FALSE)
+  etaNames <- as.vector(spec$subjectEtas)
+  chol     <- spec$cholPars
+  parnames <- c(etaNames, chol)
+  loc      <- cbind(spec$cholLoc[, 1L], spec$cholLoc[, 2L])
+  dg       <- unname(spec$isDiag)
+
+  myfn <- function(..., fixed = NULL, deriv = TRUE, deriv2 = FALSE, hessian = NULL,
+                   conditions = condition, env = NULL,
+                   cores = getOption("dMod.cores", 1L)) {
+
+    p    <- list(...)[[match.fnargs(list(...), "pars")]]
+    cv   <- .resolveCurvature(deriv, deriv2, hessian, "forward")
+    allp <- c(p, fixed)
+    zero <- function(v) {
+      out <- objlist(value = v, gradient = setNames(numeric(length(p)), names(p)),
+                     hessian = if (cv$hessian) matrix(0, length(p), length(p),
+                                                      dimnames = list(names(p), names(p))))
+      attr(out, attrName) <- v
+      attr(out, "env") <- env
+      out
+    }
+    if (!all(parnames %in% names(allp))) return(zero(0))
+
+    # Residuals in whitened coordinates, Z = L^-1 (eta_i - m), one column per subject
+    L <- spec$buildL(allp[chol])
+    Z <- forwardsolve(L, t(matrix(allp[etaNames], N, K)) - mean)
+    W <- backsolve(t(L), Z)
+    value <- sum(Z * Z) + 2 * N * sum(log(diag(L)))
+    if (!deriv) return(zero(value))
+
+    # Inner gradient over etas (index (k - 1) * N + i) and Cholesky entries
+    WZ <- W %*% t(Z)
+    gc <- -2 * WZ[loc]
+    gc[dg] <- gc[dg] * L[loc][dg] + 2 * N
+    gi <- setNames(c(2 * as.vector(t(W)), gc), parnames)
+
+    hi <- NULL
+    if (cv$hessian) {
+      # Gauss-Newton on Z: eta-eta 2 Omega^-1 per subject, Cholesky terms by the
+      # derivative of Z along each entry
+      Linv <- forwardsolve(L, diag(K))
+      Oinv <- crossprod(Linv)
+      coef <- t(Z[loc[, 2L], , drop = FALSE])
+      coef[, dg] <- -coef[, dg] * rep(L[loc][dg], each = N)
+      coef[, !dg] <- -coef[, !dg]
+      km <- loc[, 1L]
+      hcc <- 2 * crossprod(coef) * Oinv[km, km, drop = FALSE]
+      hec <- 2 * vapply(seq_along(chol), function(m) as.vector(outer(coef[, m], Oinv[, km[m]])),
+                        numeric(N * K))
+      hi <- rbind(cbind(2 * kronecker(Oinv, diag(N)), hec), cbind(t(hec), hcc))
+      dimnames(hi) <- list(parnames, parnames)
+    }
+
+    # Restricted to the free parameters, then through the upstream Jacobian
+    free <- intersect(names(p), parnames)
+    gr <- setNames(numeric(length(p)), names(p))
+    gr[free] <- gi[free]
+    hs <- NULL
+    if (cv$hessian) {
+      hs <- matrix(0, length(p), length(p), dimnames = list(names(p), names(p)))
+      hs[free, free] <- hi[free, free]
+    }
+    dP <- attr(p, "deriv", exact = TRUE)
+    if (!is.null(dP)) {
+      g0 <- gr
+      gr <- setNames(drop(g0 %*% dP), colnames(dP))
+      if (cv$hessian) {
+        hs <- t(dP) %*% hs %*% dP
+        dP2 <- if (cv$deriv2) attr(p, "deriv2", exact = TRUE)
+        common <- if (!is.null(dP2)) intersect(names(g0), dimnames(dP2)[[1]])
+        if (length(common)) {
+          th <- colnames(dP)
+          hs <- hs + matrix(crossprod(matrix(dP2[common, th, th, drop = FALSE],
+                                             nrow = length(common)), g0[common]), length(th))
+        }
+        dimnames(hs) <- list(colnames(dP), colnames(dP))
+      }
+    }
+
+    out <- objlist(value = value, gradient = gr, hessian = hs)
+    attr(out, attrName) <- value
+    attr(out, "env") <- env
+    out
+  }
+
+  class(myfn) <- c("objfn", "fn")
+  attr(myfn, "conditions") <- condition
+  attr(myfn, "parameters") <- parnames
+  attr(myfn, "omegaSpec")  <- spec
+  myfn
+}
+
+
 
 #' Print method for omega
 #'
@@ -302,7 +429,7 @@ updateOmegaChol <- function(MHatList, omega) {
   fit <- suppressMessages(trust(Q_objlist, parinit = start,
                                 rinit = 1, rmax = 10,
                                 iterlim = 50,
-                                ftol = 1e-10, mtol = 1e-10))
+                                tolControl = list(ftol = 1e-10, mtol = 1e-10)))
   setNames(as.numeric(fit$argument), chol_pars)
 }
 
@@ -310,7 +437,7 @@ updateOmegaChol <- function(MHatList, omega) {
 
 #' Parameter names of an object
 #'
-#' Generic for extracting the parameter names carried by an object. See
+#' Generic for extracting the parameter names held by an object. See
 #' [parnames.omegaspec] for the random-effects spec method.
 #'
 #' @param x An object.
@@ -376,7 +503,7 @@ parnames.omegaspec <- function(x, what = c("all", "eta", "chol"), ...) {
 #' `w_b_GH`, the change-of-variable Jacobian `2^(K/2) / |det L_H|`, and the
 #' `exp(z_b' z_b)` factor that un-does the implicit `exp(-z'z)` weight of the
 #' physicists' GH rule. Combined: `log W_b = (K/2)*log(2) - log|det L_H| +
-#' log|w_b_GH| + z_b' z_b`, with sign carried in `weightSigns`.
+#' log|w_b_GH| + z_b' z_b`, with the sign kept in `weightSigns`.
 #'
 #' @param etaHat Length-K numeric, posterior mode of the random effects.
 #' @param Hi K x K positive-definite matrix, the joint's negative-Hessian
@@ -418,12 +545,9 @@ makeSubjectNodes <- function(etaHat, Hi, level, pruneTol = Inf) {
   log_abs <- (K / 2) * log(2) - log_det_L + grid$logAbsW + grid$z2Sum
   signs   <- grid$signs
 
-  # Optional weight-magnitude pruning (default off, pruneTol = Inf). A node's
-  # contribution to the marginal integral is bounded by exp(logAbsWeights_b)
-  # times the (mode-dominated) integrand peak, so nodes whose log-weight sits
-  # `pruneTol` below the per-subject maximum contribute at most exp(-pruneTol)
-  # of the peak and can be dropped with bounded relative error. This directly
-  # shrinks the per-node ODE work in .normalEcmSubject.
+  # Optional pruning, off at pruneTol = Inf: a node whose log-weight lies
+  # `pruneTol` below the per-subject maximum contributes at most
+  # exp(-pruneTol) of the mode-dominated peak, so dropping it bounds the error.
   if (is.finite(pruneTol)) {
     keep <- log_abs >= (max(log_abs) - pruneTol)
     if (!all(keep)) {
@@ -441,9 +565,8 @@ makeSubjectNodes <- function(etaHat, Hi, level, pruneTol = Inf) {
 }
 
 
-## Per-subject metadata shared by the quadrature, SAEM and Bayesian
-## paths. Built from the omega spec and the model pieces, so it belongs
-## with the mixed-effects layer even though the sampler also consumes it.
+## Per-subject metadata shared by the quadrature, SAEM and Bayesian paths,
+## built from the omega spec and the model pieces.
 .buildBayesSubjectMeta <- function(omegaSpec, initFull, prdfn, data,
                                    errfn        = NULL,
                                    innerControl = list(),
@@ -537,10 +660,9 @@ makeSubjectNodes <- function(etaHat, Hi, level, pruneTol = Inf) {
   fn
 }
 
-# Bake dots + per-call extras into a closure callable as
-# objfun(pars, deriv, deriv2). `extra` threads per-block locals
-# (.pars_full / .Omega_inv for the joint NLME path) that must be
-# re-evaluated by the caller's R closure each iteration.
+# Bake dots and per-call extras into a closure objfun(pars, deriv, deriv2).
+# `extra` holds per-block locals (.pars_full, .Omega_inv) that the caller's
+# closure re-evaluates each iteration.
 .bake_objfun <- function(raw_objfun, dots = list(), extra = list()) {
   force(raw_objfun)
   force(dots)

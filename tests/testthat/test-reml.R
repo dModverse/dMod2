@@ -1,13 +1,5 @@
-# ============================================================================
-# Restricted maximum likelihood for the error model.
-#
-# The claims are checked against the stationarity condition itself,
-#
-#   sum_i [ 1 - h_ii - r_i^2/sigma_i^2 ] d log sigma_i^2 / d phi = 0,
-#
-# not against another dMod code path. For one constant sigma per observable
-# that is sigma^2 = RSS/(n - sum h), which is checked in the same block.
-# ============================================================================
+# Restricted maximum likelihood for the error model, checked against the REML
+# stationarity condition itself rather than another code path.
 
 skip_if_no_compile <- function() {
   testthat::skip_if_not_installed("cppDE")
@@ -15,32 +7,28 @@ skip_if_no_compile <- function() {
 }
 
 
-# Decay chain with a constant error model. The observation carries a scale `s`,
+# Decay chain with a constant error model. The observation has a scale `s`,
 # an inner parameter of the error model; the `fixed` trafo fixes it, separating
 # the estimated parameter count from the inner one. One shared object for both.
-.reml_fx <- local({
-  cache <- NULL
-  function() {
-    if (!is.null(cache)) return(cache)
-    bench <- fx_decay_compiled()
-    oldwd <- setwd(.dmod_fx_workdir()); on.exit(setwd(oldwd), add = TRUE)
-
-    gfn_s <- Y(c(y = "s*A"), f = bench$xfn, attach.input = FALSE,
-               modelname = "reml_obs_s", compile = FALSE)
-    e_const <- Y(c(y = "sigma_y"), f = gfn_s, attach.input = FALSE,
-                 condition = "C1", modelname = "reml_err", compile = FALSE)
-    p_free <- P(eqnvec(A = "A", k = "k", sigma_y = "sigma_y", s = "s"),
-                condition = "C1", modelname = "reml_p_free", compile = FALSE)
-    p_fixed <- P(eqnvec(A = "A", k = "k", sigma_y = "sigma_y", s = "1"),
-                 condition = "C1", modelname = "reml_p_fixed", compile = FALSE)
-    compile(gfn_s, e_const, p_free, p_fixed, output = "reml_all", cores = 4L)
-
-    cache <<- list(
-      free  = list(prd = gfn_s * bench$xfn * p_free,  e = e_const),
-      fixed = list(prd = gfn_s * bench$xfn * p_fixed, e = e_const))
-    cache
-  }
+fx_register(extra = function(bench) {
+  gfn_s <- Y(c(y = "s*A"), f = bench$xfn, attachInput = FALSE,
+             modelname = "reml_obs_s", compile = FALSE)
+  list(
+    reml_gfn_s = gfn_s,
+    reml_e = Y(c(y = "sigma_y"), f = gfn_s, attachInput = FALSE,
+               condition = "C1", modelname = "reml_err", compile = FALSE),
+    reml_p_free = P(eqnvec(A = "A", k = "k", sigma_y = "sigma_y", s = "s"),
+                    condition = "C1", modelname = "reml_p_free", compile = FALSE),
+    reml_p_fixed = P(eqnvec(A = "A", k = "k", sigma_y = "sigma_y", s = "1"),
+                     condition = "C1", modelname = "reml_p_fixed", compile = FALSE))
 })
+
+.reml_fx <- function() {
+  xfn <- fx_decay_compiled()$xfn
+  x <- fx_extra()
+  list(free  = list(prd = x$reml_gfn_s * xfn * x$reml_p_free,  e = x$reml_e),
+       fixed = list(prd = x$reml_gfn_s * xfn * x$reml_p_fixed, e = x$reml_e))
+}
 
 
 test_that("leverages are hat values: in [0, 1] and summing to the rank", {
@@ -57,7 +45,7 @@ test_that("leverages are hat values: in [0, 1] and summing to the rank", {
   expect_equal(nrow(lev), nrow(data$C1))
   expect_true(all(lev$leverage >= 0 & lev$leverage <= 1))
   expect_equal(sum(lev$leverage), attr(lev, "rank"), tolerance = 1e-8)
-  # s and A enter only as their product, so one direction is absent
+  # scale and initial amount enter only as their product, so one direction is absent
   expect_equal(attr(lev, "rank"), 2L)
   expect_equal(as.numeric(attr(lev, "dof")),
                nrow(data$C1) - sum(lev$leverage), tolerance = 1e-8)
@@ -103,7 +91,7 @@ test_that("confint takes the finite-sample F threshold", {
                whichPar = "p1", data = grid^2, p1 = grid),
     parameters = "p1",
     metanames = c("value", "constraint", "stepsize", "gamma", "whichPar"),
-    obj.attributes = "data")
+    objAttributes = "data")
 
   ci_chisq <- confint(prof, level = 0.95)
   expect_equal(ci_chisq$upper, sqrt(qchisq(0.95, 1)), tolerance = 1e-3)
@@ -138,7 +126,7 @@ test_that("reml sees every term of a split objective", {
   split  <- normL2(d_a, ec$prd, errmodel = ec$e, times = tt) +
             normL2(d_b, ec$prd, errmodel = ec$e, times = tt)
 
-  # the split objective carries both terms, not just the first
+  # the split objective contains both terms, not just the first
   expect_length(attr(split, "l2spec"), 2L)
   expect_equal(nrow(remlLeverage(split, pars)), n)
   expect_equal(sum(remlLeverage(split, pars)$leverage),
@@ -186,7 +174,7 @@ test_that("profile runs to the threshold it is given", {
 
   expect_gte(max(p1$value), d_chisq)
   expect_gte(max(p2$value), d_F)
-  # the profile of a is exactly a^2, so it turns around just past sqrt(delta)
+  # an exactly quadratic profile turns around just past sqrt(delta)
   expect_gt(max(abs(p2$constraint)), max(abs(p1$constraint)))
   expect_gte(max(abs(p2$constraint)), sqrt(d_F))
   expect_lt(max(abs(p2$constraint)), 2 * sqrt(d_F))

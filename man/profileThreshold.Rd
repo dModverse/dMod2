@@ -2,7 +2,7 @@
 % Please edit documentation in R/statistics.R
 \name{profileThreshold}
 \alias{profileThreshold}
-\title{Threshold for a profile likelihood}
+\title{Threshold for a Profile Likelihood}
 \usage{
 profileThreshold(level = 0.95, method = c("chisq", "F"), n = NULL, p = NULL)
 }
@@ -28,7 +28,5 @@ finite-sample threshold \eqn{n\log(1 + F_{1,\nu,1-\alpha}/\nu)},
 out and the generalisation of the classical t interval.
 }
 \seealso{
-\link{profile} takes it as \code{delta}, \link{confint.parframe} builds it from
-\code{method}, \code{n} and \code{p}. Passing the same one to both keeps the profile long
-enough for the interval to be read off rather than extrapolated.
+\link[=profile.objfn]{profile()}, \code{\link[=confint.parframe]{confint.parframe()}}
 }

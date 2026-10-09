@@ -2,25 +2,30 @@
 % Please edit documentation in R/compile.R
 \name{loadDLL}
 \alias{loadDLL}
-\title{Load shared object for a dMod object}
+\title{Load Shared Objects for dMod Objects}
 \usage{
 loadDLL(...)
 }
 \arguments{
-\item{...}{objects of class prdfn, obsfn, parfn, objfn, ...}
+\item{...}{objects of class \code{prdfn}, \code{obsfn}, \code{parfn} or \code{objfn}.}
 }
 \value{
-Invisibly, the character vector of files loaded by this call.
+Character vector of the files loaded by this call, invisibly.
 }
 \description{
-Usually when restarting the R session, although all objects are saved in
-the workspace, the dynamic libraries are not linked any more. \code{loadDLL}
-is a wrapper for \code{dyn.load} that uses the "modelname" attribute of
-dMod objects like prediction functions, observation functions, etc. to
-load the corresponding shared object. Searched are the directories the
-objects were generated in and the working directory.
+Loads the shared objects of dMod functions by their model names, e.g.
+after restoring a workspace in a new R session. Searched are the working
+directory, \code{getOption("dMod.outdir")} and the directories the sources were
+generated in. Shared objects already loaded are skipped.
 }
-\details{
-Shared objects already loaded in the current process are skipped, so
-calling \code{loadDLL} repeatedly is a no-op.
+\examples{
+\donttest{
+g <- Y(c(y = "s * x"), parameters = "s", modelname = "loadDLL_ex",
+       compile = TRUE, outdir = tempdir())
+loadDLL(g)
+}
+
+}
+\seealso{
+\code{\link[=compile]{compile()}}, \code{\link[=modelname]{modelname()}}
 }

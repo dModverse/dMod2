@@ -1,5 +1,27 @@
 ## NLME plotting and prediction methods for `em` fits.
-## Split out of plots.R: these are methods for a class the core does not define.
+
+utils::globalVariables(c("IPRED", "PRED", "subject", "cluster", "centroid",
+                         "G", "score", "selected"))
+
+#' Per-subject individual fits (spaghetti plot)
+#'
+#' @description Faceted plot with one panel per subject: observed dots, IPRED
+#'   curve, and (optionally) the population PRED curve overlaid dashed.
+#' @param x Object to plot.
+#' @param ... Method-specific arguments.
+#' @return A ggplot.
+#' @export
+plotIndivs <- function(x, ...) UseMethod("plotIndivs", x)
+
+#' Random-effect distribution diagnostics
+#'
+#' @description Per-eta histogram against the estimated `N(0, Omega_kk)`
+#'   density plus a QQ-plot against the estimated normal.
+#' @param x Object to plot.
+#' @param ... Method-specific arguments.
+#' @return A ggplot (or a list of ggplots if `cowplot` is unavailable).
+#' @export
+plotHistIndivs <- function(x, ...) UseMethod("plotHistIndivs", x)
 
 #' Predictions from an EM object
 #'
@@ -45,11 +67,8 @@ predict.em <- function(object, times = NULL, ...) {
   pred_ipred <- prdfn(times = grid_times, pars = pars_ipred, conditions = subjects)
   pred_pred  <- prdfn(times = grid_times, pars = pars_pred,  conditions = subjects)
 
-  # Restrict to observables that actually appear in the data. Without this
-  # filter, internal model states emitted by the prdfn (e.g. the depot Ag in a
-  # PK model, present because the observation Y() is built with
-  # attach.input = TRUE) would be plotted as ghost curves on the IPRED/PRED
-  # axis next to the real observable, swamping the y-axis with the dose.
+  # Only observables present in the data: states the prdfn emits as inputs to
+  # the observation would otherwise plot as extra curves.
   data_names <- unique(unlist(lapply(data, `[[`, "name")))
   obs_names <- intersect(setdiff(colnames(pred_ipred[[1]]), "time"),
                          data_names)
@@ -142,9 +161,8 @@ plot.em <- function(x, ...) {
                          color = "grey50") +
     ggplot2::geom_point(alpha = 0.75)
   if (multi_obs) {
-    # Per-observable scales differ by orders of magnitude (e.g. log-cp vs
-    # linear PCA); free scales are required and coord_equal is incompatible
-    # with that.
+    # Observable scales can differ by orders of magnitude, so the scales are
+    # free and coord_equal is not used.
     p <- p + ggplot2::facet_grid(name ~ panel, scales = "free")
   } else {
     rng <- range(c(long$observed, long$predicted), na.rm = TRUE)
@@ -209,7 +227,7 @@ plotResiduals.em <- function(parframe, ...) {
 #'   `facet_wrap(~ condition)` layout (default 4). Ignored in
 #'   `facet_grid(name ~ condition)` mode.
 #' @param showPred Logical; overlay population PRED dashed (default TRUE).
-#' @param showBand Logical; draw the IPRED +/- sigma ribbon if the fit carries
+#' @param showBand Logical; draw the IPRED +/- sigma ribbon if the fit has
 #'   an errfn (default TRUE).
 #' @param subjectsPerPage Optional integer. If set, subjects are split into
 #'   pages of at most `subjectsPerPage` each and the function returns a list
@@ -228,11 +246,9 @@ plotIndivs.em <- function(x, times = NULL, ncol = 4L,
     times <- seq(min(obs_times), max(obs_times), length.out = 200L)
 
   pf <- predict(fit, times = times)
-  # Trim grid rows to the observed time range. predict..fitNormal prepends t=0 to
-  # the dense grid for the ODE solver, but if no subject has an observation at
-  # that time the grid IPRED/PRED there can be far outside the data range
-  # (e.g. log(Cc + eps) at Cc(0)=0 sits at log(eps)), which would dominate the
-  # y-axis. Observation rows are kept verbatim.
+  # Trim grid rows to the observed time range: the grid starts at t = 0 for the
+  # solver, where predictions can lie far outside the data. Observation rows
+  # are kept verbatim.
   pf <- pf[pf$source == "obs" |
              (pf$time >= min(obs_times) & pf$time <= max(obs_times)),
            , drop = FALSE]
@@ -332,12 +348,8 @@ plotHistIndivs.em <- function(x, ...) {
                sd_est   = sd_k,
                stringsAsFactors = FALSE)
   }))
-  # Per-eta Gaussian curve on a wide grid so the full N(0, Omega_kk) shape is
-  # visible; using stat_function with a single mean(sd_est) painted all panels
-  # with the same density (wrong when omega varies across etas) and was
-  # clipped to the data extent by facet_wrap(scales = "free"). geom_line on
-  # the explicit grid both picks up the panel-specific SD and widens the
-  # x-range to ~ +/- 3.5 sigma.
+  # Per-eta Gaussian curve on an explicit grid of at least +/- 3.5 sd, so each
+  # panel shows its own N(0, Omega_kk) over its full width.
   dens_long <- do.call(rbind, lapply(seq_len(K), function(k) {
     sd_k  <- sqrt(Omega[k, k])
     xlim  <- max(abs(etaModes[, k]), 3.5 * sd_k)

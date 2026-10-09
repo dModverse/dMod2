@@ -1,15 +1,6 @@
-# Reverse-mode derivatives through the chain: stage 7 of
-# cppDE/dev/adjoint-plan.md.
-#
-# The oracle is the forward mode, and it is not sharp: a forward-sensitivity
-# solve carries n_theta tangent columns and its error norm takes the maximum
-# over all of them, so it steps finer than a value-only run does. The two modes
-# therefore differentiate two discretisations that differ by O(tol), each of
-# them exactly. The tolerances below are set tight enough that the gap sits far
-# under them, and one test measures the gap itself rather than bounding it.
-#
-# Where the adjoint is checked at rounding level, on one shared step sequence,
-# is cppDE's dev/cxx/test_reverse_*.cpp.
+# Reverse-mode derivatives through the chain, checked against forward mode.
+# The two modes differentiate discretisations that differ by O(tol), so the
+# tolerances keep that gap far below the assertions.
 
 skip_on_cran()
 
@@ -52,7 +43,7 @@ skip_on_cran()
             condition = "C1", derivMode = fr, modelname = "rv_pe", outdir = d)
     # One trafo per condition, each with a parameter of its own.
     pc <- Reduce("+", lapply(c("C1", "C2"), function(cn)
-      P(repar(paste0("logk1 ~ logk1 + dk_", cn), tr), condition = cn, derivMode = fr,
+      P(repar(tr, paste0("logk1 ~ logk1 + dk_", cn)), condition = cn, derivMode = fr,
         modelname = paste0("rv_p2_", cn), outdir = d)))
 
     ev <- eventlist(var = "A", time = "t_dose", value = "d_amt", method = "add")
@@ -73,6 +64,9 @@ skip_on_cran()
     sun <- if (isTRUE(cppDE:::cvodeConfig$available))
       odemodel(re, modelname = "rv_sun", deriv = TRUE, backend = "Sundials",
                derivMode = fr, outdir = d, compile = FALSE)
+    sunev <- if (isTRUE(cppDE:::cvodeConfig$available))
+      odemodel(re, events = ev, modelname = "rv_sun_ev", deriv = TRUE,
+               backend = "Sundials", derivMode = fr, outdir = d, compile = FALSE)
 
     m2 <- odemodel(re, modelname = "rv2_ode", deriv = TRUE, deriv2 = TRUE,
                    outdir = d, compile = FALSE,
@@ -89,25 +83,25 @@ skip_on_cran()
     # at the head of the chain. qh maps k2 per condition and hands s on, and qb
     # hands both on behind it, for two conditions in one batched call.
     tr_ab <- tr[c("A", "B", "k1")]
-    qt <- P(tr_ab, condition = "C1", attach.input = TRUE, deriv2 = TRUE,
+    qt <- P(tr_ab, condition = "C1", attachInput = TRUE, deriv2 = TRUE,
             derivMode = c(fr, "forward-reverse"), modelname = "rv2_pt", outdir = d)
     qh <- P(list(C1 = c(k2 = "exp(logk2)"), C2 = c(k2 = "2*exp(logk2)")),
-            attach.input = TRUE, deriv2 = TRUE, derivMode = c(fr, "forward-reverse"),
+            attachInput = TRUE, deriv2 = TRUE, derivMode = c(fr, "forward-reverse"),
             modelname = "rv2_ph", outdir = d)
-    qb <- P(tr_ab, attach.input = TRUE, deriv2 = TRUE,
+    qb <- P(tr_ab, attachInput = TRUE, deriv2 = TRUE,
             derivMode = c(fr, "forward-reverse"), modelname = "rv2_pb", outdir = d)
 
-    compile(m, g, e, p, pe, pc, mev, pev, mnr, pq, pl, sun, m2, g2, q, q2,
-            qt, qh, qb, output = "rv_all", cores = 4L)
+    compile(m, g, e, p, pe, pc, mev, pev, mnr, pq, pl, sun, sunev, m2, g2, q,
+            q2, qt, qh, qb, output = "rv_all", cores = test_cores())
 
     pars <- c(logA = log(2), logk1 = log(0.6), logk2 = log(0.3), logs = log(1.5))
     cache <<- list(
       first = list(dir = d, m = m,
-                   x = Xs(m, optionsOde = .rev_opt, optionsSens = .rev_opt),
+                   x = Xs(m, options = .rev_opt),
                    g = g, e = e, p = p, pe = pe, pc = pc, mev = mev, pev = pev,
-                   mnr = mnr, pq = pq, pl = pl, sun = sun,
+                   mnr = mnr, pq = pq, pl = pl, sun = sun, sunev = sunev,
                    times = seq(0, 8, length.out = 41), pars = pars),
-      second = list(x = Xs(m2, optionsOde = .rev_opt, optionsSens = .rev_opt),
+      second = list(x = Xs(m2, options = .rev_opt),
                     g = g2, p = q, p2 = q2, pt = qt, ph = qh, pb = qb,
                     times = seq(0, 8, length.out = 21), pars = pars))
     cache
@@ -162,7 +156,7 @@ test_that("the solver alone answers what the forward sensitivities answer", {
   expect_equal(unname(got[names(ref), 1L]), unname(ref), tolerance = 1e-7)
 })
 
-test_that("normL2 carries the whole chain backwards", {
+test_that("normL2 walks the whole chain backwards", {
   fx  <- .rev_fx()
   prd <- fx$g * fx$x * fx$p
   obj <- normL2(.rev_data(fx, prd, fx$pars), prd)
@@ -199,11 +193,31 @@ test_that("an estimated error model seeds the prediction a second time", {
   fx <- .rev_fx()
   prd <- fx$g * fx$x * fx$pe
   pars <- c(fx$pars, logsdrel = log(0.08), logsdabs = log(0.02))
-  # sigma unknown, so the error model has to supply it and carries theta itself.
+  # sigma unknown: the error model supplies it and depends on theta itself.
   obj <- normL2(.rev_data(fx, prd, pars, sigma = NULL), prd, fx$e)
 
   both <- expect_modes_agree(obj, pars)
   expect_true(all(abs(both$reverse$gradient[c("logsdrel", "logsdabs")]) > 1e-6))
+})
+
+test_that("optionsReverse refine checks the sweep", {
+  # Away from the best fit, where the gradient does not cancel. What is left is
+  # the value pass's own error, which CVODES' adjoint analysis has as well.
+  fx <- .rev_fx()
+  lo <- list(atol = 1e-6, rtol = 1e-4)
+  th <- fx$pars + 0.5
+  prd <- fx$g * fx$x * fx$p
+  dat <- .rev_data(fx, prd, fx$pars)
+  ref <- normL2(dat, prd)(th, deriv = TRUE, sweep = "reverse")$gradient
+  grad <- function(opt, sweep) {
+    x <- Xs(fx$m, options = lo, optionsReverse = opt)
+    normL2(dat, fx$g * x * fx$p)(th, deriv = TRUE, sweep = sweep)$gradient
+  }
+  err <- function(g) max(abs(g - ref[names(g)])) / max(abs(ref))
+  g_plain <- grad(list(), "reverse")
+  g_ref <- grad(list(refine = TRUE, gradtol = 1e-7 * max(abs(ref))), "reverse")
+  expect_false(identical(g_plain, g_ref))
+  expect_lt(err(g_ref), err(g_plain))
 })
 
 test_that("the gap to the forward mode is the discretisation, not the adjoint", {
@@ -213,7 +227,7 @@ test_that("the gap to the forward mode is the discretisation, not the adjoint", 
 
   rel <- vapply(10^-c(4, 10), function(tt) {
     o  <- list(atol = tt, rtol = tt)
-    xx <- Xs(fx$m, optionsOde = o, optionsSens = o)
+    xx <- Xs(fx$m, options = o)
     oo <- normL2(data, fx$g * xx * fx$p)
     a  <- oo(fx$pars, deriv = TRUE)
     b  <- oo(fx$pars, deriv = TRUE, sweep = "reverse")
@@ -227,14 +241,14 @@ test_that("the gap to the forward mode is the discretisation, not the adjoint", 
 
 test_that("an event with an estimated dose goes backwards too", {
   fx <- .rev_fx()
-  xv <- Xs(fx$mev, optionsOde = .rev_opt, optionsSens = .rev_opt)
+  xv <- Xs(fx$mev, options = .rev_opt)
 
   pars <- c(fx$pars, logdose = log(0.8))
   prd  <- fx$g * xv * fx$pev
   obj  <- normL2(.rev_data(fx, prd, pars), prd)
 
   both <- expect_modes_agree(obj, pars, tolerance = 1e-5)
-  # The jump itself has to carry a derivative, or logdose comes back at zero.
+  # The jump itself has to transmit a derivative, or logdose comes back at zero.
   expect_gt(abs(both$reverse$gradient[["logdose"]]), 1e-6)
 })
 
@@ -244,9 +258,11 @@ test_that("a summed objective passes the direction on", {
   obj <- normL2(.rev_data(fx, prd, fx$pars), prd) +
          constraintL2(fx$pars * 0, sigma = 4)
   # The constraint has no reverse path of its own and keeps the forward one;
-  # the sum is still the same number, and still carries no Hessian.
+  # the sum is still the same number, and still has no Hessian.
   both <- expect_modes_agree(obj, fx$pars)
   expect_null(both$reverse$hessian)
+  # The data term's direction stays on the sum, a constraint having none.
+  expect_identical(attr(obj(fx$pars, sweep = "reverse"), "sweep"), "reverse")
 })
 
 test_that("a model without a reverse object says so", {
@@ -267,8 +283,8 @@ test_that("a model without a reverse object says so", {
 test_that("a steady-state transformation goes backwards too", {
   fx <- .rev_fx()
 
-  # A* = k_in / k_out feeding the decay chain's initial A, so the gradient has
-  # to pass through the nested steady state to reach logkin and logkout.
+  # A steady state feeds an initial value, so the gradient has to pass through
+  # the nested steady state to reach its parameters.
   prd  <- fx$g * fx$x * fx$pq * fx$pl
   pars <- c(logkin = log(1.5), logkout = log(0.75),
             logk1 = log(0.6), logk2 = log(0.3), logs = log(1.5))
@@ -292,7 +308,7 @@ test_that("censored rows go backwards on every BLOQ treatment", {
   dl <- as.datalist(d)
 
   for (mode in c("M3", "M4NM", "M4BEAL", "M1")) {
-    obj <- normL2(dl, prd, opt.BLOQ = mode)
+    obj <- normL2(dl, prd, optBLOQ = mode)
     expect_modes_agree(obj, fx$pars, info = mode)
   }
 })
@@ -301,7 +317,7 @@ test_that("a fixed sigma seeds the prediction and nothing else", {
   fx <- .rev_fx()
   prd <- fx$g * fx$x * fx$pe
   pars <- c(fx$pars, logsdrel = log(0.08), logsdabs = log(0.02))
-  # sigma given in the data, so the error model is there but carries no
+  # sigma given in the data, so the error model is there but contributes no
   # derivative for these rows: its cotangent has to be dropped rather than
   # multiplied by a zero that is never formed.
   obj <- normL2(.rev_data(fx, prd, pars, sigma = 0.1), prd, fx$e)
@@ -314,14 +330,12 @@ test_that("the Sundials backend goes backwards too", {
               "CVODE backend not available")
   fx <- .rev_fx()
 
-  # CVODES adjoint sensitivity analysis under the same chain the native reverse
-  # mode uses. It is a third discretisation: the adjoint is solved as its own
-  # ODE over checkpointed forward states rather than by replaying the steps, so
-  # this is a cross-check by foreign mathematics and not a repeat.
+  # CVODES adjoint analysis under the same chain: a third discretisation, solved
+  # as its own ODE over checkpointed forward states rather than by replaying steps.
   m <- fx$sun
   expect_false(is.null(m$reversed))
 
-  x   <- Xs(m, optionsOde = .rev_opt, optionsSens = .rev_opt)
+  x   <- Xs(m, options = .rev_opt)
   prd <- fx$g * x * fx$p
   obj <- normL2(.rev_data(fx, fx$g * fx$x * fx$p, fx$pars), prd)
 
@@ -334,20 +348,19 @@ test_that("the Sundials backend goes backwards too", {
                tolerance = 1e-5)
 })
 
-test_that("the Sundials reverse object refuses events", {
+test_that("the Sundials reverse object takes the adjoint across an event", {
   skip_if_not(isTRUE(cppDE:::cvodeConfig$available),
               "CVODE backend not available")
-  d <- .rev_dir()
-  owd <- setwd(d); on.exit(setwd(owd))
-  ev <- data.frame(var = "A", time = 1, value = 0.2, method = "add",
-                   stringsAsFactors = FALSE)
-  # The native backend replays the jump; CVODES integrates the adjoint over
-  # checkpointed states and has no way to be told about one.
-  expect_error(odemodel(.rev_reactions(), modelname = "rv_sun_ev",
-                        backend = "Sundials", events = ev,
-                        derivMode = c("forward", "reverse"), outdir = d,
-                        compile = FALSE),
-               "does not support events")
+  fx <- .rev_fx()
+  expect_false(is.null(fx$sunev$reversed))
+  xs <- Xs(fx$sunev, options = .rev_opt)
+
+  pars <- c(fx$pars, logdose = log(0.8))
+  prd  <- fx$g * xs * fx$pev
+  obj  <- normL2(.rev_data(fx, prd, pars), prd)
+
+  both <- expect_modes_agree(obj, pars, tolerance = 1e-5)
+  expect_gt(abs(both$reverse$gradient[["logdose"]]), 1e-6)
 })
 
 test_that("odemodel builds the forward-reverse object and names it", {
@@ -363,7 +376,7 @@ test_that("odemodel builds the forward-reverse object and names it", {
   expect_false(is.null(m$reversed2))
   expect_identical(attr(m$reversed2, "derivMode"), "forward-reverse")
 
-  # forward-forward is the older deriv2 = TRUE under its own name.
+  # forward-forward is deriv2 = TRUE under its own name.
   m2 <- odemodel(.rev_reactions(), modelname = "rv_ffm", outdir = d,
                  derivMode = c("forward", "forward-forward"), compile = FALSE)
   expect_false(is.null(m2$extended2))
@@ -375,14 +388,8 @@ test_that("odemodel builds the forward-reverse object and names it", {
                "forward-reverse")
 })
 
-# ---------------------------------------------------------------------------
-#  Second order: the exact Hessian through the whole chain.
-#
-#  Oracle is deriv2 = TRUE, forward over forward, on the same objective. The two
-#  differentiate two discretisations, the forward one under sensitivity error
-#  control and the backward one on the value run's grid, so the gap is O(tol)
-#  and the same one the first-order tests measure.
-# ---------------------------------------------------------------------------
+# ---- Second order: the exact Hessian through the whole chain ----
+# Oracle is deriv2 = TRUE, forward over forward; the gap is O(tol) as at first order.
 
 # Data on whatever the chain's own columns are called, on its own grid.
 .rev2_data <- function(fx, chain, nms, seed = 4L, conditions = "C1") {
@@ -417,7 +424,7 @@ test_that("the chain answers the Hessian forward over forward answers", {
   }
 })
 
-test_that("the batched backward path carries the directions too", {
+test_that("the batched backward path handles the directions too", {
   # The batched leaf sizes its pass-through half from the cotangent it was
   # handed, not from its own. With one condition the batch entry never engages,
   # so this is the first place a K-column answer meets a one-column neighbour.
@@ -457,10 +464,9 @@ test_that("a reverse evaluation says which direction answered it", {
 })
 
 test_that("a summed objective keeps every term's curvature", {
-  # A constraint has no reverse path of its own, so it runs forward. Under an
-  # exact request it must still hand back its Hessian: .sumobjlist adds an
-  # absent one as zero, so a dropped term would leave the total short of that
-  # term's curvature and nothing would fail.
+  # A constraint runs forward and under an exact request must still return its
+  # Hessian: .sumobjlist adds an absent one as zero, so a dropped term would
+  # leave the total short without failing.
   fx    <- .rev2_fx()
   chain <- fx$x * fx$p
   dat   <- .rev2_data(fx, chain, c("A", "B"))
@@ -474,26 +480,17 @@ test_that("a summed objective keeps every term's curvature", {
   expect_equal(rev$gradient, fwd$gradient, tolerance = 1e-3)
   expect_equal(rev$hessian, fwd$hessian, tolerance = 1e-4)
 
-  # The constraint's own curvature is 2/sigma^2 on the diagonal and does not
-  # vanish, so a total that dropped it would differ by exactly that much.
+  # The constraint's curvature does not vanish, so a total that dropped it differs.
   bare <- normL2(dat, chain)(fx$pars, sweep = "reverse", deriv2 = TRUE)
   expect_gt(max(abs(rev$hessian - bare$hessian)), 1)
 })
 
-# ---------------------------------------------------------------------------
-#  Inputs a transformation passes through.
-#
-#  Pexpl(attach.input = TRUE) hands every input it does not map on untouched.
-#  Forward and backward, at first and second order, they keep a derivative,
-#  and both modes are checked against central differences: a forward mode that
-#  treated them as fixed and a backward one that carried no tangent for them
-#  would agree with each other on a zero.
-# ---------------------------------------------------------------------------
+# ---- Inputs a transformation passes through ----
+# Pexpl(attachInput = TRUE) hands unmapped inputs on. Both modes are checked against
+# central differences, since two modes that treated them as fixed would agree on a zero.
 
-# Central differences of `f` at `pars`, one column per parameter. Each value
-# is its own adaptive solve, off by O(tol) on a step sequence of its own, and
-# the difference quotient divides that by h: a narrower step than this one
-# measures the solver rather than the derivative.
+# Central differences of `f` at `pars`, one column per parameter. Each value is
+# an adaptive solve off by O(tol), so a narrower step measures the solver.
 .rev_fd <- function(f, pars, h = 1e-4) {
   vapply(names(pars), function(nm) {
     up <- dn <- pars
@@ -576,7 +573,7 @@ test_that("trust drives the exact Hessian, forwards and backwards", {
   expect_true(gn$converged)
 
   # A Newton run: the objective's own Hessian at every iterate. The subproblem
-  # solver takes an indefinite matrix natively, so this needed no new algebra.
+  # solver takes an indefinite matrix natively.
   nw <- trust(obj, start, rinit = 0.1, rmax = 10, iterlim = 100L,
               hessianMethod = "exact")
   expect_true(nw$converged)
@@ -590,10 +587,9 @@ test_that("trust drives the exact Hessian, forwards and backwards", {
   expect_true(rv$converged)
   expect_equal(rv$value, gn$value, tolerance = 1e-6)
 
-  # A stalled quasi-Newton phase fetching a fresh curvature rather than
-  # stopping. Whether it stalls at all is decided at the solver's noise floor
-  # and therefore by the platform, which is the point: "stall" has to reach the
-  # same place either way and may never cost more than "never" does.
+  # A stalled quasi-Newton phase fetches fresh curvature rather than stopping.
+  # Whether it stalls depends on the platform, so "stall" must reach the same
+  # place as "never" and never cost more.
   rs <- trust(obj, start, rinit = 0.1, rmax = 10, iterlim = 100L,
               hessianMethod = "sr1", sweep = "reverse",
               qnControl = list(hessianInit = "exact", hessianReseed = "stall"))
@@ -651,7 +647,7 @@ test_that("an exact Hessian asked of an objective that cannot give one says so",
   expect_error(trust(plain, st, hessianMethod = "exact"), "deriv2")
   expect_error(trust(plain, st, hessianMethod = "sr1",
                      qnControl = list(hessianInit = "exact")), "deriv2")
-  # Without an exact request it runs as it always did.
+  # Without an exact request it runs.
   expect_true(trust(plain, st, iterlim = 50L)$converged)
 })
 

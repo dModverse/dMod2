@@ -5,7 +5,10 @@
 \alias{dMod_gradient_cb}
 \alias{dMod_divergent}
 \alias{dMod_divergent_cb}
-\title{Continuous dMod colour ramps}
+\title{Continuous dMod Color Ramps}
+\format{
+Character vectors of hex color codes.
+}
 \usage{
 dMod_gradient
 

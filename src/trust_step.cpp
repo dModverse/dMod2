@@ -1,11 +1,6 @@
-// One trust-region step and one quasi-Newton update, exported so that an
-// optimiser driven from R solves its subproblem exactly the way trust() does.
-// The multiple-shooting driver is the caller: it condenses its problem onto
-// the parameters and then needs nothing but a step on them.
-//
-// The step is the reflective scheme of trust_kernel.cpp, iteration for
-// iteration: parscale, the Coleman-Li scaling, the Moré-Sorensen solve on the
-// eigendecomposition, the stepback that keeps the iterate strictly interior.
+// One trust-region step and one quasi-Newton update for optimisers driven from
+// R, such as the multiple-shooting driver. The step is trust_kernel.cpp's: parscale,
+// Coleman-Li scaling, Moré-Sorensen on the eigendecomposition, interior stepback.
 
 #include <Rcpp.h>
 #include "trust_subproblem.h"

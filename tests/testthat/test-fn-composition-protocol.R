@@ -1,5 +1,13 @@
-# Evaluation protocol behind the composition operators (R/fnProtocol.R):
-# condition truth table, bundle alignment, and protocol-vs-ordinary equality.
+# Evaluation protocol behind the composition operators (R/fnProtocol.R): condition
+# truth table, bundle alignment, protocol-vs-ordinary equality, sums of
+# objectives, chains of fns and the cached batch handle of a leaf.
+
+skip_if_no_compile <- function() {
+  testthat::skip_if_not_installed("cppDE")
+  testthat::skip_on_cran()
+}
+
+fx_register(multicond = TRUE)
 
 ## ---- Condition truth table ----------------------------------------------
 
@@ -39,7 +47,7 @@ test_that(".resolveConditions reproduces the leaf truth table", {
 
 
 test_that(".resolveConditions handles a leaf owning several conditions", {
-  # Not reachable before the rebuild; the PEtab relabeller produces it.
+  # The PEtab relabeller produces this case.
   r <- dMod2:::.resolveConditions(c("C1", "C2", "C3"), c("C1", "C3"))
   expect_true(r$evaluate)
   expect_identical(r$slots, c(1L, 3L))
@@ -172,7 +180,7 @@ test_that("a composed chain flattens nested sums into one node", {
 })
 
 
-test_that("composed mappings carry the metadata their consumers read", {
+test_that("composed mappings keep the metadata their consumers read", {
   skip_if_not_installed("cppDE")
   skip_on_cran()
 
@@ -236,9 +244,8 @@ test_that("deriv2 and cores survive a sum of objectives", {
   pri <- constraintL2(mu = fx$outerpars_log * 0, sigma = 10)
   p   <- fx$outerpars_log
 
-  # Before the fix match.fnargs dropped deriv2 and the sum silently returned
-  # the Gauss-Newton Hessian. Now it reaches the chain, which was built
-  # without deriv2 and says so.
+  # deriv2 reaches the chain, which was built without it and says so, rather
+  # than the sum returning the Gauss-Newton Hessian.
   expect_error((obj + pri)(p, deriv = TRUE, deriv2 = TRUE), "deriv2")
   expect_error(obj(p, deriv = TRUE, deriv2 = TRUE), "deriv2")
 
@@ -260,7 +267,7 @@ test_that(".fnWithConditions relabels a leaf so + can dispatch on it", {
   expect_identical(dMod2:::.fnNode(relabelled)$condition, c("A", "B"))
   expect_identical(class(relabelled), class(fx$gfn))
 
-  # and it now answers per condition rather than replicating one call
+  # it answers per condition rather than replicating one call
   pred <- fx$xfn(seq(0, 2, 0.5), c(A = 1, k = 0.5), deriv = FALSE)
   out  <- relabelled(pred[[1]], c(A = 1, k = 0.5), deriv = FALSE)
   expect_identical(names(out), c("A", "B"))
@@ -316,13 +323,11 @@ test_that(".predictMany mixes repeated and distinct conditions", {
 
 ## ---- fixed handling across composition shapes ----------------------------
 
-# `fixed` is handed from one operand to the next in five different ways across
-# the six `*` branches. These pin what each shape actually does, so a future
-# unification has to decide the differences deliberately rather than inherit
-# them. Tolerances are solver-level: fixing a parameter shrinks the
-# sensitivity system, so the integration is not bit-identical.
+# `fixed` is handed on in five different ways across the six `*` branches, and
+# these tests pin each shape. Tolerances are solver-level, since fixing a
+# parameter shrinks the sensitivity system.
 
-# Values only: prdframes also carry `parameters`, whose `fixed` marker and
+# Values only: prdframes also have `parameters`, whose `fixed` marker and
 # ordering legitimately differ between the two calls.
 .vals <- function(z) { m <- unclass(z); attributes(m) <- list(dim = dim(m)); m }
 
@@ -353,10 +358,8 @@ test_that("without a trafo, fixed does NOT leave the derivative basis", {
   skip_if_not_installed("cppDE")
   skip_on_cran()
 
-  # Xs seeds the identity over its full parameter set and hands the solver
-  # fixed = NULL, so a run-time `fixed` only removes the value from `pars`.
-  # With a trafo in the chain the parameter disappears through the trafo's
-  # Jacobian instead. The two paths therefore disagree; pinned, not endorsed.
+  # Xs drops a run-time `fixed` only from `pars`, while a trafo in the chain
+  # removes it through its Jacobian. The two paths disagree; pinned, not endorsed.
   fx <- fx_decay_compiled()
   gx <- fx$gfn * fx$xfn
   times <- seq(0, 4, by = 0.5)
@@ -420,8 +423,8 @@ test_that("normL2 + constraintL2 restricts both terms to the same conditions", {
 })
 
 test_that("the parvec C++ kernel reproduces the R subsetting and concatenation", {
-  # `[.parvec` and `c.parvec` delegate to parvec_attach()/parvec_concat(); these
-  # are the R bodies they replaced, kept here as the reference.
+  # R reference implementations of `[.parvec` and `c.parvec`, whose kernels are
+  # parvec_attach() and parvec_concat().
   sub_R <- function(x, i) {
     out <- .subset(x, i); nms <- names(out)
     deriv <- attr(x, "deriv")
@@ -466,7 +469,7 @@ test_that("the parvec C++ kernel reproduces the R subsetting and concatenation",
     expect_equal(v[i], sub_R(v, i), tolerance = 0)
   expect_equal(x0[c("p", "r")], sub_R(x0, c("p", "r")), tolerance = 0)
 
-  # concatenation, including a block that carries no deriv2 and one with a
+  # concatenation, including a block that has no deriv2 and one with a
   # deriv row missing
   parts <- list(
     list(mk(c("a", "b"), 4), mk(c("c", "d"), 4, tag = "t")),
@@ -507,4 +510,202 @@ test_that("an objective is bit-identical across thread counts", {
     expect_equal(o$gradient, ref$gradient, tolerance = 0)
     expect_equal(o$hessian,  ref$hessian,  tolerance = 0)
   }
+})
+
+
+## ---- +.objfn: value sums elementwise -----------------------------------
+
+test_that("(constraintL2(mu1) + constraintL2(mu2))(p)$value = sum of parts", {
+  mu1 <- c(a = 0, b = 0)
+  mu2 <- c(a = 1, b = -1)
+  o1 <- constraintL2(mu1, sigma = 1, attrName = "p1")
+  o2 <- constraintL2(mu2, sigma = 1, attrName = "p2")
+  obj <- o1 + o2
+
+  p <- c(a = 0.3, b = 0.4)
+  v_total <- obj(p)$value
+  v_parts <- o1(p)$value + o2(p)$value
+  expect_equal(unname(v_total), unname(v_parts), tolerance = 1e-12)
+})
+
+
+test_that("(o1 + o2)$gradient sums per-parameter contributions", {
+  mu1 <- c(a = 0, b = 0); mu2 <- c(a = 1, b = -1)
+  o1 <- constraintL2(mu1, sigma = 1, attrName = "p1")
+  o2 <- constraintL2(mu2, sigma = 1, attrName = "p2")
+  obj <- o1 + o2
+  p <- c(a = 0.3, b = 0.4)
+
+  g_total <- obj(p)$gradient
+  g_parts <- o1(p)$gradient + o2(p)$gradient
+  expect_equal(unname(g_total[names(p)]),
+               unname(g_parts[names(p)]), tolerance = 1e-12)
+})
+
+
+test_that("(o1 + o2)$hessian sums per-parameter contributions blockwise", {
+  mu1 <- c(a = 0, b = 0); mu2 <- c(a = 1, b = -1)
+  o1 <- constraintL2(mu1, sigma = 1)
+  o2 <- constraintL2(mu2, sigma = 1)
+  obj <- o1 + o2
+  p <- c(a = 0.3, b = 0.4)
+
+  H_total <- obj(p)$hessian
+  H_parts <- o1(p)$hessian + o2(p)$hessian
+  expect_equal(unname(H_total[names(p), names(p)]),
+               unname(H_parts[names(p), names(p)]), tolerance = 1e-12)
+})
+
+
+## ---- *.fn chains Jacobians on prediction functions --------------------
+
+test_that("(g * x)(times, pars) equals g(x(times, pars)) for the decay chain", {
+  skip_if_no_compile()
+  bench <- fx_decay_compiled()
+  times <- c(0, 1, 2, 5)
+  pars  <- c(A = 1.0, k = 0.5)
+
+  out_chain <- (bench$gfn * bench$xfn * bench$pfn_id)(times, pars,
+                                                     deriv = FALSE)
+  # The chained observable matches the closed-form decay.
+  expect_equal(out_chain$C1[, "y"], pars[["A"]] * exp(-pars[["k"]] * times),
+               tolerance = 1e-5)
+})
+
+
+## ---- constraintL2 + normL2: prior penalty added exactly ---------------
+
+test_that("normL2 + constraintL2 value equals normL2 + prior penalty (closed)", {
+  skip_if_no_compile()
+  bench <- fx_decay_compiled()
+  data  <- fx_decay_data(sigma = 0.1)
+  mu    <- c(A = 0.0, k = 0.0)
+  sigma <- 1.0
+  prior <- constraintL2(mu = mu, sigma = sigma)
+
+  obj_main <- normL2(data, bench$prd_id)
+  obj      <- obj_main + prior
+
+  p <- c(A = 1.2, k = 0.4)
+  v_total <- obj(p)$value
+  v_main  <- obj_main(p)$value
+  v_prior <- sum((p - mu)^2)
+  expect_equal(unname(v_total), unname(v_main + v_prior), tolerance = 1e-9)
+})
+
+
+## ---- Parameter set union through composition --------------------------
+
+test_that("attr(o1 + o2, 'parameters') = union(parameters(o1), parameters(o2))", {
+  skip_if_no_compile()
+  bench <- fx_decay_compiled()
+  data  <- fx_decay_data(sigma = 0.1)
+
+  obj_main <- normL2(data, bench$prd_id)
+  prior_extra <- constraintL2(mu = c(A = 0.0, gamma = 0.0), sigma = 1.0)
+  obj <- obj_main + prior_extra
+
+  expect_setequal(attr(obj, "parameters"),
+                  union(attr(obj_main, "parameters"),
+                        attr(prior_extra, "parameters")))
+})
+
+
+## ---- Order invariance of +.objfn ---------------------------------------
+
+test_that("(o1 + o2)(p) equals (o2 + o1)(p) at the value level", {
+  o1 <- constraintL2(c(a = 0), sigma = 1)
+  o2 <- constraintL2(c(a = 2), sigma = 1)
+  v12 <- (o1 + o2)(c(a = 0.5))$value
+  v21 <- (o2 + o1)(c(a = 0.5))$value
+  expect_equal(unname(v12), unname(v21), tolerance = 1e-12)
+})
+
+
+## ---- Cached batch handle ---------------------------------------------------
+
+# The cached cppDE batch handle names the shared object of its entry point.
+# Renaming the model or reopening a saved workspace leaves it pointing at a
+# .so that cannot be called.
+
+test_that("a batch handle whose shared object is gone is re-prepared", {
+
+  skip_on_cran()
+
+  fx <- fx_decay_multicond_compiled()
+  times <- seq(0, 5, by = 1)
+
+  invisible(fx$prd(times, fx$outerpars, deriv = TRUE))
+
+  bcache <- environment(attr(fx$xfn, "mappings")[[1]])$bcache
+  expect_false(is.null(bcache$handle))
+
+  # What the cluster node sees: the handle survived, its shared object did not.
+  bcache$handle$sym$dll <- "no_such_shared_object"
+
+  out <- expect_silent(fx$prd(times, fx$outerpars, deriv = TRUE))
+  expect_false(identical(bcache$handle$sym$dll, "no_such_shared_object"))
+
+  ref <- exp(fx$outerpars["s_C1_log"]) * exp(-0.5 * times)
+  expect_equal(unname(out$C1[, "y"]), unname(ref), tolerance = 1e-5)
+
+})
+
+test_that("modelname<- drops the cached batch handle", {
+
+  skip_on_cran()
+
+  fx <- fx_decay_multicond_compiled()
+  invisible(fx$prd(seq(0, 5, by = 1), fx$outerpars, deriv = TRUE))
+
+  bcache <- environment(attr(fx$xfn, "mappings")[[1]])$bcache
+  expect_false(is.null(bcache$handle))
+
+  x <- fx$xfn
+  modelname(x) <- "renamed_shared_object"
+  expect_true(is.null(bcache$handle))
+
+  # And the next call rebuilds it against whatever is loaded now.
+  out <- fx$prd(seq(0, 5, by = 1), fx$outerpars, deriv = TRUE)
+  expect_false(is.null(bcache$handle))
+  expect_true(all(is.finite(out$C1[, "y"])))
+
+})
+
+
+## ---- Batch check -----------------------------------------------------------
+
+# A log trafo whose batch entry shifts its input by `shift`, so a nonzero shift
+# makes the batch disagree with the scalar kernel.
+.shiftedBatchTrafo <- function(shift) {
+  p2p <- function(pars, fixed = NULL, deriv = TRUE, deriv2 = FALSE) {
+    k <- exp(pars[["logk"]])
+    as.parvec(c(k = k),
+              deriv = if (deriv) matrix(k, 1, 1, dimnames = list("k", "logk")) else FALSE)
+  }
+  attr(p2p, "batchfn") <- function(parsList, fixedList, deriv, deriv2, conditions, cores)
+    lapply(seq_along(parsList), function(i) {
+      pars <- parsList[[i]]
+      pars[["logk"]] <- pars[["logk"]] + shift
+      p2p(pars, fixedList[[i]], deriv, deriv2)
+    })
+  parfn(p2p, "logk", NULL)
+}
+
+# A constant offset trafo for one condition.
+.conditionOffset <- function(condition, offset) {
+  p2p <- function(pars, fixed = NULL, deriv = TRUE, deriv2 = FALSE)
+    as.parvec(c(logk = pars[["a"]] + offset),
+              deriv = if (deriv) matrix(1, 1, 1, dimnames = list("logk", "a")) else FALSE)
+  parfn(p2p, "a", condition)
+}
+
+test_that("dMod.batch.check passes an agreeing batch and stops a disagreeing one", {
+  inner <- .conditionOffset("C1", 0) + .conditionOffset("C2", 1)
+  withr::local_options(dMod.batch.check = TRUE)
+
+  out <- (.shiftedBatchTrafo(0) * inner)(c(a = 0.2))
+  expect_equal(unname(unlist(lapply(out, unclass))), exp(c(0.2, 1.2)), tolerance = 1e-14)
+  expect_error((.shiftedBatchTrafo(1e-3) * inner)(c(a = 0.2)),
+               "batch entry of a parfn leaf disagrees with the scalar kernel")
 })

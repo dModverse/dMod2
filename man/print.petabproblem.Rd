@@ -2,15 +2,18 @@
 % Please edit documentation in R/PEtabInterface.R
 \name{print.petabproblem}
 \alias{print.petabproblem}
-\title{Print method for \code{PEtabProblem}}
+\title{Print a PEtab Problem}
 \usage{
 \method{print}{petabproblem}(x, ...)
 }
 \arguments{
-\item{x}{A \code{PEtabProblem}.}
+\item{x}{A \code{petabproblem} returned by \code{\link[=importPEtab]{importPEtab()}}.}
 
-\item{...}{Unused.}
+\item{...}{Not used.}
+}
+\value{
+\code{x}, invisibly.
 }
 \description{
-Print method for \code{PEtabProblem}
+Print a PEtab Problem
 }

@@ -1,38 +1,11 @@
-## Clustered (complete-graph fusion) inner solver for .fitLaplace.
-##
-## The clustered penalty penaltyL1(method = "clustered") penalises the
-## complete-graph pairwise differences sum_{i<j} |eta_{i,k} - eta_{j,k}| across
-## the n subjects, per candidate parameter k, so individuals crystallise into
-## clusters that share a value. Unlike penalty()/groupPenalty("fused") (which
-## factorise over subjects and are solved coordinate-wise by trustL1), the
-## clustered penalty COUPLES the subjects, so the inner conditional-mode solve is
-## joint over all n subjects.
-##
-## The GN-linearised per-parameter subproblem is the weighted complete-graph
-## fused lasso, which reduces EXACTLY to sort-by-mode + weighted isotonic
-## regression (PAVA); see solveFusedComplete(). .clusterSolve() wraps it in a
-## joint prox-linear Gauss-Newton driver over all subjects. .clusterMap()
-## is the runnable MAP-EM fit (grouping + a MAP lambda); the exact marginal-ML
-## FOCEI value/gradient is a later step (see notes/laplace_nlme_theory.Rmd, the
-## clustered marginal 2 f + log|H_red| + 2 log Z(lambda) - G log 2pi).
+## Clustered (complete-graph fusion) inner solver for .fitLaplace. The penalty
+## sum_{i<j} |eta_ik - eta_jk| couples subjects, so the inner mode is joint;
+## each linearised per-parameter subproblem is solved by solveFusedComplete().
 
 
-## Weighted complete-graph fused lasso in one dimension.
-##
-## Solves, for n subjects with data precisions w_i > 0 and data-alone modes m_i,
-##   argmin_u  (1/2) sum_i w_i (u_i - m_i)^2  +  lambda sum_{i<j} |u_i - u_j| .
-## Because the complete-graph total-variation term is linear in the order
-## statistics (sum_{i<j}|u_i-u_j| = sum_i (2 rank(u_i) - n - 1) u_(i)), the
-## solution is EXACTLY the weighted isotonic regression (pool-adjacent-violators)
-## of the rank-shifted values v_i = m_i - lambda (2 i - n - 1)/w_i, taken in the
-## order of m. The PAVA pool blocks are the clusters; each block value is the
-## w-weighted mean of its v_i. O(n log n), exact, dependency-free. Limits:
-## lambda = 0 -> u = m (singletons); lambda -> Inf -> one block at the w-weighted
-## grand mean of m (all fused), independent of lambda (since sum(2i-n-1) = 0).
-##
-## Returns list(u = <named per-subject values, original order>,
-##   clusters = <list of subject-id character groups>, values = <per-block value>,
-##   G = <number of clusters>).
+## Weighted complete-graph fused lasso, argmin_u (1/2) sum_i w_i (u_i - m_i)^2
+## + lambda sum_{i<j} |u_i - u_j|: weighted PAVA on v_i = m_i - lambda
+## (2 i - n - 1) / w_i in the order of m. The pool blocks are the clusters.
 solveFusedComplete <- function(m, w, lambda) {
   n  <- length(m)
   nm <- names(m); if (is.null(nm)) nm <- as.character(seq_len(n))
@@ -73,15 +46,9 @@ solveFusedComplete <- function(m, w, lambda) {
 }
 
 
-## Per-subject PROFILE (conditional) linearisation at a given deviation matrix
-## `Eta` (subjects x K). For each subject it evaluates the data objfn (deriv), takes
-## the K x K joint Hessian over the candidate parameters, and returns, per parameter,
-## the profile precision 1/diag(H^{-1}) and the joint Newton data mode
-## eta - H^{-1} g. The profile precision (unlike the raw diagonal H_kk) accounts for
-## the correlation between candidate parameters, so a per-subject mode that only
-## differs from its cluster because of cross-attribution is not over-confident and
-## the marginal can fuse it. For K = 1 it reduces to the diagonal. A tiny ridge +
-## singular fallback keep it stable for degenerate directions.
+## Per-subject profile linearisation at deviations `Eta` (subjects x K): per
+## parameter the profile precision 1/diag(H^-1), which accounts for correlation
+## between candidates, and the joint Newton mode eta - H^-1 g.
 .clusterProfileLinearise <- function(resObjList, outer_struct, se, Eta) {
   subjects <- rownames(se); eta_cols <- colnames(se)
   n <- length(subjects); K <- length(eta_cols)
@@ -92,7 +59,7 @@ solveFusedComplete <- function(m, w, lambda) {
     f <- c(outer_struct, base_eta); f[as.character(se[subjects[si], ])] <- Eta[si, ]; f
   })
   ## One batched pass over the subjects; on a batch failure fall back to the
-  ## per-subject loop, which is what carries the tolerated-failure branch below.
+  ## per-subject loop, which is what has the tolerated-failure branch below.
   os <- tryCatch(.objEvalMany(resObjList[subjects], fulls, deriv = TRUE),
                  error = function(e) NULL)
   if (is.null(os)) os <- lapply(seq_len(n), function(si)
@@ -103,15 +70,9 @@ solveFusedComplete <- function(m, w, lambda) {
     o  <- os[[si]]
     if (is.null(o)) { Hd[si, ] <- 1e-8; m[si, ] <- Eta[si, ]; next }
     gj <- o$gradient[en]; Hj <- o$hessian[en, en, drop = FALSE]; grad[si, ] <- gj
-    ## Invert the joint Hessian exactly as dMod's trust() treats its Newton system:
-    ## when the Hessian is positive definite (all eigenvalues > 0, the normal case
-    ## for a Gauss-Newton information matrix) take the plain Newton inverse, no
-    ## regularisation. A degenerate direction (eigenvalue <= 0, e.g. the kon<->koff
-    ## binding degeneracy) carries no data information; trust() would handle it via
-    ## its trust radius, and here, with no radius, we simply floor those
-    ## non-positive eigenvalues so the direction gets negligible precision and is
-    ## correctly left shared (never over-split). Identifiable directions are
-    ## untouched, so the profile precision / joint Newton mode are exact.
+    ## Positive definite Hessian: plain Newton inverse. Non-positive eigenvalues
+    ## hold no data information and are floored, so their direction gets
+    ## negligible precision and stays shared.
     eg  <- eigen(Hj, symmetric = TRUE)
     lam <- eg$values
     if (any(lam <= 0)) lam <- pmax(lam, 1e-8 * max(abs(lam)))
@@ -125,28 +86,9 @@ solveFusedComplete <- function(m, w, lambda) {
 }
 
 
-## Joint clustered inner solve (the "trustGL" role).
-##
-## Finds the joint penalised conditional mode of all `n` subjects' deviations for
-## the clustered penalty, by proximal Gauss-Newton: at the current eta, linearise
-## each subject's data (Gauss-Newton, separable per parameter -> data precision
-## Hd_{i,k} and data mode m_{i,k}), solve each parameter's complete-graph fused
-## lasso exactly with solveFusedComplete(), then backtrack-line-search the joint
-## step on the true objective sum_i value_data_i(eta) + lambda * ||D eta||_1.
-## Pure R (a C++ trustGL kernel is a later performance step).
-##
-## `resObjList` is .fitLaplace's per-condition normL2 list; only the penalised
-## `subjects` (rownames(penalty$subjectEtas)) are solved here (reference
-## conditions carry no eta and are handled by the outer/structural step).
-##
-## Returns the joint bundle the clustered marginal / MAP-EM consume:
-##   etahat    subjects x K matrix of the fused deviations (colnames = eta_<par>)
-##   clusters  list (length K) of per-parameter subject-id partitions
-##   Gk, G     per-parameter and total cluster counts (G = sum(Gk))
-##   fusionL1  ||D etahat||_1 = sum_k sum_{i<j} |etahat_{i,k}-etahat_{j,k}|
-##   Hd, m     subjects x K data precisions / data modes at the mode
-##   value     the penalised inner objective at the mode
-##   converged logical
+## Joint clustered inner solve by proximal Gauss-Newton: per-parameter data
+## precision Hd and mode m, an exact fused-lasso step per parameter, and a
+## backtracking line search on the penalised objective over all `subjects`.
 .clusterSolve <- function(resObjList, outer_struct, penalty, lambda,
                              eta0 = NULL, maxit = 50L, tol = 1e-8,
                              maxls = 20L, verbose = FALSE) {
@@ -169,10 +111,9 @@ solveFusedComplete <- function(m, w, lambda) {
     full[as.character(se[s, ])] <- eta_row
     full
   }
-  ## True objective: summed subject data -2logL + lambda * complete-graph fusion.
-  ## ROBUST: an ODE-solver failure or non-finite value is treated as +Inf so the
-  ## step is rejected (mirrors how a trust-region method rejects a bad model
-  ## evaluation), instead of throwing and aborting the whole fit.
+  ## Summed subject data -2 log L plus lambda times the fusion. A solver failure
+  ## or a non-finite value gives +Inf, so the step is rejected instead of
+  ## aborting the fit.
   Fval <- function(Eta) {
     ## Any failing subject makes the whole value +Inf, so a failing batch and a
     ## failing single solve have the same outcome.
@@ -215,12 +156,9 @@ solveFusedComplete <- function(m, w, lambda) {
   for (it in seq_len(maxit)) {
     lin <- linearise(Eta); if (!lin$ok) { conv <- FALSE; break }
     grad <- lin$grad; Hd <- lin$Hd
-    ## LM-damped prox-linear step: the damped precision w = Hd + mu bounds the data
-    ## mode m = eta - g/(Hd + mu), so an ill-conditioned or unidentified direction
-    ## (Hd -> 0) cannot propose an absurd, ODE-breaking mode; for a well-informed
-    ## direction (Hd >> mu) the damping is negligible. mu is adapted like a trust
-    ## radius: raised when a step fails (worse objective OR a solver failure, both
-    ## +Inf via Fval), lowered when it succeeds. No hard identifiability threshold.
+    ## Levenberg-Marquardt damped prox-linear step: w = Hd + mu bounds the mode
+    ## m = eta - g / w where Hd -> 0. mu rises when a step fails (worse value or
+    ## solver failure) and falls when it succeeds.
     accepted <- FALSE; dF <- 0; step <- 0
     for (tries in seq_len(maxls)) {
       w  <- Hd + mu
@@ -242,18 +180,9 @@ solveFusedComplete <- function(m, w, lambda) {
     if (!accepted) { conv <- TRUE; break }         # damping exhausted -> stationary
     if (step < tol || abs(dF) < tol * (abs(Fcur) + 1)) { conv <- TRUE; break }
   }
-  ## Final linearisation ingredients for the marginal. Use the PROFILE (conditional)
-  ## precision: the diagonal of the inverse per-subject joint Hessian over the K
-  ## candidate parameters, inverted back, not the raw diagonal. With several
-  ## candidates the raw diagonal Hd_kk is over-confident: a per-subject mode that
-  ## only appears to differ from its group because of cross-attribution with the
-  ## OTHER (jointly estimated) candidates would then look statistically significant
-  ## and the marginal would over-split. The profile precision deflates exactly that
-  ## correlation, so genuinely-shared subjects fuse. For K = 1 it equals the diagonal
-  ## (no correlation), so the single-candidate path is unchanged. The mode is the
-  ## joint Newton step m = eta - H^{-1} g (data-alone conditional mode).
-  ## An unidentified direction (precision -> 0) still overflows m, so floor it
-  ## relative to the row scale and hold that coordinate's mode at eta.
+  ## Marginal ingredients: the profile precision (inverse of diag(H^-1)) and the
+  ## joint Newton mode. Precision near 0 is floored relative to the row scale
+  ## and holds that mode at eta.
   lp <- .clusterProfileLinearise(resObjList, outer_struct, se, Eta)
   Hd <- lp$Hd; m <- lp$m; grad <- lp$grad
   names(clusters) <- eta_cols
@@ -263,22 +192,9 @@ solveFusedComplete <- function(m, w, lambda) {
 }
 
 
-## Runnable clustered fit via MAP-EM (penalised point estimate).
-##
-## The clustered analogue of .fitLaplace's ECM, but a MAP (Laplace/point) EM rather
-## than the marginal ML: the inner clustered mode is the E-step surrogate, and the
-## structural + lambda M-steps are closed form. It recovers the grouping and a MAP
-## lambda; the exact marginal-ML FOCEI value/gradient (with the log|H_red| volume
-## term) is a later step, so `value` here is the MAP penalised objective, NOT a
-## marginal -2logL, and clustered fits are not (yet) comparable across models.
-##
-## Loop per outer iteration:
-##   inner  .clusterSolve at (mu, lambda) -> joint clustered mode eta_hat.
-##   anchor recentre eta_hat_{.,k} to mean 0, fold the mean into the structural
-##          mu_k = log_<par> (the shift eta->eta+c, mu->mu-c leaves prediction AND
-##          ||D eta|| unchanged, so mu / eta-level is unidentified without it).
-##   CM-2   lambda = K(n-1) / ||D eta_hat||_1  (complete-graph normalizer rho=K(n-1)).
-##   CM-1   trust() on the complete-data objective at the frozen anchored eta_hat.
+## Clustered fit by MAP-EM: inner .clusterSolve, recentring of each eta column
+## into log_<par>, then the structural M-step. `value` is the MAP penalised
+## objective, not a marginal -2 log L, so it is not comparable across models.
 .clusterMap <- function(rec, resObjList, free, fixed, lam_name,
                               control, verbose, eta_init = NULL) {
   penalty  <- rec$penalty
@@ -298,17 +214,12 @@ solveFusedComplete <- function(m, w, lambda) {
   mu_of  <- stats::setNames(paste0("log_", params), eta_cols)   # eta_<par> -> log_<par>
 
   cm1 <- .trustControl(list(rinit = 1, rmax = 10, iterlim = 30L,
-                            ftol = 1e-6, mtol = 1e-6),
+                            tolControl = list(ftol = 1e-6, mtol = 1e-6)),
                        control$cm1, label = "control$cm1")
   clc <- modifyList(list(maxit = 60L, tol = 1e-9),
                     if (is.null(control$cluster)) list() else control$cluster)
-  ## lambda is HELD FIXED by default. The closed-form MAP M-step
-  ## lambda = rho/||D eta_hat||_1 degenerates here (estimation is not selection):
-  ## with precise data ||D eta_hat||_1 is dominated by the large between-cluster
-  ## gaps, so the point estimate of lambda is far too small to fuse anything, and
-  ## the fixed point sits at no fusion. Consistent lambda selection needs the
-  ## marginal E||D eta||_1 (a later step) or a lambda-scan + BIC. Opt into the
-  ## (degenerate) MAP update with control$estimateLambda = TRUE only to inspect it.
+  ## lambda stays fixed unless control$estimateLambda: the closed-form MAP
+  ## update rho / ||D eta_hat||_1 tends to no fusion and selects nothing.
   estimateLambda <- isTRUE(control$estimateLambda)
   maxOuter  <- if (is.null(control$maxOuter))  50L  else as.integer(control$maxOuter)
   epsPar    <- if (is.null(control$epsPar))    1e-4 else control$epsPar
@@ -325,16 +236,15 @@ solveFusedComplete <- function(m, w, lambda) {
     gg <- stats::setNames(numeric(length(struct_names)), struct_names)
     HH <- matrix(0, length(struct_names), length(struct_names),
                  dimnames = list(struct_names, struct_names))
-    ## robust to a solver failure at a trust trial point: return +Inf so trust()
-    ## rejects the step and shrinks its radius (the trust-region way).
+    ## A solver failure at a trial point returns +Inf, so trust() rejects the
+    ## step and shrinks its radius.
     conds <- c(subjects, ref_conditions)
     fulls <- lapply(conds, function(cc) {
       full <- c(os, base_eta)
       if (cc %in% subjects) full[as.character(se[cc, ])] <- Eta[match(cc, subjects), ]
       full
     })
-    ## Any failure already collapses the whole objective to +Inf, so catching the
-    ## batch as a whole matches the per-condition catch it replaces.
+    ## Any failure makes the objective +Inf, so the batch is caught as a whole.
     got <- tryCatch(.objEvalMany(resObjList[conds], fulls, deriv = TRUE),
                     error = function(e) NULL)
     if (is.null(got)) return(objlist(value = Inf, gradient = gg, hessian = HH))
@@ -417,18 +327,9 @@ solveFusedComplete <- function(m, w, lambda) {
 }
 
 
-## ---- exact clustered marginal via adaptive Gauss-Hermite quadrature ----------
-##
-## The complete-graph fusion penalty is piecewise-linear over the n! order cones
-## (in each cone sum|eta_i-eta_j| = c_sigma' eta is linear), so the FOCE-linearised
-## integrand exp(-1/2[V_lin + lambda ||D eta||_1]) is a Gaussian truncated to each
-## cone, the multi-dimensional analogue of the 1-D normal-Laplace (normalLaplace).
-## Rather than the intractable closed-form order-cone probabilities, the exact
-## marginal is computed by mode-centred adaptive Gauss-Hermite quadrature over the
-## anchored (sum eta = 0) space, and its gradient by Fisher's identity (posterior
-## expectations over the quadrature nodes). This is EXACT (to quadrature accuracy),
-## unlike the conditional-on-partition Gaussian-volume approximation whose corner
-## error is O(nats) at strong fusion.
+## ---- exact clustered marginal by adaptive Gauss-Hermite quadrature ----------
+## Quadrature is mode-centred over the anchored space (sum eta = 0); the
+## gradient follows from Fisher's identity.
 
 ## physicists' Gauss-Hermite nodes/weights (weight e^{-x^2}) via Golub-Welsch.
 .gaussHermite <- function(nq) {
@@ -438,12 +339,8 @@ solveFusedComplete <- function(m, w, lambda) {
   list(x = ev$values[ord], w = sqrt(pi) * (ev$vectors[1, ord])^2)
 }
 
-## Dimension-adaptive dense-tensor node count: keep the total node count nq^d
-## bounded (~3e4) by shrinking the per-dimension nodes as the anchored dimension
-## d = G-1 grows, never exceeding `cap` (the user's node budget). All-positive
-## weights (unlike the signed Smolyak sparse grid, it never produces a negative
-## partial sum on the sharp fusion kink), so it is the robust default for the
-## clustered marginal at larger G.
+## Dense-tensor nodes per dimension, shrinking with d = G - 1 so that nq^d stays
+## near 3e4, at most `cap`. Weights stay positive, unlike the Smolyak grid.
 .adaptiveNq <- function(d, cap = 24L) {
   if (d <= 2L) return(cap)
   max(4L, min(cap, as.integer(floor(exp(log(3e4) / d)))))
@@ -458,19 +355,9 @@ solveFusedComplete <- function(m, w, lambda) {
   B
 }
 
-## Mode-centred Gauss-Hermite log-integral of exp(-phi) with local precision
-## `Prec` at the centre `zhat`, over the change of variables z = zhat + sqrt(2) L u
-## (L = chol of the local covariance). Two node sets:
-##   sparse = FALSE : full tensor product of the 1-D rule `gh` (nq^d nodes,
-##                    all-positive weights). Exact for small d, blows up for d>=4.
-##   sparse = TRUE  : Smolyak sparse grid (`sparseGridGH`, the C++ rule reused
-##                    from the Gaussian nlme path) at Smolyak depth `level`
-##                    (default d + 3). Node count grows polynomially in d, so it
-##                    stays feasible for larger clusters (more groups). Weights are
-##                    signed, so the reduction is a signed log-sum-exp.
-## Returns the log-integral, the (possibly signed) posterior weights over nodes,
-## and the node coordinates (d x M) for moment accumulation. The tensor path is
-## bit-identical to the previous implementation.
+## Mode-centred Gauss-Hermite log-integral of exp(-phi), z = zhat + sqrt(2) L u
+## with L = chol(solve(Prec)): full tensor of `gh` (positive weights) or Smolyak
+## grid at `level` (signed). Returns the log-integral, weights and nodes.
 .aghqLogI <- function(phi, zhat, Prec, gh = NULL, sparse = FALSE, level = NULL) {
   d   <- length(zhat)
   L   <- t(chol(solve(Prec)))                      # z = zhat + sqrt(2) L u
@@ -515,31 +402,9 @@ solveFusedComplete <- function(m, w, lambda) {
   list(logI = logI, post = post, Z = Z)
 }
 
-## Exact clustered marginal for ONE parameter over the n subjects.
-##   H, m   : n-vectors, data precisions Hd and data modes (FOCE linearisation)
-##   lambda : penalty strength; etahat: penalised mode (n-vector) for centring
-## Returns: value (-2logL contribution, prior-normalised via Z), the posterior
-## moments Eeta (n), Ecen2 (n, = E[(eta-m)^2]) for the Fisher outer gradient, and
-## Efus (= E_post sum_{i<j}|eta_i-eta_j|) for the closed-form lambda M-step.
-## `sizes` (default all 1) gives the WEIGHTED complete-graph fusion for a REDUCED
-## (grouped) model: if `H`/`m` are the G group precisions / data modes and `sizes`
-## the group sizes n_g, the fusion is sum_{g<h} n_g n_h |w_g - w_h| and the
-## anchoring is sum_g n_g w_g = 0 (so the full model is `sizes = 1`). This is what
-## the grouping comparison (structure selection) consumes.
-## `center` (anchored coords, length G-1) overrides the quadrature centre; NULL
-## uses the data-mode projection. Fisher's identity gives the EXACT marginal
-## gradient regardless of the centre, but a centre that moves with the argument
-## adds a quadrature-grid-motion term to a finite difference of the value; hold it
-## fixed to check the analytic gradient against FD.
-## `rule` selects the quadrature over the anchored dimension d = G-1:
-##   "tensor" : dense nq^d product using the supplied `gh` (fixed nq).
-##   "auto"   : dense tensor with a DIMENSION-ADAPTIVE nq (`.adaptiveNq`, shrinks
-##              with d to bound the node count): the robust default; all-positive
-##              weights, no signed-cancellation failure on the fusion kink.
-##   "sparse" : Smolyak sparse grid at depth `level` (default d + 3). Cheapest at
-##              large d for SMOOTH integrands, but its signed weights can fail at
-##              strong fusion (kink); use only when the fusion is weak.
-## The value is EXACT to quadrature accuracy in every case.
+## Exact clustered marginal of one parameter over subjects with data precisions
+## H and modes m: -2 log L and posterior moments Eeta, Ecen2, Efus. `sizes`
+## weights a grouped model; `center` fixes the quadrature centre.
 .clusterParamMarginal <- function(H, m, lambda, gh = NULL, sizes = rep(1, length(H)),
                                   center = NULL, rule = c("auto", "tensor", "sparse"),
                                   level = NULL) {
@@ -548,6 +413,7 @@ solveFusedComplete <- function(m, w, lambda) {
   if (G == 1L) return(list(value = 0, Eeta = m, Ecen2 = 0, Efus = 0))
   B  <- MASS::Null(matrix(sizes, G, 1))             # G x (G-1) orthonormal basis of {sizes' w = 0}
   d  <- G - 1L
+  ## "sparse" Smolyak weights are signed and can fail on a strong fusion kink.
   sparse <- identical(rule, "sparse")
   ## "auto": dimension-adaptive dense tensor, capped at the caller's node budget
   ## (the length of the supplied `gh`, i.e. quadNodes; 24 when none is given).
@@ -596,13 +462,9 @@ solveFusedComplete <- function(m, w, lambda) {
 }
 
 
-## Exact-marginal score of a grouping P (list of member-index vectors) given the
-## FOCE linearisation (per-subject data precisions Hd, data modes m). The grouping
-## constrains members to share a value: -2logL(P) = within-group data cost sum_g C_g
-## (C_g = sum_{i in g} 1/2 Hd_i (m_i - m_g)^2, the cost of forcing the group equal)
-## plus the reduced weighted clustered marginal on the G group values, evaluated at
-## the grouping's own marginal-ML lambda (M-step fixed point lambda = (G-1)/E||Dw||).
-## The null grouping (G = 1) has no random effect: -2logL = C only.
+## Exact-marginal score of a grouping P: within-group data cost of forcing equal
+## values plus the reduced weighted marginal on the G group values at their own
+## marginal-ML lambda. A single group has no random effect.
 .clusterGroupScore <- function(P, Hd, m, gh = NULL, lamIter = 30L,
                                   rule = c("auto", "tensor", "sparse"),
                                   level = NULL) {
@@ -625,23 +487,9 @@ solveFusedComplete <- function(m, w, lambda) {
 }
 
 
-## Joint agglomerative clustering across ALL candidate parameters at once.
-##
-## Per subject the linearisation supplies a joint data mode `M[i, ]` (K-vector) and
-## a joint precision `Omega[[i]]` (K x K, the data Hessian block over the K
-## candidates). A clustering-combination C (a partition of subjects per parameter)
-## is scored by the JOINT cost
-##   score(C) = D(C) + log(N) * sum_k G_k,
-## where D(C) = 0.5 sum_i (A_i(C) w_hat - M_i)^T Omega_i (A_i w_hat - M_i) is the
-## cross-parameter data cost at the constrained generalised-least-squares group
-## values w_hat = (sum_i A_i^T Omega_i A_i)^{-1} sum_i A_i^T Omega_i M_i, and A_i(C)
-## maps the group values to subject i's K deviations. Because D uses the FULL
-## Omega_i, a subject whose deviation only appears to differ from its group because
-## of cross-attribution with the OTHER candidates is explained by those instead and
-## is fused; the per-parameter selector cannot see this. Minimised by greedy
-## agglomeration from the all-separate partition (merge the (parameter, group-pair)
-## that most lowers the score, until none does). O(n^2 K) merges, each a small
-## dense solve on the LINEARISED data (no ODE), cheap.
+## Joint agglomerative clustering over all candidates: score(C) = D(C) +
+## log(N) sum_k G_k, D the GLS data cost under the full per-subject K x K
+## precision. Greedy merges from all-separate until no merge lowers the score.
 .clusterJoint <- function(M, Omega, subjects, N) {
   n <- nrow(M); K <- ncol(M)
   score <- function(cl) {
@@ -737,7 +585,7 @@ solveFusedComplete <- function(m, w, lambda) {
 #'   re-clustered. Repeats until the groupings stabilise. Default `2`; set `0` for
 #'   the single-pass profile linearisation only. Ignored when `joint = TRUE`.
 #' @param joint Logical (default `TRUE`); with more than one candidate parameter,
-#'   select the groupings JOINTLY by greedy agglomeration on a score that carries
+#'   select the groupings JOINTLY by greedy agglomeration on a score that holds
 #'   the full cross-parameter covariance (the per-subject joint Hessian), so a
 #'   subject that only appears individual-specific in one parameter because of
 #'   cross-attribution with the others is fused rather than split. This is the
@@ -777,13 +625,9 @@ solveFusedComplete <- function(m, w, lambda) {
   }), all_conditions)
   free <- init[setdiff(names(init), names(fixed))]
 
-  ## 1. all-separate structural fit (lambda -> 0) for the FOCE linearisation.
-  ## No fusion is forced here, so sigma is well estimated (no fusion feedback).
-  ## MULTISTART (fits > 1): the joint deviation mode is non-convex (the nonlinear
-  ## ODE + the L1 fusion), so with many candidate parameters the single fit can
-  ## settle in a local optimum that mis-attributes variation across correlated
-  ## parameters and mars the clustering. Run from `fits` perturbed eta starts and
-  ## keep the lowest-objective fit: a cleaner attribution, cleaner modes.
+  ## 1. All-separate structural fit (lambda -> 0) for the linearisation. With
+  ## fits > 1, perturbed eta starts guard against local optima of the
+  ## non-convex mode; the lowest objective wins.
   fits <- as.integer(fits)
   all_eta <- as.vector(se)
   free0   <- free; free0[[lam_name]] <- 1e-6
@@ -837,12 +681,9 @@ solveFusedComplete <- function(m, w, lambda) {
   perParam <- clusterFrom(sol$m, sol$Hd)
 
   if (joint && length(eta_cols) > 1L) {
-    ## 3a. JOINT agglomerative clustering: score groupings with the full
-    ## cross-parameter covariance (per-subject K x K joint Hessian) so a subject
-    ## that only differs because of cross-attribution is fused, not split. This is
-    ## the multi-parameter selector; the per-parameter chains above are kept for
-    ## inspection. (For K = 1 there is no cross-parameter effect, so the single
-    ## per-parameter marginal is used unchanged.)
+    ## 3a. Joint agglomerative clustering with the full cross-parameter
+    ## precision; the per-parameter chains above stay for inspection. K = 1
+    ## uses the per-parameter marginal.
     Ndata <- sum(vapply(names(rec$data),
       function(cc) nrow(as.data.frame(rec$data[[cc]])), 0L))
     base_eta <- stats::setNames(rep(0, length(as.vector(se))), as.vector(se))
@@ -862,10 +703,8 @@ solveFusedComplete <- function(m, w, lambda) {
            G = length(jc$clusters[[k]]), chain = perParam[[k]]$chain)), eta_cols)
     if (verbose) cat("sparsify: joint agglomerative clustering\n")
   } else if (as.integer(refine) > 0L) {
-    ## 3b. Iterative refinement (per-parameter path): re-linearise with every OTHER
-    ## candidate fused to its current clustering, so its per-subject freedom no
-    ## longer leaks cross-attribution into the parameter being clustered; re-cluster.
-    ## Repeat until the groupings stop changing.
+    ## 3b. Re-linearise with every other candidate fused to its clustering and
+    ## re-cluster, until the groupings stop changing.
     sig <- function(pp) paste(vapply(pp, function(z)
       paste(vapply(lapply(z$clusters, sort), paste, "", collapse = ","), collapse = "|"), ""),
       collapse = ";")
@@ -995,16 +834,9 @@ plot.sparsify <- function(x, type = c("grouping", "chain"), ...) {
 }
 
 
-## ---- SAEM/MCMC exact cross-check of the clustered marginal (P5) --------------
-##
-## A joint random-walk Metropolis sampler of the (anchored, FOCE-linearised)
-## clustered posterior for one parameter, the coupled analogue of the SAEM
-## E-step (prior-agnostic, value-only, no subgradient for the L1 kink). It targets
-## the SAME posterior exp(-phi(z)) that .clusterParamMarginal integrates by
-## quadrature, so their posterior moments (E[eta], E||D eta||_1) must agree: an
-## independent MCMC check that the deterministic exact marginal is correct
-## (`sizes` gives the weighted reduced/grouped model, as in .clusterParamMarginal).
-## Returns list(Eeta, Efus, accept).
+## ---- MCMC cross-check of the clustered marginal -----------------------------
+## Random-walk Metropolis on the same anchored linearised posterior that
+## .clusterParamMarginal integrates. Returns list(Eeta, Efus, accept).
 .clusterMHmoments <- function(H, m, lambda, sizes = rep(1, length(H)),
                               nsamp = 40000L, burn = 5000L, step = NULL) {
   G <- length(H); B <- MASS::Null(matrix(sizes, G, 1)); d <- G - 1L
@@ -1026,19 +858,9 @@ plot.sparsify <- function(x, type = c("grouping", "chain"), ...) {
 }
 
 
-## Full SAEM fit for the clustered model on the TRUE (nonlinear) ODE posterior.
-##
-## The stochastic-approximation EM cross-check of the FOCE/exact-marginal path:
-## unlike .selectCluster (which linearises the data at the mode), SAEM samples
-## the true coupled posterior, so agreement of its structural / posterior-mean
-## estimates validates the FOCE linearisation itself. E-step: per-subject-row
-## random-walk Metropolis over all subjects' etas, coupled by the complete-graph
-## penalty (value-only, no subgradient), with an incremental log-density (only the
-## proposed subject's data + its fusion terms change). CM-2: lambda = 2 rho /
-## E||D eta|| (rho = K(n-1)); CM-1: trust() on the complete-data objective at the
-## drawn etas; anchoring by re-centring each iteration. Reports the posterior mean
-## etaModes (which reveals the group structure); the hard grouping comes from the
-## marginal selector .selectCluster, not from a point estimate.
+## SAEM fit of the clustered model on the nonlinear posterior: per-subject
+## Metropolis E-step coupled by the fusion penalty, lambda = 2 rho / E||D eta||,
+## trust() M-step at the drawn etas. Reports posterior mean etaModes.
 .clusterSaem <- function(rec, resObjList, free, fixed, lam_name,
                                control, verbose) {
   penalty <- rec$penalty
@@ -1056,7 +878,7 @@ plot.sparsify <- function(x, type = c("grouping", "chain"), ...) {
                         cm1 = list()),
                    if (is.null(control$saem)) list() else control$saem)
   cm1 <- .trustControl(list(rinit = 1, rmax = 10, iterlim = 30L,
-                            ftol = 1e-6, mtol = 1e-6),
+                            tolControl = list(ftol = 1e-6, mtol = 1e-6)),
                        sc$cm1, label = "control$saem$cm1")
   nBurnin <- as.integer(sc$nBurnin); nEM <- as.integer(sc$nEM); nMcmc <- as.integer(sc$nMcmc)
 

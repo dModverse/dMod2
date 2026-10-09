@@ -3,7 +3,7 @@
 \name{is.eqnvec}
 \alias{is.eqnvec}
 \alias{eqnvec}
-\title{Generate equation vector object}
+\title{Generate Equation Vector Object}
 \usage{
 is.eqnvec(x)
 
@@ -16,7 +16,7 @@ eqnvec(...)
 the right-hand sides of the equations}
 }
 \value{
-object of class \code{eqnvec}, basically a named character.
+Object of class \code{eqnvec}, a named character vector.
 }
 \description{
 The eqnvec object stores explicit algebraic equations, like the

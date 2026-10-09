@@ -52,12 +52,12 @@ x(times, pars) %>% plot()
 
 
 g <- eqnvec(Cc = "Ac/Vc") %>% 
-  Y(x, compile = TRUE, attach.input = FALSE)
+  Y(x, compile = TRUE, attachInput = FALSE)
 
 
 
 e <- eqnvec(Cc = "sigma_abs + Cc * sigma_rel") %>% 
-  Y(g, modelname = "err_PK", attach.input = FALSE, compile = TRUE)
+  Y(g, modelname = "err_PK", attachInput = FALSE, compile = TRUE)
 
 p <- eqnvec() %>% 
   define("x~x", x = getParameters(g, x, e)) %>% 

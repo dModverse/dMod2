@@ -5,7 +5,7 @@
 \alias{scale_fill_dMod_c}
 \alias{scale_color_dMod_div}
 \alias{scale_fill_dMod_div}
-\title{Continuous dMod colour scales}
+\title{Continuous dMod Color Scales}
 \usage{
 scale_color_dMod_c(..., direction = 1, palette = "okabe")
 
@@ -16,29 +16,30 @@ scale_color_dMod_div(mid = 0, ..., direction = 1, palette = "okabe")
 scale_fill_dMod_div(mid = 0, ..., direction = 1, palette = "okabe")
 }
 \arguments{
-\item{...}{arguments forwarded to \code{\link[ggplot2:scale_colour_gradientn]{ggplot2::scale_colour_gradientn()}} or
+\item{...}{Arguments passed to \code{\link[ggplot2:scale_colour_gradientn]{ggplot2::scale_colour_gradientn()}} or
 \code{\link[ggplot2:scale_fill_gradientn]{ggplot2::scale_fill_gradientn()}}.}
 
-\item{direction}{1 or -1; -1 reverses the ramp.}
+\item{direction}{1 (default) or -1; -1 reverses the ramp.}
 
-\item{palette}{name of a sequential palette for \verb{_c}, a diverging one for
-\verb{_div}, see \code{\link[=dMod_palettes]{dMod_palettes()}}. Both defaults are colorblind-safe.}
+\item{palette}{Name of a sequential palette for \verb{_c}, a diverging one for
+\verb{_div}, see \code{\link[=dMod_palettes]{dMod_palettes()}}. Defaults to the colorblind-safe \code{"okabe"}.}
 
-\item{mid}{numeric, the value white is pinned to.}
+\item{mid}{Numeric, the value mapped to white. Defaults to 0.}
+}
+\value{
+A continuous \code{ggplot2} scale.
 }
 \description{
 Sequential (\verb{_c}) and diverging (\verb{_div}) counterparts of the discrete
-\code{\link[=scale_color_dMod]{scale_color_dMod()}}. The diverging scales pin white to \code{mid} even for
-asymmetric limits, so a signed quantity keeps its zero at the neutral colour.
-}
-\details{
-The suffix is \verb{_div}, not \verb{_d}: ggplot2 spells \emph{discrete} \verb{_d} (as in
-\code{\link[ggplot2:scale_colour_viridis_d]{ggplot2::scale_colour_viridis_d()}}), and here the discrete scale is the
-unsuffixed \code{\link[=scale_color_dMod]{scale_color_dMod()}}.
+\code{\link[=scale_color_dMod]{scale_color_dMod()}}. The diverging scales map \code{mid} to white, also for
+asymmetric limits.
 }
 \examples{
 library(ggplot2)
 d <- expand.grid(time = seq(0, 10, 0.1), eps = seq(0, 1, 0.1))
 ggplot(d, aes(time, exp(-eps * time), group = eps, colour = eps)) +
    geom_line() + theme_dMod() + scale_color_dMod_c()
+}
+\seealso{
+\code{\link[=scale_color_dMod]{scale_color_dMod()}}
 }

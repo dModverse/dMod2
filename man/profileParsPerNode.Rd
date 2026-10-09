@@ -2,34 +2,36 @@
 % Please edit documentation in R/remoteComputing.R
 \name{profileParsPerNode}
 \alias{profileParsPerNode}
-\title{Generate parameter list for distributed profile calculation}
+\title{Split Parameters into Ranges for Distributed Profiles}
 \usage{
-profileParsPerNode(parameters, fits_per_node, side = c("both", "split")[1])
+profileParsPerNode(parameters, parsPerNode, side = c("both", "split"), ...)
 }
 \arguments{
-\item{parameters}{list of parameters}
+\item{parameters}{Named vector or list of parameters; only its length is
+used.}
 
-\item{fits_per_node}{numerical, number of parameters that will be send to each node.}
+\item{parsPerNode}{Integer, number of parameters per node.}
 
-\item{side}{determine if both sides are calculated (default) or if the profiles are split in 'left' and 'right' for calculation}
+\item{side}{\code{"both"} (default) for one entry per range, or \code{"split"} for two
+entries per range, labelled \code{"left"} and \code{"right"}, to compute the two
+sides of each profile on separate nodes.}
+
+\item{...}{\code{fits_per_node} is deprecated, use \code{parsPerNode}.}
 }
 \value{
-List with two arrays: \code{from} contains the number of the starting
-parameter, while \code{to} stores the respective upper end of the parameter list
-per node.
+A list with the integer vectors \code{from} and \code{to}, the first and last
+parameter index of each node, and the character vector \code{side}.
 }
 \description{
-Generates list of \code{WhichPar} entries to facilitate distributed
-profile calculation.
-}
-\details{
-Lists to split the parameters for which the profiles are calculated
-on the different nodes.
+Splits the parameter indices into consecutive ranges, one per node, for
+profile calculation with \code{\link[=distributedComputing]{distributedComputing()}}.
 }
 \examples{
-\dontrun{
-parameter_list <- setNames(1:10, letters[1:10])
-var_list <- profileParsPerNode(parameter_list, 4)
-}
+parameters <- setNames(1:10, letters[1:10])
+profileParsPerNode(parameters, 4)
+profileParsPerNode(parameters, 4, side = "split")
 
+}
+\seealso{
+\code{\link[=distributedComputing]{distributedComputing()}}, \link[=profile.objfn]{profile()}
 }

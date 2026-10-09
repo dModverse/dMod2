@@ -1,32 +1,12 @@
-# -------------------------------------------------------------------------#
-# JAK2-STAT5 signalling in erythroid progenitor cells
-# -------------------------------------------------------------------------#
-#
-# [PURPOSE]
-# Bachmann et al. (2011) in dMod2: Epo induced JAK2-STAT5 signalling with the
-# three negative feedbacks CIS, SOCS3 and SHP1. 541 measurements from thirteen
-# experiments, 113 estimated parameters. The reaction network follows the
-# Data2Dynamics model `jak2_stat5_feedbacks`; the objective is evaluated at the
-# optimum the benchmark collection publishes.
-#
-# [AUTHOR]
-# Simon Beyer
-#
-# [Date]
-# Wed 03 Sep 2026
-#
-# [Info]
-# The data ship with the package as `bachmann`, the PEtab form of the same
-# problem as inst/extdata/petab_bachmann. The last section imports that one and
-# checks the two against each other.
-# -------------------------------------------------------------------------#
+# JAK2-STAT5 signalling with the CIS, SOCS3 and SHP1 feedbacks, evaluated at the
+# published optimum and cross-checked against the shipped PEtab form.
+# Bachmann et al. (2011) Mol Syst Biol; D2D model `jak2_stat5_feedbacks`.
 
 library(dMod2)
 library(ggplot2)
 
 .modelname <- "bachmann"
-# every generated source, object and shared library goes here, never into the
-# working directory
+# generated sources, objects and libraries go here, not the working directory
 .outdir    <- file.path(tempdir(), .modelname)
 .fit       <- FALSE   # multi-start search, hours on this model
 
@@ -34,32 +14,25 @@ if (!dir.exists(.outdir)) dir.create(.outdir, recursive = TRUE)
 .petabDir <- system.file("extdata", "petab_bachmann", package = "dMod2")
 
 
-# –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
-# Load data
-#
-# Values are the recorded signal divided by the maximum of its own column, the
-# gauge the scale parameters are estimated in. All but one observable are fitted
-# on log10, which is where their estimated standard deviations live as well.
-# –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
+# Load data ---------------------------------------------------------------------
+# Values are normalised to their column maximum; all observables but one are
+# fitted on log10, as are their standard deviations.
 data(bachmann)
 .logFitted <- bachmann$name != "pSTAT5B_rel"
 bachmann$value[.logFitted] <- log10(bachmann$value[.logFitted])
 
 .covariates <- c("experiment", "epo_level", "ActD", "CISoe", "SOCS3oe", "SHP1oe")
-mydataL   <- as.datalist(bachmann, split.by = "condition",
-                         keep.covariates = .covariates)
+mydataL   <- as.datalist(bachmann, splitBy = "condition",
+                         keepCovariates = .covariates)
 cond.grid <- covariates(mydataL)
 
 cat(sprintf("%d points, %d conditions, %d observables\n", nrow(bachmann),
             length(mydataL), length(unique(bachmann$name))))
 
 
-# –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
-# Define model
-# –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
-# Rate expressions are written in the compartment of their educts. npSTAT5 and
-# the nuclear transcripts are placed first, so that the reactions producing them
-# do not claim them for the cytoplasm.
+# Define model ------------------------------------------------------------------
+# Rates are written in the compartment of their educts. npSTAT5 and the nuclear
+# transcripts are assigned first, so producing reactions do not claim them.
 
 addCyt <- function(eq, from, to, rate) addReaction(eq, from, to, rate, compartment = "cyt")
 addNuc <- function(eq, from, to, rate) addReaction(eq, from, to, rate, compartment = "nuc")
@@ -136,7 +109,7 @@ reactions
 .pJAK2 <- "2 * (EpoRpJAK2 + p1EpoRpJAK2 + p2EpoRpJAK2 + p12EpoRpJAK2)"
 .pEpoR <- "16 * (p1EpoRpJAK2 + p2EpoRpJAK2 + p12EpoRpJAK2)"
 
-# scale_ and offset_ carry no experiment here; the transformation below resolves
+# scale_ and offset_ name no experiment here; the transformation below resolves
 # them per condition, which is what keeps one observation function for all of them
 observables <- do.call(eqnvec, c(list(
   pJAK2_au    = .log10(paste("offset_pJAK2 + scale_pJAK2 / init_EpoRJAK2 *", .pJAK2)),
@@ -177,12 +150,9 @@ errorModels <- eqnvec(
   SOCS3RNA_foldB = "sd_RNA_fold", SOCS3RNA_foldC = "sd_RNA_fold")
 
 
-# –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
-# Condition table
-#
-# Every generic scale and offset is resolved here. An observable an experiment
-# did not record is pinned, so it contributes no free direction to the fit.
-# –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
+# Condition table ---------------------------------------------------------------
+# Every generic scale and offset is resolved here; an observable an experiment
+# did not record is pinned, so it adds no free direction to the fit.
 .recordedBy <- list(
   pJAK2  = c("long", "actd", "fine", "cisoe", "socs3oe", "shp1oe", "dr7", "dr30"),
   pEpoR  = c("long", "actd", "fine", "cisoe", "cisoe_pepor", "socs3oe", "shp1oe",
@@ -229,17 +199,14 @@ attr(mydataL, "condition.grid") <- cond.grid
                     grep("^(scale|offset)_", names(cond.grid), value = TRUE))
 
 
-# –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
-# Build
-# –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
-myOptionsODE  <- list(atol = 1e-11, rtol = 1e-8, maxsteps = 1e7L, maxattemps = 100L)
-myOptionsSens <- list(atol = 1e-11, rtol = 1e-8, maxsteps = 1e7L, maxattemps = 100L)
+# Build -------------------------------------------------------------------------
+myOptions <- list(atol = 1e-11, rtol = 1e-8, maxsteps = 1e7L, maxattempts = 100L)
 
 model <- odemodel(reactions, modelname = "bachmann_ode", compile = FALSE, outdir = .outdir)
-x <- Xs(model, optionsOde = myOptionsODE, optionsSens = myOptionsSens)
-g <- Y(observables, x, modelname = "bachmann_obs", attach.input = FALSE,
+x <- Xs(model, options = myOptions)
+g <- Y(observables, x, modelname = "bachmann_obs", attachInput = FALSE,
        compile = FALSE, outdir = .outdir)
-e <- Y(errorModels, g, modelname = "bachmann_err", attach.input = FALSE,
+e <- Y(errorModels, g, modelname = "bachmann_err", attachInput = FALSE,
        compile = FALSE, outdir = .outdir)
 
 # only the receptor, SHP1 and STAT5 pools are stocked; the overexpression
@@ -254,10 +221,8 @@ trafo <- eqnvec() |>
   insert("STAT5 ~ init_STAT5") |>
   insert("SHP1 ~ init_SHP1 * (1 + SHP1oe * SHP1ProOE)") |>
 
-  # The model was written in parameters that carry their own reference scale, so
-  # the estimated ones are dimensionless. Each rule uses the raw parameter on its
-  # right hand side, which is what fixes the order: a parameter is rewritten
-  # before it is used, never after.
+  # Estimated parameters are dimensionless against their reference scale. Each
+  # rule reads the raw parameter, so a parameter is rewritten before it is used.
   insert("CISRNAEqc ~ CISRNAEqc / init_STAT5") |>
   insert("SOCS3RNAEqc ~ SOCS3RNAEqc / init_STAT5") |>
   insert("CISEqc ~ CISEqc / CISRNAEqc") |>
@@ -291,14 +256,9 @@ outerpars <- getParameters(prd)
 cat(length(outerpars), "estimated parameters\n")
 
 
-# –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
-# Objective
-#
-# Bounds, the published optimum and the one prior in the problem all come from
-# the PEtab parameter table, so this script and the import below start from the
-# same numbers. The prior is on the receptor pool, which the paper measured at
-# 4.15 nM with 30 percent spread; everything else the bounds hold in.
-# –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
+# Objective ---------------------------------------------------------------------
+# Bounds, published optimum and the prior on the receptor pool are read from the
+# PEtab parameter table, so this script and the import share the same numbers.
 .pars  <- read.delim(file.path(.petabDir, "parameters_Bachmann_MSB2011.tsv"))
 .prior <- as.numeric(strsplit(
   .pars$objectivePriorParameters[.pars$parameterId == "init_EpoRJAK2"], ";")[[1]])
@@ -306,7 +266,7 @@ cat(length(outerpars), "estimated parameters\n")
 
 obj <- normL2(mydataL, prd, e) +
   constraintL2(setNames(.prior[1], "init_EpoRJAK2"), sigma = .prior[2],
-               attr.name = "prior")
+               attrName = "prior")
 
 # the published optimum, on the log10 scale the table declares
 bestfit <- setNames(log10(.pars$nominalValue), .pars$parameterId)
@@ -315,9 +275,7 @@ stopifnot(setequal(names(bestfit), outerpars))
 obj(bestfit, cores = 10) |> system.time()
 
 
-# –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
-# Multi-start fit
-# –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
+# Multi-start fit ---------------------------------------------------------------
 if (.fit) {
   pouter <- structure(rep(-1, length(outerpars)), names = outerpars)
   fits <- mstrust(obj, pouter, sd = 4, fits = 500, cores = 10, rinit = 0.1, rmax = 10,  iterlim = 5000,
@@ -327,14 +285,9 @@ if (.fit) {
 }
 
 
-# –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
-# Predictions over data
-#
-# One observation function serves all 36 conditions, so a prediction also holds
-# observables an experiment never recorded. Those are dropped everywhere below,
-# which is what keeps the axes on the measured range. Time courses and dose
-# responses do not share an x axis and are drawn apart.
-# –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
+# Predictions over data ---------------------------------------------------------
+# One observation function serves all conditions; observables an experiment did
+# not record are dropped, and time courses and dose responses are drawn apart.
 recorded <- unique(paste(bachmann$condition, bachmann$name))
 
 # prediction as a data.frame, with the error model as a `sigma` column and the
@@ -344,10 +297,8 @@ recorded <- unique(paste(bachmann$condition, bachmann$name))
                 data = mydataL[conditions], errfn = e) |>
   subset(paste(condition, name) %in% recorded)
 
-# One standard deviation of the error model, in the colour of its own line and
-# dashed at the edge. plotCombined() already carries the package colour scale,
-# so only the fill has to be set to the same palette. `alpha` reaches the fill
-# only, which keeps the edge crisp.
+# One error-model standard deviation as a dashed ribbon in the line colour;
+# `alpha` reaches the fill only.
 .band <- function(pl, df, colour = "condition", x = "time")
   pl + geom_ribbon(data = df,
                    aes(x = .data[[x]], ymin = value - sigma, ymax = value + sigma,
@@ -381,11 +332,8 @@ plotCombined(prd(times, bestfit, conditions = .pert, deriv = FALSE),
   labs(x = "time [min]", y = "log10 signal [a.u.]", colour = NULL, fill = NULL)
 
 ## --- dose response: the dose swept through the model, data on top ---
-# Each dose is a condition of its own, so the recorded points alone would give a
-# four-point curve. `epo_level` is an inner parameter, so the dose can instead be
-# swept through one condition of the experiment, which keeps that experiment's
-# scales and its measurement time and draws the response the model actually
-# predicts between the doses.
+# `epo_level` is an inner parameter, so the dose is swept through one condition
+# per experiment, keeping its scales and measurement time.
 .drData <- subset(bachmann, grepl("^dr", experiment))
 .dose   <- 10^seq(log10(min(.drData$epo_level)), log10(max(.drData$epo_level)),
                   length.out = 300)
@@ -417,25 +365,18 @@ ggplot(.drPred, aes(epo_level, value, colour = experiment, fill = experiment)) +
   labs(x = "Epo [units/cell]", y = "log10 signal [a.u.]", colour = NULL, fill = NULL)
 
 
-# –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
-# Cross-check against the PEtab form of the same problem
-#
-# The benchmark collection distributes Bachmann as PEtab, and the package ships
-# that copy. Importing it builds the model a second time, from SBML and the four
-# tables instead of from the reactions above, so the two are independent up to
-# the data they share.
-# –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
+# Cross-check against the PEtab form of the same problem ------------------------
+# The import rebuilds the model from SBML and the tables, independent of the
+# reactions above up to the shared data.
 petab <- importPEtab(file.path(.petabDir, "Bachmann_MSB2011.yaml"),
                      backend = "cppDE", cores = 4, outdir = .outdir,
-                     optionsOde = myOptionsODE, optionsSens = myOptionsSens)
+                     options = myOptions)
 
 stopifnot(setequal(names(petab$bestfit), outerpars),
           isTRUE(all.equal(petab$bestfit[outerpars], bestfit[outerpars])))
 
-# The two values differ by a constant: PEtab defines the likelihood on the
-# linear measurement, so importPEtab() adds the Jacobian of the log10 transform,
-# and it normalises the prior density. The sum of squares carries neither, so
-# that is what the two models have to agree on.
+# The full values differ by a constant (PEtab's log10 Jacobian and prior
+# normalisation); the sum of squares is what the two models must agree on.
 chi2 <- c(hand  = attr(obj(bestfit, deriv = FALSE),       "chi2"),
           PEtab = attr(petab$obj(bestfit, deriv = FALSE), "chi2"))
 chi2

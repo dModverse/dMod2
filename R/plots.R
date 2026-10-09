@@ -6,27 +6,44 @@ utils::globalVariables(c("predicted", "observed", "sd_est", "iter", "level"))
 
 # Custom interface to ggplot2 ---
 
-#' Open last plot in external pdf viewer
-#' 
-#' @description Convenience function to show last plot in an external viewer.
-#' @param plot `ggplot2` plot object.
-#' @param command character, indicating which pdf viewer is started.
-#' @param ... arguments going to `ggsave`.
+#' Open a Plot in an External PDF Viewer
+#'
+#' Saves a plot as PDF in [tempdir()] and opens it with an external command.
+#'
+#' @param plot A `ggplot2` plot object. Defaults to [ggplot2::last_plot()].
+#' @param command Character, the shell command that opens the PDF file.
+#'   Default `NULL` opens it with the viewer of the platform: `"open"` on
+#'   macOS, `"xdg-open"` on Linux and `shell.exec()` on Windows.
+#' @param ... Arguments passed to [ggplot2::ggsave()].
+#' @return The path of the PDF file, invisibly.
 #' @export
-ggopen <- function(plot = last_plot(), command = "xdg-open", ...) {
+ggopen <- function(plot = last_plot(), command = NULL, ...) {
   filename <- tempfile(pattern = "Rplot", fileext = ".pdf")
   ggsave(filename = filename, plot = plot, ...)
-  system(command = paste(command, filename))
+  if (is.null(command) && .Platform$OS.type == "windows") {
+    get("shell.exec", envir = baseenv())(filename)
+    return(invisible(filename))
+  }
+  if (is.null(command))
+    command <- if (Sys.info()[["sysname"]] == "Darwin") "open" else "xdg-open"
+  system(command = paste(command, shQuote(filename)))
+  invisible(filename)
 }
 
 
-#' Standard plotting theme of dMod
-#' 
-#' @param base_size numeric, font-size
-#' @param base_family character, font-name
-#' @param showGrid logical, keep the panel grid. `FALSE` (the default) drops it;
-#'   `TRUE` leaves [ggplot2::theme_bw()]'s grid in place.
+#' Standard Plotting Theme of dMod
+#'
+#' @param base_size Numeric, base font size. Defaults to 12.
+#' @param base_family Character, font family. Defaults to `""`.
+#' @param showGrid Logical, keep the panel grid. `FALSE` (default) drops it;
+#'   `TRUE` keeps the grid of [ggplot2::theme_bw()].
+#' @return A `ggplot2` theme.
+#' @seealso [scale_color_dMod()]
 #' @export
+#' @examples
+#' library(ggplot2)
+#' ggplot(data.frame(x = 1:10, y = (1:10)^2), aes(x, y)) +
+#'   geom_line() + theme_dMod()
 theme_dMod <- function(base_size = 12, base_family = "", showGrid = FALSE) {
   colors <- list(
     medium = c(gray = '#737373', red = '#F15A60', green = '#7AC36A', blue = '#5A9BD4', orange = '#FAA75B', purple = '#9E67AB', maroon = '#CE7058', magenta = '#D77FB4'),
@@ -54,35 +71,27 @@ theme_dMod <- function(base_size = 12, base_family = "", showGrid = FALSE) {
 }
 
 # ---- palettes --------------------------------------------------------------
-#
-# Every palette below carries a measured number: the smallest pairwise CIE2000
-# distance within it, taken as the WORST case over normal, deuteranopic,
-# protanopic and tritanopic vision (for ramps, between positions at least a
-# quarter of the domain apart). A palette counts as colorblind-safe at 10 or
-# above, below roughly 3 two colors are indistinguishable side by side, and a
-# thin line needs more headroom than a filled patch.
-#
-# The numbers are baked in rather than computed at load time so that the
-# simulation packages stay out of the dependency list. Re-derive them with
-# colorspace::deutan/protan/tritan and farver::compare_colour(method = "cie2000").
+# dE: smallest pairwise CIE2000 distance over normal and simulated dichromatic
+# vision (colorspace, farver::compare_colour()); 10 or above is colorblind-safe.
 
-#' Seed colors of the dMod palette
+#' Seed Colors of the dMod Palette
 #'
-#' The ten qualitative house colors. Not colorblind-safe, its brown and red
-#' collapse under protanopia, see [dMod_palettes()] for the alternatives.
+#' The ten qualitative house colors. They are not colorblind-safe, see
+#' [dMod_palettes()] for alternatives.
 #'
+#' @format A character vector of hex color codes.
+#' @seealso [dMod_colors_cb], [dMod_palette()]
 #' @export
 dMod_colors <- c("#000000", "#C5000B", "#0084D1", "#579D1C", "#FF950E",
                  "#4B1F6F", "#CC79A7", "#006400", "#F0E442", "#8B4513")
 
-#' Colorblind-safe seed colors
+#' Colorblind-Safe Seed Colors
 #'
-#' The Okabe-Ito palette, extended to twenty. The first eight are Okabe-Ito
-#' itself; the rest were chosen greedily to maximise the worst-case pairwise
-#' distance under simulated dichromacy, subject to every color also keeping a
-#' distance of 25 to the white background. The worst case stays at Okabe-Ito's
-#' own 11.1 for all n up to twenty, so the twelve extra colors cost nothing.
+#' Okabe-Ito palette, extended to twenty colorblind-safe colors. The first
+#' eight are the Okabe-Ito colors.
 #'
+#' @format A character vector of 20 hex color codes.
+#' @seealso [dMod_colors], [dMod_palette()]
 #' @export
 dMod_colors_cb <- c(
   "#000000", "#E69F00", "#56B4E9", "#009E73", "#F0E442",
@@ -118,13 +127,14 @@ dMod_colors_cb <- c(
     "#A6CEE3", "#1F78B4", "#B2DF8A", "#33A02C", "#FB9A99", "#E31A1C", "#FDBF6F",
     "#FF7F00", "#CAB2D6", "#6A3D9A", "#FFFF99", "#B15928")))
 
-#' Continuous dMod colour ramps
+#' Continuous dMod Color Ramps
 #'
 #' `dMod_gradient` is the sequential house ramp, `dMod_divergent` the diverging
 #' one; `dMod_gradient_cb` and `dMod_divergent_cb` are their colorblind-safe
 #' counterparts and the defaults of [scale_color_dMod_c()] and
 #' [scale_color_dMod_div()]. See [dMod_palettes()] for the full set.
 #'
+#' @format Character vectors of hex color codes.
 #' @export
 dMod_gradient <- c("#4B1F6F", "#0084D1", "#579D1C", "#FF950E", "#F0E442")
 
@@ -167,15 +177,16 @@ dMod_divergent_cb <- c("#072F62", "#56B4E9", "#FFFFFF", "#E69F00", "#4F3408")
   reg[[palette]]
 }
 
-#' Overview of the dMod palettes
+#' Overview of the dMod Palettes
 #'
-#' One row per palette, with the measured worst-case CIE2000 distance under
-#' simulated dichromacy and the resulting colorblind verdict. Pass any of the
-#' names as `palette =` to [dMod_palette()], [scale_color_dMod()],
-#' [scale_color_dMod_c()] or [scale_color_dMod_div()].
+#' One row per palette. Pass any of the names as `palette` to [dMod_palette()],
+#' [scale_color_dMod()], [scale_color_dMod_c()] or [scale_color_dMod_div()].
 #'
-#' @param type restrict to `"qualitative"`, `"sequential"` or `"diverging"`.
-#' @return A data frame with columns `name`, `type`, `n`, `colorblind`, `dE`.
+#' @param type `NULL` (default) for all palettes, or any of `"qualitative"`,
+#'   `"sequential"` and `"diverging"`.
+#' @return A data frame with columns `name`, `type`, `n` (number of seed
+#'   colors), `dE` (smallest pairwise CIE2000 color distance under normal and
+#'   simulated dichromatic vision) and `colorblind` (`dE >= 10`).
 #' @export
 #' @examples
 #' dMod_palettes()
@@ -194,18 +205,21 @@ dMod_palettes <- function(type = NULL) {
   out[order(out$type, !out$colorblind, -out$dE), ]
 }
 
-#' Generate `n` distinct colors from a dMod palette
+#' Generate Distinct Colors from a dMod Palette
 #'
-#' Returns the first `n` colors of the chosen palette. For `n` beyond it,
-#' `Polychrome::createPalette()` extends the seeds deterministically; if
-#' Polychrome is not installed the overflow comes from [grDevices::hcl.colors()]
-#' instead. Neither extension inherits the palette's colorblind property, which
-#' is why a colorblind-safe choice warns once it runs out of seeds.
+#' Returns the first `n` colors of the chosen palette. Beyond its seeds the
+#' colors come from `Polychrome::createPalette()` if Polychrome is installed and
+#' from [grDevices::hcl.colors()] otherwise. These extra colors are not
+#' colorblind-safe; a colorblind-safe palette warns when it runs out of seeds.
 #'
-#' @param n integer, number of colors to produce.
-#' @param palette name of a qualitative palette, see [dMod_palettes()].
+#' @param n Integer, number of colors.
+#' @param palette Name of a qualitative palette, see [dMod_palettes()].
+#'   Defaults to `"okabe"`.
 #' @return Character vector of length `n` with hex color codes.
 #' @export
+#' @examples
+#' dMod_palette(3)
+#' dMod_palette(3, palette = "muted")
 dMod_palette <- function(n, palette = "okabe") {
   n <- as.integer(n)
   if (n <= 0L) return(character(0))
@@ -215,7 +229,7 @@ dMod_palette <- function(n, palette = "okabe") {
   if (pal$dE >= 10)
     warning("dMod_palette(): palette \"", palette, "\" holds ", length(seeds),
             " colorblind-safe colors, ", n, " were requested. The extra ",
-            n - length(seeds), " are not -- encode them with linetype, shape ",
+            n - length(seeds), " are not: encode them with linetype, shape ",
             "or facets instead.", call. = FALSE)
   if (requireNamespace("Polychrome", quietly = TRUE)) {
     old_seed <- if (exists(".Random.seed", envir = .GlobalEnv, inherits = FALSE))
@@ -229,10 +243,9 @@ dMod_palette <- function(n, palette = "okabe") {
       }
     }, add = TRUE)
     set.seed(123L)
-    # createPalette() shifts the seeds slightly to maximize distinctness across
-    # the whole set; keep the original seeds verbatim and only borrow the tail.
-    # `range` caps the luminance: unconstrained, the tail wanders up to ~224 and
-    # those colors are invisible as lines on a white panel.
+    # createPalette() shifts the seeds, so keep them verbatim and borrow only the
+    # tail. `range` caps the luminance so tail colors stay visible as lines on a
+    # white panel.
     extended <- unname(Polychrome::createPalette(n, seedcolors = seeds,
                                                  range = c(25, 70)))
     return(c(seeds, extended[(length(seeds) + 1L):n]))
@@ -240,11 +253,13 @@ dMod_palette <- function(n, palette = "okabe") {
   c(seeds, grDevices::hcl.colors(n - length(seeds), "Dark 3"))
 }
 
-#' Discrete dMod colour scales
+#' Discrete dMod Color Scales
 #'
-#' @param palette name of a qualitative palette, see [dMod_palettes()]. The
-#'   default is colorblind-safe.
-#' @param ... arguments forwarded to [ggplot2::discrete_scale()].
+#' @param palette Name of a qualitative palette, see [dMod_palettes()].
+#'   Defaults to the colorblind-safe `"okabe"`.
+#' @param ... Arguments passed to [ggplot2::discrete_scale()].
+#' @return A discrete `ggplot2` scale.
+#' @seealso [scale_color_dMod_c()], [dMod_palette()]
 #' @export
 #' @examples
 #' library(ggplot2)
@@ -276,22 +291,20 @@ scale_fill_dMod <- function(..., palette = "okabe") {
     scales::rescale_mid(x, to, from, mid)
 }
 
-#' Continuous dMod colour scales
+#' Continuous dMod Color Scales
 #'
 #' Sequential (`_c`) and diverging (`_div`) counterparts of the discrete
-#' [scale_color_dMod()]. The diverging scales pin white to `mid` even for
-#' asymmetric limits, so a signed quantity keeps its zero at the neutral colour.
+#' [scale_color_dMod()]. The diverging scales map `mid` to white, also for
+#' asymmetric limits.
 #'
-#' The suffix is `_div`, not `_d`: ggplot2 spells *discrete* `_d` (as in
-#' [ggplot2::scale_colour_viridis_d()]), and here the discrete scale is the
-#' unsuffixed [scale_color_dMod()].
-#'
-#' @param mid numeric, the value white is pinned to.
-#' @param direction 1 or -1; -1 reverses the ramp.
-#' @param palette name of a sequential palette for `_c`, a diverging one for
-#'   `_div`, see [dMod_palettes()]. Both defaults are colorblind-safe.
-#' @param ... arguments forwarded to [ggplot2::scale_colour_gradientn()] or
+#' @param mid Numeric, the value mapped to white. Defaults to 0.
+#' @param direction 1 (default) or -1; -1 reverses the ramp.
+#' @param palette Name of a sequential palette for `_c`, a diverging one for
+#'   `_div`, see [dMod_palettes()]. Defaults to the colorblind-safe `"okabe"`.
+#' @param ... Arguments passed to [ggplot2::scale_colour_gradientn()] or
 #'   [ggplot2::scale_fill_gradientn()].
+#' @return A continuous `ggplot2` scale.
+#' @seealso [scale_color_dMod()]
 #' @export
 #' @examples
 #' library(ggplot2)
@@ -332,18 +345,17 @@ ggplot <- function(...) ggplot2::ggplot(...) + scale_color_dMod() + theme_dMod()
 
 # Other ---------------------------------------------
 
-#' Coordinate transformation for data frames
-#' 
-#' Applies a symbolically defined transformation to the `value`
-#' column of a data frame. Additionally, if a `sigma` column is
-#' present, those values are transformed according to Gaussian error
+#' Coordinate Transformation for Data Frames
+#'
+#' Applies a symbolically defined transformation to the `value` column of a
+#' data frame. A `sigma` column is transformed by first-order error
 #' propagation.
-#' @param data data frame with at least columns "name" (character) and
-#' "value" (numeric). Can optionally contain a column "sigma" (numeric).
-#' @param transformations character (the transformation) or named list of
-#' characters. In this case, the list names must be a subset of those 
-#' contained in the "name" column.
-#' @return The data frame with the transformed values and sigma uncertainties.
+#' @param data Data frame with columns `name` (character) and `value`
+#'   (numeric), optionally `sigma` (numeric).
+#' @param transformations Character, one transformation for all names, or a
+#'   named list of characters, one per entry of the `name` column. Each
+#'   transformation is an expression in a single symbol, e.g. `"log(x)"`.
+#' @return The data frame with transformed `value` and `sigma`.
 #' @export
 #' 
 #' @examples
@@ -388,19 +400,22 @@ coordTransform <- function(data, transformations) {
 # Method dispatch for plotX functions -------------
 
 
-#' Plot a list of model predictions
-#' 
-#' @param prediction Named list of matrices or data.frames, usually the output of a prediction function
-#' as generated by [Xs].
-#' @param ... Further arguments going to `dplyr::filter`. 
-#' @param scales The scales argument of `facet_wrap` or `facet_grid`, i.e. `"free"`, `"fixed"`, 
-#' `"free_x"` or `"free_y"`
-#' @param facet Either `"wrap"` or `"grid"`
-#' @param transform list of transformation for the states, see [coordTransform].
-#' @details The data.frame being plotted has columns `time`, `value`, `name` and `condition`.
-#'  
-#' 
-#' @return A plot object of class `ggplot`.
+#' Plot a List of Model Predictions
+#'
+#' @param prediction A [prdlist], the output of a prediction function such as
+#'   those generated by [Xs()].
+#' @param ... Logical expressions to subset the plotted data.
+#' @param scales The `scales` argument of [ggplot2::facet_wrap()] or
+#'   [ggplot2::facet_grid()]: `"free"` (default), `"fixed"`, `"free_x"` or
+#'   `"free_y"`.
+#' @param facet `"wrap"` (default) or `"grid"`.
+#' @param transform Named list of transformations of the states, see
+#'   [coordTransform()].
+#' @details The plotted data frame has columns `time`, `value`, `name` and
+#'   `condition`.
+#'
+#' @return A `ggplot` object.
+#' @seealso [plotCombined()], [plotData()]
 #' @import ggplot2
 #' @example inst/examples/plotting.R
 #' @export
@@ -409,24 +424,27 @@ plotPrediction <- function(prediction,...) {
 }
 
 
-#' Plot a list of model predictions and a list of data points in a combined plot
-#' 
-#' @param prediction Named list of matrices or data.frames, usually the output of a prediction function
-#' as generated by [Xs].
-#' @param data Named list of data.frames as being used in [res], i.e. with columns `name`, `time`, 
-#' `value` and `sigma`.
-#' @param ... Further arguments going to `dplyr::filter`. 
-#' @param scales The scales argument of `facet_wrap` or `facet_grid`, i.e. `"free"`, `"fixed"`, 
-#' `"free_x"` or `"free_y"`
-#' @param facet `"wrap"` or `"grid"`. Try `"wrap_plain"` for high amounts of conditions and low amounts of observables.
-#' @param transform list of transformation for the states, see [coordTransform].
-#' @param aesthetics Named list of aesthetic mappings, specified as character, e.g. `list(linetype = "name")`. 
-#' Can refer to variables in the condition.grid
-#' @details The data.frame being plotted has columns `time`, `value`, `sigma`,
-#' `name` and `condition`.
-#'  
-#' 
-#' @return A plot object of class `ggplot`.
+#' Plot Model Predictions and Data in One Plot
+#'
+#' @param prediction A [prdlist], the output of a prediction function such as
+#'   those generated by [Xs()].
+#' @param data A [datalist], i.e. a named list of data frames with columns
+#'   `name`, `time`, `value` and `sigma`.
+#' @param ... Logical expressions to subset the plotted data.
+#' @param scales The `scales` argument of [ggplot2::facet_wrap()] or
+#'   [ggplot2::facet_grid()]: `"free"` (default), `"fixed"`, `"free_x"` or
+#'   `"free_y"`.
+#' @param facet `"wrap"` (default), `"grid"` or `"wrap_plain"`. `"wrap_plain"`
+#'   gives one panel per combination of name and condition.
+#' @param transform Named list of transformations of the states, see
+#'   [coordTransform()].
+#' @param aesthetics Named list of aesthetic mappings given as character, e.g.
+#'   `list(linetype = "name")`. They can refer to columns of the condition grid.
+#' @details The plotted data frame has columns `time`, `value`, `sigma`, `name`
+#'   and `condition`.
+#'
+#' @return A `ggplot` object.
+#' @seealso [plotPrediction()], [plotData()]
 #' @example inst/examples/plotting.R
 #' @importFrom graphics par
 #' @export
@@ -435,20 +453,24 @@ plotCombined <- function(prediction,...) {
 }
 
 
-#' Plot a list data points
-#' 
-#' @param data Named list of data.frames as being used in [res], i.e. with columns `name`, `time`, 
-#' `value` and `sigma`.
-#' @param ... Further arguments going to `subset`. 
-#' @param scales The scales argument of `facet_wrap` or `facet_grid`, i.e. `"free"`, `"fixed"`, 
-#' `"free_x"` or `"free_y"`
-#' @param facet Either `"wrap"` or `"grid"`
-#' @param transform list of transformation for the states, see [coordTransform].
-#' @details The data.frame being plotted has columns `time`, `value`, `sigma`,
-#' `name` and `condition`.
-#'  
-#' 
-#' @return A plot object of class `ggplot`.
+#' Plot a List of Data Points
+#'
+#' @param data A [datalist], i.e. a named list of data frames with columns
+#'   `name`, `time`, `value` and `sigma`, or such a data frame with a
+#'   `condition` column.
+#' @param ... Logical expressions to subset the plotted data.
+#' @param scales The `scales` argument of [ggplot2::facet_wrap()] or
+#'   [ggplot2::facet_grid()]: `"free"` (default), `"fixed"`, `"free_x"` or
+#'   `"free_y"`.
+#' @param facet `"wrap"` (default), `"grid"` or `"wrap_plain"`. `"wrap_plain"`
+#'   gives one panel per combination of name and condition.
+#' @param transform Named list of transformations of the states, see
+#'   [coordTransform()].
+#' @details The plotted data frame has columns `time`, `value`, `sigma`, `name`
+#'   and `condition`.
+#'
+#' @return A `ggplot` object.
+#' @seealso [plotPrediction()], [plotCombined()]
 #' @example inst/examples/plotting.R
 #' @export
 plotData  <- function(data,...) {
@@ -461,39 +483,58 @@ plotData.data.frame <- function(data, ...) {
   plotData.datalist(as.datalist(data), ...)
 }
 
-#' Profile likelihood plot
-#' 
-#' @param profs Lists of profiles as being returned by [profile].
-#' @param ... logical going to subset before plotting.
-#' @param maxvalue Numeric, the value where profiles are cut off.
-#' @param parlist Matrix or data.frame with columns for the parameters to be added to the plot as points.
-#' If a "value" column is contained, deltas are calculated with respect to lowest chisquare of profiles.
-#' @param ncol Number of columns in the resulting plot grid.
-#' @param threshold Numeric, the horizontal lines and the y-axis breaks on top
-#' of the optimum the profiles start from, which is always drawn. Defaults to the
-#' chi-square thresholds for 68%, 90% and 95%. Names are used as axis labels.
-#' Pass the value [profileThreshold] returns for the calibration the intervals
-#' are read at, so the line and [confint.parframe] agree.
-#' @return A plot object of class `ggplot`.
-#' @details See [profile] for examples.
+#' Profile Likelihood Plot
+#'
+#' @param profs A [parframe] of profiles as returned by
+#'   [profile()][profile.objfn], or a list of those.
+#' @param ... Logical expressions to subset the plotted data.
+#' @param maxvalue Numeric, the value of the objective difference at which
+#'   profiles are cut off. Defaults to 5.
+#' @param parlist Matrix or data frame with parameter columns, drawn as points.
+#'   With a `value` column, its differences to the lowest profile value are
+#'   used.
+#' @param ncol Number of columns of the plot grid. `NULL` (default) lets
+#'   [ggplot2::facet_wrap()] choose.
+#' @param threshold Numeric, the horizontal lines and y-axis breaks above the
+#'   optimum, which is always drawn. Defaults to the chi-square thresholds for
+#'   68%, 90% and 95%. Names are used as axis labels. Pass the value of
+#'   [profileThreshold()] to match [confint.parframe()].
+#' @return A `ggplot` object with the plotted data frame as attribute `"data"`.
+#' @seealso [profile()][profile.objfn], [plotPaths()]
 #' @export
+#' @examples
+#' pars <- c(a = 1, b = 0.5)
+#' obj <- constraintL2(mu = pars, sigma = 0.1)
+#' profs <- profile(obj, pars, whichPar = c("a", "b"), limits = c(-1, 1),
+#'                  cores = 1)
+#' plotProfile(profs)
 plotProfile <- function(profs,...) {
   UseMethod("plotProfile", profs)
 }
 
 
-#' Profile likelihood: plot of the parameter paths.
-#' 
-#' @param profs profile or list of profiles as being returned by [profile]
-#' @param ... arguments going to subset
-#' @param whichPar Character or index vector, indicating the parameters that are taken as possible reference (x-axis)
-#' @param sort Logical. If paths from different parameter profiles are plotted together, possible
-#' combinations are either sorted or all combinations are taken as they are.
-#' @param relative logical indicating whether the origin should be shifted.
-#' @param scales character, either `"free"` or `"fixed"`.
-#' @return A plot object of class `ggplot`.
-#' @details See [profile] for examples.
+#' Profile Likelihood: Plot of the Parameter Paths
+#'
+#' @param profs A [parframe] of profiles as returned by
+#'   [profile()][profile.objfn], or a list of those.
+#' @param ... Logical expressions to subset the plotted data.
+#' @param whichPar Character or index vector, the profiled parameters whose
+#'   paths are drawn. `NULL` (default) takes all.
+#' @param sort Logical. `TRUE` sorts each pair of parameters so that a pair
+#'   appears once; `FALSE` (default) keeps both orders.
+#' @param relative Logical. `TRUE` (default) shifts each path to start at the
+#'   optimum.
+#' @param scales Character, `"fixed"` (default) or `"free"`.
+#' @return A `ggplot` object with the plotted data frame as attribute `"data"`.
+#' @seealso [profile()][profile.objfn], [plotProfile()], [plotPathsMulti()]
 #' @export
+#' @examples
+#' pars <- c(a = 1, b = 0.5)
+#' obj <- constraintL2(mu = pars, sigma = 0.1)
+#' profs <- profile(obj, pars, whichPar = c("a", "b"), limits = c(-1, 1),
+#'                  cores = 1)
+#' plotPaths(profs)
+#' plotPaths(profs, whichPar = "a")
 plotPaths <- function(profs, ..., whichPar = NULL, sort = FALSE, relative = TRUE, scales = "fixed") {
   
   if ("parframe" %in% class(profs)) 
@@ -526,7 +567,7 @@ plotPaths <- function(profs, ..., whichPar = NULL, sort = FALSE, relative = TRUE
     if (is.numeric(whichPar)) whichPar <- names(proflist)[whichPar]
     
     subdata <- do.call(rbind, lapply(whichPar, function(n) {
-      # matirx
+      # matrix
       paths <- as.matrix(proflist[[n]][, parameters])
       values <- proflist[[n]][, "value"]
       origin <- which.min(abs(proflist[[n]][, "constraint"]))
@@ -584,25 +625,34 @@ plotPaths <- function(profs, ..., whichPar = NULL, sort = FALSE, relative = TRUE
 }
 
 
-#' Plot Fluxes given a list of flux Equations
+#' Plot Fluxes Given a List of Flux Equations
 #'
-#' @param pouter parameters
-#' @param x The model prediction function `x(times, pouter, fixed, ...)`
-#' @param fluxEquations list of chars containing expressions for the fluxes,
-#' if names are given, they are shown in the legend. Easy to obtain via [subset.eqnlist], see Examples.
-#' @param nameFlux character, name of the legend.
-#' @param times Numeric vector of time points for the model prediction
-#' @param ... Further arguments going to x, such as `fixed` or `conditions`
+#' Evaluates flux expressions along a model prediction and draws them stacked
+#' per condition.
 #'
+#' @param pouter Named numeric vector of outer parameters.
+#' @param x A prediction function, called as `x(times, pouter, deriv = FALSE, ...)`.
+#' @param times Numeric vector of time points for the prediction.
+#' @param fluxEquations Character vector or list of flux expressions in the
+#'   states and inner parameters, e.g. the `rates` of an [eqnlist]. Names are
+#'   shown in the legend; without names the expressions are.
+#' @param legendTitle Character, the legend title. Defaults to `"Fluxes:"`.
+#' @param ... Further arguments passed to `x`, such as `fixed` or `conditions`.
+#'   `nameFlux` is deprecated, use `legendTitle`.
 #'
-#' @return A plot object of class `ggplot`.
+#' @return A `ggplot` object with the flux data frame as attribute `"out"`.
+#' @seealso [subset.eqnlist()] to select reactions.
 #' @examples
-#' \dontrun{
-#'
-#' plotFluxes(bestfit, x, times, subset(f, "B"%in%Product)$rates, nameFlux = "B production")
-#' }
+#' times <- 0:5
+#' grid <- data.frame(name = "A", time = times, row.names = paste0("A", times))
+#' x <- Xd(grid)
+#' pars <- structure(exp(-times / 2), names = getParameters(x))
+#' plotFluxes(pars, x, seq(0, 5, 0.1),
+#'            c(production = "0.2", degradation = "0.5*A"))
 #' @export
-plotFluxes <- function(pouter, x, times, fluxEquations, nameFlux = "Fluxes:", ...){
+plotFluxes <- function(pouter, x, times, fluxEquations, legendTitle = "Fluxes:", ...){
+
+  dots <- .renameArgs(list(...), c(nameFlux = "legendTitle"), "plotFluxes")
 
   if (is.null(names(fluxEquations))) names(fluxEquations) <- fluxEquations
 
@@ -619,7 +669,7 @@ plotFluxes <- function(pouter, x, times, fluxEquations, nameFlux = "Fluxes:", ..
     }), parent = baseenv())
   flux <- function(values, n)
     do.call(cbind, lapply(exprs, function(e) rep_len(as.numeric(eval(e, values, fluxEnv)), n)))
-  prediction.all <- x(times, pouter, deriv = FALSE, ...)
+  prediction.all <- do.call(x, c(list(times, pouter, deriv = FALSE), dots))
   names.prediction.all <- names(prediction.all)
   if (is.null(names.prediction.all)) names.prediction.all <- paste0("C", 1:length(prediction.all))
 
@@ -636,7 +686,7 @@ plotFluxes <- function(pouter, x, times, fluxEquations, nameFlux = "Fluxes:", ..
                  "#D55E00", "#CC79A7","#CC6666", "#9999CC", "#66CC99","red", "blue", "green","black")
 
   P <- ggplot(out, aes(x = time, y = value, group = name, fill = name, log = "y")) +
-    facet_wrap(~condition) + scale_fill_manual(values = cbPalette, name = nameFlux) +
+    facet_wrap(~condition) + scale_fill_manual(values = cbPalette, name = legendTitle) +
     geom_density(stat = "identity", position = "stack", alpha = 0.3, color = "darkgrey", linewidth = 0.4) +
     xlab("time") + ylab("flux contribution")
 
@@ -662,75 +712,92 @@ plotFluxes <- function(pouter, x, times, fluxEquations, nameFlux = "Fluxes:", ..
   
 }
 
-#' Plotting objective values of a collection of fits
+#' Plot Objective Values of a Collection of Fits
 #'
 #' Draws the waterfall plot of a fit collection: the objective values minus the
-#' best one, in ascending order against their rank, on a pseudo-log10 scale that
-#' is linear below 1 and logarithmic above. A converged fit is marked by a circle
-#' and an unconverged one by a triangle, in every plot.
+#' best one, in ascending order against their rank, on a pseudo-log10 scale
+#' that is linear below 1. A converged fit is drawn as a circle, an
+#' unconverged one as a triangle.
 #'
-#' @param x data.frame with columns "value", "converged" and "iterations", e.g.
-#' a [parframe].
-#' @param ... arguments for subsetting of x
-#' @param tol maximal allowed difference between neighboring objective values
-#' to be recognized as one.
-#' @param showSteps logical, if `TRUE`, the detected steps are indicated by
-#' dashed vertical lines and labelled by their index. Defaults to `FALSE`.
-#' @return A `ggplot` object, with the plotted data attached as attribute
-#' `"data"`, the distance to the best fit in its column `delta`.
+#' @param x Data frame with columns `value`, `converged` and `iterations`,
+#'   e.g. a [parframe].
+#' @param ... Logical expressions to subset `x`.
+#' @param tol Maximal difference between neighboring objective values that
+#'   still counts as one step. Defaults to 1.
+#' @param showSteps Logical. `TRUE` marks the detected steps by dashed
+#'   vertical lines labelled by their index. Defaults to `FALSE`.
+#' @return A `ggplot` object with the plotted data frame as attribute
+#'   `"data"`; its column `delta` is the distance to the best fit.
+#' @seealso [mstrust()], [as.parframe()], [plotPars()]
 #' @export
+#' @examples
+#' fits <- parframe(data.frame(value = c(10, 10.2, 15, 40), converged = TRUE,
+#'                             iterations = 20, a = c(1, 1.1, 2, 3)),
+#'                  parameters = "a")
+#' plotValues(fits)
 plotValues <- function(x,...) {
   UseMethod("plotValues", x)
 }
 
 
-#' Plot parameter values for a fitlist
-#' 
-#' @param x parameter frame as obtained by as.parframe(mstrust)
-#' @param tol maximal allowed difference between neighboring objective values
-#' to be recognized as one.
-#' @param ... arguments for subsetting of x
+#' Plot Parameter Values of a Collection of Fits
+#'
+#' Draws one box per parameter, colored by the step of the objective value the
+#' fits belong to.
+#'
+#' @param x A [parframe], e.g. from `as.parframe(mstrust(...))`.
+#' @param tol Maximal difference between neighboring objective values that
+#'   still counts as one step. Defaults to 1.
+#' @param ... Logical expressions to subset `x`.
+#' @return A `ggplot` object with the plotted data frame as attribute `"data"`.
+#' @seealso [plotValues()], [mstrust()]
 #' @export
+#' @examples
+#' fits <- parframe(data.frame(value = c(10, 10.2, 15, 40), converged = TRUE,
+#'                             iterations = 20, a = c(1, 1.1, 2, 3),
+#'                             b = c(0, 0.1, 1, 2)),
+#'                  parameters = c("a", "b"))
+#' plotPars(fits)
 plotPars <- function(x,...) {
   UseMethod("plotPars", x)
 }
 
 
-#' Plot residuals for a fitlist
+#' Plot Residuals of a Collection of Fits
 #'
-#' @description
-#' Creates a plot of residuals from model fits, with flexible options for
-#' grouping and faceting. Residuals can be summarized across different
-#' dimensions (time, condition, observable, fit index).
+#' Sums the squared weighted residuals of each fit over all variables not
+#' named in `split` and plots the sums.
 #'
-#' @param parframe Object of class \code{parframe}, e.g. returned by \link{mstrust}.
-#' @param x Prediction function returning named list of data.frames with names 
-#'   matching \code{data}.
-#' @param data A \code{datalist} object, i.e. named list of data.frames with 
-#'   columns \code{name}, \code{time}, \code{value}, and \code{sigma}.
-#' @param split Character vector specifying how to summarize and display residuals.
-#'   \itemize{
-#'     \item \code{split[1]}: Variable for x-axis
-#'     \item \code{split[2]}: Variable for grouping (color/line), defaults to \code{split[1]}
-#'     \item \code{split[3+]}: Additional variables for \code{facet_wrap()}
-#'   }
-#' @param errmodel Optional error model function of type \code{prdfn}. If provided,
-#'   residuals include the log-likelihood contribution from sigma.
-#' @param ... Additional arguments passed to the prediction function \code{x}.
+#' @param parframe A [parframe], e.g. from `as.parframe(mstrust(...))`. Its
+#'   column `index` labels the fits; without it the row numbers are used.
+#' @param x Prediction function returning a [prdlist] with names matching
+#'   `data`.
+#' @param data A [datalist], i.e. a named list of data frames with columns
+#'   `name`, `time`, `value` and `sigma`.
+#' @param split Character vector of the variables to keep, from `"time"`,
+#'   `"name"`, `"condition"` and `"index"`. `split[1]` is the x-axis,
+#'   `split[2]` the color grouping (defaults to `split[1]`), further entries
+#'   are facets. Defaults to `"condition"`.
+#' @param errmodel Optional error model, an [obsfn]. With it the sums include
+#'   `log(sigma^2)` of each data point.
+#' @param ... Further arguments passed to `x`.
 #'
-#' @return A \code{ggplot} object with the summarized residual data frame
-#'   attached as attribute \code{"out"}.
+#' @return A `ggplot` object with the summed residuals as attribute `"out"`.
+#' @seealso [res()], [plotValues()]
 #'
 #' @examples
-#' \dontrun{
-#' # Time on x-axis, faceted by condition and name
-#' plotResiduals(myfitlist, g * x * p, data, 
-#'               c("time", "index", "condition", "name"), 
-#'               conditions = myconditions[1:4])
-#'
-#' # Condition on x-axis, residuals summed over time
-#' plotResiduals(myfitlist, g * x * p, data, c("condition", "name", "index"))
-#' }
+#' times <- 0:5
+#' grid <- data.frame(name = "A", time = times, row.names = paste0("A", times))
+#' x <- Xd(grid, condition = "C1")
+#' data <- as.datalist(data.frame(name = "A", time = times,
+#'                                value = exp(-times / 2), sigma = 0.1,
+#'                                condition = "C1"))
+#' fits <- parframe(data.frame(value = c(1, 2), converged = TRUE,
+#'                             iterations = 10,
+#'                             rbind(exp(-times / 2), exp(-times / 3)) |>
+#'                               `colnames<-`(getParameters(x))),
+#'                  parameters = getParameters(x))
+#' plotResiduals(fits, x, data, c("time", "index"))
 #'
 #' @export
 #' @importFrom dplyr group_by summarise across
@@ -799,13 +866,14 @@ plotResiduals.default <- function(parframe, x, data, split = "condition",
 # Plot generics for the layer branches -------------------------------------
 
 
-#' Convergence trace of an iterative fit
+#' Convergence Trace of an Iterative Fit
 #'
-#' @description Generic. Methods plot the quantities their fitting method
-#'   iterates on, one panel each.
+#' Generic for plotting the quantities an iterative fitting method records,
+#' one panel each. dMod2 defines no method for it; packages and extensions
+#' that return iterative fit objects do.
 #' @param x Object to plot.
 #' @param ... Method-specific arguments.
-#' @return A ggplot.
+#' @return A `ggplot` object, as returned by the method.
 #' @export
 plotTrace <- function(x, ...) UseMethod("plotTrace", x)
 
@@ -830,44 +898,70 @@ plotTrace <- function(x, ...) UseMethod("plotTrace", x)
 }
 
 
-#' Pair (corner-style) plot for `mcmc()` outputs
+#' Pair Plot of Parameter Samples
 #'
-#' Lower triangle: 2D scatter of post-warmup samples. Diagonal: 1D
-#' marginal density.
+#' Generic for a corner plot of sampled parameters: scatter plots of pairs in
+#' the lower triangle, marginal densities on the diagonal. dMod2 defines no
+#' method for it; packages and extensions that return samples do.
 #'
-#' @param x An `mcmcResult` (or subclass) object.
+#' @param x Object holding parameter samples.
 #' @param ... Method-specific arguments.
-#' @return A ggplot.
+#' @return A `ggplot` object, as returned by the method.
 #' @export
 plotPairs <- function(x, ...) UseMethod("plotPairs", x)
 
 
 
 
-## ---- profile / parameter-path plotting (moved from toolsSvenja.R) ---------
-#' Plot an array of trajectories along the profile of a parameter
-#' 
-#' @param par Character of parameter name for which the array should be generated.
-#' @param profs Lists of profiles as being returned by [profile]. 
-#' @param prd Named list of matrices or data.frames, usually the output of a prediction function
-#' as generated by [Xs].
-#' @param times Numeric vector of time points for the model prediction.
-#' @param direction Character "up" or "down" indicating the direction the value should be traced along the profile starting at the bestfit value.
-#' @param covtable Optional covariate table or condition.grid necessary if subsetting is required.
-#' @param ... Further arguments for subsetting the plot.
-#' @param nsimus Number of trajectories/ simulation to be calculated.
-#' 
-#' @return A plot object of class `ggplot`.
+## ---- profile / parameter-path plotting ---------
+#' Plot an Array of Trajectories Along the Profile of a Parameter
+#'
+#' Predicts the model at parameter sets taken along one profile, starting at
+#' the optimum, and colors the trajectories by the value of the profiled
+#' parameter. Requires the package purrr.
+#'
+#' @param par Character, the profiled parameter.
+#' @param profs A [parframe] of profiles as returned by
+#'   [profile()][profile.objfn].
+#' @param prd A prediction function, e.g. `g*x*p`, called as
+#'   `prd(times, pars, deriv = FALSE)`.
+#' @param times Numeric vector of time points for the prediction.
+#' @param direction `"up"` (default) or `"down"`, the side of the profile that
+#'   is traced from the optimum.
+#' @param covtable Condition table, e.g. from [covariates()], merged with the
+#'   predictions by condition so that `...` can refer to its columns, or
+#'   `NULL`. Has no default.
+#' @param ... Logical expressions to subset the plotted data; used only with
+#'   a `covtable`. `nsimus` is deprecated, use `nSim`.
+#' @param nSim Number of trajectories. Defaults to 4.
+#'
+#' @return A `ggplot` object.
 #' @author Svenja Kemmer, \email{svenja.kemmer@@fdm.uni-freiburg.de}
-#' @examples
-#' \dontrun{
-#'  plotArray("myparameter", myprofiles, g*x*p, seq(0, 250, 1), 
-#'     "up", condition.grid, name == "ProteinA" & condition == "c1") 
-#' }
+#' @seealso [plotProfile()], [plotPathsMulti()]
+#' @examplesIf requireNamespace("purrr", quietly = TRUE)
+#' times <- 0:5
+#' grid <- data.frame(name = "A", time = times, row.names = paste0("A", times))
+#' x <- Xd(grid)
+#' pars <- structure(exp(-times / 2), names = getParameters(x))
+#' obj <- constraintL2(mu = pars, sigma = 0.1)
+#' profs <- profile(obj, pars, whichPar = "A2", limits = c(-1, 1), cores = 1)
+#' plotArray("A2", profs, x, seq(0, 5, 0.1), covtable = NULL)
 #' @export
 #' @import data.table
-plotArray <- function (par, profs, prd, times, direction = c("up", "down"), covtable, ..., nsimus = 4) {
-  
+plotArray <- function (par, profs, prd, times, direction = c("up", "down"), covtable, ..., nSim = 4) {
+
+  direction <- match.arg(direction)
+  # The dots are subset expressions, so they stay unevaluated.
+  dots <- match.call(expand.dots = FALSE)$...
+  if ("nsimus" %in% names(dots)) {
+    if (!missing(nSim))
+      stop("plotArray: give 'nSim' only; 'nsimus' is its deprecated name.",
+           call. = FALSE)
+    warning("plotArray: 'nsimus' is deprecated, use 'nSim'.", call. = FALSE)
+    nSim <- eval(dots$nsimus, parent.frame())
+    dots$nsimus <- NULL
+  }
+
   # select subframe from profiles
   mysub <- profs %>% as.data.table() %>% .[whichPar == par, ]
   mysub[, ID := 1:nrow(mysub)]
@@ -878,10 +972,11 @@ plotArray <- function (par, profs, prd, times, direction = c("up", "down"), covt
   if(direction == "down") mysubF <- mysub[ID <= bestID]
   
   # select rows according to simulation number
-  partable <- mysubF[seq(1, nrow(mysubF), (round(nrow(mysubF)/nsimus)))]
+  partable <- mysubF[seq(1, nrow(mysubF), (round(nrow(mysubF)/nSim)))]
   
   # remove non_parameter names
   no_pars <- c("value", "constraint", "stepsize", "gamma", "whichPar", "data", "condition_obj", "AIC", "BIC", "prior", "ID", "chisquare")
+  no_pars <- intersect(no_pars, names(partable))
   partable %>% .[, (no_pars) := NULL]
   
   # make predictions
@@ -894,13 +989,14 @@ plotArray <- function (par, profs, prd, times, direction = c("up", "down"), covt
       covtable <- as.data.table(covtable, keep.rownames = "condition")
     } else covtable <- as.data.table(covtable)
     out_plot <- merge(out_plot, covtable, by = "condition")
-    out_plot <- out_plot[...]
+    if (length(dots))
+      out_plot <- eval(as.call(c(as.name("["), list(out_plot), dots)))
   }
   
   # plot
   P <- ggplot(out_plot , aes(x = time, y = value, group = ParValue, color = ParValue)) +
     facet_grid(name~condition, scales = "free_y") +
-    geom_line(size = 1) + 
+    geom_line(linewidth = 1) + 
     theme_dMod(base_size = 18) + scale_color_viridis_c() +
     theme(legend.position = "top", legend.key.size = unit(0.6,"cm")) + 
     theme(axis.line = element_line(colour = "black"), 
@@ -964,8 +1060,8 @@ plotArray <- function (par, profs, prd, times, direction = c("up", "down"), covt
   corners[[which.min(counts)]]
 }
 
-#' @keywords internal
 #' @importFrom ggplot2 ggplot
+#' @noRd
 PlotPaths <- function(profs=myprofiles, ..., whichPar, sort = FALSE, relative = TRUE, scales = "fixed", multi = TRUE, n_pars = 5, normalizePaths = FALSE) {
   
   if ("parframe" %in% class(profs)) {
@@ -1054,7 +1150,6 @@ PlotPaths <- function(profs=myprofiles, ..., whichPar, sort = FALSE, relative = 
   
   if (normalizePaths == TRUE) {
     data[, y := (ifelse(max(abs(y)) == 0, 0, y / abs(max(abs(y))))), by = combination] # if path is y, just return 0
-    # data[, y := (2 * (y - min(y)) / (max(y) - min(y))) - 1, by = combination]
     removedCombinations <- unique(data[!is.finite(y), combination])
     data <- data[is.finite(y)]
     
@@ -1111,31 +1206,47 @@ PlotPaths <- function(profs=myprofiles, ..., whichPar, sort = FALSE, relative = 
   
 }
 
-#' Profile likelihood: plot all parameter paths belonging to one profile in one plot
-#' 
-#' @param profs Lists of profiles as being returned by [profile]. 
-#' @param whichpars Character vector of parameter names for which the profile paths should be generated.
-#' @param npars Numeric vector of number of colored and named parameter paths.
-#' @param normalizePaths Logical indicating whether the paths should be normalized to absolute values of 1. Default `FALSE`; `TRUE` only useful in corner cases when you know why to do so.
-#' 
-#' @return A plot object of class `ggplot` for length(whichpars) = 1 and otherwise an object of class `cowplot`.
+#' Profile Likelihood: Plot All Parameter Paths of One Profile Together
+#'
+#' Draws, for each profiled parameter, the changes of all other parameters
+#' along its profile in one panel. The `nPars` parameters with the largest
+#' change are colored and named, the others are gray. Requires the package
+#' cowplot.
+#'
+#' @param profs A [parframe] of profiles as returned by
+#'   [profile()][profile.objfn].
+#' @param whichPar Character vector, the profiled parameters to draw.
+#' @param nPars Integer, number of colored and named paths. Defaults to 5.
+#' @param normalizePaths Logical. `TRUE` scales each path to a maximum
+#'   absolute value of 1. Defaults to `FALSE`.
+#' @param ... `whichpars` and `npars` are deprecated, use `whichPar` and
+#'   `nPars`.
+#'
+#' @return A `ggplot` object; for several `whichPar` the grid of
+#'   [cowplot::plot_grid()].
 #' @author Svenja Kemmer, \email{svenja.kemmer@@fdm.uni-freiburg.de}
-#' @examples
-#' \dontrun{
-#'  plotPathsMulti(myprofiles, c("mypar1", "mypar2"), npars = 5) 
-#' }
+#' @seealso [plotPaths()], [plotProfilesAndPaths()]
+#' @examplesIf requireNamespace("cowplot", quietly = TRUE)
+#' pars <- c(a = 1, b = 0.5, c = 2)
+#' obj <- constraintL2(mu = pars, sigma = 0.1)
+#' profs <- profile(obj, pars, whichPar = c("a", "b"), limits = c(-1, 1),
+#'                  cores = 1)
+#' plotPathsMulti(profs, c("a", "b"), nPars = 2)
 #' @export
 #' @import data.table
-plotPathsMulti <- function(profs, whichpars, npars = 5, normalizePaths = FALSE) {
+plotPathsMulti <- function(profs, whichPar, nPars = 5, normalizePaths = FALSE,
+                           ...) {
+  .renameArgs(list(...), c(whichpars = "whichPar", npars = "nPars"),
+              "plotPathsMulti", strict = TRUE)
   .require_ns("cowplot", "plotPathsMulti()")
-  if(length(whichpars) == 1){
-    p <- PlotPaths(profs=profs, whichPar = whichpars, n_pars = npars, normalizePaths = normalizePaths)
+  if(length(whichPar) == 1){
+    p <- PlotPaths(profs=profs, whichPar = whichPar, n_pars = nPars, normalizePaths = normalizePaths)
     return(p)
   } else {
     PlotList <- NULL
-    for(i in 1:length(whichpars)){
-      par <- whichpars[i]
-      p <- PlotPaths(profs=profs, whichPar = par, n_pars = npars, normalizePaths = normalizePaths)
+    for(i in 1:length(whichPar)){
+      par <- whichPar[i]
+      p <- PlotPaths(profs=profs, whichPar = par, n_pars = nPars, normalizePaths = normalizePaths)
       PlotList[[i]] <- p
     }
     pl <- cowplot::plot_grid(plotlist = PlotList)
@@ -1144,31 +1255,46 @@ plotPathsMulti <- function(profs, whichpars, npars = 5, normalizePaths = FALSE) 
 }
 
 
-#' Profile likelihood: plot profiles along with their parameter paths
-#' 
-#' Generates combined plots of profile likelihoods and their parameter paths without a shared legend.
-#' 
-#' @param profs List of profiles as returned by [profile()].
-#' @param whichpars Character vector of parameter names for which the profile paths should be generated.
-#' @param npars Numeric indicating number of colored and named parameter paths.
-#' @param ncols Number of columns in the resulting plot grid.
-#' @param normalizePaths Logical indicating whether the paths should be normalized to absolute values of 1.
-#'                       Default `FALSE`.
-#' @param modes Character vector of profile modes to display in the profile plot.
-#'              Default `c("data", "prior")`. Use e.g. `"data"` to show only the data contribution.
-#' @param ... Additional arguments passed to `cowplot::plot_grid()`.
-#' 
-#' @return A combined `ggplot` object containing the profiles and paths (no shared legend).
-#' 
+#' Profile Likelihood: Plot Profiles Along with Their Parameter Paths
+#'
+#' For each profiled parameter, draws the profile above the paths of
+#' [plotPathsMulti()]. Requires the package cowplot.
+#'
+#' @param profs A [parframe] of profiles as returned by
+#'   [profile()][profile.objfn].
+#' @param whichPar Character vector, the profiled parameters to draw.
+#' @param nPars Integer, number of colored and named paths. Defaults to 5.
+#' @param ncol Number of columns of the plot grid. Defaults to 3.
+#' @param normalizePaths Logical. `TRUE` scales each path to a maximum
+#'   absolute value of 1. Defaults to `FALSE`.
+#' @param modes Character vector, the contributions to the objective drawn in
+#'   the profile plot besides the total. Defaults to `c("data", "prior")`.
+#' @param ... Further arguments passed to [cowplot::plot_grid()].
+#'   `whichpars`, `npars` and `ncols` are deprecated, use `whichPar`, `nPars`
+#'   and `ncol`.
+#'
+#' @return A `ggplot` object, the grid of [cowplot::plot_grid()].
+#' @seealso [plotProfile()], [plotPathsMulti()]
+#' @examplesIf requireNamespace("cowplot", quietly = TRUE)
+#' pars <- c(a = 1, b = 0.5, c = 2)
+#' obj <- constraintL2(mu = pars, sigma = 0.1)
+#' profs <- profile(obj, pars, whichPar = c("a", "b"), limits = c(-1, 1),
+#'                  cores = 1)
+#' plotProfilesAndPaths(profs, c("a", "b"), nPars = 2, ncol = 2)
+#'
 #' @export
-plotProfilesAndPaths <- function(profs, whichpars, npars = 5, ncols = 3, normalizePaths = FALSE, modes = c("data", "prior"), ...) {
+plotProfilesAndPaths <- function(profs, whichPar, nPars = 5, ncol = 3,
+                                 normalizePaths = FALSE,
+                                 modes = c("data", "prior"), ...) {
+  dots <- .renameArgs(list(...), c(whichpars = "whichPar", npars = "nPars",
+                                   ncols = "ncol"), "plotProfilesAndPaths")
   .require_ns("cowplot", "plotProfilesAndPaths()")
 
   # Save original obj.attributes before any subsetting drops them
   orig_oa <- attr(profs, "obj.attributes")
   filtered_oa <- if (!is.null(orig_oa)) intersect(orig_oa, modes) else NULL
   
-  profs <- profs[profs$whichPar %in% whichpars]
+  profs <- profs[profs$whichPar %in% whichPar]
   
   cleanProfilePlot <- function(prof_sub) {
     # Remove columns for unwanted modes, so plotProfile cannot plot them
@@ -1205,14 +1331,14 @@ plotProfilesAndPaths <- function(profs, whichpars, npars = 5, ncols = 3, normali
       theme(legend.position = "none")
   }
   
-  stacked_list <- vector("list", length(whichpars))
+  stacked_list <- vector("list", length(whichPar))
   
-  for (z in seq_along(whichpars)) {
-    prof_sub <- profs[profs$whichPar == whichpars[z]]
+  for (z in seq_along(whichPar)) {
+    prof_sub <- profs[profs$whichPar == whichPar[z]]
     
     p_prof_noleg <- cleanProfilePlot(prof_sub)
     
-    p_paths <- plotPathsMulti(prof_sub, whichpars[z], npars, normalizePaths = normalizePaths) +
+    p_paths <- plotPathsMulti(prof_sub, whichPar[z], nPars, normalizePaths = normalizePaths) +
       theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())
     
     aligned_pair <- cowplot::align_plots(p_prof_noleg, p_paths, align = "v", axis = "tb")
@@ -1220,7 +1346,8 @@ plotProfilesAndPaths <- function(profs, whichpars, npars = 5, ncols = 3, normali
                                             ncol = 1, rel_heights = c(1, 0.7), align = "v", axis = "tb")
   }
   
-  body <- cowplot::plot_grid(plotlist = stacked_list, ncol = ncols, ...)
+  body <- do.call(cowplot::plot_grid,
+                  c(list(plotlist = stacked_list, ncol = ncol), dots))
   
   return(body)
 }

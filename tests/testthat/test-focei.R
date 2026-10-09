@@ -1,14 +1,104 @@
-# ============================================================================
-# FOCEI tests: end-to-end EM orchestrator + C++ kernel parity.
-#
-# Sections:
-#   * End-to-end EM(method = "focei") on a minimal one-eta NLME prdfn.
-#   * Pre-rewrite Theoph regression vs fixtures/focei_theoph_reference.rds.
-#   * C++ kernel parity against R replica on a sigma(eta) (proportional) model.
-#   * C++ kernel parity on a 2-output (parent/metabolite) model.
-# ============================================================================
+# FOCEI: end-to-end EM orchestrator and C++ kernel parity.
 
-## Context: "FOCEI orchestrator + C++ kernel"  (context() is deprecated in testthat 3e; kept as a note)
+
+# ---- Models ---------------------------------------------------------------
+
+# Every model of this file, generated with compile = FALSE and linked into one
+# shared object on first use. Building leaves the RNG state untouched.
+.focei_models <- local({
+  cache <- NULL
+  function() {
+    if (!is.null(cache)) return(cache)
+    withr::local_preserve_seed()
+    dir <- file.path(tempdir(), "focei_models")
+    dir.create(dir, showWarnings = FALSE, recursive = TRUE)
+    withr::local_dir(dir)
+    subjTrafo <- function(trafo, tab, name, deriv2)
+      P(branch(trafo, table = tab, apply = "insert"), method = "explicit",
+        compile = FALSE, modelname = name, deriv2 = deriv2)
+
+    # One-eta smoke model, four subjects.
+    sm_subj <- c("s1", "s2", "s3", "s4")
+    sm_g <- Y(c(y = "intercept"), f = NULL, parameters = "intercept",
+              compile = FALSE, deriv2 = TRUE, modelname = "focei_smoke_obs")
+    sm_p <- subjTrafo(eqnvec(intercept = "mu_pop * exp(eta)"),
+                      data.frame(eta = paste0("eta_", sm_subj), row.names = sm_subj),
+                      "focei_smoke_p", deriv2 = TRUE)
+
+    # Theoph one-compartment model with first-order absorption, dose per subject.
+    th <- datasets::Theoph
+    th$Subject <- as.character(th$Subject)
+    th_subj <- sort(unique(th$Subject))
+    doses <- vapply(th_subj, function(s) {
+      rec <- th[th$Subject == s, ][1, ]
+      rec$Dose * rec$Wt
+    }, 0.0)
+    reactions <- eqnlist()
+    reactions <- addReaction(reactions, "Ag", "",  "Ka * Ag",     "absorption")
+    reactions <- addReaction(reactions, "",   "Cc", "Ka * Ag / V", "appearance")
+    reactions <- addReaction(reactions, "Cc", "",  "Cl/V * Cc",   "elimination")
+    th_x <- Xs(odemodel(reactions, modelname = "theoph_cppreg", compile = FALSE,
+                        backend = "cppDE", deriv2 = TRUE))
+    th_g <- Y(c(y = "Cc"), th_x, modelname = "theoph_cppreg_obs",
+              compile = FALSE, deriv2 = TRUE)
+    th_err <- Y(eqnvec(y = "sigma_add"), th_g, attachInput = FALSE,
+                compile = FALSE, modelname = "theoph_cppreg_err")
+    th_p <- subjTrafo(
+      eqnvec(Ka = "exp(tka + eta_Ka)", V = "exp(tv  + eta_V)",
+             Cl = "exp(tcl + eta_Cl)", Ag = "Ag_init", Cc = "0",
+             sigma_add = "exp(log_sigma_add)"),
+      data.frame(eta_Ka  = paste0("eta_Ka_", th_subj),
+                 eta_V   = paste0("eta_V_",  th_subj),
+                 eta_Cl  = paste0("eta_Cl_", th_subj),
+                 Ag_init = doses, row.names = th_subj, stringsAsFactors = FALSE),
+      "theoph_cppreg_p", deriv2 = TRUE)
+
+    # One-compartment iv bolus with proportional error, three subjects.
+    se_subj <- c("A", "B", "C")
+    reactions <- addReaction(eqnlist(), "Cc", "", "Cl/V * Cc", "elimination")
+    se_x <- Xs(odemodel(reactions, modelname = "sigeta_ode", compile = FALSE,
+                        backend = "cppDE", deriv2 = FALSE))
+    se_g <- Y(c(y = "Cc"), se_x, modelname = "sigeta_obs", compile = FALSE,
+              deriv2 = FALSE)
+    se_err <- Y(eqnvec(y = "sigma_prop * y"), se_g, attachInput = FALSE,
+                compile = FALSE, modelname = "sigeta_err")
+    se_p <- subjTrafo(
+      eqnvec(V = "exp(tv + eta_V)", Cl = "exp(tcl)",
+             Cc = "dose / exp(tv + eta_V)", sigma_prop = "exp(log_sigma_prop)"),
+      data.frame(eta_V = paste0("eta_V_", se_subj), dose = rep(100, 3),
+                 row.names = se_subj, stringsAsFactors = FALSE),
+      "sigeta_p", deriv2 = FALSE)
+
+    # Parent / metabolite chain A -> B -> 0, both observed, three subjects.
+    mo_subj <- c("S1", "S2", "S3")
+    reactions <- eqnlist()
+    reactions <- addReaction(reactions, "A", "B", "ka * A", "absorption")
+    reactions <- addReaction(reactions, "B", "",  "ke * B", "elimination")
+    mo_x <- Xs(odemodel(reactions, modelname = "mo_ode", compile = FALSE,
+                        backend = "cppDE", deriv2 = FALSE))
+    mo_g <- Y(c(yA = "A", yB = "B"), mo_x, modelname = "mo_obs", compile = FALSE,
+              deriv2 = FALSE)
+    mo_err <- Y(eqnvec(yA = "sigA", yB = "sigB"), mo_g, attachInput = FALSE,
+                compile = FALSE, modelname = "mo_err")
+    mo_p <- subjTrafo(
+      eqnvec(ka = "exp(tka + eta_ka)", ke = "exp(tke + eta_ke)", A = "A0",
+             B = "0", sigA = "exp(lsigA)", sigB = "exp(lsigB)"),
+      data.frame(eta_ka = paste0("eta_ka_", mo_subj),
+                 eta_ke = paste0("eta_ke_", mo_subj),
+                 A0     = rep(10, 3),
+                 row.names = mo_subj, stringsAsFactors = FALSE),
+      "mo_p", deriv2 = FALSE)
+
+    compile(sm_g, sm_p, th_x, th_g, th_err, th_p, se_x, se_g, se_err, se_p,
+            mo_x, mo_g, mo_err, mo_p, output = "focei_models", cores = 2)
+    cache <<- list(
+      smoke  = list(g = sm_g, p = sm_p),
+      theoph = list(x = th_x, g = th_g, err = th_err, p = th_p),
+      sigeta = list(x = se_x, g = se_g, err = se_err, p = se_p),
+      mo     = list(x = mo_x, g = mo_g, err = mo_err, p = mo_p))
+    cache
+  }
+})
 
 
 # ---- End-to-end EM ---------------------------------------------------
@@ -19,17 +109,11 @@ test_that("EM(method='focei') runs on a minimal one-eta NLME prdfn", {
   oldwd <- setwd(tempdir())
   on.exit(setwd(oldwd))
 
-  g <- Y(c(y = "intercept"), f = NULL, parameters = "intercept",
-         compile = TRUE, deriv2 = TRUE, modelname = "focei_smoke_obs")
+  mods <- .focei_models()$smoke
+  g <- mods$g
   x <- Xt()
-
-  trafo <- eqnvec(intercept = "mu_pop * exp(eta)")
   subjects <- c("s1", "s2", "s3", "s4")
-  subj_table <- data.frame(eta = paste0("eta_", subjects),
-                           row.names = subjects)
-  trafos <- branch(trafo, table = subj_table, apply = "insert")
-  p <- P(trafos, method = "explicit", compile = TRUE, deriv2 = TRUE,
-         modelname = "focei_smoke_p")
+  p <- mods$p
 
   true_mu  <- 2.0
   true_om  <- 0.3
@@ -42,7 +126,7 @@ test_that("EM(method='focei') runs on a minimal one-eta NLME prdfn", {
     stringsAsFactors = FALSE))
 
   om <- omega(eta = "eta", subjects = subjects)
-  obj <- normL2(data, g * x * p) + constraintL2(mu = 0, Omega = om)
+  obj <- normL2(data, g * x * p) + constraintL2(om)
 
   outer_init <- c(mu_pop = 2.0, omega_eta_eta = log(0.3))
 
@@ -64,22 +148,19 @@ test_that("EM(method='focei') runs on a minimal one-eta NLME prdfn", {
 
 
 test_that("EM() rejects unknown method via match.arg", {
-  # Match on the choices list rather than match.arg()'s boilerplate ("should be
-  # one of"), which is localised -- on a non-English locale R prints e.g.
-  # "'arg' sollte eines von ..." and an English-only regexp would spuriously fail.
+  # Match on the choices list: match.arg()'s message is localised, so an
+  # English-only regexp fails on other locales.
   expect_error(EM(obj = NULL, init = c(p = 1),
                        method = "doesNotExist"),
                "foceiQuadrature")
 })
 
 
-# ---- Pre-rewrite Theoph regression ---------------------------------------
+# ---- Theoph reference fixture --------------------------------------------
 
 test_that("EM(method='focei') matches the pre-rewrite Theoph baseline", {
-  # Anchor against the Phase 0 baseline recorded before the C++ kernel landed.
-  # The fixture stores ($value, $argument) at convergence with eager Stage-2
-  # correction; the consolidated kernel must reproduce them within
-  # Schur/eigen tolerance.
+  # The fixture stores value and argument at convergence with the stage-2
+  # correction; the kernel must reproduce them within Schur/eigen tolerance.
   fixture_path <- "fixtures/focei_theoph_reference.rds"
 
   skip_on_cran()
@@ -99,51 +180,22 @@ test_that("EM(method='focei') matches the pre-rewrite Theoph baseline", {
   Theoph$Subject <- as.character(Theoph$Subject)
   subjects <- sort(unique(Theoph$Subject))
 
-  doses <- vapply(subjects, function(s) {
-    rec <- Theoph[Theoph$Subject == s, ][1, ]
-    rec$Dose * rec$Wt
-  }, 0.0)
   dlist <- as.datalist(data.frame(
     name = "y", time = Theoph$Time, value = Theoph$conc,
     sigma = NA_real_, condition = Theoph$Subject,
     stringsAsFactors = FALSE))
 
-  reactions <- eqnlist()
-  reactions <- addReaction(reactions, "Ag", "",  "Ka * Ag",     "absorption")
-  reactions <- addReaction(reactions, "",   "Cc", "Ka * Ag / V", "appearance")
-  reactions <- addReaction(reactions, "Cc", "",  "Cl/V * Cc",   "elimination")
-  m <- odemodel(reactions, modelname = "theoph_cppreg", compile = TRUE,
-                backend = "cppDE", deriv2 = TRUE)
-  x <- Xs(m)
-  g <- Y(c(y = "Cc"), x, modelname = "theoph_cppreg_obs",
-         compile = TRUE, deriv2 = TRUE)
-  err <- Y(eqnvec(y = "sigma_add"), g, attach.input = FALSE,
-           compile = TRUE, modelname = "theoph_cppreg_err")
-
-  trafo <- eqnvec(Ka        = "exp(tka + eta_Ka)",
-                  V         = "exp(tv  + eta_V)",
-                  Cl        = "exp(tcl + eta_Cl)",
-                  Ag        = "Ag_init",
-                  Cc        = "0",
-                  sigma_add = "exp(log_sigma_add)")
-  subj_table <- data.frame(
-    eta_Ka  = paste0("eta_Ka_", subjects),
-    eta_V   = paste0("eta_V_",  subjects),
-    eta_Cl  = paste0("eta_Cl_", subjects),
-    Ag_init = doses, row.names = subjects, stringsAsFactors = FALSE)
-  trafos <- branch(trafo, table = subj_table, apply = "insert")
-  p <- P(trafos, method = "explicit", compile = TRUE,
-         modelname = "theoph_cppreg_p", deriv2 = TRUE)
-  prdfn <- g * x * p
+  mods <- .focei_models()$theoph
+  err <- mods$err
+  prdfn <- mods$g * mods$x * mods$p
 
   om <- omega(eta = c("eta_Ka", "eta_V", "eta_Cl"), subjects = subjects)
   obj <- normL2(dlist, prdfn, errmodel = err) +
-           constraintL2(mu = 0, Omega = om)
+           constraintL2(om)
 
   fit <- EM(obj, ref$init,
                  method   = "focei",
-                 ## the fixture pins the stage-2 correction path, which is no
-                 ## longer the default
+                 # the fixture pins the stage-2 correction, off by default
                  control  = list(focei = list(
                    secondOrderCorrection = TRUE,
                    innerControl = list(iterlim = 30, fterm = 1e-7, mterm = 1e-7),
@@ -159,11 +211,9 @@ test_that("EM(method='focei') matches the pre-rewrite Theoph baseline", {
 # ---- C++ kernel parity: sigma(eta) (proportional error) ------------------
 
 test_that("fast inner: value/gradient/H_GN match R oracle for sigma(eta) (proportional)", {
-  # Generalized fast inner: when the error model depends on the prediction
-  # (proportional / combined errors), sigma is a function of eta and the
-  # kernel must include the dsigma/deta contributions in gradient and GN
-  # Hessian. Oracle: closed-form R replica of the kernel math, plus numDeriv
-  # on the OFV to validate the analytical gradient.
+  # With a prediction-dependent error model sigma depends on eta, and the kernel
+  # includes the dsigma/deta terms in gradient and GN Hessian. Oracle: an R
+  # replica of the kernel math, plus numDeriv on the OFV.
 
   skip_on_cran()
   if (!requireNamespace("cppDE", quietly = TRUE))
@@ -176,7 +226,7 @@ test_that("fast inner: value/gradient/H_GN match R oracle for sigma(eta) (propor
   unlink(list.files(".", pattern = "\\.(cpp|c|o|so|dll)$", full.names = TRUE),
          force = TRUE)
 
-  # Tiny synthetic PK: 1-cmt iv bolus, 3 subjects, K_eta = 1 (eta_V only).
+  # One-compartment iv bolus with a single random effect.
   subjects <- c("A", "B", "C")
   times <- c(0.5, 1, 2, 4, 8)
   set.seed(123)
@@ -194,27 +244,9 @@ test_that("fast inner: value/gradient/H_GN match R oracle for sigma(eta) (propor
   }))
   dlist <- as.datalist(data_rows)
 
-  reactions <- eqnlist()
-  reactions <- addReaction(reactions, "Cc", "", "Cl/V * Cc", "elimination")
-  m <- odemodel(reactions, modelname = "sigeta_ode", compile = TRUE,
-                backend = "cppDE", deriv2 = FALSE)
-  x <- Xs(m)
-  g <- Y(c(y = "Cc"), x, modelname = "sigeta_obs", compile = TRUE,
-         deriv2 = FALSE)
-  err <- Y(eqnvec(y = "sigma_prop * y"), g, attach.input = FALSE,
-           compile = TRUE, modelname = "sigeta_err")
-
-  trafo <- eqnvec(V  = "exp(tv + eta_V)",
-                  Cl = "exp(tcl)",
-                  Cc = "dose / exp(tv + eta_V)",
-                  sigma_prop = "exp(log_sigma_prop)")
-  subj_table <- data.frame(eta_V = paste0("eta_V_", subjects),
-                           dose  = rep(dose, length(subjects)),
-                           row.names = subjects, stringsAsFactors = FALSE)
-  trafos <- branch(trafo, table = subj_table, apply = "insert")
-  p <- P(trafos, method = "explicit", compile = TRUE,
-         modelname = "sigeta_p", deriv2 = FALSE)
-  model <- g * x * p
+  mods <- .focei_models()$sigeta
+  err <- mods$err
+  model <- mods$g * mods$x * mods$p
   om <- omega(eta = "eta_V", subjects = subjects)
 
   outer_pars <- c(tv = log(V_true), tcl = log(Cl_true),
@@ -340,10 +372,9 @@ test_that("fast inner: value/gradient/H_GN match R oracle for sigma(eta) (propor
 # ---- C++ kernel parity: 2-output (parent / metabolite) model -------------
 
 test_that("fast inner: value/gradient/H_GN match R oracle for a 2-output model", {
-  # Multi-output fast inner: data has multiple observables per subject, with
-  # distinct sigma per observable. Long-format meta carries per-row indices
-  # into the model and err deriv arrays; the kernel loops over rows, not
-  # over time x observable.
+  # Several observables per subject with distinct sigma: the long-format meta
+  # indexes the model and error derivative arrays per row, and the kernel loops
+  # over rows.
 
   skip_on_cran()
   if (!requireNamespace("cppDE", quietly = TRUE))
@@ -358,7 +389,6 @@ test_that("fast inner: value/gradient/H_GN match R oracle for a 2-output model",
   subjects <- c("S1", "S2", "S3")
   times <- c(0.5, 1, 2, 4, 8)
   pred_at <- function(t, ka, ke) {
-    # A(t) = A0 exp(-ka t), B(t) = (ka A0)/(ke-ka) (exp(-ka t) - exp(-ke t))
     A0 <- 10
     A <- A0 * exp(-ka * t)
     B <- (ka * A0 / (ke - ka)) * (exp(-ka * t) - exp(-ke * t))
@@ -383,31 +413,9 @@ test_that("fast inner: value/gradient/H_GN match R oracle for a 2-output model",
   }))
   dlist <- as.datalist(data_rows)
 
-  reactions <- eqnlist()
-  reactions <- addReaction(reactions, "A", "B", "ka * A", "absorption")
-  reactions <- addReaction(reactions, "B", "",  "ke * B", "elimination")
-  m <- odemodel(reactions, modelname = "mo_ode", compile = TRUE,
-                backend = "cppDE", deriv2 = FALSE)
-  x <- Xs(m)
-  g <- Y(c(yA = "A", yB = "B"), x, modelname = "mo_obs", compile = TRUE,
-         deriv2 = FALSE)
-  err <- Y(eqnvec(yA = "sigA", yB = "sigB"), g, attach.input = FALSE,
-           compile = TRUE, modelname = "mo_err")
-
-  trafo <- eqnvec(ka = "exp(tka + eta_ka)",
-                  ke = "exp(tke + eta_ke)",
-                  A  = "A0",
-                  B  = "0",
-                  sigA = "exp(lsigA)",
-                  sigB = "exp(lsigB)")
-  subj_table <- data.frame(eta_ka = paste0("eta_ka_", subjects),
-                           eta_ke = paste0("eta_ke_", subjects),
-                           A0     = rep(10, length(subjects)),
-                           row.names = subjects, stringsAsFactors = FALSE)
-  trafos <- branch(trafo, table = subj_table, apply = "insert")
-  p <- P(trafos, method = "explicit", compile = TRUE,
-         modelname = "mo_p", deriv2 = FALSE)
-  model <- g * x * p
+  mods <- .focei_models()$mo
+  err <- mods$err
+  model <- mods$g * mods$x * mods$p
   om <- omega(eta = c("eta_ka", "eta_ke"), subjects = subjects)
 
   outer_pars <- c(tka = log(ka_true), tke = log(ke_true),

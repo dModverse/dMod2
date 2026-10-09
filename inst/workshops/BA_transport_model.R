@@ -204,9 +204,9 @@ innerpars <- unique(c(getParameters(mymodel),
                       getSymbols(observables),
                       getSymbols(f)))
 
-trafo <- repar("x ~ x", x = innerpars)
-trafo <- repar("x ~ 0", x = reactions$states, trafo)
-trafo <- repar("x ~ exp(x)", x = innerpars, trafo)
+trafo <- repar(NULL, "x ~ x", x = innerpars)
+trafo <- repar(trafo, "x ~ 0", x = reactions$states)
+trafo <- repar(trafo, "x ~ exp(x)", x = innerpars)
 
 p <- P(trafo)
 
@@ -249,7 +249,7 @@ plotProfile(list(noSS = profiles,
 
 obj.validation <- datapointL2(name = "TCA_cell",
                               time = 41,
-                              value = "d1",
+                              parameter = "d1",
                               sigma = .1,
                               condition = "standard")
 
@@ -273,7 +273,7 @@ prediction_band <- do.call(rbind, lapply(c(7., 11., 20., 41.), function(t) {
   
   obj.validation <- datapointL2(name = "TCA_cell",
                                 time = t,
-                                value = "d1",
+                                parameter = "d1",
                                 sigma = .1,
                                 condition = "standard")
   

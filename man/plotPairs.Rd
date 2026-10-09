@@ -3,23 +3,24 @@
 \name{plotPairs}
 \alias{plotPairs}
 \alias{plotPairs.mcmcresult}
-\title{Pair (corner-style) plot for \code{mcmc()} outputs}
+\title{Pair Plot of Parameter Samples}
 \usage{
 plotPairs(x, ...)
 
 \method{plotPairs}{mcmcresult}(x, parameters = NULL, ...)
 }
 \arguments{
-\item{x}{An \code{mcmcResult} (or subclass) object.}
+\item{x}{Object holding parameter samples.}
 
 \item{...}{Method-specific arguments.}
 
 \item{parameters}{Character, the parameters to show. \code{NULL} shows all.}
 }
 \value{
-A ggplot.
+A \code{ggplot} object, as returned by the method.
 }
 \description{
-Lower triangle: 2D scatter of post-warmup samples. Diagonal: 1D
-marginal density.
+Generic for a corner plot of sampled parameters: scatter plots of pairs in
+the lower triangle, marginal densities on the diagonal. dMod2 defines no
+method for it; packages and extensions that return samples do.
 }

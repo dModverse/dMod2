@@ -13,13 +13,13 @@
 //
 //  2. Kink clamping: after the trust step is added to theta, any penalised
 //     coordinate that crossed its kink is snapped back to mu_i, so the next
-//     iteration can re-examine the active set. The assignment is verbatim --
+//     iteration can re-examine the active set. The assignment is verbatim:
 //     downstream sparsity tests read an exact equality.
 //
 // Box bounds are handled by `boundary`, exactly as in trust_kernel.cpp:
 // "reflective" applies the Coleman-Li scaling to the coordinates that survive
-// the L1 active set, "clip" is the frozen historical scheme. The kink active
-// set is orthogonal to that choice and is used by both -- L1 sparsity needs
+// the L1 active set, "clip" is componentwise clipping. The kink active
+// set is orthogonal to that choice and is used by both: L1 sparsity needs
 // coordinates to land exactly on mu, which an interior method cannot deliver.
 
 #include <Rcpp.h>
@@ -48,12 +48,17 @@ using dmod::trust_driver::subproblem_label;
 
 namespace {
 
-// Per-parameter L1 metadata, resolved from the named (mu, lambda) pair.
+// L1 metadata from the named (mu, lambda) pair. `side` overrides `one_sided` per
+// coordinate: 0 two-sided, -1 lower wall lambda * max(0, mu - theta), +1 gate
+// lambda * max(0, theta - mu) that keeps theta >= mu and leaves the kink upward.
 struct L1Spec {
   std::vector<unsigned char> has;
   std::vector<double>        mu;
   std::vector<double>        lambda;
+  std::vector<signed char>   side;
   bool                       one_sided = false;
+
+  int sd(int i) const { return side.empty() ? (one_sided ? -1 : 0) : side[i]; }
 
   void build(const NumericVector& mu_in, const NumericVector& lambda_in,
              const CharacterVector& parnames, int K, bool one_sided_) {
@@ -77,13 +82,26 @@ struct L1Spec {
     }
   }
 
+  void set_gates(const CharacterVector& gates, const CharacterVector& parnames, int K) {
+    side.assign(K, one_sided ? -1 : 0);
+    for (int j = 0; j < gates.size(); ++j)
+      for (int i = 0; i < K; ++i)
+        if (parnames[i] == gates[j]) {
+          if (!has[i]) stop("trustL1: every gate must be named in mu");
+          side[i] = 1;
+        }
+  }
+
   double value(const std::vector<double>& th) const {
     double s = 0.0;
     for (std::size_t i = 0; i < th.size(); ++i) {
       if (!has[i]) continue;
       const double d = th[i] - mu[i];
-      if (one_sided) { if (d < 0.0) s += lambda[i] * (-d); }
-      else           { s += lambda[i] * std::fabs(d); }
+      switch (sd(i)) {
+        case -1: if (d < 0.0) s += lambda[i] * (-d); break;
+        case  1: if (d > 0.0) s += lambda[i] * d;    break;
+        default: s += lambda[i] * std::fabs(d);
+      }
     }
     return s;
   }
@@ -92,36 +110,267 @@ struct L1Spec {
   double grad(int i, double th_i) const {
     if (!has[i]) return 0.0;
     const double d = th_i - mu[i];
-    if (one_sided) return (d < 0.0) ? -lambda[i] : 0.0;
+    switch (sd(i)) {
+      case -1: return (d < 0.0) ? -lambda[i] : 0.0;
+      case  1: return (d > 0.0) ?  lambda[i] : 0.0;
+      default: break;
+    }
     if (d > 0.0) return  lambda[i];
     if (d < 0.0) return -lambda[i];
     return 0.0;
   }
   bool pinned(int i, double th_i, double grad_obj_i) const {
     if (!has[i] || th_i != mu[i]) return false;
-    if (one_sided) return (-grad_obj_i) <= lambda[i];
-    return std::fabs(grad_obj_i) <= lambda[i];
+    switch (sd(i)) {
+      case -1: return (-grad_obj_i) <= lambda[i];
+      case  1: return ( grad_obj_i) >= -lambda[i];
+      default: return std::fabs(grad_obj_i) <= lambda[i];
+    }
   }
   // Snap any coordinate that crossed its kink back onto mu, verbatim.
   void clamp(const std::vector<double>& th, std::vector<double>& th_try) const {
     for (std::size_t i = 0; i < th.size(); ++i) {
       if (!has[i]) continue;
       if ((th[i] - mu[i]) * (th_try[i] - mu[i]) < 0.0) th_try[i] = mu[i];
-      if (one_sided && th_try[i] < mu[i])              th_try[i] = mu[i];
+      const int si = sd(i);
+      if (si == -1 && th_try[i] < mu[i]) th_try[i] = mu[i];
+      if (si ==  1 && th_try[i] < mu[i]) th_try[i] = mu[i];
     }
   }
 };
 
-// -------------------------------------------------------------------------
-// Coleman-Li interior trust-region-reflective on the L1-active coordinates
-//
-// One iteration is `propose` (build the reduced subproblem, take a step, clamp
-// the kinks) then `accept` (fold in the objective at the trial point). Between
-// them sits the single R callback of the whole loop, which is what lets N solves
-// share one batched call: see trustL1_lockstep_impl below. Both drivers run this
-// same code, so the lockstep is bit-identical to N separate solves by
-// construction rather than by agreement.
-// -------------------------------------------------------------------------
+// One reduced coordinate of the subproblem: a free coordinate, or a class of
+// fused block members moving together. `pen` is the penalty subgradient of the
+// class, summed over its members, on the branch the class is about to take.
+struct RCoord {
+  std::vector<int> mem;
+  double ps = 1.0;
+  double pen = 0.0;
+  bool single = true;   // a coordinate outside every block
+};
+
+// Fusion blocks: lambda * sum_{p<q} w_pq |theta_p - theta_q| plus lambda * w_pa
+// |theta_p - a| toward an optional anchor. Equal members move as one class; a
+// class at the anchor stays pinned until a subset of it is released.
+struct FuseBlock {
+  std::vector<int>    idx;
+  double              lambda = 0.0;
+  bool                anchored = false;
+  double              anchor = 0.0;
+  std::vector<double> w;   // (m+1) x (m+1), column-major, row m is the anchor
+  double wt(int p, int q) const { return w[p + (std::size_t) q * (idx.size() + 1)]; }
+};
+
+struct FuseSpec {
+  std::vector<FuseBlock> blocks;
+  std::vector<int>       block_of;   // per coordinate, -1 outside every block
+
+  bool empty() const { return blocks.empty(); }
+
+  void build(const List& fuse, int K) {
+    block_of.assign(K, -1);
+    for (int b = 0; b < fuse.size(); ++b) {
+      List fb = fuse[b];
+      FuseBlock B;
+      IntegerVector idx = fb["idx"];
+      for (int p = 0; p < idx.size(); ++p) {
+        const int i = idx[p] - 1;
+        if (i < 0 || i >= K) stop("trustL1: fuse index out of range");
+        if (block_of[i] >= 0) stop("trustL1: a parameter sits in two fuse blocks");
+        block_of[i] = b;
+        B.idx.push_back(i);
+      }
+      B.lambda = as<double>(fb["lambda"]);
+      const double a = as<double>(fb["anchor"]);
+      B.anchored = !ISNAN(a);
+      B.anchor = B.anchored ? a : 0.0;
+      NumericMatrix W = fb["w"];
+      const int m1 = static_cast<int>(B.idx.size()) + 1;
+      if (W.nrow() != m1 || W.ncol() != m1) stop("trustL1: fuse weights must be (m+1) x (m+1)");
+      B.w.assign(W.begin(), W.end());
+      blocks.push_back(B);
+    }
+  }
+
+  double value(const std::vector<double>& th) const {
+    double s = 0.0;
+    for (const FuseBlock& B : blocks) {
+      const int m = static_cast<int>(B.idx.size());
+      for (int p = 0; p < m; ++p) {
+        const double tp = th[B.idx[p]];
+        for (int q = p + 1; q < m; ++q)
+          s += B.lambda * B.wt(p, q) * std::fabs(tp - th[B.idx[q]]);
+        if (B.anchored) s += B.lambda * B.wt(p, m) * std::fabs(tp - B.anchor);
+      }
+    }
+    return s;
+  }
+
+  // Penalty force on member p from every term whose difference is nonzero.
+  double force(const FuseBlock& B, int p, const std::vector<double>& th) const {
+    const int m = static_cast<int>(B.idx.size());
+    const double tp = th[B.idx[p]];
+    double f = 0.0;
+    for (int q = 0; q < m; ++q) {
+      const double d = tp - th[B.idx[q]];
+      if (d > 0.0) f += B.lambda * B.wt(p, q);
+      if (d < 0.0) f -= B.lambda * B.wt(p, q);
+    }
+    if (B.anchored) {
+      const double d = tp - B.anchor;
+      if (d > 0.0) f += B.lambda * B.wt(p, m);
+      if (d < 0.0) f -= B.lambda * B.wt(p, m);
+    }
+    return f;
+  }
+
+  double grad(int i, const std::vector<double>& th) const {
+    const int b = block_of[i];
+    if (b < 0) return 0.0;
+    const FuseBlock& B = blocks[b];
+    for (std::size_t p = 0; p < B.idx.size(); ++p)
+      if (B.idx[p] == i) return force(B, static_cast<int>(p), th);
+    return 0.0;
+  }
+
+  // Classes of every block as reduced coordinates. A class splits, or a pinned
+  // one releases a subset, when the subset's net force exceeds the penalty
+  // across the cut; with equal weights the worst cut is a prefix by force.
+  void classes(const std::vector<double>& th, const std::vector<double>& g,
+               const std::vector<double>& ps, std::vector<RCoord>& rc) const {
+    for (const FuseBlock& B : blocks) {
+      const int m = static_cast<int>(B.idx.size());
+      std::vector<int> ord(m);
+      for (int p = 0; p < m; ++p) ord[p] = p;
+      std::sort(ord.begin(), ord.end(), [&](int a, int b) {
+        return th[B.idx[a]] < th[B.idx[b]]; });
+      for (int lo = 0; lo < m;) {
+        int hi = lo + 1;
+        while (hi < m && th[B.idx[ord[hi]]] == th[B.idx[ord[lo]]]) ++hi;
+        std::vector<int> C(ord.begin() + lo, ord.begin() + hi);
+        lo = hi;
+        split_class(B, C, th, g, ps, rc);
+      }
+    }
+  }
+
+  void split_class(const FuseBlock& B, std::vector<int> C,
+                   const std::vector<double>& th, const std::vector<double>& g,
+                   const std::vector<double>& ps, std::vector<RCoord>& rc) const {
+    const int k = static_cast<int>(C.size());
+    const int m = static_cast<int>(B.idx.size());
+    const bool pinned = B.anchored && th[B.idx[C[0]]] == B.anchor;
+    std::vector<double> f(k);
+    double fsum = 0.0, wsum = 0.0;
+    for (int a = 0; a < k; ++a) {
+      f[a] = g[B.idx[C[a]]] + force(B, C[a], th);
+      fsum += f[a];
+      for (int b = a + 1; b < k; ++b) wsum += B.wt(C[a], C[b]);
+    }
+    const double wbar = k > 1 ? wsum / (0.5 * k * (k - 1)) : 0.0;
+    std::vector<int> o(k);
+    for (int a = 0; a < k; ++a) o[a] = a;
+    std::sort(o.begin(), o.end(), [&](int a, int b) { return f[a] > f[b]; });
+
+    auto make = [&](const std::vector<int>& sel, double pen) {
+      RCoord c;
+      c.single = false;
+      for (int a : sel) c.mem.push_back(B.idx[C[a]]);
+      c.ps = ps[c.mem[0]];
+      c.pen = pen;
+      rc.push_back(c);
+    };
+    auto pen_of = [&](const std::vector<int>& sel) {
+      double s = 0.0;
+      for (int a : sel) s += f[a] - g[B.idx[C[a]]];
+      return s;
+    };
+
+    // Best cut: top-j members leave downward, or bottom-j leave upward.
+    double best = 0.0, best_cap = 0.0;
+    int best_j = 0, best_dir = 0;
+    double top = 0.0, bot = 0.0, atop = 0.0, abot = 0.0;
+    const double fbar = fsum / k;
+    const int jmax = pinned ? k : k - 1;
+    for (int j = 1; j <= jmax; ++j) {
+      top += f[o[j - 1]];      bot += f[o[k - j]];
+      if (pinned) { atop += B.wt(C[o[j - 1]], m); abot += B.wt(C[o[k - j]], m); }
+      const double inner = B.lambda * wbar * j * (k - j);
+      if (pinned) {
+        const double cd = inner + B.lambda * atop, cu = inner + B.lambda * abot;
+        if (top - cd > best)  { best = top - cd;  best_cap = cd; best_j = j; best_dir = -1; }
+        if (-bot - cu > best) { best = -bot - cu; best_cap = cu; best_j = j; best_dir = +1; }
+      } else {
+        const double ex = top - j * fbar - inner;
+        if (ex > best) { best = ex; best_cap = inner; best_j = j; best_dir = -1; }
+      }
+    }
+
+    if (best_dir == 0) {
+      if (pinned) return;
+      std::vector<int> all(o.begin(), o.end());
+      make(all, pen_of(all));
+      return;
+    }
+    std::vector<int> S, R;
+    if (best_dir < 0) { S.assign(o.begin(), o.begin() + best_j); R.assign(o.begin() + best_j, o.end()); }
+    else              { S.assign(o.end() - best_j, o.end());     R.assign(o.begin(), o.end() - best_j); }
+    // The released subset takes the branch it leaves on; the cut terms hold it
+    // back with their full capacity.
+    make(S, pen_of(S) + (best_dir < 0 ? -best_cap : best_cap));
+    if (!pinned && !R.empty()) make(R, pen_of(R) + (best_dir < 0 ? best_cap : -best_cap));
+  }
+
+  // Shorten the step to the first point where two classes of a block, or a
+  // class and its anchor, meet, and fuse them there. Values are set verbatim
+  // so the next iteration reads the fusion as exact equality.
+  void truncate(const std::vector<double>& th, std::vector<double>& tt) const {
+    double tmin = 1.0;
+    int bb = -1, pp = -1, qq = -1;
+    for (std::size_t b = 0; b < blocks.size(); ++b) {
+      const FuseBlock& B = blocks[b];
+      const int m = static_cast<int>(B.idx.size());
+      for (int p = 0; p < m; ++p) {
+        const int ip = B.idx[p];
+        for (int q = p + 1; q <= m; ++q) {
+          if (q == m && !B.anchored) break;
+          const double d  = th[ip] - (q < m ? th[B.idx[q]] : B.anchor);
+          const double dt = tt[ip] - (q < m ? tt[B.idx[q]] : B.anchor);
+          if (!(d * dt < 0.0)) continue;
+          const double t = d / (d - dt);
+          if (t < tmin) { tmin = t; bb = static_cast<int>(b); pp = p; qq = q; }
+        }
+      }
+    }
+    if (bb < 0) return;
+    const std::size_t K = th.size();
+    for (std::size_t i = 0; i < K; ++i) tt[i] = th[i] + tmin * (tt[i] - th[i]);
+    const FuseBlock& B = blocks[bb];
+    const int m = static_cast<int>(B.idx.size());
+    const double vp = tt[B.idx[pp]];
+    const double vq = qq < m ? tt[B.idx[qq]] : B.anchor;
+    const double v  = qq < m ? 0.5 * (vp + vq) : B.anchor;
+    for (int r = 0; r < m; ++r) {
+      const double x = tt[B.idx[r]];
+      if (x == vp || (qq < m && x == vq)) tt[B.idx[r]] = v;
+    }
+  }
+
+  // Members of a class share one value; anything that nudged them apart
+  // (push_interior) is undone toward the first member.
+  void equalise(const std::vector<RCoord>& rc, std::vector<double>& tt) const {
+    for (const RCoord& c : rc) {
+      if (c.single) continue;
+      for (std::size_t a = 1; a < c.mem.size(); ++a) tt[c.mem[a]] = tt[c.mem[0]];
+    }
+  }
+};
+
+// ---- Coleman-Li trust-region-reflective on the L1-active coordinates ----
+
+// An iteration is `propose` (reduced subproblem, step, kink clamp) then `accept`
+// (objective at the trial point). The one R callback sits between them, so the
+// lockstep driver runs the same code and matches N separate solves bit for bit.
 
 // Settings shared by every solve in a lockstep round.
 struct RefTune {
@@ -133,6 +382,7 @@ struct RefTune {
 struct RefState {
   int K = 0;
   L1Spec l1;
+  const FuseSpec* fuse = nullptr;
   std::vector<double> ps, lbz, ubz;
   std::vector<double> theta, z, grad_obj, H_full;
   double val = 0.0, f_used = 0.0, r = 0.0;
@@ -141,7 +391,7 @@ struct RefState {
   int iter = 0, n_iter = 0, n_fail = 0, n_stall = 0;
   std::string stop_reason = "iterlim";
 
-  std::vector<int>    active;
+  std::vector<RCoord> rc;
   std::vector<double> zr, lbr, ubr, gr, Hr, absv, jv, sqrtv, ghat, Bhat;
   std::vector<double> eigvals, eigvecs, shat, shat_step, s_step, shat_real;
   std::vector<double> z_try, theta_try;
@@ -178,13 +428,18 @@ void ref_init(RefState& s, int K, Get get, const std::vector<double>& pl,
   s.theta_try.assign(K, 0.0);
 }
 
+double pen_value(const RefState& s, const std::vector<double>& th) {
+  const double v = s.l1.value(th);
+  return s.fuse ? v + s.fuse->value(th) : v;
+}
+
 // Seed the iteration from the objective at parinit.
 void ref_seed(RefState& s, double val_obj, const double* grad, const double* H,
               double rinit) {
   const int K = s.K;
   s.grad_obj.assign(grad, grad + K);
   s.H_full.assign(H, H + (std::size_t) K * K);
-  s.val = val_obj + s.l1.value(s.theta);
+  s.val = val_obj + pen_value(s, s.theta);
   s.r = rinit;
   s.f_used = kInf;
 }
@@ -199,25 +454,45 @@ bool ref_propose(RefState& s, const RefTune& t) {
   if (s.accept) {
     s.f_used = t.minimize ? s.val : -s.val;
 
-    // Reduced space: drop only the coordinates pinned at their L1 kink. Box
-    // bounds are handled by the scaling, not by dropping.
-    s.active.clear();
-    for (int i = 0; i < K; ++i)
-      if (!s.l1.pinned(i, s.theta[i], s.grad_obj[i])) s.active.push_back(i);
-    Kred = static_cast<int>(s.active.size());
+    // Reduced space: drop the coordinates pinned at their L1 kink and the
+    // pinned fusion classes; a free class is one coordinate. Box bounds are
+    // handled by the scaling, not by dropping.
+    s.rc.clear();
+    for (int i = 0; i < K; ++i) {
+      if (s.fuse && s.fuse->block_of[i] >= 0) continue;
+      if (s.l1.pinned(i, s.theta[i], s.grad_obj[i])) continue;
+      RCoord c;
+      c.mem.push_back(i);
+      c.ps = s.ps[i];
+      c.pen = s.l1.grad(i, s.theta[i]);
+      s.rc.push_back(c);
+    }
+    if (s.fuse) s.fuse->classes(s.theta, s.grad_obj, s.ps, s.rc);
+    Kred = static_cast<int>(s.rc.size());
 
     s.zr.assign(Kred, 0.0); s.lbr.assign(Kred, 0.0); s.ubr.assign(Kred, 0.0);
     s.gr.assign(Kred, 0.0); s.Hr.assign((std::size_t) Kred * Kred, 0.0);
     for (int ii = 0; ii < Kred; ++ii) {
-      const int i = s.active[ii];
-      s.zr[ii]  = s.z[i];
-      s.lbr[ii] = s.lbz[i];
-      s.ubr[ii] = s.ubz[i];
-      s.gr[ii]  = sgn * (s.grad_obj[i] + s.l1.grad(i, s.theta[i])) / s.ps[i];
+      const RCoord& c = s.rc[ii];
+      const int i0 = c.mem[0];
+      if (c.single) {
+        s.zr[ii] = s.z[i0]; s.lbr[ii] = s.lbz[i0]; s.ubr[ii] = s.ubz[i0];
+      } else {
+        double lo = -kInf, hi = kInf;
+        for (int i : c.mem) {
+          lo = std::max(lo, s.lbz[i] / s.ps[i]);
+          hi = std::min(hi, s.ubz[i] / s.ps[i]);
+        }
+        s.zr[ii] = c.ps * s.theta[i0]; s.lbr[ii] = c.ps * lo; s.ubr[ii] = c.ps * hi;
+      }
+      double g = 0.0;
+      for (int i : c.mem) g += s.grad_obj[i];
+      s.gr[ii] = sgn * (g + c.pen) / c.ps;
       for (int jj = 0; jj < Kred; ++jj) {
-        const int j = s.active[jj];
-        s.Hr[ii + (std::size_t) jj * Kred] =
-            sgn * s.H_full[i + (std::size_t) j * K] / (s.ps[i] * s.ps[j]);
+        const RCoord& d = s.rc[jj];
+        double h = 0.0;
+        for (int i : c.mem) for (int j : d.mem) h += s.H_full[i + (std::size_t) j * K];
+        s.Hr[ii + (std::size_t) jj * Kred] = sgn * h / (c.ps * d.ps);
       }
     }
 
@@ -234,10 +509,12 @@ bool ref_propose(RefState& s, const RefTune& t) {
     // Set before the convergence break, which is exactly when it matters.
     const double btol = std::max(t.gtol, 1e-10);
     std::fill(s.at_bound.begin(), s.at_bound.end(), 0);
-    for (int ii = 0; ii < Kred; ++ii)
-      s.at_bound[s.active[ii]] = (s.jv[ii] > 0.0 &&
-                                  std::fabs(s.absv[ii] * s.gr[ii]) <= btol &&
-                                  std::fabs(s.gr[ii]) > btol) ? 1 : 0;
+    for (int ii = 0; ii < Kred; ++ii) {
+      const unsigned char ab = (s.jv[ii] > 0.0 &&
+                                std::fabs(s.absv[ii] * s.gr[ii]) <= btol &&
+                                std::fabs(s.gr[ii]) > btol) ? 1 : 0;
+      for (int i : s.rc[ii].mem) s.at_bound[i] = ab;
+    }
 
     if (s.opt_measure <= t.gtol) {
       s.converged = true; s.stop_reason = "gradient"; s.done = true; return false;
@@ -259,7 +536,7 @@ bool ref_propose(RefState& s, const RefTune& t) {
       eigen_sym_local(s.Bhat.data(), Kred, s.eigvals.data(), s.eigvecs.data());
   }
 
-  Kred = static_cast<int>(s.active.size());
+  Kred = static_cast<int>(s.rc.size());
 
   if (t.blather_on) {
     s.trace.argpath.insert(s.trace.argpath.end(), s.theta.begin(), s.theta.end());
@@ -285,21 +562,32 @@ bool ref_propose(RefState& s, const RefTune& t) {
   }
 
   s.z_try = s.z;
-  for (int ii = 0; ii < Kred; ++ii) s.z_try[s.active[ii]] += s.s_step[ii];
+  for (int ii = 0; ii < Kred; ++ii) {
+    const RCoord& c = s.rc[ii];
+    if (c.single) { s.z_try[c.mem[0]] += s.s_step[ii]; continue; }
+    const double th = (s.zr[ii] + s.s_step[ii]) / c.ps;
+    for (int i : c.mem) s.z_try[i] = s.ps[i] * th;
+  }
   // See trust_kernel.cpp. mu is validated strictly inside the box, so this
   // never disturbs a pinned kink.
   push_interior(K, s.z_try, s.lbz, s.ubz);
   for (int i = 0; i < K; ++i) s.theta_try[i] = s.z_try[i] / s.ps[i];
   s.l1.clamp(s.theta, s.theta_try);
+  if (s.fuse) {
+    s.fuse->equalise(s.rc, s.theta_try);
+    s.fuse->truncate(s.theta, s.theta_try);
+  }
   for (int i = 0; i < K; ++i) s.z_try[i] = s.ps[i] * s.theta_try[i];
 
-  // Rescore the model at the step actually taken -- the kink clamp shortens
+  // Rescore the model at the step actually taken: the kink clamp shortens
   // individual coordinates after the stepback has chosen a candidate.
   s.shat_real.assign(Kred, 0.0);
   bool rescore = true;
   for (int ii = 0; ii < Kred; ++ii) {
     if (!(s.sqrtv[ii] > 0.0)) { rescore = false; break; }
-    s.shat_real[ii] = (s.z_try[s.active[ii]] - s.zr[ii]) / s.sqrtv[ii];
+    const RCoord& c = s.rc[ii];
+    const double zt = c.single ? s.z_try[c.mem[0]] : c.ps * s.theta_try[c.mem[0]];
+    s.shat_real[ii] = (zt - s.zr[ii]) / s.sqrtv[ii];
   }
   if (rescore && Kred > 0)
     s.m_value = model_value(Kred, s.ghat.data(), s.Bhat.data(), s.shat_real.data());
@@ -315,7 +603,7 @@ bool ref_propose(RefState& s, const RefTune& t) {
 bool ref_accept(RefState& s, const RefTune& t, bool eval_ok, double val_obj_try,
                 const double* grad_try, const double* H_try_colmajor) {
   const int K = s.K;
-  const double val_try = eval_ok ? val_obj_try + s.l1.value(s.theta_try) : kInf;
+  const double val_try = eval_ok ? val_obj_try + pen_value(s, s.theta_try) : kInf;
 
   const double pred_pos  = -s.m_value;
   const double ftry_used = t.minimize ? val_try : -val_try;
@@ -385,7 +673,8 @@ List ref_result(RefState& s, const RefTune& t, const CharacterVector& parnames) 
   // The combined gradient, so the result is self-consistent with `value`.
   NumericVector grad_out(K);
   for (int i = 0; i < K; ++i)
-    grad_out[i] = s.grad_obj[i] + s.l1.grad(i, s.theta[i]);
+    grad_out[i] = s.grad_obj[i] + s.l1.grad(i, s.theta[i]) +
+                  (s.fuse ? s.fuse->grad(i, s.theta) : 0.0);
   grad_out.names() = parnames;
   NumericMatrix Hess_out(K, K);
   for (int j = 0; j < K; ++j)
@@ -410,7 +699,7 @@ List ref_result(RefState& s, const RefTune& t, const CharacterVector& parnames) 
 }
 
 List trustL1_reflective(Function objfun, NumericVector parinit,
-                        const L1Spec& l1,
+                        const L1Spec& l1, const FuseSpec& fuse,
                         double rinit, double rmax,
                         Nullable<NumericVector> parscale,
                         int iterlim,
@@ -438,8 +727,13 @@ List trustL1_reflective(Function objfun, NumericVector parinit,
   }
   fill_parscale(parscale, ps, K, "trustL1");
 
+  for (int i = 0; i < K; ++i)
+    if (!fuse.empty() && fuse.block_of[i] >= 0 && l1.has[i])
+      stop("trustL1: a parameter cannot be both in mu and in a fuse block");
+
   RefState s;
   s.l1 = l1;
+  if (!fuse.empty()) s.fuse = &fuse;
   ref_init(s, K, [&](int i) { return parinit[i]; }, pl, pu, ps);
 
   RefTune t;
@@ -488,7 +782,7 @@ List trustL1_reflective(Function objfun, NumericVector parinit,
         for (int j = 0; j < K; ++j)
           for (int i = 0; i < K; ++i)
             H_try[i + (std::size_t) j * K] = Htry_mat(i, j);
-        val_try = val_obj_try + l1.value(s.theta_try);
+        val_try = val_obj_try + pen_value(s, s.theta_try);
       }
     }
     neval++;
@@ -509,16 +803,11 @@ List trustL1_reflective(Function objfun, NumericVector parinit,
   return ref_result(s, t, parnames);
 }
 
-// -------------------------------------------------------------------------
-// N reflective solves in lock-step
-//
-// Each subject runs its own trustL1 through the very same ref_propose /
-// ref_accept as a single solve; the only difference is that one round collects
-// the trial points of every subject that has not stopped and sends them out as
-// ONE R call. That call is the ODE solve, and the condition axis inside it is
-// what cppDE parallelises. Converged subjects drop out of the round, so the
-// round count is the maximum over subjects rather than their sum.
-// -------------------------------------------------------------------------
+// ---- N reflective solves in lock-step ----
+
+// Each subject runs ref_propose / ref_accept as a single solve would; one round
+// sends the trial points of all running subjects out as one R call. Converged
+// subjects drop out, so the round count is the maximum over subjects.
 List trustL1_lockstep(Function objfun_many, NumericMatrix parinit,
                       NumericMatrix mu, NumericMatrix lambda,
                       bool one_sided, CharacterVector parnames,
@@ -639,9 +928,7 @@ List trustL1_lockstep(Function objfun_many, NumericMatrix parinit,
   return out;
 }
 
-// -------------------------------------------------------------------------
-// Legacy: active-set reduction plus componentwise clipping
-// -------------------------------------------------------------------------
+// ---- boundary = "clip": active-set reduction plus componentwise clipping ----
 List trustL1_clip(Function objfun, NumericVector parinit,
                   const L1Spec& l1,
                   double rinit, double rmax,
@@ -913,7 +1200,9 @@ List trustL1_impl(Function objfun,
                   Nullable<NumericVector>  parupper  = R_NilValue,
                   Nullable<NumericVector>  parlower  = R_NilValue,
                   bool   printIter = false,
-                  Nullable<CharacterVector> traceFile = R_NilValue) {
+                  Nullable<CharacterVector> traceFile = R_NilValue,
+                  Nullable<CharacterVector> gate = R_NilValue,
+                  Nullable<List> fuse = R_NilValue) {
 
   const int K = parinit.size();
   if (K == 0) stop("trustL1: parinit must be non-empty");
@@ -924,7 +1213,13 @@ List trustL1_impl(Function objfun,
 
   L1Spec l1;
   l1.build(mu, lambda, parinit.names(), K, one_sided);
+  if (gate.isNotNull())
+    l1.set_gates(CharacterVector(gate.get()), parinit.names(), K);
+  FuseSpec fs;
+  if (fuse.isNotNull()) fs.build(List(fuse.get()), K);
 
+  if (boundary == "clip" && (!fs.empty() || gate.isNotNull()))
+    stop("trustL1: gates and fuse blocks need boundary = \"reflective\"");
   if (boundary == "clip")
     return trustL1_clip(objfun, parinit, l1, rinit, rmax, parscale, iterlim,
                         ftol, mtol, minimize, blather,
@@ -932,7 +1227,7 @@ List trustL1_impl(Function objfun,
   if (boundary != "reflective")
     stop("trustL1: boundary must be one of \"reflective\", \"clip\"");
 
-  return trustL1_reflective(objfun, parinit, l1, rinit, rmax, parscale, iterlim,
+  return trustL1_reflective(objfun, parinit, l1, fs, rinit, rmax, parscale, iterlim,
                             ftol, mtol, gtol, xtol, rmin, thetamax,
                             minimize, blather, parupper, parlower,
                             printIter, traceFile);
@@ -969,7 +1264,7 @@ List trustL1_lockstep_impl(Function objfun_many,
     stop("trustL1: mu and lambda must have the same shape as parinit");
   List dn = parinit.attr("dimnames");
   if (dn.size() < 2 || Rf_isNull(dn[1]))
-    stop("trustL1: parinit must carry column names");
+    stop("trustL1: parinit must have column names");
   CharacterVector parnames = dn[1];
   for (int n = 0; n < N; ++n)
     for (int i = 0; i < K; ++i)

@@ -75,7 +75,7 @@ for (pr in probs) {
   }
   r$t_import <- system.time(pp <- tryCatch(
     importPEtab(yml, backend = "cppDE", cores = 8L, outdir = wd,
-                optionsOde = list(atol = 1e-12, rtol = 1e-10),
+                options = list(atol = 1e-12, rtol = 1e-10),
                 optionsSens = list(atol = 1e-8, rtol = 1e-6)),
     error = function(e) conditionMessage(e)))[3]
   if (is.character(pp)) { r$error <- pp; res[[pr]] <- r; cat("  import failed:", pp, "\n"); next }

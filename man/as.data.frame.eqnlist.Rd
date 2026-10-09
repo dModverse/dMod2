@@ -2,20 +2,21 @@
 % Please edit documentation in R/eqnClass.R
 \name{as.data.frame.eqnlist}
 \alias{as.data.frame.eqnlist}
-\title{Coerce equation list into a data frame}
+\title{Coerce Equation List into a Data Frame}
 \usage{
 \method{as.data.frame}{eqnlist}(x, ...)
 }
 \arguments{
-\item{x}{object of class \link{eqnlist}}
+\item{x}{object of class \link{eqnlist}.}
 
-\item{...}{other arguments}
+\item{...}{not used.}
 }
 \value{
-a \code{data.frame} with columns "Description" (character),
-"Rate" (character), and one column per ODE state with the state names.
-The state columns correspond to the stoichiometric matrix.
+A \code{data.frame} with the columns "Description" (character),
+"Rate" (character) and one column per state, the columns of the
+stoichiometric matrix. The compartment layout is kept as attributes and
+read back by \code{\link[=as.eqnlist]{as.eqnlist()}}. \code{NULL} for an empty equation list.
 }
 \description{
-Coerce equation list into a data frame
+Coerce Equation List into a Data Frame
 }

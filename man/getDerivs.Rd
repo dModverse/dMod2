@@ -7,7 +7,7 @@
 \alias{getDerivs.prdlist}
 \alias{getDerivs.list}
 \alias{getDerivs.objlist}
-\title{Extract the first derivatives of an object}
+\title{Extract the First Derivatives of an Object}
 \usage{
 getDerivs(x, ...)
 
@@ -22,36 +22,33 @@ getDerivs(x, ...)
 \method{getDerivs}{objlist}(x, ...)
 }
 \arguments{
-\item{x}{Object from which the first derivatives should be extracted.
-Supported classes are \code{parvec}, \code{prdframe}, \code{prdlist}, and \code{list}.}
+\item{x}{object of class \code{parvec}, \code{prdframe}, \code{prdlist}, \code{objlist}, or a
+list of such objects.}
 
-\item{...}{Additional arguments passed to specific methods (currently unused).}
+\item{...}{not used.}
 }
 \value{
-The structure of the returned object depends on the class of \code{x}:
+Depends on the class of \code{x}:
 \itemize{
-\item \code{parvec}: a matrix containing first-order parameter derivatives.
-\item \code{prdframe}: a \code{prdframe} containing time and first-order sensitivities
-of each model variable with respect to all parameters.
-\item \code{prdlist}: a \code{prdlist} whose elements are first-derivative \code{prdframe}s.
-\item \code{list}: a list of derivative objects, depending on the elements.
-\item \code{objlist}: directly returns the stored gradient (named numeric vector).
+\item \code{parvec}: the Jacobian matrix.
+\item \code{prdframe}: a \code{prdframe} with the column \code{time} and one column per pair
+of variable and parameter.
+\item \code{prdlist}: a \code{prdlist} of such \code{prdframe}s.
+\item \code{objlist}: the gradient, a named numeric vector.
+\item \code{list}: a list with the result for each element.
 }
+
+An error is raised if \code{x} has no first derivatives.
 }
 \description{
-Generic function to extract first-order derivatives
-from various model-related objects such as \code{parvec}, \code{prdframe}, or lists thereof.
-}
-\details{
-The output format depends on the class of the input object.
+Extract the First Derivatives of an Object
 }
 \examples{
-\dontrun{
-# Extract sensitivities from a model prediction frame:
-d1 <- getDerivs(myprdframe)
+J <- matrix(c(1, 0, 0, 2), 2, dimnames = list(c("a", "b"), c("x", "y")))
+p <- as.parvec(c(a = 1, b = 2), deriv = J)
+getDerivs(p)
 
-# Extract parameter derivatives from a parameter vector:
-getDerivs(myparvec)
 }
-
+\seealso{
+\code{\link[=getDerivs2]{getDerivs2()}}, \code{\link[=parvec]{parvec()}}
 }

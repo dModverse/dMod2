@@ -9,7 +9,7 @@ conditions <-c(
 ## Model Definition ------------------------------------------------------
 
 nmodel <- "simple_pfcoop" #pub model
-#nmodel <- "simple_pfc_nopfc" # pub ohne coop
+#nmodel <- "simple_pfc_nopfc" # published model without cooperativity
 
 # Read in model csv
 reactionlist <- read.csv(paste0("inst/examples/example_phytoene/phyto_",nmodel,".csv") )
@@ -57,7 +57,7 @@ forcings <- NULL
 g <- Y(observables, as.eqnvec(f), modelname = "obs_mono", compile=TRUE)
 err <- NULL
 if (!is.null(errors)) err <- Y(errors, c(observables, as.eqnvec(f)), states = names(errors), 
-                               attach.input = FALSE, modelname = "err", compile = TRUE)
+                               attachInput = FALSE, modelname = "err", compile = TRUE)
 
 
 # Generate the model C files, compile them and return a list with func and extended.
@@ -123,7 +123,6 @@ names(trafoLTot) <- conditions
 
 trafoL <- trafoLTot[conditions]
 p <- x <- NULL
-optionsOde = list(method = "lsoda")
 optionsSens = list(method = "lsodes", rtol = 1e-8, atol = 1e-8)
 
 for (C in conditions) {
@@ -132,7 +131,7 @@ for (C in conditions) {
   if (C == "pds_nP"){
     events=data.frame(var = "Fad", time = 31, value = 0.15, method = "add")
   }
-  x <- x + Xs(model0, optionsOde = optionsOde, optionsSens = optionsSens, condition = C, events = events)
+  x <- x + Xs(model0, optionsSens = optionsSens, condition = C, events = events)
 }
 
 ## Data ----------------------------------------------------------------------
@@ -147,7 +146,7 @@ if(!do.fiterrors)
 # Initalize parameters 
 outerpars <- getSymbols(do.call(c, trafoL[conditions]))
 
-# ratios of scaling factors were determined in a previous fit to avoid that the model mis-uses the scaling factors l1 = s3/s1; l2 = s3/s2
+# Fixed ratios of scaling factors keep the model from misusing them: l1 = s3/s1; l2 = s3/s2
 scalings_ls <- c(logl1_new = log(1.06), logl2_new = log(0.614),logl1 = log(1.08), logl2 = log(0.8),logl1_WT = log(1.26), logl2_WT = log(0.898), logl1_dpq = log(1),logl2_dpq = log(1))
 sigma_ls <- c(0.04,0.03,0.1,0.05,0.1,0.1, 0.05,0.05)
 names(sigma_ls) <- names(scalings_ls)
@@ -156,7 +155,7 @@ set.seed(2)
 prior <- rep(0, length(outerpars)); names(prior) <- outerpars
 pouter <- rnorm(length(prior), prior, 1); names(pouter) <- outerpars
 cOuter <- constraintL2(mu = prior, sigma = 10) # general prior for all parameters -> removed for final results
-cOuterSL <- constraintL2(mu = scalings_ls[names(scalings_ls) %in% outerpars], sigma = sigma_ls[names(scalings_ls) %in% outerpars],attr.name = "dataSC")
+cOuterSL <- constraintL2(mu = scalings_ls[names(scalings_ls) %in% outerpars], sigma = sigma_ls[names(scalings_ls) %in% outerpars],attrName = "dataSC")
 
 # Objective function for trust()
 obj <- normL2(data, g*x*p) + cOuterSL  #+ cOuter

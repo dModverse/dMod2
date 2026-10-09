@@ -6,7 +6,7 @@
 \alias{plotTrace.mcmcresultsequential}
 \alias{plotTrace.mcmcresultsingle}
 \alias{plotTrace.mcmcresultblocked}
-\title{Convergence trace of an iterative fit}
+\title{Convergence Trace of an Iterative Fit}
 \usage{
 plotTrace(x, ...)
 
@@ -27,13 +27,14 @@ plotTrace(x, ...)
 panels are drawn.}
 }
 \value{
-A ggplot.
+A \code{ggplot} object, as returned by the method.
 
 A ggplot.
 }
 \description{
-Generic. Methods plot the quantities their fitting method
-iterates on, one panel each.
+Generic for plotting the quantities an iterative fitting method records,
+one panel each. dMod2 defines no method for it; packages and extensions
+that return iterative fit objects do.
 
 Method for \code{\link[=mcmc]{mcmc()}} sequential / SMC outputs: shows the
 adaptive tempering schedule (beta vs level), the post-resample ESS,

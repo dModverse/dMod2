@@ -4,7 +4,7 @@
 \alias{as.eqnvec}
 \alias{as.eqnvec.character}
 \alias{as.eqnvec.eqnlist}
-\title{Coerce to an equation vector}
+\title{Coerce to an Equation Vector}
 \usage{
 as.eqnvec(x, ...)
 
@@ -13,20 +13,21 @@ as.eqnvec(x, ...)
 \method{as.eqnvec}{eqnlist}(x, ...)
 }
 \arguments{
-\item{x}{object of class \code{character} or \code{eqnlist}}
+\item{x}{object of class \code{character} or \code{eqnlist}.}
 
-\item{...}{arguments going to the corresponding methods}
+\item{...}{for the \code{eqnlist} method, arguments going to \code{\link[=getFluxes]{getFluxes()}},
+e.g. \code{type}; otherwise not used.}
 
-\item{names}{character, the left-hand sides of the equation}
+\item{names}{character, the left-hand sides of the equations. Default
+\code{NULL} uses \code{names(x)}.}
 }
 \value{
-object of class \link{eqnvec}.
+Object of class \link{eqnvec}.
 }
 \description{
-An equation list stores an ODE in a list format. The function
-translates this list into the right-hand sides of the ODE.
+Coerce to an Equation Vector
 }
 \details{
-If \code{x} is of class \code{eqnlist}, \link{getFluxes} is called and coerced
-into a vector of equations.
+For an \code{eqnlist}, the right-hand sides of the ODE are assembled
+from \code{\link[=getFluxes]{getFluxes()}}.
 }

@@ -2,7 +2,7 @@
 % Please edit documentation in R/PEtabInterface.R
 \name{exportPEtabObject}
 \alias{exportPEtabObject}
-\title{Export a dMod \code{petabProblem} to a PEtab problem on disk}
+\title{Export an Imported PEtab Problem}
 \usage{
 exportPEtabObject(
   petab,
@@ -13,65 +13,65 @@ exportPEtabObject(
 )
 }
 \arguments{
-\item{petab}{A \code{petabProblem} produced by \code{\link[=importPEtab]{importPEtab()}} (or hand-built
-list with the same slot names).}
+\item{petab}{A \code{petabproblem} returned by \code{\link[=importPEtab]{importPEtab()}}, or a list with
+the same components.}
 
-\item{dir}{Output directory; created if missing.}
+\item{dir}{Output directory, created if missing.}
 
-\item{modelID}{SBML model identifier (defaults to \code{petab$modelID} or
-\code{"dMod_export"}).}
+\item{modelID}{SBML model identifier. Default \code{NULL}: the model id of the
+imported problem, else \code{"dMod_export"}.}
 
-\item{formatVersion}{Output format. One of \code{"2.0.0"} (default) or
-\code{"1"}. v2 writes the new YAML schema with \code{model_files} /
-\code{experiment_files} and a long-format conditions table.}
+\item{formatVersion}{\code{"2.0.0"} (default) or \code{"1"}.}
 
-\item{overwrite}{Logical. If \code{FALSE} (default) errors when files already
-exist in \code{dir}.}
+\item{overwrite}{Logical. If \code{FALSE} (default), existing files in \code{dir} are
+an error.}
 }
 \value{
-Path to the written YAML manifest, invisibly.
+Path to the written YAML file, invisibly.
 }
 \description{
-Low-level exporter that writes the PEtab tables (parameters, observables,
-conditions, measurements; v2 additionally writes experiments) plus the
-SBML model and a YAML manifest, given a fully-populated \code{petabProblem}-
-shaped list (i.e. an object as produced by \code{\link[=importPEtab]{importPEtab()}}).
-Sub-conditions synthesised by the importer are collapsed back to their
-PEtab condition + per-row \code{observableParameters} / \code{noiseParameters}
-representation.
+Writes a problem returned by \code{\link[=importPEtab]{importPEtab()}} back to PEtab: the parameter,
+observable, condition and measurement tables, for v2 also the experiment
+table, the SBML model and a YAML file. Conditions the importer split are
+merged again. For a problem built in dMod, use \code{\link[=exportPEtab]{exportPEtab()}}.
 }
 \details{
-If you have only the dMod-native pieces (datalist, odemodel, observation
-/ parameter / prediction functions, and a numeric \code{pouter}) and never went
-through \code{importPEtab()}, use the higher-level \code{\link[=exportPEtab]{exportPEtab()}} adapter,
-which synthesises the missing PEtab metadata and dispatches here.
-
-Symbolic species initials (SBML \verb{<initialAssignment>} elements) on
-\code{petab$inits} are written verbatim through \code{\link[=exportSbml]{exportSbml()}} into the
-new SBML model.
-
-Lossy steps documented:
+Limits:
 \itemize{
-\item Parameter scales survive only via \code{attr(petab$pouter, "petab_scales")} set by the importer; hand-built problems lacking
-this attribute default to \code{"lin"}.
-\item v2 has no \code{parameterScale} column. When exporting to v2, scales
-other than \code{"lin"} are linearised on disk (values \emph{and} bounds)
-with a one-time warning.
-\item v2 has no \code{log10} observable transformation. When exporting an
-observable with \code{obs_trafo == "log10"}, dMod warns and emits
-\code{noiseDistribution = "log-normal"} (mathematically \code{log}).
-\item State-init overrides that live only on the trafo \code{p} (i.e.
-\code{cond_grid} columns whose target is a state initial concentration,
-baked in by the v1 importer) are not written to the v2 long-form
-conditions table. Exporting such a problem to v2 therefore drops
-those overrides; export to \code{formatVersion = "1"} keeps them.
-The native \code{\link[=exportPEtab]{exportPEtab()}} is unaffected because state inits
-there flow through the trafo + SBML \verb{<initialAssignment>} path.
-\item SBML \verb{<algebraicRule>} elements are silently skipped on import
-(dMod has no DAE solver), so any SBML written back from such a
-problem lacks them.
+\item Parameter scales are read from \code{attr(petab$bestfit, "petab_scales")}; without it they are \code{"lin"}.
+\item v2 has no parameter scales: values and bounds are written on the
+linear scale, with a warning.
+\item v2 has no \code{log10} observable transformation: it is written as
+\code{"log-normal"} noise, with a warning.
+\item Initial values set per condition only in the parameter
+transformation are not written to a v2 condition table; use
+\code{formatVersion = "1"} to keep them.
+\item SBML \verb{<algebraicRule>} elements are not imported and therefore not
+written.
 }
+}
+\examples{
+\dontshow{if (requireNamespace("reticulate", quietly = TRUE) && requireNamespace("rjson", quietly = TRUE) && requireNamespace("yaml", quietly = TRUE) && reticulate::py_module_available("libsbml")) withAutoprint(\{ # examplesIf}
+\donttest{
+yaml <- system.file("extdata/petab_boehm/Boehm.yaml", package = "dMod2")
+petab <- importPEtab(yaml, backend = "cppDE", cores = 1, outdir = tempdir())
+petab
+
+# The objective at the nominal values
+petab$obj(petab$bestfit)$value
+
+# The prediction needs the fixed parameters
+fixed <- attr(petab, "petab_meta")$fixed
+times <- seq(0, 240, length.out = 61)
+plot(petab$prd(times, c(petab$bestfit, fixed)), petab$dataList)
+
+# Write the problem back to PEtab
+yamlOut <- exportPEtabObject(petab, file.path(tempdir(), "boehm"),
+                             formatVersion = "1")
+readPEtabTables(yamlOut)$parameters
+}
+\dontshow{\}) # examplesIf}
 }
 \seealso{
-\code{\link[=exportPEtab]{exportPEtab()}} for a dMod-native entry point.
+\code{\link[=importPEtab]{importPEtab()}}, \code{\link[=exportPEtab]{exportPEtab()}}
 }

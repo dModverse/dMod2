@@ -31,12 +31,9 @@
 using namespace Rcpp;
 
 
-// Compute -2 log p, gradient (length P) and Hessian (P x P) over the
-// Cholesky parameters. `cholLoc` is the (P x 2) 1-based (row, col) matrix
-// from omegaSpec$cholLoc. `omegaVec` is the named numeric vector indexed
-// in the same order. `isDiag` is a logical P-vector with TRUE for the
-// log-diagonal entries.
-//
+// -2 log p, gradient (P) and Hessian (P x P) over the Cholesky parameters.
+// `cholLoc` is omegaSpec$cholLoc, (P x 2) 1-based (row, col); `omegaVec` follows
+// its order; `isDiag` flags the log-diagonal entries.
 // [[Rcpp::export(name = "priorOmegaKernel")]]
 List prior_omega_kernel(NumericVector omegaVec,
                         IntegerMatrix cholLoc,

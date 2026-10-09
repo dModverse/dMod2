@@ -12,11 +12,13 @@
 \arguments{
 \item{x}{any R object}
 
-\item{...}{not used right now}
+\item{...}{not used.}
 
-\item{data}{data list object}
+\item{data}{object of class \code{datalist}. Default \code{NULL}. Its condition grid
+adds covariate columns to the output.}
 
-\item{errfn}{obsfn object, the error model function to predict sigma}
+\item{errfn}{object of class \code{obsfn}, the error model that predicts the
+column \code{sigma}. Default \code{NULL} sets \code{sigma} to \code{NaN}.}
 }
 \value{
 a data frame

@@ -3,58 +3,52 @@
 \name{+.datalist}
 \alias{+.datalist}
 \alias{sumdatalist}
-\title{Direct sum of datasets}
+\title{Direct Sum of Datasets}
 \usage{
-\method{+}{datalist}(data1, data2)
+\method{+}{datalist}(e1, e2)
 }
 \arguments{
-\item{data1}{dataset of class \code{datalist}}
+\item{e1}{object of class \code{datalist}.}
 
-\item{data2}{dataset of class \code{datalist}}
+\item{e2}{object of class \code{datalist}.}
 }
 \value{
-Object of class \code{datalist} for the
-union of conditions.
+Object of class \code{datalist} for the union of conditions.
 }
 \description{
-Used to merge datasets with overlapping conditions.
+Combines two datalists.
 }
 \details{
-Each data list contains data frames for a number of conditions.
-The direct sum of datalist is meant as merging the two data lists and
-returning the overarching datalist.
+A condition present in both datalists is taken from \code{e2}, with
+a warning. The condition grids are combined.
 }
 \examples{
-\dontrun{
-  # Start with two data frames
-  mydata1 <- data.frame(
-    name = "A",
-    time = 0:1,
-    value = 1:2,
-    sigma = .1,
-    compound = c("DEM", "APAP"),
-    dose = "0.1"
-  )
-  
-  mydata2 <- data.frame(
-    name = "A",
-    time = 0:1,
-    value = 3:4,
-    sigma = .1,
-    compound = c("APAP", "DCF"),
-    dose = "0.1"
-  )
- 
-  # Create datalists from dataframes
-  data1 <- as.datalist(mydata1, split.by = c("compound", "dose")) 
-  data2 <- as.datalist(mydata2, split.by = c("compound", "dose")) 
-  
-  # Direct sum of datalists
-   data <- data1 + data2
-   print(data)
-  
-  # Check the condition.grid (if available)
-   condition.grid <- attr(data, "condition.grid")
-   print(condition.grid)
+mydata1 <- data.frame(
+  name = "A",
+  time = 0:1,
+  value = 1:2,
+  sigma = .1,
+  compound = c("DEM", "APAP"),
+  dose = "0.1"
+)
+
+mydata2 <- data.frame(
+  name = "A",
+  time = 0:1,
+  value = 3:4,
+  sigma = .1,
+  compound = c("APAP", "DCF"),
+  dose = "0.1"
+)
+
+data1 <- as.datalist(mydata1, splitBy = c("compound", "dose"))
+data2 <- as.datalist(mydata2, splitBy = c("compound", "dose"))
+
+## Condition APAP_0.1 is taken from data2, with a warning
+data <- data1 + data2
+data
+attr(data, "condition.grid")
 }
+\seealso{
+\code{\link[=as.datalist]{as.datalist()}}
 }

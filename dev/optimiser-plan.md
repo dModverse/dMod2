@@ -87,10 +87,10 @@ interface redesign that stops the string list from exploding.
   parameters forming and factorising `J` densely costs microseconds next to one ODE solve, and a
   sloppy spectrum has no effective rank a Krylov method could exploit.
 - **Sketched Gauss-Newton.** A small effective rank makes the sketch cheap
-  and the step wrong in the directions carrying the decrease. If revisited it belongs to the
+  and the step wrong in the directions that make up the decrease. If revisited it belongs to the
   reverse-AD track as a seed or preconditioner, not as a subproblem Hessian.
 
-**`trustL1` is declared frozen.** `src/trustL1_kernel.cpp` carries its own driver
+**`trustL1` is declared frozen.** `src/trustL1_kernel.cpp` has its own driver
 (`ref_init`, `ref_propose`, `ref_accept`, `ref_result`) with no `qn_*` machinery, and its
 `trustL1_impl` takes no `hessianMethod`. Adding Hessian sources to `trust()` needs no change there.
 Non-monotone acceptance would have to be mirrored into `ref_accept` by hand. The decision is not to,
@@ -245,7 +245,7 @@ bit-identical, which is a regression test rather than a measurement.
 
 ### Stage 3. Non-monotone acceptance
 
-Zhang-Hager: carry `Q_{k+1} = eta Q_k + 1`, `C_{k+1} = (eta Q_k C_k + f_{k+1}) / Q_{k+1}`, and score
+Zhang-Hager: keep `Q_{k+1} = eta Q_k + 1`, `C_{k+1} = (eta Q_k C_k + f_{k+1}) / Q_{k+1}`, and score
 `rho` (`trust_kernel.cpp:326`) against `C_k` instead of `f_used`. `nonmonotone = 0` reproduces
 today's behaviour exactly.
 
@@ -313,7 +313,7 @@ Moré-Sorensen handles that natively. That is why this is cheap here and expensi
 **Know what it costs before building it.** `deriv2 = TRUE` requires a model compiled with
 `odemodel(..., deriv2 = TRUE)`; `Xs.cppDE` dispatches to a third compiled object and hard-errors
 otherwise (`R/prediction.R:301-312`), and `Xs.deSolve` and `Xf` refuse outright. The solve then
-carries `p(p+1)/2` extra sensitivity blocks, about 45 for Boehm and about 6400 for Bachmann. This is
+integrates `p(p+1)/2` extra sensitivity blocks, about 45 for Boehm and about 6400 for Bachmann. This is
 a small-model method, and the plan says so rather than discovering it on the cluster.
 
 **It must not degrade silently.** If the `deriv2` attribute is missing,

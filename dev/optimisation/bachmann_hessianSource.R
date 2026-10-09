@@ -1,5 +1,5 @@
 # -------------------------------------------------------------------------#
-# Hessian source on Bachmann: does the Boehm result carry to 113 parameters?
+# Hessian source on Bachmann: does the Boehm result extend to 113 parameters?
 # -------------------------------------------------------------------------#
 #
 # [PURPOSE]
@@ -47,7 +47,7 @@ library(dMod2)
 
 # From the shared catalogue. Its keys are free of spaces and commas: they travel
 # to the nodes as literals in the generated array script.
-source(system.file("benchmarks", "hessianSourceSettings.R", package = "dMod2"))
+source(file.path("benchmarks", "scripts", "hessianSourceSettings.R"))
 settings <- hessianSourceSettings[c("gn", "gn_sr1", "sr1_id", "sr1_gn", "sr1_id_gn")]
 # BACHMANN_ONLY names a single source, which is how a source whose remote build
 # failed is sent again without touching the ones already in the queue.
@@ -188,17 +188,17 @@ pouter   <- structure(rep(-1, length(outerpars)), names = outerpars)
 .moved   <- abs(.published + 1) > 1
 pouter[.moved] <- round(.published[.moved])
 
-# The published problem carries one informative prior, on the receptor pool.
+# The published problem has one informative prior, on the receptor pool.
 # A multi-start needs the weak prior of the Boehm setup as well, over everything
 # but the error model, or starts drift into the bounds instead of converging.
 # The prior must not be able to reorder the optima the comparison is about: with
 # the centre above it costs about 1 at the published parameters, a quarter of
 # the gap between the local optima seen here. Out of it: the error parameters,
-# whose variance it would bias, and init_EpoRJAK2, which already carries the
+# whose variance it would bias, and init_EpoRJAK2, which already has the
 # published informative prior.
 .weak <- setdiff(outerpars,
                  c(grep("^sd_", outerpars, value = TRUE), "init_EpoRJAK2"))
-obj <- obj + constraintL2(pouter[.weak], sigma = 4, attr.name = "prior")
+obj <- obj + constraintL2(pouter[.weak], sigma = 4, attrName = "prior")
 
 
 # –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
@@ -240,7 +240,7 @@ fitBlock <- function(source, block)
 # –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
 if (.submit) {
 
-  # The source is substituted into the expression, so each job carries its own
+  # The source is substituted into the expression, so each job gets its own
   # as a literal rather than a variable the next pass of the loop overwrites.
   submitSource <- function(source) eval(substitute(
     distributedComputing(
@@ -249,14 +249,14 @@ if (.submit) {
       partition    = "cpu-single",
       cores        = .cores,
       nodes        = 1,
-      mem_per_core = 2,
+      memPerCore   = 2,
       # Set by the slowest arm, not the typical one: a quasi-Newton method from
       # an identity seed needs of the order of n_theta accepted steps, and a
       # truncated arm shrinks the shared block set for every other arm too.
       walltime     = "03:00:00",
       machine      = "helix",
-      var_values   = list(seq_len(.blocks)),
-      no_rep       = NULL,
+      varValues    = list(seq_len(.blocks)),
+      nRep         = NULL,
       compile      = TRUE,
       recover      = .recover,
       resetSeeds   = FALSE,

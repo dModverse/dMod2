@@ -2,19 +2,22 @@
 % Please edit documentation in R/eqnClass.R
 \name{print.eqnlist}
 \alias{print.eqnlist}
-\title{Print or pander equation list}
+\title{Print or Pander Equation List}
 \usage{
 \method{print}{eqnlist}(x, pander = FALSE, ...)
 }
 \arguments{
-\item{x}{object of class \link{eqnlist}}
+\item{x}{object of class \link{eqnlist}.}
 
-\item{pander}{logical, use pander for output (used with R markdown)}
+\item{pander}{logical, use pander for output (R Markdown). Default \code{FALSE}.}
 
-\item{...}{additional arguments}
+\item{...}{not used.}
+}
+\value{
+\code{x}, invisibly.
 }
 \description{
-Print or pander equation list
+Print or Pander Equation List
 }
 \author{
 Wolfgang Mader, \email{Wolfgang.Mader@fdm.uni-freiburg.de}

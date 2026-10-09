@@ -2,7 +2,7 @@
 % Please edit documentation in R/eqnClass.R
 \name{setCompartmentVolume}
 \alias{setCompartmentVolume}
-\title{Set compartment volumes}
+\title{Set Compartment Volumes}
 \usage{
 setCompartmentVolume(eqnlist, ..., rules = NULL)
 }
@@ -20,11 +20,8 @@ a volume rule. \code{NA} removes an existing rule.}
 An object of class \link{eqnlist}.
 }
 \description{
-Changes the volume expression (and optionally the volume rule)
-of one or more compartments. Use this rather than assigning into
-\code{eqnlist$compartments} directly: the per-state \verb{$volumes} view is derived
-from the layout and has to be recomputed, which in-place assignment does not
-do.
+Sets the volume expression, and optionally the volume rule, of
+one or more compartments and updates the per-state volumes.
 }
 \examples{
 f <- eqnlist() |>

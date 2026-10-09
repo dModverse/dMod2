@@ -1,8 +1,8 @@
 Package: dMod2
 Type: Package
 Title: Dynamic Modeling and Parameter Estimation in ODE Models
-Version: 0.10.2
-Date: 2026-10-01
+Version: 0.11.0
+Date: 2026-10-08
 Authors@R: c(
     person("Simon", "Beyer", email = "simon.beyer@fdm.uni-freiburg.de",
            role = c("aut", "cre")),
@@ -19,12 +19,14 @@ Authors@R: c(
     person("Marcus", "Rosenblatt", email = "marcus.rosenblatt@gmail.com",
            role = "ctb"),
     person("Svenja", "Kemmer", email = "svenja.kemmer@fdm.uni-freiburg.de",
-           role = "ctb"))
+           role = "ctb"),
+    person("John", "Fox", role = "ctb",
+           comment = "Signature and argument check of rref()"))
 Description: Tools for dynamic modeling and parameter estimation in ordinary
     differential equation (ODE) models of reaction networks. Models are built
     symbolically and compiled to C/C++ with first- and second-order
     sensitivities. Prediction, observation and objective functions are
-    composable function objects that carry symbolic derivatives, following the
+    composable function objects with their symbolic derivatives, following the
     paradigm that derivative information should be used for optimization
     whenever possible. Model calibration uses trust-region optimization with
     optional L1 penalties, multi-start search and profile-likelihood
@@ -42,7 +44,7 @@ Depends: R (>= 4.5.0)
 Imports:
     cOde,
     tools,
-    cppDE (>= 0.11.2),
+    cppDE (>= 0.12.0),
     ggplot2,
     parallel,
     stringr,
@@ -63,6 +65,7 @@ Remotes:
     dModverse/cppDE,
     dkaschek/cOde
 Suggests:
+    jsonlite,
     knitr,
     rmarkdown,
     testthat (>= 3.0.0),
@@ -81,6 +84,9 @@ Suggests:
     ragg,
     rjson,
     yaml
+SystemRequirements: Python package symident (symmetryDetection(),
+    symmetryReduction()), installed on first use from
+    https://github.com/dModverse/symident
 VignetteBuilder: R.rsp
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
@@ -89,3 +95,5 @@ LinkingTo:
 Config/roxygen2/version: 8.1.0
 Config/testthat/edition: 3
 Config/testthat/parallel: true
+Config/testthat/start-first: petab-published, petab-roundtrip, multipleShooting,
+    loadDLL, Xs, reverse, compile-chunked, normL2, Y

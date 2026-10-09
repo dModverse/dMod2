@@ -1,4 +1,4 @@
-## Context: "bmm (batched matrix multiplication, batch-first)"  (context() is deprecated in testthat 3e; kept as a note)
+# bmm(): batched matrix multiplication, batch-first.
 
 test_that("bmm_lb matches per-slice reference", {
   set.seed(1)
@@ -46,6 +46,6 @@ test_that("Bn = 1 edge case", {
 
 test_that("dimension-mismatch errors are raised", {
   A <- array(0, c(3, 2, 4))
-  Bmat <- matrix(0, 3, 2)  # K mismatch: should be 4
+  Bmat <- matrix(0, 3, 2)  # inner dimensions do not match
   expect_error(A %bmm% Bmat)
 })

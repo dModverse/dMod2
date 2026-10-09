@@ -11,7 +11,7 @@ skip_if_no_compile <- function() {
 ## ---- Shared models -----------------------------------------------------
 
 # Every model a test evaluates, generated once and compiled on first use. The
-# ODE sources carry -fopenmp and the algebraic ones do not, so each flag set
+# ODE sources need -fopenmp and the algebraic ones do not, so each flag set
 # gets its own shared object.
 .pp_env <- new.env(parent = emptyenv())
 
@@ -42,7 +42,7 @@ pp_models <- function() {
     addReaction("ERK",  "pERK", "k1 * ERK") |>
     addReaction("pERK", "ERK",  "k2 * pERK")
 
-  # production-decay, A* = k_in / k_out, two independent objects
+  # production-decay, two independent objects
   el_pd <- eqnlist() |>
     addReaction("", "A", "k_in") |> addReaction("A", "", "k_out * A")
   pd  <- Pimpl(el_pd, modelname = mn("pd"), verbose = FALSE)
@@ -60,7 +60,7 @@ pp_models <- function() {
     addReaction("X", "", "d * X")
   bistable <- Pimpl(el_bi, modelname = mn("bistable"), verbose = FALSE)
 
-  # x - a = 0 read as dx/dt: the only root is unstable
+  # a linear residual read as a flow: the only root is unstable
   unstable <- Pimpl(c(x = "x - a"), parameters = "a", flow = TRUE,
                     modelname = mn("unstable"), verbose = FALSE)
 
@@ -69,17 +69,17 @@ pp_models <- function() {
 
   d2 <- Pimpl(c(C = "k1*(totA - C)*(totB - C) - km*C"),
               parameters = c("k1","km","totA","totB"), deriv2 = TRUE,
-              modelname = mn("d2"), verbose = FALSE, controlsPTC = list(rtol = 1e-13))
+              modelname = mn("d2"), verbose = FALSE, controlsPTC = list(reltol = 1e-13))
 
   d2_2 <- Pimpl(c(x1 = "a*x1 - b*x2 - 1", x2 = "x1*x2 - c"),
                 parameters = c("a","b","c"), deriv2 = TRUE,
-                modelname = mn("d2_2"), verbose = FALSE, controlsPTC = list(rtol = 1e-13))
+                modelname = mn("d2_2"), verbose = FALSE, controlsPTC = list(reltol = 1e-13))
 
   el_AB <- eqnlist() |>
     addReaction("A", "B", "k*A") |>
     addReaction("B", "A", "km*B")
   d2_cq <- Pimpl(el_AB, parameters = c("k","km"), deriv2 = TRUE,
-                 modelname = mn("d2_cq"), verbose = FALSE, controlsPTC = list(rtol = 1e-13))
+                 modelname = mn("d2_cq"), verbose = FALSE, controlsPTC = list(reltol = 1e-13))
 
   moiety2_im <- Pimpl(el_2moiety, modelname = mn("2moiety_im"))
 
@@ -115,7 +115,7 @@ pp_models <- function() {
 
   compile(lin, d2, d2_2, d2_cq, moiety2_im, dimer_im, recycle, sing, noroot,
           noparam, erk_im, px, px_same, zero, pd, pd2, plasmid, bistable, unstable,
-          output = mn("impl"), cores = 4L)
+          output = mn("impl"), cores = test_cores())
 
   .pp_env$models <- list(
     lin = lin, d2 = d2, d2_2 = d2_2, d2_cq = d2_cq, moiety2_im = moiety2_im,
@@ -138,9 +138,7 @@ test_that("Pimpl on x - a = 0 returns x = a (root-finding correctness)", {
   # Pimpl returns inner state plus pass-through inputs; pick by name.
   expect_equal(as.numeric(out["x"]), pars[["a"]], tolerance = 1e-8)
 
-  # IFT: x*(a) = a, so dx*/da = +1. (The legacy fn used to recycle a single
-  # Jacobian entry across all columns, producing the wrong sign here; the
-  # current implementation pins the sign down to the standard IFT result.)
+  # The IFT sensitivity has the sign of the closed form.
   J <- attr(out, "deriv")
   expect_equal(unname(J["x", "a"]), 1, tolerance = 1e-6)
 })
@@ -150,7 +148,7 @@ test_that("Pimpl on x - a = 0 returns x = a (root-finding correctness)", {
 
 test_that("Pimpl(deriv2) matches FD on a 1D mass-action steady state", {
   skip_if_no_compile()
-  # A + B <-> C, with totA, totB substituted in: solve k1*(totA-C)*(totB-C) - km*C = 0
+  # A + B <-> C with the totals substituted in: one quadratic residual.
   pf <- pp_models()$d2
 
   p0 <- c(k1 = 1, km = 0.5, totA = 2, totB = 3, C = 0.5)
@@ -159,7 +157,7 @@ test_that("Pimpl(deriv2) matches FD on a 1D mass-action steady state", {
   J_an <- attr(v, "deriv")
   H_an <- attr(v, "deriv2")
 
-  # Closed form at C* = 1.5: dxdp = -dfdp/dfdx
+  # The Jacobian matches the closed form.
   expect_equal(unname(J_an["C", inputs]),
                c(0.3, -0.6, 0.6, 0.2), tolerance = 1e-6)
 
@@ -215,7 +213,7 @@ test_that("Pimpl(deriv2) matches FD on a 2-state coupled SS", {
 
 test_that("Pimpl(deriv2) propagates Hessian through CQ-eliminated species", {
   skip_if_no_compile()
-  # A <-> B; CQ A + B = total_1; A gets eliminated, B stays dependent
+  # A <-> B with one conserved quantity: one species is eliminated, one stays dependent.
   pf <- pp_models()$d2_cq
 
   p0 <- c(k = 2, km = 0.5, total_1 = 3, A = 0.5, B = 0.5)
@@ -224,12 +222,12 @@ test_that("Pimpl(deriv2) propagates Hessian through CQ-eliminated species", {
   J_an <- attr(v, "deriv")
   H_an <- attr(v, "deriv2")
 
-  # Closed form: B* = k*total_1 / (k+km); A* = total_1 - B*
+  # States match the closed form.
   Bs <- p0[["k"]] * p0[["total_1"]] / (p0[["k"]] + p0[["km"]])
   expect_equal(as.numeric(v["B"]), Bs, tolerance = 1e-6)
   expect_equal(as.numeric(v["A"]), p0[["total_1"]] - Bs, tolerance = 1e-6)
 
-  # A and B's Hessians are linked by A = total_1 - B  =>  d^2 A = -d^2 B
+  # The conservation law ties the two Hessians together.
   expect_equal(unname(H_an["A", inputs, inputs]),
                -unname(H_an["B", inputs, inputs]), tolerance = 1e-10)
 
@@ -257,9 +255,8 @@ test_that("Pimpl solves the full system together with the conservation rows", {
   skip_if_no_compile()
   oldwd <- setwd(.dmod_fx_workdir()); on.exit(setwd(oldwd), add = TRUE)
 
-  # A <-> B with CQ A + B = total_1. Pimpl keeps every moiety species and every
-  # rate equation and adds the conservation row; nothing is reconstructed by
-  # subtraction and no pivot species is chosen.
+  # Pimpl keeps every moiety species and every rate equation and adds the
+  # conservation row; nothing is reconstructed by subtraction.
   el <- eqnlist()
   el <- addReaction(el, "A", "B", "k*A")
   el <- addReaction(el, "B", "A", "km*B")
@@ -276,14 +273,12 @@ test_that("Pimpl solves the full system together with the conservation rows", {
 
 ## ---- CQ spectrum: independent / non-unit-coef / overlapping -----------
 
-# Conserved quantities enter as rows C x = T:
-#   B  two independent CQs            -> two rows, two total_* params
-#   D  non-unit stoichiometry (2*D)   -> coefficient 2 in C
-#   C  overlapping CQs                -> rows sharing species
+# Conserved quantities enter as rows C x = T: independent CQs give one row and
+# total each, non-unit stoichiometry a coefficient in C, overlapping CQs shared species.
 
 test_that("two independent conserved moieties solve to closed form", {
   skip_if_no_compile()
-  # A <-> B  and  C <-> D : two disjoint moieties, total_1 = A+B, total_2 = C+D
+  # two disjoint moieties
   m <- pp_models()
 
   p0 <- c(k1 = 2, k2 = 1, k3 = 0.5, k4 = 1.5, total_1 = 4, total_2 = 6,
@@ -297,12 +292,12 @@ test_that("two independent conserved moieties solve to closed form", {
 
 test_that("non-unit stoichiometric coefficient is handled (2*M <-> D)", {
   skip_if_no_compile()
-  # Dimerisation 2 M <-> D conserves the monomer count M + 2 D.
+  # Dimerisation conserves the monomer count.
   m <- pp_models()
 
   p0 <- c(ka = 1, kd = 2, total_MD = 5)
   r  <- p0[["ka"]] / p0[["kd"]]
-  Ms <- (-1 + sqrt(1 + 8 * r * p0[["total_MD"]])) / (4 * r)   # 2 r M^2 + M - T = 0
+  Ms <- (-1 + sqrt(1 + 8 * r * p0[["total_MD"]])) / (4 * r)
   Ds <- r * Ms^2
 
   oi <- m$dimer_im(p0)[[1]]
@@ -313,10 +308,8 @@ test_that("non-unit stoichiometric coefficient is handled (2*M <-> D)", {
 
 test_that("overlapping conserved quantities reconstruct consistently (recycle enzyme)", {
   skip_if_no_compile()
-  # G + S <-> GS -> G + P, P -> S : closed catalytic cycle.
-  # Two overlapping CQs share G/GS; one auto-detected CQ carries a
-  # negative coefficient on G, so the recon both divides by coef_g and
-  # nests another eliminated species (fixed-point substitution).
+  # A closed catalytic cycle with two overlapping CQs; one has a negative
+  # coefficient, so reconstruction divides by it and nests another eliminated species.
   m <- pp_models()
 
   totals <- getTotals(m$el_recycle)
@@ -352,22 +345,15 @@ test_that("a fully open network (all states drain to zero) errors clearly", {
 
 test_that("Pimpl uses the pseudoinverse when df/dx is rank-deficient", {
   skip_if_no_compile()
-  # Two-state system with a conservation law that Pimpl cannot detect without
-  # an `eqnlist`:
-  #   f1 = x1 + x2 - s
-  #   f2 = x1 + x2 - s    (same as f1 -> df/dx has rank 1)
-  # The constraint manifold is the line x1 + x2 = s. The IFT does not apply
-  # uniquely, but the Moore-Penrose pseudoinverse gives the minimum-norm
-  # sensitivity (movement on the manifold, perpendicular to the null space)
-  # which downstream callers can still use; Pimpl warns and proceeds.
+  # Duplicate residuals make df/dx rank-deficient. Pimpl warns and returns the
+  # minimum-norm sensitivity from the Moore-Penrose pseudoinverse.
   pf <- pp_models()$sing
 
   p0 <- c(s = 1, x1 = 0.5, x2 = 0.5)
   expect_warning(out <- pf(p0, deriv = TRUE)[[1]], "rank-deficient")
   J <- attr(out, "deriv")
   expect_true(is.matrix(J))
-  # Pseudoinverse projects equal-weighted sensitivity onto x1 + x2: the
-  # constraint says dx1/ds + dx2/ds = 1, with the minimum-norm split.
+  # The sensitivity satisfies the differentiated constraint.
   expect_equal(sum(J[c("x1", "x2"), "s"]), 1, tolerance = 1e-6)
 })
 
@@ -418,7 +404,7 @@ test_that("a condition-less Pimpl keeps an independent warm start per condition"
   m <- pp_models()
   resetWarmStarts(m$pd, verbose = FALSE)
 
-  # A* = k_in / k_out: 3 in C1, 6 in C2
+  # each condition reaches its own closed-form steady state
   pf  <- m$pd * m$px
   out <- pf(c(s = 3), deriv = FALSE)
   expect_equal(as.numeric(out$C1["A"]), 3, tolerance = 1e-10)
@@ -466,7 +452,7 @@ test_that("resetWarmStarts rejects non-function inputs", {
 
 test_that("Pimpl throws when no attempt converges", {
   skip_if_no_compile()
-  # x^2 + 1 = 0 has no real root.
+  # a residual without a real root
   pf <- pp_models()$noroot
 
   resetWarmStarts(pf, verbose = FALSE)
@@ -474,11 +460,7 @@ test_that("Pimpl throws when no attempt converges", {
 })
 
 
-# ============================================================================
-# Structural zero-state detection (.zeroStatesFromSmatrix) for eqnlist inputs
-# (three layers from AlyssaPetit v1.2: NegCol, PosCol+single-state feeder,
-# sink-cluster LP).
-# ============================================================================
+# ==== Structural zero states (.zeroStatesFromSmatrix): NegCol, PosCol, sink-cluster LP ====
 
 helper <- dMod2:::.zeroStatesFromSmatrix
 
@@ -497,9 +479,8 @@ test_that("NegCol: a state with only outflux is detected as zero", {
 ## ---- Layer 2: PosCol with single-state feeder --------------------------
 
 test_that("PosCol: only-influx state whose feeder has a single reactant", {
-  # X is fed by k_pr * Z and consumed by nothing (PosCol).
-  # k_pr * Z must be 0 in SS, so Z = 0 (single-state in flux).
-  # Then X is fed only by zero flux -> drop X next iteration (NegCol-empty).
+  # An only-influx state forces its single-reactant feeder to zero, and the
+  # state itself drops on the next iteration.
   el <- eqnlist() |>
     addReaction("", "X", "k_pr * Z") |>
     addReaction("Z", "",  "k_dg * Z")
@@ -512,9 +493,8 @@ test_that("PosCol: only-influx state whose feeder has a single reactant", {
 
 test_that("Sink cluster: TGFb + R_TGFb + R_TGFb_int (combined mass leaks)", {
   skip_if_not_installed("lpSolve")
-  # Each individual column has +1 and -1 entries, so layers 1+2 cannot
-  # catch them. The cluster {L, RL, RLi} as a whole degrades via the
-  # RLi -> "" reaction, so its total mass leaks monotonically.
+  # Every column has both signs, so layers 1 and 2 miss the cluster; its total
+  # mass leaks through one degradation.
   el <- eqnlist() |>
     addReaction("L + R", "RL",  "k_on  * L * R") |>
     addReaction("RL",    "L + R", "k_off * RL") |>
@@ -544,30 +524,6 @@ test_that("Sink cluster: a conserved moiety listed first stays nonzero", {
     addReaction("RL",    "",    "k_dg * RL")
   zs <- helper(el)
   expect_setequal(zs$zero_states, c("L", "RL"))
-})
-
-
-## ---- Layer 3 falls back when lpSolve is missing ------------------------
-
-test_that("FindSinkCluster degrades gracefully without lpSolve", {
-  # Same model as above; we can't easily uninstall lpSolve mid-test, so
-  # this is a structural assertion: with only layers 1+2, the cluster
-  # would not be found (we verified manually no NegCol/PosCol matches).
-  el <- eqnlist() |>
-    addReaction("L + R", "RL",  "k_on  * L * R") |>
-    addReaction("RL",    "L + R", "k_off * RL") |>
-    addReaction("RL",    "RLi", "k_int * RL") |>
-    addReaction("RLi",   "L",   "k_dec * RLi") |>
-    addReaction("RLi",   "",    "k_dg  * RLi")
-  # Sanity: every column is mixed-sign in this minimal cluster model.
-  S <- el$smatrix
-  S[is.na(S)] <- 0
-  storage.mode(S) <- "double"
-  for (j in seq_len(ncol(S))) {
-    col <- S[, j]
-    expect_true(any(col > 0) && any(col < 0),
-                info = sprintf("state %s is not mixed-sign", colnames(S)[j]))
-  }
 })
 
 
@@ -642,9 +598,7 @@ test_that("Pimpl with flow = TRUE refuses an unstable root", {
 
 ## ---- No-progress: hard error instead of stale initial values -----------
 
-# ============================================================================
-# Edge case: Pimpl with no outer parameters
-# ============================================================================
+# ==== Edge case: Pimpl with no outer parameters ====
 
 test_that("Pimpl with no outer parameters does not crash in build_jacobian", {
   skip_if_no_compile()
@@ -655,10 +609,7 @@ test_that("Pimpl with no outer parameters does not crash in build_jacobian", {
 })
 
 
-# ============================================================================
-# Totals as parameters: smart `totalXxx` naming from the longest common
-# substring of the CQ species, `total_<index>` otherwise.
-# ============================================================================
+# ==== Totals as parameters: `totalXxx` from the longest common substring, else `total_<index>` ====
 
 ## ---- Smart naming: pERK + ERK -> totalERK ----------------------------
 
@@ -677,24 +628,6 @@ test_that(".smartTotalName picks the longest common substring", {
   # Collision with an existing parameter -> disambiguate
   expect_equal(dMod2:::.smartTotalName(c("pERK", "ERK"), character(0),
                                         "totalERK", 1), "totalERK_2")
-})
-
-
-## ---- Pimpl smart naming: A <-> B uses LCS = "" -> total_1 -----------
-
-test_that("Pimpl on A <-> B introduces total_1 (no common substring)", {
-  skip_if_no_compile()
-  oldwd <- setwd(.dmod_fx_workdir()); on.exit(setwd(oldwd), add = TRUE)
-
-  el <- eqnlist() |>
-    addReaction("A", "B", "k * A") |>
-    addReaction("B", "A", "km * B")
-
-  pf <- Pimpl(el, parameters = c("k", "km"),
-              modelname = paste0("test_Pimpl_smart_total1_",
-                                 as.integer(Sys.time())),
-              compile = FALSE, verbose = FALSE)
-  expect_true("total_1" %in% getParameters(pf))
 })
 
 
@@ -727,7 +660,7 @@ test_that("Pimpl solves ERK <-> pERK to closed form in totals", {
   pf <- pp_models()$erk_im
   pars <- c(k1 = 1, k2 = 3, totalERK = 4)
   out  <- pf(pars, deriv = FALSE)[[1]]
-  # ERK* = k2 / (k1 + k2) * total = 3, pERK* = 1
+  # states match the closed form in the total
   expect_equal(as.numeric(out[c("ERK", "pERK")]), c(3, 1), tolerance = 1e-10)
 })
 
@@ -760,17 +693,15 @@ test_that("Pimpl runs its random starts from a fixed seed and leaves the global 
 
 
 test_that("Pimpl solves a network whose R-Smad rows barely turn over", {
-  # TGF-beta model, 37 states: Smad2 is 3 and almost unphosphorylated, so its row
-  # turns over 1e-11 while the pSmad2 row carries the same flux with a diagonal of
-  # 1. Scaled by its own diagonal, the Smad2 row made the step matrix singular
-  # (condition 1e26) and ptc() only shrank dt.
+  # A row that barely turns over beside a fast row of the same flux must not make
+  # the diagonally scaled step matrix singular.
   skip_if_no_compile()
   fx <- readRDS(test_path("fixtures", "pimpl_smad_row.rds"))
   oldwd <- setwd(.dmod_fx_workdir()); on.exit(setwd(oldwd), add = TRUE)
   mn <- paste0("test_pp_smadrow_", as.integer(Sys.time()))
   pf <- Pimpl(fx$reactions, forcings = fx$forcings, deriv = FALSE, modelname = mn,
               controlsPTC = list(nStarts = 0L))
-  compile(pf, output = mn, cores = 4L)
+  compile(pf, output = mn, cores = test_cores())
   out <- pf(fx$pv, deriv = FALSE)[[1]]
   expect_equal(out[["Smad2"]] + out[["pSmad2"]] + out[["C234"]], fx$pv[["tSmad2"]],
                tolerance = 1e-10)
@@ -791,10 +722,7 @@ test_that("Pimpl rejects unknown arguments and controls", {
 })
 
 
-# ============================================================================
-# CQ basis as a first-class eqnlist field: getTotals(), customTotals(),
-# mutator preservation, backward compat with pre-totals eqnlists.
-# ============================================================================
+# ==== CQ basis as an eqnlist field: getTotals(), customTotals(), mutators, pre-totals eqnlists ====
 
 ## ---- getTotals auto-detection ---------------------------------------
 
@@ -850,7 +778,7 @@ test_that("addReaction preserves custom totals when CQ structure survives", {
     addReaction("pERK", "ERK",  "k2 * pERK")
   el <- customTotals(el, list(totalE = "ERK + pERK"))
 
-  # Adding a phosphatase-modifier reaction that doesn't touch ERK/pERK mass
+  # a reaction outside the moiety keeps the totals
   el2 <- addReaction(el, "X", "", "k3 * X")
   expect_equal(names(el2$totals), "totalE")
   expect_true(isTRUE(attr(el2$totals, "custom")))

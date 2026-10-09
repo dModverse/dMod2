@@ -2,7 +2,7 @@
 % Please edit documentation in R/parClass.R
 \name{unique.parframe}
 \alias{unique.parframe}
-\title{Extract those lines of a parameter frame with unique elements in the value column}
+\title{Rows of a Parameter Frame with Unique Values}
 \usage{
 \method{unique}{parframe}(x, incomparables = FALSE, tol = 1, ...)
 }
@@ -19,5 +19,5 @@
 A subset of the parameter frame \code{x}.
 }
 \description{
-Extract those lines of a parameter frame with unique elements in the value column
+Keeps one row per distinct objective value.
 }

@@ -2,26 +2,32 @@
 % Please edit documentation in R/objClass.R
 \name{constraintGamma}
 \alias{constraintGamma}
-\title{Soft gamma constraint on positive parameters}
+\title{Soft Gamma Constraint on Positive Parameters}
 \usage{
-constraintGamma(shape, scale = 1, attr.name = "prior", condition = NULL)
+constraintGamma(shape, scale = 1, attrName = "prior", condition = NULL, ...)
 }
 \arguments{
 \item{shape}{Named numeric vector of shape parameters. Its names select the
 constrained parameters.}
 
-\item{scale}{Numeric, scalar or named and aligned with \code{shape}. The gamma
-scale, not the rate.}
+\item{scale}{Numeric, scalar or named and aligned with \code{shape}, default
+\code{1}. The gamma scale, not the rate.}
 
-\item{attr.name}{Character. Name of the attribute storing the constraint value.}
+\item{attrName}{Character. Name of the attribute holding the constraint
+value, default \code{"prior"}.}
 
-\item{condition}{Optional character vector of conditions.}
+\item{condition}{Character vector, the conditions of a sum of objectives
+in which the term is evaluated. \code{NULL} (default) evaluates it in every
+one.}
+
+\item{...}{\code{attr.name} is deprecated, use \code{attrName}.}
 }
 \value{
-Object of class \code{objfn}.
+An objective function of class \code{objfn}, called as
+\code{obj(pars, ...)}, see \link{dModfn}. Its value is the full \verb{-2 log} density.
 }
 \description{
-Soft gamma constraint on positive parameters
+Soft Gamma Constraint on Positive Parameters
 }
 \details{
 Computes the gamma prior on the \verb{-2 log} scale,

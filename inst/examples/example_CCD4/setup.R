@@ -1,7 +1,5 @@
-# publised in https://www.ncbi.nlm.nih.gov/pubmed/27811075
-# D2D: transferred to D2D exmple models, named bruno
-# simple model, sort of A -> B -> C
-# no error model fitting
+# CCD4 carotenoid cleavage: model, data, conditions and objective
+# Reference: https://www.ncbi.nlm.nih.gov/pubmed/27811075 (D2D model "Bruno")
 
 ## Model Definition ------------------------------------------------------
 
@@ -27,7 +25,7 @@ fixed <- NULL
 forcings <- NULL 
 
 # Add observable ODEs to the original ODEs or use an observation function
-g <- Y(observables, as.eqnvec(f), compile = TRUE,modelname = "obs", attach.input = FALSE)
+g <- Y(observables, as.eqnvec(f), compile = TRUE,modelname = "obs", attachInput = FALSE)
 
 # Generate the model C files, compile them and return a list with func and extended.
 do.compile <- TRUE
@@ -146,9 +144,8 @@ for (C in conditions) {
   p <- p + P(trafoLTot[[C]], condition = C)
 }
 
-optionsOde = list(method = "lsoda")#, lrw = 524)
 optionsSens = list(method = "lsodes", rtol = 1e-8, atol = 1e-8)
-x <- Xs(model0, optionsOde = optionsOde, optionsSens = optionsSens)
+x <- Xs(model0, optionsSens = optionsSens)
 
 trafoL <- trafoLTot[conditions]
 

@@ -1,20 +1,12 @@
-# Behavioral tests for trust() (trust-region optimizer, C++ implementation).
-#
-# Verifies:
-#   * convergence to the exact minimum of a quadratic in one trust step
-#   * recovery of simulated-truth parameters from a noisy decay dataset
-#   * extra objfun args passed via closure binding (no more ... forwarding)
-#   * parscale rescaling lands at the same minimum
-#   * parupper clamps a single component
-#   * blather returns the per-iter trace
-#
-# Trust is also exercised end-to-end via normL2 -> trust in
-# test-mstrust-profile.R and the existing FOCEI tests.
+# Behavioral tests for trust(): quadratic convergence, truth recovery, fixed
+# parameters, parscale invariance, bounds, Hessian sources and the trace.
 
 skip_if_no_compile <- function() {
   testthat::skip_if_not_installed("cppDE")
   testthat::skip_on_cran()
 }
+
+fx_register(multicond = TRUE)
 
 
 # Synthetic quadratic objective in arbitrary dimension. Minimum at `target`.
@@ -63,9 +55,7 @@ test_that("trust(normL2) recovers true (A, k) from simulated decay data within n
                printIter = FALSE)
 
   expect_true(fit$converged)
-  # Practical envelope at this noise level: ~10% relative on (A, k). The
-  # exponential decay has a known A * k -> kA scale identifiability that
-  # makes k a few % less constrained than A.
+  # Tolerances match the practical envelope at this noise level.
   expect_lt(abs(fit$argument[["A"]] - true_pars[["A"]]) / true_pars[["A"]],
             0.10)
   expect_lt(abs(fit$argument[["k"]] - true_pars[["k"]]) / true_pars[["k"]],
@@ -96,27 +86,10 @@ test_that("trust honors fixed = ... (held parameters unchanged in argument)", {
 
 ## ---- parscale invariance --------------------------------------------
 
-test_that("trust with parscale lands at the same minimum as the unscaled run", {
-  target <- c(a = 1.0, b = -0.5, c = 2.3)
-  obj <- .quadratic_objfn(target)
-  init <- c(a = 0, b = 0, c = 0)
-
-  fit_plain <- trust(obj, init, rinit = 1, rmax = 100, iterlim = 50,
-                     printIter = FALSE)
-  fit_scaled <- trust(obj, init, parscale = c(a = 2, b = 0.5, c = 10),
-                      rinit = 1, rmax = 100, iterlim = 50,
-                      printIter = FALSE)
-  expect_equal(unname(fit_scaled$argument[names(target)]),
-               unname(fit_plain$argument[names(target)]),
-               tolerance = 1e-6)
-})
-
-
 ## ---- bounds clamp the optimum ---------------------------------------
 
 test_that("trust honors parupper on one component while leaving the other free", {
-  # 2D problem; unconstrained min at (a, b) = (5, 1). Upper bound on `a`
-  # at 2 clamps that component; `b` converges freely to 1.
+  # An upper bound on one component clamps it; the other converges freely.
   target <- c(a = 5.0, b = 1.0)
   obj <- .quadratic_objfn(target)
 
@@ -134,14 +107,10 @@ test_that("trust honors parupper on one component while leaving the other free",
 ## ---- Near-singular Hessian: stay within trust radius ------------------
 
 test_that("trust step stays inside the trust radius when the Hessian is near-singular", {
-  # Construct an objective whose Hessian has eigenvalues spanning ~20 orders
-  # of magnitude (4e-3 down to 1e-21). LAPACK's smallest eigenvalue then
-  # comes back as tiny negative numerical noise, which previously sent the
-  # subproblem into the hard-hard branch and produced steps thousands of
-  # times larger than the trust radius. The proper Moré-Sorensen easy
-  # branch keeps ||p|| ~ r.
+  # Hessian eigenvalues span many orders of magnitude, so LAPACK returns the
+  # smallest as tiny negative noise; the Moré-Sorensen easy branch must still
+  # keep ||p|| ~ r.
   K <- 7
-  # Eigenvalues spanning many orders of magnitude.
   vals <- c(4.4e-3, 6.0e-4, 1.9e-5, 9.6e-7, 8.0e-10, 8.2e-19, 9.4e-21)
   set.seed(42)
   Q <- qr.Q(qr(matrix(rnorm(K * K), K, K)))    # random orthogonal basis
@@ -151,9 +120,8 @@ test_that("trust step stays inside the trust radius when the Hessian is near-sin
   par_target <- setNames(rep(0, K), paste0("p", seq_len(K)))
   init       <- setNames(rep(0.1, K), paste0("p", seq_len(K)))
 
-  # A static objective with constant H and gradient g + H * (p - init).
-  # Minimum is wherever H(p) = -g; with H near-singular many minima are
-  # acceptable. We only care that trust does not blow up.
+  # Constant near-singular Hessian: many minima are acceptable, only the step
+  # length is checked.
   objfun <- function(p, ...) {
     dp <- p - init
     list(value    = sum(g * dp) + 0.5 * as.numeric(t(dp) %*% H %*% dp),
@@ -165,8 +133,7 @@ test_that("trust step stays inside the trust radius when the Hessian is near-sin
     trust(objfun, init, rinit = 0.1, rmax = 10, iterlim = 50,
           blather = TRUE, printIter = FALSE))
   expect_true(all(is.finite(fit$argument)))
-  # Every accepted/proposed step must stay within rmax (and the per-iter
-  # radius). Without the fix this assertion fails by ~5 orders of magnitude.
+  # Every accepted or proposed step stays within rmax and the per-iteration radius.
   expect_true(all(fit$stepnorm <= fit$r + 1e-6))
   expect_true(all(fit$stepnorm <= 10 + 1e-6))
 })
@@ -199,7 +166,6 @@ test_that("trust(blather = TRUE) returns all trace fields with finite numbers", 
 
 
 ## ---- Coleman-Li boundary handling -------------------------------------
-#
 # The reflective scheme keeps iterates strictly inside the box, so the bound
 # is approached but never touched; `atBound` reports the activity instead.
 
@@ -225,8 +191,7 @@ test_that("trust(blather = TRUE) returns all trace fields with finite numbers", 
 
 
 test_that("trust hits the analytic KKT point of a bound-active quadratic", {
-  # min 0.5 (p - 3)' A (p - 3) s.t. x <= 1, with A = [[2,1],[1,2]].
-  # Active bound at x = 1 leaves d2 = -d1/2, hence y = 4 and g = (-3, 0).
+  # A coupled quadratic with an active upper bound: the result meets the KKT point.
   A      <- matrix(c(2, 1, 1, 2), 2, 2)
   target <- c(x = 3, y = 3)
   # Tolerances pinned: the assertions below measure KKT accuracy, which must
@@ -282,10 +247,8 @@ test_that("preddiff describes the step actually taken, bound active or not", {
 
 
 test_that("truncated and reflected steps are taken when the box blocks", {
-  # A diagonal Hessian never needs stepback: the metric's curvature term C
-  # already keeps the scaled Newton step inside the box. It is off-diagonal
-  # coupling that pushes a coordinate out, so this is a correlated problem with
-  # the optimum far outside an asymmetric box.
+  # Only off-diagonal coupling pushes the scaled Newton step out of the box,
+  # so this is a correlated problem with the optimum far outside an asymmetric box.
   A <- matrix(c(4.789636, 1.795686,  0.196845,
                 1.795686, 1.377690, -0.720839,
                 0.196845, -0.720839, 1.548688), 3, 3)
@@ -311,8 +274,7 @@ test_that("truncated and reflected steps are taken when the box blocks", {
 
 test_that("a collapsing trust radius reports failure, not convergence", {
   # Gradient points uphill, so no step is ever accepted and the radius decays.
-  # Under the old fterm-only test this reported converged = TRUE on the very
-  # first flat rejected step.
+  # A flat rejected step must not count as convergence.
   misleading <- function(p, ...) {
     list(value = sum(p^2), gradient = -2 * p, hessian = diag(length(p)))
   }
@@ -326,10 +288,9 @@ test_that("a collapsing trust radius reports failure, not convergence", {
 
 
 test_that("a flat objective under repeated rejection stops as stagnation", {
-  # Without an rmin floor the run ends once the radius has been cut far enough
-  # that the objective no longer moves. That is reported as "stagnation", never
-  # as "gradient" -- the distinction a caller needs, because the optimiser
-  # cannot tell a genuine noise floor from a bad model.
+  # Without an rmin floor the run ends once the objective stops moving. That is
+  # "stagnation", never "gradient": the optimiser cannot tell a noise floor from
+  # a bad model.
   misleading <- function(p, ...) {
     list(value = sum(p^2), gradient = -2 * p, hessian = diag(length(p)))
   }
@@ -340,9 +301,8 @@ test_that("a flat objective under repeated rejection stops as stagnation", {
 
 
 test_that("a rank-deficient Gauss-Newton Hessian gives a minimum-norm step", {
-  # f = 0.5 (x + y - 2)^2. H = J'J is rank 1 with null space (1, -1), and
-  # g = J'r is orthogonal to it -- the exactly-degenerate hard case. Extending
-  # along the zero-curvature direction would drift along x - y for no gain.
+  # Rank-deficient Gauss-Newton Hessian with the gradient orthogonal to its null
+  # space: the step must not extend along the zero-curvature direction.
   obj <- function(p, ...) {
     res <- as.numeric(p[1] + p[2] - 2)
     J   <- matrix(c(1, 1), nrow = 1)
@@ -352,15 +312,14 @@ test_that("a rank-deficient Gauss-Newton Hessian gives a minimum-norm step", {
 
   expect_true(all(is.finite(fit$argument)))
   expect_equal(sum(fit$argument), 2, tolerance = 1e-6)
-  # Minimum-norm solution of x + y = 2 from (0, 0) is (1, 1): no null-space drift.
+  # The minimum-norm solution, without null-space drift.
   expect_equal(unname(fit$argument[["x"]] - fit$argument[["y"]]), 0, tolerance = 1e-6)
 })
 
 
 test_that("curvature at roundoff level does not steer the degenerate step", {
-  # H = J'J - d*I has eigenvalues {-d, 2-d}, so lam_min is negative by construction
-  # rather than by LAPACK rounding -- the test above only catches the drift on builds
-  # whose dsyevr happens to return the singular direction as negative.
+  # A shifted Hessian makes lam_min negative by construction rather than by LAPACK
+  # rounding, so the drift shows on every build.
   obj <- function(d) function(p, ...) {
     res <- as.numeric(p[1] + p[2] - 2)
     J   <- matrix(c(1, 1), nrow = 1)
@@ -378,11 +337,8 @@ test_that("curvature at roundoff level does not steer the degenerate step", {
 
 
 test_that("a null space wider than one direction still gives the minimum-norm step", {
-  # f = 0.5 (J p - 2)^2 with J = (1, 2, 3). H = J'J is rank 1, so its null space
-  # is two-dimensional and comes back as a pair of eigenvalues split by roundoff.
-  # No LAPACK build returns a basis for that space which g is exactly orthogonal
-  # to, so the drift the two tests above only see on some builds shows up here on
-  # every one of them.
+  # A rank-1 Hessian with a two-dimensional null space: roundoff splits its
+  # eigenvalues, so no LAPACK build returns a basis g is exactly orthogonal to.
   J <- matrix(c(1, 2, 3), nrow = 1)
   obj <- function(p, ...) {
     res <- as.numeric(J %*% p - 2)
@@ -391,7 +347,7 @@ test_that("a null space wider than one direction still gives the minimum-norm st
   fit <- trust(obj, c(x = 0, y = 0, z = 0), rinit = 1, rmax = 10, iterlim = 100)
 
   expect_equal(as.numeric(J %*% fit$argument), 2, tolerance = 1e-6)
-  # Minimum-norm solution of J p = 2 from the origin is J' * 2 / ||J||^2.
+  # The minimum-norm solution.
   expect_equal(unname(fit$argument), as.numeric(t(J)) * 2 / sum(J^2),
                tolerance = 1e-6)
 })
@@ -410,10 +366,12 @@ test_that("bounds compose with parscale, parinit on a bound, and minimize = FALS
   # parscale must not move the optimum.
   # Tight tolerances so both runs reach the optimum rather than stopping at
   # their own frame-dependent distance from the bound.
-  scaled <- trust(.quadratic_objfn(target), c(x = 0, y = 0),
-                  rinit = 1, rmax = 10, parupper = c(x = 1, y = Inf),
-                  parscale = c(10, 0.1), iterlim = 200,
-                  tolControl = list(gtol = 1e-12))
+  expect_warning(
+    scaled <- trust(.quadratic_objfn(target), c(x = 0, y = 0),
+                    rinit = 1, rmax = 10, parupper = c(x = 1, y = Inf),
+                    parscale = c(10, 0.1), iterlim = 200,
+                    tolControl = list(gtol = 1e-12)),
+    "'parscale' is deprecated")
   plain  <- trust(.quadratic_objfn(target), c(x = 0, y = 0),
                   rinit = 1, rmax = 10, parupper = c(x = 1, y = Inf),
                   iterlim = 200, tolControl = list(gtol = 1e-12))
@@ -433,7 +391,7 @@ test_that("bounds compose with parscale, parinit on a bound, and minimize = FALS
 
 
 test_that("without bounds the two boundary schemes agree", {
-  # |v| == 1 and C == 0 there, so the reflective scheme reduces to the old one.
+  # Without bounds |v| == 1 and C == 0, so the reflective scheme reduces to the plain one.
   target <- c(a = 1.0, b = -0.5, c = 2.3)
   init   <- c(a = 0, b = 0, c = 0)
   refl <- trust(.quadratic_objfn(target), init, rinit = 0.5, rmax = 10,
@@ -465,11 +423,9 @@ test_that("an argument that moved into a control list is rejected by name", {
 
 
 test_that("a flat, high-value start makes progress instead of stopping at once", {
-  # Weak sensitivities with large residuals: |f| is huge while |g| is small, as
-  # when an ODE model's parameters run into a saturated regime. Any gradient
-  # criterion scaled by |f| declares this converged before the first step --
-  # |f| grows quadratically in the residuals, |g| only linearly -- which is why
-  # gtol has no relative counterpart.
+  # Large residuals with weak sensitivities: |f| is huge while |g| is small, so a
+  # gradient criterion scaled by |f| would stop before the first step. gtol has
+  # no relative counterpart.
   obj <- function(p, ...) {
     s <- 5e-4
     r <- as.numeric(p * s - 100)
@@ -854,7 +810,7 @@ test_that("an unknown Hessian source is rejected by name", {
 })
 
 # An objective may decline to build a Hessian, and NULL is how it says so.
-# `give` decides which evaluations carry one.
+# `give` decides which evaluations return one.
 .declining_objfn <- function(give = function(n) FALSE) {
   n <- 0L
   function(p, hessian = TRUE, ...) {

@@ -47,7 +47,7 @@ def build_sbml(spec):
         comp.setSpatialDimensions(c.get("spatialDimensions", 3))
         comp.setConstant(bool(c.get("constant", True)))
         # A symbolic volume is the compartment's size, not a factor hidden in
-        # the kinetic laws: SBML divides by the size, so it has to carry it.
+        # the kinetic laws: SBML divides by the size, so it has to hold it.
         formula = c.get("sizeAssignment")
         if formula is not None:
             ia = model.createInitialAssignment()

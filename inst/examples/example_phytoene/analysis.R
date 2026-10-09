@@ -1,7 +1,5 @@
-# ABC like model (p -> pf -> z) via Enzyme Fad
-# http://journals.plos.org/plosone/article?id=10.1371/journal.pone.0187628
-# published results with error model fitting (but reasonable errors available for published conditions)
-# publised for one dataset with several conditions measured in parallel, but more data available to test L1,... methods (see below)
+# Phytoene conversion p -> pf -> z by the enzyme Fad: fits with and without error model
+# Reference: http://journals.plos.org/plosone/article?id=10.1371/journal.pone.0187628
 
 ## Library dependencies and plot theme --------------------------------------------
 library(deSolve)
@@ -82,14 +80,10 @@ print(pobs)
 
 # More data
 if(FALSE){
-  # activity (and experimental setup - new lamp) changed over time. Should be common parameters that change throughout the datasets taken at different times
-  # mutantB is a less active Enzyme - unknown which parameters are affected by the mutation
+  # Datasets taken at different times differ in activity and setup; mutantB (_B, parB) is a less active enzyme
+  # standard_*: p(0) > 0, pf(0) = 0; pfl_*: p(0) = 0, pf(0) > 0
+  # Parallel measurements and dose responses (0 and 15 min per dose): see column global
   
-  # Parallel measurements: all _par datasets were measured parallel, standard_WT+ standard_B parallel, standard_nP + pds_nP parallel, see global column in datasheet
-  # all named standard have p!=0 and pf=0 for time = 0. (but different initial values for p(t=0))
-  # all named pfl_x have p=0 and pf!=0 for time = 0.
-  # all with _B or parB had the mutantB enzyme
-  # in addition you will find a lot of dose response data (pds=fad, p, pf, dpq, ...) corresponding to two measured time points per dose (0, 15min), see global column in datasheet
   
 conditionsTot <- c(
   "standard",

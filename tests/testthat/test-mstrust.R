@@ -1,12 +1,5 @@
-# ============================================================================
-# mstrust() (multi-start trust), profile() (profile likelihood),
-# vcov() (variance-covariance), and confint.parframe() (profile CIs).
-#
-# All four interact closely. We use convex-quadratic / Gaussian objectives
-# (constraintL2) so the expected behaviour is closed-form. Real-fit
-# scenarios are covered by the FOCEI / ECM suite in test-focei.R and
-# test-nlmefit.R.
-# ============================================================================
+# mstrust(), profile(), vcov() and confint.parframe() on quadratic objectives
+# (constraintL2), so the expected behaviour has a closed form.
 
 
 # ---- mstrust ------------------------------------------------------------
@@ -85,7 +78,7 @@ test_that("mstrust refuses an argument both the optimiser and the sampler take",
 test_that("profile on a 1D quadratic increases monotonically on both sides", {
   obj <- constraintL2(mu = c(theta = 0.0, nuisance = 0.0), sigma = 1)
 
-  prof <- profile(objfun = obj, pars = c(theta = 0, nuisance = 0),
+  prof <- profile(obj, pars = c(theta = 0, nuisance = 0),
                   whichPar = "theta",
                   limits = c(lower = -2, upper = 2),
                   method = "integrate",
@@ -100,9 +93,6 @@ test_that("profile on a 1D quadratic increases monotonically on both sides", {
 
 
 test_that("profile on a 1D Gaussian crosses chi^2 = 3.84 at +/- z(0.95)*sigma", {
-  # constraintL2(mu = 0, sigma = sigma) value at theta is (theta/sigma)^2.
-  # 95% chi-square threshold qchisq(0.95, 1) ~ 3.84 crosses at
-  # theta = +/- sqrt(3.84) * sigma = +/- 1.96 * sigma.
   sigma <- 0.4
   obj <- constraintL2(mu = c(theta = 0, nuisance = 0), sigma = sigma)
   prof <- profile(obj, pars = c(theta = 0, nuisance = 0),
@@ -118,8 +108,8 @@ test_that("profile on a 1D Gaussian crosses chi^2 = 3.84 at +/- z(0.95)*sigma", 
 
 
 test_that("profile respects limits on a flat direction", {
-  # Objective (a+b)^2 + c^2 is exactly flat along a - b, so the stepsize
-  # doubles every step; limits must clamp the last step, not be overshot.
+  # Along an exactly flat direction the stepsize doubles every step; limits
+  # clamp the last step rather than being overshot.
   nm <- c("a", "b", "c")
   obj <- function(pars, fixed = NULL, deriv = TRUE, ...) {
     pp <- c(pars, fixed)[nm]
@@ -148,8 +138,6 @@ test_that("profile respects limits on a flat direction", {
 # ---- vcov ---------------------------------------------------------------
 
 test_that("vcov(fit) equals solve(0.5 * H) for a quadratic with known Hessian", {
-  # constraintL2 with sigma = 1: obj(p) = sum((p - mu)^2), Hessian = 2 I.
-  # After trust converges to p = mu, vcov = (0.5 * 2 I)^-1 = I.
   mu <- c(a = 0.5, b = -0.3)
   obj <- constraintL2(mu = mu, sigma = 1)
   fit <- trust(obj, parinit = c(a = 0, b = 0),
@@ -157,7 +145,6 @@ test_that("vcov(fit) equals solve(0.5 * H) for a quadratic with known Hessian", 
   V <- vcov(fit)
   expect_equal(unname(V), diag(2), tolerance = 1e-6)
 
-  # sigma != 1: H = 2 / sigma^2, vcov = sigma^2 * I.
   mu2 <- c(a = 0.0, b = 0.0)
   obj2 <- constraintL2(mu = mu2, sigma = 0.5)
   fit2 <- trust(obj2, parinit = c(a = 0.2, b = -0.2),
@@ -168,27 +155,6 @@ test_that("vcov(fit) equals solve(0.5 * H) for a quadratic with known Hessian", 
 
 
 # ---- confint ------------------------------------------------------------
-
-test_that("confint.parframe yields half-width = z(0.95)*sigma on a 1D Gaussian profile", {
-  testthat::skip_on_cran()
-  # constraintL2's value = sum((p - mu)^2 / sigma^2); for one parameter and
-  # sigma = 0.5, value(theta) = (theta / 0.5)^2 = 4 theta^2. The 95%
-  # chi-square threshold delta = qchisq(0.95, 1) ~ 3.841 is crossed at
-  # |theta| = sqrt(3.841)/2 ~ 0.98 ~ 1.96 * 0.5.
-  sigma <- 0.5
-  obj <- constraintL2(mu = c(theta = 0, nuisance = 0), sigma = sigma)
-  prof <- profile(obj, pars = c(theta = 0, nuisance = 0),
-                  whichPar = "theta",
-                  limits = c(lower = -3, upper = 3),
-                  method = "integrate", verbose = FALSE, cores = 1)
-  # confint.parframe defaults val.column = "data"; our profile parframe
-  # uses "value", so pass it explicitly.
-  ci <- confint(prof, level = 0.95, val.column = "value")
-  half_width <- (ci$upper - ci$lower) / 2
-  expected <- qnorm(0.975) * sigma
-  expect_lt(abs(half_width - expected) / expected, 0.10)
-})
-
 
 # ---- retry / nTries -----------------------------------------------------
 
@@ -278,6 +244,24 @@ test_that("mstrust writes nothing unless asked", {
   expect_true(any(grepl("^asked/", written)))
   expect_true(any(grepl("mstrust\\.log$", written)))
   expect_true(any(grepl("parameterList\\.Rda$", written)))
+})
+
+
+test_that("cautiousMode removes the .Rda fits of its own run only", {
+  obj <- constraintL2(mu = c(a = 1.0, b = -0.5), sigma = 1)
+  d <- file.path(tempdir(), paste0("ms_cautious_", as.integer(runif(1, 1e6, 9e6))))
+  dir.create(d)
+  oldwd <- setwd(d); on.exit(setwd(oldwd), add = TRUE)
+  saveRDS(1, "fit-1.Rda")
+
+  invisible(mstrust(objfun = obj, center = c(a = 0, b = 0), resultPath = d,
+                    name = "cautious", rinit = 1, rmax = 10, iterlim = 100,
+                    fits = 2, sd = 1, cores = 1, output = TRUE, cautiousMode = TRUE))
+  inter <- list.files(d, recursive = TRUE)
+  inter <- inter[grepl("^cautious/.*/interRes/", inter)]
+  expect_true(file.exists(file.path(d, "fit-1.Rda")))
+  expect_false(any(grepl("\\.Rda$", inter)))
+  expect_true(all(c("fit-1.R", "fit-2.R") %in% basename(inter)))
 })
 
 

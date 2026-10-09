@@ -2,7 +2,7 @@
 % Please edit documentation in R/objClass.R
 \name{objframe}
 \alias{objframe}
-\title{Objective frame}
+\title{Objective Frame}
 \usage{
 objframe(
   mydata,

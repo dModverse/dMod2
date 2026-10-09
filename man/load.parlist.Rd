@@ -2,26 +2,20 @@
 % Please edit documentation in R/statistics.R
 \name{load.parlist}
 \alias{load.parlist}
-\title{Construct fitlist from temporary files.}
+\title{Load Fits Written by mstrust}
 \usage{
 load.parlist(folder)
 }
 \arguments{
-\item{folder}{Path to the folder where the fit has left its results.}
+\item{folder}{The folder \verb{<resultPath>/<name>/trial-<k>-<date>/interRes}
+of the run, which holds one \verb{fit-<i>.Rda} per completed fit.}
 }
 \value{
-An object of class parlist.
+A parlist.
 }
 \description{
-An aborted \code{\link[=mstrust]{mstrust()}}
-leaves behind results of already completed fits. This command loads these
-fits into a fitlist.
-}
-\details{
-The command \code{\link[=mstrust]{mstrust()}} saves
-each completed fit along the multi-start sequence such that the results can
-be resurrected on abortion. This command loads a fitlist from these
-intermediate results.
+Reads the per-fit files that \code{\link[=mstrust]{mstrust()}} writes with
+\code{output = TRUE}, for example after an aborted run.
 }
 \seealso{
 \code{\link[=mstrust]{mstrust()}}

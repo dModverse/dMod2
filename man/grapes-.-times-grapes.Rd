@@ -2,19 +2,29 @@
 % Please edit documentation in R/classes.R
 \name{\%.*\%}
 \alias{\%.*\%}
-\title{Multiplication of objective functions with scalars}
+\title{Multiplication of Objective Functions with Scalars}
 \usage{
 x1 \%.*\% x2
 }
 \arguments{
-\item{x1}{object of class objfn or objlist.}
+\item{x1}{numeric of length one.}
 
-\item{x2}{numeric of length one.}
+\item{x2}{object of class \code{objfn} or \code{objlist}.}
 }
 \value{
-An objective function or objlist object.
+For an \code{objfn}, an \code{objfn} whose value, gradient and Hessian are
+scaled by \code{x1}. For an \code{objlist}, the \code{objlist} with every numeric entry
+and attribute scaled. Otherwise \code{x1 * x2}.
 }
 \description{
-The \verb{\\\%.*\\\%} operator allows to multiply objects of class objlist or objfn with
-a scalar.
+\code{x1 \%.*\% x2} multiplies an object of class \code{objfn} or
+\code{objlist} by a scalar.
+}
+\examples{
+obj <- constraintL2(mu = c(a = 0, b = 0), sigma = 1)
+obj2 <- 2 \%.*\% obj
+obj2(c(a = 1, b = 2))$value
+}
+\seealso{
+\link{+.objfn}
 }

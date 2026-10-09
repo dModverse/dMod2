@@ -2,7 +2,7 @@
 % Please edit documentation in R/utils.R
 \name{lsdMod}
 \alias{lsdMod}
-\title{Print list of dMod objects in .GlobalEnv}
+\title{List dMod Objects in an Environment}
 \usage{
 lsdMod(
   classlist = c("odemodel", "parfn", "prdfn", "obsfn", "objfn", "datalist"),
@@ -10,17 +10,24 @@ lsdMod(
 )
 }
 \arguments{
-\item{classlist}{List of object classes to print.}
+\item{classlist}{Character vector of classes. Defaults to \code{"odemodel"},
+\code{"parfn"}, \code{"prdfn"}, \code{"obsfn"}, \code{"objfn"} and \code{"datalist"}.}
 
-\item{envir}{Alternative environment to search for objects.}
+\item{envir}{Environment to search. Defaults to the global environment.}
+}
+\value{
+Named character vector of the names of the objects of each class;
+the names of the vector are the classes, numbered when a class has more
+than one object.
 }
 \description{
-Lists the objects for a set of classes.
+List dMod Objects in an Environment
 }
 \examples{
-\dontrun{
-lsdMod()
-lsdMod(classlist = "prdfn", envir = environment(obj)) 
-}
+env <- new.env()
+assign("data", as.datalist(data.frame(name = "A", time = 0, value = 1,
+                                      sigma = 1, condition = "C1")),
+       envir = env)
+lsdMod(envir = env)
 
 }

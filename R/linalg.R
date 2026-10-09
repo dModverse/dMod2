@@ -1,19 +1,24 @@
 #' Batched Matrix Multiplication
 #'
-#' Efficient batched matrix multiplication with BLAS-backend.
-#' Batch index is the FIRST dimension.
+#' Multiplies matrices batch by batch through BLAS. The batch index is the
+#' first dimension of a 3D array.
 #'
-#' @section Supported Contractions:
+#' @section Supported Shapes:
 #' \describe{
-#'   \item{\code{[B,M,K] x [K,N] -> [B,M,N]}}{Left batched}
-#'   \item{\code{[M,K] x [B,K,N] -> [B,M,N]}}{Right batched}
-#'   \item{\code{[B,M,K] x [B,K,N] -> [B,M,N]}}{Both batched}
+#'   \item{`[B,M,K] x [K,N] -> [B,M,N]`}{left operand batched}
+#'   \item{`[M,K] x [B,K,N] -> [B,M,N]`}{right operand batched}
+#'   \item{`[B,M,K] x [B,K,N] -> [B,M,N]`}{both operands batched}
 #' }
 #'
-#' @param A Numeric matrix or 3D array
-#' @param B Numeric matrix or 3D array
-#' @return Numeric 3D array with dim \code{[B, M, N]}
+#' @param A Numeric matrix or 3D array.
+#' @param B Numeric matrix or 3D array.
+#' @return Numeric 3D array with dimensions `c(B, M, N)`.
 #' @export
+#' @examples
+#' A <- array(rnorm(2 * 3 * 4), c(2, 3, 4))
+#' M <- matrix(rnorm(4 * 5), 4, 5)
+#' dim(A %bmm% M)
+#' all.equal((A %bmm% M)[1, , ], A[1, , ] %*% M)
 `%bmm%` <- function(A, B) {
   da <- dim(A)
   db <- dim(B)
@@ -40,17 +45,27 @@
 
 
 
-## nullZ (moved from symbolics.R) --------------------------------------------
+## nullZ --------------------------------------------
 
-#' Find integer-null space of matrix A 
-#  this function is written along the lines of matlab's function null(A,'r'), where 'r' specifies that integer solutions are returned instead of orthonormal vectors
-#' 
-#' @param A matrix for which the null space is searched
-#' @param tol tolerance to find pivots in rref-function below
-#' @return null space of A with only integers in it
-#' 
+#' Null Space Basis from the Reduced Row Echelon Form
+#'
+#' Computes a basis of the null space of `A` from its reduced row echelon
+#' form, like `null(A, "r")` in MATLAB: each basis vector has a 1 in one
+#' non-pivot column and 0 in the others. The basis is integer if the reduced
+#' row echelon form is.
+#'
+#' @param A Numeric matrix.
+#' @param tol Tolerance for pivots. Not used: [rref()] is called with its
+#'   default tolerance.
+#' @return A matrix with `ncol(A)` rows and one column per basis vector.
+#'
 #' @author Malenka Mader, \email{Malenka.Mader@@fdm.uni-freiburg.de}
-#'   
+#' @seealso [rref()]
+#' @examples
+#' A <- rbind(c(1, -1, 0), c(0, 1, -1))
+#' nullZ(A)
+#' A %*% nullZ(A)
+#'
 #' @export
 nullZ <- function(A, tol=sqrt(.Machine$double.eps)) {
   
@@ -77,29 +92,37 @@ nullZ <- function(A, tol=sqrt(.Machine$double.eps)) {
 
 
 
-## rref (moved from symbolics.R) ---------------------------------------------
+## rref ---------------------------------------------
 
-#' Transform a matrix into reduced row echelon form
+#' Reduced Row Echelon Form of a Matrix
 #'
-#' This function computes the reduced row echelon form (RREF) of a numeric matrix.
-#' It is written along the lines of the MATLAB function \code{rref}.
+#' Computes the reduced row echelon form of a numeric matrix by Gauss-Jordan
+#' elimination with partial pivoting, like the MATLAB function `rref`.
 #'
-#' @param A Numeric matrix for which the reduced row echelon form is computed.
-#' @param tol Numeric tolerance used to identify pivot elements. Defaults to \code{sqrt(.Machine$double.eps)}.
-#' @param verbose Logical. If \code{TRUE}, prints detailed information during computation.
-#' @param fractions Logical. Currently not used.
+#' @param A Numeric matrix.
+#' @param tol Numeric tolerance below which a pivot counts as zero. Defaults to
+#'   `sqrt(.Machine$double.eps)`.
+#' @param verbose Logical. Not used.
+#' @param ... `fractions` is deprecated and ignored.
 #'
-#' @return A list with two elements:
-#' \itemize{
-#'   \item \code{[[1]]}: The reduced row echelon form of \code{A}.
-#'   \item \code{[[2]]}: The indices of the columns in which pivots were found.
-#' }
+#' @return A list with the elements `rref`, the reduced row echelon form of
+#'   `A`, and `pivots`, the indices of the pivot columns as a one-row matrix
+#'   (`NULL` if there is none).
 #'
-#' @author Malenka Mader, \email{Malenka.Mader@@fdm.uni-freiburg.de}
+#' @author Malenka Mader, \email{Malenka.Mader@@fdm.uni-freiburg.de}. The
+#'   signature and the argument check follow the function `rref()` by John Fox.
+#' @references John Fox, `rref()`, R-help mailing list, posted by Scott Hyde,
+#'   2007-09-01,
+#'   <https://stat.ethz.ch/pipermail/r-help/2007-September/139923.html>.
+#' @seealso [nullZ()]
+#' @examples
+#' A <- rbind(c(1, 2, 3), c(2, 4, 7), c(1, 2, 4))
+#' rref(A)
 #'
 #' @export
-rref <- function(A, tol=sqrt(.Machine$double.eps), verbose=FALSE, fractions=FALSE){
-  ## Written by John Fox
+rref <- function(A, tol=sqrt(.Machine$double.eps), verbose=FALSE, ...){
+  .droppedArgs(list(...), "fractions", "rref")
+  ## Signature and argument check after John Fox
   if ((!is.matrix(A)) || (!is.numeric(A)))
     stop("argument must be a numeric matrix")
   m <- nrow(A)
@@ -137,35 +160,32 @@ rref <- function(A, tol=sqrt(.Machine$double.eps), verbose=FALSE, fractions=FALS
       j = j + 1;
     }
   }
-  return (list(A,pivcol))
+  list(rref = A, pivots = pivcol)
 }
 
 
 
 
-## submatrix (moved from tools.R) --------------------------------------------
+## submatrix --------------------------------------------
 
-#' Submatrix of a matrix returning ALWAYS a matrix
-#' 
-#' @param M matrix
-#' @param rows Index vector
-#' @param cols Index vector
-#' @return The matrix `M[rows, cols]`, keeping/adjusting attributes like ncol nrow and dimnames.
+#' Submatrix That Stays a Matrix
+#'
+#' @param M A matrix.
+#' @param rows Index vector of rows. Defaults to all.
+#' @param cols Index vector of columns. Defaults to all.
+#' @return The matrix `M[rows, cols, drop = FALSE]`, with its dimnames.
+#' @examples
+#' M <- matrix(1:6, 2, 3, dimnames = list(c("a", "b"), c("x", "y", "z")))
+#' submatrix(M, rows = 1)
 #' @export
 submatrix <- function(M, rows = 1:nrow(M), cols = 1:ncol(M)) {
-  
- M[rows, cols, drop = FALSE] 
-  
-  # matrix(M[myrows, mycols], 
-  #        nrow = length(myrows), ncol = length(mycols), 
-  #        dimnames = list(rownames(M)[myrows], colnames(M)[mycols]))
-
+  M[rows, cols, drop = FALSE]
 }
 
 
 
 
-## .matchNum (moved from data.R) ---------------------------------------------
+## .matchNum ---------------------------------------------
 
 # Match with numeric tolerance 
 .matchNum <- function(x, y, tol = 1e-8) {

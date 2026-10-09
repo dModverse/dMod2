@@ -2,18 +2,18 @@
 % Please edit documentation in R/eqnClass.R
 \name{format.eqnvec}
 \alias{format.eqnvec}
-\title{Encode equation vector in format with sufficient spaces}
+\title{Format Equation Vector with Spaces}
 \usage{
 \method{format}{eqnvec}(x, ...)
 }
 \arguments{
-\item{x}{object of class \link{eqnvec}. Alternatively, a named parsable character vector.}
+\item{x}{object of class \link{eqnvec}, or a named parsable character vector.}
 
-\item{...}{additional arguments}
+\item{...}{not used.}
 }
 \value{
-named character
+Named character vector with spaces around \code{+}, \code{-}, \code{*} and \code{/}.
 }
 \description{
-Encode equation vector in format with sufficient spaces
+Format Equation Vector with Spaces
 }

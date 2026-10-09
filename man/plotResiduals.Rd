@@ -3,51 +3,54 @@
 \name{plotResiduals}
 \alias{plotResiduals}
 \alias{plotResiduals.default}
-\title{Plot residuals for a fitlist}
+\title{Plot Residuals of a Collection of Fits}
 \usage{
 plotResiduals(parframe, ...)
 
 \method{plotResiduals}{default}(parframe, x, data, split = "condition", errmodel = NULL, ...)
 }
 \arguments{
-\item{parframe}{Object of class \code{parframe}, e.g. returned by \link{mstrust}.}
+\item{parframe}{A \link{parframe}, e.g. from \code{as.parframe(mstrust(...))}. Its
+column \code{index} labels the fits; without it the row numbers are used.}
 
-\item{...}{Additional arguments passed to the prediction function \code{x}.}
+\item{...}{Further arguments passed to \code{x}.}
 
-\item{x}{Prediction function returning named list of data.frames with names
-matching \code{data}.}
+\item{x}{Prediction function returning a \link{prdlist} with names matching
+\code{data}.}
 
-\item{data}{A \code{datalist} object, i.e. named list of data.frames with
-columns \code{name}, \code{time}, \code{value}, and \code{sigma}.}
+\item{data}{A \link{datalist}, i.e. a named list of data frames with columns
+\code{name}, \code{time}, \code{value} and \code{sigma}.}
 
-\item{split}{Character vector specifying how to summarize and display residuals.
-\itemize{
-\item \code{split[1]}: Variable for x-axis
-\item \code{split[2]}: Variable for grouping (color/line), defaults to \code{split[1]}
-\item \code{split[3+]}: Additional variables for \code{facet_wrap()}
-}}
+\item{split}{Character vector of the variables to keep, from \code{"time"},
+\code{"name"}, \code{"condition"} and \code{"index"}. \code{split[1]} is the x-axis,
+\code{split[2]} the color grouping (defaults to \code{split[1]}), further entries
+are facets. Defaults to \code{"condition"}.}
 
-\item{errmodel}{Optional error model function of type \code{prdfn}. If provided,
-residuals include the log-likelihood contribution from sigma.}
+\item{errmodel}{Optional error model, an \link{obsfn}. With it the sums include
+\code{log(sigma^2)} of each data point.}
 }
 \value{
-A \code{ggplot} object with the summarized residual data frame
-attached as attribute \code{"out"}.
+A \code{ggplot} object with the summed residuals as attribute \code{"out"}.
 }
 \description{
-Creates a plot of residuals from model fits, with flexible options for
-grouping and faceting. Residuals can be summarized across different
-dimensions (time, condition, observable, fit index).
+Sums the squared weighted residuals of each fit over all variables not
+named in \code{split} and plots the sums.
 }
 \examples{
-\dontrun{
-# Time on x-axis, faceted by condition and name
-plotResiduals(myfitlist, g * x * p, data, 
-              c("time", "index", "condition", "name"), 
-              conditions = myconditions[1:4])
+times <- 0:5
+grid <- data.frame(name = "A", time = times, row.names = paste0("A", times))
+x <- Xd(grid, condition = "C1")
+data <- as.datalist(data.frame(name = "A", time = times,
+                               value = exp(-times / 2), sigma = 0.1,
+                               condition = "C1"))
+fits <- parframe(data.frame(value = c(1, 2), converged = TRUE,
+                            iterations = 10,
+                            rbind(exp(-times / 2), exp(-times / 3)) |>
+                              `colnames<-`(getParameters(x))),
+                 parameters = getParameters(x))
+plotResiduals(fits, x, data, c("time", "index"))
 
-# Condition on x-axis, residuals summed over time
-plotResiduals(myfitlist, g * x * p, data, c("condition", "name", "index"))
 }
-
+\seealso{
+\code{\link[=res]{res()}}, \code{\link[=plotValues]{plotValues()}}
 }

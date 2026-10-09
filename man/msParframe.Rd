@@ -2,7 +2,7 @@
 % Please edit documentation in R/statistics.R
 \name{msParframe}
 \alias{msParframe}
-\title{Reproducibly construct "random" parframes}
+\title{Reproducible Random Starting Points}
 \usage{
 msParframe(
   pars,
@@ -14,23 +14,27 @@ msParframe(
 )
 }
 \arguments{
-\item{pars}{Named vector. If \code{samplefun} has a "mean"-argument, values of pars will used as mean}
+\item{pars}{Named numeric vector. If \code{samplefun} has an argument \code{mean},
+the draws are centred on \code{pars}.}
 
-\item{n}{Integer how many lines should the parframe have}
+\item{n}{Integer, number of rows. Default \code{20}.}
 
-\item{seed}{Seed for the random number generator}
+\item{seed}{Seed for the random number generator. Default \code{12345}.}
 
-\item{samplefun}{random number generator: \code{\link[=rnorm]{rnorm()}}, \code{\link[=runif]{runif()}}, etc...}
+\item{samplefun}{Random number generator such as \code{\link[=rnorm]{rnorm()}} or \code{\link[=runif]{runif()}}.
+Default \code{\link[stats:rnorm]{stats::rnorm()}}.}
 
-\item{keepfirst}{boolean, if set to \code{TRUE} the first row of the parframe will be the pars}
+\item{keepfirst}{Logical. If \code{TRUE} (default), the first row is \code{pars}.}
 
-\item{...}{arguments going to samplefun}
+\item{...}{Arguments passed to \code{samplefun}.}
 }
 \value{
-parframe (without metanames)
+A parframe without metanames, one column per parameter.
 }
 \description{
-The output of this function can be used for the \code{center} - argument of \code{\link[=mstrust]{mstrust()}}
+Draws a parframe of starting points for the \code{center} argument of
+\code{\link[=mstrust]{mstrust()}} from the seed \code{seed}. The state of the global random number
+generator is left unchanged.
 }
 \examples{
 msParframe(c(a = 0, b = 100000), 5)
@@ -39,5 +43,5 @@ msParframe(c(a = 0, b = 100000), 5)
 msParframe(c(a = 0, b = 100000), 5, samplefun = rnorm, sd = c(100, 0.5))
 }
 \seealso{
-\code{\link[=mstrust]{mstrust()}} and \code{\link[=parframe]{parframe()}}
+\code{\link[=mstrust]{mstrust()}}, \code{\link[=parframe]{parframe()}}
 }

@@ -1,33 +1,38 @@
-# ============================================================================
-# Behavioral tests for the soft constraints beyond L2: constraintL1,
-# constraintCauchy, constraintGamma, constraintExponential, constraintChisq
-# and constraintRayleigh.
-#
-# Each is checked against R's own density on the -2 log scale, and its
-# derivatives against finite differences. Composition with a parfn lives at
-# the bottom.
-# ============================================================================
+# The soft constraints beyond L2, each against its own density on the -2 log
+# scale with closed-form derivatives, and composed with a parameter trafo.
 
 .priorCases <- function() {
   list(
     list(name = "constraintL1",
          fn   = constraintL1(c(k = 3), sigma = 5),
-         ld   = function(x) -log(2 * 5) - abs(x - 3) / 5),
+         ld   = function(x) -log(2 * 5) - abs(x - 3) / 5,
+         d1   = function(x) 2 * sign(x - 3) / 5,
+         d2   = function(x) 0),
     list(name = "constraintCauchy",
          fn   = constraintCauchy(c(k = 3), sigma = 5),
-         ld   = function(x) stats::dcauchy(x, 3, 5, log = TRUE)),
+         ld   = function(x) stats::dcauchy(x, 3, 5, log = TRUE),
+         d1   = function(x) 4 * (x - 3) / (25 + (x - 3)^2),
+         d2   = function(x) 4 * (25 - (x - 3)^2) / (25 + (x - 3)^2)^2),
     list(name = "constraintGamma",
          fn   = constraintGamma(c(k = 3), scale = 5),
-         ld   = function(x) stats::dgamma(x, shape = 3, scale = 5, log = TRUE)),
+         ld   = function(x) stats::dgamma(x, shape = 3, scale = 5, log = TRUE),
+         d1   = function(x) -2 * (2 / x - 1 / 5),
+         d2   = function(x) 4 / x^2),
     list(name = "constraintExponential",
          fn   = constraintExponential(c(k = 3)),
-         ld   = function(x) stats::dexp(x, rate = 1 / 3, log = TRUE)),
+         ld   = function(x) stats::dexp(x, rate = 1 / 3, log = TRUE),
+         d1   = function(x) 2 / 3,
+         d2   = function(x) 0),
     list(name = "constraintChisq",
          fn   = constraintChisq(c(k = 4)),
-         ld   = function(x) stats::dchisq(x, 4, log = TRUE)),
+         ld   = function(x) stats::dchisq(x, 4, log = TRUE),
+         d1   = function(x) -2 * (1 / x - 1 / 2),
+         d2   = function(x) 2 / x^2),
     list(name = "constraintRayleigh",
          fn   = constraintRayleigh(c(k = 3)),
-         ld   = function(x) log(x) - 2 * log(3) - x^2 / (2 * 3^2)))
+         ld   = function(x) log(x) - 2 * log(3) - x^2 / (2 * 3^2),
+         d1   = function(x) -2 * (1 / x - x / 9),
+         d2   = function(x) 2 * (1 / x^2 + 1 / 9)))
 }
 
 
@@ -38,17 +43,13 @@ test_that("each constraint is -2 log of its density", {
 })
 
 
-test_that("gradient and Hessian match finite differences", {
-  h <- 1e-5
+test_that("gradient and Hessian are the derivatives of -2 log density", {
   for (case in .priorCases()) {
-    f <- case$fn
-    o <- f(pars = c(k = 5))
-    up <- f(pars = c(k = 5 + h))$value
-    dn <- f(pars = c(k = 5 - h))$value
-    expect_equal(unname(o$gradient[["k"]]), (up - dn) / (2 * h),
-                 tolerance = 1e-4, info = case$name)
-    expect_equal(unname(o$hessian[1, 1]), (up - 2 * o$value + dn) / h^2,
-                 tolerance = 1e-3, info = case$name)
+    o <- case$fn(pars = c(k = 5))
+    expect_equal(unname(o$gradient[["k"]]), case$d1(5), tolerance = 1e-12,
+                 info = case$name)
+    expect_equal(unname(o$hessian[1, 1]), case$d2(5), tolerance = 1e-12,
+                 info = case$name)
   }
 })
 
@@ -93,25 +94,30 @@ test_that("a duplicated parameter name is rejected", {
 })
 
 
-test_that("composing with a parfn carries the chain rule", {
-  withr::local_dir(tempdir())
-  p <- P(eqnvec(k = "exp(logk)"), condition = NULL, compile = TRUE,
-         modelname = "constraintChain", deriv2 = TRUE)
-  f    <- constraintCauchy(c(k = 3), sigma = 5)
-  comp <- f * p
-  lk   <- log(5)
-  h    <- 1e-6
+# An R-level log trafo with its own Jacobian and Hessian.
+.priorLogTrafo <- function() {
+  p2p <- function(pars, fixed = NULL, deriv = TRUE, deriv2 = FALSE) {
+    k <- exp(pars[["logk"]])
+    as.parvec(c(k = k),
+              deriv  = if (deriv) matrix(k, 1, 1, dimnames = list("k", "logk")) else FALSE,
+              deriv2 = if (deriv2) array(k, c(1, 1, 1),
+                                         dimnames = list("k", "logk", "logk")) else FALSE)
+  }
+  parfn(p2p, "logk", NULL)
+}
 
-  o <- comp(pars = c(logk = lk), deriv = TRUE, deriv2 = TRUE)
-  up <- comp(pars = c(logk = lk + h), deriv = FALSE)$value
-  dn <- comp(pars = c(logk = lk - h), deriv = FALSE)$value
+test_that("composing with a parfn applies the chain rule", {
+  case <- .priorCases()[[2]]
+  comp <- case$fn * .priorLogTrafo()
+  k <- 5
+  o <- comp(pars = c(logk = log(k)), deriv = TRUE, deriv2 = TRUE)
+  gn <- comp(pars = c(logk = log(k)), deriv = TRUE)
 
-  expect_equal(unname(o$value), unname(f(pars = c(k = exp(lk)))$value),
+  expect_equal(unname(o$value), unname(case$fn(pars = c(k = k))$value),
                tolerance = 1e-12)
-  expect_equal(unname(o$gradient[["logk"]]), (up - dn) / (2 * h),
-               tolerance = 1e-5)
+  expect_equal(unname(o$gradient[["logk"]]), case$d1(k) * k, tolerance = 1e-12)
   # deriv2 is opt-in: only then does the second-order trafo term enter.
-  expect_equal(unname(o$hessian[1, 1]),
-               (up - 2 * comp(pars = c(logk = lk), deriv = FALSE)$value + dn) / h^2,
-               tolerance = 1e-3)
+  expect_equal(unname(gn$hessian[1, 1]), case$d2(k) * k^2, tolerance = 1e-12)
+  expect_equal(unname(o$hessian[1, 1]), case$d2(k) * k^2 + case$d1(k) * k,
+               tolerance = 1e-12)
 })

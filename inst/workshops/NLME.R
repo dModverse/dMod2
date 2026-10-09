@@ -55,7 +55,7 @@ data <- do.call(rbind, lapply(1:n_individuals, function(i) {
   
 }))
 
-data %>% as.datalist(split.by = c("ID", "WGT")) %>% plot()
+data %>% as.datalist(splitBy = c("ID", "WGT")) %>% plot()
 
 model <- modelNLME(x*p, covtable)
 
@@ -69,7 +69,7 @@ prediction <- fit %>% coef() %>% split(f = 1:10) %>%
   lapply(function(pars) (x*p)(times, unlist(pars), conditions = rownames(covtable)[as.numeric(rownames(pars))])[[1]]) %>%
   as.prdlist(names = rownames(covtable))
 
-plot(prediction, as.datalist(data, split.by = "condition")) + facet_wrap(~name*condition, scales = "free") 
+plot(prediction, as.datalist(data, splitBy = "condition")) + facet_wrap(~name*condition, scales = "free") 
 
 # # Set up function for saemix (saemix with dMod not supported at the moment)
 # library(saemix)

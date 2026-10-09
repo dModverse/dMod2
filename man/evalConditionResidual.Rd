@@ -2,7 +2,7 @@
 % Please edit documentation in R/objClass.R
 \name{evalConditionResidual}
 \alias{evalConditionResidual}
-\title{Per-condition residual contribution to an L2 objective}
+\title{L2 Objective of One Condition}
 \usage{
 evalConditionResidual(
   dataI,
@@ -14,39 +14,46 @@ evalConditionResidual(
   eCondNames = NULL,
   deriv = TRUE,
   deriv2 = FALSE,
-  opt.BLOQ = c("M3", "M1", "M4NM", "M4BEAL")
+  optBLOQ = c("M3", "M1", "M4NM", "M4BEAL"),
+  ...
 )
 }
 \arguments{
-\item{dataI}{datalist entry for one condition (data.frame with
-\code{name}, \code{time}, \code{value}, \code{sigma} columns).}
+\item{dataI}{\code{data.frame} of one condition of a \link{datalist}, with columns
+\code{name}, \code{time}, \code{value} and \code{sigma}.}
 
-\item{predictionI}{prdframe for that condition (typically \code{prediction[[cn]]}
-from a prdfn call).}
+\item{predictionI}{\link{prdframe} of that condition.}
 
-\item{pars}{Named numeric parameter vector at which to evaluate.}
+\item{pars}{Named numeric parameter vector.}
 
-\item{errfn}{Optional obsfn defining a parameter-dependent error model.}
+\item{errfn}{Optional \link{obsfn}, the error model. Default \code{NULL}.}
 
-\item{fixed}{Optional fixed-parameter vector (passed through to \code{errfn}).}
+\item{fixed}{Optional named numeric vector of fixed parameters, passed to
+\code{errfn}. Default \code{NULL}.}
 
-\item{cn}{Character condition name. Required when \code{errfn} is set, used
-for errmodel condition routing.}
+\item{cn}{Character, the condition name. Required when \code{errfn} is set.}
 
-\item{eCondNames}{Optional character vector of condition names that have
-an errmodel mapping. NULL means \code{errfn} applies to all.}
+\item{eCondNames}{Character vector, the conditions \code{errfn} is defined for.
+Default \code{NULL}, all.}
 
-\item{deriv, deriv2}{Logical. Whether to return gradient/Hessian.}
+\item{deriv}{Logical. \code{TRUE} (default) returns the gradient and the
+Gauss-Newton Hessian.}
 
-\item{opt.BLOQ}{Character. BLOQ likelihood treatment (see \link{normL2}).
-One of \code{"M1"}, \code{"M3"} (default), \code{"M4NM"}, \code{"M4BEAL"}.}
+\item{deriv2}{Logical. \code{TRUE} returns the exact Hessian, from the second
+derivatives of the prediction. Default \code{FALSE}.}
+
+\item{optBLOQ}{Character, the treatment of data below the limit of
+quantification, as in \code{\link[=normL2]{normL2()}}. Default \code{"M3"}.}
+
+\item{...}{\code{opt.BLOQ} is deprecated, use \code{optBLOQ}.}
 }
 \value{
-An \link{objlist} for the single condition's contribution.
+An \link{objlist}.
 }
 \description{
-Computes the negative-log-likelihood residual contribution of a single
-condition (with optional error model). Exposed so quadrature node-loops
-can evaluate one condition without paying the per-call cost of
-\link{normL2}'s multi-condition setup.
+Computes the contribution of one condition to \code{\link[=normL2]{normL2()}}.
 }
+\seealso{
+\code{\link[=normL2]{normL2()}}
+}
+\keyword{internal}

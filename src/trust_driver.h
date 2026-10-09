@@ -110,7 +110,7 @@ struct Reporter {
   ~Reporter() { if (ofs.is_open()) ofs.close(); }
 };
 
-// Per-iteration trace buffers. Every vector carries exactly one entry per
+// Per-iteration trace buffers. Every vector holds exactly one entry per
 // completed iteration, which `attach` relies on.
 struct Blather {
   std::vector<double> argpath, argtry;
@@ -183,7 +183,7 @@ inline const char* subproblem_label(bool is_newton, bool is_hard, bool is_easy) 
 enum Curvature { CV_VALUE = 0, CV_GRADIENT = 1, CV_GN = 2, CV_EXACT = 3 };
 
 // Turn an R-level failure into eval_ok = false, but let a user interrupt
-// through -- a bare catch(...) would swallow Ctrl-C and count it as a failed
+// through: a bare catch(...) would swallow Ctrl-C and count it as a failed
 // evaluation.
 inline bool eval_objfun(Function& objfun, const NumericVector& x, List& out,
                         int want = CV_GN) {
@@ -197,10 +197,9 @@ inline bool eval_objfun(Function& objfun, const NumericVector& x, List& out,
   return true;
 }
 
-// An objective may decline to build a Hessian and says so with NULL. Converting
-// that to a matrix throws from outside eval_objfun's try, so a caller would see
-// an Rcpp conversion error instead of a decision it can act on. Reads the raw
-// SEXP so nothing here throws, and copies column-major, the way H_full is held.
+// An objective may decline a Hessian by returning NULL. Reads the raw SEXP so
+// nothing throws outside eval_objfun's try, and copies column-major, the way
+// H_full is held.
 inline bool read_hessian(const List& out, int K, std::vector<double>& H) {
   if (!out.containsElementNamed("hessian")) return false;
   SEXP h = out["hessian"];

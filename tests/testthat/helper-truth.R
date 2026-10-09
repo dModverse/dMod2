@@ -1,28 +1,15 @@
-# Analytical ground-truth fixtures for behavioral tests.
-#
-# Pure-R closed-form solutions, no compilation. Tests use these to validate
-# dMod's compiled / numerical machinery against the mathematics, not against
-# another implementation.
-#
-# Conventions:
-#   * Each truth_* function returns either a numeric vector (state values)
-#     or a list with $value, $gradient, $hessian where useful.
-#   * make_noisy_data() builds a data.frame in dMod's expected layout
-#     (columns: name, time, value, sigma[, lloq], condition).
-#   * numderiv_grad / numderiv_hess wrap numDeriv with project tolerances
-#     and consistent argument order for use inside tests.
+# Pure-R closed-form references, no compilation: tests check the compiled
+# machinery against the mathematics rather than another implementation.
 
 
 ## ---- Closed-form solutions ----------------------------------------------
 
-# Linear decay  A(t) = x0 * exp(-k * t).
-# Returns a list with the state and its first / second derivatives w.r.t.
-# the parameters (x0, k). Vectorised over t.
+# Closed-form linear decay with its first and second derivatives in (x0, k),
+# vectorised over t.
 truth_decay <- function(t, x0, k) {
   E <- exp(-k * t)
   value <- x0 * E
   grad  <- cbind(x0 = E, k = -t * x0 * E)
-  # d2A / d(x0)^2 = 0, d2A / dx0 dk = -t * E, d2A / dk^2 = t^2 * x0 * E
   hess <- array(0, c(length(t), 2L, 2L),
                 dimnames = list(NULL, c("x0", "k"), c("x0", "k")))
   hess[, "x0", "k"] <- -t * E
@@ -31,9 +18,8 @@ truth_decay <- function(t, x0, k) {
   list(value = value, gradient = grad, hessian = hess)
 }
 
-# Two-step linear cascade A -> B -> C with rates (k1, k2), initial
-# A(0) = A0, B(0) = C(0) = 0. Returns A, B, C at times t.
-# Branch on k1 == k2 to keep the formula well-defined.
+# Closed-form two-step linear cascade started from A only. Equal rates take
+# the degenerate branch of the formula.
 truth_two_step <- function(t, A0, k1, k2) {
   A <- A0 * exp(-k1 * t)
   if (isTRUE(all.equal(k1, k2))) {
@@ -74,8 +60,7 @@ make_noisy_data <- function(truth_fn, pars, times,
 
 ## ---- numDeriv wrappers ---------------------------------------------------
 
-# Thin wrappers around numDeriv with a single source-of-truth tolerance for
-# behavioral tests. Pass-through ... to numDeriv for method tweaks.
+# numDeriv with Richardson extrapolation; skips when numDeriv is absent.
 numderiv_grad <- function(fn, x, ...) {
   if (!requireNamespace("numDeriv", quietly = TRUE))
     testthat::skip("numDeriv not installed")
@@ -91,30 +76,20 @@ numderiv_hess <- function(fn, x, ...) {
 
 ## ---- Closed-form objective values ---------------------------------------
 
-# Closed-form value of the (negative) log-likelihood that nll_ALOQ computes
-# for an above-LOQ Gaussian dataset:
-#   value = sum(((pred - obs) / sigma)^2) + sum(log(2 * pi * sigma^2))
-# pred, obs, sigma are length-n numeric. Used as an independent reference
-# for normL2 / nll behavioral tests.
+# Reference value of nll_ALOQ, -2 log-likelihood of above-LOQ Gaussian data.
 truth_nll_aloq <- function(pred, obs, sigma) {
   wr <- (pred - obs) / sigma
   sum(wr^2) + sum(log(2 * pi * sigma^2))
 }
 
-# Closed-form value of nll_BLOQ under M3:
-#   value = -2 * sum(log(Phi(-(pred - lloq) / sigma)))
-# Where pred is the model prediction at BLOQ time points and lloq is the
-# substituted observation (data$value is pmax-ed to lloq before residual).
+# Reference value of nll_BLOQ under M3, pred taken at the BLOQ time points.
 truth_nll_bloq_m3 <- function(pred, lloq, sigma) {
   wr <- (pred - lloq) / sigma
   -2 * sum(stats::pnorm(-wr, log.p = TRUE))
 }
 
-# Closed-form M4NM / M4BEAL BLOQ contribution:
-#   value = -2 * sum(log(1 - Phi(wr) / Phi(w0)))
-# with wr = (pred - lloq) / sigma and w0 = pred / sigma. Used as a closed
-# reference even though the dMod implementation adds stability fallbacks for
-# extreme arguments (which we test separately under nominal conditions).
+# Reference M4NM / M4BEAL BLOQ contribution, without the stability fallbacks
+# the package applies at extreme arguments.
 truth_nll_bloq_m4 <- function(pred, lloq, sigma) {
   wr <- (pred - lloq) / sigma
   w0 <- pred / sigma

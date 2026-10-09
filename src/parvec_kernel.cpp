@@ -1,6 +1,6 @@
 // parvec subsetting and concatenation
 //
-// A `parvec` is a named numeric carrying `deriv` [p x theta], optionally
+// A `parvec` is a named numeric with `deriv` [p x theta], optionally
 // `deriv2` [p x theta x theta], and `fixed` (the names whose deriv row is
 // absent). Subsetting and concatenating it is pure bookkeeping, but the
 // composition protocol does it a few hundred times per objective evaluation on
@@ -52,7 +52,7 @@ inline void match_pos(SEXP want, SEXP have, std::vector<int>& out) {
   UNPROTECT(1);
 }
 
-// Rows `keep` of a numeric matrix, dimnames carried along.
+// Rows `keep` of a numeric matrix, dimnames kept.
 SEXP subset_rows_mat(SEXP m, const std::vector<int>& keep, SEXP keep_names) {
   const int nr = Rf_nrows(m), nc = Rf_ncols(m);
   const int k  = (int) keep.size();
@@ -99,7 +99,7 @@ inline bool is_3d_real(SEXP a) {
   return d != R_NilValue && XLENGTH(d) == 3;
 }
 
-// The names in `nms` that carry no deriv row.
+// The names in `nms` that have no deriv row.
 SEXP fixed_names(SEXP nms, SEXP rn) {
   std::vector<int> pos;
   match_pos(nms, rn, pos);
@@ -148,11 +148,9 @@ SEXP rows_for(SEXP arr, SEXP nms, bool three_d) {
 
 }  // namespace
 
-// Attach the derivative attributes of a parvec to an already-subset numeric.
-// `out` carries the values and names; `deriv`/`deriv2` are the originals, whose
-// rows are restricted to those names. Returns R_NilValue for shapes it does not
-// handle so `[.parvec` can fall back. Index semantics stay in R: this never
-// looks at how `out` was selected.
+// Attach `deriv`/`deriv2`, restricted to the names of the already-subset `out`.
+// Index semantics stay in R; R_NilValue for shapes it does not handle, so
+// `[.parvec` can fall back.
 // [[Rcpp::export]]
 SEXP parvec_attach(SEXP out, SEXP deriv, SEXP deriv2) {
   if (TYPEOF(out) != REALSXP) return R_NilValue;
@@ -254,7 +252,7 @@ SEXP parvec_concat(SEXP lst) {
 
   int nprot = 2;
   if (any_deriv) {
-    // Rows of the blocks that carry a deriv, stacked in order -- rbind().
+    // Rows of the blocks that have a deriv, stacked in order as rbind() does.
     R_xlen_t nr = 0;
     for (R_xlen_t k = 0; k < m; ++k) {
       SEXP d = Rf_getAttrib(VECTOR_ELT(lst, k), Rf_install("deriv"));

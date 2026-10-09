@@ -8,11 +8,11 @@
 \alias{is.datalist}
 \alias{c.datalist}
 \alias{datalist}
-\title{Generate a datalist object}
+\title{Generate a Datalist Object}
 \usage{
 as.datalist(x, ...)
 
-\method{as.datalist}{data.frame}(x, split.by = NULL, keep.covariates = NULL, ...)
+\method{as.datalist}{data.frame}(x, splitBy = NULL, keepCovariates = NULL, ...)
 
 \method{as.datalist}{list}(x, names = NULL, ..., condition.grid = attr(x, "condition.grid"))
 
@@ -25,46 +25,48 @@ is.datalist(x)
 datalist(...)
 }
 \arguments{
-\item{x}{object of class \code{data.frame} or \code{list}. Data frames are required to
-provide "name", "time" and "value" as columns. Columns "sigma" and "lloq" can be provided.
-If "sigma" and "lloq" are missing, they
-are imputed with \code{NA} and \code{-Inf}, respectively.}
+\item{x}{object of class \code{data.frame} or \code{list} of data frames. Data frames
+must provide the columns "name", "time" and "value". The columns "sigma"
+and "lloq" are optional and default to \code{NA} and \code{-Inf}.}
 
-\item{...}{data.frame objects to be coerced into a list and additional arguments}
+\item{...}{for \code{datalist()} and \code{c()}, named data frames or datalists; for
+the \code{as.datalist()} methods, not used; \code{split.by} and \code{keep.covariates}
+are deprecated names of \code{splitBy} and \code{keepCovariates}.}
 
-\item{split.by}{vector of columns names which yield a unique identifier (conditions). If NULL, all
-columns except for the expected standard columns "name", "time", "value", "sigma" and "lloq" will be
-selected.}
+\item{splitBy}{character, the columns whose combined values identify a
+condition. Default \code{NULL} uses all columns except "name", "time",
+"value", "sigma" and "lloq".}
 
-\item{keep.covariates}{vector of additional column names which should be kept in the condition.grid.}
+\item{keepCovariates}{character, additional columns kept in the
+condition grid. Default \code{NULL}.}
 
-\item{names}{optional names vector, otherwise names are taken from \code{mylist}}
+\item{names}{character, the condition names. Default \code{NULL} takes them
+from \code{names(x)}.}
 
-\item{condition.grid}{Optionally, to manually specify a condition.grid}
+\item{condition.grid}{data frame with one row per condition. Default is the
+\code{condition.grid} attribute of \code{x}; if that is \code{NULL}, a grid with the
+single column \code{condition}.}
 
-\item{value}{The new condition names of the datalist and its condition.grid}
+\item{value}{character, the new condition names. The rows of the
+condition grid are renamed accordingly.}
 }
 \value{
-Object of class \link{datalist}
+Object of class \code{datalist}. \code{is.datalist()} returns a logical.
 
 Object of class \code{datalist}.
 }
 \description{
-The datalist object stores time-course data in a list of data.frames.
-The names of the list serve as identifiers, e.g. of an experimental condition, etc.
+A datalist stores time-course data as a named list of data
+frames, one per condition.
 }
 \details{
-Datalists can be plotted, see \link{plotData} and merged, see \link{sumdatalist}.
-They are the basic structure when combining model prediction and data via the \link{normL2}
-objective function.
+The standard columns of the data frames are "name" (observable
+name), "time", "value", "sigma" (uncertainty, can be \code{NA}) and "lloq"
+(lower limit of quantification, \code{-Inf} by default).
 
-The standard columns of the datalist data frames are "name" (observable name),
-"time" (time points), "value" (data value), "sigma" (uncertainty, can be NA), and
-"lloq" (lower limit of quantification, \code{-Inf} by default).
-
-Datalists carry the attribute \code{condition.grid} which contains additional information about different
-conditions, such as dosing information for the experiment. It can be conveniently accessed by the \link{covariates}-function.
-Reassigning names to a datalist also renames the rows of the \code{condition.grid}.
+The attribute \code{condition.grid} holds one row per condition with further
+information such as doses; see \code{\link[=covariates]{covariates()}}. Renaming a datalist renames
+the rows of its condition grid.
 }
 \examples{
 ## Generate datalist from scratch
@@ -83,7 +85,7 @@ data <- datalist(C1 = mydata1, C2 = mydata2)
 print(data)
 plot(data)
 
-## Generate datalist from singla data.frame
+## Generate datalist from a single data.frame
 times <- seq(0, 2*pi, length.out = 20)
 mydata <- data.frame(name = "A", 
                      time = times, 
@@ -93,10 +95,13 @@ mydata <- data.frame(name = "A",
                      phase = rep(c("first", "second"), each = 20),
                      amplitude = rep(c(1,1.5), each = 20))
 
-data <- as.datalist(mydata, split.by = c("stage", "phase"), keep.covariates = "amplitude")
+data <- as.datalist(mydata, splitBy = c("stage", "phase"), keepCovariates = "amplitude")
 print(data)
 plot(data)
 
 condition.grid <- attr(data, "condition.grid")
 print(condition.grid)
+}
+\seealso{
+\code{\link[=plotData]{plotData()}}, \link{+.datalist}, \code{\link[=normL2]{normL2()}}
 }

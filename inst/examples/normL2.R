@@ -1,4 +1,4 @@
-\dontrun{
+\donttest{
   ## Generate a prediction function
   
   times <- 0:5

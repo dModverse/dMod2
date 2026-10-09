@@ -459,8 +459,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // trustL1_impl
-List trustL1_impl(Function objfun, NumericVector parinit, NumericVector mu, NumericVector lambda, bool one_sided, double rinit, double rmax, Nullable<NumericVector> parscale, int iterlim, double ftol, double mtol, double gtol, double xtol, double rmin, double thetamax, std::string boundary, bool minimize, bool blather, Nullable<NumericVector> parupper, Nullable<NumericVector> parlower, bool printIter, Nullable<CharacterVector> traceFile);
-RcppExport SEXP _dMod2_trustL1_impl(SEXP objfunSEXP, SEXP parinitSEXP, SEXP muSEXP, SEXP lambdaSEXP, SEXP one_sidedSEXP, SEXP rinitSEXP, SEXP rmaxSEXP, SEXP parscaleSEXP, SEXP iterlimSEXP, SEXP ftolSEXP, SEXP mtolSEXP, SEXP gtolSEXP, SEXP xtolSEXP, SEXP rminSEXP, SEXP thetamaxSEXP, SEXP boundarySEXP, SEXP minimizeSEXP, SEXP blatherSEXP, SEXP parupperSEXP, SEXP parlowerSEXP, SEXP printIterSEXP, SEXP traceFileSEXP) {
+List trustL1_impl(Function objfun, NumericVector parinit, NumericVector mu, NumericVector lambda, bool one_sided, double rinit, double rmax, Nullable<NumericVector> parscale, int iterlim, double ftol, double mtol, double gtol, double xtol, double rmin, double thetamax, std::string boundary, bool minimize, bool blather, Nullable<NumericVector> parupper, Nullable<NumericVector> parlower, bool printIter, Nullable<CharacterVector> traceFile, Nullable<CharacterVector> gate, Nullable<List> fuse);
+RcppExport SEXP _dMod2_trustL1_impl(SEXP objfunSEXP, SEXP parinitSEXP, SEXP muSEXP, SEXP lambdaSEXP, SEXP one_sidedSEXP, SEXP rinitSEXP, SEXP rmaxSEXP, SEXP parscaleSEXP, SEXP iterlimSEXP, SEXP ftolSEXP, SEXP mtolSEXP, SEXP gtolSEXP, SEXP xtolSEXP, SEXP rminSEXP, SEXP thetamaxSEXP, SEXP boundarySEXP, SEXP minimizeSEXP, SEXP blatherSEXP, SEXP parupperSEXP, SEXP parlowerSEXP, SEXP printIterSEXP, SEXP traceFileSEXP, SEXP gateSEXP, SEXP fuseSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -486,7 +486,9 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< Nullable<NumericVector> >::type parlower(parlowerSEXP);
     Rcpp::traits::input_parameter< bool >::type printIter(printIterSEXP);
     Rcpp::traits::input_parameter< Nullable<CharacterVector> >::type traceFile(traceFileSEXP);
-    rcpp_result_gen = Rcpp::wrap(trustL1_impl(objfun, parinit, mu, lambda, one_sided, rinit, rmax, parscale, iterlim, ftol, mtol, gtol, xtol, rmin, thetamax, boundary, minimize, blather, parupper, parlower, printIter, traceFile));
+    Rcpp::traits::input_parameter< Nullable<CharacterVector> >::type gate(gateSEXP);
+    Rcpp::traits::input_parameter< Nullable<List> >::type fuse(fuseSEXP);
+    rcpp_result_gen = Rcpp::wrap(trustL1_impl(objfun, parinit, mu, lambda, one_sided, rinit, rmax, parscale, iterlim, ftol, mtol, gtol, xtol, rmin, thetamax, boundary, minimize, blather, parupper, parlower, printIter, traceFile, gate, fuse));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -619,7 +621,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_dMod2_smc_ess", (DL_FUNC) &_dMod2_smc_ess, 1},
     {"_dMod2_smc_systematic_resample", (DL_FUNC) &_dMod2_smc_systematic_resample, 2},
     {"_dMod2_smc_beta_bisect", (DL_FUNC) &_dMod2_smc_beta_bisect, 6},
-    {"_dMod2_trustL1_impl", (DL_FUNC) &_dMod2_trustL1_impl, 22},
+    {"_dMod2_trustL1_impl", (DL_FUNC) &_dMod2_trustL1_impl, 24},
     {"_dMod2_trustL1_lockstep_impl", (DL_FUNC) &_dMod2_trustL1_lockstep_impl, 19},
     {"_dMod2_trust_impl", (DL_FUNC) &_dMod2_trust_impl, 28},
     {"_dMod2_trust_step_impl", (DL_FUNC) &_dMod2_trust_step_impl, 8},

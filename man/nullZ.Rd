@@ -2,20 +2,33 @@
 % Please edit documentation in R/linalg.R
 \name{nullZ}
 \alias{nullZ}
-\title{Find integer-null space of matrix A}
+\title{Null Space Basis from the Reduced Row Echelon Form}
 \usage{
 nullZ(A, tol = sqrt(.Machine$double.eps))
 }
 \arguments{
-\item{A}{matrix for which the null space is searched}
+\item{A}{Numeric matrix.}
 
-\item{tol}{tolerance to find pivots in rref-function below}
+\item{tol}{Tolerance for pivots. Not used: \code{\link[=rref]{rref()}} is called with its
+default tolerance.}
 }
 \value{
-null space of A with only integers in it
+A matrix with \code{ncol(A)} rows and one column per basis vector.
 }
 \description{
-Find integer-null space of matrix A
+Computes a basis of the null space of \code{A} from its reduced row echelon
+form, like \code{null(A, "r")} in MATLAB: each basis vector has a 1 in one
+non-pivot column and 0 in the others. The basis is integer if the reduced
+row echelon form is.
+}
+\examples{
+A <- rbind(c(1, -1, 0), c(0, 1, -1))
+nullZ(A)
+A \%*\% nullZ(A)
+
+}
+\seealso{
+\code{\link[=rref]{rref()}}
 }
 \author{
 Malenka Mader, \email{Malenka.Mader@fdm.uni-freiburg.de}

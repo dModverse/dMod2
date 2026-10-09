@@ -2,17 +2,20 @@
 % Please edit documentation in R/parClass.R
 \name{print.parfn}
 \alias{print.parfn}
-\title{Pretty printing parameter transformations}
+\title{Print Parameter Transformations}
 \usage{
 \method{print}{parfn}(x, ...)
 }
 \arguments{
-\item{x}{prediction function}
+\item{x}{object of class \code{parfn}.}
 
-\item{...}{additional arguments}
+\item{...}{not used.}
+}
+\value{
+\code{x}, invisibly.
 }
 \description{
-Pretty printing parameter transformations
+Print Parameter Transformations
 }
 \author{
 Wolfgang Mader, \email{Wolfgang.Mader@fdm.uni-freiburg.de}

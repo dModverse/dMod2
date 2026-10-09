@@ -2,20 +2,20 @@
 % Please edit documentation in R/data.R
 \name{lbind}
 \alias{lbind}
-\title{Bind named list of data.frames into one data.frame}
+\title{Bind a Named List of Data Frames into One Data Frame}
 \usage{
 lbind(mylist)
 }
 \arguments{
-\item{mylist}{A named list of data.frame. The data.frames are expected to have the same structure.}
+\item{mylist}{A named list of data frames with the same columns.}
 }
 \value{
-data.frame with the original columns augmented by a "condition" column.
+A data frame with the original columns and \code{condition}.
 }
 \description{
-Bind named list of data.frames into one data.frame
+Adds to each data frame a column \code{condition} with its name in the list and
+binds them by rows.
 }
-\details{
-Each data.frame is augmented by a "condition" column containing the name attribute of
-the list entry. Subsequently, the augmented data.frames are bound together by \code{rbind}.
+\examples{
+lbind(list(C1 = data.frame(x = 1:2), C2 = data.frame(x = 3)))
 }

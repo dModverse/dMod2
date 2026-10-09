@@ -1,10 +1,8 @@
 ## Restricted maximum likelihood for the error model -------------------------
-##
-## The error parameters solve the maximum-likelihood equation with every data
-## point charged its own leverage h_ii:
-##   sum_i [ 1 - h_ii - r_i^2/sigma_i^2 ] d log sigma_i^2 / d phi_k = 0
-## Only first-order sensitivities enter, and the fixed point is exact although
-## each step freezes h.
+
+## Error parameters solve sum_i [1 - h_ii - r_i^2/sigma_i^2] d log sigma_i^2 / d phi_k = 0
+## with leverages h_ii. Only first-order sensitivities enter; the fixed point is
+## exact although each step freezes h.
 
 
 # One evaluation of the whole chain per L2 term, returned per term and
@@ -45,7 +43,7 @@
   }
 
   if (!length(frames))
-    stop("reml: the objective carries no data to evaluate.", call. = FALSE)
+    stop("reml: the objective holds no data to evaluate.", call. = FALSE)
   structure(frames, names = labels)
 }
 
@@ -61,7 +59,7 @@
   x    <- attr(objfun, "prdfn")
   data <- attr(objfun, "data")
   if (is.null(x) || is.null(data))
-    stop("objfun does not carry a prediction function and data. ",
+    stop("objfun does not hold a prediction function and data. ",
          "REML needs an objective built by normL2().", call. = FALSE)
   list(list(data = data, prdfn = x, errfn = attr(objfun, "errfn"),
             timesD = attr(objfun, "timesD")))
@@ -69,7 +67,7 @@
 
 
 # Stack the per-row derivative blocks of every frame into one matrix over
-# `cols`, filling with zero where a term does not carry a parameter.
+# `cols`, filling with zero where a term lacks a parameter.
 .remlBlocks <- function(frames, which, cols) {
 
   n <- vapply(frames, nrow, 0L)
@@ -96,39 +94,43 @@
 }
 
 
-#' Leverage of the data points in the mean model
+#' Leverage of the Data Points in the Mean Model
 #'
 #' @description
 #' Hat values of the weighted mean model,
 #' \eqn{h = \mathrm{diag}(W^{1/2} J (J^\top W J)^{-1} J^\top W^{1/2})} with
 #' \eqn{J = \partial\mu/\partial\theta} the prediction sensitivities and
-#' \eqn{W = \mathrm{diag}(1/\sigma_i^2)}. Each value is the share of the mean
-#' parameters carried by one data point, summed by observable.
+#' \eqn{W = \mathrm{diag}(1/\sigma_i^2)}: the leverage of each data point.
+#' Their sum is the numerical rank of the weighted sensitivity matrix, so a
+#' non-identifiable direction contributes nothing.
 #'
-#' Their sum is the numerical rank of the weighted sensitivity matrix, not the
-#' nominal parameter count: a non-identifiable direction contributes nothing.
-#'
-#' @param objfun objective function built by [normL2], carrying its prediction
+#' @param objfun Objective function built by [normL2()], with prediction
 #'   function, data and error model.
-#' @param pars named numeric parameter vector, usually a fit.
-#' @param meanpars character, the mean parameters spanning \eqn{J}. Defaults to
-#'   `names(pars)` minus the error-model parameters.
-#' @param fixed named numeric passed on to the prediction.
-#' @param rank.tol relative threshold on the singular values of the weighted
-#'   sensitivity matrix below which a direction counts as absent.
-#' @param cores passed on to the prediction.
+#' @param pars Named numeric parameter vector, usually a fit.
+#' @param meanpars Character, the mean parameters spanning \eqn{J}. Default
+#'   `NULL`: `names(pars)` without the error-model parameters.
+#' @param fixed Named numeric, passed to the prediction. Default `NULL`.
+#' @param rankTol Relative threshold on the singular values of the weighted
+#'   sensitivity matrix below which a direction counts as absent. Default
+#'   `1e-8`.
+#' @param cores Passed to the prediction. Default `getOption("dMod.cores", 1)`.
+#' @param ... `rank.tol` is deprecated, use `rankTol`.
 #'
-#' @return A `data.frame` with one row per data point, columns `condition`,
-#'   `time`, `name`, `sigma`, `residual` and `leverage`, and attributes
-#'   `"rank"` (the effective number of mean parameters) and `"dof"` (a table of
-#'   \eqn{n_g - \sum_{i \in g} h_{ii}} per observable).
+#' @return A data frame with one row per data point and columns `condition`,
+#'   `time`, `name`, `sigma`, `residual` and `leverage`. Attributes: `"rank"`,
+#'   the effective number of mean parameters; `"logdet"`, the log determinant
+#'   of \eqn{J^\top W J} over the directions present; `"dof"`, per observable
+#'   the number of data points minus the summed leverage.
 #'
-#' @seealso [reml] uses these to correct the error model.
+#' @seealso [reml()]
+#' @inherit reml examples
 #' @importFrom stats setNames
 #' @export
 remlLeverage <- function(objfun, pars, meanpars = NULL, fixed = NULL,
-                         rank.tol = 1e-8,
-                         cores = getOption("dMod.cores", 1L)) {
+                         rankTol = 1e-8,
+                         cores = getOption("dMod.cores", 1L), ...) {
+
+  .renameArgs(list(...), c(rank.tol = "rankTol"), "remlLeverage", strict = TRUE)
 
   frames <- .remlFrames(objfun, pars, fixed = fixed, cores = cores)
   if (is.null(meanpars)) meanpars <- setdiff(names(pars), .remlErrpars(objfun, pars))
@@ -146,7 +148,7 @@ remlLeverage <- function(objfun, pars, meanpars = NULL, fixed = NULL,
   J <- J / sigma
 
   s <- svd(J)
-  k <- sum(s$d > rank.tol * max(s$d))
+  k <- sum(s$d > rankTol * max(s$d))
   h <- rowSums(s$u[, seq_len(k), drop = FALSE]^2)
   # log det(J' W J) over the directions that are present, the penalty of the
   # restricted likelihood. J' W J has the squared singular values as eigenvalues.
@@ -185,52 +187,90 @@ remlLeverage <- function(objfun, pars, meanpars = NULL, fixed = NULL,
 }
 
 
-#' Estimate the error model by restricted maximum likelihood
+#' Estimate the Error Model by Restricted Maximum Likelihood
 #'
 #' @description
 #' Alternates between fitting the mean parameters at a fixed error model and
 #' updating the error parameters from the REML stationarity condition, until
 #' the error parameters stop moving. Every data point enters with its own
-#' leverage rather than with the average \eqn{p/n}.
-#'
-#' The objective is left untouched, it stays the plain \eqn{-2\log L}. Every L2
-#' term of a composed objective is used, so a split
-#' `normL2(d1, ...) + normL2(d2, ...)` is handled as one dataset.
+#' leverage, see [remlLeverage()]. Every L2 term of a composed objective is
+#' used, so `normL2(d1, ...) + normL2(d2, ...)` is handled as one dataset.
 #'
 #' @details
-#' Only first-order sensitivities are used. The condition solved is the data
-#' term's: a term acting on the error parameters from outside it, a prior for
-#' instance, is not part of it, and `reml()` warns when it finds one. Put such
-#' terms on the mean parameters.
+#' Only first-order sensitivities are used. A term acting on the error
+#' parameters from outside the data term, such as a prior, is not part of the
+#' REML condition; `reml()` warns when it finds one.
 #'
-#' @param objfun objective function built by [normL2], with an error model.
-#' @param pars named numeric starting vector covering mean and error parameters.
-#' @param errpars character, the error-model parameters. Defaults to the free
+#' @param objfun Objective function built by [normL2()], with an error model.
+#' @param pars Named numeric starting vector of mean and error parameters.
+#' @param errpars Character, the error-model parameters. Default `NULL`: the
 #'   symbols of the error equations that appear in `pars`.
-#' @param fixed named numeric held fixed throughout.
-#' @param iterlim maximum number of outer rounds.
-#' @param tol convergence threshold on the largest change of an error parameter
-#'   between two rounds.
-#' @param rank.tol passed to [remlLeverage].
-#' @param optimizer optimiser for the mean step, called as
-#'   `optimizer(objfun, parinit, fixed = , ...)`.
-#' @param control named list of arguments for `optimizer`.
-#' @param cores passed on to the prediction and the objective.
-#' @param ... further arguments for `objfun`.
+#' @param fixed Named numeric, held fixed throughout. Default `NULL`.
+#' @param iterlim Maximum number of rounds. Default `25`.
+#' @param tol Convergence threshold on the largest change of an error parameter
+#'   between two rounds. Default `1e-6`.
+#' @param rankTol Passed to [remlLeverage()]. Default `1e-8`.
+#' @param optimizer Optimiser for the mean step, called as
+#'   `optimizer(objfun, parinit, fixed = , ...)`. Default [trust()].
+#' @param control Named list of arguments for `optimizer`, merged into
+#'   `list(rinit = 0.1, rmax = 10)`. Default `NULL`.
+#' @param cores Passed to the prediction and the objective. Default
+#'   `getOption("dMod.cores", 1)`.
+#' @param ... Further arguments for `objfun`. `rank.tol` is deprecated, use
+#'   `rankTol`.
 #'
-#' @return A list with components `argument` (the full parameter vector),
-#'   `value` (the objective at `argument`), `errpars`, `leverage` (the frame
-#'   returned by [remlLeverage]), `dof` (effective degrees of freedom per
-#'   observable), `iterations`, `converged` and `fit` (the last mean fit).
+#' @return A list with components
+#'   \describe{
+#'     \item{`argument`}{The full parameter vector.}
+#'     \item{`value`}{The REML criterion, `value.plain + logdet`.}
+#'     \item{`value.plain`}{The objective at `argument`.}
+#'     \item{`logdet`}{Log determinant of \eqn{J^\top W J}, see
+#'       [remlLeverage()].}
+#'     \item{`errpars`}{The error-model parameters.}
+#'     \item{`leverage`}{The data frame returned by [remlLeverage()].}
+#'     \item{`dof`}{Effective degrees of freedom per observable.}
+#'     \item{`rank`}{Effective number of mean parameters.}
+#'     \item{`iterations`}{Number of rounds.}
+#'     \item{`converged`}{Logical.}
+#'     \item{`fit`}{The last mean fit.}
+#'   }
 #'
-#' @seealso [remlLeverage], [normL2]
+#' @seealso [remlLeverage()], [normL2()]
+#'
+#' @examples
+#' \donttest{
+#' old <- options(dMod.outdir = tempdir())
+#' f <- addReaction(eqnlist(), from = "A", to = "", rate = "k*A")
+#' x <- Xs(odemodel(f, modelname = "reml_x", compile = FALSE))
+#' g <- Y(c(y = "A"), f = x, attachInput = FALSE, modelname = "reml_g",
+#'        compile = FALSE)
+#' e <- Y(c(y = "sigma_y"), f = g, attachInput = FALSE, condition = "C1",
+#'        modelname = "reml_e", compile = FALSE)
+#' p <- P(eqnvec(A = "exp(logA)", k = "exp(logk)", sigma_y = "sigma_y"),
+#'        condition = "C1", modelname = "reml_p", compile = FALSE)
+#' compile(x, g, e, p, output = "reml_example", cores = 1)
+#'
+#' set.seed(1)
+#' times <- seq(0, 5, by = 0.25)
+#' data <- datalist(C1 = data.frame(
+#'   name = "y", time = times, sigma = NA_real_,
+#'   value = 2 * exp(-0.5 * times) + rnorm(length(times), sd = 0.1)))
+#' obj <- normL2(data, g * x * p, errmodel = e)
+#'
+#' fit <- reml(obj, c(logA = 0, logk = 0, sigma_y = 1))
+#' fit$argument
+#' fit$dof
+#' head(remlLeverage(obj, fit$argument))
+#' options(old)
+#' }
 #' @importFrom stats optim
 #' @export
 reml <- function(objfun, pars, errpars = NULL, fixed = NULL,
-                 iterlim = 25L, tol = 1e-6, rank.tol = 1e-8,
+                 iterlim = 25L, tol = 1e-6, rankTol = 1e-8,
                  optimizer = trust, control = NULL,
                  cores = getOption("dMod.cores", 1L), ...) {
 
+  dots <- .renameArgs(list(...), c(rank.tol = "rankTol"), "reml")
   if (is.null(attr(objfun, "errfn")))
     stop("reml: the objective has no error model to estimate.", call. = FALSE)
   if (is.null(names(pars)))
@@ -259,11 +299,11 @@ reml <- function(objfun, pars, errpars = NULL, fixed = NULL,
     fit <- do.call(optimizer,
                    c(list(objfun, pars[meanpars],
                           fixed = c(fixed, pars[errpars]), cores = cores),
-                     ctrl, list(...)))
+                     ctrl, dots))
     pars[meanpars] <- fit$argument[meanpars]
 
     lev <- remlLeverage(objfun, pars, meanpars = meanpars, fixed = fixed,
-                        rank.tol = rank.tol, cores = cores)
+                        rankTol = rankTol, cores = cores)
 
     # The sigma step solves the stationarity condition of the data term. Anything
     # else acting on the error parameters, a prior for instance, is not in it.
@@ -280,7 +320,7 @@ reml <- function(objfun, pars, errpars = NULL, fixed = NULL,
   }
 
   lev <- remlLeverage(objfun, pars, meanpars = meanpars, fixed = fixed,
-                      rank.tol = rank.tol, cores = cores)
+                      rankTol = rankTol, cores = cores)
 
   value.plain <- objfun(pars, fixed = fixed, cores = cores)$value
 

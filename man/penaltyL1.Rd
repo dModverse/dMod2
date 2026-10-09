@@ -63,13 +63,13 @@ it shrinks individual deviations to the target and answers "is this
 subject different from the reference value?". It factorises over subjects
 (the cheap, per-subject path) and also drives the classical two-group
 reference encoding, where one subject is the baseline (no deviation) and
-the other carries the single penalised difference. Works for any number of
+the other holds the single penalised difference. Works for any number of
 subjects.}
 \item{\code{"fused"}}{Star penalty pulling every deviation toward one shared,
 estimated centre (equivalently \code{eta} toward 0, with the centre absorbed
 into the structural mean). It answers "is this subject an outlier from the
 population mean?", the direct L1 analog of a Gaussian random effect. It
-factorises, but needs every subject to carry an anchored deviation (no
+factorises, but needs every subject to have an anchored deviation (no
 reference baseline).}
 \item{\code{"clustered"}}{Complete-graph pairwise penalty
 \eqn{\sum_{i<j} |\eta_i - \eta_j|}. It answers the richer "how do the
@@ -77,7 +77,7 @@ subjects group?": individuals crystallise into an unknown NUMBER of
 clusters that share a value, with all-shared (one cluster) and
 all-distinct (n clusters) as the two extremes, so the shared vs individual
 question is just its two-cluster special case. It COUPLES all
-subjects (the penalty is not separable), needs every subject to carry an
+subjects (the penalty is not separable), needs every subject to have an
 anchored deviation, is meaningful from three subjects up, and is scored by
 the exact clustered marginal in \link{sparsify}. Higher cost than the
 factorising methods.}

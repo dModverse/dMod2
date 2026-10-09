@@ -2,38 +2,54 @@
 % Please edit documentation in R/plots.R
 \name{plotProfilesAndPaths}
 \alias{plotProfilesAndPaths}
-\title{Profile likelihood: plot profiles along with their parameter paths}
+\title{Profile Likelihood: Plot Profiles Along with Their Parameter Paths}
 \usage{
 plotProfilesAndPaths(
   profs,
-  whichpars,
-  npars = 5,
-  ncols = 3,
+  whichPar,
+  nPars = 5,
+  ncol = 3,
   normalizePaths = FALSE,
   modes = c("data", "prior"),
   ...
 )
 }
 \arguments{
-\item{profs}{List of profiles as returned by \code{\link[=profile]{profile()}}.}
+\item{profs}{A \link{parframe} of profiles as returned by
+\link[=profile.objfn]{profile()}.}
 
-\item{whichpars}{Character vector of parameter names for which the profile paths should be generated.}
+\item{whichPar}{Character vector, the profiled parameters to draw.}
 
-\item{npars}{Numeric indicating number of colored and named parameter paths.}
+\item{nPars}{Integer, number of colored and named paths. Defaults to 5.}
 
-\item{ncols}{Number of columns in the resulting plot grid.}
+\item{ncol}{Number of columns of the plot grid. Defaults to 3.}
 
-\item{normalizePaths}{Logical indicating whether the paths should be normalized to absolute values of 1.
-Default \code{FALSE}.}
+\item{normalizePaths}{Logical. \code{TRUE} scales each path to a maximum
+absolute value of 1. Defaults to \code{FALSE}.}
 
-\item{modes}{Character vector of profile modes to display in the profile plot.
-Default \code{c("data", "prior")}. Use e.g. \code{"data"} to show only the data contribution.}
+\item{modes}{Character vector, the contributions to the objective drawn in
+the profile plot besides the total. Defaults to \code{c("data", "prior")}.}
 
-\item{...}{Additional arguments passed to \code{cowplot::plot_grid()}.}
+\item{...}{Further arguments passed to \code{\link[cowplot:plot_grid]{cowplot::plot_grid()}}.
+\code{whichpars}, \code{npars} and \code{ncols} are deprecated, use \code{whichPar}, \code{nPars}
+and \code{ncol}.}
 }
 \value{
-A combined \code{ggplot} object containing the profiles and paths (no shared legend).
+A \code{ggplot} object, the grid of \code{\link[cowplot:plot_grid]{cowplot::plot_grid()}}.
 }
 \description{
-Generates combined plots of profile likelihoods and their parameter paths without a shared legend.
+For each profiled parameter, draws the profile above the paths of
+\code{\link[=plotPathsMulti]{plotPathsMulti()}}. Requires the package cowplot.
+}
+\examples{
+\dontshow{if (requireNamespace("cowplot", quietly = TRUE)) withAutoprint(\{ # examplesIf}
+pars <- c(a = 1, b = 0.5, c = 2)
+obj <- constraintL2(mu = pars, sigma = 0.1)
+profs <- profile(obj, pars, whichPar = c("a", "b"), limits = c(-1, 1),
+                 cores = 1)
+plotProfilesAndPaths(profs, c("a", "b"), nPars = 2, ncol = 2)
+\dontshow{\}) # examplesIf}
+}
+\seealso{
+\code{\link[=plotProfile]{plotProfile()}}, \code{\link[=plotPathsMulti]{plotPathsMulti()}}
 }

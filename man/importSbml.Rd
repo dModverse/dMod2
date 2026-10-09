@@ -2,37 +2,54 @@
 % Please edit documentation in R/SBMLinterface.R
 \name{importSbml}
 \alias{importSbml}
-\title{Import an SBML model}
+\title{Import an SBML Model}
 \usage{
 importSbml(modelpath, keep = NULL)
 }
 \arguments{
-\item{modelpath}{Path to the sbml file}
+\item{modelpath}{Path to the SBML file.}
 
 \item{keep}{Parameter ids that keep their own symbol although the SBML sets
-them by an \verb{<initialAssignment>}, for a caller that assigns them
-otherwise (the PEtab condition and parameter tables). A constant
-assignment becomes their default value. Any other parameter's initial
-assignment is substituted into the rates, initial values and observables.}
+them by an \verb{<initialAssignment>}; a constant assignment becomes their
+default value. Any other initial assignment is substituted into the rates,
+initial values and observables. Default \code{NULL}.}
 }
 \value{
-list of eqnlist, parameters and inits
+A list with components
+\describe{
+\item{\code{reactions}}{The model as an \link{eqnlist}.}
+\item{\code{pars}}{Named numeric, the parameter values.}
+\item{\code{inits}}{Named character, the initial value of each state.}
+\item{\code{observables}}{Named list of observable formulas, possibly
+empty.}
+\item{\code{assignmentRules}}{Named list of assignment rule formulas,
+already substituted into rates, initial values and observables.}
+\item{\code{events}}{An \link{eventlist} or \code{NULL}, including the rescaling of
+states when an event changes a compartment volume.}
+\item{\code{eventsSource}}{An \link{eventlist} or \code{NULL}, the event assignments
+of the SBML file only.}
+\item{\code{renamed}}{Named character, the new ids of SBML ids that are no
+valid R or C++ names, named by the old ids.}
+}
 }
 \description{
-Reads an SBML Level 3 file via a Python helper (\code{inst/code/sbmlImport.py})
-that uses \code{python-libsbml}. The Python environment is provisioned
-automatically by \code{reticulate} on first use, no manual venv setup is
-required. Users who want to point dMod at an existing interpreter
-(e.g. a hand-managed venv or conda env) can set the
-\code{DMOD_LIBSBML_PYTHON} environment variable to its absolute path; that
-bypasses reticulate entirely.
+Reads an SBML Level 3 file. Requires \pkg{reticulate}, which provides a
+Python with \code{python-libsbml}; set the environment variable
+\code{DMOD_LIBSBML_PYTHON} to the path of a Python interpreter to use that one
+instead. Kinetic laws are divided by the volume of their compartment.
 }
-\details{
-Kinetic laws coming out of SBML are \strong{extensive} (amount/time) by SBML
-convention, whereas dMod stores rates in \strong{concentration-style}. On import,
-each kinetic law \code{K} is divided by the volume of its home compartment (the
-compartment shared by the educts, or the product compartment for pure
-synthesis) to produce \code{rate_dMod = K / V}. Combined with the volume-ratio
-factors emitted by \code{\link[=getFluxes]{getFluxes()}}, this preserves the SBML semantics:
-\code{K_SBML = rate_dMod * V}.
+\examples{
+\dontshow{if (requireNamespace("reticulate", quietly = TRUE) && requireNamespace("rjson", quietly = TRUE) && reticulate::py_module_available("libsbml")) withAutoprint(\{ # examplesIf}
+f <- addReaction(eqnlist(), from = "A", to = "B", rate = "k1*A")
+f <- addReaction(f, from = "B", to = "", rate = "k2*B")
+file <- file.path(tempdir(), "model.xml")
+exportSbml(f, parameters = c(k1 = 0.5, k2 = 0.1), inits = c(A = 1, B = 0),
+           filepath = file)
+model <- importSbml(file)
+model$reactions
+model$pars
+\dontshow{\}) # examplesIf}
+}
+\seealso{
+\code{\link[=exportSbml]{exportSbml()}}, \code{\link[=importPEtab]{importPEtab()}}
 }

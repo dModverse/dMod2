@@ -8,7 +8,7 @@ emObjfn(obj, control = list())
 }
 \arguments{
 \item{obj}{An \code{objfn} of the form
-\code{normL2(data, g*x*p, errmodel = err) + constraintL2(mu = 0, Omega = om)}.
+\code{normL2(data, g*x*p, errmodel = err) + constraintL2(om)}.
 The prediction function, data, error model, and omega spec are recovered
 from it automatically.}
 
@@ -18,7 +18,7 @@ default \code{Inf} = off).}
 }
 \value{
 A callable of class \code{c("emobjfn", "objfn", "fn")}. Calling it on
-\code{pars} returns an \link{objlist} with an \code{emDiag} attribute carrying
+\code{pars} returns an \link{objlist} with an \code{emDiag} attribute holding
 quadrature diagnostics.
 }
 \description{

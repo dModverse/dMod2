@@ -1,19 +1,6 @@
-/*
- * blasTools: BLAS-backed batched matrix multiplication, batch-first.
- *
- * All 3D arrays use [B, M, N] convention (batch axis FIRST), matching
- * cppDE sensitivity output and dMod's deriv/Hessian layouts. Column-major
- * storage means the batch axis varies fastest -> per-batch slices are not
- * contiguous, so bmm_rb / bmm_bb gather into scratch before the dgemm.
- * bmm_lb exploits the [B,M,K] == [B*M, K] memory identity and runs as a
- * single dgemm.
- *
- *   bmm_lb:  [B,M,K] x [K,N]   -> [B,M,N]   (1 dgemm)
- *   bmm_rb:  [M,K]   x [B,K,N] -> [B,M,N]   (B dgemms, scatter-gather)
- *   bmm_bb:  [B,M,K] x [B,K,N] -> [B,M,N]   (B dgemms, scatter-gather)
- *
- * The user-facing wrapper is `%bmm%` in R/blas.R (dispatches on dim).
- */
+// Batched dgemm on batch-first [B, M, N] arrays, the layout of cppDE
+// sensitivities. The batch axis varies fastest in column-major storage, so
+// per-batch slices are gathered into scratch except in bmm_lb.
 
 #include <Rcpp.h>
 #include <R_ext/BLAS.h>
@@ -27,9 +14,7 @@ using namespace Rcpp;
 #endif
 
 
-/* --------------------------------------------------------------------------
- * Standard BLAS wrapper: C = alpha * A * B + beta * C (column-major)
- * -------------------------------------------------------------------------- */
+// C = alpha * A * B + beta * C, column-major.
 inline void dgemm_nn(int M, int N, int K,
                      double alpha,
                      const double* A, int lda,
@@ -41,13 +26,8 @@ inline void dgemm_nn(int M, int N, int K,
 }
 
 
-/* --------------------------------------------------------------------------
- * bmm_lb: [B,M,K] x [K,N] -> [B,M,N]
- * --------------------------------------------------------------------------
- *
- * In column-major storage [B,M,K] and [B*M, K] share memory. One dgemm on
- * the reshaped left operand computes all batches at once with no copies.
- */
+// bmm_lb: [B,M,K] x [K,N] -> [B,M,N]. [B,M,K] and [B*M,K] share column-major
+// memory, so one dgemm on the reshaped left operand covers all batches.
 // [[Rcpp::export]]
 NumericVector bmm_lb(NumericVector A, NumericVector B,
                      int Bn, int M, int K, int N) {
@@ -66,15 +46,8 @@ NumericVector bmm_lb(NumericVector A, NumericVector B,
 }
 
 
-/* --------------------------------------------------------------------------
- * bmm_rb: [M,K] x [B,K,N] -> [B,M,N]
- * --------------------------------------------------------------------------
- *
- * Right argument batched under batch-first: slice B[b,,] has row stride Bn
- * (not 1), so dgemm cannot read it directly. Gather each slice into a
- * contiguous [K,N] scratch, dgemm against the shared A, scatter the [M,N]
- * result into C[b,,].
- */
+// bmm_rb: [M,K] x [B,K,N] -> [B,M,N]. Slice B[b,,] has row stride Bn, so it is
+// gathered into contiguous scratch, multiplied by A and scattered into C[b,,].
 // [[Rcpp::export]]
 NumericVector bmm_rb(NumericVector A, NumericVector B,
                      int Bn, int M, int K, int N) {
@@ -115,13 +88,7 @@ NumericVector bmm_rb(NumericVector A, NumericVector B,
 }
 
 
-/* --------------------------------------------------------------------------
- * bmm_bb: [B,M,K] x [B,K,N] -> [B,M,N]
- * --------------------------------------------------------------------------
- *
- * Both operands batched. Per slice: gather A[b,,] and B[b,,] into
- * contiguous scratch, dgemm, scatter into C[b,,].
- */
+// bmm_bb: [B,M,K] x [B,K,N] -> [B,M,N], both operands gathered per slice.
 // [[Rcpp::export]]
 NumericVector bmm_bb(NumericVector A, NumericVector B,
                      int Bn, int M, int K, int N) {

@@ -4,7 +4,7 @@
 \alias{covariates}
 \alias{covariates.datalist}
 \alias{covariates.data.frame}
-\title{Access the covariates in the data}
+\title{Access the Covariates in the Data}
 \usage{
 covariates(x, ...)
 
@@ -13,15 +13,19 @@ covariates(x, ...)
 \method{covariates}{data.frame}(x, ...)
 }
 \arguments{
-\item{x}{Either a \link{datalist} or a \code{data.frame} with mandatory
-columns \code{c("name", "time", "value", "sigma", "lloq")}.}
+\item{x}{a \link{datalist} or a \code{data.frame} with the columns
+\code{c("name", "time", "value", "sigma", "lloq")}.}
 
-\item{...}{Additional arguments forwarded to methods (e.g. \code{hypothesis}
-for the \code{tbl_df} method).}
+\item{...}{not used.}
 }
 \value{
-The \code{condition.grid} of the data
+A data frame with one row per condition: the \code{condition.grid} of a
+datalist, or the unique combinations of the non-standard columns of a data
+frame.
 }
 \description{
-Access the covariates in the data
+Access the Covariates in the Data
+}
+\seealso{
+\code{\link[=as.datalist]{as.datalist()}}
 }

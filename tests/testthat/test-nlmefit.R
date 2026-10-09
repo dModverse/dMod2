@@ -1,33 +1,48 @@
-# ============================================================================
-# EM + msEM + diagnostic plots (the public NLME API).
-#
-# Sections:
-#   * EM method dispatch     - focei / quadrature / foceiQuadrature
-#   * etaSE / shrinkage           - Laplace-inverse-Hessian diagnostics
-#   * msEM                   - multi-start wrapper around EM
-#   * predict.em + plots     - data frame + ggplot diagnostic helpers
-#
-# The C++ FOCEI kernel itself is tested in test-focei.R; here we only
-# exercise the orchestrator and the public output shape.
-# ============================================================================
-
-## Context: "EM + msEM + diagnostic plots"  (context() is deprecated in testthat 3e; kept as a note)
+# EM, msEM and diagnostic plots: the public NLME API. The C++ FOCEI kernel is
+# tested in test-focei.R.
 
 
-# Shared one-eta NLME fixture builder.
+# One-eta NLME models for every subject count the file uses, generated with
+# compile = FALSE and linked into one shared object on first use. The model
+# depends on the subject count only, so builders differ in their data alone.
+.nlme_models <- local({
+  cache <- NULL
+  function() {
+    if (!is.null(cache)) return(cache)
+    dir <- file.path(tempdir(), "nlmefit_models")
+    dir.create(dir, showWarnings = FALSE, recursive = TRUE)
+    withr::local_dir(dir)
+    g <- Y(c(y = "intercept"), f = NULL, parameters = "intercept",
+           compile = FALSE, deriv2 = TRUE, modelname = "nlmefit_obs")
+    trafo <- eqnvec(intercept = "mu_pop * exp(eta)")
+    pN <- function(N) {
+      subjects <- paste0("s", seq_len(N))
+      subj_table <- data.frame(eta = paste0("eta_", subjects),
+                               row.names = subjects)
+      P(branch(trafo, table = subj_table, apply = "insert"),
+        method = "explicit", compile = FALSE, deriv2 = TRUE,
+        modelname = paste0("nlmefit_p_", N))
+    }
+    p4 <- pN(4L); p5 <- pN(5L); p6 <- pN(6L)
+    compile(g, p4, p5, p6, output = "nlmefit_models", cores = 2)
+    cache <<- list(g = g, p = list(`4` = p4, `5` = p5, `6` = p6))
+    cache
+  }
+})
+
+# Prediction function g * x * p for N subjects, built from the cached models.
+.nlme_prdfn <- function(N) {
+  mods <- .nlme_models()
+  p <- mods$p[[as.character(N)]]
+  if (is.null(p)) stop("no cached one-eta model for N = ", N, call. = FALSE)
+  mods$g * Xt() * p
+}
+
+# Shared one-eta NLME fixture builder; `tag` only labels the call site.
 .build_one_eta <- function(seed = 1L, N = 4L, tag = "nlmef") {
+  prdfn <- .nlme_prdfn(N)
   set.seed(seed)
-  g <- Y(c(y = "intercept"), f = NULL, parameters = "intercept",
-         compile = TRUE, deriv2 = TRUE,
-         modelname = paste0("nlmefit_obs_", tag, "_", seed))
-  x <- Xt()
   subjects <- paste0("s", seq_len(N))
-  trafo <- eqnvec(intercept = "mu_pop * exp(eta)")
-  subj_table <- data.frame(eta = paste0("eta_", subjects),
-                           row.names = subjects)
-  trafos <- branch(trafo, table = subj_table, apply = "insert")
-  p <- P(trafos, method = "explicit", compile = TRUE, deriv2 = TRUE,
-         modelname = paste0("nlmefit_p_", tag, "_", seed))
   true_mu  <- 2.0; true_om <- 0.3
   true_eta <- rnorm(N, 0, true_om)
   y_obs    <- true_mu * exp(true_eta) + rnorm(N, 0, 0.2)
@@ -35,8 +50,8 @@
                                  value = y_obs, condition = subjects,
                                  stringsAsFactors = FALSE))
   om <- omega(eta = "eta", subjects = subjects)
-  obj <- normL2(data, g * x * p) + constraintL2(mu = 0, Omega = om)
-  list(obj = obj, om = om, prdfn = g * x * p, data = data,
+  obj <- normL2(data, prdfn) + constraintL2(om)
+  list(obj = obj, om = om, prdfn = prdfn, data = data,
        subjects = subjects, true_mu = true_mu, true_om = true_om,
        y_obs = y_obs)
 }
@@ -109,7 +124,7 @@ test_that("EM(method='foceiQuadrature') polishes a FOCEI fit without OFV blow-up
 })
 
 
-# ---- M1 API: reconstruction, emInit, validation, summary ---------------
+# ---- reconstruction, emInit, validation, summary -----------------------
 
 test_that("EM reconstructs model pieces from obj (slim signature)", {
   oldwd <- setwd(tempdir()); on.exit(setwd(oldwd))
@@ -138,7 +153,7 @@ test_that("EM errors on incomplete init and on removed arguments", {
   s <- .build_one_eta(23L, tag = "valid")
   expect_error(EM(s$obj, c(mu_pop = 2.0), method = "focei"), "Cholesky")
   init <- emInit(c(mu_pop = 2.0), s$om)
-  # Clean break: prdfn is no longer a formal.
+  # prdfn is not a formal of EM().
   expect_error(EM(s$obj, init, prdfn = s$prdfn, method = "focei"), "prdfn")
 })
 
@@ -213,7 +228,8 @@ test_that("EM(method='saem') runs end-to-end and returns a sensible fit", {
   expect_s3_class(fit, "em")
   expect_equal(fit$method, "saem")
   expect_true(is.finite(fit$value))
-  expect_true(fit$Omega[1, 1] > 0)                 # positive-definite Omega
+  # drawn etas spread, so Omega stays near its FOCEI value instead of collapsing
+  expect_gt(fit$Omega[1, 1], 0.01)
   expect_equal(dim(fit$etaModes), c(6L, 1L))
   expect_false(is.null(fit$stageTrace))
   expect_true(all(fit$stageTrace$phase %in% c("burnin", "converge")))
@@ -351,17 +367,9 @@ test_that("msEM handles per-fit failures without aborting the run", {
 
 # Plots fixture: more times so plotIndivs has a curve to draw.
 .build_for_plots <- function(seed = 1L) {
+  prdfn <- .nlme_prdfn(4L)
   set.seed(seed)
-  g <- Y(c(y = "intercept"), f = NULL, parameters = "intercept",
-         compile = TRUE, deriv2 = TRUE, modelname = paste0("plt_obs_", seed))
-  x <- Xt()
   subjects <- paste0("s", 1:4)
-  trafo <- eqnvec(intercept = "mu_pop * exp(eta)")
-  subj_table <- data.frame(eta = paste0("eta_", subjects),
-                           row.names = subjects)
-  trafos <- branch(trafo, table = subj_table, apply = "insert")
-  p <- P(trafos, method = "explicit", compile = TRUE, deriv2 = TRUE,
-         modelname = paste0("plt_p_", seed))
   true_eta <- rnorm(4, 0, 0.3)
   obs_rows <- do.call(rbind, lapply(seq_along(subjects), function(i) {
     ts <- c(0, 1, 2)
@@ -371,8 +379,8 @@ test_that("msEM handles per-fit failures without aborting the run", {
   }))
   data <- as.datalist(obs_rows)
   om <- omega(eta = "eta", subjects = subjects)
-  obj <- normL2(data, g * x * p) + constraintL2(mu = 0, Omega = om)
-  list(obj = obj, om = om, prdfn = g * x * p, data = data,
+  obj <- normL2(data, prdfn) + constraintL2(om)
+  list(obj = obj, om = om, prdfn = prdfn, data = data,
        subjects = subjects)
 }
 
@@ -460,9 +468,7 @@ test_that("plotTrace errors on focei fit, works on foceiQuadrature fit", {
 
 
 test_that("plotResiduals back-compat: parframe path still works", {
-  # Smoke-test that the existing plotResiduals(parframe, x, data, ...) entry
-  # point isn't broken by the EM dispatch shim. Just confirm the
-  # EM branch is bypassed for a non-EM input.
+  # A non-EM input bypasses the EM branch of plotResiduals().
   pf <- structure(data.frame(value = 1.0, index = 1L),
                   class = c("parframe", "data.frame"))
   expect_false(inherits(pf, "em"))

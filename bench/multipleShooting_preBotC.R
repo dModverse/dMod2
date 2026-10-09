@@ -92,7 +92,7 @@ opts <- list(atol = 1e-10, rtol = 1e-10, maxsteps = 1e6)
 
 model <- odemodel(f, modelname = "msPreBotC_ode", compile = FALSE,
                   outdir = .outdir, includeTimeZero = FALSE)
-x <- Xs(model, condition = "clamp", optionsOde = opts, optionsSens = opts)
+x <- Xs(model, condition = "clamp", options = opts)
 g <- Y(observables, f = x, modelname = "msPreBotC_obs", compile = FALSE,
        outdir = .outdir)
 

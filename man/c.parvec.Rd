@@ -2,17 +2,16 @@
 % Please edit documentation in R/parClass.R
 \name{c.parvec}
 \alias{c.parvec}
-\title{Concatenate parameter vectors}
+\title{Concatenate Parameter Vectors}
 \usage{
 \method{c}{parvec}(...)
 }
 \arguments{
-\item{...}{\code{parvec} objects (or \code{NULL}, which are ignored).}
+\item{...}{objects of class \code{parvec}. \code{NULL} entries are ignored.}
 }
 \value{
-A combined \code{parvec} object.
+Object of class \code{parvec}.
 }
 \description{
-Concatenates multiple \code{parvec} objects, combining values and
-propagating first-order derivatives when present.
+Concatenates \code{parvec} objects with their derivatives.
 }

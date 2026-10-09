@@ -2,7 +2,7 @@
 % Please edit documentation in R/PEtabInterface.R
 \name{importPEtab}
 \alias{importPEtab}
-\title{Import a PEtab v1 or v2 problem into dMod}
+\title{Import a PEtab Problem}
 \usage{
 importPEtab(
   yamlPath,
@@ -12,141 +12,98 @@ importPEtab(
   modelname = NULL,
   deriv = TRUE,
   derivMode = "forward",
-  optionsOde = NULL,
+  options = NULL,
   optionsSens = NULL,
-  outdir = getwd()
+  sparse = NULL,
+  outdir = .dmodOutdir(),
+  optionsOde = NULL
 )
 }
 \arguments{
 \item{yamlPath}{Path to the PEtab YAML manifest.}
 
-\item{backend}{Required: one of \code{"deSolve"}, \code{"cppDE"} or \code{"Sundials"}.
-Forwarded to \code{\link[=odemodel]{odemodel()}}.}
+\item{backend}{Required, one of \code{"deSolve"}, \code{"cppDE"} or \code{"Sundials"},
+passed to \code{\link[=odemodel]{odemodel()}}.}
 
-\item{compile}{Logical. If \code{TRUE} (default) the generated trafo,
-observation function, and ODE model are compiled to native code. Set to
-\code{FALSE} for inspection-only use.}
+\item{compile}{Logical. If \code{TRUE} (default), the generated sources are
+compiled. \code{FALSE} leaves them uncompiled for inspection.}
 
-\item{cores}{Number of parallel compilation jobs (Unix only) forwarded to
-\code{\link[=compile]{compile()}}. The importer batches all generated source files into a
-single \code{compile()} call so this directly controls native-build
-concurrency.}
+\item{cores}{Number of parallel compilation jobs, passed to \code{\link[=compile]{compile()}}.
+Default \code{1}.}
 
-\item{modelname}{Optional base modelname for the generated native files.
-Defaults to the YAML basename.}
+\item{modelname}{Base name of the generated files. Default \code{NULL}, the base
+name of the YAML file.}
 
-\item{deriv}{Logical. \code{FALSE} builds the model without sensitivity
-equations, which is much cheaper to generate and compile. The objective
-then returns its value only, so use it when the likelihood is to be
-evaluated rather than optimised.}
+\item{deriv}{Logical. If \code{FALSE}, the model is built without sensitivities;
+the objective is then evaluated with \code{deriv = FALSE}. Default \code{TRUE}.}
 
-\item{derivMode}{Which derivative directions to compile, passed to
-\code{\link[=odemodel]{odemodel()}}. \code{c("forward", "reverse")} also builds the reverse-mode
-object, so the imported objective answers to
-\code{obj(pars, sweep = "reverse")}. \code{"reverse"} needs \code{backend = "cppDE"} or
-\code{"Sundials"}; the deSolve backend goes forward only.
-Second order is not available here: the chain a PEtab import builds hits a
-cotangent width mismatch under it, so \code{derivMode} takes first order only.}
+\item{derivMode}{Derivative directions to build, passed to \code{\link[=odemodel]{odemodel()}}:
+\code{"forward"} (default), \code{"reverse"} or \code{c("forward", "reverse")}.
+\code{"reverse"} needs \code{backend = "cppDE"} or \code{"Sundials"}. First order only.}
 
-\item{optionsOde, optionsSens}{Optional lists forwarded to \code{\link[=Xs]{Xs()}} as solver
-settings for the states and their sensitivities. \code{NULL} keeps the
-backend's defaults, which are looser than a benchmark problem usually
-needs.}
+\item{options, optionsSens}{Lists passed to \code{\link[=Xs]{Xs()}}: the solver options of
+every solve and their overrides for the solves with sensitivities.
+Default \code{NULL}, the backend's defaults.}
 
-\item{outdir}{Directory the generated sources and the shared object are
-written to. Defaults to the working directory, as \code{\link[=odemodel]{odemodel()}} does; a
-problem with many conditions writes one source per condition, so a
-scratch directory is usually the better choice.}
+\item{sparse}{\code{NULL} (default) lets the cppDE or Sundials backend choose a
+sparse (KLU) or dense linear solver; \code{TRUE} or \code{FALSE} sets it.}
+
+\item{outdir}{Directory of the generated sources and shared objects, one
+source per condition. Default \code{getOption("dMod.outdir")}, else the
+working directory.}
+
+\item{optionsOde}{Deprecated name of \code{options}, accepted with a warning.}
 }
 \value{
-A list with class \code{"petabproblem"} holding \code{dataList},
+A list of class \code{"petabproblem"} with components \code{dataList},
 \code{reactions}, \code{odemodel}, \code{g}, \code{x}, \code{p}, \code{e}, \code{prd} (the composite
-\code{g * x * p}), \code{obj}, \code{bestfit}, \code{parlower}, \code{parupper}. The \code{obj}
-closure has the PEtab fixed parameters baked in, so calling
-\code{obj(bestfit)} evaluates the likelihood at the published MLE
-without the user having to pass \code{fixed = ...}. \code{bestfit} is the
-PEtab \code{nominalValue} for every estimated parameter, for benchmark
-problems this is the published maximum-likelihood estimate
-transported through the manifest; for user-authored problems it is
-the current best estimate (and serves as the optimizer's starting
-point). The vector carries \code{attr(., "petab_scales")} recording each
-parameter's PEtab scale (the exporter reads it back). Internal
-metadata used by the exporter (\code{fixed}, \code{inits}, \code{modelID},
-\code{source_yaml}, \code{sub_cond_map}, \code{obs_meta}, \code{param_meta}) lives on
-\code{attr(., "petab_meta")}.
+\code{g * x * p}), \code{obj}, \code{bestfit}, \code{parlower} and \code{parupper}. \code{obj} has the
+PEtab fixed parameters set; \code{bestfit} is the PEtab \code{nominalValue} of each
+estimated parameter, with the PEtab scales in its attribute
+\code{"petab_scales"}. The attribute \code{"petab_meta"} of the list holds what
+\code{\link[=exportPEtabObject]{exportPEtabObject()}} needs, among it the fixed parameters as \code{fixed}.
 }
 \description{
-Reads a PEtab YAML manifest plus the associated SBML model and TSV tables,
-and assembles a fully-composed dMod problem: prediction function,
-observation function, parameter transformation, datalist, and objective.
-The SBML side is delegated to \code{\link[=importSbml]{importSbml()}} (libsbml-based).
+Reads a PEtab v1 or v2 problem, a YAML file with an SBML model and TSV
+tables, and builds the dMod problem: prediction, observation and error
+functions, parameter transformation, data and objective. The SBML model is
+read by \code{\link[=importSbml]{importSbml()}}.
 }
 \details{
-Dispatch is on \code{format_version}. v2 manifests are translated to the
-internal v1 shapes so the trafo / observation / objective pipeline is
-shared.
-
-v2 specifics handled here: long-format conditions are pivoted to wide,
-the \code{experiments.tsv} \verb{(time, conditionId)} sequences are mapped to
-dMod's \verb{(simulationConditionId, preequilibrationConditionId)} pair (max
-two periods), the combined \code{noiseDistribution} (\code{normal}/\code{log-normal}/
-\code{laplace}/\code{log-laplace}) is split into observable transformation +
-distribution, explicit \code{observablePlaceholders} / \code{noisePlaceholders}
-are rewritten to v1's \verb{observableParameter$\{k\}_$\{id\}} sentinels, and an
-optional \code{mapping.tsv} is applied as a textual rewrite of PEtab entity
-IDs into model entity IDs.
-
-L2 priors on parameters are read from \code{priorDistribution} /
-\code{priorParameters} (v2) or \code{objectivePriorType} /
-\code{objectivePriorParameters} (v1) and added to \code{obj} as a \code{constraintL2}
-term. \code{parameterScaleNormal} is mapped directly; \code{normal} is mapped on
-parameters with \code{parameterScale = lin} (where the two coincide). All
-other prior distributions raise an error: dMod's only objective is
-\code{normL2}.
-
-Out of scope: non-SBML model languages (BNGL / CellML / PySB), and
-multi-period experiments (>2 periods).
+Supported: one problem per YAML file with any number of v2 model files;
+preequilibration (at most two periods per v2 experiment); observable
+transformations \code{lin}, \code{log} and \code{log10}; the noise distribution \code{normal},
+and \code{log-normal} in v2; a v2 mapping table. Priors of the distributions
+\code{uniform}, \code{normal}, \code{log-normal}, \code{cauchy}, \code{chisquare}, \code{exponential},
+\code{gamma}, \code{laplace}, \code{log-laplace}, \code{log-uniform} and \code{rayleigh}, also with
+the \code{parameterScale} prefix, are added to \code{obj}, truncated to the parameter
+bounds. Not supported: model languages other than SBML, other noise
+distributions, and a plain \code{normal} or \code{laplace} prior on a parameter whose
+scale is not \code{lin}.
 }
 \examples{
-\dontrun{
-  ## Import a PEtab problem from disk. importPEtab dispatches on the YAML's
-  ## `format_version` key, so v1 and v2 manifests are both supported. The
-  ## TSVs and the SBML model live next to the YAML; native artefacts
-  ## (`.c`, `.cpp`, `.so`) land in the current working directory, and
-  ## `setwd(tempdir())` keeps them out of the project tree.
-  setwd(tempdir())
+\dontshow{if (requireNamespace("reticulate", quietly = TRUE) && requireNamespace("rjson", quietly = TRUE) && requireNamespace("yaml", quietly = TRUE) && reticulate::py_module_available("libsbml")) withAutoprint(\{ # examplesIf}
+\donttest{
+yaml <- system.file("extdata/petab_boehm/Boehm.yaml", package = "dMod2")
+petab <- importPEtab(yaml, backend = "cppDE", cores = 1, outdir = tempdir())
+petab
 
-  ## v2 example (the bundled v2 test suite):
-  yamlPath <- system.file("PEtabTests/v2/0001/_0001.yaml", package = "dMod2")
-  petab <- importPEtab(yamlPath, backend = "deSolve")
+# The objective at the nominal values
+petab$obj(petab$bestfit)$value
 
-  ## v1 still works -- same call, different YAML schema:
-  ## yamlPath <- system.file("PEtabTests/0001/_0001.yaml", package = "dMod2")
+# The prediction needs the fixed parameters
+fixed <- attr(petab, "petab_meta")$fixed
+times <- seq(0, 240, length.out = 61)
+plot(petab$prd(times, c(petab$bestfit, fixed)), petab$dataList)
 
-  print(petab)
-
-  ## petab is a plain list -- every slot is a regular dMod object.
-  ## The objective has the PEtab `fixed` parameters baked in, so calling
-  ## obj(bestfit) evaluates the likelihood at the nominal estimate:
-  petab$obj(petab$bestfit)$value
-
-  ## Predict and plot:
-  times <- seq(0, 10, length.out = 51)
-  prediction <- petab$prd(times, c(petab$bestfit,
-                                   attr(petab, "petab_meta")$fixed))
-  plot(prediction, petab$dataList)
-
-  ## Fit:
-  fit <- trust(petab$obj, petab$bestfit, rinit = 1, rmax = 10)
-
-  ## Round-trip back to PEtab on disk. exportPEtabObject takes the full
-  ## petabProblem list; for a dMod-native problem (no PEtab origin), use
-  ## exportPEtab(data, reactions, observables, p, pouter, ...).
-  ## formatVersion defaults to "2.0.0"; pass "1" to write the legacy
-  ## schema instead.
-  outDir <- file.path(tempdir(), "petab_export")
-  yamlOut <- exportPEtabObject(petab, outDir, formatVersion = "2.0.0",
-                               overwrite = TRUE)
-  petab2 <- importPEtab(yamlOut, backend = "deSolve")
+# Write the problem back to PEtab
+yamlOut <- exportPEtabObject(petab, file.path(tempdir(), "boehm"),
+                             formatVersion = "1")
+readPEtabTables(yamlOut)$parameters
 }
+\dontshow{\}) # examplesIf}
+}
+\seealso{
+\code{\link[=exportPEtabObject]{exportPEtabObject()}}, \code{\link[=readPEtabTables]{readPEtabTables()}}, \code{\link[=importSbml]{importSbml()}},
+\code{vignette("PEtab", package = "dMod2")}
 }

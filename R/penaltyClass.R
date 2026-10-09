@@ -1,31 +1,11 @@
-## Penalty specification for regularised NLME fits (.fitLaplace).
-##
-## A `penaltySpec` is the L1/Laplace counterpart of an `omegaSpec`
-## (see nlmeClass.R): it declares which model parameters are candidates for
-## being individual-specific and how their per-subject deviations are
-## penalised, but carries a single regularisation strength `lambda` instead of
-## a Cholesky-parametrised covariance. It shares the structural fields of
-## `omegaSpec` (`eta`, `short`, `K`, `subjects`, `subjectEtas`) so the two can
-## eventually be unified.
-##
-## One constructor, penaltyL1(pars, method = ...), with three methods:
-##   method = "lasso"     : element-wise L1 of the named deviations toward a
-##                          target (default 0). Factorises over subjects.
-##   method = "fused"     : star, deviations toward one shared estimated centre
-##                          (equivalently eta toward 0). Factorises.
-##   method = "clustered" : complete-graph pairwise |eta_i - eta_j|; individuals
-##                          crystallise into clusters. Couples subjects.
-## Specs combine with `+` (one shared lambda, blocks concatenated).
-##
-## The eta-name convention matches omega():
-##   base parameter "Ka" -> eta name "eta_Ka" -> subject eta "eta_Ka_<subject>".
+## penaltySpec: L1/Laplace counterpart of an omegaSpec, with the same structural
+## fields and penalty strengths in place of a covariance. Eta names follow
+## omega(): "Ka" -> "eta_Ka" -> "eta_Ka_<subject>".
 
 
-## Resolve the penalty-strength names for one block's parameters. `lambda` is
-## either a single name (shared by all `pars`; per-parameter names when
-## `perParam = TRUE`, i.e. "<lambda>_<par>") or a named character vector giving
-## one name per parameter explicitly. Returns a named character vector
-## (par -> lambda name).
+## Penalty-strength name per parameter (par -> name). `lambda` is one name,
+## shared or expanded to "<lambda>_<par>" when `perParam = TRUE`, or a named
+## vector with one name per parameter.
 .penaltyLambdaMap <- function(lambda, pars, perParam = FALSE) {
   if (!is.character(lambda) || length(lambda) < 1L || any(!nzchar(lambda)))
     stop("`lambda` must be a non-empty character vector of parameter name(s).")
@@ -40,12 +20,9 @@
 }
 
 
-## Internal constructor. `blocks` is a list of penalty blocks, each a list with
-## fields `kind` ("single"/"fused"/"clustered"), `params` (base parameter
-## names), `lambda` (named char vector par -> penalty-strength name) and, for
-## "single", `target` (named numeric aligned to `params`). A single global
-## strength (the default) gives one `lambda` name shared by every param; a
-## per-parameter penalty gives one name per param (soft sparsity in the fit).
+## Internal constructor. A block has `kind` ("single", "fused", "clustered"),
+## `params`, `lambda` (par -> strength name) and, for "single", `target`. One
+## strength name shared by all params gives a global penalty.
 .newPenaltySpec <- function(blocks, subjects = NULL, prefix = "eta") {
 
   if (!is.list(blocks) || length(blocks) < 1L)
@@ -56,13 +33,13 @@
   if (anyDuplicated(pars_all))
     stop("A parameter appears in more than one penalty block: ",
          paste(unique(pars_all[duplicated(pars_all)]), collapse = ", "),
-         ". Each candidate parameter may carry only one penalty.")
+         ". Each candidate parameter may have only one penalty.")
 
   ## per-parameter strength names, then the distinct names (order preserved)
   lambda_by_param <- unlist(lapply(blocks, `[[`, "lambda"))
   lambda_by_param <- lambda_by_param[pars_all]
   if (is.null(lambda_by_param) || any(!nzchar(lambda_by_param)))
-    stop("Every penalty block must carry non-empty `lambda` name(s).")
+    stop("Every penalty block must have non-empty `lambda` name(s).")
   lambda_names <- unique(unname(lambda_by_param))
 
   eta   <- paste0(prefix, "_", pars_all)
@@ -137,13 +114,13 @@
 #'     subject different from the reference value?". It factorises over subjects
 #'     (the cheap, per-subject path) and also drives the classical two-group
 #'     reference encoding, where one subject is the baseline (no deviation) and
-#'     the other carries the single penalised difference. Works for any number of
+#'     the other holds the single penalised difference. Works for any number of
 #'     subjects.}
 #'   \item{`"fused"`}{Star penalty pulling every deviation toward one shared,
 #'     estimated centre (equivalently `eta` toward 0, with the centre absorbed
 #'     into the structural mean). It answers "is this subject an outlier from the
 #'     population mean?", the direct L1 analog of a Gaussian random effect. It
-#'     factorises, but needs every subject to carry an anchored deviation (no
+#'     factorises, but needs every subject to have an anchored deviation (no
 #'     reference baseline).}
 #'   \item{`"clustered"`}{Complete-graph pairwise penalty
 #'     \eqn{\sum_{i<j} |\eta_i - \eta_j|}. It answers the richer "how do the
@@ -151,7 +128,7 @@
 #'     clusters that share a value, with all-shared (one cluster) and
 #'     all-distinct (n clusters) as the two extremes, so the shared vs individual
 #'     question is just its two-cluster special case. It COUPLES all
-#'     subjects (the penalty is not separable), needs every subject to carry an
+#'     subjects (the penalty is not separable), needs every subject to have an
 #'     anchored deviation, is meaningful from three subjects up, and is scored by
 #'     the exact clustered marginal in [sparsify]. Higher cost than the
 #'     factorising methods.}
@@ -205,9 +182,8 @@ penaltyL1 <- function(pars, method = c("lasso", "fused", "clustered"),
 }
 
 
-## Merge two penalty specs into one (concatenated blocks; each block carries its
-## own penalty-strength name(s), so the merged spec is the union - a single
-## global lambda when both share it, distinct names otherwise).
+## Merge two penalty specs by concatenating blocks. Each block keeps its
+## strength names, so a shared global lambda stays one name.
 .mergePenaltySpec <- function(s1, s2) {
   if (is.null(s1)) return(s2)
   if (is.null(s2)) return(s1)
@@ -291,12 +267,9 @@ parnames.penaltyspec <- function(x, what = c("all", "eta", "lambda"), ...) {
 }
 
 
-## Expand a penaltySpec into a flat list of penalised terms. Each term is a
-## list(i, j, target, lambda): the penalty contributes lambda * |value(i) - ref|
-## where ref = value(j) for a difference term (clustered, j an eta name) or
-## `target` for an element-wise term (single/fused, j = NA), and `lambda` is the
-## penalty-strength name for that term's parameter (one shared name for a global
-## penalty, a per-parameter name otherwise). Requires subject expansion.
+## Flatten a subject-expanded penaltySpec into terms list(i, j, target, lambda)
+## adding lambda * |value(i) - ref|, ref = value(j) for a clustered pair term
+## (j an eta name) and `target` otherwise (j = NA).
 .penaltyTerms <- function(spec) {
   se <- spec$subjectEtas
   if (is.null(se))
@@ -346,23 +319,22 @@ parnames.penaltyspec <- function(x, what = c("all", "eta", "lambda"), ...) {
 #' vanishes away from the kinks); the conditional-mode solve is handled by
 #' [trustL1] inside [EM], not by feeding this term to [trust].
 #'
-#' @param penalty A `penaltySpec` (with subject expansion) from [penaltyL1],
+#' @param mu A `penaltySpec` (with subject expansion) from [penaltyL1],
 #'   possibly combined with `+`.
-#' @param attr.name Name of the numeric attribute holding the penalty value.
+#' @param attrName Name of the numeric attribute holding the penalty value.
 #'   Default `"prior_l1"` (distinct from constraintL2's `"prior"`, so the two
 #'   accumulate independently under `+`).
 #' @param condition Optional condition (default `NULL`, condition-unspecific).
-#' @return An `objfn` carrying `attr(., "penaltySpec")`.
+#' @param ... Not used.
+#' @return An `objfn` with `attr(., "penaltySpec")`.
 #' @seealso [penaltyL1], [EM], [sparsify], [constraintL2]
 #' @export
-constraintL1 <- function(penalty, attr.name = "prior_l1", condition = NULL) {
+constraintL1.penaltyspec <- function(mu, attrName = "prior_l1", condition = NULL, ...) {
 
-  if (!inherits(penalty, "penaltyspec"))
-    stop("`penalty` must be a penaltySpec built by penaltyL1().")
-  if (is.null(penalty$subjectEtas))
-    stop("`penalty` must have subject expansion. Set subjects = ... .")
+  if (is.null(mu$subjectEtas))
+    stop("The penaltySpec must have subject expansion. Set subjects = ... .")
 
-  spec         <- penalty
+  spec         <- mu
   lambda_names <- spec$lambdaName
   terms        <- .penaltyTerms(spec)
   parnames     <- c(as.vector(spec$subjectEtas), lambda_names)
@@ -420,7 +392,7 @@ constraintL1 <- function(penalty, attr.name = "prior_l1", condition = NULL) {
     out <- objlist(value = val, gradient = gr,
                    hessian = matrix(0, length(p), length(p),
                                     dimnames = list(np, np)))
-    attr(out, attr.name) <- val
+    attr(out, attrName) <- val
     attr(out, "env") <- env
     out
   }

@@ -2,15 +2,23 @@
 % Please edit documentation in R/eqnClass.R
 \name{write.eqnlist}
 \alias{write.eqnlist}
-\title{Write equation list into a csv file}
+\title{Write Equation List into a CSV File}
 \usage{
 write.eqnlist(eqnlist, ...)
 }
 \arguments{
-\item{eqnlist}{object of class \link{eqnlist}}
+\item{eqnlist}{object of class \link{eqnlist}.}
 
-\item{...}{Arguments going to \link[utils:write.table]{write.table}}
+\item{...}{arguments going to \code{\link[utils:write.csv]{utils::write.csv()}}. \code{row.names} defaults to
+\code{FALSE} and \code{na} to \code{""}.}
+}
+\value{
+\code{NULL}, invisibly. Called for the file it writes.
 }
 \description{
-Write equation list into a csv file
+Compartments and reaction frames are not written; a warning is issued if
+the equation list has any.
+}
+\seealso{
+\code{\link[=as.data.frame.eqnlist]{as.data.frame.eqnlist()}}
 }

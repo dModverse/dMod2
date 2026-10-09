@@ -1,10 +1,6 @@
-# Multiple shooting: normL2(shooting = ) and trust() on the objective it returns.
-#
-# The oracle is single shooting. With nodes read off one continuous trajectory
-# the gaps vanish, the data term is the single-shooting value, and the condensed
-# gradient and Gauss-Newton Hessian are the single-shooting ones. The segment
-# blocks are checked against finite differences, the reverse sweep against the
-# forward one, and a converged fit against the single-shooting fit.
+# Multiple shooting: normL2(shooting = ) and trust() on its objective. With
+# nodes on one continuous trajectory the gaps vanish and value, condensed
+# gradient and Gauss-Newton Hessian equal the single-shooting ones.
 
 skip_on_cran()
 
@@ -28,8 +24,8 @@ skip_on_cran()
     m <- odemodel(f, modelname = "ms_fhn", derivMode = fr,
                   includeTimeZero = FALSE, compile = FALSE, outdir = d)
     m0 <- odemodel(f, modelname = "ms_fhn0", compile = FALSE, outdir = d)
-    x <- Xs(m, optionsOde = .ms_tol, optionsSens = .ms_tol)
-    x0 <- Xs(m0, optionsOde = .ms_tol, optionsSens = .ms_tol)
+    x <- Xs(m, options = .ms_tol)
+    x0 <- Xs(m0, options = .ms_tol)
     g <- Y(c(y = "V"), f = x, modelname = "ms_fhn_obs", compile = FALSE,
            derivMode = fr)
     p <- P(eqnvec(V = "V", R = "R", a = "a", b = "b", c = "exp(lc)"),
@@ -40,7 +36,7 @@ skip_on_cran()
                       "B", "", "k2*B", "decay")
     mc <- odemodel(re, modelname = "ms_chain", derivMode = fr,
                    includeTimeZero = FALSE, compile = FALSE, outdir = d)
-    xc <- Xs(mc, optionsOde = .ms_tol, optionsSens = .ms_tol)
+    xc <- Xs(mc, options = .ms_tol)
     gc <- Y(c(yA = "s*A", yB = "s*B"), f = xc, modelname = "ms_chain_obs",
             compile = FALSE, derivMode = fr)
     pc <- P(eqnvec(A = "exp(lA)", B = "0", k1 = "exp(lk1)", k2 = "exp(lk2)",
@@ -65,7 +61,7 @@ skip_on_cran()
                      method = c("add", "add"))
     md <- odemodel(re, modelname = "ms_dose", events = evd, derivMode = fr,
                    includeTimeZero = FALSE, compile = FALSE, outdir = d)
-    xd <- Xs(md, optionsOde = .ms_tol, optionsSens = .ms_tol)
+    xd <- Xs(md, options = .ms_tol)
     gd <- Y(c(yA = "s*A", yB = "s*B"), f = xd, modelname = "ms_dose_obs",
             compile = FALSE, derivMode = fr)
     pd <- P(eqnvec(A = "exp(lA)", B = "0", k1 = "exp(lk1)", k2 = "exp(lk2)",
@@ -73,7 +69,7 @@ skip_on_cran()
             condition = "C", modelname = "ms_dose_p", compile = FALSE,
             derivMode = fr)
     suppressMessages(compile(x, x0, g, p, xc, gc, pc, pc2, ec, pce, xd, gd, pd,
-                             output = "ms_all", cores = 4))
+                             output = "ms_all", cores = test_cores()))
 
     truth <- c(V = -1, R = 1, a = 0.2, b = 0.2, lc = log(3))
     tt <- seq(0, 20, by = 0.25)
@@ -299,7 +295,7 @@ test_that("segment gradients and end-state Jacobians match finite differences", 
   expect_equal(J[-1L, ], unname(sg$jac[, loc]), tolerance = 1e-5)
 })
 
-test_that("log10 charts carry the chain rule on the nodes and the ends", {
+test_that("log10 charts apply the chain rule on the nodes and the ends", {
   skip_if_not_installed("numDeriv")
   mo <- .ms_models()
   obj <- normL2(mo$datac, mo$gc * mo$xc * mo$pc,
@@ -372,7 +368,7 @@ test_that("several conditions share theta and keep nodes of their own", {
   fit <- trust(obj, mo$truth2 + 0.2, iterlim = 200)
   expect_true(fit$converged)
   expect_equal(fit$value, ref$value, tolerance = 1e-6)
-  # y = s*A sees the scale and the initial amounts only as products
+  # the observable sees the scale and the initial amounts only as products
   ident <- function(a) c(a[["lA"]] + a[["ls"]], a[["lA2"]] + a[["ls"]],
                          a[["lk1"]], a[["lk2"]])
   expect_equal(ident(fit$argument), ident(ref$argument), tolerance = 1e-4)
@@ -391,7 +387,7 @@ test_that("fixed-time events fire once, on a node and inside a segment", {
   th <- mo$truthd + 0.05
   nd <- dMod2:::.shootNodes(sobj, th, observed = FALSE)
   E <- sobj(th, nd)
-  # continuous nodes: no gap at the node that carries the dose, and the data
+  # continuous nodes: no gap at the node of the dose, and the data
   # term of the single solve
   expect_lt(max(abs(unlist(E$gaps))), 1e-6)
   expect_equal(E$value, obj0(th, deriv = FALSE)$value, tolerance = 1e-6)
@@ -738,7 +734,7 @@ test_that("mstrust routes arguments by the formals of its optimiser", {
   expect_false("special" %in% seen$dots)
 })
 
-test_that("the backward walk carries several first-order seeds in one sweep", {
+test_that("the backward walk takes several first-order seeds in one sweep", {
   mo <- .ms_models()
   pin <- mo$p(mo$truth, deriv = FALSE)[["C"]]
   tt <- seq(0, 5, by = 0.5)

@@ -4,20 +4,7 @@
 \alias{reduceReplicates}
 \alias{reduceReplicates.data.frame}
 \alias{reduceReplicates.character}
-\title{Reduce replicated measurements to mean and standard deviation}
-\format{
-The following columns are mandatory for the data frame:
-\describe{
-\item{name}{Name of the observed species.}
-\item{time}{Measurement time point.}
-\item{value}{Measurement value.}
-\item{condition}{The condition under which the observation was made.}
-}
-
-In addition to these columns, any number of columns can follow to allow a
-fine-grained definition of conditions. The values of all columns named in
-\code{select} are then merged to get the set of conditions.
-}
+\title{Reduce Replicates to Mean and Standard Error}
 \usage{
 reduceReplicates(
   data,
@@ -44,52 +31,53 @@ reduceReplicates(
 )
 }
 \arguments{
-\item{data}{A data frame containing the measurements. See Format for details.}
+\item{data}{A data frame with the columns \code{name} (observable), \code{time},
+\code{value} and \code{condition}, plus any further columns that define conditions.
+Alternatively, the path of a \code{.csv}, \code{.xls} or \code{.xlsx} file with these
+columns; Excel files need the package \pkg{openxlsx}.}
 
-\item{select}{Names of the columns in the data frame used to define
-conditions, see Details.}
+\item{select}{Names of the columns whose values, together with \code{name},
+\code{time} and \code{condition}, define a condition. Default \code{"condition"}.}
 
-\item{datatrans}{Character vector describing a function to transform data.
-Use \kbd{x} to refer to data.}
+\item{datatrans}{Character, an expression in \code{x} applied to \code{value} before
+the reduction, for example \code{"log(x)"}. Default \code{NULL}.}
 
-\item{keep}{Character vector with columns that should not get dropped}
+\item{keep}{Names of columns that are kept although their values differ
+within a condition; the first value is used. Default \code{NULL}.}
 
-\item{weighted}{Logical flag: if TRUE, calculate weighted standard deviation using 'sigma' column.}
+\item{weighted}{Logical. If \code{TRUE}, mean and standard error are weighted by
+\code{1 / sigma^2} from the column \code{sigma} of \code{data}. Default \code{FALSE}.}
 }
 \value{
-A data frame of the following variables:
+A data frame with the columns
 \describe{
 \item{time}{Measurement time point.}
-\item{name}{Name of the observed species.}
-\item{value}{Mean of replicates.}
-\item{sigma}{Standard error of the mean, NA for single measurements.}
-\item{n}{The number of replicates reduced.}
-\item{condition}{The condition for which the value and sigma were calculated. If
-more than one column was used to define the condition, this variable
-holds the effective condition which is the combination of all applied
-single conditions.}
-\item{other columns}{Columns that were stable across replicates are retained and horizontally attached to the resulting data frame.}
+\item{value}{Mean of the replicates.}
+\item{sigma}{Standard error of the mean, \code{NA} for a single measurement.}
+\item{n}{Number of replicates.}
+\item{name}{Observable.}
+\item{condition}{The values of the \code{select} columns other than \code{name} and
+\code{time}, joined by \code{"_"}.}
 }
+followed by the kept columns.
 }
 \description{
-Obtain the mean and standard deviation from replicates per condition.
+Replaces the replicates of each condition by their mean and the standard
+error of the mean.
 }
 \details{
-Experiments are usually repeated multiple times possibly under different
-conditions leading to replicated measurements. The column "condition" in the
-data allows grouping the data by their condition. However, sometimes, a more
-fine-grained grouping is desirable. In this case, any number of additional
-columns can be appended to the data. These columns are referred to as
-"condition identifiers". Which of the condition identifiers are used for
-grouping is user-defined by specifying their names in \code{select}. The mandatory
-column "condition" is always used. The total set of different conditions is
-thus defined by all combinations of values occurring in the selected condition
-identifiers. The replicates of each condition are then reduced to mean and
-standard deviation. New condition names are derived by merging all conditions
-which were used in mean and standard deviation. Columns that are not listed in
-\code{select} but have different values within grouped data are dropped. Columns
-that remain stable across all replicates are retained and horizontally attached
-to the resulting data frame.
+A column not in \code{select} is kept when its value is the same for all
+replicates of every condition, otherwise it is dropped with a message.
+}
+\examples{
+data <- data.frame(name = "y", time = rep(c(0, 1, 2), each = 3),
+                   value = c(1.0, 1.2, 0.9, 0.6, 0.5, 0.7, 0.3, 0.2, 0.25),
+                   condition = "ctrl", replicate = rep(1:3, 3))
+reduceReplicates(data)
+
+}
+\seealso{
+\code{\link[=fitErrorModel]{fitErrorModel()}}
 }
 \author{
 Wolfgang Mader, \email{Wolfgang.Mader@fdm.uni-freiburg.de}

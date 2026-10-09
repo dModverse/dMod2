@@ -1,19 +1,17 @@
-## Unified mixed-effects entry points. EM()/msEM()/emInit() dispatch on the
-## random-effect prior attached to the objective: a Gaussian random effect from
-## omega() (constraintL2 with an Omega) or an L1/Laplace random effect from
-## penaltyL1() (constraintL1). Both are marginal maximum likelihood over that
-## prior; only the prior and the way its parameter is estimated differ.
+## EM(), msEM() and emInit() dispatch on the random-effect prior of the
+## objective: Gaussian from omega() or L1/Laplace from penaltyL1(). Both
+## maximise the marginal likelihood over that prior.
 
-## Which random-effect prior does `obj` carry? Errors if neither or both.
+## Which random-effect prior does `obj` have? Errors if neither or both.
 .emPrior <- function(obj) {
   pen <- attr(obj, "penaltySpec", exact = TRUE)
   om  <- attr(obj, "omegaSpec",   exact = TRUE)
   if (!is.null(pen) && !is.null(om))
-    stop("EM: `obj` carries both a penaltyL1() and an omega() random effect; ",
+    stop("EM: `obj` has both a penaltyL1() and an omega() random effect; ",
          "use exactly one.", call. = FALSE)
   if (!is.null(pen)) return("penaltyL1")
   if (!is.null(om))  return("omega")
-  stop("EM: `obj` carries no random-effect specification. Add either ",
+  stop("EM: `obj` has no random-effect specification. Add either ",
        "+ constraintL1(penaltyL1(...)) or an omega() random effect.",
        call. = FALSE)
 }
@@ -36,7 +34,7 @@
 #'
 #' @param obj Composed objective (`normL2(...) + constraintL2(...)` for a
 #'   Gaussian random effect, or `normL2(...) + constraintL1(penaltyL1(...))` for
-#'   an L1/Laplace one) carrying the model pieces and the random-effect spec.
+#'   an L1/Laplace one) holding the model pieces and the random-effect spec.
 #' @param init Named numeric start; assemble with [emInit].
 #' @param fixed Optional named numeric of parameters held fixed.
 #' @param method Marginal-likelihood backend. `NULL` (default) uses `"focei"`.
@@ -44,7 +42,7 @@
 #' @param control List of backend tuning options; see [EM] (Gaussian) and
 #'   the penalty backends for the recognised fields.
 #' @param verbose Logical; print progress.
-#' @return An object of class `c("em", "list")` carrying `prior`
+#' @return An object of class `c("em", "list")` with `prior`
 #'   (`"omega"`/`"penaltyL1"`), the estimated parameters (`argument`), objective
 #'   `value` (-2 log L), the per-subject conditional modes (`etaModes`), and the
 #'   prior-specific readout (`Omega` for a Gaussian fit; `lambda` / `sparsity` /
@@ -83,7 +81,7 @@ EM <- function(obj, init, fixed = NULL, method = NULL, control = list(),
 #' @param ... Prior-specific options forwarded to the backend (e.g. `sd`,
 #'   `samplefun`).
 #' @return For a Gaussian (`omega`) prior, a [parlist] of the fits; for an L1
-#'   (`penaltyL1`) prior, the best [EM] fit carrying `$msTable`.
+#'   (`penaltyL1`) prior, the best [EM] fit with `$msTable`.
 #' @seealso [EM], [emInit]
 #' @export
 msEM <- function(obj, center, fixed = NULL, method = NULL, control = list(),
@@ -143,7 +141,7 @@ emInit <- function(structural, prior, ...) {
 #' The marginal integration supplies the Occam factor that a classical penalty
 #' scan needs a lambda grid plus an information criterion to approximate.
 #'
-#' @param obj Composed objective for the full candidate set, carrying a
+#' @param obj Composed objective for the full candidate set, holding a
 #'   [penaltyL1] specification (via [constraintL1]).
 #' @param center Named numeric start (see [emInit]).
 #' @param fixed Optional named numeric held fixed.
@@ -169,7 +167,7 @@ sparsify <- function(obj, center, fixed = NULL, method = NULL, control = list(),
                      fits = NULL, cores = 1L, sd = 0.5, verbose = TRUE, ...) {
   pen <- attr(obj, "penaltySpec", exact = TRUE)
   if (is.null(pen))
-    stop("sparsify: `obj` carries no penaltyL1() specification. Add ",
+    stop("sparsify: `obj` has no penaltyL1() specification. Add ",
          "+ constraintL1(penaltyL1(..., subjects = ...)).", call. = FALSE)
   clustered <- any(vapply(pen$blocks, `[[`, "", "kind") == "clustered")
   if (clustered)

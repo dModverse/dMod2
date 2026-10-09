@@ -31,13 +31,8 @@ using namespace Rcpp;
 #endif
 
 
-/* --------------------------------------------------------------------------
- * 1D physicists' Gauss-Hermite via Golub-Welsch.
- *
- * Jacobi matrix J_n is n x n symmetric tridiagonal: diagonal 0, off-diagonal
- * sqrt(i/2). dstev returns eigenvalues (= nodes) and eigenvectors. The weight
- * for node i is sqrt(pi) * (first eigenvector component)^2.
- * -------------------------------------------------------------------------- */
+// 1D physicists' Gauss-Hermite via Golub-Welsch: nodes are the eigenvalues of the
+// Jacobi matrix (diagonal 0, off-diagonal sqrt(i/2)), weights sqrt(pi) v_0^2.
 static void gh_1d(int n, std::vector<double>& nodes, std::vector<double>& weights) {
   nodes.resize(n);
   weights.resize(n);
@@ -70,9 +65,7 @@ static void gh_1d(int n, std::vector<double>& nodes, std::vector<double>& weight
 }
 
 
-/* --------------------------------------------------------------------------
- * Smolyak coefficient: (-1)^(L - q) * C(K - 1, L - q) where q = sum(i_j).
- * -------------------------------------------------------------------------- */
+// Smolyak coefficient (-1)^(L - q) * C(K - 1, L - q), q = sum(i_j).
 static double smolyak_coef(int L, int K, int q) {
   int d = L - q;
   if (d < 0 || d > K - 1) return 0.0;
@@ -84,10 +77,7 @@ static double smolyak_coef(int L, int K, int q) {
 }
 
 
-/* --------------------------------------------------------------------------
- * Enumerate length-K positive-integer multi-indices with sum equal to q.
- * Result appended to `out`. Used inside the Smolyak combination loop.
- * -------------------------------------------------------------------------- */
+// Append to `out` every length-K positive-integer multi-index with sum q.
 static void enumerate_compositions(int K, int q,
                                    std::vector<int>& cur,
                                    int idx,
@@ -108,12 +98,8 @@ static void enumerate_compositions(int K, int q,
 }
 
 
-// Build the K-D Smolyak sparse grid for physicists' Gauss-Hermite at depth
-// `level`. Returns nodes [B, K] in z-space and signed weights (length B).
-//
-// For non-nested 1D rules (GH is non-nested), Smolyak weights are mixed-sign.
-// Dedup merges weights at coincident nodes; remaining sign mixture is handled
-// downstream via signed log-sum-exp in the per-subject evaluator.
+// GH rules are non-nested, so Smolyak weights are mixed-sign: coincident nodes
+// are merged here, the remaining signs go to the signed log-sum-exp downstream.
 //' @name sparseGridGH
 //' @title Sparse-grid Gauss-Hermite quadrature nodes (Smolyak rule)
 //' @description Builds the K-dimensional Smolyak sparse grid for physicists'
@@ -167,9 +153,8 @@ List sparseGridGH(int K, int level, int derivMode = 0) {
     }
     return key;
   };
-  // O(1) dedup of coincident nodes across the tensor-product terms. FNV-1a
-  // hash of the rounded-z key; output is re-sorted below so the node/weight
-  // layout is bit-identical to the previous std::map (ordered) materialization.
+  // O(1) dedup of coincident nodes via an FNV-1a hash of the rounded-z key; the
+  // output is sorted by key below, so the node order is deterministic.
   struct VecLLHash {
     std::size_t operator()(const std::vector<long long>& v) const {
       std::size_t h = 1469598103934665603ULL;
@@ -232,9 +217,8 @@ List sparseGridGH(int K, int level, int derivMode = 0) {
     }
   }
 
-  /* Materialize in sorted key order (reproduces the old std::map ordering, so
-     the node/weight layout -- and every downstream floating-point sum built on
-     it -- stays bit-identical). Drop zero-weight cancellation residuals. */
+  /* Emit in sorted key order so the node layout, and every floating-point sum
+     built on it, is reproducible. Drop zero-weight cancellation residuals. */
   typedef std::pair<const std::vector<long long>,
                     std::pair<std::vector<double>, double> > Entry;
   std::vector<const Entry*> entries;

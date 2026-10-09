@@ -1,4 +1,4 @@
-## Context: "omega() helper for FOCEI"  (context() is deprecated in testthat 3e; kept as a note)
+# omega(): random-effect covariance specification for FOCEI.
 
 
 test_that("diagonal omega returns K Cholesky parameters", {

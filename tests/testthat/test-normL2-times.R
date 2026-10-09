@@ -9,7 +9,7 @@
       f  <- addReaction(eqnlist(), from = "A", to = "", rate = "k*A")
       ev <- addEvent(eventlist(), var = "A", time = -10, value = "dose", method = "add")
       x  <- Xs(odemodel(f, events = ev, modelname = "t0pc_x", compile = FALSE))
-      g  <- Y(c(y = "A"), f = x, attach.input = FALSE, modelname = "t0pc_g", compile = FALSE)
+      g  <- Y(c(y = "A"), f = x, attachInput = FALSE, modelname = "t0pc_g", compile = FALSE)
       p1 <- P(eqnvec(A = "A0", k = "k", dose = "dose"), condition = "C1",
               modelname = "t0pc_p1", compile = FALSE)
       p2 <- P(eqnvec(A = "A0", k = "k", dose = "0"), condition = "C2",

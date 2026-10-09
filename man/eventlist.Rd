@@ -10,45 +10,50 @@ eventlist(var = NULL, time = NULL, value = NULL, root = NULL, method = NULL)
 addEvent(event, var, time = 0, value = 0, root = NA, method = "replace", ...)
 }
 \arguments{
-\item{var}{Character, the state to which the event is applied}
+\item{var}{character, the state to which the event is applied.}
 
-\item{time}{Character or Numeric, the time at which the event happens}
+\item{time}{character or numeric, the time at which the event happens.
+Default \code{NULL} in \code{eventlist()} and \code{0} in \code{addEvent()}.}
 
-\item{value}{Character or Numeric, the value of the event}
+\item{value}{character or numeric, the value of the event. Default \code{NULL}
+in \code{eventlist()} and \code{0} in \code{addEvent()}.}
 
-\item{root}{Character or NA, condition to trigger the event instead of time}
+\item{root}{character or \code{NA}, a condition that triggers the event when it
+reaches zero, instead of \code{time}. Default \code{NULL} in \code{eventlist()}, which
+becomes \code{NA} as soon as another column is given, and \code{NA} in \code{addEvent()}.}
 
-\item{method}{Character, options are "replace", "add" or "multiply"}
+\item{method}{character, \code{"replace"}, \code{"add"} or \code{"multiply"}. Default
+\code{NULL} in \code{eventlist()} and \code{"replace"} in \code{addEvent()}.}
 
-\item{event}{object of class \code{eventlist}}
+\item{event}{object of class \code{eventlist}, or \code{NULL}.}
 
-\item{...}{not used}
+\item{...}{not used.}
 }
 \value{
-data.frame with class eventlist
+Object of class \code{eventlist}, a data frame. \code{eventlist()} without
+arguments returns an empty eventlist.
 }
 \description{
-An eventlist is a data.frame with the necessary parameters to define an event as columns and specific events as rows.
-Event time and value can be passed as parameters, which can also be estimated.
-}
-\details{
-The function \code{addEvent} is pipe-friendly
+An eventlist is a data frame with one event per row and the columns \code{var},
+\code{time}, \code{value}, \code{root} and \code{method}. Event time and value can be
+parameters, which can be estimated. \code{addEvent()} appends an event and is
+pipe-friendly.
 }
 \examples{
-\dontrun{
-  eventlist(var = "A", time = "5", value = 1, method = "add")
-  
-  events <- addEvent(NULL, var = "A", time = "5", value = 1, method = "add")
-  events <- addEvent(events, var = "A", time = "10", value = 1, method = "add")
-  
-  # With symbols
-  events <- eventlist()
-  # Set "A" to "value_switch" at time "time_Switch"
-  events <- addEvent(events, var = "A", time = "time_switch",
-                     value = "value_switch", method = "replace")
-  # Set "B" to 2 when "A" reaches "A_target". The time-parameter for
-  # internal use will be "time_root".
-  events <- addEvent(events, var = "B", time = "time_root", value = 2,
-                     root = "A - A_target", method = "replace")
+eventlist(var = "A", time = "5", value = 1, method = "add")
+
+events <- addEvent(NULL, var = "A", time = "5", value = 1, method = "add")
+events <- addEvent(events, var = "A", time = "10", value = 1, method = "add")
+
+# With symbols: set A to value_switch at time_switch
+events <- eventlist()
+events <- addEvent(events, var = "A", time = "time_switch",
+                   value = "value_switch", method = "replace")
+# Set B to 2 when A reaches A_target; the event time is the parameter time_root
+events <- addEvent(events, var = "B", time = "time_root", value = 2,
+                   root = "A - A_target", method = "replace")
+events
 }
+\seealso{
+\code{\link[=as.eventlist]{as.eventlist()}}, \code{\link[=odemodel]{odemodel()}}
 }

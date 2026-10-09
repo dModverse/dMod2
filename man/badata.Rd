@@ -3,8 +3,22 @@
 \docType{data}
 \name{badata}
 \alias{badata}
-\title{Time-course data for the Bile-Acid demonstration model}
+\title{Time-Course Data for the Bile Acid Demonstration Model}
+\format{
+A data frame with 32 rows and the columns \code{name}, \code{time}, \code{value},
+\code{sigma}, \code{lloq} (lower limit of quantification, \code{-Inf} throughout) and
+\code{condition}.
+}
 \description{
-Time-course data for the Bile-Acid demonstration model
+Bile acid amounts in the buffer (\code{buffer}) and in the cells (\code{cellular})
+between 0.1 and 41 time units, in two conditions, \code{"closed"} and \code{"open"}.
+}
+\examples{
+data(badata)
+plotData(as.datalist(badata))
+}
+\seealso{
+\code{system.file("examples", "BA_transport.R", package = "dMod2")}
+builds and fits the model.
 }
 \keyword{data}

@@ -7,7 +7,7 @@
 \alias{controls<-}
 \alias{controls<-.objfn}
 \alias{controls<-.fn}
-\title{List, get and set controls for different functions}
+\title{List, Get and Set Controls}
 \usage{
 controls(x, ...)
 
@@ -22,66 +22,66 @@ controls(x, ...) <- value
 \method{controls}{fn}(x, condition = NULL, name, ...) <- value
 }
 \arguments{
-\item{x}{function}
+\item{x}{object of class \code{objfn} or \code{fn}.}
 
-\item{...}{arguments going to the appropriate S3 methods}
+\item{...}{not used.}
 
-\item{name}{character, the name of the control}
+\item{name}{character, the name of the control. Default \code{NULL} lists the
+controls.}
 
-\item{condition}{character, the condition name}
+\item{condition}{character, the condition name. Default \code{NULL}, every
+condition.}
 
-\item{value}{the new value}
+\item{value}{the new value of the control.}
 }
 \value{
-Either a print-out or the values of the control. Listing the
-controls of an \code{fn} prints them per function and returns the names
-invisibly, as a list with one entry per function.
+\code{controls(x)} prints the available controls and returns their names
+invisibly; for an \code{fn}, as a list with one entry per function. With \code{name},
+the value of the control, or \code{NULL} if no function holds it. The setter
+returns \code{x}.
 }
 \description{
-Applies to objects of class \code{objfn},
-\code{parfn}, \code{prdfn} and \code{obsfn}. Allows to manipulate
-different arguments that have been set when creating the
-objects. On a sum of objectives, a control is read from and written to
-every summand that has it, e.g. the \code{multipleShootingControl} of a
-\code{\link[=normL2]{normL2()}} term. The same holds for an objective scaled by \verb{\%.*\%} and
-for an objective composed with a parameter transformation, which reach the
-controls of the objective inside.
+Reads and changes the settings an object of class \code{objfn},
+\code{parfn}, \code{prdfn} or \code{obsfn} was built with. \code{controls(x)} lists the
+available controls; with \code{name}, the value of that control is returned or
+replaced. Elements of a list or data frame value can be changed with \code{$} or
+\verb{[]}.
 }
 \details{
-If called without further arguments, \code{controls(x)} lists the
-available controls within an object. Calling \code{controls()} with \code{name}
-and \code{condition} returns the control value. The value can be overwritten. If
-a list or data.frame is returned, elements of those can be manipulated by the
-\code{$}- or \verb{[]}-operator.
+A control belongs to the function built with it and is shared by
+every sum or composition that contains this function. Changing it on one of
+them changes it for all of them.
 
-A control lives in the function that was built with it, which every sum or
-composition containing that function shares. A change made on \code{x} is
-therefore seen by every object built from \code{x}, and a change made on a
-composition reaches the factor it came from.
+On an \code{fn}, the lookup covers the functions \code{x} is made of, e.g. the
+factors of \code{g * x * p}. \code{condition} restricts it to the functions defined
+for that condition; a function built without a condition counts for every
+condition. With \code{condition = NULL}, the getter returns the value of the
+first function that holds the control and the setter changes every function
+that holds it. On an \code{objfn}, including sums, scaled objectives and
+objectives composed with a parameter transformation, the same holds for the
+objective terms. Setting a control that no function holds is an error, as
+is an unknown condition.
 
-On an \code{fn}, the control is looked up in the functions \code{x} is made of, so
-\code{g * x * p} reaches the controls of \code{g}, \code{x} and \code{p}. \code{condition} restricts
-the lookup to the functions that answer for that condition; a function built
-without a condition answers for all of them, so a control set on it for one
-condition applies to every condition. With \code{condition = NULL}, the getter
-returns the value of the first function that holds the control and the
-setter writes every function that holds it. A name that several factors
-share, \code{attach.input} for instance, is set on all of them; set it on the
-factor itself to reach that one alone. Setting a control that no function
-holds is an error, as is a condition \code{x} does not know.
+The second positional argument is \code{name} for an \code{objfn} and \code{condition}
+for an \code{fn}; name both arguments to avoid confusion.
 }
 \examples{
-\dontrun{
-  ## parfn with condition
-  p <- P(eqnvec(x = "-a*x"), method = "implicit", condition = "C1")
-  controls(p)
-  controls(p, "C1", "keep.root")
-  controls(p, "C1", "keep.root") <- FALSE
-  
-  ## obsfn with NULL condition
-  g <- Y(g = eqnvec(y = "s*x"), f = NULL, states = "x", parameters = "s")
-  controls(g)
-  controls(g, NULL, "attach.input")
-  controls(g, NULL, "attach.input") <- FALSE
+old <- options(dMod.outdir = tempdir())
+
+## parfn with condition
+p <- P(eqnvec(x = "-a*x"), method = "implicit", condition = "C1")
+controls(p)
+controls(p, condition = "C1", name = "keepRoot")
+controls(p, condition = "C1", name = "keepRoot") <- FALSE
+
+## obsfn without condition
+g <- Y(g = eqnvec(y = "s*x"), f = NULL, states = "x", parameters = "s")
+controls(g)
+controls(g, name = "attachInput")
+controls(g, name = "attachInput") <- TRUE
+
+options(old)
 }
+\seealso{
+\code{\link[=normL2]{normL2()}}, \code{\link[=P]{P()}}, \code{\link[=Y]{Y()}}
 }

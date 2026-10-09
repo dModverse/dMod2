@@ -20,10 +20,7 @@ dosing <- eventlist() %>%
   addEvent("INPUT1", "TINF", 0, "replace")
 
 # ODEs and events are turned into a compiled model
-# The argument "estimate" should be used to save computational time
-# when the model contains many model parameters but only a few of them
-# are estimated. Otherwise, sensitivity equations will be computed for all
-# possible derivatives.
+# "estimate" restricts the sensitivity equations to the estimated parameters
 model <- odemodel(ODEs, events = dosing, modelname = "PKPD",
                   estimate = c("EC50", "EMAX", "GR", "hill", "PL", "RATE"),
                   compile = FALSE)
@@ -79,10 +76,8 @@ plot(x = getDerivs(prediction), data = NULL, grepl("^PL", name))
 
 ## Extension ------------------------------------------------------------------
 
-# It is possible to choose any parameterization of the model parameters
-# The parameterization is defined as character vector
-# dMod provides functions define() and insert() to help the user
-# setting up transformations
+# Any parameterization of the model parameters is a character vector, set up
+# with the help of define() and insert()
 
 # The following reparameterization inserts values,
 # reparameterizes RATE by AMT and TINF

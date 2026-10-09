@@ -14,7 +14,7 @@ data <- datalist(C1 = mydata1, C2 = mydata2)
 print(data)
 plot(data)
 
-## Generate datalist from singla data.frame
+## Generate datalist from a single data.frame
 times <- seq(0, 2*pi, length.out = 20)
 mydata <- data.frame(name = "A", 
                      time = times, 
@@ -24,7 +24,7 @@ mydata <- data.frame(name = "A",
                      phase = rep(c("first", "second"), each = 20),
                      amplitude = rep(c(1,1.5), each = 20))
 
-data <- as.datalist(mydata, split.by = c("stage", "phase"), keep.covariates = "amplitude")
+data <- as.datalist(mydata, splitBy = c("stage", "phase"), keepCovariates = "amplitude")
 print(data)
 plot(data)
 

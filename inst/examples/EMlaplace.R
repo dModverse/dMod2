@@ -1,29 +1,8 @@
 \dontrun{
 
-## ---------------------------------------------------------------------------
-## Marginal-likelihood L1/Laplace model selection: which parameters are
-## cell-line specific? (Becker et al. 2010, Epo receptor; 2 cell lines.)
-##
-## Classical workflow: L1-penalise the per-line parameter deviations, SCAN the
-## penalty strength lambda over a grid, run a multistart fit at every grid
-## point, and pick lambda by BIC. Cost: O(grid x multistart) fits.
-##
-## EM reframes the penalised fit as a nonlinear mixed-effects model with a
-## Laplace random-effect density: the deviations are random effects and the
-## single lambda is ESTIMATED by marginal maximum likelihood (one fit, no grid).
-## sparsify then walks a short nested chain of supports and keeps the one with
-## the smallest marginal -2 log L. It recovers the same parsimonious model the
-## BIC-scan would, at O(K) fits instead of O(grid x multistart). Theory:
-## notes/laplace_nlme_theory.Rmd.
-##
-## Reference encoding (Hauber et al. 2023 style): line A is the baseline
-## (theta = exp(mu)); line B carries the deviation d (theta = exp(mu + d)) and
-## |d| is penalised. d is a single coordinate, so trustL1 drives the deviation
-## of a shared parameter cleanly to zero.
-##
-## Ground truth here: kon and ke differ between the two lines (individual),
-## koff and kt are shared. Candidates = {kon, koff, kt, ke}.
-## ---------------------------------------------------------------------------
+## Which parameters are cell-line specific (Becker et al. 2010, Epo receptor)?
+## EM treats the penalised deviations as Laplace random effects and estimates
+## lambda by marginal likelihood; sparsify keeps the most parsimonious support.
 
 library(dMod2)
 outdir <- tempdir()          # keep generated C/C++ + shared objects out of the tree
@@ -54,12 +33,12 @@ g <- Y(eqnvec(y_ext = "log(Epo + dEpo_e + 1)",
               y_mem = "log(Epo_EpoR + 1)",
               y_int = "log(Epo_EpoR_i + dEpo_i + 1)"),
        x, modelname = "becker_obs", compile = FALSE, deriv2 = TRUE,
-       attach.input = FALSE, outdir = outdir)
+       attachInput = FALSE, outdir = outdir)
 e <- Y(eqnvec(y_ext = "sigma", y_mem = "sigma", y_int = "sigma"), g,
        modelname = "becker_err", compile = FALSE, deriv2 = TRUE,
-       attach.input = FALSE, outdir = outdir)
+       attachInput = FALSE, outdir = outdir)
 
-## 2. Reference encoding: candidates kon,koff,kt,ke carry a line-B deviation.
+## 2. Reference encoding: candidates kon,koff,kt,ke have a line-B deviation.
 dose  <- 1347.49                                       # init_Epo
 lines <- c("A", "B")
 trafo <- eqnvec(
@@ -114,73 +93,28 @@ cat("estimated lambda:", fit$lambda, "\n")
 print(round(fit$etaModes, 4))              # line-B deviations d_hat
 
 ## 5b. sparsify: nested-support chain, pick min marginal -2 log L. -----------
-##     The marginal integrates the deviations out, so a spurious individual
-##     parameter LOWERS the data -2logL but RAISES the marginal (Occam factor);
-##     the minimum of the chain is the parsimonious model.
+##     A spurious individual parameter lowers the data -2 log L but raises the
+##     marginal (Occam factor).
 sel <- sparsify(obj, center, fixed = fixed, method = "focei",
                  control = list(cm1 = list(iterlim = 50L)),
                  fits = 12, cores = 4, sd = 0.5, verbose = TRUE)
 print(sel)
 stopifnot(setequal(sel$support, c("kon", "ke")))     # the parsimonious model
 
-## 6. Baseline: the classical trustL1 lambda-scan + BIC (what sparsify saves).
-##    20 lambdas x 50 starts = 1000 fits, versus sparsify's ~K+1 marginal fits.
-obj_data  <- normL2(dlist, prd, errmodel = e)
+## 6. Baseline: the classical L1 scan (Hauber et al. 2023) with scanL1().
+##    A penalised multistart fit per lambda, an unpenalised refit per distinct
+##    support, the largest lambda the likelihood ratio test does not reject.
 eta_names <- as.vector(pen$subjectEtas)              # line-B deviations
-mu_pen    <- setNames(rep(0, length(eta_names)), eta_names)
-N         <- nrow(dl_rows)
-p_struct  <- length(cand) + 1L                       # candidate mu's + sigma
-lam_grid  <- 10^seq(-5, 5, length.out = 20)
-scan_center <- c(st[paste0("log_", cand)], log_sigma = log(0.1),
-                 setNames(rep(0, length(eta_names)), eta_names))
-
-## 6a. regularisation path: which deviations survive at each lambda. ----------
-path <- do.call(rbind, lapply(lam_grid, function(lam) {
-  ms <- mstrust(obj_data, center = scan_center, studyname = "scan",
-                optmethod = "trustL1", lambda = lam, mu = mu_pen, fixed = fixed,
-                fits = 50, cores = 4, sd = 0.3, rinit = 1, rmax = 10,
-                iterlim = 400, resultPath = tempdir(), output = FALSE)
-  keep <- abs(as.parvec(as.parframe(ms), index = 1)[eta_names]) > 1e-4
-  data.frame(lambda = lam, nnz = sum(keep),
-             support = paste(sort(gsub("^eta_|_B$", "", eta_names[keep])),
-                             collapse = ","), stringsAsFactors = FALSE)
-}))
-print(path, row.names = FALSE)
-
-## 6b. BIC over the DISTINCT supports the path visits. Compute BIC from an
-##     UNPENALISED (relaxed) refit of each support: at a shrinking lambda the
-##     deviations are biased toward 0, so scoring supports at the penalised fit
-##     is apples-to-oranges across lambda; the post-selection refit is the
-##     standard way to BIC-score a lasso support (relaxed lasso, Meinshausen 2007).
-relaxRefit <- function(S) {                          # clean data -2 log L for S
-  eta_in  <- if (length(S)) as.vector(pen$subjectEtas[, paste0("eta_", S),
-                                                      drop = FALSE]) else character(0)
-  eta_out <- setdiff(eta_names, eta_in)
-  fixedS  <- c(fixed, setNames(rep(0, length(eta_out)), eta_out))
-  start   <- c(st[paste0("log_", cand)], log_sigma = log(0.1),
-               setNames(rep(0, length(eta_in)), eta_in))
-  ms <- mstrust(obj_data, center = start, studyname = "relax", optmethod = "trust",
-                fixed = fixedS, fits = 12, cores = 4, sd = 0.3, rinit = 1,
-                rmax = 10, iterlim = 400, resultPath = tempdir(), output = FALSE)
-  obj_data(as.parvec(as.parframe(ms), index = 1), fixed = fixedS,
-           deriv = FALSE)$value
-}
-supports <- unique(lapply(strsplit(path$support, ","), function(s) s[nzchar(s)]))
-bic_vals <- vapply(supports,
-                   function(S) relaxRefit(S) + log(N) * (p_struct + length(S)), 0.0)
-bic_tab  <- data.frame(
-  support = vapply(supports, function(S)
-    if (length(S)) paste(sort(S), collapse = ",") else "(none)", ""),
-  size = lengths(supports), BIC = bic_vals, stringsAsFactors = FALSE)
-bic_tab  <- bic_tab[order(bic_vals), ]
-bic_tab$sel <- ifelse(bic_tab$BIC == min(bic_tab$BIC), "<= BIC min", "")
-print(bic_tab, row.names = FALSE)
-
-## sparsify finds the SAME parsimonious model the BIC-scan selects. ----------
-bic_support <- supports[[which.min(bic_vals)]]
-cat(sprintf(paste0("\nregSelect  S_hat = {%s}\nBIC-scan   S     = {%s}\n",
-                   "(sparsify: ~%d marginal fits;  scan: %d x %d = %d fits)\n"),
+scan <- scanL1(normL2(dlist, prd, errmodel = e),
+               c(st[paste0("log_", cand)], log_sigma = log(0.1),
+                 setNames(rep(0, length(eta_names)), eta_names)),
+               reference = eta_names, fixed = fixed,
+               lambda = 10^seq(-1, 4, length.out = 16), fits = 10, cores = 4,
+               sd = 0.3)
+print(scan)
+print(plot(scan))
+indiv <- setdiff(eta_names, scan$structure[[scan$selected]]$removed)
+cat(sprintf("\nsparsify  S = {%s}\nscanL1    S = {%s}\n",
             paste(sort(sel$support), collapse = ","),
-            paste(sort(bic_support), collapse = ","),
-            length(cand) + 1L, length(lam_grid), 50L, length(lam_grid) * 50L))
+            paste(sort(gsub("^eta_|_B$", "", indiv)), collapse = ",")))
 }

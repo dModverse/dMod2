@@ -2,12 +2,11 @@
 % Please edit documentation in R/steadyStates.R
 \name{steadyStates}
 \alias{steadyStates}
-\title{Calculate analytical steady states}
+\title{Analytical Steady States}
 \usage{
 steadyStates(
   model,
   file = NULL,
-  rates = NULL,
   forcings = NULL,
   givenCQs = NULL,
   neglect = NULL,
@@ -22,167 +21,125 @@ steadyStates(
   priority = NULL,
   version = "1.3",
   resolve = TRUE,
-  verbose = TRUE
+  verbose = FALSE,
+  ...
 )
 }
 \arguments{
-\item{model}{An \code{eqnlist}, or the name of a csv file describing the model.}
+\item{model}{An \link{eqnlist}, or the path of a csv file describing the model.}
 
-\item{file}{Character, path the result is written to with \code{saveRDS()}, and
-base name of the intermediate csv handed to the backend. For an \code{eqnlist}
-model it defaults to \code{"reactions_for_Alyssa"}.}
+\item{file}{Character, path of the RDS file the result is written to with
+\code{saveRDS()}. For an \code{eqnlist} the model is also written to
+\verb{<file>_model.csv} for the solver. Default \code{NULL} writes nothing; the
+solver then reads the model from a temporary file.}
 
-\item{rates}{Unused, retained for backward compatibility.}
-
-\item{forcings}{Character vector, names of the forcings. These states are
-held at zero and treated as exogenous.}
+\item{forcings}{Character vector, names of forcings. These states are held
+at zero and treated as exogenous. Default \code{NULL}.}
 
 \item{givenCQs}{Unnamed character vector of conserved quantities, either as
-\code{c("A + pA = totA", "B + pB = totB")} or as \code{c("A + pA", "B + pB")}. \code{NULL}
-(default) derives a basis automatically. In \code{"1.4"} each given quantity
-keeps one of its states free, the first by default. If that state's
-balance cannot be spent elsewhere, the next state is kept instead.}
+\code{c("A + pA = totA", "B + pB = totB")} or as \code{c("A + pA", "B + pB")}.
+Default \code{NULL}: a basis is derived, or taken from \code{\link[=customTotals]{customTotals()}} when the
+\code{eqnlist} has them. In \code{"1.4"} each given quantity keeps one of its states
+free, the first where possible.}
 
 \item{neglect}{Character vector, states and rate parameters the solver must
-not resolve. A neglected state stays a free parameter of the transformation;
-a neglected rate parameter is never used as a pivot.}
+not solve for. Default \code{NULL}.}
 
 \item{sparsifyLevel}{Numeric, upper bound on the length of the linear
-combinations used to simplify the stoichiometric matrix. Versions \code{"1.0"}
-and \code{"1.1"} only.}
+combinations used to simplify the stoichiometric matrix. Default \code{NULL}:
+\code{2} for versions \code{"1.0"} and \code{"1.1"}, unused from \code{"1.2"}.}
 
-\item{outputFormat}{Character, \code{"R"} (default) for dMod-compatible output, or
-\code{"M"} for d2d [3].}
+\item{outputFormat}{\code{"R"} (default) for dMod, or \code{"M"} for d2d [3].}
 
-\item{testSteady}{Character, how the solution is verified. One of \code{"fast"}
-(default; probabilistic Schwartz-Zippel check over GF(p), with negligible
-error probability), \code{"exact"} (symbolic substitution, slow on large \code{sqrt}
-solutions) or \code{"skip"}. \code{"fast"} requires version \code{"1.2"} or later and
-falls back to \code{"exact"} on \code{"1.1"}; version \code{"1.0"} always tests.}
+\item{testSteady}{How the solution is verified: \code{"fast"} (default), a
+probabilistic check modulo a prime; \code{"exact"}, symbolic substitution;
+\code{"skip"}.}
 
-\item{walltime}{Integer, wall-clock budget in seconds for the solver, \code{0}
-(default) for unlimited. Version \code{"1.2"} and later.}
+\item{walltime}{Integer, time budget of the solver in seconds, \code{0}
+(default) for none.}
 
-\item{simplify}{Final-simplification mode. \code{TRUE} (default) applies
-\code{sympy.simplify} once per expression, \code{FALSE} skips it and returns bulkier
-output, \code{"full"} adds a \code{cancel}/\code{posify}/\code{factor} pipeline that is slower
-but more compact. Version \code{"1.2"} and later.}
+\item{simplify}{\code{TRUE} (default) simplifies every expression once with
+sympy, \code{FALSE} skips it, \code{"full"} simplifies further at a higher cost.}
 
-\item{solveQuadratic}{Logical, whether a cycle whose final equation is
-quadratic in its own state may be closed by the positive root of
-\eqn{a X^2 + b X + c = 0} instead of by a rate-parameter pivot. This keeps
-the pivoted rate constants out of the result, at the price of \code{sqrt(...)}
-terms that some workflows cannot consume in a parameter transformation.
-Default \code{FALSE}. Version \code{"1.2"} and later. In \code{"1.4"} a state whose own
-balance, denominators cleared, has \eqn{a} and \eqn{-c} sums of positive
-terms takes the unique positive root
-\eqn{X = 2|c| / (\sqrt{b^2 + 4 a |c|} + b)}, tried before any rate constant.}
+\item{solveQuadratic}{Logical, whether a balance quadratic in its own state
+may be solved by its positive root instead of for a rate constant, which
+introduces \code{sqrt()} terms. Default \code{FALSE}.}
 
-\item{positive}{Positivity assumption used for root and pivot selection.
-\code{TRUE} (default) treats all parameters, initial values and totals as
-positive, \code{FALSE} assumes nothing, and a character vector names the symbols
-to treat as positive. Version \code{"1.2"} and later.
+\item{positive}{Positivity assumption for root and pivot selection: \code{TRUE}
+(default) all symbols are positive, \code{FALSE} none, or a character vector of
+the positive symbols. With \code{TRUE} no result contains a subtraction.}
 
-With \code{TRUE} the result is manifestly non-negative: no expression contains a
-subtraction, so no parameter choice can drive a state negative. Where
-solving for a state would yield a difference, its equation is spent on one
-of its own rate constants instead. That solve is linear and therefore has a
-unique root, which is why a pivot, not root selection, is the remedy. If no
-pivot succeeds either, a diagnosis is printed and \code{0} returned.}
+\item{branches}{Logical. If \code{TRUE}, a quadratic with two positive roots is
+returned with a selector symbol \verb{branch_<state>} taking \code{-1} or \code{+1}.
+Requires \code{solveQuadratic = TRUE}. Default \code{FALSE}.}
 
-\item{branches}{Logical, whether a quadratic with two positive roots
-(bistability) is emitted with a selector symbol \verb{branch_<state>} taking
-\code{-1} or \code{+1} to recover both steady states. Requires
-\code{solveQuadratic = TRUE}. \code{FALSE} (default) emits only the provably unique
-positive root and pivots ambiguous cases. Version \code{"1.2"} and later.}
+\item{priority}{Character vector of state and rate-parameter names, most
+preferred first: named states are solved earlier, named rate parameters
+are preferred as pivots. Default \code{NULL}.}
 
-\item{priority}{Character vector of state and rate-parameter names,
-most-preferred first, biasing the resolution order: a named state is
-resolved earlier, a named rate parameter is preferred as pivot. Structural
-constraints take precedence, so this is a preference, not a guarantee.
-Unmatched names are reported and ignored. Version \code{"1.2"} and later.}
+\item{version}{Solver version, one of \code{"1.0"}, \code{"1.1"}, \code{"1.2"}, \code{"1.3"}
+(default) and \code{"1.4"}. \code{"1.4"} solves every unknown from a combination of
+balances, so every result is a ratio of positive sums; it needs
+\code{positive = TRUE} and \code{outputFormat = "R"} and treats compartment volumes
+as fixed.}
 
-\item{version}{Character, backend version. One of \code{"1.0"} (original), \code{"1.1"}
-(adds \code{testSteady}), \code{"1.2"} (sink-cluster detection, \code{walltime},
-priority-table cycle breaking, \code{simplify} toggle, optional quadratic
-state-side solve), or \code{"1.3"} (default; same interface as \code{"1.2"}, but
-solutions are recorded lazily and resolved once at output time, with a
-lock guard replacing most rollbacks, typically orders of magnitude
-faster on feedback-heavy networks). \code{"1.4"} is a new core on the same
-interface: every balance is a linear form over the flux terms, and each
-unknown (a state or a rate constant) is solved from a combination of
-balances a linear program finds, so every solution is a ratio of positive
-sums by construction and nothing is expanded. Where no single unknown is
-left, one side of a balance shares its sum by new flux ratios \verb{r_*}. It
-needs \code{positive = TRUE} and \code{outputFormat = "R"}, and treats the model's
-compartment volumes as fixed, never as unknowns.}
+\item{resolve}{Logical, whether the result is passed through
+\code{\link[=resolveRecurrence]{resolveRecurrence()}} so that no equation refers to another. Default
+\code{TRUE}.}
 
-\item{resolve}{Logical, whether the equations are passed through
-\code{\link[=resolveRecurrence]{resolveRecurrence()}} so that none refers to another, as a dMod parameter
-transformation substitutes all entries at once. \code{FALSE} keeps the compact
-recurrent form. Versions \code{"1.2"} and later already resolve in the backend,
-so this matters for \code{"1.0"} and \code{"1.1"}.}
+\item{verbose}{\code{TRUE} reports progress in a few lines and the result,
+\code{FALSE} (default) only the result, \code{"full"} every step of the solver.}
 
-\item{verbose}{\code{TRUE} (default) reports the progress in a few lines and the
-result, \code{FALSE} only the result, \code{"full"} traces every step of the solver.
-Versions before \code{"1.3"} print their own output unless \code{verbose = FALSE}.}
+\item{...}{\code{rates} is deprecated and ignored.}
 }
 \value{
 Named character vector of steady-state equations in dMod format, or
-\code{0} if no solution was found. An entry whose value is its own name denotes a
+\code{0} if no solution was found. An entry whose value is its own name is a
 free parameter.
 }
 \description{
-Computes symbolic steady-state expressions tailored to parameter estimation,
-following the AlyssaPetit method [1], [2]. The solver itself is a Python
-module (Python 3.x), called through reticulate.
+Computes symbolic steady-state expressions for use in a parameter
+transformation, following the AlyssaPetit method [1], [2]. Each balance
+equation is solved for a state or a rate constant such that the result is
+a ratio of sums of positive terms. A state whose equation was spent on a
+rate constant stays a free parameter. The solver is a Python module called
+through \pkg{reticulate}; it needs \pkg{numpy}, \pkg{sympy} and, from
+version \code{"1.2"}, \pkg{scipy}.
 }
 \details{
-Rather than solving every balance equation for its own state, the solver
-spends each equation on whichever state or rate constant keeps the result a
-ratio of sums of positive terms. A state whose equation went to a rate
-constant is absent from the result and stays a free parameter of the
-transformation. Where no single balance stays positive, version \code{"1.3"}
-solves a strongly connected block of states jointly, so that differences
-cancel across its balances. If that fails, the block is searched balance
-by balance, spending each only on an unknown whose root stays positive once
-the balances solved before it are substituted. A state solved up front
-whose rate constants such a block needs is left to the block on a retry.
+Arguments by version:
+\tabular{ll}{
+\code{"1.0"} \tab \code{sparsifyLevel}; the solution is always tested.\cr
+\code{"1.1"} \tab adds \code{testSteady} (\code{"fast"} runs as \code{"exact"}).\cr
+\code{"1.2"}, \code{"1.3"} \tab add \code{walltime}, \code{simplify}, \code{solveQuadratic},
+\code{positive}, \code{branches}, \code{priority}; \code{sparsifyLevel} is unused.\cr
+\code{"1.3"}, \code{"1.4"} \tab honour \code{verbose} themselves; older versions are
+silenced with \code{verbose = FALSE}.\cr
+\code{"1.4"} \tab ignores \code{branches}; \code{testSteady = "exact"} runs as
+\code{"fast"}.\cr
+}
 }
 \examples{
+\dontshow{if (requireNamespace("reticulate", quietly = TRUE) && reticulate::py_module_available("sympy") && reticulate::py_module_available("scipy")) withAutoprint(\{ # examplesIf}
+reactions <- eqnlist()
+reactions <- addReaction(reactions, "Tca_buffer", "Tca_cyto",
+                         "import_Tca*Tca_buffer", "Basolateral uptake")
+reactions <- addReaction(reactions, "Tca_cyto", "Tca_buffer",
+                         "export_Tca_baso*Tca_cyto", "Basolateral efflux")
+reactions <- addReaction(reactions, "Tca_cyto", "Tca_canalicular",
+                         "export_Tca_cana*Tca_cyto", "Canalicular efflux")
+reactions <- addReaction(reactions, "Tca_canalicular", "Tca_buffer",
+                         "transport_Tca*Tca_canalicular", "Transport bile")
 
-\dontrun{
-  library(dMod2)
-  setwd(tempdir())
-  
-  reactions <- eqnlist()
-  reactions <-   addReaction(reactions, "Tca_buffer", "Tca_cyto", 
-                             "import_Tca*Tca_buffer", "Basolateral uptake")
-  reactions <-   addReaction(reactions, "Tca_cyto", "Tca_buffer", 
-                             "export_Tca_baso*Tca_cyto", "Basolateral efflux")
-  reactions <-   addReaction(reactions, "Tca_cyto", "Tca_canalicular", 
-                             "export_Tca_cana*Tca_cyto", "Canalicular efflux")
-  reactions <-   addReaction(reactions, "Tca_canalicular", "Tca_buffer", 
-                             "transport_Tca*Tca_canalicular", "Transport bile")
-  
-  mysteadies <- steadyStates(reactions)
-  print(mysteadies)
-  
-  x <- Xs(odemodel(reactions, compile = FALSE))
-  compile(x)
-  
-  parameters <- getParameters(x)
-  trafo <- `names<-`(parameters, parameters)
-  trafo <- repar("inner~steadyEqn", trafo, inner = names(mysteadies), steadyEqn = mysteadies)
-  
-  pSS <- P(trafo, condition = "steady")
-  
-  set.seed(2)
-  pars <- structure(runif( length(getParameters(pSS)), 0,1), names = getParameters(pSS))
-  
-  prediction <- (x*pSS)(seq(0,10, 0.1), pars, deriv = F)
-  plot(prediction)
-}
+steadies <- steadyStates(reactions)
+steadies
+
+# Parameter transformation that puts the model in steady state
+parameters <- getParameters(reactions)
+trafo <- repar(eqnvec(setNames(parameters, parameters)), "x ~ y",
+               x = names(steadies), y = steadies)
+trafo
+\dontshow{\}) # examplesIf}
 }
 \references{
 [1] \url{https://pmc.ncbi.nlm.nih.gov/articles/PMC4863410/}
@@ -190,6 +147,9 @@ whose rate constants such a block needs is left to the block on a retry.
 [2] \url{https://github.com/marcusrosenblatt/AlyssaPetit}
 
 [3] \url{https://github.com/Data2Dynamics/d2d}
+}
+\seealso{
+\code{\link[=repar]{repar()}}, \code{\link[=P]{P()}}
 }
 \author{
 Marcus Rosenblatt, \email{marcus.rosenblatt@fdm.uni-freiburg.de}

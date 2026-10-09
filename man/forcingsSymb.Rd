@@ -2,7 +2,7 @@
 % Please edit documentation in R/symbolics.R
 \name{forcingsSymb}
 \alias{forcingsSymb}
-\title{Return some useful forcing functions as strings}
+\title{Forcing Functions as Strings}
 \usage{
 forcingsSymb(
   type = c("Gauss", "Fermi", "1-Fermi", "MM", "Signal", "Dose"),
@@ -10,14 +10,28 @@ forcingsSymb(
 )
 }
 \arguments{
-\item{type}{Which function to be returned}
+\item{type}{The function, one of the names above. Defaults to \code{"Gauss"}.}
 
-\item{parameters}{Named vector, character or numeric. Replace parameters by the corresponding values
-in \code{parameters}.}
+\item{parameters}{Named character or numeric vector. Replaces the
+parameters named by it with its values. Defaults to \code{NULL}.}
 }
 \value{
-String with the function
+A character string with the expression.
 }
 \description{
-Return some useful forcing functions as strings
+Returns the expression of a common input function of \code{time}:
+\describe{
+\item{\code{"Gauss"}}{Gaussian peak with parameters \code{scale}, \code{mu}, \code{tau}.}
+\item{\code{"Fermi"}}{decreasing step with parameters \code{scale}, \code{mu}, \code{tau}.}
+\item{\code{"1-Fermi"}}{increasing step with parameters \code{scale}, \code{mu}, \code{tau}.}
+\item{\code{"MM"}}{saturating increase with parameters \code{slope}, \code{vmax}.}
+\item{\code{"Signal"}}{rise and decay with parameters \code{max1}, \code{max2}, \code{tau1},
+\code{tau2}.}
+\item{\code{"Dose"}}{smooth box of total amount \code{Dose} from \code{Tlag + Tinit}
+to \code{Tlag + Tinit + Tduration}.}
+}
+}
+\examples{
+forcingsSymb("Gauss")
+forcingsSymb("Fermi", parameters = c(scale = 1, tau = "0.5"))
 }

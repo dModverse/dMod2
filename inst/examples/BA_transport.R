@@ -33,9 +33,9 @@ x <- Xs(mymodel)
 
 # Define observables buffer and cellular
 observables <- eqnvec(buffer = "s*TCA_buffer", cellular = "s*(TCA_cana + TCA_cell)")
-g <- Y(observables, f = x, condition = NULL, compile = F, modelname = "obsfn_bamodel", attach.input = T)
+g <- Y(observables, f = x, condition = NULL, compile = F, modelname = "obsfn_bamodel", attachInput = T)
 
-# Define parameter transformations using define(), insert() and branch(). Old function repar also avaiable!
+# Parameter transformations via define(), insert() and branch()
 innerpars <- getParameters(x,g)
 trafo <- NULL %>%
   define("x~x", x = innerpars) %>% # identity
@@ -64,9 +64,7 @@ outerpars <- getParameters(p)
 pouter <- structure(rep(-1, length(outerpars)), names = outerpars)
 
 prd <- g*x*p
-# debugonce(x)
 times <- seq(0, 45, len = 300)
-# debugonce(g)
 out <- prd(times, pouter)
 plot(out, data)
 # plot(getDerivs(out))
@@ -102,18 +100,16 @@ p(pouter)
 # Objective function
 obj <- normL2(data, g * x * p) + constraintL2(pouter, sigma = 4)
 
-# # Fit 50 times, sample with sd=4 around pouter
+# Fit 50 times, sample with sd=4 around pouter
 outms <- mstrust(obj, pouter, sd = 4, name = "bamodel", cores=detectFreeCores(), fits=50, iterlim = 5e3)
 
 outms |> summary()
-# ## Later: Fitting on Knecht machines
+# Fitting in the background on a remote machine
 # outknecht <- runbg({
 #   mstrust(obj, pouter, sd = 4, name = "bamodelms", cores=detectFreeCores(), fits=100, iterlim = 1e3)
 # }, machine = "knecht1", filename = "bamodelms", link = T)
 # outknecht$check()
-# outknecht$get()
-# 
-# outms <- .runbgOutput$knecht1
+# outms <- outknecht$get()$knecht1
 
 out_frame <- as.parframe(outms)
 plotValues(out_frame) # Show "Waterfall" plot
@@ -123,8 +119,7 @@ bestfit <- as.parvec(out_frame)
 
 # Plot predictions along data
 plot((g*x*p)(times, bestfit), data)
-# 
-# Calculate Parameter Profiles and plot different contributions (for identifiablility only "data" is of interest)
+# Parameter profiles; for identifiability only the "data" contribution matters
 profiles_integrate <- profile(obj, bestfit, whichPar = names(bestfit), method = "integrate", cores = detectFreeCores(), 
                               limits = c(lower = -5, upper = 5), stepControl = list(stop = "data"))
 
@@ -134,8 +129,8 @@ profiles_optimize <- profile(obj, bestfit, whichPar = names(bestfit), method = "
                                                 atol = 1e-2, rtol = 1e-2, limit = 200, stop = "data"))
 
 proflist <- list(integrate = profiles_integrate, optimize = profiles_optimize) 
-# Integration based profiles fast but not exakt
-# Best practice: use method = "integrate" with reoptimize = TRUE in algoControl, then the integrate step is already close to the new optimum
+# Integration based profiles are fast but approximate; method = "integrate" with
+# reoptimize = TRUE in algoControl keeps each step close to the new optimum
 
 plotProfile(proflist, mode %in% c("data", "prior"))
 
@@ -160,7 +155,6 @@ trafo <- eqnvec() %>%
   define("k_reflux~10^K_REFLUX_OPEN", conditionMatch = "open") %>% 
   insert("S~0") # fixed structural non identifiablility
 
-# debugonce(P)
 p <- P(trafo, modelname = "bamodel_SS", compile = TRUE)
 
 outerpars <- getParameters(p)
@@ -169,7 +163,7 @@ p(pouter)
 plot((g*x*p)(times, pouter), data)
 
 # Objective function
-obj <- normL2(data, g*x*p, attr.name = "data") + constraintL2(pouter, sigma = 20, attr.name = "prior")
+obj <- normL2(data, g*x*p, attrName = "data") + constraintL2(pouter, sigma = 20, attrName = "prior")
 
 # Multistart fit
 outms <- mstrust(obj, pouter, sd = 4, iterlim = 1e3, name = "bamodel_ss", cores = detectFreeCores(), fits = 50)
@@ -191,12 +185,9 @@ profiles <- profile(obj, bestfit, whichPar = names(bestfit), method = "integrate
 plotProfile(profiles,mode %in% c("data", "prior"))
 plotPaths(profiles, whichPar = "K_REFLUX_OPEN")
 
-# Note: The parameter "reflux_open" is still practical non-identifiable
-# The profile is open to the left -> A possible reduction of the model would be the assumption of an immediate reflux, i.e. the limit case reflux_open -> infinity
-# An pragmatic but ugly way to circumvent the reformulation of the ODE system is to fix the reflux_open parameter to a high value. E.g. 1e3
-
-# One could also check the models ability to produce reliable predictions, by the calculation of prediction uncertainty with profile likelihood
-# The calculation of prediction confidence intervals is done at next
+# K_REFLUX_OPEN stays practically non-identifiable: its profile is open towards
+# instantaneous reflux, so fix k_reflux to a high value in the open condition.
+# Prediction confidence intervals from the profile likelihood follow.
 
 trafo <- eqnvec() %>%
   define("x~x", x = innerpars) %>% # identity
@@ -207,16 +198,15 @@ trafo <- eqnvec() %>%
   define("k_reflux~10^6", conditionMatch = "open") %>% 
   insert("S~0") # fixed structural non identifiablility
 
-# debugonce(P)
 p <- P(trafo, modelname = "prdfn_bamodel_final", compile = TRUE)
 
 ## Prediction uncertainty taken from validation profile --------------------------------------------------------------------------
 
-# choose sigma below 1 percent of the prediction in order to pull the prediction strongly towards d1
-obj.validation <- normL2(data, g * x * p, times = c(20), attr.name = "data") +
-  datapointL2(name = "TCA_cell", time = 20, value = "v", sigma = 0.01, attr.name = "validation", condition = "closed")
+# A sigma below 1 percent of the prediction pulls the prediction strongly towards d1
+obj.validation <- normL2(data, g * x * p, times = c(20), attrName = "data") +
+  datapointL2(name = "TCA_cell", time = 20, parameter = "v", sigma = 0.01, attrName = "validation", condition = "closed")
 
-# If sigma is not known, and you therefore decide to calculate prediction confidence intervals, just choose a very small sigma, in order to "pull strongly" on the trajectory
+# With unknown sigma, a very small one pulls the trajectory strongly
 obj.validation(c(v = 180, bestfit[getParameters(p)]))
 
 # refit
@@ -230,25 +220,25 @@ validation_profile <- profile(obj.validation, myfit$argument, "v", cores = 4, me
                                                 tolControl = list(ftol = 1e-5, mtol = 1e-5)),
                               cautiousMode = TRUE)
 
-# plotProfile(validation_profile) # This also plos the prediction colums, which is a bug in the code.
+# plotProfile(validation_profile) # also plots the prediction columns
 plotProfile(validation_profile, mode %in% c("validation", "data")) # Plots only the two contributions validation and data, along with the sum (total)
-# Is the contribution of validation small?? # If yes: The total aligns with a prediction profile
+# If the validation contribution is small, the total is a prediction profile
 
 # Confidence Interval of the prediction
 confint(validation_profile, val.column = "value")
 
 
-plotProfilesAndPaths(validation_profile, "v", ncols = 1)
+plotProfilesAndPaths(validation_profile, "v", ncol = 1)
 ## Prediction band (prediction uncertainty for several time points) --------------------------------------------------------------
-# Here we calculate a prediction CI for different timepoints. In the end we interpolate to a "prediction band"
+# Prediction CIs at several time points, interpolated to a band
 library(parallel)
 predprofs <- list()
 prediction_band <- do.call(rbind, mclapply(c(0,1,2,3,4,seq(5, 50, 2)), function(t) {
   
   cat("Computing prediction profile for t =", t, "\n")
   
-  obj.validation <- normL2(data, g * x * p, times = c(t), attr.name = "data") +
-    datapointL2(name = "TCA_cell", time = t, value = "v", sigma = 0.1, attr.name = "validation", condition = "closed")
+  obj.validation <- normL2(data, g * x * p, times = c(t), attrName = "data") +
+    datapointL2(name = "TCA_cell", time = t, parameter = "v", sigma = 0.1, attrName = "validation", condition = "closed")
   
   refit <- trust(obj.validation, parinit = c(v = 190, bestfit), rinit = 1, rmax = 10, iterlim = 1000)
   

@@ -2,7 +2,7 @@
 % Please edit documentation in R/eqnClass.R
 \name{addReaction}
 \alias{addReaction}
-\title{Add reaction to reaction table}
+\title{Add Reaction to an Equation List}
 \usage{
 addReaction(
   eqnlist,
@@ -26,24 +26,20 @@ of the reaction.}
 
 \item{description}{Optional description instead of \code{names(rate)}.}
 
-\item{compartment}{Character, compartment ID for the states this reaction
-\emph{introduces}, and the frame the reaction is written in. Defaults to
-\code{"defaultComp"}; created with volume \code{"1"} if new. States that already have a
-compartment keep it, use \code{\link[=assignCompartment]{assignCompartment()}} to place a species that does
-not belong to the compartment of the reaction first mentioning it.}
+\item{compartment}{character, compartment ID for the states this reaction
+introduces. Default \code{"defaultComp"}, created with volume \code{"1"} if new.
+States that already have a compartment keep it; see \code{\link[=assignCompartment]{assignCompartment()}}.}
 
-\item{rateCompartment}{Optional compartment ID naming the frame in which \code{rate}
-is a concentration-rate. Needed when educts span multiple compartments (e.g.
-membrane binding \code{L_ext + R_cyt -> Complex}); leave as \code{NA} (the default) to
-let \code{\link[=getFluxes]{getFluxes()}} infer the frame from the educts. When the educts do span
-compartments and \code{compartment} was given explicitly, that compartment is
-taken as the frame.}
+\item{rateCompartment}{compartment ID of the frame in which \code{rate} is a
+concentration rate. Default \code{NA} lets \code{\link[=getFluxes]{getFluxes()}} infer the frame from the
+educts. If the educts span several compartments and \code{compartment} is given
+explicitly, \code{compartment} is the frame.}
 }
 \value{
 An object of class \link{eqnlist}.
 }
 \description{
-Add reaction to reaction table
+Add Reaction to an Equation List
 }
 \examples{
 f <- eqnlist()
@@ -51,49 +47,37 @@ f <- addReaction(f, "2*A+B", "C + 2*D", "k1*B*A^2")
 f <- addReaction(f, "C + A", "B + A", "k2*C*A")
 
 
+## Equation list
+eq <- eqnlist()
+eq <- addReaction(eq, "A", "pA", "act_A * A * stimulus", "Phosphorylation of A")
+eq <- addReaction(eq, "pA", "A", "deact_A * pA", "Dephosphorylation of pA")
+eq <- addReaction(eq, "2*pA", "pA_pA", "form_complex_pA * pA^2", "Complex formation of pA")
+eq <- addReaction(eq, "B", "pB", "act_B * B * pA_pA", "Phosphorylation of B")
+eq <- addReaction(eq, "pB", "B", "deact_B * pB", "Dephosphorylation of pB")
 
-  # Write your example here. You can also add more Start..End blocks if needed.
-  # Please mask all output such as print() with the special tag
-  #    
-  # such that the test is not littered. Statements guarded by  are enabled
-  # in the example file which is extracted from this test file. To extract the
-  # example run
-  # on the R command line.
-    
-    ## Generate another equation list
-    eq <- eqnlist()
-    eq <- addReaction(eq, "A", "pA", "act_A * A * stimulus", "Phosphorylation of A")
-    eq <- addReaction(eq, "pA", "A", "deact_A * pA", "Deposphorylation of pA")
-    eq <- addReaction(eq, "2*pA", "pA_pA", "form_complex_pA * pA^2", "Complex formation of pA")
-    eq <- addReaction(eq, "B", "pB", "act_B * B * pA_pA", "Phosphorylation of B")
-    eq <- addReaction(eq, "pB", "B", "deact_B * pB", "Deposphorylation of pB")
-    
-    ## Extract data.frame of reactions
-    reactions <- getReactions(eq)
-     print(reactions)
-    
-    ## Get conserved quantities
-    cq <- conservedQuantities(eq$smatrix)
-     print(cq)
-    
-    ## Get fluxes
-    fluxes <- getFluxes(eq)
-     print(fluxes)
-    
-    ## Subsetting of equation list
-    subeq1 <- subset(eq, "pB" \%in\% Product)
-     print(subeq1)
-    subeq2 <- subset(eq, grepl("not_available", Description))
-     print(subeq2)
-    
-    ## Time derivatives of observables
-    observables <- eqnvec(pA_obs = "s1*pA", tA_obs = "s2*(A + pA)")
-    dobs <- dot(observables, eq)
-    
-    ## Combined equation vector for ODE and observables
-    f <- c(as.eqnvec(eq), dobs)
-     print(f)
-    
-    
-  
+## Data frame of reactions
+reactions <- getReactions(eq)
+print(reactions)
+
+## Conserved quantities
+cq <- conservedQuantities(eq$smatrix)
+print(cq)
+
+## Fluxes
+fluxes <- getFluxes(eq)
+print(fluxes)
+
+## Subsetting
+subeq1 <- subset(eq, "pB" \%in\% Product)
+print(subeq1)
+subeq2 <- subset(eq, grepl("not_available", Description))
+print(subeq2)
+
+## Time derivatives of observables
+observables <- eqnvec(pA_obs = "s1*pA", tA_obs = "s2*(A + pA)")
+dobs <- dot(observables, eq)
+
+## Combined equation vector for ODE and observables
+f <- c(as.eqnvec(eq), dobs)
+print(f)
 }

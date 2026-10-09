@@ -5,7 +5,7 @@
 \alias{wide2long.data.frame}
 \alias{wide2long.matrix}
 \alias{wide2long.list}
-\title{Translate wide output format (e.g., from ODE solver) into long format}
+\title{Translate Wide Format into Long Format}
 \usage{
 wide2long(out, keep = 1, na.rm = FALSE)
 
@@ -16,29 +16,33 @@ wide2long(out, keep = 1, na.rm = FALSE)
 \method{wide2long}{list}(out, keep = 1, na.rm = FALSE)
 }
 \arguments{
-\item{out}{A \code{data.frame}, \code{matrix}, or a \code{list} of matrices in wide format.}
+\item{out}{A data frame, matrix, or list of those, in wide format.}
 
-\item{keep}{Integer vector specifying the column indices to keep (default is \code{1}).}
+\item{keep}{Integer vector, the columns kept as identifiers. Defaults to 1,
+the time column.}
 
-\item{na.rm}{Logical. If \code{TRUE}, missing values are removed in the long-format output.}
+\item{na.rm}{Logical. \code{TRUE} removes rows with missing values. Defaults to
+\code{FALSE}.}
 }
 \value{
-A \code{data.frame} in long format with the following columns:
-\itemize{
-\item \code{"time"} -- values from \code{out[, 1]}.
-\item \code{"name"} -- column names from \code{out[, -1]}.
-\item \code{"value"} -- corresponding numeric values.
-\item \code{"condition"} -- if \code{out} was a list, contains the list names.
+A data frame with the kept columns and the columns
+\describe{
+\item{\code{name}}{the column names of the other columns of \code{out}.}
+\item{\code{value}}{their values.}
+\item{\code{condition}}{for a list, its names, or the list positions if it
+has none.}
 }
 }
 \description{
-Converts simulation output in wide format into a tidy long format suitable for
-plotting or further analysis (e.g., with \pkg{ggplot2}). The function assumes
-that the first column of \code{out} represents a time-like variable and the
-remaining columns contain values.
+Converts output in wide format, e.g. of a prediction, into long format with
+one row per value.
 }
-\details{
-If \code{out} is a list, the list names are added as an additional column named
-\code{"condition"}. This is particularly useful for plotting results from multiple
-simulation conditions with \pkg{ggplot2}.
+\examples{
+out <- cbind(time = 0:2, A = c(1, 0.5, 0.25), B = c(0, 0.5, 0.75))
+wide2long(out)
+wide2long(list(C1 = out, C2 = out))
+
+}
+\seealso{
+\code{\link[=long2wide]{long2wide()}}
 }

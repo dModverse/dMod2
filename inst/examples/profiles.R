@@ -1,60 +1,33 @@
+\donttest{
+old <- options(dMod.outdir = tempdir())
 
-\dontrun{
+## Decay model, observation and parameter transformation, compiled together
+f <- addReaction(eqnlist(), from = "A", to = "", rate = "k*A")
+x <- Xs(odemodel(f, modelname = "profile_x", compile = FALSE))
+g <- Y(c(y = "A"), f = x, attachInput = FALSE, modelname = "profile_g",
+       compile = FALSE)
+p <- P(eqnvec(A = "exp(logA)", k = "exp(logk)"), condition = "C1",
+       modelname = "profile_p", compile = FALSE)
+compile(x, g, p, output = "profile_example", cores = 1)
 
-## Parameter transformation
-trafo <- eqnvec(a = "exp(loga)", 
-                b = "exp(logb)", 
-                c = "exp(loga)*exp(logb)*exp(logc)")
-p <- P(trafo)
+## Data, objective and fit
+set.seed(1)
+times <- seq(0, 5, by = 0.5)
+data <- datalist(C1 = data.frame(
+  name = "y", time = times, sigma = 0.05,
+  value = 2 * exp(-0.5 * times) + rnorm(length(times), sd = 0.05)))
+obj <- normL2(data, g * x * p)
+myfit <- trust(obj, c(logA = 0, logk = 0), rinit = 1, rmax = 10)
 
-## Objective function
-obj1 <- constraintL2(mu = c(a = .1, b = 1, c = 10), sigma = .6)
-obj2 <- constraintL2(mu = c(loga = 0, logb = 0), sigma = 10)
-obj <- obj1*p + obj2
+## Profiles by integration and by repeated optimisation
+profiles.approx <- profile(obj, myfit$argument, whichPar = c("logA", "logk"))
+profiles.exact <- profile(obj, myfit$argument, whichPar = c("logA", "logk"),
+                          method = "optimize")
 
-## Initialize parameters and obtain fit
-pars <- c(loga = 1, logb = 1, logc = 1)
-myfit <- trust(obj, pars, rinit = 1, rmax = 10)
-myfit.fixed <- trust(obj, pars[-1], rinit = 1, rmax = 10, fixed = pars[1])
-
-## Compute profiles by integration method
-profiles.approx <- do.call(
-  rbind, 
-  lapply(1:3, function(i) {
-    profile(obj, myfit$argument, whichPar = i, limits = c(-3, 3),
-            method = "integrate")
-  })
-)
-
-## Compute profiles by repeated optimization 
-profiles.exact <- do.call(
-  rbind, 
-  lapply(1:3, function(i) {
-    profile(obj, myfit$argument, whichPar = i, limits = c(-3, 3),
-            method = "optimize")
-  })
-)
-
-## Compute profiles for fit with fixed element by integration method
-profiles.approx.fixed <- do.call(
-  rbind, 
-  lapply(1:2, function(i) {
-    profile(obj, myfit.fixed$argument, whichPar = i, limits = c(-3, 3),
-            method = "integrate",
-            fixed = pars[1])
-  })
-)
-
-## Plotting
-plotProfile(profiles.approx)
-plotProfile(list(profiles.approx, profiles.exact))
-plotProfile(list(profiles.approx, profiles.approx.fixed))
-
-plotPaths(profiles.approx, sort = TRUE)
-plotPaths(profiles.approx, whichPar = "logc")
-plotPaths(list(profiles.approx, profiles.approx.fixed), whichPar = "logc")
-
-## Confidence Intervals
+## Plots and confidence intervals
+plotProfile(list(approx = profiles.approx, exact = profiles.exact))
+plotPaths(profiles.approx, whichPar = "logk")
 confint(profiles.approx, val.column = "value")
 
+options(old)
 }
