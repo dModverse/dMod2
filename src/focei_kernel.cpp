@@ -33,7 +33,7 @@ using namespace Rcpp;
 #define FCONE
 #endif
 
-// Tolerance from a control list, accepting the legacy trust() spelling.
+// Tolerance from a control list, accepting the deprecated trust() alias.
 static double ctrl_tol(const List& ctrl, const char* key, const char* legacy,
                        double dflt) {
   if (ctrl.containsElementNamed(key))    return as<double>(ctrl[key]);
@@ -42,8 +42,7 @@ static double ctrl_tol(const List& ctrl, const char* key, const char* legacy,
 }
 
 
-// Smoke-test entry: one joint() call, returns OFV + ncalls for boundary
-// validation.
+// Smoke-test entry: one joint() call, returns OFV and ncalls.
 // [[Rcpp::export]]
 List focei_kernel_ping(Function joint_cb,
                        NumericVector pars,
@@ -79,11 +78,8 @@ static inline double vecs_at(const std::vector<double>& V, int K,
 }
 
 
-// The Moré-Sorensen subproblem and its eigendecomposition are shared with
-// trust_kernel.cpp; see trust_subproblem.h. Local signatures are kept so the
-// call sites below read unchanged. The shared solver additionally handles the
-// hard case (gradient orthogonal to the min-eigenspace), which the private
-// version did not.
+// Thin wrappers over the Moré-Sorensen subproblem and eigendecomposition in
+// trust_subproblem.h, shared with trust_kernel.cpp and covering the hard case.
 static inline void eigen_sym(double* A, int K, double* vals, double* vecs) {
   dmod::trust_internal::eigen_sym_local(A, K, vals, vecs);
 }
@@ -98,9 +94,7 @@ static inline void trust_subproblem(int K, const double* g,
 }
 
 
-// Per-subject inner trust loop. Calls joint(deriv=TRUE) per iteration;
-// `pars` is mutated in place at `eta_idx_global` to reflect the current eta_i,
-// other entries untouched.
+// Result of one subject's inner trust loop.
 struct InnerResult {
   std::vector<double> eta;        // K
   std::vector<double> grad;       // K (analytical gradient at the final eta)
@@ -137,21 +131,13 @@ static std::vector<int> name_indices(const CharacterVector& haystack,
 
 
 // Stage-2 `d log|H| / d theta` correction is computed in R via
-// `.computeFoceiCorrection` (R/nlme.R); the kernel calls it as an
+// `.normalFoceiCorrection` (R/nlmeNormal.R); the kernel calls it as an
 // `Rcpp::Function` callback once per outer iter (see `correction_cb`).
 
 
-// Fast inner objective for one subject. Bypasses normL2 / constraintL2 /
-// evalConditionResidual / res / nll. Multi-output and eta-dependent sigma are
-// supported: when sigma depends on eta (proportional/combined error models),
-// the corresponding columns of attr(err, "deriv") feed Js_k = d sigma/d eta_k
-// into the gradient and Hessian. The math is the M3-class likelihood (no BLOQ
-// correction) with the GN-without-deriv2 convention: residual second
-// derivatives of pred and sigma are dropped, but
-// all first-derivative cross terms (Part1/2/3) are retained.
-//
-// Per call: ONE model_cb + ONE err_cb. `Omega_inv` is precomputed once per
-// outer iter (chol pars don't change during inner trust) and reused.
+// Inner objective for one subject from one model_cb and one err_cb call, without
+// the normL2 / constraintL2 stack. Gauss-Newton: second derivatives of pred and
+// sigma are dropped, first-order cross terms of an eta-dependent sigma kept.
 struct EvalResult {
   double value;
   std::vector<double> grad;  // K
@@ -216,10 +202,8 @@ static EvalResult eval_one_subject_from(
   const int Dp0 = deriv_dim[0];  // model deriv: time
   const int Dp1 = deriv_dim[1];  // model deriv: observable
 
-  // Err deriv attribute: present when sigma is differentiable w.r.t. outer
-  // pars (i.e. virtually always under Y()-compiled errmodels). We index it
-  // only when (a) the attribute exists, (b) the row's o_idx_in_err_deriv > 0,
-  // and (c) the eta of interest has a column in the err deriv (> 0).
+  // The err deriv attribute is read only where it exists, the row has an
+  // err-deriv observable and the eta has a column in it (indices > 0).
   Nullable<NumericVector> err_deriv_attr_opt = err_i.attr("deriv");
   const bool         have_err_deriv = err_deriv_attr_opt.isNotNull();
   NumericVector      err_deriv_attr;
@@ -235,9 +219,8 @@ static EvalResult eval_one_subject_from(
   std::vector<double> grad(K, 0.0);
   std::vector<double> hess(K * K, 0.0);
 
-  // Pre-gather per-row predictions, sigmas, and Jacobian rows into packed
-  // row-major buffers that the shared residual kernel consumes directly.
-  // Stride is K (parameter dim) so each row's full Jacobian is contiguous.
+  // Per-row predictions, sigmas and Jacobian rows in packed row-major buffers
+  // of stride K, the layout the shared residual kernel reads.
   std::vector<double> pred_row(T);
   std::vector<double> sigma_row(T);
   std::vector<double> y_row(T);
@@ -281,17 +264,14 @@ static EvalResult eval_one_subject_from(
     }
   }
 
-  // Delegate the ALOQ residual math (Part0+1+2+3, sigma(eta), value+grad+hess)
-  // to the shared kernel. FOCEI never has BLOQ data, no exact-deriv2, and no
-  // Bessel correction, so the opts struct is minimal.
-  // The shared kernel accumulates the plain sum of squares alongside the
-  // likelihood; FOCEI does not report it.
+  // Shared ALOQ residual kernel without BLOQ, exact deriv2 or Bessel correction.
+  // Its plain sum of squares is not reported.
   double chi2_unused = 0.0;
   dmod::AccumOpts opts;
   opts.use_deriv2_exact    = false;
   opts.bloq_mode           = dmod::BloqMode::NONE;
   opts.sigma_depends_on_par = sigma_has_eta;
-  // Hessian parts: all on, matching the original eval_one_subject behaviour.
+  // All first-order Hessian parts.
   opts.aloq_part1 = opts.aloq_part2 = opts.aloq_part3 = true;
 
   dmod::accumulate_aloq_residual(
@@ -344,17 +324,9 @@ static EvalResult eval_one_subject(
 }
 
 
-// Rcpp-exported wrapper around eval_one_subject. Used by the joint-block
-// Bayesian sampler (Pfad B / Particle-Gibbs) to evaluate the per-subject
-// conditional posterior p(eta_i | y_i, theta, Omega) as an objlist:
-//   value    = data NLL_i(eta_i) + eta_i^T Omega^-1 eta_i + log|Omega|
-//   gradient = 2 J^T r / sigma^2 + 2 Omega^-1 eta_i (Fisher info + prior)
-//   hessian  = 2 J^T (1/sigma^2) J + 2 Omega^-1     (Gauss-Newton + prior)
-// All over the K eta entries of subject i.
-//
-// `pars_full` must contain placeholders for ALL parameters consumed by
-// model_cb (typically prdfn = g * x * p): structural pars + the K eta_i
-// for this subject. The eta slots are filled from `eta_block`.
+// Conditional objective of subject i over its K etas as an objlist: data NLL
+// + eta^T Omega^-1 eta + log|Omega|, Gauss-Newton Hessian. `pars_full` holds
+// every model_cb parameter; its eta slots are overwritten from `eta_block`.
 // [[Rcpp::export]]
 List focei_eval_one_subject(
     Function model_cb,
@@ -393,8 +365,6 @@ List focei_eval_one_subject(
 }
 
 
-// Per-subject inner trust using eval_one_subject. Returns the same
-// InnerResult shape as inner_trust_one_subject().
 // Eigen-floored log|H| and H_inv, shared by the serial and lock-step drivers.
 static InnerResult finish_inner(int K, const std::vector<double>& eta_curr,
                                 const std::vector<double>& grad,
@@ -433,6 +403,7 @@ static InnerResult finish_inner(int K, const std::vector<double>& eta_curr,
 }
 
 
+// Inner trust for one subject on eval_one_subject; writes the final eta into `pars`.
 static InnerResult inner_trust_one_subject(
     Function& model_cb,
     Function& err_cb,
@@ -509,7 +480,7 @@ static InnerResult inner_trust_one_subject(
     if (is_terminate) { converged = true; break; }
   }
 
-  // Write final eta into pars (for downstream joint-at-modes call)
+  // Final eta into pars for the joint call at the modes.
   IntegerVector eta_idx_in_pars = meta_i["eta_idx_in_pars"];
   for (int k = 0; k < K; ++k) {
     pars[eta_idx_in_pars[k] - 1] = eta_curr[k];
@@ -520,11 +491,9 @@ static InnerResult inner_trust_one_subject(
 }
 
 
-// Lock-step inner trust: every active subject takes one step per round, and
-// the round's predictions go out as a single batched callback. The subjects'
-// trust iterations are independent, so stepping them together is exact;
-// converged subjects drop out so the round count follows the slowest one that
-// is still moving.
+// Lock-step inner trust: every active subject takes one step per round and the
+// round's predictions go out as one batched callback. Subjects are independent,
+// so this is exact; converged ones drop out.
 static List inner_trust_lockstep(
     Function& predict_cb, NumericVector& pars_full, NumericMatrix& eta_warmstart,
     List& subject_meta_fast, CharacterVector& subjects,
@@ -698,10 +667,8 @@ static List inner_trust_lockstep(
 }
 
 
-// Batched per-subject inner trust using the fast objective. Mirrors
-// focei_inner_trust_batched but takes model_cb + err_cb + fast subject_meta
-// entries instead of joint_cb. Omega_inv is precomputed once in R per outer
-// iter (chol pars don't change inside inner trust).
+// Inner trust for all subjects on the fast objective. Omega_inv is fixed during
+// the inner loop, so R computes it once per outer iteration.
 // [[Rcpp::export]]
 List focei_inner_trust(Function model_cb,
                             Function err_cb,
@@ -745,8 +712,7 @@ List focei_inner_trust(Function model_cb,
                                 rinit, rmax, iterlim, ftol, mtol, eflr);
   }
 
-  // Same "freeze other subjects' etas at warmstart" semantics as the
-  // non-fast path: working copy per subject.
+  // Other subjects' etas stay at their warmstart: working copy per subject.
   std::vector<double> base_pars(pars_full.begin(), pars_full.end());
 
   NumericMatrix eta_modes(N, K);
@@ -826,10 +792,9 @@ List focei_inner_trust(Function model_cb,
 }
 
 
-// Fast variant of focei_outer_objfn: uses focei_inner_trust per-subject
-// and recovers OFV by summing per-subject fast values. One joint_cb call is
-// still required at modes for the OUTER structural gradient and Hessian
-// (Schur complement needs cross-block H[outer, eta]).
+// Outer FOCEI objective: OFV from the per-subject inner values, and one joint_cb
+// call at the modes for the outer gradient and the cross block H[outer, eta]
+// that the Schur complement needs.
 // [[Rcpp::export]]
 List focei_outer_objfn(Function model_cb,
                             Function err_cb,
@@ -870,7 +835,7 @@ List focei_outer_objfn(Function model_cb,
   for (int i = 0; i < n_outer; ++i)
     pars_full[outer_idx_full[i] - 1] = outer_pars[i];
 
-  // Fast inner trust (mutates pars_full to carry modes)
+  // Fast inner trust (mutates pars_full to hold the modes)
   List inner_res = focei_inner_trust(
       model_cb, err_cb, pars_full, eta_warmstart,
       subject_meta, Omega_inv_mat, Omega_log_det, fixed, inner_ctrl, predict_cb);
@@ -891,20 +856,8 @@ List focei_outer_objfn(Function model_cb,
   const double OFV = joint_value + sum_logdetH
                     - (double)N * (double)K * std::log(2.0);
 
-  // Only remaining full joint() call per outer iter, for the outer structural
-  // gradient + Hessian.
-  //
-  // Gauss-Newton, deliberately. H_inv_list below is the inverse of the GN
-  // inner Hessian, and the Laplace term uses log|H_GN|; the stage-2 implicit
-  // chain differentiates the same matrix it inverts, so joint_hessian must be
-  // the GN block too. Mixing an exact Newton block into that identity is
-  // inconsistent and measurably worsens agreement with the exact marginal
-  // (|grad| of bayesNLMEMarginal at the FOCEI mode: 0.024 GN vs 0.068 Newton
-  // on tests/testthat/test-bayesNLME.R).
-  //
-  // This used to be `correction_mode != "none"`, which was silently ignored:
-  // "+.objfn" dropped deriv2 before it reached the operands. Now that it does
-  // not, the choice has to be stated.
+  // Gauss-Newton joint Hessian: H_inv_list and log|H| use the GN inner block,
+  // and the stage-2 implicit chain must differentiate the same matrix it inverts.
   const bool want_deriv2 = false;
   List out_mode = as<List>(joint_cb(
       Rcpp::Named("pars")       = pars_full,
@@ -933,9 +886,8 @@ List focei_outer_objfn(Function model_cb,
   for (int i = 0; i < n_outer; ++i) grad_outer[i] = grad_full[outer_idx_grad[i]];
   grad_outer.attr("names") = outer_names;
 
-  // Stage-2 correction is honoured as eager-equivalent on the fast path:
-  // lagged-Taylor bookkeeping is not wired through here, so we always apply
-  // the current-iter analytical correction when the callback is provided.
+  // Stage-2 correction is applied eagerly at the current iterate whenever the
+  // callback is given.
   if (correction_mode != "none" && correction_cb_opt.isNotNull()) {
     Function correction_cb(correction_cb_opt);
     NumericVector corr = as<NumericVector>(correction_cb(
@@ -1005,10 +957,8 @@ List focei_outer_objfn(Function model_cb,
 }
 
 
-// Fast variant of focei_run: outer trust in C++ over the fast outer objfn.
-// joint_cb is called once per outer iter for the structural gradient +
-// Hessian; Omega_inv / Omega_log_det are recomputed each outer iter since
-// chol pars sit in outer_pars (chol par locations come via subject_meta).
+// Outer trust over focei_outer_objfn. Omega_inv and log|Omega| are rebuilt each
+// outer iteration from the Cholesky parameters in the outer vector.
 // [[Rcpp::export]]
 List focei_run(Function model_cb,
                     Function err_cb,
@@ -1209,9 +1159,3 @@ List focei_run(Function model_cb,
       Rcpp::Named("converged")  = converged,
       Rcpp::Named("trace")      = trace);
 }
-
-
-// Generic C++ trust-region outer loop around an arbitrary R objective.
-// Used by the C++ FOCEI adapter when correction != "none": the R-side
-// emObjfn(correction = ...) closure already carries the Stage-2 math, so we
-// just drive it with C++ trust step bookkeeping. objfn_cb must accept a

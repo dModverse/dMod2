@@ -1,29 +1,8 @@
 \dontrun{
 
-## ---------------------------------------------------------------------------
-## Marginal-likelihood L1/Laplace model selection: which parameters are
-## cell-line specific? (Becker et al. 2010, Epo receptor; 2 cell lines.)
-##
-## Classical workflow: L1-penalise the per-line parameter deviations, SCAN the
-## penalty strength lambda over a grid, run a multistart fit at every grid
-## point, and pick lambda by BIC. Cost: O(grid x multistart) fits.
-##
-## EM reframes the penalised fit as a nonlinear mixed-effects model with a
-## Laplace random-effect density: the deviations are random effects and the
-## single lambda is ESTIMATED by marginal maximum likelihood (one fit, no grid).
-## sparsify then walks a short nested chain of supports and keeps the one with
-## the smallest marginal -2 log L. It recovers the same parsimonious model the
-## BIC-scan would, at O(K) fits instead of O(grid x multistart). Theory:
-## notes/laplace_nlme_theory.Rmd.
-##
-## Reference encoding (Hauber et al. 2023 style): line A is the baseline
-## (theta = exp(mu)); line B carries the deviation d (theta = exp(mu + d)) and
-## |d| is penalised. d is a single coordinate, so trustL1 drives the deviation
-## of a shared parameter cleanly to zero.
-##
-## Ground truth here: kon and ke differ between the two lines (individual),
-## koff and kt are shared. Candidates = {kon, koff, kt, ke}.
-## ---------------------------------------------------------------------------
+## Which parameters are cell-line specific (Becker et al. 2010, Epo receptor)?
+## EM treats the penalised deviations as Laplace random effects and estimates
+## lambda by marginal likelihood; sparsify keeps the most parsimonious support.
 
 library(dMod2)
 outdir <- tempdir()          # keep generated C/C++ + shared objects out of the tree
@@ -59,7 +38,7 @@ e <- Y(eqnvec(y_ext = "sigma", y_mem = "sigma", y_int = "sigma"), g,
        modelname = "becker_err", compile = FALSE, deriv2 = TRUE,
        attachInput = FALSE, outdir = outdir)
 
-## 2. Reference encoding: candidates kon,koff,kt,ke carry a line-B deviation.
+## 2. Reference encoding: candidates kon,koff,kt,ke have a line-B deviation.
 dose  <- 1347.49                                       # init_Epo
 lines <- c("A", "B")
 trafo <- eqnvec(
@@ -114,9 +93,8 @@ cat("estimated lambda:", fit$lambda, "\n")
 print(round(fit$etaModes, 4))              # line-B deviations d_hat
 
 ## 5b. sparsify: nested-support chain, pick min marginal -2 log L. -----------
-##     The marginal integrates the deviations out, so a spurious individual
-##     parameter LOWERS the data -2logL but RAISES the marginal (Occam factor);
-##     the minimum of the chain is the parsimonious model.
+##     A spurious individual parameter lowers the data -2 log L but raises the
+##     marginal (Occam factor).
 sel <- sparsify(obj, center, fixed = fixed, method = "focei",
                  control = list(cm1 = list(iterlim = 50L)),
                  fits = 12, cores = 4, sd = 0.5, verbose = TRUE)

@@ -417,7 +417,7 @@ the prediction object as `attr(pred, "deriv2")` with axes
 $[t,\, \mathrm{obs},\, \eta,\, \psi]$.
 
 Third-order sensitivities of $y$ are deliberately *not* required: they
-would only enter if the full Newton Hessian, which carries an
+would only enter if the full Newton Hessian, which contains an
 $r_i \cdot \partial^2 y / \partial \eta^2$ term, were the object being
 differentiated. The Gauss-Newton substitution is precisely what keeps
 the Stage-2 correction within the reach of second-order AD, and is
@@ -664,7 +664,7 @@ $$
 \qquad M_i \;=\; \max_b \ell_b.
 $$
 
-Downstream moments use the same softmax weights with carried sign,
+Downstream moments use the same softmax weights with the sign kept,
 
 $$
 w^{\mathrm{sm}}_b \;=\; s_b \exp(\ell_b - \log L_i),
@@ -792,7 +792,7 @@ NONMEM's $\Omega$ update under SAEM, without sampling noise.
 
 ## Diagnostics
 
-Each call to the quadrature objective carries an `emDiag` attribute
+The result of each call to the quadrature objective has an `emDiag` attribute
 with components
 
 * `etaModes`, `HiList`: frozen modes and Hessians used to build the
@@ -833,7 +833,7 @@ $K \approx 4$ that is the binding constraint.
 Monte Carlo has the complementary profile. Drawing
 $\eta_i \sim q_i$ needs no Gaussian assumption, is not anchored at the
 mode, and costs the same per draw whether $K$ is 2 or 20. The price is
-that the E-step is now an estimate carrying variance, and the clean
+that the E-step is now an estimate with variance, and the clean
 Jensen argument of Section 4 no longer applies per iteration.
 
 The naive fix is MCEM: replace
@@ -999,12 +999,9 @@ the standard dMod composable function pipeline:
 ```{r obj-objfn}
 library(dMod2)
 
-# x: ODE solution (from odemodel + Xs).
-# g: observation function.
-# p: parameter transformation, with branch(..., apply = "insert") to
-#    route per-subject etas.
-# err: optional error model (errfn = NULL for fixed sigma in data).
-# om: omega with subject expansion, built via omega(..., subjects = ...).
+# x: ODE solution, g: observation function, p: per-subject trafo built with
+# branch(..., apply = "insert"), err: optional error model (NULL for fixed
+# sigma), om: omega(..., subjects = ...) with subject expansion.
 
 obj <- normL2(dlist, g * x * p, errmodel = err) +
          constraintL2(mu = 0, Omega = om)

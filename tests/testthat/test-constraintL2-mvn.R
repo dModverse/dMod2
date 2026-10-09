@@ -37,10 +37,7 @@ test_that("MVN gradient (diagonal Omega) follows analytic closed form", {
   chol_vals <- c(omega_a_a = log(0.5), omega_b_b = log(0.4))
   pars <- c(eta_vals, chol_vals)
 
-  # Diag Omega: omega_k = exp(chol_k).
-  # value         = sum_i sum_k (eta_ik / omega_k)^2 + N * 2 * sum_k chol_k
-  # dvalue/deta   = 2 * eta_ik / omega_k^2
-  # dvalue/dchol  = -2 * sum_i (eta_ik / omega_k)^2 + 2 * N
+  # Diagonal Omega with log-scale entries: closed-form gradient in eta and chol.
   omega_vec <- exp(chol_vals)
   eta_mat <- matrix(eta_vals, nrow = length(subjects), ncol = 2,
                     dimnames = dimnames(om$subjectEtas))

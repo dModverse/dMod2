@@ -1,17 +1,5 @@
-# ============================================================================
-# EM + msEM + diagnostic plots (the public NLME API).
-#
-# Sections:
-#   * EM method dispatch     - focei / quadrature / foceiQuadrature
-#   * etaSE / shrinkage           - Laplace-inverse-Hessian diagnostics
-#   * msEM                   - multi-start wrapper around EM
-#   * predict.em + plots     - data frame + ggplot diagnostic helpers
-#
-# The C++ FOCEI kernel itself is tested in test-focei.R; here we only
-# exercise the orchestrator and the public output shape.
-# ============================================================================
-
-## Context: "EM + msEM + diagnostic plots"  (context() is deprecated in testthat 3e; kept as a note)
+# EM, msEM and diagnostic plots: the public NLME API. The C++ FOCEI kernel is
+# tested in test-focei.R.
 
 
 # One-eta NLME models for every subject count the file uses, generated with
@@ -136,7 +124,7 @@ test_that("EM(method='foceiQuadrature') polishes a FOCEI fit without OFV blow-up
 })
 
 
-# ---- M1 API: reconstruction, emInit, validation, summary ---------------
+# ---- reconstruction, emInit, validation, summary -----------------------
 
 test_that("EM reconstructs model pieces from obj (slim signature)", {
   oldwd <- setwd(tempdir()); on.exit(setwd(oldwd))
@@ -165,7 +153,7 @@ test_that("EM errors on incomplete init and on removed arguments", {
   s <- .build_one_eta(23L, tag = "valid")
   expect_error(EM(s$obj, c(mu_pop = 2.0), method = "focei"), "Cholesky")
   init <- emInit(c(mu_pop = 2.0), s$om)
-  # Clean break: prdfn is no longer a formal.
+  # prdfn is not a formal of EM().
   expect_error(EM(s$obj, init, prdfn = s$prdfn, method = "focei"), "prdfn")
 })
 
@@ -480,9 +468,7 @@ test_that("plotTrace errors on focei fit, works on foceiQuadrature fit", {
 
 
 test_that("plotResiduals back-compat: parframe path still works", {
-  # Smoke-test that the existing plotResiduals(parframe, x, data, ...) entry
-  # point isn't broken by the EM dispatch shim. Just confirm the
-  # EM branch is bypassed for a non-EM input.
+  # A non-EM input bypasses the EM branch of plotResiduals().
   pf <- structure(data.frame(value = 1.0, index = 1L),
                   class = c("parframe", "data.frame"))
   expect_false(inherits(pf, "em"))

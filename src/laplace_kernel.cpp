@@ -98,27 +98,20 @@ static inline double weighted_tv(const double* e, const double* sizes, int G) {
   return s;
 }
 
-// Exact clustered marginal for one parameter over G groups via the dense/adaptive
-// Gauss-Hermite node loop. B (G x d), L (d x d, lower chol of the local cov), zc
-// (d, data-mode centre), U (M x d node coords), logw/z2/sgn (M). Evaluates the
-// data integral (centred at zc) and the prior normaliser (centred at 0) over the
-// same nodes, and returns value = -2 logI_data + 2 logI_prior plus the posterior
-// moments. Mirrors .aghqLogI + .clusterParamMarginal (all-positive weights path).
-//
-// The M per-node change-of-variables maps (each a tiny matrix-vector product) are
-// batched into three BLAS dgemm calls over all nodes at once: LU = sqrt(2) L U^T
-// (d x M), then the group values E = B (zc + LU) and EZ = B LU (G x M), which is
-// where a level-3 BLAS is worth its call overhead. The remaining per-node work
-// (the O(G^2) fusion TV, the log-sum-exp) has no useful matrix structure and stays
-// a scalar loop.
+// Exact clustered marginal for one parameter over G groups on Gauss-Hermite nodes:
+// value = -2 logI_data + 2 logI_prior, both integrals over the same nodes, plus the
+// posterior moments. Same result as .aghqLogI + .clusterParamMarginal in R.
 // [[Rcpp::export]]
 List clusterMarginalCpp(NumericVector H, NumericVector m, double lambda,
                         NumericVector sizes, NumericMatrix B, NumericMatrix L,
                         NumericVector zc, NumericMatrix U,
                         NumericVector logw, NumericVector z2, NumericVector sgn) {
+  // B (G x d) anchor basis, L lower Cholesky factor of the local covariance,
+  // zc data-mode centre, U (M x d) nodes with logw, z2, sgn per node.
   int G = B.nrow(), d = B.ncol(), M = U.nrow();
   const double s2 = std::sqrt(2.0), one = 1.0, zero = 0.0;
 
+  // The per-node change of variables runs as three dgemm calls over all nodes.
   // LU (d x M) = sqrt(2) * L (d x d) * U^T (d x M)
   std::vector<double> LU(static_cast<size_t>(d) * M);
   F77_CALL(dgemm)("N", "T", &d, &M, &d, &s2, L.begin(), &d, U.begin(), &M,

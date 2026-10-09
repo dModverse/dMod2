@@ -1,10 +1,6 @@
-## Stage-2 d log|H_GN| / d theta correction. Called as an Rcpp::Function from
-## the C++ FOCEI kernel once per outer iter (after the inner trust has
-## converged at the modes), then added into the outer gradient.
-##
-## Math identities: envelope theorem for d/d theta at eta = eta*(theta),
-## implicit chain via Newton hessian for d eta*/d theta, and the sigma-driven
-## contribution when the errfn depends on theta or eta.
+## Stage-2 d log|H_GN| / d theta correction, called from the C++ FOCEI kernel
+## once per outer iteration at the converged modes: envelope theorem at
+## eta*(theta), implicit chain for d eta*/d theta, and the sigma terms.
 .normalFoceiCorrection <- function(full_pars, joint_hessian, fixed,
                                     outer_names, H_inv_list,
                                     prdfn, errfn, omega,
@@ -14,9 +10,8 @@
   Q <- length(outer_names)
   correction0 <- setNames(numeric(Q), outer_names)
 
-  # Shared across subjects (prediction-independent): d Omega^{-1} / d chol,
-  # in closed form. buildL() writes one entry per Cholesky parameter -- exp(v)
-  # on the diagonal, v off it -- so dL/dc has a single nonzero and
+  # Subject-independent d Omega^-1 / d chol: each Cholesky parameter sets one
+  # entry of L (exp(v) on the diagonal, v off it), so
   #   d Omega^-1 / dc = -Omega^-1 (dL L' + L dL') Omega^-1.
   chol_in_outer <- intersect(outer_names, omega$cholPars)
   dOmega_inv_dchol <- list()
@@ -33,14 +28,8 @@
     }
   }
 
-  # Per-subject Stage-2 contribution: predict the subject, build its error model,
-  # accumulate its correction into a local vector, then Reduce() in subject order
-  # (bit-identical to a serial running sum). This is the dominant eager-correction
-  # cost -- one deriv2 ODE solve per subject -- so fork it over `cores`.
-  # Predict each subject only on its own time grid (up to that subject's last
-  # observation): integrating short-follow-up subjects out to the global
-  # horizon would waste ODE work, and the correction reads only the subject's
-  # own data times.
+  # Each subject is predicted only up to its last observation, since the
+  # correction reads only its own data times.
   t_pred <- lapply(subjects, function(cn)
     sort(unique(c(0, data_per_subject[[cn]]$time))))
   # One batched call instead of forking a deriv2 solve per subject: the fork
@@ -262,7 +251,7 @@
 #'   default `Inf` = off).
 #'
 #' @return A callable of class `c("emobjfn", "objfn", "fn")`. Calling it on
-#'   `pars` returns an [objlist] with an `emDiag` attribute carrying
+#'   `pars` returns an [objlist] with an `emDiag` attribute holding
 #'   quadrature diagnostics.
 #'
 #' @seealso [EM], [omega]
@@ -286,13 +275,9 @@ emObjfn <- function(obj, control = list()) {
 
 
 
-## Internal quadrature-method emObjfn constructor.
-##
-## Closure state separates the frozen E-step (nodes_per_subject, etaModes,
-## chol_value, current_level) from the trust-varying structural pars. Callers
-## refresh the frozen state via attr(em, "rebuildQuadrature")(psiFull, level)
-## between outer iterations and run trust(em, init = psi_structural) with the
-## integration grid held fixed.
+## Quadrature-method emObjfn. The frozen E-step state is refreshed between
+## outer iterations by attr(em, "rebuildQuadrature")(psiFull, level), and
+## trust(em, psi_structural) runs on the fixed integration grid.
 .normalQuadratureObjfn <- function(obj, omega, prdfn, data, errfn,
                                 level, cores, pruneTol = Inf) {
   if (!inherits(obj, "objfn"))
@@ -328,12 +313,9 @@ emObjfn <- function(obj, control = list()) {
   converged_state   <- logical(N)
   iter_state        <- integer(N)
 
-  # E-step: find every subject's posterior mode and eigen-floored Gauss-Newton
-  # Hessian in one call to the compiled focei_inner_trust kernel (built lazily
-  # from the model on first use), then place the adapted Smolyak nodes on each
-  # subject's local Gaussian. This kernel is the sole mode-finder: it bypasses
-  # the per-subject R trust / normL2 glue and returns the same Gauss-Newton
-  # curvature the R path used, so it is a pure speedup.
+  # E-step: posterior modes and eigen-floored Gauss-Newton Hessians of all
+  # subjects from the compiled focei_inner_trust kernel (built on first use),
+  # then the adapted Smolyak nodes are placed on each local Gaussian.
   rebuildQuadrature <- function(psiFull, level_new = NULL,
                                 fixed = NULL, eta_init = NULL) {
     if (!is.null(level_new)) current_level <<- as.integer(level_new)
@@ -474,20 +456,17 @@ emObjfn <- function(obj, control = list()) {
 
 
 
-# .fitNormal S3 constructor. Bundles solver output with the prdfn / data /
-# omega references that predict.em and the diagnostic plot
-# helpers (in plots.R) consume.
+# .fitNormal S3 constructor: solver output plus the prdfn, data and omega
+# references that predict.em and the diagnostic plots use.
 .normalFitMake <- function(argument, value, gradient, hessian, Omega, etaModes,
                          converged, iterations, emDiag, method,
                          foceiStart = NULL, stageTrace = NULL,
                          prdfn = NULL, data = NULL, omega = NULL,
                          errfn = NULL) {
   etaInfo  <- .normalEtaInfo(emDiag, Omega, etaModes)
-  # OFV convention (identical across the FOCEI and quadrature paths): value is
-  # the plain-ML marginal -2 log L with every 2*pi constant retained. This
-  # equals nlmixr2's -2LL and NONMEM's
-  # "OFV with constant". NONMEM's default OBJ drops the data-side Sum log(2*pi),
-  # so value_nonmem re-derives that raw-.lst-comparable number.
+  # OFV: plain-ML marginal -2 log L with every 2*pi constant, as nlmixr2's -2LL
+  # and NONMEM's "OFV with constant". value_nonmem drops the data-side
+  # sum log(2 pi) like NONMEM's default OBJ.
   n_obs <- .normalNObs(data)
   value_nonmem <- if (!is.na(n_obs) && !is.null(value))
                     value - n_obs * log(2 * pi) else NA_real_
@@ -527,10 +506,8 @@ emObjfn <- function(obj, control = list()) {
   as.integer(n)
 }
 
-# Posterior-mode standard errors and shrinkage diagnostics for the per-subject
-# random effects. Caller passes the full emDiag (which carries HInvList from
-# either the R or C++ Laplace path); returns NULLs when the inverse Hessian
-# list is unavailable (e.g. quadrature method).
+# Posterior-mode standard errors and shrinkage of the random effects from the
+# inverse Hessians in emDiag; NULLs when those are unavailable (quadrature).
 .normalEtaInfo <- function(emDiag, Omega, etaModes) {
   out <- list(etaSE = NULL, shrinkage = NULL)
   if (is.null(emDiag) || is.null(emDiag$HInvList) || is.null(etaModes))
@@ -564,10 +541,9 @@ emObjfn <- function(obj, control = list()) {
 }
 
 
-# Synthetic err callable for the case where the user supplied no errfn
-# and instead set `data$sigma` directly. Returns a prdlist whose matrix has
-# the per-observation sigmas (from the data) padded onto the prediction's
-# time grid. No `deriv` attribute, so the C++ kernel treats `dsigma/deta = 0`.
+# Stand-in err callable when sigmas come from `data$sigma`: per-observation
+# sigmas padded onto the prediction grid, without a `deriv` attribute, so the
+# kernel takes dsigma/deta = 0.
 .normalStaticErr <- function(data) {
   data_per_subject <- lapply(seq_along(data), function(i) {
     d <- data[[i]]
@@ -602,11 +578,9 @@ emObjfn <- function(obj, control = list()) {
 }
 
 
-# Builds the long-format subject_meta consumed by focei_inner_trust / the
-# C++ kernel. One row in t_idx_in_pred / o_idx_in_pred / y_data / ... per
-# observed data point of the subject, covering all observables. eta_idx_in_*
-# arrays are length K (one entry per random effect). Values 0 mark "no
-# contribution" (e.g. an eta does not appear in the err prdfn's deriv).
+# Long-format subject_meta for the C++ kernel: one row per observed data point
+# over all observables, eta_idx_in_* of length K. A 0 index marks no
+# contribution.
 .normalFastMeta <- function(prdfn, errfn, data, subjects,
                            eta_names_list, pars_full_names, pars_probe) {
   N <- length(subjects)
@@ -680,10 +654,8 @@ emObjfn <- function(obj, control = list()) {
 }
 
 
-# Internal: run the C++ FOCEI kernel and package its output as .fitNormal.
-# Used by .fitNormal(method = "focei"). Always uses the fast-inner C++ path
-# with eager Stage-2 correction, calling .normalFoceiCorrection as an
-# Rcpp::Function once per outer iter.
+# Run the C++ FOCEI kernel with eager Stage-2 correction (.normalFoceiCorrection
+# once per outer iteration) and package the output as .fitNormal.
 .normalFocei <- function(obj, omega, init, prdfn, data, errfn,
                          fixed = NULL,
                          innerControl = list(), trustControl = list(),
@@ -697,10 +669,8 @@ emObjfn <- function(obj, control = list()) {
     stop(".normalFocei: omega has no subject expansion. Call ",
          "omega(..., subjects = ...).")
 
-  # When the user did not supply an errfn but recorded sigma in the data
-  # itself, wrap the per-row sigmas into a synthetic obsfn-like callable.
-  # The fast-inner kernel treats this as "sigma constant in eta" (no err
-  # deriv attribute -> Js = 0).
+  # Sigmas recorded in the data become a synthetic err callable, which the
+  # kernel treats as constant in eta.
   if (is.null(errfn)) errfn <- .normalStaticErr(data)
 
   K        <- omega$K
@@ -768,10 +738,9 @@ emObjfn <- function(obj, control = list()) {
   lockstep <- !isFALSE(control_cpp$lockstep) &&
     !isFALSE(getOption("dMod.focei.lockstep", TRUE))
 
-  # Stage-2 volume correction. The only part of FOCEI that needs second
-  # derivatives of the prediction -- the inner mode, the Gauss-Newton Hessian
-  # and the Schur block are all products of first derivatives. Off by default,
-  # so a chain built without deriv2 fits out of the box.
+  # Stage-2 volume correction, the only part of FOCEI that needs second
+  # derivatives of the prediction. Off by default, so a chain without deriv2
+  # fits out of the box.
   correction <- isTRUE(secondOrderCorrection)
 
   fit <- focei_run(model_cb = prdfn, err_cb = errfn,
@@ -894,18 +863,9 @@ emObjfn <- function(obj, control = list()) {
 }
 
 
-# Deterministic Laplace-EM (ECM) estimator. Reuses the quadrature machinery at
-# the single-node level L = K, where the adaptive Smolyak rule collapses to the
-# Laplace approximation. Per ECM iteration:
-#   E-step  : rebuild per-subject modes eta_i* and eigen-floored H_i (freezes
-#             the current Omega through psi[chol_pars]).
-#   CM-1    : trust() on the (Laplace) marginal `em` over the structural pars.
-#   CM-2    : closed-form Omega from the *covariance-corrected* second moments
-#             M_i = eta_i* eta_i*^T + H_i^{-1}, via updateOmegaChol(). The
-#             H_i^{-1} term is exactly what separates Laplace-EM from ITS
-#             (which drops it and systematically under-estimates Omega).
-# Same CM-1/CM-2 skeleton and .fitNormal packaging as .normalQuadrature; only the
-# fixed level and the covariance-corrected CM-2 moments differ.
+# Laplace-EM (ECM): quadrature at the single-node level L = K, i.e. Laplace.
+# E-step modes and eigen-floored H_i, CM-1 trust() on the marginal, CM-2
+# Omega from the covariance-corrected moments eta_i* eta_i*^T + H_i^-1.
 .normalLaplaceEM <- function(em, init, fixed = NULL,
                           epsEcm = 1e-4, epsOfvRel = 1e-5,
                           maxEcm = 200L, maxCm1Iter = 30L,
@@ -959,11 +919,8 @@ emObjfn <- function(obj, control = list()) {
     if (deltaPsi < epsEcm || deltaOfvRel < epsOfvRel) { conv <- TRUE; break }
   }
 
-  # Report an accurate marginal -2 log L at the converged point: the single-node
-  # (level-K) Laplace value used to drive the ECM is under-resolved and can sit
-  # a few units above the true marginal, so evaluate the final value / gradient /
-  # Hessian at level K+2 (which matches the FOCEI marginal). The *estimate* is
-  # still the Laplace-EM fixed point; only the reported OFV is refined.
+  # The level-K value is under-resolved, so the reported value, gradient and
+  # Hessian come from level K + 2 at the Laplace-EM fixed point.
   reportLevel <- as.integer(K + 2L)
   final_e   <- rebuild(psi, level_new = reportLevel, fixed = fixed,
                        eta_init = e_info$etaModes)
@@ -1006,21 +963,9 @@ emObjfn <- function(obj, control = list()) {
 }
 
 
-# Stochastic-approximation EM (SAEM). Uses the per-subject eta objectives
-# (.buildBayesSubjectMeta + .makeSubjectEtaObj) with .rwmEta for a stochastic
-# E-step, and updateOmegaChol for the closed-form Omega M-step.
-# Per iteration k:
-#   E-step (stochastic): draw eta_i ~ p(eta_i | y_i, theta, Omega) with a short
-#     random-walk-Metropolis chain (nMcmc steps), one draw per subject.
-#   SA    : Robbins-Monro update of the sufficient statistic
-#     S <- S + gamma_k (1/N sum_i eta_i eta_i^T - S), gamma_k = 1 during the
-#     exploration phase (k <= nBurnin) then 1/(k - nBurnin) for convergence.
-#   CM-2  : Omega <- S via updateOmegaChol() (closed form).
-#   CM-1  : structural theta via a trust() on the complete-data objective at the
-#     drawn etas, RM-damped in the convergence phase.
-# The final value/gradient/Hessian/etaModes are reported from an accurate
-# level-(K+2) quadrature marginal at the converged point (FOCEI-comparable),
-# exactly as .normalLaplaceEM does.
+# SAEM: random-walk Metropolis E-step per subject, Robbins-Monro statistic
+# S <- S + gamma_k (mean eta_i eta_i^T - S), CM-2 Omega <- S, CM-1 trust() at
+# the drawn etas. The reported marginal is the level K + 2 quadrature.
 .normalSaem <- function(obj, omega, init, prdfn, data, errfn, fixed = NULL,
                      nBurnin = 200L, nEM = 200L, nMcmc = 10L,
                      cm1Control = list(), cores = 1L, verbose = TRUE) {
@@ -1079,9 +1024,8 @@ emObjfn <- function(obj, control = list()) {
       ei <- as.numeric(res[[i]]$eta)
       parsFull[meta$eta_names[[i]]] <- ei
       Msum <- Msum + tcrossprod(ei)
-      # Smooth Robbins-Monro stepsize adaptation toward a 0.4 acceptance target.
-      # (A crude divide/multiply rule collapses the step under the noisy
-      # few-sample acceptance estimate; the smooth log-scale rule is stable.)
+      # Smooth Robbins-Monro stepsize adaptation on the log scale toward a 0.4
+      # acceptance target, stable under the noisy acceptance estimate.
       a <- res[[i]]$accept
       if (is.finite(a))
         eta_step[i] <- min(max(eta_step[i] * exp(0.3 * (a - 0.4)), 0.02), 5)
@@ -1143,11 +1087,8 @@ emObjfn <- function(obj, control = list()) {
 }
 
 
-# Recover the model pieces (prdfn, data, errfn, omegaSpec) from a composed
-# objective. normL2() and constraintL2_mvn() stamp these as attributes at
-# construction and +.objfn coalesces them, so a well-formed NLME objective
-# `normL2(data, g*x*p, errmodel = e) + constraintL2(om)`
-# self-describes and callers never re-pass the pieces.
+# Recover prdfn, data, errfn and omegaSpec from a composed objective: normL2()
+# and constraintL2_mvn() stamp them as attributes and +.objfn coalesces them.
 .normalReconstruct <- function(obj) {
   if (!inherits(obj, "objfn"))
     stop(".fitNormal: `obj` must be an objfn.", call. = FALSE)
@@ -1161,7 +1102,7 @@ emObjfn <- function(obj, control = list()) {
          "normL2(data, g*x*p, errmodel = e) + constraintL2(om).",
          call. = FALSE)
   if (is.null(omega))
-    stop(".fitNormal: `obj` carries no random-effects prior. Add ",
+    stop(".fitNormal: `obj` has no random-effects prior. Add ",
          "+ constraintL2(omega(..., subjects = ...)).",
          call. = FALSE)
   if (is.null(omega$subjectEtas))
@@ -1413,7 +1354,7 @@ print.em <- function(x, ...) {
 }
 
 ## Methods below are Gaussian-random-effect (omega) specific; a penaltyL1 fit
-## does not carry an Omega / Fisher information, so guard with a clear message.
+## does not hold an Omega / Fisher information, so guard with a clear message.
 .emRequireOmega <- function(x, fn) {
   if (!identical(x$prior, "omega"))
     stop(fn, "() is implemented for omega() fits; a penaltyL1() fit exposes ",
@@ -1506,10 +1447,8 @@ confint.em <- function(object, parm = NULL, level = 0.95, ...) {
              row.names = NULL)
 }
 
-# Structural-parameter standard errors from the outer observed information.
-# Reuses vcov() (statistics.R), which returns solve(0.5 * hessian) under dMod's
-# -2 log L convention. Robust to partial Hessians (name-matched) and to
-# non-positive diagonals (returned as NA).
+# Structural standard errors from the outer observed information via vcov(),
+# name-matched for partial Hessians, NA for non-positive diagonals.
 .normalStructuralSE <- function(object) {
   est <- object$argument
   se  <- setNames(rep(NA_real_, length(est)), names(est))
@@ -1711,9 +1650,8 @@ print.summary.em <- function(x, digits = 4, ...) {
   Z_prior       <- forwardsolve(L_omega, t(nodesSubj$etaNodes))   # K x B
   log_prior_all <- log_norm_prior - 0.5 * colSums(Z_prior^2)
 
-  # Each node is its own nonlinear IVP, so they cannot be fused into one solve
-  # -- but they are independent, so they go out as one batch against the same
-  # condition. Bit-identical to the per-node form.
+  # Nodes are independent nonlinear IVPs, so they go out as one batch against
+  # the same condition.
   pars_nodes <- lapply(seq_len(B), function(b) {
     fp <- full_pars
     fp[eta_i_names] <- nodesSubj$etaNodes[b, ]
@@ -1741,7 +1679,7 @@ print.summary.em <- function(x, digits = 4, ...) {
 
     # log integrand = log|W_b| + log p(y|eta_b) + log p(eta_b|Omega); the prior
     # term is precomputed for all nodes above (log_prior_all).
-    # log p(y|eta_b) = -0.5 * res_b$value (the value carries -2 log p form).
+    # log p(y|eta_b) = -0.5 * res_b$value (the value is in -2 log p form).
     log_int[b] <- nodesSubj$logAbsWeights[b] - 0.5 * res_b$value + log_prior_all[b]
 
     if (with_grad) {
@@ -1801,11 +1739,9 @@ print.summary.em <- function(x, digits = 4, ...) {
 }
 
 
-# Drop heavy state (emDiag, prdfn, data, omega, errfn, foceiStart,
-# stageTrace) from an .fitNormal so a parlist of .msfitNormal results stays small.
-# Keeps everything as.parframe.parlist + summary.parlist + downstream
-# diagnostics consume: argument, value, gradient, hessian, omega, etaModes,
-# etaSE, shrinkage, converged, iterations, method.
+# Drop heavy state (emDiag, prdfn, data, omega, errfn, foceiStart, stageTrace)
+# from a .fitNormal so a parlist of .msfitNormal results stays small; keeps
+# what as.parframe, summary and the diagnostics read.
 .stripNormalFit <- function(fit) {
   keep <- c("argument", "value", "gradient", "hessian",
             "omega", "etaModes", "etaSE", "shrinkage",
@@ -1927,12 +1863,8 @@ print.summary.em <- function(x, digits = 4, ...) {
   }
   cores <- min(fits, cores)
 
-  # Nested-parallelism guard. .msfitNormal forks `cores` FIT workers; each inner
-  # .fitNormal may itself fork `subject_cores` SUBJECT workers via
-  # control$<method>$cores (default 1 = fits-only). The two levels compose
-  # (e.g. 4 fits x 4 subjects = 16 processes) but their product must stay below
-  # the physical core count or the machine oversubscribes. Warn, do not clamp:
-  # the user opted into the nesting explicitly.
+  # Fit workers times subject workers (control$<method>$cores) must stay below
+  # the physical core count. Warn, do not clamp: the nesting is the user's.
   inner_cores <- max(1L,
                      control$focei$cores      %||% 1L,
                      control$quadrature$cores %||% 1L,
@@ -1966,10 +1898,8 @@ print.summary.em <- function(x, digits = 4, ...) {
 
   doOne <- function(i) {
     init_i <- parInitList[[i]]
-    # Retry: on a try-error, draw a fresh parinit and re-run .fitNormal, up to
-    # nTries times. parframe-supplied centers skip retry (rows are taken as
-    # given). Pequil/Pimpl warm-start caches are flushed between attempts so
-    # the retry does not inherit a dead basin from the previous start.
+    # Retry a try-error from a fresh parinit up to nTries times, flushing the
+    # Pequil/Pimpl warm-start caches; parframe-supplied centers are not retried.
     max_tries <- if (isTRUE(retry) && !is.parframe(center)) as.integer(nTries) else 1L
     t0 <- Sys.time()
     fit <- NULL
@@ -2021,9 +1951,8 @@ print.summary.em <- function(x, digits = 4, ...) {
     fit
   }
 
-  # Parallel dispatch. Fork on Unix; PSOCK + foreach on Windows, and also when
-  # a condition axis is asked for -- a forked worker cannot carry one. Falls
-  # back to serial when cores == 1 or fits == 1.
+  # Fork on Unix; PSOCK + foreach on Windows and when a condition axis is
+  # requested, which a forked worker cannot run. Serial when cores or fits is 1.
   .cc <- .splitCores(cores, "fits")
   coresConditions <- .cc$conditions; cores <- .cc$outer
   if (!is.null(coresConditions) && cores == 1L)

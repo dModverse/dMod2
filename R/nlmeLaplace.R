@@ -1,19 +1,6 @@
-## .fitLaplace: regularised NLME fits with a marginally-estimated penalty strength.
-##
-## .fitLaplace reframes the L1-penalised "which parameters are individual-specific"
-## fit as a nonlinear mixed-effects model with a Laplace random-effect density
-## (notes/laplace_nlme_theory.Rmd): the per-subject deviations are random
-## effects, the single penalty strength `lambda` is a parameter of that density
-## estimated by marginal maximum likelihood (no scan, no per-lambda multistart),
-## the outer marginal is evaluated with FOCE(I) and the inner conditional mode
-## with trustL1.
-##
-## The penalty structure is declared with penaltyL1() (penaltyClass.R)
-## and stamped onto the objective by constraintL1(); the fit is assembled exactly
-## like an omega() nlme fit, i.e. (via the exported EM()/emInit() dispatchers)
-##   obj  <- normL2(dlist, g*x*p, errmodel = e) + constraintL1(pen)
-##   init <- emInit(structural, pen)
-##   fit  <- EM(obj, init, method = "focei")
+## .fitLaplace: NLME fit with a Laplace random-effect density whose strength
+## `lambda` is estimated by marginal maximum likelihood, FOCE(I) outside and
+## trustL1 for the inner mode. The objective is normL2(...) + constraintL1(pen).
 
 
 ## Recover the model pieces + penalty spec from a composed .fitLaplace objective.
@@ -31,7 +18,7 @@
          "normL2(data, g*x*p, errmodel = e) + constraintL1(pen).",
          call. = FALSE)
   if (is.null(penalty))
-    stop(".fitLaplace: `obj` carries no penalty. Add ",
+    stop(".fitLaplace: `obj` has no penalty. Add ",
          "+ constraintL1(penaltyL1(..., subjects = ...)).", call. = FALSE)
   if (is.null(penalty$subjectEtas))
     stop(".fitLaplace: the penalty in `obj` has no subject expansion. Build it with ",
@@ -112,20 +99,9 @@
 }
 
 
-## d diag(H)/d{theta,eta} of one subject's data Hessian, in closed form.
-##
-## H is the Gauss-Newton block, H = c * G' diag(1/sigma^2) G with
-## G[t,k] = d yhat_t / d eta_k, so its derivative needs only second
-## derivatives of the prediction -- no third ones, and no differences:
-##
-##   d H[k,k]/d p = c * ( 2 sum_t G[t,k] W[t,k,p] / sigma_t^2
-##                        - 2 sum_t G[t,k]^2 dsigma_p,t / sigma_t^3 )
-##
-## with W = d2 yhat / d eta_k d p. `c` is recovered from the objective's own
-## Hessian rather than assumed, which also checks the reconstruction.
-##
-## Returns list(dth, deta, Hd) with Hd the reconstructed diagonal, or NULL when
-## the chain cannot supply deriv2.
+## d diag(H)/d{theta,eta} of one subject's Gauss-Newton Hessian in closed form,
+## from second derivatives of the prediction; `c` comes from the objective's
+## own Hessian. Returns list(dth, deta, Hd), or NULL without deriv2.
 .laplaceHdDerivs <- function(obj_s, full_mode, eta_names_i, struct_names,
                              cores = getOption("dMod.cores", 1L)) {
   prd    <- attr(obj_s, "prdfn",  exact = TRUE)
@@ -213,12 +189,9 @@
 }
 
 
-## Build a data-only per-subject objfun eta -> objlist. `resObj_s` MUST be a
-## normL2 carrying this subject's data alone: each subject needs its own marginal,
-## and a shared all-subject objfn returns the sum. The outer (structural + error)
-## parameters are held at `outer_struct`; all etas start at 0 and only subject i's
-## block varies. Value/gradient/hessian follow dMod's -2 log L convention, so they
-## feed .laplaceSubjectMarginal() directly.
+## Data-only per-subject objfun eta -> objlist at fixed `outer_struct`.
+## `resObj_s` must hold this subject's data alone, since a shared objfn returns
+## the sum over subjects. Values follow the -2 log L convention.
 .laplaceSubjectObjfun <- function(resObj_s, outer_struct, all_eta_names,
                                   eta_names_i) {
   base_full <- c(outer_struct,
@@ -248,22 +221,9 @@
 }
 
 
-## Evaluate the outer marginal objective sum_i -2 log L_i at theta = (structural,
-## error, lambda). With grad = TRUE also returns the outer gradient. Two modes:
-##   secondOrderCorrection = FALSE (FOCE): d(-2logL)/d theta = data gradient at the mode plus
-##     the first-moment (Fisher) cross term Hcross (E[eta]-etahat); lambda closed
-##     form -2 sum_k (1/lambda - E|eta_k|). Misses the volume + mode-shift terms.
-##   secondOrderCorrection = TRUE (FOCEI): the EXACT total derivative of the Laplace-approx
-##     marginal value, d M/d theta = explicit(eta frozen) + implicit mode shift
-##     (d M/d etahat)(d etahat/d theta), including lambda. The volume term's
-##     d Hd/d{theta,eta} comes from .laplaceHdDerivs() in closed form, so the
-##     chain has to be deriv2-capable.
-## With hess = TRUE (requires grad) it also returns the structural Gauss-Newton
-## Hessian sum_i o_full$hessian[struct, struct] (the data Hessian block at each
-## subject's mode) as $hessian; the outer trust() CM-step consumes it. This is a
-## GN approximation of the marginal Hessian (drops the d eta_hat / d theta coupling
-## and the log-volume curvature), exactly as Gaussian FOCE's outer step does.
-## With collect = TRUE also returns the per-subject solves for the readout.
+## Outer marginal sum_i -2 log L_i at theta = (structural, error, lambda); with
+## `grad` its FOCE gradient, or the exact FOCEI one with secondOrderCorrection,
+## with `hess` the structural Gauss-Newton Hessian, with `collect` the solves.
 .laplaceOuterEval <- function(theta, rec, resObjList, targets_by_subject,
                           control = list(), collect = FALSE, warm = NULL,
                           grad = FALSE, hess = FALSE, correction = FALSE) {
@@ -305,9 +265,8 @@
   })
   tgList <- lapply(seq_along(subjects), function(ii)
     targets_by_subject[[subjects[ii]]][etaNames[[ii]]])
-  ## per-coordinate strength (each candidate coordinate uses its parameter's
-  ## lambda); a single global lambda stays a scalar (bit-identical backward
-  ## compat), else a per-coordinate named vector for trustL1 / normalLaplace.
+  ## Each candidate coordinate uses its parameter's lambda; a single global
+  ## lambda stays a scalar, otherwise a per-coordinate named vector.
   lamList <- lapply(etaNames, function(en)
     if (length(lam_name) == 1L) lambda_vec[[1L]]
     else setNames(unname(lambda_vec[lamByCoord]), en))
@@ -339,10 +298,8 @@
       K       <- length(eta_names_i)
 
       if (!correction) {
-        ## Plain FOCE: mode-value gradient plus the first-moment (Fisher) cross
-        ## term E_post[d di$value/d theta] ~= d value/d theta + Hcross (E[eta]-etahat).
-        ## Misses the normal-Laplace volume term and the mode shift (the FOCEI
-        ## branch below); the error-parameter (interaction) gap is several percent.
+        ## Plain FOCE: mode-value gradient plus the first-moment cross term
+        ## Hcross (E[eta] - etahat), without volume term and mode shift.
         delta   <- nl$Eeta - (sm$etahat - tg)
         gStruct <- gStruct + o_full$gradient[struct_names] +
                    as.numeric(Hcross %*% delta)
@@ -352,15 +309,11 @@
         gLambda  <- gLambda +
           vapply(lam_name, function(j) sum(contribL[lamByCoord == j]), 0.0)
       } else {
-        ## FOCEI: the EXACT total derivative of the Laplace-approx marginal value
-        ##   M = value(etahat) - (1/2) sum g_k^2/Hd_k - 2 sum log I_k,
-        ## with a_k = Hd_k/2, m_k = etahat_k - g_k/Hd_k (both functions of the mode
-        ## etahat(theta)). d M/d theta = explicit(eta frozen) + implicit
-        ## (d M/d etahat) (d etahat/d theta). The volume term enters through
-        ## d Hd_k/d{theta,eta} and d g_k/d{theta,eta}; the mode shift closes the
-        ## FOCE gap (structural + lambda).
+        ## FOCEI: exact total derivative of the Laplace marginal
+        ## M = value(etahat) - (1/2) sum g_k^2/Hd_k - 2 sum log I_k, explicit at
+        ## frozen eta plus the mode shift (d M/d etahat)(d etahat/d theta).
         dI_dm <- nl$dlogI_dm; dI_da <- nl$dlogI_da; dI_dl <- nl$dlogI_dlambda
-        ## d Hd/d{theta,eta} in closed form -- see .laplaceHdDerivs(). The
+        ## d Hd/d{theta,eta} in closed form, see .laplaceHdDerivs(). The
         ## Gauss-Newton Hessian is a product of first derivatives, so its
         ## derivative needs only second derivatives of the prediction.
         .hd <- .laplaceHdDerivs(resObjList[[s]], full_mode, eta_names_i,
@@ -435,10 +388,8 @@
     if (collect) perSub[[ii]] <- sm
   }
 
-  ## Reference conditions: data conditions carrying no random effect (the baseline
-  ## line in the 2-line reference encoding). No eta, no marginalisation, no lambda
-  ## term - they contribute their plain data -2 log L and structural derivatives,
-  ## pinning the structural center (mu) that the penalised line deviates from.
+  ## Reference conditions have no random effect: they add their plain data
+  ## -2 log L and structural derivatives and pin the structural center (mu).
   ref_conditions <- setdiff(names(rec$data), subjects)
   if (length(ref_conditions)) {
     full_ref <- c(outer_struct, setNames(rep(0, length(all_eta)), all_eta))
@@ -479,24 +430,9 @@
 }
 
 
-## SAEM cross-check backend for the factorising (penalty/fused) path.
-##
-## A self-contained stochastic-approximation EM that reuses .fitLaplace's per-subject
-## data objfns (resObjList). Per outer iteration:
-##   E-step  a short per-subject random-walk Metropolis draw of eta_i from the
-##           L1-penalised posterior log p(eta) = -1/2 value_data(eta) -
-##           lambda * sum_k |eta_k - t_k|. The kink needs no subgradient: MH uses
-##           only the (unnormalised) log-density, not its gradient.
-##   SA      a Robbins-Monro update of the sufficient statistic
-##           S_abs = sum_i sum_k |eta_ik - t_k|, damped by gamma_k (1 in burn-in,
-##           1/(k - nBurnin) in convergence).
-##   CM-2    the closed-form lambda M-step lambda = Kn / S_abs (same as the FOCEI
-##           path), the Laplace analogue of updateOmegaChol.
-##   CM-1    a trust() structural M-step at the drawn etas (data + reference
-##           conditions), RM-damped in the convergence phase.
-## Reports a FOCE-comparable readout (argument, lambda, etaModes = posterior
-## means, value = the FOCE marginal at the SAEM point) so method = "saem" and
-## "focei" land side by side. See notes/laplace_nlme_theory.Rmd (SAEM estimator).
+## SAEM cross-check for the factorising path: per-subject random-walk
+## Metropolis E-step, Robbins-Monro update of S_abs = sum |eta_ik - t_k|,
+## lambda = K n / S_abs and a trust() M-step. The readout matches FOCE.
 .laplaceSaem <- function(rec, resObjList, targets_by_subject, free, fixed,
                         lam_name, control, verbose) {
   penalty  <- rec$penalty
@@ -661,7 +597,7 @@
 #'
 #' @description
 #' Fits an ODE mixed-effects model in which the per-subject deviations of the
-#' candidate parameters carry a Laplace (L1) random-effect density, and the
+#' candidate parameters have a Laplace (L1) random-effect density, and the
 #' single penalty strength `lambda` is estimated by marginal maximum likelihood
 #' (no scan, no per-lambda multistart). The outer marginal is evaluated with
 #' FOCEI (normal-Laplace factorising path), the inner conditional mode with
@@ -671,7 +607,7 @@
 #' in place of `constraintL2(<omegaspec>)`:
 #' `obj <- normL2(data, g*x*p, errmodel = e) + constraintL1(pen)`.
 #'
-#' @param obj Composed objective carrying the model pieces and the `penaltySpec`.
+#' @param obj Composed objective holding the model pieces and the `penaltySpec`.
 #' @param init Named numeric start (structural + error + `lambda`); see [emInit].
 #' @param fixed Optional named numeric of parameters held fixed.
 #' @param method Marginal-likelihood backend for the factorising
@@ -711,13 +647,9 @@
          paste(miss, collapse = ", "), "'. Assemble it with emInit().",
          call. = FALSE)
 
-  ## One normL2 per data condition, each restricted to that condition's data.
-  ## Each subject's marginal needs its own value; a single all-subject objfn
-  ## returns the sum, which would pollute every marginal (and inflate sigma).
-  ## Conditions WITH a random effect (in the
-  ## penalty's subjectEtas) get the normal-Laplace marginal; conditions WITHOUT
-  ## one (reference lines in the 2-line reference encoding) contribute their plain
-  ## data likelihood to the structural fit (see .laplaceOuterEval).
+  ## One normL2 per data condition, since each subject's marginal needs its own
+  ## value. Conditions with a random effect get the normal-Laplace marginal,
+  ## reference conditions their plain data likelihood.
   all_conditions <- names(rec$data)
   resObjList <- setNames(lapply(all_conditions, function(s) {
     data_s <- rec$data[s]
@@ -725,11 +657,8 @@
     normL2(data_s, rec$prdfn, errmodel = rec$errfn)
   }), all_conditions)
 
-  ## Clustered penalty: the coupled (complete-graph fusion) path. Dispatch to the
-  ## joint MAP-EM (R/L1Clustering.R) before .laplaceFactorisingTargets, which handles
-  ## only the factorising single/fused penalties. (The exact marginal-ML clustered
-  ## FOCEI value/gradient is a later step; the MAP-EM recovers the grouping + a MAP
-  ## lambda.)
+  ## The clustered penalty couples subjects and goes to the joint MAP-EM
+  ## (L1Clustering.R); the code below handles single and fused penalties.
   if (any(vapply(penalty$blocks, `[[`, "", "kind") == "clustered")) {
     free0 <- init[setdiff(names(init), names(fixed))]
     if (method == "saem")
@@ -758,30 +687,20 @@
   useWarm <- if (is.null(control$warm)) FALSE else isTRUE(control$warm)
   warm    <- if (useWarm) new.env(parent = emptyenv()) else NULL
 
-  ## Outer solver = ECM (theory eq 9 + the FOCE marginal). Per outer iteration:
-  ##   CM-1  structural + error pars via dMod trust() on the smooth FOCE marginal
-  ##         (analytic Fisher gradient + Gauss-Newton Hessian), lambda frozen.
-  ##   CM-2  lambda in closed form, lambda* = K n / sum_ik E|eta_ik|, from the
-  ##         normal-Laplace posterior moments at the new structural point.
-  ## The inner conditional-mode solve (per-subject trustL1 + normal-Laplace) is the
-  ## shared E-step. NB the outer trust() here is a *different* trust-region from
-  ## the one inside trustL1: this one works on the smooth marginal over (mu, sigma)
-  ## with no L1 kink, trustL1's works on the per-subject L1-penalised mode.
+  ## Outer ECM: CM-1 fits structural and error pars by trust() on the smooth
+  ## FOCE marginal at fixed lambda, CM-2 sets lambda = K n / sum E|eta_ik|. This
+  ## trust() is distinct from the one inside trustL1, which sees the L1 kink.
   cm1 <- .trustControl(list(rinit = 1, rmax = 10, iterlim = 30L,
                             tolControl = list(ftol = 1e-6, mtol = 1e-6)),
                        control$cm1, label = "control$cm1")
   maxOuter  <- if (is.null(control$maxOuter))  50L  else as.integer(control$maxOuter)
   epsPar    <- if (is.null(control$epsPar))    1e-4 else control$epsPar
   epsOfvRel <- if (is.null(control$epsOfvRel)) 1e-5 else control$epsOfvRel
-  ## FOCEI normal-Laplace volume correction in the CM-1 gradient. Needs second
-  ## derivatives of the prediction, so it is off by default and the plain FOCE
-  ## gradient is what a first-order chain gets. Same control name as the normal
-  ## path.
+  ## FOCEI volume correction in the CM-1 gradient: it needs second derivatives
+  ## of the prediction, so it is off by default.
   useCorrection <- isTRUE(control$secondOrderCorrection)
-  ## cap the penalty strength (a floor on the scale rho = 1/lambda). A shared
-  ## parameter drives its deviations to 0, so its M-step lambda = n/sum E|eta|
-  ## runs to infinity; the cap lets that strength settle (== "shared") so the
-  ## ECM converges. Well above any strength a genuinely individual parameter takes.
+  ## Cap on lambda: a shared parameter's M-step lambda = n / sum E|eta| diverges
+  ## and the cap lets its strength settle, well above any individual one.
   lambdaMax <- if (is.null(control$lambdaMax)) 1e4 else control$lambdaMax
   ## per-strength deviation counts for the closed-form M-step: strength j is
   ## shared by (#subjects * #params using j) deviations.
@@ -805,10 +724,8 @@
          hessian  = r$hessian[struct_names, struct_names, drop = FALSE])
   }
 
-  ## a strength whose deviations collapse (parameter shared) is frozen at the
-  ## cap: its marginal is monotone in lambda (boundary), so left free it would
-  ## climb forever and the ECM would never settle. epsShare = the mean|eta|
-  ## below which a parameter counts as shared.
+  ## A strength whose deviations collapse (mean |eta| < epsShare) is frozen at
+  ## the cap: its marginal is monotone in lambda, so the ECM would not settle.
   epsShare   <- if (is.null(control$epsShare)) 0.02 else control$epsShare
   shared_lams <- character(0)
   psi_struct <- free[struct_names]
@@ -954,7 +871,7 @@
 #' with the full ranked table attached as `$msTable`. Only the free *structural*
 #' start is perturbed; the penalty strength `lambda` is re-estimated from its
 #' closed-form M-step inside every fit, so its starting value does not matter.
-#' Marginal-likelihood surfaces of the sharp Laplace kind can carry local optima,
+#' Marginal-likelihood surfaces of the sharp Laplace kind can have local optima,
 #' so a multi-start is the safe way to compare models (supports) on an equal
 #' footing (see `notes/laplace_nlme_theory.Rmd`, the support-selection agreement).
 #'
@@ -968,7 +885,7 @@
 #' @param start1stfromCenter If `TRUE` (default) the first fit starts exactly at
 #'   `center`; the rest are perturbed.
 #' @param verbose Logical; print a one-line summary.
-#' @return The best [EM] object, additionally carrying `$msTable` (fits ranked
+#' @return The best [EM] object, additionally holding `$msTable` (fits ranked
 #'   by value) and `$nfits`; class `c("msem", "em", "list")`.
 #' @seealso [EM], [emInit], [msEM]
 #' @noRd
@@ -1062,7 +979,7 @@
 #'
 #' @param obj Composed objective for the **full** candidate set, i.e.
 #'   `normL2(data, g*x*p, errmodel = e) + constraintL1(penalty(candidates,
-#'   subjects = ...))`. Its prediction function must carry the deviation
+#'   subjects = ...))`. Its prediction function must contain the deviation
 #'   parameters `eta_<par>_<subject>` for every candidate; restricted supports are
 #'   obtained by holding the excluded deviations at zero.
 #' @param center Named numeric start (structural + error + `lambda`); see
@@ -1220,26 +1137,11 @@
 
 
 ## ---- normal-Laplace marginal primitives ------------------------------------
-## FOCEI marginal for the .fitLaplace factorising path (penalty + fused).
-##
-## For one candidate coordinate the linearised per-subject marginal contribution
-## is the convolution of a data Gaussian (precision `a`, mode `m`) with a
-## Laplace(lambda) prior:
-##   I(a, m, lambda) = \int (lambda/2) e^{-lambda|eta|} e^{-(a/2)(eta - m)^2} d eta,
-## the normal-Laplace density (Reed 2006; theory eq 13-14 in
-## notes/laplace_nlme_theory.Rmd). We work with log I for numerical stability
-## and return, in one pass, the outer-gradient partials
-##   d logI / d{m, a, lambda}
-## and the posterior moments E[eta], E[|eta|], E[(eta - m)^2], which follow from
-## the identities
-##   E[|eta|]        = 1/lambda - d logI / d lambda
-##   E[eta] - m      = (1/a)      d logI / d m
-##   E[(eta - m)^2]  = -2         d logI / d a.
-## E[|eta|] is exactly the quantity the closed-form lambda update (eq 9) needs.
+## log I(a, m, lambda), I = int lambda/2 e^{-lambda|eta|} e^{-a/2 (eta - m)^2},
+## its partials and posterior moments, e.g. E|eta| = 1/lambda - dlogI/dlambda.
 
-## Whether the .fitLaplace / clustered marginal kernels use the C++ port (default)
-## or the pure-R reference. Toggle with options(laplaceUseCpp = FALSE); the two
-## paths agree to ~1e-10 (tests/testthat/test-.fitLaplace.R).
+## C++ marginal kernels (default) or the pure-R reference for .fitLaplace and
+## the clustered path, chosen by options(laplaceUseCpp).
 .laplaceUseCpp <- function() isTRUE(getOption("laplaceUseCpp", TRUE))
 
 .TWO_OVER_SQRTPI <- 2 / sqrt(pi)
@@ -1317,22 +1219,9 @@ normalLaplace <- function(a, m, lambda) {
 }
 
 
-## Per-subject FOCEI-normal-Laplace marginal for the factorising path.
-##
-## `objfun(eta)` must return the subject's data objlist in dMod's -2 log L
-## convention: value = -2 log p(y_i | eta), gradient = d value / d eta,
-## hessian = d^2 value / d eta^2 (~ 2 * J^T Sigma^-1 J, Gauss-Newton). The
-## penalised conditional mode is found by trustL1; the linearised marginal is
-## then the product of per-coordinate normal-Laplace integrals (separable case,
-## a_k = diag). Returns the per-subject -2 log L_i contribution plus the mode and
-## the ingredients (a, m, moments) the outer correction and the lambda update
-## consume.
-##
-## Convention (derived in notes/laplace_nlme_theory.Rmd, eq 11-14):
-##   Hd = diag(hessian),  a_k = Hd_k / 2  (theory precision J^T Sigma^-1 J),
-##   m_k = etahat_k - grad_k / Hd_k       (data-alone mode, separable),
-##   -2 log L_i = value(etahat) - (1/2) sum grad_k^2 / Hd_k - 2 sum log I_k,
-##   with I_k = normalLaplace(a_k, m_k - target_k, lambda).
+## Per-subject FOCEI normal-Laplace marginal: trustL1 finds the penalised mode,
+## a_k = Hd_k / 2, m_k = etahat_k - g_k / Hd_k, -2 log L_i = value - (1/2)
+## sum g_k^2 / Hd_k - 2 sum log I_k. `objfun(eta)` returns the -2 log L objlist.
 .laplaceSubjectMarginal <- function(objfun, eta0, targets, lambda,
                                 control = list(rinit = 1, rmax = 10,
                                                iterlim = 100L,
@@ -1352,8 +1241,8 @@ normalLaplace <- function(a, m, lambda) {
 }
 
 
-## The marginal, given the objective at the mode. Split out so the lock-step
-## driver below and the single solve above share one copy of the arithmetic.
+## The marginal given the objective at the mode, shared by the single solve and
+## the lock-step driver.
 .laplaceMarginalFrom <- function(di, full, etahat, targets, lambda, converged) {
   nm <- names(etahat)
   gd <- di$gradient[nm]
@@ -1373,11 +1262,9 @@ normalLaplace <- function(a, m, lambda) {
 }
 
 
-## Every subject's conditional mode, stepping in unison. Each subject runs the
-## same reflective trustL1 as the single solve; the driver only collects the
-## trial points of the subjects that have not stopped and evaluates them in one
-## batched call, which is where the condition axis parallelises. Falls back to
-## the per-subject loop for anything the lock-step driver does not carry.
+## Every subject's conditional mode in lock step: each runs the reflective
+## trustL1 of the single solve, and the open trial points go out in one batched
+## call. Falls back to the per-subject loop where the driver does not apply.
 .laplaceSubjectMarginals <- function(objfuns, eta0List, targetsList, lambdaList,
                                      control = list(), lockstep = TRUE,
                                      cores = getOption("dMod.cores", 1L)) {

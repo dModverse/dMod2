@@ -18,7 +18,7 @@ sparsify(
 )
 }
 \arguments{
-\item{obj}{Composed objective for the full candidate set, carrying a
+\item{obj}{Composed objective for the full candidate set, holding a
 \link{penaltyL1} specification (via \link{constraintL1}).}
 
 \item{center}{Named numeric start (see \link{emInit}).}
@@ -121,10 +121,10 @@ g <- Y(eqnvec(y_ext = "log(Epo + dEpo_e + 1)",
               y_mem = "log(Epo_EpoR + 1)",
               y_int = "log(Epo_EpoR_i + dEpo_i + 1)"),
        x, modelname = "beckerc_obs", compile = FALSE, deriv2 = TRUE,
-       attach.input = FALSE, outdir = outdir)
+       attachInput = FALSE, outdir = outdir)
 e <- Y(eqnvec(y_ext = "sigma", y_mem = "sigma", y_int = "sigma"), g,
        modelname = "beckerc_err", compile = FALSE, deriv2 = TRUE,
-       attach.input = FALSE, outdir = outdir)
+       attachInput = FALSE, outdir = outdir)
 
 ## 2. Clustered encoding: every line has a deviation for each candidate.
 ##    Unlike the 2-line reference encoding (EMlaplace.R), the complete-graph fusion

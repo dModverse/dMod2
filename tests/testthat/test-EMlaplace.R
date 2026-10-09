@@ -1,19 +1,4 @@
-# ============================================================================
-# EM / sparsify: marginal-likelihood L1/Laplace model selection.
-#
-# Sections:
-#   * normalLaplace          - 1-D normal-Laplace marginal + moments vs a
-#                              numerical integral (no compilation).
-#   * .laplaceSubjectMarginal    - GN-exact per-subject FOCE marginal on a
-#                              linear-Gaussian (quadratic) objfun (no compilation).
-#   * EM + sparsify     - end-to-end on a tiny decay ODE, reference
-#                              encoding, 2 cell lines: recover the individual /
-#                              shared split and the parsimonious support.
-#
-# The math anchors live at the normal-Laplace section of R/nlmeLaplace.R.
-# ============================================================================
-
-## Context: "EM + sparsify (Laplace-NLME model selection)"  (context() is deprecated in testthat 3e; kept as a note)
+# EM and sparsify: marginal-likelihood L1/Laplace model selection.
 
 
 # ---- normalLaplace primitive ---------------------------------------------
@@ -55,11 +40,8 @@ test_that("normalLaplace recycles its arguments to a common length", {
 # ---- .laplaceSubjectMarginal on a linear-Gaussian objfun ---------------------
 
 test_that(".laplaceSubjectMarginal is GN-exact on a quadratic objfun", {
-  # A quadratic data objfun in -2logL convention:
-  #   value(eta) = 0.5 Hd (eta - m0)^2 + v0,  grad = Hd (eta - m0),  hess = Hd.
-  # Then the FOCE marginal -2logL_i = v0 - 2 log I with
-  #   I = int (lambda/2) e^{-lambda|z|} e^{-(Hd/4)(z - (m0 - target))^2} dz,
-  #   z = eta - target  (a = Hd/2, m_shift = m0 - target).
+  # For a quadratic data objfun the FOCE marginal is a normal-Laplace integral,
+  # so a numerical integral of its kernel is the exact reference.
   Hd <- 3.0; m0 <- 1.5; v0 <- 4.0; target <- 0.2; lambda <- 2.0
   nm <- "eta_x"
   objfun <- function(p, ...) {
@@ -138,9 +120,8 @@ test_that(".laplaceSubjectMarginal is GN-exact on a quadratic objfun", {
   }
 })
 
-# One-state decay dA/dt = -k A, observed as log(A+1); 2 cell lines A/B with the
-# reference encoding (line A = baseline, line B holds the deviations). Truth:
-# k is individual (line B differs), A0 is shared.
+# Two cell lines in reference encoding; the truth has one individual and one
+# shared parameter.
 .build_reg_smoke <- function(tag = "reg", seed = 1L) {
   mods <- .reg_models()
   set.seed(seed)
@@ -218,9 +199,8 @@ test_that("the FOCEI correction closes the error-parameter gradient gap", {
   relF <- abs(gF[names(theta)] - gFD) / pmax(abs(gFD), 1e-8)
   relI <- abs(gI[names(theta)] - gFD) / pmax(abs(gFD), 1e-8)
 
-  # FOCE misses the interaction (sigma, several %) AND the structural + lambda
-  # mode shift (a few tenths of a %); the full FOCEI total derivative closes all
-  # of them to FD accuracy.
+  # FOCE misses the interaction and the mode-shift terms; the full FOCEI total
+  # derivative matches the FD gradient.
   expect_gt(relF[["log_sigma"]], 0.02)
   expect_gt(max(relF[c("log_k", "log_A0", "lambda")]), 0.002)
   expect_lt(max(relI[c("log_k", "log_A0", "log_sigma")]), 1e-3)
@@ -254,7 +234,7 @@ test_that("EM(method='saem') agrees with the FOCEI backend", {
   expect_lt(max(abs(f_focei$argument[sn] - f_saem$argument[sn])), 0.2)
   expect_gt(f_saem$lambda / f_focei$lambda, 0.6)
   expect_lt(f_saem$lambda / f_focei$lambda, 1.6)
-  # both recover the individual k deviation
+  # both recover the individual deviation
   expect_gt(f_saem$etaModes["B", "eta_k"], 0.4)
   expect_lt(abs(f_saem$etaModes["B", "eta_A0"]), 0.2)
 })
@@ -277,7 +257,6 @@ test_that("sparsify picks the parsimonious support {k}", {
 
   expect_s3_class(sel, "sparsify")
   expect_identical(sel$support, "k")
-  # k ranks above A0
   expect_gt(sel$ranking[["k"]], sel$ranking[["A0"]])
   # the selected support is the marginal-minimiser and beats the full support
   expect_true(sel$chain$selected[sel$chain$support == "k"])
@@ -287,13 +266,7 @@ test_that("sparsify picks the parsimonious support {k}", {
 })
 
 
-# ============================================================================
-# Clustered inner solver (complete-graph fusion): solveFusedComplete (sort +
-# weighted PAVA), .clusterSolve (joint prox-linear driver), and the runnable
-# MAP-EM fit that recovers the grouping. Math anchors: R/L1Clustering.R.
-# ============================================================================
-
-## Context: "EM clustered inner solver (complete-graph fusion)"  (context() is deprecated in testthat 3e; kept as a note)
+# Clustered inner solver (complete-graph fusion) and the MAP-EM fit.
 
 # ---- solveFusedComplete vs brute force (no compilation) ------------------
 
@@ -340,8 +313,7 @@ test_that("solveFusedComplete matches exhaustive brute force + limits", {
 
 # ---- .clusterSolve + MAP-EM on a compiled ODE -------------------------
 
-# 4 cell lines A/B/C/D, one clustered parameter k; truth two clusters
-# {A,B} (eta 0.35) and {C,D} (eta -0.35). Reuses the decay ODE.
+# Four cell lines, one clustered parameter whose truth forms two clusters.
 .build_reg_cluster <- function(tag = "cl", seed = 3L) {
   mods <- .reg_models()
   set.seed(seed)
@@ -389,7 +361,7 @@ test_that(".clusterSolve finds the joint clustered mode (vs optim)", {
                  control = list(reltol = 1e-13, maxit = 15000))
     expect_lt(max(abs(eh - opt$par)), 5e-3)
   }
-  ## intermediate lambda -> the correct two clusters {A,B},{C,D} emerge
+  # an intermediate lambda recovers the true clusters
   sol <- .clusterSolve(resObjList, s$st, pen, 150, maxit = 150L, tol = 1e-11)
   expect_equal(sol$G, 2L)
   grp <- lapply(sol$clusters[["eta_k"]], sort)
@@ -411,10 +383,9 @@ test_that("EM clustered (MAP-EM) recovers the grouping at fixed sigma", {
   expect_s3_class(fit, "em")
   expect_true(isTRUE(fit$clustered))
   expect_true(fit$converged)
-  expect_equal(fit$G, 2L)                            # {A,B} and {C,D}
+  expect_equal(fit$G, 2L)
   # anchoring: deviations mean-zero per parameter
   expect_lt(abs(mean(fit$etaModes[, "eta_k"])), 1e-8)
-  # the recovered clusters are {A,B} and {C,D}
   grp <- lapply(fit$clusters[["eta_k"]], sort)
   has <- function(g) any(vapply(grp, function(x) identical(x, g), NA))
   expect_true(has(c("A", "B")))
@@ -458,8 +429,8 @@ test_that(".clusterParamMarginal is exact vs a direct integral + Fisher moments"
 })
 
 test_that("the exact-marginal comparison recovers the true grouping", {
-  # linear-Gaussian n=4, precise data, true clusters {1,2},{3,4}. The exact
-  # marginal must reject full fusion (data cost) AND full separation (Occam).
+  # Precise linear-Gaussian data with two true clusters: the exact marginal
+  # rejects full fusion (data cost) and full separation (Occam).
   gh <- .gaussHermite(24)
   Hd <- c(50, 45, 52, 48); m <- c(0.55, 0.52, -0.48, -0.51)
   lamgrid <- 10^seq(-3, 3, length.out = 40)
@@ -469,7 +440,7 @@ test_that("the exact-marginal comparison recovers the true grouping", {
   scores <- vapply(paths, function(P) .clusterGroupScore(P, Hd, m, gh)$value, 0.0)
   best <- lapply(paths[[which.min(scores)]], sort)
   has <- function(g) any(vapply(best, function(z) identical(z, g), NA))
-  expect_true(has(c(1L, 2L)) && has(c(3L, 4L)))   # picks {1,2},{3,4}
+  expect_true(has(c(1L, 2L)) && has(c(3L, 4L)))
   expect_equal(length(best), 2L)
 })
 
@@ -486,10 +457,10 @@ test_that("sparsify recovers the grouping on a 4-subject ODE", {
     obj, init, control = list(cm1 = list(iterlim = 50L), maxOuter = 30L),
     verbose = FALSE))
   expect_s3_class(res, "sparsify")
-  expect_equal(res$perParam[["eta_k"]]$G, 2L)          # two clusters
+  expect_equal(res$perParam[["eta_k"]]$G, 2L)
   grp <- lapply(res$perParam[["eta_k"]]$clusters, sort)
   has <- function(gg) any(vapply(grp, function(z) identical(z, gg), NA))
-  expect_true(has(c("A", "B")) && has(c("C", "D")))    # {A,B},{C,D}
+  expect_true(has(c("A", "B")) && has(c("C", "D")))
 })
 
 
@@ -527,17 +498,17 @@ test_that("EM(method='saem') fits the clustered model on the true ODE posterior"
   expect_equal(fit$method, "saem")
   # SAEM samples the TRUE (nonlinear) posterior -> cross-checks the FOCE path
   expect_lt(abs(fit$argument[["log_k"]] - log(0.3)), 0.1)
-  # posterior means reveal the two groups: A,B > 0, C,D < 0, well separated
+  # posterior means separate the two groups
   E <- fit$etaModes[, "eta_k"]
   expect_gt(min(E[c("A", "B")]), 0.15)
   expect_lt(max(E[c("C", "D")]), -0.15)
 })
 
 
-# ---- WS2: per-parameter lambda_k + many-lines ----------------------------
+# ---- per-parameter lambda_k and many lines -------------------------------
 
 test_that("penalty machinery supports per-parameter and merged strengths", {
-  # global (backward compatible): one shared strength name
+  # global: one shared strength name
   pg <- penaltyL1(c("k", "A0"), subjects = paste0("s", 1:3))
   expect_equal(pg$lambdaName, "lambda")
   expect_equal(unname(pg$lambdaByParam[c("k", "A0")]), c("lambda", "lambda"))
@@ -566,7 +537,7 @@ test_that("penalty machinery supports per-parameter and merged strengths", {
   expect_equal(unname(r$gradient["lambda_A0"]), 0.25)
 })
 
-# 4-subject fixture: parameter k is individual (two groups +-0.6), A0 is shared.
+# Four subjects: one parameter individual in two groups, the other shared.
 .build_reg_manyline <- function(tag = "ml", seed = 3L) {
   mods <- .reg_models()
   set.seed(seed)
@@ -630,10 +601,10 @@ test_that("per-parameter EM gives soft sparsity (shared par -> capped lambda)", 
   expect_s3_class(fit, "em")
   expect_true(fit$converged)
   expect_length(fit$lambda, 2L)
-  # shared parameter A0: its deviations collapse, its strength is frozen high
+  # shared parameter: its deviations collapse, its strength is frozen high
   expect_lt(mean(abs(fit$etaModes[, "eta_A0"])), 0.05)
   expect_gt(fit$lambda[["lambda_A0"]], 50 * fit$lambda[["lambda_k"]])
-  # individual parameter k: deviations recovered near the truth (+-0.6)
+  # individual parameter: deviations recovered near the truth
   expect_gt(mean(abs(fit$etaModes[, "eta_k"])), 0.4)
 })
 
@@ -654,7 +625,7 @@ test_that("single global lambda stays scalar (backward compatible)", {
 })
 
 
-# ---- WS1: adaptive / kink-robust quadrature for the clustered marginal ----
+# ---- adaptive, kink-robust quadrature for the clustered marginal ---------
 
 test_that("adaptive-tensor marginal equals the dense tensor at small d", {
   gh <- .gaussHermite(24L)
@@ -663,15 +634,15 @@ test_that("adaptive-tensor marginal equals the dense tensor at small d", {
     H <- runif(4, 5, 40); m <- rnorm(4, 0, 0.7); lam <- 10^runif(1, -0.5, 1.5)
     va <- .clusterParamMarginal(H, m, lam, gh, rule = "auto")
     vt <- .clusterParamMarginal(H, m, lam, gh, rule = "tensor")
-    # d = G-1 = 3, adaptiveNq(3) = 24, so auto and tensor(24) coincide exactly
+    # adaptiveNq(3) = 24, so auto and tensor(24) coincide exactly
     expect_equal(va$value, vt$value)
     expect_equal(va$Efus,  vt$Efus)
   }
 })
 
 test_that("adaptive-tensor marginal stays feasible and finite at larger G", {
-  # d = G-1 = 5: the dense 24^5 (~8M nodes) tensor is infeasible; the adaptive
-  # rule shrinks nq (here 7 -> 7^5 ~ 1.7e4) and never produces a signed-sum NaN.
+  # The dense tensor is infeasible at this dimension; the adaptive rule shrinks
+  # nq and never produces a signed-sum NaN.
   expect_lte(.adaptiveNq(5L)^5, 3e4)
   set.seed(2); H <- runif(6, 8, 30); m <- c(0.8, 0.75, 0.7, -0.7, -0.75, -0.8)
   for (lam in c(1, 5, 30)) {
@@ -691,15 +662,15 @@ test_that("sparse rule never escapes a NaN (falls back to the dense tensor)", {
 })
 
 test_that("grouping selection recovers the truth at n=6 with the adaptive rule", {
-  Hd <- rep(50, 6); m <- c(0.5, 0.55, 0.52, -0.5, -0.55, -0.52)  # two groups
+  Hd <- rep(50, 6); m <- c(0.5, 0.55, 0.52, -0.5, -0.55, -0.52)
   paths <- list(as.list(1:6), list(1:3, 4:6), list(1:6))
   sc <- vapply(paths, function(P) .clusterGroupScore(P, Hd, m, rule = "auto")$value, 0.0)
-  expect_equal(which.min(sc), 2L)                 # the G=2 grouping wins
+  expect_equal(which.min(sc), 2L)
   expect_lt(sc[2], sc[1]); expect_lt(sc[2], sc[3])
 })
 
 
-# ---- WS5: C++ marginal kernels are bit-comparable to the R reference ------
+# ---- C++ marginal kernels are bit-comparable to the R reference ----------
 
 test_that("normalLaplaceCpp reproduces the R normalLaplace", {
   set.seed(1)

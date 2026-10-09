@@ -1,16 +1,8 @@
 \dontrun{
 
-## ---------------------------------------------------------------------------
-## Nonlinear mixed-effects walkthrough: Theophylline (12 subjects, oral PK).
-##
-## Structural model, on the log scale so positivity is automatic:
-##   Ka_i = exp(tka + eta_Ka_i), V_i = exp(tv + eta_V_i), Cl_i = exp(tcl + eta_Cl_i)
-## Residual model, the usual lognormal / constant-CV PK convention:
-##   log(DV_ij) = log(Cc_ij) + eps_ij,   eps_ij ~ N(0, sigma_add^2)
-##
-## Reference values (Pinheiro & Bates 2000): Ka_pop ~ 1.5 1/h, V_pop ~ 32 L,
-## Cl_pop ~ 3.0 L/h; sd(eta) ~ 0.5 / 0.1 / 0.3.
-## ---------------------------------------------------------------------------
+## Nonlinear mixed-effects walkthrough: Theophylline, 12 subjects, oral PK,
+## log-normal parameters and residuals. Reference (Pinheiro & Bates 2000):
+## Ka_pop ~ 1.5 1/h, V_pop ~ 32 L, Cl_pop ~ 3.0 L/h; sd(eta) ~ 0.5 / 0.1 / 0.3.
 
 library(dMod2)
 
@@ -111,10 +103,7 @@ plotIndivs    (fit)   # per-subject IPRED / PRED curves over the data
 plotResiduals (fit)   # IWRES vs IPRED and IWRES vs TIME
 plotHistIndivs(fit)   # eta histograms with QQ line vs N(0, Omega_kk)
 
-## ---------------------------------------------------------------------------
-## Other estimators. All share this objective, this init, and the fit layout;
-## only the E-step and the outer loop differ.
-## ---------------------------------------------------------------------------
+## ---- Other estimators: same objective, init and fit layout, other E-step ----
 
 ## Sparse-grid Gauss-Hermite refinement, warm-started from FOCEI. Use it as a
 ## confirmatory step once the model structure is settled: it removes the

@@ -1,20 +1,4 @@
-# ============================================================================
-# Quadrature / ECM stack tests.
-#
-# Sections (bottom-up through the call graph):
-#   * sparseGridGH / makeSubjectNodes   - low-level Smolyak-GH numerics
-#   * evalConditionResidual               - per-condition residual lifted helper
-#   * .normalEcmSubject                  - per-subject 3-moment evaluator
-#   * updateOmegaChol                     - CM-2 projection onto omega structure
-#   * emObjfn(method = "quadrature")       - end-to-end objective + rebuildQuadrature
-#
-# Where a closed-form integral exists, we use it as the oracle. Otherwise
-# numDeriv is used as an independent gradient check (see comments in each
-# block for why; an exact closed-form reference would not exercise the
-# realistic Smolyak code path).
-# ============================================================================
-
-## Context: "Quadrature / ECM"  (context() is deprecated in testthat 3e; kept as a note)
+# Quadrature and ECM stack, bottom-up from the Smolyak-GH numerics to emObjfn().
 
 
 # ---- Smolyak-GH numerics --------------------------------------------------
@@ -104,7 +88,7 @@ test_that("sparseGridGH mass equals pi^(K/2) and first moment vanishes", {
 
 test_that("sparseGridGH K=1 short-circuit yields the full m=2L-1 GH rule", {
   g <- sparseGridGH(1L, 4L)
-  expect_equal(nrow(g$nodes), 7L)             # m(4) = 2*4 - 1 = 7
+  expect_equal(nrow(g$nodes), 7L)
   expect_true(all(g$weights > 0))
   expect_equal(sum(g$weights), sqrt(pi), tolerance = 1e-12)
 })
@@ -237,8 +221,7 @@ test_that("evalConditionResidual matches the in-normL2 closure (no errfn)", {
 
 
 test_that("normL2 still produces the same OFV after eval_condition refactor", {
-  # Regression: hand-check that the eval_condition lift did not drift the
-  # residual numerics relative to the pre-refactor OFV.
+  # The per-condition residual path yields a finite OFV and gradient.
   set.seed(1)
   oldwd <- setwd(tempdir())
   on.exit(setwd(oldwd))
@@ -327,10 +310,8 @@ test_that("logLhat at level L recovers the 1D-integrate truth for a one-eta prdf
 
 
 test_that("gradient at outer params matches numDeriv on the one-eta prdfn", {
-  # numDeriv is the oracle here -- a clean closed-form reference for the
-  # quadrature gradient would need a linear-in-theta toy log-likelihood
-  # (where Gauss-Hermite is exact), which would not exercise the realistic
-  # quadrature code path.
+  # numDeriv is the oracle: a closed-form reference needs a model on which
+  # Gauss-Hermite is exact, which would skip the realistic quadrature path.
   skip_if_not_installed("numDeriv")
   set.seed(2)
   oldwd <- setwd(tempdir())
@@ -379,10 +360,8 @@ test_that("gradient at outer params matches numDeriv on the one-eta prdfn", {
 
 
 test_that("frozen-node guarantee: nodesSubj does not change between em calls", {
-  # The frozen-K_i invariant is enforced by the orchestrator (Phase 4d): nodes
-  # are built once before each CM-1 trust call and not mutated during it. Here
-  # we test the contract directly: calling .normalEcmSubject twice with
-  # different psi but the SAME nodesSubj must use identical nodes.
+  # Nodes are built once per CM-1 trust call: two .normalEcmSubject calls with
+  # different psi and the same nodesSubj must use identical nodes.
   set.seed(3)
   oldwd <- setwd(tempdir())
   on.exit(setwd(oldwd))
@@ -435,10 +414,8 @@ test_that("diagonal: recovers Omega_true axis variances closed-form", {
   chol_vec <- updateOmegaChol(M_list, om)
   L <- om$buildL(chol_vec)
   Omega_est <- tcrossprod(L)
-  # Monte-Carlo estimate from N = 200 subjects: the relative sampling error of a
-  # variance estimate is ~sqrt(2/N) = 10%, so allow ~2 sigma element-wise.
-  # (testthat 3e compares element-wise via waldo, not all.equal's mean relative
-  # difference, so the bound has to hold for the worst element, not on average.)
+  # A variance estimate has relative sampling error ~sqrt(2/N); the tolerance
+  # is about 2 sigma and testthat 3e applies it to the worst element.
   expect_equal(unname(diag(Omega_est)), diag(Omega_true), tolerance = 0.2)
   expect_true(all(Omega_est[lower.tri(Omega_est)] == 0))
 })
@@ -453,8 +430,8 @@ test_that("full: recovers Omega_true Cholesky closed-form", {
   chol_vec <- updateOmegaChol(M_list, om)
   L <- om$buildL(chol_vec)
   Omega_est <- tcrossprod(L)
-  # N = 1000 subjects: ~sqrt(2/N) = 4.5% relative sampling error, allow ~2 sigma
-  # element-wise (the off-diagonal covariance is the noisiest entry).
+  # About 2 sigma of the ~sqrt(2/N) sampling error; the off-diagonal entry is
+  # the noisiest.
   expect_equal(Omega_est, Omega_true, tolerance = 0.15,
                ignore_attr = TRUE)
 })
@@ -563,9 +540,8 @@ test_that("frozen-node invariance: em(pars1) and em(pars2) reuse the same nodes"
 
 
 test_that("quadrature gradient matches numDeriv on the one-eta prdfn", {
-  # numDeriv is the oracle here -- closed-form would require a contrived
-  # linear-in-theta toy where Gauss-Hermite is exact and would mask the
-  # adaptive Smolyak code path being exercised.
+  # numDeriv is the oracle: a closed-form reference would skip the adaptive
+  # Smolyak path.
   skip_if_not_installed("numDeriv")
   oldwd <- setwd(tempdir())
   on.exit(setwd(oldwd))
@@ -582,7 +558,7 @@ test_that("quadrature gradient matches numDeriv on the one-eta prdfn", {
 })
 
 
-# ---- M3: sparse-grid memoisation + weight-pruning ------------------------
+# ---- sparse-grid memoisation and weight pruning --------------------------
 
 test_that("sparse-grid memoisation returns grids identical to a fresh build", {
   a <- dMod2:::.getSparseGrid(2L, 5L)

@@ -1,7 +1,6 @@
-## Cholesky parameter naming convention (load-bearing):
-##   diagonal:    paste0(prefix, "_", short, "_", short),  L_kk = exp(par)
-##   off-diag:    paste0(prefix, "_", short_k, "_", short_l) for k > l,  L_kl = par
-## where short = sub("^eta_", "", eta), so eta_Cl -> Cl, eta_V -> V, etc.
+## Cholesky parameter names: diagonal paste0(prefix, "_", s, "_", s) with
+## L_kk = exp(par), off-diagonal paste0(prefix, "_", s_k, "_", s_l) for k > l
+## with L_kl = par, where s = sub("^eta_", "", eta).
 
 
 
@@ -438,7 +437,7 @@ updateOmegaChol <- function(MHatList, omega) {
 
 #' Parameter names of an object
 #'
-#' Generic for extracting the parameter names carried by an object. See
+#' Generic for extracting the parameter names held by an object. See
 #' [parnames.omegaspec] for the random-effects spec method.
 #'
 #' @param x An object.
@@ -504,7 +503,7 @@ parnames.omegaspec <- function(x, what = c("all", "eta", "chol"), ...) {
 #' `w_b_GH`, the change-of-variable Jacobian `2^(K/2) / |det L_H|`, and the
 #' `exp(z_b' z_b)` factor that un-does the implicit `exp(-z'z)` weight of the
 #' physicists' GH rule. Combined: `log W_b = (K/2)*log(2) - log|det L_H| +
-#' log|w_b_GH| + z_b' z_b`, with sign carried in `weightSigns`.
+#' log|w_b_GH| + z_b' z_b`, with the sign kept in `weightSigns`.
 #'
 #' @param etaHat Length-K numeric, posterior mode of the random effects.
 #' @param Hi K x K positive-definite matrix, the joint's negative-Hessian
@@ -546,12 +545,9 @@ makeSubjectNodes <- function(etaHat, Hi, level, pruneTol = Inf) {
   log_abs <- (K / 2) * log(2) - log_det_L + grid$logAbsW + grid$z2Sum
   signs   <- grid$signs
 
-  # Optional weight-magnitude pruning (default off, pruneTol = Inf). A node's
-  # contribution to the marginal integral is bounded by exp(logAbsWeights_b)
-  # times the (mode-dominated) integrand peak, so nodes whose log-weight sits
-  # `pruneTol` below the per-subject maximum contribute at most exp(-pruneTol)
-  # of the peak and can be dropped with bounded relative error. This directly
-  # shrinks the per-node ODE work in .normalEcmSubject.
+  # Optional pruning, off at pruneTol = Inf: a node whose log-weight lies
+  # `pruneTol` below the per-subject maximum contributes at most
+  # exp(-pruneTol) of the mode-dominated peak, so dropping it bounds the error.
   if (is.finite(pruneTol)) {
     keep <- log_abs >= (max(log_abs) - pruneTol)
     if (!all(keep)) {
@@ -569,9 +565,8 @@ makeSubjectNodes <- function(etaHat, Hi, level, pruneTol = Inf) {
 }
 
 
-## Per-subject metadata shared by the quadrature, SAEM and Bayesian
-## paths. Built from the omega spec and the model pieces, so it belongs
-## with the mixed-effects layer even though the sampler also consumes it.
+## Per-subject metadata shared by the quadrature, SAEM and Bayesian paths,
+## built from the omega spec and the model pieces.
 .buildBayesSubjectMeta <- function(omegaSpec, initFull, prdfn, data,
                                    errfn        = NULL,
                                    innerControl = list(),
@@ -665,10 +660,9 @@ makeSubjectNodes <- function(etaHat, Hi, level, pruneTol = Inf) {
   fn
 }
 
-# Bake dots + per-call extras into a closure callable as
-# objfun(pars, deriv, deriv2). `extra` threads per-block locals
-# (.pars_full / .Omega_inv for the joint NLME path) that must be
-# re-evaluated by the caller's R closure each iteration.
+# Bake dots and per-call extras into a closure objfun(pars, deriv, deriv2).
+# `extra` holds per-block locals (.pars_full, .Omega_inv) that the caller's
+# closure re-evaluates each iteration.
 .bake_objfun <- function(raw_objfun, dots = list(), extra = list()) {
   force(raw_objfun)
   force(dots)

@@ -39,7 +39,7 @@ The augmented weight \code{W_b} for the integral \verb{int g(eta) deta} approxim
 as \verb{sum_b W_b * g(eta_b)} includes: the raw Smolyak-Gauss-Hermite weight
 \code{w_b_GH}, the change-of-variable Jacobian \verb{2^(K/2) / |det L_H|}, and the
 \verb{exp(z_b' z_b)} factor that un-does the implicit \verb{exp(-z'z)} weight of the
-physicists' GH rule. Combined: \verb{log W_b = (K/2)*log(2) - log|det L_H| + log|w_b_GH| + z_b' z_b}, with sign carried in \code{weightSigns}.
+physicists' GH rule. Combined: \verb{log W_b = (K/2)*log(2) - log|det L_H| + log|w_b_GH| + z_b' z_b}, with the sign kept in \code{weightSigns}.
 }
 \seealso{
 \code{\link[=sparseGridGH]{sparseGridGH()}}

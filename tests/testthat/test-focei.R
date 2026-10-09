@@ -1,14 +1,4 @@
-# ============================================================================
-# FOCEI tests: end-to-end EM orchestrator + C++ kernel parity.
-#
-# Sections:
-#   * End-to-end EM(method = "focei") on a minimal one-eta NLME prdfn.
-#   * Pre-rewrite Theoph regression vs fixtures/focei_theoph_reference.rds.
-#   * C++ kernel parity against R replica on a sigma(eta) (proportional) model.
-#   * C++ kernel parity on a 2-output (parent/metabolite) model.
-# ============================================================================
-
-## Context: "FOCEI orchestrator + C++ kernel"  (context() is deprecated in testthat 3e; kept as a note)
+# FOCEI: end-to-end EM orchestrator and C++ kernel parity.
 
 
 # ---- Models ---------------------------------------------------------------
@@ -158,22 +148,19 @@ test_that("EM(method='focei') runs on a minimal one-eta NLME prdfn", {
 
 
 test_that("EM() rejects unknown method via match.arg", {
-  # Match on the choices list rather than match.arg()'s boilerplate ("should be
-  # one of"), which is localised -- on a non-English locale R prints e.g.
-  # "'arg' sollte eines von ..." and an English-only regexp would spuriously fail.
+  # Match on the choices list: match.arg()'s message is localised, so an
+  # English-only regexp fails on other locales.
   expect_error(EM(obj = NULL, init = c(p = 1),
                        method = "doesNotExist"),
                "foceiQuadrature")
 })
 
 
-# ---- Pre-rewrite Theoph regression ---------------------------------------
+# ---- Theoph reference fixture --------------------------------------------
 
 test_that("EM(method='focei') matches the pre-rewrite Theoph baseline", {
-  # Anchor against the Phase 0 baseline recorded before the C++ kernel landed.
-  # The fixture stores ($value, $argument) at convergence with eager Stage-2
-  # correction; the consolidated kernel must reproduce them within
-  # Schur/eigen tolerance.
+  # The fixture stores value and argument at convergence with the stage-2
+  # correction; the kernel must reproduce them within Schur/eigen tolerance.
   fixture_path <- "fixtures/focei_theoph_reference.rds"
 
   skip_on_cran()
@@ -208,8 +195,7 @@ test_that("EM(method='focei') matches the pre-rewrite Theoph baseline", {
 
   fit <- EM(obj, ref$init,
                  method   = "focei",
-                 ## the fixture pins the stage-2 correction path, which is no
-                 ## longer the default
+                 # the fixture pins the stage-2 correction, off by default
                  control  = list(focei = list(
                    secondOrderCorrection = TRUE,
                    innerControl = list(iterlim = 30, fterm = 1e-7, mterm = 1e-7),
@@ -225,11 +211,9 @@ test_that("EM(method='focei') matches the pre-rewrite Theoph baseline", {
 # ---- C++ kernel parity: sigma(eta) (proportional error) ------------------
 
 test_that("fast inner: value/gradient/H_GN match R oracle for sigma(eta) (proportional)", {
-  # Generalized fast inner: when the error model depends on the prediction
-  # (proportional / combined errors), sigma is a function of eta and the
-  # kernel must include the dsigma/deta contributions in gradient and GN
-  # Hessian. Oracle: closed-form R replica of the kernel math, plus numDeriv
-  # on the OFV to validate the analytical gradient.
+  # With a prediction-dependent error model sigma depends on eta, and the kernel
+  # includes the dsigma/deta terms in gradient and GN Hessian. Oracle: an R
+  # replica of the kernel math, plus numDeriv on the OFV.
 
   skip_on_cran()
   if (!requireNamespace("cppDE", quietly = TRUE))
@@ -242,7 +226,7 @@ test_that("fast inner: value/gradient/H_GN match R oracle for sigma(eta) (propor
   unlink(list.files(".", pattern = "\\.(cpp|c|o|so|dll)$", full.names = TRUE),
          force = TRUE)
 
-  # Tiny synthetic PK: 1-cmt iv bolus, 3 subjects, K_eta = 1 (eta_V only).
+  # One-compartment iv bolus with a single random effect.
   subjects <- c("A", "B", "C")
   times <- c(0.5, 1, 2, 4, 8)
   set.seed(123)
@@ -388,10 +372,9 @@ test_that("fast inner: value/gradient/H_GN match R oracle for sigma(eta) (propor
 # ---- C++ kernel parity: 2-output (parent / metabolite) model -------------
 
 test_that("fast inner: value/gradient/H_GN match R oracle for a 2-output model", {
-  # Multi-output fast inner: data has multiple observables per subject, with
-  # distinct sigma per observable. Long-format meta carries per-row indices
-  # into the model and err deriv arrays; the kernel loops over rows, not
-  # over time x observable.
+  # Several observables per subject with distinct sigma: the long-format meta
+  # indexes the model and error derivative arrays per row, and the kernel loops
+  # over rows.
 
   skip_on_cran()
   if (!requireNamespace("cppDE", quietly = TRUE))
@@ -406,7 +389,6 @@ test_that("fast inner: value/gradient/H_GN match R oracle for a 2-output model",
   subjects <- c("S1", "S2", "S3")
   times <- c(0.5, 1, 2, 4, 8)
   pred_at <- function(t, ka, ke) {
-    # A(t) = A0 exp(-ka t), B(t) = (ka A0)/(ke-ka) (exp(-ka t) - exp(-ke t))
     A0 <- 10
     A <- A0 * exp(-ka * t)
     B <- (ka * A0 / (ke - ka)) * (exp(-ka * t) - exp(-ke * t))

@@ -14,7 +14,7 @@
   }
 }
 
-# y_i = sum_j 10^log10_kj * s_kj * x_ij: the gated linear model.
+# Linear model whose coefficients are a log10 magnitude times a gate.
 .gated_model <- function(X) function(p) {
   k  <- paste0("k", seq_len(ncol(X)))
   a  <- 10^p[paste0("log10_", k)]; s <- p[paste0("s_", k)]
@@ -23,7 +23,7 @@
   list(y = drop(X %*% (a * s)), J = J)
 }
 
-# Four cell types around one level mu, fold changes r_<type> to type R.
+# Cell types around one common level, with fold changes to a reference type.
 .type_model <- function(type) function(p) {
   r <- c(R = 0, p[c("r_B", "r_C", "r_D")])
   names(r) <- c("R", "B", "C", "D")
@@ -32,9 +32,8 @@
   list(y = p[["mu"]] + r[type], J = J)
 }
 
-# Exponential decay y = exp(-k t) per cell type, log10 k = lk + r_<type> with
-# r of the first type zero: the toy model of Hauber et al. (2023), solved
-# analytically.
+# Exponential decay per cell type with fold changes on the log10 rate: the toy
+# model of Hauber et al. (2023), solved analytically.
 .decay_model <- function(type, times, types = unique(type)) function(p) {
   rn <- paste0("r_", types[-1])
   r  <- c(0, p[rn]); names(r) <- types

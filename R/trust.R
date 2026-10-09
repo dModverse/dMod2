@@ -568,8 +568,7 @@ trustL1 <- function(objfun, parinit, mu = 0 * parinit, one.sided = FALSE, lambda
 }
 
 
-# Merge a user control list into `defaults` for a trust()/trustL1() call. Names
-# are checked
+# Merge user control into `defaults` for trust()/trustL1(). Names are checked
 # against the optimiser's formals, so every optimiser argument is settable and a
 # typo errors here instead of silently reaching objfun via `...`.
 .trustControl <- function(defaults, control = NULL, optimizer = trust,

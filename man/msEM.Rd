@@ -30,7 +30,7 @@ msEM(
 }
 \value{
 For a Gaussian (\code{omega}) prior, a \link{parlist} of the fits; for an L1
-(\code{penaltyL1}) prior, the best \link{EM} fit carrying \verb{$msTable}.
+(\code{penaltyL1}) prior, the best \link{EM} fit with \verb{$msTable}.
 }
 \description{
 The multi-start pendant of \link{EM}: runs \link{EM} from several perturbed starts and

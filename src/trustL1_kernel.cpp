@@ -13,13 +13,13 @@
 //
 //  2. Kink clamping: after the trust step is added to theta, any penalised
 //     coordinate that crossed its kink is snapped back to mu_i, so the next
-//     iteration can re-examine the active set. The assignment is verbatim --
+//     iteration can re-examine the active set. The assignment is verbatim:
 //     downstream sparsity tests read an exact equality.
 //
 // Box bounds are handled by `boundary`, exactly as in trust_kernel.cpp:
 // "reflective" applies the Coleman-Li scaling to the coordinates that survive
-// the L1 active set, "clip" is the frozen historical scheme. The kink active
-// set is orthogonal to that choice and is used by both -- L1 sparsity needs
+// the L1 active set, "clip" is componentwise clipping. The kink active
+// set is orthogonal to that choice and is used by both: L1 sparsity needs
 // coordinates to land exactly on mu, which an interior method cannot deliver.
 
 #include <Rcpp.h>
@@ -48,10 +48,9 @@ using dmod::trust_driver::subproblem_label;
 
 namespace {
 
-// Per-parameter L1 metadata, resolved from the named (mu, lambda) pair.
-// `side` overrides `one_sided` per coordinate: 0 two-sided, -1 a lower wall
-// lambda * max(0, mu - theta), +1 a gate lambda * max(0, theta - mu) that keeps
-// theta >= mu and leaves its kink only upward.
+// L1 metadata from the named (mu, lambda) pair. `side` overrides `one_sided` per
+// coordinate: 0 two-sided, -1 lower wall lambda * max(0, mu - theta), +1 gate
+// lambda * max(0, theta - mu) that keeps theta >= mu and leaves the kink upward.
 struct L1Spec {
   std::vector<unsigned char> has;
   std::vector<double>        mu;
@@ -147,7 +146,7 @@ struct RCoord {
   std::vector<int> mem;
   double ps = 1.0;
   double pen = 0.0;
-  bool single = true;   // a coordinate outside every block: the original path
+  bool single = true;   // a coordinate outside every block
 };
 
 // Fusion blocks: lambda * sum_{p<q} w_pq |theta_p - theta_q| plus lambda * w_pa
@@ -367,16 +366,11 @@ struct FuseSpec {
   }
 };
 
-// -------------------------------------------------------------------------
-// Coleman-Li interior trust-region-reflective on the L1-active coordinates
-//
-// One iteration is `propose` (build the reduced subproblem, take a step, clamp
-// the kinks) then `accept` (fold in the objective at the trial point). Between
-// them sits the single R callback of the whole loop, which is what lets N solves
-// share one batched call: see trustL1_lockstep_impl below. Both drivers run this
-// same code, so the lockstep is bit-identical to N separate solves by
-// construction rather than by agreement.
-// -------------------------------------------------------------------------
+// ---- Coleman-Li trust-region-reflective on the L1-active coordinates ----
+
+// An iteration is `propose` (reduced subproblem, step, kink clamp) then `accept`
+// (objective at the trial point). The one R callback sits between them, so the
+// lockstep driver runs the same code and matches N separate solves bit for bit.
 
 // Settings shared by every solve in a lockstep round.
 struct RefTune {
@@ -585,7 +579,7 @@ bool ref_propose(RefState& s, const RefTune& t) {
   }
   for (int i = 0; i < K; ++i) s.z_try[i] = s.ps[i] * s.theta_try[i];
 
-  // Rescore the model at the step actually taken -- the kink clamp shortens
+  // Rescore the model at the step actually taken: the kink clamp shortens
   // individual coordinates after the stepback has chosen a candidate.
   s.shat_real.assign(Kred, 0.0);
   bool rescore = true;
@@ -809,16 +803,11 @@ List trustL1_reflective(Function objfun, NumericVector parinit,
   return ref_result(s, t, parnames);
 }
 
-// -------------------------------------------------------------------------
-// N reflective solves in lock-step
-//
-// Each subject runs its own trustL1 through the very same ref_propose /
-// ref_accept as a single solve; the only difference is that one round collects
-// the trial points of every subject that has not stopped and sends them out as
-// ONE R call. That call is the ODE solve, and the condition axis inside it is
-// what cppDE parallelises. Converged subjects drop out of the round, so the
-// round count is the maximum over subjects rather than their sum.
-// -------------------------------------------------------------------------
+// ---- N reflective solves in lock-step ----
+
+// Each subject runs ref_propose / ref_accept as a single solve would; one round
+// sends the trial points of all running subjects out as one R call. Converged
+// subjects drop out, so the round count is the maximum over subjects.
 List trustL1_lockstep(Function objfun_many, NumericMatrix parinit,
                       NumericMatrix mu, NumericMatrix lambda,
                       bool one_sided, CharacterVector parnames,
@@ -939,9 +928,7 @@ List trustL1_lockstep(Function objfun_many, NumericMatrix parinit,
   return out;
 }
 
-// -------------------------------------------------------------------------
-// Legacy: active-set reduction plus componentwise clipping
-// -------------------------------------------------------------------------
+// ---- boundary = "clip": active-set reduction plus componentwise clipping ----
 List trustL1_clip(Function objfun, NumericVector parinit,
                   const L1Spec& l1,
                   double rinit, double rmax,
@@ -1277,7 +1264,7 @@ List trustL1_lockstep_impl(Function objfun_many,
     stop("trustL1: mu and lambda must have the same shape as parinit");
   List dn = parinit.attr("dimnames");
   if (dn.size() < 2 || Rf_isNull(dn[1]))
-    stop("trustL1: parinit must carry column names");
+    stop("trustL1: parinit must have column names");
   CharacterVector parnames = dn[1];
   for (int n = 0; n < N; ++n)
     for (int i = 0; i < K; ++i)

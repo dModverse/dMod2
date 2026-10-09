@@ -18,7 +18,7 @@ default \code{Inf} = off).}
 }
 \value{
 A callable of class \code{c("emobjfn", "objfn", "fn")}. Calling it on
-\code{pars} returns an \link{objlist} with an \code{emDiag} attribute carrying
+\code{pars} returns an \link{objlist} with an \code{emDiag} attribute holding
 quadrature diagnostics.
 }
 \description{

@@ -37,7 +37,7 @@ f <- eqnvec(A = "-k1 * A - k2 * A", B = "k1 * A - k3 * B")
 x <- Xs(odemodel(f, modelname = "scanL1_x", compile = FALSE, outdir = outdir),
         compile = FALSE)
 g <- Y(eqnvec(obsA = "A", obsB = "B"), f, modelname = "scanL1_g",
-       compile = FALSE, attach.input = FALSE, outdir = outdir)
+       compile = FALSE, attachInput = FALSE, outdir = outdir)
 trafo <- gateL1(eqnvec(A = "1", B = "0", k1 = "10^log10_k1",
                        k2 = "10^log10_k2", k3 = "10^log10_k3"),
                 c("k1", "k2", "k3"))

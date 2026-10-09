@@ -9,7 +9,7 @@ EM(obj, init, fixed = NULL, method = NULL, control = list(), verbose = TRUE)
 \arguments{
 \item{obj}{Composed objective (\code{normL2(...) + constraintL2(...)} for a
 Gaussian random effect, or \code{normL2(...) + constraintL1(penaltyL1(...))} for
-an L1/Laplace one) carrying the model pieces and the random-effect spec.}
+an L1/Laplace one) holding the model pieces and the random-effect spec.}
 
 \item{init}{Named numeric start; assemble with \link{emInit}.}
 
@@ -24,7 +24,7 @@ the penalty backends for the recognised fields.}
 \item{verbose}{Logical; print progress.}
 }
 \value{
-An object of class \code{c("em", "list")} carrying \code{prior}
+An object of class \code{c("em", "list")} with \code{prior}
 (\code{"omega"}/\code{"penaltyL1"}), the estimated parameters (\code{argument}), objective
 \code{value} (-2 log L), the per-subject conditional modes (\code{etaModes}), and the
 prior-specific readout (\code{Omega} for a Gaussian fit; \code{lambda} / \code{sparsity} /
@@ -64,7 +64,7 @@ The outer marginal is FOCE(I) / EM / SAEM; the inner conditional mode uses
 ## notes/laplace_nlme_theory.Rmd.
 ##
 ## Reference encoding (Hauber et al. 2023 style): line A is the baseline
-## (theta = exp(mu)); line B carries the deviation d (theta = exp(mu + d)) and
+## (theta = exp(mu)); line B has the deviation d (theta = exp(mu + d)) and
 ## |d| is penalised. d is a single coordinate, so trustL1 drives the deviation
 ## of a shared parameter cleanly to zero.
 ##
@@ -101,12 +101,12 @@ g <- Y(eqnvec(y_ext = "log(Epo + dEpo_e + 1)",
               y_mem = "log(Epo_EpoR + 1)",
               y_int = "log(Epo_EpoR_i + dEpo_i + 1)"),
        x, modelname = "becker_obs", compile = FALSE, deriv2 = TRUE,
-       attach.input = FALSE, outdir = outdir)
+       attachInput = FALSE, outdir = outdir)
 e <- Y(eqnvec(y_ext = "sigma", y_mem = "sigma", y_int = "sigma"), g,
        modelname = "becker_err", compile = FALSE, deriv2 = TRUE,
-       attach.input = FALSE, outdir = outdir)
+       attachInput = FALSE, outdir = outdir)
 
-## 2. Reference encoding: candidates kon,koff,kt,ke carry a line-B deviation.
+## 2. Reference encoding: candidates kon,koff,kt,ke have a line-B deviation.
 dose  <- 1347.49                                       # init_Epo
 lines <- c("A", "B")
 trafo <- eqnvec(
@@ -243,7 +243,7 @@ m <- odemodel(reactions, modelname = "theoph_ode", backend = "cppDE",
 x <- Xs(m)
 g <- Y(c(y = "log(Cc + 1e-9)"), x, modelname = "theoph_obs",
        compile = FALSE, deriv2 = TRUE, outdir = outdir)
-e <- Y(eqnvec(y = "sigma_add"), g, attach.input = FALSE,
+e <- Y(eqnvec(y = "sigma_add"), g, attachInput = FALSE,
        modelname = "theoph_err", compile = FALSE, deriv2 = TRUE, outdir = outdir)
 
 ## 3. Per-subject parameter transformation. branch(apply = "insert") expands

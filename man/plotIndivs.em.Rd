@@ -25,7 +25,7 @@
 
 \item{showPred}{Logical; overlay population PRED dashed (default TRUE).}
 
-\item{showBand}{Logical; draw the IPRED +/- sigma ribbon if the fit carries
+\item{showBand}{Logical; draw the IPRED +/- sigma ribbon if the fit has
 an errfn (default TRUE).}
 
 \item{subjectsPerPage}{Optional integer. If set, subjects are split into
