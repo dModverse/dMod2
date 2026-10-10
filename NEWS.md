@@ -1,3 +1,8 @@
+# dMod2 0.11.2
+
+* `symmetryDetection()` and `symmetryReduction()` install symident from PyPI on
+  first use; under `RETICULATE_PYTHON`, `pip install symident`.
+
 # dMod2 0.11.1
 
 * `distributedComputing()` runs zstd as a pipe stage of its own and moves the

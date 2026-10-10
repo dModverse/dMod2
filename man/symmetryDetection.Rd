@@ -124,8 +124,7 @@ the observations of a model do not change: the nullspace of the observability
 matrix over finite fields, with certified rank and exact closed forms. The model
 \code{f}, the observables \code{g} and an optional \code{trafo} are equations in any form
 \code{\link[=as.eqnvec]{as.eqnvec()}} accepts. The computation runs in the Python package \code{symident}
-through \code{reticulate}, installed on first use from
-\url{https://github.com/dModverse/symident}.
+through \code{reticulate}, installed from PyPI on first use.
 
 Right-hand sides, observables and initial values may contain \code{exp()},
 \code{exp10()}, \code{b^x}, hyperbolic and trigonometric functions, free exponents \code{x^n},
