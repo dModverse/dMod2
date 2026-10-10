@@ -1,3 +1,11 @@
+# dMod2 0.11.3
+
+* New `trustL1()`: the trust region of `trust()` with an L1 penalty on chosen
+  parameters around reference values `mu`, one-sided with `one.sided`. `gate`
+  keeps a parameter on or above its kink, so it can reach the reference
+  exactly, and `fuse` penalises the pairwise differences within blocks, whose
+  members move as one while equal. The penalised step runs in a C++ kernel.
+
 # dMod2 0.11.2
 
 * `symmetryDetection()` and `symmetryReduction()` install symident from PyPI on

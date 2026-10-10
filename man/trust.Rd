@@ -2,6 +2,7 @@
 % Please edit documentation in R/trust.R
 \name{trust}
 \alias{trust}
+\alias{trustL1}
 \title{Non-Linear Optimisation by a Trust-Region Method}
 \usage{
 trust(
@@ -23,6 +24,36 @@ trust(
   blather = FALSE,
   printIter = FALSE,
   traceFile = NULL,
+  ...
+)
+
+trustL1(
+  objfun,
+  parinit,
+  mu = 0 * parinit,
+  one.sided = FALSE,
+  lambda = 1,
+  rinit = 0.1,
+  rmax = 10,
+  parscale = NULL,
+  iterlim = 100L,
+  ftol = 1e-06,
+  mtol = 1e-06,
+  gtol = 1e-06,
+  xtol = 0,
+  rmin = 0,
+  theta.max = 0.99995,
+  boundary = c("reflective", "clip"),
+  minimize = TRUE,
+  blather = FALSE,
+  parupper = NULL,
+  parlower = NULL,
+  printIter = FALSE,
+  traceFile = NULL,
+  fterm,
+  mterm,
+  gate = NULL,
+  fuse = NULL,
   ...
 )
 }
@@ -168,6 +199,41 @@ at each evaluation. Default \code{FALSE}.}
 iteration, objective value and parameters. Default \code{NULL}, no file.}
 
 \item{...}{Further named arguments passed to \code{objfun}.}
+
+\item{mu}{Named numeric vector of reference values for the L1-penalised
+parameters. Names must be a subset of \code{names(parinit)}; only the
+named parameters receive a penalty. Each must lie strictly inside
+\code{[parlower, parupper]}. Defaults to a zero vector covering all of
+\code{parinit}.}
+
+\item{one.sided}{Logical. If \code{TRUE}, the penalty is one-sided and
+acts as a lower wall at \code{mu}: \code{lambda * max(0, mu - p)}.
+Otherwise it is the symmetric \code{lambda * |p - mu|}.}
+
+\item{lambda}{Strength of the L1 penalty. Either a scalar (broadcast to
+all entries of \code{mu}) or a named numeric aligned with \code{mu}.}
+
+\item{ftol, mtol, gtol, xtol, rmin, theta.max, boundary}{\code{trustL1} only;
+its tolerances stay flat, it does not take the control lists of
+\code{trust}.}
+
+\item{fterm, mterm}{Deprecated aliases for \code{ftol} and \code{mtol}.}
+
+\item{gate}{Character, names in \code{mu} whose penalty is the gate
+\code{lambda * (p - mu)} with \code{p >= mu}: the parameter can sit exactly
+on \code{mu} and leaves it only upward. Starts below \code{mu} are moved
+onto it.}
+
+\item{fuse}{List of fusion blocks. A block penalises
+\code{lambda * sum_{i<j} w_ij |p_i - p_j|} over its parameters, plus
+\code{lambda * w_ia |p_i - a|} toward an optional anchor \code{a}.
+Parameters with equal values move as one and split again when the data
+pull them apart. A block is a character vector of parameter names or a
+list with \code{pars}, and optionally \code{lambda} (default: the scalar
+\code{lambda}), \code{anchor} (default none) and \code{weights}, an
+\code{(m+1) x (m+1)} matrix whose last row and column refer to the
+anchor (default all 1). Fused parameters must not appear in \code{mu}; if
+\code{fuse} is given and \code{mu} is not, \code{mu} is empty.}
 }
 \value{
 A list of class \code{trustfit} with components

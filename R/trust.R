@@ -435,7 +435,140 @@ print.trustfit <- function(x, ...) {
 }
 
 
-# Merge a user control list into `defaults` for a trust() call. Names are checked
+#' @export
+#' @rdname trust
+#' @param ftol,mtol,gtol,xtol,rmin,theta.max,boundary \code{trustL1} only;
+#'   its tolerances stay flat, it does not take the control lists of
+#'   \code{trust}.
+#' @param fterm,mterm Deprecated aliases for \code{ftol} and \code{mtol}.
+#' @param mu Named numeric vector of reference values for the L1-penalised
+#'   parameters. Names must be a subset of \code{names(parinit)}; only the
+#'   named parameters receive a penalty. Each must lie strictly inside
+#'   \code{[parlower, parupper]}. Defaults to a zero vector covering all of
+#'   \code{parinit}.
+#' @param one.sided Logical. If \code{TRUE}, the penalty is one-sided and
+#'   acts as a lower wall at \code{mu}: \code{lambda * max(0, mu - p)}.
+#'   Otherwise it is the symmetric \code{lambda * |p - mu|}.
+#' @param lambda Strength of the L1 penalty. Either a scalar (broadcast to
+#'   all entries of \code{mu}) or a named numeric aligned with \code{mu}.
+#' @param gate Character, names in \code{mu} whose penalty is the gate
+#'   \code{lambda * (p - mu)} with \code{p >= mu}: the parameter can sit exactly
+#'   on \code{mu} and leaves it only upward. Starts below \code{mu} are moved
+#'   onto it.
+#' @param fuse List of fusion blocks. A block penalises
+#'   \code{lambda * sum_{i<j} w_ij |p_i - p_j|} over its parameters, plus
+#'   \code{lambda * w_ia |p_i - a|} toward an optional anchor \code{a}.
+#'   Parameters with equal values move as one and split again when the data
+#'   pull them apart. A block is a character vector of parameter names or a
+#'   list with \code{pars}, and optionally \code{lambda} (default: the scalar
+#'   \code{lambda}), \code{anchor} (default none) and \code{weights}, an
+#'   \code{(m+1) x (m+1)} matrix whose last row and column refer to the
+#'   anchor (default all 1). Fused parameters must not appear in \code{mu}; if
+#'   \code{fuse} is given and \code{mu} is not, \code{mu} is empty.
+trustL1 <- function(objfun, parinit, mu = 0 * parinit, one.sided = FALSE, lambda = 1,
+                    rinit = 0.1, rmax = 10,
+                    parscale  = NULL,
+                    iterlim   = 100L,
+                    ftol      = 1e-6,
+                    mtol      = 1e-6,
+                    gtol      = 1e-6,
+                      xtol      = 0,
+                    rmin      = 0,
+                    theta.max = 0.99995,
+                    boundary  = c("reflective", "clip"),
+                    minimize  = TRUE,
+                    blather   = FALSE,
+                    parupper  = NULL,
+                    parlower  = NULL,
+                    printIter = FALSE,
+                    traceFile = NULL,
+                    fterm, mterm,
+                    gate = NULL, fuse = NULL,
+                    ...) {
+  if (!missing(fterm)) ftol <- fterm
+  if (!missing(mterm)) mtol  <- mterm
+  boundary <- match.arg(boundary)
+
+  sanePars <- sanitizePars(parinit, list(...)$fixed)
+  parinit  <- sanePars$pars
+
+  if (is.null(names(parinit)))
+    stop("trustL1: parinit must be a named numeric vector")
+  if (missing(mu) && !is.null(fuse)) mu <- structure(numeric(0), names = character(0))
+  if (length(mu) > 0L && is.null(names(mu)))
+    stop("trustL1: mu must be a named numeric vector")
+
+  unknown <- setdiff(names(mu), names(parinit))
+  if (length(unknown) > 0L)
+    stop("trustL1: mu has names not present in parinit: ",
+         paste(unknown, collapse = ", "))
+
+  lambda0 <- if (length(lambda) == 1L) as.numeric(lambda) else NULL
+  if (length(lambda) == 1L) {
+    lambda <- structure(rep(as.numeric(lambda), length(mu)),
+                        names = names(mu))
+  } else {
+    if (is.null(names(lambda)))
+      stop("trustL1: lambda must be scalar or a named numeric vector")
+    if (!setequal(names(lambda), names(mu)))
+      stop("trustL1: names(lambda) must equal names(mu)")
+    lambda <- lambda[names(mu)]
+  }
+
+  # The kernel passes what it wants as a second argument; trustL1 always
+  # takes value, gradient and Hessian, so the request is dropped here.
+  dots <- list(...)
+  fn <- function(x, want = 2L) do.call(objfun, c(list(x), dots))
+
+  mu <- structure(as.numeric(mu), names = names(mu))
+  lambda <- structure(as.numeric(lambda), names = names(lambda))
+
+  if (!is.null(gate)) {
+    gate <- as.character(gate)
+    if (!all(gate %in% names(mu)))
+      stop("trustL1: every gate must be named in mu")
+    low <- gate[parinit[gate] < mu[gate]]
+    parinit[low] <- mu[low]
+  }
+  if (!is.null(fuse)) fuse <- .fuseBlocks(fuse, names(parinit), lambda0)
+
+  trustL1_impl(fn, parinit, mu, lambda,
+               as.logical(one.sided)[1L], rinit, rmax,
+               parscale, as.integer(iterlim),
+               ftol, mtol, gtol, xtol, rmin, theta.max,
+               boundary, minimize, blather,
+               parupper, parlower, printIter, traceFile,
+               gate = gate, fuse = fuse)
+}
+
+# Normalise trustL1 fuse blocks to list(idx, lambda, anchor, w) with idx
+# positions in `parnames`.
+.fuseBlocks <- function(fuse, parnames, lambda0) {
+  if (!is.list(fuse)) fuse <- list(fuse)
+  lapply(fuse, function(b) {
+    if (is.character(b)) b <- list(pars = b)
+    pars <- b$pars
+    if (length(pars) < 1L || anyDuplicated(pars))
+      stop("trustL1: a fuse block needs unique parameter names")
+    idx <- match(pars, parnames)
+    if (anyNA(idx))
+      stop("trustL1: fuse names not present in parinit: ",
+           paste(pars[is.na(idx)], collapse = ", "))
+    lam <- if (is.null(b$lambda)) lambda0 else b$lambda
+    if (length(lam) != 1L || !is.finite(lam) || lam < 0)
+      stop("trustL1: a fuse block needs one non-negative lambda")
+    m <- length(pars)
+    w <- if (is.null(b$weights)) matrix(1, m + 1L, m + 1L) else b$weights
+    if (!is.matrix(w) || any(dim(w) != m + 1L))
+      stop("trustL1: fuse weights must be a (m+1) x (m+1) matrix")
+    list(idx = as.integer(idx), lambda = as.numeric(lam),
+         anchor = if (is.null(b$anchor)) NA_real_ else as.numeric(b$anchor),
+         w = matrix(as.numeric(w), m + 1L))
+  })
+}
+
+
+# Merge user control into `defaults` for trust()/trustL1(). Names are checked
 # against the optimiser's formals, so every optimiser argument is settable and a
 # typo errors here instead of silently reaching objfun via `...`.
 .trustControl <- function(defaults, control = NULL, optimizer = trust,

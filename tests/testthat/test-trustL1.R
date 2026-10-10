@@ -1,0 +1,245 @@
+# trustL1() on quadratic objectives, whose L1-penalised optimum is the
+# soft-thresholding solution on both sides of the kink.
+
+
+# Quadratic objfn centred at `target` with unit "sigma". Returns an
+# objlist so trustL1's `+.objlist` accumulation works correctly.
+.quadratic_objfn <- function(target) {
+  d <- length(target)
+  function(p, ...) {
+    gr <- 2 * (p - target); names(gr) <- names(p)
+    hs <- 2 * diag(d); dimnames(hs) <- list(names(p), names(p))
+    objlist(value = sum((p - target)^2), gradient = gr, hessian = hs)
+  }
+}
+
+
+## ---- Soft-threshold above the kink: |x0 - mu| > lambda/2 ---------------
+
+test_that("trustL1 lands on soft(x0, lambda/2) when above the L1 kink", {
+  x0 <- 1.5
+  lambda <- 0.4
+  obj <- .quadratic_objfn(c(x = x0))
+
+  fit <- trustL1(obj, parinit = c(x = 0), mu = c(x = 0),
+                 lambda = lambda, rinit = 0.5, rmax = 5, iterlim = 100)
+  # x0 lies outside the dead zone, so the soft-threshold is active.
+  expected <- x0 - sign(x0 - 0) * lambda / 2
+  expect_equal(unname(fit$argument[["x"]]), expected, tolerance = 1e-4)
+})
+
+
+## ---- Multivariate: soft-threshold acts elementwise --------------------
+
+test_that("trustL1 with diagonal quadratic applies soft-threshold elementwise", {
+  x0 <- c(a = 1.0, b = 0.05, c = -0.8)
+  lambda <- 0.3
+  obj <- .quadratic_objfn(x0)
+  mu_L1 <- c(a = 0, b = 0, c = 0)
+
+  fit <- trustL1(obj, parinit = c(a = 0, b = 0, c = 0),
+                 mu = mu_L1, lambda = lambda,
+                 rinit = 0.5, rmax = 5, iterlim = 200)
+
+  # Each coordinate: soft(x0_i, lambda/2) w.r.t. mu_i = 0.
+  soft <- function(z, t) if (abs(z) <= t) 0 else z - sign(z) * t
+  expected <- vapply(x0, soft, t = lambda / 2, FUN.VALUE = 0.0)
+  expect_equal(unname(fit$argument[names(x0)]),
+               unname(expected), tolerance = 5e-3)
+})
+
+
+## ---- Lambda = 0 reduces to plain trust ---------------------------------
+
+test_that("trustL1 with lambda = 0 converges to the unpenalized minimum", {
+  x0 <- c(a = 0.7, b = -1.2)
+  obj <- .quadratic_objfn(x0)
+  fit <- trustL1(obj, parinit = c(a = 0, b = 0),
+                 mu = c(a = 0, b = 0), lambda = 0,
+                 rinit = 0.5, rmax = 5, iterlim = 100)
+  expect_equal(unname(fit$argument[names(x0)]), unname(x0),
+               tolerance = 1e-5)
+})
+
+
+## ---- Sub-kink coords are pinned to mu exactly -------------------------
+
+test_that("trustL1 pins sub-kink coords to mu exactly via the active set", {
+  # x0 places 'b' and 'd' inside the soft-threshold dead zone, 'a' and 'c' outside.
+  x0     <- c(a = 1.5, b = 0.10, c = -0.8, d = -0.05)
+  lambda <- 0.5
+  obj    <- .quadratic_objfn(x0)
+  mu_L1  <- c(a = 0, b = 0, c = 0, d = 0)
+
+  fit <- trustL1(obj, parinit = c(a = 0, b = 0, c = 0, d = 0),
+                 mu = mu_L1, lambda = lambda,
+                 rinit = 0.5, rmax = 5, iterlim = 200)
+
+  # b and d must land at mu = 0 exactly (active-set pinning, not just
+  # numerically close).
+  expect_identical(unname(fit$argument[["b"]]), 0)
+  expect_identical(unname(fit$argument[["d"]]), 0)
+
+  # a and c follow the analytic soft-threshold solution.
+  expect_equal(unname(fit$argument[["a"]]),
+               1.5 - lambda / 2, tolerance = 1e-6)
+  expect_equal(unname(fit$argument[["c"]]),
+               -0.8 + lambda / 2, tolerance = 1e-6)
+
+  # Reported value equals smooth-part value at theta plus L1 contribution.
+  smooth_at_theta <- sum((fit$argument - x0)^2)
+  l1_at_theta    <- lambda * sum(abs(fit$argument - mu_L1))
+  expect_equal(fit$value, smooth_at_theta + l1_at_theta, tolerance = 1e-8)
+})
+
+
+## ---- Sub-kink coords stay pinned when parinit starts off the kink -----
+
+test_that("trustL1 pulls sub-kink coords to mu when started away from it", {
+  # Same dead-zone setup, but initialise far from mu so the optimiser has
+  # to *cross* the kink to pin the parameter.
+  x0     <- c(a = 1.5, b = 0.10)
+  lambda <- 0.5
+  obj    <- .quadratic_objfn(x0)
+  mu_L1  <- c(a = 0, b = 0)
+
+  fit <- trustL1(obj, parinit = c(a = 2.0, b = 1.0),
+                 mu = mu_L1, lambda = lambda,
+                 rinit = 0.5, rmax = 5, iterlim = 200)
+
+  expect_identical(unname(fit$argument[["b"]]), 0)
+  expect_equal(unname(fit$argument[["a"]]),
+               1.5 - lambda / 2, tolerance = 1e-6)
+})
+
+
+## ---- One-sided penalty acts as a lower wall at mu ---------------------
+
+test_that("trustL1 one-sided penalty pins coords pushing below mu", {
+  # The one-sided penalty fires only below mu, so the optimum is the
+  # soft-threshold solution projected onto [mu, +Inf).
+  x0     <- c(a = -1.0, b = 0.5)
+  lambda <- 0.4
+  obj    <- .quadratic_objfn(x0)
+  mu_L1  <- c(a = 0, b = 0)
+
+  fit <- trustL1(obj, parinit = c(a = 0.5, b = 0.5),
+                 mu = mu_L1, one.sided = TRUE, lambda = lambda,
+                 rinit = 0.5, rmax = 5, iterlim = 200)
+
+  # a is held at the lower wall.
+  expect_identical(unname(fit$argument[["a"]]), 0)
+  # b is above mu, penalty inactive, so b lands at the unpenalised min.
+  expect_equal(unname(fit$argument[["b"]]), 0.5, tolerance = 1e-6)
+})
+
+
+## ---- Box bounds alongside the L1 kink ---------------------------------
+# The kink active set is independent of the box and pins to mu bit-exactly.
+
+test_that("trustL1 combines a box bound with an L1 kink", {
+  # a is capped by its upper bound; b lies inside the dead zone and stays at mu.
+  obj <- function(p, ...) {
+    d <- as.numeric(p - c(3, 0.05))
+    list(value = sum(d^2), gradient = 2 * d, hessian = 2 * diag(2))
+  }
+  fit <- trustL1(obj, c(a = 0.5, b = 1), mu = c(a = 0, b = 0), lambda = 1,
+                 rinit = 1, rmax = 10, iterlim = 100,
+                 parupper = c(a = 1, b = Inf))
+
+  expect_true(fit$converged)
+  expect_identical(unname(fit$argument[["b"]]), 0)
+  expect_equal(unname(fit$argument[["a"]]), 1, tolerance = 1e-6)
+  expect_lt(fit$argument[["a"]], 1)
+  expect_true(fit$atBound[["a"]])
+})
+
+
+test_that("trustL1 rejects a kink outside the box", {
+  obj <- function(p, ...) list(value = sum(p^2), gradient = 2 * p, hessian = 2 * diag(2))
+  expect_error(
+    trustL1(obj, c(a = 0.5, b = 0.5), mu = c(a = 2), lambda = 1,
+            rinit = 1, rmax = 10, parupper = c(a = 1, b = Inf)),
+    "mu must lie strictly inside")
+})
+
+
+test_that("trustL1 boundary = 'clip' reproduces the historical pinning", {
+  obj <- function(p, ...) {
+    d <- as.numeric(p - c(2, 0.05))
+    list(value = sum(d^2), gradient = 2 * d, hessian = 2 * diag(2))
+  }
+  refl <- trustL1(obj, c(a = 1, b = 1), mu = c(a = 0, b = 0), lambda = 1,
+                  rinit = 1, rmax = 10, boundary = "reflective")
+  clip <- trustL1(obj, c(a = 1, b = 1), mu = c(a = 0, b = 0), lambda = 1,
+                  rinit = 1, rmax = 10, boundary = "clip")
+  expect_identical(unname(refl$argument[["b"]]), 0)
+  expect_identical(unname(clip$argument[["b"]]), 0)
+  expect_equal(unname(refl$argument), unname(clip$argument), tolerance = 1e-8)
+})
+
+
+## ---- gates and fusion blocks --------------------------------------------
+
+test_that("a gate stays on its kink unless the data pull it upward", {
+  for (case in list(c(y = -1, s = 0), c(y = 0.3, s = 0), c(y = 2, s = 1.5))) {
+    fit <- trustL1(.quadratic_objfn(c(s = case[["y"]])), parinit = c(s = 1),
+                   mu = c(s = 0), lambda = 1, gate = "s")
+    expect_identical(fit$argument[["s"]] == 0, case[["s"]] == 0)
+    expect_equal(fit$argument[["s"]], case[["s"]], tolerance = 1e-6)
+  }
+  start_below <- trustL1(.quadratic_objfn(c(s = -1)), parinit = c(s = -0.5),
+                         mu = c(s = 0), lambda = 1, gate = "s")
+  expect_identical(start_below$argument[["s"]], 0)
+})
+
+test_that("a fusion block shrinks toward fused values and fuses exactly", {
+  y   <- c(a = 0, b = 1, c = 5)
+  obj <- .quadratic_objfn(y)
+  fit <- function(lambda, start = c(a = 0.5, b = -1, c = 2))
+    trustL1(obj, parinit = start, fuse = list(names(y)), lambda = lambda,
+            rinit = 0.5, rmax = 5, iterlim = 200)$argument
+
+  # No fusion: each value moves by lambda/2 per neighbour above minus below.
+  expect_equal(unname(fit(0.8)), c(0.8, 1, 4.2), tolerance = 1e-6)
+
+  # a and b fuse and stay fused; c keeps its own value.
+  p <- fit(1.2)
+  expect_identical(p[["a"]], p[["b"]])
+  expect_equal(unname(p), c(1.1, 1.1, 3.8), tolerance = 1e-6)
+
+  # Strong penalty: everything at the mean, also from a fused start.
+  expect_equal(unname(fit(10)), rep(2, 3), tolerance = 1e-6)
+  p <- fit(1.2, start = c(a = 2, b = 2, c = 2))
+  expect_equal(unname(p), c(1.1, 1.1, 3.8), tolerance = 1e-6)
+})
+
+test_that("an anchored block soft-thresholds toward its anchor", {
+  y <- c(a = 0.3, b = -2)
+  w <- matrix(1, 3, 3); w[1:2, 1:2] <- 0
+  fit <- trustL1(.quadratic_objfn(y), parinit = c(a = 0, b = 0),
+                 fuse = list(list(pars = names(y), anchor = 0, weights = w)),
+                 lambda = 1, rinit = 0.5, rmax = 5)
+  expect_identical(fit$argument[["a"]], 0)
+  expect_equal(fit$argument[["b"]], -1.5, tolerance = 1e-6)
+})
+
+test_that("an anchored fused block releases only the members the data pull away", {
+  y <- c(a = 0.1, b = 0.2, c = 3)
+  w <- matrix(1, 4, 4); w[4, 1:2] <- w[1:2, 4] <- 3
+  fit <- trustL1(.quadratic_objfn(y), parinit = c(a = 0, b = 0, c = 0),
+                 fuse = list(list(pars = names(y), anchor = 0, weights = w)),
+                 lambda = 0.3, rinit = 0.5, rmax = 5, iterlim = 200)
+  expect_identical(fit$argument[["a"]], 0)
+  expect_identical(fit$argument[["b"]], 0)
+  # the released member balances the anchor and the pinned members
+  expect_equal(fit$argument[["c"]], 3 - 0.45, tolerance = 1e-6)
+})
+
+test_that("gates and fuse blocks reject the clip boundary and overlap with mu", {
+  obj <- .quadratic_objfn(c(a = 1, b = 2))
+  expect_error(trustL1(obj, c(a = 0, b = 0), fuse = list(c("a", "b")),
+                       boundary = "clip"), "reflective")
+  expect_error(trustL1(obj, c(a = 0, b = 0), mu = c(a = 0),
+                       fuse = list(c("a", "b"))), "both in mu")
+})
