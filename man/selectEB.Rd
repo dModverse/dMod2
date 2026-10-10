@@ -78,7 +78,8 @@ score of every start above the best. \code{"trace"}: score along the best start.
 Object of class \code{selectEB}, a list with
 \describe{
 \item{\code{terms}}{per candidate: family, \code{on} at the best structure, \code{gain},
-\code{threshold}, \code{pip}, \code{selected} after the refits.}
+\code{threshold}, \code{pip} (\code{NA} with \code{rule = "alpha"}), \code{selected} after the
+refits.}
 \item{\code{hyper}}{\eqn{\hat g}, the penalty \eqn{(1 + g)/g \log(1 + g)} per
 parameter, and per family the posterior mean share of present
 candidates.}
@@ -104,42 +105,20 @@ One multistart of this single problem replaces a penalty grid with a
 multistart per strength.
 }
 \details{
-A structure \eqn{z \in \{0,1\}^J} switches the candidates on or off; an absent
-gate or reference parameter is fixed at 0. The slab is a g-prior on the
-effects of the present candidates: normal around 0 with \eqn{g} times the
-covariance of their estimate, so \eqn{g} is the squared effect size in units
-of its standard error and does not depend on parametrisation or units. With
-the likelihood ratio in place of the Wald statistic, the structure scores
-\deqn{G(z, g) = \frac{g\,D_z + D_0}{1 + g} + (p_z + a_g) \log(1 + g)
-  - 2 \log p(z),}
-where \eqn{D_z} is the minimal \eqn{-2 \log L} of structure \eqn{z}, \eqn{D_0}
-that of the structure without candidates, \eqn{p_z} the number of parameters
-of the present candidates, \eqn{(1 + g)^{-a_g/2}} the hyper-g prior and
-\eqn{p(z)} the beta-binomial structure prior per family, i.e. the share of
-present candidates integrated out under a \eqn{\mathrm{Beta}(a, b)} prior,
-which corrects for the number of candidates. Minimising over \eqn{g} gives
-\eqn{1 + \hat g = (D_0 - D_z) / (p_z + a_g)}.
-
-Each start draws a structure and parameters, then alternates a search over
-single switches of candidates (each a fit warm-started from the current one)
-with the update of \eqn{g}, until neither lowers \eqn{G}. The values of
-\eqn{G} are comparable across starts.
-
-A candidate with \eqn{p_j} parameters is present iff its gain
-\eqn{\Delta_j = D_{\mathrm{off}} - D_{\mathrm{on}}} exceeds
-\deqn{\lambda_j = \frac{1 + g}{g} \left(p_j \log(1 + g) - 2 \log
-  \frac{p(z_{\mathrm{on}})}{p(z_{\mathrm{off}})}\right),}
-equivalently iff its conditional inclusion probability exceeds 0.5. With
-\code{rule = "alpha"}, every present parameter costs \code{qchisq(1 - alpha, 1)}
+A structure switches each candidate on or off; an absent gate or reference
+parameter is fixed at 0. The present candidates share a slab whose width
+\eqn{g} is estimated together with the structure, so every candidate gets
+its own threshold on its gain in \eqn{-2 \log L}, both reported in \code{terms}.
+With \code{rule = "alpha"} every present parameter costs \code{qchisq(1 - alpha, 1)}
 instead.
 
-The final structure comes from refits along the candidates ordered by
-inclusion probability: the smallest structure that a likelihood ratio test
-against the full model does not reject at level \code{alpha}.
-
-Candidates whose parameters are close to collinear at the best structure
-are reported in \code{nonidentifiable}, and structures whose score is within
-\code{control$window} of the best one in \code{alternatives}.
+The final structure comes from refits along the candidates ordered by their
+gain above the threshold, present ones first: the smallest structure that a
+likelihood ratio test against the full model does not reject at level
+\code{alpha}. Candidates whose parameters are close to collinear at the best
+structure are reported in \code{nonidentifiable}, and structures whose score is
+within \code{control$window} of the best one in \code{alternatives}. The method is
+described in \code{vignette("StructureSelection", package = "dMod2")}.
 }
 \examples{
 \dontrun{

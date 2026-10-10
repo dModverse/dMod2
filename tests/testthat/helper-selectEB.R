@@ -7,7 +7,7 @@
   list(y = drop(X %*% b), J = X)
 }
 
-# Intercept plus gated coefficients: y = b0 + X (10^log10_k * s_k).
+# Linear model with an intercept and gated coefficients on the log10 scale.
 .gated_lin_model <- function(X) function(p) {
   k <- paste0("k", seq_len(ncol(X)))
   a <- 10^p[paste0("log10_", k)]; s <- p[paste0("s_", k)]
@@ -35,8 +35,8 @@
        truth = paste0("-", paste(paste0("s_", ks[-on]), collapse = " -")))
 }
 
-# Two parallel paths A -> B with gated rates and a gated linear drift:
-# y = 1 - exp(-(ka s_a + kb s_b) t) + kc s_c t. The paths can replace each other.
+# Two gated parallel paths A -> B and a gated drift; the paths can replace each
+# other.
 .paths_model <- function(t) function(p) {
   ka <- 10^p[["la"]]; kb <- 10^p[["lb"]]; kc <- 10^p[["lc"]]
   r  <- ka * p[["s_a"]] + kb * p[["s_b"]]

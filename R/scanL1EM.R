@@ -1,7 +1,6 @@
-# scanL1(lambda = "em"): the strength of the Lq penalty estimated by an EM on
-# the marginal likelihood, one strength per family (gates, reference
-# parameters). The penalty lambda |b|^q is the exponential power prior
-# p(b) = q lambda^(1/q) / (2 Gamma(1/q)) exp(-lambda |b|^q), one-sided for gates.
+# scanL1(lambda = "em"): one Lq strength per family estimated by an EM on the marginal
+# likelihood. lambda |b|^q is the exponential power prior
+# q lambda^(1/q) / (2 Gamma(1/q)) exp(-lambda |b|^q), one-sided for gates.
 
 # -2 log of the normalising constant of the prior.
 .l1EmLogNorm <- function(lambda, q, oneSided)
@@ -83,10 +82,9 @@
   (P + t(P)) / 2
 }
 
-# One EM from `st`: MAP, posterior of the terms, closed-form strengths per
-# family, until the strengths settle. The prior acts on every term divided by
-# its `scale`. Value: approximate -2 log marginal
-# likelihood plus the -2 log Gamma hyperprior of the strengths.
+# One EM from `st`: MAP, posterior of the terms divided by `scale`, closed-form strengths
+# per family, until they settle. Value: approximate -2 log marginal likelihood plus the
+# -2 log Gamma hyperprior of the strengths.
 .l1EmRun <- function(obj, st, family, q, gates, fixed, ctl, scale) {
   em <- ctl$em
   fams <- unique(family)
@@ -137,11 +135,9 @@
                         start0, fits, sd, cores, obj, extra = list(sparse),
                         positive = gates, wf = wf, levelTol = ctl$tolHits)
   if (is.null(best)) stop("scanL1: every EM run failed.", call. = FALSE)
-  # Stepwise refits from the MAP structure: every present term, weakest first,
-  # is tested against the current structure and dropped unless its removal is
-  # rejected at `alpha` (divided by the number of terms with "bonferroni");
-  # then every absent term, largest posterior size first, is added if its
-  # addition is significant.
+  # Stepwise refits from the MAP structure: a present term, weakest first, is dropped
+  # unless its removal is rejected at `alpha` (over the number of terms with
+  # "bonferroni"); an absent term, largest first, is added if significant.
   terms <- names(family)
   u <- abs(best$argument[terms]) / scale[terms]
   Eq <- stats::setNames(best$terms$Eq, best$terms$term)[terms]
