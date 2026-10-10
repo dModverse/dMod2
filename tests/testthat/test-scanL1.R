@@ -49,6 +49,16 @@ test_that("scanL1 removes the gate of a term the data do not need", {
   expect_gt(fit$refits$p[fit$refits$key == "-s_k2"], 0.05)
   expect_s3_class(plot(fit), "ggplot")
   expect_s3_class(plot(fit, type = "test"), "ggplot")
+
+  # the lowest level of every waterfall: the path structure is on it, all its
+  # runs lie within tolHits of the best value
+  expect_true(all(c("lambda", "key", "value", "fits") %in% names(fit$level)))
+  expect_true(all(paste(fit$path$lambda, fit$path$key) %in% paste(fit$level$lambda, fit$level$key)))
+  expect_length(fit$levelFits, nrow(fit$path))
+  for (lv in fit$levelFits) {
+    v <- vapply(lv, `[[`, 0, "value")
+    expect_true(all(v <= min(v) + 0.1))
+  }
 })
 
 test_that("scanL1 fuses equal fold changes and anchors the shared ones", {

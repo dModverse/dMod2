@@ -72,7 +72,8 @@ gateL1 <- function(trafo, pars, prefix = "s_") {
 #' @param groups List of blocks. A block is a character vector, or a list with
 #'   `pars` and `anchor`: the anchor is a fixed value every member is also
 #'   pulled toward, e.g. 0 for the reference cell type.
-#' @param lambda Grid of penalty strengths.
+#' @param lambda Grid of penalty strengths, or `"em"`: one strength per family
+#'   (gates, reference parameters) estimated with the structure, see Details.
 #' @param fixed Named numeric, parameters fixed throughout.
 #' @param q Exponent of the penalty. `q < 1` (e.g. 0.8) is approximated by
 #'   reweighted L1 fits.
@@ -109,8 +110,31 @@ gateL1 <- function(trafo, pars, prefix = "s_") {
 #'   `hits` (runs that must reach
 #'   the best value within `tolHits`, default 1 and 0.1, for the full model, a
 #'   `lambda` and a refit; further batches of starts are added until then, up
-#'   to `maxFits`, default ten times the batch).
-#' @details With `ssl`, term `j` (a gate, a reference parameter, or in a block
+#'   to `maxFits`, default ten times the batch), `em` (with `lambda = "em"`:
+#'   `init` start strength, `a` and `b` of its Gamma prior, `tol` on the change
+#'   of `log lambda`, `adaptive`, default 1, 1, 0, 1e-3 and `TRUE`, and
+#'   `adjust`, `"none"` or `"bonferroni"`: level of the stepwise tests `alpha`
+#'   or `alpha` over the number of terms).
+#' @details With `lambda = "em"`, the penalty \eqn{\lambda |u_j|^q} on term
+#'   \eqn{u_j = \beta_j / a_j} is the exponential power prior
+#'   \eqn{p(u) \propto \exp(-\lambda |u|^q)}, one-sided for gates. A gate is
+#'   relative to the full rate already; with `adaptive`, a reference parameter
+#'   is divided by its full estimate \eqn{a_j}, so that a large effect is
+#'   penalised as little as a gate that is on (adaptive lasso). An EM
+#'   alternates the MAP fit by [trustL1] with the posterior of every term, the
+#'   data taken as Gaussian around the MAP with the other parameters profiled,
+#'   and the closed-form strength per family
+#'   \deqn{\lambda = \frac{J/q + a - 1}{\sum_j E|u_j|^q + b},}
+#'   as for a variance component. The runs of a multistart of this EM are
+#'   compared by their approximate marginal likelihood, so one waterfall
+#'   replaces the grid. Refits without penalty then start from the structure
+#'   of the best run: every present term, smallest \eqn{|u_j|} first, is
+#'   removed unless the likelihood ratio test of its removal rejects at
+#'   `alpha`; every absent term, largest \eqn{E|u_j|^q} first, is added if the
+#'   test of its addition rejects. The tests are listed in `steps`.
+#'   `groups` and `ssl` are not available with `lambda = "em"`.
+#'
+#'   With `ssl`, term `j` (a gate, a reference parameter, or in a block
 #'   the gap between neighbours of the sorted values, anchor included, as in
 #'   Ke, Fan and Wu 2015) has the prior
 #'   \deqn{\pi(d_j \mid \theta) = \theta\,\psi_1(d_j) + (1-\theta)\,\psi_0(d_j),
@@ -136,6 +160,10 @@ gateL1 <- function(trafo, pars, prefix = "s_") {
 #'       penalised fit and, with `ssl`, the number of EM iterations.}
 #'     \item{`coefficients`}{penalised estimates per `lambda`.}
 #'     \item{`arguments`}{all free parameters of the penalised fit per `lambda`.}
+#'     \item{`level`}{one row per `lambda` and structure on the lowest level of
+#'       its waterfall, the runs within `tolHits` of the best value: structure
+#'       key, best value and number of runs.}
+#'     \item{`levelFits`}{per `lambda`, these runs: free parameters and value.}
 #'     \item{`refits`}{one row per distinct structure: `-2 log L`, free
 #'       parameters, LRT statistic, degrees of freedom, p-value, BIC.}
 #'     \item{`full`}{the full fit: value, parameters and the sorted values of
@@ -144,6 +172,9 @@ gateL1 <- function(trafo, pars, prefix = "s_") {
 #'       `lambda` it was chosen at.}
 #'     \item{`structure`}{per key: removed parameters and groups.}
 #'     \item{`fit`}{named parameters of the chosen refit, fixed ones included.}
+#'     \item{`em`}{with `lambda = "em"`: the strengths, a table per term
+#'       (scale, MAP estimate, \eqn{E|u|^q}, standard error), the trace of the
+#'       best run and the values of all runs.}
 #'     \item{`inclusion`, `theta`}{with `ssl`: inclusion probability of every
 #'       gate, reference parameter and pairwise difference at the final slab
 #'       share, and that share, per `lambda`.}
@@ -171,10 +202,16 @@ scanL1 <- function(obj, center, zero = NULL, reference = NULL, groups = NULL,
   if (q <= 0 || q > 1) stop("scanL1: q must lie in (0, 1].", call. = FALSE)
   if (!is.null(ssl) && q < 1)
     stop("scanL1: ssl and q < 1 are two different penalties, give one.", call. = FALSE)
+  if (identical(lambda, "em") && (length(groups) || !is.null(ssl)))
+    stop("scanL1: lambda = \"em\" takes gates and reference parameters, no groups or ssl.",
+         call. = FALSE)
   ctl <- utils::modifyList(list(trust = list(rinit = 0.1, rmax = 10, iterlim = 200L),
                                 nq = 3L, eps = 0.01, ndata = NULL, nem = 50L,
                                 tolp = 1e-4, nmerge = 5L, snap = 1e-6, hits = 1L,
-                                tolHits = 0.1, maxFits = NULL), control)
+                                tolHits = 0.1, maxFits = NULL,
+                                em = list(init = 1, a = 1, b = 0, tol = 1e-3, adaptive = TRUE,
+                                          adjust = "none")),
+                           control)
   wf <- if (ctl$hits > 1L) list(hits = ctl$hits, tol = ctl$tolHits, max = ctl$maxFits)
   if (.Platform$OS.type == "windows") cores <- 1L
 
@@ -201,10 +238,13 @@ scanL1 <- function(obj, center, zero = NULL, reference = NULL, groups = NULL,
   fixSel    <- c(fixed, fullPars[gatedPars])
   start0    <- c(fullPars[setdiff(names(fullPars), gatedPars)],
                  stats::setNames(rep(1, length(gates)), gates))
-  lambda    <- sort(lambda)
   sparse    <- start0
   sparse[c(gates, reference)] <- 0
   for (b in groups) sparse[b$pars] <- b$anchor %||% mean(start0[b$pars])
+  if (identical(lambda, "em"))
+    return(.l1EmScan(obj, start0, sparse, gates, reference, fixSel, q, ctl, pathFits,
+                     sd, cores, wf, full, fullPars, zero, fixed, alpha))
+  lambda    <- sort(lambda)
   if (!is.null(ssl))
     ssl <- utils::modifyList(list(lambda1 = 1, a = 2, b = 2), ssl)
   pen1 <- function(start, l, n, extra, prior = NULL)
@@ -227,9 +267,12 @@ scanL1 <- function(obj, center, zero = NULL, reference = NULL, groups = NULL,
     cur  <- fitsL[[l]]
     if (is.null(down) || (!is.null(cur) && down$value >= cur$value)) next
     # A better optimum from above: more starts until the waterfall reaches it.
-    fitsL[[l]] <- if (!is.null(ssl) || is.null(wf) || is.null(cur)) down
+    new <- if (!is.null(ssl) || is.null(wf) || is.null(cur)) down
       else pen1(start0, l, pathFits, NULL,
                 list(fits = list(down), values = cur$values, starts = cur$starts + 1L))
+    if (is.null(new)) next
+    new$level  <- .l1Level(c(new$level, cur$level), ctl$tolHits)
+    fitsL[[l]] <- new
   }
   path <- lapply(seq_along(lambda), function(l) {
     f <- fitsL[[l]]
@@ -287,9 +330,19 @@ scanL1 <- function(obj, center, zero = NULL, reference = NULL, groups = NULL,
                     theta = vapply(path, `[[`, 0, "theta"), ssl = ssl)
   } else out_ssl <- NULL
 
+  levelTab <- do.call(rbind, lapply(path, function(z) {
+    k <- vapply(z$level, function(f) .l1Structure(f$argument, gates, reference, groups)$key, "")
+    v <- vapply(z$level, `[[`, 0, "value")
+    data.frame(lambda = z$lambda, key = unique(k),
+               value = vapply(unique(k), function(u) min(v[k == u]), 0, USE.NAMES = FALSE),
+               fits = vapply(unique(k), function(u) sum(k == u), 0L, USE.NAMES = FALSE),
+               stringsAsFactors = FALSE)
+  }))
+
   out <- list(path = pathTab, coefficients = cbind(lambda = pathTab$lambda, coefs),
               arguments = lapply(path, `[[`, "argument"),
               refits = refitTab,
+              level = levelTab, levelFits = lapply(path, `[[`, "level"),
               full = list(value = full$value, argument = fullPars, values = full$values,
                           starts = full$starts, hits = full$hits),
               selected = sel$key, lambdaSelected = sel$lambda,
@@ -311,11 +364,12 @@ scanL1 <- function(obj, center, zero = NULL, reference = NULL, groups = NULL,
   a[setdiff(names(a), tol)]
 }
 
-# Best of `fits` runs of `run(start)` from `center` and starts drawn around it.
-# With `wf`, further batches follow until `wf$hits` runs lie within `wf$tol` of
-# the best or `wf$max` starts are spent; `prior` adds earlier runs to the count.
+# Best of `fits` runs of `run(start)` from `center` and around it, with the runs
+# within `levelTol` of it as `level`. With `wf`, batches follow until `wf$hits` runs
+# lie within `wf$tol` or `wf$max` starts are spent; `prior` adds earlier runs.
 .l1Multistart <- function(run, center, fits, sd, cores, obj, extra = NULL,
-                          positive = character(0), wf = NULL, prior = NULL) {
+                          positive = character(0), wf = NULL, prior = NULL,
+                          levelTol = wf$tol %||% 0.1) {
   draw <- function(n) lapply(seq_len(max(n, 0L)), function(i) {
     st <- center + stats::rnorm(length(center), 0, sd)
     st[positive] <- abs(st[positive])
@@ -352,7 +406,14 @@ scanL1 <- function(obj, center, zero = NULL, reference = NULL, groups = NULL,
   best$values <- sort(c(vals, pv))
   best$starts <- total
   best$hits   <- hits
+  best$level  <- .l1Level(lapply(res, `[`, c("argument", "value")), levelTol)
   best
+}
+
+# The runs within `tol` of the best value: the lowest level of a waterfall.
+.l1Level <- function(fits, tol) {
+  v <- vapply(fits, `[[`, 0, "value")
+  fits[v <= min(v) + tol]
 }
 
 # One penalised fit at `lambda` from `start0`, the `extra` starts and random
@@ -377,11 +438,12 @@ scanL1 <- function(obj, center, zero = NULL, reference = NULL, groups = NULL,
   if (!is.null(ssl)) {
     em <- function(st) .sslEM(run, st, singles, groups, lambda, ssl, ctl)
     return(.l1Multistart(em, start0, fits, sd, cores, obj, extra = extra,
-                         positive = gates))
+                         positive = gates, levelTol = ctl$tolHits))
   }
   if (q == 1)
     return(.l1Multistart(function(st) run(st, wS, wB), start0, fits, sd, cores, obj,
-                         extra = extra, positive = gates, wf = wf, prior = prior))
+                         extra = extra, positive = gates, wf = wf, prior = prior,
+                         levelTol = ctl$tolHits))
   lq <- function(st) {
     best <- run(st, wS, wB)
     for (k in seq_len(ctl$nq)) {
@@ -401,7 +463,7 @@ scanL1 <- function(obj, center, zero = NULL, reference = NULL, groups = NULL,
     best
   }
   .l1Multistart(lq, start0, fits, sd, cores, obj, extra = extra, positive = gates,
-                wf = wf, prior = prior)
+                wf = wf, prior = prior, levelTol = ctl$tolHits)
 }
 
 # Absolute penalised terms of `th`: the singles, then the upper triangle of
@@ -687,14 +749,19 @@ print.scanL1 <- function(x, ...) {
   if (x$select == "lrt") cat(sprintf(" (alpha = %g)", x$alpha))
   if (x$q < 1) cat(sprintf(", q = %g", x$q))
   if (!is.null(x$ssl)) cat(sprintf(", spike-and-slab with lambda1 = %g", x$ssl$lambda1))
+  if (!is.null(x$em)) {
+    cat(sprintf(", lambda by EM: %s\n\nTerms:\n",
+                paste(sprintf("%s %.4g", names(x$em$lambda), x$em$lambda), collapse = ", ")))
+    print(x$em$terms, row.names = FALSE, digits = 4)
+  }
   rt  <- x$refits
   ids <- paste0("S", seq_len(nrow(rt)))
   cat("\n\nRefits:\n")
   print(data.frame(id = ids, rt[setdiff(names(rt), "key")]), row.names = FALSE, digits = 4)
   cat("\nStructures:\n")
   cat(sprintf("  %s  %s\n", ids, ifelse(nzchar(rt$key), rt$key, "(full model)")), sep = "")
-  cat(sprintf("\nSelected at lambda = %.4g: %s\n", x$lambdaSelected,
-              ids[match(x$selected, rt$key)]))
+  sel <- if (is.null(x$em)) sprintf(" at lambda = %.4g", x$lambdaSelected) else ""
+  cat(sprintf("\nSelected%s: %s\n", sel, ids[match(x$selected, rt$key)]))
   invisible(x)
 }
 

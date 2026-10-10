@@ -1,5 +1,23 @@
 # dMod2 (devel-EM)
 
+* `scanL1()` gains `lambda = "em"`: the strength of the L1 or Lq penalty is
+  estimated per family (gates, reference parameters) by an EM on the marginal
+  likelihood, as a variance component, instead of scanned over a grid. One
+  multistart of the EM replaces the multistart per `lambda`. With
+  `control$em$adaptive`, a reference parameter is penalised relative to its
+  full estimate. Refits along the terms ordered by their penalised size make
+  the final choice by likelihood ratio test.
+* New `selectEB()`: selects which gated parameters and which reference
+  parameters are present, with the penalty estimated instead of scanned. The
+  slab is a g-prior on the effects, the share of present candidates is
+  integrated under a beta-binomial prior, and a multistart over structures
+  alternates single switches of candidates with the closed-form update of
+  `g`. Per candidate it reports the gain in -2 log L, the threshold and the
+  inclusion probability; `rule = "alpha"` thresholds at the chi-square
+  quantile instead. Refits with a likelihood ratio test against the full model
+  make the final choice, on the data term with `lrt = "data"`. Substitutes are
+  reported as alternative structures and near-collinear groups. Vignette
+  "Structure selection with an estimated penalty".
 * New `scanL1()`: L1 selection over a grid of penalty strengths in the
   manner of Hauber, Rosenblatt and Timmer (2023). A penalised multistart fit
   per `lambda`, an unpenalised refit of each distinct structure, and the
@@ -37,6 +55,20 @@
 * The spike-and-slab path of `scanL1()` runs the EM at each `lambda` from the
   previous mode and from the sparse point and keeps the smaller `-2 log`
   posterior, followed by the downward pass that `q < 1` uses.
+* `scanL1()` returns `level` and `levelFits`: per `lambda`, the runs on the
+  lowest level of the waterfall, within `tolHits` of the best value, and the
+  structures they take.
+
+# dMod2 0.11.2
+
+* `symmetryDetection()` and `symmetryReduction()` install symident from PyPI on
+  first use; under `RETICULATE_PYTHON`, `pip install symident`.
+
+# dMod2 0.11.1
+
+* `distributedComputing()` runs zstd as a pipe stage of its own and moves the
+  uploaded files one by one. macOS reads `tar -I` as a file list and its `mv`
+  has no `-t`, so the upload and the collection of results failed there.
 
 # dMod2 0.11.0
 

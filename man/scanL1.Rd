@@ -42,7 +42,8 @@ parameters fixed.}
 \code{pars} and \code{anchor}: the anchor is a fixed value every member is also
 pulled toward, e.g. 0 for the reference cell type.}
 
-\item{lambda}{Grid of penalty strengths.}
+\item{lambda}{Grid of penalty strengths, or \code{"em"}: one strength per family
+(gates, reference parameters) estimated with the structure, see Details.}
 
 \item{fixed}{Named numeric, parameters fixed throughout.}
 
@@ -89,7 +90,11 @@ to their kink than this are put onto it without a refit, default 1e-6),
 \code{hits} (runs that must reach
 the best value within \code{tolHits}, default 1 and 0.1, for the full model, a
 \code{lambda} and a refit; further batches of starts are added until then, up
-to \code{maxFits}, default ten times the batch).}
+to \code{maxFits}, default ten times the batch), \code{em} (with \code{lambda = "em"}:
+\code{init} start strength, \code{a} and \code{b} of its Gamma prior, \code{tol} on the change
+of \verb{log lambda}, \code{adaptive}, default 1, 1, 0, 1e-3 and \code{TRUE}, and
+\code{adjust}, \code{"none"} or \code{"bonferroni"}: level of the stepwise tests \code{alpha}
+or \code{alpha} over the number of terms).}
 }
 \value{
 Object of class \code{scanL1} with
@@ -99,6 +104,10 @@ number of removed parameters, p-value of its refit, convergence of the
 penalised fit and, with \code{ssl}, the number of EM iterations.}
 \item{\code{coefficients}}{penalised estimates per \code{lambda}.}
 \item{\code{arguments}}{all free parameters of the penalised fit per \code{lambda}.}
+\item{\code{level}}{one row per \code{lambda} and structure on the lowest level of
+its waterfall, the runs within \code{tolHits} of the best value: structure
+key, best value and number of runs.}
+\item{\code{levelFits}}{per \code{lambda}, these runs: free parameters and value.}
 \item{\code{refits}}{one row per distinct structure: \verb{-2 log L}, free
 parameters, LRT statistic, degrees of freedom, p-value, BIC.}
 \item{\code{full}}{the full fit: value, parameters and the sorted values of
@@ -107,6 +116,9 @@ all its starts.}
 \code{lambda} it was chosen at.}
 \item{\code{structure}}{per key: removed parameters and groups.}
 \item{\code{fit}}{named parameters of the chosen refit, fixed ones included.}
+\item{\code{em}}{with \code{lambda = "em"}: the strengths, a table per term
+(scale, MAP estimate, \eqn{E|u|^q}, standard error), the trace of the
+best run and the values of all runs.}
 \item{\code{inclusion}, \code{theta}}{with \code{ssl}: inclusion probability of every
 gate, reference parameter and pairwise difference at the final slab
 share, and that share, per \code{lambda}.}
@@ -132,6 +144,25 @@ group.}
 }
 }
 \details{
+With \code{lambda = "em"}, the penalty \eqn{\lambda |u_j|^q} on term
+\eqn{u_j = \beta_j / a_j} is the exponential power prior
+\eqn{p(u) \propto \exp(-\lambda |u|^q)}, one-sided for gates. A gate is
+relative to the full rate already; with \code{adaptive}, a reference parameter
+is divided by its full estimate \eqn{a_j}, so that a large effect is
+penalised as little as a gate that is on (adaptive lasso). An EM
+alternates the MAP fit by \link{trustL1} with the posterior of every term, the
+data taken as Gaussian around the MAP with the other parameters profiled,
+and the closed-form strength per family
+\deqn{\lambda = \frac{J/q + a - 1}{\sum_j E|u_j|^q + b},}
+as for a variance component. The runs of a multistart of this EM are
+compared by their approximate marginal likelihood, so one waterfall
+replaces the grid. Refits without penalty then start from the structure
+of the best run: every present term, smallest \eqn{|u_j|} first, is
+removed unless the likelihood ratio test of its removal rejects at
+\code{alpha}; every absent term, largest \eqn{E|u_j|^q} first, is added if the
+test of its addition rejects. The tests are listed in \code{steps}.
+\code{groups} and \code{ssl} are not available with \code{lambda = "em"}.
+
 With \code{ssl}, term \code{j} (a gate, a reference parameter, or in a block
 the gap between neighbours of the sorted values, anchor included, as in
 Ke, Fan and Wu 2015) has the prior

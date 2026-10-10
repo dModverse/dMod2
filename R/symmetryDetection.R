@@ -5,8 +5,7 @@
 #'   matrix over finite fields, with certified rank and exact closed forms. The model
 #'   `f`, the observables `g` and an optional `trafo` are equations in any form
 #'   [as.eqnvec()] accepts. The computation runs in the Python package `symident`
-#'   through `reticulate`, installed on first use from
-#'   <https://github.com/dModverse/symident>.
+#'   through `reticulate`, installed from PyPI on first use.
 #'
 #'   Right-hand sides, observables and initial values may contain `exp()`,
 #'   `exp10()`, `b^x`, hyperbolic and trigonometric functions, free exponents `x^n`,
@@ -222,22 +221,18 @@ reconstControl <- function(relevanceCap = 6L, relevanceCapDir = 24L, relevanceCa
 
 # ---- the interface to the Python package symident --------------------------------
 
-# Where symident is installed from until it is on PyPI
-.symidentSource <- "git+https://github.com/dModverse/symident"
-
 # A module of symident. A missing symident is requested into reticulate's
 # ephemeral environment; under RETICULATE_PYTHON it has to be installed there.
 .symident <- function(module = "rjson") {
   .require_ns("reticulate", "symmetryDetection()")
   .require_ns("jsonlite", "symmetryDetection()")
   if (!reticulate::py_module_available("symident"))
-    suppressWarnings(try(reticulate::py_require(paste("symident @", .symidentSource)),
-                         silent = TRUE))
+    suppressWarnings(try(reticulate::py_require("symident"), silent = TRUE))
   tryCatch(reticulate::import(paste0("symident.", module)),
            error = function(e)
     stop("symmetryDetection() needs the Python package symident. Install it into ",
-         "the Python environment of reticulate with `pip install ", .symidentSource,
-         "` (", conditionMessage(e), ").", call. = FALSE))
+         "the Python environment of reticulate with `pip install symident` (",
+         conditionMessage(e), ").", call. = FALSE))
 }
 
 # camelCase to snake_case, the argument names of symident
