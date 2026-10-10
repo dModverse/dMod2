@@ -25,10 +25,6 @@
   pull gates to zero, fold changes to zero, or fuse parameters of a block
   pairwise; `q < 1` by reweighted L1. `gateL1()` inserts the gates, so a
   parameter in a log parametrisation can reach exactly zero.
-* `trustL1()` gains `gate`, a penalty that keeps a parameter on or above its
-  kink, and `fuse`, blocks with a pairwise penalty whose members move as one
-  while equal. It accepts the curvature request of the trust kernel again,
-  so objectives without `...` work.
 * `scanL1()` gains `ssl`, the spike-and-slab lasso of Rockova and George
   (2018): every penalised term comes from a slab or a spike, an EM alternates
   closed-form inclusion probabilities with weighted `trustL1()` fits, and one
@@ -58,6 +54,14 @@
 * `scanL1()` returns `level` and `levelFits`: per `lambda`, the runs on the
   lowest level of the waterfall, within `tolHits` of the best value, and the
   structures they take.
+
+# dMod2 0.11.3
+
+* New `trustL1()`: the trust region of `trust()` with an L1 penalty on chosen
+  parameters around reference values `mu`, one-sided with `one.sided`. `gate`
+  keeps a parameter on or above its kink, so it can reach the reference
+  exactly, and `fuse` penalises the pairwise differences within blocks, whose
+  members move as one while equal. The penalised step runs in a C++ kernel.
 
 # dMod2 0.11.2
 
