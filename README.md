@@ -84,11 +84,11 @@ Two models are worked through end to end:
 `symmetryDetection()` finds the directions in parameters and initial
 values along which the observations of a model do not change, and
 `symmetryReduction()` turns them into a parameter transformation that
-removes them. Both run in the Python package symident, which dMod2
-installs from its [repository](https://github.com/dModverse/symident) on
-first use; under `RETICULATE_PYTHON` install it there with
-`pip install git+https://github.com/dModverse/symident`. A steady-state
-start on coupled steady states needs msolve, which
+removes them. Both run in the Python package
+[symident](https://github.com/dModverse/symident), which dMod2 installs
+from PyPI on first use; under `RETICULATE_PYTHON` install it there with
+`pip install symident`. A steady-state start on coupled steady states
+needs msolve, which
 `python -c "import symident; symident.install_msolve()"` builds or
 `SYMIDENT_MSOLVE` points to.
 

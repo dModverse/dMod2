@@ -925,14 +925,13 @@ distributedComputing <- function(
           # Everything the job produced, but not what was uploaded or built from
           # it. Patterns are double-quoted so the remote shell passes them to
           # tar instead of globbing them.
-          " 'ZSTD_NBTHREADS=0 tar -C ", jobname, "_folder ",
+          " 'tar -C ", jobname, "_folder ",
           paste0("--exclude=\"", c("*_workspace.RData", "*_files.txt",
                                    "*.c", "*.cpp", "*.o", "*.a", "*.so"),
                  "\"", collapse = " "),
-          " -I zstd -cf - ./'", # compress the remaining files on remote
-          " | ", # pipe to local
-          "",
-          "tar -C ", output_folder_abs, "/", jobname,"_folder/results/ -I zstd -xf -"
+          " -cf - ./ | zstd -T0 -q -c'", # compress the remaining files on remote
+          " | zstd -d -q -c | ", # pipe to local
+          "tar -C ", output_folder_abs, "/", jobname,"_folder/results/ -xf -"
         )
       )
     } else {
@@ -941,8 +940,9 @@ distributedComputing <- function(
         paste0(
           "mkdir -p ", output_folder_abs, "/", jobname,"_folder/results/; ",
           ssh_command, "-n ", machine, " '",
-          "ZSTD_NBTHREADS=0 find ", jobname, "_folder -type f -name \"*result.RData\" -exec tar -I zstd -cf - {} +'",
-          " | tar --strip-components=1 -I zstd -x -C ", shQuote(paste0(output_folder_abs, "/", jobname,"_folder/results/"))
+          "find ", jobname, "_folder -type f -name \"*result.RData\" -exec tar -cf - {} + | zstd -T0 -q -c'",
+          " | zstd -d -q -c | tar --strip-components=1 -xf - -C ",
+          shQuote(paste0(output_folder_abs, "/", jobname,"_folder/results/"))
         )
       )
     }
@@ -1195,13 +1195,15 @@ distributedComputing <- function(
                        .remoteLibs(libs))
 
   ## File names go in a list in the job folder, not on the command line that
-  ## both tar calls share.
+  ## both tar calls share. zstd runs as its own pipe stage and the files move
+  ## one by one: BSD tar reads -I as a file list, and BSD mv has no -t.
   transferCmds <- function(files) {
     writeLines(files, paste0(wd_path, filelist_file))
-    list(locale = paste0("tar -I 'zstd -T0' -cf - -T ", wd_path, filelist_file,
-                         " ", wd_path, "*"),
-         remote = paste0("tar -C ./ -I zstd -xf - ; xargs -r -n 100 mv -t ./",
-                         jobname, "_folder < ./", jobname, "_folder/",
+    list(locale = paste0("tar -cf - -T ", wd_path, filelist_file,
+                         " ", wd_path, "* | zstd -T0 -q -c"),
+         remote = paste0("zstd -d -q -c | tar -C ./ -xf - ; ",
+                         "while IFS= read -r f; do mv -- \"$f\" ./", jobname,
+                         "_folder/; done < ./", jobname, "_folder/",
                          filelist_file, "; "))
   }
 

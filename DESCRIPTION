@@ -1,7 +1,7 @@
 Package: dMod2
 Type: Package
 Title: Dynamic Modeling and Parameter Estimation in ODE Models
-Version: 0.11.0
+Version: 0.11.2
 Date: 2026-10-08
 Authors@R: c(
     person("Simon", "Beyer", email = "simon.beyer@fdm.uni-freiburg.de",
@@ -85,8 +85,7 @@ Suggests:
     rjson,
     yaml
 SystemRequirements: Python package symident (symmetryDetection(),
-    symmetryReduction()), installed on first use from
-    https://github.com/dModverse/symident
+    symmetryReduction()), installed from PyPI on first use
 VignetteBuilder: R.rsp
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)

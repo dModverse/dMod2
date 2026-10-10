@@ -59,6 +59,17 @@
   lowest level of the waterfall, within `tolHits` of the best value, and the
   structures they take.
 
+# dMod2 0.11.2
+
+* `symmetryDetection()` and `symmetryReduction()` install symident from PyPI on
+  first use; under `RETICULATE_PYTHON`, `pip install symident`.
+
+# dMod2 0.11.1
+
+* `distributedComputing()` runs zstd as a pipe stage of its own and moves the
+  uploaded files one by one. macOS reads `tar -I` as a file list and its `mv`
+  has no `-t`, so the upload and the collection of results failed there.
+
 # dMod2 0.11.0
 
 * Breaking: `Xs()` on cppDE takes `refine` and `gradtol` in `optionsReverse`;
