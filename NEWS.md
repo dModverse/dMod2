@@ -1,4 +1,4 @@
-# dMod2 (devel-EM)
+# dMod2 (devel-bayes)
 
 * `scanL1()` gains `lambda = "em"`: the strength of the L1 or Lq penalty is
   estimated per family (gates, reference parameters) by an EM on the marginal
@@ -54,6 +54,13 @@
 * `scanL1()` returns `level` and `levelFits`: per `lambda`, the runs on the
   lowest level of the waterfall, within `tolHits` of the best value, and the
   structures they take.
+
+# dMod2 0.11.4
+
+* symident and python-libsbml are found in `~/.virtualenvs/r-reticulate` too,
+  installed on first use.
+* `summary(x, detailed = TRUE)` on a `symmetryReduction()` result explains each
+  section. Needs symident 0.9.3.
 
 # dMod2 0.11.3
 

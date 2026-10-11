@@ -50,7 +50,7 @@ coords <- res$info$coordinates
 # s is the gauge the fit fixes as well; the zero limits below need
 # reportZeroCompatibility
 red <- symmetryReduction(res, fixed = "s", reportZeroCompatibility = TRUE)
-summary(red)
+summary(red, detailed = TRUE)
 
 
 # –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––

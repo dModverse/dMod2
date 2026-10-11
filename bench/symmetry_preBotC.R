@@ -88,7 +88,7 @@ summary(res)
 coords <- res$info$coordinates
 
 red <- symmetryReduction(res, positive = positive)
-summary(red)
+summary(red, detailed = TRUE)
 red$trafo
 
 symmetryDetection(f, observables, trafo = red$trafo, positive = positive,
@@ -287,4 +287,4 @@ lt <- as.eqnvec(setNames(paste0("exp10(", posPars, "_l10)"), posPars))
 resL <- symmetryDetection(f, observables, trafo = lt, positive = c("n", "h"),
                           reconstruct = TRUE)
 redL <- symmetryReduction(resL, positive = c("n", "h"))
-redL
+summary(redL, detailed = TRUE)
