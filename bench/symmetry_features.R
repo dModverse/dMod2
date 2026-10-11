@@ -130,7 +130,7 @@ egf <- symmetryDetection(egfr, eqnvec(pMEK_obs = "pMEK", pERK_obs = "pERK"),
                          events = egf.event, trafo = as.eqnvec(steadyStates(egfr)),
                          reduceCQ = FALSE, reconstruct = TRUE)
 redEgf <- symmetryReduction(egf, verbose = TRUE)
-summary(redEgf)
+summary(redEgf, detailed = TRUE)
 redEgf$trafo
 
 
@@ -190,7 +190,7 @@ symmetryReduction(res, fixed = "ktl")
 f2 <- eqnvec(A = "k1 + u*k2 - kdeg*A")
 res2 <- symmetryDetection(f2, eqnvec(y = "A"), fixed = "u", reconstruct = TRUE)
 red2 <- symmetryReduction(res2)
-red2
+summary(red2, detailed = TRUE)
 symmetryReduction(res2, dPoly = 0L, dDarboux = 0L, dExp = 0L)
 symmetryReduction(res2, reportZeroCompatibility = TRUE)$zeroCompatibility
 
@@ -198,11 +198,13 @@ f3 <- eqnvec(A = "-k1*A + k2*B", B = "k1*A - k2*B")
 g3 <- eqnvec(y = "alpha*A")
 res3 <- symmetryDetection(f3, g3, reconstruct = TRUE)
 red3 <- symmetryReduction(res3)
+summary(red3, detailed = TRUE)
 symmetryDetection(f3, g3, trafo = red3$trafo)$identifiable
 
 f4 <- eqnvec(x = "-(b - a)/(a*b)*x")
 res4 <- symmetryDetection(f4, eqnvec(y = "x"), reconstruct = TRUE)
 red4 <- symmetryReduction(res4)
+summary(red4, detailed = TRUE)
 red4$blocks[[1]]$stage
 red4$blocks[[1]]$invariants
 symmetryReduction(res4, dDarboux = 1L, separable = FALSE)$blocks[[1]]$invariants
@@ -220,7 +222,7 @@ out <- symmetryDetection(f, g, scalingsOnly = TRUE)
 fE <- eqnvec(A = "kA - kd*A", B = "kB - kE*exp(A)*B")
 obs <- symmetryDetection(fE, g, reconstruct = TRUE)
 red <- symmetryReduction(obs, positive = c("B", "kB", "kd", "kE", "s"))
-red
+summary(red, detailed = TRUE)
 symmetryDetection(fE, g, trafo = red$trafo)$identifiable
 out <- symmetryDetection(fE, g, trafo = eqnvec(A = "0"))
 
@@ -248,7 +250,7 @@ hh <- eqnvec(
 obs <- symmetryDetection(hh, eqnvec(y = "V"), reconstruct = TRUE)
 out <- symmetryDetection(hh, eqnvec(y = "V"), scalingsOnly = TRUE)
 red <- symmetryReduction(obs, positive = c("C", "gNa", "gK", "gL", "m", "h", "n"))
-red
+summary(red, detailed = TRUE)
 symmetryDetection(hh, eqnvec(y = "V"), trafo = red$trafo)$identifiable
 
 # Morris-Lecar: tanh() and cosh()
@@ -261,7 +263,7 @@ out <- symmetryDetection(ml, eqnvec(y = "V"), reconstruct = TRUE)
 bz <- eqnvec(x = "(1/(1 + exp((Vh - u)/k)) - x)/tau", u = "a - b*u")
 out <- symmetryDetection(bz, eqnvec(y = "s*x"), reconstruct = TRUE)
 red <- symmetryReduction(out)
-red
+summary(red, detailed = TRUE)
 symmetryDetection(bz, eqnvec(y = "s*x"), trafo = red$trafo)$identifiable
 
 

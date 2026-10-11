@@ -74,8 +74,9 @@ the positive orthant.}
 \code{remaining}, \code{rational} and \code{pins}.}
 \item{\code{coordinates}, \code{fixed}, \code{settings}, \code{call}}{provenance.}
 }
-\code{print()} shows the verdict, the trafo and the new parameters, \code{summary()} one
-line per block. Both take \code{width}, \code{summary()} also \code{verbose}.
+\code{print()} shows the verdict, the trafo, the new parameters and the sections,
+\code{summary()} also one line per block. Both take \code{width}, \code{summary()} also
+\code{verbose} and \code{detailed}, which explains each section.
 }
 \description{
 Turns the non-identifiable directions of a \code{\link[=symmetryDetection]{symmetryDetection()}} result into a

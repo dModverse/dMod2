@@ -76,7 +76,7 @@ summary(res)
 coords <- res$info$coordinates
 
 red <- symmetryReduction(res)
-summary(red)
+summary(red, detailed = TRUE)
 red$trafo
 
 # a second detection in the reduced chart: TRUE when nothing is left

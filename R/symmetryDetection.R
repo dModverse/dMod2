@@ -221,18 +221,31 @@ reconstControl <- function(relevanceCap = 6L, relevanceCapDir = 24L, relevanceCa
 
 # ---- the interface to the Python package symident --------------------------------
 
-# A module of symident. A missing symident is requested into reticulate's
-# ephemeral environment; under RETICULATE_PYTHON it has to be installed there.
+.symidentMin <- "0.9.3"
+.symidentReq <- paste0("symident>=", .symidentMin)
+
+# whether symident is installed in version .symidentMin or later
+.symidentCurrent <- function() {
+  v <- tryCatch(reticulate::import("importlib.metadata")$version("symident"),
+                error = function(e) NA_character_)
+  !is.na(v) && utils::compareVersion(v, .symidentMin) >= 0
+}
+
+# A module of symident, installed on first use.
 .symident <- function(module = "rjson") {
   .require_ns("reticulate", "symmetryDetection()")
   .require_ns("jsonlite", "symmetryDetection()")
-  if (!reticulate::py_module_available("symident"))
-    suppressWarnings(try(reticulate::py_require("symident"), silent = TRUE))
-  tryCatch(reticulate::import(paste0("symident.", module)),
-           error = function(e)
-    stop("symmetryDetection() needs the Python package symident. Install it into ",
-         "the Python environment of reticulate with `pip install symident` (",
-         conditionMessage(e), ").", call. = FALSE))
+  if (!.symidentCurrent())
+    suppressWarnings(try(reticulate::py_require(.symidentReq), silent = TRUE))
+  if (!.symidentCurrent()) {
+    message("Installing symident into ", reticulate::py_exe(), ".")
+    try(reticulate::py_install(.symidentReq, pip = TRUE), silent = TRUE)
+    reticulate::import("importlib")$invalidate_caches()
+  }
+  if (!.symidentCurrent())
+    stop("symmetryDetection() needs the Python package symident (>= ", .symidentMin, "). ",
+         "Install it into ", reticulate::py_exe(), " with `pip install -U symident`.", call. = FALSE)
+  reticulate::import(paste0("symident.", module))
 }
 
 # camelCase to snake_case, the argument names of symident
