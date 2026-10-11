@@ -276,7 +276,7 @@ res.stt <- symmetryDetection(f.stt, observables, trafo = eqnvec(Hx = "0", ph = "
 summary(res.stt)
 
 red.stt <- symmetryReduction(res.stt)
-print(red.stt)
+summary(red.stt, detailed = TRUE)
 
 # adds two subcritical currents of both signs in a tilted field
 .tilt <- c("tilt_m1", "tilt_p1")

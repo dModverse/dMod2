@@ -202,4 +202,4 @@ for (r in seq_len(.nRep))
     idReduction <- symmetryReduction(idResult, positive = positive)
   )[["elapsed"]]
 min(tReduce)
-idReduction
+summary(idReduction, detailed = TRUE)

@@ -613,16 +613,23 @@ exportSbml <- function(eqnlist, parameters = NULL, inits = NULL, filepath,
   # `import libsbml` is probed once per session, cached in an env var, to catch
   # a wrong interpreter or an unresolved requirement early.
   if (!identical(Sys.getenv("DMOD_LIBSBML_OK", unset = ""), "1")) {
-    status <- suppressWarnings(
+    probe <- function() suppressWarnings(
       system2(python, args = c("-c", shQuote("import libsbml")),
               stdout = FALSE, stderr = FALSE))
+    status <- probe()
+    # an existing ~/.virtualenvs/r-reticulate ignores py_require(); install there
+    if (status != 0L && !nzchar(override)) {
+      message("Installing python-libsbml into ", python, ".")
+      try(reticulate::py_install("python-libsbml", pip = TRUE), silent = TRUE)
+      status <- probe()
+    }
     if (status != 0L)
       stop("Python at ", python, " could not `import libsbml` ",
            "(status ", status, "). ",
            if (nzchar(override))
              "Install python-libsbml into that env."
            else
-             "reticulate did not provision python-libsbml as expected.")
+             "Install it with `pip install python-libsbml`.")
     Sys.setenv(DMOD_LIBSBML_OK = "1")
   }
   python

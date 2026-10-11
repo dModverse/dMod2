@@ -12,7 +12,7 @@
 #' @noRd
 .onLoad <- function(libname, pkgname) {
   if (requireNamespace("reticulate", quietly = TRUE))
-    reticulate::py_require(c("python-libsbml", "sympy", "scipy", "numpy"))
+    reticulate::py_require(c("python-libsbml", "sympy", "scipy", "numpy", "symident>=0.9.3"))
 }
 
 #' Package attach

@@ -1,3 +1,10 @@
+# dMod2 0.11.4
+
+* symident and python-libsbml are found in `~/.virtualenvs/r-reticulate` too,
+  installed on first use.
+* `summary(x, detailed = TRUE)` on a `symmetryReduction()` result explains each
+  section. Needs symident 0.9.3.
+
 # dMod2 0.11.3
 
 * New `trustL1()`: the trust region of `trust()` with an L1 penalty on chosen

@@ -52,8 +52,9 @@
 #'       `remaining`, `rational` and `pins`.}
 #'     \item{`coordinates`, `fixed`, `settings`, `call`}{provenance.}
 #'   }
-#'   `print()` shows the verdict, the trafo and the new parameters, `summary()` one
-#'   line per block. Both take `width`, `summary()` also `verbose`.
+#'   `print()` shows the verdict, the trafo, the new parameters and the sections,
+#'   `summary()` also one line per block. Both take `width`, `summary()` also
+#'   `verbose` and `detailed`, which explains each section.
 #'
 #' @seealso [symmetryDetection()], [P()]
 #' @examplesIf requireNamespace("reticulate", quietly = TRUE) && reticulate::py_module_available("symident")
@@ -131,19 +132,25 @@ symmetryReduction <- function(object, fixed = NULL, positive = TRUE, dPoly = 3L,
   structure(res, class = "symmetryreduction", symident = raw)
 }
 
+# the call named in the report for the explained sections
+.detailCall <- "summary(x, detailed = TRUE)"
+
 #' @export
 print.symmetryreduction <- function(x, width = getOption("width"), ...) {
-  .symReport("reduction_lines", x, width = as.integer(width))
+  .symReport("reduction_lines", x, width = as.integer(width), detail_call = .detailCall)
   invisible(x)
 }
 
 #' @export
-summary.symmetryreduction <- function(object, verbose = FALSE, width = getOption("width"), ...)
-  structure(list(object = object, verbose = isTRUE(verbose), width = as.integer(width)),
+summary.symmetryreduction <- function(object, verbose = FALSE, detailed = FALSE,
+                                      width = getOption("width"), ...)
+  structure(list(object = object, verbose = isTRUE(verbose), detailed = isTRUE(detailed),
+                 width = as.integer(width)),
             class = "summary.symmetryreduction")
 
 #' @export
 print.summary.symmetryreduction <- function(x, ...) {
-  .symReport("reduction_summary_lines", x$object, verbose = x$verbose, width = x$width)
+  .symReport("reduction_summary_lines", x$object, verbose = x$verbose, width = x$width,
+             detailed = x$detailed, detail_call = .detailCall)
   invisible(x)
 }
