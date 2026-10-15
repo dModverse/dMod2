@@ -10,12 +10,14 @@ test_that("argument names go to snake_case and field names back to camelCase", {
                    c("lieOrderUsed", "rank", "gaugeSuggestion"))
   x <- list(info = list(lie_order_used = 2L, model_exprs = list("k_on")),
             symmetries = list(list(complete_generator = list(k_on = "k_on"),
-                                   generator = list(k_off = "-k_off"))))
+                                   generator = list(k_off = "-k_off"),
+                                   state_components = list(x_c1 = "x_c1"))))
   y <- dMod2:::.symCamelFields(x)
   expect_identical(names(y$info), c("lieOrderUsed", "modelExprs"))
-  expect_identical(names(y$symmetries[[1]]), c("completeGenerator", "generator"))
+  expect_identical(names(y$symmetries[[1]]), c("completeGenerator", "generator", "stateComponents"))
   expect_identical(names(y$symmetries[[1]]$completeGenerator), "k_on")
   expect_identical(names(y$symmetries[[1]]$generator), "k_off")
+  expect_identical(names(y$symmetries[[1]]$stateComponents), "x_c1")
 })
 
 test_that("reconstControl() passes homotopy to symident as a flag", {
@@ -23,6 +25,19 @@ test_that("reconstControl() passes homotopy to symident as a flag", {
   expect_false(reconstControl(homotopy = FALSE)$homotopy)
   expect_error(reconstControl(homotopy = NA))
   expect_identical(dMod2:::.symControlSnake("homotopy"), "homotopy")
+})
+
+test_that("the optional reconstruction settings travel only when set", {
+  ctrl <- reconstControl()
+  for (k in c("homotopyDegree", "degreeCapMax", "exactProof", "exactWorkCap", "seed"))
+    expect_true(k %in% names(ctrl) && is.null(ctrl[[k]]))
+  ctrl <- reconstControl(degreeCapMax = 6, exactProof = FALSE, exactWorkCap = 1e6, seed = 3)
+  expect_identical(ctrl$degreeCapMax, 6L)
+  expect_identical(ctrl$seed, 3L)
+  expect_false(ctrl$exactProof)
+  expect_error(reconstControl(homotopyDegree = 0))
+  expect_identical(dMod2:::.symControlSnake(c("degreeCapMax", "exactWorkCap", "homotopyDegree")),
+                   c("degree_cap_max", "exact_work_cap", "homotopy_degree"))
 })
 
 test_that("the specification holds reactions, totals, conditions and events", {
@@ -61,6 +76,8 @@ test_that("a scaling and a general direction, with the result object", {
   expect_s3_class(r$symmetries[[1]]$generator, "eqnvec")
   expect_identical(unclass(r$symmetries[[1]]$generator), c(A = "A", B = "B", s = "-s"))
   expect_identical(r$info$lieOrderDriver, 1L)
+  expect_identical(vapply(r$symmetries, `[[`, "", "level"), c("exact", "exact"))
+  expect_identical(r$info$rankStatus$status, "proven")
   expect_true(all(c("A", "B", "k1", "k2", "s") %in% r$info$coordinates))
   expect_false(is.null(attr(r, "symident")))
   expect_identical(r$call[[1]], quote(symmetryDetection))
@@ -97,6 +114,42 @@ test_that("events split the time line and equilibrate starts at rest", {
   expect_true(isTRUE(r$info$settings$equilibrate))
 })
 
+test_that("the gap order is raised to its rank bound, else the rank is a lower bound", {
+  f <- eqnvec(x = "u*w - k*x", w = "c*(1 - u)*v", v = "1 - u", u = "0")
+  ev <- addEvent(eventlist(), var = "u", time = 0, value = "0", method = "replace") |>
+    addEvent(var = "u", time = 1, value = "1", method = "replace")
+  tr <- eqnvec(w = "0", v = "0", u = "0")
+  r <- symmetryDetection(f, eqnvec(y = "x"), trafo = tr, events = ev, verbose = FALSE)
+  expect_true(r$identifiable)
+  expect_true(r$info$gapCertified)
+  cap <- reconstControl(gapOrderCap = 1L)
+  r <- symmetryDetection(f, eqnvec(y = "x"), trafo = tr, events = ev, reconstruct = TRUE,
+                         verify = FALSE, control = cap, verbose = FALSE)
+  expect_false(r$info$gapCertified)
+  expect_match(r$info$gapCertificate, "below its bound 3")
+  expect_identical(r$info$rankStatus$status, "lower bound")
+  expect_false(r$identifiable)
+  expect_true(any(grepl("^gap order: ", unlist(r$info$limits))))
+  expect_null(r$info$bound$probability)
+  expect_true(any(grepl("gap order is not proven", capture.output(print(r)))))
+  expect_warning(r <- symmetryDetection(f, eqnvec(y = "x"), trafo = tr, events = ev, reconstruct = TRUE,
+                                        control = cap, verbose = FALSE),
+                 "still grows")
+  expect_identical(r$info$verification$method, "gap guard")
+  r <- symmetryDetection(f_ab, eqnvec(y = "s*A"), reconstruct = TRUE, verbose = FALSE)
+  expect_null(r$info$gapCertified)
+  expect_length(r$info$branches, 0L)
+})
+
+test_that("regimes name the regimes an experiment visits", {
+  expect_identical(dMod2:::.symRegimes(c("x > c", "x < c")), list("x > c", "x < c"))
+  expect_identical(dMod2:::.symRegimes(list(a = "x > c", b = list(c("x > c", "y > 0")))),
+                   list(a = list("x > c"), b = list(list("x > c", "y > 0"))))
+  r <- symmetryDetection(eqnvec(x = "piecewise(-k1*x, x > c, -k2*x)"), eqnvec(y = "x"),
+                         trafo = eqnvec(x = "2"), regimes = "x > c", verbose = FALSE)
+  expect_true(all(c("c", "k2") %in% unlist(lapply(r$symmetries, `[[`, "support"))))
+})
+
 test_that("scalings only, the gauge and the control settings", {
   r <- symmetryDetection(f_ab, eqnvec(y = "s*A"), scalingsOnly = TRUE, verbose = FALSE)
   expect_identical(r$identifiable, NA)
@@ -106,6 +159,9 @@ test_that("scalings only, the gauge and the control settings", {
                          verbose = FALSE)
   expect_length(r$gauge, 1L)
   expect_identical(r$info$settings$degreeCap, 3L)
+  r <- symmetryDetection(f_ab, eqnvec(y = "s*A"), reconstruct = TRUE,
+                         control = reconstControl(degreeCapMax = 6L, seed = 2L), verbose = FALSE)
+  expect_identical(r$info$settings$control$degreeCapMax, 6L)
 })
 
 test_that("the reduction removes the directions and reports its chart", {
@@ -124,4 +180,21 @@ test_that("the reduction removes the directions and reports its chart", {
   fx <- symmetryReduction(r, fixed = "s")
   expect_identical(unname(unclass(fx$trafo)["s"]), "s")
   expect_error(symmetryReduction(list()), "symmetrydetection")
+  expect_true(red$level %in% c("exact", "assumed"))
+  expect_true(all(vapply(red$blocks, function(b) b$generatorLevel, "") == "exact"))
+  expect_length(red$limits, 0L)
+  lim <- symmetryReduction(r, workCap = 0L, check = FALSE)
+  expect_true(any(grepl("work_cap=0", unlist(lim$limits))))
+  expect_true(red$checks$pins && red$checks$invariants)
+  expect_true(red$checks$loop$ok)
+  expect_identical(red$checks$loop$rankStatus, "proven")
+  expect_null(symmetryReduction(r, check = FALSE)$checks$loop)
+})
+
+test_that("the reduction refuses open directions unless allowOpen", {
+  r <- symmetryDetection(f_ab, eqnvec(y = "s*A"), verbose = FALSE)
+  expect_error(symmetryReduction(r), "no closed form")
+  red <- symmetryReduction(r, allowOpen = TRUE)
+  expect_identical(red$removed, "X\u2081")
+  expect_identical(red$remaining, "X\u2082")
 })

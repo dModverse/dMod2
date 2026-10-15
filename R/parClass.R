@@ -323,7 +323,7 @@ plotPars.parframe <- function(x, tol = 1, ...){
 
 #' @export
 #' @rdname plotValues
-plotValues.parframe <- function(x, tol = 1, ..., showSteps = FALSE) {
+plotValues.parframe <- function(x, tol = 1, ..., showSteps = FALSE, pseudoLog = FALSE) {
 
   if (!missing(...)) x <- subset(x, ...)
 
@@ -332,22 +332,22 @@ plotValues.parframe <- function(x, tol = 1, ..., showSteps = FALSE) {
   pars[["delta"]] <- pars$value - pars$value[1]
   jumps <- .stepDetect(pars$value, tol)
 
-  yScale <- scale_y_continuous(trans = scales::pseudo_log_trans(base = 10),
-                               breaks = .decadeBreaks)
+  yScale <- if (pseudoLog)
+    scale_y_continuous(trans = scales::pseudo_log_trans(base = 10), breaks = .decadeBreaks)
 
   stepLines <- stepLabels <- NULL
   if (showSteps) {
     stepLines <- geom_vline(xintercept = jumps, lty = 2)
-    stepLabels <- annotate("text", x = jumps + 1, y = pars$delta[jumps], label = jumps,
+    stepLabels <- annotate("text", x = jumps + 1, y = pars$value[jumps], label = jumps,
                            hjust = 0, vjust = -0.5, color = "firebrick", size = 3)
   }
 
-  P <- ggplot2::ggplot(pars, aes(x = index, y = delta, pch = converged, color = iterations)) +
+  P <- ggplot2::ggplot(pars, aes(x = index, y = value, pch = converged, color = iterations)) +
     stepLines +
     geom_point() +
     stepLabels +
     yScale +
-    labs(x = "Fit rank", y = expression(Delta * " objective value"),
+    labs(x = "Fit rank", y = "Objective value",
          color = "Iterations") +
     scale_color_gradient(low = "dodgerblue", high = "orange") +
     .scaleConverged() +

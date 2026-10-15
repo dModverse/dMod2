@@ -27,8 +27,8 @@ NULL
 #' @format A data frame with 32 rows and the columns `name`, `time`, `value`,
 #'   `sigma`, `lloq` (lower limit of quantification, `-Inf` throughout) and
 #'   `condition`.
-#' @seealso `system.file("examples", "BA_transport.R", package = "dMod2")`
-#'   builds and fits the model.
+#' @seealso `demo("BA_transport", package = "dMod2")` builds and fits the
+#'   model.
 #' @examples
 #' data(badata)
 #' plotData(as.datalist(badata))
@@ -68,8 +68,7 @@ NULL
 #' distributed in the PEtab benchmark collection, model
 #' `Bachmann_MSB2011`, which is installed with the package, see
 #' `system.file("extdata", "petab_bachmann", package = "dMod2")`.
-#' @seealso `system.file("examples", "example_BachmannMSB2011.R", package =
-#'   "dMod2")` builds the model.
+#' @seealso `demo("BachmannMSB2011", package = "dMod2")` builds the model.
 #' @examples
 #' data(bachmann)
 #' head(bachmann)
@@ -94,8 +93,8 @@ NULL
 #' spectrometry and mathematical modeling. J Proteome Res 13(12):5685-5694.
 #' Values as distributed in the PEtab benchmark collection, model
 #' `Boehm_JProteomeRes2014`.
-#' @seealso `system.file("examples", "example_Boehm_JProteomeRes2014.R",
-#'   package = "dMod2")` builds the model.
+#' @seealso `demo("Boehm_JProteomeRes2014", package = "dMod2")` builds the
+#'   model.
 #' @examples
 #' data(boehm)
 #' plotData(as.datalist(boehm))
@@ -316,3 +315,42 @@ lbind <- function(mylist) {
   return(outlong)
   
 }
+
+
+#' Time-Course Data for IFN-alpha Signalling in Huh7.5 Cells
+#'
+#' 1918 measurements on human hepatoma cells stimulated with IFN-alpha at 0 h,
+#' at 24 h or at both: phosphorylated and total STAT1 and STAT2 and IRF9 in the
+#' cytoplasm and the nucleus, USP18, seven target gene transcripts and the
+#' molecules per cell of STAT1, STAT2, IRF9 and USP18. Two experiments
+#' perturb the USP18 feedback, by knock-down and by overexpression.
+#'
+#' @format A data frame with 1918 rows and 8 columns:
+#' \describe{
+#'   \item{`time`}{hours after the start of the experiment, when the first
+#'     dose and the doxycycline are given.}
+#'   \item{`name`}{observable, 22 levels. Immunoblots (`*_Cyt`, `*_Nuc`) and
+#'     qPCR (`*_mRNA`, fold change against untreated cells) are on the
+#'     natural log, molecules per cell (`mc_*`) on the linear scale.}
+#'   \item{`value`}{the measurement, blots scaled across replicates.}
+#'   \item{`sigma`}{standard deviation from the combined scaling and error
+#'     model.}
+#'   \item{`condition`}{one of 25 conditions, `<experiment>_<ifn1>_<ifn2>`,
+#'     for example `"WT_10_5000"` for 10 U/ml at 0 h and 5000 U/ml at 24 h.}
+#'   \item{`experiment`}{`"WT"`, `"USP18kd"` (USP18 knock-down by siRNA) or
+#'     `"USP18oe"` (USP18 overexpression, induced by doxycycline from 0 h on).}
+#'   \item{`ifn1`, `ifn2`}{IFN-alpha dose at 0 h and at 24 h in U/ml.}
+#' }
+#'
+#' @source Kok F, Rosenblatt M, Teusel M, et al. (2020), Disentangling
+#' molecular mechanisms regulating sensitization of interferon alpha signal
+#' transduction. Mol Syst Biol 16:e8955, \doi{10.15252/msb.20198955}. Values
+#' as fitted for the Huh7.5 core model of the publication.
+#' @seealso `demo("KokMSB2020", package = "dMod2")` builds the model.
+#' @examples
+#' data(kok)
+#' head(kok)
+#' @name kok
+#' @docType data
+#' @keywords data
+NULL

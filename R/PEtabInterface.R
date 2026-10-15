@@ -1138,7 +1138,7 @@ readPEtabTables <- function(yamlPath) {
 # does not evaluate counts as nonzero.
 .petab_vanishes <- function(e, zero = character(0)) {
   if (is.null(e)) return(FALSE)
-  syms <- all.vars(e)
+  syms <- setdiff(all.vars(e), "pi")
   env  <- new.env(parent = baseenv())
   env$piecewise <- function(...) {
     a <- list(...); n <- length(a)

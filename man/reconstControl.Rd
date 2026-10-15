@@ -23,6 +23,11 @@ reconstControl(
   perPrimeMinPrimes = 3L,
   homotopy = TRUE,
   timeout = Inf,
+  homotopyDegree = NULL,
+  degreeCapMax = NULL,
+  exactProof = NULL,
+  exactWorkCap = NULL,
+  seed = NULL,
   ...
 )
 }
@@ -74,6 +79,19 @@ fitted along lines in parameter space as a last route. Defaults to \code{TRUE}.}
 \item{timeout}{Time limit in seconds for the reconstruction. Directions not
 finished in time are reported by their support. \code{Inf} (default) sets no limit.}
 
+\item{homotopyDegree}{Total degree bound of the entries the homotopy route fits.}
+
+\item{degreeCapMax}{Degree up to which an entry past \code{degreeCap} is probed again,
+the bound doubled each time.}
+
+\item{exactProof}{Whether a closed form that is not its own lift is proven through
+the fields of each regime, one detection per regime.}
+
+\item{exactWorkCap}{Work bound of that proof: regimes times coordinates times tape
+instructions; above it the proof is skipped and the limit noted.}
+
+\item{seed}{Seed of the random choices.}
+
 \item{...}{\code{minsupportCandCap}, \code{perprimeCap} and \code{perprimeMinPrimes} are
 deprecated, use \code{minSupportCandCap}, \code{perPrimeCap} and \code{perPrimeMinPrimes}.}
 }
@@ -84,6 +102,11 @@ A list of class \code{reconstcontrol} with the settings.
 Saturation and closed-form reconstruction settings for
 \code{symmetryDetection(control = reconstControl())}. Raise the caps to reconstruct
 wide or high-degree directions, at the cost of more samples.
+}
+\details{
+\code{homotopyDegree}, \code{degreeCapMax}, \code{exactProof}, \code{exactWorkCap} and \code{seed}
+default to \code{NULL}, which keeps the value of symident (4, 8, \code{TRUE}, 500000 and
+0).
 }
 \examples{
 reconstControl(degreeCap = 6L, timeout = 60)

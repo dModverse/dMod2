@@ -14,8 +14,11 @@ symmetryReduction(
   separable = TRUE,
   reportZeroCompatibility = FALSE,
   alternatives = FALSE,
-  timeout = 600,
+  timeout = Inf,
   verbose = FALSE,
+  allowOpen = FALSE,
+  check = TRUE,
+  workCap = 4000L,
   ...
 )
 }
@@ -42,14 +45,26 @@ Defaults to 2.}
 \item{reportZeroCompatibility}{Logical. Report which coordinates each block can
 drive to 0. Defaults to \code{FALSE}.}
 
-\item{alternatives}{Logical. Also return the charts of the other admissible
-pins in \verb{$alternatives}. Defaults to \code{FALSE}.}
+\item{alternatives}{Logical. Also return the charts of the other valid pins
+in \verb{$alternatives}. Defaults to \code{FALSE}.}
 
 \item{timeout}{Time limit in seconds for the chart search of one block; a block not
-solved in time keeps its invariants (\code{"invariantOnly"}). Defaults to 600.}
+solved in time keeps its invariants (\code{"invariantOnly"}). Unlike \code{workCap}, it depends
+on the load of the machine. Defaults to \code{Inf}.}
 
 \item{verbose}{Logical. Report the progress per block and stage. Defaults to
 \code{FALSE}.}
+
+\item{allowOpen}{Logical. Reduce the directions with a closed form and leave those
+of level \code{"open"} in place; otherwise such a direction is an error. A direction
+of level \code{"verified"} gives a warning. Defaults to \code{FALSE}.}
+
+\item{check}{Logical. Run the detection again on the model with the trafo applied
+and record in \code{checks$loop} whether exactly the remaining directions are left.
+Defaults to \code{TRUE}; large models may turn it off.}
+
+\item{workCap}{Number of candidate sections the search of one block may try;
+reaching it is an entry in \code{limits}. Defaults to 4000.}
 
 \item{...}{Not used.}
 }
@@ -59,12 +74,23 @@ An object of class \code{symmetryreduction}:
 \item{\code{blocks}}{one entry per set of coupled directions, with its
 \code{invariants}, \code{section}, \code{survivorMeaning} (the invariant each \verb{q_<k>}
 holds), \code{carrierDomain}, \code{coverage} and \code{status} (\code{"fixed"},
-\code{"reduced"}, \code{"invariantOnly"} or \code{"unresolved"}).}
+\code{"reduced"}, \code{"invariantOnly"} or \code{"unresolved"}), \code{level},
+\code{generatorLevel} (the lowest level of its directions), \code{assumptions} and,
+for a curved block, \code{count} (\code{"exact"} or \code{"upper bound"}).}
+\item{\code{level}}{how far the reduction is established, the lowest over the
+reduced blocks: \code{"exact"}, \code{"verified"} (a direction rests on a verified closed
+form) or \code{"assumed"} (a claim rests on an assumption each block names under
+\code{assumptions}).}
+\item{\code{limits}}{the work budgets and time limits that stopped a section search.}
+\item{\code{checks}}{\code{pins} and \code{invariants}, whether every pin holds under the trafo
+and every invariant of a block maps to its new parameter over Q, \code{failed},
+and with \code{check = TRUE} \code{loop}: the \code{directions} the reduced model has, the
+number \code{expected}, its \code{rank}, \code{dim} and \code{rankStatus}, and \code{ok}.}
 \item{\code{zeroCompatibility}}{with \code{reportZeroCompatibility = TRUE}, the sets of
 coordinates that can vanish together and the \code{condition} for it.}
 \item{\code{trafo}}{an \link{eqnvec} over all coordinates for \code{\link[=P]{P()}} or
 \code{symmetryDetection(trafo = )}; \code{NULL} if nothing was reduced.}
-\item{\code{family}}{the admissible gauges of each reduced block.}
+\item{\code{family}}{the valid gauges of each reduced block.}
 \item{\code{removed}, \code{remaining}}{labels of the directions.}
 \item{\code{dependent}}{labels of directions that depend on the others and need
 no reduction.}

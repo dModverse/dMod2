@@ -27,6 +27,7 @@ data(boehm)
 plotData(as.datalist(boehm))
 }
 \seealso{
-\code{system.file("examples", "example_Boehm_JProteomeRes2014.R", package = "dMod2")} builds the model.
+\code{demo("Boehm_JProteomeRes2014", package = "dMod2")} builds the
+model.
 }
 \keyword{data}

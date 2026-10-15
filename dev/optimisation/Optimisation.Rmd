@@ -71,7 +71,7 @@ behaviour they produce.
 
 The running example is the STAT5 dimerisation model of Boehm et al.
 [@boehm2014identification], built as in the shipped example
-`example_Boehm_JProteomeRes2014.R`: nine parameters on a base-10 logarithmic
+`demo("Boehm_JProteomeRes2014")`: nine parameters on a base-10 logarithmic
 scale, a weak prior on the six dynamic ones, and bounds of $\pm 5$. The multi-start comparisons on this model share one set of 100 starting points; the comparison without the prior and the Bachmann model use 200.
 
 ```{r problem, results = "hide"}
@@ -404,7 +404,7 @@ wrong curvature keeps dominating the approximation; on this model those runs
 exhaust the iteration cap without reaching a termination test. `"sr1"` is not
 affected: its rank-one update has no sign constraint and overwrites bad
 curvature outright, and the Moré-Sorensen subproblem solves the indefinite
-approximations that follow. `benchmarks/scripts` compares both seeds.
+approximations that follow. `bench/hessian` compares both seeds.
 
 `qnMemory` limits the curvature retained. The default `0`, used in the
 rest of this vignette, accumulates every update onto the seed. A positive value
@@ -446,7 +446,7 @@ fitAll <- function(...)
                       cores = .cores, rinit = 0.1, rmax = 10, iterlim = 5000,
                       parlower = parlower, parupper = parupper, ...))
 
-source(file.path("benchmarks", "scripts", "hessianSourceSettings.R"))
+source(file.path("..", "..", "bench", "hessian", "hessianSourceSettings.R"))
 settings <- hessianSourceSettings[c("gn", "gn_bfgs", "gn_sr1", "bfgs_id", "sr1_id")]
 
 runs <- .fit("multistart", lapply(settings, function(a) do.call(fitAll, a)))
@@ -916,7 +916,7 @@ it, is fitted in the chart the symmetry reduction certifies, with the voltage as
 the only observable. A change of a parameter by a per cent moves the late spikes
 by more than their width, so the single-shooting objective breaks into narrow
 valleys, one for every way model spikes can pair with data spikes.
-`bench/multipleShooting_preBotC.R` runs the fits; its results are stored beside
+`bench/multipleShooting/preBotC.R` runs the fits; its results are stored beside
 this document.
 
 Two things decide the outcome besides the method. The solver runs at `1e-10`:
@@ -986,19 +986,19 @@ so this document renders in seconds and reproduces what it shows;
 The two larger comparisons are too expensive for a render and are stored beside
 the document, one file each:
 
-- `boehm_noprior.rds` comes from `bench_hessianSource.R` under `benchmarks/scripts`
+- `boehm_noprior.rds` comes from `bench/hessian/hessianSource.R`
   with the environment variable `BOEHM_NOPRIOR` set, and takes minutes on one
   machine.
 - `bachmann.rds` comes from `bachmann_hessianSource.R` under `dev/optimisation`,
   run first with `BACHMANN_SUBMIT` and then with `BACHMANN_COLLECT`. It needs a
   SLURM cluster: five job arrays of 50 tasks, four fits each.
 
-Without `BOEHM_NOPRIOR`, `bench_hessianSource.R` runs the nine-parameter
+Without `BOEHM_NOPRIOR`, `bench/hessian/hessianSource.R` runs the nine-parameter
 comparison of the earlier sections over the whole catalogue rather than the
 subset shown here, with the per-start `stopReason` tables.
 
 The FitzHugh-Nagumo fits are part of `results.rds`. `prebotc.rds` comes from
-`bench/multipleShooting_preBotC.R` with the environment variable `MS_RESULTS`
+`bench/multipleShooting/preBotC.R` with the environment variable `MS_RESULTS`
 set to its path, and takes about half an hour on a machine with twenty cores.
 
 # References

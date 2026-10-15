@@ -1,0 +1,5 @@
+BachmannMSB2011         JAK2-STAT5 signalling with feedbacks (Bachmann et al. 2011), PEtab cross-check
+Boehm_JProteomeRes2014  STAT5 dimerisation (Boehm et al. 2014): multi-start, REML error model, profiles
+KokMSB2020              IFN-alpha sensitization in Huh7.5 cells (Kok et al. 2020)
+BA_transport            Bile acid transport, the demonstration model of the data set badata
+HodgkinHuxley           Hodgkin-Huxley squid axon with piecewise() current pulse and gates

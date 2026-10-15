@@ -303,10 +303,7 @@ import(stringr)
 importFrom(Rcpp,sourceCpp)
 importFrom(abind,abind)
 importFrom(cOde,
-  getSymbols,
   odeC,
-  prodSymb,
-  replaceSymbols,
   sensitivitiesSymb,
   setForcings
 )

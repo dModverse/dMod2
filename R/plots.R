@@ -714,9 +714,8 @@ plotFluxes <- function(pouter, x, times, fluxEquations, legendTitle = "Fluxes:",
 
 #' Plot Objective Values of a Collection of Fits
 #'
-#' Draws the waterfall plot of a fit collection: the objective values minus the
-#' best one, in ascending order against their rank, on a pseudo-log10 scale
-#' that is linear below 1. A converged fit is drawn as a circle, an
+#' Draws the waterfall plot of a fit collection: the objective values in
+#' ascending order against their rank. A converged fit is drawn as a circle, an
 #' unconverged one as a triangle.
 #'
 #' @param x Data frame with columns `value`, `converged` and `iterations`,
@@ -726,6 +725,9 @@ plotFluxes <- function(pouter, x, times, fluxEquations, legendTitle = "Fluxes:",
 #'   still counts as one step. Defaults to 1.
 #' @param showSteps Logical. `TRUE` marks the detected steps by dashed
 #'   vertical lines labelled by their index. Defaults to `FALSE`.
+#' @param pseudoLog Logical. `TRUE` draws the values on a pseudo-log10 scale,
+#'   linear below 1 in absolute value and defined for negative values. Defaults
+#'   to `FALSE`, a linear scale.
 #' @return A `ggplot` object with the plotted data frame as attribute
 #'   `"data"`; its column `delta` is the distance to the best fit.
 #' @seealso [mstrust()], [as.parframe()], [plotPars()]

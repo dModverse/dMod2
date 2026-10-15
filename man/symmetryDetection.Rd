@@ -14,6 +14,7 @@ symmetryDetection(
   forcings = NULL,
   events = NULL,
   conditions = NULL,
+  regimes = NULL,
   equilibrate = FALSE,
   reduceCQ = FALSE,
   freeInitial = NULL,
@@ -64,6 +65,13 @@ model symbols or event values. A numeric cell fixes the symbol, a character cell
 renames it. A column named like a dynamic state sets its initial value. A
 direction is reported only if it is non-identifiable in every condition.}
 
+\item{regimes}{For a model with switches, the regimes an experiment visits: a
+character vector of comparisons such as \code{"x > c"}, each selecting the regimes on
+that side of a switch, or a list of such vectors whose comparisons hold together;
+the first entry is the regime at the start. A list named by the rows of
+\code{conditions} gives them per condition. Without it every regime counts; a switch on
+parameters alone needs its side named here.}
+
 \item{equilibrate}{Logical. Start at a steady state of \code{f} with the inputs at 0;
 the earliest events apply on top. Coupled steady states may need msolve, which
 \code{symident.install_msolve()} builds or \code{SYMIDENT_MSOLVE} points to. Defaults
@@ -83,7 +91,7 @@ instead of their support. Defaults to \code{FALSE}.}
 (none) or a character vector.}
 
 \item{verify}{Logical. Check that the rank has saturated where the Lie order is
-not certified; the result is in \verb{$info$verification}. Defaults to \code{TRUE}.}
+not proven sufficient; the result is in \verb{$info$verification}. Defaults to \code{TRUE}.}
 
 \item{cores}{Number of threads and worker processes. Defaults to 1.}
 
@@ -100,18 +108,34 @@ models without \code{equilibrate} and later events).}
 \value{
 An object of class \code{symmetrydetection}:
 \describe{
-\item{\code{identifiable}}{\code{TRUE} or \code{FALSE}, \code{NA} with \code{scalingsOnly}.}
+\item{\code{identifiable}}{\code{TRUE} or \code{FALSE}, \code{NA} with \code{scalingsOnly}; \code{FALSE} holds as far as
+\code{info$rankStatus} says.}
 \item{\code{rank}, \code{dim}}{rank of the observability matrix and number of
 coordinates.}
 \item{\code{symmetries}}{the directions, each a generator
-\eqn{X = \sum_i \eta_i \partial_{z_i}}: \code{generator} (\eqn{\eta} by
+\eqn{X = \sum_i \xi_i \partial_{\theta_i}}: \code{generator} (\eqn{\xi} by
 coordinate), \code{weights} (a scaling's integer weights), \code{type} (\code{"scaling"} or
-\code{"general"}), \code{degree}, \code{support}, \code{explicit}, \code{certified}, \code{reason},
-\code{route}, \code{display}, \code{completeGenerator} and \code{factor}.}
-\item{\code{info}}{\code{engine}, the Lie order and its certification
+\code{"general"}), \code{degree}, \code{support}, \code{explicit}, \code{level}, \code{stateComponents},
+\code{reason}, \code{route}, \code{display}, \code{completeGenerator} and \code{factor}. \code{level} is
+\code{"exact"} for a direction proven over the rationals, \code{"verified"} for one
+checked at random points modulo a large prime at the Lie and gap orders used
+and \code{"open"} without closed form; \code{stateComponents} holds, for an exact
+direction, the components on the states of the field that proves it.}
+\item{\code{info}}{\code{engine}, the Lie order and whether it is proven sufficient
 (\code{lieOrderUsed}, \code{lieOrderDriver}, \code{liePlateau}, \code{lieCertified}),
-\code{rankProven}, \code{rankProof}, \code{gapOrderUsed}, \code{conditions}, \code{segments},
-\code{coordinates}, \code{settings}, \code{elapsed} and \code{verification}.}
+the gap order of the events after the start and whether it is proven
+sufficient (\code{gapOrderUsed}, \code{gapCertified}, \code{NULL} without such events, and
+\code{gapCertificate}, why not), \code{rankProven}, \code{rankProof}, \code{rankFields} (a rank
+the invariant fields establish, checked at random points modulo a prime),
+\code{rankFieldsBound} (the probability that a wrong field passes), \code{rankStatus}
+(\code{status} \code{"proven"}, \code{"verified"} or \code{"lower bound"}, \code{why} and
+\code{probability}), \code{proof} (why each \code{"verified"} direction is not proven),
+\code{bound} (the probability that a wrong closed form passes the check, only where
+both orders are proven sufficient or the rank is settled), \code{limits} (what
+stopped part of the analysis), \code{errors} (exceptions turned into failed
+routes), \code{branches} (resting states with several roots modulo a prime, of
+which the first is taken), \code{conditions}, \code{segments}, \code{coordinates},
+\code{settings}, \code{elapsed} and \code{verification}.}
 \item{\code{gauge}}{the coordinates fixed under \code{gaugePreference}.}
 \item{\code{call}}{the matched call.}
 }
@@ -121,10 +145,10 @@ computation. Both take \code{verbose} and \code{width}.
 \description{
 Finds the directions in parameters and initial values along which
 the observations of a model do not change: the nullspace of the observability
-matrix over finite fields, with certified rank and exact closed forms. The model
-\code{f}, the observables \code{g} and an optional \code{trafo} are equations in any form
-\code{\link[=as.eqnvec]{as.eqnvec()}} accepts. The computation runs in the Python package \code{symident}
-through \code{reticulate}, installed from PyPI on first use.
+matrix over finite fields, with exact closed forms and a level that says whether
+each one is proven. The model \code{f}, the observables \code{g} and an optional \code{trafo} are
+equations in any form \code{\link[=as.eqnvec]{as.eqnvec()}} accepts. The computation runs in the Python
+package \code{symident} through \code{reticulate}, installed from PyPI on first use.
 
 Right-hand sides, observables and initial values may contain \code{exp()},
 \code{exp10()}, \code{b^x}, hyperbolic and trigonometric functions, free exponents \code{x^n},

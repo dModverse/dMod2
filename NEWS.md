@@ -1,3 +1,35 @@
+# dMod2 0.12.0
+
+* Needs cppDE 0.13.0 and symident 0.10.0.
+* `getSymbols()` and `replaceSymbols()` are dMod2's own, no longer re-exported
+  from cOde, which is now needed for the deSolve backend only.
+  `replaceSymbols()` brackets a replacement that is not a single operand,
+  replaces variables only, not function or argument names, and keeps the
+  spacing.
+* `pi` is the number in equations, as in cppDE, and `getSymbols()` does not
+  list it.
+* `symmetryDetection()` gains `regimes`, the regimes an experiment visits in a
+  model with switches, overall or per condition.
+* A direction of `symmetryDetection()` has a `level` (`"exact"`, `"verified"`
+  or `"open"`) in place of `certified`, and `stateComponents`. `info` gains
+  `rankStatus`, `proof`, `bound`, `gapCertified`, `limits`, `errors` and
+  `branches`.
+* `reconstControl()` gains `homotopyDegree`, `degreeCapMax`, `exactProof`,
+  `exactWorkCap` and `seed`; `NULL`, the default, keeps the value of symident.
+* `symmetryReduction()` stops at a direction of level `"open"` unless
+  `allowOpen = TRUE`. It gains `workCap`, `timeout` defaults to `Inf`, and
+  `check = TRUE` runs the detection again on the reduced model. The result
+  gains `level`, `limits` and `checks`, and each block its `level`.
+* `plotValues()` draws the objective values on a linear scale, not their distance to
+  the best fit on a pseudo-log scale; `pseudoLog = TRUE` switches to a pseudo-log10 scale.
+* The data set `kok` and the demo `KokMSB2020`. The Bachmann, Boehm, bile acid and
+  Hodgkin-Huxley scripts are demos as well, `demo(package = "dMod2")` lists them; the
+  tutorials left in `inst/examples` from dMod and the R2C templates in `inst/templates`
+  are removed, and the gradient comparisons moved to `bench/gradient`.
+* `bench/` and `benchmarks/` are one directory, `bench/`, by topic: `harness/` (the PEtab
+  benchmark suite), `gradient/`, `hessian/`, `symmetry/`, `multipleShooting/` and
+  `numSteady/`.
+
 # dMod2 0.11.4
 
 * symident and python-libsbml are found in `~/.virtualenvs/r-reticulate` too,

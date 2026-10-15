@@ -2,10 +2,10 @@
 #'
 #' @description Finds the directions in parameters and initial values along which
 #'   the observations of a model do not change: the nullspace of the observability
-#'   matrix over finite fields, with certified rank and exact closed forms. The model
-#'   `f`, the observables `g` and an optional `trafo` are equations in any form
-#'   [as.eqnvec()] accepts. The computation runs in the Python package `symident`
-#'   through `reticulate`, installed from PyPI on first use.
+#'   matrix over finite fields, with exact closed forms and a level that says whether
+#'   each one is proven. The model `f`, the observables `g` and an optional `trafo` are
+#'   equations in any form [as.eqnvec()] accepts. The computation runs in the Python
+#'   package `symident` through `reticulate`, installed from PyPI on first use.
 #'
 #'   Right-hand sides, observables and initial values may contain `exp()`,
 #'   `exp10()`, `b^x`, hyperbolic and trigonometric functions, free exponents `x^n`,
@@ -39,6 +39,12 @@
 #'   model symbols or event values. A numeric cell fixes the symbol, a character cell
 #'   renames it. A column named like a dynamic state sets its initial value. A
 #'   direction is reported only if it is non-identifiable in every condition.
+#' @param regimes For a model with switches, the regimes an experiment visits: a
+#'   character vector of comparisons such as `"x > c"`, each selecting the regimes on
+#'   that side of a switch, or a list of such vectors whose comparisons hold together;
+#'   the first entry is the regime at the start. A list named by the rows of
+#'   `conditions` gives them per condition. Without it every regime counts; a switch on
+#'   parameters alone needs its side named here.
 #' @param equilibrate Logical. Start at a steady state of `f` with the inputs at 0;
 #'   the earliest events apply on top. Coupled steady states may need msolve, which
 #'   `symident.install_msolve()` builds or `SYMIDENT_MSOLVE` points to. Defaults
@@ -53,7 +59,7 @@
 #' @param positive Coordinates known to be positive: `TRUE` (default, all), `FALSE`
 #'   (none) or a character vector.
 #' @param verify Logical. Check that the rank has saturated where the Lie order is
-#'   not certified; the result is in `$info$verification`. Defaults to `TRUE`.
+#'   not proven sufficient; the result is in `$info$verification`. Defaults to `TRUE`.
 #' @param cores Number of threads and worker processes. Defaults to 1.
 #' @param control A [reconstControl()] list.
 #' @param scalingsOnly Logical. Only the scaling symmetries, from an exact integer
@@ -64,18 +70,34 @@
 #'
 #' @return An object of class `symmetrydetection`:
 #'   \describe{
-#'     \item{`identifiable`}{`TRUE` or `FALSE`, `NA` with `scalingsOnly`.}
+#'     \item{`identifiable`}{`TRUE` or `FALSE`, `NA` with `scalingsOnly`; `FALSE` holds as far as
+#'       `info$rankStatus` says.}
 #'     \item{`rank`, `dim`}{rank of the observability matrix and number of
 #'       coordinates.}
 #'     \item{`symmetries`}{the directions, each a generator
-#'       \eqn{X = \sum_i \eta_i \partial_{z_i}}: `generator` (\eqn{\eta} by
+#'       \eqn{X = \sum_i \xi_i \partial_{\theta_i}}: `generator` (\eqn{\xi} by
 #'       coordinate), `weights` (a scaling's integer weights), `type` (`"scaling"` or
-#'       `"general"`), `degree`, `support`, `explicit`, `certified`, `reason`,
-#'       `route`, `display`, `completeGenerator` and `factor`.}
-#'     \item{`info`}{`engine`, the Lie order and its certification
+#'       `"general"`), `degree`, `support`, `explicit`, `level`, `stateComponents`,
+#'       `reason`, `route`, `display`, `completeGenerator` and `factor`. `level` is
+#'       `"exact"` for a direction proven over the rationals, `"verified"` for one
+#'       checked at random points modulo a large prime at the Lie and gap orders used
+#'       and `"open"` without closed form; `stateComponents` holds, for an exact
+#'       direction, the components on the states of the field that proves it.}
+#'     \item{`info`}{`engine`, the Lie order and whether it is proven sufficient
 #'       (`lieOrderUsed`, `lieOrderDriver`, `liePlateau`, `lieCertified`),
-#'       `rankProven`, `rankProof`, `gapOrderUsed`, `conditions`, `segments`,
-#'       `coordinates`, `settings`, `elapsed` and `verification`.}
+#'       the gap order of the events after the start and whether it is proven
+#'       sufficient (`gapOrderUsed`, `gapCertified`, `NULL` without such events, and
+#'       `gapCertificate`, why not), `rankProven`, `rankProof`, `rankFields` (a rank
+#'       the invariant fields establish, checked at random points modulo a prime),
+#'       `rankFieldsBound` (the probability that a wrong field passes), `rankStatus`
+#'       (`status` `"proven"`, `"verified"` or `"lower bound"`, `why` and
+#'       `probability`), `proof` (why each `"verified"` direction is not proven),
+#'       `bound` (the probability that a wrong closed form passes the check, only where
+#'       both orders are proven sufficient or the rank is settled), `limits` (what
+#'       stopped part of the analysis), `errors` (exceptions turned into failed
+#'       routes), `branches` (resting states with several roots modulo a prime, of
+#'       which the first is taken), `conditions`, `segments`, `coordinates`,
+#'       `settings`, `elapsed` and `verification`.}
 #'     \item{`gauge`}{the coordinates fixed under `gaugePreference`.}
 #'     \item{`call`}{the matched call.}
 #'   }
@@ -105,8 +127,9 @@
 #' @export
 symmetryDetection <- function(f, g, trafo = NULL, parameters = NULL,
                               fixed = NULL, gaugePreference = FALSE, forcings = NULL,
-                              events = NULL, conditions = NULL, equilibrate = FALSE,
-                              reduceCQ = FALSE, freeInitial = NULL, reconstruct = FALSE,
+                              events = NULL, conditions = NULL, regimes = NULL,
+                              equilibrate = FALSE, reduceCQ = FALSE, freeInitial = NULL,
+                              reconstruct = FALSE,
                               positive = TRUE, verify = TRUE, cores = 1,
                               control = reconstControl(), scalingsOnly = FALSE,
                               symEngine = c("modular", "symbolic"), verbose = FALSE) {
@@ -122,6 +145,7 @@ symmetryDetection <- function(f, g, trafo = NULL, parameters = NULL,
                free_initial = freeInitial)
   for (k in names(syms))
     if (!is.null(syms[[k]])) spec[[k]] <- as.list(as.character(syms[[k]]))
+  if (!is.null(regimes)) spec$regimes <- .symRegimes(regimes)
   spec$gauge_preference <- if (is.null(gaugePreference)) "AUTO"
     else if (isFALSE(gaugePreference)) FALSE else as.list(as.character(gaugePreference))
   spec$equilibrate <- isTRUE(equilibrate)
@@ -176,8 +200,19 @@ symmetryDetection <- function(f, g, trafo = NULL, parameters = NULL,
 #'   fitted along lines in parameter space as a last route. Defaults to `TRUE`.
 #' @param timeout Time limit in seconds for the reconstruction. Directions not
 #'   finished in time are reported by their support. `Inf` (default) sets no limit.
+#' @param homotopyDegree Total degree bound of the entries the homotopy route fits.
+#' @param degreeCapMax Degree up to which an entry past `degreeCap` is probed again,
+#'   the bound doubled each time.
+#' @param exactProof Whether a closed form that is not its own lift is proven through
+#'   the fields of each regime, one detection per regime.
+#' @param exactWorkCap Work bound of that proof: regimes times coordinates times tape
+#'   instructions; above it the proof is skipped and the limit noted.
+#' @param seed Seed of the random choices.
 #' @param ... `minsupportCandCap`, `perprimeCap` and `perprimeMinPrimes` are
 #'   deprecated, use `minSupportCandCap`, `perPrimeCap` and `perPrimeMinPrimes`.
+#' @details `homotopyDegree`, `degreeCapMax`, `exactProof`, `exactWorkCap` and `seed`
+#'   default to `NULL`, which keeps the value of symident (4, 8, `TRUE`, 500000 and
+#'   0).
 #' @return A list of class `reconstcontrol` with the settings.
 #' @seealso [symmetryDetection()]
 #' @export
@@ -188,7 +223,9 @@ reconstControl <- function(relevanceCap = 6L, relevanceCapDir = 24L, relevanceCa
                            laurentDegNum = 4L, laurentDegDen = 2L, laurentCandCap = 200000L,
                            termCap = 60L, generalDegNum = 4L, generalDegDen = 3L,
                            gapOrderCap = 8L, minSupportCandCap = 20000L, perPrimeCap = 120L,
-                           perPrimeMinPrimes = 3L, homotopy = TRUE, timeout = Inf, ...) {
+                           perPrimeMinPrimes = 3L, homotopy = TRUE, timeout = Inf,
+                           homotopyDegree = NULL, degreeCapMax = NULL, exactProof = NULL,
+                           exactWorkCap = NULL, seed = NULL, ...) {
   .renameArgs(list(...), c(minsupportCandCap = "minSupportCandCap",
                            perprimeCap = "perPrimeCap",
                            perprimeMinPrimes = "perPrimeMinPrimes"),
@@ -199,7 +236,12 @@ reconstControl <- function(relevanceCap = 6L, relevanceCapDir = 24L, relevanceCa
             laurentDegNum >= 1L, laurentDegDen >= 0L, laurentCandCap >= 1L,
             generalDegNum >= 1L, generalDegDen >= 1L, gapOrderCap >= 0L,
             minSupportCandCap >= 1L, perPrimeCap >= 1L, perPrimeMinPrimes >= 2L,
-            isTRUE(homotopy) || isFALSE(homotopy), is.numeric(timeout), timeout > 0)
+            isTRUE(homotopy) || isFALSE(homotopy), is.numeric(timeout), timeout > 0,
+            is.null(homotopyDegree) || homotopyDegree >= 1L,
+            is.null(degreeCapMax) || degreeCapMax >= 0L,
+            is.null(exactProof) || isTRUE(exactProof) || isFALSE(exactProof),
+            is.null(exactWorkCap) || exactWorkCap > 0, is.null(seed) || is.numeric(seed))
+  int <- function(x) if (is.null(x)) NULL else as.integer(x)
   structure(list(relevanceCap = as.integer(relevanceCap),
                  relevanceCapDir = as.integer(relevanceCapDir),
                  relevanceCapSparse = as.integer(relevanceCapSparse),
@@ -214,14 +256,17 @@ reconstControl <- function(relevanceCap = 6L, relevanceCapDir = 24L, relevanceCa
                  minSupportCandCap = as.integer(minSupportCandCap),
                  perPrimeCap = as.integer(perPrimeCap),
                  perPrimeMinPrimes = as.integer(perPrimeMinPrimes), homotopy = homotopy,
-                 timeout = timeout),
+                 timeout = timeout, homotopyDegree = int(homotopyDegree),
+                 degreeCapMax = int(degreeCapMax), exactProof = exactProof,
+                 exactWorkCap = if (is.null(exactWorkCap)) NULL else as.numeric(exactWorkCap),
+                 seed = int(seed)),
             class = c("reconstcontrol", "list"))
 }
 
 
 # ---- the interface to the Python package symident --------------------------------
 
-.symidentMin <- "0.9.3"
+.symidentMin <- "0.10.0"
 .symidentReq <- paste0("symident>=", .symidentMin)
 
 # whether symident is installed in version .symidentMin or later
@@ -265,13 +310,22 @@ reconstControl <- function(relevanceCap = 6L, relevanceCapDir = 24L, relevanceCa
 # symbols and keep their names
 .symCamelFields <- function(x, data = c("generator", "complete_generator", "weights",
                                         "display", "factor", "pins", "survivor_meaning",
-                                        "carrier_domain", "trafo", "totals")) {
+                                        "carrier_domain", "trafo", "totals",
+                                        "state_components")) {
   if (!is.list(x)) return(x)
   nm <- names(x)
   for (i in seq_along(x))
     if (is.null(nm) || !nm[i] %in% data) x[i] <- list(.symCamelFields(x[[i]], data))
   if (!is.null(nm)) names(x) <- .symCamel(nm)
   x
+}
+
+# regimes as symident reads them: each entry one comparison or a list of comparisons, a
+# list named by condition holding the entries of each condition
+.symRegimes <- function(x) {
+  entries <- function(r) lapply(if (is.list(r)) r else as.list(r), function(e)
+    if (length(e) == 1L) as.character(e) else as.list(as.character(e)))
+  if (is.list(x) && !is.null(names(x))) lapply(x, entries) else entries(x)
 }
 
 # one call into symident: the arguments as JSON in, the result as JSON out, with its
@@ -357,6 +411,7 @@ reconstControl <- function(relevanceCap = 6L, relevanceCapDir = 24L, relevanceCa
   res$symmetries <- lapply(res$symmetries, function(d) {
     d$generator <- vec(d$generator)
     d$completeGenerator <- vec(d$completeGenerator)
+    d$stateComponents <- vec(d$stateComponents)
     d$support <- chr(d$support)
     if (!is.null(d$display)) d$display <- lapply(d$display, as.character)
     structure(d, class = "symmetrygenerator")
