@@ -1,3 +1,8 @@
+# dMod2 0.12.3
+
+* `trustL1()` drops `parscale`, as `trust()` did in 0.12.2. A scaling of the
+  parameters belongs in `P()`.
+
 # dMod2 0.12.2
 
 * `trust()` gains `fallbackControl`, the settings of the fallback phase:

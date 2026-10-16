@@ -33,7 +33,6 @@ trustL1(
   lambda = 1,
   rinit = 0.1,
   rmax = 10,
-  parscale = NULL,
   iterlim = 100L,
   ftol = 1e-06,
   mtol = 1e-06,

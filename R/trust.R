@@ -530,7 +530,6 @@ print.trustfit <- function(x, ...) {
 #'   \code{fuse} is given and \code{mu} is not, \code{mu} is empty.
 trustL1 <- function(objfun, parinit, mu = 0 * parinit, one.sided = FALSE, lambda = 1,
                     rinit = 0.1, rmax = 10,
-                    parscale  = NULL,
                     iterlim   = 100L,
                     ftol      = 1e-6,
                     mtol      = 1e-6,
@@ -594,7 +593,7 @@ trustL1 <- function(objfun, parinit, mu = 0 * parinit, one.sided = FALSE, lambda
 
   trustL1_impl(fn, parinit, mu, lambda,
                as.logical(one.sided)[1L], rinit, rmax,
-               parscale, as.integer(iterlim),
+               NULL, as.integer(iterlim),
                ftol, mtol, gtol, xtol, rmin, theta.max,
                boundary, minimize, blather,
                parupper, parlower, printIter, traceFile,

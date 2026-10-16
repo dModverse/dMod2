@@ -48,18 +48,18 @@ test_that(".splitCores reads a scalar as the outer axis only", {
 
 
 test_that(".splitCores reads both axes, by name or by position", {
-  r <- dMod2:::.splitCores(c(fits = 3L, conditions = 2L), "fits")
-  expect_identical(r$outer, 3L)
-  expect_identical(r$conditions, 2L)
+  r <- dMod2:::.splitCores(c(fits = 2L, conditions = 1L), "fits")
+  expect_identical(r$outer, 2L)
+  expect_identical(r$conditions, 1L)
 
   # positional: first is the outer axis
-  r <- dMod2:::.splitCores(c(3L, 2L), "fits")
-  expect_identical(r$outer, 3L)
-  expect_identical(r$conditions, 2L)
+  r <- dMod2:::.splitCores(c(2L, 1L), "fits")
+  expect_identical(r$outer, 2L)
+  expect_identical(r$conditions, 1L)
 
   # the outer axis is named after the caller's axis
-  r <- dMod2:::.splitCores(c(pars = 5L, conditions = 2L), "pars")
-  expect_identical(r$outer, 5L)
+  r <- dMod2:::.splitCores(c(pars = 2L, conditions = 1L), "pars")
+  expect_identical(r$outer, 2L)
 })
 
 
