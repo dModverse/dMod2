@@ -4,7 +4,7 @@
 \alias{attrs}
 \title{Select Attributes}
 \usage{
-attrs(x, which = NULL, keep = TRUE, ...)
+attrs(x, which = NULL, keep = TRUE)
 }
 \arguments{
 \item{x}{An object.}
@@ -15,8 +15,6 @@ attrs(x, which = NULL, keep = TRUE, ...)
 
 \item{keep}{Logical. \code{TRUE} (default) keeps the attributes in \code{which} and
 removes all others; \code{FALSE} removes those in \code{which}.}
-
-\item{...}{\code{atr} is deprecated, use \code{which}.}
 }
 \value{
 \code{x} with the selected attributes.

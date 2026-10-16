@@ -47,7 +47,6 @@ as.objlist <- function(p) {
 #'   derivatives of the prediction. Default `FALSE`.
 #' @param optBLOQ Character, the treatment of data below the limit of
 #'   quantification, as in [normL2()]. Default `"M3"`.
-#' @param ... `opt.BLOQ` is deprecated, use `optBLOQ`.
 #'
 #' @return An [objlist].
 #' @seealso [normL2()]
@@ -60,10 +59,7 @@ evalConditionResidual <- function(dataI, predictionI, pars,
                                   eCondNames = NULL,
                                   deriv      = TRUE,
                                   deriv2     = FALSE,
-                                  optBLOQ    = c("M3", "M1", "M4NM", "M4BEAL"),
-                                  ...) {
-  .renameArgs(list(...), c(opt.BLOQ = "optBLOQ"), "evalConditionResidual",
-              strict = TRUE)
+                                  optBLOQ    = c("M3", "M1", "M4NM", "M4BEAL")) {
   optBLOQ <- match.arg(optBLOQ)
   err_cn <- NULL
   if (!is.null(errfn) && (is.null(eCondNames) || cn %in% eCondNames)) {
@@ -175,7 +171,6 @@ evalConditionResidual <- function(dataI, predictionI, pars,
 #'   under `chi2`. Adding objectives pools the terms sharing an `attrName`,
 #'   so `chi2` stays one number; where two `attrName`s meet it splits into
 #'   `chi2_<attrName>` per contribution.
-#' @param cores Deprecated and ignored, see section Lifecycle.
 #' @param optBLOQ Character. NONMEM-style treatment of below-LOQ rows
 #'   (those with `value <= lloq` in the data). One of `"M1"` (drop BLOQ rows
 #'   from the objective), `"M3"` (censored log-likelihood, default), `"M4NM"`
@@ -212,8 +207,6 @@ evalConditionResidual <- function(dataI, predictionI, pars,
 #'   [Xs()], built on `odemodel(..., includeTimeZero = FALSE)`. The method
 #'   and the node layout are described in
 #'   `vignette("Optimisation", package = "dMod2")`.
-#' @param ... `attr.name` and `opt.BLOQ` are deprecated, use `attrName` and
-#'   `optBLOQ`.
 #'
 #' @return
 #' An objective function of class `objfn`, called as `obj(pars, ...)`, see
@@ -227,26 +220,15 @@ evalConditionResidual <- function(dataI, predictionI, pars,
 #' @details
 #' Combine objectives with `+`, see [sumobjfn].
 #'
-#' @section Lifecycle:
-#' The argument `cores` is deprecated and ignored; pass `cores` to the
-#' objective call or set `options(dMod.cores = )`.
-#'
 #' @inheritSection dModfn Calling a dMod function
 #' @seealso [datapointL2()], [constraintL2()], [res()]
 #' @example inst/examples/normL2.R
 #' @export
 normL2 <- function(data, x, errmodel = NULL, times = NULL,
                    attrName = "data",
-                   cores = 1L,
                    optBLOQ = c("M3", "M1", "M4NM", "M4BEAL"),
-                   multipleShootingControl = NULL, ...) {
+                   multipleShootingControl = NULL) {
 
-  .renameArgs(list(...), c(attr.name = "attrName", opt.BLOQ = "optBLOQ"),
-              "normL2", strict = TRUE)
-  if (!missing(cores))
-    warning("normL2: 'cores' at construction time is deprecated and ignored. ",
-            "Pass cores = to the objective call, or set options(dMod.cores = ).",
-            call. = FALSE)
   optBLOQ <- match.arg(optBLOQ)
 
   timesD <- .normL2Grid(data, times)
@@ -591,11 +573,10 @@ normL2 <- function(data, x, errmodel = NULL, times = NULL,
 constraintL2 <- function(mu, ...) UseMethod("constraintL2")
 
 #' @rdname constraintL2
-#' @param ... Passed to the method. `attr.name` is deprecated, use `attrName`.
+#' @param ... Passed to the method.
 #' @export
 constraintL2.default <- function(mu, sigma = 1, attrName = "prior",
                                  condition = NULL, ...) {
-  .renameArgs(list(...), c(attr.name = "attrName"), "constraintL2")
 
   # c(a = "s_a", b = 2) arrives as character with "2" in it
   if (!is.numeric(sigma) &&
@@ -769,11 +750,10 @@ constraintL2.default <- function(mu, sigma = 1, attrName = "prior",
 constraintL1 <- function(mu, ...) UseMethod("constraintL1")
 
 #' @rdname constraintL1
-#' @param ... Passed to the method. `attr.name` is deprecated, use `attrName`.
+#' @param ... Passed to the method.
 #' @export
 constraintL1.default <- function(mu, sigma = 1, attrName = "prior",
                                  condition = NULL, ...) {
-  .renameArgs(list(...), c(attr.name = "attrName"), "constraintL1")
 
   parnames <- names(mu)
   mu    <- .constraintArg(mu,    parnames, "mu",    "constraintL1")
@@ -798,7 +778,6 @@ constraintL1.default <- function(mu, sigma = 1, attrName = "prior",
 #' @param condition Character vector, the conditions of a sum of objectives
 #'   in which the term is evaluated. `NULL` (default) evaluates it in every
 #'   one.
-#' @param ... `attr.name` is deprecated, use `attrName`.
 #'
 #' @details
 #' Computes the Cauchy prior on the `-2 log` scale,
@@ -814,9 +793,7 @@ constraintL1.default <- function(mu, sigma = 1, attrName = "prior",
 #' prior <- constraintCauchy(mu = c(k1 = 0), sigma = 2)
 #' prior(pars = c(k1 = 1))$value
 #' @export
-constraintCauchy <- function(mu, sigma = 1, attrName = "prior", condition = NULL,
-                             ...) {
-  .renameArgs(list(...), c(attr.name = "attrName"), "constraintCauchy", strict = TRUE)
+constraintCauchy <- function(mu, sigma = 1, attrName = "prior", condition = NULL) {
 
   parnames <- names(mu)
   mu    <- .constraintArg(mu,    parnames, "mu",    "constraintCauchy")
@@ -842,7 +819,6 @@ constraintCauchy <- function(mu, sigma = 1, attrName = "prior", condition = NULL
 #' @param condition Character vector, the conditions of a sum of objectives
 #'   in which the term is evaluated. `NULL` (default) evaluates it in every
 #'   one.
-#' @param ... `attr.name` is deprecated, use `attrName`.
 #'
 #' @details
 #' Computes the gamma prior on the `-2 log` scale,
@@ -857,9 +833,7 @@ constraintCauchy <- function(mu, sigma = 1, attrName = "prior", condition = NULL
 #' prior <- constraintGamma(shape = c(k1 = 3), scale = 5)
 #' prior(pars = c(k1 = 5))$value
 #' @export
-constraintGamma <- function(shape, scale = 1, attrName = "prior", condition = NULL,
-                            ...) {
-  .renameArgs(list(...), c(attr.name = "attrName"), "constraintGamma", strict = TRUE)
+constraintGamma <- function(shape, scale = 1, attrName = "prior", condition = NULL) {
 
   parnames <- names(shape)
   shape <- .constraintArg(shape, parnames, "shape", "constraintGamma")
@@ -887,7 +861,6 @@ constraintGamma <- function(shape, scale = 1, attrName = "prior", condition = NU
 #' @param condition Character vector, the conditions of a sum of objectives
 #'   in which the term is evaluated. `NULL` (default) evaluates it in every
 #'   one.
-#' @param ... `attr.name` is deprecated, use `attrName`.
 #'
 #' @details
 #' Computes the exponential prior on the `-2 log` scale,
@@ -903,9 +876,7 @@ constraintGamma <- function(shape, scale = 1, attrName = "prior", condition = NU
 #' prior <- constraintExponential(scale = c(k1 = 3))
 #' prior(pars = c(k1 = 5))$value
 #' @export
-constraintExponential <- function(scale, attrName = "prior", condition = NULL,
-                                  ...) {
-  .renameArgs(list(...), c(attr.name = "attrName"), "constraintExponential", strict = TRUE)
+constraintExponential <- function(scale, attrName = "prior", condition = NULL) {
 
   parnames <- names(scale)
   scale <- .constraintArg(scale, parnames, "scale", "constraintExponential")
@@ -929,7 +900,6 @@ constraintExponential <- function(scale, attrName = "prior", condition = NULL,
 #' @param condition Character vector, the conditions of a sum of objectives
 #'   in which the term is evaluated. `NULL` (default) evaluates it in every
 #'   one.
-#' @param ... `attr.name` is deprecated, use `attrName`.
 #'
 #' @details
 #' Computes the chi-squared prior on the `-2 log` scale,
@@ -944,9 +914,7 @@ constraintExponential <- function(scale, attrName = "prior", condition = NULL,
 #' prior <- constraintChisq(df = c(k1 = 4))
 #' prior(pars = c(k1 = 5))$value
 #' @export
-constraintChisq <- function(df, attrName = "prior", condition = NULL,
-                            ...) {
-  .renameArgs(list(...), c(attr.name = "attrName"), "constraintChisq", strict = TRUE)
+constraintChisq <- function(df, attrName = "prior", condition = NULL) {
 
   parnames <- names(df)
   df <- .constraintArg(df, parnames, "df", "constraintChisq")
@@ -972,7 +940,6 @@ constraintChisq <- function(df, attrName = "prior", condition = NULL,
 #' @param condition Character vector, the conditions of a sum of objectives
 #'   in which the term is evaluated. `NULL` (default) evaluates it in every
 #'   one.
-#' @param ... `attr.name` is deprecated, use `attrName`.
 #'
 #' @details
 #' Computes the Rayleigh prior on the `-2 log` scale,
@@ -987,9 +954,7 @@ constraintChisq <- function(df, attrName = "prior", condition = NULL,
 #' prior <- constraintRayleigh(sigma = c(k1 = 3))
 #' prior(pars = c(k1 = 5))$value
 #' @export
-constraintRayleigh <- function(sigma, attrName = "prior", condition = NULL,
-                               ...) {
-  .renameArgs(list(...), c(attr.name = "attrName"), "constraintRayleigh", strict = TRUE)
+constraintRayleigh <- function(sigma, attrName = "prior", condition = NULL) {
 
   parnames <- names(sigma)
   sigma <- .constraintArg(sigma, parnames, "sigma", "constraintRayleigh")
@@ -1021,8 +986,6 @@ constraintRayleigh <- function(sigma, attrName = "prior", condition = NULL,
 #'   default `"validation"`. The value is also returned as `chi2`
 #'   contribution, see `attrName` in [normL2()].
 #' @param condition Character, the condition of the prediction. No default.
-#' @param ... `value` and `attr.name` are deprecated names of `parameter` and
-#'   `attrName`.
 #' @details The value is
 #' \deqn{\left(\frac{x(t) - v}{\sigma}\right)^2}{((x(t) - v)/sigma)^2}
 #' with the prediction \eqn{x(t)} and the value of `parameter`, \eqn{v}. The
@@ -1046,10 +1009,8 @@ constraintRayleigh <- function(sigma, attrName = "prior", condition = NULL,
 #' vali(pars = c(p0, newpoint = 2), env = .GlobalEnv)
 #' @export
 datapointL2 <- function(name, time, parameter, sigma = 1,
-                        attrName = "validation", condition, ...) {
+                        attrName = "validation", condition) {
 
-  .renameArgs(list(...), c(value = "parameter", attr.name = "attrName"),
-              "datapointL2", strict = TRUE)
   controls <- list(
     mu       = structure(name, names = parameter)[1], # one data point only
     time     = time[1],

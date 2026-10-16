@@ -15,33 +15,6 @@
 }
 
 
-#' Deprecated PEtab Readers
-#'
-#' `readPetabYaml()` and `readPetabTables()` are deprecated, use
-#' [readPEtabYaml()] and [readPEtabTables()].
-#'
-#' @param yamlPath Path to the PEtab YAML file.
-#' @return As [readPEtabYaml()] and [readPEtabTables()].
-#' @keywords internal
-#' @name readPetab-deprecated
-NULL
-
-#' @rdname readPetab-deprecated
-#' @export
-readPetabYaml <- function(yamlPath) {
-  warning("'readPetabYaml' is deprecated, use 'readPEtabYaml'.", call. = FALSE)
-  readPEtabYaml(yamlPath)
-}
-
-#' @rdname readPetab-deprecated
-#' @export
-readPetabTables <- function(yamlPath) {
-  warning("'readPetabTables' is deprecated, use 'readPEtabTables'.",
-          call. = FALSE)
-  readPEtabTables(yamlPath)
-}
-
-
 ## --- low-level YAML / TSV readers ------------------------------------------
 
 #' Read a PEtab YAML File
@@ -1971,7 +1944,6 @@ readPEtabTables <- function(yamlPath) {
 #' @param outdir Directory of the generated sources and shared objects, one
 #'   source per condition. Default `getOption("dMod.outdir")`, else the
 #'   working directory.
-#' @param optionsOde Deprecated name of `options`, accepted with a warning.
 #' @return A list of class `"petabproblem"` with components `dataList`,
 #'   `reactions`, `odemodel`, `g`, `x`, `p`, `e`, `prd` (the composite
 #'   `g * x * p`), `obj`, `bestfit`, `parlower` and `parupper`. `obj` has the
@@ -2005,11 +1977,7 @@ importPEtab <- function(yamlPath, backend,
                         compile = TRUE, cores = 1L, modelname = NULL,
                         deriv = TRUE, derivMode = "forward",
                         options = NULL, optionsSens = NULL,
-                        sparse = NULL, outdir = .dmodOutdir(), optionsOde = NULL) {
-
-  if (!is.null(optionsOde))
-    options <- .optionsOdeAlias(options, list(optionsOde = optionsOde),
-                                "importPEtab")
+                        sparse = NULL, outdir = .dmodOutdir()) {
 
   cores <- as.integer(cores)
   if (length(cores) != 1L || is.na(cores) || cores < 1L)

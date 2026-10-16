@@ -690,7 +690,8 @@ test_that("trust() refuses what multiple shooting cannot honour", {
   mo <- .ms_models()
   obj <- normL2(mo$data, mo$g * mo$x * mo$p, multipleShootingControl = list(nodes = seq(2, 18, 2)))
   expect_error(trust(obj, mo$truth, hessianMethod = "exact"), "does not support")
-  expect_error(trust(obj, mo$truth, hessianFallback = "sr1"), "does not support")
+  expect_error(trust(obj, mo$truth, fallbackControl = list(hessianMethod = "sr1")),
+               "does not support")
   expect_error(trust(obj, mo$truth, stepControl = list(nonmonotone = 0.8)), "does not support")
   expect_error(trust(obj, mo$truth, sweep = "reverse"), "bfgs")
   expect_error(trust(obj, mo$truth, deriv2 = TRUE), "takes fixed, cores and sweep")

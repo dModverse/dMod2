@@ -1,3 +1,26 @@
+# dMod2 0.12.2
+
+* `trust()` gains `fallbackControl`, the settings of the fallback phase:
+  `hessianMethod` (default `"none"`), `limit`, `iterlim` (per fallback
+  phase), `sweep` and `qnControl`. With `sweep = NULL`, the default, the
+  fallback phase evaluates the objective backwards when the chain can.
+  `hessianFallback`, `fallbackLimit` and `parscale` are removed.
+* `trust()` defaults to `iterlim = 1000`, counted over all phases.
+* The deprecated argument names and aliases are removed, among them
+  `attr.name`, `opt.BLOQ`, `obj.attributes`, `sort.by`, `split.by`,
+  `keep.covariates`, `rank.tol`, `attach.input`, `keep.root`, `optionsOde`,
+  `start1stfromCenter`, `fterm`, `mterm`, `stepControl$theta.max`, the
+  `controlsPTC` entries `rtol` and `atol`, the `cores` of `normL2()` and
+  `readPetabYaml()`, `readPetabTables()`. `repar(expr, trafo)` is an error.
+* `mstrust()` drops `hessian` from every fit and records `elapsed`, the wall
+  time of each fit, and the attribute `"run"` with the start time, total wall
+  time, cores, optimiser, sampler, their arguments and the package versions.
+  `as.parframe()` adds the column `elapsed` and keeps `"run"`.
+* `vcov()` takes an evaluation of an objective function, `vcov(obj(pars))`,
+  with `fixed` for parameters held at a bound. `vcov()` on a fit without
+  Hessian is an error instead of a matrix of `NA`.
+* The `.R` files of `mstrust(cautiousMode = TRUE)` restore the fits exactly.
+
 # dMod2 0.12.1
 
 * Needs symident 0.10.1.

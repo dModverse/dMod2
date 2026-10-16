@@ -24,7 +24,8 @@
 
 hessianSourceSettings <- list(
   gn          = list(hessianMethod = "gn"),
-  gn_bfgs     = list(hessianMethod = "gn", hessianFallback = "bfgs"),
+  gn_bfgs     = list(hessianMethod = "gn",
+                     fallbackControl = list(hessianMethod = "bfgs")),
   bfgs_gn     = list(hessianMethod = "bfgs"),
   bfgs_id     = list(hessianMethod = "bfgs",
                      qnControl = list(hessianInit = "identity")),
@@ -34,12 +35,15 @@ hessianSourceSettings <- list(
   bfgs_id_m10 = list(hessianMethod = "bfgs",
                      qnControl = list(hessianInit = "identity",
                                       qnMemory = 10L)),
-  gn_sr1      = list(hessianMethod = "gn", hessianFallback = "sr1"),
-  gn_bfgs_x3  = list(hessianMethod = "gn", hessianFallback = "bfgs",
-                     fallbackLimit = 3L),
-  sr1_id_gn   = list(hessianMethod = "sr1", hessianFallback = "gn",
+  gn_sr1      = list(hessianMethod = "gn",
+                     fallbackControl = list(hessianMethod = "sr1")),
+  gn_bfgs_x3  = list(hessianMethod = "gn",
+                     fallbackControl = list(hessianMethod = "bfgs", limit = 3L)),
+  sr1_id_gn   = list(hessianMethod = "sr1",
+                     fallbackControl = list(hessianMethod = "gn"),
                      qnControl = list(hessianInit = "identity")),
-  bfgs_id_gn  = list(hessianMethod = "bfgs", hessianFallback = "gn",
+  bfgs_id_gn  = list(hessianMethod = "bfgs",
+                     fallbackControl = list(hessianMethod = "gn"),
                      qnControl = list(hessianInit = "identity")),
   # The shape the reverse mode exists for: one exact Hessian at the start, then
   # a descent on gradients that cost a fraction of a forward one. `sweep` rides

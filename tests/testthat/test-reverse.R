@@ -280,6 +280,43 @@ test_that("a model without a reverse object says so", {
 })
 
 
+test_that("a fallback runs backwards when the chain can and forwards when not", {
+  fx    <- .rev_fx()
+  prd   <- fx$g * fx$x * fx$p
+  data  <- .rev_data(fx, prd, fx$pars)
+  obj   <- normL2(data, prd)
+  start <- fx$pars + 0.3
+
+  # Records the sweep of every evaluation and whether it asked for a Hessian.
+  seen <- character(0)
+  traced <- function(pars, ..., sweep = "forward") {
+    seen <<- c(seen, paste(sweep, isTRUE(list(...)$hessian)))
+    obj(pars, ..., sweep = sweep)
+  }
+
+  sr1 <- list(hessianMethod = "sr1")
+  plain <- trust(obj, start)
+  hy <- trust(traced, start, fallbackControl = sr1)
+  expect_identical(hy$fallbackSweep, "reverse")
+  expect_identical(hy$nSwitch, 1L)
+  expect_gt(hy$evalBySource[["sr1"]], 0L)
+  expect_true("reverse FALSE" %in% seen)
+  expect_false("reverse TRUE" %in% seen)
+  expect_equal(hy$value, plain$value, tolerance = 1e-6)
+
+  fw <- trust(obj, start, fallbackControl = c(sr1, sweep = "forward"))
+  expect_identical(fw$fallbackSweep, "forward")
+  expect_equal(fw$value, hy$value, tolerance = 1e-6)
+
+  owd <- setwd(fx$dir); on.exit(setwd(owd))
+  nobj <- normL2(data, fx$g * Xs(fx$mnr) * fx$p)
+  expect_identical(trust(nobj, start, fallbackControl = sr1)$fallbackSweep,
+                   "forward")
+  expect_error(trust(nobj, start, fallbackControl = c(sr1, sweep = "reverse")),
+               "no reverse object")
+})
+
+
 test_that("a steady-state transformation goes backwards too", {
   fx <- .rev_fx()
 

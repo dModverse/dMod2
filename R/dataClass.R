@@ -22,9 +22,6 @@ as.datalist <- function(x, ...) {
 #' @rdname datalist
 as.datalist.data.frame <- function(x, splitBy = NULL, keepCovariates = NULL, ...) {
 
-  .renameArgs(list(...), c(split.by = "splitBy",
-                           keep.covariates = "keepCovariates"), "as.datalist")
-
   # Sanitize data and get names
   x <- sanitizeData(x)
   dataframe <- x[["data"]]
@@ -334,8 +331,7 @@ covariates.data.frame <- function(x, ...) {
 #' information such as doses; see [covariates()]. Renaming a datalist renames
 #' the rows of its condition grid.
 #' @param ... for `datalist()` and `c()`, named data frames or datalists; for
-#' the `as.datalist()` methods, not used; `split.by` and `keep.covariates`
-#' are deprecated names of `splitBy` and `keepCovariates`.
+#' the `as.datalist()` methods, not used.
 #' @return Object of class `datalist`.
 #' @seealso [plotData()], [+.datalist], [normL2()]
 #' @export

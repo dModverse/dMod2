@@ -294,7 +294,7 @@ summary(structural)
 #>   rank: proven (4 directions, exact scalings)
 #>   25 conditions, 50 segments
 #>   settings: reduce_cq=False, equilibrate=False, reconstruct=False
-#>   elapsed: 9.0s
+#>   elapsed: 8.5s
 #> 
 #> Result:  rank 92 / 96  |  4 non-identifiable directions
 #> 
@@ -385,36 +385,49 @@ obj    <- normL2(mydataL, prd) + constraintL2(pouter, sigma = 12)
 .pars   <- read.delim(file.path(.extDir, "parameters_Kok_MSB2020.tsv"))
 bestfit <- setNames(.pars$estimate, .pars$parameterId)
 stopifnot(setequal(names(bestfit), outerpars))
-
-obj(bestfit) |> system.time()
-```
-
-```
-#>    user  system elapsed 
-#>   2.842   0.018   2.870
 ```
 
 ## Forward and reverse gradient
-Forward sensitivities integrate one system per parameter, the reverse sweep the
-states once and back, which at 85 parameters is much faster.
+The value alone, then with the gradient. Forward sensitivities integrate one
+system per parameter, on one core or with the conditions spread over four; the
+reverse sweep integrates the states once and back, which at 85 parameters is
+much faster.
 
 
 ``` r
-system.time(obj(bestfit, deriv = TRUE))
+system.time(obj(bestfit, deriv = FALSE))
 ```
 
 ```
 #>    user  system elapsed 
-#>   2.818   0.004   2.834
+#>    0.05    0.00    0.05
 ```
 
 ``` r
-system.time(obj(bestfit, deriv = TRUE, sweep = "reverse"))
+system.time(obj(bestfit))
 ```
 
 ```
 #>    user  system elapsed 
-#>   0.113   0.000   0.113
+#>   2.725   0.010   2.743
+```
+
+``` r
+system.time(obj(bestfit, cores = 4))
+```
+
+```
+#>    user  system elapsed 
+#>   2.986   0.012   0.819
+```
+
+``` r
+system.time(obj(bestfit, sweep = "reverse"))
+```
+
+```
+#>    user  system elapsed 
+#>   0.105   0.000   0.105
 ```
 
 At the optimum the gradient is small, so the integration error at the

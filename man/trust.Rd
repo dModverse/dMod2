@@ -10,11 +10,9 @@ trust(
   parinit,
   rinit = 0.1,
   rmax = 10,
-  iterlim = 100L,
+  iterlim = 1000L,
   hessianMethod = c("gn", "bfgs", "sr1", "exact"),
-  hessianFallback = c("none", "bfgs", "sr1", "gn"),
-  fallbackLimit = 1L,
-  parscale = NULL,
+  fallbackControl = NULL,
   parupper = NULL,
   parlower = NULL,
   tolControl = NULL,
@@ -50,8 +48,6 @@ trustL1(
   parlower = NULL,
   printIter = FALSE,
   traceFile = NULL,
-  fterm,
-  mterm,
   gate = NULL,
   fuse = NULL,
   ...
@@ -73,8 +69,8 @@ outside \code{[parlower, parupper]} are clipped with a warning; with
 
 \item{rmax}{Maximum trust-region radius. Default \code{10}.}
 
-\item{iterlim}{Maximum number of trust-region iterations. Default
-\code{100}.}
+\item{iterlim}{Maximum number of trust-region iterations over all phases.
+Default \code{1000}.}
 
 \item{hessianMethod}{Source of the model Hessian at the start of the run:
 \code{"gn"} (default) the Gauss-Newton Hessian of the objective,
@@ -84,22 +80,36 @@ every iterate, which needs an objective that takes \code{deriv2}.
 Quasi-Newton methods require \code{stepControl$boundary = "reflective"}.
 Also selects the control defaults below.}
 
-\item{hessianFallback}{Hessian source the run hands over to at the first
-value, model, step or stagnation stop: \code{"none"} (default),
-\code{"bfgs"}, \code{"sr1"} or \code{"gn"}. A handover restarts the trust
-region at \code{rinit}, discards the quasi-Newton pairs and keeps the
-working Hessian.}
-
-\item{fallbackLimit}{Number of handovers allowed. Default \code{1}: hand
+\item{fallbackControl}{List of settings of the fallback phase, merged into
+the defaults. The run hands over to it at the first value, model, step or
+stagnation stop. A handover restarts the trust region at \code{rinit} and
+discards the quasi-Newton pairs. Not available with multiple shooting
+and \code{boundary = "clip"}.
+\describe{
+\item{\code{hessianMethod}}{Hessian source of the fallback phase:
+\code{"none"} (default), no fallback, or \code{"sr1"},
+\code{"bfgs"}, \code{"gn"}. The same source as \code{hessianMethod}
+is no fallback either.}
+\item{\code{limit}}{Number of handovers allowed. Default \code{1}: hand
 over once and run the fallback to the end. A higher value alternates
 between the two sources, \code{0} disables the fallback. The result
 reports the count as \code{nSwitch}.}
-
-\item{parscale}{Deprecated. Optional numeric of length
-\code{length(parinit)}, named or unnamed. The trust region works on the
-parameters multiplied by \code{parscale}, so the trust radius and
-\code{xtol} are measured there. Default \code{NULL}, no scaling. Fit on
-log scale instead.}
+\item{\code{iterlim}}{Maximum number of iterations of one fallback
+phase. Default \code{200}.}
+\item{\code{sweep}}{\code{"forward"} or \code{"reverse"}, the
+\code{sweep} the objective is evaluated with in the fallback phase, in
+place of a \code{sweep} in \code{...}. Default \code{NULL}: reverse
+if the objective can be evaluated backwards at \code{parinit}, as with
+\code{derivMode = c("forward", "reverse")} throughout the chain,
+forward otherwise. A Gauss-Newton Hessian is always computed forward.
+When the two phases differ in sweep, a handover evaluates the current
+iterate once more. The result reports the sweep used as
+\code{fallbackSweep}.}
+\item{\code{qnControl}}{Quasi-Newton settings of the fallback phase,
+merged over \code{qnControl}; see there. Default
+\code{list(hessianInit = "gn")}: start from the Hessian of the
+Gauss-Newton phase handing over.}
+}}
 
 \item{parupper, parlower}{Upper and lower bounds. Unnamed: the first element
 applies to all parameters. Named: entries are matched by name, missing
@@ -107,12 +117,9 @@ parameters are unbounded. Default \code{NULL}, unbounded.}
 
 \item{tolControl}{List of convergence thresholds, merged into the defaults.
 \describe{
-\item{\code{ftol}}{Change in objective value. Default \code{1e-6}. For
-an ODE model integrated at relative tolerance \code{rtol}, use a value
-at or above \code{rtol * abs(f)}.}
+\item{\code{ftol}}{Change in objective value. Default \code{1e-6}.}
 \item{\code{mtol}}{Predicted model decrease. Default \code{1e-6}.}
-\item{\code{gtol}}{First-order optimality measure, absolute. Default
-\code{1e-6}. For a relative test pass \code{gtol = x * abs(f)}.}
+\item{\code{gtol}}{First-order optimality measure. Default \code{1e-6}.}
 \item{\code{xtol}}{Step norm. Default \code{0}, disabled.}
 \item{\code{rmin}}{Lower limit on the trust radius; falling below it
 stops the run with \code{converged = FALSE}. Default \code{0},
@@ -146,8 +153,8 @@ rebuilds the approximation in each iteration from the last
 \code{1e-8}, \code{0} disables the test; \code{"sr1"} is exempt. The
 result reports the rejected pairs as \code{qnSkipped}.}
 \item{\code{qnRejected}}{Whether \code{"sr1"} also updates from a
-rejected trial point. Default \code{TRUE} when \code{hessianMethod}
-or \code{hessianFallback} is \code{"sr1"}, \code{FALSE} otherwise.}
+rejected trial point. Default \code{TRUE} for a phase whose source is
+\code{"sr1"}, \code{FALSE} otherwise.}
 }}
 
 \item{stepControl}{List of step and acceptance settings, merged into the
@@ -217,8 +224,6 @@ all entries of \code{mu}) or a named numeric aligned with \code{mu}.}
 its tolerances stay flat, it does not take the control lists of
 \code{trust}.}
 
-\item{fterm, mterm}{Deprecated aliases for \code{ftol} and \code{mtol}.}
-
 \item{gate}{Character, names in \code{mu} whose penalty is the gate
 \code{lambda * (p - mu)} with \code{p >= mu}: the parameter can sit exactly
 on \code{mu} and leaves it only upward. Starts below \code{mu} are moved
@@ -246,6 +251,8 @@ gradient and model Hessian at \code{argument}.}
 \item{\code{qnEval}}{Evaluations spent in a quasi-Newton phase.}
 \item{\code{qnSkipped}}{Pairs rejected by the cautious test.}
 \item{\code{nSwitch}}{Number of Hessian source handovers.}
+\item{\code{fallbackSweep}}{The sweep of the fallback phase, present
+when a fallback is set.}
 \item{\code{nReseed}}{Number of reseeds by
 \code{qnControl$hessianReseed = "stall"}.}
 \item{\code{evalBySource}}{Named integer, evaluations per Hessian
@@ -320,11 +327,14 @@ flat within \code{ftol}.
 evaluations in a row) or \code{"iterlim"}. Stagnation reports
 \code{converged = TRUE}.
 
-Only \code{gtol} tests first-order optimality. With a
-\code{hessianFallback}, the first \code{"fvalue"}, \code{"preddiff"},
+Only \code{gtol} tests first-order optimality. With a fallback, see
+\code{fallbackControl}, the first \code{"fvalue"}, \code{"preddiff"},
 \code{"step"} or \code{"stagnation"} stop hands over to the fallback source
 instead of ending the run. In a quasi-Newton phase \code{"fvalue"},
-\code{"preddiff"} and \code{"step"} do not end the run.
+\code{"preddiff"} and \code{"step"} do not end the run. A fallback phase
+that reaches \code{fallbackControl$iterlim} ends like a soft stop, with
+\code{stopReason = "iterlim"} and \code{converged = FALSE} when no handover
+is left.
 
 \code{argument}, \code{value}, \code{gradient}, \code{hessian} and
 \code{atBound} in the result belong to the best iterate visited, which is
@@ -335,8 +345,8 @@ the last accepted one when \code{stepControl$nonmonotone = 0}.
 
 An objective built by \code{\link{normL2}(..., multipleShootingControl = )},
 alone or in a sum, is optimised by multiple shooting with the same controls.
-Not available then: \code{hessianMethod = "exact"}, a
-\code{hessianFallback}, \code{qnControl$hessianReseed},
+Not available then: \code{hessianMethod = "exact"}, a fallback,
+\code{qnControl$hessianReseed},
 \code{qnControl$qnMemory}, \code{stepControl$nonmonotone},
 \code{boundary = "clip"}, \code{minimize = FALSE} and \code{traceFile}.
 The run reports \code{converged = TRUE} only when the scaled gaps between
@@ -366,7 +376,7 @@ fit$atBound
 
 # Quasi-Newton with a Gauss-Newton fallback
 fit <- trust(rosenbrock, c(a = -1.2, b = 1), hessianMethod = "bfgs",
-             hessianFallback = "gn", iterlim = 200)
+             fallbackControl = list(hessianMethod = "gn"), iterlim = 200)
 fit$evalBySource
 
 }

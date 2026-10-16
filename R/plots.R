@@ -638,7 +638,6 @@ plotPaths <- function(profs, ..., whichPar = NULL, sort = FALSE, relative = TRUE
 #'   shown in the legend; without names the expressions are.
 #' @param legendTitle Character, the legend title. Defaults to `"Fluxes:"`.
 #' @param ... Further arguments passed to `x`, such as `fixed` or `conditions`.
-#'   `nameFlux` is deprecated, use `legendTitle`.
 #'
 #' @return A `ggplot` object with the flux data frame as attribute `"out"`.
 #' @seealso [subset.eqnlist()] to select reactions.
@@ -652,7 +651,7 @@ plotPaths <- function(profs, ..., whichPar = NULL, sort = FALSE, relative = TRUE
 #' @export
 plotFluxes <- function(pouter, x, times, fluxEquations, legendTitle = "Fluxes:", ...){
 
-  dots <- .renameArgs(list(...), c(nameFlux = "legendTitle"), "plotFluxes")
+  dots <- list(...)
 
   if (is.null(names(fluxEquations))) names(fluxEquations) <- fluxEquations
 
@@ -934,7 +933,7 @@ plotPairs <- function(x, ...) UseMethod("plotPairs", x)
 #'   predictions by condition so that `...` can refer to its columns, or
 #'   `NULL`. Has no default.
 #' @param ... Logical expressions to subset the plotted data; used only with
-#'   a `covtable`. `nsimus` is deprecated, use `nSim`.
+#'   a `covtable`.
 #' @param nSim Number of trajectories. Defaults to 4.
 #'
 #' @return A `ggplot` object.
@@ -955,14 +954,6 @@ plotArray <- function (par, profs, prd, times, direction = c("up", "down"), covt
   direction <- match.arg(direction)
   # The dots are subset expressions, so they stay unevaluated.
   dots <- match.call(expand.dots = FALSE)$...
-  if ("nsimus" %in% names(dots)) {
-    if (!missing(nSim))
-      stop("plotArray: give 'nSim' only; 'nsimus' is its deprecated name.",
-           call. = FALSE)
-    warning("plotArray: 'nsimus' is deprecated, use 'nSim'.", call. = FALSE)
-    nSim <- eval(dots$nsimus, parent.frame())
-    dots$nsimus <- NULL
-  }
 
   # select subframe from profiles
   mysub <- profs %>% as.data.table() %>% .[whichPar == par, ]
@@ -1221,8 +1212,6 @@ PlotPaths <- function(profs=myprofiles, ..., whichPar, sort = FALSE, relative = 
 #' @param nPars Integer, number of colored and named paths. Defaults to 5.
 #' @param normalizePaths Logical. `TRUE` scales each path to a maximum
 #'   absolute value of 1. Defaults to `FALSE`.
-#' @param ... `whichpars` and `npars` are deprecated, use `whichPar` and
-#'   `nPars`.
 #'
 #' @return A `ggplot` object; for several `whichPar` the grid of
 #'   [cowplot::plot_grid()].
@@ -1236,10 +1225,7 @@ PlotPaths <- function(profs=myprofiles, ..., whichPar, sort = FALSE, relative = 
 #' plotPathsMulti(profs, c("a", "b"), nPars = 2)
 #' @export
 #' @import data.table
-plotPathsMulti <- function(profs, whichPar, nPars = 5, normalizePaths = FALSE,
-                           ...) {
-  .renameArgs(list(...), c(whichpars = "whichPar", npars = "nPars"),
-              "plotPathsMulti", strict = TRUE)
+plotPathsMulti <- function(profs, whichPar, nPars = 5, normalizePaths = FALSE) {
   .require_ns("cowplot", "plotPathsMulti()")
   if(length(whichPar) == 1){
     p <- PlotPaths(profs=profs, whichPar = whichPar, n_pars = nPars, normalizePaths = normalizePaths)
@@ -1272,8 +1258,6 @@ plotPathsMulti <- function(profs, whichPar, nPars = 5, normalizePaths = FALSE,
 #' @param modes Character vector, the contributions to the objective drawn in
 #'   the profile plot besides the total. Defaults to `c("data", "prior")`.
 #' @param ... Further arguments passed to [cowplot::plot_grid()].
-#'   `whichpars`, `npars` and `ncols` are deprecated, use `whichPar`, `nPars`
-#'   and `ncol`.
 #'
 #' @return A `ggplot` object, the grid of [cowplot::plot_grid()].
 #' @seealso [plotProfile()], [plotPathsMulti()]
@@ -1288,8 +1272,7 @@ plotPathsMulti <- function(profs, whichPar, nPars = 5, normalizePaths = FALSE,
 plotProfilesAndPaths <- function(profs, whichPar, nPars = 5, ncol = 3,
                                  normalizePaths = FALSE,
                                  modes = c("data", "prior"), ...) {
-  dots <- .renameArgs(list(...), c(whichpars = "whichPar", npars = "nPars",
-                                   ncols = "ncol"), "plotProfilesAndPaths")
+  dots <- list(...)
   .require_ns("cowplot", "plotProfilesAndPaths()")
 
   # Save original obj.attributes before any subsetting drops them

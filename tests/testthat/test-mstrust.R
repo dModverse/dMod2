@@ -32,13 +32,37 @@ test_that("a multi-start reports the Hessian source handovers per fit", {
   fits <- mstrust(objfun = obj, center = c(a = 0, b = 0),
                   name = "test_mstrust_switch",
                   rinit = 1, rmax = 10, iterlim = 100,
-                  hessianFallback = "bfgs",
+                  fallbackControl = list(hessianMethod = "bfgs"),
                   fits = 3, sd = 1, cores = 1, output = FALSE)
 
   pf <- as.parframe(fits)
   expect_true("nSwitch" %in% names(pf))
   expect_true(is.integer(pf$nSwitch))
   expect_false(anyNA(pf$nSwitch))
+})
+
+
+test_that("a multi-start records wall times and run settings, not Hessians", {
+  obj <- constraintL2(mu = c(a = 1.0, b = -0.5), sigma = 1)
+  fits <- mstrust(objfun = obj, center = c(a = 0, b = 0),
+                  rinit = 1, rmax = 10, iterlim = 100,
+                  fits = 3, sd = 1, cores = 1)
+
+  expect_false(any(vapply(fits, function(f) "hessian" %in% names(f), TRUE)))
+  expect_true(all(vapply(fits, function(f) f$elapsed >= 0, TRUE)))
+
+  run <- attr(fits, "run")
+  expect_equal(run$fits, 3)
+  expect_equal(run$optimiser, "trust")
+  expect_equal(run$optimiserArgs$iterlim, 100)
+  expect_equal(run$samplerArgs$sd, 1)
+  expect_gte(run$elapsed, 0)
+  expect_named(run$versions, c("R", "dMod2", "cppDE"))
+
+  pf <- as.parframe(fits)
+  expect_true("elapsed" %in% attr(pf, "metanames"))
+  expect_false(anyNA(pf$elapsed))
+  expect_identical(attr(pf[1:2, ], "run"), run)
 })
 
 
@@ -154,6 +178,26 @@ test_that("vcov(fit) equals solve(0.5 * H) for a quadratic with known Hessian", 
 })
 
 
+test_that("vcov of an objective evaluation matches the fit and zeroes fixed parameters", {
+  obj <- constraintL2(mu = c(a = 0.5, b = -0.3), sigma = 0.5)
+  fit <- trust(obj, parinit = c(a = 0, b = 0),
+               rinit = 1, rmax = 10, iterlim = 50, printIter = FALSE)
+  expect_equal(vcov(obj(fit$argument)), vcov(fit))
+
+  V <- vcov(obj(fit$argument), fixed = "b")
+  expect_equal(V["a", "a"], 0.25, tolerance = 1e-6)
+  expect_equal(unname(c(V["b", ], V[, "b"])), rep(0, 4))
+})
+
+
+test_that("vcov of an mstrust fit asks for an objective evaluation", {
+  obj <- constraintL2(mu = c(a = 0.5, b = -0.3), sigma = 1)
+  fits <- mstrust(obj, center = c(a = 0, b = 0), fits = 1, sd = 1,
+                  rinit = 1, rmax = 10, iterlim = 50)
+  expect_error(vcov(fits[[1]]), "vcov\\(obj\\(fit\\$argument\\)\\)")
+})
+
+
 # ---- confint ------------------------------------------------------------
 
 # ---- retry / nTries -----------------------------------------------------
@@ -254,14 +298,19 @@ test_that("cautiousMode removes the .Rda fits of its own run only", {
   oldwd <- setwd(d); on.exit(setwd(oldwd), add = TRUE)
   saveRDS(1, "fit-1.Rda")
 
-  invisible(mstrust(objfun = obj, center = c(a = 0, b = 0), resultPath = d,
-                    name = "cautious", rinit = 1, rmax = 10, iterlim = 100,
-                    fits = 2, sd = 1, cores = 1, output = TRUE, cautiousMode = TRUE))
+  fits <- mstrust(objfun = obj, center = c(a = 0, b = 0), resultPath = d,
+                  name = "cautious", rinit = 1, rmax = 10, iterlim = 100,
+                  fits = 2, sd = 1, cores = 1, output = TRUE, cautiousMode = TRUE)
   inter <- list.files(d, recursive = TRUE)
   inter <- inter[grepl("^cautious/.*/interRes/", inter)]
   expect_true(file.exists(file.path(d, "fit-1.Rda")))
   expect_false(any(grepl("\\.Rda$", inter)))
   expect_true(all(c("fit-1.R", "fit-2.R") %in% basename(inter)))
+
+  # The deparsed fit restores the parlist entry bit for bit.
+  restored <- dget(file.path(d, inter[basename(inter) == "fit-1.R"]))
+  expect_identical(restored$argument, fits[[1]]$argument)
+  expect_identical(restored$value, fits[[1]]$value)
 })
 
 

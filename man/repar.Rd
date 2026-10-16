@@ -28,12 +28,6 @@ Replaces the left-hand side of \code{"lhs ~ rhs"} by the
 right-hand side in \code{trafo}, after the symbols of \code{expr} are replaced by the
 arguments in \code{...}. \code{\link[=define]{define()}} and \code{\link[=insert]{insert()}} build on it.
 }
-\section{Lifecycle}{
-
-The order \code{repar(expr, trafo)} is deprecated. It is recognised by an
-expression in first place and accepted with a warning.
-}
-
 \examples{
 innerpars   <- letters[1:3]
 constraints <- c(a = "b + c")

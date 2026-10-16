@@ -294,14 +294,17 @@ obj    <- normL2(mydataL, prd) + constraintL2(pouter, sigma = 12)
 bestfit <- setNames(.pars$estimate, .pars$parameterId)
 stopifnot(setequal(names(bestfit), outerpars))
 
-obj(bestfit) |> system.time()
-
 
 # Forward and reverse gradient --------------------------------------------------
-# Forward sensitivities integrate one system per parameter, the reverse sweep the
-# states once and back, which at 85 parameters is much faster.
-system.time(obj(bestfit, deriv = TRUE))
-system.time(obj(bestfit, deriv = TRUE, sweep = "reverse"))
+# The value alone, then with the gradient. Forward sensitivities integrate one
+# system per parameter, on one core or with the conditions spread over four; the
+# reverse sweep integrates the states once and back, which at 85 parameters is
+# much faster.
+system.time(obj(bestfit, deriv = FALSE))
+system.time(obj(bestfit))
+system.time(obj(bestfit, cores = 4))
+system.time(obj(bestfit, sweep = "reverse"))
+
 
 # At the optimum the gradient is small, so the integration error at the
 # tolerances of the fit dominates it. With tighter tolerances and the sweep

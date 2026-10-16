@@ -290,9 +290,9 @@ and the bound handling are the same in all four cases.
 | `"sr1"` | a symmetric rank-one update, possibly indefinite | value, gradient |
 | `"exact"` | the objective's exact Hessian, a Newton run | value, gradient, exact Hessian |
 
-`hessianFallback` names a second source and `fallbackLimit` how often the two
-may swap. A run is a method and optionally a fallback; no pair has a name of its
-own.
+`fallbackControl` names a second source, `hessianMethod`, with its own `limit`
+on how often the two may swap, its own `iterlim`, `sweep` and `qnControl`. A
+run is a method and optionally a fallback; no pair has a name of its own.
 
 For a sum of squares the Gauss-Newton matrix $J^{\mathsf T} J$ is an adequate
 curvature model wherever the residuals are small, and dMod2 obtains it at no
@@ -371,7 +371,7 @@ single <- .fit("single", list(
                  parlower = parlower, parupper = parupper),
   fallback = trust(obj, start, rinit = 0.1, rmax = 10, iterlim = 5000,
                  parlower = parlower, parupper = parupper,
-                 hessianFallback = "bfgs")))
+                 fallbackControl = list(hessianMethod = "bfgs"))))
 
 data.frame(method = names(single),
            value  = vapply(single, `[[`, 0.0, "value"),
@@ -388,9 +388,9 @@ ending at a stationary point, which a fallback reaches and `"gn"` does not.
 # Seed and memory of the approximation
 
 Three arguments shape the approximation. They apply when a run begins in a
-quasi-Newton phase, that is for `"bfgs"` and `"sr1"`; `"gn"` ignores them, and a
-fallback seeds its handover from the Gauss-Newton matrix irrespective of
-`hessianInit`.
+quasi-Newton phase, that is for `"bfgs"` and `"sr1"`; `"gn"` ignores them. A
+fallback phase reads them from `fallbackControl$qnControl`, whose default
+`hessianInit = "gn"` seeds the handover from the last Gauss-Newton matrix.
 
 `hessianInit` selects the initial matrix: the default `"gn"` is the objective's
 Hessian at `parinit`, `"identity"` the identity. With `"identity"`, `trust()`

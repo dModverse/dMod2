@@ -58,6 +58,15 @@ enum HessianMethod { HM_NONE = -1, HM_GN = 0, HM_BFGS = 1, HM_SR1 = 2,
 enum HessianInit { HI_GN = 0, HI_IDENTITY = 1, HI_EXACT = 2 };
 enum HessianReseed { HR_NEVER = 0, HR_STALL = 1 };
 
+// Quasi-Newton settings of one phase; primary and fallback each have their own.
+struct QnParams {
+  int init;
+  int reseed;
+  int memory;
+  double cautious;
+  bool rejected;
+};
+
 // Same update, applied to the working Hessian `H` of `val` rather than of phi.
 void qn_update(int kind, int K, std::vector<double>& H,
                const std::vector<double>& s, const std::vector<double>& y,
@@ -121,9 +130,8 @@ List trust_reflective(Function objfun, NumericVector parinit,
                       double gtol, double xtol,
                       double rmin, double thetamax,
                       int hessianMethod, int hessianFallback, int fallbackLimit,
-                      int hessianInit,
-                      int hessianReseed,
-                      int qnMemory, double qnCautious, bool qnRejected,
+                      int fallbackIterlim, bool refreshOnSwitch,
+                      const QnParams& qpri, const QnParams& qfb,
                       double nonmonotone,
                       bool minimize, bool blather_on,
                       Nullable<NumericVector> parupper,
@@ -165,20 +173,18 @@ List trust_reflective(Function objfun, NumericVector parinit,
   // Only a run that starts quasi-Newton can do without the objective's Hessian;
   // gn needs it every iteration and a fallback seeds its handover from it.
   const bool qn_start = (hessianMethod == HM_BFGS || hessianMethod == HM_SR1);
-  const bool seed_gn  = !(qn_start && hessianInit == HI_IDENTITY);
+  const bool seed_gn  = !(qn_start && qpri.init == HI_IDENTITY);
   // An exact seed is the whole argument for the reverse mode: one expensive
   // evaluation at the start buys a true curvature, and the descent then runs on
   // gradients alone. `hessianMethod = "exact"` asks for it at every iterate.
   const bool seed_exact =
-      (hessianInit == HI_EXACT) || (hessianMethod == HM_EXACT);
+      (qpri.init == HI_EXACT) || (hessianMethod == HM_EXACT);
   // What an iterate that wants curvature at all should ask for.
   const int want_level = (hessianMethod == HM_EXACT) ? CV_EXACT : CV_GN;
-  // A reseed under "stall" fetches the same kind the seed did.
-  const bool reseed_exact = seed_exact;
 
   List out_init;
   if (!eval_objfun(objfun, x_named, out_init,
-                   seed_exact ? CV_EXACT : (seed_gn ? CV_GN : CV_GRADIENT)))
+                   seed_exact ? CV_EXACT : (seed_gn ? CV_GN : CV_GRADIENT), false))
     stop("parinit not feasible: objfun failed");
   double val = as<double>(out_init["value"]);
   if (!std::isfinite(val)) stop("parinit not feasible: value is not finite");
@@ -235,10 +241,16 @@ List trust_reflective(Function objfun, NumericVector parinit,
   const int fallback = hessianFallback;
   const bool has_fallback =
       (fallback != HM_NONE && fallback != primary && fallbackLimit > 0);
-  bool on_fallback = false, qn_dirty = false, reseed_gn = false;
-  // "stall": a stalled quasi-Newton phase fetches fresh curvature at the current
-  // iterate, keeping its source and replacing only the matrix it starts from.
-  const bool reseed_on_stall = (hessianReseed == HR_STALL);
+  bool on_fallback = false, qn_dirty = false;
+  // Settings of the phase running now.
+  const QnParams* qp = &qpri;
+  // An evaluation at the current iterate before the next step: the Hessian of a
+  // handover or reseed at `pending_level`, and with `pending_refresh` value and
+  // gradient as the new phase computes them.
+  int  pending_level = -1;
+  bool pending_refresh = false;
+  // Iterations of the running fallback phase, against fallbackIterlim.
+  int  phase_iter = 0;
   // "exact" is a Newton run: the objective's own Hessian at every iterate, the
   // way gn passes J^T J through, and the subproblem solver takes an indefinite
   // matrix natively.
@@ -291,22 +303,44 @@ List trust_reflective(Function objfun, NumericVector parinit,
   for (int iter = 1; iter <= iterlim; ++iter) {
     R_CheckUserInterrupt();
 
-    // A handover back to gn needs the objective's Hessian at the current
-    // iterate, which the quasi-Newton phase stopped asking for. One extra
-    // evaluation per switch; a failed one leaves the approximation in place.
-    if (reseed_gn) {
-      reseed_gn = false;
+    // The Hessian a handover or reseed needs at the current iterate, and after
+    // a change of sweep value and gradient as the new phase computes them. A
+    // failed evaluation or a declined Hessian keeps the approximation.
+    if (pending_level >= 0) {
+      const int level = pending_level;
+      const bool refresh = pending_refresh;
+      pending_level = -1; pending_refresh = false;
       NumericVector x_now(K);
       x_now.names() = parnames;
       for (int i = 0; i < K; ++i) x_now[i] = z[i] / ps[i];
+      // A Gauss-Newton Hessian is computed forward, so a fallback phase that
+      // runs otherwise takes its value and gradient from a second evaluation.
+      const bool split = refresh && on_fallback && level == CV_GN;
+      auto take = [&](const List& out) {
+        if (!out.containsElementNamed("value") ||
+            !out.containsElementNamed("gradient")) return;
+        const double v = as<double>(out["value"]);
+        if (!std::isfinite(v)) return;
+        NumericVector g = as<NumericVector>(out["gradient"]);
+        if (g.size() != K) return;
+        val = v;
+        grad_full.assign(g.begin(), g.end());
+        zh_C = minimize ? val : -val; zh_Q = 1.0;
+      };
       List out_now;
-      if (eval_objfun(objfun, x_now, out_now,
-                      reseed_exact ? CV_EXACT : CV_GN)) {
-        // A declined Hessian leaves the approximation in place, the same as a
-        // failed evaluation does; the handover runs on what it already had.
-        read_hessian(out_now, K, H_full);
+      if (eval_objfun(objfun, x_now, out_now, level, on_fallback)) {
+        if (level >= CV_GN) read_hessian(out_now, K, H_full);
+        if (refresh && !split) take(out_now);
         neval++;
         eval_src[hessian_source_slot(qn_active, qn_kind, primary)]++;
+      }
+      if (split) {
+        List out_g;
+        if (eval_objfun(objfun, x_now, out_g, CV_GRADIENT, on_fallback)) {
+          take(out_g);
+          neval++;
+          eval_src[hessian_source_slot(qn_active, qn_kind, primary)]++;
+        }
       }
       qn_dirty = true;
     }
@@ -372,7 +406,7 @@ List trust_reflective(Function objfun, NumericVector parinit,
     const bool want_h = !qn_active;
     List out_try;
     bool eval_ok = eval_objfun(objfun, x_try, out_try,
-                               want_h ? want_level : CV_GRADIENT);
+                               want_h ? want_level : CV_GRADIENT, on_fallback);
     double val_try = kInf;
     NumericVector grad_try;
     std::vector<double> Htry;
@@ -420,7 +454,7 @@ List trust_reflective(Function objfun, NumericVector parinit,
     // along s is still valid (Nocedal and Wright, sec. 6.2). BFGS needs an
     // accepted step for the curvature condition.
     const bool qn_pair = qn_active && eval_ok &&
-                         (accept || (qnRejected && qn_kind == HM_SR1));
+                         (accept || (qp->rejected && qn_kind == HM_SR1));
 
     // (s, y) in minimised sign, before z/grad_full are overwritten.
     if (qn_pair)
@@ -442,17 +476,17 @@ List trust_reflective(Function objfun, NumericVector parinit,
 
     if (qn_pair) {
       const bool keep = (qn_kind == HM_SR1) ||
-                        qn_pair_informative(K, s_qn, y_qn, qnCautious);
+                        qn_pair_informative(K, s_qn, y_qn, qp->cautious);
       if (!keep) {
         qn_skipped++;
       } else {
         double sy = 0.0, yy = 0.0;
         for (int i = 0; i < K; ++i) { sy += s_qn[i] * y_qn[i]; yy += y_qn[i] * y_qn[i]; }
         if (sy > 0.0 && yy > 0.0) qn_gamma = yy / sy;
-        if (qnMemory > 0) {
+        if (qp->memory > 0) {
           qn_S.push_back(s_qn);
           qn_Y.push_back(y_qn);
-          if ((int) qn_S.size() > qnMemory) { qn_S.pop_front(); qn_Y.pop_front(); }
+          if ((int) qn_S.size() > qp->memory) { qn_S.pop_front(); qn_Y.pop_front(); }
           qn_assemble(qn_kind, K, H_full, qn_gamma, qn_S, qn_Y, qn_sgn);
         } else {
           qn_update(qn_kind, K, H_full, s_qn, y_qn, qn_sgn);
@@ -493,33 +527,60 @@ List trust_reflective(Function objfun, NumericVector parinit,
     // A stalled quasi-Newton phase can fetch a fresh curvature instead of
     // stopping. A reseed, not a handover: the source stays and only the matrix
     // it updates from is replaced, so the stored pairs go with it.
-    if (soft_stop != nullptr && reseed_on_stall && qn_active &&
+    if (soft_stop != nullptr && qp->reseed == HR_STALL && qn_active &&
         moved_since_reseed && n_reseed < kReseedLimit &&
         std::strcmp(soft_stop, "stagnation") == 0) {
-      reseed_gn = true;
+      // A reseed under "stall" fetches the same kind the phase was seeded with.
+      pending_level = (qp->init == HI_EXACT) ? CV_EXACT : CV_GN;
       n_reseed++; moved_since_reseed = false;
       n_stall = 0; r = rinit;
       qn_S.clear(); qn_Y.clear(); qn_gamma = 1.0;
       soft_stop = nullptr;
     }
+    // A fallback phase that used up its budget ends like a soft stop, but
+    // without the claim of convergence.
+    bool budget_out = false;
+    if (on_fallback && ++phase_iter >= fallbackIterlim && soft_stop == nullptr) {
+      soft_stop = "iterlim";
+      budget_out = true;
+    }
+
     // A soft stop hands over to the other source and restarts the trust
-    // region. Going to a quasi-Newton phase seeds it from the last accepted
-    // J^T J, which is why H_full is deliberately not reset here.
+    // region. A quasi-Newton phase seeded "gn" starts from the last accepted
+    // J^T J, which is why H_full is not reset for it.
     if (soft_stop != nullptr && has_fallback && n_switch < fallbackLimit) {
+      const bool was_qn = qn_active;
       on_fallback = !on_fallback;
+      qp = on_fallback ? &qfb : &qpri;
       const int target = on_fallback ? fallback : primary;
-      qn_active = (target != HM_GN);
-      if (qn_active) qn_kind = (target == HM_SR1) ? HM_SR1 : HM_BFGS;
-      else           reseed_gn = true;
+      qn_active = (target != HM_GN && target != HM_EXACT);
+      if (qn_active) {
+        qn_kind = (target == HM_SR1) ? HM_SR1 : HM_BFGS;
+        if (qp->init == HI_IDENTITY) {
+          std::fill(H_full.begin(), H_full.end(), 0.0);
+          for (int i = 0; i < K; ++i) H_full[i + (std::size_t) i * K] = qn_sgn;
+          qn_dirty = true;
+        }
+        if (qp->init == HI_EXACT)                 pending_level = CV_EXACT;
+        else if (qp->init == HI_GN && was_qn)     pending_level = CV_GN;
+        else if (refreshOnSwitch)                 pending_level = CV_GRADIENT;
+      } else {
+        pending_level = (target == HM_EXACT) ? CV_EXACT : CV_GN;
+      }
+      pending_refresh = refreshOnSwitch;
+      phase_iter = 0;
       n_switch++; n_stall = 0; r = rinit;
       qn_S.clear(); qn_Y.clear(); qn_gamma = 1.0;
       soft_stop = nullptr;
+      budget_out = false;
     }
     // The three tests above read the quadratic model, which in a quasi-Newton
     // phase describes the approximation rather than the iterate. Such a run
     // ends on the gradient; stagnation reads accepted steps and still applies.
     if (soft_stop != nullptr && qn_active && model_stop) soft_stop = nullptr;
-    if (soft_stop != nullptr) { converged = true; stop_reason = soft_stop; break; }
+    if (soft_stop != nullptr) {
+      converged = !budget_out; stop_reason = soft_stop; break;
+    }
     if (r < rmin) { stop_reason = "radius"; break; }
   }
 
@@ -839,11 +900,18 @@ List trust_impl(Function objfun,
                 std::string hessianMethod = "gn",
                 std::string hessianFallback = "none",
                 int    fallbackLimit = 1,
+                int    fallbackIterlim = 200,
+                bool   refreshOnSwitch = false,
                 std::string hessianInit = "gn",
                 std::string hessianReseed = "never",
                 int    qnMemory   = 0,
                 double qnCautious = 1e-8,
                 bool   qnRejected = true,
+                std::string fbHessianInit = "gn",
+                std::string fbHessianReseed = "never",
+                int    fbQnMemory   = 0,
+                double fbQnCautious = 1e-8,
+                bool   fbQnRejected = true,
                 double nonmonotone = 0.0,
                 bool   minimize  = true,
                 bool   blather   = false,
@@ -874,20 +942,27 @@ List trust_impl(Function objfun,
   else if (hessianFallback == "sr1")  hf = HM_SR1;
   else stop("trust: hessianFallback must be one of \"none\", \"gn\", \"bfgs\", \"sr1\"");
   if (fallbackLimit < 0) stop("trust: fallbackLimit must be >= 0");
+  if (fallbackIterlim < 1) stop("trust: the fallback iterlim must be >= 1");
 
-  int hi = HI_GN;
-  if      (hessianInit == "gn")       hi = HI_GN;
-  else if (hessianInit == "identity") hi = HI_IDENTITY;
-  else if (hessianInit == "exact")    hi = HI_EXACT;
-  else stop("trust: hessianInit must be one of \"gn\", \"identity\", "
-            "\"exact\"");
-
-  int hr = HR_NEVER;
-  if      (hessianReseed == "never") hr = HR_NEVER;
-  else if (hessianReseed == "stall") hr = HR_STALL;
-  else stop("trust: hessianReseed must be one of \"never\", \"stall\"");
-  if (qnMemory < 0) stop("trust: qnMemory must be >= 0");
-  if (qnCautious < 0.0) stop("trust: qnCautious must be >= 0");
+  auto qn_params = [](const std::string& init, const std::string& reseed,
+                      int memory, double cautious, bool rejected) {
+    QnParams q{HI_GN, HR_NEVER, memory, cautious, rejected};
+    if      (init == "gn")       q.init = HI_GN;
+    else if (init == "identity") q.init = HI_IDENTITY;
+    else if (init == "exact")    q.init = HI_EXACT;
+    else stop("trust: hessianInit must be one of \"gn\", \"identity\", "
+              "\"exact\"");
+    if      (reseed == "never") q.reseed = HR_NEVER;
+    else if (reseed == "stall") q.reseed = HR_STALL;
+    else stop("trust: hessianReseed must be one of \"never\", \"stall\"");
+    if (memory < 0) stop("trust: qnMemory must be >= 0");
+    if (cautious < 0.0) stop("trust: qnCautious must be >= 0");
+    return q;
+  };
+  const QnParams qpri = qn_params(hessianInit, hessianReseed, qnMemory,
+                                  qnCautious, qnRejected);
+  const QnParams qfb  = qn_params(fbHessianInit, fbHessianReseed, fbQnMemory,
+                                  fbQnCautious, fbQnRejected);
   if (!(nonmonotone >= 0.0 && nonmonotone < 1.0))
     stop("trust: nonmonotone must be in [0, 1)");
 
@@ -904,7 +979,7 @@ List trust_impl(Function objfun,
   return trust_reflective(objfun, parinit, rinit, rmax, parscale, iterlim,
                           ftol, mtol, gtol, xtol, rmin, thetamax,
                           hm, hf, fallbackLimit,
-                          hi, hr, qnMemory, qnCautious, qnRejected,
+                          fallbackIterlim, refreshOnSwitch, qpri, qfb,
                           nonmonotone, minimize, blather, parupper, parlower,
                           printIter, traceFile);
 }

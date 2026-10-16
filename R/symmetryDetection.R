@@ -208,8 +208,6 @@ symmetryDetection <- function(f, g, trafo = NULL, parameters = NULL,
 #' @param exactWorkCap Work bound of that proof: regimes times coordinates times tape
 #'   instructions; above it the proof is skipped and the limit noted.
 #' @param seed Seed of the random choices.
-#' @param ... `minsupportCandCap`, `perprimeCap` and `perprimeMinPrimes` are
-#'   deprecated, use `minSupportCandCap`, `perPrimeCap` and `perPrimeMinPrimes`.
 #' @details `homotopyDegree`, `degreeCapMax`, `exactProof`, `exactWorkCap` and `seed`
 #'   default to `NULL`, which keeps the value of symident (4, 8, `TRUE`, 500000 and
 #'   0).
@@ -225,11 +223,7 @@ reconstControl <- function(relevanceCap = 6L, relevanceCapDir = 24L, relevanceCa
                            gapOrderCap = 8L, minSupportCandCap = 20000L, perPrimeCap = 120L,
                            perPrimeMinPrimes = 3L, homotopy = TRUE, timeout = Inf,
                            homotopyDegree = NULL, degreeCapMax = NULL, exactProof = NULL,
-                           exactWorkCap = NULL, seed = NULL, ...) {
-  .renameArgs(list(...), c(minsupportCandCap = "minSupportCandCap",
-                           perprimeCap = "perPrimeCap",
-                           perprimeMinPrimes = "perPrimeMinPrimes"),
-              "reconstControl", strict = TRUE)
+                           exactWorkCap = NULL, seed = NULL) {
   stopifnot(relevanceCap >= 0L, relevanceCapDir >= 1L,
             relevanceCapSparse >= relevanceCap, degreeCap >= 0L,
             sampleSlack >= 0L, probeRetries >= 1L, termCap >= 1L,

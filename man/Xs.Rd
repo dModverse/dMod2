@@ -35,8 +35,7 @@ Xs(odemodel, ...)
 \arguments{
 \item{odemodel}{An \code{\link[=odemodel]{odemodel()}}. Its backend decides which method runs.}
 
-\item{...}{\code{optionsOde}, the deprecated name of \code{options}, is still
-accepted with a warning.}
+\item{...}{Not used.}
 
 \item{forcings}{\code{data.frame} with columns \code{name} (character or factor),
 \code{time} and \code{value}, one row per data point of a forcing declared in
@@ -151,8 +150,7 @@ come from one \code{Xs()} per condition, joined by \code{+}.
 controls of the returned function and read at every solve, so \code{\link[=controls]{controls()}}
 can change them later; on the \code{deSolve} backend \code{events} and \code{fcontrol} as
 well. The controls are named after the arguments, \code{options}, \code{optionsSens}
-and \code{optionsReverse}; \code{optionsOde} is accepted as a deprecated alias of
-\code{options}. A replaced list is merged as described in section Solver
+and \code{optionsReverse}. A replaced list is merged as described in section Solver
 options, so it only needs the entries it changes.
 }
 

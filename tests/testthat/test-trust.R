@@ -1,5 +1,5 @@
 # Behavioral tests for trust(): quadratic convergence, truth recovery, fixed
-# parameters, parscale invariance, bounds, Hessian sources and the trace.
+# parameters, bounds, Hessian sources and the trace.
 
 skip_if_no_compile <- function() {
   testthat::skip_if_not_installed("cppDE")
@@ -83,8 +83,6 @@ test_that("trust honors fixed = ... (held parameters unchanged in argument)", {
   expect_true("A" %in% names(fit$argument))
 })
 
-
-## ---- parscale invariance --------------------------------------------
 
 ## ---- bounds clamp the optimum ---------------------------------------
 
@@ -353,7 +351,7 @@ test_that("a null space wider than one direction still gives the minimum-norm st
 })
 
 
-test_that("bounds compose with parscale, parinit on a bound, and minimize = FALSE", {
+test_that("bounds compose with parinit on a bound and minimize = FALSE", {
   target <- c(x = 5, y = 5)
 
   # parinit sitting exactly on the bound must be nudged inside, not frozen.
@@ -362,20 +360,6 @@ test_that("bounds compose with parscale, parinit on a bound, and minimize = FALS
   expect_true(on_bound$converged)
   expect_equal(unname(on_bound$argument[["y"]]), 5, tolerance = 1e-6)
   expect_true(on_bound$atBound[["x"]])
-
-  # parscale must not move the optimum.
-  # Tight tolerances so both runs reach the optimum rather than stopping at
-  # their own frame-dependent distance from the bound.
-  expect_warning(
-    scaled <- trust(.quadratic_objfn(target), c(x = 0, y = 0),
-                    rinit = 1, rmax = 10, parupper = c(x = 1, y = Inf),
-                    parscale = c(10, 0.1), iterlim = 200,
-                    tolControl = list(gtol = 1e-12)),
-    "'parscale' is deprecated")
-  plain  <- trust(.quadratic_objfn(target), c(x = 0, y = 0),
-                  rinit = 1, rmax = 10, parupper = c(x = 1, y = Inf),
-                  iterlim = 200, tolControl = list(gtol = 1e-12))
-  expect_equal(unname(scaled$argument), unname(plain$argument), tolerance = 1e-5)
 
   # Maximising a concave objective under the same bound.
   negobj <- function(p, ...) {
@@ -487,7 +471,7 @@ test_that("quasi-Newton methods reach the same optimum as gn on a nonlinear fit"
   expect_true(ref$converged)
   runs <- list(bfgs = list(hessianMethod = "bfgs"),
                sr1  = list(hessianMethod = "sr1"),
-               fb   = list(hessianFallback = "bfgs"))
+               fb   = list(fallbackControl = list(hessianMethod = "bfgs")))
   for (hm in names(runs)) {
     fit <- do.call(trust, c(list(obj, init, rinit = 1, rmax = 10, iterlim = 200),
                             runs[[hm]]))
@@ -526,7 +510,8 @@ test_that("evalBySource and nSwitch account for every evaluation", {
   expect_identical(trust(obj, init)$evalBySource[["bfgs"]], 0L)  # gn: only gn
 
   # A fallback hands over once and both phases are charged separately.
-  hy <- suppressWarnings(trust(.flat_objfn(2L), init, hessianFallback = "bfgs"))
+  hy <- suppressWarnings(trust(.flat_objfn(2L), init,
+                               fallbackControl = list(hessianMethod = "bfgs")))
   expect_identical(hy$nSwitch, 1L)
   expect_identical(sum(hy$evalBySource), hy$neval)
   expect_gt(hy$evalBySource[["gn"]], 0L)
@@ -586,7 +571,8 @@ test_that("a bfgs fallback takes over from gn on stagnation", {
   gn <- suppressWarnings(trust(obj, init, hessianMethod = "gn", blather = TRUE))
   expect_true(all(gn$hessianSource == "gn"))
 
-  hy <- suppressWarnings(trust(obj, init, hessianFallback = "bfgs", blather = TRUE))
+  hy <- suppressWarnings(trust(obj, init, blather = TRUE,
+                               fallbackControl = list(hessianMethod = "bfgs")))
   expect_identical(hy$hessianSource[1], "gn")   # always starts on gn
   expect_true("bfgs" %in% hy$hessianSource)      # and switches
   expect_gt(hy$qnEval, 0L)
@@ -604,7 +590,7 @@ test_that("the fallback takes over on a value stop too, and gets past where gn s
   expect_gt(max(abs(gn$argument - target)), 1e-3)   # nowhere near it
 
   hy <- trust(obj, init, rinit = 1, rmax = 10, iterlim = 500,
-              hessianFallback = "bfgs", blather = TRUE)
+              fallbackControl = list(hessianMethod = "bfgs"), blather = TRUE)
   expect_true("bfgs" %in% hy$hessianSource)
   expect_identical(hy$stopReason, "gradient")       # first-order, not stopped short
   expect_lt(hy$value, gn$value)
@@ -616,8 +602,8 @@ test_that("a soft stop past the handover ends the run", {
   # rather than run to iterlim.
   obj  <- .flat_objfn(2L)
   init <- c(a = 0, b = 0)
-  hy <- suppressWarnings(trust(obj, init, hessianFallback = "bfgs",
-                               iterlim = 500))
+  hy <- suppressWarnings(trust(obj, init, iterlim = 500,
+                               fallbackControl = list(hessianMethod = "bfgs")))
   expect_true(hy$converged)
   expect_identical(hy$stopReason, "stagnation")
   expect_lt(hy$iterations, 500L)
@@ -627,7 +613,7 @@ test_that("hessianInit is inert for the methods that need the objective Hessian"
   target <- c(a = 1.0, b = -0.5, c = 2.3)
   obj <- .quadratic_objfn(target)
   init <- c(a = 0, b = 0, c = 0)
-  runs <- list(gn = list(), fb = list(hessianFallback = "bfgs"))
+  runs <- list(gn = list(), fb = list(fallbackControl = list(hessianMethod = "bfgs")))
   for (hm in names(runs)) {
     args <- c(list(obj, init, rinit = 1), runs[[hm]])
     ref <- do.call(trust, args)
@@ -745,28 +731,12 @@ test_that("an iteration-limit stop also reports the last accepted iterate", {
 
 ## ---- Selectable Hessian fallback --------------------------------------
 
-test_that("a fallback run is the same whichever way it is spelled", {
-  init <- c(a = 0, b = 0)
-  for (nm in c("flat", "misscaled")) {
-    obj <- if (nm == "flat") .flat_objfn(2L) else .misscaled_objfn(c(a = 1, b = -2))
-    old <- trust(obj, init, iterlim = 200, hessianFallback = "bfgs",
-                 blather = TRUE)
-    new <- trust(obj, init, iterlim = 200, hessianFallback = "bfgs",
-                 fallbackLimit = 1L, blather = TRUE)
-    expect_identical(new$neval, old$neval, info = nm)
-    expect_identical(new$value, old$value, info = nm)
-    expect_identical(new$nSwitch, old$nSwitch, info = nm)
-    expect_identical(new$hessianSource, old$hessianSource, info = nm)
-    expect_identical(new$argument, old$argument, info = nm)
-  }
-})
-
 test_that("no fallback reproduces the plain run", {
   obj  <- .misscaled_objfn(c(a = 1, b = -2))
   init <- c(a = 0, b = 0)
   plain <- trust(obj, init, iterlim = 200)
-  for (off in list(list(hessianFallback = "none"),
-                   list(hessianFallback = "bfgs", fallbackLimit = 0L))) {
+  for (off in list(list(fallbackControl = list(hessianMethod = "gn")),
+                   list(fallbackControl = list(hessianMethod = "bfgs", limit = 0L)))) {
     f <- do.call(trust, c(list(obj, init, iterlim = 200), off))
     expect_identical(f$neval, plain$neval)
     expect_identical(f$value, plain$value)
@@ -778,7 +748,8 @@ test_that("the fallback source is selectable and is charged for its evaluations"
   obj  <- .misscaled_objfn(c(a = 1, b = -2))
   init <- c(a = 0, b = 0)
   for (fb in c("bfgs", "sr1")) {
-    f <- trust(obj, init, iterlim = 200, hessianFallback = fb, blather = TRUE)
+    f <- trust(obj, init, iterlim = 200, blather = TRUE,
+               fallbackControl = list(hessianMethod = fb))
     expect_identical(f$nSwitch, 1L, info = fb)
     expect_true(fb %in% f$hessianSource, info = fb)
     expect_gt(f$evalBySource[[fb]], 0)
@@ -791,10 +762,10 @@ test_that("fallbackLimit above one hands control back to the primary source", {
   # fires and the sources alternate.
   obj  <- .flat_objfn(2L)
   init <- c(a = 0, b = 0)
-  one <- trust(obj, init, iterlim = 300, hessianFallback = "bfgs",
-               fallbackLimit = 1L, blather = TRUE)
-  two <- trust(obj, init, iterlim = 300, hessianFallback = "bfgs",
-               fallbackLimit = 2L, blather = TRUE)
+  one <- trust(obj, init, iterlim = 300, blather = TRUE,
+               fallbackControl = list(hessianMethod = "bfgs", limit = 1L))
+  two <- trust(obj, init, iterlim = 300, blather = TRUE,
+               fallbackControl = list(hessianMethod = "bfgs", limit = 2L))
 
   expect_identical(one$nSwitch, 1L)
   expect_identical(two$nSwitch, 2L)
@@ -806,7 +777,50 @@ test_that("fallbackLimit above one hands control back to the primary source", {
 test_that("an unknown Hessian source is rejected by name", {
   obj <- .quadratic_objfn(c(a = 1.0))
   expect_error(trust(obj, c(a = 0), hessianMethod = "nope"), "should be one of")
-  expect_error(trust(obj, c(a = 0), hessianFallback = "nope"), "should be one of")
+  expect_error(trust(obj, c(a = 0), fallbackControl = list(hessianMethod = "nope")),
+               "should be one of")
+  expect_error(trust(obj, c(a = 0), fallbackControl = list(budget = 3)),
+               "unknown entries budget")
+})
+
+test_that("a fallback is off by default and reports the sweep it used", {
+  # A plain R function has no `sweep` argument, so the fallback runs forward.
+  obj  <- .misscaled_objfn(c(a = 1, b = -2))
+  init <- c(a = 0, b = 0)
+  plain <- trust(obj, init)
+  expect_identical(plain$nSwitch, 0L)
+  expect_null(plain$fallbackSweep)
+  f <- trust(obj, init, blather = TRUE,
+             fallbackControl = list(hessianMethod = "sr1"))
+  expect_identical(f$nSwitch, 1L)
+  expect_true("sr1" %in% f$hessianSource)
+  expect_identical(f$fallbackSweep, "forward")
+  expect_error(trust(obj, init, hessianFallback = "sr1"),
+               "fallbackControl\\$hessianMethod")
+  expect_error(trust(obj, init, fallbackControl = list(hessianMethod = "sr1",
+                                                       sweep = "reverse")),
+               "no `sweep` argument")
+  expect_error(trust(obj, init, hessianMethod = "sr1",
+                     fallbackControl = list(hessianMethod = "gn", sweep = "reverse")),
+               "forward sensitivities")
+})
+
+test_that("a fallback phase that uses up its iterations ends unconverged", {
+  obj  <- .misscaled_objfn(c(a = 1, b = -2))
+  init <- c(a = 0, b = 0)
+  f <- trust(obj, init, blather = TRUE,
+             fallbackControl = list(hessianMethod = "bfgs", iterlim = 2L))
+  expect_identical(f$nSwitch, 1L)
+  expect_identical(f$stopReason, "iterlim")
+  expect_false(f$converged)
+  expect_identical(sum(f$hessianSource == "bfgs"), 2L)
+
+  # With a handover left, the budget hands back instead.
+  g <- trust(obj, init, blather = TRUE,
+             fallbackControl = list(hessianMethod = "bfgs", iterlim = 2L,
+                                    limit = 2L))
+  expect_identical(g$nSwitch, 2L)
+  expect_identical(utils::tail(g$hessianSource, 1L), "gn")
 })
 
 # An objective may decline to build a Hessian, and NULL is how it says so.

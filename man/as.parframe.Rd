@@ -20,7 +20,8 @@ is sorted. Default \code{"value"}.}
 \value{
 Object of class \link{parframe}. For a \code{parlist}, the meta-information
 columns are \code{index}, \code{value}, \code{converged} and \code{iterations}, plus the
-termination and evaluation counts the fits report.
+termination and evaluation counts and the wall time \code{elapsed} the fits
+report. The attribute \code{"run"} of the parlist is kept.
 }
 \description{
 Coerce to a Parameter Frame

@@ -174,7 +174,6 @@ plot.parlist <- function(x, path = FALSE, ...) {
 #' @param sortBy character, the column by which the returned parameter frame
 #' is sorted. Default `"value"`.
 as.parframe.parlist <- function(x, sortBy = "value", ...) {
-  .renameArgs(list(...), c(sort.by = "sortBy"), "as.parframe")
   m_stat <- .statParlist(x)
   m_metanames <- c("index", "value", "converged", "iterations")
   m_idx <- which("error" != m_stat)
@@ -199,6 +198,13 @@ as.parframe.parlist <- function(x, sortBy = "value", ...) {
     if (any(!is.na(col))) { m_parframe[[field]] <- col; m_metanames <- c(m_metanames, field) }
   }
 
+  m_elapsed <- vapply(x[m_idx], function(.x)
+    if (is.null(.x[["elapsed"]])) NA_real_ else .x[["elapsed"]], 1.0)
+  if (any(!is.na(m_elapsed))) {
+    m_parframe$elapsed <- m_elapsed
+    m_metanames <- c(m_metanames, "elapsed")
+  }
+
   parameters <- lapply(x[m_idx], function(x) data.table::as.data.table(as.list(x$argument)))
   parameters <- data.table::rbindlist(parameters, use.names = TRUE)
   m_parframe <- cbind(m_parframe, parameters)
@@ -206,7 +212,9 @@ as.parframe.parlist <- function(x, sortBy = "value", ...) {
   # Sort by value
   m_parframe <- m_parframe[order(m_parframe[[sortBy]]),]
   
-  parframe(m_parframe, parameters = names(parameters), metanames = m_metanames)
+  out <- parframe(m_parframe, parameters = names(parameters), metanames = m_metanames)
+  attr(out, "run") <- attr(x, "run")
+  out
 }
 
 
@@ -240,7 +248,8 @@ c.parlist <- function(...) {
 #' @param ... not used.
 #' @return Object of class [parframe]. For a `parlist`, the meta-information
 #' columns are `index`, `value`, `converged` and `iterations`, plus the
-#' termination and evaluation counts the fits report.
+#' termination and evaluation counts and the wall time `elapsed` the fits
+#' report. The attribute `"run"` of the parlist is kept.
 #' @seealso [parframe()], [as.parvec.parframe()], and [parlist()] for an
 #'   example.
 #' @export
@@ -521,8 +530,10 @@ is.parframe <- function(x) {
   obj.attributes <- intersect(obj.attributes, colnames(out))
   parameters <- intersect(parameters, colnames(out))
   
-  parframe(out, parameters = parameters, metanames = metanames, objAttributes = obj.attributes)
-  
+  out <- parframe(out, parameters = parameters, metanames = metanames, objAttributes = obj.attributes)
+  attr(out, "run") <- attr(x, "run")
+  out
+
 }
 
 
@@ -972,7 +983,6 @@ parfn <- function(p2p, parameters = NULL, condition = NULL) {
 #'   Default `NULL`.
 #' @param objAttributes character, the names of the objective function
 #'   attributes. Default `NULL`.
-#' @param ... `obj.attributes` is deprecated, use `objAttributes`.
 #' @return Object of class `parframe`, a data frame with the attributes
 #' `parameters`, `metanames` and `obj.attributes`. `is.parframe()` returns a
 #' logical.
@@ -986,10 +996,7 @@ parfn <- function(p2p, parameters = NULL, condition = NULL) {
 #' as.parvec(pf)
 #' @export
 parframe <- function(x = NULL, parameters = colnames(x), metanames = NULL,
-                     objAttributes = NULL, ...) {
-
-  .renameArgs(list(...), c(obj.attributes = "objAttributes"), "parframe",
-              strict = TRUE)
+                     objAttributes = NULL) {
 
   if (!is.null(x)) {
     rownames(x) <- NULL

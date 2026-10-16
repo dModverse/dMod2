@@ -55,7 +55,6 @@
 #'   balances, so every result is a ratio of positive sums; it needs
 #'   `positive = TRUE` and `outputFormat = "R"` and treats compartment volumes
 #'   as fixed.
-#' @param ... `rates` is deprecated and ignored.
 #'
 #' @details
 #' Arguments by version:
@@ -108,10 +107,8 @@ steadyStates <- function(model, file = NULL, forcings = NULL,
                          outputFormat = "R", testSteady = c("fast", "exact", "skip"),
                          walltime = 0L, simplify = TRUE, solveQuadratic = FALSE,
                          positive = TRUE, branches = FALSE, priority = NULL,
-                         version = "1.3", resolve = TRUE, verbose = FALSE,
-                         ...) {
+                         version = "1.3", resolve = TRUE, verbose = FALSE) {
 
-  .droppedArgs(list(...), "rates", "steadyStates")
   .require_ns("reticulate", "steadyStates()")
   # Validate version and verification mode
   version <- match.arg(version, choices = c("1.0", "1.1", "1.2", "1.3", "1.4"))

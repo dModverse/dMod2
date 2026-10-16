@@ -4,7 +4,7 @@
 \alias{plotPathsMulti}
 \title{Profile Likelihood: Plot All Parameter Paths of One Profile Together}
 \usage{
-plotPathsMulti(profs, whichPar, nPars = 5, normalizePaths = FALSE, ...)
+plotPathsMulti(profs, whichPar, nPars = 5, normalizePaths = FALSE)
 }
 \arguments{
 \item{profs}{A \link{parframe} of profiles as returned by
@@ -16,9 +16,6 @@ plotPathsMulti(profs, whichPar, nPars = 5, normalizePaths = FALSE, ...)
 
 \item{normalizePaths}{Logical. \code{TRUE} scales each path to a maximum
 absolute value of 1. Defaults to \code{FALSE}.}
-
-\item{...}{\code{whichpars} and \code{npars} are deprecated, use \code{whichPar} and
-\code{nPars}.}
 }
 \value{
 A \code{ggplot} object; for several \code{whichPar} the grid of

@@ -27,8 +27,7 @@ reconstControl(
   degreeCapMax = NULL,
   exactProof = NULL,
   exactWorkCap = NULL,
-  seed = NULL,
-  ...
+  seed = NULL
 )
 }
 \arguments{
@@ -91,9 +90,6 @@ the fields of each regime, one detection per regime.}
 instructions; above it the proof is skipped and the limit noted.}
 
 \item{seed}{Seed of the random choices.}
-
-\item{...}{\code{minsupportCandCap}, \code{perprimeCap} and \code{perprimeMinPrimes} are
-deprecated, use \code{minSupportCandCap}, \code{perPrimeCap} and \code{perPrimeMinPrimes}.}
 }
 \value{
 A list of class \code{reconstcontrol} with the settings.

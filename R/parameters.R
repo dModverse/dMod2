@@ -368,7 +368,6 @@ P <- function(trafo = NULL, parameters = NULL, condition = NULL,
 #'   `deriv2 = TRUE`.
 #' @param outdir Directory for the generated source and shared object,
 #'   default `getOption("dMod.outdir")`, else the working directory.
-#' @param ... `attach.input` is deprecated, use `attachInput`.
 #'
 #' @return A [parfn], called as `p(pars, ...)`, see section Calling a dMod
 #'   function.
@@ -381,9 +380,7 @@ Pexpl <- function(trafo, parameters = NULL, attachInput = FALSE, condition = NUL
                   compile = FALSE, modelname = NULL, verbose = FALSE,
                   deriv = TRUE, deriv2 = FALSE,
                   derivMode = "forward",
-                  outdir = .dmodOutdir(), ...) {
-
-  .renameArgs(list(...), c(attach.input = "attachInput"), "Pexpl", strict = TRUE)
+                  outdir = .dmodOutdir()) {
 
   derivMode <- .matchDerivMode(derivMode, c("forward", "reverse", "forward-reverse"))
   emit_d1   <- isTRUE(deriv)
@@ -862,13 +859,6 @@ resetWarmStarts <- function(fn, verbose = FALSE) {
               positive = TRUE, stability = TRUE, archive = 8L,
               nStarts = 20L, startRange = c(-5, 5), startScale = NULL, seed = 1L)
   given <- as.list(controlsPTC)
-  old <- intersect(names(given), c("rtol", "atol"))
-  if (length(old)) {
-    warning("Pimpl: controlsPTC entries 'rtol' and 'atol' are deprecated; use 'reltol' ",
-            "and 'abstol'.", call. = FALSE)
-    names(given)[names(given) == "rtol"] <- "reltol"
-    names(given)[names(given) == "atol"] <- "abstol"
-  }
   if (length(given) && (is.null(names(given)) || any(!nzchar(names(given)))))
     stop("Pimpl: controlsPTC must be a named list.", call. = FALSE)
   bad <- setdiff(names(given), names(def))
@@ -936,7 +926,6 @@ resetWarmStarts <- function(fn, verbose = FALSE) {
 #'   }
 #' @param outdir Directory for the generated files, default
 #'   `getOption("dMod.outdir")`, else the working directory.
-#' @param ... `keep.root` is deprecated, use `keepRoot`.
 #'
 #' @details Conserved quantities of an [eqnlist] enter as \eqn{C x = T}.
 #' States without influx are 0. Initial guesses are kept roots, then the
@@ -957,9 +946,7 @@ Pimpl <- function(trafo, parameters = NULL, forcings = NULL, condition = NULL,
                   keepRoot = TRUE, flow = inherits(trafo, "eqnlist"),
                   compile = FALSE, modelname = NULL, verbose = FALSE,
                   deriv = TRUE, deriv2 = FALSE, controlsPTC = list(),
-                  outdir = .dmodOutdir(), ...) {
-
-  .renameArgs(list(...), c(keep.root = "keepRoot"), "Pimpl", strict = TRUE)
+                  outdir = .dmodOutdir()) {
 
   flow    <- isTRUE(flow)
   emit_d1 <- isTRUE(deriv)
@@ -1532,9 +1519,6 @@ branch <- function(trafo, table = NULL,
 #' @param reset `FALSE` (default) replaces the left-hand side wherever it
 #'   occurs in the expressions, `TRUE` sets the entry it names.
 #' @return Same shape as `trafo`.
-#' @section Lifecycle:
-#' The order `repar(expr, trafo)` is deprecated. It is recognised by an
-#' expression in first place and accepted with a warning.
 #' @seealso [define()], [insert()]
 #' @export
 #' @importFrom stats as.formula
@@ -1548,13 +1532,8 @@ branch <- function(trafo, table = NULL,
 #' trafo <- repar(trafo, "x ~ x + Delta_x_condition",
 #'                x = innerpars, condition = mycondition)
 repar <- function(trafo = NULL, expr, ..., reset = FALSE) {
-  if (.isReparExpr(trafo) && (missing(expr) || !.isReparExpr(expr))) {
-    warning("repar: the order is repar(trafo, expr); repar(expr, trafo) is ",
-            "deprecated.", call. = FALSE)
-    old <- trafo
-    trafo <- if (missing(expr)) NULL else expr
-    expr <- old
-  }
+  if (.isReparExpr(trafo) && (missing(expr) || !.isReparExpr(expr)))
+    stop("repar: the order is repar(trafo, expr).", call. = FALSE)
   if (inherits(expr, "formula")) expr <- deparse(expr)
   parsed <- as.character(stats::as.formula(.colonize(expr)))
   lhs <- parsed[2]; rhs <- parsed[3]

@@ -15,8 +15,7 @@ Pexpl(
   deriv = TRUE,
   deriv2 = FALSE,
   derivMode = "forward",
-  outdir = .dmodOutdir(),
-  ...
+  outdir = .dmodOutdir()
 )
 }
 \arguments{
@@ -54,8 +53,6 @@ is \code{"expl_parfn"}, followed by \verb{_<condition>}.}
 
 \item{outdir}{Directory for the generated source and shared object,
 default \code{getOption("dMod.outdir")}, else the working directory.}
-
-\item{...}{\code{attach.input} is deprecated, use \code{attachInput}.}
 }
 \value{
 A \link{parfn}, called as \code{p(pars, ...)}, see section Calling a dMod
