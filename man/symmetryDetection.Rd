@@ -73,9 +73,9 @@ the first entry is the regime at the start. A list named by the rows of
 parameters alone needs its side named here.}
 
 \item{equilibrate}{Logical. Start at a steady state of \code{f} with the inputs at 0;
-the earliest events apply on top. Coupled steady states may need msolve, which
-\code{symident.install_msolve()} builds or \code{SYMIDENT_MSOLVE} points to. Defaults
-to \code{FALSE}.}
+the earliest events apply on top. Coupled steady states may need msolve; when
+it is missing, an interactive session asks whether to build it into the
+symident cache (on Windows with Rtools). Defaults to \code{FALSE}.}
 
 \item{reduceCQ}{Logical, \link{eqnlist} only. Report the freedom of a conserved moiety
 on its total (\code{TRUE}) or on the initial value of one species (\code{FALSE},

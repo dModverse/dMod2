@@ -101,9 +101,8 @@ removes them. Both run in the Python package
 [symident](https://github.com/dModverse/symident), which dMod2 installs
 from PyPI on first use; under `RETICULATE_PYTHON` install it there with
 `pip install symident`. A steady-state start on coupled steady states
-needs msolve, which
-`python -c "import symident; symident.install_msolve()"` builds or
-`SYMIDENT_MSOLVE` points to.
+needs msolve, which `symmetryDetection()` offers to build when it is
+missing, or which `SYMIDENT_MSOLVE` points to.
 
 ## Citation
 

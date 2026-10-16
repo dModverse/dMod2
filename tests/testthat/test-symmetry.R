@@ -40,6 +40,24 @@ test_that("the optional reconstruction settings travel only when set", {
                    c("degree_cap_max", "exact_work_cap", "homotopy_degree"))
 })
 
+test_that("a missing msolve is offered, and the call repeated once it is installed", {
+  skip_if_not_installed("jsonlite")
+  calls <- 0L
+  missingMsolve <- structure(class = c("symident.sym.msolve.MsolveMissingError", "error",
+                                       "condition"), list(message = "needs msolve", call = NULL))
+  local_mocked_bindings(.symident = function(...) list(f = function(...) {
+    calls <<- calls + 1L
+    if (calls == 1L) stop(missingMsolve)
+    '{"ok": true}'
+  }), .package = "dMod2")
+  local_mocked_bindings(.offerMsolve = function() FALSE, .package = "dMod2")
+  expect_error(dMod2:::.symCall("f"), "confirm its installation")
+  calls <- 0L
+  local_mocked_bindings(.offerMsolve = function() TRUE, .package = "dMod2")
+  expect_true(dMod2:::.symCall("f")$ok)
+  expect_identical(calls, 2L)
+})
+
 test_that("the specification holds reactions, totals, conditions and events", {
   r <- eqnlist() |>
     addReaction("A", "B", "k1 * A") |>

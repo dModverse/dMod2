@@ -46,9 +46,9 @@
 #'   `conditions` gives them per condition. Without it every regime counts; a switch on
 #'   parameters alone needs its side named here.
 #' @param equilibrate Logical. Start at a steady state of `f` with the inputs at 0;
-#'   the earliest events apply on top. Coupled steady states may need msolve, which
-#'   `symident.install_msolve()` builds or `SYMIDENT_MSOLVE` points to. Defaults
-#'   to `FALSE`.
+#'   the earliest events apply on top. Coupled steady states may need msolve; when
+#'   it is missing, an interactive session asks whether to build it into the
+#'   symident cache (on Windows with Rtools). Defaults to `FALSE`.
 #' @param reduceCQ Logical, [eqnlist] only. Report the freedom of a conserved moiety
 #'   on its total (`TRUE`) or on the initial value of one species (`FALSE`,
 #'   default).
@@ -266,7 +266,7 @@ reconstControl <- function(relevanceCap = 6L, relevanceCapDir = 24L, relevanceCa
 
 # ---- the interface to the Python package symident --------------------------------
 
-.symidentMin <- "0.10.0"
+.symidentMin <- "0.10.1"
 .symidentReq <- paste0("symident>=", .symidentMin)
 
 # whether symident is installed in version .symidentMin or later
@@ -341,13 +341,99 @@ reconstControl <- function(relevanceCap = 6L, relevanceCapDir = 24L, relevanceCa
   args <- lapply(list(...), function(a) if (is.character(a) && length(a) == 1L) a
                  else as.character(jsonlite::toJSON(a, auto_unbox = TRUE, null = "null",
                                                     digits = NA, force = TRUE)))
-  out <- do.call(si[[fun]], c(args, list(
+  args <- c(args, list(
     env = as.character(jsonlite::toJSON(env, auto_unbox = TRUE)),
-    options = as.character(jsonlite::toJSON(opt, auto_unbox = TRUE, null = "null")))))
+    options = as.character(jsonlite::toJSON(opt, auto_unbox = TRUE, null = "null"))))
+  out <- tryCatch(do.call(si[[fun]], args),
+                  symident.sym.msolve.MsolveMissingError = function(e) {
+                    if (!.offerMsolve())
+                      stop("this steady state needs msolve: confirm its installation in an ",
+                           "interactive session, or set SYMIDENT_MSOLVE to an msolve ",
+                           "executable.", call. = FALSE)
+                    do.call(si[[fun]], args)
+                  })
   res <- jsonlite::fromJSON(out, simplifyVector = FALSE)
   for (w in unlist(res$warnings)) warning(w, call. = FALSE)
   res$warnings <- NULL
   structure(res, json = out)
+}
+
+# Asks whether to install msolve into the symident cache and does so; FALSE when the
+# session is not interactive or the answer is no.
+.offerMsolve <- function() {
+  if (!interactive()) return(FALSE)
+  inst <- .symident("install")
+  q <- paste0("This steady state needs msolve, which is not installed. Download and build ",
+              "msolve ", inst$MSOLVE_VERSION, " into ", inst$cache_dir(), "? (yes/no) ")
+  repeat {
+    a <- tolower(trimws(readline(q)))
+    if (a %in% c("n", "no")) return(FALSE)
+    if (a %in% c("y", "yes")) break
+  }
+  path <- if (.Platform$OS.type == "windows") .buildMsolveRtools(inst)
+          else inst$install_msolve(ask = FALSE)
+  message("msolve installed in ", path)
+  TRUE
+}
+
+# Builds msolve with the compiler of R and the static GMP, MPFR and FLINT of Rtools
+# into the layout the symident cache expects. symident runs msolve on one thread, so
+# OpenMP is a stub.
+.buildMsolveRtools <- function(inst) {
+  config <- function(x) system2(file.path(R.home("bin"), "R"), c("CMD", "config", x),
+                                stdout = TRUE)
+  cc <- config("CC")
+  libs <- file.path(config("LOCAL_SOFT"), "lib", c("libflint.a", "libmpfr.a", "libgmp.a"))
+  if (!nzchar(Sys.which(cc)) || !all(file.exists(libs)))
+    stop("building msolve on Windows needs Rtools.", call. = FALSE)
+  version <- inst$MSOLVE_VERSION
+  work <- tempfile("msolve")
+  dir.create(work)
+  on.exit(unlink(work, recursive = TRUE), add = TRUE)
+  tarball <- file.path(work, "msolve.tar.gz")
+  utils::download.file(sprintf(
+    "https://github.com/algebraic-solving/msolve/archive/refs/tags/v%s.tar.gz", version),
+    tarball, mode = "wb", quiet = TRUE)
+  utils::untar(tarball, exdir = work)
+  src <- file.path(work, paste0("msolve-", version))
+  writeLines(c(sprintf('#define VERSION "%s"', version), "#define HAVE_FLINT_NMOD_H 1",
+               "#define HAVE_TIMESPEC_GET 1"), file.path(src, "config.h"))
+  dir.create(file.path(src, "ompstub"))
+  writeLines(c(
+    "#include <time.h>",
+    "static inline int omp_get_thread_num(void) { return 0; }",
+    "static inline int omp_get_max_threads(void) { return 1; }",
+    "static inline void omp_set_num_threads(int n) { (void)n; }",
+    "static inline double omp_get_wtime(void) {",
+    "  struct timespec ts; timespec_get(&ts, TIME_UTC); return ts.tv_sec + 1e-9 * ts.tv_nsec;",
+    "}"), file.path(src, "ompstub", "omp.h"))
+  run <- function(args) {
+    out <- suppressWarnings(system2(cc, args, stdout = TRUE, stderr = TRUE))
+    if (!is.null(attr(out, "status")))
+      stop("the msolve build failed:\n", paste(utils::tail(out, 20), collapse = "\n"),
+           call. = FALSE)
+  }
+  # one translation unit per library; main.c includes libmsolve.c
+  units <- c("usolve/usolve.c", "fglm/fglm_core.c", "neogb/gb.c", "msolve/main.c")
+  objs <- file.path(work, sub("\\.c$", ".o", basename(units)))
+  inc <- paste0("-I", shQuote(c(src, file.path(src, c("src", "ompstub"))), type = "cmd"))
+  message("Compiling msolve ", version, ", this takes a minute.")
+  for (i in seq_along(units))
+    run(c("-std=gnu17", "-O2", "-DHAVE_CONFIG_H", inc, "-w", "-c",
+          shQuote(file.path(src, "src", units[i]), type = "cmd"),
+          "-o", shQuote(objs[i], type = "cmd")))
+  prefix <- file.path(inst$cache_dir(), paste0("deps-msolve-", version))
+  marker <- file.path(prefix, ".msolve-complete")
+  unlink(marker)
+  dir.create(file.path(prefix, "bin"), recursive = TRUE, showWarnings = FALSE)
+  exe <- file.path(prefix, "bin", "msolve.exe")
+  run(c("-static", "-s", "-o", shQuote(exe, type = "cmd"), shQuote(rev(objs), type = "cmd"),
+        shQuote(libs, type = "cmd"), "-lm"))
+  inst$msolve_check$cache_clear()
+  if (is.null(inst$msolve_check(exe)))
+    stop("the msolve build produced no working executable.", call. = FALSE)
+  file.create(marker)
+  normalizePath(exe)
 }
 
 # the result as symident wrote it, for its own report and for the reduction

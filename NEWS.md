@@ -1,3 +1,10 @@
+# dMod2 0.12.1
+
+* Needs symident 0.10.1.
+* When symident needs msolve and finds none, `symmetryDetection()` and
+  `symmetryReduction()` ask in an interactive session whether to build it into the
+  symident cache, on Windows with Rtools, and then repeat the call.
+
 # dMod2 0.12.0
 
 * Needs cppDE 0.13.0 and symident 0.10.0.
