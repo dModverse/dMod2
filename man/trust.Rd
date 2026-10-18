@@ -12,7 +12,8 @@ trust(
   rmax = 10,
   iterlim = 1000L,
   hessianMethod = c("gn", "bfgs", "sr1", "exact"),
-  fallbackControl = NULL,
+  phases = NULL,
+  switches = NULL,
   parupper = NULL,
   parlower = NULL,
   tolControl = NULL,
@@ -71,44 +72,49 @@ outside \code{[parlower, parupper]} are clipped with a warning; with
 \item{iterlim}{Maximum number of trust-region iterations over all phases.
 Default \code{1000}.}
 
-\item{hessianMethod}{Source of the model Hessian at the start of the run:
-\code{"gn"} (default) the Gauss-Newton Hessian of the objective,
-\code{"bfgs"} or \code{"sr1"} a quasi-Newton update seeded as
+\item{hessianMethod}{Source of the model Hessian of a run without
+\code{phases}: \code{"gn"} (default) the Gauss-Newton Hessian of the
+objective, \code{"bfgs"} or \code{"sr1"} a quasi-Newton update seeded as
 \code{qnControl$hessianInit} says, \code{"exact"} the true Hessian at
 every iterate, which needs an objective that takes \code{deriv2}.
 Quasi-Newton methods require \code{stepControl$boundary = "reflective"}.
-Also selects the control defaults below.}
+Also selects the control defaults below. With \code{phases}, each phase
+names its own and this argument is an error.}
 
-\item{fallbackControl}{List of settings of the fallback phase, merged into
-the defaults. The run hands over to it at the first value, model, step or
-stagnation stop. A handover restarts the trust region at \code{rinit} and
-discards the quasi-Newton pairs. Not available with multiple shooting
-and \code{boundary = "clip"}.
+\item{phases}{List of phases, each a list of settings, run one after the
+other and from the first again after the last. The run hands over to the
+next phase at a value, model, step or stagnation stop and when a phase
+uses up its own \code{iterlim}. A handover restarts the trust region at
+\code{rinit} and discards the quasi-Newton pairs. Default \code{NULL}: one
+phase from \code{hessianMethod} and \code{qnControl}, evaluated with the
+\code{sweep} in \code{...}. Names of the list label the phases in the
+result, the Hessian source does otherwise. Not available with multiple
+shooting and \code{boundary = "clip"}.
 \describe{
-\item{\code{hessianMethod}}{Hessian source of the fallback phase:
-\code{"none"} (default), no fallback, or \code{"sr1"},
-\code{"bfgs"}, \code{"gn"}. The same source as \code{hessianMethod}
-is no fallback either.}
-\item{\code{limit}}{Number of handovers allowed. Default \code{1}: hand
-over once and run the fallback to the end. A higher value alternates
-between the two sources, \code{0} disables the fallback. The result
-reports the count as \code{nSwitch}.}
-\item{\code{iterlim}}{Maximum number of iterations of one fallback
-phase. Default \code{200}.}
+\item{\code{hessianMethod}}{Hessian source of the phase, as
+\code{hessianMethod}. Required.}
+\item{\code{iterlim}}{Maximum number of iterations of one run of the
+phase. Default \code{NULL}: only the total \code{iterlim}.}
 \item{\code{sweep}}{\code{"forward"} or \code{"reverse"}, the
-\code{sweep} the objective is evaluated with in the fallback phase, in
-place of a \code{sweep} in \code{...}. Default \code{NULL}: reverse
-if the objective can be evaluated backwards at \code{parinit}, as with
+\code{sweep} the objective is evaluated with in the phase; a
+\code{sweep} in \code{...} is an error with \code{phases}. Default
+\code{NULL}: for \code{"bfgs"} and \code{"sr1"} reverse if the
+objective can be evaluated backwards at \code{parinit}, as with
 \code{derivMode = c("forward", "reverse")} throughout the chain,
 forward otherwise. A Gauss-Newton Hessian is always computed forward.
-When the two phases differ in sweep, a handover evaluates the current
-iterate once more. The result reports the sweep used as
-\code{fallbackSweep}.}
-\item{\code{qnControl}}{Quasi-Newton settings of the fallback phase,
-merged over \code{qnControl}; see there. Default
-\code{list(hessianInit = "gn")}: start from the Hessian of the
-Gauss-Newton phase handing over.}
+A handover between phases of different sweep evaluates the current
+iterate once more. The result reports the sweeps as
+\code{phaseSweep}.}
+\item{\code{qnControl}}{Quasi-Newton settings of the phase, merged
+over \code{qnControl}; see there. \code{hessianInit} defaults to
+\code{"gn"} in every phase but the first: a quasi-Newton phase starts
+from the Gauss-Newton Hessian at the iterate of the handover.}
 }}
+
+\item{switches}{Number of handovers allowed. Default \code{NULL}: one
+fewer than there are phases, so each runs once. A higher value cycles
+through the phases again, \code{0} runs the first phase only. The result
+reports the count as \code{nSwitch}.}
 
 \item{parupper, parlower}{Upper and lower bounds. Unnamed: the first element
 applies to all parameters. Named: entries are matched by name, missing
@@ -249,11 +255,15 @@ gradient and model Hessian at \code{argument}.}
 \item{\code{neval}}{Number of objective evaluations.}
 \item{\code{qnEval}}{Evaluations spent in a quasi-Newton phase.}
 \item{\code{qnSkipped}}{Pairs rejected by the cautious test.}
-\item{\code{nSwitch}}{Number of Hessian source handovers.}
-\item{\code{fallbackSweep}}{The sweep of the fallback phase, present
-when a fallback is set.}
+\item{\code{nSwitch}}{Number of handovers between phases.}
+\item{\code{phaseIterations}}{Named integer, the iterations of each
+phase run, in run order and named after the phase; sums to
+\code{iterations}.}
+\item{\code{phaseSweep}}{Named character, the sweep of each element
+of \code{phases}, present when \code{phases} is set.}
 \item{\code{nReseed}}{Number of reseeds by
-\code{qnControl$hessianReseed = "stall"}.}
+\code{qnControl$hessianReseed = "stall"}, which allows each run of a
+phase the same number.}
 \item{\code{evalBySource}}{Named integer, evaluations per Hessian
 source.}
 \item{\code{converged}}{Logical.}
@@ -326,14 +336,15 @@ flat within \code{ftol}.
 evaluations in a row) or \code{"iterlim"}. Stagnation reports
 \code{converged = TRUE}.
 
-Only \code{gtol} tests first-order optimality. With a fallback, see
-\code{fallbackControl}, the first \code{"fvalue"}, \code{"preddiff"},
-\code{"step"} or \code{"stagnation"} stop hands over to the fallback source
+Only \code{gtol} tests first-order optimality. While \code{switches}
+remain, see \code{phases}, an \code{"fvalue"}, \code{"preddiff"},
+\code{"step"} or \code{"stagnation"} stop hands over to the next phase
 instead of ending the run. In a quasi-Newton phase \code{"fvalue"},
-\code{"preddiff"} and \code{"step"} do not end the run. A fallback phase
-that reaches \code{fallbackControl$iterlim} ends like a soft stop, with
-\code{stopReason = "iterlim"} and \code{converged = FALSE} when no handover
-is left.
+\code{"preddiff"} and \code{"step"} do not end the run. A phase that
+reaches its own \code{iterlim} ends like a soft stop, with
+\code{stopReason = "iterlim"} and \code{converged = FALSE} when no
+handover is left. The total \code{iterlim} ends the run in any phase, with
+\code{stopReason = "iterlim"} and \code{converged = FALSE}.
 
 \code{argument}, \code{value}, \code{gradient}, \code{hessian} and
 \code{atBound} in the result belong to the best iterate visited, which is
@@ -344,8 +355,8 @@ the last accepted one when \code{stepControl$nonmonotone = 0}.
 
 An objective built by \code{\link{normL2}(..., multipleShootingControl = )},
 alone or in a sum, is optimised by multiple shooting with the same controls.
-Not available then: \code{hessianMethod = "exact"}, a fallback,
-\code{qnControl$hessianReseed},
+Not available then: \code{hessianMethod = "exact"}, more than one phase,
+\code{switches}, \code{qnControl$hessianReseed},
 \code{qnControl$qnMemory}, \code{stepControl$nonmonotone},
 \code{boundary = "clip"}, \code{minimize = FALSE} and \code{traceFile}.
 The run reports \code{converged = TRUE} only when the scaled gaps between
@@ -373,9 +384,12 @@ fit <- trust(rosenbrock, c(a = -1.2, b = 1), parupper = c(a = 0.5),
              iterlim = 200)
 fit$atBound
 
-# Quasi-Newton with a Gauss-Newton fallback
-fit <- trust(rosenbrock, c(a = -1.2, b = 1), hessianMethod = "bfgs",
-             fallbackControl = list(hessianMethod = "gn"), iterlim = 200)
+# Gauss-Newton, then BFGS with a budget of its own, then Gauss-Newton again
+fit <- trust(rosenbrock, c(a = -1.2, b = 1), iterlim = 200,
+             phases = list(list(hessianMethod = "gn"),
+                           list(hessianMethod = "bfgs", iterlim = 50)),
+             switches = 2)
+fit$phaseIterations
 fit$evalBySource
 
 }

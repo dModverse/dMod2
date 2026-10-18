@@ -118,8 +118,10 @@ coordinate), \code{weights} (a scaling's integer weights), \code{type} (\code{"s
 \code{"general"}), \code{degree}, \code{support}, \code{explicit}, \code{level}, \code{stateComponents},
 \code{reason}, \code{route}, \code{display}, \code{completeGenerator} and \code{factor}. \code{level} is
 \code{"exact"} for a direction proven over the rationals, \code{"verified"} for one
-checked at random points modulo a large prime at the Lie and gap orders used
-and \code{"open"} without closed form; \code{stateComponents} holds, for an exact
+checked at random points modulo a large prime with an error bound,
+\code{"checked"} for one checked without an error bound (an unproven Lie or gap
+order, or a model outside the scope of the bound) and \code{"open"} without closed
+form; \code{stateComponents} holds, for an exact
 direction, the components on the states of the field that proves it.}
 \item{\code{info}}{\code{engine}, the Lie order and whether it is proven sufficient
 (\code{lieOrderUsed}, \code{lieOrderDriver}, \code{liePlateau}, \code{lieCertified}),
@@ -129,7 +131,10 @@ sufficient (\code{gapOrderUsed}, \code{gapCertified}, \code{NULL} without such e
 the invariant fields establish, checked at random points modulo a prime),
 \code{rankFieldsBound} (the probability that a wrong field passes), \code{rankStatus}
 (\code{status} \code{"proven"}, \code{"verified"} or \code{"lower bound"}, \code{why} and
-\code{probability}), \code{proof} (why each \code{"verified"} direction is not proven),
+\code{probability}), \code{proof} (why each \code{"verified"} or \code{"checked"} direction is not
+proven), \code{assumptions} (\code{domain}, the declared positive coordinates, \code{starts},
+the sides of switches declared at the start, and \code{errorBound}, the probability
+that a verified closed form or rank is wrong),
 \code{bound} (the probability that a wrong closed form passes the check, only where
 both orders are proven sufficient or the rank is settled), \code{limits} (what
 stopped part of the analysis), \code{errors} (exceptions turned into failed

@@ -9,14 +9,12 @@
 # Settings a shooting run cannot honour are refused. Every other summand enters
 # the condensed problem with its own value, gradient and Gauss-Newton Hessian.
 .trustShooting <- function(objfun, parinit, rinit, rmax, iterlim,
-                           hessianMethod, hessianFallback, fallbackLimit,
-                           parupper, parlower, tol, qn, step,
+                           hessianMethod, parupper, parlower, tol, qn, step,
                            minimize, blather, printIter, traceFile, dots) {
 
   hm <- hessianMethod
   bad <- c(
     if (hm == "exact") "hessianMethod = \"exact\"",
-    if (hessianFallback != "none") "a fallback (fallbackControl$hessianMethod)",
     if (!identical(qn$hessianInit, "gn") && !identical(qn$hessianInit, "identity"))
       "qnControl$hessianInit = \"exact\"",
     if (!identical(qn$hessianReseed %||% "never", "never")) "qnControl$hessianReseed",

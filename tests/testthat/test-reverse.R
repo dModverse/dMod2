@@ -280,7 +280,7 @@ test_that("a model without a reverse object says so", {
 })
 
 
-test_that("a fallback runs backwards when the chain can and forwards when not", {
+test_that("a quasi-Newton phase runs backwards when the chain can and forwards when not", {
   fx    <- .rev_fx()
   prd   <- fx$g * fx$x * fx$p
   data  <- .rev_data(fx, prd, fx$pars)
@@ -294,25 +294,26 @@ test_that("a fallback runs backwards when the chain can and forwards when not", 
     obj(pars, ..., sweep = sweep)
   }
 
+  gn  <- list(hessianMethod = "gn")
   sr1 <- list(hessianMethod = "sr1")
   plain <- trust(obj, start)
-  hy <- trust(traced, start, fallbackControl = sr1)
-  expect_identical(hy$fallbackSweep, "reverse")
+  hy <- trust(traced, start, phases = list(gn, sr1))
+  expect_identical(hy$phaseSweep, c(gn = "forward", sr1 = "reverse"))
   expect_identical(hy$nSwitch, 1L)
   expect_gt(hy$evalBySource[["sr1"]], 0L)
   expect_true("reverse FALSE" %in% seen)
   expect_false("reverse TRUE" %in% seen)
   expect_equal(hy$value, plain$value, tolerance = 1e-6)
 
-  fw <- trust(obj, start, fallbackControl = c(sr1, sweep = "forward"))
-  expect_identical(fw$fallbackSweep, "forward")
+  fw <- trust(obj, start, phases = list(gn, c(sr1, sweep = "forward")))
+  expect_identical(fw$phaseSweep[["sr1"]], "forward")
   expect_equal(fw$value, hy$value, tolerance = 1e-6)
 
   owd <- setwd(fx$dir); on.exit(setwd(owd))
   nobj <- normL2(data, fx$g * Xs(fx$mnr) * fx$p)
-  expect_identical(trust(nobj, start, fallbackControl = sr1)$fallbackSweep,
+  expect_identical(trust(nobj, start, phases = list(gn, sr1))$phaseSweep[["sr1"]],
                    "forward")
-  expect_error(trust(nobj, start, fallbackControl = c(sr1, sweep = "reverse")),
+  expect_error(trust(nobj, start, phases = list(gn, c(sr1, sweep = "reverse"))),
                "no reverse object")
 })
 

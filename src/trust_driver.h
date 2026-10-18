@@ -197,12 +197,12 @@ inline bool eval_objfun(Function& objfun, const NumericVector& x, List& out,
   return true;
 }
 
-// The same with the phase: `fallback` tells the R closure which phase's
-// settings the evaluation belongs to.
+// The same with the phase: `phase`, 0-based, tells the R closure which
+// phase's settings the evaluation belongs to.
 inline bool eval_objfun(Function& objfun, const NumericVector& x, List& out,
-                        int want, bool fallback) {
+                        int want, int phase) {
   try {
-    out = as<List>(objfun(x, want, fallback));
+    out = as<List>(objfun(x, want, phase));
   } catch (Rcpp::internal::InterruptedException&) {
     throw;
   } catch (...) {

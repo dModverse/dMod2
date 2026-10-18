@@ -1,3 +1,37 @@
+# dMod2 0.12.4
+
+* `symmetryDetection()` and `symmetryReduction()` need symident 0.11.0. A direction
+  checked without an error bound has level `"checked"`, and `info$assumptions` lists the
+  declared domain and the declared starts of the switches, with the error bound.
+* `symmetryReduction()` names the claims of a section that are not proven under
+  `blocks[[i]]$unproven`, with level `"open"`, and lists `assumptions`; the level `"assumed"`,
+  `blocks[[i]]$assumptions` and the argument `verbose` are removed. A section on a face
+  holds `faceWhy` and `faceLevel`; a resting state checked only at random points of the face
+  makes the block `"checked"`.
+* In the blocks of `symmetryReduction()`, `newParameters`, `solvedDomain` and `choices`
+  replace `survivorMeaning`, `carrierDomain` and `admissible`.
+* `trust()` takes `phases`, a list of phases, each with its own `hessianMethod`,
+  `iterlim`, `sweep` and `qnControl`, run in turn and cycled through for up to
+  `switches` handovers. A phase that uses up its own `iterlim` hands over like a
+  soft stop. `fallbackControl` is removed:
+  `fallbackControl = list(hessianMethod = "sr1", limit = 3, iterlim = 200)` is
+  `phases = list(list(hessianMethod = "gn"), list(hessianMethod = "sr1", iterlim = 200)), switches = 3`.
+  A run without `phases` is unchanged.
+* The result of `trust()` has `phaseIterations`, the iterations of each phase run
+  in run order, and with `phases` the sweeps of the phases as `phaseSweep` in place
+  of `fallbackSweep`. `as.parframe()` adds a column `iterations.<phase>` per phase.
+* Each run of a quasi-Newton phase has its own allowance of reseeds by
+  `qnControl$hessianReseed = "stall"`; `nReseed` counts over the run.
+* `mstrust(cores = c(fits = , conditions = ))` runs both axes as given, each
+  capped at the cores available, and records that layout in `attr(, "run")$cores`.
+* `mstrust()` and `profile()` stop the cluster of a conditions axis and restore
+  `options(dMod.cores)` on exit, on every platform.
+* The cores available are those of the R process, `parallelly::availableCores()`,
+  which follows the CPU affinity and a SLURM or PBS allocation. dMod2 imports
+  parallelly.
+* A sum of objective functions keeps the `compileInfo` of its terms, so `loadDLL()`
+  on it searches the directories its sources were compiled in.
+
 # dMod2 0.12.3
 
 * `trustL1()` drops `parscale`, as `trust()` did in 0.12.2. A scaling of the

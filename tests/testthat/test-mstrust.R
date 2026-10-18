@@ -32,13 +32,14 @@ test_that("a multi-start reports the Hessian source handovers per fit", {
   fits <- mstrust(objfun = obj, center = c(a = 0, b = 0),
                   name = "test_mstrust_switch",
                   rinit = 1, rmax = 10, iterlim = 100,
-                  fallbackControl = list(hessianMethod = "bfgs"),
+                  phases = list(list(hessianMethod = "gn"), list(hessianMethod = "bfgs")),
                   fits = 3, sd = 1, cores = 1, output = FALSE)
 
   pf <- as.parframe(fits)
   expect_true("nSwitch" %in% names(pf))
   expect_true(is.integer(pf$nSwitch))
   expect_false(anyNA(pf$nSwitch))
+  expect_identical(pf$iterations.gn + pf$iterations.bfgs, pf$iterations)
 })
 
 

@@ -1364,19 +1364,22 @@ profileParsPerNode <- function(parameters, parsPerNode, side = c("both", "split"
   o <- if (!is.null(nm) && outer %in% nm) cores[[outer]] else cores[[1L]]
   k <- if (!is.null(nm) && "conditions" %in% nm) cores[["conditions"]] else cores[[2L]]
 
-  avail <- suppressWarnings(parallel::detectCores())
-  if (!is.na(avail) && o * k > avail)
+  avail <- .availableCores()
+  if (o * k > avail)
     warning(sprintf("cores: %d (%s) x %d (conditions) = %d exceeds the %d available.",
                     o, outer, k, o * k, avail), call. = FALSE)
   list(outer = o, conditions = k)
 }
 
 
-.sanitizeCores <- function(cores)  {
-  
-  max.cores <- parallel::detectCores()
-  min(max.cores, cores)
-  
+# Cores this process may use: the affinity mask, cgroup and scheduler
+# allocation (SLURM, PBS, ...), not the cores of the node.
+.availableCores <- function() as.integer(parallelly::availableCores())
+
+# Caps each element of a core vector at the cores available, names kept.
+.sanitizeCores <- function(cores) {
+  cores[] <- pmin(as.integer(cores), .availableCores())
+  cores
 }
 
 
@@ -1395,8 +1398,10 @@ profileParsPerNode <- function(parameters, parsPerNode, side = c("both", "split"
 
   strategy <- match.arg(strategy)
   cores <- max(1L, as.integer(cores))
-  if (!is.null(coresConditions) && cores == 1L)
-    options(dMod.cores = as.integer(coresConditions))
+  if (cores == 1L && !is.null(coresConditions)) {
+    old <- options(dMod.cores = as.integer(coresConditions))
+    on.exit(options(old), add = TRUE)
+  }
   if (cores == 1L)
     return(lapply(X, FUN))
 

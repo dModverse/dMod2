@@ -21,7 +21,9 @@ is sorted. Default \code{"value"}.}
 Object of class \link{parframe}. For a \code{parlist}, the meta-information
 columns are \code{index}, \code{value}, \code{converged} and \code{iterations}, plus the
 termination and evaluation counts and the wall time \code{elapsed} the fits
-report. The attribute \code{"run"} of the parlist is kept.
+report. Fits of \code{\link[=trust]{trust()}} with several \code{phases} add one column
+\verb{iterations.<phase>} per phase, the iterations summed over its runs. The
+attribute \code{"run"} of the parlist is kept.
 }
 \description{
 Coerce to a Parameter Frame

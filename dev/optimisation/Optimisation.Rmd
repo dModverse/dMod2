@@ -290,9 +290,10 @@ and the bound handling are the same in all four cases.
 | `"sr1"` | a symmetric rank-one update, possibly indefinite | value, gradient |
 | `"exact"` | the objective's exact Hessian, a Newton run | value, gradient, exact Hessian |
 
-`fallbackControl` names a second source, `hessianMethod`, with its own `limit`
-on how often the two may swap, its own `iterlim`, `sweep` and `qnControl`. A
-run is a method and optionally a fallback; no pair has a name of its own.
+`phases` lists the sources a run passes through, each with its own
+`hessianMethod`, `iterlim`, `sweep` and `qnControl`; `switches` bounds the
+number of handovers, cycling through the list. Without `phases` a run has one
+source; no combination has a name of its own.
 
 For a sum of squares the Gauss-Newton matrix $J^{\mathsf T} J$ is an adequate
 curvature model wherever the residuals are small, and dMod2 obtains it at no
@@ -354,8 +355,9 @@ definiteness argument rests on the step being accepted.
 
 ## The handover
 
-A fallback run stays on `"gn"` until `fvalue`, `preddiff`, `step` or
-`stagnation` would terminate it, then switches to the fallback source, seeded
+A run with a `"gn"` phase and a quasi-Newton phase stays on `"gn"` until
+`fvalue`, `preddiff`, `step` or `stagnation` would terminate it, then switches
+to the next phase, seeded
 with the last accepted $J^{\mathsf T} J$. `gradient` remains terminal: it is an
 optimality test, not a symptom of a stalled model. The construction follows
 Fides of Fröhlich and Sorger [@froehlich2022fides], which switches when the
@@ -369,9 +371,10 @@ start <- as.parvec(msParframe(pouter, n = 1, sd = 3))
 single <- .fit("single", list(
   gn     = trust(obj, start, rinit = 0.1, rmax = 10, iterlim = 5000,
                  parlower = parlower, parupper = parupper),
-  fallback = trust(obj, start, rinit = 0.1, rmax = 10, iterlim = 5000,
+  gn_bfgs = trust(obj, start, rinit = 0.1, rmax = 10, iterlim = 5000,
                  parlower = parlower, parupper = parupper,
-                 fallbackControl = list(hessianMethod = "bfgs"))))
+                 phases = list(list(hessianMethod = "gn"),
+                               list(hessianMethod = "bfgs")))))
 
 data.frame(method = names(single),
            value  = vapply(single, `[[`, 0.0, "value"),
@@ -381,16 +384,17 @@ data.frame(method = names(single),
            row.names = NULL)
 ```
 
-Over the shared starting points of the next section a fallback run uses a few
-per cent more evaluations than `"gn"`. The `grad` column there counts the starts
-ending at a stationary point, which a fallback reaches and `"gn"` does not.
+Over the shared starting points of the next section a two-phase run uses a
+few per cent more evaluations than `"gn"`. The `grad` column there counts the
+starts ending at a stationary point, which a two-phase run reaches and `"gn"`
+does not.
 
 # Seed and memory of the approximation
 
 Three arguments shape the approximation. They apply when a run begins in a
 quasi-Newton phase, that is for `"bfgs"` and `"sr1"`; `"gn"` ignores them. A
-fallback phase reads them from `fallbackControl$qnControl`, whose default
-`hessianInit = "gn"` seeds the handover from the last Gauss-Newton matrix.
+later phase reads them from its own `qnControl`, where `hessianInit` defaults to
+`"gn"` and seeds the handover from the last Gauss-Newton matrix.
 
 `hessianInit` selects the initial matrix: the default `"gn"` is the objective's
 Hessian at `parinit`, `"identity"` the identity. With `"identity"`, `trust()`
@@ -510,9 +514,9 @@ waterfall <- function(frames, cutoff = Inf) {
 waterfall(runs, cutoff = 600)
 ```
 
-The curves fall into two shapes. Gauss-Newton and the two fallback runs track
-each other over the whole range, since a fallback is Gauss-Newton until a soft
-stop fires. They differ in the leading plateau: under Gauss-Newton it is not
+The curves fall into two shapes. Gauss-Newton and both two-phase runs
+track each other over the whole range, since such a run is Gauss-Newton until a
+soft stop fires. They differ in the leading plateau: under Gauss-Newton it is not
 flat, because the model stops improving before the minimum, whereas the
 quasi-Newton phase brings those starts to a common value. The identity-seeded
 runs form the second shape, with a longer leading plateau: they reach the global
@@ -604,10 +608,10 @@ it.
 
 # Discussion
 
-`"gn"` and the two fallback runs reach the published optimum from the same
-number of starts. A fallback changes only how a run ends, moving stops from the
-model tests to `gradient`, and an `"sr1"` fallback moves more of them than a
-`"bfgs"` one.
+`"gn"` and both two-phase runs reach the published optimum from the same
+number of starts. A quasi-Newton phase after `"gn"` changes only how a run ends,
+moving stops from the model tests to `gradient`, and an `"sr1"` phase moves more
+of them than a `"bfgs"` one.
 
 On Boehm with the prior, `"sr1"` seeded from the identity reaches the best optimum from several times as many starts as `"gn"`, 34 against 6 of 100, at a tenth of the evaluations per optimum.
 

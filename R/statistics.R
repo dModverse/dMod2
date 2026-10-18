@@ -141,10 +141,12 @@ profile.objfn <- function(fitted, pars, whichPar, alpha = 0.05,
   
   # cores = c(pars = , conditions = ) splits the two axes; see mstrust().
   .cc <- .splitCores(cores, "pars")
-  coresConditions <- .cc$conditions
+  coresConditions <- if (!is.null(.cc$conditions)) .sanitizeCores(.cc$conditions)
   cores <- .sanitizeCores(min(length(whichPar), .cc$outer))
-  if (!is.null(coresConditions) && cores == 1L)
-    options(dMod.cores = coresConditions)
+  if (!is.null(coresConditions) && cores == 1L) {
+    oldCores <- options(dMod.cores = coresConditions)
+    on.exit(options(oldCores), add = TRUE)
+  }
   
   # Substitute user-set control parameters
   if (!is.null(stepControl)) sControl[match(names(stepControl), names(sControl))] <- stepControl
@@ -166,6 +168,7 @@ profile.objfn <- function(fitted, pars, whichPar, alpha = 0.05,
         (!is.null(coresConditions) && coresConditions > 1L)) {
       
       cluster <- parallel::makeCluster(cores)
+      on.exit(parallel::stopCluster(cluster), add = TRUE)
       doParallel::registerDoParallel(cl = cluster)
       
       parallel::clusterCall(cl = cluster, function(x) .libPaths(x), .libPaths())
@@ -182,6 +185,7 @@ profile.objfn <- function(fitted, pars, whichPar, alpha = 0.05,
       doParallel::registerDoParallel(cores = cores)
       
     }
+    on.exit(doParallel::stopImplicitCluster(), add = TRUE)
     
     "%mydo%" <- foreach::"%dopar%"
     
@@ -579,13 +583,6 @@ profile.objfn <- function(fitted, pars, whichPar, alpha = 0.05,
   
   
   
-  if (Sys.info()[['sysname']] == "Windows" & cores > 1) {
-    
-    parallel::stopCluster(cluster)
-    doParallel::stopImplicitCluster()
-    
-  }
-  
   # .. Prepare output -----
   outncol <- vapply(out, ncol, 1)
   failed <- outncol != max(outncol)
@@ -968,9 +965,6 @@ mstrust <- function(objfun, center, rinit = .1, rmax = 10, fits = 20, cores = 1,
   optmethodName <- if (is.character(optmethod)) optmethod else
     paste(deparse(substitute(optmethod)), collapse = "")
 
-  # Check if on Windows
-  cores <- .sanitizeCores(cores)
-  
   argslist <- list(
     objfun = objfun, center = center, name = name,
     rinit = rinit, rmax = rmax, fits = fits,
@@ -1068,10 +1062,12 @@ mstrust <- function(objfun, center, rinit = .1, rmax = 10, fits = 20, cores = 1,
   # cores = c(fits = , conditions = ) splits the two axes. cppDE's batch runs
   # serially inside a fork, so an inner axis > 1 selects PSOCK.
   .cc <- .splitCores(cores, "fits")
-  coresConditions <- .cc$conditions
-  cores <- min(fits, .cc$outer)
-  if (!is.null(coresConditions) && cores == 1L)
-    options(dMod.cores = coresConditions)
+  coresConditions <- if (!is.null(.cc$conditions)) .sanitizeCores(.cc$conditions)
+  cores <- .sanitizeCores(min(fits, .cc$outer))
+  if (!is.null(coresConditions)) {
+    oldCores <- options(dMod.cores = coresConditions)
+    on.exit(options(oldCores), add = TRUE)
+  }
   if (cores > 1) {
     
     # Start cluster if on windows
@@ -1079,6 +1075,7 @@ mstrust <- function(objfun, center, rinit = .1, rmax = 10, fits = 20, cores = 1,
         (!is.null(coresConditions) && coresConditions > 1L)) {
       
       cluster <- parallel::makeCluster(cores)
+      on.exit(parallel::stopCluster(cluster), add = TRUE)
       doParallel::registerDoParallel(cluster)
       parallel::clusterCall(cl = cluster, function(x) .libPaths(x), .libPaths())
       
@@ -1094,6 +1091,7 @@ mstrust <- function(objfun, center, rinit = .1, rmax = 10, fits = 20, cores = 1,
       doParallel::registerDoParallel(cores = cores)
       
     }
+    on.exit(doParallel::stopImplicitCluster(), add = TRUE)
     
     "%mydo%" <- foreach::"%dopar%"
     
@@ -1205,12 +1203,6 @@ mstrust <- function(objfun, center, rinit = .1, rmax = 10, fits = 20, cores = 1,
   
   if (!is.null(logfile)) close(logfile)
 
-  if (Sys.info()[['sysname']] == "Windows" & cores > 1) {
-
-    parallel::stopCluster(cluster)
-    doParallel::stopImplicitCluster()
-
-  }
   
   
   

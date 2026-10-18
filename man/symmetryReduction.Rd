@@ -15,7 +15,6 @@ symmetryReduction(
   reportZeroCompatibility = FALSE,
   alternatives = FALSE,
   timeout = Inf,
-  verbose = FALSE,
   allowOpen = FALSE,
   check = TRUE,
   workCap = 4000L,
@@ -48,16 +47,14 @@ drive to 0. Defaults to \code{FALSE}.}
 \item{alternatives}{Logical. Also return the charts of the other valid pins
 in \verb{$alternatives}. Defaults to \code{FALSE}.}
 
-\item{timeout}{Time limit in seconds for the chart search of one block; a block not
+\item{timeout}{Time limit in seconds for the section search of one block; a block not
 solved in time keeps its invariants (\code{"invariantOnly"}). Unlike \code{workCap}, it depends
 on the load of the machine. Defaults to \code{Inf}.}
 
-\item{verbose}{Logical. Report the progress per block and stage. Defaults to
-\code{FALSE}.}
-
 \item{allowOpen}{Logical. Reduce the directions with a closed form and leave those
 of level \code{"open"} in place; otherwise such a direction is an error. A direction
-of level \code{"verified"} gives a warning. Defaults to \code{FALSE}.}
+of level \code{"verified"} or \code{"checked"}, and a section claim left unproven, give a
+warning. Defaults to \code{FALSE}.}
 
 \item{check}{Logical. Run the detection again on the model with the trafo applied
 and record in \code{checks$loop} whether exactly the remaining directions are left.
@@ -72,16 +69,25 @@ reaching it is an entry in \code{limits}. Defaults to 4000.}
 An object of class \code{symmetryreduction}:
 \describe{
 \item{\code{blocks}}{one entry per set of coupled directions, with its
-\code{invariants}, \code{section}, \code{survivorMeaning} (the invariant each \verb{q_<k>}
-holds), \code{carrierDomain}, \code{coverage} and \code{status} (\code{"fixed"},
+\code{invariants}, \code{section}, \code{newParameters} (the invariant each \verb{q_<k>}
+holds), \code{solvedDomain}, \code{coverage} and \code{status} (\code{"fixed"},
 \code{"reduced"}, \code{"invariantOnly"} or \code{"unresolved"}), \code{level},
-\code{generatorLevel} (the lowest level of its directions), \code{assumptions} and,
-for a curved block, \code{count} (\code{"exact"} or \code{"upper bound"}).}
+\code{generatorLevel} (the lowest level of its directions), \code{unproven} (the claims
+of its section that are not proven) and, for a curved block, \code{count}
+(\code{"exact"} or \code{"upper bound"}), \code{injective} and \code{reach}. A section on a face
+(\code{face}) holds \code{faceWhy}, why the model is not shown continuous up to the face
+(\code{NULL} when it is), and \code{faceLevel}, \code{"checked"} when the resting state under
+\code{equilibrate} is checked at random points only.}
 \item{\code{level}}{how far the reduction is established, the lowest over the
-reduced blocks: \code{"exact"}, \code{"verified"} (a direction rests on a verified closed
-form) or \code{"assumed"} (a claim rests on an assumption each block names under
-\code{assumptions}).}
-\item{\code{limits}}{the work budgets and time limits that stopped a section search.}
+reduced blocks: \code{"exact"}, \code{"verified"} or \code{"checked"} (a direction rests on a
+closed form verified with an error bound, or checked without one, or a face on a
+checked resting state) or \code{"open"} (a claim of a section is not proven, named
+under \code{unproven}).}
+\item{\code{assumptions}}{what the reduction assumes: \code{domain} (the declared positive
+coordinates) and \code{starts} (the sides of switches declared at the start), with
+\code{errorBound}, the probability that a verified closed form is wrong.}
+\item{\code{limits}}{the work budgets and time limits that stopped a section or
+invariant search.}
 \item{\code{checks}}{\code{pins} and \code{invariants}, whether every pin holds under the trafo
 and every invariant of a block maps to its new parameter over Q, \code{failed},
 and with \code{check = TRUE} \code{loop}: the \code{directions} the reduced model has, the

@@ -198,6 +198,18 @@ as.parframe.parlist <- function(x, sortBy = "value", ...) {
     if (any(!is.na(col))) { m_parframe[[field]] <- col; m_metanames <- c(m_metanames, field) }
   }
 
+  # Iterations per element of trust()'s `phases`, summed over its runs, when
+  # the fits had more than one.
+  m_phase <- lapply(x[m_idx], function(.x) .x[["phaseIterations"]])
+  m_labels <- unique(unlist(lapply(x[m_idx], function(.x)
+    names(.x[["phaseSweep"]]) %||% names(.x[["phaseIterations"]]))))
+  if (length(m_labels) > 1L) for (l in m_labels) {
+    col <- paste0("iterations.", l)
+    m_parframe[[col]] <- vapply(m_phase, function(v)
+      if (is.null(v)) NA_integer_ else as.integer(sum(v[names(v) == l])), 1L)
+    m_metanames <- c(m_metanames, col)
+  }
+
   m_elapsed <- vapply(x[m_idx], function(.x)
     if (is.null(.x[["elapsed"]])) NA_real_ else .x[["elapsed"]], 1.0)
   if (any(!is.na(m_elapsed))) {
@@ -249,7 +261,9 @@ c.parlist <- function(...) {
 #' @return Object of class [parframe]. For a `parlist`, the meta-information
 #' columns are `index`, `value`, `converged` and `iterations`, plus the
 #' termination and evaluation counts and the wall time `elapsed` the fits
-#' report. The attribute `"run"` of the parlist is kept.
+#' report. Fits of [trust()] with several `phases` add one column
+#' `iterations.<phase>` per phase, the iterations summed over its runs. The
+#' attribute `"run"` of the parlist is kept.
 #' @seealso [parframe()], [as.parvec.parframe()], and [parlist()] for an
 #'   example.
 #' @export

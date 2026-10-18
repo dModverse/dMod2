@@ -80,8 +80,10 @@
 #'       `"general"`), `degree`, `support`, `explicit`, `level`, `stateComponents`,
 #'       `reason`, `route`, `display`, `completeGenerator` and `factor`. `level` is
 #'       `"exact"` for a direction proven over the rationals, `"verified"` for one
-#'       checked at random points modulo a large prime at the Lie and gap orders used
-#'       and `"open"` without closed form; `stateComponents` holds, for an exact
+#'       checked at random points modulo a large prime with an error bound,
+#'       `"checked"` for one checked without an error bound (an unproven Lie or gap
+#'       order, or a model outside the scope of the bound) and `"open"` without closed
+#'       form; `stateComponents` holds, for an exact
 #'       direction, the components on the states of the field that proves it.}
 #'     \item{`info`}{`engine`, the Lie order and whether it is proven sufficient
 #'       (`lieOrderUsed`, `lieOrderDriver`, `liePlateau`, `lieCertified`),
@@ -91,7 +93,10 @@
 #'       the invariant fields establish, checked at random points modulo a prime),
 #'       `rankFieldsBound` (the probability that a wrong field passes), `rankStatus`
 #'       (`status` `"proven"`, `"verified"` or `"lower bound"`, `why` and
-#'       `probability`), `proof` (why each `"verified"` direction is not proven),
+#'       `probability`), `proof` (why each `"verified"` or `"checked"` direction is not
+#'       proven), `assumptions` (`domain`, the declared positive coordinates, `starts`,
+#'       the sides of switches declared at the start, and `errorBound`, the probability
+#'       that a verified closed form or rank is wrong),
 #'       `bound` (the probability that a wrong closed form passes the check, only where
 #'       both orders are proven sufficient or the rank is settled), `limits` (what
 #'       stopped part of the analysis), `errors` (exceptions turned into failed
@@ -260,7 +265,7 @@ reconstControl <- function(relevanceCap = 6L, relevanceCapDir = 24L, relevanceCa
 
 # ---- the interface to the Python package symident --------------------------------
 
-.symidentMin <- "0.10.1"
+.symidentMin <- "0.11.0"
 .symidentReq <- paste0("symident>=", .symidentMin)
 
 # whether symident is installed in version .symidentMin or later
@@ -303,8 +308,8 @@ reconstControl <- function(relevanceCap = 6L, relevanceCapDir = 24L, relevanceCa
 # field names to camelCase, recursively; the fields in `data` are named by model
 # symbols and keep their names
 .symCamelFields <- function(x, data = c("generator", "complete_generator", "weights",
-                                        "display", "factor", "pins", "survivor_meaning",
-                                        "carrier_domain", "trafo", "totals",
+                                        "display", "factor", "pins", "new_parameters",
+                                        "solved_domain", "trafo", "totals",
                                         "state_components")) {
   if (!is.list(x)) return(x)
   nm <- names(x)
