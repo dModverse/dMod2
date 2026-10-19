@@ -1,23 +1,53 @@
 # Bayesian NLME targets: bayesNLMEMarginal (FOCEI Laplace marginal, SMC) and bayesNLMEJoint (Particle-Gibbs).
 
 
-# Shared one-eta NLME fixture.
-.makeBayesNLMEFixture <- function(tag = "bnlme") {
-  set.seed(1)
-  oldwd <- setwd(tempdir())
-  on.exit(setwd(oldwd), add = TRUE)
+# The models of this file, generated with compile = FALSE and linked into one
+# shared object on first use: the one-eta NLME chain over four subjects and a
+# one-state decay with second-order sensitivities.
+.bnlme_models <- local({
+  cache <- NULL
+  function() {
+    if (!is.null(cache)) return(cache)
+    dir <- file.path(tempdir(), "bayesnlme_models")
+    dir.create(dir, showWarnings = FALSE, recursive = TRUE)
+    withr::local_dir(dir)
+    g <- Y(c(y = "intercept"), f = NULL, parameters = "intercept",
+           compile = FALSE, deriv2 = TRUE, modelname = "bnlme_obs")
+    subjects <- c("s1", "s2", "s3", "s4")
+    subj_table <- data.frame(eta = paste0("eta_", subjects),
+                             row.names = subjects)
+    trafos <- branch(eqnvec(intercept = "mu_pop * exp(eta)"), table = subj_table,
+                     apply = "insert")
+    p <- P(trafos, method = "explicit", compile = FALSE, deriv2 = TRUE,
+           modelname = "bnlme_p")
 
-  g <- Y(c(y = "intercept"), f = NULL, parameters = "intercept",
-         compile = TRUE, deriv2 = TRUE,
-         modelname = paste0(tag, "_obs_", as.integer(Sys.time())))
+    f <- c(A = "-k*A")
+    m <- odemodel(f, modelname = "md_decay_m", backend = "cppDE", deriv2 = TRUE,
+                  nStack = 4L, compile = FALSE, verbose = FALSE)
+    ode_opts <- list(atol = 1e-12, rtol = 1e-12)
+    xfn <- Xs(m, condition = "C1", options = ode_opts, optionsSens = ode_opts)
+    gfn <- Y(c(y = "A"), f = f, parameters = "A", modelname = "md_decay_obs",
+             compile = FALSE, deriv2 = TRUE, attachInput = FALSE, condition = "C1")
+    pfn <- Pexpl(c(A = "A", k = "k"), parameters = NULL, modelname = "md_decay_p",
+                 compile = FALSE, deriv2 = TRUE, derivMode = "forward",
+                 condition = "C1")
+
+    compile(g, p, xfn, gfn, pfn, output = "bayesnlme_models", cores = test_cores())
+    cache <<- list(g = g, p = p, subjects = subjects,
+                   decay = list(prd = gfn * xfn * pfn, m = m))
+    cache
+  }
+})
+
+
+# Shared one-eta NLME fixture.
+.makeBayesNLMEFixture <- function() {
+  mods <- .bnlme_models()
+  set.seed(1)
+  g <- mods$g
   x <- Xt()
-  trafo <- eqnvec(intercept = "mu_pop * exp(eta)")
-  subjects <- c("s1", "s2", "s3", "s4")
-  subj_table <- data.frame(eta = paste0("eta_", subjects),
-                           row.names = subjects)
-  trafos <- branch(trafo, table = subj_table, apply = "insert")
-  p <- P(trafos, method = "explicit", compile = TRUE, deriv2 = TRUE,
-         modelname = paste0(tag, "_p_", as.integer(Sys.time())))
+  p <- mods$p
+  subjects <- mods$subjects
 
   true_mu  <- 2.0
   true_om  <- 0.3
@@ -42,7 +72,7 @@ test_that("bayesNLMEMarginal builds a likObj whose value at FOCEI MAP matches th
   testthat::skip_if_not_installed("cppDE")
   testthat::skip_on_cran()
 
-  fx <- .makeBayesNLMEFixture("bm")
+  fx <- .makeBayesNLMEFixture()
   init <- c(mu_pop = 2.0, omega_eta_eta = log(0.3))
 
   fit <- suppressMessages(EM(
@@ -77,7 +107,7 @@ test_that("bayesNLMEMarginal: Omega-gradient FD-check on a non-converged point",
   testthat::skip_if_not_installed("cppDE")
   testthat::skip_on_cran()
 
-  fx <- .makeBayesNLMEFixture("bm_fd")
+  fx <- .makeBayesNLMEFixture()
   tgt <- bayesNLMEMarginal(obj = fx$obj, omegaSpec = fx$om,
                             prdfn = fx$prd, data = fx$data,
                             priorSample = function(n) NULL)
@@ -101,7 +131,7 @@ test_that("mcmc(bayesNLMEMarginal(...), sequenceType = 'sequential') smoke test"
   testthat::skip_if_not_installed("cppDE")
   testthat::skip_on_cran()
 
-  fx <- .makeBayesNLMEFixture("bm_smc")
+  fx <- .makeBayesNLMEFixture()
   init <- c(mu_pop = 2.0, omega_eta_eta = log(0.3))
   fit <- suppressMessages(EM(
     fx$obj, init, method = "focei"))
@@ -144,7 +174,7 @@ test_that("mcmc(bayesNLMEJoint(...)) runs and returns expected shape", {
   testthat::skip_if_not_installed("cppDE")
   testthat::skip_on_cran()
 
-  fx <- .makeBayesNLMEFixture("bj")
+  fx <- .makeBayesNLMEFixture()
   init <- c(mu_pop = 2.0, omega_eta_eta = log(0.3))
   fit <- suppressMessages(EM(
     fx$obj, init, method = "focei"))
@@ -424,26 +454,7 @@ skip_if_no_compile <- function() {
 }
 
 
-.make_decay_deriv2 <- function() {
-  prev <- getwd(); on.exit(setwd(prev), add = TRUE)
-  withr::local_dir(tempdir())
-  f <- c(A = "-k*A")
-  tag <- as.integer(Sys.time())
-  m <- odemodel(f, modelname = paste0("md_decay_m_", tag),
-                backend = "cppDE", deriv2 = TRUE, nStack = 4L, verbose = FALSE)
-  ode_opts <- list(atol = 1e-12, rtol = 1e-12)
-  xfn <- Xs(m, condition = "C1",
-            options = ode_opts, optionsSens = ode_opts)
-  gfn <- Y(c(y = "A"), f = f, parameters = "A",
-           modelname = paste0("md_decay_obs_", tag),
-           compile = TRUE, deriv2 = TRUE, attachInput = FALSE,
-           condition = "C1")
-  pfn <- Pexpl(c(A = "A", k = "k"), parameters = NULL,
-               modelname = paste0("md_decay_p_", tag),
-               compile = TRUE, deriv2 = TRUE, derivMode = "forward",
-               condition = "C1")
-  list(prd = gfn * xfn * pfn, m = m)
-}
+.make_decay_deriv2 <- function() .bnlme_models()$decay
 
 
 .fd_dG <- function(obj, theta, h = 1e-4) {

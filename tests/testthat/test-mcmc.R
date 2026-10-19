@@ -400,16 +400,16 @@ test_that("mcmc(target, chains = N) returns expected shape and R-hat", {
   set.seed(1)
   oldwd <- setwd(tempdir()); on.exit(setwd(oldwd), add = TRUE)
   g <- Y(c(y = "intercept"), f = NULL, parameters = "intercept",
-         compile = TRUE, deriv2 = TRUE,
-         modelname = paste0("bnlme_mc_obs_", as.integer(Sys.time())))
+         compile = FALSE, deriv2 = TRUE, modelname = "mcmc_bnlme_obs")
   x <- Xt()
   trafo <- eqnvec(intercept = "mu_pop * exp(eta)")
   subjects <- c("s1", "s2", "s3", "s4")
   subj_table <- data.frame(eta = paste0("eta_", subjects),
                            row.names = subjects)
   trafos <- branch(trafo, table = subj_table, apply = "insert")
-  p <- P(trafos, method = "explicit", compile = TRUE, deriv2 = TRUE,
-         modelname = paste0("bnlme_mc_p_", as.integer(Sys.time())))
+  p <- P(trafos, method = "explicit", compile = FALSE, deriv2 = TRUE,
+         modelname = "mcmc_bnlme_p")
+  compile(g, p, output = "mcmc_bnlme", cores = test_cores())
   true_mu  <- 2.0
   true_eta <- rnorm(length(subjects), 0, 0.3)
   y_obs    <- true_mu * exp(true_eta) + rnorm(length(subjects), 0, 0.2)
