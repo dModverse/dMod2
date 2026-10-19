@@ -182,16 +182,31 @@ inline const char* subproblem_label(bool is_newton, bool is_hard, bool is_easy) 
 // objective's formals are visible.
 enum Curvature { CV_VALUE = 0, CV_GRADIENT = 1, CV_GN = 2, CV_EXACT = 3 };
 
+// Message of the last failed evaluation, for errors that end a run.
+inline std::string& last_eval_error() {
+  static std::string msg;
+  return msg;
+}
+
 // Turn an R-level failure into eval_ok = false, but let a user interrupt
 // through: a bare catch(...) would swallow Ctrl-C and count it as a failed
 // evaluation.
 inline bool eval_objfun(Function& objfun, const NumericVector& x, List& out,
                         int want = CV_GN) {
   try {
-    out = as<List>(objfun(x, want));
+    RObject res = objfun(x, want);
+    if (Rf_inherits(res, "try-error")) {
+      last_eval_error() = Rf_length(res) ? CHAR(STRING_ELT(res, 0)) : "unknown error";
+      return false;
+    }
+    out = as<List>(res);
   } catch (Rcpp::internal::InterruptedException&) {
     throw;
+  } catch (std::exception& e) {
+    last_eval_error() = e.what();
+    return false;
   } catch (...) {
+    last_eval_error() = "unknown error";
     return false;
   }
   return true;
@@ -202,13 +217,27 @@ inline bool eval_objfun(Function& objfun, const NumericVector& x, List& out,
 inline bool eval_objfun(Function& objfun, const NumericVector& x, List& out,
                         int want, int phase) {
   try {
-    out = as<List>(objfun(x, want, phase));
+    RObject res = objfun(x, want, phase);
+    if (Rf_inherits(res, "try-error")) {
+      last_eval_error() = Rf_length(res) ? CHAR(STRING_ELT(res, 0)) : "unknown error";
+      return false;
+    }
+    out = as<List>(res);
   } catch (Rcpp::internal::InterruptedException&) {
     throw;
+  } catch (std::exception& e) {
+    last_eval_error() = e.what();
+    return false;
   } catch (...) {
+    last_eval_error() = "unknown error";
     return false;
   }
   return true;
+}
+
+// The error that ends a run whose objective fails at parinit.
+[[noreturn]] inline void stop_parinit_failed() {
+  stop("parinit not feasible: objfun failed: " + last_eval_error());
 }
 
 // An objective may decline a Hessian by returning NULL. Reads the raw SEXP so

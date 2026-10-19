@@ -754,8 +754,9 @@ getLocalDLLs <- function() {
 
 #' Load Shared Objects for dMod Objects
 #'
-#' Loads the shared objects of dMod functions by their model names, e.g.
-#' after restoring a workspace in a new R session. Searched are the working
+#' Loads the shared objects of dMod functions by their model names and the
+#' names of their generated sources, e.g. after restoring a workspace in a
+#' new R session. Searched are the working
 #' directory, `getOption("dMod.outdir")` and the directories the sources were
 #' generated in. Shared objects already loaded are skipped.
 #'
@@ -775,8 +776,13 @@ loadDLL <- function(...) {
 
   .so    <- .Platform$dynlib.ext
   models <- modelname(...)
-  names  <- paste0(outer(models, c("", "_s", "_s2", "_sdcv", "_deriv", "_dfdx", "_dfdp"),
-                         paste0), .so)
+  # Every generated source compiled on its own has a shared object of its
+  # name, also the auxiliary ones no modelname names (Pimpl's `_influx`).
+  srcs   <- as.character(unlist(lapply(list(...), function(o)
+    lapply(attr(o, "compileInfo"), `[[`, "srcfile"))))
+  names  <- paste0(unique(c(outer(models, c("", "_s", "_s2", "_sdcv", "_deriv", "_dfdx", "_dfdp"),
+                                  paste0),
+                            tools::file_path_sans_ext(basename(srcs)))), .so)
   files  <- as.vector(outer(.dllSearchDirs(list(...)), names, file.path))
   files  <- normalizePath(files[file.exists(files)], winslash = "/", mustWork = FALSE)
   files  <- setdiff(unique(files), .loadedDLLPaths())

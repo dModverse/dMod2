@@ -8,7 +8,8 @@ repar(trafo = NULL, expr, ..., reset = FALSE)
 }
 \arguments{
 \item{trafo}{Named character, \link{eqnvec} or a list of those. Default \code{NULL}
-returns the identity of the left-hand sides.}
+starts from the identity of the left-hand sides, so the result maps each
+left-hand side to its right-hand side.}
 
 \item{expr}{\code{"lhs ~ rhs"} string or formula. Inside a name, \verb{_} separates
 symbols, so \code{"Delta_x"} with \code{x = "a"} becomes \code{"Delta_a"}.}

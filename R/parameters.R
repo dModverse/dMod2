@@ -1510,7 +1510,8 @@ branch <- function(trafo, table = NULL,
 #' arguments in `...`. [define()] and [insert()] build on it.
 #'
 #' @param trafo Named character, [eqnvec] or a list of those. Default `NULL`
-#'   returns the identity of the left-hand sides.
+#'   starts from the identity of the left-hand sides, so the result maps each
+#'   left-hand side to its right-hand side.
 #' @param expr `"lhs ~ rhs"` string or formula. Inside a name, `_` separates
 #'   symbols, so `"Delta_x"` with `x = "a"` becomes `"Delta_a"`.
 #' @param ... Named character or numeric vectors of equal length, replacing
@@ -1550,8 +1551,8 @@ repar <- function(trafo = NULL, expr, ..., reset = FALSE) {
     rhs <- .decolonize(rhs)
   }
 
-  if (is.null(trafo))                           as.eqnvec(structure(lhs, names = lhs))
-  else if (is.list(trafo)      && !reset)       lapply(trafo, function(t) replaceSymbols(lhs, rhs, t))
+  if (is.null(trafo)) return(as.eqnvec(structure(rhs, names = lhs)))
+  if (is.list(trafo)      && !reset)       lapply(trafo, function(t) replaceSymbols(lhs, rhs, t))
   else if (is.character(trafo) && !reset)       replaceSymbols(lhs, rhs, trafo)
   else if (is.list(trafo)      &&  reset)       lapply(trafo, function(t) { t[lhs] <- rhs; t })
   else { trafo[lhs] <- rhs; trafo }

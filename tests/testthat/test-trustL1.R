@@ -243,3 +243,17 @@ test_that("gates and fuse blocks reject the clip boundary and overlap with mu", 
   expect_error(trustL1(obj, c(a = 0, b = 0), mu = c(a = 0),
                        fuse = list(c("a", "b"))), "both in mu")
 })
+
+
+test_that("the lockstep kernel names the row and the error of a failed start", {
+  quad <- function(p) list(value = sum(p^2), gradient = 2 * p,
+                           hessian = diag(2, length(p)))
+  objfun_many <- function(parsList, which) lapply(seq_along(which), function(j) {
+    if (which[j] == 2L) return(structure("no steady state", class = "try-error"))
+    quad(parsList[[j]])
+  })
+  P0 <- matrix(1, 2, 2, dimnames = list(NULL, c("a", "b")))
+  Z  <- matrix(0, 2, 2)
+  expect_error(dMod2:::trustL1_lockstep_impl(objfun_many, P0, Z, Z, FALSE, 1, 10),
+               "objfun failed: row 2: no steady state")
+})
