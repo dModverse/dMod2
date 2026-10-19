@@ -394,7 +394,7 @@ trust <- function(objfun, parinit, rinit = 0.1, rmax = 10,
     if (want >= 3L) args$deriv2 <- TRUE
     d <- phaseDots[[phase + 1L]]
     if (!is.null(phases) && want == 2L) d$sweep <- NULL
-    do.call(objfun, c(args, d))
+    .tryObjective(do.call(objfun, c(args, d)))
   }
   qfield <- function(f) lapply(ph$phases, function(p) p$qnControl[[f]])
   fit <- trust_impl(fn, parinit, rinit, rmax, NULL, as.integer(iterlim),
@@ -657,7 +657,7 @@ trustL1 <- function(objfun, parinit, mu = 0 * parinit, one.sided = FALSE, lambda
   # The kernel passes what it wants as a second argument; trustL1 always
   # takes value, gradient and Hessian, so the request is dropped here.
   dots <- list(...)
-  fn <- function(x, want = 2L) do.call(objfun, c(list(x), dots))
+  fn <- function(x, want = 2L) .tryObjective(do.call(objfun, c(list(x), dots)))
 
   mu <- structure(as.numeric(mu), names = names(mu))
   lambda <- structure(as.numeric(lambda), names = names(lambda))
@@ -723,3 +723,9 @@ trustL1 <- function(objfun, parinit, mu = 0 * parinit, one.sided = FALSE, lambda
          ". Settable are ", paste(settable, collapse = ", "), ".", call. = FALSE)
   modifyList(defaults, as.list(control))
 }
+
+
+## An R error reaches the kernel as a try-error with its message; thrown
+## through Rcpp, the message would be lost.
+.tryObjective <- function(expr)
+  tryCatch(expr, error = function(e) structure(conditionMessage(e), class = "try-error"))

@@ -1,0 +1,3 @@
+# A devel branch keeps its own NEWS section above the release sections of master,
+# so a sync merge takes both sides instead of stopping.
+NEWS.md merge=union

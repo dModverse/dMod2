@@ -1294,12 +1294,12 @@ normalLaplace <- function(a, m, lambda) {
   colnames(P0) <- paste0("eta", seq_len(K))
 
   ## One batched pass, with the per-subject loop as the fallback so a batch that
-  ## cannot run keeps each subject's own failure isolated.
+  ## cannot run keeps each subject's own failure isolated, as a try-error.
   evalMany <- function(idx, fulls) {
     got <- tryCatch(.objEvalMany(resobjs[idx], fulls, deriv = TRUE, cores = cores),
                     error = function(e) NULL)
     if (is.null(got)) got <- lapply(seq_along(idx), function(j)
-      tryCatch(resobjs[[idx[j]]](fulls[[j]], deriv = TRUE), error = function(e) NULL))
+      .tryObjective(resobjs[[idx[j]]](fulls[[j]], deriv = TRUE)))
     got
   }
   objfun_many <- function(parsList, which) {
@@ -1307,7 +1307,7 @@ normalLaplace <- function(a, m, lambda) {
       parsAt[[which[j]]](as.numeric(parsList[[j]]))))
     lapply(seq_along(which), function(j) {
       o <- got[[j]]
-      if (is.null(o)) return(NULL)
+      if (is.null(o) || inherits(o, "try-error")) return(o)
       en <- etaNames[[which[j]]]
       list(value = o$value, gradient = o$gradient[en],
            hessian = o$hessian[en, en, drop = FALSE])
@@ -1329,7 +1329,7 @@ normalLaplace <- function(a, m, lambda) {
   lapply(seq_len(N), function(i) {
     nm <- etaNames[[i]]
     full <- os[[i]]
-    if (is.null(full))
+    if (is.null(full) || inherits(full, "try-error"))
       return(.laplaceSubjectMarginal(objfuns[[i]], eta0List[[i]],
                                      targetsList[[i]], lambdaList[[i]], control))
     di <- list(value = full$value, gradient = full$gradient[nm],

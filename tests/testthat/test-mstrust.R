@@ -326,3 +326,73 @@ test_that("subset() on a parframe sees the calling frame", {
   expect_equal(nrow(subset(pf, value < 6)), 2L)
   expect_s3_class(pick(6), "parframe")
 })
+
+
+# ---- PSOCK workers --------------------------------------------------------
+
+# Two conditions behind a Pimpl steady state, each source compiled into its
+# own shared object, so a worker has to find all of them by itself.
+.psock_env <- new.env(parent = emptyenv())
+
+psock_model <- function() {
+  if (!is.null(.psock_env$obj)) return(.psock_env)
+  oldwd <- setwd(.dmod_fx_workdir()); on.exit(setwd(oldwd), add = TRUE)
+  mn <- function(x) paste0("test_psock_", x, "_", as.integer(Sys.time()))
+
+  el <- eqnlist() |>
+    addReaction("", "A", "k_in") |> addReaction("A", "B", "k1*A") |>
+    addReaction("B", "", "k2*B")
+  x  <- Xs(odemodel(el, modelname = mn("x"), compile = FALSE), compile = FALSE)
+  g  <- Y(c(yB = "s*B"), x, parameters = "s", modelname = mn("g"), compile = FALSE)
+  ss <- Pimpl(el, modelname = mn("ss"), compile = FALSE, verbose = FALSE)
+  trafo <- define(NULL, "x~exp(x)", x = getParameters(x, g))
+  p1 <- P(trafo, condition = "c1", modelname = mn("p1"), compile = FALSE)
+  p2 <- P(insert(trafo, "x ~ 2*x", x = "k_in"), condition = "c2",
+          modelname = mn("p2"), compile = FALSE)
+  compile(g, x, ss, p1, p2, cores = test_cores())
+
+  p <- ss * (p1 + p2)
+  pars <- structure(rep(0, length(getParameters(p))), names = getParameters(p))
+  pred <- (g * x * p)(seq(0, 10, 1), pars)
+  data <- as.datalist(lapply(pred, function(m)
+    data.frame(name = "yB", time = m[, "time"], value = m[, "yB"], sigma = 0.1)))
+
+  .psock_env$pars <- pars
+  .psock_env$obj  <- normL2(data, g * x * p) + constraintL2(pars, sigma = 10)
+  .psock_env
+}
+
+
+test_that("mstrust fits a Pimpl model on PSOCK workers with a condition axis", {
+  skip_on_cran()
+  skip_if(dMod2:::.availableCores() < 4L, "needs four cores")
+  m <- psock_model()
+
+  fits <- mstrust(m$obj, m$pars, fits = 2, sd = 0.5, iterlim = 30,
+                  cores = c(fits = 2, conditions = 2))
+
+  errs <- unlist(lapply(fits, `[[`, "error"))
+  expect_null(errs)
+  expect_true(all(is.finite(as.parframe(fits)$value)))
+})
+
+
+test_that("profile runs on PSOCK workers with a condition axis", {
+  skip_on_cran()
+  skip_if(dMod2:::.availableCores() < 4L, "needs four cores")
+  m <- psock_model()
+
+  prof <- profile(m$obj, m$pars, whichPar = c("k1", "k2"), verbose = FALSE,
+                  stepControl = list(limit = 5),
+                  cores = c(pars = 2, conditions = 2))
+
+  expect_setequal(unique(prof$whichPar), c("k1", "k2"))
+  expect_true(all(is.finite(prof$value)))
+})
+
+
+test_that("trust reports why the objective failed at parinit", {
+  obj <- function(pars, ...) stop("no shared object for this model")
+  expect_error(trust(obj, c(a = 0), rinit = 1, rmax = 10),
+               "objfun failed: no shared object for this model")
+})

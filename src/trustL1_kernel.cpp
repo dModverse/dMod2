@@ -39,6 +39,8 @@ using dmod::trust_internal::trust_sub;
 using dmod::trust_driver::Blather;
 using dmod::trust_driver::Reporter;
 using dmod::trust_driver::eval_objfun;
+using dmod::trust_driver::stop_parinit_failed;
+using dmod::trust_driver::last_eval_error;
 using dmod::trust_driver::fill_bound;
 using dmod::trust_driver::fill_parscale;
 using dmod::trust_driver::kInf;
@@ -748,7 +750,7 @@ List trustL1_reflective(Function objfun, NumericVector parinit,
   x_named.names() = parnames;
   List out_init;
   if (!eval_objfun(objfun, x_named, out_init))
-    stop("parinit not feasible: objfun failed");
+    stop_parinit_failed();
   double val_obj = as<double>(out_init["value"]);
   if (!std::isfinite(val_obj)) stop("parinit not feasible: value is not finite");
   NumericVector grad0 = as<NumericVector>(out_init["gradient"]);
@@ -861,10 +863,14 @@ List trustL1_lockstep(Function objfun_many, NumericMatrix parinit,
   // finite counts as a failed evaluation" rule.
   auto read_one = [&](SEXP el, double* val_obj, std::vector<double>& grad,
                       std::vector<double>& H) {
-    if (Rf_isNull(el)) return false;
+    if (Rf_isNull(el)) { last_eval_error() = "no result"; return false; }
+    if (Rf_inherits(el, "try-error")) {
+      last_eval_error() = Rf_length(el) ? CHAR(STRING_ELT(el, 0)) : "unknown error";
+      return false;
+    }
     List o(el);
     double v = as<double>(o["value"]);
-    if (!std::isfinite(v)) return false;
+    if (!std::isfinite(v)) { last_eval_error() = "value is not finite"; return false; }
     NumericVector g = as<NumericVector>(o["gradient"]);
     NumericMatrix Hm = as<NumericMatrix>(o["hessian"]);
     if (g.size() != K || Hm.nrow() != K || Hm.ncol() != K)
@@ -885,8 +891,10 @@ List trustL1_lockstep(Function objfun_many, NumericMatrix parinit,
     std::vector<double> g, H;
     for (int n = 0; n < N; ++n) {
       double v = 0.0;
-      if (!read_one(got[n], &v, g, H))
-        stop("parinit not feasible: objfun failed");
+      if (!read_one(got[n], &v, g, H)) {
+        last_eval_error() = "row " + std::to_string(n + 1) + ": " + last_eval_error();
+        stop_parinit_failed();
+      }
       ref_seed(st[n], v, g.data(), H.data(), rinit);
     }
   }

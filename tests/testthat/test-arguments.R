@@ -28,6 +28,13 @@ test_that("repar takes the transformation first and refuses the other order", {
   expect_equal(unclass(repar(NULL, "x ~ x", x = "a")), c(a = "a"))
 })
 
+test_that("a transformation started from NULL keeps the right-hand side", {
+  expect_equal(unclass(define(NULL, "x ~ exp(x)", x = c("a", "b"))),
+               c(a = "exp(a)", b = "exp(b)"))
+  expect_equal(unclass(insert(NULL, "x ~ exp(x)", x = "a")), c(a = "exp(a)"))
+  expect_s3_class(define(NULL, "x ~ x", x = "a"), "eqnvec")
+})
+
 test_that("trust returns a trustfit; vcov and profile are stats methods", {
   obj <- constraintL2(mu = c(a = 0.5, b = -0.3), sigma = 1)
   fit <- trust(obj, c(a = 0, b = 0), rinit = 1, rmax = 10)

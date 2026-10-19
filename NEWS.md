@@ -55,6 +55,16 @@
   lowest level of the waterfall, within `tolHits` of the best value, and the
   structures they take.
 
+# dMod2 0.12.7
+
+* `loadDLL()` also loads the shared objects of a model's auxiliary sources, such as the
+  influx function of `Pimpl()`, so `mstrust()` and `profile()` with a condition axis run
+  on PSOCK workers also for models compiled source by source.
+* `trust()` and `trustL1()` append the objective's error message to
+  `parinit not feasible: objfun failed`.
+* `define()`, `insert()` and `repar()` on `trafo = NULL` map each left-hand side to its
+  right-hand side, not to itself.
+
 # dMod2 0.12.6
 
 * `controls()` on an objective also reaches the functions it evaluates: the prediction and

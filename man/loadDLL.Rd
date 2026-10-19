@@ -13,8 +13,9 @@ loadDLL(...)
 Character vector of the files loaded by this call, invisibly.
 }
 \description{
-Loads the shared objects of dMod functions by their model names, e.g.
-after restoring a workspace in a new R session. Searched are the working
+Loads the shared objects of dMod functions by their model names and the
+names of their generated sources, e.g. after restoring a workspace in a
+new R session. Searched are the working
 directory, \code{getOption("dMod.outdir")} and the directories the sources were
 generated in. Shared objects already loaded are skipped.
 }
