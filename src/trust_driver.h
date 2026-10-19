@@ -197,6 +197,20 @@ inline bool eval_objfun(Function& objfun, const NumericVector& x, List& out,
   return true;
 }
 
+// The same with the phase: `phase`, 0-based, tells the R closure which
+// phase's settings the evaluation belongs to.
+inline bool eval_objfun(Function& objfun, const NumericVector& x, List& out,
+                        int want, int phase) {
+  try {
+    out = as<List>(objfun(x, want, phase));
+  } catch (Rcpp::internal::InterruptedException&) {
+    throw;
+  } catch (...) {
+    return false;
+  }
+  return true;
+}
+
 // An objective may decline a Hessian by returning NULL. Reads the raw SEXP so
 // nothing throws outside eval_objfun's try, and copies column-major, the way
 // H_full is held.

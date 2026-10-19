@@ -156,6 +156,7 @@ S3method(summary,symmetrydetection)
 S3method(summary,symmetryreduction)
 S3method(unique,parframe)
 S3method(vcov,em)
+S3method(vcov,objlist)
 S3method(vcov,trustfit)
 S3method(wide2long,data.frame)
 S3method(wide2long,list)
@@ -302,8 +303,6 @@ export(profileThreshold)
 export(progressBar)
 export(readPEtabTables)
 export(readPEtabYaml)
-export(readPetabTables)
-export(readPetabYaml)
 export(reconstControl)
 export(reduceReplicates)
 export(reml)
@@ -345,10 +344,7 @@ import(stringr)
 importFrom(Rcpp,sourceCpp)
 importFrom(abind,abind)
 importFrom(cOde,
-  getSymbols,
   odeC,
-  prodSymb,
-  replaceSymbols,
   sensitivitiesSymb,
   setForcings
 )

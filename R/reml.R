@@ -114,7 +114,6 @@
 #'   sensitivity matrix below which a direction counts as absent. Default
 #'   `1e-8`.
 #' @param cores Passed to the prediction. Default `getOption("dMod.cores", 1)`.
-#' @param ... `rank.tol` is deprecated, use `rankTol`.
 #'
 #' @return A data frame with one row per data point and columns `condition`,
 #'   `time`, `name`, `sigma`, `residual` and `leverage`. Attributes: `"rank"`,
@@ -128,9 +127,7 @@
 #' @export
 remlLeverage <- function(objfun, pars, meanpars = NULL, fixed = NULL,
                          rankTol = 1e-8,
-                         cores = getOption("dMod.cores", 1L), ...) {
-
-  .renameArgs(list(...), c(rank.tol = "rankTol"), "remlLeverage", strict = TRUE)
+                         cores = getOption("dMod.cores", 1L)) {
 
   frames <- .remlFrames(objfun, pars, fixed = fixed, cores = cores)
   if (is.null(meanpars)) meanpars <- setdiff(names(pars), .remlErrpars(objfun, pars))
@@ -216,8 +213,7 @@ remlLeverage <- function(objfun, pars, meanpars = NULL, fixed = NULL,
 #'   `list(rinit = 0.1, rmax = 10)`. Default `NULL`.
 #' @param cores Passed to the prediction and the objective. Default
 #'   `getOption("dMod.cores", 1)`.
-#' @param ... Further arguments for `objfun`. `rank.tol` is deprecated, use
-#'   `rankTol`.
+#' @param ... Further arguments for `objfun`.
 #'
 #' @return A list with components
 #'   \describe{
@@ -270,7 +266,7 @@ reml <- function(objfun, pars, errpars = NULL, fixed = NULL,
                  optimizer = trust, control = NULL,
                  cores = getOption("dMod.cores", 1L), ...) {
 
-  dots <- .renameArgs(list(...), c(rank.tol = "rankTol"), "reml")
+  dots <- list(...)
   if (is.null(attr(objfun, "errfn")))
     stop("reml: the objective has no error model to estimate.", call. = FALSE)
   if (is.null(names(pars)))

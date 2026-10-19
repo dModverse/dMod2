@@ -17,7 +17,7 @@
 
 #' @useDynLib dMod2, .registration = TRUE
 #' @importFrom Rcpp sourceCpp
-#' @importFrom cOde getSymbols replaceSymbols prodSymb sensitivitiesSymb
+#' @importFrom cOde sensitivitiesSymb
 #' @importFrom cOde setForcings odeC
 #' @importFrom tidyselect all_of
 #' @importFrom stats D approx rnorm runif sd

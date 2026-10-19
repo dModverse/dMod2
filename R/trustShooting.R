@@ -9,14 +9,12 @@
 # Settings a shooting run cannot honour are refused. Every other summand enters
 # the condensed problem with its own value, gradient and Gauss-Newton Hessian.
 .trustShooting <- function(objfun, parinit, rinit, rmax, iterlim,
-                           hessianMethod, hessianFallback, fallbackLimit,
-                           parscale, parupper, parlower, tol, qn, step,
+                           hessianMethod, parupper, parlower, tol, qn, step,
                            minimize, blather, printIter, traceFile, dots) {
 
   hm <- hessianMethod
   bad <- c(
     if (hm == "exact") "hessianMethod = \"exact\"",
-    if (hessianFallback != "none") "a hessianFallback",
     if (!identical(qn$hessianInit, "gn") && !identical(qn$hessianInit, "identity"))
       "qnControl$hessianInit = \"exact\"",
     if (!identical(qn$hessianReseed %||% "never", "never")) "qnControl$hessianReseed",
@@ -63,9 +61,7 @@
   K <- length(theta)
   lb <- .shootBound(parlower, tnames, -Inf)
   ub <- .shootBound(parupper, tnames, Inf)
-  ps <- if (is.null(parscale)) rep(1, K) else as.numeric(parscale)
-  if (length(ps) != K || !all(ps > 0))
-    stop("trust: parscale must be positive, one per parameter.", call. = FALSE)
+  ps <- rep(1, K)
   if (any(theta < lb | theta > ub)) {
     warning("trust: 'parinit' outside the bounds was clipped.", call. = FALSE)
     theta <- pmin(pmax(theta, lb), ub)
@@ -803,7 +799,7 @@
   }
   class(f1) <- c("objfn", "fn")
   r <- tryCatch(suppressWarnings(trust(f1, theta, rinit = rinit, rmax = rmax,
-                                       iterlim = iterlim, parscale = ps,
+                                       iterlim = iterlim,
                                        parupper = ub, parlower = lb)),
                 error = function(e) NULL)
   if (is.null(r) || !all(is.finite(r$argument)))

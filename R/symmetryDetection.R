@@ -2,10 +2,10 @@
 #'
 #' @description Finds the directions in parameters and initial values along which
 #'   the observations of a model do not change: the nullspace of the observability
-#'   matrix over finite fields, with certified rank and exact closed forms. The model
-#'   `f`, the observables `g` and an optional `trafo` are equations in any form
-#'   [as.eqnvec()] accepts. The computation runs in the Python package `symident`
-#'   through `reticulate`, installed from PyPI on first use.
+#'   matrix over finite fields, with exact closed forms and a level that says whether
+#'   each one is proven. The model `f`, the observables `g` and an optional `trafo` are
+#'   equations in any form [as.eqnvec()] accepts. The computation runs in the Python
+#'   package `symident` through `reticulate`, installed from PyPI on first use.
 #'
 #'   Right-hand sides, observables and initial values may contain `exp()`,
 #'   `exp10()`, `b^x`, hyperbolic and trigonometric functions, free exponents `x^n`,
@@ -39,10 +39,16 @@
 #'   model symbols or event values. A numeric cell fixes the symbol, a character cell
 #'   renames it. A column named like a dynamic state sets its initial value. A
 #'   direction is reported only if it is non-identifiable in every condition.
+#' @param regimes For a model with switches, the regimes an experiment visits: a
+#'   character vector of comparisons such as `"x > c"`, each selecting the regimes on
+#'   that side of a switch, or a list of such vectors whose comparisons hold together;
+#'   the first entry is the regime at the start. A list named by the rows of
+#'   `conditions` gives them per condition. Without it every regime counts; a switch on
+#'   parameters alone needs its side named here.
 #' @param equilibrate Logical. Start at a steady state of `f` with the inputs at 0;
-#'   the earliest events apply on top. Coupled steady states may need msolve, which
-#'   `symident.install_msolve()` builds or `SYMIDENT_MSOLVE` points to. Defaults
-#'   to `FALSE`.
+#'   the earliest events apply on top. Coupled steady states may need msolve; when
+#'   it is missing, an interactive session asks whether to build it into the
+#'   symident cache (on Windows with Rtools). Defaults to `FALSE`.
 #' @param reduceCQ Logical, [eqnlist] only. Report the freedom of a conserved moiety
 #'   on its total (`TRUE`) or on the initial value of one species (`FALSE`,
 #'   default).
@@ -53,7 +59,7 @@
 #' @param positive Coordinates known to be positive: `TRUE` (default, all), `FALSE`
 #'   (none) or a character vector.
 #' @param verify Logical. Check that the rank has saturated where the Lie order is
-#'   not certified; the result is in `$info$verification`. Defaults to `TRUE`.
+#'   not proven sufficient; the result is in `$info$verification`. Defaults to `TRUE`.
 #' @param cores Number of threads and worker processes. Defaults to 1.
 #' @param control A [reconstControl()] list.
 #' @param scalingsOnly Logical. Only the scaling symmetries, from an exact integer
@@ -64,18 +70,39 @@
 #'
 #' @return An object of class `symmetrydetection`:
 #'   \describe{
-#'     \item{`identifiable`}{`TRUE` or `FALSE`, `NA` with `scalingsOnly`.}
+#'     \item{`identifiable`}{`TRUE` or `FALSE`, `NA` with `scalingsOnly`; `FALSE` holds as far as
+#'       `info$rankStatus` says.}
 #'     \item{`rank`, `dim`}{rank of the observability matrix and number of
 #'       coordinates.}
 #'     \item{`symmetries`}{the directions, each a generator
-#'       \eqn{X = \sum_i \eta_i \partial_{z_i}}: `generator` (\eqn{\eta} by
+#'       \eqn{X = \sum_i \xi_i \partial_{\theta_i}}: `generator` (\eqn{\xi} by
 #'       coordinate), `weights` (a scaling's integer weights), `type` (`"scaling"` or
-#'       `"general"`), `degree`, `support`, `explicit`, `certified`, `reason`,
-#'       `route`, `display`, `completeGenerator` and `factor`.}
-#'     \item{`info`}{`engine`, the Lie order and its certification
+#'       `"general"`), `degree`, `support`, `explicit`, `level`, `stateComponents`,
+#'       `reason`, `route`, `display`, `completeGenerator` and `factor`. `level` is
+#'       `"exact"` for a direction proven over the rationals, `"verified"` for one
+#'       checked at random points modulo a large prime with an error bound,
+#'       `"checked"` for one checked without an error bound (an unproven Lie or gap
+#'       order, or a model outside the scope of the bound) and `"open"` without closed
+#'       form; `stateComponents` holds, for an exact
+#'       direction, the components on the states of the field that proves it.}
+#'     \item{`info`}{`engine`, the Lie order and whether it is proven sufficient
 #'       (`lieOrderUsed`, `lieOrderDriver`, `liePlateau`, `lieCertified`),
-#'       `rankProven`, `rankProof`, `gapOrderUsed`, `conditions`, `segments`,
-#'       `coordinates`, `settings`, `elapsed` and `verification`.}
+#'       the gap order of the events after the start and whether it is proven
+#'       sufficient (`gapOrderUsed`, `gapCertified`, `NULL` without such events, and
+#'       `gapCertificate`, why not), `rankProven`, `rankProof`, `rankFields` (a rank
+#'       the invariant fields establish, checked at random points modulo a prime),
+#'       `rankFieldsBound` (the probability that a wrong field passes), `rankStatus`
+#'       (`status` `"proven"`, `"verified"` or `"lower bound"`, `why` and
+#'       `probability`), `proof` (why each `"verified"` or `"checked"` direction is not
+#'       proven), `assumptions` (`domain`, the declared positive coordinates, `starts`,
+#'       the sides of switches declared at the start, and `errorBound`, the probability
+#'       that a verified closed form or rank is wrong),
+#'       `bound` (the probability that a wrong closed form passes the check, only where
+#'       both orders are proven sufficient or the rank is settled), `limits` (what
+#'       stopped part of the analysis), `errors` (exceptions turned into failed
+#'       routes), `branches` (resting states with several roots modulo a prime, of
+#'       which the first is taken), `conditions`, `segments`, `coordinates`,
+#'       `settings`, `elapsed` and `verification`.}
 #'     \item{`gauge`}{the coordinates fixed under `gaugePreference`.}
 #'     \item{`call`}{the matched call.}
 #'   }
@@ -105,8 +132,9 @@
 #' @export
 symmetryDetection <- function(f, g, trafo = NULL, parameters = NULL,
                               fixed = NULL, gaugePreference = FALSE, forcings = NULL,
-                              events = NULL, conditions = NULL, equilibrate = FALSE,
-                              reduceCQ = FALSE, freeInitial = NULL, reconstruct = FALSE,
+                              events = NULL, conditions = NULL, regimes = NULL,
+                              equilibrate = FALSE, reduceCQ = FALSE, freeInitial = NULL,
+                              reconstruct = FALSE,
                               positive = TRUE, verify = TRUE, cores = 1,
                               control = reconstControl(), scalingsOnly = FALSE,
                               symEngine = c("modular", "symbolic"), verbose = FALSE) {
@@ -122,6 +150,7 @@ symmetryDetection <- function(f, g, trafo = NULL, parameters = NULL,
                free_initial = freeInitial)
   for (k in names(syms))
     if (!is.null(syms[[k]])) spec[[k]] <- as.list(as.character(syms[[k]]))
+  if (!is.null(regimes)) spec$regimes <- .symRegimes(regimes)
   spec$gauge_preference <- if (is.null(gaugePreference)) "AUTO"
     else if (isFALSE(gaugePreference)) FALSE else as.list(as.character(gaugePreference))
   spec$equilibrate <- isTRUE(equilibrate)
@@ -176,8 +205,17 @@ symmetryDetection <- function(f, g, trafo = NULL, parameters = NULL,
 #'   fitted along lines in parameter space as a last route. Defaults to `TRUE`.
 #' @param timeout Time limit in seconds for the reconstruction. Directions not
 #'   finished in time are reported by their support. `Inf` (default) sets no limit.
-#' @param ... `minsupportCandCap`, `perprimeCap` and `perprimeMinPrimes` are
-#'   deprecated, use `minSupportCandCap`, `perPrimeCap` and `perPrimeMinPrimes`.
+#' @param homotopyDegree Total degree bound of the entries the homotopy route fits.
+#' @param degreeCapMax Degree up to which an entry past `degreeCap` is probed again,
+#'   the bound doubled each time.
+#' @param exactProof Whether a closed form that is not its own lift is proven through
+#'   the fields of each regime, one detection per regime.
+#' @param exactWorkCap Work bound of that proof: regimes times coordinates times tape
+#'   instructions; above it the proof is skipped and the limit noted.
+#' @param seed Seed of the random choices.
+#' @details `homotopyDegree`, `degreeCapMax`, `exactProof`, `exactWorkCap` and `seed`
+#'   default to `NULL`, which keeps the value of symident (4, 8, `TRUE`, 500000 and
+#'   0).
 #' @return A list of class `reconstcontrol` with the settings.
 #' @seealso [symmetryDetection()]
 #' @export
@@ -188,18 +226,21 @@ reconstControl <- function(relevanceCap = 6L, relevanceCapDir = 24L, relevanceCa
                            laurentDegNum = 4L, laurentDegDen = 2L, laurentCandCap = 200000L,
                            termCap = 60L, generalDegNum = 4L, generalDegDen = 3L,
                            gapOrderCap = 8L, minSupportCandCap = 20000L, perPrimeCap = 120L,
-                           perPrimeMinPrimes = 3L, homotopy = TRUE, timeout = Inf, ...) {
-  .renameArgs(list(...), c(minsupportCandCap = "minSupportCandCap",
-                           perprimeCap = "perPrimeCap",
-                           perprimeMinPrimes = "perPrimeMinPrimes"),
-              "reconstControl", strict = TRUE)
+                           perPrimeMinPrimes = 3L, homotopy = TRUE, timeout = Inf,
+                           homotopyDegree = NULL, degreeCapMax = NULL, exactProof = NULL,
+                           exactWorkCap = NULL, seed = NULL) {
   stopifnot(relevanceCap >= 0L, relevanceCapDir >= 1L,
             relevanceCapSparse >= relevanceCap, degreeCap >= 0L,
             sampleSlack >= 0L, probeRetries >= 1L, termCap >= 1L,
             laurentDegNum >= 1L, laurentDegDen >= 0L, laurentCandCap >= 1L,
             generalDegNum >= 1L, generalDegDen >= 1L, gapOrderCap >= 0L,
             minSupportCandCap >= 1L, perPrimeCap >= 1L, perPrimeMinPrimes >= 2L,
-            isTRUE(homotopy) || isFALSE(homotopy), is.numeric(timeout), timeout > 0)
+            isTRUE(homotopy) || isFALSE(homotopy), is.numeric(timeout), timeout > 0,
+            is.null(homotopyDegree) || homotopyDegree >= 1L,
+            is.null(degreeCapMax) || degreeCapMax >= 0L,
+            is.null(exactProof) || isTRUE(exactProof) || isFALSE(exactProof),
+            is.null(exactWorkCap) || exactWorkCap > 0, is.null(seed) || is.numeric(seed))
+  int <- function(x) if (is.null(x)) NULL else as.integer(x)
   structure(list(relevanceCap = as.integer(relevanceCap),
                  relevanceCapDir = as.integer(relevanceCapDir),
                  relevanceCapSparse = as.integer(relevanceCapSparse),
@@ -214,14 +255,17 @@ reconstControl <- function(relevanceCap = 6L, relevanceCapDir = 24L, relevanceCa
                  minSupportCandCap = as.integer(minSupportCandCap),
                  perPrimeCap = as.integer(perPrimeCap),
                  perPrimeMinPrimes = as.integer(perPrimeMinPrimes), homotopy = homotopy,
-                 timeout = timeout),
+                 timeout = timeout, homotopyDegree = int(homotopyDegree),
+                 degreeCapMax = int(degreeCapMax), exactProof = exactProof,
+                 exactWorkCap = if (is.null(exactWorkCap)) NULL else as.numeric(exactWorkCap),
+                 seed = int(seed)),
             class = c("reconstcontrol", "list"))
 }
 
 
 # ---- the interface to the Python package symident --------------------------------
 
-.symidentMin <- "0.9.3"
+.symidentMin <- "0.11.0"
 .symidentReq <- paste0("symident>=", .symidentMin)
 
 # whether symident is installed in version .symidentMin or later
@@ -264,14 +308,23 @@ reconstControl <- function(relevanceCap = 6L, relevanceCapDir = 24L, relevanceCa
 # field names to camelCase, recursively; the fields in `data` are named by model
 # symbols and keep their names
 .symCamelFields <- function(x, data = c("generator", "complete_generator", "weights",
-                                        "display", "factor", "pins", "survivor_meaning",
-                                        "carrier_domain", "trafo", "totals")) {
+                                        "display", "factor", "pins", "new_parameters",
+                                        "solved_domain", "trafo", "totals",
+                                        "state_components")) {
   if (!is.list(x)) return(x)
   nm <- names(x)
   for (i in seq_along(x))
     if (is.null(nm) || !nm[i] %in% data) x[i] <- list(.symCamelFields(x[[i]], data))
   if (!is.null(nm)) names(x) <- .symCamel(nm)
   x
+}
+
+# regimes as symident reads them: each entry one comparison or a list of comparisons, a
+# list named by condition holding the entries of each condition
+.symRegimes <- function(x) {
+  entries <- function(r) lapply(if (is.list(r)) r else as.list(r), function(e)
+    if (length(e) == 1L) as.character(e) else as.list(as.character(e)))
+  if (is.list(x) && !is.null(names(x))) lapply(x, entries) else entries(x)
 }
 
 # one call into symident: the arguments as JSON in, the result as JSON out, with its
@@ -287,13 +340,99 @@ reconstControl <- function(relevanceCap = 6L, relevanceCapDir = 24L, relevanceCa
   args <- lapply(list(...), function(a) if (is.character(a) && length(a) == 1L) a
                  else as.character(jsonlite::toJSON(a, auto_unbox = TRUE, null = "null",
                                                     digits = NA, force = TRUE)))
-  out <- do.call(si[[fun]], c(args, list(
+  args <- c(args, list(
     env = as.character(jsonlite::toJSON(env, auto_unbox = TRUE)),
-    options = as.character(jsonlite::toJSON(opt, auto_unbox = TRUE, null = "null")))))
+    options = as.character(jsonlite::toJSON(opt, auto_unbox = TRUE, null = "null"))))
+  out <- tryCatch(do.call(si[[fun]], args),
+                  symident.sym.msolve.MsolveMissingError = function(e) {
+                    if (!.offerMsolve())
+                      stop("this steady state needs msolve: confirm its installation in an ",
+                           "interactive session, or set SYMIDENT_MSOLVE to an msolve ",
+                           "executable.", call. = FALSE)
+                    do.call(si[[fun]], args)
+                  })
   res <- jsonlite::fromJSON(out, simplifyVector = FALSE)
   for (w in unlist(res$warnings)) warning(w, call. = FALSE)
   res$warnings <- NULL
   structure(res, json = out)
+}
+
+# Asks whether to install msolve into the symident cache and does so; FALSE when the
+# session is not interactive or the answer is no.
+.offerMsolve <- function() {
+  if (!interactive()) return(FALSE)
+  inst <- .symident("install")
+  q <- paste0("This steady state needs msolve, which is not installed. Download and build ",
+              "msolve ", inst$MSOLVE_VERSION, " into ", inst$cache_dir(), "? (yes/no) ")
+  repeat {
+    a <- tolower(trimws(readline(q)))
+    if (a %in% c("n", "no")) return(FALSE)
+    if (a %in% c("y", "yes")) break
+  }
+  path <- if (.Platform$OS.type == "windows") .buildMsolveRtools(inst)
+          else inst$install_msolve(ask = FALSE)
+  message("msolve installed in ", path)
+  TRUE
+}
+
+# Builds msolve with the compiler of R and the static GMP, MPFR and FLINT of Rtools
+# into the layout the symident cache expects. symident runs msolve on one thread, so
+# OpenMP is a stub.
+.buildMsolveRtools <- function(inst) {
+  config <- function(x) system2(file.path(R.home("bin"), "R"), c("CMD", "config", x),
+                                stdout = TRUE)
+  cc <- config("CC")
+  libs <- file.path(config("LOCAL_SOFT"), "lib", c("libflint.a", "libmpfr.a", "libgmp.a"))
+  if (!nzchar(Sys.which(cc)) || !all(file.exists(libs)))
+    stop("building msolve on Windows needs Rtools.", call. = FALSE)
+  version <- inst$MSOLVE_VERSION
+  work <- tempfile("msolve")
+  dir.create(work)
+  on.exit(unlink(work, recursive = TRUE), add = TRUE)
+  tarball <- file.path(work, "msolve.tar.gz")
+  utils::download.file(sprintf(
+    "https://github.com/algebraic-solving/msolve/archive/refs/tags/v%s.tar.gz", version),
+    tarball, mode = "wb", quiet = TRUE)
+  utils::untar(tarball, exdir = work)
+  src <- file.path(work, paste0("msolve-", version))
+  writeLines(c(sprintf('#define VERSION "%s"', version), "#define HAVE_FLINT_NMOD_H 1",
+               "#define HAVE_TIMESPEC_GET 1"), file.path(src, "config.h"))
+  dir.create(file.path(src, "ompstub"))
+  writeLines(c(
+    "#include <time.h>",
+    "static inline int omp_get_thread_num(void) { return 0; }",
+    "static inline int omp_get_max_threads(void) { return 1; }",
+    "static inline void omp_set_num_threads(int n) { (void)n; }",
+    "static inline double omp_get_wtime(void) {",
+    "  struct timespec ts; timespec_get(&ts, TIME_UTC); return ts.tv_sec + 1e-9 * ts.tv_nsec;",
+    "}"), file.path(src, "ompstub", "omp.h"))
+  run <- function(args) {
+    out <- suppressWarnings(system2(cc, args, stdout = TRUE, stderr = TRUE))
+    if (!is.null(attr(out, "status")))
+      stop("the msolve build failed:\n", paste(utils::tail(out, 20), collapse = "\n"),
+           call. = FALSE)
+  }
+  # one translation unit per library; main.c includes libmsolve.c
+  units <- c("usolve/usolve.c", "fglm/fglm_core.c", "neogb/gb.c", "msolve/main.c")
+  objs <- file.path(work, sub("\\.c$", ".o", basename(units)))
+  inc <- paste0("-I", shQuote(c(src, file.path(src, c("src", "ompstub"))), type = "cmd"))
+  message("Compiling msolve ", version, ", this takes a minute.")
+  for (i in seq_along(units))
+    run(c("-std=gnu17", "-O2", "-DHAVE_CONFIG_H", inc, "-w", "-c",
+          shQuote(file.path(src, "src", units[i]), type = "cmd"),
+          "-o", shQuote(objs[i], type = "cmd")))
+  prefix <- file.path(inst$cache_dir(), paste0("deps-msolve-", version))
+  marker <- file.path(prefix, ".msolve-complete")
+  unlink(marker)
+  dir.create(file.path(prefix, "bin"), recursive = TRUE, showWarnings = FALSE)
+  exe <- file.path(prefix, "bin", "msolve.exe")
+  run(c("-static", "-s", "-o", shQuote(exe, type = "cmd"), shQuote(rev(objs), type = "cmd"),
+        shQuote(libs, type = "cmd"), "-lm"))
+  inst$msolve_check$cache_clear()
+  if (is.null(inst$msolve_check(exe)))
+    stop("the msolve build produced no working executable.", call. = FALSE)
+  file.create(marker)
+  normalizePath(exe)
 }
 
 # the result as symident wrote it, for its own report and for the reduction
@@ -357,6 +496,7 @@ reconstControl <- function(relevanceCap = 6L, relevanceCapDir = 24L, relevanceCa
   res$symmetries <- lapply(res$symmetries, function(d) {
     d$generator <- vec(d$generator)
     d$completeGenerator <- vec(d$completeGenerator)
+    d$stateComponents <- vec(d$stateComponents)
     d$support <- chr(d$support)
     if (!is.null(d$display)) d$display <- lapply(d$display, as.character)
     structure(d, class = "symmetrygenerator")

@@ -91,7 +91,7 @@ fx_decay_compiled <- function() {
                        list(output = "fx_decay_all", cores = test_cores())))
 
     cache$extra <- extra
-    if (!is.null(mc)) cache$decay_mc <- .fx_multicond_finish(base, mc)
+    if (!is.null(mc)) cache$decay_mc <- .fx_multicond_finish(base, mc, "fx_decay_all")
     cache$decay <- c(base, list(
       prd_id        = gfn * xfn * pfn_id,
       prd_log       = gfn * xfn * pfn_log,
@@ -107,7 +107,8 @@ fx_decay_compiled <- function() {
 
 # The decay chain over C1..C4 with a scale of its own per condition, so each
 # condition has a different derivative basis and every leaf runs batched.
-# Elements: conditions, m, xfn, gfn, pfn, prd, outerpars.
+# Elements: conditions, m, xfn, gfn, pfn, prd, outerpars, and libs, the joint
+# shared objects the chain is linked into, for modelname<- and loadDLL().
 .fx_multicond_parts <- function(base) {
   conds <- paste0("C", 1:4)
   gfn <- Y(c(y = "s*A"), f = base$xfn, condition = NULL, attachInput = FALSE,
@@ -120,9 +121,9 @@ fx_decay_compiled <- function() {
   list(conditions = conds, gfn = gfn, pfn = pfn)
 }
 
-.fx_multicond_finish <- function(base, mc) {
+.fx_multicond_finish <- function(base, mc, libs) {
   list(conditions = mc$conditions, m = base$m, xfn = base$xfn, gfn = mc$gfn,
-       pfn = mc$pfn, prd = mc$gfn * base$xfn * mc$pfn,
+       pfn = mc$pfn, prd = mc$gfn * base$xfn * mc$pfn, libs = libs,
        outerpars = c(A_log = 0, k_log = log(0.5),
                      setNames(seq(0, 0.3, length.out = 4),
                               paste0("s_", mc$conditions, "_log"))))
@@ -136,7 +137,7 @@ fx_decay_multicond_compiled <- function() {
   .dmod_with_fx_workdir({
     mc <- .fx_multicond_parts(base)
     compile(mc$gfn, mc$pfn, output = "fx_mc_all", cores = test_cores())
-    cache$decay_mc <- .fx_multicond_finish(base, mc)
+    cache$decay_mc <- .fx_multicond_finish(base, mc, c("fx_decay_all", "fx_mc_all"))
   })
   cache$decay_mc
 }

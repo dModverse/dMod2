@@ -10,10 +10,8 @@ normL2(
   errmodel = NULL,
   times = NULL,
   attrName = "data",
-  cores = 1L,
   optBLOQ = c("M3", "M1", "M4NM", "M4BEAL"),
-  multipleShootingControl = NULL,
-  ...
+  multipleShootingControl = NULL
 )
 }
 \arguments{
@@ -40,8 +38,6 @@ returned as an attribute of this name, and the sum of squares behind it
 under \code{chi2}. Adding objectives pools the terms sharing an \code{attrName},
 so \code{chi2} stays one number; where two \code{attrName}s meet it splits into
 \verb{chi2_<attrName>} per contribution.}
-
-\item{cores}{Deprecated and ignored, see section Lifecycle.}
 
 \item{optBLOQ}{Character. NONMEM-style treatment of below-LOQ rows
 (those with \code{value <= lloq} in the data). One of \code{"M1"} (drop BLOQ rows
@@ -82,9 +78,6 @@ conditions or a list named by condition. Default \code{NULL}. Needs
 \code{\link[=Xs]{Xs()}}, built on \code{odemodel(..., includeTimeZero = FALSE)}. The method
 and the node layout are described in
 \code{vignette("Optimisation", package = "dMod2")}.}
-
-\item{...}{\code{attr.name} and \code{opt.BLOQ} are deprecated, use \code{attrName} and
-\code{optBLOQ}.}
 }
 \value{
 An objective function of class \code{objfn}, called as \code{obj(pars, ...)}, see
@@ -103,12 +96,6 @@ the data.
 \details{
 Combine objectives with \code{+}, see \link{sumobjfn}.
 }
-\section{Lifecycle}{
-
-The argument \code{cores} is deprecated and ignored; pass \code{cores} to the
-objective call or set \code{options(dMod.cores = )}.
-}
-
 \section{Calling a dMod function}{
 
 The leading arguments depend on the class and are matched by position or

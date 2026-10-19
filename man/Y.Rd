@@ -18,8 +18,7 @@ Y(
   deriv = TRUE,
   deriv2 = FALSE,
   derivMode = "forward",
-  outdir = .dmodOutdir(),
-  ...
+  outdir = .dmodOutdir()
 )
 }
 \arguments{
@@ -80,8 +79,6 @@ attribute.
 \item{outdir}{Character. Directory for the generated C++ source and the
 shared object, default \code{getOption("dMod.outdir")}, else the working
 directory.}
-
-\item{...}{\code{attach.input} is deprecated, use \code{attachInput}.}
 }
 \value{
 An \link{obsfn}, called as \code{g(out, pars, ...)} with a \link{prdlist} \code{out}, see

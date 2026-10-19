@@ -721,10 +721,7 @@ runbg <- function(..., machine = "localhost", filename = NULL, input = ls(.Globa
 #' passed to `sshpass`, which must be installed locally.
 #'
 #' @param ... R code to be executed remotely. Variables that change between
-#'   tasks are named `var_i`, see Details. `mem_per_core`, `ssh_passwd`,
-#'   `var_values`, `no_rep`, `purge_local` and `custom_folders` are deprecated
-#'   names of `memPerCore`, `sshPasswd`, `varValues`, `nRep`, `purgeLocal` and
-#'   `customFolders`.
+#'   tasks are named `var_i`, see Details.
 #' @param jobname Character, unique name of the job. A job with the same name
 #'   is overwritten.
 #' @param partition SLURM partition. Defaults to `"single"`.
@@ -838,16 +835,8 @@ distributedComputing <- function(
     input = ls(.GlobalEnv, all.names = TRUE),
     libs = NULL
 ){
-  # The dots hold the code, unevaluated, and the deprecated argument names.
-  dots <- match.call(expand.dots = FALSE)$...
-  renames <- c(mem_per_core = "memPerCore", ssh_passwd = "sshPasswd",
-               var_values = "varValues", no_rep = "nRep",
-               purge_local = "purgeLocal", custom_folders = "customFolders")
-  old <- intersect(names(dots), names(renames))
-  callerEnv <- parent.frame()
-  .renameArgs(lapply(dots[old], eval, envir = callerEnv), renames,
-              "distributedComputing")
-  code <- if (length(old)) dots[!names(dots) %in% old] else dots
+  # The dots hold the code, unevaluated.
+  code <- match.call(expand.dots = FALSE)$...
   original_wd <- getwd()
   if (is.null(customFolders)) {
     output_folder_abs <- "./"
@@ -984,9 +973,7 @@ distributedComputing <- function(
   
   # purge function, its default taken from the argument of distributedComputing()
   purgeLocalDefault <- purgeLocal
-  out[[3]] <- function (purgeLocal = purgeLocalDefault, ...) {
-    .renameArgs(list(...), c(purge_local = "purgeLocal"), "purge",
-                strict = TRUE)
+  out[[3]] <- function (purgeLocal = purgeLocalDefault) {
     # remove files remote
     system(
       paste0(
@@ -1311,7 +1298,6 @@ distributedComputing <- function(
 #' @param side `"both"` (default) for one entry per range, or `"split"` for two
 #'   entries per range, labelled `"left"` and `"right"`, to compute the two
 #'   sides of each profile on separate nodes.
-#' @param ... `fits_per_node` is deprecated, use `parsPerNode`.
 #'
 #' @return A list with the integer vectors `from` and `to`, the first and last
 #'   parameter index of each node, and the character vector `side`.
@@ -1322,11 +1308,8 @@ distributedComputing <- function(
 #' profileParsPerNode(parameters, 4, side = "split")
 #'
 #' @export
-profileParsPerNode <- function(parameters, parsPerNode, side = c("both", "split"),
-                               ...) {
+profileParsPerNode <- function(parameters, parsPerNode, side = c("both", "split")) {
 
-  .renameArgs(list(...), c(fits_per_node = "parsPerNode"), "profileParsPerNode",
-              strict = TRUE)
   side <- match.arg(side)
 
   # get the number of parameters
@@ -1381,19 +1364,22 @@ profileParsPerNode <- function(parameters, parsPerNode, side = c("both", "split"
   o <- if (!is.null(nm) && outer %in% nm) cores[[outer]] else cores[[1L]]
   k <- if (!is.null(nm) && "conditions" %in% nm) cores[["conditions"]] else cores[[2L]]
 
-  avail <- suppressWarnings(parallel::detectCores())
-  if (!is.na(avail) && o * k > avail)
+  avail <- .availableCores()
+  if (o * k > avail)
     warning(sprintf("cores: %d (%s) x %d (conditions) = %d exceeds the %d available.",
                     o, outer, k, o * k, avail), call. = FALSE)
   list(outer = o, conditions = k)
 }
 
 
-.sanitizeCores <- function(cores)  {
-  
-  max.cores <- parallel::detectCores()
-  min(max.cores, cores)
-  
+# Cores this process may use: the affinity mask, cgroup and scheduler
+# allocation (SLURM, PBS, ...), not the cores of the node.
+.availableCores <- function() as.integer(parallelly::availableCores())
+
+# Caps each element of a core vector at the cores available, names kept.
+.sanitizeCores <- function(cores) {
+  cores[] <- pmin(as.integer(cores), .availableCores())
+  cores
 }
 
 
@@ -1412,8 +1398,10 @@ profileParsPerNode <- function(parameters, parsPerNode, side = c("both", "split"
 
   strategy <- match.arg(strategy)
   cores <- max(1L, as.integer(cores))
-  if (!is.null(coresConditions) && cores == 1L)
-    options(dMod.cores = as.integer(coresConditions))
+  if (cores == 1L && !is.null(coresConditions)) {
+    old <- options(dMod.cores = as.integer(coresConditions))
+    on.exit(options(old), add = TRUE)
+  }
   if (cores == 1L)
     return(lapply(X, FUN))
 

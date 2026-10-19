@@ -24,25 +24,53 @@
 #'   Defaults to 2.
 #' @param separable Logical. Solve separable blocks by quadratures. Defaults to
 #'   `TRUE`.
-#' @param alternatives Logical. Also return the charts of the other admissible
-#'   pins in `$alternatives`. Defaults to `FALSE`.
-#' @param timeout Time limit in seconds for the chart search of one block; a block not
-#'   solved in time keeps its invariants (`"invariantOnly"`). Defaults to 600.
-#' @param verbose Logical. Report the progress per block and stage. Defaults to
-#'   `FALSE`.
+#' @param alternatives Logical. Also return the charts of the other valid pins
+#'   in `$alternatives`. Defaults to `FALSE`.
+#' @param timeout Time limit in seconds for the section search of one block; a block not
+#'   solved in time keeps its invariants (`"invariantOnly"`). Unlike `workCap`, it depends
+#'   on the load of the machine. Defaults to `Inf`.
+#' @param workCap Number of candidate sections the search of one block may try;
+#'   reaching it is an entry in `limits`. Defaults to 4000.
+#' @param allowOpen Logical. Reduce the directions with a closed form and leave those
+#'   of level `"open"` in place; otherwise such a direction is an error. A direction
+#'   of level `"verified"` or `"checked"`, and a section claim left unproven, give a
+#'   warning. Defaults to `FALSE`.
+#' @param check Logical. Run the detection again on the model with the trafo applied
+#'   and record in `checks$loop` whether exactly the remaining directions are left.
+#'   Defaults to `TRUE`; large models may turn it off.
 #' @param ... Not used.
 #'
 #' @return An object of class `symmetryreduction`:
 #'   \describe{
 #'     \item{`blocks`}{one entry per set of coupled directions, with its
-#'       `invariants`, `section`, `survivorMeaning` (the invariant each `q_<k>`
-#'       holds), `carrierDomain`, `coverage` and `status` (`"fixed"`,
-#'       `"reduced"`, `"invariantOnly"` or `"unresolved"`).}
+#'       `invariants`, `section`, `newParameters` (the invariant each `q_<k>`
+#'       holds), `solvedDomain`, `coverage` and `status` (`"fixed"`,
+#'       `"reduced"`, `"invariantOnly"` or `"unresolved"`), `level`,
+#'       `generatorLevel` (the lowest level of its directions), `unproven` (the claims
+#'       of its section that are not proven) and, for a curved block, `count`
+#'       (`"exact"` or `"upper bound"`), `injective` and `reach`. A section on a face
+#'       (`face`) holds `faceWhy`, why the model is not shown continuous up to the face
+#'       (`NULL` when it is), and `faceLevel`, `"checked"` when the resting state under
+#'       `equilibrate` is checked at random points only.}
+#'     \item{`level`}{how far the reduction is established, the lowest over the
+#'       reduced blocks: `"exact"`, `"verified"` or `"checked"` (a direction rests on a
+#'       closed form verified with an error bound, or checked without one, or a face on a
+#'       checked resting state) or `"open"` (a claim of a section is not proven, named
+#'       under `unproven`).}
+#'     \item{`assumptions`}{what the reduction assumes: `domain` (the declared positive
+#'       coordinates) and `starts` (the sides of switches declared at the start), with
+#'       `errorBound`, the probability that a verified closed form is wrong.}
+#'     \item{`limits`}{the work budgets and time limits that stopped a section or
+#'       invariant search.}
+#'     \item{`checks`}{`pins` and `invariants`, whether every pin holds under the trafo
+#'       and every invariant of a block maps to its new parameter over Q, `failed`,
+#'       and with `check = TRUE` `loop`: the `directions` the reduced model has, the
+#'       number `expected`, its `rank`, `dim` and `rankStatus`, and `ok`.}
 #'     \item{`zeroCompatibility`}{with `reportZeroCompatibility = TRUE`, the sets of
 #'       coordinates that can vanish together and the `condition` for it.}
 #'     \item{`trafo`}{an [eqnvec] over all coordinates for [P()] or
 #'       `symmetryDetection(trafo = )`; `NULL` if nothing was reduced.}
-#'     \item{`family`}{the admissible gauges of each reduced block.}
+#'     \item{`family`}{the valid gauges of each reduced block.}
 #'     \item{`removed`, `remaining`}{labels of the directions.}
 #'     \item{`dependent`}{labels of directions that depend on the others and need
 #'       no reduction.}
@@ -69,7 +97,8 @@
 symmetryReduction <- function(object, fixed = NULL, positive = TRUE, dPoly = 3L,
                               dDarboux = 2L, dExp = 2L, separable = TRUE,
                               reportZeroCompatibility = FALSE, alternatives = FALSE,
-                              timeout = 600, verbose = FALSE, ...) {
+                              timeout = Inf, allowOpen = FALSE, check = TRUE,
+                              workCap = 4000L, ...) {
   if (!inherits(object, "symmetrydetection"))
     stop("symmetryReduction(): `object` must be a symmetrydetection result.", call. = FALSE)
   if (length(list(...)))
@@ -82,7 +111,8 @@ symmetryReduction <- function(object, fixed = NULL, positive = TRUE, dPoly = 3L,
                zero_compatibility = isTRUE(reportZeroCompatibility),
                alternatives = isTRUE(alternatives),
                timeout = if (is.infinite(timeout)) "Inf" else timeout,
-               verbose = isTRUE(verbose))
+               allow_open = isTRUE(allowOpen), check = isTRUE(check),
+               work_cap = as.integer(workCap))
   if (is.null(fixed)) args$fixed <- NULL
   .symRedFromPy(.symCall("reduce_json", .symRaw(object), args), match.call())
 }
@@ -105,13 +135,13 @@ symmetryReduction <- function(object, fixed = NULL, positive = TRUE, dPoly = 3L,
   res$blocks <- lapply(res$blocks, function(b) {
     for (k in c("labels", "support", "transversal", "invariants", "certificates",
                 "section", "moduleCombos", "redundantFixed")) if (!is.null(b[[k]])) b[[k]] <- chr(b[[k]])
-    for (k in c("pins", "survivorMeaning", "carrierDomain")) if (!is.null(b[[k]])) b[[k]] <- str(b[[k]])
+    for (k in c("pins", "newParameters", "solvedDomain")) if (!is.null(b[[k]])) b[[k]] <- str(b[[k]])
     if (!is.null(b$zeroCompatibility)) b$zeroCompatibility <- zero(b$zeroCompatibility)
     b
   })
   res$family <- lapply(res$family, function(f) {
     f$labels <- chr(f$labels)
-    if (!is.null(f$admissible)) f$admissible <- lapply(f$admissible, chr)
+    if (!is.null(f$choices)) f$choices <- lapply(f$choices, chr)
     if (!is.null(f$matroid)) f$matroid <- lapply(f$matroid, chr)
     f
   })

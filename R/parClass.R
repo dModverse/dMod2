@@ -174,7 +174,6 @@ plot.parlist <- function(x, path = FALSE, ...) {
 #' @param sortBy character, the column by which the returned parameter frame
 #' is sorted. Default `"value"`.
 as.parframe.parlist <- function(x, sortBy = "value", ...) {
-  .renameArgs(list(...), c(sort.by = "sortBy"), "as.parframe")
   m_stat <- .statParlist(x)
   m_metanames <- c("index", "value", "converged", "iterations")
   m_idx <- which("error" != m_stat)
@@ -199,6 +198,25 @@ as.parframe.parlist <- function(x, sortBy = "value", ...) {
     if (any(!is.na(col))) { m_parframe[[field]] <- col; m_metanames <- c(m_metanames, field) }
   }
 
+  # Iterations per element of trust()'s `phases`, summed over its runs, when
+  # the fits had more than one.
+  m_phase <- lapply(x[m_idx], function(.x) .x[["phaseIterations"]])
+  m_labels <- unique(unlist(lapply(x[m_idx], function(.x)
+    names(.x[["phaseSweep"]]) %||% names(.x[["phaseIterations"]]))))
+  if (length(m_labels) > 1L) for (l in m_labels) {
+    col <- paste0("iterations.", l)
+    m_parframe[[col]] <- vapply(m_phase, function(v)
+      if (is.null(v)) NA_integer_ else as.integer(sum(v[names(v) == l])), 1L)
+    m_metanames <- c(m_metanames, col)
+  }
+
+  m_elapsed <- vapply(x[m_idx], function(.x)
+    if (is.null(.x[["elapsed"]])) NA_real_ else .x[["elapsed"]], 1.0)
+  if (any(!is.na(m_elapsed))) {
+    m_parframe$elapsed <- m_elapsed
+    m_metanames <- c(m_metanames, "elapsed")
+  }
+
   parameters <- lapply(x[m_idx], function(x) data.table::as.data.table(as.list(x$argument)))
   parameters <- data.table::rbindlist(parameters, use.names = TRUE)
   m_parframe <- cbind(m_parframe, parameters)
@@ -206,7 +224,9 @@ as.parframe.parlist <- function(x, sortBy = "value", ...) {
   # Sort by value
   m_parframe <- m_parframe[order(m_parframe[[sortBy]]),]
   
-  parframe(m_parframe, parameters = names(parameters), metanames = m_metanames)
+  out <- parframe(m_parframe, parameters = names(parameters), metanames = m_metanames)
+  attr(out, "run") <- attr(x, "run")
+  out
 }
 
 
@@ -240,7 +260,10 @@ c.parlist <- function(...) {
 #' @param ... not used.
 #' @return Object of class [parframe]. For a `parlist`, the meta-information
 #' columns are `index`, `value`, `converged` and `iterations`, plus the
-#' termination and evaluation counts the fits report.
+#' termination and evaluation counts and the wall time `elapsed` the fits
+#' report. Fits of [trust()] with several `phases` add one column
+#' `iterations.<phase>` per phase, the iterations summed over its runs. The
+#' attribute `"run"` of the parlist is kept.
 #' @seealso [parframe()], [as.parvec.parframe()], and [parlist()] for an
 #'   example.
 #' @export
@@ -303,27 +326,23 @@ plotPars.parframe <- function(x, tol = 1, ...){
 }
 
 
-# 0 and the decades from 10 up to the largest absolute limit, both signs. On a
-# pseudo-log axis, which is linear below 1, a break at 1 would crowd 0.
+# 0 and multiples of the decades from 10 up to the largest absolute limit, both
+# signs, refined from 1 over 1-2-5 to 1..9 until three fall inside the limits.
+# On a pseudo-log axis, which is linear below 1, a break at 1 would crowd 0.
 .decadeBreaks <- function(lims) {
-  p <- 10^seq_len(max(1, ceiling(log10(max(abs(lims), 1)))))
-  sort(unique(c(-p, 0, p)))
+  d <- 10^seq_len(max(1, ceiling(log10(max(abs(lims), 1)))))
+  for (m in list(1, c(1, 2, 5), 1:9)) {
+    p <- as.vector(outer(m, d))
+    b <- sort(unique(c(-p, 0, p)))
+    if (sum(b >= lims[1] & b <= lims[2]) >= 3L) return(b)
+  }
+  pretty(lims)
 }
-
-
-# Convergence always reads the same way, a filled circle for a converged fit and
-# a triangle for one that stopped otherwise. Both levels stay in the legend even
-# when only one occurs, so several waterfall plots can be compared directly.
-.scaleConverged <- function()
-  scale_shape_manual(name = "Converged",
-                     values = c(`TRUE` = 16, `FALSE` = 17),
-                     limits = c("TRUE", "FALSE"),
-                     labels = c("yes", "no"), drop = FALSE)
 
 
 #' @export
 #' @rdname plotValues
-plotValues.parframe <- function(x, tol = 1, ..., showSteps = FALSE) {
+plotValues.parframe <- function(x, tol = 1, ..., showSteps = FALSE, pseudoLog = FALSE) {
 
   if (!missing(...)) x <- subset(x, ...)
 
@@ -332,25 +351,27 @@ plotValues.parframe <- function(x, tol = 1, ..., showSteps = FALSE) {
   pars[["delta"]] <- pars$value - pars$value[1]
   jumps <- .stepDetect(pars$value, tol)
 
-  yScale <- scale_y_continuous(trans = scales::pseudo_log_trans(base = 10),
-                               breaks = .decadeBreaks)
+  yScale <- if (pseudoLog)
+    scale_y_continuous(trans = scales::pseudo_log_trans(base = 10), breaks = .decadeBreaks)
 
   stepLines <- stepLabels <- NULL
   if (showSteps) {
     stepLines <- geom_vline(xintercept = jumps, lty = 2)
-    stepLabels <- annotate("text", x = jumps + 1, y = pars$delta[jumps], label = jumps,
+    stepLabels <- annotate("text", x = jumps + 1, y = pars$value[jumps], label = jumps,
                            hjust = 0, vjust = -0.5, color = "firebrick", size = 3)
   }
 
-  P <- ggplot2::ggplot(pars, aes(x = index, y = delta, pch = converged, color = iterations)) +
+  # an unconverged fit is red, outside the ramp of the iterations
+  conv <- pars$converged %in% TRUE
+  P <- ggplot2::ggplot(pars, aes(x = index, y = value)) +
     stepLines +
-    geom_point() +
+    geom_point(data = pars[conv, ], aes(color = iterations)) +
+    geom_point(data = pars[!conv, ], color = dMod_colors[2]) +
     stepLabels +
     yScale +
-    labs(x = "Fit rank", y = expression(Delta * " objective value"),
-         color = "Iterations") +
-    scale_color_gradient(low = "dodgerblue", high = "orange") +
-    .scaleConverged() +
+    labs(x = "Fit rank", y = "Objective value", color = "Iterations",
+         caption = if (!all(conv)) "red: not converged") +
+    scale_color_dMod_c() +
     theme_dMod()
 
   attr(P, "data") <- pars
@@ -521,8 +542,10 @@ is.parframe <- function(x) {
   obj.attributes <- intersect(obj.attributes, colnames(out))
   parameters <- intersect(parameters, colnames(out))
   
-  parframe(out, parameters = parameters, metanames = metanames, objAttributes = obj.attributes)
-  
+  out <- parframe(out, parameters = parameters, metanames = metanames, objAttributes = obj.attributes)
+  attr(out, "run") <- attr(x, "run")
+  out
+
 }
 
 
@@ -972,7 +995,6 @@ parfn <- function(p2p, parameters = NULL, condition = NULL) {
 #'   Default `NULL`.
 #' @param objAttributes character, the names of the objective function
 #'   attributes. Default `NULL`.
-#' @param ... `obj.attributes` is deprecated, use `objAttributes`.
 #' @return Object of class `parframe`, a data frame with the attributes
 #' `parameters`, `metanames` and `obj.attributes`. `is.parframe()` returns a
 #' logical.
@@ -986,10 +1008,7 @@ parfn <- function(p2p, parameters = NULL, condition = NULL) {
 #' as.parvec(pf)
 #' @export
 parframe <- function(x = NULL, parameters = colnames(x), metanames = NULL,
-                     objAttributes = NULL, ...) {
-
-  .renameArgs(list(...), c(obj.attributes = "objAttributes"), "parframe",
-              strict = TRUE)
+                     objAttributes = NULL) {
 
   if (!is.null(x)) {
     rownames(x) <- NULL

@@ -10,8 +10,7 @@ remlLeverage(
   meanpars = NULL,
   fixed = NULL,
   rankTol = 1e-08,
-  cores = getOption("dMod.cores", 1L),
-  ...
+  cores = getOption("dMod.cores", 1L)
 )
 }
 \arguments{
@@ -30,8 +29,6 @@ sensitivity matrix below which a direction counts as absent. Default
 \code{1e-8}.}
 
 \item{cores}{Passed to the prediction. Default \code{getOption("dMod.cores", 1)}.}
-
-\item{...}{\code{rank.tol} is deprecated, use \code{rankTol}.}
 }
 \value{
 A data frame with one row per data point and columns \code{condition},

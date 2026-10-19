@@ -75,3 +75,6 @@ CLAUDE.md
 
 # Test-run artefact from a headless plot() call.
 tests/testthat/Rplots.pdf
+
+# HTML previews of the rendered demos
+examples/*.html

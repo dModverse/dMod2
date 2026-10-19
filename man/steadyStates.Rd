@@ -21,8 +21,7 @@ steadyStates(
   priority = NULL,
   version = "1.3",
   resolve = TRUE,
-  verbose = FALSE,
-  ...
+  verbose = FALSE
 )
 }
 \arguments{
@@ -89,8 +88,6 @@ as fixed.}
 
 \item{verbose}{\code{TRUE} reports progress in a few lines and the result,
 \code{FALSE} (default) only the result, \code{"full"} every step of the solver.}
-
-\item{...}{\code{rates} is deprecated and ignored.}
 }
 \value{
 Named character vector of steady-state equations in dMod format, or

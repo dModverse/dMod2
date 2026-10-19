@@ -66,7 +66,7 @@ statsReset <- environment(attr(pSS, "mappings")[[1]])$statsReset
 statsReset()
 set.seed(1)
 t3 <- system.time(f1 <- trust(obj, center + rnorm(length(center), 0, 1), rinit = 0.1, rmax = 10,
-                              iterlim = 400, hessianFallback = "sr1", fallbackLimit = 1L))[3]
+                              iterlim = 400))[3]
 cat(sprintf("\none trust fit: value %.2f, converged %s, %d iterations, %.0f s\n",
             f1$value, f1$converged, f1$iterations, t3))
 showStats("trust")
@@ -74,8 +74,7 @@ showStats("trust")
 # ---- multistart ----------------------------------------------------------------
 set.seed(2)
 tm <- system.time(fits <- mstrust(obj, center, studyname = "numSteady", fits = nfits, cores = cores,
-                                  sd = 1, iterlim = 400, output = FALSE,
-                                  hessianFallback = "sr1", fallbackLimit = 1L))[3]
+                                  sd = 1, iterlim = 400, output = FALSE))[3]
 pf <- as.parframe(fits)
 ok <- vapply(fits, function(f) is.list(f) && is.null(f$error), TRUE)
 cat(sprintf("\n%d of %d fits returned, %d converged, %.0f s\n",

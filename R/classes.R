@@ -985,6 +985,8 @@ match.fnargs <- function(arglist, choices) {
     attr(outfn, "conditions") <- conditions12
     attr(outfn, "parameters") <- parameters12
     attr(outfn, "modelname") <- modelname12
+    attr(outfn, "compileInfo") <- .mergeCompileInfo(attr(e1, "compileInfo"),
+                                                    attr(e2, "compileInfo"))
     # Reconstruction handles, coalesced from either operand.
     for (.a in c("prdfn", "data", "errfn", "timesD", "omegaSpec")) {
       .v <- attr(e1, .a, exact = TRUE)

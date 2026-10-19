@@ -18,7 +18,7 @@ data(badata)
 plotData(as.datalist(badata))
 }
 \seealso{
-\code{system.file("examples", "BA_transport.R", package = "dMod2")}
-builds and fits the model.
+\code{demo("BA_transport", package = "dMod2")} builds and fits the
+model.
 }
 \keyword{data}

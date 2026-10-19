@@ -37,11 +37,15 @@
 #' evaluations in a row) or \code{"iterlim"}. Stagnation reports
 #' \code{converged = TRUE}.
 #'
-#' Only \code{gtol} tests first-order optimality. With a
-#' \code{hessianFallback}, the first \code{"fvalue"}, \code{"preddiff"},
-#' \code{"step"} or \code{"stagnation"} stop hands over to the fallback source
+#' Only \code{gtol} tests first-order optimality. While \code{switches}
+#' remain, see \code{phases}, an \code{"fvalue"}, \code{"preddiff"},
+#' \code{"step"} or \code{"stagnation"} stop hands over to the next phase
 #' instead of ending the run. In a quasi-Newton phase \code{"fvalue"},
-#' \code{"preddiff"} and \code{"step"} do not end the run.
+#' \code{"preddiff"} and \code{"step"} do not end the run. A phase that
+#' reaches its own \code{iterlim} ends like a soft stop, with
+#' \code{stopReason = "iterlim"} and \code{converged = FALSE} when no
+#' handover is left. The total \code{iterlim} ends the run in any phase, with
+#' \code{stopReason = "iterlim"} and \code{converged = FALSE}.
 #'
 #' \code{argument}, \code{value}, \code{gradient}, \code{hessian} and
 #' \code{atBound} in the result belong to the best iterate visited, which is
@@ -50,8 +54,8 @@
 #' @section Multiple shooting:
 #' An objective built by \code{\link{normL2}(..., multipleShootingControl = )},
 #' alone or in a sum, is optimised by multiple shooting with the same controls.
-#' Not available then: \code{hessianMethod = "exact"}, a
-#' \code{hessianFallback}, \code{qnControl$hessianReseed},
+#' Not available then: \code{hessianMethod = "exact"}, more than one phase,
+#' \code{switches}, \code{qnControl$hessianReseed},
 #' \code{qnControl$qnMemory}, \code{stepControl$nonmonotone},
 #' \code{boundary = "clip"}, \code{minimize = FALSE} and \code{traceFile}.
 #' The run reports \code{converged = TRUE} only when the scaled gaps between
@@ -69,40 +73,57 @@
 #'   \code{boundary = "reflective"} they are moved just inside the box.
 #' @param rinit Initial trust-region radius. Default \code{0.1}.
 #' @param rmax Maximum trust-region radius. Default \code{10}.
-#' @param iterlim Maximum number of trust-region iterations. Default
-#'   \code{100}.
-#' @param hessianMethod Source of the model Hessian at the start of the run:
-#'   \code{"gn"} (default) the Gauss-Newton Hessian of the objective,
-#'   \code{"bfgs"} or \code{"sr1"} a quasi-Newton update seeded as
+#' @param iterlim Maximum number of trust-region iterations over all phases.
+#'   Default \code{1000}.
+#' @param hessianMethod Source of the model Hessian of a run without
+#'   \code{phases}: \code{"gn"} (default) the Gauss-Newton Hessian of the
+#'   objective, \code{"bfgs"} or \code{"sr1"} a quasi-Newton update seeded as
 #'   \code{qnControl$hessianInit} says, \code{"exact"} the true Hessian at
 #'   every iterate, which needs an objective that takes \code{deriv2}.
 #'   Quasi-Newton methods require \code{stepControl$boundary = "reflective"}.
-#'   Also selects the control defaults below.
-#' @param hessianFallback Hessian source the run hands over to at the first
-#'   value, model, step or stagnation stop: \code{"none"} (default),
-#'   \code{"bfgs"}, \code{"sr1"} or \code{"gn"}. A handover restarts the trust
-#'   region at \code{rinit}, discards the quasi-Newton pairs and keeps the
-#'   working Hessian.
-#' @param fallbackLimit Number of handovers allowed. Default \code{1}: hand
-#'   over once and run the fallback to the end. A higher value alternates
-#'   between the two sources, \code{0} disables the fallback. The result
+#'   Also selects the control defaults below. With \code{phases}, each phase
+#'   names its own and this argument is an error.
+#' @param phases List of phases, each a list of settings, run one after the
+#'   other and from the first again after the last. The run hands over to the
+#'   next phase at a value, model, step or stagnation stop and when a phase
+#'   uses up its own \code{iterlim}. A handover restarts the trust region at
+#'   \code{rinit} and discards the quasi-Newton pairs. Default \code{NULL}: one
+#'   phase from \code{hessianMethod} and \code{qnControl}, evaluated with the
+#'   \code{sweep} in \code{...}. Names of the list label the phases in the
+#'   result, the Hessian source does otherwise. Not available with multiple
+#'   shooting and \code{boundary = "clip"}.
+#'   \describe{
+#'     \item{\code{hessianMethod}}{Hessian source of the phase, as
+#'       \code{hessianMethod}. Required.}
+#'     \item{\code{iterlim}}{Maximum number of iterations of one run of the
+#'       phase. Default \code{NULL}: only the total \code{iterlim}.}
+#'     \item{\code{sweep}}{\code{"forward"} or \code{"reverse"}, the
+#'       \code{sweep} the objective is evaluated with in the phase; a
+#'       \code{sweep} in \code{...} is an error with \code{phases}. Default
+#'       \code{NULL}: for \code{"bfgs"} and \code{"sr1"} reverse if the
+#'       objective can be evaluated backwards at \code{parinit}, as with
+#'       \code{derivMode = c("forward", "reverse")} throughout the chain,
+#'       forward otherwise. A Gauss-Newton Hessian is always computed forward.
+#'       A handover between phases of different sweep evaluates the current
+#'       iterate once more. The result reports the sweeps as
+#'       \code{phaseSweep}.}
+#'     \item{\code{qnControl}}{Quasi-Newton settings of the phase, merged
+#'       over \code{qnControl}; see there. \code{hessianInit} defaults to
+#'       \code{"gn"} in every phase but the first: a quasi-Newton phase starts
+#'       from the Gauss-Newton Hessian at the iterate of the handover.}
+#'   }
+#' @param switches Number of handovers allowed. Default \code{NULL}: one
+#'   fewer than there are phases, so each runs once. A higher value cycles
+#'   through the phases again, \code{0} runs the first phase only. The result
 #'   reports the count as \code{nSwitch}.
-#' @param parscale Deprecated. Optional numeric of length
-#'   \code{length(parinit)}, named or unnamed. The trust region works on the
-#'   parameters multiplied by \code{parscale}, so the trust radius and
-#'   \code{xtol} are measured there. Default \code{NULL}, no scaling. Fit on
-#'   log scale instead.
 #' @param parupper,parlower Upper and lower bounds. Unnamed: the first element
 #'   applies to all parameters. Named: entries are matched by name, missing
 #'   parameters are unbounded. Default \code{NULL}, unbounded.
 #' @param tolControl List of convergence thresholds, merged into the defaults.
 #'   \describe{
-#'     \item{\code{ftol}}{Change in objective value. Default \code{1e-6}. For
-#'       an ODE model integrated at relative tolerance \code{rtol}, use a value
-#'       at or above \code{rtol * abs(f)}.}
+#'     \item{\code{ftol}}{Change in objective value. Default \code{1e-6}.}
 #'     \item{\code{mtol}}{Predicted model decrease. Default \code{1e-6}.}
-#'     \item{\code{gtol}}{First-order optimality measure, absolute. Default
-#'       \code{1e-6}. For a relative test pass \code{gtol = x * abs(f)}.}
+#'     \item{\code{gtol}}{First-order optimality measure. Default \code{1e-6}.}
 #'     \item{\code{xtol}}{Step norm. Default \code{0}, disabled.}
 #'     \item{\code{rmin}}{Lower limit on the trust radius; falling below it
 #'       stops the run with \code{converged = FALSE}. Default \code{0},
@@ -135,8 +156,8 @@
 #'       \code{1e-8}, \code{0} disables the test; \code{"sr1"} is exempt. The
 #'       result reports the rejected pairs as \code{qnSkipped}.}
 #'     \item{\code{qnRejected}}{Whether \code{"sr1"} also updates from a
-#'       rejected trial point. Default \code{TRUE} when \code{hessianMethod}
-#'       or \code{hessianFallback} is \code{"sr1"}, \code{FALSE} otherwise.}
+#'       rejected trial point. Default \code{TRUE} for a phase whose source is
+#'       \code{"sr1"}, \code{FALSE} otherwise.}
 #'   }
 #' @param stepControl List of step and acceptance settings, merged into the
 #'   defaults.
@@ -192,9 +213,15 @@
 #'     \item{\code{neval}}{Number of objective evaluations.}
 #'     \item{\code{qnEval}}{Evaluations spent in a quasi-Newton phase.}
 #'     \item{\code{qnSkipped}}{Pairs rejected by the cautious test.}
-#'     \item{\code{nSwitch}}{Number of Hessian source handovers.}
+#'     \item{\code{nSwitch}}{Number of handovers between phases.}
+#'     \item{\code{phaseIterations}}{Named integer, the iterations of each
+#'       phase run, in run order and named after the phase; sums to
+#'       \code{iterations}.}
+#'     \item{\code{phaseSweep}}{Named character, the sweep of each element
+#'       of \code{phases}, present when \code{phases} is set.}
 #'     \item{\code{nReseed}}{Number of reseeds by
-#'       \code{qnControl$hessianReseed = "stall"}.}
+#'       \code{qnControl$hessianReseed = "stall"}, which allows each run of a
+#'       phase the same number.}
 #'     \item{\code{evalBySource}}{Named integer, evaluations per Hessian
 #'       source.}
 #'     \item{\code{converged}}{Logical.}
@@ -250,9 +277,12 @@
 #'              iterlim = 200)
 #' fit$atBound
 #'
-#' # Quasi-Newton with a Gauss-Newton fallback
-#' fit <- trust(rosenbrock, c(a = -1.2, b = 1), hessianMethod = "bfgs",
-#'              hessianFallback = "gn", iterlim = 200)
+#' # Gauss-Newton, then BFGS with a budget of its own, then Gauss-Newton again
+#' fit <- trust(rosenbrock, c(a = -1.2, b = 1), iterlim = 200,
+#'              phases = list(list(hessianMethod = "gn"),
+#'                            list(hessianMethod = "bfgs", iterlim = 50)),
+#'              switches = 2)
+#' fit$phaseIterations
 #' fit$evalBySource
 #'
 #' @references Coleman, T. F. and Li, Y. (1996). An interior trust region
@@ -284,11 +314,10 @@
 #'
 #' @export
 trust <- function(objfun, parinit, rinit = 0.1, rmax = 10,
-                  iterlim   = 100L,
+                  iterlim   = 1000L,
                   hessianMethod   = c("gn", "bfgs", "sr1", "exact"),
-                  hessianFallback = c("none", "bfgs", "sr1", "gn"),
-                  fallbackLimit   = 1L,
-                  parscale  = NULL,
+                  phases    = NULL,
+                  switches  = NULL,
                   parupper  = NULL,
                   parlower  = NULL,
                   tolControl  = NULL,
@@ -299,56 +328,180 @@ trust <- function(objfun, parinit, rinit = 0.1, rmax = 10,
                   printIter = FALSE,
                   traceFile = NULL,
                   ...) {
-  hessianMethod   <- match.arg(hessianMethod)
-  hessianFallback <- match.arg(hessianFallback)
   dots <- list(...)
   .trustRejectMoved(names(dots), "trust")
-  if (!is.null(parscale))
-    warning("trust: 'parscale' is deprecated; fit on log scale instead.",
-            call. = FALSE)
-  stepControl <- .stepControlAlias(stepControl, "trust")
+  if (!is.null(phases) && !missing(hessianMethod))
+    stop("trust: with `phases`, each phase names its own hessianMethod.",
+         call. = FALSE)
+  if (!is.null(phases) && !is.null(dots$sweep))
+    stop("trust: with `phases`, each phase sets its own sweep.", call. = FALSE)
+  hessianMethod <- if (is.null(phases)) match.arg(hessianMethod) else
+    .phaseMethod(phases[[1L]]$hessianMethod, 1L)
 
-  ctl  <- .trustDefaults(hessianMethod, hessianFallback)
+  ctl  <- .trustDefaults(hessianMethod)
   tol  <- .mergeControl(ctl$tolControl,  tolControl,  "tolControl")
   qn   <- .mergeControl(ctl$qnControl,   qnControl,   "qnControl")
   step <- .mergeControl(ctl$stepControl, stepControl, "stepControl")
 
   boundary    <- match.arg(step$boundary, c("reflective", "clip"))
-  hessianInit   <- match.arg(qn$hessianInit, c("gn", "identity", "exact"))
-  hessianReseed <- match.arg(qn$hessianReseed %||% "never", c("never", "stall"))
+  ph <- .trustPhases(phases, switches, hessianMethod, qnControl)
 
   # The objective decides: a normL2 with a multipleShootingControl, alone or
   # in a sum, is optimised by multiple shooting, with the same controls.
-  if (length(.shootingTerms(objfun)))
+  if (length(.shootingTerms(objfun)) > 0L) {
+    if (length(ph$phases) > 1L || ph$switches > 0L)
+      stop("trust: a multiple-shooting objective runs a single phase; ",
+           "`phases` with more than one element and `switches` are not ",
+           "supported.", call. = FALSE)
     return(.trustFit(.trustShooting(objfun, parinit, rinit, rmax, iterlim,
-                          hessianMethod, hessianFallback, fallbackLimit,
-                          parscale, parupper, parlower, tol, qn, step,
+                          hessianMethod, parupper, parlower, tol,
+                          ph$phases[[1L]]$qnControl, step,
                           minimize, blather, printIter, traceFile, dots)))
+  }
 
   # `want` (0 value, 1 gradient, 2 Gauss-Newton, 3 exact) becomes the objective's
   # own arguments here, where its formals are visible. The exact request is checked
   # up front, since a stop() inside fn reads as "parinit not feasible".
   .fml   <- names(formals(objfun))
-  .wants_exact <- identical(hessianMethod, "exact") ||
-                  identical(hessianInit, "exact")
+  .wants_exact <- any(vapply(ph$phases, function(p)
+    identical(p$hessianMethod, "exact") || identical(p$qnControl$hessianInit, "exact"),
+    TRUE))
   if (.wants_exact && !any(c("deriv2", "...") %in% .fml))
     stop("trust: hessianMethod or qnControl$hessianInit is \"exact\", but ",
          "this objective has no `deriv2` argument to ask an exact Hessian ",
          "with.", call. = FALSE)
 
-  fn <- function(x, want = 2L) {
+  # Without `phases` the objective takes `...` as given. With `phases` each
+  # phase passes its own sweep in place of one in `...`, and a request for a
+  # Gauss-Newton Hessian runs forward, since it needs the forward sensitivities.
+  sweeps <- if (is.null(phases)) dots$sweep %||% "forward" else {
+    probe <- local({
+      v <- NULL
+      function() { if (is.null(v)) v <<- .reverseProbe(objfun, parinit, dots); v }
+    })
+    vapply(ph$phases, function(p) .phaseSweep(p$sweep, p$hessianMethod, objfun, probe), "")
+  }
+  phaseDots <- lapply(sweeps, function(s) {
+    if (is.null(phases)) return(dots)
+    d <- dots
+    d$sweep <- if (identical(s, "reverse")) "reverse" else NULL
+    d
+  })
+
+  fn <- function(x, want = 2L, phase = 0L) {
     want <- as.integer(want)
     args <- list(x, deriv = want >= 1L, hessian = want >= 2L)
     if (want >= 3L) args$deriv2 <- TRUE
-    do.call(objfun, c(args, dots))
+    d <- phaseDots[[phase + 1L]]
+    if (!is.null(phases) && want == 2L) d$sweep <- NULL
+    do.call(objfun, c(args, d))
   }
-  .trustFit(trust_impl(fn, parinit, rinit, rmax, parscale, as.integer(iterlim),
+  qfield <- function(f) lapply(ph$phases, function(p) p$qnControl[[f]])
+  fit <- trust_impl(fn, parinit, rinit, rmax, NULL, as.integer(iterlim),
              tol$ftol, tol$mtol, tol$gtol, tol$xtol, tol$rmin, step$thetaMax,
-             boundary, hessianMethod, hessianFallback,
-             as.integer(fallbackLimit), hessianInit, hessianReseed,
-             as.integer(qn$qnMemory), qn$qnCautious, isTRUE(qn$qnRejected),
+             boundary,
+             vapply(ph$phases, `[[`, "", "hessianMethod"),
+             vapply(ph$phases, `[[`, 1L, "iterlim"),
+             sweeps == "reverse",
+             vapply(qfield("hessianInit"), function(v)
+               match.arg(v, c("gn", "identity", "exact")), ""),
+             vapply(qfield("hessianReseed"), function(v)
+               match.arg(v %||% "never", c("never", "stall")), ""),
+             vapply(qfield("qnMemory"), as.integer, 1L),
+             vapply(qfield("qnCautious"), as.numeric, 1),
+             vapply(qfield("qnRejected"), isTRUE, TRUE),
+             ph$switches,
              step$nonmonotone, minimize, blather,
-             parupper, parlower, printIter, traceFile))
+             parupper, parlower, printIter, traceFile)
+  if (!is.null(fit$phaseIterations)) {
+    n <- length(fit$phaseIterations)
+    names(fit$phaseIterations) <- ph$labels[(seq_len(n) - 1L) %% length(ph$labels) + 1L]
+  }
+  if (!is.null(phases)) fit$phaseSweep <- stats::setNames(sweeps, ph$labels)
+  .trustFit(fit)
+}
+
+
+.phaseMethod <- function(method, k) {
+  if (is.null(method))
+    stop("trust: phases[[", k, "]] names no hessianMethod.", call. = FALSE)
+  match.arg(method, c("gn", "bfgs", "sr1", "exact"))
+}
+
+# The phases of a run, each with its Hessian source, budget (NA: none of its
+# own), sweep and quasi-Newton settings merged over the defaults of its source
+# and the top-level qnControl. Without `phases`, one phase from the top level.
+.trustPhases <- function(phases, switches, hessianMethod, qnControl) {
+  if (is.null(phases))
+    phases <- list(list(hessianMethod = hessianMethod))
+  else if (!is.list(phases) || !length(phases) ||
+           !all(vapply(phases, is.list, TRUE)))
+    stop("trust: `phases` must be a non-empty list of lists.", call. = FALSE)
+
+  defaults <- list(hessianMethod = NULL, iterlim = NULL, sweep = NULL,
+                   qnControl = NULL)
+  out <- lapply(seq_along(phases), function(k) {
+    p <- .mergeControl(defaults, phases[[k]], paste0("phases[[", k, "]]"))
+    p$hessianMethod <- .phaseMethod(p$hessianMethod, k)
+    lim <- p$iterlim %||% Inf
+    if (length(lim) != 1L || is.na(lim) || lim < 1)
+      stop("trust: phases[[", k, "]]$iterlim must be a positive number.",
+           call. = FALSE)
+    p$iterlim <- if (is.finite(lim)) as.integer(lim) else NA_integer_
+    q <- .mergeControl(.trustDefaults(p$hessianMethod)$qnControl, qnControl,
+                       "qnControl")
+    # A later phase starts from the Gauss-Newton Hessian at the handover.
+    if (k > 1L) q$hessianInit <- "gn"
+    p$qnControl <- .mergeControl(q, p$qnControl,
+                                 paste0("phases[[", k, "]]$qnControl"))
+    p
+  })
+
+  switches <- switches %||% (length(out) - 1L)
+  if (length(switches) != 1L || is.na(switches) || switches < 0)
+    stop("trust: `switches` must be a non-negative integer.", call. = FALSE)
+
+  labels <- names(phases) %||% rep("", length(out))
+  labels <- ifelse(nzchar(labels), labels, vapply(out, `[[`, "", "hessianMethod"))
+  list(phases = out, switches = as.integer(switches),
+       labels = make.unique(labels, sep = "."))
+}
+
+# The sweep of one phase. NULL takes the reverse sweep for a quasi-Newton phase
+# when the objective can do it at parinit, forward otherwise; an explicit
+# "reverse" has to work. `probe()` is TRUE or the message of the failed probe.
+.phaseSweep <- function(sweep, method, objfun, probe) {
+  if (!is.null(sweep)) sweep <- match.arg(sweep, c("forward", "reverse"))
+  if (identical(method, "gn")) {
+    if (identical(sweep, "reverse"))
+      stop("trust: a Gauss-Newton phase needs the forward sensitivities; ",
+           "sweep = \"reverse\" is for \"bfgs\", \"sr1\" and \"exact\".",
+           call. = FALSE)
+    return("forward")
+  }
+  if (identical(sweep, "forward")) return("forward")
+  if (is.null(sweep) && identical(method, "exact")) return("forward")
+  if (!"sweep" %in% names(formals(objfun))) {
+    if (is.null(sweep)) return("forward")
+    stop("trust: a phase asks for sweep = \"reverse\", but the objective has ",
+         "no `sweep` argument.", call. = FALSE)
+  }
+  ok <- probe()
+  if (isTRUE(ok)) return("reverse")
+  if (is.null(sweep)) return("forward")
+  stop("trust: a phase asks for sweep = \"reverse\", but the objective cannot ",
+       "be evaluated backwards: ", ok, call. = FALSE)
+}
+
+# TRUE if the objective evaluates value and gradient backwards at parinit, the
+# error message otherwise.
+.reverseProbe <- function(objfun, parinit, dots) {
+  dots$sweep <- "reverse"
+  tryCatch({
+    suppressWarnings(do.call(objfun, c(list(parinit, deriv = TRUE,
+                                            hessian = FALSE), dots)))
+    TRUE
+  }, error = function(e) conditionMessage(e))
 }
 
 # A fit is a list of class `trustfit`, so vcov() dispatches on it.
@@ -368,12 +521,11 @@ print.trustfit <- function(x, ...) {
 # Defaults per Hessian source, and the single source of truth for what each
 # control group accepts. Members of one group are settable together or not at
 # all; see the roxygen of `trust` for what they mean.
-.trustDefaults <- function(hessianMethod = "gn", hessianFallback = "none") {
+.trustDefaults <- function(hessianMethod = "gn") {
   qn <- list(hessianInit = "gn", hessianReseed = "never",
              qnMemory = 0L, qnCautious = 1e-8, qnRejected = FALSE)
-  # Nocedal and Wright, sec. 6.2: SR1 also updates from a rejected step. The
-  # flag is inert outside an sr1 phase, so a fallback to sr1 arms it too.
-  if ("sr1" %in% c(hessianMethod, hessianFallback)) qn$qnRejected <- TRUE
+  # Nocedal and Wright, sec. 6.2: SR1 also updates from a rejected step.
+  if (identical(hessianMethod, "sr1")) qn$qnRejected <- TRUE
   list(
     tolControl  = list(ftol = 1e-6, mtol = 1e-6, gtol = 1e-6,
                        xtol = 0, rmin = 0, ctol = 1e-6),
@@ -385,32 +537,24 @@ print.trustfit <- function(x, ...) {
 }
 
 
-# Deprecated flat arguments and the control member replacing each, reported by
-# name instead of being routed to objfun.
+# Members of a control list, refused by name when given flat instead of being
+# routed to objfun.
 .trustMoved <- c(
   ftol = "tolControl$ftol",   mtol  = "tolControl$mtol",
   gtol = "tolControl$gtol",   xtol  = "tolControl$xtol",
-  rmin = "tolControl$rmin",   fterm = "tolControl$ftol",
-  mterm = "tolControl$mtol",
+  rmin = "tolControl$rmin",
   hessianInit = "qnControl$hessianInit", qnMemory   = "qnControl$qnMemory",
   hessianReseed = "qnControl$hessianReseed",
   qnCautious  = "qnControl$qnCautious",  qnRejected = "qnControl$qnRejected",
   boundary    = "stepControl$boundary",  thetaMax   = "stepControl$thetaMax",
-  theta.max   = "stepControl$thetaMax",  nonmonotone = "stepControl$nonmonotone")
-
-# `theta.max`, the former name of stepControl$thetaMax, with a warning.
-.stepControlAlias <- function(stepControl, who) {
-  if (!"theta.max" %in% names(stepControl)) return(stepControl)
-  if ("thetaMax" %in% names(stepControl))
-    stop(who, ": give stepControl$thetaMax only; 'theta.max' is its ",
-         "deprecated name.", call. = FALSE)
-  warning(who, ": stepControl$theta.max is deprecated, use thetaMax.",
-          call. = FALSE)
-  names(stepControl)[names(stepControl) == "theta.max"] <- "thetaMax"
-  stepControl
-}
+  nonmonotone = "stepControl$nonmonotone")
 
 .trustRejectMoved <- function(nms, who) {
+  gone <- intersect(nms, c("fallbackControl", "hessianFallback", "fallbackLimit"))
+  if (length(gone))
+    stop(who, ": ", paste(gone, collapse = ", "), " is no argument; a run over ",
+         "several Hessian sources takes `phases` and `switches`, see ?trust.",
+         call. = FALSE)
   hit <- intersect(nms, names(.trustMoved))
   if (length(hit))
     stop(who, ": ", paste(hit, collapse = ", "), " moved into a control list. ",
@@ -440,7 +584,6 @@ print.trustfit <- function(x, ...) {
 #' @param ftol,mtol,gtol,xtol,rmin,theta.max,boundary \code{trustL1} only;
 #'   its tolerances stay flat, it does not take the control lists of
 #'   \code{trust}.
-#' @param fterm,mterm Deprecated aliases for \code{ftol} and \code{mtol}.
 #' @param mu Named numeric vector of reference values for the L1-penalised
 #'   parameters. Names must be a subset of \code{names(parinit)}; only the
 #'   named parameters receive a penalty. Each must lie strictly inside
@@ -467,7 +610,6 @@ print.trustfit <- function(x, ...) {
 #'   \code{fuse} is given and \code{mu} is not, \code{mu} is empty.
 trustL1 <- function(objfun, parinit, mu = 0 * parinit, one.sided = FALSE, lambda = 1,
                     rinit = 0.1, rmax = 10,
-                    parscale  = NULL,
                     iterlim   = 100L,
                     ftol      = 1e-6,
                     mtol      = 1e-6,
@@ -482,11 +624,8 @@ trustL1 <- function(objfun, parinit, mu = 0 * parinit, one.sided = FALSE, lambda
                     parlower  = NULL,
                     printIter = FALSE,
                     traceFile = NULL,
-                    fterm, mterm,
                     gate = NULL, fuse = NULL,
                     ...) {
-  if (!missing(fterm)) ftol <- fterm
-  if (!missing(mterm)) mtol  <- mterm
   boundary <- match.arg(boundary)
 
   sanePars <- sanitizePars(parinit, list(...)$fixed)
@@ -534,7 +673,7 @@ trustL1 <- function(objfun, parinit, mu = 0 * parinit, one.sided = FALSE, lambda
 
   trustL1_impl(fn, parinit, mu, lambda,
                as.logical(one.sided)[1L], rinit, rmax,
-               parscale, as.integer(iterlim),
+               NULL, as.integer(iterlim),
                ftol, mtol, gtol, xtol, rmin, theta.max,
                boundary, minimize, blather,
                parupper, parlower, printIter, traceFile,

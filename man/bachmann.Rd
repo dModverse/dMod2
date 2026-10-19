@@ -41,6 +41,6 @@ data(bachmann)
 head(bachmann)
 }
 \seealso{
-\code{system.file("examples", "example_BachmannMSB2011.R", package = "dMod2")} builds the model.
+\code{demo("BachmannMSB2011", package = "dMod2")} builds the model.
 }
 \keyword{data}

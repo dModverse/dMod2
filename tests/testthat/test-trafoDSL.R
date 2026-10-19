@@ -27,7 +27,7 @@ test_that("identifiers may end in an underscore", {
   trafo <- define(trafo, "S_ ~ N_ - I0_")
 
   expect_equal(insert(trafo, "gamma_ ~ gamma_CA")[["gamma_"]], "gamma_CA")
-  expect_equal(repar(trafo, "I0_ ~ I0_NY")[["S_"]], "N_-I0_NY")
+  expect_equal(repar(trafo, "I0_ ~ I0_NY")[["S_"]], "N_ - I0_NY")
   expect_equal(insert(trafo, "x ~ exp(x)", x = "a__b")[["a__b"]], "exp(a__b)")
 
 })
@@ -37,7 +37,7 @@ test_that("substitution into compound identifiers still works", {
   trafo <- define(eqnvec(), "x~x", x = c("alpha", "k_pr_21mRNA"))
   out   <- insert(trafo, "x ~ x + Delta_x_condition", x = "alpha", condition = "C1")
 
-  expect_equal(out[["alpha"]], "alpha+Delta_alpha_C1")
+  expect_equal(out[["alpha"]], "alpha + Delta_alpha_C1")
   expect_equal(out[["k_pr_21mRNA"]], "k_pr_21mRNA")
 
 })
@@ -113,5 +113,39 @@ test_that("subset() on an eqnlist sees the calling frame", {
   expect_equal(nrow(getReactions(byRate("k1"))), 1L)
   expect_equal(nrow(getReactions(byEduct("A"))), 1L)
   expect_equal(nrow(getReactions(subset(eq, grepl("k", Rate)))), 2L)
+
+})
+
+test_that("a compound replacement keeps its precedence", {
+
+  trafo <- define(eqnvec(), "x~x", x = c("a", "b"))
+  trafo <- define(trafo, "c ~ x/tot*k^tot", x = "a")
+  out   <- insert(trafo, "tot ~ 500*(1 + tot)")
+
+  expect_equal(out[["c"]], "a/(500 * (1 + tot)) * k^(500 * (1 + tot))")
+  expect_equal(insert(trafo, "a ~ exp(a)")[["c"]], "exp(a)/tot * k^tot")
+  expect_equal(insert(trafo, "tot ~ -1")[["c"]], "a/(-1) * k^(-1)")
+
+})
+
+test_that("replaceSymbols replaces variables only", {
+
+  expect_equal(replaceSymbols("k", "p+q", "f(k = k) + l$k + exp(k)"),
+               "f(k = (p+q)) + l$k + exp(p+q)")
+  expect_equal(replaceSymbols(c("a", "b"), c("b", "a"), "a - b"), "b - a")
+  x <- eqnvec(A = "k1*B", B = "0")
+  out <- replaceSymbols("k1", "k2 + k3", x)
+  expect_s3_class(out, "eqnvec")
+  expect_equal(unclass(out), c(A = "(k2 + k3)*B", B = "0"))
+
+})
+
+test_that("getSymbols lists variables once, in order", {
+
+  expect_equal(getSymbols(c("k1*A/(Km + A)", "0", "exp(-k2*time)")),
+               c("k1", "A", "Km", "k2", "time"))
+  expect_equal(getSymbols("k1*A + f(x = B)", exclude = "A"), c("k1", "B"))
+  expect_equal(getSymbols("2*pi*k*time"), c("k", "time"))
+  expect_null(getSymbols(NULL))
 
 })

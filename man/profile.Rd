@@ -107,7 +107,7 @@ side of the optimum to profile.}
 \code{\link[=confint.parframe]{confint.parframe()}}, so the profile reaches that threshold.}
 
 \item{...}{Further arguments passed to \code{fitted}, for example
-\code{fixed}. \code{objfun} is deprecated, use \code{fitted}.}
+\code{fixed}.}
 }
 \value{
 A \code{\link[=parframe]{parframe()}} with one row per profile point of all profiled

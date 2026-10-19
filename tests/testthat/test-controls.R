@@ -80,29 +80,6 @@ test_that("Xs solves with the options set through controls, defaults kept", {
   expect_silent(x(.ctl_times, inner, deriv = FALSE))
 })
 
-test_that("optionsOde is a deprecated alias of options", {
-  fx <- ctl_models()
-  inner <- c(A = 1, k = 0.5)
-  expect_warning(x <- Xs(fx$m, optionsOde = list(maxsteps = 2L)),
-                 "'optionsOde' is deprecated")
-  expect_identical(controls(x, NULL, "options"), list(maxsteps = 2L))
-  expect_error(x(.ctl_times, inner, deriv = FALSE), "Maximum number of steps")
-  expect_warning(Xs(fx$m, options = list(), optionsOde = list(rtol = 1e-8)),
-                 "'optionsOde' is deprecated")
-  expect_error(Xs(fx$m, options = list(rtol = 1e-8), optionsOde = list()),
-               "give 'options' only")
-
-  expect_warning(controls(x, NULL, "optionsOde") <- list(),
-                 "'optionsOde' is deprecated")
-  expect_identical(controls(x, NULL, "options"), list())
-  expect_warning(expect_identical(controls(x, NULL, "optionsOde"), list()),
-                 "'optionsOde' is deprecated")
-
-  expect_warning(xf <- Xf(fx$m, optionsOde = list(maxsteps = 2L)),
-                 "'optionsOde' is deprecated")
-  expect_error(xf(.ctl_times, inner), "Maximum number of steps")
-})
-
 test_that("Xs warns about an unknown option set through controls, once", {
   fx <- ctl_models()
   x <- Xs(fx$m)

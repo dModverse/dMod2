@@ -71,7 +71,7 @@ behaviour they produce.
 
 The running example is the STAT5 dimerisation model of Boehm et al.
 [@boehm2014identification], built as in the shipped example
-`example_Boehm_JProteomeRes2014.R`: nine parameters on a base-10 logarithmic
+`demo("Boehm_JProteomeRes2014")`: nine parameters on a base-10 logarithmic
 scale, a weak prior on the six dynamic ones, and bounds of $\pm 5$. The multi-start comparisons on this model share one set of 100 starting points; the comparison without the prior and the Bachmann model use 200.
 
 ```{r problem, results = "hide"}
@@ -290,9 +290,10 @@ and the bound handling are the same in all four cases.
 | `"sr1"` | a symmetric rank-one update, possibly indefinite | value, gradient |
 | `"exact"` | the objective's exact Hessian, a Newton run | value, gradient, exact Hessian |
 
-`hessianFallback` names a second source and `fallbackLimit` how often the two
-may swap. A run is a method and optionally a fallback; no pair has a name of its
-own.
+`phases` lists the sources a run passes through, each with its own
+`hessianMethod`, `iterlim`, `sweep` and `qnControl`; `switches` bounds the
+number of handovers, cycling through the list. Without `phases` a run has one
+source; no combination has a name of its own.
 
 For a sum of squares the Gauss-Newton matrix $J^{\mathsf T} J$ is an adequate
 curvature model wherever the residuals are small, and dMod2 obtains it at no
@@ -354,8 +355,9 @@ definiteness argument rests on the step being accepted.
 
 ## The handover
 
-A fallback run stays on `"gn"` until `fvalue`, `preddiff`, `step` or
-`stagnation` would terminate it, then switches to the fallback source, seeded
+A run with a `"gn"` phase and a quasi-Newton phase stays on `"gn"` until
+`fvalue`, `preddiff`, `step` or `stagnation` would terminate it, then switches
+to the next phase, seeded
 with the last accepted $J^{\mathsf T} J$. `gradient` remains terminal: it is an
 optimality test, not a symptom of a stalled model. The construction follows
 Fides of Fröhlich and Sorger [@froehlich2022fides], which switches when the
@@ -369,9 +371,10 @@ start <- as.parvec(msParframe(pouter, n = 1, sd = 3))
 single <- .fit("single", list(
   gn     = trust(obj, start, rinit = 0.1, rmax = 10, iterlim = 5000,
                  parlower = parlower, parupper = parupper),
-  fallback = trust(obj, start, rinit = 0.1, rmax = 10, iterlim = 5000,
+  gn_bfgs = trust(obj, start, rinit = 0.1, rmax = 10, iterlim = 5000,
                  parlower = parlower, parupper = parupper,
-                 hessianFallback = "bfgs")))
+                 phases = list(list(hessianMethod = "gn"),
+                               list(hessianMethod = "bfgs")))))
 
 data.frame(method = names(single),
            value  = vapply(single, `[[`, 0.0, "value"),
@@ -381,16 +384,17 @@ data.frame(method = names(single),
            row.names = NULL)
 ```
 
-Over the shared starting points of the next section a fallback run uses a few
-per cent more evaluations than `"gn"`. The `grad` column there counts the starts
-ending at a stationary point, which a fallback reaches and `"gn"` does not.
+Over the shared starting points of the next section a two-phase run uses a
+few per cent more evaluations than `"gn"`. The `grad` column there counts the
+starts ending at a stationary point, which a two-phase run reaches and `"gn"`
+does not.
 
 # Seed and memory of the approximation
 
 Three arguments shape the approximation. They apply when a run begins in a
-quasi-Newton phase, that is for `"bfgs"` and `"sr1"`; `"gn"` ignores them, and a
-fallback seeds its handover from the Gauss-Newton matrix irrespective of
-`hessianInit`.
+quasi-Newton phase, that is for `"bfgs"` and `"sr1"`; `"gn"` ignores them. A
+later phase reads them from its own `qnControl`, where `hessianInit` defaults to
+`"gn"` and seeds the handover from the last Gauss-Newton matrix.
 
 `hessianInit` selects the initial matrix: the default `"gn"` is the objective's
 Hessian at `parinit`, `"identity"` the identity. With `"identity"`, `trust()`
@@ -404,7 +408,7 @@ wrong curvature keeps dominating the approximation; on this model those runs
 exhaust the iteration cap without reaching a termination test. `"sr1"` is not
 affected: its rank-one update has no sign constraint and overwrites bad
 curvature outright, and the Moré-Sorensen subproblem solves the indefinite
-approximations that follow. `benchmarks/scripts` compares both seeds.
+approximations that follow. `bench/hessian` compares both seeds.
 
 `qnMemory` limits the curvature retained. The default `0`, used in the
 rest of this vignette, accumulates every update onto the seed. A positive value
@@ -446,7 +450,7 @@ fitAll <- function(...)
                       cores = .cores, rinit = 0.1, rmax = 10, iterlim = 5000,
                       parlower = parlower, parupper = parupper, ...))
 
-source(file.path("benchmarks", "scripts", "hessianSourceSettings.R"))
+source(file.path("..", "..", "bench", "hessian", "hessianSourceSettings.R"))
 settings <- hessianSourceSettings[c("gn", "gn_bfgs", "gn_sr1", "bfgs_id", "sr1_id")]
 
 runs <- .fit("multistart", lapply(settings, function(a) do.call(fitAll, a)))
@@ -510,9 +514,9 @@ waterfall <- function(frames, cutoff = Inf) {
 waterfall(runs, cutoff = 600)
 ```
 
-The curves fall into two shapes. Gauss-Newton and the two fallback runs track
-each other over the whole range, since a fallback is Gauss-Newton until a soft
-stop fires. They differ in the leading plateau: under Gauss-Newton it is not
+The curves fall into two shapes. Gauss-Newton and both two-phase runs
+track each other over the whole range, since such a run is Gauss-Newton until a
+soft stop fires. They differ in the leading plateau: under Gauss-Newton it is not
 flat, because the model stops improving before the minimum, whereas the
 quasi-Newton phase brings those starts to a common value. The identity-seeded
 runs form the second shape, with a longer leading plateau: they reach the global
@@ -604,10 +608,10 @@ it.
 
 # Discussion
 
-`"gn"` and the two fallback runs reach the published optimum from the same
-number of starts. A fallback changes only how a run ends, moving stops from the
-model tests to `gradient`, and an `"sr1"` fallback moves more of them than a
-`"bfgs"` one.
+`"gn"` and both two-phase runs reach the published optimum from the same
+number of starts. A quasi-Newton phase after `"gn"` changes only how a run ends,
+moving stops from the model tests to `gradient`, and an `"sr1"` phase moves more
+of them than a `"bfgs"` one.
 
 On Boehm with the prior, `"sr1"` seeded from the identity reaches the best optimum from several times as many starts as `"gn"`, 34 against 6 of 100, at a tenth of the evaluations per optimum.
 
@@ -916,7 +920,7 @@ it, is fitted in the chart the symmetry reduction certifies, with the voltage as
 the only observable. A change of a parameter by a per cent moves the late spikes
 by more than their width, so the single-shooting objective breaks into narrow
 valleys, one for every way model spikes can pair with data spikes.
-`bench/multipleShooting_preBotC.R` runs the fits; its results are stored beside
+`bench/multipleShooting/preBotC.R` runs the fits; its results are stored beside
 this document.
 
 Two things decide the outcome besides the method. The solver runs at `1e-10`:
@@ -986,19 +990,19 @@ so this document renders in seconds and reproduces what it shows;
 The two larger comparisons are too expensive for a render and are stored beside
 the document, one file each:
 
-- `boehm_noprior.rds` comes from `bench_hessianSource.R` under `benchmarks/scripts`
+- `boehm_noprior.rds` comes from `bench/hessian/hessianSource.R`
   with the environment variable `BOEHM_NOPRIOR` set, and takes minutes on one
   machine.
 - `bachmann.rds` comes from `bachmann_hessianSource.R` under `dev/optimisation`,
   run first with `BACHMANN_SUBMIT` and then with `BACHMANN_COLLECT`. It needs a
   SLURM cluster: five job arrays of 50 tasks, four fits each.
 
-Without `BOEHM_NOPRIOR`, `bench_hessianSource.R` runs the nine-parameter
+Without `BOEHM_NOPRIOR`, `bench/hessian/hessianSource.R` runs the nine-parameter
 comparison of the earlier sections over the whole catalogue rather than the
 subset shown here, with the per-start `stopReason` tables.
 
 The FitzHugh-Nagumo fits are part of `results.rds`. `prebotc.rds` comes from
-`bench/multipleShooting_preBotC.R` with the environment variable `MS_RESULTS`
+`bench/multipleShooting/preBotC.R` with the environment variable `MS_RESULTS`
 set to its path, and takes about half an hour on a machine with twenty cores.
 
 # References

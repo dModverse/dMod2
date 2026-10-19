@@ -10,8 +10,7 @@ datapointL2(
   parameter,
   sigma = 1,
   attrName = "validation",
-  condition,
-  ...
+  condition
 )
 }
 \arguments{
@@ -31,9 +30,6 @@ default \code{"validation"}. The value is also returned as \code{chi2}
 contribution, see \code{attrName} in \code{\link[=normL2]{normL2()}}.}
 
 \item{condition}{Character, the condition of the prediction. No default.}
-
-\item{...}{\code{value} and \code{attr.name} are deprecated names of \code{parameter} and
-\code{attrName}.}
 }
 \value{
 An objective function of class \code{objfn}, called as

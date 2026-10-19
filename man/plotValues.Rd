@@ -5,7 +5,7 @@
 \alias{plotValues}
 \title{Plot Objective Values of a Collection of Fits}
 \usage{
-\method{plotValues}{parframe}(x, tol = 1, ..., showSteps = FALSE)
+\method{plotValues}{parframe}(x, tol = 1, ..., showSteps = FALSE, pseudoLog = FALSE)
 
 plotValues(x, ...)
 }
@@ -20,16 +20,19 @@ still counts as one step. Defaults to 1.}
 
 \item{showSteps}{Logical. \code{TRUE} marks the detected steps by dashed
 vertical lines labelled by their index. Defaults to \code{FALSE}.}
+
+\item{pseudoLog}{Logical. \code{TRUE} draws the values on a pseudo-log10 scale,
+linear below 1 in absolute value and defined for negative values. Defaults
+to \code{FALSE}, a linear scale.}
 }
 \value{
 A \code{ggplot} object with the plotted data frame as attribute
 \code{"data"}; its column \code{delta} is the distance to the best fit.
 }
 \description{
-Draws the waterfall plot of a fit collection: the objective values minus the
-best one, in ascending order against their rank, on a pseudo-log10 scale
-that is linear below 1. A converged fit is drawn as a circle, an
-unconverged one as a triangle.
+Draws the waterfall plot of a fit collection: the objective values in
+ascending order against their rank. A converged fit is colored by its number
+of iterations, an unconverged one is red.
 }
 \examples{
 fits <- parframe(data.frame(value = c(10, 10.2, 15, 40), converged = TRUE,

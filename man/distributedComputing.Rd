@@ -31,10 +31,7 @@ distributedComputing(
 }
 \arguments{
 \item{...}{R code to be executed remotely. Variables that change between
-tasks are named \code{var_i}, see Details. \code{mem_per_core}, \code{ssh_passwd},
-\code{var_values}, \code{no_rep}, \code{purge_local} and \code{custom_folders} are deprecated
-names of \code{memPerCore}, \code{sshPasswd}, \code{varValues}, \code{nRep}, \code{purgeLocal} and
-\code{customFolders}.}
+tasks are named \code{var_i}, see Details.}
 
 \item{jobname}{Character, unique name of the job. A job with the same name
 is overwritten.}

@@ -72,13 +72,17 @@ Default \code{10}.}
 
 \item{...}{Arguments passed by name to \code{optmethod}, \code{samplefun} or
 \code{objfun}. Names matching neither the optimiser nor the sampler go to
-\code{objfun}. \code{start1stfromCenter} is deprecated, use \code{startFromCenter}.}
+\code{objfun}.}
 }
 \value{
 A parlist with one entry per fit, failed fits included. Each entry
-is the result of the optimiser plus \code{parinit}, its starting point, or a
-list with element \code{error} for a fit that failed. \code{\link[=as.parframe]{as.parframe()}} turns
-it into a table.
+is the result of the optimiser without \code{hessian}, plus \code{parinit}, its
+starting point, and \code{elapsed}, its wall time in seconds including
+retries; a fit that failed is a list with element \code{error}. For the
+covariance at a fit, use \code{vcov(objfun(fit$argument))}. The attribute
+\code{"run"} holds the start time, total wall time, number of fits, cores,
+optimiser and sampler with their arguments, and the versions of R, dMod2
+and cppDE. \code{\link[=as.parframe]{as.parframe()}} turns the parlist into a table.
 }
 \description{
 Runs \code{\link[=trust]{trust()}} from several starting points: \code{center} plus

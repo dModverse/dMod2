@@ -161,7 +161,7 @@ if (.collect) {
 # The example is sourced up to its PEtab cross-check, which is the part that
 # would pull in reticulate and libsbml.
 # –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
-.exampleFile <- system.file("examples", "example_BachmannMSB2011.R",
+.exampleFile <- system.file("demo", "BachmannMSB2011.R",
                             package = "dMod2")
 .exampleCode <- readLines(.exampleFile)
 .upto <- grep("^petab <- importPEtab", .exampleCode)[1] - 1L

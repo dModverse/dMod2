@@ -85,7 +85,7 @@
 #' @param side \code{"both"} (default), \code{"left"} or \code{"right"}, the
 #'   side of the optimum to profile.
 #' @param ... Further arguments passed to \code{fitted}, for example
-#'   \code{fixed}. `objfun` is deprecated, use `fitted`.
+#'   \code{fixed}.
 #'
 #' @return A [parframe()] with one row per profile point of all profiled
 #'   parameters, with metanames \code{value} (the objective), \code{constraint}
@@ -113,7 +113,7 @@ profile.objfn <- function(fitted, pars, whichPar, alpha = 0.05,
                     delta = NULL,
                     ...) {
 
-  dotArgs <- .renameArgs(list(...), c(objfun = "fitted"), "profile")
+  dotArgs <- list(...)
   # Bound in this frame, so the parallel workers receive it.
   objfun <- fitted
 
@@ -141,10 +141,12 @@ profile.objfn <- function(fitted, pars, whichPar, alpha = 0.05,
   
   # cores = c(pars = , conditions = ) splits the two axes; see mstrust().
   .cc <- .splitCores(cores, "pars")
-  coresConditions <- .cc$conditions
+  coresConditions <- if (!is.null(.cc$conditions)) .sanitizeCores(.cc$conditions)
   cores <- .sanitizeCores(min(length(whichPar), .cc$outer))
-  if (!is.null(coresConditions) && cores == 1L)
-    options(dMod.cores = coresConditions)
+  if (!is.null(coresConditions) && cores == 1L) {
+    oldCores <- options(dMod.cores = coresConditions)
+    on.exit(options(oldCores), add = TRUE)
+  }
   
   # Substitute user-set control parameters
   if (!is.null(stepControl)) sControl[match(names(stepControl), names(sControl))] <- stepControl
@@ -166,6 +168,7 @@ profile.objfn <- function(fitted, pars, whichPar, alpha = 0.05,
         (!is.null(coresConditions) && coresConditions > 1L)) {
       
       cluster <- parallel::makeCluster(cores)
+      on.exit(parallel::stopCluster(cluster), add = TRUE)
       doParallel::registerDoParallel(cl = cluster)
       
       parallel::clusterCall(cl = cluster, function(x) .libPaths(x), .libPaths())
@@ -182,6 +185,7 @@ profile.objfn <- function(fitted, pars, whichPar, alpha = 0.05,
       doParallel::registerDoParallel(cores = cores)
       
     }
+    on.exit(doParallel::stopImplicitCluster(), add = TRUE)
     
     "%mydo%" <- foreach::"%dopar%"
     
@@ -579,13 +583,6 @@ profile.objfn <- function(fitted, pars, whichPar, alpha = 0.05,
   
   
   
-  if (Sys.info()[['sysname']] == "Windows" & cores > 1) {
-    
-    parallel::stopCluster(cluster)
-    doParallel::stopImplicitCluster()
-    
-  }
-  
   # .. Prepare output -----
   outncol <- vapply(out, ncol, 1)
   failed <- outncol != max(outncol)
@@ -783,20 +780,24 @@ confint.parframe <- function(object, parm = NULL, level = 0.95, ...,
 
 #' Variance-Covariance Matrix of a Fit
 #'
-#' A method of [stats::vcov()] for the result of [trust()].
+#' Methods of [stats::vcov()] for an evaluation of an objective function and
+#' for the result of [trust()].
 #'
-#' @param object A result of [trust()], class `trustfit`, or one fit of a
-#'   parlist.
+#' @param object An evaluation of an objective function, class `objlist`, such
+#'   as `obj(pars)`, or a result of [trust()], class `trustfit`.
+#' @param fixed Names of parameters held fixed, for example at a bound.
+#'   Default `NULL`.
 #' @param parupper,parlower Named upper and lower bounds. Parameters at or
 #'   beyond a bound count as fixed, as do those that `object$atBound` marks.
 #'   Default `NULL`.
-#' @param ... `fit` is deprecated, use `object`.
+#' @param ... Not used.
 #'
 #' @return Square matrix with the parameter names as dimnames: the inverse of
 #'   half the Hessian of `object` (pseudo-inverse when singular), with rows
-#'   and columns of fixed parameters set to zero. All `NA` when `object` has
-#'   no Hessian, `NULL` when it has no `argument`.
-#' @seealso [trust()]
+#'   and columns of fixed parameters set to zero. For a `trustfit`, `NULL`
+#'   when it has no `argument`, and an error when it has no Hessian; the fits
+#'   of [mstrust()] have none, use `vcov(obj(fit$argument))` for them.
+#' @seealso [trust()], [mstrust()]
 #' @examples
 #' obj <- function(x, ...) {
 #'   list(value = sum(x^2 / c(1, 4)),
@@ -805,28 +806,47 @@ confint.parframe <- function(object, parm = NULL, level = 0.95, ...,
 #' }
 #' fit <- trust(obj, c(a = 1, b = 1))
 #' vcov(fit)
+#'
+#' # The same from an evaluation of the objective
+#' ev <- obj(fit$argument)
+#' vcov(objlist(ev$value, ev$gradient, ev$hessian))
 #' @importFrom stats vcov
+#' @export
+vcov.objlist <- function(object, fixed = NULL, ...) {
+
+  hessian__ <- object[["hessian"]]
+  if (is.null(hessian__)) stop("The objective was evaluated without a Hessian.")
+  if (is.null(colnames(hessian__))) {
+    nm <- names(object[["gradient"]])
+    dimnames(hessian__) <- list(nm, nm)
+  }
+
+  vcov__ <- 0*hessian__
+  is_fixed__ <- colnames(hessian__) %in% fixed
+  subhessian__ <- hessian__[!is_fixed__, !is_fixed__, drop = FALSE]
+  subvcov__ <- try(solve(0.5*subhessian__), silent = TRUE)
+  if (inherits(subvcov__, "try-error")) subvcov__ <- MASS::ginv(0.5*subhessian__)
+  vcov__[!is_fixed__, !is_fixed__] <- subvcov__
+
+  vcov__
+
+}
+
+#' @rdname vcov.objlist
 #' @export
 vcov.trustfit <- function(object, parupper = NULL, parlower = NULL, ...) {
 
-  .renameArgs(list(...), c(fit = "object"), "vcov", strict = TRUE)
-  fit <- object
-  hessian__ <- fit[["hessian"]]
-  arg__ <- fit[["argument"]]
-  
+  arg__ <- object[["argument"]]
   if (is.null(arg__)) return()
+  if (is.null(object[["hessian"]]))
+    stop("The fit has no Hessian. Evaluate the objective at the fit: ",
+         "vcov(obj(fit$argument)).")
 
-  if (is.null(hessian__)) {
-    vcov__ <- matrix(NA, nrow = length(arg__), ncol = length(arg__), 
-                     dimnames = list(names(arg__), names(arg__)))
-    return(vcov__)
-  }
-  
   # Parameters held by a bound rather than by the data. A reflective boundary
   # keeps iterates strictly inside and reports `atBound` itself; otherwise the
   # bounds are compared with a relative tolerance.
   fixed <- NULL
-  atBound__ <- fit[["atBound"]]
+  atBound__ <- object[["atBound"]]
   if (!is.null(atBound__) && !is.null(names(atBound__)))
     fixed <- union(fixed, names(atBound__)[which(as.logical(atBound__))])
   reltol__ <- 1e-6
@@ -841,15 +861,9 @@ vcov.trustfit <- function(object, parupper = NULL, parlower = NULL, ...) {
       which(myarg__ <= parlower + reltol__ * pmax(1, abs(parlower)))])
   }
 
-  vcov__ <- 0*hessian__
-  is_fixed__ <- colnames(hessian__) %in% fixed
-  subhessian__ <- hessian__[!is_fixed__, !is_fixed__, drop = FALSE]
-  subvcov__ <- try(solve(0.5*subhessian__), silent = TRUE)
-  if (inherits(subvcov__, "try-error")) subvcov__ <- MASS::ginv(0.5*subhessian__)
-  vcov__[!is_fixed__, !is_fixed__] <- subvcov__
-  
-  return(vcov__) 
-  
+  vcov.objlist(objlist(object[["value"]], object[["gradient"]], object[["hessian"]]),
+               fixed = fixed)
+
 }
 
 
@@ -892,7 +906,7 @@ vcov.trustfit <- function(object, parupper = NULL, parlower = NULL, ...) {
 #'   Default `10`.
 #' @param ... Arguments passed by name to `optmethod`, `samplefun` or
 #'   `objfun`. Names matching neither the optimiser nor the sampler go to
-#'   `objfun`. `start1stfromCenter` is deprecated, use `startFromCenter`.
+#'   `objfun`.
 #'
 #' @details Nothing is written to disk unless `output`, `cautiousMode` or a
 #'   `traceFile` argument for [trust()] asks for it. Files then go to
@@ -902,9 +916,13 @@ vcov.trustfit <- function(object, parupper = NULL, parlower = NULL, ...) {
 #'   the log `mstrust.log`. [load.parlist()] reads the fits from `interRes/`.
 #'
 #' @return A parlist with one entry per fit, failed fits included. Each entry
-#'   is the result of the optimiser plus `parinit`, its starting point, or a
-#'   list with element `error` for a fit that failed. [as.parframe()] turns
-#'   it into a table.
+#'   is the result of the optimiser without `hessian`, plus `parinit`, its
+#'   starting point, and `elapsed`, its wall time in seconds including
+#'   retries; a fit that failed is a list with element `error`. For the
+#'   covariance at a fit, use `vcov(objfun(fit$argument))`. The attribute
+#'   `"run"` holds the start time, total wall time, number of fits, cores,
+#'   optimiser and sampler with their arguments, and the versions of R, dMod2
+#'   and cppDE. [as.parframe()] turns the parlist into a table.
 #'
 #' @seealso [trust()], [msParframe()], [as.parframe()], [load.parlist()]
 #'
@@ -940,16 +958,13 @@ mstrust <- function(objfun, center, rinit = .1, rmax = 10, fits = 20, cores = 1,
                     ...) {
 
   narrowing <- NULL
-  varargslist <- .renameArgs(list(...),
-                             c(start1stfromCenter = "startFromCenter"),
-                             "mstrust")
+  varargslist <- list(...)
   samplefunName <- if (is.character(samplefun)) samplefun else
     paste(deparse(substitute(samplefun)), collapse = "")
   samplefun <- match.fun(samplefun)
+  optmethodName <- if (is.character(optmethod)) optmethod else
+    paste(deparse(substitute(optmethod)), collapse = "")
 
-  # Check if on Windows
-  cores <- .sanitizeCores(cores)
-  
   argslist <- list(
     objfun = objfun, center = center, name = name,
     rinit = rinit, rmax = rmax, fits = fits,
@@ -1005,7 +1020,8 @@ mstrust <- function(objfun, center, rinit = .1, rmax = 10, fits = 20, cores = 1,
   writeFiles <- isTRUE(output) || isTRUE(cautiousMode) ||
     !is.null(argslist[["traceFile"]])
 
-  m_timeStamp <- paste0(format(Sys.time(), "%d-%m-%Y-%H%M%S"))
+  m_started <- Sys.time()
+  m_timeStamp <- format(m_started, "%d-%m-%Y-%H%M%S")
 
   resultFolderBase <- file.path(argslist$resultPath, argslist$name)
   m_trial <- paste0("trial-", length(dir(resultFolderBase, pattern = "trial*")) + 1)
@@ -1046,10 +1062,12 @@ mstrust <- function(objfun, center, rinit = .1, rmax = 10, fits = 20, cores = 1,
   # cores = c(fits = , conditions = ) splits the two axes. cppDE's batch runs
   # serially inside a fork, so an inner axis > 1 selects PSOCK.
   .cc <- .splitCores(cores, "fits")
-  coresConditions <- .cc$conditions
-  cores <- min(fits, .cc$outer)
-  if (!is.null(coresConditions) && cores == 1L)
-    options(dMod.cores = coresConditions)
+  coresConditions <- if (!is.null(.cc$conditions)) .sanitizeCores(.cc$conditions)
+  cores <- .sanitizeCores(min(fits, .cc$outer))
+  if (!is.null(coresConditions)) {
+    oldCores <- options(dMod.cores = coresConditions)
+    on.exit(options(oldCores), add = TRUE)
+  }
   if (cores > 1) {
     
     # Start cluster if on windows
@@ -1057,6 +1075,7 @@ mstrust <- function(objfun, center, rinit = .1, rmax = 10, fits = 20, cores = 1,
         (!is.null(coresConditions) && coresConditions > 1L)) {
       
       cluster <- parallel::makeCluster(cores)
+      on.exit(parallel::stopCluster(cluster), add = TRUE)
       doParallel::registerDoParallel(cluster)
       parallel::clusterCall(cl = cluster, function(x) .libPaths(x), .libPaths())
       
@@ -1072,6 +1091,7 @@ mstrust <- function(objfun, center, rinit = .1, rmax = 10, fits = 20, cores = 1,
       doParallel::registerDoParallel(cores = cores)
       
     }
+    on.exit(doParallel::stopImplicitCluster(), add = TRUE)
     
     "%mydo%" <- foreach::"%dopar%"
     
@@ -1119,6 +1139,7 @@ mstrust <- function(objfun, center, rinit = .1, rmax = 10, fits = 20, cores = 1,
     # Up to nTries attempts, each resampling parinit after a try-error or
     # fit$error and resetting warm starts. Rows of a parframe center are taken as
     # given and never retried.
+    t0 <- proc.time()[["elapsed"]]
     max_tries <- if (isTRUE(retry) && !is.parframe(center)) as.integer(nTries) else 1L
     fit <- NULL
     for (try_i in seq_len(max_tries)) {
@@ -1146,11 +1167,15 @@ mstrust <- function(objfun, center, rinit = .1, rmax = 10, fits = 20, cores = 1,
     }
     
     fit$parinit <- argstrust$parinit
+    fit$hessian <- NULL
+    fit$elapsed <- proc.time()[["elapsed"]] - t0
     
     # Write current fit to disk
     if (output) {
       saveRDS(fit, file = file.path(interResultFolder, paste0("fit-", i, ".Rda")))
-      if (cautiousMode) dput(fit[c("value", "argument", "iterations", "converged")], file = file.path(interResultFolder, paste0("fit-", i, ".R")))
+      if (cautiousMode) dput(fit[c("value", "argument", "iterations", "converged", "elapsed")],
+                           file = file.path(interResultFolder, paste0("fit-", i, ".R")),
+                           control = c("keepNA", "keepInteger", "niceNames", "showAttributes", "digits17"))
       # Assembled before writing, so concurrent jobs interleave less in the log.
       msgSep <- "-------"
       if (any(names(fit) == "error")) {
@@ -1178,12 +1203,6 @@ mstrust <- function(objfun, center, rinit = .1, rmax = 10, fits = 20, cores = 1,
   
   if (!is.null(logfile)) close(logfile)
 
-  if (Sys.info()[['sysname']] == "Windows" & cores > 1) {
-
-    parallel::stopCluster(cluster)
-    doParallel::stopImplicitCluster()
-
-  }
   
   
   
@@ -1207,6 +1226,20 @@ mstrust <- function(objfun, center, rinit = .1, rmax = 10, fits = 20, cores = 1,
   })
   
   
+  # objfun is a closure and parinit varies per fit, so neither is kept.
+  attr(m_parlist, "run") <- list(
+    started = m_started,
+    elapsed = as.numeric(difftime(Sys.time(), m_started, units = "secs")),
+    fits = fits,
+    cores = c(fits = cores, conditions = coresConditions),
+    optimiser = optmethodName,
+    optimiserArgs = argstrust[setdiff(names(argstrust), c("objfun", "parinit"))],
+    sampler = samplefunName,
+    samplerArgs = argssample,
+    versions = c(R = as.character(getRversion()),
+                 dMod2 = as.character(utils::packageVersion("dMod2")),
+                 cppDE = as.character(utils::packageVersion("cppDE"))))
+
   # Wrap up
   # Write out results
   if (output) saveRDS(m_parlist, file = fileParList)

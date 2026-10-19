@@ -17,8 +17,7 @@ Pimpl(
   deriv = TRUE,
   deriv2 = FALSE,
   controlsPTC = list(),
-  outdir = .dmodOutdir(),
-  ...
+  outdir = .dmodOutdir()
 )
 }
 \arguments{
@@ -77,8 +76,6 @@ is not advanced.}
 
 \item{outdir}{Directory for the generated files, default
 \code{getOption("dMod.outdir")}, else the working directory.}
-
-\item{...}{\code{keep.root} is deprecated, use \code{keepRoot}.}
 }
 \value{
 A \link{parfn}, called as \code{p(pars, ...)}, see section Calling a dMod

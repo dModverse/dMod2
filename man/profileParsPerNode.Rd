@@ -4,7 +4,7 @@
 \alias{profileParsPerNode}
 \title{Split Parameters into Ranges for Distributed Profiles}
 \usage{
-profileParsPerNode(parameters, parsPerNode, side = c("both", "split"), ...)
+profileParsPerNode(parameters, parsPerNode, side = c("both", "split"))
 }
 \arguments{
 \item{parameters}{Named vector or list of parameters; only its length is
@@ -15,8 +15,6 @@ used.}
 \item{side}{\code{"both"} (default) for one entry per range, or \code{"split"} for two
 entries per range, labelled \code{"left"} and \code{"right"}, to compute the two
 sides of each profile on separate nodes.}
-
-\item{...}{\code{fits_per_node} is deprecated, use \code{parsPerNode}.}
 }
 \value{
 A list with the integer vectors \code{from} and \code{to}, the first and last

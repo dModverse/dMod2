@@ -13,7 +13,7 @@ constraintL1(mu, ...)
 \item{mu}{Named numeric vector of prior locations. Its names select the
 constrained parameters.}
 
-\item{...}{Passed to the method. \code{attr.name} is deprecated, use \code{attrName}.}
+\item{...}{Passed to the method.}
 
 \item{sigma}{Numeric, scalar or named and aligned with \code{mu}, default \code{1}.
 The Laplace scale, the reciprocal penalty strength.}
