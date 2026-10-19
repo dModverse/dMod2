@@ -104,7 +104,13 @@ fx_register(multicond = TRUE)
   fit
 }
 
-.alive <- function(pids) vapply(pids, tools::pskill, TRUE, signal = 0L)
+# A zombie counts as gone: in a container whose init does not reap, an exited
+# worker stays in the process table and still answers signal 0.
+.alive <- function(pids) vapply(pids, function(p) {
+  stat <- file.path("/proc", p, "stat")
+  if (!file.exists(stat)) return(tools::pskill(p, signal = 0L))
+  substr(sub(".*\\) ", "", readLines(stat, 1L)), 1L, 1L) != "Z"
+}, TRUE)
 
 .runLayout <- function(lf, cores) {
   mstrust(lf$obj, center = lf$starts, cores = cores, optmethod = .trustWhere,

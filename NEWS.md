@@ -1,3 +1,17 @@
+# dMod2 0.12.6
+
+* `controls()` on an objective also reaches the functions it evaluates: the prediction and
+  error model of each `normL2()` term and the parameter transformation of an
+  `objfn * parfn`. Solver tolerances and other controls can be changed through the
+  objective alone. `condition` restricts the lookup as for an `fn`.
+* An unknown entry of `options`, `optionsSens` or `optionsReverse` of `Xs()` and `Xf()` is
+  an error, also when set later with `controls()`.
+* `Y()` names a state the prediction does not return, e.g. after the control `names` of
+  `Xs()` left it out.
+* A failed batch solve names the conditions that did not complete.
+* `plotValues()` shows unconverged fits in red with a legend entry of their own instead of
+  a caption.
+
 # dMod2 0.12.5
 
 * `plotValues()` colors converged fits by their iterations on the dMod ramp and draws

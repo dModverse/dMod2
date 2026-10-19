@@ -21,9 +21,13 @@
 #' condition. With `condition = NULL`, the getter returns the value of the
 #' first function that holds the control and the setter changes every function
 #' that holds it. On an `objfn`, including sums, scaled objectives and
-#' objectives composed with a parameter transformation, the same holds for the
-#' objective terms. Setting a control that no function holds is an error, as
-#' is an unknown condition.
+#' objectives composed with a parameter transformation, the lookup covers the
+#' objective terms and the functions they evaluate: the prediction and error
+#' model given to [normL2()] and the parameter transformation of an
+#' `objfn * parfn`. The solver tolerances of an objective can so be changed
+#' without the prediction function it was built from. A control of the
+#' objective term itself is found first. Setting a control that no function
+#' holds is an error, as is an unknown condition.
 #'
 #' The second positional argument is `name` for an `objfn` and `condition`
 #' for an `fn`; name both arguments to avoid confusion.
@@ -58,10 +62,29 @@ controls <- function(x, ...) {
 
 
 
-.lscontrolsObjfn <- function(x) {
+.lscontrolsObjfn <- function(x, condition = NULL) {
 
-  unique(unlist(lapply(.controlTargets(x), function(t) names(environment(t)$controls))))
+  own <- lapply(.controlTargets(x), function(t) names(environment(t)$controls))
+  fns <- lapply(.objFnLeaves(x, condition), function(l) names(l$env$controls))
+  unique(unlist(c(own, fns)))
 
+}
+
+# The functions an objective evaluates, through its terms and the objectives it
+# wraps: prediction and error model of each normL2() term, and the parameter
+# transformation of an objfn * parfn.
+.objFns <- function(x) {
+  inner <- c(attr(x, "terms", exact = TRUE), attr(x, "wrapped", exact = TRUE))
+  c(attr(x, "fns", exact = TRUE), unlist(lapply(inner, .objFns), recursive = FALSE))
+}
+
+# The leaves holding controls among the functions of an objective, once per
+# kernel, restricted as in .fnControlLeaves().
+.objFnLeaves <- function(x, condition = NULL, name = NULL) {
+  leaves <- unlist(lapply(.objFns(x), .fnControlLeaves, condition = condition,
+                          name = name), recursive = FALSE)
+  keys <- vapply(leaves, function(l) format(l$env), "")
+  leaves[!duplicated(keys)]
 }
 
 # The objectives holding control `name` (any control if NULL): `x` itself, or
@@ -156,12 +179,15 @@ controls <- function(x, ...) {
 #' @rdname controls
 #' @param name character, the name of the control. Default `NULL` lists the
 #'   controls.
-controls.objfn <- function(x, name = NULL, ...) {
+controls.objfn <- function(x, name = NULL, condition = NULL, ...) {
 
-  if (is.null(name)) return(.lscontrolsObjfn(x))
+  condition <- .controlCondition(x, condition)
+  if (is.null(name)) return(.lscontrolsObjfn(x, condition))
   tg <- .controlTargets(x, name)
-  if (!length(tg)) return(NULL)
-  environment(tg[[1L]])$controls[[name]]
+  if (length(tg)) return(environment(tg[[1L]])$controls[[name]])
+  lv <- .objFnLeaves(x, condition, name)
+  if (!length(lv)) return(NULL)
+  lv[[1L]]$env$controls[[name]]
 }
 
 #' @export
@@ -190,13 +216,19 @@ controls.fn <- function(x, condition = NULL, name = NULL, ...) {
 #' @export
 #' @param value the new value of the control.
 #' @rdname controls
-"controls<-.objfn" <- function(x, name, ..., value) {
+"controls<-.objfn" <- function(x, name, condition = NULL, ..., value) {
+  condition <- .controlCondition(x, condition)
   tg <- .controlTargets(x, name)
-  if (!length(tg))
-    stop("controls<-: the objective has no control '", name, "'. Available: ",
-         paste(.lscontrolsObjfn(x), collapse = ", "), ".", call. = FALSE)
+  lv <- .objFnLeaves(x, condition, name)
+  if (!length(tg) && !length(lv))
+    stop("controls<-: the objective has no control '", name, "'",
+         if (!is.null(condition))
+           paste0(" for condition ", paste(condition, collapse = ", ")),
+         ". Available: ", paste(.lscontrolsObjfn(x, condition), collapse = ", "), ".",
+         call. = FALSE)
   # [<- keeps an entry set to NULL, where [[<- would drop it
   for (t in tg) environment(t)$controls[name] <- list(value)
+  for (l in lv) l$env$controls[name] <- list(value)
   return(x)
 }
 
