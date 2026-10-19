@@ -31,8 +31,8 @@ A \code{ggplot} object with the plotted data frame as attribute
 }
 \description{
 Draws the waterfall plot of a fit collection: the objective values in
-ascending order against their rank. A converged fit is drawn as a circle, an
-unconverged one as a triangle.
+ascending order against their rank. A converged fit is colored by its number
+of iterations, an unconverged one is red.
 }
 \examples{
 fits <- parframe(data.frame(value = c(10, 10.2, 15, 40), converged = TRUE,

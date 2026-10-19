@@ -41,6 +41,12 @@ cat(sprintf("%d points, %d conditions, %d observables\n", nrow(kok),
 ```
 
 ## Define model
+The model scheme, Figure 2 of Kok et al. (2020)
+[doi:10.15252/msb.20198955](https://doi.org/10.15252/msb.20198955), published
+under CC BY 4.0.
+
+![Model scheme of IFNalpha signalling, Kok et al. (2020), Figure 2](figures/KokMSB2020_pathway.png)
+
 Newly made STAT1, STAT2, IRF9, USP18 and SOCS1 pass a linear chain before they
 act, which delays the feedback without a delay differential equation.
 
@@ -294,7 +300,7 @@ summary(structural)
 #>   rank: proven (4 directions, exact scalings)
 #>   25 conditions, 50 segments
 #>   settings: reduce_cq=False, equilibrate=False, reconstruct=False
-#>   elapsed: 8.5s
+#>   elapsed: 8.1s
 #> 
 #> Result:  rank 92 / 96  |  4 non-identifiable directions
 #> 
@@ -400,7 +406,7 @@ system.time(obj(bestfit, deriv = FALSE))
 
 ```
 #>    user  system elapsed 
-#>    0.05    0.00    0.05
+#>   0.040   0.001   0.041
 ```
 
 ``` r
@@ -409,7 +415,7 @@ system.time(obj(bestfit))
 
 ```
 #>    user  system elapsed 
-#>   2.725   0.010   2.743
+#>   2.497   0.008   2.512
 ```
 
 ``` r
@@ -418,7 +424,7 @@ system.time(obj(bestfit, cores = 4))
 
 ```
 #>    user  system elapsed 
-#>   2.986   0.012   0.819
+#>   2.628   0.012   0.741
 ```
 
 ``` r
@@ -427,8 +433,116 @@ system.time(obj(bestfit, sweep = "reverse"))
 
 ```
 #>    user  system elapsed 
-#>   0.105   0.000   0.105
+#>   0.090   0.000   0.091
 ```
+
+## Multi-start on helix
+200 fits from random starts around the published optimum ran on the
+bwForCluster Helix, as 10 array tasks of 20 fits on 20 cores, each task seeded
+by its SLURM job ID. The fits use the default Gauss-Newton Hessian, and the
+sources in .outdir are compiled once on the login node. The authors acknowledge
+support by the state of Baden-Württemberg through bwHPC and the German Research
+Foundation (DFG) through grant INST 35/1597-1 FUGG.
+
+The job needs an account on helix, so `.helix <- TRUE` submits it and the demo
+otherwise reads the fits shipped with the package. `.recover <- TRUE` returns
+the functions of a submitted job without submitting again.
+
+
+``` r
+.helix <- FALSE
+if (.helix) {
+  .recover <- TRUE
+  .currentwd <- getwd()
+  setwd(.outdir)
+  job <- distributedComputing(
+    {
+      mstrust(
+        obj,
+        bestfit,
+        rinit = 0.1,
+        rmax = 10,
+        fits = 20,
+        iterlim = 1e4L,
+        cores = 20,
+        samplefun = "rnorm",
+        sd = 4,
+        resultPath = ".",
+        stats = FALSE,
+        output = FALSE,
+        cautiousMode = FALSE,
+        startFromCenter = FALSE,
+        retry = TRUE,
+        nTries = 10L,
+        tolControl = list(ftol = 1e-5, mtol = 1e-5, gtol = 1e-2)
+      )
+    },
+    jobname = "kok_mstrust",
+    machine = "helix",
+    partition = "cpu-single",
+    cores = 20,
+    nodes = 1,
+    memPerCore = 2,
+    walltime = "24:00:00",
+    nRep = 10,
+    compile = TRUE,
+    recover = .recover,
+    input = ls(.GlobalEnv)
+  )
+  job$check()
+  fits <- job$get()
+  setwd(.currentwd)
+  # a task that failed returns an error instead of a parlist
+  fits <- Filter(function(f) inherits(f, "parlist"), fits)
+  outframe <- do.call(c, fits) |> as.parframe()
+}
+if (!.helix) outframe <- readRDS(file.path(.extDir, "outframe_KokMSB2020.rds"))
+```
+
+## Fitting statistics
+The waterfall plot sorts the final objective values; fits on the same plateau
+ended in the same optimum.
+
+
+``` r
+plotValues(outframe, pseudoLog = TRUE)
+```
+
+![plot of chunk unnamed-chunk-13](figures/KokMSB2020/unnamed-chunk-13-1.png)
+
+``` r
+c(best = min(outframe$value), published = obj(bestfit, deriv = FALSE)$value)
+```
+
+```
+#>      best published 
+#>  4713.066  4713.840
+```
+
+``` r
+table(stopReason = outframe$stopReason, converged = outframe$converged)
+```
+
+```
+#>             converged
+#> stopReason   TRUE
+#>   fvalue       46
+#>   preddiff     92
+#>   stagnation   62
+```
+
+Wall time of a single fit on one core of a Helix node.
+
+
+``` r
+ggplot(as.data.frame(outframe), aes(elapsed/60)) +
+  geom_histogram(bins = 30) +
+  scale_x_log10() +
+  theme_dMod() +
+  labs(x = "wall time per fit [min]", y = "fits")
+```
+
+![plot of chunk unnamed-chunk-14](figures/KokMSB2020/unnamed-chunk-14-1.png)
 
 At the optimum the gradient is small, so the integration error at the
 tolerances of the fit dominates it. With tighter tolerances and the sweep
@@ -502,7 +616,7 @@ fit   <- as.data.frame(prd(times, bestfit, deriv = FALSE), data = mydataL)
   labs(x = "time [h]", y = "log signal [a.u.]", colour = "IFN [U/ml]")
 ```
 
-![plot of chunk unnamed-chunk-14](figures/KokMSB2020/unnamed-chunk-14-1.png)
+![plot of chunk unnamed-chunk-17](figures/KokMSB2020/unnamed-chunk-17-1.png)
 
 ``` r
 .draw(.panel(.single, .mRNAs), "ifn1", c(0, 24)) +
@@ -511,7 +625,7 @@ fit   <- as.data.frame(prd(times, bestfit, deriv = FALSE), data = mydataL)
   labs(x = "time [h]", y = "log fold change", colour = "IFN [U/ml]")
 ```
 
-![plot of chunk unnamed-chunk-14](figures/KokMSB2020/unnamed-chunk-14-2.png)
+![plot of chunk unnamed-chunk-17](figures/KokMSB2020/unnamed-chunk-17-2.png)
 
 ### the second dose after a prestimulation
 Without prestimulation the response to 5000 U/ml is that of `WT_5000_0`,
@@ -534,7 +648,7 @@ shifted to 24 h, since every condition starts at the same steady state.
        title = "5000 U/ml at 24 h, black without prestimulation")
 ```
 
-![plot of chunk unnamed-chunk-15](figures/KokMSB2020/unnamed-chunk-15-1.png)
+![plot of chunk unnamed-chunk-18](figures/KokMSB2020/unnamed-chunk-18-1.png)
 
 ### USP18: knock-down and overexpression against the wild type
 
@@ -550,7 +664,7 @@ shifted to 24 h, since every condition starts at the same steady state.
   labs(x = "time [h]", y = "log signal [a.u.]", colour = NULL)
 ```
 
-![plot of chunk unnamed-chunk-16](figures/KokMSB2020/unnamed-chunk-16-1.png)
+![plot of chunk unnamed-chunk-19](figures/KokMSB2020/unnamed-chunk-19-1.png)
 
 ### sensitization: the response to 5000 U/ml against the prestimulation dose
 The response is the area under the occupied ISRE sites in the 4 h after a dose.
@@ -583,5 +697,5 @@ ggplot(sensitization, aes(dose, ratio)) +
        y = "ISRE response to 5000 U/ml at 24 h,\nrelative to no prestimulation")
 ```
 
-![plot of chunk unnamed-chunk-17](figures/KokMSB2020/unnamed-chunk-17-1.png)
+![plot of chunk unnamed-chunk-20](figures/KokMSB2020/unnamed-chunk-20-1.png)
 

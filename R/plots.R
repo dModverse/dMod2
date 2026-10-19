@@ -714,8 +714,8 @@ plotFluxes <- function(pouter, x, times, fluxEquations, legendTitle = "Fluxes:",
 #' Plot Objective Values of a Collection of Fits
 #'
 #' Draws the waterfall plot of a fit collection: the objective values in
-#' ascending order against their rank. A converged fit is drawn as a circle, an
-#' unconverged one as a triangle.
+#' ascending order against their rank. A converged fit is colored by its number
+#' of iterations, an unconverged one is red.
 #'
 #' @param x Data frame with columns `value`, `converged` and `iterations`,
 #'   e.g. a [parframe].

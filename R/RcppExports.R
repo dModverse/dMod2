@@ -49,7 +49,7 @@ trustL1_lockstep_impl <- function(objfun_many, parinit, mu, lambda, one_sided, r
     .Call(`_dMod2_trustL1_lockstep_impl`, objfun_many, parinit, mu, lambda, one_sided, rinit, rmax, parscale, iterlim, ftol, mtol, gtol, xtol, rmin, thetamax, minimize, blather, parupper, parlower)
 }
 
-trust_impl <- function(objfun, parinit, rinit, rmax, parscale = NULL, iterlim = 100L, ftol = 1e-6, mtol = 1e-6, gtol = 1e-6, xtol = 0.0, rmin = 0.0, thetamax = 0.99995, boundary = "reflective", phaseMethod = as.character( c("gn")), phaseIterlim = as.integer( c(NA_INTEGER)), phaseReverse = as.logical( c(false)), phaseInit = as.character( c("gn")), phaseReseed = as.character( c("never")), phaseMemory = as.integer( c(0)), phaseCautious = as.numeric( c(1e-8)), phaseRejected = as.logical( c(true)), switches = 0L, nonmonotone = 0.0, minimize = TRUE, blather = FALSE, parupper = NULL, parlower = NULL, printIter = FALSE, traceFile = NULL) {
+trust_impl <- function(objfun, parinit, rinit, rmax, parscale, iterlim, ftol, mtol, gtol, xtol, rmin, thetamax, boundary, phaseMethod, phaseIterlim, phaseReverse, phaseInit, phaseReseed, phaseMemory, phaseCautious, phaseRejected, switches = 0L, nonmonotone = 0.0, minimize = TRUE, blather = FALSE, parupper = NULL, parlower = NULL, printIter = FALSE, traceFile = NULL) {
     .Call(`_dMod2_trust_impl`, objfun, parinit, rinit, rmax, parscale, iterlim, ftol, mtol, gtol, xtol, rmin, thetamax, boundary, phaseMethod, phaseIterlim, phaseReverse, phaseInit, phaseReseed, phaseMemory, phaseCautious, phaseRejected, switches, nonmonotone, minimize, blather, parupper, parlower, printIter, traceFile)
 }
 

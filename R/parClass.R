@@ -326,22 +326,18 @@ plotPars.parframe <- function(x, tol = 1, ...){
 }
 
 
-# 0 and the decades from 10 up to the largest absolute limit, both signs. On a
-# pseudo-log axis, which is linear below 1, a break at 1 would crowd 0.
+# 0 and multiples of the decades from 10 up to the largest absolute limit, both
+# signs, refined from 1 over 1-2-5 to 1..9 until three fall inside the limits.
+# On a pseudo-log axis, which is linear below 1, a break at 1 would crowd 0.
 .decadeBreaks <- function(lims) {
-  p <- 10^seq_len(max(1, ceiling(log10(max(abs(lims), 1)))))
-  sort(unique(c(-p, 0, p)))
+  d <- 10^seq_len(max(1, ceiling(log10(max(abs(lims), 1)))))
+  for (m in list(1, c(1, 2, 5), 1:9)) {
+    p <- as.vector(outer(m, d))
+    b <- sort(unique(c(-p, 0, p)))
+    if (sum(b >= lims[1] & b <= lims[2]) >= 3L) return(b)
+  }
+  pretty(lims)
 }
-
-
-# Convergence always reads the same way, a filled circle for a converged fit and
-# a triangle for one that stopped otherwise. Both levels stay in the legend even
-# when only one occurs, so several waterfall plots can be compared directly.
-.scaleConverged <- function()
-  scale_shape_manual(name = "Converged",
-                     values = c(`TRUE` = 16, `FALSE` = 17),
-                     limits = c("TRUE", "FALSE"),
-                     labels = c("yes", "no"), drop = FALSE)
 
 
 #' @export
@@ -365,15 +361,17 @@ plotValues.parframe <- function(x, tol = 1, ..., showSteps = FALSE, pseudoLog = 
                            hjust = 0, vjust = -0.5, color = "firebrick", size = 3)
   }
 
-  P <- ggplot2::ggplot(pars, aes(x = index, y = value, pch = converged, color = iterations)) +
+  # an unconverged fit is red, outside the ramp of the iterations
+  conv <- pars$converged %in% TRUE
+  P <- ggplot2::ggplot(pars, aes(x = index, y = value)) +
     stepLines +
-    geom_point() +
+    geom_point(data = pars[conv, ], aes(color = iterations)) +
+    geom_point(data = pars[!conv, ], color = dMod_colors[2]) +
     stepLabels +
     yScale +
-    labs(x = "Fit rank", y = "Objective value",
-         color = "Iterations") +
-    scale_color_gradient(low = "dodgerblue", high = "orange") +
-    .scaleConverged() +
+    labs(x = "Fit rank", y = "Objective value", color = "Iterations",
+         caption = if (!all(conv)) "red: not converged") +
+    scale_color_dMod_c() +
     theme_dMod()
 
   attr(P, "data") <- pars

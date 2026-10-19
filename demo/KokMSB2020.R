@@ -28,6 +28,12 @@ cat(sprintf("%d points, %d conditions, %d observables\n", nrow(kok),
 
 
 # Define model ------------------------------------------------------------------
+# The model scheme, Figure 2 of Kok et al. (2020)
+# [doi:10.15252/msb.20198955](https://doi.org/10.15252/msb.20198955), published
+# under CC BY 4.0.
+#
+# ![Model scheme of IFNalpha signalling, Kok et al. (2020), Figure 2](figures/KokMSB2020_pathway.png)
+#
 # Newly made STAT1, STAT2, IRF9, USP18 and SOCS1 pass a linear chain before they
 # act, which delays the feedback without a delay differential equation.
 .chain <- function(eq, protein, n, synthesis, to) {
@@ -305,6 +311,81 @@ system.time(obj(bestfit))
 system.time(obj(bestfit, cores = 4))
 system.time(obj(bestfit, sweep = "reverse"))
 
+
+# Multi-start on helix ----------------------------------------------------------
+# 200 fits from random starts around the published optimum ran on the
+# bwForCluster Helix, as 10 array tasks of 20 fits on 20 cores, each task seeded
+# by its SLURM job ID. The fits use the default Gauss-Newton Hessian, and the
+# sources in .outdir are compiled once on the login node. The authors acknowledge
+# support by the state of Baden-Württemberg through bwHPC and the German Research
+# Foundation (DFG) through grant INST 35/1597-1 FUGG.
+#
+# The job needs an account on helix, so `.helix <- TRUE` submits it and the demo
+# otherwise reads the fits shipped with the package. `.recover <- TRUE` returns
+# the functions of a submitted job without submitting again.
+.helix <- FALSE
+if (.helix) {
+  .recover <- TRUE
+  .currentwd <- getwd()
+  setwd(.outdir)
+  job <- distributedComputing(
+    {
+      mstrust(
+        obj,
+        bestfit,
+        rinit = 0.1,
+        rmax = 10,
+        fits = 20,
+        iterlim = 1e4L,
+        cores = 20,
+        samplefun = "rnorm",
+        sd = 4,
+        resultPath = ".",
+        stats = FALSE,
+        output = FALSE,
+        cautiousMode = FALSE,
+        startFromCenter = FALSE,
+        retry = TRUE,
+        nTries = 10L,
+        tolControl = list(ftol = 1e-5, mtol = 1e-5, gtol = 1e-2)
+      )
+    },
+    jobname = "kok_mstrust",
+    machine = "helix",
+    partition = "cpu-single",
+    cores = 20,
+    nodes = 1,
+    memPerCore = 2,
+    walltime = "24:00:00",
+    nRep = 10,
+    compile = TRUE,
+    recover = .recover,
+    input = ls(.GlobalEnv)
+  )
+  job$check()
+  fits <- job$get()
+  setwd(.currentwd)
+  # a task that failed returns an error instead of a parlist
+  fits <- Filter(function(f) inherits(f, "parlist"), fits)
+  outframe <- do.call(c, fits) |> as.parframe()
+}
+if (!.helix) outframe <- readRDS(file.path(.extDir, "outframe_KokMSB2020.rds"))
+
+
+# Fitting statistics ------------------------------------------------------------
+# The waterfall plot sorts the final objective values; fits on the same plateau
+# ended in the same optimum.
+plotValues(outframe, pseudoLog = TRUE)
+
+c(best = min(outframe$value), published = obj(bestfit, deriv = FALSE)$value)
+table(stopReason = outframe$stopReason, converged = outframe$converged)
+
+# Wall time of a single fit on one core of a Helix node.
+ggplot(as.data.frame(outframe), aes(elapsed/60)) +
+  geom_histogram(bins = 30) +
+  scale_x_log10() +
+  theme_dMod() +
+  labs(x = "wall time per fit [min]", y = "fits")
 
 # At the optimum the gradient is small, so the integration error at the
 # tolerances of the fit dominates it. With tighter tolerances and the sweep

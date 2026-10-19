@@ -86,12 +86,12 @@ fx_register(multicond = TRUE)
 
 # The four-condition fixture under normL2 and a weak prior, which makes the
 # fit regular; starts from a fixed parframe. The objective names the joint
-# shared object, so loadDLL() finds it in a fresh PSOCK worker.
+# shared objects, so loadDLL() finds them in a fresh PSOCK worker.
 .layout_fixture <- function() {
   fx <- fx_decay_multicond_compiled()
   data <- fx_decay_data_multi(setNames(rep(list(c(A = 1, k = 0.5)), 4), fx$conditions))
   obj <- normL2(data, fx$prd) + constraintL2(fx$outerpars, sigma = 3)
-  modelname(obj) <- "fx_decay_all"
+  modelname(obj) <- fx$libs
   starts <- msParframe(fx$outerpars, n = 4, sd = 0.3, seed = 3)
   list(obj = obj, starts = starts)
 }

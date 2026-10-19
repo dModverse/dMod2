@@ -1,3 +1,11 @@
+# dMod2 0.12.5
+
+* `plotValues()` colors converged fits by their iterations on the dMod ramp and draws
+  unconverged ones in red, with a caption only when there are any. With
+  `pseudoLog = TRUE`, a range within one decade gets breaks at 1-2-5 or finer.
+* The demo `KokMSB2020` shows the model scheme of the publication and the statistics of
+  200 fits, which ship in `inst/extdata/kok/`.
+
 # dMod2 0.12.4
 
 * `symmetryDetection()` and `symmetryReduction()` need symident 0.11.0. A direction
