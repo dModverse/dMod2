@@ -403,6 +403,8 @@ normL2 <- function(data, x, errmodel = NULL, times = NULL,
   attr(myfn, "data")  <- data
   attr(myfn, "timesD") <- timesD
   attr(myfn, "errfn") <- errmodel
+  # the functions whose controls controls() reaches through the objective
+  attr(myfn, "fns") <- Filter(Negate(is.null), list(x, errmodel))
   myfn
 }
 

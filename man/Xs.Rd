@@ -67,7 +67,7 @@ settings of the forcings, \code{method}, \code{rule}, \code{f} and \code{ties} a
 \item{optionsReverse}{Named list controlling the backward pass of
 \code{sweep = "reverse"}. Needs \code{backend = "cppDE"} and a model built with
 \code{derivMode = "reverse"}. \code{NULL}, the default, sweeps the step grid of the
-value pass. An unknown entry is ignored with a warning. Entries:
+value pass. An unknown entry is an error. Entries:
 \itemize{
 \item \code{refine}: \code{TRUE} checks each step of the sweep against the tolerances
 of the solve and sweeps a failing step again in substeps, see
@@ -93,7 +93,7 @@ integrates the states and, with \code{deriv = TRUE}, their sensitivities.
 
 On the \code{cppDE} and \code{Sundials} backends the lists take the entries below and
 pass them to \code{\link[cppDE:solveODE]{cppDE::solveODE()}}. An entry not given keeps its default; an
-unknown entry is ignored with a warning.
+unknown entry is an error, also when set later with \code{\link[=controls]{controls()}}.
 \itemize{
 \item \code{atol}, \code{rtol}: absolute and relative error tolerance, default \code{1e-6}.
 \item \code{maxsteps}: largest number of steps of one solve, default \code{1e6}.

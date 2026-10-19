@@ -92,7 +92,7 @@ NULL
 #' @param optionsReverse Named list controlling the backward pass of
 #'   `sweep = "reverse"`. Needs `backend = "cppDE"` and a model built with
 #'   `derivMode = "reverse"`. `NULL`, the default, sweeps the step grid of the
-#'   value pass. An unknown entry is ignored with a warning. Entries:
+#'   value pass. An unknown entry is an error. Entries:
 #'   * `refine`: `TRUE` checks each step of the sweep against the tolerances
 #'     of the solve and sweeps a failing step again in substeps, see
 #'     [cppDE::adjointControl()]. Default `FALSE`.
@@ -106,7 +106,7 @@ NULL
 #' @section Solver options:
 #' On the `cppDE` and `Sundials` backends the lists take the entries below and
 #' pass them to [cppDE::solveODE()]. An entry not given keeps its default; an
-#' unknown entry is ignored with a warning.
+#' unknown entry is an error, also when set later with [controls()].
 #'
 #' * `atol`, `rtol`: absolute and relative error tolerance, default `1e-6`.
 #' * `maxsteps`: largest number of steps of one solve, default `1e6`.
@@ -343,13 +343,15 @@ Xs.deSolve <- function(odemodel, forcings = NULL, events = NULL, names = NULL, c
   split(forcings[, c("time", "value")], forcings$name)
 }
 
-# Solver options as given, merged over the defaults, warning about any name
-# outside `known`.
+# Solver options as given, merged over the defaults. A name outside `known` is
+# an error, as a misspelt tolerance would otherwise go unnoticed.
 .cppdeOptions <- function(options, defaults, label, known = names(defaults)) {
   options <- as.list(options)
   bad <- setdiff(names(options), known)
   if (length(bad) > 0)
-    warning(sprintf("%s: Ignoring unknown option(s): %s", label, paste(bad, collapse = ", ")))
+    stop(sprintf("%s: unknown option%s %s. Known: %s.", label,
+                 if (length(bad) > 1L) "s" else "", paste(bad, collapse = ", "),
+                 paste(known, collapse = ", ")), call. = FALSE)
   modifyList(defaults, options)
 }
 
@@ -382,7 +384,7 @@ Xs.cppDE <- function(odemodel, forcings = NULL, events = NULL, names = NULL, con
 
 
   # Derived at every solve from what `controls` holds; derived here as well,
-  # which checks the arguments and warns about unknown options when given.
+  # which checks the arguments, an unknown option among them, when given.
   forcsOf <- .derivedControl(.cppdeForcings)
   forcsOf(forcings)
 
@@ -633,14 +635,15 @@ Xs.cppDE <- function(odemodel, forcings = NULL, events = NULL, names = NULL, con
       o      <- solveOpts(FALSE)
       paramL <- lapply(seq_len(n), function(i)
         c(unclass(parsList[[i]]), unclass(fixedList[[i]])))
-      conds  <- function() lapply(seq_len(n), function(i) list(
+      conds  <- function() setNames(lapply(seq_len(n), function(i) list(
         times = timesL[[i]], parms = paramL[[i]],
-        forcings = forcs, keepStore = TRUE))
+        forcings = forcs, keepStore = TRUE)), names(parsList))
       batch <- get0("solveODEBatch", envir = asNamespace("cppDE"),
                     inherits = FALSE)
       ob <- o[setdiff(names(o), c("traceFile", "onFailure"))]
       h <- if (is.null(batch)) NULL else
-        batchHandle(rcache, list(times = timesL, forcings = forcs, opts = ob),
+        batchHandle(rcache, list(times = timesL, conditions = names(parsList),
+                                 forcings = forcs, opts = ob),
                     reversed, conds, ob)
       res <- if (is.null(batch))
         lapply(seq_len(n), function(i) do.call(cppDE::solveODE, c(
@@ -667,10 +670,11 @@ Xs.cppDE <- function(odemodel, forcings = NULL, events = NULL, names = NULL, con
     solveFn <- get0("solveBatch",    envir = ns, inherits = FALSE)
     obatch  <- o[setdiff(names(o), c("traceFile", "onFailure"))]
 
-    mkConds <- function() lapply(seq_len(n), function(i)
+    # named by condition, so that cppDE names a condition that fails
+    mkConds <- function() setNames(lapply(seq_len(n), function(i)
       list(times = timesL[[i]], parms = preps[[i]]$params,
            tangent = preps[[i]]$tangent, hessian = preps[[i]]$hessian,
-           forcings = forcs))
+           forcings = forcs)), names(parsList))
 
     res <- if (is.null(batch)) {
       lapply(seq_len(n), function(i) do.call(cppDE::solveODE, c(
@@ -682,7 +686,7 @@ Xs.cppDE <- function(odemodel, forcings = NULL, events = NULL, names = NULL, con
       # holds. A rename or move of the shared object is invisible to `sig` and
       # checked by `.batchHandleLive()`.
       sig <- list(model = as.character(model), times = timesL,
-                  deriv = deriv, deriv2 = deriv2,
+                  conditions = names(parsList), deriv = deriv, deriv2 = deriv2,
                   sens = lapply(preps, function(pr) dimnames(pr$tangent)),
                   forcings = forcs, opts = obatch)
       if (!identical(bcache$sig, sig) || !.batchHandleLive(bcache$handle)) {
@@ -1366,10 +1370,20 @@ Y <- function(g, f = NULL, states = NULL, parameters = NULL,
 
   controls <- list(attachInput = attachInput)
 
+  # The prediction has to return every state the observables read.
+  needStates <- function(out) {
+    lack <- setdiff(obsStates, colnames(out))
+    if (length(lack))
+      stop("Y(): the prediction has no column ", paste(lack, collapse = ", "),
+           ", which the observables read. A prediction function returns the ",
+           "states in its control 'names', see controls().", call. = FALSE)
+  }
+
   # `.ad_out` lets the batched entry hand in a precomputed AD result.
   X2Y <- function(out, pars, fixed = NULL, deriv = TRUE, deriv2 = FALSE,
                   .ad_out = NULL, .fixedObs = NULL) {
 
+    needStates(out)
     if (deriv2 && !emit_d2)
       stop("Y() was built with deriv2 = FALSE; rebuild Y() with deriv2 = TRUE.", call. = FALSE)
     if (!emit_d1) deriv <- FALSE
@@ -1472,6 +1486,7 @@ Y <- function(g, f = NULL, states = NULL, parameters = NULL,
     s2Ref <- NULL; s2Keep <- TRUE
     sets <- lapply(seq_len(n), function(i) {
       pars <- parsList[[i]]; out <- outList[[i]]
+      needStates(out)
       fnm <- names(fixedList[[i]])
       params <- c(unclass(pars), unclass(fixedList[[i]]))
       dX <- attr(out, "deriv")
@@ -1510,6 +1525,7 @@ Y <- function(g, f = NULL, states = NULL, parameters = NULL,
   # Pulls a cotangent on the observables back onto the prediction's states and
   # the parameters; attached states pass theirs through unchanged.
   X2Yvjp <- function(out, pars, fixed = NULL, cotangent) {
+    needStates(out)
     w <- .asCtOut(cotangent)
     if (is.null(gEval$vjp))
       stop("Y(): the reverse mode needs a vector-Jacobian product; rebuild ",
