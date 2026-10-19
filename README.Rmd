@@ -68,17 +68,27 @@ Models are assembled from four kinds of function objects that compose with `*` (
 | `parfn` | `P()` | parameter transformations |
 | `objfn` | `normL2()`, `constraintL2()` | objective functions |
 
-Two models are worked through end to end:
+Three models are worked through end to end:
 
-- [STAT5 dimerisation after Epo stimulation](examples/boehm.md): the model of
+- [STAT5 dimerisation after Epo stimulation](examples/Boehm_JProteomeRes2014.md): the model of
   Boehm et al. (2014) from reactions to profile likelihoods, with a multistart
   fit, an error model by restricted maximum likelihood and confidence
   intervals.
-- [`inst/examples/example_BachmannMSB2011.R`](inst/examples/example_BachmannMSB2011.R):
-  the JAK2-STAT5 model of
+- [JAK2-STAT5 signalling with feedbacks](examples/BachmannMSB2011.md): the model of
   [Bachmann et al. (2011)](https://doi.org/10.1038/msb.2011.50), with 25 states
   in two compartments, the negative feedbacks CIS, SOCS3 and SHP1, and 113
   parameters estimated from 541 measurements across thirteen experiments.
+- [IFN-alpha sensitization](examples/KokMSB2020.md): the model of
+  [Kok et al. (2020)](https://doi.org/10.15252/msb.20198955), its structural
+  identifiability, the fit at the published optimum over 25 conditions, the
+  gradient by forward sensitivities and by the reverse sweep, and the
+  sensitization of a second dose by a first.
+
+All three are demos of the package, as are [bile acid
+transport](examples/BA_transport.md) from profile likelihoods to a prediction band, and
+a [Hodgkin-Huxley neuron](examples/HodgkinHuxley.md) with switches on time and
+state. `demo("KokMSB2020", package = "dMod2")` runs one, `demo(package = "dMod2")`
+lists them.
 
 ## Structural identifiability
 
@@ -88,7 +98,7 @@ them into a parameter transformation that removes them. Both run in the Python
 package [symident](https://github.com/dModverse/symident), which dMod2 installs
 from PyPI on first use; under `RETICULATE_PYTHON` install it there with
 `pip install symident`. A steady-state start on coupled steady states needs
-msolve, which `python -c "import symident; symident.install_msolve()"` builds or
+msolve, which `symmetryDetection()` offers to build when it is missing, or which
 `SYMIDENT_MSOLVE` points to.
 
 ## Citation

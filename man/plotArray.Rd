@@ -34,7 +34,7 @@ predictions by condition so that \code{...} can refer to its columns, or
 \code{NULL}. Has no default.}
 
 \item{...}{Logical expressions to subset the plotted data; used only with
-a \code{covtable}. \code{nsimus} is deprecated, use \code{nSim}.}
+a \code{covtable}.}
 
 \item{nSim}{Number of trajectories. Defaults to 4.}
 }

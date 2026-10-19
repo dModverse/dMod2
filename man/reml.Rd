@@ -44,8 +44,7 @@ between two rounds. Default \code{1e-6}.}
 \item{cores}{Passed to the prediction and the objective. Default
 \code{getOption("dMod.cores", 1)}.}
 
-\item{...}{Further arguments for \code{objfun}. \code{rank.tol} is deprecated, use
-\code{rankTol}.}
+\item{...}{Further arguments for \code{objfun}.}
 }
 \value{
 A list with components

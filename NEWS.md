@@ -55,6 +55,115 @@
   lowest level of the waterfall, within `tolHits` of the best value, and the
   structures they take.
 
+# dMod2 0.12.5
+
+* `plotValues()` colors converged fits by their iterations on the dMod ramp and draws
+  unconverged ones in red, with a caption only when there are any. With
+  `pseudoLog = TRUE`, a range within one decade gets breaks at 1-2-5 or finer.
+* The demo `KokMSB2020` shows the model scheme of the publication and the statistics of
+  200 fits, which ship in `inst/extdata/kok/`.
+
+# dMod2 0.12.4
+
+* `symmetryDetection()` and `symmetryReduction()` need symident 0.11.0. A direction
+  checked without an error bound has level `"checked"`, and `info$assumptions` lists the
+  declared domain and the declared starts of the switches, with the error bound.
+* `symmetryReduction()` names the claims of a section that are not proven under
+  `blocks[[i]]$unproven`, with level `"open"`, and lists `assumptions`; the level `"assumed"`,
+  `blocks[[i]]$assumptions` and the argument `verbose` are removed. A section on a face
+  holds `faceWhy` and `faceLevel`; a resting state checked only at random points of the face
+  makes the block `"checked"`.
+* In the blocks of `symmetryReduction()`, `newParameters`, `solvedDomain` and `choices`
+  replace `survivorMeaning`, `carrierDomain` and `admissible`.
+* `trust()` takes `phases`, a list of phases, each with its own `hessianMethod`,
+  `iterlim`, `sweep` and `qnControl`, run in turn and cycled through for up to
+  `switches` handovers. A phase that uses up its own `iterlim` hands over like a
+  soft stop. `fallbackControl` is removed:
+  `fallbackControl = list(hessianMethod = "sr1", limit = 3, iterlim = 200)` is
+  `phases = list(list(hessianMethod = "gn"), list(hessianMethod = "sr1", iterlim = 200)), switches = 3`.
+  A run without `phases` is unchanged.
+* The result of `trust()` has `phaseIterations`, the iterations of each phase run
+  in run order, and with `phases` the sweeps of the phases as `phaseSweep` in place
+  of `fallbackSweep`. `as.parframe()` adds a column `iterations.<phase>` per phase.
+* Each run of a quasi-Newton phase has its own allowance of reseeds by
+  `qnControl$hessianReseed = "stall"`; `nReseed` counts over the run.
+* `mstrust(cores = c(fits = , conditions = ))` runs both axes as given, each
+  capped at the cores available, and records that layout in `attr(, "run")$cores`.
+* `mstrust()` and `profile()` stop the cluster of a conditions axis and restore
+  `options(dMod.cores)` on exit, on every platform.
+* The cores available are those of the R process, `parallelly::availableCores()`,
+  which follows the CPU affinity and a SLURM or PBS allocation. dMod2 imports
+  parallelly.
+* A sum of objective functions keeps the `compileInfo` of its terms, so `loadDLL()`
+  on it searches the directories its sources were compiled in.
+
+# dMod2 0.12.3
+
+* `trustL1()` drops `parscale`, as `trust()` did in 0.12.2. A scaling of the
+  parameters belongs in `P()`.
+
+# dMod2 0.12.2
+
+* `trust()` gains `fallbackControl`, the settings of the fallback phase:
+  `hessianMethod` (default `"none"`), `limit`, `iterlim` (per fallback
+  phase), `sweep` and `qnControl`. With `sweep = NULL`, the default, the
+  fallback phase evaluates the objective backwards when the chain can.
+  `hessianFallback`, `fallbackLimit` and `parscale` are removed.
+* `trust()` defaults to `iterlim = 1000`, counted over all phases.
+* The deprecated argument names and aliases are removed, among them
+  `attr.name`, `opt.BLOQ`, `obj.attributes`, `sort.by`, `split.by`,
+  `keep.covariates`, `rank.tol`, `attach.input`, `keep.root`, `optionsOde`,
+  `start1stfromCenter`, `fterm`, `mterm`, `stepControl$theta.max`, the
+  `controlsPTC` entries `rtol` and `atol`, the `cores` of `normL2()` and
+  `readPetabYaml()`, `readPetabTables()`. `repar(expr, trafo)` is an error.
+* `mstrust()` drops `hessian` from every fit and records `elapsed`, the wall
+  time of each fit, and the attribute `"run"` with the start time, total wall
+  time, cores, optimiser, sampler, their arguments and the package versions.
+  `as.parframe()` adds the column `elapsed` and keeps `"run"`.
+* `vcov()` takes an evaluation of an objective function, `vcov(obj(pars))`,
+  with `fixed` for parameters held at a bound. `vcov()` on a fit without
+  Hessian is an error instead of a matrix of `NA`.
+* The `.R` files of `mstrust(cautiousMode = TRUE)` restore the fits exactly.
+
+# dMod2 0.12.1
+
+* Needs symident 0.10.1.
+* When symident needs msolve and finds none, `symmetryDetection()` and
+  `symmetryReduction()` ask in an interactive session whether to build it into the
+  symident cache, on Windows with Rtools, and then repeat the call.
+
+# dMod2 0.12.0
+
+* Needs cppDE 0.13.0 and symident 0.10.0.
+* `getSymbols()` and `replaceSymbols()` are dMod2's own, no longer re-exported
+  from cOde, which is now needed for the deSolve backend only.
+  `replaceSymbols()` brackets a replacement that is not a single operand,
+  replaces variables only, not function or argument names, and keeps the
+  spacing.
+* `pi` is the number in equations, as in cppDE, and `getSymbols()` does not
+  list it.
+* `symmetryDetection()` gains `regimes`, the regimes an experiment visits in a
+  model with switches, overall or per condition.
+* A direction of `symmetryDetection()` has a `level` (`"exact"`, `"verified"`
+  or `"open"`) in place of `certified`, and `stateComponents`. `info` gains
+  `rankStatus`, `proof`, `bound`, `gapCertified`, `limits`, `errors` and
+  `branches`.
+* `reconstControl()` gains `homotopyDegree`, `degreeCapMax`, `exactProof`,
+  `exactWorkCap` and `seed`; `NULL`, the default, keeps the value of symident.
+* `symmetryReduction()` stops at a direction of level `"open"` unless
+  `allowOpen = TRUE`. It gains `workCap`, `timeout` defaults to `Inf`, and
+  `check = TRUE` runs the detection again on the reduced model. The result
+  gains `level`, `limits` and `checks`, and each block its `level`.
+* `plotValues()` draws the objective values on a linear scale, not their distance to
+  the best fit on a pseudo-log scale; `pseudoLog = TRUE` switches to a pseudo-log10 scale.
+* The data set `kok` and the demo `KokMSB2020`. The Bachmann, Boehm, bile acid and
+  Hodgkin-Huxley scripts are demos as well, `demo(package = "dMod2")` lists them; the
+  tutorials left in `inst/examples` from dMod and the R2C templates in `inst/templates`
+  are removed, and the gradient comparisons moved to `bench/gradient`.
+* `bench/` and `benchmarks/` are one directory, `bench/`, by topic: `harness/` (the PEtab
+  benchmark suite), `gradient/`, `hessian/`, `symmetry/`, `multipleShooting/` and
+  `numSteady/`.
+
 # dMod2 0.11.4
 
 * symident and python-libsbml are found in `~/.virtualenvs/r-reticulate` too,

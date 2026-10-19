@@ -30,9 +30,7 @@ absolute value of 1. Defaults to \code{FALSE}.}
 \item{modes}{Character vector, the contributions to the objective drawn in
 the profile plot besides the total. Defaults to \code{c("data", "prior")}.}
 
-\item{...}{Further arguments passed to \code{\link[cowplot:plot_grid]{cowplot::plot_grid()}}.
-\code{whichpars}, \code{npars} and \code{ncols} are deprecated, use \code{whichPar}, \code{nPars}
-and \code{ncol}.}
+\item{...}{Further arguments passed to \code{\link[cowplot:plot_grid]{cowplot::plot_grid()}}.}
 }
 \value{
 A \code{ggplot} object, the grid of \code{\link[cowplot:plot_grid]{cowplot::plot_grid()}}.

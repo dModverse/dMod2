@@ -30,8 +30,7 @@ Xf(odemodel, ...)
 \arguments{
 \item{odemodel}{An \code{\link[=odemodel]{odemodel()}}. Its backend decides which method runs.}
 
-\item{...}{\code{optionsOde}, the deprecated name of \code{options}, is still
-accepted with a warning.}
+\item{...}{Not used.}
 
 \item{forcings, events, condition}{As in \code{\link[=Xs]{Xs()}}.}
 

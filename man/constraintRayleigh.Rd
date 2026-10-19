@@ -4,7 +4,7 @@
 \alias{constraintRayleigh}
 \title{Soft Rayleigh Constraint on Positive Parameters}
 \usage{
-constraintRayleigh(sigma, attrName = "prior", condition = NULL, ...)
+constraintRayleigh(sigma, attrName = "prior", condition = NULL)
 }
 \arguments{
 \item{sigma}{Named numeric vector of scale parameters. Its names select the
@@ -16,8 +16,6 @@ value, default \code{"prior"}.}
 \item{condition}{Character vector, the conditions of a sum of objectives
 in which the term is evaluated. \code{NULL} (default) evaluates it in every
 one.}
-
-\item{...}{\code{attr.name} is deprecated, use \code{attrName}.}
 }
 \value{
 An objective function of class \code{objfn}, called as

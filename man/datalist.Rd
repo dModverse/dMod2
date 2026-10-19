@@ -30,8 +30,7 @@ must provide the columns "name", "time" and "value". The columns "sigma"
 and "lloq" are optional and default to \code{NA} and \code{-Inf}.}
 
 \item{...}{for \code{datalist()} and \code{c()}, named data frames or datalists; for
-the \code{as.datalist()} methods, not used; \code{split.by} and \code{keep.covariates}
-are deprecated names of \code{splitBy} and \code{keepCovariates}.}
+the \code{as.datalist()} methods, not used.}
 
 \item{splitBy}{character, the columns whose combined values identify a
 condition. Default \code{NULL} uses all columns except "name", "time",

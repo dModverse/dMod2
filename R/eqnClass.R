@@ -839,11 +839,13 @@ dot <- function(observable, eqnlist) {
   # Generate equations from eqnist
   f <- as.eqnvec(eqnlist)
   
+  # chain rule: the sum over states of d(observable)/d(state) times d(state)/dt
   newodes <- sapply(derivatives, function(der) {
-    
-    prodSymb(matrix(der, nrow = 1), matrix(f[names(der)], ncol = 1))
-    
-    
+    der  <- unlist(der)
+    rate <- unclass(f)[names(der)]
+    keep <- der != "0" & rate != "0"
+    if (!any(keep)) return("0")
+    paste0("(", der[keep], ") * (", rate[keep], ")", collapse = " + ")
   })
   
   as.eqnvec(newodes)

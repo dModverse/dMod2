@@ -130,16 +130,6 @@ controls <- function(x, ...) {
   condition
 }
 
-# A control under its deprecated name answers under the current one.
-.controlAlias <- function(name) {
-  renames <- c(optionsOde = "options", attach.input = "attachInput",
-               keep.root = "keepRoot", attr.name = "attrName")
-  if (length(name) != 1L || !name %in% names(renames)) return(name)
-  warning(sprintf("controls: '%s' is deprecated, use '%s'.", name,
-                  renames[[name]]), call. = FALSE)
-  renames[[name]]
-}
-
 .lscontrolsFn <- function(x, condition = NULL) {
 
   leaves <- .fnControlLeaves(x, condition)
@@ -168,7 +158,6 @@ controls <- function(x, ...) {
 #'   controls.
 controls.objfn <- function(x, name = NULL, ...) {
 
-  name <- .controlAlias(name)
   if (is.null(name)) return(.lscontrolsObjfn(x))
   tg <- .controlTargets(x, name)
   if (!length(tg)) return(NULL)
@@ -182,7 +171,6 @@ controls.objfn <- function(x, name = NULL, ...) {
 controls.fn <- function(x, condition = NULL, name = NULL, ...) {
 
   condition <- .controlCondition(x, condition)
-  name <- .controlAlias(name)
   if (is.null(name)) return(.lscontrolsFn(x, condition))
 
   tg <- .fnControlLeaves(x, condition, name)
@@ -203,7 +191,6 @@ controls.fn <- function(x, condition = NULL, name = NULL, ...) {
 #' @param value the new value of the control.
 #' @rdname controls
 "controls<-.objfn" <- function(x, name, ..., value) {
-  name <- .controlAlias(name)
   tg <- .controlTargets(x, name)
   if (!length(tg))
     stop("controls<-: the objective has no control '", name, "'. Available: ",
@@ -217,7 +204,6 @@ controls.fn <- function(x, condition = NULL, name = NULL, ...) {
 #' @rdname controls
 "controls<-.fn" <- function(x, condition = NULL, name, ..., value) {
   condition <- .controlCondition(x, condition)
-  name <- .controlAlias(name)
   tg <- .fnControlLeaves(x, condition, name)
   if (!length(tg)) {
     avail <- unique(unlist(lapply(.fnControlLeaves(x, condition),

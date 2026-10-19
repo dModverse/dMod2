@@ -17,8 +17,7 @@ parframe(
   x = NULL,
   parameters = colnames(x),
   metanames = NULL,
-  objAttributes = NULL,
-  ...
+  objAttributes = NULL
 )
 }
 \arguments{
@@ -31,7 +30,7 @@ parframe(
 \item{drop}{logical. Default \code{FALSE}. \code{TRUE} returns a plain data frame or
 vector instead of a \code{parframe}.}
 
-\item{...}{\code{obj.attributes} is deprecated, use \code{objAttributes}.}
+\item{...}{for \code{subset()}, a logical expression in the columns of \code{x}.}
 
 \item{parameters}{character, the names of the parameter columns. Default
 \code{colnames(x)}.}

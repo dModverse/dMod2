@@ -4,7 +4,7 @@
 \alias{rref}
 \title{Reduced Row Echelon Form of a Matrix}
 \usage{
-rref(A, tol = sqrt(.Machine$double.eps), verbose = FALSE, ...)
+rref(A, tol = sqrt(.Machine$double.eps), verbose = FALSE)
 }
 \arguments{
 \item{A}{Numeric matrix.}
@@ -13,8 +13,6 @@ rref(A, tol = sqrt(.Machine$double.eps), verbose = FALSE, ...)
 \code{sqrt(.Machine$double.eps)}.}
 
 \item{verbose}{Logical. Not used.}
-
-\item{...}{\code{fractions} is deprecated and ignored.}
 }
 \value{
 A list with the elements \code{rref}, the reduced row echelon form of

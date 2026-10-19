@@ -101,8 +101,7 @@ NULL
 #' @param fcontrol `deSolve` backend only. List with the interpolation
 #'   settings of the forcings, `method`, `rule`, `f` and `ties` as in
 #'   [stats::approxfun()], passed to [deSolve::ode()] as its `fcontrol`.
-#' @param ... `optionsOde`, the deprecated name of `options`, is still
-#'   accepted with a warning.
+#' @param ... Not used.
 #'
 #' @section Solver options:
 #' On the `cppDE` and `Sundials` backends the lists take the entries below and
@@ -159,8 +158,7 @@ NULL
 #' controls of the returned function and read at every solve, so [controls()]
 #' can change them later; on the `deSolve` backend `events` and `fcontrol` as
 #' well. The controls are named after the arguments, `options`, `optionsSens`
-#' and `optionsReverse`; `optionsOde` is accepted as a deprecated alias of
-#' `options`. A replaced list is merged as described in section Solver
+#' and `optionsReverse`. A replaced list is merged as described in section Solver
 #' options, so it only needs the entries it changes.
 #'
 #' @return A [prdfn], called as `x(times, pars, ...)`, see section Calling
@@ -186,7 +184,6 @@ Xs.deSolve <- function(odemodel, forcings = NULL, events = NULL, names = NULL, c
                        options = list(), optionsSens = list(),
                        fcontrol = NULL, ...) {
 
-  options <- .optionsOdeAlias(options, list(...), "Xs")
   func <- odemodel$func
   extended <- odemodel$extended
   if (is.null(extended)) warning("Element 'extended' empty. ODE model does not contain sensitivities.")
@@ -362,18 +359,6 @@ Xs.deSolve <- function(odemodel, forcings = NULL, events = NULL, names = NULL, c
   modifyList(modifyList(list(method = method), as.list(options)), as.list(sens))
 }
 
-# `optionsOde`, the former name of `options`, given in the dots of a
-# constructor. Taken with a warning; given together with `options` it is an
-# error.
-.optionsOdeAlias <- function(options, dots, label) {
-  if (!"optionsOde" %in% names(dots)) return(options)
-  if (length(options))
-    stop(label, ": give 'options' only; 'optionsOde' is its deprecated name.",
-         call. = FALSE)
-  warning(label, ": 'optionsOde' is deprecated, use 'options'.", call. = FALSE)
-  dots$optionsOde
-}
-
 # Caches `derive(src)` until `src` changes. `controls` keeps the user's form,
 # the solver gets the derived one; identical() on an unchanged object is a
 # pointer comparison, so a solve pays nothing and a change is checked once.
@@ -395,7 +380,6 @@ Xs.cppDE <- function(odemodel, forcings = NULL, events = NULL, names = NULL, con
                       options = list(), optionsSens = list(),
                       optionsReverse = NULL, ...) {
 
-  options <- .optionsOdeAlias(options, list(...), "Xs")
 
   # Derived at every solve from what `controls` holds; derived here as well,
   # which checks the arguments and warns about unknown options when given.
@@ -894,8 +878,7 @@ Xs.cppDE <- function(odemodel, forcings = NULL, events = NULL, names = NULL, con
 #'   its section Solver options. On the `deSolve` backend `method` defaults to
 #'   `"lsoda"`.
 #' @param fcontrol `deSolve` backend only, as in [Xs()].
-#' @param ... `optionsOde`, the deprecated name of `options`, is still
-#'   accepted with a warning.
+#' @param ... Not used.
 #'
 #' @return A [prdfn], called as `x(times, pars, fixed = NULL)`, returning a
 #'   [prdlist] without derivatives; the other arguments of section Calling a
@@ -913,7 +896,6 @@ Xf <- function(odemodel, ...) {
 Xf.deSolve <- function(odemodel, forcings = NULL, events = NULL, condition = NULL,
                        options = list(), fcontrol = NULL, ...) {
 
-  options <- .optionsOdeAlias(options, list(...), "Xf")
 
   func <- odemodel$func
 
@@ -977,7 +959,6 @@ Xf.deSolve <- function(odemodel, forcings = NULL, events = NULL, condition = NUL
 Xf.cppDE <- function(odemodel, forcings = NULL, events = NULL, condition = NULL,
                       options = list(), ...) {
 
-  options <- .optionsOdeAlias(options, list(...), "Xf")
 
   # `controls` keeps the arguments as given; the solver's forms are derived
   # from them at every solve, and here, which checks them once when given.
@@ -1274,7 +1255,6 @@ Xd <- function(data, condition = NULL) {
 #' @param outdir Character. Directory for the generated C++ source and the
 #'   shared object, default `getOption("dMod.outdir")`, else the working
 #'   directory.
-#' @param ... `attach.input` is deprecated, use `attachInput`.
 #'
 #' @return
 #' An [obsfn], called as `g(out, pars, ...)` with a [prdlist] `out`, see
@@ -1292,9 +1272,7 @@ Y <- function(g, f = NULL, states = NULL, parameters = NULL,
               condition = NULL, attachInput = FALSE,
               compile = FALSE, modelname = NULL, verbose = FALSE,
               cores = NULL, deriv = TRUE, deriv2 = FALSE,
-              derivMode = "forward", outdir = .dmodOutdir(), ...) {
-
-  .renameArgs(list(...), c(attach.input = "attachInput"), "Y", strict = TRUE)
+              derivMode = "forward", outdir = .dmodOutdir()) {
 
   derivMode <- .matchDerivMode(derivMode, c("forward", "reverse", "forward-reverse"))
 

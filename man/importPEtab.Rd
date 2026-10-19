@@ -15,8 +15,7 @@ importPEtab(
   options = NULL,
   optionsSens = NULL,
   sparse = NULL,
-  outdir = .dmodOutdir(),
-  optionsOde = NULL
+  outdir = .dmodOutdir()
 )
 }
 \arguments{
@@ -51,8 +50,6 @@ sparse (KLU) or dense linear solver; \code{TRUE} or \code{FALSE} sets it.}
 \item{outdir}{Directory of the generated sources and shared objects, one
 source per condition. Default \code{getOption("dMod.outdir")}, else the
 working directory.}
-
-\item{optionsOde}{Deprecated name of \code{options}, accepted with a warning.}
 }
 \value{
 A list of class \code{"petabproblem"} with components \code{dataList},
