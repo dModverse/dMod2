@@ -317,7 +317,7 @@ system.time(obj(bestfit, sweep = "reverse"))
 # bwForCluster Helix, as 10 array tasks of 20 fits on 20 cores, each task seeded
 # by its SLURM job ID. The fits use the default Gauss-Newton Hessian, and the
 # sources in .outdir are compiled once on the login node. The authors acknowledge
-# support by the state of Baden-Württemberg through bwHPC and the German Research
+# support by the state of Baden-Wuerttemberg through bwHPC and the German Research
 # Foundation (DFG) through grant INST 35/1597-1 FUGG.
 #
 # The job needs an account on helix, so `.helix <- TRUE` submits it and the demo

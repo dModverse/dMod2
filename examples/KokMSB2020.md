@@ -300,7 +300,7 @@ summary(structural)
 #>   rank: proven (4 directions, exact scalings)
 #>   25 conditions, 50 segments
 #>   settings: reduce_cq=False, equilibrate=False, reconstruct=False
-#>   elapsed: 8.1s
+#>   elapsed: 57.7s
 #> 
 #> Result:  rank 92 / 96  |  4 non-identifiable directions
 #> 
@@ -406,7 +406,7 @@ system.time(obj(bestfit, deriv = FALSE))
 
 ```
 #>    user  system elapsed 
-#>   0.040   0.001   0.041
+#>   0.122   0.000   0.124
 ```
 
 ``` r
@@ -415,7 +415,7 @@ system.time(obj(bestfit))
 
 ```
 #>    user  system elapsed 
-#>   2.497   0.008   2.512
+#>   9.199   0.038  12.742
 ```
 
 ``` r
@@ -424,7 +424,7 @@ system.time(obj(bestfit, cores = 4))
 
 ```
 #>    user  system elapsed 
-#>   2.628   0.012   0.741
+#>   8.990   0.041   3.412
 ```
 
 ``` r
@@ -433,7 +433,7 @@ system.time(obj(bestfit, sweep = "reverse"))
 
 ```
 #>    user  system elapsed 
-#>   0.090   0.000   0.091
+#>   0.318   0.001   0.524
 ```
 
 ## Multi-start on helix
@@ -441,7 +441,7 @@ system.time(obj(bestfit, sweep = "reverse"))
 bwForCluster Helix, as 10 array tasks of 20 fits on 20 cores, each task seeded
 by its SLURM job ID. The fits use the default Gauss-Newton Hessian, and the
 sources in .outdir are compiled once on the login node. The authors acknowledge
-support by the state of Baden-Württemberg through bwHPC and the German Research
+support by the state of Baden-Wuerttemberg through bwHPC and the German Research
 Foundation (DFG) through grant INST 35/1597-1 FUGG.
 
 The job needs an account on helix, so `.helix <- TRUE` submits it and the demo
