@@ -1,2 +1,9 @@
 PKG_CXXFLAGS = $(SHLIB_OPENMP_CXXFLAGS)
 PKG_LIBS = $(LAPACK_LIBS) $(BLAS_LIBS) $(FLIBS) $(SHLIB_OPENMP_CXXFLAGS)
+
+all: $(SHLIB)
+
+# make does not track headers; a header change has to rebuild its users
+normL2_kernel.o constraint_kernel.o residual_kernel.o residual_kernel_rwrap.o: residual_kernel.h
+trust_kernel.o trustL1_kernel.o trust_step.o: trust_driver.h trust_subproblem.h
+trust_kernel.o trust_step.o: trust_qn.h

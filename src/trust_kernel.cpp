@@ -37,6 +37,7 @@ using dmod::trust_driver::CV_EXACT;
 using dmod::trust_driver::CV_GN;
 using dmod::trust_driver::CV_GRADIENT;
 using dmod::trust_driver::eval_objfun;
+using dmod::trust_driver::stop_parinit_failed;
 using dmod::trust_driver::fill_bound;
 using dmod::trust_driver::fill_parscale;
 using dmod::trust_driver::kInf;
@@ -193,7 +194,7 @@ List trust_reflective(Function objfun, NumericVector parinit,
   List out_init;
   if (!eval_objfun(objfun, x_named, out_init,
                    seed_exact ? CV_EXACT : (seed_gn ? CV_GN : CV_GRADIENT), 0))
-    stop("parinit not feasible: objfun failed");
+    stop_parinit_failed();
   double val = as<double>(out_init["value"]);
   if (!std::isfinite(val)) stop("parinit not feasible: value is not finite");
   NumericVector grad0 = as<NumericVector>(out_init["gradient"]);
@@ -701,7 +702,7 @@ List trust_clip(Function objfun, NumericVector parinit,
   // from inside a conversion.
   List out_init;
   if (!eval_objfun(objfun, x_named, out_init, CV_GN))
-    stop("parinit not feasible: the objective failed there");
+    stop_parinit_failed();
   double val = as<double>(out_init["value"]);
   NumericVector grad0 = as<NumericVector>(out_init["gradient"]);
   if (!std::isfinite(val)) stop("parinit not feasible: value is not finite");
