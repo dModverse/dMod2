@@ -361,16 +361,22 @@ plotValues.parframe <- function(x, tol = 1, ..., showSteps = FALSE, pseudoLog = 
                            hjust = 0, vjust = -0.5, color = "firebrick", size = 3)
   }
 
-  # an unconverged fit is red, outside the ramp of the iterations
+  # an unconverged fit is red, outside the ramp of the iterations, with a legend
+  # entry of its own
   conv <- pars$converged %in% TRUE
+  unconverged <- if (!all(conv)) list(
+    geom_point(data = pars[!conv, ], aes(shape = "not converged"), color = dMod_colors[2]),
+    scale_shape_manual(values = c(`not converged` = 19),
+                       guide = guide_legend(override.aes = list(color = dMod_colors[2]),
+                                            order = 1)))
+
   P <- ggplot2::ggplot(pars, aes(x = index, y = value)) +
     stepLines +
     geom_point(data = pars[conv, ], aes(color = iterations)) +
-    geom_point(data = pars[!conv, ], color = dMod_colors[2]) +
+    unconverged +
     stepLabels +
     yScale +
-    labs(x = "Fit rank", y = "Objective value", color = "Iterations",
-         caption = if (!all(conv)) "red: not converged") +
+    labs(x = "Fit rank", y = "Objective value", color = "Iterations", shape = NULL) +
     scale_color_dMod_c() +
     theme_dMod()
 

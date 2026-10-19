@@ -278,6 +278,9 @@ match.fnargs <- function(arglist, choices) {
   split <- lapply(idx, function(i) .splitParsFixed(.req_pars(b, i), .req_fixed(b, i)))
   parsL  <- lapply(split, `[[`, "pars")
   fixedL <- lapply(split, `[[`, "fixed")
+  # named by condition where every request has one, so a solver failure names it
+  cn <- vapply(conds, function(cd) if (length(cd) == 1L) as.character(cd) else NA_character_, "")
+  if (!anyNA(cn)) names(parsL) <- cn
 
   res <- switch(st$kind,
     prdfn = if (keepStore)
@@ -1294,9 +1297,11 @@ test_conditions <- function(c1, c2) {
         tm$prdfn <- tryCatch(tm$prdfn * e2, error = function(e) tm$prdfn)
         tm
       })
-    # The objective inside, for controls(). Not `terms`: the composition
-    # reads other parameters than the objective it wraps.
+    # The objective inside and the transformation, for controls(). Not
+    # `terms`: the composition reads other parameters than the objective it
+    # wraps.
     attr(outfn, "wrapped") <- list(e1)
+    attr(outfn, "fns") <- list(e2)
   } else {
     attr(outfn, "mappings") <- .composeMappings(st, e1, e2, conditions.out, spec$out)
   }

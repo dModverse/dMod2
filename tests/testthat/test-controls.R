@@ -34,10 +34,12 @@ ctl_models <- function() {
           derivMode = c("forward", "reverse"), modelname = "ctl_pa", outdir = d)
   pim <- Pimpl(c(x = "x^2 - a"), parameters = "a",
                modelname = "ctl_pim", outdir = d, verbose = FALSE)
+  # an outer transformation, for objfn * parfn
+  po <- P(c(A_log = "a", k_log = "b"), modelname = "ctl_po", outdir = d)
 
-  compile(m, mf, g, p, pa, pim, output = "ctl_all", cores = test_cores())
+  compile(m, mf, g, p, pa, pim, po, output = "ctl_all", cores = test_cores())
 
-  .ctl_env$models <- list(m = m, mf = mf, g = g, p = p, pa = pa, pim = pim)
+  .ctl_env$models <- list(m = m, mf = mf, g = g, p = p, pa = pa, pim = pim, po = po)
 }
 
 # The kernel of an unspecific leaf.
@@ -80,14 +82,15 @@ test_that("Xs solves with the options set through controls, defaults kept", {
   expect_silent(x(.ctl_times, inner, deriv = FALSE))
 })
 
-test_that("Xs warns about an unknown option set through controls, once", {
+test_that("Xs stops on an unknown option set through controls", {
   fx <- ctl_models()
   x <- Xs(fx$m)
   inner <- c(A = 1, k = 0.5)
   controls(x, NULL, "options") <- list(rtol = 1e-8, bogus = 1)
-  expect_warning(x(.ctl_times, inner, deriv = FALSE),
-                 "options: Ignoring unknown option\\(s\\): bogus")
-  expect_no_warning(x(.ctl_times, inner, deriv = FALSE))
+  expect_error(x(.ctl_times, inner, deriv = FALSE),
+               "options: unknown option bogus\\. Known: atol, rtol")
+  controls(x, NULL, "options") <- list(rtol = 1e-8)
+  expect_silent(x(.ctl_times, inner, deriv = FALSE))
 })
 
 test_that("Xs keeps the forcings as given and integrates the ones set later", {
@@ -150,18 +153,18 @@ test_that("optionsReverse set later meets the check the constructor makes", {
   expect_silent(xf(.ctl_times, c(A = 0, k = 1)))
 })
 
-test_that("optionsReverse warns about an unknown entry, once", {
+test_that("optionsReverse stops on an unknown entry, given or set later", {
   fx <- ctl_models()
-  expect_warning(x <- Xs(fx$m, optionsReverse = list(refine = TRUE, gradtoll = 1)),
-                 "optionsReverse: Ignoring unknown option\\(s\\): gradtoll")
+  expect_error(Xs(fx$m, optionsReverse = list(refine = TRUE, gradtoll = 1)),
+               "optionsReverse: unknown option gradtoll")
+  x <- Xs(fx$m, optionsReverse = list(refine = TRUE))
   k <- .ctl_kernel(x)
   expect_true(environment(k)$sweepCtl()$refine)
 
   controls(x, NULL, "optionsReverse") <- list(refin = TRUE)
-  expect_warning(ctl <- environment(k)$sweepCtl(),
-                 "optionsReverse: Ignoring unknown option\\(s\\): refin")
-  expect_null(ctl)
-  expect_no_warning(environment(k)$sweepCtl())
+  expect_error(environment(k)$sweepCtl(), "optionsReverse: unknown option refin")
+  controls(x, NULL, "optionsReverse") <- list(refine = FALSE)
+  expect_null(environment(k)$sweepCtl())
 })
 
 test_that("sensErrCon reaches the forward solver from optionsSens", {
@@ -192,9 +195,8 @@ test_that("sensErrCon reaches the forward solver from optionsSens", {
   expect_identical(seen, list(NULL, FALSE, NULL, NULL))
 
   # sensErrCon belongs to optionsSens alone, so options does not know it.
-  expect_warning(controls(x, NULL, "options") <- list(sensErrCon = FALSE),
-                 NA)
-  expect_warning(k(.ctl_times, p, deriv = FALSE), "sensErrCon")
+  expect_silent(controls(x, NULL, "options") <- list(sensErrCon = FALSE))
+  expect_error(k(.ctl_times, p, deriv = FALSE), "unknown option sensErrCon")
 })
 
 test_that("the reverse control uses refine and gradtol as they are when it is used", {
@@ -427,7 +429,69 @@ test_that("controls reach through %.*% and objfn * parfn, which stay one term", 
   vali <- datapointL2("A", 2, "newpoint", condition = "C1")
   both <- sobj + 3 %.*% vali
   expect_setequal(controls(both), c("multipleShootingControl", "mu", "time",
-                                    "sigma", "attrName"))
+                                    "sigma", "attrName", "attachInput", "forcings",
+                                    "names", "options", "optionsSens",
+                                    "optionsReverse"))
   controls(both, "sigma") <- 2
   expect_identical(controls(vali, "sigma"), 2)
+})
+
+
+test_that("controls on an objective reach the functions it evaluates", {
+  fx <- ctl_models()
+  x <- Xs(fx$m)
+  data <- as.datalist(data.frame(
+    name = "y", time = c(1, 2, 1, 2), value = c(0.6, 0.4, 1.2, 0.7),
+    sigma = 0.1, condition = c("C1", "C1", "C2", "C2")), splitBy = "condition")
+  obj <- normL2(data, fx$g * x * fx$p) + constraintL2(c(A_log = 0, k_log = 0))
+  pars <- c(A_log = 0, k_log = log(0.5))
+
+  expect_true(all(c("multipleShootingControl", "options", "attachInput") %in%
+                    controls(obj)))
+  v0 <- obj(pars)$value
+  controls(obj, "options") <- list(atol = 1e-1, rtol = 1e-1)
+  expect_identical(controls(x, NULL, "options"), list(atol = 1e-1, rtol = 1e-1))
+  expect_identical(controls(obj, "options"), list(atol = 1e-1, rtol = 1e-1))
+  expect_false(isTRUE(all.equal(obj(pars)$value, v0)))
+  controls(obj, "options")$rtol <- 1e-6
+  expect_identical(controls(x, NULL, "options"), list(atol = 1e-1, rtol = 1e-6))
+  controls(obj, "options") <- list()
+  expect_identical(obj(pars)$value, v0)
+
+  # a condition narrows the leaves; g holds every condition
+  on.exit(controls(fx$p, NULL, "attachInput") <- FALSE, add = TRUE)
+  on.exit(controls(fx$g, NULL, "attachInput") <- FALSE, add = TRUE)
+  controls(obj, "attachInput", condition = "C2") <- TRUE
+  expect_false(controls(fx$p, "C1", "attachInput"))
+  expect_true(controls(fx$p, "C2", "attachInput"))
+  expect_error(controls(obj, "bogus") <- 1, "no control 'bogus'")
+  expect_error(controls(obj, "options", condition = "C3") <- list(), "unknown condition")
+
+  # the outer transformation of objfn * parfn is reached as well
+  op <- obj * fx$po
+  on.exit(controls(fx$po, NULL, "attachInput") <- FALSE, add = TRUE)
+  expect_false(controls(fx$po, NULL, "attachInput"))
+  controls(op, "attachInput") <- TRUE
+  expect_true(controls(fx$po, NULL, "attachInput"))
+})
+
+
+test_that("Y names the state the prediction does not return", {
+  fx <- ctl_models()
+  x <- Xs(fx$m)
+  prd <- fx$g * x * fx$p
+  pars <- c(A_log = 0, k_log = log(0.5))
+  controls(x, NULL, "names") <- character(0)
+  expect_error(prd(.ctl_times, pars), "prediction has no column A, which the observables read")
+  expect_error(prd(.ctl_times, pars, conditions = "C1"), "prediction has no column A")
+})
+
+
+test_that("a failed batch solve names its conditions", {
+  fx <- ctl_models()
+  x <- Xs(fx$m)
+  prd <- fx$g * x * fx$p
+  controls(x, NULL, "options") <- list(maxsteps = 1L)
+  expect_error(prd(c(0, 50, 100), c(A_log = 0, k_log = log(0.5)), deriv = FALSE),
+               "conditions did not complete: C1, C2")
 })

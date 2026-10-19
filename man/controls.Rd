@@ -11,13 +11,13 @@
 \usage{
 controls(x, ...)
 
-\method{controls}{objfn}(x, name = NULL, ...)
+\method{controls}{objfn}(x, name = NULL, condition = NULL, ...)
 
 \method{controls}{fn}(x, condition = NULL, name = NULL, ...)
 
 controls(x, ...) <- value
 
-\method{controls}{objfn}(x, name, ...) <- value
+\method{controls}{objfn}(x, name, condition = NULL, ...) <- value
 
 \method{controls}{fn}(x, condition = NULL, name, ...) <- value
 }
@@ -58,9 +58,13 @@ for that condition; a function built without a condition counts for every
 condition. With \code{condition = NULL}, the getter returns the value of the
 first function that holds the control and the setter changes every function
 that holds it. On an \code{objfn}, including sums, scaled objectives and
-objectives composed with a parameter transformation, the same holds for the
-objective terms. Setting a control that no function holds is an error, as
-is an unknown condition.
+objectives composed with a parameter transformation, the lookup covers the
+objective terms and the functions they evaluate: the prediction and error
+model given to \code{\link[=normL2]{normL2()}} and the parameter transformation of an
+\code{objfn * parfn}. The solver tolerances of an objective can so be changed
+without the prediction function it was built from. A control of the
+objective term itself is found first. Setting a control that no function
+holds is an error, as is an unknown condition.
 
 The second positional argument is \code{name} for an \code{objfn} and \code{condition}
 for an \code{fn}; name both arguments to avoid confusion.
