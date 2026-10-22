@@ -22,6 +22,32 @@ test_that("mstrust returns the global minimum across random starts on a convex q
 })
 
 
+test_that("set.seed() reproduces the starts of a multi-start whatever the cores", {
+  skip_on_os("windows")
+  obj <- constraintL2(mu = c(a = 1, b = -0.5), sigma = 1)
+  starts <- function(cores) {
+    set.seed(7)
+    fits <- mstrust(obj, c(a = 0, b = 0), fits = 4, sd = 1, cores = cores)
+    t(vapply(fits, function(f) as.numeric(f$parinit[c("a", "b")]), numeric(2)))
+  }
+  serial <- starts(1)
+  expect_identical(starts(2), serial)
+  expect_false(anyDuplicated(serial) > 0)
+})
+
+
+test_that("unique() keeps one row per value, sorted by value", {
+  pf <- parframe(data.frame(value = c(5, 1, 1.2, 5.1, 9),
+                            converged = c(TRUE, TRUE, TRUE, FALSE, TRUE), a = 1:5),
+                 parameters = "a", metanames = c("value", "converged"))
+  expect_identical(unique(pf)$a, c(2L, 1L, 5L))
+  expect_identical(unique(subset(pf, !converged | value > 6))$a, c(4L, 5L))
+  expect_identical(unique(subset(pf, value < 6))$a, c(2L, 1L))
+  expect_identical(nrow(unique(subset(pf, value > 100))), 0L)
+  expect_identical(unique(subset(pf, value > 8))$a, 5L)
+})
+
+
 test_that("a multi-start reports the Hessian source handovers per fit", {
   # nSwitch is the gate quantity for a switching Hessian source, so it has to
   # survive the trip from trust() through the parlist into the parframe.
@@ -268,6 +294,27 @@ test_that("mstrust with retry = FALSE does not re-attempt", {
 })
 
 
+test_that("mstrust takes an anonymous sampler", {
+  obj <- constraintL2(mu = c(a = 1, b = -0.5), sigma = 1)
+  out <- mstrust(obj, c(a = 0, b = 0), fits = 2L, cores = 1L, sd = 0.5,
+                 samplefun = function(n, sd) rnorm(n, 0, sd))
+  expect_length(out, 2L)
+})
+
+
+test_that("summary and plot of a parlist skip aborted fits", {
+  out <- mstrust(objfun = make_flaky_obj(fail_first = 1L), center = c(a = 0, b = 0),
+                 rinit = 1, rmax = 10, fits = 2L, sd = 1, cores = 1L, retry = FALSE)
+  expect_identical(as.vector(dMod2:::.statParlist(out)), c("error", "converged"))
+  expect_output(summary(out), "Fits aborted:       1")
+  expect_s3_class(plot(out), "ggplot")
+
+  aborted <- as.parlist(out[1])
+  expect_output(summary(aborted), "Fits aborted:       1")
+  expect_error(plot(aborted), "No converged fit")
+})
+
+
 # ---- on-disk results are opt-in -----------------------------------------
 
 test_that("mstrust writes nothing unless asked", {
@@ -342,7 +389,7 @@ psock_model <- function() {
   el <- eqnlist() |>
     addReaction("", "A", "k_in") |> addReaction("A", "B", "k1*A") |>
     addReaction("B", "", "k2*B")
-  x  <- Xs(odemodel(el, modelname = mn("x"), compile = FALSE), compile = FALSE)
+  x  <- Xs(odemodel(el, modelname = mn("x"), compile = FALSE))
   g  <- Y(c(yB = "s*B"), x, parameters = "s", modelname = mn("g"), compile = FALSE)
   ss <- Pimpl(el, modelname = mn("ss"), compile = FALSE, verbose = FALSE)
   trafo <- define(NULL, "x~exp(x)", x = getParameters(x, g))
@@ -395,4 +442,69 @@ test_that("trust reports why the objective failed at parinit", {
   obj <- function(pars, ...) stop("no shared object for this model")
   expect_error(trust(obj, c(a = 0), rinit = 1, rmax = 10),
                "objfun failed: no shared object for this model")
+})
+
+test_that("a profile without an accepted step holds the origin only", {
+  obj <- constraintL2(mu = c(a = 1, b = -0.5), sigma = 1)
+  stuck <- function(pars, fixed = NULL, ...) {
+    if (abs(c(pars, fixed)[["a"]] - 1) > 1e-12) stop("a must stay")
+    obj(pars, fixed = fixed, ...)
+  }
+  pr <- suppressWarnings(profile(stuck, c(a = 1, b = -0.5), "a", limits = c(-1, 1), cores = 1))
+  expect_equal(nrow(pr), 1L)
+  expect_equal(pr$a, 1)
+  expect_equal(pr$constraint, 0)
+})
+
+test_that("mstrust passes the own arguments of another optimiser", {
+  obj <- constraintL2(mu = c(a = 1, b = 2), sigma = 1)
+  fits <- mstrust(obj, c(a = 0, b = 0), fits = 2, sd = 1, cores = 1, optmethod = "trustL1",
+                  ftol = 1e-8)
+  expect_length(fits, 2L)
+})
+
+test_that("confint takes a profile without a data column", {
+  obj <- constraintL2(mu = c(a = 1, b = 2), sigma = 1)
+  pr <- profile(obj, c(a = 1, b = 2), "a", limits = c(-3, 3), cores = 1)
+  ci <- confint(pr)
+  expect_equal(unname(unlist(ci[1, c("lower", "upper")])), 1 + c(-1, 1) * qnorm(0.975),
+               tolerance = 0.02)
+})
+
+test_that("profile checks whichPar and the stop criterion and drops failed profiles by name", {
+  obj <- constraintL2(mu = c(a = 1, b = 2), sigma = 1)
+  p0 <- c(a = 1, b = 2)
+  expect_error(profile(obj, p0, "zz", cores = 1), "zz")
+  expect_error(profile(obj, p0, "b", fixed = c(b = 2), cores = 1), "b")
+  expect_error(profile(obj, p0, "a", stepControl = list(stop = "nothere"), cores = 1), "nothere")
+  expect_error(profile(obj, p0, "a", stepControl = list(limt = 3), cores = 1), "limt")
+  failB <- function(pars, fixed = NULL, ...) {
+    if (abs(c(pars, fixed)[["b"]] - 2) > 1e-12) stop("boom")
+    obj(pars, fixed = fixed, ...)
+  }
+  expect_message(pr <- profile(failB, p0, c("a", "b"), limits = c(-1, 1), cores = 1),
+                 "profile b.*boom")
+  expect_setequal(unique(pr$whichPar), c("a", "b"))
+  bad <- function(pars, ...) stop("boom")
+  expect_error(profile(bad, p0, c("a", "b"), cores = 1), "boom")
+})
+
+test_that("the log of mstrust holds one entry per fit, also from PSOCK workers", {
+  skip_on_cran()
+  skip_if(dMod2:::.availableCores() < 4L, "needs four cores")
+  withr::local_dir(withr::local_tempdir())
+  obj <- constraintL2(mu = c(a = 1, b = 2), sigma = 1)
+  fits <- mstrust(obj, c(a = 0, b = 0), fits = 3, sd = 1, output = TRUE,
+                  cores = c(fits = 2, conditions = 2))
+  log <- readLines(list.files(".", "mstrust.log", recursive = TRUE, full.names = TRUE))
+  expect_equal(sum(grepl("^Fit [0-9]+ completed", log)), 3L)
+  expect_true(any(grepl("^trust", log)))
+  expect_error(mstrust(obj, c(a = 0, b = 0), fits = 0, sd = 1), "fits")
+})
+
+test_that("load.parlist reads the fits in the order of their numbers", {
+  d <- withr::local_tempdir()
+  for (i in 1:11) saveRDS(list(value = i, converged = TRUE, iterations = 1, argument = c(a = i)),
+                          file.path(d, paste0("fit-", i, ".Rda")))
+  expect_equal(vapply(load.parlist(d), function(f) f$value, 1), 1:11)
 })

@@ -14,7 +14,7 @@ reml(
   rankTol = 1e-08,
   optimizer = trust,
   control = NULL,
-  cores = getOption("dMod.cores", 1L),
+  cores = getOption("dMod2.cores", 1L),
   ...
 )
 }
@@ -42,7 +42,7 @@ between two rounds. Default \code{1e-6}.}
 \code{list(rinit = 0.1, rmax = 10)}. Default \code{NULL}.}
 
 \item{cores}{Passed to the prediction and the objective. Default
-\code{getOption("dMod.cores", 1)}.}
+\code{getOption("dMod2.cores", 1)}.}
 
 \item{...}{Further arguments for \code{objfun}.}
 }
@@ -77,7 +77,7 @@ REML condition; \code{reml()} warns when it finds one.
 }
 \examples{
 \donttest{
-old <- options(dMod.outdir = tempdir())
+old <- options(dMod2.outdir = tempdir())
 f <- addReaction(eqnlist(), from = "A", to = "", rate = "k*A")
 x <- Xs(odemodel(f, modelname = "reml_x", compile = FALSE))
 g <- Y(c(y = "A"), f = x, attachInput = FALSE, modelname = "reml_g",

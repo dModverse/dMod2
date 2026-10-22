@@ -37,10 +37,11 @@ Draws a parframe of starting points for the \code{center} argument of
 generator is left unchanged.
 }
 \examples{
-msParframe(c(a = 0, b = 100000), 5)
+# Five starts around pars, the first one at pars
+msParframe(c(k1 = 1, k2 = 10), n = 5)
 
-# Parameter specific sigma
-msParframe(c(a = 0, b = 100000), 5, samplefun = rnorm, sd = c(100, 0.5))
+# A standard deviation per parameter
+msParframe(c(k1 = 1, k2 = 10), n = 5, sd = c(0.1, 2))
 }
 \seealso{
 \code{\link[=mstrust]{mstrust()}}, \code{\link[=parframe]{parframe()}}

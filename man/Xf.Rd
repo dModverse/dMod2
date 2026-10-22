@@ -30,7 +30,7 @@ Xf(odemodel, ...)
 \arguments{
 \item{odemodel}{An \code{\link[=odemodel]{odemodel()}}. Its backend decides which method runs.}
 
-\item{...}{Not used.}
+\item{...}{Not used; an argument not named here is an error.}
 
 \item{forcings, events, condition}{As in \code{\link[=Xs]{Xs()}}.}
 
@@ -43,7 +43,8 @@ its section Solver options. On the \code{deSolve} backend \code{method} defaults
 \value{
 A \link{prdfn}, called as \code{x(times, pars, fixed = NULL)}, returning a
 \link{prdlist} without derivatives; the other arguments of section Calling a
-dMod function are accepted and ignored. \code{forcings} and \code{options} can be
+dMod function are accepted and ignored, except \code{deriv2 = TRUE}, which is
+an error. \code{forcings} and \code{options} can be
 changed with \code{\link[=controls]{controls()}}.
 }
 \description{
@@ -92,7 +93,7 @@ conditions of the function.
 An objective function stores its prediction there as \code{prediction} and
 returns the environment as attribute \code{env}.
 \item \code{cores}: number of threads for the ODE solves and the residual kernel.
-Default \code{getOption("dMod.cores", 1L)}.
+Default \code{getOption("dMod2.cores", 1L)}.
 }
 
 Prediction, observation and parameter functions accept \code{hessian} and

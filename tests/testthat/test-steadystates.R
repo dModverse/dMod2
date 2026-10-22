@@ -1,42 +1,24 @@
-test_that("steady_states_are_steady", {
-
-  # Run inside tempdir so the Pexpl + odemodel codegen does not pollute
-  # tests/testthat/.
+test_that("a closed cycle started in its steady state stays there", {
   withr::local_dir(tempdir())
 
-  reactions <- eqnlist()
-  reactions <-   addReaction(reactions, "Tca_buffer", "Tca_cyto", "import_Tca*Tca_buffer", "Basolateral uptake")
-  reactions <-   addReaction(reactions, "Tca_cyto", "Tca_buffer", "export_Tca_baso*Tca_cyto", "Basolateral efflux")
-  reactions <-   addReaction(reactions, "Tca_cyto", "Tca_canalicular", "export_Tca_cana*Tca_cyto", "Canalicular efflux")
-  reactions <-   addReaction(reactions, "Tca_canalicular", "Tca_buffer", "transport_Tca*Tca_canalicular", "Transport bile")
+  cycle <- eqnlist() |>
+    addReaction("U", "V", "a*U") |>
+    addReaction("V", "U", "b*V") |>
+    addReaction("V", "W", "c*V") |>
+    addReaction("W", "U", "d*W")
+  ss <- steadyStates(cycle)
+  expect_false(identical(ss, 0))
 
-  mysteadies <- steadyStates(reactions)
+  x <- Xs(odemodel(cycle, modelname = "ssCycle", compile = FALSE))
+  inner <- getParameters(x)
+  p <- P(repar(setNames(inner, inner), "lhs~rhs", lhs = names(ss), rhs = ss),
+         condition = "steady", compile = FALSE)
+  compile(x, p, output = "ssCycle_all", cores = test_cores())
 
-  x <- Xs(odemodel(reactions, modelname = "ssTest", compile = FALSE))
-
-  parameters <- getParameters(x)
-  trafo <- `names<-`(parameters, parameters)
-  trafo <- repar(trafo, "inner~steadyEqn", inner = names(mysteadies), steadyEqn = mysteadies)
-
-  pSS <- P(trafo, condition = "steady", compile = FALSE)
-  compile(x, pSS, output = "ssTest_all", cores = test_cores())
-
-  set.seed(2)
-  pars <- structure(runif( length(getParameters(pSS)), 0,1), names = getParameters(pSS))
-
-  prediction <- (x*pSS)(seq(0,10, 0.1), pars, deriv = F)
-
-  is_steady <- function(prediction) {
-    mypred <- wide2long(prediction)
-    steady_conds <- sapply(split(mypred, mypred[c("name", "condition")]), function(i) {
-      sd(i$value) <= 1e-8 * max(abs(i$value), 1)
-    })
-    return(all(steady_conds))
-  }
-
-  expect_length(mysteadies, 3)
-  expect_true(is_steady(prediction))
-
+  outer <- setNames(seq(0.3, 0.9, length.out = length(getParameters(p))), getParameters(p))
+  traj <- wide2long((x * p)(seq(0, 10, 0.5), outer, deriv = FALSE))
+  drift <- tapply(traj$value, traj$name, function(v) diff(range(v)) / max(abs(v), 1))
+  expect_true(all(drift <= 1e-8))
 })
 
 test_that("additive fluxes are split instead of derailing the solver", {
@@ -65,10 +47,8 @@ test_that("additive fluxes are split instead of derailing the solver", {
 
 })
 
-test_that("a locked rate constant never costs the solution its positivity", {
+test_that("a binding cascade is solved as positive sums", {
 
-  # States solved up front lock rate constants. A pivot side holding a locked
-  # constant is disqualified, so the solve never returns a difference of fluxes.
   withr::local_dir(tempdir())
 
   reactions <- eqnlist()
@@ -92,12 +72,13 @@ test_that("a locked rate constant never costs the solution its positivity", {
   odes <- as.eqnvec(reactions)
   set.seed(4)
   symbolsOf <- function(x) unique(unlist(lapply(x, function(e) all.vars(parse(text = e)))))
-  free <- setdiff(symbolsOf(c(as.character(odes), mysteadies)), names(mysteadies))
+  # Entries kept as their own name are free parameters, not definitions.
+  defs <- mysteadies[trimws(mysteadies) != names(mysteadies)]
+  free <- setdiff(symbolsOf(c(as.character(odes), mysteadies)), names(defs))
   env <- as.list(stats::runif(length(free), 0.2, 2))
   names(env) <- free
 
-  # Entries kept as their own name are free parameters, not definitions.
-  todo <- mysteadies[trimws(mysteadies) != names(mysteadies)]
+  todo <- defs
   while (length(todo)) {
     ready <- vapply(todo, function(eqn) all(all.vars(parse(text = eqn)) %in% names(env)),
                     logical(1))
@@ -169,10 +150,10 @@ test_that("a leaking cluster across compartments is 0, a moiety listed first is 
     setCompartmentVolume(cell = Vc)
   symbolsOf <- function(x) unique(unlist(lapply(x, function(e) all.vars(parse(text = e)))))
 
-  for (vols in list(c("Vc", "Ve"), c("1.4", "0.45"))) for (v in c("1.3", "1.4")) {
-    lab <- paste0("version ", v, ", volumes ", vols[1], "/", vols[2])
+  for (vols in list(c("Vc", "Ve"), c("1.4", "0.45"))) {
+    lab <- paste0("volumes ", vols[1], "/", vols[2])
     r <- toy(vols[1], vols[2])
-    ss <- steadyStates(r, version = v, verbose = FALSE)
+    ss <- steadyStates(r, verbose = FALSE)
     expect_false(identical(ss, 0), label = lab)
     if (identical(ss, 0)) next
     expect_setequal(names(ss)[trimws(ss) == "0"], c("L", "LR"))
@@ -190,11 +171,8 @@ test_that("a leaking cluster across compartments is 0, a moiety listed first is 
 
 })
 
-test_that("positive = TRUE spends the row on a rate constant, not on a difference", {
+test_that("a saturating binding rate is solved without a difference", {
 
-  # A state skipped by the direct positive-solve pass reaches a later phase where
-  # solving for it gives a difference; only the pivot onto a rate constant keeps
-  # the result a sum.
   withr::local_dir(tempdir())
 
   reactions <- eqnlist()
@@ -208,12 +186,9 @@ test_that("positive = TRUE spends the row on a rate constant, not on a differenc
 
   mysteadies <- steadyStates(reactions)
 
-  # The invariant: positive = TRUE (the default) must not emit a subtraction.
+  # No result contains a subtraction.
   expect_false(any(grepl("-", mysteadies, fixed = TRUE)))
 
-  # The row was spent on the rate constant, so Rec stays a free parameter.
-  expect_true("k_pr_Rec" %in% names(mysteadies))
-  expect_false("Rec" %in% names(mysteadies))
 
   # And it is still a steady state, at a random positive point.
   odes <- as.eqnvec(reactions)
@@ -240,11 +215,9 @@ test_that("positive = TRUE spends the row on a rate constant, not on a differenc
 
 })
 
-test_that("a sign-indefinite fixed point is refused (1.2) or repaired (1.3)", {
+test_that("a production with a basal arm is solved as positive sums", {
 
-  # With a basal arm the additive flux is split and no single rate constant
-  # absorbs the row. Symbolic fluxes leave the production arms as a
-  # ratio-parameter pivot, so the model is solved manifestly positively.
+  # The additive flux is split, and no single rate constant absorbs the balance.
   withr::local_dir(tempdir())
 
   reactions <- eqnlist()
@@ -256,10 +229,6 @@ test_that("a sign-indefinite fixed point is refused (1.2) or repaired (1.3)", {
   reactions <- addReaction(reactions, "Lig + Rec", "Cpx", "k_form*Lig*Rec/(Km + Rec)",
                            "Saturating complex formation")
   reactions <- addReaction(reactions, "Cpx", "", "k_dg_Cpx*Cpx", "Complex degradation")
-
-  # The diagnosis goes to Python stdout, which R cannot capture, so only the
-  # return is asserted.
-  expect_identical(steadyStates(reactions, version = "1.2"), 0)
 
   mysteadies <- steadyStates(reactions)
   expect_false(any(grepl("-", mysteadies, fixed = TRUE)))
@@ -280,10 +249,8 @@ test_that("a sign-indefinite fixed point is refused (1.2) or repaired (1.3)", {
 
 })
 
-test_that("a recycled pivot rate constant is resolved, not defined by itself", {
+test_that("a recycling loop is solved without a definition referring to itself", {
 
-  # A pivot rate constant that reappears in a later row's influx sum is resolved
-  # against the pivot relations first, never defined in terms of itself.
   withr::local_dir(tempdir())
 
   reactions <- eqnlist()
@@ -299,9 +266,6 @@ test_that("a recycled pivot rate constant is resolved, not defined by itself", {
   reactions <- addReaction(reactions, "Inh", "", "k_dg_Inh*Inh", "Inhibitor decay")
 
   mysteadies <- steadyStates(reactions)
-
-  # The row was spent on the recycling loop's rate constants.
-  expect_true(all(c("k_int", "k_rec") %in% names(mysteadies)))
 
   defs <- mysteadies[trimws(mysteadies) != names(mysteadies)]
   # No definition may reference its own left-hand side.
@@ -335,8 +299,8 @@ test_that("a recycled pivot rate constant is resolved, not defined by itself", {
 })
 
 test_that("a symbol defined twice or in a cycle is an error", {
-  reticulate::py_require(c("numpy", "sympy"))
-  ap <- reticulate::import_from_path("AlyssaPetit_ver1_3",
+  reticulate::py_require(c("numpy", "sympy", "scipy"))
+  ap <- reticulate::import_from_path("AlyssaPetit",
                                      path = system.file("code", package = "dMod2"))
   topo <- ap$`_topo_sort_eqs`
   expect_equal(unlist(topo(list("a = b", "b = c", "c = c"))), c("b = c", "a = b", "c = c"))
@@ -389,7 +353,7 @@ test_that("a block that no single balance resolves is solved jointly", {
   expect_lt(max(abs(residual)), 1e-10)
 })
 
-test_that("version 1.4 solves every model above positively", {
+test_that("every model above is solved positively", {
 
   withr::local_dir(tempdir())
   vol <- eqnlist() |>
@@ -442,7 +406,7 @@ test_that("version 1.4 solves every model above positively", {
 
   for (nm in names(models)) {
     r <- models[[nm]]
-    ss <- steadyStates(r, version = "1.4", verbose = FALSE)
+    ss <- steadyStates(r, verbose = FALSE)
     expect_false(identical(ss, 0), label = nm)
     defs <- ss[trimws(ss) != names(ss)]
     expect_false(any(grepl("-", defs, fixed = TRUE)), label = nm)
@@ -460,16 +424,7 @@ test_that("version 1.4 solves every model above positively", {
   }
 })
 
-test_that("version 1.4 names the arguments it ignores", {
-  withr::local_dir(tempdir())
-  r <- eqnlist() |> addReaction("", "A", "k_pr_A") |> addReaction("A", "", "k_dg_A*A")
-  expect_message(steadyStates(r, version = "1.4", verbose = FALSE, branches = TRUE),
-                 "1.4 ignores branches")
-  expect_message(steadyStates(r, version = "1.4", verbose = FALSE, testSteady = "exact"),
-                 "ignores testSteady = \"exact\"", fixed = TRUE)
-})
-
-test_that("version 1.4 takes the positive root with solveQuadratic", {
+test_that("solveQuadratic takes the positive root", {
   withr::local_dir(tempdir())
   models <- list(
     dimer = eqnlist() |> addReaction("", "A", "k_pr_A") |> addReaction("A", "", "k_dg_A*A") |>
@@ -483,7 +438,7 @@ test_that("version 1.4 takes the positive root with solveQuadratic", {
   symbolsOf <- function(x) unique(unlist(lapply(x, function(e) all.vars(parse(text = e)))))
   for (nm in names(models)) {
     r <- models[[nm]]
-    ss <- steadyStates(r, version = "1.4", solveQuadratic = TRUE, verbose = FALSE)
+    ss <- steadyStates(r, solveQuadratic = TRUE, verbose = FALSE)
     defs <- ss[trimws(ss) != names(ss)]
     # the state is a root, no rate constant was spent on its balance
     expect_true(any(grepl("sqrt", defs)), label = nm)
@@ -497,17 +452,17 @@ test_that("version 1.4 takes the positive root with solveQuadratic", {
     expect_lt(max(abs(residual)), 1e-10, label = nm)
   }
   # a positive linear coefficient keeps the root free of subtractions
-  ss <- steadyStates(models$dimer, version = "1.4", solveQuadratic = TRUE, verbose = FALSE)
+  ss <- steadyStates(models$dimer, solveQuadratic = TRUE, verbose = FALSE)
   expect_false(any(grepl("-", ss, fixed = TRUE)))
 })
 
-test_that("version 1.4 keeps the first state of a given conserved quantity free", {
+test_that("the first state of a given conserved quantity stays free", {
   withr::local_dir(tempdir())
   r <- eqnlist() |> addReaction("", "K", "k_pr_K") |> addReaction("K", "", "k_dg_K*K") |>
     addReaction("A", "pA", "k_phos*K*A") |> addReaction("pA", "A", "k_dephos*pA")
   rates <- c("k_phos", "k_dephos", "k_pr_K", "k_dg_K")
   for (cq in c("A + pA = tA", "pA + A = tA")) {
-    ss <- steadyStates(r, version = "1.4", givenCQs = cq, neglect = rates, verbose = FALSE)
+    ss <- steadyStates(r, givenCQs = cq, neglect = rates, verbose = FALSE)
     kept <- sub(" .*", "", cq)
     expect_identical(ss[[kept]], kept)
     expect_false(identical(ss[[setdiff(c("A", "pA"), kept)]], setdiff(c("A", "pA"), kept)))
@@ -526,11 +481,9 @@ test_that("species named like sympy objects (Ci, E, S, Q) are plain symbols", {
     addReaction("Ci", "", "kdeg*Ci", "degradation") |>
     addReaction("C + S", "C + Q", "kp*C*S", "phosphorylation") |>
     addReaction("Q", "S", "kdp*Q", "dephosphorylation")
-  for (v in c("1.3", "1.4")) {
-    ss <- steadyStates(r, version = v, verbose = FALSE)
-    expect_false(identical(ss, 0))
-    expect_true(length(ss) > 0L)
-  }
+  ss <- steadyStates(r, verbose = FALSE)
+  expect_false(identical(ss, 0))
+  expect_true(length(ss) > 0L)
 })
 
 

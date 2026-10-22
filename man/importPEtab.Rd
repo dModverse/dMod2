@@ -48,7 +48,7 @@ Default \code{NULL}, the backend's defaults.}
 sparse (KLU) or dense linear solver; \code{TRUE} or \code{FALSE} sets it.}
 
 \item{outdir}{Directory of the generated sources and shared objects, one
-source per condition. Default \code{getOption("dMod.outdir")}, else the
+source per condition. Default \code{getOption("dMod2.outdir")}, else the
 working directory.}
 }
 \value{

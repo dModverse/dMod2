@@ -149,3 +149,9 @@ test_that("getSymbols lists variables once, in order", {
   expect_null(getSymbols(NULL))
 
 })
+
+test_that("conditionMatch needs a trafo with a condition tree", {
+  tr <- eqnvec(x = "x", y = "y")
+  expect_error(define(tr, "x ~ 2", conditionMatch = "C"), "branch")
+  expect_error(insert(tr, "x ~ a", a = "b", conditionMatch = "C"), "branch")
+})

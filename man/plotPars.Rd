@@ -5,17 +5,17 @@
 \alias{plotPars}
 \title{Plot Parameter Values of a Collection of Fits}
 \usage{
-\method{plotPars}{parframe}(x, tol = 1, ...)
+\method{plotPars}{parframe}(x, ..., tol = 1)
 
 plotPars(x, ...)
 }
 \arguments{
 \item{x}{A \link{parframe}, e.g. from \code{as.parframe(mstrust(...))}.}
 
+\item{...}{Logical expressions to subset \code{x}.}
+
 \item{tol}{Maximal difference between neighboring objective values that
 still counts as one step. Defaults to 1.}
-
-\item{...}{Logical expressions to subset \code{x}.}
 }
 \value{
 A \code{ggplot} object with the plotted data frame as attribute \code{"data"}.

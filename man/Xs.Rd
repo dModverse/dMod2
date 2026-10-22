@@ -35,7 +35,7 @@ Xs(odemodel, ...)
 \arguments{
 \item{odemodel}{An \code{\link[=odemodel]{odemodel()}}. Its backend decides which method runs.}
 
-\item{...}{Not used.}
+\item{...}{Not used; an argument not named here is an error.}
 
 \item{forcings}{\code{data.frame} with columns \code{name} (character or factor),
 \code{time} and \code{value}, one row per data point of a forcing declared in
@@ -108,6 +108,10 @@ solve. With \code{"warn"} and \code{"silent"} the result ends at the time reache
 so an objective sees fewer data points rather than a failure.
 \item \code{traceFile}: CSV file the per-step trace is written to, default \code{NULL};
 needs \code{odemodel(..., stepTrace = TRUE)}.
+\item \code{maxOrder}: upper bound on the order of the multistep methods, 1 to 5
+for \code{"bdf"} and 1 to 12 for \code{"adams"}; default \code{NULL}, the method's own.
+\item \code{stald}: stability limit detection for \code{"bdf"}, default \code{FALSE}; see
+\code{\link[cppDE:solveODE]{cppDE::solveODE()}}.
 \item \code{sensErrCon}: \code{optionsSens} only. \code{FALSE} takes the sensitivities out of
 the error test, which is cheaper and gives less accurate sensitivities;
 default \code{TRUE}.
@@ -194,7 +198,7 @@ conditions of the function.
 An objective function stores its prediction there as \code{prediction} and
 returns the environment as attribute \code{env}.
 \item \code{cores}: number of threads for the ODE solves and the residual kernel.
-Default \code{getOption("dMod.cores", 1L)}.
+Default \code{getOption("dMod2.cores", 1L)}.
 }
 
 Prediction, observation and parameter functions accept \code{hessian} and

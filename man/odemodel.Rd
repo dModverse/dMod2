@@ -66,7 +66,7 @@ through \pkg{cOde}.}
 \item{verbose}{logical, print the compiler output. Default \code{FALSE}.}
 
 \item{outdir}{directory for the generated sources and shared objects.
-Default \code{getOption("dMod.outdir")}, else the working directory.
+Default \code{getOption("dMod2.outdir")}, else the working directory.
 \code{backend = "deSolve"} writes to the working directory only.}
 
 \item{...}{Passed to \code{\link[cppDE:cppODE]{cppDE::cppODE()}}, \code{\link[cppDE:cvode]{cppDE::cvode()}} or

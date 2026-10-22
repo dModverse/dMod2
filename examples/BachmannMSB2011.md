@@ -12,11 +12,15 @@ library(dMod2)
 library(ggplot2)
 
 .modelname <- "bachmann"
-# generated sources, objects and libraries go here, not the working directory
 .outdir    <- file.path(tempdir(), .modelname)
 .fit       <- FALSE   # multi-start search, hours on this model
-
 if (!dir.exists(.outdir)) dir.create(.outdir, recursive = TRUE)
+# generated sources and shared objects go to .outdir, and one evaluation of the
+# objective spreads its conditions over the free cores of this machine; the forked
+# workers of mstrust() evaluate theirs serially. See ?dMod2 for the options.
+.cores <- detectFreeCores()
+.opt   <- options(dMod2.outdir = .outdir, dMod2.cores = .cores)
+set.seed(5555)
 .petabDir <- system.file("extdata", "petab_bachmann", package = "dMod2")
 ```
 
@@ -44,8 +48,9 @@ cat(sprintf("%d points, %d conditions, %d observables\n", nrow(bachmann),
 ```
 
 ## Define model
-Rates are written in the compartment of their educts. npSTAT5 and the nuclear
-transcripts are assigned first, so producing reactions do not claim them.
+Rates are written in the compartment of their educts. npSTAT5 and the cytoplasmic
+transcripts CISRNA and SOCS3RNA are assigned first, so the reactions producing
+them do not claim them.
 
 
 ``` r
@@ -95,7 +100,7 @@ reactions <- eqnlist() |>
   addCyt("SHP1Act", "SHP1", "SHP1Dea * SHP1Act") |>
 
   # two routes to pSTAT5: JAK2 phosphorylates on any active receptor, the
-  # receptor itself only on the doubly phosphorylated one and cooperatively
+  # receptor itself only once site 1 is phosphorylated, and cooperatively
   addCyt("STAT5", "pSTAT5",
          "STAT5ActJAK2 * STAT5 * (EpoRpJAK2 + p1EpoRpJAK2 + p2EpoRpJAK2 + p12EpoRpJAK2) / (1 + SOCS3Inh * SOCS3)") |>
   addCyt("STAT5", "pSTAT5",
@@ -118,7 +123,7 @@ reactions <- eqnlist() |>
 
 # the floor keeps log10 finite where a species is still empty. It matches what
 # importPEtab() applies, so the two objectives further down stay comparable.
-.log10 <- function(x) paste0("log10(", x, " + 1e-10)")
+.log10 <- function(x) paste0("log10(", x, " + 1e-15)")
 .pJAK2 <- "2 * (EpoRpJAK2 + p1EpoRpJAK2 + p2EpoRpJAK2 + p12EpoRpJAK2)"
 .pEpoR <- "16 * (p1EpoRpJAK2 + p2EpoRpJAK2 + p12EpoRpJAK2)"
 
@@ -210,7 +215,7 @@ cond.grid$perturbation <- with(cond.grid,
   ifelse(CISoe == 1, "CIS overexpressed",
   ifelse(SOCS3oe == 1, "SOCS3 overexpressed",
   ifelse(SHP1oe == 1, "SHP1 overexpressed", "control")))))
-attr(mydataL, "condition.grid") <- cond.grid
+mydataL <- as.datalist(mydataL, condition.grid = cond.grid)
 ```
 
 Which columns of the grid are parameter substitutions. The rest, `experiment`
@@ -229,12 +234,10 @@ and `perturbation`, are labels the plots read and must not reach `branch()`.
 ``` r
 myOptions <- list(atol = 1e-11, rtol = 1e-8, maxsteps = 1e7L, maxattempts = 100L)
 
-model <- odemodel(reactions, modelname = "bachmann_ode", compile = FALSE, outdir = .outdir)
+model <- odemodel(reactions, modelname = "bachmann_ode", compile = FALSE)
 x <- Xs(model, options = myOptions)
-g <- Y(observables, x, modelname = "bachmann_obs", attachInput = FALSE,
-       compile = FALSE, outdir = .outdir)
-e <- Y(errorModels, g, modelname = "bachmann_err", attachInput = FALSE,
-       compile = FALSE, outdir = .outdir)
+g <- Y(observables, x, modelname = "bachmann_obs", compile = FALSE)
+e <- Y(errorModels, g, modelname = "bachmann_err", compile = FALSE)
 
 # only the receptor, SHP1 and STAT5 pools are stocked; the overexpression
 # experiments start with their protein already present
@@ -274,9 +277,9 @@ trafo <- eqnvec() |>
   insert("x~1", x = c("CISRNAEqc", "SOCS3RNAEqc")) |>
   insert("x~exp10(x)", x = .currentSymbols)
 
-p <- P(trafo, modelname = "bachmann_trafo", compile = FALSE, outdir = .outdir)
+p <- P(trafo, modelname = "bachmann_trafo", compile = FALSE)
 
-compile(g, x, p, e, output = .modelname, cores = 12)
+compile(g, x, p, e, output = .modelname, cores = .cores)
 
 prd       <- g*x*p
 outerpars <- getParameters(prd)
@@ -293,25 +296,25 @@ PEtab parameter table, so this script and the import share the same numbers.
 
 
 ``` r
-.pars  <- read.delim(file.path(.petabDir, "parameters_Bachmann_MSB2011.tsv"))
+.pars  <- readPEtabTables(file.path(.petabDir, "Bachmann_MSB2011.yaml"))$parameters
 .prior <- as.numeric(strsplit(
   .pars$objectivePriorParameters[.pars$parameterId == "init_EpoRJAK2"], ";")[[1]])
 .pars  <- .pars[.pars$estimate == 1, ]
 
 obj <- normL2(mydataL, prd, e) +
-  constraintL2(setNames(.prior[1], "init_EpoRJAK2"), sigma = .prior[2],
-               attrName = "prior")
+  constraintL2(setNames(.prior[1], "init_EpoRJAK2"), sigma = .prior[2])
 
 # the published optimum, on the log10 scale the table declares
-bestfit <- setNames(log10(.pars$nominalValue), .pars$parameterId)
-stopifnot(setequal(names(bestfit), outerpars))
+published <- setNames(log10(.pars$nominalValue), .pars$parameterId)
+stopifnot(setequal(names(published), outerpars))
+bestfit <- published
 
-obj(bestfit, cores = 10) |> system.time()
+obj(bestfit) |> system.time()
 ```
 
 ```
 #>    user  system elapsed 
-#>   1.243   0.022   0.425
+#>   1.565   0.029   0.474
 ```
 
 ## Multi-start fit
@@ -320,10 +323,12 @@ obj(bestfit, cores = 10) |> system.time()
 ``` r
 if (.fit) {
   pouter <- structure(rep(-1, length(outerpars)), names = outerpars)
-  fits <- mstrust(obj, pouter, sd = 4, fits = 500, cores = 10, rinit = 0.1, rmax = 10,  iterlim = 5000,
+  fits <- mstrust(obj, pouter, sd = 4, fits = 500, cores = .cores, iterlim = 5000,
                   parlower = setNames(log10(.pars$lowerBound), .pars$parameterId),
-                  parupper = setNames(log10(.pars$upperBound), .pars$parameterId))
-  bestfit <- as.parvec(as.parframe(fits))
+                  parupper = setNames(log10(.pars$upperBound), .pars$parameterId)) |>
+    as.parframe()
+  plotValues(fits)
+  bestfit <- as.parvec(fits)
 }
 ```
 
@@ -337,9 +342,8 @@ recorded <- unique(paste(bachmann$condition, bachmann$name))
 
 # prediction as a data.frame, with the error model as a `sigma` column and the
 # condition grid attached, which is what the ribbons and the colours read from
-.frame <- function(conditions, times)
-  as.data.frame(prd(times, bestfit, conditions = conditions, deriv = FALSE),
-                data = mydataL[conditions], errfn = e) |>
+.frame <- function(prediction)
+  as.data.frame(prediction, data = mydataL[names(prediction)], errfn = e) |>
   subset(paste(condition, name) %in% recorded)
 ```
 
@@ -364,9 +368,9 @@ times <- seq(0, 250, length.out = 500)
 
 
 ``` r
-plotCombined(prd(times, bestfit, conditions = "long", deriv = FALSE),
-             mydataL["long"], paste(condition, name) %in% recorded) |>
-  .band(.frame("long", times)) +
+.long <- prd(times, bestfit, conditions = "long", deriv = FALSE)
+plotCombined(.long, mydataL["long"], paste(condition, name) %in% recorded) |>
+  .band(.frame(.long)) +
   labs(x = "time [min]", y = "log10 signal [a.u.]", colour = NULL, fill = NULL,
        title = "CFU-E, 5 units/ml Epo")
 ```
@@ -379,12 +383,12 @@ plotCombined(prd(times, bestfit, conditions = "long", deriv = FALSE),
 ``` r
 .pert <- rownames(cond.grid)[cond.grid$experiment %in%
                              c("actd", "cisoe", "socs3oe", "shp1oe")]
-plotCombined(prd(times, bestfit, conditions = .pert, deriv = FALSE),
-             mydataL[.pert],
+.perturbed <- prd(times, bestfit, conditions = .pert, deriv = FALSE)
+plotCombined(.perturbed, mydataL[.pert],
              paste(condition, name) %in% recorded,
              name %in% c("pJAK2_au", "pEpoR_au", "pSTAT5_au", "CIS_au"),
              aesthetics = list(color = "perturbation", group = "condition")) |>
-  .band(subset(.frame(.pert, times),
+  .band(subset(.frame(.perturbed),
                name %in% c("pJAK2_au", "pEpoR_au", "pSTAT5_au", "CIS_au")),
         colour = "perturbation") +
   facet_grid(name ~ experiment, scales = "free_y") +
@@ -402,7 +406,8 @@ per experiment, keeping its scales and measurement time.
 .drData <- subset(bachmann, grepl("^dr", experiment))
 .dose   <- 10^seq(log10(min(.drData$epo_level)), log10(max(.drData$epo_level)),
                   length.out = 300)
-.inner  <- p(bestfit)
+.inner  <- p(bestfit, deriv = FALSE)
+.gx     <- g * x
 
 .sweep <- function(ex) {
   cn   <- rownames(cond.grid)[cond.grid$experiment == ex][1]
@@ -411,7 +416,7 @@ per experiment, keeping its scales and measurement time.
   pin  <- setNames(as.numeric(.inner[[cn]]), names(.inner[[cn]]))
   do.call(rbind, lapply(.dose, function(d) {
     pin["epo_level"] <- d
-    out <- as.data.frame((g * x)(sort(unique(c(0, tt))), pin, deriv = FALSE),
+    out <- as.data.frame(.gx(sort(unique(c(0, tt))), pin, deriv = FALSE),
                          errfn = e)
     cbind(out[out$time == tt & out$name %in% seen, c("name", "value", "sigma")],
           epo_level = d, experiment = ex)
@@ -426,7 +431,7 @@ ggplot(.drPred, aes(epo_level, value, colour = experiment, fill = experiment)) +
   geom_point(data = .drData) +
   facet_wrap(~name, scales = "free_y") +
   scale_x_log10() + scale_color_dMod() + scale_fill_dMod() +
-  theme_dMod() + 
+  theme_dMod() +
   labs(x = "Epo [units/cell]", y = "log10 signal [a.u.]", colour = NULL, fill = NULL)
 ```
 
@@ -434,16 +439,17 @@ ggplot(.drPred, aes(epo_level, value, colour = experiment, fill = experiment)) +
 
 ## Cross-check against the PEtab form of the same problem
 The import rebuilds the model from SBML and the tables, independent of the
-reactions above up to the shared data.
+reactions above up to the shared data. It reads the SBML with python-libsbml
+from the Python environment of dMod2; `Sys.setenv(DMOD_LIBSBML_PYTHON =
+"/path/to/python")` takes another interpreter that has it.
 
 
 ``` r
 petab <- importPEtab(file.path(.petabDir, "Bachmann_MSB2011.yaml"),
-                     backend = "cppDE", cores = 4, outdir = .outdir,
-                     options = myOptions)
+                     backend = "cppDE", cores = .cores, options = myOptions)
 
 stopifnot(setequal(names(petab$bestfit), outerpars),
-          isTRUE(all.equal(petab$bestfit[outerpars], bestfit[outerpars])))
+          isTRUE(all.equal(petab$bestfit[outerpars], published[outerpars])))
 ```
 
 The full values differ by a constant (PEtab's log10 Jacobian and prior
@@ -451,13 +457,19 @@ normalisation); the sum of squares is what the two models must agree on.
 
 
 ``` r
-chi2 <- c(hand  = attr(obj(bestfit, deriv = FALSE),       "chi2"),
-          PEtab = attr(petab$obj(bestfit, deriv = FALSE), "chi2"))
+chi2 <- c(hand  = attr(obj(published, deriv = FALSE),       "chi2"),
+          PEtab = attr(petab$obj(published, deriv = FALSE), "chi2"))
 chi2
 ```
 
 ```
 #>  hand.data PEtab.data 
 #>   541.0021   541.0021
+```
+
+``` r
+stopifnot(isTRUE(all.equal(unname(chi2[1]), unname(chi2[2]), tolerance = 1e-6)))
+
+options(.opt)
 ```
 

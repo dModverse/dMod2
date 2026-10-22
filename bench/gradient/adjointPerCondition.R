@@ -49,7 +49,7 @@ library(microbenchmark)
 
 Sys.setenv(OMP_NUM_THREADS = "1", MKL_NUM_THREADS = "1",
            OPENBLAS_NUM_THREADS = "1", GOTO_NUM_THREADS = "1")
-options(dMod.cores = 1, cppDE.cores = 1)
+options(dMod2.cores = 1, cppDE.cores = 1)
 
 # atol under rtol under the observables' own floor: the three have to hold in
 # that order, or the gradient is measuring the floor.

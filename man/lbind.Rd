@@ -7,7 +7,8 @@
 lbind(mylist)
 }
 \arguments{
-\item{mylist}{A named list of data frames with the same columns.}
+\item{mylist}{A named list of data frames; a column missing in one of them
+is \code{NA} there.}
 }
 \value{
 A data frame with the original columns and \code{condition}.

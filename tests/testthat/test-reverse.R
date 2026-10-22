@@ -183,7 +183,7 @@ test_that("the reverse mode reaches every condition and every branch", {
 
   # Two conditions is where the batched backward solve takes over from the
   # loop, so this is where it has to answer the same thing.
-  withr::with_options(list(dMod.batch.check = TRUE), {
+  withr::with_options(list(dMod2.batch.check = TRUE), {
     r2 <- obj(pars, deriv = TRUE, sweep = "reverse")
     expect_equal(r2$gradient, both$reverse$gradient)
   })
@@ -484,9 +484,9 @@ test_that("the batched backward path handles the directions too", {
   expect_equal(rev$gradient, fwd$gradient, tolerance = 1e-3)
   expect_equal(rev$hessian, fwd$hessian, tolerance = 1e-4)
   expect_equal(rev$hessian, t(rev$hessian), tolerance = 1e-8)
-  # The batched and the scalar route are the same arithmetic; dMod.batch.check
+  # The batched and the scalar route are the same arithmetic; dMod2.batch.check
   # re-runs every batched leaf through the scalar kernel and compares.
-  withr::local_options(dMod.batch.check = TRUE)
+  withr::local_options(dMod2.batch.check = TRUE)
   expect_equal(obj(fx$pars, sweep = "reverse", deriv2 = TRUE)$hessian,
                rev$hessian, tolerance = 0)
 })
@@ -597,7 +597,7 @@ test_that("inputs passed through behind another transformation, batched", {
   expect_equal(fwd$hessian[names(pars), names(pars)], fdH, tolerance = 1e-5)
   expect_equal(rev$hessian, fwd$hessian, tolerance = 1e-4)
 
-  withr::local_options(dMod.batch.check = TRUE)
+  withr::local_options(dMod2.batch.check = TRUE)
   expect_equal(obj(pars, deriv2 = TRUE)$hessian, fwd$hessian, tolerance = 0)
 })
 

@@ -113,16 +113,27 @@ pp_models <- function() {
                     C2 = c(k_in = "s", k_out = "1", A = "1")),
                modelname = mn("px_same"), verbose = FALSE)
 
+  # a root whose first derivative vanishes at a = 1 while the second does not
+  kink <- Pimpl(c(x = "(a-1)^2 + 1 - x"), parameters = "a", deriv2 = TRUE,
+                modelname = mn("kink"), verbose = FALSE,
+                controlsPTC = list(positive = FALSE))
+
+  # E is a catalyst, constant rather than zero
+  el_cat <- eqnlist() |>
+    addReaction("", "S", "k0") |> addReaction("S", "", "kd*S") |>
+    addReaction("S + E", "P + E", "k1*E*S") |> addReaction("P", "S", "k2*P")
+  catalyst <- Pimpl(el_cat, modelname = mn("catalyst"), verbose = FALSE)
+
   compile(lin, d2, d2_2, d2_cq, moiety2_im, dimer_im, recycle, sing, noroot,
           noparam, erk_im, px, px_same, zero, pd, pd2, plasmid, bistable, unstable,
-          output = mn("impl"), cores = test_cores())
+          kink, catalyst, output = mn("impl"), cores = test_cores())
 
   .pp_env$models <- list(
     lin = lin, d2 = d2, d2_2 = d2_2, d2_cq = d2_cq, moiety2_im = moiety2_im,
     dimer_im = dimer_im, recycle = recycle, el_recycle = el_recycle, sing = sing,
     noroot = noroot, noparam = noparam, erk_im = erk_im, px = px, px_same = px_same,
     zero = zero, pd = pd, pd2 = pd2, plasmid = plasmid, bistable = bistable,
-    unstable = unstable)
+    unstable = unstable, kink = kink, catalyst = catalyst)
 }
 
 
@@ -848,4 +859,25 @@ test_that("print.eqnlist shows the conserved quantities by name", {
   out2 <- capture.output(print(el2))
   expect_true(any(grepl("Conserved quantities .custom.", out2)))
   expect_true(any(grepl("totalE\\s*=\\s*ERK \\+ pERK", out2)))
+})
+
+
+test_that("a solved state keeps its second derivative where the first vanishes", {
+  skip_if_no_compile()
+  w <- pp_models()$kink(c(a = 1), deriv2 = TRUE)[[1]]
+  expect_equal(unname(w[["x"]]), 1, tolerance = 1e-8)
+  expect_false("x" %in% attr(w, "fixed"))
+  expect_equal(attr(w, "deriv2")["x", "a", "a"], 2, tolerance = 1e-6)
+})
+
+test_that("a catalyst is a constant state, not a zero one", {
+  skip_if_no_compile()
+  pc <- pp_models()$catalyst
+  expect_true("E" %in% attr(pc, "parameters"))
+  given <- c(k0 = 1, kd = 1, k1 = 1, k2 = 2, E = 4)
+  pars <- given[intersect(names(given), attr(pc, "parameters"))]
+  v <- pc(c(pars, setNames(rep(4, length(setdiff(attr(pc, "parameters"), names(given)))),
+                           setdiff(attr(pc, "parameters"), names(given)))),
+          deriv = FALSE)[[1]]
+  expect_equal(unname(v[c("S", "P", "E")]), c(1, 2, 4), tolerance = 1e-6)
 })

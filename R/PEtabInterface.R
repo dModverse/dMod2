@@ -754,7 +754,7 @@ readPEtabTables <- function(yamlPath) {
   # whole objective as having one.
   myfn <- function(..., fixed = NULL, deriv = TRUE, deriv2 = FALSE,
                    hessian = NULL, conditions = condition, env = NULL,
-                   cores = getOption("dMod.cores", 1L)) {
+                   cores = getOption("dMod2.cores", 1L)) {
 
     p   <- list(...)[[match.fnargs(list(...), "pars")]]
     all <- c(p, fixed)
@@ -1942,7 +1942,7 @@ readPEtabTables <- function(yamlPath) {
 #' @param sparse `NULL` (default) lets the cppDE or Sundials backend choose a
 #'   sparse (KLU) or dense linear solver; `TRUE` or `FALSE` sets it.
 #' @param outdir Directory of the generated sources and shared objects, one
-#'   source per condition. Default `getOption("dMod.outdir")`, else the
+#'   source per condition. Default `getOption("dMod2.outdir")`, else the
 #'   working directory.
 #' @return A list of class `"petabproblem"` with components `dataList`,
 #'   `reactions`, `odemodel`, `g`, `x`, `p`, `e`, `prd` (the composite

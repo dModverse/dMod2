@@ -33,12 +33,11 @@ argument invisibly.
 }
 \description{
 A parameter list holds the results of several optimisation
-runs, as returned by \code{\link[=mstrust]{mstrust()}}. \code{c()} renumbers the fit index of the
-combined list.
+runs, as returned by \code{\link[=mstrust]{mstrust()}}. \code{c()} concatenates parameter lists.
 }
 \examples{
 \donttest{
-## Prediction function
+## Observation of a regression curve
 regfn <- c(y = "sin(a*time)")
 g <- Y(regfn, parameters = "a", compile = TRUE, modelname = "parlist_obs",
        outdir = tempdir())
@@ -75,7 +74,4 @@ plot((g*x)(times, bestfit), data)
 }
 \seealso{
 \code{\link[=load.parlist]{load.parlist()}}, \code{\link[=plot.parlist]{plot.parlist()}}, \code{\link[=as.parframe]{as.parframe()}}
-}
-\author{
-Wolfgang Mader, \email{Wolfgang.Mader@fdm.uni-freiburg.de}
 }

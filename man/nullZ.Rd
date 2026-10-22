@@ -9,8 +9,8 @@ nullZ(A, tol = sqrt(.Machine$double.eps))
 \arguments{
 \item{A}{Numeric matrix.}
 
-\item{tol}{Tolerance for pivots. Not used: \code{\link[=rref]{rref()}} is called with its
-default tolerance.}
+\item{tol}{Numeric tolerance below which a pivot counts as zero, passed to
+\code{\link[=rref]{rref()}}.}
 }
 \value{
 A matrix with \code{ncol(A)} rows and one column per basis vector.
@@ -29,7 +29,4 @@ A \%*\% nullZ(A)
 }
 \seealso{
 \code{\link[=rref]{rref()}}
-}
-\author{
-Malenka Mader, \email{Malenka.Mader@fdm.uni-freiburg.de}
 }

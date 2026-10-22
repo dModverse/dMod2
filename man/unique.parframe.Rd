@@ -13,10 +13,11 @@
 
 \item{tol}{tolerance to decide when values are assumed to be equal, see \code{\link[=plotValues]{plotValues()}}.}
 
-\item{...}{additional arguments being passed to \code{\link[=plotValues]{plotValues()}}, e.g. for subsetting.}
+\item{...}{Not used. Select rows first with \code{\link[=subset]{subset()}}, as in
+\code{unique(subset(x, converged))}.}
 }
 \value{
-A subset of the parameter frame \code{x}.
+The rows of \code{x} with distinct values, sorted by value.
 }
 \description{
 Keeps one row per distinct objective value.

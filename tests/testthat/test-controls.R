@@ -199,6 +199,38 @@ test_that("sensErrCon reaches the forward solver from optionsSens", {
   expect_error(k(.ctl_times, p, deriv = FALSE), "unknown option sensErrCon")
 })
 
+test_that("maxOrder and stald reach every solve, and the default passes neither", {
+  fx <- ctl_models()
+  x <- Xs(fx$m)
+  k <- .ctl_kernel(x)
+  p <- c(A = 1, k = 0.5)
+  seen <- list()
+  real <- cppDE::solveODE
+  local_mocked_bindings(solveODE = function(...) {
+    a <- list(...)
+    seen <<- c(seen, list(a[intersect(names(a), c("maxOrder", "stald"))]))
+    real(...)
+  }, .package = "cppDE")
+  w <- matrix(1, length(.ctl_times), 1L, dimnames = list(NULL, "A"))
+  run <- function() {
+    seen <<- list()
+    k(.ctl_times, p, deriv = FALSE)
+    k(.ctl_times, p, deriv = TRUE)
+    attr(k, "vjpfn")(.ctl_times, p, NULL, w)
+    seen
+  }
+
+  expect_identical(run(), rep(list(setNames(list(), character())), 3L))
+  controls(x, NULL, "options") <- list(maxOrder = 3L, stald = TRUE)
+  expect_identical(run(), rep(list(list(maxOrder = 3L, stald = TRUE)), 3L))
+
+  xf <- Xf(fx$mf, forcings = data.frame(name = "u", time = c(0, 100), value = 1),
+           options = list(maxOrder = 2L))
+  seen <- list()
+  xf(.ctl_times, c(A = 0, k = 1))
+  expect_identical(seen, list(list(maxOrder = 2L)))
+})
+
 test_that("the reverse control uses refine and gradtol as they are when it is used", {
   fx <- ctl_models()
   x <- Xs(fx$m, optionsReverse = list(refine = TRUE, gradtol = 1e-4))

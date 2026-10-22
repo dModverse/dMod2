@@ -3,32 +3,32 @@
 #' Match Function Arguments to Choices
 #'
 #' Assigns unnamed entries of `arglist` to the entries of `choices` that are
-#' not named in it, in order. Named entries not in `choices` are dropped.
+#' not named in it, in order. A named entry not in `choices`, more entries
+#' than `choices` and a choice left without an entry are errors.
 #'
 #' @param arglist list of arguments, as from `list(...)`.
 #' @param choices character, the argument names to match.
-#' @return Integer vector of the positions in `arglist` matching `choices`,
-#'   `NA` where a choice is absent.
+#' @return Integer vector of the positions in `arglist` matching `choices`.
 #' @keywords internal
 #' @export
 match.fnargs <- function(arglist, choices) {
-
-  # Catch the case of names == NULL
-  if (is.null(names(arglist))) names(arglist) <- rep("", length(arglist))
-
-  # exclude named arguments which are not in choices
-  arglist <- arglist[names(arglist) %in% c(choices, "")]
-
-  # determine available arguments
-  available <- choices %in% names(arglist)
-
-  if (!all(available)) names(arglist)[names(arglist) == ""] <- choices[!available]
-
-  if (any(duplicated(names(arglist)))) stop("duplicate arguments in prdfn/obsfn/parfn function call")
-
-  mapping <- match(choices, names(arglist))
-  return(mapping)
-
+  nms <- names(arglist)
+  if (is.null(nms)) nms <- rep("", length(arglist))
+  unknown <- setdiff(nms[nzchar(nms)], choices)
+  if (length(unknown))
+    stop("unknown argument ", paste(unknown, collapse = ", "), "; the arguments are ",
+         paste(choices, collapse = ", "), " and those named in the function.", call. = FALSE)
+  if (anyDuplicated(nms[nzchar(nms)]))
+    stop("duplicate arguments in prdfn/obsfn/parfn function call", call. = FALSE)
+  unnamed <- which(!nzchar(nms))
+  free <- setdiff(choices, nms)
+  if (length(unnamed) > length(free))
+    stop("too many arguments; the arguments are ", paste(choices, collapse = ", "),
+         " and those named in the function.", call. = FALSE)
+  nms[unnamed] <- free[seq_along(unnamed)]
+  lost <- setdiff(choices, nms)
+  if (length(lost)) stop("argument ", paste(lost, collapse = ", "), " is missing.", call. = FALSE)
+  match(choices, nms)
 }
 
 
@@ -302,12 +302,12 @@ match.fnargs <- function(arglist, choices) {
     parfn = bf(parsList = parsL, fixedList = fixedL, deriv = deriv,
                deriv2 = deriv2, conditions = conds, cores = cores))
 
-  if (isTRUE(getOption("dMod.batch.check", FALSE))) {
+  if (isTRUE(getOption("dMod2.batch.check", FALSE))) {
     ref <- lapply(seq_along(idx), function(j)
       .callKernel(st, b, idx[j], conds[[j]], deriv, deriv2, keepStore))
     cmp <- all.equal(res, ref, tolerance = 0)
     if (!isTRUE(cmp))
-      stop("dMod.batch.check: batch entry of a ", st$kind,
+      stop("dMod2.batch.check: batch entry of a ", st$kind,
            " leaf disagrees with the scalar kernel:\n  ",
            paste(cmp, collapse = "\n  "), call. = FALSE)
   }
@@ -586,7 +586,7 @@ match.fnargs <- function(arglist, choices) {
       conditions = if (is.null(res$conditions)) NULL else as.list(res$conditions[live]),
       cores     = cores,
       seeds     = seeds)
-    if (isTRUE(getOption("dMod.batch.check", FALSE))) {
+    if (isTRUE(getOption("dMod2.batch.check", FALSE))) {
       ref <- lapply(seq_along(live), function(j)
         if (seeds)
           vjp(times = .req_times(b, live[j]), pars = split[[j]]$pars,
@@ -596,7 +596,7 @@ match.fnargs <- function(arglist, choices) {
               fixed = split[[j]]$fixed, cotangent = w[[live[j]]]$out))
       cmp <- all.equal(vals, ref, tolerance = 0)
       if (!isTRUE(cmp))
-        stop("dMod.batch.check: the batched vjp of a ", st$kind,
+        stop("dMod2.batch.check: the batched vjp of a ", st$kind,
              " leaf disagrees with the scalar one:\n  ",
              paste(cmp, collapse = "\n  "), call. = FALSE)
     }
@@ -673,12 +673,12 @@ match.fnargs <- function(arglist, choices) {
 
 ## ---- Public shim ---------------------------------------------------------
 
-# Every fn object is a thin wrapper over its descriptor. `cores` must be a
-# formal: match.fnargs drops unknown named arguments from `...`.
+# Every fn object is a thin wrapper over its descriptor; match.fnargs refuses
+# named arguments in `...` that are no inputs.
 .fnWrap <- function(st) {
   function(..., fixed = NULL, deriv = TRUE, deriv2 = FALSE, hessian = TRUE,
            conditions = st$default_conditions, env = NULL,
-           cores = getOption("dMod.cores", 1L), sweep = "forward")
+           cores = getOption("dMod2.cores", 1L), sweep = "forward")
     .fnCall(st, list(...), fixed, deriv, deriv2, hessian, conditions, env, cores,
             sweep)
 }
@@ -700,7 +700,7 @@ match.fnargs <- function(arglist, choices) {
 # list of one per request.
 .predictMany <- function(x, times, parsList, conditions, fixed = NULL,
                          deriv = TRUE, deriv2 = FALSE, env = NULL,
-                         cores = getOption("dMod.cores", 1L)) {
+                         cores = getOption("dMod2.cores", 1L)) {
   n <- length(parsList)
   if (length(conditions) != n)
     stop(".predictMany: one condition per parameter set is required.", call. = FALSE)
@@ -749,9 +749,11 @@ match.fnargs <- function(arglist, choices) {
                 conditions = cond, env = env),
       parfn = f(pars = .req_pars(b, j), fixed = .req_fixed(b, j),
                 deriv = deriv, deriv2 = deriv2, conditions = cond, env = env),
-      objfn = f(pars = .req_pars(b, j), fixed = .req_fixed(b, j),
-                deriv = deriv, deriv2 = deriv2, hessian = hessian,
-                conditions = cond, env = env, sweep = sweep),
+      objfn = do.call(f, c(list(pars = .req_pars(b, j), fixed = .req_fixed(b, j),
+                                deriv = deriv, deriv2 = deriv2, hessian = hessian,
+                                conditions = cond, env = env),
+                           # an objective without the formal knows the forward sweep only
+                           if ("sweep" %in% names(formals(f))) list(sweep = sweep))),
       stop(".evalLegacy: cannot drive an fn of class ",
            paste(class(f), collapse = "/"), call. = FALSE))
     # an objfn returns its objlist directly, not a per-condition list
@@ -817,7 +819,7 @@ match.fnargs <- function(arglist, choices) {
 }
 
 # Metadata a composed mapping keeps. Without this getEquations, summary.*,
-# Y(f = <composed>), compare() and petabExport all see NULL.
+# Y(f = <composed>) and petabExport all see NULL.
 .composedMappingAttrs <- function(m, p1, p2, cond, p1kind, p2kind) {
   c1 <- .condFor(p1, cond); c2 <- .condFor(p2, cond)
   attr(m, "parameters") <- getParameters(p2, conditions = c2)
@@ -840,15 +842,15 @@ match.fnargs <- function(arglist, choices) {
   force(cond)
   switch(kind,
     obsfn = function(out, pars, fixed = NULL, deriv = TRUE, deriv2 = FALSE,
-                     cores = getOption("dMod.cores", 1L))
+                     cores = getOption("dMod2.cores", 1L))
       .fnCall(st, list(out = out, pars = pars), fixed, deriv, deriv2, TRUE,
               cond, NULL, cores)[[1]],
     prdfn = function(times, pars, fixed = NULL, deriv = TRUE, deriv2 = FALSE,
-                     cores = getOption("dMod.cores", 1L))
+                     cores = getOption("dMod2.cores", 1L))
       .fnCall(st, list(times = times, pars = pars), fixed, deriv, deriv2, TRUE,
               cond, NULL, cores)[[1]],
     function(pars, fixed = NULL, deriv = TRUE, deriv2 = FALSE,
-             cores = getOption("dMod.cores", 1L))
+             cores = getOption("dMod2.cores", 1L))
       .fnCall(st, list(pars = pars), fixed, deriv, deriv2, TRUE,
               cond, NULL, cores)[[1]])
 }
@@ -884,7 +886,6 @@ match.fnargs <- function(arglist, choices) {
 }
 
 
-# `forcings` on a summed fn is read opportunistically by compare().
 .unionMappingAttr <- function(mappings, what) {
   vals <- lapply(mappings, attr, what)
   vals <- vals[!vapply(vals, is.null, logical(1))]
@@ -914,6 +915,9 @@ match.fnargs <- function(arglist, choices) {
 "+.objfn" <- function(e1, e2) {
 
   if (is.null(e1)) return(e2)
+  if (is.null(e2)) return(e1)
+  if (!inherits(e1, "objfn") || !inherits(e2, "objfn"))
+    stop("only objective functions (objfn) can be added to an objfn.", call. = FALSE)
 
   conditions.x1 <- attr(e1, "conditions")
   conditions.x2 <- attr(e2, "conditions")
@@ -933,7 +937,7 @@ match.fnargs <- function(arglist, choices) {
 
     outfn <- function(..., fixed = NULL, deriv = TRUE, deriv2 = FALSE, hessian = NULL,
                       conditions = conditions12, env = NULL,
-                      cores = getOption("dMod.cores", 1L),
+                      cores = getOption("dMod2.cores", 1L),
                       sweep = "forward") {
 
       arglist <- list(...)
@@ -954,20 +958,17 @@ match.fnargs <- function(arglist, choices) {
                       else hessian,
             conditions = conds, env = e, cores = cores)
       }
-      # A term without conditions is evaluated once, any other on its
-      # intersection with `conditions`, and not at all when that is empty.
-      v1 <- v2 <- NULL
-      if (is.null(conditions.x1)) {
-        v1 <- .call(e1, conditions.x1, env)
-      } else if (any(conditions %in% conditions.x1)) {
-        v1 <- .call(e1, intersect(conditions, conditions.x1), env)
+      # A term without conditions is evaluated once with the caller's env, any
+      # other on its share of `conditions` and skipped when that is empty,
+      # unless it holds an unconditioned term. The second term reuses the env
+      # the first returned.
+      .term <- function(f, own, e) {
+        if (is.null(own)) return(.call(f, NULL, env))
+        mine <- intersect(conditions, own)
+        if (length(mine) || isTRUE(attr(f, "unconditioned"))) .call(f, mine, e)
       }
-
-      if (is.null(conditions.x2)) {
-        v2 <- .call(e2, conditions.x2, env)
-      } else if (any(conditions %in% conditions.x2)) {
-        v2 <- .call(e2, intersect(conditions, conditions.x2), attr(v1, "env"))
-      }
+      v1 <- .term(e1, conditions.x1, env)
+      v2 <- .term(e2, conditions.x2, attr(v1, "env") %||% env)
 
       # .sumobjlist adds an absent Hessian as zero, which is wrong when only
       # one term has one.
@@ -980,7 +981,7 @@ match.fnargs <- function(arglist, choices) {
              call. = FALSE)
 
       out <- v1 + v2
-      attr(out, "env") <- attr(v1, "env")
+      attr(out, "env") <- attr(v1, "env") %||% attr(v2, "env")
       return(out)
     }
 
@@ -988,6 +989,8 @@ match.fnargs <- function(arglist, choices) {
     attr(outfn, "conditions") <- conditions12
     attr(outfn, "parameters") <- parameters12
     attr(outfn, "modelname") <- modelname12
+    attr(outfn, "unconditioned") <- is.null(conditions.x1) || is.null(conditions.x2) ||
+      isTRUE(attr(e1, "unconditioned")) || isTRUE(attr(e2, "unconditioned"))
     attr(outfn, "compileInfo") <- .mergeCompileInfo(attr(e1, "compileInfo"),
                                                     attr(e2, "compileInfo"))
     # Reconstruction handles, coalesced from either operand.
@@ -1029,22 +1032,17 @@ match.fnargs <- function(arglist, choices) {
 #' @export
 "%.*%" <- function(x1, x2) {
 
+  if (inherits(x2, c("objlist", "objfn")) &&
+      !(is.numeric(x1) && length(x1) == 1L && is.finite(x1)))
+    stop("%.*%: the factor must be a finite numeric scalar.", call. = FALSE)
+
   if (inherits(x2, "objlist")) {
-
-    out <- lapply(x2, function(x) {
-      x1*x
-    })
-    # Multiply attributes
-    out2.attributes <- attributes(x2)[sapply(attributes(x2), is.numeric)]
-    attr.names <- names(out2.attributes)
-    out.attributes <- lapply(attr.names, function(n) {
-      x1*attr(x2, n)
-    })
+    # An absent gradient or Hessian stays absent.
+    out <- lapply(unclass(x2), function(x) if (is.null(x)) NULL else x1 * x)
+    numericAttrs <- names(Filter(is.numeric, attributes(x2)))
     attributes(out) <- attributes(x2)
-    attributes(out)[attr.names] <- out.attributes
-
+    for (n in numericAttrs) attr(out, n) <- x1 * attr(x2, n)
     return(out)
-
 
   } else if (inherits(x2, "objfn")) {
 
@@ -1053,7 +1051,7 @@ match.fnargs <- function(arglist, choices) {
     modelname12 <- attr(x2, "modelname")
     outfn <- function(..., fixed = NULL, deriv = TRUE, deriv2 = FALSE, hessian = NULL,
                       conditions = conditions12, env = NULL,
-                      cores = getOption("dMod.cores", 1L),
+                      cores = getOption("dMod2.cores", 1L),
                       sweep = "forward") {
 
       arglist <- list(...)

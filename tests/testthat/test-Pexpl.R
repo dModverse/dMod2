@@ -45,12 +45,18 @@ skip_if_no_compile <- function() {
                 attachInput = TRUE, deriv2 = TRUE,
                 modelname = "test_P_thru", compile = FALSE)
 
+    # outputs whose first derivative vanishes at b = 0 while the second does not
+    p_kink <- Pexpl(c(a = "b^2", c = "exp(b)*d"), deriv2 = TRUE,
+                    modelname = "test_P_kink", compile = FALSE)
+    p_ksum <- Pexpl(c(y = "a + c"), deriv2 = TRUE,
+                    modelname = "test_P_ksum", compile = FALSE)
+
     compile(p_mix, p_rev, p_fwd, p_const_val, p_const_fwd, x_full, p_full, g_full,
-            p_thru, output = "test_P_all", cores = test_cores())
+            p_thru, p_kink, p_ksum, output = "test_P_all", cores = test_cores())
     cache <<- list(p_mix = p_mix, p_rev = p_rev, p_fwd = p_fwd,
                    p_const_val = p_const_val, p_const_fwd = p_const_fwd,
                    x_full = x_full, p_full = p_full, g_full = g_full,
-                   p_thru = p_thru)
+                   p_thru = p_thru, p_kink = p_kink, p_ksum = p_ksum)
     cache
   }
 })
@@ -266,4 +272,15 @@ test_that("an uncompiled Pexpl asks for compile()", {
   p <- Pexpl(c(A = "exp(a)"), compile = FALSE, modelname = "uncompiled_pexpl")
   expect_error(p(c(a = 1)), "is not compiled; call compile\\(\\)")
   expect_error(p(c(a = 1), deriv = FALSE), "is not compiled; call compile\\(\\)")
+})
+
+
+test_that("an output with a vanishing first derivative keeps its second", {
+  skip_if_no_compile()
+  fx <- .pexpl_fx()
+  v <- fx$p_kink(c(b = 0, d = 1), deriv2 = TRUE)[[1]]
+  expect_false("a" %in% attr(v, "fixed"))
+  expect_equal(attr(v, "deriv2")["a", "b", "b"], 2)
+  w <- (fx$p_ksum * fx$p_kink)(c(b = 0, d = 1), deriv2 = TRUE)[[1]]
+  expect_equal(attr(w, "deriv2")["y", "b", "b"], 3)
 })

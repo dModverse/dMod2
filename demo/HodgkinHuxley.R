@@ -5,8 +5,14 @@
 library(dMod2)
 library(ggplot2)
 
-.outdir <- file.path(tempdir(), "hodgkinHuxley")
+.modelname <- "hodgkinHuxley"
+.outdir    <- file.path(tempdir(), .modelname)
 if (!dir.exists(.outdir)) dir.create(.outdir, recursive = TRUE)
+# generated sources and shared objects go to .outdir, see ?dMod2 for the options;
+# compiling, fitting and profiling use the free cores of this machine
+.opt   <- options(dMod2.outdir = .outdir)
+.cores <- detectFreeCores()
+set.seed(1)
 
 
 # Model ------------------------------------------------------------------------
@@ -34,12 +40,12 @@ f <- eqnvec(
   a = "piecewise((1 - a)/tau_on, V > V_th, -a/tau_off)"
 )
 
-model <- odemodel(f, modelname = "hh_ode", compile = FALSE, outdir = .outdir)
+model <- odemodel(f, modelname = "hh_ode", compile = FALSE)
 x <- Xs(model)
 
 
 # Parameters -------------------------------------------------------------------
-# The gates start at their steady state at -65 mV, the AHP gate closed
+# The gates start at their steady state at -65 mV, the AHP gate closed.
 gateAtRest <- function(alpha, beta, V = -65) {
   env <- list(V = V, piecewise = function(value, condition, otherwise)
     if (condition) value else otherwise)
@@ -59,11 +65,14 @@ trafo <- eqnvec(
   t_on = "2", dur = "1", I0 = "I0"
 )
 
-# A weak pulse stays below threshold, a strong one fires a spike and opens the AHP gate
-p <- P(list(weak = insert(trafo, "I0 ~ 3"), strong = insert(trafo, "I0 ~ 20")),
-       modelname = "hh_trafo", compile = FALSE, outdir = .outdir)
+# A weak pulse stays below threshold, a strong one fires a spike and opens the AHP
+# gate.
+pulses <- data.frame(I0 = c(3, 20), row.names = c("weak", "strong"))
+p <- trafo |>
+  branch(table = pulses, apply = "insert") |>
+  P(modelname = "hh_trafo", compile = FALSE)
 
-compile(x, p, output = "hodgkinHuxley")
+compile(x, p, output = .modelname, cores = .cores)
 
 pars_true <- c(lg_Na = log10(120), lg_K = log10(36), lg_L = log10(0.3), lg_AHP = log10(5))
 
@@ -71,9 +80,8 @@ pars_true <- c(lg_Na = log10(120), lg_K = log10(36), lg_L = log10(0.3), lg_AHP =
 # Simulated data ---------------------------------------------------------------
 # The membrane potential from the true conductances, every 0.25 ms with 1 mV noise.
 times <- seq(0, 30, by = 0.02)
-plot((x*p)(times, pars_true)) + labs(x = "time [ms]")
+plot((x*p)(times, pars_true, deriv = FALSE)) + labs(x = "time [ms]")
 
-set.seed(1)
 data <- as.data.frame((x*p)(seq(0, 30, by = 0.25), pars_true, deriv = FALSE))
 data <- subset(data, name == "V")
 data$sigma <- 1
@@ -85,19 +93,19 @@ data <- as.datalist(data)
 # Twenty starts around the true conductances.
 obj <- normL2(data, x*p)
 
-starts <- msParframe(pars_true, n = 20, seed = 2, sd = 0.5)
-fits <- mstrust(obj, starts, fits = 20, cores = 1, resultPath = .outdir)
-fits <- as.parframe(fits)
-
-plotValues(fits)
+fits <- mstrust(obj, pars_true, fits = 20, sd = 0.5, cores = .cores) |> as.parframe()
+plotValues(fits, pseudoLog = TRUE)
 bestfit <- as.parvec(fits)
 rbind(true = pars_true, fit = bestfit)
 
-plotCombined((x*p)(times, bestfit), data, name == "V") +
+plotCombined((x*p)(times, bestfit, deriv = FALSE), data, name == "V") +
   labs(x = "time [ms]", y = "membrane potential [mV]", colour = "pulse")
 
 
 # Profiles ---------------------------------------------------------------------
 # How well the voltage trace of the two pulses determines each conductance.
-profiles <- profile(obj, bestfit, names(bestfit))
-plotProfile(profiles)
+profiles <- profile(obj, bestfit, names(bestfit), cores = .cores)
+plotProfile(profiles, mode == "data")
+confint(profiles)
+
+options(.opt)

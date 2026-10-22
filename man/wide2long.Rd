@@ -43,6 +43,3 @@ wide2long(out)
 wide2long(list(C1 = out, C2 = out))
 
 }
-\seealso{
-\code{\link[=long2wide]{long2wide()}}
-}

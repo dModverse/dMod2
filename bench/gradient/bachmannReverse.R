@@ -7,7 +7,7 @@ library(dMod2)
 # Single-threaded everywhere, so the comparison does not measure threading.
 Sys.setenv(OMP_NUM_THREADS = "1", MKL_NUM_THREADS = "1",
            OPENBLAS_NUM_THREADS = "1", GOTO_NUM_THREADS = "1")
-options(dMod.cores = 1, cppDE.cores = 1)
+options(dMod2.cores = 1, cppDE.cores = 1)
 
 .outdir <- file.path(tempdir(), "bachmannReverse")
 dir.create(.outdir, recursive = TRUE, showWarnings = FALSE)

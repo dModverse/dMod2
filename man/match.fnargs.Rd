@@ -12,11 +12,11 @@ match.fnargs(arglist, choices)
 \item{choices}{character, the argument names to match.}
 }
 \value{
-Integer vector of the positions in \code{arglist} matching \code{choices},
-\code{NA} where a choice is absent.
+Integer vector of the positions in \code{arglist} matching \code{choices}.
 }
 \description{
 Assigns unnamed entries of \code{arglist} to the entries of \code{choices} that are
-not named in it, in order. Named entries not in \code{choices} are dropped.
+not named in it, in order. A named entry not in \code{choices}, more entries
+than \code{choices} and a choice left without an entry are errors.
 }
 \keyword{internal}

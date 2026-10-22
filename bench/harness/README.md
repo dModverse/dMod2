@@ -43,7 +43,7 @@ problems have each trait, with a warning for a trait none covers:
 
 ## What is measured
 
-Per problem, on one core (`options(dMod.cores = 1)`):
+Per problem, on one core (`options(dMod2.cores = 1)`):
 
 - `sec`, the minimum over `--nrep` bursts of at least `--target` seconds;
 - `cost`, the time of an arm in value evaluations;

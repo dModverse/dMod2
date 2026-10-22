@@ -5,7 +5,7 @@
 \alias{plotValues}
 \title{Plot Objective Values of a Collection of Fits}
 \usage{
-\method{plotValues}{parframe}(x, tol = 1, ..., showSteps = FALSE, pseudoLog = FALSE)
+\method{plotValues}{parframe}(x, ..., tol = 1, showSteps = FALSE, pseudoLog = FALSE)
 
 plotValues(x, ...)
 }
@@ -13,10 +13,10 @@ plotValues(x, ...)
 \item{x}{Data frame with columns \code{value}, \code{converged} and \code{iterations},
 e.g. a \link{parframe}.}
 
+\item{...}{Logical expressions to subset \code{x}.}
+
 \item{tol}{Maximal difference between neighboring objective values that
 still counts as one step. Defaults to 1.}
-
-\item{...}{Logical expressions to subset \code{x}.}
 
 \item{showSteps}{Logical. \code{TRUE} marks the detected steps by dashed
 vertical lines labelled by their index. Defaults to \code{FALSE}.}

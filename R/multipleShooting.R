@@ -75,7 +75,7 @@
 
   myfn <- function(pars, nodes, fixed = NULL, deriv = TRUE, hessian = deriv,
                    sweep = c("forward", "reverse"),
-                   cores = getOption("dMod.cores", 1L), env = NULL,
+                   cores = getOption("dMod2.cores", 1L), env = NULL,
                    growth = FALSE, residuals = FALSE) {
     sweep <- match.arg(sweep)
     if (is.null(env)) env <- new.env()
@@ -675,7 +675,7 @@
 # directly observed states from the data, others from a simulation at `pars`,
 # or where that fails the last state reached or p's initial value.
 .shootNodes <- function(objfun, pars, fixed = NULL, observed = TRUE,
-                        cores = getOption("dMod.cores", 1L), smooth = FALSE) {
+                        cores = getOption("dMod2.cores", 1L), smooth = FALSE) {
   spec <- attr(objfun, "spec")
   states <- spec$states
   pin <- .shootInner(spec, pars, fixed, cores)

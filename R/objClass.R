@@ -66,11 +66,13 @@ evalConditionResidual <- function(dataI, predictionI, pars,
     if (is.null(cn))
       stop("evalConditionResidual: `cn` must be supplied when `errfn` is set.")
     pinner     <- getParameters(predictionI)
-    fixedinner <- pinner[attr(pinner, "fixed")]
+    # the `fixed` marker is empty without sensitivities, so the outer names count too
+    fixedinner <- pinner[union(attr(pinner, "fixed"),
+                               intersect(names(pinner), names(fixed)))]
     pinner     <- as.parvec(pinner[setdiff(names(pinner), names(fixed))])
     fixedinner <- as.parvec(fixedinner, deriv = FALSE, deriv2 = FALSE)
-    err_cn <- errfn(out = predictionI, pars = pinner,
-                    fixed = fixedinner, conditions = cn)[[cn]]
+    err_cn <- errfn(out = predictionI, pars = pinner, fixed = fixedinner,
+                    deriv = deriv, deriv2 = deriv2, conditions = cn)[[cn]]
   }
 
   key   <- if (is.null(cn)) "cond" else cn
@@ -270,7 +272,7 @@ normL2 <- function(data, x, errmodel = NULL, times = NULL,
   # in; see .objEvalMany().
   myfn <- function(..., fixed = NULL, deriv = TRUE, deriv2 = FALSE, hessian = NULL,
                    conditions = NULL, env = NULL,
-                   cores = getOption("dMod.cores", 1L), .prediction = NULL,
+                   cores = getOption("dMod2.cores", 1L), .prediction = NULL,
                    sweep = c("forward", "reverse")) {
     pars <- ..1
     if (is.null(env)) env <- new.env()
@@ -378,7 +380,9 @@ normL2 <- function(data, x, errmodel = NULL, times = NULL,
     # Summing objectives pools terms sharing an `attrName` into one `chi2` and
     # splits the rest into `chi2_<attrName>`.
     attr(out, "chi2") <- setNames(kr$chi2, attrName)
-    env$prediction <- prediction
+    # the other terms of a sum may have stored the predictions of other conditions
+    if (is.null(env$prediction)) env$prediction <- prediction
+    else env$prediction[names(prediction)] <- prediction
     attr(out, "env") <- env
     out
   }
@@ -413,7 +417,7 @@ normL2 <- function(data, x, errmodel = NULL, times = NULL,
 # predictions in one batched request. Falls back to the reference loop on a
 # missing handle, mixed prdfns, a condition owned twice, or a failing batch.
 .objEvalMany <- function(objList, parsList, deriv = TRUE, deriv2 = FALSE,
-                         cores = getOption("dMod.cores", 1L)) {
+                         cores = getOption("dMod2.cores", 1L)) {
   n <- length(parsList)
   objs <- if (is.function(objList)) rep(list(objList), n) else objList
   stopifnot(length(objs) == n)
@@ -585,13 +589,16 @@ constraintL2.default <- function(mu, sigma = 1, attrName = "prior",
       (!is.character(sigma) || any(!is.na(suppressWarnings(as.numeric(sigma))))))
     stop("constraintL2: 'sigma' is all numbers or all parameter names.", call. = FALSE)
   est <- is.character(sigma)
-  if (length(sigma) == 1) sigma <- setNames(rep(sigma, length(mu)), names(mu))
+  if (length(sigma) == 1 && is.null(names(sigma))) sigma <- rep(sigma, length(mu))
   if (is.null(names(sigma))) names(sigma) <- names(mu)
+  missingSigma <- setdiff(names(mu), names(sigma))
+  if (length(missingSigma))
+    stop("`sigma` has no entry for ", paste(missingSigma, collapse = ", "), ".", call. = FALSE)
   sigma <- sigma[names(mu)]
 
   myfn <- function(..., fixed = NULL, deriv = TRUE, deriv2 = FALSE, hessian = NULL,
                    conditions = condition, env = NULL,
-                   cores = getOption("dMod.cores", 1L)) {
+                   cores = getOption("dMod2.cores", 1L)) {
 
     p <- list(...)[[match.fnargs(list(...), "pars")]]
     cv <- .resolveCurvature(deriv, deriv2, hessian, "forward")
@@ -641,7 +648,7 @@ constraintL2.default <- function(mu, sigma = 1, attrName = "prior",
   if (anyDuplicated(parnames))
     stop("Duplicated parameter name in ", fn, "(): ",
          paste(unique(parnames[duplicated(parnames)]), collapse = ", "), ".")
-  if (length(x) == 1L) x <- setNames(rep(x, length(parnames)), parnames)
+  if (length(x) == 1L && is.null(names(x))) x <- rep(x, length(parnames))
   if (is.null(names(x))) names(x) <- parnames
   missing <- setdiff(parnames, names(x))
   if (length(missing))
@@ -657,7 +664,7 @@ constraintL2.default <- function(mu, sigma = 1, attrName = "prior",
 
   myfn <- function(..., fixed = NULL, deriv = TRUE, deriv2 = FALSE, hessian = NULL,
                    conditions = condition, env = NULL,
-                   cores = getOption("dMod.cores", 1L)) {
+                   cores = getOption("dMod2.cores", 1L)) {
 
     p    <- list(...)[[match.fnargs(list(...), "pars")]]
     cv <- .resolveCurvature(deriv, deriv2, hessian, "forward")
@@ -1022,7 +1029,7 @@ datapointL2 <- function(name, time, parameter, sigma = 1,
 
   myfn <- function(..., fixed = NULL, deriv = TRUE, deriv2 = FALSE, hessian = NULL,
                    conditions = NULL, env = NULL,
-                   cores = getOption("dMod.cores", 1L)) {
+                   cores = getOption("dMod2.cores", 1L)) {
     cv <- .resolveCurvature(deriv, deriv2, hessian, "forward")
     build_hessian <- cv$hessian
     deriv2        <- cv$deriv2
@@ -1118,7 +1125,7 @@ datapointL2 <- function(name, time, parameter, sigma = 1,
   }
 
   what <- intersect(c("value", "gradient", "hessian"), c(names(e1), names(e2)))
-  out12 <- lapply(what, function(w) switch(w,
+  out12 <- lapply(setNames(nm = what), function(w) switch(w,
     value    = e1$value + e2$value,
     gradient = addVector(addVector(setNames(numeric(length(pars)), pars),
                                    e1$gradient), e2$gradient),
@@ -1130,7 +1137,6 @@ datapointL2 <- function(name, time, parameter, sigma = 1,
       if (!is.null(e2$hessian)) H <- addMatrix(H, e2$hessian)
       H
     }))
-  names(out12) <- what
 
   # Numeric attributes are summed, an absent one counting as zero. The chi2
   # contributions are kept apart from that: they are pooled by the `attrName`
@@ -1179,22 +1185,26 @@ datapointL2 <- function(name, time, parameter, sigma = 1,
 
 #' @export
 print.objlist <- function(x, n1 = 20, n2 = 6, ...) {
-  cat("value\n", "==================\n",x$value, "\n")
+  heading <- function(...) cat(..., "\n==================\n", sep = "")
+  heading("value")
+  cat(x$value, "\n", sep = "")
   # An objlist from a `deriv = FALSE` call holds the value alone.
-  if (length(x$gradient)) {
-    n1 <- min(n1, length(x$gradient))
-    cat("gradient[1:",n1,"] (full length = ",length(x$gradient),")\n", "==================\n", sep = "")
-    print(x$gradient[1:n1])
+  grad <- x$gradient
+  if (length(grad)) {
+    m <- min(n1, length(grad))
+    heading("gradient[1:", m, "] (full length = ", length(grad), ")")
+    print(grad[seq_len(m)])
     cat("\n")
   }
-  if (length(x$hessian)) {
-    n2 <- min(n2, nrow(x$hessian))
-    cat("hessian[1:",n2,",1:",n2,"]","\n", "==================\n", sep = "")
-    print(x$hessian[1:n2,1:n2, drop = FALSE])
+  hess <- x$hessian
+  if (length(hess)) {
+    m <- seq_len(min(n2, nrow(hess)))
+    heading("hessian[1:", length(m), ",1:", length(m), "]")
+    print(hess[m, m, drop = FALSE])
     cat("\n")
   }
   cat("\n")
-  cat("attributes\n", "==================\n")
+  heading("attributes")
   # str() would prefix every line with the storage mode, and the chi2 tag with
   # a line of its own. The attributes hold objective contributions, so what
   # matters is the name and the number.
@@ -1288,13 +1298,14 @@ summary.objfn <- function(object, ...) {
 #' @export
 res <- function(data, out, err = NULL) {
   
-  data$name <- as.character(data$name)
+  # The data name column may be a factor.
+  obs <- as.character(data$name)
   n <- nrow(data)
   times <- sort(unique(data$time))
-  names <- unique(data$name)
+  names <- unique(obs)
   
   ti <- .matchNum(times, out[, 1])[.matchNum(data$time, times)]
-  ni <- match(names, colnames(out))[match(data$name, names)]
+  ni <- match(names, colnames(out))[match(obs, names)]
   if (anyNA(ni))
     stop("Observable not found: ",
          paste(setdiff(names, colnames(out)), collapse = ", "))
@@ -1304,7 +1315,7 @@ res <- function(data, out, err = NULL) {
   
   deriv <- NULL
   if (!is.null(d <- attr(out, "deriv"))) {
-    oi <- match(data$name, dimnames(d)[[2]])
+    oi <- match(obs, dimnames(d)[[2]])
     np <- dim(d)[3]
     deriv <- matrix(
       d[cbind(rep(ti, np), rep(oi, np), rep(seq_len(np), each = n))],
@@ -1313,7 +1324,7 @@ res <- function(data, out, err = NULL) {
 
   deriv2 <- NULL
   if (!is.null(d2 <- attr(out, "deriv2"))) {
-    oi2 <- match(data$name, dimnames(d2)[[2]])
+    oi2 <- match(obs, dimnames(d2)[[2]])
     np2 <- dim(d2)[3]
     # Build [n*np*np x 4] index matrix; outermost loop = k, then j, then i.
     idx <- cbind(
@@ -1334,11 +1345,11 @@ res <- function(data, out, err = NULL) {
   if (any(sNA)) {
     if (is.null(err)) stop("NA sigmas but no errmodel")
     ti_e <- .matchNum(times, err[, 1])[.matchNum(data$time, times)]
-    ni_e <- match(names, colnames(err))[match(data$name, names)]
+    ni_e <- match(names, colnames(err))[match(obs, names)]
     sig[sNA] <- err[cbind(ti_e, ni_e)][sNA]
 
     if (!is.null(de <- attr(err, "deriv"))) {
-      oi <- match(data$name, dimnames(de)[[2]])
+      oi <- match(obs, dimnames(de)[[2]])
       np <- dim(de)[3]
       ns <- sum(sNA)
       derr <- matrix(0, n, np, dimnames = list(NULL, dimnames(de)[[3]]))
@@ -1348,7 +1359,7 @@ res <- function(data, out, err = NULL) {
     }
 
     if (!is.null(de2 <- attr(err, "deriv2"))) {
-      oi <- match(data$name, dimnames(de2)[[2]])
+      oi <- match(obs, dimnames(de2)[[2]])
       np2 <- dim(de2)[3]
       ns <- sum(sNA)
       derr2 <- array(0, c(n, np2, np2),
@@ -1369,7 +1380,7 @@ res <- function(data, out, err = NULL) {
 
   objframe(
     data.table::data.table(
-      time = data$time, name = data$name, value = val,
+      time = data$time, name = obs, value = val,
       prediction = pred, sigma = sig, residual = resi,
       weighted.residual = resi * inv,
       bloq = val <= data$lloq, weighted.0 = pred * inv),

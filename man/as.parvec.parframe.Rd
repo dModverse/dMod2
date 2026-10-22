@@ -25,6 +25,3 @@ Select a Parameter Vector from a Parameter Frame
 \seealso{
 \code{\link[=as.parframe]{as.parframe()}}, \code{\link[=parvec]{parvec()}}
 }
-\author{
-Wolfgang Mader, \email{Wolfgang.Mader@fdm.uni-freiburg.de}
-}

@@ -257,3 +257,18 @@ test_that("the lockstep kernel names the row and the error of a failed start", {
   expect_error(dMod2:::trustL1_lockstep_impl(objfun_many, P0, Z, Z, FALSE, 1, 10),
                "objfun failed: row 2: no steady state")
 })
+
+test_that("trustL1 maximising subtracts the penalty", {
+  x0 <- c(a = 3, b = -0.2, c = 0.1)
+  neg <- function(pars, ...) {
+    o <- .quadratic_objfn(x0)(pars, ...)
+    o$value <- -o$value; o$gradient <- -o$gradient; o$hessian <- -o$hessian
+    o
+  }
+  fit <- trustL1(neg, parinit = c(a = 0, b = 0, c = 0), mu = 0 * x0, lambda = 1,
+                 minimize = FALSE, rinit = 0.5, rmax = 5, iterlim = 200)
+  expect_equal(unname(fit$argument), c(2.5, 0, 0), tolerance = 1e-4)
+  ref <- trustL1(.quadratic_objfn(x0), parinit = c(a = 0, b = 0, c = 0), mu = 0 * x0,
+                 lambda = 1, rinit = 0.5, rmax = 5, iterlim = 200)
+  expect_equal(fit$value, -ref$value, tolerance = 1e-6)
+})

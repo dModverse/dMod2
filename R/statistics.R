@@ -101,497 +101,284 @@
 #' @rdname profile
 #' @export
 profile.objfn <- function(fitted, pars, whichPar, alpha = 0.05,
-                    limits = c(lower = -Inf, upper = Inf), 
-                    method = c("integrate", "optimize"),
-                    stepControl = NULL, 
-                    algoControl = NULL,
-                    optControl  = NULL,
-                    verbose = FALSE,
-                    cores = 1,
-                    cautiousMode = FALSE,
-                    side = c("both", "left", "right"),
-                    delta = NULL,
-                    ...) {
+                          limits = c(lower = -Inf, upper = Inf),
+                          method = c("integrate", "optimize"),
+                          stepControl = NULL,
+                          algoControl = NULL,
+                          optControl  = NULL,
+                          verbose = FALSE,
+                          cores = 1,
+                          cautiousMode = FALSE,
+                          side = c("both", "left", "right"),
+                          delta = NULL,
+                          ...) {
 
   dotArgs <- list(...)
-  # Bound in this frame, so the parallel workers receive it.
   objfun <- fitted
 
-  # Guarantee that pars is named numeric without deriv attribute
   sanePars <- sanitizePars(pars, dotArgs$fixed)
   pars <- sanePars$pars
   fixed <- sanePars$fixed
-  
-  
-  # Initialize control parameters depending on method
+
   method  <- match.arg(method)
   side <- match.arg(side)
-  
-  
-  if (method == "integrate") {
-    sControl <- list(stepsize = 1e-4, min = 1e-4, max = Inf, atol = 1e-2, rtol = 1e-2, limit = 500, stop = "value")
-    aControl <- list(gamma = 1, W = "hessian", reoptimize = FALSE, correction = 1, reg = .Machine$double.eps)
-    oControl <- list(rinit = .1, rmax = 10, iterlim = 10)
+  if (is.null(delta)) delta <- qchisq(1 - alpha, 1)
+
+  sControl <- switch(method,
+    integrate = list(stepsize = 1e-4, min = 1e-4, max = Inf, atol = 1e-2, rtol = 1e-2,
+                     limit = 500, stop = "value"),
+    optimize  = list(stepsize = 1e-2, min = 1e-4, max = Inf, atol = 1e-1, rtol = 1e-1,
+                     limit = 100, stop = "value"))
+  aControl <- switch(method,
+    integrate = list(gamma = 1, W = "hessian", reoptimize = FALSE, correction = 1,
+                     reg = .Machine$double.eps),
+    optimize  = list(gamma = 0, W = "identity", reoptimize = TRUE, correction = 1, reg = 0))
+  oControl <- switch(method,
+    integrate = list(rinit = .1, rmax = 10, iterlim = 10),
+    optimize  = list(rinit = .1, rmax = 10, iterlim = 100))
+  sControl <- .mergeControl(sControl, stepControl, "stepControl")
+  aControl <- .mergeControl(aControl, algoControl, "algoControl")
+  aControl$W <- match.arg(aControl$W[1], c("hessian", "identity"))
+  oControl <- .trustControl(oControl, optControl, label = "optControl")
+
+  if (is.character(whichPar)) {
+    lost <- setdiff(whichPar, names(pars))
+    if (length(lost))
+      stop("profile: ", paste(lost, collapse = ", "),
+           if (all(lost %in% names(fixed))) " fixed" else " not among the parameters",
+           call. = FALSE)
+    whichPar <- match(whichPar, names(pars))
   }
-  if (method == "optimize") {
-    sControl <- list(stepsize = 1e-2, min = 1e-4, max = Inf, atol = 1e-1, rtol = 1e-1, limit = 100, stop = "value")
-    aControl <- list(gamma = 0, W = "identity", reoptimize = TRUE, correction = 1, reg = 0)
-    oControl <- list(rinit = .1, rmax = 10, iterlim = 100)
-  }
-  
+  if (!length(whichPar) || anyNA(whichPar) || any(whichPar < 1 | whichPar > length(pars)))
+    stop("profile: whichPar must name or index parameters of pars.", call. = FALSE)
+
   # cores = c(pars = , conditions = ) splits the two axes; see mstrust().
   .cc <- .splitCores(cores, "pars")
   coresConditions <- if (!is.null(.cc$conditions)) .sanitizeCores(.cc$conditions)
   cores <- .sanitizeCores(min(length(whichPar), .cc$outer))
-  if (!is.null(coresConditions) && cores == 1L) {
-    oldCores <- options(dMod.cores = coresConditions)
-    on.exit(options(oldCores), add = TRUE)
-  }
-  
-  # Substitute user-set control parameters
-  if (!is.null(stepControl)) sControl[match(names(stepControl), names(sControl))] <- stepControl
-  if (!is.null(algoControl)) aControl[match(names(algoControl), names(aControl))] <- algoControl
-  oControl <- .trustControl(oControl, optControl, label = "optControl")
-  
-  
-  # Create interRes folder for cautiousMode
-  if (cautiousMode){
-    interResFolder <- "profiles-interRes"
-    dir.create(interResFolder,showWarnings = FALSE)
-  }
-  
-  
-  # Start cluster if on windows
-  if (cores > 1) {
-    
-    if (Sys.info()[['sysname']] == "Windows" ||
-        (!is.null(coresConditions) && coresConditions > 1L)) {
-      
-      cluster <- parallel::makeCluster(cores)
-      on.exit(parallel::stopCluster(cluster), add = TRUE)
-      doParallel::registerDoParallel(cl = cluster)
-      
-      parallel::clusterCall(cl = cluster, function(x) .libPaths(x), .libPaths())
-      
-      varlist <- ls()
-      # Exclude things like "missing argument"
-      varlist <- c("objfun", "whichPar", "alpha", "delta", "limits", "method", "verbose", "cores",
-                   "pars", "fixed", "dotArgs", "coresConditions",
-                   "sControl", "aControl", "oControl")
-      parallel::clusterExport(cluster, envir = environment(), varlist = varlist)
-      
-    } else {
-      
-      doParallel::registerDoParallel(cores = cores)
-      
+
+  folder <- "profiles-interRes"
+  if (cautiousMode) dir.create(folder, showWarnings = FALSE)
+
+  out <- .parallelLapply(whichPar, function(whichIndex) tryCatch(
+    .profileOne(whichIndex, objfun, pars, fixed, dotArgs, sControl, aControl, oControl,
+                limits, delta, side, verbose, if (cautiousMode) folder),
+    error = function(e) e), cores = cores, coresConditions = coresConditions)
+
+  names(out) <- names(pars)[whichPar]
+  failed <- vapply(out, inherits, TRUE, "error")
+  reasons <- vapply(out[failed], conditionMessage, "")
+  if (all(failed))
+    stop("profile: ", paste(unique(reasons), collapse = "; "), call. = FALSE)
+  if (any(failed))
+    message("Profiles failed: ", paste0(names(reasons), " (", reasons, ")", collapse = ", "))
+  do.call(rbind, out[!failed])
+}
+
+
+# The profile of parameter whichIndex. Each side follows the path equation of the
+# Lagrangian by steps from the optimum, until the objective has risen by delta, the
+# limit or the step limit is reached, or the objective fails.
+.profileOne <- function(whichIndex, objfun, pars, fixed, dotArgs, sControl, aControl,
+                        oControl, limits, delta, side, verbose, folder) {
+
+  if (inherits(objfun, "fn")) loadDLL(objfun)
+  name <- names(pars)[whichIndex]
+  n <- length(pars)
+  # A profile step starts next to an optimum, where single shooting is enough.
+  obj.opt <- .singleShooting(objfun)
+  nSingular <- 0L
+  nFailedOpt <- 0L
+
+  # With W = "identity" the steps go along whichPar only.
+  Id <- NULL
+  evalObj <- function(p) {
+    out <- do.call(objfun, c(list(p), dotArgs))
+    if (aControl$W == "identity") {
+      if (is.null(Id)) {
+        Id <<- diag(1/.Machine$double.eps, length(out$gradient))
+        Id[whichIndex, whichIndex] <<- 1
+        dimnames(Id) <<- list(names(out$gradient), names(out$gradient))
+      }
+      out$hessian <- Id
     }
-    on.exit(doParallel::stopImplicitCluster(), add = TRUE)
-    
-    "%mydo%" <- foreach::"%dopar%"
-    
-    
-  } else {
-    
-    "%mydo%" <- foreach::"%do%"
-    
+    out
   }
-  
-  
-  # Convert whichPar to index vector
-  if (is.character(whichPar)) whichPar <- which(names(pars) %in% whichPar)
-  
-  loaded_packages <- .packages()  
-  out <- foreach::foreach(whichIndex = whichPar, 
-                          .packages = loaded_packages, 
-                          .inorder = TRUE,
-                          .options.multicore = list(preschedule = FALSE)) %mydo% {
-                            
-                            if (inherits(objfun, "fn")) loadDLL(objfun)
-                            if (!is.null(coresConditions))
-                              options(dMod.cores = coresConditions)
-                            
-                            
-                            whichPar.name <- names(pars)[whichIndex]
-                            
-                            
-                            
-                            ## Functions needed during profile computation -----------------------
-                            # A profile step starts next to an optimum, where
-                            # single shooting is enough and cheaper.
-                            obj.opt <- .singleShooting(objfun)
-                            obj.prof <- function(p, ...) {
-                              out <- objfun(p, ...)
-                              # If "identity", substitute hessian such that steps are in whichPar-direction.
-                              Id <- diag(1/.Machine$double.eps, length(out$gradient))
-                              Id[whichIndex, whichIndex] <- 1
-                              colnames(Id) <- rownames(Id) <- names(out$gradient)
-                              
-                              W <- match.arg(aControl$W[1], c("hessian", "identity"))
-                              out$hessian <- switch(W,
-                                                    "hessian" = out$hessian,
-                                                    "identity" = Id)
-                              return(out)    
-                            }
-                            
-                            pseudoinverse <- function(m, tol) {
-                              msvd <- svd(m)
-                              index <- which(abs(msvd$d) > max(dim(m))*max(msvd$d)*tol) 
-                              if (length(index) == 0) {
-                                out <- array(0, dim(m)[2:1])
-                              }
-                              else {
-                                out <- msvd$u[,index] %*% (1/msvd$d[index] * t(msvd$v)[index,])
-                              }
-                              attr(out, "valid") <- 1:length(msvd$d) %in% index
-                              return(out)
-                            }
-                            
-                            constraint <- function(p) {
-                              value <- p[whichIndex] - pars[whichIndex]
-                              gradient <- rep(0, length(p))
-                              gradient[whichIndex] <- 1
-                              return(list(value = value, gradient = gradient))
-                            }
-                            lagrange <- function(y) {
-                              
-                              # initialize values
-                              p <- y
-                              lambda <- 0
-                              out <- do.call(obj.prof, c(list(p = p), dotArgs))
-                              g.original <- constraint(p)
-                              
-                              # evaluate derivatives and constraints
-                              g     <- direction * g.original$value
-                              gdot  <- direction * g.original$gradient
-                              ldot  <- out$gradient
-                              lddot <- out$hessian 
-                              
-                              # compute rhs of profile ODE
-                              M <- rbind(cbind(lddot, gdot), 
-                                         matrix(c(gdot, 0), nrow=1))
-                              
-                              v <- c(-rep(gamma, length(p))*(ldot + lambda*gdot), 1)
-                              v0 <- c(-rep(0, length(p))*(ldot + lambda*gdot), 1)
-                              
-                              W <- pseudoinverse(M, tol = aControl$reg)
-                              valid <- attr(W, "valid")
-                              if(any(!valid)) {
-                                dy <- try(as.vector(W%*%v)[1:length(p)], silent=FALSE)
-                                dy0 <- try(as.vector(W%*%v0)[1:length(p)], silent=FALSE)
-                                dy[!valid[1:length(p)]] <- dy0[!valid[1:length(p)]] <- 0
-                                dy[whichIndex] <- dy0[whichIndex] <- direction
-                                warning(paste0("Iteration ", i, ": Some singular values of the Hessian are below the threshold. Optimization will be performed."))
-                              } else {
-                                dy <- try(as.vector(W%*%v)[1:length(p)], silent=FALSE)
-                                dy0 <- try(as.vector(W%*%v0)[1:length(p)], silent=FALSE)
-                              }
-                              
-                              
-                              if(!inherits(dy, "try-error")) {
-                                names(dy) <- names(y) 
-                                correction <- sqrt(sum((dy-dy0)^2))/sqrt(sum(dy^2))
-                              } else {
-                                dy <- NA
-                                correction <- 0
-                                warning(paste0("Iteration ", i, ": Impossible to invert Hessian. Trying to optimize instead."))
-                              }
-                              
-                              # Numeric attributes become profile modes that add
-                              # up to the total; chi2 decomposes one of them and
-                              # is not a mode of its own.
-                              out.attributes <- attributes(out)[sapply(attributes(out), is.numeric)]
-                              out.attributes <- out.attributes[
-                                !grepl("^chi2($|_)", names(out.attributes))]
-                              out.attributes.names <- names(out.attributes)
-                              
-                              
-                              return(c(list(dy = dy, 
-                                            value = out$value, 
-                                            gradient = out$gradient, 
-                                            correction = correction, 
-                                            valid = valid, 
-                                            attributes = out.attributes.names),
-                                       out.attributes))
-                              
-                              
-                              
-                              
-                            }
-                            doIteration <- function() {
-                              
-                              optimize <- aControl$reoptimize
-                              # Check for error in evaluation of lagrange()
-                              if(is.na(dy[1])) {
-                                optimize <- TRUE
-                                y.try <- y
-                                y.try[whichIndex] <- y[whichIndex] + direction*stepsize
-                                rinit <- oControl$rinit
-                              } else {
-                                dy.norm <- sqrt(sum(dy^2))
-                                rinit <- min(c(oControl$rinit, 3*dy.norm))
-                                y.try <- y + dy
-                                if(any(!lagrange.out$valid)) optimize <- TRUE
-                              }
-                              
-                              # Do reoptimization if requested or necessary
-                              if(optimize) {      
-                                parinit.opt <- y.try[-whichIndex]
-                                fixed.opt <- c(fixed, y.try[whichIndex])
-                                
-                                arglist <- c(list(objfun = obj.opt, parinit = parinit.opt, fixed = fixed.opt, rinit = rinit), 
-                                             oControl[names(oControl)!="rinit"],
-                                             dotArgs[names(dotArgs) != "fixed"])
-                                
-                                
-                                myfit <- try(do.call(trust, arglist), silent=FALSE)
-                                if(!inherits(myfit, "try-error")) {
-                                  y.try[names(myfit$argument)] <- as.vector(myfit$argument)  
-                                } else {
-                                  warning("Optimization not successful. Profile may be erroneous.")
-                                }
-                                
-                              }
-                              
-                              return(y.try)
-                              
-                            }
-                            doAdaption <- function() {
-                              
-                              lagrange.out.try <- lagrange(y.try)
-                              valid <- TRUE
-                              
-                              # Predicted change of the objective value
-                              dobj.pred <- sum(lagrange.out$gradient*(y.try - y))
-                              dobj.fact <- lagrange.out.try$value - lagrange.out$value
-                              correction <- lagrange.out.try$correction
-                              
-                              # Gamma adaption based on amount of actual correction
-                              if (correction > aControl$correction) gamma <- gamma/2
-                              if (correction < 0.5*aControl$correction) gamma <- min(c(aControl$gamma, gamma*2))
-                              
-                              # Stepsize adaption based on difference in predicted change of objective value
-                              if (abs(dobj.fact - dobj.pred) > sControl$atol & stepsize > sControl$min) {
-                                stepsize <- max(c(stepsize/1.5, sControl$min))
-                                valid <- FALSE
-                              }
-                              if (abs(dobj.fact - dobj.pred) < .3*sControl$atol | abs((dobj.fact - dobj.pred)/dobj.fact) < .3*sControl$rtol) {
-                                stepsize <- min(c(stepsize*2, sControl$max))
-                              }
-                              
-                              ## Verbose
-                              if (verbose) {
-                                # Compute progres
-                                diff.thres <- diff.steps <- diff.limit <- 0
-                                if (threshold < Inf)
-                                  diff.thres <- 1 - max(c(0, min(c(1, (threshold - lagrange.out.try$value)/delta))))
-                                if (sControl$limit < Inf)
-                                  diff.steps <- i/sControl$limit
-                                diff.limit <- switch(as.character(sign(constraint.out$value)),
-                                                     "1"  = 1 - (limits[2] - constraint.out$value)/limits[2],
-                                                     "-1" = diff.limit <- 1 - (limits[1] - constraint.out$value)/limits[1],
-                                                     "0"  = 0)
-                                
-                                percentage <- max(c(diff.thres, diff.steps, diff.limit), na.rm = TRUE)*100
-                                progressBar(percentage)
-                                
-                                
-                                myvalue <- format(substr(lagrange.out$value  , 0, 8), width = 8)
-                                myconst <- format(substr(constraint.out$value, 0, 8), width = 8)
-                                mygamma <- format(substr(gamma               , 0, 8), width = 8)
-                                myvalid <- all(lagrange.out$valid)
-                                cat("\tvalue:", myvalue, "constraint:", myconst, "gamma:", mygamma, "valid:", myvalid) 
-                              }
-                              
-                              
-                              
-                              return(list(lagrange = lagrange.out.try, stepsize = stepsize, gamma = gamma, valid = valid))
-                              
-                              
-                            }
-                            
-                            ## Compute profile -------------------------------------------------
-                            
-                            # Initialize profile
-                            i <- 0 
-                            direction <- 1
-                            gamma <- aControl$gamma
-                            stepsize <- sControl$stepsize
-                            ini <- pars
-                            
-                            lagrange.out <- lagrange(ini)
-                            constraint.out <- constraint(pars)
-                            
-                            if (is.null(delta)) delta <- qchisq(1 - alpha, 1)
-                            
-                            
-                            
-                            threshold <- lagrange.out[[sControl$stop]] + delta
-                            out.attributes <- unlist(lagrange.out[lagrange.out$attributes])
-                            
-                            out <- c(value = lagrange.out$value, 
-                                     constraint = as.vector(constraint.out$value), 
-                                     stepsize = stepsize, 
-                                     gamma = gamma, 
-                                     whichPar = whichIndex,
-                                     out.attributes, ini)
-                            if (side %in% c("right", "both")) {
-                              # Compute right profile
-                              if (verbose) {
-                                cat("Compute right profile\n")
-                              }
-                              direction <- 1
-                              gamma <- aControl$gamma
-                              stepsize <- sControl$stepsize
-                              y <- ini
-                              
-                              lagrange.out <- lagrange.out
-                              constraint.out <- constraint.out
-                              
-                              while (i < sControl$limit) {
 
-                                ## Iteration step
-                                # Clamp so the last step lands on the limit instead of overshooting
-                                stepsize <- min(stepsize, limits[2] - constraint.out$value)
-                                sufficient <- FALSE
-                                retry <- 0
-                                while (!sufficient & retry < 5) {
-                                  dy <- stepsize*lagrange.out$dy
-                                  y.try <- try(doIteration(), silent = TRUE)
-                                  out.try <- try(doAdaption(), silent = TRUE)
-                                  if (inherits(y.try, "try-error") | inherits(out.try, "try-error")) {
-                                    sufficient <- FALSE
-                                    stepsize <- stepsize/1.5
-                                    retry <- retry + 1
-                                  } else {
-                                    sufficient <- out.try$valid
-                                    stepsize <- out.try$stepsize
-                                  }
+  # Solutions of M x = rhs; a matrix too ill-conditioned for solve() takes the
+  # pseudoinverse, whose singular values below reg are flagged invalid.
+  solveM <- function(M, rhs) {
+    if (rcond(M) > sqrt(.Machine$double.eps)) {
+      sol <- tryCatch(solve(M, rhs), error = function(e) NULL)
+      if (!is.null(sol)) return(list(sol = sol, valid = rep(TRUE, nrow(M))))
+    }
+    s <- svd(M)
+    idx <- which(abs(s$d) > max(dim(M)) * max(s$d) * aControl$reg)
+    sol <- if (length(idx))
+      s$v[, idx, drop = FALSE] %*% (crossprod(s$u[, idx, drop = FALSE], rhs) / s$d[idx])
+    else matrix(0, ncol(M), ncol(rhs))
+    list(sol = sol, valid = seq_along(s$d) %in% idx)
+  }
 
-                                }
-                                if (inherits(y.try, "try-error") | inherits(out.try, "try-error")) break
-                                
-                                
-                                ## Set values
-                                y <- y.try
-                                lagrange.out <- out.try$lagrange
-                                constraint.out <- constraint(y.try)
-                                stepsize <- out.try$stepsize
-                                gamma <- out.try$gamma
-                                out.attributes <- unlist(lagrange.out[lagrange.out$attributes])
-                                
-                                ## Return values 
-                                out <- rbind(out, 
-                                             c(value = lagrange.out$value, 
-                                               constraint = as.vector(constraint.out$value), 
-                                               stepsize = stepsize, 
-                                               gamma = gamma, 
-                                               whichPar = whichIndex,
-                                               out.attributes, 
-                                               y))
-                                
-                                if (cautiousMode)
-                                  .profileDump(out, whichPar.name, pars, out.attributes,
-                                               interResFolder, "right")
-                                
-                                value <- lagrange.out[[sControl$stop]]
-                                if (value > threshold | constraint.out$value >= limits[2] - sqrt(.Machine$double.eps)) break
-                                
-                                i <- i + 1
-                                
-                              }
-                            }
-                            
-                            if (side %in% c("left", "both")) {
-                              # Compute left profile
-                              if (verbose) {
-                                cat("\nCompute left profile\n")
-                              }
-                              i <- 0
-                              direction <- -1
-                              gamma <- aControl$gamma
-                              stepsize <- sControl$stepsize
-                              y <- ini
-                              
-                              lagrange.out <- lagrange(ini)
-                              constraint.out <- constraint(pars)
-                              
-                              while (i < sControl$limit) {
+  lagrange <- function(y, direction, gamma, out = evalObj(y)) {
+    gdot <- direction * (seq_len(n) == whichIndex)
+    M <- rbind(cbind(out$hessian, gdot), c(gdot, 0))
+    st <- solveM(M, cbind(c(-gamma * out$gradient, 1), c(rep(0, n), 1)))
+    dy <- st$sol[seq_len(n), 1]
+    dy0 <- st$sol[seq_len(n), 2]
+    valid <- st$valid
+    if (!all(valid)) {
+      dy[!valid[seq_len(n)]] <- dy0[!valid[seq_len(n)]] <- 0
+      dy[whichIndex] <- dy0[whichIndex] <- direction
+      nSingular <<- nSingular + 1L
+    }
+    names(dy) <- names(y)
+    # Numeric attributes become profile modes that add up to the total; chi2
+    # decomposes one of them and is not a mode of its own.
+    attrs <- Filter(is.numeric, attributes(out))
+    attrs <- attrs[!grepl("^chi2($|_)", names(attrs))]
+    c(list(dy = dy, value = out$value, gradient = out$gradient,
+           correction = sqrt(sum((dy - dy0)^2)) / sqrt(sum(dy^2)),
+           valid = valid, attributes = names(attrs), obj = out),
+      attrs)
+  }
 
-                                ## Iteration step
-                                # Clamp so the last step lands on the limit instead of overshooting
-                                stepsize <- min(stepsize, constraint.out$value - limits[1])
-                                sufficient <- FALSE
-                                retry <- 0
-                                while (!sufficient & retry < 5) {
-                                  dy <- stepsize*lagrange.out$dy
-                                  y.try <- try(doIteration(), silent = TRUE)
-                                  out.try <- try(doAdaption(), silent = TRUE)
-                                  if (inherits(y.try, "try-error") | inherits(out.try, "try-error")) {
-                                    sufficient <- FALSE
-                                    stepsize <- stepsize/1.5
-                                    retry <- retry + 1
-                                  } else {
-                                    sufficient <- out.try$valid
-                                    stepsize <- out.try$stepsize
-                                  }
+  iterate <- function(y, dy, lag, direction, stepsize) {
+    optimize <- aControl$reoptimize
+    if (anyNA(dy)) {
+      optimize <- TRUE
+      y.try <- y
+      y.try[whichIndex] <- y[whichIndex] + direction * stepsize
+      rinit <- oControl$rinit
+    } else {
+      rinit <- min(oControl$rinit, 3 * sqrt(sum(dy^2)))
+      y.try <- y + dy
+      if (!all(lag$valid)) optimize <- TRUE
+    }
+    if (!optimize) return(y.try)
+    arglist <- c(list(objfun = obj.opt, parinit = y.try[-whichIndex],
+                      fixed = c(fixed, y.try[whichIndex]), rinit = rinit),
+                 oControl[names(oControl) != "rinit"],
+                 dotArgs[names(dotArgs) != "fixed"])
+    fit <- try(do.call(trust, arglist), silent = TRUE)
+    if (inherits(fit, "try-error")) nFailedOpt <<- nFailedOpt + 1L
+    else y.try[names(fit$argument)] <- as.vector(fit$argument)
+    y.try
+  }
 
-                                }
-                                if (inherits(y.try, "try-error") | inherits(out.try, "try-error")) break
-                                
-                                ## Set values
-                                y <- y.try
-                                lagrange.out <- out.try$lagrange
-                                constraint.out <- constraint(y.try)
-                                stepsize <- out.try$stepsize
-                                gamma <- out.try$gamma
-                                out.attributes <- unlist(lagrange.out[lagrange.out$attributes])
-                                
-                                
-                                ## Return values
-                                out <- rbind(c(value = lagrange.out$value, 
-                                               constraint = as.vector(constraint.out$value), 
-                                               stepsize = stepsize, 
-                                               gamma = gamma,
-                                               whichPar = whichIndex,
-                                               out.attributes,
-                                               y), 
-                                             out)
-                                
-                                if (cautiousMode)
-                                  .profileDump(out, whichPar.name, pars, out.attributes,
-                                               interResFolder, "left")
-                                
-                                
-                                value <- lagrange.out[[sControl$stop]]
-                                if (value > threshold | constraint.out$value <= limits[1] + sqrt(.Machine$double.eps)) break
-                                
-                                i <- i + 1
-                                
-                              }
-                            }
-                            # Output
-                            out <- as.data.frame(out)
-                            out$whichPar <- whichPar.name
-                            parframe(
-                              out,
-                              parameters = names(pars),
-                              metanames = c("value", "constraint", "stepsize", "gamma", "whichPar"),
-                              objAttributes = names(out.attributes)
-                            )
-                            
-                          }
-  
-  
-  
-  # .. Prepare output -----
-  outncol <- vapply(out, ncol, 1)
-  failed <- outncol != max(outncol)
-  if (any(failed)) message("The following profiles failed: ", paste0(whichPar[failed], collapse = ", "))
-  out <- out[!failed]  
-  
-  do.call(rbind, out)
-  
-  
+  # Accepts y.try if the objective changed as predicted, and adapts step and gamma.
+  adapt <- function(y, y.try, lag, gamma, stepsize, direction) {
+    lag.try <- lagrange(y.try, direction, gamma)
+    valid <- TRUE
+    dobj.pred <- sum(lag$gradient * (y.try - y))
+    dobj.fact <- lag.try$value - lag$value
+    if (lag.try$correction > aControl$correction) gamma <- gamma / 2
+    if (lag.try$correction < 0.5 * aControl$correction) gamma <- min(aControl$gamma, gamma * 2)
+    mismatch <- abs(dobj.fact - dobj.pred)
+    if (mismatch > sControl$atol && stepsize > sControl$min) {
+      stepsize <- max(stepsize / 1.5, sControl$min)
+      valid <- FALSE
+    }
+    if (mismatch < .3 * sControl$atol || abs(mismatch / dobj.fact) < .3 * sControl$rtol)
+      stepsize <- min(stepsize * 2, sControl$max)
+    list(y = y.try, lag = lag.try, stepsize = stepsize, gamma = gamma, valid = valid)
+  }
+
+  profileRow <- function(lag, con, stepsize, gamma, y)
+    c(value = lag$value, constraint = as.vector(con), stepsize = stepsize, gamma = gamma,
+      whichPar = whichIndex, unlist(lag[lag$attributes]), y)
+
+  origin <- lagrange(pars, 1, aControl$gamma)
+  if (!is.numeric(origin[[sControl$stop]]))
+    stop("stepControl$stop = '", sControl$stop, "' is no element of the objective's value.",
+         call. = FALSE)
+  threshold <- origin[[sControl$stop]] + delta
+  originRow <- profileRow(origin, 0, sControl$stepsize, aControl$gamma, pars)
+
+  dump <- function(rows, label) {
+    if (is.null(folder)) return(invisible(NULL))
+    frame <- do.call(rbind, if (label == "right") c(list(originRow), rows)
+                            else c(rev(rows), list(originRow)))
+    .profileDump(frame, name, pars, origin[origin$attributes], folder, label)
+  }
+
+  # Rows away from the optimum and the reason the side ended
+  walk <- function(direction, lag) {
+    label <- if (direction > 0) "right" else "left"
+    if (verbose) cat("\nCompute", label, "profile\n")
+    limit <- if (direction > 0) limits[2] else limits[1]
+    gamma <- aControl$gamma
+    stepsize <- sControl$stepsize
+    y <- pars
+    con <- 0
+    rows <- list()
+    reason <- "step limit"
+    for (i in seq_len(sControl$limit)) {
+      # The last step lands on the limit instead of overshooting.
+      stepsize <- min(stepsize, direction * (limit - con))
+      sufficient <- FALSE
+      retry <- 0
+      while (!sufficient && retry < 5) {
+        step <- tryCatch(adapt(y, iterate(y, stepsize * lag$dy, lag, direction, stepsize), lag,
+                               gamma, stepsize, direction),
+                         error = function(e) e)
+        if (inherits(step, "error")) {
+          stepsize <- stepsize / 1.5
+          retry <- retry + 1
+        } else {
+          sufficient <- step$valid
+          stepsize <- step$stepsize
+        }
+      }
+      if (inherits(step, "error")) {
+        reason <- conditionMessage(step)
+        break
+      }
+      y <- step$y
+      lag <- step$lag
+      con <- y[[whichIndex]] - pars[[whichIndex]]
+      gamma <- step$gamma
+      rows[[i]] <- profileRow(lag, con, stepsize, gamma, y)
+      dump(rows, label)
+      if (verbose) {
+        progress <- max(c(if (is.finite(threshold)) 1 - max(0, min(1, (threshold - lag$value) / delta)),
+                          i / sControl$limit,
+                          if (is.finite(limit) && limit != 0) con / limit), na.rm = TRUE)
+        .progressBar(100 * progress)
+        cat("\tvalue:", formatC(lag$value, digits = 4, format = "g", width = 10),
+            "constraint:", formatC(con, digits = 4, format = "g", width = 10),
+            "gamma:", formatC(gamma, digits = 4, format = "g", width = 10),
+            "valid:", all(lag$valid))
+      }
+      if (lag[[sControl$stop]] > threshold) { reason <- "threshold"; break }
+      if (direction * (con - limit) >= -sqrt(.Machine$double.eps)) { reason <- "limit"; break }
+    }
+    list(rows = rows, reason = reason, label = label)
+  }
+
+  right <- if (side %in% c("right", "both")) walk(1, origin)
+  left <- if (side %in% c("left", "both"))
+    walk(-1, lagrange(pars, -1, aControl$gamma, out = origin$obj))
+  sides <- list(left, right)
+  if (verbose) cat("\n")
+
+  for (sd in Filter(Negate(is.null), sides))
+    if (!sd$reason %in% c("threshold", "limit", "step limit"))
+      message("profile ", name, ", ", sd$label, " side: stopped by an error of the objective: ",
+              sd$reason)
+  if (nSingular)
+    warning("profile ", name, ": the Hessian was singular at ", nSingular,
+            " steps, which were reoptimized.", call. = FALSE)
+  if (nFailedOpt)
+    warning("profile ", name, ": ", nFailedOpt,
+            " reoptimizations failed; the profile may be erroneous.", call. = FALSE)
+
+  out <- as.data.frame(do.call(rbind, c(rev(sides[[1]]$rows), list(originRow), sides[[2]]$rows)))
+  out$whichPar <- name
+  parframe(out,
+           parameters = names(pars),
+           metanames = c("value", "constraint", "stepsize", "gamma", "whichPar"),
+           objAttributes = names(unlist(origin[origin$attributes])))
 }
 
 #' @rdname profile
@@ -600,25 +387,11 @@ profile.function <- function(fitted, ...) profile.objfn(fitted, ...)
 
 
 
-#' Progress Bar
-#'
-#' Prints a progress bar on the current console line.
-#'
-#' @param percentage Numeric between 0 and 100.
-#' @param size Integer, width of the bar in characters. Default \code{50}.
-#' @param number Logical, whether the percentage is printed after the bar.
-#'   Default \code{TRUE}.
-#' @return \code{NULL}, invisibly; called for its output.
-#' @keywords internal
-#' @export
-progressBar <- function(percentage, size = 50, number = TRUE) {
-  
-  if(percentage < 0) percentage <- 0
-  if(percentage > 100) percentage <- 100
-  
-  out <- paste("\r|", paste(rep("=", round(size*percentage/100)), collapse=""), paste(rep(" ", size-round(size*percentage/100)), collapse=""), "|", sep="")
-  cat(out)
-  if(number) cat(format(paste(" ", round(percentage), "%", sep=""), width=5))
+# A progress bar on the current console line, percentage in 0 to 100
+.progressBar <- function(percentage, size = 50) {
+  filled <- round(size * min(max(percentage, 0), 100) / 100)
+  cat("\r|", strrep("=", filled), strrep(" ", size - filled), "| ",
+      format(paste0(round(percentage), "%"), width = 4), sep = "")
   invisible(NULL)
 }
 
@@ -668,7 +441,8 @@ profileThreshold <- function(level = 0.95, method = c("chisq", "F"),
 #' @param level The confidence level. Default `0.95`.
 #' @param ... Not used.
 #' @param val.column Column of the profile the threshold applies to, for
-#'   example `"value"` or `"data"`. Default `"data"`.
+#'   example `"value"` or `"data"`. Default `"data"`, or `"value"` for a profile
+#'   without a `data` column.
 #' @param method Calibration of the threshold, `"chisq"` (default) or `"F"`,
 #'   see [profileThreshold()].
 #' @inheritParams profileThreshold
@@ -685,7 +459,9 @@ confint.parframe <- function(object, parm = NULL, level = 0.95, ...,
 
   method <- match.arg(method)
   profile <- object
-  obj.attributes <- attr(profile, "obj.attributes")
+  if (missing(val.column) && !val.column %in% names(profile)) val.column <- "value"
+  if (!val.column %in% names(profile))
+    stop("confint: the profile has no column '", val.column, "'.", call. = FALSE)
 
   if (is.null(parm))
     parm <- unique(profile[["whichPar"]])
@@ -814,21 +590,21 @@ confint.parframe <- function(object, parm = NULL, level = 0.95, ...,
 #' @export
 vcov.objlist <- function(object, fixed = NULL, ...) {
 
-  hessian__ <- object[["hessian"]]
-  if (is.null(hessian__)) stop("The objective was evaluated without a Hessian.")
-  if (is.null(colnames(hessian__))) {
+  H <- object[["hessian"]]
+  if (is.null(H)) stop("The objective was evaluated without a Hessian.")
+  if (is.null(colnames(H))) {
     nm <- names(object[["gradient"]])
-    dimnames(hessian__) <- list(nm, nm)
+    dimnames(H) <- list(nm, nm)
   }
 
-  vcov__ <- 0*hessian__
-  is_fixed__ <- colnames(hessian__) %in% fixed
-  subhessian__ <- hessian__[!is_fixed__, !is_fixed__, drop = FALSE]
-  subvcov__ <- try(solve(0.5*subhessian__), silent = TRUE)
-  if (inherits(subvcov__, "try-error")) subvcov__ <- MASS::ginv(0.5*subhessian__)
-  vcov__[!is_fixed__, !is_fixed__] <- subvcov__
+  V <- 0*H
+  isFixed <- colnames(H) %in% fixed
+  Hfree <- H[!isFixed, !isFixed, drop = FALSE]
+  Vfree <- try(solve(0.5*Hfree), silent = TRUE)
+  if (inherits(Vfree, "try-error")) Vfree <- MASS::ginv(0.5*Hfree)
+  V[!isFixed, !isFixed] <- Vfree
 
-  vcov__
+  V
 
 }
 
@@ -836,8 +612,8 @@ vcov.objlist <- function(object, fixed = NULL, ...) {
 #' @export
 vcov.trustfit <- function(object, parupper = NULL, parlower = NULL, ...) {
 
-  arg__ <- object[["argument"]]
-  if (is.null(arg__)) return()
+  argument <- object[["argument"]]
+  if (is.null(argument)) return()
   if (is.null(object[["hessian"]]))
     stop("The fit has no Hessian. Evaluate the objective at the fit: ",
          "vcov(obj(fit$argument)).")
@@ -846,19 +622,19 @@ vcov.trustfit <- function(object, parupper = NULL, parlower = NULL, ...) {
   # keeps iterates strictly inside and reports `atBound` itself; otherwise the
   # bounds are compared with a relative tolerance.
   fixed <- NULL
-  atBound__ <- object[["atBound"]]
-  if (!is.null(atBound__) && !is.null(names(atBound__)))
-    fixed <- union(fixed, names(atBound__)[which(as.logical(atBound__))])
-  reltol__ <- 1e-6
+  atBound <- object[["atBound"]]
+  if (!is.null(atBound) && !is.null(names(atBound)))
+    fixed <- union(fixed, names(atBound)[which(as.logical(atBound))])
+  reltol <- 1e-6
   if (!is.null(parupper)) {
-    myarg__ <- arg__[names(parupper)]
-    fixed <- union(fixed, names(myarg__)[
-      which(myarg__ >= parupper - reltol__ * pmax(1, abs(parupper)))])
+    value <- argument[names(parupper)]
+    fixed <- union(fixed, names(value)[
+      which(value >= parupper - reltol * pmax(1, abs(parupper)))])
   }
   if (!is.null(parlower)) {
-    myarg__ <- arg__[names(parlower)]
-    fixed <- union(fixed, names(myarg__)[
-      which(myarg__ <= parlower + reltol__ * pmax(1, abs(parlower)))])
+    value <- argument[names(parlower)]
+    fixed <- union(fixed, names(value)[
+      which(value <= parlower + reltol * pmax(1, abs(parlower)))])
   }
 
   vcov.objlist(objlist(object[["value"]], object[["gradient"]], object[["hessian"]]),
@@ -876,8 +652,9 @@ vcov.trustfit <- function(object, parupper = NULL, parlower = NULL, ...) {
 #'
 #' @param objfun Objective function, see [trust()].
 #' @param center Named numeric parameter centre, or a parframe whose rows are
-#'   used as starting points; `fits` is then the number of rows. [msParframe()]
-#'   gives reproducible starts.
+#'   used as starting points; `fits` is then the number of rows. The random
+#'   starts, those of retries included, are drawn before the fits are spread
+#'   over `cores`, so [set.seed()] reproduces a run.
 #' @param rinit,rmax Initial and maximum trust-region radius, see [trust()].
 #'   Default `0.1` and `10`.
 #' @param fits Number of fits. Default `20`.
@@ -896,7 +673,8 @@ vcov.trustfit <- function(object, parupper = NULL, parlower = NULL, ...) {
 #' @param output Logical, write every fit and the final parlist to disk.
 #'   Default `FALSE`.
 #' @param cautiousMode Logical, also write every fit deparsed to an `.R` file
-#'   and keep the intermediate files. Default `FALSE`.
+#'   in `interRes/`, which is kept after the run while its `.Rda` files are
+#'   removed. Default `FALSE`.
 #' @param startFromCenter Logical. If `TRUE`, the first fit starts at
 #'   `center` without offset. Default `FALSE`.
 #' @param retry Logical. If `TRUE` (default), a fit that fails with an error
@@ -913,7 +691,8 @@ vcov.trustfit <- function(object, parupper = NULL, parlower = NULL, ...) {
 #'   `<resultPath>/<name>/trial-<k>-<date>/`: the per-fit files in its
 #'   subfolder `interRes/`, which is removed on completion unless
 #'   `cautiousMode = TRUE`, the final `parameterList.Rda` (with `output`) and
-#'   the log `mstrust.log`. [load.parlist()] reads the fits from `interRes/`.
+#'   the log `mstrust.log`. [load.parlist()] reads the fits from `interRes/`
+#'   of a run that is still going or was aborted.
 #'
 #' @return A parlist with one entry per fit, failed fits included. Each entry
 #'   is the result of the optimiser without `hessian`, plus `parinit`, its
@@ -925,8 +704,6 @@ vcov.trustfit <- function(object, parupper = NULL, parlower = NULL, ...) {
 #'   and cppDE. [as.parframe()] turns the parlist into a table.
 #'
 #' @seealso [trust()], [msParframe()], [as.parframe()], [load.parlist()]
-#'
-#' @author Wolfgang Mader, \email{Wolfgang.Mader@@fdm.uni-freiburg.de}
 #'
 #' @examples
 #' rosenbrock <- function(x, ...) {
@@ -950,340 +727,206 @@ vcov.trustfit <- function(object, parupper = NULL, parlower = NULL, ...) {
 #' as.parframe(fits)
 #'
 #' @export
-#' @import parallel
 mstrust <- function(objfun, center, rinit = .1, rmax = 10, fits = 20, cores = 1, optmethod = "trust",
                     samplefun = "rnorm", resultPath = ".", name = "mstrust",
                     stats = FALSE, output = FALSE, cautiousMode = FALSE,
                     startFromCenter = FALSE, retry = TRUE, nTries = 10L,
                     ...) {
 
-  narrowing <- NULL
-  varargslist <- list(...)
   samplefunName <- if (is.character(samplefun)) samplefun else
     paste(deparse(substitute(samplefun)), collapse = "")
   samplefun <- match.fun(samplefun)
   optmethodName <- if (is.character(optmethod)) optmethod else
     paste(deparse(substitute(optmethod)), collapse = "")
-
-  argslist <- list(
-    objfun = objfun, center = center, name = name,
-    rinit = rinit, rmax = rmax, fits = fits,
-    cores = cores, optmethod = optmethod, samplefun = samplefun,
-    resultPath = resultPath, stats = stats, output = output,
-    cautiousMode = cautiousMode, retry = retry, nTries = nTries)
-  argslist <- c(argslist, varargslist)
-  
-  # Add extra arguments
-  argslist$n <- length(center) # How many inital values do we need?
-  
-  # Route each argument: names local to mstrust(), then those the optimiser and
-  # samplefun() accept (which must not clash), the rest to the objective.
-  nameslocal <- c("name", "center", "fits", "cores", "optmethod", "samplefun",
-                  "resultPath", "stats", "narrowing", "output", "cautiousMode",
-                  "retry", "nTries")
-  # A name that belongs in one of trust()'s control lists is not a formal and
-  # would otherwise reach objfun.
-  .trustRejectMoved(names(argslist), "mstrust")
-  # Routed by the formals of the optimiser actually called.
   optfun <- if (is.function(optmethod)) optmethod else match.fun(optmethod)
-  namestrust <- intersect(setdiff(names(formals(optfun)), "..."), names(argslist))
-  namessample <- intersect(names(formals(samplefun)), names(argslist))
-  if (length(intersect(namestrust, namessample)) != 0) {
-    stop("Argument names of the optimiser and ", samplefunName, "() clash.")
-  }
-  
-  # Default optimizer
-  namesobj <- setdiff(names(argslist), c(namestrust, namessample, nameslocal))
-  
-  # Assemble argument lists common to all calls in mclapply
-  # Sample function
-  argssample <- structure(vector("list", length = length(namessample)), names = namessample)
-  for (name in namessample) {
-    argssample[[name]] <- argslist[[name]]
-  }
-  
-  # Objective function
-  argsobj <- structure(vector("list", length = length(namesobj)), names = namesobj)
-  for (name in namesobj) {
-    argsobj[[name]] <- argslist[[name]]
-  }
-  
-  # Trust optimizer, except for initial values
-  argstrust <- structure(vector("list", length = length(namestrust)), names = namestrust)
-  for (name in namestrust) {
-    argstrust[[name]] <- argslist[[name]]
-  }
-  
-  # Assemble output filenames and folders. Nothing is created unless something
-  # was asked for: `output` and `cautiousMode` persist fits, `traceFile` puts
-  # the per-fit solver traces here.
-  writeFiles <- isTRUE(output) || isTRUE(cautiousMode) ||
-    !is.null(argslist[["traceFile"]])
 
-  m_started <- Sys.time()
-  m_timeStamp <- format(m_started, "%d-%m-%Y-%H%M%S")
+  given <- c(mget(c("objfun", "rinit", "rmax", .mstrustOwn), envir = environment()), list(...))
+  given$n <- length(center)
+  route <- .mstrustRoute(given, optfun, samplefun, samplefunName)
+  traceFile <- given[["traceFile"]]
 
-  resultFolderBase <- file.path(argslist$resultPath, argslist$name)
-  m_trial <- paste0("trial-", length(dir(resultFolderBase, pattern = "trial*")) + 1)
-  resultFolder <- file.path(resultFolderBase, paste0(m_trial, "-", m_timeStamp))
-  interResultFolder <- file.path(resultFolder, "interRes")
-  fileLog <- file.path(resultFolder, "mstrust.log")
-  fileParList <- file.path(resultFolder, "parameterList.Rda")
+  if (is.parframe(center)) fits <- nrow(center)
+  if (length(fits) != 1L || is.na(fits) || fits < 1)
+    stop("mstrust: fits must be a positive number.", call. = FALSE)
 
-  logfile <- NULL
-  if (writeFiles) {
-    dir.create(path = interResultFolder, showWarnings = FALSE, recursive = TRUE)
-    # The error checking leverages that mclapply runs each job in a try().
-    logfile <- file(fileLog, open = "w")
-  }
-  
-  # Parameter assignment information
-  if (is.null(narrowing) || narrowing[1] == 1) {
-    msg <- paste0("Parameter assignment information\n",
-                  strpad("mstrust", 12),                        ": ", paste0(nameslocal, collapse = ", "), "\n",
-                  strpad("trust", 12),                          ": ", paste0(namestrust, collapse = ", "), "\n",
-                  strpad(samplefunName, 12), ": ", paste0(namessample, collapse = ", "), "\n\n")
-    if (!is.null(logfile)) { writeLines(msg, logfile); flush(logfile) }
-  }
-  
-  # Write narrowing status information to file
-  if (!is.null(narrowing)) {
-    msg <- paste0("--> Narrowing, run ", narrowing[1], " of ", narrowing[2], "\n",
-                  "--> " , fits, " fits to run\n")
-    if (!is.null(logfile)) writeLines(msg, logfile)
-    flush(logfile)
-  }
-  
-  if(is.parframe(center)) {
-    fits <- nrow(center)
-  }
-  
-  
+  # Nothing is written unless asked for: `output` and `cautiousMode` keep fits,
+  # `traceFile` puts the per-fit solver traces into the result folder.
+  writeFiles <- isTRUE(output) || isTRUE(cautiousMode) || !is.null(traceFile)
+
+  started <- Sys.time()
+  paths <- .mstrustPaths(resultPath, name, started)
+
+  # The log is written by this process only, workers cannot share its connection.
+  writeLog <- function(msg) if (writeFiles) cat(msg, file = paths$log, append = TRUE, sep = "\n")
+  if (writeFiles) dir.create(path = paths$fits, showWarnings = FALSE, recursive = TRUE)
+  assigned <- .mstrustColon(c(mstrust = toString(.mstrustOwn),
+                              setNames(toString(names(route$optimiser)), optmethodName),
+                              setNames(toString(names(route$sampler)), samplefunName)))
+  writeLog(paste0("Parameter assignment information\n", paste(assigned, collapse = "\n"), "\n"))
+
   # cores = c(fits = , conditions = ) splits the two axes. cppDE's batch runs
   # serially inside a fork, so an inner axis > 1 selects PSOCK.
   .cc <- .splitCores(cores, "fits")
   coresConditions <- if (!is.null(.cc$conditions)) .sanitizeCores(.cc$conditions)
   cores <- .sanitizeCores(min(fits, .cc$outer))
   if (!is.null(coresConditions)) {
-    oldCores <- options(dMod.cores = coresConditions)
+    oldCores <- options(dMod2.cores = coresConditions)
     on.exit(options(oldCores), add = TRUE)
   }
-  if (cores > 1) {
-    
-    # Start cluster if on windows
-    if (Sys.info()[['sysname']] == "Windows" ||
-        (!is.null(coresConditions) && coresConditions > 1L)) {
-      
-      cluster <- parallel::makeCluster(cores)
-      on.exit(parallel::stopCluster(cluster), add = TRUE)
-      doParallel::registerDoParallel(cluster)
-      parallel::clusterCall(cl = cluster, function(x) .libPaths(x), .libPaths())
-      
-      varlist <- ls()
-      # Exclude things like "missing argument"
-      varlist <- c("objfun", "center", "argstrust", 
-                   "samplefun", "argssample", "argsobj", 
-                   "output", "interResultFolder", "logfile", "coresConditions")
-      parallel::clusterExport(cluster, envir = environment(), varlist = varlist)
-      
-    } else {
-      
-      doParallel::registerDoParallel(cores = cores)
-      
-    }
-    on.exit(doParallel::stopImplicitCluster(), add = TRUE)
-    
-    "%mydo%" <- foreach::"%dopar%"
-    
-  } else {
-    
-    "%mydo%" <- foreach::"%do%"
-    
-  }
-  
-  
-  loaded_packages <- .packages()  
-  m_parlist <- as.parlist(foreach::foreach(i = 1:fits, 
-                                           .packages = loaded_packages, 
-                                           .inorder = TRUE,
-                                           .options.multicore = list(preschedule = FALSE)
-  ) %mydo% {
-    
+
+  # Every start, those of retries included, is drawn here before the fits are
+  # spread over workers, so set.seed() reproduces a run whatever `cores`.
+  maxTries <- if (isTRUE(retry) && !is.parframe(center)) as.integer(nTries) else 1L
+  draw <- function() center + do.call(samplefun, route$sampler)
+  starts <- lapply(seq_len(fits), function(i) {
+    if (is.parframe(center)) as.parvec(center, i)
+    else if (i == 1 && startFromCenter) center
+    else draw()
+  })
+  restarts <- lapply(seq_len(fits), function(i) lapply(seq_len(maxTries - 1L), function(k) draw()))
+
+  fitOne <- function(i) {
     # A plain R function has no shared objects to load.
     if (inherits(objfun, "fn")) suppressMessages(loadDLL(objfun))
-    # PSOCK workers do not inherit options; forks do, harmlessly.
-    if (!is.null(coresConditions)) options(dMod.cores = coresConditions)
-    
-    if(is.parframe(center)) {
-      argstrust$parinit <- as.parvec(center, i)
-    } else {
-      if (i == 1 && startFromCenter) {
-        # First fit always starts from center
-        argstrust$parinit <- center
-      } else {
-        # All other fits start from random positions
-        argstrust$parinit <- center + do.call(samplefun, argssample)
-      }
-    }
-
-    # Check if traceFile is requested. In that case combine tracefile, with logfolder and fit number
-    if (!is.null(argstrust[["traceFile"]])) {
-      digits <- floor(log10(fits))
-      argstrust[["traceFile"]] <- file.path(resultFolder, paste0(formatC(i, digits = digits, flag = "0"), "_", argslist[["traceFile"]]))
+    optArgs <- route$optimiser
+    if (!is.null(traceFile)) {
+      optArgs$traceFile <- file.path(paths$run, paste0(
+        formatC(i, digits = floor(log10(fits)), flag = "0"), "_", traceFile))
     }
 
     # Each fit starts without the warm-start roots of the previous fit
     # (cores = 1) or of the parent process (cores > 1, forked).
     try(resetWarmStarts(objfun, verbose = FALSE), silent = TRUE)
 
-    # Up to nTries attempts, each resampling parinit after a try-error or
-    # fit$error and resetting warm starts. Rows of a parframe center are taken as
-    # given and never retried.
+    # Up to maxTries attempts, each from the next drawn start after a try-error
+    # or fit$error, with warm starts reset. Rows of a parframe are never retried.
     t0 <- proc.time()[["elapsed"]]
-    max_tries <- if (isTRUE(retry) && !is.parframe(center)) as.integer(nTries) else 1L
-    fit <- NULL
-    for (try_i in seq_len(max_tries)) {
-      fit <- try(do.call(optmethod, c(argstrust, argsobj)), silent = !output)
-      ok  <- !inherits(fit, "try-error") && is.list(fit) && !any(names(fit) == "error")
-      if (ok || try_i == max_tries) break
-      argstrust$parinit <- center + do.call(samplefun, argssample)
+    start <- starts[[i]]
+    for (attempt in seq_len(maxTries)) {
+      optArgs$parinit <- start
+      fit <- try(do.call(optmethod, c(optArgs, route$objective)), silent = TRUE)
+      failed <- inherits(fit, "try-error") || !is.list(fit) || "error" %in% names(fit)
+      if (!failed || attempt == maxTries) break
+      start <- restarts[[i]][[attempt]]
       try(resetWarmStarts(objfun, verbose = FALSE), silent = TRUE)
     }
-    
-    # Keep only numeric attributes of object returned by trust()
+
+    # Only the numeric attributes of the optimiser's result are kept.
     attr.fit <- attributes(fit)
-    keep.attr <- sapply(attr.fit, is.numeric)
-    fit <- fit[1:length(fit)] # deletes attributes
-    if (any(keep.attr)) attributes(fit) <- c(attributes(fit), attr.fit[keep.attr]) # attach numeric attributes
+    keep.attr <- vapply(attr.fit, is.numeric, TRUE)
+    fit <- fit[seq_along(fit)]
+    if (any(keep.attr)) attributes(fit) <- c(attributes(fit), attr.fit[keep.attr])
     if ("trustfit" %in% attr.fit$class) fit <- .trustFit(fit)
-    
-    
-    # In some crashes a try-error object is returned which is not a list. Since
-    # each element in the parlist is assumed to be a list, these cases are wrapped.
-    if (!is.list(fit)) {
-      f <- list()
-      f$error <- fit
-      fit <- f
-    }
-    
-    fit$parinit <- argstrust$parinit
+    # A crash can return a try-error, which is no list.
+    if (!is.list(fit)) fit <- list(error = fit)
+
+    fit[["parinit"]] <- start
     fit$hessian <- NULL
     fit$elapsed <- proc.time()[["elapsed"]] - t0
-    
-    # Write current fit to disk
-    if (output) {
-      saveRDS(fit, file = file.path(interResultFolder, paste0("fit-", i, ".Rda")))
-      if (cautiousMode) dput(fit[c("value", "argument", "iterations", "converged", "elapsed")],
-                           file = file.path(interResultFolder, paste0("fit-", i, ".R")),
-                           control = c("keepNA", "keepInteger", "niceNames", "showAttributes", "digits17"))
-      # Assembled before writing, so concurrent jobs interleave less in the log.
-      msgSep <- "-------"
-      if (any(names(fit) == "error")) {
-        msg <- paste0(msgSep, "\n",
-                      "Fit ", i, " failed after ", fit$iterations, " iterations with error\n",
-                      "--> ", fit$error,
-                      msgSep, "\n")
-        
-        writeLines(msg, logfile)
-        flush(logfile)
-      } else {
-        msg <- paste0(msgSep, "\n",
-                      "Fit ", i, " completed\n",
-                      "--> iterations : ", fit$iterations, "\n",
-                      "-->  converged : ", fit$converged, "\n",
-                      "--> obj. value : ", round(fit$value, digits = 2), "\n",
-                      msgSep)
-        
-        writeLines(msg, logfile)
-        flush(logfile)
-      }
-    }
-    return(fit)
-  })
-  
-  if (!is.null(logfile)) close(logfile)
 
-  
-  
-  
-  # A fit fails as a "try-error" object or as a trust() result with an `error`
-  # entry. A completed fit may still be unconverged (iteration limit), and one
-  # stopped by the trust radius reaching rmin is reported converged without being so.
-  m_trustFlags.converged = 0
-  m_trustFlags.unconverged = 1
-  m_trustFlags.error = 2
-  m_trustFlags.fatal = 3
-  idxStatus <- sapply(m_parlist, function(fit) {
-    if (inherits(fit, "try-error") || any(names(fit) == "error")) {
-      return(m_trustFlags.error)
-    } else if (!any(names(fit) == "converged")) {
-      return(m_trustFlags.fatal)
-    } else if (fit$converged) {
-      return(m_trustFlags.converged)
-    } else {
-      return(m_trustFlags.unconverged)
+    if (output) {
+      saveRDS(fit, file = file.path(paths$fits, paste0("fit-", i, ".Rda")))
+      if (cautiousMode) dput(fit[c("value", "argument", "iterations", "converged", "elapsed")],
+                           file = file.path(paths$fits, paste0("fit-", i, ".R")),
+                           control = c("keepNA", "keepInteger", "niceNames", "showAttributes", "digits17"))
     }
-  })
-  
-  
+    fit
+  }
+
+  parlist <- as.parlist(.parallelLapply(seq_len(fits), fitOne, cores = cores,
+                                        coresConditions = coresConditions))
+
+  if (output) for (i in seq_along(parlist)) writeLog(.mstrustFitEntry(i, parlist[[i]]))
   # objfun is a closure and parinit varies per fit, so neither is kept.
-  attr(m_parlist, "run") <- list(
-    started = m_started,
-    elapsed = as.numeric(difftime(Sys.time(), m_started, units = "secs")),
+  attr(parlist, "run") <- list(
+    started = started,
+    elapsed = as.numeric(difftime(Sys.time(), started, units = "secs")),
     fits = fits,
     cores = c(fits = cores, conditions = coresConditions),
     optimiser = optmethodName,
-    optimiserArgs = argstrust[setdiff(names(argstrust), c("objfun", "parinit"))],
+    optimiserArgs = route$optimiser[setdiff(names(route$optimiser), c("objfun", "parinit"))],
     sampler = samplefunName,
-    samplerArgs = argssample,
+    samplerArgs = route$sampler,
     versions = c(R = as.character(getRversion()),
                  dMod2 = as.character(utils::packageVersion("dMod2")),
                  cppDE = as.character(utils::packageVersion("cppDE"))))
 
-  # Wrap up
-  # Write out results
-  if (output) saveRDS(m_parlist, file = fileParList)
-  
-  # Remove temporary files
+  if (output) saveRDS(parlist, file = paths$parlist)
   if (writeFiles) {
-    if (!cautiousMode) {
-      unlink(interResultFolder, recursive = TRUE)
-    } else {
-      unlink(list.files(interResultFolder, "\\.Rda$", full.names = TRUE))
-    }
+    if (!cautiousMode) unlink(paths$fits, recursive = TRUE)
+    else unlink(list.files(paths$fits, "\\.Rda$", full.names = TRUE))
   }
-  
-  # Show summary
-  sum.error <- sum(idxStatus == m_trustFlags.error)
-  sum.fatal <- sum(idxStatus == m_trustFlags.fatal)
-  sum.unconverged <- sum(idxStatus == m_trustFlags.unconverged)
-  sum.converged <- sum(idxStatus == m_trustFlags.converged)
-  reasons <- .stopReasonTable(m_parlist)
-  msg <- paste0("Multi start trust summary\n",
-                "Outcome     : Occurrence\n",
-                "Error       : ", sum.error, "\n",
-                "Fatal       : ", sum.fatal, " must be 0\n",
-                "Unconverged : ", sum.unconverged, "\n",
-                "Converged   : ", sum.converged, "\n",
-                "           -----------\n",
-                "Total       : ", sum.error + sum.fatal + sum.unconverged + sum.converged, paste0("[", fits, "]"), "\n",
-                if (!is.null(reasons))
-                  paste0("\nTermination reason\n",
-                         paste0(formatC(names(reasons), width = -12), ": ",
-                                as.integer(reasons), collapse = "\n"), "\n"))
-  if (writeFiles) {
-    logfile <- file(fileLog, open = "a")
-    writeLines(msg, logfile)
-    flush(logfile)
-    close(logfile)
-  }
-  
-  if (stats) {
-    cat(msg)
-  }
-  
-  return(m_parlist)
+
+  summaryText <- .mstrustSummary(parlist, fits)
+  writeLog(summaryText)
+  if (stats) cat(summaryText)
+
+  parlist
 }
+
+# Arguments mstrust() keeps for itself, never passed on.
+.mstrustOwn <- c("name", "center", "fits", "cores", "optmethod", "samplefun",
+                 "resultPath", "stats", "output", "cautiousMode", "retry", "nTries")
+
+# Splits the named arguments of mstrust() by destination: the formals of the
+# optimiser, then those of the sampler, which must be disjoint, and every
+# remaining name that is not mstrust()'s own goes to the objective.
+.mstrustRoute <- function(given, optfun, samplefun, samplerName) {
+  accepts <- function(f) intersect(setdiff(names(formals(f)), "..."), names(given))
+  toOptimiser <- accepts(optfun)
+  .trustRejectMoved(setdiff(names(given), toOptimiser), "mstrust")
+  toSampler <- accepts(samplefun)
+  if (length(intersect(toOptimiser, toSampler)))
+    stop("Argument names of the optimiser and ", samplerName, "() clash.")
+  toObjective <- setdiff(names(given), c(toOptimiser, toSampler, .mstrustOwn))
+  list(optimiser = given[toOptimiser], sampler = given[toSampler],
+       objective = given[toObjective])
+}
+
+# Folder of one run, `<resultPath>/<name>/trial-<k>-<date>`, numbered after the
+# runs already there, and the files inside it.
+.mstrustPaths <- function(resultPath, name, started) {
+  base <- file.path(resultPath, name)
+  k <- length(list.files(base, pattern = "trial")) + 1L
+  run <- file.path(base, sprintf("trial-%d-%s", k, format(started, "%d-%m-%Y-%H%M%S")))
+  list(run = run, fits = file.path(run, "interRes"), log = file.path(run, "mstrust.log"),
+       parlist = file.path(run, "parameterList.Rda"))
+}
+
+# "label       : value" lines, labels padded to 12 characters.
+.mstrustColon <- function(x) paste0(formatC(names(x), width = -12), ": ", x)
+
+# Log entry of fit i: its outcome between two rules.
+.mstrustFitEntry <- function(i, fit) {
+  body <- if (!is.null(fit$error)) {
+    c(sprintf("Fit %d failed with error", i),
+      paste("-->", trimws(paste(as.character(fit$error), collapse = " "))))
+  } else {
+    shown <- list(iterations = fit$iterations, converged = fit$converged,
+                  `obj. value` = round(fit$value, digits = 2))
+    c(sprintf("Fit %d completed", i),
+      sprintf("--> %10s : %s", names(shown), vapply(shown, paste, "", collapse = " ")))
+  }
+  paste(c("-------", body, "-------"), collapse = "\n")
+}
+
+# Count of fits per outcome and, where the optimiser reports one, per
+# termination reason.
+.mstrustSummary <- function(parlist, fits) {
+  status <- .statParlist(parlist)
+  counts <- c(Outcome = "Occurrence",
+              Error = sum(status == "error"),
+              Unconverged = sum(status == "notconverged"),
+              Converged = sum(status == "converged"))
+  out <- c("Multi start summary", .mstrustColon(counts),
+           paste0(strrep(" ", 11), strrep("-", 11)), .mstrustColon(c(Total = fits)))
+  reasons <- .stopReasonTable(parlist)
+  if (!is.null(reasons))
+    out <- c(out, "", "Termination reason",
+             .mstrustColon(setNames(as.integer(reasons), names(reasons))))
+  paste0(paste(out, collapse = "\n"), "\n")
+}
+
 
 #' Reproducible Random Starting Points
 #'
@@ -1306,10 +949,11 @@ mstrust <- function(objfun, center, rinit = .1, rmax = 10, fits = 20, cores = 1,
 #' @seealso [mstrust()], [parframe()]
 #'
 #' @examples
-#' msParframe(c(a = 0, b = 100000), 5)
-#' 
-#' # Parameter specific sigma
-#' msParframe(c(a = 0, b = 100000), 5, samplefun = rnorm, sd = c(100, 0.5))
+#' # Five starts around pars, the first one at pars
+#' msParframe(c(k1 = 1, k2 = 10), n = 5)
+#'
+#' # A standard deviation per parameter
+#' msParframe(c(k1 = 1, k2 = 10), n = 5, sd = c(0.1, 2))
 msParframe <- function(pars, n = 20, seed = 12345, samplefun = stats::rnorm,
                        keepfirst = TRUE, ...) {
 
@@ -1346,17 +990,12 @@ msParframe <- function(pars, n = 20, seed = 12345, samplefun = stats::rnorm,
 #'
 #' @seealso [mstrust()]
 #'
-#' @author Wolfgang Mader, \email{Wolfgang.Mader@@fdm.uni-freiburg.de}
-#'
 #' @export
 load.parlist <- function(folder) {
-  # Read in all fits
-  m_fileList <- dir(folder, pattern = "\\.Rda$")
-  m_parVec <- lapply(m_fileList, function(file) {
-    return(readRDS(file.path(folder, file)))
-  })
-  
-  return(as.parlist(m_parVec))
+  files <- dir(folder, pattern = "\\.Rda$")
+  number <- suppressWarnings(as.integer(gsub("\\D", "", files)))
+  files <- files[order(number, files)]
+  as.parlist(lapply(file.path(folder, files), readRDS))
 }
 
 
@@ -1368,8 +1007,6 @@ load.parlist <- function(folder) {
 #'
 #' @param data A data frame with the columns `name` (observable), `time`,
 #'   `value` and `condition`, plus any further columns that define conditions.
-#'   Alternatively, the path of a `.csv`, `.xls` or `.xlsx` file with these
-#'   columns; Excel files need the package \pkg{openxlsx}.
 #' @param select Names of the columns whose values, together with `name`,
 #'   `time` and `condition`, define a condition. Default `"condition"`.
 #' @param datatrans Character, an expression in `x` applied to `value` before
@@ -1386,7 +1023,7 @@ load.parlist <- function(folder) {
 #' @return
 #' A data frame with the columns
 #' \describe{
-#'  \item{time}{Measurement time point.}
+#'  \item{time}{Time of the measurement.}
 #'  \item{value}{Mean of the replicates.}
 #'  \item{sigma}{Standard error of the mean, `NA` for a single measurement.}
 #'  \item{n}{Number of replicates.}
@@ -1397,9 +1034,6 @@ load.parlist <- function(folder) {
 #' followed by the kept columns.
 #'
 #' @seealso [fitErrorModel()]
-#'
-#' @author Wolfgang Mader, \email{Wolfgang.Mader@@fdm.uni-freiburg.de}
-#' @author Simon Beyer, \email{simon.beyer@@fdm.uni-freiburg.de}
 #'
 #' @examples
 #' data <- data.frame(name = "y", time = rep(c(0, 1, 2), each = 3),
@@ -1415,109 +1049,54 @@ reduceReplicates <- function(data, select = "condition", datatrans = NULL, keep 
 #' @rdname reduceReplicates
 #' @export
 reduceReplicates.data.frame <- function(data, select = "condition", datatrans = NULL, keep = NULL, weighted = FALSE) {
-  # File format definition
-  fmtnames <- c("name", "time", "value", "condition")
-  if (length(intersect(names(data), fmtnames)) != length(fmtnames)) {
-    stop(paste("Mandatory column names are:", paste(fmtnames, collapse = ", ")))
-  }
-  
-  # Check if sigma column is present if weighted = TRUE
-  if (weighted && !"sigma" %in% names(data)) {
+
+  required <- c("name", "time", "value", "condition")
+  if (!all(required %in% names(data)))
+    stop("Mandatory column names are: ", paste(required, collapse = ", "))
+  if (weighted && !"sigma" %in% names(data))
     stop("Column 'sigma' is required for weighted = TRUE but was not found in the data.")
-  }
-  
-  # Transform data if requested
-  if (!is.null(datatrans) && is.character(datatrans)) {
-    x <- data$value
-    data$value <- eval(parse(text = datatrans))
-  }
-  
-  # Define grouping conditions
+
+  if (is.character(datatrans))
+    data$value <- eval(parse(text = datatrans), list(x = data$value), parent.frame())
+
+  # A group is one combination of observable, time and the `select` columns,
+  # in the order of its first row.
   select <- unique(c("name", "time", "condition", select))
-  condidnt <- apply(data[select], 1, paste, collapse = "_")
-  conditions <- unique(condidnt)
-  
-  # Identify columns that are consistent across replicates
-  potential_cols <- setdiff(names(data), c("value", "sigma", "n", select))
-  if (length(potential_cols) == 0) {
-    stable_cols <- character(0)
-  } else {
-    stable_cols <- potential_cols[which(sapply(potential_cols, function(col) {
-      res <- tapply(data[[col]], condidnt, function(x) length(unique(x)) == 1)
-      all(as.logical(res))
-    }))]
-  }
-  
-  # Add columns from 'keep' (if any), even if unstable
-  if (!is.null(keep)) {
-    keep <- intersect(keep, names(data))  # Make sure the columns exist
-    stable_cols <- union(stable_cols, keep)
-  }
-  
-  dropped_cols <- setdiff(names(data), c("time", "value", "sigma", "n", stable_cols))
-  
-  # Reduce data
-  reduct <- do.call(rbind, lapply(conditions, function(cond) {
-    conddata <- data[condidnt == cond, ]
-    mergecond <- paste(unique(conddata[setdiff(select, c("name", "time"))]), collapse = "_")
-    
-    # Determine value and sigma
-    if (weighted && nrow(conddata) > 1) {
-      weights <- 1 / conddata$sigma^2
-      mean_val <- sum(weights * conddata$value) / sum(weights)
-      sigma_val <- sqrt(sum(weights * (conddata$value - mean_val)^2) / 
-                          (sum(weights) - sum(weights^2) / sum(weights))) / sqrt(nrow(conddata))
-    } else if (nrow(conddata) > 1) {
-      mean_val <- mean(conddata$value)
-      sigma_val <- sd(conddata$value) / sqrt(nrow(conddata))
-    } else {
-      mean_val <- conddata$value
-      sigma_val <- NA
-    }
-    
-    data.frame(
-      time = conddata[1, "time"],
-      value = mean_val,
-      sigma = sigma_val,
-      n = nrow(conddata),
-      name = conddata[1, "name"],
-      condition = mergecond,
-      conddata[1, stable_cols, drop = FALSE]
-    )
-  }))
-  
-  message("Dropped columns: ", paste(setdiff(dropped_cols, names(reduct)), collapse = ", "))
-  return(reduct)
+  key <- do.call(paste, c(unname(as.list(data[select])), sep = "\r"))
+  group <- factor(key, levels = unique(key))
+  first <- !duplicated(key)
+
+  isConstant <- function(column)
+    all(vapply(split(column, group), function(v) length(unique(v)) == 1L, TRUE))
+  candidates <- setdiff(names(data), c("value", "sigma", "n", select))
+  extra <- union(Filter(function(col) isConstant(data[[col]]), candidates),
+                 intersect(keep, names(data)))
+
+  moments <- vapply(seq_len(nlevels(group)), function(g) {
+    rows <- which(as.integer(group) == g)
+    v <- data$value[rows]
+    k <- length(v)
+    if (k == 1L) return(c(v, NA_real_, 1))
+    if (!weighted) return(c(mean(v), stats::sd(v) / sqrt(k), k))
+    w <- 1 / data$sigma[rows]^2
+    m <- sum(w * v) / sum(w)
+    spread <- sum(w * (v - m)^2) / (sum(w) - sum(w^2) / sum(w))
+    c(m, sqrt(spread) / sqrt(k), k)
+  }, numeric(3))
+
+  label <- setdiff(select, c("name", "time"))
+  out <- data.frame(
+    time = data$time[first],
+    value = moments[1, ],
+    sigma = moments[2, ],
+    n = as.integer(moments[3, ]),
+    name = data$name[first],
+    condition = do.call(paste, c(lapply(data[first, label, drop = FALSE], as.character), sep = "_")),
+    data[first, extra, drop = FALSE])
+
+  message("Dropped columns: ", paste(setdiff(names(data), names(out)), collapse = ", "))
+  out
 }
-
-
-#' @rdname reduceReplicates
-#' @export
-reduceReplicates.character <- function(data, select = "condition", datatrans = NULL, keep = NULL, weighted = FALSE) {
-  # Ensure the file exists
-  if (!file.exists(data)) {
-    stop("The specified file does not exist.")
-  }
-  
-  # Determine the file type based on extension
-  ext <- tools::file_ext(data)
-  if (tolower(ext) == "csv") {
-    data <- read.csv(data, stringsAsFactors = FALSE)
-  } else if (tolower(ext) %in% c("xls", "xlsx")) {
-    if (!requireNamespace("openxlsx", quietly = TRUE)) {
-      stop("The 'openxlsx' package is required to read Excel files. Please install it.")
-    }
-    data <- openxlsx::read.xlsx(data)
-  } else {
-    stop("Unsupported file format. Only .csv, .xls, and .xlsx are supported.")
-  }
-  
-  # Call the data.frame method
-  reduceReplicates(as.data.frame(data), select = select, datatrans = datatrans,
-                   keep = keep, weighted = weighted)
-}
-
-
 
 
 # A bound vector in the order of `par`: unnamed bounds are positional, named
@@ -1569,9 +1148,6 @@ reduceReplicates.character <- function(data, select = "condition", datatrans = N
 #'
 #' @seealso [reduceReplicates()]
 #'
-#' @author Wolfgang Mader, \email{Wolfgang.Mader@@fdm.uni-freiburg.de}
-#' @author Simon Beyer, \email{simon.beyer@@fdm.uni-freiburg.de}
-#'
 #' @examplesIf requireNamespace("optimx", quietly = TRUE)
 #' set.seed(1)
 #' mu <- rep(c(0.1, 1, 10, 100), each = 4)
@@ -1584,73 +1160,62 @@ reduceReplicates.character <- function(data, select = "condition", datatrans = N
 #' @importFrom stats qchisq
 #' @importFrom ggplot2 ggplot aes geom_point geom_line geom_ribbon ylab facet_wrap scale_y_log10 theme
 fitErrorModel <- function(data, factors, errorModel = "exp(s0)+exp(srel)*x^2",
-                          par = c(s0 = 1, srel = .1),
-                          lower = NULL, upper = NULL,  # optional parameter bounds
+                          par = c(s0 = 1, srel = .1), lower = NULL, upper = NULL,
                           plotting = FALSE, blather = FALSE, ...) {
 
   .require_ns("optimx", "fitErrorModel()")
-  # Assemble conditions
-  condidnt <- Reduce(paste, subset(data, select = factors))
-  conditions <- unique(condidnt)
-  
-  # Fit error model
-  nColData <- ncol(data)
-  dataErrorModel <- cbind(data, as.list(par))
-  
-  for (cond in conditions) {
-    subdata <- dataErrorModel[condidnt == cond,]
-    x <- subdata$value
-    n <- subdata$n
-    y <- subdata$sigma * sqrt(n)
-    
-    # Objective: the analytic maximum likelihood
-    obj <- function(par) {
-      with(as.list(par), {
-        sigma2 <- eval(parse(text = errorModel)) 
-        negLogLik <- sum((n - 1) * (log(sigma2) + (y^2 / sigma2)), na.rm = TRUE)
-        return(negLogLik)
-      })
+  model <- str2expression(errorModel)
+  callEnv <- parent.frame()
+  variance <- function(p, x) eval(model[[length(model)]], c(as.list(p), list(x = x)), callEnv)
+
+  # A single factor column labels the groups as it is, several are pasted.
+  label <- if (length(factors) == 1L) data[[factors]] else
+    do.call(paste, unname(as.list(data[factors])))
+  sampleSd <- data$sigma * sqrt(data$n)
+  dof <- data$n - 1
+  bounds <- list(lower = .parBound(lower, par, -Inf), upper = .parBound(upper, par, Inf))
+
+  # The sample variance times dof / variance is chi^2(dof), whose likelihood
+  # depends on the model variance only through dof * (log v + s^2 / v).
+  estimates <- matrix(NA_real_, nrow(data), length(par), dimnames = list(NULL, names(par)))
+  single <- rep(NA_real_, nrow(data))
+  for (g in unique(label)) {
+    rows <- which(label == g)
+    nll <- function(p) {
+      v <- variance(p, data$value[rows])
+      sum(dof[rows] * (log(v) + sampleSd[rows]^2 / v), na.rm = TRUE)
     }
-    
-    fit <- optimx::optimr(par, obj, method = "L-BFGS-B",
-                          lower = .parBound(lower, par, -Inf),
-                          upper = .parBound(upper, par, Inf), ...)
-    
-    sigma <- sqrt(with(as.list(fit$par), eval(parse(text = errorModel))))
-    dataErrorModel[condidnt == cond, ]$sigma <- sigma 
-    dataErrorModel[condidnt == cond, -(nColData:1)] <- data.frame(as.list(fit$par))
+    best <- optimx::optimr(par, nll, method = "L-BFGS-B",
+                           lower = bounds$lower, upper = bounds$upper, ...)$par
+    estimates[rows, ] <- rep(best, each = length(rows))
+    single[rows] <- variance(best, data$value[rows])
   }
-  
-  # Calculate confidence bounds for sigma
-  p68 <- (1 - .683) / 2
-  p95 <- (1 - .955) / 2
-  dataErrorModel$cbLower68 <- dataErrorModel$sigma^2 * qchisq(p = p68, df = dataErrorModel$n - 1) / (dataErrorModel$n - 1)
-  dataErrorModel$cbUpper68 <- dataErrorModel$sigma^2 * qchisq(p = p68, df = dataErrorModel$n - 1, lower.tail = FALSE) / (dataErrorModel$n - 1)
-  dataErrorModel$cbLower95 <- dataErrorModel$sigma^2 * qchisq(p = p95, df = dataErrorModel$n - 1) / (dataErrorModel$n - 1)
-  dataErrorModel$cbUpper95 <- dataErrorModel$sigma^2 * qchisq(p = p95, df = dataErrorModel$n - 1, lower.tail = FALSE) / (dataErrorModel$n - 1)
-  
-  # Assemble result
-  dataErrorModel <- cbind(dataErrorModel, condidnt, sigmaLS = data$sigma)
-  attr(dataErrorModel, "errorModel") <- errorModel
-  
-  # Plot if requested
+
+  result <- data
+  result$sigma <- sqrt(single)
+  band <- function(level, upper)
+    result$sigma^2 * stats::qchisq((1 - level) / 2, dof, lower.tail = !upper) / dof
+  result <- cbind(result, as.data.frame(estimates),
+                  cbLower68 = band(.683, FALSE), cbUpper68 = band(.683, TRUE),
+                  cbLower95 = band(.955, FALSE), cbUpper95 = band(.955, TRUE))
+  result$condidnt <- label
+  result$sigmaLS <- data$sigma
+  attr(result, "errorModel") <- errorModel
+
   if (plotting) {
-    print(ggplot(dataErrorModel, aes(x = value)) +
-            geom_point(aes(y = sigmaLS^2 * (n))) +
-            geom_line(aes(y = sigma^2)) +
-            geom_ribbon(aes(ymin = cbLower95, ymax = cbUpper95), alpha = .3) +
-            geom_ribbon(aes(ymin = cbLower68, ymax = cbUpper68), alpha = .3) +
-            ylab("variance") +
-            facet_wrap(~condidnt, scales = "free") +
-            scale_y_log10() +
-            theme_dMod()
-    )}
-  
-  # Return standard error of the mean
-  dataErrorModel$sigma <- dataErrorModel$sigma / sqrt(dataErrorModel$n)
-  data$sigma <- dataErrorModel$sigma
-  if (blather)
-    return(dataErrorModel)
-  else 
-    return(data)
+    shown <- transform(result, observed = sampleSd^2, predicted = single)
+    print(ggplot(shown, aes(x = value)) +
+            geom_point(aes(y = observed)) +
+            geom_line(aes(y = predicted)) +
+            geom_ribbon(aes(ymin = cbLower95, ymax = cbUpper95), alpha = 0.3) +
+            geom_ribbon(aes(ymin = cbLower68, ymax = cbUpper68), alpha = 0.3) +
+            facet_wrap("condidnt", scales = "free") +
+            scale_y_log10() + ylab("variance") + theme_dMod())
+  }
+
+  result$sigma <- result$sigma / sqrt(data$n)
+  if (blather) return(result)
+  data$sigma <- result$sigma
+  data
 }
+

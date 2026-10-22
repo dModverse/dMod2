@@ -156,7 +156,7 @@ test_that("Y with pure-numeric observable composes with an Xs prediction", {
 
 test_that("g * Xt() * P() differentiates by the outer parameters", {
   skip_if_no_compile()
-  withr::local_options(dMod.batch.check = TRUE)
+  withr::local_options(dMod2.batch.check = TRUE)
   fx <- .y_xt_fx()
   prd <- fx$g * Xt() * fx$p
   times <- c(0, 0.5, 2)
@@ -202,7 +202,7 @@ test_that("Y differentiates its own parameters without a trafo upstream", {
 
 test_that("normL2 on g * Xt() * P() takes fixed parameters", {
   skip_if_no_compile()
-  withr::local_options(dMod.batch.check = TRUE)
+  withr::local_options(dMod2.batch.check = TRUE)
   fx <- .y_xt_fx()
   prd <- fx$g * Xt() * fx$p
   times <- c(0.5, 1, 2)
@@ -233,11 +233,11 @@ test_that("normL2 on g * Xt() * P() takes fixed parameters", {
 })
 
 
-test_that("generated sources go to dMod.outdir when it is set", {
+test_that("generated sources go to dMod2.outdir when it is set", {
   out <- withr::local_tempdir()
   cwd <- withr::local_tempdir()
   withr::local_dir(cwd)
-  withr::local_options(dMod.outdir = out)
+  withr::local_options(dMod2.outdir = out)
   Y(c(y = "a*x"), f = NULL, states = "x", parameters = "a",
     modelname = "test_Y_outdir", compile = FALSE)
   expect_equal(list.files(cwd), character(0))

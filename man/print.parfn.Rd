@@ -17,6 +17,3 @@
 \description{
 Print Parameter Transformations
 }
-\author{
-Wolfgang Mader, \email{Wolfgang.Mader@fdm.uni-freiburg.de}
-}

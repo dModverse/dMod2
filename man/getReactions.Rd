@@ -43,11 +43,7 @@ print(subeq1)
 subeq2 <- subset(eq, grepl("not_available", Description))
 print(subeq2)
 
-## Time derivatives of observables
-observables <- eqnvec(pA_obs = "s1*pA", tA_obs = "s2*(A + pA)")
-dobs <- dot(observables, eq)
-
-## Combined equation vector for ODE and observables
-f <- c(as.eqnvec(eq), dobs)
+## Equation vector of the ODE
+f <- as.eqnvec(eq)
 print(f)
 }

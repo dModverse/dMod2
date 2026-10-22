@@ -22,26 +22,30 @@ as.datalist <- function(x, ...) {
 #' @rdname datalist
 as.datalist.data.frame <- function(x, splitBy = NULL, keepCovariates = NULL, ...) {
 
-  # Sanitize data and get names
-  x <- sanitizeData(x)
+  x <- sanitizeData(as.data.frame(x))
   dataframe <- x[["data"]]
   standard.names <- x[["columns"]]
   all.names <- colnames(dataframe)
-  
-  # Get splitting information
+
   if (is.null(splitBy)) splitBy <- setdiff(all.names, standard.names)
-  conditions <- lapply(splitBy, function(n) dataframe[, n])
-  splits <- do.call(paste, c(conditions, list(sep = "_")))
+  # Data without a splitting column is one condition, named as datalist() names it.
+  splits <- if (length(splitBy))
+    do.call(paste, c(lapply(splitBy, function(n) dataframe[[n]]), list(sep = "_")))
+  else rep("1", nrow(dataframe))
+  if (length(splitBy) && nrow(unique(dataframe[splitBy])) > length(unique(splits)))
+    stop("the values of ", paste(splitBy, collapse = ", "), " pasted with \"_\" give the ",
+         "same condition name for different conditions.", call. = FALSE)
 
 
   # condition grid
   conditionframe <- dataframe[!duplicated(splits), union(splitBy, keepCovariates), drop = FALSE]
+  if (!ncol(conditionframe)) conditionframe <- data.frame(condition = unique(splits))
   rownames(conditionframe) <- splits[!duplicated(splits)]
 
 
   # data list output
-  dataframe <- cbind(data.frame(condition = splits), dataframe[, standard.names])
-  out <- lapply(unique(splits), function(s) dataframe[dataframe[, 1] == s, -1])
+  dataframe <- dataframe[, standard.names, drop = FALSE]
+  out <- lapply(unique(splits), function(s) dataframe[splits == s, , drop = FALSE])
 
   names(out) <- as.character(unique(splits))
 
@@ -60,31 +64,15 @@ as.datalist.data.frame <- function(x, splitBy = NULL, keepCovariates = NULL, ...
 #' @rdname datalist
 as.datalist.list <- function(x, names = NULL, ..., condition.grid = attr(x, "condition.grid")) {
 
-  mylist <- x
+  if (!all(vapply(x, is.data.frame, logical(1)))) stop("list of data.frame expected")
+  frames <- lapply(x, function(d) sanitizeData(as.data.frame(d))[["data"]])
+  conditions <- if (is.null(names)) base::names(x) else names
+  if (length(conditions) != length(frames)) stop("names argument has wrong length")
 
-
-  ## Check properties
-  if (is.null(names)) mynames <- names(mylist) else mynames <- names
-  is.data.frame <- sapply(mylist, class) == "data.frame"
-  if (!all(is.data.frame)) stop("list of data.frame expected")
-
-  # Sanitize data in list
-  mylist <- lapply(mylist, function(x) sanitizeData(x)[["data"]])
-
-  if (length(mynames) != length(mylist)) stop("names argument has wrong length")
-
-  ## Prepare output
-  names(mylist) <- mynames
-  class(mylist) <- c("datalist", "list")
-
-
-  if (is.null(condition.grid)) {
-    condition.grid <- data.frame(condition = mynames, row.names = mynames)
-  }
-  attr(mylist, "condition.grid") <- condition.grid
-
-  return(mylist)
-
+  # A list without a grid gets one with the condition names as its only column.
+  grid <- condition.grid %||% data.frame(condition = conditions, row.names = conditions)
+  structure(stats::setNames(frames, conditions), class = c("datalist", "list"),
+            condition.grid = grid)
 }
 
 
@@ -95,10 +83,12 @@ as.datalist.list <- function(x, names = NULL, ..., condition.grid = attr(x, "con
 #' @export
 #' @rdname datalist
 "names<-.datalist" <- function(x, value) {
-  x <- unclass(x)
-  x <- base::`names<-`(x, value)
-  attr(x, "condition.grid") <- base::`rownames<-`(attr(x, "condition.grid"), value)
-  return(as.datalist(x))
+  grid <- attr(x, "condition.grid")
+  rownames(grid) <- value
+  if (!is.null(grid[["condition"]])) grid[["condition"]] <- value
+  frames <- unclass(x)
+  names(frames) <- value
+  as.datalist(frames, condition.grid = grid)
 }
 
 #' @export
@@ -110,15 +100,13 @@ is.datalist <- function(x) {
 #' @export
 #' @rdname datalist
 c.datalist <- function(...) {
-  dlist <- lapply(list(...), unclass)
-  
-  condition.grids <- lapply(dlist, function(i) attr(i, "condition.grid"))
-  mycg <- Reduce(dMod2::combine, condition.grids)
-  
-  dlist <- Reduce(c, lapply(dlist, function(i) {`attr<-`(i, "condition.grid", NULL)}))
-  attr(dlist, "condition.grid") <-  mycg
-  class(dlist) <- "datalist"
-  return(dlist)
+  parts <- list(...)
+  grid <- Reduce(combine, lapply(parts, attr, "condition.grid"))
+  frames <- do.call(c, lapply(parts, function(d) `attributes<-`(d, list(names = names(d)))))
+  repeated <- unique(names(frames)[duplicated(names(frames))])
+  if (length(repeated))
+    stop("conditions are duplicated: ", paste(repeated, collapse = ", "), call. = FALSE)
+  structure(frames, condition.grid = grid, class = c("datalist", "list"))
 }
 
 
@@ -131,11 +119,18 @@ print.datalist <- function(x, ...) {
   }
 }
 
-# Subset of all datalist entries
+# Keeps, in every condition, the rows where `subset` holds; the grid stays as it is.
 #' @export
-subset.datalist <- function(x, ...){
-  datalist <- lapply(x, function(i) subset(i, ...))
-  return(as.datalist(datalist))
+subset.datalist <- function(x, subset, ...) {
+  e <- substitute(subset)
+  env <- parent.frame()
+  out <- unclass(x)
+  out[] <- lapply(out, function(d) {
+    r <- eval(e, d, env)
+    d[r & !is.na(r), , drop = FALSE]
+  })
+  class(out) <- class(x)
+  out
 }
 
 #' @export
@@ -188,48 +183,33 @@ subset.datalist <- function(x, ...){
 plotData.datalist <- function(data, ..., scales = "free",
                               facet = c("wrap", "grid", "wrap_plain"),
                               transform = NULL) {
-  
+
   facet <- match.arg(facet)
-  
-  # --- Prepare covariate table ---
-  covtable <- covariates(data)
-  covtable <- cbind(condition = rownames(covtable), covtable)
-  covtable <- covtable[!duplicated(names(covtable))]
-  
-  # --- Prepare data ---
-  data <- lbind(data)
-  data <- base::merge(data, covtable, by = "condition", all.x = TRUE)
-  data <- as.data.frame(dplyr::filter(data, ...))
-  data$bloq <- ifelse(data$value <= data$lloq, "yes", "no")
-  
-  if (!is.null(transform)) data <- coordTransform(data, transform)
-  
-  # --- Construct plot ---
-  p <- ggplot(data, aes(x = time, y = value, 
-                        ymin = value - sigma, ymax = value + sigma, 
-                        pch = bloq))
-  
-  if (facet == "wrap") {
-    p <- p + 
-      aes(group = condition, color = condition) +
-      facet_wrap(~name, scales = scales)
-  } else if (facet == "grid") {
-    p <- p + facet_grid(name ~ condition, scales = scales)
-  } else {
-    p <- p + facet_wrap(~name * condition, scales = scales)
-  }
-  
-  p <- p + 
-    geom_point() + 
+
+  # The condition grid joins the data by condition, so filters can use covariates.
+  grid <- covariates(data)
+  covs <- grid[setdiff(colnames(grid), "condition")]
+  grid <- data.frame(condition = rownames(grid), covs, check.names = FALSE)
+  frame <- base::merge(lbind(data), grid, by = "condition", all.x = TRUE)
+  frame <- as.data.frame(dplyr::filter(frame, ...))
+  frame$bloq <- ifelse(frame$value <= frame$lloq, "yes", "no")
+  if (!is.null(transform)) frame <- coordTransform(frame, transform)
+
+  layout <- switch(facet,
+    wrap       = list(aes(group = condition, color = condition),
+                      facet_wrap(~name, scales = scales)),
+    grid       = facet_grid(name ~ condition, scales = scales),
+    wrap_plain = facet_wrap(~name * condition, scales = scales))
+  noBloq <- if (all(frame$bloq == "no")) guides(shape = "none")
+
+  p <- ggplot(frame, aes(x = time, y = value, ymin = value - sigma, ymax = value + sigma,
+                         pch = bloq)) +
+    layout +
+    geom_point() +
     geom_errorbar(width = 0) +
-    scale_shape_manual(name = "BLoQ", values = c(yes = 4, no = 19))
-  
-  if (all(data$bloq == "no")) {
-    p <- p + guides(shape = "none")
-  }
-  
-  attr(p, "data") <- data
-  p
+    scale_shape_manual(name = "BLoQ", values = c(yes = 4, no = 19)) +
+    noBloq
+  structure(p, data = frame)
 }
 
 
@@ -287,9 +267,7 @@ covariates <- function(x, ...) {
 #' @export
 #' @rdname covariates
 covariates.datalist <- function(x, ...) {
-
-  attr(x, "condition.grid")
-
+  attr(x, "condition.grid", exact = TRUE)
 }
 
 #' @export
@@ -297,20 +275,18 @@ covariates.datalist <- function(x, ...) {
 covariates.data.frame <- function(x, ...) {
 
   exclude <- c("name", "time", "value", "sigma", "lloq")
-  contains.condition <- "condition" %in% colnames(x)
-  out <- unique(x[, setdiff(names(x), exclude)])
+  out <- unique(x[, setdiff(names(x), exclude), drop = FALSE])
+  if (!ncol(out)) stop("The data frame has no condition or covariate column.", call. = FALSE)
 
-  if (contains.condition) {
-    if (any(duplicated(out[["condition"]]))) {
-      stop("Unique entries of condition column do not correspond to unique covariate combinations.")
-    }
-    rownames(out) <- out[["condition"]]
-    out <- out[ , setdiff(names(out), "condition")]
-  } else {
+  if (!"condition" %in% colnames(out)) {
     rownames(out) <- do.call(paste_, out)
+    return(out)
   }
-
-  return(out)
+  if (anyDuplicated(out[["condition"]]))
+    stop("Unique entries of condition column do not correspond to unique covariate combinations.")
+  rownames(out) <- out[["condition"]]
+  if (ncol(out) > 1L) out <- out[, setdiff(names(out), "condition"), drop = FALSE]
+  out
 
 }
 
@@ -325,7 +301,7 @@ covariates.data.frame <- function(x, ...) {
 #' frames, one per condition.
 #' @details The standard columns of the data frames are "name" (observable
 #' name), "time", "value", "sigma" (uncertainty, can be `NA`) and "lloq"
-#' (lower limit of quantification, `-Inf` by default).
+#' (lower limit of quantification, `-Inf` by default; `NA` means no limit).
 #'
 #' The attribute `condition.grid` holds one row per condition with further
 #' information such as doses; see [covariates()]. Renaming a datalist renames
@@ -336,10 +312,8 @@ covariates.data.frame <- function(x, ...) {
 #' @seealso [plotData()], [+.datalist], [normL2()]
 #' @export
 datalist <- function(...) {
-  mylist <- list(...)
-  mynames <- names(mylist)
-  if (is.null(mynames)) mynames <- as.character(1:length(mylist))
-  as.datalist(mylist, mynames)
+  mylist <- .fillNames(list(...), "")
+  as.datalist(mylist, names(mylist))
 }
 
 

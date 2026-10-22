@@ -70,7 +70,7 @@ The second positional argument is \code{name} for an \code{objfn} and \code{cond
 for an \code{fn}; name both arguments to avoid confusion.
 }
 \examples{
-old <- options(dMod.outdir = tempdir())
+old <- options(dMod2.outdir = tempdir())
 
 ## parfn with condition
 p <- P(eqnvec(x = "-a*x"), method = "implicit", condition = "C1")

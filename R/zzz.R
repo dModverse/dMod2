@@ -1,10 +1,12 @@
 #' Package initialization
 #'
-#' Declares the Python dependencies the symbolic layer needs, `getLinVars()`
-#' and the `simplify` path in `eqnClass.R`, and `steadyStates()`.
+#' Declares the Python dependencies the symbolic layer needs, the `simplify`
+#' path in `eqnClass.R` and `steadyStates()`.
 #' `reticulate::py_require()` does not start Python here: it records the
 #' requirement so the first call into Python provisions an env that has the
 #' listed packages. The SBML/PEtab layer adds `python-libsbml` to this list.
+#' symident is required on first use by `.symident()`, so a symident that
+#' cannot be resolved leaves Python for every other caller intact.
 #'
 #' @keywords internal
 #' @importFrom stats setNames predict density median dnorm
@@ -12,7 +14,7 @@
 #' @noRd
 .onLoad <- function(libname, pkgname) {
   if (requireNamespace("reticulate", quietly = TRUE))
-    reticulate::py_require(c("python-libsbml", "sympy", "scipy", "numpy", "symident>=0.11.0"))
+    reticulate::py_require(c("python-libsbml", "sympy", "scipy", "numpy"))
 }
 
 #' Package attach
@@ -27,7 +29,6 @@
 # pins it for the width of each fork, which makes BLAS inside a worker serial, so
 # say so here, and say when there is no lever and the hang is still reachable.
 .announceForkGuard <- function() {
-  if (isTRUE(getOption("dMod.quiet"))) return(invisible(NULL))
   g <- tryCatch(cppDE::forkGuard(), error = function(e) NULL)
   if (is.null(g) || !isTRUE(g$guard)) return(invisible(NULL))
 

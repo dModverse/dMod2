@@ -93,7 +93,7 @@ forward gradient at atol 1e-12, rtol 1e-10.
   quit(save = "no")
 }
 
-options(dMod.cores = 1)
+options(dMod2.cores = 1)
 tol <- as.numeric(OPTS$tol)
 root <- if (nzchar(OPTS$`petab-root`)) OPTS$`petab-root` else
   file.path(ROOT, "bench", "harness", "cache", "petab")

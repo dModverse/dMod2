@@ -529,3 +529,18 @@ test_that("an undefined observable counts only at a data point", {
                                 sigma = 0.1, condition = "C1"))
   expect_error(normL2(at0, prd)(pars), "NaN at data point\\(s\\) of condition 'C1': frac \\(t = 0\\)")
 })
+
+test_that("evalConditionResidual keeps fixed error parameters without sensitivities", {
+  skip_if_no_compile()
+  bench <- fx_decay_compiled()
+  data <- fx_decay_data(sigma = 0.1)
+  data$C1$sigma <- NA_real_
+  ec <- .nl2_fx()$const
+  pars <- bench$outerpars_id
+  fixed <- c(sigma_y = 0.1)
+  pr <- ec$prd(times = data$C1$time, pars = pars, fixed = fixed, deriv = FALSE)[["C1"]]
+  r <- evalConditionResidual(data$C1, pr, pars, errfn = ec$e, fixed = fixed, cn = "C1",
+                             deriv = FALSE)
+  ref <- normL2(data, ec$prd, errmodel = ec$e)(pars, fixed = fixed, deriv = FALSE)
+  expect_equal(r$value, ref$value, tolerance = 1e-10)
+})

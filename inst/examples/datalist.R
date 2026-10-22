@@ -14,19 +14,15 @@ data <- datalist(C1 = mydata1, C2 = mydata2)
 print(data)
 plot(data)
 
-## Generate datalist from a single data.frame
-times <- seq(0, 2*pi, length.out = 20)
-mydata <- data.frame(name = "A", 
-                     time = times, 
-                     value = c(sin(times), 1.5 * sin(times)), 
-                     sigma = .1, 
-                     stage = rep(c("upper", "lower"), each = 10),
-                     phase = rep(c("first", "second"), each = 20),
-                     amplitude = rep(c(1,1.5), each = 20))
+## Split one data.frame into conditions, keeping a covariate per condition
+t <- seq(0, 2*pi, length.out = 20)
+long <- data.frame(name = "A", time = c(t, t), sigma = 0.1,
+                   amplitude = rep(c(1, 1.5), each = 20),
+                   phase = rep(c("early", "late"), each = 20),
+                   stage = rep(rep(c("upper", "lower"), each = 10), 2))
+long$value <- long$amplitude * sin(long$time)
 
-data <- as.datalist(mydata, splitBy = c("stage", "phase"), keepCovariates = "amplitude")
+data <- as.datalist(long, splitBy = c("stage", "phase"), keepCovariates = "amplitude")
 print(data)
 plot(data)
-
-condition.grid <- attr(data, "condition.grid")
-print(condition.grid)
+print(covariates(data))

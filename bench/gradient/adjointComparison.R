@@ -8,7 +8,7 @@ library(dMod2)
 # no route is timed with threading the others lack.
 Sys.setenv(OMP_NUM_THREADS = "1", MKL_NUM_THREADS = "1",
            OPENBLAS_NUM_THREADS = "1", GOTO_NUM_THREADS = "1")
-options(dMod.cores = 1, cppDE.cores = 1)
+options(dMod2.cores = 1, cppDE.cores = 1)
 
 .outdir <- file.path(tempdir(), "adjointComparison")
 dir.create(.outdir, recursive = TRUE, showWarnings = FALSE)

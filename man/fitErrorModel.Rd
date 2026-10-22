@@ -72,8 +72,3 @@ fitErrorModel(reduced, factors = "name", par = c(s0 = -4, srel = -3))
 \seealso{
 \code{\link[=reduceReplicates]{reduceReplicates()}}
 }
-\author{
-Wolfgang Mader, \email{Wolfgang.Mader@fdm.uni-freiburg.de}
-
-Simon Beyer, \email{simon.beyer@fdm.uni-freiburg.de}
-}
