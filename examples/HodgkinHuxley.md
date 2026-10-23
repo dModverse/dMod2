@@ -16,7 +16,7 @@ library(ggplot2)
 if (!dir.exists(.outdir)) dir.create(.outdir, recursive = TRUE)
 # generated sources and shared objects go to .outdir, see ?dMod2 for the options;
 # compiling, fitting and profiling use the free cores of the local machine
-.opt   <- options(dMod2.outdir = .outdir)
+options(dMod2.outdir = .outdir)
 .cores <- detectFreeCores()
 set.seed(1)
 ```
@@ -102,7 +102,8 @@ times <- seq(0, 30, by = 0.02)
 plot((x*p)(times, pars_true, deriv = FALSE)) + labs(x = "time [ms]")
 ```
 
-![plot of chunk unnamed-chunk-5](figures/HodgkinHuxley/unnamed-chunk-5-1.png)
+
+<img src="figures/HodgkinHuxley/unnamed-chunk-5-1.png" width="768" />
 
 ``` r
 data <- as.data.frame((x*p)(seq(0, 30, by = 0.25), pars_true, deriv = FALSE))
@@ -123,7 +124,8 @@ fits <- mstrust(obj, pars_true, fits = 20, sd = 0.5, cores = .cores) |> as.parfr
 plotValues(fits, pseudoLog = TRUE)
 ```
 
-![plot of chunk unnamed-chunk-6](figures/HodgkinHuxley/unnamed-chunk-6-1.png)
+
+<img src="figures/HodgkinHuxley/unnamed-chunk-6-1.png" width="768" />
 
 ``` r
 bestfit <- as.parvec(fits)
@@ -141,7 +143,8 @@ plotCombined((x*p)(times, bestfit, deriv = FALSE), data, name == "V") +
   labs(x = "time [ms]", y = "membrane potential [mV]", colour = "pulse")
 ```
 
-![plot of chunk unnamed-chunk-6](figures/HodgkinHuxley/unnamed-chunk-6-2.png)
+
+<img src="figures/HodgkinHuxley/unnamed-chunk-6-2.png" width="768" />
 
 ## Profiles
 How well the voltage trace of the two pulses determines each conductance.
@@ -152,7 +155,8 @@ profiles <- profile(obj, bestfit, names(bestfit), cores = .cores)
 plotProfile(profiles, mode == "data")
 ```
 
-![plot of chunk unnamed-chunk-7](figures/HodgkinHuxley/unnamed-chunk-7-1.png)
+
+<img src="figures/HodgkinHuxley/unnamed-chunk-7-1.png" width="768" />
 
 ``` r
 confint(profiles)
@@ -164,9 +168,5 @@ confint(profiles)
 #> lg_K     lg_K  1.5618504  1.5241539  1.6036880
 #> lg_L     lg_L -0.5045292 -0.5335288 -0.4722905
 #> lg_Na   lg_Na  2.0769582  2.0422622  2.1156543
-```
-
-``` r
-options(.opt)
 ```
 

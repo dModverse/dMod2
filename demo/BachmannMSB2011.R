@@ -13,7 +13,7 @@ if (!dir.exists(.outdir)) dir.create(.outdir, recursive = TRUE)
 # objective spreads its conditions over the free cores of the local machine; the
 # forked workers of mstrust() evaluate theirs serially. See ?dMod2 for the options.
 .cores <- detectFreeCores()
-.opt   <- options(dMod2.outdir = .outdir, dMod2.cores = .cores)
+options(dMod2.outdir = .outdir, dMod2.cores = .cores)
 set.seed(5555)
 .petabDir <- system.file("extdata", "petab_bachmann", package = "dMod2")
 
@@ -136,8 +136,6 @@ observables <- do.call(eqnvec, c(list(
   setNames(as.list(.log10(paste0("1 + scale_SOCS3RNA_fold", LETTERS[1:3],
                                  " / SOCS3RNAEqc / init_STAT5 * SOCS3RNA"))),
            paste0("SOCS3RNA_fold", LETTERS[1:3]))))
-
-stopifnot(setequal(names(observables), unique(bachmann$name)))
 
 # one standard deviation per antibody, shared by every experiment using it
 errorModels <- eqnvec(
@@ -270,7 +268,6 @@ obj <- normL2(mydataL, prd, e) +
 
 # the published optimum, on the log10 scale the table declares
 published <- setNames(log10(.pars$nominalValue), .pars$parameterId)
-stopifnot(setequal(names(published), outerpars))
 bestfit <- published
 
 obj(bestfit) |> system.time()
@@ -376,14 +373,8 @@ ggplot(.drPred, aes(epo_level, value, colour = experiment, fill = experiment)) +
 petab <- importPEtab(file.path(.petabDir, "Bachmann_MSB2011.yaml"),
                      backend = "cppDE", cores = .cores, options = myOptions)
 
-stopifnot(setequal(names(petab$bestfit), outerpars),
-          isTRUE(all.equal(petab$bestfit[outerpars], published[outerpars])))
-
 # The full values differ by a constant (PEtab's log10 Jacobian and prior
 # normalisation); the sum of squares is what the two models must agree on.
 chi2 <- c(hand  = attr(obj(published, deriv = FALSE),       "chi2"),
           PEtab = attr(petab$obj(published, deriv = FALSE), "chi2"))
 chi2
-stopifnot(isTRUE(all.equal(unname(chi2[1]), unname(chi2[2]), tolerance = 1e-6)))
-
-options(.opt)

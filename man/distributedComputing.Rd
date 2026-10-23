@@ -92,6 +92,10 @@ the background. Returns functions to check, wait for, collect and delete the
 results. Needs a Unix-like system.
 }
 \details{
+The start is reported as a message, on a SLURM cluster with the job ID. A
+build writes its output to \code{build.log} in the job folder; a failed build
+shows its end in the error.
+
 The value of \code{expr} is the result of a task. In the code, \code{task}
 is the task's element of \code{tasks} (\code{NULL} for a count), \code{taskId} its
 position, \code{cores} the cores the task may use and \code{jobname} the job's name.

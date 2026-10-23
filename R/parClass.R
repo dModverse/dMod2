@@ -423,7 +423,10 @@ plotValues.parframe <- function(x, ..., tol = 1, showSteps = FALSE, pseudoLog = 
     geom_point(data = subset(data, is.zero)) +
     scale_y_continuous(breaks = threshold, labels = labels,
                        limits = c(NA, maxvalue)) +
-    xlab("parameter value") + ylab("Confidence Level")
+    xlab("parameter value") + ylab("Confidence Level") +
+    # a narrow panel drops the x labels that would overlap and keeps apart from the next
+    guides(x = guide_axis(check.overlap = TRUE)) +
+    theme(panel.spacing.x = unit(1.2, "lines"))
 
   # A single set needs no colour legend to say so.
   p <- if (nlevels(data$proflist) < 2L) p + guides(color = "none")

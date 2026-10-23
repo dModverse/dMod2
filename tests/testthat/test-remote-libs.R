@@ -141,8 +141,10 @@ test_that("remote nodes run their tasks, and recover, the registry and purge rea
   local_mocked_bindings(detectFreeCores = function(machine) setNames(rep(8, length(machine)),
                                                                      machine))
   y <- 3
-  job <- distributedComputing(y * taskId, tasks = 3, on = sshNodes(c("h1", "h2")),
-                              input = "y", jobname = "jr")
+  expect_message(
+    job <- distributedComputing(y * taskId, tasks = 3, on = sshNodes(c("h1", "h2")),
+                                input = "y", jobname = "jr"),
+    "jr: 3 tasks started on h1 \\(8 cores\\), h2 \\(8 cores\\)")
   expect_identical(attr(job, "manifest")$taskHost, c(1L, 2L, 1L))
   expect_s3_class(job, "dMod2Job")
   expect_true(wait_for(job))
@@ -194,6 +196,12 @@ test_that("a remote build compiles the sources of the objects into one shared ob
     input = "model", jobname = "jb", wait = TRUE))
   expect_identical(out, list(c(TRUE, FALSE)))
   expect_length(list.files("."), 0L)
+
+  writeLines("not C", file.path(models, "broken.c"))
+  attr(model, "compileInfo")[[1]]$srcfile <- file.path(models, "broken.c")
+  expect_error(suppressMessages(distributedComputing(
+    1, on = sshNodes("h1"), input = "model", jobname = "jx")),
+    "the start on h1 failed:[\\s\\S]*error", perl = TRUE)
 })
 
 test_that("build = 'copy' ships the shared objects of dMod2.outdir", {
@@ -223,10 +231,11 @@ test_that("a SLURM job fills the template of its login node and runs one array t
     "#SBATCH --time={{walltime}}", "#SBATCH --cpus-per-task={{ cores }}",
     "#SBATCH --mem-per-cpu={{ memPerCore }}gb", "export FROM_TEMPLATE=1", "{{ run }}"))
   slurmTemplate("h1", from = tpl, edit = FALSE)
-  job <- distributedComputing(c(task$p, Sys.getenv("FROM_TEMPLATE"), cores),
-                              tasks = data.frame(p = c("a", "b")),
-                              on = slurmCluster("h1", cores = 2, walltime = "00:10:00"),
-                              jobname = "jsl", input = character(0))
+  expect_message(job <- distributedComputing(
+    c(task$p, Sys.getenv("FROM_TEMPLATE"), cores), tasks = data.frame(p = c("a", "b")),
+    on = slurmCluster("h1", cores = 2, walltime = "00:10:00"), jobname = "jsl",
+    input = character(0)),
+    "jsl: 2 tasks submitted to h1 as SLURM job 4242, 2 array tasks of 2 cores")
   expect_identical(attr(job, "manifest")$jobid, "4242")
   expect_true(wait_for(job))
   expect_identical(job$get(), list(c("a", "1", "2"), c("b", "1", "2")))
