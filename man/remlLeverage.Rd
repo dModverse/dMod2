@@ -10,7 +10,7 @@ remlLeverage(
   meanpars = NULL,
   fixed = NULL,
   rankTol = 1e-08,
-  cores = getOption("dMod.cores", 1L)
+  cores = getOption("dMod2.cores", 1L)
 )
 }
 \arguments{
@@ -28,7 +28,7 @@ function, data and error model.}
 sensitivity matrix below which a direction counts as absent. Default
 \code{1e-8}.}
 
-\item{cores}{Passed to the prediction. Default \code{getOption("dMod.cores", 1)}.}
+\item{cores}{Passed to the prediction. Default \code{getOption("dMod2.cores", 1)}.}
 }
 \value{
 A data frame with one row per data point and columns \code{condition},
@@ -47,7 +47,7 @@ non-identifiable direction contributes nothing.
 }
 \examples{
 \donttest{
-old <- options(dMod.outdir = tempdir())
+old <- options(dMod2.outdir = tempdir())
 f <- addReaction(eqnlist(), from = "A", to = "", rate = "k*A")
 x <- Xs(odemodel(f, modelname = "reml_x", compile = FALSE))
 g <- Y(c(y = "A"), f = x, attachInput = FALSE, modelname = "reml_g",

@@ -700,12 +700,35 @@ test_that("modelname<- drops the cached batch handle", {
   parfn(p2p, "a", condition)
 }
 
-test_that("dMod.batch.check passes an agreeing batch and stops a disagreeing one", {
+test_that("dMod2.batch.check passes an agreeing batch and stops a disagreeing one", {
   inner <- .conditionOffset("C1", 0) + .conditionOffset("C2", 1)
-  withr::local_options(dMod.batch.check = TRUE)
+  withr::local_options(dMod2.batch.check = TRUE)
 
   out <- (.shiftedBatchTrafo(0) * inner)(c(a = 0.2))
   expect_equal(unname(unlist(lapply(out, unclass))), exp(c(0.2, 1.2)), tolerance = 1e-14)
   expect_error((.shiftedBatchTrafo(1e-3) * inner)(c(a = 0.2)),
                "batch entry of a parfn leaf disagrees with the scalar kernel")
+})
+
+
+## ---- Sums of objectives ------------------------------------------------------
+
+test_that("a sum of objectives shares the predictions of all its terms", {
+  skip_if_not_installed("cppDE")
+  skip_on_cran()
+  fx <- fx_decay_multicond_compiled()
+  data <- fx_decay_data_multi()
+  o1 <- normL2(data["C1"], fx$prd)
+  o2 <- normL2(data["C2"], fx$prd)
+  dp1 <- datapointL2("y", time = 2, parameter = "v", sigma = 0.5, condition = "C1")
+  dp2 <- datapointL2("y", time = 2, parameter = "v", sigma = 0.5, condition = "C2")
+  pv <- c(fx$outerpars, v = 0.7)
+  ref <- (normL2(data, fx$prd) + dp1)(pv)$value
+  expect_equal((o1 + o2 + dp1)(pv)$value, ref)
+  prior <- constraintL2(mu = c(v = 0), sigma = 1)
+  expect_equal((prior + o1 + o2 + dp1)(pv)$value, ref + 0.49)
+  expect_equal((o1 + o2 + dp2)(pv, conditions = "C2")$value,
+               (o2 + dp2)(pv)$value)
+  expect_identical(o1 + NULL, o1)
+  expect_error(o1 + 1, "objfn")
 })

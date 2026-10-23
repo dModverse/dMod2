@@ -103,7 +103,7 @@
 ## from second derivatives of the prediction; `c` comes from the objective's
 ## own Hessian. Returns list(dth, deta, Hd), or NULL without deriv2.
 .laplaceHdDerivs <- function(obj_s, full_mode, eta_names_i, struct_names,
-                             cores = getOption("dMod.cores", 1L)) {
+                             cores = getOption("dMod2.cores", 1L)) {
   prd    <- attr(obj_s, "prdfn",  exact = TRUE)
   errfn  <- attr(obj_s, "errfn",  exact = TRUE)
   dat    <- attr(obj_s, "data",   exact = TRUE)
@@ -272,7 +272,7 @@
     else setNames(unname(lambda_vec[lamByCoord]), en))
   smList <- .laplaceSubjectMarginals(objfuns, eta0List, tgList, lamList, inner,
                                      lockstep = !isFALSE(control$lockstep) &&
-                                       !isFALSE(getOption("dMod.laplace.lockstep", TRUE)))
+                                       !isFALSE(getOption("dMod2.laplace.lockstep", TRUE)))
 
   for (ii in seq_along(subjects)) {
     s           <- subjects[ii]
@@ -620,7 +620,7 @@
 #'   outer CM-1 trust-region (`cm1` = a list of any [trust] argument); ECM controls (`maxOuter`,
 #'   `epsPar`, `epsOfvRel`); `lockstep` (default `TRUE`: solve the inner modes of
 #'   all subjects in unison so each round's objectives go out as one batched
-#'   call; `FALSE`, or `options(dMod.laplace.lockstep = FALSE)`, restores the
+#'   call; `FALSE`, or `options(dMod2.laplace.lockstep = FALSE)`, restores the
 #'   per-subject loop, which it reproduces exactly); `warm` (opt-in inner-mode warm-starting); `correction`
 #'   `secondOrderCorrection` (logical, default `FALSE`: the normal-Laplace FOCEI
 #'   volume term in the CM-1 gradient; needs a chain built with `deriv2 = TRUE`,
@@ -1267,7 +1267,7 @@ normalLaplace <- function(a, m, lambda) {
 ## call. Falls back to the per-subject loop where the driver does not apply.
 .laplaceSubjectMarginals <- function(objfuns, eta0List, targetsList, lambdaList,
                                      control = list(), lockstep = TRUE,
-                                     cores = getOption("dMod.cores", 1L)) {
+                                     cores = getOption("dMod2.cores", 1L)) {
   N <- length(objfuns)
   serial <- function() lapply(seq_len(N), function(i)
     .laplaceSubjectMarginal(objfuns[[i]], eta0List[[i]], targetsList[[i]],

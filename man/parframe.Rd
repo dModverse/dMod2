@@ -9,13 +9,13 @@
 \usage{
 is.parframe(x)
 
-\method{[}{parframe}(x, i = NULL, j = NULL, drop = FALSE)
+\method{[}{parframe}(x, i, j, drop = FALSE)
 
 \method{subset}{parframe}(x, ...)
 
 parframe(
   x = NULL,
-  parameters = colnames(x),
+  parameters = setdiff(colnames(x), c(metanames, objAttributes)),
   metanames = NULL,
   objAttributes = NULL
 )
@@ -23,17 +23,19 @@ parframe(
 \arguments{
 \item{x}{data frame. Default \code{NULL} gives an empty parameter frame.}
 
-\item{i}{row index in any format. Default \code{NULL} keeps all rows.}
+\item{i}{row index in any format; missing keeps all rows. Used alone, as in
+\code{x[j]}, it selects columns, as for a data frame.}
 
-\item{j}{column index in any format. Default \code{NULL} keeps all columns.}
+\item{j}{column index in any format; missing keeps all columns.}
 
 \item{drop}{logical. Default \code{FALSE}. \code{TRUE} returns a plain data frame or
 vector instead of a \code{parframe}.}
 
-\item{...}{for \code{subset()}, a logical expression in the columns of \code{x}.}
+\item{...}{for \code{subset()}, logical expressions in the columns of \code{x}; a row
+is kept where all of them are \code{TRUE}.}
 
 \item{parameters}{character, the names of the parameter columns. Default
-\code{colnames(x)}.}
+all columns that are neither in \code{metanames} nor in \code{objAttributes}.}
 
 \item{metanames}{character, the names of the meta-information columns.
 Default \code{NULL}.}

@@ -21,7 +21,7 @@
 ## 8191 characters on Windows, where `R CMD` runs through it. The option lowers
 ## it for tests.
 .compileCmdLimit <- function() {
-  lim <- suppressWarnings(as.integer(getOption("dMod.compile.cmdlimit")))
+  lim <- suppressWarnings(as.integer(getOption("dMod2.compile.cmdlimit")))
   if (length(lim) == 1L && !is.na(lim)) return(lim)
   if (.Platform$OS.type == "windows") 8000L else 96000L
 }
@@ -684,7 +684,7 @@ compile <- function(..., output = NULL, args = NULL, cores = detectFreeCores(),
 
 #' Loaded Shared Objects in the Working Directory
 #'
-#' Only the working directory is searched, not `getOption("dMod.outdir")` or
+#' Only the working directory is searched, not `getOption("dMod2.outdir")` or
 #' the directories the objects were generated in.
 #'
 #' @return Character vector with the names of the loaded shared objects whose
@@ -740,7 +740,7 @@ getLocalDLLs <- function() {
 }
 
 # Default directory of generated sources and shared objects
-.dmodOutdir <- function() getOption("dMod.outdir", getwd())
+.dmodOutdir <- function() getOption("dMod2.outdir", getwd())
 
 ## Directories to search for an object's shared libraries: where its sources
 ## were generated, the default output directory and the working directory.
@@ -757,7 +757,7 @@ getLocalDLLs <- function() {
 #' Loads the shared objects of dMod functions by their model names and the
 #' names of their generated sources, e.g. after restoring a workspace in a
 #' new R session. Searched are the working
-#' directory, `getOption("dMod.outdir")` and the directories the sources were
+#' directory, `getOption("dMod2.outdir")` and the directories the sources were
 #' generated in. Shared objects already loaded are skipped.
 #'
 #' @param ... objects of class `prdfn`, `obsfn`, `parfn` or `objfn`.

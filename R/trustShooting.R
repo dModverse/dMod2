@@ -39,7 +39,7 @@
     stop("trust: a multiple-shooting objective takes fixed, cores and sweep, ",
          "not ", paste(refused, collapse = ", "), ".", call. = FALSE)
   fixed <- dots$fixed
-  cores <- if (is.null(dots$cores)) getOption("dMod.cores", 1L) else dots$cores
+  cores <- if (is.null(dots$cores)) getOption("dMod2.cores", 1L) else dots$cores
   sweep <- match.arg(dots$sweep %||% "forward", c("forward", "reverse"))
   if (hm == "gn" && sweep == "reverse")
     stop("trust: a Gauss-Newton block needs forward sensitivities; with ",

@@ -7,7 +7,8 @@
 conservedQuantities(S, weight = c("none", "volume"), volumes = NULL)
 }
 \arguments{
-\item{S}{Stoichiometric matrix}
+\item{S}{numeric matrix, one row per reaction and one named column per
+state. \code{NA} entries count as 0.}
 
 \item{weight}{One of \code{"none"} (default) or \code{"volume"}. When \code{"volume"}, the
 columns of \code{S} are multiplied by their compartment volume before the kernel
@@ -18,11 +19,13 @@ than concentration. Requires \code{volumes} to be supplied as numeric.}
 aligned with \code{colnames(S)}. Only consulted when \code{weight = "volume"}.}
 }
 \value{
-Data frame with conserved quantities and an attribute with the
-number of conserved quantities.
+\code{NULL} if nothing is conserved, otherwise a data frame with one
+character column of expressions such as \code{"1*A+1*pA"}, one row per
+conserved quantity, and their number in the attribute \code{n}.
 }
 \description{
-Determine Conserved Quantities from the Stoichiometric Matrix
+Each vector of the null space basis of \code{S} (\code{\link[=nullZ]{nullZ()}}) gives one linear
+combination of the states that the reactions leave unchanged.
 }
 \examples{
 ## Equation list
@@ -51,14 +54,7 @@ print(subeq1)
 subeq2 <- subset(eq, grepl("not_available", Description))
 print(subeq2)
 
-## Time derivatives of observables
-observables <- eqnvec(pA_obs = "s1*pA", tA_obs = "s2*(A + pA)")
-dobs <- dot(observables, eq)
-
-## Combined equation vector for ODE and observables
-f <- c(as.eqnvec(eq), dobs)
+## Equation vector of the ODE
+f <- as.eqnvec(eq)
 print(f)
-}
-\author{
-Malenka Mader, \email{Malenka.Mader@fdm.uni-freiburg.de}
 }

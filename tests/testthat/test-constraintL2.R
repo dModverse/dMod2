@@ -70,7 +70,7 @@ test_that("constraintL2 takes sigma = 1 by default", {
 
 test_that("constraintL2 * P takes fixed outer parameters", {
   skip_on_cran()
-  withr::local_options(dMod.batch.check = TRUE)
+  withr::local_options(dMod2.batch.check = TRUE)
   fx <- .cl2_p()
   prior <- constraintL2(mu = c(A = 1, k = 0.5), sigma = 0.5)
   all <- c(A_log = 0.2, k_log = -0.4, k2_log = 0.1)
@@ -96,4 +96,13 @@ test_that("constraintL2 * P takes fixed outer parameters", {
 test_that("constraintL2 refuses numbers among sigma parameter names", {
   expect_error(constraintL2(c(a = 0, b = 0), sigma = c(a = "s_a", b = 2)),
                "all numbers or all parameter names")
+})
+
+test_that("a named scalar sigma applies to its own parameter only", {
+  expect_error(constraintL2(mu = c(a = 0, b = 0), sigma = c(b = 2)), "no entry for a")
+  o <- constraintL2(mu = c(a = 0, b = 0), sigma = c(b = 2, a = 1))(c(a = 1, b = 2))
+  expect_equal(unname(o$value), 1 + 1)
+  expect_error(constraintL2(mu = c(a = 0, b = 0, c = 0), sigma = c(a = 1, b = 2)),
+               "no entry for c")
+  expect_error(constraintL1(mu = c(a = 0, b = 0), sigma = c(b = 2)), "no entry for a")
 })

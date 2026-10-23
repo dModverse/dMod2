@@ -4,7 +4,7 @@
 utils::globalVariables(c("predicted", "observed", "sd_est", "iter", "level"))
 
 
-# Custom interface to ggplot2 ---
+# PDF viewer, theme and color palettes ---
 
 #' Open a Plot in an External PDF Viewer
 #'
@@ -45,14 +45,6 @@ ggopen <- function(plot = last_plot(), command = NULL, ...) {
 #' ggplot(data.frame(x = 1:10, y = (1:10)^2), aes(x, y)) +
 #'   geom_line() + theme_dMod()
 theme_dMod <- function(base_size = 12, base_family = "", showGrid = FALSE) {
-  colors <- list(
-    medium = c(gray = '#737373', red = '#F15A60', green = '#7AC36A', blue = '#5A9BD4', orange = '#FAA75B', purple = '#9E67AB', maroon = '#CE7058', magenta = '#D77FB4'),
-    dark = c(black = '#010202', red = '#EE2E2F', green = '#008C48', blue = '#185AA9', orange = '#F47D23', purple = '#662C91', maroon = '#A21D21', magenta = '#B43894'),
-    light = c(gray = '#CCCCCC', red = '#F2AFAD', green = '#D9E4AA', blue = '#B8D2EC', orange = '#F3D1B0', purple = '#D5B2D4', maroon = '#DDB9A9', magenta = '#EBC0DA')
-  )
-  gray <- colors$medium["gray"]
-  black <- colors$dark["black"]
-
   theme_bw(base_size = base_size, base_family = base_family) +
     theme(line = element_line(colour = "black"),
           rect = element_rect(fill = "white", colour = NA),
@@ -343,7 +335,7 @@ scale_fill_dMod_div <- function(mid = 0, ..., direction = 1, palette = "okabe") 
 ggplot <- function(...) ggplot2::ggplot(...) + scale_color_dMod() + theme_dMod()
 
 
-# Other ---------------------------------------------
+# Transformation of plotted values ---------------------------------------
 
 #' Coordinate Transformation for Data Frames
 #'
@@ -359,45 +351,32 @@ ggplot <- function(...) ggplot2::ggplot(...) + scale_color_dMod() + theme_dMod()
 #' @export
 #' 
 #' @examples
-#' mydata1 <- data.frame(name = c("A", "B"), time = 0:5, value = 0:5, sigma = .1)
-#' coordTransform(mydata1, "log(value)")
-#' coordTransform(mydata1, list(A = "exp(value)", B = "sqrt(value)"))
+#' d <- data.frame(name = rep(c("u", "v"), each = 3), time = 0:2, value = 1:6,
+#'                 sigma = 0.2)
+#' coordTransform(d, "log(y)")
+#' coordTransform(d, list(u = "y^2", v = "exp(-y)"))
 coordTransform <- function(data, transformations) {
-  
+
   mynames <- unique(as.character(data$name))
-  
-  # Replicate transformation if not a list
   if (!is.list(transformations))
     transformations <- as.list(structure(rep(transformations, length(mynames)), names = mynames))
-  
-  out <- do.call(rbind, lapply(mynames, function(n) {
-    
-    subdata <- subset(data, name == n)
-    
-    if (n %in% names(transformations)) {
-      
-      mysymbol <- getSymbols(transformations[[n]])[1]
-      mytrafo <- replaceSymbols(mysymbol, "value", transformations[[n]])
-      mytrafo <- parse(text = mytrafo)
-      
-      if ("sigma" %in% colnames(subdata))
-        subdata$sigma <- abs(with(subdata, eval(D(mytrafo, "value")))) * subdata$sigma
-      subdata$value <- with(subdata, eval(mytrafo))
-      
-    }
-    
-    return(subdata)
-    
-  }))
-  
-  
-  return(out)
-  
-  
+
+  # in place, so the rows keep their order
+  for (n in intersect(mynames, names(transformations))) {
+    rows <- which(data$name == n)
+    subdata <- data[rows, , drop = FALSE]
+    mytrafo <- str2expression(replaceSymbols(getSymbols(transformations[[n]])[1], "value",
+                                             transformations[[n]]))
+    # Errors propagate linearly; without one the transformation need not be differentiable.
+    if (any(!is.na(subdata$sigma)))
+      data$sigma[rows] <- abs(eval(D(mytrafo, "value"), subdata)) * subdata$sigma
+    data$value[rows] <- eval(mytrafo, subdata)
+  }
+  data
 }
 
 
-# Method dispatch for plotX functions -------------
+# Generics of the prediction and data plots ---------------------------------
 
 
 #' Plot a List of Model Predictions
@@ -446,7 +425,6 @@ plotPrediction <- function(prediction,...) {
 #' @return A `ggplot` object.
 #' @seealso [plotPrediction()], [plotData()]
 #' @example inst/examples/plotting.R
-#' @importFrom graphics par
 #' @export
 plotCombined <- function(prediction,...) {
   UseMethod("plotCombined", prediction)
@@ -479,9 +457,7 @@ plotData  <- function(data,...) {
 
 #' @export
 #' @rdname plotData
-plotData.data.frame <- function(data, ...) {
-  plotData.datalist(as.datalist(data), ...)
-}
+plotData.data.frame <- function(data, ...) plotData(as.datalist(data), ...)
 
 #' Profile Likelihood Plot
 #'
@@ -536,92 +512,54 @@ plotProfile <- function(profs,...) {
 #' plotPaths(profs)
 #' plotPaths(profs, whichPar = "a")
 plotPaths <- function(profs, ..., whichPar = NULL, sort = FALSE, relative = TRUE, scales = "fixed") {
-  
-  if ("parframe" %in% class(profs)) 
-    arglist <- list(profs)
-  else
-    arglist <- as.list(profs)
-  
-  
-  if (is.null(names(arglist))) {
-    profnames <- 1:length(arglist)
-  } else {
-    profnames <- names(arglist)
+
+  paths <- droplevels(dplyr::filter(.pathFrame(profs, whichPar, relative, sort), ...))
+  axisLabel <- function(k) {
+    label <- paste("parameter", k)
+    if (relative) as.expression(bquote(paste(Delta, .(label)))) else label
   }
-  
-  
-  data <- do.call(rbind, lapply(1:length(arglist), function(i) {
-    # choose a proflist
-    proflist <- as.data.frame(arglist[[i]])
-    parameters <- attr(arglist[[i]], "parameters")
-    
-    if (is.data.frame(proflist)) {
-      whichPars <- unique(proflist$whichPar)
-      proflist <- lapply(whichPars, function(n) {
-        with(proflist, proflist[whichPar == n, ])
-      })
-      names(proflist) <- whichPars
-    }
-    
-    if (is.null(whichPar)) whichPar <- names(proflist)
-    if (is.numeric(whichPar)) whichPar <- names(proflist)[whichPar]
-    
-    subdata <- do.call(rbind, lapply(whichPar, function(n) {
-      # matrix
-      paths <- as.matrix(proflist[[n]][, parameters])
-      values <- proflist[[n]][, "value"]
-      origin <- which.min(abs(proflist[[n]][, "constraint"]))
-      if (relative) 
-        for(j in 1:ncol(paths)) paths[, j] <- as.numeric(paths[, j]) - as.numeric(paths[origin, j])
-      
-      combinations <- expand.grid.alt(whichPar, colnames(paths))
-      if (sort) combinations <- apply(combinations, 1, sort) else combinations <- apply(combinations, 1, identity)
-      combinations <- submatrix(combinations, cols = -which(combinations[1,] == combinations[2,]))
-      combinations <- submatrix(combinations, cols = !duplicated(paste(combinations[1,], combinations[2,])))
-      
-      
-      path.data <- do.call(rbind, lapply(1:dim(combinations)[2], function(j) {
-        data.frame(chisquare = values, 
-                   name = n,
-                   proflist = profnames[i],
-                   combination = paste(combinations[,j], collapse = " - \n"),
-                   x = paths[, combinations[1,j]],
-                   y = paths[, combinations[2,j]])
-      }))
-      
-      return(path.data)
-      
+
+  p <- ggplot2::ggplot(paths, aes(x, y, group = interaction(name, proflist), colour = name,
+                                  linetype = proflist)) +
+    geom_path() +
+    facet_wrap(vars(combination), scales = scales) +
+    labs(x = axisLabel(1), y = axisLabel(2)) +
+    scale_color_dMod(name = "profiled\nparameter") +
+    scale_linetype_discrete("profile\nlist") +
+    theme_dMod()
+  attr(p, "data") <- paths
+  p
+}
+
+
+# Parameter paths of profiles in long format: per profile set and profiled parameter n,
+# one block per pair (first, partner) of whichPar and the parameters. With `relative`
+# the paths start at zero at the optimum; `absoluteX` keeps the profiled parameter absolute.
+.pathFrame <- function(profs, whichPar = NULL, relative = TRUE, sort = FALSE, absoluteX = FALSE) {
+  sets <- .profileSets(profs)
+  do.call(rbind, lapply(names(sets), function(s) {
+    parts <- .profileSplit(sets[[s]])
+    parameters <- attr(sets[[s]], "parameters")
+    wp <- if (is.null(whichPar)) names(parts) else whichPar
+    if (is.numeric(wp)) wp <- names(parts)[wp]
+    lost <- setdiff(wp, names(parts))
+    if (length(lost)) stop("Parameters not profiled: ", paste(lost, collapse = ", "), call. = FALSE)
+    cmb <- expand.grid.alt(wp, parameters)
+    if (sort) cmb <- t(apply(cmb, 1, sort))
+    cmb <- cmb[cmb[, 1] != cmb[, 2], , drop = FALSE]
+    cmb <- cmb[!duplicated(paste(cmb[, 1], cmb[, 2])), , drop = FALSE]
+    do.call(rbind, lapply(wp, function(n) {
+      P <- as.matrix(parts[[n]][, parameters, drop = FALSE])
+      origin <- P[which.min(abs(parts[[n]]$constraint)), ]
+      X <- P
+      if (relative) P <- sweep(P, 2, origin)
+      if (!absoluteX) X <- P
+      data.frame(chisquare = rep(parts[[n]]$value, nrow(cmb)), name = n, proflist = s,
+                 combination = rep(paste(cmb[, 1], cmb[, 2], sep = " - \n"), each = nrow(P)),
+                 partner = rep(cmb[, 2], each = nrow(P)),
+                 x = as.vector(X[, cmb[, 1]]), y = as.vector(P[, cmb[, 2]]))
     }))
-    
-    return(subdata)
-    
   }))
-  
-  data$proflist <- as.factor(data$proflist)
-  
-  
-  if (relative)
-    axis.labels <- c(expression(paste(Delta, "parameter 1")), expression(paste(Delta, "parameter 2")))  
-  else
-    axis.labels <- c("parameter 1", "parameter 2")
-  
-  
-  data <- droplevels(subset(data, ...))
-  data$y <- as.numeric(data$y)
-  data$x <- as.numeric(data$x)
-  
-  suppressMessages(
-    p <- ggplot(data, aes(x = x, y = y, group = interaction(name, proflist), color = name, lty = proflist)) + 
-      facet_wrap(~combination, scales = scales) + 
-      geom_path() + #geom_point(aes=aes(size=1), alpha=1/3) +
-      xlab(axis.labels[1]) + ylab(axis.labels[2]) +
-      scale_linetype_discrete(name = "profile\nlist") +
-      scale_color_dMod(name = "profiled\nparameter")
-  )
-  
-  attr(p, "data") <- data
-  return(p)
-  
 }
 
 
@@ -651,48 +589,42 @@ plotPaths <- function(profs, ..., whichPar = NULL, sort = FALSE, relative = TRUE
 #' @export
 plotFluxes <- function(pouter, x, times, fluxEquations, legendTitle = "Fluxes:", ...){
 
-  dots <- list(...)
+  formulas <- vapply(fluxEquations, as.character, "")
+  labels <- names(fluxEquations)
+  if (is.null(labels)) labels <- formulas
+  labels[!nzchar(labels)] <- formulas[!nzchar(labels)]
+  calls <- lapply(formulas, str2lang)
 
-  if (is.null(names(fluxEquations))) names(fluxEquations) <- fluxEquations
+  # functions of the expression language that base R lacks
+  lang <- new.env(parent = baseenv())
+  lang$Heaviside <- function(x) (sign(x) + 1) / 2
+  lang$exp10 <- function(x) 10^x
+  lang$piecewise <- function(...) {
+    args <- list(...)
+    n <- length(args) %/% 2L
+    otherwise <- if (length(args) > 2L * n) args[[length(args)]] else NA_real_
+    Reduce(function(k, rest) ifelse(args[[2L * k]], args[[2L * k - 1L]], rest),
+           seq_len(n), otherwise, right = TRUE)
+  }
 
-  # Flux values evaluated in R.
-  exprs <- lapply(fluxEquations, function(e) str2lang(as.character(e)))
-  fluxEnv <- list2env(list(
-    Heaviside = function(x) ifelse(x < 0, 0, ifelse(x == 0, 0.5, 1)),
-    exp10 = function(x) 10^x,
-    piecewise = function(...) {
-      a <- list(...); n <- length(a)
-      val <- if (n %% 2L) a[[n]] else NA_real_
-      for (i in rev(seq_len(n %/% 2L))) val <- ifelse(a[[2L * i]], a[[2L * i - 1L]], val)
-      val
-    }), parent = baseenv())
-  flux <- function(values, n)
-    do.call(cbind, lapply(exprs, function(e) rep_len(as.numeric(eval(e, values, fluxEnv)), n)))
-  prediction.all <- do.call(x, c(list(times, pouter, deriv = FALSE), dots))
-  names.prediction.all <- names(prediction.all)
-  if (is.null(names.prediction.all)) names.prediction.all <- paste0("C", 1:length(prediction.all))
+  prediction <- .fillNames(x(times, pouter, deriv = FALSE, ...), "C")
+  out <- do.call(rbind, unname(Map(function(frame, condition) {
+    n <- nrow(frame)
+    columns <- matrix(frame, n, dimnames = dimnames(frame))
+    scope <- c(as.list(as.data.frame(columns)), as.list(unclass(attr(frame, "parameters"))))
+    values <- vapply(calls, function(e) rep_len(as.numeric(eval(e, scope, lang)), n), numeric(n))
+    data.frame(time = frame[, "time"], name = factor(rep(labels, each = n), levels = labels),
+               value = as.vector(values), condition = condition)
+  }, prediction, names(prediction))))
 
-  out <- lapply(1:length(prediction.all), function(cond) {
-    prediction <- prediction.all[[cond]]
-    pinner <- attr(prediction, "parameters")
-    values <- c(as.list(as.data.frame(unclass(prediction))), as.list(unclass(pinner)))
-    fluxes <- cbind(time = prediction[, "time"], flux(values, nrow(prediction)))
-    return(fluxes)
-  }); names(out) <- names.prediction.all
-  out <- wide2long(out)
-
-  cbPalette <- c("#999999", "#E69F00", "#F0E442", "#56B4E9", "#009E73", "#0072B2",
-                 "#D55E00", "#CC79A7","#CC6666", "#9999CC", "#66CC99","red", "blue", "green","black")
-
-  P <- ggplot(out, aes(x = time, y = value, group = name, fill = name, log = "y")) +
-    facet_wrap(~condition) + scale_fill_manual(values = cbPalette, name = legendTitle) +
-    geom_density(stat = "identity", position = "stack", alpha = 0.3, color = "darkgrey", linewidth = 0.4) +
-    xlab("time") + ylab("flux contribution")
-
-  attr(P, "out") <- out
-
-  return(P)
-
+  p <- ggplot2::ggplot(out, aes(time, value, group = name, fill = name)) +
+    geom_area(position = "stack", alpha = 0.3, colour = "darkgrey", linewidth = 0.4) +
+    facet_wrap(vars(condition)) +
+    scale_fill_dMod(name = legendTitle) +
+    labs(x = "time", y = "flux contribution") +
+    theme_dMod()
+  attr(p, "out") <- out
+  p
 }
 
 
@@ -736,9 +668,7 @@ plotFluxes <- function(pouter, x, times, fluxEquations, legendTitle = "Fluxes:",
 #'                             iterations = 20, a = c(1, 1.1, 2, 3)),
 #'                  parameters = "a")
 #' plotValues(fits)
-plotValues <- function(x,...) {
-  UseMethod("plotValues", x)
-}
+plotValues <- function(x, ...) UseMethod("plotValues")
 
 
 #' Plot Parameter Values of a Collection of Fits
@@ -759,9 +689,7 @@ plotValues <- function(x,...) {
 #'                             b = c(0, 0.1, 1, 2)),
 #'                  parameters = c("a", "b"))
 #' plotPars(fits)
-plotPars <- function(x,...) {
-  UseMethod("plotPars", x)
-}
+plotPars <- function(x, ...) UseMethod("plotPars")
 
 
 #' Plot Residuals of a Collection of Fits
@@ -810,55 +738,31 @@ plotResiduals <- function(parframe, ...) UseMethod("plotResiduals")
 plotResiduals.default <- function(parframe, x, data, split = "condition",
                                   errmodel = NULL, ...) {
 
-  timesD <- sort(unique(c(0, unlist(lapply(data, function(d) d$time)))))
-  
-  if (!("index" %in% colnames(parframe))) {
-    parframe$index <- seq_len(nrow(parframe))
-  }
-  
-  # --- Compute residuals for all fits and conditions ---
-  out <- do.call(rbind, lapply(seq_len(nrow(parframe)), function(j) {
-    pred <- x(timesD, as.parvec(parframe, j), deriv = FALSE, ...)
-    
-    out_con <- do.call(rbind, lapply(names(pred), function(con) {
-      err <- NULL
-      if (!is.null(errmodel)) {
-        err <- errmodel(out = pred[[con]], pars = getParameters(pred[[con]]), conditions = con)
-      }
-      out <- res(data[[con]], pred[[con]], err[[con]])
-      cbind(out, condition = con)
+  times <- sort(unique(c(0, unlist(lapply(data, `[[`, "time")))))
+  fits <- if ("index" %in% colnames(parframe)) parframe$index else seq_len(nrow(parframe))
+
+  # residuals of one fit, all conditions, labelled by fit and condition
+  residualsOf <- function(j) {
+    pred <- x(times, .parvecRow(parframe, j), deriv = FALSE, ...)
+    data.table::rbindlist(lapply(names(pred), function(C) {
+      err <- if (length(errmodel))
+        errmodel(out = pred[[C]], pars = getParameters(pred[[C]]), conditions = C)[[C]]
+      data.frame(index = as.character(fits[j]), res(data[[C]], pred[[C]], err), condition = C)
     }))
-    
-    cbind(index = as.character(parframe[j, "index"]), out_con)
-  }))
-  
-  # --- Summarize residuals ---
-  out <- dplyr::group_by(out, across(all_of(split)))
-  
-  if (!is.null(errmodel)) {
-    out <- dplyr::summarise(out, res = sum(weighted.residual^2 + log(sigma^2)), .groups = "drop")
-  } else {
-    out <- dplyr::summarise(out, res = sum(weighted.residual^2), .groups = "drop")
   }
-  
-  out <- as.data.frame(out)
-  
-  # --- Build aesthetics ---
-  groupvar <- if (length(split) > 1) split[2] else split[1]
-  
-  p <- ggplot(out, aes(x = !!rlang::data_sym(split[1]), 
-                       y = res, 
-                       color = !!rlang::data_sym(groupvar), 
-                       group = !!rlang::data_sym(groupvar))) + 
-    theme_dMod() + 
-    geom_point() + 
+  long <- data.table::rbindlist(lapply(seq_len(nrow(parframe)), residualsOf))
+
+  terms <- long$weighted.residual^2
+  if (length(errmodel)) terms <- terms + log(long$sigma^2)
+  sums <- data.table::data.table(long[, split, with = FALSE], res = terms)
+  out <- as.data.frame(sums[, list(res = sum(res)), keyby = split])
+
+  colourBy <- as.name(split[min(2L, length(split))])
+  p <- ggplot(out, aes(!!as.name(split[1]), res, colour = !!colourBy, group = !!colourBy)) +
+    theme_dMod() +
+    geom_point() +
     geom_line()
-  
-  if (length(split) > 2) {
-    facet_vars <- rlang::syms(split[3:length(split)])
-    p <- p + facet_wrap(vars(!!!facet_vars))
-  }
-  
+  if (length(split) > 2L) p <- p + facet_wrap(split[-(1:2)])
   attr(p, "out") <- out
   p
 }
@@ -919,7 +823,7 @@ plotPairs <- function(x, ...) UseMethod("plotPairs", x)
 #'
 #' Predicts the model at parameter sets taken along one profile, starting at
 #' the optimum, and colors the trajectories by the value of the profiled
-#' parameter. Requires the package purrr.
+#' parameter.
 #'
 #' @param par Character, the profiled parameter.
 #' @param profs A [parframe] of profiles as returned by
@@ -927,108 +831,64 @@ plotPairs <- function(x, ...) UseMethod("plotPairs", x)
 #' @param prd A prediction function, e.g. `g*x*p`, called as
 #'   `prd(times, pars, deriv = FALSE)`.
 #' @param times Numeric vector of time points for the prediction.
+#' @param ... Logical expressions in the columns `time`, `name`, `value`,
+#'   `condition` and those of `covtable` to subset the plotted data.
 #' @param direction `"up"` (default) or `"down"`, the side of the profile that
 #'   is traced from the optimum.
 #' @param covtable Condition table, e.g. from [covariates()], merged with the
-#'   predictions by condition so that `...` can refer to its columns, or
-#'   `NULL`. Has no default.
-#' @param ... Logical expressions to subset the plotted data; used only with
-#'   a `covtable`.
-#' @param nSim Number of trajectories. Defaults to 4.
+#'   predictions by condition so that `...` can refer to its columns. Default
+#'   `NULL`.
+#' @param nSim Number of trajectories, evenly spaced along the profile side
+#'   and starting at the optimum; at most the number of profile points on that
+#'   side. Defaults to 4.
 #'
 #' @return A `ggplot` object.
-#' @author Svenja Kemmer, \email{svenja.kemmer@@fdm.uni-freiburg.de}
 #' @seealso [plotProfile()], [plotPathsMulti()]
-#' @examplesIf requireNamespace("purrr", quietly = TRUE)
+#' @examples
 #' times <- 0:5
 #' grid <- data.frame(name = "A", time = times, row.names = paste0("A", times))
 #' x <- Xd(grid)
 #' pars <- structure(exp(-times / 2), names = getParameters(x))
 #' obj <- constraintL2(mu = pars, sigma = 0.1)
 #' profs <- profile(obj, pars, whichPar = "A2", limits = c(-1, 1), cores = 1)
-#' plotArray("A2", profs, x, seq(0, 5, 0.1), covtable = NULL)
+#' plotArray("A2", profs, x, seq(0, 5, 0.1))
 #' @export
-#' @import data.table
-plotArray <- function (par, profs, prd, times, direction = c("up", "down"), covtable, ..., nSim = 4) {
+plotArray <- function(par, profs, prd, times, ..., direction = c("up", "down"),
+                      covtable = NULL, nSim = 4) {
 
   direction <- match.arg(direction)
-  # The dots are subset expressions, so they stay unevaluated.
-  dots <- match.call(expand.dots = FALSE)$...
+  prof <- as.data.frame(profs)[profs$whichPar == par, , drop = FALSE]
+  if (!nrow(prof)) stop("plotArray: '", par, "' is not profiled.", call. = FALSE)
+  origin <- which.min(abs(prof$constraint))
+  side <- if (direction == "up") origin:nrow(prof) else origin:1
+  side <- side[unique(round(seq(1, length(side), length.out = min(nSim, length(side)))))]
+  parameters <- attr(profs, "parameters")
 
-  # select subframe from profiles
-  mysub <- profs %>% as.data.table() %>% .[whichPar == par, ]
-  mysub[, ID := 1:nrow(mysub)]
-  
-  # get ID of bestfit (constraint is 0 for bestfit)
-  bestID <- mysub[constraint == 0.00]$ID
-  if(direction == "up") mysubF <- mysub[ID >= bestID]  
-  if(direction == "down") mysubF <- mysub[ID <= bestID]
-  
-  # select rows according to simulation number
-  partable <- mysubF[seq(1, nrow(mysubF), (round(nrow(mysubF)/nSim)))]
-  
-  # remove non_parameter names
-  no_pars <- c("value", "constraint", "stepsize", "gamma", "whichPar", "data", "condition_obj", "AIC", "BIC", "prior", "ID", "chisquare")
-  no_pars <- intersect(no_pars, names(partable))
-  partable %>% .[, (no_pars) := NULL]
-  
-  # make predictions
-  predictionDT <- .predictArray(prd, times, pars = partable, whichpar = par)
-  out_plot <- copy(predictionDT)
-  
-  # use covtable for subsetting of the plot
-  if(!is.null(covtable)) {
-    if(!"condition" %in% names(covtable)){
-      covtable <- as.data.table(covtable, keep.rownames = "condition")
-    } else covtable <- as.data.table(covtable)
-    out_plot <- merge(out_plot, covtable, by = "condition")
-    if (length(dots))
-      out_plot <- eval(as.call(c(as.name("["), list(out_plot), dots)))
-  }
-  
-  # plot
-  P <- ggplot(out_plot , aes(x = time, y = value, group = ParValue, color = ParValue)) +
-    facet_grid(name~condition, scales = "free_y") +
-    geom_line(linewidth = 1) + 
-    theme_dMod(base_size = 18) + scale_color_viridis_c() +
-    theme(legend.position = "top", legend.key.size = unit(0.6,"cm")) + 
-    theme(axis.line = element_line(colour = "black"), 
-          panel.grid.major = element_line(colour = "grey97"), 
-          panel.grid.minor = element_line(colour = "grey97"), 
-          panel.background = element_blank()) +
-    xlab("time") +
-    ylab(paste0("value"))
-  
-  return(P)
-}
-
-.predictArray <- function (prd, times, pars = partable, whichpar = par, keep_names = NULL, FLAGverbose = FALSE, FLAGverbose2 = FALSE, FLAGbrowser = FALSE, ...) {
-  .require_ns("purrr", ".predictArray()")
-  if (FLAGverbose2) cat("Simulating", "\n")
-  out <- lapply(1:nrow(pars), function(i) {
-    if (FLAGverbose) cat("Parameter set", i, "\n")
-    if (FLAGbrowser) browser()
-    mypar <- pars[i,] %>% as.numeric()
-    parval <- round(pars[i,][[whichpar]], digits = 2)
-    names(mypar) <- names(pars)
-    mypar <- as.parvec(mypar)
-    prediction <- try(prd(times, mypar, deriv = FALSE, ...))
-    if (inherits(prediction, "try-error")) {
-      warning("parameter set ", i, " failed\n")
-      return(NULL)
-    }
-    prediction <- purrr::imap(prediction, function(.x,.y){
-      .x <- data.table(.x)
-      if (!is.null(keep_names))
-        .x[, (setdiff(names(.x), c(keep_names, "time"))) := NULL]
-      .x[, `:=`(condition = .y, ParValue = parval)]
-      .x
+  # long trajectories of profile point k, NULL with a warning if the prediction fails
+  trajectories <- function(k) {
+    pars <- unlist(prof[side[k], parameters])
+    pred <- tryCatch(prd(times, as.parvec(pars), deriv = FALSE), error = function(e) {
+      warning("plotArray: parameter set ", k, " failed: ", conditionMessage(e), call. = FALSE)
+      NULL
     })
-    melt(rbindlist(prediction), variable.name = "name", value.name = "value", id.vars = c("time", "condition", "ParValue"))
-  })
-  if (FLAGverbose2) cat("postprocessing", "\n")
-  out <- rbindlist(out[!is.null(out)])
-  out
+    if (is.null(pred)) return(NULL)
+    plain <- lapply(.fillNames(pred, ""), function(m) matrix(m, nrow(m), dimnames = dimnames(m)))
+    cbind(wide2long(plain), set = k, ParValue = pars[[par]])
+  }
+  out <- as.data.frame(data.table::rbindlist(lapply(seq_along(side), trajectories)))
+
+  if (length(covtable)) {
+    if (!"condition" %in% names(covtable)) covtable <- cbind(condition = rownames(covtable), covtable)
+    out <- merge(out, covtable, by = "condition")
+  }
+  out <- dplyr::filter(out, ...)
+
+  ggplot2::ggplot(out, aes(time, value, group = set, colour = ParValue)) +
+    geom_line() +
+    facet_grid(rows = vars(name), cols = vars(condition), scales = "free_y") +
+    scale_color_viridis_c(name = par) +
+    labs(x = "time", y = "value") +
+    theme_dMod()
 }
 
 
@@ -1053,152 +913,6 @@ plotArray <- function (par, profs, prd, times, direction = c("up", "down"), covt
   corners[[which.min(counts)]]
 }
 
-#' @importFrom ggplot2 ggplot
-#' @noRd
-PlotPaths <- function(profs=myprofiles, ..., whichPar, sort = FALSE, relative = TRUE, scales = "fixed", multi = TRUE, n_pars = 5, normalizePaths = FALSE) {
-  
-  if ("parframe" %in% class(profs)) {
-    arglist <- list(profs)
-  } else {
-    arglist <- as.list(profs)
-  }
-  
-  if (is.null(names(arglist))) {
-    profnames <- 1:length(arglist)
-  } else {
-    profnames <- names(arglist)
-  }
-  
-  
-  data <- do.call(rbind, lapply(1:length(arglist), function(i) {
-    # choose a proflist
-    proflist <- as.data.frame(arglist[[i]])
-    parameters <- attr(arglist[[i]], "parameters")
-    
-    if (is.data.frame(proflist)) {
-      whichPars <- unique(proflist$whichPar)
-      proflist <- lapply(whichPars, function(n) {
-        with(proflist, proflist[whichPar == n, ])
-      })
-      names(proflist) <- whichPars
-    }
-    
-    if (is.null(whichPar)) whichPar <- names(proflist)
-    if (is.numeric(whichPar)) whichPar <- names(proflist)[whichPar]
-    
-    subdata <- do.call(rbind, lapply(whichPar, function(n) {
-      # matrix
-      paths <- as.matrix(proflist[[n]][, parameters])
-      values <- proflist[[n]][, "value"]
-      origin <- which.min(abs(proflist[[n]][, "constraint"]))
-      
-      # Save absolute values of profiled parameter before relativizing
-      abs_profiled <- as.numeric(paths[, n])
-      
-      if (relative) 
-        for(j in 1:ncol(paths)) paths[, j] <- as.numeric(paths[, j]) - as.numeric(paths[origin, j])
-      
-      # Restore absolute values for the profiled parameter (x-axis always absolute)
-      paths[, n] <- abs_profiled
-      
-      combinations <- expand.grid.alt(whichPar, colnames(paths))
-      if (sort) combinations <- apply(combinations, 1, sort) else combinations <- apply(combinations, 1, identity)
-      combinations <- submatrix(combinations, cols = -which(combinations[1,] == combinations[2,]))
-      combinations <- submatrix(combinations, cols = !duplicated(paste(combinations[1,], combinations[2,])))
-      
-      
-      path.data <- do.call(rbind, lapply(1:dim(combinations)[2], function(j) {
-        data.frame(chisquare = values, 
-                   name = n,
-                   proflist = profnames[i],
-                   combination = paste(combinations[,j], collapse = " - \n"),
-                   x = paths[, combinations[1,j]],
-                   y = paths[, combinations[2,j]])
-      }))
-      
-      if(multi) path.data <- path.data %>% as.data.table %>% .[, partner := tstrsplit(as.character(combination), "\n", fixed=TRUE, keep = 2)]
-      
-      
-      return(path.data)
-      
-    }))
-    
-    return(subdata)
-    
-  }))
-  
-  data$proflist <- as.factor(data$proflist)
-  
-  if (relative){
-    axis.labels <- c("parameter 1", expression(Delta ~ p[j]))
-  } else {
-    axis.labels <- c("parameter 1", "parameter 2")
-  }
-  
-  data <- droplevels(subset(data, ...))
-  removeBecauseNonsense <- c("value", "constraint", "stepsize", "chisquare", "data", "prior", "gamma", "whichPar")
-  data <- data[!(partner %in% removeBecauseNonsense)]
-  data$y <- as.numeric(data$y)
-  data$x <- as.numeric(data$x)
-  
-  if (normalizePaths == TRUE) {
-    data[, y := (ifelse(max(abs(y)) == 0, 0, y / abs(max(abs(y))))), by = combination] # if path is y, just return 0
-    removedCombinations <- unique(data[!is.finite(y), combination])
-    data <- data[is.finite(y)]
-    
-    if(length(removedCombinations)>0) {warning(paste0("The following combinations have been removed due to failed paths:\n\t",paste(str_remove_all(removedCombinations, "\n"), collapse = "\n\t")))}
-  }
-  
-  
-  if(multi){
-    
-    # determine strength of change
-    data[, max.dev := max(c(abs(max(as.numeric(y))), abs(min(as.numeric(y) )))), by = "partner"]
-    setorder(data, name, -max.dev)
-    
-    # create new column "label" only use to assign ploting colors
-    data[,label := ifelse(max.dev %in% unique(max.dev)[1:n_pars], partner, "Others")]
-    
-    # Define the plotting colors
-    species_colors <- c(
-      setNames(dMod_palette(n_pars + 1L)[-1L], unique(data$partner)[1:n_pars]),
-      "Others" = "gray"
-    )
-    
-    # Automatically find the corner with the least data density
-    legend_corner <- .findEmptyCorner(data$x, data$y)
-    
-    suppressMessages(
-      p <- ggplot2::ggplot(data, aes(x = x, y = y, color = label, group = partner)) + 
-        geom_line() +
-        xlab(whichPar) + ylab(expression(Delta ~ p[j])) +
-        scale_linetype_discrete(name = "profile\nlist") +
-        scale_color_manual(values = species_colors) + theme_dMod() +
-        theme(legend.position = "inside",
-              legend.position.inside = legend_corner,
-              legend.justification = legend_corner,
-              legend.title = element_blank(),
-              legend.background = element_rect(fill = alpha("white", 0.85), colour = "black", linewidth = 0.3),
-              legend.key.size = unit(0.4, "cm"),
-              legend.margin = margin(2, 4, 2, 4),
-              legend.text = element_text(size = 7))
-    )
-  } else {
-    suppressMessages(
-      p <- ggplot2::ggplot(data, aes(x = x, y = y, group = interaction(name, proflist), color = name, lty = proflist)) + 
-        facet_wrap(~combination, scales = scales) + 
-        geom_path() + #geom_point(aes=aes(size=1), alpha=1/3) +
-        xlab(axis.labels[1]) + ylab(axis.labels[2]) +
-        scale_linetype_discrete(name = "profile\nlist") +
-        scale_color_dMod(name = "profiled\nparameter")
-    )
-  }
-  
-  attr(p, "data") <- data
-  return(p)
-  
-}
-
 #' Profile Likelihood: Plot All Parameter Paths of One Profile Together
 #'
 #' Draws, for each profiled parameter, the changes of all other parameters
@@ -1215,7 +929,6 @@ PlotPaths <- function(profs=myprofiles, ..., whichPar, sort = FALSE, relative = 
 #'
 #' @return A `ggplot` object; for several `whichPar` the grid of
 #'   [cowplot::plot_grid()].
-#' @author Svenja Kemmer, \email{svenja.kemmer@@fdm.uni-freiburg.de}
 #' @seealso [plotPaths()], [plotProfilesAndPaths()]
 #' @examplesIf requireNamespace("cowplot", quietly = TRUE)
 #' pars <- c(a = 1, b = 0.5, c = 2)
@@ -1227,19 +940,37 @@ PlotPaths <- function(profs=myprofiles, ..., whichPar, sort = FALSE, relative = 
 #' @import data.table
 plotPathsMulti <- function(profs, whichPar, nPars = 5, normalizePaths = FALSE) {
   .require_ns("cowplot", "plotPathsMulti()")
-  if(length(whichPar) == 1){
-    p <- PlotPaths(profs=profs, whichPar = whichPar, n_pars = nPars, normalizePaths = normalizePaths)
-    return(p)
-  } else {
-    PlotList <- NULL
-    for(i in 1:length(whichPar)){
-      par <- whichPar[i]
-      p <- PlotPaths(profs=profs, whichPar = par, n_pars = nPars, normalizePaths = normalizePaths)
-      PlotList[[i]] <- p
-    }
-    pl <- cowplot::plot_grid(plotlist = PlotList)
-    return(pl)
-  }
+  plots <- lapply(whichPar, .pathPanel, profs = profs, nPars = nPars,
+                  normalizePaths = normalizePaths)
+  if (length(plots) == 1L) return(plots[[1]])
+  cowplot::plot_grid(plotlist = plots)
+}
+
+# All paths of the profile of whichPar in one panel, the nPars largest colored
+.pathPanel <- function(whichPar, profs, nPars, normalizePaths) {
+  data <- data.table::as.data.table(.pathFrame(profs, whichPar, absoluteX = TRUE))
+  if (normalizePaths) data[, y := if (any(y != 0)) y / max(abs(y)) else y, by = partner]
+  data[, max.dev := max(abs(y)), by = partner]
+  data.table::setorder(data, -max.dev)
+  top <- head(unique(data$partner), nPars)
+  data[, label := ifelse(partner %in% top, partner, "Others")]
+  colors <- c(setNames(dMod_palette(nPars + 1L)[-1L][seq_along(top)], top), Others = "gray")
+  corner <- .findEmptyCorner(data$x, data$y)
+
+  p <- ggplot2::ggplot(data, aes(x = x, y = y, color = label, group = partner)) +
+    geom_line() +
+    xlab(whichPar) + ylab(expression(Delta ~ p[j])) +
+    scale_color_manual(name = NULL, values = colors, breaks = c(top, "Others")) + theme_dMod() +
+    theme(legend.position = "inside",
+          legend.position.inside = corner,
+          legend.justification = corner,
+          legend.background = element_rect(fill = alpha("white", 0.85), colour = "black",
+                                           linewidth = 0.3),
+          legend.key.size = unit(0.4, "cm"),
+          legend.margin = margin(2, 4, 2, 4),
+          legend.text = element_text(size = 7))
+  attr(p, "data") <- as.data.frame(data)
+  p
 }
 
 
@@ -1279,7 +1010,7 @@ plotProfilesAndPaths <- function(profs, whichPar, nPars = 5, ncol = 3,
   orig_oa <- attr(profs, "obj.attributes")
   filtered_oa <- if (!is.null(orig_oa)) intersect(orig_oa, modes) else NULL
   
-  profs <- profs[profs$whichPar %in% whichPar]
+  profs <- profs[profs$whichPar %in% whichPar, ]
   
   cleanProfilePlot <- function(prof_sub) {
     # Remove columns for unwanted modes, so plotProfile cannot plot them
@@ -1288,9 +1019,9 @@ plotProfilesAndPaths <- function(profs, whichPar, nPars = 5, ncol = 3,
     attr(prof_sub, "obj.attributes") <- filtered_oa
     p <- plotProfile(prof_sub)
     
-    # plotProfile always adds "total"; filter the underlying data to requested modes
+    # the total and the requested contributions
     pdata <- attr(p, "data")
-    pdata <- pdata[pdata$mode %in% modes, , drop = FALSE]
+    pdata <- pdata[pdata$mode %in% c("total", modes), , drop = FALSE]
     
     threshold <- c(1, 2.7, 3.84)
     p_new <- ggplot(pdata, aes(x = par, y = delta, group = interaction(proflist, mode), 
@@ -1319,7 +1050,7 @@ plotProfilesAndPaths <- function(profs, whichPar, nPars = 5, ncol = 3,
   stacked_list <- vector("list", length(whichPar))
   
   for (z in seq_along(whichPar)) {
-    prof_sub <- profs[profs$whichPar == whichPar[z]]
+    prof_sub <- profs[profs$whichPar == whichPar[z], ]
     
     p_prof_noleg <- cleanProfilePlot(prof_sub)
     

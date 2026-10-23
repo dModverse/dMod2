@@ -21,6 +21,21 @@ test_that("rref names its result", {
   expect_identical(r[[1]], r$rref)
 })
 
+test_that("nullZ of a matrix without pivots is the identity", {
+  expect_equal(nullZ(matrix(0, 2, 3)), diag(3))
+})
+
+test_that("plotArray takes more simulations than the profile has points", {
+  times <- 0:5
+  grid <- data.frame(name = "A", time = times, row.names = paste0("A", times))
+  x <- Xd(grid)
+  pars <- structure(exp(-times / 2), names = getParameters(x))
+  profs <- profile(constraintL2(mu = pars, sigma = 0.1), pars, whichPar = "A2",
+                   limits = c(-1, 1), cores = 1)
+  expect_s3_class(plotArray("A2", profs, x, times, covtable = NULL, nSim = 100),
+                  "ggplot")
+})
+
 test_that("repar takes the transformation first and refuses the other order", {
   tr <- c(a = "a", b = "b")
   expect_identical(repar(tr, "x ~ exp(x)", x = "a"), c(a = "exp(a)", b = "b"))

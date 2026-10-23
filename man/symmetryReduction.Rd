@@ -7,7 +7,7 @@
 symmetryReduction(
   object,
   fixed = NULL,
-  positive = TRUE,
+  positive = NULL,
   dPoly = 3L,
   dDarboux = 2L,
   dExp = 2L,
@@ -27,8 +27,8 @@ symmetryReduction(
 \item{fixed}{Coordinates with known values; scalings they remove are dropped.
 \code{NULL} (default) uses the gauge of \code{object}.}
 
-\item{positive}{Coordinates known to be positive: \code{TRUE} (default, all), \code{FALSE}
-(none) or a character vector.}
+\item{positive}{Coordinates known to be positive: \code{TRUE} (all), \code{FALSE} (none) or a
+character vector. \code{NULL} (default) takes the declaration of the detection in \code{object}.}
 
 \item{dPoly}{Degree bound of polynomial and rational invariants. Defaults
 to 3.}

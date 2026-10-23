@@ -17,6 +17,3 @@
 \description{
 Prints, for each equation, the symbols it depends on.
 }
-\author{
-Wolfgang Mader, \email{Wolfgang.Mader@fdm.uni-freiburg.de}
-}

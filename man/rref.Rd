@@ -4,20 +4,18 @@
 \alias{rref}
 \title{Reduced Row Echelon Form of a Matrix}
 \usage{
-rref(A, tol = sqrt(.Machine$double.eps), verbose = FALSE)
+rref(A, tol = sqrt(.Machine$double.eps))
 }
 \arguments{
 \item{A}{Numeric matrix.}
 
 \item{tol}{Numeric tolerance below which a pivot counts as zero. Defaults to
 \code{sqrt(.Machine$double.eps)}.}
-
-\item{verbose}{Logical. Not used.}
 }
 \value{
 A list with the elements \code{rref}, the reduced row echelon form of
-\code{A}, and \code{pivots}, the indices of the pivot columns as a one-row matrix
-(\code{NULL} if there is none).
+\code{A} with entries below \code{tol} set to zero, and \code{pivots}, the integer indices
+of the pivot columns.
 }
 \description{
 Computes the reduced row echelon form of a numeric matrix by Gauss-Jordan
@@ -28,15 +26,6 @@ A <- rbind(c(1, 2, 3), c(2, 4, 7), c(1, 2, 4))
 rref(A)
 
 }
-\references{
-John Fox, \code{rref()}, R-help mailing list, posted by Scott Hyde,
-2007-09-01,
-\url{https://stat.ethz.ch/pipermail/r-help/2007-September/139923.html}.
-}
 \seealso{
 \code{\link[=nullZ]{nullZ()}}
-}
-\author{
-Malenka Mader, \email{Malenka.Mader@fdm.uni-freiburg.de}. The
-signature and the argument check follow the function \code{rref()} by John Fox.
 }

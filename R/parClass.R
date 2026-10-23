@@ -1,16 +1,12 @@
-## Methods for the class parlist -----------------------------------------------
+## parlist: the fit results of mstrust() ---------------------------------------
 
 #' @param x list of fit results, each as returned by [trust()]. Default `NULL`
 #'   returns `NULL`.
 #' @rdname parlist
 #' @export
 as.parlist <- function(x = NULL) {
-  if (is.null(x)) {
-    return(NULL)
-  } else {
-    class(x) <- c("parlist", "list")
-    return(x)
-  }
+  if (is.null(x)) return(NULL)
+  structure(x, class = c("parlist", "list"))
 }
 
 #' @export
@@ -38,62 +34,38 @@ print.parlist <- function(x, ...) {
 #' @param object object of class `parlist`.
 #' @rdname parlist
 summary.parlist <- function(object, ...) {
-  
-  x <- object
-  
-  # Statistics
-  m_stat <- .statParlist(x)
-  m_error <- sum(m_stat == "error")
-  m_converged <- sum(m_stat == "converged")
-  m_notConverged <- sum(m_stat == "notconverged")
-  m_sumStatus <- sum(m_error, m_converged, m_notConverged)
-  m_total <- length(m_stat)
-  
-  # Best and worst fit
-  m_parframe <- as.parframe(x)
-  m_order <- order(m_parframe$value)
-  m_bestWorst <- m_parframe[c(m_order[1], tail(m_order, 1)),]
-  rownames(m_bestWorst) <- c("best", "worst")
-  cat("Results of the best and worst fit\n")
-  print(m_bestWorst)
-  
-  cat("\nStatistics of fit outcome",
-      "\nFits aborted:       ", m_error,
-      "\nFits not converged: ", m_notConverged,
-      "\nFits converged:     ", m_converged,
-      "\nFits total:         ", m_sumStatus, " [", m_total, "]", sep = "")
 
-  m_reasons <- .stopReasonTable(x)
-  if (!is.null(m_reasons)) {
+  status <- factor(.statParlist(object), levels = c("error", "notconverged", "converged"))
+  counts <- table(status)
+
+  frame <- as.parframe(object)
+  if (nrow(frame)) {
+    extremes <- frame[order(frame$value)[c(1L, nrow(frame))], ]
+    rownames(extremes) <- c("best", "worst")
+    cat("Best and worst fit\n")
+    print(extremes)
+  }
+
+  tally <- c("Fits aborted:" = counts[["error"]], "Fits not converged:" = counts[["notconverged"]],
+             "Fits converged:" = counts[["converged"]], "Fits total:" = length(status))
+  cat("\nStatistics of fit outcome\n", sprintf("%-20s%d\n", names(tally), tally), sep = "")
+
+  reasons <- .stopReasonTable(object)
+  if (!is.null(reasons)) {
     cat("\n\nTermination reason\n")
-    for (nm in names(m_reasons))
-      cat(formatC(nm, width = -20), m_reasons[[nm]], "\n", sep = "")
+    cat(sprintf("%-20s%d\n", names(reasons), as.integer(reasons)), sep = "")
   }
   invisible(object)
 }
 
 
 
-## Gather statistics of a fitlist: one row per fit, holding the convergence
-## status ("error" / "converged" / "notconverged"). Consumed by
-## summary.parlist() and as.parframe.parlist().
+# Convergence status per fit: "error", "converged" or "notconverged"
 .statParlist <- function(x) {
-  status <- do.call(rbind, lapply(x, function(fit) {
-    if (inherits(fit, "try-error") || any(names(fit) == "error") || any(is.null(fit))) {
-      return("error")
-    } else {
-      if (fit$converged) {
-        return("converged")
-      } else {
-        return("notconverged")
-      }
-    }
-  }))
-  
-  rownames(status) <- 1:length(status)
-  colnames(status) <- "fit status"
-
-  return(status)
+  vapply(x, function(fit) {
+    if (is.null(fit) || inherits(fit, "try-error") || !is.null(fit$error)) return("error")
+    if (isTRUE(fit$converged)) "converged" else "notconverged"
+  }, "", USE.NAMES = FALSE)
 }
 
 
@@ -131,124 +103,96 @@ summary.parlist <- function(object, ...) {
 #' @param ... not used.
 #' @return A `ggplot` object.
 #' @seealso [parlist()], [plotValues()]
-#' @author Malenka Mader, \email{Malenka.Mader@@fdm.uni-freiburg.de}
 #'   
 #' @export
 plot.parlist <- function(x, path = FALSE, ...) {
-  
-  pl <- x
-  
-  index <- do.call(rbind, lapply(pl, function(l) l$converged))
-  fl <- pl[index]
-  if (!path) {
-    initPar <- do.call(rbind, lapply(fl, function(l) l$parinit))
-    convPar <- do.call(rbind, lapply(fl, function(l) l$argument))
-    
-    ddata <- data.frame(cbind(matrix(initPar, ncol = 1), matrix(convPar, ncol = 1) ))
-    ddata <- cbind(rep(colnames(initPar), each = nrow(initPar)), ddata, 1)
-    names(ddata) <- c("parameter","x","y","run")
-    
-    #plot initial vs converged parameter values
-    ggplot(data=ddata)+facet_wrap(~ parameter)+geom_point(aes(x=x,y=y))
-  } else {
-    if (!any (names(fl[[1]]) == "argpath")){
-      stop("No path information in the fits. Run trust() or mstrust() with blather = TRUE.")
-    }
-    parNames <- names(fl[[1]]$parinit)
-    
-    pathPar <- do.call(rbind, mapply(function(l, idx) {
-      mParPath <- as.data.frame(matrix(l$argpath, ncol = 1))
-      mParPath <- cbind(rep(parNames,each = nrow(l$argpath), times = 1), rep(1:nrow(l$argpath), length(parNames)), mParPath, as.character(idx))
-    }, l = fl, idx = 1:length(fl), SIMPLIFY = FALSE))
-    names(pathPar) <- c("parameter", "iteration", "path", "idx")
-    ggplot(data=pathPar)+geom_line(aes(x=iteration,y=path,colour=idx))+facet_wrap(~ parameter)
-  }
+
+  fits <- x[.statParlist(x) == "converged"]
+  if (!length(fits)) stop("No converged fit to plot.", call. = FALSE)
+  if (path) return(.plotParlistPath(fits))
+
+  start <- do.call(rbind, lapply(fits, `[[`, "parinit"))
+  end <- do.call(rbind, lapply(fits, `[[`, "argument"))
+  frame <- data.frame(parameter = rep(colnames(start), each = nrow(start)),
+                      x = as.vector(start), y = as.vector(end), run = 1)
+  ggplot(frame, aes(x = x, y = y)) + geom_point() + facet_wrap(~parameter)
+}
+
+# Iterates of every fit, one line per fit and one panel per parameter
+.plotParlistPath <- function(fits) {
+  if (!"argpath" %in% names(fits[[1]]))
+    stop("No path information in the fits. Run trust() or mstrust() with blather = TRUE.")
+  pars <- names(fits[[1]][["parinit"]])
+  steps <- lapply(seq_along(fits), function(i) {
+    iterates <- fits[[i]][["argpath"]]
+    data.frame(parameter = rep(pars, each = nrow(iterates)),
+               iteration = rep(seq_len(nrow(iterates)), length(pars)),
+               path = as.vector(iterates), idx = as.character(i))
+  })
+  ggplot(do.call(rbind, steps), aes(x = iteration, y = path, colour = idx)) +
+    geom_line() + facet_wrap(~parameter)
 }
 
 
-
-
 #' @export
-#' @importFrom data.table as.data.table rbindlist
 #' @rdname as.parframe
 #' @param sortBy character, the column by which the returned parameter frame
 #' is sorted. Default `"value"`.
 as.parframe.parlist <- function(x, sortBy = "value", ...) {
-  m_stat <- .statParlist(x)
-  m_metanames <- c("index", "value", "converged", "iterations")
-  m_idx <- which("error" != m_stat)
-  m_parframe <- data.frame(index = m_idx,
-                           value = vapply(x[m_idx], function(.x) .x$value, 1.0),
-                           converged = vapply(x[m_idx], function(.x) .x$converged, TRUE),
-                           iterations = vapply(x[m_idx], function(.x) as.integer(.x$iterations), 1L))
 
-  m_reasons <- .stopReasonParlist(x)[m_idx]
-  if (any(!is.na(m_reasons))) {
-    m_parframe$stopReason <- m_reasons
-    m_metanames <- c(m_metanames, "stopReason")
-  }
+  keep <- which(.statParlist(x) != "error")
+  fits <- x[keep]
+  field <- function(name, type, convert = identity)
+    vapply(fits, function(f) if (is.null(f[[name]])) type[NA_integer_] else convert(f[[name]]), type)
 
-  # Objective (= gradient) evaluations, those spent in the quasi-Newton phase,
-  # and the Hessian source handovers; present only when the optimiser reports
-  # them.
-  .intcol <- function(field) vapply(x[m_idx], function(.x)
-    if (is.null(.x[[field]])) NA_integer_ else as.integer(.x[[field]]), 1L)
-  for (field in c("neval", "qnEval", "qnSkipped", "nSwitch")) {
-    col <- .intcol(field)
-    if (any(!is.na(col))) { m_parframe[[field]] <- col; m_metanames <- c(m_metanames, field) }
-  }
+  out <- data.frame(index = keep,
+                    value = vapply(fits, function(f) f[["value"]], numeric(1)),
+                    converged = vapply(fits, function(f) isTRUE(f[["converged"]]), logical(1)),
+                    iterations = vapply(fits, function(f) as.integer(f[["iterations"]]), integer(1)))
+
+  # Diagnostics enter only when at least one fit reports them: the termination
+  # reason, the objective evaluations (all, quasi-Newton, skipped) and the
+  # Hessian source handovers.
+  extra <- list(stopReason = .stopReasonParlist(x)[keep])
+  for (name in c("neval", "qnEval", "qnSkipped", "nSwitch"))
+    extra[[name]] <- field(name, integer(1), as.integer)
 
   # Iterations per element of trust()'s `phases`, summed over its runs, when
   # the fits had more than one.
-  m_phase <- lapply(x[m_idx], function(.x) .x[["phaseIterations"]])
-  m_labels <- unique(unlist(lapply(x[m_idx], function(.x)
-    names(.x[["phaseSweep"]]) %||% names(.x[["phaseIterations"]]))))
-  if (length(m_labels) > 1L) for (l in m_labels) {
-    col <- paste0("iterations.", l)
-    m_parframe[[col]] <- vapply(m_phase, function(v)
-      if (is.null(v)) NA_integer_ else as.integer(sum(v[names(v) == l])), 1L)
-    m_metanames <- c(m_metanames, col)
-  }
+  phases <- unique(unlist(lapply(fits, function(f)
+    names(f[["phaseSweep"]]) %||% names(f[["phaseIterations"]]))))
+  if (length(phases) > 1L) for (ph in phases)
+    extra[[paste0("iterations.", ph)]] <- vapply(fits, function(f) {
+      it <- f[["phaseIterations"]]
+      if (is.null(it)) NA_integer_ else as.integer(sum(it[names(it) == ph]))
+    }, integer(1))
+  extra$elapsed <- field("elapsed", numeric(1))
 
-  m_elapsed <- vapply(x[m_idx], function(.x)
-    if (is.null(.x[["elapsed"]])) NA_real_ else .x[["elapsed"]], 1.0)
-  if (any(!is.na(m_elapsed))) {
-    m_parframe$elapsed <- m_elapsed
-    m_metanames <- c(m_metanames, "elapsed")
-  }
+  extra <- Filter(function(col) !all(is.na(col)), extra)
+  out[names(extra)] <- extra
+  meta <- names(out)
 
-  parameters <- lapply(x[m_idx], function(x) data.table::as.data.table(as.list(x$argument)))
-  parameters <- data.table::rbindlist(parameters, use.names = TRUE)
-  m_parframe <- cbind(m_parframe, parameters)
-  
-  # Sort by value
-  m_parframe <- m_parframe[order(m_parframe[[sortBy]]),]
-  
-  out <- parframe(m_parframe, parameters = names(parameters), metanames = m_metanames)
+  # Fits may differ in their parameters; a parameter a fit lacks is NA there.
+  pars <- as.character(unique(unlist(lapply(fits, function(f) names(f[["argument"]])))))
+  for (par in pars)
+    out[[par]] <- vapply(fits, function(f) as.numeric(f[["argument"]][par]), numeric(1))
+
+  out <- parframe(out[order(out[[sortBy]]), , drop = FALSE], parameters = pars, metanames = meta)
   attr(out, "run") <- attr(x, "run")
   out
 }
 
 
 
-#' @author Wolfgang Mader, \email{Wolfgang.Mader@@fdm.uni-freiburg.de}
 #'
 #' @rdname parlist
 #' @export
-#' @export c.parlist
 c.parlist <- function(...) {
-  m_fits <- lapply(list(...), unclass)
-  m_fits <- do.call(c, m_fits)
-  m_parlist <- mapply(function(fit, idx) {
-    if (is.list(fit)) fit$index <- idx
-    return(fit)
-  }, fit = m_fits, idx = seq_along(m_fits), SIMPLIFY = FALSE)
-  
-  return(as.parlist(m_parlist))
+  # a single fit is one entry, not a list of entries
+  parts <- lapply(list(...), function(a)
+    if (!inherits(a, "parlist") && is.list(a) && !is.null(a$argument)) list(a) else unclass(a))
+  as.parlist(do.call(c, parts))
 }
-
-
-
 
 
 ## Methods for the class parframe ----
@@ -284,19 +228,21 @@ as.parframe <- function(x, ...) {
 #'   row. A warning is issued if that fit did not converge.
 #' @seealso [as.parframe()], [parvec()]
 #'
-#' @author Wolfgang Mader, \email{Wolfgang.Mader@@fdm.uni-freiburg.de}
-#'   
 #' @export
 as.parvec.parframe <- function(x, index = 1, ...) {
-  parframe <- x
-  m_order <- 1:nrow(x)
-  metanames <- attr(parframe, "metanames")
-  if ("value" %in% metanames) m_order <- order(parframe$value)
-  best <- as.parvec(unlist(as.data.frame(parframe)[m_order[index], attr(parframe, "parameters"), drop = FALSE]))
-  if ("converged" %in% metanames && !parframe[m_order[index],]$converged) {
-    warning("Parameter vector of an unconverged fit is selected.", call. = FALSE)
-  }
-  return(best)
+  if (length(index) != 1L || is.na(index) || index < 1 || index > nrow(x))
+    stop("'index' must be one number from 1 to ", nrow(x), ", the rows of the parframe.",
+         call. = FALSE)
+  metanames <- attr(x, "metanames")
+  row <- if ("value" %in% metanames) order(x$value)[index] else index
+  if ("converged" %in% metanames && isFALSE(x$converged[row]))
+    warning("The selected parameter vector is from an unconverged fit.", call. = FALSE)
+  .parvecRow(x, row)
+}
+
+# Row i of a parframe as parvec, in the row order of the frame
+.parvecRow <- function(x, i) {
+  as.parvec(unlist(as.data.frame(x)[i, attr(x, "parameters"), drop = FALSE]))
 }
 
 
@@ -304,25 +250,22 @@ as.parvec.parframe <- function(x, index = 1, ...) {
 
 #' @export
 #' @rdname plotPars
-plotPars.parframe <- function(x, tol = 1, ...){
-  
+plotPars.parframe <- function(x, ..., tol = 1) {
+
   if (!missing(...)) x <- subset(x, ...)
-  
-  jumps <- .stepDetect(x$value, tol)
-  jump.index <- approx(jumps, jumps, xout = 1:length(x$value), method = "constant", rule = 2)$y
-  
-  x$index <- as.factor(jump.index)
-  
-  myparframe <- x
-  parNames <- attr(myparframe,"parameters")
-  parOut <- wide2long.data.frame(out = ((myparframe[, c("index", "value", parNames)])) , keep = 1:2)
-  names(parOut) <- c("index", "value", "name", "parvalue")
-  plot <- ggplot2::ggplot(parOut, aes(x = name, y = parvalue, color = index)) + geom_boxplot(outlier.alpha = 0) + theme_dMod() + scale_color_dMod() + theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5))
-  
+
+  x <- x[order(x$value), ]
+  x$step <- as.factor(findInterval(seq_len(nrow(x)), .stepDetect(x$value, tol)))
+
+  parNames <- attr(x, "parameters")
+  parOut <- wide2long.data.frame(out = x[, c("step", "value", parNames)], keep = 1:2)
+  names(parOut) <- c("step", "value", "name", "parvalue")
+  plot <- ggplot2::ggplot(parOut, aes(x = name, y = parvalue, color = step)) +
+    geom_boxplot(outlier.alpha = 0) + theme_dMod() + scale_color_dMod() +
+    guides(x = guide_axis(angle = 90))
+
   attr(plot, "data") <- parOut
-  
-  return(plot)
-  
+  plot
 }
 
 
@@ -342,7 +285,7 @@ plotPars.parframe <- function(x, tol = 1, ...){
 
 #' @export
 #' @rdname plotValues
-plotValues.parframe <- function(x, tol = 1, ..., showSteps = FALSE, pseudoLog = FALSE) {
+plotValues.parframe <- function(x, ..., tol = 1, showSteps = FALSE, pseudoLog = FALSE) {
 
   if (!missing(...)) x <- subset(x, ...)
 
@@ -352,7 +295,7 @@ plotValues.parframe <- function(x, tol = 1, ..., showSteps = FALSE, pseudoLog = 
   jumps <- .stepDetect(pars$value, tol)
 
   yScale <- if (pseudoLog)
-    scale_y_continuous(trans = scales::pseudo_log_trans(base = 10), breaks = .decadeBreaks)
+    scale_y_continuous(transform = scales::pseudo_log_trans(base = 10), breaks = .decadeBreaks)
 
   stepLines <- stepLabels <- NULL
   if (showSteps) {
@@ -380,10 +323,7 @@ plotValues.parframe <- function(x, tol = 1, ..., showSteps = FALSE, pseudoLog = 
     scale_color_dMod_c() +
     theme_dMod()
 
-  attr(P, "data") <- pars
-  attr(P, "jumps") <- jumps
-
-  return(P)
+  structure(P, data = pars, jumps = jumps)
 
 }
 
@@ -457,15 +397,12 @@ plotValues.parframe <- function(x, tol = 1, ..., showSteps = FALSE, pseudoLog = 
 # `parlist` overlay. A `value` column places points at their distance to the
 # reference, otherwise on the zero line.
 .profilePoints <- function(parlist, sets) {
-  delta <- 0
-  if ("value" %in% colnames(parlist)) {
-    delta   <- as.numeric(parlist[, "value", drop = TRUE] - .profileReference(sets))
-    parlist <- parlist[, !colnames(parlist) %in%
-                         c("index", "value", "converged", "iterations")]
-  }
-  points <- data.frame(par   = as.numeric(as.matrix(parlist)),
-                       name  = rep(colnames(parlist), each = nrow(parlist)),
-                       delta = delta)
+  frame <- as.data.frame(parlist)
+  pars <- intersect(colnames(frame), unlist(lapply(sets, attr, "parameters")))
+  height <- if (is.null(frame[["value"]])) 0 else frame[["value"]] - .profileReference(sets)
+  points <- data.frame(par = as.numeric(unlist(frame[pars], use.names = FALSE)),
+                       name = rep(pars, each = nrow(frame)),
+                       delta = as.numeric(height))
   geom_point(data = points, aes(x = par, y = delta), color = "black",
              inherit.aes = FALSE)
 }
@@ -504,7 +441,8 @@ plotValues.parframe <- function(x, tol = 1, ..., showSteps = FALSE, pseudoLog = 
 plotProfile.parframe <- function(profs, ..., maxvalue = 5, parlist = NULL, ncol = NULL,
                                  threshold = .profileLines()) {
   sets <- .profileSets(profs)
-  data <- droplevels(subset(.profileFrame(sets, maxvalue), ...))
+  data <- .profileFrame(sets, maxvalue)
+  data <- droplevels(data[.filterRows(data, ...), , drop = FALSE])
   .profilePlot(data, sets, parlist, ncol, maxvalue, threshold)
 }
 
@@ -514,7 +452,8 @@ plotProfile.parframe <- function(profs, ..., maxvalue = 5, parlist = NULL, ncol 
 plotProfile.list <- function(profs, ..., maxvalue = 5, parlist = NULL, ncol = NULL,
                              threshold = .profileLines()) {
   sets <- .profileSets(profs)
-  data <- droplevels(subset(.profileFrame(sets, maxvalue), ...))
+  data <- .profileFrame(sets, maxvalue)
+  data <- droplevels(data[.filterRows(data, ...), , drop = FALSE])
   .profilePlot(data, sets, parlist, ncol, maxvalue, threshold)
 }
 
@@ -523,47 +462,52 @@ plotProfile.list <- function(profs, ..., maxvalue = 5, parlist = NULL, ncol = NU
 #' @export
 #' @rdname parframe
 is.parframe <- function(x) {
-  "parframe" %in% class(x)
+  inherits(x, "parframe")
 }
 
 #' @export
-#' @param i row index in any format. Default `NULL` keeps all rows.
-#' @param j column index in any format. Default `NULL` keeps all columns.
+#' @param i row index in any format; missing keeps all rows. Used alone, as in
+#'   `x[j]`, it selects columns, as for a data frame.
+#' @param j column index in any format; missing keeps all columns.
 #' @param drop logical. Default `FALSE`. `TRUE` returns a plain data frame or
 #'   vector instead of a `parframe`.
 #' @rdname parframe
-"[.parframe" <- function(x, i = NULL, j = NULL, drop = FALSE){
-  
-  metanames <- attr(x, "metanames")
-  obj.attributes <- attr(x, "obj.attributes")
-  parameters <- attr(x, "parameters")
-  
+"[.parframe" <- function(x, i, j, drop = FALSE) {
+
   out <- as.data.frame(x)
-  if (!is.null(i)) out <- out[i, ]
-  if (!is.null(j)) out <- out[, j, drop = drop]
-  
+  nIndex <- nargs() - if (missing(drop)) 0L else 1L
+  if (nIndex == 2L) {
+    if (!missing(i)) out <- out[i]
+  } else {
+    if (!missing(i)) out <- out[i, , drop = FALSE]
+    if (!missing(j)) out <- out[, j, drop = drop]
+  }
   if (drop) return(out)
-  
-  metanames <- intersect(metanames, colnames(out))
-  obj.attributes <- intersect(obj.attributes, colnames(out))
-  parameters <- intersect(parameters, colnames(out))
-  
-  out <- parframe(out, parameters = parameters, metanames = metanames, objAttributes = obj.attributes)
+
+  out <- parframe(out,
+                  parameters = intersect(attr(x, "parameters"), colnames(out)),
+                  metanames = intersect(attr(x, "metanames"), colnames(out)),
+                  objAttributes = intersect(attr(x, "obj.attributes"), colnames(out)))
   attr(out, "run") <- attr(x, "run")
   out
-
 }
 
 
 #' @export
-#' @param ... for `subset()`, a logical expression in the columns of `x`.
+#' @param ... for `subset()`, logical expressions in the columns of `x`; a row
+#'   is kept where all of them are `TRUE`.
 #' @rdname parframe
 subset.parframe <- function(x, ...) {
+  x[.filterRows(x, ...), ]
+}
 
-  # Columns of `x` first, then the caller's frame.
-  condition <- eval(substitute(alist(...)))[[1L]]
-  x[eval(condition, as.list(x), parent.frame()), ]
-
+# The rows of a data frame where every expression in `...` holds, NA counting as
+# FALSE. An expression sees the columns of `x` first, then the environment it was
+# written in, also when passed on through the `...` of another function.
+.filterRows <- function(x, ...) {
+  keep <- rep(TRUE, nrow(x))
+  for (q in rlang::enquos(...)) keep <- keep & rlang::eval_tidy(q, data = as.list(x))
+  keep & !is.na(keep)
 }
 
 #' Rows of a Parameter Frame with Unique Values
@@ -572,16 +516,14 @@ subset.parframe <- function(x, ...) {
 #' @param x parameter frame
 #' @param incomparables not used. Argument exists for compatibility with S3 generic.
 #' @param tol tolerance to decide when values are assumed to be equal, see [plotValues()].
-#' @param ... additional arguments being passed to [plotValues()], e.g. for subsetting.
-#' @return A subset of the parameter frame `x`.
+#' @param ... Not used. Select rows first with [subset()], as in
+#'   `unique(subset(x, converged))`.
+#' @return The rows of `x` with distinct values, sorted by value.
 #' @export
 unique.parframe <- function(x, incomparables = FALSE, tol = 1, ...) {
-  
-  
-  jumps <- attr(plotValues(x = x, tol = tol, ...), "jumps")
-  x[jumps, ]
-  
-  
+  if (!nrow(x)) return(x)
+  x <- x[order(x$value), ]
+  x[.stepDetect(x$value, tol), ]
 }
 
 
@@ -661,39 +603,22 @@ print.parvec <- function(x, ...) {
   
   par <- unclass(x)
   nms <- names(par)
-  n_width <- max(nchar(nms))
+  n_width <- max(0L, nchar(nms))
   
   cat("Parameter vector:\n")
-  for (i in seq_along(par)) {
-    val <- formatC(par[i], digits = 6, format = "g")
-    if (par[i] >= 0) val <- paste0(" ", val)
-    cat(sprintf("  %s : %s\n", format(nms[i], width = n_width, justify = "right"), val))
-  }
+  if (length(par))
+    cat(sprintf("  %s : %s\n", format(nms, width = n_width, justify = "right"),
+                formatC(par, digits = 6, format = "g", flag = " ")), sep = "")
   
-  deriv  <- attr(x, "deriv")
-  deriv2 <- attr(x, "deriv2")
-  fixed  <- attr(x, "fixed")
-
-  cat("\nAttributes:\n")
-  if (!is.null(deriv)) {
-    d <- dim(deriv)
-    cat(sprintf("  deriv  : %d x %d matrix\n", d[1], d[2]))
-  } else {
-    cat("  deriv  : <none>\n")
-  }
-
-  if (!is.null(deriv2)) {
-    d2 <- dim(deriv2)
-    cat(sprintf("  deriv2 : %d x %d x %d array\n", d2[1], d2[2], d2[3]))
-  } else {
-    cat("  deriv2 : <none>\n")
-  }
-
-  if (!is.null(fixed) && length(fixed) > 0) {
-    cat(sprintf("  fixed  : %s\n", paste(fixed, collapse = ", ")))
-  } else {
-    cat("  fixed  : <none>\n")
-  }
+  # "<rows> x <cols> matrix" for a derivative, "<none>" without one
+  shape <- function(a, kind)
+    if (is.null(a)) "<none>" else paste(paste(dim(a), collapse = " x "), kind)
+  fixed <- attr(x, "fixed")
+  cat("\nAttributes:\n",
+      sprintf("  deriv  : %s\n", shape(attr(x, "deriv"), "matrix")),
+      sprintf("  deriv2 : %s\n", shape(attr(x, "deriv2"), "array")),
+      sprintf("  fixed  : %s\n", if (length(fixed)) paste(fixed, collapse = ", ") else "<none>"),
+      sep = "")
 
   invisible(x)
 }
@@ -880,14 +805,13 @@ c.parvec <- function(...) {
 }
 
 
-## Methods for the class parfn--------------------------------------------------
+## Printing a parameter transformation (parfn) ---------------------------------
 
 #' Print Parameter Transformations
 #'
 #' @param x object of class `parfn`.
 #' @param ... not used.
 #' @return `x`, invisibly.
-#' @author Wolfgang Mader, \email{Wolfgang.Mader@@fdm.uni-freiburg.de}
 #' 
 #' @export
 print.parfn <- function(x, ...) {
@@ -996,7 +920,7 @@ parfn <- function(p2p, parameters = NULL, condition = NULL) {
 #' @seealso [as.parframe()], [profile()][profile.objfn], [mstrust()]
 #' @param x data frame. Default `NULL` gives an empty parameter frame.
 #' @param parameters character, the names of the parameter columns. Default
-#'   `colnames(x)`.
+#'   all columns that are neither in `metanames` nor in `objAttributes`.
 #' @param metanames character, the names of the meta-information columns.
 #'   Default `NULL`.
 #' @param objAttributes character, the names of the objective function
@@ -1013,30 +937,18 @@ parfn <- function(p2p, parameters = NULL, condition = NULL) {
 #' pf[pf$value < 3, ]
 #' as.parvec(pf)
 #' @export
-parframe <- function(x = NULL, parameters = colnames(x), metanames = NULL,
-                     objAttributes = NULL) {
-
-  if (!is.null(x)) {
-    rownames(x) <- NULL
-    out <- as.data.frame(x)
-  } else {
-    out <- data.frame()
-  }
-
-  attr(out, "parameters") <- parameters
-  attr(out, "metanames") <- metanames
-  attr(out, "obj.attributes") <- objAttributes
-  class(out) <- c("parframe", "data.frame")
-
-  return(out)
-
+parframe <- function(x = NULL, parameters = setdiff(colnames(x), c(metanames, objAttributes)),
+                     metanames = NULL, objAttributes = NULL) {
+  out <- if (is.null(x)) data.frame() else as.data.frame(x)
+  rownames(out) <- NULL
+  structure(out, parameters = parameters, metanames = metanames,
+            obj.attributes = objAttributes, class = c("parframe", "data.frame"))
 }
 
 #' Parameter List
 #'
 #' @description A parameter list holds the results of several optimisation
-#' runs, as returned by [mstrust()]. `c()` renumbers the fit index of the
-#' combined list.
+#' runs, as returned by [mstrust()]. `c()` concatenates parameter lists.
 #' @param ... for `parlist()` and `c()`, fit results or parameter lists; for
 #'   `print()` and `summary()`, not used.
 #' @return Object of class `parlist`. `print()` and `summary()` return their
@@ -1077,20 +989,9 @@ parlist <- function(...) {
 #' @example inst/examples/parvec.R
 #' @export
 parvec <- function(..., deriv = NULL) {
-  
-  mylist <- list(...)
-  if (length(mylist) > 0) {
-    mynames <- paste0("par", seq_along(mylist))
-    is.available <- !is.null(names(mylist))
-    mynames[is.available] <- names(mylist)[is.available]
-    
-    out <- as.numeric(unlist(mylist))
-    names(out) <- mynames
-    
-    return(as.parvec(out, deriv = deriv))
-  } else {
-    return(NULL)
-  }
+  x <- c(...)
+  if (!length(x)) return(NULL)
+  as.parvec(.fillNames(vapply(x, as.numeric, 0), "par"), deriv = deriv)
 }
 
 

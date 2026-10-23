@@ -22,10 +22,12 @@
 #' @export
 #'
 #' @examples
-#' eventlist(var = "A", time = "5", value = 1, method = "add")
+#' # Add 1 to A at t = 5
+#' eventlist(var = "A", time = 5, value = 1, method = "add")
 #'
-#' events <- addEvent(NULL, var = "A", time = "5", value = 1, method = "add")
-#' events <- addEvent(events, var = "A", time = "10", value = 1, method = "add")
+#' # Two doses of B, started from NULL and piped
+#' events <- addEvent(NULL, var = "B", time = 2, value = 0.5, method = "add") |>
+#'   addEvent(var = "B", time = 8, value = 0.5, method = "add")
 #'
 #' # With symbols: set A to value_switch at time_switch
 #' events <- eventlist()
@@ -94,7 +96,7 @@ as.eventlist <- function(x, ...) {
 #' @rdname as.eventlist
 as.eventlist.list <- function(x, ...) {
   
-  # Check names
+  if (!length(x) || (is.data.frame(x) && !nrow(x))) return(eventlist())
   required <- c("var", "time", "value", "method")
   if (!all(required %in% names(x)))
     stop("x needs to provide var, time, value, and method.")

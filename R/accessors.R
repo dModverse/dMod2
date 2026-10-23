@@ -40,7 +40,7 @@
 #' returns `x`.
 #' @seealso [normL2()], [P()], [Y()]
 #' @examples
-#' old <- options(dMod.outdir = tempdir())
+#' old <- options(dMod2.outdir = tempdir())
 #'
 #' ## parfn with condition
 #' p <- P(eqnvec(x = "-a*x"), method = "implicit", condition = "C1")
@@ -513,6 +513,7 @@ getParameters.fn <- function(x, ..., conditions = NULL) {
     parameters <- attr(x, "parameters")
   } else {
     mappings <- attr(x, "mappings")
+    if (is.null(names(mappings))) return(attr(x, "parameters"))
     mappings <- mappings[intersect(names(mappings), conditions)]
     parameters <- Reduce("union",
                          lapply(mappings, function(m) attr(m, "parameters"))
@@ -565,9 +566,7 @@ getParameters.eqnlist <- function(x, ..., conditions = NULL) {
 #' @export
 #' @rdname getParameters
 getParameters.eventlist <- function(x, ..., conditions = NULL) {
-  idx <- match(c("time", "value", "root"), names(x))
-  idx[!is.na(idx)]
-  Reduce(union, lapply(x[idx], getSymbols))
+  Reduce(union, lapply(x[intersect(c("time", "value", "root"), names(x))], getSymbols))
 }
 
 #' @export
@@ -677,25 +676,28 @@ modelname.fn <- function(x = NULL, ..., conditions = NULL) {
   
   mappings <- attr(x, "mappings")
   if (!is.null(mappings)) {
+    # unnamed mappings hold for every condition
     select <- seq_along(mappings)
-    if (!is.null(conditions)) select <- intersect(names(mappings), conditions)
-    if (length(value) == 1) value <- rep(value, length.out = length(select))
+    if (!is.null(conditions) && !is.null(names(mappings)))
+      select <- which(names(mappings) %in% conditions)
+    value <- rep(value, length.out = length(select))
     
-    for (i in select) {
+    for (k in seq_along(select)) {
+      i <- select[k]
       m <- mappings[[i]]
       
       if ("composed" %in% class(m)) {
-        modelname(m) <- value[i %% length(value) + 1]  # recursive
+        modelname(m) <- value[k]  # recursive
       } else {
-        attr(m, "modelname") <- value[i %% length(value) + 1]
+        attr(m, "modelname") <- value[k]
         # A deSolve leaf keeps the compiled model in its closure, from which
         # cOde reads the shared object to load, so the rename must reach it.
         e <- if (is.function(m)) environment(m) else NULL
         if (!is.null(e)) {
           if (!is.null(e[["func"]]))
-            attr(e[["func"]], "modelname") <- value[i %% length(value) + 1]
+            attr(e[["func"]], "modelname") <- value[k]
           if (!is.null(e[["extended"]]))
-            attr(e[["extended"]], "modelname") <- value[i %% length(value) + 1]
+            attr(e[["extended"]], "modelname") <- value[k]
           # A cppDE leaf caches a prepared batch handle bound to the shared
           # object the entry point was resolved from. The rename is exactly
           # what invalidates that binding, so drop the cache with it.
@@ -751,30 +753,6 @@ getEquations.odemodel <- function(x, conditions = NULL) {
 
 }
 
-
-
-#' @export
-#' @rdname getEquations
-getEquations.prdfn <- function(x, conditions = NULL) {
-
-  mappings <- attr(x, "mappings")
-
-  if (is.null(conditions)) {
-    equations <- lapply(mappings, function(m) attr(m, "equations"))
-    return(equations)
-  }
-
-  if (!is.null(conditions)) {
-    mappings <- mappings[conditions]
-    equations <- lapply(mappings, function(m) attr(m, "equations"))
-    if (length(equations) == 1) {
-      return(equations[[1]])
-    } else {
-      return(equations)
-    }
-  }
-
-}
 
 
 #' @export

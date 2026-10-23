@@ -99,7 +99,7 @@ print.odemodel <- function(x, ...) {
 #'   through \pkg{cOde}.
 #' @param verbose logical, print the compiler output. Default `FALSE`.
 #' @param outdir directory for the generated sources and shared objects.
-#'   Default `getOption("dMod.outdir")`, else the working directory.
+#'   Default `getOption("dMod2.outdir")`, else the working directory.
 #'   `backend = "deSolve"` writes to the working directory only.
 #' @param ... Passed to [cppDE::cppODE()], [cppDE::cvode()] or
 #'   [cOde::funC()], according to `backend`. Among them:
@@ -140,6 +140,8 @@ odemodel <- function(f, deriv = TRUE, deriv2 = FALSE, derivMode = "forward",
   backend <- match.arg(backend)
   derivMode <- .matchDerivMode(derivMode, c("forward", "reverse",
                                             "forward-forward", "forward-reverse"))
+  # without derivatives there is no direction to build
+  if (!deriv && !deriv2) derivMode <- "forward"
   reverse  <- "reverse" %in% derivMode
   reverse2 <- "forward-reverse" %in% derivMode
   # The two spellings of forward over forward name the same build product.

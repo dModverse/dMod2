@@ -1,5 +1,5 @@
 \donttest{
-## Prediction function
+## Observation of a regression curve
 regfn <- c(y = "sin(a*time)")
 g <- Y(regfn, parameters = "a", compile = TRUE, modelname = "parlist_obs",
        outdir = tempdir())

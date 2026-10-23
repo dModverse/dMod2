@@ -122,43 +122,35 @@ NULL
 #' combine(data1, data2)
 #' @export
 combine <- function(...) {
-  
-  # List of input data.frames
-  mylist <- list(...)
-  # Remove empty slots
-  is.empty <- sapply(mylist, is.null)
-  mylist <- mylist[!is.empty]
-  
-  mynames <- unique(unlist(lapply(mylist, function(S) colnames(S))))
-  
+
+  mylist <- Filter(Negate(is.null), list(...))
+  if (!length(mylist)) return(NULL)
+  mynames <- unique(unlist(lapply(mylist, colnames)))
+
+  if (all(vapply(mylist, is.matrix, TRUE))) {
+    out <- do.call(rbind, lapply(mylist, function(l) {
+      full <- matrix(0, nrow(l), length(mynames), dimnames = list(rownames(l), mynames))
+      full[, colnames(l)] <- l
+      full
+    }))
+    return(out)
+  }
+
   mylist <- lapply(mylist, function(l) {
-    
-    if(is.data.frame(l)) {
-      i <- sapply(l, is.factor)
-      l[i] <- lapply(l[i], as.character)
-      present.list <- as.list(l)
-      missing.names <- setdiff(mynames, names(present.list))
-      missing.list <- structure(as.list(rep(NA, length(missing.names))), names = missing.names)
-      combined.data <- do.call(function(...) cbind.data.frame(..., stringsAsFactors = FALSE), c(present.list, missing.list))
-      rownames(combined.data) <- rownames(l)
-    }
-    if(is.matrix(l)) {
-      present.matrix <- as.matrix(l)
-      missing.names <- setdiff(mynames, colnames(present.matrix))
-      missing.matrix <- matrix(0, nrow = nrow(present.matrix), ncol = length(missing.names), 
-                             dimnames = list(NULL, missing.names))
-      combined.data <- submatrix(cbind(present.matrix, missing.matrix), cols = mynames)
-      rownames(combined.data) <- rownames(l)
-    }
-    
-    return(combined.data)
+    l <- as.data.frame(l, stringsAsFactors = FALSE)
+    l[] <- lapply(l, function(column) if (is.factor(column)) as.character(column) else column)
+    l
   })
-  
-  out <- do.call(rbind, mylist)
-  
-  return(out)
-  
-  
+  out <- as.data.frame(data.table::rbindlist(mylist, use.names = TRUE, fill = TRUE))[mynames]
+  # Row names as rbind() gives them: automatic ones are numbered, the others
+  # made unique.
+  if (!all(vapply(mylist, function(l) .row_names_info(l) < 0, TRUE))) {
+    rn <- unlist(lapply(mylist, function(l)
+      if (.row_names_info(l) < 0) rep(NA_character_, nrow(l)) else rownames(l)))
+    rn[is.na(rn)] <- which(is.na(rn))
+    rownames(out) <- make.unique(rn, sep = "")
+  }
+  out
 }
 
 
@@ -184,7 +176,6 @@ combine <- function(...) {
 #'   \item{`condition`}{for a list, its names, or the list positions if it
 #'     has none.}
 #' }
-#' @seealso [long2wide()]
 #' @examples
 #' out <- cbind(time = 0:2, A = c(1, 0.5, 0.25), B = c(0, 0.5, 0.75))
 #' wide2long(out)
@@ -212,8 +203,10 @@ wide2long.matrix <- function(out, keep = 1, na.rm = FALSE) {
   
   timenames <- colnames(out)[keep]
   allnames <- colnames(out)[-keep]
-  if (any(duplicated(allnames))) warning("Found duplicated colnames in out. Duplicates were removed.")
-  times <- out[,keep]
+  if (anyDuplicated(allnames))
+    stop("Duplicated column names: ", paste(unique(allnames[duplicated(allnames)]), collapse = ", "),
+         call. = FALSE)
+  times <- out[, keep, drop = FALSE]
   ntimes <- nrow(out)
   values <- unlist(out[,allnames])
   outlong <- data.frame(times, 
@@ -230,54 +223,18 @@ wide2long.matrix <- function(out, keep = 1, na.rm = FALSE) {
 #' @rdname wide2long
 #' @export
 wide2long.list <- function(out, keep = 1, na.rm = FALSE) {
-  
-  # An unnamed list still needs a condition column; without one `cbind` would
-  # drop it and every caller reading `$condition` would come up empty.
+  # An unnamed list still gets a condition column, which callers read.
   conditions <- names(out)
   if (is.null(conditions)) conditions <- as.character(seq_along(out))
-  
-  outlong <- do.call(rbind, lapply(seq_along(out), function(cond) {
-    
-    cbind(wide2long.matrix(out[[cond]], keep = keep, na.rm = na.rm),
-          condition = conditions[cond])
-    
-  }))
-  
-  
-  
-  return(outlong)
-  
+  pieces <- lapply(out, wide2long.matrix, keep = keep, na.rm = na.rm)
+  outlong <- as.data.frame(data.table::rbindlist(pieces))
+  outlong$condition <- rep(conditions, vapply(pieces, nrow, 1L))
+  outlong
 }
 
 
 
 
-## long2wide --------------------------------------------
-
-#' Translate Long Format into Wide Format
-#'
-#' Inverse of [wide2long()] for a single condition.
-#'
-#' @param out Data frame in long format with time, name and value as its
-#'   first three columns, each name having a value at every time.
-#' @return A matrix in wide format, one column per name after the time column.
-#' @seealso [wide2long()]
-#' @examples
-#' out <- cbind(time = 0:2, A = c(1, 0.5, 0.25), B = c(0, 0.5, 0.75))
-#' long2wide(wide2long(out))
-#' @export
-long2wide <- function(out) {
-  
-  timename <- colnames(out)[1]
-  times <- unique(out[,1])
-  allnames <- unique(as.character(out[,2]))
-  M <- matrix(out[,3], nrow=length(times), ncol=length(allnames))
-  M <- cbind(times, M)
-  colnames(M) <- c(timename, allnames)
-  
-  return(M)
-  
-}
 
 
 
@@ -289,31 +246,19 @@ long2wide <- function(out) {
 #' Adds to each data frame a column `condition` with its name in the list and
 #' binds them by rows.
 #'
-#' @param mylist A named list of data frames with the same columns.
+#' @param mylist A named list of data frames; a column missing in one of them
+#'   is `NA` there.
 #' @return A data frame with the original columns and `condition`.
 #' @examples
 #' lbind(list(C1 = data.frame(x = 1:2), C2 = data.frame(x = 3)))
 #' @export
 lbind <- function(mylist) {
-  
+  if (!length(mylist)) return(NULL)
   conditions <- names(mylist)
-  numconditions <- conditions
-
-  
-  outlong <- do.call(rbind, lapply(1:length(conditions), function(cond) {
-    
-    myout <- mylist[[cond]]
-    if (nrow(myout) > 0)
-      myout[["condition"]] <- numconditions[cond]
-    else
-      myout[["condition"]] <- character(0)
-    
-    return(myout)
-    
-  }))
-  
-  return(outlong)
-  
+  if (is.null(conditions)) conditions <- as.character(seq_along(mylist))
+  out <- as.data.frame(data.table::rbindlist(mylist, use.names = TRUE, fill = TRUE))
+  out$condition <- rep(conditions, vapply(mylist, nrow, 1L))
+  out
 }
 
 

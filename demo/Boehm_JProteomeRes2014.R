@@ -5,14 +5,16 @@
 
 library(dMod2)
 library(ggplot2)
-set.seed(5555)
 
 .modelname <- "boehm"
-# generated sources, objects and libraries go here, not the working directory
 .outdir    <- file.path(tempdir(), .modelname)
 if (!dir.exists(.outdir)) dir.create(.outdir, recursive = TRUE)
+# generated sources and shared objects go to .outdir, see ?dMod2 for the options;
+# compiling, fitting and profiling use the free cores of this machine
+.opt   <- options(dMod2.outdir = .outdir)
+.cores <- detectFreeCores()
+set.seed(5555)
 .petabDir <- system.file("extdata", "petab_boehm", package = "dMod2")
-.cores    <- 8
 
 
 # Reactions ---------------------------------------------------------------------
@@ -48,7 +50,7 @@ as.eqnvec(reactions)
 # error model has one standard deviation per observable, estimated with the rest.
 myOptions <- list(atol = 1e-8, rtol = 1e-6, maxattempts = 100L, maxsteps = 1e6)
 
-model <- odemodel(reactions, modelname = "boehm_ode", compile = FALSE, outdir = .outdir)
+model <- odemodel(reactions, modelname = "boehm_ode", compile = FALSE)
 x <- Xs(model, options = myOptions)
 
 observables <- eqnvec(
@@ -62,10 +64,8 @@ errors <- eqnvec(
   rSTAT5A_rel = "sd_rSTAT5A_rel"
 )
 
-g <- Y(observables, x, modelname = "boehm_obs", attachInput = FALSE,
-       compile = FALSE, outdir = .outdir)
-e <- Y(errors, g, modelname = "boehm_err", attachInput = FALSE,
-       compile = FALSE, outdir = .outdir)
+g <- Y(observables, x, modelname = "boehm_obs", compile = FALSE)
+e <- Y(errors, g, modelname = "boehm_err", compile = FALSE)
 
 
 # Parameter transformation ------------------------------------------------------
@@ -83,11 +83,11 @@ p <- eqnvec() |>
   insert("ratio ~ 0.693") |>
   insert("specC17 ~ 0.107") |>
   insert("x~exp10(x)", x = estimated) |>
-  P(modelname = "boehm_trafo", condition = "Boehm2014", compile = FALSE, outdir = .outdir)
+  P(modelname = "boehm_trafo", condition = "Boehm2014", compile = FALSE)
 
 # One call compiles ODE, sensitivities, observation, error model and trafo
 # together into one shared object.
-compile(g, x, p, e, output = .modelname, cores = 4)
+compile(g, x, p, e, output = .modelname, cores = .cores)
 prd       <- g*x*p
 outerpars <- getParameters(prd)
 
@@ -105,58 +105,58 @@ obj    <- normL2(data, prd, e) + constraintL2(pouter[dyn], sigma = 4)
 
 # Fifty trust-region fits from random starts, sorted by value: the lowest
 # plateau holds the runs that reached the best optimum.
-fits <- mstrust(obj, center = pouter, sd = 3, fits = 50, cores = .cores,
-                rinit = 0.1, rmax = 10, iterlim = 5000)
-fits <- as.parframe(fits)
+fits <- mstrust(obj, pouter, sd = 3, fits = 50, cores = .cores, iterlim = 5000) |>
+  as.parframe()
 plotValues(fits, tol = 0.1, value < 1e4)
 best <- as.parvec(fits)
 
 
 # Error model by restricted maximum likelihood ----------------------------------
 # Maximum likelihood underestimates the standard deviations, because the fitted
-# mean shrinks the residuals. `reml()` weights each residual by one minus its
+# mean shrinks the residuals. `reml()` counts each data point with one minus its
 # leverage, the stationarity condition of the restricted likelihood (Patterson
-# and Thompson 1971), which leaves the standard deviations unbiased.
+# and Thompson 1971), which corrects the variances for the degrees of freedom the
+# mean uses.
 remlfit <- reml(obj, best)
+stopifnot(remlfit$converged)
 rbind(ML = best[remlfit$errpars], REML = remlfit$argument[remlfit$errpars])
 remlfit$dof     # data points minus the summed leverage, per observable
 remlfit$rank    # effective number of mean parameters
 
-# The summed leverage per observable adds up to the rank, which stays below the
-# nominal number of mean parameters.
-lev <- remlLeverage(obj, best)
-tapply(lev$leverage, lev$name, sum)
+# The summed leverage per observable adds up to the rank.
+tapply(remlfit$leverage$leverage, remlfit$leverage$name, sum)
 
 
 # Fit and uncertainty band ------------------------------------------------------
 # One standard deviation of the REML error model around the prediction.
-pars   <- remlfit$argument
-times  <- seq(0, 240, length.out = 200)
-prdout <- as.data.frame(prd(times, pars, deriv = FALSE), errfn = e)
+times      <- seq(0, 240, length.out = 200)
+prediction <- prd(times, remlfit$argument, deriv = FALSE)
 
-plot(prd(times, pars, deriv = FALSE), data) +
-  geom_ribbon(data = prdout, aes(x = time, ymin = value - sigma, ymax = value + sigma),
+plot(prediction, data) +
+  geom_ribbon(data = as.data.frame(prediction, errfn = e),
+              aes(x = time, ymin = value - sigma, ymax = value + sigma),
               linetype = "dashed", alpha = 0.3) +
-  labs(x = "time [min]", y = "relative signal [%]", colour = NULL, fill = NULL)
+  labs(x = "time [min]", y = "relative signal [%]", colour = NULL)
 
 
 # Profile likelihood ------------------------------------------------------------
 # A profile re-optimises every other parameter while one is held away from the
 # optimum, so the interval comes from the likelihood itself (Raue et al. 2009).
-# `profileThreshold()` gives the threshold once for `profile()`, `plotProfile()`
-# and `confint()`; `method = "F"` calibrates it for the finite sample, with the
-# effective rank of the REML fit as the number of mean parameters.
+# `profileThreshold()` gives the threshold for `profile()` and `plotProfile()`;
+# `confint()` computes the same one from `method`, `n` and `p`. `method = "F"`
+# calibrates it for the finite sample, with the effective rank of the REML fit as
+# the number of mean parameters.
 nd     <- sum(vapply(data, nrow, 0L))
 thr_95 <- profileThreshold(0.95, method = "F", n = nd, p = remlfit$rank)
 thr_90 <- profileThreshold(0.90, method = "F", n = nd, p = remlfit$rank)
 
 # The intervals are taken on the data term; the prior only keeps the fit finite.
 profiles <- profile(
-  obj, best, names(best), limits = c(-5, 5), cores = length(best), delta = thr_95,
-  stepControl = list(stepsize = 1e-4, min = 1e-4, max = Inf,
-                     atol = 1e-3, rtol = 1e-3, limit = 200, stop = "data"),
+  obj, best, whichPar = names(best), limits = c(lower = -5, upper = 5),
+  cores = .cores, delta = thr_95,
+  stepControl = list(atol = 1e-3, rtol = 1e-3, limit = 200, stop = "data"),
   algoControl = list(reoptimize = TRUE),
-  optControl  = list(rinit = 0.1, rmax = 10, iterlim = 20))
+  optControl  = list(iterlim = 20))
 
 plotProfile(profiles, mode %in% c("data", "prior"),
             threshold = c("90%" = thr_90, "95%" = thr_95))
@@ -170,14 +170,15 @@ confint(profiles, level = 0.95, val.column = "data",
 
 # Cross-check against the PEtab form of the same problem ------------------------
 # The import rebuilds the model from SBML and the tables. At the published
-# optimum both forms give the same sum of squares. The explicit modelname keeps
-# the import's files apart from the hand-built ones.
-.pars     <- read.delim(file.path(.petabDir, "parameters_Boehm_JProteomeRes2014.tsv"))
-.pars     <- .pars[.pars$estimate == 1, ]
-published <- setNames(log10(.pars$nominalValue), .pars$parameterId)[outerpars]
-
-petab <- importPEtab(file.path(.petabDir, "Boehm.yaml"), backend = "cppDE", cores = 4,
-                     modelname = "boehm_petab", outdir = .outdir, options = myOptions)
+# optimum, `petab$bestfit`, both forms give the same sum of squares. The explicit
+# modelname keeps the import's files apart from the hand-built ones.
+petab <- importPEtab(file.path(.petabDir, "Boehm.yaml"), backend = "cppDE",
+                     cores = .cores, modelname = "boehm_petab", options = myOptions)
 stopifnot(setequal(names(petab$bestfit), outerpars))
-c(hand  = attr(obj(published, deriv = FALSE), "chi2"),
-  PEtab = attr(petab$obj(published, deriv = FALSE), "chi2"))
+published <- petab$bestfit[outerpars]
+chi2 <- c(hand  = attr(obj(published, deriv = FALSE), "chi2"),
+          PEtab = attr(petab$obj(published, deriv = FALSE), "chi2"))
+chi2
+stopifnot(isTRUE(all.equal(unname(chi2[1]), unname(chi2[2]), tolerance = 1e-6)))
+
+options(.opt)

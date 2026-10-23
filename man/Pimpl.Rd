@@ -75,7 +75,7 @@ is not advanced.}
 }}
 
 \item{outdir}{Directory for the generated files, default
-\code{getOption("dMod.outdir")}, else the working directory.}
+\code{getOption("dMod2.outdir")}, else the working directory.}
 }
 \value{
 A \link{parfn}, called as \code{p(pars, ...)}, see section Calling a dMod
@@ -134,7 +134,7 @@ conditions of the function.
 An objective function stores its prediction there as \code{prediction} and
 returns the environment as attribute \code{env}.
 \item \code{cores}: number of threads for the ODE solves and the residual kernel.
-Default \code{getOption("dMod.cores", 1L)}.
+Default \code{getOption("dMod2.cores", 1L)}.
 }
 
 Prediction, observation and parameter functions accept \code{hessian} and

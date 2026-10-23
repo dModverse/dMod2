@@ -24,5 +24,5 @@ getSymbols(c("k1*A/(Km + A)", "exp(-k2*time)"))
 getSymbols("k1*A + k2*B", exclude = "A")
 }
 \seealso{
-\code{\link[=replaceSymbols]{replaceSymbols()}}, \code{\link[=getElements]{getElements()}}
+\code{\link[=replaceSymbols]{replaceSymbols()}}
 }

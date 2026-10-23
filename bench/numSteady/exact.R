@@ -34,13 +34,10 @@ arms <- lapply(list(Ctrl = c(0, 0, 0, 0), R1Knd = c(0, 0, 1, 0), R2Knd = c(0, 0,
 symbolic <- function(pert) {
   r <- bare$reactions
   r$rates <- cOde::replaceSymbols(names(pert), as.character(pert), r$rates)
-  for (v in c("1.4", "1.3")) {
-    ss <- tryCatch(suppressMessages({
-      utils::capture.output(y <- steadyStates(r, forcings = bare$forcings, version = v, verbose = FALSE))
-      y }), error = function(e) NULL)
-    if (is.character(ss) && length(ss) > 1L) return(list(ss = ss, version = v))
-  }
-  NULL
+  ss <- tryCatch(suppressMessages({
+    utils::capture.output(y <- steadyStates(r, forcings = bare$forcings, verbose = FALSE))
+    y }), error = function(e) NULL)
+  if (is.character(ss) && length(ss) > 1L) list(ss = ss)
 }
 
 evalSS <- function(ss, free) {
@@ -70,7 +67,7 @@ for (a in names(arms)) {
     val <- evalSS(ss, free)
     vals <- c(free, val)
     if (anyNA(val) || any(!is.finite(val)) || any(val < 0)) {
-      res[[length(res) + 1L]] <- data.table(arm = a, version = sym$version, valid = FALSE); next
+      res[[length(res) + 1L]] <- data.table(arm = a, valid = FALSE); next
     }
     x <- setNames(rep(0, length(dep)), dep)
     x[intersect(dep, names(vals))] <- vals[intersect(dep, names(vals))]
@@ -102,7 +99,7 @@ for (a in names(arms)) {
       other <- rel < 1e-6 && sto$maxRe <= 1e-8 * sto$scale
     }
     ow <- tryCatch(pss(c(p, x), deriv = FALSE)[[1]], error = function(e) conditionMessage(e))
-    res[[length(res) + 1L]] <- data.table(arm = a, version = sym$version, valid = TRUE, stable = stable,
+    res[[length(res) + 1L]] <- data.table(arm = a, valid = TRUE, stable = stable,
                                           ok = ok, time = t, relerr = err, other_stable = other,
                                           relerr_warm = relErr(ow),
                                           msg = if (ok) "" else substr(o, 1, 100))
@@ -111,7 +108,7 @@ for (a in names(arms)) {
 res <- rbindlist(res, fill = TRUE)
 saveRDS(res, file.path(outdir, "exact.rds"))
 st <- res[stable %in% TRUE]
-print(st[, .(steadyStates = version[1], stable = .N, cold_equal = sum(relerr <= 1e-6, na.rm = TRUE),
+print(st[, .(stable = .N, cold_equal = sum(relerr <= 1e-6, na.rm = TRUE),
              cold_other_basin = sum(other_stable %in% TRUE), cold_wrong = sum(other_stable %in% FALSE),
              cold_failed = sum(!ok), cold_relerr_med = median(relerr, na.rm = TRUE),
              warm_relerr_max = max(relerr_warm, na.rm = TRUE), t_med = median(time)), by = arm])

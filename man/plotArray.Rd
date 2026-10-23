@@ -9,9 +9,9 @@ plotArray(
   profs,
   prd,
   times,
-  direction = c("up", "down"),
-  covtable,
   ...,
+  direction = c("up", "down"),
+  covtable = NULL,
   nSim = 4
 )
 }
@@ -26,17 +26,19 @@ plotArray(
 
 \item{times}{Numeric vector of time points for the prediction.}
 
+\item{...}{Logical expressions in the columns \code{time}, \code{name}, \code{value},
+\code{condition} and those of \code{covtable} to subset the plotted data.}
+
 \item{direction}{\code{"up"} (default) or \code{"down"}, the side of the profile that
 is traced from the optimum.}
 
 \item{covtable}{Condition table, e.g. from \code{\link[=covariates]{covariates()}}, merged with the
-predictions by condition so that \code{...} can refer to its columns, or
-\code{NULL}. Has no default.}
+predictions by condition so that \code{...} can refer to its columns. Default
+\code{NULL}.}
 
-\item{...}{Logical expressions to subset the plotted data; used only with
-a \code{covtable}.}
-
-\item{nSim}{Number of trajectories. Defaults to 4.}
+\item{nSim}{Number of trajectories, evenly spaced along the profile side
+and starting at the optimum; at most the number of profile points on that
+side. Defaults to 4.}
 }
 \value{
 A \code{ggplot} object.
@@ -44,22 +46,17 @@ A \code{ggplot} object.
 \description{
 Predicts the model at parameter sets taken along one profile, starting at
 the optimum, and colors the trajectories by the value of the profiled
-parameter. Requires the package purrr.
+parameter.
 }
 \examples{
-\dontshow{if (requireNamespace("purrr", quietly = TRUE)) withAutoprint(\{ # examplesIf}
 times <- 0:5
 grid <- data.frame(name = "A", time = times, row.names = paste0("A", times))
 x <- Xd(grid)
 pars <- structure(exp(-times / 2), names = getParameters(x))
 obj <- constraintL2(mu = pars, sigma = 0.1)
 profs <- profile(obj, pars, whichPar = "A2", limits = c(-1, 1), cores = 1)
-plotArray("A2", profs, x, seq(0, 5, 0.1), covtable = NULL)
-\dontshow{\}) # examplesIf}
+plotArray("A2", profs, x, seq(0, 5, 0.1))
 }
 \seealso{
 \code{\link[=plotProfile]{plotProfile()}}, \code{\link[=plotPathsMulti]{plotPathsMulti()}}
-}
-\author{
-Svenja Kemmer, \email{svenja.kemmer@fdm.uni-freiburg.de}
 }

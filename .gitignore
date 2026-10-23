@@ -51,7 +51,6 @@ tests/testthat/*.o
 tests/testthat/*.so
 tests/testthat/*.dll
 tests/testthat/reactions_for_Alyssa*
-tests/testthat/_snaps/
 
 # bench baselines are transient, except the tracked pre-rewrite baseline
 bench/baselines/*

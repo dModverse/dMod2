@@ -4,9 +4,11 @@
 #' average, at least 1. Works on Linux and macOS, locally or on remote
 #' machines via `ssh`. On Windows it returns 1 with a warning. Under
 #' `R CMD check` with `_R_CHECK_LIMIT_CORES_` set, the result is at most 2.
-#' @param machine Character vector of SSH hosts, e.g. `"user@@host"`. `NULL`
-#'   (default) for the local machine.
-#' @return Numeric vector of free cores, one per machine, with attributes
+#' @param machine Character vector of machines: `"localhost"` is the local machine,
+#'   any other entry an `ssh` destination such as `"host"` or `"user@@host"`.
+#'   `NULL` (default) for the local machine.
+#' @return Numeric vector of free cores, one per machine and named by it, with
+#'   attributes
 #'   `"ncores"` (number of cores) and `"used"` (load average).
 #' @export
 #' @examples
@@ -45,8 +47,8 @@ detectFreeCores <- function(machine = NULL) {
   }
   
   if (!is.null(machine)) {
-    output <- lapply(machine, .getLoadAndCores)
-    freeCores <- vapply(output, `[[`, numeric(1), "free")
+    output <- lapply(machine, function(m) .getLoadAndCores(if (!.isLocalhost(m)) m))
+    freeCores <- setNames(vapply(output, `[[`, numeric(1), "free"), machine)
     attr(freeCores, "ncores") <- vapply(output, `[[`, numeric(1), "nCores")
     attr(freeCores, "used") <- vapply(output, `[[`, numeric(1), "occupied")
   } else {
@@ -211,7 +213,7 @@ detectFreeCores <- function(machine = NULL) {
 
   ## Job count: a fixed `cores`, or whatever the remote machine reports.
   nproc <- if (is.null(cores)) "$NPROC" else as.character(max(1L, as.integer(cores)))
-  ## nproc honours OMP_NUM_THREADS, which runbg() sets to 1 for the job itself
+  ## nproc honours OMP_NUM_THREADS, which the job sets to 1 for itself
   detect <- if (is.null(cores))
     c("NPROC=$(env -u OMP_NUM_THREADS -u OMP_THREAD_LIMIT nproc 2>/dev/null || echo 1)",
       "if [ \"$NPROC\" -gt 16 ]; then NPROC=16; fi", "")
@@ -348,1003 +350,567 @@ detectFreeCores <- function(machine = NULL) {
 }
 
 
-#' Run an R Expression in the Background
-#'
-#' Saves the objects named in `input` to a workspace, copies it with `scp` to
-#' each machine, runs the expression there with `Rscript` and returns
-#' functions to collect the results. Requires a Unix-like system and `ssh`
-#' key authentication on every machine.
-#'
-#' @details The value of the last expression in `...` is the result of a
-#' machine. `get()` returns the list of these results.
-#'
-#' Build-related files are handled as follows:
-#' \itemize{
-#'   \item `compile = TRUE`: C/C++ source files are transferred and compiled
-#'         remotely via `R CMD SHLIB`.
-#'   \item `link = TRUE`: object files (`.o`) are transferred and linked
-#'         remotely.
-#'   \item Both `FALSE` (default): shared objects (`.so`) are copied.
-#' }
-#' With `compile` or `link`, the `modelname` of [obsfn], [parfn] and [prdfn]
-#' objects in the workspace is set to the newly built shared object. The
-#' remote build needs cppDE installed for the R on the `PATH` of the remote
-#' machine.
-#' @param ... R code.
-#' @param machine Character vector of SSH hosts, e.g. `"localhost"`,
-#'   `"user@@host"` or `c("localhost", "localhost")`. Defaults to
-#'   `"localhost"`.
-#' @param filename Character, the base name of the job files. `NULL` (default)
-#' picks a random name.
-#' @param input Character vector, the objects of the global environment that are
-#' saved and copied to the remote machines. Defaults to all.
-#' @param compile Logical. `TRUE` transfers the C/C++ sources (`.c`, `.cpp`) of
-#' the working directory and compiles them on each machine into one shared
-#' object; overrides `link`. Call it from `getOption("dMod.outdir")` when that
-#' is set. Defaults to `FALSE`.
-#' @param link Logical. `TRUE` transfers the object files (`.o`) of the working
-#' directory and links them on each machine; an error is raised if there are
-#' none. Needs a remote compiler compatible with the local one. Ignored if
-#' `compile = TRUE`. Defaults to `FALSE`.
-#' @param buildCores Number of parallel compiler processes of the build on each
-#' remote machine. `NULL` (default) uses the cores the machine reports, at most
-#' 16.
-#' @param buildBundle Number of generated sources the remote build puts into one
-#' translation unit, as in [distributedComputing()]. Only used for builds with
-#' more files than the shell accepts as arguments. `1` compiles one file at a
-#' time. Defaults to 50.
-#' @param wait Logical. `TRUE` waits for the job and returns its results as
-#' `get()` does; if the local result files exist already, they are loaded
-#' without running the job. `FALSE` (default) returns at once; the results are
-#' fetched by `get()`.
-#' @param recover Logical. `TRUE` returns the functions `check()`, `get()`,
-#' `purge()` and `terminate()` of an earlier job without starting it again,
-#' e.g. after a crashed session. Needs the `filename` of that job. Defaults to
-#' `FALSE`.
-#' @param walltime Optional character, the maximum runtime as `"HH:MM:SS"`,
-#' after which the job is terminated. `NULL` (default) sets no limit.
-#' @param libs Optional character vector of library paths put in front of the
-#' remote library search path, for the job and the remote build. The remote
-#' shell expands them, so `~` is the remote home.
-#' @return With `wait = TRUE` the results, else a list of functions:
-#' \describe{
-#'   \item{`check()`}{reports whether the results are ready and returns
-#'     `TRUE` or `FALSE`.}
-#'   \item{`get()`}{copies the result files to the working directory and
-#'     returns the results, a list named by machine.}
-#'   \item{`purge()`}{deletes the job folders on the remote machines and the
-#'     job files in the local working directory.}
-#'   \item{`terminate()`}{kills the processes of the job on the remote
-#'     machines.}
-#' }
-#' @seealso [distributedComputing()]
-#' @export
-#' @examples
-#' \dontrun{
-#' job <- runbg({
-#'   M <- matrix(rnorm(1e2), 10, 10)
-#'   solve(M)
-#' }, machine = c("user@@host", "user@@host"), filename = "job1")
-#' job$check()
-#' result <- job$get()
-#' job$purge()
-#'
-#' # Recover the functions of a running job, e.g. after a crashed session
-#' job <- runbg(NULL, machine = c("user@@host", "user@@host"),
-#'              filename = "job1", recover = TRUE)
-#' job$get()
-#' }
-runbg <- function(..., machine = "localhost", filename = NULL, input = ls(.GlobalEnv), compile = FALSE, link = FALSE, buildCores = NULL, buildBundle = 50, wait = FALSE, recover = FALSE, walltime = NULL, libs = NULL) {
-  
-  expr <- as.expression(substitute(...))
-  nmachines <- length(machine)
-  
-  # compile takes precedence over link
-  if (compile) link <- FALSE
-  
-  # Generate a random filename if none is provided
-  if (is.null(filename))
-    filename <- paste0("tmp_", paste(sample(c(0:9, letters), 5, replace = TRUE), collapse = ""))
-  
-  filename0 <- filename
-  filename <- paste(filename, 1:nmachines, sep = "_")
-  
-  # Initialize output list
-  out <- structure(vector("list", 4), names = c("check", "get", "purge", "terminate"))
-  
-  # Check whether results are ready on all machines
-  out[[1]] <- function() {
-    
-    check.out <- sapply(1:nmachines, function(m) length(suppressWarnings(
-      system(paste0("ssh ", machine[m], " ls ", filename[m], "_folder/ | grep -x ", filename[m], "_result.RData"), 
-             intern = TRUE))))
-    
-    if (all(check.out > 0)) {
-      cat("Result is ready!\n")
-      return(TRUE)
-    } else if (any(check.out > 0)) {
-      cat("Result from machines", paste(which(check.out > 0), collapse = ", "), "are ready.")
-      return(FALSE)
+## ---- distributedComputing() ---------------------------------------------------
+## A job lives in <jobname>_folder/<k>, one subfolder per distinct machine k: in the
+## working directory for "localhost", in the home directory elsewhere. The local
+## <jobname>_folder holds the manifest job.rds and the files get() fetches.
+
+## "localhost" is the local machine, reached without ssh; every other machine by ssh.
+.isLocalhost <- function(machine) identical(machine, "localhost")
+
+## `cmd` run by the POSIX shell of `machine` in its job folder `dir`. On
+## "localhost" `dir` lies in `wd`, and the R of this session with its library
+## paths comes first.
+.onMachine <- function(machine, cmd, dir, wd, ...) {
+  if (.isLocalhost(machine)) {
+    env <- paste0("export PATH=", shQuote(R.home("bin")), ":\"$PATH\" R_LIBS=",
+                  shQuote(paste(.libPaths(), collapse = ":")), "; ")
+    return(system(paste0(env, "cd ", shQuote(file.path(wd, dir)), " && ", cmd), ...))
+  }
+  system(paste("ssh", machine, shQuote(paste0("cd ", dir, " && ", cmd))), ...)
+}
+
+## The files of `stage` into an emptied job folder `dir` of `machine`. Symbolic
+## links in the stage are followed.
+.pushStage <- function(machine, stage, dir, wd) {
+  unpack <- paste0("rm -rf ", dir, " && mkdir -p ", dir, " && tar -C ", dir, " -xf -")
+  if (.isLocalhost(machine))
+    unpack <- paste0("(cd ", shQuote(wd), " && ", unpack, ")")
+  else
+    unpack <- paste("ssh", machine, shQuote(unpack))
+  system(paste0("tar -C ", shQuote(stage), " -chf - . | ", unpack))
+}
+
+## The files named by the shell pattern `what` of the job folder `dir` of a
+## remote `machine`, copied into the same folder below `wd`.
+.pullFiles <- function(machine, dir, what, wd) {
+  local <- file.path(wd, dir)
+  dir.create(local, recursive = TRUE, showWarnings = FALSE)
+  system(paste0("ssh ", machine, " ", shQuote(paste0("cd ", dir, " && tar -cf - ", what,
+                                                     " 2>/dev/null")),
+                " | tar -C ", shQuote(local), " -xf -"),
+         ignore.stderr = TRUE)
+}
+
+## Tasks as a list, one element per task: a count gives NULL elements, a data
+## frame its rows as lists.
+.asTasks <- function(tasks) {
+  if (is.numeric(tasks) && length(tasks) == 1L && !is.list(tasks)) {
+    n <- as.integer(tasks)
+    if (is.na(n) || n < 1L || n != tasks)
+      stop("'tasks' must be a positive whole number, a list or a data frame", call. = FALSE)
+    return(vector("list", n))
+  }
+  if (is.data.frame(tasks)) {
+    if (!nrow(tasks)) stop("'tasks' has no rows", call. = FALSE)
+    rows <- lapply(seq_len(nrow(tasks)), function(i) as.list(tasks[i, , drop = FALSE]))
+    if (!identical(rownames(tasks), as.character(seq_len(nrow(tasks)))))
+      names(rows) <- rownames(tasks)
+    return(rows)
+  }
+  if (!length(tasks)) stop("'tasks' is empty", call. = FALSE)
+  as.list(tasks)
+}
+
+## Seconds of a walltime "HH:MM:SS".
+.walltimeSeconds <- function(walltime) {
+  p <- suppressWarnings(as.numeric(strsplit(walltime, ":", fixed = TRUE)[[1L]]))
+  if (length(p) != 3L || anyNA(p))
+    stop("'walltime' must be \"HH:MM:SS\"", call. = FALSE)
+  sum(p * c(3600, 60, 1))
+}
+
+## The job script of a SLURM template: every {{ name }} of `values` filled in.
+## The lines before {{ run }} other than #SBATCH and comments are its
+## environment, which the build on the login node uses too.
+.fillJobscript <- function(template, values) {
+  lines <- readLines(template, warn = FALSE)
+  at <- grep("^\\s*\\{\\{\\s*run\\s*\\}\\}\\s*$", lines)
+  if (length(at) != 1L)
+    stop("the job script ", template, " needs one line {{ run }}", call. = FALSE)
+  env <- lines[seq_len(at - 1L)]
+  env <- env[!grepl("^\\s*(#|$)", env)]
+  fill <- function(x) {
+    for (k in names(values))
+      x <- gsub(paste0("\\{\\{\\s*", k, "\\s*\\}\\}"), values[[k]], x)
+    x
+  }
+  script <- fill(lines)
+  left <- unique(unlist(regmatches(script, gregexpr("\\{\\{\\s*[A-Za-z]+\\s*\\}\\}", script))))
+  left <- left[!grepl("^\\{\\{\\s*run\\s*\\}\\}$", left)]
+  if (length(left))
+    stop("the job script ", template, " has placeholders without a value: ",
+         paste(left, collapse = ", "), call. = FALSE)
+  list(script = script, env = fill(env))
+}
+
+## The job script templates of slurmTemplate(), one per login node.
+.slurmTemplateDir <- function() file.path(tools::R_user_dir("dMod2", "config"), "slurm")
+
+## The templates dMod2 ships, named by cluster.
+.slurmShipped <- function() {
+  files <- list.files(system.file("slurm", package = "dMod2"), pattern = "\\.sh$",
+                      full.names = TRUE)
+  stats::setNames(files, sub("\\.sh$", "", basename(files)))
+}
+
+## The template set up for a login node.
+.slurmJobscript <- function(host) {
+  f <- file.path(.slurmTemplateDir(), paste0(host, ".sh"))
+  if (file.exists(f)) return(f)
+  stop("no job script for '", host, "'; set one up once with slurmTemplate(\"", host,
+       "\", from = <job script>) or pass 'jobscript', see ?slurmTemplate", call. = FALSE)
+}
+
+## The cores of every machine, named by machine: NA where `machine` names a
+## machine without its cores.
+.machineCores <- function(machine) {
+  if (is.numeric(machine) && !is.null(names(machine))) {
+    cores <- machine
+    if (anyNA(cores) || any(cores < 1) || any(cores != round(cores)))
+      stop("the cores of 'machine' must be positive whole numbers", call. = FALSE)
+  } else if (is.character(machine) && length(machine)) {
+    cores <- setNames(rep(NA_integer_, length(machine)), machine)
+  } else {
+    stop("'machine' must name the machines, with or without their cores, such as ",
+         "c(\"server1\", \"server2\") or c(server1 = 20, server2 = 10)", call. = FALSE)
+  }
+  if (anyNA(names(cores)) || any(!nzchar(names(cores))) || anyDuplicated(names(cores)))
+    stop("name every machine once in 'machine'", call. = FALSE)
+  setNames(as.integer(cores), names(cores))
+}
+
+## The R script of one task, run as `Rscript job.R <taskId> <cores>` in the job folder.
+.taskScript <- function(expr, jobname, seed, shared) {
+  c("library(dMod2)",
+    "load('workspace.RData')",
+    if (is.null(shared)) "for (so in list.files(pattern = '[.]so$')) dyn.load(so)",
+    if (!is.null(shared)) c(
+      paste0("dyn.load(", encodeString(paste0(shared, ".so"), quote = "'"), ")"),
+      "for (nm in ls()) {",
+      "  o <- get(nm)",
+      "  if (inherits(o, c('obsfn', 'parfn', 'prdfn', 'objfn')))",
+      paste0("    { modelname(o) <- ", encodeString(shared, quote = "'"), "; assign(nm, o) }"),
+      "}"),
+    "taskId <- as.integer(commandArgs(TRUE)[1L])",
+    "cores <- as.integer(commandArgs(TRUE)[2L])",
+    "task <- readRDS('tasks.rds')[[taskId]]",
+    paste0("jobname <- ", encodeString(jobname, quote = "'")),
+    paste0("set.seed(", seed, " + taskId)"),
+    paste0("result <- try({\n", paste(deparse(expr, width.cutoff = 500L), collapse = "\n"),
+           "\n})"),
+    "saveRDS(result, paste0('task_', taskId, '.rds'))")
+}
+
+## The state of every task: "done", "running" or "failed".
+.taskStatus <- function(m) {
+  state <- rep("failed", m$ntasks)
+  for (k in seq_along(m$hosts)) {
+    host <- m$hosts[k]
+    dir <- file.path(m$folder, k)
+    probe <- if (m$slurm)
+      paste0("ls; squeue -h -r -j ", m$jobid, " -o 'running %K' 2>/dev/null")
+    else
+      paste0("ls; for f in slot_*.pid; do [ -f \"$f\" ] && kill -0 \"$(cat \"$f\")\" ",
+             "2>/dev/null && echo alive \"$f\"; done")
+    out <- suppressWarnings(.onMachine(host, paste0(probe, "; true"), dir, m$wd,
+                                       intern = TRUE, ignore.stderr = TRUE))
+    mine <- which(m$taskHost == k)
+    if (m$slurm) {
+      running <- as.integer(sub("^running ", "", grep("^running ", out, value = TRUE)))
+      state[intersect(mine, running)] <- "running"
     } else {
-      cat("Not ready!\n") 
-      return(FALSE)
+      alive <- as.integer(sub("^alive slot_([0-9]+)\\.pid$", "\\1",
+                              grep("^alive ", out, value = TRUE)))
+      if (k %in% alive) state[mine] <- "running"
     }
-    
+    done <- as.integer(sub("^task_([0-9]+)\\.rds$", "\\1",
+                           grep("^task_[0-9]+\\.rds$", out, value = TRUE)))
+    state[intersect(mine, done)] <- "done"
   }
-  
-  # Fetch result files from remote machines and load into workspace
-  out[[2]] <- function() {
-    
-    result <- structure(vector(mode = "list", length = nmachines), names = machine)
-    for (m in 1:nmachines) {
-      .runbgOutput <- NULL
-      system(paste0("scp ", machine[m], ":", filename[m], "_folder/", filename[m], "_result.RData ./"), ignore.stdout = TRUE, ignore.stderr = TRUE)
-      check <- try(load(file = paste0(filename[m], "_result.RData")), silent = TRUE) 
-      if (!inherits(check, "try-error")) result[[m]] <- .runbgOutput
-    }
-    result
+  state
+}
+
+## The functions of the job described by the manifest `m`.
+.jobFunctions <- function(m) {
+  local <- file.path(m$wd, m$folder)
+
+  check <- function() {
+    state <- .taskStatus(m)
+    n <- table(factor(state, c("done", "running", "failed")))
+    cat(m$jobname, ": ", n[["done"]], " of ", m$ntasks, " tasks done",
+        if (n[["running"]]) paste0(", ", n[["running"]], " running"),
+        if (n[["failed"]]) paste0(", ", n[["failed"]], " failed"),
+        "\n", sep = "")
+    finished <- !n[["running"]]
+    if (finished && n[["failed"]])
+      warning(n[["failed"]], " of ", m$ntasks, " tasks failed; their output is in ",
+              file.path(m$folder, "<k>", "task_<i>.out"), call. = FALSE)
+    invisible(finished)
   }
-  
-  # Remove temporary folders and files on remote machines and locally
-  out[[3]] <- function() {
-    
-    for (m in 1:nmachines) {
-      folder_exists <- suppressWarnings(
-        system(paste0("ssh ", machine[m], " '[ -d ", filename[m], "_folder ] && echo 1 || echo 0'"), 
-               intern = TRUE)
-      )
-      if (folder_exists == "1") {
-        system(paste0("ssh ", machine[m], " rm -r ", filename[m], "_folder"))
-      }
-      
-      rout_exists <- suppressWarnings(
-        system(paste0("ssh ", machine[m], " '[ -f ", filename[m], ".Rout ] && echo 1 || echo 0'"), 
-               intern = TRUE)
-      )
-      if (rout_exists == "1") {
-        system(paste0("ssh ", machine[m], " rm ", filename[m], ".Rout"))
-      }
+
+  get <- function(all = FALSE) {
+    for (k in seq_along(m$hosts)) {
+      if (.isLocalhost(m$hosts[k])) next
+      what <- if (all) "." else "task_*.rds"
+      .pullFiles(m$hosts[k], file.path(m$folder, k), what, m$wd)
     }
-    
-    local_files <- list.files(pattern = paste0(filename0, ".*"))
-    if (length(local_files) > 0) {
-      system(paste0("rm ", filename0, "*"))
+    out <- vector("list", m$ntasks)
+    names(out) <- m$names
+    for (i in seq_len(m$ntasks)) {
+      f <- file.path(local, m$taskHost[i], paste0("task_", i, ".rds"))
+      if (file.exists(f)) out[i] <- list(readRDS(f))
+    }
+    out
+  }
+
+  purge <- function(local = FALSE) {
+    for (k in seq_along(m$hosts))
+      .onMachine(m$hosts[k], paste0("cd .. && rm -rf ", k, " && cd .. && rmdir ", m$folder,
+                                    " 2>/dev/null; true"),
+                 file.path(m$folder, k), m$wd, ignore.stderr = TRUE)
+    if (local) unlink(file.path(m$wd, m$folder), recursive = TRUE)
+    invisible(NULL)
+  }
+
+  terminate <- function() {
+    for (k in seq_along(m$hosts)) {
+      cmd <- if (m$slurm) paste("scancel", m$jobid)
+      else paste0("for f in slot_*.pid; do [ -f \"$f\" ] || continue; p=$(cat \"$f\"); ",
+                  "kill -TERM -- -$p 2>/dev/null || { pkill -TERM -P $p; kill -TERM $p; }; ",
+                  "done 2>/dev/null; true")
+      .onMachine(m$hosts[k], cmd, file.path(m$folder, k), m$wd, ignore.stderr = TRUE)
+    }
+    invisible(NULL)
+  }
+
+  structure(list(check = check, get = get, purge = purge, terminate = terminate),
+            class = "dModJob", manifest = m)
+}
+
+#' @export
+print.dModJob <- function(x, ...) {
+  m <- attr(x, "manifest")
+  cat("Job ", m$jobname, ": ", m$ntasks, if (m$ntasks == 1L) " task" else " tasks",
+      if (m$slurm) paste0(" as SLURM job ", m$jobid, " on ", m$hosts)
+      else paste0(" on ", paste0(m$hosts, " (", m$cores, " cores)", collapse = ", ")),
+      "\n",
+      "check(), get(all = FALSE), purge(local = FALSE), terminate()\n", sep = "")
+  invisible(x)
+}
+
+
+#' Run R Code as Tasks on Other Processes, Machines or a SLURM Cluster
+#'
+#' Saves the objects named in `input`, copies them with the code to each
+#' machine and runs the code there once per task, in the background. Without
+#' SLURM the tasks run as processes of their own: `"localhost"` is this
+#' machine, any other entry an `ssh` destination with key authentication. With
+#' `slurm = TRUE` the tasks form an array job of the scheduler, submitted
+#' through a job script template. Returns functions to check, collect and
+#' delete the results. Needs a Unix-like system.
+#'
+#' @details The value of `expr` is the result of a task. In the code, `task`
+#' is the task's element of `tasks` (`NULL` for a count), `taskId` its
+#' position, `cores` the cores the task may use and `jobname` the job's name.
+#' Parallel code such as [mstrust()] or [profile()][profile.objfn] takes
+#' `cores = cores`. A task that raises an error returns the error as a
+#' `try-error`.
+#'
+#' Without SLURM the tasks are dealt to the machines in turn, and a machine runs
+#' its tasks one after the other, each with all the cores of the machine: the
+#' cores `machine` gives it, or its free cores by [detectFreeCores()]. A
+#' machine with fewer free cores than given gets those, with a warning. The
+#' processes are detached and survive the R session. Jobs are kept in
+#' `<jobname>_folder`, in the working directory for `"localhost"` and in the
+#' home directory of a remote machine.
+#'
+#' With `slurm = TRUE` the tasks form an array job, submitted on the login node
+#' through the job script template [slurmTemplate()] set up for it.
+#'
+#' The model files come from `getOption("dMod2.outdir")`, else from the working
+#' directory:
+#' \itemize{
+#'   \item `compile = TRUE`: the C/C++ sources are copied and compiled once per
+#'         machine into one shared object.
+#'   \item `link = TRUE`: the object files (`.o`) are copied and linked once per
+#'         machine; needs a compiler there compatible with the local one.
+#'   \item Both `FALSE` (default): the shared objects (`.so`) are copied.
+#' }
+#' With `compile` or `link`, the [obsfn], [parfn] and [prdfn] objects and the objectives
+#' use the new shared object. The build needs cppDE installed for the R on the
+#' machine.
+#'
+#' @param expr R code, evaluated once per task.
+#' @param tasks A positive whole number of tasks, or a list or vector with one
+#'   element per task, or a data frame with one row per task. `NULL` (default)
+#'   is one task per machine.
+#' @param machine The machines, each named once: a character vector, or a
+#'   vector of cores named by machine, such as `c(server1 = 20, server2 = 10)`.
+#'   `"localhost"` is the local machine, used without `ssh`; any other name is an
+#'   `ssh` destination such as `"host"` or `"user@@host"`. Without cores a
+#'   machine uses its free cores. With SLURM the one login node, named with the
+#'   cores of each array task, such as `c(mycluster = 20)`. Default `"localhost"`.
+#' @param jobname Character, the name of the job and its folder. `NULL`
+#'   (default) picks a random name.
+#' @param slurm Logical. `TRUE` submits the tasks as a SLURM array job on the
+#'   login node `machine`, through its job script template. Default `FALSE`.
+#' @param jobscript Path to a job script template, in place of the one
+#'   [slurmTemplate()] set up for the login node. Default `NULL`.
+#' @param memPerCore,walltime Memory per core in GB and the maximum runtime per
+#'   task as `"HH:MM:SS"`, filled into the job script. Without SLURM `walltime`
+#'   ends a task through `timeout` where the machine has it, and `memPerCore` is
+#'   not used. Defaults 2 and `NULL`, no limit.
+#' @param input Character vector, the objects saved and copied to the
+#'   machines, looked up from the calling environment. Defaults to all objects
+#'   of the calling environment.
+#' @param compile,link Logical, see Details. `compile` overrides `link`.
+#'   Default `FALSE`.
+#' @param buildCores Number of parallel compiler processes of a build. `NULL`
+#'   (default) uses the cores the machine reports, at most 16.
+#' @param buildBundle Number of generated sources a build puts into one
+#'   translation unit, only for builds with more files than the shell accepts
+#'   as arguments. `1` compiles one file at a time. Default 50.
+#' @param libs Optional character vector of library paths put in front of the
+#'   library search path on the machines, for the tasks and the build. The
+#'   remote shell expands them, so `~` is the remote home.
+#' @param seed Integer, task `i` starts with `set.seed(seed + i)`. `NULL`
+#'   (default) draws one.
+#' @param wait Logical. `TRUE` waits for the tasks, returns the results of
+#'   `get()` and deletes the job with `purge(local = TRUE)`. Default `FALSE`.
+#' @param recover Logical. `TRUE` returns the functions of the job `jobname`
+#'   submitted earlier from this working directory, without submitting again.
+#'   Default `FALSE`.
+#'
+#' @return With `wait = TRUE` the results, else an object of class `dModJob`, a
+#'   list of functions:
+#' \describe{
+#'   \item{`check()`}{reports how many tasks are done, running or failed and
+#'     returns `TRUE` once no task runs any more, with a warning when some
+#'     failed. A task fails when its process ends without a result.}
+#'   \item{`get(all = FALSE)`}{returns the results, a list with one entry per
+#'     task, named like `tasks`, `NULL` for a task not done. Results of remote
+#'     machines are copied into `<jobname>_folder/<k>`, with `all = TRUE`
+#'     together with every other file of the job folder.}
+#'   \item{`purge(local = FALSE)`}{deletes the job folders on the machines,
+#'     with `local = TRUE` also the local `<jobname>_folder`.}
+#'   \item{`terminate()`}{stops the tasks.}
+#' }
+#'
+#' @seealso [slurmTemplate()], [detectFreeCores()]
+#' @example inst/examples/distributedComputing.R
+#' @export
+distributedComputing <- function(expr, tasks = NULL, machine = "localhost", jobname = NULL,
+                                 slurm = FALSE, jobscript = NULL,
+                                 memPerCore = 2, walltime = NULL,
+                                 input = ls(parent.frame()), compile = FALSE, link = FALSE,
+                                 buildCores = NULL, buildBundle = 50, libs = NULL,
+                                 seed = NULL, wait = FALSE, recover = FALSE) {
+
+  wd <- getwd()
+  if (recover) {
+    if (is.null(jobname)) stop("'recover' needs the 'jobname'", call. = FALSE)
+    f <- file.path(wd, paste0(jobname, "_folder"), "job.rds")
+    if (!file.exists(f))
+      stop("no job '", jobname, "' was submitted from this working directory", call. = FALSE)
+    m <- readRDS(f)
+    m$wd <- wd
+    return(.jobFunctions(m))
+  }
+
+  expr <- substitute(expr)
+  env <- parent.frame()
+  cores <- .machineCores(machine)
+  hosts <- names(cores)
+  if (slurm && length(hosts) != 1L)
+    stop("with 'slurm' the 'machine' is the one login node", call. = FALSE)
+  if (slurm && is.na(cores))
+    stop("with 'slurm' give the cores of each array task, such as machine = c(mycluster = 20)",
+         call. = FALSE)
+  if (slurm && is.null(jobscript)) jobscript <- .slurmJobscript(hosts)
+  if (slurm && !file.exists(jobscript))
+    stop("the job script ", jobscript, " does not exist", call. = FALSE)
+  if (!slurm) {
+    free <- detectFreeCores(hosts)
+    short <- !is.na(cores) & cores > free
+    if (any(short))
+      warning(paste0(hosts[short], " has ", free[short], " free cores; its tasks get ",
+                     free[short], " instead of ", cores[short], collapse = "; "), call. = FALSE)
+    cores <- setNames(as.integer(ifelse(is.na(cores) | short, free, cores)), hosts)
+  }
+  tasks <- .asTasks(if (is.null(tasks)) length(hosts) else tasks)
+  if (compile) link <- FALSE
+  if (is.null(jobname))
+    jobname <- paste0("job_", paste(sample(c(0:9, letters), 6, replace = TRUE), collapse = ""))
+  if (is.null(seed)) seed <- sample.int(1e6, 1L)
+  n <- length(tasks)
+
+  # The machine of every task, dealt in turn
+  host <- (seq_len(n) - 1L) %% length(hosts) + 1L
+  m <- list(jobname = jobname, wd = wd, folder = paste0(jobname, "_folder"),
+            cores = cores, hosts = hosts, slurm = slurm, ntasks = n,
+            names = names(tasks), taskHost = host, jobid = NA)
+  local <- file.path(wd, m$folder)
+  unlink(local, recursive = TRUE)
+  dir.create(local)
+
+  # The stage: workspace, tasks, task script, build script and payload
+  stage <- tempfile("dMod_stage_")
+  dir.create(stage)
+  on.exit(unlink(stage, recursive = TRUE), add = TRUE)
+  .saveWorkspace(setdiff(input, ".Random.seed"), file.path(stage, "workspace.RData"),
+                 envir = env)
+  saveRDS(tasks, file.path(stage, "tasks.rds"))
+
+  shared <- NULL
+  build <- ""
+  models <- .dmodOutdir()
+  glob <- function(pattern) Sys.glob(file.path(models, pattern))
+  payload <- if (compile) glob(c("*.c", "*.cpp")) else if (link) glob("*.o") else glob("*.so")
+  if (link && !length(payload))
+    stop("'link' found no object files (.o) in ", models, call. = FALSE)
+  if (compile || link) {
+    shared <- paste0(jobname, "_shared_object")
+    info <- .remoteBuildInfo(env)
+    writeLines(basename(payload), file.path(stage, "files.txt"))
+    writeLines(.remoteBuildScript(
+      files = basename(payload), output = paste0(shared, ".so"),
+      compileArgs = info$compileArgs, needsCVODE = info$needsCVODE, needsKLU = info$needsKLU,
+      needsLapack = info$needsLapack, link = link, cxx = length(glob("*.cpp")) > 0L,
+      cores = buildCores, filelist = "files.txt", bundle = buildBundle),
+      file.path(stage, "build.sh"))
+    build <- "bash build.sh && "
+  }
+  if (length(payload)) file.symlink(normalizePath(payload), file.path(stage, basename(payload)))
+  writeLines(.taskScript(expr, jobname, seed, shared), file.path(stage, "job.R"))
+
+  unpack <- paste0("if [ -f workspace.RData.zst ]; then zstd -dqf workspace.RData.zst && ",
+                   "rm -f workspace.RData.zst; fi && ")
+  setup <- paste0(.remoteLibs(libs), "export OMP_NUM_THREADS=1 MKL_NUM_THREADS=1; ")
+  limit <- if (!is.null(walltime)) paste0("${TO:+$TO ", .walltimeSeconds(walltime), "} ")
+  run <- function(id) paste0(limit, "Rscript job.R ", id, " ", cores[[m$taskHost[id]]],
+                             " > task_", id, ".out 2>&1")
+
+  if (slurm) {
+    filled <- .fillJobscript(jobscript, list(
+      jobname = jobname, ntasks = n, cores = cores[[1L]], memPerCore = memPerCore,
+      walltime = if (!is.null(walltime)) walltime))
+    filled$script[grepl("^\\s*\\{\\{\\s*run\\s*\\}\\}\\s*$", filled$script)] <- paste0(
+      setup, "Rscript job.R \"$SLURM_ARRAY_TASK_ID\" ", cores[[1L]],
+      " > \"task_${SLURM_ARRAY_TASK_ID}.out\" 2>&1")
+    writeLines(filled$script, file.path(stage, "job.sh"))
+    writeLines(filled$env, file.path(stage, "env.sh"))
+    dir <- file.path(m$folder, 1L)
+    .pushStage(hosts, stage, dir, wd)
+    out <- .onMachine(hosts, paste0(unpack, ". ./env.sh && ", setup, build, "sbatch job.sh"),
+                      dir, wd, intern = TRUE)
+    id <- regmatches(out, regexpr("[0-9]+$", grep("Submitted batch job", out, value = TRUE)))
+    if (!length(id))
+      stop("the submission on ", hosts, " failed:\n", paste(out, collapse = "\n"),
+           call. = FALSE)
+    m$jobid <- id[1L]
+  } else {
+    # one script per machine, its tasks one after the other
+    for (k in unique(host)) {
+      writeLines(c("#!/bin/sh", setup, "TO=$(command -v timeout || true)",
+                   vapply(which(host == k), run, "")),
+                 file.path(stage, paste0("slot_", k, ".sh")))
+    }
+    for (k in unique(host)) {
+      dir <- file.path(m$folder, k)
+      .pushStage(hosts[k], stage, dir, wd)
+      status <- .onMachine(hosts[k], paste0(
+        unpack, setup, build, "if command -v setsid >/dev/null; then S=setsid; else S=; fi; ",
+        "nohup $S sh slot_", k, ".sh > /dev/null 2>&1 < /dev/null & echo $! > slot_", k,
+        ".pid"), dir, wd)
+      if (status != 0)
+        stop("the start on ", hosts[k], " failed (exit status ", status, ")", call. = FALSE)
     }
   }
-  
-  # Kill all processes associated with this job on the remote machines
-  out[[4]] <- function() {
-    for (m in 1:nmachines) {
-      pids <- suppressWarnings(
-        system(paste0("ssh ", machine[m], 
-                      " 'ps aux | grep \"", filename[m], "\" | grep -v grep'"), 
-               intern = TRUE)
-      )
-      
-      if (length(pids) > 0) {
-        running_pids <- sapply(strsplit(pids, "\\s+"), function(x) {
-          if (grepl("R", x[8])) x[2] else NULL
-        })
-        running_pids <- running_pids[!sapply(running_pids, is.null)]
-        
-        if (length(running_pids) > 0) {
-          system(paste0("ssh ", machine[m], " 'kill ", paste(running_pids, collapse = " "), "'"))
-          cat("Terminated", length(running_pids), "running processes on", machine[m], "\n")
-        } else {
-          cat("No running processes found on", machine[m], "\n")
-        }
-      }
-    }
+  saveRDS(m, file.path(local, "job.rds"))
+  job <- .jobFunctions(m)
+  if (!wait) return(job)
+
+  repeat {
+    state <- .taskStatus(m)
+    if (!any(state == "running")) break
+    Sys.sleep(1)
   }
-  
-  # Recover control functions without re-submitting the job
-  if (recover) return(out)
-  
-  # If result files already exist locally and wait = TRUE, load them directly
-  resultfile <- paste(filename, "result.RData", sep = "_")
-  if (all(file.exists(resultfile)) & wait) {
-    
-    result <- structure(vector(mode = "list", length = nmachines), names = machine)
-    for (m in 1:nmachines) {
-      .runbgOutput <- NULL
-      load(file = resultfile[m])
-      result[[m]] <- .runbgOutput
-    }
+  if (all(state == "done")) {
+    result <- job$get()
+    job$purge(local = TRUE)
     return(result)
   }
-  
-  # Save current workspace to be transferred to remote machines
-  save(list = input, file = paste0(filename0, ".RData"), envir = .GlobalEnv)
-  
-  # The remote script attaches dMod2 only, not the submitting session's
-  # packages; anything else belongs in the expression.
-  pack <- "library(dMod2)"
-  
-  output <- ".runbgOutput"
-  
-  # The portable, model-specific flags and the file list; the rest is resolved
-  # on the remote machine by the script .remoteBuildScript() writes.
-  buildinfo <- list(compileArgs = "", needsCVODE = FALSE, needsKLU = FALSE,
-                    needsLapack = FALSE)
-  has_cxx <- FALSE
-  if (compile || link) {
-
-    buildinfo <- .remoteBuildInfo()
-    has_cxx <- length(list.files(pattern = glob2rx("*.cpp"))) > 0
-
-    if (compile) {
-      sourcefiles <- c(list.files(pattern = glob2rx("*.c")),
-                       list.files(pattern = glob2rx("*.cpp")))
-    } else {
-      object_files <- Sys.glob("*.o")
-      if (length(object_files) == 0)
-        stop("No .o files found for linking! You must compile first.")
-      sourcefiles <- object_files
-      message("runbg(): linking pre-compiled .o files remotely. This requires the ",
-              "remote toolchain to be ABI-compatible with the local one; if the ",
-              "link or dyn.load() fails, resubmit with compile = TRUE.")
-    }
-
-  }
-  
-  if (compile || link) {
-    # R code to load the newly built shared object and update modelnames of known function objects
-    objfns <- 'obj.fns <- ls()[sapply(ls(), function(nm) inherits(get(nm, envir=.GlobalEnv), c("obsfn", "parfn", "prdfn", "objfn")))]'
-    setmn <- sprintf('for (o in obj.fns) eval(parse(text=paste0("modelname(", o, ") <- \'%s\'")))', paste0(filename0, "_shared_object"))
-    load_so <- paste0("dyn.load('", filename0, "_shared_object.so')")
-  } else {
-    objfns <- NULL
-    setmn <- NULL
-    load_so <- NULL
-  }
-  
-  # Assemble the R script to be executed on each remote machine
-  program <- lapply(1:nmachines, function(m) paste(
-    c(
-      pack,
-      paste0("setwd('~/", filename[m], "_folder')"),
-      "rm(list = ls())",
-      if (!is.null(walltime)) paste0("Sys.setenv(R_TIMEOUT='", walltime, "')"),
-      paste0("load('", filename0, ".RData')"),
-      objfns,
-      setmn,
-      if (!is.null(load_so)) {
-        load_so
-      } else {
-        c("files <- list.files(pattern = '\\\\.so$')", "for (f in files) dyn.load(f)")
-      },
-      paste0(".node <- ", m),
-      if (!is.null(walltime)) {
-        paste0(".runbgOutput <- try(tools::pskill(Sys.getpid(), tools::SIGALRM, ", walltime, "); ", as.character(expr), ")")
-      } else {
-        paste0(".runbgOutput <- try(", as.character(expr), ")")
-      },
-      paste0("save(", output ,", file = '", filename[m], "_result.RData')")
-    ),
-    collapse = "\n"
-  ))
-  
-  for (m in 1:nmachines) {
-    
-    # Write the R script for this machine
-    cat(program[[m]], file = paste0(filename[m], ".R"))
-    
-    # Create remote working directory
-    system(paste0("ssh ", machine[m], " mkdir -p ", filename[m], "_folder/"), 
-           ignore.stdout = TRUE, ignore.stderr = TRUE)
-    
-    # Clear any leftover files from previous runs
-    system(paste0("ssh ", machine[m], " rm -r ", filename[m], "_folder/*"), 
-           ignore.stdout = TRUE, ignore.stderr = TRUE)
-    
-    # Transfer workspace
-    system(paste0("scp ", getwd(), "/", filename0, ".RData* ", machine[m], ":", filename[m], "_folder/"))
-    
-    # Transfer R script
-    system(paste0("scp ", getwd(), "/", filename[m], ".R* ", machine[m], ":", filename[m], "_folder/"))
-    
-    # Only the payload the requested mode consumes. Globs are expanded by the
-    # local shell, so the command string stays short at any file count.
-    payload <- if (compile) c("*.c", "*.cpp") else if (link) "*.o" else "*.so"
-    payload <- payload[vapply(payload, function(g) length(Sys.glob(g)) > 0L, logical(1))]
-    if (length(payload))
-      system(paste0("scp ", paste0(getwd(), "/", payload, collapse = " "), " ",
-                    machine[m], ":", filename[m], "_folder/"),
-             ignore.stdout = TRUE, ignore.stderr = TRUE)
-    
-    
-    # Write and transfer compile script per machine, then build the remote command
-    compile_cmd <- ""
-    if (compile || link) {
-      ## The build script reads its inputs from this list, not from its own
-      ## command line.
-      filelist_file <- paste0(filename[m], "_files.txt")
-      writeLines(sourcefiles, filelist_file)
-      compile_script_content <- .remoteBuildScript(
-        files       = sourcefiles,
-        output      = paste0(filename0, "_shared_object.so"),
-        compileArgs = buildinfo$compileArgs,
-        needsCVODE  = buildinfo$needsCVODE,
-        needsKLU    = buildinfo$needsKLU,
-        needsLapack = buildinfo$needsLapack,
-        link        = link,
-        cxx         = has_cxx,
-        cores       = buildCores,
-        workdir     = paste0(filename[m], "_folder"),
-        filelist    = filelist_file,
-        bundle      = buildBundle
-      )
-      compile_script_file <- paste0(filename[m], "_compile.sh")
-      cat(compile_script_content, file = compile_script_file)
-      system(paste0("scp ", getwd(), "/", compile_script_file, " ", getwd(), "/", filelist_file,
-                    " ", machine[m], ":", filename[m], "_folder/"))
-      compile_cmd <- paste0("bash ", filename[m], "_folder/", compile_script_file)
-    }
-    
-    # Execute: compile/link if requested, then run the R script
-    # OMP_NUM_THREADS=1 and MKL_NUM_THREADS=1 ensure single-threaded execution per job
-    system(paste0(
-      "ssh ", machine[m], 
-      " '", .remoteLibs(libs), "export OMP_NUM_THREADS=1 && export MKL_NUM_THREADS=1",
-      if (nzchar(compile_cmd)) paste0(" && ", compile_cmd),
-      " && R CMD BATCH --vanilla ", filename[m], "_folder/", filename[m], ".R'"
-    ), intern = FALSE, wait = wait)
-  }
-  
-  if (!wait) return(out)
-  result <- out$get()
-  out$purge()
+  result <- job$get(all = TRUE)
+  warning(sum(state != "done"), " of ", n, " tasks failed; their output is in ",
+          file.path(m$folder, "<k>", "task_<i>.out"), call. = FALSE)
   result
 }
 
-
-
-## ---- HPC/SLURM distributed computing --------------------------------------
-
-#' Run R Code on a Remote HPC System with SLURM
+#' Job script templates of SLURM clusters
 #'
-#' Saves the workspace, copies it with generated R and shell scripts to a
-#' remote system via `ssh`, and submits the R code there as a SLURM array job.
-#' Returns functions to check, collect and delete the results.
+#' Sets up the job script template of a SLURM cluster, once per login node.
+#' The templates are kept in `tools::R_user_dir("dMod2", "config")` and stay
+#' across sessions; [distributedComputing()] with `slurm = TRUE` takes the one
+#' named like the login node in its `machine`.
 #'
-#' @details The value of `...` on each array task is its result. `get()`
-#' returns the list of results, one per task.
+#' A template is a job script with the placeholders `{{ jobname }}`,
+#' `{{ ntasks }}`, `{{ cores }}`, `{{ memPerCore }}`, `{{ walltime }}` and one
+#' line `{{ run }}`, which runs the task given by `SLURM_ARRAY_TASK_ID`. The
+#' lines before `{{ run }}` that are not comments set up the environment, for
+#' example with `module load`; the build on the login node runs in it as well.
+#' A job script of the cluster becomes a template by these placeholders. dMod2
+#' ships one for the bwForCluster Helix, `"helix"`.
 #'
-#' Repetitions of the same code are requested with `nRep`. Code that varies
-#' between tasks reads the variables `var_1`, `var_2`, ..., whose values on
-#' each task are taken from the corresponding vectors of `varValues`.
+#' @param machine The login node, named as in the `machine` of
+#'   [distributedComputing()]. `NULL` (default) lists the templates set up.
+#' @param from The template to start from: the name of one dMod2 ships, such
+#'   as `"helix"`, or the path of a job script. Defaults to the shipped
+#'   template named `machine`.
+#' @param edit Logical, opens the template in the editor. Default
+#'   `interactive()`.
+#' @param overwrite Logical. `TRUE` replaces a template set up before; with
+#'   `FALSE` (default) it is kept.
 #'
-#' The workspace is compressed with `zstd` if it is available locally. The job
-#' script loads the environment modules `compiler/gnu/13.3` and `math/R`; the
-#' remote build needs cppDE installed for that R. A job is only submitted if
-#' the remote build succeeds. Without `ssh` key authentication, `sshPasswd` is
-#' passed to `sshpass`, which must be installed locally.
+#' @return The path of the template, invisibly. Without `machine` the paths of
+#'   the templates set up, named by login node.
 #'
-#' @param ... R code to be executed remotely. Variables that change between
-#'   tasks are named `var_i`, see Details.
-#' @param jobname Character, unique name of the job. A job with the same name
-#'   is overwritten.
-#' @param partition SLURM partition. Defaults to `"single"`.
-#' @param cores Number of cores per node. Defaults to 16.
-#' @param nodes Number of nodes per task. Defaults to 1.
-#' @param memPerCore Memory per core in GB. Defaults to 2.
-#' @param walltime Maximum runtime per task as `"hh:mm:ss"`. Defaults to
-#'   `"01:00:00"`.
-#' @param sshPasswd Optional password for `sshpass`. `NULL` (default) uses
-#'   `ssh` key authentication, which is recommended.
-#' @param machine SSH address of the remote system, e.g. `"user@@host"`.
-#'   Defaults to `"cluster"`.
-#' @param varValues List of vectors, one per variable `var_i`, all of the
-#'   same length: the number of array tasks. Exclusive with `nRep`.
-#' @param nRep Integer, number of repetitions. Exclusive with `varValues`.
-#' @param recover Logical. `TRUE` submits nothing and returns the functions
-#'   for a job submitted earlier under `jobname`. Default `FALSE`, which
-#'   submits the job.
-#' @param purgeLocal Logical, the default of the argument of the same name of
-#'   `purge()`. Defaults to `FALSE`.
-#' @param compile Logical. `TRUE` transfers the C/C++ sources (`*.c`,
-#'   `*.cpp`) of the working directory and compiles them on the remote system
-#'   into one shared object; overrides `link`. Call it from
-#'   `getOption("dMod.outdir")` when that is set. Defaults to `FALSE`.
-#' @param link Logical. `TRUE` transfers the object files (`*.o`) of the working
-#'   directory and links them on the remote system; an error is raised if
-#'   there are none. Needs a remote compiler compatible with the local one.
-#'   Ignored if `compile = TRUE`. Defaults to `FALSE`.
-#' @param buildCores Number of parallel compiler processes of the remote build,
-#'   which runs on the login node before submission. `NULL` (default) uses the
-#'   cores the login node reports, at most 16.
-#' @param buildBundle Number of generated sources the remote build puts into one
-#'   translation unit. Only used for builds with more files than the shell
-#'   accepts as arguments. `1` compiles one file at a time. Defaults to 50.
-#' @param customFolders Named character vector with the entries `"compiled"`,
-#'   `"output"` and `"tmp"`, relative paths for compiled files, results and
-#'   temporary files. `NULL` (default) uses the working directory.
-#' @param input Character vector, the objects of the global environment to
-#'   transfer. Defaults to all.
-#' @param resetSeeds Logical. `TRUE` (default) removes `.Random.seed` from the
-#'   transferred workspace and seeds each task with its SLURM job ID.
-#' @param returnAll Logical. `TRUE` (default) makes `get()` fetch all files the
-#'   job produced except the uploaded workspace and build files; `FALSE` only
-#'   the result files.
-#' @param libs Optional character vector of library paths put in front of the
-#'   remote library search path, for the jobs and the remote build. The remote
-#'   shell expands them, so `~` is the remote home.
-#'
-#' @return A list of functions:
-#' \describe{
-#'   \item{`check()`}{reports how many results are ready and returns `TRUE`
-#'     when all are.}
-#'   \item{`get()`}{copies the results into `<jobname>_folder/results/` and
-#'     returns them, a list with one entry per task.}
-#'   \item{`purge(purgeLocal)`}{deletes the job folder on the remote system,
-#'     with `purgeLocal = TRUE` also the local one.}
-#' }
-#'
-#' @seealso [runbg()], [profileParsPerNode()]
-#'
+#' @seealso [distributedComputing()]
 #' @examples
 #' \dontrun{
-#' # Multi-start fits, 20 tasks
-#' job <- distributedComputing(
-#'   {
-#'     mstrust(obj, center = pars, fits = 48, cores = 16, sd = 4)
-#'   },
-#'   jobname = "fits", machine = "user@@host", partition = "single",
-#'   cores = 16, walltime = "02:00:00", nRep = 20
-#' )
-#' job$check()
-#' fits <- job$get()
-#' job$purge()
-#'
-#' # Profiles, a range of parameters per task
-#' ranges <- profileParsPerNode(bestfit, 4)
-#' job <- distributedComputing(
-#'   {
-#'     profile(obj, bestfit, whichPar = as.numeric(var_1):as.numeric(var_2),
-#'             limits = c(-5, 5), cores = 16)
-#'   },
-#'   jobname = "profiles", machine = "user@@host", cores = 16,
-#'   walltime = "02:00:00", varValues = ranges[c("from", "to")]
-#' )
-#' profiles <- do.call(rbind, job$get())
-#' job$purge()
+#' # once per login node, from a job script of the cluster
+#' slurmTemplate("mycluster", from = "~/mycluster.sh")
+#' # the template dMod2 ships for the bwForCluster Helix
+#' slurmTemplate("helix")
+#' slurmTemplate()
 #' }
-#'
 #' @export
-distributedComputing <- function(
-    ...,
-    jobname,
-    partition = "single",
-    cores = 16,
-    nodes = 1,
-    memPerCore = 2,
-    walltime = "01:00:00",
-    sshPasswd = NULL,
-    machine = "cluster",
-    varValues = NULL,
-    nRep = NULL,
-    recover = FALSE,
-    purgeLocal = FALSE,
-    compile = FALSE,
-    link = FALSE,
-    buildCores = NULL,
-    buildBundle = 50,
-    customFolders = NULL,
-    resetSeeds = TRUE,
-    returnAll = TRUE,
-    input = ls(.GlobalEnv, all.names = TRUE),
-    libs = NULL
-){
-  # The dots hold the code, unevaluated.
-  code <- match.call(expand.dots = FALSE)$...
-  original_wd <- getwd()
-  if (is.null(customFolders)) {
-    output_folder_abs <- "./"
-  } else if(!is.null(customFolders) & !all(length(customFolders) == 3 & sort(names(customFolders)) == c("compiled", "output", "tmp"))) {
-    warning("'customFolders' must be named vector with exact three elements:\n
-            'compiled', 'output', 'tmp', containing relative paths to the resp folders\n
-            input is wrong, ignored.\n")
-  } else {
-    compiled_folder <- customFolders["compiled"]
-    output_folder <- customFolders["output"]
-    tmp_folder <- customFolders["tmp"]
-    
-    system(paste0("cp ", compiled_folder, "* ", tmp_folder))
-    
-    setwd(output_folder)
-    output_folder_abs <- getwd()
-    
-    setwd(original_wd)
-    setwd(tmp_folder)
+slurmTemplate <- function(machine = NULL, from = machine, edit = interactive(),
+                          overwrite = FALSE) {
+  dir <- .slurmTemplateDir()
+  if (is.null(machine)) {
+    files <- list.files(dir, pattern = "\\.sh$", full.names = TRUE)
+    return(stats::setNames(files, sub("\\.sh$", "", basename(files))))
   }
-  
-  # Safety rule: never compile and link at the same time
-  if (compile) link <- FALSE
-  
-  
-  on.exit(setwd(original_wd))
-  
-  # - definitions - #
-  
-  # relative path to the working directory
-  
-  wd_path <- paste0("./",jobname, "_folder/")
-  
-  # number of repetitions
-  if(!is.null(nRep) & is.null(varValues)) {
-    num_nodes <- nRep - 1
-  } else if(is.null(nRep) & !is.null(varValues)) {
-    num_nodes <- length(varValues[[1]]) - 1
-  } else {
-    stop("I dont know what you want how often done. Please set either 'nRep' or pass 'varValues' (_not_ both!)")
+  if (!is.character(machine) || length(machine) != 1L || !nzchar(machine) ||
+      grepl("/", machine, fixed = TRUE))
+    stop("'machine' must name one login node", call. = FALSE)
+  dest <- file.path(dir, paste0(machine, ".sh"))
+  if (!file.exists(dest) || overwrite) {
+    shipped <- .slurmShipped()
+    src <- if (from %in% names(shipped)) shipped[[from]] else from
+    if (!file.exists(src))
+      stop(if (missing(from)) paste0("dMod2 ships no template for '", machine, "'; give ",
+                                     "the job script to start from as 'from'")
+           else paste0("'", from, "' is neither a job script nor a template dMod2 ships"),
+           ", see ?slurmTemplate", call. = FALSE)
+    dir.create(dir, recursive = TRUE, showWarnings = FALSE)
+    if (!file.copy(src, dest, overwrite = TRUE))
+      stop("cannot write ", dest, call. = FALSE)
   }
-  
-  # define the ssh command depending on 'sshpass' being used
-  ssh_command <- if (is.null(sshPasswd)) "ssh "
-                 else paste0("sshpass -p ", sshPasswd, " ssh ")
-  
-  # - output functions - #
-  # Structure of the output 
-  out <- structure(vector("list", 3), names = c("check", "get", "purge"))
-  
-  # check function
-  out[[1]] <- function() {
-
-    ready <- length(suppressWarnings(system(
-      paste0(ssh_command, machine, " 'ls ", jobname,
-             "_folder/ 2>/dev/null | grep -E \"result[.]RData$\"'"),
-      intern = TRUE)))
-
-    if (ready >= num_nodes + 1) {
-      cat("Result is ready!\n")
-      return(TRUE)
-    }
-    cat("Result from", ready, "out of", num_nodes + 1, "nodes are ready.\n")
-    FALSE
-  }
-  
-  # get function
-  out[[2]] <- function () {
-    # copy all files back
-    if (returnAll == T) {
-      system(
-        paste0(
-          "mkdir -p ", output_folder_abs, "/", jobname,"_folder/results/; ",
-          ssh_command, "-n ", machine, # go to remote
-          # Everything the job produced, but not what was uploaded or built from
-          # it. Patterns are double-quoted so the remote shell passes them to
-          # tar instead of globbing them.
-          " 'tar -C ", jobname, "_folder ",
-          paste0("--exclude=\"", c("*_workspace.RData", "*_files.txt",
-                                   "*.c", "*.cpp", "*.o", "*.a", "*.so"),
-                 "\"", collapse = " "),
-          " -cf - ./ | zstd -T0 -q -c'", # compress the remaining files on remote
-          " | zstd -d -q -c | ", # pipe to local
-          "tar -C ", output_folder_abs, "/", jobname,"_folder/results/ -xf -"
-        )
-      )
-    } else {
-      # copy only result files back
-      system(
-        paste0(
-          "mkdir -p ", output_folder_abs, "/", jobname,"_folder/results/; ",
-          ssh_command, "-n ", machine, " '",
-          "find ", jobname, "_folder -type f -name \"*result.RData\" -exec tar -cf - {} + | zstd -T0 -q -c'",
-          " | zstd -d -q -c | tar --strip-components=1 -xf - -C ",
-          shQuote(paste0(output_folder_abs, "/", jobname,"_folder/results/"))
-        )
-      )
-    }
-    
-    
-    # get list of all currently available output files
-    result_list <- vector("list", num_nodes + 1)
-    result_dir <- paste0(output_folder_abs, "/", jobname, "_folder/results/")
-    result_files <- list.files(path = result_dir, pattern = glob2rx("*result.RData"))
-
-    ## Nothing here is the normal state after an OOM kill or a walltime overrun.
-    if (!length(result_files))
-      cat("\n\tNo results retrieved. The jobs are still running or ended before",
-          "\n\twriting a result. Check the .err files in ", jobname,
-          "_folder/ on ", machine, ".\n", sep = "")
-    else if (length(result_files) != num_nodes + 1)
-      cat("\n\t", length(result_files), " of ", num_nodes + 1, " results ready\n",
-          sep = "")
-
-    ## Slot by SLURM array index: with partial results the file order differs.
-    node_ID <- suppressWarnings(as.integer(
-      sub(".*_([0-9]+)_result\\.RData$", "\\1", result_files)))
-    slot <- ifelse(is.na(node_ID) | node_ID < 0L | node_ID > num_nodes,
-                   seq_along(result_files), node_ID + 1L)
-
-    for (i in seq_along(result_files)) {
-      cluster_result <- NULL
-      check <- try(load(file = paste0(result_dir, result_files[i])), silent = TRUE)
-      if (inherits(check, "try-error"))
-        warning("Could not load '", result_files[i], "': ",
-                conditionMessage(attr(check, "condition")), call. = FALSE)
-      else
-        result_list[[slot[i]]] <- cluster_result
-    }
-    result_list
-  }
-  
-  
-  
-  # purge function, its default taken from the argument of distributedComputing()
-  purgeLocalDefault <- purgeLocal
-  out[[3]] <- function (purgeLocal = purgeLocalDefault) {
-    # remove files remote
-    system(
-      paste0(
-        ssh_command, machine, " rm -rf ", jobname, "_folder"
-      )
-    )
-    # also remove local files if want so
-    if (purgeLocal) {
-      system(
-        paste0("rm -rf ", output_folder_abs, "/", jobname,"_folder")
-      )
-    }
-  }
-  
-  # if recover == T, stop here
-  if(recover) {
-    setwd(original_wd)
-    return(out)
-  } 
-  
-  
-  
-  
-  
-  
-  
-  
-  
-  # - calculation - #
-  # create wd for this run
-  system(
-    paste0("rm -rf ",jobname,"_folder")
-  )
-  system(
-    paste0("mkdir ",jobname,"_folder/")
-  )
-  
-  
-  
-  # Export the workspace the job needs. The default covers hidden names too,
-  # because resetSeeds acts on a transferred .Random.seed.
-  input <- intersect(input, ls(.GlobalEnv, all.names = TRUE))
-  ws_file <- .saveWorkspace(input, paste0(wd_path, jobname, "_workspace.RData"))
-  ## The job script loads the plain .RData. Not every zstd has --rm, and a failed
-  ## expansion must not reach the sbatch.
-  ws_unpack <- if (grepl("\\.zst$", ws_file))
-    paste0("{ zstd -dqf ", basename(ws_file), " && rm -f ", basename(ws_file),
-           "; } || exit 1; ") else ""
-  
-  
-  # WRITE R
-  
-  
-  # The node script attaches dMod2 only, not the submitting session's
-  # packages; anything else belongs in the expression.
-  package_list <- "library(dMod2)"
-  if (compile || link) {
-    objfns <- 'obj.fns <- ls()[sapply(ls(), function(nm) inherits(get(nm, envir=.GlobalEnv), c("obsfn", "parfn", "prdfn", "objfn")))]'
-    setmn <- sprintf('for (o in obj.fns) eval(parse(text=paste0("modelname(", o, ") <- \'%s\'")))\n', paste0(jobname, "_shared_object"))
-    load_so <- paste0("dyn.load('",jobname,"_shared_object.so')")
-  } else {
-    objfns <- ""
-    setmn <-""
-    load_so <- ""
-  }
-  
-  
-  
-  # generate parameter lists
-  if (!is.null(varValues)) {
-    var_list <- paste(
-      lapply(
-        seq(1,length(varValues)),
-        function(i) {
-          if (is.character(varValues[[i]])) {
-            paste0("var_values_", i, "=c('", paste(varValues[[i]], collapse="','"),"')")
-          } else {
-            paste0("var_values_", i, "=c(", paste(varValues[[i]], collapse=","),")")
-          }
-          
-          
-        }
-      ),
-      collapse = "\n"
-    )
-    # List of all names of parameters that will be changes between runs
-    var_names <- paste(lapply(seq(1,length(varValues)), function(i) paste0("var_",i)))
-    
-    # Variables per run
-    var_per_run <- paste(
-      lapply(
-        seq(1, length(varValues)),
-        function(i) {
-          paste0("var_", i, "=var_values_",i,"[(as.numeric(Sys.getenv('SLURM_ARRAY_TASK_ID')) + 1)]")
-        }
-      ),
-      collapse = "\n"
-    )
-  } else {
-    var_list <- ""
-    var_per_run <- ""
-  }
-  
-  
-  # define fixed pars
-  fixedpars <- paste(
-    "node_ID = Sys.getenv('SLURM_ARRAY_TASK_ID')",
-    "job_ID = Sys.getenv('SLURM_JOB_ID')",
-    paste0("jobname = ", "'",jobname,"'"),
-    sep = "\n"
-  )
-  
-  
-  # WRITE R
-  if (!length(code))
-    stop("distributedComputing: no R code to run.", call. = FALSE)
-  expr <- as.expression(code[[1L]])
-  cat(
-    paste(
-      "#!/usr/bin/env Rscript",
-      "",
-      "# Load packages",
-      package_list,
-      "",
-      "# Load environment",
-      paste0("load('",jobname,"_workspace.RData')"),
-      "",
-      if (resetSeeds == TRUE & exists(".Random.seed")) {
-        paste0("# remove random seeds\nrm(.Random.seed)\nset.seed(as.numeric(Sys.getenv('SLURM_JOB_ID')))")
-        
-      },
-      "",
-      "# load shared object if precompiled",
-      objfns,
-      setmn,
-      load_so,
-      "",
-      "# List of variablevalues",
-      var_list,
-      "",
-      "# Define variable values per run",
-      var_per_run,
-      "",
-      "# Fixed parameters",
-      fixedpars,
-      "",
-      "",
-      "",
-      "# Paste function call",
-      paste0("cluster_result <- try(", as.character(expr),")"),
-      sep = "\n",
-      "save(cluster_result, file = paste0(jobname,'_', node_ID, '_result.RData'))" #'_',job_ID, 
-    ),
-    file = paste0(wd_path, jobname,".R")
-  )
-  
-  
-  
-  
-  # WRITE BASH
-  cat(
-    paste(
-      "#!/bin/bash",
-      "",
-      "# Job name",
-      paste0("#SBATCH --job-name=",jobname),
-      "# Define format of output, deactivated",
-      paste0("#SBATCH --output=",jobname,"_%j-%a.out"),
-      "# Define format of errorfile, deactivated",
-      paste0("#SBATCH --error=",jobname,"_%j-%a.err"),
-      "# Define partition",
-      paste0("#SBATCH --partition=", partition),
-      "# Define number of nodes per task",
-      paste0("#SBATCH --nodes=", nodes),
-      "# Define number of cores per node",
-      paste0("#SBATCH --ntasks-per-node=",cores),
-      "# Define walltime",
-      paste0("#SBATCH --time=",walltime),
-      "# Define of repetition",
-      paste0("#SBATCH -a 0-", num_nodes),
-      "# memory per CPU core",
-      paste0("#SBATCH --mem-per-cpu=", memPerCore, "gb"),
-      "",
-      "",
-      "# Load compiler modules",
-      "module load compiler/gnu/13.3",
-      "# Load R modules",
-      "module load math/R",
-      paste0("export OMP_NUM_THREADS=","1"),
-      paste0("export MKL_NUM_THREADS=", "1"),
-      .remoteLibs(libs),
-      "",
-      "# Run R script",
-      paste0("Rscript ", jobname, ".R"),
-      sep = "\n" 
-    ),
-    file = paste0(wd_path,jobname,".sh")
-  )
-  
-  
-  # The build script ships in the job folder, as a bare `R CMD SHLIB` misses
-  # cppDE's includes and BLAS/LAPACK; `&&` makes a failed build skip the sbatch.
-  build_script_file <- paste0(jobname, "_build.sh")
-  filelist_file <- paste0(jobname, "_files.txt")
-  module_cmd <- paste0("module load compiler/gnu/13.3 2>/dev/null; module load math/R; ",
-                       .remoteLibs(libs))
-
-  ## File names go in a list in the job folder, not on the command line that
-  ## both tar calls share. zstd runs as its own pipe stage and the files move
-  ## one by one: BSD tar reads -I as a file list, and BSD mv has no -t.
-  transferCmds <- function(files) {
-    writeLines(files, paste0(wd_path, filelist_file))
-    list(locale = paste0("tar -cf - -T ", wd_path, filelist_file,
-                         " ", wd_path, "* | zstd -T0 -q -c"),
-         remote = paste0("zstd -d -q -c | tar -C ./ -xf - ; ",
-                         "while IFS= read -r f; do mv -- \"$f\" ./", jobname,
-                         "_folder/; done < ./", jobname, "_folder/",
-                         filelist_file, "; "))
-  }
-
-  if (compile) {
-    # --- FULL RECOMPILATION (.cpp/.c -> .so) ---
-    sourcefiles <- c(list.files(pattern = glob2rx("*.c")),
-                     list.files(pattern = glob2rx("*.cpp")))
-
-    tarCmds    <- transferCmds(sourcefiles)
-    tar_locale <- tarCmds$locale
-    tar_remote <- tarCmds$remote
-
-    buildinfo <- .remoteBuildInfo()
-    cat(.remoteBuildScript(
-      files       = sourcefiles,
-      output      = paste0(jobname, "_shared_object.so"),
-      compileArgs = buildinfo$compileArgs,
-      needsCVODE  = buildinfo$needsCVODE,
-      needsKLU    = buildinfo$needsKLU,
-      needsLapack = buildinfo$needsLapack,
-      link        = FALSE,
-      cxx         = any(grepl("\\.cpp$", sourcefiles)),
-      cores       = buildCores,
-      filelist    = filelist_file,
-      bundle      = buildBundle
-    ), file = paste0(wd_path, build_script_file))
-
-    compile_remote <- paste0(module_cmd, "bash ", build_script_file, " && ")
-
-  } else if (link) {
-    # --- LINK ONLY (.o -> .so) ---
-    object_files <- Sys.glob("*.o")
-    if (length(object_files) == 0)
-      stop("No .o files found for linking! You must compile first.")
-
-    message("distributedComputing(): linking pre-compiled .o files on the cluster. ",
-            "This requires the cluster toolchain to be ABI-compatible with the ",
-            "local one; if the link or dyn.load() fails, resubmit with compile = TRUE.")
-
-    tarCmds    <- transferCmds(object_files)
-    tar_locale <- tarCmds$locale
-    tar_remote <- tarCmds$remote
-
-    buildinfo <- .remoteBuildInfo()
-    cat(.remoteBuildScript(
-      files       = object_files,
-      output      = paste0(jobname, "_shared_object.so"),
-      compileArgs = buildinfo$compileArgs,
-      needsCVODE  = buildinfo$needsCVODE,
-      needsKLU    = buildinfo$needsKLU,
-      needsLapack = buildinfo$needsLapack,
-      link        = TRUE,
-      cxx         = length(Sys.glob("*.cpp")) > 0,
-      cores       = buildCores,
-      filelist    = filelist_file,
-      bundle      = buildBundle
-    ), file = paste0(wd_path, build_script_file))
-
-    compile_remote <- paste0(module_cmd, "bash ", build_script_file, " && ")
-
-  } else {
-    # --- NO BUILD ACTION (shared objects already available) ---
-    tarCmds    <- transferCmds(Sys.glob("*.so"))
-    tar_locale <- tarCmds$locale
-    tar_remote <- tarCmds$remote
-    compile_remote <- ""
-  }
-  
-  # transfer and run files
-  status <- system(
-    paste0(
-      tar_locale, # compress all files in the local working dir
-      " | ", ssh_command, machine, # pipe to ssh session on remote
-      " 'if [ -d ", jobname, "_folder ]; then rm -Rf ", jobname,"_folder; fi ;", # remove folder if it exists
-      " mkdir -p ", jobname,"_folder; ", # create new wd on remote
-      tar_remote, # uncompress files in wd on remote, if necessary move files
-      "cd ", jobname, "_folder; ", # change in said wd
-      ws_unpack, # expand the workspace if it was shipped compressed
-      compile_remote, # compile files if said so, if not nothing happen
-      "sbatch ", jobname, ".sh'" # start bash script
-    )
-  )
-
-  # ssh forwards the exit status of the remote command chain, so a failed
-  # remote build shows up here instead of silently queueing a broken job.
-  if (status != 0)
-    warning("Remote build or job submission failed (exit status ", status,
-            "). See the compiler output above; nothing was submitted if the ",
-            "build is what failed.", call. = FALSE)
-
-  setwd(original_wd)
-  return(out)
+  if (edit) utils::file.edit(dest)
+  invisible(dest)
 }
-
-
-
-#' Split Parameters into Ranges for Distributed Profiles
-#'
-#' Splits the parameter indices into consecutive ranges, one per node, for
-#' profile calculation with [distributedComputing()].
-#'
-#' @param parameters Named vector or list of parameters; only its length is
-#'   used.
-#' @param parsPerNode Integer, number of parameters per node.
-#' @param side `"both"` (default) for one entry per range, or `"split"` for two
-#'   entries per range, labelled `"left"` and `"right"`, to compute the two
-#'   sides of each profile on separate nodes.
-#'
-#' @return A list with the integer vectors `from` and `to`, the first and last
-#'   parameter index of each node, and the character vector `side`.
-#' @seealso [distributedComputing()], [profile()][profile.objfn]
-#' @examples
-#' parameters <- setNames(1:10, letters[1:10])
-#' profileParsPerNode(parameters, 4)
-#' profileParsPerNode(parameters, 4, side = "split")
-#'
-#' @export
-profileParsPerNode <- function(parameters, parsPerNode, side = c("both", "split")) {
-
-  side <- match.arg(side)
-
-  # get the number of parameters
-  n_pars <- length(parameters)
-  
-  # determine the number of nodes necessary
-  no_nodes <- 1:ceiling(n_pars/parsPerNode)
-  
-  # generate the lists which parameters are send to which node
-  pars_from <- parsPerNode
-  pars_to_vec <- parsPerNode
-  while (pars_from < (n_pars)) {
-    pars_from <- pars_from + parsPerNode
-    pars_to_vec <- c(pars_to_vec, pars_from)
-  }
-  pars_to_vec[length(pars_to_vec)] <- n_pars
-  
-  pars_from_vec <- c(1, pars_to_vec+1)
-  pars_from_vec <- head(pars_from_vec, -1)
-  
-  # adjust for sides 
-  if (side == "both") {
-    side_vec <-  rep("both", length(no_nodes))
-  } else {
-    # split pars_to_vec and pars_from_vec by repeating each element twice
-    pars_to_vec <- rep(pars_to_vec, each = 2)
-    pars_from_vec <- rep(pars_from_vec, each = 2)
-    side_vec <- rep(c("left", "right"), length(no_nodes))
-  }
-  
-  out <- list(from=pars_from_vec, to=pars_to_vec, side = side_vec)
-  
-  return(out)
-}
-
 
 
 ## .sanitizeCores ----------------------------------------------------------------
@@ -1399,7 +965,7 @@ profileParsPerNode <- function(parameters, parsPerNode, side = c("both", "split"
   strategy <- match.arg(strategy)
   cores <- max(1L, as.integer(cores))
   if (cores == 1L && !is.null(coresConditions)) {
-    old <- options(dMod.cores = as.integer(coresConditions))
+    old <- options(dMod2.cores = as.integer(coresConditions))
     on.exit(options(old), add = TRUE)
   }
   if (cores == 1L)
@@ -1434,8 +1000,9 @@ profileParsPerNode <- function(parameters, parsPerNode, side = c("both", "split"
   loaded_packages <- .packages()
   kcond <- if (is.null(coresConditions)) NULL else as.integer(coresConditions)
   out <- foreach::foreach(i = seq_along(X),
-                          .packages = loaded_packages) %dopar% {
-    if (!is.null(kcond)) options(dMod.cores = kcond)
+                          .packages = loaded_packages,
+                          .options.multicore = list(preschedule = FALSE)) %dopar% {
+    if (!is.null(kcond)) options(dMod2.cores = kcond)
     FUN(X[[i]])
   }
   out

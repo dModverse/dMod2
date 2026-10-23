@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """SBML -> JSON adapter for dMod's `importSbml()`. Reads SBML directly via
 libsbml and emits a compact JSON payload with everything dMod needs:
 stoichiometric matrix, kinetic-law strings, parameter values, species
@@ -49,6 +48,14 @@ import json
 import math
 import re
 import libsbml
+
+
+def _number_or_text(text):
+    """A float when the text parses as one, the text otherwise."""
+    try:
+        return float(text)
+    except (TypeError, ValueError):
+        return text
 
 
 def _formula(ast):
@@ -285,10 +292,7 @@ def parse_sbml(sbml_file):
             if m1 is not None:
                 rhs = m1.group(2).strip()
                 # Numeric or symbolic -- both valid in dMod's eventlist.
-                try:
-                    trigger_time = float(rhs)
-                except ValueError:
-                    trigger_time = rhs
+                trigger_time = _number_or_text(rhs)
         assignments = []
         for j in range(ev.getNumEventAssignments()):
             ea = ev.getEventAssignment(j)
@@ -323,16 +327,17 @@ def parse_sbml(sbml_file):
     }
 
 
-if __name__ == '__main__':
-    if len(sys.argv) < 2:
-        print('Usage: %s SBML-FILE-NAME [OUTFILE]' % __file__)
-        sys.exit(1)
+def main(argv):
+    """Write the JSON payload of the SBML file argv[0] to argv[1], or to stdout."""
+    if not argv:
+        sys.exit("usage: sbmlImport.py MODEL.xml [OUT.json]")
+    payload = json.dumps(parse_sbml(argv[0]))
+    if len(argv) == 1:
+        sys.stdout.write(payload + "\n")
+        return
+    with open(argv[1], "w") as out:
+        out.write(payload)
 
-    sbml_file_name = sys.argv[1]
-    output = json.dumps(parse_sbml(sbml_file_name))
 
-    if len(sys.argv) > 2:
-        with open(sys.argv[2], 'w') as f:
-            f.write(output)
-    else:
-        print(output)
+if __name__ == "__main__":
+    main(sys.argv[1:])

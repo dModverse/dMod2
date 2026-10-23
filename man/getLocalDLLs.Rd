@@ -11,7 +11,7 @@ Character vector with the names of the loaded shared objects whose
 path lies in the working directory.
 }
 \description{
-Only the working directory is searched, not \code{getOption("dMod.outdir")} or
+Only the working directory is searched, not \code{getOption("dMod2.outdir")} or
 the directories the objects were generated in.
 }
 \seealso{

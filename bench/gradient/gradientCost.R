@@ -28,7 +28,7 @@
 # -------------------------------------------------------------------------#
 
 library(dMod2)
-options(dMod.cores = 1)
+options(dMod2.cores = 1)
 
 .outdir <- file.path(tempdir(), "bench_gradientCost")
 dir.create(.outdir, recursive = TRUE, showWarnings = FALSE)

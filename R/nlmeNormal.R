@@ -208,7 +208,7 @@
 # one error-model frame per request; conditions may repeat across rounds.
 .foceiPredictMany <- function(prdfn, errfn) {
   function(timesList, parsList, conditions, fixed) {
-    cores <- getOption("dMod.cores", 1L)
+    cores <- getOption("dMod2.cores", 1L)
     conditions <- as.character(conditions)
     preds <- .predictMany(prdfn, times = timesList, parsList = parsList,
                           conditions = conditions, fixed = fixed,
@@ -372,7 +372,7 @@ emObjfn <- function(obj, control = list()) {
   }
 
   myfn <- function(..., fixed = NULL, deriv = TRUE, env = NULL,
-                   cores = getOption("dMod.cores", 1L)) {
+                   cores = getOption("dMod2.cores", 1L)) {
     p <- list(...)[[match.fnargs(list(...), "pars")]]
     if (is.null(env)) env <- new.env()
 
@@ -736,7 +736,7 @@ emObjfn <- function(obj, control = list()) {
   # single-condition callback per subject. Bit-identical to the serial path,
   # so it is the default; set the option or control entry to FALSE to compare.
   lockstep <- !isFALSE(control_cpp$lockstep) &&
-    !isFALSE(getOption("dMod.focei.lockstep", TRUE))
+    !isFALSE(getOption("dMod2.focei.lockstep", TRUE))
 
   # Stage-2 volume correction, the only part of FOCEI that needs second
   # derivatives of the prediction. Off by default, so a chain without deriv2
@@ -1956,7 +1956,7 @@ print.summary.em <- function(x, digits = 4, ...) {
   .cc <- .splitCores(cores, "fits")
   coresConditions <- .cc$conditions; cores <- .cc$outer
   if (!is.null(coresConditions) && cores == 1L)
-    options(dMod.cores = coresConditions)
+    options(dMod2.cores = coresConditions)
   if (cores > 1L) {
     if (Sys.info()[['sysname']] == "Windows" ||
         (!is.null(coresConditions) && coresConditions > 1L)) {
@@ -1979,7 +1979,7 @@ print.summary.em <- function(x, digits = 4, ...) {
         .packages = .packages(),
         .inorder = TRUE,
         .options.multicore = list(preschedule = FALSE)) %mydo% {
-          if (!is.null(coresConditions)) options(dMod.cores = coresConditions)
+          if (!is.null(coresConditions)) options(dMod2.cores = coresConditions)
           doOne(i)
         }
     } else {

@@ -107,6 +107,17 @@ test_that("a scaling and a general direction, with the result object", {
   expect_true(any(grepl("Lie order", sm)))
 })
 
+test_that("an unknown input and its change along each direction", {
+  r <- symmetryDetection(eqnvec(L = "-(c*T + L)/tau"), eqnvec(y = "L"), unknownInputs = "T",
+                         reconstruct = TRUE, verbose = FALSE)
+  expect_identical(c(r$rank, r$dim), c(1L, 3L))
+  expect_identical(r$info$coordinates, c("L", "c", "tau"))
+  ch <- lapply(r$symmetries, `[[`, "inputChange")
+  expect_true(all(vapply(ch, function(x) inherits(x, "eqnvec") && names(x) == "T", TRUE)))
+  expect_identical(names(r$info$unknownInputs$jets), "T")
+  expect_true(any(grepl("input change:", capture.output(print(r)))))
+})
+
 test_that("an identifiable model, and conditions that fix a scale", {
   r <- symmetryDetection(eqnvec(x = "-k*x"), eqnvec(y = "x"), verbose = FALSE)
   expect_true(r$identifiable)
@@ -209,6 +220,14 @@ test_that("the reduction removes the directions and reports its chart", {
   expect_true(red$checks$loop$ok)
   expect_identical(red$checks$loop$rankStatus, "proven")
   expect_null(symmetryReduction(r, check = FALSE)$checks$loop)
+})
+
+test_that("the reduction takes the declared positive coordinates of the detection", {
+  pos <- c("k", "e", "s", "a")
+  r <- symmetryDetection(eqnvec(x = "-k*x", z = "a*x - e*z"), eqnvec(y = "s*z"), positive = pos,
+                         reconstruct = TRUE, verbose = FALSE)
+  expect_identical(as.character(unlist(symmetryReduction(r)$assumptions$domain)), pos)
+  expect_true(isTRUE(symmetryReduction(r, positive = TRUE)$assumptions$domain))
 })
 
 test_that("the reduction refuses open directions unless allowOpen", {

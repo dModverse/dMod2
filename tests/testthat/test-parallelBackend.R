@@ -96,11 +96,11 @@ fx_register(multicond = TRUE)
   list(obj = obj, starts = starts)
 }
 
-# trust() with the worker's PID and its dMod.cores in the fit.
+# trust() with the worker's PID and its dMod2.cores in the fit.
 .trustWhere <- function(objfun, parinit, ...) {
   fit <- trust(objfun, parinit, ...)
   fit$pid <- Sys.getpid()
-  fit$dModCores <- getOption("dMod.cores", NA_integer_)
+  fit$dModCores <- getOption("dMod2.cores", NA_integer_)
   fit
 }
 
@@ -135,7 +135,7 @@ test_that("mstrust runs the layout asked for and leaves no workers or options be
   skip_on_os("windows")
   skip_if(dMod2:::.availableCores() < 4L)
   lf <- .layout_fixture()
-  old <- options(dMod.cores = NULL); on.exit(options(old), add = TRUE)
+  old <- options(dMod2.cores = NULL); on.exit(options(old), add = TRUE)
 
   serial <- .runLayout(lf, 1L)
   expect_identical(attr(serial, "run")$cores, c(fits = 1L))
@@ -144,7 +144,7 @@ test_that("mstrust runs the layout asked for and leaves no workers or options be
   inner <- .runLayout(lf, c(fits = 1L, conditions = 2L))
   expect_identical(attr(inner, "run")$cores, c(fits = 1L, conditions = 2L))
   expect_true(all(vapply(inner, `[[`, 1L, "dModCores") == 2L))
-  expect_null(getOption("dMod.cores"))
+  expect_null(getOption("dMod2.cores"))
 
   fork <- .runLayout(lf, c(fits = 2L, conditions = 1L))
   expect_identical(attr(fork, "run")$cores, c(fits = 2L, conditions = 1L))
@@ -154,7 +154,7 @@ test_that("mstrust runs the layout asked for and leaves no workers or options be
   expect_identical(attr(psock, "run")$cores, c(fits = 2L, conditions = 2L))
   expect_length(setdiff(vapply(psock, `[[`, 1L, "pid"), Sys.getpid()), 2L)
   expect_true(all(vapply(psock, `[[`, 1L, "dModCores") == 2L))
-  expect_null(getOption("dMod.cores"))
+  expect_null(getOption("dMod2.cores"))
 
   # more workers than fits
   capped <- .runLayout(lf, c(fits = 10L, conditions = 1L))
@@ -177,7 +177,7 @@ test_that("profile gives the same profiles in every layout and closes its worker
   skip_on_os("windows")
   skip_if(dMod2:::.availableCores() < 4L, "needs 4 cores")
   lf <- .layout_fixture()
-  old <- options(dMod.cores = NULL); on.exit(options(old), add = TRUE)
+  old <- options(dMod2.cores = NULL); on.exit(options(old), add = TRUE)
   best <- trust(lf$obj, unlist(lf$starts[1, attr(lf$starts, "parameters")]))$argument
   conns <- nrow(showConnections())
 
@@ -188,16 +188,16 @@ test_that("profile gives the same profiles in every layout and closes its worker
   for (cores in list(c(pars = 1L, conditions = 2L), c(pars = 2L, conditions = 1L),
                      c(pars = 2L, conditions = 2L)))
     expect_equal(.prof(cores), serial)
-  expect_null(getOption("dMod.cores"))
+  expect_null(getOption("dMod2.cores"))
   expect_identical(nrow(showConnections()), conns)
 })
 
 
-test_that("profile leaves dMod.cores as it found it", {
+test_that("profile leaves dMod2.cores as it found it", {
   obj <- constraintL2(mu = c(a = 1, b = -0.5), sigma = 1)
-  old <- options(dMod.cores = NULL); on.exit(options(old), add = TRUE)
+  old <- options(dMod2.cores = NULL); on.exit(options(old), add = TRUE)
   prof <- profile(obj, c(a = 1, b = -0.5), "a", limits = c(-2, 2),
                   cores = c(pars = 1L, conditions = 2L), verbose = FALSE)
   expect_true(nrow(prof) > 1L)
-  expect_null(getOption("dMod.cores"))
+  expect_null(getOption("dMod2.cores"))
 })

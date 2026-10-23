@@ -55,6 +55,204 @@
   lowest level of the waterfall, within `tolHits` of the best value, and the
   structures they take.
 
+# dMod2 0.13.0
+
+* Breaking: `steadyStates()` has one solver, the former version `"1.4"`: every unknown is
+  solved from a combination of balances, so every result is a ratio of positive sums. The
+  versions `"1.0"` to `"1.3"` and the arguments `version`, `sparsifyLevel`, `outputFormat`,
+  `positive` and `branches` are gone; `testSteady` is `"fast"` or `"skip"`.
+
+* Breaking: the options are named `dMod2.*`: `dMod2.cores`, `dMod2.outdir`,
+  `dMod2.batch.check` and `dMod2.compile.cmdlimit`; the `dMod.*` names are no longer read.
+  `dMod.quiet` and `dMod.sym.<name>` are gone: `suppressPackageStartupMessages()` silences
+  the startup message, and `SYMIDENT_<NAME>` sets a switch of symident. `?dMod2` lists the
+  options and environment variables.
+
+* The solver options of `Xs()` and `Xf()` on the `cppDE` and `Sundials` backends take
+  `maxOrder`, an upper bound on the order of the multistep methods, and `stald`, stability
+  limit detection for `"bdf"`.
+
+* Breaking: `distributedComputing()` is rebuilt and takes over `runbg()`; `runbg()` and
+  `profileParsPerNode()` are removed. The code runs once per task: `tasks` is a number, a
+  list or a data frame, and the code reads its element or row as `task` and its position as
+  `taskId`, and the cores it may use as `cores`. Without `slurm` the tasks run as detached
+  background processes on `"localhost"`, without ssh, or on machines reached by ssh, one
+  after the other per machine and each with the machine's cores: those `machine` names, as
+  in `c(server1 = 20, server2 = 10)`, or its free cores, and never more than are free. With
+  `slurm = TRUE` they form an array job with the cores `machine` names, submitted through
+  the job script template of the login node, with `{{ }}` fields. `input` is taken from the
+  calling environment, every task gets the seed `seed + taskId`, `recover` needs only the
+  `jobname`, and the job gains `terminate()`; `check()` returns `TRUE` once no task runs any
+  more and warns about failed tasks. `cores`, `nRep`, `varValues`, `partition`, `nodes`,
+  `sshPasswd`, `customFolders`, `returnAll`, `resetSeeds` and `purgeLocal` are gone.
+  `demo("BA_transport")` sends its multistarts this way, and
+  `examples/distributedComputing.md` describes it.
+
+* `slurmTemplate()` sets up the job script template of a SLURM cluster once per login node,
+  kept across sessions, from a job script of the cluster or from the one dMod2 ships for the
+  bwForCluster Helix.
+
+* `mstrust()` draws every random start, those of retries included, before it spreads the
+  fits over `cores`, so `set.seed()` reproduces a run whatever `cores`.
+
+* `unique()` on a parframe returns the rows with distinct values sorted by value, also for a
+  parframe not sorted by value; rows are selected with `subset()` first. dMod2 needs
+  ggplot2 3.5.0.
+
+* `rref()` no longer takes `verbose`, which it did not use.
+
+* `detectFreeCores()` names its values by machine and reaches `"localhost"` without ssh.
+
+* `symmetryDetection(unknownInputs = )` declares unknown functions of time; an exact
+  direction lists the change of each input as `inputChange`. Needs symident 0.12.0.
+
+* Loading dMod2 no longer requires symident in the Python environment; symmetryDetection()
+  and symmetryReduction() require it on first use, so a symident that cannot be resolved
+  leaves the code generation of models intact.
+
+* Breaking: `getElements()`, `blockdiagSymb()`, `getLinVars()`, `long2wide()`, `lsdMod()`,
+  `compare()`, `forcingsSymb()` and `dot()` are removed, as is the `character` method of
+  `reduceReplicates()`; `reduceReplicates(read.csv(file))` replaces it, and openxlsx and purrr
+  are no longer suggested. `progressBar()` is no longer exported.
+
+* Breaking: a dMod function refuses a named argument it does not take, more unnamed
+  arguments than it has inputs and a missing input, so `x(times, pars, condition = "C1")`
+  is an error instead of a prediction for all conditions. `Xs()` and `Xf()` refuse
+  arguments they do not take.
+
+* Breaking: the subset expressions of `plotPars()`, `plotValues()` and `plotArray()` come
+  right after the data, `tol`, `direction`, `covtable` and `nSim` after them; `covtable`
+  defaults to `NULL`, and the subset applies with and without it. `plotArray()` draws
+  `nSim` trajectories evenly spaced from the optimum, at most one per profile point,
+  grouped by parameter set.
+
+* `Xd()` applies the chain rule of a parameter transformation and differentiates by the
+  free parameters only; a missing grid parameter is an error.
+
+* `predict()` on a parframe labels each prediction with its own row, also for a parframe
+  not sorted by value, and adds a condition grid with one covariate; `plotResiduals()`
+  uses the row of each fit.
+
+* `addReaction()` reads any numeric coefficient, such as `3/2*A`, `(2)*A` or `2*3*A`, and
+  refuses a term that is no `coefficient*species`, a reaction without species and a state
+  named `Rate` or `Description`. `getReactions()` writes the coefficients as they are.
+  `subset()` of an eqnlist takes `%in%` on a vector as base R does.
+
+* `rref()` sets entries below `tol` to zero and returns the pivots as an integer vector;
+  `nullZ()` passes `tol` on and returns the identity for a matrix without pivots.
+  Conserved quantities have no rounding residues.
+
+* `lloq = NA` in data means no limit of quantification.
+
+* `as.datalist()` takes data without a condition or covariate column, as one condition
+  `"1"`, tibbles and data.tables. Renaming a datalist renames its `condition` column,
+  `subset()` of a datalist keeps the condition grid, and `covariates()` of a data frame
+  returns a data frame for any number of covariates.
+
+* `reduceReplicates()` names conditions by the levels of factor columns.
+
+* `profile()` checks `whichPar`, `stepControl` and `algoControl`, names a failed profile
+  with its error, reports an objective error that ended a side and singular Hessians once
+  per profile, and returns the optimum alone when no step is accepted. Each path step
+  solves the linear system directly and takes the pseudoinverse only for an
+  ill-conditioned one.
+
+* `confint()` takes a profile without a `data` column through `val.column = "value"`.
+
+* `mstrust()` takes an anonymous `samplefun` or one with a long name, passes the arguments
+  of an optimiser other than `trust()`, refuses
+  `fits < 1`, and writes one log entry per fit also from PSOCK workers; `load.parlist()`
+  reads the fits in the order of their numbers. `mstrust()` and `profile()` share one
+  parallel backend.
+
+* A scaled objective `a %.*% obj` keeps an absent gradient or Hessian absent and needs a
+  finite scalar `a`.
+
+* On the `deSolve` backend, `Xs()` and `Xf()` return the requested times only, warn when
+  the solver stops early, name missing parameters, and `Xs()` checks `names` and refuses
+  an odemodel without sensitivities.
+
+* `[` on a parframe keeps a single column as a parframe and selects columns by a single
+  index, as for a data frame; `as.parvec()` of a parframe checks `index`; `parframe()`
+  takes as parameters the columns that are neither meta names nor objective attributes.
+  `summary()` and `plot()` of a parlist skip aborted fits, `summary()` also takes an empty
+  parlist and fits without convergence flag, and `c()` of parlists concatenates.
+
+* `eqnvec()`, `parvec()` and `prdlist()` name unnamed entries by their position; a parvec
+  with `NA` prints; `wide2long()` refuses duplicated names.
+
+* `plotPaths()` and `plotPathsMulti()` build their paths in one pass; `plotPathsMulti()`
+  normalizes each path to the range -1 to 1 and colors the `nPars` largest paths, the
+  others in "Others". `plotPars()` detects steps on a frame in any order and names the
+  column `step`. A layer added to `plotCombined()` uses its data. `coordTransform()`
+  propagates errors only where `sigma` is given. `plotFluxes()` takes any number of
+  fluxes.
+
+* `wide2long()`, `lbind()` and `combine()` bind through data.table, which speeds up the
+  data frames of predictions with many conditions.
+
+* `write.eqnlist()` and `as.eventlist()` handle empty lists; `is.eqnlist()` checks that
+  the columns of the stoichiometric matrix are the states.
+
+* `Pexpl()` marks an output as fixed only when it depends on no varying input, and
+  `Pimpl()` keeps the rows of every solved state, so an output whose first derivative
+  vanishes at the evaluation point keeps its second derivative. `Pimpl()` treats a species
+  that no reaction changes, such as a catalyst, as a constant state, not as zero.
+
+* In a sum of objectives, `datapointL2()` finds the predictions of every `normL2()` term,
+  also behind a prior or a term that `conditions` skips. `obj + NULL` returns `obj`; adding
+  anything else that is not an objfn is an error.
+
+* `constraintL2()` and the other priors apply a named `sigma` to the parameter it names and
+  refuse a `sigma` without an entry for a parameter of `mu`. `trustL1(minimize = FALSE)`
+  subtracts the penalty from the objective it maximises. `evalConditionResidual()` passes
+  `fixed` parameters to the error model also without sensitivities.
+
+* `odemodel(deriv = FALSE)` builds no derivatives, whatever `derivMode`. `define()` and
+  `insert()` refuse `conditionMatch` for a trafo without a condition tree.
+
+* `eqnlist()` takes `compartments` without `compartmentOf`, with every state in
+  `defaultComp`, and refuses `compartmentOf` without its compartments. `c()` of eqnlists
+  keeps the layout of an eqnlist without reactions and the custom totals, and `subset()`
+  returns an empty eqnlist when no reaction matches. `log10Transform()` keeps names that
+  sympy reads as constants, such as `E` and `I`. `format.eqnvec()` keeps powers and
+  numbers such as `1e-3` whole. `as.eqnvec()` refuses empty and duplicated names.
+
+* `lbind()` and `as.data.frame()` of a datalist fill a column that some conditions lack
+  with `NA`. `c()` of datalists returns class `list` as well and refuses a condition named
+  twice. `as.datalist()` refuses covariate values whose condition names coincide.
+
+* `subset()` of a parframe and the subsets of `plotPars()`, `plotValues()` and
+  `plotProfile()` take several expressions and see the frame of the caller. `as.parframe()`
+  of a parlist fills a parameter that some fits lack with `NA`, and `c()` appends a single
+  fit to a parlist. `plotProfile(parlist = )` draws the profiled parameters only,
+  `plotProfilesAndPaths()` draws the total profile, `plot()` of a prdframe takes a data
+  frame, and `coordTransform()` keeps the order of the rows.
+
+* `modelname<-` assigns a vector of names condition by condition and takes `conditions`;
+  `getParameters(conditions = )` of a function for every condition returns its
+  parameters.
+
+* The code that dMod 1 contributors other than the authors wrote is reimplemented from its
+  documented behaviour: the print methods of eqnvec, eqnlist, objlist and parvec,
+  `summary()`, `plot()` and `as.parframe()` of a parlist, `fitErrorModel()`,
+  `reduceReplicates()`, the argument routing and fit log of `mstrust()`, `Xd()`,
+  `define()`, `insert()`, `conservedQuantities()`, the datalist methods and the prediction,
+  data, flux, residual and array plots. With the old `steadyStates()` versions gone,
+  `DESCRIPTION` lists the two authors only.
+
+* `Xd()` takes a state with a single grid point as constant; `plotFluxes()` labels an
+  unnamed flux by its expression also when others are named; `eqnlist()` takes a plain
+  vector as a one-column stoichiometric matrix; `reduceReplicates()` groups by the exact
+  times instead of times rounded to seven digits.
+
+* In a nested sum of objectives, a term without conditions is evaluated for any requested
+  conditions, as in a flat sum.
+
+* `summary()` of a parlist heads its table "Best and worst fit"; the messages of
+  `as.parvec()` on an unconverged fit, `as.eqnvec()` on unparsable equations and
+  `steadyStates()` on named `givenCQs` are reworded.
+
 # dMod2 0.12.7
 
 * `loadDLL()` also loads the shared objects of a model's auxiliary sources, such as the

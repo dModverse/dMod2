@@ -95,7 +95,7 @@
   myfit <- trust(myfn, pini + rnorm(length(pini), 0, .1), rinit=1, rmax=10, iterlim=500, fixed = c(loglambda = 0, fixed))
 # Evaluate model at best-fitting parameter values and plot
   prediction <- x(times, p(myfit$argument, fixed))
-  print(plotCombined(list(states=prediction, input=long2wide(mydataReceptor)), list(states=mydata, input=mydataReceptor)))
+  print(plotCombined(list(states=prediction, input=as.matrix(data.table::dcast(data.table::as.data.table(mydataReceptor), time ~ name, value.var = "value"))), list(states=mydata, input=mydataReceptor)))
 
 # Compute profile for loglambda
   proflist.approx <- profile.trust(myfn, c(myfit$argument, loglambda = 0), "loglambda", limits=c(-20, 0), algoControl = list(gamma = 1, reg = .1), fixed = fixed)

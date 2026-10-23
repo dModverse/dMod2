@@ -1,5 +1,5 @@
 \donttest{
-old <- options(dMod.outdir = tempdir())
+old <- options(dMod2.outdir = tempdir())
 
 ## Decay model, observation and parameter transformation, compiled together
 f <- addReaction(eqnlist(), from = "A", to = "", rate = "k*A")

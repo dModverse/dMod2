@@ -40,10 +40,12 @@ parameters, which can be estimated. \code{addEvent()} appends an event and is
 pipe-friendly.
 }
 \examples{
-eventlist(var = "A", time = "5", value = 1, method = "add")
+# Add 1 to A at t = 5
+eventlist(var = "A", time = 5, value = 1, method = "add")
 
-events <- addEvent(NULL, var = "A", time = "5", value = 1, method = "add")
-events <- addEvent(events, var = "A", time = "10", value = 1, method = "add")
+# Two doses of B, started from NULL and piped
+events <- addEvent(NULL, var = "B", time = 2, value = 0.5, method = "add") |>
+  addEvent(var = "B", time = 8, value = 0.5, method = "add")
 
 # With symbols: set A to value_switch at time_switch
 events <- eventlist()

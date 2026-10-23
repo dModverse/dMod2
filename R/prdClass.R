@@ -58,12 +58,11 @@ print.prdlist <- function(x, ...) {
   
   mynames <- names(x)
   if (is.null(mynames)) mynames <- rep("NULL", length(x))
-  
-  for (i in 1:length(x)) {
+  for (i in seq_along(x)) {
     cat(mynames[i], ":\n", sep = "")
     print(x[[i]])
   }
-  
+  invisible(x)
 }
 
 
@@ -82,10 +81,10 @@ as.data.frame.prdlist <- function(x, ..., data = NULL, errfn = NULL) {
   
   if (!is.null(errfn)) {
     sigma <- as.prdlist(
-      lapply(1:length(prediction), 
-             function(i) errfn(prediction[[i]], 
-                               getParameters(prediction[[i]]), 
-                               conditions = names(prediction)[i])[[1]]),
+      lapply(seq_along(prediction),
+             function(i) errfn(prediction[[i]],
+                               getParameters(prediction[[i]]),
+                               conditions = names(prediction)[i], deriv = FALSE)[[1]]),
       names = names(prediction)
     )
     sigma <- wide2long(sigma)
@@ -102,122 +101,74 @@ as.data.frame.prdlist <- function(x, ..., data = NULL, errfn = NULL) {
     prediction$sigma[!is.na(i)] <- sigma$value[i[!is.na(i)]]
   }
   
-  if (!is.null(condition.grid)) {
-    for (C in colnames(condition.grid)) {
-      rows <- ifelse(is.na(prediction$condition), 1, as.character(prediction$condition))
-      prediction[, C] <- condition.grid[rows, C]
-    }
-    n1 <- nrow(prediction)
-  }
-  
-  
-  return(prediction)
-  
-  
-} 
+  rows <- as.character(prediction$condition)
+  for (C in colnames(condition.grid)) prediction[, C] <- condition.grid[rows, C]
+  prediction
+}
 
 #' @export
 #' @param x object of class `prdlist` or `prdframe`.
 #' @rdname plotCombined
 plot.prdlist <- function(x, data = NULL, ..., scales = "free", facet = c("wrap", "grid", "wrap_plain"), transform = NULL) {
-  
-  prediction <- x
-  
-  if (is.null(names(prediction))) names(prediction) <- paste0("C", 1:length(prediction))
-  if (!is.null(data) && is.null(names(data))) names(data) <- paste0("C", 1:length(data))
-  
-  plotCombined.prdlist(prediction = prediction, data = data, ..., scales = scales, facet = facet, transform = transform)
-  
+  byPosition <- function(l) if (is.null(names(l))) setNames(l, paste0("C", seq_along(l))) else l
+  if (!is.null(data)) data <- byPosition(data)
+  plotCombined.prdlist(byPosition(x), data, ..., scales = scales, facet = facet,
+                       transform = transform)
 }
 
 
+# Rows of `frame` extended by the covariates of their condition, looked up in the row names
+# of `grid`; columns `frame` already has are left alone.
+.addCovariates <- function(frame, grid) {
+  extra <- setdiff(names(grid), names(frame))
+  if (!length(extra)) return(frame)
+  cbind(frame, grid[match(frame$condition, rownames(grid)), extra, drop = FALSE],
+        row.names = NULL)
+}
+
 #' @export
 #' @rdname plotCombined
-#' @importFrom dplyr filter
 #' @importFrom rlang parse_expr
 plotCombined.prdlist <- function(prediction, data = NULL, ..., 
                                  scales = "free", 
                                  facet = c("wrap", "grid", "wrap_plain"), 
                                  transform = NULL, aesthetics = NULL) {
-  
+
   facet <- match.arg(facet)
-  
-  make_aes <- function(mapping) {
-    mapping <- lapply(mapping, function(col) {
-      if (!is.null(col)) rlang::parse_expr(col)
-    })
-    do.call(aes, Filter(Negate(is.null), mapping))
-  }
-  
-  mynames <- c("time", "name", "value", "sigma", "condition")
-  covtable <- NULL
-  
-  # --- Prepare data ---
-  if (!is.null(data)) {
-    covtable <- covariates(data)
-    covtable <- cbind(condition = rownames(covtable), covtable)
-    covtable <- covtable[!duplicated(names(covtable))]
-    
-    data <- lbind(data)
-    data <- base::merge(data, covtable, by = "condition", all.x = TRUE)
-    data <- as.data.frame(dplyr::filter(data, ...))
-    data$bloq <- ifelse(data$value <= data$lloq, "yes", "no")
-    
-    if (!is.null(transform)) data <- coordTransform(data, transform)
-  }
-  
-  # --- Prepare prediction ---
+  grid <- if (!is.null(data)) covariates(data)
+  subsetted <- function(frame) as.data.frame(dplyr::filter(.addCovariates(frame, grid), ...))
+  transformed <- function(frame) if (is.null(transform)) frame else coordTransform(frame, transform)
+
   if (!is.null(prediction)) {
-    prediction <- cbind(wide2long(prediction), sigma = NA)
-    if (!is.null(covtable)) {
-      prediction <- base::merge(prediction, covtable, by = "condition", all.x = TRUE)
-    }
-    prediction <- as.data.frame(dplyr::filter(prediction, ...))
-    
-    if (!is.null(transform)) prediction <- coordTransform(prediction, transform)
+    long <- wide2long(prediction)
+    long$sigma <- NA
+    prediction <- transformed(subsetted(long))
   }
-  
-  # --- Combine into single data frame ---
-  keep_cols <- unique(c(mynames, names(covtable)))
-  total <- rbind(
-    if (!is.null(prediction)) prediction[, keep_cols] else NULL,
-    if (!is.null(data)) data[, keep_cols] else NULL
-  )
-  
-  # --- Build aesthetics ---
-  aes_base <- list(x = "time", y = "value", 
-                   ymin = "value - sigma", ymax = "value + sigma")
-  if (facet == "wrap") {
-    aes_base$group <- "condition"
-    aes_base$color <- "condition"
+  if (length(data)) {
+    obs <- subsetted(lbind(data))
+    obs$bloq <- ifelse(obs$value <= obs$lloq, "yes", "no")
+    data <- transformed(obs)
   }
-  aesthetics <- c(aes_base[setdiff(names(aes_base), names(aesthetics))], aesthetics)
-  
-  # --- Construct plot ---
-  p <- ggplot(total, make_aes(aesthetics))
-  
-  p <- p + switch(facet,
-                  wrap       = facet_wrap(~name, scales = scales),
-                  grid       = facet_grid(name ~ condition, scales = scales),
-                  wrap_plain = facet_wrap(~name * condition, scales = scales)
-  )
-  
-  if (!is.null(prediction)) {
-    p <- p + geom_line(data = prediction)
-  }
-  
-  if (!is.null(data)) {
-    p <- p + 
-      geom_point(data = data, aes(pch = bloq)) + 
-      geom_errorbar(data = data, width = 0) +
-      scale_shape_manual(name = "BLoQ", values = c(yes = 4, no = 19))
-    
-    if (all(data$bloq == "no")) {
-      p <- p + guides(shape = "none")
-    }
-  }
-  
-  attr(p, "data") <- list(data = data, prediction = prediction)
+
+  columns <- union(c("time", "name", "value", "sigma", "condition"), names(grid))
+  plotted <- rbind(prediction[columns], data[columns])
+
+  # user aesthetics replace defaults of the same name
+  mapping <- list(x = "time", y = "value", ymin = "value - sigma", ymax = "value + sigma")
+  if (facet == "wrap") mapping[c("group", "color")] <- "condition"
+  mapping <- utils::modifyList(mapping, as.list(aesthetics))
+  panels <- switch(facet,
+    wrap = facet_wrap(vars(name), scales = scales),
+    grid = facet_grid(rows = vars(name), cols = vars(condition), scales = scales),
+    wrap_plain = facet_wrap(vars(name, condition), scales = scales))
+
+  p <- ggplot(plotted, aes(!!!lapply(mapping, rlang::parse_expr))) + panels
+  if (!is.null(prediction)) p <- p + geom_line(data = prediction)
+  if (is.null(data)) return(p)
+
+  p <- p + geom_point(aes(shape = bloq), data = data) + geom_errorbar(data = data, width = 0) +
+    scale_shape_manual(name = "BLoQ", values = c(yes = 4, no = 19))
+  if (!any(data$bloq == "yes")) p <- p + guides(shape = "none")
   p
 }
 
@@ -226,40 +177,27 @@ plotCombined.prdlist <- function(prediction, data = NULL, ...,
 #'   given, the predicted `sigma` is drawn as a band around the prediction.
 #' @export
 #' @rdname plotPrediction
-#' @importFrom dplyr filter
 plotPrediction.prdlist <- function(prediction, ..., errfn = NULL, 
                                    scales = "free", 
                                    facet = c("wrap", "grid"), 
                                    transform = NULL) {
-  
+
   facet <- match.arg(facet)
-  
-  prediction <- as.data.frame(prediction, errfn = errfn)
-  prediction <- dplyr::filter(prediction, ...)
-  
-  if (!is.null(transform)) prediction <- coordTransform(prediction, transform)
-  
-  # --- Construct plot ---
-  p <- ggplot(prediction, aes(x = time, y = value))
-  
-  if (facet == "wrap") {
-    p <- p + 
-      aes(group = condition, color = condition) +
-      facet_wrap(~name, scales = scales)
+  frame <- dplyr::filter(as.data.frame(prediction, errfn = errfn), ...)
+  if (!is.null(transform)) frame <- coordTransform(frame, transform)
+
+  p <- if (facet == "wrap") {
+    ggplot(frame, aes(time, value, group = condition, colour = condition)) +
+      facet_wrap(vars(name), scales = scales)
   } else {
-    p <- p + facet_grid(name ~ condition, scales = scales)
+    ggplot(frame, aes(time, value)) +
+      facet_grid(rows = vars(name), cols = vars(condition), scales = scales)
   }
-  
-  if (!is.null(errfn)) {
-    p <- p + geom_ribbon(
-      aes(ymin = value - sigma, ymax = value + sigma, fill = condition), 
-      lty = 0, alpha = 0.3
-    )
-  }
-  
-  p <- p + geom_line()
-  
-  attr(p, "data") <- prediction
+  band <- if (!is.null(errfn))
+    geom_ribbon(aes(ymin = value - sigma, ymax = value + sigma, fill = condition),
+                linetype = 0, alpha = 0.3)
+  p <- p + list(band, geom_line())
+  attr(p, "data") <- frame
   p
 }
 
@@ -269,16 +207,9 @@ plotPrediction.prdlist <- function(prediction, ..., errfn = NULL,
 #' @export
 #' @rdname plotCombined
 plot.prdframe <- function(x, data = NULL, ..., scales = "free", facet = c("wrap", "grid", "wrap_plain"), transform = NULL) {
-  
-  prediction <- x
-  
-  prediction <- list("C1" = prediction)
-  if (!is.null(data) && is.data.frame(data))
-    data <- list("C1" = data)
-  
-  
-  plotCombined.prdlist(prediction = prediction, data = data, ..., scales = scales, facet = facet, transform = transform)
-  
+  if (is.data.frame(data)) data <- as.datalist(list(C1 = data))
+  plotCombined.prdlist(list(C1 = x), data, ..., scales = scales, facet = facet,
+                       transform = transform)
 }
 
 #' @export
@@ -409,7 +340,7 @@ summary.obsfn <- function(object, ...) {
 # rows and the conditions repeat across them.
 .predictRows <- function(x, times, pars, dots) {
   rows <- seq_len(nrow(pars))
-  parsList <- lapply(rows, function(i) as.parvec(pars, i))
+  parsList <- lapply(rows, function(i) .parvecRow(pars, i))
   serial <- function() lapply(parsList, function(pp)
     do.call(x, c(list(times, pp), list(deriv = FALSE), dots)))
 
@@ -447,68 +378,27 @@ summary.obsfn <- function(object, ...) {
 #'   `"data"`.
 #' @export
 predict.prdfn <- function(object, ..., times, pars, data = NULL) {
-  
-  
-  x <- object
-  arglist <- list(...)
-  if (any(names(arglist) == "conditions")) {
-    C <- arglist[["conditions"]]
-    if (!is.null(data)) {
-      data <- data[C]
-    }
-  }
+
+  dots <- list(...)
+  if (!is.null(data) && !is.null(dots$conditions)) data <- data[dots$conditions]
+  grid <- attr(data, "condition.grid")
+  grid <- grid[setdiff(names(grid), "condition")]
+  meta <- setdiff(colnames(pars), attr(pars, "parameters"))
+
+  predictions <- .predictRows(object, times, pars, dots)
+  blocks <- lapply(seq_along(predictions), function(i) {
+    block <- .addCovariates(as.data.frame(predictions[[i]]), grid)
+    block[paste0(".", meta)] <- lapply(meta, function(m) pars[[m]][i])
+    block
+  })
+  prediction <- do.call(combine, blocks)
+
+  # the data gets the columns of the prediction, NA where it has none
   if (is.null(data)) data <- data.frame()
-  condition.grid.data <- attr(data, "condition.grid")
-  
-  preds <- .predictRows(x, times, pars, arglist)
-
-  prediction <- do.call(combine, lapply(1:nrow(pars), function(i) {
-    
-    prediction <- preds[[i]]
-    
-    if (is.null(names(prediction))) {
-      conditions <- 1
-    } else {
-      conditions <- names(prediction)
-    }
-    
-    condition.grid <- data.frame(row.names = conditions)
-    
-    # Augment by parframe metanames and obj.attributes
-    mygrid <- pars[i, !colnames(pars) %in% attr(pars, "parameters")]
-    mynames <- colnames(mygrid)
-    if (length(mynames) > 0) {
-      mynames <- paste0(".", mynames)
-      colnames(mygrid) <- mynames
-      condition.grid <- cbind(condition.grid, mygrid)
-    }
-    
-    # Augment by condition.grid of data
-    if (!is.null(condition.grid.data) && ncol(condition.grid.data) > 1) 
-      condition.grid <- cbind(condition.grid.data[conditions,], condition.grid)
-    
-    # Write condition.grid into data
-    attr(data, "condition.grid") <- condition.grid
-
-    # Return
-    as.data.frame(prediction, data = data)
-    
-  }))
-  
-  n <- nrow(prediction)
-  
-  if (length(data) > 0) {
-    attr(data, "condition.grid") <- condition.grid.data
-    data <- as.data.frame(data)
-    tmp <- combine(prediction, data)
-    data <- tmp[-(1:n),]
-  }
-  
+  if (length(data))
+    data <- combine(prediction, as.data.frame(data))[-seq_len(nrow(prediction)), ]
   attr(prediction, "data") <- data
-  return(prediction)  
-  
-  
-  
+  prediction
 }
 
 
@@ -638,10 +528,8 @@ prdframe <- function(prediction = NULL,
 #' @seealso [prdfn()], [plotCombined()]
 #' @export
 prdlist <- function(...) {
-  mylist <- list(...)
-  mynames <- names(mylist)
-  if (is.null(mynames)) mynames <- as.character(1:length(mylist))
-  as.prdlist(mylist, mynames)
+  mylist <- .fillNames(list(...), "")
+  as.prdlist(mylist, names(mylist))
 }
 
 
