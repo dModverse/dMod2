@@ -532,6 +532,7 @@ confint.parframe <- function(object, parm = NULL, level = 0.95, ...,
     
     # Right profiles
     right <- d[d[["constraint"]] >= 0,]
+    right <- right[order(right[["constraint"]]), ]
     upper <- d[[whichPar]][origin] + get_xThreshold(right)
     
     # Left profile

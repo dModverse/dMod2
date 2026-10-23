@@ -20,8 +20,8 @@ evaluation of a prediction, observation or objective, the default of
 their \code{cores} argument. Default 1.}
 \item{\code{dMod2.outdir}}{Directory the model constructors such as
 \code{\link[=odemodel]{odemodel()}}, \code{\link[=Y]{Y()}} and \code{\link[=P]{P()}} write their sources and shared objects
-to, and \code{\link[=distributedComputing]{distributedComputing()}} takes the model files from. Default
-the working directory.}
+to, and where \code{\link[=distributedComputing]{distributedComputing()}} looks for model files when its
+objects name none. Default the working directory.}
 \item{\code{dMod2.batch.check}}{\code{TRUE} evaluates every batch of conditions a
 second time condition by condition and stops where the two differ.
 Default \code{FALSE}.}

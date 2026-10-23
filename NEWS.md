@@ -1,3 +1,44 @@
+# dMod2 0.13.1
+
+* Breaking: `distributedComputing()` takes where its tasks run as `on`: `localNode()`,
+  `sshNodes()` or `slurmCluster()`, each with the `cores` of a task. A node is one worker,
+  and a SLURM job has `array` workers, its array tasks; the tasks are dealt to the workers
+  in turn. `slurmCluster()` takes `walltime`, `memPerCore`, the job script and
+  `partition`, `account`, `maxRunning` and further options of `sbatch`. `build =
+  c("auto", "compile", "link", "copy")` replaces `compile` and `link`, and `"auto"`
+  compiles on remote nodes. The arguments `machine`, `slurm`, `jobscript`, `memPerCore`,
+  `walltime`, `compile` and `link` are gone, and `slurmTemplate()` names its first
+  argument `login`.
+
+* `distributedComputing()` ships the model files of the objects in `input` instead of
+  every file of `dMod2.outdir`. A job of the same name that still runs where the new one
+  would run is an error. The manifest is written before the start, and every job is
+  registered until `purge(local = TRUE)`; `dMod2Jobs()` lists them, and `recover` finds a
+  job from any working directory. The job has `wait()` and `log(i)`, and `get()` joins
+  parlists with `c()` and data frames with `rbind()`, leaving out tasks without a result
+  with a warning.
+
+* `rbind()` of parameter frames keeps their attributes and joins the parts of a profile,
+  such as its two sides, into one. `confint()` sorts the right side of a profile as it
+  does the left.
+
+* Breaking: `trust()` takes `boundary` as an argument instead of `stepControl$boundary`.
+  `trustL1()` takes its settings as `trust()` does: `ftol`, `mtol`, `gtol`, `xtol` and
+  `rmin` in `tolControl`, `thetaMax` (was `theta.max`) in `stepControl`, and `parupper`,
+  `parlower` and `boundary` after `iterlim`; a flat name is refused with the list it moved
+  to, and `iterlim` defaults to 1000.
+
+* The `check()` of a `distributedComputing()` job counts a task whose process remains as a
+  zombie as finished, as in a container whose init does not reap.
+
+* `distributedComputing(slurm = TRUE)` reads the job ID of `sbatch` also when the build on
+  the login node prints before it.
+
+* `plotCombined(aesthetics = )` replaces a default aesthetic also under its other spelling,
+  such as `colour` for `color`.
+
+* `wide2long()` of a matrix builds its data frame without a row-name warning.
+
 # dMod2 0.13.0
 
 * Breaking: `steadyStates()` has one solver, the former version `"1.4"`: every unknown is

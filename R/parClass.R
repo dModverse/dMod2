@@ -495,10 +495,34 @@ is.parframe <- function(x) {
 
 #' @export
 #' @param ... for `subset()`, logical expressions in the columns of `x`; a row
-#'   is kept where all of them are `TRUE`.
+#'   is kept where all of them are `TRUE`. For `rbind()`, parameter frames with
+#'   the same columns.
 #' @rdname parframe
 subset.parframe <- function(x, ...) {
   x[.filterRows(x, ...), ]
+}
+
+#' @details `rbind()` keeps the attributes of the first frame. Profiles of one
+#' parameter computed in parts, such as its left and right side, are joined
+#' into one: the repeated optimum is dropped and the points are sorted by
+#' `constraint`.
+#' @param deparse.level not used.
+#' @export
+#' @rdname parframe
+rbind.parframe <- function(..., deparse.level = 1) {
+  frames <- Filter(Negate(is.null), list(...))
+  out <- do.call(rbind.data.frame, c(unname(lapply(frames, as.data.frame)),
+                                     make.row.names = FALSE))
+  if (all(c("whichPar", "constraint") %in% names(out))) {
+    out <- out[order(match(out$whichPar, unique(out$whichPar)), out$constraint), ]
+    out <- out[!(out$constraint == 0 & duplicated(out[c("whichPar", "constraint")])), ]
+  }
+  first <- frames[[1L]]
+  out <- parframe(out, parameters = attr(first, "parameters"),
+                  metanames = attr(first, "metanames"),
+                  objAttributes = attr(first, "obj.attributes"))
+  attr(out, "run") <- attr(first, "run")
+  out
 }
 
 # The rows of a data frame where every expression in `...` holds, NA counting as

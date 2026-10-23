@@ -16,7 +16,7 @@ library(ggplot2)
 .outdir    <- file.path(tempdir(), .modelname)
 if (!dir.exists(.outdir)) dir.create(.outdir, recursive = TRUE)
 # generated sources and shared objects go to .outdir, see ?dMod2 for the options;
-# compiling and the symmetry detection use the free cores of this machine
+# compiling and the symmetry detection use the free cores of the local machine
 .opt   <- options(dMod2.outdir = .outdir)
 .cores <- detectFreeCores()
 .extDir <- system.file("extdata", "kok", package = "dMod2")
@@ -305,7 +305,7 @@ summary(structural)
 #>   rank: proven (4 directions, exact scalings)
 #>   25 conditions, 50 segments
 #>   settings: reduce_cq=False, equilibrate=False, reconstruct=False
-#>   elapsed: 8.8s
+#>   elapsed: 8.2s
 #> 
 #> Result:  rank 92 / 96  |  4 non-identifiable directions
 #> 
@@ -412,7 +412,7 @@ system.time(obj(bestfit, deriv = FALSE))
 
 ```
 #>    user  system elapsed 
-#>   0.050   0.000   0.049
+#>   0.053   0.000   0.054
 ```
 
 ``` r
@@ -421,7 +421,7 @@ system.time(obj(bestfit))
 
 ```
 #>    user  system elapsed 
-#>   2.881   0.014   2.907
+#>   2.646   0.013   2.669
 ```
 
 ``` r
@@ -430,7 +430,7 @@ system.time(obj(bestfit, cores = .cores))
 
 ```
 #>    user  system elapsed 
-#>   4.323   0.016   0.586
+#>   4.556   0.027   0.596
 ```
 
 ``` r
@@ -439,17 +439,18 @@ system.time(obj(bestfit, sweep = "reverse"))
 
 ```
 #>    user  system elapsed 
-#>   0.106   0.000   0.107
+#>   0.112   0.000   0.112
 ```
 
 ## Multi-start on helix
 200 fits from random starts around the published optimum ran on the
 bwForCluster Helix through distributedComputing(), as a SLURM array job of 10
-tasks. `machine = c(helix = 20)` names the login node and the 20 cores of each
-array task; in the task `cores` holds them, and mstrust() runs 20 fits on them.
-Every task has a seed of its own. The fits use the default Gauss-Newton Hessian.
-The sources in .outdir are compiled once on the login node, and the job script
-is the one dMod2 ships for Helix, set up once with slurmTemplate("helix").
+tasks. `slurmCluster("helix", cores = 20)` names the login node and the 20 cores
+of each array task; in the task `cores` holds them, and mstrust() runs 20 fits on
+them. Every task has a seed of its own. The fits use the default Gauss-Newton
+Hessian. The sources of the objective are compiled once on the login node, and
+the job script is the one dMod2 ships for Helix, set up once with
+slurmTemplate("helix").
 The authors acknowledge support by the state of Baden-Wuerttemberg through bwHPC
 and the German Research Foundation (DFG) through grant INST 35/1597-1 FUGG.
 
@@ -460,7 +461,7 @@ the package. The fits are expensive, which is why they do not run on the local
 machine. A job folder `kok_mstrust_folder` in the working directory means the job
 was submitted from here already: the call then recovers its functions instead
 of submitting again, and its fits replace the shipped ones once check() finds no
-task running.
+task running; get() joins the parlists of the tasks.
 
 
 ``` r
@@ -471,15 +472,11 @@ if (.helix) {
   job <- distributedComputing(
     mstrust(obj, bestfit, fits = 20, cores = cores, sd = 4, iterlim = 1e4L,
             tolControl = list(ftol = 1e-5, mtol = 1e-5, gtol = 1e-2)),
-    tasks = 10, machine = c(helix = 20), slurm = TRUE, walltime = "24:00:00",
-    jobname = "kok_mstrust", compile = TRUE, seed = 1L, input = c("obj", "bestfit"),
+    tasks = 10, on = slurmCluster("helix", cores = 20, walltime = "24:00:00"),
+    jobname = "kok_mstrust", seed = 1L, input = c("obj", "bestfit"),
     recover = dir.exists("kok_mstrust_folder")
   )
-  if (job$check()) {
-    fits <- job$get()
-    stopifnot(vapply(fits, inherits, NA, "parlist"))
-    outframe <- as.parframe(do.call(c, fits))
-  }
+  if (job$check()) outframe <- as.parframe(job$get())
 }
 ```
 

@@ -5,19 +5,19 @@
 \title{Job script templates of SLURM clusters}
 \usage{
 slurmTemplate(
-  machine = NULL,
-  from = machine,
+  login = NULL,
+  from = login,
   edit = interactive(),
   overwrite = FALSE
 )
 }
 \arguments{
-\item{machine}{The login node, named as in the \code{machine} of
-\code{\link[=distributedComputing]{distributedComputing()}}. \code{NULL} (default) lists the templates set up.}
+\item{login}{The login node, as in \code{\link[=slurmCluster]{slurmCluster()}}. \code{NULL} (default) lists
+the templates set up.}
 
 \item{from}{The template to start from: the name of one dMod2 ships, such
 as \code{"helix"}, or the path of a job script. Defaults to the shipped
-template named \code{machine}.}
+template named \code{login}.}
 
 \item{edit}{Logical, opens the template in the editor. Default
 \code{interactive()}.}
@@ -26,23 +26,24 @@ template named \code{machine}.}
 \code{FALSE} (default) it is kept.}
 }
 \value{
-The path of the template, invisibly. Without \code{machine} the paths of
+The path of the template, invisibly. Without \code{login} the paths of
 the templates set up, named by login node.
 }
 \description{
 Sets up the job script template of a SLURM cluster, once per login node.
 The templates are kept in \code{tools::R_user_dir("dMod2", "config")} and stay
-across sessions; \code{\link[=distributedComputing]{distributedComputing()}} with \code{slurm = TRUE} takes the one
-named like the login node in its \code{machine}.
+across sessions; \code{\link[=distributedComputing]{distributedComputing()}} on a \code{\link[=slurmCluster]{slurmCluster()}} takes the one
+named like its login node.
 }
 \details{
 A template is a job script with the placeholders \code{{{ jobname }}},
-\code{{{ ntasks }}}, \code{{{ cores }}}, \code{{{ memPerCore }}}, \code{{{ walltime }}} and one
-line \code{{{ run }}}, which runs the task given by \code{SLURM_ARRAY_TASK_ID}. The
-lines before \code{{{ run }}} that are not comments set up the environment, for
-example with \verb{module load}; the build on the login node runs in it as well.
-A job script of the cluster becomes a template by these placeholders. dMod2
-ships one for the bwForCluster Helix, \code{"helix"}.
+\code{{{ ntasks }}} (the number of array tasks), \code{{{ cores }}}, \code{{{ memPerCore }}},
+\code{{{ walltime }}} and one line \code{{{ run }}}, which runs the tasks of the array
+task \code{SLURM_ARRAY_TASK_ID}. The lines before \code{{{ run }}} that are not
+comments set up the environment, for example with \verb{module load}; the build on
+the login node runs in it as well. A job script of the cluster becomes a
+template by these placeholders. dMod2 ships one for the bwForCluster Helix,
+\code{"helix"}.
 }
 \examples{
 \dontrun{
@@ -54,5 +55,5 @@ slurmTemplate()
 }
 }
 \seealso{
-\code{\link[=distributedComputing]{distributedComputing()}}
+\code{\link[=distributedComputing]{distributedComputing()}}, \code{\link[=slurmCluster]{slurmCluster()}}
 }

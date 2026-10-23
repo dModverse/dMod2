@@ -12,7 +12,7 @@ library(ggplot2)
 .outdir    <- file.path(tempdir(), .modelname)
 if (!dir.exists(.outdir)) dir.create(.outdir, recursive = TRUE)
 # generated sources and shared objects go to .outdir, see ?dMod2 for the options;
-# compiling, fitting and profiling use the free cores of this machine
+# compiling, fitting and profiling use the free cores of the local machine
 .opt   <- options(dMod2.outdir = .outdir)
 .cores <- detectFreeCores()
 set.seed(5555)
@@ -66,25 +66,22 @@ obj  <- normL2(data, g*x*p, attrName = "data") +
 
 # Multistarts as tasks ----------------------------------------------------------
 # distributedComputing() saves the objects named in `input`, copies them with the
-# code and the shared objects of .outdir to a job folder in the working directory
-# and runs the code there in the background, one task per machine. In the task,
-# `cores` holds the cores of its machine, and mstrust() runs ten fits per core.
-# It needs a Unix-like system; on Windows, call mstrust() itself with
-# `cores = .cores`. ?distributedComputing shows how to send the same code to other
-# machines or to a SLURM cluster.
+# code and the shared objects of the model to a job folder in the working
+# directory and runs the code there in the background, as one task on the local
+# machine. In the task, `cores` holds the cores of `on`, and mstrust() runs ten
+# fits per core. It needs a Unix-like system; on Windows, call mstrust() itself
+# with `cores = .cores`. ?distributedComputing shows how to send the same code to
+# other machines with sshNodes() or to a SLURM cluster with slurmCluster().
 job <- distributedComputing(
   mstrust(obj, pouter, sd = 4, fits = 10 * cores, cores = cores),
-  machine = c(localhost = .cores), jobname = "ba_fits", input = c("obj", "pouter")
+  on = localNode(.cores), jobname = "ba_fits", input = c("obj", "pouter")
 )
 job
 
-# check() reports the tasks done, running or failed and returns TRUE once none
-# runs. get() returns one parlist per task, which c() joins; purge() deletes the
-# job folders.
-while (!job$check()) Sys.sleep(5)
-.results <- job$get()
-stopifnot(vapply(.results, inherits, NA, "parlist"))
-fits <- as.parframe(do.call(c, .results))
+# wait() reports the tasks done, running or failed until none runs. get() joins
+# the parlists of the tasks; purge() deletes the job folders.
+job$wait(interval = 5)
+fits <- as.parframe(job$get())
 job$purge(local = TRUE)
 plotValues(fits)
 
@@ -148,13 +145,11 @@ obj  <- normL2(data, g*x*p, attrName = "data") +
   constraintL2(pouter, sigma = 20, attrName = "prior")
 
 # `wait = TRUE` waits for the tasks, returns their results and deletes the job.
-.results <- distributedComputing(
+fits <- distributedComputing(
   mstrust(obj, pouter, sd = 4, fits = 10 * cores, cores = cores),
-  machine = c(localhost = .cores), jobname = "ba_fits_ss", input = c("obj", "pouter"),
+  on = localNode(.cores), jobname = "ba_fits_ss", input = c("obj", "pouter"),
   wait = TRUE
-)
-stopifnot(vapply(.results, inherits, NA, "parlist"))
-fits <- as.parframe(do.call(c, .results))
+) |> as.parframe()
 plotValues(fits)
 bestfit <- as.parvec(fits)
 

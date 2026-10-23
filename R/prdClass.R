@@ -155,8 +155,10 @@ plotCombined.prdlist <- function(prediction, data = NULL, ...,
 
   # user aesthetics replace defaults of the same name
   mapping <- list(x = "time", y = "value", ymin = "value - sigma", ymax = "value + sigma")
-  if (facet == "wrap") mapping[c("group", "color")] <- "condition"
-  mapping <- utils::modifyList(mapping, as.list(aesthetics))
+  if (facet == "wrap") mapping[c("group", "colour")] <- "condition"
+  user <- as.list(aesthetics)
+  names(user) <- ggplot2::standardise_aes_names(names(user))
+  mapping <- utils::modifyList(mapping, user)
   panels <- switch(facet,
     wrap = facet_wrap(vars(name), scales = scales),
     grid = facet_grid(rows = vars(name), cols = vars(condition), scales = scales),
