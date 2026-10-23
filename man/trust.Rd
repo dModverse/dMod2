@@ -16,6 +16,7 @@ trust(
   switches = NULL,
   parupper = NULL,
   parlower = NULL,
+  boundary = c("reflective", "clip"),
   tolControl = NULL,
   qnControl = NULL,
   stepControl = NULL,
@@ -34,18 +35,14 @@ trustL1(
   lambda = 1,
   rinit = 0.1,
   rmax = 10,
-  iterlim = 100L,
-  ftol = 1e-06,
-  mtol = 1e-06,
-  gtol = 1e-06,
-  xtol = 0,
-  rmin = 0,
-  theta.max = 0.99995,
-  boundary = c("reflective", "clip"),
-  minimize = TRUE,
-  blather = FALSE,
+  iterlim = 1000L,
   parupper = NULL,
   parlower = NULL,
+  boundary = c("reflective", "clip"),
+  tolControl = NULL,
+  stepControl = NULL,
+  minimize = TRUE,
+  blather = FALSE,
   printIter = FALSE,
   traceFile = NULL,
   gate = NULL,
@@ -77,7 +74,7 @@ Default \code{1000}.}
 objective, \code{"bfgs"} or \code{"sr1"} a quasi-Newton update seeded as
 \code{qnControl$hessianInit} says, \code{"exact"} the true Hessian at
 every iterate, which needs an objective that takes \code{deriv2}.
-Quasi-Newton methods require \code{stepControl$boundary = "reflective"}.
+Quasi-Newton methods require \code{boundary = "reflective"}.
 Also selects the control defaults below. With \code{phases}, each phase
 names its own and this argument is an error.}
 
@@ -120,6 +117,9 @@ reports the count as \code{nSwitch}.}
 applies to all parameters. Named: entries are matched by name, missing
 parameters are unbounded. Default \code{NULL}, unbounded.}
 
+\item{boundary}{Box-bound handling, \code{"reflective"} (default) or
+\code{"clip"}. See section Box bounds.}
+
 \item{tolControl}{List of convergence thresholds, merged into the defaults.
 \describe{
 \item{\code{ftol}}{Change in objective value. Default \code{1e-6}.}
@@ -132,7 +132,9 @@ disabled.}
 \item{\code{ctol}}{Multiple shooting only: scaled gap size below which
 the trajectory counts as continuous; no other test stops the run
 before. Default \code{1e-6}.}
-}}
+}
+\code{trustL1} reads \code{ftol}, \code{mtol}, \code{gtol}, \code{xtol}
+and \code{rmin}.}
 
 \item{qnControl}{List of quasi-Newton settings, merged into the defaults and
 read only in a \code{"bfgs"} or \code{"sr1"} phase.
@@ -165,8 +167,6 @@ rejected trial point. Default \code{TRUE} for a phase whose source is
 \item{stepControl}{List of step and acceptance settings, merged into the
 defaults.
 \describe{
-\item{\code{boundary}}{Box-bound handling, \code{"reflective"} (default)
-or \code{"clip"}. See section Box bounds.}
 \item{\code{thetaMax}}{Largest fraction of the distance to a bound a
 step may use. Default \code{0.99995}. \code{boundary = "reflective"}
 only.}
@@ -224,10 +224,6 @@ Otherwise it is the symmetric \code{lambda * |p - mu|}.}
 
 \item{lambda}{Strength of the L1 penalty. Either a scalar (broadcast to
 all entries of \code{mu}) or a named numeric aligned with \code{mu}.}
-
-\item{ftol, mtol, gtol, xtol, rmin, theta.max, boundary}{\code{trustL1} only;
-its tolerances stay flat, it does not take the control lists of
-\code{trust}.}
 
 \item{gate}{Character, names in \code{mu} whose penalty is the gate
 \code{lambda * (p - mu)} with \code{p >= mu}: the parameter can sit exactly

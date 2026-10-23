@@ -459,8 +459,21 @@ test_that("a profile without an accepted step holds the origin only", {
 test_that("mstrust passes the own arguments of another optimiser", {
   obj <- constraintL2(mu = c(a = 1, b = 2), sigma = 1)
   fits <- mstrust(obj, c(a = 0, b = 0), fits = 2, sd = 1, cores = 1, optmethod = "trustL1",
-                  ftol = 1e-8)
+                  lambda = 1e-3)
   expect_length(fits, 2L)
+})
+
+test_that("rbind() joins the two sides of a profile, and confint() reads them in any order", {
+  obj <- constraintL2(mu = c(a = 1, b = 2), sigma = 1)
+  p0 <- c(a = 1, b = 2)
+  both <- profile(obj, p0, "a", limits = c(-3, 3), cores = 1)
+  left <- profile(obj, p0, "a", limits = c(-3, 3), cores = 1, side = "left")
+  right <- profile(obj, p0, "a", limits = c(-3, 3), cores = 1, side = "right")
+  joined <- rbind(right, left)
+  expect_s3_class(joined, "parframe")
+  expect_identical(attr(joined, "metanames"), attr(both, "metanames"))
+  expect_equal(joined[, c("constraint", "value")], both[, c("constraint", "value")])
+  expect_equal(confint(joined), confint(both))
 })
 
 test_that("confint takes a profile without a data column", {

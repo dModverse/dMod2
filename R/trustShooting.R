@@ -19,7 +19,7 @@
       "qnControl$hessianInit = \"exact\"",
     if (!identical(qn$hessianReseed %||% "never", "never")) "qnControl$hessianReseed",
     if (!identical(as.integer(qn$qnMemory), 0L)) "qnControl$qnMemory",
-    if (!identical(step$boundary, "reflective")) "stepControl$boundary = \"clip\"",
+    if (!identical(step$boundary, "reflective")) "boundary = \"clip\"",
     if (!identical(step$nonmonotone, 0) && !identical(step$nonmonotone, 0L)) "stepControl$nonmonotone",
     if (!isTRUE(minimize)) "minimize = FALSE",
     if (!is.null(traceFile)) "traceFile")

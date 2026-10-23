@@ -113,8 +113,10 @@ fx_register(multicond = TRUE)
 }, TRUE)
 
 .runLayout <- function(lf, cores) {
-  mstrust(lf$obj, center = lf$starts, cores = cores, optmethod = .trustWhere,
-          iterlim = 50)
+  # a runner with fewer cores than the layout asks for warns; the layout still runs
+  withCallingHandlers(
+    mstrust(lf$obj, center = lf$starts, cores = cores, optmethod = .trustWhere, iterlim = 50),
+    warning = function(w) if (grepl("exceeds the", conditionMessage(w))) invokeRestart("muffleWarning"))
 }
 
 .fitsOf <- function(fits)

@@ -10,8 +10,8 @@ library(ggplot2)
 .fit       <- FALSE   # multi-start search, hours on this model
 if (!dir.exists(.outdir)) dir.create(.outdir, recursive = TRUE)
 # generated sources and shared objects go to .outdir, and one evaluation of the
-# objective spreads its conditions over the free cores of this machine; the forked
-# workers of mstrust() evaluate theirs serially. See ?dMod2 for the options.
+# objective spreads its conditions over the free cores of the local machine; the
+# forked workers of mstrust() evaluate theirs serially. See ?dMod2 for the options.
 .cores <- detectFreeCores()
 .opt   <- options(dMod2.outdir = .outdir, dMod2.cores = .cores)
 set.seed(5555)

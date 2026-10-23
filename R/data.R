@@ -209,9 +209,9 @@ wide2long.matrix <- function(out, keep = 1, na.rm = FALSE) {
   times <- out[, keep, drop = FALSE]
   ntimes <- nrow(out)
   values <- unlist(out[,allnames])
-  outlong <- data.frame(times, 
-                        name = factor(rep(allnames, each = ntimes), levels = allnames), 
-                        value = as.numeric(values))
+  outlong <- data.frame(times,
+                        name = factor(rep(allnames, each = ntimes), levels = allnames),
+                        value = as.numeric(values), row.names = NULL)
   colnames(outlong)[1:length(keep)] <- timenames
   
   if (na.rm) outlong <- outlong[!is.na(outlong$value),]

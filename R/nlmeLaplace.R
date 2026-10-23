@@ -240,7 +240,7 @@
 
   inner <- .trustControl(
     list(rinit = control$rinit %||% 1, rmax = control$rmax %||% 10,
-         iterlim = control$iterlim %||% 50L, ftol = 1e-8, mtol = 1e-8),
+         iterlim = control$iterlim %||% 50L, tolControl = list(ftol = 1e-8, mtol = 1e-8)),
     control$inner, optimizer = trustL1, label = "control$inner")
 
   total   <- 0
@@ -1223,9 +1223,9 @@ normalLaplace <- function(a, m, lambda) {
 ## a_k = Hd_k / 2, m_k = etahat_k - g_k / Hd_k, -2 log L_i = value - (1/2)
 ## sum g_k^2 / Hd_k - 2 sum log I_k. `objfun(eta)` returns the -2 log L objlist.
 .laplaceSubjectMarginal <- function(objfun, eta0, targets, lambda,
-                                control = list(rinit = 1, rmax = 10,
-                                               iterlim = 100L,
-                                               ftol = 1e-8, mtol = 1e-8)) {
+                                control = list(rinit = 1, rmax = 10, iterlim = 100L,
+                                               tolControl = list(ftol = 1e-8,
+                                                                 mtol = 1e-8))) {
   nm <- names(eta0)
   fit <- do.call(trustL1, modifyList(control, list(
     objfun = objfun, parinit = eta0, mu = targets, lambda = lambda)))
@@ -1316,11 +1316,14 @@ normalLaplace <- function(a, m, lambda) {
 
   dflt <- function(nm) eval(formals(trustL1)[[nm]])
   pick <- function(nm) control[[nm]] %||% dflt(nm)
+  tol  <- .mergeControl(.trustDefaults("gn")$tolControl[c("ftol", "mtol", "gtol", "xtol", "rmin")],
+                        control$tolControl, "tolControl")
+  step <- .mergeControl(list(thetaMax = 0.99995), control$stepControl, "stepControl")
   fits <- trustL1_lockstep_impl(
     objfun_many, P0, MU, LAM, isTRUE(control$one.sided),
     pick("rinit"), pick("rmax"), NULL, as.integer(pick("iterlim")),
-    pick("ftol"), pick("mtol"), pick("gtol"), pick("xtol"), pick("rmin"),
-    pick("theta.max"), TRUE, FALSE, NULL, NULL)
+    tol$ftol, tol$mtol, tol$gtol, tol$xtol, tol$rmin, step$thetaMax,
+    TRUE, FALSE, NULL, NULL)
 
   etahats <- lapply(seq_len(N), function(i)
     setNames(as.numeric(fits[[i]]$argument), etaNames[[i]]))

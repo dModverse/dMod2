@@ -4,6 +4,7 @@
 \alias{is.parframe}
 \alias{[.parframe}
 \alias{subset.parframe}
+\alias{rbind.parframe}
 \alias{parframe}
 \title{Generate a Parameter Frame}
 \usage{
@@ -12,6 +13,8 @@ is.parframe(x)
 \method{[}{parframe}(x, i, j, drop = FALSE)
 
 \method{subset}{parframe}(x, ...)
+
+\method{rbind}{parframe}(..., deparse.level = 1)
 
 parframe(
   x = NULL,
@@ -32,7 +35,10 @@ parframe(
 vector instead of a \code{parframe}.}
 
 \item{...}{for \code{subset()}, logical expressions in the columns of \code{x}; a row
-is kept where all of them are \code{TRUE}.}
+is kept where all of them are \code{TRUE}. For \code{rbind()}, parameter frames with
+the same columns.}
+
+\item{deparse.level}{not used.}
 
 \item{parameters}{character, the names of the parameter columns. Default
 all columns that are neither in \code{metanames} nor in \code{objAttributes}.}
@@ -55,6 +61,11 @@ value, converged), attributes of an objective function (e.g. data and prior
 contribution) and the parameters.
 }
 \details{
+\code{rbind()} keeps the attributes of the first frame. Profiles of one
+parameter computed in parts, such as its left and right side, are joined
+into one: the repeated optimum is dropped and the points are sorted by
+\code{constraint}.
+
 Parameter frames can be subsetted either by \verb{[ , ]} or by \code{subset}. If
 \verb{[ , index]} is used, the names of the removed columns will also be removed from
 the corresponding attributes, i.e. metanames, obj.attributes and parameters.

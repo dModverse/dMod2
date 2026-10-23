@@ -20,8 +20,8 @@
 #'     their `cores` argument. Default 1.}
 #'   \item{`dMod2.outdir`}{Directory the model constructors such as
 #'     [odemodel()], [Y()] and [P()] write their sources and shared objects
-#'     to, and [distributedComputing()] takes the model files from. Default
-#'     the working directory.}
+#'     to, and where [distributedComputing()] looks for model files when its
+#'     objects name none. Default the working directory.}
 #'   \item{`dMod2.batch.check`}{`TRUE` evaluates every batch of conditions a
 #'     second time condition by condition and stops where the two differ.
 #'     Default `FALSE`.}

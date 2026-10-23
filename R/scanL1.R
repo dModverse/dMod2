@@ -227,7 +227,7 @@ scanL1 <- function(obj, center, zero = NULL, reference = NULL, groups = NULL,
   ## 1. Full model ------------------------------------------------------------
   fixFull <- c(fixed, stats::setNames(rep(1, length(gates)), gates))
   full <- .l1Multistart(function(st)
-    do.call(trust, c(list(obj, st), .l1TrustArgs(ctl$trust), list(fixed = fixFull))),
+    do.call(trust, c(list(obj, st), ctl$trust, list(fixed = fixFull))),
                         center, fits, sd, cores, obj, wf = wf)
   if (is.null(full)) stop("scanL1: every fit of the full model failed.", call. = FALSE)
   fullPars <- full$argument
@@ -354,15 +354,6 @@ scanL1 <- function(obj, center, zero = NULL, reference = NULL, groups = NULL,
   out
 }
 
-
-# `control$trust` as `trust()` takes it: the flat tolerances of `trustL1()`
-# go into `tolControl`.
-.l1TrustArgs <- function(a) {
-  tol <- intersect(names(a), c("ftol", "mtol", "gtol", "xtol", "rmin"))
-  if (!length(tol)) return(a)
-  a$tolControl <- utils::modifyList(a$tolControl %||% list(), a[tol])
-  a[setdiff(names(a), tol)]
-}
 
 # Best of `fits` runs of `run(start)` from `center` and around it, with the runs
 # within `levelTol` of it as `level`. With `wf`, batches follow until `wf$hits` runs
@@ -690,7 +681,7 @@ scanL1 <- function(obj, center, zero = NULL, reference = NULL, groups = NULL,
   both  <- intersect(names(start), names(warm))
   warm[both] <- start[both]
   r <- .l1Multistart(function(s)
-    do.call(trust, c(list(objR, s), .l1TrustArgs(ctl$trust), list(fixed = fixR))),
+    do.call(trust, c(list(objR, s), ctl$trust, list(fixed = fixR))),
                      fullPars[free], fits, sd, cores, obj, extra = list(warm[free]),
                      wf = wf)
   if (is.null(r)) return(NULL)

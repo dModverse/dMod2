@@ -349,7 +349,8 @@ constraintL1.penaltyspec <- function(mu, attrName = "prior_l1", condition = NULL
   t_lam <- vapply(terms, function(z) z$lambda, "")
   .idx  <- new.env(parent = emptyenv())
 
-  myfn <- function(..., fixed = NULL, deriv = TRUE, deriv2 = FALSE,
+  # `hessian` is accepted as trust() passes it; `deriv` alone decides the derivatives
+  myfn <- function(..., fixed = NULL, deriv = TRUE, deriv2 = FALSE, hessian = NULL,
                    conditions = condition, env = NULL,
                    cores = getOption("dMod2.cores", 1L)) {
 
