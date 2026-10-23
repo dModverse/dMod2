@@ -13,10 +13,12 @@ library(dMod2)
 library(ggplot2)
 
 .modelname <- "kok"
-# generated sources, objects and libraries go here, not the working directory
 .outdir    <- file.path(tempdir(), .modelname)
-
 if (!dir.exists(.outdir)) dir.create(.outdir, recursive = TRUE)
+# generated sources and shared objects go to .outdir, see ?dMod2 for the options;
+# compiling and the symmetry detection use the free cores of this machine
+.opt   <- options(dMod2.outdir = .outdir)
+.cores <- detectFreeCores()
 .extDir <- system.file("extdata", "kok", package = "dMod2")
 ```
 
@@ -196,10 +198,9 @@ myOptions <- list(atol = 1e-8, rtol = 1e-6, maxsteps = 1e6L, maxattempts = 100L)
 # model, observation and trafo also get the reverse sweep, see the gradient below
 .modes <- c("forward", "reverse")
 model <- odemodel(reactions, events = doses, modelname = "kok_ode",
-                  derivMode = .modes, compile = FALSE, outdir = .outdir)
+                  derivMode = .modes, compile = FALSE)
 x <- Xs(model, options = myOptions)
-g <- Y(observables, x, modelname = "kok_obs", attachInput = FALSE,
-       derivMode = .modes, compile = FALSE, outdir = .outdir)
+g <- Y(observables, x, modelname = "kok_obs", derivMode = .modes, compile = FALSE)
 ```
 
 ## Parameter transformation
@@ -283,11 +284,15 @@ trafo <- trafo |>
 ## Structural identifiability
 A symmetry is a direction in parameter space along which the observables do not
 change. Over all 25 conditions the model has four, all scaling symmetries.
+symident takes its switches from the environment variables `SYMIDENT_<NAME>`,
+also when set during the session: `Sys.setenv(SYMIDENT_MSOLVE =
+"/opt/msolve/bin/msolve")` uses an msolve installed elsewhere, and
+`SYMIDENT_CACHE` moves the cache it installs msolve into.
 
 
 ``` r
 structural <- symmetryDetection(reactions, observables, trafo = trafo,
-                                events = doses, cores = 4)
+                                events = doses, cores = .cores)
 summary(structural)
 ```
 
@@ -300,7 +305,7 @@ summary(structural)
 #>   rank: proven (4 directions, exact scalings)
 #>   25 conditions, 50 segments
 #>   settings: reduce_cq=False, equilibrate=False, reconstruct=False
-#>   elapsed: 57.7s
+#>   elapsed: 8.8s
 #> 
 #> Result:  rank 92 / 96  |  4 non-identifiable directions
 #> 
@@ -349,7 +354,7 @@ products and ratios this rescaling leaves alone. The rescaled parameters belong
 to the ISRE and GAS occupancy, SOCS1 and SOCS3, which are seen only through the
 rates they enter. As the summary says, holding one parameter of each generator
 fixed removes it. The publication does so by tying one rate to another, and
-fixes three more values on top.
+fixes rCytNuc, TrLocIRF9n and five blot offsets on top.
 
 
 ``` r
@@ -366,9 +371,9 @@ trafo <- trafo |>
 # every estimated parameter on the natural log
 p <- trafo |>
   insert("x~exp(x)", x = .currentSymbols) |>
-  P(modelname = "kok_trafo", derivMode = .modes, compile = FALSE, outdir = .outdir)
+  P(modelname = "kok_trafo", derivMode = .modes, compile = FALSE)
 
-compile(g, x, p, output = .modelname, cores = 12)
+compile(g, x, p, output = .modelname, cores = .cores)
 
 prd       <- g*x*p
 outerpars <- getParameters(prd)
@@ -395,9 +400,10 @@ stopifnot(setequal(names(bestfit), outerpars))
 
 ## Forward and reverse gradient
 The value alone, then with the gradient. Forward sensitivities integrate one
-system per parameter, on one core or with the conditions spread over four; the
-reverse sweep integrates the states once and back, which at 85 parameters is
-much faster.
+system per parameter, on one core or with the conditions spread over the free
+cores, here by `cores = .cores` and for every evaluation by
+`options(dMod2.cores = .cores)`; the reverse sweep integrates the states once
+and back, which at 85 parameters is much faster.
 
 
 ``` r
@@ -406,7 +412,7 @@ system.time(obj(bestfit, deriv = FALSE))
 
 ```
 #>    user  system elapsed 
-#>   0.122   0.000   0.124
+#>   0.050   0.000   0.049
 ```
 
 ``` r
@@ -415,16 +421,16 @@ system.time(obj(bestfit))
 
 ```
 #>    user  system elapsed 
-#>   9.199   0.038  12.742
+#>   2.881   0.014   2.907
 ```
 
 ``` r
-system.time(obj(bestfit, cores = 4))
+system.time(obj(bestfit, cores = .cores))
 ```
 
 ```
 #>    user  system elapsed 
-#>   8.990   0.041   3.412
+#>   4.323   0.016   0.586
 ```
 
 ``` r
@@ -433,70 +439,48 @@ system.time(obj(bestfit, sweep = "reverse"))
 
 ```
 #>    user  system elapsed 
-#>   0.318   0.001   0.524
+#>   0.106   0.000   0.107
 ```
 
 ## Multi-start on helix
 200 fits from random starts around the published optimum ran on the
-bwForCluster Helix, as 10 array tasks of 20 fits on 20 cores, each task seeded
-by its SLURM job ID. The fits use the default Gauss-Newton Hessian, and the
-sources in .outdir are compiled once on the login node. The authors acknowledge
-support by the state of Baden-Wuerttemberg through bwHPC and the German Research
-Foundation (DFG) through grant INST 35/1597-1 FUGG.
+bwForCluster Helix through distributedComputing(), as a SLURM array job of 10
+tasks. `machine = c(helix = 20)` names the login node and the 20 cores of each
+array task; in the task `cores` holds them, and mstrust() runs 20 fits on them.
+Every task has a seed of its own. The fits use the default Gauss-Newton Hessian.
+The sources in .outdir are compiled once on the login node, and the job script
+is the one dMod2 ships for Helix, set up once with slurmTemplate("helix").
+The authors acknowledge support by the state of Baden-Wuerttemberg through bwHPC
+and the German Research Foundation (DFG) through grant INST 35/1597-1 FUGG.
 
-The job needs an account on helix, so `.helix <- TRUE` submits it and the demo
-otherwise reads the fits shipped with the package. `.recover <- TRUE` returns
-the functions of a submitted job without submitting again.
+The job needs an account on Helix, reached by ssh with a key under the host
+alias `helix` of ~/.ssh/config, with dMod2 and cppDE installed there, so
+`.helix <- TRUE` submits it and the demo otherwise reads the fits shipped with
+the package. The fits are expensive, which is why they do not run on the local
+machine. A job folder `kok_mstrust_folder` in the working directory means the job
+was submitted from here already: the call then recovers its functions instead
+of submitting again, and its fits replace the shipped ones once check() finds no
+task running.
 
 
 ``` r
-.helix <- FALSE
+.helix   <- FALSE
+outframe <- readRDS(file.path(.extDir, "outframe_KokMSB2020.rds"))
 if (.helix) {
-  .recover <- TRUE
-  .currentwd <- getwd()
-  setwd(.outdir)
+  slurmTemplate("helix", edit = FALSE)
   job <- distributedComputing(
-    {
-      mstrust(
-        obj,
-        bestfit,
-        rinit = 0.1,
-        rmax = 10,
-        fits = 20,
-        iterlim = 1e4L,
-        cores = 20,
-        samplefun = "rnorm",
-        sd = 4,
-        resultPath = ".",
-        stats = FALSE,
-        output = FALSE,
-        cautiousMode = FALSE,
-        startFromCenter = FALSE,
-        retry = TRUE,
-        nTries = 10L,
-        tolControl = list(ftol = 1e-5, mtol = 1e-5, gtol = 1e-2)
-      )
-    },
-    jobname = "kok_mstrust",
-    machine = "helix",
-    partition = "cpu-single",
-    cores = 20,
-    nodes = 1,
-    memPerCore = 2,
-    walltime = "24:00:00",
-    nRep = 10,
-    compile = TRUE,
-    recover = .recover,
-    input = ls(.GlobalEnv)
+    mstrust(obj, bestfit, fits = 20, cores = cores, sd = 4, iterlim = 1e4L,
+            tolControl = list(ftol = 1e-5, mtol = 1e-5, gtol = 1e-2)),
+    tasks = 10, machine = c(helix = 20), slurm = TRUE, walltime = "24:00:00",
+    jobname = "kok_mstrust", compile = TRUE, seed = 1L, input = c("obj", "bestfit"),
+    recover = dir.exists("kok_mstrust_folder")
   )
-  job$check()
-  fits <- job$get()
-  setwd(.currentwd)
-  # a task that failed returns an error instead of a parlist
-  fits <- Filter(function(f) inherits(f, "parlist"), fits)
-  outframe <- do.call(c, fits) |> as.parframe()
+  if (job$check()) {
+    fits <- job$get()
+    stopifnot(vapply(fits, inherits, NA, "parlist"))
+    outframe <- as.parframe(do.call(c, fits))
+  }
 }
-if (!.helix) outframe <- readRDS(file.path(.extDir, "outframe_KokMSB2020.rds"))
 ```
 
 ## Fitting statistics
@@ -546,15 +530,19 @@ ggplot(as.data.frame(outframe), aes(elapsed/60)) +
 
 At the optimum the gradient is small, so the integration error at the
 tolerances of the fit dominates it. With tighter tolerances and the sweep
-checked against them, the two agree.
+checked against them, the two agree. controls() sets them on the objective,
+which shares them with `x` and `prd`, so they are restored afterwards.
 
 
 ``` r
-.xt   <- Xs(model, options = modifyList(myOptions, list(atol = 1e-10, rtol = 1e-8)),
-            optionsReverse = list(refine = TRUE))
-.objt <- normL2(mydataL, g*.xt*p) + constraintL2(pouter, sigma = 12)
-.fwd  <- .objt(bestfit, deriv = TRUE)
-.rev  <- .objt(bestfit, deriv = TRUE, sweep = "reverse")
+.options        <- controls(obj, name = "options")
+.optionsReverse <- controls(obj, name = "optionsReverse")
+controls(obj, name = "options") <- modifyList(myOptions, list(atol = 1e-10, rtol = 1e-8))
+controls(obj, name = "optionsReverse") <- list(refine = TRUE)
+.fwd <- obj(bestfit)
+.rev <- obj(bestfit, sweep = "reverse")
+controls(obj, name = "options")        <- .options
+controls(obj, name = "optionsReverse") <- .optionsReverse
 head(cbind(forward = .fwd$gradient, reverse = .rev$gradient[names(.fwd$gradient)]), 10)
 ```
 
@@ -578,29 +566,18 @@ follow Figures 3, 5 and 7 of the publication.
 
 
 ``` r
-times <- sort(unique(c(seq(0, 32, by = 0.1), 24 + seq(0, 1, by = 0.02))))
-fit   <- as.data.frame(prd(times, bestfit, deriv = FALSE), data = mydataL)
+times      <- sort(unique(c(seq(0, 32, by = 0.1), 24 + seq(0, 1, by = 0.02))))
+prediction <- prd(times, bestfit, deriv = FALSE)
+fit        <- as.data.frame(prediction, data = mydataL)
 
 .blots <- c(paste0(c("pSTAT1", "pSTAT2", "IRF9", "tSTAT1", "tSTAT2"), "_",
                    rep(c("Cyt", "Nuc"), each = 5)), "USP18_Cyt")
 .mRNAs <- grep("_mRNA$", unique(kok$name), value = TRUE)
 
-# model and data of the conditions `keep` selects, for the observables `names`
-.panel <- function(keep, names) {
-  pick <- function(df) df[keep(df) & df$name %in% names, ]
-  list(model = pick(fit), data = pick(kok))
-}
-.draw <- function(pn, colour, xlim = NULL)
-  ggplot(pn$model, aes(time, value, colour = .data[[colour]], group = condition)) +
-  geom_line() +
-  geom_errorbar(data = pn$data, aes(ymin = value - sigma, ymax = value + sigma),
-                width = 0, alpha = 0.6) +
-  geom_point(data = pn$data, size = 1) +
-  facet_wrap(~name, scales = "free_y") +
-  coord_cartesian(xlim = xlim) +
-  theme_dMod()
+# plotCombined() draws model and data of the conditions its filters select,
+# coloured by a covariate of the data
 .doses <- function(...)
-  scale_colour_viridis_c(trans = "log10", end = 0.9, ...,
+  scale_colour_viridis_c(transform = "log10", end = 0.9, ...,
                          labels = function(d) format(d, scientific = FALSE,
                                                      drop0trailing = TRUE))
 ```
@@ -609,9 +586,10 @@ fit   <- as.data.frame(prd(times, bestfit, deriv = FALSE), data = mydataL)
 
 
 ``` r
-.single <- function(df) df$experiment == "WT" & df$ifn2 == 0 & df$ifn1 > 0
-.draw(.panel(.single, .blots), "ifn1", c(0, 24)) +
+plotCombined(prediction, mydataL, experiment == "WT", ifn2 == 0, ifn1 > 0,
+             name %in% .blots, aesthetics = list(color = "ifn1"), scales = "free_y") +
   .doses() +
+  coord_cartesian(xlim = c(0, 24)) +
   scale_x_continuous(breaks = seq(0, 24, 8)) +
   labs(x = "time [h]", y = "log signal [a.u.]", colour = "IFN [U/ml]")
 ```
@@ -619,8 +597,10 @@ fit   <- as.data.frame(prd(times, bestfit, deriv = FALSE), data = mydataL)
 ![plot of chunk unnamed-chunk-17](figures/KokMSB2020/unnamed-chunk-17-1.png)
 
 ``` r
-.draw(.panel(.single, .mRNAs), "ifn1", c(0, 24)) +
+plotCombined(prediction, mydataL, experiment == "WT", ifn2 == 0, ifn1 > 0,
+             name %in% .mRNAs, aesthetics = list(color = "ifn1"), scales = "free_y") +
   .doses() +
+  coord_cartesian(xlim = c(0, 24)) +
   scale_x_continuous(breaks = seq(0, 24, 8)) +
   labs(x = "time [h]", y = "log fold change", colour = "IFN [U/ml]")
 ```
@@ -639,11 +619,19 @@ shifted to 24 h, since every condition starts at the same steady state.
 }
 .second <- function(df) df$experiment == "WT" & df$ifn2 == 5000
 .late   <- c("pSTAT1_Nuc", "pSTAT2_Nuc", "pSTAT1_Cyt", "pSTAT2_Cyt", "USP18_Cyt")
-.pn     <- .panel(.second, .late)
-.pn$model <- rbind(.pn$model, subset(.naive(fit), name %in% .late))
-.pn$data  <- rbind(.pn$data, subset(.naive(kok), name %in% .late))
-.draw(.pn, "ifn1", c(24, 30)) +
+.model  <- rbind(subset(fit, .second(fit) & name %in% .late),
+                 subset(.naive(fit), name %in% .late))
+.data   <- rbind(subset(kok, .second(kok) & name %in% .late),
+                 subset(.naive(kok), name %in% .late))
+ggplot(.model, aes(time, value, colour = ifn1, group = condition)) +
+  geom_line() +
+  geom_errorbar(data = .data, aes(ymin = value - sigma, ymax = value + sigma),
+                width = 0, alpha = 0.6) +
+  geom_point(data = .data, size = 1) +
+  facet_wrap(~name, scales = "free_y") +
+  coord_cartesian(xlim = c(24, 30)) +
   .doses(na.value = "black") +
+  theme_dMod() +
   labs(x = "time [h]", y = "log signal [a.u.]", colour = "prestimulation\n[U/ml]",
        title = "5000 U/ml at 24 h, black without prestimulation")
 ```
@@ -654,13 +642,12 @@ shifted to 24 h, since every condition starts at the same steady state.
 
 
 ``` r
-.usp18 <- function(df) df$condition %in% c("WT_5000_0", "WT_5000_5000",
-                                            "USP18kd_5000_0", "USP18kd_5000_5000",
-                                            "USP18oe_0_5000")
-.draw(.panel(.usp18, c("USP18_Cyt", "tSTAT1_Cyt", "pSTAT1_Cyt", "pSTAT2_Cyt")),
-      "experiment") +
+plotCombined(prediction, mydataL,
+             condition %in% c("WT_5000_0", "WT_5000_5000", "USP18kd_5000_0",
+                              "USP18kd_5000_5000", "USP18oe_0_5000"),
+             name %in% c("USP18_Cyt", "tSTAT1_Cyt", "pSTAT1_Cyt", "pSTAT2_Cyt"),
+             aesthetics = list(color = "experiment"), scales = "free_y") +
   geom_vline(xintercept = 24, linetype = "dotted") +
-  scale_color_dMod() +
   labs(x = "time [h]", y = "log signal [a.u.]", colour = NULL)
 ```
 
@@ -678,7 +665,7 @@ Above 1 a prestimulation sensitizes the cell, below 1 it desensitizes it.
   occ <- occ[occ[, "time"] >= from, "OccISREbs"]
   sum(diff(tt) * (head(occ, -1) + tail(occ, -1)) / 2)
 }
-.pin  <- unlist(p(bestfit)[["WT_10_5000"]])
+.pin  <- p(bestfit, deriv = FALSE, conditions = "WT_10_5000")[[1]]
 .ref  <- .auc(replace(.pin, c("first", "second"), c(10*5000, 0)), 0)
 .dose <- 10^seq(-1, 4, length.out = 60)
 sensitization <- data.frame(
@@ -698,4 +685,8 @@ ggplot(sensitization, aes(dose, ratio)) +
 ```
 
 ![plot of chunk unnamed-chunk-20](figures/KokMSB2020/unnamed-chunk-20-1.png)
+
+``` r
+options(.opt)
+```
 

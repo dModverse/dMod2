@@ -43,27 +43,13 @@ importSbml <- function(modelpath, keep = NULL) {
 
   .require_ns("reticulate", "SBML import")
   .require_ns("rjson", "SBML import")
-  importscript <- system.file("code/sbmlImport.py", package = "dMod2")
-  tmpfile_json <- tempfile()
-  modelpath <- normalizePath(modelpath, mustWork = TRUE)
-
-  venv_python <- .dmod_libsbml_python()
-
-  status <- system2(venv_python,
-                    args = c(shQuote(importscript),
-                             shQuote(modelpath),
-                             shQuote(tmpfile_json)))
-  if (status != 0L || !file.exists(tmpfile_json))
-    stop("SBML import failed (exit ", status, "). ",
-         "Check that the libsbml virtualenv has python-libsbml installed.")
-  json_content <- rjson::fromJSON(file = tmpfile_json)
-  json_content <- .renameNonSyntactic(json_content)
+  sbml <- .renameNonSyntactic(.sbmlPayload(normalizePath(modelpath, mustWork = TRUE)))
 
   # rjson collapses inner arrays of length 1 into a bare vector, so `S` is
   # reshaped from the known counts into `[n_reactions x n_states]`.
-  S_raw <- json_content[["S"]]
-  n_states <- length(json_content[["stateNames"]])
-  n_rxns   <- length(json_content[["v"]])
+  S_raw <- sbml[["S"]]
+  n_states <- length(sbml[["stateNames"]])
+  n_rxns   <- length(sbml[["v"]])
   # A model whose dynamics live entirely in RateRules has no reactions; the
   # empty JSON payload would otherwise cbind into a list-mode matrix.
   S <- if (n_rxns == 0L || n_states == 0L) NULL
@@ -83,15 +69,15 @@ importSbml <- function(modelpath, keep = NULL) {
     s
   }
 
-  v <- .normalise_formula(json_content[["v"]])
+  v <- .normalise_formula(sbml[["v"]])
 
-  states <- json_content[["stateNames"]]
+  states <- sbml[["stateNames"]]
 
   # Build compartment records + state-to-compartment map from the libsbml payload.
   compartments <- list()
   compartmentOf <- character(0)
-  comp_json <- json_content[["compartments"]]
-  spc_json  <- json_content[["speciesCompartments"]]
+  comp_json <- sbml[["compartments"]]
+  spc_json  <- sbml[["speciesCompartments"]]
   if (!is.null(comp_json) && length(comp_json) > 0L) {
     for (c in comp_json) {
       # A unit-size compartment becomes the literal "1", keeping its id out of
@@ -135,26 +121,26 @@ importSbml <- function(modelpath, keep = NULL) {
   }
 
   # SBML species with hasOnlySubstanceUnits hold amounts, not concentrations.
-  amountStates <- intersect(unlist(json_content[["amountSpecies"]]), states)
+  amountStates <- intersect(unlist(sbml[["amountSpecies"]]), states)
 
-  pars <- setNames(json_content[["p"]], json_content[["parameterNames"]])
-  x0 <- setNames(.normalise_formula(json_content[["x0"]]),
-                 json_content[["stateNames"]])
+  pars <- setNames(sbml[["p"]], sbml[["parameterNames"]])
+  x0 <- setNames(.normalise_formula(sbml[["x0"]]),
+                 sbml[["stateNames"]])
 
   # AssignmentRules `lhs := rhs` are inlined into rates and initials up to a
   # fixed point, so chained rules resolve; their LHS are dropped from `pars`.
-  rules <- json_content[["assignmentRules"]]
+  rules <- sbml[["assignmentRules"]]
   # An initialAssignment on a constant parameter is substituted like a rule,
   # with species standing for their initial values. A parameter driven by a
   # RateRule is promoted to a state below instead.
-  par_ia <- json_content[["parameterAssignments"]]
+  par_ia <- sbml[["parameterAssignments"]]
   for (nm in intersect(keep, names(par_ia))) {
     v0 <- tryCatch(eval(parse(text = .normalise_formula(par_ia[[nm]])), baseenv()),
                    error = function(e) NULL)
     if (is.numeric(v0) && length(v0) == 1L && nm %in% names(pars)) pars[[nm]] <- v0
   }
   ia_lhs <- setdiff(names(par_ia),
-                    c(names(rules), names(json_content[["rateRules"]]), keep))
+                    c(names(rules), names(sbml[["rateRules"]]), keep))
   if (length(ia_lhs)) {
     ia_rhs <- .normalise_formula(unlist(par_ia[ia_lhs], use.names = FALSE))
     if (length(states))
@@ -179,7 +165,7 @@ importSbml <- function(modelpath, keep = NULL) {
   # ---- rate rules ----
   # A RateRule defines dX/dt = rhs and SBML forbids reactions on X. It is added
   # after the volume division above, since dC/dt is already intensive.
-  rate_rules <- json_content[["rateRules"]]
+  rate_rules <- sbml[["rateRules"]]
   if (length(rate_rules)) {
     rr_lhs <- names(rate_rules)
     rr_rhs <- .normalise_formula(unlist(rate_rules, use.names = FALSE))
@@ -197,7 +183,7 @@ importSbml <- function(modelpath, keep = NULL) {
     # gets unit volume, so dX/dt = rhs.
     promote <- setdiff(rr_lhs, states)
     if (length(promote)) {
-      par_ia <- json_content[["parameterAssignments"]]
+      par_ia <- sbml[["parameterAssignments"]]
       init <- vapply(promote, function(nm) {
         ia <- par_ia[[nm]]
         if (!is.null(ia) && nzchar(ia)) return(.normalise_formula(ia))
@@ -236,7 +222,7 @@ importSbml <- function(modelpath, keep = NULL) {
                        reactionCompartment = reactionCompartment,
                        amountStates = amountStates)
 
-  observables <- json_content[["observables"]]
+  observables <- sbml[["observables"]]
   # An observable may read a rule-defined symbol; the rule LHS is no longer a
   # parameter after inlining, so the formula has to be inlined as well.
   if (length(rules) && length(observables)) {
@@ -252,7 +238,7 @@ importSbml <- function(modelpath, keep = NULL) {
   # ---- events ----
   # One "replace" row per eventAssignment. A `time >= T` trigger sets `time`,
   # any other trigger becomes the root `lhs - (rhs)`.
-  events_json <- json_content[["events"]]
+  events_json <- sbml[["events"]]
   events_df <- NULL
   events_src <- NULL
   if (length(events_json)) {
@@ -317,7 +303,7 @@ importSbml <- function(modelpath, keep = NULL) {
               observables = observables, assignmentRules = rules,
               events = events_df,
               eventsSource = events_src,
-              renamed = attr(json_content, "renamed") %||% character(0))
+              renamed = attr(sbml, "renamed") %||% character(0))
   out
 }
 
@@ -364,6 +350,20 @@ importSbml <- function(modelpath, keep = NULL) {
               map[[i]], x, perl = TRUE)
   x
 }
+
+# The model as the list that code/sbmlImport.py writes to JSON under libsbml's
+# Python. rjson reads arrays of length one as bare values.
+.sbmlPayload <- function(path) {
+  out <- tempfile(fileext = ".json")
+  on.exit(unlink(out))
+  script <- system.file("code/sbmlImport.py", package = "dMod2")
+  status <- system2(.dmod_libsbml_python(), shQuote(c(script, path, out)))
+  if (status != 0L || !file.exists(out))
+    stop("SBML import failed (exit ", status, "). ",
+         "Check that the libsbml virtualenv has python-libsbml installed.")
+  rjson::fromJSON(file = out)
+}
+
 
 # SBML ids may start with an underscore or a digit, which R cannot parse. They
 # are renamed on the raw JSON, before anything reads a formula.

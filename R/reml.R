@@ -113,7 +113,7 @@
 #' @param rankTol Relative threshold on the singular values of the weighted
 #'   sensitivity matrix below which a direction counts as absent. Default
 #'   `1e-8`.
-#' @param cores Passed to the prediction. Default `getOption("dMod.cores", 1)`.
+#' @param cores Passed to the prediction. Default `getOption("dMod2.cores", 1)`.
 #'
 #' @return A data frame with one row per data point and columns `condition`,
 #'   `time`, `name`, `sigma`, `residual` and `leverage`. Attributes: `"rank"`,
@@ -127,7 +127,7 @@
 #' @export
 remlLeverage <- function(objfun, pars, meanpars = NULL, fixed = NULL,
                          rankTol = 1e-8,
-                         cores = getOption("dMod.cores", 1L)) {
+                         cores = getOption("dMod2.cores", 1L)) {
 
   frames <- .remlFrames(objfun, pars, fixed = fixed, cores = cores)
   if (is.null(meanpars)) meanpars <- setdiff(names(pars), .remlErrpars(objfun, pars))
@@ -212,7 +212,7 @@ remlLeverage <- function(objfun, pars, meanpars = NULL, fixed = NULL,
 #' @param control Named list of arguments for `optimizer`, merged into
 #'   `list(rinit = 0.1, rmax = 10)`. Default `NULL`.
 #' @param cores Passed to the prediction and the objective. Default
-#'   `getOption("dMod.cores", 1)`.
+#'   `getOption("dMod2.cores", 1)`.
 #' @param ... Further arguments for `objfun`.
 #'
 #' @return A list with components
@@ -235,7 +235,7 @@ remlLeverage <- function(objfun, pars, meanpars = NULL, fixed = NULL,
 #'
 #' @examples
 #' \donttest{
-#' old <- options(dMod.outdir = tempdir())
+#' old <- options(dMod2.outdir = tempdir())
 #' f <- addReaction(eqnlist(), from = "A", to = "", rate = "k*A")
 #' x <- Xs(odemodel(f, modelname = "reml_x", compile = FALSE))
 #' g <- Y(c(y = "A"), f = x, attachInput = FALSE, modelname = "reml_g",
@@ -264,7 +264,7 @@ remlLeverage <- function(objfun, pars, meanpars = NULL, fixed = NULL,
 reml <- function(objfun, pars, errpars = NULL, fixed = NULL,
                  iterlim = 25L, tol = 1e-6, rankTol = 1e-8,
                  optimizer = trust, control = NULL,
-                 cores = getOption("dMod.cores", 1L), ...) {
+                 cores = getOption("dMod2.cores", 1L), ...) {
 
   dots <- list(...)
   if (is.null(attr(objfun, "errfn")))

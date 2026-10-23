@@ -14,10 +14,7 @@ A function of class \code{idfn}.
 }
 \examples{
 x <- Xt()
-id <- Id()
-
-(id*x)(1:10, pars = c(a = 1))
-(x*id)(1:10, pars = c(a = 1))
-str(id*x)
-str(x*id)
+identical(Id() * x, x)
+identical(x * Id(), x)
+(Id() * x)(0:3, c(a = 1))
 }

@@ -204,7 +204,7 @@ constraintL2.omegaspec <- function(mu, mean = 0, attrName = "prior", condition =
 
   myfn <- function(..., fixed = NULL, deriv = TRUE, deriv2 = FALSE, hessian = NULL,
                    conditions = condition, env = NULL,
-                   cores = getOption("dMod.cores", 1L)) {
+                   cores = getOption("dMod2.cores", 1L)) {
 
     p    <- list(...)[[match.fnargs(list(...), "pars")]]
     cv   <- .resolveCurvature(deriv, deriv2, hessian, "forward")

@@ -42,11 +42,9 @@ sanitizeData <- function(x, required = c("name", "time", "value"), imputed = c(s
   if (length(missing.required) > 0)
       stop("These mandatory columns are missing: ", paste(missing.required, collapse = ", "))
   
-  if (length(missing.imputed) > 0) {
-    
-    for (n in missing.imputed) x[[n]] <- imputed[n]
-    
-  }
+  for (n in missing.imputed) x[[n]] <- rep(imputed[[n]], nrow(x))
+  # A missing limit of quantification is no limit.
+  if ("lloq" %in% names(x)) x$lloq[is.na(x$lloq)] <- -Inf
 
   # A column holding only NA reads in as logical; the numeric ones stay double.
   for (n in intersect(setdiff(c(required, names(imputed)), "name"), names(x)))

@@ -42,7 +42,7 @@
 #'   An objective function stores its prediction there as `prediction` and
 #'   returns the environment as attribute `env`.
 #' * `cores`: number of threads for the ODE solves and the residual kernel.
-#'   Default `getOption("dMod.cores", 1L)`.
+#'   Default `getOption("dMod2.cores", 1L)`.
 #'
 #' Prediction, observation and parameter functions accept `hessian` and
 #' `sweep` and ignore them. With `deriv = TRUE` an objective function returns
@@ -101,7 +101,7 @@ NULL
 #' @param fcontrol `deSolve` backend only. List with the interpolation
 #'   settings of the forcings, `method`, `rule`, `f` and `ties` as in
 #'   [stats::approxfun()], passed to [deSolve::ode()] as its `fcontrol`.
-#' @param ... Not used.
+#' @param ... Not used; an argument not named here is an error.
 #'
 #' @section Solver options:
 #' On the `cppDE` and `Sundials` backends the lists take the entries below and
@@ -121,6 +121,10 @@ NULL
 #'   so an objective sees fewer data points rather than a failure.
 #' * `traceFile`: CSV file the per-step trace is written to, default `NULL`;
 #'   needs `odemodel(..., stepTrace = TRUE)`.
+#' * `maxOrder`: upper bound on the order of the multistep methods, 1 to 5
+#'   for `"bdf"` and 1 to 12 for `"adams"`; default `NULL`, the method's own.
+#' * `stald`: stability limit detection for `"bdf"`, default `FALSE`; see
+#'   [cppDE::solveODE()].
 #' * `sensErrCon`: `optionsSens` only. `FALSE` takes the sensitivities out of
 #'   the error test, which is cheaper and gives less accurate sensitivities;
 #'   default `TRUE`.
@@ -178,23 +182,48 @@ Xs <- function(odemodel, ...) {
   UseMethod("Xs", odemodel)
 }
 
+# Refuses arguments a backend method does not take, which `...` would swallow.
+.rejectDots <- function(who, ...) {
+  if (...length())
+    stop(who, ": unknown arguments ", paste(names(list(...)), collapse = ", "), ".",
+         call. = FALSE)
+}
+
+# One deSolve solve through cOde::odeC(). Its warnings are kept back, and a solve
+# that ends before the last time point warns once with the first of them.
+.odeCSolve <- function(args, who) {
+  msgs <- character(0)
+  out <- withCallingHandlers(do.call(odeC, args), warning = function(w) {
+    msgs <<- c(msgs, conditionMessage(w))
+    invokeRestart("muffleWarning")
+  })
+  if (max(out[, "time"]) < max(args$times))
+    warning(who, ": the solver stopped at t = ", signif(max(out[, "time"]), 6),
+            " before the last time point", if (length(msgs)) paste0(": ", msgs[1]),
+            call. = FALSE)
+  out
+}
+
 #' @export
 #' @rdname Xs
 Xs.deSolve <- function(odemodel, forcings = NULL, events = NULL, names = NULL, condition = NULL,
                        options = list(), optionsSens = list(),
                        fcontrol = NULL, ...) {
 
+  .rejectDots("Xs", ...)
   func <- odemodel$func
   extended <- odemodel$extended
-  if (is.null(extended)) warning("Element 'extended' empty. ODE model does not contain sensitivities.")
+  if (is.null(extended))
+    stop("Xs: the odemodel is built without sensitivities; use Xf() or odemodel(deriv = TRUE).",
+         call. = FALSE)
   
   myforcings <- forcings
   myevents <- events
   myfcontrol <- fcontrol
   
-  if (!is.null(attr(func, "events")) & !is.null(myevents))
+  if (!is.null(events) && !is.null(attr(func, "events")))
     warning("Events already defined in odemodel. Additional events in Xs() will be ignored.")
-  if (is.null(attr(func, "events")) & !is.null(myevents))
+  else if (!is.null(events))
     message("Events should be defined in odemodel(). If defined in Xs(), events will be applied, but sensitivities will not be reset accordingly.")
   
   # Variable and parameter names
@@ -215,8 +244,11 @@ Xs.deSolve <- function(odemodel, forcings = NULL, events = NULL, names = NULL, c
   yiniSens <- as.numeric(senssplit.1 == senssplit.2)
   names(yiniSens) <- sensvar
   
-  # Only a subset of all variables/forcings is returned
   if (is.null(names)) names <- c(variables, forcnames)
+  unknown <- setdiff(names, c(variables, forcnames))
+  if (length(unknown))
+    stop("Xs: names ", paste(unknown, collapse = ", "), " are no states or forcings of the model: ",
+         paste(c(variables, forcnames), collapse = ", "), ".", call. = FALSE)
   
   # Controls to be modified from outside
   controls <- list(
@@ -235,6 +267,9 @@ Xs.deSolve <- function(odemodel, forcings = NULL, events = NULL, names = NULL, c
 
     fixedNames <- names(fixed)
     params <- c(unclass(pars), unclass(fixed))
+    lost <- setdiff(c(variables, parameters), names(params))
+    if (length(lost))
+      stop("Xs: parameters missing: ", paste(lost, collapse = ", "), call. = FALSE)
     yini <- params[variables]
     mypars <- params[parameters]
     
@@ -245,7 +280,8 @@ Xs.deSolve <- function(odemodel, forcings = NULL, events = NULL, names = NULL, c
     fcontrol <- controls$fcontrol
     names <- controls$names
     
-    # Add event time points (required by integrator)
+    # Event times join the grid of the integrator, the output keeps the requested ones.
+    requested <- times
     times <- sort(union(unique(events$time), times))
     
     # Sort event time points
@@ -259,20 +295,21 @@ Xs.deSolve <- function(odemodel, forcings = NULL, events = NULL, names = NULL, c
       
       # Evaluate model without sensitivities
       if (!is.null(forcings)) forc <- setForcings(func, forcings) else forc <- NULL
-      out <- suppressWarnings(do.call(odeC, c(list(y = unclass(yini), times = times, func = func, 
-                                                   parms = mypars, forcings = forc, 
-                                                   events = list(data = events), fcontrol = fcontrol), optsOde)))
-      out <- submatrix(out, cols = c("time", names))
+      out <- .odeCSolve(c(list(y = unclass(yini), times = times, func = func,
+                               parms = mypars, forcings = forc,
+                               events = list(data = events), fcontrol = fcontrol), optsOde), "Xs")
+      out <- submatrix(out, rows = out[, "time"] %in% requested, cols = c("time", names))
       
     } else {
       
       # Evaluate extended model
       if (!is.null(forcings)) forc <- setForcings(extended, forcings) else forc <- NULL
-      outSens <- suppressWarnings(do.call(odeC, c(list(y = c(unclass(yini), yiniSens), times = times, 
-                                                       func = extended, parms = mypars, 
-                                                       forcings = forc, fcontrol = fcontrol,
-                                                       events = list(data = events)), optsSens)))
-      
+      outSens <- .odeCSolve(c(list(y = c(unclass(yini), yiniSens), times = times,
+                                   func = extended, parms = mypars,
+                                   forcings = forc, fcontrol = fcontrol,
+                                   events = list(data = events)), optsSens), "Xs")
+      outSens <- outSens[outSens[, "time"] %in% requested, , drop = FALSE]
+
       out <- submatrix(outSens, cols = c("time", names))
 
       # Forcings live in `names` so the value matrix can return them, but the
@@ -288,12 +325,10 @@ Xs.deSolve <- function(odemodel, forcings = NULL, events = NULL, names = NULL, c
 
       dP <- attr(pars, "deriv")
       if (!is.null(dP)) {
-        dPsub <- dP[senspars, , drop = FALSE]
-        if(any(rownames(dP) %in% senspars)) {
+        if (length(senspars)) {
+          dPsub <- dP[senspars, , drop = FALSE]
           myderivs <- mysensitivities %bmm% dPsub
           dimnames(myderivs) <- list(NULL, svars, colnames(dPsub))
-        } else {
-          myderivs <- NULL
         }
       } else {
         myderivs <- mysensitivities
@@ -355,6 +390,15 @@ Xs.deSolve <- function(odemodel, forcings = NULL, events = NULL, names = NULL, c
   modifyList(defaults, options)
 }
 
+# maxOrder and stald for cppDE::solveODE(), only where they leave the default,
+# so a cppDE without them still serves every other solve.
+.orderOpts <- function(o) {
+  out <- list()
+  if (!is.null(o$maxOrder)) out$maxOrder <- o$maxOrder
+  if (isTRUE(o$stald)) out$stald <- TRUE
+  out
+}
+
 # The arguments of deSolve::ode() for one solve: `sens` merged over `options`,
 # merged over the backend's default method.
 .deSolveOptions <- function(options, sens, method) {
@@ -382,7 +426,7 @@ Xs.cppDE <- function(odemodel, forcings = NULL, events = NULL, names = NULL, con
                       options = list(), optionsSens = list(),
                       optionsReverse = NULL, ...) {
 
-
+  .rejectDots("Xs", ...)
   # Derived at every solve from what `controls` holds; derived here as well,
   # which checks the arguments, an unknown option among them, when given.
   forcsOf <- .derivedControl(.cppdeForcings)
@@ -394,7 +438,8 @@ Xs.cppDE <- function(odemodel, forcings = NULL, events = NULL, names = NULL, con
 
   optionsDefault <- list(atol = 1e-6, rtol = 1e-6, maxattempts = 50L, maxsteps = 1e6L,
                          hini = 0, roottol = 1e-6, maxroot = 1L,
-                         onFailure = "stop", traceFile = NULL)
+                         onFailure = "stop", traceFile = NULL,
+                         maxOrder = NULL, stald = FALSE)
   sensKnown <- c(names(optionsDefault), "sensErrCon")
   odeOf <- .derivedControl(function(o) .cppdeOptions(o, optionsDefault, "options"))
   # `o` is list(options, optionsSens); the second is merged over the first.
@@ -549,7 +594,7 @@ Xs.cppDE <- function(odemodel, forcings = NULL, events = NULL, names = NULL, con
                 maxsteps = o$maxsteps, hini = o$hini, roottol = o$roottol,
                 maxroot = o$maxroot, onFailure = o$onFailure, traceFile = o$traceFile)
     if (!is.null(sec)) out$sensErrCon <- sec
-    out
+    c(out, .orderOpts(o))
   }
   # sensErrCon of a forward solve.
   sensSec <- function() isTRUE(sensOpts()$sensErrCon)
@@ -882,11 +927,12 @@ Xs.cppDE <- function(odemodel, forcings = NULL, events = NULL, names = NULL, con
 #'   its section Solver options. On the `deSolve` backend `method` defaults to
 #'   `"lsoda"`.
 #' @param fcontrol `deSolve` backend only, as in [Xs()].
-#' @param ... Not used.
+#' @param ... Not used; an argument not named here is an error.
 #'
 #' @return A [prdfn], called as `x(times, pars, fixed = NULL)`, returning a
 #'   [prdlist] without derivatives; the other arguments of section Calling a
-#'   dMod function are accepted and ignored. `forcings` and `options` can be
+#'   dMod function are accepted and ignored, except `deriv2 = TRUE`, which is
+#'   an error. `forcings` and `options` can be
 #'   changed with [controls()].
 #' @inheritSection dModfn Calling a dMod function
 #' @seealso [Xs()], [controls()]
@@ -900,7 +946,7 @@ Xf <- function(odemodel, ...) {
 Xf.deSolve <- function(odemodel, forcings = NULL, events = NULL, condition = NULL,
                        options = list(), fcontrol = NULL, ...) {
 
-
+  .rejectDots("Xf", ...)
   func <- odemodel$func
 
   myforcings <- forcings
@@ -909,8 +955,8 @@ Xf.deSolve <- function(odemodel, forcings = NULL, events = NULL, condition = NUL
 
   variables <- attr(func, "variables")
   parameters <- attr(func, "parameters")
-  yini <- rep(0, length(variables))
-  names(yini) <- variables
+  # States not in `pars` start at zero.
+  start <- setNames(numeric(length(variables)), variables)
 
   controls <- list(
     forcings = myforcings,
@@ -932,16 +978,21 @@ Xf.deSolve <- function(odemodel, forcings = NULL, events = NULL, condition = NUL
     # Xf has no sensitivities, so fixed/free collapses to a single pars vector.
     pars <- c(unclass(pars), unclass(fixed))
 
+    lost <- setdiff(parameters, names(pars))
+    if (length(lost))
+      stop("Xf: parameters missing: ", paste(lost, collapse = ", "), call. = FALSE)
+    requested <- times
     times <- sort(union(unique(events$time), times))
 
-    yini[names(pars[names(pars) %in% variables])] <- pars[names(pars) %in% variables]
+    given <- variables[variables %in% names(pars)]
+    start[given] <- pars[given]
     mypars <- pars[parameters]
 
     if (!is.null(forcings)) forc <- setForcings(func, forcings) else forc <- NULL
-    out <- suppressWarnings(do.call(odeC, c(list(y = yini, times = times, func = func,
-                                                 parms = mypars, forcings = forc,
-                                                 events = list(data = events),
-                                                 fcontrol = fcontrol), opts)))
+    out <- .odeCSolve(c(list(y = start, times = times, func = func, parms = mypars,
+                             forcings = forc, events = list(data = events),
+                             fcontrol = fcontrol), opts), "Xf")
+    out <- out[out[, "time"] %in% requested, , drop = FALSE]
 
     prdframe(out, deriv = NULL, parameters = pars)
   }
@@ -963,7 +1014,7 @@ Xf.deSolve <- function(odemodel, forcings = NULL, events = NULL, condition = NUL
 Xf.cppDE <- function(odemodel, forcings = NULL, events = NULL, condition = NULL,
                       options = list(), ...) {
 
-
+  .rejectDots("Xf", ...)
   # `controls` keeps the arguments as given; the solver's forms are derived
   # from them at every solve, and here, which checks them once when given.
   forcsOf <- .derivedControl(.cppdeForcings)
@@ -974,7 +1025,8 @@ Xf.cppDE <- function(odemodel, forcings = NULL, events = NULL, condition = NULL,
 
   optionsDefault <- list(atol = 1e-6, rtol = 1e-6, maxattempts = 50L, maxsteps = 1e6L,
                          hini = 0, roottol = 1e-6, maxroot = 1L,
-                         onFailure = "stop", traceFile = NULL)
+                         onFailure = "stop", traceFile = NULL,
+                         maxOrder = NULL, stald = FALSE)
   odeOf <- .derivedControl(function(o) .cppdeOptions(o, optionsDefault, "options"))
   odeOf(options)
 
@@ -994,17 +1046,12 @@ Xf.cppDE <- function(odemodel, forcings = NULL, events = NULL, condition = NULL,
     forcings <- forcsOf(controls$forcings)
     o <- odeOf(controls$options)
 
-    out <- cppDE::solveODE(func, times, params,
-                            tangent = NULL, hessian = NULL, fixed = NULL,
-                            forcings = forcings,
-                            abstol = o$atol, reltol = o$rtol,
-                            maxattempts = o$maxattempts,
-                            maxsteps = o$maxsteps,
-                            hini = o$hini,
-                            roottol = o$roottol,
-                            maxroot = o$maxroot,
-                            onFailure = o$onFailure,
-                            traceFile = o$traceFile)
+    out <- do.call(cppDE::solveODE, c(
+      list(func, times, params, forcings = forcings,
+           abstol = o$atol, reltol = o$rtol, maxattempts = o$maxattempts,
+           maxsteps = o$maxsteps, hini = o$hini, roottol = o$roottol,
+           maxroot = o$maxroot, onFailure = o$onFailure, traceFile = o$traceFile),
+      .orderOpts(o)))
 
     out <- cbind(out$time, out$variable,
                  if (length(forcings)) cppDE::forcingValues(out$time, forcings))
@@ -1054,122 +1101,115 @@ Xf.cppDE <- function(odemodel, forcings = NULL, events = NULL, condition = NULL,
 #' plot(prediction)
 #' @export
 Xd <- function(data, condition = NULL) {
-  
-  states <- unique(as.character(data$name))
-  
-  
-  # List of prediction functions with sensitivities
-  predL <- lapply(states, function(s) {
-    subdata <- subset(data, as.character(name) == s)
-    
-    M <- diag(1, nrow(subdata), nrow(subdata))
-    parameters.specific <- rownames(subdata)
-    if(is.null(parameters.specific)) parameters.specific <- paste("par", s, 1:nrow(subdata), sep = "_")
-    sensnames <- paste(s, parameters.specific, sep = ".")
-    
-    # return function
-    out <- function(times, pars) {
-      value <- approx(x = subdata$time, y = pars[parameters.specific], xout = times, rule = 2)$y
-      grad <- do.call(cbind, lapply(1:nrow(subdata), function(i) {
-        approx(x = subdata$time, y = M[, i], xout = times, rule = 2)$y
-      }))
-      colnames(grad) <- sensnames
-      attr(value, "sensitivities") <- grad
-      attr(value, "sensnames") <- sensnames
-      return(value)
-    }
-    
-    attr(out, "parameters") <- parameters.specific
-    
-    return(out)
-    
-  }); names(predL) <- states
-  
-  # Collect parameters
-  parameters <- unlist(lapply(predL, function(p) attr(p, "parameters")))
-  
-  # Initialize parameters if available
-  pouter <- NULL
-  if(any(colnames(data) == "value")) 
-    pouter <- structure(data$value[match(parameters, rownames(data))], names = parameters)
-  
-  sensGrid <- expand.grid(states, parameters, stringsAsFactors=FALSE)
-  sensNames <- paste(sensGrid[,1], sensGrid[,2], sep=".")  
-  
-  
-  controls <- list()  
-  
-  P2X <- function(times, pars, fixed = NULL, deriv = TRUE, deriv2 = FALSE){
+
+  stateOf <- as.character(data$name)
+  states <- unique(stateOf)
+  byState <- lapply(states, function(s) {
+    rows <- which(stateOf == s)
+    list(pars = rownames(data)[rows], interp = .gridInterpolant(data$time[rows]))
+  })
+  names(byState) <- states
+  parameters <- unlist(lapply(byState, `[[`, "pars"), use.names = FALSE)
+
+  pouter <- if ("value" %in% names(data))
+    setNames(data$value[match(parameters, rownames(data))], parameters)
+
+  P2X <- function(times, pars, fixed = NULL, deriv = TRUE, deriv2 = FALSE) {
 
     if (deriv2)
       stop("Xd: second-order sensitivities are not implemented for data-driven prediction.")
-    # Xd has no fixed/free split: fixed parameters join `pars` for the lookup.
-    if (!is.null(fixed)) pars <- c(unclass(pars), unclass(fixed))
+    # Derivatives are taken with respect to `pars` only, through attr(pars, "deriv") if present.
+    dP <- attr(pars, "deriv")
+    allPars <- if (length(fixed)) c(unclass(pars), unclass(fixed)) else pars
+    absent <- parameters[!parameters %in% names(allPars)]
+    if (length(absent))
+      stop("Xd: parameters missing: ", paste(absent, collapse = ", "), call. = FALSE)
 
-
-    predictions <- lapply(states, function(s) predL[[s]](times, pars)); names(predictions) <- states
-    
-    out <- cbind(times, do.call(cbind, predictions))
-    colnames(out) <- c("time", states)
-    
-    myderivs <- NULL
-    if (deriv) {
-
-      # Fill in sensitivities, column layout is state-fastest, matching the
-      # expand.grid(states, parameters) ordering used to build sensNames.
-      outSens <- matrix(0, nrow = length(times), ncol = length(sensNames),
-                        dimnames = list(NULL, sensNames))
-      for (s in states) {
-        mysens   <- attr(predictions[[s]], "sensitivities")
-        mynames  <- attr(predictions[[s]], "sensnames")
-        outSens[, mynames] <- mysens
-      }
-
-      # Reshape to 3D [time, state, param] (batch-first), matching Xs.
-      myderivs <- array(outSens,
-                        dim = c(length(times), length(states), length(parameters)),
-                        dimnames = list(NULL, states, parameters))
-
-      # Chain rule via upstream parameter transformation.
-      dP <- attr(pars, "deriv")
-      if (!is.null(dP)) {
-        dPsub <- dP[parameters, , drop = FALSE]
-        myderivs <- myderivs %bmm% dPsub
-        dimnames(myderivs) <- list(NULL, states, colnames(dPsub))
-      }
+    nt <- length(times)
+    out <- matrix(0, nt, length(states) + 1L, dimnames = list(NULL, c("time", states)))
+    out[, "time"] <- times
+    jac <- if (deriv)
+      array(0, c(nt, length(states), length(parameters)),
+            dimnames = list(NULL, states, parameters))
+    for (s in states) {
+      grid <- byState[[s]]
+      ip <- grid$interp(times, unclass(allPars)[grid$pars], jacobian = deriv)
+      out[, s] <- ip$value
+      if (deriv) jac[, s, grid$pars] <- ip$jacobian
     }
 
-    prdframe(out, deriv = myderivs, parameters = pars)
-    
+    if (deriv && is.null(dP))
+      jac <- jac[, , parameters %in% names(pars), drop = FALSE]
+    if (deriv && !is.null(dP)) {
+      # Grid parameters that are fixed or absent from dP have zero tangent rows.
+      seed <- matrix(0, length(parameters), ncol(dP), dimnames = list(parameters, colnames(dP)))
+      inDP <- parameters[parameters %in% rownames(dP)]
+      seed[inDP, ] <- dP[inDP, , drop = FALSE]
+      jac <- jac %bmm% seed
+      dimnames(jac) <- list(NULL, states, colnames(dP))
+    }
+
+    prdframe(out, deriv = jac, parameters = allPars)
   }
-  
-  # The forward path's Jacobian `grad`, contracted with the cotangent instead
-  # of dP.
+
+  # The Jacobian of the forward path, contracted with the cotangent.
   attr(P2X, "vjpfn") <- function(times, pars, fixed = NULL, cotangent) {
     w <- .asCtOut(cotangent)
-    p <- if (is.null(fixed)) pars else c(unclass(pars), unclass(fixed))
     K <- .ctK(w)
     out <- .ctZero(names(pars), K)
-    for (s in states) {
-      if (!(s %in% dimnames(w)[[2L]])) next
-      pr  <- predL[[s]](times, p)
-      sens <- attr(pr, "sensitivities")
-      nms  <- attr(pr, "parameters") %||% attr(predL[[s]], "parameters")
-      ws <- matrix(w[, s, ], nrow = dim(w)[1L], ncol = K)
-      contrib <- crossprod(sens, ws)
-      rownames(contrib) <- nms
-      hit <- intersect(nms, rownames(out))
-      if (length(hit))
-        out[hit, ] <- out[hit, , drop = FALSE] + contrib[hit, , drop = FALSE]
+    for (s in intersect(states, dimnames(w)[[2L]])) {
+      grid <- byState[[s]]
+      jac <- grid$interp(times, NULL)$jacobian
+      pull <- crossprod(jac, matrix(w[, s, ], nrow = dim(w)[1L], ncol = K))
+      own <- grid$pars %in% rownames(out)
+      out[grid$pars[own], ] <- out[grid$pars[own], , drop = FALSE] + pull[own, , drop = FALSE]
     }
     out
   }
 
-  attr(P2X, "parameters") <- structure(parameters, names = NULL)
+  attr(P2X, "parameters") <- parameters
   attr(P2X, "pouter") <- pouter
-  
-  prdfn(P2X, attr(P2X, "parameters"), condition)
-  
+
+  prdfn(P2X, parameters, condition)
+}
+
+# Piecewise linear interpolant through the points (grid, values), constant
+# beyond the first and last grid time. Values at a repeated grid time are
+# averaged. Returns the value and the Jacobian [times, grid point].
+.gridInterpolant <- function(grid) {
+  knots <- sort(unique(grid))
+  nk <- length(knots)
+  node <- match(grid, knots)
+  weight <- 1 / tabulate(node, nk)
+  tied <- anyDuplicated(grid) > 0L
+
+  function(times, values, jacobian = TRUE) {
+    lo <- findInterval(times, knots)
+    before <- lo == 0L
+    lo[before] <- 1L
+    hi <- pmin(lo + 1L, nk)
+    frac <- (times - knots[lo]) / (knots[hi] - knots[lo])
+    frac[before | hi == lo] <- 0
+
+    value <- NULL
+    if (!is.null(values)) {
+      y <- numeric(nk)
+      if (tied) y <- as.vector(rowsum(as.vector(values), node, reorder = TRUE)) * weight
+      else y[node] <- values
+      value <- y[lo] + (y[hi] - y[lo]) * frac
+    }
+    if (!jacobian) return(list(value = value))
+
+    # Upper neighbour first, so a clamped point (hi == lo) ends with weight 1.
+    nt <- length(times)
+    basis <- matrix(0, nt, nk)
+    basis[cbind(seq_len(nt), hi)] <- frac
+    basis[cbind(seq_len(nt), lo)] <- 1 - frac
+    jac <- basis[, node, drop = FALSE]
+    if (tied) jac <- jac * rep(weight[node], each = nt)
+    colnames(jac) <- NULL
+    list(value = value, jacobian = jac)
+  }
 }
 
 
@@ -1257,7 +1297,7 @@ Xd <- function(data, condition = NULL) {
 #'   the call has `deriv2 = TRUE`; on a function built without them that call
 #'   is an error. Requires `deriv = TRUE`. Default `FALSE`.
 #' @param outdir Character. Directory for the generated C++ source and the
-#'   shared object, default `getOption("dMod.outdir")`, else the working
+#'   shared object, default `getOption("dMod2.outdir")`, else the working
 #'   directory.
 #'
 #' @return
@@ -1324,15 +1364,12 @@ Y <- function(g, f = NULL, states = NULL, parameters = NULL,
     # copy taken when it was composed, the leaf the forcings it runs with.
     myforcings <- Reduce(union, lapply(.fnLeaves(f), function(l)
       as.character(.kernelSetting(l$kernel, "forcings")$name)))
-    mystates <- unique(c(do.call(c, lapply(getEquations(f), names)), "time"))
-    if (length(intersect(myforcings, mystates)) > 0)
+    odeStates <- union(unlist(lapply(getEquations(f), names), use.names = FALSE), "time")
+    if (any(myforcings %in% odeStates))
       stop("Forcings and states overlap in different conditions.")
-
-    mystates <- c(mystates, myforcings)
-    myparameters <- setdiff(union(getParameters(f), getSymbols(unclass(g))),
-                            c(mystates, myforcings))
-    states <- union(mystates, states)
-    parameters <- union(myparameters, parameters)
+    inputs <- c(odeStates, myforcings)
+    states <- union(inputs, states)
+    parameters <- union(setdiff(union(getParameters(f), symbols), inputs), parameters)
   } else {
     f <- as.eqnvec(f)
     mystates <- union(names(f), "time")
@@ -1678,14 +1715,7 @@ Xt <- function(condition = NULL) {
 #'
 #' @examples
 #' x <- Xt()
-#' id <- Id()
-#'
-#' (id*x)(1:10, pars = c(a = 1))
-#' (x*id)(1:10, pars = c(a = 1))
-#' str(id*x)
-#' str(x*id)
-Id <- function() {
-  outfn <- function() return(NULL)
-  class(outfn) <- c("idfn", "fn")
-  return(outfn)
-}
+#' identical(Id() * x, x)
+#' identical(x * Id(), x)
+#' (Id() * x)(0:3, c(a = 1))
+Id <- function() structure(function() NULL, class = c("idfn", "fn"))

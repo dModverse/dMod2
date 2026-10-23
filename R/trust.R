@@ -671,13 +671,26 @@ trustL1 <- function(objfun, parinit, mu = 0 * parinit, one.sided = FALSE, lambda
   }
   if (!is.null(fuse)) fuse <- .fuseBlocks(fuse, names(parinit), lambda0)
 
-  trustL1_impl(fn, parinit, mu, lambda,
-               as.logical(one.sided)[1L], rinit, rmax,
-               NULL, as.integer(iterlim),
-               ftol, mtol, gtol, xtol, rmin, theta.max,
-               boundary, minimize, blather,
-               parupper, parlower, printIter, traceFile,
-               gate = gate, fuse = fuse)
+  # Maximising f minus the penalty is minimising -f plus the penalty; the kernel
+  # would negate the penalty with f.
+  flip <- function(out) {
+    if (inherits(out, "try-error")) return(out)
+    for (k in c("value", "gradient", "hessian")) if (!is.null(out[[k]])) out[[k]] <- -out[[k]]
+    out
+  }
+  if (!minimize) {
+    fnMax <- fn
+    fn <- function(x, want = 2L) flip(fnMax(x, want))
+  }
+
+  out <- trustL1_impl(fn, parinit, mu, lambda,
+                      as.logical(one.sided)[1L], rinit, rmax,
+                      NULL, as.integer(iterlim),
+                      ftol, mtol, gtol, xtol, rmin, theta.max,
+                      boundary, TRUE, blather,
+                      parupper, parlower, printIter, traceFile,
+                      gate = gate, fuse = fuse)
+  if (minimize) out else flip(out)
 }
 
 # Normalise trustL1 fuse blocks to list(idx, lambda, anchor, w) with idx

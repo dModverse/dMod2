@@ -12,6 +12,7 @@ symmetryDetection(
   fixed = NULL,
   gaugePreference = FALSE,
   forcings = NULL,
+  unknownInputs = NULL,
   events = NULL,
   conditions = NULL,
   regimes = NULL,
@@ -55,6 +56,11 @@ directions on the fewest coordinates; a character vector ranks the coordinates
 to fix (\code{*} as wildcard). The gauge is returned as \verb{$gauge}.}
 
 \item{forcings}{Character vector of input states, 0 at the start and at rest.}
+
+\item{unknownInputs}{Character vector of unknown functions of time of no assumed
+form: symbols in \code{f} and \code{g} without an equation. A direction may change them along with the
+parameters; an exact one lists that change as \code{inputChange}. A character cell of
+\code{conditions} renames an unknown input in that condition.}
 
 \item{events}{An \link{eventlist} with event times as numbers or expressions in the
 parameters, in chronological order. Root events are not supported. An event
@@ -164,9 +170,9 @@ the model time.
 The analysis starts at the earliest event; later events split the time
 line into segments. Directions are reported in the original coordinates.
 
-Every environment variable \verb{SYMIDENT_<NAME>} and every option
-\verb{dMod.sym.<name>} set in R is passed to symident for the call, the option
-name converted to snake case. The environment variables a user may need
+Every environment variable \verb{SYMIDENT_<NAME>} set in R, also with
+\code{\link[=Sys.setenv]{Sys.setenv()}} during the session, is passed to symident for the call.
+The environment variables a user may need
 are \code{SYMIDENT_MSOLVE}, the path of the msolve executable (unset by
 default, msolve is then searched in the symident cache and on the
 \code{PATH}), and \code{SYMIDENT_CACHE}, the directory of that cache (by default

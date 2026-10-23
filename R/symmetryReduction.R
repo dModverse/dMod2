@@ -14,7 +14,8 @@
 #' @param object A `symmetrydetection` result from [symmetryDetection()].
 #' @param fixed Coordinates with known values; scalings they remove are dropped.
 #'   `NULL` (default) uses the gauge of `object`.
-#' @inheritParams symmetryDetection
+#' @param positive Coordinates known to be positive: `TRUE` (all), `FALSE` (none) or a
+#'   character vector. `NULL` (default) takes the declaration of the detection in `object`.
 #' @param reportZeroCompatibility Logical. Report which coordinates each block can
 #'   drive to 0. Defaults to `FALSE`.
 #' @param dPoly Degree bound of polynomial and rational invariants. Defaults
@@ -94,7 +95,7 @@
 #' red$trafo
 #' symmetryDetection(f, g, trafo = red$trafo, verbose = FALSE)$identifiable
 #' @export
-symmetryReduction <- function(object, fixed = NULL, positive = TRUE, dPoly = 3L,
+symmetryReduction <- function(object, fixed = NULL, positive = NULL, dPoly = 3L,
                               dDarboux = 2L, dExp = 2L, separable = TRUE,
                               reportZeroCompatibility = FALSE, alternatives = FALSE,
                               timeout = Inf, allowOpen = FALSE, check = TRUE,
@@ -114,6 +115,7 @@ symmetryReduction <- function(object, fixed = NULL, positive = TRUE, dPoly = 3L,
                allow_open = isTRUE(allowOpen), check = isTRUE(check),
                work_cap = as.integer(workCap))
   if (is.null(fixed)) args$fixed <- NULL
+  if (is.null(positive)) args$positive <- NULL
   .symRedFromPy(.symCall("reduce_json", .symRaw(object), args), match.call())
 }
 

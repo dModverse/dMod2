@@ -12,6 +12,35 @@ transformation functions as \code{g * x * p}. Objective functions over several
 experimental conditions are minimized by trust-region optimization, and
 parameter uncertainty is assessed by profile likelihoods.
 }
+\section{Options}{
+
+\describe{
+\item{\code{dMod2.cores}}{Cores over the experimental conditions inside one
+evaluation of a prediction, observation or objective, the default of
+their \code{cores} argument. Default 1.}
+\item{\code{dMod2.outdir}}{Directory the model constructors such as
+\code{\link[=odemodel]{odemodel()}}, \code{\link[=Y]{Y()}} and \code{\link[=P]{P()}} write their sources and shared objects
+to, and \code{\link[=distributedComputing]{distributedComputing()}} takes the model files from. Default
+the working directory.}
+\item{\code{dMod2.batch.check}}{\code{TRUE} evaluates every batch of conditions a
+second time condition by condition and stops where the two differ.
+Default \code{FALSE}.}
+\item{\code{dMod2.compile.cmdlimit}}{Longest command line in characters that
+\code{\link[=compile]{compile()}} passes to the compiler and archiver. Default 96000, 8000 on
+Windows.}
+}
+}
+
+\section{Environment variables}{
+
+\describe{
+\item{\code{DMOD_LIBSBML_PYTHON}}{Python interpreter with libsbml for the SBML
+interface.}
+\item{\verb{SYMIDENT_<NAME>}}{Switch \verb{<name>} of symident for
+\code{\link[=symmetryDetection]{symmetryDetection()}} and \code{\link[=symmetryReduction]{symmetryReduction()}}, see the Details there.}
+}
+}
+
 \seealso{
 Models: \code{\link[=eqnlist]{eqnlist()}}, \code{\link[=addReaction]{addReaction()}}, \code{\link[=odemodel]{odemodel()}}, \code{\link[=Xs]{Xs()}}, \code{\link[=Y]{Y()}}, \code{\link[=P]{P()}}.
 Data and objectives: \code{\link[=as.datalist]{as.datalist()}}, \code{\link[=normL2]{normL2()}}, \code{\link[=constraintL2]{constraintL2()}}.
@@ -25,18 +54,7 @@ Identifiability: \code{\link[=symmetryDetection]{symmetryDetection()}}.
 Authors:
 \itemize{
   \item Simon Beyer \email{simon.beyer@fdm.uni-freiburg.de}
-  \item Daniel Kaschek \email{daniel.kaschek@gmail.com} (Created dMod 1.0; original design, philosophy) [copyright holder]
-}
-
-Other contributors:
-\itemize{
-  \item Daniel Lill \email{daniel.lill@posteo.de} [contributor]
-  \item Wolfgang Mader \email{Wolfgang.Mader@fdm.uni-freiburg.de} [contributor]
-  \item Mirjam Fehling-Kaschek \email{mirjam.fehling@physik.uni-freiburg.de} [contributor]
-  \item Severin Bang \email{severin.bang@physik.uni-freiburg.de} [contributor]
-  \item Marcus Rosenblatt \email{marcus.rosenblatt@gmail.com} [contributor]
-  \item Svenja Kemmer \email{svenja.kemmer@fdm.uni-freiburg.de} [contributor]
-  \item John Fox (Signature and argument check of rref()) [contributor]
+  \item Daniel Kaschek \email{daniel.kaschek@gmail.com} (Created dMod 1.0; original design, philosophy)
 }
 
 }

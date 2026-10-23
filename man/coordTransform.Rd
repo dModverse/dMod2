@@ -23,7 +23,8 @@ data frame. A \code{sigma} column is transformed by first-order error
 propagation.
 }
 \examples{
-mydata1 <- data.frame(name = c("A", "B"), time = 0:5, value = 0:5, sigma = .1)
-coordTransform(mydata1, "log(value)")
-coordTransform(mydata1, list(A = "exp(value)", B = "sqrt(value)"))
+d <- data.frame(name = rep(c("u", "v"), each = 3), time = 0:2, value = 1:6,
+                sigma = 0.2)
+coordTransform(d, "log(y)")
+coordTransform(d, list(u = "y^2", v = "exp(-y)"))
 }

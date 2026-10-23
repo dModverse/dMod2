@@ -52,7 +52,7 @@ P <- function(trafo = NULL, parameters = NULL, condition = NULL,
 
   ## Codegen-only inside mclapply: dyn.load in a forked worker is lost when
   ## the fork exits, so the actual compile happens in the parent below.
-  result <- Reduce("+", mclapply(seq_along(trafo_list), function(i) {
+  result <- Reduce("+", parallel::mclapply(seq_along(trafo_list), function(i) {
     tr   <- trafo_list[[i]]
     cond <- names(trafo_list[i])
     m <- if (!is.null(method)) match.arg(method, c("explicit", "implicit"))
@@ -156,7 +156,13 @@ P <- function(trafo = NULL, parameters = NULL, condition = NULL,
   if (!deriv || is.null(Jac))
     return(as.parvec(val, deriv = FALSE, deriv2 = FALSE))
 
-  Jac  <- Jac[rowSums(Jac != 0) > 0, , drop = FALSE]
+  ## An output is fixed when its expression has no varying input, not when its
+  ## derivative vanishes at this point: the Hessian may not.
+  varying <- if (is.null(attr(pars, "deriv"))) setdiff(names(pars), names(fixed))
+             else rownames(attr(pars, "deriv"))
+  dependent <- vapply(rownames(Jac), function(o)
+    is.null(st$depends[[o]]) || any(st$depends[[o]] %in% varying), logical(1))
+  Jac  <- Jac[dependent | rowSums(Jac != 0) > 0, , drop = FALSE]
   Hess <- if (deriv2 && !is.null(Hess)) Hess[rownames(Jac), , , drop = FALSE]
 
   ## Every varying input keeps a derivative row: without one it counts as fixed
@@ -367,7 +373,7 @@ P <- function(trafo = NULL, parameters = NULL, condition = NULL,
 #'   `sweep = "reverse"`, `"forward-reverse"` for `sweep = "reverse"` with
 #'   `deriv2 = TRUE`.
 #' @param outdir Directory for the generated source and shared object,
-#'   default `getOption("dMod.outdir")`, else the working directory.
+#'   default `getOption("dMod2.outdir")`, else the working directory.
 #'
 #' @return A [parfn], called as `p(pars, ...)`, see section Calling a dMod
 #'   function.
@@ -415,6 +421,7 @@ Pexpl <- function(trafo, parameters = NULL, attachInput = FALSE, condition = NUL
   st <- list2env(list(fun = fun, jac = jac, hess = hess, evaluate = evaluate,
                       evaluateBatch = PEval$evaluateBatch, vjp = PEval$vjp,
                       outnames = names(trafo),
+                      depends = lapply(setNames(as.character(trafo), names(trafo)), getSymbols),
                       parameters = parameters,
                       use_ad = use_ad, ad_symbol = ad_symbol,
                       ad2_symbol = ad2_symbol, emit_d1 = emit_d1,
@@ -457,8 +464,8 @@ Pexpl <- function(trafo, parameters = NULL, attachInput = FALSE, condition = NUL
 
 #' Detect states that are structurally zero in steady state
 #'
-#' Iterated three-layer test on the stoichiometric matrix of an `eqnlist`
-#' (matches AlyssaPetit v1.2):
+#' Iterated three-layer test on the stoichiometric matrix of an `eqnlist`, the
+#' one the steady-state solver of [steadyStates()] applies:
 #' \enumerate{
 #'   \item *Neg-only column*: only outflux, must be zero at SS.
 #'   \item *Pos-only column with single-state feeder*: each feeding flux
@@ -482,6 +489,8 @@ Pexpl <- function(trafo, parameters = NULL, attachInput = FALSE, condition = NUL
   S <- suppressWarnings(matrix(as.numeric(S0), nrow = nrow(S0), ncol = ncol(S0),
                                dimnames = dimnames(S0)))
   S[is.na(S)] <- 0
+  # states some reaction changes; the others, such as catalysts, are constant
+  changed <- colnames(S)[colSums(S != 0) > 0]
   rates       <- eqnlist_obj$rates
   description <- eqnlist_obj$description
   reactionCompartment <- eqnlist_obj$reactionCompartment
@@ -537,10 +546,12 @@ Pexpl <- function(trafo, parameters = NULL, attachInput = FALSE, condition = NUL
       reactionCompartment <- reactionCompartment[keep]
   }
 
-  ## No influx (column has no strictly positive entry) => zero at SS;
-  ## also catches all-zero columns from prior reductions.
+  ## No influx (column has no strictly positive entry) => zero at SS; also
+  ## catches the all-zero columns of prior reductions. A state no reaction
+  ## changes, such as a catalyst, is constant instead.
   .neg_col <- function(M) {
-    for (j in seq_len(ncol(M))) if (!any(M[, j] > 0)) return(j)
+    for (j in seq_len(ncol(M)))
+      if (!any(M[, j] > 0) && colnames(M)[j] %in% changed) return(j)
     NA_integer_
   }
 
@@ -925,7 +936,7 @@ resetWarmStarts <- function(fn, verbose = FALSE) {
 #'       is not advanced.}
 #'   }
 #' @param outdir Directory for the generated files, default
-#'   `getOption("dMod.outdir")`, else the working directory.
+#'   `getOption("dMod2.outdir")`, else the working directory.
 #'
 #' @details Conserved quantities of an [eqnlist] enter as \eqn{C x = T}.
 #' States without influx are 0. Initial guesses are kept roots, then the
@@ -1247,7 +1258,9 @@ Pimpl <- function(trafo, parameters = NULL, forcings = NULL, condition = NULL,
       jacobian <- jacobian %*% dPsub
     }
 
-    keep <- rowSums(jacobian != 0) > 0
+    # a solved state keeps its row where dx/dp vanishes at this point, its
+    # second derivative may not
+    keep <- rownames(jacobian) %in% dependent | rowSums(jacobian != 0) > 0
     jacobian <- jacobian[keep, , drop = FALSE]
     if (!is.null(hessian)) hessian <- hessian[keep, , , drop = FALSE]
     list(jacobian = jacobian, hessian = hessian)
@@ -1384,29 +1397,10 @@ Pimpl <- function(trafo, parameters = NULL, forcings = NULL, condition = NULL,
 #' @example inst/examples/define.R
 define <- function(trafo, expr, ..., conditionMatch = NULL) {
   if (missing(trafo)) trafo <- NULL
-  tree <- attr(trafo, "tree")
-  if (is.list(trafo) && is.null(names(trafo)))
-    stop("If trafo is a list, elements must be named.", call. = FALSE)
-  if (is.list(trafo) && !all(names(trafo) %in% rownames(tree)))
-    stop("List names must be a subset of rownames(attr(trafo, 'tree')).", call. = FALSE)
-  mytrafo <- if (is.list(trafo)) trafo else list(trafo)
-
-  dots      <- substitute(alist(...))
+  dots <- substitute(alist(...))
   callerEnv <- parent.frame()
-  out  <- lapply(seq_along(mytrafo), function(i) {
-    .currentTrafo   <- mytrafo[[i]]
-    .currentSymbols <- if (is.null(.currentTrafo)) NULL else getSymbols(.currentTrafo)
-    row <- if (is.list(trafo)) tree[names(mytrafo)[i], , drop = FALSE]
-           else tree[1, , drop = FALSE]
-    if (!is.null(conditionMatch) && !str_detect(rownames(row), conditionMatch))
-      return(.currentTrafo)
-    args <- .evalDots(dots, row, .currentTrafo, .currentSymbols, callerEnv)
-    do.call(repar, c(list(expr = expr, trafo = .currentTrafo, reset = TRUE), args))
-  })
-  names(out) <- names(mytrafo)
-  if (!is.list(trafo)) out <- out[[1]]
-  attr(out, "tree") <- tree
-  out
+  .reparBranches(trafo, dots, callerEnv, conditionMatch, function(tr, args)
+    do.call(repar, c(list(expr = expr, trafo = tr, reset = TRUE), args)))
 }
 
 
@@ -1414,34 +1408,41 @@ define <- function(trafo, expr, ..., conditionMatch = NULL) {
 #' @rdname define
 insert <- function(trafo, expr, ..., conditionMatch = NULL) {
   if (missing(trafo)) trafo <- NULL
-  tree <- attr(trafo, "tree")
-  if (is.list(trafo) && is.null(names(trafo)))
-    stop("If trafo is a list, elements must be named.", call. = FALSE)
-  if (is.list(trafo) && !all(names(trafo) %in% rownames(tree)))
-    stop("List names must be a subset of rownames(attr(trafo, 'tree')).", call. = FALSE)
-  mytrafo <- if (is.list(trafo)) trafo else list(trafo)
-
-  dots      <- substitute(alist(...))
+  dots <- substitute(alist(...))
   callerEnv <- parent.frame()
-  out  <- lapply(seq_along(mytrafo), function(i) {
-    .currentTrafo   <- mytrafo[[i]]
-    .currentSymbols <- if (is.null(.currentTrafo)) NULL else getSymbols(.currentTrafo)
-    row <- if (is.list(trafo)) tree[names(mytrafo)[i], , drop = FALSE]
-           else tree[1, , drop = FALSE]
-    if (!is.null(conditionMatch) && !str_detect(rownames(row), conditionMatch))
-      return(.currentTrafo)
-    args <- .evalDots(dots, row, .currentTrafo, .currentSymbols, callerEnv)
-    if (!length(args))
-      return(do.call(repar, list(expr = expr, trafo = .currentTrafo)))
+  .reparBranches(trafo, dots, callerEnv, conditionMatch, function(tr, args) {
     ## Logical dots gate the substitution per condition rather than naming a
-    ## symbol, so they decide and are then dropped.
-    isGate <- vapply(args, is.logical, logical(1))
-    gate   <- unlist(args[isGate], use.names = FALSE)
-    if (length(gate) && any(!gate)) return(.currentTrafo)
-    do.call(repar, c(list(expr = expr, trafo = .currentTrafo), args[!isGate]))
+    ## symbol: any FALSE leaves the branch unchanged.
+    gates <- vapply(args, is.logical, logical(1))
+    if (!all(unlist(args[gates]))) return(tr)
+    do.call(repar, c(list(expr = expr, trafo = tr), args[!gates]))
   })
-  names(out) <- names(mytrafo)
-  if (!is.list(trafo)) out <- out[[1]]
+}
+
+
+# `edit(branch, args)` for each branch of `trafo` (a single trafo is one
+# branch) whose condition matches `conditionMatch`, with the dots evaluated
+# against that condition. The result has the shape of `trafo` and its tree.
+.reparBranches <- function(trafo, dots, callerEnv, conditionMatch, edit) {
+  tree <- attr(trafo, "tree")
+  branched <- is.list(trafo)
+  if (branched && is.null(names(trafo)))
+    stop("If trafo is a list, elements must be named.", call. = FALSE)
+  if (branched && !all(names(trafo) %in% rownames(tree)))
+    stop("List names must be a subset of rownames(attr(trafo, 'tree')).", call. = FALSE)
+  if (!is.null(conditionMatch) && is.null(tree))
+    stop("conditionMatch needs the condition tree of a trafo built by branch().", call. = FALSE)
+
+  branches <- if (branched) trafo else list(trafo)
+  keys <- if (branched) names(trafo) else 1L
+  out <- Map(function(tr, key) {
+    cond <- tree[key, , drop = FALSE]
+    if (!is.null(conditionMatch) && !str_detect(rownames(cond), conditionMatch))
+      return(tr)
+    symbols <- if (!is.null(tr)) getSymbols(tr)
+    edit(tr, .evalDots(dots, cond, tr, symbols, callerEnv))
+  }, branches, keys)
+  if (!branched) out <- out[[1L]]
   attr(out, "tree") <- tree
   out
 }

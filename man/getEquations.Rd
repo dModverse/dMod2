@@ -3,15 +3,12 @@
 \name{getEquations}
 \alias{getEquations}
 \alias{getEquations.odemodel}
-\alias{getEquations.prdfn}
 \alias{getEquations.fn}
 \title{Extract the Equations of an Object}
 \usage{
 getEquations(x, conditions = NULL)
 
 \method{getEquations}{odemodel}(x, conditions = NULL)
-
-\method{getEquations}{prdfn}(x, conditions = NULL)
 
 \method{getEquations}{fn}(x, conditions = NULL)
 }

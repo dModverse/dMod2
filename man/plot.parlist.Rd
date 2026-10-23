@@ -26,6 +26,3 @@ iterations.
 \seealso{
 \code{\link[=parlist]{parlist()}}, \code{\link[=plotValues]{plotValues()}}
 }
-\author{
-Malenka Mader, \email{Malenka.Mader@fdm.uni-freiburg.de}
-}

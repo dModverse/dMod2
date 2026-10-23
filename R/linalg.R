@@ -55,11 +55,10 @@
 #' row echelon form is.
 #'
 #' @param A Numeric matrix.
-#' @param tol Tolerance for pivots. Not used: [rref()] is called with its
-#'   default tolerance.
+#' @param tol Numeric tolerance below which a pivot counts as zero, passed to
+#'   [rref()].
 #' @return A matrix with `ncol(A)` rows and one column per basis vector.
 #'
-#' @author Malenka Mader, \email{Malenka.Mader@@fdm.uni-freiburg.de}
 #' @seealso [rref()]
 #' @examples
 #' A <- rbind(c(1, -1, 0), c(0, 1, -1))
@@ -67,29 +66,15 @@
 #' A %*% nullZ(A)
 #'
 #' @export
-nullZ <- function(A, tol=sqrt(.Machine$double.eps)) {
-  
-  ret <- rref(A) # compute reduced row echelon form of A
-  ret[[1]] -> R # matrix A in rref 
-  ret[[2]] -> pivcol #columns in which a pivot was found
-  
-  n <- ncol(A) # number of columns of A
-  r <- length(pivcol) # rank of reduced row echelon form
-  nopiv <- 1:n
-  nopiv <- nopiv[-pivcol]  # columns in which no pivot was found
-  
-  Z <- mat <- matrix(0, nrow = n, ncol = n-r) # matrix containing the vectors spanning the null space
-  if ( n>r ) {
-    Z[nopiv,] <- diag(1, n-r, n-r)
-    if ( r>0 ) {
-      Z[pivcol,] <- -R[1:r,nopiv]
-    }
-  }
-  return (Z) 
-  
+nullZ <- function(A, tol = sqrt(.Machine$double.eps)) {
+  r <- rref(A, tol)
+  piv <- r$pivots
+  free <- setdiff(seq_len(ncol(A)), piv)
+  Z <- matrix(0, ncol(A), length(free))
+  Z[cbind(free, seq_along(free))] <- 1
+  if (length(piv)) Z[piv, ] <- -r$rref[seq_along(piv), free, drop = FALSE]
+  Z
 }
-
-
 
 
 ## rref ---------------------------------------------
@@ -102,63 +87,39 @@ nullZ <- function(A, tol=sqrt(.Machine$double.eps)) {
 #' @param A Numeric matrix.
 #' @param tol Numeric tolerance below which a pivot counts as zero. Defaults to
 #'   `sqrt(.Machine$double.eps)`.
-#' @param verbose Logical. Not used.
 #'
 #' @return A list with the elements `rref`, the reduced row echelon form of
-#'   `A`, and `pivots`, the indices of the pivot columns as a one-row matrix
-#'   (`NULL` if there is none).
+#'   `A` with entries below `tol` set to zero, and `pivots`, the integer indices
+#'   of the pivot columns.
 #'
-#' @author Malenka Mader, \email{Malenka.Mader@@fdm.uni-freiburg.de}. The
-#'   signature and the argument check follow the function `rref()` by John Fox.
-#' @references John Fox, `rref()`, R-help mailing list, posted by Scott Hyde,
-#'   2007-09-01,
-#'   <https://stat.ethz.ch/pipermail/r-help/2007-September/139923.html>.
 #' @seealso [nullZ()]
 #' @examples
 #' A <- rbind(c(1, 2, 3), c(2, 4, 7), c(1, 2, 4))
 #' rref(A)
 #'
 #' @export
-rref <- function(A, tol=sqrt(.Machine$double.eps), verbose=FALSE){
-  ## Signature and argument check after John Fox
-  if ((!is.matrix(A)) || (!is.numeric(A)))
-    stop("argument must be a numeric matrix")
+rref <- function(A, tol = sqrt(.Machine$double.eps)) {
+  if (!is.numeric(A) || !is.matrix(A))
+    stop("'A' must be a numeric matrix", call. = FALSE)
   m <- nrow(A)
-  n <- ncol(A)
-  
-  i <- 1 # row index
-  j <- 1 # column index
-  pivcol <- c() # vector of columns in which nozero pivots are found
-  while ((i <= m) & (j <= n)){
-    # find pivot in column j
-    which <- which.max(abs(A[i:m,j])) # column in which pivot is
-    k <- i+which-1 #row index, in which pivot is
-    pivot <- A[k, j] # pivot of column j
-    
-    if ( abs(pivot) <= tol ) {
-      A[i:m,j] =matrix(0,m-i+1,1) # column is negligible, zero it out
-      j <- j+1
-    } else {
-      # remember column index
-      pivcol <- cbind(pivcol,j)
-      
-      # swap i-th and k-th column
-      A[cbind(i,k),j:n] = A[cbind(k, i),j:n];
-      
-      # divide pivot row by pivot element.
-      A[i,j:n] = A[i,j:n]/A[i,j];
-      
-      # subtract multiples of pivot row from all other rows.
-      otherRows <- 1:m
-      otherRows <- otherRows[-i]
-      for (u in otherRows) {
-        A[u,j:n] = A[u,j:n] - A[u,j]*A[i,j:n];
-      }
-      i = i + 1;
-      j = j + 1;
+  pivots <- integer(0)
+  i <- 1L
+  for (j in seq_len(ncol(A))) {
+    if (i > m) break
+    k <- i - 1L + which.max(abs(A[i:m, j]))
+    if (abs(A[k, j]) <= tol) {
+      A[i:m, j] <- 0
+      next
     }
+    pivots <- c(pivots, j)
+    A[c(i, k), ] <- A[c(k, i), ]
+    A[i, ] <- A[i, ] / A[i, j]
+    others <- seq_len(m)[-i]
+    A[others, ] <- A[others, ] - outer(A[others, j], A[i, ])
+    i <- i + 1L
   }
-  list(rref = A, pivots = pivcol)
+  A[abs(A) <= tol] <- 0
+  list(rref = A, pivots = pivots)
 }
 
 

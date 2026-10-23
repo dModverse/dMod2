@@ -3,7 +3,6 @@
 \name{reduceReplicates}
 \alias{reduceReplicates}
 \alias{reduceReplicates.data.frame}
-\alias{reduceReplicates.character}
 \title{Reduce Replicates to Mean and Standard Error}
 \usage{
 reduceReplicates(
@@ -21,20 +20,10 @@ reduceReplicates(
   keep = NULL,
   weighted = FALSE
 )
-
-\method{reduceReplicates}{character}(
-  data,
-  select = "condition",
-  datatrans = NULL,
-  keep = NULL,
-  weighted = FALSE
-)
 }
 \arguments{
 \item{data}{A data frame with the columns \code{name} (observable), \code{time},
-\code{value} and \code{condition}, plus any further columns that define conditions.
-Alternatively, the path of a \code{.csv}, \code{.xls} or \code{.xlsx} file with these
-columns; Excel files need the package \pkg{openxlsx}.}
+\code{value} and \code{condition}, plus any further columns that define conditions.}
 
 \item{select}{Names of the columns whose values, together with \code{name},
 \code{time} and \code{condition}, define a condition. Default \code{"condition"}.}
@@ -51,7 +40,7 @@ within a condition; the first value is used. Default \code{NULL}.}
 \value{
 A data frame with the columns
 \describe{
-\item{time}{Measurement time point.}
+\item{time}{Time of the measurement.}
 \item{value}{Mean of the replicates.}
 \item{sigma}{Standard error of the mean, \code{NA} for a single measurement.}
 \item{n}{Number of replicates.}
@@ -78,9 +67,4 @@ reduceReplicates(data)
 }
 \seealso{
 \code{\link[=fitErrorModel]{fitErrorModel()}}
-}
-\author{
-Wolfgang Mader, \email{Wolfgang.Mader@fdm.uni-freiburg.de}
-
-Simon Beyer, \email{simon.beyer@fdm.uni-freiburg.de}
 }

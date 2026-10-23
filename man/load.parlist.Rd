@@ -20,6 +20,3 @@ Reads the per-fit files that \code{\link[=mstrust]{mstrust()}} writes with
 \seealso{
 \code{\link[=mstrust]{mstrust()}}
 }
-\author{
-Wolfgang Mader, \email{Wolfgang.Mader@fdm.uni-freiburg.de}
-}

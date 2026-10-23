@@ -28,8 +28,9 @@ mstrust(
 \item{objfun}{Objective function, see \code{\link[=trust]{trust()}}.}
 
 \item{center}{Named numeric parameter centre, or a parframe whose rows are
-used as starting points; \code{fits} is then the number of rows. \code{\link[=msParframe]{msParframe()}}
-gives reproducible starts.}
+used as starting points; \code{fits} is then the number of rows. The random
+starts, those of retries included, are drawn before the fits are spread
+over \code{cores}, so \code{\link[=set.seed]{set.seed()}} reproduces a run.}
 
 \item{rinit, rmax}{Initial and maximum trust-region radius, see \code{\link[=trust]{trust()}}.
 Default \code{0.1} and \code{10}.}
@@ -58,7 +59,8 @@ working directory.}
 Default \code{FALSE}.}
 
 \item{cautiousMode}{Logical, also write every fit deparsed to an \code{.R} file
-and keep the intermediate files. Default \code{FALSE}.}
+in \verb{interRes/}, which is kept after the run while its \code{.Rda} files are
+removed. Default \code{FALSE}.}
 
 \item{startFromCenter}{Logical. If \code{TRUE}, the first fit starts at
 \code{center} without offset. Default \code{FALSE}.}
@@ -94,7 +96,8 @@ Nothing is written to disk unless \code{output}, \code{cautiousMode} or a
 \verb{<resultPath>/<name>/trial-<k>-<date>/}: the per-fit files in its
 subfolder \verb{interRes/}, which is removed on completion unless
 \code{cautiousMode = TRUE}, the final \code{parameterList.Rda} (with \code{output}) and
-the log \code{mstrust.log}. \code{\link[=load.parlist]{load.parlist()}} reads the fits from \verb{interRes/}.
+the log \code{mstrust.log}. \code{\link[=load.parlist]{load.parlist()}} reads the fits from \verb{interRes/}
+of a run that is still going or was aborted.
 }
 \examples{
 rosenbrock <- function(x, ...) {
@@ -120,7 +123,4 @@ as.parframe(fits)
 }
 \seealso{
 \code{\link[=trust]{trust()}}, \code{\link[=msParframe]{msParframe()}}, \code{\link[=as.parframe]{as.parframe()}}, \code{\link[=load.parlist]{load.parlist()}}
-}
-\author{
-Wolfgang Mader, \email{Wolfgang.Mader@fdm.uni-freiburg.de}
 }

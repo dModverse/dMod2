@@ -39,6 +39,3 @@ plotPathsMulti(profs, c("a", "b"), nPars = 2)
 \seealso{
 \code{\link[=plotPaths]{plotPaths()}}, \code{\link[=plotProfilesAndPaths]{plotProfilesAndPaths()}}
 }
-\author{
-Svenja Kemmer, \email{svenja.kemmer@fdm.uni-freiburg.de}
-}

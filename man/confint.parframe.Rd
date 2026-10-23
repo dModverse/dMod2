@@ -26,7 +26,8 @@ all profiled parameters.}
 \item{...}{Not used.}
 
 \item{val.column}{Column of the profile the threshold applies to, for
-example \code{"value"} or \code{"data"}. Default \code{"data"}.}
+example \code{"value"} or \code{"data"}. Default \code{"data"}, or \code{"value"} for a profile
+without a \code{data} column.}
 
 \item{method}{Calibration of the threshold, \code{"chisq"} (default) or \code{"F"},
 see \code{\link[=profileThreshold]{profileThreshold()}}.}

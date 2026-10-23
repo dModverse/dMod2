@@ -13,8 +13,8 @@
 \code{list(zero_states, eqnlist)} with the reduced system.
 }
 \description{
-Iterated three-layer test on the stoichiometric matrix of an \code{eqnlist}
-(matches AlyssaPetit v1.2):
+Iterated three-layer test on the stoichiometric matrix of an \code{eqnlist}, the
+one the steady-state solver of \code{\link[=steadyStates]{steadyStates()}} applies:
 \enumerate{
 \item \emph{Neg-only column}: only outflux, must be zero at SS.
 \item \emph{Pos-only column with single-state feeder}: each feeding flux

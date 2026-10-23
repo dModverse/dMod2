@@ -11,7 +11,7 @@
 #     expanded to prove it,
 #   - differences cancel exactly between balances (moiety sums, recycling
 #     loops, a ligand that leaves only through its receptors), because
-#     identical atoms carry one coefficient,
+#     identical atoms share one coefficient,
 #   - solutions stay lazy and small: they reference each other, the LP keeps
 #     the references acyclic, and one resolution happens at output time.
 # Where the greedy choice of unknowns runs into a dead end, the states whose
@@ -35,6 +35,367 @@ import re as _re_pe
 _PE_IDENT = _re_pe.compile(r'\b([A-Za-z_][A-Za-z0-9_]*)\b(?!\s*\()')
 
 
+# Sink clusters, sign classes, final simplification, topological order and the
+# modular steady-state test.
+
+# testSteady='fast' checks f_i(x_ss) == 0 by Schwartz-Zippel: evaluate each
+# residual at random points in GF(p); a non-zero rational function vanishes
+# there with probability <= deg/p, so a few points give near-certainty cheaply.
+# Primes are == 3 mod 4 so a field sqrt is d**((p+1)//4) for a quadratic residue.
+_MODP_PRIMES=(2147483647, 1000000007)
+
+
+class _UnsupportedModp(Exception):
+    pass
+
+
+class _ResampleModp(Exception):
+    pass
+
+
+def ParseVolumes(volumes):
+    # State -> volume expression, as written by steadyStates() (1 for amounts).
+    return {parse_expr(str(k)): parse_expr(str(v)) for k, v in dict(volumes).items()}
+
+
+def _amount_key(flux):
+    # Floats to 12 significant digits: a numeric volume ratio times its
+    # denominator compares equal to its numerator.
+    return flux.xreplace({f: sympy.Rational(format(float(f), '.12g'))
+                          for f in flux.atoms(sympy.Float)})
+
+
+def _amount_columns(SM_np, F, X, volumes):
+    # Columns summed per amount flux, the flux times the volume of the states
+    # it touches. steadyStates() writes a reaction across compartments as one
+    # row per volume ratio; these rows share one amount flux and add up to the
+    # reaction's stoichiometry.
+    groups={}
+    for k in range(SM_np.shape[1]):
+        touched=numpy.nonzero(SM_np[:, k])[0]
+        if len(touched)==0:
+            continue
+        key=_amount_key(F[k]*volumes.get(X[int(touched[0])], 1))
+        groups.setdefault(key, []).append(k)
+    if not groups:
+        return numpy.zeros((SM_np.shape[0], 0))
+    return numpy.column_stack([SM_np[:, ks].sum(axis=1) for ks in groups.values()])
+
+
+def FindSinkCluster(SM, eps=1e-8, M=1e4, F=None, X=None, volumes=None):
+    # Structural mass-balance test: find c >= 0, c != 0 such that
+    # c^T * SM <= 0 componentwise with at least one strictly negative entry.
+    # Support of such c is a subset of states whose total mass monotonically
+    # leaks out of the system -> all of them must be zero in steady state.
+    # Generalises checkNegRows (which only catches single-row sinks).
+    # The support may add a conserved moiety to a leaking cluster. Only its
+    # states that reach a leaking column along columns of the support are 0:
+    # educts of the leaking columns, then the educts of every column producing
+    # a state already found (as .zeroStatesFromSmatrix() in R).
+    # Given the fluxes F and the states X with their volumes, c weighs amounts
+    # and the columns of one amount flux are summed first.
+    n_states=SM.rows
+    if n_states==0 or SM.cols==0:
+        return []
+    SM_np=numpy.array(SM.tolist(), dtype=float)
+    if F is not None:
+        SM_np=_amount_columns(SM_np, F, X, volumes or {})
+    n_flux=SM_np.shape[1]
+    if n_flux==0:
+        return []
+    A_ub=SM_np.T
+    b_ub=numpy.zeros(n_flux)
+    c_obj=SM_np.sum(axis=1)
+    for i in range(n_states):
+        bounds=[(0.0, M)]*n_states
+        bounds[i]=(1.0, 1.0)
+        res=linprog(c=c_obj, A_ub=A_ub, b_ub=b_ub, bounds=bounds, method='highs')
+        if not (res.success and res.fun is not None and res.fun<-eps):
+            continue
+        sup=res.x>eps
+        leak=SM_np.T.dot(res.x)<-eps
+        out=sup & (SM_np[:, leak]<0).any(axis=1)
+        while True:
+            feed=(SM_np[out, :]>0).any(axis=0)
+            add=sup & ~out & (SM_np[:, feed]<0).any(axis=1)
+            if not add.any():
+                break
+            out|=add
+        if out.any():
+            return [int(j) for j in numpy.nonzero(out)[0]]
+    return []
+
+
+def _mono_sign_definite(mono, positive_syms):
+    # Monomial sign is set by its coefficient only if every symbolic factor is
+    # known non-negative: declared positive, or raised to an even power.
+    for base, exp in mono.as_powers_dict().items():
+        if not base.free_symbols or base in positive_syms:
+            continue
+        if getattr(exp, 'is_even', False):
+            continue
+        return False
+    return True
+
+
+def _normalizeSign(expr):
+    # factor() normalises the sign of each irreducible factor, which can park a
+    # -1 in front of a quotient whose value is positive.
+    numer, denom=sympy.fraction(expr)
+    if _sign_class(denom)=='-':
+        return (-numer)/(-denom)
+    return expr
+
+
+def _sign_class(expr, positive_syms=None):
+    # Sign of a polynomial under positive_syms (None = all symbols positive):
+    # '+'/'-' if all monomials share a provable sign, '0' if zero, else '+/-'.
+    expr=sympy.expand(expr)
+    if expr==0:
+        return '0'
+    has_pos=False
+    has_neg=False
+    for t in sympy.Add.make_args(expr):
+        coeff, mono=t.as_coeff_Mul()
+        if positive_syms is not None and not _mono_sign_definite(mono, positive_syms):
+            return '+/-'
+        if coeff.is_negative:
+            has_neg=True
+        elif coeff.is_positive:
+            has_pos=True
+        else:
+            return '+/-'
+    if has_pos and has_neg:
+        return '+/-'
+    if has_pos:
+        return '+'
+    if has_neg:
+        return '-'
+    return '0'
+
+
+def _simplify_with_sqrt(expr):
+    # Decompose a rational expression with at most one sqrt subterm into
+    # (P + Q*sqrt(D))/R, factor each piece independently, and recombine.
+    # SymPy's generic simplify/factor treats sqrt(.) as an opaque atom and
+    # therefore can't reduce expressions of this shape -- it just leaves the
+    # numerator as a giant sum mixing rational and irrational monomials.
+    # The decomposition below catches the structure the quadratic solver
+    # actually produces and reliably compacts it.
+    expr = cancel(expr)
+    sqrts = [s for s in expr.atoms(sympy.Pow) if s.exp == sympy.S.Half]
+    if not sqrts:
+        n, d = fraction(expr)
+        return factor(n)/factor(d)
+    if len(sqrts) != 1:
+        return expr
+    sq = sqrts[0]
+    try:
+        poly = sympy.Poly(expr, sq)
+    except sympy.PolynomialError:
+        return expr
+    if poly.degree() > 1:
+        return expr
+    coeffs = poly.all_coeffs()
+    if len(coeffs) == 1:
+        n, d = fraction(coeffs[0])
+        return factor(n)/factor(d)
+    Q_part, P_part = coeffs[0], coeffs[1]
+    P_n, P_d = fraction(cancel(P_part))
+    Q_n, Q_d = fraction(cancel(Q_part))
+    R = sympy.lcm(P_d, Q_d)
+    P_scaled = cancel(P_n * R / P_d)
+    Q_scaled = cancel(Q_n * R / Q_d)
+    D_factored = factor(sq.args[0])
+    sq_factored = sympy.sqrt(D_factored)
+    return (factor(P_scaled) + factor(Q_scaled)*sq_factored) / factor(R)
+
+
+def _finalSimplify(rs, full):
+    """One right-hand side through the final-simplification pipeline.
+
+    `full` selects cancel + posify + simplify(ratio=oo) + factor(num)/factor(den);
+    otherwise a single sympy.simplify. sqrt takes the (P + Q*sqrt(D))/R route
+    either way.
+    """
+    e_raw=parse_expr(rs)
+    if(e_raw.has(sympy.sqrt)):
+        e_pos, reps = posify(e_raw)
+        e_pos = _simplify_with_sqrt(e_pos)
+        return str(e_pos.subs(reps))
+    if(full):
+        e_pos, reps=posify(cancel(e_raw))
+        e_pos=_simplify(e_pos, ratio=oo, rational=True)
+        n, d=fraction(e_pos)
+        return str(_normalizeSign((factor(n)/factor(d)).subs(reps)))
+    return str(_normalizeSign(_simplify(e_raw)))
+
+
+def _topo_sort_eqs(eqs):
+    # Order 'lhs = rhs' entries so every definition precedes its uses -- the
+    # textual resolution substitutes entry i into entries j > i, so a
+    # reference must point backwards. Free-parameter entries (lhs == rhs)
+    # define nothing. Stable: among ready entries the earliest wins. A symbol
+    # defined twice, in terms of itself or in a cycle is an error.
+    n=len(eqs)
+    parts=[eq.split(' = ', 1) for eq in eqs]
+    defs=[ls for ls, rs in parts if ls!=rs]
+    lhs_all=[ls for ls, _ in parts]
+    twice=sorted({ls for ls in defs if lhs_all.count(ls) > 1})
+    if twice:
+        raise RuntimeError('steady state defines '+', '.join(twice)+' more than once; '
+                           'the solution is inconsistent. Please report this bug!')
+    patterns=[re.compile(r'\b'+re.escape(ls)+r'\b') if ls!=rs else None
+              for ls, rs in parts]
+    selfref=[ls for i, (ls, rs) in enumerate(parts)
+             if patterns[i] is not None and patterns[i].search(rs)]
+    if selfref:
+        raise RuntimeError('steady state defines '+', '.join(selfref)+' in terms of '
+                           'itself. Please report this bug!')
+    deps=[set() for _ in range(n)]
+    for i in range(n):
+        for j in range(n):
+            if i==j or patterns[j] is None:
+                continue
+            if patterns[j].search(parts[i][1]):
+                deps[i].add(j)
+    order=[]
+    emitted=set()
+    while len(order) < n:
+        pick=next((i for i in range(n)
+                   if i not in emitted and deps[i] <= emitted), None)
+        if pick is None:
+            left=sorted(parts[i][0] for i in range(n) if i not in emitted)
+            raise RuntimeError('steady-state equations reference each other cyclically: '
+                               +', '.join(left)+'. Please report this bug!')
+        emitted.add(pick)
+        order.append(pick)
+    return [eqs[i] for i in order]
+
+
+def _collect_exponent_syms(expr):
+    # Symbols that appear inside a non-numeric exponent (e.g. Hill coefficients
+    # in C3**nhill). These are assigned small integers so the exponent stays a
+    # concrete integer during modular evaluation.
+    syms=set()
+    for pw in expr.atoms(sympy.Pow):
+        if not pw.exp.is_number:
+            syms|=pw.exp.free_symbols
+    return syms
+
+
+def _eval_exponent(e, env_int):
+    if e.is_number:
+        return int(e)
+    return int(e.subs(env_int))
+
+
+def _eval_modp(expr, env, p):
+    # Evaluate expr at the point env (symbol -> int) in GF(p). Raises
+    # _ResampleModp on a zero denominator / non-residue sqrt, _UnsupportedModp
+    # on a node we do not model.
+    if expr.is_Integer:
+        return int(expr) % p
+    if expr.is_Rational:
+        return (int(expr.p) * pow(int(expr.q), -1, p)) % p
+    if expr.is_Symbol:
+        if expr not in env:
+            # Used before it is defined: the equations are not resolvable in
+            # the given order (a self-referential entry).
+            raise _UnsupportedModp(str(expr)+' is used before it is defined')
+        return env[expr] % p
+    if expr.is_Add:
+        return sum(_eval_modp(a, env, p) for a in expr.args) % p
+    if expr.is_Mul:
+        r=1
+        for a in expr.args:
+            r=r*_eval_modp(a, env, p) % p
+        return r
+    if expr.is_Pow:
+        base, e = expr.args
+        if e.is_Rational and e.q == 2:
+            d=_eval_modp(base, env, p)
+            if d == 0:
+                if int(e.p) > 0:
+                    return 0
+                raise _ResampleModp()
+            if pow(d, (p-1)//2, p) != 1:
+                raise _ResampleModp()
+            s=pow(d, (p+1)//4, p)
+            return pow(s, int(e.p) % (p-1), p)
+        n=_eval_exponent(e, env)
+        bv=_eval_modp(base, env, p)
+        if n == 0:
+            return 1
+        if bv == 0:
+            if n > 0:
+                return 0
+            raise _ResampleModp()
+        return pow(bv, n % (p-1), p)
+    if expr.is_number:
+        v=sympy.nsimplify(expr)
+        if v.is_Rational:
+            return (int(v.p) * pow(int(v.q), -1, p)) % p
+    raise _UnsupportedModp('unsupported node '+type(expr).__name__+': '+str(expr)[:200])
+
+
+def _steady_test_fast(ODE, eqOut, zeroStates, trials=3, primes=_MODP_PRIMES):
+    # Schwartz-Zippel steady-state check WITHOUT symbolic substitution: the
+    # solved symbols are evaluated in dependency order (eqOut is
+    # topologically sorted, definitions first) into the same environment,
+    # then every residual is evaluated at that point. Returns the sorted
+    # list of indices of ODEs with a provably nonzero residual. Raises
+    # _UnsupportedModp if a node is unsupported or no valid sample point
+    # was found.
+    pairs=[]
+    for eq in eqOut:
+        ls, rs=eq.split(' = ', 1)
+        if ls==rs:
+            continue
+        pairs.append((parse_expr(ls), parse_expr(rs)))
+    odes=[sympy.sympify(o) for o in ODE]
+    all_exprs=[r for _, r in pairs]+odes
+    exp_syms=set()
+    for e in all_exprs:
+        exp_syms|=_collect_exponent_syms(e)
+    defined={l for l, _ in pairs}
+    zero_syms=set(zeroStates)
+    base=set()
+    for e in all_exprs:
+        base|=e.free_symbols
+    base-=defined
+    bad=set()
+    for p in primes:
+        good=0
+        attempts=0
+        while good < trials and attempts < trials*30:
+            attempts+=1
+            env={}
+            for s in base:
+                name=str(s)
+                if s in zero_syms:
+                    env[s]=0
+                elif name.startswith('branch_'):
+                    env[s]=random.choice([1, p-1])
+                elif s in exp_syms:
+                    env[s]=random.randint(2, 5)
+                else:
+                    env[s]=random.randint(1, p-1)
+            try:
+                for l, r in pairs:
+                    env[l]=_eval_modp(r, env, p)
+                vals=[_eval_modp(o, env, p) for o in odes]
+            except _ResampleModp:
+                continue
+            good+=1
+            for i, v in enumerate(vals):
+                if v % p != 0:
+                    bad.add(i)
+        if good == 0:
+            raise _UnsupportedModp('no valid sample point in GF('+str(p)+')')
+    return sorted(bad)
+
+
 def parse_expr(s, local_dict=None, **kwargs):
     s = str(s)
     ld = {nm: sympy.Symbol(nm) for nm in set(_PE_IDENT.findall(s))}
@@ -44,7 +405,7 @@ def parse_expr(s, local_dict=None, **kwargs):
 from scipy.optimize import linprog
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import AlyssaPetit_ver1_3 as _v13
+from sympy import simplify as _simplify, cancel, factor, fraction, oo, posify
 
 # Output: 0 = result only, 1 = progress and result (default), 2 = full trace.
 _VERBOSE=1
@@ -108,7 +469,7 @@ def _zero_states(states, fluxes, stoich, volumes):
             break
         SM=sympy.Matrix(len(states), len(fluxes),
                         lambda i, j: stoich[j][i])
-        cluster=_v13.FindSinkCluster(SM, F=fluxes, X=states, volumes=volumes)
+        cluster=FindSinkCluster(SM, F=fluxes, X=states, volumes=volumes)
         if not cluster:
             break
         zs=[states[i] for i in cluster]
@@ -173,7 +534,7 @@ def _candidates(states, atoms, neglect):
         if s in held:
             continue
         lin=[a for a in idx if _linear_factor(atoms[a], s)]
-        # a rate constant whose fluxes all carry a neglected symbol would be
+        # a rate constant whose fluxes all contain a neglected symbol would be
         # solved as a ratio over it, and that symbol may be 0
         if lin and all(atoms[a].free_symbols & held for a in lin) and s not in states:
             continue
@@ -371,7 +732,7 @@ def _coords(c, basis):
 def _solve_unknown(u, Au, basis, Rnp, forced, span):
     """Combination w of the balances that isolates u, or None.
 
-    c = w^T R: atoms of u (Au) carry c <= 0 summing to -1, every other atom
+    c = w^T R: atoms of u (Au) have c <= 0 summing to -1, every other atom
     c >= 0, atoms in `forced` c = 0 (they would close a reference cycle).
     Minimises the positive side, which keeps the equation sparse. The float
     optimum is rationalised and re-checked exactly; it must be independent of
@@ -462,7 +823,7 @@ def _reaches(start, target, deps):
 
 def _group_unknown(order, cands, nonlin, atoms, atom_syms, basis, Rnp, span,
                    sol, deps, B_rows, row_of, state_set):
-    # One side of an unsolved state's balance, every atom of it carrying its
+    # One side of an unsolved state's balance, every atom of it with its
     # own unsolved rate constant. The fluxes of that side share their sum by
     # new free flux ratios, flux_g = r_g * flux_g0 (v1.3's r_*), and the sum
     # fixes k_g0.
@@ -631,21 +992,9 @@ def _greedy(order, cands, nonlin, atoms, basis, Rnp, r, check_time, B_rows, row_
 # Entry point, same interface as v1.3
 # –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
 
-def Alyssa(filename,
-           injections=[],
-           givenCQs=[],
-           neglect=[],
-           sparsifyLevel=0,
-           outputFormat='R',
-           testSteady='fast',
-           walltime=0,
-           simplify=True,
-           solveQuadratic=False,
-           positive=True,
-           branches=False,
-           priority=[],
-           verbose=True,
-           volumes={}):
+def Alyssa(model_csv, injections=(), givenCQs=(), neglect=(), testSteady='fast',
+           walltime=0, simplify=True, solveQuadratic=False, priority=(),
+           verbose=True, volumes=None):
     global _VERBOSE
     _VERBOSE=2 if verbose=='full' else int(bool(verbose))
     del _NOTES[:]
@@ -653,20 +1002,17 @@ def Alyssa(filename,
     _STUCK[0]=None
     t0=time.time()
     check_time=lambda: walltime>0 and time.time()-t0>walltime
-    filename=str(filename)
+    filename=str(model_csv)
+    volumes=dict(volumes or {})
     injections=[str(s) for s in injections]
     neglect={str(s) for s in neglect}
     priority=[str(s) for s in priority]
-    if positive is not True:
-        raise ValueError('version 1.4 requires positive = TRUE')
-    if outputFormat!='R':
-        raise ValueError('version 1.4 writes outputFormat = "R" only')
 
     states, fluxes, stoich=_read_model(filename, injections)
     ODE_states=list(states)
     ODE=[sympy.Add(*[col[i]*f for f, col in zip(fluxes, stoich)]) for i in range(len(states))]
     states, fluxes, stoich, zero=_zero_states(states, fluxes, stoich,
-                                              _v13.ParseVolumes(volumes))
+                                              ParseVolumes(volumes))
     atoms, B=_atoms(states, fluxes, stoich)
     basis=_row_basis(B, len(atoms))
     r=len(basis)
@@ -820,7 +1166,7 @@ def Alyssa(filename,
     solved_names={str(u) for u, _ in solution}
     eqOut=[str(u)+' = '+str(f) for u, f in solution]
     eqOut+=[str(s)+' = '+str(s) for s in states if str(s) not in solved_names]
-    eqOut=_v13._topo_sort_eqs(eqOut)
+    eqOut=_topo_sort_eqs(eqOut)
 
     if simplify:
         full=isinstance(simplify, str) and simplify.lower()=='full'
@@ -834,12 +1180,12 @@ def Alyssa(filename,
                     _note('walltime exceeded while simplifying, the rest is left as it is')
                     simplify=False
                 else:
-                    rs=_v13._finalSimplify(rs, full)
+                    rs=_finalSimplify(rs, full)
             out.append(ls+' = '+rs)
         eqOut=out
 
     if testSteady in ('fast', 'modp', 'exact', 'T'):
-        bad=_v13._steady_test_fast([str(o) for o in ODE], eqOut, zero)
+        bad=_steady_test_fast([str(o) for o in ODE], eqOut, zero)
         if bad:
             _note('not steady: '+', '.join('d'+str(ODE_states[i])+'/dt' for i in bad))
         test_status='FAILED' if bad else 'passed (mod p)'
@@ -848,8 +1194,8 @@ def Alyssa(filename,
 
     # resolve: a dMod trafo substitutes all entries at once
     substituted=set()
-    for i in range(len(eqOut)):
-        ls, rs=eqOut[i].split(' = ', 1)
+    for i, eq in enumerate(eqOut):
+        ls, rs=eq.split(' = ', 1)
         if ls==rs:
             continue
         pat=re.compile(r'\b'+re.escape(ls)+r'\b')
@@ -870,7 +1216,7 @@ def Alyssa(filename,
     ret=[s+'=0' for s in zero_names]+[eq.replace(' = ', '=', 1) for eq in eqOut]
 
     if _VERBOSE>=1:
-        print('I obtained the following equations:\n', flush=True)
+        print('Steady state:\n', flush=True)
         for s_ in zero_names:
             print('\t'+s_+' = 0\n', flush=True)
         for eq in eqOut:

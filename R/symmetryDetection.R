@@ -32,6 +32,10 @@
 #'   directions on the fewest coordinates; a character vector ranks the coordinates
 #'   to fix (`*` as wildcard). The gauge is returned as `$gauge`.
 #' @param forcings Character vector of input states, 0 at the start and at rest.
+#' @param unknownInputs Character vector of unknown functions of time of no assumed
+#'   form: symbols in `f` and `g` without an equation. A direction may change them along with the
+#'   parameters; an exact one lists that change as `inputChange`. A character cell of
+#'   `conditions` renames an unknown input in that condition.
 #' @param events An [eventlist] with event times as numbers or expressions in the
 #'   parameters, in chronological order. Root events are not supported. An event
 #'   value named like a column of `conditions` is read from it.
@@ -112,9 +116,9 @@
 #' @details The analysis starts at the earliest event; later events split the time
 #'   line into segments. Directions are reported in the original coordinates.
 #'
-#'   Every environment variable `SYMIDENT_<NAME>` and every option
-#'   `dMod.sym.<name>` set in R is passed to symident for the call, the option
-#'   name converted to snake case. The environment variables a user may need
+#'   Every environment variable `SYMIDENT_<NAME>` set in R, also with
+#'   [Sys.setenv()] during the session, is passed to symident for the call.
+#'   The environment variables a user may need
 #'   are `SYMIDENT_MSOLVE`, the path of the msolve executable (unset by
 #'   default, msolve is then searched in the symident cache and on the
 #'   `PATH`), and `SYMIDENT_CACHE`, the directory of that cache (by default
@@ -132,8 +136,8 @@
 #' @export
 symmetryDetection <- function(f, g, trafo = NULL, parameters = NULL,
                               fixed = NULL, gaugePreference = FALSE, forcings = NULL,
-                              events = NULL, conditions = NULL, regimes = NULL,
-                              equilibrate = FALSE, reduceCQ = FALSE, freeInitial = NULL,
+                              unknownInputs = NULL, events = NULL, conditions = NULL,
+                              regimes = NULL, equilibrate = FALSE, reduceCQ = FALSE, freeInitial = NULL,
                               reconstruct = FALSE,
                               positive = TRUE, verify = TRUE, cores = 1,
                               control = reconstControl(), scalingsOnly = FALSE,
@@ -147,7 +151,7 @@ symmetryDetection <- function(f, g, trafo = NULL, parameters = NULL,
          "(eqnvec, named character vector or a list of those).", call. = FALSE)
   spec <- .symSpec(f, g, trafo, conditions, events)
   syms <- list(parameters = parameters, fixed = fixed, forcings = forcings,
-               free_initial = freeInitial)
+               unknown_inputs = unknownInputs, free_initial = freeInitial)
   for (k in names(syms))
     if (!is.null(syms[[k]])) spec[[k]] <- as.list(as.character(syms[[k]]))
   if (!is.null(regimes)) spec$regimes <- .symRegimes(regimes)
@@ -265,7 +269,7 @@ reconstControl <- function(relevanceCap = 6L, relevanceCapDir = 24L, relevanceCa
 
 # ---- the interface to the Python package symident --------------------------------
 
-.symidentMin <- "0.11.0"
+.symidentMin <- "0.12.0"
 .symidentReq <- paste0("symident>=", .symidentMin)
 
 # whether symident is installed in version .symidentMin or later
@@ -310,7 +314,7 @@ reconstControl <- function(relevanceCap = 6L, relevanceCapDir = 24L, relevanceCa
 .symCamelFields <- function(x, data = c("generator", "complete_generator", "weights",
                                         "display", "factor", "pins", "new_parameters",
                                         "solved_domain", "trafo", "totals",
-                                        "state_components")) {
+                                        "state_components", "input_change", "jets")) {
   if (!is.list(x)) return(x)
   nm <- names(x)
   for (i in seq_along(x))
@@ -329,20 +333,15 @@ reconstControl <- function(relevanceCap = 6L, relevanceCapDir = 24L, relevanceCa
 
 # one call into symident: the arguments as JSON in, the result as JSON out, with its
 # warnings raised and the JSON kept as attribute "json". The SYMIDENT_* environment
-# and the dMod.sym.* options travel with it, since Python reads its environment once
+# travels with it, since Python reads its environment once
 .symCall <- function(fun, ...) {
   si <- .symident()
   env <- Sys.getenv()
   env <- as.list(env[grepl("^SYMIDENT_", names(env)) & nzchar(env)])
-  opt <- options()
-  opt <- opt[grepl("^dMod\\.sym\\.", names(opt))]
-  names(opt) <- .symSnake(sub("^dMod\\.sym\\.", "", names(opt)))
   args <- lapply(list(...), function(a) if (is.character(a) && length(a) == 1L) a
                  else as.character(jsonlite::toJSON(a, auto_unbox = TRUE, null = "null",
                                                     digits = NA, force = TRUE)))
-  args <- c(args, list(
-    env = as.character(jsonlite::toJSON(env, auto_unbox = TRUE)),
-    options = as.character(jsonlite::toJSON(opt, auto_unbox = TRUE, null = "null"))))
+  args <- c(args, list(env = as.character(jsonlite::toJSON(env, auto_unbox = TRUE))))
   out <- tryCatch(do.call(si[[fun]], args),
                   symident.sym.msolve.MsolveMissingError = function(e) {
                     if (!.offerMsolve())
@@ -369,9 +368,9 @@ reconstControl <- function(relevanceCap = 6L, relevanceCapDir = 24L, relevanceCa
     if (a %in% c("n", "no")) return(FALSE)
     if (a %in% c("y", "yes")) break
   }
-  path <- if (.Platform$OS.type == "windows") .buildMsolveRtools(inst)
-          else inst$install_msolve(ask = FALSE)
-  message("msolve installed in ", path)
+  # install_msolve() reports the path itself
+  if (.Platform$OS.type == "windows") message("msolve installed in ", .buildMsolveRtools(inst))
+  else inst$install_msolve(ask = FALSE)
   TRUE
 }
 
@@ -497,6 +496,7 @@ reconstControl <- function(relevanceCap = 6L, relevanceCapDir = 24L, relevanceCa
     d$generator <- vec(d$generator)
     d$completeGenerator <- vec(d$completeGenerator)
     d$stateComponents <- vec(d$stateComponents)
+    d$inputChange <- vec(d$inputChange)
     d$support <- chr(d$support)
     if (!is.null(d$display)) d$display <- lapply(d$display, as.character)
     structure(d, class = "symmetrygenerator")

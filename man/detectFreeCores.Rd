@@ -7,11 +7,13 @@
 detectFreeCores(machine = NULL)
 }
 \arguments{
-\item{machine}{Character vector of SSH hosts, e.g. \code{"user@host"}. \code{NULL}
-(default) for the local machine.}
+\item{machine}{Character vector of machines: \code{"localhost"} is the local machine,
+any other entry an \code{ssh} destination such as \code{"host"} or \code{"user@host"}.
+\code{NULL} (default) for the local machine.}
 }
 \value{
-Numeric vector of free cores, one per machine, with attributes
+Numeric vector of free cores, one per machine and named by it, with
+attributes
 \code{"ncores"} (number of cores) and \code{"used"} (load average).
 }
 \description{

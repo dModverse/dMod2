@@ -83,7 +83,7 @@
   myfit <- trust(myfn, pini + rnorm(length(pini), 0, .1), rinit=1, rmax=10, iterlim=500)
 # Evaluate model at best-fitting parameter values and plot
   prediction <- x(times, p(myfit$argument))
-  plotCombined(list(states=prediction, input=long2wide(mydataReceptor)), list(states=mydata, input=mydataReceptor))
+  plotCombined(list(states=prediction, input=as.matrix(data.table::dcast(data.table::as.data.table(mydataReceptor), time ~ name, value.var = "value"))), list(states=mydata, input=mydataReceptor))
   
 ## Multiple fits ------------------------------------------
 

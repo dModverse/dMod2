@@ -46,7 +46,7 @@ test_that("compile() links many conditions through a chunked archive", {
 
   withr::local_dir(tempdir())
   ## Force the archive route without generating a thousand sources.
-  withr::local_options(dMod.compile.cmdlimit = 1L)
+  withr::local_options(dMod2.compile.cmdlimit = 1L)
 
   conditions <- sprintf("chk%02d", 1:4)
   p <- Reduce("+", lapply(conditions, function(cn)

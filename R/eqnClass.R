@@ -54,15 +54,13 @@ is.eqnlist <- function(x) {
                 "compartments", "compartmentOf", "reactionCompartment")
 
   # A reaction-less list is valid and may already have a compartment layout.
-  if (is.null(x$smatrix))
-    return(length(x$states) == 0 &&
-           length(x$rates) == 0 &&
-           is.null(x$volumes) &&
-           length(x$description) == 0 &&
-           is.null(x$reactionCompartment) &&
-           ((is.null(x$compartments) && is.null(x$compartmentOf)) ||
-            (!is.null(x$compartments) && !is.null(x$compartmentOf) &&
-             all(x$compartmentOf %in% names(x$compartments)))))
+  if (is.null(x[["smatrix"]])) {
+    empty <- !length(x$states) && !length(x$rates) && !length(x$description) &&
+      is.null(x$volumes) && is.null(x$reactionCompartment)
+    hasComp <- !is.null(x$compartments)
+    if (hasComp != !is.null(x$compartmentOf)) return(FALSE)
+    return(empty && (!hasComp || all(x$compartmentOf %in% names(x$compartments))))
+  }
 
   refs <- !is.null(x$compartments) && !is.null(x$compartmentOf) &&
           all(x$states %in% names(x$compartmentOf)) &&
@@ -84,7 +82,7 @@ is.eqnlist <- function(x) {
   inherits(x, "eqnlist") &&
     all(required %in% names(x)) &&
     is.matrix(x$smatrix) &&
-    all(names(x$smatrix) == names(x$states)) &&
+    identical(as.character(colnames(x$smatrix)), as.character(x$states)) &&
     nrow(x$smatrix) == length(x$rates) &&
     ncol(x$smatrix) == length(x$states) &&
     refs && volumes && reactions && amounts
@@ -95,58 +93,59 @@ is.eqnlist <- function(x) {
 
 #' Determine Conserved Quantities from the Stoichiometric Matrix
 #'
-#' @param S Stoichiometric matrix
+#' Each vector of the null space basis of `S` ([nullZ()]) gives one linear
+#' combination of the states that the reactions leave unchanged.
+#'
+#' @param S numeric matrix, one row per reaction and one named column per
+#'   state. `NA` entries count as 0.
 #' @param weight One of `"none"` (default) or `"volume"`. When `"volume"`, the
 #'   columns of `S` are multiplied by their compartment volume before the kernel
 #'   is computed, so the returned quantities are conserved in *amount* rather
 #'   than concentration. Requires `volumes` to be supplied as numeric.
 #' @param volumes Optional named numeric vector of volume values keyed by state,
 #'   aligned with `colnames(S)`. Only consulted when `weight = "volume"`.
-#' @return Data frame with conserved quantities and an attribute with the
-#'   number of conserved quantities.
-#' @author Malenka Mader, \email{Malenka.Mader@@fdm.uni-freiburg.de}
+#' @return `NULL` if nothing is conserved, otherwise a data frame with one
+#'   character column of expressions such as `"1*A+1*pA"`, one row per
+#'   conserved quantity, and their number in the attribute `n`.
 #'
 #' @example inst/examples/equations.R
 #' @export
 conservedQuantities <- function(S, weight = c("none", "volume"), volumes = NULL) {
   weight <- match.arg(weight)
-  # Get kernel of S
   S[is.na(S)] <- 0
-  if (weight == "volume") {
-    if (is.null(volumes))
-      stop("`weight = \"volume\"` requires a named numeric `volumes` argument.")
-    if (is.null(colnames(S)))
-      stop("`S` must have column names when `weight = \"volume\"`.")
-    missing_vol <- setdiff(colnames(S), names(volumes))
-    if (length(missing_vol) > 0L)
-      stop("`volumes` missing entries for: ", paste(missing_vol, collapse = ", "))
-    v_num <- suppressWarnings(as.numeric(volumes[colnames(S)]))
-    if (anyNA(v_num))
-      stop("`weight = \"volume\"` requires all volumes to be numeric; got symbolic expression(s).")
-    S <- sweep(S, 2, v_num, "*")
-  }
-  v <- nullZ(S)
-  n_cq <-  ncol(v)
-  
-  # Iterate over conserved quantities, removes 0s, etc.
-  if (n_cq > 0) {
-    if (is.null(colnames(S))) stop("Columns of stoichiometric matrix not named.") else variables <- colnames(S)
-    cq <- matrix(nrow = ncol(v), ncol = 1)
-    for (iCol in 1:ncol(v)) {
-      is.zero <- v[, iCol] == 0
-      # gsub, not sub: a kernel vector may have more than one negative weight.
-      cq[iCol, 1] <- gsub("+-", "-", paste0(v[!is.zero, iCol], "*", variables[!is.zero], collapse = "+"), fixed = TRUE)
-    }
-    
-    colnames(cq) <- paste0("Conserved quantities: ", n_cq)
-    cq <- as.data.frame(cq)
-    attr(x = cq, which = "n") <- n_cq
-    
-  } else {
-    cq <- c()
-  }
-  
-  return(cq)
+  if (weight == "volume") S <- .volumeWeighted(S, volumes)
+
+  basis <- nullZ(S)
+  n <- ncol(basis)
+  if (n == 0L) return(NULL)
+  states <- colnames(S)
+  if (is.null(states)) stop("Columns of stoichiometric matrix not named.")
+
+  expr <- vapply(seq_len(n), function(k) {
+    w <- basis[, k]
+    used <- w != 0
+    paste(w[used], states[used], sep = "*", collapse = "+")
+  }, character(1))
+  # gsub, not sub: a basis vector may have several negative weights.
+  out <- data.frame(gsub("+-", "-", expr, fixed = TRUE))
+  names(out) <- paste("Conserved quantities:", n)
+  attr(out, "n") <- n
+  out
+}
+
+# Scale the columns of S by the numeric volume of their state.
+.volumeWeighted <- function(S, volumes) {
+  if (is.null(volumes))
+    stop("`weight = \"volume\"` requires a named numeric `volumes` argument.")
+  if (is.null(colnames(S)))
+    stop("`S` must have column names when `weight = \"volume\"`.")
+  missing_vol <- setdiff(colnames(S), names(volumes))
+  if (length(missing_vol) > 0L)
+    stop("`volumes` missing entries for: ", paste(missing_vol, collapse = ", "))
+  v_num <- suppressWarnings(as.numeric(volumes[colnames(S)]))
+  if (anyNA(v_num))
+    stop("`weight = \"volume\"` requires all volumes to be numeric; got symbolic expression(s).")
+  sweep(S, 2, v_num, "*")
 }
 
 
@@ -319,56 +318,28 @@ customTotals <- function(eqnlist, totals) {
 #' @example inst/examples/equations.R
 #' @export
 getReactions <- function(eqnlist) {
-  
-  # Extract information from eqnlist
-  S <- eqnlist$smatrix
-  rates <- eqnlist$rates
-  description <- eqnlist$description
-  variables <- eqnlist$states
-  
-  # Determine lhs and rhs of reactions
-  if(is.null(S)) return()
-  
-  reactions <- apply(S, 1, function(v) {
-    
-    numbers <- v[which(!is.na(v))]
-    educts <- -numbers[numbers < 0]
-    products <- numbers[numbers > 0]
-    educts <- paste(paste(educts, names(educts), sep = "*"), collapse=" + ")
-    products <- paste(paste(products, names(products), sep = "*"), collapse=" + ")
-    educts <- gsub("1*", "", educts, fixed = TRUE)
-    products <- gsub("1*", "", products, fixed = TRUE)
-    
-    reaction <- paste(educts, "->", products)
-    return(c(educts, products))
-    
-  })
-  educts <- reactions[1,]
-  products <- reactions[2,]
-  
-  # Check for consistency
-  exclMarks.logical <- unlist(lapply(1:length(rates), function(i) {
-    
-    myrate <- rates[i]
-    parsedRate <- getParseData(parse(text=myrate, keep.source = TRUE))
-    symbols <- parsedRate$text[parsedRate$token=="SYMBOL"]
-    
-    educts <- variables[which(S[i,]<0)]
-    
-    !all(unlist(lapply(educts, function(e) any(e==symbols))))
-    
-  }))
-  exclMarks <- rep(" ", ncol(reactions))
-  exclMarks[exclMarks.logical] <- "!"
-  
 
-  # Generate data.frame  
-  out <- data.frame(exclMarks, educts, "->", products, rates, description, stringsAsFactors = FALSE)
-  colnames(out) <- c("Check", "Educt",  "->",  "Product", "Rate", "Description")
-  rownames(out) <- 1:nrow(out)
-  
-  return(out)
-  
+  S <- eqnlist$smatrix
+  if (is.null(S)) return()
+  rates <- eqnlist$rates
+
+  side <- function(v) paste(ifelse(v == 1, names(v), paste0(v, "*", names(v))), collapse = " + ")
+  reactions <- apply(S, 1, function(v) {
+    v <- v[!is.na(v)]
+    c(side(-v[v < 0]), side(v[v > 0]))
+  })
+
+  # "!" marks a reaction whose rate does not contain all its educts.
+  check <- vapply(seq_along(rates), function(i) {
+    educts <- eqnlist$states[which(S[i, ] < 0)]
+    if (all(educts %in% getSymbols(rates[i]))) " " else "!"
+  }, "")
+
+  out <- data.frame(check, reactions[1, ], "->", reactions[2, ], rates, eqnlist$description,
+                    stringsAsFactors = FALSE)
+  colnames(out) <- c("Check", "Educt", "->", "Product", "Rate", "Description")
+  rownames(out) <- seq_len(nrow(out))
+  out
 }
 
 
@@ -393,7 +364,6 @@ getReactions <- function(eqnlist) {
 #' f <- addReaction(f, "2*A+B", "C + 2*D", "k1*B*A^2")
 #' f <- addReaction(f, "C + A", "B + A", "k2*C*A")
 #'
-#'
 #' @example inst/examples/equations.R
 #' @export
 #' @rdname addReaction
@@ -409,12 +379,15 @@ addReaction <- function(eqnlist, from, to, rate, description = names(rate),
   reactionCompartment_in <- eqnlist$reactionCompartment
 
   # Analyze the reaction character expressions
-  educts <- getSymbols(from)
-  eductCoef <- 0
-  if(length(educts) > 0) eductCoef <- sapply(educts, function(e) sum(getCoefficients(from, e)))
-  products <- getSymbols(to)
-  productCoef <- 0
-  if(length(products) > 0) productCoef <- sapply(products, function(p) sum(getCoefficients(to, p)))
+  eductCoef <- .sideCoefficients(from)
+  educts <- names(eductCoef)
+  productCoef <- .sideCoefficients(to)
+  products <- names(productCoef)
+  if (!length(educts) && !length(products))
+    stop("A reaction needs at least one species.", call. = FALSE)
+  reserved <- intersect(c(educts, products), c("Rate", "Description"))
+  if (length(reserved))
+    stop("'", reserved[1], "' is reserved and cannot name a state.", call. = FALSE)
 
 
   # States introduced by this reaction
@@ -760,7 +733,7 @@ getFluxes <- function(eqnlist, type = c("conc", "amount")) {
   vref_vol <- .refVolumes(vref_cid, compartments)
 
   # generate equation expressions
-  terme <- lapply(1:length(variables), function(j) {
+  terme <- lapply(seq_along(variables), function(j) {
     v <- SMatrix[,j]
     nonZeros <- which(!is.na(v))
     var.description <- description[nonZeros]
@@ -814,42 +787,6 @@ getFluxes <- function(eqnlist, type = c("conc", "amount")) {
 
 
 
-#' Symbolic Time Derivative of an Equation Vector
-#' 
-#' Expresses the time derivatives of observables in terms of the right-hand
-#' sides of the ODE defined by an equation list.
-#'
-#' @param observable named character vector or object of class [eqnvec].
-#' @param eqnlist object of class [eqnlist].
-#' @return Object of class [eqnvec], the time derivatives of `observable`.
-#' @example inst/examples/equations.R
-#' @export
-dot <- function(observable, eqnlist) {
-  
- 
-  # Analyze the observable character expression
-  symbols <- getSymbols(observable)
-  states <- intersect(symbols, eqnlist$states)
-  derivatives <- lapply(observable, function(obs) {
-    out <- lapply(as.list(states), function(x) paste(deparse(D(parse(text=obs), x), width.cutoff = 500),collapse=""))
-    names(out) <- states
-    return(out)
-  })
-  
-  # Generate equations from eqnist
-  f <- as.eqnvec(eqnlist)
-  
-  # chain rule: the sum over states of d(observable)/d(state) times d(state)/dt
-  newodes <- sapply(derivatives, function(der) {
-    der  <- unlist(der)
-    rate <- unclass(f)[names(der)]
-    keep <- der != "0" & rate != "0"
-    if (!any(keep)) return("0")
-    paste0("(", der[keep], ") * (", rate[keep], ")", collapse = " + ")
-  })
-  
-  as.eqnvec(newodes)
-}
 
 
 
@@ -903,6 +840,7 @@ write.eqnlist <- function(eqnlist, ...) {
   if (!"row.names" %in% argnames) arglist$row.names <- FALSE
   if (!"na" %in% argnames) arglist$na <- ""
   
+  if (!length(eqnlist$rates)) stop("The eqnlist has no reaction to write.", call. = FALSE)
   arglist$x <- as.data.frame(eqnlist)
 
   # The csv has no place for the layout; don't drop it silently.
@@ -941,7 +879,7 @@ subset.eqnlist <- function(x, ...) {
   
   # Do selection on data.frame
   data <- getReactions(eqnlist)
-  if(is.null(data)) return()
+  if (is.null(data)) return(eqnlist())
   
   data.list <- list(Educt = lapply(data$Educt, getSymbols), 
                     Product = lapply(data$Product, getSymbols),
@@ -950,14 +888,16 @@ subset.eqnlist <- function(x, ...) {
                     Check = data$Check)
   
   # The condition resolves against the reaction table, then the calling frame.
-  # `%in%` is overloaded because Educt and Product are lists of symbol vectors,
-  # which the base operator cannot compare.
+  # `%in%` is overloaded for Educt and Product, lists of symbol vectors, and is
+  # the base operator otherwise.
   env <- list2env(data.list, envir = new.env(parent = callerEnv))
-  env$"%in%" <- function(x, table)
-    sapply(table, function(mytable) any(x == mytable))
+  env$"%in%" <- function(x, table) {
+    if (!is.list(table)) return(base::`%in%`(x, table))
+    vapply(table, function(el) any(base::`%in%`(x, el)), logical(1))
+  }
   condition <- eval(substitute(alist(...)))[[1L]]
   select <- which(eval(condition, env))
-  if (length(select) == 0) return(NULL)
+  if (length(select) == 0) return(eqnlist())
   
   # Translate subsetting on eqnlist entries
   # smatrix
@@ -1016,44 +956,43 @@ subset.eqnlist <- function(x, ...) {
 #' @param pander logical, use pander for output (R Markdown). Default `FALSE`.
 #' @param ... not used.
 #' @return `x`, invisibly.
-#' @author Wolfgang Mader, \email{Wolfgang.Mader@@fdm.uni-freiburg.de}
-#' @author Daniel Kaschek, \email{daniel.kaschek@@physik.uni-freiburg.de}
 #' 
 #' @export
 print.eqnlist <- function(x, pander = FALSE, ...) {
 
-  eqnlist <- x
+  reactions <- getReactions(x)
 
-  totals <- getTotals(eqnlist)
-  r <- getReactions(eqnlist)
-  comp_lines <- .format_compartments(eqnlist$compartments, eqnlist$compartmentOf,
-                                     eqnlist$states, eqnlist$amountStates)
-
-  if (!pander) {
-    if (length(totals)) {
-      tag <- if (isTRUE(attr(eqnlist$totals, "custom"))) " (custom)" else ""
-      cat("Conserved quantities", tag, ":\n", sep = "")
-      for (nm in names(totals))
-        cat("  ", nm, " = ", totals[[nm]], "\n", sep = "")
+  if (pander) {
+    if (!requireNamespace("pander", quietly = TRUE)) {
+      print(reactions)
+      return(invisible(x))
     }
-    if (length(comp_lines) > 0L) {
-      cat("\n")
-      cat(comp_lines, sep = "\n")
-    }
-    cat("\n")
-    print(r)
-  } else if (requireNamespace("pander", quietly = TRUE)) {
-    pander::panderOptions("table.alignment.default", "left")
-    pander::panderOptions("table.split.table", Inf)
-    pander::panderOptions("table.split.cells", Inf)
-    exclude <- "Check"
-    r <- r[, setdiff(colnames(r), exclude)]
-    r$Rate <- paste0(format.eqnvec(as.character(r$Rate)))
-    pander::pander(r)
-  } else {
-    print(r)
+    .panderTableOptions()
+    reactions$Check <- NULL
+    reactions$Rate <- unname(format.eqnvec(as.character(reactions$Rate)))
+    pander::pander(reactions)
+    return(invisible(x))
   }
+
+  totals <- getTotals(x)
+  if (length(totals)) {
+    custom <- isTRUE(attr(x$totals, "custom"))
+    cat("Conserved quantities", if (custom) " (custom)", ":\n", sep = "")
+    cat(sprintf("  %s = %s\n", names(totals), unlist(totals, use.names = FALSE)), sep = "")
+  }
+  layout <- .format_compartments(x$compartments, x$compartmentOf, x$states, x$amountStates)
+  if (length(layout)) cat("", layout, sep = "\n")
+  cat("\n")
+  print(reactions)
   invisible(x)
+}
+
+
+# Left-aligned pander tables that are never split.
+.panderTableOptions <- function() {
+  pander::panderOptions("table.alignment.default", "left")
+  pander::panderOptions("table.split.table", Inf)
+  pander::panderOptions("table.split.cells", Inf)
 }
 
 
@@ -1134,8 +1073,11 @@ as.eqnvec.character <- function(x = NULL, names = NULL, ...) {
   if (is.null(names)) names <- names(equations)
   if (is.null(names)) stop("equations need names")
   if (length(names) != length(equations)) stop("Length of names and equations do not coincide")
-  try.parse <- try(parse(text = equations), silent = TRUE)
-  if (inherits(try.parse, "try-error")) stop("equations cannot be parsed: ", try.parse)
+  if (any(is.na(names) | !nzchar(names))) stop("every equation needs a name")
+  if (anyDuplicated(names)) stop("equation names are duplicated: ",
+                                 paste(unique(names[duplicated(names)]), collapse = ", "))
+  tryCatch(parse(text = equations), error = function(e)
+    stop("equations cannot be parsed: ", conditionMessage(e), call. = FALSE))
   
   out <- structure(equations, names = names)
   class(out) <- c("eqnvec", "character")
@@ -1167,11 +1109,9 @@ as.eqnvec.eqnlist <- function(x, ...) {
 c.eqnlist <- function(...) {
 
   inputs <- list(...)
-  inputs <- inputs[!vapply(inputs, function(x) is.null(x) || is.null(x$smatrix), logical(1))]
+  inputs <- inputs[!vapply(inputs, is.null, logical(1))]
   if (length(inputs) == 0L) return(eqnlist())
-
-  # Merge stoichiometry / rates / description via the data.frame path
-  out <- Reduce(combine, lapply(inputs, as.data.frame))
+  hasReactions <- !vapply(inputs, function(x) is.null(x$smatrix), logical(1))
 
   # Merge compartments with conflict detection
   all_compartments <- list()
@@ -1199,12 +1139,12 @@ c.eqnlist <- function(...) {
     if (is.null(el$compartmentOf)) next
     for (st in names(el$compartmentOf)) {
       cid <- unname(el$compartmentOf[[st]])
-      if (st %in% names(all_compartmentOf)) {
-        if (!identical(unname(all_compartmentOf[[st]]), cid)) {
-          stop(sprintf("State '%s' assigned to different compartments across input eqnlists.", st))
-        }
-      } else {
+      old <- if (st %in% names(all_compartmentOf)) unname(all_compartmentOf[[st]])
+      # an explicit compartment wins over the default one
+      if (is.null(old) || identical(old, "defaultComp")) {
         all_compartmentOf[st] <- cid
+      } else if (!identical(old, cid) && !identical(cid, "defaultComp")) {
+        stop(sprintf("State '%s' assigned to different compartments across input eqnlists.", st))
       }
     }
   }
@@ -1225,9 +1165,29 @@ c.eqnlist <- function(...) {
     all_rc <- NULL
   }
 
-  as.eqnlist(out, compartments = all_compartments, compartmentOf = all_compartmentOf,
-             reactionCompartment = all_rc,
-             amountStates = unique(unlist(lapply(inputs, function(el) el$amountStates))))
+  out <- if (!any(hasReactions)) {
+    eqnlist(compartments = all_compartments, compartmentOf = all_compartmentOf)
+  } else {
+    as.eqnlist(Reduce(combine, lapply(inputs[hasReactions], as.data.frame)),
+               compartments = all_compartments, compartmentOf = all_compartmentOf,
+               reactionCompartment = all_rc,
+               amountStates = unique(unlist(lapply(inputs, function(el) el$amountStates))))
+  }
+
+  # Custom totals survive, completed by the detected totals of the other inputs,
+  # as long as they form a basis of the result.
+  custom <- vapply(inputs, function(el) isTRUE(attr(el$totals, "custom")), logical(1))
+  if (!any(custom)) return(out)
+  totals <- unlist(lapply(inputs[custom], function(el) unclass(el$totals)))
+  auto <- unlist(lapply(inputs[!custom & hasReactions], function(el) unclass(getTotals(el))))
+  if (length(auto))
+    totals <- c(totals, setNames(auto, make.unique(c(names(totals), rep("total", length(auto))),
+                                                   sep = "_")[-seq_along(totals)]))
+  tryCatch(customTotals(out, as.list(totals)), error = function(e) {
+    warning("customTotals invalidated by c(): ", conditionMessage(e),
+            ". Resetting to auto.", call. = FALSE)
+    out
+  })
 
 }
 
@@ -1235,15 +1195,7 @@ c.eqnlist <- function(...) {
 #' @export
 #' @param x object of any class
 #' @rdname eqnvec
-is.eqnvec <- function(x) {
-  if (inherits(x, "eqnvec") &&
-      length(x) == length(names(x))
-  )
-    return(TRUE)
-  
-  else
-    return(FALSE)
-}
+is.eqnvec <- function(x) inherits(x, "eqnvec") && length(names(x)) == length(x)
 
 
 ## Class "eqnvec" and its methods --------------------------------------------
@@ -1261,21 +1213,15 @@ is.eqnvec <- function(x) {
 #' @export
 format.eqnvec <- function(x, ...) {
   
-  eqnvec <- x
-  
-  eqns <- sapply(eqnvec, function(eqn) {
-    parser.out <- getParseData(parse(text = eqn, keep.source = TRUE))
-    parser.out <- subset(parser.out, terminal == TRUE)
-    out <- paste(parser.out$text, collapse = "")
-    return(out)
-  })
-  
-  patterns <- c("+", "-", "*", "/")
-  for (p in patterns) eqns <- gsub(p, paste0(" ", p, " "), eqns, fixed = TRUE)
-  
-  return(eqns)
-    
-  
+  # pads the operator tokens only, so a number like 1e-3 stays whole
+  vapply(x, function(eqn) {
+    tokens <- getParseData(parse(text = eqn, keep.source = TRUE))
+    tokens <- tokens[tokens$terminal, ]
+    text <- ifelse(tokens$token == "'^'", "^", tokens$text)
+    op <- tokens$token %in% c("'+'", "'-'", "'*'", "'/'")
+    text[op] <- paste0(" ", text[op], " ")
+    paste(text, collapse = "")
+  }, character(1))
 }
 
 #' Print Equation Vector
@@ -1286,71 +1232,34 @@ format.eqnvec <- function(x, ...) {
 #' @param ... not used.
 #' @return `x`, invisibly.
 #' 
-#' @author Wolfgang Mader, \email{Wolfgang.Mader@@fdm.uni-freiburg.de}
-#' 
 #' @import stringr
 #' @export
 print.eqnvec <- function(x, width = 140, pander = FALSE, ...) {
-  
-  eqnvec <- x
 
-  # Stuff to print
-  m_odr <- "Idx"
-  m_rel <- " <- "
-  m_sep <- " "
-  m_species <- names(eqnvec)
-  
-  # Width of stuff to print
-  m_odrWidth <- max(3, nchar(m_odr))
-  m_speciesWidth <- max(nchar(m_species), nchar("outer"))
-  m_lineWidth <- max(width, m_speciesWidth + 10)
-  m_relWidth <- nchar(m_rel)
-  m_sepWidth <- nchar(m_sep)
-  
-  # Compound widths
-  m_frontWidth <- m_odrWidth + m_speciesWidth + m_relWidth + m_sepWidth
-  m_eqnWidth <- m_lineWidth - m_frontWidth
-  
-  # Order of states for alphabetical for print out. The Idx column is the
-  # sequential print order (1, 2, 3, ...), not the pre-sort position.
-  m_eqnOrder <- order(m_species)
-
-  # Iterate over species
-  m_msgEqn <- do.call(c, mapply(function(eqn, spec, odr) {
-    return(paste0(
-      str_pad(string = odr, side = "left", width = m_odrWidth),
-      m_sep,
-      str_pad(string = spec, side = "left", width = m_speciesWidth),
-      m_rel,
-      str_wrap(string = gsub(x = eqn, pattern = " ", replacement = "", fixed = TRUE),
-               width = m_eqnWidth, exdent = m_frontWidth)
-    ))
-  }, eqn = eqnvec[m_eqnOrder], spec = m_species[m_eqnOrder],
-     odr = seq_along(m_eqnOrder), SIMPLIFY = FALSE))
-  
-  # Print to command line or to pander
-  if (!pander) {
-    cat(paste0(str_pad(string = m_odr, side = "left", width = m_odrWidth),
-               m_sep,
-               str_pad(string = "Inner", side = "left", width = m_speciesWidth),
-               m_rel,
-               "Outer\n"))
-    cat(m_msgEqn, sep = "\n")
-  } else if (requireNamespace("pander", quietly = TRUE)) {
-    pander::panderOptions("table.alignment.default", "left")
-    pander::panderOptions("table.split.table", Inf)
-    pander::panderOptions("table.split.cells", Inf)
-    out <- as.data.frame(unclass(eqnvec), stringsAsFactors = FALSE)
-    colnames(out) <- ""
-    out[, 1] <- format.eqnvec(out[, 1])
-    pander::pander(out)
-
-  } else {
-    out <- as.data.frame(unclass(eqnvec), stringsAsFactors = FALSE)
-    colnames(out) <- ""
-    out[, 1] <- format.eqnvec(out[, 1])
-    print(out)
+  if (pander) {
+    tab <- data.frame(unname(format.eqnvec(unclass(x))), row.names = names(x))
+    names(tab) <- ""
+    if (!requireNamespace("pander", quietly = TRUE)) {
+      print(tab)
+      return(invisible(x))
+    }
+    .panderTableOptions()
+    pander::pander(tab)
+    return(invisible(x))
   }
+
+  # Columns: index, right-aligned name, " <- ", right-hand side. Spaces are
+  # dropped from the equations; continuation lines start under the first one.
+  lhs <- names(x)
+  ord <- order(lhs)
+  nameWidth <- max(nchar(lhs), 5L)
+  indent <- 3L + 1L + nameWidth + 4L
+  rhsWidth <- max(width, nameWidth + 10) - indent
+  rhs <- stringr::str_wrap(gsub(" ", "", unclass(x)[ord], fixed = TRUE),
+                           width = rhsWidth, exdent = indent)
+  idx <- stringr::str_pad(c("Idx", seq_along(ord)), width = 3L)
+  key <- stringr::str_pad(c("Inner", lhs[ord]), width = nameWidth)
+  cat(paste0(idx, " ", key, " <- ", c("Outer", rhs)), sep = "\n")
   invisible(x)
 }
 
@@ -1363,7 +1272,6 @@ print.eqnvec <- function(x, width = 140, pander = FALSE, ...) {
 #' @param object object of class [eqnvec].
 #' @param ... not used.
 #' @return `object`, invisibly.
-#' @author Wolfgang Mader, \email{Wolfgang.Mader@@fdm.uni-freiburg.de}
 #' 
 #' @export
 summary.eqnvec <- function(object, ...) {
@@ -1377,13 +1285,9 @@ summary.eqnvec <- function(object, ...) {
 #' @export
 c.eqnvec <- function(...) {
  
-  out <- lapply(list(...), unclass)
-  out <- do.call(c, out)
-  if (any(duplicated(names(out)))) {
-    stop("Names must be unique")
-  }
-  
-  as.eqnvec(out)
+  joined <- unlist(lapply(list(...), unclass))
+  if (anyDuplicated(names(joined))) stop("Names must be unique")
+  as.eqnvec(joined)
 }
 
 #' @export
@@ -1395,51 +1299,6 @@ c.eqnvec <- function(...) {
 
 
 
-#' Identify Linear Variables in an Equation Vector
-#'
-#' Requires the Python module `sympy`, accessed through \pkg{reticulate}.
-#'
-#' @param eqnvec object of class `eqnvec`.
-#'
-#' @return Character vector of the variables that occur linearly in all
-#'   equations.
-#'
-#' @examplesIf reticulate::py_module_available("sympy")
-#' eqnvec <- as.eqnvec(
-#'   c("-k1*A", "k1*A - k2*B", "-k3*B*C/(Km+C) + k4*pC", "k3*B*C/(Km+C) - k4*pC"),
-#'   names = c("A", "B", "C", "pC")
-#' )
-#' getLinVars(eqnvec)
-#'
-#' @export
-getLinVars <- function(eqnvec) {
-  if (!inherits(eqnvec, "eqnvec")) {
-    stop("Input 'eqnvec' must be of class 'eqnvec'.")
-  }
-  .require_ns("reticulate", "getLinVars()")
-
-  sympy <- reticulate::import("sympy")
-  sympy_zero <- sympy$Integer(0)
-  
-  variables <- names(eqnvec)
-  sympy_vars <- lapply(variables, sympy$Symbol)
-  sympy_eqns <- lapply(as.character(eqnvec), sympy$simplify)
-  
-  is_linear_in_eq <- function(eqn, var) {
-    first_derivative <- sympy$diff(eqn, var)
-    second_derivative <- sympy$diff(first_derivative, var)
-    is_second_derivative_zero <- sympy$simplify(second_derivative) == sympy_zero
-    is_first_derivative_nonzero <- sympy$simplify(first_derivative) != sympy_zero
-    is_second_derivative_zero && is_first_derivative_nonzero
-  }
-  
-  linear_vars <- sapply(seq_along(sympy_vars), function(i) {
-    var <- sympy_vars[[i]]
-    all(sapply(sympy_eqns, function(eqn) is_linear_in_eq(eqn, var)))
-  })
-  
-  variables[linear_vars]
-}
 
 
 
@@ -1462,24 +1321,9 @@ getLinVars <- function(eqnvec) {
 #' @seealso [eqnlist]
 #' @export
 eqnvec <- function(...) {
-
-  mylist <- list(...)
-  if (length(mylist) > 0) {
-    mynames <- paste0("eqn", 1:length(mylist))
-    is.available <- !is.null(names(mylist))
-    mynames[is.available] <- names(mylist)[is.available]
-
-    names(mylist) <- mynames
-    out <- unlist(mylist)
-
-    return(as.eqnvec(out))
-
-  } else {
-
-    return(NULL)
-
-  }
-
+  x <- c(...)
+  if (!length(x)) return(NULL)
+  as.eqnvec(.fillNames(vapply(x, as.character, ""), "eqn"))
 }
 
 #' @rdname eqnlist
@@ -1522,23 +1366,16 @@ eqnlist <- function(smatrix = NULL, states = colnames(smatrix), rates = NULL,
   # canonicalise it to NULL so is.eqnlist() recognises the empty list.
   if (length(states) == 0L && length(rates) == 0L) smatrix <- NULL
 
-  # Dimension checks and preparations for non-empty argument list.
+  # One column per state, one row per rate; "not involved" is NA, as in addReaction().
   if (!is.null(smatrix)) {
-    #Dimension checks
-    d1 <- dim(smatrix)
-    l2 <- length(states)
-    l3 <- length(rates)
-    if (l2 != d1[2]) stop("Number of states does not coincide with number of columns of stoichiometric matrix")
-    if (l3 != d1[1]) stop("Number of rates does not coincide with number of rows of stoichiometric matrix")
-
-    # Prepare variables
     smatrix <- as.matrix(smatrix)
+    if (ncol(smatrix) != length(states))
+      stop("Number of states does not coincide with number of columns of stoichiometric matrix")
+    if (nrow(smatrix) != length(rates))
+      stop("Number of rates does not coincide with number of rows of stoichiometric matrix")
     colnames(smatrix) <- states
-    # "not involved" is NA, not 0, as in addReaction().
     smatrix[!is.na(smatrix) & smatrix == 0] <- NA
-    if (is.null(description)) {
-      description <- 1:nrow(smatrix)
-    }
+    if (is.null(description)) description <- seq_len(nrow(smatrix))
   }
 
   resolved <- .resolve_compartments(as.character(states), compartments, compartmentOf, volumes)
@@ -1605,10 +1442,11 @@ eqnlist <- function(smatrix = NULL, states = colnames(smatrix), rates = NULL,
 
   given_volumes <- volumes
 
-  if (!is.null(compartments) && !is.null(compartmentOf)) {
+  if (!is.null(compartmentOf) || (!is.null(compartments) && is.null(volumes))) {
     compartments <- lapply(compartments, normalize_entry)
+    if (is.null(compartmentOf)) compartmentOf <- setNames(character(0), character(0))
     compartmentOf <- setNames(as.character(compartmentOf), names(compartmentOf))
-    if (is.null(names(compartmentOf)) || any(!nzchar(names(compartmentOf))))
+    if (length(compartmentOf) && (is.null(names(compartmentOf)) || any(!nzchar(names(compartmentOf)))))
       stop("`compartmentOf` must be a fully named character vector (names = state IDs).")
     missing_states <- setdiff(states, names(compartmentOf))
     if (length(missing_states) > 0L) {
@@ -1699,10 +1537,13 @@ log10Transform <- function(f, suffix = "_l10", simplify = TRUE) {
     quotient <- paste0("(", f[[k]], ")/(", k, ")")
     if (!is.null(spy)) {
       # cancel removes the state where it divides out, expand then distributes
-      # the remainder over the division.
+      # the remainder over the division. Every name stays a plain symbol, also
+      # one sympy knows as a constant such as E or I.
+      syms <- getSymbols(quotient)
       cancelled <- tryCatch(
         gsub("\\*\\*", "^", as.character(
-          spy$expand(spy$cancel(spy$sympify(gsub("\\^", "**", quotient)))))),
+          spy$expand(spy$cancel(spy$sympify(gsub("\\^", "**", quotient),
+                                            locals = setNames(lapply(syms, spy$Symbol), syms)))))),
         error = function(e) NULL)
       if (!is.null(cancelled)) quotient <- cancelled
     }

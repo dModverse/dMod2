@@ -351,7 +351,7 @@ constraintL1.penaltyspec <- function(mu, attrName = "prior_l1", condition = NULL
 
   myfn <- function(..., fixed = NULL, deriv = TRUE, deriv2 = FALSE,
                    conditions = condition, env = NULL,
-                   cores = getOption("dMod.cores", 1L)) {
+                   cores = getOption("dMod2.cores", 1L)) {
 
     p    <- list(...)[[match.fnargs(list(...), "pars")]]
     allp <- c(p, fixed)

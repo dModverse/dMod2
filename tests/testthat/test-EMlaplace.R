@@ -721,7 +721,7 @@ test_that("the inner trustL1 lock-step reproduces the per-subject solves", {
   tgt  <- .laplaceFactorisingTargets(pen)
   ctrl <- list(iterlim = 300L)
   run  <- function(on, theta, correction)
-    withr::with_options(list(dMod.laplace.lockstep = on, dMod.cores = 1L),
+    withr::with_options(list(dMod2.laplace.lockstep = on, dMod2.cores = 1L),
       .laplaceOuterEval(theta, rec, resObjList, tgt, ctrl, grad = TRUE,
                         hess = TRUE, correction = correction, collect = TRUE))
 
@@ -766,7 +766,7 @@ test_that("the lock-step issues one batched request per round, not one per subje
   local_mocked_bindings(
     .predictMany = function(...) { batches <<- batches + 1L; orig(...) },
     .package = "dMod2")
-  withr::local_options(dMod.laplace.lockstep = TRUE, dMod.cores = 1L)
+  withr::local_options(dMod2.laplace.lockstep = TRUE, dMod2.cores = 1L)
   .laplaceOuterEval(theta, rec, resObjList, .laplaceFactorisingTargets(pen),
                     list(iterlim = 300L), grad = TRUE, hess = TRUE)
   expect_gt(n, 0L)

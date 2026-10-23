@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Build an SBML Level 3 Version 2 document from a JSON spec produced by
 dMod's `exportSbml()`. Mirrors the import helper `sbmlImport.py` but in
 the opposite direction. Uses `libsbml.parseL3Formula` to lift the text-form
@@ -153,13 +152,14 @@ def build_sbml(spec):
     return document
 
 
-if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        print("Usage: %s SPEC.json" % __file__)
-        sys.exit(1)
-
-    with open(sys.argv[1]) as fh:
+def main(argv):
+    """Build the SBML document described by the JSON spec argv[0] and write it to its outfile."""
+    if not argv:
+        sys.exit("usage: dmodToSbml.py SPEC.json")
+    with open(argv[0]) as fh:
         spec = json.load(fh)
+    libsbml.writeSBMLToFile(build_sbml(spec), spec["outfile"])
 
-    doc = build_sbml(spec)
-    libsbml.writeSBMLToFile(doc, spec["outfile"])
+
+if __name__ == "__main__":
+    main(sys.argv[1:])

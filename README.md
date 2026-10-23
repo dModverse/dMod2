@@ -104,6 +104,14 @@ from PyPI on first use; under `RETICULATE_PYTHON` install it there with
 needs msolve, which `symmetryDetection()` offers to build when it is
 missing, or which `SYMIDENT_MSOLVE` points to.
 
+## Distributed computing
+
+`distributedComputing()` runs fits, profiles or any other R code as
+tasks in the background: on the local machine, on machines reached by
+ssh with the cores each may use, or as an array job of a SLURM cluster
+through a job script template. The
+[guide](examples/distributedComputing.md) shows how.
+
 ## Citation
 
 There is no publication for dMod2 yet. The paper below describes

@@ -509,7 +509,7 @@ priorOmega <- function(omegaSpec,
 
   myfn <- function(..., fixed = NULL, deriv = TRUE, deriv2 = FALSE,
                    conditions = NULL, env = NULL,
-                   cores = getOption("dMod.cores", 1L)) {
+                   cores = getOption("dMod2.cores", 1L)) {
     pars <- ..1
     if (!all(cholPars %in% names(pars)))
       stop("priorOmega: missing Cholesky parameters: ",

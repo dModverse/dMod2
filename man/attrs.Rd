@@ -27,9 +27,5 @@ x <- structure(1:3, names = c("a", "b", "c"), note = "temporary")
 attrs(x)
 attrs(x, "note", keep = FALSE)
   
-}
-\author{
-Wolfgang Mader, \email{Wolfgang.Mader@fdm.uni-freiburg.de}
-
-Mirjam Fehling-Kaschek, \email{mirjam.fehling@physik.uni-freiburg.de}
+  
 }

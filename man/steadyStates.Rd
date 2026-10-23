@@ -10,16 +10,11 @@ steadyStates(
   forcings = NULL,
   givenCQs = NULL,
   neglect = NULL,
-  sparsifyLevel = NULL,
-  outputFormat = "R",
-  testSteady = c("fast", "exact", "skip"),
+  testSteady = c("fast", "skip"),
   walltime = 0L,
   simplify = TRUE,
   solveQuadratic = FALSE,
-  positive = TRUE,
-  branches = FALSE,
   priority = NULL,
-  version = "1.3",
   resolve = TRUE,
   verbose = FALSE
 )
@@ -38,21 +33,14 @@ at zero and treated as exogenous. Default \code{NULL}.}
 \item{givenCQs}{Unnamed character vector of conserved quantities, either as
 \code{c("A + pA = totA", "B + pB = totB")} or as \code{c("A + pA", "B + pB")}.
 Default \code{NULL}: a basis is derived, or taken from \code{\link[=customTotals]{customTotals()}} when the
-\code{eqnlist} has them. In \code{"1.4"} each given quantity keeps one of its states
-free, the first where possible.}
+\code{eqnlist} has them. Each given quantity keeps one of its states free, the
+first where possible.}
 
 \item{neglect}{Character vector, states and rate parameters the solver must
 not solve for. Default \code{NULL}.}
 
-\item{sparsifyLevel}{Numeric, upper bound on the length of the linear
-combinations used to simplify the stoichiometric matrix. Default \code{NULL}:
-\code{2} for versions \code{"1.0"} and \code{"1.1"}, unused from \code{"1.2"}.}
-
-\item{outputFormat}{\code{"R"} (default) for dMod, or \code{"M"} for d2d [3].}
-
 \item{testSteady}{How the solution is verified: \code{"fast"} (default), a
-probabilistic check modulo a prime; \code{"exact"}, symbolic substitution;
-\code{"skip"}.}
+probabilistic check modulo a prime, or \code{"skip"}.}
 
 \item{walltime}{Integer, time budget of the solver in seconds, \code{0}
 (default) for none.}
@@ -64,23 +52,9 @@ sympy, \code{FALSE} skips it, \code{"full"} simplifies further at a higher cost.
 may be solved by its positive root instead of for a rate constant, which
 introduces \code{sqrt()} terms. Default \code{FALSE}.}
 
-\item{positive}{Positivity assumption for root and pivot selection: \code{TRUE}
-(default) all symbols are positive, \code{FALSE} none, or a character vector of
-the positive symbols. With \code{TRUE} no result contains a subtraction.}
-
-\item{branches}{Logical. If \code{TRUE}, a quadratic with two positive roots is
-returned with a selector symbol \verb{branch_<state>} taking \code{-1} or \code{+1}.
-Requires \code{solveQuadratic = TRUE}. Default \code{FALSE}.}
-
 \item{priority}{Character vector of state and rate-parameter names, most
 preferred first: named states are solved earlier, named rate parameters
 are preferred as pivots. Default \code{NULL}.}
-
-\item{version}{Solver version, one of \code{"1.0"}, \code{"1.1"}, \code{"1.2"}, \code{"1.3"}
-(default) and \code{"1.4"}. \code{"1.4"} solves every unknown from a combination of
-balances, so every result is a ratio of positive sums; it needs
-\code{positive = TRUE} and \code{outputFormat = "R"} and treats compartment volumes
-as fixed.}
 
 \item{resolve}{Logical, whether the result is passed through
 \code{\link[=resolveRecurrence]{resolveRecurrence()}} so that no equation refers to another. Default
@@ -99,22 +73,10 @@ Computes symbolic steady-state expressions for use in a parameter
 transformation, following the AlyssaPetit method [1], [2]. Each balance
 equation is solved for a state or a rate constant such that the result is
 a ratio of sums of positive terms. A state whose equation was spent on a
-rate constant stays a free parameter. The solver is a Python module called
-through \pkg{reticulate}; it needs \pkg{numpy}, \pkg{sympy} and, from
-version \code{"1.2"}, \pkg{scipy}.
-}
-\details{
-Arguments by version:
-\tabular{ll}{
-\code{"1.0"} \tab \code{sparsifyLevel}; the solution is always tested.\cr
-\code{"1.1"} \tab adds \code{testSteady} (\code{"fast"} runs as \code{"exact"}).\cr
-\code{"1.2"}, \code{"1.3"} \tab add \code{walltime}, \code{simplify}, \code{solveQuadratic},
-\code{positive}, \code{branches}, \code{priority}; \code{sparsifyLevel} is unused.\cr
-\code{"1.3"}, \code{"1.4"} \tab honour \code{verbose} themselves; older versions are
-silenced with \code{verbose = FALSE}.\cr
-\code{"1.4"} \tab ignores \code{branches}; \code{testSteady = "exact"} runs as
-\code{"fast"}.\cr
-}
+rate constant stays a free parameter. Every unknown is solved from a
+combination of balances, so every result is a ratio of positive sums, and
+compartment volumes are fixed. The solver is a Python module called through
+\pkg{reticulate}; it needs \pkg{numpy}, \pkg{sympy} and \pkg{scipy}.
 }
 \examples{
 \dontshow{if (requireNamespace("reticulate", quietly = TRUE) && reticulate::py_module_available("sympy") && reticulate::py_module_available("scipy")) withAutoprint(\{ # examplesIf}
@@ -139,15 +101,14 @@ trafo
 \dontshow{\}) # examplesIf}
 }
 \references{
-[1] \url{https://pmc.ncbi.nlm.nih.gov/articles/PMC4863410/}
+[1] Rosenblatt, M., Timmer, J. and Kaschek, D. (2016).
+Customized steady-state constraints for parameter estimation in
+non-linear ordinary differential equation models.
+\emph{Frontiers in Cell and Developmental Biology} 4, 41.
+\doi{10.3389/fcell.2016.00041}
 
 [2] \url{https://github.com/marcusrosenblatt/AlyssaPetit}
-
-[3] \url{https://github.com/Data2Dynamics/d2d}
 }
 \seealso{
 \code{\link[=repar]{repar()}}, \code{\link[=P]{P()}}
-}
-\author{
-Marcus Rosenblatt, \email{marcus.rosenblatt@fdm.uni-freiburg.de}
 }
