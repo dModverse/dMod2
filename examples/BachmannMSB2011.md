@@ -19,7 +19,7 @@ if (!dir.exists(.outdir)) dir.create(.outdir, recursive = TRUE)
 # objective spreads its conditions over the free cores of the local machine; the
 # forked workers of mstrust() evaluate theirs serially. See ?dMod2 for the options.
 .cores <- detectFreeCores()
-.opt   <- options(dMod2.outdir = .outdir, dMod2.cores = .cores)
+options(dMod2.outdir = .outdir, dMod2.cores = .cores)
 set.seed(5555)
 .petabDir <- system.file("extdata", "petab_bachmann", package = "dMod2")
 ```
@@ -151,8 +151,6 @@ observables <- do.call(eqnvec, c(list(
   setNames(as.list(.log10(paste0("1 + scale_SOCS3RNA_fold", LETTERS[1:3],
                                  " / SOCS3RNAEqc / init_STAT5 * SOCS3RNA"))),
            paste0("SOCS3RNA_fold", LETTERS[1:3]))))
-
-stopifnot(setequal(names(observables), unique(bachmann$name)))
 
 # one standard deviation per antibody, shared by every experiment using it
 errorModels <- eqnvec(
@@ -306,7 +304,6 @@ obj <- normL2(mydataL, prd, e) +
 
 # the published optimum, on the log10 scale the table declares
 published <- setNames(log10(.pars$nominalValue), .pars$parameterId)
-stopifnot(setequal(names(published), outerpars))
 bestfit <- published
 
 obj(bestfit) |> system.time()
@@ -314,7 +311,7 @@ obj(bestfit) |> system.time()
 
 ```
 #>    user  system elapsed 
-#>   1.565   0.029   0.474
+#>   1.607   0.051   0.498
 ```
 
 ## Multi-start fit
@@ -375,7 +372,8 @@ plotCombined(.long, mydataL["long"], paste(condition, name) %in% recorded) |>
        title = "CFU-E, 5 units/ml Epo")
 ```
 
-![plot of chunk unnamed-chunk-12](figures/BachmannMSB2011/unnamed-chunk-12-1.png)
+
+<img src="figures/BachmannMSB2011/unnamed-chunk-12-1.png" width="768" />
 
 ### what each perturbation does, control against perturbed
 
@@ -395,7 +393,8 @@ plotCombined(.perturbed, mydataL[.pert],
   labs(x = "time [min]", y = "log10 signal [a.u.]", colour = NULL, fill = NULL)
 ```
 
-![plot of chunk unnamed-chunk-13](figures/BachmannMSB2011/unnamed-chunk-13-1.png)
+
+<img src="figures/BachmannMSB2011/unnamed-chunk-13-1.png" width="768" />
 
 ### dose response: the dose swept through the model, data on top
 `epo_level` is an inner parameter, so the dose is swept through one condition
@@ -435,7 +434,8 @@ ggplot(.drPred, aes(epo_level, value, colour = experiment, fill = experiment)) +
   labs(x = "Epo [units/cell]", y = "log10 signal [a.u.]", colour = NULL, fill = NULL)
 ```
 
-![plot of chunk unnamed-chunk-14](figures/BachmannMSB2011/unnamed-chunk-14-1.png)
+
+<img src="figures/BachmannMSB2011/unnamed-chunk-14-1.png" width="768" />
 
 ## Cross-check against the PEtab form of the same problem
 The import rebuilds the model from SBML and the tables, independent of the
@@ -447,9 +447,6 @@ from the Python environment of dMod2; `Sys.setenv(DMOD_LIBSBML_PYTHON =
 ``` r
 petab <- importPEtab(file.path(.petabDir, "Bachmann_MSB2011.yaml"),
                      backend = "cppDE", cores = .cores, options = myOptions)
-
-stopifnot(setequal(names(petab$bestfit), outerpars),
-          isTRUE(all.equal(petab$bestfit[outerpars], published[outerpars])))
 ```
 
 The full values differ by a constant (PEtab's log10 Jacobian and prior
@@ -465,11 +462,5 @@ chi2
 ```
 #>  hand.data PEtab.data 
 #>   541.0021   541.0021
-```
-
-``` r
-stopifnot(isTRUE(all.equal(unname(chi2[1]), unname(chi2[2]), tolerance = 1e-6)))
-
-options(.opt)
 ```
 

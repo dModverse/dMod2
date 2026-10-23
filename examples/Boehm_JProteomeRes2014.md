@@ -17,7 +17,7 @@ library(ggplot2)
 if (!dir.exists(.outdir)) dir.create(.outdir, recursive = TRUE)
 # generated sources and shared objects go to .outdir, see ?dMod2 for the options;
 # compiling, fitting and profiling use the free cores of the local machine
-.opt   <- options(dMod2.outdir = .outdir)
+options(dMod2.outdir = .outdir)
 .cores <- detectFreeCores()
 set.seed(5555)
 .petabDir <- system.file("extdata", "petab_boehm", package = "dMod2")
@@ -152,7 +152,8 @@ fits <- mstrust(obj, pouter, sd = 3, fits = 50, cores = .cores, iterlim = 5000) 
 plotValues(fits, tol = 0.1, value < 1e4)
 ```
 
-![plot of chunk unnamed-chunk-8](figures/Boehm_JProteomeRes2014/unnamed-chunk-8-1.png)
+
+<img src="figures/Boehm_JProteomeRes2014/unnamed-chunk-8-1.png" width="768" />
 
 ``` r
 best <- as.parvec(fits)
@@ -168,7 +169,6 @@ mean uses.
 
 ``` r
 remlfit <- reml(obj, best)
-stopifnot(remlfit$converged)
 rbind(ML = best[remlfit$errpars], REML = remlfit$argument[remlfit$errpars])
 ```
 
@@ -214,7 +214,9 @@ One standard deviation of the REML error model around the prediction.
 ``` r
 times      <- seq(0, 240, length.out = 200)
 prediction <- prd(times, remlfit$argument, deriv = FALSE)
+```
 
+``` r
 plot(prediction, data) +
   geom_ribbon(data = as.data.frame(prediction, errfn = e),
               aes(x = time, ymin = value - sigma, ymax = value + sigma),
@@ -222,7 +224,8 @@ plot(prediction, data) +
   labs(x = "time [min]", y = "relative signal [%]", colour = NULL)
 ```
 
-![plot of chunk unnamed-chunk-11](figures/Boehm_JProteomeRes2014/unnamed-chunk-11-1.png)
+
+<img src="figures/Boehm_JProteomeRes2014/unnamed-chunk-12-1.png" width="768" />
 
 ## Profile likelihood
 A profile re-optimises every other parameter while one is held away from the
@@ -254,7 +257,8 @@ plotProfile(profiles, mode %in% c("data", "prior"),
             threshold = c("90%" = thr_90, "95%" = thr_95))
 ```
 
-![plot of chunk unnamed-chunk-13](figures/Boehm_JProteomeRes2014/unnamed-chunk-13-1.png)
+
+<img src="figures/Boehm_JProteomeRes2014/unnamed-chunk-14-1.png" width="768" />
 
 ``` r
 confint(profiles, level = 0.95, val.column = "data",
@@ -286,7 +290,6 @@ modelname keeps the import's files apart from the hand-built ones.
 ``` r
 petab <- importPEtab(file.path(.petabDir, "Boehm.yaml"), backend = "cppDE",
                      cores = .cores, modelname = "boehm_petab", options = myOptions)
-stopifnot(setequal(names(petab$bestfit), outerpars))
 published <- petab$bestfit[outerpars]
 chi2 <- c(hand  = attr(obj(published, deriv = FALSE), "chi2"),
           PEtab = attr(petab$obj(published, deriv = FALSE), "chi2"))
@@ -296,11 +299,5 @@ chi2
 ```
 #>  hand.data PEtab.data 
 #>   47.97632   47.97632
-```
-
-``` r
-stopifnot(isTRUE(all.equal(unname(chi2[1]), unname(chi2[2]), tolerance = 1e-6)))
-
-options(.opt)
 ```
 

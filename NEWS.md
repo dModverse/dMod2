@@ -1,3 +1,12 @@
+# dMod2 0.13.2
+
+* `distributedComputing()` reports the start of a job as a message, on a SLURM cluster
+  with the job ID and the array tasks. A build writes its output to `build.log` in the job
+  folder, and a failed build is an error that shows its end instead of starting the tasks.
+
+* `plotProfile()` leaves more space between its panels, and a narrow panel leaves out the
+  x labels that would overlap.
+
 # dMod2 0.13.1
 
 * Breaking: `distributedComputing()` takes where its tasks run as `on`: `localNode()`,
