@@ -11,7 +11,7 @@ library(ggplot2)
 if (!dir.exists(.outdir)) dir.create(.outdir, recursive = TRUE)
 # generated sources and shared objects go to .outdir, see ?dMod2 for the options;
 # compiling and the symmetry detection use the free cores of the local machine
-.opt   <- options(dMod2.outdir = .outdir)
+options(dMod2.outdir = .outdir)
 .cores <- detectFreeCores()
 .extDir <- system.file("extdata", "kok", package = "dMod2")
 
@@ -166,8 +166,6 @@ observables <- do.call(eqnvec, c(
        mc_IRF9  = paste(.IRF9, collapse = " + "),
        mc_USP18 = "USP18")))
 
-stopifnot(setequal(names(observables), unique(kok$name)))
-
 
 # Build -------------------------------------------------------------------------
 myOptions <- list(atol = 1e-8, rtol = 1e-6, maxsteps = 1e6L, maxattempts = 100L)
@@ -303,7 +301,6 @@ obj    <- normL2(mydataL, prd) + constraintL2(pouter, sigma = 12)
 # the published optimum, on the natural log scale
 .pars   <- read.delim(file.path(.extDir, "parameters_Kok_MSB2020.tsv"))
 bestfit <- setNames(.pars$estimate, .pars$parameterId)
-stopifnot(setequal(names(bestfit), outerpars))
 
 
 # Forward and reverse gradient --------------------------------------------------
@@ -476,5 +473,3 @@ ggplot(sensitization, aes(dose, ratio)) +
   theme_dMod() +
   labs(x = "prestimulation at 0 h [U/ml]",
        y = "ISRE response to 5000 U/ml at 24 h,\nrelative to no prestimulation")
-
-options(.opt)

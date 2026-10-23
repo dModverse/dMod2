@@ -13,7 +13,7 @@ library(ggplot2)
 if (!dir.exists(.outdir)) dir.create(.outdir, recursive = TRUE)
 # generated sources and shared objects go to .outdir, see ?dMod2 for the options;
 # compiling, fitting and profiling use the free cores of the local machine
-.opt   <- options(dMod2.outdir = .outdir)
+options(dMod2.outdir = .outdir)
 .cores <- detectFreeCores()
 set.seed(5555)
 
@@ -25,6 +25,7 @@ set.seed(5555)
 # estimated parameters to those of the model. `g*x*p` composes them.
 data(badata)
 data <- as.datalist(badata)
+#+ fig.height = 3.5
 plot(data)
 
 reactions <- eqnlist() |>
@@ -42,7 +43,7 @@ g <- Y(observables, x, modelname = "ba_obs", compile = FALSE)
 innerpars <- getParameters(x, g)
 
 
-# Two conditions ----------------------------------------------------------------
+# Parameter transformation ------------------------------------------------------
 # The buffer starts empty, every other parameter is estimated on log10. Open
 # junctions get a reflux rate of their own.
 trafo <- eqnvec() |>
@@ -64,7 +65,7 @@ obj  <- normL2(data, g*x*p, attrName = "data") +
   constraintL2(pouter, sigma = 4, attrName = "prior")
 
 
-# Multistarts as tasks ----------------------------------------------------------
+# Multi-start fit ---------------------------------------------------------------
 # distributedComputing() saves the objects named in `input`, copies them with the
 # code and the shared objects of the model to a job folder in the working
 # directory and runs the code there in the background, as one task on the local
@@ -100,11 +101,10 @@ ggplot(.optima, aes(time, value, colour = factor(round(.value, 1)),
   scale_color_dMod() +
   labs(colour = "objective value")
 
-
 bestfit <- as.parvec(fits)
 
 
-# Profiles: a structural non-identifiability ------------------------------------
+# Parameter profile likelihood --------------------------------------------------
 # profile() follows each profile in one of two ways: `method = "integrate"`
 # integrates the path along which the other parameters stay optimal, and
 # `method = "optimize"` reoptimises them at every step. Both run here, and
@@ -125,7 +125,7 @@ plotProfile(list(integrate = profiles_integrate, optimize = profiles_optimize),
 plotPaths(profiles_integrate, whichPar = "S")
 
 
-# A steady-state start ----------------------------------------------------------
+# Starting from steady state ----------------------------------------------------
 # The canaliculi start in balance with the cells, at the reflux of closed
 # junctions, since they open only at time 0. The scale is fixed to 1, which
 # removes the direction.
@@ -160,7 +160,7 @@ profiles <- profile(obj, bestfit, whichPar = names(bestfit), method = "integrate
 plotProfile(profiles, mode %in% c("data", "prior"))
 
 
-# Fast reflux in the open condition ---------------------------------------------
+# Fixed reflux in the open condition --------------------------------------------
 # K_REFLUX_OPEN stays practically non-identifiable: its profile is open towards
 # instantaneous reflux. The reflux is fixed to a fast rate instead. K_EXPORT_SINUS
 # stays open towards slow export below the 68% level.
@@ -176,6 +176,7 @@ p <- P(trafo, modelname = "ba_trafo_final", compile = TRUE)
 
 obj     <- normL2(data, g*x*p, attrName = "data")
 bestfit <- trust(obj, bestfit[getParameters(p)], rinit = 1)$argument
+#+ fig.height = 3.5
 plot((g*x*p)(times, bestfit, deriv = FALSE), data)
 
 # the parameters with their 95% confidence intervals, on log10
@@ -219,5 +220,3 @@ ggplot(.pred, aes(time, value)) +
   geom_point(data = .band, aes(y = upper), shape = 4) +
   theme_dMod() +
   labs(x = "time", y = "cellular bile acid", title = "closed junctions: prediction band")
-
-options(.opt)

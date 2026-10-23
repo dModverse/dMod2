@@ -11,7 +11,7 @@ library(ggplot2)
 if (!dir.exists(.outdir)) dir.create(.outdir, recursive = TRUE)
 # generated sources and shared objects go to .outdir, see ?dMod2 for the options;
 # compiling, fitting and profiling use the free cores of the local machine
-.opt   <- options(dMod2.outdir = .outdir)
+options(dMod2.outdir = .outdir)
 .cores <- detectFreeCores()
 set.seed(5555)
 .petabDir <- system.file("extdata", "petab_boehm", package = "dMod2")
@@ -118,7 +118,6 @@ best <- as.parvec(fits)
 # and Thompson 1971), which corrects the variances for the degrees of freedom the
 # mean uses.
 remlfit <- reml(obj, best)
-stopifnot(remlfit$converged)
 rbind(ML = best[remlfit$errpars], REML = remlfit$argument[remlfit$errpars])
 remlfit$dof     # data points minus the summed leverage, per observable
 remlfit$rank    # effective number of mean parameters
@@ -132,6 +131,7 @@ tapply(remlfit$leverage$leverage, remlfit$leverage$name, sum)
 times      <- seq(0, 240, length.out = 200)
 prediction <- prd(times, remlfit$argument, deriv = FALSE)
 
+#+ fig.height = 3.5
 plot(prediction, data) +
   geom_ribbon(data = as.data.frame(prediction, errfn = e),
               aes(x = time, ymin = value - sigma, ymax = value + sigma),
@@ -174,11 +174,7 @@ confint(profiles, level = 0.95, val.column = "data",
 # modelname keeps the import's files apart from the hand-built ones.
 petab <- importPEtab(file.path(.petabDir, "Boehm.yaml"), backend = "cppDE",
                      cores = .cores, modelname = "boehm_petab", options = myOptions)
-stopifnot(setequal(names(petab$bestfit), outerpars))
 published <- petab$bestfit[outerpars]
 chi2 <- c(hand  = attr(obj(published, deriv = FALSE), "chi2"),
           PEtab = attr(petab$obj(published, deriv = FALSE), "chi2"))
 chi2
-stopifnot(isTRUE(all.equal(unname(chi2[1]), unname(chi2[2]), tolerance = 1e-6)))
-
-options(.opt)

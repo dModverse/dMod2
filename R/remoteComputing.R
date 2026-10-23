@@ -465,6 +465,9 @@ detectFreeCores <- function(machine = NULL) {
        call. = FALSE)
 }
 
+## "1 task", "2 tasks".
+.count <- function(n, what) paste(n, if (n == 1L) what else paste0(what, "s"))
+
 ## A positive whole number as integer; NULL stays NULL where `null` allows it.
 .wholeNumber <- function(x, name, null = TRUE) {
   if (is.null(x) && null) return(NULL)
@@ -855,6 +858,10 @@ print.dMod2Job <- function(x, ...) {
 #' the background. Returns functions to check, wait for, collect and delete the
 #' results. Needs a Unix-like system.
 #'
+#' The start is reported as a message, on a SLURM cluster with the job ID. A
+#' build writes its output to `build.log` in the job folder; a failed build
+#' shows its end in the error.
+#'
 #' @details The value of `expr` is the result of a task. In the code, `task`
 #' is the task's element of `tasks` (`NULL` for a count), `taskId` its
 #' position, `cores` the cores the task may use and `jobname` the job's name.
@@ -1013,7 +1020,8 @@ distributedComputing <- function(expr, tasks = NULL, on = localNode(), jobname =
       cxx = any(grepl("\\.cpp$", files)), cores = buildCores, filelist = "files.txt",
       bundle = buildBundle),
       file.path(stage, "build.sh"))
-    buildCmd <- "bash build.sh && "
+    # the build writes to build.log, which shows its end only when it fails
+    buildCmd <- "{ bash build.sh > build.log 2>&1 || { tail -n 40 build.log; false; }; } && "
   }
   if (length(files)) file.symlink(normalizePath(files), file.path(stage, basename(files)))
   writeLines(.taskScript(expr, jobname, seed, shared), file.path(stage, "job.R"))
@@ -1049,6 +1057,8 @@ distributedComputing <- function(expr, tasks = NULL, on = localNode(), jobname =
            "returns its functions:\n", paste(out, collapse = "\n"), call. = FALSE)
     m$jobid <- id[1L]
     .saveManifest(m)
+    message(jobname, ": ", .count(n, "task"), " submitted to ", hosts, " as SLURM job ", m$jobid,
+            ", ", .count(workers, "array task"), " of ", cores[[1L]], " cores")
   } else {
     run <- function(id) paste0("Rscript job.R ", id, " ", cores[[worker[id]]],
                                " > task_", id, ".out 2>&1")
@@ -1059,13 +1069,14 @@ distributedComputing <- function(expr, tasks = NULL, on = localNode(), jobname =
     for (k in unique(worker)) {
       dir <- file.path(m$folder, k)
       .pushStage(hosts[k], stage, dir, wd)
-      status <- .onMachine(hosts[k], paste0(
-        unpack, setup, buildCmd, "if command -v setsid >/dev/null; then S=setsid; else S=; fi; ",
+      out <- suppressWarnings(.onMachine(hosts[k], paste0(
+        unpack, setup, buildCmd, "{ if command -v setsid >/dev/null; then S=setsid; else S=; fi; ",
         "nohup $S sh slot_", k, ".sh > /dev/null 2>&1 < /dev/null & echo $! > slot_", k,
-        ".pid"), dir, wd)
-      if (status != 0)
-        stop("the start on ", hosts[k], " failed (exit status ", status, ")", call. = FALSE)
+        ".pid; }"), dir, wd, intern = TRUE))
+      if (!is.null(attr(out, "status")))
+        stop("the start on ", hosts[k], " failed:\n", paste(out, collapse = "\n"), call. = FALSE)
     }
+    message(jobname, ": ", .count(n, "task"), " started on ", .targetLabel(on))
   }
   job <- .jobFunctions(m)
   if (!wait) return(job)

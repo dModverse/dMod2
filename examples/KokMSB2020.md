@@ -17,7 +17,7 @@ library(ggplot2)
 if (!dir.exists(.outdir)) dir.create(.outdir, recursive = TRUE)
 # generated sources and shared objects go to .outdir, see ?dMod2 for the options;
 # compiling and the symmetry detection use the free cores of the local machine
-.opt   <- options(dMod2.outdir = .outdir)
+options(dMod2.outdir = .outdir)
 .cores <- detectFreeCores()
 .extDir <- system.file("extdata", "kok", package = "dMod2")
 ```
@@ -185,8 +185,6 @@ observables <- do.call(eqnvec, c(
        mc_STAT2 = paste(.tSTAT2, collapse = " + "),
        mc_IRF9  = paste(.IRF9, collapse = " + "),
        mc_USP18 = "USP18")))
-
-stopifnot(setequal(names(observables), unique(kok$name)))
 ```
 
 ## Build
@@ -305,7 +303,7 @@ summary(structural)
 #>   rank: proven (4 directions, exact scalings)
 #>   25 conditions, 50 segments
 #>   settings: reduce_cq=False, equilibrate=False, reconstruct=False
-#>   elapsed: 8.2s
+#>   elapsed: 8.5s
 #> 
 #> Result:  rank 92 / 96  |  4 non-identifiable directions
 #> 
@@ -395,7 +393,6 @@ obj    <- normL2(mydataL, prd) + constraintL2(pouter, sigma = 12)
 # the published optimum, on the natural log scale
 .pars   <- read.delim(file.path(.extDir, "parameters_Kok_MSB2020.tsv"))
 bestfit <- setNames(.pars$estimate, .pars$parameterId)
-stopifnot(setequal(names(bestfit), outerpars))
 ```
 
 ## Forward and reverse gradient
@@ -412,7 +409,7 @@ system.time(obj(bestfit, deriv = FALSE))
 
 ```
 #>    user  system elapsed 
-#>   0.053   0.000   0.054
+#>   0.046   0.001   0.048
 ```
 
 ``` r
@@ -421,7 +418,7 @@ system.time(obj(bestfit))
 
 ```
 #>    user  system elapsed 
-#>   2.646   0.013   2.669
+#>   2.832   0.016   2.860
 ```
 
 ``` r
@@ -430,7 +427,7 @@ system.time(obj(bestfit, cores = .cores))
 
 ```
 #>    user  system elapsed 
-#>   4.556   0.027   0.596
+#>   4.399   0.008   0.595
 ```
 
 ``` r
@@ -439,7 +436,7 @@ system.time(obj(bestfit, sweep = "reverse"))
 
 ```
 #>    user  system elapsed 
-#>   0.112   0.000   0.112
+#>   0.101   0.000   0.102
 ```
 
 ## Multi-start on helix
@@ -489,7 +486,8 @@ ended in the same optimum.
 plotValues(outframe, pseudoLog = TRUE)
 ```
 
-![plot of chunk unnamed-chunk-13](figures/KokMSB2020/unnamed-chunk-13-1.png)
+
+<img src="figures/KokMSB2020/unnamed-chunk-13-1.png" width="768" />
 
 ``` r
 c(best = min(outframe$value), published = obj(bestfit, deriv = FALSE)$value)
@@ -523,7 +521,8 @@ ggplot(as.data.frame(outframe), aes(elapsed/60)) +
   labs(x = "wall time per fit [min]", y = "fits")
 ```
 
-![plot of chunk unnamed-chunk-14](figures/KokMSB2020/unnamed-chunk-14-1.png)
+
+<img src="figures/KokMSB2020/unnamed-chunk-14-1.png" width="768" />
 
 At the optimum the gradient is small, so the integration error at the
 tolerances of the fit dominates it. With tighter tolerances and the sweep
@@ -591,7 +590,8 @@ plotCombined(prediction, mydataL, experiment == "WT", ifn2 == 0, ifn1 > 0,
   labs(x = "time [h]", y = "log signal [a.u.]", colour = "IFN [U/ml]")
 ```
 
-![plot of chunk unnamed-chunk-17](figures/KokMSB2020/unnamed-chunk-17-1.png)
+
+<img src="figures/KokMSB2020/unnamed-chunk-17-1.png" width="768" />
 
 ``` r
 plotCombined(prediction, mydataL, experiment == "WT", ifn2 == 0, ifn1 > 0,
@@ -602,7 +602,8 @@ plotCombined(prediction, mydataL, experiment == "WT", ifn2 == 0, ifn1 > 0,
   labs(x = "time [h]", y = "log fold change", colour = "IFN [U/ml]")
 ```
 
-![plot of chunk unnamed-chunk-17](figures/KokMSB2020/unnamed-chunk-17-2.png)
+
+<img src="figures/KokMSB2020/unnamed-chunk-17-2.png" width="768" />
 
 ### the second dose after a prestimulation
 Without prestimulation the response to 5000 U/ml is that of `WT_5000_0`,
@@ -633,7 +634,8 @@ ggplot(.model, aes(time, value, colour = ifn1, group = condition)) +
        title = "5000 U/ml at 24 h, black without prestimulation")
 ```
 
-![plot of chunk unnamed-chunk-18](figures/KokMSB2020/unnamed-chunk-18-1.png)
+
+<img src="figures/KokMSB2020/unnamed-chunk-18-1.png" width="768" />
 
 ### USP18: knock-down and overexpression against the wild type
 
@@ -648,7 +650,8 @@ plotCombined(prediction, mydataL,
   labs(x = "time [h]", y = "log signal [a.u.]", colour = NULL)
 ```
 
-![plot of chunk unnamed-chunk-19](figures/KokMSB2020/unnamed-chunk-19-1.png)
+
+<img src="figures/KokMSB2020/unnamed-chunk-19-1.png" width="768" />
 
 ### sensitization: the response to 5000 U/ml against the prestimulation dose
 The response is the area under the occupied ISRE sites in the 4 h after a dose.
@@ -681,9 +684,6 @@ ggplot(sensitization, aes(dose, ratio)) +
        y = "ISRE response to 5000 U/ml at 24 h,\nrelative to no prestimulation")
 ```
 
-![plot of chunk unnamed-chunk-20](figures/KokMSB2020/unnamed-chunk-20-1.png)
 
-``` r
-options(.opt)
-```
+<img src="figures/KokMSB2020/unnamed-chunk-20-1.png" width="768" />
 

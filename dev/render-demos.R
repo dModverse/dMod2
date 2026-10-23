@@ -41,9 +41,13 @@ for (d in demos) {
   knitr::spin(src, knit = FALSE, format = "Rmd")
   unlink(file.path("examples", "figures", d), recursive = TRUE)
   knitr::opts_knit$set(root.dir = normalizePath("examples"))
-  knitr::opts_chunk$set(fig.path = file.path("figures", d, ""), fig.width = 10,
-                        fig.height = 6.5, dpi = 96, comment = "#>", message = FALSE,
-                        warning = FALSE, error = FALSE)
+  # twice the pixels at the displayed width, shown without a caption
+  knitr::opts_chunk$set(fig.path = file.path("figures", d, ""), fig.width = 8,
+                        fig.height = 5, dev = "png", dpi = 96, fig.retina = 2,
+                        comment = "#>", message = FALSE, warning = FALSE, error = FALSE)
+  knitr::render_markdown()
+  knitr::knit_hooks$set(plot = function(x, options)
+    sprintf('\n<img src="%s" width="%s" />\n\n', x, options$out.width))
   owd <- setwd("examples")
   knitr::knit(rmd, output = paste0(d, ".md"), envir = new.env(), quiet = TRUE)
   setwd(owd)

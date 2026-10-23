@@ -19,7 +19,7 @@ library(ggplot2)
 if (!dir.exists(.outdir)) dir.create(.outdir, recursive = TRUE)
 # generated sources and shared objects go to .outdir, see ?dMod2 for the options;
 # compiling, fitting and profiling use the free cores of the local machine
-.opt   <- options(dMod2.outdir = .outdir)
+options(dMod2.outdir = .outdir)
 .cores <- detectFreeCores()
 set.seed(5555)
 ```
@@ -34,10 +34,14 @@ estimated parameters to those of the model. `g*x*p` composes them.
 ``` r
 data(badata)
 data <- as.datalist(badata)
+```
+
+``` r
 plot(data)
 ```
 
-![plot of chunk unnamed-chunk-2](figures/BA_transport/unnamed-chunk-2-1.png)
+
+<img src="figures/BA_transport/unnamed-chunk-3-1.png" width="768" />
 
 ``` r
 reactions <- eqnlist() |>
@@ -55,7 +59,7 @@ g <- Y(observables, x, modelname = "ba_obs", compile = FALSE)
 innerpars <- getParameters(x, g)
 ```
 
-## Two conditions
+## Parameter transformation
 The buffer starts empty, every other parameter is estimated on log10. Open
 junctions get a reflux rate of their own.
 
@@ -80,7 +84,7 @@ obj  <- normL2(data, g*x*p, attrName = "data") +
   constraintL2(pouter, sigma = 4, attrName = "prior")
 ```
 
-## Multistarts as tasks
+## Multi-start fit
 distributedComputing() saves the objects named in `input`, copies them with the
 code and the shared objects of the model to a job folder in the working
 directory and runs the code there in the background, as one task on the local
@@ -112,7 +116,8 @@ job$purge(local = TRUE)
 plotValues(fits)
 ```
 
-![plot of chunk unnamed-chunk-4](figures/BA_transport/unnamed-chunk-4-1.png)
+
+<img src="figures/BA_transport/unnamed-chunk-5-1.png" width="768" />
 
 The fits end in a few local optima, one prediction each.
 
@@ -133,13 +138,14 @@ ggplot(.optima, aes(time, value, colour = factor(round(.value, 1)),
   labs(colour = "objective value")
 ```
 
-![plot of chunk unnamed-chunk-5](figures/BA_transport/unnamed-chunk-5-1.png)
+
+<img src="figures/BA_transport/unnamed-chunk-6-1.png" width="768" />
 
 ``` r
 bestfit <- as.parvec(fits)
 ```
 
-## Profiles: a structural non-identifiability
+## Parameter profile likelihood
 profile() follows each profile in one of two ways: `method = "integrate"`
 integrates the path along which the other parameters stay optimal, and
 `method = "optimize"` reoptimises them at every step. Both run here, and
@@ -159,7 +165,8 @@ plotProfile(list(integrate = profiles_integrate, optimize = profiles_optimize),
             mode %in% c("data", "prior"))
 ```
 
-![plot of chunk unnamed-chunk-6](figures/BA_transport/unnamed-chunk-6-1.png)
+
+<img src="figures/BA_transport/unnamed-chunk-7-1.png" width="768" />
 
 The profiles of S, TCA_CELL and TCA_CANA stay flat in the data: the three
 compensate each other, as the paths show.
@@ -169,9 +176,10 @@ compensate each other, as the paths show.
 plotPaths(profiles_integrate, whichPar = "S")
 ```
 
-![plot of chunk unnamed-chunk-7](figures/BA_transport/unnamed-chunk-7-1.png)
 
-## A steady-state start
+<img src="figures/BA_transport/unnamed-chunk-8-1.png" width="768" />
+
+## Starting from steady state
 The canaliculi start in balance with the cells, at the reflux of closed
 junctions, since they open only at time 0. The scale is fixed to 1, which
 removes the direction.
@@ -206,7 +214,8 @@ fits <- distributedComputing(
 plotValues(fits)
 ```
 
-![plot of chunk unnamed-chunk-9](figures/BA_transport/unnamed-chunk-9-1.png)
+
+<img src="figures/BA_transport/unnamed-chunk-10-1.png" width="768" />
 
 ``` r
 bestfit <- as.parvec(fits)
@@ -218,9 +227,10 @@ profiles <- profile(obj, bestfit, whichPar = names(bestfit), method = "integrate
 plotProfile(profiles, mode %in% c("data", "prior"))
 ```
 
-![plot of chunk unnamed-chunk-9](figures/BA_transport/unnamed-chunk-9-2.png)
 
-## Fast reflux in the open condition
+<img src="figures/BA_transport/unnamed-chunk-10-2.png" width="768" />
+
+## Fixed reflux in the open condition
 K_REFLUX_OPEN stays practically non-identifiable: its profile is open towards
 instantaneous reflux. The reflux is fixed to a fast rate instead. K_EXPORT_SINUS
 stays open towards slow export below the 68% level.
@@ -239,10 +249,14 @@ p <- P(trafo, modelname = "ba_trafo_final", compile = TRUE)
 
 obj     <- normL2(data, g*x*p, attrName = "data")
 bestfit <- trust(obj, bestfit[getParameters(p)], rinit = 1)$argument
+```
+
+``` r
 plot((g*x*p)(times, bestfit, deriv = FALSE), data)
 ```
 
-![plot of chunk unnamed-chunk-10](figures/BA_transport/unnamed-chunk-10-1.png)
+
+<img src="figures/BA_transport/unnamed-chunk-12-1.png" width="768" />
 
 ``` r
 # the parameters with their 95% confidence intervals, on log10
@@ -254,11 +268,11 @@ confint(profiles, level = 0.95)
 
 ```
 #>                          name      value      lower      upper
-#> K_EXPORT_CANA   K_EXPORT_CANA -1.2565412 -1.8467085 -0.6678075
-#> K_EXPORT_SINUS K_EXPORT_SINUS -0.7632622       -Inf -0.6180823
-#> K_IMPORT             K_IMPORT -0.7173893 -0.8133181 -0.6346371
-#> K_REFLUX             K_REFLUX -0.9155092 -1.4632928 -0.3409975
-#> TCA_CELL             TCA_CELL  2.5685417  2.5459922  2.5905578
+#> K_EXPORT_CANA   K_EXPORT_CANA -1.2565416 -1.8467086 -0.6678071
+#> K_EXPORT_SINUS K_EXPORT_SINUS -0.7632620       -Inf -0.6180828
+#> K_IMPORT             K_IMPORT -0.7173893 -0.8133183 -0.6346371
+#> K_REFLUX             K_REFLUX -0.9155095 -1.4632941 -0.3409976
+#> TCA_CELL             TCA_CELL  2.5685418  2.5459922  2.5905578
 ```
 
 ## Prediction profile
@@ -284,7 +298,8 @@ prof20 <- .predict(20)
 plotProfile(prof20, mode %in% c("validation", "data"))
 ```
 
-![plot of chunk unnamed-chunk-11](figures/BA_transport/unnamed-chunk-11-1.png)
+
+<img src="figures/BA_transport/unnamed-chunk-13-1.png" width="768" />
 
 ``` r
 confint(prof20, val.column = "data")
@@ -292,7 +307,7 @@ confint(prof20, val.column = "data")
 
 ```
 #>   name   value    lower    upper
-#> v    v 298.223 287.8172 309.6321
+#> v    v 298.223 287.8172 309.6298
 ```
 
 ``` r
@@ -312,9 +327,6 @@ ggplot(.pred, aes(time, value)) +
   labs(x = "time", y = "cellular bile acid", title = "closed junctions: prediction band")
 ```
 
-![plot of chunk unnamed-chunk-11](figures/BA_transport/unnamed-chunk-11-2.png)
 
-``` r
-options(.opt)
-```
+<img src="figures/BA_transport/unnamed-chunk-13-2.png" width="768" />
 

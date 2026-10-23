@@ -10,7 +10,7 @@ library(ggplot2)
 if (!dir.exists(.outdir)) dir.create(.outdir, recursive = TRUE)
 # generated sources and shared objects go to .outdir, see ?dMod2 for the options;
 # compiling, fitting and profiling use the free cores of the local machine
-.opt   <- options(dMod2.outdir = .outdir)
+options(dMod2.outdir = .outdir)
 .cores <- detectFreeCores()
 set.seed(1)
 
@@ -107,5 +107,3 @@ plotCombined((x*p)(times, bestfit, deriv = FALSE), data, name == "V") +
 profiles <- profile(obj, bestfit, names(bestfit), cores = .cores)
 plotProfile(profiles, mode == "data")
 confint(profiles)
-
-options(.opt)
