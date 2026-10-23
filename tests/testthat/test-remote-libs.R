@@ -163,6 +163,7 @@ test_that("remote nodes run their tasks, and recover, the registry and purge rea
 })
 
 test_that("a job ships the model files of its objects, else those of dMod2.outdir", {
+  skip_on_os("windows")
   models <- withr::local_tempdir()
   file.create(file.path(models, c("a.cpp", "a.o", "a.so", "b.cpp")))
   info <- function(f) structure(list(), compileInfo = list(list(srcfile = file.path(models, f))))
