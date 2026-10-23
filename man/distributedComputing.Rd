@@ -7,21 +7,16 @@
 distributedComputing(
   expr,
   tasks = NULL,
-  machine = "localhost",
+  on = localNode(),
   jobname = NULL,
-  slurm = FALSE,
-  jobscript = NULL,
-  memPerCore = 2,
-  walltime = NULL,
   input = ls(parent.frame()),
-  compile = FALSE,
-  link = FALSE,
-  buildCores = NULL,
-  buildBundle = 50,
+  build = c("auto", "compile", "link", "copy"),
   libs = NULL,
   seed = NULL,
   wait = FALSE,
-  recover = FALSE
+  recover = FALSE,
+  buildCores = NULL,
+  buildBundle = 50
 )
 }
 \arguments{
@@ -29,81 +24,72 @@ distributedComputing(
 
 \item{tasks}{A positive whole number of tasks, or a list or vector with one
 element per task, or a data frame with one row per task. \code{NULL} (default)
-is one task per machine.}
+is one task per worker.}
 
-\item{machine}{The machines, each named once: a character vector, or a
-vector of cores named by machine, such as \code{c(server1 = 20, server2 = 10)}.
-\code{"localhost"} is the local machine, used without \code{ssh}; any other name is an
-\code{ssh} destination such as \code{"host"} or \code{"user@host"}. Without cores a
-machine uses its free cores. With SLURM the one login node, named with the
-cores of each array task, such as \code{c(mycluster = 20)}. Default \code{"localhost"}.}
+\item{on}{Where the tasks run: \code{\link[=localNode]{localNode()}} (default), \code{\link[=sshNodes]{sshNodes()}} or
+\code{\link[=slurmCluster]{slurmCluster()}}.}
 
 \item{jobname}{Character, the name of the job and its folder. \code{NULL}
 (default) picks a random name.}
 
-\item{slurm}{Logical. \code{TRUE} submits the tasks as a SLURM array job on the
-login node \code{machine}, through its job script template. Default \code{FALSE}.}
+\item{input}{Character vector, the objects saved and copied to the nodes,
+looked up from the calling environment. Defaults to all objects of the
+calling environment.}
 
-\item{jobscript}{Path to a job script template, in place of the one
-\code{\link[=slurmTemplate]{slurmTemplate()}} set up for the login node. Default \code{NULL}.}
-
-\item{memPerCore, walltime}{Memory per core in GB and the maximum runtime per
-task as \code{"HH:MM:SS"}, filled into the job script. Without SLURM \code{walltime}
-ends a task through \code{timeout} where the machine has it, and \code{memPerCore} is
-not used. Defaults 2 and \code{NULL}, no limit.}
-
-\item{input}{Character vector, the objects saved and copied to the
-machines, looked up from the calling environment. Defaults to all objects
-of the calling environment.}
-
-\item{compile, link}{Logical, see Details. \code{compile} overrides \code{link}.
-Default \code{FALSE}.}
-
-\item{buildCores}{Number of parallel compiler processes of a build. \code{NULL}
-(default) uses the cores the machine reports, at most 16.}
-
-\item{buildBundle}{Number of generated sources a build puts into one
-translation unit, only for builds with more files than the shell accepts
-as arguments. \code{1} compiles one file at a time. Default 50.}
+\item{build}{How the model files reach the nodes: \code{"auto"}, \code{"compile"},
+\code{"link"} or \code{"copy"}, see Details.}
 
 \item{libs}{Optional character vector of library paths put in front of the
-library search path on the machines, for the tasks and the build. The
-remote shell expands them, so \code{~} is the remote home.}
+library search path on the nodes, for the tasks and the build. The remote
+shell expands them, so \code{~} is the remote home.}
 
 \item{seed}{Integer, task \code{i} starts with \code{set.seed(seed + i)}. \code{NULL}
 (default) draws one.}
 
 \item{wait}{Logical. \code{TRUE} waits for the tasks, returns the results of
-\code{get()} and deletes the job with \code{purge(local = TRUE)}. Default \code{FALSE}.}
+\code{get()} and deletes the job with \code{purge(local = TRUE)}; a job with failed
+tasks is kept. Default \code{FALSE}.}
 
-\item{recover}{Logical. \code{TRUE} returns the functions of the job \code{jobname}
-submitted earlier from this working directory, without submitting again.
-Default \code{FALSE}.}
+\item{recover}{Logical. \code{TRUE} returns the functions of the job \code{jobname},
+submitted from this working directory or registered, without submitting
+again. Default \code{FALSE}.}
+
+\item{buildCores}{Number of parallel compiler processes of a build. \code{NULL}
+(default) uses the cores the node reports, at most 16.}
+
+\item{buildBundle}{Number of generated sources a build puts into one
+translation unit, only for builds with more files than the shell accepts
+as arguments. \code{1} compiles one file at a time. Default 50.}
 }
 \value{
-With \code{wait = TRUE} the results, else an object of class \code{dModJob}, a
-list of functions:
+With \code{wait = TRUE} the results of \code{get()}, else an object of class
+\code{dMod2Job}, a list of functions:
 \describe{
 \item{\code{check()}}{reports how many tasks are done, running or failed and
 returns \code{TRUE} once no task runs any more, with a warning when some
 failed. A task fails when its process ends without a result.}
-\item{\code{get(all = FALSE)}}{returns the results, a list with one entry per
-task, named like \code{tasks}, \code{NULL} for a task not done. Results of remote
-machines are copied into \verb{<jobname>_folder/<k>}, with \code{all = TRUE}
+\item{\code{wait(interval = 10)}}{polls every \code{interval} seconds until no task
+runs, reports each change as a message and returns \code{TRUE} when every task
+is done.}
+\item{\code{get(combine = TRUE, all = FALSE)}}{returns the results. With
+\code{combine = TRUE} parlists are joined by \code{c()} and data frames such as
+parframes by \code{rbind()}, other results come as a list; tasks without a
+result are left out with a warning. \code{combine = FALSE} returns one entry
+per task, named like \code{tasks}, \code{NULL} for a task not done. Results of
+remote nodes are copied into \verb{<jobname>_folder/<k>}, with \code{all = TRUE}
 together with every other file of the job folder.}
-\item{\code{purge(local = FALSE)}}{deletes the job folders on the machines,
-with \code{local = TRUE} also the local \verb{<jobname>_folder}.}
+\item{\code{log(i, lines = 20)}}{prints the last lines of the output of task
+\code{i}.}
+\item{\code{purge(local = FALSE)}}{deletes the job folders on the nodes, with
+\code{local = TRUE} also the local \verb{<jobname>_folder} and the registry entry.}
 \item{\code{terminate()}}{stops the tasks.}
 }
 }
 \description{
-Saves the objects named in \code{input}, copies them with the code to each
-machine and runs the code there once per task, in the background. Without
-SLURM the tasks run as processes of their own: \code{"localhost"} is this
-machine, any other entry an \code{ssh} destination with key authentication. With
-\code{slurm = TRUE} the tasks form an array job of the scheduler, submitted
-through a job script template. Returns functions to check, collect and
-delete the results. Needs a Unix-like system.
+Saves the objects named in \code{input}, copies them with the code and the model
+files to the nodes given by \code{on} and runs the code there once per task, in
+the background. Returns functions to check, wait for, collect and delete the
+results. Needs a Unix-like system.
 }
 \details{
 The value of \code{expr} is the result of a task. In the code, \code{task}
@@ -111,31 +97,30 @@ is the task's element of \code{tasks} (\code{NULL} for a count), \code{taskId} i
 position, \code{cores} the cores the task may use and \code{jobname} the job's name.
 Parallel code such as \code{\link[=mstrust]{mstrust()}} or \link[=profile.objfn]{profile()} takes
 \code{cores = cores}. A task that raises an error returns the error as a
-\code{try-error}.
+\code{try-error}. Task \code{i} starts with the seed \code{seed + i}.
 
-Without SLURM the tasks are dealt to the machines in turn, and a machine runs
-its tasks one after the other, each with all the cores of the machine: the
-cores \code{machine} gives it, or its free cores by \code{\link[=detectFreeCores]{detectFreeCores()}}. A
-machine with fewer free cores than given gets those, with a warning. The
-processes are detached and survive the R session. Jobs are kept in
-\verb{<jobname>_folder}, in the working directory for \code{"localhost"} and in the
-home directory of a remote machine.
+The tasks are dealt in turn to the workers of \code{on}, the nodes or the array
+tasks of a SLURM job, and a worker runs its tasks one after the other, see
+\code{\link[=localNode]{localNode()}}. A job is kept in \verb{<jobname>_folder}, in the working directory
+for \code{"localhost"} and in the home directory of a remote node. A job of the
+same name that still runs there is an error. Every job is registered in
+\code{tools::R_user_dir("dMod2", "data")} until \code{purge(local = TRUE)}, and
+\code{\link[=dMod2Jobs]{dMod2Jobs()}} lists them.
 
-With \code{slurm = TRUE} the tasks form an array job, submitted on the login node
-through the job script template \code{\link[=slurmTemplate]{slurmTemplate()}} set up for it.
-
-The model files come from \code{getOption("dMod2.outdir")}, else from the working
-directory:
+The model files are those of the \link{obsfn}, \link{parfn}, \link{prdfn} and objective
+objects in \code{input}; objects without them take every file of
+\code{getOption("dMod2.outdir")}, else of the working directory.
 \itemize{
-\item \code{compile = TRUE}: the C/C++ sources are copied and compiled once per
-machine into one shared object.
-\item \code{link = TRUE}: the object files (\code{.o}) are copied and linked once per
-machine; needs a compiler there compatible with the local one.
-\item Both \code{FALSE} (default): the shared objects (\code{.so}) are copied.
+\item \code{build = "compile"}: the C/C++ sources are copied and compiled once
+per node into one shared object, against the cppDE installed there.
+\item \code{build = "link"}: the object files (\code{.o}) are copied and linked once
+per node; needs a compiler there compatible with the local one.
+\item \code{build = "copy"}: the shared objects are copied.
+\item \code{build = "auto"} (default): \code{"copy"} on the local machine,
+\code{"compile"} elsewhere.
 }
-With \code{compile} or \code{link}, the \link{obsfn}, \link{parfn} and \link{prdfn} objects and the objectives
-use the new shared object. The build needs cppDE installed for the R on the
-machine.
+After a build the \link{obsfn}, \link{parfn} and \link{prdfn} objects and the objectives
+use the new shared object.
 }
 \examples{
 if (.Platform$OS.type == "unix") {
@@ -144,49 +129,54 @@ if (.Platform$OS.type == "unix") {
   M <- matrix(rnorm(1e2), 10, 10)
   job <- distributedComputing(det(M * task), tasks = list(a = 1, b = 2),
                               input = "M", jobname = "example")
-  while (!job$check()) Sys.sleep(1)
+  job$wait(interval = 1)
   print(job$get())
   job$purge(local = TRUE)
   setwd(old)
 }
 
 \dontrun{
-# For an objective obj and a centre of the starts: multistarts on two machines
-# reached by ssh, one task per machine with ten fits per core
+# For an objective obj and a centre of the starts: multistarts on two nodes
+# reached by ssh, one task per node with ten fits per core
+nodes <- sshNodes(c("server1", "server2"), cores = 16)
 jobFitting <- distributedComputing(
   mstrust(obj, center, fits = 10 * cores, cores = cores, sd = 4),
-  machine = c(server1 = 8, server2 = 16), jobname = "fits", compile = TRUE
+  on = nodes, jobname = "fits"
 )
-while (!jobFitting$check()) Sys.sleep(10)
-parlists <- Filter(function(f) inherits(f, "parlist"), jobFitting$get())
-fits     <- as.parframe(do.call(c, parlists))
-bestfit  <- as.parvec(fits)
-jobFitting$purge()
+jobFitting$wait()
+fits    <- as.parframe(jobFitting$get())
+bestfit <- as.parvec(fits)
+jobFitting$purge(local = TRUE)
 
-# Profiles of the best fit, four parameters per task, on the free cores of
-# both machines
+# Profiles of the best fit: one task per group of four parameters and side, on
+# the free cores of both nodes. get() joins the sides of every parameter.
+groups <- split(names(bestfit), ceiling(seq_along(bestfit) / 4))
 jobProfiling <- distributedComputing(
-  profile(obj, bestfit, whichPar = task, limits = c(-5, 5), cores = cores),
-  tasks = split(names(bestfit), ceiling(seq_along(bestfit) / 4)),
-  machine = c("server1", "server2"), jobname = "profiles"
+  profile(obj, bestfit, whichPar = groups[[task$group]], side = task$side,
+          limits = c(-5, 5), cores = cores),
+  tasks = expand.grid(group = seq_along(groups), side = c("left", "right"),
+                      stringsAsFactors = FALSE),
+  on = sshNodes(c("server1", "server2")), jobname = "profiles"
 )
-while (!jobProfiling$check()) Sys.sleep(10)
-profiles <- do.call(rbind, jobProfiling$get())
+jobProfiling$wait()
+profiles <- jobProfiling$get()
+confint(profiles)
 
-# A SLURM array job of 10 tasks with 20 cores each, on the login node
-# "mycluster". Its job script template is set up once, from a job script of
-# the cluster with the placeholders of ?slurmTemplate.
+# 1000 fits on a SLURM cluster: 100 array tasks of 10 fits on 10 cores each,
+# through the job script template of its login node "mycluster", set up once
+# from a job script of the cluster with the placeholders of ?slurmTemplate.
 slurmTemplate("mycluster", from = "~/mycluster.sh")
+cluster <- slurmCluster("mycluster", cores = 10, walltime = "02:00:00")
 job <- distributedComputing(
-  mstrust(obj, center, fits = 20, cores = cores, sd = 4),
-  tasks = 10, machine = c(mycluster = 20), slurm = TRUE,
-  walltime = "02:00:00", jobname = "slurmfits", compile = TRUE
+  mstrust(obj, center, fits = cores, cores = cores, sd = 4),
+  tasks = 100, on = cluster, jobname = "slurmfits"
 )
 
-# The functions of a job submitted earlier from this working directory
-jobProfiling <- distributedComputing(NULL, jobname = "profiles", recover = TRUE)
+# The jobs submitted and not purged, and the functions of one of them
+dMod2Jobs()
+job <- distributedComputing(NULL, jobname = "slurmfits", recover = TRUE)
 }
 }
 \seealso{
-\code{\link[=slurmTemplate]{slurmTemplate()}}, \code{\link[=detectFreeCores]{detectFreeCores()}}
+\code{\link[=localNode]{localNode()}}, \code{\link[=slurmTemplate]{slurmTemplate()}}, \code{\link[=dMod2Jobs]{dMod2Jobs()}}, \code{\link[=detectFreeCores]{detectFreeCores()}}
 }

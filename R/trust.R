@@ -80,7 +80,7 @@
 #'   objective, \code{"bfgs"} or \code{"sr1"} a quasi-Newton update seeded as
 #'   \code{qnControl$hessianInit} says, \code{"exact"} the true Hessian at
 #'   every iterate, which needs an objective that takes \code{deriv2}.
-#'   Quasi-Newton methods require \code{stepControl$boundary = "reflective"}.
+#'   Quasi-Newton methods require \code{boundary = "reflective"}.
 #'   Also selects the control defaults below. With \code{phases}, each phase
 #'   names its own and this argument is an error.
 #' @param phases List of phases, each a list of settings, run one after the
@@ -119,6 +119,8 @@
 #' @param parupper,parlower Upper and lower bounds. Unnamed: the first element
 #'   applies to all parameters. Named: entries are matched by name, missing
 #'   parameters are unbounded. Default \code{NULL}, unbounded.
+#' @param boundary Box-bound handling, \code{"reflective"} (default) or
+#'   \code{"clip"}. See section Box bounds.
 #' @param tolControl List of convergence thresholds, merged into the defaults.
 #'   \describe{
 #'     \item{\code{ftol}}{Change in objective value. Default \code{1e-6}.}
@@ -132,6 +134,8 @@
 #'       the trajectory counts as continuous; no other test stops the run
 #'       before. Default \code{1e-6}.}
 #'   }
+#'   \code{trustL1} reads \code{ftol}, \code{mtol}, \code{gtol}, \code{xtol}
+#'   and \code{rmin}.
 #' @param qnControl List of quasi-Newton settings, merged into the defaults and
 #'   read only in a \code{"bfgs"} or \code{"sr1"} phase.
 #'   \describe{
@@ -162,8 +166,6 @@
 #' @param stepControl List of step and acceptance settings, merged into the
 #'   defaults.
 #'   \describe{
-#'     \item{\code{boundary}}{Box-bound handling, \code{"reflective"} (default)
-#'       or \code{"clip"}. See section Box bounds.}
 #'     \item{\code{thetaMax}}{Largest fraction of the distance to a bound a
 #'       step may use. Default \code{0.99995}. \code{boundary = "reflective"}
 #'       only.}
@@ -320,6 +322,7 @@ trust <- function(objfun, parinit, rinit = 0.1, rmax = 10,
                   switches  = NULL,
                   parupper  = NULL,
                   parlower  = NULL,
+                  boundary  = c("reflective", "clip"),
                   tolControl  = NULL,
                   qnControl   = NULL,
                   stepControl = NULL,
@@ -338,12 +341,16 @@ trust <- function(objfun, parinit, rinit = 0.1, rmax = 10,
   hessianMethod <- if (is.null(phases)) match.arg(hessianMethod) else
     .phaseMethod(phases[[1L]]$hessianMethod, 1L)
 
+  if ("boundary" %in% names(stepControl))
+    stop("trust: boundary is an argument of trust(), not a stepControl entry.",
+         call. = FALSE)
   ctl  <- .trustDefaults(hessianMethod)
   tol  <- .mergeControl(ctl$tolControl,  tolControl,  "tolControl")
   qn   <- .mergeControl(ctl$qnControl,   qnControl,   "qnControl")
   step <- .mergeControl(ctl$stepControl, stepControl, "stepControl")
 
-  boundary    <- match.arg(step$boundary, c("reflective", "clip"))
+  boundary <- match.arg(boundary)
+  step$boundary <- boundary
   ph <- .trustPhases(phases, switches, hessianMethod, qnControl)
 
   # The objective decides: a normL2 with a multipleShootingControl, alone or
@@ -530,7 +537,7 @@ print.trustfit <- function(x, ...) {
     tolControl  = list(ftol = 1e-6, mtol = 1e-6, gtol = 1e-6,
                        xtol = 0, rmin = 0, ctol = 1e-6),
     qnControl   = qn,
-    stepControl = list(boundary = "reflective", thetaMax = 0.99995,
+    stepControl = list(thetaMax = 0.99995,
                        nonmonotone = 0, acceptance = "filter", soc = TRUE,
                        anneal = TRUE, twoPhase = FALSE, regularise = 0,
                        restore = FALSE))
@@ -546,7 +553,7 @@ print.trustfit <- function(x, ...) {
   hessianInit = "qnControl$hessianInit", qnMemory   = "qnControl$qnMemory",
   hessianReseed = "qnControl$hessianReseed",
   qnCautious  = "qnControl$qnCautious",  qnRejected = "qnControl$qnRejected",
-  boundary    = "stepControl$boundary",  thetaMax   = "stepControl$thetaMax",
+  thetaMax    = "stepControl$thetaMax",  theta.max  = "stepControl$thetaMax",
   nonmonotone = "stepControl$nonmonotone")
 
 .trustRejectMoved <- function(nms, who) {
@@ -581,9 +588,6 @@ print.trustfit <- function(x, ...) {
 
 #' @export
 #' @rdname trust
-#' @param ftol,mtol,gtol,xtol,rmin,theta.max,boundary \code{trustL1} only;
-#'   its tolerances stay flat, it does not take the control lists of
-#'   \code{trust}.
 #' @param mu Named numeric vector of reference values for the L1-penalised
 #'   parameters. Names must be a subset of \code{names(parinit)}; only the
 #'   named parameters receive a penalty. Each must lie strictly inside
@@ -610,23 +614,23 @@ print.trustfit <- function(x, ...) {
 #'   \code{fuse} is given and \code{mu} is not, \code{mu} is empty.
 trustL1 <- function(objfun, parinit, mu = 0 * parinit, one.sided = FALSE, lambda = 1,
                     rinit = 0.1, rmax = 10,
-                    iterlim   = 100L,
-                    ftol      = 1e-6,
-                    mtol      = 1e-6,
-                    gtol      = 1e-6,
-                      xtol      = 0,
-                    rmin      = 0,
-                    theta.max = 0.99995,
-                    boundary  = c("reflective", "clip"),
-                    minimize  = TRUE,
-                    blather   = FALSE,
+                    iterlim   = 1000L,
                     parupper  = NULL,
                     parlower  = NULL,
+                    boundary  = c("reflective", "clip"),
+                    tolControl  = NULL,
+                    stepControl = NULL,
+                    minimize  = TRUE,
+                    blather   = FALSE,
                     printIter = FALSE,
                     traceFile = NULL,
                     gate = NULL, fuse = NULL,
                     ...) {
+  .trustRejectMoved(names(list(...)), "trustL1")
   boundary <- match.arg(boundary)
+  tolDefaults <- .trustDefaults("gn")$tolControl[c("ftol", "mtol", "gtol", "xtol", "rmin")]
+  tol  <- .mergeControl(tolDefaults, tolControl, "tolControl")
+  step <- .mergeControl(list(thetaMax = 0.99995), stepControl, "stepControl")
 
   sanePars <- sanitizePars(parinit, list(...)$fixed)
   parinit  <- sanePars$pars
@@ -686,7 +690,7 @@ trustL1 <- function(objfun, parinit, mu = 0 * parinit, one.sided = FALSE, lambda
   out <- trustL1_impl(fn, parinit, mu, lambda,
                       as.logical(one.sided)[1L], rinit, rmax,
                       NULL, as.integer(iterlim),
-                      ftol, mtol, gtol, xtol, rmin, theta.max,
+                      tol$ftol, tol$mtol, tol$gtol, tol$xtol, tol$rmin, step$thetaMax,
                       boundary, TRUE, blather,
                       parupper, parlower, printIter, traceFile,
                       gate = gate, fuse = fuse)

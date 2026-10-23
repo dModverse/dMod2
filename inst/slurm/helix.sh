@@ -1,7 +1,7 @@
 #!/bin/bash
-# Job script template of distributedComputing(slurm = TRUE) for the bwForCluster
-# Helix, set up with slurmTemplate("helix"). The {{ ... }} fields are filled in,
-# {{ run }} runs one array task.
+# Job script template of distributedComputing() on slurmCluster("helix", ...) for
+# the bwForCluster Helix, set up with slurmTemplate("helix"). The {{ ... }} fields
+# are filled in, {{ run }} runs the tasks of one array task.
 #SBATCH --job-name={{ jobname }}
 #SBATCH --array=1-{{ ntasks }}
 #SBATCH --partition=cpu-single

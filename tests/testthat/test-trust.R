@@ -379,9 +379,9 @@ test_that("without bounds the two boundary schemes agree", {
   target <- c(a = 1.0, b = -0.5, c = 2.3)
   init   <- c(a = 0, b = 0, c = 0)
   refl <- trust(.quadratic_objfn(target), init, rinit = 0.5, rmax = 10,
-                stepControl = list(boundary = "reflective"))
+                boundary = "reflective")
   clip <- trust(.quadratic_objfn(target), init, rinit = 0.5, rmax = 10,
-                stepControl = list(boundary = "clip"))
+                boundary = "clip")
   expect_equal(unname(refl$argument), unname(clip$argument), tolerance = 1e-10)
 })
 
@@ -389,11 +389,11 @@ test_that("without bounds the two boundary schemes agree", {
 test_that("boundary = 'clip' keeps landing exactly on the bound", {
   fit <- trust(.quadratic_objfn(c(a = 5, b = 1)), c(a = 0, b = 0),
                rinit = 1, rmax = 10, parupper = c(a = 2, b = Inf),
-               stepControl = list(boundary = "clip"))
+               boundary = "clip")
   expect_identical(unname(fit$argument[["a"]]), 2)
   expect_error(
     trust(.quadratic_objfn(c(a = 1)), c(a = 0), rinit = 1, rmax = 10,
-          stepControl = list(boundary = "nonsense")),
+          boundary = "nonsense"),
     "should be one of")
 })
 
@@ -402,7 +402,8 @@ test_that("an argument that moved into a control list is rejected by name", {
   obj <- .quadratic_objfn(c(a = 1))
   expect_error(trust(obj, c(a = 0), gtol = 1e-8), "tolControl\\$gtol")
   expect_error(trust(obj, c(a = 0), qnMemory = 3L), "qnControl\\$qnMemory")
-  expect_error(trust(obj, c(a = 0), boundary = "clip"), "stepControl\\$boundary")
+  expect_error(trust(obj, c(a = 0), stepControl = list(boundary = "clip")),
+               "argument of trust")
 })
 
 
@@ -627,7 +628,7 @@ test_that("hessianInit is inert for the methods that need the objective Hessian"
 test_that("quasi-Newton methods require the reflective boundary and a known name", {
   obj <- .quadratic_objfn(c(a = 1.0))
   init <- c(a = 0)
-  expect_error(trust(obj, init, stepControl = list(boundary = "clip"),
+  expect_error(trust(obj, init, boundary = "clip",
                      hessianMethod = "bfgs"), "reflective")
   expect_error(trust(obj, init, hessianMethod = "nope"))   # match.arg rejects
 })
@@ -801,7 +802,7 @@ test_that("phases are checked by name and the fallback arguments refused", {
   expect_error(trust(obj, init, fallbackControl = list(hessianMethod = "sr1")),
                "`phases` and `switches`")
   expect_error(trust(obj, init, hessianFallback = "sr1"), "`phases` and `switches`")
-  expect_error(trust(obj, init, stepControl = list(boundary = "clip"),
+  expect_error(trust(obj, init, boundary = "clip",
                      phases = list(list(hessianMethod = "gn"), list(hessianMethod = "gn"))),
                "single \"gn\" phase")
 })
@@ -972,7 +973,7 @@ test_that("gn says which argument it cannot honour when no Hessian arrives", {
   expect_error(trust(.declining_objfn(), init, rinit = 1, rmax = 10),
                "no Hessian at parinit")
   expect_error(trust(.declining_objfn(), init, rinit = 1, rmax = 10,
-                     stepControl = list(boundary = "clip")),
+                     boundary = "clip"),
                "no Hessian at parinit")
 })
 

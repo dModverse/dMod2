@@ -272,3 +272,16 @@ test_that("trustL1 maximising subtracts the penalty", {
                  lambda = 1, rinit = 0.5, rmax = 5, iterlim = 200)
   expect_equal(fit$value, -ref$value, tolerance = 1e-6)
 })
+
+
+test_that("trustL1 takes its tolerances in tolControl and refuses them flat", {
+  obj <- .quadratic_objfn(c(a = 1, b = 0.5))
+  init <- c(a = 0, b = 0)
+  expect_error(trustL1(obj, init, gtol = 1e-8), "tolControl\\$gtol")
+  expect_error(trustL1(obj, init, theta.max = 0.9), "stepControl\\$thetaMax")
+  expect_error(trustL1(obj, init, tolControl = list(ctol = 1)), "unknown entries ctol")
+  fit <- trustL1(obj, init, lambda = 0.1, tolControl = list(gtol = 1e-10),
+                 stepControl = list(thetaMax = 0.9))
+  expect_true(fit$converged)
+})
+

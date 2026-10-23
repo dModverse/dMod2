@@ -16,7 +16,7 @@ library(ggplot2)
 .outdir    <- file.path(tempdir(), .modelname)
 if (!dir.exists(.outdir)) dir.create(.outdir, recursive = TRUE)
 # generated sources and shared objects go to .outdir, see ?dMod2 for the options;
-# compiling, fitting and profiling use the free cores of this machine
+# compiling, fitting and profiling use the free cores of the local machine
 .opt   <- options(dMod2.outdir = .outdir)
 .cores <- detectFreeCores()
 set.seed(5555)

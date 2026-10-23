@@ -83,9 +83,11 @@ test_that("plotCombined subsets, transforms and takes extra aesthetics", {
   expect_mapequal(.map(p$mapping), c(x = "time", y = "value", ymin = "value - sigma",
                                      ymax = "value + sigma", group = "condition",
                                      linetype = "name", colour = "dose"))
-  # an aesthetic named "colour" adds to the default color instead of replacing it
-  m <- .map(plotCombined(pred, aesthetics = list(colour = "dose"))$mapping)
-  expect_equal(unname(m[names(m) == "colour"]), c("condition", "dose"))
+  # an aesthetic replaces the default of the same name, in either spelling
+  for (a in list(list(colour = "dose"), list(color = "dose"))) {
+    m <- .map(plotCombined(pred, aesthetics = a)$mapping)
+    expect_equal(unname(m[names(m) == "colour"]), "dose")
+  }
 })
 
 test_that("plotCombined marks data below the limit of quantification", {

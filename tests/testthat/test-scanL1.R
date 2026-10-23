@@ -128,10 +128,3 @@ test_that("a multistart adds starts until the best value is hit often enough", {
                                   wf = list(hits = 3, tol = 1e-6, max = 12))
   expect_identical(capped$starts, 12L)
 })
-
-test_that("the flat trustL1 tolerances reach trust() as tolControl", {
-  a <- dMod2:::.l1TrustArgs(list(rinit = 0.1, ftol = 1e-4, gtol = 1e-3))
-  expect_identical(a$tolControl, list(ftol = 1e-4, gtol = 1e-3))
-  expect_false(any(c("ftol", "gtol") %in% names(a)))
-  expect_identical(dMod2:::.l1TrustArgs(list(rinit = 0.1)), list(rinit = 0.1))
-})

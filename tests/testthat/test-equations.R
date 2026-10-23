@@ -80,7 +80,8 @@ test_that("compartments or compartmentOf alone set the layout", {
 test_that("c() keeps the layout of an eqnlist without reactions and custom totals", {
   decl <- assignCompartment(eqnlist(), A = "cyt", volume = "Vc")
   r <- addReaction(eqnlist(), "A", "B", "k*A")
-  expect_equal(c(decl, r)$compartmentOf[["A"]], "cyt")
+  expect_warning(both <- c(decl, r), "the layout wins")
+  expect_equal(both$compartmentOf[["A"]], "cyt")
   f <- customTotals(addReaction(eqnlist(), "A", "B", "k1*A"), list(tot = "A + B"))
   g <- addReaction(eqnlist(), "C", "D", "k2*C")
   expect_true("tot" %in% names(getTotals(c(f, g))))

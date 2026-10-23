@@ -752,6 +752,22 @@ getLocalDLLs <- function() {
 }
 
 
+## The shared objects of dMod objects found in the search directories: those of
+## their model names and of every generated source compiled on its own, also the
+## auxiliary ones no model name names (Pimpl's `_influx`).
+.dllFiles <- function(objects) {
+  fns    <- Filter(function(o) inherits(o, c("fn", "objfn")), objects)
+  models <- as.character(unlist(lapply(fns, modelname)))
+  srcs   <- as.character(unlist(lapply(objects, function(o)
+    lapply(attr(o, "compileInfo"), `[[`, "srcfile"))))
+  names  <- paste0(unique(c(outer(models, c("", "_s", "_s2", "_sdcv", "_deriv", "_dfdx", "_dfdp"),
+                                  paste0),
+                            tools::file_path_sans_ext(basename(srcs)))), .Platform$dynlib.ext)
+  files  <- as.vector(outer(.dllSearchDirs(objects), names, file.path))
+  unique(normalizePath(files[file.exists(files)], winslash = "/", mustWork = FALSE))
+}
+
+
 #' Load Shared Objects for dMod Objects
 #'
 #' Loads the shared objects of dMod functions by their model names and the
@@ -774,18 +790,7 @@ getLocalDLLs <- function() {
 #' @export
 loadDLL <- function(...) {
 
-  .so    <- .Platform$dynlib.ext
-  models <- modelname(...)
-  # Every generated source compiled on its own has a shared object of its
-  # name, also the auxiliary ones no modelname names (Pimpl's `_influx`).
-  srcs   <- as.character(unlist(lapply(list(...), function(o)
-    lapply(attr(o, "compileInfo"), `[[`, "srcfile"))))
-  names  <- paste0(unique(c(outer(models, c("", "_s", "_s2", "_sdcv", "_deriv", "_dfdx", "_dfdp"),
-                                  paste0),
-                            tools::file_path_sans_ext(basename(srcs)))), .so)
-  files  <- as.vector(outer(.dllSearchDirs(list(...)), names, file.path))
-  files  <- normalizePath(files[file.exists(files)], winslash = "/", mustWork = FALSE)
-  files  <- setdiff(unique(files), .loadedDLLPaths())
+  files <- setdiff(.dllFiles(list(...)), .loadedDLLPaths())
   if (!length(files)) return(invisible(character(0)))
 
   for (f in files) dyn.load(f)

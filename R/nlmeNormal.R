@@ -371,7 +371,8 @@ emObjfn <- function(obj, control = list()) {
                    iterations = iter_state))
   }
 
-  myfn <- function(..., fixed = NULL, deriv = TRUE, env = NULL,
+  # `hessian` is accepted as trust() passes it; `deriv` alone decides the derivatives
+  myfn <- function(..., fixed = NULL, deriv = TRUE, hessian = NULL, env = NULL,
                    cores = getOption("dMod2.cores", 1L)) {
     p <- list(...)[[match.fnargs(list(...), "pars")]]
     if (is.null(env)) env <- new.env()

@@ -179,7 +179,7 @@ selectEB <- function(obj, center, zero = NULL, reference = NULL, class = NULL,
     return(list(value = v$value, argument = start, hessian = matrix(0, 0, 0),
                 converged = TRUE))
   }
-  do.call(trust, c(list(env$obj, start), .l1TrustArgs(env$ctl$trust), list(fixed = fx)))
+  do.call(trust, c(list(env$obj, start), env$ctl$trust, list(fixed = fx)))
 }
 
 # Full parameter vector of a fit: `start` with the fitted and the fixed values.

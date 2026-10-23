@@ -634,7 +634,8 @@ makeSubjectNodes <- function(etaHat, Hi, level, pruneTol = Inf) {
                                 parsFullTemplate, etaIndices) {
   meta_i  <- subjectMeta$fast_meta[[i]]
   eta_idx <- as.integer(etaIndices)
-  fn <- function(..., fixed = NULL, deriv = TRUE, deriv2 = FALSE,
+  # `hessian` is accepted as trust() passes it; `deriv` alone decides the derivatives
+  fn <- function(..., fixed = NULL, deriv = TRUE, deriv2 = FALSE, hessian = NULL,
                  conditions = NULL, env = NULL, .pars_full = NULL,
                  .Omega_inv = NULL, .Omega_log_det = NULL) {
     eta_i <- ..1
