@@ -1278,9 +1278,9 @@ Xd <- function(data, condition = NULL) {
 #'   shared object. Default `NULL`, which is `"obsfn"`, followed by
 #'   `_<condition>`.
 #' @param verbose Logical, print compiler output to the R console.
-#' @param cores Number of parallel jobs used to generate the sources when
-#' `g` is a list; `NULL` auto-detects. Ignored for a single observation
-#' function, which is one source either way.
+#' @param cores Number of parallel jobs used to generate and compile the sources
+#' when `g` is a list, on Windows only to compile them; `NULL` auto-detects.
+#' Ignored for a single observation function, which is one source either way.
 #' @param derivMode Which derivative code to build, any of `"forward"`
 #'   (default), `"reverse"` and `"forward-reverse"`.
 #'   * `"forward"`: the Jacobian; without it the function returns no `deriv`
@@ -1326,15 +1326,13 @@ Y <- function(g, f = NULL, states = NULL, parameters = NULL,
     if (is.null(names(g)) || any(!nzchar(names(g))))
       stop("Y(): a list of observables needs the conditions as its names.",
            call. = FALSE)
-    cores <- if (Sys.info()[["sysname"]] == "Windows") 1L
-             else if (is.null(cores)) detectFreeCores()
-             else min(detectFreeCores(), cores)
+    cores <- if (is.null(cores)) detectFreeCores() else min(detectFreeCores(), cores)
     result <- Reduce("+", parallel::mclapply(seq_along(g), function(i)
       Y(g[[i]], f = f, states = states, parameters = parameters,
         condition = names(g)[i], attachInput = attachInput,
         compile = FALSE, modelname = modelname, verbose = verbose,
         deriv = deriv, deriv2 = deriv2, derivMode = derivMode, outdir = outdir),
-      mc.cores = cores))
+      mc.cores = if (.Platform$OS.type == "windows") 1L else cores))
     if (compile)
       compile(result, cores = cores, output = modelname, verbose = verbose)
     return(result)

@@ -54,6 +54,20 @@
 * `scanL1()` returns `level` and `levelFits`: per `lambda`, the runs on the
   lowest level of the waterfall, within `tolHits` of the best value, and the
   structures they take.
+# dMod2 0.13.3
+
+* `distributedComputing()` keeps the manifest of a job also in its folder on every remote
+  node. `recover = TRUE` with `on` given takes it from there, so a job submitted from
+  another machine is recovered, and a job of the same name that still runs on the nodes
+  is an error also when it was submitted from another machine.
+
+* `distributedComputing()` runs on Windows, with the local commands in the sh of Rtools.
+  `detectFreeCores()` measures the processor load of the local Windows machine, without
+  a warning.
+
+* `compile()` compiles in parallel on Windows too, with or without a combined `output`,
+  and `P()` and `Y()` pass their `cores` to it there.
+
 # dMod2 0.13.2
 
 * `distributedComputing()` reports the start of a job as a message, on a SLURM cluster
