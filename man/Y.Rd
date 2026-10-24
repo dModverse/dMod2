@@ -52,9 +52,9 @@ shared object. Default \code{NULL}, which is \code{"obsfn"}, followed by
 
 \item{verbose}{Logical, print compiler output to the R console.}
 
-\item{cores}{Number of parallel jobs used to generate the sources when
-\code{g} is a list; \code{NULL} auto-detects. Ignored for a single observation
-function, which is one source either way.}
+\item{cores}{Number of parallel jobs used to generate and compile the sources
+when \code{g} is a list, on Windows only to compile them; \code{NULL} auto-detects.
+Ignored for a single observation function, which is one source either way.}
 
 \item{deriv}{Logical. If \code{TRUE} (default), build the first derivatives,
 returned as \code{attr(, "deriv")}, \verb{[time, observable, parameter]}, when the

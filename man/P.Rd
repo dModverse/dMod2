@@ -38,8 +38,9 @@ is \code{"expl_parfn"} or \code{"impl_parfn"}, followed by \verb{_<condition>}.}
 \item{method}{\code{"explicit"}, \code{"implicit"}, or \code{NULL} (default) for
 \code{"implicit"} if \code{trafo} is an \link{eqnlist} and \code{"explicit"} otherwise.}
 
-\item{cores}{Number of parallel jobs generating the sources of a list.
-\code{NULL} (default) uses \code{\link[=detectFreeCores]{detectFreeCores()}}; 1 on Windows.}
+\item{cores}{Number of parallel jobs generating and compiling the sources of
+a list; on Windows the sources are generated one after the other. \code{NULL}
+(default) uses \code{\link[=detectFreeCores]{detectFreeCores()}}.}
 
 \item{verbose}{Logical. Print the compiler output, default \code{FALSE}.}
 

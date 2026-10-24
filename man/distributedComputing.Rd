@@ -52,7 +52,11 @@ tasks is kept. Default \code{FALSE}.}
 
 \item{recover}{Logical. \code{TRUE} returns the functions of the job \code{jobname},
 submitted from this working directory or registered, without submitting
-again. Default \code{FALSE}.}
+again. Else, with \code{on} given, the manifest is taken from the job folder of
+its remote nodes, which recovers a job submitted from another machine; it
+is then saved in \verb{<jobname>_folder} of the working directory and
+registered. A job that also runs on \code{"localhost"} is recovered only on the
+machine it was submitted from. Default \code{FALSE}.}
 
 \item{buildCores}{Number of parallel compiler processes of a build. \code{NULL}
 (default) uses the cores the node reports, at most 16.}
@@ -89,7 +93,8 @@ together with every other file of the job folder.}
 Saves the objects named in \code{input}, copies them with the code and the model
 files to the nodes given by \code{on} and runs the code there once per task, in
 the background. Returns functions to check, wait for, collect and delete the
-results. Needs a Unix-like system.
+results. On Windows the local commands run in the sh of Rtools; remote
+nodes need a POSIX shell.
 }
 \details{
 The start is reported as a message, on a SLURM cluster with the job ID. A
@@ -106,8 +111,10 @@ Parallel code such as \code{\link[=mstrust]{mstrust()}} or \link[=profile.objfn]
 The tasks are dealt in turn to the workers of \code{on}, the nodes or the array
 tasks of a SLURM job, and a worker runs its tasks one after the other, see
 \code{\link[=localNode]{localNode()}}. A job is kept in \verb{<jobname>_folder}, in the working directory
-for \code{"localhost"} and in the home directory of a remote node. A job of the
-same name that still runs there is an error. Every job is registered in
+for \code{"localhost"} and in the home directory of a remote node. Its manifest
+\code{job.rds} lies in the local \verb{<jobname>_folder} and in that of every remote
+node. A job of the same name that still runs there is an error, also when it
+was submitted from another machine. Every job is registered in
 \code{tools::R_user_dir("dMod2", "data")} until \code{purge(local = TRUE)}, and
 \code{\link[=dMod2Jobs]{dMod2Jobs()}} lists them.
 

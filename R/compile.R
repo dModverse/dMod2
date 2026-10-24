@@ -17,6 +17,41 @@
 
 
 
+## A compile command run without a shell: its output, with the "status"
+## attribute of a failure. Pipes, not a `2>&1` token, which on Windows reaches
+## the compiler as an input file.
+.compileRun <- function(cmd) {
+  toks <- unlist(strsplit(trimws(cmd), "[[:space:]]+"))
+  toks <- toks[nzchar(toks)]
+  suppressWarnings(system2(toks[1], toks[-1], stdout = TRUE, stderr = TRUE))
+}
+
+## One shared object by R CMD SHLIB, with the environment `job$env` set in this
+## process, which on a cluster worker reaches no other compile. A working
+## directory of its own keeps the tmp.def SHLIB writes there from colliding.
+.compileShlib <- function(job) {
+  do.call(Sys.setenv, as.list(job$env))
+  wd <- tempfile("shlib")
+  dir.create(wd)
+  old <- setwd(wd)
+  on.exit({
+    setwd(old)
+    unlink(wd, recursive = TRUE)
+  })
+  suppressWarnings(system2(file.path(R.home("bin"), "R"),
+                           c("CMD", "SHLIB", shQuote(job$srcfile)),
+                           stdout = TRUE, stderr = TRUE))
+}
+
+## `FUN`, a function of base R only, over `X` on a PSOCK cluster of `cores`
+## workers, for Windows, which cannot fork. The workers run no package code.
+.compileOnCluster <- function(X, FUN, cores) {
+  cl <- parallel::makeCluster(min(as.integer(cores), length(X)))
+  on.exit(parallel::stopCluster(cl))
+  environment(FUN) <- globalenv()
+  parallel::parLapplyLB(cl, X, FUN)
+}
+
 ## Longest command line: the per-argument limit on Linux (128 KiB), cmd.exe's
 ## 8191 characters on Windows, where `R CMD` runs through it. The option lowers
 ## it for tests.
@@ -179,8 +214,7 @@
 #'   a directory is taken as given.
 #' @param args character, additional compiler and linker flags for every
 #'   file. Default `NULL`.
-#' @param cores integer, parallel compilation jobs (Unix only). Default
-#'   [detectFreeCores()].
+#' @param cores integer, parallel compilation jobs. Default [detectFreeCores()].
 #' @param chunkSize integer, the maximum number of object files per archiver
 #'   call when the link command would exceed the command-line limit. Default
 #'   100.
@@ -291,6 +325,9 @@ compile <- function(..., output = NULL, args = NULL, cores = detectFreeCores(),
 
   info <- Filter(function(e) length(e$srcfile) == 1L && nzchar(e$srcfile) && file.exists(e$srcfile), info)
   if (!length(info)) stop("No source files found")
+  # make drops the backslashes of a Windows path
+  for (i in seq_along(info))
+    info[[i]]$srcfile <- normalizePath(info[[i]]$srcfile, "/")
 
   ## Deduplicate by srcfile, keeping the first non-empty flags.
   ord <- order(vapply(info, function(e) e$srcfile, character(1)))
@@ -320,7 +357,6 @@ compile <- function(..., output = NULL, args = NULL, cores = detectFreeCores(),
   roots_full <- sub("\\.[^.]+$", "", files)
 
   ## compiler flags
-  if (.Platform$OS.type == "windows") cores <- 1
   pic  <- if (.Platform$OS.type == "windows") "" else "-fPIC"
   base <- paste("-O2 -DNDEBUG -w", pic)
 
@@ -420,24 +456,29 @@ compile <- function(..., output = NULL, args = NULL, cores = detectFreeCores(),
 
   ## Compile one file with its own flags set via PKG_*, so per-file linkArgs
   ## reach only the files that need them. Each mclapply fork has its own env.
-  compile_one <- function(entry) {
+  ## The PKG_* flags of one source as Makevars lines, named by variable.
+  shlib_flags <- function(entry) {
     extra_c <- entry$compileArgs %||% ""
-    pkg_c  <- .mergeFlags(base,     extra_c)
-    pkg_cx <- .mergeFlags(cxx_base, extra_c)
-    pkg_l  <- trimws(paste(base_libs, entry$linkArgs %||% ""))
-    Sys.setenv(
-      PKG_CFLAGS   = pkg_c,
-      PKG_CXXFLAGS = pkg_cx,
+    c(PKG_CFLAGS   = .mergeFlags(base,     extra_c),
+      PKG_CXXFLAGS = .mergeFlags(cxx_base, extra_c),
       PKG_CPPFLAGS = cppflags,
-      PKG_LIBS     = pkg_l
-    )
+      PKG_LIBS     = trimws(paste(base_libs, entry$linkArgs %||% "")))
+  }
+  mk_lines <- function(flags) paste(names(flags), "=", flags)
+
+  shlib_check <- function(out, srcfile) {
+    if (verbose && length(out)) writeLines(out)
+    status <- attr(out, "status")
+    if (!is.null(status) && status != 0L)
+      stop("Compilation failed: ", srcfile, "\n",
+           paste(utils::tail(out, 12), collapse = "\n"))
+  }
+
+  compile_one <- function(entry) {
+    flags <- shlib_flags(entry)
+    do.call(Sys.setenv, as.list(flags))
     if (.Platform$OS.type == "windows") {
-      mv <- .compileMakevarsUser(c(
-        paste("PKG_CFLAGS =",   pkg_c),
-        paste("PKG_CXXFLAGS =", pkg_cx),
-        paste("PKG_CPPFLAGS =", cppflags),
-        paste("PKG_LIBS =",     pkg_l)
-      ))
+      mv <- .compileMakevarsUser(mk_lines(flags))
       old_mu <- Sys.getenv("R_MAKEVARS_USER", unset = NA)
       Sys.setenv(R_MAKEVARS_USER = mv)
       on.exit({
@@ -447,15 +488,10 @@ compile <- function(..., output = NULL, args = NULL, cores = detectFreeCores(),
       }, add = TRUE)
 
       ## PKG_LIBS from the env can vanish from SHLIB's link command on some
-      ## R/rtools combinations, hence the Makevars.win. Serial on Windows.
+      ## R/rtools combinations, hence the Makevars.win.
       mv_path <- file.path(dirname(entry$srcfile), "Makevars.win")
       mv_pre  <- if (file.exists(mv_path)) readLines(mv_path, warn = FALSE) else NULL
-      writeLines(c(
-        paste("PKG_CFLAGS =",   pkg_c),
-        paste("PKG_CXXFLAGS =", pkg_cx),
-        paste("PKG_CPPFLAGS =", cppflags),
-        paste("PKG_LIBS =",     pkg_l)
-      ), mv_path)
+      writeLines(mk_lines(flags), mv_path)
       on.exit({
         if (is.null(mv_pre)) try(unlink(mv_path), silent = TRUE)
         else                 try(writeLines(mv_pre, mv_path), silent = TRUE)
@@ -466,12 +502,21 @@ compile <- function(..., output = NULL, args = NULL, cores = detectFreeCores(),
     Rexe <- file.path(R.home("bin"), "R")
     shlib_args <- c("CMD", "SHLIB", shQuote(entry$srcfile))
     if (verbose) cat(shQuote(Rexe), paste(shlib_args, collapse = " "), "\n")
-    out <- suppressWarnings(system2(Rexe, shlib_args, stdout = TRUE, stderr = TRUE))
-    if (verbose && length(out)) writeLines(out)
-    status <- attr(out, "status")
-    if (!is.null(status) && status != 0L)
-      stop("Compilation failed: ", entry$srcfile, "\n",
-           paste(utils::tail(out, 12), collapse = "\n"))
+    shlib_check(suppressWarnings(system2(Rexe, shlib_args, stdout = TRUE, stderr = TRUE)),
+                entry$srcfile)
+  }
+
+  ## In parallel on Windows every worker sets its own environment and user
+  ## Makevars, read after a Makevars.win, so no file next to the sources is shared.
+  compile_on_cluster <- function(info) {
+    jobs <- lapply(info, function(entry) {
+      flags <- shlib_flags(entry)
+      list(srcfile = entry$srcfile,
+           env = c(flags, R_MAKEVARS_USER = .compileMakevarsUser(mk_lines(flags))))
+    })
+    on.exit(unlink(vapply(jobs, function(j) j$env[["R_MAKEVARS_USER"]], "")))
+    outs <- .compileOnCluster(jobs, .compileShlib, cores)
+    for (i in seq_along(jobs)) shlib_check(outs[[i]], jobs[[i]]$srcfile)
   }
 
   ## Command compiling a single source to a .o via a direct $CC/$CXX -c call.
@@ -488,12 +533,9 @@ compile <- function(..., output = NULL, args = NULL, cores = detectFreeCores(),
             cpicflags, cflags_R, "-c", shQuote(src), "-o", shQuote(obj))
   }
 
-  compile_one_obj <- function(job) {
+  ## `out` is the output of the command, run here unless a cluster ran it.
+  compile_one_obj <- function(job, out = .compileRun(job$cmd)) {
     if (verbose) cat(job$cmd, "\n")
-    ## system2() with pipes, not a `2>&1` token, which on Windows reaches the
-    ## compiler as an input file. The pipes keep the diagnostics of a failure.
-    toks <- .tok(job$cmd)
-    out  <- suppressWarnings(system2(toks[1], toks[-1], stdout = TRUE, stderr = TRUE))
     if (verbose && length(out)) writeLines(out)
     status <- attr(out, "status")
     if (!is.null(status) && status != 0L)
@@ -512,6 +554,8 @@ compile <- function(..., output = NULL, args = NULL, cores = detectFreeCores(),
            "to link them into a single shared object.", call. = FALSE)
     if (.Platform$OS.type == "unix" && cores > 1)
       parallel::mclapply(info, compile_one, mc.cores = cores)
+    else if (cores > 1 && length(info) > 1L)
+      compile_on_cluster(info)
     else for (e in info) compile_one(e)
     for (r in roots_full) .reloadDLL(paste0(r, so))
     .clearSymbols()
@@ -551,6 +595,9 @@ compile <- function(..., output = NULL, args = NULL, cores = detectFreeCores(),
       list(srcfile = files[i], cmd = obj_cmd(info[[i]], if (is_cxx[i]) pch)))
     res <- if (.Platform$OS.type == "unix" && cores > 1)
       parallel::mclapply(jobs, compile_one_obj, mc.cores = cores)
+    else if (cores > 1 && length(jobs) > 1L)
+      Map(compile_one_obj, jobs,
+          .compileOnCluster(vapply(jobs, `[[`, "", "cmd"), .compileRun, cores))
     else lapply(jobs, compile_one_obj)
     ## mclapply returns a failing fork as a try-error instead of raising it.
     bad <- vapply(res, inherits, logical(1), "try-error")

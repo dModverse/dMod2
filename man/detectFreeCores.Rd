@@ -19,7 +19,8 @@ attributes
 \description{
 Estimates the free cores as the number of cores minus the 1-minute load
 average, at least 1. Works on Linux and macOS, locally or on remote
-machines via \code{ssh}. On Windows it returns 1 with a warning. Under
+machines via \code{ssh}. On the local Windows machine the load is the processor
+load since the previous call, over at least 0.25 s and at most a minute. Under
 \verb{R CMD check} with \verb{_R_CHECK_LIMIT_CORES_} set, the result is at most 2.
 }
 \examples{

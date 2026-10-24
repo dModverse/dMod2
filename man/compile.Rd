@@ -23,8 +23,7 @@ a directory is taken as given.}
 \item{args}{character, additional compiler and linker flags for every
 file. Default \code{NULL}.}
 
-\item{cores}{integer, parallel compilation jobs (Unix only). Default
-\code{\link[=detectFreeCores]{detectFreeCores()}}.}
+\item{cores}{integer, parallel compilation jobs. Default \code{\link[=detectFreeCores]{detectFreeCores()}}.}
 
 \item{chunkSize}{integer, the maximum number of object files per archiver
 call when the link command would exceed the command-line limit. Default

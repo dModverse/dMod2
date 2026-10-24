@@ -71,6 +71,51 @@ test_that("compile() links many conditions through a chunked archive", {
 })
 
 
+test_that("compile commands run on a cluster and keep the status of a failure", {
+
+  cc  <- dMod2:::.compileConfig("CC")
+  out <- dMod2:::.compileOnCluster(c(paste(cc, "--version"), paste(cc, "no_such_file.c")),
+                                   dMod2:::.compileRun, 2)
+  expect_null(attr(out[[1]], "status"))
+  expect_gt(attr(out[[2]], "status"), 0)
+
+})
+
+
+test_that("compile() compiles the sources of an output in parallel", {
+
+  withr::local_dir(tempdir())
+  conditions <- sprintf("par%02d", 1:3)
+  p <- Reduce("+", lapply(conditions, function(cn)
+    P(eqnvec(k1 = "exp(logk1)", A0 = "exp(logA0)*scale"),
+      condition = cn, compile = FALSE, modelname = paste0("parallel_p_", cn))))
+
+  compile(p, output = "parallel_all", cores = 2)
+  out <- p(c(logk1 = log(2), logA0 = log(3), scale = 5))
+  expect_equal(vapply(conditions, function(cn) unname(out[[cn]]["A0"]), 0),
+               setNames(rep(15, length(conditions)), conditions))
+
+})
+
+
+test_that("compile() builds one shared object per source in parallel with its own flags", {
+
+  dir <- withr::local_tempdir()
+  # BLAS calls link only when PKG_LIBS reaches the link of each source
+  objs <- lapply(1:3, function(i) {
+    f <- file.path(dir, sprintf("par_blas%d.c", i))
+    writeLines(c("#include <R_ext/BLAS.h>", sprintf("double par_blas%d(void) {", i),
+                 "  double x[2] = {1, 2}; int n = 2, one = 1;",
+                 "  return F77_CALL(ddot)(&n, x, &one, x, &one);", "}"), f)
+    structure(list(), compileInfo = list(list(srcfile = f, compileArgs = "", linkArgs = "")))
+  })
+  suppressMessages(do.call(compile, c(objs, list(cores = 2))))
+  expect_true(all(is.loaded(sprintf("par_blas%d", 1:3))))
+  expect_false(file.exists(file.path(dir, "Makevars.win")))
+
+})
+
+
 test_that("compile() refuses more shared objects than R can load", {
 
   withr::local_dir(tempdir())

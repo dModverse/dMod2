@@ -18,8 +18,9 @@
 #' @param verbose Logical. Print the compiler output, default `FALSE`.
 #' @param method `"explicit"`, `"implicit"`, or `NULL` (default) for
 #'   `"implicit"` if `trafo` is an [eqnlist] and `"explicit"` otherwise.
-#' @param cores Number of parallel jobs generating the sources of a list.
-#'   `NULL` (default) uses [detectFreeCores()]; 1 on Windows.
+#' @param cores Number of parallel jobs generating and compiling the sources of
+#'   a list; on Windows the sources are generated one after the other. `NULL`
+#'   (default) uses [detectFreeCores()].
 #' @param deriv,deriv2 Build first and second derivatives, default `TRUE` and
 #'   `FALSE`. `deriv2` requires `deriv = TRUE`.
 #' @param ... Further arguments of [Pexpl()] (`attachInput`, `derivMode`,
@@ -46,9 +47,7 @@ P <- function(trafo = NULL, parameters = NULL, condition = NULL,
   } else trafo_list <- trafo
 
   ## detectFreeCores() has side effects (warnings, SSH on remotes); call once.
-  cores <- if (Sys.info()[['sysname']] == "Windows") 1L
-           else if (is.null(cores)) detectFreeCores()
-           else min(detectFreeCores(), cores)
+  cores <- if (is.null(cores)) detectFreeCores() else min(detectFreeCores(), cores)
 
   ## Codegen-only inside mclapply: dyn.load in a forked worker is lost when
   ## the fork exits, so the actual compile happens in the parent below.
@@ -64,7 +63,7 @@ P <- function(trafo = NULL, parameters = NULL, condition = NULL,
       implicit = Pimpl(trafo = tr, parameters = parameters, condition = cond,
                        compile = FALSE, modelname = modelname, verbose = verbose,
                        deriv = deriv, deriv2 = deriv2, ...))
-  }, mc.cores = cores))
+  }, mc.cores = if (.Platform$OS.type == "windows") 1L else cores))
 
   if (compile) compile(result, cores = cores, output = modelname, verbose = verbose)
   result

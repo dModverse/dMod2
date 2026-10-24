@@ -2,7 +2,8 @@
 #'
 #' Estimates the free cores as the number of cores minus the 1-minute load
 #' average, at least 1. Works on Linux and macOS, locally or on remote
-#' machines via `ssh`. On Windows it returns 1 with a warning. Under
+#' machines via `ssh`. On the local Windows machine the load is the processor
+#' load since the previous call, over at least 0.25 s and at most a minute. Under
 #' `R CMD check` with `_R_CHECK_LIMIT_CORES_` set, the result is at most 2.
 #' @param machine Character vector of machines: `"localhost"` is the local machine,
 #'   any other entry an `ssh` destination such as `"host"` or `"user@@host"`.
@@ -17,20 +18,19 @@ detectFreeCores <- function(machine = NULL) {
   
   .getLoadAndCores <- function(prefix = NULL) {
     cmd <- function(x) {
-      if (!is.null(prefix)) x <- paste("ssh", prefix, x)
-      system(x, intern = TRUE)
+      if (!is.null(prefix)) x <- paste("ssh", prefix, .sq(x))
+      .shell(x, intern = TRUE)
     }
-    
-    # Detect OS: use uname for remote, Sys.info() for local
+
     os <- if (!is.null(prefix)) cmd("uname") else Sys.info()[["sysname"]]
-    
+
     if (grepl("Windows", os, ignore.case = TRUE)) {
-      # No load average on Windows, return 1 free core as safe default
-      warning("detectFreeCores: load average not available on Windows, returning 1")
       nCores <- parallel::detectCores()
-      return(list(free = 1, nCores = nCores, occupied = NA_real_))
+      occupied <- nCores * .windowsLoad()
+      return(list(free = max(1L, round(nCores - occupied)), nCores = nCores,
+                  occupied = occupied))
     }
-    
+
     if (grepl("Darwin", os, ignore.case = TRUE)) {
       # macOS: sysctl provides load avg as "{ x.xx x.xx x.xx }"
       occupied <- as.numeric(strsplit(cmd("sysctl -n vm.loadavg"), " ")[[1]][2])
@@ -66,6 +66,29 @@ detectFreeCores <- function(machine = NULL) {
   }
 
   freeCores
+}
+
+## The processor load of the local Windows machine, 0 to 1, since the previous
+## call: within 0.25 s of it the same value, after a minute a fresh 0.25 s sample.
+.loadState <- new.env(parent = emptyenv())
+
+.windowsLoad <- function() {
+  at <- Sys.time()
+  now <- .systemTimes()
+  age <- if (is.null(.loadState$at)) Inf else
+    as.numeric(difftime(at, .loadState$at, units = "secs"))
+  if (age < 0.25) return(.loadState$load)
+  prev <- .loadState$times
+  if (age > 60) {
+    prev <- now
+    Sys.sleep(0.25)
+    at <- Sys.time()
+    now <- .systemTimes()
+  }
+  busy <- 1 - (now[["idle"]] - prev[["idle"]]) / (now[["total"]] - prev[["total"]])
+  .loadState$at <- at
+  .loadState$times <- now
+  .loadState$load <- if (is.finite(busy)) min(1, max(0, busy)) else 0
 }
 
 
@@ -131,14 +154,14 @@ detectFreeCores <- function(machine = NULL) {
 ## GB; without the binary it is saved uncompressed. Returns the file written.
 .saveWorkspace <- function(input, file, envir = .GlobalEnv, level = 3L) {
 
-  zstd <- Sys.which("zstd")
-  if (!nzchar(zstd)) {
+  if (!nzchar(Sys.which("zstd"))) {
     save(list = input, file = file, envir = envir, compress = FALSE)
     return(file)
   }
 
   out <- paste0(file, ".zst")
-  con <- pipe(paste0(shQuote(zstd), " -T0 -", as.integer(level),
+  # by name: cmd.exe, which runs the pipe on Windows, drops quotes around the command
+  con <- pipe(paste0("zstd -T0 -", as.integer(level),
                      " -q -f -o ", shQuote(out)), "wb")
   ## close() pcloses, so zstd has finished before tar sees the file.
   ok <- try(save(list = input, file = con, envir = envir), silent = TRUE)
@@ -246,7 +269,7 @@ detectFreeCores <- function(machine = NULL) {
   doBundle <- chunked && !link && as.integer(bundle) > 1L && sum(isCxx) > 1L
 
   anchorLine <- if (chunked)
-    paste0("ANCHOR=", shQuote(files[if (any(isCxx)) which(isCxx)[1] else 1L]))
+    paste0("ANCHOR=", .sq(files[if (any(isCxx)) which(isCxx)[1] else 1L]))
 
   ## Bundling the small generated sources into few translation units parses the
   ## shared headers once per bundle.
@@ -265,7 +288,7 @@ detectFreeCores <- function(machine = NULL) {
     "fi", "")
 
   compileBlock <- if (!is.null(filelist)) c(
-    paste0("FILELIST=", shQuote(filelist)),
+    paste0("FILELIST=", .sq(filelist)),
     anchorLine, "",
     "dmod_compile_one() {",
     "  src=\"$1\"",
@@ -354,21 +377,46 @@ detectFreeCores <- function(machine = NULL) {
 ## A job lives in <jobname>_folder/<k>, one subfolder per node k: in the working
 ## directory for "localhost", in the home directory elsewhere. The local
 ## <jobname>_folder holds the manifest job.rds and the files get() fetches; a copy of
-## the manifest is registered in the data directory of dMod2.
+## the manifest lies in the <jobname>_folder of every remote node and one is
+## registered in the data directory of dMod2.
 
 ## "localhost" is the local machine, reached without ssh; every other node by ssh.
 .isLocalhost <- function(machine) identical(machine, "localhost")
+
+## Quoted for a POSIX shell, also on Windows.
+.sq <- function(x) shQuote(x, type = "sh")
+
+## `cmd` run by a POSIX shell: the system shell, on Windows the sh of Rtools.
+.shell <- function(cmd, ...) {
+  if (.Platform$OS.type != "windows") return(system(cmd, ...))
+  if (!nzchar(Sys.which("sh")))
+    stop("distributedComputing() needs the sh of Rtools on the PATH", call. = FALSE)
+  system(paste("sh -c", shQuote(cmd, type = "cmd")), ...)
+}
+
+## A local path as the POSIX shell reads it in PATH: on Windows "C:/x" is "/c/x".
+.shPath <- function(path) {
+  if (.Platform$OS.type != "windows") return(path)
+  sub("^([A-Za-z]):", "/\\L\\1", normalizePath(path, "/", mustWork = FALSE), perl = TRUE)
+}
 
 ## `cmd` run by the POSIX shell of `machine` in its job folder `dir`. On
 ## "localhost" `dir` lies in `wd`, and the R of this session with its library
 ## paths comes first.
 .onMachine <- function(machine, cmd, dir, wd, ...) {
   if (.isLocalhost(machine)) {
-    env <- paste0("export PATH=", shQuote(R.home("bin")), ":\"$PATH\" R_LIBS=",
-                  shQuote(paste(.libPaths(), collapse = ":")), "; ")
-    return(system(paste0(env, "cd ", shQuote(file.path(wd, dir)), " && ", cmd), ...))
+    env <- paste0("export PATH=", .sq(.shPath(R.home("bin"))), ":\"$PATH\" R_LIBS=",
+                  .sq(paste(.libPaths(), collapse = .Platform$path.sep)), "; ")
+    return(.shell(paste0(env, "cd ", .sq(file.path(wd, dir)), " && ", cmd), ...))
   }
-  system(paste("ssh", machine, shQuote(paste0("cd ", dir, " && ", cmd))), ...)
+  .shell(paste("ssh", machine, .sq(paste0("cd ", dir, " && ", cmd))), ...)
+}
+
+## `text` into `file` with LF line ends, which the POSIX shell needs, also on Windows.
+.writeLF <- function(text, file) {
+  con <- file(file, "wb")
+  on.exit(close(con))
+  writeLines(text, con)
 }
 
 ## The files of `stage` into an emptied job folder `dir` of `machine`. Symbolic
@@ -376,10 +424,10 @@ detectFreeCores <- function(machine = NULL) {
 .pushStage <- function(machine, stage, dir, wd) {
   unpack <- paste0("rm -rf ", dir, " && mkdir -p ", dir, " && tar -C ", dir, " -xf -")
   if (.isLocalhost(machine))
-    unpack <- paste0("(cd ", shQuote(wd), " && ", unpack, ")")
+    unpack <- paste0("(cd ", .sq(wd), " && ", unpack, ")")
   else
-    unpack <- paste("ssh", machine, shQuote(unpack))
-  system(paste0("tar -C ", shQuote(stage), " -chf - . | ", unpack))
+    unpack <- paste("ssh", machine, .sq(unpack))
+  .shell(paste0("tar -C ", .sq(stage), " -chf - . | ", unpack))
 }
 
 ## The files named by the shell pattern `what` of the job folder `dir` of a
@@ -387,9 +435,8 @@ detectFreeCores <- function(machine = NULL) {
 .pullFiles <- function(machine, dir, what, wd) {
   local <- file.path(wd, dir)
   dir.create(local, recursive = TRUE, showWarnings = FALSE)
-  system(paste0("ssh ", machine, " ", shQuote(paste0("cd ", dir, " && tar -cf - ", what,
-                                                     " 2>/dev/null")),
-                " | tar -C ", shQuote(local), " -xf -"),
+  .shell(paste0("ssh ", machine, " ", .sq(paste0("cd ", dir, " && tar -cf - ", what)),
+                " 2>/dev/null | tar -C ", .sq(local), " -xf -"),
          ignore.stderr = TRUE)
 }
 
@@ -585,7 +632,9 @@ print.dMod2Target <- function(x, ...) {
 .taskScript <- function(expr, jobname, seed, shared) {
   c("library(dMod2)",
     "load('workspace.RData')",
-    if (is.null(shared)) "for (so in list.files(pattern = '[.]so$')) dyn.load(so)",
+    if (is.null(shared))
+      paste0("for (so in list.files(pattern = paste0('[.]', ",
+             "substring(.Platform$dynlib.ext, 2L), '$'))) dyn.load(so)"),
     if (!is.null(shared)) c(
       paste0("dyn.load(", encodeString(paste0(shared, ".so"), quote = "'"), ")"),
       "for (nm in ls()) {",
@@ -616,7 +665,8 @@ print.dMod2Target <- function(x, ...) {
     copy    = if (length(srcs)) .dllFiles(objs) else character(0))
   if (!length(files))
     files <- Sys.glob(file.path(.dmodOutdir(), switch(build, compile = c("*.c", "*.cpp"),
-                                                      link = "*.o", copy = "*.so")))
+                                                      link = "*.o",
+                                                      copy = paste0("*", .Platform$dynlib.ext))))
   if (build == "link" && (!length(files) || !all(file.exists(files))))
     stop("'link' needs the object files (.o) of the models: ",
          paste(basename(files[!file.exists(files)]), collapse = ", "), call. = FALSE)
@@ -625,7 +675,7 @@ print.dMod2Target <- function(x, ...) {
 
 ## The SLURM jobs of a manifest for squeue and scancel: by ID, else by name.
 .slurmSelect <- function(m) {
-  if (is.na(m$jobid)) paste0("-n ", shQuote(m$jobname), " -u \"$USER\"") else paste("-j", m$jobid)
+  if (is.na(m$jobid)) paste0("-n ", .sq(m$jobname), " -u \"$USER\"") else paste("-j", m$jobid)
 }
 
 ## The state of every task: "done", "running" or "failed". A task waiting for
@@ -641,8 +691,9 @@ print.dMod2Target <- function(x, ...) {
     else
       # a zombie is finished: a container whose init does not reap keeps it in the
       # process table, where it still answers signal 0
-      paste0("ls; for f in slot_*.pid; do [ -f \"$f\" ] || continue; p=$(cat \"$f\"); ",
-             "if [ -r /proc/$p/status ]; then grep -q \"^State:[[:space:]]*Z\" /proc/$p/status ",
+      paste0("ls; for f in slot_*.pid slot_*.run; do [ -f \"$f\" ] || continue; ",
+             "p=$(cat \"$f\"); if [ -r /proc/$p/status ]; then ",
+             "grep -q \"^State:[[:space:]]*Z\" /proc/$p/status ",
              "|| echo alive \"$f\"; else kill -0 \"$p\" 2>/dev/null && echo alive \"$f\"; fi; done")
     out <- suppressWarnings(.onMachine(host, paste0(probe, "; true"), dir, m$wd,
                                        intern = TRUE, ignore.stderr = TRUE))
@@ -651,7 +702,7 @@ print.dMod2Target <- function(x, ...) {
       running <- as.integer(sub("^running ", "", grep("^running [0-9]+$", out, value = TRUE)))
       state[mine[worker[mine] %in% running]] <- "running"
     } else {
-      alive <- as.integer(sub("^alive slot_([0-9]+)\\.pid$", "\\1",
+      alive <- as.integer(sub("^alive slot_([0-9]+)\\.(pid|run)$", "\\1",
                               grep("^alive ", out, value = TRUE)))
       if (k %in% alive) state[mine] <- "running"
     }
@@ -714,10 +765,28 @@ print.dMod2Target <- function(x, ...) {
                                                                   serialize = FALSE), ".rds"))
 
 ## The manifest into the local job folder and the registry.
-.saveManifest <- function(m) {
+.saveManifestLocal <- function(m) {
   saveRDS(m, file.path(m$wd, m$folder, "job.rds"))
   dir.create(.jobRegistry(), recursive = TRUE, showWarnings = FALSE)
   saveRDS(m, .registryFile(m))
+}
+
+## The manifest also into the job folder of every remote node.
+.saveManifest <- function(m) {
+  .saveManifestLocal(m)
+  for (host in unique(m$hosts[!vapply(m$hosts, .isLocalhost, NA)]))
+    .shell(paste0("tar -C ", .sq(file.path(m$wd, m$folder)), " -cf - job.rds | ssh ",
+                  host, " ", .sq(paste0("mkdir -p ", m$folder, " && tar -C ", m$folder,
+                                            " -xf -"))))
+}
+
+## The manifest in the job folder `folder` of a remote `host`, NULL if there is none.
+.remoteManifest <- function(host, folder) {
+  tmp <- tempfile("dMod_manifest_")
+  on.exit(unlink(tmp, recursive = TRUE), add = TRUE)
+  .pullFiles(host, folder, "job.rds", tmp)
+  f <- file.path(tmp, folder, "job.rds")
+  if (file.exists(f)) tryCatch(readRDS(f), error = function(e) NULL)
 }
 
 .registeredJobs <- function() {
@@ -726,8 +795,9 @@ print.dMod2Target <- function(x, ...) {
 }
 
 ## The manifest of the job `jobname`: the one in the working directory, else the
-## one registered under that name.
-.recoverManifest <- function(jobname, wd) {
+## one registered under that name, else the one on the first of the remote `hosts`
+## that has it, which is then saved for the working directory.
+.recoverManifest <- function(jobname, wd, hosts = NULL) {
   if (is.null(jobname)) stop("'recover' needs the 'jobname'", call. = FALSE)
   f <- file.path(wd, paste0(jobname, "_folder"), "job.rds")
   if (file.exists(f)) {
@@ -737,23 +807,40 @@ print.dMod2Target <- function(x, ...) {
   }
   found <- Filter(function(m) identical(m$jobname, jobname), .registeredJobs())
   if (length(found) == 1L) return(found[[1L]])
-  if (!length(found))
-    stop("no job '", jobname, "' was submitted from this working directory or is ",
-         "registered, see dMod2Jobs()", call. = FALSE)
-  stop("several jobs '", jobname, "' are registered, submitted from ",
-       paste(vapply(found, `[[`, "", "wd"), collapse = ", "),
-       "; recover it from its working directory", call. = FALSE)
+  if (length(found))
+    stop("several jobs '", jobname, "' are registered, submitted from ",
+         paste(vapply(found, `[[`, "", "wd"), collapse = ", "),
+         "; recover it from its working directory", call. = FALSE)
+  hosts <- hosts[!vapply(hosts, .isLocalhost, NA)]
+  for (host in hosts) {
+    m <- .remoteManifest(host, paste0(jobname, "_folder"))
+    if (!identical(m$jobname, jobname)) next
+    if (any(vapply(m$hosts, .isLocalhost, NA)))
+      stop("the job '", jobname, "' runs partly on the machine it was submitted from; ",
+           "recover it there", call. = FALSE)
+    m$wd <- wd
+    dir.create(file.path(wd, m$folder), showWarnings = FALSE)
+    .saveManifestLocal(m)
+    return(m)
+  }
+  stop("no job '", jobname, "' was submitted from this working directory or is registered",
+       if (length(hosts)) paste0(" or lies on ", paste(hosts, collapse = ", ")),
+       ", see dMod2Jobs()", call. = FALSE)
 }
 
 ## An error when a job of this name still runs where the new one would replace
-## its folders: in this working directory, or on one of the same remote nodes.
+## its folders: in this working directory, or on one of the same remote nodes,
+## also when it was submitted from another machine.
 .refuseRunning <- function(jobname, wd, hosts) {
   f <- file.path(wd, paste0(jobname, "_folder"), "job.rds")
+  remote <- hosts[!vapply(hosts, .isLocalhost, NA)]
   same <- function(m) identical(m$jobname, jobname) &&
-    any(m$hosts[!vapply(m$hosts, .isLocalhost, NA)] %in% hosts)
+    any(m$hosts[!vapply(m$hosts, .isLocalhost, NA)] %in% remote)
+  onNodes <- lapply(remote, .remoteManifest, folder = paste0(jobname, "_folder"))
   old <- c(if (file.exists(f)) list(.recoverManifest(jobname, wd)),
-           Filter(same, .registeredJobs()))
-  old <- old[!duplicated(vapply(old, `[[`, "", "wd"))]
+           Filter(same, .registeredJobs()), Filter(same, onNodes))
+  old <- old[!duplicated(vapply(old, function(m)
+    paste(m$wd, as.numeric(m$submitted %||% NA)), ""))]
   for (m in old) {
     running <- sum(.taskStatus(m) == "running")
     if (running)
@@ -808,8 +895,9 @@ print.dMod2Target <- function(x, ...) {
 
   purge <- function(local = FALSE) {
     for (k in seq_along(m$hosts))
-      .onMachine(m$hosts[k], paste0("cd .. && rm -rf ", k, " && cd .. && rmdir ", m$folder,
-                                    " 2>/dev/null; true"),
+      .onMachine(m$hosts[k], paste0("cd .. && rm -rf ", k,
+                                    if (!.isLocalhost(m$hosts[k])) " job.rds",
+                                    " && cd .. && rmdir ", m$folder, " 2>/dev/null; true"),
                  file.path(m$folder, k), m$wd, ignore.stderr = TRUE)
     if (local) {
       unlink(file.path(m$wd, m$folder), recursive = TRUE)
@@ -821,8 +909,9 @@ print.dMod2Target <- function(x, ...) {
   terminate <- function() {
     for (k in seq_along(m$hosts)) {
       cmd <- if (m$slurm) paste("scancel", .slurmSelect(m))
-      else paste0("for f in slot_*.pid; do [ -f \"$f\" ] || continue; p=$(cat \"$f\"); ",
-                  "kill -TERM -- -$p 2>/dev/null || { pkill -TERM -P $p; kill -TERM $p; }; ",
+      else paste0("for f in slot_*.pid slot_*.run; do [ -f \"$f\" ] || continue; ",
+                  "p=$(cat \"$f\"); kill -TERM -- -$p 2>/dev/null || ",
+                  "{ pkill -TERM -P $p; kill -TERM $p; }; ",
                   "done 2>/dev/null; true")
       .onMachine(m$hosts[k], cmd, file.path(m$folder, k), m$wd, ignore.stderr = TRUE)
     }
@@ -856,7 +945,8 @@ print.dMod2Job <- function(x, ...) {
 #' Saves the objects named in `input`, copies them with the code and the model
 #' files to the nodes given by `on` and runs the code there once per task, in
 #' the background. Returns functions to check, wait for, collect and delete the
-#' results. Needs a Unix-like system.
+#' results. On Windows the local commands run in the sh of Rtools; remote
+#' nodes need a POSIX shell.
 #'
 #' The start is reported as a message, on a SLURM cluster with the job ID. A
 #' build writes its output to `build.log` in the job folder; a failed build
@@ -872,8 +962,10 @@ print.dMod2Job <- function(x, ...) {
 #' The tasks are dealt in turn to the workers of `on`, the nodes or the array
 #' tasks of a SLURM job, and a worker runs its tasks one after the other, see
 #' [localNode()]. A job is kept in `<jobname>_folder`, in the working directory
-#' for `"localhost"` and in the home directory of a remote node. A job of the
-#' same name that still runs there is an error. Every job is registered in
+#' for `"localhost"` and in the home directory of a remote node. Its manifest
+#' `job.rds` lies in the local `<jobname>_folder` and in that of every remote
+#' node. A job of the same name that still runs there is an error, also when it
+#' was submitted from another machine. Every job is registered in
 #' `tools::R_user_dir("dMod2", "data")` until `purge(local = TRUE)`, and
 #' [dMod2Jobs()] lists them.
 #'
@@ -915,7 +1007,11 @@ print.dMod2Job <- function(x, ...) {
 #'   tasks is kept. Default `FALSE`.
 #' @param recover Logical. `TRUE` returns the functions of the job `jobname`,
 #'   submitted from this working directory or registered, without submitting
-#'   again. Default `FALSE`.
+#'   again. Else, with `on` given, the manifest is taken from the job folder of
+#'   its remote nodes, which recovers a job submitted from another machine; it
+#'   is then saved in `<jobname>_folder` of the working directory and
+#'   registered. A job that also runs on `"localhost"` is recovered only on the
+#'   machine it was submitted from. Default `FALSE`.
 #' @param buildCores Number of parallel compiler processes of a build. `NULL`
 #'   (default) uses the cores the node reports, at most 16.
 #' @param buildBundle Number of generated sources a build puts into one
@@ -953,7 +1049,10 @@ distributedComputing <- function(expr, tasks = NULL, on = localNode(), jobname =
                                  buildCores = NULL, buildBundle = 50) {
 
   wd <- getwd()
-  if (recover) return(.jobFunctions(.recoverManifest(jobname, wd)))
+  if (recover) {
+    hosts <- if (!missing(on) && inherits(on, "dMod2Target")) on$login %||% on$hosts
+    return(.jobFunctions(.recoverManifest(jobname, wd, hosts)))
+  }
 
   expr <- substitute(expr)
   env <- parent.frame()
@@ -1012,8 +1111,8 @@ distributedComputing <- function(expr, tasks = NULL, on = localNode(), jobname =
   if (build %in% c("compile", "link") && length(files)) {
     shared <- paste0(jobname, "_shared_object")
     info <- .remoteBuildInfo(list2env(objs))
-    writeLines(basename(files), file.path(stage, "files.txt"))
-    writeLines(.remoteBuildScript(
+    .writeLF(basename(files), file.path(stage, "files.txt"))
+    .writeLF(.remoteBuildScript(
       files = basename(files), output = paste0(shared, ".so"),
       compileArgs = info$compileArgs, needsCVODE = info$needsCVODE, needsKLU = info$needsKLU,
       needsLapack = info$needsLapack, link = build == "link",
@@ -1023,7 +1122,11 @@ distributedComputing <- function(expr, tasks = NULL, on = localNode(), jobname =
     # the build writes to build.log, which shows its end only when it fails
     buildCmd <- "{ bash build.sh > build.log 2>&1 || { tail -n 40 build.log; false; }; } && "
   }
-  if (length(files)) file.symlink(normalizePath(files), file.path(stage, basename(files)))
+  # Windows creates symbolic links only with administrator rights
+  if (length(files) && .Platform$OS.type == "windows")
+    file.copy(normalizePath(files), file.path(stage, basename(files)))
+  else if (length(files))
+    file.symlink(normalizePath(files), file.path(stage, basename(files)))
   writeLines(.taskScript(expr, jobname, seed, shared), file.path(stage, "job.R"))
 
   unpack <- paste0("if [ -f workspace.RData.zst ]; then zstd -dqf workspace.RData.zst && ",
@@ -1038,8 +1141,8 @@ distributedComputing <- function(expr, tasks = NULL, on = localNode(), jobname =
     filled$script[grepl("^\\s*\\{\\{\\s*run\\s*\\}\\}\\s*$", filled$script)] <- paste0(
       setup, "for i in $(seq \"$SLURM_ARRAY_TASK_ID\" ", workers, " ", n, "); do ",
       "Rscript job.R \"$i\" ", cores[[1L]], " > \"task_$i.out\" 2>&1; done")
-    writeLines(filled$script, file.path(stage, "job.sh"))
-    writeLines(filled$env, file.path(stage, "env.sh"))
+    .writeLF(filled$script, file.path(stage, "job.sh"))
+    .writeLF(filled$env, file.path(stage, "env.sh"))
     dir <- file.path(m$folder, 1L)
     .pushStage(hosts, stage, dir, wd)
     .saveManifest(m)
@@ -1048,7 +1151,7 @@ distributedComputing <- function(expr, tasks = NULL, on = localNode(), jobname =
               if (!is.null(on$maxRunning)) paste0("--array=1-", workers, "%", on$maxRunning),
               on$sbatch)
     out <- .onMachine(hosts, paste0(unpack, ". ./env.sh && ", setup, buildCmd,
-                                    paste(c("sbatch", shQuote(opts), "job.sh"), collapse = " ")),
+                                    paste(c("sbatch", .sq(opts), "job.sh"), collapse = " ")),
                       dir, wd, intern = TRUE)
     submitted <- grep("Submitted batch job", out, value = TRUE)
     id <- regmatches(submitted, regexpr("[0-9]+$", submitted))
@@ -1060,10 +1163,14 @@ distributedComputing <- function(expr, tasks = NULL, on = localNode(), jobname =
     message(jobname, ": ", .count(n, "task"), " submitted to ", hosts, " as SLURM job ", m$jobid,
             ", ", .count(workers, "array task"), " of ", cores[[1L]], " cores")
   } else {
+    # slot_<k>.run holds the PID of the running task, which on Windows a kill of
+    # the slot does not reach
     run <- function(id) paste0("Rscript job.R ", id, " ", cores[[worker[id]]],
-                               " > task_", id, ".out 2>&1")
+                               " > task_", id, ".out 2>&1 & echo $! > slot_", worker[id],
+                               ".run; wait $!")
     for (k in unique(worker))
-      writeLines(c("#!/bin/sh", setup, vapply(which(worker == k), run, "")),
+      .writeLF(c("#!/bin/sh", setup, vapply(which(worker == k), run, ""),
+                 paste0("rm -f slot_", k, ".run")),
                  file.path(stage, paste0("slot_", k, ".sh")))
     .saveManifest(m)
     for (k in unique(worker)) {
