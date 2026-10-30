@@ -20,6 +20,9 @@
 
 * A sum of objectives holds its terms, not the frame it is built in.
 
+* `distributedComputing(build = "compile")` builds a model of eight or more C++ sources that
+  lie outside the working directory, such as in `getOption("dMod2.outdir")`.
+
 # dMod2 0.13.4
 
 * `evalConditionResidual()` has the parameters that enter only the error model in its

@@ -27,6 +27,16 @@ test_that("the remote build script resolves SUNDIALS flags on the remote side", 
                      fixed = TRUE))
 })
 
+test_that("the precompiled header of a remote build reads sources outside the working directory", {
+  dir <- withr::local_tempdir()
+  paths <- file.path(dir, sprintf("m%d.cpp", 1:8))
+  for (p in paths) writeLines(c("#include <cmath>", "#include <vector>", "", "int f() { return 0; }"), p)
+  script <- dMod2:::.remoteBuildScript(basename(paths), "m.so", sources = paths)
+  expect_match(script, "cat > dMod_pch.hpp", fixed = TRUE)
+  expect_match(script, "#include <vector>", fixed = TRUE)
+  expect_false(grepl(dir, script, fixed = TRUE))
+})
+
 test_that("the generated include line evaluates to the installed cppDE flags", {
   cfg <- get0("cvodeConfig", envir = asNamespace("cppDE"), inherits = FALSE)
   skip_if_not(is.environment(cfg) && isTRUE(cfg$available))

@@ -177,12 +177,13 @@ detectFreeCores <- function(machine = NULL) {
 ## Bash script that builds the shared object on the remote machine from the
 ## sources, or the object files when `link = TRUE`. Beyond the argument limit it
 ## uses compile()'s chunked archive build, reading its inputs from `filelist`.
+## `sources` are the local paths of `files`, read for the precompiled header.
 .remoteBuildScript <- function(files, output, compileArgs = "",
                                needsCVODE = FALSE, needsKLU = FALSE,
                                needsLapack = FALSE,
                                link = FALSE, cxx = FALSE, cores = 1,
                                workdir = NULL, filelist = NULL, chunkSize = 100,
-                               bundle = 50) {
+                               bundle = 50, sources = files) {
 
   files <- unlist(strsplit(trimws(files), "\\s+"))
   files <- files[nzchar(files)]
@@ -243,7 +244,7 @@ detectFreeCores <- function(machine = NULL) {
 
   ## Precompiled header; a missing .gch is harmless, the sources then include
   ## the headers themselves.
-  cxxSrc <- files[grepl("\\.cpp$", files, ignore.case = TRUE)]
+  cxxSrc <- sources[grepl("\\.cpp$", sources, ignore.case = TRUE)]
   pchInc <- if (!link && length(cxxSrc) >= 8L) .compilePCHIncludes(cxxSrc)
   toolchain <- if (!is.null(filelist) || !is.null(pchInc)) c(
     "CC=$(R CMD config CC);   CFLAGS=$(R CMD config CFLAGS)",
@@ -1113,7 +1114,7 @@ distributedComputing <- function(expr, tasks = NULL, on = localNode(), jobname =
     info <- .remoteBuildInfo(list2env(objs))
     .writeLF(basename(files), file.path(stage, "files.txt"))
     .writeLF(.remoteBuildScript(
-      files = basename(files), output = paste0(shared, ".so"),
+      files = basename(files), sources = files, output = paste0(shared, ".so"),
       compileArgs = info$compileArgs, needsCVODE = info$needsCVODE, needsKLU = info$needsKLU,
       needsLapack = info$needsLapack, link = build == "link",
       cxx = any(grepl("\\.cpp$", files)), cores = buildCores, filelist = "files.txt",

@@ -17,8 +17,8 @@
 #
 # [Info]
 # The model is built by the shipped example, which builds it by hand and needs
-# no libsbml. Fitting runs on helix through distributedComputing; set .submit
-# to FALSE to run the same comparison in this session instead.
+# no libsbml. Fitting runs on helix through distributedComputing(). Run from
+# the package root; the job folders go to a scratch directory.
 # -------------------------------------------------------------------------#
 
 library(dMod2)
@@ -26,28 +26,42 @@ library(dMod2)
 # BACHMANN_SUBMIT=1 submits batch .batch, BACHMANN_COLLECT=1 fetches finished
 # results without a model, neither builds only the model. Both are opt in
 # because submitting deletes the job folder a running array writes into.
+# BACHMANN_LOCAL=1 runs the first block on this machine instead, as a check.
 .submit  <- nzchar(Sys.getenv("BACHMANN_SUBMIT"))
+.local   <- nzchar(Sys.getenv("BACHMANN_LOCAL"))
 .recover <- FALSE    # TRUE re-attaches to a job already in the queue
 # One job per Hessian source, each an array of .blocks tasks. Small tasks over
 # many array slots rather than few wide jobs: the scheduler backfills them one
 # by one, so the fits start without waiting for a block of free cores.
-.cores   <- 4L       # fits per array task, one core each
+.taskCores <- 4L     # fits per array task, one core each; the demo sets .cores of its own
 .blocks  <- 50L      # array tasks per source
-.nstart  <- .cores * .blocks   # 200 shared starting points per Hessian source
+.nstart  <- .taskCores * .blocks   # 200 shared starting points per Hessian source
 .jobname <- "bachmann_hessianSource"
 
 # Starts are drawn in batches. A batch has its own seed but the same seed for
 # every source, so the sources stay comparable; batches accumulate, so two of
 # them give 2 * .blocks starts per source. Batch 1 keeps the bare job name.
 .batch   <- 4L       # the batch to submit
-.batches <- 4L       # the batches to collect
+.batches <- 1:4      # the batches to collect
 .jobFor  <- function(source, batch)
   paste0(.jobname, if (batch > 1L) paste0("_b", batch) else "", "_", source)
 .collect <- nzchar(Sys.getenv("BACHMANN_COLLECT"))
 
-# From the shared catalogue. Its keys are free of spaces and commas: they travel
-# to the nodes as literals in the generated array script.
-source(file.path("benchmarks", "scripts", "hessianSourceSettings.R"))
+# Set by the slowest arm, not the typical one: a quasi-Newton method from an
+# identity seed needs of the order of n_theta accepted steps, and a truncated
+# arm shrinks the shared block set for every other arm too.
+.cluster <- if (.local) localNode(cores = .taskCores) else
+  slurmCluster("helix", cores = .taskCores, walltime = "03:00:00", memPerCore = 2, partition = "cpu-single")
+.jobdir  <- file.path(tempdir(), "bachmann_jobs")
+dir.create(.jobdir, showWarnings = FALSE)
+inJobdir <- function(expr) {
+  old <- setwd(.jobdir)
+  on.exit(setwd(old))
+  expr
+}
+
+# From the shared catalogue; the source is substituted into the task as a literal.
+source(file.path("bench", "hessian", "hessianSourceSettings.R"))
 settings <- hessianSourceSettings[c("gn", "gn_sr1", "sr1_id", "sr1_gn", "sr1_id_gn")]
 # BACHMANN_ONLY names a single source, which is how a source whose remote build
 # failed is sent again without touching the ones already in the queue.
@@ -57,27 +71,17 @@ settings <- hessianSourceSettings[c("gn", "gn_sr1", "sr1_id", "sr1_gn", "sr1_id_
 # –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
 # Collect only
 #
-# The result files are self contained, so fetching them needs neither the model
-# nor the job interface. This is the cheap way back to the tables, and it works
-# while the arrays are still running.
+# The manifest of a job lies in its folder on helix, so the results come back
+# without the model, from any machine, also while the arrays still run.
 # –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
 fetchResults <- function(source) {
   unlist(lapply(.batches, function(batch) {
-    # Fetched into the session's temporary directory: the results live on the
-    # cluster, nothing is kept here.
-    local <- file.path(tempdir(), paste0("results_b", batch, "_", source))
-    dir.create(local, showWarnings = FALSE)
-    remote <- paste0("helix:", .jobFor(source, batch), "_folder/")
-    system2("rsync", c("-az", "--ignore-missing-args",
-                       shQuote(paste0(remote, "*_result.RData")), shQuote(local)),
-            stdout = FALSE, stderr = FALSE)
-    lapply(list.files(local, pattern = "_result[.]RData$", full.names = TRUE),
-           function(f) {
-             e <- new.env(); load(f, envir = e)
-             out <- get(ls(e)[1], envir = e)
-             out$batch <- batch
-             out
-           })
+    job <- inJobdir(distributedComputing(NULL, jobname = .jobFor(source, batch), on = .cluster,
+                                         recover = TRUE))
+    lapply(Filter(Negate(is.null), inJobdir(job$get(combine = FALSE))), function(out) {
+      if (is.list(out)) out$batch <- batch
+      out
+    })
   }), recursive = FALSE)
 }
 
@@ -109,7 +113,7 @@ collect <- function(raw) {
   keys <- Reduce(intersect, lapply(bySource, key))
   message(length(keys), " of ", .blocks * length(.batches),
           " slices complete in every source, ",
-          length(keys) * .cores, " starts each")
+          length(keys) * .taskCores, " starts each")
   # mstrust() numbers its fits within a task, so `index` restarts at 1 in every
   # block. The draw order of a start is recovered from the block it sat in,
   # which is what any budget truncation has to follow.
@@ -117,7 +121,7 @@ collect <- function(raw) {
     keep <- g[key(g) %in% keys]
     f <- do.call(rbind, lapply(keep, function(k) {
       fits <- k$fits
-      fits$index <- (k$batch - 1L) * .blocks * .cores +
+      fits$index <- (k$batch - 1L) * .blocks * .taskCores +
         k$block + (seq_len(nrow(fits)) - 1L) * .blocks
       fits
     }))
@@ -159,23 +163,15 @@ if (.collect) {
 # Model and objective
 #
 # The example is sourced up to its PEtab cross-check, which is the part that
-# would pull in reticulate and libsbml.
+# would pull in reticulate and libsbml. distributedComputing() ships the model
+# sources the objective names, from the example's output directory.
 # –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
 .exampleFile <- system.file("demo", "BachmannMSB2011.R",
                             package = "dMod2")
 .exampleCode <- readLines(.exampleFile)
 .upto <- grep("^petab <- importPEtab", .exampleCode)[1] - 1L
-
-# distributedComputing() ships the model sources it finds in the working
-# directory, so the generated code has to land there rather than in tempdir().
-# Codegen lands in the working directory, because distributedComputing() ships
-# the sources it finds there. Run this from a scratch directory: in a package
-# root it would leave forty sources and their objects behind.
-if (file.exists("DESCRIPTION") || file.exists("NAMESPACE"))
-  stop("run this from a scratch directory, not from a package root: ", getwd())
-.exampleCode <- sub("^\\.outdir\\s*<-.*$", ".outdir <- getwd()", .exampleCode)
-eval(parse(text = .exampleCode[seq_len(.upto)]), envir = globalenv())
-stopifnot(length(list.files(pattern = "[.](c|cpp)$")) > 0)
+# Invisible: the excerpt ends on a plot, which Rscript would print to Rplots.pdf.
+invisible(eval(parse(text = .exampleCode[seq_len(.upto)]), envir = globalenv()))
 
 parlower <- setNames(log10(.pars$lowerBound), .pars$parameterId)
 parupper <- setNames(log10(.pars$upperBound), .pars$parameterId)
@@ -230,7 +226,7 @@ fitBlock <- function(source, block)
   list(source = source, block = block,
        fits = as.parframe(do.call(mstrust, c(
          list(objfun = obj, center = .slice(block), fits = nrow(.slice(block)),
-              cores = .cores, rinit = 0.1, rmax = 10, iterlim = 5000,
+              cores = .taskCores, rinit = 0.1, rmax = 10, iterlim = 5000,
               parlower = parlower, parupper = parupper),
          settings[[source]]))))
 
@@ -238,36 +234,37 @@ fitBlock <- function(source, block)
 # –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
 # Run
 # –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
-if (.submit) {
+# What a task needs; the dot names are not in the default `input`.
+.input <- c("fitBlock", ".slice", "starts", ".blocks", ".taskCores", "obj", "settings",
+            "parlower", "parupper")
+
+if (.submit || .local) {
 
   # The source is substituted into the expression, so each job gets its own
   # as a literal rather than a variable the next pass of the loop overwrites.
-  submitSource <- function(source) eval(substitute(
+  # A task is the number of its block.
+  submitSource <- function(source) inJobdir(eval(substitute(
     distributedComputing(
-      { fitBlock(SRC, var_1) },
-      jobname      = .jobFor(SRC, .batch),
-      partition    = "cpu-single",
-      cores        = .cores,
-      nodes        = 1,
-      memPerCore   = 2,
-      # Set by the slowest arm, not the typical one: a quasi-Newton method from
-      # an identity seed needs of the order of n_theta accepted steps, and a
-      # truncated arm shrinks the shared block set for every other arm too.
-      walltime     = "03:00:00",
-      machine      = "helix",
-      varValues    = list(seq_len(.blocks)),
-      nRep         = NULL,
-      compile      = TRUE,
-      recover      = .recover,
-      resetSeeds   = FALSE,
-      returnAll    = TRUE),
-    list(SRC = source)))
+      { fitBlock(SRC, task) },
+      tasks   = as.list(if (.local) 1L else seq_len(.blocks)),
+      on      = .cluster,
+      jobname = .jobFor(SRC, .batch),
+      input   = .input,
+      build   = "compile",
+      recover = .recover),
+    list(SRC = source)), envir = globalenv()))
 
   .which <- if (is.null(.only)) names(settings) else .only
   jobs <- lapply(setNames(nm = .which), submitSource)
 
-  if (.recover)
-    report(collect(unlist(lapply(jobs, function(j) j$get()), recursive = FALSE)))
+  if (.recover || .local) {
+    if (.local) for (j in jobs) inJobdir(j$wait())
+    report(collect(unlist(lapply(jobs, function(j)
+      lapply(inJobdir(j$get(combine = FALSE)), function(out) {
+        if (is.list(out)) out$batch <- .batch
+        out
+      })), recursive = FALSE)))
+  }
 
 }
 
