@@ -28,7 +28,8 @@
 #'   `outdir`), as `method` selects.
 #'
 #' @return A [parfn], called as `p(pars, ...)`, see section Calling a dMod
-#'   function.
+#'   function. The random effects of a transformation built by [insert()]
+#'   stay attached, so [randomEffects()] reads them from the result.
 #' @inheritSection dModfn Calling a dMod function
 #' @seealso [Pexpl()], [Pimpl()], [define()]
 #' @example inst/examples/P.R
@@ -66,6 +67,7 @@ P <- function(trafo = NULL, parameters = NULL, condition = NULL,
   }, mc.cores = if (.Platform$OS.type == "windows") 1L else cores))
 
   if (compile) compile(result, cores = cores, output = modelname, verbose = verbose)
+  attr(result, "randomEffects") <- attr(trafo, "randomEffects", exact = TRUE)
   result
 }
 
@@ -1367,7 +1369,12 @@ Pimpl <- function(trafo, parameters = NULL, forcings = NULL, condition = NULL,
 #' @param trafo Named character or [eqnvec], or a list of those named by
 #'   condition as `branch()` returns it. `NULL` starts a new one.
 #' @param expr `"lhs <- rhs"` string. Its symbols are replaced by the
-#'   arguments in `...` of the same name; see [repar()].
+#'   arguments in `...` of the same name; see [repar()]. For `insert()` on a
+#'   branched transformation also one or several effect formulas, e.g.
+#'   `cl ~ wt + (1 | ID)`, which replace the symbol by a linear predictor
+#'   over the columns of the branch table with fixed and random effects; see
+#'   [randomEffects()]. Named arguments in `...` are then placeholders of the
+#'   formulas, `insert(trafo, x ~ 1 + (1 | ID), x = c("ka", "cl"))`.
 #' @param table `data.frame` with one row per condition, row names the
 #'   conditions. Kept as attribute `tree`; its columns can be read in `...`
 #'   by name.
@@ -1382,7 +1389,8 @@ Pimpl <- function(trafo, parameters = NULL, forcings = NULL, condition = NULL,
 #'   the columns of `attr(trafo, "tree")`, `.currentTrafo` (the
 #'   transformation of the condition) and `.currentSymbols` (its symbols) in
 #'   scope. An unnamed logical argument of `insert()` selects the conditions
-#'   where it is `TRUE`.
+#'   where it is `TRUE`. Next to effect formulas they are more formulas and
+#'   placeholders, evaluated once in the calling environment.
 #'
 #' @return Same shape as `trafo`, or a list named by condition for
 #'   `branch()`.
@@ -1393,8 +1401,11 @@ define <- function(trafo, expr, ..., conditionMatch = NULL) {
   if (missing(trafo)) trafo <- NULL
   dots <- substitute(alist(...))
   callerEnv <- parent.frame()
-  .reparBranches(trafo, dots, callerEnv, conditionMatch, function(tr, args)
-    do.call(repar, c(list(expr = expr, trafo = tr, reset = TRUE), args)))
+  re <- attr(trafo, "randomEffects", exact = TRUE)
+  .reparBranches(trafo, dots, callerEnv, conditionMatch, function(tr, args) {
+    .guardEffectSymbols(.substitutionSides(expr, args)$lhs, re)
+    do.call(repar, c(list(expr = expr, trafo = tr, reset = TRUE), args))
+  })
 }
 
 
@@ -1404,11 +1415,22 @@ insert <- function(trafo, expr, ..., conditionMatch = NULL) {
   if (missing(trafo)) trafo <- NULL
   dots <- substitute(alist(...))
   callerEnv <- parent.frame()
+  # effect formulas, one or several; named dots are their placeholders
+  if (inherits(expr, "formula")) {
+    more <- lapply(eval(dots), eval, envir = callerEnv)
+    nm <- names(more) %||% rep("", length(more))
+    if (!all(vapply(more[!nzchar(nm)], inherits, TRUE, "formula")))
+      stop("insert: next to effect formulas, pass more formulas or named placeholders.", call. = FALSE)
+    formulas <- .expandEffectFormulas(c(list(expr), more[!nzchar(nm)]), more[nzchar(nm)])
+    return(.insertEffects(trafo, formulas, conditionMatch))
+  }
+  re <- attr(trafo, "randomEffects", exact = TRUE)
   .reparBranches(trafo, dots, callerEnv, conditionMatch, function(tr, args) {
     ## Logical dots gate the substitution per condition rather than naming a
     ## symbol: any FALSE leaves the branch unchanged.
     gates <- vapply(args, is.logical, logical(1))
     if (!all(unlist(args[gates]))) return(tr)
+    .guardEffectSymbols(.substitutionSides(expr, args[!gates])$lhs, re)
     do.call(repar, c(list(expr = expr, trafo = tr), args[!gates]))
   })
 }
@@ -1438,6 +1460,7 @@ insert <- function(trafo, expr, ..., conditionMatch = NULL) {
   }, branches, keys)
   if (!branched) out <- out[[1L]]
   attr(out, "tree") <- tree
+  attr(out, "randomEffects") <- attr(trafo, "randomEffects", exact = TRUE)
   out
 }
 
@@ -1530,20 +1553,8 @@ branch <- function(trafo, table = NULL,
 repar <- function(trafo = NULL, expr, ..., reset = FALSE) {
   if (.isReparExpr(trafo) && (missing(expr) || !.isReparExpr(expr)))
     stop("repar: the order is repar(trafo, expr).", call. = FALSE)
-  parsed <- .parseSubstitution(expr)
-  lhs <- parsed[1]; rhs <- parsed[2]
-
-  args <- lapply(list(...), as.character)
-  if (length(args)) {
-    reps <- as.data.frame(args, stringsAsFactors = FALSE)
-    apply_repl <- function(side) vapply(seq_len(nrow(reps)), function(i)
-      .decolonize(replaceSymbols(colnames(reps), reps[i, ], side)),
-      character(1))
-    lhs <- apply_repl(lhs); rhs <- apply_repl(rhs)
-  } else {
-    lhs <- .decolonize(lhs)
-    rhs <- .decolonize(rhs)
-  }
+  sides <- .substitutionSides(expr, list(...))
+  lhs <- sides$lhs; rhs <- sides$rhs
 
   if (is.null(trafo)) return(as.eqnvec(structure(rhs, names = lhs)))
   if (is.list(trafo)      && !reset)       lapply(trafo, function(t) replaceSymbols(lhs, rhs, t))
@@ -1559,6 +1570,18 @@ repar <- function(trafo = NULL, expr, ..., reset = FALSE) {
     (is.character(x) && length(x) == 1L && is.null(names(x)) &&
        grepl("<-|~", x))
 
+# Left- and right-hand sides of a substitution, one pair per element of the
+# placeholder vectors in `args`.
+.substitutionSides <- function(expr, args) {
+  parsed <- .parseSubstitution(expr)
+  args <- lapply(args, as.character)
+  if (!length(args)) return(list(lhs = .decolonize(parsed[1]), rhs = .decolonize(parsed[2])))
+  reps <- as.data.frame(args, stringsAsFactors = FALSE)
+  side <- function(x) vapply(seq_len(nrow(reps)), function(i)
+    .decolonize(replaceSymbols(colnames(reps), reps[i, ], x)), character(1))
+  list(lhs = side(parsed[1]), rhs = side(parsed[2]))
+}
+
 # Left- and right-hand side of a `"lhs <- rhs"` string, colonized.
 .parseSubstitution <- function(expr) {
   if (inherits(expr, "formula") || (is.character(expr) && !grepl("<-", expr, fixed = TRUE) &&
@@ -1568,10 +1591,9 @@ repar <- function(trafo = NULL, expr, ..., reset = FALSE) {
   if (!is.character(expr) || length(expr) != 1L)
     stop("A substitution is one string \"lhs <- rhs\".", call. = FALSE)
   e <- str2lang(.colonize(expr))
-  if (!is.call(e) || !identical(e[[1]], as.name("<-")))
+  if (!is.call(e) || !identical(e[[1]], as.name("<-")) || (is.call(e[[3]]) && identical(e[[3]][[1]], as.name("<-"))))
     stop("Substitutions are written \"lhs <- rhs\", got \"", expr, "\".", call. = FALSE)
   c(deparse1(e[[2]]), deparse1(e[[3]]))
 }
-
 
 paste_ <- function(...) paste(..., sep = "_")

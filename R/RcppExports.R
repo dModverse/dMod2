@@ -21,8 +21,24 @@ datapointL2_kernel <- function(pouter, fixed_opt, prdf, dpred_attr_opt, d2pred_a
     .Call(`_dMod2_datapointL2_kernel`, pouter, fixed_opt, prdf, dpred_attr_opt, d2pred_attr_opt, obs_name, t, sigma, value_par, deriv, build_hessian)
 }
 
-normL2_kernel <- function(prediction, err_list_opt, meta_list, par_names_global, deriv2_requested, threads, bloq_mode = "M3", build_hessian = TRUE, want_seed = FALSE, local_blocks = FALSE) {
-    .Call(`_dMod2_normL2_kernel`, prediction, err_list_opt, meta_list, par_names_global, deriv2_requested, threads, bloq_mode, build_hessian, want_seed, local_blocks)
+dirichlet_process_partitions <- function(a, m, concentration, tau) {
+    .Call(`_dMod2_dirichlet_process_partitions`, a, m, concentration, tau)
+}
+
+focei_eval_one_subject <- function(model_cb, err_cb, pars_full, fixed, meta_i, eta_block, Omega_inv, Omega_log_det) {
+    .Call(`_dMod2_focei_eval_one_subject`, model_cb, err_cb, pars_full, fixed, meta_i, eta_block, Omega_inv, Omega_log_det)
+}
+
+focei_inner_trust <- function(model_cb, err_cb, pars_full, eta_warmstart, subject_meta, Omega_inv_mat, Omega_log_det, fixed, control, predict_cb = NULL) {
+    .Call(`_dMod2_focei_inner_trust`, model_cb, err_cb, pars_full, eta_warmstart, subject_meta, Omega_inv_mat, Omega_log_det, fixed, control, predict_cb)
+}
+
+focei_run <- function(model_cb, err_cb, joint_cb, init, subject_meta, fixed, control, correction_mode = "none", correction_cb = NULL, predict_cb = NULL) {
+    .Call(`_dMod2_focei_run`, model_cb, err_cb, joint_cb, init, subject_meta, fixed, control, correction_mode, correction_cb, predict_cb)
+}
+
+normL2_kernel <- function(prediction, err_list_opt, meta_list, par_names_global, deriv2_requested, threads, bloq_mode = "M3", build_hessian = TRUE, want_seed = FALSE, local_blocks = FALSE, t_df = 0) {
+    .Call(`_dMod2_normL2_kernel`, prediction, err_list_opt, meta_list, par_names_global, deriv2_requested, threads, bloq_mode, build_hessian, want_seed, local_blocks, t_df)
 }
 
 parvec_attach <- function(out, deriv, deriv2) {
@@ -31,6 +47,10 @@ parvec_attach <- function(out, deriv, deriv2) {
 
 parvec_concat <- function(lst) {
     .Call(`_dMod2_parvec_concat`, lst)
+}
+
+sparseGridGK <- function(K, level) {
+    .Call(`_dMod2_sparseGridGK`, K, level)
 }
 
 residual_kernel_aloq <- function(pred, dpred, d2pred, y_data, sigma, dsigma, d2sigma, lloq, opts) {

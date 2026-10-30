@@ -68,7 +68,82 @@ void contract_d2_block(int n_obs, int n_par,
   }
 }
 
+// The parameters at which a row has a nonzero derivative of its prediction or its sigma; the
+// Gauss-Newton Hessian of the row vanishes outside them.
+inline void row_support(int n_par, const double* dpred, const double* dsigma, std::vector<int>& nz) {
+  nz.clear();
+  for (int k = 0; k < n_par; ++k)
+    if (dpred[k] != 0.0 || (dsigma && dsigma[k] != 0.0)) nz.push_back(k);
+}
+
 }  // namespace
+
+
+// Student-t rows: the loss l(pred, sigma) by its first and second derivatives; censored rows
+// by M3 with the t distribution function. Shared by the ALOQ and BLOQ entries.
+static void accumulate_t_rows(int n_obs, int n_par, const double* pred, const double* dpred,
+                              const double* d2pred, const double* y_data, const double* sigma,
+                              const double* dsigma, const double* d2sigma, bool censored,
+                              const AccumOpts& opts, double& value_acc, double* chi2_acc,
+                              double* grad_acc, double* hess_acc, double* seed_pred,
+                              double* seed_sigma) {
+  const double nu = opts.t_df;
+  const bool has_dsig = (dsigma != nullptr) && opts.sigma_depends_on_par;
+  const bool has_d2sig = opts.use_deriv2_exact && has_dsig && (d2sigma != nullptr);
+  const double c_nu = -2.0 * (std::lgamma(0.5 * (nu + 1.0)) - std::lgamma(0.5 * nu) -
+                              0.5 * std::log(nu * M_PI));
+  std::vector<double> W_d2(opts.use_deriv2_exact ? n_obs : 0, 0.0);
+  std::vector<double> W_d2sig(has_d2sig ? n_obs : 0, 0.0);
+  std::vector<double> scratch_d2;
+  std::vector<int> nz;
+  nz.reserve(n_par);
+  for (int i = 0; i < n_obs; ++i) {
+    const double s = sigma[i], inv_s = 1.0 / s, inv_s2 = inv_s * inv_s;
+    const double w = (pred[i] - y_data[i]) * inv_s;
+    const double q = nu + w * w;
+    double m1, m2, two = 2.0;
+    if (!censored) {
+      value_acc += (nu + 1.0) * std::log1p(w * w / nu) + 2.0 * std::log(s) + c_nu;
+      if (chi2_acc) *chi2_acc += w * w;
+      m1 = 2.0 * (nu + 1.0) * w / q;
+      m2 = 2.0 * (nu + 1.0) * (nu - w * w) / (q * q);
+    } else {
+      value_acc += -2.0 * R::pt(-w, nu, 1, 1);
+      const double G = std::exp(R::dt(w, nu, 1) - R::pt(-w, nu, 1, 1));
+      const double hp = -(nu + 1.0) * w / q;
+      m1 = 2.0 * G;
+      m2 = 2.0 * G * (hp + G);
+      two = 0.0;
+    }
+    // derivatives of the loss in pred and sigma
+    const double lp = m1 * inv_s, ls = (two - w * m1) * inv_s;
+    const double lpp = m2 * inv_s2, lps = -(m1 + w * m2) * inv_s2;
+    const double lss = (2.0 * w * m1 + w * w * m2 - two) * inv_s2;
+    const double* dp = dpred + (std::size_t) i * n_par;
+    const double* ds = has_dsig ? dsigma + (std::size_t) i * n_par : nullptr;
+    for (int k = 0; k < n_par; ++k)
+      grad_acc[k] += lp * dp[k] + (has_dsig ? ls * ds[k] : 0.0);
+    if (seed_pred) seed_pred[i] += lp;
+    if (seed_sigma) seed_sigma[i] += ls;
+    if (opts.build_hessian) {
+      row_support(n_par, dp, ds, nz);
+      for (const int k2 : nz) {
+        double* h_col = hess_acc + (std::size_t) k2 * n_par;
+        const double dx2 = dp[k2], ds2 = has_dsig ? ds[k2] : 0.0;
+        for (const int k1 : nz) {
+          const double dx1 = dp[k1], ds1 = has_dsig ? ds[k1] : 0.0;
+          h_col[k1] += lpp * dx1 * dx2 + lps * (dx1 * ds2 + ds1 * dx2) + lss * ds1 * ds2;
+        }
+      }
+    }
+    if (opts.use_deriv2_exact) W_d2[i] = lp;
+    if (has_d2sig) W_d2sig[i] = ls;
+  }
+  if (opts.build_hessian && opts.use_deriv2_exact && d2pred != nullptr)
+    contract_d2_block(n_obs, n_par, d2pred, W_d2.data(), hess_acc, scratch_d2);
+  if (opts.build_hessian && has_d2sig)
+    contract_d2_block(n_obs, n_par, d2sigma, W_d2sig.data(), hess_acc, scratch_d2);
+}
 
 
 void accumulate_aloq_residual(
@@ -89,6 +164,12 @@ void accumulate_aloq_residual(
     double* hess_acc,
     double* seed_pred,
     double* seed_sigma) {
+  if (std::isfinite(opts.t_df)) {
+    if (n_obs > 0)
+      accumulate_t_rows(n_obs, n_par, pred, dpred, d2pred, y_data, sigma, dsigma, d2sigma, false,
+                        opts, value_acc, &chi2_acc, grad_acc, hess_acc, seed_pred, seed_sigma);
+    return;
+  }
 
   if (n_obs == 0) return;
   if (n_par < 0) throw std::runtime_error("accumulate_aloq: n_par must be >= 0");
@@ -107,6 +188,8 @@ void accumulate_aloq_residual(
   std::vector<double> W_d2(opts.use_deriv2_exact ? n_obs : 0, 0.0);
   std::vector<double> W_d2sig(has_d2sig ? n_obs : 0, 0.0);
   std::vector<double> scratch_d2;
+  std::vector<int> nz;
+  nz.reserve(n_par);
 
   for (int i = 0; i < n_obs; ++i) {
     const double sig    = sigma[i];
@@ -191,16 +274,17 @@ void accumulate_aloq_residual(
       }
     }
 
-    // Single per-row Hessian double-loop. Branchless on the inner k1 loop,
-    // since each coefficient defaults to 0 when its contribution is absent.
+    // Single per-row Hessian double-loop over the support of the row, where its bilinear
+    // terms can be nonzero; each coefficient defaults to 0 when its contribution is absent.
+    if (opts.build_hessian) row_support(n_par, dpred_i, dsigma_i, nz);
     if (opts.build_hessian)
-    for (int k2 = 0; k2 < n_par; ++k2) {
+    for (const int k2 : nz) {
       const double dwr_k2 = dwr[k2];
       const double dx_k2  = has_dsig ? dpred_i[k2]  : 0.0;
       const double ds_k2  = has_dsig ? dsigma_i[k2] : 0.0;
       const double dw0_k2 = m4beal_aloq ? dw0[k2] : 0.0;
       double* h_col = hess_acc + (std::size_t) k2 * n_par;
-      for (int k1 = 0; k1 < n_par; ++k1) {
+      for (const int k1 : nz) {
         const double dwr_k1 = dwr[k1];
         const double dx_k1  = has_dsig ? dpred_i[k1]  : 0.0;
         const double ds_k1  = has_dsig ? dsigma_i[k1] : 0.0;
@@ -257,6 +341,13 @@ void accumulate_bloq_residual(
 
   if (n_obs == 0) return;
   if (opts.bloq_mode == BloqMode::NONE || opts.bloq_mode == BloqMode::M1) {
+    return;
+  }
+  if (std::isfinite(opts.t_df)) {
+    if (opts.bloq_mode != BloqMode::M3)
+      throw std::runtime_error("accumulate_bloq: a Student-t likelihood treats censored rows by M3 or M1.");
+    accumulate_t_rows(n_obs, n_par, pred, dpred, d2pred, y_data, sigma, dsigma, d2sigma, true,
+                      opts, value_acc, nullptr, grad_acc, hess_acc, seed_pred, seed_sigma);
     return;
   }
   if (n_par < 0) throw std::runtime_error("accumulate_bloq: n_par must be >= 0");

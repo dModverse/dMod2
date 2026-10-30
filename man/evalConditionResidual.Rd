@@ -14,7 +14,8 @@ evalConditionResidual(
   eCondNames = NULL,
   deriv = TRUE,
   deriv2 = FALSE,
-  optBLOQ = c("M3", "M1", "M4NM", "M4BEAL")
+  optBLOQ = c("M3", "M1", "M4NM", "M4BEAL"),
+  df = Inf
 )
 }
 \arguments{
@@ -43,6 +44,9 @@ derivatives of the prediction. Default \code{FALSE}.}
 
 \item{optBLOQ}{Character, the treatment of data below the limit of
 quantification, as in \code{\link[=normL2]{normL2()}}. Default \code{"M3"}.}
+
+\item{df}{Degrees of freedom of a Student-t likelihood as in \code{\link[=normT]{normT()}};
+\code{Inf} (default) is the normal one.}
 }
 \value{
 An \link{objlist}.

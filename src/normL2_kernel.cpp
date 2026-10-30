@@ -23,6 +23,21 @@
 #include <cstring>
 #include <stdexcept>
 
+// Set in the child of a fork: the OpenMP thread pool of the parent does not exist there, so a
+// parallel region with more than one thread would wait for it forever.
+#if !defined(_WIN32)
+#include <pthread.h>
+namespace {
+bool normL2Forked = false;
+struct NormL2ForkGuard {
+  NormL2ForkGuard() { pthread_atfork(nullptr, nullptr, [] { normL2Forked = true; }); }
+} normL2ForkGuard;
+}
+static inline bool dmod_normL2_forked() { return normL2Forked; }
+#else
+static inline bool dmod_normL2_forked() { return false; }
+#endif
+
 #ifdef _OPENMP
 #  include <omp.h>
 #endif
@@ -337,7 +352,8 @@ List normL2_kernel(
     std::string bloq_mode = "M3",
     bool build_hessian = true,
     bool want_seed = false,
-    bool local_blocks = false) {
+    bool local_blocks = false,
+    double t_df = 0) {
 
   const int n_cond = prediction.size();
   if ((int) meta_list.size() != n_cond)
@@ -386,6 +402,8 @@ List normL2_kernel(
 #ifndef _OPENMP
   n_threads = 1;
 #endif
+  // a forked child has none of the OpenMP threads of its parent
+  if (dmod_normL2_forked()) n_threads = 1;
   // A thread with no condition still allocates its own gradient and Hessian
   // slot, so never ask for more threads than there is work.
   if (n_threads > n_cond) n_threads = std::max(1, n_cond);
@@ -393,6 +411,8 @@ List normL2_kernel(
   dmod::AccumOpts base_opts;
   base_opts.use_deriv2_exact = deriv2_requested;
   base_opts.bloq_mode        = bmode;
+  // Student-t with t_df degrees of freedom; 0 or infinite is the normal likelihood
+  if (t_df > 0) base_opts.t_df = t_df;
   base_opts.build_hessian    = build_hessian;
 
   // One slot per condition in its local parameter space, allocated here so the

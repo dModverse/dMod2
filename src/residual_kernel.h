@@ -33,6 +33,13 @@
 //          + (if use_deriv2_exact) 2 G(w0)/sigma * d2pred/dtheta^2
 //          +                       -2 w0 G(w0)/sigma * d2sigma/dtheta^2
 //
+//   Student-t with t_df = nu finite (ALOQ and M3), loss in w and s:
+//     ALOQ: obj += (nu + 1) log(1 + wr^2 / nu) + 2 log s + c(nu)
+//     M3:   obj += -2 log F_nu(-wr)
+//     grad and hess from the derivatives of the loss in (pred, sigma), the
+//     Hessian J' L J with L the exact 2 x 2 Hessian of the loss, plus the
+//     deriv2-exact terms weighted by its first derivatives.
+//
 // Conventions:
 //   - dpred is stored row-major: dpred[row*n_par + p] = d pred_row / d par_p.
 //   - d2pred is stored row-major over (row, p, q):
@@ -52,6 +59,7 @@
 #define DMOD_RESIDUAL_KERNEL_H
 
 #include <cstddef>
+#include <limits>
 
 namespace dmod {
 
@@ -77,6 +85,9 @@ struct AccumOpts {
   // Selects BLOQ likelihood treatment. Has no effect on accumulate_aloq.
   // (M4BEAL however does add a correction to the ALOQ branch.)
   BloqMode bloq_mode = BloqMode::NONE;
+
+  // Degrees of freedom of a Student-t likelihood; infinite is the normal one.
+  double t_df = std::numeric_limits<double>::infinity();
 
   // If true, dsigma must be non-null and the kernel accounts for sigma's
   // dependence on parameters in gradient and Hessian (Parts 1/2/3).

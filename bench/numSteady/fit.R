@@ -46,7 +46,7 @@ center <- setNames(rep(-1, length(outer)), outer)
 center[grepl("^offset_", outer)] <- 0
 center[grepl("^tSmad", outer)] <- log10(0.4)
 
-obj <- normL2(m$data, prd, t0 = m$t0) +
+obj <- normL2(m$data, prd, times = as.list(m$t0)) +
   constraintL2(center, sigma = 3, attrName = "prior")
 
 ss <- environment(attr(pSS, "mappings")[[1]])$stats

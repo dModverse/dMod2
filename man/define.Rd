@@ -22,14 +22,20 @@ branch(
 condition as \code{branch()} returns it. \code{NULL} starts a new one.}
 
 \item{expr}{\code{"lhs <- rhs"} string. Its symbols are replaced by the
-arguments in \code{...} of the same name; see \code{\link[=repar]{repar()}}.}
+arguments in \code{...} of the same name; see \code{\link[=repar]{repar()}}. For \code{insert()} on a
+branched transformation also one or several effect formulas, e.g.
+\code{cl ~ wt + (1 | ID)}, which replace the symbol by a linear predictor
+over the columns of the branch table with fixed and random effects; see
+\code{\link[=randomEffects]{randomEffects()}}. Named arguments in \code{...} are then placeholders of the
+formulas, \code{insert(trafo, x ~ 1 + (1 | ID), x = c("ka", "cl"))}.}
 
 \item{...}{Named vectors replacing the symbols of \code{expr} of the same name,
 one substitution per element. They are evaluated per condition, with
 the columns of \code{attr(trafo, "tree")}, \code{.currentTrafo} (the
 transformation of the condition) and \code{.currentSymbols} (its symbols) in
 scope. An unnamed logical argument of \code{insert()} selects the conditions
-where it is \code{TRUE}.}
+where it is \code{TRUE}. Next to effect formulas they are more formulas and
+placeholders, evaluated once in the calling environment.}
 
 \item{conditionMatch}{Regular expression; only the conditions whose names
 match are changed. Default \code{NULL}, all.}

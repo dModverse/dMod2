@@ -53,7 +53,8 @@ a list; on Windows the sources are generated one after the other. \code{NULL}
 }
 \value{
 A \link{parfn}, called as \code{p(pars, ...)}, see section Calling a dMod
-function.
+function. The random effects of a transformation built by \code{\link[=insert]{insert()}}
+stay attached, so \code{\link[=randomEffects]{randomEffects()}} reads them from the result.
 }
 \description{
 Builds a \link{parfn} with \code{\link[=Pexpl]{Pexpl()}} or \code{\link[=Pimpl]{Pimpl()}}.

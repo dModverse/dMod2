@@ -7,7 +7,7 @@
 
 .normL2_reverse <- function(pars, fixed, deriv, conditions, env, cores,
                             x, errmodel, data, timesD, e.cond, opt.BLOQ,
-                            attr.name, hessian = FALSE, meta_cache = NULL) {
+                            attr.name, hessian = FALSE, meta_cache = NULL, t.df = Inf) {
 
   # Hessian: J' H_rho J from the forward tangents (the kernel without second
   # derivatives) plus the prediction's curvature weighted by the seed (a dual
@@ -73,6 +73,7 @@
     deriv2_requested = FALSE,
     threads          = as.integer(cores),
     bloq_mode        = opt.BLOQ,
+    t_df             = t.df,
     build_hessian    = n_dir > 0L,
     want_seed        = isTRUE(deriv)
   )

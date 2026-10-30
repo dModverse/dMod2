@@ -4,6 +4,118 @@
   `"lhs <- rhs"`, e.g. `insert(trafo, "x <- exp(x)", x = pars)`. A `"lhs ~ rhs"` string or a
   formula is an error that names the new form; `~` is left to model formulas.
 
+* `evalConditionResidual()` with `df` gives the Student-t likelihood of `normT()`.
+
+* Random effects as formulas: `insert()` on a branched transformation takes effect formulas
+  such as `cl ~ wt + (1 + dose | p | ID)`. The symbol is replaced by its linear predictor on
+  the scale the transformation gives it, so after `insert(trafo, "x <- exp(x)", x = "cl")`
+  the random effects are normal on the log scale. Fixed effects are coded as by
+  `model.matrix()` over the columns of the branch table, random terms follow lme4 with the
+  IDs of brms for correlation across formulas, `gr(ID, dist = )` sets the distribution.
+  `x ~ 1 + (1 | ID), x = pars` and `ka + v ~ ...` apply one right-hand side to many symbols.
+  `randomEffects()` returns the structure from the transformation or from the `P()` built
+  from it.
+
+* New `normal()`, `laplace(lambda)`, `spikeSlab(prob, tau)` and
+  `dirichletProcess(concentration, tau)`, the distributions of a random term. A spike-and-slab
+  deviation is exactly 0 or, with probability `prob`, drawn from N(0, tau^2). Under
+  `dirichletProcess()` the groups share the population value or a common deviation in
+  clusters, with the Ewens prior over the partitions and N(0, tau^2) as base measure. Every
+  hyperparameter left `NULL` is estimated by marginal maximum likelihood with the other
+  parameters.
+
+* New `em()` and `msem()`, mixed-effects fits as `trust()` and `mstrust()`:
+  `em(obj, random = randomEffects(p), init, fixed, method)` takes the objective of the data and
+  builds the prior itself. A group may own several conditions, conditions without a group
+  enter the fit, random terms over several groupings, nested or crossed, are integrated per
+  connected component, and normal and sparse random effects combine in one fit. Methods:
+    * `"focei"`, the Laplace approximation of the marginal with exact gradient, censored data
+      by M3 and random effects in the error model; Laplace, spike-and-slab and
+      Dirichlet-process random effects are integrated on the Schur complement of the normal
+      ones, the partitions of a Dirichlet process summed exactly (at most 14 groups), and
+      sparse random effects of one group that the data couple by expectation consistent
+      (`control$laplace$coupling`, or mean field as a bound). Their hyperparameters move with
+      the other parameters in one trust region: the Schur complement of the fixed parameters
+      takes the sparse random effects at the curvature of their posterior, the curvature of a
+      hyperparameter puts its Newton step at its M-step, and a BFGS correction learns the
+      missing information. Such fits have no Hessian of the marginal: with Laplace and
+      spike-and-slab random effects `vcov()` inverts the empirical information of the exact
+      scores of the groups, `fit$information`, which needs more groups than parameters; with
+      Dirichlet-process ones, whose groups are not independent, `vcov()` is an error and
+      `confint(method = "profile")` gives intervals;
+    * `"quadrature"`, from the FOCEI fit, on nested sparse grids whose level per group follows
+      `control$quadrature$tol`, with an importance-sampling certificate per group;
+    * `"laplaceEM"`, the same nodes in an ECM;
+    * `"saem"`, stochastic approximation with the mu-referenced fixed effects and Omega in
+      closed form; for Dirichlet-process random effects of any number of groups by Gibbs
+      sweeps over the clusters, -2 log L by sequential importance sampling with `valueSE`.
+
+  `msem()` perturbs the starts on the scale on which each parameter is unbounded and returns
+  the best fit with the table of its starts, which `plotValues()` draws as a waterfall;
+  `cores` splits as in `mstrust()`. The fit from `init` runs first, and every other start ends
+  after `budget` (default 5) times its outer iterations, with `converged = FALSE`.
+
+* `em()` fits report `omega` (standard deviations and correlations with standard errors),
+  `random` (the modes per group with conditional standard errors, for the sparse
+  distributions the cluster and the probability of 0), `strengths`, `slab`, `logLik()` (so
+  `AIC()` and `BIC()`), `residuals()` of type IRES, IWRES, CWRES, PRES or PWRES,
+  `predict(type = )`, `confint(method = "profile")`, `anova()`, `simulate()`, `summary()`,
+  `coef()`, `vcov()`, `plot()`, `plotResiduals()`, `plotTrace()`, `plotCombined()` (data,
+  IPRED and PRED per condition) and the new generic `plotRandomEffects()`, which compares
+  draws from the conditional distributions of the random effects with their estimated
+  normal, so the shrinkage of the modes does not distort it (`type = "modes"` for the modes).
+
+* New `normT()`: the Student-t likelihood with fixed degrees of freedom, with exact
+  derivatives and censored data by M3, through `trust()` and every method of `em()`.
+
+* `em()` and `msem()` take `sparse = "auto"` (default), `TRUE` or `FALSE`, as `trust()` does.
+
+* `em()` by FOCEI over normal random effects runs its outer trust region on the sparse
+  Hessian where `sparse` chooses it: the joint Gauss-Newton Hessian minus the Schur complement
+  of every group plus the volume term, each local to the parameters of the group, for one
+  grouping and for several. `summary()` and the standard errors of Omega solve the sparse
+  Hessian for the columns they need.
+
+* The normal prior of `em()` returns a sparse Hessian on `hessian = "sparse"`.
+
+* FOCEI, with normal and with sparse random effects, gets the second derivatives of its volume
+  term by forward over reverse (`control$derivMode = "forward-reverse"`, the default, for models
+  built with `derivMode = c("forward", "reverse", "forward-reverse")`): one pass forward along
+  the random effects and a few backward sweeps give the exact gradient, the mode shift and the
+  derivatives of the curvature of every group, at a cost that does not grow with the square of
+  the parameters. The outer trust region takes the Gauss-Newton Schur complement with the
+  volume curvature of the variance parameters from these derivatives; the
+  reported Hessian is exact forward over forward where the model has `deriv2`, else the exact
+  Schur complement of the joint Hessian with that volume curvature, exact for models linear in
+  the random effects, and `summary()` says so. `"forward-forward"` keeps the second-order
+  sensitivities; a model with only one of the two takes it. In both modes, dense and sparse, the outer model of FOCEI gets an SR1
+  correction from the changes of the full outer gradient between the last three accepted
+  points: it adds the curvature Gauss-Newton leaves out, negative curvature included, so fewer
+  fits stop at saddles of the Gauss-Newton model.
+
+* FOCEI in both derivative modes: the inner trust region of the random effects steps on the
+  Gauss-Newton Hessian with an SR1 correction from its accepted steps where that stays positive
+  definite; the outer gradient has the first-order correction for the eta gradient the inner
+  solve leaves at the modes; a rejected step shrinks the radius to a quarter of its own length
+  where that is shorter; the fit ends on the evaluation of its last accepted point. Forward over
+  reverse answers all second-order seeds of a step in one backward sweep.
+
+* `em()` with Laplace, spike-and-slab or Dirichlet-process random effects takes the terms of
+  `obj` besides the data, such as priors and constraints; a
+  term on a hyperparameter or a random effect is an error.
+
+* Sparse random effects by forward over reverse: the marginal alone needs no second-order
+  sensitivities, so models built without `deriv2` also return to expectation consistent after
+  a fall back to mean field.
+
+* `em()` says in a message when its models give second derivatives forward over forward only and
+  names `derivMode = c("forward", "reverse", "forward-reverse")`; `msem()` says it once.
+
+* Removed from the devel-EM layer: `EM()` and `msEM()` (now `em()` and `msem()`), `omega()`,
+  `penaltyL1()`, `emInit()`, `updateOmegaChol()`, `makeSubjectNodes()`, `emObjfn()`,
+  `sparsify()`, `scanL1()`, `gateL1()`, `selectEB()` and the vignette "Structure selection
+  with an estimated penalty".
+
 * The reverse mode: the Hessian of `normL2()` with `sweep = "reverse"` has the curvature of an
   estimated error model, an error model that is a sum of per-condition ones goes backwards, and
   so does an observation function without parameters of its own at second order. `Y()`, `P()`

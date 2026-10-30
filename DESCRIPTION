@@ -17,9 +17,12 @@ Description: Tools for dynamic modeling and parameter estimation in ordinary
     whenever possible. Model calibration uses trust-region optimization with
     optional L1 penalties, multi-start search and profile-likelihood
     identifiability analysis, over experimental conditions that are integrated
-    and evaluated in parallel. Further tools cover symbolic steady states,
-    parameter transformations with implicit and steady-state solutions, error
-    models, and distributed computing on a cluster. Models, experimental
+    and evaluated in parallel. Mixed-effects models with normal, Laplace,
+    spike-and-slab and Dirichlet-process random effects are fitted by
+    expectation maximization with the Laplace approximation, sparse-grid
+    quadrature or stochastic approximation. Further tools cover symbolic steady
+    states, parameter transformations with implicit and steady-state solutions,
+    error models, and distributed computing on a cluster. Models, experimental
     conditions, measurements and parameter tables are imported from and
     exported to the 'PEtab' format, with 'SBML' import and export through
     'libSBML'.

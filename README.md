@@ -92,6 +92,15 @@ neuron](examples/HodgkinHuxley.md) with switches on time and state.
 `demo("KokMSB2020", package = "dMod2")` runs one,
 `demo(package = "dMod2")` lists them.
 
+## Mixed-effects models
+
+Random effects are written as effect formulas on the parameter
+transformation, in the notation of lme4, and `em()` fits them by
+marginal maximum likelihood: FOCEI, adaptive sparse-grid quadrature,
+laplaceEM or SAEM. Besides normal random effects, Laplace,
+spike-and-slab and Dirichlet-process ones select which groups differ,
+with their hyperparameters estimated in the same fit.
+
 ## Structural identifiability
 
 `symmetryDetection()` finds the directions in parameters and initial

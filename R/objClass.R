@@ -47,6 +47,8 @@ as.objlist <- function(p) {
 #'   derivatives of the prediction. Default `FALSE`.
 #' @param optBLOQ Character, the treatment of data below the limit of
 #'   quantification, as in [normL2()]. Default `"M3"`.
+#' @param df Degrees of freedom of a Student-t likelihood as in [normT()];
+#'   `Inf` (default) is the normal one.
 #'
 #' @return An [objlist].
 #' @seealso [normL2()]
@@ -59,7 +61,8 @@ evalConditionResidual <- function(dataI, predictionI, pars,
                                   eCondNames = NULL,
                                   deriv      = TRUE,
                                   deriv2     = FALSE,
-                                  optBLOQ    = c("M3", "M1", "M4NM", "M4BEAL")) {
+                                  optBLOQ    = c("M3", "M1", "M4NM", "M4BEAL"),
+                                  df         = Inf) {
   optBLOQ <- match.arg(optBLOQ)
   err_cn <- NULL
   if (!is.null(errfn) && (is.null(eCondNames) || cn %in% eCondNames)) {
@@ -94,7 +97,8 @@ evalConditionResidual <- function(dataI, predictionI, pars,
     par_names_global = par_names_global,
     deriv2_requested = isTRUE(deriv2),
     threads          = 1L,
-    bloq_mode        = optBLOQ
+    bloq_mode        = optBLOQ,
+    t_df             = df
   )
   if (deriv)
     objlist(value = kr$value, gradient = kr$gradient, hessian = kr$hessian)
@@ -238,8 +242,41 @@ normL2 <- function(data, x, errmodel = NULL, times = NULL,
                    attrName = "data",
                    optBLOQ = c("M3", "M1", "M4NM", "M4BEAL"),
                    multipleShootingControl = NULL) {
+  .normL2Objective(data, x, errmodel, times, attrName, match.arg(optBLOQ),
+                   multipleShootingControl, df = Inf)
+}
 
-  optBLOQ <- match.arg(optBLOQ)
+
+#' Student-t likelihood between data and model prediction
+#'
+#' @description
+#' Builds the objective of a fit whose residuals follow a Student-t
+#' distribution with `df` degrees of freedom and scale given by the error
+#' model or the data's `sigma`: the `-2 log` likelihood of the data, summed
+#' over the conditions. Its tails are heavier than those of [normL2()], so
+#' single outliers move the fit less; `df = Inf` would be [normL2()].
+#'
+#' @inheritParams normL2
+#' @param df Degrees of freedom, a positive number, fixed during the fit.
+#' @param optBLOQ `"M3"` (default, the probability of lying below the limit
+#'   under the t distribution) or `"M1"` (censored rows dropped).
+#'
+#' @return An objective function of class `objfn`, as [normL2()] returns it,
+#'   usable in [trust()], [mstrust()], [profile()] and [em()].
+#' @seealso [normL2()]
+#' @example inst/examples/normT.R
+#' @export
+normT <- function(data, x, errmodel = NULL, df, times = NULL, attrName = "data",
+                  optBLOQ = c("M3", "M1")) {
+  if (missing(df) || length(df) != 1L || !is.finite(df) || df <= 0)
+    stop("normT: `df` is a positive finite number.", call. = FALSE)
+  .normL2Objective(data, x, errmodel, times, attrName, match.arg(optBLOQ), NULL, df = df)
+}
+
+
+# The objective of normL2() and normT(): normal residuals for df = Inf, else Student-t.
+.normL2Objective <- function(data, x, errmodel, times, attrName, optBLOQ,
+                             multipleShootingControl, df) {
 
   timesD <- .normL2Grid(data, times)
   .timesOf <- function(conds) if (is.list(timesD)) unname(timesD[conds]) else timesD
@@ -304,7 +341,7 @@ normL2 <- function(data, x, errmodel = NULL, times = NULL,
         conditions = conditions,
         env = env, cores = cores, x = x, errmodel = errmodel, data = data,
         timesD = .timesOf(conditions), e.cond = e.cond, opt.BLOQ = optBLOQ,
-        attr.name = attrName, meta_cache = .meta_cache_rev))
+        attr.name = attrName, meta_cache = .meta_cache_rev, t.df = df))
     }
 
     # The Hessian is only meaningful with deriv; when it is not wanted, the
@@ -386,7 +423,8 @@ normL2 <- function(data, x, errmodel = NULL, times = NULL,
       threads          = as.integer(cores),
       bloq_mode        = optBLOQ,
       build_hessian    = build_hessian,
-      local_blocks     = build_hessian && sparse
+      local_blocks     = build_hessian && sparse,
+      t_df             = df
     )
     # a sparse Hessian is assembled from the blocks of the conditions
     if (build_hessian && sparse)
@@ -423,7 +461,7 @@ normL2 <- function(data, x, errmodel = NULL, times = NULL,
   # `l2spec` has one entry per L2 term, since the single handles below are
   # first-wins on composition; "errfn" is absent without an error model.
   attr(myfn, "l2spec") <- list(list(data = data, prdfn = x, errfn = errmodel,
-                                    timesD = timesD))
+                                    timesD = timesD, optBLOQ = optBLOQ, df = df))
   attr(myfn, "prdfn") <- x
   attr(myfn, "data")  <- data
   attr(myfn, "timesD") <- timesD

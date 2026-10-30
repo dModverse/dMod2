@@ -565,3 +565,72 @@ test_that("an error parameter outside the prediction's derivatives has its gradi
   r <- evalConditionResidual(data$C1, pr, pars, errfn = e, cn = "C1")
   expect_equal(unname(r$gradient[names(pars)]), num, tolerance = 1e-6)
 })
+
+
+test_that("normT has the Student-t likelihood with exact gradient and Hessian, censored rows too", {
+  P2X <- function(times, pars, fixed = NULL, deriv = TRUE, deriv2 = FALSE) {
+    p <- c(unclass(pars), unclass(fixed)); an <- paste0("a", 0:3)
+    jac <- array(0, c(length(times), 1, 4), dimnames = list(NULL, "y", an))
+    for (i in seq_along(times)) jac[i, 1, times[i] + 1] <- 1
+    jac2 <- if (deriv2) array(0, c(length(times), 1, 4, 4), dimnames = list(NULL, "y", an, an))
+    prdframe(cbind(time = times, y = p[an][times + 1]), deriv = jac, deriv2 = jac2, parameters = p)
+  }
+  x <- prdfn(P2X, paste0("a", 0:3), "C1")
+  X2Y <- function(out, pars, fixed = NULL, deriv = TRUE, deriv2 = FALSE) {
+    p <- c(unclass(pars), unclass(fixed))
+    sig <- exp(p[["ls"]]) * (1 + 0.1 * out[, "y"]^2)
+    jac <- jac2 <- NULL
+    if (deriv || deriv2) {
+      jac <- array(0, c(nrow(out), 1, 5), dimnames = list(NULL, "y", c(paste0("a", 0:3), "ls")))
+      for (i in seq_len(nrow(out))) {
+        jac[i, 1, i] <- exp(p[["ls"]]) * 0.2 * out[i, "y"]
+        jac[i, 1, 5] <- sig[i]
+      }
+    }
+    if (deriv2) {
+      jac2 <- array(0, c(nrow(out), 1, 5, 5), dimnames = list(NULL, "y", dimnames(jac)[[3]], dimnames(jac)[[3]]))
+      for (i in seq_len(nrow(out))) {
+        jac2[i, 1, i, i] <- exp(p[["ls"]]) * 0.2
+        jac2[i, 1, i, 5] <- jac2[i, 1, 5, i] <- exp(p[["ls"]]) * 0.2 * out[i, "y"]
+        jac2[i, 1, 5, 5] <- sig[i]
+      }
+    }
+    prdframe(cbind(time = out[, "time"], y = sig), deriv = jac, deriv2 = jac2, parameters = p)
+  }
+  e <- obsfn(X2Y, "ls", "C1")
+  data <- as.datalist(data.frame(name = "y", time = 0:3, value = c(1, 2, 2.5, 0.2), sigma = NA,
+                                 lloq = c(-Inf, -Inf, -Inf, 0.5), condition = "C1"))
+  obj <- normT(data, x, errmodel = e, df = 4)
+  pars <- c(a0 = 1.2, a1 = 1.7, a2 = 2.9, a3 = 0.9, ls = -0.3)
+  v <- function(q) obj(setNames(q, names(pars)), deriv = FALSE)$value
+  gr <- function(q) unname(obj(setNames(q, names(pars)))$gradient[names(pars)])
+  # the likelihood itself, rows above the limit and the censored one
+  sg <- exp(-0.3) * (1 + 0.1 * pars[1:4]^2)
+  ref <- -2 * sum(dt((pars[1:3] - c(1, 2, 2.5)) / sg[1:3], 4, log = TRUE) - log(sg[1:3])) -
+    2 * pt((0.5 - pars[[4]]) / sg[[4]], 4, log.p = TRUE)
+  expect_equal(v(unname(pars)), unname(ref), tolerance = 1e-10)
+  out <- obj(pars, deriv2 = TRUE)
+  expect_equal(unname(out$gradient[names(pars)]), numDeriv::grad(v, unname(pars)), tolerance = 1e-7)
+  expect_equal(unname(out$hessian[names(pars), names(pars)]), numDeriv::jacobian(gr, unname(pars)),
+               tolerance = 1e-6)
+  expect_error(normT(data, x, df = 0), "positive")
+})
+
+
+test_that("the row loss derivatives of the Student-t likelihood match its expressions", {
+  f <- function(x, y, cens, nu) if (cens) -2 * pt((y - x[1]) / x[2], nu, log.p = TRUE) else
+    (nu + 1) * log1p(((x[1] - y) / x[2])^2 / nu) + 2 * log(x[2])
+  for (cens in c(FALSE, TRUE)) {
+    D <- dMod2:::.rowLossDerivs(1.3, 0.7, 0.9, cens, df = 4)
+    d3 <- numDeriv::jacobian(function(x) {
+      E <- dMod2:::.rowLossDerivs(x[1], x[2], 0.9, cens, df = 4); c(E[1, 3, 1], E[1, 2, 2], E[1, 1, 3]) }, c(1.3, 0.7))
+    h <- numDeriv::hessian(function(x) f(x, 0.9, cens, 4), c(1.3, 0.7))
+    expect_equal(c(D[1, 3, 1], D[1, 2, 2], D[1, 1, 3]), c(h[1, 1], h[1, 2], h[2, 2]), tolerance = 1e-7)
+    expect_equal(c(D[1, 4, 1], D[1, 3, 2], D[1, 2, 3], D[1, 1, 4]), c(d3[1, 1], d3[1, 2], d3[2, 2], d3[3, 2]),
+                 tolerance = 1e-6)
+  }
+  # normal rows above the limit in closed form, as the series gives them
+  p <- c(1.3, -0.2, 4); s <- c(0.7, 1.5, 0.2); y <- c(0.9, 0.3, 4.1)
+  expect_equal(dMod2:::.rowLossDerivs(p, s, y, rep(FALSE, 3)),
+               dMod2:::.rowLossTaylor(p, s, y, rep(FALSE, 3)), tolerance = 1e-12)
+})

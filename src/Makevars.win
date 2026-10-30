@@ -7,3 +7,4 @@ all: $(SHLIB)
 normL2_kernel.o constraint_kernel.o residual_kernel.o residual_kernel_rwrap.o: residual_kernel.h
 trust_kernel.o trustL1_kernel.o trust_step.o: trust_driver.h trust_subproblem.h
 trust_kernel.o trust_step.o: trust_qn.h
+focei_kernel.o: residual_kernel.h trust_subproblem.h

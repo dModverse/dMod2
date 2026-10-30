@@ -172,7 +172,7 @@ test_that("trust(sparse = \"auto\") takes the sparse path above its thresholds, 
   expect_error(trust(obj, f$pars, sparse = "yes"), "TRUE, FALSE")
 })
 
-test_that("censored rows and datapointL2 have the sparse Hessian of the dense one", {
+test_that("normT, censored rows and datapointL2 have the sparse Hessian of the dense one", {
   f <- .sparseFixture()
   grid <- function(cn) data.frame(name = "y", time = 0:3, row.names = paste0(cn, "_a", 0:3))
   x <- Xd(grid("C1"), condition = "C1") + Xd(grid("C2"), condition = "C2")
@@ -182,7 +182,7 @@ test_that("censored rows and datapointL2 have the sparse Hessian of the dense on
   censored <- as.datalist(transform(data, lloq = 1.8))
   data <- as.datalist(data)
   pars <- c(f$pars, target = 1.5)
-  terms <- function(d) list(normL2(d, x),
+  terms <- function(d) list(normT(d, x, df = 4), normL2(d, x),
                             normL2(d, x) + datapointL2("y", 2, "target", sigma = 0.2, condition = "C1"))
   for (obj in terms(censored)) {
     dense <- obj(pars, deriv = TRUE)
