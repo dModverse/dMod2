@@ -10,6 +10,54 @@ Rcpp::Rostream<true>&  Rcpp::Rcout = Rcpp::Rcpp_cout_get();
 Rcpp::Rostream<false>& Rcpp::Rcerr = Rcpp::Rcpp_cerr_get();
 #endif
 
+// alignmentPredictors
+NumericMatrix alignmentPredictors(List conds, List theta, int S, int threads);
+RcppExport SEXP _dMod2_alignmentPredictors(SEXP condsSEXP, SEXP thetaSEXP, SEXP SSEXP, SEXP threadsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< List >::type conds(condsSEXP);
+    Rcpp::traits::input_parameter< List >::type theta(thetaSEXP);
+    Rcpp::traits::input_parameter< int >::type S(SSEXP);
+    Rcpp::traits::input_parameter< int >::type threads(threadsSEXP);
+    rcpp_result_gen = Rcpp::wrap(alignmentPredictors(conds, theta, S, threads));
+    return rcpp_result_gen;
+END_RCPP
+}
+// alignmentForwardBlocks
+List alignmentForwardBlocks(NumericVector tangent, Nullable<NumericVector> hessian, List conds, List keepNames, int threads);
+RcppExport SEXP _dMod2_alignmentForwardBlocks(SEXP tangentSEXP, SEXP hessianSEXP, SEXP condsSEXP, SEXP keepNamesSEXP, SEXP threadsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type tangent(tangentSEXP);
+    Rcpp::traits::input_parameter< Nullable<NumericVector> >::type hessian(hessianSEXP);
+    Rcpp::traits::input_parameter< List >::type conds(condsSEXP);
+    Rcpp::traits::input_parameter< List >::type keepNames(keepNamesSEXP);
+    Rcpp::traits::input_parameter< int >::type threads(threadsSEXP);
+    rcpp_result_gen = Rcpp::wrap(alignmentForwardBlocks(tangent, hessian, conds, keepNames, threads));
+    return rcpp_result_gen;
+END_RCPP
+}
+// alignmentVjpBlocks
+List alignmentVjpBlocks(NumericVector tangent, Nullable<NumericVector> hessian, int o, List conds, List W, List V, IntegerVector first, IntegerMatrix rest, int threads);
+RcppExport SEXP _dMod2_alignmentVjpBlocks(SEXP tangentSEXP, SEXP hessianSEXP, SEXP oSEXP, SEXP condsSEXP, SEXP WSEXP, SEXP VSEXP, SEXP firstSEXP, SEXP restSEXP, SEXP threadsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type tangent(tangentSEXP);
+    Rcpp::traits::input_parameter< Nullable<NumericVector> >::type hessian(hessianSEXP);
+    Rcpp::traits::input_parameter< int >::type o(oSEXP);
+    Rcpp::traits::input_parameter< List >::type conds(condsSEXP);
+    Rcpp::traits::input_parameter< List >::type W(WSEXP);
+    Rcpp::traits::input_parameter< List >::type V(VSEXP);
+    Rcpp::traits::input_parameter< IntegerVector >::type first(firstSEXP);
+    Rcpp::traits::input_parameter< IntegerMatrix >::type rest(restSEXP);
+    Rcpp::traits::input_parameter< int >::type threads(threadsSEXP);
+    rcpp_result_gen = Rcpp::wrap(alignmentVjpBlocks(tangent, hessian, o, conds, W, V, first, rest, threads));
+    return rcpp_result_gen;
+END_RCPP
+}
 // bmm_lb
 NumericVector bmm_lb(NumericVector A, NumericVector B, int Bn, int M, int K, int N);
 RcppExport SEXP _dMod2_bmm_lb(SEXP ASEXP, SEXP BSEXP, SEXP BnSEXP, SEXP MSEXP, SEXP KSEXP, SEXP NSEXP) {
@@ -414,6 +462,9 @@ END_RCPP
 }
 
 static const R_CallMethodDef CallEntries[] = {
+    {"_dMod2_alignmentPredictors", (DL_FUNC) &_dMod2_alignmentPredictors, 4},
+    {"_dMod2_alignmentForwardBlocks", (DL_FUNC) &_dMod2_alignmentForwardBlocks, 5},
+    {"_dMod2_alignmentVjpBlocks", (DL_FUNC) &_dMod2_alignmentVjpBlocks, 9},
     {"_dMod2_bmm_lb", (DL_FUNC) &_dMod2_bmm_lb, 6},
     {"_dMod2_bmm_rb", (DL_FUNC) &_dMod2_bmm_rb, 6},
     {"_dMod2_bmm_bb", (DL_FUNC) &_dMod2_bmm_bb, 6},

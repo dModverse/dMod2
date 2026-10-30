@@ -529,7 +529,8 @@ confint.em <- function(object, parm = NULL, level = 0.95, method = c("wald", "pr
 #' @description Likelihood ratio tests of fits ordered by their number of
 #' parameters, each against the one before, with AIC and BIC.
 #'
-#' @param object,... `em` objects of nested models on the same data.
+#' @param object,... `em` objects of nested models on the same data, or
+#'   `alignment` objects.
 #' @return A data.frame with `model` (the position of the fit among the
 #'   arguments), `npar`, `value` (-2 log L), `AIC`, `BIC`, `chisq`, `df` and
 #'   `p` per fit.

@@ -1,4 +1,4 @@
-# dMod2 (unreleased)
+# dMod2 0.14.0
 
 * Breaking: `define()`, `insert()`, `repar()` and `branch(apply = )` write a substitution as
   `"lhs <- rhs"`, e.g. `insert(trafo, "x <- exp(x)", x = pars)`. A `"lhs ~ rhs"` string or a
@@ -83,13 +83,13 @@
   built with `derivMode = c("forward", "reverse", "forward-reverse")`): one pass forward along
   the random effects and a few backward sweeps give the exact gradient, the mode shift and the
   derivatives of the curvature of every group, at a cost that does not grow with the square of
-  the parameters. The outer trust region takes the Gauss-Newton Schur complement with the
-  volume curvature of the variance parameters from these derivatives; the
-  reported Hessian is exact forward over forward where the model has `deriv2`, else the exact
-  Schur complement of the joint Hessian with that volume curvature, exact for models linear in
-  the random effects, and `summary()` says so. `"forward-forward"` keeps the second-order
-  sensitivities; a model with only one of the two takes it. In both modes, dense and sparse, the outer model of FOCEI gets an SR1
-  correction from the changes of the full outer gradient between the last three accepted
+  the parameters. The outer trust region takes the Gauss-Newton Schur complement with the volume
+  curvature of the variance parameters from these derivatives; the reported Hessian is exact
+  forward over forward where the model has `deriv2`, else the exact Schur complement of the
+  joint Hessian with that volume curvature, exact for models linear in the random effects, and
+  `summary()` says so. `"forward-forward"` keeps the second-order sensitivities; a model with
+  only one of the two takes it. In both modes, dense and sparse, the outer model of FOCEI gets
+  an SR1 correction from the changes of the full outer gradient between the last three accepted
   points: it adds the curvature Gauss-Newton leaves out, negative curvature included, so fewer
   fits stop at saddles of the Gauss-Newton model.
 
@@ -115,6 +115,48 @@
   `penaltyL1()`, `emInit()`, `updateOmegaChol()`, `makeSubjectNodes()`, `emObjfn()`,
   `sparsify()`, `scanL1()`, `gateL1()`, `selectEB()` and the vignette "Structure selection
   with an estimated penalty".
+
+* New `alignmentModel()` and `align()`: alignment of replicate readings with free expressions
+  for the prediction and its standard deviation. Every symbol is a linear predictor given by a
+  formula in `model.matrix()` coding with random terms, a column with one level per value,
+  numeric or not, and `I(dose)` a covariate. `trafo = c("sj <- 10^sj")` sets the scale of a
+  symbol, `error = NULL` an error model without symbols, `prior` a `constraintL2()` on any
+  parameter, the spread of a random term included; censored readings by M3, a Student-t option.
+  As in blotIt, the experiments connected by shared values form blocks, and per block the mean
+  of the predictors of the first biological symbol is held at 0. Absolute readings, marked in a
+  logical column `absolute`, such as concentrations by targeted mass spectrometry, are predicted
+  by the expression `absolute` in the biological symbols and data columns (the first biological
+  symbol by default, units by the expression), depend on no scaling parameter and may be `NA` in
+  the columns of the scaling formulas; their block is not normalized but comes out in their
+  units. Every experiment within its connected component of the groups of the random terms is a
+  condition of its own, so the Hessian is sparse over them; designs and coefficients are sparse
+  matrices and the standard errors of the values come from a sparse solve. `align()` starts the
+  coefficients of the first scaling symbol where its predictor is, per experiment, the median of
+  the predictors at which the prediction meets the relative readings, runs the fits of a
+  multistart in parallel on `cores`, one core each, and stops at tolerances of
+  `sqrt(.Machine$double.eps)`, inner fits included. Methods `print()`, `as.datalist()`,
+  `plotValues()` (the starts by rank), `plotResiduals()`, `anova()` and `simulate()`, plots
+  `plotAligned()` and `plotScaled()`. The demo "alignment" aligns qPCR experiments with
+  undetected wells, and Western blots with a random background per gel together with targeted
+  mass spectrometry, which puts the values in nM.
+
+* `alignmentModel()` takes random terms of several groupings, nested or crossed, such as a lane
+  effect per gel and lane shared by the antibodies of a gel beside a background per gel and
+  antibody. They are normal and integrated per connected component; a condition is an experiment
+  within its component, and the normalization blocks follow the fixed parts of the scaling
+  formulas. `fit$omega` and `fit$random` have a column `grouping`, and `plotRandomEffects()`
+  draws a panel per grouping and random effect.
+
+* The objective of an alignment answers all its conditions by one prediction and one error-model
+  function: the compiled model is evaluated once at the readings of all conditions, and the
+  derivatives of every condition in its parameters and the contractions of the backward sweep
+  run in C++, in parallel over the conditions. The error model of an alignment is taken from the
+  prediction, which evaluates it alongside. Its backward sweeps answer several second-order
+  seeds at once, so FOCEI fits it by forward over reverse.
+
+* An alignment holds the evaluation that the backward sweeps of prediction and error model share
+  only within one sweep, so a fitted alignment keeps none of it; an error model that depends on
+  no symbol is not evaluated backwards.
 
 * The reverse mode: the Hessian of `normL2()` with `sweep = "reverse"` has the curvature of an
   estimated error model, an error model that is a sum of per-condition ones goes backwards, and

@@ -650,7 +650,8 @@ plotFluxes <- function(pouter, x, times, fluxEquations, legendTitle = "Fluxes:",
 #' of iterations, an unconverged one is red.
 #'
 #' @param x Data frame with columns `value`, `converged` and `iterations`,
-#'   e.g. a [parframe] or a fit of [msem()], whose starts are plotted.
+#'   e.g. a [parframe], a fit of [msem()], whose starts are plotted, or an
+#'   alignment from [align()].
 #' @param ... Logical expressions to subset `x`.
 #' @param tol Maximal difference between neighboring objective values that
 #'   still counts as one step. Defaults to 1.

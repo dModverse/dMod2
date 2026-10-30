@@ -99,7 +99,10 @@ transformation, in the notation of lme4, and `em()` fits them by
 marginal maximum likelihood: FOCEI, adaptive sparse-grid quadrature,
 laplaceEM or SAEM. Besides normal random effects, Laplace,
 spike-and-slab and Dirichlet-process ones select which groups differ,
-with their hyperparameters estimated in the same fit.
+with their hyperparameters estimated in the same fit. The demo
+[alignment](examples/alignment.md) aligns qPCR experiments and Western
+blots with a random gel background together with targeted mass
+spectrometry in nM with `align()`.
 
 ## Structural identifiability
 

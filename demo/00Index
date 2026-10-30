@@ -3,3 +3,4 @@ Boehm_JProteomeRes2014  STAT5 dimerisation (Boehm et al. 2014): multi-start, REM
 KokMSB2020              IFN-alpha sensitization in Huh7.5 cells (Kok et al. 2020)
 BA_transport            Bile acid transport, the demonstration model of the data set badata
 HodgkinHuxley           Hodgkin-Huxley squid axon with piecewise() current pulse and gates
+alignment               Alignment of qPCR experiments with undetected wells, and of Western blots with a random gel background together with mass spectrometry in nM

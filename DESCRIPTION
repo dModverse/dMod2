@@ -1,8 +1,8 @@
 Package: dMod2
 Type: Package
 Title: Dynamic Modeling and Parameter Estimation in ODE Models
-Version: 0.13.4
-Date: 2026-10-28
+Version: 0.14.0
+Date: 2026-10-30
 Authors@R: c(
     person("Simon", "Beyer", email = "simon.beyer@fdm.uni-freiburg.de",
            role = c("aut", "cre")),
@@ -20,7 +20,8 @@ Description: Tools for dynamic modeling and parameter estimation in ordinary
     and evaluated in parallel. Mixed-effects models with normal, Laplace,
     spike-and-slab and Dirichlet-process random effects are fitted by
     expectation maximization with the Laplace approximation, sparse-grid
-    quadrature or stochastic approximation. Further tools cover symbolic steady
+    quadrature or stochastic approximation, and replicate measurements are
+    aligned by free models of their scales. Further tools cover symbolic steady
     states, parameter transformations with implicit and steady-state solutions,
     error models, and distributed computing on a cluster. Models, experimental
     conditions, measurements and parameter tables are imported from and
