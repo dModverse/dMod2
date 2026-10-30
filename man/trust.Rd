@@ -24,6 +24,7 @@ trust(
   blather = FALSE,
   printIter = FALSE,
   traceFile = NULL,
+  sparse = "auto",
   ...
 )
 
@@ -209,6 +210,19 @@ at each evaluation. Default \code{FALSE}.}
 
 \item{traceFile}{Path of a CSV file written with one row per evaluation:
 iteration, objective value and parameters. Default \code{NULL}, no file.}
+
+\item{sparse}{\code{"auto"} (default), \code{TRUE} or \code{FALSE}. With
+\code{TRUE}, \code{objfun} is called with \code{hessian = "sparse"} and
+its sparse Gauss-Newton Hessian (a \code{Matrix}) is factorised by sparse
+Cholesky. Without phases and bounds; of the other settings only
+\code{rinit}, \code{rmax}, \code{iterlim}, \code{tolControl$ftol},
+\code{tolControl$mtol} and \code{printIter} apply. \code{"auto"} takes
+this path for a Gauss-Newton minimisation without phases, bounds, exact
+Hessian, trace or multiple shooting when \code{parinit} has at least
+\code{parameters} entries and the sparse Hessian at \code{parinit} fills
+at most \code{fill} of the matrix, both from
+\code{getOption("dMod2.sparseAuto")}, a list that defaults to
+\code{parameters = 500} and \code{fill = 0.05}.}
 
 \item{...}{Further named arguments passed to \code{objfun}.}
 

@@ -60,7 +60,9 @@
 #'     \item{\code{gamma}}{Initial factor of the correction towards the
 #'       optimum of the other parameters. \code{1} / \code{0}.}
 #'     \item{\code{W}}{Matrix in the path equation, \code{"hessian"} or
-#'       \code{"identity"}. \code{"hessian"} / \code{"identity"}.}
+#'       \code{"identity"}. With \code{"identity"} a step moves the profiled
+#'       parameter alone and the others are reoptimised at every step.
+#'       \code{"hessian"} / \code{"identity"}.}
 #'     \item{\code{reoptimize}}{Whether every step is followed by a fit of the
 #'       other parameters with [trust()]. \code{FALSE} / \code{TRUE}.}
 #'     \item{\code{correction}}{Relative correction above which \code{gamma}
@@ -84,6 +86,10 @@
 #'   and the files are kept. Default \code{FALSE}.
 #' @param side \code{"both"} (default), \code{"left"} or \code{"right"}, the
 #'   side of the optimum to profile.
+#' @param sparse \code{"auto"} (default), \code{TRUE} or \code{FALSE}: the
+#'   path equation and the reoptimisations on the sparse Hessian of
+#'   \code{fitted}, chosen at \code{pars} as in [trust()]. \code{hessian =
+#'   "sparse"} in \code{...} is \code{TRUE}.
 #' @param ... Further arguments passed to \code{fitted}, for example
 #'   \code{fixed}.
 #'
@@ -111,6 +117,7 @@ profile.objfn <- function(fitted, pars, whichPar, alpha = 0.05,
                           cautiousMode = FALSE,
                           side = c("both", "left", "right"),
                           delta = NULL,
+                          sparse = "auto",
                           ...) {
 
   dotArgs <- list(...)
@@ -119,6 +126,11 @@ profile.objfn <- function(fitted, pars, whichPar, alpha = 0.05,
   sanePars <- sanitizePars(pars, dotArgs$fixed)
   pars <- sanePars$pars
   fixed <- sanePars$fixed
+  .checkSparse(sparse, "profile")
+  if (identical(dotArgs$hessian, "sparse")) sparse <- TRUE
+  if (identical(sparse, "auto"))
+    sparse <- is.null(dotArgs$hessian) && .sparseChoice(objfun, pars, dotArgs)$sparse
+  if (sparse) dotArgs$hessian <- "sparse"
 
   method  <- match.arg(method)
   side <- match.arg(side)
@@ -189,48 +201,54 @@ profile.objfn <- function(fitted, pars, whichPar, alpha = 0.05,
   obj.opt <- .singleShooting(objfun)
   nSingular <- 0L
   nFailedOpt <- 0L
+  # hessian = "sparse" in the arguments of the objective keeps the path equation sparse
+  sparse <- identical(dotArgs$hessian, "sparse")
+  # W = "identity" steps along whichPar alone; the reoptimisation sets the others.
+  identity <- aControl$W == "identity"
 
-  # With W = "identity" the steps go along whichPar only.
-  Id <- NULL
-  evalObj <- function(p) {
-    out <- do.call(objfun, c(list(p), dotArgs))
-    if (aControl$W == "identity") {
-      if (is.null(Id)) {
-        Id <<- diag(1/.Machine$double.eps, length(out$gradient))
-        Id[whichIndex, whichIndex] <<- 1
-        dimnames(Id) <<- list(names(out$gradient), names(out$gradient))
-      }
-      out$hessian <- Id
-    }
-    out
-  }
-
-  # Solutions of M x = rhs; a matrix too ill-conditioned for solve() takes the
-  # pseudoinverse, whose singular values below reg are flagged invalid.
+  # Solutions of M x = rhs; a singular matrix takes the pseudoinverse without its
+  # singular values below reg. The sparse LU decides singularity by its pivots.
   solveM <- function(M, rhs) {
+    if (sparse) {
+      lu <- Matrix::lu(M, errSing = FALSE)
+      if (!.luSingular(lu))
+        return(list(sol = as.matrix(Matrix::solve(lu, rhs)), singular = FALSE))
+      if (nrow(M) > 5001L) {
+        cols <- setdiff(.luSingularColumns(M), n + 1L)
+        stop("the sparse path equation is singular; fix the non-identifiable parameters",
+             if (length(cols)) paste0(": ", paste(names(pars)[cols], collapse = ", ")), ".",
+             call. = FALSE)
+      }
+      M <- as.matrix(M)
+    }
     if (rcond(M) > sqrt(.Machine$double.eps)) {
       sol <- tryCatch(solve(M, rhs), error = function(e) NULL)
-      if (!is.null(sol)) return(list(sol = sol, valid = rep(TRUE, nrow(M))))
+      if (!is.null(sol)) return(list(sol = sol, singular = FALSE))
     }
     s <- svd(M)
     idx <- which(abs(s$d) > max(dim(M)) * max(s$d) * aControl$reg)
     sol <- if (length(idx))
       s$v[, idx, drop = FALSE] %*% (crossprod(s$u[, idx, drop = FALSE], rhs) / s$d[idx])
     else matrix(0, ncol(M), ncol(rhs))
-    list(sol = sol, valid = seq_along(s$d) %in% idx)
+    list(sol = sol, singular = length(idx) < length(s$d))
   }
 
-  lagrange <- function(y, direction, gamma, out = evalObj(y)) {
+  lagrange <- function(y, direction, gamma, out = do.call(objfun, c(list(y), dotArgs))) {
     gdot <- direction * (seq_len(n) == whichIndex)
-    M <- rbind(cbind(out$hessian, gdot), c(gdot, 0))
-    st <- solveM(M, cbind(c(-gamma * out$gradient, 1), c(rep(0, n), 1)))
-    dy <- st$sol[seq_len(n), 1]
-    dy0 <- st$sol[seq_len(n), 2]
-    valid <- st$valid
-    if (!all(valid)) {
-      dy[!valid[seq_len(n)]] <- dy0[!valid[seq_len(n)]] <- 0
-      dy[whichIndex] <- dy0[whichIndex] <- direction
-      nSingular <<- nSingular + 1L
+    singular <- FALSE
+    if (identity) {
+      dy <- dy0 <- gdot
+    } else {
+      M <- rbind(cbind(out$hessian, gdot), c(gdot, 0))
+      if (sparse) M <- methods::as(methods::as(M, "CsparseMatrix"), "generalMatrix")
+      st <- solveM(M, cbind(c(-gamma * out$gradient, 1), c(rep(0, n), 1)))
+      dy <- st$sol[seq_len(n), 1]
+      dy0 <- st$sol[seq_len(n), 2]
+      singular <- st$singular
+      if (singular) {
+        dy[whichIndex] <- dy0[whichIndex] <- direction
+        nSingular <<- nSingular + 1L
+      }
     }
     names(dy) <- names(y)
     # Numeric attributes become profile modes that add up to the total; chi2
@@ -239,12 +257,12 @@ profile.objfn <- function(fitted, pars, whichPar, alpha = 0.05,
     attrs <- attrs[!grepl("^chi2($|_)", names(attrs))]
     c(list(dy = dy, value = out$value, gradient = out$gradient,
            correction = sqrt(sum((dy - dy0)^2)) / sqrt(sum(dy^2)),
-           valid = valid, attributes = names(attrs), obj = out),
+           singular = singular, attributes = names(attrs), obj = out),
       attrs)
   }
 
   iterate <- function(y, dy, lag, direction, stepsize) {
-    optimize <- aControl$reoptimize
+    optimize <- aControl$reoptimize || identity
     if (anyNA(dy)) {
       optimize <- TRUE
       y.try <- y
@@ -253,13 +271,14 @@ profile.objfn <- function(fitted, pars, whichPar, alpha = 0.05,
     } else {
       rinit <- min(oControl$rinit, 3 * sqrt(sum(dy^2)))
       y.try <- y + dy
-      if (!all(lag$valid)) optimize <- TRUE
+      if (lag$singular) optimize <- TRUE
     }
     if (!optimize) return(y.try)
     arglist <- c(list(objfun = obj.opt, parinit = y.try[-whichIndex],
                       fixed = c(fixed, y.try[whichIndex]), rinit = rinit),
                  oControl[names(oControl) != "rinit"],
-                 dotArgs[names(dotArgs) != "fixed"])
+                 list(sparse = sparse),
+                 dotArgs[!names(dotArgs) %in% c("fixed", if (sparse) "hessian")])
     fit <- try(do.call(trust, arglist), silent = TRUE)
     if (inherits(fit, "try-error")) nFailedOpt <<- nFailedOpt + 1L
     else y.try[names(fit$argument)] <- as.vector(fit$argument)
@@ -348,7 +367,7 @@ profile.objfn <- function(fitted, pars, whichPar, alpha = 0.05,
         cat("\tvalue:", formatC(lag$value, digits = 4, format = "g", width = 10),
             "constraint:", formatC(con, digits = 4, format = "g", width = 10),
             "gamma:", formatC(gamma, digits = 4, format = "g", width = 10),
-            "valid:", all(lag$valid))
+            "singular:", lag$singular)
       }
       if (lag[[sControl$stop]] > threshold) { reason <- "threshold"; break }
       if (direction * (con - limit) >= -sqrt(.Machine$double.eps)) { reason <- "limit"; break }
@@ -564,6 +583,9 @@ confint.parframe <- function(object, parm = NULL, level = 0.95, ...,
 #'   as `obj(pars)`, or a result of [trust()], class `trustfit`.
 #' @param fixed Names of parameters held fixed, for example at a bound.
 #'   Default `NULL`.
+#' @param which Names of the parameters whose block of the covariance is
+#'   returned. Default `NULL`, all of them. With a sparse Hessian (a `Matrix`,
+#'   from `hessian = "sparse"`) only these columns are solved for.
 #' @param parupper,parlower Named upper and lower bounds. Parameters at or
 #'   beyond a bound count as fixed, as do those that `object$atBound` marks.
 #'   Default `NULL`.
@@ -571,7 +593,9 @@ confint.parframe <- function(object, parm = NULL, level = 0.95, ...,
 #'
 #' @return Square matrix with the parameter names as dimnames: the inverse of
 #'   half the Hessian of `object` (pseudo-inverse when singular), with rows
-#'   and columns of fixed parameters set to zero. For a `trustfit`, `NULL`
+#'   and columns of fixed parameters set to zero. A sparse Hessian is factorised
+#'   by sparse Cholesky; when singular, a pseudo-inverse is taken up to 5000
+#'   free parameters and an error raised beyond. For a `trustfit`, `NULL`
 #'   when it has no `argument`, and an error when it has no Hessian; the fits
 #'   of [mstrust()] have none, use `vcov(obj(fit$argument))` for them.
 #' @seealso [trust()], [mstrust()]
@@ -589,7 +613,7 @@ confint.parframe <- function(object, parm = NULL, level = 0.95, ...,
 #' vcov(objlist(ev$value, ev$gradient, ev$hessian))
 #' @importFrom stats vcov
 #' @export
-vcov.objlist <- function(object, fixed = NULL, ...) {
+vcov.objlist <- function(object, fixed = NULL, which = NULL, ...) {
 
   H <- object[["hessian"]]
   if (is.null(H)) stop("The objective was evaluated without a Hessian.")
@@ -597,6 +621,12 @@ vcov.objlist <- function(object, fixed = NULL, ...) {
     nm <- names(object[["gradient"]])
     dimnames(H) <- list(nm, nm)
   }
+  if (is.null(which)) which <- colnames(H)
+  unknown <- setdiff(which, colnames(H))
+  if (length(unknown))
+    stop("`which` names parameters the Hessian does not have: ",
+         paste(unknown, collapse = ", "), ".", call. = FALSE)
+  if (.isSparse(H)) return(.vcovSparse(H, fixed, which))
 
   V <- 0*H
   isFixed <- colnames(H) %in% fixed
@@ -605,13 +635,41 @@ vcov.objlist <- function(object, fixed = NULL, ...) {
   if (inherits(Vfree, "try-error")) Vfree <- MASS::ginv(0.5*Hfree)
   V[!isFixed, !isFixed] <- Vfree
 
-  V
+  V[which, which, drop = FALSE]
 
+}
+
+# The covariance block of `which` from a sparse Hessian: one sparse Cholesky
+# factor, solved for the free columns of `which`.
+.vcovSparse <- function(H, fixed, which) {
+  V <- matrix(0, length(which), length(which), dimnames = list(which, which))
+  free <- setdiff(colnames(H), fixed)
+  cols <- intersect(which, free)
+  if (!length(cols)) return(V)
+  Hfree <- Matrix::forceSymmetric(0.5 * H[free, free, drop = FALSE])
+  ch <- tryCatch(suppressWarnings(Matrix::Cholesky(Hfree, perm = TRUE, LDL = FALSE)),
+                 error = function(e) NULL)
+  if (!is.null(ch) && .cholSingular(ch)) ch <- NULL
+  if (is.null(ch)) {
+    if (length(free) > 5000L)
+      stop("The sparse Hessian is singular on its ", length(free), " free parameters; ",
+           "fix the non-identifiable ones or ask for the block of an identifiable set.",
+           call. = FALSE)
+    Vfree <- MASS::ginv(as.matrix(Hfree))
+    dimnames(Vfree) <- list(free, free)
+    V[cols, cols] <- Vfree[cols, cols]
+    return(V)
+  }
+  E <- Matrix::sparseMatrix(i = match(cols, free), j = seq_along(cols), x = 1,
+                            dims = c(length(free), length(cols)))
+  X <- as.matrix(Matrix::solve(ch, E))
+  V[cols, cols] <- X[match(cols, free), , drop = FALSE]
+  V
 }
 
 #' @rdname vcov.objlist
 #' @export
-vcov.trustfit <- function(object, parupper = NULL, parlower = NULL, ...) {
+vcov.trustfit <- function(object, parupper = NULL, parlower = NULL, which = NULL, ...) {
 
   argument <- object[["argument"]]
   if (is.null(argument)) return()
@@ -639,7 +697,7 @@ vcov.trustfit <- function(object, parupper = NULL, parlower = NULL, ...) {
   }
 
   vcov.objlist(objlist(object[["value"]], object[["gradient"]], object[["hessian"]]),
-               fixed = fixed)
+               fixed = fixed, which = which)
 
 }
 

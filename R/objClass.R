@@ -82,7 +82,10 @@ evalConditionResidual <- function(dataI, predictionI, pars,
                               key, eCondNames)
 
   d_dn <- dimnames(attr(predictionI, "deriv"))
-  par_names_global <- if (!is.null(d_dn)) d_dn[[3]] else character(0)
+  # the error model's parameters count also where the prediction does not depend on them
+  e_dn <- if (!is.null(err_cn)) dimnames(attr(err_cn, "deriv"))
+  par_names_global <- union(if (!is.null(d_dn)) d_dn[[3]], if (deriv) e_dn[[3]])
+  if (is.null(par_names_global)) par_names_global <- character(0)
 
   kr <- normL2_kernel(
     prediction       = pred1,
@@ -111,6 +114,10 @@ evalConditionResidual <- function(dataI, predictionI, pars,
   gradient <- setNames(numeric(length(pnames)), pnames)
   gradient[hit] <- g[hit]
   out$gradient <- gradient
+  if (.isSparse(out$hessian)) {
+    out$hessian <- .sparseOver(out$hessian, pnames)
+    return(out)
+  }
   # A skipped Hessian stays NULL; only realign one that was actually built.
   if (!is.null(out$hessian)) {
     hessian <- matrix(0, length(pnames), length(pnames),
@@ -126,8 +133,9 @@ evalConditionResidual <- function(dataI, predictionI, pars,
 .resolveCurvature <- function(deriv, deriv2, hessian, sweep) {
   reverse <- identical(sweep, "reverse")
   asked   <- !is.null(hessian)
+  sparse  <- identical(hessian, "sparse")
   deriv2  <- isTRUE(deriv2)
-  want    <- if (asked) isTRUE(hessian) else (deriv2 || !reverse)
+  want    <- if (asked) isTRUE(hessian) || sparse else (deriv2 || !reverse)
 
   if (deriv2 && asked && !want) {
     warning("'hessian = FALSE' overrides 'deriv2 = TRUE'; no Hessian is built.",
@@ -143,7 +151,7 @@ evalConditionResidual <- function(dataI, predictionI, pars,
     want <- FALSE
   }
   want   <- isTRUE(deriv) && want
-  list(hessian = want, deriv2 = deriv2 && want)
+  list(hessian = want, deriv2 = deriv2 && want, sparse = sparse && want)
 }
 
 
@@ -284,6 +292,7 @@ normL2 <- function(data, x, errmodel = NULL, times = NULL,
     cv <- .resolveCurvature(deriv, deriv2, hessian, sweep)
     hessian <- cv$hessian
     deriv2  <- cv$deriv2
+    sparse  <- cv$sparse
     if (identical(sweep, "reverse")) {
       if (!is.null(.prediction))
         stop("normL2: a handed-in prediction is a forward-mode shortcut and ",
@@ -342,9 +351,11 @@ normL2 <- function(data, x, errmodel = NULL, times = NULL,
       err_list[match(cn_eval, conditions)] <- got
     }
 
-    # Determine current deriv signature (per-condition local par names);
-    # empty for value-only (deriv = FALSE) evaluations.
-    cur_sig <- lapply(prediction, function(pr) dimnames(attr(pr, "deriv"))[[3]])
+    # Current deriv signature: per-condition parameters of the prediction and the
+    # error model; empty for value-only (deriv = FALSE) evaluations.
+    cur_sig <- lapply(seq_along(prediction), function(k)
+      union(dimnames(attr(prediction[[k]], "deriv"))[[3]],
+            if (!is.null(err_list[[k]])) dimnames(attr(err_list[[k]], "deriv"))[[3]]))
     # row counts too: a truncated solve has fewer rows than the cached indices
     cur_shape <- c(vapply(prediction, NROW, integer(1)),
                    vapply(err_list, NROW, integer(1)))
@@ -368,8 +379,12 @@ normL2 <- function(data, x, errmodel = NULL, times = NULL,
       deriv2_requested = isTRUE(deriv2),
       threads          = as.integer(cores),
       bloq_mode        = optBLOQ,
-      build_hessian    = build_hessian
+      build_hessian    = build_hessian,
+      local_blocks     = build_hessian && sparse
     )
+    # a sparse Hessian is assembled from the blocks of the conditions
+    if (build_hessian && sparse)
+      kr$hessian <- .sparseFromBlocks(lapply(kr$local, `[[`, "hessian"), par_names_global)
     out <- if (deriv)
       .alignObjlist(objlist(value = kr$value, gradient = kr$gradient,
                             hessian = kr$hessian), names(pars))
@@ -609,6 +624,19 @@ constraintL2.default <- function(mu, sigma = 1, attrName = "prior",
 
     sigma_pars <- if (est) sigma[names(mu)] else rep("", length(mu))
     sigma_vec  <- if (est) rep(0.0, length(mu)) else as.numeric(sigma[names(mu)])
+    if (deriv && cv$sparse) {
+      sp <- .sparseRestrict(p, dP, dP2, c(names(mu), sigma_pars))
+      kr <- constraintL2_scalar_kernel(
+        pars = sp$pars, dP_opt = sp$dP, dP2_opt = sp$dP2,
+        inner_par_names = names(sp$pars), fixed_opt = fixed,
+        mu_names = names(mu), mu = as.numeric(mu), sigma = sigma_vec,
+        sigma_pars = as.character(sigma_pars), est = est,
+        deriv = TRUE, build_hessian = TRUE)
+      out <- .sparseLift(kr$value, kr$gradient, kr$hessian, sp$outer)
+      attr(out, attrName) <- out$value
+      attr(out, "env") <- env
+      return(out)
+    }
     kr <- constraintL2_scalar_kernel(
       pars = p,
       dP_opt = if (!is.null(dP)) dP else NULL,
@@ -672,6 +700,17 @@ constraintL2.default <- function(mu, sigma = 1, attrName = "prior",
     deriv2        <- cv$deriv2
     dP   <- if (deriv) attr(p, "deriv", exact = TRUE) else NULL
     dP2  <- if (build_hessian && deriv2) attr(p, "deriv2", exact = TRUE) else NULL
+
+    if (deriv && cv$sparse) {
+      sp <- .sparseRestrict(p, dP, dP2, parnames)
+      q <- sp$pars; attr(q, "deriv") <- sp$dP; attr(q, "deriv2") <- sp$dP2
+      small <- myfn(q, fixed = fixed, deriv = TRUE, deriv2 = deriv2, hessian = TRUE,
+                    conditions = conditions, env = env, cores = cores)
+      out <- .sparseLift(small$value, small$gradient, small$hessian, sp$outer)
+      attr(out, attr.name) <- out$value
+      attr(out, "env") <- env
+      return(out)
+    }
 
     allp <- c(p, fixed)
     np   <- length(p)
@@ -1057,8 +1096,11 @@ datapointL2 <- function(name, time, parameter, sigma = 1,
 
     dpred_attr  <- if (deriv) attr(prdf, "deriv") else NULL
     d2pred_attr <- if (build_hessian && deriv2) attr(prdf, "deriv2") else NULL
+    # sparse: the kernel sees the parameters of the prediction and the target only
+    local <- if (cv$sparse) intersect(names(pouter), c(dimnames(dpred_attr)[[3]], names(mu)[1]))
+             else names(pouter)
     kr <- datapointL2_kernel(
-      pouter           = pouter,
+      pouter           = pouter[local],
       fixed_opt        = fixed,
       prdf             = prdf,
       dpred_attr_opt   = dpred_attr,
@@ -1071,7 +1113,8 @@ datapointL2 <- function(name, time, parameter, sigma = 1,
       build_hessian    = build_hessian
     )
 
-    out <- objlist(value = kr$value, gradient = kr$gradient, hessian = kr$hessian)
+    out <- if (cv$sparse) .sparseLift(kr$value, kr$gradient, kr$hessian, names(pouter))
+           else objlist(value = kr$value, gradient = kr$gradient, hessian = kr$hessian)
     attr(out, attrName)    <- out$value
     # The value is the squared standardised residual itself, no normaliser.
     attr(out, "chi2")       <- setNames(out$value, attrName)
@@ -1131,7 +1174,11 @@ datapointL2 <- function(name, time, parameter, sigma = 1,
                                    e1$gradient), e2$gradient),
     # A summand may return a NULL hessian (built with hessian = FALSE); the sum
     # is NULL only when both are, otherwise the present ones add.
-    hessian  = if (is.null(e1$hessian) && is.null(e2$hessian)) NULL else {
+    hessian  = if (is.null(e1$hessian) && is.null(e2$hessian)) {
+      NULL
+    } else if (.isSparse(e1$hessian) || .isSparse(e2$hessian)) {
+      .sparseOver(e1$hessian, pars) + .sparseOver(e2$hessian, pars)
+    } else {
       H <- matrix(0, length(pars), length(pars), dimnames = list(pars, pars))
       if (!is.null(e1$hessian)) H <- addMatrix(H, e1$hessian)
       if (!is.null(e2$hessian)) H <- addMatrix(H, e2$hessian)

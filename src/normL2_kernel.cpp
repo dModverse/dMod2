@@ -107,6 +107,17 @@ CondInputs gather_one_condition(
     Dp1 = deriv_dim[1];
     n_par_local = par_local_names.size();
   }
+  // Parameters only the error model depends on extend the local axis, their dpred is zero.
+  const int n_pred_par = n_par_local;
+  if (has_deriv && err_mat_opt.isNotNull()) {
+    RObject ed0 = NumericMatrix(err_mat_opt.get()).attr("deriv");
+    if (!ed0.isNULL()) {
+      const CharacterVector en = par_axis_names(NumericVector(ed0));
+      for (int q = 0; q < en.size(); ++q)
+        if (match_name(par_local_names, as<std::string>(en[q])) < 0) par_local_names.push_back(en[q]);
+      n_par_local = par_local_names.size();
+    }
+  }
   C.n_par_local = n_par_local;
 
   C.par_idx_global.resize(n_par_local);
@@ -175,7 +186,7 @@ CondInputs gather_one_condition(
       const int ti = t_idx[i] - 1;
       const int od = o_idx_d[i] - 1;
       double* row = C.dpred.data() + (std::size_t) j * n_par_local;
-      for (int p = 0; p < n_par_local; ++p) {
+      for (int p = 0; p < n_pred_par; ++p) {
         row[p] = dpred_flat[ti + od * Dp0 + p * Dp0 * Dp1];
       }
     }
@@ -192,14 +203,14 @@ CondInputs gather_one_condition(
         const std::size_t N2 = (std::size_t) n_par_local * (std::size_t) n_par_local;
         C.d2pred.assign((std::size_t) n_data * N2, 0.0);
         // R d2 attr col-major: [time, obs, par1, par2]
-        // We assume dimnames(d2)[[3]] == dimnames(d2)[[4]] == par_local_names.
+        // We assume dimnames(d2)[[3]] == dimnames(d2)[[4]] == the prediction's parameters.
         for (int j = 0; j < n_data; ++j) {
           const int i = perm[j];
           const int ti = t_idx[i] - 1;
           const int od = o_idx_d[i] - 1;
           double* dst = C.d2pred.data() + (std::size_t) j * N2;
-          for (int p = 0; p < n_par_local; ++p) {
-            for (int q = 0; q < n_par_local; ++q) {
+          for (int p = 0; p < n_pred_par; ++p) {
+            for (int q = 0; q < n_pred_par; ++q) {
               dst[(std::size_t) p * n_par_local + q] =
                   d2_attr[ti + od * D0 + p * D0 * D1 + q * D0 * D1 * D2];
             }

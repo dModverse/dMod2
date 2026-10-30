@@ -158,6 +158,25 @@ test_that("profile on a 1D Gaussian crosses chi^2 = 3.84 at +/- z(0.95)*sigma", 
 })
 
 
+test_that("profile with W = \"identity\" gives the profile of the quadratic, without a warning", {
+  obj <- function(pars, fixed = NULL, ...) {
+    p <- c(pars, fixed)
+    u <- p[["a"]] + p[["b"]] - 2
+    g <- c(a = 2 * (p[["a"]] - 1) + 8 * u, b = 8 * u)
+    H <- matrix(c(10, 8, 8, 8), 2, 2, dimnames = list(c("a", "b"), c("a", "b")))
+    free <- names(pars)
+    objlist((p[["a"]] - 1)^2 + 4 * u^2, g[free], H[free, free, drop = FALSE])
+  }
+  p0 <- c(a = 1, b = 1)
+  for (method in c("optimize", "integrate")) {
+    expect_no_warning(pr <- profile(obj, p0, "a", limits = c(-1, 1), method = method, cores = 1,
+                                    algoControl = list(W = "identity")))
+    expect_equal(pr$value, pr$constraint^2, tolerance = 1e-8)
+    expect_equal(pr$b, 1 - pr$constraint, tolerance = 1e-6)
+    expect_equal(range(pr$constraint), c(-1, 1), tolerance = 1e-8)
+  }
+})
+
 test_that("profile respects limits on a flat direction", {
   # Along an exactly flat direction the stepsize doubles every step; limits
   # clamp the last step rather than being overshot.

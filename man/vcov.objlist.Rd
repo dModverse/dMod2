@@ -5,9 +5,9 @@
 \alias{vcov.trustfit}
 \title{Variance-Covariance Matrix of a Fit}
 \usage{
-\method{vcov}{objlist}(object, fixed = NULL, ...)
+\method{vcov}{objlist}(object, fixed = NULL, which = NULL, ...)
 
-\method{vcov}{trustfit}(object, parupper = NULL, parlower = NULL, ...)
+\method{vcov}{trustfit}(object, parupper = NULL, parlower = NULL, which = NULL, ...)
 }
 \arguments{
 \item{object}{An evaluation of an objective function, class \code{objlist}, such
@@ -15,6 +15,10 @@ as \code{obj(pars)}, or a result of \code{\link[=trust]{trust()}}, class \code{t
 
 \item{fixed}{Names of parameters held fixed, for example at a bound.
 Default \code{NULL}.}
+
+\item{which}{Names of the parameters whose block of the covariance is
+returned. Default \code{NULL}, all of them. With a sparse Hessian (a \code{Matrix},
+from \code{hessian = "sparse"}) only these columns are solved for.}
 
 \item{...}{Not used.}
 
@@ -25,7 +29,9 @@ Default \code{NULL}.}
 \value{
 Square matrix with the parameter names as dimnames: the inverse of
 half the Hessian of \code{object} (pseudo-inverse when singular), with rows
-and columns of fixed parameters set to zero. For a \code{trustfit}, \code{NULL}
+and columns of fixed parameters set to zero. A sparse Hessian is factorised
+by sparse Cholesky; when singular, a pseudo-inverse is taken up to 5000
+free parameters and an error raised beyond. For a \code{trustfit}, \code{NULL}
 when it has no \code{argument}, and an error when it has no Hessian; the fits
 of \code{\link[=mstrust]{mstrust()}} have none, use \code{vcov(obj(fit$argument))} for them.
 }

@@ -20,6 +20,7 @@
   cautiousMode = FALSE,
   side = c("both", "left", "right"),
   delta = NULL,
+  sparse = "auto",
   ...
 )
 
@@ -71,7 +72,9 @@ Defaults are given as \code{"integrate"} / \code{"optimize"}.
 \item{\code{gamma}}{Initial factor of the correction towards the
 optimum of the other parameters. \code{1} / \code{0}.}
 \item{\code{W}}{Matrix in the path equation, \code{"hessian"} or
-\code{"identity"}. \code{"hessian"} / \code{"identity"}.}
+\code{"identity"}. With \code{"identity"} a step moves the profiled
+parameter alone and the others are reoptimised at every step.
+\code{"hessian"} / \code{"identity"}.}
 \item{\code{reoptimize}}{Whether every step is followed by a fit of the
 other parameters with \code{\link[=trust]{trust()}}. \code{FALSE} / \code{TRUE}.}
 \item{\code{correction}}{Relative correction above which \code{gamma}
@@ -105,6 +108,11 @@ side of the optimum to profile.}
 \code{NULL}, which uses \code{qchisq(1 - alpha, 1)}. Pass
 \code{\link[=profileThreshold]{profileThreshold()}} with the arguments later given to
 \code{\link[=confint.parframe]{confint.parframe()}}, so the profile reaches that threshold.}
+
+\item{sparse}{\code{"auto"} (default), \code{TRUE} or \code{FALSE}: the
+path equation and the reoptimisations on the sparse Hessian of
+\code{fitted}, chosen at \code{pars} as in \code{\link[=trust]{trust()}}. \code{hessian =
+"sparse"} in \code{...} is \code{TRUE}.}
 
 \item{...}{Further arguments passed to \code{fitted}, for example
 \code{fixed}.}

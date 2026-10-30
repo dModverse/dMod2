@@ -544,3 +544,24 @@ test_that("evalConditionResidual keeps fixed error parameters without sensitivit
   ref <- normL2(data, ec$prd, errmodel = ec$e)(pars, fixed = fixed, deriv = FALSE)
   expect_equal(r$value, ref$value, tolerance = 1e-10)
 })
+
+
+test_that("an error parameter outside the prediction's derivatives has its gradient", {
+  x <- Xd(data.frame(name = "y", time = 0:3, row.names = paste0("a", 0:3)), condition = "C1")
+  X2Y <- function(out, pars, fixed = NULL, deriv = TRUE, deriv2 = FALSE) {
+    p <- c(unclass(pars), unclass(fixed))
+    sig <- rep(exp(p[["ls"]]), nrow(out))
+    jac <- if (deriv) array(sig, c(nrow(out), 1, 1), dimnames = list(NULL, "y", "ls"))
+    prdframe(cbind(time = out[, "time"], y = sig), deriv = jac, parameters = p)
+  }
+  e <- obsfn(X2Y, "ls", "C1")
+  data <- as.datalist(data.frame(name = "y", time = 0:3, value = c(1, 2, 2.5, 4), sigma = NA,
+                                 condition = "C1"))
+  obj <- normL2(data, x, errmodel = e)
+  pars <- c(a0 = 1.2, a1 = 1.7, a2 = 2.9, a3 = 3.6, ls = -0.3)
+  num <- numDeriv::grad(function(q) obj(setNames(q, names(pars)), deriv = FALSE)$value, unname(pars))
+  expect_equal(unname(obj(pars)$gradient[names(pars)]), num, tolerance = 1e-6)
+  pr <- x(times = 0:3, pars = pars, conditions = "C1")[["C1"]]
+  r <- evalConditionResidual(data$C1, pr, pars, errfn = e, cn = "C1")
+  expect_equal(unname(r$gradient[names(pars)]), num, tolerance = 1e-6)
+})

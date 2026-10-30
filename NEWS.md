@@ -1,3 +1,31 @@
+# dMod2 0.13.4
+
+* `evalConditionResidual()` has the parameters that enter only the error model in its
+  gradient and Hessian.
+
+* An objective called with `hessian = "sparse"` returns its Gauss-Newton Hessian as a sparse
+  `Matrix` assembled from the blocks of the conditions; `trust(sparse = TRUE)` factorises it by
+  sparse Cholesky and `vcov(which = )` solves it for the columns named. `datapointL2()` returns
+  a sparse Hessian there too.
+
+* `trust()` and `profile()` take `sparse = "auto"` (default), `TRUE` or `FALSE`. `"auto"` takes
+  the sparse Gauss-Newton Hessian for a minimisation without phases, bounds or exact Hessian
+  when there are at least 500 free parameters and the Hessian at the start fills at most 5% of
+  its matrix (`options(dMod2.sparseAuto = )`), and starts from that evaluation.
+  `trust(sparse = TRUE)` on an objective that returns a dense Hessian is an error that names the
+  terms of its sum that do. `mstrust()` passes `sparse` to `trust()`.
+
+* `profile()` on a sparse Hessian decides by the pivots of its LU whether the path equation is
+  singular, by the rule of `vcov()`: a pivot at most 1e-14 times the largest. A singular step
+  then takes the pseudo-inverse and reoptimises as on a dense Hessian, up to 5000 parameters;
+  above, the error names the non-identifiable parameters. The pseudo-inverse step keeps all its
+  components. `algoControl$W = "identity"` moves the profiled parameter alone and reoptimises
+  the others at every step, without a matrix in the path equation and without a warning on
+  singularity.
+
+* Requires cppDE 0.13.4: a second-order solve whose parameters have no second
+  derivatives crashed R with an older cppDE.
+
 # dMod2 0.13.3
 
 * `distributedComputing()` keeps the manifest of a job also in its folder on every remote

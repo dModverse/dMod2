@@ -204,6 +204,18 @@
 #'   at each evaluation. Default \code{FALSE}.
 #' @param traceFile Path of a CSV file written with one row per evaluation:
 #'   iteration, objective value and parameters. Default \code{NULL}, no file.
+#' @param sparse \code{"auto"} (default), \code{TRUE} or \code{FALSE}. With
+#'   \code{TRUE}, \code{objfun} is called with \code{hessian = "sparse"} and
+#'   its sparse Gauss-Newton Hessian (a \code{Matrix}) is factorised by sparse
+#'   Cholesky. Without phases and bounds; of the other settings only
+#'   \code{rinit}, \code{rmax}, \code{iterlim}, \code{tolControl$ftol},
+#'   \code{tolControl$mtol} and \code{printIter} apply. \code{"auto"} takes
+#'   this path for a Gauss-Newton minimisation without phases, bounds, exact
+#'   Hessian, trace or multiple shooting when \code{parinit} has at least
+#'   \code{parameters} entries and the sparse Hessian at \code{parinit} fills
+#'   at most \code{fill} of the matrix, both from
+#'   \code{getOption("dMod2.sparseAuto")}, a list that defaults to
+#'   \code{parameters = 500} and \code{fill = 0.05}.
 #' @param ... Further named arguments passed to \code{objfun}.
 #'
 #' @return A list of class \code{trustfit} with components
@@ -330,8 +342,26 @@ trust <- function(objfun, parinit, rinit = 0.1, rmax = 10,
                   blather   = FALSE,
                   printIter = FALSE,
                   traceFile = NULL,
+                  sparse    = "auto",
                   ...) {
   dots <- list(...)
+  .checkSparse(sparse, "trust")
+  first <- NULL
+  if (identical(sparse, "auto")) {
+    plain <- is.null(phases) && is.null(parupper) && is.null(parlower) && minimize &&
+      identical(match.arg(hessianMethod), "gn") && !blather && is.null(traceFile) &&
+      !isTRUE(dots$deriv2) && !identical(dots$sweep, "reverse") && !length(.shootingTerms(objfun))
+    choice <- if (plain) .sparseChoice(objfun, parinit, dots) else list(sparse = FALSE)
+    sparse <- choice$sparse
+    first <- choice$first
+  }
+  if (isTRUE(sparse)) {
+    if (!is.null(phases) || !is.null(parupper) || !is.null(parlower) || !minimize)
+      stop("trust(sparse = TRUE) minimises without phases and bounds.", call. = FALSE)
+    tol <- utils::modifyList(.trustDefaults()$tolControl, as.list(tolControl))
+    return(.trustFit(.trustSparse(objfun, parinit, rinit, rmax, as.integer(iterlim),
+                                  tol$ftol, tol$mtol, dots, printIter, first)))
+  }
   .trustRejectMoved(names(dots), "trust")
   if (!is.null(phases) && !missing(hessianMethod))
     stop("trust: with `phases`, each phase names its own hessianMethod.",
