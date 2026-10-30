@@ -101,9 +101,9 @@ carrier <- unlist(lapply(red$blocks, `[[`, "carrierDomain"))
 logRed  <- c(positive, names(carrier)[carrier == "positive"])
 
 p <- eqnvec() |>
-  define("x~x", x = innerpars) |>
-  insert("x~y", x = names(red$trafo), y = red$trafo) |>
-  insert("x~exp10(x)", x = intersect(.currentSymbols, logRed)) |>
+  define("x<-x", x = innerpars) |>
+  insert("x<-y", x = names(red$trafo), y = red$trafo) |>
+  insert("x<-exp10(x)", x = intersect(.currentSymbols, logRed)) |>
   P(modelname = "msPreBotC_p", compile = FALSE, outdir = .outdir)
 
 compile(x, g, p, output = .modelname, cores = .cores)

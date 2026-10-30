@@ -66,11 +66,11 @@ junctions get a reflux rate of their own.
 
 ``` r
 trafo <- eqnvec() |>
-  define("x~x", x = innerpars) |>
-  define("TCA_buffer~0") |>
-  insert("x~10^y", x = .currentSymbols, y = toupper(.currentSymbols)) |>
+  define("x<-x", x = innerpars) |>
+  define("TCA_buffer<-0") |>
+  insert("x<-10^y", x = .currentSymbols, y = toupper(.currentSymbols)) |>
   branch(conditions = c("closed", "open")) |>
-  insert("K_REFLUX~K_REFLUX_OPEN", conditionMatch = "open")
+  insert("K_REFLUX<-K_REFLUX_OPEN", conditionMatch = "open")
 p <- P(trafo, modelname = "ba_trafo", compile = FALSE)
 
 compile(g, x, p, output = .modelname, cores = .cores)
@@ -187,13 +187,13 @@ removes the direction.
 
 ``` r
 trafo <- eqnvec() |>
-  define("x~x", x = innerpars) |>
-  define("TCA_buffer~0") |>
-  define("TCA_cana~TCA_cell*k_export_cana/k_reflux") |>
-  insert("x~10^y", x = .currentSymbols, y = toupper(.currentSymbols)) |>
+  define("x<-x", x = innerpars) |>
+  define("TCA_buffer<-0") |>
+  define("TCA_cana<-TCA_cell*k_export_cana/k_reflux") |>
+  insert("x<-10^y", x = .currentSymbols, y = toupper(.currentSymbols)) |>
   branch(conditions = c("closed", "open")) |>
-  define("k_reflux~10^K_REFLUX_OPEN", conditionMatch = "open") |>
-  insert("S~0")
+  define("k_reflux<-10^K_REFLUX_OPEN", conditionMatch = "open") |>
+  insert("S<-0")
 p <- P(trafo, modelname = "ba_trafo_ss", compile = TRUE)
 
 outerpars <- getParameters(p)
@@ -238,13 +238,13 @@ stays open towards slow export below the 68% level.
 
 ``` r
 trafo <- eqnvec() |>
-  define("x~x", x = innerpars) |>
-  define("TCA_buffer~0") |>
-  define("TCA_cana~TCA_cell*k_export_cana/k_reflux") |>
-  insert("x~10^y", x = .currentSymbols, y = toupper(.currentSymbols)) |>
+  define("x<-x", x = innerpars) |>
+  define("TCA_buffer<-0") |>
+  define("TCA_cana<-TCA_cell*k_export_cana/k_reflux") |>
+  insert("x<-10^y", x = .currentSymbols, y = toupper(.currentSymbols)) |>
   branch(conditions = c("closed", "open")) |>
-  define("k_reflux~10^6", conditionMatch = "open") |>
-  insert("S~0")
+  define("k_reflux<-10^6", conditionMatch = "open") |>
+  insert("S<-0")
 p <- P(trafo, modelname = "ba_trafo_final", compile = TRUE)
 
 obj     <- normL2(data, g*x*p, attrName = "data")

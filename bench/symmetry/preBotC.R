@@ -116,14 +116,14 @@ carrier <- unlist(lapply(red$blocks, `[[`, "carrierDomain"))
 logRed  <- c(positive, names(carrier)[carrier == "positive"])
 
 p.full <- eqnvec() |>
-  define("x~x", x = innerpars) |>
-  insert("x~exp10(x)", x = intersect(.currentSymbols, positive)) |>
+  define("x<-x", x = innerpars) |>
+  insert("x<-exp10(x)", x = intersect(.currentSymbols, positive)) |>
   P(modelname = "preBotC_pfull", compile = FALSE, outdir = .outdir)
 
 p.red <- eqnvec() |>
-  define("x~x", x = innerpars) |>
-  insert("x~y", x = names(red$trafo), y = red$trafo) |>
-  insert("x~exp10(x)", x = intersect(.currentSymbols, logRed)) |>
+  define("x<-x", x = innerpars) |>
+  insert("x<-y", x = names(red$trafo), y = red$trafo) |>
+  insert("x<-exp10(x)", x = intersect(.currentSymbols, logRed)) |>
   P(modelname = "preBotC_pred", compile = FALSE, outdir = .outdir)
 
 # observable plus the currents, to show what a direction moves

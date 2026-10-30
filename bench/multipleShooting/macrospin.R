@@ -69,11 +69,11 @@ fields    <- data.frame(Hz = c(100, 30), Hx = c(0, 100), row.names = c("easy", "
 
 p <- Reduce(`+`, lapply(rownames(fields), function(cn) {
   eqnvec() |>
-    define("x~x", x = innerpars) |>
-    define("x~y", x = c("Hz", "Hx"), y = unlist(fields[cn, ])) |>
-    define("ph~0") |>
-    define(paste0("th~th0_", cn)) |>
-    insert("x~10^x", x = c("gam", "al", "Hk", "s")) |>
+    define("x<-x", x = innerpars) |>
+    define("x<-y", x = c("Hz", "Hx"), y = unlist(fields[cn, ])) |>
+    define("ph<-0") |>
+    define(paste0("th<-th0_", cn)) |>
+    insert("x<-10^x", x = c("gam", "al", "Hk", "s")) |>
     P(condition = cn, modelname = paste0("msMacro_p_", cn), compile = FALSE,
       outdir = .outdir)
 }))
@@ -166,12 +166,12 @@ gc <- Y(eqnvec(y = "s*mz"), f = xc, modelname = "msMacroC_obs", compile = FALSE,
         outdir = .outdir)
 pc <- Reduce(`+`, lapply(rownames(fields), function(cn) {
   eqnvec() |>
-    define("x~x", x = getParameters(gc, xc)) |>
-    define("x~y", x = c("Hz", "Hx"), y = unlist(fields[cn, ])) |>
-    define("mx~sin(th0)", th0 = paste0("th0_", cn)) |>
-    define("my~0") |>
-    define("mz~cos(th0)", th0 = paste0("th0_", cn)) |>
-    insert("x~10^x", x = c("gam", "al", "Hk", "s")) |>
+    define("x<-x", x = getParameters(gc, xc)) |>
+    define("x<-y", x = c("Hz", "Hx"), y = unlist(fields[cn, ])) |>
+    define("mx<-sin(th0)", th0 = paste0("th0_", cn)) |>
+    define("my<-0") |>
+    define("mz<-cos(th0)", th0 = paste0("th0_", cn)) |>
+    insert("x<-10^x", x = c("gam", "al", "Hk", "s")) |>
     P(condition = cn, modelname = paste0("msMacroC_p_", cn), compile = FALSE,
       outdir = .outdir)
 }))

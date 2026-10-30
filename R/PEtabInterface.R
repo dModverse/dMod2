@@ -1216,8 +1216,8 @@ readPEtabTables <- function(yamlPath) {
     # The replacement has to be parenthesised as a whole: `^` is right
     # associative, so substituting into `K^2` would give `10^(K^2)` instead of
     # `(10^K)^2`.
-    if (length(log_pars))   tr <- repar(tr, "x ~ (exp(x))", x = log_pars)
-    if (length(log10_pars)) tr <- repar(tr, "x ~ (10^(x))", x = log10_pars)
+    if (length(log_pars))   tr <- repar(tr, "x <- (exp(x))", x = log_pars)
+    if (length(log10_pars)) tr <- repar(tr, "x <- (10^(x))", x = log10_pars)
     tr
   }
 
@@ -1234,7 +1234,7 @@ readPEtabTables <- function(yamlPath) {
       if (kind == "init") {
         tr[cn] <- v
       } else if (identical(scope, "all")) {
-        tr <- repar(tr, paste0(cn, " ~ ", v))
+        tr <- repar(tr, paste0(cn, " <- ", v))
       }
     }
     tr
@@ -2639,7 +2639,7 @@ print.petabproblem <- function(x, ...) {
 #' @param overwrite Logical, whether existing files in `dir` are overwritten.
 #'   Default `FALSE`.
 #' @return Path to the written YAML manifest, invisibly.
-#' @details An outer parameter named like a state (e.g. `A ~ exp(A)`) cannot
+#' @details An outer parameter named like a state (e.g. `"A <- exp(A)"`) cannot
 #'   share the species id in SBML. It is written as `init_<state>` and the
 #'   condition table sets the species to it. An outer parameter named
 #'   like an inner parameter keeps its name when the trafo is a pure scale

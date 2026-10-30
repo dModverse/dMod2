@@ -11,8 +11,9 @@ repar(trafo = NULL, expr, ..., reset = FALSE)
 starts from the identity of the left-hand sides, so the result maps each
 left-hand side to its right-hand side.}
 
-\item{expr}{\code{"lhs ~ rhs"} string or formula. Inside a name, \verb{_} separates
-symbols, so \code{"Delta_x"} with \code{x = "a"} becomes \code{"Delta_a"}.}
+\item{expr}{\code{"lhs <- rhs"} string. Inside a name, \verb{_} separates symbols,
+so \code{"Delta_x"} with \code{x = "a"} becomes \code{"Delta_a"}. A \code{"lhs ~ rhs"}
+string or a formula is an error: \code{~} is reserved for model formulas.}
 
 \item{...}{Named character or numeric vectors of equal length, replacing
 the symbols of \code{expr} of the same name; element \code{i} of each gives the
@@ -25,7 +26,7 @@ occurs in the expressions, \code{TRUE} sets the entry it names.}
 Same shape as \code{trafo}.
 }
 \description{
-Replaces the left-hand side of \code{"lhs ~ rhs"} by the
+Replaces the left-hand side of \code{"lhs <- rhs"} by the
 right-hand side in \code{trafo}, after the symbols of \code{expr} are replaced by the
 arguments in \code{...}. \code{\link[=define]{define()}} and \code{\link[=insert]{insert()}} build on it.
 }
@@ -33,10 +34,10 @@ arguments in \code{...}. \code{\link[=define]{define()}} and \code{\link[=insert
 innerpars   <- letters[1:3]
 constraints <- c(a = "b + c")
 mycondition <- "cond1"
-trafo <- repar(NULL,  "x ~ x",      x = innerpars)
-trafo <- repar(trafo, "x ~ y",      x = names(constraints), y = constraints)
-trafo <- repar(trafo, "x ~ exp(x)", x = innerpars)
-trafo <- repar(trafo, "x ~ x + Delta_x_condition",
+trafo <- repar(NULL,  "x <- x",      x = innerpars)
+trafo <- repar(trafo, "x <- y",      x = names(constraints), y = constraints)
+trafo <- repar(trafo, "x <- exp(x)", x = innerpars)
+trafo <- repar(trafo, "x <- x + Delta_x_condition",
                x = innerpars, condition = mycondition)
 }
 \seealso{

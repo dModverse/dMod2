@@ -11,7 +11,7 @@ test_that("a closed cycle started in its steady state stays there", {
 
   x <- Xs(odemodel(cycle, modelname = "ssCycle", compile = FALSE))
   inner <- getParameters(x)
-  p <- P(repar(setNames(inner, inner), "lhs~rhs", lhs = names(ss), rhs = ss),
+  p <- P(repar(setNames(inner, inner), "lhs<-rhs", lhs = names(ss), rhs = ss),
          condition = "steady", compile = FALSE)
   compile(x, p, output = "ssCycle_all", cores = test_cores())
 

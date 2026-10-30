@@ -86,7 +86,7 @@ model and a YAML file. Parameter scales, fixed values and per-condition
 values are read off the parameter transformation \code{p}.
 }
 \details{
-An outer parameter named like a state (e.g. \code{A ~ exp(A)}) cannot
+An outer parameter named like a state (e.g. \code{"A <- exp(A)"}) cannot
 share the species id in SBML. It is written as \verb{init_<state>} and the
 condition table sets the species to it. An outer parameter named
 like an inner parameter keeps its name when the trafo is a pure scale

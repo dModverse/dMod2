@@ -411,9 +411,9 @@ psock_model <- function() {
   x  <- Xs(odemodel(el, modelname = mn("x"), compile = FALSE))
   g  <- Y(c(yB = "s*B"), x, parameters = "s", modelname = mn("g"), compile = FALSE)
   ss <- Pimpl(el, modelname = mn("ss"), compile = FALSE, verbose = FALSE)
-  trafo <- define(NULL, "x~exp(x)", x = getParameters(x, g))
+  trafo <- define(NULL, "x<-exp(x)", x = getParameters(x, g))
   p1 <- P(trafo, condition = "c1", modelname = mn("p1"), compile = FALSE)
-  p2 <- P(insert(trafo, "x ~ 2*x", x = "k_in"), condition = "c2",
+  p2 <- P(insert(trafo, "x <- 2*x", x = "k_in"), condition = "c2",
           modelname = mn("p2"), compile = FALSE)
   compile(g, x, ss, p1, p2, cores = test_cores())
 

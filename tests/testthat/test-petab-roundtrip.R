@@ -68,8 +68,8 @@ test_that("exportPEtab keeps log parametrisations free of self-references", {
 
   for (wrap in c("exp", "exp10")) {
     p <- eqnvec() %>%
-      define("x~x", x = getParameters(g, x)) %>%
-      insert(sprintf("x~%s(x)", wrap), x = .currentSymbols) %>%
+      define("x<-x", x = getParameters(g, x)) %>%
+      insert(sprintf("x<-%s(x)", wrap), x = .currentSymbols) %>%
       P(modelname = paste0("selfref_p_", wrap), condition = "C1",
         compile = TRUE)
     pars <- if (wrap == "exp") truth else truth / log(10)

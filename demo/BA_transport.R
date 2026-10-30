@@ -47,11 +47,11 @@ innerpars <- getParameters(x, g)
 # The buffer starts empty, every other parameter is estimated on log10. Open
 # junctions get a reflux rate of their own.
 trafo <- eqnvec() |>
-  define("x~x", x = innerpars) |>
-  define("TCA_buffer~0") |>
-  insert("x~10^y", x = .currentSymbols, y = toupper(.currentSymbols)) |>
+  define("x<-x", x = innerpars) |>
+  define("TCA_buffer<-0") |>
+  insert("x<-10^y", x = .currentSymbols, y = toupper(.currentSymbols)) |>
   branch(conditions = c("closed", "open")) |>
-  insert("K_REFLUX~K_REFLUX_OPEN", conditionMatch = "open")
+  insert("K_REFLUX<-K_REFLUX_OPEN", conditionMatch = "open")
 p <- P(trafo, modelname = "ba_trafo", compile = FALSE)
 
 compile(g, x, p, output = .modelname, cores = .cores)
@@ -130,13 +130,13 @@ plotPaths(profiles_integrate, whichPar = "S")
 # junctions, since they open only at time 0. The scale is fixed to 1, which
 # removes the direction.
 trafo <- eqnvec() |>
-  define("x~x", x = innerpars) |>
-  define("TCA_buffer~0") |>
-  define("TCA_cana~TCA_cell*k_export_cana/k_reflux") |>
-  insert("x~10^y", x = .currentSymbols, y = toupper(.currentSymbols)) |>
+  define("x<-x", x = innerpars) |>
+  define("TCA_buffer<-0") |>
+  define("TCA_cana<-TCA_cell*k_export_cana/k_reflux") |>
+  insert("x<-10^y", x = .currentSymbols, y = toupper(.currentSymbols)) |>
   branch(conditions = c("closed", "open")) |>
-  define("k_reflux~10^K_REFLUX_OPEN", conditionMatch = "open") |>
-  insert("S~0")
+  define("k_reflux<-10^K_REFLUX_OPEN", conditionMatch = "open") |>
+  insert("S<-0")
 p <- P(trafo, modelname = "ba_trafo_ss", compile = TRUE)
 
 outerpars <- getParameters(p)
@@ -165,13 +165,13 @@ plotProfile(profiles, mode %in% c("data", "prior"))
 # instantaneous reflux. The reflux is fixed to a fast rate instead. K_EXPORT_SINUS
 # stays open towards slow export below the 68% level.
 trafo <- eqnvec() |>
-  define("x~x", x = innerpars) |>
-  define("TCA_buffer~0") |>
-  define("TCA_cana~TCA_cell*k_export_cana/k_reflux") |>
-  insert("x~10^y", x = .currentSymbols, y = toupper(.currentSymbols)) |>
+  define("x<-x", x = innerpars) |>
+  define("TCA_buffer<-0") |>
+  define("TCA_cana<-TCA_cell*k_export_cana/k_reflux") |>
+  insert("x<-10^y", x = .currentSymbols, y = toupper(.currentSymbols)) |>
   branch(conditions = c("closed", "open")) |>
-  define("k_reflux~10^6", conditionMatch = "open") |>
-  insert("S~0")
+  define("k_reflux<-10^6", conditionMatch = "open") |>
+  insert("S<-0")
 p <- P(trafo, modelname = "ba_trafo_final", compile = TRUE)
 
 obj     <- normL2(data, g*x*p, attrName = "data")

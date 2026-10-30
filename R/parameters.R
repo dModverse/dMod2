@@ -1371,7 +1371,7 @@ Pimpl <- function(trafo, parameters = NULL, forcings = NULL, condition = NULL,
 #'
 #' @param trafo Named character or [eqnvec], or a list of those named by
 #'   condition as `branch()` returns it. `NULL` starts a new one.
-#' @param expr `"lhs ~ rhs"` string. Its symbols are replaced by the
+#' @param expr `"lhs <- rhs"` string. Its symbols are replaced by the
 #'   arguments in `...` of the same name; see [repar()].
 #' @param table `data.frame` with one row per condition, row names the
 #'   conditions. Kept as attribute `tree`; its columns can be read in `...`
@@ -1468,8 +1468,8 @@ branch <- function(trafo, table = NULL,
     for (par in colnames(row)) {
       val <- row[[par]]; if (is.na(val)) next
       single <- out[[cn]]; attr(single, "tree") <- row
-      out[[cn]] <- if (apply == "insert") insert(single, paste0(par, " ~ ", val))
-                   else                    define(single, paste0(par, " ~ ", val))
+      out[[cn]] <- if (apply == "insert") insert(single, paste0(par, " <- ", val))
+                   else                    define(single, paste0(par, " <- ", val))
       attr(out[[cn]], "tree") <- NULL
     }
   }
@@ -1505,15 +1505,16 @@ branch <- function(trafo, table = NULL,
 
 #' Reparameterization
 #'
-#' @description Replaces the left-hand side of `"lhs ~ rhs"` by the
+#' @description Replaces the left-hand side of `"lhs <- rhs"` by the
 #' right-hand side in `trafo`, after the symbols of `expr` are replaced by the
 #' arguments in `...`. [define()] and [insert()] build on it.
 #'
 #' @param trafo Named character, [eqnvec] or a list of those. Default `NULL`
 #'   starts from the identity of the left-hand sides, so the result maps each
 #'   left-hand side to its right-hand side.
-#' @param expr `"lhs ~ rhs"` string or formula. Inside a name, `_` separates
-#'   symbols, so `"Delta_x"` with `x = "a"` becomes `"Delta_a"`.
+#' @param expr `"lhs <- rhs"` string. Inside a name, `_` separates symbols,
+#'   so `"Delta_x"` with `x = "a"` becomes `"Delta_a"`. A `"lhs ~ rhs"`
+#'   string or a formula is an error: `~` is reserved for model formulas.
 #' @param ... Named character or numeric vectors of equal length, replacing
 #'   the symbols of `expr` of the same name; element `i` of each gives the
 #'   `i`-th substitution.
@@ -1522,22 +1523,20 @@ branch <- function(trafo, table = NULL,
 #' @return Same shape as `trafo`.
 #' @seealso [define()], [insert()]
 #' @export
-#' @importFrom stats as.formula
 #' @examples
 #' innerpars   <- letters[1:3]
 #' constraints <- c(a = "b + c")
 #' mycondition <- "cond1"
-#' trafo <- repar(NULL,  "x ~ x",      x = innerpars)
-#' trafo <- repar(trafo, "x ~ y",      x = names(constraints), y = constraints)
-#' trafo <- repar(trafo, "x ~ exp(x)", x = innerpars)
-#' trafo <- repar(trafo, "x ~ x + Delta_x_condition",
+#' trafo <- repar(NULL,  "x <- x",      x = innerpars)
+#' trafo <- repar(trafo, "x <- y",      x = names(constraints), y = constraints)
+#' trafo <- repar(trafo, "x <- exp(x)", x = innerpars)
+#' trafo <- repar(trafo, "x <- x + Delta_x_condition",
 #'                x = innerpars, condition = mycondition)
 repar <- function(trafo = NULL, expr, ..., reset = FALSE) {
   if (.isReparExpr(trafo) && (missing(expr) || !.isReparExpr(expr)))
     stop("repar: the order is repar(trafo, expr).", call. = FALSE)
-  if (inherits(expr, "formula")) expr <- deparse(expr)
-  parsed <- as.character(stats::as.formula(.colonize(expr)))
-  lhs <- parsed[2]; rhs <- parsed[3]
+  parsed <- .parseSubstitution(expr)
+  lhs <- parsed[1]; rhs <- parsed[2]
 
   args <- lapply(list(...), as.character)
   if (length(args)) {
@@ -1558,10 +1557,26 @@ repar <- function(trafo = NULL, expr, ..., reset = FALSE) {
   else { trafo[lhs] <- rhs; trafo }
 }
 
-# A `"lhs ~ rhs"` string or a formula, as opposed to a transformation.
+# A substitution string, or a formula or `~` string given in its place, as
+# opposed to a transformation.
 .isReparExpr <- function(x)
   inherits(x, "formula") ||
     (is.character(x) && length(x) == 1L && is.null(names(x)) &&
-       grepl("~", x, fixed = TRUE))
+       grepl("<-|~", x))
+
+# Left- and right-hand side of a `"lhs <- rhs"` string, colonized.
+.parseSubstitution <- function(expr) {
+  if (inherits(expr, "formula") || (is.character(expr) && !grepl("<-", expr, fixed = TRUE) &&
+                                      grepl("~", expr, fixed = TRUE)))
+    stop("Substitutions are written \"lhs <- rhs\", e.g. \"x <- exp(x)\"; ",
+         "'~' is reserved for model formulas.", call. = FALSE)
+  if (!is.character(expr) || length(expr) != 1L)
+    stop("A substitution is one string \"lhs <- rhs\".", call. = FALSE)
+  e <- str2lang(.colonize(expr))
+  if (!is.call(e) || !identical(e[[1]], as.name("<-")))
+    stop("Substitutions are written \"lhs <- rhs\", got \"", expr, "\".", call. = FALSE)
+  c(deparse1(e[[2]]), deparse1(e[[3]]))
+}
+
 
 paste_ <- function(...) paste(..., sep = "_")

@@ -73,7 +73,7 @@
 #'
 #' # Parameter transformation that puts the model in steady state
 #' parameters <- getParameters(reactions)
-#' trafo <- repar(eqnvec(setNames(parameters, parameters)), "x ~ y",
+#' trafo <- repar(eqnvec(setNames(parameters, parameters)), "x <- y",
 #'                x = names(steadies), y = steadies)
 #' trafo
 steadyStates <- function(model, file = NULL, forcings = NULL,

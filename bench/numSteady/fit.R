@@ -29,11 +29,11 @@ pSS <- Pimpl(m$reactions, forcings = m$forcings, compile = FALSE, modelname = "n
 inner <- union(getParameters(pSS), setdiff(getParameters(x, g), m$reactions$states))
 inner <- union(inner, m$forcings)
 trafo <- eqnvec() |>
-  define("x~x", x = inner) |>
+  define("x<-x", x = inner) |>
   branch(table = m$grid, conditions = rownames(m$grid), apply = "insert") |>
-  insert("x~0", x = m$forcings) |>
-  insert("volumeC ~ 1", "volumeEC ~ 10") |>
-  insert("x~exp10(x)", x = .currentSymbols[!grepl("^offset_", .currentSymbols)])
+  insert("x<-0", x = m$forcings) |>
+  insert("volumeC <- 1", "volumeEC <- 10") |>
+  insert("x<-exp10(x)", x = .currentSymbols[!grepl("^offset_", .currentSymbols)])
 pCond <- P(trafo, compile = FALSE, modelname = "ns_p")
 
 compile(g, x, pSS, pCond, output = "ns_all", cores = cores, verbose = FALSE)

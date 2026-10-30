@@ -243,37 +243,37 @@ e <- Y(errorModels, g, modelname = "bachmann_err", compile = FALSE)
                  c("EpoRJAK2", "SHP1", "STAT5", "EpoRJAK2_CIS", "CIS", "SOCS3"))
 
 trafo <- eqnvec() |>
-  define("x~x", x = getParameters(model, g, e)) |>
-  define("x~0", x = .zero) |>
-  insert("EpoRJAK2 ~ init_EpoRJAK2") |>
-  insert("STAT5 ~ init_STAT5") |>
-  insert("SHP1 ~ init_SHP1 * (1 + SHP1oe * SHP1ProOE)") |>
+  define("x<-x", x = getParameters(model, g, e)) |>
+  define("x<-0", x = .zero) |>
+  insert("EpoRJAK2 <- init_EpoRJAK2") |>
+  insert("STAT5 <- init_STAT5") |>
+  insert("SHP1 <- init_SHP1 * (1 + SHP1oe * SHP1ProOE)") |>
 
   # Estimated parameters are dimensionless against their reference scale. Each
   # rule reads the raw parameter, so a parameter is rewritten before it is used.
-  insert("CISRNAEqc ~ CISRNAEqc / init_STAT5") |>
-  insert("SOCS3RNAEqc ~ SOCS3RNAEqc / init_STAT5") |>
-  insert("CISEqc ~ CISEqc / CISRNAEqc") |>
-  insert("SOCS3Eqc ~ SOCS3Eqc / SOCS3RNAEqc") |>
-  insert("CISEqcOE ~ CISEqcOE * CISEqc") |>
-  insert("SOCS3EqcOE ~ SOCS3EqcOE * SOCS3Eqc") |>
-  insert("CISInh ~ CISInh / CISEqc") |>
-  insert("SOCS3Inh ~ SOCS3Inh / SOCS3Eqc") |>
-  insert("JAK2EpoRDeaSHP1 ~ JAK2EpoRDeaSHP1 / init_SHP1") |>
-  insert("EpoRCISRemove ~ EpoRCISRemove / init_EpoRJAK2") |>
-  insert("SHP1ActEpoR ~ SHP1ActEpoR / init_EpoRJAK2") |>
-  insert("STAT5ActJAK2 ~ STAT5ActJAK2 / init_EpoRJAK2") |>
-  insert("STAT5ActEpoR ~ STAT5ActEpoR / init_EpoRJAK2^2") |>
+  insert("CISRNAEqc <- CISRNAEqc / init_STAT5") |>
+  insert("SOCS3RNAEqc <- SOCS3RNAEqc / init_STAT5") |>
+  insert("CISEqc <- CISEqc / CISRNAEqc") |>
+  insert("SOCS3Eqc <- SOCS3Eqc / SOCS3RNAEqc") |>
+  insert("CISEqcOE <- CISEqcOE * CISEqc") |>
+  insert("SOCS3EqcOE <- SOCS3EqcOE * SOCS3Eqc") |>
+  insert("CISInh <- CISInh / CISEqc") |>
+  insert("SOCS3Inh <- SOCS3Inh / SOCS3Eqc") |>
+  insert("JAK2EpoRDeaSHP1 <- JAK2EpoRDeaSHP1 / init_SHP1") |>
+  insert("EpoRCISRemove <- EpoRCISRemove / init_EpoRJAK2") |>
+  insert("SHP1ActEpoR <- SHP1ActEpoR / init_EpoRJAK2") |>
+  insert("STAT5ActJAK2 <- STAT5ActJAK2 / init_EpoRJAK2") |>
+  insert("STAT5ActEpoR <- STAT5ActEpoR / init_EpoRJAK2^2") |>
 
   # the two overexpressed pools start at the level their production term holds
-  insert("CIS ~ CISoe * CISEqcOE * CISEqc") |>
-  insert("EpoRJAK2_CIS ~ CISoe") |>
-  insert("SOCS3 ~ SOCS3oe * SOCS3EqcOE * SOCS3Eqc") |>
+  insert("CIS <- CISoe * CISEqcOE * CISEqc") |>
+  insert("EpoRJAK2_CIS <- CISoe") |>
+  insert("SOCS3 <- SOCS3oe * SOCS3EqcOE * SOCS3Eqc") |>
 
   branch(table = cond.grid[.substitutions], apply = "insert") |>
   # both RNA equilibrium constants only ever appear next to a scale parameter
-  insert("x~1", x = c("CISRNAEqc", "SOCS3RNAEqc")) |>
-  insert("x~exp10(x)", x = .currentSymbols)
+  insert("x<-1", x = c("CISRNAEqc", "SOCS3RNAEqc")) |>
+  insert("x<-exp10(x)", x = .currentSymbols)
 
 p <- P(trafo, modelname = "bachmann_trafo", compile = FALSE)
 

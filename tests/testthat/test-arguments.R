@@ -38,16 +38,25 @@ test_that("plotArray takes more simulations than the profile has points", {
 
 test_that("repar takes the transformation first and refuses the other order", {
   tr <- c(a = "a", b = "b")
-  expect_identical(repar(tr, "x ~ exp(x)", x = "a"), c(a = "exp(a)", b = "b"))
-  expect_error(repar("x ~ exp(x)", tr, x = "a"), "repar\\(trafo, expr\\)")
-  expect_equal(unclass(repar(NULL, "x ~ x", x = "a")), c(a = "a"))
+  expect_identical(repar(tr, "x <- exp(x)", x = "a"), c(a = "exp(a)", b = "b"))
+  expect_error(repar("x <- exp(x)", tr, x = "a"), "repar\\(trafo, expr\\)")
+  expect_equal(unclass(repar(NULL, "x <- x", x = "a")), c(a = "a"))
+})
+
+test_that("a substitution is written with <-; ~ and formulas are refused", {
+  tr <- c(a = "a", b = "b")
+  expect_identical(repar(tr, "a <- b + 1"), c(a = "b + 1", b = "b"))
+  expect_error(repar(tr, "a ~ b"), "lhs <- rhs")
+  expect_error(insert(tr, "a ~ b"), "reserved for model formulas")
+  expect_error(define(tr, a ~ b), "reserved for model formulas")
+  expect_error(repar(tr, "a == b"), "lhs <- rhs")
 })
 
 test_that("a transformation started from NULL keeps the right-hand side", {
-  expect_equal(unclass(define(NULL, "x ~ exp(x)", x = c("a", "b"))),
+  expect_equal(unclass(define(NULL, "x <- exp(x)", x = c("a", "b"))),
                c(a = "exp(a)", b = "exp(b)"))
-  expect_equal(unclass(insert(NULL, "x ~ exp(x)", x = "a")), c(a = "exp(a)"))
-  expect_s3_class(define(NULL, "x ~ x", x = "a"), "eqnvec")
+  expect_equal(unclass(insert(NULL, "x <- exp(x)", x = "a")), c(a = "exp(a)"))
+  expect_s3_class(define(NULL, "x <- x", x = "a"), "eqnvec")
 })
 
 test_that("trust returns a trustfit; vcov and profile are stats methods", {

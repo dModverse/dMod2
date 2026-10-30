@@ -350,7 +350,7 @@ rownames(cond.grid) <- cond.grid$Pertubation
 cond.grid$Pertubation <- NULL
 
 cond.trafo <- eqnvec() |>
-  define("x~x", x = getParameters(reactions, events)) |>
+  define("x<-x", x = getParameters(reactions, events)) |>
   branch(table = cond.grid, apply = "insert")
 
 out <- symmetryDetection(

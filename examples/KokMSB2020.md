@@ -213,55 +213,55 @@ sides end up in the estimated parameters only.
 .chainOf <- function(protein, n) paste0(protein, "_LC_", seq_len(n))
 
 trafo <- eqnvec() |>
-  define("x~x", x = getParameters(model, g)) |>
-  define("x~0", x = .complexes) |>
+  define("x<-x", x = getParameters(model, g)) |>
+  define("x<-0", x = .complexes) |>
 
   # protein pools: synthesis balances degradation, the same flux passes each chain
-  insert("x ~ STAT1c*degSTAT1/delaySTAT1", x = .chainOf("STAT1", 3)) |>
-  insert("x ~ STAT2c*degSTAT2/delaySTAT2", x = .chainOf("STAT2", 5)) |>
-  insert("x ~ IRF9c*degIRF9/delayIRF9", x = .chainOf("IRF9", 2)) |>
-  insert("x ~ synthUSP18*USP18mRNA/delayUSP18", x = .chainOf("USP18", 2)) |>
-  insert("SOCS1_LC_1 ~ synthSOCS1*SOCS1mRNA/delaySOCS1") |>
-  insert("synthSTAT1 ~ STAT1c*degSTAT1/STAT1mRNA*(kmsynthSTAT1 + STAT1mRNA)") |>
-  insert("synthSTAT2 ~ STAT2c*degSTAT2/STAT2mRNA") |>
-  insert("synthIRF9 ~ IRF9c*degIRF9/IRF9mRNA") |>
-  insert("USP18 ~ synthUSP18*USP18mRNA/degUSP18") |>
-  insert("prodRec ~ Rec*(degRec + degRecBySOCS*SOCS1)") |>
-  insert("SOCS1 ~ synthSOCS1*SOCS1mRNA/degSOCS1") |>
-  insert("SOCS3 ~ synthSOCS3*SOCS3mRNA/degSOCS3") |>
-  insert("degIRF2 ~ IRF2mRNA*delayIRF2/IRF2") |>
+  insert("x <- STAT1c*degSTAT1/delaySTAT1", x = .chainOf("STAT1", 3)) |>
+  insert("x <- STAT2c*degSTAT2/delaySTAT2", x = .chainOf("STAT2", 5)) |>
+  insert("x <- IRF9c*degIRF9/delayIRF9", x = .chainOf("IRF9", 2)) |>
+  insert("x <- synthUSP18*USP18mRNA/delayUSP18", x = .chainOf("USP18", 2)) |>
+  insert("SOCS1_LC_1 <- synthSOCS1*SOCS1mRNA/delaySOCS1") |>
+  insert("synthSTAT1 <- STAT1c*degSTAT1/STAT1mRNA*(kmsynthSTAT1 + STAT1mRNA)") |>
+  insert("synthSTAT2 <- STAT2c*degSTAT2/STAT2mRNA") |>
+  insert("synthIRF9 <- IRF9c*degIRF9/IRF9mRNA") |>
+  insert("USP18 <- synthUSP18*USP18mRNA/degUSP18") |>
+  insert("prodRec <- Rec*(degRec + degRecBySOCS*SOCS1)") |>
+  insert("SOCS1 <- synthSOCS1*SOCS1mRNA/degSOCS1") |>
+  insert("SOCS3 <- synthSOCS3*SOCS3mRNA/degSOCS3") |>
+  insert("degIRF2 <- IRF2mRNA*delayIRF2/IRF2") |>
 
   # transcripts at rest
-  insert("STAT1mRNA ~ synthSTAT1mRNAbasal/hlSTAT1mRNA") |>
-  insert("STAT2mRNA ~ synthSTAT2mRNAbasal/hlSTAT2mRNA") |>
-  insert("IRF9mRNA ~ synthIRF9mRNAbasal/hlIRF9mRNA") |>
-  insert("USP18mRNA ~ synthUSP18mRNAbasal/hlUSP18mRNA") |>
-  insert("SOCS3mRNA ~ synthSOCS3mRNAbasal/hlSOCS3mRNA") |>
-  insert("SOCS1mRNA ~ synthSOCS1mRNAbasal/(hlSOCS1mRNA*(1 + IRF2))") |>
-  insert("IRF2mRNA ~ synthIRF2mRNAbasal/delayIRF2") |>
+  insert("STAT1mRNA <- synthSTAT1mRNAbasal/hlSTAT1mRNA") |>
+  insert("STAT2mRNA <- synthSTAT2mRNAbasal/hlSTAT2mRNA") |>
+  insert("IRF9mRNA <- synthIRF9mRNAbasal/hlIRF9mRNA") |>
+  insert("USP18mRNA <- synthUSP18mRNAbasal/hlUSP18mRNA") |>
+  insert("SOCS3mRNA <- synthSOCS3mRNAbasal/hlSOCS3mRNA") |>
+  insert("SOCS1mRNA <- synthSOCS1mRNAbasal/(hlSOCS1mRNA*(1 + IRF2))") |>
+  insert("IRF2mRNA <- synthIRF2mRNAbasal/delayIRF2") |>
 
   # nucleus to cytoplasm ratio at rest, the same for all shuttling proteins
-  insert("STAT1c ~ totSTAT1/(1 + rCytNuc)") |>
-  insert("STAT1n ~ totSTAT1*rCytNuc/(1 + rCytNuc)") |>
-  insert("STAT2c ~ totSTAT2/(1 + rCytNuc)") |>
-  insert("STAT2n ~ totSTAT2*rCytNuc/(1 + rCytNuc)") |>
-  insert("IRF9c ~ totIRF9/(1 + rCytNuc)") |>
-  insert("IRF9n ~ totIRF9*rCytNuc/(1 + rCytNuc)") |>
-  insert("TrLocSTAT1c ~ TrLocSTAT1n*rCytNuc") |>
-  insert("TrLocSTAT2c ~ TrLocSTAT2n*rCytNuc") |>
-  insert("TrLocIRF9c ~ TrLocIRF9n*rCytNuc") |>
+  insert("STAT1c <- totSTAT1/(1 + rCytNuc)") |>
+  insert("STAT1n <- totSTAT1*rCytNuc/(1 + rCytNuc)") |>
+  insert("STAT2c <- totSTAT2/(1 + rCytNuc)") |>
+  insert("STAT2n <- totSTAT2*rCytNuc/(1 + rCytNuc)") |>
+  insert("IRF9c <- totIRF9/(1 + rCytNuc)") |>
+  insert("IRF9n <- totIRF9*rCytNuc/(1 + rCytNuc)") |>
+  insert("TrLocSTAT1c <- TrLocSTAT1n*rCytNuc") |>
+  insert("TrLocSTAT2c <- TrLocSTAT2n*rCytNuc") |>
+  insert("TrLocIRF9c <- TrLocIRF9n*rCytNuc") |>
 
   # observation scales and complex formation relative to the protein totals
-  insert("x ~ x/totSTAT1", x = paste0("scale_tSTAT1_", c("Cyt", "Nuc"))) |>
-  insert("x ~ x/totSTAT2", x = c(paste0("scale_tSTAT2_", c("Cyt", "Nuc")),
+  insert("x <- x/totSTAT1", x = paste0("scale_tSTAT1_", c("Cyt", "Nuc"))) |>
+  insert("x <- x/totSTAT2", x = c(paste0("scale_tSTAT2_", c("Cyt", "Nuc")),
                                "ComplFormSTAT1dimc")) |>
-  insert("x ~ x/totIRF9", x = paste0("scale_", c("pSTAT1", "pSTAT2", "IRF9"),
+  insert("x <- x/totIRF9", x = paste0("scale_", c("pSTAT1", "pSTAT2", "IRF9"),
                                    rep(c("_Cyt", "_Nuc"), each = 3))) |>
-  insert("totSTAT1 ~ 4e5*totSTAT1") |>
-  insert("totSTAT2 ~ 2.5e4*(1 + totSTAT2)") |>
-  insert("totIRF9 ~ 500*(1 + totIRF9)") |>
-  insert("Rec ~ 100*Rec") |>
-  insert("synthUSP18 ~ 1000*synthUSP18")
+  insert("totSTAT1 <- 4e5*totSTAT1") |>
+  insert("totSTAT2 <- 2.5e4*(1 + totSTAT2)") |>
+  insert("totIRF9 <- 500*(1 + totIRF9)") |>
+  insert("Rec <- 100*Rec") |>
+  insert("synthUSP18 <- 1000*synthUSP18")
 ```
 
 Per condition: the USP18 knock-down lowers every USP18 synthesis, doxycycline
@@ -272,11 +272,11 @@ units per U/ml.
 ``` r
 trafo <- trafo |>
   branch(table = cond.grid) |>
-  insert("x ~ x/x_inh", experiment == "USP18kd",
+  insert("x <- x/x_inh", experiment == "USP18kd",
          x = c("synthUSP18mRNA", "synthUSP18", "synthUSP18mRNAbasal")) |>
-  insert("x ~ x*x_OE", experiment == "USP18oe", x = "synthUSP18mRNAbasal") |>
-  insert("first ~ dose", dose = 10*ifn1) |>
-  insert("second ~ dose", dose = 10*ifn2)
+  insert("x <- x*x_OE", experiment == "USP18oe", x = "synthUSP18mRNAbasal") |>
+  insert("first <- dose", dose = 10*ifn1) |>
+  insert("second <- dose", dose = 10*ifn2)
 ```
 
 ## Structural identifiability
@@ -357,18 +357,18 @@ fixes rCytNuc, TrLocIRF9n and five blot offsets on top.
 
 ``` r
 trafo <- trafo |>
-  insert("synthSOCS1 ~ degSOCS1") |>
-  insert("synthSOCS3 ~ degSOCS3") |>
-  insert("genOccISREbsByISGF3n ~ hlOccISREbs/(500*(1 + totIRF9))") |>
-  insert("genOccGASbsBySTAT1dimn ~ hlOccGASbs") |>
-  insert("rCytNuc ~ 0.1") |>
-  insert("TrLocIRF9n ~ exp(8)") |>
-  insert("x~0", x = c("off_IRF9_Nuc", "off_IRF9_Cyt", "off_USP18",
+  insert("synthSOCS1 <- degSOCS1") |>
+  insert("synthSOCS3 <- degSOCS3") |>
+  insert("genOccISREbsByISGF3n <- hlOccISREbs/(500*(1 + totIRF9))") |>
+  insert("genOccGASbsBySTAT1dimn <- hlOccGASbs") |>
+  insert("rCytNuc <- 0.1") |>
+  insert("TrLocIRF9n <- exp(8)") |>
+  insert("x<-0", x = c("off_IRF9_Nuc", "off_IRF9_Cyt", "off_USP18",
                       "off_tSTAT2_Nuc", "off_tSTAT1_Nuc"))
 
 # every estimated parameter on the natural log
 p <- trafo |>
-  insert("x~exp(x)", x = .currentSymbols) |>
+  insert("x<-exp(x)", x = .currentSymbols) |>
   P(modelname = "kok_trafo", derivMode = .modes, compile = FALSE)
 
 compile(g, x, p, output = .modelname, cores = .cores)

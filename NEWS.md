@@ -1,3 +1,9 @@
+# dMod2 (unreleased)
+
+* Breaking: `define()`, `insert()`, `repar()` and `branch(apply = )` write a substitution as
+  `"lhs <- rhs"`, e.g. `insert(trafo, "x <- exp(x)", x = pars)`. A `"lhs ~ rhs"` string or a
+  formula is an error that names the new form; `~` is left to model formulas.
+
 # dMod2 0.13.4
 
 * `evalConditionResidual()` has the parameters that enter only the error model in its

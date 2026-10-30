@@ -43,7 +43,7 @@ skip_on_cran()
             condition = "C1", derivMode = fr, modelname = "rv_pe", outdir = d)
     # One trafo per condition, each with a parameter of its own.
     pc <- Reduce("+", lapply(c("C1", "C2"), function(cn)
-      P(repar(tr, paste0("logk1 ~ logk1 + dk_", cn)), condition = cn, derivMode = fr,
+      P(repar(tr, paste0("logk1 <- logk1 + dk_", cn)), condition = cn, derivMode = fr,
         modelname = paste0("rv_p2_", cn), outdir = d)))
 
     ev <- eventlist(var = "A", time = "t_dose", value = "d_amt", method = "add")

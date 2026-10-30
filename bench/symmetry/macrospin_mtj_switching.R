@@ -94,11 +94,11 @@ fields    <- data.frame(Hz = c(100, 30), Hx = c(0, 100), row.names = c("easy", "
 # positive physical parameters on log10, the tilt angle linear
 p <- Reduce(`+`, lapply(rownames(fields), function(cn) {
   eqnvec() |>
-    define("x~x", x = innerpars) |>
-    define("x~y", x = c("Hz", "Hx"), y = unlist(fields[cn, ])) |>
-    define("ph~0") |>
-    define(paste0("th~th0_", cn)) |>
-    insert("x~10^x", x = c("gam", "al", "Hk", "s")) |>
+    define("x<-x", x = innerpars) |>
+    define("x<-y", x = c("Hz", "Hx"), y = unlist(fields[cn, ])) |>
+    define("ph<-0") |>
+    define(paste0("th<-th0_", cn)) |>
+    insert("x<-10^x", x = c("gam", "al", "Hk", "s")) |>
     P(condition = cn, modelname = paste0("macrospin_p_", cn), compile = FALSE,
       outdir = .outdir)
 }))
@@ -308,11 +308,11 @@ design <- data.frame(Hz = 20, cond.all[, c("Hx", "u")])
 
 p.stt <- Reduce(`+`, lapply(rownames(design), function(cn) {
   eqnvec() |>
-    define("x~x", x = innerpars.stt) |>
-    define("x~y", x = c("Hz", "Hx", "u"), y = unlist(design[cn, ])) |>
-    define("ph~0") |>
-    define(paste0("th~th0_", cn)) |>
-    insert("x~10^x", x = c("gam", "al", "Hk", "eta", "xi", "s")) |>
+    define("x<-x", x = innerpars.stt) |>
+    define("x<-y", x = c("Hz", "Hx", "u"), y = unlist(design[cn, ])) |>
+    define("ph<-0") |>
+    define(paste0("th<-th0_", cn)) |>
+    insert("x<-10^x", x = c("gam", "al", "Hk", "eta", "xi", "s")) |>
     P(condition = cn, modelname = paste0("mtj_p_", cn), compile = FALSE,
       outdir = .outdir)
 }))

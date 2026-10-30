@@ -72,25 +72,25 @@ innerpars <- getParameters(g, x)
 
 # every coordinate free, named _l10 like the coordinates of the flow
 p.flow <- eqnvec() |>
-  define("x~x", x = innerpars) |>
-  insert("x ~ exp10(x_l10)", x = .currentSymbols) |>
+  define("x<-x", x = innerpars) |>
+  insert("x <- exp10(x_l10)", x = .currentSymbols) |>
   P(modelname = "AB_pflow", compile = FALSE, outdir = .outdir)
 
 # s gauged
 p.lin <- eqnvec() |>
-  define("x~x", x = innerpars) |>
-  define("s~1") |>
-  insert("x~exp10(x)", x = .currentSymbols) |>
+  define("x<-x", x = innerpars) |>
+  define("s<-1") |>
+  insert("x<-exp10(x)", x = .currentSymbols) |>
   P(modelname = "AB_plin", compile = FALSE, outdir = .outdir)
 
 # red$trafo is stated in linear coordinates and goes in before exp10, which
 # requires a positive carrier domain (red$blocks[[1]]$carrierDomain)
 red$blocks[[1]]$carrierDomain
 p.red <- eqnvec() |>
-  define("x~x", x = innerpars) |>
-  insert("x~y", x = names(red$trafo), y = red$trafo) |>
-  define("s~1") |>
-  insert("x~exp10(x)", x = .currentSymbols) |>
+  define("x<-x", x = innerpars) |>
+  insert("x<-y", x = names(red$trafo), y = red$trafo) |>
+  define("s<-1") |>
+  insert("x<-exp10(x)", x = .currentSymbols) |>
   P(modelname = "AB_pred", compile = FALSE, outdir = .outdir)
 
 # One flow dz/deps = sgn*xi(z) per direction, so one compiled model runs both

@@ -107,13 +107,13 @@ estimated <- c("Epo_degradation_BaF3", "k_exp_hetero", "k_exp_homo", "k_imp_hete
                "k_imp_homo", "k_phos", "sd_pSTAT5A_rel", "sd_pSTAT5B_rel", "sd_rSTAT5A_rel")
 
 p <- eqnvec() |>
-  define("x~x", x = innerpars) |>
-  define("x~0", x = c("pApA", "pApB", "pBpB", "nucpApA", "nucpApB", "nucpBpB")) |>
-  insert("STAT5A ~ 207.6*ratio") |>
-  insert("STAT5B ~ 207.6 - 207.6*ratio") |>
-  insert("ratio ~ 0.693") |>
-  insert("specC17 ~ 0.107") |>
-  insert("x~exp10(x)", x = estimated) |>
+  define("x<-x", x = innerpars) |>
+  define("x<-0", x = c("pApA", "pApB", "pBpB", "nucpApA", "nucpApB", "nucpBpB")) |>
+  insert("STAT5A <- 207.6*ratio") |>
+  insert("STAT5B <- 207.6 - 207.6*ratio") |>
+  insert("ratio <- 0.693") |>
+  insert("specC17 <- 0.107") |>
+  insert("x<-exp10(x)", x = estimated) |>
   P(modelname = "boehm_trafo", condition = "Boehm2014", compile = FALSE)
 ```
 

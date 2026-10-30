@@ -103,16 +103,16 @@ innerpars <- getParameters(g, x)
 
 # every coordinate free; the oven temperature is set by the experiment
 p.full <- eqnvec() |>
-  define("x~x", x = innerpars) |>
-  define("Ta~428") |>
-  insert("x~exp10(x)", x = setdiff(.currentSymbols, "Ta")) |>
+  define("x<-x", x = innerpars) |>
+  define("Ta<-428") |>
+  insert("x<-exp10(x)", x = setdiff(.currentSymbols, "Ta")) |>
   P(modelname = "battery_pfull", compile = FALSE, outdir = .outdir)
 
 p.red <- eqnvec() |>
-  define("x~x", x = innerpars) |>
-  insert("x~y", x = names(red$trafo), y = red$trafo) |>
-  define("Ta~428") |>
-  insert("x~exp10(x)", x = setdiff(.currentSymbols, "Ta")) |>
+  define("x<-x", x = innerpars) |>
+  insert("x<-y", x = names(red$trafo), y = red$trafo) |>
+  define("Ta<-428") |>
+  insert("x<-exp10(x)", x = setdiff(.currentSymbols, "Ta")) |>
   P(modelname = "battery_pred", compile = FALSE, outdir = .outdir)
 
 # one flow per direction, dz/deps = sgn*xi(z), in log10 of the moved coordinates
