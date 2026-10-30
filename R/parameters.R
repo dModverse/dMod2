@@ -118,14 +118,14 @@ P <- function(trafo = NULL, parameters = NULL, condition = NULL,
     dP  <- attr(pars, "deriv")
     dP2 <- if (deriv2) attr(pars, "deriv2") else NULL
     if (is.null(dP)) {
-      active <- setdiff(st$parameters, names(fixed))
+      active <- .setdiffU(st$parameters, names(fixed))
       dP <- diag(length(active)); dimnames(dP) <- list(active, active)
     }
     out <- if (!is.null(.ad_out)) .ad_out else
       st$evaluate(NULL, p[st$parameters], tangentX = NULL, tangentP = dP,
                   hessianX = NULL, hessianP = dP2,
                   deriv2 = deriv2, attach.input = attach.input,
-                  fixed = intersect(names(fixed), st$parameters))
+                  fixed = as.character(.intersectU(names(fixed), st$parameters)))
     pinnerVal <- out$y[1, ]
     tg <- out$tangent
     if (!is.null(tg))
@@ -147,7 +147,7 @@ P <- function(trafo = NULL, parameters = NULL, condition = NULL,
 
   ## attach.input appends every input the transformation does not map, a fixed
   ## one included, as Pimpl does.
-  through <- if (attach.input) setdiff(names(p), names(pinnerVal)) else character(0)
+  through <- if (attach.input) .setdiffU(names(p), names(pinnerVal)) else character(0)
   val <- if (length(through)) c(pinnerVal, .subset(p, through)) else pinnerVal
 
   ## A build without forward derivatives has none to give. Rows for the inputs
@@ -157,7 +157,7 @@ P <- function(trafo = NULL, parameters = NULL, condition = NULL,
 
   ## An output is fixed when its expression has no varying input, not when its
   ## derivative vanishes at this point: the Hessian may not.
-  varying <- if (is.null(attr(pars, "deriv"))) setdiff(names(pars), names(fixed))
+  varying <- if (is.null(attr(pars, "deriv"))) .setdiffU(names(pars), names(fixed))
              else rownames(attr(pars, "deriv"))
   dependent <- vapply(rownames(Jac), function(o)
     is.null(st$depends[[o]]) || any(st$depends[[o]] %in% varying), logical(1))
@@ -167,7 +167,7 @@ P <- function(trafo = NULL, parameters = NULL, condition = NULL,
   ## Every varying input keeps a derivative row: without one it counts as fixed
   ## downstream and the forward gradient along it would be zero. What the caller
   ## fixed has no row and stays fixed.
-  moving <- setdiff(through, names(fixed))
+  moving <- .setdiffU(through, names(fixed))
   if (length(moving)) {
     d <- .Pexpl_through(pars, moving, colnames(Jac), second = !is.null(Hess))
     Jac <- .Pexpl_widen(Jac, d$theta)
@@ -251,7 +251,7 @@ P <- function(trafo = NULL, parameters = NULL, condition = NULL,
     pars <- parsList[[i]]; fixed <- fixedList[[i]]
     dP <- attr(pars, "deriv")
     if (is.null(dP)) {
-      active <- setdiff(st$parameters, names(fixed))
+      active <- .setdiffU(st$parameters, names(fixed))
       dP <- diag(length(active)); dimnames(dP) <- list(active, active)
     }
     list(vars = NULL, params = c(pars, fixed)[st$parameters],
@@ -295,41 +295,36 @@ P <- function(trafo = NULL, parameters = NULL, condition = NULL,
          call. = FALSE)
   w <- .asCtPars(cotangent)
   K <- .ctK(w)
+  b <- .ctBlocks(K)
   p <- c(pars, fixed)
   outnames <- st$outnames
-  W <- matrix(0, 1L, length(outnames), dimnames = list(NULL, outnames))
   hit <- intersect(rownames(w), outnames)
-  if (length(hit)) W[1L, hit] <- w[hit, 1L]
 
   dp <- attr(pars, "deriv")
-  if (K == 1L || is.null(dp) || !any(dp != 0)) {
-    # No tangent arrives, so every slice is pulled back as the first.
-    u <- NULL
-    for (k in seq_len(K)) {
-      Wk <- W
-      if (k > 1L) { Wk[] <- 0; if (length(hit)) Wk[1L, hit] <- w[hit, k] }
-      r <- st$vjp(NULL, p[st$parameters], Wk)
-      u <- cbind(u, r$cotangentP[, 1L])
-    }
-    dimnames(u) <- list(rownames(r$cotangentP), NULL)
+  if (b$D == 0L || is.null(dp) || !any(dp != 0)) {
+    # No tangent arrives, so every slice is pulled back as the first, all as seeds of one call.
+    W <- array(0, c(1L, length(outnames), K), dimnames = list(NULL, outnames, NULL))
+    if (length(hit)) W[1L, hit, ] <- w[hit, , drop = FALSE]
+    r <- st$vjp(NULL, p[st$parameters], W)
+    u <- matrix(r$cotangentP, ncol = K, dimnames = list(rownames(r$cotangentP), NULL))
   } else {
     # The node has no variables, so only the parameters bring tangents in, and
     # the cotangent brings its own. Both halves of d/dv (w' J) come back in one
     # pass; nothing here forms a Hessian.
-    nd <- K - 1L
+    nd <- b$D
+    W <- array(0, c(1L, length(outnames), b$S), dimnames = list(NULL, outnames, NULL))
+    if (length(hit)) W[1L, hit, ] <- w[hit, b$first, drop = FALSE]
     V <- matrix(0, length(st$parameters), nd,
                 dimnames = list(st$parameters, NULL))
-    if (!is.null(dp)) {
-      take <- intersect(rownames(dp), st$parameters)
-      if (length(take)) V[take, ] <- dp[take, seq_len(nd), drop = FALSE]
-    }
-    DW <- array(0, c(1L, length(outnames), 1L, nd))
+    take <- intersect(rownames(dp), st$parameters)
+    if (length(take)) V[take, ] <- dp[take, seq_len(nd), drop = FALSE]
+    DW <- array(0, c(1L, length(outnames), b$S, nd))
     if (length(hit))
-      DW[1L, match(hit, outnames), 1L, ] <- w[hit, -1L, drop = FALSE]
+      for (s in seq_len(b$S)) DW[1L, match(hit, outnames), s, ] <- w[hit, b$rest[, s], drop = FALSE]
     r <- st$vjp(NULL, p[st$parameters], W, tangentP = V, curvature = DW)
-    u <- cbind(r$cotangentP[, 1L, drop = FALSE],
-               matrix(r$curvatureP[, 1L, ], ncol = nd))
-    rownames(u) <- rownames(r$cotangentP)
+    u <- matrix(0, nrow(r$cotangentP), K, dimnames = list(rownames(r$cotangentP), NULL))
+    u[, b$first] <- r$cotangentP
+    for (s in seq_len(b$S)) u[, b$rest[, s]] <- matrix(r$curvatureP[, s, ], nrow = nrow(u))
   }
   wp <- .pickCotangent(u, names(pars))
 

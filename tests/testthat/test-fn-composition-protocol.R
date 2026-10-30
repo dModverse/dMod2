@@ -638,16 +638,34 @@ test_that("a batch handle whose shared object is gone is re-prepared", {
   invisible(fx$prd(times, fx$outerpars, deriv = TRUE))
 
   bcache <- environment(attr(fx$xfn, "mappings")[[1]])$bcache
-  expect_false(is.null(bcache$handle))
+  expect_false(is.null(bcache$entries[[1]]$handle))
 
   # What the cluster node sees: the handle survived, its shared object did not.
-  bcache$handle$sym$dll <- "no_such_shared_object"
+  bcache$entries[[1]]$handle$sym$dll <- "no_such_shared_object"
 
   out <- expect_silent(fx$prd(times, fx$outerpars, deriv = TRUE))
-  expect_false(identical(bcache$handle$sym$dll, "no_such_shared_object"))
+  expect_false(identical(bcache$entries[[1]]$handle$sym$dll, "no_such_shared_object"))
 
   ref <- exp(fx$outerpars["s_C1_log"]) * exp(-0.5 * times)
   expect_equal(unname(out$C1[, "y"]), unname(ref), tolerance = 1e-5)
+
+})
+
+test_that("the batch handle cache keeps the handles of alternating request sets", {
+
+  skip_on_cran()
+
+  fx <- fx_decay_multicond_compiled()
+  bcache <- environment(attr(fx$xfn, "mappings")[[1]])$bcache
+  rm(list = ls(bcache, all.names = TRUE), envir = bcache)
+  a <- fx$prd(seq(0, 5, by = 1), fx$outerpars, deriv = TRUE)
+  b <- fx$prd(seq(0, 4, by = 2), fx$outerpars, deriv = TRUE)
+  first <- bcache$entries[[2]]$handle
+  again <- fx$prd(seq(0, 5, by = 1), fx$outerpars, deriv = TRUE)
+  expect_length(bcache$entries, 2)
+  expect_identical(bcache$entries[[1]]$handle, first)
+  expect_identical(c(again$C1), c(a$C1))
+  expect_identical(attr(again$C1, "deriv"), attr(a$C1, "deriv"))
 
 })
 
@@ -659,15 +677,15 @@ test_that("modelname<- drops the cached batch handle", {
   invisible(fx$prd(seq(0, 5, by = 1), fx$outerpars, deriv = TRUE))
 
   bcache <- environment(attr(fx$xfn, "mappings")[[1]])$bcache
-  expect_false(is.null(bcache$handle))
+  expect_false(is.null(bcache$entries[[1]]$handle))
 
   x <- fx$xfn
   modelname(x) <- "renamed_shared_object"
-  expect_true(is.null(bcache$handle))
+  expect_null(bcache$entries)
 
   # And the next call rebuilds it against whatever is loaded now.
   out <- fx$prd(seq(0, 5, by = 1), fx$outerpars, deriv = TRUE)
-  expect_false(is.null(bcache$handle))
+  expect_false(is.null(bcache$entries[[1]]$handle))
   expect_true(all(is.finite(out$C1[, "y"])))
 
 })

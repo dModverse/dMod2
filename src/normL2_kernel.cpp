@@ -18,6 +18,7 @@
 #include <Rcpp.h>
 #include <vector>
 #include <string>
+#include <unordered_map>
 #include <cstddef>
 #include <cstring>
 #include <stdexcept>
@@ -73,7 +74,7 @@ CondInputs gather_one_condition(
     NumericMatrix prdf,
     Nullable<NumericMatrix> err_mat_opt,
     const List& meta,
-    const CharacterVector& par_names_global,
+    const std::unordered_map<std::string, int>& global_index,
     bool want_d2pred) {
   CondInputs C;
   IntegerVector t_idx       = meta["t_idx_in_pred"];        // 1-based
@@ -122,9 +123,8 @@ CondInputs gather_one_condition(
 
   C.par_idx_global.resize(n_par_local);
   for (int p = 0; p < n_par_local; ++p) {
-    std::string nm = as<std::string>(par_local_names[p]);
-    int g = match_name(par_names_global, nm);
-    C.par_idx_global[p] = (g < 0) ? 0 : (g + 1);  // 1-based
+    const auto hit = global_index.find(as<std::string>(par_local_names[p]));
+    C.par_idx_global[p] = (hit == global_index.end()) ? 0 : (hit->second + 1);  // 1-based
   }
 
   // ALOQ-first permutation: stable sort indices so ALOQ rows come first.
@@ -349,7 +349,11 @@ List normL2_kernel(
   List err_list;
   if (err_list_opt.isNotNull()) err_list = err_list_opt.get();
 
-  // Phase 1: gather (serial, R API allowed)
+  // Phase 1: gather (serial, R API allowed); the global names are hashed once, the conditions
+  // look up their local parameters in them
+  std::unordered_map<std::string, int> global_index;
+  global_index.reserve(n_par_global);
+  for (int g = n_par_global - 1; g >= 0; --g) global_index[as<std::string>(par_names_global[g])] = g;
   std::vector<CondInputs> conds;
   conds.reserve(n_cond);
   for (int c = 0; c < n_cond; ++c) {
@@ -363,7 +367,7 @@ List normL2_kernel(
     }
     conds.push_back(gather_one_condition(
         prdf, err_opt, as<List>(meta_list[c]),
-        par_names_global, deriv2_requested));
+        global_index, deriv2_requested));
   }
 
   // Phase 2: accumulate (parallel-over-conditions)

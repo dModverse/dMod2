@@ -203,6 +203,18 @@ test_that("censored rows and datapointL2 have the sparse Hessian of the dense on
   }
 })
 
+test_that("a sum of objectives holds its terms, not the frame it is built in", {
+  f <- .sparseFixture()
+  prior <- constraintL2(c(C1_a0 = 1), sigma = 1)
+  build <- function() {
+    ballast <- numeric(1e6)
+    f$obj + prior
+  }
+  obj <- build()
+  size <- length(serialize(obj, NULL))
+  expect_lt(size, length(serialize(f$obj, NULL)) + length(serialize(prior, NULL)) + 1e5)
+})
+
 test_that("the sparse trust step with a low-rank part solves the subproblem of the indefinite sum", {
   H <- Matrix::Diagonal(x = c(1, 2, 3, 4))
   U <- cbind(c(1, 1, 0, 0), c(0, 0.5, 1, 0))

@@ -101,6 +101,11 @@ match.fnargs <- function(arglist, choices) {
        slots      = slots)
 }
 
+# One request behind every slot, so that a leaf answers once for all: a shared bundle, or one
+# without conditions, whose slots do not ask for different times.
+.sharedRequest <- function(b)
+  (b$shared || is.null(b$conds)) && !(is.list(b$times) && length(unique(b$times)) > 1L)
+
 # NULL holes are part of the contract: as.prdlist and do.call(c, .) rely on them.
 .emptySlots <- function(conditions) {
   structure(vector("list", max(1L, length(conditions))), names = conditions)
@@ -186,7 +191,7 @@ match.fnargs <- function(arglist, choices) {
   f <- attr(p, "fixed")
   # Without a parameter derivative there is no transformation in between, so
   # the outer fixed parameters are the inner ones.
-  if (is.null(attr(p, "deriv"))) f <- union(f, intersect(names(p), names(fixed)))
+  if (is.null(attr(p, "deriv"))) f <- c(f, .setdiffU(.intersectU(names(p), names(fixed)), f))
   list(pars = p, fixed = p[f])
 }
 
@@ -242,28 +247,23 @@ match.fnargs <- function(arglist, choices) {
        paste0(capture.output(print(out[ai[, 1], c(1, ai[, 2])])), collapse = "\n"))
 }
 
-# `cond` is the slot's condition name; Pimpl uses it as warm-start key.
+# `cond` is the slot's condition name; Pimpl uses it as warm-start key, and a
+# kernel with a `condition` argument gets it.
 .callKernel <- function(st, b, i, cond, deriv, deriv2, keepStore = FALSE) {
   pf <- .splitParsFixed(.req_pars(b, i), .req_fixed(b, i))
+  cnd <- if (isTRUE(st$kernel_has_cond)) list(condition = cond)
   switch(st$kind,
-    prdfn = if (keepStore)
-              st$kernel(times = .req_times(b, i), pars = pf$pars, fixed = pf$fixed,
-                        deriv = deriv, deriv2 = deriv2, keepStore = TRUE)
-            else
-              st$kernel(times = .req_times(b, i), pars = pf$pars, fixed = pf$fixed,
-                        deriv = deriv, deriv2 = deriv2),
+    prdfn = do.call(st$kernel, c(list(times = .req_times(b, i), pars = pf$pars, fixed = pf$fixed,
+                                      deriv = deriv, deriv2 = deriv2),
+                                 if (keepStore) list(keepStore = TRUE), cnd)),
     obsfn = {
       o <- .req_out(b, i)
       .checkPrediction(o, cond)
-      st$kernel(out = o, pars = pf$pars, fixed = pf$fixed,
-                deriv = deriv, deriv2 = deriv2)
+      do.call(st$kernel, c(list(out = o, pars = pf$pars, fixed = pf$fixed,
+                                deriv = deriv, deriv2 = deriv2), cnd))
     },
-    parfn = if (isTRUE(st$kernel_has_cond))
-              st$kernel(pars = pf$pars, fixed = pf$fixed, deriv = deriv,
-                        deriv2 = deriv2, condition = cond)
-            else
-              st$kernel(pars = pf$pars, fixed = pf$fixed, deriv = deriv,
-                        deriv2 = deriv2))
+    parfn = do.call(st$kernel, c(list(pars = pf$pars, fixed = pf$fixed, deriv = deriv,
+                                      deriv2 = deriv2), cnd)))
 }
 
 # Batch entry when the leaf has one, else a loop. Not mclapply: prdframes hold
@@ -282,22 +282,19 @@ match.fnargs <- function(arglist, choices) {
   cn <- vapply(conds, function(cd) if (length(cd) == 1L) as.character(cd) else NA_character_, "")
   if (!anyNA(cn)) names(parsL) <- cn
 
+  # a batch entry with a `conditions` argument gets the conditions of the slots
+  cnd <- if ("conditions" %in% names(formals(bf))) list(conditions = conds)
   res <- switch(st$kind,
-    prdfn = if (keepStore)
-              bf(times = if (is.list(b$times)) b$times[idx] else b$times,
-                 parsList = parsL, fixedList = fixedL,
-                 deriv = deriv, deriv2 = deriv2, cores = cores,
-                 keepStore = TRUE)
-            else
-              bf(times = if (is.list(b$times)) b$times[idx] else b$times,
-                 parsList = parsL, fixedList = fixedL,
-                 deriv = deriv, deriv2 = deriv2, cores = cores),
+    prdfn = do.call(bf, c(list(times = if (is.list(b$times)) b$times[idx] else b$times,
+                               parsList = parsL, fixedList = fixedL,
+                               deriv = deriv, deriv2 = deriv2, cores = cores),
+                          if (keepStore) list(keepStore = TRUE), cnd)),
     obsfn = {
       outL <- lapply(seq_along(idx), function(j) {
         o <- .req_out(b, idx[j]); .checkPrediction(o, conds[[j]]); o
       })
-      bf(outList = outL, parsList = parsL, fixedList = fixedL,
-         deriv = deriv, deriv2 = deriv2, cores = cores)
+      do.call(bf, c(list(outList = outL, parsList = parsL, fixedList = fixedL,
+                         deriv = deriv, deriv2 = deriv2, cores = cores), cnd))
     },
     parfn = bf(parsList = parsL, fixedList = fixedL, deriv = deriv,
                deriv2 = deriv2, conditions = conds, cores = cores))
@@ -327,7 +324,7 @@ match.fnargs <- function(arglist, choices) {
   if (!res$evaluate || length(res$slots) == 0L) return(outlist)
 
   slots <- res$slots
-  shared <- b$shared || is.null(b$conds)
+  shared <- .sharedRequest(b)
   cond_of_slot <- if (is.null(res$conditions)) list(NULL)
                   else .condKeys(st, as.list(res$conditions[slots]), shared)
 
@@ -519,20 +516,22 @@ match.fnargs <- function(arglist, choices) {
   out <- vector("list", n)
   if (!res$evaluate || !length(res$slots)) return(out)
 
-  shared <- b$shared || is.null(b$conds)
+  shared <- .sharedRequest(b)
   live <- Filter(function(s) !.ct_null(w[[s]]), res$slots)
   if (!length(live)) return(out)
 
   # One vjp call at input index i, seeded with ws. A node reached only through
   # the parameters it passes on solves nothing.
+  vjp_cond <- !identical(st$kind, "parfn") && "condition" %in% names(formals(vjp))
   call_one <- function(i, ws, cond) {
     pf <- .splitParsFixed(.req_pars(b, i), .req_fixed(b, i))
+    cnd <- if (vjp_cond) list(condition = cond)
     r <- if (!identical(st$kind, "parfn") && is.null(ws$out)) .ct() else
       switch(st$kind,
-      prdfn = .ct(pars = vjp(times = .req_times(b, i), pars = pf$pars,
-                             fixed = pf$fixed, cotangent = ws$out)),
-      obsfn = vjp(out = .req_out(b, i), pars = pf$pars, fixed = pf$fixed,
-                  cotangent = ws$out),
+      prdfn = .ct(pars = do.call(vjp, c(list(times = .req_times(b, i), pars = pf$pars,
+                                             fixed = pf$fixed, cotangent = ws$out), cnd))),
+      obsfn = do.call(vjp, c(list(out = .req_out(b, i), pars = pf$pars, fixed = pf$fixed,
+                                  cotangent = ws$out), cnd)),
       parfn = .ct(pars = vjp(pars = pf$pars, fixed = pf$fixed,
                              cotangent = ws$pars, condition = cond)),
       stop(".bwdLeaf: no reverse mode for a ", st$kind, " leaf.", call. = FALSE))
@@ -571,14 +570,23 @@ match.fnargs <- function(arglist, choices) {
     return(out)
   }
 
-  batchable <- identical(st$kind, "prdfn") && !is.null(st$vjpbatchfn) &&
+  batchable <- st$kind %in% c("prdfn", "obsfn") && !is.null(st$vjpbatchfn) &&
                length(live) > 1L &&
                all(vapply(live, function(s) !is.null(w[[s]]$out), TRUE)) &&
                (!seeds || "seeds" %in% names(formals(st$vjpbatchfn)))
   if (batchable) {
     split <- lapply(live, function(s) .splitParsFixed(.req_pars(b, s),
                                                       .req_fixed(b, s)))
-    vals <- st$vjpbatchfn(
+    # an observation leaf answers with cotangents of its output and its parameters
+    vals <- if (identical(st$kind, "obsfn"))
+      st$vjpbatchfn(
+        outList   = lapply(live, function(s) .req_out(b, s)),
+        parsList  = lapply(split, `[[`, "pars"),
+        fixedList = lapply(split, `[[`, "fixed"),
+        cotangentList = lapply(live, function(s) w[[s]]$out),
+        conditions = if (is.null(res$conditions)) NULL else as.list(res$conditions[live]),
+        cores     = cores)
+    else st$vjpbatchfn(
       times     = if (is.list(b$times)) b$times[live] else b$times,
       parsList  = lapply(split, `[[`, "pars"),
       fixedList = lapply(split, `[[`, "fixed"),
@@ -588,7 +596,10 @@ match.fnargs <- function(arglist, choices) {
       seeds     = seeds)
     if (isTRUE(getOption("dMod2.batch.check", FALSE))) {
       ref <- lapply(seq_along(live), function(j)
-        if (seeds)
+        if (identical(st$kind, "obsfn"))
+          vjp(out = .req_out(b, live[j]), pars = split[[j]]$pars,
+              fixed = split[[j]]$fixed, cotangent = w[[live[j]]]$out)
+        else if (seeds)
           vjp(times = .req_times(b, live[j]), pars = split[[j]]$pars,
               fixed = split[[j]]$fixed, cotangent = w[[live[j]]]$out, seeds = TRUE)
         else
@@ -601,13 +612,13 @@ match.fnargs <- function(arglist, choices) {
              paste(cmp, collapse = "\n  "), call. = FALSE)
     }
     # As in call_one, the pass-through half is picked at the width the node
-    # hands on, not at its own.
+    # hands on, not at its own; a slot without one passes nothing on.
     for (j in seq_along(live)) {
       wj <- w[[live[j]]]
       K  <- max(.ctK(wj$pars), .ctK(wj$out))
-      out[[live[j]]] <- .addCt(
-        .ct(pars = vals[[j]]),
-        .ct(pars = .pickCotangent(wj$pars, names(split[[j]]$pars), K)))
+      own <- if (identical(st$kind, "obsfn")) vals[[j]] else .ct(pars = vals[[j]])
+      out[[live[j]]] <- if (is.null(wj$pars)) own else
+        .addCt(own, .ct(pars = .pickRows(wj$pars, names(split[[j]]$pars), K)))
     }
     return(out)
   }
@@ -912,7 +923,11 @@ match.fnargs <- function(arglist, choices) {
 #' @aliases sumobjfn
 #' @example inst/examples/objective.R
 #' @export
-"+.objfn" <- function(e1, e2) {
+"+.objfn" <- function(e1, e2) .sumObjfn(e1, e2)
+
+# The sum is built in a frame of its own: the frame of an S3 method holds the caller's frame
+# (`.GenericCallEnv`), which the closure would keep and serialize.
+.sumObjfn <- function(e1, e2) {
 
   if (is.null(e1)) return(e2)
   if (is.null(e2)) return(e1)

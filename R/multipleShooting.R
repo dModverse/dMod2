@@ -316,7 +316,7 @@
 }
 
 # The error model on the observations of every segment, as normL2 evaluates it.
-.shootErrors <- function(spec, obs, fixed, deriv, cores) {
+.shootErrors <- function(spec, obs, fixed, deriv, cores, tape = FALSE, env = NULL) {
   if (is.null(spec$errmodel)) return(NULL)
   segs <- spec$segs
   idx <- which(vapply(segs, function(s) is.null(spec$e.cond) || s$cond %in% spec$e.cond, TRUE))
@@ -332,10 +332,12 @@
   b <- .bundle(conds = conds, out = obs[idx],
                pars = lapply(split, `[[`, "pars"),
                fixed = lapply(split, `[[`, "fixed"), shared = FALSE)
-  got <- .evalMany(spec$errmodel, b, deriv, FALSE, NULL, cores)
+  # with `tape`, the forward pass of the reverse mode, whose tape the seeds go back through
+  fw <- if (tape) .fwdMany(spec$errmodel, b, env, cores)
+  got <- if (tape) fw$values else .evalMany(spec$errmodel, b, deriv, FALSE, NULL, cores)
   err <- vector("list", length(segs))
   err[idx] <- got
-  list(err = err, idx = idx, split = split)
+  list(err = err, idx = idx, split = split, tape = fw$tape)
 }
 
 .shootMeta <- function(spec, cache, obs, err) {
@@ -575,7 +577,7 @@
     fg <- .fwdMany(spec$g, bg, env, cores)
     obs <- unname(unclass(fg$values))
   }
-  ee <- .shootErrors(spec, obs, fixed, FALSE, cores)
+  ee <- .shootErrors(spec, obs, fixed, FALSE, cores, tape = TRUE, env = env)
   err <- if (is.null(ee)) NULL else ee$err
   meta <- .shootMeta(spec, cache, obs, err)
   kr <- normL2_kernel(
@@ -585,8 +587,7 @@
     build_hessian = FALSE, want_seed = TRUE, local_blocks = TRUE)
 
   # data seeds on the observations, and through the error model
-  w_obs <- .normL2SeedCt(meta, obs, err, kr, spec$errmodel,
-                         err_idx = ee$idx, err_split = ee$split)
+  w_obs <- .normL2SeedCt(meta, obs, err, kr, ee$tape, err_idx = ee$idx, env = env, cores = cores)
 
   # the observation function backwards, onto the states and inner parameters
   u_g <- if (is.null(fg)) w_obs else .bwdNode(fg$tape, w_obs, env, cores)

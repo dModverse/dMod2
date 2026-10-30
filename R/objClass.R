@@ -318,9 +318,15 @@ normL2 <- function(data, x, errmodel = NULL, times = NULL,
     if (!is.null(.prediction) && !identical(names(prediction), conditions))
       prediction <- prediction[conditions]
 
-    # Error model output for all conditions in one batched evaluation.
+    # Error model output for all conditions in one batched evaluation; an error model whose
+    # output the prediction holds is taken from there.
     err_list <- NULL
-    if (!is.null(errmodel)) {
+    if (!is.null(errmodel) && isTRUE(attr(errmodel, "sigmaInPrediction", exact = TRUE))) {
+      cn_eval <- if (is.null(e.cond)) conditions else intersect(conditions, e.cond)
+      err_list <- vector("list", length(conditions))
+      err_list[match(cn_eval, conditions)] <- lapply(prediction[cn_eval], function(pr)
+        attr(pr, "sigma", exact = TRUE)$frame)
+    } else if (!is.null(errmodel)) {
       cn_eval <- if (is.null(e.cond)) conditions else intersect(conditions, e.cond)
       split <- lapply(cn_eval, function(cn) {
         pinner     <- getParameters(prediction[[cn]])
@@ -353,16 +359,16 @@ normL2 <- function(data, x, errmodel = NULL, times = NULL,
 
     # Current deriv signature: per-condition parameters of the prediction and the
     # error model; empty for value-only (deriv = FALSE) evaluations.
-    cur_sig <- lapply(seq_along(prediction), function(k)
-      union(dimnames(attr(prediction[[k]], "deriv"))[[3]],
-            if (!is.null(err_list[[k]])) dimnames(attr(err_list[[k]], "deriv"))[[3]]))
+    cur_sig <- list(lapply(prediction, function(p) dimnames(attr(p, "deriv"))[[3]]),
+                    lapply(err_list, function(e) if (!is.null(e)) dimnames(attr(e, "deriv"))[[3]]))
     # row counts too: a truncated solve has fewer rows than the cached indices
     cur_shape <- c(vapply(prediction, NROW, integer(1)),
                    vapply(err_list, NROW, integer(1)))
     if (is.null(.meta_cache$meta_list) ||
         !identical(.meta_cache$signature, cur_sig) ||
         !identical(.meta_cache$shape, cur_shape)) {
-      .meta_cache$par_names_global <- unique(unlist(cur_sig))
+      .meta_cache$par_names_global <- unique(unlist(lapply(seq_along(prediction), function(k)
+        union(cur_sig[[1]][[k]], if (k <= length(cur_sig[[2]])) cur_sig[[2]][[k]])), use.names = FALSE))
       .meta_cache$meta_list <- .build_normL2_meta(
         data, prediction, err_list, conditions, e.cond)
       .meta_cache$signature <- cur_sig
@@ -432,13 +438,13 @@ normL2 <- function(data, x, errmodel = NULL, times = NULL,
 # predictions in one batched request. Falls back to the reference loop on a
 # missing handle, mixed prdfns, a condition owned twice, or a failing batch.
 .objEvalMany <- function(objList, parsList, deriv = TRUE, deriv2 = FALSE,
-                         cores = getOption("dMod2.cores", 1L)) {
+                         cores = getOption("dMod2.cores", 1L), hessian = NULL) {
   n <- length(parsList)
   objs <- if (is.function(objList)) rep(list(objList), n) else objList
   stopifnot(length(objs) == n)
 
   serial <- function() lapply(seq_len(n), function(j)
-    objs[[j]](parsList[[j]], deriv = deriv, deriv2 = deriv2, cores = cores))
+    objs[[j]](parsList[[j]], deriv = deriv, deriv2 = deriv2, hessian = hessian, cores = cores))
   if (n < 2L) return(serial())
 
   prd   <- attr(objs[[1L]], "prdfn", exact = TRUE)
@@ -465,7 +471,7 @@ normL2 <- function(data, x, errmodel = NULL, times = NULL,
   if (is.null(preds)) return(serial())
 
   lapply(seq_len(n), function(j)
-    objs[[j]](parsList[[j]], deriv = deriv, deriv2 = deriv2,
+    objs[[j]](parsList[[j]], deriv = deriv, deriv2 = deriv2, hessian = hessian,
               .prediction = setNames(preds[j], conds[j])))
 }
 

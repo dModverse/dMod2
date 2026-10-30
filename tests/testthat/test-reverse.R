@@ -91,8 +91,20 @@ skip_on_cran()
     qb <- P(tr_ab, attachInput = TRUE, deriv2 = TRUE,
             derivMode = c(fr, "forward-reverse"), modelname = "rv2_pb", outdir = d)
 
+    # An estimated error model on two conditions, as one Y() and as a sum per condition.
+    fr2 <- c(fr, "forward-reverse")
+    errs <- c(obsA = "sd_rel*obsA + sd_abs", obsB = "sd_rel*obsB + sd_abs")
+    e2 <- Y(errs, g2, states = c("obsA", "obsB"), parameters = c("sd_rel", "sd_abs"), deriv2 = TRUE,
+            derivMode = fr2, modelname = "rv2_err", outdir = d)
+    e2c <- Reduce("+", lapply(c("C1", "C2"), function(cn)
+      Y(errs, g2, states = c("obsA", "obsB"), parameters = c("sd_rel", "sd_abs"), condition = cn,
+        deriv2 = TRUE, derivMode = fr2, modelname = paste0("rv2_err_", cn), outdir = d)))
+    qe <- Reduce("+", lapply(c("C1", "C2"), function(cn)
+      P(c(tr, sd_rel = "exp(logsdrel)", sd_abs = "exp(logsdabs)"), condition = cn, deriv2 = TRUE,
+        derivMode = fr2, modelname = paste0("rv2_pe_", cn), outdir = d)))
+
     compile(m, g, e, p, pe, pc, mev, pev, mnr, pq, pl, sun, sunev, m2, g2, q,
-            q2, qt, qh, qb, output = "rv_all", cores = test_cores())
+            q2, qt, qh, qb, e2, e2c, qe, output = "rv_all", cores = test_cores())
 
     pars <- c(logA = log(2), logk1 = log(0.6), logk2 = log(0.3), logs = log(1.5))
     cache <<- list(
@@ -102,7 +114,7 @@ skip_on_cran()
                    mnr = mnr, pq = pq, pl = pl, sun = sun, sunev = sunev,
                    times = seq(0, 8, length.out = 41), pars = pars),
       second = list(x = Xs(m2, options = .rev_opt),
-                    g = g2, p = q, p2 = q2, pt = qt, ph = qh, pb = qb,
+                    g = g2, p = q, p2 = q2, pt = qt, ph = qh, pb = qb, e = e2, ec = e2c, pe = qe,
                     times = seq(0, 8, length.out = 21), pars = pars))
     cache
   }
@@ -459,6 +471,29 @@ test_that("the chain answers the Hessian forward over forward answers", {
     expect_equal(rev$hessian, t(rev$hessian), tolerance = 1e-8, info = nm)
     expect_identical(dimnames(rev$hessian),
                      list(names(fx$pars), names(fx$pars)), info = nm)
+  }
+})
+
+test_that("an estimated error model enters the Hessian backwards, also as a sum per condition", {
+  fx <- .rev2_fx()
+  chain <- fx$g * fx$x * fx$pe
+  pars <- c(fx$pars, logsdrel = log(0.08), logsdabs = log(0.02))
+  pred <- chain(fx$times, pars)
+  set.seed(4)
+  idx <- c(4L, 8L, 12L, 16L, 20L)
+  data <- as.datalist(do.call(rbind, lapply(c("C1", "C2"), function(cc) do.call(rbind, lapply(c("obsA", "obsB"),
+    function(nm) data.frame(name = nm, time = pred[[cc]][idx, "time"],
+                            value = pred[[cc]][idx, nm] * exp(rnorm(length(idx), 0, 0.05)),
+                            sigma = NA_real_, condition = cc, stringsAsFactors = FALSE))))))
+  for (err in list(single = fx$e, summed = fx$ec)) {
+    obj <- normL2(data, chain, errmodel = err)
+    fwd <- obj(pars, deriv2 = TRUE)
+    rev <- obj(pars, sweep = "reverse", deriv2 = TRUE)
+    grad <- obj(pars, sweep = "reverse")
+    expect_equal(rev$value, fwd$value, tolerance = 1e-8)
+    expect_equal(grad$gradient, fwd$gradient, tolerance = 1e-3)
+    expect_equal(rev$gradient, fwd$gradient, tolerance = 1e-3)
+    expect_equal(rev$hessian, fwd$hessian, tolerance = 1e-4)
   }
 })
 

@@ -69,3 +69,18 @@ test_that("times as a list is named by the conditions of the data", {
   expect_error(normL2(data, prd, times = list(C1 = -10, C3 = 0)), "not C3")
   expect_error(normL2(data, prd, times = list(-10, 0)), "named by the conditions")
 })
+
+test_that("a leaf of several conditions answers each with its own times", {
+  x <- prdfn(function(times, pars, fixed = NULL, deriv = TRUE, deriv2 = FALSE) {
+    J <- array(times, c(length(times), 1L, 1L), dimnames = list(NULL, "y", "a"))
+    prdframe(cbind(time = times, y = pars[["a"]] * times), deriv = if (deriv) J, parameters = pars)
+  }, parameters = "a")
+  x <- dMod2:::.fnWithConditions(x, c("C1", "C2"))
+  data <- as.datalist(data.frame(name = "y", time = c(0, 1, 5, 6), value = c(0.1, 1.9, 10.2, 11.8),
+                                 sigma = 1, condition = rep(c("C1", "C2"), each = 2)))
+  obj <- normL2(data, x, times = list(C1 = c(0, 1), C2 = c(5, 6)))
+  out <- obj(c(a = 2))
+  expect_equal(out$value, 0.1 + 4 * log(2 * pi), tolerance = 1e-12)
+  expect_equal(unname(out$gradient), -2 * sum(c(0, 1, 5, 6) * (c(0.1, 1.9, 10.2, 11.8) - 2 * c(0, 1, 5, 6))),
+               tolerance = 1e-12)
+})

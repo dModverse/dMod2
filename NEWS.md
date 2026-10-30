@@ -4,6 +4,22 @@
   `"lhs <- rhs"`, e.g. `insert(trafo, "x <- exp(x)", x = pars)`. A `"lhs ~ rhs"` string or a
   formula is an error that names the new form; `~` is left to model formulas.
 
+* The reverse mode: the Hessian of `normL2()` with `sweep = "reverse"` has the curvature of an
+  estimated error model, an error model that is a sum of per-condition ones goes backwards, and
+  so does an observation function without parameters of its own at second order. `Y()`, `P()`
+  and `Xs()` answer several second-order seeds in one backward sweep.
+
+* A prediction or observation function whose kernel has a `condition` argument gets the
+  condition of every call, its batch entries get `conditions`; an observation function
+  answers the backward sweep through its batch entry where it has one. `normL2()` with `times`
+  as a list evaluates a function of several conditions at the times of each, and its backward
+  sweep sums the cotangents of the conditions in one pass. An error model whose output the
+  prediction holds is taken from there.
+
+* A cppDE model keeps the batch handles of its last eight request sets.
+
+* A sum of objectives holds its terms, not the frame it is built in.
+
 # dMod2 0.13.4
 
 * `evalConditionResidual()` has the parameters that enter only the error model in its

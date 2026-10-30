@@ -26,19 +26,60 @@
 .ctZero <- function(nms, K = 1L)
   matrix(0, length(nms), K, dimnames = list(nms, NULL))
 
-# The solver's answer as a K-column cotangent: the gradient in slice 1, its
-# directional derivatives along the chain's tangents beside it.
+# Inside .withSeeds(S, ...) the trailing axis of a second-order cotangent holds S blocks of
+# equal width, each a seed followed by its derivatives along the tangents, so that one backward
+# sweep answers S seeds; outside it there is one block.
+.reverseState <- new.env(parent = emptyenv())
+.withSeeds <- function(S, expr) {
+  old <- .reverseState$seeds
+  .reverseState$seeds <- S
+  on.exit(.reverseState$seeds <- old)
+  expr
+}
+
+# The blocks of a trailing axis of width K: `first`, the position of every seed, and `rest`,
+# [D, S], the positions of its derivatives along the D tangents.
+.ctBlocks <- function(K, S = .reverseState$seeds %||% 1L) {
+  if (K %% S)
+    stop("a cotangent of width ", K, " does not split into ", S, " seed blocks.", call. = FALSE)
+  B <- K %/% S
+  first <- (seq_len(S) - 1L) * B + 1L
+  list(S = S, D = B - 1L, first = first,
+       rest = matrix(rep(first, each = B - 1L) + seq_len(B - 1L), B - 1L, S))
+}
+
+# The solver's answer as a K-column cotangent: per seed the gradient and its directional
+# derivatives along the chain's tangents beside it.
 .adjointCt <- function(res, K = 1L) {
-  g <- res$cotangent[, 1L]
-  u <- matrix(g, ncol = 1L, dimnames = list(names(g), NULL))
-  if (K == 1L) return(u)
+  b <- .ctBlocks(K)
+  g <- res$cotangent
+  if (is.null(dim(g))) g <- matrix(g, ncol = 1L, dimnames = list(names(g), NULL))
+  u <- matrix(0, nrow(g), K, dimnames = list(rownames(g), NULL))
+  u[, b$first] <- g[, seq_len(b$S)]
+  if (b$D == 0L) return(u)
   if (is.null(res$curvature))
     stop("a second-order cotangent needs a model built with ",
          "derivMode = \"forward-reverse\"", call. = FALSE)
-  cbind(u, matrix(res$curvature[, seq_len(K - 1L), 1L], nrow = nrow(u)))
+  for (s in seq_len(b$S))
+    u[, b$rest[, s]] <- matrix(res$curvature[, seq_len(b$D), s], nrow = nrow(u))
+  u
 }
 
 .ct_null <- function(w) is.null(w) || (is.null(w$out) && is.null(w$pars))
+
+# The sum of row-named matrices of one width on the rows `nms`, in one pass; rows outside `nms`
+# are dropped, as .pickCotangent() does.
+.sumCotangents <- function(cts, nms) {
+  cts <- Filter(Negate(is.null), cts)
+  if (!length(cts)) return(.ctZero(nms, 1L))
+  K <- ncol(cts[[1L]])
+  out <- matrix(0, length(nms), K, dimnames = list(nms, NULL))
+  i <- match(unlist(lapply(cts, rownames), use.names = FALSE), nms)
+  v <- do.call(rbind, cts)
+  hit <- !is.na(i)
+  if (any(hit)) out[sort(unique(i[hit])), ] <- rowsum(v[hit, , drop = FALSE], i[hit], reorder = TRUE)
+  out
+}
 
 # Adds two row-named matrices on the union of their rows, keeping the order of
 # the first. Positions are resolved once with match(), as this runs per node.
@@ -99,20 +140,28 @@
   out
 }
 
+# The rows of `w` among `nms`, without the zero rows of the others; at another width as
+# .pickCotangent().
+.pickRows <- function(w, nms, K = .ctK(w)) {
+  if (is.null(w) || ncol(w) != K) return(.pickCotangent(w, nms, K))
+  w[!is.na(match(rownames(w), nms)), , drop = FALSE]
+}
+
 # A cotangent on a subset of columns, widened to the full state set with zeros.
 # Slice 1 becomes the solver's `cotangent`, the further direction slices its
 # `curvature` (NULL at first order), since a seed column costs a whole sweep.
 .widenCotangent <- function(w, full, subset) {
   n <- dim(w)[1L]
-  K <- .ctK(w)
-  W <- array(0, c(n, length(full), 1L),
+  b <- .ctBlocks(.ctK(w))
+  W <- array(0, c(n, length(full), b$S),
              dimnames = list(NULL, full, NULL))
   hit <- intersect(subset, full)
-  if (length(hit)) W[, hit, 1L] <- w[, hit, 1L, drop = FALSE]
-  if (K == 1L) return(list(cotangent = W, curvature = NULL))
+  if (length(hit)) W[, hit, ] <- w[, hit, b$first, drop = FALSE]
+  if (b$D == 0L) return(list(cotangent = W, curvature = NULL))
   # The curvature is positional, in the column order of `full`.
-  cv <- array(0, c(n, length(full), 1L, K - 1L))
-  if (length(hit)) cv[, match(hit, full), 1L, ] <- w[, hit, -1L, drop = FALSE]
+  cv <- array(0, c(n, length(full), b$S, b$D))
+  if (length(hit))
+    for (s in seq_len(b$S)) cv[, match(hit, full), s, ] <- w[, hit, b$rest[, s], drop = FALSE]
   list(cotangent = W, curvature = cv)
 }
 
@@ -201,16 +250,19 @@
         stop("a second-order cotangent needs this transformation's own second ",
              "derivatives, and it returned none; rebuild it with deriv2 = TRUE.",
              call. = FALSE)
-      # w' H, the node's curvature seen through the cotangent, times the
+      # w' H, the node's curvature seen through each seed, times the
       # tangents that arrived: the second half of d/dv (J' w).
-      M <- apply(H, c(2L, 3L), function(col) sum(col * wv[, 1L]))
-      Vk <- matrix(0, ncol(J), K - 1L, dimnames = list(colnames(J), NULL))
+      b <- .ctBlocks(K)
+      Vk <- matrix(0, ncol(J), b$D, dimnames = list(colnames(J), NULL))
       if (!is.null(V)) {
         hit <- intersect(rownames(V), colnames(J))
         if (length(hit))
-          Vk[hit, ] <- V[hit, seq_len(K - 1L), drop = FALSE]
+          Vk[hit, ] <- V[hit, seq_len(b$D), drop = FALSE]
       }
-      u[, -1L] <- u[, -1L, drop = FALSE] + M %*% Vk
+      for (s in seq_len(b$S)) {
+        M <- apply(H, c(2L, 3L), function(col) sum(col * wv[, b$first[s]]))
+        u[, b$rest[, s]] <- u[, b$rest[, s], drop = FALSE] + M %*% Vk
+      }
     }
     .pickCotangent(u, names(pars))
   }

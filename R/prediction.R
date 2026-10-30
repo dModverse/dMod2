@@ -57,6 +57,11 @@
 #'   \code{"reverse"} \tab \code{FALSE} \tab none \tab none, with a warning \cr
 #' }
 #'
+#' `hessian = "sparse"` returns the Gauss-Newton Hessian of the forward sweep
+#' as a sparse `Matrix`, assembled from the blocks of the conditions; [trust()]
+#' factorises it where its argument `sparse` takes the sparse path, and [vcov()]
+#' solves it for the columns of `which`.
+#'
 #' With `deriv = FALSE` it returns the value alone.
 #'
 #' @seealso [controls()] to change the settings of a function after it is
@@ -568,8 +573,8 @@ Xs.cppDE <- function(odemodel, forcings = NULL, events = NULL, names = NULL, con
   # Subsets to `names` only when needed, as it copies the sensitivity array.
   # Forcings follow the states, as values without derivatives.
   assemble1 <- function(res, pars, fixed, deriv, deriv2) {
-    nms <- intersect(controls$names, colnames(res$variable))
-    fnms <- intersect(controls$names, forcNames)
+    nms <- .intersectU(controls$names, colnames(res$variable))
+    fnms <- .intersectU(controls$names, forcNames)
     keepAll <- identical(nms, colnames(res$variable))
     out <- cbind(res$time,
                  if (keepAll) res$variable else submatrix(res$variable, cols = nms),
@@ -641,24 +646,29 @@ Xs.cppDE <- function(odemodel, forcings = NULL, events = NULL, names = NULL, con
   }
 
   # Handle caches for the prepared-batch path: conditions are prepared once
-  # and re-solved with new numbers.
+  # and re-solved with new numbers. Each keeps the last `handles` signatures, so
+  # fits that alternate between request sets reuse their handles.
   bcache <- new.env(parent = emptyenv())
   rcache <- new.env(parent = emptyenv())
   vcache <- new.env(parent = emptyenv())
 
   # A prepared handle for `model`, reused while `sig` holds; NULL where cppDE's
-  # solveBatch() lacks an argument in `need`.
-  batchHandle <- function(cache, sig, model, conds, opts, need = character(0)) {
+  # solveBatch() lacks an argument in `need`. The most recent first.
+  batchHandle <- function(cache, sig, model, conds, opts, need = character(0),
+                          handles = 8L) {
     ns <- asNamespace("cppDE")
     prepFn  <- get0("prepareBatch", envir = ns, inherits = FALSE)
     solveFn <- get0("solveBatch",   envir = ns, inherits = FALSE)
     if (is.null(prepFn) || is.null(solveFn) ||
         !all(need %in% names(formals(solveFn)))) return(NULL)
-    if (!identical(cache$sig, sig) || !.batchHandleLive(cache$handle)) {
-      cache$handle <- do.call(prepFn, c(list(model, conditions = conds()), opts))
-      cache$sig <- sig
-    }
-    cache$handle
+    hit <- Position(function(e) identical(e$sig, sig) && .batchHandleLive(e$handle),
+                    cache$entries)
+    entry <- if (is.na(hit))
+      list(sig = sig, handle = do.call(prepFn, c(list(model, conditions = conds()), opts)))
+    else cache$entries[[hit]]
+    rest <- if (is.na(hit)) cache$entries else cache$entries[-hit]
+    cache$entries <- c(list(entry), utils::head(rest, handles - 1L))
+    entry$handle
   }
 
   # One batched cppDE call over all requests. Falls back to a loop when cppDE
@@ -734,12 +744,7 @@ Xs.cppDE <- function(odemodel, forcings = NULL, events = NULL, names = NULL, con
                   conditions = names(parsList), deriv = deriv, deriv2 = deriv2,
                   sens = lapply(preps, function(pr) dimnames(pr$tangent)),
                   forcings = forcs, opts = obatch)
-      if (!identical(bcache$sig, sig) || !.batchHandleLive(bcache$handle)) {
-        bcache$handle <- do.call(prepFn, c(list(model, conditions = mkConds()),
-                                           obatch))
-        bcache$sig <- sig
-      }
-      solveFn(bcache$handle,
+      solveFn(batchHandle(bcache, sig, model, mkConds, obatch),
               parms    = lapply(preps, `[[`, "params"),
               tangent  = lapply(preps, `[[`, "tangent"),
               hessian  = lapply(preps, `[[`, "hessian"),
@@ -1228,7 +1233,8 @@ Xd <- function(data, condition = NULL) {
       dimnames(dP) <- list(free, free)
     }
   }
-  theta <- union(dimnames(if (is.null(dX)) dX2 else dX)[[3L]], colnames(dP))
+  theta <- dimnames(if (is.null(dX)) dX2 else dX)[[3L]]
+  theta <- c(theta, .setdiffU(colnames(dP), theta))
   list(tangentX = .padTheta(dX, theta, 3L),
        tangentP = .padTheta(dP, theta, 2L),
        hessianX = .padTheta(dX2, theta, 3:4),
@@ -1407,7 +1413,7 @@ Y <- function(g, f = NULL, states = NULL, parameters = NULL,
 
   # The prediction has to return every state the observables read.
   needStates <- function(out) {
-    lack <- setdiff(obsStates, colnames(out))
+    lack <- .setdiffU(obsStates, colnames(out))
     if (length(lack))
       stop("Y(): the prediction has no column ", paste(lack, collapse = ", "),
            ", which the observables read. A prediction function returns the ",
@@ -1425,8 +1431,10 @@ Y <- function(g, f = NULL, states = NULL, parameters = NULL,
     if (deriv2 && !deriv) deriv <- TRUE
 
     attachInput <- controls$attachInput
-    fixedObsParams <- if (!is.null(.fixedObs)) .fixedObs else
-      intersect(union(attr(pars, "fixed"), names(fixed)), obsParams)
+    fixedObsParams <- if (!is.null(.fixedObs)) .fixedObs else {
+      held <- attr(pars, "fixed")
+      as.character(.intersectU(c(held, .setdiffU(names(fixed), held)), obsParams))
+    }
     params <- c(unclass(pars), unclass(fixed))
 
     if (use_ad && deriv && !is.null(gevaluate)) {
@@ -1570,18 +1578,19 @@ Y <- function(g, f = NULL, states = NULL, parameters = NULL,
     fixedObsParams <- .intersectU(c(attr(pars, "fixed"), names(fixed)), obsParams)
 
     K <- .ctK(w)
-    wm <- .ctSlice(w)
-    W <- matrix(0, nrow(out), length(observables),
-                dimnames = list(NULL, observables))
-    iw <- match(observables, colnames(wm))
-    if (any(!is.na(iw))) W[, !is.na(iw)] <- wm[, iw[!is.na(iw)], drop = FALSE]
+    b <- .ctBlocks(K)
+    # the seeds [time, observable, seed] and, along the tangents, their derivatives
+    W <- array(0, c(nrow(out), length(observables), b$S),
+               dimnames = list(NULL, observables, NULL))
+    iw <- match(observables, dimnames(w)[[2L]])
+    if (any(!is.na(iw))) W[, !is.na(iw), ] <- w[, iw[!is.na(iw)], b$first, drop = FALSE]
 
-    if (K == 1L) {
+    if (b$D == 0L) {
       r <- gEval$vjp(out[, obsStates, drop = FALSE], params[obsParams], W)
     } else {
       # The value pass's directions on both inputs, the prediction's tangents
       # and the parameters' deriv.
-      nd <- K - 1L
+      nd <- b$D
       dX <- attr(out, "deriv")
       VX <- array(0, c(nrow(out), length(obsStates), nd))
       if (!is.null(dX)) {
@@ -1595,10 +1604,11 @@ Y <- function(g, f = NULL, states = NULL, parameters = NULL,
         take <- intersect(rownames(dP), obsParams)
         if (length(take)) VP[take, ] <- dP[take, seq_len(nd), drop = FALSE]
       }
-      DW <- array(0, c(nrow(out), length(observables), 1L, nd))
+      DW <- array(0, c(nrow(out), length(observables), b$S, nd))
       hitw <- intersect(dimnames(w)[[2L]], observables)
       if (length(hitw))
-        DW[, match(hitw, observables), 1L, ] <- w[, hitw, -1L, drop = FALSE]
+        for (s in seq_len(b$S))
+          DW[, match(hitw, observables), s, ] <- w[, hitw, b$rest[, s], drop = FALSE]
       r <- gEval$vjp(out[, obsStates, drop = FALSE], params[obsParams], W,
                      tangentX = VX, tangentP = VP, curvature = DW)
     }
@@ -1607,26 +1617,27 @@ Y <- function(g, f = NULL, states = NULL, parameters = NULL,
                    dimnames = list(NULL, colnames(out), NULL))
     hit <- .intersectU(obsStates, colnames(out))
     if (length(hit)) {
-      w_out[, hit, 1L] <- r$cotangentX[, hit, 1L]
-      if (K > 1L)
-        w_out[, hit, -1L] <- r$curvatureX[, match(hit, obsStates), 1L, , drop = FALSE]
+      w_out[, hit, b$first] <- r$cotangentX[, hit, , drop = FALSE]
+      if (b$D > 0L)
+        for (s in seq_len(b$S))
+          w_out[, hit, b$rest[, s]] <- r$curvatureX[, match(hit, obsStates), s, , drop = FALSE]
     }
     # Everything attachInput passed through keeps whatever the caller put on
     # it, the observables aside.
     if (controls$attachInput) {
-      through <- intersect(setdiff(colnames(wm), c("time", observables)), colnames(out))
+      through <- intersect(setdiff(dimnames(w)[[2L]], c("time", observables)), colnames(out))
       if (length(through))
         w_out[, through, ] <- w_out[, through, , drop = FALSE] +
                               w[, through, , drop = FALSE]
     }
 
-    up <- matrix(r$cotangentP[, 1L], ncol = 1L,
-                 dimnames = list(rownames(r$cotangentP), NULL))
-    if (K > 1L) {
-      up <- cbind(up, matrix(r$curvatureP[, 1L, ], nrow = nrow(up)))
-      rownames(up) <- rownames(r$cotangentP)
-    }
-    w_pars <- .pickCotangent(up, names(pars))
+    up <- matrix(0, nrow(r$cotangentP), K, dimnames = list(rownames(r$cotangentP), NULL))
+    up[, b$first] <- r$cotangentP
+    if (b$D > 0L && nrow(up))
+      for (s in seq_len(b$S))
+        up[, b$rest[, s]] <- matrix(r$curvatureP[, s, ], nrow = nrow(up))
+    # K columns also where the observables have no parameters of their own
+    w_pars <- .pickCotangent(up, names(pars), K)
     w_pars[match(names(pars), fixedObsParams, 0L) > 0L, ] <- 0
     .ct(out = w_out, pars = w_pars)
   }

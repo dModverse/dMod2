@@ -26,9 +26,10 @@
   prediction <- as.prdlist(fw$values)
   prediction <- prediction[conditions]
 
-  # --- the error model, values only ----------------------------------------
+  # --- the error model on the predictions and their tangents, with a tape for its vjp
   err_list <- NULL
   err_pars <- err_fixed <- NULL
+  err_tape <- NULL
   cn_eval <- character(0)
   if (!is.null(errmodel)) {
     cn_eval <- if (is.null(e.cond)) conditions else .intersectU(conditions, e.cond)
@@ -42,26 +43,20 @@
     })
     err_pars  <- lapply(split, `[[`, "pars")
     err_fixed <- lapply(split, `[[`, "fixed")
-    est <- .fnNode(errmodel)
-    got <- if (!is.null(est) && length(cn_eval) > 1L) {
-      eb <- .bundle(conds = cn_eval,
-                    out   = lapply(cn_eval, function(cn) prediction[[cn]]),
-                    pars  = err_pars, fixed = err_fixed, shared = FALSE)
-      .evalNode(est, eb, FALSE, FALSE, NULL, cores)
-    } else {
-      lapply(seq_along(cn_eval), function(j)
-        errmodel(out = prediction[[cn_eval[j]]], pars = err_pars[[j]],
-                 fixed = err_fixed[[j]], deriv = FALSE,
-                 conditions = cn_eval[j])[[cn_eval[j]]])
-    }
+    eb <- .bundle(conds = cn_eval,
+                  out   = lapply(cn_eval, function(cn) prediction[[cn]]),
+                  pars  = err_pars, fixed = err_fixed, shared = FALSE)
+    ef <- .fwdMany(errmodel, eb, env, cores, deriv = n_dir > 0L)
+    err_tape <- ef$tape
     err_list <- vector("list", length(conditions))
-    err_list[match(cn_eval, conditions)] <- got
+    err_list[match(cn_eval, conditions)] <- ef$values
   }
 
   # The data-to-prediction indices hold while names, tangents and row counts do.
   sig <- list(lapply(prediction, function(pr) dimnames(attr(pr, "deriv"))[[3]]),
               vapply(prediction, NROW, integer(1)),
-              vapply(err_list, NROW, integer(1)))
+              vapply(err_list, NROW, integer(1)),
+              lapply(err_list, function(e) dimnames(attr(e, "deriv"))[2:3]))
   hit <- !is.null(meta_cache) && identical(meta_cache$sig, sig)
   meta_list <- if (hit) meta_cache$meta_list else
     .build_normL2_meta(data, prediction, err_list, conditions, e.cond)
@@ -92,17 +87,13 @@
   }
 
   # --- the seed as cotangents on the prediction, and through the error model
-  w_chain <- .normL2SeedCt(meta_list, prediction, err_list, kr, errmodel,
-                           err_idx = match(cn_eval, conditions),
-                           err_split = Map(function(a, b) list(pars = a, fixed = b),
-                                           err_pars, err_fixed),
+  w_chain <- .normL2SeedCt(meta_list, prediction, err_list, kr, err_tape,
+                           err_idx = match(cn_eval, conditions), env = env, cores = cores,
                            K = n_dir + 1L)
 
   # --- the chain backwards --------------------------------------------------
   u <- .bwdNode(fw$tape, w_chain, env, cores)
-  grad <- Reduce(.addNamed,
-                 lapply(u, function(z) if (is.null(z)) NULL else z$pars))
-  grad <- .pickCotangent(grad, names(pars))
+  grad <- .sumCotangents(lapply(u, function(z) if (is.null(z)) NULL else z$pars), names(pars))
   gradient <- setNames(grad[, 1L], rownames(grad))
 
   # The two terms, on the same rows and in the same order: the kernel's is in
@@ -126,10 +117,11 @@
 }
 
 # The seed as one cotangent per condition aligned with `prediction`, direct and
-# through the error model at positions `err_idx` with inputs `err_split`. Rows
-# follow the kernel's ALOQ-then-BLOQ order; fixed-sigma rows get no sigma seed.
-.normL2SeedCt <- function(meta_list, prediction, err_list, kr, errmodel,
-                          err_idx = NULL, err_split = NULL, K = 1L) {
+# through the error model, whose forward tape `err_tape` covers the conditions at
+# positions `err_idx`. Rows follow the kernel's ALOQ-then-BLOQ order; fixed-sigma
+# rows get no sigma seed.
+.normL2SeedCt <- function(meta_list, prediction, err_list, kr, err_tape,
+                          err_idx = NULL, env = NULL, cores = 1L, K = 1L) {
   n <- length(meta_list)
   w_pred <- vector("list", n)
   w_err  <- vector("list", n)
@@ -158,19 +150,14 @@
   # cotangent lands on both, and the prediction's half adds to the seed above.
   w_chain <- lapply(seq_len(n), function(ci)
     .ct(out = .ctWiden(.ct(out = .dropTime(w_pred[[ci]]))$out, K)))
-  if (!is.null(errmodel) && length(err_idx)) {
-    evjp <- attr(.fnLeafKernel(errmodel), "vjpfn")
-    if (is.null(evjp))
-      stop("normL2: the error model has no vjp entry; rebuild it with ",
-           "Y(..., compile = TRUE).", call. = FALSE)
+  if (!is.null(err_tape) && length(err_idx)) {
+    w_e <- lapply(err_idx, function(ci)
+      if (is.null(w_err[[ci]])) .ct() else .ct(out = .ctWiden(.ct(out = .dropTime(w_err[[ci]]))$out, K)))
+    u <- .bwdNode(err_tape, w_e, env, cores)
     for (j in seq_along(err_idx)) {
+      if (j > length(u) || .ct_null(u[[j]])) next
       ci <- err_idx[j]
-      if (is.null(w_err[[ci]])) next
-      u <- evjp(out = prediction[[ci]], pars = err_split[[j]]$pars,
-                fixed = err_split[[j]]$fixed,
-                cotangent = .ctWiden(.ct(out = .dropTime(w_err[[ci]]))$out, K))
-      w_chain[[ci]] <- .addCt(w_chain[[ci]], .ct(out = .dropTime(u$out),
-                                                 pars = u$pars))
+      w_chain[[ci]] <- .addCt(w_chain[[ci]], .ct(out = .dropTime(u[[j]]$out), pars = u[[j]]$pars))
     }
   }
   w_chain
@@ -190,10 +177,3 @@
   out
 }
 
-# The raw kernel behind a single-leaf fn, which is where the vjp attribute
-# sits. An error model built by Y() is exactly that.
-.fnLeafKernel <- function(f) {
-  st <- .fnNode(f)
-  if (is.null(st) || !identical(st$op, "leaf")) return(f)
-  st$kernel
-}
