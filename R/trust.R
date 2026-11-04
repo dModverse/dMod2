@@ -15,8 +15,9 @@
 #'
 #' @section Convergence:
 #' The run stops as soon as one of the following holds. The gradient test is
-#' evaluated at the current iterate; the value, model and step tests count only
-#' on an accepted step.
+#' evaluated at the current iterate; the value and step tests count only on an
+#' accepted step, the model test also on a rejected Newton step from inside the
+#' trust region.
 #' \itemize{
 #'   \item \code{gtol}: the first-order optimality measure
 #'     \eqn{\max_i |v_i g_i|} is at most \code{gtol}, with \eqn{v_i} the
@@ -60,7 +61,8 @@
 #' \code{boundary = "clip"}, \code{minimize = FALSE} and \code{traceFile}.
 #' The run reports \code{converged = TRUE} only when the scaled gaps between
 #' the segments are below \code{tolControl$ctol}. The method is described in
-#' \code{vignette("Optimisation", package = "dMod2")}.
+#' the guide chapter
+#' \href{https://dmodverse.github.io/dMod2/articles/guide-optimization.html}{Optimization}.
 #'
 #' @param objfun Function whose first argument is a numeric vector of
 #'   parameters, returning a list with components \code{value},
@@ -269,7 +271,8 @@
 #'
 #' @seealso [mstrust()] for multi-start fits, [profile()][profile.objfn] for
 #'   profile likelihoods, [normL2()] for the objective,
-#'   \code{vignette("Optimisation", package = "dMod2")} for the method.
+#'   the guide chapter
+#'   \href{https://dmodverse.github.io/dMod2/articles/guide-optimization.html}{Optimization} for the method.
 #'
 #' @examples
 #' rosenbrock <- function(x, ...) {

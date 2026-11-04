@@ -232,6 +232,27 @@ test_that("the sparse trust step with a low-rank part solves the subproblem of t
   expect_equal(plain$p, -g / c(1, 2, 3, 4), tolerance = 1e-12)
 })
 
+test_that("the sparse trust step on a Hessian with a flat direction ends on the boundary", {
+  H <- Matrix::Diagonal(x = c(1, 1e-200))
+  st <- dMod2:::.sparseTrustStep(H, c(1, 1), 1)
+  expect_true(st$boundary)
+  expect_gt(st$lambda, 0)
+  expect_equal(sqrt(sum(st$p^2)), 1, tolerance = 1e-3)
+  expect_equal(drop(as.matrix(H + st$lambda * Matrix::Diagonal(2)) %*% st$p), c(-1, -1), tolerance = 1e-10)
+  # at a vanishing gradient the step is zero
+  expect_equal(dMod2:::.sparseTrustStep(H, c(0, 0), 1)$p, c(0, 0))
+  # gradients whose squares underflow: a step of the radius, its norm taken without underflow
+  H2 <- Matrix::Diagonal(x = c(1, 2))
+  for (g in list(c(1e-160, 1e-160), c(1e-170, 1e-170))) {
+    tiny <- dMod2:::.sparseTrustStep(H2, g, 1e-170)
+    expect_true(tiny$boundary)
+    expect_equal(dMod2:::.norm2(tiny$p) / 1e-170, 1, tolerance = 1e-3)
+  }
+  # a dense Hessian takes the same step
+  dense <- dMod2:::.sparseTrustStep(Matrix::forceSymmetric(Matrix::Matrix(as.matrix(H), sparse = FALSE, doDiag = FALSE)), c(1, 1), 1)
+  expect_equal(dense$p, st$p, tolerance = 1e-10)
+})
+
 test_that("the sparse trust step takes a low-rank part whose weights differ by many orders", {
   setTimeLimit(elapsed = 10, transient = TRUE)
   on.exit(setTimeLimit(elapsed = Inf))

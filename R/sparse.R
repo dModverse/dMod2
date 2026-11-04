@@ -69,10 +69,10 @@
   objlist(value = value, gradient = g, hessian = .sparseOver(hessian, outer))
 }
 
-# Whether a sparse Cholesky factor is numerically singular: a squared pivot below `tol` times
-# the largest, which CHOLMOD leaves for a semidefinite matrix where solve() would stop.
+# Whether a Cholesky factor, sparse or dense, is numerically singular: a squared pivot below `tol`
+# times the largest, which CHOLMOD leaves for a semidefinite matrix where solve() would stop.
 .cholSingular <- function(ch, tol = 1e-14) {
-  d <- Matrix::diag(methods::as(ch, "Matrix"))^2
+  d <- Matrix::diag(ch)
   !length(d) || !all(is.finite(d)) || min(d) <= tol * max(d)
 }
 
@@ -96,6 +96,12 @@
   sort(q[d <= tol * max(d)])
 }
 
+# The Euclidean norm of `x`, free of under- and overflow.
+.norm2 <- function(x) {
+  m <- max(abs(x))
+  if (m == 0 || !is.finite(m)) m else m * sqrt(sum((x / m)^2))
+}
+
 # Trust-region step: minimises g'p + p'Bp/2 subject to |p| <= radius with
 # sparse Cholesky factors of B + lambda I (More and Sorensen 1983), B = H plus
 # the low-rank part U diag(d) U' of `lowrank`, solved by Woodbury.
@@ -104,25 +110,39 @@
   I <- Matrix::Diagonal(n)
   U <- lowrank$U
   d <- lowrank$d
-  # NULL where B + lambda I is not positive definite: with H + lambda I positive definite, B + lambda I
-  # has as many negative eigenvalues as diag(1/d) + U'(H + lambda I)^-1 U has positive ones beyond d;
-  # a solve that is not finite counts as not positive definite
-  fac <- function(lambda) {
-    ch <- tryCatch(suppressWarnings(Matrix::Cholesky(Matrix::forceSymmetric(H + lambda * I),
-                                    perm = TRUE, LDL = FALSE)), error = function(e) NULL)
-    if (is.null(ch) || !length(d)) return(list(ch = ch)[!is.null(ch)])
-    W <- as.matrix(Matrix::solve(ch, U))
-    K <- diag(1 / d, length(d)) + crossprod(U, W)
-    if (!all(is.finite(K))) return(NULL)
-    ev <- eigen(K, symmetric = TRUE, only.values = TRUE)$values
-    if (any(ev == 0) || sum(ev > 0) != sum(d > 0)) return(NULL)
-    list(ch = ch, W = W, K = K)
-  }
-  # the limit of the step for lambda to infinity
-  steepest <- function() list(p = -radius * g / sqrt(sum(g^2)), lambda = Inf, boundary = TRUE)
   solveB <- function(f, b) {
     x <- as.numeric(Matrix::solve(f$ch, b))
     if (is.null(f$W)) x else x - drop(f$W %*% solve(f$K, crossprod(f$W, b)))
+  }
+  # NULL where B + lambda I is not positive definite: with H + lambda I positive definite and its
+  # factor not numerically singular, B + lambda I has as many negative eigenvalues as
+  # diag(1/d) + U'(H + lambda I)^-1 U has positive ones beyond d; a solve that fails, a step p or a
+  # curvature q = u' (B + lambda I)^-1 u along u = p / |p| that is not finite, or a negative
+  # curvature, counts as not positive definite
+  fac <- function(lambda) {
+    ch <- tryCatch(suppressWarnings(Matrix::Cholesky(Matrix::forceSymmetric(H + lambda * I),
+                                    perm = TRUE, LDL = FALSE)), error = function(e) NULL)
+    if (is.null(ch) || .cholSingular(ch)) return(NULL)
+    f <- list(ch = ch)
+    if (length(d)) {
+      W <- as.matrix(Matrix::solve(ch, U))
+      K <- diag(1 / d, length(d)) + crossprod(U, W)
+      if (!all(is.finite(K))) return(NULL)
+      ev <- eigen(K, symmetric = TRUE, only.values = TRUE)$values
+      if (any(ev == 0) || sum(ev > 0) != sum(d > 0)) return(NULL)
+      f <- c(f, list(W = W, K = K))
+    }
+    p <- tryCatch(-solveB(f, g), error = function(e) NULL)
+    if (is.null(p) || !all(is.finite(p))) return(NULL)
+    np <- .norm2(p)
+    q <- if (np > 0) tryCatch(sum((p / np) * solveB(f, p / np)), error = function(e) NA) else 0
+    if (!is.finite(q) || q < 0) return(NULL)
+    c(f, list(p = p, np = np, q = q))
+  }
+  # the limit of the step for lambda to infinity
+  steepest <- function() {
+    ng <- .norm2(g)
+    list(p = if (ng > 0) -radius * (g / ng) else 0 * g, lambda = Inf, boundary = TRUE)
   }
   scale <- max(1, max(abs(Matrix::diag(H))))
   lambda <- lambda0
@@ -132,19 +152,19 @@
     if (!is.finite(lambda)) return(steepest())
     f <- fac(lambda)
   }
-  p <- -solveB(f, g)
-  np <- sqrt(sum(p^2))
-  if (lambda == 0 && np <= radius) return(list(p = p, lambda = 0, boundary = FALSE))
+  p <- f$p
+  np <- f$np
+  if ((lambda == 0 && np <= radius) || np == 0) return(list(p = p, lambda = lambda, boundary = FALSE))
   for (it in 1:50) {
     if (abs(np - radius) <= 1e-3 * radius) break
-    q2 <- sum(p * solveB(f, p))
-    lnew <- lambda + (np / radius - 1) * np^2 / q2
+    # Newton on 1/|p(lambda)| = 1/radius, with |p|^2 / p'(B + lambda I)^-1 p = 1 / q
+    lnew <- lambda + (np / radius - 1) / f$q
     if (lnew <= 0) lnew <- lambda / 10
     f2 <- fac(lnew)
     while (!length(f2) && is.finite(lnew)) { lnew <- 2 * lnew + 1e-10 * scale; f2 <- fac(lnew) }
     if (!length(f2)) return(steepest())
     lambda <- lnew; f <- f2
-    p <- -solveB(f, g); np <- sqrt(sum(p^2))
+    p <- f$p; np <- f$np
     if (np < radius && lambda < 1e-12 * scale) break
   }
   list(p = p, lambda = lambda, boundary = TRUE)

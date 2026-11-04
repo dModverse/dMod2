@@ -23,6 +23,21 @@ fx_register(multicond = TRUE)
 
 ## ---- Quadratic: one-step convergence ----------------------------------
 
+test_that("trust ends where a Newton step it rejects predicts less than mtol", {
+  # the values rise once the iterate is near the minimum, so the Newton steps there are rejected
+  hit <- FALSE
+  obj <- function(pars, ...) {
+    d <- pars[["x"]] - 1
+    v <- d^2 + if (hit) 1e-5 else 0
+    if (abs(d) < 1e-3) hit <<- TRUE
+    objlist(v, c(x = 2 * d), matrix(2.2, 1, 1, dimnames = list("x", "x")))
+  }
+  fit <- trust(obj, c(x = 0), rinit = 1, rmax = 10, iterlim = 100)
+  expect_true(fit$converged)
+  expect_identical(fit$stopReason, "preddiff")
+  expect_lt(fit$iterations, 10)
+})
+
 test_that("trust converges to the exact minimum of a quadratic in one outer step", {
   target <- c(a = 1.0, b = -0.5, c = 2.3)
   obj <- .quadratic_objfn(target)

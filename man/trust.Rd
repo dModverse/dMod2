@@ -324,8 +324,9 @@ result reports which parameters a bound holds.
 \section{Convergence}{
 
 The run stops as soon as one of the following holds. The gradient test is
-evaluated at the current iterate; the value, model and step tests count only
-on an accepted step.
+evaluated at the current iterate; the value and step tests count only on an
+accepted step, the model test also on a rejected Newton step from inside the
+trust region.
 \itemize{
 \item \code{gtol}: the first-order optimality measure
 \eqn{\max_i |v_i g_i|} is at most \code{gtol}, with \eqn{v_i} the
@@ -371,7 +372,8 @@ Not available then: \code{hessianMethod = "exact"}, more than one phase,
 \code{boundary = "clip"}, \code{minimize = FALSE} and \code{traceFile}.
 The run reports \code{converged = TRUE} only when the scaled gaps between
 the segments are below \code{tolControl$ctol}. The method is described in
-\code{vignette("Optimisation", package = "dMod2")}.
+the guide chapter
+\href{https://dmodverse.github.io/dMod2/articles/guide-optimization.html}{Optimization}.
 }
 
 \examples{
@@ -434,5 +436,6 @@ multiple shooting. \emph{IET Systems Biology} 1(2), 78-88.
 \seealso{
 \code{\link[=mstrust]{mstrust()}} for multi-start fits, \link[=profile.objfn]{profile()} for
 profile likelihoods, \code{\link[=normL2]{normL2()}} for the objective,
-\code{vignette("Optimisation", package = "dMod2")} for the method.
+the guide chapter
+\href{https://dmodverse.github.io/dMod2/articles/guide-optimization.html}{Optimization} for the method.
 }

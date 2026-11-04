@@ -1303,18 +1303,20 @@
   lam <- 1e-12 * dmax
   L <- Matrix::Cholesky(H, perm = TRUE, LDL = FALSE, Imult = lam)
   p <- -as.numeric(Matrix::solve(L, g, system = "A"))
-  np <- sqrt(sum(p^2))
+  np <- .norm2(p)
   if (np <= r) return(list(step = p, lambda = lam))
   for (it in seq_len(maxit)) {
-    q2 <- sum(p * as.numeric(Matrix::solve(L, p, system = "A")))
     # Newton on 1/||p|| approaches from below and does not overshoot; the
-    # guard only keeps lambda positive
-    lnew <- lam + (np / r - 1) * np^2 / q2
+    # guard only keeps lambda positive. The curvature is taken along p / ||p||,
+    # so that a short step does not underflow.
+    u <- p / np
+    q <- sum(u * as.numeric(Matrix::solve(L, u, system = "A")))
+    lnew <- lam + (np / r - 1) / q
     lam <- if (lnew > 0) lnew else lam / 10
     L <- Matrix::update(L, H, mult = lam)
     p <- -as.numeric(Matrix::solve(L, g, system = "A"))
-    np <- sqrt(sum(p^2))
-    if (abs(np - r) <= 1e-3 * r) break
+    np <- .norm2(p)
+    if (np == 0 || abs(np - r) <= 1e-3 * r) break
   }
   if (np > r) p <- p * (r / np)
   list(step = p, lambda = lam)

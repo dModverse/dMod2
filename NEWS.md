@@ -1,3 +1,13 @@
+# dMod2 0.14.3
+
+* `trust()` also ends on a rejected Newton step from inside the trust region that predicts a
+  decrease below `mtol`.
+
+* The sparse trust-region step, and the step of multiple shooting, count a numerically singular
+  factor or a failed solve as not positive definite and take the norm of the step and the
+  curvature along it without under- or overflow: a Hessian with flat directions gives a step on
+  the boundary of the region.
+
 # dMod2 0.14.2
 
 * `normL2(data, g * x * p, errmodel = e)` evaluates in C++ where `x` is `Xs()` of the cppDE

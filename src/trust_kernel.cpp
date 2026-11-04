@@ -535,6 +535,11 @@ List trust_reflective(Function objfun, NumericVector parinit,
       else if (std::fabs(m_value) < mtol)     { soft_stop = "preddiff"; model_stop = true; }
       else if (xtol > 0.0 && stepnorm < xtol) { soft_stop = "step";     model_stop = true; }
     }
+    // A rejected Newton step inside the radius that predicts less than mtol: no smaller step
+    // predicts more, the model is at its minimum.
+    if (!accept && eval_ok && is_newton && std::fabs(m_value) < mtol) {
+      soft_stop = "preddiff"; model_stop = true;
+    }
     if (soft_stop == nullptr && r >= rmin && n_stall >= kStallLimit)
       soft_stop = "stagnation";
 

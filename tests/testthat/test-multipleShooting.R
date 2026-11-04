@@ -661,6 +661,9 @@ test_that("the sparse trust-region step solves the shifted system", {
   expect_equal(sqrt(sum(small$step^2)), 0.1, tolerance = 1e-3)
   expect_equal(small$step, -as.numeric(solve(as.matrix(H) + diag(small$lambda, 3), g)),
                tolerance = 1e-6)
+  # a gradient whose squares underflow
+  tiny <- dMod2:::.shootSparseTR(H, g * 1e-160, 1e-170)
+  expect_equal(dMod2:::.norm2(tiny$step) / 1e-170, 1, tolerance = 1e-3)
 })
 
 test_that("quasi-Newton blocks run forward and on the reverse sweep", {
