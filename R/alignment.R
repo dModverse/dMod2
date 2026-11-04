@@ -58,6 +58,15 @@
 #' @param trafo Character vector of `"symbol <- expression"`, the scale of a
 #'   symbol in its predictor, e.g. `c("yi <- 10^yi", "sj <- 10^sj")`. Symbols
 #'   not named are their predictor.
+#' @param technical Names of the columns of `data` that tell technical
+#'   replicates apart, such as the lanes of one sample on a gel. Readings that
+#'   agree in all other columns but `value` and `lloq` are one sample and are
+#'   replaced by their mean before the alignment. The mean is geometric,
+#'   taken on the log scale, for an error model in `prediction` (relative
+#'   errors), and arithmetic otherwise, as for readings already on a log
+#'   scale. A sample with censored readings
+#'   is censored at the mean of its readings with the limits in place of the
+#'   censored ones. `NULL` (default): every reading is a sample.
 #' @param distribution `"normal"` or `"t"` (Student-t, [normT()]).
 #' @param df Degrees of freedom for `distribution = "t"`.
 #' @param prior Optional prior of parameters on their predictor scale, a
@@ -65,9 +74,10 @@
 #'   deviation of the normal random effect of a symbol `s` without correlation is
 #'   `omega_s_s`, e.g. `constraintL2(mu = c(omega_bj_bj = 0), sigma = 0.3)`.
 #'
-#' @return Object of class `alignmentmodel`: the data, the design of every
-#'   symbol, the compiled expressions, the prior and the `normalization`: the
-#'   block of every reading and per block the coefficients of the mean.
+#' @return Object of class `alignmentmodel`: the data, one row per sample
+#'   with `technical`, the design of every symbol, the compiled expressions,
+#'   the prior and the `normalization`: the block of every reading and per
+#'   block the coefficients of the mean.
 #' @seealso [align()]
 #' @references Kemmer, S., Bang, S., Rosenblatt, M., Timmer, J. and Kaschek, D. (2022).
 #'   BlotIt: Optimal alignment of Western blot and qPCR experiments.
@@ -75,7 +85,7 @@
 #' @example inst/examples/alignment.R
 #' @export
 alignmentModel <- function(data, model, errmodel, biological, scaling, error, absolute = NULL, trafo = NULL,
-                           distribution = c("normal", "t"), df = NULL, prior = NULL) {
+                           technical = NULL, distribution = c("normal", "t"), df = NULL, prior = NULL) {
   distribution <- match.arg(distribution)
   if (missing(model) || missing(errmodel))
     stop("alignmentModel: `model` and `errmodel` have no default; write both.", call. = FALSE)
@@ -119,6 +129,24 @@ alignmentModel <- function(data, model, errmodel, biological, scaling, error, ab
   symbols <- vapply(parsed, `[[`, "", "symbol")
   if (anyDuplicated(symbols))
     stop("alignmentModel: a symbol is assigned twice: ", symbols[duplicated(symbols)][1], call. = FALSE)
+  tech <- NULL
+  if (length(technical)) {
+    if (!is.character(technical) || !all(technical %in% names(data)) ||
+        any(technical %in% c("value", "lloq", "absolute")))
+      stop("alignmentModel: `technical` names columns of `data` other than value, lloq and absolute.",
+           call. = FALSE)
+    read <- intersect(technical, c(unlist(lapply(forms, function(f) all.vars(f$formula))),
+                                   getSymbols(c(model, errmodel, absolute))))
+    if (length(read))
+      stop("alignmentModel: the technical column ", read[1], " is in a formula or expression; ",
+           "technical replicates are averaged before the alignment.", call. = FALSE)
+    geometric <- "prediction" %in% getSymbols(errmodel)
+    tech <- list(columns = technical, readings = nrow(data), mean = if (geometric) "geometric" else "arithmetic")
+    data <- .technicalMeans(data, technical, lloq, censored, geometric)
+    lloq <- if ("lloq" %in% names(data)) data$lloq else rep(NA_real_, nrow(data))
+    censored <- !is.na(lloq) & (is.na(data$value) | data$value <= lloq)
+    isAbs <- if ("absolute" %in% names(data)) data$absolute else rep(FALSE, nrow(data))
+  }
   # a bare column is a factor, one level per value; I(x) keeps it a covariate
   coded <- data
   for (v in intersect(unlist(lapply(parsed, function(pf) .bareVars(pf$fixed))), names(data)))
@@ -172,7 +200,7 @@ alignmentModel <- function(data, model, errmodel, biological, scaling, error, ab
             fn = .alignmentFn(sub(model), sub(errmodel2), c(symbols, covariates)),
             fnAbsolute = if (any(isAbs)) .alignmentFn(sub(absolute), sub(errmodelAbs), c(symbols, covariates)),
             grouping = if (length(groupings)) groupings, distribution = distribution, df = df,
-            prior = prior)
+            prior = prior, technical = tech)
   m$coef <- .alignmentCoefficients(m)
   m$normalization <- .alignmentNormalizationDesign(m)
   ap <- .alignmentPars(m)
@@ -202,6 +230,30 @@ alignmentModel <- function(data, model, errmodel, biological, scaling, error, ab
   list(X = X, random = random, columns = sub$columns)
 }
 
+## One row per sample, the readings that agree in all columns but `value`, `lloq` and `technical`:
+## their mean, on the log scale with `geometric`. A sample with censored readings is censored at
+## the mean of its readings with the limits in place of the censored ones, a bound of its mean.
+.technicalMeans <- function(data, technical, lloq, censored, geometric) {
+  key <- setdiff(names(data), c("value", "lloq", technical))
+  id <- if (length(key)) do.call(paste, c(lapply(data[key], function(x) ifelse(is.na(x), "\rNA", as.character(x))),
+                                          sep = "\r"))
+        else rep("1", nrow(data))
+  sample <- factor(id, unique(id))
+  bound <- ifelse(censored, lloq, data$value)
+  if (geometric && any(bound <= 0))
+    stop("alignmentModel: the geometric mean of technical replicates, for an error model in `prediction`, ",
+         "needs positive readings and positive limits of the censored ones.", call. = FALSE)
+  to <- if (geometric) function(x) log(pmax(x, 0)) else identity
+  from <- if (geometric) exp else identity
+  avg <- function(x) from(as.vector(tapply(to(x), sample, mean)))
+  cens <- as.vector(tapply(censored, sample, any))
+  out <- data[!duplicated(id), setdiff(names(data), technical), drop = FALSE]
+  out$value <- ifelse(cens, NA_real_, avg(bound))
+  if ("lloq" %in% names(data)) out$lloq <- ifelse(cens, avg(bound), avg(lloq))
+  rownames(out) <- NULL
+  out
+}
+
 ## The variables of a formula that stand outside a function call such as factor().
 .bareVars <- function(e) {
   if (is.name(e)) return(as.character(e))
@@ -223,6 +275,9 @@ print.alignmentmodel <- function(x, ...) {
                 if (x$trafo[[s]] != s) paste0(", ", s, " = ", x$trafo[[s]]) else "",
                 if (length(d$random)) paste0(", random over ", d$random[[1]]$group) else ""))
   }
+  if (!is.null(x$technical))
+    cat(sprintf("  technical replicates over %s: %d readings, their %s means\n",
+                paste(x$technical$columns, collapse = ", "), x$technical$readings, x$technical$mean))
   if (any(x$censored)) cat(sprintf("  %d readings censored at their lloq\n", sum(x$censored)))
   if (length(x$covariates)) cat("  covariates:", paste(x$covariates, collapse = ", "), "\n")
   if (!is.null(x$prior)) cat("  prior on", paste(attr(x$prior, "parameters"), collapse = ", "), "\n")
@@ -239,15 +294,30 @@ print.alignmentmodel <- function(x, ...) {
 }
 
 
-# Compiled expressions, one per model, error model and variables in the session.
+# Compiled expressions, one per model, error model and variables in the session, built in the
+# output directory of the session; processes that build the same expressions take turns.
 .alignmentCache <- new.env(parent = emptyenv())
 .alignmentFn <- function(model, errmodel, variables) {
   key <- substr(digest::digest(list(model, errmodel, variables)), 1, 10)
-  if (is.null(.alignmentCache[[key]]))
-    .alignmentCache[[key]] <- cppDE::cppFUN(c(prediction = model, sigma = errmodel), variables = variables,
-                                            modelname = paste0("align_", key), outdir = tempdir(),
-                                            compile = TRUE, deriv2 = TRUE, convenient = FALSE)
+  if (!is.null(.alignmentCache[[key]])) return(.alignmentCache[[key]])
+  outdir <- .dmodOutdir()
+  .withLock(file.path(outdir, paste0("align_", key, ".lock")),
+            .alignmentCache[[key]] <- cppDE::cppFUN(c(prediction = model, sigma = errmodel), variables = variables,
+                                                    modelname = paste0("align_", key), outdir = outdir,
+                                                    compile = TRUE, deriv2 = TRUE, convenient = FALSE))
   .alignmentCache[[key]]
+}
+
+## `expr` evaluated while this process holds the lock directory `lock`, whose creation is atomic;
+## a lock older than `stale` seconds is taken over.
+.withLock <- function(lock, expr, stale = 600) {
+  while (!dir.create(lock, showWarnings = FALSE)) {
+    age <- as.numeric(difftime(Sys.time(), file.mtime(lock), units = "secs"))
+    if (isTRUE(age > stale)) unlink(lock, recursive = TRUE)
+    else Sys.sleep(0.05)
+  }
+  on.exit(unlink(lock, recursive = TRUE))
+  expr
 }
 
 ## The fixed and random parameters of the model.
@@ -650,6 +720,10 @@ print.alignmentmodel <- function(x, ...) {
   attr(P2X, "vjpbatchfn") <- function(times, parsList, fixedList, cotangentList, conditions = NULL, cores = 1L,
                                       seeds = FALSE)
     .alignmentVjpMany(shared, times, parsList, fixedList, cotangentList, 1L, cores, seeds, conditions)
+  # the compiled expressions, for loadDLL() in a new process
+  fns <- Filter(Negate(is.null), list(shared$m$fn, shared$m$fnAbsolute))
+  attr(P2X, "modelname") <- vapply(fns, attr, "", "modelname")
+  attr(P2X, "compileInfo") <- do.call(.collectCompileInfo, fns)
   prdfn(P2X, parNames, NULL)
 }
 
@@ -1005,7 +1079,9 @@ print.alignmentmodel <- function(x, ...) {
 #' @description Estimates the parameters of an [alignmentModel()] by maximum
 #'   likelihood, the marginal one with random terms ([em()]), with the
 #'   normalization of the values per block of experiments (see
-#'   [alignmentModel()]) in the objective. Every experiment, a combination of
+#'   [alignmentModel()]) in the objective; the error parameters and the
+#'   hyperparameters of normal random terms by default by restricted
+#'   likelihood. Every experiment, a combination of
 #'   the columns of the scaling formulas, or with random terms every group, is
 #'   a condition of its own, so the Hessian is sparse over them; [trust()] and
 #'   [em()] take the sparse path as `sparse = "auto"` decides.
@@ -1023,6 +1099,17 @@ print.alignmentmodel <- function(x, ...) {
 #'   coefficients of the first scaling symbol then start where its predictor
 #'   is, per experiment, the median of the predictors at which the prediction
 #'   meets its relative readings.
+#' @param reml `TRUE` (default): the error parameters, and the hyperparameters
+#'   of normal random terms, by restricted likelihood, the parameters of the
+#'   symbols of the prediction (`model` and `absolute` of the
+#'   [alignmentModel()]) integrated out under a flat prior (Lindstrom and
+#'   Bates 1990), in at most 20 rounds from the best maximum likelihood fit
+#'   until the error parameters and hyperparameters move by less than 1e-4.
+#'   Without random terms or with normal ones and `method = "focei"`; else
+#'   maximum likelihood. Where the information of the values and scales is
+#'   singular, at the maximum likelihood fit or at a round, the restricted
+#'   likelihood is not defined, and the fit is by maximum likelihood with a
+#'   warning. `FALSE`: maximum likelihood.
 #'
 #' @details The objective of an alignment is exact to rounding, so the fits stop
 #'   at changes of the objective, predicted decreases and gradients below
@@ -1032,9 +1119,17 @@ print.alignmentmodel <- function(x, ...) {
 #'   the columns of the biological formulas: the columns, `symbol`, `estimate`
 #'   and `se` of the predictor, `value` and `sigma` on the scale of the
 #'   symbol), `scaled` (the readings with `prediction`, `sigma`, `residual`
-#'   and `bloq`), `parameters`, `value` (-2 log L, with the normalization and
-#'   the prior), `npar` (one less per block), `AIC`, `values` of all fits, `multistart`
-#'   (per fit its `value`, `converged` and `iterations`, see [plotValues()]),
+#'   and `bloq`), `parameters` (with attribute `estimation`, `"REML"` or
+#'   `"ML"`), `value` (-2 log L, of the restricted likelihood with REML, with
+#'   the normalization and the prior), `npar` (one less per block), `AIC`
+#'   (with REML comparable only between fits with the same parameters of the
+#'   prediction), `values` (-2 log L of all fits, sorted), `multistart`
+#'   (per fit its `value`, `converged` and `iterations`, see [plotValues()];
+#'   with REML the maximum likelihood fits the rounds start from),
+#'   `remlRounds` (the rounds of the restricted likelihood, 0 without),
+#'   `seSource` (`"Hessian"`, or `"Gauss-Newton"` where the reported Hessian
+#'   of a fit with random terms is not positive definite: then the
+#'   Gauss-Newton Schur complement over the random effects),
 #'   `fit`, `objfn`, `omega`, `random` and `randomEffects` with random terms,
 #'   and the `model`. `scaled` also has `scaled`, the value of the biological symbol at which the prediction meets
 #'   the reading with the other symbols at the fit (`NaN` where none does), and
@@ -1045,10 +1140,14 @@ print.alignmentmodel <- function(x, ...) {
 #' @references Kemmer, S., Bang, S., Rosenblatt, M., Timmer, J. and Kaschek, D. (2022).
 #'   BlotIt: Optimal alignment of Western blot and qPCR experiments.
 #'   \emph{PLOS ONE} 17(8), e0264295. \doi{10.1371/journal.pone.0264295}
+#'
+#'   Lindstrom, M. J. and Bates, D. M. (1990). Nonlinear mixed effects models
+#'   for repeated measures data. \emph{Biometrics} 46(3), 673-687.
+#'   \doi{10.2307/2532087}
 #' @example inst/examples/alignment.R
 #' @export
 align <- function(model, fits = 10L, cores = 1L, method = c("focei", "quadrature"),
-                  sd = 0.5, iterlim = 1000L, init = NULL) {
+                  sd = 0.5, iterlim = 1000L, init = NULL, reml = TRUE) {
   method <- match.arg(method)
   m <- model
   if (!inherits(m, "alignmentmodel")) stop("align: `model` is an alignmentModel().", call. = FALSE)
@@ -1063,6 +1162,11 @@ align <- function(model, fits = 10L, cores = 1L, method = c("focei", "quadrature
   obj <- .alignmentObjective(m) + .alignmentNormalization(m) + m$prior
   re <- .alignmentRandomEffects(m)
   free <- .alignmentPars(m)$fixed
+  # the restricted likelihood without random terms and with normal ones by FOCEI
+  reml <- isTRUE(reml) && (is.null(re) || (method == "focei" && all(re$terms$dist == "normal")))
+  mean <- if (reml) intersect(.alignmentMean(m), free)
+  # without error parameters and random terms the restricted likelihood is the likelihood
+  if (reml && is.null(re) && !length(setdiff(free, mean))) reml <- FALSE
   st <- .alignmentStart(m, free)
   st[intersect(names(init), names(st))] <- init[intersect(names(init), names(st))]
   if (anyNA(st))
@@ -1093,21 +1197,96 @@ align <- function(model, fits = 10L, cores = 1L, method = c("focei", "quadrature
     best <- fit[[which.min(multistart$value)]]
     pars <- best$argument
   }
+  rounds <- 0L
+  if (reml) {
+    # rounds of the restricted likelihood from the best fit, its term linearized at the last round
+    design <- if (!is.null(re)) .emDesign(obj, re) else .remlDesign(obj)
+    theta <- setdiff(names(best$argument), mean)
+    ml <- list(best = best, pars = pars)
+    repeat {
+      term <- .remlAnchor(design, pars, mean, theta)
+      # where the information of the mean parameters is singular, the restricted likelihood is not
+      # defined, as where the rounds run off to a spread of random effects without bound
+      if (!is.finite(term(best$argument)$value)) {
+        warning("align: the values and scales are not identifiable at ",
+                if (rounds) sprintf("round %d of the restricted likelihood", rounds) else "the maximum likelihood fit",
+                ", where the restricted likelihood is not defined; the fit is by maximum likelihood.", call. = FALSE)
+        best <- ml$best; pars <- ml$pars
+        reml <- FALSE; rounds <- 0L
+        break
+      }
+      rounds <- rounds + 1L
+      nxt <- if (!is.null(re)) em(obj + term, re, best$argument, fixed = best$fixed, method = method,
+                                  control = ctrl, cores = 1L, verbose = FALSE)
+             else trust(obj + term, best$argument, rinit = 1, rmax = 10, iterlim = iterlim, tolControl = tc)
+      # the mean parameters are at their optimum for the error parameters of every round
+      moved <- max(abs(nxt$argument[theta] - best$argument[theta]))
+      nxt$boundary <- best$boundary
+      best <- nxt
+      pars <- if (!is.null(re)) c(best$argument, .etaVector(best), best$fixed) else best$argument
+      if (moved < 1e-4) break
+      if (rounds == 20L) {
+        warning("align: the restricted likelihood moved the error parameters by ", signif(moved, 2),
+                " in its last of 20 rounds.", call. = FALSE)
+        break
+      }
+    }
+  }
   H <- best$hessian
   if (is.null(H) && !is.null(best$information)) H <- 2 * best$information
   if (is.null(H) && is.null(re)) H <- obj(pars, hessian = "sparse")$hessian
   allPars <- pars
-  variance <- if (!is.null(H)) .alignmentVariance(H, intersect(names(best$argument), rownames(H)))
+  on <- intersect(names(best$argument), rownames(H))
+  # where the reported Hessian of a fit with random terms is not positive definite, the
+  # Gauss-Newton Schur complement over the random effects
+  seSource <- "Hessian"
+  if (!is.null(re) && !is.null(H) && !.positiveDefinite(H[on, on, drop = FALSE])) {
+    H <- .alignmentGaussNewton(obj, re, best)
+    seSource <- "Gauss-Newton"
+  }
+  variance <- if (!is.null(H)) .alignmentVariance(H, on)
   aligned <- .alignmentValues(m, allPars, variance)
   scaled <- .alignmentScaled(m, allPars)
   if (any(m$censored)) aligned$lloq <- .alignmentLimits(m, aligned, scaled)
   npar <- length(best$argument) - nrow(m$normalization$A)
+  attr(allPars, "estimation") <- if (reml) "REML" else "ML"
   structure(list(aligned = aligned, scaled = scaled, parameters = allPars,
                  value = best$value, npar = npar, AIC = best$value + 2 * npar,
-                 values = sort(multistart$value, na.last = TRUE), multistart = multistart,
+                 values = sort(multistart$value, na.last = TRUE), multistart = multistart, remlRounds = rounds,
+                 seSource = seSource,
                  fit = best, objfn = obj,
                  omega = if (!is.null(re)) best$omega, random = if (!is.null(re)) best$random,
                  randomEffects = re, model = m), class = "alignment")
+}
+
+## The fixed parameters of the symbols of the prediction, of any role, integrated out by the
+## restricted likelihood.
+.alignmentMean <- function(m) {
+  s <- intersect(m$symbols$symbol, getSymbols(c(m$model, m$absoluteModel)))
+  unique(unlist(lapply(m$design[s], function(d) colnames(d$X)), use.names = FALSE))
+}
+
+## Whether a symmetric Hessian, dense or sparse, is positive definite.
+.positiveDefinite <- function(H) {
+  if (.isSparse(H)) {
+    ch <- tryCatch(suppressWarnings(Matrix::Cholesky(Matrix::forceSymmetric(H), perm = TRUE, LDL = FALSE)),
+                   error = function(e) NULL)
+    return(!is.null(ch) && !.cholSingular(ch))
+  }
+  H <- as.matrix(H)
+  !is.null(tryCatch(chol((H + t(H)) / 2), error = function(e) NULL))
+}
+
+## The Gauss-Newton Schur complement over the random effects of the -2 log L of a fit at its modes.
+.alignmentGaussNewton <- function(obj, re, fit) {
+  design <- .emDesign(obj, re)
+  joint <- design$objfn + .normalPrior(design)
+  eta <- .etaVector(fit)
+  on <- names(fit$argument)
+  H <- joint(pars = c(fit$argument, eta), fixed = fit$fixed, deriv = TRUE, hessian = "sparse")$hessian
+  H <- .sparseOver(H, c(on, names(eta)))
+  e <- names(eta)
+  Matrix::forceSymmetric(H[on, on] - Matrix::crossprod(H[e, on], Matrix::solve(H[e, e], H[e, on])))
 }
 
 ## The columns of the data the fixed effects of a symbol read.
@@ -1246,11 +1425,27 @@ align <- function(model, fits = 10L, cores = 1L, method = c("focei", "quadrature
 
 #' @export
 print.alignment <- function(x, ...) {
-  cat(sprintf("alignment: %d readings, %d biological values, -2 log L %.2f, %d parameters, AIC %.2f\n",
-              nrow(x$scaled), nrow(x$aligned), x$value, x$npar, x$AIC))
-  if (length(x$values) > 1L) cat("  fits:", paste(round(utils::head(x$values, 10), 2), collapse = " "), "\n")
+  reml <- identical(attr(x$parameters, "estimation"), "REML")
+  cat(sprintf("alignment: %d readings, %d biological values, %d parameters\n", nrow(x$scaled), nrow(x$aligned),
+              x$npar))
+  cat(sprintf("  %s: -2 log L %.2f, AIC %.2f\n",
+              if (!reml) "maximum likelihood"
+              else sprintf("restricted likelihood (REML, %d %s)", x$remlRounds, if (x$remlRounds == 1L) "round" else "rounds"),
+              x$value, x$AIC))
+  # with REML the multistart is by maximum likelihood, its best fit the start of the rounds
+  nf <- length(x$values)
+  if (nf > 1L || reml)
+    cat(sprintf("  %s%s: -2 log L %s\n",
+                if (!reml) "fits"
+                else if (nf == 1L) "maximum likelihood fit, the start of REML"
+                else "maximum likelihood fits, REML from the best",
+                if (nf > 10L) sprintf(" (best 10 of %d)", nf) else "",
+                paste(sprintf("%.2f", utils::head(x$values, 10L)), collapse = " ")))
   nid <- sum(is.infinite(x$aligned$se))
   if (nid) cat(sprintf("  %d biological values not identifiable (se Inf)\n", nid))
+  if (identical(x$seSource, "Gauss-Newton"))
+    cat("  standard errors from the Gauss-Newton information, the Hessian of the marginal is",
+        "not positive definite\n")
   if (all(is.na(x$aligned$se))) cat("  standard errors NA: the random effects give no Hessian of the marginal\n")
   invisible(x)
 }
@@ -1282,6 +1477,14 @@ as.datalist.alignment <- function(x, time = "time", name = "symbol", condition =
 
 .alignedColumns <- function(a) setdiff(names(a), c("symbol", "estimate", "se", "value", "sigma", "lloq"))
 
+## The levels of character columns on one axis: in the order of their values where all are numbers,
+## else sorted.
+.axisLevels <- function(...) {
+  u <- unique(unlist(lapply(list(...), as.character)))
+  num <- suppressWarnings(as.numeric(u))
+  if (anyNA(num)) .naturalLevels(u) else u[order(num)]
+}
+
 
 #' Diagnostic plots of an alignment
 #'
@@ -1301,6 +1504,7 @@ plotAligned <- function(x, ...) {
   xv <- if ("time" %in% cols) "time" else cols[1]
   grp <- setdiff(cols, xv)
   a$group <- if (length(grp)) do.call(paste, c(lapply(a[grp], as.character), sep = " ")) else "all"
+  if (is.character(a[[xv]])) a[[xv]] <- factor(a[[xv]], levels = .axisLevels(a[[xv]]))
   ggplot2::ggplot(a, ggplot2::aes(x = .data[[xv]], y = .data$value, colour = .data$group)) +
     ggplot2::geom_point() +
     ggplot2::geom_errorbar(ggplot2::aes(ymin = .data$value - .data$sigma, ymax = .data$value + .data$sigma),
@@ -1324,6 +1528,11 @@ plotScaled <- function(x, ...) {
   cols <- .alignedColumns(bio)
   xv <- if ("time" %in% cols) "time" else cols[1]
   s <- s[is.finite(s$scaled) & !s$bloq, ]
+  if (is.character(bio[[xv]])) {
+    lev <- .axisLevels(bio[[xv]], s[[xv]])
+    bio[[xv]] <- factor(bio[[xv]], levels = lev)
+    s[[xv]] <- factor(s[[xv]], levels = lev)
+  }
   ggplot2::ggplot(s, ggplot2::aes(x = .data[[xv]], y = .data$scaled)) +
     ggplot2::geom_point(alpha = 0.6) +
     ggplot2::geom_point(data = bio, ggplot2::aes(x = .data[[xv]], y = .data$value), colour = dMod_colors[2]) +
@@ -1394,7 +1603,16 @@ plotResiduals.alignment <- function(parframe, ...) {
 #' @rdname anova.em
 #' @order 2
 #' @export
-anova.alignment <- function(object, ...) .anovaTable(c(list(object), list(...)))
+anova.alignment <- function(object, ...) {
+  fits <- c(list(object), list(...))
+  # restricted likelihoods differ by the log determinant of their mean parameters
+  reml <- vapply(fits, function(f) identical(attr(f$parameters, "estimation"), "REML"), TRUE)
+  mean <- lapply(fits, function(f) sort(.alignmentMean(f$model)))
+  if (any(reml) && (!all(reml) || length(unique(mean)) > 1L))
+    stop("anova: restricted likelihoods compare only between fits with the same parameters of the prediction; ",
+         "fit with reml = FALSE.", call. = FALSE)
+  .anovaTable(fits)
+}
 
 
 #' Simulate readings from an alignment

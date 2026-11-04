@@ -6,6 +6,7 @@ truth <- c(0.02, 1, 4, 2, 0.5)[match(d$time, c("0", "10", "30", "60", "120"))]
 d$value <- (rlnorm(6, 7, 0.5)[match(d$gel, unique(d$gel))] * truth + 50) * rlnorm(nrow(d), 0, 0.1)
 
 \donttest{
+old <- options(dMod2.outdir = tempdir())
 ## every symbol positive, on the log scale of its predictor; one value per time point,
 ## one scale per gel
 logs <- c("yi <- exp(yi)", "sj <- exp(sj)", "bj <- exp(bj)", "sigmaR <- exp(sigmaR)")
@@ -22,4 +23,5 @@ fit <- align(m, fits = 4)
 fit
 fit$aligned
 plotAligned(fit)
+options(old)
 }

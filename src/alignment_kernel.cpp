@@ -105,7 +105,7 @@ NumericMatrix alignmentPredictors(List conds, List theta, int S, int threads = 1
   int N = 0;
   for (int c = 0; c < C; ++c) N = std::max(N, B[c].start + B[c].n);
   NumericMatrix out(N, S);
-  double* o = N * S ? &out[0] : nullptr;
+  double* o = N * S > 0 ? &out[0] : nullptr;
   std::vector<const double*> th(C);
   for (int c = 0; c < C; ++c) {
     NumericVector tc = theta[c];
@@ -154,14 +154,14 @@ List alignmentForwardBlocks(NumericVector tangent, Nullable<NumericVector> hessi
     NumericVector jp(n * F), js(n * F);
     jp.attr("dim") = IntegerVector::create(n, 1, F); jp.attr("dimnames") = dn;
     js.attr("dim") = IntegerVector::create(n, 1, F); js.attr("dimnames") = dn;
-    Jp[c] = n * F ? &jp[0] : nullptr; Js[c] = n * F ? &js[0] : nullptr;
+    Jp[c] = n * F > 0 ? &jp[0] : nullptr; Js[c] = n * F > 0 ? &js[0] : nullptr;
     List oc = List::create(Named("prediction") = jp, Named("sigma") = js);
     if (second) {
       List dn2 = List::create(R_NilValue, CharacterVector::create("y"), keepNames[c], keepNames[c]);
       NumericVector hp(n * F * F), hs(n * F * F);
       hp.attr("dim") = IntegerVector::create(n, 1, F, F); hp.attr("dimnames") = dn2;
       hs.attr("dim") = IntegerVector::create(n, 1, F, F); hs.attr("dimnames") = dn2;
-      Hp[c] = n * F ? &hp[0] : nullptr; Hs[c] = n * F ? &hs[0] : nullptr;
+      Hp[c] = n * F > 0 ? &hp[0] : nullptr; Hs[c] = n * F > 0 ? &hs[0] : nullptr;
       oc["prediction2"] = hp; oc["sigma2"] = hs;
     }
     out[c] = oc;

@@ -401,3 +401,164 @@ reml <- function(objfun, pars, errpars = NULL, fixed = NULL,
             "Put such terms on the mean parameters instead.", call. = FALSE)
   invisible(NULL)
 }
+
+
+## Restricted likelihood of mixed-effects and alignment fits ---------------------------------
+
+## The term that integrates the parameters `mean` out of the likelihood under a flat prior by
+## Laplace, log|S / 2| - p log(2 pi) with S the Schur complement over the etas of the information
+## G = sum_r w_r a_r a_r' + C + P over the mean parameters and the etas: a_r the derivative of the
+## prediction of data row r, w_r its curvature in the prediction with sigma held (the expected
+## one for Student-t readings), C the Hessian of the terms of the objective beside the data and P
+## the prior precision of the etas, at `full`, the outer parameters and the modes. With `deriv`
+## also its gradient in the parameters `theta` of `full`, the others held:
+## sum_r q_r dw_r + tr(Gamma dP), q_r = a_r' Gamma a_r, Gamma = G^-1 minus the inverse eta blocks.
+.remlTerm <- function(design, full, fixed, mean, theta = character(0), deriv = TRUE, cores = 1L) {
+  units <- if (length(.allEtas(design))) .volumeUnits(design, full, fixed) else list()
+  V <- c(mean, unlist(lapply(units, `[[`, "eta")))
+  conds <- names(design$data)
+  preds <- .predictMany(design$prdfn, times = lapply(conds, function(cn) .emGrid(design, cn)),
+                        parsList = rep(list(full), length(conds)), conditions = conds, fixed = fixed,
+                        deriv = TRUE, cores = cores)
+  names(preds) <- conds
+  frames <- .volumeFrameList(design, conds, preds, fixed, cores, deriv2 = FALSE)
+  rows <- lapply(conds, function(cn) {
+    A <- .frameParameters(frames[[cn]])
+    rw <- .remlRows(design, cn, frames[[cn]], intersect(V, A), intersect(theta, A))
+    lr <- .rowLossDerivs(rw$p, rw$s, rw$y, rw$cens, design$df)
+    rw$w <- lr[, 3L, 1L]; rw$dw <- lr[, 3L, 2L]
+    # Student-t readings by their expected curvature, which is positive
+    if (is.finite(design$df)) {
+      k <- !rw$cens
+      rw$w[k] <- 2 * (design$df + 1) / ((design$df + 3) * rw$s[k]^2)
+      rw$dw[k] <- -2 * rw$w[k] / rw$s[k]
+    }
+    rw
+  })
+  # the information over the mean parameters and the etas, sparse
+  idx <- function(v) match(v, V)
+  trip <- lapply(rows, function(rw) {
+    if (!length(rw$V)) return(NULL)
+    a <- matrix(rw$a, length(rw$w))
+    B <- crossprod(a, rw$w * a)
+    k <- idx(rw$V)
+    list(i = rep(k, length(k)), j = rep(k, each = length(k)), x = as.vector(B))
+  })
+  for (u in units) {
+    k <- idx(u$eta)
+    trip[[length(trip) + 1L]] <- list(i = rep(k, length(k)), j = rep(k, each = length(k)), x = as.vector(u$P))
+  }
+  G <- Matrix::sparseMatrix(i = unlist(lapply(trip, `[[`, "i")), j = unlist(lapply(trip, `[[`, "j")),
+                            x = unlist(lapply(trip, `[[`, "x")), dims = c(length(V), length(V)),
+                            dimnames = list(V, V))
+  others <- Filter(function(t) is.null(attr(t, "l2spec", exact = TRUE)), .objTerms(design$objfn))
+  if (length(others))
+    G <- G + .sparseOver(Reduce(`+`, others)(pars = full, fixed = fixed, deriv = TRUE, hessian = "sparse")$hessian, V)
+  G <- Matrix::forceSymmetric(G)
+  ch <- tryCatch(suppressWarnings(Matrix::Cholesky(G, perm = TRUE, LDL = FALSE)), error = function(e) NULL)
+  if (is.null(ch) || .cholSingular(ch)) return(list(value = Inf))
+  D <- lapply(units, function(u) as.matrix(G[u$eta, u$eta, drop = FALSE]))
+  value <- 2 * sum(log(Matrix::diag(methods::as(ch, "Matrix")))) -
+    sum(vapply(D, function(d) as.numeric(determinant(d)$modulus), 0)) - length(mean) * log(4 * pi)
+  if (!deriv) return(list(value = value))
+  # q_r and the eta blocks of G^-1 from L^-1 P on the rows and the unit vectors of the etas
+  n <- vapply(rows, function(rw) length(rw$w), 0L)
+  rhs <- Matrix::sparseMatrix(
+    i = unlist(lapply(rows, function(rw) rep(idx(rw$V), each = length(rw$w)))),
+    j = unlist(Map(function(rw, off) rep(off + seq_along(rw$w), length(rw$V)), rows, cumsum(c(0L, n))[seq_along(n)])),
+    x = unlist(lapply(rows, function(rw) as.vector(rw$a))), dims = c(length(V), sum(n)))
+  E <- Matrix::sparseMatrix(i = idx(V[-seq_along(mean)]), j = seq_along(V[-seq_along(mean)]), x = 1,
+                            dims = c(length(V), length(V) - length(mean)))
+  X <- Matrix::solve(ch, Matrix::solve(ch, cbind(rhs, E), system = "P"), system = "L")
+  q <- Matrix::colSums(X[, seq_len(sum(n)), drop = FALSE]^2)
+  Xe <- X[, sum(n) + seq_len(ncol(E)), drop = FALSE]
+  grad <- setNames(numeric(length(theta)), theta)
+  off <- 0L
+  for (r in seq_along(rows)) {
+    rw <- rows[[r]]
+    at <- off + seq_along(rw$w)
+    off <- off + length(rw$w)
+    if (!length(rw$A)) next
+    qr <- q[at]
+    # the eta part of q_r, which the subtraction of log|G_ee| takes out
+    u <- which(vapply(units, function(un) conds[r] %in% un$conditions, TRUE))
+    if (length(u)) {
+      e <- units[[u[1]]]$eta
+      ae <- matrix(rw$a, length(rw$w))[, match(e, rw$V), drop = FALSE]
+      ae[is.na(ae)] <- 0
+      qr <- qr - rowSums((ae %*% solve(D[[u[1]]])) * ae)
+    }
+    grad[rw$A] <- grad[rw$A] + drop(crossprod(matrix(rw$sA, length(rw$w)), qr * rw$dw))
+  }
+  for (k in seq_along(units)) {
+    cps <- intersect(names(units[[k]]$dP), theta)
+    if (!length(cps)) next
+    cols <- match(units[[k]]$eta, V[-seq_along(mean)])
+    Ginv <- as.matrix(Matrix::crossprod(Xe[, cols, drop = FALSE])) - solve(D[[k]])
+    for (cp in cps) grad[cp] <- grad[cp] + sum(Ginv * units[[k]]$dP[[cp]])
+  }
+  list(value = value, gradient = grad)
+}
+
+## The data rows of condition `cn` for .remlTerm(): prediction p, sigma s, data y, censoring, the
+## derivatives `a` of p in the parameters `V` and `sA` of s in `theta`; a recorded sigma has none.
+.remlRows <- function(design, cn, frames, V, theta) {
+  d <- .conditionData(design, cn)
+  pred <- frames$pred
+  tp <- .matchNum(d$time, as.numeric(pred[, "time"]))
+  ip <- tp + (match(d$name, dimnames(attr(pred, "deriv"))[[2]]) - 1L) * nrow(pred)
+  rows <- list(p = pred[cbind(tp, match(d$name, colnames(pred)))], s = d$sigma, y = pmax(d$value, d$lloq),
+               cens = d$value <= d$lloq, a = .rowSlices(attr(pred, "deriv"), ip, V),
+               sA = .rowSlices(NULL, seq_len(nrow(d)), theta), V = V, A = theta)
+  err <- frames$err
+  if (is.null(err)) return(rows)
+  te <- .matchNum(d$time, as.numeric(err[, "time"]))
+  model <- is.na(d$sigma)
+  rows$s[model] <- err[cbind(te, match(d$name, colnames(err)))][model]
+  e1 <- attr(err, "deriv")
+  if (is.null(e1)) return(rows)
+  ie <- te + (match(d$name, dimnames(e1)[[2]]) - 1L) * nrow(err)
+  none <- is.na(ie) | !model
+  ie[none] <- 1L
+  rows$sA <- .rowSlices(e1, ie, theta)
+  rows$sA[none, ] <- 0
+  rows
+}
+
+## The restricted likelihood term as an objective of the error parameters and hyperparameters
+## `theta`, the other parameters of `full` and the modes held at the point `anchor` of the previous
+## round, the linearization of Lindstrom and Bates. Its Hessian is left 0.
+.remlAnchor <- function(design, anchor, mean, theta) {
+  last <- NULL
+  fn <- function(..., fixed = NULL, deriv = TRUE, deriv2 = FALSE, hessian = NULL, conditions = NULL,
+                 env = NULL, cores = getOption("dMod2.cores", 1L)) {
+    arglist <- list(...)
+    pars <- arglist[match.fnargs(arglist, "pars")][[1]]
+    th <- intersect(theta, names(pars))
+    full <- anchor
+    full[th] <- pars[th]
+    key <- list(full[th], isTRUE(deriv))
+    if (!identical(last$key, key))
+      last <<- list(key = key, rt = .remlTerm(design, full, fixed, mean, th, deriv = isTRUE(deriv), cores = cores))
+    rt <- last$rt
+    if (!isTRUE(deriv) || !is.finite(rt$value)) return(objlist(value = rt$value, gradient = NULL, hessian = NULL))
+    gradient <- setNames(numeric(length(pars)), names(pars))
+    gradient[th] <- rt$gradient[th]
+    cv <- .resolveCurvature(deriv, deriv2, hessian, "forward")
+    H <- if (cv$hessian) {
+      if (cv$sparse) .sparseOver(NULL, names(pars))
+      else matrix(0, length(pars), length(pars), dimnames = list(names(pars), names(pars)))
+    }
+    objlist(value = rt$value, gradient = gradient, hessian = H)
+  }
+  class(fn) <- c("objfn", "fn")
+  attr(fn, "parameters") <- theta
+  fn
+}
+
+## The pieces of a design that .remlTerm() reads, for an objective without random effects.
+.remlDesign <- function(obj) {
+  spec <- attr(obj, "l2spec", exact = TRUE)[[1]]
+  list(prdfn = attr(obj, "prdfn", exact = TRUE), errfn = attr(obj, "errfn", exact = TRUE),
+       data = attr(obj, "data", exact = TRUE), objfn = obj, df = spec$df %||% Inf)
+}

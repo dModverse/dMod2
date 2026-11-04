@@ -14,6 +14,7 @@ alignmentModel(
   error,
   absolute = NULL,
   trafo = NULL,
+  technical = NULL,
   distribution = c("normal", "t"),
   df = NULL,
   prior = NULL
@@ -53,6 +54,16 @@ is an error.}
 symbol in its predictor, e.g. \code{c("yi <- 10^yi", "sj <- 10^sj")}. Symbols
 not named are their predictor.}
 
+\item{technical}{Names of the columns of \code{data} that tell technical
+replicates apart, such as the lanes of one sample on a gel. Readings that
+agree in all other columns but \code{value} and \code{lloq} are one sample and are
+replaced by their mean before the alignment. The mean is geometric,
+taken on the log scale, for an error model in \code{prediction} (relative
+errors), and arithmetic otherwise, as for readings already on a log
+scale. A sample with censored readings
+is censored at the mean of its readings with the limits in place of the
+censored ones. \code{NULL} (default): every reading is a sample.}
+
 \item{distribution}{\code{"normal"} or \code{"t"} (Student-t, \code{\link[=normT]{normT()}}).}
 
 \item{df}{Degrees of freedom for \code{distribution = "t"}.}
@@ -67,9 +78,10 @@ deviation of the normal random effect of a symbol \code{s} without correlation i
 \item{...}{Ignored.}
 }
 \value{
-Object of class \code{alignmentmodel}: the data, the design of every
-symbol, the compiled expressions, the prior and the \code{normalization}: the
-block of every reading and per block the coefficients of the mean.
+Object of class \code{alignmentmodel}: the data, one row per sample
+with \code{technical}, the design of every symbol, the compiled expressions,
+the prior and the \code{normalization}: the block of every reading and per
+block the coefficients of the mean.
 }
 \description{
 Builds the model of an alignment: readings of several experiments (gels,
@@ -113,6 +125,7 @@ truth <- c(0.02, 1, 4, 2, 0.5)[match(d$time, c("0", "10", "30", "60", "120"))]
 d$value <- (rlnorm(6, 7, 0.5)[match(d$gel, unique(d$gel))] * truth + 50) * rlnorm(nrow(d), 0, 0.1)
 
 \donttest{
+old <- options(dMod2.outdir = tempdir())
 ## every symbol positive, on the log scale of its predictor; one value per time point,
 ## one scale per gel
 logs <- c("yi <- exp(yi)", "sj <- exp(sj)", "bj <- exp(bj)", "sigmaR <- exp(sigmaR)")
@@ -129,6 +142,7 @@ fit <- align(m, fits = 4)
 fit
 fit$aligned
 plotAligned(fit)
+options(old)
 }
 }
 \references{

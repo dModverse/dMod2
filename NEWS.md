@@ -1,3 +1,29 @@
+# dMod2 0.14.6
+
+* `align(reml = TRUE)`, the default: the error parameters, and the hyperparameters of normal
+  random terms, by restricted likelihood. The parameters of the symbols of the prediction are
+  integrated out under a flat prior as by Lindstrom and Bates: in rounds from the maximum
+  likelihood fit, the log determinant of their Gauss-Newton information at the parameters and
+  modes of the previous round enters the objective with its exact gradient, through FOCEI where
+  the model has random terms. Fits with Laplace, spike-and-slab or Dirichlet-process terms and
+  `method = "quadrature"` stay maximum likelihood; `print()` and the attribute `estimation` of
+  `fit$parameters` say which, `fit$remlRounds` counts the rounds. Where the information is
+  singular, the fit is by maximum likelihood, with a warning. `anova()` of alignments refuses
+  restricted likelihoods of fits with different parameters of the prediction.
+
+* `align()` goes on from its fit after a variance is set to 0, and its results have those etas
+  among `parameters`. Where the Hessian of a fit with random terms is not positive definite at
+  its optimum, the standard errors come from the Gauss-Newton Schur complement over the random
+  effects (`fit$seSource`).
+
+* `alignmentModel(technical = )` names the columns that tell technical replicates apart, such as
+  lanes. Readings that agree in all other columns but `value` and `lloq` are replaced by their
+  mean before the alignment: geometric, on the log scale, for an error model in `prediction`,
+  arithmetic otherwise; a sample with censored readings is censored at the mean of its readings.
+
+* Alignment models compile into `getOption("dMod2.outdir")`, and processes that build the same
+  model at once take turns.
+
 # dMod2 0.14.5
 
 * `em()` sets a variance at its boundary to 0: a normal random effect of its own block whose

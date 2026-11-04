@@ -11,7 +11,8 @@ align(
   method = c("focei", "quadrature"),
   sd = 0.5,
   iterlim = 1000L,
-  init = NULL
+  init = NULL,
+  reml = TRUE
 )
 }
 \arguments{
@@ -34,15 +35,35 @@ intercepts where their symbol is 1, the other parameters at 0. The
 coefficients of the first scaling symbol then start where its predictor
 is, per experiment, the median of the predictors at which the prediction
 meets its relative readings.}
+
+\item{reml}{\code{TRUE} (default): the error parameters, and the hyperparameters
+of normal random terms, by restricted likelihood, the parameters of the
+symbols of the prediction (\code{model} and \code{absolute} of the
+\code{\link[=alignmentModel]{alignmentModel()}}) integrated out under a flat prior (Lindstrom and
+Bates 1990), in at most 20 rounds from the best maximum likelihood fit
+until the error parameters and hyperparameters move by less than 1e-4.
+Without random terms or with normal ones and \code{method = "focei"}; else
+maximum likelihood. Where the information of the values and scales is
+singular, at the maximum likelihood fit or at a round, the restricted
+likelihood is not defined, and the fit is by maximum likelihood with a
+warning. \code{FALSE}: maximum likelihood.}
 }
 \value{
 Object of class \code{alignment}: \code{aligned} (one row per combination of
 the columns of the biological formulas: the columns, \code{symbol}, \code{estimate}
 and \code{se} of the predictor, \code{value} and \code{sigma} on the scale of the
 symbol), \code{scaled} (the readings with \code{prediction}, \code{sigma}, \code{residual}
-and \code{bloq}), \code{parameters}, \code{value} (-2 log L, with the normalization and
-the prior), \code{npar} (one less per block), \code{AIC}, \code{values} of all fits, \code{multistart}
-(per fit its \code{value}, \code{converged} and \code{iterations}, see \code{\link[=plotValues]{plotValues()}}),
+and \code{bloq}), \code{parameters} (with attribute \code{estimation}, \code{"REML"} or
+\code{"ML"}), \code{value} (-2 log L, of the restricted likelihood with REML, with
+the normalization and the prior), \code{npar} (one less per block), \code{AIC}
+(with REML comparable only between fits with the same parameters of the
+prediction), \code{values} (-2 log L of all fits, sorted), \code{multistart}
+(per fit its \code{value}, \code{converged} and \code{iterations}, see \code{\link[=plotValues]{plotValues()}};
+with REML the maximum likelihood fits the rounds start from),
+\code{remlRounds} (the rounds of the restricted likelihood, 0 without),
+\code{seSource} (\code{"Hessian"}, or \code{"Gauss-Newton"} where the reported Hessian
+of a fit with random terms is not positive definite: then the
+Gauss-Newton Schur complement over the random effects),
 \code{fit}, \code{objfn}, \code{omega}, \code{random} and \code{randomEffects} with random terms,
 and the \code{model}. \code{scaled} also has \code{scaled}, the value of the biological symbol at which the prediction meets
 the reading with the other symbols at the fit (\code{NaN} where none does), and
@@ -54,7 +75,9 @@ a combination.
 Estimates the parameters of an \code{\link[=alignmentModel]{alignmentModel()}} by maximum
 likelihood, the marginal one with random terms (\code{\link[=em]{em()}}), with the
 normalization of the values per block of experiments (see
-\code{\link[=alignmentModel]{alignmentModel()}}) in the objective. Every experiment, a combination of
+\code{\link[=alignmentModel]{alignmentModel()}}) in the objective; the error parameters and the
+hyperparameters of normal random terms by default by restricted
+likelihood. Every experiment, a combination of
 the columns of the scaling formulas, or with random terms every group, is
 a condition of its own, so the Hessian is sparse over them; \code{\link[=trust]{trust()}} and
 \code{\link[=em]{em()}} take the sparse path as \code{sparse = "auto"} decides.
@@ -73,6 +96,7 @@ truth <- c(0.02, 1, 4, 2, 0.5)[match(d$time, c("0", "10", "30", "60", "120"))]
 d$value <- (rlnorm(6, 7, 0.5)[match(d$gel, unique(d$gel))] * truth + 50) * rlnorm(nrow(d), 0, 0.1)
 
 \donttest{
+old <- options(dMod2.outdir = tempdir())
 ## every symbol positive, on the log scale of its predictor; one value per time point,
 ## one scale per gel
 logs <- c("yi <- exp(yi)", "sj <- exp(sj)", "bj <- exp(bj)", "sigmaR <- exp(sigmaR)")
@@ -89,12 +113,17 @@ fit <- align(m, fits = 4)
 fit
 fit$aligned
 plotAligned(fit)
+options(old)
 }
 }
 \references{
 Kemmer, S., Bang, S., Rosenblatt, M., Timmer, J. and Kaschek, D. (2022).
 BlotIt: Optimal alignment of Western blot and qPCR experiments.
 \emph{PLOS ONE} 17(8), e0264295. \doi{10.1371/journal.pone.0264295}
+
+Lindstrom, M. J. and Bates, D. M. (1990). Nonlinear mixed effects models
+for repeated measures data. \emph{Biometrics} 46(3), 673-687.
+\doi{10.2307/2532087}
 }
 \seealso{
 \code{\link[=alignmentModel]{alignmentModel()}}, \code{\link[=plotAligned]{plotAligned()}}
