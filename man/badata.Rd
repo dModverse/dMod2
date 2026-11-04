@@ -18,7 +18,8 @@ data(badata)
 plotData(as.datalist(badata))
 }
 \seealso{
-\code{demo("BA_transport", package = "dMod2")} builds and fits the
+The example project
+\href{https://dmodverse.github.io/dMod2/articles/bileAcidTransport.html}{bileAcidTransport} builds and fits the
 model.
 }
 \keyword{data}

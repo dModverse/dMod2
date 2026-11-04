@@ -40,6 +40,15 @@ head(fit$random)
 head(residuals(fit, type = "CWRES"))
 confint(fit, parm = "Cl", method = "profile")
 
+## diagnostics: residuals, NPDE from simulations, a visual predictive check, the random
+## effects against the body weight of the subjects
+npde <- residuals(fit, type = "NPDE", nsim = 200, seed = 1)
+attr(npde, "tests")
+plotResiduals(fit, nsim = 200, seed = 1)
+plotVPC(fit, nsim = 100, bins = 6, seed = 1)
+weight <- tapply(Theoph$Wt, Theoph$Subject, `[`, 1)[subjects]
+plotRandomEffects(fit, covariates = data.frame(weight = weight, row.names = subjects))
+
 ## four starts
 best <- msem(obj, randomEffects(p), init = c(Ka = 0, V = 3, Cl = 0.7, sigma_add = log(0.5)),
              fits = 4)

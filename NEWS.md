@@ -1,3 +1,59 @@
+# dMod2 0.14.5
+
+* `em()` sets a variance at its boundary to 0: a normal random effect of its own block whose
+  standard deviation ends below 0.1 is dropped, its etas fixed at 0, and the other parameters are
+  fitted again; where that raises -2 log L by at most `control$boundary` (default 0.1), the fit
+  without it is returned and names the hyperparameter in `boundary`, which `msem()` lists per
+  start. The fit keeps its random effects in `design` and the values given as `fixed`, and
+  `em()` and `msem()` take a fit as `init` and go on from it.
+
+* FOCEI ends where its model can gain less than `mtol` in the largest region the fit allows
+  (`rmax`), and after five consecutive rejected trials that leave the objective flat within
+  `ftol`. The inner search for the modes, of FOCEI and of the quadrature, stops where the Newton
+  step is below `innerControl$steptol` (default 1e-8), so that -2 log L at given parameters does
+  not depend on where the search started. FOCEI over several groupings solves the modes of all
+  components in lock step, with one batched evaluation of the model per round; `summary()` prints
+  the shrinkage per grouping.
+
+* `em()` and `msem()` stop with an error where -2 log L of the data is not finite at the start,
+  and FOCEI where a Hessian is not finite. A trial point where the prediction fails, or where its
+  value or derivatives are not finite, is rejected, in the search for the modes for that subject
+  alone; SAEM keeps the parameters of an iteration where the objective fails at the draws.
+
+* `em(method = "quadrature")` and Laplace EM factor the Hessian of the modes instead of inverting
+  it, so that a random effect whose standard deviation collapses to 0 ends the fit. A stage of
+  the quadrature ends where the Hessian is not positive definite, where a Newton step on rebuilt
+  nodes would lower -2 log L by less than `tolDecrement` or than the nodes resolve, or where a
+  step raised -2 log L by more than a Newton step would gain; the stage trace has the resolution.
+
+* SAEM evaluates the data term of its draws, and the quadrature that of its nodes, in C++ where
+  the model allows it, as FOCEI does.
+
+* `msem(budget = )` caps the outer trust region of FOCEI, also the one before quadrature, at
+  `budget` times the iterations of the first fit; quadrature, Laplace EM and SAEM keep their own
+  limits.
+
+* Spike-and-slab random effects have no upper bound per group: up to 12 of a group are
+  integrated jointly and exactly, more each alone, coupled by expectation consistent or mean
+  field (`coupling` in `control`). With sparse random effects one coupling holds for the whole
+  fit, expectation consistent where it converges at the start, else mean field, reported as
+  `"meanFieldFallback"`.
+
+* An effect formula leaves a condition whose grouping is missing (`NA` in the branch table)
+  without random effect, at the fixed effects.
+
+* `residuals(fit, type = "NPDE")`: normalised prediction distribution errors from simulated data
+  sets, decorrelated per group, censored readings by a uniform draw below their simulated
+  fraction, with the tests of mean, variance and normality as attribute `tests`. New
+  `plotVPC()`: visual predictive check of an `em()` fit, prediction corrected with `pc = TRUE`,
+  stratified by a column of the condition grid, with the fraction of censored readings.
+  `plotResiduals()` of an `em()` fit takes `type`, any of IWRES, CWRES and NPDE, and
+  `plotRandomEffects(fit, covariates = )` plots the random effects against covariates of the
+  groups. The plots of `em()` fits order the conditions naturally.
+
+* New data sets `warfarin` (PK/PD after an oral dose, 32 subjects) and `mavoglurant` (PK after
+  an intravenous infusion, 120 subjects, 78 on two occasions), from nlmixr2data.
+
 # dMod2 0.14.4
 
 * `profile()` returns the attribute `ends`, one row per side with the number of steps and why

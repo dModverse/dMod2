@@ -1,6 +1,6 @@
 # FOCEI: -2 log L ~ J(theta, eta*) + sum_g log|H_g / 2| around the conditional modes of every
 # group, J the joint objective, H_g its Gauss-Newton Hessian in the etas. The gradient has the
-# exact derivative of the volume term; vignette("NLME") has the derivation.
+# exact derivative of the volume term; the guide chapter Nonlinear mixed-effects models has the derivation.
 
 
 ## Derivatives up to order 4 of the -2 log likelihood of a row in its prediction p and sigma s,
@@ -104,6 +104,18 @@
 
 .errorModel <- function(design) design$errfn %||% .dataSigmaErrfn(design$data)
 
+## A^-1 B for a symmetric eta block A, solved on its unit diagonal: where the variance of a random
+## effect runs to 0, its prior precision outgrows the other entries by many orders of magnitude.
+.scaledSolve <- function(A, B = NULL) {
+  if (is.null(B)) {
+    B <- diag(nrow(A))
+    dimnames(B) <- list(colnames(A), rownames(A))
+  }
+  d <- 1 / sqrt(abs(diag(A)))
+  d[!is.finite(d)] <- 1
+  d * solve(d * A * rep(d, each = nrow(A)), d * as.matrix(B))
+}
+
 ## The error-model frame of condition `cn` at the prediction `pred`; the frame of the recorded
 ## sigmas where the error model does not cover the condition.
 .errorFrame <- function(design, pred, cn) {
@@ -133,13 +145,13 @@
 ## Kernel description of one condition block: its rows, above the limit first, and their
 ## indices into the prediction, its derivatives and the error model at `pars`. A row with a
 ## recorded sigma uses it, the others the error model, as in normL2().
-.conditionBlock <- function(design, cn, pars, fixed) {
+.conditionBlock <- function(design, cn, pars, fixed, frame = NULL) {
   d <- .conditionData(design, cn)
   cens <- d$value <= d$lloq
   d <- d[order(cens, d$time, d$name), , drop = FALSE]
   times <- .emGrid(design, cn)
-  pred <- design$prdfn(times = times, pars = pars, fixed = fixed, deriv = TRUE, conditions = cn)[[1]]
-  err <- .errorFrame(design, pred, cn)
+  pred <- frame$pred %||% design$prdfn(times = times, pars = pars, fixed = fixed, deriv = TRUE, conditions = cn)[[1]]
+  err <- frame$err %||% .errorFrame(design, pred, cn)
   dn <- dimnames(attr(pred, "deriv"))
   en <- dimnames(attr(err, "deriv"))
   obs <- match(d$name, colnames(pred))
@@ -175,8 +187,13 @@
   probe <- setNames(numeric(length(full)), full)
   probe[outer] <- start
   groups <- design$groups
+  # the frames of all conditions in one evaluation in C++ where the model allows it, laid out as the
+  # frames the kernel reads
+  conds <- unique(unlist(design$conditions[groups], use.names = FALSE))
+  frames <- .chainFrames(design$chain, conds, lapply(conds, function(cn) .emGrid(design, cn)), list(probe), fixed,
+                         TRUE, FALSE, getOption("dMod2.cores", 1L))
   meta <- lapply(groups, function(g) {
-    blocks <- lapply(design$conditions[[g]], function(cn) .conditionBlock(design, cn, probe, fixed))
+    blocks <- lapply(design$conditions[[g]], function(cn) .conditionBlock(design, cn, probe, fixed, frames[[cn]]))
     used <- unique(unlist(lapply(blocks, `[[`, "parameters")))
     absent <- setdiff(E[g, ], used)
     if (length(absent))
@@ -215,6 +232,14 @@
   errfn <- .errorModel(design)
   function(timesList, parsList, conditions, fixed) {
     conditions <- as.character(conditions)
+    # the native chain where it covers the conditions; the recorded sigmas where there is no error model
+    fr <- .chainFrames(design$chain, conditions, timesList, parsList, fixed, TRUE, FALSE, getOption("dMod2.cores", 1L))
+    if (!is.null(fr)) {
+      pred <- unname(lapply(fr, `[[`, "pred"))
+      err <- unname(lapply(seq_along(fr), function(i) fr[[i]]$err %||%
+        .dataSigmaErrfn(design$data)(out = fr[[i]]$pred, conditions = conditions[i])[[1L]]))
+      return(list(pred = pred, err = err))
+    }
     preds <- .predictMany(design$prdfn, times = timesList, parsList = parsList,
                           conditions = conditions, fixed = fixed, deriv = TRUE,
                           cores = getOption("dMod2.cores", 1L))
@@ -235,35 +260,52 @@
 }
 
 
-## The prediction and error-model frames of a condition with first and second derivatives;
-## `err` is NULL for sigmas recorded in the data.
-.volumeFrames <- function(design, cn, pred, fixed) {
-  if (is.null(attr(pred, "deriv")) || is.null(attr(pred, "deriv2")))
+## The batched predictor `f` for the FOCEI kernel. Where the batch fails, every request is
+## predicted alone, and one that fails gets frames the kernel takes as a failed trial of its
+## subject; the message is kept in `failure`.
+.guardPredictor <- function(f, failure = new.env(parent = emptyenv()))
+  function(timesList, parsList, conditions, fixed) {
+    failed <- function(e) {
+      failure$message <- conditionMessage(e)
+      list(pred = list("failed"), err = list("failed"))
+    }
+    tryCatch(f(timesList, parsList, conditions, fixed), error = function(e) {
+      failed(e)
+      one <- lapply(seq_along(conditions), function(i)
+        tryCatch(f(timesList[i], parsList[i], conditions[i], fixed), error = failed))
+      list(pred = lapply(one, function(x) x$pred[[1L]]), err = lapply(one, function(x) x$err[[1L]]))
+    })
+  }
+
+## The prediction and error-model frames of a condition with first and second derivatives, the
+## first only without `deriv2`; `err` is NULL for sigmas recorded in the data.
+.volumeFrames <- function(design, cn, pred, fixed, deriv2 = TRUE) {
+  if (deriv2 && (is.null(attr(pred, "deriv")) || is.null(attr(pred, "deriv2"))))
     stop("em: the prediction of condition ", cn, " has no second derivatives; build the ",
          "model with deriv2 = TRUE.", call. = FALSE)
   if (is.null(design$errfn)) return(list(pred = pred, err = NULL))
   inner <- getParameters(pred)
   fixedInner <- as.parvec(inner[attr(inner, "fixed")], deriv = FALSE, deriv2 = FALSE)
   inner <- as.parvec(inner[setdiff(names(inner), names(fixed))])
-  err <- design$errfn(out = pred, pars = inner, fixed = fixedInner, deriv2 = TRUE, conditions = cn)[[cn]]
+  err <- design$errfn(out = pred, pars = inner, fixed = fixedInner, deriv2 = deriv2, conditions = cn)[[cn]]
   list(pred = pred, err = err)
 }
 
 ## The volume frames of the conditions `conds` with their predictions `preds`, the error model
 ## evaluated for all of them in one call.
-.volumeFrameList <- function(design, conds, preds, fixed, cores = 1L) {
+.volumeFrameList <- function(design, conds, preds, fixed, cores = 1L, deriv2 = TRUE) {
   for (cn in conds)
-    if (is.null(attr(preds[[cn]], "deriv")) || is.null(attr(preds[[cn]], "deriv2")))
+    if (deriv2 && (is.null(attr(preds[[cn]], "deriv")) || is.null(attr(preds[[cn]], "deriv2"))))
       stop("em: the prediction of condition ", cn, " has no second derivatives; build the ",
            "model with deriv2 = TRUE.", call. = FALSE)
   node <- if (!is.null(design$errfn)) .fnNode(design$errfn)
   if (is.null(node))
-    return(setNames(lapply(conds, function(cn) .volumeFrames(design, cn, preds[[cn]], fixed)), conds))
+    return(setNames(lapply(conds, function(cn) .volumeFrames(design, cn, preds[[cn]], fixed, deriv2)), conds))
   inner <- lapply(conds, function(cn) getParameters(preds[[cn]]))
   fixedInner <- lapply(inner, function(x) as.parvec(x[attr(x, "fixed")], deriv = FALSE, deriv2 = FALSE))
   inner <- lapply(inner, function(x) as.parvec(x[setdiff(names(x), names(fixed))]))
   errs <- .evalNode(node, .bundle(conds = conds, out = unname(preds[conds]), pars = inner,
-                                  fixed = fixedInner), TRUE, TRUE, NULL, cores)
+                                  fixed = fixedInner), TRUE, deriv2, NULL, cores)
   setNames(lapply(seq_along(conds), function(i) list(pred = preds[[conds[i]]], err = errs[[i]])), conds)
 }
 
@@ -357,9 +399,12 @@
     list(lay = lay, P = 2 * cd$Oinv, d1 = setNames(lapply(cd$dOinv, `*`, 2), lay$cholPars),
          d2 = 2 * cd$d2Oinv)
   })
+  # per grouping the groups of every condition, which may be several
+  groupsOf <- lapply(subs, function(sd) split(rep(names(sd$conditions), lengths(sd$conditions)),
+                                              unlist(sd$conditions, use.names = FALSE)))
   pieces <- function(cond) unlist(lapply(seq_along(subs), function(k) {
     sd <- subs[[k]]
-    gs <- names(which(vapply(sd$conditions, function(cs) any(cs %in% cond), TRUE)))
+    gs <- names(sd$conditions)[names(sd$conditions) %in% unlist(groupsOf[[k]][cond], use.names = FALSE)]
     lapply(gs, function(g) list(k = k, eta = unname(sd$etaNames[g, derivs[[k]]$lay$stems])))
   }), recursive = FALSE)
   units <- if (is.null(design$groupings)) lapply(design$groups, function(g) list(conditions = design$conditions[[g]]))
@@ -414,7 +459,10 @@
 ## mode shift d eta*/d theta = -H_ee^-1 H_eA from the exact joint blocks of the rows (`etaShift`
 ## per unit); the Hessian leaves out third-order sensitivities and d2 eta*/d theta2. With
 ## hessian = "sparse" the Hessian is a sparse Matrix and the shift of a unit has its columns A only.
-.foceiVolume <- function(design, full, fixed, outer, H_inv_list, hessian = FALSE, cores = 1L) {
+## With terms = "reverse" the Hessian has the terms of .volumeReverse(curvature = TRUE) only;
+## otherwise those of tr(H^-1 D_ab H) in `terms`, any of "mixed" (products of the mixed second
+## derivatives of a row), "cross", "loss4" and "loss3", all with "full".
+.foceiVolume <- function(design, full, fixed, outer, H_inv_list, hessian = FALSE, cores = 1L, terms = "full") {
   sparse <- identical(hessian, "sparse")
   hessian <- sparse || isTRUE(hessian)
   Q <- length(outer)
@@ -427,10 +475,14 @@
 
   conds <- unique(unlist(lapply(units, `[[`, "conditions"), use.names = FALSE))
   times <- lapply(conds, function(cn) .emGrid(design, cn))
-  preds <- .predictMany(design$prdfn, times = times, parsList = rep(list(full), length(conds)),
-                        conditions = conds, fixed = fixed, deriv = TRUE, deriv2 = TRUE, cores = cores)
-  names(preds) <- conds
-  frames <- .volumeFrameList(design, conds, preds, fixed, cores)
+  frames <- .chainFrames(design$chain, conds, times, list(full), fixed, TRUE, TRUE, cores)
+  if (!is.null(frames) && any(vapply(frames, function(f) is.null(f$err), TRUE))) frames <- NULL
+  if (is.null(frames)) {
+    preds <- .predictMany(design$prdfn, times = times, parsList = rep(list(full), length(conds)),
+                          conditions = conds, fixed = fixed, deriv = TRUE, deriv2 = TRUE, cores = cores)
+    names(preds) <- conds
+    frames <- .volumeFrameList(design, conds, preds, fixed, cores)
+  }
 
   # the rows of every unit in the outer parameters it depends on, directly, through the error
   # model or the prior, and the row loss of all of them in one call
@@ -463,6 +515,8 @@
 
     # d eta*/d theta from the exact joint blocks at the modes
     jb <- .jointBlocks(rw, lr, u, full, A, cholIn)
+    if (!all(is.finite(jb$HeA)) || !all(is.finite(jb$Hee)))
+      stop("FOCEI: the second derivatives of the model are not finite at these parameters.", call. = FALSE)
     thj <- colSums(abs(jb$HeA)) > 0
     Em <- matrix(0, Kn, Qa, dimnames = list(eta, A))
     if (any(thj)) {
@@ -522,6 +576,19 @@
     for (cp in intersect(cholIn, names(dOinv))) DH[, , match(cp, A)] <- DH[, , match(cp, A)] + dOinv[[cp]]
     P <- array(0, c(Kn, Kn, Qa))
     for (al in seq_len(Qa)) P[, , al] <- Hinv %*% DH[, , al]
+    Pm <- matrix(P, Kn * Kn)
+    Pt <- matrix(aperm(P, c(2, 1, 3)), Kn * Kn)
+    own <- intersect(cholIn, names(dOinv))
+    if (identical(terms, "reverse")) {
+      block <- -crossprod(Pt, Pm)
+      for (al in own) for (be in own)
+        block[match(al, A), match(be, A)] <- block[match(al, A), match(be, A)] + sum(Hinv * d2Oinv(al, be))
+      structural <- !(A %in% cholIn)
+      block[structural, structural] <- 0
+      if (sparse) blocks[[length(blocks) + 1L]] <- structure(block, dimnames = list(A, A))
+      else hess[A, A] <- hess[A, A] + block
+      next
+    }
 
     # tr(H^-1 D_ab H) in Gauss-Newton form
     DaM <- matrix(Da, tn * Kn, Qa); DbM <- matrix(Db, tn * Kn, Qa)
@@ -544,14 +611,16 @@
       T4 <- T4 + matrix(colSums(cz * matrix(z[[2]], tn)), Qa, Qa) +
         crossprod(Mw, Em) + crossprod(Em, Mw) + crossprod(Em, MV %*% Em)
     }
-    vol <- 2 * T1 + 2 * (X + t(X)) + T3 + T4
-    own <- intersect(cholIn, names(dOinv))
+    use <- if (identical(terms, "full")) c("mixed", "cross", "loss4", "loss3") else terms
+    vol <- matrix(0, Qa, Qa)
+    if ("mixed" %in% use) vol <- vol + 2 * T1
+    if ("cross" %in% use) vol <- vol + 2 * (X + t(X))
+    if ("loss4" %in% use) vol <- vol + T3
+    if ("loss3" %in% use) vol <- vol + T4
     for (al in own) for (be in own)
       vol[match(al, A), match(be, A)] <- vol[match(al, A), match(be, A)] + sum(Hinv * d2Oinv(al, be))
 
     # - tr(H^-1 D_a H H^-1 D_b H)
-    Pm <- matrix(P, Kn * Kn)
-    Pt <- matrix(aperm(P, c(2, 1, 3)), Kn * Kn)
     block <- vol - crossprod(Pt, Pm)
     if (sparse) blocks[[length(blocks) + 1L]] <- structure(block, dimnames = list(A, A))
     else hess[A, A] <- hess[A, A] + block
@@ -570,7 +639,7 @@
 .fitFocei <- function(design, joint, start, fixed = NULL, control = list()) {
   if (.foceiSparseChoice(design, joint, start, fixed, control$sparse %||% "auto"))
     return(.fitFoceiSparse(design, joint, start, fixed, control))
-  ic <- modifyList(list(rinit = 1, rmax = 10, iterlim = 30, ftol = 1e-7, mtol = 1e-7,
+  ic <- modifyList(list(rinit = 1, rmax = 10, iterlim = 30, steptol = 1e-8, mtol = 1e-12,
                         eigen_floor_relative = 1e-10), control$innerControl %||% list())
   oc <- modifyList(list(rinit = 1, rmax = 10, iterlim = 200, ftol = 1e-7, mtol = 1e-5),
                    control$trustControl %||% list())
@@ -580,27 +649,30 @@
   outer <- names(start)
   mode <- .secondOrderMode(design, joint, start, fixed, control)
   correction <- mode != "none"
-  # the volume gradient and Hessian, added to the Gauss-Newton Schur model of the outer trust
-  # with the SR1 correction from the full outer gradients of the accepted points, and
-  # d eta*/d theta, which starts the modes of the next trial to first order
+  # the outer model: the Gauss-Newton Schur complement, forward over forward plus the volume Hessian,
+  # plus the SR1 correction from the full outer gradients of the accepted points; with the volume
+  # gradient, and d eta*/d theta, which starts the modes of the next trial to first order
   learn <- .outerSecant(outer)
   last <- NULL
   volume <- function(full_pars, joint_hessian, H_inv_list, data_gradient) {
-    vol <- if (mode == "forward-forward")
-      .foceiVolume(design, full_pars, fixed, outer, H_inv_list, hessian = TRUE, cores = cores)
-    else .volumeReverse(design, full_pars, fixed, outer, H_inv_list, cores = cores, curvature = TRUE)
-    if (mode == "forward-forward") last <<- list(full = full_pars, hessian = vol$hessian)
-    base <- .gnSchur(joint_hessian, outer, meta$eta_names, H_inv_list) + vol$hessian[outer, outer]
+    ff <- mode == "forward-forward"
+    vol <- if (ff) .foceiVolume(design, full_pars, fixed, outer, H_inv_list, hessian = TRUE, cores = cores)
+           else .volumeReverse(design, full_pars, fixed, outer, H_inv_list, cores = cores)
+    curvature <- if (ff) vol$hessian[outer, outer] else 0
+    if (ff) last <<- list(full = full_pars, hessian = vol$hessian)
+    base <- .gnSchur(joint_hessian, outer, meta$eta_names, H_inv_list) + curvature
     learn$add(full_pars[outer], data_gradient[outer] + vol$gradient[outer], function(x) base %*% x)
-    list(gradient = vol$gradient, hessian = vol$hessian[outer, outer] + learn$dense(),
-         eta_shift = vol$etaShift)
+    list(gradient = vol$gradient, hessian = curvature + learn$dense(), eta_shift = vol$etaShift)
   }
-  fit <- focei_run(model_cb = design$prdfn, err_cb = .errorModel(design), joint_cb = joint,
-                   init = start, subject_meta = meta, fixed = fixed,
-                   control = list(inner = ic, outer = oc),
-                   correction_mode = if (correction) "eager" else "none",
-                   correction_cb = if (correction) volume else NULL,
-                   predict_cb = .batchPredictor(design))
+  failure <- new.env(parent = emptyenv())
+  fit <- tryCatch(focei_run(model_cb = design$prdfn, err_cb = .errorModel(design), joint_cb = joint,
+                            init = start, subject_meta = meta, fixed = fixed,
+                            control = list(inner = ic, outer = oc),
+                            correction_mode = if (correction) "eager" else "none",
+                            correction_cb = if (correction) volume else NULL,
+                            predict_cb = .guardPredictor(.batchPredictor(design), failure)),
+                  error = function(e) stop(conditionMessage(e), if (!is.null(failure$message))
+                    paste0("; the last prediction that failed: ", failure$message), call. = FALSE))
 
   E <- design$etaNames[, design$normal$stems, drop = FALSE]
   etaModes <- fit$etaModes
@@ -616,7 +688,7 @@
     on <- rownames(hessian)
     ee <- intersect(as.vector(E), rownames(jh))
     hessian <- jh[on, on, drop = FALSE] -
-      crossprod(jh[ee, on, drop = FALSE], solve(jh[ee, ee, drop = FALSE], jh[ee, on, drop = FALSE]))
+      crossprod(jh[ee, on, drop = FALSE], .scaledSolve(jh[ee, ee, drop = FALSE], jh[ee, on, drop = FALSE]))
     # the volume Hessian of the last correction where the fit ends on its point
     vol <- if (!is.null(last) && identical(names(last$full), names(full)) &&
                identical(unname(unclass(last$full)), unname(full))) last$hessian
@@ -634,9 +706,19 @@
 ## the other one, with a message where it was asked for explicitly; an error where it has neither.
 .secondOrderMode <- function(design, joint, start, fixed, control, units = NULL) {
   if (isFALSE(control$secondOrderCorrection)) return("none")
-  want <- control$derivMode %||% "forward-reverse"
   etas <- .allEtas(design)
   full <- c(start, setNames(numeric(length(etas)), etas))
+  # without a probe where the native chain covers every condition: forward over forward with its
+  # second derivatives, forward over reverse with its sweeps
+  want <- control$derivMode %||% "forward-reverse"
+  native <- .evalCpp() && !is.null(design$chain) && {
+    conds <- names(design$data)
+    ff <- want == "forward-forward"
+    !is.null(.chainLookup(design$chain, conds, rep(list(names(full)), length(conds)), names(fixed), if (!ff) names(full),
+                          TRUE, ff, lapply(conds, function(cn) .emGrid(design, cn)),
+                          tangents = if (ff) 0L else 1L, seeds = if (ff) 0L else 1L))
+  }
+  if (native) return(want)
   units <- units %||% .volumeUnits(design, full, fixed)
   reverse <- function() !inherits(tryCatch(
     .sweepUnits(design, full, fixed, units, lapply(units, function(u)
@@ -762,7 +844,7 @@
 ## The joint objective of a trial point has its derivatives, so the value comes from the same
 ## solve as on the dense path; the volume term is evaluated where a step is accepted.
 .fitFoceiSparse <- function(design, joint, start, fixed = NULL, control = list()) {
-  ic <- modifyList(list(rinit = 1, rmax = 10, iterlim = 30, ftol = 1e-7, mtol = 1e-7,
+  ic <- modifyList(list(rinit = 1, rmax = 10, iterlim = 30, steptol = 1e-8, mtol = 1e-12,
                         eigen_floor_relative = 1e-10), control$innerControl %||% list())
   oc <- modifyList(list(rinit = 1, rmax = 10, iterlim = 200, ftol = 1e-7, mtol = 1e-5),
                    control$trustControl %||% list())
@@ -775,7 +857,7 @@
   etas <- as.vector(E)
   byGroup <- as.vector(t(E))
   N <- nrow(E); K <- lay$K
-  predictor <- .batchPredictor(design)
+  predictor <- .guardPredictor(.batchPredictor(design))
   errfn <- .errorModel(design)
   mode <- .secondOrderMode(design, joint, start, fixed, control)
   correction <- mode != "none"
@@ -807,13 +889,11 @@
     left <- Matrix::bdiag(lapply(ev$inner$H_inv, unname)) %*% jt$gradient[byGroup]
     ev$gradient <- jt$gradient[outer] - as.numeric(Hoe %*% left)
     if (!correction) return(ev)
-    # forward over reverse: the exact volume gradient on the Gauss-Newton Schur model with the
-    # volume curvature from dH/dtheta
+    # forward over reverse: the exact volume gradient on the Gauss-Newton Schur model, whose
+    # curvature the SR1 correction learns
     if (mode == "forward-reverse" && !deriv2) {
-      vol <- .volumeReverse(design, ev$full, fixed, outer, ev$inner$H_inv, cores = cores, local = TRUE,
-                            curvature = TRUE)
+      vol <- .volumeReverse(design, ev$full, fixed, outer, ev$inner$H_inv, cores = cores, local = TRUE)
       ev$gradient <- ev$gradient + vol$gradient[outer]
-      ev$hessian <- Matrix::forceSymmetric(ev$hessian + vol$hessian)
       ev$shift <- vol$etaShift
       return(ev)
     }
@@ -823,12 +903,15 @@
     ev$shift <- vol$etaShift
     ev
   }
-  # the modes of `ev` moved to first order along `step`
+  # the modes of `ev` moved to first order along `step`, for a group whose predicted move stays within
+  # the region the inner search starts with, as in the dense kernel
   shifted <- function(ev, step) {
     w <- ev$inner$eta_modes
     for (i in seq_along(ev$shift)) {
       S <- ev$shift[[i]]
-      if (length(S)) w[i, ] <- w[i, ] + drop(S %*% step[colnames(S)])
+      if (!length(S)) next
+      d <- drop(S %*% step[colnames(S)])
+      if (is.finite(sum(d^2)) && sqrt(sum(d^2)) <= ic$rinit) w[i, ] <- w[i, ] + d
     }
     w
   }
@@ -839,7 +922,7 @@
   if (correction) learn$add(cur$theta, cur$gradient, function(x) cur$hessian %*% x)
   r <- oc$rinit
   converged <- FALSE
-  it <- 0L
+  it <- stall <- 0L
   trace <- list(value = cur$value, radius = r, rho = 0, accept = 1L)
   while (it < oc$iterlim) {
     it <- it + 1L
@@ -852,7 +935,14 @@
     trial <- tryCatch(modesAt(cur$theta + step, shifted(cur, step)), error = function(e) NULL)
     ft <- if (is.null(trial)) Inf else trial$value
     rho <- if (pred > 0 && is.finite(ft)) (cur$value - ft) / pred else -Inf
-    done <- is.finite(ft) && (abs(cur$value - ft) < oc$ftol || abs(pred) < oc$mtol)
+    # what the model can gain at all, in the largest region the fit allows, as in the dense kernel
+    reach <- if (r < oc$rmax) {
+      sm <- .sparseTrustStep(cur$hessian, cur$gradient, oc$rmax, lowrank = lr)
+      Bm <- as.numeric(cur$hessian %*% sm$p)
+      if (length(lr$d)) Bm <- Bm + drop(lr$U %*% (lr$d * crossprod(lr$U, sm$p)))
+      -(sum(cur$gradient * sm$p) + 0.5 * sum(sm$p * Bm))
+    } else pred
+    done <- is.finite(ft) && abs(reach) < oc$mtol && (abs(cur$value - ft) < oc$ftol || abs(pred) < oc$mtol)
     ok <- if (done) ft < cur$value else rho >= 0.25
     if (!done && rho < 0.25) r <- min(r, sqrt(sum(st$p^2))) / 4
     else if (!done && rho > 0.75 && st$boundary) r <- min(2 * r, oc$rmax)
@@ -863,7 +953,10 @@
     }
     for (f in names(trace)) trace[[f]] <- c(trace[[f]], switch(f, value = cur$value, radius = r, rho = rho,
                                                                accept = as.integer(ok)))
-    if (done) { converged <- TRUE; break }
+    # as trust(): five consecutive rejected trials that leave the objective flat within ftol, the noise
+    # of its evaluation, end the fit with nothing left to resolve
+    stall <- if (ok || !is.finite(ft) || abs(cur$value - ft) >= oc$ftol) 0L else stall + 1L
+    if (done || stall >= 5L) { converged <- TRUE; break }
   }
   # the exact Schur complement of the joint Hessian at the modes plus the volume Hessian; by
   # forward over reverse with the volume curvature from dH/dtheta where there is no deriv2
@@ -886,30 +979,51 @@
   .requireM3(design, NULL, "FOCEI")
   sparse <- .foceiSparseChoice(design, joint, start, fixed, control$sparse %||% "auto")
   curvature <- if (sparse) "sparse" else NULL
-  objs <- .conditionObjectives(design)
-  priors <- lapply(design$groupings, .normalPrior)
   units <- .volumeUnits(design, c(start, setNames(numeric(length(.allEtas(design))), .allEtas(design))), fixed)
   etas <- .allEtas(design)
   outer <- names(start)
   mode <- .secondOrderMode(design, joint, start, fixed, control)
   learn <- .outerSecant(outer)
-  ic <- modifyList(list(rinit = 1, rmax = 10, iterlim = 100L), control$innerControl %||% list())
+  # a component has its modes where its Newton step is below `steptol`: the volume term is linear in
+  # their error, so a small change of the value does not tell they are found
+  ic <- modifyList(list(rinit = 1, rmax = 10, iterlim = 100L, mtol = 1e-12, steptol = 1e-8),
+                   control$innerControl %||% list())
   warm <- setNames(numeric(length(etas)), etas)
+  # the objectives per condition of the R evaluation, built where the chain does not cover the model
+  delayedAssign("objs", .conditionObjectives(design))
+  # The modes of all components in lock step (focei_units_lockstep()): per round one batched
+  # evaluation of the conditions of the components still moving, then per component a trust step on
+  # its data and the normal prior of its etas, e' P e / 2, accepted by its own ratio.
   modes <- function(theta) {
-    for (u in units) {
-      f <- function(e, ...) {
-        full <- c(theta, fixed, warm); full[u$eta] <- e
-        d <- Reduce(`+`, .objEvalMany(objs[u$conditions], rep(list(full), length(u$conditions)), deriv = TRUE,
-                                      hessian = curvature))
-        pr <- Reduce(`+`, lapply(priors, function(pf) pf(pars = full, fixed = fixed, deriv = TRUE, hessian = curvature)))
-        objlist(value = d$value + pr$value,
-                gradient = .named(d$gradient, u$eta) + .named(pr$gradient, u$eta),
-                hessian = .namedHessian(d$hessian, u$eta) + .namedHessian(pr$hessian, u$eta))
-      }
-      fit <- trust(f, warm[u$eta], rinit = ic$rinit, rmax = ic$rmax, iterlim = ic$iterlim,
-                   tolControl = ic[intersect(names(ic), c("ftol", "mtol", "gtol"))])
-      warm[u$eta] <<- fit$argument[u$eta]
+    held <- c(theta, fixed)
+    P <- lapply(.volumeUnits(design, c(theta, fixed, warm), fixed), function(u) {
+      m <- as.matrix(u$P); storage.mode(m) <- "double"; m
+    })
+    # the data terms of the components `idx` at the etas `etas`, summed per component in C++ where
+    # the model allows it; NULL for a component whose prediction fails, the others evaluated apart
+    dataUnits <- function(idx, etas) {
+      cs <- unlist(lapply(units[idx], `[[`, "conditions"), use.names = FALSE)
+      owner <- rep(seq_along(idx), vapply(units[idx], function(u) length(u$conditions), 0L))
+      parsL <- lapply(owner, function(j) setNames(etas[[j]], units[[idx[j]]]$eta))
+      loc <- tryCatch(.chainLocal(design$chain, cs, parsL, rep(list(held), length(cs)), TRUE, FALSE,
+                                  getOption("dMod2.cores", 1L), design$bloq, design$df), error = function(e) NULL)
+      d <- if (!is.null(loc)) chain_unit_sums(loc, owner - 1L, lapply(units[idx], `[[`, "eta"), TRUE)
+      else tryCatch({
+        m <- .objEvalMany(objs[cs], parsL, deriv = TRUE, fixed = held)
+        lapply(seq_along(idx), function(j) {
+          eta <- units[[idx[j]]]$eta
+          mine <- m[owner == j]
+          list(value = sum(vapply(mine, `[[`, 0, "value")),
+               gradient = Reduce(`+`, lapply(mine, function(x) .named(x$gradient, eta))),
+               hessian = Reduce(`+`, lapply(mine, function(x) .namedHessian(x$hessian, eta))))
+        })
+      }, error = function(e) NULL)
+      if (is.null(d)) return(if (length(idx) == 1L) list(NULL)
+                             else lapply(seq_along(idx), function(j) dataUnits(idx[j], etas[j])[[1L]]))
+      lapply(d, function(x) if (is.finite(x$value)) x)
     }
+    w <- focei_units_lockstep(dataUnits, lapply(units, function(u) unname(warm[u$eta])), P, ic)
+    for (i in seq_along(units)) warm[units[[i]]$eta] <<- w[[i]]
     warm
   }
   outerObjective <- function(theta, deriv2 = FALSE, volumeHessian = FALSE, ...) {
@@ -917,7 +1031,7 @@
     full <- c(theta, modes(theta))
     gn <- joint(pars = full, fixed = fixed, deriv = TRUE, hessian = curvature)
     block <- function(u) as.matrix(gn$hessian[u$eta, u$eta, drop = FALSE])
-    Hinv <- lapply(units, function(u) solve(block(u)))
+    Hinv <- lapply(units, function(u) .scaledSolve(block(u)))
     logdet <- sum(vapply(units, function(u) as.numeric(determinant(block(u) / 2)$modulus), 0))
     cores <- getOption("dMod2.cores", 1L)
     schur <- function(h) {
@@ -933,14 +1047,13 @@
       if (volumeHessian) H <- H + vol$hessian[outer, outer]
       volGradient <- vol$gradient[outer]
     } else {
-      # forward over reverse: the exact volume gradient on the Gauss-Newton Schur model with the
-      # SR1 correction of the dense path; the exact Schur complement where it is reported
-      vol <- if (mode != "none")
-        .volumeReverse(design, full, fixed, outer, Hinv, cores = cores, local = sparse, curvature = TRUE)
+      # forward over reverse: the exact volume gradient on the Gauss-Newton Schur model, whose
+      # curvature the SR1 correction of the dense path learns; the exact Schur complement where it
+      # is reported
+      vol <- if (mode != "none") .volumeReverse(design, full, fixed, outer, Hinv, cores = cores, local = sparse)
       volGradient <- if (mode == "none") 0 else vol$gradient[outer]
       H <- schur(gn$hessian)
       if (mode != "none") {
-        H <- H + vol$hessian
         learn$add(theta, gn$gradient[outer] + volGradient, function(x) H %*% x)
         if (!sparse) H <- H + learn$dense()
       }
@@ -956,7 +1069,7 @@
     attr(out, "Hinv") <- Hinv
     out
   }
-  oc <- modifyList(list(rinit = 1, rmax = 10, iterlim = 200L), control$trustControl %||% list())
+  oc <- modifyList(list(rinit = 1, rmax = 10, iterlim = 200L, ftol = 1e-7, mtol = 1e-5), control$trustControl %||% list())
   args <- list(objfun = outerObjective, parinit = start, rinit = oc$rinit, rmax = oc$rmax, iterlim = oc$iterlim,
                tolControl = oc[intersect(names(oc), c("ftol", "mtol", "gtol"))],
                sparse = sparse)

@@ -18,7 +18,8 @@
 }
 
 ## -2 log p(y_g, eta_g) of every group at the rows of `eta`, the value of the FOCEI kernel per
-## group, from one prediction without derivatives of the conditions of all groups.
+## group: the data term of every condition in one evaluation without derivatives, in C++ where the
+## model allows it, else from the predictions and the row losses in R.
 .groupDensity <- function(design, meta, fixed, cores = 1L) {
   errfn <- .errorModel(design)
   node <- .fnNode(errfn)
@@ -27,10 +28,19 @@
   conditions <- vapply(blocks, function(b) as.character(b$condition), "")
   times <- lapply(blocks, `[[`, "times")
   etaNames <- lapply(meta$fast_meta, `[[`, "eta_names")
+  dataTerm <- function(parsList) {
+    d <- .chainLocal(design$chain, conditions, parsList, rep(list(fixed), length(parsList)), FALSE, FALSE, cores,
+                     design$bloq, design$df)
+    if (is.null(d)) return(NULL)
+    v <- vapply(d, function(x) as.numeric(x$value), 0)
+    vapply(seq_along(etaNames), function(g) sum(v[group == g]), 0)
+  }
   function(full, eta, Oinv, logDet) {
     parsList <- lapply(seq_along(blocks), function(j) {
       p <- full; p[etaNames[[group[j]]]] <- eta[group[j], ]; p
     })
+    value <- dataTerm(parsList)
+    if (!is.null(value)) return(value + rowSums((eta %*% Oinv) * eta) + logDet)
     preds <- .predictMany(design$prdfn, times = times, parsList = parsList, conditions = conditions,
                           fixed = fixed, deriv = FALSE, cores = cores)
     inner <- lapply(preds, function(q) attr(q, "parameters"))
@@ -336,7 +346,8 @@
     L <- .choleskyFactor(lay, c(full, fixed))
     Oinv <- chol2inv(t(L)); logDet <- 2 * sum(log(diag(L)))
     target <- function(e) density(full, e, Oinv, logDet)
-    value <- target(eta)
+    # a state where the model fails takes any proposal it can evaluate
+    value <- tryCatch(target(eta), error = function(e) rep(Inf, G))
     rw <- .metropolisGroups(target, eta, value, nMcmc, step = step)
     eta <- rw$eta
     if (nLaplace > 0L) {
@@ -364,16 +375,21 @@
     eta <- phi - shift(beta)
     # the other parameters: a trust step while annealing, then the step on the averaged quadratic
     # model of the complete-data objective
+    # where the complete-data objective fails at the draws, the trust parameters keep their values
     if (length(trustPars) && burnin) {
-      cm <- .innerTrust(modifyList(cm1, list(objfun = cm1Objective, parinit = full[trustPars])))
-      full[trustPars] <- cm$argument
+      cm <- tryCatch(.innerTrust(modifyList(cm1, list(objfun = cm1Objective, parinit = full[trustPars]))),
+                     error = function(e) NULL)
+      if (!is.null(cm)) full[trustPars] <- cm$argument
     }
     if (length(trustPars) && !burnin) {
-      out <- cm1Objective(full[trustPars])
-      model <- .averageQuadratic(if (gamma < 1) model, out, full[trustPars], gamma)
-      one$trust <- .quadraticStep(list(A = model$A, c = drop(model$A %*% full[trustPars]) - out$gradient),
-                                  full[trustPars], Inf)
-      full[trustPars] <- .quadraticStep(model, full[trustPars])
+      out <- tryCatch(cm1Objective(full[trustPars]), error = function(e) NULL)
+      one$trust <- full[trustPars]
+      if (!is.null(out)) {
+        model <- .averageQuadratic(if (gamma < 1) model, out, full[trustPars], gamma)
+        one$trust <- .quadraticStep(list(A = model$A, c = drop(model$A %*% full[trustPars]) - out$gradient),
+                                    full[trustPars], Inf)
+        full[trustPars] <- .quadraticStep(model, full[trustPars])
+      }
     }
     if (length(trustPars)) {
       beta[partial] <- full[partial]
@@ -403,9 +419,9 @@
       if (length(trustPars)) draw[trustPars] <- one$trust
       targets <- rbind(targets, draw)
       n <- k - burnEnd
-      if (n >= 2L * window && n %% 10L == 0L)
-        mcGap <- .monteCarloGap(info, completeInformation(),
-                                .batchMeansCov(targets[-seq_len(window), , drop = FALSE]))
+      Ic <- if (n >= 2L * window && n %% 10L == 0L) tryCatch(completeInformation(), error = function(e) NULL)
+      if (!is.null(Ic))
+        mcGap <- .monteCarloGap(info, Ic, .batchMeansCov(targets[-seq_len(window), , drop = FALSE]))
     }
     rows[[k]] <- data.frame(iter = k, phase = if (is.na(burnEnd) || k <= burnEnd) "burnin" else "averaging",
                             gamma = gamma, deltaPsi = max(abs(psi - prev)),
@@ -507,7 +523,8 @@
     hyp <- .stemHypers(sl, c(hyper, fixed))
     accept <- NA_real_
     if (K) {
-      rw <- .metropolisGroups(function(e) density(full, e, Oinv, logDet), eta, density(full, eta, Oinv, logDet),
+      rw <- .metropolisGroups(function(e) density(full, e, Oinv, logDet), eta,
+                              tryCatch(density(full, eta, Oinv, logDet), error = function(e) rep(Inf, nrow(eta))),
                               nMcmc, step = step)
       eta <- rw$eta
       accept <- mean(rw$accept)
@@ -558,12 +575,15 @@
       if (cn %in% hypers)
         hyper[[cn]] <- bound(.ewensConcentration(stats["free", j], rep(G, length(b$stems))), hyper[[cn]])
     }
+    # where the complete-data objective fails at the draws, the structural parameters keep their values
     if (length(structural) && burnin) {
-      cm <- .innerTrust(modifyList(cm1, list(objfun = cm1Objective, parinit = full[structural])))
-      full[structural] <- cm$argument
+      cm <- tryCatch(.innerTrust(modifyList(cm1, list(objfun = cm1Objective, parinit = full[structural]))),
+                     error = function(e) NULL)
+      if (!is.null(cm)) full[structural] <- cm$argument
     }
-    if (length(structural) && !burnin) {
-      model <- .averageQuadratic(if (gamma < 1) model, cm1Objective(full[structural]), full[structural], gamma)
+    out <- if (length(structural) && !burnin) tryCatch(cm1Objective(full[structural]), error = function(e) NULL)
+    if (!is.null(out)) {
+      model <- .averageQuadratic(if (gamma < 1) model, out, full[structural], gamma)
       full[structural] <- .quadraticStep(model, full[structural])
     }
     prev <- if (nrow(history)) history[nrow(history), ] else psiOf()

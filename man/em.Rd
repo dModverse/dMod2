@@ -29,7 +29,9 @@ start at 0); it may set those and the hyperparameters \verb{omega_*} (log
 standard deviations and Cholesky entries) and, named
 \verb{<kind>_<grouping>} and numbered \verb{_1}, \verb{_2}, ... when a grouping has
 several such blocks, \verb{lambda_*} (Laplace), \verb{prob_*} and \verb{tau_*}
-(spike and slab), \verb{concentration_*} and \verb{tau_*} (Dirichlet process).}
+(spike and slab), \verb{concentration_*} and \verb{tau_*} (Dirichlet process).
+An \code{em} fit as \code{init} gives its estimates as the start and its \code{fixed}
+values, and its random effects without those it set to 0 at the boundary.}
 
 \item{fixed}{Named numeric of parameters held fixed.}
 
@@ -38,17 +40,18 @@ several such blocks, \verb{lambda_*} (Laplace), \verb{prob_*} and \verb{tau_*}
 
 \item{control}{List of options: \code{sd} (start of the random-effect standard
 deviations, default 0.3), \code{innerControl} and \code{trustControl} (the inner
-and outer trust region of FOCEI; the outer one stops where the predicted
-change of -2 log L is below \code{mtol}, default 1e-5), \code{secondOrderCorrection} (default
+and outer trust region of FOCEI; the inner one stops where the Newton
+step of the random effects is below \code{steptol}, default 1e-8, the outer one
+where the predicted change of -2 log L is below \code{mtol}, default 1e-5), \code{secondOrderCorrection} (default
 \code{TRUE}), \code{derivMode}, how FOCEI gets the second derivatives of its
 volume term: \code{"forward-reverse"} (default), directional sweeps forward
 along the random effects and backward with seeds, for models built with
 \code{derivMode = c("forward", "reverse", "forward-reverse")}: the outer model
-Hessian Gauss-Newton with the volume curvature of the variance parameters;
+Hessian Gauss-Newton, the volume curvature learned by the SR1 correction;
 the reported Hessian forward over forward where
 the model also has \code{deriv2}, else the exact Schur complement of the joint
-Hessian (up to 500 parameters) with that volume curvature, exact for
-models linear in the random effects; or \code{"forward-forward"}, the
+Hessian (up to 500 parameters) with the volume curvature of the variance
+parameters, exact for models linear in the random effects; or \code{"forward-forward"}, the
 second-order sensitivities of models built with \code{deriv2 = TRUE}, with the
 exact volume Hessian. In both modes an SR1 correction from the changes of
 the outer gradient between the last three accepted points adds the curvature
@@ -62,10 +65,17 @@ effects, whose parameters and hyperparameters move in one trust region:
 \code{maxOuter} (default 200), its iterations; \code{trustControl}, its \code{\link[=trust]{trust()}}
 settings; \code{coupling}, \code{"expectationConsistent"} (default) or
 \code{"meanField"}, the integral where the data couple sparse random effects
-of one group that the priors keep apart. Where expectation consistent
-does not converge at a point, the fit continues by mean field and tries
-expectation consistent again from that optimum; \code{fit$coupling} names the
-integral of the result. Other entries are an error.}
+of one group that the priors keep apart. The coupling holds for the
+whole fit: where expectation consistent does not converge at the start,
+the fit is by mean field, and \code{fit$coupling} is \code{"meanFieldFallback"}; a
+trial point at which it does not converge is a failed evaluation of the
+trust region. \code{boundary}, the largest rise of -2 log L at which a
+variance is set to 0, default 0.1, \code{FALSE} for none: with one grouping
+and several blocks, a normal random effect of its own block whose
+standard deviation ends below 0.1 is dropped, its etas fixed at 0, and
+the other parameters are fitted again from the estimates; where that
+raises -2 log L by at most \code{boundary}, the fit without it is returned and
+names its hyperparameter in \code{boundary}. Other entries are an error.}
 
 \item{cores}{Number of cores over the groups and conditions inside the
 fit; with 1 (default) no threads are started.}
@@ -97,7 +107,8 @@ the posterior probability of a deviation of 0), \code{strengths} and \code{slab}
 Dirichlet-process blocks), \code{valueSE} (the standard error of \code{value} when
 it comes from importance sampling), \code{coupling} (where the data couple
 sparse random effects: \code{"expectationConsistent"}, \code{"meanField"} or
-\code{"meanFieldFallback"}), \code{etaModes}, \code{etaSE}, \code{shrinkage} and
+\code{"meanFieldFallback"}), \code{boundary} (the hyperparameters of the random
+effects set to 0, see \code{control}), \code{etaModes}, \code{etaSE}, \code{shrinkage} and
 the design; with method \code{"quadrature"} also \code{certificate}, per group its
 level, -2 log L by quadrature and by importance sampling with standard
 error, the Pareto shape of the weights, the estimated error of its level
@@ -180,7 +191,11 @@ effects of a group; level \code{K + s} integrates polynomials of total
 degree \verb{2 s + 1} exactly.}
 \item{\code{maxLevel}}{highest level, default \code{K + 8}.}
 \item{\code{tolDecrement}}{a stage ends when a Newton step on the rebuilt
-nodes would lower -2 log L by less, default 1e-4.}
+nodes would lower -2 log L by less than \code{tolDecrement}, default 1e-4,
+or than the nodes resolve, the change of -2 log L by the next level
+summed over the groups; or by less than the last step raised it on
+rebuilt nodes of the same levels, at its iterate of lowest -2 log L.
+Each counts as converged.}
 \item{\code{maxEcmPerStage}, \code{cm1Control}, \code{maxCm1Iter}}{rebuilds per stage
 (default 10), \code{\link[=trust]{trust()}} settings and iterations of a step (default 30).}
 \item{\code{pruneTol}}{nodes whose weight lies this much in log below the
@@ -240,6 +255,15 @@ fit$omega
 head(fit$random)
 head(residuals(fit, type = "CWRES"))
 confint(fit, parm = "Cl", method = "profile")
+
+## diagnostics: residuals, NPDE from simulations, a visual predictive check, the random
+## effects against the body weight of the subjects
+npde <- residuals(fit, type = "NPDE", nsim = 200, seed = 1)
+attr(npde, "tests")
+plotResiduals(fit, nsim = 200, seed = 1)
+plotVPC(fit, nsim = 100, bins = 6, seed = 1)
+weight <- tapply(Theoph$Wt, Theoph$Subject, `[`, 1)[subjects]
+plotRandomEffects(fit, covariates = data.frame(weight = weight, row.names = subjects))
 
 ## four starts
 best <- msem(obj, randomEffects(p), init = c(Ka = 0, V = 3, Cl = 0.7, sigma_add = log(0.5)),

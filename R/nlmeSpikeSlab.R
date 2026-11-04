@@ -1,6 +1,6 @@
 # Spike-and-slab random effects, each 0 or from N(0, tau^2) with probability prob, and
 # Dirichlet-process random effects, a partition of the groups under the Ewens prior with one
-# N(0, tau^2) value per block but that of the population value; vignette("NLME") derives both.
+# N(0, tau^2) value per block but that of the population value; the guide chapter Group-specific effects derives both.
 
 
 ## The integral of a cluster symbol on the expansion (a, m) of its groups: the exact sum over all
@@ -12,13 +12,16 @@
     list(stats = c(r$free, length(a), r$slab2)))
 }
 
+## The largest number of spike-and-slab coordinates of a group integrated jointly, 2^K subsets.
+.slabJoint <- 12L
+
 ## The integral of the spike-and-slab coordinates of a group on their full curvature, a sum over
 ## the subsets F of slab coordinates of closed-form Gaussian integrals at eta = 0 off F; Fisher
 ## derivatives, posterior moments and the most probable subset.
 .slabSubsets <- function(P, m, prob, tau) {
   K <- length(m)
-  if (K > 12L)
-    stop("em: at most 12 spike-and-slab random effects per group.", call. = FALSE)
+  if (K > .slabJoint)
+    stop(sprintf("em: at most %d spike-and-slab coordinates integrated jointly.", .slabJoint), call. = FALSE)
   b <- drop(P %*% m); c0 <- sum(m * b)
   subsets <- unname(as.matrix(expand.grid(rep(list(c(FALSE, TRUE)), K))))
   n <- nrow(subsets)

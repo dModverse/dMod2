@@ -1,6 +1,6 @@
 # Laplace random effects with density lambda / 2 exp(-lambda |eta|) per coordinate and
 # spike-and-slab ones, normal ones beside them; marginal, exact gradient and M-steps as derived
-# in vignette("NLME").
+# in the guide chapter Group-specific effects.
 
 
 ## ---- normal-Laplace integral -------------------------------------------------
@@ -95,9 +95,14 @@
 ## One data objective per condition, so that the groups evaluate in one batch.
 .conditionObjectives <- function(design) {
   grid <- attr(design$objfn, "timesD", exact = TRUE)
-  lapply(setNames(nm = names(design$data)), function(cn)
-    .normL2Objective(design$data[cn], design$prdfn, design$errfn,
-                     if (is.list(grid)) grid[cn] else grid, "data", design$bloq, NULL, design$df))
+  # the objective over all conditions, which .objEvalMany() calls once for many of them
+  whole <- .normL2Objective(design$data, design$prdfn, design$errfn, grid, "data", design$bloq, NULL, design$df)
+  lapply(setNames(nm = names(design$data)), function(cn) {
+    o <- .normL2Objective(design$data[cn], design$prdfn, design$errfn,
+                          if (is.list(grid)) grid[cn] else grid, "data", design$bloq, NULL, design$df)
+    attr(o, "whole") <- whole
+    o
+  })
 }
 
 ## The terms of the objective of `design` besides its data, such as priors and constraints; NULL
@@ -270,10 +275,12 @@
 }
 
 ## The factors of the sparse coordinates: every Laplace and Dirichlet-process stem alone, the
-## spike-and-slab stems of a group jointly; `coupled` when the data precision links two of them.
+## spike-and-slab stems of a group jointly up to .slabJoint of them, beyond that each alone;
+## `coupled` when the data precision links two factors.
 .sparseFactors <- function(P, stems, lay) {
   r <- match(stems, lay$stem)
   joint <- which(lay$dist[r] == "spikeSlab")
+  if (length(joint) > .slabJoint) joint <- integer(0)
   factors <- c(as.list(setdiff(seq_along(stems), joint)), if (length(joint)) list(joint))
   owner <- integer(length(stems))
   for (j in seq_along(factors)) owner[factors[[j]]] <- j
@@ -290,18 +297,9 @@
   G <- nrow(m); K <- ncol(m); stems <- colnames(m)
   sf <- .sparseFactors(P, stems, lay)
   Pm <- matrix(vapply(seq_len(G), function(i) drop(P[[i]] %*% m[i, ]), numeric(K)), G, K, byrow = TRUE)
-  cavity <- function(Lam, gam) {
-    tt <- nn <- mu <- matrix(0, G, K, dimnames = dimnames(m))
-    cov <- vector("list", G)
-    for (i in seq_len(G)) {
-      V <- solve(P[[i]] + diag(Lam[i, ], K))
-      mu[i, ] <- drop(V %*% (Pm[i, ] + gam[i, ]))
-      tt[i, ] <- 1 / diag(V) - Lam[i, ]
-      nn[i, ] <- (mu[i, ] / diag(V) - gam[i, ]) / tt[i, ]
-      cov[[i]] <- structure(V, dimnames = list(stems, stems))
-    }
-    list(t = tt, n = nn, mu = mu, cov = cov)
-  }
+  Pd <- lapply(P, function(Pi) { Pi <- as.matrix(Pi); storage.mode(Pi) <- "double"; Pi })
+  storage.mode(Pm) <- "double"
+  cavity <- function(Lam, gam) ec_cavity(Pd, Lam, gam, Pm, stems, dimnames(m))
   integrate <- function(f, cv) .factorIntegral(f, lapply(seq_len(G), function(i) diag(cv$t[i, ], K)),
                                                cv$n[, f, drop = FALSE], lay[sf$rows[f], , drop = FALSE], hyp)
   Lam <- gam <- matrix(0, G, K, dimnames = dimnames(m))
@@ -363,19 +361,13 @@
 }
 
 ## The sparse integral: exact where the factors are not coupled, otherwise by expectation
-## consistent or mean field as `coupling` says, mean field flagged where expectation consistent
-## fails, NULL there without `fallback`. Expectation consistent starts from the sites `sites` where
-## given, otherwise from zero.
-.sparseIntegral <- function(P, m, start, lay, hyp, hypers, coupling = "expectationConsistent", sites = NULL,
-                            fallback = TRUE) {
+## consistent or mean field as `coupling` says; NULL where expectation consistent does not
+## converge. Expectation consistent starts from the sites `sites` where given, otherwise from zero.
+.sparseIntegral <- function(P, m, start, lay, hyp, hypers, coupling = "expectationConsistent", sites = NULL) {
   if (identical(coupling, "expectationConsistent") && .sparseFactors(P, colnames(m), lay)$coupled) {
     ec <- if (!is.null(sites)) .sparseExpectation(P, m, lay, hyp, hypers, start = sites)
     if (is.null(ec)) ec <- .sparseExpectation(P, m, lay, hyp, hypers)
-    if (!is.null(ec)) return(ec)
-    if (!fallback) return(NULL)
-    mf <- .sparseMeanField(P, m, start, lay, hyp, hypers)
-    mf$coupling <- "meanFieldFallback"
-    return(mf)
+    return(ec)
   }
   .sparseMeanField(P, m, start, lay, hyp, hypers)
 }
@@ -498,8 +490,7 @@
   sp <- if (identical(control$integral, "importance"))
     .importanceField(lapply(S, `/`, 2), modes[, iL, drop = FALSE] - u, lay, hyp, hypers, control$particles %||% 500L)
   else .sparseIntegral(lapply(S, `/`, 2), modes[, iL, drop = FALSE] - u, modes[, iL, drop = FALSE],
-                       lay, hyp, hypers, control$coupling %||% "expectationConsistent", control$sites,
-                       fallback = !isFALSE(control$fallback))
+                       lay, hyp, hypers, control$coupling %||% "expectationConsistent", control$sites)
   if (is.null(sp)) return(list(infeasible = TRUE))
   value <- sum(vapply(at, `[[`, 0, "value")) + (pr$value %||% 0) + volume - sum(gL * u) / 2 - 2 * sp$logI +
     sum(vapply(free, `[[`, 0, "value"))
@@ -770,26 +761,19 @@
     out[at] <- out[at] + drop(shift[, q, drop = FALSE] %*% (p[q] - warmAt[q]))
     out
   }
-  # coupled sparse random effects by expectation consistent until it fails at a point; that trust
-  # run is abandoned (every later evaluation fails, since trust() catches errors) and starts again
-  # by mean field; from the optimum of that, expectation consistent again, where a trial point at
-  # which it fails is infeasible
+  # one coupling of the sparse random effects for the whole fit, so that the objective is one
+  # function: expectation consistent where it converges at the start, mean field otherwise; a trial
+  # point at which expectation consistent does not converge is a failed evaluation
   requested <- match.arg(lc$coupling %||% "expectationConsistent", c("expectationConsistent", "meanField"))
   coupling <- requested
   sites <- NULL
-  switched <- FALSE
-  polishing <- FALSE
-  abandoned <- FALSE
   # every evaluation starts from the modes and sites of the last accepted point, so that the
   # objective near it does not depend on the trials before
   marginal <- function(p, grad = TRUE, commit = TRUE, scores = FALSE) {
     r <- .laplaceMarginal(design, objs, prior, c(p, fixed), .stemHypers(lay, c(hyper, fixed)), names(p),
                           hypers, fixed, predicted(p), grad = grad, scores = scores,
-                          control = modifyList(lc, list(coupling = coupling, sites = sites, fallback = !polishing)))
+                          control = modifyList(lc, list(coupling = coupling, sites = sites)))
     if (isTRUE(r$infeasible)) return(r)
-    if (identical(r$coupling, "meanFieldFallback")) {
-      coupling <<- "meanField"; switched <<- TRUE; r$switched <- TRUE
-    }
     if (commit) accept(p, r)
     r
   }
@@ -799,6 +783,8 @@
     if (!is.null(r$modeShift)) shift <<- r$modeShift
     if (!is.null(r$sites)) sites <<- r$sites
   }
+  fellBack <- identical(coupling, "expectationConsistent") && isTRUE(marginal(par, grad = FALSE)$infeasible)
+  if (fellBack) coupling <- "meanField"
   rows <- list()
   record <- function(phase, value, dpar)
     rows[[length(rows) + 1L]] <<- data.frame(iter = length(rows) + 1L, phase = phase, OFV = value,
@@ -810,12 +796,10 @@
   # M-step, plus a BFGS correction from the points that lowered the value
   best <- Inf; bestAt <- bestGrad <- correction <- NULL
   jointObjective <- function(x, ...) {
-    if (abandoned) return(.failedEvaluation(x))
     p <- x[names(par)]
     hyper <<- .hyperFromFree(kind, x[hypers])
     r <- marginal(p, commit = FALSE)
     if (isTRUE(r$infeasible)) return(.failedEvaluation(x))
-    if (isTRUE(r$switched)) { abandoned <<- TRUE; return(.failedEvaluation(x)) }
     n <- names(x)
     base <- matrix(0, length(n), length(n), dimnames = list(n, n))
     base[names(p), names(p)] <- r$hessian[names(p), names(p)]
@@ -833,16 +817,15 @@
     }
     objlist(value = r$value, gradient = g, hessian = base + correction)
   }
-  # one run of the trust region from the current point: the trust result, "switched" when the
-  # coupling turned to mean field during it, NULL with a warning on an error
+  # one run of the trust region from the current point: the trust result, NULL with a warning on
+  # an error
   jointRun <- function(rinit = jointControl$rinit) {
     x0 <- c(par, .hyperToFree(kind, hyper))
     best <<- Inf; bestAt <<- bestGrad <<- correction <<- NULL
-    abandoned <<- FALSE
     jt <- tryCatch(.innerTrust(modifyList(jointControl, list(objfun = jointObjective, parinit = x0, rinit = rinit,
                                                              iterlim = max(maxOuter - steps(), 1L)))),
                    error = function(e) {
-                     if (!abandoned) warning("em: the trust region stopped: ", conditionMessage(e), call. = FALSE)
+                     warning("em: the trust region stopped: ", conditionMessage(e), call. = FALSE)
                      NULL
                    })
     hyper <<- .hyperFromFree(kind, x0[hypers])
@@ -850,7 +833,7 @@
       par <<- jt$argument[names(par)]
       hyper <<- .hyperFromFree(kind, jt$argument[hypers])
     }
-    if (abandoned) "switched" else jt
+    jt
   }
 
   # a run that stops short starts again with a fresh correction while the runs lower -2 log L
@@ -860,29 +843,21 @@
   mtol <- jointControl$tolControl$mtol %||% 1e-5
   while (estimated && steps() < maxOuter) {
     jt <- jointRun()
-    if (identical(jt, "switched")) next
     if (is.null(jt)) { conv <- FALSE; break }
     conv <- isTRUE(jt$converged)
     if (conv || !(jt$value < last - mtol)) break
     last <- jt$value
   }
-  # after a fall back to mean field, expectation consistent from its optimum; kept if it converges
-  if (switched && conv && estimated) {
-    saved <- list(par = par, hyper = hyper, warm = warm, warmAt = warmAt, shift = shift)
-    coupling <- requested; sites <- NULL; switched <- FALSE; polishing <- TRUE
-    jt <- if (!isTRUE(marginal(par, grad = FALSE)$infeasible)) jointRun(rinit = 0.1)
-    polishing <- FALSE
-    if (!(is.list(jt) && isTRUE(jt$converged) && !switched)) {
-      par <- saved$par; hyper <- saved$hyper; warm <- saved$warm; warmAt <- saved$warmAt; shift <- saved$shift
-      coupling <- "meanField"; switched <- TRUE
-    }
-  }
   final <- marginal(par, scores = TRUE)
-  coupled <- if (!is.null(final$coupling)) if (switched) "meanFieldFallback" else final$coupling
+  if (isTRUE(final$infeasible) || !is.finite(final$value %||% NA_real_))
+    stop("em: the integral over the sparse random effects is not finite at the last point of the ",
+         "fit; a start nearer the optimum, or another coupling in control$laplace, may avoid it.",
+         call. = FALSE)
+  coupled <- if (!is.null(final$coupling)) if (fellBack) "meanFieldFallback" else final$coupling
   # the model Hessian approximates the curvature of the integral by Gauss-Newton, so the fit has none; with
   # independent groups the empirical information is G / (G - 1) times the sum of the outer products
   # of their centred scores of log L, the conditions without random effects add half their Hessian
-  information <- if (!anyNA(final$scores)) {
+  information <- if (!is.null(final$scores) && !anyNA(final$scores)) {
     G <- nrow(final$scores)
     centred <- sweep(final$scores, 2, colMeans(final$scores)) / 2
     I <- if (G > 1L) G / (G - 1) * crossprod(centred) else 0 * crossprod(centred)

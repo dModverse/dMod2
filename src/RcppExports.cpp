@@ -106,6 +106,22 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// ec_cavity
+List ec_cavity(List P, NumericMatrix Lam, NumericMatrix gam, NumericMatrix Pm, CharacterVector stems, List dimnames);
+RcppExport SEXP _dMod2_ec_cavity(SEXP PSEXP, SEXP LamSEXP, SEXP gamSEXP, SEXP PmSEXP, SEXP stemsSEXP, SEXP dimnamesSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< List >::type P(PSEXP);
+    Rcpp::traits::input_parameter< NumericMatrix >::type Lam(LamSEXP);
+    Rcpp::traits::input_parameter< NumericMatrix >::type gam(gamSEXP);
+    Rcpp::traits::input_parameter< NumericMatrix >::type Pm(PmSEXP);
+    Rcpp::traits::input_parameter< CharacterVector >::type stems(stemsSEXP);
+    Rcpp::traits::input_parameter< List >::type dimnames(dimnamesSEXP);
+    rcpp_result_gen = Rcpp::wrap(ec_cavity(P, Lam, gam, Pm, stems, dimnames));
+    return rcpp_result_gen;
+END_RCPP
+}
 // chain_params
 SEXP chain_params(List plan, List values, bool deriv, bool deriv2, int threads, SEXP tangents);
 RcppExport SEXP _dMod2_chain_params(SEXP planSEXP, SEXP valuesSEXP, SEXP derivSEXP, SEXP deriv2SEXP, SEXP threadsSEXP, SEXP tangentsSEXP) {
@@ -651,6 +667,20 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// focei_units_lockstep
+List focei_units_lockstep(Function data_cb, List warm, List P, List control);
+RcppExport SEXP _dMod2_focei_units_lockstep(SEXP data_cbSEXP, SEXP warmSEXP, SEXP PSEXP, SEXP controlSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Function >::type data_cb(data_cbSEXP);
+    Rcpp::traits::input_parameter< List >::type warm(warmSEXP);
+    Rcpp::traits::input_parameter< List >::type P(PSEXP);
+    Rcpp::traits::input_parameter< List >::type control(controlSEXP);
+    rcpp_result_gen = Rcpp::wrap(focei_units_lockstep(data_cb, warm, P, control));
+    return rcpp_result_gen;
+END_RCPP
+}
 
 static const R_CallMethodDef CallEntries[] = {
     {"_dMod2_alignmentPredictors", (DL_FUNC) &_dMod2_alignmentPredictors, 4},
@@ -659,6 +689,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_dMod2_bmm_lb", (DL_FUNC) &_dMod2_bmm_lb, 6},
     {"_dMod2_bmm_rb", (DL_FUNC) &_dMod2_bmm_rb, 6},
     {"_dMod2_bmm_bb", (DL_FUNC) &_dMod2_bmm_bb, 6},
+    {"_dMod2_ec_cavity", (DL_FUNC) &_dMod2_ec_cavity, 6},
     {"_dMod2_chain_params", (DL_FUNC) &_dMod2_chain_params, 6},
     {"_dMod2_chain_data", (DL_FUNC) &_dMod2_chain_data, 11},
     {"_dMod2_chain_frames", (DL_FUNC) &_dMod2_chain_frames, 6},
@@ -690,6 +721,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_dMod2_trust_impl", (DL_FUNC) &_dMod2_trust_impl, 29},
     {"_dMod2_trust_step_impl", (DL_FUNC) &_dMod2_trust_step_impl, 8},
     {"_dMod2_qn_update_impl", (DL_FUNC) &_dMod2_qn_update_impl, 4},
+    {"_dMod2_focei_units_lockstep", (DL_FUNC) &_dMod2_focei_units_lockstep, 4},
     {NULL, NULL, 0}
 };
 

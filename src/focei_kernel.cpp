@@ -25,6 +25,7 @@
 
 #include "residual_kernel.h"
 #include "trust_subproblem.h"
+#include "trust_driver.h"
 
 using namespace Rcpp;
 
@@ -42,6 +43,39 @@ static double ctrl_tol(const List& ctrl, const char* key, const char* legacy,
 }
 
 
+// Whether a trial is accepted: by the ratio of the actual to the predicted decrease, and near the
+// modes, where a Newton step predicts less than 1e-6 of the value, also by a smaller gradient: the
+// solver's error in the value there exceeds what the step gains, the gradient is still measured.
+static bool accept_trial(double rho, bool is_newton, double predicted_red, double val, const std::vector<double>& grad,
+                         const std::vector<double>& grad_try) {
+  if (rho >= 0.25) return true;
+  if (!is_newton || predicted_red > 1e-6 * std::max(1.0, std::fabs(val))) return false;
+  double g0 = 0.0, g1 = 0.0;
+  for (std::size_t k = 0; k < grad.size(); ++k) { g0 += grad[k] * grad[k]; g1 += grad_try[k] * grad_try[k]; }
+  return g1 < g0;
+}
+
+// The modes are found where the Gauss-Newton step H^-1 g, on H and not on the secant model, is below
+// `steptol`, as the volume term is linear in their error; or where a step on the boundary gains less
+// than `mtol` of the value `val`, the region shrunk below the distance to the modes.
+static bool modes_found(int K, const std::vector<double>& grad, const std::vector<double>& eigvals,
+                        const std::vector<double>& eigvecs, double predicted_red, bool is_newton, double steptol,
+                        double mtol, double val) {
+  if (!is_newton) return std::fabs(predicted_red) <= mtol * std::max(1.0, std::fabs(val));
+  double tr = 0.0;
+  for (int k = 0; k < K; ++k) tr += std::fabs(eigvals[k]);
+  const double floor = 1e-10 * tr / std::max(K, 1);
+  double s2 = 0.0;
+  for (int k = 0; k < K; ++k) {
+    double c = 0.0;
+    for (int j = 0; j < K; ++j) c += eigvecs[j + (std::size_t) K * k] * grad[j];
+    const double step = c / std::max(eigvals[k], floor);
+    s2 += step * step;
+  }
+  return std::sqrt(s2) <= steptol;
+}
+
+
 static inline double vecs_at(const std::vector<double>& V, int K,
                              int row, int col) {
   return V[row + col * K];
@@ -50,7 +84,10 @@ static inline double vecs_at(const std::vector<double>& V, int K,
 
 // Thin wrappers over the Moré-Sorensen subproblem and eigendecomposition in
 // trust_subproblem.h, shared with trust_kernel.cpp and covering the hard case.
+// A Hessian that is not finite stops the evaluation: LAPACK does not return on NaN input.
 static inline void eigen_sym(double* A, int K, double* vals, double* vecs) {
+  for (std::size_t i = 0; i < (std::size_t) K * K; ++i)
+    if (!std::isfinite(A[i])) throw std::runtime_error("FOCEI: the Hessian is not finite.");
   dmod::trust_internal::eigen_sym_local(A, K, vals, vecs);
 }
 
@@ -159,9 +196,18 @@ struct EvalResult {
   std::vector<double> hess;  // K*K column-major
 };
 
-// The prediction and error-model frames of a subject, one per condition block.
+static inline bool all_finite(const EvalResult& e) {
+  if (!std::isfinite(e.value)) return false;
+  for (double v : e.grad) if (!std::isfinite(v)) return false;
+  for (double v : e.hess) if (!std::isfinite(v)) return false;
+  return true;
+}
+
+// The prediction and error-model frames of a subject, one per condition block;
+// `failed` where the prediction of one of its blocks failed.
 struct SubjectFrames {
   std::vector<NumericMatrix> pred, err;
+  bool failed = false;
 };
 
 // Split in two so the lock-step driver can batch the callbacks: this half
@@ -494,7 +540,7 @@ static InnerResult inner_trust_one_subject(
     double Omega_log_det,
     double rinit, double rmax,
     int    iterlim,
-    double ftol, double mtol,
+    double steptol, double mtol,
     double eigen_floor_relative) {
   const int K = eta_init.size();
 
@@ -520,11 +566,22 @@ static InnerResult inner_trust_one_subject(
     double predicted_red = 0.0;
     trust_subproblem(K, grad.data(), mvals.data(), mvecs.data(),
                      r, p_step.data(), &predicted_red, &is_newton);
+    if (modes_found(K, grad, eigvals, eigvecs, predicted_red, is_newton, steptol, mtol, val_curr)) {
+      converged = true;
+      break;
+    }
     for (int k = 0; k < K; ++k) eta_try[k] = eta_curr[k] + p_step[k];
 
     EvalResult ft = eval_one_subject(
         model_cb, err_cb, pars, fixed, meta_i,
         eta_try.data(), Omega_inv, Omega_log_det);
+    // a trial whose value or derivatives are not finite is rejected like one that does not decrease
+    if (!all_finite(ft)) {
+      r = shrunk_radius(r, p_step.data(), K);
+      std::fill(S.begin(), S.end(), 0.0);
+      model_eigen(K, hess, S, mvals, mvecs);
+      continue;
+    }
     double val_try = ft.value;
     std::vector<double> grad_try(ft.grad), hess_try(ft.hess);
     std::vector<double> eigvals_try(K), eigvecs_try(K * K);
@@ -535,19 +592,9 @@ static InnerResult inner_trust_one_subject(
                    ? actual_red / predicted_red
                    : -std::numeric_limits<double>::infinity();
 
-    bool is_terminate = std::isfinite(val_try) &&
-                        (std::fabs(actual_red)   < ftol ||
-                         std::fabs(predicted_red) < mtol);
-    bool accept;
-    if (is_terminate) {
-      accept = (val_try < val_curr);
-    } else if (rho < 0.25) {
-      accept = false;
-      r = shrunk_radius(r, p_step.data(), K);
-    } else {
-      accept = true;
-      if (rho > 0.75 && !is_newton) r = std::min(2.0 * r, rmax);
-    }
+    const bool accept = std::isfinite(val_try) && accept_trial(rho, is_newton, predicted_red, val_curr, grad, grad_try);
+    if (!accept) r = shrunk_radius(r, p_step.data(), K);
+    else if (rho > 0.75 && !is_newton) r = std::min(2.0 * r, rmax);
 
     if (accept) {
       secant_update(K, S, p_step, grad, grad_try, hess_try);
@@ -560,7 +607,6 @@ static InnerResult inner_trust_one_subject(
     } else {
       std::fill(S.begin(), S.end(), 0.0);
     }
-    if (is_terminate) { converged = true; break; }
     model_eigen(K, hess, S, mvals, mvecs);
   }
 
@@ -584,7 +630,7 @@ static List inner_trust_lockstep(
     List& subject_meta_fast, CharacterVector& subjects,
     const std::vector<double>& Omega_inv, double Omega_log_det,
     Nullable<NumericVector> fixed, int K, int N,
-    double rinit, double rmax, int iterlim, double ftol, double mtol,
+    double rinit, double rmax, int iterlim, double steptol, double mtol,
     double eflr) {
 
   struct LS {
@@ -632,8 +678,10 @@ static List inner_trust_lockstep(
     for (int j = 0; j < M; ++j) {
       const int nb = as<List>(as<List>(subject_meta_fast[idx[j]])["blocks"]).size();
       for (int b = 0; b < nb; ++b, ++q) {
-        frames[j].pred.push_back(as<NumericMatrix>(preds[q]));
-        frames[j].err.push_back(as<NumericMatrix>(errs[q]));
+        SEXP pq = preds[q], eq = errs[q];
+        if (TYPEOF(pq) != REALSXP || TYPEOF(eq) != REALSXP) { frames[j].failed = true; continue; }
+        frames[j].pred.push_back(as<NumericMatrix>(pq));
+        frames[j].err.push_back(as<NumericMatrix>(eq));
       }
     }
     return frames;
@@ -654,6 +702,8 @@ static List inner_trust_lockstep(
     for (int i = 0; i < N; ++i) { idx[i] = i; etas[i] = st[i].eta.data(); }
     std::vector<SubjectFrames> frames = run_round(idx, etas);
     for (int i = 0; i < N; ++i) {
+      if (frames[i].failed)
+        Rcpp::stop("FOCEI: the prediction fails at the modes the inner search starts from.");
       List meta_i = as<List>(subject_meta_fast[i]);
       EvalResult fr = eval_one_subject_from(frames[i], st[i].pars, meta_i,
                                             st[i].eta.data(), Omega_inv.data(),
@@ -675,6 +725,10 @@ static List inner_trust_lockstep(
       trust_subproblem(K, st[i].grad.data(), st[i].mvals.data(),
                        st[i].mvecs.data(), st[i].r, st[i].p_step.data(),
                        &st[i].predicted_red, &st[i].is_newton);
+      if (modes_found(K, st[i].grad, st[i].eigvals, st[i].eigvecs, st[i].predicted_red, st[i].is_newton, steptol,
+                      mtol, st[i].val)) {
+        st[i].converged = true; st[i].done = true; continue;
+      }
       for (int k = 0; k < K; ++k) st[i].eta_try[k] = st[i].eta[k] + st[i].p_step[k];
       idx.push_back(i);
       etas.push_back(st[i].eta_try.data());
@@ -685,10 +739,19 @@ static List inner_trust_lockstep(
 
     for (size_t j = 0; j < idx.size(); ++j) {
       const int i = idx[j];
+      // a trial where the prediction fails, or whose value or derivatives are not finite, is
+      // rejected like one that does not decrease
+      auto reject = [&]() {
+        st[i].r = shrunk_radius(st[i].r, st[i].p_step.data(), K);
+        std::fill(st[i].S.begin(), st[i].S.end(), 0.0);
+        model_eigen(K, st[i].hess, st[i].S, st[i].mvals, st[i].mvecs);
+      };
+      if (frames[j].failed) { reject(); continue; }
       List meta_i = as<List>(subject_meta_fast[i]);
       EvalResult ft = eval_one_subject_from(frames[j], st[i].pars, meta_i,
                                             st[i].eta_try.data(),
                                             Omega_inv.data(), Omega_log_det);
+      if (!all_finite(ft)) { reject(); continue; }
       std::vector<double> eigvals_try(K), eigvecs_try((size_t)K * K);
       eigen_sym(ft.hess.data(), K, eigvals_try.data(), eigvecs_try.data());
 
@@ -696,18 +759,10 @@ static List inner_trust_lockstep(
       const double rho = (st[i].predicted_red > 0.0 && std::isfinite(ft.value))
                            ? actual_red / st[i].predicted_red
                            : -std::numeric_limits<double>::infinity();
-      const bool is_terminate = std::isfinite(ft.value) &&
-                                (std::fabs(actual_red) < ftol ||
-                                 std::fabs(st[i].predicted_red) < mtol);
-      bool accept;
-      if (is_terminate) {
-        accept = (ft.value < st[i].val);
-      } else if (rho < 0.25) {
-        accept = false; st[i].r = shrunk_radius(st[i].r, st[i].p_step.data(), K);
-      } else {
-        accept = true;
-        if (rho > 0.75 && !st[i].is_newton) st[i].r = std::min(2.0 * st[i].r, rmax);
-      }
+      const bool accept = std::isfinite(ft.value) &&
+                          accept_trial(rho, st[i].is_newton, st[i].predicted_red, st[i].val, st[i].grad, ft.grad);
+      if (!accept) st[i].r = shrunk_radius(st[i].r, st[i].p_step.data(), K);
+      else if (rho > 0.75 && !st[i].is_newton) st[i].r = std::min(2.0 * st[i].r, rmax);
       if (accept) {
         secant_update(K, st[i].S, st[i].p_step, st[i].grad, ft.grad, ft.hess);
         st[i].eta = st[i].eta_try; st[i].val = ft.value;
@@ -716,7 +771,6 @@ static List inner_trust_lockstep(
       } else {
         std::fill(st[i].S.begin(), st[i].S.end(), 0.0);
       }
-      if (is_terminate) { st[i].converged = true; st[i].done = true; continue; }
       model_eigen(K, st[i].hess, st[i].S, st[i].mvals, st[i].mvecs);
     }
   }
@@ -805,8 +859,8 @@ List focei_inner_trust(Function model_cb,
                      as<double>(control["rmax"]) : 10.0;
   int    iterlim = control.containsElementNamed("iterlim") ?
                      as<int>(control["iterlim"]) : 30;
-  double ftol    = ctrl_tol(control, "ftol", "fterm", 1e-7);
-  double mtol    = ctrl_tol(control, "mtol", "mterm", 1e-7);
+  double steptol = ctrl_tol(control, "steptol", "steptol", 1e-8);
+  double mtol    = ctrl_tol(control, "mtol", "mterm", 1e-12);
   double eflr    = control.containsElementNamed("eigen_floor_relative") ?
                      as<double>(control["eigen_floor_relative"]) : 1e-10;
 
@@ -814,7 +868,7 @@ List focei_inner_trust(Function model_cb,
     Function pcb(predict_cb);
     return inner_trust_lockstep(pcb, pars_full, eta_warmstart, subject_meta_fast,
                                 subjects, Omega_inv, Omega_log_det, fixed, K, N,
-                                rinit, rmax, iterlim, ftol, mtol, eflr);
+                                rinit, rmax, iterlim, steptol, mtol, eflr);
   }
 
   // Other subjects' etas stay at their warmstart: working copy per subject.
@@ -842,7 +896,7 @@ List focei_inner_trust(Function model_cb,
     InnerResult r = inner_trust_one_subject(
         model_cb, err_cb, working_pars, fixed, meta_i, eta_init,
         Omega_inv.data(), Omega_log_det,
-        rinit, rmax, iterlim, ftol, mtol, eflr);
+        rinit, rmax, iterlim, steptol, mtol, eflr);
 
     for (int k = 0; k < K; ++k) {
       eta_modes  (i, k) = r.eta[k];
@@ -925,17 +979,22 @@ static List add_correction(Function& correction_cb, const CharacterVector& outer
 }
 
 // Moves the modes in `eta` (N x K) to first order along the step: eta += S_i step.
-static void shift_modes(NumericMatrix& eta, const List& shift, const std::vector<double>& step) {
+// Only a subject whose move stays within `radius`, the region the inner search starts with; one that
+// would move farther, as where H_ee is near singular, keeps its modes.
+static void shift_modes(NumericMatrix& eta, const List& shift, const std::vector<double>& step, double radius) {
   const int N = eta.nrow(), K = eta.ncol(), n = step.size();
   if (shift.size() != N) return;
+  std::vector<double> d(K);
   for (int i = 0; i < N; ++i) {
     NumericMatrix S = as<NumericMatrix>(shift[i]);
     if (S.nrow() != K || S.ncol() != n) continue;
+    double norm2 = 0.0;
     for (int k = 0; k < K; ++k) {
-      double d = 0.0;
-      for (int j = 0; j < n; ++j) d += S(k, j) * step[j];
-      eta(i, k) += d;
+      d[k] = 0.0;
+      for (int j = 0; j < n; ++j) d[k] += S(k, j) * step[j];
+      norm2 += d[k] * d[k];
     }
+    if (std::isfinite(norm2) && std::sqrt(norm2) <= radius) for (int k = 0; k < K; ++k) eta(i, k) += d[k];
   }
 }
 
@@ -1066,8 +1125,8 @@ List focei_outer_objfn(Function model_cb,
                     tmp.data(),  &n_outer,
                     H_oi.data(), &n_outer,
                     &one, Hess_col.data(), &n_outer FCONE FCONE);
-    // the gradient at the exact modes to first order: the inner trust stops on the value, so
-    // the eta gradient g_i left over enters through the coupling, grad -= H_oi H_i^-1 g_i
+    // the gradient at the exact modes to first order: the eta gradient g_i the inner search leaves
+    // enters through the coupling, grad -= H_oi H_i^-1 g_i
     for (int r = 0; r < n_outer; ++r) {
       double d = 0.0;
       for (int k = 0; k < K; ++k) d += tmp[r + k * n_outer] * grad_full[eta_idx_grad[i][k]];
@@ -1177,6 +1236,7 @@ List focei_run(Function model_cb,
 
   List inner_ctrl = control.containsElementNamed("inner") ?
                       as<List>(control["inner"]) : List();
+  const double inner_rinit = inner_ctrl.containsElementNamed("rinit") ? as<double>(inner_ctrl["rinit"]) : 1.0;
   List outer_ctrl = control.containsElementNamed("outer") ?
                       as<List>(control["outer"]) : List();
   double rinit   = outer_ctrl.containsElementNamed("rinit") ?
@@ -1207,12 +1267,13 @@ List focei_run(Function model_cb,
   double       f_curr = as<double>(out_curr["value"]);
   NumericVector g_curr = as<NumericVector>(out_curr["gradient"]);
   NumericMatrix H_curr = as<NumericMatrix>(out_curr["hessian"]);
-  eta_warm = as<NumericMatrix>(out_curr["eta_modes"]);
+  // a copy: shift_modes() moves the warm start in place, the modes of the evaluation stay
+  eta_warm = clone(as<NumericMatrix>(out_curr["eta_modes"]));
   List shift_curr = as<List>(out_curr["eta_shift"]);
 
   double r = rinit;
   bool   converged = false;
-  int    iter = 0;
+  int    iter = 0, n_stall = 0;
   NumericVector theta_try(n_outer);
   theta_try.attr("names") = outer_names;
   std::vector<double> p_step(n_outer);
@@ -1236,11 +1297,20 @@ List focei_run(Function model_cb,
     double predicted_red = 0.0;
     trust_subproblem(n_outer, g_vec.data(), vals.data(), vecs.data(),
                      r, p_step.data(), &predicted_red, &is_newton);
+    // what the model can gain at all, in the largest region the fit allows: a region that rejections
+    // shrank makes the step's own prediction small without the fit being near its optimum
+    double reachable = predicted_red;
+    if (r < rmax) {
+      std::vector<double> p_max(n_outer);
+      bool newton_max = false;
+      trust_subproblem(n_outer, g_vec.data(), vals.data(), vecs.data(), rmax, p_max.data(), &reachable,
+                       &newton_max);
+    }
 
     for (int j = 0; j < n_outer; ++j) theta_try[j] = theta[j] + p_step[j];
 
     NumericMatrix eta_warm_saved(clone(eta_warm));
-    shift_modes(eta_warm, shift_curr, p_step);
+    shift_modes(eta_warm, shift_curr, p_step, inner_rinit);
     List out_try;
     double f_try = std::numeric_limits<double>::infinity();
     bool eval_ok = true;
@@ -1254,9 +1324,8 @@ List focei_run(Function model_cb,
                    ? actual_red / predicted_red
                    : -std::numeric_limits<double>::infinity();
 
-    bool is_terminate = std::isfinite(f_try) &&
-                        (std::fabs(actual_red) < ftol ||
-                         std::fabs(predicted_red) < mtol);
+    bool is_terminate = std::isfinite(f_try) && std::fabs(reachable) < mtol &&
+                        (std::fabs(actual_red) < ftol || std::fabs(predicted_red) < mtol);
     bool accept;
     if (is_terminate) {
       accept = (f_try < f_curr);
@@ -1292,7 +1361,7 @@ List focei_run(Function model_cb,
       g_curr = g_try;
       H_curr = H_try;
       shift_curr = shift_try;
-      eta_warm = as<NumericMatrix>(out_try["eta_modes"]);
+      eta_warm = clone(as<NumericMatrix>(out_try["eta_modes"]));
       out_keep = out_try;
       out_keep["gradient"] = g_try;
       out_keep["hessian"] = H_try;
@@ -1306,6 +1375,10 @@ List focei_run(Function model_cb,
     trace_accept.push_back(accept ? 1 : 0);
 
     if (is_terminate) { converged = true; break; }
+    // as trust(): consecutive rejected trials that leave the objective flat within ftol, the noise
+    // of its evaluation, end the fit with nothing left to resolve
+    if (accept || !eval_ok || std::fabs(actual_red) >= ftol) n_stall = 0;
+    else if (++n_stall >= dmod::trust_driver::kStallLimit) { converged = true; break; }
   }
   // a loop that reaches iterlim leaves iter one past it
   iter = std::min(iter, iterlim);

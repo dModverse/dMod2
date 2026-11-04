@@ -81,3 +81,15 @@ attrs <- function(x, which = NULL, keep = TRUE) {
   names(x) <- nms
   x
 }
+
+# set.seed() for the calling function; the random state of the session returns when that function does
+.localSeed <- function(seed, frame = parent.frame()) {
+  if (is.null(seed)) return(invisible(NULL))
+  old <- get0(".Random.seed", envir = globalenv(), inherits = FALSE)
+  restore <- function() {
+    if (is.null(old)) rm(".Random.seed", envir = globalenv())
+    else assign(".Random.seed", old, envir = globalenv())
+  }
+  do.call(on.exit, list(as.call(list(restore)), add = TRUE), envir = frame)
+  set.seed(seed)
+}

@@ -2,12 +2,23 @@
 % Please edit documentation in R/plotsEM.R
 \name{plotResiduals.em}
 \alias{plotResiduals.em}
-\title{Weighted-residual diagnostics for an EM}
+\title{Residual diagnostics of a mixed-effects fit}
 \usage{
-\method{plotResiduals}{em}(parframe, ...)
+\method{plotResiduals}{em}(
+  parframe,
+  type = c("IWRES", "CWRES", "NPDE"),
+  nsim = 1000L,
+  seed = NULL,
+  ...
+)
 }
 \arguments{
 \item{parframe}{An \code{em} fit, see \code{\link[=em]{em()}}.}
+
+\item{type}{Any of \code{"IWRES"}, \code{"CWRES"} and \code{"NPDE"}, by default all three.}
+
+\item{nsim, seed}{With \code{"NPDE"}: the number of simulated data sets and the
+seed of the random number generator.}
 
 \item{...}{Ignored.}
 }
@@ -15,6 +26,65 @@
 A ggplot.
 }
 \description{
-Two-panel scatter: IWRES vs IPRED and IWRES vs TIME with a
-loess smoother.
+One row of panels per type of residual: against the population
+prediction (IWRES against the individual one), against time with a loess
+smoother, and a QQ-plot against N(0, 1). See \link[=residuals.em]{residuals()}.
+}
+\examples{
+\donttest{
+## Theophylline, 12 subjects: one-compartment oral model, log parameters with a normal
+## random intercept per subject, additive error
+library(dMod2)
+outdir <- tempdir()
+data(Theoph, package = "datasets")
+Theoph$Subject <- as.character(Theoph$Subject)
+subjects <- sort(unique(Theoph$Subject))
+data <- as.datalist(data.frame(name = "y", time = Theoph$Time, value = Theoph$conc,
+                               sigma = NA_real_, condition = Theoph$Subject))
+
+reactions <- eqnlist()
+reactions <- addReaction(reactions, "Ag", "",   "Ka * Ag",     "absorption")
+reactions <- addReaction(reactions, "",   "Cc", "Ka * Ag / V", "appearance")
+reactions <- addReaction(reactions, "Cc", "",   "Cl/V * Cc",   "elimination")
+x <- Xs(odemodel(reactions, modelname = "theoph_ode", compile = FALSE, deriv2 = TRUE,
+                 outdir = outdir))
+g <- Y(c(y = "Cc"), x, modelname = "theoph_obs", compile = FALSE, deriv2 = TRUE, outdir = outdir)
+err <- Y(eqnvec(y = "sigma_add"), g, attachInput = FALSE, modelname = "theoph_err",
+         compile = FALSE, deriv2 = TRUE, outdir = outdir)
+
+## one condition per subject, the dose from the branch table; the effect formula
+## replaces each log parameter by its intercept plus a random effect per subject
+doses <- tapply(Theoph$Dose * Theoph$Wt, Theoph$Subject, `[`, 1)[subjects]
+trafo <- branch(define(NULL, "x <- x", x = c("Ka", "V", "Cl", "Ag", "Cc", "sigma_add")),
+                table = data.frame(ID = subjects, dose = doses, row.names = subjects))
+trafo <- insert(trafo, "Ag <- dose", dose = dose)
+trafo <- insert(trafo, "Cc <- 0")
+trafo <- insert(trafo, "x <- exp(x)", x = c("Ka", "V", "Cl", "sigma_add"))
+trafo <- insert(trafo, Ka + V + Cl ~ 1 + (1 | ID))
+p <- P(trafo, method = "explicit", compile = FALSE, modelname = "theoph_p", deriv2 = TRUE,
+       outdir = outdir)
+compile(x, g, err, p, output = "theoph_nlme")
+
+obj <- normL2(data, g * x * p, errmodel = err)
+fit <- em(obj, randomEffects(p), init = c(Ka = 0, V = 3, Cl = 0.7, sigma_add = log(0.5)))
+summary(fit)
+fit$omega
+head(fit$random)
+head(residuals(fit, type = "CWRES"))
+confint(fit, parm = "Cl", method = "profile")
+
+## diagnostics: residuals, NPDE from simulations, a visual predictive check, the random
+## effects against the body weight of the subjects
+npde <- residuals(fit, type = "NPDE", nsim = 200, seed = 1)
+attr(npde, "tests")
+plotResiduals(fit, nsim = 200, seed = 1)
+plotVPC(fit, nsim = 100, bins = 6, seed = 1)
+weight <- tapply(Theoph$Wt, Theoph$Subject, `[`, 1)[subjects]
+plotRandomEffects(fit, covariates = data.frame(weight = weight, row.names = subjects))
+
+## four starts
+best <- msem(obj, randomEffects(p), init = c(Ka = 0, V = 3, Cl = 0.7, sigma_add = log(0.5)),
+             fits = 4)
+best$multistart
+}
 }

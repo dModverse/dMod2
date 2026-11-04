@@ -4,7 +4,13 @@
 \alias{residuals.em}
 \title{Residuals of a mixed-effects fit}
 \usage{
-\method{residuals}{em}(object, type = c("IWRES", "IRES", "CWRES", "PRES", "PWRES"), ...)
+\method{residuals}{em}(
+  object,
+  type = c("IWRES", "IRES", "CWRES", "PRES", "PWRES", "NPDE"),
+  nsim = 1000L,
+  seed = NULL,
+  ...
+)
 }
 \arguments{
 \item{object}{An \code{em} object, see \code{\link[=em]{em()}}.}
@@ -15,14 +21,92 @@ error model), \code{"IRES"} (data minus individual prediction), \code{"CWRES"}
 per group the residual of its data against \eqn{f(\eta^*) - G \eta^*},
 whitened by \eqn{G \Omega G' + \Sigma}, \eqn{G} the sensitivities in the
 normal random effects; without those equal to IWRES), \code{"PRES"} or
-\code{"PWRES"} (against the population prediction).}
+\code{"PWRES"} (against the population prediction), \code{"NPDE"} (normalised
+prediction distribution errors from \code{nsim} simulated data sets,
+decorrelated per group, readings at or below their limit imputed as in
+Nguyen et al. 2012).}
+
+\item{nsim, seed}{With \code{"NPDE"}: number of simulated data sets and the seed
+of the random number generator.}
 
 \item{...}{Ignored.}
 }
 \value{
 Numeric vector, one entry per data row, in the order of the rows of
-\code{predict(object)} with \code{source == "obs"}.
+\code{predict(object)} with \code{source == "obs"}. NPDE have the attribute \code{tests},
+the tests of mean 0 (t-test), variance 1 (chi-square) and normality
+(Shapiro-Wilk) with their p-values and the global p-value, three times the
+smallest.
 }
 \description{
 Residuals of a mixed-effects fit
+}
+\examples{
+\donttest{
+## Theophylline, 12 subjects: one-compartment oral model, log parameters with a normal
+## random intercept per subject, additive error
+library(dMod2)
+outdir <- tempdir()
+data(Theoph, package = "datasets")
+Theoph$Subject <- as.character(Theoph$Subject)
+subjects <- sort(unique(Theoph$Subject))
+data <- as.datalist(data.frame(name = "y", time = Theoph$Time, value = Theoph$conc,
+                               sigma = NA_real_, condition = Theoph$Subject))
+
+reactions <- eqnlist()
+reactions <- addReaction(reactions, "Ag", "",   "Ka * Ag",     "absorption")
+reactions <- addReaction(reactions, "",   "Cc", "Ka * Ag / V", "appearance")
+reactions <- addReaction(reactions, "Cc", "",   "Cl/V * Cc",   "elimination")
+x <- Xs(odemodel(reactions, modelname = "theoph_ode", compile = FALSE, deriv2 = TRUE,
+                 outdir = outdir))
+g <- Y(c(y = "Cc"), x, modelname = "theoph_obs", compile = FALSE, deriv2 = TRUE, outdir = outdir)
+err <- Y(eqnvec(y = "sigma_add"), g, attachInput = FALSE, modelname = "theoph_err",
+         compile = FALSE, deriv2 = TRUE, outdir = outdir)
+
+## one condition per subject, the dose from the branch table; the effect formula
+## replaces each log parameter by its intercept plus a random effect per subject
+doses <- tapply(Theoph$Dose * Theoph$Wt, Theoph$Subject, `[`, 1)[subjects]
+trafo <- branch(define(NULL, "x <- x", x = c("Ka", "V", "Cl", "Ag", "Cc", "sigma_add")),
+                table = data.frame(ID = subjects, dose = doses, row.names = subjects))
+trafo <- insert(trafo, "Ag <- dose", dose = dose)
+trafo <- insert(trafo, "Cc <- 0")
+trafo <- insert(trafo, "x <- exp(x)", x = c("Ka", "V", "Cl", "sigma_add"))
+trafo <- insert(trafo, Ka + V + Cl ~ 1 + (1 | ID))
+p <- P(trafo, method = "explicit", compile = FALSE, modelname = "theoph_p", deriv2 = TRUE,
+       outdir = outdir)
+compile(x, g, err, p, output = "theoph_nlme")
+
+obj <- normL2(data, g * x * p, errmodel = err)
+fit <- em(obj, randomEffects(p), init = c(Ka = 0, V = 3, Cl = 0.7, sigma_add = log(0.5)))
+summary(fit)
+fit$omega
+head(fit$random)
+head(residuals(fit, type = "CWRES"))
+confint(fit, parm = "Cl", method = "profile")
+
+## diagnostics: residuals, NPDE from simulations, a visual predictive check, the random
+## effects against the body weight of the subjects
+npde <- residuals(fit, type = "NPDE", nsim = 200, seed = 1)
+attr(npde, "tests")
+plotResiduals(fit, nsim = 200, seed = 1)
+plotVPC(fit, nsim = 100, bins = 6, seed = 1)
+weight <- tapply(Theoph$Wt, Theoph$Subject, `[`, 1)[subjects]
+plotRandomEffects(fit, covariates = data.frame(weight = weight, row.names = subjects))
+
+## four starts
+best <- msem(obj, randomEffects(p), init = c(Ka = 0, V = 3, Cl = 0.7, sigma_add = log(0.5)),
+             fits = 4)
+best$multistart
+}
+}
+\references{
+Comets, E., Brendel, K. and Mentré, F. (2008). Computing
+normalised prediction distribution errors to evaluate nonlinear
+mixed-effect models. \emph{Computer Methods and Programs in Biomedicine}
+90(2), 154-166.
+
+Nguyen, T. H. T., Comets, E. and Mentré, F. (2012). Extension of NPDE for
+evaluation of nonlinear mixed effect models in presence of data below the
+quantification limit with applications to HIV dynamic model.
+\emph{Journal of Pharmacokinetics and Pharmacodynamics} 39(5), 499-518.
 }

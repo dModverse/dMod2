@@ -108,8 +108,8 @@ test_that("the outer SR1 correction recovers an indefinite Hessian from the step
   # the low-rank factors are those of the dense correction
   f <- learn$factors()
   expect_equal(unname(f$U %*% (f$d * t(f$U))), unname(learn$dense()), tolerance = 1e-12)
-  # only the last pairs enter, the first is forgotten with the default memory of 2
-  short <- dMod2:::.outerSecant(rownames(A))
+  # only the last pairs enter: with a memory of 2 the first is forgotten
+  short <- dMod2:::.outerSecant(rownames(A), memory = 2L)
   for (x in points) short$add(setNames(x, rownames(A)), gradient(x), function(v) base %*% v)
   expect_equal(ncol(short$factors()$U), 2L)
 })
@@ -184,7 +184,18 @@ test_that("the FOCEI gradient with a random effect in the error model is the slo
   # tolerance of the solver
   expect_equal(frV$gradient, ffV$gradient, tolerance = 1e-3)
   expect_equal(frV$etaShift, ffV$etaShift, tolerance = 1e-3)
-  ff <- em(obj, randomEffects(mods$p), init, control = c(ctl, derivMode = "forward-forward"), verbose = FALSE)
+  # the sweeps through the native chain and through R
+  V <- matrix(1, length(full), 1, dimnames = list(names(full), NULL))
+  expect_false(is.null(.sweepChainForward(design, full, NULL, V, names(design$data), 1L, 1L)))
+  frC <- .volumeReverse(design, full, NULL, names(init), Hinv, curvature = TRUE)
+  frR <- withr::with_options(list(dMod2.evaluation = "R"),
+                             .volumeReverse(design, full, NULL, names(init), Hinv, curvature = TRUE))
+  expect_equal(frC, frR, tolerance = 1e-10)
+  expect_equal(.schurReverse(design, full, NULL, names(init)),
+               withr::with_options(list(dMod2.evaluation = "R"), .schurReverse(design, full, NULL, names(init))),
+               tolerance = 1e-10)
+  ff <- em(obj, randomEffects(mods$p), init, control = modifyList(ctl, list(derivMode = "forward-forward")),
+            verbose = FALSE)
   expect_identical(ff$derivMode, "forward-forward")
   expect_equal(fd$value, ff$value, tolerance = 1e-6)
   expect_equal(fd$argument, ff$argument, tolerance = 1e-4)
@@ -228,6 +239,61 @@ test_that("the volume rows give the exact joint blocks and d eta*/d theta is the
   shift <- dMod2:::.foceiVolume(design, full, NULL, names(theta), Hinv)$etaShift
   slope <- numDeriv::jacobian(modes, unname(theta), method.args = list(eps = 1e-4, d = 1e-3, r = 2))
   expect_equal(unname(do.call(rbind, shift)), slope, tolerance = 1e-4)
+})
+
+
+test_that("the inner search stops on the Newton step of the modes, not on a change of the value", {
+  skip_on_cran()
+  oldwd <- setwd(tempdir()); on.exit(setwd(oldwd))
+  mods <- .focei_models()$sigeta
+  set.seed(5)
+  model <- mods$g * mods$x * mods$p
+  truth <- c(V = log(20), Cl = log(5), sigma_prop = log(0.1))
+  sim <- model(c(0.5, 1, 2, 4, 8), c(truth, eta_V_A = -0.2, eta_V_B = 0.1, eta_V_C = 0.05), deriv = FALSE)
+  data <- as.datalist(do.call(rbind, lapply(names(sim), function(s) data.frame(
+    name = "y", time = sim[[s]][, "time"], value = sim[[s]][, "y"] * (1 + 0.1 * rnorm(nrow(sim[[s]]))),
+    sigma = NA_real_, condition = s))))
+  obj <- normL2(data, model, errmodel = mods$err)
+  init <- c(truth + 0.05, omega_V_V = log(0.3))
+  # a loose value tolerance ends only steps on the boundary of the region
+  fit <- em(obj, randomEffects(mods$p), init, verbose = FALSE,
+            control = list(innerControl = list(mtol = 1e-3), trustControl = list(iterlim = 0)))
+  design <- .emDesign(obj, randomEffects(mods$p))
+  En <- design$etaNames
+  E <- as.vector(En)
+  full <- c(init, setNames(as.vector(fit$etaModes[rownames(En), , drop = FALSE]), E))
+  data <- obj(full, deriv = TRUE)
+  prior <- .normalPrior(design)(pars = full, deriv = TRUE)
+  step <- solve(data$hessian[E, E] + prior$hessian[E, E], data$gradient[E] + prior$gradient[E])
+  expect_lt(max(abs(step)), 1e-8)
+})
+
+
+test_that("FOCEI does not end where failed trials shrank the region", {
+  skip_on_cran()
+  oldwd <- setwd(tempdir()); on.exit(setwd(oldwd))
+  mods <- .focei_models()$sigeta
+  set.seed(5)
+  model <- mods$g * mods$x * mods$p
+  truth <- c(V = log(20), Cl = log(5), sigma_prop = log(0.1))
+  sim <- model(c(0.5, 1, 2, 4, 8), c(truth, eta_V_A = -0.2, eta_V_B = 0.1, eta_V_C = 0.05), deriv = FALSE)
+  data <- as.datalist(do.call(rbind, lapply(names(sim), function(s) data.frame(
+    name = "y", time = sim[[s]][, "time"], value = sim[[s]][, "y"] * (1 + 0.1 * rnorm(nrow(sim[[s]]))),
+    sigma = NA_real_, condition = s))))
+  obj <- normL2(data, model, errmodel = mods$err)
+  init <- c(truth + 0.3, omega_V_V = log(0.3))
+  # the prediction fails away from the start, so only trials of a collapsed region succeed
+  real <- .batchPredictor
+  local_mocked_bindings(.batchPredictor = function(design) {
+    f <- real(design)
+    function(timesList, parsList, conditions, fixed) {
+      if (any(vapply(parsList, function(p) max(abs(p[names(init)] - init)), 0) > 1e-7)) stop("fails away")
+      f(timesList, parsList, conditions, fixed)
+    }
+  })
+  fit <- em(obj, randomEffects(mods$p), init, verbose = FALSE, sparse = FALSE,
+            control = list(derivMode = "forward-forward", trustControl = list(iterlim = 40)))
+  expect_false(fit$converged)
 })
 
 
@@ -294,6 +360,90 @@ test_that("the inner kernel has the value, gradient and Gauss-Newton Hessian of 
     expect_equal(as.numeric(batched$gradient[s, ]), R$grad, tolerance = 1e-12)
     expect_equal(as.numeric(batched$H_GN[[s]]), R$hess, tolerance = 1e-12)
   }
+})
+
+test_that("a failed prediction at an inner trial point rejects the trial of its subject only", {
+  skip_on_cran()
+  oldwd <- setwd(tempdir()); on.exit(setwd(oldwd))
+  subjects <- c("A", "B", "C")
+  times <- c(0.5, 1, 2, 4, 8)
+  set.seed(123)
+  pred_at <- function(t, V, Cl) (100 / V) * exp(-Cl / V * t)
+  data_rows <- do.call(rbind, lapply(seq_along(subjects), function(i) {
+    pred <- pred_at(times, 20 * exp(c(-0.2, 0.1, 0.05)[i]), 5)
+    data.frame(name = "y", time = times, value = pred + rnorm(length(times), 0, 0.1 * pred),
+               sigma = NA_real_, condition = subjects[i], stringsAsFactors = FALSE)
+  }))
+  mods <- .focei_models()$sigeta
+  model <- mods$g * mods$x * mods$p
+  obj <- normL2(as.datalist(data_rows), model, errmodel = mods$err)
+  outer <- c(V = log(20), Cl = log(5), sigma_prop = log(0.1), omega_V_V = log(0.3))
+  km <- .kernelMeta(obj, mods$p, outer, c(eta_V_A = 0, eta_V_B = 0, eta_V_C = 0))
+  predict <- dMod2:::.batchPredictor(km$design)
+  # the prediction of one subject fails at the first trial value of its eta, alone or in a batch
+  bad <- NULL
+  failing <- function(timesList, parsList, conditions, fixed) {
+    for (q in which(conditions == "B")) {
+      e <- parsList[[q]][["eta_V_B"]]
+      if (e != 0 && is.null(bad)) bad <<- e
+      if (identical(e, bad)) stop("1 of ", length(conditions), " conditions did not complete: B")
+    }
+    predict(timesList, parsList, conditions, fixed)
+  }
+  modes <- function(cb) dMod2:::focei_inner_trust(
+    model_cb = model, err_cb = mods$err, pars_full = km$full, eta_warmstart = matrix(0, 3, 1),
+    subject_meta = km$meta, Omega_inv_mat = matrix(1 / 0.3^2), Omega_log_det = log(0.3^2), fixed = NULL,
+    control = list(iterlim = 50, ftol = 1e-12, mtol = 1e-12), predict_cb = cb)
+  failure <- new.env(parent = emptyenv())
+  ref <- modes(predict)
+  got <- modes(dMod2:::.guardPredictor(failing, failure))
+  expect_false(is.null(bad))
+  expect_match(failure$message, "did not complete: B")
+  expect_true(all(got$converged))
+  # the other subjects take the same steps; the one with the failure ends within the inner tolerance
+  expect_identical(got$eta_modes[c("A", "C"), ], ref$eta_modes[c("A", "C"), ])
+  expect_lt(abs(got$eta_modes["B", 1] - ref$eta_modes["B", 1]), 1e-5)
+})
+
+test_that("an inner trial point whose derivatives are not finite rejects the trial of its subject only", {
+  skip_on_cran()
+  oldwd <- setwd(tempdir()); on.exit(setwd(oldwd))
+  subjects <- c("A", "B", "C")
+  times <- c(0.5, 1, 2, 4, 8)
+  set.seed(123)
+  pred_at <- function(t, V, Cl) (100 / V) * exp(-Cl / V * t)
+  data_rows <- do.call(rbind, lapply(seq_along(subjects), function(i) {
+    pred <- pred_at(times, 20 * exp(c(-0.2, 0.1, 0.05)[i]), 5)
+    data.frame(name = "y", time = times, value = pred + rnorm(length(times), 0, 0.1 * pred),
+               sigma = NA_real_, condition = subjects[i], stringsAsFactors = FALSE)
+  }))
+  mods <- .focei_models()$sigeta
+  model <- mods$g * mods$x * mods$p
+  obj <- normL2(as.datalist(data_rows), model, errmodel = mods$err)
+  outer <- c(V = log(20), Cl = log(5), sigma_prop = log(0.1), omega_V_V = log(0.3))
+  km <- .kernelMeta(obj, mods$p, outer, c(eta_V_A = 0, eta_V_B = 0, eta_V_C = 0))
+  predict <- dMod2:::.batchPredictor(km$design)
+  # the sensitivities of one subject are NaN at the first trial value of its eta
+  bad <- NULL
+  poisoned <- function(timesList, parsList, conditions, fixed) {
+    out <- predict(timesList, parsList, conditions, fixed)
+    for (q in which(conditions == "B")) {
+      e <- parsList[[q]][["eta_V_B"]]
+      if (e != 0 && is.null(bad)) bad <<- e
+      if (identical(e, bad)) attr(out$pred[[q]], "deriv")[] <- NaN
+    }
+    out
+  }
+  modes <- function(cb) dMod2:::focei_inner_trust(
+    model_cb = model, err_cb = mods$err, pars_full = km$full, eta_warmstart = matrix(0, 3, 1),
+    subject_meta = km$meta, Omega_inv_mat = matrix(1 / 0.3^2), Omega_log_det = log(0.3^2), fixed = NULL,
+    control = list(iterlim = 50, ftol = 1e-12, mtol = 1e-12), predict_cb = cb)
+  ref <- modes(predict)
+  got <- modes(poisoned)
+  expect_false(is.null(bad))
+  expect_true(all(got$converged))
+  expect_identical(got$eta_modes[c("A", "C"), ], ref$eta_modes[c("A", "C"), ])
+  expect_lt(abs(got$eta_modes["B", 1] - ref$eta_modes["B", 1]), 1e-5)
 })
 
 test_that("the inner kernel matches the R replica for two observables per subject", {
@@ -364,4 +514,13 @@ test_that("the inner kernel matches the R replica for two observables per subjec
     expect_equal(as.numeric(res$gradient[s, ]), unname(R$grad), tolerance = 1e-10)
     expect_equal(as.numeric(res$H_GN[[s]]), as.numeric(R$hess), tolerance = 1e-10)
   }
+})
+
+test_that("an eta block with a vanishing variance is solved on its unit diagonal", {
+  A <- matrix(c(5e18, 1, 0.5, 1, 4, 1, 0.5, 1, 3), 3, dimnames = rep(list(c("a", "b", "c")), 2))
+  B <- matrix(1:6, 3)
+  expect_error(solve(A, B), "singular")
+  x <- dMod2:::.scaledSolve(A, B)
+  expect_equal(A %*% x, B, ignore_attr = TRUE, tolerance = 1e-10)
+  expect_equal(dMod2:::.scaledSolve(A)[2:3, 2:3], solve(A[2:3, 2:3]), tolerance = 1e-10)
 })

@@ -27,7 +27,8 @@ data(boehm)
 plotData(as.datalist(boehm))
 }
 \seealso{
-\code{demo("Boehm_JProteomeRes2014", package = "dMod2")} builds the
-model.
+The example project
+\href{https://dmodverse.github.io/dMod2/articles/boehmJProteomeRes2014.html}{boehmJProteomeRes2014} builds and fits
+the model.
 }
 \keyword{data}

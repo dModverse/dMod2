@@ -165,6 +165,21 @@ test_that("on nodes frozen in phi the referenced fixed effects, the error model 
                }, 0)), tolerance = 1e-10)
 })
 
+test_that("a stage ends at what its nodes resolve, at its best iterate", {
+  m <- .quad_models()
+  fit <- suppressMessages(em(m$objE, randomEffects(m$pw), c(mu = 0.7, mu_w = 0.1, s = log(0.3)),
+                             method = "quadrature", verbose = FALSE,
+                             control = list(quadrature = list(maxLevel = 2, tol = 1e-12, tolDecrement = 1e-12,
+                                                              certificate = FALSE))))
+  tr <- fit$stageTrace
+  expect_true(fit$converged)
+  expect_lt(nrow(tr), 10L)
+  last <- tr[nrow(tr), ]
+  # ended where a Newton step gains less than the nodes resolve, or after a step that rose
+  expect_true(last$decrement < last$resolution || tr$OFV[nrow(tr)] > tr$OFV[nrow(tr) - 1L])
+  expect_equal(fit$value, min(tr$OFV), tolerance = 1e-7)
+})
+
 test_that("the certificate at the estimate agrees with the quadrature and is reproducible", {
   m <- .quad_models()
   d <- dMod2:::.emDesign(m$objE, randomEffects(m$pw))
@@ -176,4 +191,16 @@ test_that("the certificate at the estimate agrees with the quadrature and is rep
   expect_false(any(cert$flag))
   expect_true(all(abs(cert$quadrature - cert$importance) < 3 * cert$se + 1e-3))
   expect_identical(cert, dMod2:::.quadratureCertificate(d, q, psi, NULL, list(points = 256, seed = 3)))
+})
+
+test_that("the Newton decrement of a singular Hessian counts the flat directions linearly", {
+  # positive definite: g' H^-1 g / 2
+  ev <- list(gradient = c(1, 2), hessian = diag(c(2, 4)))
+  expect_equal(dMod2:::.newtonDecrement(ev), (1 / 2 + 4 / 4) / 2)
+  # a flat direction without gradient, as at a variance that runs to 0, adds nothing
+  ev <- list(gradient = c(1, 0), hessian = diag(c(2, 0)))
+  expect_equal(dMod2:::.newtonDecrement(ev), 1 / 4)
+  # a gradient along a flat direction gains rmax times its size
+  ev <- list(gradient = c(1, 1e-3), hessian = diag(c(2, 0)))
+  expect_equal(dMod2:::.newtonDecrement(ev, rmax = 10), 1 / 4 + 1e-2)
 })

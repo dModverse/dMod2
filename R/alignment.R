@@ -1077,7 +1077,10 @@ align <- function(model, fits = 10L, cores = 1L, method = c("focei", "quadrature
     multistart <- if (!is.null(best$multistart)) best$multistart[c("value", "converged", "iterations")]
                   else data.frame(value = best$value, converged = isTRUE(best$converged),
                                   iterations = as.numeric(best$iterations %||% NA)[1])
-    pars <- c(best$argument, .etaVector(best))
+    # the random effects the fit kept, a variance it set to 0 with its random effects fixed at 0
+    re <- best$design$randomEffects
+    pars <- c(best$argument, .etaVector(best), best$fixed)
+    ctrl$boundary <- FALSE
   } else {
     fit <- if (fits > 1L)
       mstrust(obj, st, rinit = 1, rmax = 10, fits = fits, cores = cores, sd = sd, iterlim = iterlim,

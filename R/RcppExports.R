@@ -25,6 +25,10 @@ bmm_bb <- function(A, B, Bn, M, K, N) {
     .Call(`_dMod2_bmm_bb`, A, B, Bn, M, K, N)
 }
 
+ec_cavity <- function(P, Lam, gam, Pm, stems, dimnames) {
+    .Call(`_dMod2_ec_cavity`, P, Lam, gam, Pm, stems, dimnames)
+}
+
 chain_params <- function(plan, values, deriv, deriv2, threads, tangents) {
     .Call(`_dMod2_chain_params`, plan, values, deriv, deriv2, threads, tangents)
 }
@@ -147,5 +151,9 @@ trust_step_impl <- function(x, g, H, r, lower, upper, parscale, thetamax) {
 
 qn_update_impl <- function(B, s, y, method) {
     .Call(`_dMod2_qn_update_impl`, B, s, y, method)
+}
+
+focei_units_lockstep <- function(data_cb, warm, P, control) {
+    .Call(`_dMod2_focei_units_lockstep`, data_cb, warm, P, control)
 }
 

@@ -91,8 +91,10 @@ print.randomeffects <- function(x, ...) {
 #'   is exactly 0 unless the data need it.
 #' - `spikeSlab()`: the deviation of a group is exactly 0 (spike) or drawn
 #'   from \eqn{N(0, \tau^2)}{N(0, tau^2)} (slab); every group deviates with
-#'   probability `prob`, independently. The spike-and-slab random effects of
-#'   a group are integrated jointly, at most 12 per group.
+#'   probability `prob`, independently. Up to 12 spike-and-slab random
+#'   effects of a group are integrated jointly and exactly; with more, each is
+#'   integrated alone and the coupling by the data is approximated as set by
+#'   `control$laplace$coupling` of [em()].
 #' - `dirichletProcess()`: per symbol, the deviations follow a Dirichlet
 #'   process with base measure \eqn{N(0, \tau^2)}{N(0, tau^2)} and
 #'   `concentration`, the fixed effect seated first at deviation 0: the
@@ -313,8 +315,12 @@ print.redist <- function(x, ...) {
   for (ti in seq_along(pf$random)) {
     rt <- pf$random[[ti]]
     g <- do.call(paste, c(lapply(tree[rt$vars], as.character), sep = "_"))
-    .uniqueNames(g, "groups of ", rt$group)
+    # a condition with a missing grouping belongs to no group and keeps the fixed effects
+    none <- Reduce(`|`, lapply(tree[rt$vars], is.na))
+    g[none] <- NA_character_
+    .uniqueNames(g[!none], "groups of ", rt$group)
     Z <- stats::model.matrix(rt$expr, stats::model.frame(rt$expr, tree, na.action = stats::na.fail))
+    Z[none, ] <- 0
     zn <- colnames(Z)
     stems <- ifelse(zn == "(Intercept)", paste0("eta_", sym), paste0("eta_", sym, "_", .effectName(zn)))
     other <- Filter(function(r) r$group != rt$group, random)
@@ -327,7 +333,8 @@ print.redist <- function(x, ...) {
                                             lambda = rt$dist$lambda, prob = rt$dist$prob,
                                             concentration = rt$dist$concentration, tau = rt$dist$tau,
                                             stem = stems[k],
-                                            etas = paste0(stems[k], "_", .effectName(g)), z = Z[, k],
+                                            etas = ifelse(none, NA_character_, paste0(stems[k], "_", .effectName(g))),
+                                            z = Z[, k],
                                             groups = g)
   }
   list(X = X, random = random, columns = intersect(all.vars(pf$fixed), names(tree)))

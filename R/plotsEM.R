@@ -35,6 +35,7 @@ plot.em <- function(x, ...) {
     data.frame(condition = pf$condition, name = pf$name,
                observed = pf$observed, predicted = pf$PRED,
                panel = "PRED", stringsAsFactors = FALSE))
+  long$condition <- factor(long$condition, .naturalLevels(long$condition))
   multiple <- length(unique(long$name)) > 1L
   p <- ggplot2::ggplot(long, ggplot2::aes(x = predicted, y = observed,
                                           color = condition)) +
@@ -59,37 +60,45 @@ plot.em <- function(x, ...) {
     ggplot2::theme(legend.position = "none")
 }
 
-#' Weighted-residual diagnostics for an EM
+#' Residual diagnostics of a mixed-effects fit
 #'
-#' @description Two-panel scatter: IWRES vs IPRED and IWRES vs TIME with a
-#'   loess smoother.
+#' @description One row of panels per type of residual: against the population
+#'   prediction (IWRES against the individual one), against time with a loess
+#'   smoother, and a QQ-plot against N(0, 1). See [residuals()][residuals.em].
 #' @param parframe An `em` fit, see [em()].
+#' @param type Any of `"IWRES"`, `"CWRES"` and `"NPDE"`, by default all three.
+#' @param nsim,seed With `"NPDE"`: the number of simulated data sets and the
+#'   seed of the random number generator.
 #' @param ... Ignored.
 #' @return A ggplot.
+#' @example inst/examples/NLME.R
 #' @export
-plotResiduals.em <- function(parframe, ...) {
+plotResiduals.em <- function(parframe, type = c("IWRES", "CWRES", "NPDE"), nsim = 1000L, seed = NULL, ...) {
   fit <- parframe
+  type <- match.arg(type, several.ok = TRUE)
   pf <- predict(fit)
   pf <- pf[pf$source == "obs", , drop = FALSE]
-  long <- rbind(
-    data.frame(x = pf$IPRED, y = pf$IWRES, name = pf$name,
-               panel = "IWRES vs IPRED", stringsAsFactors = FALSE),
-    data.frame(x = pf$time,  y = pf$IWRES, name = pf$name,
-               panel = "IWRES vs TIME",  stringsAsFactors = FALSE))
-  p <- ggplot2::ggplot(long, ggplot2::aes(x = x, y = y, color = name)) +
-    ggplot2::geom_hline(yintercept = 0, linetype = "dashed", color = "grey50") +
-    ggplot2::geom_point(alpha = 0.8) +
-    ggplot2::geom_smooth(se = FALSE, method = "loess", formula = y ~ x,
-                         color = dMod_colors[2], linewidth = 0.6)
-  if (length(unique(long$name)) > 1L) {
-    p <- p + ggplot2::facet_grid(name ~ panel, scales = "free_x")
-  } else {
-    p <- p + ggplot2::facet_wrap(~ panel, scales = "free_x")
-  }
-  p +
-    scale_color_dMod() +
-    ggplot2::labs(x = NULL, y = "IWRES",
-                  title = "Weighted residual diagnostics") +
+  long <- do.call(rbind, lapply(type, function(ty) {
+    r <- if (ty == "IWRES") pf$IWRES else stats::residuals(fit, type = ty, nsim = nsim, seed = seed)
+    vs <- if (ty == "IWRES") "IPRED" else "PRED"
+    q <- stats::qnorm(stats::ppoints(length(r)))[rank(r, ties.method = "first")]
+    rbind(data.frame(type = ty, panel = paste("vs", vs), x = pf[[vs]], y = r, name = pf$name, stringsAsFactors = FALSE),
+          data.frame(type = ty, panel = "vs time", x = pf$time, y = r, name = pf$name, stringsAsFactors = FALSE),
+          data.frame(type = ty, panel = "QQ", x = q, y = r, name = pf$name, stringsAsFactors = FALSE))
+  }))
+  long$type <- factor(long$type, type)
+  long$panel <- factor(long$panel, c("vs IPRED", "vs PRED", "vs time", "QQ"))
+  scatter <- long[long$panel != "QQ", , drop = FALSE]
+  qq <- long[long$panel == "QQ", , drop = FALSE]
+  ggplot2::ggplot(long, ggplot2::aes(x = x, y = y, color = name)) +
+    ggplot2::geom_hline(data = scatter, ggplot2::aes(yintercept = 0), linetype = "dashed", color = "grey50") +
+    ggplot2::geom_abline(data = qq, ggplot2::aes(slope = 1, intercept = 0), linetype = "dashed", color = "grey50") +
+    ggplot2::geom_point(alpha = 0.7, size = 1.2) +
+    ggplot2::geom_smooth(data = scatter, ggplot2::aes(group = 1), se = FALSE, method = "loess", formula = y ~ x,
+                         color = dMod_colors[2], linewidth = 0.6) +
+    ggplot2::facet_grid(type ~ panel, scales = "free") +
+    scale_color_dMod(guide = if (length(unique(long$name)) > 1L) "legend" else "none") +
+    ggplot2::labs(x = NULL, y = "residual", color = NULL, title = "Residual diagnostics") +
     theme_dMod(base_size = 11)
 }
 
@@ -119,7 +128,8 @@ plotCombined.em <- function(prediction, times = NULL, ncol = 4L, showPred = TRUE
   # the curves over the range of the data, the data rows all
   pf <- pf[pf$source == "obs" | (pf$time >= min(obsTimes) & pf$time <= max(obsTimes)), , drop = FALSE]
   multiple <- length(unique(pf$name)) > 1L
-  conditions <- if (is.factor(pf$condition)) levels(droplevels(pf$condition)) else unique(as.character(pf$condition))
+  conditions <- .naturalLevels(if (is.factor(pf$condition)) droplevels(pf$condition) else pf$condition)
+  pf$condition <- factor(pf$condition, conditions)
 
   page <- function(pp, label = NULL) {
     obs <- pp[pp$source == "obs", , drop = FALSE]
@@ -148,7 +158,7 @@ plotCombined.em <- function(prediction, times = NULL, ncol = 4L, showPred = TRUE
   pages <- split(conditions, ceiling(seq_along(conditions) / n))
   lapply(seq_along(pages), function(i) {
     sub <- pf[as.character(pf$condition) %in% pages[[i]], , drop = FALSE]
-    if (is.factor(sub$condition)) sub$condition <- factor(sub$condition, levels = pages[[i]])
+    sub$condition <- factor(sub$condition, levels = pages[[i]])
     page(sub, sprintf("(page %d/%d)", i, length(pages)))
   })
 }
@@ -162,10 +172,19 @@ plotCombined.em <- function(prediction, times = NULL, ncol = 4L, showPred = TRUE
 #'   by the shrinkage.
 #' @param draws Number of draws per group with `type = "conditional"`. Default 20.
 #' @param bins Number of bars of every histogram. Default 30.
+#' @param covariates Columns of the condition grid of the data of the fit
+#'   ([datalist]), or a data.frame with one row per condition (row names or a
+#'   column `condition`): instead the modes of the random effects of every
+#'   group against the covariates of its first condition, a scatter with a
+#'   loess trend for a numeric covariate of more than five values, boxes for
+#'   the others.
 #' @param ... Ignored.
 #' @return A ggplot (or a list with `hist` and `qq` if cowplot is unavailable).
+#' @example inst/examples/NLME.R
 #' @export
-plotRandomEffects.em <- function(x, type = c("conditional", "modes"), draws = 20L, bins = 30, ...) {
+plotRandomEffects.em <- function(x, type = c("conditional", "modes"), draws = 20L, bins = 30, covariates = NULL,
+                                 ...) {
+  if (!is.null(covariates)) return(.randomEffectCovariates(x, covariates))
   type <- match.arg(type)
   values <- .randomEffectValues(x, type, draws)
   # the density of every random effect over at least +/- 3.5 standard deviations

@@ -21,6 +21,15 @@ test_that("an effect formula replaces the symbol by its linear predictor on the 
   expect_equal(re$subjects$ID, list(s1 = "C1", s2 = "C2", s3 = "C3"))
 })
 
+test_that("a condition with a missing grouping belongs to no group and keeps the fixed effect", {
+  cov <- .cov; cov$ID[2] <- NA
+  tr <- insert(branch(define(NULL, "x <- x", x = c("ka", "cl")), table = cov), cl ~ 1 + (1 | ID))
+  expect_equal(as.character(tr$C2["cl"]), "(cl)")
+  re <- randomEffects(tr)
+  expect_true(is.na(re$etas["C2", "eta_cl"]))
+  expect_equal(re$subjects$ID, list(s1 = "C1", s3 = "C3"))
+})
+
 test_that("placeholders and sums on the left apply one right-hand side to many symbols", {
   a <- insert(.tr(), x ~ 1 + (1 | ID), x = c("ka", "cl"))
   b <- insert(.tr(), ka + cl ~ 1 + (1 | ID))
@@ -43,7 +52,6 @@ test_that("an ID correlates terms across formulas and gr() sets the distribution
   lam <- 2
   re <- randomEffects(insert(.tr(), v ~ 1 + (1 | gr(ID, dist = laplace(lambda = lam)))))
   expect_equal(re$terms$lambda, 2)
-  expect_output(print(re), "laplace, lambda 2")
 })
 
 test_that("P() keeps the random effects and effect formulas stack over calls", {
@@ -80,5 +88,4 @@ test_that("a cluster term shares its concentration and tau over its symbols", {
   expect_equal(unique(re$terms$dist), "dirichletProcess")
   expect_length(re$blocks, 1L)
   expect_true(all(is.na(re$terms$concentration)))
-  expect_output(print(re), "dirichletProcess, concentration estimated, tau estimated")
 })

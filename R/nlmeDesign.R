@@ -3,6 +3,15 @@
 # their hyperparameters. Everything downstream of em() reads the design, never the spec.
 
 
+## The plans of the native chain of the data term `spec` of `obj`: those of its normL2() term, so
+## that they last over the fits of one objective; a context of their own where it has none.
+.objectiveChain <- function(obj, spec) {
+  if (is.null(spec)) return(NULL)
+  term <- Find(function(t) identical(attr(t, "l2spec", exact = TRUE)[[1]], spec), .objTerms(obj))
+  ctx <- if (is.function(term)) get0(".chain", envir = environment(term), inherits = FALSE)
+  if (is.environment(ctx)) ctx else .chainContext(spec)
+}
+
 ## The design of `obj` and the random effects `random`: with one grouping its groups, etas and
 ## blocks are fields of the design, with several `groupings` holds one design per grouping and
 ## `components` the sets of conditions their groups connect.
@@ -23,7 +32,7 @@
   subs <- lapply(setNames(nm = unique(random$terms$group)), function(gr) .groupingDesign(random, data, gr))
   base <- list(prdfn = prdfn, errfn = attr(obj, "errfn", exact = TRUE), data = data, objfn = obj,
                df = spec$df %||% Inf, bloq = spec$optBLOQ %||% "M3", fixedEffects = random$fixed,
-               randomEffects = random)
+               randomEffects = random, chain = .objectiveChain(obj, spec))
   inGroup <- unique(unlist(lapply(subs, function(sd) unlist(sd$conditions))))
   free <- setdiff(names(data), inGroup)
   if (length(subs) == 1L)
@@ -69,6 +78,15 @@
   }
   top <- vapply(conds, find, "")
   lapply(unname(split(conds, factor(top, unique(top)))), function(cs) list(conditions = cs))
+}
+
+## The random effects `re` without the term of `stem`, whose etas the caller fixes at 0.
+.dropRandomTerm <- function(re, stem) {
+  keep <- re$terms$stem != stem
+  etaNames <- lapply(re$etaNames, function(E) E[, setdiff(colnames(E), stem), drop = FALSE])
+  .newRandomEffects(re$terms[keep, , drop = FALSE], re$etas[, keep, drop = FALSE], re$groups[keep], re$fixed,
+                    re$fixedDesign, subjects = re$subjects[unique(re$terms$group[keep])],
+                    etaNames = if (length(re$etaNames)) etaNames)
 }
 
 ## The grouping designs of a design, one with a single grouping.

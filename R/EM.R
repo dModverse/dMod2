@@ -70,22 +70,25 @@
 #'   `<kind>_<grouping>` and numbered `_1`, `_2`, ... when a grouping has
 #'   several such blocks, `lambda_*` (Laplace), `prob_*` and `tau_*`
 #'   (spike and slab), `concentration_*` and `tau_*` (Dirichlet process).
+#'   An `em` fit as `init` gives its estimates as the start and its `fixed`
+#'   values, and its random effects without those it set to 0 at the boundary.
 #' @param fixed Named numeric of parameters held fixed.
 #' @param method `"focei"` (default), `"quadrature"`, `"laplaceEM"` or
 #'   `"saem"`.
 #' @param control List of options: `sd` (start of the random-effect standard
 #'   deviations, default 0.3), `innerControl` and `trustControl` (the inner
-#'   and outer trust region of FOCEI; the outer one stops where the predicted
-#'   change of -2 log L is below `mtol`, default 1e-5), `secondOrderCorrection` (default
+#'   and outer trust region of FOCEI; the inner one stops where the Newton
+#'   step of the random effects is below `steptol`, default 1e-8, the outer one
+#'   where the predicted change of -2 log L is below `mtol`, default 1e-5), `secondOrderCorrection` (default
 #'   `TRUE`), `derivMode`, how FOCEI gets the second derivatives of its
 #'   volume term: `"forward-reverse"` (default), directional sweeps forward
 #'   along the random effects and backward with seeds, for models built with
 #'   `derivMode = c("forward", "reverse", "forward-reverse")`: the outer model
-#'   Hessian Gauss-Newton with the volume curvature of the variance parameters;
+#'   Hessian Gauss-Newton, the volume curvature learned by the SR1 correction;
 #'   the reported Hessian forward over forward where
 #'   the model also has `deriv2`, else the exact Schur complement of the joint
-#'   Hessian (up to 500 parameters) with that volume curvature, exact for
-#'   models linear in the random effects; or `"forward-forward"`, the
+#'   Hessian (up to 500 parameters) with the volume curvature of the variance
+#'   parameters, exact for models linear in the random effects; or `"forward-forward"`, the
 #'   second-order sensitivities of models built with `deriv2 = TRUE`, with the
 #'   exact volume Hessian. In both modes an SR1 correction from the changes of
 #'   the outer gradient between the last three accepted points adds the curvature
@@ -99,10 +102,17 @@
 #'   `maxOuter` (default 200), its iterations; `trustControl`, its [trust()]
 #'   settings; `coupling`, `"expectationConsistent"` (default) or
 #'   `"meanField"`, the integral where the data couple sparse random effects
-#'   of one group that the priors keep apart. Where expectation consistent
-#'   does not converge at a point, the fit continues by mean field and tries
-#'   expectation consistent again from that optimum; `fit$coupling` names the
-#'   integral of the result. Other entries are an error.
+#'   of one group that the priors keep apart. The coupling holds for the
+#'   whole fit: where expectation consistent does not converge at the start,
+#'   the fit is by mean field, and `fit$coupling` is `"meanFieldFallback"`; a
+#'   trial point at which it does not converge is a failed evaluation of the
+#'   trust region. `boundary`, the largest rise of -2 log L at which a
+#'   variance is set to 0, default 0.1, `FALSE` for none: with one grouping
+#'   and several blocks, a normal random effect of its own block whose
+#'   standard deviation ends below 0.1 is dropped, its etas fixed at 0, and
+#'   the other parameters are fitted again from the estimates; where that
+#'   raises -2 log L by at most `boundary`, the fit without it is returned and
+#'   names its hyperparameter in `boundary`. Other entries are an error.
 #' @param cores Number of cores over the groups and conditions inside the
 #'   fit; with 1 (default) no threads are started.
 #' @param verbose Logical; print the progress of the iterative methods.
@@ -129,7 +139,8 @@
 #'   Dirichlet-process blocks), `valueSE` (the standard error of `value` when
 #'   it comes from importance sampling), `coupling` (where the data couple
 #'   sparse random effects: `"expectationConsistent"`, `"meanField"` or
-#'   `"meanFieldFallback"`), `etaModes`, `etaSE`, `shrinkage` and
+#'   `"meanFieldFallback"`), `boundary` (the hyperparameters of the random
+#'   effects set to 0, see `control`), `etaModes`, `etaSE`, `shrinkage` and
 #'   the design; with method `"quadrature"` also `certificate`, per group its
 #'   level, -2 log L by quadrature and by importance sampling with standard
 #'   error, the Pareto shape of the weights, the estimated error of its level
@@ -156,7 +167,11 @@
 #'     degree `2 s + 1` exactly.}
 #'   \item{`maxLevel`}{highest level, default `K + 8`.}
 #'   \item{`tolDecrement`}{a stage ends when a Newton step on the rebuilt
-#'     nodes would lower -2 log L by less, default 1e-4.}
+#'     nodes would lower -2 log L by less than `tolDecrement`, default 1e-4,
+#'     or than the nodes resolve, the change of -2 log L by the next level
+#'     summed over the groups; or by less than the last step raised it on
+#'     rebuilt nodes of the same levels, at its iterate of lowest -2 log L.
+#'     Each counts as converged.}
 #'   \item{`maxEcmPerStage`, `cm1Control`, `maxCm1Iter`}{rebuilds per stage
 #'     (default 10), [trust()] settings and iterations of a step (default 30).}
 #'   \item{`pruneTol`}{nodes whose weight lies this much in log below the
@@ -182,6 +197,8 @@ em <- function(obj, random, init = NULL, fixed = NULL,
   method <- match.arg(method)
   .checkEmControl(control)
   control$sparse <- .checkSparse(sparse, "em")
+  cont <- .emContinue(obj, random, init, fixed)
+  random <- cont$random; init <- cont$init; fixed <- cont$fixed
   design <- .emDesign(obj, random)
   start <- .emStart(design, init, fixed, sd = control$sd %||% 0.3)
   .withCores(cores, .emFit(design, start, fixed, method, control, verbose))
@@ -190,7 +207,7 @@ em <- function(obj, random, init = NULL, fixed = NULL,
 ## Refuses entries of `control` and of `control$laplace` that em() does not read.
 .checkEmControl <- function(control) {
   known <- list(control = c("sd", "innerControl", "trustControl", "secondOrderCorrection", "derivMode", "quadrature",
-                            "saem", "laplace"),
+                            "saem", "laplace", "boundary"),
                 laplace = c("maxOuter", "trustControl", "coupling"))
   for (k in names(known)) {
     x <- if (k == "control") control else control[[k]]
@@ -202,6 +219,9 @@ em <- function(obj, random, init = NULL, fixed = NULL,
   dm <- control$derivMode
   if (!is.null(dm) && !(length(dm) == 1L && dm %in% c("forward-reverse", "forward-forward")))
     stop("em: `control$derivMode` is \"forward-reverse\" or \"forward-forward\".", call. = FALSE)
+  bd <- control$boundary
+  if (!is.null(bd) && !isFALSE(bd) && !(is.numeric(bd) && length(bd) == 1L && is.finite(bd) && bd >= 0))
+    stop("em: `control$boundary` is FALSE or one number of at least 0.", call. = FALSE)
   cp <- control$laplace$coupling
   if (!is.null(cp) && !(length(cp) == 1L && cp %in% c("expectationConsistent", "meanField")))
     stop("em: `control$laplace$coupling` is \"expectationConsistent\" or \"meanField\".", call. = FALSE)
@@ -227,14 +247,17 @@ em <- function(obj, random, init = NULL, fixed = NULL,
 #' @param cores Number of fits run in parallel, or `c(fits = , conditions = )`
 #'   as in [mstrust()]: fits in parallel and cores inside each fit.
 #' @param sd Standard deviation of the perturbation of the starts.
-#' @param budget The fit from `init` runs first; every other start ends after
-#'   `budget` times its outer iterations at most, those of the trust region of
-#'   FOCEI and of the fits with sparse random effects. `Inf` lets every start
-#'   run to convergence.
+#' @param budget The fit from `init` runs first; in every other start the
+#'   outer trust region of FOCEI, also the one before quadrature, and that of
+#'   the fits with sparse random effects end after `budget` times the
+#'   iterations they took in the first fit. Quadrature, Laplace-EM and SAEM
+#'   keep their own iteration limits. `Inf` lets every start run to
+#'   convergence.
 #' @example inst/examples/NLME.R
 #' @return The fit with the smallest `value`, of class `em`, with `multistart`,
-#'   a data.frame of every start with its `value`, `converged`, `iterations`
-#'   and `error`; a start that the budget ends has `converged = FALSE`.
+#'   a data.frame of every start with its `value`, `converged`, `iterations`,
+#'   `error` and `boundary`, the variances its fit set to 0; a start that the
+#'   budget ends has `converged = FALSE`.
 #'   [plotValues()] draws it as a waterfall.
 #' @seealso [em()]
 #' @export
@@ -246,6 +269,8 @@ msem <- function(obj, random, init = NULL, fixed = NULL,
   if (length(budget) != 1L || is.na(budget) || budget <= 0)
     stop("msem: `budget` is a positive number, Inf for none.", call. = FALSE)
   control$sparse <- .checkSparse(sparse, "msem")
+  cont <- .emContinue(obj, random, init, fixed)
+  random <- cont$random; init <- cont$init; fixed <- cont$fixed
   design <- .emDesign(obj, random)
   center <- .emStart(design, init, fixed, sd = control$sd %||% 0.3)
   # every start and every seed is drawn here, so set.seed() reproduces a run whatever `cores`;
@@ -254,17 +279,17 @@ msem <- function(obj, random, init = NULL, fixed = NULL,
   seeds <- sample.int(.Machine$integer.max, fits)
   split <- .splitCores(cores, "fits")
   inner <- if (!is.null(split$conditions)) .sanitizeCores(split$conditions)
-  # a worker returns its fit without the parts of the design, which the parent has
+  # a worker returns its fit without the parts of the design, which the parent has; a fit with a
+  # variance set to 0 keeps the design without that random effect
   shared <- c("prdfn", "data", "errfn", "design")
   # the message on the derivative mode travels with the fit and is given once
   one <- function(i, cap = NULL) {
     suppressMessages(loadDLL(obj))
-    try(resetWarmStarts(obj, verbose = FALSE), silent = TRUE)
     set.seed(seeds[i])
     note <- NULL
     tryCatch(withCallingHandlers({
       fit <- .emFit(design, starts[[i]], fixed, method, .capIterations(control, cap), FALSE)
-      fit[shared] <- NULL
+      if (is.null(fit$boundary)) fit[shared] <- NULL
       fit$derivModeNote <- note
       fit
     }, dMod2DerivModeMessage = function(m) {
@@ -274,8 +299,7 @@ msem <- function(obj, random, init = NULL, fixed = NULL,
   }
   # the budget of the other starts comes from the first, so it does not depend on `cores`
   first <- .parallelLapply(1L, one, coresConditions = inner)
-  done <- if (is.character(first[[1]])) NA_real_ else suppressWarnings(as.numeric(first[[1]]$iterations)[1])
-  cap <- if (is.finite(budget) && isTRUE(is.finite(done))) as.integer(ceiling(budget * max(done, 1)))
+  cap <- .msemCap(first[[1]], method, budget)
   runs <- c(first, if (fits > 1L) .parallelLapply(seq_len(fits)[-1], function(i) one(i, cap),
                                                   cores = .sanitizeCores(min(fits - 1L, split$outer)),
                                                   coresConditions = inner))
@@ -289,20 +313,84 @@ msem <- function(obj, random, init = NULL, fixed = NULL,
                       converged = vapply(runs, function(r) !is.character(r) && isTRUE(r$converged), TRUE),
                       iterations = vapply(runs, function(r) if (is.character(r)) NA_integer_
                                           else as.integer(r$iterations %||% NA_integer_), 0L),
-                      error = vapply(runs, function(r) if (is.character(r)) r else NA_character_, ""))
+                      error = vapply(runs, function(r) if (is.character(r)) r else NA_character_, ""),
+                      boundary = vapply(runs, function(r) if (is.character(r)) "" else paste(r$boundary, collapse = ", "), ""))
   if (verbose) print(table)
   if (!any(ok)) stop("msem: every fit failed; the first error: ", table$error[1], call. = FALSE)
   best <- runs[[which(ok)[which.min(table$value[ok])]]]
-  best[shared] <- list(design$prdfn, design$data, design$errfn, design)
+  if (is.null(best$boundary)) best[shared] <- list(design$prdfn, design$data, design$errfn, design)
   best$multistart <- table
   best
 }
 
 
-## One fit of `design` from `start` by `method`, with its `control`.
+## The iteration cap of the other starts: `budget` times the outer trust iterations of the first
+## fit `first`, those of the FOCEI stage before quadrature; NULL for the methods it does not cap.
+.msemCap <- function(first, method, budget) {
+  if (is.character(first) || !method %in% c("focei", "quadrature") || !is.finite(budget)) return(NULL)
+  done <- suppressWarnings(as.numeric(first$trustIterations %||% first$iterations)[1])
+  if (!is.finite(done)) return(NULL)
+  as.integer(ceiling(budget * max(done, 1)))
+}
+
+
+## A fit as `init`: its estimates as the start and its fixed values, its random effects without
+## those it set to 0 at the boundary, whose etas are held at 0.
+.emContinue <- function(obj, random, init, fixed) {
+  if (!inherits(init, "em")) return(list(random = random, init = init, fixed = fixed))
+  for (h in init$boundary) {
+    design <- .emDesign(obj, random)
+    b <- Filter(function(b) identical(paste("omega", b$short, b$short, sep = "_"), h), design$blocks)
+    if (length(b) != 1L) next
+    etas <- as.vector(design$etaNames[, b[[1]]$stems])
+    fixed <- c(fixed, setNames(numeric(length(etas)), etas)[setdiff(etas, names(fixed))])
+    random <- .dropRandomTerm(random, b[[1]]$stems)
+  }
+  fixed <- c(fixed, init$fixed[setdiff(names(init$fixed), names(fixed))])
+  list(random = random, init = init$argument[setdiff(names(init$argument), names(fixed))], fixed = fixed)
+}
+
+## One fit of `design` from `start` by `method`, with its `control`; -2 log L of the data at the
+## start with the random effects at 0 must be finite.
 .emFit <- function(design, start, fixed, method, control, verbose) {
+  etas <- .allEtas(design)
+  v <- design$objfn(pars = c(start, setNames(numeric(length(etas)), etas)), fixed = fixed, deriv = FALSE)$value
+  if (!is.finite(v))
+    stop("em: -2 log L of the data is not finite at the start (", format(v), "); an error model of 0 or ",
+         "below at a data point gives that.", call. = FALSE)
   fit <- .emFitMethod(design, start, fixed, method, control, verbose)
   fit$control <- control
+  fit$fixed <- fixed
+  .emBoundary(design, fit, fixed, method, control, verbose)
+}
+
+## The fit with the normal random effects of single blocks whose standard deviation ended below 0.1
+## set to 0 one at a time, smallest first, where the fit without one is at most control$boundary
+## worse; every refit starts from the estimates and checks its own random effects again.
+.emBoundary <- function(design, fit, fixed, method, control, verbose) {
+  tol <- control$boundary %||% 0.1
+  if (isFALSE(tol) || !is.null(design$groupings) || is.null(design$normal)) return(fit)
+  single <- Filter(function(b) b$dist == "normal" && length(b$stems) == 1L, design$blocks)
+  if (!length(single)) return(fit)
+  par <- c(fit$argument, fixed)
+  hyper <- vapply(single, function(b) paste("omega", b$short, b$short, sep = "_"), "")
+  stems <- vapply(single, `[[`, "", "stems")
+  free <- hyper %in% names(fit$argument)
+  logsd <- par[hyper]
+  small <- which(free & is.finite(logsd) & logsd < log(0.1))
+  if (length(design$blocks) <= 1L || !length(small)) return(fit)
+  for (k in small[order(logsd[small])]) {
+    random <- .dropRandomTerm(design$randomEffects, stems[k])
+    etas <- as.vector(design$etaNames[, stems[k]])
+    reduced <- tryCatch(suppressWarnings(.emFit(.emDesign(design$objfn, random),
+                                                fit$argument[setdiff(names(fit$argument), hyper[k])],
+                                                c(fixed, setNames(numeric(length(etas)), etas)),
+                                                method, control, verbose)),
+                        error = function(e) NULL)
+    if (is.null(reduced) || !(reduced$value <= fit$value + tol)) next
+    reduced$boundary <- c(hyper[k], reduced$boundary)
+    return(reduced)
+  }
   fit
 }
 
@@ -341,7 +429,9 @@ msem <- function(obj, random, init = NULL, fixed = NULL,
     focei = .fitFocei(design, joint, start, fixed, control),
     quadrature = {
       focei <- .fitFocei(design, joint, start, fixed, control)
-      .fitQuadrature(design, focei$argument, fixed, control, verbose, etaInit = focei$etaModes)
+      q <- .fitQuadrature(design, focei$argument, fixed, control, verbose, etaInit = focei$etaModes)
+      q$trustIterations <- focei$iterations
+      q
     },
     laplaceEM = .fitLaplaceEM(design, start, fixed, control, verbose),
     saem = .fitSaem(design, start, fixed, control, verbose))

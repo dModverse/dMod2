@@ -53,12 +53,12 @@
   full[meta$outer_names] <- psi[meta$outer_names]
   full[as.vector(E)] <- as.vector(etaInit)
   L <- .choleskyFactor(lay, psi)
-  ic <- modifyList(list(rinit = 1, rmax = 10, iterlim = 30, ftol = 1e-7, mtol = 1e-7,
+  ic <- modifyList(list(rinit = 1, rmax = 10, iterlim = 30, steptol = 1e-8, mtol = 1e-12,
                         eigen_floor_relative = 1e-10), control)
   fr <- focei_inner_trust(model_cb = design$prdfn, err_cb = .errorModel(design), pars_full = full,
                           eta_warmstart = etaInit, subject_meta = meta,
                           Omega_inv_mat = chol2inv(t(L)), Omega_log_det = 2 * sum(log(diag(L))),
-                          fixed = fixed, control = ic, predict_cb = .batchPredictor(design))
+                          fixed = fixed, control = ic, predict_cb = .guardPredictor(.batchPredictor(design)))
   modes <- fr$eta_modes
   dimnames(modes) <- dimnames(etaInit)
   list(modes = modes, H = setNames(fr$H_GN, design$groups))
@@ -103,6 +103,37 @@
     p
   })
   rest <- setdiff(names(base), active)
+  kr <- .nodeChain(design, reqCond, full, active, rest, grad, deriv2, cores) %||%
+    .nodeR(design, reqCond, full, active, rest, grad, deriv2, cores)
+  Q <- length(active)
+  lapply(seq_along(groups), function(i) {
+    B <- nrow(etas[[i]])
+    value <- numeric(B)
+    gr <- if (grad) matrix(0, B, Q, dimnames = list(NULL, active))
+    he <- if (grad) array(0, c(B, Q, Q), dimnames = list(NULL, active, active))
+    for (r in which(reqGroup == i)) {
+      loc <- kr$local[[r]]
+      b <- reqNode[r]
+      value[b] <- value[b] + loc$value
+      if (!grad) next
+      nm <- intersect(active, names(loc$gradient))
+      gr[b, nm] <- gr[b, nm] + loc$gradient[nm]
+      he[b, nm, nm] <- he[b, nm, nm] + loc$hessian[nm, nm]
+    }
+    list(value = value, gradient = gr, hessian = he)
+  })
+}
+
+## The data term of every request of .nodeData() in C++: list(local), NULL where the chain does not
+## cover the model.
+.nodeChain <- function(design, reqCond, full, active, rest, grad, deriv2, cores) {
+  loc <- .chainLocal(design$chain, reqCond, if (grad) lapply(full, `[`, active) else full,
+                     if (grad) lapply(full, `[`, rest), grad, grad && deriv2, cores, design$bloq, design$df)
+  if (!is.null(loc)) list(local = loc)
+}
+
+## The data term of every request of .nodeData() through the R evaluation: list(local).
+.nodeR <- function(design, reqCond, full, active, rest, grad, deriv2, cores) {
   preds <- .predictMany(design$prdfn, times = lapply(reqCond, function(cn) .emGrid(design, cn)),
                         parsList = if (grad) lapply(full, `[`, active) else full,
                         conditions = reqCond, fixed = if (grad) lapply(full, `[`, rest),
@@ -127,25 +158,8 @@
                        if (!is.null(errs)) list(errs[[r]]), "c", NULL)[[1]])
   names(meta) <- unique(reqCond)
   pn <- if (grad) unique(unlist(lapply(c(preds, errs), function(f) dimnames(attr(f, "deriv"))[[3]])))
-  kr <- normL2_kernel(preds, errs, unname(meta[reqCond]), as.character(pn), isTRUE(grad && deriv2), 1L,
-                      design$bloq, build_hessian = grad, local_blocks = TRUE, t_df = design$df)
-  Q <- length(active)
-  lapply(seq_along(groups), function(i) {
-    B <- nrow(etas[[i]])
-    value <- numeric(B)
-    gr <- if (grad) matrix(0, B, Q, dimnames = list(NULL, active))
-    he <- if (grad) array(0, c(B, Q, Q), dimnames = list(NULL, active, active))
-    for (r in which(reqGroup == i)) {
-      loc <- kr$local[[r]]
-      b <- reqNode[r]
-      value[b] <- value[b] + loc$value
-      if (!grad) next
-      nm <- intersect(active, names(loc$gradient))
-      gr[b, nm] <- gr[b, nm] + loc$gradient[nm]
-      he[b, nm, nm] <- he[b, nm, nm] + loc$hessian[nm, nm]
-    }
-    list(value = value, gradient = gr, hessian = he)
-  })
+  normL2_kernel(preds, errs, unname(meta[reqCond]), as.character(pn), isTRUE(grad && deriv2), 1L,
+                design$bloq, build_hessian = grad, local_blocks = TRUE, t_df = design$df)
 }
 
 
@@ -360,12 +374,16 @@
 }
 
 
-## The predicted decrease of -2 log L of a Newton step, g' H^-1 g / 2; Inf where the Hessian is
-## not positive definite.
-.newtonDecrement <- function(ev) {
+## The predicted decrease of -2 log L of a Newton step, g' H^-1 g / 2. Where the Hessian is not
+## positive definite, as where the variance of a random effect runs to 0, the directions without
+## positive curvature add the linear decrease of a step of `rmax` along their gradient.
+.newtonDecrement <- function(ev, rmax = 10) {
   R <- tryCatch(chol(ev$hessian), error = function(e) NULL)
-  if (is.null(R)) return(Inf)
-  sum(backsolve(R, ev$gradient, transpose = TRUE)^2) / 2
+  if (!is.null(R)) return(sum(backsolve(R, ev$gradient, transpose = TRUE)^2) / 2)
+  e <- eigen((ev$hessian + t(ev$hessian)) / 2, symmetric = TRUE)
+  g <- drop(crossprod(e$vectors, ev$gradient))
+  curved <- e$values > sqrt(.Machine$double.eps) * max(abs(e$values))
+  sum(g[curved]^2 / e$values[curved]) / 2 + rmax * sqrt(sum(g[!curved]^2))
 }
 
 ## Whether the prediction and error model have second derivatives; the evaluation stays in the
@@ -388,7 +406,7 @@
 
 ## ECM by quadrature from `start`: per stage of `levels`, the nodes rebuilt at the current
 ## parameters and one trust over every parameter on them, until a Newton step on the rebuilt
-## nodes would lower -2 log L by less than `tolDecrement`.
+## nodes would lower -2 log L by less than `tolDecrement`, or by less than the last step raised it.
 .fitQuadrature <- function(design, start, fixed, control = list(), verbose = FALSE,
                            etaInit = NULL) {
   lay <- design$normal
@@ -403,26 +421,40 @@
   step <- .trustControl(list(rinit = 1, rmax = 10, hessianMethod = if (exact) "exact" else "gn",
                              tolControl = list(ftol = 1e-8, mtol = 1e-8)),
                         qc$cm1Control, label = "cm1Control")
-  rows <- list(); dec <- Inf
+  rows <- list(); dec <- Inf; ended <- FALSE
   for (level in levels) {
+    prev <- NULL; best <- NULL; ended <- FALSE
     for (it in seq_len(qc$maxEcmPerStage %||% 10L)) {
       if (it > 1L || level != levels[1]) q$rebuild(psi, level, tol)
       ev <- q$value(psi, fixed = fixed, deriv2 = exact)
       dec <- .newtonDecrement(ev)
+      # what the nodes resolve: the change of -2 log L by the next level, summed over the groups
+      resolution <- sum(q$state$levelError[is.finite(q$state$levelError)])
+      at <- list(psi = psi, value = ev$value, levels = q$state$levels)
+      # -2 log L rose since the last iterate, on nodes of the same levels, by more than the Newton
+      # decrement here: the change is below what these nodes resolve, the stage ends at its best iterate.
+      unresolved <- !is.null(prev) && identical(prev$levels, at$levels) && at$value - prev$value > dec
+      if (is.null(best) || !identical(best$levels, at$levels) || at$value < best$value) best <- at
       rows[[length(rows) + 1L]] <- data.frame(level = level, ecmIter = it, OFV = ev$value, decrement = dec,
-                                              maxLevel = max(q$state$levels),
+                                              resolution = resolution, maxLevel = max(q$state$levels),
                                               nodes = sum(vapply(q$state$nodes, function(n) nrow(n$eta), 0L)),
                                               maxSoftmax = max(attr(ev, "diagnostics")$maxWeight),
                                               nEffMin = min(attr(ev, "diagnostics")$nEff))
-      if (verbose) message(sprintf("em(quadrature) level %d ecm %d: -2 log L %.6f, decrement %.2e",
-                                   level, it, ev$value, dec))
-      if (dec < (qc$tolDecrement %||% 1e-4)) break
+      if (verbose) message(sprintf("em(quadrature) level %d ecm %d: -2 log L %.6f, decrement %.2e, resolution %.2e",
+                                   level, it, ev$value, dec, resolution))
+      if (dec < max(qc$tolDecrement %||% 1e-4, resolution)) { ended <- TRUE; break }
+      if (unresolved) {
+        ended <- TRUE
+        if (!identical(best$psi, psi)) { psi <- best$psi; q$rebuild(psi, level, tol) }
+        break
+      }
+      prev <- at
       cm <- .innerTrust(modifyList(step, list(objfun = q$value, parinit = psi, fixed = fixed,
                                               iterlim = qc$maxCm1Iter %||% 30L)))
       psi <- cm$argument
     }
   }
-  converged <- dec < (qc$tolDecrement %||% 1e-4)
+  converged <- ended
   if (!converged) q$rebuild(psi, levels[length(levels)], tol)
   fit <- .quadratureResult(design, q, psi, fixed, "quadrature", length(rows), converged,
                            do.call(rbind, rows), exact)
@@ -458,7 +490,7 @@
     psi[structural] <- cm$argument
     q$rebuild(psi, lay$K + 1L)
     moments <- lapply(design$groups, function(g)
-      tcrossprod(q$state$modes[g, ]) + 2 * solve(q$state$H[[g]]))
+      tcrossprod(q$state$modes[g, ]) + 2 * chol2inv(chol(q$state$H[[g]])))
     upd <- .updateNormal(design, moments, fixed)
     psi[intersect(names(psi), names(upd))] <- upd[intersect(names(psi), names(upd))]
     dpsi <- max(abs(psi - before))
@@ -500,12 +532,13 @@
     if (is.null(s)) NA_real_ else s$logL
   }, 0)
   draws <- lapply(seq_along(design$groups), function(i) {
-    Sigma <- 2 * solve(st$H[[i]])
-    C <- t(chol(Sigma))
-    eta <- matrix(st$modes[i, ], nrow(z), K, byrow = TRUE) + (z %*% t(C)) / scale
+    # the proposal covariance 2 H^-1 = C C' with C^-1 = chol(H) / sqrt(2), without inverting H,
+    # which a collapsed random effect makes ill-conditioned
+    Cinv <- chol(st$H[[i]]) / sqrt(2)
+    eta <- matrix(st$modes[i, ], nrow(z), K, byrow = TRUE) + t(backsolve(Cinv, t(z))) / scale
     colnames(eta) <- lay$stems
-    d <- forwardsolve(C, t(eta) - st$modes[i, ])
-    logProposal <- lgamma((5 + K) / 2) - lgamma(5 / 2) - K / 2 * log(5 * pi) - sum(log(diag(C))) -
+    d <- Cinv %*% (t(eta) - st$modes[i, ])
+    logProposal <- lgamma((5 + K) / 2) - lgamma(5 / 2) - K / 2 * log(5 * pi) + sum(log(diag(Cinv))) -
       (5 + K) / 2 * log1p(colSums(d^2) / 5)
     list(eta = eta, logProposal = logProposal)
   })

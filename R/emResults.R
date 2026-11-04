@@ -15,7 +15,7 @@
   }, 0))
   out <- list(argument = fit$argument, value = fit$value, gradient = fit$gradient,
               hessian = fit$hessian, information = fit$information, converged = fit$converged,
-              iterations = fit$iterations,
+              iterations = fit$iterations, trustIterations = fit$trustIterations,
               method = method, fixed = fixed,
               nObs = nObs, valueNonmem = if (!is.finite(design$df)) fit$value - nDensity * log(2 * pi) else NA_real_,
               prdfn = design$prdfn, data = design$data, errfn = design$errfn, design = design,
@@ -179,8 +179,10 @@ print.em <- function(x, ...) {
   if (!is.null(x$coupling))
     cat("Coupled sparse random effects: ", switch(x$coupling, expectationConsistent = "expectation consistent",
         meanField = "mean field (an upper bound on -2 log L)",
-        meanFieldFallback = "mean field, expectation consistent did not converge"), "\n", sep = "")
+        meanFieldFallback = "mean field, expectation consistent did not converge at the start"), "\n", sep = "")
   print(x$argument)
+  if (length(x$boundary))
+    cat("Set to 0 at the boundary: ", paste(x$boundary, collapse = ", "), "\n", sep = "")
   if (!is.null(x$omega)) {
     cat("Random effects:\n")
     print(x$omega, row.names = FALSE)
@@ -320,9 +322,11 @@ print.summary.em <- function(x, digits = 4, ...) {
     om$estimate <- signif(om$estimate, digits); om$se <- signif(om$se, digits)
     print(om, row.names = FALSE)
   }
-  if (!is.null(x$shrinkage))
-    cat("\nShrinkage:", paste(sprintf("%s = %.3f", names(x$shrinkage), x$shrinkage),
-                                   collapse = ", "), "\n")
+  sh <- x$shrinkage
+  # several groupings: one vector per grouping
+  if (is.list(sh)) sh <- unlist(unname(Map(function(s, g) setNames(s, paste0(g, ": ", names(s))), sh, names(sh))))
+  if (length(sh))
+    cat("\nShrinkage:", paste(sprintf("%s = %.3f", names(sh), sh), collapse = ", "), "\n")
   invisible(x)
 }
 
@@ -423,17 +427,40 @@ predict.em <- function(object, times = NULL, type = c("all", "individual", "popu
 #'   per group the residual of its data against \eqn{f(\eta^*) - G \eta^*},
 #'   whitened by \eqn{G \Omega G' + \Sigma}, \eqn{G} the sensitivities in the
 #'   normal random effects; without those equal to IWRES), `"PRES"` or
-#'   `"PWRES"` (against the population prediction).
+#'   `"PWRES"` (against the population prediction), `"NPDE"` (normalised
+#'   prediction distribution errors from `nsim` simulated data sets,
+#'   decorrelated per group, readings at or below their limit imputed as in
+#'   Nguyen et al. 2012).
+#' @param nsim,seed With `"NPDE"`: number of simulated data sets and the seed
+#'   of the random number generator.
 #' @param ... Ignored.
 #' @return Numeric vector, one entry per data row, in the order of the rows of
-#'   `predict(object)` with `source == "obs"`.
+#'   `predict(object)` with `source == "obs"`. NPDE have the attribute `tests`,
+#'   the tests of mean 0 (t-test), variance 1 (chi-square) and normality
+#'   (Shapiro-Wilk) with their p-values and the global p-value, three times the
+#'   smallest.
+#' @example inst/examples/NLME.R
+#' @references Comets, E., Brendel, K. and Mentré, F. (2008). Computing
+#'   normalised prediction distribution errors to evaluate nonlinear
+#'   mixed-effect models. \emph{Computer Methods and Programs in Biomedicine}
+#'   90(2), 154-166.
+#'
+#'   Nguyen, T. H. T., Comets, E. and Mentré, F. (2012). Extension of NPDE for
+#'   evaluation of nonlinear mixed effect models in presence of data below the
+#'   quantification limit with applications to HIV dynamic model.
+#'   \emph{Journal of Pharmacokinetics and Pharmacodynamics} 39(5), 499-518.
 #' @export
-residuals.em <- function(object, type = c("IWRES", "IRES", "CWRES", "PRES", "PWRES"), ...) {
+residuals.em <- function(object, type = c("IWRES", "IRES", "CWRES", "PRES", "PWRES", "NPDE"),
+                         nsim = 1000L, seed = NULL, ...) {
   type <- match.arg(type)
   pr <- predict(object)
   pr <- pr[pr$source == "obs", , drop = FALSE]
-  if (type != "CWRES") return(pr[[type]])
-  .cwres(object, pr)
+  if (type == "CWRES") return(.cwres(object, pr))
+  if (type != "NPDE") return(pr[[type]])
+  .localSeed(seed)
+  out <- .npde(object, nsim, pr)
+  attr(out, "tests") <- .npdeTests(out)
+  out
 }
 
 ## Conditional weighted residuals per group, or per component with several groupings, over the
@@ -494,7 +521,8 @@ residuals.em <- function(object, type = c("IWRES", "IRES", "CWRES", "PRES", "PWR
 confint.em <- function(object, parm = NULL, level = 0.95, method = c("wald", "profile"),
                        control = NULL, ...) {
   method <- match.arg(method)
-  control <- control %||% object$control %||% list()
+  # the profile keeps the random effects of the fit
+  control <- modifyList(control %||% object$control %||% list(), list(boundary = FALSE))
   est <- object$argument
   se <- .structuralSE(object)
   z <- stats::qnorm(1 - (1 - level) / 2)

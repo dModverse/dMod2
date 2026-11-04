@@ -27,7 +27,8 @@ NULL
 #' @format A data frame with 32 rows and the columns `name`, `time`, `value`,
 #'   `sigma`, `lloq` (lower limit of quantification, `-Inf` throughout) and
 #'   `condition`.
-#' @seealso `demo("BA_transport", package = "dMod2")` builds and fits the
+#' @seealso The example project
+#'   [bileAcidTransport](https://dmodverse.github.io/dMod2/articles/bileAcidTransport.html) builds and fits the
 #'   model.
 #' @examples
 #' data(badata)
@@ -68,7 +69,8 @@ NULL
 #' distributed in the PEtab benchmark collection, model
 #' `Bachmann_MSB2011`, which is installed with the package, see
 #' `system.file("extdata", "petab_bachmann", package = "dMod2")`.
-#' @seealso `demo("BachmannMSB2011", package = "dMod2")` builds the model.
+#' @seealso The example project
+#'   [bachmannMSB2011](https://dmodverse.github.io/dMod2/articles/bachmannMSB2011.html) builds and fits the model.
 #' @examples
 #' data(bachmann)
 #' head(bachmann)
@@ -93,8 +95,9 @@ NULL
 #' spectrometry and mathematical modeling. J Proteome Res 13(12):5685-5694.
 #' Values as distributed in the PEtab benchmark collection, model
 #' `Boehm_JProteomeRes2014`.
-#' @seealso `demo("Boehm_JProteomeRes2014", package = "dMod2")` builds the
-#'   model.
+#' @seealso The example project
+#'   [boehmJProteomeRes2014](https://dmodverse.github.io/dMod2/articles/boehmJProteomeRes2014.html) builds and fits
+#'   the model.
 #' @examples
 #' data(boehm)
 #' plotData(as.datalist(boehm))
@@ -291,11 +294,91 @@ lbind <- function(mylist) {
 #' molecular mechanisms regulating sensitization of interferon alpha signal
 #' transduction. Mol Syst Biol 16:e8955, \doi{10.15252/msb.20198955}. Values
 #' as fitted for the Huh7.5 core model of the publication.
-#' @seealso `demo("KokMSB2020", package = "dMod2")` builds the model.
+#' @seealso The example project [kokMSB2020](https://dmodverse.github.io/dMod2/articles/kokMSB2020.html) builds
+#'   the model.
 #' @examples
 #' data(kok)
 #' head(kok)
 #' @name kok
+#' @docType data
+#' @keywords data
+NULL
+
+
+#' Warfarin Pharmacokinetics and Pharmacodynamics
+#'
+#' Plasma concentration of warfarin (`cp`, mg/L) and prothrombin complex
+#' activity (`pca`, percent of normal) in 32 subjects after one oral dose at
+#' time 0. The four concentrations recorded as 0, at 0.5 h, are left out; their
+#' limit of quantification is not known.
+#'
+#' @format A data frame with 479 rows, one per reading, and 10 columns:
+#' \describe{
+#'   \item{`name`}{`"cp"` or `"pca"`.}
+#'   \item{`time`}{hours after the dose.}
+#'   \item{`value`}{the reading.}
+#'   \item{`sigma`}{`NA` throughout.}
+#'   \item{`condition`}{the subject, `"ID1"` to `"ID32"`.}
+#'   \item{`id`}{the subject, 1 to 32.}
+#'   \item{`dose`}{the oral dose in mg.}
+#'   \item{`wt`, `age`, `sex`}{weight (kg), age (years) and sex.}
+#' }
+#' @source Package nlmixr2data, data set `warfarin` (GPL >= 3), after
+#'   Funaki T, Holford N, Fujita S (2018), Population PKPD analysis using
+#'   nlmixr2 and NONMEM, PAGJA 2018.
+#'
+#'   O'Reilly RA, Aggeler PM, Leong LS (1963), Studies on the coumarin
+#'   anticoagulant drugs: the pharmacodynamics of warfarin in man. Journal of
+#'   Clinical Investigation 42(10):1542-1551.
+#'
+#'   O'Reilly RA, Aggeler PM (1968), Studies on coumarin anticoagulant drugs:
+#'   initiation of warfarin therapy without a loading dose. Circulation
+#'   38:169-177.
+#' @seealso The example project [pharmacometrics](https://dmodverse.github.io/dMod2/articles/pharmacometrics.html)
+#'   fits a PK/PD model.
+#' @examples
+#' data(warfarin)
+#' head(warfarin)
+#' @name warfarin
+#' @docType data
+#' @keywords data
+NULL
+
+
+#' Mavoglurant Pharmacokinetics
+#'
+#' Plasma concentration of mavoglurant (`cp`) in 120 subjects after an
+#' intravenous infusion of 10 min (20 min in one occasion); 78 subjects were
+#' dosed on two occasions. Time counts from the start of the infusion of each
+#' occasion.
+#'
+#' @format A data frame with 2427 rows, one per reading, and 13 columns:
+#' \describe{
+#'   \item{`name`}{`"cp"`.}
+#'   \item{`time`}{hours after the start of the infusion of the occasion.}
+#'   \item{`value`}{the concentration.}
+#'   \item{`sigma`}{`NA` throughout.}
+#'   \item{`condition`}{subject and occasion, `"<ID>_<OCC>"`.}
+#'   \item{`ID`, `OCC`}{subject and occasion.}
+#'   \item{`dose`}{the infused dose in mg, 25, 37.5 or 50.}
+#'   \item{`duration`}{the duration of the infusion in hours, `AMT / RATE` of
+#'     the source.}
+#'   \item{`AGE`, `SEX`, `WT`, `HT`}{age (years), sex (1 or 2), weight (kg)
+#'     and height (m).}
+#' }
+#' @source Package nlmixr2data, data set `mavoglurant` (GPL >= 3), the
+#'   readings without the rows of missing values.
+#'
+#'   Wendling T, Tsamandouras N, Dumitras S, Pigeolet E, Ogungbenro K, Aarons
+#'   L (2016), Reduction of a whole-body physiologically based pharmacokinetic
+#'   model to stabilise the Bayesian analysis of clinical data. The AAPS
+#'   Journal 18(1):196-209.
+#' @seealso The example project [pharmacometrics](https://dmodverse.github.io/dMod2/articles/pharmacometrics.html)
+#'   fits a two-compartment model with variability between occasions.
+#' @examples
+#' data(mavoglurant)
+#' head(mavoglurant)
+#' @name mavoglurant
 #' @docType data
 #' @keywords data
 NULL

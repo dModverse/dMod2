@@ -41,6 +41,7 @@ data(bachmann)
 head(bachmann)
 }
 \seealso{
-\code{demo("BachmannMSB2011", package = "dMod2")} builds the model.
+The example project
+\href{https://dmodverse.github.io/dMod2/articles/bachmannMSB2011.html}{bachmannMSB2011} builds and fits the model.
 }
 \keyword{data}

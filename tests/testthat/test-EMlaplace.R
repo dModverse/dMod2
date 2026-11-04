@@ -405,7 +405,7 @@ test_that("the group scores of a sparse marginal sum to its gradient, each the g
   }
 })
 
-test_that("where expectation consistent fails the fit continues by mean field and says so", {
+test_that("where expectation consistent fails at the start the fit is by mean field and says so", {
   m <- .lap()
   obj <- normL2(m$data, m$g * Xt() * m$pc, errmodel = m$err)
   mf <- em(obj, randomEffects(m$pc), m$init, verbose = FALSE, control = list(laplace = list(coupling = "meanField")))
@@ -417,6 +417,24 @@ test_that("where expectation consistent fails the fit continues by mean field an
   expect_equal(fb$coupling, "meanFieldFallback")
   expect_true(fb$converged)
   expect_equal(fb$value, mf$value, tolerance = 1e-5)
+})
+
+test_that("a trial point at which expectation consistent fails is a failed evaluation, the coupling stays", {
+  m <- .lap()
+  obj <- normL2(m$data, m$g * Xt() * m$pc, errmodel = m$err)
+  ec <- em(obj, randomEffects(m$pc), m$init, verbose = FALSE)
+  expect_equal(ec$coupling, "expectationConsistent")
+  real <- dMod2:::.sparseExpectation
+  calls <- 0L
+  local_mocked_bindings(.sparseExpectation = function(...) {
+    calls <<- calls + 1L
+    if (calls %in% 3:4) NULL else real(...)
+  }, .package = "dMod2")
+  fit <- em(obj, randomEffects(m$pc), m$init, verbose = FALSE)
+  expect_gt(calls, 4L)
+  expect_equal(fit$coupling, "expectationConsistent")
+  expect_true(fit$converged)
+  expect_equal(fit$value, ec$value, tolerance = 1e-5)
 })
 
 
@@ -494,6 +512,46 @@ test_that("the spike-and-slab integral of a group sums the subsets on the full c
   # one coordinate is the partition of one group with the anchor, c / (1 + c) its slab share
   one <- dMod2:::.slabSubsets(matrix(3), 0.4, 0.3 / 1.3, 0.7)
   expect_equal(one$logI, dMod2:::.slabPartition(3, 0.4, 0.3, 0.7)$logI)
+})
+
+test_that("more spike-and-slab coordinates than integrated jointly: one factor each, expectation consistent", {
+  K <- 13L; G <- 2L; st <- paste0("s", seq_len(K))
+  # the subset sum of .slabSubsets without its bound on K
+  exact <- function(P, m, prob, tau) {
+    b <- drop(P %*% m); c0 <- sum(m * b)
+    terms <- apply(as.matrix(expand.grid(rep(list(c(FALSE, TRUE)), K))), 1, function(F) {
+      out <- sum(log(prob[F])) + sum(log1p(-prob[!F])) - c0 / 2
+      if (!any(F)) return(out)
+      R <- chol(P[F, F, drop = FALSE] + diag(1 / tau[F]^2, sum(F)))
+      out + sum(backsolve(R, b[F], transpose = TRUE)^2) / 2 - sum(log(diag(R))) - sum(log(tau[F]))
+    })
+    max(terms) + log(sum(exp(terms - max(terms))))
+  }
+  lay <- data.frame(stem = st, block = 1L, dist = "spikeSlab", lambdaName = NA_character_, probName = "prob_ID",
+                    concentrationName = NA_character_, tauName = "tau_ID", lambda = NA_real_, prob = NA_real_,
+                    concentration = NA_real_, tau = NA_real_, stringsAsFactors = FALSE)
+  hyp <- list(lambda = setNames(rep(NA, K), st), prob = setNames(rep(0.3, K), st),
+              concentration = setNames(rep(NA, K), st), tau = setNames(rep(0.8, K), st))
+  draw <- function(rho) {
+    P <- lapply(seq_len(G), function(g) {
+      A <- diag(runif(K, 2, 6))
+      A[cbind(1:(K - 1), 2:K)] <- A[cbind(2:K, 1:(K - 1))] <- rho * sqrt(diag(A)[-K] * diag(A)[-1])
+      structure(A, dimnames = list(st, st))
+    })
+    m <- matrix(rnorm(G * K, 0, 0.6) * rbinom(G * K, 1, 0.4), G, K, dimnames = list(paste0("g", seq_len(G)), st))
+    list(P = P, m = m)
+  }
+  logI <- function(d) sum(vapply(seq_len(G), function(g) exact(d$P[[g]], d$m[g, ], hyp$prob, hyp$tau), 0))
+  set.seed(1)
+  d0 <- draw(0)
+  expect_equal(lengths(dMod2:::.sparseFactors(d0$P, st, lay)$factors), rep(1L, K))
+  # without coupling the factors are exact
+  expect_equal(dMod2:::.sparseIntegral(d0$P, d0$m, d0$m, lay, hyp, character(0))$logI, logI(d0), tolerance = 1e-10)
+  d <- draw(0.3)
+  ec <- dMod2:::.sparseIntegral(d$P, d$m, d$m, lay, hyp, character(0))
+  mf <- dMod2:::.sparseIntegral(d$P, d$m, d$m, lay, hyp, character(0), coupling = "meanField")
+  expect_identical(ec$coupling, "expectationConsistent")
+  expect_lt(abs(ec$logI - logI(d)), abs(mf$logI - logI(d)) / 3)
 })
 
 test_that("the spike-and-slab and cluster marginals have the exact gradient, normal etas beside", {

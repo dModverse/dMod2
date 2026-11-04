@@ -225,7 +225,10 @@ test_that("a random background per gel fits through EM, censored readings by M3"
   expect_named(fit$multistart, c("value", "converged", "iterations"))
   expect_equal(nrow(fit$multistart), 2L)
   expect_true(all(c("eta_bj_G01", "eta_sigmaR_G01") %in% names(fit$parameters)))
-  expect_equal(sort(unique(fit$omega$eta1)), c("bj", "sigmaR"))
+  # a random effect without spread in the readings is set to 0 at the boundary
+  expect_equal(unique(fit$omega$eta1), "bj")
+  expect_match(fit$fit$boundary, "sigmaR")
+  expect_equal(unname(fit$parameters[grep("^eta_sigmaR_", names(fit$parameters))]), rep(0, 8))
   expect_equal(fit$scaled$bloq, low)
   expect_equal(fit$aligned$lloq[fit$aligned$time == "0"], min(fit$scaled$scaled[low]))
   expect_true(all(is.na(fit$aligned$lloq[fit$aligned$time != "0"])))
@@ -233,15 +236,15 @@ test_that("a random background per gel fits through EM, censored readings by M3"
   # beside the optimum, where the gradient is not of the size of the convergence of the modes
   ctl <- list(trustControl = list(iterlim = 0), innerControl = list(ftol = 1e-12, mtol = 1e-12, iterlim = 200))
   point <- fit$fit$argument + 0.05
-  at <- function(sparse) em(fit$objfn, fit$randomEffects, point, control = ctl, verbose = FALSE,
-                            sparse = sparse)
+  at <- function(sparse) em(fit$objfn, fit$randomEffects, point, fixed = fit$fit$fixed, control = ctl,
+                            verbose = FALSE, sparse = sparse)
   dense <- at(FALSE)
   sp <- at(TRUE)
   nm <- names(dense$argument)
   # forward over reverse through the vjp of the alignment kernels, against forward over forward
   expect_identical(dense$derivMode, "forward-reverse")
-  ff <- em(fit$objfn, fit$randomEffects, point, control = c(ctl, list(derivMode = "forward-forward")),
-           verbose = FALSE)
+  ff <- em(fit$objfn, fit$randomEffects, point, fixed = fit$fit$fixed,
+           control = c(ctl, list(derivMode = "forward-forward")), verbose = FALSE)
   expect_equal(dense$value, ff$value, tolerance = 1e-10)
   expect_equal(dense$gradient, ff$gradient, tolerance = 1e-6)
   expect_equal(dense$hessian, ff$hessian, tolerance = 1e-6)
