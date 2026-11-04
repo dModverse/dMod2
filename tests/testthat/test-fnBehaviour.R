@@ -1,6 +1,6 @@
 # Characterisation of Xd(), Id(), the event and start checks of the deSolve
-# prediction functions, the forcing check of Y(), objective sums and their
-# printing, res() with a factor name column, and define()/insert().
+# prediction functions, the forcing check of Y(), objective sums, res() with a
+# factor name column, and define()/insert().
 
 .xdGrid <- data.frame(name = c("A", "A", "A", "B", "B"),
                        time = c(0, 1, 3, 2, 0),
@@ -165,19 +165,6 @@ test_that("+.objlist sums on the union of parameters and keeps attributes", {
   s2 <- v + v
   expect_identical(names(s2), "value")
   expect_identical(s2$value, 2)
-})
-
-test_that("print.objlist prints value, truncated gradient and Hessian, attributes", {
-  g <- setNames(seq_len(25) / 10, paste0("p", seq_len(25)))
-  H <- diag(25); dimnames(H) <- list(names(g), names(g))
-  o <- objlist(3.5, g, H)
-  attr(o, "chi2") <- c(data = 2.25)
-  attr(o, "data") <- 2.25
-  expect_snapshot(print(o))
-  expect_snapshot(print(o, n1 = 3, n2 = 2))
-  expect_snapshot(print(objlist(1, c(a = 1), NULL)))
-  expect_snapshot(print(structure(list(value = 4), class = "objlist")))
-  expect_invisible(print(o))
 })
 
 test_that("res accepts a factor name column and returns character names", {

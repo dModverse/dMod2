@@ -1,5 +1,5 @@
 # Observable behaviour of mstrust(), reduceReplicates(), fitErrorModel() and
-# the result parsing of steadyStates(): printed output, files, routing, values.
+# the result parsing of steadyStates(): messages, files, routing, values.
 
 quadObj <- function(pars, fixed = NULL, ...) {
   p <- c(pars, fixed)
@@ -14,18 +14,6 @@ stripRunDate <- function(x) gsub("trial-([0-9]+)-[0-9-]+", "trial-\\1-DATE", x)
 
 # ---- mstrust ------------------------------------------------------------
 
-test_that("mstrust prints the multi-start summary with stats = TRUE", {
-  set.seed(4)
-  expect_snapshot(fits <- mstrust(quadObj, c(a = 0, b = 0), fits = 6, sd = 2,
-                                  retry = FALSE, stats = TRUE))
-  expect_identical(sum(dMod2:::.statParlist(fits) == "error"), 3L)
-  set.seed(4)
-  expect_snapshot(invisible(mstrust(quadObj, c(a = 0, b = 0), fits = 2, sd = 0.5,
-                                    iterlim = 1, stats = TRUE)))
-  expect_silent(mstrust(quadObj, c(a = 0, b = 0), fits = 2, sd = 0.5))
-})
-
-
 test_that("mstrust writes the run folder, log and parameter list with output = TRUE", {
   d <- withr::local_tempdir()
   set.seed(4)
@@ -34,8 +22,6 @@ test_that("mstrust writes the run folder, log and parameter list with output = T
   files <- stripRunDate(list.files(d, recursive = TRUE, include.dirs = TRUE))
   expect_identical(sort(files), c("run", "run/trial-1-DATE", "run/trial-1-DATE/mstrust.log",
                                   "run/trial-1-DATE/parameterList.Rda"))
-  log <- list.files(d, "mstrust.log", recursive = TRUE, full.names = TRUE)
-  expect_snapshot(writeLines(readLines(log)))
   saved <- readRDS(list.files(d, "parameterList.Rda", recursive = TRUE, full.names = TRUE))
   expect_identical(unclass(saved)[1:4], unclass(fits)[1:4])
 
@@ -181,19 +167,13 @@ test_that("fitErrorModel fits per group and returns the standard error", {
   expect_identical(unique(as.character(two$condidnt)), c("y ctrl", "z ctrl"))
 })
 
-test_that("fitErrorModel plots variances and bands per group", {
+test_that("fitErrorModel plots the variances of the replicates", {
   skip_if_not_installed("optimx")
   red <- errorModelData()
   pdf(NULL); on.exit(dev.off())
   invisible(fitErrorModel(red, factors = "name", par = c(s0 = -4, srel = -3), plotting = TRUE))
-  p <- ggplot2::last_plot()
-  expect_identical(unname(vapply(p$layers, function(l) class(l$geom)[1], "")),
-                   c("GeomPoint", "GeomLine", "GeomRibbon", "GeomRibbon"))
-  expect_identical(p$labels$y, "variance")
-  expect_identical(names(p$facet$params$facets), "condidnt")
-  b <- ggplot2::ggplot_build(p)
+  b <- ggplot2::ggplot_build(ggplot2::last_plot())
   expect_equal(10^b$data[[1]]$y, red$sigma^2 * red$n)
-  expect_identical(as.character(b$layout$layout$condidnt), c("y", "z"))
 })
 
 

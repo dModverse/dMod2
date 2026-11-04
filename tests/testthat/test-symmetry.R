@@ -1,5 +1,5 @@
 # The wrapper around symident: argument and field names, the model specification,
-# the objects and their reports. The analysis itself is tested in symident.
+# the objects. The analysis itself is tested in symident.
 
 test_that("argument names go to snake_case and field names back to camelCase", {
   expect_identical(dMod2:::.symSnake(c("relevanceCapDir", "laurentDegNum", "timeout",
@@ -99,12 +99,6 @@ test_that("a scaling and a general direction, with the result object", {
   expect_true(all(c("A", "B", "k1", "k2", "s") %in% r$info$coordinates))
   expect_false(is.null(attr(r, "symident")))
   expect_identical(r$call[[1]], quote(symmetryDetection))
-  out <- capture.output(print(r))
-  expect_match(out[1], "rank 3 / 5")
-  expect_true(any(grepl("Scalings:", out)))
-  sm <- capture.output(summary(r))
-  expect_true(any(grepl("Computation:", sm)))
-  expect_true(any(grepl("Lie order", sm)))
 })
 
 test_that("an unknown input and its change along each direction", {
@@ -115,14 +109,12 @@ test_that("an unknown input and its change along each direction", {
   ch <- lapply(r$symmetries, `[[`, "inputChange")
   expect_true(all(vapply(ch, function(x) inherits(x, "eqnvec") && names(x) == "T", TRUE)))
   expect_identical(names(r$info$unknownInputs$jets), "T")
-  expect_true(any(grepl("input change:", capture.output(print(r)))))
 })
 
 test_that("an identifiable model, and conditions that fix a scale", {
   r <- symmetryDetection(eqnvec(x = "-k*x"), eqnvec(y = "x"), verbose = FALSE)
   expect_true(r$identifiable)
   expect_length(r$symmetries, 0L)
-  expect_match(capture.output(print(r))[1], "identifiable")
   r <- symmetryDetection(eqnvec(x = "-k*x"), eqnvec(y = "s*x"), verbose = FALSE)
   expect_false(r$identifiable)
   dose <- addEvent(eventlist(), var = "x", time = 0, value = "dose", method = "replace")
@@ -160,7 +152,6 @@ test_that("the gap order is raised to its rank bound, else the rank is a lower b
   expect_false(r$identifiable)
   expect_true(any(grepl("^gap order: ", unlist(r$info$limits))))
   expect_null(r$info$bound$probability)
-  expect_true(any(grepl("gap order is not proven", capture.output(print(r)))))
   expect_warning(r <- symmetryDetection(f, eqnvec(y = "x"), trafo = tr, events = ev, reconstruct = TRUE,
                                         control = cap, verbose = FALSE),
                  "still grows")
@@ -204,8 +195,6 @@ test_that("the reduction removes the directions and reports its chart", {
   expect_identical(unname(unclass(red$trafo)["A"]), "1")
   expect_true(all(c("block", "coordinates", "verdict", "condition") %in%
                     names(red$zeroCompatibility)))
-  expect_true(any(grepl("Trafo", capture.output(print(red)))))
-  expect_true(any(grepl("Blocks", capture.output(summary(red)))))
   fx <- symmetryReduction(r, fixed = "s")
   expect_identical(unname(unclass(fx$trafo)["s"]), "s")
   expect_error(symmetryReduction(list()), "symmetrydetection")

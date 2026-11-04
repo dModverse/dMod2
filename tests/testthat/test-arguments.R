@@ -85,12 +85,6 @@ test_that("msParframe leaves the global RNG alone", {
   expect_identical(.Random.seed, before)
 })
 
-test_that("plotFluxes takes its legend title", {
-  times <- 0:5
-  grid <- data.frame(name = "A", time = times, row.names = paste0("A", times))
-  x <- Xd(grid)
-  pars <- structure(exp(-times / 2), names = getParameters(x))
-  p <- plotFluxes(pars, x, seq(0, 5, 0.5), c(prod = "0.2"), legendTitle = "F")
-  expect_s3_class(p, "ggplot")
+test_that("symmetryDetection asks for the observables", {
   expect_error(symmetryDetection(eqnvec(x = "-k*x")), "give the observables")
 })

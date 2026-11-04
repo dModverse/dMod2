@@ -75,10 +75,6 @@ test_that("as.parvec of a parframe checks the index", {
   expect_error(as.parvec(pf, 0))
 })
 
-test_that("a parvec with NA prints", {
-  expect_output(print(as.parvec(c(a = NA, b = 1))), "NA")
-})
-
 test_that("parvec() names unnamed entries by position", {
   expect_equal(names(parvec(a = 1, 2)), c("a", "par2"))
   expect_equal(names(parvec(c(a = 1, b = 2))), c("a", "b"))

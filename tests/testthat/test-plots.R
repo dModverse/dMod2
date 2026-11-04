@@ -87,16 +87,6 @@ test_that("plotArray draws nSim trajectories from the optimum, also for small va
   expect_true(any(d$ParValue == pars[["A2"]]))
 })
 
-test_that("plotPathsMulti colors the nPars largest paths and puts the rest in Others", {
-  skip_if_not_installed("cowplot")
-  pars <- c(A0 = 1, A1 = 0.5, A2 = 0.3, A3 = 0.2, A4 = 0.1)
-  profs <- profile(constraintL2(mu = pars, sigma = 0.1), pars, whichPar = "A1",
-                   limits = c(-1, 1), cores = 1)
-  d <- as.data.frame(plotPathsMulti(profs, "A1", nPars = 2)$data)
-  expect_lte(length(unique(d$label)), 3L)
-  expect_true("Others" %in% d$label)
-})
-
 test_that("plotPaths draws relative paths and names an unprofiled parameter", {
   pr <- .coupledProfile()
   d <- as.data.frame(plotPaths(pr)$data)

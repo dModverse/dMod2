@@ -44,8 +44,9 @@
     # one-compartment iv bolus with proportional error, three subjects
     se_subj <- c("A", "B", "C")
     reactions <- addReaction(eqnlist(), "Cc", "", "Cl/V * Cc", "elimination")
-    se_x <- Xs(odemodel(reactions, modelname = "sigeta_ode", compile = FALSE, backend = "cppDE",
-                        deriv2 = TRUE, derivMode = c(dm, "forward-forward")))
+    se_ode <- odemodel(reactions, modelname = "sigeta_ode", compile = FALSE, backend = "cppDE",
+                       deriv2 = TRUE, derivMode = c(dm, "forward-forward"))
+    se_x <- Xs(se_ode)
     se_g <- Y(c(y = "Cc"), se_x, modelname = "sigeta_obs", compile = FALSE, deriv2 = TRUE, derivMode = dm)
     se_err <- Y(eqnvec(y = "sigma_prop * y"), se_g, attachInput = FALSE, compile = FALSE,
                 deriv2 = TRUE, modelname = "sigeta_err", derivMode = dm)
@@ -79,7 +80,7 @@
     cache <<- list(
       theoph = list(x = th_x, g = th_g, err = th_err, p = th_p, data = as.datalist(data.frame(
         name = "y", time = th$Time, value = th$conc, sigma = NA_real_, condition = th$Subject))),
-      sigeta = list(x = se_x, g = se_g, err = se_err, p = se_p),
+      sigeta = list(x = se_x, g = se_g, err = se_err, p = se_p, ode = se_ode),
       mo     = list(x = mo_x, g = mo_g, err = mo_err, p = mo_p))
     cache
   }
@@ -142,7 +143,8 @@ test_that("the FOCEI gradient with a random effect in the error model is the slo
   oldwd <- setwd(tempdir()); on.exit(setwd(oldwd))
   mods <- .focei_models()$sigeta
   set.seed(5)
-  model <- mods$g * mods$x * mods$p
+  # a tight solve, so that the slope is not that of the solver error
+  model <- mods$g * Xs(mods$ode, options = list(atol = 1e-12, rtol = 1e-12)) * mods$p
   truth <- c(V = log(20), Cl = log(5), sigma_prop = log(0.1))
   eta <- c(eta_V_A = -0.2, eta_V_B = 0.1, eta_V_C = 0.05)
   sim <- model(c(0.5, 1, 2, 4, 8), c(truth, eta), deriv = FALSE)
@@ -195,7 +197,8 @@ test_that("the volume rows give the exact joint blocks and d eta*/d theta is the
   oldwd <- setwd(tempdir()); on.exit(setwd(oldwd))
   mods <- .focei_models()$sigeta
   set.seed(5)
-  model <- mods$g * mods$x * mods$p
+  # a tight solve, so that the difference quotient of the modes is not that of the solver error
+  model <- mods$g * Xs(mods$ode, options = list(atol = 1e-12, rtol = 1e-12)) * mods$p
   truth <- c(V = log(20), Cl = log(5), sigma_prop = log(0.1))
   sim <- model(c(0.5, 1, 2, 4, 8), c(truth, eta_V_A = -0.2, eta_V_B = 0.1, eta_V_C = 0.05), deriv = FALSE)
   data <- as.datalist(do.call(rbind, lapply(names(sim), function(s) data.frame(

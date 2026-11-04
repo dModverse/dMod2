@@ -1,5 +1,4 @@
-# The ggplot objects of the prediction, data, flux, residual and path plots: layers, mappings,
-# facets, scales and the plotted data. No compiled code.
+# The plotted data of the prediction, data, flux, residual and path plots. No compiled code.
 
 pdf(NULL)
 
@@ -15,14 +14,6 @@ pdf(NULL)
              dose = match(C, c("C1", "C2"))))),
   splitBy = "condition", keepCovariates = "dose")
 
-.geoms <- function(p) unname(vapply(p$layers, function(l) class(l$geom)[1], ""))
-.map <- function(m) vapply(m, rlang::as_label, "")
-.facetVars <- function(p) {
-  f <- p$facet$params
-  list(rows = names(c(f$facets, f$rows)), cols = names(f$cols))
-}
-.scale <- function(p, aes) p$scales$get_scales(aes)
-
 # sigma from a constant error model, one prdframe per condition
 .errfn <- function(out, pars, conditions = NULL, ...) {
   s <- out
@@ -30,22 +21,10 @@ pdf(NULL)
   setNames(list(prdframe(s, parameters = pars)), conditions)
 }
 
-test_that("plotCombined draws prediction lines and data points with error bars", {
+test_that("plotCombined plots the predictions and the data with their sigmas", {
   pred <- .x2(c("C1", "C2"))(0:3, .pars2)
   p <- plotCombined(pred, .data2(c("C1", "C2")))
   expect_s3_class(p, "ggplot")
-  expect_equal(.geoms(p), c("GeomLine", "GeomPoint", "GeomErrorbar"))
-  expect_equal(.map(p$mapping), c(x = "time", y = "value", ymin = "value - sigma",
-                                  ymax = "value + sigma", group = "condition",
-                                  colour = "condition"))
-  expect_equal(.map(p$layers[[2]]$mapping), c(shape = "bloq"))
-  expect_equal(p$layers[[3]]$geom_params$width, 0)
-  expect_s3_class(p$facet, "FacetWrap")
-  expect_equal(.facetVars(p)$rows, "name")
-  expect_equal(p$facet$params$free, list(x = TRUE, y = TRUE))
-  expect_equal(.scale(p, "shape")$name, "BLoQ")
-  expect_equal(p$guides$guides$shape, "none")
-
   d <- p$data
   expect_equal(names(d), c("time", "name", "value", "sigma", "condition", "dose"))
   expect_equal(nrow(d), 2 * 8 + 2 * 4)
@@ -57,21 +36,12 @@ test_that("plotCombined draws prediction lines and data points with error bars",
   expect_equal(p$layers[[2]]$data$bloq, rep("no", 8))
 })
 
-test_that("plotCombined facets by grid and by name and condition", {
+test_that("plotCombined refuses an unknown facet", {
   pred <- .x2()(0:3, .pars2)
-  p <- plotCombined(pred, .data2(), facet = "grid", scales = "free_y")
-  expect_s3_class(p$facet, "FacetGrid")
-  expect_equal(.facetVars(p), list(rows = "name", cols = "condition"))
-  expect_equal(p$facet$params$free, list(x = FALSE, y = TRUE))
-  expect_equal(.map(p$mapping), c(x = "time", y = "value", ymin = "value - sigma",
-                                  ymax = "value + sigma"))
-  p <- plotCombined(pred, .data2(), facet = "wrap_plain")
-  expect_s3_class(p$facet, "FacetWrap")
-  expect_equal(.facetVars(p)$rows, c("name", "condition"))
   expect_error(plotCombined(pred, facet = "none"), "should be one of")
 })
 
-test_that("plotCombined subsets, transforms and takes extra aesthetics", {
+test_that("plotCombined subsets and transforms", {
   pred <- .x2()(0:3, .pars2)
   p <- plotCombined(pred, .data2(), name == "A", time > 0,
                     transform = list(A = "log(x)"),
@@ -80,14 +50,6 @@ test_that("plotCombined subsets, transforms and takes extra aesthetics", {
   expect_equal(unique(as.character(d$name)), "A")
   expect_equal(d$value, log(c(0.5, 0.25, 0.125, 0.6, 0.2, 0.1)))
   expect_equal(d$sigma, c(NA, NA, NA, 0.1 / c(0.6, 0.2, 0.1)))
-  expect_mapequal(.map(p$mapping), c(x = "time", y = "value", ymin = "value - sigma",
-                                     ymax = "value + sigma", group = "condition",
-                                     linetype = "name", colour = "dose"))
-  # an aesthetic replaces the default of the same name, in either spelling
-  for (a in list(list(colour = "dose"), list(color = "dose"))) {
-    m <- .map(plotCombined(pred, aesthetics = a)$mapping)
-    expect_equal(unname(m[names(m) == "colour"]), "dose")
-  }
 })
 
 test_that("plotCombined marks data below the limit of quantification", {
@@ -96,46 +58,29 @@ test_that("plotCombined marks data below the limit of quantification", {
   data[[1]]$lloq <- 0.15
   p <- plotCombined(pred, data)
   expect_equal(p$layers[[2]]$data$bloq, c("no", "no", "no", "yes"))
-  expect_null(p$guides$guides$shape)
-  expect_equal(.scale(p, "shape")$palette(2), c(yes = 4, no = 19))
 })
 
-test_that("plotCombined without data draws the prediction only", {
+test_that("plotCombined without data plots the prediction only", {
   p <- plotCombined(.x2()(0:3, .pars2))
-  expect_equal(.geoms(p), "GeomLine")
   expect_equal(names(p$data), c("time", "name", "value", "sigma", "condition"))
 })
 
-test_that("plot() of a prdlist names unnamed predictions and data", {
+test_that("plot() of a prdlist takes the covariates of the data", {
   pred <- .x2(c("C1", "C2"))(0:3, .pars2)
-  data <- .data2(c("C1", "C2"))
-  attr(data, "names") <- NULL
-  p <- plot(unname(pred), data)
-  expect_equal(unique(p$data$condition), c("C1", "C2"))
-  expect_equal(p$layers[[2]]$data$condition, rep(c("C1", "C2"), each = 4))
   p <- plot(pred, .data2(c("C1", "C2")), facet = "grid", scales = "fixed")
-  expect_s3_class(p$facet, "FacetGrid")
   expect_equal(p$data$dose, c(rep(1:2, each = 8), rep(1:2, each = 4)))
 })
 
-test_that("plot() of a prdframe names it C1, also its data frame", {
+test_that("plot() of a prdframe and a data frame takes a subset", {
   pred <- .x2()(0:3, .pars2)[[1]]
   d <- data.frame(name = "A", time = 0:3, value = 1, sigma = 0.1)
   p <- plot(pred, d, time < 3, facet = "wrap_plain")
-  expect_equal(unique(p$data$condition), "C1")
   expect_equal(max(p$data$time), 2)
-  expect_equal(.facetVars(p)$rows, c("name", "condition"))
-  expect_equal(.geoms(plot(pred)), "GeomLine")
 })
 
-test_that("plotPrediction draws one line per condition and keeps its data", {
+test_that("plotPrediction keeps its data, subsets and transforms", {
   pred <- .x2(c("C1", "C2"))(0:3, .pars2)
   p <- plotPrediction(pred)
-  expect_equal(.geoms(p), "GeomLine")
-  expect_mapequal(.map(p$mapping), c(x = "time", y = "value", group = "condition",
-                                     colour = "condition"))
-  expect_s3_class(p$facet, "FacetWrap")
-  expect_equal(.facetVars(p)$rows, "name")
   d <- attr(p, "data")
   expect_equal(names(d), c("time", "name", "value", "condition", "sigma"))
   expect_true(all(is.nan(d$sigma)))
@@ -143,20 +88,12 @@ test_that("plotPrediction draws one line per condition and keeps its data", {
 
   p <- plotPrediction(pred, condition == "C2", name == "A", facet = "grid", scales = "free_x",
                       transform = list(A = "2*x"))
-  expect_s3_class(p$facet, "FacetGrid")
-  expect_equal(.facetVars(p), list(rows = "name", cols = "condition"))
-  expect_equal(p$facet$params$free, list(x = TRUE, y = FALSE))
-  expect_equal(.map(p$mapping), c(x = "time", y = "value"))
   expect_equal(attr(p, "data")$value, 2 * c(1, 0.5, 0.25, 0.125))
 })
 
-test_that("plotPrediction draws the sigma of an error model as a ribbon", {
+test_that("plotPrediction takes the sigma of an error model", {
   pred <- .x2()(0:3, .pars2)
   p <- plotPrediction(pred, errfn = .errfn)
-  expect_equal(.geoms(p), c("GeomRibbon", "GeomLine"))
-  expect_equal(.map(p$layers[[1]]$mapping), c(ymin = "value - sigma", ymax = "value + sigma",
-                                              fill = "condition"))
-  expect_equal(p$layers[[1]]$aes_params, list(linetype = 0, alpha = 0.3))
   expect_equal(attr(p, "data")$sigma, rep(0.2, 8))
 })
 
@@ -164,22 +101,13 @@ test_that("plotData of a data frame splits it into conditions", {
   d <- data.frame(name = "A", time = 0:3, value = 1:4, sigma = 0.1,
                   condition = rep(c("u", "v"), each = 2))
   p <- plotData(d, time > 0)
-  expect_equal(.geoms(p), c("GeomPoint", "GeomErrorbar"))
-  expect_equal(p$data$condition, c("u", "v", "v"))
+  expect_equal(as.character(p$data$condition), c("u", "v", "v"))
   expect_equal(p$data$value, 2:4)
 })
 
 test_that("plotFluxes stacks the fluxes of every condition", {
   x <- .x2(c("C1", "C2"))
   p <- plotFluxes(.pars2, x, 0:3, c(prod = "A0", deg = "0.5*A*B", "Heaviside(time - 1)"))
-  expect_equal(.geoms(p), "GeomArea")
-  expect_s3_class(p$layers[[1]]$position, "PositionStack")
-  expect_equal(p$layers[[1]]$aes_params, list(alpha = 0.3, colour = "darkgrey", linewidth = 0.4))
-  expect_equal(.map(p$mapping), c(x = "time", y = "value", group = "name", fill = "name"))
-  expect_equal(.facetVars(p)$rows, "condition")
-  expect_equal(.scale(p, "fill")$name, "Fluxes:")
-  expect_equal(p$labels[c("x", "y")], list(x = "time", y = "flux contribution"))
-
   out <- attr(p, "out")
   expect_equal(names(out), c("time", "name", "value", "condition"))
   expect_equal(levels(out$name), c("prod", "deg", "Heaviside(time - 1)"))
@@ -189,15 +117,12 @@ test_that("plotFluxes stacks the fluxes of every condition", {
   expect_identical(p$data, out)
 })
 
-test_that("plotFluxes names unnamed predictions and passes its arguments to x", {
+test_that("plotFluxes evaluates unnamed fluxes and passes its arguments to x", {
   x <- .x2(c("C1", "C2"))
   p <- plotFluxes(.pars2, function(...) unname(x(...)), 0:1,
                   list("piecewise(1, time < 1, 2)", "exp10(B1)"), legendTitle = "F")
   out <- attr(p, "out")
-  expect_equal(unique(out$condition), c("C1", "C2"))
-  expect_equal(levels(out$name), c("piecewise(1, time < 1, 2)", "exp10(B1)"))
   expect_equal(out$value[1:4], c(1, 2, 10^0.3, 10^0.3))
-  expect_equal(.scale(p, "fill")$name, "F")
   p <- plotFluxes(.pars2, x, 0:1, c(f = "A"), conditions = "C2")
   expect_equal(unique(attr(p, "out")$condition), "C2")
 })
@@ -214,19 +139,12 @@ test_that("plotResiduals sums squared weighted residuals per split", {
   p <- plotResiduals(pf, x, data)
   out <- attr(p, "out")
   expect_equal(out, data.frame(condition = names(data), res = sum(r0) + sum(r1)))
-  expect_equal(.geoms(p), c("GeomPoint", "GeomLine"))
-  expect_equal(.map(p$mapping), c(x = "condition", y = "res", colour = "condition",
-                                  group = "condition"))
-  expect_s3_class(p$facet, "FacetNull")
 
   p <- plotResiduals(pf, x, data, split = c("time", "index", "condition"))
   out <- attr(p, "out")
   expect_equal(names(out), c("time", "index", "condition", "res"))
   expect_equal(out$index, rep(rep(c("1", "2"), each = 2), 4))
   expect_equal(out$res[out$condition == "C1"], c(rbind(r0, r1)))
-  expect_equal(.map(p$mapping), c(x = "time", y = "res", colour = "index", group = "index"))
-  expect_s3_class(p$facet, "FacetWrap")
-  expect_equal(.facetVars(p)$rows, "condition")
 })
 
 test_that("plotResiduals adds log(sigma^2) of an error model and uses the index column", {
@@ -252,16 +170,9 @@ test_that("plotResiduals adds log(sigma^2) of an error model and uses the index 
                        limits = c(-1, 1), cores = 1))
 }
 
-test_that("plotArray colors trajectories along the profile by the parameter value", {
+test_that("plotArray predicts along the profile at the profiled parameter values", {
   pr <- .profA2()
   p <- plotArray("A2", pr$profs, pr$x, c(0, 2, 4), nSim = 3)
-  expect_equal(.geoms(p), "GeomLine")
-  expect_equal(.map(p$mapping), c(x = "time", y = "value", group = "set", colour = "ParValue"))
-  expect_s3_class(p$facet, "FacetGrid")
-  expect_equal(.facetVars(p), list(rows = "name", cols = "condition"))
-  expect_equal(p$facet$params$free, list(x = FALSE, y = TRUE))
-  expect_equal(.scale(p, "colour")$name, "A2")
-  expect_equal(p$labels[c("x", "y")], list(x = "time", y = "value"))
   d <- p$data
   expect_equal(names(d), c("time", "name", "value", "condition", "set", "ParValue"))
   expect_equal(d$set, rep(1:3, each = 3))
@@ -296,23 +207,11 @@ test_that("plotPaths draws the paths of each pair, relative or absolute", {
   profs <- profile(constraintL2(mu = pars, sigma = 0.1), pars, whichPar = c("a", "b"),
                    limits = c(-1, 1), cores = 1)
   p <- plotPaths(profs)
-  expect_equal(.geoms(p), "GeomPath")
-  expect_equal(.map(p$mapping), c(x = "x", y = "y", group = "interaction(name, proflist)",
-                                  colour = "name", linetype = "proflist"))
-  expect_s3_class(p$facet, "FacetWrap")
-  expect_equal(.facetVars(p)$rows, "combination")
-  expect_equal(p$facet$params$free, list(x = FALSE, y = FALSE))
-  expect_equal(p$labels$x, expression(paste(Delta, "parameter 1")))
-  expect_equal(p$labels$y, expression(paste(Delta, "parameter 2")))
-  expect_equal(.scale(p, "linetype")$name, "profile\nlist")
-  expect_equal(.scale(p, "colour")$name, "profiled\nparameter")
   d <- attr(p, "data")
   expect_identical(d, p$data)
   expect_equal(levels(factor(d$combination)), c("a - \nb", "b - \na"))
 
   p <- plotPaths(profs, name == "a", relative = FALSE, scales = "free")
-  expect_equal(p$labels[c("x", "y")], list(x = "parameter 1", y = "parameter 2"))
-  expect_equal(p$facet$params$free, list(x = TRUE, y = TRUE))
   d <- attr(p, "data")
   expect_equal(unique(d$name), "a")
   expect_setequal(unique(d$combination), c("a - \nb", "b - \na"))

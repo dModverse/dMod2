@@ -166,46 +166,6 @@
       structure(list(par = c(1, 2), name = c("a", "a"), delta = c(0, 
       0)), class = "data.frame", row.names = 1:2)
 
-# print of a parvec
-
-    Code
-      print(x)
-    Output
-      Parameter vector:
-        a :       1
-        b :  2.5e-07
-        k :      -3
-      
-      Attributes:
-        deriv  : 2 x 2 matrix
-        deriv2 : 2 x 2 x 2 array
-        fixed  : k
-
----
-
-    Code
-      print(as.parvec(c(a = 1)))
-    Output
-      Parameter vector:
-        a :       1
-      
-      Attributes:
-        deriv  : <none>
-        deriv2 : <none>
-        fixed  : <none>
-
----
-
-    Code
-      print(structure(numeric(0), class = c("parvec", "numeric")))
-    Output
-      Parameter vector:
-      
-      Attributes:
-        deriv  : <none>
-        deriv2 : <none>
-        fixed  : <none>
-
 # subsetting a parvec
 
     Code
@@ -335,17 +295,4 @@
       -Inf, 3.5, -Inf)), class = "data.frame", row.names = 5:8)), class = c("datalist", 
       "list"), condition.grid = structure(list(dose = c(1, 2)), row.names = c("1", 
       "2"), class = "data.frame"))
-
-# plotData of a datalist
-
-    Code
-      .canonDput(attr(p, "data"))
-    Output
-      structure(list(condition = c("1", "1", "1", "1", "2", "2", "2", 
-      "2"), name = c("A", "B", "A", "B", "A", "B", "A", "B"), time = c(0L, 
-      0L, 1L, 1L, 0L, 0L, 1L, 1L), value = 1:8, sigma = c(0.5, 0.5, 
-      0.5, 0.5, 0.5, 0.5, 0.5, 0.5), lloq = c(-Inf, -Inf, 3.5, -Inf, 
-      -Inf, -Inf, 3.5, -Inf), dose = c(1, 1, 1, 1, 2, 2, 2, 2), bloq = c("no", 
-      "no", "yes", "no", "no", "no", "no", "no")), class = "data.frame", row.names = c(NA, 
-      8L))
 

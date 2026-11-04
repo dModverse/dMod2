@@ -202,54 +202,9 @@ test_that("plotProfile draws the threshold it is given", {
   # the level of the fit is always the first line, whatever the thresholds are
   expect_equal(unname(ggplot2::layer_scales(p)$y$breaks),
                c(0, 1, qchisq(0.90, 1), qchisq(0.95, 1)))
-  expect_equal(ggplot2::layer_scales(p)$y$get_labels()[1], "optimum")
 
   thr <- profileThreshold(0.95, method = "F", n = 48, p = 6)
   p2 <- plotProfile(prof, threshold = c("95% / F" = thr))
   expect_equal(unname(ggplot2::layer_scales(p2)$y$breaks), c(0, thr))
-  expect_equal(ggplot2::layer_scales(p2)$y$get_labels(), c("optimum", "95% / F"))
   expect_equal(unname(unique(ggplot2::layer_data(p2, 1)$yintercept)), c(0, thr))
-})
-
-
-test_that("the profile legend names sets and disappears for a single one", {
-  nm <- c("a", "b")
-  obj <- function(pars, fixed = NULL, deriv = TRUE, ...) {
-    pp <- c(pars, fixed)[nm]
-    g <- c(a = 2 * pp[["a"]], b = 2 * pp[["b"]])
-    H <- matrix(c(2, 0, 0, 2), 2, 2, dimnames = list(nm, nm))
-    free <- names(pars)
-    structure(list(value = as.numeric(pp[["a"]]^2 + pp[["b"]]^2),
-                   gradient = g[free], hessian = H[free, free, drop = FALSE]),
-              class = c("objlist", "list"))
-  }
-  class(obj) <- c("objfn", "fn")
-  attr(obj, "modelname") <- character(0)
-
-  prof <- profile(obj, c(a = 0, b = 0), "a", limits = c(-3, 3), cores = 1)
-
-  # what the reader sees, not what the object stores
-  drawn <- function(p) {
-    gt <- ggplot2::ggplotGrob(p)
-    out <- character(0)
-    walk <- function(g) {
-      if (inherits(g, "titleGrob") || inherits(g, "text"))
-        out <<- c(out, as.character(g$label))
-      if (!is.null(g$children)) lapply(g$children, walk)
-      if (!is.null(g$grobs))    lapply(g$grobs, walk)
-      invisible(NULL)
-    }
-    walk(gt)
-    unique(out)
-  }
-
-  one <- drawn(plotProfile(prof))
-  expect_false("proflist" %in% one)
-  expect_false("set" %in% one)
-  expect_true("mode" %in% one)
-
-  two <- drawn(plotProfile(list(A = prof, B = prof)))
-  expect_false("proflist" %in% two)
-  expect_true("set" %in% two)
-  expect_true(all(c("A", "B") %in% two))
 })

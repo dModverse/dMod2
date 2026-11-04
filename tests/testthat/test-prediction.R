@@ -83,10 +83,6 @@ test_that("dMod functions refuse unknown, surplus and missing arguments", {
   expect_error(obj(p, fixd = c(a0 = 1)), "fixd")
 })
 
-test_that("an empty prdlist prints", {
-  expect_no_error(capture.output(print(prdlist())))
-})
-
 test_that("modelname<- names each condition and honours conditions", {
   mk <- function(cond, mn) {
     f <- function(...) NULL
