@@ -219,8 +219,8 @@ evalConditionResidual <- function(dataI, predictionI, pars,
 #'
 #'   `x` has to be a chain `g * x * p` with one prediction function from
 #'   [Xs()], built on `odemodel(..., includeTimeZero = FALSE)`. The method
-#'   and the node layout are described in
-#'   `vignette("Optimisation", package = "dMod2")`.
+#'   and the node layout are described in the guide chapter
+#'   [Optimization](https://dmodverse.github.io/dMod2/articles/guide-optimization.html).
 #'
 #' @return
 #' An objective function of class `objfn`, called as `obj(pars, ...)`, see
@@ -233,6 +233,13 @@ evalConditionResidual <- function(dataI, predictionI, pars,
 #'
 #' @details
 #' Combine objectives with `+`, see [sumobjfn].
+#'
+#' A chain `g * x * p` with `x` from [Xs()] of the cppDE backend, [Xt()] or,
+#' for values alone, [Xf()], `g` and `errmodel` from [Y()], and `p` a product
+#' of [Pexpl()] and [Pimpl()] transformations or absent is evaluated in C++,
+#' in parallel over the conditions on `getOption("dMod2.cores")`, to the
+#' values and derivatives of the evaluation in R. Any other model is
+#' evaluated in R, as is every model under `options(dMod2.evaluation = "R")`.
 #'
 #' @inheritSection dModfn Calling a dMod function
 #' @seealso [datapointL2()], [constraintL2()], [res()]
@@ -303,7 +310,18 @@ normT <- function(data, x, errmodel = NULL, df, times = NULL, attrName = "data",
   .meta_cache$par_names_global <- NULL
   .meta_cache$signature        <- NULL  # invalidates on shape change
   .meta_cache$shape            <- NULL
+  .meta_cache$byCond           <- list()
   .meta_cache_rev <- new.env(parent = emptyenv())
+  # the plans of the native chain (.chainContext())
+  .chain <- .chainContext(list(prdfn = x, errfn = errmodel, data = data, timesD = timesD))
+  .chainObjective <- function(pars, fixed, conditions, deriv, deriv2, hessian, cores, parsList = NULL) {
+    free <- if (is.null(parsList)) rep(list(names(pars)), length(conditions)) else lapply(parsList, names)
+    plan <- .chainLookup(.chain, conditions, free, names(fixed), if (is.null(parsList)) names(pars), deriv, deriv2)
+    if (is.null(plan)) return(NULL)
+    values <- if (is.null(parsList)) list(c(unclass(pars), unclass(fixed)))
+              else lapply(parsList, function(p) c(unclass(p), unclass(fixed)))
+    .chainEval(plan, values, deriv, deriv2, hessian, !is.null(parsList), cores, optBLOQ, df)
+  }
 
   # Controls of the objective, changed later by controls<-. trust() lays out the
   # shooting segments when called; laying them out once here surfaces errors at
@@ -318,14 +336,14 @@ normT <- function(data, x, errmodel = NULL, df, times = NULL, attrName = "data",
   myfn <- function(..., fixed = NULL, deriv = TRUE, deriv2 = FALSE, hessian = NULL,
                    conditions = NULL, env = NULL,
                    cores = getOption("dMod2.cores", 1L), .prediction = NULL,
-                   sweep = c("forward", "reverse")) {
+                   sweep = c("forward", "reverse"), .local = FALSE) {
     pars <- ..1
     if (is.null(env)) env <- new.env()
     conditions <- if (is.null(conditions)) conditions.obj else
-      intersect(conditions.obj, conditions)
+      .intersect(conditions.obj, conditions)
     if (!length(conditions)) return(NULL)
 
-    sweep <- match.arg(sweep)
+    sweep <- match.arg(sweep, c("forward", "reverse"))
     cv <- .resolveCurvature(deriv, deriv2, hessian, sweep)
     hessian <- cv$hessian
     deriv2  <- cv$deriv2
@@ -335,6 +353,20 @@ normT <- function(data, x, errmodel = NULL, df, times = NULL, attrName = "data",
         stop("normL2: a handed-in prediction is a forward-mode shortcut and ",
              "records no tape; the reverse mode has to walk the chain itself.",
              call. = FALSE)
+      # the adjoint gradient through the native chain where its pieces allow it
+      if (isTRUE(deriv) && !isTRUE(hessian) && !exists("prediction", envir = env, inherits = FALSE)) {
+        res <- .chainAdjoint(.chain, conditions, pars, fixed, cores, optBLOQ, df)
+        if (!is.null(res)) {
+          out <- objlist(value = res$value, gradient = res$gradient, hessian = NULL)
+          attr(out, attrName) <- out$value
+          attr(out, "chi2") <- setNames(res$chi2, attrName)
+          attr(out, "sweep") <- "reverse"
+          delayedAssign("prediction", x(times = .timesOf(conditions), pars = pars, fixed = fixed, deriv = FALSE,
+                                        conditions = conditions, cores = cores), assign.env = env)
+          attr(out, "env") <- env
+          return(out)
+        }
+      }
       return(.normL2_reverse(
         pars = pars, fixed = fixed, deriv = deriv,
         hessian = hessian,
@@ -347,6 +379,26 @@ normT <- function(data, x, errmodel = NULL, df, times = NULL, attrName = "data",
     # The Hessian is only meaningful with deriv; when it is not wanted, the
     # J^T J contraction is skipped and no second-order sensitivities are needed.
     build_hessian <- hessian
+
+    # the native chain where its pieces allow it, the R path below otherwise; the predictions
+    # are computed when the environment is asked for them
+    if (is.null(.prediction) && !sparse && !.local && .evalCpp() &&
+        !exists("prediction", envir = env, inherits = FALSE)) {
+      res <- .chainObjective(pars, fixed, conditions, deriv, deriv2, build_hessian, cores)
+      if (!is.null(res)) {
+        pn <- names(pars)
+        out <- if (deriv)
+          objlist(value = res$value, gradient = setNames(res$gradient, pn),
+                  hessian = if (build_hessian) matrix(res$hessian, length(pn), dimnames = list(pn, pn)))
+        else objlist(value = res$value, gradient = NULL, hessian = NULL)
+        attr(out, attrName) <- out$value
+        attr(out, "chi2") <- setNames(res$chi2, attrName)
+        delayedAssign("prediction", x(times = .timesOf(conditions), pars = pars, fixed = fixed, deriv = deriv,
+                                      deriv2 = deriv2, conditions = conditions, cores = cores), assign.env = env)
+        attr(out, "env") <- env
+        return(out)
+      }
+    }
 
     prediction <- if (!is.null(.prediction)) .prediction else
       x(times = .timesOf(conditions), pars = pars, fixed = fixed,
@@ -406,13 +458,33 @@ normT <- function(data, x, errmodel = NULL, df, times = NULL, attrName = "data",
         !identical(.meta_cache$shape, cur_shape)) {
       .meta_cache$par_names_global <- unique(unlist(lapply(seq_along(prediction), function(k)
         union(cur_sig[[1]][[k]], if (k <= length(cur_sig[[2]])) cur_sig[[2]][[k]])), use.names = FALSE))
-      .meta_cache$meta_list <- .build_normL2_meta(
-        data, prediction, err_list, conditions, e.cond)
+      # the meta of a condition is kept by its parameters and row counts, so that calls on
+      # changing sets of conditions rebuild only what changed
+      n <- length(conditions)
+      key <- lapply(seq_len(n), function(k) list(cur_sig[[1]][[k]], if (k <= length(cur_sig[[2]])) cur_sig[[2]][[k]],
+                                                 cur_shape[k], cur_shape[n + k]))
+      byCond <- .meta_cache$byCond
+      stale <- which(!vapply(seq_len(n), function(k) identical(byCond[[conditions[k]]]$key, key[[k]]), TRUE))
+      if (length(stale)) {
+        built <- .build_normL2_meta(data, prediction[stale], if (!is.null(err_list)) err_list[stale],
+                                    conditions[stale], e.cond)
+        for (j in seq_along(stale)) byCond[[conditions[stale[j]]]] <- list(key = key[[stale[j]]], meta = built[[j]])
+        .meta_cache$byCond <- byCond
+      }
+      .meta_cache$meta_list <- lapply(conditions, function(cn) byCond[[cn]]$meta)
       .meta_cache$signature <- cur_sig
       .meta_cache$shape <- cur_shape
     }
     par_names_global <- .meta_cache$par_names_global
     if (is.null(par_names_global)) par_names_global <- character(0)
+    # in the order of `pars` first, so that the result needs no realignment
+    pnames <- names(pars)
+    if (!identical(.meta_cache$pkey, pnames) || !identical(.meta_cache$pbase, par_names_global)) {
+      .meta_cache$pkey <- pnames
+      .meta_cache$pbase <- par_names_global
+      .meta_cache$pordered <- c(pnames[pnames %in% par_names_global], par_names_global[!par_names_global %in% pnames])
+    }
+    par_names_global <- .meta_cache$pordered
 
     kr <- normL2_kernel(
       prediction       = prediction,
@@ -423,9 +495,11 @@ normT <- function(data, x, errmodel = NULL, df, times = NULL, attrName = "data",
       threads          = as.integer(cores),
       bloq_mode        = optBLOQ,
       build_hessian    = build_hessian,
-      local_blocks     = build_hessian && sparse,
+      local_blocks     = .local || (build_hessian && sparse),
       t_df             = df
     )
+    # the value, gradient and Hessian of every condition in its own parameters
+    if (.local) return(setNames(kr$local, conditions))
     # a sparse Hessian is assembled from the blocks of the conditions
     if (build_hessian && sparse)
       kr$hessian <- .sparseFromBlocks(lapply(kr$local, `[[`, "hessian"), par_names_global)
@@ -472,17 +546,17 @@ normT <- function(data, x, errmodel = NULL, df, times = NULL, attrName = "data",
 }
 
 
-# Evaluate single-condition objectives, one parameter vector each, with the
+# Evaluate single-condition objectives, one parameter vector each and `fixed` for all, with the
 # predictions in one batched request. Falls back to the reference loop on a
 # missing handle, mixed prdfns, a condition owned twice, or a failing batch.
 .objEvalMany <- function(objList, parsList, deriv = TRUE, deriv2 = FALSE,
-                         cores = getOption("dMod2.cores", 1L), hessian = NULL) {
+                         cores = getOption("dMod2.cores", 1L), hessian = NULL, fixed = NULL) {
   n <- length(parsList)
   objs <- if (is.function(objList)) rep(list(objList), n) else objList
   stopifnot(length(objs) == n)
 
   serial <- function() lapply(seq_len(n), function(j)
-    objs[[j]](parsList[[j]], deriv = deriv, deriv2 = deriv2, hessian = hessian, cores = cores))
+    objs[[j]](parsList[[j]], fixed = fixed, deriv = deriv, deriv2 = deriv2, hessian = hessian, cores = cores))
   if (n < 2L) return(serial())
 
   prd   <- attr(objs[[1L]], "prdfn", exact = TRUE)
@@ -502,14 +576,45 @@ normT <- function(data, x, errmodel = NULL, df, times = NULL, attrName = "data",
         any(c(".prediction", "...") %in% names(formals(o))), TRUE)))
     return(serial())
 
+  # slices of one objective through the native chain, prediction and data term at once
+  whole <- attr(objs[[1L]], "whole", exact = TRUE)
+  chain <- if (!is.null(whole) && .evalCpp() &&
+               all(vapply(objs, function(o) identical(attr(o, "whole", exact = TRUE), whole), TRUE)))
+    environment(whole)$.chainObjective(parsList[[1L]], fixed, conds, deriv, deriv2,
+                                       !identical(hessian, FALSE), cores, parsList = parsList)
+  if (!is.null(chain)) return(lapply(seq_len(n), function(j) {
+    l <- chain$local[[j]]
+    out <- if (deriv) .alignObjlist(objlist(value = l$value, gradient = l$gradient, hessian = l$hessian),
+                                    names(parsList[[j]]))
+           else objlist(value = l$value, gradient = NULL, hessian = NULL)
+    attr(out, "data") <- l$value
+    attr(out, "chi2") <- c(data = l$chi2)
+    out
+  }))
+
   preds <- tryCatch(
-    .predictMany(prd, times = times, parsList = parsList, conditions = conds,
+    .predictMany(prd, times = times, parsList = parsList, conditions = conds, fixed = fixed,
                  deriv = deriv, deriv2 = deriv2, cores = cores),
     error = function(e) NULL)
   if (is.null(preds)) return(serial())
 
+  # slices of one objective: its error model and kernel take all conditions in one call
+  if (!is.null(whole) && all(vapply(objs, function(o) identical(attr(o, "whole", exact = TRUE), whole), TRUE))) {
+    loc <- whole(parsList[[1L]], fixed = fixed, deriv = deriv, deriv2 = deriv2, hessian = hessian, cores = cores,
+                 conditions = conds, .prediction = setNames(preds, conds), .local = TRUE)
+    return(lapply(seq_len(n), function(j) {
+      l <- loc[[conds[j]]]
+      out <- if (deriv) .alignObjlist(objlist(value = l$value, gradient = l$gradient, hessian = l$hessian),
+                                      names(parsList[[j]]))
+             else objlist(value = l$value, gradient = NULL, hessian = NULL)
+      attr(out, "data") <- l$value
+      attr(out, "chi2") <- c(data = l$chi2)
+      out
+    }))
+  }
+
   lapply(seq_len(n), function(j)
-    objs[[j]](parsList[[j]], deriv = deriv, deriv2 = deriv2, hessian = hessian,
+    objs[[j]](parsList[[j]], fixed = fixed, deriv = deriv, deriv2 = deriv2, hessian = hessian,
               .prediction = setNames(preds[j], conds[j])))
 }
 
@@ -659,7 +764,8 @@ constraintL2.default <- function(mu, sigma = 1, attrName = "prior",
                    conditions = condition, env = NULL,
                    cores = getOption("dMod2.cores", 1L)) {
 
-    p <- list(...)[[match.fnargs(list(...), "pars")]]
+    args <- list(...)
+    p <- args[[match.fnargs(args, "pars")]]
     cv <- .resolveCurvature(deriv, deriv2, hessian, "forward")
     build_hessian <- cv$hessian
     deriv2        <- cv$deriv2
@@ -1191,13 +1297,16 @@ datapointL2 <- function(name, time, parameter, sigma = 1,
   if (is.null(e1)) return(e2)
   if (is.null(e2)) return(e1)
 
-  gn1 <- names(e1$gradient)
-  gn2 <- names(e2$gradient)
+  g1 <- e1$gradient
+  g2 <- e2$gradient
+  gn1 <- names(g1)
+  gn2 <- names(g2)
+  same <- identical(gn1, gn2)
 
   # Layout of the sum: the operand spanning the other, else their union.
-  pars <- if (all(gn2 %in% gn1)) gn1
+  pars <- if (same || all(gn2 %in% gn1)) gn1
           else if (all(gn1 %in% gn2)) gn2
-          else union(gn1, gn2)
+          else .union(gn1, gn2)
 
   addVector <- function(target, x) {
     i <- match(names(x), names(target))
@@ -1206,49 +1315,58 @@ datapointL2 <- function(name, time, parameter, sigma = 1,
     target
   }
   addMatrix <- function(target, x) {
-    i <- intersect(rownames(target), rownames(x))
-    target[i, i] <- target[i, i] + x[i, i]
+    i <- match(rownames(x), rownames(target))
+    ok <- which(!is.na(i))
+    target[i[ok], i[ok]] <- target[i[ok], i[ok]] + x[ok, ok]
     target
   }
-
-  what <- intersect(c("value", "gradient", "hessian"), c(names(e1), names(e2)))
-  out12 <- lapply(setNames(nm = what), function(w) switch(w,
-    value    = e1$value + e2$value,
-    gradient = addVector(addVector(setNames(numeric(length(pars)), pars),
-                                   e1$gradient), e2$gradient),
-    # A summand may return a NULL hessian (built with hessian = FALSE); the sum
-    # is NULL only when both are, otherwise the present ones add.
-    hessian  = if (is.null(e1$hessian) && is.null(e2$hessian)) {
-      NULL
-    } else if (.isSparse(e1$hessian) || .isSparse(e2$hessian)) {
-      .sparseOver(e1$hessian, pars) + .sparseOver(e2$hessian, pars)
-    } else {
-      H <- matrix(0, length(pars), length(pars), dimnames = list(pars, pars))
-      if (!is.null(e1$hessian)) H <- addMatrix(H, e1$hessian)
-      if (!is.null(e2$hessian)) H <- addMatrix(H, e2$hessian)
-      H
-    }))
-
-  # Numeric attributes are summed, an absent one counting as zero. The chi2
-  # contributions are kept apart from that: they are pooled by the `attrName`
-  # they belong to, not by the attribute they happen to sit under.
-  numeric_attrs <- function(x) {
-    a <- attributes(x)
-    a <- a[vapply(a, is.numeric, logical(1))]
-    a[!grepl("^chi2($|_)", names(a))]
+  laidOut <- function(H) {
+    dn <- dimnames(H)
+    !is.null(dn) && identical(dn[[1L]], pars) && identical(dn[[2L]], pars)
   }
-  a1 <- numeric_attrs(e1)
-  a2 <- numeric_attrs(e2)
-  for (n in union(names(a1), names(a2)))
-    attr(out12, n) <- (if (is.null(a1[[n]])) 0 else a1[[n]]) +
-                      (if (is.null(a2[[n]])) 0 else a2[[n]])
 
-  chi2 <- c(.chi2Contributions(e1), .chi2Contributions(e2))
-  if (length(chi2)) {
-    chi2 <- vapply(split(unname(chi2), names(chi2)), sum, 0)
-    if (length(chi2) == 1L) attr(out12, "chi2") <- chi2
-    else for (n in names(chi2)) attr(out12, paste0("chi2_", n)) <- unname(chi2[n])
+  what <- c("value", "gradient", "hessian")
+  what <- what[what %in% c(names(e1), names(e2))]
+  out12 <- setNames(vector("list", length(what)), what)
+  if ("value" %in% what) out12["value"] <- list(e1$value + e2$value)
+  if ("gradient" %in% what) out12["gradient"] <- list(
+    if (same && !is.null(g1) && !is.null(g2)) g1 + g2
+    else addVector(addVector(setNames(numeric(length(pars)), pars), g1), g2))
+  # A summand may return a NULL hessian (built with hessian = FALSE); the sum is NULL only when both
+  # are, otherwise the present ones add.
+  if ("hessian" %in% what) {
+    H1 <- e1$hessian
+    H2 <- e2$hessian
+    out12["hessian"] <- list(
+      if (is.null(H1) && is.null(H2)) NULL
+      else if (.isSparse(H1) || .isSparse(H2)) .sparseOver(H1, pars) + .sparseOver(H2, pars)
+      else if (laidOut(H1) && laidOut(H2)) H1 + H2
+      else {
+        # the first operand where it has the layout of the sum already
+        H <- if (laidOut(H1)) H1
+             else {
+               Z <- matrix(0, length(pars), length(pars), dimnames = list(pars, pars))
+               if (!is.null(H1)) addMatrix(Z, H1) else Z
+             }
+        if (!is.null(H2)) addMatrix(H, H2) else H
+      })
   }
+
+  # Numeric attributes are summed, an absent one counting as zero. The chi2 contributions are kept
+  # apart from that: they are pooled by the `attrName` they belong to, not by the attribute they
+  # happen to sit under.
+  a1 <- .objlistAttrs(e1)
+  a2 <- .objlistAttrs(e2)
+  for (n in .union(names(a1$num), names(a2$num)))
+    attr(out12, n) <- (if (is.null(a1$num[[n]])) 0 else a1$num[[n]]) +
+                      (if (is.null(a2$num[[n]])) 0 else a2$num[[n]])
+
+  chi2 <- c(a1$chi2, a2$chi2)
+  if (length(chi2) > 1L)
+    chi2 <- if (anyDuplicated(names(chi2))) vapply(split(unname(chi2), names(chi2)), sum, 0)
+            else chi2[order(names(chi2))]
+  if (length(chi2) == 1L) attr(out12, "chi2") <- chi2
+  else for (n in names(chi2)) attr(out12, paste0("chi2_", n)) <- unname(chi2[n])
 
   # The direction the terms were evaluated in; a term without a reverse path
   # has none, and terms that disagree leave the sum without one.
@@ -1261,16 +1379,23 @@ datapointL2 <- function(name, time, parameter, sigma = 1,
 }
 
 
-# The chi2 contributions of an objlist as one named vector, however they are
-# currently stored: a single one sits under `chi2`, several under `chi2_<name>`.
-.chi2Contributions <- function(x) {
+# The numeric attributes of an objlist apart from its chi2 contributions (`num`), and those as one
+# named vector (`chi2`), however they are stored: a single one under `chi2`, several under
+# `chi2_<name>`.
+.objlistAttrs <- function(x) {
   a <- attributes(x)
-  a <- a[grepl("^chi2($|_)", names(a))]
-  if (!length(a)) return(numeric(0))
-  out <- unlist(a, use.names = FALSE)
-  names(out) <- unlist(lapply(names(a), function(n)
-    if (identical(n, "chi2")) names(a[[n]]) else sub("^chi2_", "", n)))
-  out
+  n <- names(a)
+  isChi2 <- n == "chi2" | startsWith(n, "chi2_")
+  num <- a[!isChi2 & vapply(a, is.numeric, TRUE)]
+  k <- which(isChi2)
+  chi2 <- if (!length(k)) numeric(0)
+          else if (length(k) == 1L && n[k] == "chi2") a[[k]]
+          else {
+            v <- unlist(a[k], use.names = FALSE)
+            names(v) <- unlist(lapply(k, function(i) if (n[i] == "chi2") names(a[[i]]) else substring(n[i], 6L)))
+            v
+          }
+  list(num = num, chi2 = chi2)
 }
 
 

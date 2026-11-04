@@ -401,12 +401,14 @@ List normL2_kernel(
   int n_threads = std::max(1, threads);
 #ifndef _OPENMP
   n_threads = 1;
+#else
+  n_threads = std::min(n_threads, omp_get_num_procs());
 #endif
   // a forked child has none of the OpenMP threads of its parent
   if (dmod_normL2_forked()) n_threads = 1;
-  // A thread with no condition still allocates its own gradient and Hessian
-  // slot, so never ask for more threads than there is work.
-  if (n_threads > n_cond) n_threads = std::max(1, n_cond);
+  // the requested team, at most the processors, also for fewer conditions, so that OpenMP keeps its
+  // threads
+  if (n_cond <= 1) n_threads = 1;
 
   dmod::AccumOpts base_opts;
   base_opts.use_deriv2_exact = deriv2_requested;

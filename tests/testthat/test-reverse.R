@@ -60,6 +60,9 @@ skip_on_cran()
     pl <- P(c(k_in = "exp(logkin)", k_out = "exp(logkout)", B = "0",
               k1 = "exp(logk1)", k2 = "exp(logk2)", s = "exp(logs)"),
             condition = "C1", derivMode = fr, modelname = "rv_pq", outdir = d)
+    pl2 <- P(c(k_in = "2 * exp(logkin)", k_out = "exp(logkout)", B = "0",
+               k1 = "exp(logk1)", k2 = "exp(logk2)", s = "exp(logs)"),
+             condition = "C2", derivMode = fr, modelname = "rv_pq2", outdir = d)
 
     sun <- if (isTRUE(cppDE:::cvodeConfig$available))
       odemodel(re, modelname = "rv_sun", deriv = TRUE, backend = "Sundials",
@@ -102,19 +105,22 @@ skip_on_cran()
     qe <- Reduce("+", lapply(c("C1", "C2"), function(cn)
       P(c(tr, sd_rel = "exp(logsdrel)", sd_abs = "exp(logsdabs)"), condition = cn, deriv2 = TRUE,
         derivMode = fr2, modelname = paste0("rv2_pe_", cn), outdir = d)))
+    # observables of time alone, for Xt()
+    gt <- Y(c(obsA = "s * exp(-k1 * time)", obsB = "s * k1 * time"), f = NULL, parameters = c("s", "k1"),
+            deriv2 = TRUE, derivMode = fr2, modelname = "rv2_obst", outdir = d)
 
-    compile(m, g, e, p, pe, pc, mev, pev, mnr, pq, pl, sun, sunev, m2, g2, q,
-            q2, qt, qh, qb, e2, e2c, qe, output = "rv_all", cores = test_cores())
+    compile(m, g, e, p, pe, pc, mev, pev, mnr, pq, pl, pl2, sun, sunev, m2, g2, q,
+            q2, qt, qh, qb, e2, e2c, qe, gt, output = "rv_all", cores = test_cores())
 
     pars <- c(logA = log(2), logk1 = log(0.6), logk2 = log(0.3), logs = log(1.5))
     cache <<- list(
       first = list(dir = d, m = m,
                    x = Xs(m, options = .rev_opt),
                    g = g, e = e, p = p, pe = pe, pc = pc, mev = mev, pev = pev,
-                   mnr = mnr, pq = pq, pl = pl, sun = sun, sunev = sunev,
+                   mnr = mnr, pq = pq, pl = pl, pl2 = pl2, sun = sun, sunev = sunev,
                    times = seq(0, 8, length.out = 41), pars = pars),
-      second = list(x = Xs(m2, options = .rev_opt),
-                    g = g2, p = q, p2 = q2, pt = qt, ph = qh, pb = qb, e = e2, ec = e2c, pe = qe,
+      second = list(m = m2, x = Xs(m2, options = .rev_opt),
+                    g = g2, p = q, p2 = q2, pt = qt, ph = qh, pb = qb, e = e2, ec = e2c, pe = qe, gt = gt,
                     times = seq(0, 8, length.out = 21), pars = pars))
     cache
   }
@@ -178,6 +184,12 @@ test_that("normL2 walks the whole chain backwards", {
   # contract, which is exactly what the quasi-Newton arm wants.
   expect_null(both$reverse$hessian)
   expect_false(is.null(both$forward$hessian))
+  # the adjoint through the native chain, and through R
+  expect_false(is.null(.chainAdjoint(environment(obj)$.chain, environment(obj)$conditions.obj, fx$pars, NULL, 1L,
+                                     "M3", Inf)))
+  viaR <- withr::with_options(list(dMod2.evaluation = "R"), obj(fx$pars, deriv = TRUE, sweep = "reverse"))
+  expect_equal(both$reverse$value, viaR$value, tolerance = 1e-10)
+  expect_equal(both$reverse$gradient, viaR$gradient[names(both$reverse$gradient)], tolerance = 1e-8)
 })
 
 test_that("the reverse mode reaches every condition and every branch", {
@@ -193,12 +205,14 @@ test_that("the reverse mode reaches every condition and every branch", {
   # not notice.
   expect_true(all(abs(both$reverse$gradient[c("dk_C1", "dk_C2")]) > 1e-6))
 
-  # Two conditions is where the batched backward solve takes over from the
-  # loop, so this is where it has to answer the same thing.
-  withr::with_options(list(dMod2.batch.check = TRUE), {
+  # Two conditions is where the batched backward solve of the R evaluation takes over from the
+  # loop, so this is where it has to answer what the conditions one by one answer.
+  withr::with_options(list(dMod2.evaluation = "R"), {
     r2 <- obj(pars, deriv = TRUE, sweep = "reverse")
-    expect_equal(r2$gradient, both$reverse$gradient)
+    one <- lapply(c("C1", "C2"), function(cn) obj(pars, deriv = TRUE, sweep = "reverse", conditions = cn)$gradient)
   })
+  expect_equal(r2$gradient, both$reverse$gradient)
+  expect_equal(r2$gradient, one[[1]][names(r2$gradient)] + one[[2]][names(r2$gradient)], tolerance = 1e-12)
 })
 
 test_that("an estimated error model seeds the prediction a second time", {
@@ -344,6 +358,20 @@ test_that("a steady-state transformation goes backwards too", {
   # Both steady-state parameters have to arrive; a Jacobian contracted on the
   # wrong side would silently zero one of them.
   expect_true(all(abs(both$reverse$gradient[c("logkin", "logkout")]) > 1e-6))
+})
+
+
+test_that("a steady state keeps the derivative rows of the inputs it passes on", {
+  fx <- .rev_fx()
+  # inputs with zero tangents keep their rows: without them they count as fixed downstream, where
+  # a backward sweep pulls nothing onto them
+  V <- matrix(c(1, 0, 0), 3, 1, dimnames = list(c("k_in", "k_out", "k1"), "v"))
+  out <- fx$pq(as.parvec(c(k_in = 1.5, k_out = 0.75, k1 = 0.6), deriv = V))[[1]]
+  expect_setequal(rownames(attr(out, "deriv")), c("A", "k_in", "k_out", "k1"))
+  expect_equal(attr(out, "deriv")[c("k_out", "k1"), "v"], c(k_out = 0, k1 = 0))
+  # a fixed input has no row
+  out <- fx$pq(as.parvec(c(k_in = 1.5, k_out = 0.75), deriv = V[1:2, , drop = FALSE]), fixed = c(k1 = 0.6))[[1]]
+  expect_false("k1" %in% rownames(attr(out, "deriv")))
 })
 
 
@@ -519,11 +547,13 @@ test_that("the batched backward path handles the directions too", {
   expect_equal(rev$gradient, fwd$gradient, tolerance = 1e-3)
   expect_equal(rev$hessian, fwd$hessian, tolerance = 1e-4)
   expect_equal(rev$hessian, t(rev$hessian), tolerance = 1e-8)
-  # The batched and the scalar route are the same arithmetic; dMod2.batch.check
-  # re-runs every batched leaf through the scalar kernel and compares.
-  withr::local_options(dMod2.batch.check = TRUE)
+  # The batched and the scalar route of the R evaluation are the same arithmetic: the conditions
+  # one by one sum to the batch.
+  withr::local_options(dMod2.evaluation = "R")
+  one <- lapply(c("C1", "C2"), function(cn) obj(fx$pars, sweep = "reverse", deriv2 = TRUE, conditions = cn)$hessian)
+  nm <- rownames(rev$hessian)
   expect_equal(obj(fx$pars, sweep = "reverse", deriv2 = TRUE)$hessian,
-               rev$hessian, tolerance = 0)
+               one[[1]][nm, nm] + one[[2]][nm, nm], tolerance = 1e-12)
 })
 
 test_that("a reverse evaluation says which direction answered it", {
@@ -556,6 +586,18 @@ test_that("a summed objective keeps every term's curvature", {
   # The constraint's curvature does not vanish, so a total that dropped it differs.
   bare <- normL2(dat, chain)(fx$pars, sweep = "reverse", deriv2 = TRUE)
   expect_gt(max(abs(rev$hessian - bare$hessian)), 1)
+})
+
+test_that("a term whose value is not finite makes the sum not finite rather than an error", {
+  fx    <- .rev2_fx()
+  chain <- fx$x * fx$p
+  obj   <- normL2(.rev2_data(fx, chain, c("A", "B")), chain)
+  # a term that has no derivatives where its value is not finite
+  inf <- structure(function(..., fixed = NULL, deriv = TRUE, deriv2 = FALSE, hessian = NULL, conditions = NULL,
+                            env = NULL, cores = 1L) objlist(value = Inf, gradient = NULL, hessian = NULL),
+                   class = c("objfn", "fn"), parameters = names(fx$pars))
+  expect_identical((obj + inf)(fx$pars, deriv2 = TRUE)$value, Inf)
+  expect_identical((inf + obj)(fx$pars)$value, Inf)
 })
 
 # ---- Inputs a transformation passes through ----
@@ -632,8 +674,67 @@ test_that("inputs passed through behind another transformation, batched", {
   expect_equal(fwd$hessian[names(pars), names(pars)], fdH, tolerance = 1e-5)
   expect_equal(rev$hessian, fwd$hessian, tolerance = 1e-4)
 
-  withr::local_options(dMod2.batch.check = TRUE)
-  expect_equal(obj(pars, deriv2 = TRUE)$hessian, fwd$hessian, tolerance = 0)
+  withr::local_options(dMod2.evaluation = "R")
+  one <- lapply(c("C1", "C2"), function(cn) obj(pars, deriv2 = TRUE, conditions = cn)$hessian)
+  nm <- rownames(fwd$hessian)
+  expect_equal(obj(pars, deriv2 = TRUE)$hessian, one[[1]][nm, nm] + one[[2]][nm, nm], tolerance = 1e-12)
+})
+
+test_that("the native chain takes stages of transformations, a steady state, Xt() and Xf()", {
+  fx <- .rev_fx()
+  f2 <- .rev2_fx()
+  pq <- c(logkin = log(1.5), logkout = log(0.75), logk1 = log(0.6), logk2 = log(0.3), logs = log(1.5))
+  f2$pars <- c(logA = log(2), logk1 = log(0.6), logk2 = log(0.3), s = 1.5)
+  steady <- fx$g * fx$x * fx$pq * fx$pl
+  staged <- f2$g * f2$x * f2$pb * f2$ph
+  timed <- f2$gt * Xt() * f2$pb * f2$ph
+  flat <- f2$g * Xf(f2$m, options = .rev_opt) * f2$pb * f2$ph
+  both <- c("C1", "C2")
+  cases <- list(
+    list(obj = normL2(.rev_data(fx, steady, pq, seed = 11L), steady), pars = pq,
+         args = list(list(), list(sweep = "reverse"))),
+    list(obj = normL2(.rev2_data(f2, staged, c("obsA", "obsB"), conditions = both), staged), pars = f2$pars,
+         args = list(list(), list(deriv2 = TRUE), list(sweep = "reverse"))),
+    list(obj = normL2(.rev2_data(f2, timed, c("obsA", "obsB"), conditions = both), timed), pars = f2$pars,
+         args = list(list(), list(deriv2 = TRUE), list(sweep = "reverse"))),
+    list(obj = normL2(.rev2_data(f2, staged, c("obsA", "obsB"), conditions = both), flat), pars = f2$pars,
+         args = list(list(deriv = FALSE))))
+  for (cs in cases) {
+    for (a in cs$args) {
+      native <- do.call(cs$obj, c(list(cs$pars), a))
+      r <- withr::with_options(list(dMod2.evaluation = "R"), do.call(cs$obj, c(list(cs$pars), a)))
+      expect_equal(native$value, r$value, tolerance = 1e-12)
+      expect_equal(native$gradient[names(r$gradient)], r$gradient, tolerance = 1e-10)
+      expect_equal(native$hessian[rownames(r$hessian), colnames(r$hessian)], r$hessian, tolerance = 1e-10)
+    }
+    # every request had a plan of the chain, none fell back
+    en <- environment(cs$obj)$.chain$entries
+    keys <- ls(en)
+    expect_length(unique(sub("^\\S+ ", "", keys)), length(cs$args))
+    expect_false(any(vapply(keys, function(k) any(vapply(get(k, envir = en), function(e) isTRUE(e$none), TRUE)),
+                            TRUE)))
+  }
+})
+
+test_that("the steady states of all conditions are solved together, the same on any core count", {
+  fx <- .rev_fx()
+  pq <- c(logkin = log(1.5), logkout = log(0.75), logk1 = log(0.6), logk2 = log(0.3), logs = log(1.5))
+  steady <- fx$g * fx$x * fx$pq * (fx$pl + fx$pl2)
+  obj <- normL2(.rev_data(fx, steady, pq, conds = c("C1", "C2"), seed = 12L), steady)
+  # every call solves its roots
+  controls(fx$pq, name = "keepRoot") <- FALSE
+  on.exit(controls(fx$pq, name = "keepRoot") <- TRUE, add = TRUE)
+  at <- function(cores, evaluation = "C++")
+    withr::with_options(list(dMod2.cores = cores, dMod2.evaluation = evaluation), obj(pq))
+  one <- at(1L)
+  three <- at(3L)
+  expect_identical(three$value, one$value)
+  expect_identical(three$gradient, one$gradient)
+  expect_identical(three$hessian, one$hessian)
+  r <- at(1L, "R")
+  expect_equal(one$value, r$value, tolerance = 1e-12)
+  expect_equal(one$gradient[names(r$gradient)], r$gradient, tolerance = 1e-10)
+  expect_equal(one$hessian[rownames(r$hessian), colnames(r$hessian)], r$hessian, tolerance = 1e-10)
 })
 
 test_that("trust drives the exact Hessian, forwards and backwards", {

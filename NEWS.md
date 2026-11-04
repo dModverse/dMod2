@@ -1,3 +1,25 @@
+# dMod2 0.14.2
+
+* `normL2(data, g * x * p, errmodel = e)` evaluates in C++ where `x` is `Xs()` of the cppDE
+  backend, `Xt()`, or `Xf()` for values alone, `g` and `e` come from `Y()`, and `p` is any
+  product of `Pexpl()` and `Pimpl()`, sums per condition included, or absent: per condition the
+  transformations, the steady states with their derivatives by the implicit function theorem,
+  the batch solve of the model and the data term, in parallel over the conditions on
+  `getOption("dMod2.cores")`. Value, gradient and Hessian, Gauss-Newton or exact, and the adjoint
+  gradient of `sweep = "reverse"` equal those of the R evaluation, which every other model takes,
+  as does every model under `options(dMod2.evaluation = "R")`.
+
+* The parallel regions over conditions run on `getOption("dMod2.cores")` threads, at most the
+  processors, also for fewer conditions than cores.
+
+* The checkpoints `Xs()` keeps for the reverse sweep are limited to twice the widest batch of
+  conditions, at least 4, and freed with `cppDE::releaseStore()` once they leave the cache or the
+  backward solve of the native chain used them.
+
+* A sum of objectives in which one term has a value that is not finite returns that value.
+
+* The option `dMod2.batch.check` is removed.
+
 # dMod2 0.14.1
 
 * The steady states of `Pimpl()` are solved in C++ by the solver of `cppDE::ptc()`, in the

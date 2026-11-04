@@ -22,9 +22,11 @@ their \code{cores} argument. Default 1.}
 \code{\link[=odemodel]{odemodel()}}, \code{\link[=Y]{Y()}} and \code{\link[=P]{P()}} write their sources and shared objects
 to, and where \code{\link[=distributedComputing]{distributedComputing()}} looks for model files when its
 objects name none. Default the working directory.}
-\item{\code{dMod2.batch.check}}{\code{TRUE} evaluates every batch of conditions a
-second time condition by condition and stops where the two differ.
-Default \code{FALSE}.}
+\item{\code{dMod2.evaluation}}{\code{"C++"} evaluates the objectives of \code{\link[=normL2]{normL2()}},
+with their predictions and the random-effects fits of \code{\link[=em]{em()}} built on
+them, in C++ per condition where the model allows it (see Details of
+\code{\link[=normL2]{normL2()}}); \code{"R"} evaluates every model through its function objects
+in R. Default \code{"C++"}.}
 \item{\code{dMod2.compile.cmdlimit}}{Longest command line in characters that
 \code{\link[=compile]{compile()}} passes to the compiler and archiver. Default 96000, 8000 on
 Windows.}

@@ -70,7 +70,6 @@ test_that("constraintL2 takes sigma = 1 by default", {
 
 test_that("constraintL2 * P takes fixed outer parameters", {
   skip_on_cran()
-  withr::local_options(dMod2.batch.check = TRUE)
   fx <- .cl2_p()
   prior <- constraintL2(mu = c(A = 1, k = 0.5), sigma = 0.5)
   all <- c(A_log = 0.2, k_log = -0.4, k2_log = 0.1)
@@ -85,6 +84,10 @@ test_that("constraintL2 * P takes fixed outer parameters", {
     expect_equal(part$gradient, full$gradient[free])
     expect_equal(part$hessian, full$hessian[free, free, drop = FALSE])
   }
+  # the batch over both conditions answers what each condition alone answers
+  pars <- all[getParameters(fx$p2)]
+  both <- fx$p2(pars)
+  for (cn in names(both)) expect_equal(both[[cn]], fx$p2(pars, conditions = cn)[[cn]], tolerance = 0)
 
   fit <- trust(prior * fx$p1, all["k_log"], rinit = 1, rmax = 10,
                fixed = all["A_log"])

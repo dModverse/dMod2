@@ -156,7 +156,6 @@ test_that("Y with pure-numeric observable composes with an Xs prediction", {
 
 test_that("g * Xt() * P() differentiates by the outer parameters", {
   skip_if_no_compile()
-  withr::local_options(dMod2.batch.check = TRUE)
   fx <- .y_xt_fx()
   prd <- fx$g * Xt() * fx$p
   times <- c(0, 0.5, 2)
@@ -174,6 +173,8 @@ test_that("g * Xt() * P() differentiates by the outer parameters", {
       expect_false("k" %in% dimnames(d)[[3]])
     }
   }
+  # the batch over both conditions answers what one condition alone answers
+  expect_equal(prd(times, pars)[["C2"]], prd(times, pars, conditions = "C2")[["C2"]], tolerance = 0)
 
   out <- prd(times, pars[-1], fixed = pars[1])
   d <- attr(out$C1, "deriv")
@@ -202,7 +203,6 @@ test_that("Y differentiates its own parameters without a trafo upstream", {
 
 test_that("normL2 on g * Xt() * P() takes fixed parameters", {
   skip_if_no_compile()
-  withr::local_options(dMod2.batch.check = TRUE)
   fx <- .y_xt_fx()
   prd <- fx$g * Xt() * fx$p
   times <- c(0.5, 1, 2)

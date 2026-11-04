@@ -25,6 +25,34 @@ bmm_bb <- function(A, B, Bn, M, K, N) {
     .Call(`_dMod2_bmm_bb`, A, B, Bn, M, K, N)
 }
 
+chain_params <- function(plan, values, deriv, deriv2, threads, tangents) {
+    .Call(`_dMod2_chain_params`, plan, values, deriv, deriv2, threads, tangents)
+}
+
+chain_data <- function(plan, pre, raw, deriv, deriv2, build_hessian, local, threads, bloq_mode, t_df, want_seed) {
+    .Call(`_dMod2_chain_data`, plan, pre, raw, deriv, deriv2, build_hessian, local, threads, bloq_mode, t_df, want_seed)
+}
+
+chain_frames <- function(plan, pre, raw, deriv, deriv2, threads) {
+    .Call(`_dMod2_chain_frames`, plan, pre, raw, deriv, deriv2, threads)
+}
+
+chain_rows <- function(plan, pre, raw, threads) {
+    .Call(`_dMod2_chain_rows`, plan, pre, raw, threads)
+}
+
+chain_back <- function(plan, pre, raw, seedP, seedS, S, threads, first) {
+    .Call(`_dMod2_chain_back`, plan, pre, raw, seedP, seedS, S, threads, first)
+}
+
+chain_pull <- function(plan, values, tangents, roots, back, rraw, S, threads, first) {
+    .Call(`_dMod2_chain_pull`, plan, values, tangents, roots, back, rraw, S, threads, first)
+}
+
+chain_unit_sums <- function(local, owner, etaNames, deriv) {
+    .Call(`_dMod2_chain_unit_sums`, local, owner, etaNames, deriv)
+}
+
 constraintL2_scalar_kernel <- function(pars, dP_opt, dP2_opt, inner_par_names, fixed_opt, mu_names, mu, sigma, sigma_pars, est, deriv = TRUE, build_hessian = TRUE) {
     .Call(`_dMod2_constraintL2_scalar_kernel`, pars, dP_opt, dP2_opt, inner_par_names, fixed_opt, mu_names, mu, sigma, sigma_pars, est, deriv, build_hessian)
 }

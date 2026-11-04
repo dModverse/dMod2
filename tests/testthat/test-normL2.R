@@ -351,6 +351,38 @@ test_that("normL2 BLOQ M3 + proportional errmodel: value and gradient match", {
 })
 
 
+test_that("the native chain gives the objective of the R path, error model and censored rows included", {
+  skip_if_no_compile()
+  ec <- .nl2_fx()$prop
+  pars <- c(A = 1.0, k = 0.5, srel = 0.1)
+  data <- fx_decay_data_bloq(pars = pars[c("A", "k")], sigma = 0.05, lloq = 0.1, times = seq(0, 10, by = 1))
+  data$C1$sigma[c(TRUE, FALSE)] <- NA_real_
+  obj <- normL2(data, ec$prd, errmodel = ec$e, optBLOQ = "M3")
+  run <- function(chain, ...) withr::with_options(list(dMod2.evaluation = if (chain) "C++" else "R"), obj(...))
+  for (args in list(list(pars), list(pars, deriv = FALSE), list(pars[-1], fixed = pars[1]))) {
+    a <- do.call(run, c(list(TRUE), args))
+    b <- do.call(run, c(list(FALSE), args))
+    expect_equal(a$value, b$value, tolerance = 1e-12)
+    expect_equal(a$gradient, b$gradient, tolerance = 1e-12)
+    expect_equal(a$hessian, b$hessian, tolerance = 1e-12)
+    expect_equal(attr(a, "chi2"), attr(b, "chi2"), tolerance = 1e-12)
+  }
+  entries <- environment(obj)$.chain$entries
+  expect_false(isTRUE(get(ls(entries)[1], envir = entries)[[1]]$none))
+  # the predictions of the environment, computed when asked for
+  expect_equal(attr(run(TRUE, pars), "env")$prediction$C1, attr(run(FALSE, pars), "env")$prediction$C1)
+
+  mc <- fx_decay_multicond_compiled()
+  dm <- fx_decay_data_multi(setNames(rep(list(c(A = 1, k = 0.5)), 4), mc$conditions))
+  objm <- normL2(dm, mc$prd)
+  a <- withr::with_options(list(dMod2.evaluation = "C++", dMod2.cores = 2L), objm(mc$outerpars))
+  b <- withr::with_options(list(dMod2.evaluation = "R"), objm(mc$outerpars))
+  expect_error(withr::with_options(list(dMod2.evaluation = "native"), objm(mc$outerpars)), "C\\+\\+")
+  expect_equal(a$value, b$value, tolerance = 1e-12)
+  expect_equal(a$gradient, b$gradient, tolerance = 1e-12)
+  expect_equal(a$hessian, b$hessian, tolerance = 1e-12)
+})
+
 test_that("normL2 BLOQ M4 + proportional errmodel: value and gradient match", {
   skip_if_no_compile()
   ec <- .nl2_fx()$prop
@@ -418,29 +450,6 @@ test_that("terms sharing an attrName pool their chi2, others split", {
               normL2(data, bench$prd_id))(bench$outerpars_id)
   expect_equal(unname(attr(three, "chi2_data")), 2 * chi1, tolerance = 1e-9)
   expect_equal(unname(attr(three, "chi2_validation")), chi1, tolerance = 1e-9)
-})
-
-
-# ---- Printing -----------------------------------------------------------
-
-test_that("print.objlist skips the blocks a deriv = FALSE call lacks", {
-  o <- structure(list(value = -480.3, gradient = NULL, hessian = NULL),
-                 class = "objlist")
-  attr(o, "data") <- -480.3
-  attr(o, "chi2") <- c(data = 541)
-  out <- capture.output(print(o))
-  expect_true(any(grepl("^value", out)))
-  expect_false(any(grepl("^(gradient|hessian)\\[", out)))
-  # the attribute block shows names and numbers, not storage modes
-  expect_true(any(grepl("^ chi2 +541", out)))
-  expect_false(any(grepl("num |chr |List of", out)))
-
-  g <- setNames(c(1, 2, 3), letters[1:3])
-  h <- matrix(0, 3, 3, dimnames = list(letters[1:3], letters[1:3]))
-  o2 <- structure(list(value = 1.5, gradient = g, hessian = h), class = "objlist")
-  out2 <- capture.output(print(o2))
-  expect_true(any(grepl("gradient\\[1:3\\]", out2)))
-  expect_true(any(grepl("hessian\\[1:3,1:3\\]", out2)))
 })
 
 

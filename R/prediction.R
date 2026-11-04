@@ -357,13 +357,13 @@ Xs.deSolve <- function(odemodel, forcings = NULL, events = NULL, names = NULL, c
 
 }
 
-# A prepared batch handle is live while the shared object it resolved its entry
-# point from is loaded; a rename or a workspace reopened elsewhere drops it.
+# A prepared batch handle is live while its entry point is loaded from the shared
+# object it was resolved from; a rename or a workspace reopened elsewhere drops it.
 .batchHandleLive <- function(handle) {
   if (is.null(handle)) return(FALSE)
   dll <- handle$sym$dll
   if (is.null(dll)) return(TRUE)
-  dll %in% names(getLoadedDLLs())
+  is.character(handle$sym$name) && is.loaded(handle$sym$name, PACKAGE = dll)
 }
 
 # The forcings as the cppDE solver takes them, one data.frame of time and value
@@ -503,11 +503,12 @@ Xs.cppDE <- function(odemodel, forcings = NULL, events = NULL, names = NULL, con
 
   # Checkpoints of the value pass, matched on times and parameters, for the
   # backward sweeps over the same trajectory. A lookup keeps the store; the
-  # cache holds at least twice the widest batch and evicts the least recent.
+  # cache holds twice the widest batch, at least 4, and evicts the least
+  # recent, since a store far from the optimum holds many steps.
   scache <- new.env(parent = emptyenv())
   scache$items <- list()
   scache$width <- 0L
-  storeCap <- function() max(64L, 2L * scache$width)
+  storeCap <- function() max(4L, 2L * scache$width)
   storeFind <- function(times, params) {
     it <- scache$items
     for (k in seq_along(it))
@@ -515,14 +516,22 @@ Xs.cppDE <- function(odemodel, forcings = NULL, events = NULL, names = NULL, con
         return(k)
     NA_integer_
   }
+  # a store that leaves the cache is freed at once, see .releaseStores()
   storePut <- function(times, params, store) {
     if (is.null(store)) return(invisible(NULL))
     k <- storeFind(times, params)
-    if (!is.na(k)) scache$items[[k]] <- NULL
+    if (!is.na(k)) {
+      old <- scache$items[[k]]$store
+      scache$items[[k]] <- NULL
+      if (!identical(old, store)) .releaseStores(list(old))
+    }
     scache$items[[length(scache$items) + 1L]] <-
       list(times = times, params = params, store = store)
     excess <- length(scache$items) - storeCap()
-    if (excess > 0L) scache$items <- scache$items[-seq_len(excess)]
+    if (excess > 0L) {
+      .releaseStores(lapply(scache$items[seq_len(excess)], `[[`, "store"))
+      scache$items <- scache$items[-seq_len(excess)]
+    }
     invisible(NULL)
   }
   storeGet <- function(times, params) {
@@ -543,6 +552,7 @@ Xs.cppDE <- function(odemodel, forcings = NULL, events = NULL, names = NULL, con
 
   # Marshalling shared by the single and the batched entry: Phi'(theta) as the
   # tangent (and Phi''(theta) as the Hessian) on the inner parameter rows.
+  rowCache <- new.env(parent = emptyenv())
   prep1 <- function(pars, fixed, deriv, deriv2) {
     out <- list(params = c(unclass(pars), unclass(fixed)),
                 tangent = NULL, hessian = NULL)
@@ -550,10 +560,15 @@ Xs.cppDE <- function(odemodel, forcings = NULL, events = NULL, names = NULL, con
     deriv_in <- attr(pars, "deriv")
     if (is.null(deriv_in)) return(out)
     phi_rows <- inner_names
-    # Positions, not names: a character index costs a match() per use.
-    ridx <- match(phi_rows, rownames(deriv_in))
-    hit  <- !is.na(ridx)
-    src  <- ridx[hit]
+    # Positions, not names: a character index costs a match() per use. The rows of
+    # consecutive conditions mostly agree, so their match is kept.
+    rn <- rownames(deriv_in)
+    if (!identical(rn, rowCache$rn)) {
+      ridx <- match(phi_rows, rn)
+      rowCache$rn <- rn; rowCache$hit <- !is.na(ridx); rowCache$src <- ridx[rowCache$hit]
+    }
+    hit  <- rowCache$hit
+    src  <- rowCache$src
     out$tangent <- matrix(0, length(phi_rows), ncol(deriv_in),
                           dimnames = list(phi_rows, colnames(deriv_in)))
     out$tangent[hit, ] <- deriv_in[src, , drop = FALSE]
@@ -758,6 +773,52 @@ Xs.cppDE <- function(odemodel, forcings = NULL, events = NULL, names = NULL, con
 
   }
   attr(P2X, "batchfn") <- P2Xbatch
+  # The prepared solve of the native chain (.chainPlan()): one condition per entry of `timesL`,
+  # `dirsL` the directions of its tangent. With `seeds` the backward solve of forward over
+  # reverse with that many seeds per condition instead. With `adjoint` the first order: the
+  # forward solve keeping its checkpoints, or with `seeds` the backward one, which the caller
+  # hands them. NULL where the leaf cannot take part.
+  attr(P2X, "chainSolve") <- function(timesL, dirsL, deriv, deriv2, seeds = 0L, adjoint = FALSE) {
+    if (adjoint) {
+      if (!has_store) return(NULL)
+      o <- solveOpts(FALSE)
+      if (!is.null(o$traceFile)) return(NULL)
+      forcs <- forcsOf(controls$forcings)
+      n <- length(inner_names)
+      states <- dim_names$variable
+      conds <- lapply(timesL, function(tt) c(
+        list(times = tt, parms = setNames(rep(1, n), inner_names), forcings = forcs),
+        if (seeds > 0L) list(cotangent = array(0, c(length(tt), length(states), seeds), dimnames = list(NULL, states, NULL)),
+                             adjoint = sweepCtl())
+        else list(keepStore = TRUE)))
+      h <- do.call(cppDE::prepareBatch, c(list(reversed, conditions = conds),
+                                          o[setdiff(names(o), c("traceFile", "onFailure"))]))
+      if (is.null(h$sym)) return(NULL)
+      return(list(handle = h, inner = inner_names, variables = attr(func, "variables"), onFailure = o$onFailure))
+    }
+    if ((deriv2 && !has_deriv2) || (deriv && is.null(extended))) return(NULL)
+    if (seeds > 0L && (!has_reverse2 || deriv2)) return(NULL)
+    o <- solveOpts(deriv || seeds > 0L, if (deriv || seeds > 0L) sensSec())
+    if (!is.null(o$traceFile)) return(NULL)
+    model <- if (seeds > 0L) reversed2 else pickModel(deriv, deriv2)
+    forcs <- forcsOf(controls$forcings)
+    n <- length(inner_names)
+    states <- dim_names$variable
+    conds <- lapply(seq_along(timesL), function(i) {
+      nd <- length(dirsL[[i]])
+      nt <- length(timesL[[i]])
+      list(times = timesL[[i]], parms = setNames(rep(1, n), inner_names),
+           tangent = if (deriv) matrix(0, n, nd, dimnames = list(inner_names, dirsL[[i]])),
+           hessian = if (deriv2) array(0, c(n, nd, nd), dimnames = list(inner_names, dirsL[[i]], dirsL[[i]])),
+           cotangent = if (seeds > 0L) array(0, c(nt, length(states), seeds), dimnames = list(NULL, states, NULL)),
+           curvature = if (seeds > 0L) array(0, c(nt, length(states), seeds, nd)),
+           forcings = forcs)
+    })
+    h <- do.call(cppDE::prepareBatch, c(list(model, conditions = conds),
+                                        o[setdiff(names(o), c("traceFile", "onFailure"))]))
+    if (is.null(h$sym)) return(NULL)
+    list(handle = h, inner = inner_names, variables = attr(func, "variables"), onFailure = o$onFailure)
+  }
 
   # ---- Reverse mode -------------------------------------------------------
   # Pulls a cotangent on the prediction back onto `pars`, replaying stored
@@ -783,7 +844,7 @@ Xs.cppDE <- function(odemodel, forcings = NULL, events = NULL, names = NULL, con
     # Second order sweeps over the value pass's tangents, as prep1 builds them
     # for a forward solve, and integrates its own trajectory.
     pr <- prep1(pars, fixed, K > 1L, FALSE)
-    o <- solveOpts(K > 1L)
+    o <- solveOpts(K > 1L, if (K > 1L) sensSec())
     # cppDE refuses a store and a control under forward-reverse.
     st <- if (K > 1L) NULL else storeGet(times, pr$params)
     call <- c(list(reversed, times, pr$params, fixed = NULL,
@@ -846,7 +907,7 @@ Xs.cppDE <- function(odemodel, forcings = NULL, events = NULL, names = NULL, con
     }
 
     .requireReverse(has_reverse, has_reverse2, K)
-    o <- solveOpts(K > 1L)
+    o <- solveOpts(K > 1L, if (K > 1L) sensSec())
     conds <- lapply(seq_len(n), function(i) {
       pr <- prep1(parsList[[i]], fixedList[[i]], K > 1L, FALSE)
       ct <- .widenCotangent(wList[[i]], states, controls$names)
@@ -1063,6 +1124,20 @@ Xf.cppDE <- function(odemodel, forcings = NULL, events = NULL, condition = NULL,
     colnames(out)[1] <- "time"
 
     prdframe(out, deriv = NULL, parameters = c(pars, fixed))
+  }
+  # The prepared solve of the native chain (.chainPlan()), values only; NULL for derivatives.
+  attr(P2X, "chainSolve") <- function(timesL, dirsL, deriv, deriv2, seeds = 0L, adjoint = FALSE) {
+    if (deriv || deriv2 || seeds > 0L || adjoint) return(NULL)
+    o <- odeOf(controls$options)
+    if (!is.null(o$traceFile)) return(NULL)
+    forcs <- forcsOf(controls$forcings)
+    conds <- lapply(timesL, function(tt)
+      list(times = tt, parms = setNames(rep(1, length(paramNames)), paramNames), forcings = forcs))
+    h <- do.call(cppDE::prepareBatch, c(list(func, conditions = conds),
+      list(abstol = o$atol, reltol = o$rtol, maxattempts = o$maxattempts, maxsteps = o$maxsteps, hini = o$hini,
+           roottol = o$roottol, maxroot = o$maxroot), .orderOpts(o)))
+    if (is.null(h$sym)) return(NULL)
+    list(handle = h, variables = attr(func, "variables"), onFailure = o$onFailure)
   }
 
   attr(P2X, "parameters") <- paramNames
@@ -1644,6 +1719,12 @@ Y <- function(g, f = NULL, states = NULL, parameters = NULL,
 
   attr(X2Y, "vjpfn") <- X2Yvjp
   attr(X2Y, "batchfn") <- X2Ybatch
+  # What the native chain (.chainPlan()) needs: the compiled function and the names of its
+  # inputs and outputs; NULL where the leaf cannot take part.
+  attr(X2Y, "chainObs") <- function()
+    if (use_ad && emit_d1 && !isTRUE(controls$attachInput) && !is.null(gEval$evaluateBatch))
+      list(st = environment(gEval$evaluateBatch)$st, states = obsStates, params = obsParams,
+           observables = observables, d2 = emit_d2)
 
   attr(X2Y, "equations")  <- as.eqnvec(g)
   attr(X2Y, "parameters") <- parameters
@@ -1706,6 +1787,28 @@ Xt <- function(condition = NULL) {
   # Time depends on no parameter, so its cotangent is zero.
   attr(P2X, "vjpfn") <- function(times, pars, fixed = NULL, cotangent)
     .ctZero(names(pars), .ctK(.asCtOut(cotangent)))
+  # The solve of the native chain (.chainPlan()), as the batch solve of Xs() answers it: time the
+  # one state, its derivatives and the cotangents of the backward solve zero.
+  attr(P2X, "chainSolve") <- function(timesL, dirsL, deriv, deriv2, seeds = 0L, adjoint = FALSE) {
+    back <- seeds > 0L
+    preps <- lapply(seq_along(timesL), function(i) {
+      nd <- length(dirsL[[i]])
+      list(args = c(list(times = timesL[[i]], parms = numeric(0)),
+                    if (deriv || back) list(tangent = matrix(0, 0, nd, dimnames = list(NULL, dirsL[[i]]))),
+                    if (deriv2) list(hessian = array(0, c(0L, nd, nd))),
+                    if (back) list(cotangent = array(0, c(length(timesL[[i]]), 1L, seeds)), curvature = NULL)))
+    })
+    run <- function(args, cores) lapply(args, function(a) {
+      if (back) return(list(cotangent = numeric(0), curvature = numeric(0)))
+      tt <- a$times
+      nd <- if (is.null(a$tangent)) 0L else ncol(a$tangent)
+      list(time = tt, variable = matrix(tt, ncol = 1L, dimnames = list(NULL, "time")),
+           tangent = if (deriv) array(0, c(length(tt), 1L, nd)),
+           hessian = if (deriv2) array(0, c(length(tt), 1L, nd, nd)), store = list())
+    })
+    list(handle = list(required = character(0), preps = preps, sym = NULL), variables = "time", run = run,
+         onFailure = "stop")
+  }
 
   attr(P2X, "parameters") <- NULL
   attr(P2X, "equations") <- NULL

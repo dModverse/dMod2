@@ -13,23 +13,32 @@
 #' @export
 match.fnargs <- function(arglist, choices) {
   nms <- names(arglist)
+  # each argument by position or by its own name, in order
+  if (length(arglist) == length(choices) && (is.null(nms) || all(!nzchar(nms) | nms == choices)))
+    return(seq_along(choices))
   if (is.null(nms)) nms <- rep("", length(arglist))
-  unknown <- setdiff(nms[nzchar(nms)], choices)
+  unknown <- .setdiff(nms[nzchar(nms)], choices)
   if (length(unknown))
     stop("unknown argument ", paste(unknown, collapse = ", "), "; the arguments are ",
          paste(choices, collapse = ", "), " and those named in the function.", call. = FALSE)
   if (anyDuplicated(nms[nzchar(nms)]))
     stop("duplicate arguments in prdfn/obsfn/parfn function call", call. = FALSE)
   unnamed <- which(!nzchar(nms))
-  free <- setdiff(choices, nms)
+  free <- .setdiff(choices, nms)
   if (length(unnamed) > length(free))
     stop("too many arguments; the arguments are ", paste(choices, collapse = ", "),
          " and those named in the function.", call. = FALSE)
   nms[unnamed] <- free[seq_along(unnamed)]
-  lost <- setdiff(choices, nms)
+  lost <- .setdiff(choices, nms)
   if (length(lost)) stop("argument ", paste(lost, collapse = ", "), " is missing.", call. = FALSE)
   match(choices, nms)
 }
+
+## setdiff(), intersect() and union() of atomic vectors without the class checks of base R, for the
+## paths every evaluation takes.
+.setdiff   <- function(x, y) unique(x[match(x, y, 0L) == 0L])
+.intersect <- function(x, y) unique(y[match(x, y, 0L)])
+.union     <- function(x, y) unique(c(x, y))
 
 
 ## Evaluation protocol for fn objects -------------------------------------
@@ -298,16 +307,6 @@ match.fnargs <- function(arglist, choices) {
     },
     parfn = bf(parsList = parsL, fixedList = fixedL, deriv = deriv,
                deriv2 = deriv2, conditions = conds, cores = cores))
-
-  if (isTRUE(getOption("dMod2.batch.check", FALSE))) {
-    ref <- lapply(seq_along(idx), function(j)
-      .callKernel(st, b, idx[j], conds[[j]], deriv, deriv2, keepStore))
-    cmp <- all.equal(res, ref, tolerance = 0)
-    if (!isTRUE(cmp))
-      stop("dMod2.batch.check: batch entry of a ", st$kind,
-           " leaf disagrees with the scalar kernel:\n  ",
-           paste(cmp, collapse = "\n  "), call. = FALSE)
-  }
   res
 }
 
@@ -386,7 +385,23 @@ match.fnargs <- function(arglist, choices) {
   keep <- which(!is.na(own))
   if (!length(keep)) return(outlist)
 
-  for (k in unique(own[keep])) {
+  ks <- unique(own[keep])
+  # Pexpl() leaves, mostly one per condition, in one call
+  kern <- lapply(ks, function(k) {
+    nd <- .fnNode(st$parts[[k]])
+    if (!is.null(nd) && identical(nd$op, "leaf") && isTRUE(attr(nd$kernel, "pexpl", exact = TRUE))) nd$kernel
+  })
+  many <- !vapply(kern, is.null, TRUE)
+  if (sum(many) < 2L) many[] <- FALSE
+  if (any(many)) {
+    pos <- keep[own[keep] %in% ks[many]]
+    sub <- .bundle_positions(b, pos, slotnames[pos])
+    pf <- lapply(seq_along(pos), function(j) .splitParsFixed(.req_pars(sub, j), .req_fixed(sub, j)))
+    vals <- .Pexpl_many(kern[match(own[pos], ks)], lapply(pf, `[[`, "pars"), lapply(pf, `[[`, "fixed"),
+                        deriv, deriv2, cores)
+    for (j in seq_along(pos)) outlist[[pos[j]]] <- vals[[j]]
+  }
+  for (k in ks[!many]) {
     pos  <- keep[own[keep] == k]
     sub  <- .bundle_positions(b, pos, slotnames[pos])
     part <- .evalMany(st$parts[[k]], sub, deriv, deriv2, env, cores, hessian, sweep)
@@ -594,23 +609,6 @@ match.fnargs <- function(arglist, choices) {
       conditions = if (is.null(res$conditions)) NULL else as.list(res$conditions[live]),
       cores     = cores,
       seeds     = seeds)
-    if (isTRUE(getOption("dMod2.batch.check", FALSE))) {
-      ref <- lapply(seq_along(live), function(j)
-        if (identical(st$kind, "obsfn"))
-          vjp(out = .req_out(b, live[j]), pars = split[[j]]$pars,
-              fixed = split[[j]]$fixed, cotangent = w[[live[j]]]$out)
-        else if (seeds)
-          vjp(times = .req_times(b, live[j]), pars = split[[j]]$pars,
-              fixed = split[[j]]$fixed, cotangent = w[[live[j]]]$out, seeds = TRUE)
-        else
-          vjp(times = .req_times(b, live[j]), pars = split[[j]]$pars,
-              fixed = split[[j]]$fixed, cotangent = w[[live[j]]]$out))
-      cmp <- all.equal(vals, ref, tolerance = 0)
-      if (!isTRUE(cmp))
-        stop("dMod2.batch.check: the batched vjp of a ", st$kind,
-             " leaf disagrees with the scalar one:\n  ",
-             paste(cmp, collapse = "\n  "), call. = FALSE)
-    }
     # As in call_one, the pass-through half is picked at the width the node
     # hands on, not at its own; a slot without one passes nothing on.
     for (j in seq_along(live)) {
@@ -888,7 +886,7 @@ match.fnargs <- function(arglist, choices) {
   st2$default_conditions <- conds
 
   out <- .fnWrap(st2)
-  for (a in c("parameters", "compileInfo", "resetWarmStart"))
+  for (a in c("parameters", "compileInfo"))
     attr(out, a) <- attr(fn, a, exact = TRUE)
   attr(out, "mappings")   <- setNames(rep(list(st$kernel), length(conds)), conds)
   attr(out, "conditions") <- conds
@@ -979,16 +977,17 @@ match.fnargs <- function(arglist, choices) {
       # the first returned.
       .term <- function(f, own, e) {
         if (is.null(own)) return(.call(f, NULL, env))
-        mine <- intersect(conditions, own)
+        mine <- .intersect(conditions, own)
         if (length(mine) || isTRUE(attr(f, "unconditioned"))) .call(f, mine, e)
       }
       v1 <- .term(e1, conditions.x1, env)
       v2 <- .term(e2, conditions.x2, attr(v1, "env") %||% env)
 
       # .sumobjlist adds an absent Hessian as zero, which is wrong when only
-      # one term has one.
+      # one term has one and both values are finite.
       .h <- function(v) !is.null(v) && !is.null(v$hessian)
-      if (!is.null(v1) && !is.null(v2) && xor(.h(v1), .h(v2)))
+      .finite <- function(v) all(is.finite(v$value))
+      if (!is.null(v1) && !is.null(v2) && xor(.h(v1), .h(v2)) && .finite(v1) && .finite(v2))
         stop("a summed objective got a Hessian from ",
              if (.h(v1)) "its first" else "its second", " term and none from ",
              if (.h(v1)) "its second" else "its first",

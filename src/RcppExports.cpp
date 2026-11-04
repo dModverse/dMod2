@@ -106,6 +106,124 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// chain_params
+SEXP chain_params(List plan, List values, bool deriv, bool deriv2, int threads, SEXP tangents);
+RcppExport SEXP _dMod2_chain_params(SEXP planSEXP, SEXP valuesSEXP, SEXP derivSEXP, SEXP deriv2SEXP, SEXP threadsSEXP, SEXP tangentsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< List >::type plan(planSEXP);
+    Rcpp::traits::input_parameter< List >::type values(valuesSEXP);
+    Rcpp::traits::input_parameter< bool >::type deriv(derivSEXP);
+    Rcpp::traits::input_parameter< bool >::type deriv2(deriv2SEXP);
+    Rcpp::traits::input_parameter< int >::type threads(threadsSEXP);
+    Rcpp::traits::input_parameter< SEXP >::type tangents(tangentsSEXP);
+    rcpp_result_gen = Rcpp::wrap(chain_params(plan, values, deriv, deriv2, threads, tangents));
+    return rcpp_result_gen;
+END_RCPP
+}
+// chain_data
+SEXP chain_data(List plan, List pre, List raw, bool deriv, bool deriv2, bool build_hessian, bool local, int threads, std::string bloq_mode, double t_df, bool want_seed);
+RcppExport SEXP _dMod2_chain_data(SEXP planSEXP, SEXP preSEXP, SEXP rawSEXP, SEXP derivSEXP, SEXP deriv2SEXP, SEXP build_hessianSEXP, SEXP localSEXP, SEXP threadsSEXP, SEXP bloq_modeSEXP, SEXP t_dfSEXP, SEXP want_seedSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< List >::type plan(planSEXP);
+    Rcpp::traits::input_parameter< List >::type pre(preSEXP);
+    Rcpp::traits::input_parameter< List >::type raw(rawSEXP);
+    Rcpp::traits::input_parameter< bool >::type deriv(derivSEXP);
+    Rcpp::traits::input_parameter< bool >::type deriv2(deriv2SEXP);
+    Rcpp::traits::input_parameter< bool >::type build_hessian(build_hessianSEXP);
+    Rcpp::traits::input_parameter< bool >::type local(localSEXP);
+    Rcpp::traits::input_parameter< int >::type threads(threadsSEXP);
+    Rcpp::traits::input_parameter< std::string >::type bloq_mode(bloq_modeSEXP);
+    Rcpp::traits::input_parameter< double >::type t_df(t_dfSEXP);
+    Rcpp::traits::input_parameter< bool >::type want_seed(want_seedSEXP);
+    rcpp_result_gen = Rcpp::wrap(chain_data(plan, pre, raw, deriv, deriv2, build_hessian, local, threads, bloq_mode, t_df, want_seed));
+    return rcpp_result_gen;
+END_RCPP
+}
+// chain_frames
+SEXP chain_frames(List plan, List pre, List raw, bool deriv, bool deriv2, int threads);
+RcppExport SEXP _dMod2_chain_frames(SEXP planSEXP, SEXP preSEXP, SEXP rawSEXP, SEXP derivSEXP, SEXP deriv2SEXP, SEXP threadsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< List >::type plan(planSEXP);
+    Rcpp::traits::input_parameter< List >::type pre(preSEXP);
+    Rcpp::traits::input_parameter< List >::type raw(rawSEXP);
+    Rcpp::traits::input_parameter< bool >::type deriv(derivSEXP);
+    Rcpp::traits::input_parameter< bool >::type deriv2(deriv2SEXP);
+    Rcpp::traits::input_parameter< int >::type threads(threadsSEXP);
+    rcpp_result_gen = Rcpp::wrap(chain_frames(plan, pre, raw, deriv, deriv2, threads));
+    return rcpp_result_gen;
+END_RCPP
+}
+// chain_rows
+SEXP chain_rows(List plan, List pre, List raw, int threads);
+RcppExport SEXP _dMod2_chain_rows(SEXP planSEXP, SEXP preSEXP, SEXP rawSEXP, SEXP threadsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< List >::type plan(planSEXP);
+    Rcpp::traits::input_parameter< List >::type pre(preSEXP);
+    Rcpp::traits::input_parameter< List >::type raw(rawSEXP);
+    Rcpp::traits::input_parameter< int >::type threads(threadsSEXP);
+    rcpp_result_gen = Rcpp::wrap(chain_rows(plan, pre, raw, threads));
+    return rcpp_result_gen;
+END_RCPP
+}
+// chain_back
+SEXP chain_back(List plan, List pre, List raw, NumericMatrix seedP, NumericMatrix seedS, int S, int threads, bool first);
+RcppExport SEXP _dMod2_chain_back(SEXP planSEXP, SEXP preSEXP, SEXP rawSEXP, SEXP seedPSEXP, SEXP seedSSEXP, SEXP SSEXP, SEXP threadsSEXP, SEXP firstSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< List >::type plan(planSEXP);
+    Rcpp::traits::input_parameter< List >::type pre(preSEXP);
+    Rcpp::traits::input_parameter< List >::type raw(rawSEXP);
+    Rcpp::traits::input_parameter< NumericMatrix >::type seedP(seedPSEXP);
+    Rcpp::traits::input_parameter< NumericMatrix >::type seedS(seedSSEXP);
+    Rcpp::traits::input_parameter< int >::type S(SSEXP);
+    Rcpp::traits::input_parameter< int >::type threads(threadsSEXP);
+    Rcpp::traits::input_parameter< bool >::type first(firstSEXP);
+    rcpp_result_gen = Rcpp::wrap(chain_back(plan, pre, raw, seedP, seedS, S, threads, first));
+    return rcpp_result_gen;
+END_RCPP
+}
+// chain_pull
+SEXP chain_pull(List plan, List values, NumericMatrix tangents, SEXP roots, List back, List rraw, int S, int threads, bool first);
+RcppExport SEXP _dMod2_chain_pull(SEXP planSEXP, SEXP valuesSEXP, SEXP tangentsSEXP, SEXP rootsSEXP, SEXP backSEXP, SEXP rrawSEXP, SEXP SSEXP, SEXP threadsSEXP, SEXP firstSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< List >::type plan(planSEXP);
+    Rcpp::traits::input_parameter< List >::type values(valuesSEXP);
+    Rcpp::traits::input_parameter< NumericMatrix >::type tangents(tangentsSEXP);
+    Rcpp::traits::input_parameter< SEXP >::type roots(rootsSEXP);
+    Rcpp::traits::input_parameter< List >::type back(backSEXP);
+    Rcpp::traits::input_parameter< List >::type rraw(rrawSEXP);
+    Rcpp::traits::input_parameter< int >::type S(SSEXP);
+    Rcpp::traits::input_parameter< int >::type threads(threadsSEXP);
+    Rcpp::traits::input_parameter< bool >::type first(firstSEXP);
+    rcpp_result_gen = Rcpp::wrap(chain_pull(plan, values, tangents, roots, back, rraw, S, threads, first));
+    return rcpp_result_gen;
+END_RCPP
+}
+// chain_unit_sums
+List chain_unit_sums(List local, IntegerVector owner, List etaNames, bool deriv);
+RcppExport SEXP _dMod2_chain_unit_sums(SEXP localSEXP, SEXP ownerSEXP, SEXP etaNamesSEXP, SEXP derivSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< List >::type local(localSEXP);
+    Rcpp::traits::input_parameter< IntegerVector >::type owner(ownerSEXP);
+    Rcpp::traits::input_parameter< List >::type etaNames(etaNamesSEXP);
+    Rcpp::traits::input_parameter< bool >::type deriv(derivSEXP);
+    rcpp_result_gen = Rcpp::wrap(chain_unit_sums(local, owner, etaNames, deriv));
+    return rcpp_result_gen;
+END_RCPP
+}
 // constraintL2_scalar_kernel
 List constraintL2_scalar_kernel(NumericVector pars, Nullable<NumericMatrix> dP_opt, Nullable<NumericVector> dP2_opt, CharacterVector inner_par_names, Nullable<NumericVector> fixed_opt, CharacterVector mu_names, NumericVector mu, NumericVector sigma, CharacterVector sigma_pars, bool est, bool deriv, bool build_hessian);
 RcppExport SEXP _dMod2_constraintL2_scalar_kernel(SEXP parsSEXP, SEXP dP_optSEXP, SEXP dP2_optSEXP, SEXP inner_par_namesSEXP, SEXP fixed_optSEXP, SEXP mu_namesSEXP, SEXP muSEXP, SEXP sigmaSEXP, SEXP sigma_parsSEXP, SEXP estSEXP, SEXP derivSEXP, SEXP build_hessianSEXP) {
@@ -541,6 +659,13 @@ static const R_CallMethodDef CallEntries[] = {
     {"_dMod2_bmm_lb", (DL_FUNC) &_dMod2_bmm_lb, 6},
     {"_dMod2_bmm_rb", (DL_FUNC) &_dMod2_bmm_rb, 6},
     {"_dMod2_bmm_bb", (DL_FUNC) &_dMod2_bmm_bb, 6},
+    {"_dMod2_chain_params", (DL_FUNC) &_dMod2_chain_params, 6},
+    {"_dMod2_chain_data", (DL_FUNC) &_dMod2_chain_data, 11},
+    {"_dMod2_chain_frames", (DL_FUNC) &_dMod2_chain_frames, 6},
+    {"_dMod2_chain_rows", (DL_FUNC) &_dMod2_chain_rows, 4},
+    {"_dMod2_chain_back", (DL_FUNC) &_dMod2_chain_back, 8},
+    {"_dMod2_chain_pull", (DL_FUNC) &_dMod2_chain_pull, 9},
+    {"_dMod2_chain_unit_sums", (DL_FUNC) &_dMod2_chain_unit_sums, 4},
     {"_dMod2_constraintL2_scalar_kernel", (DL_FUNC) &_dMod2_constraintL2_scalar_kernel, 12},
     {"_dMod2_datapointL2_kernel", (DL_FUNC) &_dMod2_datapointL2_kernel, 11},
     {"_dMod2_dirichlet_process_partitions", (DL_FUNC) &_dMod2_dirichlet_process_partitions, 4},

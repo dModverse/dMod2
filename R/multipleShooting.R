@@ -77,7 +77,7 @@
                    sweep = c("forward", "reverse"),
                    cores = getOption("dMod2.cores", 1L), env = NULL,
                    growth = FALSE, residuals = FALSE) {
-    sweep <- match.arg(sweep)
+    sweep <- match.arg(sweep, c("forward", "reverse"))
     if (is.null(env)) env <- new.env()
     .shootCheckNodes(nodes, spec)
     if (identical(sweep, "reverse") && isTRUE(deriv))

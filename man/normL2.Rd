@@ -76,8 +76,8 @@ conditions or a list named by condition. Default \code{NULL}. Needs
 
 \code{x} has to be a chain \code{g * x * p} with one prediction function from
 \code{\link[=Xs]{Xs()}}, built on \code{odemodel(..., includeTimeZero = FALSE)}. The method
-and the node layout are described in
-\code{vignette("Optimisation", package = "dMod2")}.}
+and the node layout are described in the guide chapter
+\href{https://dmodverse.github.io/dMod2/articles/guide-optimization.html}{Optimization}.}
 }
 \value{
 An objective function of class \code{objfn}, called as \code{obj(pars, ...)}, see
@@ -95,6 +95,13 @@ the data.
 }
 \details{
 Combine objectives with \code{+}, see \link{sumobjfn}.
+
+A chain \code{g * x * p} with \code{x} from \code{\link[=Xs]{Xs()}} of the cppDE backend, \code{\link[=Xt]{Xt()}} or,
+for values alone, \code{\link[=Xf]{Xf()}}, \code{g} and \code{errmodel} from \code{\link[=Y]{Y()}}, and \code{p} a product
+of \code{\link[=Pexpl]{Pexpl()}} and \code{\link[=Pimpl]{Pimpl()}} transformations or absent is evaluated in C++,
+in parallel over the conditions on \code{getOption("dMod2.cores")}, to the
+values and derivatives of the evaluation in R. Any other model is
+evaluated in R, as is every model under \code{options(dMod2.evaluation = "R")}.
 }
 \section{Calling a dMod function}{
 

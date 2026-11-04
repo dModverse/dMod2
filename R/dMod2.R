@@ -22,9 +22,11 @@
 #'     [odemodel()], [Y()] and [P()] write their sources and shared objects
 #'     to, and where [distributedComputing()] looks for model files when its
 #'     objects name none. Default the working directory.}
-#'   \item{`dMod2.batch.check`}{`TRUE` evaluates every batch of conditions a
-#'     second time condition by condition and stops where the two differ.
-#'     Default `FALSE`.}
+#'   \item{`dMod2.evaluation`}{`"C++"` evaluates the objectives of [normL2()],
+#'     with their predictions and the random-effects fits of [em()] built on
+#'     them, in C++ per condition where the model allows it (see Details of
+#'     [normL2()]); `"R"` evaluates every model through its function objects
+#'     in R. Default `"C++"`.}
 #'   \item{`dMod2.compile.cmdlimit`}{Longest command line in characters that
 #'     [compile()] passes to the compiler and archiver. Default 96000, 8000 on
 #'     Windows.}
