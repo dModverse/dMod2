@@ -1,0 +1,17 @@
+# Boehm 2014
+
+STAT5 dimerisation in BaF3 cells after Boehm et al. (2014), J Proteome Res 13:5685: multistart, error model by restricted maximum likelihood, prediction band, profiles and the PEtab form of the problem.
+
+## Files
+
+| file | content |
+|---|---|
+| `analysis.R` | the analysis, shown below |
+
+## Run
+
+With this folder as working directory: `source("analysis.R")`.
+
+```{r, echo = FALSE, results = "asis"}
+cat(knitr::knit_child(text = script("analysis.R"), quiet = TRUE), sep = "\n")
+```

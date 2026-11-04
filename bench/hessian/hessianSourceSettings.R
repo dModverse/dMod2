@@ -4,7 +4,7 @@
 #
 # [PURPOSE]
 # One definition of the optimiser settings compared by hessianSource.R,
-# the Optimisation vignette and dev/optimisation/bachmann_hessianSource.R. Each
+# the guide chapter Optimization. Each
 # selects the subset it can afford to run.
 #
 # [AUTHOR]

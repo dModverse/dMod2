@@ -1,0 +1,15 @@
+---
+title: "Oppelt 2018"
+---
+
+```{r, echo = FALSE, results = "asis"}
+dir <- "../../examples/oppeltNPJSystBiolAppl2018"
+page <- readLines(file.path(dir, "README.md"))
+page <- page[-grep("^# ", page)[1]]
+figures <- unique(unlist(regmatches(page, gregexpr("figures/[^\")[:space:]]+", page))))
+flat <- paste0("oppeltNPJSystBiolAppl2018-", basename(figures))
+file.copy(file.path(dir, figures), flat, overwrite = TRUE)
+for (i in seq_along(figures)) page <- gsub(figures[i], flat[i], page, fixed = TRUE)
+page <- gsub("<img src=", "<img alt=\"Output of the code above\" src=", page, fixed = TRUE)
+cat(page, sep = "\n")
+```

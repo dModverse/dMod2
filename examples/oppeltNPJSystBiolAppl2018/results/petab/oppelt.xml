@@ -1,0 +1,921 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<sbml xmlns="http://www.sbml.org/sbml/level3/version2/core" level="3" version="2">
+  <model id="oppelt">
+    <listOfCompartments>
+      <compartment id="nucleus" spatialDimensions="3" size="1" constant="true"/>
+      <compartment id="defaultComp" spatialDimensions="3" size="1" constant="true"/>
+    </listOfCompartments>
+    <listOfSpecies>
+      <species id="TNF" compartment="defaultComp" initialConcentration="0" hasOnlySubstanceUnits="false" boundaryCondition="false" constant="false"/>
+      <species id="TNFR" compartment="defaultComp" initialConcentration="0" hasOnlySubstanceUnits="false" boundaryCondition="false" constant="false"/>
+      <species id="Lig" compartment="defaultComp" initialConcentration="0" hasOnlySubstanceUnits="false" boundaryCondition="false" constant="false"/>
+      <species id="Ikk" compartment="defaultComp" hasOnlySubstanceUnits="false" boundaryCondition="false" constant="false"/>
+      <species id="pIkk" compartment="defaultComp" initialConcentration="0" hasOnlySubstanceUnits="false" boundaryCondition="false" constant="false"/>
+      <species id="ppIkk" compartment="defaultComp" initialConcentration="0" hasOnlySubstanceUnits="false" boundaryCondition="false" constant="false"/>
+      <species id="iIkk" compartment="defaultComp" initialConcentration="0" hasOnlySubstanceUnits="false" boundaryCondition="false" constant="false"/>
+      <species id="NfkIkb" compartment="defaultComp" hasOnlySubstanceUnits="false" boundaryCondition="false" constant="false"/>
+      <species id="NfkpIkb" compartment="defaultComp" initialConcentration="0" hasOnlySubstanceUnits="false" boundaryCondition="false" constant="false"/>
+      <species id="pNfkIkb" compartment="defaultComp" initialConcentration="0" hasOnlySubstanceUnits="false" boundaryCondition="false" constant="false"/>
+      <species id="pNfkpIkb" compartment="defaultComp" initialConcentration="0" hasOnlySubstanceUnits="false" boundaryCondition="false" constant="false"/>
+      <species id="Nfk" compartment="defaultComp" initialConcentration="0" hasOnlySubstanceUnits="false" boundaryCondition="false" constant="false"/>
+      <species id="pIkb" compartment="defaultComp" initialConcentration="0" hasOnlySubstanceUnits="false" boundaryCondition="false" constant="false"/>
+      <species id="pNfk" compartment="defaultComp" initialConcentration="0" hasOnlySubstanceUnits="false" boundaryCondition="false" constant="false"/>
+      <species id="Ikb" compartment="defaultComp" initialConcentration="0" hasOnlySubstanceUnits="false" boundaryCondition="false" constant="false"/>
+      <species id="mIkb" compartment="defaultComp" initialConcentration="0" hasOnlySubstanceUnits="false" boundaryCondition="false" constant="false"/>
+      <species id="nIkb" compartment="nucleus" initialConcentration="0" hasOnlySubstanceUnits="false" boundaryCondition="false" constant="false"/>
+      <species id="pnNfk" compartment="nucleus" initialConcentration="0" hasOnlySubstanceUnits="false" boundaryCondition="false" constant="false"/>
+      <species id="nNfk" compartment="nucleus" initialConcentration="0" hasOnlySubstanceUnits="false" boundaryCondition="false" constant="false"/>
+      <species id="nNfkIkb" compartment="nucleus" initialConcentration="0" hasOnlySubstanceUnits="false" boundaryCondition="false" constant="false"/>
+      <species id="RnaA20_1" compartment="defaultComp" initialConcentration="0" hasOnlySubstanceUnits="false" boundaryCondition="false" constant="false"/>
+      <species id="RnaA20_2" compartment="defaultComp" initialConcentration="0" hasOnlySubstanceUnits="false" boundaryCondition="false" constant="false"/>
+      <species id="RnaA20" compartment="defaultComp" initialConcentration="0" hasOnlySubstanceUnits="false" boundaryCondition="false" constant="false"/>
+      <species id="A20" compartment="defaultComp" initialConcentration="0" hasOnlySubstanceUnits="false" boundaryCondition="false" constant="false"/>
+    </listOfSpecies>
+    <listOfParameters>
+      <parameter id="deact_TNFR" value="0.587422338475963" constant="true"/>
+      <parameter id="degrad_L" value="1501.57622560819" constant="true"/>
+      <parameter id="act_Ikk_by_TNF" value="0.088648658072754" constant="true"/>
+      <parameter id="inh_Ikk" value="0.605574226480418" constant="true"/>
+      <parameter id="act_Ikk_Base" value="7.15832098461395e-05" constant="true"/>
+      <parameter id="trigger_iIkk" value="0.0028908601795919" constant="true"/>
+      <parameter id="act_pIkk" value="1.27659889520739" constant="true"/>
+      <parameter id="deact_ppIkk" value="0.149013064762703" constant="true"/>
+      <parameter id="act_Ikb_Base" value="0.00159547797376589" constant="true"/>
+      <parameter id="act_Ikb_by_Ikk" value="0.142914031384596" constant="true"/>
+      <parameter id="eta_s_ppIkk" value="11.6156322093786" constant="true"/>
+      <parameter id="act_Nfk_Base" value="0.00104662204581092" constant="true"/>
+      <parameter id="act_Nfk_by_Ikk" value="0.101416492848377" constant="true"/>
+      <parameter id="form_complex" value="4.89077938804057" constant="true"/>
+      <parameter id="ext_nNfkIkb" value="8.0728242732713" constant="true"/>
+      <parameter id="eta_act_Nfk_Base_c_NfkpIkb" value="0.386793168137181" constant="true"/>
+      <parameter id="eta_act_Nfk_c_NfkpIkb" value="0.565526758333155" constant="true"/>
+      <parameter id="split_NfkpIkb" value="0.0882872899729724" constant="true"/>
+      <parameter id="eta_act_Ikb_Base_c_pNfkIkb" value="263.227952094655" constant="true"/>
+      <parameter id="eta_act_Ikb_c_pNfkIkb" value="2.64644719618678" constant="true"/>
+      <parameter id="eta_split_pNfkpIkb" value="1.52390788669663" constant="true"/>
+      <parameter id="int_Nfk" value="0.0188118089457795" constant="true"/>
+      <parameter id="degrad_Ikb" value="7.07378104241315" constant="true"/>
+      <parameter id="eta_int_pNfk" value="13.8164852022623" constant="true"/>
+      <parameter id="eta_int_Ikb" value="10.70734844553" constant="true"/>
+      <parameter id="prod_mIkb_by_nNfk" value="0.00490830476149716" constant="true"/>
+      <parameter id="degrad_mIkb" value="0.0334930538835816" constant="true"/>
+      <parameter id="eta_form_complex_nuc" value="23.3823753224361" constant="true"/>
+      <parameter id="deact_pnNfk" value="0.47489673311613" constant="true"/>
+      <parameter id="shuttle_RnaA20" value="0.00867088504580524" constant="true"/>
+      <parameter id="degrad_RnaA20" value="0.0653591223979699" constant="true"/>
+      <parameter id="build_A20" value="0.0361885127423982" constant="true"/>
+      <parameter id="degrad_A20" value="0.0653591223971773" constant="true"/>
+      <parameter id="s_nucNFkB" value="1.1747869078519" constant="true"/>
+      <parameter id="off_nucNFkB" value="0.951402185796096" constant="true"/>
+      <parameter id="tau_nucNFkB" value="0.000335160293570843" constant="true"/>
+      <parameter id="s_cytNFkB" value="0.305409161091959" constant="true"/>
+      <parameter id="off_cytNFkB" value="0.811865933473932" constant="true"/>
+      <parameter id="tau_cytNFkB" value="0.000448218695416816" constant="true"/>
+      <parameter id="off_A20GFP" value="0.437803133096189" constant="true"/>
+      <parameter id="tau_A20GFP" value="1.29358416573098e-05" constant="true"/>
+      <parameter id="s_IkBa" value="1.34283421162569" constant="true"/>
+      <parameter id="off_IkBa" value="0.0142023118303186" constant="true"/>
+      <parameter id="s_pNFkB" value="10.2167536373943" constant="true"/>
+      <parameter id="off_pNFkB" value="0.161479296331298" constant="true"/>
+      <parameter id="s_pIkBa" value="8.14111198602538" constant="true"/>
+      <parameter id="off_pIkBa" value="0.0257543694645067" constant="true"/>
+      <parameter id="s_pIKK" value="7.00602093217341" constant="true"/>
+      <parameter id="off_pIKK" value="0.444805284191553" constant="true"/>
+      <parameter id="s_ipIkBa_ibIkBa" value="1.75216709025558" constant="true"/>
+      <parameter id="off_ipIkBa_ibIkBa" value="0.0963966451854263" constant="true"/>
+      <parameter id="s_ipNFkB_ibNFkB" value="0.150892050825604" constant="true"/>
+      <parameter id="off_ipNFkB_ibNFkB" value="0.93407474264646" constant="true"/>
+      <parameter id="s_ipNFkB_ibpIkBa" value="6.49492197718068" constant="true"/>
+      <parameter id="off_ipNFkB_ibpIkBa" value="0.0252366161123431" constant="true"/>
+      <parameter id="s_ipNFkB_ibpNFkB" value="4.40732054166259" constant="true"/>
+      <parameter id="off_ipNFkB_ibpNFkB" value="0.360195882490725" constant="true"/>
+      <parameter id="s_ipIkBa_ibpNFkB" value="10.8825503888843" constant="true"/>
+      <parameter id="off_ipIkBa_ibpNFkB" value="0.280720684882213" constant="true"/>
+      <parameter id="s_ipIkBa_ibNFkB" value="1.4093371879586" constant="true"/>
+      <parameter id="off_ipIkBa_ibNFkB" value="0.263448808458618" constant="true"/>
+      <parameter id="sigma_nucNFkB" value="0.0186718751080403" constant="true"/>
+      <parameter id="sigma_cytNFkB" value="0.0203365630681654" constant="true"/>
+      <parameter id="sigma_A20GFP" value="0.0475404195472475" constant="true"/>
+      <parameter id="Vnuc" value="1" constant="true"/>
+      <parameter id="totalNfk" value="1" constant="true"/>
+      <parameter id="totalIkk" value="1" constant="true"/>
+      <parameter id="uptake" value="1" constant="true"/>
+      <parameter id="prod_Ikb" value="1" constant="true"/>
+      <parameter id="build_RnaA20" value="1" constant="true"/>
+      <parameter id="split_NfkIkb" value="1" constant="true"/>
+      <parameter id="s_A20GFP" value="1" constant="true"/>
+      <parameter id="prod_L" value="1" constant="true"/>
+      <parameter id="K_R" value="0" constant="true"/>
+    </listOfParameters>
+    <listOfInitialAssignments>
+      <initialAssignment symbol="nucleus">
+        <math xmlns="http://www.w3.org/1998/Math/MathML">
+          <ci> Vnuc </ci>
+        </math>
+      </initialAssignment>
+      <initialAssignment symbol="Ikk">
+        <math xmlns="http://www.w3.org/1998/Math/MathML">
+          <ci> totalIkk </ci>
+        </math>
+      </initialAssignment>
+      <initialAssignment symbol="NfkIkb">
+        <math xmlns="http://www.w3.org/1998/Math/MathML">
+          <ci> totalNfk </ci>
+        </math>
+      </initialAssignment>
+    </listOfInitialAssignments>
+    <listOfReactions>
+      <reaction id="r1" reversible="false">
+        <listOfProducts>
+          <speciesReference species="TNFR" stoichiometry="1" constant="true"/>
+        </listOfProducts>
+        <listOfModifiers>
+          <modifierSpeciesReference species="TNF"/>
+          <modifierSpeciesReference species="Lig"/>
+        </listOfModifiers>
+        <kineticLaw>
+          <math xmlns="http://www.w3.org/1998/Math/MathML">
+            <apply>
+              <times/>
+              <cn type="integer"> 1 </cn>
+              <apply>
+                <divide/>
+                <apply>
+                  <times/>
+                  <ci> uptake </ci>
+                  <apply>
+                    <plus/>
+                    <ci> TNF </ci>
+                    <ci> Lig </ci>
+                  </apply>
+                </apply>
+                <apply>
+                  <plus/>
+                  <cn type="integer"> 1 </cn>
+                  <apply>
+                    <times/>
+                    <ci> K_R </ci>
+                    <apply>
+                      <plus/>
+                      <ci> TNF </ci>
+                      <ci> Lig </ci>
+                    </apply>
+                  </apply>
+                </apply>
+              </apply>
+            </apply>
+          </math>
+        </kineticLaw>
+      </reaction>
+      <reaction id="r2" reversible="false">
+        <listOfReactants>
+          <speciesReference species="TNFR" stoichiometry="1" constant="true"/>
+        </listOfReactants>
+        <kineticLaw>
+          <math xmlns="http://www.w3.org/1998/Math/MathML">
+            <apply>
+              <times/>
+              <cn type="integer"> 1 </cn>
+              <ci> deact_TNFR </ci>
+              <ci> TNFR </ci>
+            </apply>
+          </math>
+        </kineticLaw>
+      </reaction>
+      <reaction id="r3" reversible="false">
+        <listOfProducts>
+          <speciesReference species="Lig" stoichiometry="1" constant="true"/>
+        </listOfProducts>
+        <kineticLaw>
+          <math xmlns="http://www.w3.org/1998/Math/MathML">
+            <apply>
+              <times/>
+              <cn type="integer"> 1 </cn>
+              <ci> prod_L </ci>
+            </apply>
+          </math>
+        </kineticLaw>
+      </reaction>
+      <reaction id="r4" reversible="false">
+        <listOfReactants>
+          <speciesReference species="Lig" stoichiometry="1" constant="true"/>
+        </listOfReactants>
+        <kineticLaw>
+          <math xmlns="http://www.w3.org/1998/Math/MathML">
+            <apply>
+              <times/>
+              <cn type="integer"> 1 </cn>
+              <ci> degrad_L </ci>
+              <ci> Lig </ci>
+            </apply>
+          </math>
+        </kineticLaw>
+      </reaction>
+      <reaction id="r5" reversible="false">
+        <listOfReactants>
+          <speciesReference species="Ikk" stoichiometry="1" constant="true"/>
+        </listOfReactants>
+        <listOfProducts>
+          <speciesReference species="pIkk" stoichiometry="1" constant="true"/>
+        </listOfProducts>
+        <listOfModifiers>
+          <modifierSpeciesReference species="A20"/>
+          <modifierSpeciesReference species="TNFR"/>
+        </listOfModifiers>
+        <kineticLaw>
+          <math xmlns="http://www.w3.org/1998/Math/MathML">
+            <apply>
+              <times/>
+              <cn type="integer"> 1 </cn>
+              <apply>
+                <divide/>
+                <ci> act_Ikk_by_TNF </ci>
+                <apply>
+                  <plus/>
+                  <cn type="integer"> 1 </cn>
+                  <apply>
+                    <divide/>
+                    <ci> A20 </ci>
+                    <ci> inh_Ikk </ci>
+                  </apply>
+                </apply>
+              </apply>
+              <ci> TNFR </ci>
+              <ci> Ikk </ci>
+            </apply>
+          </math>
+        </kineticLaw>
+      </reaction>
+      <reaction id="r6" reversible="false">
+        <listOfReactants>
+          <speciesReference species="Ikk" stoichiometry="1" constant="true"/>
+        </listOfReactants>
+        <listOfProducts>
+          <speciesReference species="pIkk" stoichiometry="1" constant="true"/>
+        </listOfProducts>
+        <kineticLaw>
+          <math xmlns="http://www.w3.org/1998/Math/MathML">
+            <apply>
+              <times/>
+              <cn type="integer"> 1 </cn>
+              <ci> act_Ikk_Base </ci>
+              <ci> Ikk </ci>
+            </apply>
+          </math>
+        </kineticLaw>
+      </reaction>
+      <reaction id="r7" reversible="false">
+        <listOfReactants>
+          <speciesReference species="pIkk" stoichiometry="1" constant="true"/>
+        </listOfReactants>
+        <listOfProducts>
+          <speciesReference species="ppIkk" stoichiometry="1" constant="true"/>
+        </listOfProducts>
+        <kineticLaw>
+          <math xmlns="http://www.w3.org/1998/Math/MathML">
+            <apply>
+              <times/>
+              <cn type="integer"> 1 </cn>
+              <ci> act_pIkk </ci>
+              <ci> pIkk </ci>
+            </apply>
+          </math>
+        </kineticLaw>
+      </reaction>
+      <reaction id="r8" reversible="false">
+        <listOfReactants>
+          <speciesReference species="ppIkk" stoichiometry="1" constant="true"/>
+        </listOfReactants>
+        <listOfProducts>
+          <speciesReference species="iIkk" stoichiometry="1" constant="true"/>
+        </listOfProducts>
+        <kineticLaw>
+          <math xmlns="http://www.w3.org/1998/Math/MathML">
+            <apply>
+              <times/>
+              <cn type="integer"> 1 </cn>
+              <ci> deact_ppIkk </ci>
+              <ci> ppIkk </ci>
+            </apply>
+          </math>
+        </kineticLaw>
+      </reaction>
+      <reaction id="r9" reversible="false">
+        <listOfReactants>
+          <speciesReference species="iIkk" stoichiometry="1" constant="true"/>
+        </listOfReactants>
+        <listOfProducts>
+          <speciesReference species="Ikk" stoichiometry="1" constant="true"/>
+        </listOfProducts>
+        <kineticLaw>
+          <math xmlns="http://www.w3.org/1998/Math/MathML">
+            <apply>
+              <times/>
+              <cn type="integer"> 1 </cn>
+              <ci> trigger_iIkk </ci>
+              <ci> iIkk </ci>
+            </apply>
+          </math>
+        </kineticLaw>
+      </reaction>
+      <reaction id="r10" reversible="false">
+        <listOfReactants>
+          <speciesReference species="NfkIkb" stoichiometry="1" constant="true"/>
+        </listOfReactants>
+        <listOfProducts>
+          <speciesReference species="NfkpIkb" stoichiometry="1" constant="true"/>
+        </listOfProducts>
+        <kineticLaw>
+          <math xmlns="http://www.w3.org/1998/Math/MathML">
+            <apply>
+              <times/>
+              <cn type="integer"> 1 </cn>
+              <ci> act_Ikb_Base </ci>
+              <ci> NfkIkb </ci>
+            </apply>
+          </math>
+        </kineticLaw>
+      </reaction>
+      <reaction id="r11" reversible="false">
+        <listOfReactants>
+          <speciesReference species="NfkIkb" stoichiometry="1" constant="true"/>
+        </listOfReactants>
+        <listOfProducts>
+          <speciesReference species="NfkpIkb" stoichiometry="1" constant="true"/>
+        </listOfProducts>
+        <listOfModifiers>
+          <modifierSpeciesReference species="pIkk"/>
+        </listOfModifiers>
+        <kineticLaw>
+          <math xmlns="http://www.w3.org/1998/Math/MathML">
+            <apply>
+              <times/>
+              <cn type="integer"> 1 </cn>
+              <ci> act_Ikb_by_Ikk </ci>
+              <ci> pIkk </ci>
+              <ci> NfkIkb </ci>
+            </apply>
+          </math>
+        </kineticLaw>
+      </reaction>
+      <reaction id="r12" reversible="false">
+        <listOfReactants>
+          <speciesReference species="NfkIkb" stoichiometry="1" constant="true"/>
+        </listOfReactants>
+        <listOfProducts>
+          <speciesReference species="NfkpIkb" stoichiometry="1" constant="true"/>
+        </listOfProducts>
+        <listOfModifiers>
+          <modifierSpeciesReference species="ppIkk"/>
+        </listOfModifiers>
+        <kineticLaw>
+          <math xmlns="http://www.w3.org/1998/Math/MathML">
+            <apply>
+              <times/>
+              <cn type="integer"> 1 </cn>
+              <ci> act_Ikb_by_Ikk </ci>
+              <ci> eta_s_ppIkk </ci>
+              <ci> ppIkk </ci>
+              <ci> NfkIkb </ci>
+            </apply>
+          </math>
+        </kineticLaw>
+      </reaction>
+      <reaction id="r13" reversible="false">
+        <listOfReactants>
+          <speciesReference species="NfkIkb" stoichiometry="1" constant="true"/>
+        </listOfReactants>
+        <listOfProducts>
+          <speciesReference species="pNfkIkb" stoichiometry="1" constant="true"/>
+        </listOfProducts>
+        <kineticLaw>
+          <math xmlns="http://www.w3.org/1998/Math/MathML">
+            <apply>
+              <times/>
+              <cn type="integer"> 1 </cn>
+              <ci> act_Nfk_Base </ci>
+              <ci> NfkIkb </ci>
+            </apply>
+          </math>
+        </kineticLaw>
+      </reaction>
+      <reaction id="r14" reversible="false">
+        <listOfReactants>
+          <speciesReference species="NfkIkb" stoichiometry="1" constant="true"/>
+        </listOfReactants>
+        <listOfProducts>
+          <speciesReference species="pNfkIkb" stoichiometry="1" constant="true"/>
+        </listOfProducts>
+        <listOfModifiers>
+          <modifierSpeciesReference species="pIkk"/>
+        </listOfModifiers>
+        <kineticLaw>
+          <math xmlns="http://www.w3.org/1998/Math/MathML">
+            <apply>
+              <times/>
+              <cn type="integer"> 1 </cn>
+              <ci> act_Nfk_by_Ikk </ci>
+              <ci> pIkk </ci>
+              <ci> NfkIkb </ci>
+            </apply>
+          </math>
+        </kineticLaw>
+      </reaction>
+      <reaction id="r15" reversible="false">
+        <listOfReactants>
+          <speciesReference species="NfkIkb" stoichiometry="1" constant="true"/>
+        </listOfReactants>
+        <listOfProducts>
+          <speciesReference species="pNfkIkb" stoichiometry="1" constant="true"/>
+        </listOfProducts>
+        <listOfModifiers>
+          <modifierSpeciesReference species="ppIkk"/>
+        </listOfModifiers>
+        <kineticLaw>
+          <math xmlns="http://www.w3.org/1998/Math/MathML">
+            <apply>
+              <times/>
+              <cn type="integer"> 1 </cn>
+              <ci> act_Nfk_by_Ikk </ci>
+              <ci> eta_s_ppIkk </ci>
+              <ci> ppIkk </ci>
+              <ci> NfkIkb </ci>
+            </apply>
+          </math>
+        </kineticLaw>
+      </reaction>
+      <reaction id="r16" reversible="false">
+        <listOfReactants>
+          <speciesReference species="pNfkIkb" stoichiometry="1" constant="true"/>
+        </listOfReactants>
+        <listOfProducts>
+          <speciesReference species="pNfkpIkb" stoichiometry="1" constant="true"/>
+        </listOfProducts>
+        <kineticLaw>
+          <math xmlns="http://www.w3.org/1998/Math/MathML">
+            <apply>
+              <times/>
+              <cn type="integer"> 1 </cn>
+              <ci> act_Ikb_Base </ci>
+              <ci> eta_act_Ikb_Base_c_pNfkIkb </ci>
+              <ci> pNfkIkb </ci>
+            </apply>
+          </math>
+        </kineticLaw>
+      </reaction>
+      <reaction id="r17" reversible="false">
+        <listOfReactants>
+          <speciesReference species="pNfkIkb" stoichiometry="1" constant="true"/>
+        </listOfReactants>
+        <listOfProducts>
+          <speciesReference species="pNfkpIkb" stoichiometry="1" constant="true"/>
+        </listOfProducts>
+        <listOfModifiers>
+          <modifierSpeciesReference species="pIkk"/>
+        </listOfModifiers>
+        <kineticLaw>
+          <math xmlns="http://www.w3.org/1998/Math/MathML">
+            <apply>
+              <times/>
+              <cn type="integer"> 1 </cn>
+              <ci> act_Ikb_by_Ikk </ci>
+              <ci> eta_act_Ikb_c_pNfkIkb </ci>
+              <ci> pIkk </ci>
+              <ci> pNfkIkb </ci>
+            </apply>
+          </math>
+        </kineticLaw>
+      </reaction>
+      <reaction id="r18" reversible="false">
+        <listOfReactants>
+          <speciesReference species="pNfkIkb" stoichiometry="1" constant="true"/>
+        </listOfReactants>
+        <listOfProducts>
+          <speciesReference species="pNfkpIkb" stoichiometry="1" constant="true"/>
+        </listOfProducts>
+        <listOfModifiers>
+          <modifierSpeciesReference species="ppIkk"/>
+        </listOfModifiers>
+        <kineticLaw>
+          <math xmlns="http://www.w3.org/1998/Math/MathML">
+            <apply>
+              <times/>
+              <cn type="integer"> 1 </cn>
+              <ci> act_Ikb_by_Ikk </ci>
+              <ci> eta_s_ppIkk </ci>
+              <ci> eta_act_Ikb_c_pNfkIkb </ci>
+              <ci> ppIkk </ci>
+              <ci> pNfkIkb </ci>
+            </apply>
+          </math>
+        </kineticLaw>
+      </reaction>
+      <reaction id="r19" reversible="false">
+        <listOfReactants>
+          <speciesReference species="NfkpIkb" stoichiometry="1" constant="true"/>
+        </listOfReactants>
+        <listOfProducts>
+          <speciesReference species="pNfkpIkb" stoichiometry="1" constant="true"/>
+        </listOfProducts>
+        <kineticLaw>
+          <math xmlns="http://www.w3.org/1998/Math/MathML">
+            <apply>
+              <times/>
+              <cn type="integer"> 1 </cn>
+              <ci> act_Nfk_Base </ci>
+              <ci> eta_act_Nfk_Base_c_NfkpIkb </ci>
+              <ci> NfkpIkb </ci>
+            </apply>
+          </math>
+        </kineticLaw>
+      </reaction>
+      <reaction id="r20" reversible="false">
+        <listOfReactants>
+          <speciesReference species="NfkpIkb" stoichiometry="1" constant="true"/>
+        </listOfReactants>
+        <listOfProducts>
+          <speciesReference species="pNfkpIkb" stoichiometry="1" constant="true"/>
+        </listOfProducts>
+        <listOfModifiers>
+          <modifierSpeciesReference species="pIkk"/>
+        </listOfModifiers>
+        <kineticLaw>
+          <math xmlns="http://www.w3.org/1998/Math/MathML">
+            <apply>
+              <times/>
+              <cn type="integer"> 1 </cn>
+              <ci> act_Nfk_by_Ikk </ci>
+              <ci> eta_act_Nfk_c_NfkpIkb </ci>
+              <ci> pIkk </ci>
+              <ci> NfkpIkb </ci>
+            </apply>
+          </math>
+        </kineticLaw>
+      </reaction>
+      <reaction id="r21" reversible="false">
+        <listOfReactants>
+          <speciesReference species="NfkpIkb" stoichiometry="1" constant="true"/>
+        </listOfReactants>
+        <listOfProducts>
+          <speciesReference species="pNfkpIkb" stoichiometry="1" constant="true"/>
+        </listOfProducts>
+        <listOfModifiers>
+          <modifierSpeciesReference species="ppIkk"/>
+        </listOfModifiers>
+        <kineticLaw>
+          <math xmlns="http://www.w3.org/1998/Math/MathML">
+            <apply>
+              <times/>
+              <cn type="integer"> 1 </cn>
+              <ci> act_Nfk_by_Ikk </ci>
+              <ci> eta_s_ppIkk </ci>
+              <ci> eta_act_Nfk_c_NfkpIkb </ci>
+              <ci> ppIkk </ci>
+              <ci> NfkpIkb </ci>
+            </apply>
+          </math>
+        </kineticLaw>
+      </reaction>
+      <reaction id="r22" reversible="false">
+        <listOfReactants>
+          <speciesReference species="NfkpIkb" stoichiometry="1" constant="true"/>
+        </listOfReactants>
+        <listOfProducts>
+          <speciesReference species="Nfk" stoichiometry="1" constant="true"/>
+          <speciesReference species="pIkb" stoichiometry="1" constant="true"/>
+        </listOfProducts>
+        <kineticLaw>
+          <math xmlns="http://www.w3.org/1998/Math/MathML">
+            <apply>
+              <times/>
+              <cn type="integer"> 1 </cn>
+              <ci> split_NfkpIkb </ci>
+              <ci> NfkpIkb </ci>
+            </apply>
+          </math>
+        </kineticLaw>
+      </reaction>
+      <reaction id="r23" reversible="false">
+        <listOfReactants>
+          <speciesReference species="pNfkpIkb" stoichiometry="1" constant="true"/>
+        </listOfReactants>
+        <listOfProducts>
+          <speciesReference species="pIkb" stoichiometry="1" constant="true"/>
+          <speciesReference species="pNfk" stoichiometry="1" constant="true"/>
+        </listOfProducts>
+        <kineticLaw>
+          <math xmlns="http://www.w3.org/1998/Math/MathML">
+            <apply>
+              <times/>
+              <cn type="integer"> 1 </cn>
+              <ci> split_NfkIkb </ci>
+              <ci> eta_split_pNfkpIkb </ci>
+              <ci> pNfkpIkb </ci>
+            </apply>
+          </math>
+        </kineticLaw>
+      </reaction>
+      <reaction id="r24" reversible="false">
+        <listOfReactants>
+          <speciesReference species="Nfk" stoichiometry="1" constant="true"/>
+          <speciesReference species="Ikb" stoichiometry="1" constant="true"/>
+        </listOfReactants>
+        <listOfProducts>
+          <speciesReference species="NfkIkb" stoichiometry="1" constant="true"/>
+        </listOfProducts>
+        <kineticLaw>
+          <math xmlns="http://www.w3.org/1998/Math/MathML">
+            <apply>
+              <times/>
+              <cn type="integer"> 1 </cn>
+              <ci> form_complex </ci>
+              <ci> Nfk </ci>
+              <ci> Ikb </ci>
+            </apply>
+          </math>
+        </kineticLaw>
+      </reaction>
+      <reaction id="r25" reversible="false">
+        <listOfProducts>
+          <speciesReference species="mIkb" stoichiometry="1" constant="true"/>
+        </listOfProducts>
+        <listOfModifiers>
+          <modifierSpeciesReference species="nNfk"/>
+        </listOfModifiers>
+        <kineticLaw>
+          <math xmlns="http://www.w3.org/1998/Math/MathML">
+            <apply>
+              <times/>
+              <cn type="integer"> 1 </cn>
+              <ci> prod_mIkb_by_nNfk </ci>
+              <ci> nNfk </ci>
+            </apply>
+          </math>
+        </kineticLaw>
+      </reaction>
+      <reaction id="r26" reversible="false">
+        <listOfReactants>
+          <speciesReference species="mIkb" stoichiometry="1" constant="true"/>
+        </listOfReactants>
+        <kineticLaw>
+          <math xmlns="http://www.w3.org/1998/Math/MathML">
+            <apply>
+              <times/>
+              <cn type="integer"> 1 </cn>
+              <ci> degrad_mIkb </ci>
+              <ci> mIkb </ci>
+            </apply>
+          </math>
+        </kineticLaw>
+      </reaction>
+      <reaction id="r27" reversible="false">
+        <listOfProducts>
+          <speciesReference species="Ikb" stoichiometry="1" constant="true"/>
+        </listOfProducts>
+        <listOfModifiers>
+          <modifierSpeciesReference species="mIkb"/>
+        </listOfModifiers>
+        <kineticLaw>
+          <math xmlns="http://www.w3.org/1998/Math/MathML">
+            <apply>
+              <times/>
+              <cn type="integer"> 1 </cn>
+              <ci> prod_Ikb </ci>
+              <ci> mIkb </ci>
+            </apply>
+          </math>
+        </kineticLaw>
+      </reaction>
+      <reaction id="r28" reversible="false">
+        <listOfReactants>
+          <speciesReference species="pIkb" stoichiometry="1" constant="true"/>
+        </listOfReactants>
+        <kineticLaw>
+          <math xmlns="http://www.w3.org/1998/Math/MathML">
+            <apply>
+              <times/>
+              <cn type="integer"> 1 </cn>
+              <ci> degrad_Ikb </ci>
+              <ci> pIkb </ci>
+            </apply>
+          </math>
+        </kineticLaw>
+      </reaction>
+      <reaction id="r29" reversible="false">
+        <listOfReactants>
+          <speciesReference species="Ikb" stoichiometry="1" constant="true"/>
+        </listOfReactants>
+        <listOfProducts>
+          <speciesReference species="nIkb" stoichiometry="1" constant="true"/>
+        </listOfProducts>
+        <kineticLaw>
+          <math xmlns="http://www.w3.org/1998/Math/MathML">
+            <apply>
+              <times/>
+              <cn type="integer"> 1 </cn>
+              <ci> int_Nfk </ci>
+              <ci> eta_int_Ikb </ci>
+              <ci> Ikb </ci>
+            </apply>
+          </math>
+        </kineticLaw>
+      </reaction>
+      <reaction id="r30" reversible="false">
+        <listOfReactants>
+          <speciesReference species="pNfk" stoichiometry="1" constant="true"/>
+        </listOfReactants>
+        <listOfProducts>
+          <speciesReference species="pnNfk" stoichiometry="1" constant="true"/>
+        </listOfProducts>
+        <kineticLaw>
+          <math xmlns="http://www.w3.org/1998/Math/MathML">
+            <apply>
+              <times/>
+              <cn type="integer"> 1 </cn>
+              <ci> int_Nfk </ci>
+              <ci> eta_int_pNfk </ci>
+              <ci> pNfk </ci>
+            </apply>
+          </math>
+        </kineticLaw>
+      </reaction>
+      <reaction id="r31" reversible="false">
+        <listOfReactants>
+          <speciesReference species="Nfk" stoichiometry="1" constant="true"/>
+        </listOfReactants>
+        <listOfProducts>
+          <speciesReference species="nNfk" stoichiometry="1" constant="true"/>
+        </listOfProducts>
+        <kineticLaw>
+          <math xmlns="http://www.w3.org/1998/Math/MathML">
+            <apply>
+              <times/>
+              <cn type="integer"> 1 </cn>
+              <ci> int_Nfk </ci>
+              <ci> Nfk </ci>
+            </apply>
+          </math>
+        </kineticLaw>
+      </reaction>
+      <reaction id="r32" reversible="false">
+        <listOfReactants>
+          <speciesReference species="pnNfk" stoichiometry="1" constant="true"/>
+        </listOfReactants>
+        <listOfProducts>
+          <speciesReference species="nNfk" stoichiometry="1" constant="true"/>
+        </listOfProducts>
+        <kineticLaw>
+          <math xmlns="http://www.w3.org/1998/Math/MathML">
+            <apply>
+              <times/>
+              <ci> Vnuc </ci>
+              <ci> deact_pnNfk </ci>
+              <ci> pnNfk </ci>
+            </apply>
+          </math>
+        </kineticLaw>
+      </reaction>
+      <reaction id="r33" reversible="false">
+        <listOfReactants>
+          <speciesReference species="nIkb" stoichiometry="1" constant="true"/>
+          <speciesReference species="nNfk" stoichiometry="1" constant="true"/>
+        </listOfReactants>
+        <listOfProducts>
+          <speciesReference species="nNfkIkb" stoichiometry="1" constant="true"/>
+        </listOfProducts>
+        <kineticLaw>
+          <math xmlns="http://www.w3.org/1998/Math/MathML">
+            <apply>
+              <times/>
+              <ci> Vnuc </ci>
+              <ci> form_complex </ci>
+              <ci> eta_form_complex_nuc </ci>
+              <ci> nNfk </ci>
+              <ci> nIkb </ci>
+            </apply>
+          </math>
+        </kineticLaw>
+      </reaction>
+      <reaction id="r34" reversible="false">
+        <listOfReactants>
+          <speciesReference species="nNfkIkb" stoichiometry="1" constant="true"/>
+        </listOfReactants>
+        <listOfProducts>
+          <speciesReference species="NfkIkb" stoichiometry="1" constant="true"/>
+        </listOfProducts>
+        <kineticLaw>
+          <math xmlns="http://www.w3.org/1998/Math/MathML">
+            <apply>
+              <times/>
+              <ci> Vnuc </ci>
+              <ci> ext_nNfkIkb </ci>
+              <ci> nNfkIkb </ci>
+            </apply>
+          </math>
+        </kineticLaw>
+      </reaction>
+      <reaction id="r35" reversible="false">
+        <listOfProducts>
+          <speciesReference species="RnaA20_1" stoichiometry="1" constant="true"/>
+        </listOfProducts>
+        <listOfModifiers>
+          <modifierSpeciesReference species="nNfk"/>
+        </listOfModifiers>
+        <kineticLaw>
+          <math xmlns="http://www.w3.org/1998/Math/MathML">
+            <apply>
+              <times/>
+              <cn type="integer"> 1 </cn>
+              <ci> build_RnaA20 </ci>
+              <ci> nNfk </ci>
+            </apply>
+          </math>
+        </kineticLaw>
+      </reaction>
+      <reaction id="r36" reversible="false">
+        <listOfReactants>
+          <speciesReference species="RnaA20_1" stoichiometry="1" constant="true"/>
+        </listOfReactants>
+        <listOfProducts>
+          <speciesReference species="RnaA20_2" stoichiometry="1" constant="true"/>
+        </listOfProducts>
+        <kineticLaw>
+          <math xmlns="http://www.w3.org/1998/Math/MathML">
+            <apply>
+              <times/>
+              <cn type="integer"> 1 </cn>
+              <ci> shuttle_RnaA20 </ci>
+              <ci> RnaA20_1 </ci>
+            </apply>
+          </math>
+        </kineticLaw>
+      </reaction>
+      <reaction id="r37" reversible="false">
+        <listOfReactants>
+          <speciesReference species="RnaA20_2" stoichiometry="1" constant="true"/>
+        </listOfReactants>
+        <listOfProducts>
+          <speciesReference species="RnaA20" stoichiometry="1" constant="true"/>
+        </listOfProducts>
+        <kineticLaw>
+          <math xmlns="http://www.w3.org/1998/Math/MathML">
+            <apply>
+              <times/>
+              <cn type="integer"> 1 </cn>
+              <ci> shuttle_RnaA20 </ci>
+              <ci> RnaA20_2 </ci>
+            </apply>
+          </math>
+        </kineticLaw>
+      </reaction>
+      <reaction id="r38" reversible="false">
+        <listOfReactants>
+          <speciesReference species="RnaA20" stoichiometry="1" constant="true"/>
+        </listOfReactants>
+        <kineticLaw>
+          <math xmlns="http://www.w3.org/1998/Math/MathML">
+            <apply>
+              <times/>
+              <cn type="integer"> 1 </cn>
+              <ci> degrad_RnaA20 </ci>
+              <ci> RnaA20 </ci>
+            </apply>
+          </math>
+        </kineticLaw>
+      </reaction>
+      <reaction id="r39" reversible="false">
+        <listOfProducts>
+          <speciesReference species="A20" stoichiometry="1" constant="true"/>
+        </listOfProducts>
+        <listOfModifiers>
+          <modifierSpeciesReference species="RnaA20"/>
+        </listOfModifiers>
+        <kineticLaw>
+          <math xmlns="http://www.w3.org/1998/Math/MathML">
+            <apply>
+              <times/>
+              <cn type="integer"> 1 </cn>
+              <ci> build_A20 </ci>
+              <ci> RnaA20 </ci>
+            </apply>
+          </math>
+        </kineticLaw>
+      </reaction>
+      <reaction id="r40" reversible="false">
+        <listOfReactants>
+          <speciesReference species="A20" stoichiometry="1" constant="true"/>
+        </listOfReactants>
+        <kineticLaw>
+          <math xmlns="http://www.w3.org/1998/Math/MathML">
+            <apply>
+              <times/>
+              <cn type="integer"> 1 </cn>
+              <ci> degrad_A20 </ci>
+              <ci> A20 </ci>
+            </apply>
+          </math>
+        </kineticLaw>
+      </reaction>
+    </listOfReactions>
+  </model>
+</sbml>

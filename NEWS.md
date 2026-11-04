@@ -1,3 +1,21 @@
+# dMod2 0.14.7
+
+* The website <https://dmodverse.github.io/dMod2/> replaces the vignettes. Its guide has eleven
+  chapters: setting up models, symmetries, sensitivities, optimization, profile likelihood,
+  prediction uncertainty, nonlinear mixed-effects models, group-specific effects, alignment of
+  relative data measurements, PEtab import and export, remote computing. The chapters on
+  optimization and on mixed-effects models derive the methods of `trust()`, `mstrust()`,
+  `trustL1()`, multiple shooting, FOCEI, quadrature, Laplace EM and SAEM and compare them. The
+  site also has the reference by topic and the example projects as articles.
+
+* The applications that were demos are example projects in `examples/` of the repository: each
+  folder holds its scripts, its saved fits and a README. New example projects `pharmacometrics`
+  (theophylline, warfarin and mavoglurant, FOCEI and SAEM multistarts with the diagnostics of
+  `em()` fits, nlmixr2 on the same model where installed) and `TMDD` (target-mediated drug
+  disposition with the target at its steady state, censored readings, FOCEI and quadrature).
+
+* License GPL (>= 3).
+
 # dMod2 0.14.6
 
 * `align(reml = TRUE)`, the default: the error parameters, and the hyperparameters of normal

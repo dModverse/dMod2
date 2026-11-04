@@ -28,8 +28,8 @@
 # or added.
 #
 # With MS_RESULTS set, the numbers and the trajectories of the figure are
-# written there; dev/optimisation/prebotc.rds, which the Optimisation vignette
-# reads, is that file.
+# written there; vignettes/articles/results/preBotC.rds, which the guide
+# chapter Optimization reads, is that file.
 #
 # [AUTHOR]
 # Simon Beyer

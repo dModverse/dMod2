@@ -1,0 +1,1130 @@
+---
+title: "4. Optimization"
+bibliography: refs.bib
+csl: ieee.csl
+link-citations: true
+---
+
+```{r, include = FALSE, purl = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>", fig.width = 8, fig.height = 4.5, dpi = 96,
+                      fig.retina = 2, message = FALSE)
+project <- normalizePath("../../examples/oppeltNPJSystBiolAppl2018")
+stored <- normalizePath("results")
+boehmFile <- normalizePath("../../examples/boehmJProteomeRes2014/results/hessianSources.rds",
+                           mustWork = FALSE)
+bachmannFile <- normalizePath("../../examples/bachmannMSB2011/results/hessianSources.rds",
+                              mustWork = FALSE)
+knitr::opts_knit$set(root.dir = project)
+fitted <- file.exists(file.path(project, "results", "fits.rds"))
+optimized <- file.exists(file.path(project, "results", "optimizers.rds"))
+compared <- file.exists(boehmFile)
+comparedBachmann <- file.exists(bachmannFile)
+shotFhn <- file.exists(file.path(stored, "fitzhughNagumo.rds"))
+shotPreBotC <- file.exists(file.path(stored, "preBotC.rds"))
+knitr::read_chunk("../../examples/oppeltNPJSystBiolAppl2018/model.R")
+knitr::read_chunk("../../examples/oppeltNPJSystBiolAppl2018/fit.R")
+knitr::read_chunk("../../examples/oppeltNPJSystBiolAppl2018/plots.R")
+knitr::read_chunk("../../examples/oppeltNPJSystBiolAppl2018/optimizers.R")
+```
+
+Fitting means minimising $-2 \log L$, here with the prior $-2 \log$ of the posterior, over the outer
+parameters. The objective of an ODE model is smooth but rarely convex: it has local optima, flat
+directions and regions where the model cannot be evaluated. dMod2 [@kaschek2019dmod] fits with a
+trust-region method on the exact gradient, `trust()`, and runs it from many starts, `mstrust()`.
+This chapter describes the method and every setting of the two functions, fits the model of
+[chapter 1](guide-model.html) with the gauge of [chapter 2](guide-symmetries.html), compares the
+sources of the model Hessian on two published problems, and covers the two variants of the
+method: L1 penalties by `trustL1()` and multiple shooting. The code of the fits is `fit.R` and
+`plots.R` of the project.
+
+```{r setup, echo = FALSE}
+```
+
+```{r data, echo = FALSE}
+```
+
+```{r reactions, echo = FALSE}
+```
+
+```{r observables, echo = FALSE}
+```
+
+```{r errors, echo = FALSE}
+```
+
+```{r steadystate, echo = FALSE, results = "hide"}
+```
+
+```{r odemodel, echo = FALSE}
+```
+
+```{r transformation, echo = FALSE}
+```
+
+```{r compile, echo = FALSE}
+```
+
+```{r objective, echo = FALSE}
+```
+
+```{r tolerances, echo = FALSE}
+```
+
+```{r gauge, echo = FALSE}
+```
+
+## Trust region
+
+At the iterate $\theta_k$ with the gradient $g$ and a symmetric approximation $H$ of the Hessian,
+`trust()` minimises the quadratic model of the objective inside a ball,
+
+$$\min_{s} \; m(s) = g^\top s + \tfrac{1}{2}\, s^\top H s \quad \text{subject to} \quad \lVert s \rVert \le r .$$
+
+The ratio of the actual to the predicted decrease decides whether the step is taken and how the
+radius $r$ changes. Far from the optimum the radius keeps the steps where the quadratic model
+holds; near it the steps are Newton steps of the model, with fast local convergence. The
+subproblem solver, the radius update, the bounds and the termination tests below are the same
+for every source of $H$.
+
+### Subproblem
+
+`trust()` solves the subproblem exactly, through the full eigendecomposition of $H$
+[@more1983computing]. The solution satisfies $(H + \nu I)\, s = -g$ with a multiplier $\nu \ge 0$
+that makes $H + \nu I$ positive semidefinite and vanishes unless the step reaches the boundary,
+$\lVert s \rVert = r$. With $H = Q \Lambda Q^\top$, eigenvalues $\lambda_i$ and $\gamma = Q^\top g$,
+the step
+
+$$s(\nu) = -Q (\Lambda + \nu I)^{-1} \gamma$$
+
+solves the subproblem when $\nu \ge \max(0, -\lambda_{\min})$ and either $\nu = 0$ with
+$\lVert s \rVert \le r$, or $\nu > 0$ with $\lVert s \rVert = r$. The second case is a root of the
+secular equation
+
+$$\phi(\nu) = \frac{1}{r} - \frac{1}{\lVert s(\nu) \rVert}
+ = \frac{1}{r} - \Big( \sum_i \frac{\gamma_i^2}{(\lambda_i + \nu)^2} \Big)^{-1/2},$$
+
+which is smooth and almost linear for $\nu > -\lambda_{\min}$, so Newton's method on $\phi$
+converges in a few iterations, each $O(n_\theta)$ once the eigendecomposition is known. When
+$\gamma_i = 0$ for every eigenvector of $\lambda_{\min} < 0$, no $\nu$ drives $\lVert s \rVert$ out
+to $r$ (the hard case), and the solution is $s(-\lambda_{\min}) + \tau q_{\min}$ with $\tau$ chosen
+so that $\lVert s \rVert = r$. A positive definite $H$ never reaches the hard case; an indefinite
+quasi-Newton model can.
+
+The exact solution handles an indefinite $H$ directly: a direction of negative curvature is followed
+to the boundary. The eigendecomposition costs $O(n_\theta^3)$ per iteration; for a large model with
+a sparse Hessian the sparse path below factorises instead.
+
+### Step and radius
+
+Each iteration compares the decrease the model predicts with the actual one,
+
+$$\rho_k = \frac{f(\theta_k) - f(\theta_k + s_k)}{-m_k(s_k)},$$
+
+and updates the radius from it, with $r_{\max}$ = `rmax`:
+
+$$r_{k+1} = \begin{cases}
+\min(r_k/4,\, \lVert s_k \rVert / 4), & \rho_k < 1/4, \\
+\min(2 r_k,\, r_{\max}), & \rho_k > 3/4 \text{ and } \lVert s_k \rVert \ge 0.9\, r_k, \\
+r_k, & \text{otherwise.}
+\end{cases}$$
+
+A step with $\rho_k < 1/4$ is rejected, and a rejected step much shorter than the radius shrinks
+the radius to the step's own scale. The radius grows only when the step reached the boundary,
+since a shorter step was limited by the model, not by the region. The first radius is `rinit`,
+in the units of the parameters: on the natural log scale of the Oppelt model, `rinit = 0.1` is a
+first step of ten percent in a rate constant.
+
+A trial point at which the objective fails, for example because the ODE solver gives up, or
+returns a value that is not finite, counts as rejected and quarters the radius. Three failures in
+a row end the run with `stopReason = "objfun"`. A fit therefore needs no bounds to keep it out of
+regions where the model cannot be evaluated: it backs off from them.
+
+### Nonmonotone acceptance
+
+With `stepControl$nonmonotone` $= \eta \in (0, 1)$, the actual decrease is measured from a
+weighted average of past values [@zhang2004nonmonotone],
+
+$$Q_{k+1} = \eta Q_k + 1, \qquad C_{k+1} = \frac{\eta Q_k C_k + f(\theta_{k+1})}{Q_{k+1}},$$
+
+and $\rho_k = \bigl(C_k - f(\theta_k + s_k)\bigr) / \bigl(-m_k(s_k)\bigr)$. At $\eta = 0$, the
+default, $C_k = f(\theta_k)$ and the rule above is recovered. A larger $\eta$ lets the iterate
+leave a narrow valley by accepting steps that raise the objective, so the result reports the best
+iterate visited, not the last. The termination tests read the objective itself: only the
+acceptance is relaxed.
+
+### Bounds
+
+`parlower` and `parupper` bound the parameters, named or as one number for all. The default,
+`boundary = "reflective"`, is the interior trust-region method of Coleman and Li
+[@coleman1996interior], which turns a bound into a change of metric. With $v_i$ the signed
+distance from $\theta_i$ to the bound the gradient pushes it towards (1 if that bound is
+infinite), $D = \operatorname{diag}(\lvert v \rvert^{1/2})$ and $J^v$ the diagonal of
+$\partial \lvert v \rvert / \partial \theta$, the subproblem is solved in the scaled variables
+
+$$\hat g = D g, \qquad \hat B = D H D + \operatorname{diag}(g)\, J^v ,$$
+
+so the model steepens towards a bound and the step turns away from it. The first-order optimality
+measure that `gtol` reads, $\max_i \lvert v_i g_i \rvert$, vanishes both at an interior stationary
+point and at a bound the gradient pushes into. A step that would still leave the box is cut to the
+fraction `stepControl$thetaMax` (default 0.99995) of the distance to the bound, reflected off the
+blocking faces, or replaced by the scaled steepest-descent step, whichever the model rates best.
+Every iterate stays strictly inside the box; `atBound` in the result names the parameters a bound
+holds. A start outside the box is moved inside with a warning.
+
+`boundary = "clip"` reduces the subproblem to the parameters that are free, those not at a bound
+the gradient pushes into, and clips the step componentwise. It returns a shorter result and
+supports no quasi-Newton source. On the log scale with a prior, as in the Oppelt model, every
+parameter moves freely and the fit needs no bounds.
+
+### Termination
+
+The run stops as soon as one of the following tests holds; `stopReason` in the result names it.
+The gradient test is evaluated at the current iterate, the value and step tests on an accepted
+step.
+
+| `stopReason` | test | `converged` |
+|---|---|---|
+| `"gradient"` | $\max_i \lvert v_i g_i \rvert \le$ `gtol`; without bounds $\max_i \lvert g_i \rvert$ | `TRUE` |
+| `"fvalue"` | an accepted step changed the value by less than `ftol` | `TRUE` |
+| `"preddiff"` | the model predicts a decrease below `mtol`, also on a rejected Newton step inside the region | `TRUE` |
+| `"step"` | the step norm is below `xtol` (default 0, off) | `TRUE` |
+| `"stagnation"` | five rejected steps in a row left the value flat within `ftol` | `TRUE` |
+| `"radius"` | the radius fell below `rmin` (default 0, off) | `FALSE` |
+| `"objfun"` | three failed evaluations in a row | `FALSE` |
+| `"iterlim"` | `iterlim` iterations | `FALSE` |
+
+Only `"gradient"` tests first-order optimality. `"fvalue"`, `"preddiff"` and `"step"` read the
+prediction of the quadratic model, so a model Hessian that misrepresents the local curvature can
+end a run at a point that is not stationary, with `converged = TRUE` at a value above the
+optimum. In a quasi-Newton phase, where the model is an approximation still being built, the three
+are not applied: such a phase ends on the gradient, on stagnation, which counts rejected steps
+instead of reading the model, or on the radius. The gradient norm is the stopping test usually
+recommended for quasi-Newton methods [@nocedal2006numerical].
+
+The tolerances are bounded below by what the objective resolves. For an ODE model integrated at
+relative tolerance $\epsilon$, the value has a relative error of about $\epsilon$ and the
+sensitivities about an order more, which gives the gradient a noise floor. `ftol` belongs at or
+above $\epsilon \lvert f \rvert$, and `gtol` at the noise floor of the gradient; a tighter
+tolerance needs a tighter integrator first. A run that ends on `"stagnation"` rather than on
+`"gradient"` points to tolerances below the noise floor; `max(abs(fit$gradient))` shows where it
+lies. `model.R` sets `ftol`, `mtol` and `gtol` above the error of the solver, as
+[chapter 1](guide-model.html#solver-error) measures it, and passes them as `tolControl`.
+
+## Model Hessian
+
+`hessianMethod` selects the source of $H$:
+
+| value | $H$ | the objective returns |
+|---|---|---|
+| `"gn"` | the Gauss-Newton Hessian, at every iterate | value, gradient, Gauss-Newton Hessian |
+| `"exact"` | the exact Hessian, at every iterate: a Newton run | value, gradient, exact Hessian |
+| `"bfgs"` | a damped BFGS update [@powell1978fast] | value, gradient |
+| `"sr1"` | a symmetric rank-one update, possibly indefinite | value, gradient |
+
+### Gauss-Newton
+
+$H$ is by default the Gauss-Newton matrix. With the residuals $r_j = (y_j - f_j)/\sigma_j$ and their
+Jacobian $J$ from the sensitivities, the Hessian of $\sum_j r_j^2$ is
+
+$$\nabla^2 \sum_j r_j^2 = 2 J^\top J + 2 \sum_j r_j \nabla^2 r_j .$$
+
+The second term needs the second-order sensitivities and is small where the model fits, with
+residuals that scatter around zero; Gauss-Newton keeps the first, which is positive semidefinite
+and free: the Jacobian that gives the gradient also gives $J^\top J$, so an iteration with the
+Hessian costs no more than one with the gradient alone. The prior adds its exact Hessian,
+$2/s_k^2$ on the diagonal. With an error model that depends on the parameters, the matrix
+also has first-order terms of the variance, which need not be positive semidefinite
+([chapter 3](guide-sensitivities.html)).
+
+Near an optimum with large residuals the Gauss-Newton model, without the second term, stops
+improving, and `ftol` or `mtol` ends the run short of the minimum. A quasi-Newton approximation
+infers the curvature from the steps taken and has no such bias.
+
+### Exact Hessian
+
+`hessianMethod = "exact"` asks the objective for its exact Hessian at every iterate,
+`obj(..., deriv2 = TRUE)`, and runs Newton's method in the trust region, which takes an indefinite
+Hessian as it comes. It needs the second-order sensitivities of the whole chain: models built with
+`deriv2 = TRUE`, or with the derivative mode `"forward-reverse"` and evaluated backwards,
+see [chapter 3](guide-sensitivities.html). An iteration costs far more than with the Gauss-Newton
+Hessian, but the model is exact wherever the residuals are large.
+
+### BFGS
+
+Both quasi-Newton updates use the secant pair
+
+$$s_k = \theta_{k+1} - \theta_k, \qquad y_k = \nabla f(\theta_{k+1}) - \nabla f(\theta_k),$$
+
+and require the new model to reproduce it, $B_{k+1} s_k = y_k$. BFGS is the rank-two update that
+keeps $B$ positive definite, which requires $s^\top y > 0$. Away from a minimum this curvature
+condition can fail, so the pair is damped before use [@powell1978fast]: with
+
+$$\vartheta = \begin{cases}
+1, & s^\top y \ge 0.2\, s^\top B s, \\
+\dfrac{0.8\, s^\top B s}{s^\top B s - s^\top y}, & \text{otherwise,}
+\end{cases}
+\qquad \tilde y = \vartheta y + (1 - \vartheta) B s ,$$
+
+the update is
+
+$$B_{k+1} = B_k - \frac{B_k s\, s^\top B_k}{s^\top B_k s} + \frac{\tilde y\, \tilde y^\top}{s^\top \tilde y}.$$
+
+The damped pair satisfies $s^\top \tilde y \ge 0.2\, s^\top B s > 0$, so $B$ stays positive
+definite. `qnControl$qnCautious` adds the test of Li and Fukushima [@li2001modified]: a pair
+counts only when $s^\top y > c \lVert s \rVert \lVert y \rVert$ with $c$ = `qnCautious` (default
+`1e-8`), which discards pairs whose curvature is numerical noise; `qnSkipped` in the result
+counts them. BFGS updates from accepted steps only.
+
+### SR1
+
+SR1 is the rank-one update that satisfies the secant equation without requiring definiteness.
+With $w = y - B_k s$,
+
+$$B_{k+1} = B_k + \frac{w\, w^\top}{w^\top s},$$
+
+the only symmetric rank-one correction that does so. Since $w^\top s$ can be arbitrarily small,
+the update is skipped when $\lvert w^\top s \rvert \le 10^{-8} \lVert s \rVert \lVert w \rVert$.
+SR1 converges to the true Hessian, indefinite regions included, and the subproblem solver steps
+along the negative curvature it reports. A rejected trial point still supplies a valid pair, because
+the curvature along a step does not depend on whether the step is accepted, and its gradient is
+already computed [@nocedal2006numerical]; `qnControl$qnRejected`, `TRUE` for `"sr1"`, uses it.
+
+### Seed and memory
+
+The quasi-Newton settings are entries of `qnControl` and apply to a `"bfgs"` or `"sr1"` phase:
+
+| entry | default | controls |
+|---|---|---|
+| `hessianInit` | `"gn"` | the seed: the Gauss-Newton Hessian at the start, `"identity"`, or `"exact"`, the exact Hessian at the start and gradients only after it |
+| `hessianReseed` | `"never"` | `"stall"`: a quasi-Newton phase that would stop on stagnation starts again from a fresh seed of the same kind at the current iterate, if the iterate moved since the last reseed, at most eight times per phase |
+| `qnMemory` | `0` | `0` accumulates every update onto the seed; a positive number rebuilds the approximation in each iteration from the last `qnMemory` pairs |
+| `qnCautious` | `1e-8` | the cautious test of BFGS; `0` turns it off |
+| `qnRejected` | `TRUE` for `"sr1"` | SR1 also updates from rejected trial points |
+
+With `hessianInit = "identity"`, `trust()` never asks for a Hessian, so an objective that returns
+gradients alone suffices. The Gauss-Newton seed is not always the better one: far from the optimum
+$J^\top J$ is large and severely ill-conditioned. A BFGS update is of rank two and keeps $B$
+positive definite, so where the seed is wrong by orders of magnitude the wrong curvature dominates
+the approximation for many steps. SR1 has no sign constraint and overwrites such curvature
+outright. The comparison below measures both.
+
+With `qnMemory` $= m > 0$ the approximation is rebuilt in each iteration from $\gamma I$ and the
+most recent $m$ pairs, with $\gamma = y^\top y / s^\top y$ of the newest pair, the scaling of
+Shanno and Phua [@shanno1978matrix]. This is the curvature information of L-BFGS
+[@nocedal2006numerical], assembled into the explicit matrix the subproblem needs. It saves no
+memory; the seed and every pair older than the last $m$ are forgotten.
+
+`trust()` has no diagonal preconditioner and no scaled identity as seed. On a logarithmic
+parameter scale, the normal case in dMod2, a diagonal scaling has nothing to correct, and the
+ill-conditioning of sloppy models lies along rotated directions [@gutenkunst2007universally] that
+no diagonal scaling reaches.
+
+### Phases
+
+`phases` lists Hessian sources that a run passes through one after the other. Each phase is a
+list with its own `hessianMethod`, and optionally its own `iterlim`, `sweep` and `qnControl`,
+merged over the top-level `qnControl`. A run stays in a phase until a value, model, step or
+stagnation stop, or the phase's own `iterlim`, would end it, and then hands over to the next
+phase instead. `"gradient"` stays terminal: it is an optimality test, not a symptom of a stalled
+model. A handover restarts the radius at `rinit` and discards the quasi-Newton pairs; a
+quasi-Newton phase after the first starts from the Gauss-Newton Hessian at the iterate of the
+handover. `switches` bounds the number of handovers: by default one fewer than there are phases,
+so each runs once; a higher value cycles through the list again, `0` runs the first phase only.
+The construction follows Fides of Fröhlich and Sorger [@froehlich2022fides], which switches from
+one Hessian source to another when the trust region stops making progress.
+
+```{r, eval = FALSE}
+# Gauss-Newton until the model stops improving, then SR1 to the stationary point
+fit <- trust(obj, best, fixed = gauge, tolControl = tolerances,
+             phases = list(list(hessianMethod = "gn"), list(hessianMethod = "sr1")))
+fit[c("phaseIterations", "evalBySource", "nSwitch", "stopReason")]
+```
+
+Without `phases` a run has one source, from `hessianMethod` and `qnControl`; with `phases`,
+`hessianMethod` is an error. Names of the list label the phases in the result. `phaseIterations`
+holds the iterations of each phase run in order, `evalBySource` the evaluations per source,
+`qnEval` those in a quasi-Newton phase, `nSwitch` the handovers.
+
+### Reverse sweep
+
+A quasi-Newton phase needs the gradient alone. With `sweep = "reverse"` the objective computes it
+by one backward sweep of the adjoint system instead of the $n_\theta$ sensitivity columns of the
+forward sweep, for models built with `derivMode = c("forward", "reverse")`;
+[chapter 3](guide-sensitivities.html) describes the sweep and its accuracy. The `sweep` of a phase
+is an entry of the phase. Left out, a `"bfgs"` or `"sr1"` phase runs backwards if the objective
+can be evaluated backwards at the start, forwards otherwise; a Gauss-Newton phase always runs
+forwards, since $J^\top J$ needs the forward sensitivities. `phaseSweep` in the result reports the
+sweep of every phase. Without `phases`, a `sweep` passed to `trust()` goes to the objective as is.
+
+### Sparse Hessians
+
+For a model with many parameters that each act on few conditions, such as a fit over hundreds of
+cell lines with their own parameters, the Gauss-Newton Hessian is sparse. `sparse = TRUE` asks
+the objective for it as a sparse `Matrix` and solves the subproblem by sparse Cholesky factors of
+$H + \nu I$, with Newton's method on $1/\lVert s(\nu) \rVert = 1/r$. The default `"auto"` takes
+this path for a Gauss-Newton minimisation without phases, bounds, exact Hessian, trace or multiple
+shooting when there are at least 500 parameters and the Hessian at the start fills at most 5 % of
+the matrix; `options(dMod2.sparseAuto = list(parameters = , fill = ))` changes both thresholds.
+
+### Arguments and result
+
+| argument | default | controls |
+|---|---|---|
+| `rinit`, `rmax` | `0.1`, `10` | first and largest radius, in the units of the parameters |
+| `iterlim` | `1000` | iterations over all phases |
+| `hessianMethod` | `"gn"` | `"gn"`, `"exact"`, `"bfgs"` or `"sr1"`, see Model Hessian |
+| `phases`, `switches` | none | a run over several Hessian sources, see Phases |
+| `parlower`, `parupper` | none | bounds |
+| `boundary` | `"reflective"` | `"reflective"` or `"clip"`, see Bounds |
+| `tolControl` | `ftol`, `mtol`, `gtol` `1e-6`; `xtol`, `rmin` `0`; `ctol` `1e-6` | the termination tests; `ctol` for multiple shooting |
+| `qnControl` | see Seed and memory | the quasi-Newton update |
+| `stepControl` | `thetaMax = 0.99995`, `nonmonotone = 0` | the step; further entries for multiple shooting |
+| `minimize` | `TRUE` | `FALSE` maximises |
+| `sparse` | `"auto"` | the sparse path |
+| `blather` | `FALSE` | `TRUE` returns the trace of every iteration |
+| `printIter` | `FALSE` | print the value at each evaluation |
+| `traceFile` | none | a CSV file with one row per evaluation: iteration, value, parameters |
+
+An argument `trust()` does not know goes to the objective, such as `fixed`, the parameters held
+at given values. A flat `ftol = ` or `hessianInit = ` is an error that names the control list it
+belongs to, and an unknown entry of a control list is an error.
+
+The result, of class `trustfit`, holds the best iterate `argument` with its `value`, `gradient`
+and model `hessian`, the counts `iterations` and `neval`, `converged`, `atBound` and
+`stopReason`, and the quasi-Newton and phase counts above. With `blather = TRUE` it also holds
+`argpath` and `argtry`, the accepted iterates and trial points, and per iteration `steptype`,
+`stepback`, `accept`, the radius `r`, `rho`, `valpath`, `valtry`, `preddiff`, `stepnorm` and, with
+a quasi-Newton source, `hessianSource`. `vcov(fit)` inverts half the Hessian for the covariance
+of the estimate, without the parameters a bound holds.
+
+## One fit
+
+```{r, echo = FALSE, results = "asis", eval = !fitted}
+cat("> Results pending: `results/fits.rds` of the project is written by `fit.R`.\n")
+```
+
+A fit from a start near the best fit, with the gauge held fixed. `mstrust()` with one fit draws the
+start, here with standard deviation 0.5 around the best fit, and draws again where the model cannot
+be evaluated, for example where the resting state of the cells is no longer stable:
+
+```{r, eval = fitted}
+best <- as.parvec(readRDS("results/fits.rds"))
+set.seed(1)
+fit <- mstrust(obj, best, fixed = gauge, sd = 0.5, fits = 1, rinit = 0.1, rmax = 10,
+               iterlim = 1000, tolControl = tolerances)[[1]]
+fit[c("value", "converged", "iterations", "stopReason")]
+```
+
+## Multistart
+
+A single fit finds the optimum whose basin of attraction contains its start. `mstrust()` fits from
+many starts, drawn around a centre, and returns them as a list of fits; `as.parframe()` turns it into
+a table sorted by value. `fit.R` draws the starts from the prior means with standard deviation 2 on
+the log scale, a factor of $e^2 \approx 7$ per standard deviation. A start at which the model
+cannot be evaluated, for example because a bleaching rate is so large that a signal vanishes, is
+replaced by the next draw. `cores` runs the fits in parallel processes.
+
+```{r multistart, eval = FALSE}
+```
+
+`mstrust()` sorts its arguments by name: those of the optimiser go to `trust()`, those of the
+sampler, by default `rnorm()` with its `sd`, to the sampler, every other one to the objective.
+Every start, those of the retries included, is drawn before the fits are spread over the cores,
+so `set.seed()` reproduces a run whatever `cores`.
+
+| argument | default | controls |
+|---|---|---|
+| `center` | | the centre of the starts, or a parframe whose rows are the starts |
+| `fits` | `20` | number of fits; the rows of `center` if it is a parframe |
+| `samplefun` | `"rnorm"` | the sampler of the offsets, called with `n` and its own arguments |
+| `startFromCenter` | `FALSE` | the first fit starts at `center` |
+| `retry`, `nTries` | `TRUE`, `10` | a fit that fails starts again from the next draw, up to `nTries` attempts |
+| `cores` | `1` | parallel fits, or `c(fits = , conditions = )` for threads over the conditions inside each fit |
+| `optmethod` | `"trust"` | the optimiser, for example `"trustL1"` |
+| `output`, `cautiousMode` | `FALSE` | write every fit to `resultPath/name/trial-<k>-<date>/` |
+
+`msParframe()` draws a parframe of starts from a seed of its own, which leaves the global random
+number generator alone; passed as `center`, it gives several runs the same starts, as in the
+comparisons below. `load.parlist()` reads the fits that `output = TRUE` wrote, also of a run that
+is still going or was aborted. Every fit in the result has its start `parinit` and its wall time
+`elapsed`; a fit that failed is a list with its `error`, and the attribute `"run"` records the
+optimiser and the sampler with their arguments, the cores, the times and the versions.
+
+[Chapter 11](guide-remote-computing.html) runs the fits as an array job on a cluster, one fit per
+task. `results/fits.rds` holds the result:
+
+```{r, echo = FALSE, results = "asis", eval = !fitted}
+cat("> Results pending: `results/fits.rds` of the project is written by `fit.R`.\n")
+```
+
+```{r load, eval = fitted}
+```
+
+```{r, eval = fitted}
+head(fits[, c("value", "converged", "iterations")])
+c(fits = nrow(fits), converged = sum(fits$converged), best = min(fits$value),
+  withinOne = sum(fits$value < min(fits$value) + 1))
+```
+
+The waterfall sorts the fits by their final value, every fit, on a pseudo-log scale of the
+distance to the best, which keeps the plateaus near the best apart and the far ones in view. A
+plateau is a local optimum, and the number of fits on it shows the size of its basin of
+attraction:
+
+```{r waterfall, eval = fitted}
+```
+
+The parameters of the fits on the best plateaus, one colour per plateau. A parameter that differs
+between plateaus is one the local optima disagree on; [chapter 5](guide-profiles.html) shows which
+parameters the data determine.
+
+```{r parameters, fig.width = 10, fig.height = 14, eval = fitted}
+```
+
+The prediction of the best fit against the data is the last figure of
+[chapter 1](guide-model.html).
+
+## Hessian sources compared
+
+### The model of the guide
+
+`optimizers.R` fits the model of [chapter 1](guide-model.html) with five sources of the model
+Hessian from the same 100 starts, drawn as in the multistart above. The chain is built with the
+reverse sweep and forward over reverse, as in [chapter 3](guide-sensitivities.html): Gauss-Newton
+from the forward sensitivities, BFGS and SR1 from the reverse gradient and seeded with the
+identity, the exact Hessian by forward over reverse, and 20 iterations of Gauss-Newton handing
+over to BFGS, which starts from the Gauss-Newton Hessian at the handover. The fits ran as tasks
+of a SLURM cluster with `distributedComputing()` ([chapter 11](guide-remote-computing.html)).
+
+```{r optimizers, eval = FALSE}
+```
+
+```{r, echo = FALSE, results = "asis", eval = !optimized}
+cat("> Results pending: `results/optimizers.rds` of the project is written by `optimizers.R`.\n")
+```
+
+```{r, eval = optimized}
+opt <- readRDS("results/optimizers.rds")
+opt$method <- factor(opt$method, unique(opt$method))
+top <- min(opt$value, na.rm = TRUE)
+do.call(rbind, lapply(split(opt, opt$method), function(d) data.frame(
+  starts = nrow(d), failed = sum(is.na(d$value)), converged = sum(d$converged),
+  hits = sum(d$value < top + 1, na.rm = TRUE), iterations = median(d$iterations, na.rm = TRUE),
+  seconds = round(median(d$elapsed, na.rm = TRUE), 1),
+  secondsPerHit = round(sum(d$elapsed, na.rm = TRUE) / max(1, sum(d$value < top + 1, na.rm = TRUE))))))
+```
+
+`iterations` and `seconds` are medians over the starts, `secondsPerHit` the time of all starts over
+the number of hits, starts that end within 1 of the best value of all; the plateaus of the
+multistart above lie closer together than that. `failed` counts the starts that ended without a
+result:
+
+```{r, eval = optimized, fig.height = 6}
+opt$rank <- ave(opt$value, opt$method, FUN = function(v) rank(v, ties.method = "first", na.last = TRUE))
+ggplot2::ggplot(opt, ggplot2::aes(rank, value - top, colour = converged)) +
+  ggplot2::geom_point(size = 1) +
+  ggplot2::facet_wrap(~method, ncol = 5) +
+  ggplot2::scale_y_continuous(transform = scales::pseudo_log_trans(sigma = 0.1, base = 10),
+                              breaks = c(0, 1, 10, 100, 1000, 1e4)) +
+  ggplot2::scale_colour_manual(values = c(`TRUE` = "black", `FALSE` = dMod_colors[2])) +
+  ggplot2::labs(x = "rank", y = "-2 log L above the best", colour = "converged") +
+  theme_dMod()
+```
+
+```{r, include = FALSE, eval = optimized}
+sens <- readRDS("results/sensitivities.rds")$timing
+```
+
+The cost of an iteration decides here. A reverse gradient costs about
+1/`r if (optimized) round(sens[["forward"]] / sens[["reverse"]]) else 6` of the forward
+sensitivities ([chapter 3](guide-sensitivities.html)), so BFGS runs more iterations than
+Gauss-Newton in less time and reaches the best plateau from more starts: of the five sources it
+needs the least time per hit. SR1 from the identity needs the most iterations of the single
+sources and reaches the best plateau rarely. The exact Hessian converges most often, but an
+evaluation by forward over reverse costs about
+`r if (optimized) round(sens[["forward-reverse"]] / sens[["forward"]]) else 5` times the forward
+sensitivities, and it needs the most time per hit. Gauss-Newton handing over to BFGS runs into the
+iteration limit in most fits: the BFGS phase starts from the Gauss-Newton Hessian after 20
+iterations, still far from the optimum, a seed whose excess curvature BFGS corrects slowly
+([Seed and memory](#seed-and-memory)). The two published problems below show the same trade-offs
+with other weights.
+
+### Published problems
+
+The sources of the model Hessian differ in what an iteration costs and in where a run ends. Two
+published problems show how: the STAT5 dimerisation model of Boehm et al.
+[@boehm2014identification] with nine parameters, the project
+[boehmJProteomeRes2014](boehmJProteomeRes2014.html), and the JAK2-STAT5 model of Bachmann et al.
+[@bachmann2011division] with 113, the project [bachmannMSB2011](bachmannMSB2011.html). Every
+source of a comparison runs from the same starts, drawn once with `msParframe()`, so the runs
+differ only in the method. A start is a hit when it ends within 0.1 of the best value. The cost
+of a hit, the evaluations of all starts over the number of hits, combines the cost of a start
+with the rate at which starts succeed.
+
+```{r, echo = FALSE, results = "asis", eval = !compared}
+cat("> Results pending: `results/hessianSources.rds` of the Boehm project.\n")
+```
+
+```{r, include = FALSE, eval = compared}
+boehm <- readRDS(boehmFile)
+library(ggplot2)
+# One panel for several fit collections, each ranked on its own, drawn back to front so that the
+# first one listed stays on top. A circle is a converged fit, a triangle any other.
+waterfall <- function(frames, cutoff = Inf) {
+  ranked <- do.call(rbind, lapply(rev(names(frames)), function(set) {
+    fits <- subset(frames[[set]], value < cutoff)
+    fits <- fits[order(fits$value), ]
+    data.frame(index = seq_len(nrow(fits)), value = fits$value,
+               converged = as.character(fits$converged), set = set)
+  }))
+  ranked$set <- factor(ranked$set, levels = names(frames))
+  colours <- stats::setNames(dMod_palette(8, "okabe")[-5][seq_along(frames)], names(frames))
+  ggplot(ranked, aes(index, value, colour = set)) +
+    geom_line(aes(group = set), linewidth = 0.3) +
+    geom_point(aes(shape = converged), size = 1.3) +
+    scale_shape_manual(values = c(`TRUE` = 16, `FALSE` = 17), breaks = c("TRUE", "FALSE"),
+                       labels = c(`TRUE` = "yes", `FALSE` = "no")) +
+    scale_colour_manual(values = colours) +
+    labs(x = "start, sorted by value", y = "-2 log L", colour = NULL, shape = "converged") +
+    theme_dMod() +
+    theme(legend.position = "bottom", legend.box = "vertical")
+}
+# hits within `tol` of `ref`, and what they cost
+hitTable <- function(runs, ref, tol = 0.1) {
+  do.call(rbind, lapply(names(runs), function(source) {
+    f <- runs[[source]]
+    hits <- sum(f$value <= ref + tol)
+    stops <- if (!is.null(f$stopReason)) f$stopReason else f$stop
+    data.frame(source, best = round(min(f$value), 3), hits, starts = nrow(f),
+               gradient = sum(stops == "gradient"), medianEval = stats::median(f$neval),
+               evalPerHit = if (hits > 0) round(sum(f$neval) / hits) else NA_real_)
+  }))
+}
+```
+
+### STAT5 dimerisation
+
+The nine parameters are on the log10 scale, with a weak prior of standard deviation 4 on the six
+dynamic ones and bounds of $\pm 5$, as in `analysis.R` of the project. Two runs from the prior
+centre, every parameter at $-1$:
+
+```{r, eval = FALSE}
+parlower <- structure(rep(-5, length(outerpars)), names = outerpars)
+parupper <- structure(rep(5, length(outerpars)), names = outerpars)
+start <- pouter
+single <- list(
+  gn = trust(obj, start, iterlim = 5000, parlower = parlower, parupper = parupper),
+  "gn -> bfgs" = trust(obj, start, iterlim = 5000, parlower = parlower, parupper = parupper,
+                       phases = list(list(hessianMethod = "gn"), list(hessianMethod = "bfgs"))))
+```
+
+```{r, eval = compared}
+with(boehm, data.frame(source = names(single),
+                       value = vapply(single, `[[`, 0, "value"),
+                       stop = vapply(single, `[[`, "", "stopReason"),
+                       neval = vapply(single, `[[`, 0L, "neval"),
+                       qnEval = vapply(single, `[[`, 0L, "qnEval"), row.names = NULL))
+```
+
+Gauss-Newton stops on `"fvalue"`; the BFGS phase after it moves the value a little further and
+ends on stagnation. The seeds and the memory of BFGS from the same start, a Gauss-Newton seed, the
+identity, and the identity with `qnMemory = 10`:
+
+```{r, eval = compared}
+data.frame(seed = c("gn", "identity", "identity"), memory = c(0L, 0L, 10L),
+           value = vapply(boehm$seeds, `[[`, 0, "value"),
+           stop = vapply(boehm$seeds, `[[`, "", "stopReason"),
+           neval = vapply(boehm$seeds, `[[`, 0L, "neval"))
+```
+
+From this start, several decades from the optimum, the Gauss-Newton seed keeps BFGS in the basin
+Gauss-Newton ends in, the identity reaches the best optimum, and a memory of ten pairs, which
+forgets the curvature of the earlier steps, ends far above. The cautious test of `qnCautious`
+changes neither the outcome nor the cost on this model.
+
+A multistart of 100 starts per source, five sources: Gauss-Newton, the two two-phase runs, and BFGS
+and SR1 seeded with the identity.
+
+```{r, eval = FALSE}
+set.seed(20260905)
+starts <- msParframe(pouter, n = 100, sd = 3)
+sources <- list(
+  gn = list(hessianMethod = "gn"),
+  "gn -> bfgs" = list(phases = list(list(hessianMethod = "gn"), list(hessianMethod = "bfgs"))),
+  "gn -> sr1" = list(phases = list(list(hessianMethod = "gn"), list(hessianMethod = "sr1"))),
+  "bfgs, id" = list(hessianMethod = "bfgs", qnControl = list(hessianInit = "identity")),
+  "sr1, id" = list(hessianMethod = "sr1", qnControl = list(hessianInit = "identity")))
+runs <- lapply(sources, function(settings)
+  as.parframe(do.call(mstrust, c(list(obj, center = starts, iterlim = 5000, parlower = parlower,
+                                      parupper = parupper, cores = 4), settings))))
+```
+
+```{r, eval = compared}
+runs <- boehm$multistart
+hitTable(runs, min(vapply(runs, function(f) min(f$value), 0)))
+```
+
+`gradient` counts the starts that ended at a stationary point, `medianEval` the evaluations of a
+typical start. Gauss-Newton ends every start on `"fvalue"` or `"preddiff"`; the quasi-Newton
+phases, where these tests are not applied, end on the gradient or on stagnation.
+
+```{r, eval = compared, fig.height = 5.5, fig.cap = "The five Hessian sources over the same 100 starts, each ranked on its own. Values above 600 are left out."}
+waterfall(runs, cutoff = 600)
+```
+
+The curves fall into two shapes. Gauss-Newton and both two-phase runs follow each other over the
+whole range, since such a run is Gauss-Newton until a soft stop fires. They differ in the leading
+plateau: under Gauss-Newton it is not flat, because the model stops improving before the minimum,
+whereas the quasi-Newton phase brings those starts to a common value. The runs seeded with the
+identity form the second shape, with a longer leading plateau: they reach the best optimum from
+more starts, and more of the remaining starts end high. Under BFGS this worsens the typical value,
+under SR1 it does not. SR1 from the identity reaches the best optimum from several times as many
+starts as Gauss-Newton, at a tenth of the evaluations per hit.
+
+### Without the prior
+
+The prior keeps starts away from the bounds and shapes the comparison. On the likelihood alone,
+with bounds of $\pm 8$ and 200 starts, the published optimum is $-2 \log L = 276.44$
+[@hass2019benchmark], and a hit ends within 0.1 of it. The two BFGS sources are left out, and two
+others join: SR1 from a Gauss-Newton seed, and the reversed handover from SR1 back to
+Gauss-Newton.
+
+```{r, eval = compared}
+noprior <- split(boehm$noprior, boehm$noprior$source)
+hitTable(noprior, 276.44)
+```
+
+```{r, eval = compared, fig.height = 4, fig.cap = "Five Hessian sources on the likelihood without a prior, over the same 200 starts, each ranked on its own. Values above 600 are left out."}
+waterfall(noprior, cutoff = 600)
+```
+
+Every source reaches the published optimum, and the quasi-Newton runs lose most of their lead:
+SR1 from the identity reaches it from 32 of 200 starts against 34 of 100 with the prior, at seven
+times the evaluations per hit, while Gauss-Newton gains, 28 of 200 against 6 of 100. SR1 from a
+Gauss-Newton seed reaches the optimum from the most starts, and the reversed handover at the
+fewest evaluations per hit, with a fifth to a quarter fewer evaluations per start than either SR1
+run alone.
+
+The reversed handover also changes how runs end:
+
+```{r, eval = compared}
+with(boehm$noprior, table(source, stop))
+```
+
+SR1 alone stagnates on most starts; handing back to Gauss-Newton turns that into ends on
+`"fvalue"`, because the model tests of a Gauss-Newton phase apply again, and cuts the runs that
+exhaust the iteration limit. The forward handover matches Gauss-Newton in hits and in runs at the
+iteration limit, and differs in how its runs end.
+
+### JAK2-STAT5, 113 parameters
+
+The JAK2-STAT5 model of Bachmann et al. has 113 estimated parameters, 25 states, 20 observables
+and 36 conditions; the fits ran on a SLURM cluster through `distributedComputing()`
+([chapter 11](guide-remote-computing.html)), one job per source, each an array of 50 tasks of four
+fits.
+
+A multistart over 113 parameters needs a weak prior, or starts run into the bounds instead of
+converging. The published values span twelve decades, and one prior centre for all, at standard
+deviation 4, adds 27 to the objective at the published optimum and moves the optimum. The centre of
+every parameter whose published value lies more than a decade from the default is the order of
+magnitude of that value, so that it lies within one decade everywhere and the prior adds 1.04 at the
+optimum. The optimum stays at the published parameters, where the objective with the prior is
+$-479.26$; a hit ends within 0.1 of it. Starts are drawn around that centre with standard deviation
+4 and drawn again where they leave the box.
+
+```{r, echo = FALSE, results = "asis", eval = !comparedBachmann}
+cat("> Results pending: `results/hessianSources.rds` of the Bachmann project.\n")
+```
+
+```{r, eval = comparedBachmann && compared}
+bachmann <- readRDS(bachmannFile)
+bachmannRuns <- split(bachmann, bachmann$source)
+hitTable(bachmannRuns, -479.26)
+with(bachmann, table(source, stop))
+```
+
+```{r, eval = comparedBachmann && compared, fig.height = 4, fig.cap = "Five Hessian sources on the JAK2-STAT5 model over the same 200 starts, each ranked on its own. Starts ending above -400 are left out."}
+waterfall(bachmannRuns, cutoff = -400)
+```
+
+Every source reaches the same best value, and the counts at 0.1 and at 1 from the optimum are the
+same: a start either finds the published minimum or ends far from it. No source finds an optimum
+another misses. The sources differ in cost: Gauss-Newton reaches the optimum at half the
+evaluations per hit of the cheapest SR1 run, the reverse of the ordering at nine parameters.
+
+For SR1 the identity is the better seed here, 79 hits against 65. The Gauss-Newton seed brings the
+curvature of a point the run is about to leave into the first steps of an approximation that is
+rebuilt anyway, and SR1 has no damping to discard it. After the forward handover the model tests no
+longer fire and almost every run ends on stagnation, at the values Gauss-Newton reaches alone;
+after the reversed handover most runs end on `"fvalue"`. Neither changes which optimum is found:
+matched start by start, Gauss-Newton and the forward handover differ by $3 \times 10^{-6}$. By the
+time a soft stop fires the basin is chosen, and the handover only changes how the run ends inside
+it.
+
+### Findings
+
+The ordering of the sources depends on the problem. On the JAK2-STAT5 model Gauss-Newton reaches
+the optimum at half the cost of the cheapest SR1 run; on the STAT5 dimerisation model SR1 is
+cheapest, by an order of magnitude with the prior and by a factor of two without. The term
+Gauss-Newton omits explains the ordering: where the residuals at the optimum are small, $J^\top J$
+is close to the true Hessian, and a source that infers curvature from steps costs extra evaluations
+without improving the model. Where they are large, so is the omitted term, the Gauss-Newton model
+stops improving early, and its tests fire far from the minimum.
+
+Three findings hold across the settings. No source reaches an optimum another misses; they differ
+in cost. A handover does not change the basin a run ends in, since the basin is chosen before a
+soft stop fires: the forward handover changes only where inside a basin a run stops, the reversed
+one restores a valid stopping test. A quasi-Newton phase needs of the order of $n_\theta$ accepted
+steps before it covers every direction, so its cost per hit grows with the number of parameters.
+
+## L1 penalties
+
+`trustL1()` minimises the objective plus an L1 penalty on some of the parameters,
+
+$$f(\theta) + \sum_{i \in \mu} \lambda_i \lvert \theta_i - \mu_i \rvert ,$$
+
+with the reference values `mu`, named by the penalised parameters, and the strength `lambda`, one
+number or one per parameter. The penalty has a kink at $\mu_i$, where a parameter sits exactly
+until the data pull it away with a force above $\lambda_i$; scanned over $\lambda$, it selects
+which parameters differ from their references. `trustL1()` runs the trust region of `trust()`
+with the Gauss-Newton Hessian of the objective and two changes:
+
+- A penalised parameter on its kink is taken out of the subproblem while
+  $\lvert \partial f / \partial \theta_i \rvert \le \lambda_i$: the penalty dominates, and the
+  parameter stays.
+- A step that moves a penalised parameter across its kink is cut back onto $\mu_i$, exactly, so
+  that the next iteration examines it again and a zero difference is an exact zero.
+
+`one.sided = TRUE` makes the penalty a wall, $\lambda_i \max(0, \mu_i - \theta_i)$. `gate` names
+parameters whose penalty is $\lambda_i (\theta_i - \mu_i)$ with $\theta_i \ge \mu_i$: the parameter
+sits on $\mu_i$ and leaves it upward only. `fuse` takes blocks of parameters penalised by their
+differences, $\lambda \sum_{p < q} w_{pq} \lvert \theta_p - \theta_q \rvert$, plus optionally the
+difference to an anchor: parameters with equal values move as one and split when the data pull
+them apart, which groups conditions with equal parameters. The bounds are those of `trust()`, both
+`boundary` settings included; of `tolControl` it reads `ftol`, `mtol`, `gtol`, `xtol` and `rmin`,
+and of `stepControl` `thetaMax`. `mstrust(optmethod = "trustL1")` runs it from many starts.
+[Chapter 8](guide-group-effects.html) estimates the differences between groups by a prior of the
+random effects instead of a scan; the modes of its Laplace random effects come from `trustL1()`.
+
+## Multiple shooting
+
+Every method above integrates the model from its initial state across the whole time axis, single
+shooting. For an oscillating or spiking system this makes the objective rugged: a small change of
+a parameter shifts every later period, and once a peak has moved by more than its own width the
+residuals no longer tell in which direction it moved. The valleys around the optimum become narrow
+and the starts that reach it rare.
+
+Multiple shooting [@bock1983recent; @baake1992fitting] cuts the time axis at nodes
+$\tau_1 < \dots < \tau_M$. Segment $j$ is integrated from node values $s_j$ of its own, the first
+one from the initial state the parameter transformation gives, and continuity becomes a
+constraint of the fit,
+
+$$c_j = x(\tau_{j+1};\, \tau_j, s_j, \theta) - s_{j+1} = 0 .$$
+
+The nodes start at the data wherever a state is observed, so every segment stays close to its data
+whatever the parameters are, and the gaps close only as the fit converges. At convergence the
+trajectory is continuous and the result is a stationary point of the single-shooting objective.
+
+In dMod2 multiple shooting is a control of the objective, not a different optimiser:
+
+```{r, eval = FALSE}
+obj <- normL2(data, g * x * p, multipleShootingControl = TRUE)
+fit <- trust(obj, start)            # or mstrust(obj, ...)
+fit$multipleShooting$violation      # the scaled gaps at the end
+controls(obj, "multipleShootingControl") <- NULL   # single shooting again
+```
+
+Called as a function, `obj` is still the single-shooting objective, so evaluating, plotting and
+profiling it are unchanged. `trust()` reads the control and runs the method below; a sum with a
+prior keeps it. The chain has to be `g*x*p` with one prediction function from `Xs()`, built
+on `odemodel(..., includeTimeZero = FALSE)`, so that a segment is integrated from its own start.
+Not available with multiple shooting: `hessianMethod = "exact"`, more than one phase,
+`switches`, `qnControl$hessianReseed`, `qnControl$qnMemory`, `stepControl$nonmonotone`,
+`boundary = "clip"`, `minimize = FALSE` and `traceFile`.
+
+### Condensed step
+
+Bock's generalised Gauss-Newton method linearises the constraints at the current iterate
+$(\theta, s)$. With $G_j = \partial x_j / \partial s_j$ and $P_j = \partial x_j / \partial \theta$
+the sensitivities of the end state of segment $j$,
+
+$$\Delta s_{j+1} = \alpha\, c_j + G_j\, \Delta s_j + P_j\, \Delta \theta ,$$
+
+and the recursion from the first segment gives $\Delta s = \alpha z + S\, \Delta\theta$ for all
+nodes at once. Substituted into the linearised residuals of the segments, it leaves a Gauss-Newton
+model in $\Delta\theta$ alone (condensing). The subproblem keeps the size of the single-shooting
+one, and the subproblem solver and the bounds above take it unchanged. The nodes follow the step
+through the linearisation rather than a new simulation, so the gaps close as the iteration
+converges, not at every point it visits.
+
+The trust region bounds parameters and nodes together,
+
+$$\lVert D\, \Delta\theta \rVert^2 + \lVert V (\alpha z + S\, \Delta\theta) \rVert^2 \le r^2 ,$$
+
+with $V$ one over the scale of each state: the range of the data for an observed state, of a
+simulation otherwise, and a decade for a state in a log10 chart (`multipleShootingControl$scale`
+sets it). A region on $\theta$ alone does not bound $S\, \Delta\theta$, the linearised
+single-shooting response of a node, which across a spike is huge. $\alpha = 1$ closes the
+linearised gaps completely, Bock's own step. Under an active region the node step is damped with
+the parameter step: $\alpha$ is the share of the node part of the full Gauss-Newton step that the
+radius admits, at most one. Where condensing would propagate a gap through a chain of expanding
+segments beyond a bound, that link of the linearisation is dropped for the step. A summand other
+than the shooting term, a prior or a single-shooting `normL2()` of other data, enters with its own
+value, gradient and Gauss-Newton Hessian.
+
+A step is accepted by the filter of Fletcher and Leyffer [@fletcher2002nonlinear] on the pair of
+the data term $f$ and the scaled gap size $h = \lVert V c \rVert$ (`stepControl$acceptance =
+"filter"`, the default), or by the $\ell_2$ exact penalty $f + \mu h$ (`"merit"`). A rejected step
+whose gaps did not close as predicted gets one second-order correction (`stepControl$soc`, on by
+default), the trial gaps condensed with the sensitivities already at hand. A run reports
+`converged = TRUE` only when $h$ has fallen below `tolControl$ctol`, and no other test ends it
+before: with open gaps the nodes absorb what the parameters do not explain, and the data term is
+no measure of the fit.
+
+`hessianMethod = "gn"` condenses the Gauss-Newton block of every segment. `"bfgs"` and `"sr1"`
+keep one quasi-Newton block per segment for the segment's Lagrangian, which gradients alone keep
+up to date, and so run on the gradients of `sweep = "reverse"`.
+
+### Continuity annealing
+
+From a start far from the optimum, even the condensed step can be forced through a regime the data
+never show, such as a spike threshold that the resting potential of the start never reaches.
+`stepControl$anneal`, on by default, therefore first prices the gaps instead of enforcing them: it
+minimises $f + w \lVert V c \rVert^2$ over parameters and nodes on the sparse Gauss-Newton matrix
+of the full problem, with $w$ rising tenfold per stage from one, until the gaps are small, and then
+hands over to the exact method. This is the precision annealing of variational data assimilation
+[@ye2015improved] with a fixed schedule. A stage ends once a step gains less than a thousandth of
+the objective, and the annealing ends early where the penalty dominates and a whole stage no
+longer closes the gaps, where no weight will. It needs forward sensitivities and is skipped
+without them.
+
+### Nodes
+
+`multipleShootingControl$nodes = "auto"`, the default, starts from ten segments per condition, or
+from one per half oscillation of the data where that is more, and cuts a segment in two where
+
+- the spectral radius of its propagation matrix $G_j$ exceeds `growth` (default 10). It is the
+  factor by which the linearised flow of the segment expands, the same in every chart and under
+  every scaling of the states;
+- the root mean square of its weighted residuals exceeds `misfit` (default 3) and twice the median
+  of its condition, where the model misses a feature of the data locally;
+- or its solve fails.
+
+This happens before the first step and at every iterate, never below half the finest spacing of
+the data, and either half of a cut keeps `minPoints` data points, by default one more than the
+model has states, so that no node can fit its segment alone.
+
+The growth of an oscillator stays near one: along a limit cycle the flow neither expands nor
+contracts, and a damped precession contracts. What grows over a long segment is the sensitivity of
+its phase to the frequency, linearly with the number of periods it spans, and from a start with the
+wrong frequency the phase slips by a whole period and the segment fits the data a period off. One
+segment per half oscillation, counted at the turning points of the data, bounds that slip without
+a look at the model. A misfit on every segment, as wrong parameters produce it, cuts nothing: no
+node removes it, and cutting there would refine the time axis down to the spacing of the data.
+
+An angle state goes on `charts = c(phi = "angle")`, where a gap counts modulo $2\pi$; `"log10"`
+puts the node values of a positive state on the log scale. A state observed directly starts at the
+data. The other states start at a run of the model whose observed states are reset to the data at
+every data time, replacement synchronisation [@pecora1990synchronization]: states driven by the
+observed ones, a gating variable driven by the voltage, forget where they started and follow the
+measured trajectory, instead of being handed from one noisy value per segment to the next.
+`init = "spline"` does the same with a smoothing spline through the data, its roughness chosen by
+generalised cross-validation [@horbelt2002parameter], `init = "simulation"` takes every node value
+from a simulation at the start parameters, and a list as `fit$multipleShooting$nodes` returns it
+gives the node values, with the node times in `nodes`.
+
+`nodes = "transitions"` puts a node just before every fast change of the data, a spike or the jump
+of a relaxation oscillator, found as a run of samples whose rate lies more than eight median
+absolute deviations off its median, and fills the rest with the even nodes of `"auto"`. The layout
+stays fixed. Each change then starts in its segment where the data have it, whatever the parameters
+are; the slow stretch behind it depends on them smoothly, and a wrong timing shows as a gap before
+the next node, a small difference of the state rather than a change in the wrong place. Node times
+given as numbers, for all conditions or as a list by condition, fix the layout as given.
+
+### Further methods
+
+Bock's own globalisation damps the full Gauss-Newton step, all linearised gaps closed, by a factor
+that a curvature estimate predicts and a corrector cuts back; a damped step is taken when the
+simplified step at its end, the Jacobians of the current iterate with the residuals and gaps of
+the trial, has shrunk. This natural level function follows the geometry of the problem rather than
+the weights of a merit function [@peifer2007parameter]; `stepControl$acceptance = "natural"`
+selects it, with the filter taking over where the damping finds no step. It needs the Gauss-Newton
+Hessian, a fixed sigma and no error model. Four further settings are off by default, since each
+helps on some problems and costs on others:
+
+- `stepControl$twoPhase` fits the parameters first with the node values held at their start
+  [@horbelt2002parameter], then lays the nodes out afresh at the parameters found and releases
+  them. Every segment has to explain its data from a start the data give, so no node takes up
+  misfit the parameters should remove. This helps where noise in the node values would otherwise
+  move the parameters, as on a spiking trace, at several times the cost elsewhere.
+- `stepControl$regularise` holds directions of the condensed problem fixed whose singular value
+  lies below that fraction of the largest, directions the data do not identify
+  [@peifer2007parameter].
+- `multipleShootingControl$breaks` names nodes at which continuity is not enforced
+  [@voss2004nonlinear]; it needs the Gauss-Newton Hessian.
+- `stepControl$restore` gives the filter its restoration phase, at most five times: it first
+  closes the linearised gaps at the current parameters, damped if need be, and where that does not
+  halve them puts the nodes onto the trajectory of these parameters. On a noisy spike train, nodes
+  put onto the trajectory of wrong parameters let the automatic layout cut far more segments, and
+  fewer starts reach the optimum.
+
+The result has, besides the fields of a fit, a list `multipleShooting` with the final `nodes`, the
+`gaps` per condition, their scaled size `violation`, the counts `nRelaxed` (iterations with a node
+step below the full one), `nSOC` (accepted second-order corrections), `nSplit` (segments cut),
+`nRestore` and `nStages` (annealing stages), the `cuts`, the `acceptance` and `sweep` used, `mu`
+or `filterSize`, and with `blather = TRUE` a `trace`.
+
+### FitzHugh-Nagumo oscillator
+
+The FitzHugh-Nagumo oscillator [@fitzhugh1961impulses],
+
+$$\dot V = c\,(V - V^3/3 + R), \qquad \dot R = -(V - a + b R)/c ,$$
+
+is fitted to its voltage alone, 81 points on $[0, 20]$ with noise of 0.1.
+
+```{r, eval = shotFhn, results = "hide"}
+fhnDir <- file.path(tempdir(), "fitzhughNagumo")
+dir.create(fhnDir, showWarnings = FALSE)
+fhn <- eqnvec(V = "c*(V - V^3/3 + R)", R = "-(V - a + b*R)/c")
+fhnModel <- odemodel(fhn, modelname = "fhn_ode", includeTimeZero = FALSE, compile = FALSE,
+                     outdir = fhnDir)
+fx <- Xs(fhnModel, options = list(atol = 1e-10, rtol = 1e-10))
+fg <- Y(c(y = "V"), f = fx, modelname = "fhn_obs", compile = FALSE, outdir = fhnDir)
+fp <- P(eqnvec(V = "V", R = "R", a = "a", b = "b", c = "exp(lc)"), condition = "C",
+        modelname = "fhn_p", compile = FALSE, outdir = fhnDir)
+compile(fx, fg, fp, output = "fhn", cores = 2)
+fhnPrd <- fg * fx * fp
+
+fhnTruth <- c(V = -1, R = 1, a = 0.2, b = 0.2, lc = log(3))
+tt <- seq(0, 20, by = 0.25)
+set.seed(1)
+yy <- fhnPrd(tt, fhnTruth, deriv = FALSE)[[1]][, "y"]
+fhnData <- as.datalist(data.frame(name = "y", time = tt, value = yy + rnorm(length(tt), 0, 0.1),
+                                  sigma = 0.1, condition = "C"))
+fhnSS <- normL2(fhnData, fhnPrd)
+fhnMS <- normL2(fhnData, fhnPrd, multipleShootingControl = TRUE)
+```
+
+Forty starts perturb the initial states by a standard deviation of 1.5 and $a$, $b$ and $\log c$
+by 1; each method runs from all of them:
+
+```{r, eval = FALSE}
+set.seed(7)
+fhnStarts <- parframe(do.call(rbind, lapply(1:40, function(i)
+  fhnTruth + c(rnorm(2, 0, 1.5), rnorm(3, 0, 1)))))
+fhnFit <- function(obj, ...)
+  as.parframe(mstrust(obj, center = fhnStarts, cores = 4, iterlim = 300, ...))
+fhnRuns <- list("single shooting" = fhnFit(fhnSS),
+                "multiple shooting, filter" = fhnFit(fhnMS),
+                "multiple shooting, merit" = fhnFit(fhnMS, stepControl = list(acceptance = "merit")))
+```
+
+A start is a hit when the single-shooting objective at its final parameters lies within 0.1 of
+the best one. It is evaluated anew rather than read off the fit, since a multiple-shooting run with
+open gaps reports a data term that can lie below the optimum.
+
+```{r, echo = FALSE, results = "asis", eval = !shotFhn}
+cat("> Results pending: `vignettes/articles/results/fitzhughNagumo.rds`.\n")
+```
+
+```{r, eval = shotFhn}
+fhnRuns <- readRDS(file.path(stored, "fitzhughNagumo.rds"))
+fhnValue <- function(f) apply(as.matrix(f[, names(fhnTruth)]), 1, function(th)
+  fhnSS(th, deriv = FALSE)$value)
+fhnBest <- min(unlist(lapply(fhnRuns, fhnValue)))
+do.call(rbind, lapply(names(fhnRuns), function(method) {
+  f <- fhnRuns[[method]]
+  hits <- sum(fhnValue(f) <= fhnBest + 0.1)
+  data.frame(method, converged = sum(f$converged), hits, medianEval = stats::median(f$neval),
+             evalPerHit = if (hits > 0) round(sum(f$neval) / hits) else NA_real_)
+}))
+```
+
+Multiple shooting reaches the optimum from more than twice as many starts, at a quarter of the
+evaluations per hit. Much of what either method spends goes into the starts it misses: most of
+those of single shooting run into the iteration limit, and the three starts multiple shooting
+misses take almost half of its evaluations. The evaluations of a multiple-shooting run include
+those of the annealing stages. One of them integrates every segment once, which covers the time
+axis once as a single-shooting evaluation does, with the sensitivities of each segment's node
+values on top of those of the parameters. The filter and the merit function reach the optimum from
+as many starts at nearly the same cost.
+
+### Pacemaker neuron
+
+The pacemaker neuron of the pre-Bötzinger complex [@butera1999models] is harder. Its voltage fires
+bursts of spikes about 2 ms wide. One burst, thirteen spikes in 700 ms sampled at 10 kHz with noise
+of 0.25 mV, as a patch-clamp recording gives it, is fitted in the chart the symmetry reduction
+certifies, with the voltage as the only observable. A change of a parameter by a per cent moves the
+late spikes by more than their width, so the single-shooting objective breaks into narrow valleys,
+one for every way model spikes can pair with data spikes. `bench/multipleShooting/preBotC.R` runs
+the fits, half an hour on twenty cores, and stores what this section shows.
+
+Two things decide the outcome besides the method. The solver runs at `1e-10`: at `1e-8`, far from
+the optimum where misplaced spikes make the residuals large, the objective scatters by more than
+the decrease a step predicts, and the trust region of either method collapses. And the nodes are
+`nodes = "transitions"`, one just before every spike:
+
+```{r, echo = FALSE, results = "asis", eval = !shotPreBotC}
+cat("> Results pending: `vignettes/articles/results/preBotC.rds`.\n")
+```
+
+```{r, eval = shotPreBotC}
+pb <- readRDS(file.path(stored, "preBotC.rds"))
+round(pb$nodes, 1)
+```
+
+From the true parameters both methods reach the optimum, `ss` the single-shooting objective at the
+end of each run:
+
+```{r, eval = shotPreBotC}
+with(pb$truth, data.frame(run, ss = round(ss, 1), gaps = signif(gaps, 2)))
+```
+
+From ten starts at each of three distances from the truth, the positive parameters perturbed on
+log10 by `scale` and the potentials, half-activations and slopes by a fifth of that relatively, a
+start is a hit when `ss` at its end lies within 1 of the optimum; `sec` is the median time of a
+fit:
+
+```{r, eval = shotPreBotC}
+with(pb$starts, data.frame(method, scale, hits, fits, sec = medianSec))
+```
+
+`r if (shotPreBotC) sprintf("Single shooting reaches the optimum from %d of %d starts, multiple shooting from %d. The figure shows a start at %s decades: it stays silent, single shooting ends in one of the valleys with spikes too low and at the wrong times, and multiple shooting lays every spike onto the data.", sum(pb$starts$hits[pb$starts$method == "single shooting"]), sum(pb$starts$fits[pb$starts$method == "single shooting"]), sum(pb$starts$hits[pb$starts$method == "multiple shooting"]), pb$pick$scale)` A
+miss of multiple shooting ends where single shooting ends, with spikes missing or added.
+
+```{r, eval = shotPreBotC, fig.height = 6, fig.cap = "One start, and the fits of single and multiple shooting from it, against the data (grey, every fifth point)."}
+ggplot2::ggplot(pb$trajectories, ggplot2::aes(time, value)) +
+  ggplot2::geom_point(data = pb$data, size = 0.15, colour = "grey60") +
+  ggplot2::geom_line(linewidth = 0.3, colour = dMod_colors[1]) +
+  ggplot2::facet_wrap(~run, ncol = 1) +
+  ggplot2::labs(x = "time [ms]", y = "V [mV]") +
+  theme_dMod()
+```
+
+Where the nodes sit decides. Ten even segments, the start of `"auto"`, contain several spikes
+each: a small error of the parameters moves them, the segments miss their data, and the automatic
+cuts pile nodes onto the spikes with the noise of the data in their values. A node just before a
+spike leaves the spike in place and hands its timing to the gap in front of the next node, a smooth
+function of the parameters. Close to the truth that turns a part of the starts single shooting
+misses into hits; farther off the method is still a local one, and the hits fall with the
+distance. The noise matters as well: with 1 mV at 1 kHz, one or two points on a spike, a node value
+off by the noise just before the upstroke moves the spike by more than its width, and the
+transition layout reached the optimum from none of fifteen such starts.
+
+## Stored results
+
+The comparisons of this chapter read stored fits; their code is shown above with the settings it
+ran with.
+
+- `examples/boehmJProteomeRes2014/results/hessianSources.rds`: the single runs, the seeds and the
+  multistart with the prior, from the code above on the model of `analysis.R`, and the comparison
+  without the prior, the fits of `bench/hessian/hessianSource.R` with the environment variable
+  `BOEHM_NOPRIOR` set, minutes on one machine, reduced to source, value, evaluations, convergence
+  and stop reason.
+- `examples/bachmannMSB2011/results/hessianSources.rds`: the five sources on the JAK2-STAT5 model,
+  five job arrays of 50 tasks of four fits each on a SLURM cluster.
+- `vignettes/articles/results/fitzhughNagumo.rds`: the FitzHugh-Nagumo fits, from the code above.
+- `vignettes/articles/results/preBotC.rds`: from `bench/multipleShooting/preBotC.R` with the
+  environment variable `MS_RESULTS` set to the path of the file.
+
+## References

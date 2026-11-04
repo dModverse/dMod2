@@ -1,0 +1,15 @@
+observableId	observableFormula	observablePlaceholders	noiseFormula	noiseDistribution	noisePlaceholders
+nucNFkB	log(s_nucNFkB * (pnNfk + nNfk + nNfkIkb) + off_nucNFkB) - tau_nucNFkB * time		sigma_nucNFkB	normal	
+cytNFkB	log(s_cytNFkB * (NfkIkb + NfkpIkb + pNfkIkb + pNfkpIkb + pNfk + Nfk) + off_cytNFkB) - tau_cytNFkB * time		sigma_cytNFkB	normal	
+A20GFP	log(s_A20GFP * (A20) + off_A20GFP) - tau_A20GFP * time		sigma_A20GFP	normal	
+IkBa	log(s_IkBa * (NfkIkb + pNfkIkb + NfkpIkb + pIkb + Ikb) + off_IkBa)		noiseParameter1_IkBa	normal	noiseParameter1_IkBa
+pNFkB	log(s_pNFkB * (pNfkpIkb + pNfkIkb + pNfk) + off_pNFkB)		noiseParameter1_pNFkB	normal	noiseParameter1_pNFkB
+pIkBa	log(s_pIkBa * (NfkpIkb + pNfkpIkb + pIkb) + off_pIkBa)		noiseParameter1_pIkBa	normal	noiseParameter1_pIkBa
+pIKK	log(s_pIKK * (pIkk + ppIkk) + off_pIKK)		noiseParameter1_pIKK	normal	noiseParameter1_pIKK
+ipIkBa_ibIkBa	log(s_ipIkBa_ibIkBa * (NfkIkb + pNfkIkb + NfkpIkb + pIkb + Ikb) + off_ipIkBa_ibIkBa)		noiseParameter1_ipIkBa_ibIkBa	normal	noiseParameter1_ipIkBa_ibIkBa
+ipNFkB_ibNFkB	log(s_ipNFkB_ibNFkB * (NfkIkb + NfkpIkb + pNfkIkb + pNfkpIkb + pNfk + Nfk) + off_ipNFkB_ibNFkB)		noiseParameter1_ipNFkB_ibNFkB	normal	noiseParameter1_ipNFkB_ibNFkB
+ipNFkB_ibpIkBa	log(s_ipNFkB_ibpIkBa * (NfkpIkb + pNfkpIkb) + off_ipNFkB_ibpIkBa)		noiseParameter1_ipNFkB_ibpIkBa	normal	noiseParameter1_ipNFkB_ibpIkBa
+ipNFkB_ibpNFkB	log(s_ipNFkB_ibpNFkB * (pNfkpIkb + pNfkIkb + pNfk) + off_ipNFkB_ibpNFkB)		noiseParameter1_ipNFkB_ibpNFkB	normal	noiseParameter1_ipNFkB_ibpNFkB
+ipIkBa_ibpNFkB	log(s_ipIkBa_ibpNFkB * (pNfkpIkb + pNfkIkb) + off_ipIkBa_ibpNFkB)		noiseParameter1_ipIkBa_ibpNFkB	normal	noiseParameter1_ipIkBa_ibpNFkB
+ipIkBa_ibNFkB	log(s_ipIkBa_ibNFkB * (NfkIkb + NfkpIkb + pNfkIkb + pNfkpIkb) + off_ipIkBa_ibNFkB)		noiseParameter1_ipIkBa_ibNFkB	normal	noiseParameter1_ipIkBa_ibNFkB
+ratioNFkBIkBa	log((NfkIkb + NfkpIkb + pNfkIkb + pNfkpIkb + pNfk + Nfk) / (NfkIkb + NfkpIkb + pNfkIkb + pNfkpIkb + pIkb + Ikb))		noiseParameter1_ratioNFkBIkBa	normal	noiseParameter1_ratioNFkBIkBa

@@ -1,0 +1,430 @@
+---
+title: "1. Setting up models"
+---
+
+```{r, include = FALSE, purl = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>", fig.width = 8, fig.height = 4.5, dpi = 96,
+                      fig.retina = 2, message = FALSE)
+project <- normalizePath("../../examples/oppeltNPJSystBiolAppl2018")
+knitr::opts_knit$set(root.dir = project)
+fitted <- file.exists(file.path(project, "results", "fits.rds"))
+knitr::read_chunk("../../examples/oppeltNPJSystBiolAppl2018/model.R")
+```
+
+A model in dMod2 is a chain of function objects. Each maps its input to its output and returns,
+together with the output, the derivatives of the output with respect to the parameters:
+
+| class | constructors | mapping |
+|---|---|---|
+| `parfn` | `P()`, `Pexpl()`, `Pimpl()` | parameter transformation: outer parameters to the inner parameters of every condition, or parameters to the steady state of a network (`Pimpl()`) |
+| `prdfn` | `Xs()`, `Xf()` | parameters to the trajectories of the states, the solution of the ODE, with their sensitivities (`Xs()`) or without (`Xf()`) |
+| `obsfn` | `Y()` | states to observables, and observables to their standard deviations, the error model |
+| `objfn` | `normL2()`, `constraintL2()`, `datapointL2()` | parameters to the objective $-2 \log L$, its gradient and its Hessian |
+
+In the guide, `p` and `pSS` are `parfn`s, `x` is the `prdfn`, `g` the observables and `e` the
+error model, both `obsfn`s, and `obj` the `objfn`.
+
+`*` concatenates two function objects by the chain rule: for $y = g(x(p(\theta)))$ it returns $y$
+together with
+
+$$\frac{\partial y}{\partial \theta} = \frac{\partial g}{\partial x}\,\frac{\partial x}{\partial p}\,
+\frac{\partial p}{\partial \theta},$$
+
+each factor computed exactly by the object it belongs to, the middle one from the sensitivity
+equations of the ODE. `g*x*pSS*p` is again a `prdfn`, from the outer parameters to the
+observables of all conditions. `normL2(data, g*x*pSS*p, e)` is the `objfn` an optimiser
+minimises, and `+` adds `objfn`s, for example a prior.
+
+The product of two `parfn`s is a `parfn`. `pSS*p` first takes the outer parameters to the inner
+parameters of each condition and then those to the steady state. A transformation is built in such
+stages wherever one step depends on the result of another: a reparametrisation, the values per
+condition, an equilibration.
+
+The inner parameters are the symbols of the equations: rate constants, initial values, volumes,
+scales, offsets and standard deviations. Every condition has its own values of them. The outer
+parameters are the parameters of the fit. The `parfn` computes the inner parameters of every
+condition from the outer ones, and an outer parameter that enters several conditions is one
+parameter for all of them.
+
+The guide builds and analyses the model of Oppelt et al. (2018, npj Syst Biol Appl 4:23): NFκB
+signalling in HepG2 cells stimulated with TNFα. The code is the project
+[`examples/oppeltNPJSystBiolAppl2018`](https://github.com/dModverse/dMod2/tree/master/examples/oppeltNPJSystBiolAppl2018);
+each chapter shows a part of its scripts. This chapter goes through `model.R`, from the reactions
+to the `objfn`. The model is the full model of the publication, before any reduction:
+[chapter 2](guide-symmetries.html) removes its symmetries, [chapter 5](guide-profiles.html) the
+parts the data do not determine.
+
+```{r setup}
+```
+
+## Reactions
+
+In unstimulated cells NFκB is held in the cytoplasm by its inhibitor IκBα. TNFα activates its
+receptor, and the active receptor activates the kinase IKK. IKK phosphorylates IκBα and NFκB in
+their complex; phosphorylated IκBα is released and degraded. Free NFκB enters the nucleus and
+induces the transcription of IκBα and of A20. New IκBα enters the nucleus, binds NFκB and exports
+it; A20 inhibits the activation of IKK. Both negative feedbacks make nuclear NFκB oscillate in
+damped waves. IKK passes through four states: inactive (`Ikk`), active (`pIkk`), doubly
+phosphorylated (`ppIkk`) and refractory (`iIkk`), from which it recovers.
+
+`addReaction()` adds a reaction with its educts, products and rate to an `eqnlist`. The model has
+two compartments: the cytoplasm, the default compartment of volume 1, and the nucleus, of volume
+`Vnuc` relative to it. `assignCompartment()` places the four nuclear species there. A rate is a
+concentration rate in the compartment of its educts. Reaction $r$ with rate $v_r$ in a frame of
+volume $V_{f(r)}$ moves the amount $V_{f(r)} v_r$ per unit time, and a species $i$ in a compartment
+of volume $V_i$ changes its concentration by that amount divided by $V_i$:
+
+$$\dot x_i = \frac{1}{V_i} \sum_r S_{ri}\, V_{f(r)}\, v_r(x, p),$$
+
+with $S_{ri}$ the stoichiometric coefficient of species $i$ in reaction $r$. A reaction within one
+compartment contributes $S_{ri} v_r$; the import of free NFκB into the nucleus contributes
+$v_r / V_\mathrm{nuc}$ to nuclear NFκB, and the export of the nuclear complex $V_\mathrm{nuc} v_r$ to
+the cytoplasmic complex.
+
+TNFα in the medium is not used up by the cells. The reaction `TNF -> TNF + TNFR` writes it as a
+catalyst: TNFα appears on both sides, so its concentration stays constant, while it produces active
+receptors. As a state of its own, TNFα can be set by an event at the time of the stimulus (section
+[Events](#events)).
+
+The model of the guide extends the publication at the receptor in two ways, which
+[chapter 2](guide-symmetries.html) and [chapter 5](guide-profiles.html) take out again. The
+receptors saturate, with the constant `K_R`, and besides TNFα a ligand `Lig` activates them, which
+the cells secrete at the rate `prod_L` and which decays with `degrad_L`; no measurement sees it.
+The receptors are activated at the rate
+
+$$v = \frac{\mathrm{uptake}\,(\mathrm{TNF} + \mathrm{Lig})}{1 + K_R\,(\mathrm{TNF} + \mathrm{Lig})},$$
+
+which for `K_R = 0` and without the ligand is the rate `uptake * TNF` of the publication.
+
+```{r reactions}
+```
+
+```{r}
+length(reactions$states)
+length(reactions$rates)
+as.eqnvec(reactions)[c("NfkIkb", "nNfk", "TNF", "TNFR", "Lig")]
+```
+
+The equation of `NfkIkb` has the export of the nuclear complex with the factor `Vnuc`, that of
+`nNfk` the import with `1/Vnuc`; `TNF` has the right-hand side 0.
+
+Several reactions share their rate constants through factors named `eta_`: the phosphorylation of
+IκBα by `ppIkk` runs at `eta_s_ppIkk` times the rate by `pIkk`, the formation of the nuclear
+complex at `eta_form_complex_nuc` times that in the cytoplasm. A factor of 1 states that the two
+processes are equally fast; the prior of section [Objective](#objective) is centred there.
+
+## Observables
+
+The data are live-cell imaging of NFκB and A20 fused to GFP, quantitative immunoblots of the
+cytoplasm, and immunoblots after immunoprecipitation (IP) of NFκB or IκBα, which measure the
+proteins bound to the precipitated one. An imaging signal or a blot measures the sum of the species
+that have the epitope, up to a scale `s_` and an offset `off_`. The fluorescence of the imaging
+readouts bleaches exponentially with the rate `tau_`. The data are on the natural log scale, and so
+are the observables:
+
+$$y = \log\bigl((s\, x + o)\, e^{-\tau t}\bigr) = \log(s\, x + o) - \tau t.$$
+
+On the log scale an error of constant size is a relative error of the signal. The helper `logOf()`
+writes the expressions; the last observable, the ratio of cytoplasmic NFκB to IκBα, is a ratio of
+two sums of species and needs no scale.
+
+```{r observables}
+```
+
+## Error model
+
+The blots come with a standard deviation per point, in the column `sigma` of the data. The imaging
+readouts have none; the error model gives them a standard deviation of their own on the log scale,
+estimated with the other parameters. Rows with a value in `sigma` do not use the error model.
+
+```{r errors}
+```
+
+## Steady state
+
+The cells rest before TNFα is added. Their state at the time of the stimulus is a steady state of
+the network without TNFα, $f(x, p) = 0$. These equations do not determine $x$ alone: the reactions
+move NFκB and IKK between their forms but neither produce nor degrade them, and the totals are
+conserved. A conserved quantity is a vector $w$ in the null space of the stoichiometric matrix,
+$S w = 0$; it conserves the amount $\sum_i w_i V_i x_i$, which `conservedQuantities()` writes on the
+concentrations with the volumes of their compartments:
+
+```{r}
+conservedQuantities(reactions)
+```
+
+NFκB in the nucleus enters its total with the factor `Vnuc`, since the total is an amount. `TNF`
+is conserved because no reaction changes it; a conserved quantity of a single species has the
+name of that species.
+
+`Pimpl()` builds a `parfn` that solves the steady state numerically in every evaluation. It stacks
+the right-hand side and the conservation laws $C(p)\,x = T$, with the totals $T$ as parameters
+(`totalNfk`, `totalIkk`), into
+
+$$G(x, p) = \begin{pmatrix} f(x, p) \\ C(p)\, x - T \end{pmatrix} = 0,$$
+
+and solves it by pseudo-transient continuation: implicit Euler steps of $\dot x = f(x, p)$ on the
+manifold of the conservation laws, with a pseudo-time step that grows as the residual falls: the
+iteration follows the flow far from the root and becomes Newton's method near it, and so reaches a
+stable steady state, the one the cells rest in. A state that no reaction changes, `TNF`, is held at
+its given value, here 0, and the ligand rests at `prod_L / degrad_L`, so that the receptors are
+active at rest as well. The derivatives of the root follow from the implicit function theorem:
+$G(x(p), p) = 0$ for all $p$ gives
+
+$$\frac{\partial G}{\partial x}\, \frac{\partial x}{\partial p} = -\frac{\partial G}{\partial p},$$
+
+a linear system with the Jacobian of the stacked equations, which is regular where the steady
+state is isolated within its conservation class. A root depends on the parameters only, never on
+the calls before it, so the `objfn` is the same function of its parameters in every call.
+
+```{r steadystate}
+```
+
+`steadyStates()` is the symbolic alternative: it solves the balance equations in closed form where
+the solution is a ratio of positive sums, and the solution enters `P()` like any other assignment.
+For this network, with basal phosphorylation and transcription feeding back on each other, it finds
+no such form, and the guide uses `Pimpl()`.
+
+## Events
+
+An event changes a state at a time, or when a root condition crosses zero. Its time and its value
+can be parameters, and the sensitivities pass it: an event that replaces $x_k$ by $v(p)$ at time
+$t_e$ sets $\partial x_k / \partial p = \partial v / \partial p$ there and leaves the other rows
+unchanged. Here an event adds TNFα at time 0: the system starts from the steady state of `pSS`,
+computed at `TNF = 0`, and the event replaces `TNF` by `dose_TNF`. The dose is the unit of TNFα,
+1 in the stimulated condition and 0 in the control.
+
+## ODE model
+
+`odemodel()` generates C++ code for the right-hand side and for the sensitivity equations, the
+derivatives of the states with respect to every parameter and initial value. `Xs()` turns it into
+the `prdfn` `x` and sets the options of the solver. `Y(observables, x)` builds the `obsfn` `g` on
+the states of `x`, and `Y(errors, g)` the `obsfn` `e` on the observables of `g`. `compile = FALSE`
+defers the compilation, so that all parts are compiled together in the section
+[Compile](#compile).
+
+```{r odemodel}
+```
+
+The default backend `"cppDE"` integrates with a BDF method and computes first-order and, with
+`deriv2 = TRUE`, second-order sensitivities. `backend = "Sundials"` uses CVODES, `backend =
+"deSolve"` the solvers of deSolve.
+
+At every step the solver estimates the local error of each state $x_i$ and accepts the step if
+
+$$|\varepsilon_i| \le \mathrm{atol} + \mathrm{rtol}\,|x_i| .$$
+
+| option | default | controls |
+|---|---|---|
+| `atol` | `1e-6` | absolute error per step, in the units of the states |
+| `rtol` | `1e-6` | relative error per step |
+| `maxsteps` | `1e6` | steps of one solve before it fails |
+| `maxattempts` | `50` | rejected steps in a row before the solve fails |
+| `hini` | `0` | first step, 0 estimates it |
+| `sensErrCon` | `TRUE` | (`optionsSens` only) whether the sensitivities enter the error test |
+
+`atol` has to be small against the states that matter: a state around $10^{-3}$ keeps three correct
+digits under `atol = 1e-6`. The totals of NFκB and IKK are of order 1, and the observables are
+logarithms, which magnify the relative error of a small state; `model.R` sets `rtol = 1e-8` and
+`atol = 1e-10`. The error of the solver is noise in $-2 \log L$ and its gradient; the section
+[Solver error](#solver-error) measures it.
+
+## Data
+
+The data of the publication are a CSV file with 15 lines of header. Each row names the readout, the
+time in minutes, the value, its standard deviation, the treatment, the compound, the cell type and
+the blot scale. `model.R` renames the readouts to the names of the observables and keeps HepG2
+cells without a compound: 312 points in two conditions, untreated and stimulated with TNFα.
+
+```{r data}
+```
+
+```{r}
+table(hepg2$name, hepg2$condition)
+```
+
+`as.datalist()` splits the data into a `datalist`, one data frame per condition; `keepCovariates`
+keeps the columns that describe a condition. `covariates()` returns them as a table with one row
+per condition:
+
+```{r}
+covariates(data)
+```
+
+```{r, fig.width = 10, fig.height = 6}
+plotData(data, name %in% c("nucNFkB", "cytNFkB", "A20GFP", "IkBa", "pIkBa", "pIKK")) +
+  ggplot2::labs(x = "time [min]", y = "log signal [a.u.]")
+```
+
+Nuclear NFκB rises within 25 minutes of TNFα, falls, and returns in a second, smaller wave at about
+two hours; cytoplasmic NFκB moves the opposite way. IκBα falls while NFκB enters the nucleus, and
+A20 rises with a delay.
+
+## Transformation
+
+The `parfn` `p` states how every inner parameter follows from the outer ones. `define()` and
+`insert()` build it as assignments:
+
+- `define("x <- x", x = ...)` starts with every parameter of `pSS`, `x`, `g` and `e` as itself,
+  except the states, whose values come from the steady state.
+- `insert("x <- exp(x)", x = .currentSymbols)` puts every symbol on the natural log scale. The data
+  determine the order of magnitude of a rate constant, and the log keeps it positive.
+- `define("TNF <- 0")` sets TNFα to 0 for the steady state.
+- `branch(covariates(data))` copies the assignments once per condition, and `define(...,
+  conditionMatch = )` sets the dose in each.
+
+`P()` turns the assignments into the `parfn`.
+
+```{r transformation}
+```
+
+```{r}
+p
+```
+
+## Inner and outer parameters
+
+```{r}
+length(getParameters(pSS, x, g, e))
+getEquations(p, conditions = "TNF")[c("dose_TNF", "TNF", "totalNfk", "Vnuc")]
+getEquations(p, conditions = "control")[c("dose_TNF", "TNF")]
+```
+
+The inner parameters include the 23 initial values; the steady state replaces them. The dose is a
+number per condition, every other inner parameter the exponential of one outer parameter shared by
+both conditions.
+
+## Compile
+
+`compile()` compiles all generated sources into one shared object in `getOption("dMod2.outdir")`,
+here `build/` in the project. The object files are reused while the generated code and the
+compiler flags do not change.
+
+```{r compile}
+```
+
+```{r}
+length(getParameters(prd))
+```
+
+The `prdfn` `prd = g*x*pSS*p` maps the `r length(getParameters(prd))` outer parameters to the
+observables of the two conditions.
+
+## Objective
+
+`normL2(data, prd, e)` returns an `objfn`. With the predictions $f_j(\theta)$ of the data points
+$y_j$ and their standard deviations $\sigma_j$, from the data or from the error model, it computes
+
+$$-2 \log L(\theta) = \sum_j \left( \frac{(y_j - f_j(\theta))^2}{\sigma_j(\theta)^2} +
+\log \sigma_j(\theta)^2 \right) + \text{const},$$
+
+with its gradient and the Gauss-Newton approximation of its Hessian, both from the sensitivities.
+The term $\log \sigma_j^2$ is the normalisation of the Gaussian density; it keeps the estimated
+standard deviations of the imaging readouts from growing without bound.
+
+Every parameter gets a weak Gaussian prior on the log scale,
+
+$$-2 \log \pi(\theta) = \sum_k \left( \frac{\theta_k - \mu_k}{s_k} \right)^2,$$
+
+with mean $\mu_k = -1$ and standard deviation $s_k = 4$: one standard deviation is a factor of
+$e^4 \approx 55$. The offsets have mean $-2$ and standard deviation 2, since a background lies below
+the signal, and the factors `eta_` mean 0, a factor of 1. The prior is far wider than what the data
+determine where they determine a parameter; where they do not, it keeps the parameter at a finite
+value. The objective is then $-2 \log$ of the posterior up to a constant, and its minimum exists
+without bounds on the parameters. `constraintL2()` builds the prior as another `objfn`, and `+`
+adds it to the data term.
+
+```{r objective}
+```
+
+## Evaluation
+
+```{r, echo = FALSE, results = "asis", eval = !fitted}
+cat("> Results pending: `results/fits.rds` of the project is written by `fit.R`.\n")
+```
+
+An `objfn` called with outer parameters returns the value, the gradient and the Hessian. At the
+best fit of [chapter 4](guide-optimization.html), with the parameters that [chapter 2](guide-symmetries.html)
+fixes, `gauge`:
+
+```{r gauge, echo = FALSE}
+```
+
+```{r, eval = fitted}
+best <- as.parvec(readRDS("results/fits.rds"))
+value <- obj(best, fixed = gauge)
+value$value
+c(data = attr(value, "data"), prior = attr(value, "prior"))
+max(abs(value$gradient))
+dim(value$hessian)
+```
+
+The value has two parts, kept as attributes: the data term and the prior. At the optimum the
+gradient is close to zero.
+
+The prediction at these parameters against the data. With `errfn = e`, `plotCombined()` draws one
+standard deviation of the error model as a band around the prediction of the imaging readouts:
+
+```{r, fig.width = 10, fig.height = 7, eval = fitted}
+times <- seq(0, 360, length.out = 361)
+plotCombined(prd(times, c(best, gauge), deriv = FALSE), data, errfn = e) +
+  ggplot2::facet_wrap(~name, scales = "free_y", ncol = 4) +
+  ggplot2::labs(x = "time [min]", y = "log signal [a.u.]")
+```
+
+## Solver error
+
+```{r, echo = FALSE, results = "asis", eval = !fitted}
+cat("> Results pending: `results/fits.rds` of the project is written by `fit.R`.\n")
+```
+
+The solver solves each step to its tolerances, so the value and the gradient of the `objfn` have
+an error that changes with the parameters like noise. The `objfn` is built again with tolerances
+three orders of magnitude tighter, and the difference to it is the error of the settings of
+`model.R`:
+
+```{r, eval = fitted}
+tight <- normL2(data, g * Xs(model, options = list(atol = 1e-13, rtol = 1e-11)) * pSS * p, e) +
+  constraintL2(mu, sigma = sigma)
+reference <- tight(best, fixed = gauge)
+c(value = value$value - reference$value,
+  gradient = max(abs(value$gradient - reference$gradient[names(value$gradient)])))
+```
+
+The error over a range of tolerances, `atol` two orders below `rtol`:
+
+```{r, fig.height = 3, eval = fitted}
+scan <- do.call(rbind, lapply(4:9, function(k) {
+  xk <- Xs(model, options = list(atol = 10^-(k + 2), rtol = 10^-k))
+  vk <- (normL2(data, g * xk * pSS * p, e) + constraintL2(mu, sigma = sigma))(best, fixed = gauge)
+  data.frame(rtol  = 10^-k,
+             name  = c("value", "gradient"),
+             error = c(abs(vk$value - reference$value),
+                       max(abs(vk$gradient - reference$gradient[names(vk$gradient)]))))
+}))
+scan$name <- factor(scan$name, c("value", "gradient"))
+ggplot2::ggplot(scan, ggplot2::aes(rtol, error, color = name)) +
+  ggplot2::geom_line() +
+  ggplot2::geom_point() +
+  ggplot2::scale_x_log10(breaks = 10^-(4:9), labels = scales::label_log()) +
+  ggplot2::scale_y_log10(breaks = scales::breaks_log(8), labels = scales::label_log()) +
+  ggplot2::labs(y = "error against rtol = 1e-11", color = NULL) +
+  scale_color_dMod() +
+  theme_dMod()
+```
+
+The error falls about in proportion to `rtol`. It sets what the optimiser can resolve. `trust()`
+stops when the change of the objective, its predicted change or its largest gradient entry falls
+below `ftol`, `mtol` or `gtol`, by default `1e-6` each. A tolerance below the noise of the
+objective cannot be met reliably: near the optimum the steps are then decided by the noise, and a
+fit wanders until its iteration limit. With the settings of `model.R` the value is accurate to
+below $10^{-6}$ and the gradient to below $10^{-4}$: the default `gtol` of $10^{-6}$ lies below the
+noise of the gradient, and the default `ftol` hardly above that of the value. `model.R`
+sets the tolerances of the optimiser an order of magnitude above the noise; the fits and profiles
+of the following chapters use them.
+
+```{r tolerances}
+```
+
+Tighter tolerances of the solver allow tighter tolerances of the optimiser, at a higher cost of
+every evaluation.

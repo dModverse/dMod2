@@ -1,0 +1,312 @@
+url: https://dmodverse.github.io/dMod2/
+
+redirects:
+- ["articles/distributedComputing.html", "articles/guide-remote-computing.html"]
+- ["articles/guide-fit.html", "articles/guide-optimization.html"]
+- ["articles/guide-prediction.html", "articles/guide-prediction-uncertainty.html"]
+- ["articles/guide-mixed-effects.html", "articles/guide-nlme.html"]
+- ["articles/guide-groupings.html", "articles/guide-group-effects.html"]
+
+template:
+  bootstrap: 5
+  math-rendering: mathjax
+
+navbar:
+  structure:
+    left: [guide, articles, reference, news]
+    right: [search, github]
+  components:
+    guide:
+      text: Guide
+      menu:
+      - text: "1. Setting up models"
+        href: articles/guide-model.html
+      - text: "2. Symmetries"
+        href: articles/guide-symmetries.html
+      - text: "3. Sensitivities"
+        href: articles/guide-sensitivities.html
+      - text: "4. Optimization"
+        href: articles/guide-optimization.html
+      - text: "5. Profile likelihood"
+        href: articles/guide-profiles.html
+      - text: "6. Prediction uncertainty"
+        href: articles/guide-prediction-uncertainty.html
+      - text: "7. Nonlinear mixed-effects models"
+        href: articles/guide-nlme.html
+      - text: "8. Group-specific effects"
+        href: articles/guide-group-effects.html
+      - text: "9. Alignment of relative data measurements"
+        href: articles/guide-alignment.html
+      - text: "10. PEtab import and export"
+        href: articles/guide-petab.html
+      - text: "11. Remote computing"
+        href: articles/guide-remote-computing.html
+    github:
+      icon: fa-github
+      href: https://github.com/dModverse/dMod2
+      aria-label: GitHub
+
+articles:
+- title: Guide
+  navbar: ~
+  desc: The NFκB project of Oppelt et al. (2018), chapter by chapter; theophylline for mixed effects, simulated blots for the alignment.
+  contents:
+  - '`articles/guide-model`'
+  - '`articles/guide-symmetries`'
+  - '`articles/guide-sensitivities`'
+  - '`articles/guide-optimization`'
+  - '`articles/guide-profiles`'
+  - '`articles/guide-prediction-uncertainty`'
+  - '`articles/guide-nlme`'
+  - '`articles/guide-group-effects`'
+  - '`articles/guide-alignment`'
+  - '`articles/guide-petab`'
+  - '`articles/guide-remote-computing`'
+
+- title: Examples
+  navbar: Examples
+  desc: Projects in `examples/` of the repository, each with its data, scripts and saved results.
+  contents:
+  - '`articles/oppeltNPJSystBiolAppl2018`'
+  - '`articles/bachmannMSB2011`'
+  - '`articles/boehmJProteomeRes2014`'
+  - '`articles/kokMSB2020`'
+  - '`articles/bileAcidTransport`'
+  - '`articles/hodgkinHuxleyJPhysiol1952`'
+  - '`articles/pharmacometrics`'
+  - '`articles/TMDD`'
+
+reference:
+- title: Package
+  contents:
+  - dMod2-package
+
+- title: Reaction networks and equations
+  desc: Reactions, compartments, equation vectors, conserved quantities and steady states.
+  contents:
+  - eqnlist
+  - addReaction
+  - assignCompartment
+  - setCompartmentVolume
+  - getReactions
+  - getFluxes
+  - plotFluxes
+  - print.eqnlist
+  - as.data.frame.eqnlist
+  - subset.eqnlist
+  - write.eqnlist
+  - eqnvec
+  - as.eqnvec
+  - format.eqnvec
+  - print.eqnvec
+  - summary.eqnvec
+  - conservedQuantities
+  - customTotals
+  - steadyStates
+  - log10Transform
+  - eventlist
+  - as.eventlist
+  - getSymbols
+  - replaceSymbols
+  - resolveRecurrence
+
+- title: Prediction
+  desc: Compiled ODE models and the prediction functions built on them.
+  contents:
+  - odemodel
+  - Xs
+  - Xf
+  - Xd
+  - Xt
+  - prdfn
+  - predict.prdfn
+  - prdframe
+  - prdlist
+  - compile
+  - loadDLL
+  - getLocalDLLs
+  - modelname
+  - controls
+
+- title: Observation and parameter functions
+  desc: >
+    The function objects composed as `g * x * p`: observation functions,
+    parameter transformations, concatenation and direct sum.
+  contents:
+  - 'Y'
+  - obsfn
+  - P
+  - Pexpl
+  - Pimpl
+  - parfn
+  - define
+  - repar
+  - print.parfn
+  - Id
+  - prodfn
+  - sumfn
+  - dModfn
+
+- title: Data
+  contents:
+  - datalist
+  - sumdatalist
+  - as.data.frame.datalist
+  - covariates
+  - wide2long
+  - lbind
+  - combine
+  - reduceReplicates
+  - coordTransform
+
+- title: Objective functions
+  desc: Likelihoods of the data, constraints and priors, error models.
+  contents:
+  - normL2
+  - normT
+  - res
+  - datapointL2
+  - constraintL2
+  - constraintL1
+  - constraintCauchy
+  - constraintChisq
+  - constraintExponential
+  - constraintGamma
+  - constraintRayleigh
+  - objlist
+  - as.objlist
+  - sumobjfn
+  - sumobjlist
+  - "%.*%"
+  - objframe
+  - vcov.objlist
+  - reml
+  - remlLeverage
+  - fitErrorModel
+
+- title: Optimisation and profiles
+  contents:
+  - trust
+  - mstrust
+  - msParframe
+  - parlist
+  - load.parlist
+  - plot.parlist
+  - parframe
+  - as.parframe
+  - as.parvec.parframe
+  - unique.parframe
+  - parvec
+  - print.parvec
+  - c.parvec
+  - "[.parvec"
+  - profile.objfn
+  - profileThreshold
+  - confint.parframe
+  - plotProfile
+  - plotPaths
+  - plotPathsMulti
+  - plotProfilesAndPaths
+  - plotArray
+  - plotValues
+  - plotPars
+  - plotPairs
+  - plotResiduals
+  - plotTrace
+
+- title: Mixed effects
+  desc: Random effects on parameter transformations, fits by marginal likelihood and their diagnostics.
+  contents:
+  - randomEffects
+  - normal
+  - em
+  - msem
+  - print.em
+  - summary.em
+  - coef.em
+  - vcov.em
+  - confint.em
+  - logLik.em
+  - anova.em
+  - predict.em
+  - residuals.em
+  - simulate.em
+  - plot.em
+  - plotCombined.em
+  - plotResiduals.em
+  - plotRandomEffects
+  - plotVPC
+
+- title: Alignment
+  desc: Measurements on unknown scales aligned to common values.
+  contents:
+  - align
+  - alignmentModel
+  - as.datalist.alignment
+  - simulate.alignment
+  - plotAligned
+
+- title: Plots and colours
+  contents:
+  - plotData
+  - plotPrediction
+  - plotCombined
+  - theme_dMod
+  - scale_color_dMod
+  - scale_color_dMod_c
+  - dMod_colors
+  - dMod_colors_cb
+  - dMod_palette
+  - dMod_palettes
+  - dMod_gradient
+  - ggopen
+
+- title: Structural identifiability
+  desc: Symmetries of ODE models by the Python package symident.
+  contents:
+  - symmetryDetection
+  - symmetryReduction
+  - reconstControl
+
+- title: PEtab and SBML
+  contents:
+  - importPEtab
+  - exportPEtab
+  - exportPEtabObject
+  - readPEtabTables
+  - readPEtabYaml
+  - print.petabproblem
+  - importSbml
+  - exportSbml
+
+- title: Distributed computing
+  contents:
+  - distributedComputing
+  - localNode
+  - slurmTemplate
+  - dMod2Jobs
+  - detectFreeCores
+
+- title: Data sets
+  contents:
+  - bachmann
+  - badata
+  - boehm
+  - jakstat
+  - kok
+  - warfarin
+  - mavoglurant
+
+- title: Accessors and linear algebra
+  contents:
+  - getConditions
+  - getDerivs
+  - getDerivs2
+  - getEquations
+  - getObservables
+  - getParameters
+  - attrs
+  - "%bmm%"
+  - rref
+  - nullZ
+  - submatrix

@@ -1,0 +1,369 @@
+---
+title: "11. Remote computing"
+---
+
+```{r, include = FALSE, purl = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>", eval = FALSE)
+library(dMod2)
+# the local job runs in an empty folder, where it finds no shared objects of other articles
+.work <- tempfile("remote-computing-")
+dir.create(.work)
+knitr::opts_knit$set(root.dir = .work)
+.outdir <- options(dMod2.outdir = NULL)
+```
+
+dMod2 uses cores along two axes. The conditions of one objective evaluation are solved in threads
+of one process; independent fits and profiles run as processes of their own.
+`distributedComputing()` takes the second axis beyond the R session: it runs any R code as tasks
+in processes detached from the session, on the local machine, on machines reached by ssh or as an
+array job of a SLURM cluster. This chapter sums up the two axes, runs a job of general R code on
+the local machine, describes what `distributedComputing()` does with it, and ends with the fits
+and profiles of the guide project on a cluster. The local job runs when this page is built; the
+commands for other machines are shown, not run.
+
+## Threads and processes
+
+One evaluation of the objective `obj` solves the ODE of every condition with its sensitivities.
+`options(dMod2.cores = n)`, or `obj(pars, cores = n)` for a single call, solves the conditions in
+`n` threads inside the C++ code. The model of the guide has two conditions, so two threads are the
+most this axis uses; a model with many conditions, or `em()` with many groups, gains in
+proportion.
+
+Independent fits share nothing but the model, so they run as processes forked from the session.
+`mstrust()`, `msem()` and `profile()` take `cores` for this axis, and
+`cores = c(fits = 4, conditions = 2)` runs four fits at a time with two threads each. Every forked
+fit holds its own predictions, so the process axis multiplies the memory, while threads share one
+process. The product of the two should stay below the number of cores.
+
+| where | argument | axis |
+|---|---|---|
+| one evaluation | `options(dMod2.cores = )`, `obj(pars, cores = )` | conditions, threads |
+| `em()` | `cores` | groups and conditions, threads |
+| `mstrust()`, `msem()` | `cores`, or `c(fits = , conditions = )` | fits, processes |
+| `profile()` | `cores`, or `c(pars = , conditions = )` | profiled parameters, processes |
+| `distributedComputing()` | `tasks`, `on` | tasks, detached processes on this or other machines |
+
+```{r}
+options(dMod2.cores = 2)
+fits <- mstrust(obj, mu[free], fixed = gauge, sd = 2, fits = 20,
+                cores = c(fits = 4, conditions = 2))
+profiles <- profile(obj, best, names(best), fixed = gauge, cores = 8)
+```
+
+## Tasks
+
+`distributedComputing(expr, tasks, on)` evaluates the R code `expr` once per task, each time in a
+fresh R process, and the value of `expr` is the result of the task. `tasks` is a number of tasks,
+a list or vector with one element per task, or a data frame with one row per task. In the code
+
+- `task` is the element or row of the task, a row as a list (`task$n`), and `NULL` when `tasks`
+  is a number,
+- `taskId` is its position in `tasks`,
+- `cores` is the number of cores the task may use, which parallel code takes as it is, such as
+  `mstrust(cores = cores)`, `parallel::mclapply(mc.cores = cores)` or
+  `options(dMod2.cores = cores)`,
+- `jobname` is the name of the job.
+
+`input` names the objects of the session that the code reads, by default every object of the
+calling environment; functions are objects like any other. The process attaches dMod2 besides
+the default packages of R: the code loads other packages itself, and the options of the session,
+`dMod2.cores` among them, do not reach it.
+
+As an example of general R code, the coverage of the 95% t interval for the mean of exponential
+samples, one task per sample size, as a job on the local machine:
+
+```{r coverage, eval = TRUE}
+interval <- function(y) t.test(y)$conf.int
+sizes <- data.frame(n = c(5, 10, 20, 50))
+job <- distributedComputing(
+  {
+    message("task ", taskId, ": samples of size ", task$n)
+    covered <- replicate(2000, {
+      ci <- interval(rexp(task$n))
+      ci[1] < 1 && 1 < ci[2]
+    })
+    data.frame(n = task$n, coverage = mean(covered))
+  },
+  tasks = sizes, on = localNode(cores = 1), jobname = "coverage", input = "interval", seed = 1
+)
+job
+```
+
+The call returns once the tasks have started, and the session stays free. `job` is a list of
+functions that follow the job: `check()` reports the state of its tasks, `wait()` polls until none
+runs, and `get()` joins the results, here the data frames of the tasks into one.
+
+```{r follow, eval = TRUE}
+job$check()
+job$wait(interval = 1)
+job$get()
+```
+
+Task `i` starts with the seed `seed + i`, so its result does not depend on the worker it runs on or
+on the order of the tasks; without `seed`, `distributedComputing()` draws one. A task whose code
+raises an error has the error as its result, a `try-error`, and the other tasks go on.
+
+## Job folder
+
+At the submission `distributedComputing()` writes the files of the job into a temporary stage and
+copies the stage to every node, as one `tar` stream through ssh, into the folder
+`<jobname>_folder/<k>` of the home directory, `k` the number of the node. On `"localhost"` the
+folder lies in the working directory, and the copy goes without ssh. The local `<jobname>_folder`
+also holds `job.rds`, the manifest of the job. After the run of the local job:
+
+```{r folder, eval = TRUE}
+list.files("coverage_folder", recursive = TRUE)
+```
+
+| file | content |
+|---|---|
+| `workspace.RData` | the objects of `input`, saved by `save()`; compressed with `zstd` when the local machine has it, and unpacked on the node |
+| `tasks.rds` | the tasks as a list, a data frame as one list per row |
+| `job.R` | the R script of a task |
+| model files | sources, object files or shared objects of the models, see [Model files and builds](#model-files-and-builds) |
+| `build.sh`, `files.txt`, `build.log` | the build of the model files on the node, and its output |
+| `slot_<k>.sh`, `slot_<k>.pid`, `slot_<k>.run` | the script that runs the tasks of node `k`, its process ID, and that of the running task |
+| `job.sh`, `env.sh` | on a SLURM cluster: the job script filled in from the template, and its environment |
+| `task_<i>.out`, `task_<i>.rds` | the output and the result of task `i` |
+
+`job.R` is the same for every task, which comes from the command line,
+`Rscript job.R <taskId> <cores>`, with the output in `task_<taskId>.out`:
+
+```{r jobscript, eval = TRUE}
+writeLines(readLines("coverage_folder/1/job.R"))
+```
+
+It attaches dMod2, loads the workspace and the shared objects of the folder, reads its task from
+`tasks.rds`, sets the seed and evaluates the code inside `try()`. The result goes to
+`task_<taskId>.rds`, which `get()` reads. Each task is a process of its own, so nothing passes from
+one task to the next but files. The code runs in the job folder of its node: files it writes land
+there, and `get(all = TRUE)` copies them back.
+
+## Nodes and workers
+
+`on` says where the tasks run:
+
+```{r}
+on <- localNode()                                        # the local machine, its free cores
+on <- localNode(cores = 8)
+on <- sshNodes(c("server1", "server2"))                  # each node with its free cores
+on <- sshNodes(c("server1", "server2"), cores = 10)
+on <- sshNodes(cores = c(server1 = 24, server2 = 20))
+on <- sshNodes(c("localhost", "server1"))                # the local machine and one more
+on <- slurmCluster("mycluster", cores = 8, walltime = "12:00:00")
+```
+
+A node is an ssh destination such as `"host"` or `"user@host"`, reached with key authentication,
+since the commands run without a terminal to type a password in. The name `"localhost"` is the
+local machine, reached without ssh: its commands run in the shell of the session, in the working
+directory, and its tasks in the R and with the library paths of the session. A job on the local
+machine needs neither ssh nor a second installation of dMod2; `localNode()` is
+`sshNodes("localhost")`.
+
+The tasks run on workers, and a node is one worker. The tasks are dealt to the workers in turn,
+task `i` to worker `(i - 1) %% W + 1` of `W`, and a worker runs its tasks one after the other, each
+with the `cores` of its node. On two nodes two tasks run at a time, and the parallel code inside a
+task uses the cores of its node. `tasks = NULL`, the default, gives one task per worker.
+
+`cores` is the number of cores of each task on a node: one number for all nodes, a vector named by
+node, or `NULL` for the free cores at the submission. `detectFreeCores()` counts them as the cores
+of a machine minus its load average of the last minute, at least 1, on the local machine or
+through ssh; a node gets at most its free cores, with a warning when it was given more.
+
+```{r}
+detectFreeCores(c("localhost", "server1", "server2"))
+```
+
+On each node the tasks run in the shell script `slot_<k>.sh`, which calls `Rscript job.R` for every
+task of the node in turn. It is started as `nohup setsid sh slot_<k>.sh &`: `setsid` gives it a
+session of its own and `nohup` shields it from the hangup signal, so it runs on when the ssh
+connection or the R session ends. The tasks run with `OMP_NUM_THREADS=1` and `MKL_NUM_THREADS=1`,
+so that BLAS and OpenMP start no threads beyond those the code asks for, and with the library paths
+of `libs` first.
+
+## Model files and builds
+
+A model object calls compiled code, which has to be on the node. The model files of a job are those
+of the model objects in `input`, the `obsfn`, `parfn`, `prdfn` and objectives, found through the
+sources they were generated from; objects without them take every model file of
+`getOption("dMod2.outdir")`, else of the working directory. `build` says how they reach the nodes:
+
+- `"compile"`: the C and C++ sources are copied, and `build.sh` compiles them on each node into one
+  shared object, against the cppDE installed there: with its headers, its SUNDIALS and KLU, the
+  `-D` switches of the model and `-O2`. It runs `buildCores` compilers at a time, by default the
+  cores of the node, at most 16. Past the length limit of a command line the objects go through a
+  static archive, with `buildBundle` sources per translation unit.
+- `"link"`: the object files are copied and linked on each node, which needs a compiler there
+  compatible with the local one.
+- `"copy"`: the shared objects are copied, which needs a node compatible with the local machine.
+- `"auto"`, the default: `"copy"` when every node is `"localhost"`, `"compile"` otherwise.
+
+The build runs once per node, before the first task: the tasks of a node share its folder and load
+the one shared object, to which `job.R` points every model object of the workspace
+(`modelname()`). On a SLURM cluster the build runs once on the login node for all array
+tasks. Its output goes to `build.log` in the job folder; a failed build stops the submission, and
+the error shows the end of the log. `libs` puts library paths first on the nodes, for the build
+and the tasks; the remote shell expands them, so `~` is the remote home.
+
+The coverage job has no model files: `input` holds no model object, and the working directory no
+shared object.
+
+## Following a job
+
+| function | does |
+|---|---|
+| `check()` | prints how many tasks are done, running and failed; returns `TRUE` once none runs, with a warning when some failed |
+| `wait(interval = 10)` | polls every `interval` seconds until no task runs, reports each change, and returns `TRUE` when every task is done |
+| `get(combine = TRUE, all = FALSE)` | returns the results |
+| `log(i, lines = 20)` | prints the last lines of the output of task `i` |
+| `purge(local = FALSE)` | deletes the job folders on the nodes, with `local = TRUE` also the local one and the registry entry |
+| `terminate()` | stops the tasks |
+
+A task is done when its result file exists, running while its worker runs, also when it waits for
+its turn, and failed when its worker has ended without its result. `get()` copies the result files
+of remote nodes through ssh into the local `<jobname>_folder/<k>`, with `all = TRUE` every file of
+the job folders. It joins parlists with `c()` and data frames, parameter frames among them, with
+`rbind()`, which also joins the two sides of a profile into one; other results come as a list.
+Tasks without a result are left out with a warning. `get(combine = FALSE)` returns one entry per
+task, named like `tasks`: `NULL` for a task not done, the `try-error` of a failed one.
+`terminate()` ends the process group of every slot, on a SLURM cluster the job by `scancel`.
+
+The output of the second task, and the deletion of the job:
+
+```{r purge, eval = TRUE}
+job$log(2)
+job$purge(local = TRUE)
+```
+
+`distributedComputing(wait = TRUE)` waits for the tasks itself, returns the result of `get()` and
+deletes the job; a job with failed tasks is kept, and `log()` shows their output.
+
+A job outlives the session that submitted it. Its manifest lies in the local `<jobname>_folder`, in
+the folder of every remote node, and in the registry of jobs, `tools::R_user_dir("dMod2", "data")`,
+until `purge(local = TRUE)`; `dMod2Jobs()` lists the registered jobs. `recover = TRUE` with the
+name of a job returns its functions without submitting it again: from the manifest in the working
+directory, else from the registry, else, with `on` given, from the folder on its remote nodes,
+which recovers a job submitted from another machine. A new job of the same name is an error while
+the old one still runs where the new one would replace its folders: in the same working directory,
+or on the same remote nodes, also when it was submitted from another machine.
+
+```{r}
+dMod2Jobs()
+job <- distributedComputing(jobname = "fits", recover = TRUE)
+job <- distributedComputing(jobname = "fits", on = sshNodes(c("server1", "server2")),
+                            recover = TRUE)
+```
+
+## SLURM clusters
+
+`slurmCluster()` names the login node of a cluster, reached by ssh, and the resources of one array
+task: `cores`, `walltime` and `memPerCore` in GB. The workers are the array tasks, `array` of them,
+by default one per task; array task `j` runs the tasks `j`, `j + array`, `j + 2 * array`, ... one
+after the other. The stage goes to `~/<jobname>_folder/1` on the login node. There the environment
+of the template is set up, the model files are built once, and `sbatch` submits the array job from
+that folder, so the compute nodes have to see the home directory of the login node, as on most
+clusters. `partition`, `account`, `maxRunning` (the most array tasks at once) and `sbatch` (further
+options, such as `"--constraint=ib"`) go to `sbatch` and take precedence over the `#SBATCH` lines
+of the template. The start reports the job ID; `check()` reads the state from `squeue`, and
+`terminate()` calls `scancel`.
+
+The job script comes from a template, set up once per login node with `slurmTemplate()` and kept in
+`tools::R_user_dir("dMod2", "config")`. A template is a job script of the cluster with the
+placeholders `{{ jobname }}`, `{{ ntasks }}` (the number of array tasks), `{{ cores }}`,
+`{{ memPerCore }}` and `{{ walltime }}`, and one line `{{ run }}`, which runs the tasks of the array
+task. The lines before `{{ run }}` that are not comments set up the environment, for example with
+`module load`; the build on the login node runs in it too. A placeholder without a value is an
+error, so a template with `{{ walltime }}` needs `walltime`. The template dMod2 ships for the
+bwForCluster Helix:
+
+```{r template, eval = TRUE}
+writeLines(readLines(system.file("slurm", "helix.sh", package = "dMod2")))
+```
+
+```{r}
+slurmTemplate("mycluster", from = "~/mycluster.sh")   # once, from a job script, for editing
+slurmTemplate("helix")                                 # the template dMod2 ships for Helix
+slurmTemplate()                                        # the templates set up
+cluster <- slurmCluster("helix", cores = 1, walltime = "12:00:00")
+```
+
+`slurmCluster(jobscript = )` takes another template for a single job.
+
+## Fits and profiles of the guide project
+
+The 500 fits of `fit.R` from [chapter 4](guide-optimization.html), as 500 tasks of one fit on one
+core, each from the start that its own seed draws:
+
+```{r}
+free <- setdiff(names(mu), names(gauge))
+fitsJob <- distributedComputing(
+  mstrust(obj, mu[free], fixed = gauge, sd = 2, fits = 1, iterlim = 1000, tolControl = tolerances),
+  tasks = 500, on = cluster, jobname = "oppelt_fits", seed = 1,
+  input = c("obj", "mu", "free", "gauge", "tolerances"))
+fitsJob$check()
+fitsJob$wait(interval = 60)
+fits <- as.parframe(fitsJob$get())
+fitsJob$purge(local = TRUE)
+```
+
+The sources of `obj` are compiled once on the login node, and every task loads `obj` and fits.
+`get()` joins the parlists of the tasks, and `as.parframe()` sorts the fits by value. A session
+started later, also on another day, takes up the job by its name:
+
+```{r}
+fitsJob <- distributedComputing(jobname = "oppelt_fits", recover = TRUE)
+```
+
+The profiles of [chapter 5](guide-profiles.html), one side of one parameter per task, from a data
+frame of tasks:
+
+```{r}
+sides <- expand.grid(par = names(bestWide), side = c("left", "right"), stringsAsFactors = FALSE)
+profilesJob <- distributedComputing(
+  profile(objWide, bestWide, task$par, side = task$side, fixed = gauge,
+          limits = c(lower = -7, upper = 7), stepControl = list(stop = "data"),
+          algoControl = list(reoptimize = TRUE),
+          optControl = list(iterlim = 100, tolControl = tolerances)),
+  tasks = sides, on = cluster, jobname = "oppelt_profiles",
+  input = c("objWide", "bestWide", "gauge", "tolerances"))
+profilesJob$wait(interval = 60)
+profiles <- profilesJob$get()
+```
+
+`get()` binds the parameter frames of the tasks, the two sides of a parameter into one profile.
+
+On machines without SLURM as many tasks run at a time as there are nodes, each with the cores of
+its node. One task per node, the default of `tasks`, with ten fits per core of the node:
+
+```{r}
+fitsJob <- distributedComputing(
+  mstrust(obj, mu[free], fixed = gauge, sd = 2, fits = 10 * cores, iterlim = 1000,
+          tolControl = tolerances, cores = cores),
+  on = sshNodes(c("server1", "server2")), jobname = "oppelt_fits", seed = 1,
+  input = c("obj", "mu", "free", "gauge", "tolerances"))
+```
+
+[Bile acid transport](bileAcidTransport.html) runs its multistarts as a job on the local machine,
+[Kok 2020](kokMSB2020.html) its 200 fits as an array job on Helix.
+
+## Requirements
+
+The local machine runs the commands of a job in a POSIX shell, on Windows in the `sh` of Rtools,
+and every remote node needs one. A remote node is reached by ssh with key authentication and has
+dMod2 and cppDE installed for the R on its path, or in `libs`; `build = "compile"` also needs a
+compiler there. A SLURM cluster needs an account on its login node, a template set up with
+`slurmTemplate()`, and a home directory that the compute nodes see. `zstd`, when the local machine
+has it, compresses the workspace and is then needed on every remote node.
+
+## Summary
+
+- Many conditions: `options(dMod2.cores = )` or `em(cores = )`, threads inside one evaluation.
+- Many fits or profiles in the session: `cores` of `mstrust()`, `msem()` and `profile()`, forked
+  processes.
+- Any R code as tasks detached from the session: `distributedComputing()` on `localNode()`,
+  `sshNodes()` or `slurmCluster()`, followed by `check()`, `wait()`, `get()` and `purge()`, and
+  taken up again with `recover = TRUE`.
+
+```{r, include = FALSE, eval = TRUE, purl = FALSE}
+options(.outdir)
+```

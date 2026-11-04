@@ -32,8 +32,13 @@ README_files/
 vignettes/*.R
 vignettes/*.html
 vignettes/*.pdf
-!vignettes/PEtab.pdf
-!vignettes/Optimisation.pdf
+
+# pkgdown: the site, and the figures the project articles copy beside themselves
+docs/
+vignettes/articles/*.png
+
+# example projects: generated sources and shared objects
+examples/*/build/
 
 # Compiled objects and scratch
 *.o
@@ -77,3 +82,5 @@ tests/testthat/Rplots.pdf
 
 # HTML previews of the rendered demos
 examples/*.html
+# staging folders of distributedComputing()
+*_folder/

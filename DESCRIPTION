@@ -1,7 +1,7 @@
 Package: dMod2
 Type: Package
 Title: Dynamic Modeling and Parameter Estimation in ODE Models
-Version: 0.14.6
+Version: 0.14.7
 Date: 2026-11-04
 Authors@R: c(
     person("Simon", "Beyer", email = "simon.beyer@fdm.uni-freiburg.de",
@@ -27,9 +27,9 @@ Description: Tools for dynamic modeling and parameter estimation in ordinary
     conditions, measurements and parameter tables are imported from and
     exported to the 'PEtab' format, with 'SBML' import and export through
     'libSBML'.
-URL: https://github.com/dModverse/dMod2
+URL: https://dmodverse.github.io/dMod2/, https://github.com/dModverse/dMod2
 BugReports: https://github.com/dModverse/dMod2/issues
-License: GPL (>= 2)
+License: GPL (>= 3)
 Depends: R (>= 4.5.0)
 Imports:
     cOde,
@@ -70,13 +70,11 @@ Suggests:
     optimx,
     cowplot,
     pander,
-    R.rsp,
     ragg,
     rjson,
     yaml
 SystemRequirements: Python package symident (symmetryDetection(),
     symmetryReduction()), installed from PyPI on first use
-VignetteBuilder: R.rsp
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
 LinkingTo: 

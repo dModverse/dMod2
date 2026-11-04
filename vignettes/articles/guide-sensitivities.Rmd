@@ -1,0 +1,270 @@
+---
+title: "3. Sensitivities"
+bibliography: refs.bib
+csl: ieee.csl
+link-citations: true
+---
+
+```{r, include = FALSE, purl = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>", fig.width = 8, fig.height = 4.5, dpi = 96,
+                      fig.retina = 2, message = FALSE)
+project <- normalizePath("../../examples/oppeltNPJSystBiolAppl2018")
+knitr::opts_knit$set(root.dir = project)
+measured <- file.exists(file.path(project, "results", "sensitivities.rds"))
+knitr::read_chunk("../../examples/oppeltNPJSystBiolAppl2018/sensitivities.R")
+library(dMod2)
+```
+
+A fit, a profile and a mixed-effects model all need the derivatives of the objective in the
+parameters. dMod2 computes them exactly: from the sensitivities of the ODE solution, propagated by
+the chain rule through every function object of the model, without finite differences. This
+chapter shows the four ways to get them, forward, forward over forward, reverse and forward over
+reverse, the backends of `odemodel()` and what each costs for the model of the guide. The
+numerical methods behind them are the subject of the [cppDE site](https://dmodverse.github.io/cppDE/),
+whose articles this chapter links. The code is `sensitivities.R` of the project.
+
+## Forward sensitivities
+
+The states $x(t)$ of an ODE $\dot x = f(x, \theta)$ with $x(t_0) = x_0(\theta)$ depend on the
+parameters $\theta$. Their sensitivities $S = \partial x / \partial \theta$, one column per
+parameter, follow from differentiating the ODE:
+
+$$\dot S = \frac{\partial f}{\partial x}\, S + \frac{\partial f}{\partial \theta}, \qquad
+  S(t_0) = \frac{\partial x_0}{\partial \theta}.$$
+
+For $n_x$ states and $n_\theta$ parameters these are $n_x n_\theta$ further equations, so the cost
+of a solve grows with the number of parameters. cppDE does not write them out: the generated code
+evaluates $f$ on dual numbers, each state value with one tangent per parameter, and the integrator
+steps states and tangents together. The step-size control includes the tangents (`sensErrCon`),
+so that the sensitivities are as accurate as the states
+([forward sensitivities](https://dmodverse.github.io/cppDE/articles/methods-forward.html)). An event
+that sets a state passes the tangents through the saltation matrix of the jump
+([events](https://dmodverse.github.io/cppDE/articles/methods-events.html)).
+
+The observables $y = g(x, \theta)$ have the sensitivities
+$\partial y / \partial \theta = g_x S + g_\theta$, and every further function object of the chain
+`g*x*p` multiplies by its Jacobian. For the objective $-2 \log L = \sum_i r_i^2 + \dots$ with the
+weighted residuals $r_i = (y_i - f_i(\theta)) / \sigma_i$ of the data points $y_i$, the Jacobian
+$J = \partial r / \partial \theta$ gives the gradient $2 J^\top r$ and the Gauss-Newton Hessian
+$2 J^\top J$, both from first-order sensitivities. The exact Hessian adds
+$2 \sum_i r_i\, \nabla^2 r_i$, which needs second derivatives. It matters where the residuals are
+large or the model is far from linear in its parameters, and for the terms of an error model
+whatever the residuals.
+
+## Forward over forward
+
+The second derivatives of the solution follow from differentiating the sensitivity equations once
+more: one equation per state and pair of parameters, $n_x n_\theta (n_\theta + 1) / 2$ in all. dMod2
+builds them with `deriv2 = TRUE` in `odemodel()`, `Y()` and `P()`, and an objective called with
+`deriv2 = TRUE` and the forward sweep returns the exact Hessian. The number of pairs grows with the
+square of the parameters, so this is for small models: the mixed-effects models of
+[chapter 7](guide-nlme.html) with a handful of parameters use it, the model of the guide with
+`r if (measured) nrow(readRDS(file.path(project, "results", "sensitivities.rds"))$gradients) else "64"`
+parameters only once, below, to show what it costs.
+
+## Reverse sweep
+
+The gradient of one scalar, the objective, does not need all sensitivities. The adjoint method
+computes it from one backward sweep: with the Lagrange multipliers $\lambda(t)$ of the ODE,
+
+$$\dot\lambda = -\left(\frac{\partial f}{\partial x}\right)^{\!\top} \lambda
+  - \left(\frac{\partial \ell}{\partial x}\right)^{\!\top}, \qquad
+  \frac{\mathrm{d}(-2 \log L)}{\mathrm{d}\theta} = \int \lambda^\top \frac{\partial f}{\partial \theta}\,
+  \mathrm{d}t + \dots,$$
+
+integrated backwards from the last data point, with jumps of $\lambda$ at the measurement times.
+cppDE differentiates the integrator itself rather than this continuous adjoint: the *discrete
+adjoint* sweeps back through the steps the forward solve took, so the gradient is the exact
+derivative of the computed objective. The trajectory of the forward pass is kept at checkpoints and
+recomputed between them ([reverse mode](https://dmodverse.github.io/cppDE/articles/methods-reverse.html)).
+The cost of the sweep does not depend on the number of parameters: a few times that of the value.
+
+A model is evaluated backwards when every function object of the chain is built with the reverse
+direction, `derivMode = c("forward", "reverse")`, and called with `sweep = "reverse"`. `Pimpl()`
+passes the sweep through the Jacobian of its root. The value pass runs on the grid of a solve
+without sensitivities, and the backward pass sweeps the step grid of that value pass; both run
+under the solver `options` alone, while the solves with sensitivities take `optionsSens` merged
+over `options`.
+
+In `trust()` the sweep is an entry of each phase:
+
+```{r, eval = FALSE}
+fit <- trust(obj, start,
+             phases = list(list(hessianMethod = "gn"),
+                           list(hessianMethod = "sr1", sweep = "reverse")))
+fit$phaseSweep
+```
+
+A phase without `sweep` takes the reverse sweep for `"bfgs"` and `"sr1"` if the objective can be
+evaluated backwards at the start, and the forward sweep otherwise. A Gauss-Newton phase always runs
+forwards, since $J^\top J$ needs the forward sensitivities; asked for a Gauss-Newton Hessian with
+`sweep = "reverse"`, the objective warns and returns none. An `"exact"` phase runs forwards by
+default and backwards with `sweep = "reverse"`, where `deriv2 = TRUE` gives the exact Hessian by
+forward over reverse. A handover between phases of different sweep evaluates the current iterate
+once more. [Chapter 4](guide-optimization.html) compares these Hessian sources on the model of the
+guide.
+
+### Accuracy of a reverse gradient
+
+A forward sensitivity is integrated under the error control of the solver; the adjoint of a
+backward sweep is not, by default: it follows the step grid of the value pass, whose steps were
+chosen for the states. `Xs()` on the cppDE backend controls the sweep through `optionsReverse`;
+the solver side is `cppDE::adjointControl()`
+([checking the sweep](https://dmodverse.github.io/cppDE/articles/methods-reverse.html)).
+
+```{r, eval = FALSE}
+x <- Xs(model, options = list(atol = 1e-8, rtol = 1e-6),
+        optionsReverse = list(refine = TRUE, gradtol = 1e-3))
+controls(x, "optionsReverse") <- list(refine = FALSE)   # the grid of the value pass again
+```
+
+- `refine = TRUE` holds each step of the sweep to the local error test of the CVODES backward
+  problem under the absolute and relative tolerances of the solve, and a step that fails it is
+  swept again in substeps.
+- `gradtol` adds each step's share of the gradient to that test, as its absolute tolerance.
+
+A trust-region method converges with a gradient that is accurate relative to its own size
+[@carter1991global; @conn2000trust], so `gradtol` is set as a fraction of the scale of the
+gradient.
+
+## Forward over reverse
+
+The exact Hessian without second-order sensitivities: forward tangents, one per parameter, ride on
+the backward sweep, which then returns the derivative of the gradient along each tangent, a column
+of the Hessian. The cost grows with the number of parameters like a forward solve, but nothing of
+order $n_\theta^2$ is integrated or stored
+([forward over reverse](https://dmodverse.github.io/cppDE/articles/methods-forward-reverse.html)).
+The chain is built with `derivMode = c("forward", "reverse", "forward-reverse")`, and the objective
+called with `sweep = "reverse", deriv2 = TRUE` returns the exact Hessian.
+
+The same sweeps give second derivatives along directions only, which FOCEI uses. Its volume term
+needs traces $\operatorname{tr}(M\, \partial H_i / \partial \psi)$ with a fixed matrix $M$, and the
+joint Hessian applied to a direction of the random effects. The random effects of different groups
+never meet in a condition, so the $k$-th random effect of every group shares one tangent $v_k$:
+one forward pass along $K$ tangents serves all groups. A backward sweep with the seed $w$ on the
+predictions and sigmas of the data rows, and $\dot w_k$ along tangent $k$, returns $J^\top w$ and
+
+$$\sum_r w_r\, \nabla^2 f_r\, v_k + J^\top \dot w_k$$
+
+for every $k$, with $f_r$ the prediction or sigma of row $r$ and $J$ their Jacobian. The rows of
+the joint Hessian in the random effects come from one sweep with the gradient of the row loss as
+seed and its derivative $L_r J_r v_k$ along tangent $k$, $L_r$ the Hessian of the row loss in
+prediction and sigma; they give $\Phi_i^{\eta\eta}$, $\Phi_i^{\eta\psi}$ and the shift of the mode,
+$\mathrm{d}\hat\eta / \mathrm{d}\psi = -(\Phi_i^{\eta\eta})^{-1} \Phi_i^{\eta\psi}$. The trace
+gradients are linear in $M$: seed $j$ is $2 L_r J_{r,j}$, and along tangent $k$ the derivative of
+$L_r$ contracted with $J_{r,j}$ and $J_{r,k}$. Its slice $k$ is $U_{jk}$, and
+
+$$\nabla \operatorname{tr}(M H_i) = \sum_{j,k} M_{jk}\, U_{jk}$$
+
+for every symmetric $M$: $K$ seeds for any number of matrices. The rows of the joint Hessian and the
+$K$ trace seeds go back in one sweep, the trailing axis of every cotangent holding $K + 1$ blocks,
+a seed and its derivatives along the tangents each. [Chapter 7](guide-nlme.html) describes the
+volume term itself.
+
+## Backends
+
+`odemodel(backend = )` chooses the solver. The function objects above it are the same for all
+three, and `Xs()` dispatches on the class of the model.
+
+| backend | solver | forward | forward over forward | reverse | forward over reverse | use |
+|---|---|---|---|---|---|---|
+| `"cppDE"` (default) | generated C++, BDF/NDF, Adams, Rosenbrock, Tsitouras | dual numbers | `deriv2 = TRUE` | discrete adjoint | yes | every model |
+| `"Sundials"` | SUNDIALS CVODES through `cppDE::cvode()` | CVODES sensitivities | no | CVODES adjoint (ASA) | no | a cross-check against an established solver |
+| `"deSolve"` | `lsodes` of deSolve, equations by cOde | sensitivity equations | no | no | no | the models of dMod |
+
+The step methods and their error control are described in
+[stepping](https://dmodverse.github.io/cppDE/articles/methods-stepping.html), the CVODES backend in
+[CVODES](https://dmodverse.github.io/cppDE/articles/methods-cvode.html), and the timings of cppDE
+against CVODES in the [benchmarks](https://dmodverse.github.io/cppDE/articles/benchmarks.html).
+
+## The model of the guide
+
+`sensitivities.R` builds the chain of [chapter 1](guide-model.html) once more, every function
+object with all directions, and evaluates the data term at the best fit of
+[chapter 4](guide-optimization.html):
+
+```{r reversechain, eval = FALSE}
+```
+
+```{r, echo = FALSE, results = "asis", eval = !measured}
+cat("> Results pending: `results/sensitivities.rds` of the project is written by `sensitivities.R`.\n")
+```
+
+```{r, eval = measured}
+s <- readRDS("results/sensitivities.rds")
+```
+
+The gradient by the reverse sweep agrees with the forward one:
+
+```{r gradients, eval = FALSE}
+```
+
+```{r, eval = measured}
+max(abs(s$gradients$forward - s$gradients$reverse)) / max(abs(s$gradients$forward))
+```
+
+a relative deviation of the order of the tolerances of the solve, since the backward sweep runs on
+the step grid of the value pass without `refine`.
+
+The cost of one evaluation, the shortest of ten, in seconds:
+
+```{r cost, eval = FALSE}
+```
+
+```{r, eval = measured}
+s$timing
+```
+
+The reverse gradient costs a few values, the forward gradient one solve with a tangent per
+parameter. The exact Hessian by forward over reverse costs about
+`r if (measured) round(s$timing[["forward-reverse"]] / s$timing[["forward"]], 1) else "5"` forward
+gradients. Forward over forward is measured once:
+
+```{r forwardforward, eval = FALSE}
+```
+
+```{r, eval = measured}
+c(seconds = s$forwardForward, s$memory)
+```
+
+```{r, include = FALSE, eval = measured}
+peakText <- if (s$memory[["forwardForward"]] > s$memory[["before"]] + 0.05) {
+  sprintf("raises the peak memory of the process from %.1f to %.1f GB", s$memory[["before"]],
+          s$memory[["forwardForward"]])
+} else sprintf("leaves the peak memory of the process at %.1f GB", s$memory[["before"]])
+```
+
+It takes `r if (measured) round(s$forwardForward / s$timing[["forward-reverse"]]) else "about 20"`
+times as long as forward over reverse and `r if (measured) peakText else "needs little memory"`;
+for fits of this model it is a check, not a method. Both give the same Hessian, up to the error of
+the solver:
+
+```{r hessians, eval = FALSE}
+```
+
+```{r, eval = measured}
+max(abs(s$forwardForwardHessian[rownames(s$exact), colnames(s$exact)] - s$exact)) / max(abs(s$exact))
+```
+
+The eigenvalues of the exact Hessian and of the Gauss-Newton Hessian at the best fit:
+
+```{r, fig.height = 3.5, eval = measured}
+eig <- data.frame(rank = rep(seq_len(nrow(s$hessians)), 2),
+                  value = c(s$hessians$exact, s$hessians$gaussNewton),
+                  Hessian = rep(c("exact", "Gauss-Newton"), each = nrow(s$hessians)))
+ggplot2::ggplot(eig, ggplot2::aes(rank, value, colour = Hessian)) +
+  ggplot2::geom_point() +
+  ggplot2::scale_y_continuous(trans = scales::pseudo_log_trans(sigma = 1e-3, base = 10),
+                              breaks = c(-1e-1, 0, 1e-2, 1, 1e2, 1e4)) +
+  ggplot2::labs(x = "rank", y = "eigenvalue") +
+  theme_dMod()
+```
+
+The two agree in the large eigenvalues, the directions the data determine well. In the smallest
+they differ: the exact Hessian is positive definite, its smallest eigenvalue
+`r if (measured) signif(min(s$hessians$exact), 2) else "0.05"`, while the Gauss-Newton Hessian has
+the eigenvalue `r if (measured) signif(min(s$hessians$gaussNewton), 2) else "-0.02"`. The flat
+directions are where the Hessian sources of [chapter 4](guide-optimization.html) take different
+steps.
+
+## References

@@ -1,0 +1,17 @@
+# Kok 2020
+
+IFN-alpha sensitisation in Huh7.5 cells after Kok et al. (2020), Mol Syst Biol 16:e8955: model, structural identifiability, forward and reverse gradient, the multistart of the publication and the fit at its optimum.
+
+## Files
+
+| file | content |
+|---|---|
+| `analysis.R` | the analysis, shown below |
+
+## Run
+
+With this folder as working directory: `source("analysis.R")`.
+
+```{r, echo = FALSE, results = "asis"}
+cat(knitr::knit_child(text = script("analysis.R"), quiet = TRUE), sep = "\n")
+```

@@ -3,6 +3,10 @@
 ^src/.*\.so$
 
 ^\.github$
+^_pkgdown\.yml$
+^docs$
+^pkgdown$
+^vignettes/articles$
 ^\.git$
 ^\.positai$
 ^\.claude$

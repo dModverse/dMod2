@@ -1,0 +1,1297 @@
+conditionId	targetId	targetValue
+long	EpoRJAK2	init_EpoRJAK2
+long	EpoRJAK2_CIS	0
+long	SHP1	init_SHP1 * (1 + 0 * SHP1ProOE)
+long	STAT5	init_STAT5
+long	CIS	0 * CISEqcOE_outer * CISEqc_outer
+long	SOCS3	0 * SOCS3EqcOE_outer * SOCS3Eqc_outer
+long	epo_level	1.25e-07
+long	SOCS3Inh	SOCS3Inh_outer/SOCS3Eqc_outer
+long	JAK2EpoRDeaSHP1	JAK2EpoRDeaSHP1_outer/init_SHP1
+long	EpoRCISRemove	EpoRCISRemove_outer/init_EpoRJAK2
+long	SHP1ActEpoR	SHP1ActEpoR_outer/init_EpoRJAK2
+long	STAT5ActJAK2	STAT5ActJAK2_outer/init_EpoRJAK2
+long	STAT5ActEpoR	STAT5ActEpoR_outer/init_EpoRJAK2^2
+long	CISInh	CISInh_outer/CISEqc_outer
+long	CISRNAEqc	1/init_STAT5
+long	ActD	0
+long	SOCS3RNAEqc	1/init_STAT5
+long	CISEqc	CISEqc_outer/1
+long	CISoe	0
+long	CISEqcOE	CISEqcOE_outer * CISEqc_outer
+long	SOCS3Eqc	SOCS3Eqc_outer/1
+long	SOCS3oe	0
+long	SOCS3EqcOE	SOCS3EqcOE_outer * SOCS3Eqc_outer
+long	offset_pJAK2	offset_pJAK2_long
+long	scale_pJAK2	scale_pJAK2_long
+long	offset_pEpoR	offset_pEpoR_long
+long	scale_pEpoR	scale_pEpoR_long
+long	offset_CIS	offset_CIS_long
+long	scale_CIS	scale_CIS_long
+long	offset_SOCS3	offset_SOCS3_long
+long	scale_SOCS3	scale_SOCS3_long
+long	scale_tSTAT5	scale_tSTAT5_long
+long	offset_pSTAT5	offset_pSTAT5_long
+long	scale_pSTAT5	scale_pSTAT5_long
+long	scale_tSHP1	1
+long	sd_pSTAT5_au	sd_STAT5_au
+conc	EpoRJAK2	init_EpoRJAK2
+conc	EpoRJAK2_CIS	0
+conc	SHP1	init_SHP1 * (1 + 0 * SHP1ProOE)
+conc	STAT5	init_STAT5
+conc	CIS	0 * CISEqcOE_outer * CISEqc_outer
+conc	SOCS3	0 * SOCS3EqcOE_outer * SOCS3Eqc_outer
+conc	epo_level	1.25e-07
+conc	SOCS3Inh	SOCS3Inh_outer/SOCS3Eqc_outer
+conc	JAK2EpoRDeaSHP1	JAK2EpoRDeaSHP1_outer/init_SHP1
+conc	EpoRCISRemove	EpoRCISRemove_outer/init_EpoRJAK2
+conc	SHP1ActEpoR	SHP1ActEpoR_outer/init_EpoRJAK2
+conc	STAT5ActJAK2	STAT5ActJAK2_outer/init_EpoRJAK2
+conc	STAT5ActEpoR	STAT5ActEpoR_outer/init_EpoRJAK2^2
+conc	CISInh	CISInh_outer/CISEqc_outer
+conc	CISRNAEqc	1/init_STAT5
+conc	ActD	0
+conc	SOCS3RNAEqc	1/init_STAT5
+conc	CISEqc	CISEqc_outer/1
+conc	CISoe	0
+conc	CISEqcOE	CISEqcOE_outer * CISEqc_outer
+conc	SOCS3Eqc	SOCS3Eqc_outer/1
+conc	SOCS3oe	0
+conc	SOCS3EqcOE	SOCS3EqcOE_outer * SOCS3Eqc_outer
+conc	offset_pJAK2	0
+conc	scale_pJAK2	1
+conc	offset_pEpoR	0
+conc	scale_pEpoR	1
+conc	offset_CIS	0
+conc	scale_CIS	1
+conc	offset_SOCS3	0
+conc	scale_SOCS3	1
+conc	scale_tSTAT5	1
+conc	offset_pSTAT5	0
+conc	scale_pSTAT5	1
+conc	scale_tSHP1	1
+conc	sd_pSTAT5_au	sd_STAT5_au
+rna	EpoRJAK2	init_EpoRJAK2
+rna	EpoRJAK2_CIS	0
+rna	SHP1	init_SHP1 * (1 + 0 * SHP1ProOE)
+rna	STAT5	init_STAT5
+rna	CIS	0 * CISEqcOE_outer * CISEqc_outer
+rna	SOCS3	0 * SOCS3EqcOE_outer * SOCS3Eqc_outer
+rna	epo_level	1.25e-07
+rna	SOCS3Inh	SOCS3Inh_outer/SOCS3Eqc_outer
+rna	JAK2EpoRDeaSHP1	JAK2EpoRDeaSHP1_outer/init_SHP1
+rna	EpoRCISRemove	EpoRCISRemove_outer/init_EpoRJAK2
+rna	SHP1ActEpoR	SHP1ActEpoR_outer/init_EpoRJAK2
+rna	STAT5ActJAK2	STAT5ActJAK2_outer/init_EpoRJAK2
+rna	STAT5ActEpoR	STAT5ActEpoR_outer/init_EpoRJAK2^2
+rna	CISInh	CISInh_outer/CISEqc_outer
+rna	CISRNAEqc	1/init_STAT5
+rna	ActD	0
+rna	SOCS3RNAEqc	1/init_STAT5
+rna	CISEqc	CISEqc_outer/1
+rna	CISoe	0
+rna	CISEqcOE	CISEqcOE_outer * CISEqc_outer
+rna	SOCS3Eqc	SOCS3Eqc_outer/1
+rna	SOCS3oe	0
+rna	SOCS3EqcOE	SOCS3EqcOE_outer * SOCS3Eqc_outer
+rna	offset_pJAK2	0
+rna	scale_pJAK2	1
+rna	offset_pEpoR	0
+rna	scale_pEpoR	1
+rna	offset_CIS	0
+rna	scale_CIS	1
+rna	offset_SOCS3	0
+rna	scale_SOCS3	1
+rna	scale_tSTAT5	1
+rna	offset_pSTAT5	0
+rna	scale_pSTAT5	1
+rna	scale_tSHP1	1
+rna	sd_pSTAT5_au	sd_STAT5_au
+actd_0	EpoRJAK2	init_EpoRJAK2
+actd_0	EpoRJAK2_CIS	0
+actd_0	SHP1	init_SHP1 * (1 + 0 * SHP1ProOE)
+actd_0	STAT5	init_STAT5
+actd_0	CIS	0 * CISEqcOE_outer * CISEqc_outer
+actd_0	SOCS3	0 * SOCS3EqcOE_outer * SOCS3Eqc_outer
+actd_0	epo_level	1.25e-07
+actd_0	SOCS3Inh	SOCS3Inh_outer/SOCS3Eqc_outer
+actd_0	JAK2EpoRDeaSHP1	JAK2EpoRDeaSHP1_outer/init_SHP1
+actd_0	EpoRCISRemove	EpoRCISRemove_outer/init_EpoRJAK2
+actd_0	SHP1ActEpoR	SHP1ActEpoR_outer/init_EpoRJAK2
+actd_0	STAT5ActJAK2	STAT5ActJAK2_outer/init_EpoRJAK2
+actd_0	STAT5ActEpoR	STAT5ActEpoR_outer/init_EpoRJAK2^2
+actd_0	CISInh	CISInh_outer/CISEqc_outer
+actd_0	CISRNAEqc	1/init_STAT5
+actd_0	ActD	0
+actd_0	SOCS3RNAEqc	1/init_STAT5
+actd_0	CISEqc	CISEqc_outer/1
+actd_0	CISoe	0
+actd_0	CISEqcOE	CISEqcOE_outer * CISEqc_outer
+actd_0	SOCS3Eqc	SOCS3Eqc_outer/1
+actd_0	SOCS3oe	0
+actd_0	SOCS3EqcOE	SOCS3EqcOE_outer * SOCS3Eqc_outer
+actd_0	offset_pJAK2	offset_pJAK2_actd
+actd_0	scale_pJAK2	scale_pJAK2_actd
+actd_0	offset_pEpoR	offset_pEpoR_actd
+actd_0	scale_pEpoR	scale_pEpoR_actd
+actd_0	offset_CIS	offset_CIS_actd
+actd_0	scale_CIS	scale_CIS_actd
+actd_0	offset_SOCS3	0
+actd_0	scale_SOCS3	1
+actd_0	scale_tSTAT5	scale_tSTAT5_actd
+actd_0	offset_pSTAT5	offset_pSTAT5_actd
+actd_0	scale_pSTAT5	scale_pSTAT5_actd
+actd_0	scale_tSHP1	1
+actd_0	sd_pSTAT5_au	sd_STAT5_au
+actd_1	EpoRJAK2	init_EpoRJAK2
+actd_1	EpoRJAK2_CIS	0
+actd_1	SHP1	init_SHP1 * (1 + 0 * SHP1ProOE)
+actd_1	STAT5	init_STAT5
+actd_1	CIS	0 * CISEqcOE_outer * CISEqc_outer
+actd_1	SOCS3	0 * SOCS3EqcOE_outer * SOCS3Eqc_outer
+actd_1	epo_level	1.25e-07
+actd_1	SOCS3Inh	SOCS3Inh_outer/SOCS3Eqc_outer
+actd_1	JAK2EpoRDeaSHP1	JAK2EpoRDeaSHP1_outer/init_SHP1
+actd_1	EpoRCISRemove	EpoRCISRemove_outer/init_EpoRJAK2
+actd_1	SHP1ActEpoR	SHP1ActEpoR_outer/init_EpoRJAK2
+actd_1	STAT5ActJAK2	STAT5ActJAK2_outer/init_EpoRJAK2
+actd_1	STAT5ActEpoR	STAT5ActEpoR_outer/init_EpoRJAK2^2
+actd_1	CISInh	CISInh_outer/CISEqc_outer
+actd_1	CISRNAEqc	1/init_STAT5
+actd_1	ActD	1
+actd_1	SOCS3RNAEqc	1/init_STAT5
+actd_1	CISEqc	CISEqc_outer/1
+actd_1	CISoe	0
+actd_1	CISEqcOE	CISEqcOE_outer * CISEqc_outer
+actd_1	SOCS3Eqc	SOCS3Eqc_outer/1
+actd_1	SOCS3oe	0
+actd_1	SOCS3EqcOE	SOCS3EqcOE_outer * SOCS3Eqc_outer
+actd_1	offset_pJAK2	offset_pJAK2_actd
+actd_1	scale_pJAK2	scale_pJAK2_actd
+actd_1	offset_pEpoR	offset_pEpoR_actd
+actd_1	scale_pEpoR	scale_pEpoR_actd
+actd_1	offset_CIS	offset_CIS_actd
+actd_1	scale_CIS	scale_CIS_actd
+actd_1	offset_SOCS3	0
+actd_1	scale_SOCS3	1
+actd_1	scale_tSTAT5	scale_tSTAT5_actd
+actd_1	offset_pSTAT5	offset_pSTAT5_actd
+actd_1	scale_pSTAT5	scale_pSTAT5_actd
+actd_1	scale_tSHP1	1
+actd_1	sd_pSTAT5_au	sd_STAT5_au
+fine	EpoRJAK2	init_EpoRJAK2
+fine	EpoRJAK2_CIS	0
+fine	SHP1	init_SHP1 * (1 + 0 * SHP1ProOE)
+fine	STAT5	init_STAT5
+fine	CIS	0 * CISEqcOE_outer * CISEqc_outer
+fine	SOCS3	0 * SOCS3EqcOE_outer * SOCS3Eqc_outer
+fine	epo_level	1.25e-06
+fine	SOCS3Inh	SOCS3Inh_outer/SOCS3Eqc_outer
+fine	JAK2EpoRDeaSHP1	JAK2EpoRDeaSHP1_outer/init_SHP1
+fine	EpoRCISRemove	EpoRCISRemove_outer/init_EpoRJAK2
+fine	SHP1ActEpoR	SHP1ActEpoR_outer/init_EpoRJAK2
+fine	STAT5ActJAK2	STAT5ActJAK2_outer/init_EpoRJAK2
+fine	STAT5ActEpoR	STAT5ActEpoR_outer/init_EpoRJAK2^2
+fine	CISInh	CISInh_outer/CISEqc_outer
+fine	CISRNAEqc	1/init_STAT5
+fine	ActD	0
+fine	SOCS3RNAEqc	1/init_STAT5
+fine	CISEqc	CISEqc_outer/1
+fine	CISoe	0
+fine	CISEqcOE	CISEqcOE_outer * CISEqc_outer
+fine	SOCS3Eqc	SOCS3Eqc_outer/1
+fine	SOCS3oe	0
+fine	SOCS3EqcOE	SOCS3EqcOE_outer * SOCS3Eqc_outer
+fine	offset_pJAK2	offset_pJAK2_fine
+fine	scale_pJAK2	scale_pJAK2_fine
+fine	offset_pEpoR	offset_pEpoR_fine
+fine	scale_pEpoR	scale_pEpoR_fine
+fine	offset_CIS	0
+fine	scale_CIS	1
+fine	offset_SOCS3	0
+fine	scale_SOCS3	1
+fine	scale_tSTAT5	1
+fine	offset_pSTAT5	0
+fine	scale_pSTAT5	1
+fine	scale_tSHP1	1
+fine	sd_pSTAT5_au	sd_STAT5_au
+cisoe_0	EpoRJAK2	init_EpoRJAK2
+cisoe_0	EpoRJAK2_CIS	0
+cisoe_0	SHP1	init_SHP1 * (1 + 0 * SHP1ProOE)
+cisoe_0	STAT5	init_STAT5
+cisoe_0	CIS	0 * CISEqcOE_outer * CISEqc_outer
+cisoe_0	SOCS3	0 * SOCS3EqcOE_outer * SOCS3Eqc_outer
+cisoe_0	epo_level	1.25e-07
+cisoe_0	SOCS3Inh	SOCS3Inh_outer/SOCS3Eqc_outer
+cisoe_0	JAK2EpoRDeaSHP1	JAK2EpoRDeaSHP1_outer/init_SHP1
+cisoe_0	EpoRCISRemove	EpoRCISRemove_outer/init_EpoRJAK2
+cisoe_0	SHP1ActEpoR	SHP1ActEpoR_outer/init_EpoRJAK2
+cisoe_0	STAT5ActJAK2	STAT5ActJAK2_outer/init_EpoRJAK2
+cisoe_0	STAT5ActEpoR	STAT5ActEpoR_outer/init_EpoRJAK2^2
+cisoe_0	CISInh	CISInh_outer/CISEqc_outer
+cisoe_0	CISRNAEqc	1/init_STAT5
+cisoe_0	ActD	0
+cisoe_0	SOCS3RNAEqc	1/init_STAT5
+cisoe_0	CISEqc	CISEqc_outer/1
+cisoe_0	CISoe	0
+cisoe_0	CISEqcOE	CISEqcOE_outer * CISEqc_outer
+cisoe_0	SOCS3Eqc	SOCS3Eqc_outer/1
+cisoe_0	SOCS3oe	0
+cisoe_0	SOCS3EqcOE	SOCS3EqcOE_outer * SOCS3Eqc_outer
+cisoe_0	offset_pJAK2	offset_pJAK2_cisoe
+cisoe_0	scale_pJAK2	scale_pJAK2_cisoe
+cisoe_0	offset_pEpoR	offset_pEpoR_cisoe
+cisoe_0	scale_pEpoR	scale_pEpoR_cisoe
+cisoe_0	offset_CIS	offset_CIS_cisoe
+cisoe_0	scale_CIS	scale_CIS_cisoe
+cisoe_0	offset_SOCS3	offset_SOCS3_cisoe
+cisoe_0	scale_SOCS3	scale_SOCS3_cisoe
+cisoe_0	scale_tSTAT5	1
+cisoe_0	offset_pSTAT5	offset_pSTAT5_cisoe
+cisoe_0	scale_pSTAT5	scale_pSTAT5_cisoe
+cisoe_0	scale_tSHP1	1
+cisoe_0	sd_pSTAT5_au	sd_STAT5_au
+cisoe_1	EpoRJAK2	init_EpoRJAK2
+cisoe_1	EpoRJAK2_CIS	1
+cisoe_1	SHP1	init_SHP1 * (1 + 0 * SHP1ProOE)
+cisoe_1	STAT5	init_STAT5
+cisoe_1	CIS	1 * CISEqcOE_outer * CISEqc_outer
+cisoe_1	SOCS3	0 * SOCS3EqcOE_outer * SOCS3Eqc_outer
+cisoe_1	epo_level	1.25e-07
+cisoe_1	SOCS3Inh	SOCS3Inh_outer/SOCS3Eqc_outer
+cisoe_1	JAK2EpoRDeaSHP1	JAK2EpoRDeaSHP1_outer/init_SHP1
+cisoe_1	EpoRCISRemove	EpoRCISRemove_outer/init_EpoRJAK2
+cisoe_1	SHP1ActEpoR	SHP1ActEpoR_outer/init_EpoRJAK2
+cisoe_1	STAT5ActJAK2	STAT5ActJAK2_outer/init_EpoRJAK2
+cisoe_1	STAT5ActEpoR	STAT5ActEpoR_outer/init_EpoRJAK2^2
+cisoe_1	CISInh	CISInh_outer/CISEqc_outer
+cisoe_1	CISRNAEqc	1/init_STAT5
+cisoe_1	ActD	0
+cisoe_1	SOCS3RNAEqc	1/init_STAT5
+cisoe_1	CISEqc	CISEqc_outer/1
+cisoe_1	CISoe	1
+cisoe_1	CISEqcOE	CISEqcOE_outer * CISEqc_outer
+cisoe_1	SOCS3Eqc	SOCS3Eqc_outer/1
+cisoe_1	SOCS3oe	0
+cisoe_1	SOCS3EqcOE	SOCS3EqcOE_outer * SOCS3Eqc_outer
+cisoe_1	offset_pJAK2	offset_pJAK2_cisoe
+cisoe_1	scale_pJAK2	scale_pJAK2_cisoe
+cisoe_1	offset_pEpoR	offset_pEpoR_cisoe
+cisoe_1	scale_pEpoR	scale_pEpoR_cisoe
+cisoe_1	offset_CIS	offset_CIS_cisoe
+cisoe_1	scale_CIS	scale_CIS_cisoe
+cisoe_1	offset_SOCS3	offset_SOCS3_cisoe
+cisoe_1	scale_SOCS3	scale_SOCS3_cisoe
+cisoe_1	scale_tSTAT5	1
+cisoe_1	offset_pSTAT5	offset_pSTAT5_cisoe
+cisoe_1	scale_pSTAT5	scale_pSTAT5_cisoe
+cisoe_1	scale_tSHP1	1
+cisoe_1	sd_pSTAT5_au	sd_STAT5_au
+cisoe_pepor_0	EpoRJAK2	init_EpoRJAK2
+cisoe_pepor_0	EpoRJAK2_CIS	0
+cisoe_pepor_0	SHP1	init_SHP1 * (1 + 0 * SHP1ProOE)
+cisoe_pepor_0	STAT5	init_STAT5
+cisoe_pepor_0	CIS	0 * CISEqcOE_outer * CISEqc_outer
+cisoe_pepor_0	SOCS3	0 * SOCS3EqcOE_outer * SOCS3Eqc_outer
+cisoe_pepor_0	epo_level	1.25e-07
+cisoe_pepor_0	SOCS3Inh	SOCS3Inh_outer/SOCS3Eqc_outer
+cisoe_pepor_0	JAK2EpoRDeaSHP1	JAK2EpoRDeaSHP1_outer/init_SHP1
+cisoe_pepor_0	EpoRCISRemove	EpoRCISRemove_outer/init_EpoRJAK2
+cisoe_pepor_0	SHP1ActEpoR	SHP1ActEpoR_outer/init_EpoRJAK2
+cisoe_pepor_0	STAT5ActJAK2	STAT5ActJAK2_outer/init_EpoRJAK2
+cisoe_pepor_0	STAT5ActEpoR	STAT5ActEpoR_outer/init_EpoRJAK2^2
+cisoe_pepor_0	CISInh	CISInh_outer/CISEqc_outer
+cisoe_pepor_0	CISRNAEqc	1/init_STAT5
+cisoe_pepor_0	ActD	0
+cisoe_pepor_0	SOCS3RNAEqc	1/init_STAT5
+cisoe_pepor_0	CISEqc	CISEqc_outer/1
+cisoe_pepor_0	CISoe	0
+cisoe_pepor_0	CISEqcOE	CISEqcOE_outer * CISEqc_outer
+cisoe_pepor_0	SOCS3Eqc	SOCS3Eqc_outer/1
+cisoe_pepor_0	SOCS3oe	0
+cisoe_pepor_0	SOCS3EqcOE	SOCS3EqcOE_outer * SOCS3Eqc_outer
+cisoe_pepor_0	offset_pJAK2	0
+cisoe_pepor_0	scale_pJAK2	1
+cisoe_pepor_0	offset_pEpoR	offset_pEpoR_cisoe_pepor
+cisoe_pepor_0	scale_pEpoR	scale_pEpoR_cisoe_pepor
+cisoe_pepor_0	offset_CIS	0
+cisoe_pepor_0	scale_CIS	1
+cisoe_pepor_0	offset_SOCS3	0
+cisoe_pepor_0	scale_SOCS3	1
+cisoe_pepor_0	scale_tSTAT5	1
+cisoe_pepor_0	offset_pSTAT5	0
+cisoe_pepor_0	scale_pSTAT5	1
+cisoe_pepor_0	scale_tSHP1	1
+cisoe_pepor_0	sd_pSTAT5_au	sd_STAT5_au
+cisoe_pepor_1	EpoRJAK2	init_EpoRJAK2
+cisoe_pepor_1	EpoRJAK2_CIS	1
+cisoe_pepor_1	SHP1	init_SHP1 * (1 + 0 * SHP1ProOE)
+cisoe_pepor_1	STAT5	init_STAT5
+cisoe_pepor_1	CIS	1 * CISEqcOE_outer * CISEqc_outer
+cisoe_pepor_1	SOCS3	0 * SOCS3EqcOE_outer * SOCS3Eqc_outer
+cisoe_pepor_1	epo_level	1.25e-07
+cisoe_pepor_1	SOCS3Inh	SOCS3Inh_outer/SOCS3Eqc_outer
+cisoe_pepor_1	JAK2EpoRDeaSHP1	JAK2EpoRDeaSHP1_outer/init_SHP1
+cisoe_pepor_1	EpoRCISRemove	EpoRCISRemove_outer/init_EpoRJAK2
+cisoe_pepor_1	SHP1ActEpoR	SHP1ActEpoR_outer/init_EpoRJAK2
+cisoe_pepor_1	STAT5ActJAK2	STAT5ActJAK2_outer/init_EpoRJAK2
+cisoe_pepor_1	STAT5ActEpoR	STAT5ActEpoR_outer/init_EpoRJAK2^2
+cisoe_pepor_1	CISInh	CISInh_outer/CISEqc_outer
+cisoe_pepor_1	CISRNAEqc	1/init_STAT5
+cisoe_pepor_1	ActD	0
+cisoe_pepor_1	SOCS3RNAEqc	1/init_STAT5
+cisoe_pepor_1	CISEqc	CISEqc_outer/1
+cisoe_pepor_1	CISoe	1
+cisoe_pepor_1	CISEqcOE	CISEqcOE_outer * CISEqc_outer
+cisoe_pepor_1	SOCS3Eqc	SOCS3Eqc_outer/1
+cisoe_pepor_1	SOCS3oe	0
+cisoe_pepor_1	SOCS3EqcOE	SOCS3EqcOE_outer * SOCS3Eqc_outer
+cisoe_pepor_1	offset_pJAK2	0
+cisoe_pepor_1	scale_pJAK2	1
+cisoe_pepor_1	offset_pEpoR	offset_pEpoR_cisoe_pepor
+cisoe_pepor_1	scale_pEpoR	scale_pEpoR_cisoe_pepor
+cisoe_pepor_1	offset_CIS	0
+cisoe_pepor_1	scale_CIS	1
+cisoe_pepor_1	offset_SOCS3	0
+cisoe_pepor_1	scale_SOCS3	1
+cisoe_pepor_1	scale_tSTAT5	1
+cisoe_pepor_1	offset_pSTAT5	0
+cisoe_pepor_1	scale_pSTAT5	1
+cisoe_pepor_1	scale_tSHP1	1
+cisoe_pepor_1	sd_pSTAT5_au	sd_STAT5_au
+socs3oe_0	EpoRJAK2	init_EpoRJAK2
+socs3oe_0	EpoRJAK2_CIS	0
+socs3oe_0	SHP1	init_SHP1 * (1 + 0 * SHP1ProOE)
+socs3oe_0	STAT5	init_STAT5
+socs3oe_0	CIS	0 * CISEqcOE_outer * CISEqc_outer
+socs3oe_0	SOCS3	0 * SOCS3EqcOE_outer * SOCS3Eqc_outer
+socs3oe_0	epo_level	1.25e-07
+socs3oe_0	SOCS3Inh	SOCS3Inh_outer/SOCS3Eqc_outer
+socs3oe_0	JAK2EpoRDeaSHP1	JAK2EpoRDeaSHP1_outer/init_SHP1
+socs3oe_0	EpoRCISRemove	EpoRCISRemove_outer/init_EpoRJAK2
+socs3oe_0	SHP1ActEpoR	SHP1ActEpoR_outer/init_EpoRJAK2
+socs3oe_0	STAT5ActJAK2	STAT5ActJAK2_outer/init_EpoRJAK2
+socs3oe_0	STAT5ActEpoR	STAT5ActEpoR_outer/init_EpoRJAK2^2
+socs3oe_0	CISInh	CISInh_outer/CISEqc_outer
+socs3oe_0	CISRNAEqc	1/init_STAT5
+socs3oe_0	ActD	0
+socs3oe_0	SOCS3RNAEqc	1/init_STAT5
+socs3oe_0	CISEqc	CISEqc_outer/1
+socs3oe_0	CISoe	0
+socs3oe_0	CISEqcOE	CISEqcOE_outer * CISEqc_outer
+socs3oe_0	SOCS3Eqc	SOCS3Eqc_outer/1
+socs3oe_0	SOCS3oe	0
+socs3oe_0	SOCS3EqcOE	SOCS3EqcOE_outer * SOCS3Eqc_outer
+socs3oe_0	offset_pJAK2	offset_pJAK2_socs3oe
+socs3oe_0	scale_pJAK2	scale_pJAK2_socs3oe
+socs3oe_0	offset_pEpoR	offset_pEpoR_socs3oe
+socs3oe_0	scale_pEpoR	scale_pEpoR_socs3oe
+socs3oe_0	offset_CIS	offset_CIS_socs3oe
+socs3oe_0	scale_CIS	scale_CIS_socs3oe
+socs3oe_0	offset_SOCS3	offset_SOCS3_socs3oe
+socs3oe_0	scale_SOCS3	scale_SOCS3_socs3oe
+socs3oe_0	scale_tSTAT5	1
+socs3oe_0	offset_pSTAT5	offset_pSTAT5_socs3oe
+socs3oe_0	scale_pSTAT5	scale_pSTAT5_socs3oe
+socs3oe_0	scale_tSHP1	1
+socs3oe_0	sd_pSTAT5_au	sd_STAT5_au
+socs3oe_1	EpoRJAK2	init_EpoRJAK2
+socs3oe_1	EpoRJAK2_CIS	0
+socs3oe_1	SHP1	init_SHP1 * (1 + 0 * SHP1ProOE)
+socs3oe_1	STAT5	init_STAT5
+socs3oe_1	CIS	0 * CISEqcOE_outer * CISEqc_outer
+socs3oe_1	SOCS3	1 * SOCS3EqcOE_outer * SOCS3Eqc_outer
+socs3oe_1	epo_level	1.25e-07
+socs3oe_1	SOCS3Inh	SOCS3Inh_outer/SOCS3Eqc_outer
+socs3oe_1	JAK2EpoRDeaSHP1	JAK2EpoRDeaSHP1_outer/init_SHP1
+socs3oe_1	EpoRCISRemove	EpoRCISRemove_outer/init_EpoRJAK2
+socs3oe_1	SHP1ActEpoR	SHP1ActEpoR_outer/init_EpoRJAK2
+socs3oe_1	STAT5ActJAK2	STAT5ActJAK2_outer/init_EpoRJAK2
+socs3oe_1	STAT5ActEpoR	STAT5ActEpoR_outer/init_EpoRJAK2^2
+socs3oe_1	CISInh	CISInh_outer/CISEqc_outer
+socs3oe_1	CISRNAEqc	1/init_STAT5
+socs3oe_1	ActD	0
+socs3oe_1	SOCS3RNAEqc	1/init_STAT5
+socs3oe_1	CISEqc	CISEqc_outer/1
+socs3oe_1	CISoe	0
+socs3oe_1	CISEqcOE	CISEqcOE_outer * CISEqc_outer
+socs3oe_1	SOCS3Eqc	SOCS3Eqc_outer/1
+socs3oe_1	SOCS3oe	1
+socs3oe_1	SOCS3EqcOE	SOCS3EqcOE_outer * SOCS3Eqc_outer
+socs3oe_1	offset_pJAK2	offset_pJAK2_socs3oe
+socs3oe_1	scale_pJAK2	scale_pJAK2_socs3oe
+socs3oe_1	offset_pEpoR	offset_pEpoR_socs3oe
+socs3oe_1	scale_pEpoR	scale_pEpoR_socs3oe
+socs3oe_1	offset_CIS	offset_CIS_socs3oe
+socs3oe_1	scale_CIS	scale_CIS_socs3oe
+socs3oe_1	offset_SOCS3	offset_SOCS3_socs3oe
+socs3oe_1	scale_SOCS3	scale_SOCS3_socs3oe
+socs3oe_1	scale_tSTAT5	1
+socs3oe_1	offset_pSTAT5	offset_pSTAT5_socs3oe
+socs3oe_1	scale_pSTAT5	scale_pSTAT5_socs3oe
+socs3oe_1	scale_tSHP1	1
+socs3oe_1	sd_pSTAT5_au	sd_STAT5_au + sd_pSTAT5_socs3oe
+shp1oe_0	EpoRJAK2	init_EpoRJAK2
+shp1oe_0	EpoRJAK2_CIS	0
+shp1oe_0	SHP1	init_SHP1 * (1 + 0 * SHP1ProOE)
+shp1oe_0	STAT5	init_STAT5
+shp1oe_0	CIS	0 * CISEqcOE_outer * CISEqc_outer
+shp1oe_0	SOCS3	0 * SOCS3EqcOE_outer * SOCS3Eqc_outer
+shp1oe_0	epo_level	1.25e-07
+shp1oe_0	SOCS3Inh	SOCS3Inh_outer/SOCS3Eqc_outer
+shp1oe_0	JAK2EpoRDeaSHP1	JAK2EpoRDeaSHP1_outer/init_SHP1
+shp1oe_0	EpoRCISRemove	EpoRCISRemove_outer/init_EpoRJAK2
+shp1oe_0	SHP1ActEpoR	SHP1ActEpoR_outer/init_EpoRJAK2
+shp1oe_0	STAT5ActJAK2	STAT5ActJAK2_outer/init_EpoRJAK2
+shp1oe_0	STAT5ActEpoR	STAT5ActEpoR_outer/init_EpoRJAK2^2
+shp1oe_0	CISInh	CISInh_outer/CISEqc_outer
+shp1oe_0	CISRNAEqc	1/init_STAT5
+shp1oe_0	ActD	0
+shp1oe_0	SOCS3RNAEqc	1/init_STAT5
+shp1oe_0	CISEqc	CISEqc_outer/1
+shp1oe_0	CISoe	0
+shp1oe_0	CISEqcOE	CISEqcOE_outer * CISEqc_outer
+shp1oe_0	SOCS3Eqc	SOCS3Eqc_outer/1
+shp1oe_0	SOCS3oe	0
+shp1oe_0	SOCS3EqcOE	SOCS3EqcOE_outer * SOCS3Eqc_outer
+shp1oe_0	offset_pJAK2	offset_pJAK2_shp1oe
+shp1oe_0	scale_pJAK2	scale_pJAK2_shp1oe
+shp1oe_0	offset_pEpoR	offset_pEpoR_shp1oe
+shp1oe_0	scale_pEpoR	scale_pEpoR_shp1oe
+shp1oe_0	offset_CIS	offset_CIS_shp1oe
+shp1oe_0	scale_CIS	scale_CIS_shp1oe
+shp1oe_0	offset_SOCS3	0
+shp1oe_0	scale_SOCS3	1
+shp1oe_0	scale_tSTAT5	scale_tSTAT5_shp1oe
+shp1oe_0	offset_pSTAT5	offset_pSTAT5_shp1oe
+shp1oe_0	scale_pSTAT5	scale_pSTAT5_shp1oe
+shp1oe_0	scale_tSHP1	scale_SHP1_shp1oe
+shp1oe_0	sd_pSTAT5_au	sd_STAT5_au
+shp1oe_1	EpoRJAK2	init_EpoRJAK2
+shp1oe_1	EpoRJAK2_CIS	0
+shp1oe_1	SHP1	init_SHP1 * (1 + 1 * SHP1ProOE)
+shp1oe_1	STAT5	init_STAT5
+shp1oe_1	CIS	0 * CISEqcOE_outer * CISEqc_outer
+shp1oe_1	SOCS3	0 * SOCS3EqcOE_outer * SOCS3Eqc_outer
+shp1oe_1	epo_level	1.25e-07
+shp1oe_1	SOCS3Inh	SOCS3Inh_outer/SOCS3Eqc_outer
+shp1oe_1	JAK2EpoRDeaSHP1	JAK2EpoRDeaSHP1_outer/init_SHP1
+shp1oe_1	EpoRCISRemove	EpoRCISRemove_outer/init_EpoRJAK2
+shp1oe_1	SHP1ActEpoR	SHP1ActEpoR_outer/init_EpoRJAK2
+shp1oe_1	STAT5ActJAK2	STAT5ActJAK2_outer/init_EpoRJAK2
+shp1oe_1	STAT5ActEpoR	STAT5ActEpoR_outer/init_EpoRJAK2^2
+shp1oe_1	CISInh	CISInh_outer/CISEqc_outer
+shp1oe_1	CISRNAEqc	1/init_STAT5
+shp1oe_1	ActD	0
+shp1oe_1	SOCS3RNAEqc	1/init_STAT5
+shp1oe_1	CISEqc	CISEqc_outer/1
+shp1oe_1	CISoe	0
+shp1oe_1	CISEqcOE	CISEqcOE_outer * CISEqc_outer
+shp1oe_1	SOCS3Eqc	SOCS3Eqc_outer/1
+shp1oe_1	SOCS3oe	0
+shp1oe_1	SOCS3EqcOE	SOCS3EqcOE_outer * SOCS3Eqc_outer
+shp1oe_1	offset_pJAK2	offset_pJAK2_shp1oe
+shp1oe_1	scale_pJAK2	scale_pJAK2_shp1oe
+shp1oe_1	offset_pEpoR	offset_pEpoR_shp1oe
+shp1oe_1	scale_pEpoR	scale_pEpoR_shp1oe
+shp1oe_1	offset_CIS	offset_CIS_shp1oe
+shp1oe_1	scale_CIS	scale_CIS_shp1oe
+shp1oe_1	offset_SOCS3	0
+shp1oe_1	scale_SOCS3	1
+shp1oe_1	scale_tSTAT5	scale_tSTAT5_shp1oe
+shp1oe_1	offset_pSTAT5	offset_pSTAT5_shp1oe
+shp1oe_1	scale_pSTAT5	scale_pSTAT5_shp1oe
+shp1oe_1	scale_tSHP1	scale_SHP1_shp1oe
+shp1oe_1	sd_pSTAT5_au	sd_STAT5_au
+dr7_1000	EpoRJAK2	init_EpoRJAK2
+dr7_1000	EpoRJAK2_CIS	0
+dr7_1000	SHP1	init_SHP1 * (1 + 0 * SHP1ProOE)
+dr7_1000	STAT5	init_STAT5
+dr7_1000	CIS	0 * CISEqcOE_outer * CISEqc_outer
+dr7_1000	SOCS3	0 * SOCS3EqcOE_outer * SOCS3Eqc_outer
+dr7_1000	epo_level	2.5e-05
+dr7_1000	SOCS3Inh	SOCS3Inh_outer/SOCS3Eqc_outer
+dr7_1000	JAK2EpoRDeaSHP1	JAK2EpoRDeaSHP1_outer/init_SHP1
+dr7_1000	EpoRCISRemove	EpoRCISRemove_outer/init_EpoRJAK2
+dr7_1000	SHP1ActEpoR	SHP1ActEpoR_outer/init_EpoRJAK2
+dr7_1000	STAT5ActJAK2	STAT5ActJAK2_outer/init_EpoRJAK2
+dr7_1000	STAT5ActEpoR	STAT5ActEpoR_outer/init_EpoRJAK2^2
+dr7_1000	CISInh	CISInh_outer/CISEqc_outer
+dr7_1000	CISRNAEqc	1/init_STAT5
+dr7_1000	ActD	0
+dr7_1000	SOCS3RNAEqc	1/init_STAT5
+dr7_1000	CISEqc	CISEqc_outer/1
+dr7_1000	CISoe	0
+dr7_1000	CISEqcOE	CISEqcOE_outer * CISEqc_outer
+dr7_1000	SOCS3Eqc	SOCS3Eqc_outer/1
+dr7_1000	SOCS3oe	0
+dr7_1000	SOCS3EqcOE	SOCS3EqcOE_outer * SOCS3Eqc_outer
+dr7_1000	offset_pJAK2	offset_pJAK2_dr7
+dr7_1000	scale_pJAK2	scale_pJAK2_dr7
+dr7_1000	offset_pEpoR	offset_pEpoR_dr7
+dr7_1000	scale_pEpoR	scale_pEpoR_dr7
+dr7_1000	offset_CIS	0
+dr7_1000	scale_CIS	1
+dr7_1000	offset_SOCS3	0
+dr7_1000	scale_SOCS3	1
+dr7_1000	scale_tSTAT5	1
+dr7_1000	offset_pSTAT5	0
+dr7_1000	scale_pSTAT5	1
+dr7_1000	scale_tSHP1	1
+dr7_1000	sd_pSTAT5_au	sd_STAT5_au
+dr7_100	EpoRJAK2	init_EpoRJAK2
+dr7_100	EpoRJAK2_CIS	0
+dr7_100	SHP1	init_SHP1 * (1 + 0 * SHP1ProOE)
+dr7_100	STAT5	init_STAT5
+dr7_100	CIS	0 * CISEqcOE_outer * CISEqc_outer
+dr7_100	SOCS3	0 * SOCS3EqcOE_outer * SOCS3Eqc_outer
+dr7_100	epo_level	2.5e-06
+dr7_100	SOCS3Inh	SOCS3Inh_outer/SOCS3Eqc_outer
+dr7_100	JAK2EpoRDeaSHP1	JAK2EpoRDeaSHP1_outer/init_SHP1
+dr7_100	EpoRCISRemove	EpoRCISRemove_outer/init_EpoRJAK2
+dr7_100	SHP1ActEpoR	SHP1ActEpoR_outer/init_EpoRJAK2
+dr7_100	STAT5ActJAK2	STAT5ActJAK2_outer/init_EpoRJAK2
+dr7_100	STAT5ActEpoR	STAT5ActEpoR_outer/init_EpoRJAK2^2
+dr7_100	CISInh	CISInh_outer/CISEqc_outer
+dr7_100	CISRNAEqc	1/init_STAT5
+dr7_100	ActD	0
+dr7_100	SOCS3RNAEqc	1/init_STAT5
+dr7_100	CISEqc	CISEqc_outer/1
+dr7_100	CISoe	0
+dr7_100	CISEqcOE	CISEqcOE_outer * CISEqc_outer
+dr7_100	SOCS3Eqc	SOCS3Eqc_outer/1
+dr7_100	SOCS3oe	0
+dr7_100	SOCS3EqcOE	SOCS3EqcOE_outer * SOCS3Eqc_outer
+dr7_100	offset_pJAK2	offset_pJAK2_dr7
+dr7_100	scale_pJAK2	scale_pJAK2_dr7
+dr7_100	offset_pEpoR	offset_pEpoR_dr7
+dr7_100	scale_pEpoR	scale_pEpoR_dr7
+dr7_100	offset_CIS	0
+dr7_100	scale_CIS	1
+dr7_100	offset_SOCS3	0
+dr7_100	scale_SOCS3	1
+dr7_100	scale_tSTAT5	1
+dr7_100	offset_pSTAT5	0
+dr7_100	scale_pSTAT5	1
+dr7_100	scale_tSHP1	1
+dr7_100	sd_pSTAT5_au	sd_STAT5_au
+dr7_10	EpoRJAK2	init_EpoRJAK2
+dr7_10	EpoRJAK2_CIS	0
+dr7_10	SHP1	init_SHP1 * (1 + 0 * SHP1ProOE)
+dr7_10	STAT5	init_STAT5
+dr7_10	CIS	0 * CISEqcOE_outer * CISEqc_outer
+dr7_10	SOCS3	0 * SOCS3EqcOE_outer * SOCS3Eqc_outer
+dr7_10	epo_level	2.5e-07
+dr7_10	SOCS3Inh	SOCS3Inh_outer/SOCS3Eqc_outer
+dr7_10	JAK2EpoRDeaSHP1	JAK2EpoRDeaSHP1_outer/init_SHP1
+dr7_10	EpoRCISRemove	EpoRCISRemove_outer/init_EpoRJAK2
+dr7_10	SHP1ActEpoR	SHP1ActEpoR_outer/init_EpoRJAK2
+dr7_10	STAT5ActJAK2	STAT5ActJAK2_outer/init_EpoRJAK2
+dr7_10	STAT5ActEpoR	STAT5ActEpoR_outer/init_EpoRJAK2^2
+dr7_10	CISInh	CISInh_outer/CISEqc_outer
+dr7_10	CISRNAEqc	1/init_STAT5
+dr7_10	ActD	0
+dr7_10	SOCS3RNAEqc	1/init_STAT5
+dr7_10	CISEqc	CISEqc_outer/1
+dr7_10	CISoe	0
+dr7_10	CISEqcOE	CISEqcOE_outer * CISEqc_outer
+dr7_10	SOCS3Eqc	SOCS3Eqc_outer/1
+dr7_10	SOCS3oe	0
+dr7_10	SOCS3EqcOE	SOCS3EqcOE_outer * SOCS3Eqc_outer
+dr7_10	offset_pJAK2	offset_pJAK2_dr7
+dr7_10	scale_pJAK2	scale_pJAK2_dr7
+dr7_10	offset_pEpoR	offset_pEpoR_dr7
+dr7_10	scale_pEpoR	scale_pEpoR_dr7
+dr7_10	offset_CIS	0
+dr7_10	scale_CIS	1
+dr7_10	offset_SOCS3	0
+dr7_10	scale_SOCS3	1
+dr7_10	scale_tSTAT5	1
+dr7_10	offset_pSTAT5	0
+dr7_10	scale_pSTAT5	1
+dr7_10	scale_tSHP1	1
+dr7_10	sd_pSTAT5_au	sd_STAT5_au
+dr7_1	EpoRJAK2	init_EpoRJAK2
+dr7_1	EpoRJAK2_CIS	0
+dr7_1	SHP1	init_SHP1 * (1 + 0 * SHP1ProOE)
+dr7_1	STAT5	init_STAT5
+dr7_1	CIS	0 * CISEqcOE_outer * CISEqc_outer
+dr7_1	SOCS3	0 * SOCS3EqcOE_outer * SOCS3Eqc_outer
+dr7_1	epo_level	2.5e-08
+dr7_1	SOCS3Inh	SOCS3Inh_outer/SOCS3Eqc_outer
+dr7_1	JAK2EpoRDeaSHP1	JAK2EpoRDeaSHP1_outer/init_SHP1
+dr7_1	EpoRCISRemove	EpoRCISRemove_outer/init_EpoRJAK2
+dr7_1	SHP1ActEpoR	SHP1ActEpoR_outer/init_EpoRJAK2
+dr7_1	STAT5ActJAK2	STAT5ActJAK2_outer/init_EpoRJAK2
+dr7_1	STAT5ActEpoR	STAT5ActEpoR_outer/init_EpoRJAK2^2
+dr7_1	CISInh	CISInh_outer/CISEqc_outer
+dr7_1	CISRNAEqc	1/init_STAT5
+dr7_1	ActD	0
+dr7_1	SOCS3RNAEqc	1/init_STAT5
+dr7_1	CISEqc	CISEqc_outer/1
+dr7_1	CISoe	0
+dr7_1	CISEqcOE	CISEqcOE_outer * CISEqc_outer
+dr7_1	SOCS3Eqc	SOCS3Eqc_outer/1
+dr7_1	SOCS3oe	0
+dr7_1	SOCS3EqcOE	SOCS3EqcOE_outer * SOCS3Eqc_outer
+dr7_1	offset_pJAK2	offset_pJAK2_dr7
+dr7_1	scale_pJAK2	scale_pJAK2_dr7
+dr7_1	offset_pEpoR	offset_pEpoR_dr7
+dr7_1	scale_pEpoR	scale_pEpoR_dr7
+dr7_1	offset_CIS	0
+dr7_1	scale_CIS	1
+dr7_1	offset_SOCS3	0
+dr7_1	scale_SOCS3	1
+dr7_1	scale_tSTAT5	1
+dr7_1	offset_pSTAT5	0
+dr7_1	scale_pSTAT5	1
+dr7_1	scale_tSHP1	1
+dr7_1	sd_pSTAT5_au	sd_STAT5_au
+dr7_0.1	EpoRJAK2	init_EpoRJAK2
+dr7_0.1	EpoRJAK2_CIS	0
+dr7_0.1	SHP1	init_SHP1 * (1 + 0 * SHP1ProOE)
+dr7_0.1	STAT5	init_STAT5
+dr7_0.1	CIS	0 * CISEqcOE_outer * CISEqc_outer
+dr7_0.1	SOCS3	0 * SOCS3EqcOE_outer * SOCS3Eqc_outer
+dr7_0.1	epo_level	2.5e-09
+dr7_0.1	SOCS3Inh	SOCS3Inh_outer/SOCS3Eqc_outer
+dr7_0.1	JAK2EpoRDeaSHP1	JAK2EpoRDeaSHP1_outer/init_SHP1
+dr7_0.1	EpoRCISRemove	EpoRCISRemove_outer/init_EpoRJAK2
+dr7_0.1	SHP1ActEpoR	SHP1ActEpoR_outer/init_EpoRJAK2
+dr7_0.1	STAT5ActJAK2	STAT5ActJAK2_outer/init_EpoRJAK2
+dr7_0.1	STAT5ActEpoR	STAT5ActEpoR_outer/init_EpoRJAK2^2
+dr7_0.1	CISInh	CISInh_outer/CISEqc_outer
+dr7_0.1	CISRNAEqc	1/init_STAT5
+dr7_0.1	ActD	0
+dr7_0.1	SOCS3RNAEqc	1/init_STAT5
+dr7_0.1	CISEqc	CISEqc_outer/1
+dr7_0.1	CISoe	0
+dr7_0.1	CISEqcOE	CISEqcOE_outer * CISEqc_outer
+dr7_0.1	SOCS3Eqc	SOCS3Eqc_outer/1
+dr7_0.1	SOCS3oe	0
+dr7_0.1	SOCS3EqcOE	SOCS3EqcOE_outer * SOCS3Eqc_outer
+dr7_0.1	offset_pJAK2	offset_pJAK2_dr7
+dr7_0.1	scale_pJAK2	scale_pJAK2_dr7
+dr7_0.1	offset_pEpoR	offset_pEpoR_dr7
+dr7_0.1	scale_pEpoR	scale_pEpoR_dr7
+dr7_0.1	offset_CIS	0
+dr7_0.1	scale_CIS	1
+dr7_0.1	offset_SOCS3	0
+dr7_0.1	scale_SOCS3	1
+dr7_0.1	scale_tSTAT5	1
+dr7_0.1	offset_pSTAT5	0
+dr7_0.1	scale_pSTAT5	1
+dr7_0.1	scale_tSHP1	1
+dr7_0.1	sd_pSTAT5_au	sd_STAT5_au
+dr30_50	EpoRJAK2	init_EpoRJAK2
+dr30_50	EpoRJAK2_CIS	0
+dr30_50	SHP1	init_SHP1 * (1 + 0 * SHP1ProOE)
+dr30_50	STAT5	init_STAT5
+dr30_50	CIS	0 * CISEqcOE_outer * CISEqc_outer
+dr30_50	SOCS3	0 * SOCS3EqcOE_outer * SOCS3Eqc_outer
+dr30_50	epo_level	1.25e-06
+dr30_50	SOCS3Inh	SOCS3Inh_outer/SOCS3Eqc_outer
+dr30_50	JAK2EpoRDeaSHP1	JAK2EpoRDeaSHP1_outer/init_SHP1
+dr30_50	EpoRCISRemove	EpoRCISRemove_outer/init_EpoRJAK2
+dr30_50	SHP1ActEpoR	SHP1ActEpoR_outer/init_EpoRJAK2
+dr30_50	STAT5ActJAK2	STAT5ActJAK2_outer/init_EpoRJAK2
+dr30_50	STAT5ActEpoR	STAT5ActEpoR_outer/init_EpoRJAK2^2
+dr30_50	CISInh	CISInh_outer/CISEqc_outer
+dr30_50	CISRNAEqc	1/init_STAT5
+dr30_50	ActD	0
+dr30_50	SOCS3RNAEqc	1/init_STAT5
+dr30_50	CISEqc	CISEqc_outer/1
+dr30_50	CISoe	0
+dr30_50	CISEqcOE	CISEqcOE_outer * CISEqc_outer
+dr30_50	SOCS3Eqc	SOCS3Eqc_outer/1
+dr30_50	SOCS3oe	0
+dr30_50	SOCS3EqcOE	SOCS3EqcOE_outer * SOCS3Eqc_outer
+dr30_50	offset_pJAK2	offset_pJAK2_dr30
+dr30_50	scale_pJAK2	scale_pJAK2_dr30
+dr30_50	offset_pEpoR	offset_pEpoR_dr30
+dr30_50	scale_pEpoR	scale_pEpoR_dr30
+dr30_50	offset_CIS	0
+dr30_50	scale_CIS	1
+dr30_50	offset_SOCS3	0
+dr30_50	scale_SOCS3	1
+dr30_50	scale_tSTAT5	1
+dr30_50	offset_pSTAT5	0
+dr30_50	scale_pSTAT5	1
+dr30_50	scale_tSHP1	1
+dr30_50	sd_pSTAT5_au	sd_STAT5_au
+dr30_5	EpoRJAK2	init_EpoRJAK2
+dr30_5	EpoRJAK2_CIS	0
+dr30_5	SHP1	init_SHP1 * (1 + 0 * SHP1ProOE)
+dr30_5	STAT5	init_STAT5
+dr30_5	CIS	0 * CISEqcOE_outer * CISEqc_outer
+dr30_5	SOCS3	0 * SOCS3EqcOE_outer * SOCS3Eqc_outer
+dr30_5	epo_level	1.25e-07
+dr30_5	SOCS3Inh	SOCS3Inh_outer/SOCS3Eqc_outer
+dr30_5	JAK2EpoRDeaSHP1	JAK2EpoRDeaSHP1_outer/init_SHP1
+dr30_5	EpoRCISRemove	EpoRCISRemove_outer/init_EpoRJAK2
+dr30_5	SHP1ActEpoR	SHP1ActEpoR_outer/init_EpoRJAK2
+dr30_5	STAT5ActJAK2	STAT5ActJAK2_outer/init_EpoRJAK2
+dr30_5	STAT5ActEpoR	STAT5ActEpoR_outer/init_EpoRJAK2^2
+dr30_5	CISInh	CISInh_outer/CISEqc_outer
+dr30_5	CISRNAEqc	1/init_STAT5
+dr30_5	ActD	0
+dr30_5	SOCS3RNAEqc	1/init_STAT5
+dr30_5	CISEqc	CISEqc_outer/1
+dr30_5	CISoe	0
+dr30_5	CISEqcOE	CISEqcOE_outer * CISEqc_outer
+dr30_5	SOCS3Eqc	SOCS3Eqc_outer/1
+dr30_5	SOCS3oe	0
+dr30_5	SOCS3EqcOE	SOCS3EqcOE_outer * SOCS3Eqc_outer
+dr30_5	offset_pJAK2	offset_pJAK2_dr30
+dr30_5	scale_pJAK2	scale_pJAK2_dr30
+dr30_5	offset_pEpoR	offset_pEpoR_dr30
+dr30_5	scale_pEpoR	scale_pEpoR_dr30
+dr30_5	offset_CIS	0
+dr30_5	scale_CIS	1
+dr30_5	offset_SOCS3	0
+dr30_5	scale_SOCS3	1
+dr30_5	scale_tSTAT5	1
+dr30_5	offset_pSTAT5	0
+dr30_5	scale_pSTAT5	1
+dr30_5	scale_tSHP1	1
+dr30_5	sd_pSTAT5_au	sd_STAT5_au
+dr30_100	EpoRJAK2	init_EpoRJAK2
+dr30_100	EpoRJAK2_CIS	0
+dr30_100	SHP1	init_SHP1 * (1 + 0 * SHP1ProOE)
+dr30_100	STAT5	init_STAT5
+dr30_100	CIS	0 * CISEqcOE_outer * CISEqc_outer
+dr30_100	SOCS3	0 * SOCS3EqcOE_outer * SOCS3Eqc_outer
+dr30_100	epo_level	2.5e-06
+dr30_100	SOCS3Inh	SOCS3Inh_outer/SOCS3Eqc_outer
+dr30_100	JAK2EpoRDeaSHP1	JAK2EpoRDeaSHP1_outer/init_SHP1
+dr30_100	EpoRCISRemove	EpoRCISRemove_outer/init_EpoRJAK2
+dr30_100	SHP1ActEpoR	SHP1ActEpoR_outer/init_EpoRJAK2
+dr30_100	STAT5ActJAK2	STAT5ActJAK2_outer/init_EpoRJAK2
+dr30_100	STAT5ActEpoR	STAT5ActEpoR_outer/init_EpoRJAK2^2
+dr30_100	CISInh	CISInh_outer/CISEqc_outer
+dr30_100	CISRNAEqc	1/init_STAT5
+dr30_100	ActD	0
+dr30_100	SOCS3RNAEqc	1/init_STAT5
+dr30_100	CISEqc	CISEqc_outer/1
+dr30_100	CISoe	0
+dr30_100	CISEqcOE	CISEqcOE_outer * CISEqc_outer
+dr30_100	SOCS3Eqc	SOCS3Eqc_outer/1
+dr30_100	SOCS3oe	0
+dr30_100	SOCS3EqcOE	SOCS3EqcOE_outer * SOCS3Eqc_outer
+dr30_100	offset_pJAK2	offset_pJAK2_dr30
+dr30_100	scale_pJAK2	scale_pJAK2_dr30
+dr30_100	offset_pEpoR	offset_pEpoR_dr30
+dr30_100	scale_pEpoR	scale_pEpoR_dr30
+dr30_100	offset_CIS	0
+dr30_100	scale_CIS	1
+dr30_100	offset_SOCS3	0
+dr30_100	scale_SOCS3	1
+dr30_100	scale_tSTAT5	1
+dr30_100	offset_pSTAT5	0
+dr30_100	scale_pSTAT5	1
+dr30_100	scale_tSHP1	1
+dr30_100	sd_pSTAT5_au	sd_STAT5_au
+dr30_10	EpoRJAK2	init_EpoRJAK2
+dr30_10	EpoRJAK2_CIS	0
+dr30_10	SHP1	init_SHP1 * (1 + 0 * SHP1ProOE)
+dr30_10	STAT5	init_STAT5
+dr30_10	CIS	0 * CISEqcOE_outer * CISEqc_outer
+dr30_10	SOCS3	0 * SOCS3EqcOE_outer * SOCS3Eqc_outer
+dr30_10	epo_level	2.5e-07
+dr30_10	SOCS3Inh	SOCS3Inh_outer/SOCS3Eqc_outer
+dr30_10	JAK2EpoRDeaSHP1	JAK2EpoRDeaSHP1_outer/init_SHP1
+dr30_10	EpoRCISRemove	EpoRCISRemove_outer/init_EpoRJAK2
+dr30_10	SHP1ActEpoR	SHP1ActEpoR_outer/init_EpoRJAK2
+dr30_10	STAT5ActJAK2	STAT5ActJAK2_outer/init_EpoRJAK2
+dr30_10	STAT5ActEpoR	STAT5ActEpoR_outer/init_EpoRJAK2^2
+dr30_10	CISInh	CISInh_outer/CISEqc_outer
+dr30_10	CISRNAEqc	1/init_STAT5
+dr30_10	ActD	0
+dr30_10	SOCS3RNAEqc	1/init_STAT5
+dr30_10	CISEqc	CISEqc_outer/1
+dr30_10	CISoe	0
+dr30_10	CISEqcOE	CISEqcOE_outer * CISEqc_outer
+dr30_10	SOCS3Eqc	SOCS3Eqc_outer/1
+dr30_10	SOCS3oe	0
+dr30_10	SOCS3EqcOE	SOCS3EqcOE_outer * SOCS3Eqc_outer
+dr30_10	offset_pJAK2	offset_pJAK2_dr30
+dr30_10	scale_pJAK2	scale_pJAK2_dr30
+dr30_10	offset_pEpoR	offset_pEpoR_dr30
+dr30_10	scale_pEpoR	scale_pEpoR_dr30
+dr30_10	offset_CIS	0
+dr30_10	scale_CIS	1
+dr30_10	offset_SOCS3	0
+dr30_10	scale_SOCS3	1
+dr30_10	scale_tSTAT5	1
+dr30_10	offset_pSTAT5	0
+dr30_10	scale_pSTAT5	1
+dr30_10	scale_tSHP1	1
+dr30_10	sd_pSTAT5_au	sd_STAT5_au
+dr30_1	EpoRJAK2	init_EpoRJAK2
+dr30_1	EpoRJAK2_CIS	0
+dr30_1	SHP1	init_SHP1 * (1 + 0 * SHP1ProOE)
+dr30_1	STAT5	init_STAT5
+dr30_1	CIS	0 * CISEqcOE_outer * CISEqc_outer
+dr30_1	SOCS3	0 * SOCS3EqcOE_outer * SOCS3Eqc_outer
+dr30_1	epo_level	2.5e-08
+dr30_1	SOCS3Inh	SOCS3Inh_outer/SOCS3Eqc_outer
+dr30_1	JAK2EpoRDeaSHP1	JAK2EpoRDeaSHP1_outer/init_SHP1
+dr30_1	EpoRCISRemove	EpoRCISRemove_outer/init_EpoRJAK2
+dr30_1	SHP1ActEpoR	SHP1ActEpoR_outer/init_EpoRJAK2
+dr30_1	STAT5ActJAK2	STAT5ActJAK2_outer/init_EpoRJAK2
+dr30_1	STAT5ActEpoR	STAT5ActEpoR_outer/init_EpoRJAK2^2
+dr30_1	CISInh	CISInh_outer/CISEqc_outer
+dr30_1	CISRNAEqc	1/init_STAT5
+dr30_1	ActD	0
+dr30_1	SOCS3RNAEqc	1/init_STAT5
+dr30_1	CISEqc	CISEqc_outer/1
+dr30_1	CISoe	0
+dr30_1	CISEqcOE	CISEqcOE_outer * CISEqc_outer
+dr30_1	SOCS3Eqc	SOCS3Eqc_outer/1
+dr30_1	SOCS3oe	0
+dr30_1	SOCS3EqcOE	SOCS3EqcOE_outer * SOCS3Eqc_outer
+dr30_1	offset_pJAK2	offset_pJAK2_dr30
+dr30_1	scale_pJAK2	scale_pJAK2_dr30
+dr30_1	offset_pEpoR	offset_pEpoR_dr30
+dr30_1	scale_pEpoR	scale_pEpoR_dr30
+dr30_1	offset_CIS	0
+dr30_1	scale_CIS	1
+dr30_1	offset_SOCS3	0
+dr30_1	scale_SOCS3	1
+dr30_1	scale_tSTAT5	1
+dr30_1	offset_pSTAT5	0
+dr30_1	scale_pSTAT5	1
+dr30_1	scale_tSHP1	1
+dr30_1	sd_pSTAT5_au	sd_STAT5_au
+dr30_0.1	EpoRJAK2	init_EpoRJAK2
+dr30_0.1	EpoRJAK2_CIS	0
+dr30_0.1	SHP1	init_SHP1 * (1 + 0 * SHP1ProOE)
+dr30_0.1	STAT5	init_STAT5
+dr30_0.1	CIS	0 * CISEqcOE_outer * CISEqc_outer
+dr30_0.1	SOCS3	0 * SOCS3EqcOE_outer * SOCS3Eqc_outer
+dr30_0.1	epo_level	2.5e-09
+dr30_0.1	SOCS3Inh	SOCS3Inh_outer/SOCS3Eqc_outer
+dr30_0.1	JAK2EpoRDeaSHP1	JAK2EpoRDeaSHP1_outer/init_SHP1
+dr30_0.1	EpoRCISRemove	EpoRCISRemove_outer/init_EpoRJAK2
+dr30_0.1	SHP1ActEpoR	SHP1ActEpoR_outer/init_EpoRJAK2
+dr30_0.1	STAT5ActJAK2	STAT5ActJAK2_outer/init_EpoRJAK2
+dr30_0.1	STAT5ActEpoR	STAT5ActEpoR_outer/init_EpoRJAK2^2
+dr30_0.1	CISInh	CISInh_outer/CISEqc_outer
+dr30_0.1	CISRNAEqc	1/init_STAT5
+dr30_0.1	ActD	0
+dr30_0.1	SOCS3RNAEqc	1/init_STAT5
+dr30_0.1	CISEqc	CISEqc_outer/1
+dr30_0.1	CISoe	0
+dr30_0.1	CISEqcOE	CISEqcOE_outer * CISEqc_outer
+dr30_0.1	SOCS3Eqc	SOCS3Eqc_outer/1
+dr30_0.1	SOCS3oe	0
+dr30_0.1	SOCS3EqcOE	SOCS3EqcOE_outer * SOCS3Eqc_outer
+dr30_0.1	offset_pJAK2	offset_pJAK2_dr30
+dr30_0.1	scale_pJAK2	scale_pJAK2_dr30
+dr30_0.1	offset_pEpoR	offset_pEpoR_dr30
+dr30_0.1	scale_pEpoR	scale_pEpoR_dr30
+dr30_0.1	offset_CIS	0
+dr30_0.1	scale_CIS	1
+dr30_0.1	offset_SOCS3	0
+dr30_0.1	scale_SOCS3	1
+dr30_0.1	scale_tSTAT5	1
+dr30_0.1	offset_pSTAT5	0
+dr30_0.1	scale_pSTAT5	1
+dr30_0.1	scale_tSHP1	1
+dr30_0.1	sd_pSTAT5_au	sd_STAT5_au
+dr10_5	EpoRJAK2	init_EpoRJAK2
+dr10_5	EpoRJAK2_CIS	0
+dr10_5	SHP1	init_SHP1 * (1 + 0 * SHP1ProOE)
+dr10_5	STAT5	init_STAT5
+dr10_5	CIS	0 * CISEqcOE_outer * CISEqc_outer
+dr10_5	SOCS3	0 * SOCS3EqcOE_outer * SOCS3Eqc_outer
+dr10_5	epo_level	1.25e-07
+dr10_5	SOCS3Inh	SOCS3Inh_outer/SOCS3Eqc_outer
+dr10_5	JAK2EpoRDeaSHP1	JAK2EpoRDeaSHP1_outer/init_SHP1
+dr10_5	EpoRCISRemove	EpoRCISRemove_outer/init_EpoRJAK2
+dr10_5	SHP1ActEpoR	SHP1ActEpoR_outer/init_EpoRJAK2
+dr10_5	STAT5ActJAK2	STAT5ActJAK2_outer/init_EpoRJAK2
+dr10_5	STAT5ActEpoR	STAT5ActEpoR_outer/init_EpoRJAK2^2
+dr10_5	CISInh	CISInh_outer/CISEqc_outer
+dr10_5	CISRNAEqc	1/init_STAT5
+dr10_5	ActD	0
+dr10_5	SOCS3RNAEqc	1/init_STAT5
+dr10_5	CISEqc	CISEqc_outer/1
+dr10_5	CISoe	0
+dr10_5	CISEqcOE	CISEqcOE_outer * CISEqc_outer
+dr10_5	SOCS3Eqc	SOCS3Eqc_outer/1
+dr10_5	SOCS3oe	0
+dr10_5	SOCS3EqcOE	SOCS3EqcOE_outer * SOCS3Eqc_outer
+dr10_5	offset_pJAK2	0
+dr10_5	scale_pJAK2	1
+dr10_5	offset_pEpoR	0
+dr10_5	scale_pEpoR	1
+dr10_5	offset_CIS	0
+dr10_5	scale_CIS	1
+dr10_5	offset_SOCS3	0
+dr10_5	scale_SOCS3	1
+dr10_5	scale_tSTAT5	1
+dr10_5	offset_pSTAT5	0
+dr10_5	scale_pSTAT5	scale_pSTAT5_dr10
+dr10_5	scale_tSHP1	1
+dr10_5	sd_pSTAT5_au	sd_STAT5_au
+dr10_0.5	EpoRJAK2	init_EpoRJAK2
+dr10_0.5	EpoRJAK2_CIS	0
+dr10_0.5	SHP1	init_SHP1 * (1 + 0 * SHP1ProOE)
+dr10_0.5	STAT5	init_STAT5
+dr10_0.5	CIS	0 * CISEqcOE_outer * CISEqc_outer
+dr10_0.5	SOCS3	0 * SOCS3EqcOE_outer * SOCS3Eqc_outer
+dr10_0.5	epo_level	1.25e-08
+dr10_0.5	SOCS3Inh	SOCS3Inh_outer/SOCS3Eqc_outer
+dr10_0.5	JAK2EpoRDeaSHP1	JAK2EpoRDeaSHP1_outer/init_SHP1
+dr10_0.5	EpoRCISRemove	EpoRCISRemove_outer/init_EpoRJAK2
+dr10_0.5	SHP1ActEpoR	SHP1ActEpoR_outer/init_EpoRJAK2
+dr10_0.5	STAT5ActJAK2	STAT5ActJAK2_outer/init_EpoRJAK2
+dr10_0.5	STAT5ActEpoR	STAT5ActEpoR_outer/init_EpoRJAK2^2
+dr10_0.5	CISInh	CISInh_outer/CISEqc_outer
+dr10_0.5	CISRNAEqc	1/init_STAT5
+dr10_0.5	ActD	0
+dr10_0.5	SOCS3RNAEqc	1/init_STAT5
+dr10_0.5	CISEqc	CISEqc_outer/1
+dr10_0.5	CISoe	0
+dr10_0.5	CISEqcOE	CISEqcOE_outer * CISEqc_outer
+dr10_0.5	SOCS3Eqc	SOCS3Eqc_outer/1
+dr10_0.5	SOCS3oe	0
+dr10_0.5	SOCS3EqcOE	SOCS3EqcOE_outer * SOCS3Eqc_outer
+dr10_0.5	offset_pJAK2	0
+dr10_0.5	scale_pJAK2	1
+dr10_0.5	offset_pEpoR	0
+dr10_0.5	scale_pEpoR	1
+dr10_0.5	offset_CIS	0
+dr10_0.5	scale_CIS	1
+dr10_0.5	offset_SOCS3	0
+dr10_0.5	scale_SOCS3	1
+dr10_0.5	scale_tSTAT5	1
+dr10_0.5	offset_pSTAT5	0
+dr10_0.5	scale_pSTAT5	scale_pSTAT5_dr10
+dr10_0.5	scale_tSHP1	1
+dr10_0.5	sd_pSTAT5_au	sd_STAT5_au
+dr10_100	EpoRJAK2	init_EpoRJAK2
+dr10_100	EpoRJAK2_CIS	0
+dr10_100	SHP1	init_SHP1 * (1 + 0 * SHP1ProOE)
+dr10_100	STAT5	init_STAT5
+dr10_100	CIS	0 * CISEqcOE_outer * CISEqc_outer
+dr10_100	SOCS3	0 * SOCS3EqcOE_outer * SOCS3Eqc_outer
+dr10_100	epo_level	2.5e-06
+dr10_100	SOCS3Inh	SOCS3Inh_outer/SOCS3Eqc_outer
+dr10_100	JAK2EpoRDeaSHP1	JAK2EpoRDeaSHP1_outer/init_SHP1
+dr10_100	EpoRCISRemove	EpoRCISRemove_outer/init_EpoRJAK2
+dr10_100	SHP1ActEpoR	SHP1ActEpoR_outer/init_EpoRJAK2
+dr10_100	STAT5ActJAK2	STAT5ActJAK2_outer/init_EpoRJAK2
+dr10_100	STAT5ActEpoR	STAT5ActEpoR_outer/init_EpoRJAK2^2
+dr10_100	CISInh	CISInh_outer/CISEqc_outer
+dr10_100	CISRNAEqc	1/init_STAT5
+dr10_100	ActD	0
+dr10_100	SOCS3RNAEqc	1/init_STAT5
+dr10_100	CISEqc	CISEqc_outer/1
+dr10_100	CISoe	0
+dr10_100	CISEqcOE	CISEqcOE_outer * CISEqc_outer
+dr10_100	SOCS3Eqc	SOCS3Eqc_outer/1
+dr10_100	SOCS3oe	0
+dr10_100	SOCS3EqcOE	SOCS3EqcOE_outer * SOCS3Eqc_outer
+dr10_100	offset_pJAK2	0
+dr10_100	scale_pJAK2	1
+dr10_100	offset_pEpoR	0
+dr10_100	scale_pEpoR	1
+dr10_100	offset_CIS	0
+dr10_100	scale_CIS	1
+dr10_100	offset_SOCS3	0
+dr10_100	scale_SOCS3	1
+dr10_100	scale_tSTAT5	1
+dr10_100	offset_pSTAT5	0
+dr10_100	scale_pSTAT5	scale_pSTAT5_dr10
+dr10_100	scale_tSHP1	1
+dr10_100	sd_pSTAT5_au	sd_STAT5_au
+dr10_10	EpoRJAK2	init_EpoRJAK2
+dr10_10	EpoRJAK2_CIS	0
+dr10_10	SHP1	init_SHP1 * (1 + 0 * SHP1ProOE)
+dr10_10	STAT5	init_STAT5
+dr10_10	CIS	0 * CISEqcOE_outer * CISEqc_outer
+dr10_10	SOCS3	0 * SOCS3EqcOE_outer * SOCS3Eqc_outer
+dr10_10	epo_level	2.5e-07
+dr10_10	SOCS3Inh	SOCS3Inh_outer/SOCS3Eqc_outer
+dr10_10	JAK2EpoRDeaSHP1	JAK2EpoRDeaSHP1_outer/init_SHP1
+dr10_10	EpoRCISRemove	EpoRCISRemove_outer/init_EpoRJAK2
+dr10_10	SHP1ActEpoR	SHP1ActEpoR_outer/init_EpoRJAK2
+dr10_10	STAT5ActJAK2	STAT5ActJAK2_outer/init_EpoRJAK2
+dr10_10	STAT5ActEpoR	STAT5ActEpoR_outer/init_EpoRJAK2^2
+dr10_10	CISInh	CISInh_outer/CISEqc_outer
+dr10_10	CISRNAEqc	1/init_STAT5
+dr10_10	ActD	0
+dr10_10	SOCS3RNAEqc	1/init_STAT5
+dr10_10	CISEqc	CISEqc_outer/1
+dr10_10	CISoe	0
+dr10_10	CISEqcOE	CISEqcOE_outer * CISEqc_outer
+dr10_10	SOCS3Eqc	SOCS3Eqc_outer/1
+dr10_10	SOCS3oe	0
+dr10_10	SOCS3EqcOE	SOCS3EqcOE_outer * SOCS3Eqc_outer
+dr10_10	offset_pJAK2	0
+dr10_10	scale_pJAK2	1
+dr10_10	offset_pEpoR	0
+dr10_10	scale_pEpoR	1
+dr10_10	offset_CIS	0
+dr10_10	scale_CIS	1
+dr10_10	offset_SOCS3	0
+dr10_10	scale_SOCS3	1
+dr10_10	scale_tSTAT5	1
+dr10_10	offset_pSTAT5	0
+dr10_10	scale_pSTAT5	scale_pSTAT5_dr10
+dr10_10	scale_tSHP1	1
+dr10_10	sd_pSTAT5_au	sd_STAT5_au
+dr10_1	EpoRJAK2	init_EpoRJAK2
+dr10_1	EpoRJAK2_CIS	0
+dr10_1	SHP1	init_SHP1 * (1 + 0 * SHP1ProOE)
+dr10_1	STAT5	init_STAT5
+dr10_1	CIS	0 * CISEqcOE_outer * CISEqc_outer
+dr10_1	SOCS3	0 * SOCS3EqcOE_outer * SOCS3Eqc_outer
+dr10_1	epo_level	2.5e-08
+dr10_1	SOCS3Inh	SOCS3Inh_outer/SOCS3Eqc_outer
+dr10_1	JAK2EpoRDeaSHP1	JAK2EpoRDeaSHP1_outer/init_SHP1
+dr10_1	EpoRCISRemove	EpoRCISRemove_outer/init_EpoRJAK2
+dr10_1	SHP1ActEpoR	SHP1ActEpoR_outer/init_EpoRJAK2
+dr10_1	STAT5ActJAK2	STAT5ActJAK2_outer/init_EpoRJAK2
+dr10_1	STAT5ActEpoR	STAT5ActEpoR_outer/init_EpoRJAK2^2
+dr10_1	CISInh	CISInh_outer/CISEqc_outer
+dr10_1	CISRNAEqc	1/init_STAT5
+dr10_1	ActD	0
+dr10_1	SOCS3RNAEqc	1/init_STAT5
+dr10_1	CISEqc	CISEqc_outer/1
+dr10_1	CISoe	0
+dr10_1	CISEqcOE	CISEqcOE_outer * CISEqc_outer
+dr10_1	SOCS3Eqc	SOCS3Eqc_outer/1
+dr10_1	SOCS3oe	0
+dr10_1	SOCS3EqcOE	SOCS3EqcOE_outer * SOCS3Eqc_outer
+dr10_1	offset_pJAK2	0
+dr10_1	scale_pJAK2	1
+dr10_1	offset_pEpoR	0
+dr10_1	scale_pEpoR	1
+dr10_1	offset_CIS	0
+dr10_1	scale_CIS	1
+dr10_1	offset_SOCS3	0
+dr10_1	scale_SOCS3	1
+dr10_1	scale_tSTAT5	1
+dr10_1	offset_pSTAT5	0
+dr10_1	scale_pSTAT5	scale_pSTAT5_dr10
+dr10_1	scale_tSHP1	1
+dr10_1	sd_pSTAT5_au	sd_STAT5_au
+dr10_0.1	EpoRJAK2	init_EpoRJAK2
+dr10_0.1	EpoRJAK2_CIS	0
+dr10_0.1	SHP1	init_SHP1 * (1 + 0 * SHP1ProOE)
+dr10_0.1	STAT5	init_STAT5
+dr10_0.1	CIS	0 * CISEqcOE_outer * CISEqc_outer
+dr10_0.1	SOCS3	0 * SOCS3EqcOE_outer * SOCS3Eqc_outer
+dr10_0.1	epo_level	2.5e-09
+dr10_0.1	SOCS3Inh	SOCS3Inh_outer/SOCS3Eqc_outer
+dr10_0.1	JAK2EpoRDeaSHP1	JAK2EpoRDeaSHP1_outer/init_SHP1
+dr10_0.1	EpoRCISRemove	EpoRCISRemove_outer/init_EpoRJAK2
+dr10_0.1	SHP1ActEpoR	SHP1ActEpoR_outer/init_EpoRJAK2
+dr10_0.1	STAT5ActJAK2	STAT5ActJAK2_outer/init_EpoRJAK2
+dr10_0.1	STAT5ActEpoR	STAT5ActEpoR_outer/init_EpoRJAK2^2
+dr10_0.1	CISInh	CISInh_outer/CISEqc_outer
+dr10_0.1	CISRNAEqc	1/init_STAT5
+dr10_0.1	ActD	0
+dr10_0.1	SOCS3RNAEqc	1/init_STAT5
+dr10_0.1	CISEqc	CISEqc_outer/1
+dr10_0.1	CISoe	0
+dr10_0.1	CISEqcOE	CISEqcOE_outer * CISEqc_outer
+dr10_0.1	SOCS3Eqc	SOCS3Eqc_outer/1
+dr10_0.1	SOCS3oe	0
+dr10_0.1	SOCS3EqcOE	SOCS3EqcOE_outer * SOCS3Eqc_outer
+dr10_0.1	offset_pJAK2	0
+dr10_0.1	scale_pJAK2	1
+dr10_0.1	offset_pEpoR	0
+dr10_0.1	scale_pEpoR	1
+dr10_0.1	offset_CIS	0
+dr10_0.1	scale_CIS	1
+dr10_0.1	offset_SOCS3	0
+dr10_0.1	scale_SOCS3	1
+dr10_0.1	scale_tSTAT5	1
+dr10_0.1	offset_pSTAT5	0
+dr10_0.1	scale_pSTAT5	scale_pSTAT5_dr10
+dr10_0.1	scale_tSHP1	1
+dr10_0.1	sd_pSTAT5_au	sd_STAT5_au
+dr90_5	EpoRJAK2	init_EpoRJAK2
+dr90_5	EpoRJAK2_CIS	0
+dr90_5	SHP1	init_SHP1 * (1 + 0 * SHP1ProOE)
+dr90_5	STAT5	init_STAT5
+dr90_5	CIS	0 * CISEqcOE_outer * CISEqc_outer
+dr90_5	SOCS3	0 * SOCS3EqcOE_outer * SOCS3Eqc_outer
+dr90_5	epo_level	1.25e-07
+dr90_5	SOCS3Inh	SOCS3Inh_outer/SOCS3Eqc_outer
+dr90_5	JAK2EpoRDeaSHP1	JAK2EpoRDeaSHP1_outer/init_SHP1
+dr90_5	EpoRCISRemove	EpoRCISRemove_outer/init_EpoRJAK2
+dr90_5	SHP1ActEpoR	SHP1ActEpoR_outer/init_EpoRJAK2
+dr90_5	STAT5ActJAK2	STAT5ActJAK2_outer/init_EpoRJAK2
+dr90_5	STAT5ActEpoR	STAT5ActEpoR_outer/init_EpoRJAK2^2
+dr90_5	CISInh	CISInh_outer/CISEqc_outer
+dr90_5	CISRNAEqc	1/init_STAT5
+dr90_5	ActD	0
+dr90_5	SOCS3RNAEqc	1/init_STAT5
+dr90_5	CISEqc	CISEqc_outer/1
+dr90_5	CISoe	0
+dr90_5	CISEqcOE	CISEqcOE_outer * CISEqc_outer
+dr90_5	SOCS3Eqc	SOCS3Eqc_outer/1
+dr90_5	SOCS3oe	0
+dr90_5	SOCS3EqcOE	SOCS3EqcOE_outer * SOCS3Eqc_outer
+dr90_5	offset_pJAK2	0
+dr90_5	scale_pJAK2	1
+dr90_5	offset_pEpoR	0
+dr90_5	scale_pEpoR	1
+dr90_5	offset_CIS	0
+dr90_5	scale_CIS	1
+dr90_5	offset_SOCS3	0
+dr90_5	scale_SOCS3	1
+dr90_5	scale_tSTAT5	1
+dr90_5	offset_pSTAT5	0
+dr90_5	scale_pSTAT5	1
+dr90_5	scale_tSHP1	1
+dr90_5	sd_pSTAT5_au	sd_STAT5_au
+dr90_100	EpoRJAK2	init_EpoRJAK2
+dr90_100	EpoRJAK2_CIS	0
+dr90_100	SHP1	init_SHP1 * (1 + 0 * SHP1ProOE)
+dr90_100	STAT5	init_STAT5
+dr90_100	CIS	0 * CISEqcOE_outer * CISEqc_outer
+dr90_100	SOCS3	0 * SOCS3EqcOE_outer * SOCS3Eqc_outer
+dr90_100	epo_level	2.5e-06
+dr90_100	SOCS3Inh	SOCS3Inh_outer/SOCS3Eqc_outer
+dr90_100	JAK2EpoRDeaSHP1	JAK2EpoRDeaSHP1_outer/init_SHP1
+dr90_100	EpoRCISRemove	EpoRCISRemove_outer/init_EpoRJAK2
+dr90_100	SHP1ActEpoR	SHP1ActEpoR_outer/init_EpoRJAK2
+dr90_100	STAT5ActJAK2	STAT5ActJAK2_outer/init_EpoRJAK2
+dr90_100	STAT5ActEpoR	STAT5ActEpoR_outer/init_EpoRJAK2^2
+dr90_100	CISInh	CISInh_outer/CISEqc_outer
+dr90_100	CISRNAEqc	1/init_STAT5
+dr90_100	ActD	0
+dr90_100	SOCS3RNAEqc	1/init_STAT5
+dr90_100	CISEqc	CISEqc_outer/1
+dr90_100	CISoe	0
+dr90_100	CISEqcOE	CISEqcOE_outer * CISEqc_outer
+dr90_100	SOCS3Eqc	SOCS3Eqc_outer/1
+dr90_100	SOCS3oe	0
+dr90_100	SOCS3EqcOE	SOCS3EqcOE_outer * SOCS3Eqc_outer
+dr90_100	offset_pJAK2	0
+dr90_100	scale_pJAK2	1
+dr90_100	offset_pEpoR	0
+dr90_100	scale_pEpoR	1
+dr90_100	offset_CIS	0
+dr90_100	scale_CIS	1
+dr90_100	offset_SOCS3	0
+dr90_100	scale_SOCS3	1
+dr90_100	scale_tSTAT5	1
+dr90_100	offset_pSTAT5	0
+dr90_100	scale_pSTAT5	1
+dr90_100	scale_tSHP1	1
+dr90_100	sd_pSTAT5_au	sd_STAT5_au
+dr90_10	EpoRJAK2	init_EpoRJAK2
+dr90_10	EpoRJAK2_CIS	0
+dr90_10	SHP1	init_SHP1 * (1 + 0 * SHP1ProOE)
+dr90_10	STAT5	init_STAT5
+dr90_10	CIS	0 * CISEqcOE_outer * CISEqc_outer
+dr90_10	SOCS3	0 * SOCS3EqcOE_outer * SOCS3Eqc_outer
+dr90_10	epo_level	2.5e-07
+dr90_10	SOCS3Inh	SOCS3Inh_outer/SOCS3Eqc_outer
+dr90_10	JAK2EpoRDeaSHP1	JAK2EpoRDeaSHP1_outer/init_SHP1
+dr90_10	EpoRCISRemove	EpoRCISRemove_outer/init_EpoRJAK2
+dr90_10	SHP1ActEpoR	SHP1ActEpoR_outer/init_EpoRJAK2
+dr90_10	STAT5ActJAK2	STAT5ActJAK2_outer/init_EpoRJAK2
+dr90_10	STAT5ActEpoR	STAT5ActEpoR_outer/init_EpoRJAK2^2
+dr90_10	CISInh	CISInh_outer/CISEqc_outer
+dr90_10	CISRNAEqc	1/init_STAT5
+dr90_10	ActD	0
+dr90_10	SOCS3RNAEqc	1/init_STAT5
+dr90_10	CISEqc	CISEqc_outer/1
+dr90_10	CISoe	0
+dr90_10	CISEqcOE	CISEqcOE_outer * CISEqc_outer
+dr90_10	SOCS3Eqc	SOCS3Eqc_outer/1
+dr90_10	SOCS3oe	0
+dr90_10	SOCS3EqcOE	SOCS3EqcOE_outer * SOCS3Eqc_outer
+dr90_10	offset_pJAK2	0
+dr90_10	scale_pJAK2	1
+dr90_10	offset_pEpoR	0
+dr90_10	scale_pEpoR	1
+dr90_10	offset_CIS	0
+dr90_10	scale_CIS	1
+dr90_10	offset_SOCS3	0
+dr90_10	scale_SOCS3	1
+dr90_10	scale_tSTAT5	1
+dr90_10	offset_pSTAT5	0
+dr90_10	scale_pSTAT5	1
+dr90_10	scale_tSHP1	1
+dr90_10	sd_pSTAT5_au	sd_STAT5_au
+dr90_1	EpoRJAK2	init_EpoRJAK2
+dr90_1	EpoRJAK2_CIS	0
+dr90_1	SHP1	init_SHP1 * (1 + 0 * SHP1ProOE)
+dr90_1	STAT5	init_STAT5
+dr90_1	CIS	0 * CISEqcOE_outer * CISEqc_outer
+dr90_1	SOCS3	0 * SOCS3EqcOE_outer * SOCS3Eqc_outer
+dr90_1	epo_level	2.5e-08
+dr90_1	SOCS3Inh	SOCS3Inh_outer/SOCS3Eqc_outer
+dr90_1	JAK2EpoRDeaSHP1	JAK2EpoRDeaSHP1_outer/init_SHP1
+dr90_1	EpoRCISRemove	EpoRCISRemove_outer/init_EpoRJAK2
+dr90_1	SHP1ActEpoR	SHP1ActEpoR_outer/init_EpoRJAK2
+dr90_1	STAT5ActJAK2	STAT5ActJAK2_outer/init_EpoRJAK2
+dr90_1	STAT5ActEpoR	STAT5ActEpoR_outer/init_EpoRJAK2^2
+dr90_1	CISInh	CISInh_outer/CISEqc_outer
+dr90_1	CISRNAEqc	1/init_STAT5
+dr90_1	ActD	0
+dr90_1	SOCS3RNAEqc	1/init_STAT5
+dr90_1	CISEqc	CISEqc_outer/1
+dr90_1	CISoe	0
+dr90_1	CISEqcOE	CISEqcOE_outer * CISEqc_outer
+dr90_1	SOCS3Eqc	SOCS3Eqc_outer/1
+dr90_1	SOCS3oe	0
+dr90_1	SOCS3EqcOE	SOCS3EqcOE_outer * SOCS3Eqc_outer
+dr90_1	offset_pJAK2	0
+dr90_1	scale_pJAK2	1
+dr90_1	offset_pEpoR	0
+dr90_1	scale_pEpoR	1
+dr90_1	offset_CIS	0
+dr90_1	scale_CIS	1
+dr90_1	offset_SOCS3	0
+dr90_1	scale_SOCS3	1
+dr90_1	scale_tSTAT5	1
+dr90_1	offset_pSTAT5	0
+dr90_1	scale_pSTAT5	1
+dr90_1	scale_tSHP1	1
+dr90_1	sd_pSTAT5_au	sd_STAT5_au
+dr90_0.1	EpoRJAK2	init_EpoRJAK2
+dr90_0.1	EpoRJAK2_CIS	0
+dr90_0.1	SHP1	init_SHP1 * (1 + 0 * SHP1ProOE)
+dr90_0.1	STAT5	init_STAT5
+dr90_0.1	CIS	0 * CISEqcOE_outer * CISEqc_outer
+dr90_0.1	SOCS3	0 * SOCS3EqcOE_outer * SOCS3Eqc_outer
+dr90_0.1	epo_level	2.5e-09
+dr90_0.1	SOCS3Inh	SOCS3Inh_outer/SOCS3Eqc_outer
+dr90_0.1	JAK2EpoRDeaSHP1	JAK2EpoRDeaSHP1_outer/init_SHP1
+dr90_0.1	EpoRCISRemove	EpoRCISRemove_outer/init_EpoRJAK2
+dr90_0.1	SHP1ActEpoR	SHP1ActEpoR_outer/init_EpoRJAK2
+dr90_0.1	STAT5ActJAK2	STAT5ActJAK2_outer/init_EpoRJAK2
+dr90_0.1	STAT5ActEpoR	STAT5ActEpoR_outer/init_EpoRJAK2^2
+dr90_0.1	CISInh	CISInh_outer/CISEqc_outer
+dr90_0.1	CISRNAEqc	1/init_STAT5
+dr90_0.1	ActD	0
+dr90_0.1	SOCS3RNAEqc	1/init_STAT5
+dr90_0.1	CISEqc	CISEqc_outer/1
+dr90_0.1	CISoe	0
+dr90_0.1	CISEqcOE	CISEqcOE_outer * CISEqc_outer
+dr90_0.1	SOCS3Eqc	SOCS3Eqc_outer/1
+dr90_0.1	SOCS3oe	0
+dr90_0.1	SOCS3EqcOE	SOCS3EqcOE_outer * SOCS3Eqc_outer
+dr90_0.1	offset_pJAK2	0
+dr90_0.1	scale_pJAK2	1
+dr90_0.1	offset_pEpoR	0
+dr90_0.1	scale_pEpoR	1
+dr90_0.1	offset_CIS	0
+dr90_0.1	scale_CIS	1
+dr90_0.1	offset_SOCS3	0
+dr90_0.1	scale_SOCS3	1
+dr90_0.1	scale_tSTAT5	1
+dr90_0.1	offset_pSTAT5	0
+dr90_0.1	scale_pSTAT5	1
+dr90_0.1	scale_tSHP1	1
+dr90_0.1	sd_pSTAT5_au	sd_STAT5_au

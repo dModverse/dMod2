@@ -1,0 +1,135 @@
+---
+title: "10. PEtab import and export"
+---
+
+```{r, include = FALSE, purl = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>", fig.width = 8, fig.height = 4.5, dpi = 96,
+                      fig.retina = 2, message = FALSE)
+project <- normalizePath("../../examples/oppeltNPJSystBiolAppl2018")
+knitr::opts_knit$set(root.dir = project)
+fitted <- file.exists(file.path(project, "results", "fits.rds"))
+knitr::read_chunk("../../examples/oppeltNPJSystBiolAppl2018/model.R")
+knitr::read_chunk("../../examples/oppeltNPJSystBiolAppl2018/petab.R")
+```
+
+PEtab is the exchange format for parameter estimation problems of ODE models: an SBML model and
+tables of the measurements, the observables with their noise models, the conditions and the
+parameters with their scales and bounds, tied together by a YAML file. Problems of the
+[PEtab benchmark collection](https://github.com/Benchmarking-Initiative/Benchmark-Models-PEtab)
+and of other tools are read the same way. This chapter writes the model of the guide at its best
+fit as a PEtab problem and reads it back; the code is `petab.R` of the project.
+
+```{r setup, echo = FALSE}
+```
+
+```{r data, echo = FALSE}
+```
+
+```{r reactions, echo = FALSE}
+```
+
+```{r observables, echo = FALSE}
+```
+
+```{r errors, echo = FALSE}
+```
+
+```{r steadystate, echo = FALSE}
+```
+
+```{r odemodel, echo = FALSE}
+```
+
+```{r transformation, echo = FALSE}
+```
+
+```{r compile, echo = FALSE}
+```
+
+```{r objective, echo = FALSE}
+```
+
+```{r gauge, echo = FALSE}
+```
+
+## Export
+
+`exportPEtab()` writes the parts of a model: the reactions as SBML, the observables and errors,
+the data, and the parameter transformation `p`, which gives the scales, the fixed values and the
+values per condition. A parameter that enters only as `exp()` is on the log scale. Version 2 of
+PEtab, the default, has no parameter scales: the values are written on the linear scale, and a
+warning lists the parameters that were on the log scale. The gauge of
+[chapter 2](guide-symmetries.html) enters as fixed values, also on the linear scale.
+
+Three parts of the model need more than the transformation.
+
+- **The state at rest.** With `steadyState = pSS`, every condition starts from a
+  pre-equilibration: PEtab simulates the model to its steady state before time 0. The totals of
+  the conserved moieties, the parameters of `Pimpl()`, become parameters of the initial values:
+  one species per total starts at the total, here the complex `NfkIkb` for NFκB and the
+  unphosphorylated `Ikk` for IKK, the other states at 0, and the simulation to the steady state
+  keeps the totals.
+  The two conditions differ only in the dose, which enters through the event, so they share one
+  pre-equilibration condition.
+- **The event.** With `events = events`, the event at time 0 becomes the value of `TNF` in the
+  condition table, which PEtab sets after the pre-equilibration.
+- **The errors.** The imaging readouts take their error model; the blots, which the error model
+  leaves out, take the standard deviations of the data as noise parameters per measurement, as in
+  `normL2()`.
+
+```{r, echo = FALSE, results = "asis", eval = !fitted}
+cat("> Results pending: `results/fits.rds` of the project is written by `fit.R`.\n")
+```
+
+```{r petabexport, warning = FALSE, eval = fitted}
+```
+
+Each experiment starts with the pre-equilibration at $t = -\infty$, then its condition at 0:
+
+```{r, eval = fitted}
+read.delim("results/petab/experiments_oppelt.tsv")
+read.delim("results/petab/conditions_oppelt.tsv")
+```
+
+## Import
+
+`importPEtab()` builds the whole problem: the `prdfn`, the `obsfn`s of the observables and errors,
+the `parfn` with the scales of the parameter table, the data and the `objfn`. A
+pre-equilibration becomes a `Pimpl()` of the network with the totals taken from the initial
+values. `options` are the options of the solver.
+
+```{r petabimport, eval = fitted}
+```
+
+The problem read back gives the data term of `model.R` at the best fit. `petab$bestfit` holds the
+nominal values of the parameter table on the scales of the problem, `petab$parlower` and
+`petab$parupper` its bounds; the imported problem is fitted and profiled like any other.
+
+## SBML
+
+The model of the problem is an SBML file, written by `exportSbml()`: the species with their
+compartments and volumes, the reactions with their kinetic laws, the parameters and the initial
+assignments, here one species per total at its total. Kinetic laws in SBML are amounts per time;
+`exportSbml()` multiplies the concentration rates of dMod2 by the volume of their compartment, and
+`importSbml()` divides by it again. `importSbml()` reads the file into an equation list with the
+compartments and volumes, the parameter values, initial values, assignment rules and events of
+the file:
+
+```{r, eval = fitted}
+sbml <- importSbml("results/petab/oppelt.xml")
+names(sbml)
+c(states = length(sbml$reactions$states), reactions = length(sbml$reactions$rates))
+identical(sort(sbml$reactions$states), sort(reactions$states))
+```
+
+`exportSbml(reactions, parameters, inits, filepath)` writes an equation list directly, without
+the tables of a PEtab problem.
+
+## Notes
+
+- The SBML and PEtab interfaces use Python through reticulate, with `python-libsbml`;
+  `DMOD_LIBSBML_PYTHON` selects the interpreter.
+- PEtab version 1 and 2 problems are read; `exportPEtab()` writes version 2 by default and version
+  1 with `formatVersion = "1"`, which keeps the scales but writes expressions into the condition
+  table that only dMod2 reads back.
+- `exportPEtab()` writes the events at time 0 that replace a state; it refuses other events.

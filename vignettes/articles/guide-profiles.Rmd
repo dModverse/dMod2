@@ -1,0 +1,344 @@
+---
+title: "5. Profile likelihood"
+bibliography: refs.bib
+csl: ieee.csl
+link-citations: true
+---
+
+```{r, include = FALSE, purl = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>", fig.width = 8, fig.height = 4.5, dpi = 96,
+                      fig.retina = 2, message = FALSE)
+project <- normalizePath("../../examples/oppeltNPJSystBiolAppl2018")
+knitr::opts_knit$set(root.dir = project)
+profiled <- file.exists(file.path(project, "results", "profiles.rds"))
+reduced <- file.exists(file.path(project, "results", "reduced.rds"))
+knitr::read_chunk("../../examples/oppeltNPJSystBiolAppl2018/model.R")
+knitr::read_chunk("../../examples/oppeltNPJSystBiolAppl2018/profiles.R")
+knitr::read_chunk("../../examples/oppeltNPJSystBiolAppl2018/reduced.R")
+knitr::read_chunk("../../examples/oppeltNPJSystBiolAppl2018/refit.R")
+```
+
+A fit gives the best parameters; the profile likelihood tells how well the data determine each of
+them. It is the standard tool for confidence intervals of ODE models and for practical
+identifiability (Raue et al. 2009, Bioinformatics 25:1923), because it follows the objective itself
+rather than its quadratic approximation at the optimum. With the symmetries of
+[chapter 2](guide-symmetries.html) removed, what the profiles find is what the data, not the
+equations, leave undetermined. This chapter profiles all parameters of the full model at the best
+fit of [chapter 4](guide-optimization.html), takes the limits that the profiles point to, and
+arrives at a reduced model whose parameters are all determined. The code is `profiles.R`.
+
+```{r setup, echo = FALSE}
+```
+
+```{r data, echo = FALSE}
+```
+
+```{r reactions, echo = FALSE}
+```
+
+```{r observables, echo = FALSE}
+```
+
+```{r errors, echo = FALSE}
+```
+
+```{r steadystate, echo = FALSE}
+```
+
+```{r odemodel, echo = FALSE}
+```
+
+```{r transformation, echo = FALSE}
+```
+
+```{r compile, echo = FALSE}
+```
+
+```{r objective, echo = FALSE}
+```
+
+```{r tolerances, echo = FALSE}
+```
+
+```{r gauge, echo = FALSE}
+```
+
+## Profile
+
+The profile of a parameter $\theta_i$ is the objective minimised over all other parameters with
+$\theta_i$ held at a value $c$:
+
+$$\mathrm{PL}_i(c) = \min_{\theta \,:\, \theta_i = c} \; -2 \log L(\theta) .$$
+
+By the likelihood ratio test, the values $c$ with $\mathrm{PL}_i(c) - \mathrm{PL}_i(\hat\theta_i)$
+below the $1 - \alpha$ quantile of $\chi^2_1$ form a confidence interval of level $1 - \alpha$: 3.84
+for 95 %. The interval holds asymptotically, for many data points; it needs no quadratic
+approximation of the objective, and it is invariant under a reparametrisation of $\theta_i$: on the
+log scale it is the log of the interval on the linear scale. `profileThreshold()` computes the
+threshold, and with `method = "F"` the finite-sample threshold for estimated standard deviations.
+
+With a prior, the objective is $-2 \log$ of the posterior, and its profile mixes the data and the
+prior. A question of identifiability is a question about the data alone, and so is every reduction
+that follows from it. Two measures keep the prior out. First, the prior is widened before the
+profiles: the weak prior of [chapter 1](guide-model.html#objective), standard deviation 4, helps the
+multistart by keeping undetermined parameters finite, but it also pulls them towards its mean and so
+shapes the profiles. With standard deviation 10 it still keeps the objective bounded, and its
+curvature, $2/10^2 = 0.02$ per squared log unit, is small against that of the data wherever they
+determine a parameter. The best fit is refitted with the wide prior, and the profiles start from
+there. Second, the profiles are read through the data term,
+
+$$\mathrm{PL}^\mathrm{data}_i(c) = -2 \log L\bigl(\hat\theta(c)\bigr),$$
+
+with $\hat\theta(c)$ the minimiser at $\theta_i = c$, and `stepControl = list(stop = "data")`
+stops a profile where the data term, not the posterior, crosses the threshold. Three shapes of it
+matter:
+
+- It rises above the threshold on both sides: the data determine $\theta_i$, and the interval is
+  finite.
+- It stays below the threshold on one side as far as the profile goes: the data bound $\theta_i$
+  on one side only. The parameter is *practically non-identifiable*: more or other data could
+  determine it, but these do not.
+- It is exactly flat: a structural non-identifiability, which [chapter 2](guide-symmetries.html)
+  finds from the equations and the gauge has removed.
+
+A one-sided profile that runs to $-\infty$ on the log scale means that the process can be
+switched off without a worse fit: a rate constant of 0 removes its reaction. One that runs to
+$+\infty$ means that the process can be arbitrarily fast: it is in equilibrium on the time scale of
+the data, and a large fixed value, or the quasi-steady state, describes it. Taking these limits
+gives a smaller model with the same fit, whose remaining parameters the data can determine
+(Maiwald et al. 2016, IET Syst Biol 10:76).
+
+## Methods
+
+Computing $\mathrm{PL}_i$ point by point is a sequence of constrained fits, each starting from the
+last point.
+
+- `method = "optimize"` moves $\theta_i$ by a step and fits all other parameters again with
+  `trust()`. Every point is a converged fit, and every step costs one.
+- `method = "integrate"` follows the constrained optimum as a curve. With the Lagrangian
+  $f(\theta) + \lambda\,(\theta_i - c)$, the optimum satisfies $\nabla f + \lambda e_i = 0$ and
+  $\theta_i = c$; differentiating with respect to $c$ gives the path equation
+
+  $$\begin{pmatrix} H & e_i \\ e_i^\top & 0 \end{pmatrix}
+    \begin{pmatrix} \mathrm{d}\theta/\mathrm{d}c \\ \mathrm{d}\lambda/\mathrm{d}c \end{pmatrix}
+    = \begin{pmatrix} 0 \\ 1 \end{pmatrix}$$
+
+  with the Hessian $H$. One step needs one evaluation and one linear solve. With the Gauss-Newton
+  Hessian the path drifts off the profile; `algoControl = list(reoptimize = TRUE)` corrects every
+  step by a fit of the other parameters, started on the path, which needs few iterations.
+
+Both adapt the step: the predicted change of the objective is compared with the actual one, and a
+mismatch above `atol` shrinks the step, and one below `0.3 * atol`, or below `0.3 * rtol` relative
+to the actual change, doubles it.
+
+| entry of `stepControl` | `"integrate"` | `"optimize"` | controls |
+|---|---|---|---|
+| `stepsize` | `1e-4` | `1e-2` | first step in the profiled parameter |
+| `min`, `max` | `1e-4`, `Inf` | `1e-4`, `Inf` | bounds of the step |
+| `atol` | `1e-2` | `1e-1` | mismatch of predicted and actual change that rejects a step |
+| `rtol` | `1e-2` | `1e-1` | relative mismatch below which the step grows |
+| `limit` | `500` | `100` | steps per side |
+| `stop` | `"value"` | `"value"` | the part of the objective compared with the threshold |
+
+The correction is a `trust()` fit with the settings of `optControl`. Its tolerances have the same
+meaning as in [chapter 4](guide-optimization.html) and lie above the error of the solver for the
+same reason; `profiles.R` passes the `tolerances` of `model.R`. The mismatch `atol = 1e-2` that
+decides a step lies four orders of magnitude above the error of the value that
+[chapter 1](guide-model.html#solver-error) measures. `iterlim` bounds the iterations of one
+correction. `limits` bounds the profiled parameter relative to the optimum, `side` profiles one side
+only, and `cores` profiles several parameters in parallel processes.
+
+## All parameters
+
+`profiles.R` widens the prior and refits:
+
+```{r wideprior, eval = FALSE}
+```
+
+It then profiles every parameter with the integration and corrections of up to 100 iterations, each
+side until the data term has risen by the threshold or the parameter has moved by 7, a factor of
+$e^7 \approx 1100$. A profile that reaches a lower value than its start has found a better optimum;
+`profiles.R` refits from the lowest point and profiles again. Here the first pass found one: at the
+better optimum, translation and degradation of A20 are both about twentyfold slower, which keeps the
+level of A20 and slows its turnover, and its transcript moves faster through the two delay stages.
+
+```{r profiles, eval = FALSE}
+```
+
+```{r, echo = FALSE, results = "asis", eval = !profiled}
+cat("> Results pending: `results/profiles.rds` of the project is written by `profiles.R`.\n")
+```
+
+```{r, eval = profiled}
+saved <- readRDS("results/profiles.rds")
+refit <- saved$refit
+profiles <- saved$profiles
+objWide <- normL2(data, prd, e) + constraintL2(mu, sigma = 10)
+wide <- objWide(refit$argument, fixed = gauge)
+c(data = attr(wide, "data"), prior = attr(wide, "prior"))
+```
+
+With the wide prior the data term falls by about 6.5 below that of the multistart: the weak prior
+had held some parameters away from where the data put them, and the prior term is now small. No
+point of the profiles lies lower than the refit:
+
+```{r, eval = profiled}
+c(refit = refit$value, lowest = min(profiles$value))
+```
+
+The intervals from the data term, and how each profile ends:
+
+```{r, eval = profiled}
+intervals <- confint(profiles, level = 0.95, val.column = "data")
+intervals$shape <- with(intervals, ifelse(is.finite(lower) & is.finite(upper), "finite",
+                       ifelse(is.finite(lower), "open above",
+                              ifelse(is.finite(upper), "open below", "open on both sides"))))
+table(intervals$shape)
+rownames(intervals) <- NULL
+intervals[intervals$shape != "finite", c("name", "value", "lower", "upper", "shape")]
+```
+
+`plotProfile()` draws the data term and the prior separately, each relative to its value at the
+optimum. On an open side the data term stays below the threshold of 3.84 up to the end of the
+range; what rises there is the prior, by up to 2.9:
+
+```{r, fig.width = 10, fig.height = 13, eval = profiled}
+open <- intervals$name[intervals$shape != "finite"]
+plotProfile(profiles, mode %in% c("data", "prior"), name %in% open, ncol = 4) +
+  ggplot2::scale_x_continuous(breaks = scales::breaks_pretty(n = 3)) +
+  ggplot2::theme(strip.text = ggplot2::element_text(size = 9)) +
+  ggplot2::labs(x = "log value", colour = NULL, linetype = NULL)
+```
+
+## Compensation
+
+Along a profile the other parameters move to compensate the profiled one. Parameters that move
+together along a flat profile form the combination the data determine. `plotPaths()` shows them.
+The basal phosphorylation of IκBα, `act_Ikb_Base`, falls along its profile while the factor
+`eta_act_Ikb_Base_c_pNfkIkb` rises by the same amount: the data determine the product, the rate of
+IκBα phosphorylation in the complex with pNFκB, and not how much of it is basal phosphorylation of
+the free complex. The import of free NFκB, `int_Nfk`, trades in the same way against the factors
+of the import of IκBα and pNFκB:
+
+```{r, fig.height = 4, eval = profiled}
+plotPaths(profiles, whichPar = "act_Ikb_Base")
+plotPaths(profiles, whichPar = "int_Nfk")
+```
+
+## Reduction
+
+Each open profile proposes a limit: a rate free to go to 0 removes its process, one free to grow
+without bound makes its process instantaneous, a readout parameter at 0 drops its term. Taken
+together, the limits must still describe the data. The data term decides, not the prior: the
+reduced model is fitted with the wide prior, and its data term is compared with that of the full
+model by the likelihood ratio test, with the number of removed parameters as the degrees of
+freedom. The limits of `reduced.R`, with the profile of each in the full model:
+
+| process | parameter | profile | limit |
+|---|---|---|---|
+| decay of the ligand | `degrad_L` | open above | instantaneous: no ligand |
+| basal activation of IKK | `act_Ikk_Base` | open below | removed |
+| basal phosphorylation of NFκB | `act_Nfk_Base`, with `eta_act_Nfk_Base_c_NfkpIkb`, which only multiplies it | open below, open on both sides | removed |
+| phosphorylation by ppIKK | `eta_s_ppIkk` | open above | removed |
+| phosphorylation of IκBα by pIKK in the complex with pNFκB | `eta_act_Ikb_c_pNfkIkb` | open below | removed |
+| inhibition of IKK by A20 | `inh_Ikk` | open on both sides | removed |
+| deactivation of the receptor | `deact_TNFR` | finite | removed |
+| export of the nuclear complex, its formation, degradation of pIκBα | `ext_nNfkIkb`, `eta_form_complex_nuc`, `degrad_Ikb` | open above | fast, 1000 per minute |
+| release of pNFκB from the complex with pIκBα | `eta_split_pNfkpIkb` | open above | fast, 1000 per minute |
+| offsets of the IκBα and pIκBα blots | `off_IkBa`, `off_ipIkBa_ibIkBa`, `off_pIkBa`, `off_ipNFkB_ibpIkBa` | open below | 0 |
+| bleaching of A20-GFP | `tau_A20GFP` | open below | 0 |
+| scale of the NFκB blot after NFκB precipitation | `s_ipNFkB_ibNFkB` | open below | 0, the readout is its offset |
+| offset of the A20 imaging readout | `off_A20GFP` | open below | 0 |
+
+The ligand goes with its decay: one that decays at once never reaches the receptor. The constant
+of the saturation, `K_R`, is 0 by the gauge of [chapter 2](guide-symmetries.html), so without the
+ligand the receptor is activated linearly in TNFα, as in the publication. Two limits are not what
+a single profile proposes: the deactivation of the receptor has a finite interval, and the
+phosphorylation by ppIKK is open above, not below. Both are limits of the published model
+[@oppelt2018model], and the test takes them together with the others.
+
+The other open profiles propose limits the reduced model does not take, and each of their
+parameters has a finite interval in the reduced model below. Without basal phosphorylation of
+IκBα, `act_Ikb_Base`, the resting cells hold no pIκBα, and together with the other limits the fit
+loses more than the threshold allows; without import of free NFκB, `int_Nfk`, the IκBα of the
+resting cells is degraded completely and the measured IκBα cannot be described. The activation of
+IKK by the receptor, `act_Ikk_by_TNF`, moves together with the constant of its inhibition by A20
+along its profile; with the inhibition removed it is left to the data. Where a limit removes a
+process, `reduced.R` writes the reaction network anew; the fast rates and the vanishing readout
+parameters are fixed in the transformation:
+
+```{r reducedreactions, eval = FALSE}
+```
+
+```{r reducedobservables, eval = FALSE}
+```
+
+```{r reducedmodel, eval = FALSE}
+```
+
+The objective of the reduced model has the wide prior:
+
+```{r reducedobjective, eval = FALSE}
+```
+
+`refit.R` fits the reduced model from the full model at the optimum and from 50 starts around that
+fit, and compares the data terms:
+
+```{r reducedfit, eval = FALSE}
+```
+
+```{r likelihoodratio, eval = FALSE}
+```
+
+```{r, echo = FALSE, results = "asis", eval = !reduced}
+cat("> Results pending: `results/reduced.rds` of the project is written by `refit.R`.\n")
+```
+
+```{r, eval = reduced}
+saved <- readRDS("results/reduced.rds")
+saved$ratio
+```
+
+The reduced model has `r if (reduced) round(saved$ratio[["removed"]]) else 19` fewer parameters
+and a data term higher by `r if (reduced) signif(saved$ratio[["difference"]], 2) else "?"`, well below
+the threshold of `r if (reduced) signif(saved$ratio[["threshold"]], 3) else "?"`: the data do not
+distinguish it from the full model.
+
+## Reduced model
+
+`refit.R` profiles every parameter of the reduced model with the settings of `profiles.R`:
+
+```{r reducedprofiles, eval = FALSE}
+```
+
+```{r, eval = reduced}
+intervalsReduced <- confint(saved$profiles, level = 0.95, val.column = "data")
+intervalsReduced$shape <- with(intervalsReduced, ifelse(is.finite(lower) & is.finite(upper), "finite",
+                              ifelse(is.finite(lower), "open above",
+                                     ifelse(is.finite(upper), "open below", "open on both sides"))))
+rownames(intervalsReduced) <- NULL
+table(intervalsReduced$shape)
+```
+
+Every profile of the reduced model is finite: the data determine all of its parameters. The
+intervals of the rate constants:
+
+```{r, eval = reduced}
+rates <- setdiff(intervalsReduced$name, grep("^(s|off|sigma|tau)_", intervalsReduced$name, value = TRUE))
+intervalsReduced[intervalsReduced$name %in% rates, c("name", "value", "lower", "upper")]
+```
+
+```{r, fig.width = 10, fig.height = 12, eval = reduced}
+plotProfile(saved$profiles, mode %in% c("data", "prior"), name %in% rates, ncol = 4) +
+  ggplot2::scale_x_continuous(breaks = scales::breaks_pretty(n = 3)) +
+  ggplot2::theme(strip.text = ggplot2::element_text(size = 9)) +
+  ggplot2::labs(x = "log value", colour = NULL, linetype = NULL)
+```
+
+The publication reduced the model by the same means, profiles and the fluxes of the reactions, to a
+core model of 29 reactions. The reduced model here has 29 reactions as well and agrees with it in
+most limits. It differs in a few: it keeps the second delay stage of the A20 transcript and the
+basal phosphorylation of IκBα, and it removes the deactivation of the receptor, which the core
+model keeps at a small fixed rate.
+
+## References

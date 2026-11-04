@@ -1,0 +1,88 @@
+# Oppelt 2018
+
+
+
+NFκB signalling in HepG2 cells after TNFα, and its change by drugs that cause liver injury, after
+Oppelt et al. (2018), npj Syst Biol Appl 4:23. The full model of the publication has 38 reactions
+in cytoplasm and nucleus and starts from the resting state of the cells, a steady state that
+`Pimpl()` solves numerically; the project extends it at the receptor, which saturates and is also
+activated by a ligand the cells secrete, and reduces the extension again by the symmetries and
+the profiles; 312 measurements of live-cell imaging and immunoblots in untreated and
+stimulated cells determine it, and 444 further measurements, 408 of them with one of five compounds, the changes
+they cause. The data are those of the publication; Daniel Kaschek's implementation in dMod
+(dkaschek/dMod_Examples, TNFa) is the source of the model. The
+[guide](https://dmodverse.github.io/dMod2/articles/guide-model.html) goes through the code.
+
+## Files
+
+| file | content |
+|---|---|
+| `data/oppelt2018.csv` | the measurements of the publication |
+| `model.R` | data, the full model, its resting state, conditions, compiling, objective, the gauge |
+| `symmetries.R` | the Lie symmetries of the full model, saves `results/symmetries.rds` |
+| `fit.R` | multistart of 500 fits, saves `results/fits.rds` |
+| `profiles.R` | profiles of all parameters with a wide prior, saves `results/profiles.rds` |
+| `reduced.R` | the model reduced by the limits the profiles point to |
+| `refit.R` | fit and profiles of the reduced model, likelihood ratio, saves `results/reduced.rds` |
+| `prediction.R` | prediction band of nuclear IκBα, saves `results/prediction.rds` |
+| `compounds.R` | the changes the compounds cause, by spike-and-slab random effects, saves `results/compounds.rds` |
+| `petab.R` | the model as a PEtab problem with its resting state as a pre-equilibration, written to `results/petab/` and read back |
+| `plots.R` | figures from the saved results |
+| `results/` | saved results |
+
+## Run
+
+With this folder as working directory, in this order:
+
+```r
+source("model.R")        # about a minute, mostly compiling into build/
+source("symmetries.R")   # seconds, needs the Python package symident
+source("fit.R")          # about 12 core hours
+source("profiles.R")     # about 15 core hours
+source("refit.R")        # about 3 core hours
+source("prediction.R")   # about 2 core hours
+source("compounds.R")    # about 70 minutes on 20 cores
+source("petab.R")        # about a minute
+source("plots.R")
+```
+
+`model.R` uses the free cores of the machine. `plots.R` only reads `results/`.
+
+
+
+
+
+## Fit
+
+500 fits, 338 converged. The best value is -456.804, reached by 2 fits within 0.1.
+
+
+<img src="figures/waterfall-1.png" width="768" />
+
+
+<img src="figures/prediction-1.png" width="960" />
+
+## Reduction
+
+The profiles of the full model lead to a model with 19 parameters less, whose data term is 7.6 higher, below the 95% threshold of 30.1; every parameter of the reduced model is determined. The [chapter on profile likelihood](https://dmodverse.github.io/dMod2/articles/guide-profiles.html) shows the limits.
+
+## Prediction
+
+
+
+The 95% band of nuclear IκBα, which no experiment measured, from prediction profiles of the
+reduced model:
+
+
+<img src="figures/band-1.png" width="768" />
+
+## Compounds
+
+
+
+The changes of the rate constants by the five compounds, from spike-and-slab random effects; the
+colour is the mode of a change on the log scale, its opacity the evidence against no change:
+
+
+<img src="figures/changes-1.png" width="768" />
+

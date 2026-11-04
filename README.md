@@ -13,6 +13,11 @@ observation, parameter transformation and objective functions return
 gradient and Hessian with their value, propagated forward or in one
 reverse sweep.
 
+The [website](https://dmodverse.github.io/dMod2/) has a
+[guide](https://dmodverse.github.io/dMod2/articles/guide-model.html)
+from the setup of a model to fits, profile likelihoods and mixed
+effects, the reference and the example projects.
+
 ## System requirements
 
 Model code is generated and compiled at run time, so **C and C++
@@ -66,31 +71,45 @@ experimental conditions):
 | `parfn` | `P()` | parameter transformations |
 | `objfn` | `normL2()`, `constraintL2()` | objective functions |
 
-Three models are worked through end to end:
+Four models are worked through end to end:
 
-- [STAT5 dimerisation after Epo
-  stimulation](examples/Boehm_JProteomeRes2014.md): the model of Boehm
-  et al. (2014) from reactions to profile likelihoods, with a multistart
-  fit, an error model by restricted maximum likelihood and confidence
-  intervals.
-- [JAK2-STAT5 signalling with feedbacks](examples/BachmannMSB2011.md):
+- [NFκB signalling after
+  TNFα](https://dmodverse.github.io/dMod2/articles/oppeltNPJSystBiolAppl2018.html):
+  the model of [Oppelt et
+  al. (2018)](https://doi.org/10.1038/s41540-018-0058-z), 38 reactions
+  in two compartments from a numerically computed resting state, its
+  symmetries, a multistart, the reduction by profile likelihoods to a
+  model whose parameters are all determined, a prediction band, and the
+  changes five liver-toxic drugs cause, by spike-and-slab random
+  effects. The guide goes through it.
+- [JAK2-STAT5 signalling with
+  feedbacks](https://dmodverse.github.io/dMod2/articles/bachmannMSB2011.html):
   the model of [Bachmann et
   al. (2011)](https://doi.org/10.1038/msb.2011.50), with 25 states in
   two compartments, the negative feedbacks CIS, SOCS3 and SHP1, and 113
   parameters estimated from 541 measurements across thirteen
-  experiments.
-- [IFN-alpha sensitization](examples/KokMSB2020.md): the model of [Kok
-  et al. (2020)](https://doi.org/10.15252/msb.20198955), its structural
+  experiments, and its problem in PEtab.
+- [STAT5 dimerisation after Epo
+  stimulation](https://dmodverse.github.io/dMod2/articles/boehmJProteomeRes2014.html):
+  the model of Boehm et al. (2014) from reactions to profile
+  likelihoods, with a multistart fit, an error model by restricted
+  maximum likelihood and confidence intervals.
+- [IFN-alpha
+  sensitization](https://dmodverse.github.io/dMod2/articles/kokMSB2020.html):
+  the model of [Kok et
+  al. (2020)](https://doi.org/10.15252/msb.20198955), its structural
   identifiability, the fit at the published optimum over 25 conditions,
   the gradient by forward sensitivities and by the reverse sweep, and
   the sensitization of a second dose by a first.
 
-All three are demos of the package, as are [bile acid
-transport](examples/BA_transport.md) from profile likelihoods to a
-prediction band, and a [Hodgkin-Huxley
-neuron](examples/HodgkinHuxley.md) with switches on time and state.
-`demo("KokMSB2020", package = "dMod2")` runs one,
-`demo(package = "dMod2")` lists them.
+All four are example projects in
+[`examples/`](https://github.com/dModverse/dMod2/tree/master/examples)
+of the repository, each with its data, scripts and saved results, as are
+[bile acid
+transport](https://dmodverse.github.io/dMod2/articles/bileAcidTransport.html)
+from profile likelihoods to a prediction band, and a [Hodgkin-Huxley
+neuron](https://dmodverse.github.io/dMod2/articles/hodgkinHuxleyJPhysiol1952.html)
+with switches on time and state.
 
 ## Mixed-effects models
 
@@ -99,10 +118,18 @@ transformation, in the notation of lme4, and `em()` fits them by
 marginal maximum likelihood: FOCEI, adaptive sparse-grid quadrature,
 laplaceEM or SAEM. Besides normal random effects, Laplace,
 spike-and-slab and Dirichlet-process ones select which groups differ,
-with their hyperparameters estimated in the same fit. The demo
-[alignment](examples/alignment.md) aligns qPCR experiments and Western
-blots with a random gel background together with targeted mass
-spectrometry in nM with `align()`.
+with their hyperparameters estimated in the same fit. The example
+projects show [pharmacometric
+models](https://dmodverse.github.io/dMod2/articles/pharmacometrics.html)
+of theophylline, warfarin and mavoglurant against nlmixr2 and a
+simulated [target-mediated drug
+disposition](https://dmodverse.github.io/dMod2/articles/TMDD.html); the
+guide finds [which rates of NFκB signalling five drugs
+change](https://dmodverse.github.io/dMod2/articles/guide-group-effects.html)
+with spike-and-slab random effects and
+[aligns](https://dmodverse.github.io/dMod2/articles/guide-alignment.html)
+qPCR experiments and Western blots with a random gel background together
+with targeted mass spectrometry in nM with `align()`.
 
 ## Structural identifiability
 
@@ -122,7 +149,8 @@ missing, or which `SYMIDENT_MSOLVE` points to.
 tasks in the background: on the local machine, on machines reached by
 ssh with the cores each may use, or as an array job of a SLURM cluster
 through a job script template. The
-[guide](examples/distributedComputing.md) shows how.
+[guide](https://dmodverse.github.io/dMod2/articles/guide-remote-computing.html)
+shows how.
 
 ## Citation
 

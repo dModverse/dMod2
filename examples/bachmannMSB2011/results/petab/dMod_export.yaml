@@ -1,0 +1,15 @@
+format_version: 2.0.0
+parameter_files:
+- parameters_dMod_export.tsv
+model_files:
+  dMod_export:
+    location: dMod_export.xml
+    language: sbml
+observable_files:
+- observables_dMod_export.tsv
+measurement_files:
+- measurements_dMod_export.tsv
+condition_files:
+- conditions_dMod_export.tsv
+experiment_files:
+- experiments_dMod_export.tsv
