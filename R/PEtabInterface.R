@@ -710,27 +710,19 @@ readPEtabTables <- function(yamlPath) {
 # Internal: the prior term of a PEtab objective on the -2 log scale, reported in
 # `attr(, "prior")`. Families with a dMod constructor go through it; the others
 # and the truncation constant, which leaves gradient and Hessian alone, are here.
-.petab_prior_objective <- function(specs, attrName = "prior",
-                                   condition = NULL) {
+.petab_prior_objective <- function(specs) {
 
   one <- function(sp) {
     id <- sp$id; a <- sp$pars[1L]
     b  <- if (length(sp$pars) > 1L) sp$pars[2L] else NA_real_
     switch(sp$dist,
-      normal      = constraintL2(setNames(a, id), sigma = b,
-                                 attrName = attrName, condition = condition),
-      laplace     = constraintL1(setNames(a, id), sigma = b,
-                                 attrName = attrName, condition = condition),
-      cauchy      = constraintCauchy(setNames(a, id), sigma = b,
-                                     attrName = attrName, condition = condition),
-      gamma       = constraintGamma(setNames(a, id), scale = b,
-                                    attrName = attrName, condition = condition),
-      exponential = constraintExponential(setNames(a, id),
-                                          attrName = attrName, condition = condition),
-      chisquare   = constraintChisq(setNames(a, id),
-                                    attrName = attrName, condition = condition),
-      rayleigh    = constraintRayleigh(setNames(a, id),
-                                       attrName = attrName, condition = condition),
+      normal      = constraintL2(setNames(a, id), sigma = b),
+      laplace     = constraintL1(setNames(a, id), sigma = b),
+      cauchy      = constraintCauchy(setNames(a, id), sigma = b),
+      gamma       = constraintGamma(setNames(a, id), scale = b),
+      exponential = constraintExponential(setNames(a, id)),
+      chisquare   = constraintChisq(setNames(a, id)),
+      rayleigh    = constraintRayleigh(setNames(a, id)),
       NULL)
   }
 
@@ -753,7 +745,7 @@ readPEtabTables <- function(yamlPath) {
   # returned to a caller that asked for none makes a reverse sweep treat the
   # whole objective as having one.
   myfn <- function(..., fixed = NULL, deriv = TRUE, deriv2 = FALSE,
-                   hessian = NULL, conditions = condition, env = NULL,
+                   hessian = NULL, conditions = NULL, env = NULL,
                    cores = getOption("dMod2.cores", 1L)) {
 
     p   <- list(...)[[match.fnargs(list(...), "pars")]]
@@ -779,13 +771,12 @@ readPEtabTables <- function(yamlPath) {
     out <- objlist(value = unname(value),
                    gradient = if (deriv) grad else NULL,
                    hessian  = if (build_hessian) hess else NULL)
-    attr(out, attrName) <- out$value
+    attr(out, "prior") <- out$value
     attr(out, "env") <- env
     out
   }
 
   class(myfn) <- c("objfn", "fn")
-  attr(myfn, "conditions") <- condition
   attr(myfn, "parameters") <- ids
 
   Reduce(`+`, parts, myfn)
@@ -1185,12 +1176,10 @@ readPEtabTables <- function(yamlPath) {
 # to the inner set: state initial values, `inner_pars` and the observable/noise
 # placeholders `obs_inner`. Arguments come from the `.petab_parse_*` helpers.
 .petab_build_trafo <- function(sub_cond_map, conditions, col_kind, override_cols,
-                               inits, sbml_pars, states, inner_pars,
+                               inits, states, inner_pars,
                                pouter_names, fixed, scales,
                                obs_inner = character(),
                                reactions = NULL,
-                               events = NULL,
-                               compile = TRUE,
                                modelname = "petab_trafo",
                                cores = 1L, outdir = .dmodOutdir(),
                                derivMode = "forward") {
@@ -1331,8 +1320,11 @@ readPEtabTables <- function(yamlPath) {
 
     # Totals of the conserved quantities from the species initials, over the
     # network without its structurally zero states, as Pimpl derives them.
-    peq_totals <- if (length(peq_reactions$states))
-      conservedQuantities(.zeroStatesFromSmatrix(peq_reactions)$eqnlist)
+    peq_totals <- if (length(peq_reactions$states)) {
+      zs <- .zeroStatesFromSmatrix(peq_reactions)
+      Filter(function(e) !all(intersect(getSymbols(e), zs$eqnlist$states) %in% zs$resting),
+             conservedQuantities(zs$eqnlist))
+    }
     for (tn in names(peq_totals)) {
       sp <- intersect(getSymbols(peq_totals[[tn]]), peq_reactions$states)
       if (!all(sp %in% names(tr_pre)))
@@ -1350,7 +1342,7 @@ readPEtabTables <- function(yamlPath) {
     eq_of[sub] <- peq
     if (is.null(eq_model[[peq]]) && length(peq_reactions$states))
       eq_model[[peq]] <- Pimpl(peq_reactions, condition = NULL,
-                               compile = compile, outdir = outdir,
+                               compile = FALSE, outdir = outdir,
                                modelname = paste(modelname,
                                                  sanitizeConditions(peq),
                                                  "eq", sep = "_"))
@@ -1364,15 +1356,15 @@ readPEtabTables <- function(yamlPath) {
   parfns <- list()
   if (length(plain_tr))
     parfns[[length(parfns) + 1L]] <-
-      P(plain_tr, compile = compile, outdir = outdir, cores = cores,
+      P(plain_tr, compile = FALSE, outdir = outdir, cores = cores,
         modelname = modelname, derivMode = derivMode)
   for (k in unique(eq_of)) {
     subs   <- names(eq_of)[eq_of == k]
     tag    <- sanitizeConditions(k)
-    p_pre  <- P(pre_tr[subs],  compile = compile, outdir = outdir, cores = cores,
+    p_pre  <- P(pre_tr[subs],  compile = FALSE, outdir = outdir, cores = cores,
                 modelname = paste(modelname, tag, "pre",  sep = "_"),
                 derivMode = derivMode)
-    p_post <- P(post_tr[subs], compile = compile, outdir = outdir, cores = cores,
+    p_post <- P(post_tr[subs], compile = FALSE, outdir = outdir, cores = cores,
                 modelname = paste(modelname, tag, "post", sep = "_"),
                 derivMode = derivMode)
     parfns[[length(parfns) + 1L]] <- if (is.null(eq_model[[k]])) p_post * p_pre
@@ -1439,7 +1431,6 @@ readPEtabTables <- function(yamlPath) {
 # construction, so with the transformed data the residual is on that scale and
 # normL2's fast path holds.
 .petab_build_observation_fn <- function(obs, obs_trafo, reactions,
-                                        compile = TRUE,
                                         modelname = "petab_obs",
                                         outdir = .dmodOutdir(),
                                         keepStates = character(),
@@ -1458,7 +1449,7 @@ readPEtabTables <- function(yamlPath) {
                    setdiff(unique(unlist(lapply(obs_eqn, getSymbols))), "time")
                  else NULL,
     attachInput = length(keepStates) > 0L,
-    compile    = compile,
+    compile    = FALSE,
     modelname  = modelname,
     outdir     = outdir,
     derivMode  = derivMode)
@@ -1469,7 +1460,7 @@ readPEtabTables <- function(yamlPath) {
 # substitution. One condition-free Y over the placeholder-form noise formulas
 # suffices, since the trafo binds the placeholders per sub-condition.
 .petab_build_error_fn <- function(obs_meta, sub_cond_map, reactions,
-                                  compile = TRUE, modelname = "petab_err",
+                                  modelname = "petab_err",
                                   outdir = .dmodOutdir(), derivMode = "forward") {
 
   obs_subs <- attr(sub_cond_map, "obs_subs") %||% list()
@@ -1506,19 +1497,18 @@ readPEtabTables <- function(yamlPath) {
     f            = c(reactions_eqnvec, obs_eqnvec),
     states       = c(names(obs_eqnvec), .petab_noise_states(obs_meta, reactions)),
     attachInput  = FALSE,
-    compile      = compile,
+    compile      = FALSE,
     modelname    = modelname,
     outdir       = outdir,
     derivMode    = derivMode)
 }
 
 
-# Build the odemodel and Xs() for the chosen backend. `compile` is forwarded so
-# linking can wait for one batched compile(); `events` come from importSbml(),
+# Build the odemodel and Xs() for the chosen backend, uncompiled so linking
+# waits for one batched compile(); `events` come from importSbml(),
 # `options` / `optionsSens` reach Xs() untouched.
 .petab_build_odemodel <- function(reactions, backend,
                                   modelname = "petab_model",
-                                  compile = TRUE,
                                   events = NULL,
                                   options = NULL, optionsSens = NULL,
                                   sparse = NULL,
@@ -1533,7 +1523,7 @@ readPEtabTables <- function(yamlPath) {
   # that start. The backends otherwise force 0 into the integration grid,
   # which would apply the initial values there instead.
   args <- list(reactions, modelname = modelname, backend = backend,
-               events = events, compile = compile, includeTimeZero = FALSE,
+               events = events, compile = FALSE, includeTimeZero = FALSE,
                deriv = deriv, derivMode = derivMode, outdir = outdir)
   if (!is.null(sparse) && backend != "deSolve") args$sparse <- sparse
   m <- do.call(odemodel, args)
@@ -1619,7 +1609,7 @@ readPEtabTables <- function(yamlPath) {
 # measurements; `obs_meta_full` is reduced to the observables it uses.
 .petab_build_model_pieces <- function(sbml, meas_m, conditions_df,
                                       obs_meta_full, param_meta,
-                                      modelname, backend, compile,
+                                      modelname, backend,
                                       sub_cond_prefix = "",
                                       start_times = NULL,
                                       switches = NULL,
@@ -1764,7 +1754,6 @@ readPEtabTables <- function(yamlPath) {
 
   ode_pair <- .petab_build_odemodel(sbml$reactions, backend = backend,
                                     modelname = paste0(modelname, "_ode"),
-                                    compile = compile,
                                     events = all_events,
                                     options = options,
                                     optionsSens = optionsSens,
@@ -1773,14 +1762,13 @@ readPEtabTables <- function(yamlPath) {
                                     outdir = outdir)
   g <- .petab_build_observation_fn(obs_meta$obs, obs_meta$obs_trafo,
                                    sbml$reactions,
-                                   compile = compile,
                                    modelname = paste0(modelname, "_obs"),
                                    outdir = outdir,
                                    keepStates = .petab_noise_states(
                                      obs_meta, sbml$reactions),
                                    derivMode = derivMode)
   e <- .petab_build_error_fn(obs_meta, meas_info$sub_cond_map,
-                             sbml$reactions, compile = compile,
+                             sbml$reactions,
                              modelname = paste0(modelname, "_err"),
                              outdir = outdir, derivMode = derivMode)
   p <- .petab_build_trafo(
@@ -1789,7 +1777,6 @@ readPEtabTables <- function(yamlPath) {
           col_kind      = cond_info$col_kind,
           override_cols = cond_info$override_cols,
           inits         = sbml$inits,
-          sbml_pars     = sbml$pars,
           states        = states,
           inner_pars    = inner_pars,
           pouter_names  = pouter_names,
@@ -1797,8 +1784,7 @@ readPEtabTables <- function(yamlPath) {
           scales        = param_meta$scales,
           obs_inner     = obs_inner,
           reactions = sbml$reactions,
-          events = all_events,
-          compile = compile, modelname = paste0(modelname, "_trafo"),
+          modelname = paste0(modelname, "_trafo"),
           cores = cores, outdir = outdir, derivMode = derivMode)
 
   dataList <- as.datalist(meas_info$data, splitBy = "condition")
@@ -2077,7 +2063,6 @@ importPEtab <- function(yamlPath, backend,
       param_meta       = param_meta,
       modelname        = paste0(modelname, suffix),
       backend          = backend,
-      compile          = FALSE,
       sub_cond_prefix  = sc_prefix,
       start_times      = tables$startTimes,
       switches         = tables$switches,

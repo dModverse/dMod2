@@ -72,7 +72,8 @@
   }))
 }
 
-## The hyperparameters of every stem, lambda, theta and tau, from `pars` or the fixed values.
+## The hyperparameters of every stem, lambda, prob, concentration and tau, from `pars` or the fixed
+## values.
 .stemHypers <- function(lay, pars) {
   value <- function(fixed, name) setNames(ifelse(is.na(fixed), unname(pars[name]), fixed), lay$stem)
   list(lambda = value(lay$lambda, lay$lambdaName), prob = value(lay$prob, lay$probName),
@@ -303,7 +304,7 @@
   integrate <- function(f, cv) .factorIntegral(f, lapply(seq_len(G), function(i) diag(cv$t[i, ], K)),
                                                cv$n[, f, drop = FALSE], lay[sf$rows[f], , drop = FALSE], hyp)
   Lam <- gam <- matrix(0, G, K, dimnames = dimnames(m))
-  if (!is.null(start) && identical(dim(start$Lam), dim(Lam)) && all(.sparseCavityOk(P, start$Lam, start$gam))) {
+  if (!is.null(start) && identical(dim(start$Lam), dim(Lam)) && all(.sparseCavityOk(P, start$Lam))) {
     Lam[] <- start$Lam; gam[] <- start$gam
   }
   damp <- 0.5; last <- Inf; converged <- FALSE
@@ -356,7 +357,7 @@
 }
 
 ## Whether sites leave every cavity precision positive.
-.sparseCavityOk <- function(P, Lam, gam) {
+.sparseCavityOk <- function(P, Lam) {
   unlist(lapply(seq_along(P), function(i) 1 / diag(solve(P[[i]] + diag(Lam[i, ], ncol(Lam)))) - Lam[i, ] > 0))
 }
 
@@ -429,8 +430,9 @@
 ## ---- marginal ------------------------------------------------------------------------------
 
 ## The approximate marginal -2 log L at `theta`: the normal etas on the quadratic model of the joint
-## mode, the sparse coordinates on the Schur complement by mean field; its exact gradient in
-## `active` and `hypers`, a model Hessian, the moments and the selected clusters. With
+## mode, the sparse coordinates on the Schur complement by expectation consistent or mean field as
+## `control$coupling` says; its exact gradient in `active` and `hypers`, a model Hessian, the
+## moments and the selected clusters. With
 ## `scores`, the gradient split into the rows of the groups and that of the conditions without
 ## random effects, with their Hessian.
 .laplaceMarginal <- function(design, objs, prior, theta, hyp, active, hypers, fixed, warm,
@@ -839,12 +841,14 @@
   # a run that stops short starts again with a fresh correction while the runs lower -2 log L
   estimated <- length(par) + length(hyper) > 0L
   conv <- !estimated
+  stopReason <- if (estimated) "iterlim" else NA_character_
   last <- Inf
   mtol <- jointControl$tolControl$mtol %||% 1e-5
   while (estimated && steps() < maxOuter) {
     jt <- jointRun()
-    if (is.null(jt)) { conv <- FALSE; break }
+    if (is.null(jt)) { conv <- FALSE; stopReason <- "error"; break }
     conv <- isTRUE(jt$converged)
+    stopReason <- jt$stopReason %||% NA_character_
     if (conv || !(jt$value < last - mtol)) break
     last <- jt$value
   }
@@ -868,7 +872,7 @@
        hessian = NULL, information = information, etaModes = final$selected,
        etaCov = setNames(final$cov, design$groups),
        clusters = final$clusters, spike = final$spike, converged = conv, iterations = steps(),
-       stageTrace = do.call(rbind, rows), coupling = coupled)
+       stopReason = stopReason, stageTrace = do.call(rbind, rows), coupling = coupled)
 }
 
 ## A failed evaluation for trust(): it shrinks the radius, three in a row end the run.

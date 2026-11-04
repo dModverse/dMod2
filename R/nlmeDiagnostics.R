@@ -128,7 +128,8 @@ utils::globalVariables(c("lo", "mid", "hi", "percentile", "blq", "blqLo", "blqMi
 #'   the breaks of the bins.
 #' @param pc `TRUE`: prediction corrected (Bergstrand et al. 2011), every
 #'   reading and simulation times the median population prediction of its bin
-#'   over its own population prediction.
+#'   over its own population prediction. Without `logScale`, readings whose
+#'   population prediction is not positive are left out, with their simulations.
 #' @param logScale With `pc`, `TRUE` for observables on a log scale: the
 #'   correction adds the median population prediction of the bin minus the
 #'   own one instead.
@@ -142,7 +143,7 @@ utils::globalVariables(c("lo", "mid", "hi", "percentile", "blq", "blqLo", "blqMi
 #' @references Bergstrand, M., Hooker, A. C., Wallin, J. E. and Karlsson, M. O.
 #'   (2011). Prediction-corrected visual predictive checks for diagnosing
 #'   nonlinear mixed-effects models. \emph{The AAPS Journal} 13(2), 143-151.
-#' @example inst/examples/NLME.R
+#' @example inst/examples/plotVPC.R
 #' @export
 plotVPC <- function(x, ...) UseMethod("plotVPC", x)
 
@@ -155,6 +156,15 @@ plotVPC.em <- function(x, nsim = 200L, bins = 8L, pc = FALSE, logScale = FALSE, 
   pr <- pr[pr$source == "obs", , drop = FALSE]
   sims <- .simulatedRows(x, nsim)
   lloq <- .emObsLimits(design)
+  if (pc && !logScale) {
+    # the correction is relative to the population prediction, undefined where that is not positive
+    keep <- is.finite(pr$PRED) & pr$PRED > 0
+    if (!any(keep))
+      stop("plotVPC: no reading has a positive population prediction; use `pc = FALSE`.", call. = FALSE)
+    pr <- pr[keep, , drop = FALSE]
+    sims <- sims[keep, , drop = FALSE]
+    lloq <- lloq[keep]
+  }
   censored <- pr$observed <= lloq
   simCensored <- sims <= lloq
   y <- pmax(pr$observed, lloq)
@@ -195,6 +205,8 @@ plotVPC.em <- function(x, nsim = 200L, bins = 8L, pc = FALSE, logScale = FALSE, 
                blqHi = stats::quantile(blqSim, 0.975, names = FALSE), stringsAsFactors = FALSE)
   }))
   rownames(table) <- NULL
+  # the observables in the order of the data
+  table$name <- factor(table$name, unique(as.character(pr$name)))
   shown <- table
   shown$observed[shown$observed <= shown$limit] <- NA
   facet <- if (length(unique(table$stratum)) > 1L) ggplot2::facet_grid(name ~ stratum, scales = "free_y")
@@ -249,7 +261,7 @@ plotVPC.em <- function(x, nsim = 200L, bins = 8L, pc = FALSE, logScale = FALSE, 
     v <- grid[first, cv]
     # a covariate of few values is a category, in the order of its values
     levels <- if (is.numeric(v)) as.character(sort(unique(v))) else .naturalLevels(v)
-    data.frame(eta = random$eta, mode = random$mode, covariate = cv,
+    data.frame(eta = factor(random$eta, unique(random$eta)), mode = random$mode, covariate = cv,
                numeric = is.numeric(v) && length(unique(v)) > 5L, value = factor(as.character(v), levels),
                x = suppressWarnings(as.numeric(as.character(v))), stringsAsFactors = FALSE)
   }))

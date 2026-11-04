@@ -30,6 +30,9 @@ in R. Default \code{"C++"}.}
 \item{\code{dMod2.compile.cmdlimit}}{Longest command line in characters that
 \code{\link[=compile]{compile()}} passes to the compiler and archiver. Default 96000, 8000 on
 Windows.}
+\item{\code{dMod2.sparseAuto}}{Thresholds of \code{sparse = "auto"} in \code{\link[=trust]{trust()}} and
+\code{\link[=em]{em()}}, a list of \code{parameters} and \code{fill}, see \code{\link[=trust]{trust()}}. Default
+\code{list(parameters = 500, fill = 0.05)}.}
 }
 }
 

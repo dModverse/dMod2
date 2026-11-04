@@ -80,21 +80,6 @@ test_that("a bundle built from a public call broadcasts and stays aligned", {
 })
 
 
-test_that(".bundle_subset keeps per-request alignment", {
-  b <- dMod2:::.bundle(conds = c("C1", "C2", "C3"),
-                      times = list(1, 2, 3),
-                      pars  = list(c(a = 1), c(a = 2), c(a = 3)))
-  s <- dMod2:::.bundle_subset(b, c("C3", "C1"))
-  expect_identical(s$conds, c("C3", "C1"))
-  expect_identical(dMod2:::.req_pars(s, 1L), c(a = 3))
-  expect_identical(dMod2:::.req_times(s, 2L), 1)
-
-  # unknown conditions are dropped, not NA
-  s <- dMod2:::.bundle_subset(b, c("C2", "nope"))
-  expect_identical(s$conds, "C2")
-})
-
-
 test_that(".splitParsFixed makes pars and fixed disjoint", {
   p <- as.parvec(c(a = 1, b = 2))
   r <- dMod2:::.splitParsFixed(p, c(b = 9))

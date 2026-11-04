@@ -25,6 +25,17 @@ knitr::read_chunk("../../examples/oppeltNPJSystBiolAppl2018/model.R")
 knitr::read_chunk("../../examples/oppeltNPJSystBiolAppl2018/fit.R")
 knitr::read_chunk("../../examples/oppeltNPJSystBiolAppl2018/plots.R")
 knitr::read_chunk("../../examples/oppeltNPJSystBiolAppl2018/optimizers.R")
+# a value of a stored result for the text, "?" while the result is missing
+ifStored <- function(available, value) if (available) value else "?"
+# counts, shares and ratios as the text writes them
+inWords <- function(n) if (n %in% 1:20) c("one", "two", "three", "four", "five", "six", "seven",
+  "eight", "nine", "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen",
+  "seventeen", "eighteen", "nineteen", "twenty")[n] else format(n)
+inFraction <- function(x) if (round(1 / x) %in% 2:10) c("half", "a third", "a quarter", "a fifth",
+  "a sixth", "a seventh", "an eighth", "a ninth", "a tenth")[round(1 / x) - 1] else
+  sprintf("1/%d", round(1 / x))
+byFactor <- function(r) if (round(r) >= 10) "an order of magnitude" else
+  paste("a factor of", inWords(round(r)))
 ```
 
 Fitting means minimising $-2 \log L$, here with the prior $-2 \log$ of the posterior, over the outer
@@ -522,7 +533,7 @@ result:
 ```{r, eval = optimized, fig.height = 6}
 opt$rank <- ave(opt$value, opt$method, FUN = function(v) rank(v, ties.method = "first", na.last = TRUE))
 ggplot2::ggplot(opt, ggplot2::aes(rank, value - top, colour = converged)) +
-  ggplot2::geom_point(size = 1) +
+  ggplot2::geom_point(size = 1, na.rm = TRUE) +
   ggplot2::facet_wrap(~method, ncol = 5) +
   ggplot2::scale_y_continuous(transform = scales::pseudo_log_trans(sigma = 0.1, base = 10),
                               breaks = c(0, 1, 10, 100, 1000, 1e4)) +
@@ -664,6 +675,12 @@ runs <- boehm$multistart
 hitTable(runs, min(vapply(runs, function(f) min(f$value), 0)))
 ```
 
+```{r, include = FALSE, eval = compared}
+withPrior <- hitTable(runs, min(vapply(runs, function(f) min(f$value), 0)))
+rownames(withPrior) <- withPrior$source
+sr1Share <- withPrior["sr1, id", "evalPerHit"] / withPrior["gn", "evalPerHit"]
+```
+
 `gradient` counts the starts that ended at a stationary point, `medianEval` the evaluations of a
 typical start. Gauss-Newton ends every start on `"fvalue"` or `"preddiff"`; the quasi-Newton
 phases, where these tests are not applied, end on the gradient or on stagnation.
@@ -676,10 +693,10 @@ The curves fall into two shapes. Gauss-Newton and both two-phase runs follow eac
 whole range, since such a run is Gauss-Newton until a soft stop fires. They differ in the leading
 plateau: under Gauss-Newton it is not flat, because the model stops improving before the minimum,
 whereas the quasi-Newton phase brings those starts to a common value. The runs seeded with the
-identity form the second shape, with a longer leading plateau: they reach the best optimum from
-more starts, and more of the remaining starts end high. Under BFGS this worsens the typical value,
-under SR1 it does not. SR1 from the identity reaches the best optimum from several times as many
-starts as Gauss-Newton, at a tenth of the evaluations per hit.
+identity form the second shape, with a longer leading plateau: they reach the best optimum from more
+starts, and more of the remaining starts end high. Under BFGS this worsens the typical value, under
+SR1 it does not. SR1 from the identity reaches the best optimum from several times as many starts as
+Gauss-Newton, at `r ifStored(compared, inFraction(sr1Share))` of the evaluations per hit.
 
 ### Without the prior
 
@@ -694,16 +711,34 @@ noprior <- split(boehm$noprior, boehm$noprior$source)
 hitTable(noprior, 276.44)
 ```
 
+```{r, include = FALSE, eval = compared}
+withoutPrior <- hitTable(noprior, 276.44)
+rownames(withoutPrior) <- withoutPrior$source
+hitsOf <- function(table, source)
+  sprintf("%d of %d", table[source, "hits"], table[source, "starts"])
+sr1Times <- round(withoutPrior["sr1, id", "evalPerHit"] / withPrior["sr1, id", "evalPerHit"])
+# the evaluations per start the reversed handover saves against the two SR1 runs
+fewerEvals <- sort(1 - withoutPrior["sr1, id -> gn", "medianEval"] /
+                     withoutPrior[c("sr1, id", "sr1, gn"), "medianEval"])
+# Gauss-Newton against the cheapest run that starts with SR1, per hit
+sr1Factor <- function(table) table["gn", "evalPerHit"] /
+  min(table$evalPerHit[startsWith(table$source, "sr1")])
+```
+
 ```{r, eval = compared, fig.height = 4, fig.cap = "Five Hessian sources on the likelihood without a prior, over the same 200 starts, each ranked on its own. Values above 600 are left out."}
 waterfall(noprior, cutoff = 600)
 ```
 
-Every source reaches the published optimum, and the quasi-Newton runs lose most of their lead:
-SR1 from the identity reaches it from 32 of 200 starts against 34 of 100 with the prior, at seven
-times the evaluations per hit, while Gauss-Newton gains, 28 of 200 against 6 of 100. SR1 from a
-Gauss-Newton seed reaches the optimum from the most starts, and the reversed handover at the
-fewest evaluations per hit, with a fifth to a quarter fewer evaluations per start than either SR1
-run alone.
+Every source reaches the published optimum, and the quasi-Newton runs lose most of their lead: SR1
+from the identity reaches it from `r ifStored(compared, hitsOf(withoutPrior, "sr1, id"))` starts
+against `r ifStored(compared, hitsOf(withPrior, "sr1, id"))` with the prior, at
+`r ifStored(compared, inWords(sr1Times))` times the evaluations per hit, while Gauss-Newton gains,
+`r ifStored(compared, hitsOf(withoutPrior, "gn"))` against
+`r ifStored(compared, hitsOf(withPrior, "gn"))`. SR1 from a Gauss-Newton seed reaches the optimum
+from the most starts, and the reversed handover at the fewest evaluations per hit, with
+`r ifStored(compared, inFraction(fewerEvals[1]))` to
+`r ifStored(compared, inFraction(fewerEvals[2]))` fewer evaluations per start than either SR1 run
+alone.
 
 The reversed handover also changes how runs end:
 
@@ -743,33 +778,48 @@ hitTable(bachmannRuns, -479.26)
 with(bachmann, table(source, stop))
 ```
 
+```{r, include = FALSE, eval = comparedBachmann && compared}
+bachmannTable <- hitTable(bachmannRuns, -479.26)
+rownames(bachmannTable) <- bachmannTable$source
+gnShare <- sr1Factor(bachmannTable)
+# a bound on the difference of the end values of the same start, one digit times a power of ten
+matched <- max(abs(bachmannRuns[["gn"]]$value - bachmannRuns[["gn -> sr1"]]$value))
+matched <- sprintf("%d \\times 10^{%d}", ceiling(matched / 10^floor(log10(matched))),
+                   floor(log10(matched)))
+```
+
 ```{r, eval = comparedBachmann && compared, fig.height = 4, fig.cap = "Five Hessian sources on the JAK2-STAT5 model over the same 200 starts, each ranked on its own. Starts ending above -400 are left out."}
 waterfall(bachmannRuns, cutoff = -400)
 ```
 
 Every source reaches the same best value, and the counts at 0.1 and at 1 from the optimum are the
 same: a start either finds the published minimum or ends far from it. No source finds an optimum
-another misses. The sources differ in cost: Gauss-Newton reaches the optimum at half the
-evaluations per hit of the cheapest SR1 run, the reverse of the ordering at nine parameters.
+another misses. The sources differ in cost: Gauss-Newton reaches the optimum at
+`r ifStored(comparedBachmann && compared, inFraction(gnShare))` the evaluations per hit of the
+cheapest SR1 run, the reverse of the ordering at nine parameters.
 
-For SR1 the identity is the better seed here, 79 hits against 65. The Gauss-Newton seed brings the
-curvature of a point the run is about to leave into the first steps of an approximation that is
-rebuilt anyway, and SR1 has no damping to discard it. After the forward handover the model tests no
-longer fire and almost every run ends on stagnation, at the values Gauss-Newton reaches alone;
-after the reversed handover most runs end on `"fvalue"`. Neither changes which optimum is found:
-matched start by start, Gauss-Newton and the forward handover differ by $3 \times 10^{-6}$. By the
-time a soft stop fires the basin is chosen, and the handover only changes how the run ends inside
-it.
+For SR1 the identity is the better seed here,
+`r ifStored(comparedBachmann && compared, bachmannTable["sr1, id", "hits"])` hits against
+`r ifStored(comparedBachmann && compared, bachmannTable["sr1, gn", "hits"])`. The Gauss-Newton seed
+brings the curvature of a point the run is about to leave into the first steps of an approximation
+that is rebuilt anyway, and SR1 has no damping to discard it. After the forward handover the model
+tests no longer fire and almost every run ends on stagnation, at the values Gauss-Newton reaches
+alone; after the reversed handover most runs end on `"fvalue"`. Neither changes which optimum is
+found: matched start by start, Gauss-Newton and the forward handover differ by at most
+$`r ifStored(comparedBachmann && compared, matched)`$. By the time a soft stop fires the basin is
+chosen, and the handover only changes how the run ends inside it.
 
 ### Findings
 
-The ordering of the sources depends on the problem. On the JAK2-STAT5 model Gauss-Newton reaches
-the optimum at half the cost of the cheapest SR1 run; on the STAT5 dimerisation model SR1 is
-cheapest, by an order of magnitude with the prior and by a factor of two without. The term
-Gauss-Newton omits explains the ordering: where the residuals at the optimum are small, $J^\top J$
-is close to the true Hessian, and a source that infers curvature from steps costs extra evaluations
-without improving the model. Where they are large, so is the omitted term, the Gauss-Newton model
-stops improving early, and its tests fire far from the minimum.
+The ordering of the sources depends on the problem. On the JAK2-STAT5 model Gauss-Newton reaches the
+optimum at `r ifStored(comparedBachmann && compared, inFraction(gnShare))` the cost of the cheapest
+SR1 run; on the STAT5 dimerisation model SR1 is cheapest, by
+`r ifStored(compared, byFactor(sr1Factor(withPrior)))` with the prior and by
+`r ifStored(compared, byFactor(sr1Factor(withoutPrior)))` without. The term Gauss-Newton omits
+explains the ordering: where the residuals at the optimum are small, $J^\top J$ is close to the true
+Hessian, and a source that infers curvature from steps costs extra evaluations without improving the
+model. Where they are large, so is the omitted term, the Gauss-Newton model stops improving early,
+and its tests fire far from the minimum.
 
 Three findings hold across the settings. No source reaches an optimum another misses; they differ
 in cost. A handover does not change the basin a run ends in, since the basin is chosen before a
@@ -1040,24 +1090,42 @@ do.call(rbind, lapply(names(fhnRuns), function(method) {
 }))
 ```
 
-Multiple shooting reaches the optimum from more than twice as many starts, at a quarter of the
-evaluations per hit. Much of what either method spends goes into the starts it misses: most of
-those of single shooting run into the iteration limit, and the three starts multiple shooting
-misses take almost half of its evaluations. The evaluations of a multiple-shooting run include
-those of the annealing stages. One of them integrates every segment once, which covers the time
-axis once as a single-shooting evaluation does, with the sensitivities of each segment's node
-values on top of those of the parameters. The filter and the merit function reach the optimum from
-as many starts at nearly the same cost.
+```{r, include = FALSE, eval = shotFhn}
+fhnHit <- lapply(fhnRuns, function(f) fhnValue(f) <= fhnBest + 0.1)
+fhnPerHit <- function(m) sum(fhnRuns[[m]]$neval) / sum(fhnHit[[m]])
+single <- "single shooting"
+shooting <- "multiple shooting, filter"
+moreHits <- floor(sum(fhnHit[[shooting]]) / sum(fhnHit[[single]]))
+moreHits <- if (moreHits <= 2) c("once", "twice")[moreHits] else paste(inWords(moreHits), "times")
+missed <- !fhnHit[[shooting]]
+missedShare <- sum(fhnRuns[[shooting]]$neval[missed]) / sum(fhnRuns[[shooting]]$neval)
+shootingShare <- fhnPerHit(shooting) / fhnPerHit(single)
+```
+
+Multiple shooting reaches the optimum from more than `r ifStored(shotFhn, moreHits)` as many starts,
+at `r ifStored(shotFhn, inFraction(shootingShare))` of the evaluations per hit. Much of what either
+method spends goes into the starts it misses: most of those of single shooting run into the
+iteration limit, and the `r ifStored(shotFhn, inWords(sum(missed)))` starts multiple shooting misses
+take almost `r ifStored(shotFhn, inFraction(missedShare))` of its evaluations. The evaluations of a
+multiple-shooting run include those of the annealing stages. One of them integrates every segment
+once, which covers the time axis once as a single-shooting evaluation does, with the sensitivities
+of each segment's node values on top of those of the parameters. The filter and the merit function
+reach the optimum from as many starts at nearly the same cost.
 
 ### Pacemaker neuron
 
+```{r, include = FALSE, eval = shotPreBotC}
+pb <- readRDS(file.path(stored, "preBotC.rds"))
+```
+
 The pacemaker neuron of the pre-Bötzinger complex [@butera1999models] is harder. Its voltage fires
-bursts of spikes about 2 ms wide. One burst, thirteen spikes in 700 ms sampled at 10 kHz with noise
-of 0.25 mV, as a patch-clamp recording gives it, is fitted in the chart the symmetry reduction
-certifies, with the voltage as the only observable. A change of a parameter by a per cent moves the
-late spikes by more than their width, so the single-shooting objective breaks into narrow valleys,
-one for every way model spikes can pair with data spikes. `bench/multipleShooting/preBotC.R` runs
-the fits, half an hour on twenty cores, and stores what this section shows.
+bursts of spikes about 2 ms wide. One burst, `r ifStored(shotPreBotC, inWords(pb$spikes))` spikes in
+700 ms sampled at 10 kHz with noise of 0.25 mV, as a patch-clamp recording gives it, is fitted in
+the chart the symmetry reduction certifies, with the voltage as the only observable. A change of a
+parameter by a per cent moves the late spikes by more than their width, so the single-shooting
+objective breaks into narrow valleys, one for every way model spikes can pair with data spikes.
+`bench/multipleShooting/preBotC.R` runs the fits, half an hour on twenty cores, and stores what this
+section shows.
 
 Two things decide the outcome besides the method. The solver runs at `1e-10`: at `1e-8`, far from
 the optimum where misplaced spikes make the residuals large, the objective scatters by more than

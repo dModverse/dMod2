@@ -155,7 +155,7 @@
   first <- match(unique(reqCond), reqCond)
   meta <- lapply(first, function(r)
     .build_normL2_meta(setNames(list(design$data[[reqCond[r]]]), "c"), list(c = preds[[r]]),
-                       if (!is.null(errs)) list(errs[[r]]), "c", NULL)[[1]])
+                       if (!is.null(errs)) list(errs[[r]]), "c")[[1]])
   names(meta) <- unique(reqCond)
   pn <- if (grad) unique(unlist(lapply(c(preds, errs), function(f) dimnames(attr(f, "deriv"))[[3]])))
   normL2_kernel(preds, errs, unname(meta[reqCond]), as.character(pn), isTRUE(grad && deriv2), 1L,
@@ -394,7 +394,7 @@
 
 ## The final evaluation over every parameter on the nodes at `psi`, with the exact Hessian where
 ## the chain has second derivatives, and the conditional covariance of the etas, M - m m' per group.
-.quadratureResult <- function(design, q, psi, fixed, method, iterations, converged, trace,
+.quadratureResult <- function(design, q, psi, fixed, iterations, converged, trace,
                               exact = .hasDeriv2(q, psi, fixed)) {
   out <- q$value(psi, fixed = fixed, deriv2 = exact)
   cov <- Map(function(M, m) M - tcrossprod(m), attr(out, "moments"), attr(out, "means"))
@@ -456,7 +456,7 @@
   }
   converged <- ended
   if (!converged) q$rebuild(psi, levels[length(levels)], tol)
-  fit <- .quadratureResult(design, q, psi, fixed, "quadrature", length(rows), converged,
+  fit <- .quadratureResult(design, q, psi, fixed, length(rows), converged,
                            do.call(rbind, rows), exact)
   if (!isFALSE(qc$certificate))
     fit$certificate <- .quadratureCertificate(design, q, psi, fixed, qc$certificate %||% list(), tol)
@@ -504,7 +504,7 @@
     if (max(dpsi, distance) < (qc$epsEcm %||% 1e-5)) { conv <- TRUE; break }
   }
   q$rebuild(psi, lay$K + 2L)
-  .quadratureResult(design, q, psi, fixed, "laplaceEM", length(rows), conv, do.call(rbind, rows), exact)
+  .quadratureResult(design, q, psi, fixed, length(rows), conv, do.call(rbind, rows), exact)
 }
 
 

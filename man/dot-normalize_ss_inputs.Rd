@@ -14,13 +14,13 @@
 \item{forcings}{Forcing names.}
 }
 \value{
-A named list with \code{trafo}, \code{states}, \code{zero_states}, \code{dependent},
-\code{parameters}, \code{parms_all}, \code{totals} and, for an \link{eqnlist}, \code{influx}, the
-sum of the producing fluxes per state.
+A named list with \code{trafo}, \code{states}, \code{zero_states}, \code{resting},
+\code{dependent}, \code{parameters}, \code{parms_all}, \code{totals} and, for an \link{eqnlist},
+\code{influx}, the sum of the producing fluxes per state.
 }
 \description{
 Coerces \code{trafo} to an \code{eqnvec}, zeroes and removes forcings, removes states
 that are structurally zero at steady state and promotes states with a zero
-right-hand side to parameters.
+right-hand side to parameters; the resting ones among them default to 0.
 }
 \keyword{internal}

@@ -256,8 +256,7 @@ P <- function(trafo = NULL, parameters = NULL, condition = NULL,
     .Pexpl_p2p(st, pars, fixed, deriv, deriv2,
                attach.input = controls$attachInput)
   attr(p2p, "vjpfn") <- function(pars, fixed = NULL, cotangent, condition = NULL)
-    .Pexpl_vjp(st, pars, fixed, cotangent, condition,
-               attach.input = controls$attachInput)
+    .Pexpl_vjp(st, pars, fixed, cotangent, attach.input = controls$attachInput)
   attr(p2p, "batchfn") <- function(parsList, fixedList, deriv, deriv2,
                                    conditions, cores)
     .Pexpl_batch(st, parsList, fixedList, deriv, deriv2, cores,
@@ -298,8 +297,7 @@ P <- function(trafo = NULL, parameters = NULL, condition = NULL,
 # w' Jac, the reverse of the forward Jac %*% dP: the observation functions' vjp
 # call with no variables and the cotangent on the inner parameters. Under
 # attach.input the passed-through outer parameters add their own cotangent.
-.Pexpl_vjp <- function(st, pars, fixed = NULL, cotangent, condition = NULL,
-                       attach.input = FALSE) {
+.Pexpl_vjp <- function(st, pars, fixed = NULL, cotangent, attach.input = FALSE) {
   if (is.null(st$vjp))
     stop("Pexpl(): the reverse mode needs a vector-Jacobian product; rebuild ",
          "with derivMode = c(\"forward\", \"reverse\") and compile = TRUE.",
@@ -482,15 +480,17 @@ Pexpl <- function(trafo, parameters = NULL, attachInput = FALSE, condition = NUL
 #' }
 #' For each zero-state the column is dropped, the state symbol is substituted
 #' by `"0"` in remaining rates, structurally-zero reactions are removed, and
-#' detection re-runs (removals can expose new zero-states).
+#' detection re-runs (removals can expose new zero-states). A state that some
+#' reaction changes but none is left to change, outside every conserved
+#' moiety, rests: the steady state leaves its value free.
 #'
 #' @param eqnlist_obj An [eqnlist].
-#' @return `list(zero_states, eqnlist)` with the reduced system.
+#' @return `list(zero_states, resting, eqnlist)` with the reduced system.
 #' @keywords internal
 .zeroStatesFromSmatrix <- function(eqnlist_obj) {
   S0 <- eqnlist_obj$smatrix
   if (is.null(S0) || ncol(S0) == 0L || nrow(S0) == 0L)
-    return(list(zero_states = character(0), eqnlist = eqnlist_obj))
+    return(list(zero_states = character(0), resting = character(0), eqnlist = eqnlist_obj))
 
   S <- suppressWarnings(matrix(as.numeric(S0), nrow = nrow(S0), ncol = ncol(S0),
                                dimnames = dimnames(S0)))
@@ -564,17 +564,12 @@ Pexpl <- function(trafo, parameters = NULL, attachInput = FALSE, condition = NUL
       reactionCompartment <- reactionCompartment[keep]
   }
 
-  ## No influx (column has no strictly positive entry) => zero at SS; also
-  ## catches the all-zero columns of prior reductions. A state no reaction
-  ## changes, such as a catalyst, is constant instead, and so is a state of a
-  ## conserved moiety that the reductions left without any reaction or that is
-  ## the last of its moiety not at 0: the moiety's total rests there.
+  ## Outflux without influx => zero at SS. A state without any reaction left is
+  ## constant instead, and so is the last state of a moiety not at 0, which
+  ## holds the moiety's total.
   .neg_col <- function(M) {
     for (j in seq_len(ncol(M))) {
-      cn <- colnames(M)[j]
-      if (any(M[, j] > 0) || !(cn %in% changed)) next
-      if (!any(M[, j] < 0) && cn %in% moiety) next
-      if (.last_holder(cn)) next
+      if (any(M[, j] > 0) || !any(M[, j] < 0) || .last_holder(colnames(M)[j])) next
       return(j)
     }
     NA_integer_
@@ -668,8 +663,10 @@ Pexpl <- function(trafo, parameters = NULL, attachInput = FALSE, condition = NUL
   }
 
   if (!length(zero_states))
-    return(list(zero_states = character(0), eqnlist = eqnlist_obj))
+    return(list(zero_states = character(0), resting = character(0), eqnlist = eqnlist_obj))
 
+  idle <- colnames(S)[colSums(S != 0) == 0]
+  resting <- setdiff(intersect(idle, changed), moiety)
   S_out <- S
   S_out[S_out == 0] <- NA
   storage.mode(S_out) <- storage.mode(S0)
@@ -684,39 +681,25 @@ Pexpl <- function(trafo, parameters = NULL, attachInput = FALSE, condition = NUL
   if (!is.null(new_obj$compartmentOf))
     new_obj$compartmentOf <- new_obj$compartmentOf[colnames(S_out)]
 
-  list(zero_states = zero_states, eqnlist = new_obj)
+  list(zero_states = zero_states, resting = resting, eqnlist = new_obj)
 }
 
-
-## Zero forcing symbols in all rates and drop their equations, so forcings are
-## never solved for; returns an eqnvec. Shared by the steady-state preamble and
-## by symmetryDetection().
-#' @keywords internal
-.zero_and_drop_forcings <- function(trafo, forcings) {
-  if (is.null(forcings) || !length(forcings)) return(as.eqnvec(trafo))
-  if (inherits(trafo, "eqnlist"))
-    trafo$rates <- replaceSymbols(forcings, rep("0", length(forcings)), trafo$rates)
-  else
-    trafo <- replaceSymbols(forcings, rep("0", length(forcings)), trafo)
-  trafo <- as.eqnvec(trafo)
-  trafo[setdiff(names(trafo), forcings)]
-}
 
 #' Normalise steady-state inputs
 #'
 #' Coerces `trafo` to an `eqnvec`, zeroes and removes forcings, removes states
 #' that are structurally zero at steady state and promotes states with a zero
-#' right-hand side to parameters.
+#' right-hand side to parameters; the resting ones among them default to 0.
 #'
 #' @param trafo An [eqnlist], [eqnvec] or named character vector.
 #' @param parameters Outer parameters (may be `NULL`).
 #' @param forcings Forcing names.
-#' @return A named list with `trafo`, `states`, `zero_states`, `dependent`,
-#'   `parameters`, `parms_all`, `totals` and, for an [eqnlist], `influx`, the
-#'   sum of the producing fluxes per state.
+#' @return A named list with `trafo`, `states`, `zero_states`, `resting`,
+#'   `dependent`, `parameters`, `parms_all`, `totals` and, for an [eqnlist],
+#'   `influx`, the sum of the producing fluxes per state.
 #' @keywords internal
 .normalize_ss_inputs <- function(trafo, parameters, forcings) {
-  zero_states <- character(0); influx <- NULL
+  zero_states <- resting <- character(0); influx <- NULL
   original_params <- character(0)
   totals <- list()
 
@@ -730,13 +713,14 @@ Pexpl <- function(trafo, parameters = NULL, attachInput = FALSE, condition = NUL
     full <- trafo
     zs <- .zeroStatesFromSmatrix(trafo)
     zero_states <- zs$zero_states
+    resting     <- zs$resting
     trafo       <- zs$eqnlist
     if (!length(trafo$states))
       stop("All states are structurally zero in steady state; no dynamical ",
            "state remains to solve for. The network likely has irreversible ",
            "drains without matching influx (an open system with trivial ",
            "all-zero equilibrium).", call. = FALSE)
-    totals <- .restingTotals(full, trafo, zero_states, held)
+    totals <- .restingTotals(full, trafo, zero_states, c(held, resting))
     influx <- vapply(getFluxes(trafo), function(t) {
       pos <- trimws(t[!startsWith(trimws(t), "-")])
       if (length(pos)) paste(sub("^\\+", "", pos), collapse = " + ") else "0"
@@ -764,7 +748,7 @@ Pexpl <- function(trafo, parameters = NULL, attachInput = FALSE, condition = NUL
   parameters <- Reduce(union, list(getSymbols(trafo[dependent], exclude = dependent),
                                    parameters %||% character(0),
                                    original_params, names(totals)))
-  list(trafo = trafo, states = states, zero_states = zero_states,
+  list(trafo = trafo, states = states, zero_states = zero_states, resting = resting,
        dependent = dependent, parameters = parameters,
        parms_all = setdiff(parameters, dependent),
        totals = totals,
@@ -851,7 +835,9 @@ Pexpl <- function(trafo, parameters = NULL, attachInput = FALSE, condition = NUL
 #'   `getOption("dMod2.outdir")`, else the working directory.
 #'
 #' @details Conserved quantities of an [eqnlist] enter as \eqn{C x = T}.
-#' States without influx are 0. The root is solved from the states in `pars`,
+#' States without influx are 0. A state whose reactions all vanish with them
+#' rests: it takes its value from `pars`, 0 where `pars` has none, and is not
+#' among the parameters. The root is solved from the states in `pars`,
 #' missing ones at 1, then from all states at 1, then from `nStarts` random
 #' starts; with `flow = TRUE` the stable root the flow leads to. If all fail, it
 #' is an error. A root depends on the parameters, the states in `pars` and the
@@ -883,8 +869,9 @@ Pimpl <- function(trafo, parameters = NULL, forcings = NULL, condition = NULL,
 
   norm <- .normalize_ss_inputs(trafo, parameters, forcings)
   zero_states <- norm$zero_states
+  resting     <- norm$resting
   dependent   <- norm$dependent
-  parameters  <- norm$parameters
+  parameters  <- setdiff(norm$parameters, resting)
   n_dep       <- length(dependent)
 
   if (is.null(modelname)) modelname <- "impl_parfn"
@@ -1009,6 +996,9 @@ Pimpl <- function(trafo, parameters = NULL, forcings = NULL, condition = NULL,
     p   <- pars
     dP  <- attr(p, "deriv")
     dP2 <- if (deriv2) attr(p, "deriv2") else NULL
+    # a resting state not given rests at 0, without derivatives
+    rest0 <- setdiff(resting, c(names(p), names(fixed)))
+    if (length(rest0)) fixed <- c(fixed, setNames(rep(0, length(rest0)), rest0))
     if (!is.null(fixed)) {
       p <- p[!names(p) %in% names(fixed)]
       p <- c(p, fixed)
@@ -1040,7 +1030,7 @@ Pimpl <- function(trafo, parameters = NULL, forcings = NULL, condition = NULL,
   # the steady state as a stage of the native chain (.chainStage()): its unknowns, the states at
   # 0, its parameters and the native state that solves its roots
   attr(p2p, "chainImpl") <- function(condition) list(
-    dependent = dependent, zero = zero_states, parameters = parms_all, d1 = emit_d1, d2 = emit_d2,
+    dependent = dependent, zero = zero_states, resting = resting, parameters = parms_all, d1 = emit_d1, d2 = emit_d2,
     state = nativeState())
   attr(p2p, "equations")   <- as.eqnvec(all_exprs)
   attr(p2p, "parameters")  <- parameters

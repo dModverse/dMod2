@@ -182,7 +182,7 @@ detectFreeCores <- function(machine = NULL) {
                                needsCVODE = FALSE, needsKLU = FALSE,
                                needsLapack = FALSE,
                                link = FALSE, cxx = FALSE, cores = 1,
-                               workdir = NULL, filelist = NULL, chunkSize = 100,
+                               filelist = NULL, chunkSize = 100,
                                bundle = 50, sources = files) {
 
   files <- unlist(strsplit(trimws(files), "\\s+"))
@@ -345,7 +345,6 @@ detectFreeCores <- function(machine = NULL) {
     "# below would source that nonexistent startup file and die with exit 1.",
     "unset R_TESTS",
     "",
-    if (!is.null(workdir)) c(paste0("cd ", workdir), ""),
     "CPPDE_INC=$(Rscript -e 'cat(system.file(\"include\", package = \"cppDE\"))')",
     "if [ -z \"$CPPDE_INC\" ]; then",
     "  echo \"dMod: package 'cppDE' is not installed for the R on PATH here,\" >&2",
@@ -1346,15 +1345,10 @@ slurmTemplate <- function(login = NULL, from = login, edit = interactive(),
 ## .parallelLapply ---------------------------------------------------------------
 
 # Cross-platform parallel-apply. Unix forks via doParallel; Windows uses a
-# PSOCK cluster with explicit library-path + variable export. Driven through
+# PSOCK cluster with the library paths of the session. Driven through
 # foreach::%dopar% so the caller body is the same on both platforms.
-.parallelLapply <- function(X, FUN, cores = 1L,
-                            extraExports = character(0),
-                            envir = parent.frame(),
-                            coresConditions = NULL,
-                            strategy = c("auto", "fork", "psock")) {
+.parallelLapply <- function(X, FUN, cores = 1L, coresConditions = NULL) {
 
-  strategy <- match.arg(strategy)
   cores <- max(1L, as.integer(cores))
   if (cores == 1L && !is.null(coresConditions)) {
     old <- options(dMod2.cores = as.integer(coresConditions))
@@ -1366,10 +1360,7 @@ slurmTemplate <- function(login = NULL, from = login, edit = interactive(),
   # A forked worker cannot split a condition axis: cppDE's batch runs serially
   # inside a fork, so an inner axis selects PSOCK.
   wants_inner <- !is.null(coresConditions) && coresConditions > 1L
-  use_psock <- switch(strategy,
-                      psock = TRUE,
-                      fork  = FALSE,
-                      auto  = Sys.info()[["sysname"]] == "Windows" || wants_inner)
+  use_psock <- Sys.info()[["sysname"]] == "Windows" || wants_inner
 
   if (use_psock) {
     cluster <- parallel::makeCluster(cores)
@@ -1380,9 +1371,6 @@ slurmTemplate <- function(login = NULL, from = login, edit = interactive(),
     doParallel::registerDoParallel(cl = cluster)
     parallel::clusterCall(cl = cluster, function(x) .libPaths(x), .libPaths())
     parallel::clusterEvalQ(cluster, suppressMessages(library(dMod2)))
-    if (length(extraExports) > 0L)
-      parallel::clusterExport(cluster, envir = envir,
-                              varlist = extraExports)
   } else {
     doParallel::registerDoParallel(cores = cores)
     on.exit(doParallel::stopImplicitCluster(), add = TRUE)

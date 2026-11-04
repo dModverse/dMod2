@@ -10,7 +10,7 @@
 \item{eqnlist_obj}{An \link{eqnlist}.}
 }
 \value{
-\code{list(zero_states, eqnlist)} with the reduced system.
+\code{list(zero_states, resting, eqnlist)} with the reduced system.
 }
 \description{
 Iterated three-layer test on the stoichiometric matrix of an \code{eqnlist}, the
@@ -25,6 +25,8 @@ monotonically (mass-balance LP via \code{lpSolve::lp}).
 }
 For each zero-state the column is dropped, the state symbol is substituted
 by \code{"0"} in remaining rates, structurally-zero reactions are removed, and
-detection re-runs (removals can expose new zero-states).
+detection re-runs (removals can expose new zero-states). A state that some
+reaction changes but none is left to change, outside every conserved
+moiety, rests: the steady state leaves its value free.
 }
 \keyword{internal}

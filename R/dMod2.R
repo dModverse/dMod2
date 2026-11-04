@@ -30,6 +30,9 @@
 #'   \item{`dMod2.compile.cmdlimit`}{Longest command line in characters that
 #'     [compile()] passes to the compiler and archiver. Default 96000, 8000 on
 #'     Windows.}
+#'   \item{`dMod2.sparseAuto`}{Thresholds of `sparse = "auto"` in [trust()] and
+#'     [em()], a list of `parameters` and `fill`, see [trust()]. Default
+#'     `list(parameters = 500, fill = 0.05)`.}
 #' }
 #'
 #' @section Environment variables:

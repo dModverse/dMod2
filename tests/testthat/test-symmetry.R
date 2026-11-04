@@ -43,17 +43,19 @@ test_that("the optional reconstruction settings travel only when set", {
 test_that("a missing msolve is offered, and the call repeated once it is installed", {
   skip_if_not_installed("jsonlite")
   calls <- 0L
+  installed <- FALSE
   missingMsolve <- structure(class = c("symident.sym.msolve.MsolveMissingError", "error",
                                        "condition"), list(message = "needs msolve", call = NULL))
+  # the call fails while msolve is not installed, the offer installs it where accepted
   local_mocked_bindings(.symident = function(...) list(f = function(...) {
     calls <<- calls + 1L
-    if (calls == 1L) stop(missingMsolve)
+    if (!installed) stop(missingMsolve)
     '{"ok": true}'
   }), .package = "dMod2")
   local_mocked_bindings(.offerMsolve = function() FALSE, .package = "dMod2")
   expect_error(dMod2:::.symCall("f"), "confirm its installation")
   calls <- 0L
-  local_mocked_bindings(.offerMsolve = function() TRUE, .package = "dMod2")
+  local_mocked_bindings(.offerMsolve = function() installed <<- TRUE, .package = "dMod2")
   expect_true(dMod2:::.symCall("f")$ok)
   expect_identical(calls, 2L)
 })

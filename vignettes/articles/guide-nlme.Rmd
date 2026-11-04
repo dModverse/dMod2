@@ -100,7 +100,7 @@ random
 ```
 
 Since the formula acts after the log transformation, $\log \mathrm{Cl}_i = \mathrm{Cl} +
-\eta_{\mathrm{Cl},i}$ with $\eta_{\mathrm{Cl},i} \sim N(0, \omega_{\mathrm{Cl}}^2)$: log-normal
+\eta_{\mathrm{Cl},i}$ with $\eta_{\mathrm{Cl},i} \sim \mathcal{N}(0, \omega_{\mathrm{Cl}}^2)$: log-normal
 individual parameters. The formula syntax covers more:
 
 | formula | meaning |
@@ -124,16 +124,18 @@ ones also by `"saem"`. This chapter treats normal ones.
 
 ## Marginal likelihood
 
-The random effects enter the model only through the parameter transformation. For subject $i$
-with random effects $\eta_i$ the transformation gives the inner parameters
+The random effects enter the model only through the parameter transformation. For subject $i$,
+one of $G$ groups, with random effects $\eta_i$ the transformation gives the inner parameters
 $\phi_i = h(\theta, \eta_i)$, the ODE and the observation function the prediction
 
 $$\mu_{ij}(\theta, \eta_i) = g\bigl(x(t_{ij};\, \phi_i)\bigr),$$
 
 and the observation model is
 
-$$y_{ij} = \mu_{ij}(\theta, \eta_i) + \varepsilon_{ij}, \qquad
-\varepsilon_{ij} \sim N\bigl(0, \sigma^2(\phi_i, t_{ij})\bigr), \qquad \eta_i \sim N(0, \Omega),$$
+$$\begin{aligned}
+y_{ij} &= \mu_{ij}(\theta, \eta_i) + \varepsilon_{ij}, \\
+\varepsilon_{ij} &\sim \mathcal{N}\bigl(0, \sigma^2(\phi_i, t_{ij})\bigr), \qquad \eta_i \sim \mathcal{N}(0, \Omega),
+\end{aligned}$$
 
 with the population parameters $\psi = (\theta, \Omega, \sigma)$. The right-hand side of the ODE
 never sees $\eta_i$: the sensitivities of the prediction in the random effects come from the
@@ -141,7 +143,7 @@ chain rule through `g * x * p` as any other sensitivities, and the likelihood fa
 groups, since each $\eta_i$ couples only to the data $y_i$ of its group and to the population
 through its prior. The marginal log-likelihood is
 
-$$\ell(\psi) = \sum_{i=1}^N \log L_i(\psi), \qquad
+$$\ell(\psi) = \sum_{i=1}^G \log L_i(\psi), \qquad
 L_i(\psi) = \int p(y_i \mid \eta_i, \psi)\, p(\eta_i \mid \Omega)\, \mathrm{d}\eta_i ,$$
 
 with $y_i$ the data of all conditions of group $i$; the conditions without a group add their data
@@ -149,7 +151,7 @@ $-2 \log L$ as it is.
 
 In code, the integrand is the objective of the data, `normL2(data, g * x * p, errmodel = e)`,
 which gives $-2 \log p(y_i \mid \eta_i, \psi)$ summed over the conditions, plus the prior of the
-random effects, $\sum_i \eta_i^\top \Omega^{-1} \eta_i + N \log \lvert \Omega \rvert$, which
+random effects, $\sum_i \eta_i^\top \Omega^{-1} \eta_i + G \log \lvert \Omega \rvert$, which
 `em()` builds from `randomEffects(p)`. Their sum is the joint $-2 \log$ density
 $-2 \log p(y, \eta \mid \psi)$ up to a constant. `normT(data, g * x * p, errmodel = e, df = 4)`
 instead of `normL2()` gives Student-t residuals with heavier tails.
@@ -165,14 +167,17 @@ every method of `em()` is an approximation of it.
 For a reference value $\psi^{(t)}$, let $q_i(\eta_i) = p(\eta_i \mid y_i, \psi^{(t)})$ be the
 posterior of the random effects of group $i$. For any $\psi$, by Jensen's inequality,
 
-$$\log L_i(\psi) = \log \int q_i(\eta_i)\, \frac{p(y_i, \eta_i \mid \psi)}{q_i(\eta_i)}\, \mathrm{d}\eta_i
-\ge \underbrace{\mathbb{E}_{q_i}\bigl[\log p(y_i, \eta_i \mid \psi)\bigr]}_{Q_i(\psi \mid \psi^{(t)})}
-- \mathbb{E}_{q_i}\bigl[\log q_i(\eta_i)\bigr].$$
+$$\begin{aligned}
+\log L_i(\psi) &= \log \int q_i(\eta_i)\, \frac{p(y_i, \eta_i \mid \psi)}{q_i(\eta_i)}\, \mathrm{d}\eta_i \\
+&\ge \underbrace{\mathbb{E}_{q_i}\bigl[\log p(y_i, \eta_i \mid \psi)\bigr]}_{Q_i(\psi \mid \psi^{(t)})}
+- \mathbb{E}_{q_i}\bigl[\log q_i(\eta_i)\bigr].
+\end{aligned}$$
 
 The bound is tight at $\psi = \psi^{(t)}$, where $p(y_i, \eta_i \mid \psi) / q_i(\eta_i) =
 p(y_i \mid \psi^{(t)})$ is constant in $\eta_i$. The second term, the entropy of $q_i$, does not
 depend on $\psi$. Summed over the groups, $Q(\psi \mid \psi^{(t)}) = \sum_i Q_i(\psi \mid
-\psi^{(t)})$.
+\psi^{(t)})$. EM maximises $Q$; [chapter 8](guide-group-effects.html) writes the same
+objective on the scale of $-2 \log L$ and minimises $-2Q$.
 
 ### Iteration
 
@@ -185,8 +190,10 @@ EM alternates two steps:
 The iteration never decreases the marginal likelihood. With $\mathcal{H}(q) = -\mathbb{E}_q \log
 q$,
 
-$$\ell(\psi^{(t+1)}) \ge Q(\psi^{(t+1)} \mid \psi^{(t)}) + \mathcal{H}(q)
-\ge Q(\psi^{(t)} \mid \psi^{(t)}) + \mathcal{H}(q) = \ell(\psi^{(t)}),$$
+$$\begin{aligned}
+\ell(\psi^{(t+1)}) &\ge Q(\psi^{(t+1)} \mid \psi^{(t)}) + \mathcal{H}(q) \\
+&\ge Q(\psi^{(t)} \mid \psi^{(t)}) + \mathcal{H}(q) = \ell(\psi^{(t)}),
+\end{aligned}$$
 
 the first inequality the bound at $\psi^{(t+1)}$, the second the M-step, the equality the
 tightness at $\psi^{(t)}$. The improvement is strict unless $\psi^{(t)}$ is a stationary point of
@@ -225,12 +232,14 @@ Fix $\psi$ and write the joint $-2 \log$ density of group $i$ as
 $$\Phi_i(\eta) = -2 \log p(y_i \mid \eta, \psi) - 2 \log p(\eta \mid \Omega).$$
 
 With the conditional mode $\hat\eta_i = \arg\min_\eta \Phi_i(\eta)$ and $H_i = \nabla^2_\eta
-\Phi_i(\hat\eta_i)$, the posterior precision is $P_i = H_i/2$. Expanding $\Phi_i$ to second order
+\Phi_i(\hat\eta_i)$, the curvature of data and prior, the posterior precision is $P_i = H_i/2$. Expanding $\Phi_i$ to second order
 around $\hat\eta_i$ and integrating the Gaussian gives Laplace's approximation of the $K$-dimensional
 integral,
 
-$$L_i(\psi) \approx (2\pi)^{K/2}\, \lvert P_i \rvert^{-1/2} \exp\bigl(-\tfrac12 \Phi_i(\hat\eta_i)\bigr),
-\qquad -2 \log L_i \approx \Phi_i(\hat\eta_i) + \log \lvert H_i/2 \rvert - K \log(2\pi).$$
+$$\begin{aligned}
+L_i(\psi) &\approx (2\pi)^{K/2}\, \lvert P_i \rvert^{-1/2} \exp\bigl(-\tfrac12 \Phi_i(\hat\eta_i)\bigr), \\
+-2 \log L_i &\approx \Phi_i(\hat\eta_i) + \log \lvert H_i/2 \rvert - K \log(2\pi).
+\end{aligned}$$
 
 The prior term of $\Phi_i$ is written without its $K \log(2\pi)$, which cancels the last term, so
 FOCEI minimises
@@ -246,7 +255,7 @@ the method loses accuracy wherever $\sigma$ depends on $\eta$, as for a proporti
 error model.
 
 In the language of EM, FOCEI approximates the posterior by the Gaussian
-$N(\hat\eta_i, P_i^{-1})$ and the expectation by a single evaluation at $\hat\eta_i$ with the
+$\mathcal{N}(\hat\eta_i, P_i^{-1})$ and the expectation by a single evaluation at $\hat\eta_i$ with the
 normalising factor $\log \lvert P_i \rvert$; the M-step becomes one optimisation of the analytic
 surrogate $F$ over all of $\psi$:
 
@@ -457,7 +466,7 @@ therefore summed in log space with the signs kept, as below.
 ### Adaptation
 
 The rule integrates against the weight $\exp(-z^\top z)$ in a standard frame; the integral of
-group $i$ lives around its mode. The local Gaussian $N(\hat\eta_i, P_i^{-1})$, $P_i = H_i/2$, of
+group $i$ lives around its mode. The local Gaussian $\mathcal{N}(\hat\eta_i, P_i^{-1})$, $P_i = H_i/2$, of
 FOCEI matches $\Phi_i$ to second order at the mode, and as the map from $z$ to $\eta$ it makes the
 quadrature adaptive: every outer iterate gives new $(\hat\eta_i, P_i)$, the nodes follow, and the
 rule stays centred as $\psi$ moves. With $L_H$ the lower Cholesky factor of $P_i$, the change of
@@ -465,7 +474,7 @@ variables
 
 $$\eta = \hat\eta_i + \sqrt{2}\, L_H^{-\top} z$$
 
-maps a standard normal in $z$ onto $N(\hat\eta_i, P_i^{-1})$; the $\sqrt 2$ converts between the
+maps a standard normal in $z$ onto $\mathcal{N}(\hat\eta_i, P_i^{-1})$; the $\sqrt 2$ converts between the
 weight $e^{-z^2}$ of the rule and $e^{-z^2/2}$. Its Jacobian $2^{K/2} / \lvert \det L_H \rvert$
 and the factor $\exp(z^\top z)$ that undoes the weight of the rule go into the weights,
 
@@ -480,14 +489,19 @@ node at $\hat\eta_i$ with the Laplace normaliser as weight.
 For the nodes $b = 1, \dots, B$ of a group let $\ell_b = \log \lvert W_b \rvert - \frac12
 \Phi_i(\eta_b)$ and $s_b = \operatorname{sgn}(W_b)$. Then
 
-$$\log L_i = \log \Bigl\lvert \sum_b s_b\, e^{\ell_b} \Bigr\rvert
-= \ell_{\max} + \log \Bigl\lvert \sum_b s_b\, e^{\ell_b - \ell_{\max}} \Bigr\rvert, \qquad
-\ell_{\max} = \max_b \ell_b ,$$
+$$\begin{aligned}
+\log L_i &= \log \Bigl\lvert \sum_b s_b\, e^{\ell_b} \Bigr\rvert
+= \ell_{\max} + \log \Bigl\lvert \sum_b s_b\, e^{\ell_b - \ell_{\max}} \Bigr\rvert, \\
+\ell_{\max} &= \max_b \ell_b ,
+\end{aligned}$$
 
 and the moments of the posterior use the normalised weights with their signs,
 
-$$\tilde w_b = s_b\, e^{\ell_b - \log L_i}, \qquad \hat m_i = \sum_b \tilde w_b\, \eta_b, \qquad
-\hat M_i = \sum_b \tilde w_b\, \eta_b \eta_b^\top .$$
+$$\begin{aligned}
+\tilde w_b &= s_b\, e^{\ell_b - \log L_i}, \\
+\hat m_i &= \sum_b \tilde w_b\, \eta_b, \\
+\hat M_i &= \sum_b \tilde w_b\, \eta_b \eta_b^\top .
+\end{aligned}$$
 
 A sum $\sum_b s_b e^{\ell_b - \ell_{\max}}$ that is not positive or not finite means the grid does
 not resolve the posterior: the evaluation stops and names the group, and a higher level resolves it.
@@ -496,8 +510,10 @@ The effective sample size $1 / \sum_b \tilde w_b^2$ of every group is part of th
 The gradient of the marginal log-likelihood is the weighted average of the node gradients, and
 its Hessian follows from the log-sum-exp identity,
 
-$$\nabla_\psi \log L_i = \sum_b \tilde w_b\, \nabla_\psi \ell_b, \qquad
-\nabla^2_\psi \log L_i = \sum_b \tilde w_b\, \nabla^2_\psi \ell_b + \operatorname{Cov}_{\tilde w}(\nabla_\psi \ell_b),$$
+$$\begin{aligned}
+\nabla_\psi \log L_i &= \sum_b \tilde w_b\, \nabla_\psi \ell_b, \\
+\nabla^2_\psi \log L_i &= \sum_b \tilde w_b\, \nabla^2_\psi \ell_b + \operatorname{Cov}_{\tilde w}(\nabla_\psi \ell_b),
+\end{aligned}$$
 
 with $\nabla_\psi \ell_b = -\frac12 \nabla_\psi \Phi_i(\eta_b)$ and the covariance taken under the
 signed weights, $\operatorname{Cov}(g) = \mathbb{E}[g g^\top] - \mathbb{E}[g]\, \mathbb{E}[g]^\top$;
@@ -548,7 +564,7 @@ A quadrature fit holds `stageTrace`, one row per rebuild with the stage level, t
 Newton decrement, the resolution, the highest level and the number of nodes; `etaCov`, the
 posterior covariance $\hat M_i - \hat m_i \hat m_i^\top$ of every group; and `certificate`.
 `plotTrace(fit)` draws the trace, and `plotRandomEffects(fit)` the histograms of the modes over the
-fitted $N(0, \Omega_{kk})$.
+fitted $\mathcal{N}(0, \Omega_{kk})$.
 
 ## Laplace EM
 
@@ -564,7 +580,7 @@ $$\log p(\eta \mid \Omega) = -\tfrac12 \sum_i \Bigl[ \log \lvert \Omega \rvert +
 Its expectation under the posteriors replaces $\eta_i \eta_i^\top$ by the posterior second moment
 $M_i$, and setting the derivative in $\Omega$ to zero gives the sufficient statistic
 
-$$S = \frac{1}{N} \sum_{i=1}^N M_i .$$
+$$S = \frac{1}{G} \sum_{i=1}^G M_i .$$
 
 Per block of $\Omega$ the maximiser is the block of $S$ itself, and its Cholesky factor gives the
 parameters `omega_<a>_<b>`; with some entries fixed the update maximises over the others. Laplace
@@ -573,8 +589,8 @@ the mode alone would leave out the posterior covariance and shrink $\Omega$.
 
 EM converges linearly, so the change of the parameters per iteration says little about the
 distance to the fixed point. With $\delta_t = \max \lvert \psi^{(t)} - \psi^{(t-1)} \rvert$ and the
-rate $\rho = \delta_t / \delta_{t-1}$, the remaining distance is about $\delta_t \rho / (1 - \rho)$,
-and the fit stops when both lie below `epsEcm` (default `1e-5`), after at most `maxEcm` (default
+rate $\delta_t / \delta_{t-1}$, the remaining distance is about $\delta_t^2 / (\delta_{t-1} - \delta_t)$,
+and the fit stops when $\delta_t$ and this distance lie below `epsEcm` (default `1e-5`), after at most `maxEcm` (default
 200) iterations. The value it reports is the quadrature at level $K + 2$. It reads `epsEcm`,
 `maxEcm`, `cm1Control` and `maxCm1Iter` from `control$quadrature`.
 
@@ -607,15 +623,17 @@ with a sufficient statistic $S$, the E-step needs only the vector $\mathbb{E}_q[
 the M-step is a fixed map $s \mapsto \hat\psi(s)$. The expectation of a fixed statistic is what a
 Robbins-Monro recursion estimates:
 
-$$s_k = s_{k-1} + \gamma_k \bigl( S(y, \eta^{(k)}) - s_{k-1} \bigr), \qquad
-\eta^{(k)} \sim q(\cdot \mid \psi^{(k-1)}), \qquad \psi^{(k)} = \hat\psi(s_k).$$
+$$\begin{aligned}
+s_k &= s_{k-1} + \gamma_k \bigl( S(y, \eta^{(k)}) - s_{k-1} \bigr), \\
+\eta^{(k)} &\sim q(\cdot \mid \psi^{(k-1)}), \qquad \psi^{(k)} = \hat\psi(s_k).
+\end{aligned}$$
 
 Under the conditions on $\gamma_k$ below, $s_k$ converges almost surely and the iterates converge to
 a stationary point of $\ell$ [@delyon1999convergence; @kuhn2004coupling].
 
-The block of the random effects fits this form exactly. With $\eta_i \sim N(0, \Omega)$,
+The block of the random effects fits this form exactly. With $\eta_i \sim \mathcal{N}(0, \Omega)$,
 
-$$\log p(\eta \mid \Omega) = -\tfrac{N}{2} \log \lvert \Omega \rvert
+$$\log p(\eta \mid \Omega) = -\tfrac{G}{2} \log \lvert \Omega \rvert
 - \tfrac12 \Bigl\langle \sum_i \eta_i \eta_i^\top,\, \Omega^{-1} \Bigr\rangle + \text{const},$$
 
 with the statistic $\sum_i \eta_i \eta_i^\top$, and the M-step is the closed form of Laplace EM
@@ -631,7 +649,10 @@ burn-in they take one `trust()` step per iteration on the complete-data objectiv
 random effects. During averaging the gradient $g_k$ and Hessian $H_k$ of that objective at
 $\theta_k$ enter a Robbins-Monro average of its quadratic models,
 
-$$A_k = A_{k-1} + \gamma_k (H_k - A_{k-1}), \qquad c_k = c_{k-1} + \gamma_k (H_k \theta_k - g_k - c_{k-1}),$$
+$$\begin{aligned}
+A_k &= A_{k-1} + \gamma_k (H_k - A_{k-1}), \\
+c_k &= c_{k-1} + \gamma_k (H_k \theta_k - g_k - c_{k-1}),
+\end{aligned}$$
 
 and $\theta$ takes the Newton step on $\frac12 \theta^\top A_k \theta - c_k^\top \theta$, at most
 one unit long. At the fixed point the averaged gradient vanishes, which by Fisher's identity is
@@ -647,7 +668,7 @@ Each iteration $k$ has three steps:
 - **Simulation.** For each group a draw $\eta_i^{(k)} \sim q_i(\eta \mid y_i, \psi^{(k-1)})$ with
   the target $\Phi_i$ of FOCEI, whose value for all groups comes from one prediction without
   sensitivities. A few random-walk Metropolis steps from the previous draw are followed by
-  independence proposals from $N\bigl(\hat\eta_i, 1.5\, (H_i/2)^{-1}\bigr)$ at the conditional
+  independence proposals from $\mathcal{N}\bigl(\hat\eta_i, 1.5\, (H_i/2)^{-1}\bigr)$ at the conditional
   modes, refreshed every few iterations. Every proposal leaves $q_i$ invariant, so a short chain
   suffices [@kuhn2004coupling]. The random numbers come from the session stream, so `set.seed()`
   reproduces a fit.
@@ -844,8 +865,8 @@ lowest <- vapply(saved$multistart, function(t) sum(t$value < min(t$value, na.rm 
 of the `r if (stored) nrow(waterfall) else "?"` starts end more than 20 above the best and lie
 outside the plot. All three methods find the same two optima, $-2 \log L$ shifted by their
 approximations. Most starts end on the upper plateau, the fit of the sections above; about
-`r if (stored) round(mean(lowest)) else "?"` of 200 per method reach the lower one, the flip-flop
-solution:
+`r if (stored) round(mean(lowest)) else "?"` of `r if (stored) nrow(saved$multistart[[1]]) else "?"`
+per method reach the lower one, the flip-flop solution:
 
 ```{r, eval = stored}
 flipflop <- saved$best$FOCEI
@@ -888,10 +909,20 @@ estimates:
 saved$cross
 ```
 
+```{r, include = FALSE, eval = stored}
+byMethod <- split(saved$cross$value, saved$cross$by)
+quadratureValue <- mean(byMethod$quadrature)
+# a bound on the distance of SAEM to the quadrature, one significant digit
+saemGap <- max(abs(byMethod$SAEM - quadratureValue))
+saemGap <- ceiling(saemGap / 10^floor(log10(saemGap))) * 10^floor(log10(saemGap))
+```
+
 From every starting point each method ends at the same flip-flop estimates and reports its own
-$-2 \log L$ there: FOCEI about 1.5 below the quadrature, which integrates the random effects more
-accurately than Laplace's method; SAEM, valued by the quadrature of level $K + 2$ at its estimate,
-within a few tenths of the quadrature.
+$-2 \log L$ there: FOCEI about
+`r if (stored) signif(quadratureValue - mean(byMethod$FOCEI), 2) else "?"` below the quadrature,
+which integrates the random effects more accurately than Laplace's method; SAEM, valued by the
+quadrature of level $K + 2$ at its estimate, within `r if (stored) saemGap else "?"` of the
+quadrature.
 
 `msem()` draws every start and seed before the fits are spread over `cores`, so `set.seed()`
 reproduces a run; `cores = c(fits = , conditions = )` splits the cores between parallel fits and

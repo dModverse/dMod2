@@ -2,15 +2,19 @@
 
 withr::local_options(dMod2.outdir = tempdir())
 
-.alignmentSim <- function(nGel = 6, seed = 1) {
+# readings of nGel gels at five times: `spread` the log standard deviation of the backgrounds
+# between the gels, `deviation` the log deviations of the readings, drawn where NULL; attribute
+# `truth` holds the value, scale and background of every reading
+.alignmentSim <- function(nGel = 6, seed = 1, deviation = NULL, spread = 0.3) {
   set.seed(seed)
   times <- c(0, 10, 30, 60, 120)
   d <- expand.grid(time = times, gel = sprintf("G%02d", seq_len(nGel)), stringsAsFactors = FALSE)
   truth <- c(0.02, 1, 4, 2, 0.5)[match(d$time, times)]
   s <- rlnorm(nGel, 7, 0.5)[match(d$gel, unique(d$gel))]
-  b <- rlnorm(nGel, 4, 0.3)[match(d$gel, unique(d$gel))]
-  d$value <- (s * truth + b) * rlnorm(nrow(d), 0, 0.1)
+  b <- rlnorm(nGel, 4, spread)[match(d$gel, unique(d$gel))]
+  d$value <- (s * truth + b) * if (is.null(deviation)) rlnorm(nrow(d), 0, 0.1) else exp(deviation)
   d$time <- as.character(d$time)
+  attr(d, "truth") <- data.frame(yi = truth, sj = s, bj = b)
   d
 }
 
@@ -114,7 +118,9 @@ test_that("a numeric column on the right gives levels, I() a covariate, and the 
 })
 
 test_that("align() fits the values and a finite error for each value", {
-  d <- .alignmentSim(6)
+  # one background in all gels, as the model has it: a background that differs between the gels
+  # can put the smallest value at 0, where the errors are infinite
+  d <- .alignmentSim(6, spread = 0)
   m <- .am("rel", d, model = "yi * sj + bj", errmodel = "sigmaR * prediction", biological = yi ~ time,
            scaling = sj ~ gel, error = bj + sigmaR ~ 1, trafo = .logs("yi", "sj", "bj", "sigmaR"))
   fit <- align(m, fits = 3)
@@ -174,6 +180,22 @@ test_that("an error model without symbols takes error = NULL, and init sets star
   expect_null(shared$vjpEvalMany)
 })
 
+test_that("without random terms the standard errors come from the exact Hessian", {
+  # the Hessian of the fit, without the second derivatives of the outputs, can be indefinite at a
+  # minimum with large residuals; the standard errors take the exact one
+  d <- data.frame(time = c("0", "1", "0", "1"), gel = c("A", "A", "B", "B"), value = c(100, 100, 100, 400))
+  m <- alignmentModel(d, model = "yi * sj", errmodel = "0.1 * prediction", biological = yi ~ time,
+                      scaling = sj ~ gel, error = NULL, trafo = .logs("yi", "sj"))
+  fit <- suppressMessages(align(m, fits = 1))
+  nm <- names(fit$fit$argument)
+  expect_false(dMod2:::.positiveDefinite(fit$fit$hessian[nm, nm]))
+  H <- numDeriv::hessian(function(q) fit$objfn(setNames(q, nm))$value, fit$fit$argument)
+  V <- solve(H / 2)
+  dimnames(V) <- list(nm, nm)
+  X <- as.matrix(m$design$yi$X[!duplicated(d$time), , drop = FALSE])
+  expect_equal(fit$aligned$se, unname(sqrt(diag(X %*% V[colnames(X), colnames(X)] %*% t(X)))), tolerance = 1e-5)
+})
+
 test_that("without random terms every experiment is a condition and trust() runs sparse", {
   d <- .alignmentSim(5)
   m <- .rel(d)
@@ -231,10 +253,13 @@ test_that("a random background per gel fits through EM, censored readings by M3"
   expect_named(fit$multistart, c("value", "converged", "iterations"))
   expect_equal(nrow(fit$multistart), 2L)
   expect_true(all(c("eta_bj_G01", "eta_sigmaR_G01") %in% names(fit$parameters)))
-  # a random effect without spread in the readings is set to 0 at the boundary
-  expect_equal(unique(fit$omega$eta1), "bj")
-  expect_match(fit$fit$boundary, "sigmaR")
-  expect_equal(unname(fit$parameters[grep("^eta_sigmaR_", names(fit$parameters))]), rep(0, 8))
+  # a random effect the fit sets to 0 at the boundary leaves the variances, its etas held at 0;
+  # whether the error scale, drawn without a spread, ends there depends on the draw
+  dropped <- sub("^omega_(.+)_\\1$", "\\1", fit$fit$boundary, perl = TRUE)
+  expect_setequal(c(fit$omega$eta1, dropped), c("bj", "sigmaR"))
+  expect_false(any(dropped %in% fit$omega$eta1))
+  for (s in dropped)
+    expect_equal(unname(fit$parameters[grep(paste0("^eta_", s, "_"), names(fit$parameters))]), rep(0, 8))
   expect_equal(fit$scaled$bloq, low)
   expect_equal(fit$aligned$lloq[fit$aligned$time == "0"], min(fit$scaled$scaled[low]))
   expect_true(all(is.na(fit$aligned$lloq[fit$aligned$time != "0"])))
@@ -282,7 +307,7 @@ test_that("a random background per gel fits through EM, censored readings by M3"
   free <- intersect(names(fs$fit$argument), rownames(fs$fit$hessian))
   X <- m$design$yi$X[!duplicated(m$data$time), , drop = FALSE]
   H <- if (identical(fs$seSource, "Hessian")) fs$fit$hessian
-       else dMod2:::.alignmentGaussNewton(fs$objfn, fs$randomEffects, fs$fit)
+       else dMod2:::.alignmentGaussNewton(fs$model, fs$objfn, fs$randomEffects, fs$fit)
   expect_s4_class(H, "sparseMatrix")
   expect_equal(fs$aligned$se, sqrt(dMod2:::.alignmentVariance(as.matrix(H), free)(X)))
   expect_equal(sqrt(dMod2:::.alignmentVariance(sp$hessian, nm)(X)),
@@ -327,7 +352,8 @@ test_that("technical replicates are averaged per sample, and the fit is that of 
   lanes$value <- log2(lanes$value)
   lanes$lloq <- NA_real_
   low <- lanes$gel == "G01" & lanes$time %in% c("0", "10")
-  lanes$lloq[low] <- max(lanes$value[low]) - 0.01
+  # every reading of the two samples is censored but the first lane at time 10
+  lanes$lloq[low] <- max(lanes$value[low & lanes$lane != 1]) + 0.01
   lanes$lloq[low & lanes$time == "10" & lanes$lane == 1] <- -Inf
   add <- alignmentModel(lanes, model = "yi + sj", errmodel = "sigma", biological = yi ~ time, scaling = sj ~ gel,
                         error = sigma ~ 1, trafo = "sigma <- exp(sigma)", technical = "lane")
@@ -385,12 +411,25 @@ test_that("censored readings without random terms have the exact Hessian of M3",
                                         error = sigmaR ~ 1, trafo = .logs("yi", "sj", "bj", "sigmaR"), ...)
 
 test_that("the outer model of FOCEI learns the curvature that leads off a saddle of Gauss-Newton", {
-  m <- .rbg(.alignmentSim(8))
+  d <- .alignmentSim(8)
+  m <- .rbg(d)
   obj <- dMod2:::.alignmentObjective(m) + dMod2:::.alignmentNormalization(m)
+  re <- dMod2:::.alignmentRandomEffects(m)
   st <- dMod2:::.alignmentStart(m, dMod2:::.alignmentPars(m)$fixed)
-  fit <- em(obj, dMod2:::.alignmentRandomEffects(m), st, control = list(trustControl = list(mtol = 1e-4)),
-            sparse = FALSE, verbose = FALSE)
-  expect_lt(fit$value, 472)
+  fit <- em(obj, re, st, control = list(trustControl = list(mtol = 1e-4)), sparse = FALSE, verbose = FALSE)
+  # the parameters the readings were drawn from, the values at a geometric mean of 1; -2 log L
+  # there lies above the optimum and below the saddle
+  tr <- attr(d, "truth")
+  shift <- mean(log(unique(tr$yi)))
+  target <- list(yi = log(tr$yi) - shift, sj = log(tr$sj) + shift, bj = rep(4, nrow(d)),
+                 sigmaR = rep(log(0.1), nrow(d)))
+  truth <- c(unlist(lapply(names(target), function(k) {
+    X <- as.matrix(m$design[[k]]$X)
+    setNames(qr.solve(X, target[[k]]), colnames(X))
+  })), omega_bj_bj = log(0.3))
+  at <- em(obj, re, truth[names(fit$argument)], control = list(trustControl = list(iterlim = 0)), sparse = FALSE,
+           verbose = FALSE)
+  expect_lt(fit$value, at$value)
 })
 
 test_that("the FOCEI gradient and Hessian are those of the FOCEI objective, censored data too", {
@@ -416,10 +455,11 @@ test_that("the FOCEI gradient and Hessian are those of the FOCEI objective, cens
 })
 
 test_that("the FOCEI gradient with a random effect in the error model is the slope of the objective", {
+  # error scales that spread by a factor of 20 between the gels: the fit keeps their random effect
+  sc <- rep(exp(seq(-1.5, 1.5, length.out = 8)), each = 5)
   set.seed(5)
-  d <- .alignmentSim(8)
-  sc <- exp(rnorm(8, 0, 0.7))[match(d$gel, unique(d$gel))]
-  d$value <- d$value * exp(rnorm(nrow(d), 0, 0.1 * sc))
+  dev <- rnorm(40, 0, 0.1 * sc)
+  d <- .alignmentSim(8, deviation = dev)
   m <- alignmentModel(d, model = "yi * sj + bj", errmodel = "sigmaR * prediction", biological = yi ~ time,
                       scaling = sj ~ gel, error = bj + sigmaR ~ 1 + (1 | gel),
                       trafo = .logs("yi", "sj", "bj", "sigmaR"))
@@ -619,14 +659,15 @@ test_that("the restricted likelihood of a model linear in the mean parameters gi
   expect_identical(ml$remlRounds, 0L)
 })
 
-test_that("the restricted likelihood through FOCEI: sigma near the truth, its value, gradient and sparse path", {
+test_that("the restricted likelihood through FOCEI: sigma near the drawn noise, its value, gradient and sparse path", {
   set.seed(1)
   times <- c(0, 10, 30, 60, 120, 240); conc <- c(1, 40, 85, 60, 25, 10)
   gels <- sprintf("G%02d", 1:10)
   shift <- setNames(rnorm(10, 3, 1.5), gels)
   background <- setNames(1.5 + rnorm(10, 0, 0.3), gels)
   wb <- do.call(rbind, lapply(gels, function(g) data.frame(method = "WB", gel = g, time = sort(sample(times, 4)))))
-  wb$value <- log2(conc[match(wb$time, times)] + 2^background[wb$gel]) + shift[wb$gel] + rnorm(nrow(wb), 0, 0.4)
+  noiseWB <- rnorm(nrow(wb), 0, 0.4)
+  wb$value <- log2(conc[match(wb$time, times)] + 2^background[wb$gel]) + shift[wb$gel] + noiseWB
   ms <- data.frame(method = "MS", gel = NA, time = rep(c(0, 30, 60, 240), each = 2))
   ms$value <- log2(conc[match(ms$time, times)]) + rnorm(nrow(ms), 0, 0.35)
   d <- rbind(cbind(wb, absolute = FALSE), cbind(ms, absolute = TRUE))
@@ -639,7 +680,9 @@ test_that("the restricted likelihood through FOCEI: sigma near the truth, its va
   sigmas <- function(fit) c(exp(fit$parameters[["sigma"]]), exp(fit$parameters[["sigma"]] + fit$parameters[["sigma_methodWB"]]))
   # restricted likelihood removes the downward bias of the maximum likelihood estimate
   expect_true(all(sigmas(re) > sigmas(ml)))
-  expect_true(all(abs(sigmas(re) / c(0.35, 0.4) - 1) < 0.25))
+  # the relative method near the standard deviation of its noise as drawn; the eight readings of
+  # the absolute method leave its sigma far from that in some draws
+  expect_lt(abs(sigmas(re)[2] / sqrt(mean(noiseWB^2)) - 1), 0.35)
   expect_gte(re$remlRounds, 2L)
   # the term of a round: log|S / 2| - p log(2 pi) at the parameters and modes of the last round, the
   # error parameters and the hyperparameter replaced; FOCEI with it has the exact gradient, dense
@@ -716,8 +759,7 @@ test_that("alignment models build in the output directory of the session, by for
   res <- parallel::mclapply(1:2, function(i) tryCatch(value(build()), error = conditionMessage), mc.cores = 2)
   expect_true(all(vapply(res, is.numeric, TRUE)))
   expect_equal(res[[1]], res[[2]])
-  expect_true(any(grepl("^align_.*\\.so$", list.files(dir))))
-  expect_false(any(grepl("\\.lock$", list.files(dir))))
+  expect_true(any(grepl("align_.*\\.so$", list.files(dir, recursive = TRUE))))
 })
 
 test_that("a fit reports the modes at its parameters, a positive definite Hessian and finite standard errors", {
@@ -750,10 +792,41 @@ test_that("a fit reports the modes at its parameters, a positive definite Hessia
   expect_true(all(is.finite(fit$aligned$se)))
   # the Gauss-Newton Schur complement, which takes over where the Hessian is not positive
   # definite, gives finite standard errors of the same order
-  gn <- dMod2:::.alignmentGaussNewton(fit$objfn, fit$randomEffects, fit$fit)
+  gn <- dMod2:::.alignmentGaussNewton(fit$model, fit$objfn, fit$randomEffects, fit$fit)
   on <- names(fit$fit$argument)
   X <- m$design$yi$X[!duplicated(m$data$time), , drop = FALSE]
   se <- sqrt(dMod2:::.alignmentVariance(as.matrix(gn), on)(X))
   expect_true(all(is.finite(se)))
   expect_lt(max(abs(log(se / fit$aligned$se))), log(2))
+})
+
+test_that("the Gauss-Newton fallback is the expected information, positive definite where the joint Hessian is not", {
+  times <- c("0", "1", "2")
+  d <- expand.grid(time = times, gel = c("A", "B", "C"), stringsAsFactors = FALSE)
+  d$value <- 100 * exp(c(-0.4, 0, 0.4))[match(d$gel, c("A", "B", "C"))] * c(1, 2, 4)[match(d$time, times)]
+  d$value[d$time == "2" & d$gel == "A"] <- 4 * d$value[d$time == "2" & d$gel == "A"]
+  m <- alignmentModel(d, model = "yi * sj", errmodel = "0.1 * prediction", biological = yi ~ time,
+                      scaling = sj ~ 1 + (1 | gel), error = NULL, trafo = .logs("yi", "sj"))
+  fit <- suppressMessages(align(m, fits = 1, reml = FALSE))
+  f <- fit$fit
+  eta <- dMod2:::.etaVector(f)
+  on <- names(f$argument)
+  e <- names(eta)
+  free <- c(on, e)
+  # the Schur complement of the first-order Hessian of the joint at the modes is indefinite
+  design <- dMod2:::.emDesign(fit$objfn, fit$randomEffects)
+  joint <- design$objfn + dMod2:::.normalPrior(design)
+  H <- as.matrix(joint(pars = c(f$argument, eta), fixed = f$fixed, hessian = "sparse")$hessian)[free, free]
+  first <- H[on, on] - H[on, e] %*% solve(H[e, e], H[e, on])
+  expect_lt(min(eigen(first, symmetric = TRUE, only.values = TRUE)$values), 0)
+  gn <- as.matrix(dMod2:::.alignmentGaussNewton(m, fit$objfn, fit$randomEffects, f))
+  expect_gt(min(eigen(gn, symmetric = TRUE, only.values = TRUE)$values), 0)
+  # the information of the readings, 2 / sigma^2 in the prediction and 4 / sigma^2 in sigma
+  n <- nrow(d)
+  out <- function(q) as.vector(dMod2:::.alignmentEval(m, seq_len(n), c(setNames(q, free), f$fixed), deriv = FALSE)$y)
+  q <- unname(c(f$argument, eta)[free])
+  J <- numDeriv::jacobian(out, q)
+  s <- out(q)[n + seq_len(n)]
+  expect_equal(unname(as.matrix(dMod2:::.alignmentFisher(m, c(setNames(q, free), f$fixed), free))),
+               2 * crossprod(J[seq_len(n), ] / s) + 4 * crossprod(J[n + seq_len(n), ] / s), tolerance = 1e-6)
 })

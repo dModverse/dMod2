@@ -268,12 +268,18 @@ test_that("vcov of an mstrust fit asks for an objective evaluation", {
 
 # ---- retry / nTries -----------------------------------------------------
 
+# An objective that fails at the first `fail_first` points it is evaluated at, and only there.
 make_flaky_obj <- function(fail_first = 3L) {
-  counter <- 0L
+  failing <- list()
   fn <- function(pars, fixed = NULL, deriv = TRUE, ...) {
-    counter <<- counter + 1L
-    if (counter <= fail_first)
-      stop("flaky objfn: deliberate failure ", counter, "/", fail_first)
+    p <- setNames(as.numeric(pars), names(pars))
+    at <- Position(function(q) isTRUE(all.equal(q, p)), failing)
+    if (is.na(at) && length(failing) < fail_first) {
+      failing[[length(failing) + 1L]] <<- p
+      at <- length(failing)
+    }
+    if (!is.na(at))
+      stop("flaky objfn: deliberate failure ", at, "/", fail_first)
     v <- sum(pars * pars)
     g <- 2 * pars
     H <- 2 * diag(length(pars))

@@ -173,7 +173,7 @@
   # then the nodes are laid out afresh and released. A failing phase is dropped.
   start0 <- NULL
   if (isTRUE(step$twoPhase)) {
-    ph <- .shootPhaseOne(sobj, theta, nodes, fixed, cores, pv, lb, ub, ps,
+    ph <- .shootPhaseOne(sobj, theta, nodes, fixed, cores, pv, lb, ub,
                          rinit, rmax, iterlim)
     neval <- neval + ph$neval
     if (!is.null(ph$theta)) {
@@ -777,7 +777,7 @@
 # The first of two phases: theta alone by the trust region of trust(), on the
 # data term of the segments with every node held where it is, plus the other
 # summands. NULL for theta when the phase fails.
-.shootPhaseOne <- function(sobj, theta, nodes, fixed, cores, pv, lb, ub, ps,
+.shootPhaseOne <- function(sobj, theta, nodes, fixed, cores, pv, lb, ub,
                            rinit, rmax, iterlim) {
   tnames <- names(theta)
   K <- length(tnames)

@@ -76,12 +76,6 @@ static bool modes_found(int K, const std::vector<double>& grad, const std::vecto
 }
 
 
-static inline double vecs_at(const std::vector<double>& V, int K,
-                             int row, int col) {
-  return V[row + col * K];
-}
-
-
 // Thin wrappers over the Moré-Sorensen subproblem and eigendecomposition in
 // trust_subproblem.h, shared with trust_kernel.cpp and covering the hard case.
 // A Hessian that is not finite stops the evaluation: LAPACK does not return on NaN input.
@@ -446,47 +440,6 @@ static EvalResult eval_one_subject(
   SubjectFrames frames;
   predict_one_subject(model_cb, err_cb, pars, fixed, meta_i, eta_block, &frames);
   return eval_one_subject_from(frames, pars, meta_i, eta_block, Omega_inv, Omega_log_det);
-}
-
-
-// Conditional objective of subject i over its K etas as an objlist: data NLL
-// + eta^T Omega^-1 eta + log|Omega|, Gauss-Newton Hessian. `pars_full` holds
-// every model_cb parameter; its eta slots are overwritten from `eta_block`.
-// [[Rcpp::export]]
-List focei_eval_one_subject(
-    Function model_cb,
-    Function err_cb,
-    NumericVector pars_full,
-    Nullable<NumericVector> fixed,
-    List meta_i,
-    NumericVector eta_block,
-    NumericMatrix Omega_inv,
-    double Omega_log_det) {
-
-  NumericVector pars_copy = clone(pars_full);
-  IntegerVector eta_idx_in_pars = meta_i["eta_idx_in_pars"];
-  const int K = eta_block.size();
-  if ((int)eta_idx_in_pars.size() != K)
-    stop("focei_eval_one_subject: eta_block length mismatch.");
-  if (Omega_inv.nrow() != K || Omega_inv.ncol() != K)
-    stop("focei_eval_one_subject: Omega_inv shape mismatch.");
-
-  EvalResult er = eval_one_subject(
-      model_cb, err_cb, pars_copy, fixed, meta_i,
-      eta_block.begin(), Omega_inv.begin(), Omega_log_det);
-
-  NumericVector grad(K);
-  for (int k = 0; k < K; ++k) grad[k] = er.grad[k];
-  NumericMatrix H(K, K);
-  for (int c = 0; c < K; ++c) for (int r = 0; r < K; ++r)
-    H(r, c) = er.hess[r + K * c];
-  CharacterVector eta_names = meta_i["eta_names"];
-  grad.attr("names") = eta_names;
-  H.attr("dimnames") = List::create(eta_names, eta_names);
-
-  return List::create(_["value"] = er.value,
-                      _["gradient"] = grad,
-                      _["hessian"]  = H);
 }
 
 

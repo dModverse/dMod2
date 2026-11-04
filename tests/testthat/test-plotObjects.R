@@ -191,11 +191,12 @@ test_that("plotArray merges a covariate table and warns about a failing set", {
   p <- plotArray("A2", pr$profs, pr$x, 0:1, dose == 3, covtable = cov, nSim = 2)
   expect_equal(names(p$data), c("condition", "time", "name", "value", "set", "ParValue", "dose"))
   expect_equal(nrow(p$data), 4L)
-  calls <- 0
-  prd <- function(...) {
-    calls <<- calls + 1
-    if (calls == 2) stop("boom")
-    pr$x(...)
+  # the prediction fails at the profiled value of the second set
+  full <- plotArray("A2", pr$profs, pr$x, 0:1, nSim = 3)$data
+  second <- unique(full$ParValue[full$set == 2])
+  prd <- function(times, pars, ...) {
+    if (isTRUE(all.equal(as.numeric(pars["A2"]), second))) stop("boom")
+    pr$x(times, pars, ...)
   }
   expect_warning(p <- plotArray("A2", pr$profs, prd, 0:1, nSim = 3),
                  "parameter set 2 failed: boom")

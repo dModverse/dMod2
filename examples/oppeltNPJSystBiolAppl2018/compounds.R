@@ -77,34 +77,18 @@ init[c("prob_compound", "tau_compound")] <- c(0.2, 0.5)
 priorCompounds <- constraintL2(c(muReduced, setNames(muReduced[blot3], paste0(blot3, "_blot3")))[population],
                                sigma = 10)
 # ten starts: the one above and nine with the fixed effects moved by a standard deviation of 0.5 on
-# the log scale, the probability of a change on the logit scale and the spread by a factor
+# the log scale, the probability of a change on the logit scale and the spread by a factor; a start
+# whose fit fails, where the resting state is not stable, is drawn again; every start runs to its end,
+# the ten at once on a tenth of the cores each
 set.seed(3)
-moved <- setdiff(names(init), c("prob_compound", "tau_compound"))
-startsCompounds <- c(list(init), lapply(1:9, function(k) {
-  s <- init
-  s[moved] <- s[moved] + rnorm(length(moved), sd = 0.5)
-  s[["prob_compound"]] <- plogis(qlogis(0.2) + rnorm(1, sd = 0.5))
-  s[["tau_compound"]] <- 0.5 * exp(rnorm(1, sd = 0.5))
-  s
-}))
-# the fit from start k, saved without the model, which an evaluation at the estimates restores
-fitCompound <- function(k) {
-  fit <- tryCatch(em(objCompounds + priorCompounds, random, startsCompounds[[k]], fixed = gaugeReduced,
+fitCompounds <- msem(objCompounds + priorCompounds, random, init, fixed = gaugeReduced,
                      control = list(laplace = list(trustControl = list(tolControl = tolerances))),
-                     cores = getOption("dMod2.cores")), error = function(e) conditionMessage(e))
-  if (is.character(fit)) return(fit)
-  fit[c("design", "prdfn", "errfn", "data")] <- NULL
-  fit
-}
-fitsCompounds <- lapply(seq_along(startsCompounds), fitCompound)
+                     fits = 10, sd = 0.5, budget = Inf, keepFits = TRUE,
+                     cores = c(fits = 10, conditions = max(1, getOption("dMod2.cores") %/% 10)))
 
 ## ---- compoundsave
-# the best fit and a table of all starts
-ok <- !vapply(fitsCompounds, is.character, TRUE)
-starts <- data.frame(start = seq_along(fitsCompounds),
-                     value = vapply(fitsCompounds, function(f) if (is.character(f)) NA_real_ else f$value, 0),
-                     converged = vapply(fitsCompounds, function(f) !is.character(f) && isTRUE(f$converged), TRUE),
-                     error = vapply(fitsCompounds, function(f) if (is.character(f)) f else NA_character_, ""))
-saved <- fitsCompounds[[which(ok)[which.min(starts$value[ok])]]]
-saved$multistart <- starts
+# the best fit with the table and the fits of all starts, saved without the model, which an
+# evaluation at the estimates restores
+saved <- fitCompounds
+saved[c("design", "prdfn", "errfn", "data")] <- NULL
 saveRDS(saved, "results/compounds.rds")

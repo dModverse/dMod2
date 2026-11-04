@@ -142,18 +142,6 @@ match.fnargs <- function(arglist, choices) {
 # Refcounted, so this costs pointers rather than copies.
 .bundle_broadcast <- function(x, n) rep(list(x), n)
 
-.bundle_subset <- function(b, sel) {
-  if (is.null(b$conds)) return(b)
-  idx <- match(sel, b$conds)
-  idx <- idx[!is.na(idx)]
-  .bundle(conds  = b$conds[idx],
-          times  = if (is.list(b$times)) b$times[idx] else b$times,
-          out    = if (is.null(b$out))   NULL else b$out[idx],
-          pars   = if (is.null(b$pars))  NULL else b$pars[idx],
-          fixed  = if (is.null(b$fixed)) NULL else b$fixed[idx],
-          shared = b$shared)
-}
-
 .bundle_positions <- function(b, pos, conds_out) {
   if (is.null(b$conds))
     return(.bundle(conds = conds_out, times = b$times,
@@ -895,8 +883,8 @@ match.fnargs <- function(arglist, choices) {
 }
 
 
-.unionMappingAttr <- function(mappings, what) {
-  vals <- lapply(mappings, attr, what)
+.unionMappingAttr <- function(mappings) {
+  vals <- lapply(mappings, attr, "forcings")
   vals <- vals[!vapply(vals, is.null, logical(1))]
   if (!length(vals)) NULL else vals[[1]]
 }
@@ -1143,7 +1131,7 @@ match.fnargs <- function(arglist, choices) {
   attr(outfn, "compileInfo") <- .mergeCompileInfo(attr(e1, "compileInfo"),
                                                   attr(e2, "compileInfo"))
   attr(outfn, "conditions")  <- own$conditions
-  attr(outfn, "forcings")    <- .unionMappingAttr(own$mappings, "forcings")
+  attr(outfn, "forcings")    <- .unionMappingAttr(own$mappings)
 
   # Keep "composed" only when a composed operand went in, so summary() keeps
   # its detail branch for a sum of leaves and drops it for a sum of chains.

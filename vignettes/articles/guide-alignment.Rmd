@@ -5,6 +5,8 @@ title: "9. Alignment of relative data measurements"
 ```{r, include = FALSE}
 knitr::opts_chunk$set(collapse = TRUE, comment = "#>", fig.width = 8, fig.height = 4, dpi = 96,
                       fig.retina = 2, message = FALSE)
+inWords <- function(n) if (n %in% 1:12) c("one", "two", "three", "four", "five", "six", "seven",
+  "eight", "nine", "ten", "eleven", "twelve")[n] else format(n)
 ```
 
 Western blots, plate readers and many other assays give readings on a scale of their own: one
@@ -137,11 +139,16 @@ fitLanes
 signif(errors(fitLanes), 2)
 ```
 
+```{r, include = FALSE}
+# the largest error of an aligned value in units of its standard error
+inSE <- function(fit) with(errors(fit), max(abs(error / se)))
+```
+
 Both fits find nearly the same values with the same errors. The fit of the lanes reports
 standard errors smaller by about the square root of 3, the number of lanes per sample: it
 counts 90 readings, but most of the error of a value is the biological deviation of the
-samples, of which there are 30. Its errors reach 1.7 standard errors, those of the fit of
-the means stay within one.
+samples, of which there are 30. Its errors reach `r round(inSE(fitLanes), 1)` standard errors,
+those of the fit of the means stay within `r inWords(ceiling(inSE(fit)))`.
 
 ## Background per gel
 

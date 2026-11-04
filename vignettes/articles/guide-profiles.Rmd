@@ -16,6 +16,11 @@ knitr::read_chunk("../../examples/oppeltNPJSystBiolAppl2018/model.R")
 knitr::read_chunk("../../examples/oppeltNPJSystBiolAppl2018/profiles.R")
 knitr::read_chunk("../../examples/oppeltNPJSystBiolAppl2018/reduced.R")
 knitr::read_chunk("../../examples/oppeltNPJSystBiolAppl2018/refit.R")
+# a value of a stored result for the text, "?" while the result is missing
+ifStored <- function(available, value) if (available) value else "?"
+inWords <- function(n) if (n %in% 1:20) c("one", "two", "three", "four", "five", "six", "seven",
+  "eight", "nine", "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen",
+  "seventeen", "eighteen", "nineteen", "twenty")[n] else format(n)
 ```
 
 A fit gives the best parameters; the profile likelihood tells how well the data determine each of
@@ -155,12 +160,20 @@ only, and `cores` profiles several parameters in parallel processes.
 ```{r wideprior, eval = FALSE}
 ```
 
+```{r, include = FALSE, eval = profiled}
+# translation and degradation of A20 at the final refit against the best fit of the multistart
+a20 <- c("build_A20", "degrad_A20")
+a20Slower <- exp(mean(as.numeric(as.parvec(readRDS("results/fits.rds"))[a20]) -
+                      readRDS("results/profiles.rds")$refit$argument[a20]))
+```
+
 It then profiles every parameter with the integration and corrections of up to 100 iterations, each
 side until the data term has risen by the threshold or the parameter has moved by 7, a factor of
 $e^7 \approx 1100$. A profile that reaches a lower value than its start has found a better optimum;
 `profiles.R` refits from the lowest point and profiles again. Here the first pass found one: at the
-better optimum, translation and degradation of A20 are both about twentyfold slower, which keeps the
-level of A20 and slows its turnover, and its transcript moves faster through the two delay stages.
+better optimum, translation and degradation of A20 are both about
+`r ifStored(profiled, inWords(signif(a20Slower, 1)))`fold slower, which keeps the level of A20 and
+slows its turnover, and its transcript moves faster through the two delay stages.
 
 ```{r profiles, eval = FALSE}
 ```
@@ -178,9 +191,14 @@ wide <- objWide(refit$argument, fixed = gauge)
 c(data = attr(wide, "data"), prior = attr(wide, "prior"))
 ```
 
-With the wide prior the data term falls by about 6.5 below that of the multistart: the weak prior
-had held some parameters away from where the data put them, and the prior term is now small. No
-point of the profiles lies lower than the refit:
+```{r, include = FALSE, eval = profiled}
+narrow <- obj(as.parvec(readRDS("results/fits.rds")), fixed = gauge)
+dataDrop <- attr(narrow, "data") - attr(wide, "data")
+```
+
+With the wide prior the data term falls by about `r ifStored(profiled, round(dataDrop, 1))` below
+that of the multistart: the weak prior had held some parameters away from where the data put them,
+and the prior term is now small. No point of the profiles lies lower than the refit:
 
 ```{r, eval = profiled}
 c(refit = refit$value, lowest = min(profiles$value))
@@ -198,9 +216,20 @@ rownames(intervals) <- NULL
 intervals[intervals$shape != "finite", c("name", "value", "lower", "upper", "shape")]
 ```
 
+```{r, include = FALSE, eval = profiled}
+# the largest rise of the prior on an open side, against its value at the optimum
+along <- as.data.frame(profiles)
+openSides <- intervals[intervals$shape != "finite", ]
+priorRise <- max(mapply(function(name, shape) {
+  d <- along[along$whichPar == name, ]
+  side <- switch(shape, "open above" = d$constraint >= 0, "open below" = d$constraint <= 0, TRUE)
+  max(d$prior[side] - d$prior[which.min(abs(d$constraint))])
+}, openSides$name, openSides$shape))
+```
+
 `plotProfile()` draws the data term and the prior separately, each relative to its value at the
 optimum. On an open side the data term stays below the threshold of 3.84 up to the end of the
-range; what rises there is the prior, by up to 2.9:
+range; what rises there is the prior, by up to `r ifStored(profiled, ceiling(10 * priorRise) / 10)`:
 
 ```{r, fig.width = 10, fig.height = 13, eval = profiled}
 open <- intervals$name[intervals$shape != "finite"]

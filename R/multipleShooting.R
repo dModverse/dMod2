@@ -62,12 +62,11 @@
   }
   keys <- vapply(segs, `[[`, "", "key")
   dataSeg <- setNames(lapply(segs, `[[`, "data"), keys)
-  ekeys <- if (is.null(e.cond)) NULL else keys[vapply(segs, function(s) s$cond %in% e.cond, TRUE)]
 
   spec <- list2env(list(
     x = x, p = p, g = g, errmodel = errmodel, states = states, charts = charts,
     conditions = conditions, e.cond = e.cond, segs = segs, keys = keys,
-    dataSeg = dataSeg, ekeys = ekeys, opt.BLOQ = opt.BLOQ,
+    dataSeg = dataSeg, opt.BLOQ = opt.BLOQ,
     tau = lapply(setNames(conditions, conditions), function(cn)
       vapply(Filter(function(s) s$cond == cn, segs), `[[`, 0, "start"))),
     parent = emptyenv())
@@ -202,11 +201,11 @@
 }
 
 # Node coordinate of a state value, and its derivative.
-.shootToChart <- function(v, charts, where = "") {
+.shootToChart <- function(v, charts) {
   lg <- charts == "log10"
   if (any(lg & !(v > 0)))
     stop("multiple shooting: state ", paste(names(charts)[lg & !(v > 0)], collapse = ", "),
-         " is not positive", where, ", so its log10 chart is undefined.",
+         " is not positive, so its log10 chart is undefined.",
          call. = FALSE)
   s <- v; d <- rep(1, length(v))
   s[lg] <- log10(v[lg])
@@ -344,8 +343,7 @@
   sig <- lapply(obs, function(pr) dimnames(attr(pr, "deriv"))[[3]])
   shape <- c(vapply(obs, NROW, integer(1)), vapply(err, NROW, integer(1)))
   if (is.null(cache$meta) || !identical(cache$sig, sig) || !identical(cache$shape, shape)) {
-    cache$meta <- .build_normL2_meta(spec$dataSeg, setNames(obs, spec$keys),
-                                     err, spec$keys, spec$ekeys)
+    cache$meta <- .build_normL2_meta(spec$dataSeg, setNames(obs, spec$keys), err, spec$keys)
     cache$sig <- sig
     cache$shape <- shape
   }

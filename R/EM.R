@@ -189,7 +189,7 @@
 #' `cm1Control` and `maxCm1Iter`.
 #'
 #' @seealso [msem()], [randomEffects()], [insert()]
-#' @example inst/examples/NLME.R
+#' @example inst/examples/em.R
 #' @export
 em <- function(obj, random, init = NULL, fixed = NULL,
                method = c("focei", "quadrature", "laplaceEM", "saem"),
@@ -253,17 +253,26 @@ em <- function(obj, random, init = NULL, fixed = NULL,
 #'   iterations they took in the first fit. Quadrature, Laplace-EM and SAEM
 #'   keep their own iteration limits. `Inf` lets every start run to
 #'   convergence.
-#' @example inst/examples/NLME.R
+#' @param retry Logical. If `TRUE` (default), a fit that fails with an error,
+#'   for instance at a start where a steady state of [Pimpl()] has no stable
+#'   root, is repeated from a new perturbed start, up to `nTries` attempts.
+#' @param nTries Maximum number of attempts per start, including the first.
+#'   Default `10`.
+#' @param keepFits Logical. If `TRUE`, the result has `fits`, the fit of every
+#'   start, or its error message, without the model. Default `FALSE`.
+#' @example inst/examples/msem.R
 #' @return The fit with the smallest `value`, of class `em`, with `multistart`,
 #'   a data.frame of every start with its `value`, `converged`, `iterations`,
-#'   `error` and `boundary`, the variances its fit set to 0; a start that the
-#'   budget ends has `converged = FALSE`.
+#'   `tries`, `stop`, the test that ended its trust region (`"error"` where
+#'   every attempt failed), `error` and `boundary`, the variances its fit set
+#'   to 0; a start that the budget ends has `converged = FALSE`.
 #'   [plotValues()] draws it as a waterfall.
 #' @seealso [em()]
 #' @export
 msem <- function(obj, random, init = NULL, fixed = NULL,
                  method = c("focei", "quadrature", "laplaceEM", "saem"),
-                 control = list(), fits = 20L, cores = 1L, sd = 0.5, budget = 5, verbose = FALSE, sparse = "auto") {
+                 control = list(), fits = 20L, cores = 1L, sd = 0.5, budget = 5, verbose = FALSE, sparse = "auto",
+                 retry = TRUE, nTries = 10L, keepFits = FALSE) {
   method <- match.arg(method)
   .checkEmControl(control)
   if (length(budget) != 1L || is.na(budget) || budget <= 0)
@@ -277,6 +286,11 @@ msem <- function(obj, random, init = NULL, fixed = NULL,
   # an inner axis above 1 runs the fits in PSOCK workers, as mstrust()
   starts <- c(list(center), lapply(seq_len(fits - 1L), function(i) .perturbStart(design, center, sd)))
   seeds <- sample.int(.Machine$integer.max, fits)
+  # the starts and seeds of the retries come after, so those of the first attempts stay as they were
+  maxTries <- if (isTRUE(retry)) max(1L, as.integer(nTries)) else 1L
+  restarts <- lapply(seq_len(fits), function(i)
+    lapply(seq_len(maxTries - 1L), function(k) .perturbStart(design, center, sd)))
+  reseeds <- matrix(sample.int(.Machine$integer.max, fits * (maxTries - 1L)), fits)
   split <- .splitCores(cores, "fits")
   inner <- if (!is.null(split$conditions)) .sanitizeCores(split$conditions)
   # a worker returns its fit without the parts of the design, which the parent has; a fit with a
@@ -285,17 +299,24 @@ msem <- function(obj, random, init = NULL, fixed = NULL,
   # the message on the derivative mode travels with the fit and is given once
   one <- function(i, cap = NULL) {
     suppressMessages(loadDLL(obj))
-    set.seed(seeds[i])
     note <- NULL
-    tryCatch(withCallingHandlers({
-      fit <- .emFit(design, starts[[i]], fixed, method, .capIterations(control, cap), FALSE)
-      if (is.null(fit$boundary)) fit[shared] <- NULL
-      fit$derivModeNote <- note
-      fit
-    }, dMod2DerivModeMessage = function(m) {
-      note <<- conditionMessage(m)
-      invokeRestart("muffleMessage")
-    }), error = function(e) conditionMessage(e))
+    for (a in seq_len(maxTries)) {
+      set.seed(if (a == 1L) seeds[i] else reseeds[i, a - 1L])
+      start <- if (a == 1L) starts[[i]] else restarts[[i]][[a - 1L]]
+      fit <- tryCatch(withCallingHandlers({
+        fit <- .emFit(design, start, fixed, method, .capIterations(control, cap), FALSE)
+        if (is.null(fit$boundary)) fit[shared] <- NULL
+        fit
+      }, dMod2DerivModeMessage = function(m) {
+        note <<- conditionMessage(m)
+        invokeRestart("muffleMessage")
+      }), error = function(e) conditionMessage(e))
+      if (!is.character(fit)) break
+    }
+    if (is.character(fit)) return(structure(fit, tries = a))
+    fit$derivModeNote <- note
+    fit$tries <- a
+    fit
   }
   # the budget of the other starts comes from the first, so it does not depend on `cores`
   first <- .parallelLapply(1L, one, coresConditions = inner)
@@ -308,11 +329,16 @@ msem <- function(obj, random, init = NULL, fixed = NULL,
   notes <- unique(unlist(lapply(runs[ok], `[[`, "derivModeNote")))
   for (n in notes) .derivModeMessage(sub("\n$", "", n))
   runs[ok] <- lapply(runs[ok], function(r) { r$derivModeNote <- NULL; r })
+  tries <- vapply(runs, function(r) as.integer(if (is.character(r)) attr(r, "tries") %||% 1L else r$tries %||% 1L), 0L)
+  runs[ok] <- lapply(runs[ok], function(r) { r$tries <- NULL; r })
   table <- data.frame(start = seq_len(fits),
                       value = vapply(runs, function(r) if (is.character(r)) NA_real_ else r$value, 0),
                       converged = vapply(runs, function(r) !is.character(r) && isTRUE(r$converged), TRUE),
                       iterations = vapply(runs, function(r) if (is.character(r)) NA_integer_
                                           else as.integer(r$iterations %||% NA_integer_), 0L),
+                      tries = tries,
+                      stop = vapply(runs, function(r) if (is.character(r)) "error"
+                                    else as.character(r$stopReason %||% NA_character_), ""),
                       error = vapply(runs, function(r) if (is.character(r)) r else NA_character_, ""),
                       boundary = vapply(runs, function(r) if (is.character(r)) "" else paste(r$boundary, collapse = ", "), ""))
   if (verbose) print(table)
@@ -320,6 +346,7 @@ msem <- function(obj, random, init = NULL, fixed = NULL,
   best <- runs[[which(ok)[which.min(table$value[ok])]]]
   if (is.null(best$boundary)) best[shared] <- list(design$prdfn, design$data, design$errfn, design)
   best$multistart <- table
+  if (isTRUE(keepFits)) best$fits <- lapply(runs, function(r) { if (is.list(r)) r[shared] <- NULL; r })
   best
 }
 

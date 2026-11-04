@@ -792,8 +792,7 @@ plotResiduals.default <- function(parframe, x, data, split = "condition",
 #' Convergence Trace of an Iterative Fit
 #'
 #' Generic for plotting the quantities an iterative fitting method records,
-#' one panel each. dMod2 defines no method for it; packages and extensions
-#' that return iterative fit objects do.
+#' one panel each, with a method for [em()] fits.
 #' @param x Object to plot.
 #' @param ... Method-specific arguments.
 #' @return A `ggplot` object, as returned by the method.
@@ -801,24 +800,6 @@ plotResiduals.default <- function(parframe, x, data, split = "condition",
 plotTrace <- function(x, ...) UseMethod("plotTrace", x)
 
 
-
-
-# Long-format samples for ggplot.
-.bayes_samples_long <- function(samples, par_names = NULL) {
-  if (!is.matrix(samples)) stop("samples must be a matrix.")
-  if (is.null(colnames(samples))) {
-    if (is.null(par_names))
-      par_names <- paste0("p", seq_len(ncol(samples)))
-    colnames(samples) <- par_names
-  }
-  N <- nrow(samples)
-  data.frame(
-    sample    = rep(seq_len(N), times = ncol(samples)),
-    parameter = factor(rep(colnames(samples), each = N),
-                       levels = colnames(samples)),
-    value     = as.vector(samples),
-    stringsAsFactors = FALSE)
-}
 
 
 #' Pair Plot of Parameter Samples

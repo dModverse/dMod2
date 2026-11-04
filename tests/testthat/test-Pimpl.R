@@ -136,17 +136,26 @@ pp_models <- function() {
     addReaction("I", "pI", "a * R * I") |> addReaction("pI", "iI", "b * pI") |>
     addReaction("iI", "I", "c * iI")
   rest <- Pimpl(el_rest, modelname = mn("rest"), verbose = FALSE)
+  # the same network as g * x * rest * p, its resting state absent from p or given by it
+  rest_ode <- odemodel(el_rest, modelname = mn("rest_ode"), compile = FALSE)
+  rest_obs <- Y(c(yI = "I", yP = "pI"), f = el_rest, modelname = mn("rest_obs"))
+  tr_rest <- c(u = "exp(lu)", a = "exp(la)", b = "exp(lb)", c = "1",
+               setNames("exp(lT)", grep("^total", attr(rest, "parameters"), value = TRUE)))
+  rest_p0 <- P(tr_rest, condition = "C1", modelname = mn("rest_p0"))
+  rest_p1 <- P(c(tr_rest, R = "exp(lR)"), condition = "C1", modelname = mn("rest_p1"))
 
   compile(lin, d2, d2_2, d2_cq, moiety2_im, dimer_im, recycle, sing, noroot,
           noparam, erk_im, px, px_same, zero, pd, pd2, plasmid, bistable, unstable,
-          kink, catalyst, vol, rest, output = mn("impl"), cores = test_cores())
+          kink, catalyst, vol, rest, rest_ode, rest_obs, rest_p0, rest_p1,
+          output = mn("impl"), cores = test_cores())
 
   .pp_env$models <- list(
     lin = lin, d2 = d2, d2_2 = d2_2, d2_cq = d2_cq, moiety2_im = moiety2_im,
     dimer_im = dimer_im, recycle = recycle, el_recycle = el_recycle, sing = sing,
     noroot = noroot, noparam = noparam, erk_im = erk_im, px = px, px_same = px_same,
     zero = zero, pd = pd, pd2 = pd2, plasmid = plasmid, bistable = bistable,
-    unstable = unstable, kink = kink, catalyst = catalyst, vol = vol, rest = rest)
+    unstable = unstable, kink = kink, catalyst = catalyst, vol = vol, rest = rest,
+    rest_ode = rest_ode, rest_obs = rest_obs, rest_p0 = rest_p0, rest_p1 = rest_p1)
 }
 
 
@@ -474,13 +483,14 @@ test_that("NegCol: a state with only outflux is detected as zero", {
 ## ---- Layer 2: PosCol with single-state feeder --------------------------
 
 test_that("PosCol: only-influx state whose feeder has a single reactant", {
-  # An only-influx state forces its single-reactant feeder to zero, and the
-  # state itself drops on the next iteration.
+  # An only-influx state forces its single-reactant feeder to zero; the state
+  # itself is left without reactions and rests.
   el <- eqnlist() |>
     addReaction("", "X", "k_pr * Z") |>
     addReaction("Z", "",  "k_dg * Z")
   zs <- helper(el)
-  expect_setequal(zs$zero_states, c("Z", "X"))
+  expect_setequal(zs$zero_states, "Z")
+  expect_identical(zs$resting, "X")
 })
 
 
@@ -862,12 +872,42 @@ test_that("the conserved amount holds the volumes, also symbolic ones", {
   expect_equal(unname(J[c("A", "B"), "V"]), c(0, -B / 0.4), tolerance = 1e-7)
 })
 
-test_that("a moiety whose reactions all rest keeps its total in the one form left", {
+test_that("a resting state is 0 unless given, and a given value drives the moiety", {
   skip_if_no_compile()
   pr <- pp_models()$rest
+  expect_false("R" %in% attr(pr, "parameters"))
   tn <- grep("^total", attr(pr, "parameters"), value = TRUE)
   expect_length(tn, 1L)
   pars <- c(u = 1, a = 1, b = 1, c = 1, setNames(2, tn))
   o <- pr(pars[intersect(names(pars), attr(pr, "parameters"))], deriv = FALSE)[[1]]
   expect_equal(as.numeric(o[c("I", "pI", "iI", "R")]), c(2, 0, 0, 0))
+  expect_identical(as.numeric(o[c("pI", "iI")]), c(0, 0))
+
+  o <- pr(c(pars[intersect(names(pars), attr(pr, "parameters"))], R = 0.1))[[1]]
+  expect_equal(as.numeric(o[c("I", "pI", "iI", "R")]), c(20, 2, 2, 1.2) / 12, tolerance = 1e-8)
+  J <- attr(o, "deriv")
+  expect_equal(unname(J[c("I", "pI", "R"), "R"]), c(-4, 2, 1.44) / 1.44, tolerance = 1e-6)
+})
+
+
+test_that("the native chain reads a resting state absent from its input as 0", {
+  skip_if_no_compile()
+  m <- pp_models()
+  x <- Xs(m$rest_ode)
+  data <- as.datalist(data.frame(
+    name = rep(c("yI", "yP"), each = 3), time = rep(c(0, 1, 2), 2),
+    value = c(1.7, 1.6, 1.7, 0.1, 0.2, 0.15), sigma = 0.1, condition = "C1"), splitBy = "condition")
+  outer <- c(lu = 0, la = 0.1, lb = -0.2, lT = log(2), lR = log(0.1))
+  for (p in list(m$rest_p0, m$rest_p1)) {
+    obj <- normL2(data, m$rest_obs * x * m$rest * p)
+    pars <- outer[getParameters(p)]
+    a <- withr::with_options(list(dMod2.evaluation = "C++"), obj(pars))
+    b <- withr::with_options(list(dMod2.evaluation = "R"), obj(pars))
+    entries <- environment(obj)$.chain$entries
+    expect_false(isTRUE(get(ls(entries)[1], envir = entries)[[1]]$none))
+    expect_equal(a$value, b$value, tolerance = 1e-10)
+    expect_equal(a$gradient, b$gradient, tolerance = 1e-10)
+    expect_equal(a$hessian, b$hessian, tolerance = 1e-10)
+  }
+  expect_true(abs(a$gradient[["lR"]]) > 1)
 })

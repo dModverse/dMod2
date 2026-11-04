@@ -186,8 +186,9 @@ obj <- normL2(data, prd, e) + constraintL2(mu, sigma = sigma)
 
 
 ## ---- tolerances
-# the stopping tolerances of trust(), an order of magnitude above the error that the solver
-# settings leave in the value (below 1e-6) and the gradient (below 1e-4)
+# the stopping tolerances of trust(), above the error that the solver settings leave: ftol and
+# mtol an order of magnitude above that of the value (below 1e-6), gtol two above that of the
+# gradient (below 1e-5)
 tolerances <- list(ftol = 1e-5, mtol = 1e-5, gtol = 1e-3)
 
 

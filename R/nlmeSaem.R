@@ -438,7 +438,7 @@
   q$state$modes <- eta
   q$rebuild(psi, K + 2L)
   converged <- stationary && !is.na(mcGap) && mcGap <= mcTol
-  .quadratureResult(design, q, psi, fixed, "saem", nrow(trace), converged, trace)
+  .quadratureResult(design, q, psi, fixed, nrow(trace), converged, trace)
 }
 
 

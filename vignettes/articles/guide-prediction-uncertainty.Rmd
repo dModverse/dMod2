@@ -11,6 +11,10 @@ predicted <- file.exists(file.path(project, "results", "prediction.rds"))
 knitr::read_chunk("../../examples/oppeltNPJSystBiolAppl2018/model.R")
 knitr::read_chunk("../../examples/oppeltNPJSystBiolAppl2018/reduced.R")
 knitr::read_chunk("../../examples/oppeltNPJSystBiolAppl2018/prediction.R")
+# a value of a stored result for the text, "?" while the result is missing
+ifStored <- function(available, value) if (available) value else "?"
+inWords <- function(n) if (n %in% 1:12) c("one", "two", "three", "four", "five", "six", "seven",
+  "eight", "nine", "ten", "eleven", "twelve")[n] else format(n)
 ```
 
 A model is fitted to say something the data do not show directly: the time course of a species
@@ -105,15 +109,21 @@ ends the profile; with the data term alone, the profile would walk on until its 
 
 ## Band
 
+```{r, include = FALSE, eval = predicted}
+# the decades of the prediction at the times of the band
+decades <- log10(range(readRDS("results/prediction.rds")$band$value))
+```
+
 `prediction.R` takes the reduced model at its best fit and computes the prediction profile of
 nuclear IκBα in the stimulated condition at 45 times, densest at the flanks of its pulse, in
 parallel, with the settings of the profiles of [chapter 5](guide-profiles.html). The predicted
-concentration spans five orders of magnitude over the time course, so the profiles run on its
-logarithm, like the parameters: a second observation function adds `lognIkb` to the readouts,
-the validation point has the standard deviation 0.01 on the logarithm, one percent of the
-concentration, and the interval returns to the concentration by the exponential. On the
-concentration itself, $v$ would be as small as $10^{-7}$ next to parameters of order one, and the
-path equation of the profile would be numerically singular.
+concentration spans `r ifStored(predicted, inWords(floor(diff(decades))))` orders of magnitude over
+the time course, so the profiles run on its logarithm, like the parameters: a second observation
+function adds `lognIkb` to the readouts, the validation point has the standard deviation 0.01 on the
+logarithm, one percent of the concentration, and the interval returns to the concentration by the
+exponential. On the concentration itself, $v$ would be as small as
+$10^{`r ifStored(predicted, floor(decades[1]))`}$ next to parameters of order one, and the path
+equation of the profile would be numerically singular.
 
 ```{r predictionsetup, eval = FALSE}
 ```

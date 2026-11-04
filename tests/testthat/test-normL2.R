@@ -576,7 +576,9 @@ test_that("an error parameter outside the prediction's derivatives has its gradi
 })
 
 
-test_that("normT has the Student-t likelihood with exact gradient and Hessian, censored rows too", {
+# A prediction y = a_i at times i and an error model exp(ls) (1 + 0.1 y^2), both with their
+# exact second derivatives, written out so the objectives' Hessians need no compiled model.
+.nl2_handmade <- function() {
   P2X <- function(times, pars, fixed = NULL, deriv = TRUE, deriv2 = FALSE) {
     p <- c(unclass(pars), unclass(fixed)); an <- paste0("a", 0:3)
     jac <- array(0, c(length(times), 1, 4), dimnames = list(NULL, "y", an))
@@ -606,7 +608,14 @@ test_that("normT has the Student-t likelihood with exact gradient and Hessian, c
     }
     prdframe(cbind(time = out[, "time"], y = sig), deriv = jac, deriv2 = jac2, parameters = p)
   }
-  e <- obsfn(X2Y, "ls", "C1")
+  list(x = x, e = obsfn(X2Y, "ls", "C1"))
+}
+
+
+test_that("normT has the Student-t likelihood with exact gradient and Hessian, censored rows too", {
+  hm <- .nl2_handmade()
+  x <- hm$x
+  e <- hm$e
   data <- as.datalist(data.frame(name = "y", time = 0:3, value = c(1, 2, 2.5, 0.2), sigma = NA,
                                  lloq = c(-Inf, -Inf, -Inf, 0.5), condition = "C1"))
   obj <- normT(data, x, errmodel = e, df = 4)
@@ -623,6 +632,24 @@ test_that("normT has the Student-t likelihood with exact gradient and Hessian, c
   expect_equal(unname(out$hessian[names(pars), names(pars)]), numDeriv::jacobian(gr, unname(pars)),
                tolerance = 1e-6)
   expect_error(normT(data, x, df = 0), "positive")
+})
+
+
+test_that("normL2 has the exact Hessian with censored rows under every BLOQ method", {
+  hm <- .nl2_handmade()
+  data <- as.datalist(data.frame(name = "y", time = 0:3, value = c(1, 2, 2.5, 0.2), sigma = NA,
+                                 lloq = c(-Inf, -Inf, 0.4, 0.5), condition = "C1"))
+  pars <- c(a0 = 1.2, a1 = 1.7, a2 = 2.9, a3 = 0.9, ls = -0.3)
+  for (mode in c("M3", "M4NM", "M4BEAL")) {
+    obj <- normL2(data, hm$x, errmodel = hm$e, optBLOQ = mode)
+    v <- function(q) obj(setNames(q, names(pars)), deriv = FALSE)$value
+    gr <- function(q) unname(obj(setNames(q, names(pars)))$gradient[names(pars)])
+    out <- obj(pars, deriv2 = TRUE)
+    expect_equal(unname(out$gradient[names(pars)]), numDeriv::grad(v, unname(pars)),
+                 tolerance = 1e-7, info = mode)
+    expect_equal(unname(out$hessian[names(pars), names(pars)]), numDeriv::jacobian(gr, unname(pars)),
+                 tolerance = 1e-6, info = mode)
+  }
 })
 
 

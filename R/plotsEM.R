@@ -23,6 +23,7 @@ plotRandomEffects <- function(x, ...) UseMethod("plotRandomEffects", x)
 #' @param x An `em` fit, see [em()].
 #' @param ... Ignored.
 #' @return A ggplot.
+#' @example inst/examples/emPredictions.R
 #' @export
 plot.em <- function(x, ...) {
   fit <- x
@@ -36,6 +37,7 @@ plot.em <- function(x, ...) {
                observed = pf$observed, predicted = pf$PRED,
                panel = "PRED", stringsAsFactors = FALSE))
   long$condition <- factor(long$condition, .naturalLevels(long$condition))
+  long$name <- factor(long$name, unique(as.character(pf$name)))
   multiple <- length(unique(long$name)) > 1L
   p <- ggplot2::ggplot(long, ggplot2::aes(x = predicted, y = observed,
                                           color = condition)) +
@@ -71,7 +73,7 @@ plot.em <- function(x, ...) {
 #'   seed of the random number generator.
 #' @param ... Ignored.
 #' @return A ggplot.
-#' @example inst/examples/NLME.R
+#' @example inst/examples/plotResiduals.em.R
 #' @export
 plotResiduals.em <- function(parframe, type = c("IWRES", "CWRES", "NPDE"), nsim = 1000L, seed = NULL, ...) {
   fit <- parframe
@@ -88,6 +90,7 @@ plotResiduals.em <- function(parframe, type = c("IWRES", "CWRES", "NPDE"), nsim 
   }))
   long$type <- factor(long$type, type)
   long$panel <- factor(long$panel, c("vs IPRED", "vs PRED", "vs time", "QQ"))
+  long$name <- factor(long$name, unique(as.character(pf$name)))
   scatter <- long[long$panel != "QQ", , drop = FALSE]
   qq <- long[long$panel == "QQ", , drop = FALSE]
   ggplot2::ggplot(long, ggplot2::aes(x = x, y = y, color = name)) +
@@ -118,6 +121,7 @@ plotResiduals.em <- function(parframe, type = c("IWRES", "CWRES", "NPDE"), nsim 
 #'   pages of at most this many, one plot per page.
 #' @param ... Ignored.
 #' @return A ggplot, or a list of ggplots when `conditionsPerPage` is set.
+#' @example inst/examples/emPredictions.R
 #' @export
 plotCombined.em <- function(prediction, times = NULL, ncol = 4L, showPred = TRUE, showBand = TRUE,
                             conditionsPerPage = NULL, ...) {
@@ -130,6 +134,7 @@ plotCombined.em <- function(prediction, times = NULL, ncol = 4L, showPred = TRUE
   multiple <- length(unique(pf$name)) > 1L
   conditions <- .naturalLevels(if (is.factor(pf$condition)) droplevels(pf$condition) else pf$condition)
   pf$condition <- factor(pf$condition, conditions)
+  pf$name <- factor(pf$name, unique(as.character(pf$name)))
 
   page <- function(pp, label = NULL) {
     obs <- pp[pp$source == "obs", , drop = FALSE]
@@ -180,13 +185,15 @@ plotCombined.em <- function(prediction, times = NULL, ncol = 4L, showPred = TRUE
 #'   the others.
 #' @param ... Ignored.
 #' @return A ggplot (or a list with `hist` and `qq` if cowplot is unavailable).
-#' @example inst/examples/NLME.R
+#' @example inst/examples/plotRandomEffects.R
 #' @export
 plotRandomEffects.em <- function(x, type = c("conditional", "modes"), draws = 20L, bins = 30, covariates = NULL,
                                  ...) {
   if (!is.null(covariates)) return(.randomEffectCovariates(x, covariates))
   type <- match.arg(type)
   values <- .randomEffectValues(x, type, draws)
+  # the panels in the order of the random effects of the fit
+  values$eta <- factor(values$eta, unique(values$eta))
   # the density of every random effect over at least +/- 3.5 standard deviations
   density <- do.call(rbind, lapply(split(values, values$eta), function(v) {
     lim <- max(abs(v$value), 3.5 * v$sd[1])
@@ -253,6 +260,7 @@ plotValues.em <- function(x, ..., tol = 1, showSteps = FALSE, pseudoLog = FALSE)
 #'   with normal random effects only.
 #' @param ... Ignored.
 #' @return A ggplot.
+#' @example inst/examples/plotTrace.R
 #' @export
 plotTrace.em <- function(x, ...) {
   tr <- x$stageTrace
@@ -262,9 +270,12 @@ plotTrace.em <- function(x, ...) {
   panels <- c(OFV = "OFV", deltaPsi = "|delta psi|", deltaPar = "|delta par|", deltaStruct = "|delta theta|",
               decrement = "Newton decrement", maxSoftmax = "max softmax", nEffMin = "n_eff min")
   have <- intersect(names(panels), names(tr))
-  stage <- factor(tr$level %||% tr$phase %||% rep("all", nrow(tr)))
+  # the stages in the order they ran
+  stage <- tr$level %||% tr$phase %||% rep("all", nrow(tr))
+  stage <- factor(stage, unique(stage))
   long <- do.call(rbind, lapply(have, function(v)
     data.frame(iter = seq_len(nrow(tr)), value = tr[[v]], panel = panels[[v]], stage = stage)))
+  long$panel <- factor(long$panel, unname(panels[have]))
   ggplot2::ggplot(long, ggplot2::aes(x = iter, y = value, color = stage)) +
     ggplot2::geom_line() + ggplot2::geom_point() +
     ggplot2::facet_wrap(~ panel, scales = "free_y") +

@@ -81,8 +81,7 @@ evalConditionResidual <- function(dataI, predictionI, pars,
   key   <- if (is.null(cn)) "cond" else cn
   pred1 <- setNames(list(predictionI), key)
   err1  <- if (!is.null(err_cn)) setNames(list(err_cn), key) else NULL
-  meta1 <- .build_normL2_meta(setNames(list(dataI), key), pred1, err1,
-                              key, eCondNames)
+  meta1 <- .build_normL2_meta(setNames(list(dataI), key), pred1, err1, key)
 
   d_dn <- dimnames(attr(predictionI, "deriv"))
   # the error model's parameters count also where the prediction does not depend on them
@@ -467,7 +466,7 @@ normT <- function(data, x, errmodel = NULL, df, times = NULL, attrName = "data",
       stale <- which(!vapply(seq_len(n), function(k) identical(byCond[[conditions[k]]]$key, key[[k]]), TRUE))
       if (length(stale)) {
         built <- .build_normL2_meta(data, prediction[stale], if (!is.null(err_list)) err_list[stale],
-                                    conditions[stale], e.cond)
+                                    conditions[stale])
         for (j in seq_along(stale)) byCond[[conditions[stale[j]]]] <- list(key = key[[stale[j]]], meta = built[[j]])
         .meta_cache$byCond <- byCond
       }
@@ -550,13 +549,13 @@ normT <- function(data, x, errmodel = NULL, df, times = NULL, attrName = "data",
 # predictions in one batched request. Falls back to the reference loop on a
 # missing handle, mixed prdfns, a condition owned twice, or a failing batch.
 .objEvalMany <- function(objList, parsList, deriv = TRUE, deriv2 = FALSE,
-                         cores = getOption("dMod2.cores", 1L), hessian = NULL, fixed = NULL) {
+                         cores = getOption("dMod2.cores", 1L), fixed = NULL) {
   n <- length(parsList)
   objs <- if (is.function(objList)) rep(list(objList), n) else objList
   stopifnot(length(objs) == n)
 
   serial <- function() lapply(seq_len(n), function(j)
-    objs[[j]](parsList[[j]], fixed = fixed, deriv = deriv, deriv2 = deriv2, hessian = hessian, cores = cores))
+    objs[[j]](parsList[[j]], fixed = fixed, deriv = deriv, deriv2 = deriv2, cores = cores))
   if (n < 2L) return(serial())
 
   prd   <- attr(objs[[1L]], "prdfn", exact = TRUE)
@@ -580,8 +579,8 @@ normT <- function(data, x, errmodel = NULL, df, times = NULL, attrName = "data",
   whole <- attr(objs[[1L]], "whole", exact = TRUE)
   chain <- if (!is.null(whole) && .evalCpp() &&
                all(vapply(objs, function(o) identical(attr(o, "whole", exact = TRUE), whole), TRUE)))
-    environment(whole)$.chainObjective(parsList[[1L]], fixed, conds, deriv, deriv2,
-                                       !identical(hessian, FALSE), cores, parsList = parsList)
+    environment(whole)$.chainObjective(parsList[[1L]], fixed, conds, deriv, deriv2, TRUE, cores,
+                                       parsList = parsList)
   if (!is.null(chain)) return(lapply(seq_len(n), function(j) {
     l <- chain$local[[j]]
     out <- if (deriv) .alignObjlist(objlist(value = l$value, gradient = l$gradient, hessian = l$hessian),
@@ -600,7 +599,7 @@ normT <- function(data, x, errmodel = NULL, df, times = NULL, attrName = "data",
 
   # slices of one objective: its error model and kernel take all conditions in one call
   if (!is.null(whole) && all(vapply(objs, function(o) identical(attr(o, "whole", exact = TRUE), whole), TRUE))) {
-    loc <- whole(parsList[[1L]], fixed = fixed, deriv = deriv, deriv2 = deriv2, hessian = hessian, cores = cores,
+    loc <- whole(parsList[[1L]], fixed = fixed, deriv = deriv, deriv2 = deriv2, cores = cores,
                  conditions = conds, .prediction = setNames(preds, conds), .local = TRUE)
     return(lapply(seq_len(n), function(j) {
       l <- loc[[conds[j]]]
@@ -614,7 +613,7 @@ normT <- function(data, x, errmodel = NULL, df, times = NULL, attrName = "data",
   }
 
   lapply(seq_len(n), function(j)
-    objs[[j]](parsList[[j]], fixed = fixed, deriv = deriv, deriv2 = deriv2, hessian = hessian,
+    objs[[j]](parsList[[j]], fixed = fixed, deriv = deriv, deriv2 = deriv2,
               .prediction = setNames(preds[j], conds[j])))
 }
 
@@ -622,7 +621,7 @@ normT <- function(data, x, errmodel = NULL, df, times = NULL, attrName = "data",
 # Build per-condition metadata for the C++ normL2_kernel. Indexes data rows
 # into prediction/errmodel matrices, encodes ALOQ/BLOQ partition, and stores
 # the LOQ-substituted y values (matching res()'s `pmax(value, lloq)`).
-.build_normL2_meta <- function(data, prediction, err_list, conditions, e_cond) {
+.build_normL2_meta <- function(data, prediction, err_list, conditions) {
   err_list_named <- if (!is.null(err_list)) {
     setNames(err_list, conditions)
   } else {

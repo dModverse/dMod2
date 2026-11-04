@@ -1,3 +1,30 @@
+# dMod2 0.14.8
+
+* `Pimpl()`: a state whose reactions all vanish at the steady state rests. It takes its value
+  from the input, 0 where the input has none, and is not among the parameters.
+
+* Alignment models compile into `align/<host>_<process>/` of the output directory, so processes
+  that build the same model at once share no file.
+
+* `plotVPC(pc = TRUE)` leaves out the readings whose population prediction is not positive.
+  `confint(method = "profile")` of an `em()` fit refits with the fit's derivative mode. The plots
+  of `em()` fits order their panels as the model and the data do; `plotTrace()` its stages as
+  they ran.
+
+* `msem(retry = TRUE)`, the default, draws a start again where its fit fails, for instance where the
+  steady state of `Pimpl()` has no stable root at the start, up to `nTries` attempts; the table of
+  starts has their `tries` and `stop`, the test that ended each trust region. `keepFits = TRUE`
+  returns the fit of every start. The fits of `em()` have `stopReason`.
+
+* `align()` takes the standard errors of a fit without random terms from the exact Hessian at the
+  fit, and its fallback where the marginal Hessian is not positive definite from the expected
+  information, positive semidefinite by construction.
+
+* `compile()` reuses the objects of earlier calls in the same directory.
+
+* The help pages of the mixed-effects functions have an example each; what takes longer than
+  seconds is not run.
+
 # dMod2 0.14.7
 
 * The website <https://dmodverse.github.io/dMod2/> replaces the vignettes. Its guide has eleven

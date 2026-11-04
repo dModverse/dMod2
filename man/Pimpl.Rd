@@ -93,7 +93,9 @@ the implicit function theorem.
 }
 \details{
 Conserved quantities of an \link{eqnlist} enter as \eqn{C x = T}.
-States without influx are 0. The root is solved from the states in \code{pars},
+States without influx are 0. A state whose reactions all vanish with them
+rests: it takes its value from \code{pars}, 0 where \code{pars} has none, and is not
+among the parameters. The root is solved from the states in \code{pars},
 missing ones at 1, then from all states at 1, then from \code{nStarts} random
 starts; with \code{flow = TRUE} the stable root the flow leads to. If all fail, it
 is an error. A root depends on the parameters, the states in \code{pars} and the

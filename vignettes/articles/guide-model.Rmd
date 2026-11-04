@@ -290,9 +290,9 @@ getEquations(p, conditions = "TNF")[c("dose_TNF", "TNF", "totalNfk", "Vnuc")]
 getEquations(p, conditions = "control")[c("dose_TNF", "TNF")]
 ```
 
-The inner parameters include the 23 initial values; the steady state replaces them. The dose is a
-number per condition, every other inner parameter the exponential of one outer parameter shared by
-both conditions.
+The inner parameters include the `r length(reactions$states)` initial values; the steady state
+replaces them. The dose is a number per condition, every other inner parameter the exponential of
+one outer parameter shared by both conditions.
 
 ## Compile
 
@@ -391,6 +391,12 @@ c(value = value$value - reference$value,
   gradient = max(abs(value$gradient - reference$gradient[names(value$gradient)])))
 ```
 
+```{r, include = FALSE, eval = fitted}
+# the powers of ten below which the errors of the settings of model.R lie
+solverError <- ceiling(log10(c(value = abs(value$value - reference$value),
+  gradient = max(abs(value$gradient - reference$gradient[names(value$gradient)])))))
+```
+
 The error over a range of tolerances, `atol` two orders below `rtol`:
 
 ```{r, fig.height = 3, eval = fitted}
@@ -413,15 +419,28 @@ ggplot2::ggplot(scan, ggplot2::aes(rtol, error, color = name)) +
   theme_dMod()
 ```
 
+```{r, ref.label = "tolerances", include = FALSE}
+```
+
+```{r, include = FALSE}
+# the powers of ten of the noise, and the orders of magnitude the tolerances of model.R lie above it
+noise <- if (fitted) solverError else c(value = -6, gradient = -5)
+aboveNoise <- round(log10(c(value = min(tolerances$ftol, tolerances$mtol),
+                            gradient = tolerances$gtol))) - noise
+orders <- function(k) if (k == 1) "an order of magnitude" else
+  paste(c("two", "three", "four", "five")[k - 1], "orders of magnitude")
+```
+
 The error falls about in proportion to `rtol`. It sets what the optimiser can resolve. `trust()`
 stops when the change of the objective, its predicted change or its largest gradient entry falls
 below `ftol`, `mtol` or `gtol`, by default `1e-6` each. A tolerance below the noise of the
 objective cannot be met reliably: near the optimum the steps are then decided by the noise, and a
 fit wanders until its iteration limit. With the settings of `model.R` the value is accurate to
-below $10^{-6}$ and the gradient to below $10^{-4}$: the default `gtol` of $10^{-6}$ lies below the
-noise of the gradient, and the default `ftol` hardly above that of the value. `model.R`
-sets the tolerances of the optimiser an order of magnitude above the noise; the fits and profiles
-of the following chapters use them.
+below $10^{`r noise[["value"]]`}$ and the gradient to below $10^{`r noise[["gradient"]]`}$: the
+default `gtol` of $10^{-6}$ lies below the noise of the gradient, and the default `ftol` hardly
+above that of the value. `model.R` sets `ftol` and `mtol` `r orders(aboveNoise[["value"]])` above
+the noise of the value and `gtol` `r orders(aboveNoise[["gradient"]])` above that of the gradient;
+the fits and profiles of the following chapters use them.
 
 ```{r tolerances}
 ```

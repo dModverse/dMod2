@@ -119,15 +119,36 @@ test_that("the normal-Laplace integral and its moments match a numerical integra
 # difference steps stay above 1e-3.
 .slope <- function(f, x) numDeriv::grad(f, x, method.args = list(eps = 1e-2, d = 1e-2, r = 4))
 
+# The approximate marginal of Laplace random effects has a kink where one of their modes reaches or
+# leaves 0. Every coordinate takes the widest step whose difference points keep the signs of the
+# modes in `cols` at `x`; `at` returns the marginal without gradient.
+.pieceSlope <- function(at, x, cols) {
+  pattern <- function(r) sign(r$modes[, cols]) * (abs(r$modes[, cols]) > 1e-8)
+  ref <- pattern(at(x))
+  vapply(seq_along(x), function(j) {
+    for (d in 10^-seq(2, 4, by = 0.5)) {
+      kept <- TRUE
+      f <- function(v) {
+        r <- at(replace(x, j, v))
+        kept <<- kept && identical(pattern(r), ref)
+        r$value
+      }
+      s <- numDeriv::grad(f, x[[j]], method.args = list(eps = d, d = d, r = 4))
+      if (kept) return(s)
+    }
+    s
+  }, 0)
+}
+
 test_that("the approximate marginal has the exact gradient", {
   m <- .lap()
   theta <- m$init + c(0.05, -0.02, 0.1)
   lam <- 3
   r <- .marginalAt(m$pc, theta, lam)
-  f <- function(v) .marginalAt(m$pc, setNames(v, names(theta)), lam, grad = FALSE)$value
-  expect_equal(unname(r$gradient[names(theta)]), .slope(f, unname(theta)), tolerance = 1e-5)
-  fl <- function(l) .marginalAt(m$pc, theta, l, grad = FALSE)$value
-  expect_equal(unname(r$gradient[length(theta) + 1L]), .slope(fl, lam), tolerance = 1e-5)
+  at <- function(v) .marginalAt(m$pc, setNames(v[1:3], names(theta)), v[[4]], grad = FALSE)
+  s <- .pieceSlope(at, c(unname(theta), lam), c("eta_k", "eta_A"))
+  expect_equal(unname(r$gradient[names(theta)]), s[1:3], tolerance = 1e-5)
+  expect_equal(unname(r$gradient[length(theta) + 1L]), s[[4]], tolerance = 1e-5)
 })
 
 test_that("the marginal alone needs no second-order sensitivities under forward over reverse", {
@@ -361,8 +382,8 @@ test_that("normal and Laplace random effects in one fit: exact gradient and the 
   m <- .lap()
   theta <- c(m$init + c(0.05, -0.02, 0.1), omega_A_A = log(0.2))
   r <- .marginalAt(m$pm, theta, 3)
-  f <- function(v) .marginalAt(m$pm, setNames(v, names(theta)), 3, grad = FALSE)$value
-  expect_equal(unname(r$gradient[names(theta)]), .slope(f, unname(theta)), tolerance = 1e-5)
+  at <- function(v) .marginalAt(m$pm, setNames(v, names(theta)), 3, grad = FALSE)
+  expect_equal(unname(r$gradient[names(theta)]), .pieceSlope(at, unname(theta), "eta_k"), tolerance = 1e-5)
   objOf <- function(p) normL2(m$data, m$g * Xt() * p, errmodel = m$err)
   # a huge strength pins the Laplace etas at 0: the fit of the normal ones alone
   big <- em(objOf(m$pm), randomEffects(m$pm), m$init, fixed = c(lambda_ID = 1e5), verbose = FALSE)
@@ -425,16 +446,24 @@ test_that("a trial point at which expectation consistent fails is a failed evalu
   ec <- em(obj, randomEffects(m$pc), m$init, verbose = FALSE)
   expect_equal(ec$coupling, "expectationConsistent")
   real <- dMod2:::.sparseExpectation
-  calls <- 0L
-  local_mocked_bindings(.sparseExpectation = function(...) {
-    calls <<- calls + 1L
-    if (calls %in% 3:4) NULL else real(...)
+  first <- bad <- NULL
+  after <- 0L
+  # expectation consistent fails at the first trial point whose strength is not that of the start
+  local_mocked_bindings(.sparseExpectation = function(P, m, lay, hyp, ...) {
+    at <- hyp$lambda
+    if (is.null(first)) first <<- at
+    if (is.null(bad) && !isTRUE(all.equal(at, first))) bad <<- at
+    if (isTRUE(all.equal(at, bad))) return(NULL)
+    if (!is.null(bad)) after <<- after + 1L
+    real(P, m, lay, hyp, ...)
   }, .package = "dMod2")
   fit <- em(obj, randomEffects(m$pc), m$init, verbose = FALSE)
-  expect_gt(calls, 4L)
+  expect_false(is.null(bad))
+  expect_gt(after, 0L)
   expect_equal(fit$coupling, "expectationConsistent")
   expect_true(fit$converged)
-  expect_equal(fit$value, ec$value, tolerance = 1e-5)
+  # both fits end at the optimum to their tolerance, a few 1e-4 in -2 log L
+  expect_lt(abs(fit$value - ec$value), 1e-3)
 })
 
 

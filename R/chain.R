@@ -34,8 +34,11 @@
   impl <- attr(k, "chainImpl", exact = TRUE)
   if (!is.function(impl)) return(NULL)
   im <- impl(cond)
-  if ((order >= 1L && !im$d1) || (order >= 2L && !im$d2) || anyNA(match(im$parameters, prev))) return(NULL)
-  list(kind = 1L, fn = NULL, vjp = NULL, inNames = im$parameters, fnout = c(im$dependent, im$zero),
+  # a resting state absent from `prev` enters as 0 and leaves as 0
+  rest0 <- intersect(setdiff(im$parameters, prev), im$resting)
+  if ((order >= 1L && !im$d1) || (order >= 2L && !im$d2) ||
+      anyNA(match(setdiff(im$parameters, rest0), prev))) return(NULL)
+  list(kind = 1L, fn = NULL, vjp = NULL, inNames = im$parameters, fnout = c(im$dependent, im$zero, rest0),
        through = setdiff(prev, c(im$dependent, im$zero)), guessNames = im$dependent, state = im$state,
        order = as.integer(order))
 }
@@ -62,7 +65,7 @@
   prev <- o
   for (s in seq_along(st)) {
     d <- st[[s]]
-    st[[s]] <- c(d, list(`in` = match(d$inNames, prev) - 1L, pass = match(d$through, prev) - 1L,
+    st[[s]] <- c(d, list(`in` = match(d$inNames, prev, 0L) - 1L, pass = match(d$through, prev) - 1L,
                          guess = match(d$guessNames, prev, 0L) - 1L, nfo = length(d$fnout)))
     prev <- c(d$fnout, d$through)
   }
@@ -363,16 +366,16 @@
 ## The prediction and error model of `conds` on `times`, per condition list(pred, err) as matrices
 ## with the time first and the derivatives as attributes, from the outer values `parsList` (one
 ## vector for all or one per condition) and `fixed`; NULL where the chain does not cover them.
-.chainFrames <- function(ctx, conds, times, parsList, fixed, deriv, deriv2, cores) {
+.chainFrames <- function(ctx, conds, times, parsList, fixed, deriv2, cores) {
   if (is.null(ctx) || !.evalCpp()) return(NULL)
   free <- if (length(parsList) == 1L) rep(list(names(parsList[[1L]])), length(conds)) else lapply(parsList, names)
-  plan <- .chainLookup(ctx, conds, free, names(fixed), NULL, deriv, deriv2, times)
+  plan <- .chainLookup(ctx, conds, free, names(fixed), NULL, TRUE, deriv2, times)
   if (is.null(plan)) return(NULL)
   values <- lapply(parsList, function(p) c(unclass(p), unclass(fixed)))
-  pre <- .chainParams(plan, values, deriv, deriv2, cores)
+  pre <- .chainParams(plan, values, TRUE, deriv2, cores)
   raw <- if (!is.null(pre)) .chainSolveRun(plan, pre$args, cores)
   if (is.null(raw)) return(NULL)
-  out <- chain_frames(plan, pre, raw, deriv, deriv2, as.integer(cores))
+  out <- chain_frames(plan, pre, raw, deriv2, as.integer(cores))
   if (!is.null(out)) names(out) <- conds
   out
 }

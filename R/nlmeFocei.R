@@ -191,7 +191,7 @@
   # frames the kernel reads
   conds <- unique(unlist(design$conditions[groups], use.names = FALSE))
   frames <- .chainFrames(design$chain, conds, lapply(conds, function(cn) .emGrid(design, cn)), list(probe), fixed,
-                         TRUE, FALSE, getOption("dMod2.cores", 1L))
+                         FALSE, getOption("dMod2.cores", 1L))
   meta <- lapply(groups, function(g) {
     blocks <- lapply(design$conditions[[g]], function(cn) .conditionBlock(design, cn, probe, fixed, frames[[cn]]))
     used <- unique(unlist(lapply(blocks, `[[`, "parameters")))
@@ -233,7 +233,7 @@
   function(timesList, parsList, conditions, fixed) {
     conditions <- as.character(conditions)
     # the native chain where it covers the conditions; the recorded sigmas where there is no error model
-    fr <- .chainFrames(design$chain, conditions, timesList, parsList, fixed, TRUE, FALSE, getOption("dMod2.cores", 1L))
+    fr <- .chainFrames(design$chain, conditions, timesList, parsList, fixed, FALSE, getOption("dMod2.cores", 1L))
     if (!is.null(fr)) {
       pred <- unname(lapply(fr, `[[`, "pred"))
       err <- unname(lapply(seq_along(fr), function(i) fr[[i]]$err %||%
@@ -459,10 +459,7 @@
 ## mode shift d eta*/d theta = -H_ee^-1 H_eA from the exact joint blocks of the rows (`etaShift`
 ## per unit); the Hessian leaves out third-order sensitivities and d2 eta*/d theta2. With
 ## hessian = "sparse" the Hessian is a sparse Matrix and the shift of a unit has its columns A only.
-## With terms = "reverse" the Hessian has the terms of .volumeReverse(curvature = TRUE) only;
-## otherwise those of tr(H^-1 D_ab H) in `terms`, any of "mixed" (products of the mixed second
-## derivatives of a row), "cross", "loss4" and "loss3", all with "full".
-.foceiVolume <- function(design, full, fixed, outer, H_inv_list, hessian = FALSE, cores = 1L, terms = "full") {
+.foceiVolume <- function(design, full, fixed, outer, H_inv_list, hessian = FALSE, cores = 1L) {
   sparse <- identical(hessian, "sparse")
   hessian <- sparse || isTRUE(hessian)
   Q <- length(outer)
@@ -475,7 +472,7 @@
 
   conds <- unique(unlist(lapply(units, `[[`, "conditions"), use.names = FALSE))
   times <- lapply(conds, function(cn) .emGrid(design, cn))
-  frames <- .chainFrames(design$chain, conds, times, list(full), fixed, TRUE, TRUE, cores)
+  frames <- .chainFrames(design$chain, conds, times, list(full), fixed, TRUE, cores)
   if (!is.null(frames) && any(vapply(frames, function(f) is.null(f$err), TRUE))) frames <- NULL
   if (is.null(frames)) {
     preds <- .predictMany(design$prdfn, times = times, parsList = rep(list(full), length(conds)),
@@ -579,16 +576,6 @@
     Pm <- matrix(P, Kn * Kn)
     Pt <- matrix(aperm(P, c(2, 1, 3)), Kn * Kn)
     own <- intersect(cholIn, names(dOinv))
-    if (identical(terms, "reverse")) {
-      block <- -crossprod(Pt, Pm)
-      for (al in own) for (be in own)
-        block[match(al, A), match(be, A)] <- block[match(al, A), match(be, A)] + sum(Hinv * d2Oinv(al, be))
-      structural <- !(A %in% cholIn)
-      block[structural, structural] <- 0
-      if (sparse) blocks[[length(blocks) + 1L]] <- structure(block, dimnames = list(A, A))
-      else hess[A, A] <- hess[A, A] + block
-      next
-    }
 
     # tr(H^-1 D_ab H) in Gauss-Newton form
     DaM <- matrix(Da, tn * Kn, Qa); DbM <- matrix(Db, tn * Kn, Qa)
@@ -611,12 +598,7 @@
       T4 <- T4 + matrix(colSums(cz * matrix(z[[2]], tn)), Qa, Qa) +
         crossprod(Mw, Em) + crossprod(Em, Mw) + crossprod(Em, MV %*% Em)
     }
-    use <- if (identical(terms, "full")) c("mixed", "cross", "loss4", "loss3") else terms
-    vol <- matrix(0, Qa, Qa)
-    if ("mixed" %in% use) vol <- vol + 2 * T1
-    if ("cross" %in% use) vol <- vol + 2 * (X + t(X))
-    if ("loss4" %in% use) vol <- vol + T3
-    if ("loss3" %in% use) vol <- vol + T4
+    vol <- 2 * T1 + 2 * (X + t(X)) + T3 + T4
     for (al in own) for (be in own)
       vol[match(al, A), match(be, A)] <- vol[match(al, A), match(be, A)] + sum(Hinv * d2Oinv(al, be))
 
@@ -923,6 +905,7 @@
   r <- oc$rinit
   converged <- FALSE
   it <- stall <- 0L
+  stopReason <- "iterlim"
   trace <- list(value = cur$value, radius = r, rho = 0, accept = 1L)
   while (it < oc$iterlim) {
     it <- it + 1L
@@ -956,7 +939,7 @@
     # as trust(): five consecutive rejected trials that leave the objective flat within ftol, the noise
     # of its evaluation, end the fit with nothing left to resolve
     stall <- if (ok || !is.finite(ft) || abs(cur$value - ft) >= oc$ftol) 0L else stall + 1L
-    if (done || stall >= 5L) { converged <- TRUE; break }
+    if (done || stall >= 5L) { converged <- TRUE; stopReason <- if (done) "model" else "stall"; break }
   }
   # the exact Schur complement of the joint Hessian at the modes plus the volume Hessian; by
   # forward over reverse with the volume curvature from dH/dtheta where there is no deriv2
@@ -968,7 +951,8 @@
   dimnames(etaModes) <- list(design$groups, lay$stems)
   list(argument = cur$theta, value = cur$value, gradient = cur$gradient, hessian = final$hessian,
        etaModes = etaModes, etaCov = setNames(lapply(cur$inner$H_inv, function(H) 2 * H), design$groups),
-       converged = converged, iterations = it, trace = trace, derivMode = mode, hessianExact = exact)
+       converged = converged, iterations = it, stopReason = stopReason, trace = trace, derivMode = mode,
+       hessianExact = exact)
 }
 
 
@@ -1007,7 +991,7 @@
       parsL <- lapply(owner, function(j) setNames(etas[[j]], units[[idx[j]]]$eta))
       loc <- tryCatch(.chainLocal(design$chain, cs, parsL, rep(list(held), length(cs)), TRUE, FALSE,
                                   getOption("dMod2.cores", 1L), design$bloq, design$df), error = function(e) NULL)
-      d <- if (!is.null(loc)) chain_unit_sums(loc, owner - 1L, lapply(units[idx], `[[`, "eta"), TRUE)
+      d <- if (!is.null(loc)) chain_unit_sums(loc, owner - 1L, lapply(units[idx], `[[`, "eta"))
       else tryCatch({
         m <- .objEvalMany(objs[cs], parsL, deriv = TRUE, fixed = held)
         lapply(seq_along(idx), function(j) {
@@ -1083,7 +1067,8 @@
   }), recursive = FALSE)
   list(argument = fit$argument[outer], value = final$value, gradient = final$gradient,
        hessian = final$hessian, etas = warm, etaCovUnits = cov, units = units,
-       converged = isTRUE(fit$converged), iterations = fit$iterations, derivMode = mode,
+       converged = isTRUE(fit$converged), iterations = fit$iterations, stopReason = fit$stopReason,
+       derivMode = mode,
        hessianExact = mode == "forward-forward" || .jointDeriv2(joint, c(fit$argument[outer], warm), fixed))
 }
 

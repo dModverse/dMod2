@@ -18,8 +18,6 @@
 #define FCONE
 #endif
 
-using namespace Rcpp;
-
 namespace dmod {
 namespace pimpl {
 
@@ -97,10 +95,3 @@ void onManifold(double* xa, int n, const double* C, int k, const double* total) 
 
 }  // namespace pimpl
 }  // namespace dmod
-
-// [[Rcpp::export]]
-NumericVector pimpl_on_manifold(NumericVector xa, NumericMatrix C, NumericVector total) {
-  NumericVector out = clone(xa);
-  dmod::pimpl::onManifold(REAL(out), out.size(), REAL(C), C.nrow(), REAL(total));
-  return out;
-}

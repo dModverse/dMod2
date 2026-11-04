@@ -200,14 +200,6 @@
   out
 }
 
-# One direction slice of an out-half, as the matrix a leaf's vjp takes.
-.ctSlice <- function(w, k = 1L) {
-  m <- w[, , k, drop = FALSE]
-  dim(m) <- dim(w)[1:2]
-  dimnames(m) <- dimnames(w)[1:2]
-  m
-}
-
 # The "time" column is a label, not an output, and never takes a cotangent.
 .dropTime <- function(m) {
   if (is.null(m) || length(dim(m)) < 2L) return(m)

@@ -10,6 +10,9 @@ knitr::opts_knit$set(root.dir = project)
 detected <- file.exists(file.path(project, "results", "symmetries.rds"))
 knitr::read_chunk("../../examples/oppeltNPJSystBiolAppl2018/model.R")
 knitr::read_chunk("../../examples/oppeltNPJSystBiolAppl2018/symmetries.R")
+# a count as the text writes it
+inWords <- function(n) if (n %in% 1:12) c("one", "two", "three", "four", "five", "six", "seven",
+  "eight", "nine", "ten", "eleven", "twelve")[n] else format(n)
 ```
 
 Before a model meets its data, its equations decide which parameters it can determine at all. If
@@ -159,11 +162,18 @@ symmetries <- readRDS("results/symmetries.rds")
 symmetries
 ```
 
+```{r, include = FALSE, eval = detected}
+types <- vapply(symmetries$symmetries, `[[`, "", "type")
+general <- symmetries$symmetries[types == "general"]
+```
+
 The rank of the observability-identifiability matrix is `r symmetries$rank` of
-`r symmetries$dim` coordinates, proven, and the kernel is spanned by ten directions, each proven
-over the rationals: nine scalings and one general direction. The ten generators are a basis of the
-kernel; symident prints one basis, and a sum of its generators is a symmetry as well. Up to such
-sums, the scalings fall into five kinds.
+`r symmetries$dim` coordinates, proven, and the kernel is spanned by
+`r inWords(length(types))` directions, each proven over the rationals:
+`r inWords(sum(types == "scaling"))` scalings and `r inWords(length(general))` general direction.
+The `r inWords(length(types))` generators are a basis of the kernel; symident prints one basis,
+and a sum of its generators is a symmetry as well. Up to such sums, the scalings fall into five
+kinds.
 
 - **Unobserved intermediates.** The active receptor `TNFR`, the IκBα transcript `mIkb`, the A20
   transcript and the A20 protein are measured nowhere, or, A20, only up to a scale. Each enters
@@ -206,9 +216,10 @@ change of the curve parameter, the level follows $\dot u = -u(1 + u)$, whose sol
 $$u \mapsto \frac{u}{e^{\varepsilon} + (e^{\varepsilon} - 1)\, u},$$
 
 a Möbius transformation of the level, as in the model of Merkt et al.; `K_R` and `uptake` follow
-it. The components of the generator are polynomials of degree two, and a search for scalings alone
-would not find it. Without the ligand the same holds for the saturation alone: with one dose,
-`uptake / (1 + K_R)` is determined, and $K_R$ moves along an affine direction.
+it. The components of the generator are polynomials of degree
+`r inWords(general[[1]]$degree)`, and a search for scalings alone would not find it. Without the
+ligand the same holds for the saturation alone: with one dose, `uptake / (1 + K_R)` is determined,
+and $K_R$ moves along an affine direction.
 
 ## Reduction
 
@@ -247,11 +258,11 @@ per scaling at 1, at 0 on the log scale, and the saturation at the section of th
 ```{r gauge}
 ```
 
-The ten fixed coordinates remove all ten directions if no combination of generators leaves them all
-unchanged, that is if the components of the generators on them form a regular matrix. For a
-scaling the components are its weights on the log scale; for $X_{10}$ they are its components at a
-point of the section, `K_R = 0` and `prod_L = uptake = degrad_L = 1`, divided by the coordinate
-where it is on the log scale:
+The `r inWords(length(gauge))` fixed coordinates remove all `r inWords(length(types))` directions
+if no combination of generators leaves them all unchanged, that is if the components of the
+generators on them form a regular matrix. For a scaling the components are its weights on the log
+scale; for $X_{10}$ they are its components at a point of the section, `K_R = 0` and
+`prod_L = uptake = degrad_L = 1`, divided by the coordinate where it is on the log scale:
 
 ```{r, eval = detected}
 point <- c(K_R = 0, prod_L = 1, uptake = 1, degrad_L = 1)

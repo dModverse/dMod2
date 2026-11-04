@@ -295,29 +295,17 @@ print.alignmentmodel <- function(x, ...) {
 
 
 # Compiled expressions, one per model, error model and variables in the session, built in the
-# output directory of the session; processes that build the same expressions take turns.
+# output directory of the session, in a folder per host and process: forks that build the same
+# expressions at once share no file.
 .alignmentCache <- new.env(parent = emptyenv())
 .alignmentFn <- function(model, errmodel, variables) {
   key <- substr(digest::digest(list(model, errmodel, variables)), 1, 10)
   if (!is.null(.alignmentCache[[key]])) return(.alignmentCache[[key]])
-  outdir <- .dmodOutdir()
-  .withLock(file.path(outdir, paste0("align_", key, ".lock")),
-            .alignmentCache[[key]] <- cppDE::cppFUN(c(prediction = model, sigma = errmodel), variables = variables,
-                                                    modelname = paste0("align_", key), outdir = outdir,
-                                                    compile = TRUE, deriv2 = TRUE, convenient = FALSE))
-  .alignmentCache[[key]]
-}
-
-## `expr` evaluated while this process holds the lock directory `lock`, whose creation is atomic;
-## a lock older than `stale` seconds is taken over.
-.withLock <- function(lock, expr, stale = 600) {
-  while (!dir.create(lock, showWarnings = FALSE)) {
-    age <- as.numeric(difftime(Sys.time(), file.mtime(lock), units = "secs"))
-    if (isTRUE(age > stale)) unlink(lock, recursive = TRUE)
-    else Sys.sleep(0.05)
-  }
-  on.exit(unlink(lock, recursive = TRUE))
-  expr
+  outdir <- file.path(.dmodOutdir(), "align", paste0(Sys.info()[["nodename"]], "_", Sys.getpid()))
+  dir.create(outdir, recursive = TRUE, showWarnings = FALSE)
+  .alignmentCache[[key]] <- cppDE::cppFUN(c(prediction = model, sigma = errmodel), variables = variables,
+                                          modelname = paste0("align_", key), outdir = outdir,
+                                          compile = TRUE, deriv2 = TRUE, convenient = FALSE)
 }
 
 ## The fixed and random parameters of the model.
@@ -1129,7 +1117,7 @@ print.alignmentmodel <- function(x, ...) {
 #'   `remlRounds` (the rounds of the restricted likelihood, 0 without),
 #'   `seSource` (`"Hessian"`, or `"Gauss-Newton"` where the reported Hessian
 #'   of a fit with random terms is not positive definite: then the
-#'   Gauss-Newton Schur complement over the random effects),
+#'   Gauss-Newton Schur complement of the expected information over the random effects),
 #'   `fit`, `objfn`, `omega`, `random` and `randomEffects` with random terms,
 #'   and the `model`. `scaled` also has `scaled`, the value of the biological symbol at which the prediction meets
 #'   the reading with the other symbols at the fit (`NaN` where none does), and
@@ -1234,14 +1222,16 @@ align <- function(model, fits = 10L, cores = 1L, method = c("focei", "quadrature
   }
   H <- best$hessian
   if (is.null(H) && !is.null(best$information)) H <- 2 * best$information
-  if (is.null(H) && is.null(re)) H <- obj(pars, hessian = "sparse")$hessian
+  # without random terms the exact Hessian: the one of the fit leaves out the second derivatives
+  # of prediction and sigma, and can be indefinite at a minimum with large residuals
+  if (is.null(re)) H <- obj(pars, deriv2 = TRUE, hessian = if (is.null(H) || .isSparse(H)) "sparse")$hessian
   allPars <- pars
   on <- intersect(names(best$argument), rownames(H))
   # where the reported Hessian of a fit with random terms is not positive definite, the
   # Gauss-Newton Schur complement over the random effects
   seSource <- "Hessian"
   if (!is.null(re) && !is.null(H) && !.positiveDefinite(H[on, on, drop = FALSE])) {
-    H <- .alignmentGaussNewton(obj, re, best)
+    H <- .alignmentGaussNewton(m, obj, re, best)
     seSource <- "Gauss-Newton"
   }
   variance <- if (!is.null(H)) .alignmentVariance(H, on)
@@ -1277,16 +1267,78 @@ align <- function(model, fits = 10L, cores = 1L, method = c("focei", "quadrature
   !is.null(tryCatch(chol((H + t(H)) / 2), error = function(e) NULL))
 }
 
-## The Gauss-Newton Schur complement over the random effects of the -2 log L of a fit at its modes.
-.alignmentGaussNewton <- function(obj, re, fit) {
+## The Gauss-Newton Schur complement over the random effects at the modes of a fit: of the
+## expected information of the readings and the normal random effects plus the Hessian of the
+## normalization and the prior, positive semidefinite by construction.
+.alignmentGaussNewton <- function(m, obj, re, fit) {
   design <- .emDesign(obj, re)
-  joint <- design$objfn + .normalPrior(design)
   eta <- .etaVector(fit)
   on <- names(fit$argument)
-  H <- joint(pars = c(fit$argument, eta), fixed = fit$fixed, deriv = TRUE, hessian = "sparse")$hessian
-  H <- .sparseOver(H, c(on, names(eta)))
   e <- names(eta)
+  free <- c(on, e)
+  pars <- c(setNames(as.numeric(fit$argument), on), eta, fit$fixed)
+  extra <- .alignmentNormalization(m)
+  if (!is.null(m$prior)) extra <- extra + m$prior
+  H <- .alignmentFisher(m, pars, free) + .normalFisher(design, pars, free) +
+    .sparseOver(extra(pars = pars[free], fixed = fit$fixed, deriv = TRUE, hessian = "sparse")$hessian, free)
   Matrix::forceSymmetric(H[on, on] - Matrix::crossprod(H[e, on], Matrix::solve(H[e, e], H[e, on])))
+}
+
+## The expected information of the readings in -2 log L over the parameters `free` at `pars`, from
+## the first derivatives of prediction and sigma: of its value for a reading, of lying below its
+## limit for a censored one.
+.alignmentFisher <- function(m, pars, free) {
+  cond <- .alignmentConditions(m)
+  rowsOf <- split(seq_len(nrow(m$data)), factor(cond, unique(cond)))
+  locals <- .alignmentLocals(m, cond, rowsOf)
+  nu <- if (identical(m$distribution, "t")) m$df else Inf
+  # location and scale information of a normal or Student-t reading
+  iLoc <- if (is.finite(nu)) 2 * (nu + 1) / (nu + 3) else 2
+  iScale <- if (is.finite(nu)) 4 * nu / (nu + 3) else 4
+  logF <- function(x, lower) if (is.finite(nu)) stats::pt(x, nu, lower.tail = lower, log.p = TRUE)
+                             else stats::pnorm(x, lower.tail = lower, log.p = TRUE)
+  logf <- function(x) if (is.finite(nu)) stats::dt(x, nu, log = TRUE) else stats::dnorm(x, log = TRUE)
+  parts <- lapply(names(rowsOf), function(cn) {
+    r <- rowsOf[[cn]]
+    k <- match(locals[[cn]]$pars, free)
+    use <- which(!is.na(k))
+    if (!length(use)) return(NULL)
+    ev <- .alignmentEval(m, r, pars, local = locals[[cn]])
+    s <- ev$y[, "sigma"]
+    Jp <- matrix(ev$J[, "prediction", use], length(r)) / s
+    Js <- matrix(ev$J[, "sigma", use], length(r)) / s
+    cens <- m$censored[r]
+    # a censored reading is a Bernoulli one with p = F(z), z = (lloq - prediction) / sigma
+    z <- ifelse(cens, (m$lloq[r] - ev$y[, "prediction"]) / s, 0)
+    wz <- ifelse(cens, 2 * exp(2 * logf(z) - logF(z, TRUE) - logF(z, FALSE)), 0)
+    B <- crossprod(Jp * sqrt(iLoc * !cens)) + crossprod(Js * sqrt(iScale * !cens)) +
+      crossprod((Jp + z * Js) * sqrt(wz))
+    list(i = rep(k[use], length(use)), j = rep(k[use], each = length(use)), x = as.vector(B))
+  })
+  Matrix::sparseMatrix(i = unlist(lapply(parts, `[[`, "i")), j = unlist(lapply(parts, `[[`, "j")),
+                       x = unlist(lapply(parts, `[[`, "x")), dims = rep(length(free), 2L),
+                       dimnames = list(free, free))
+}
+
+## The expected information of the normal random effects in -2 log L over `free`: 2 Omega^-1 per
+## group for the etas, G tr(Omega^-1 Omega_a Omega^-1 Omega_b) for the Cholesky parameters.
+.normalFisher <- function(design, pars, free) {
+  H <- .sparseOver(NULL, free)
+  for (sd in design$groupings %||% list(design)) {
+    lay <- sd$normal
+    if (is.null(lay) || !lay$K) next
+    E <- sd$etaNames[, lay$stems, drop = FALSE]
+    L <- .choleskyFactor(lay, pars)
+    cd <- .choleskyDerivatives(lay, L)
+    M <- lapply(cd$dOinv, function(d) -d %*% tcrossprod(L))
+    # tr(M_a M_b) of M_a = Omega^-1 Omega_a
+    Fc <- crossprod(vapply(M, as.vector, numeric(lay$K^2)), vapply(M, function(x) as.vector(t(x)), numeric(lay$K^2)))
+    nm <- c(as.vector(E), lay$cholPars)
+    blk <- Matrix::bdiag(2 * Matrix::kronecker(cd$Oinv, Matrix::Diagonal(nrow(E))), nrow(E) * Fc)
+    dimnames(blk) <- list(nm, nm)
+    H <- H + .sparseOver(blk, free)
+  }
+  H
 }
 
 ## The columns of the data the fixed effects of a symbol read.
@@ -1551,12 +1603,6 @@ plotResiduals.alignment <- function(parframe, ...) {
     theme_dMod()
 }
 
-
-.alignAllPars <- function(pars, fixed) {
-  if (!length(fixed)) return(setNames(as.numeric(pars), names(pars)))
-  p <- c(setNames(as.numeric(pars), names(pars)), setNames(as.numeric(fixed), names(fixed)))
-  p[!duplicated(names(p))]
-}
 
 ## The variances x' V x of linear combinations of the estimates, the rows x of a matrix with
 ## parameter columns, V the inverse of half the Hessian of -2 log L: by a sparse Cholesky solve

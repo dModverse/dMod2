@@ -250,8 +250,10 @@ bool runStages(const PPlan& P, const std::vector<Root>& R, Vec& u, int upto, int
       if (Q.x == nullptr || (nd > 0 && Q.D == nullptr) || (deriv2 && nd > 0 && Q.D2 == nullptr)) return false;
       const int nq = Q.ndep;
       for (int i = 0; i < nq; ++i) o.v[i] = Q.x[i];
+      // an input at -1 is a resting state absent from the vector: 0, without derivatives
       for (int d = 0; d < nd; ++d)
         for (int j = 0; j < nin; ++j) {
+          if (S.in[j] < 0) continue;
           const double Jj = u.J[S.in[j] + un * d];
           if (Jj != 0.0)
             for (int i = 0; i < nq; ++i) o.J[i + on * d] += Q.D[i + (std::size_t) nq * j] * Jj;
@@ -261,10 +263,12 @@ bool runStages(const PPlan& P, const std::vector<Root>& R, Vec& u, int upto, int
           for (int a = 0; a < nd; ++a) {
             const std::size_t ab = a + (std::size_t) nd * b;
             for (int j = 0; j < nin; ++j) {
+              if (S.in[j] < 0) continue;
               const double Hj = u.H[S.in[j] + un * ab], Ja = u.J[S.in[j] + un * a];
               for (int i = 0; i < nq; ++i) o.H[i + on * ab] += Q.D[i + (std::size_t) nq * j] * Hj;
               if (Ja == 0.0) continue;
               for (int l = 0; l < nin; ++l) {
+                if (S.in[l] < 0) continue;
                 const double Jb = u.J[S.in[l] + un * b];
                 if (Jb == 0.0) continue;
                 for (int i = 0; i < nq; ++i)
@@ -345,7 +349,7 @@ SEXP chain_params(List plan, List values, bool deriv, bool deriv2, int threads, 
       dmod::pimpl::Request q;
       q.st = S.pimpl;
       q.order = S.order;
-      for (int j : S.in) q.pv.push_back(res[c].v[j]);
+      for (int j : S.in) q.pv.push_back(j >= 0 ? res[c].v[j] : 0.0);
       for (int j : S.guess) q.guess.push_back(j >= 0 ? res[c].v[j] : 1.0);
       req.push_back(std::move(q));
       at.push_back(c);
@@ -560,7 +564,7 @@ dmod::BloqMode bloqMode(const std::string& s) {
 
 // A matrix [T, 1 + n] with the times first and the values `v` [T, n] behind them, named
 // c("time", names), with the derivatives `d` [T, n, nd] and `d2` [T, n, nd, nd] as attributes.
-SEXP frame(const double* t, const Ad& a, int T, int n, int nd, bool deriv, bool deriv2, const CharacterVector& names,
+SEXP frame(const double* t, const Ad& a, int T, int n, int nd, bool deriv2, const CharacterVector& names,
            const CharacterVector& dirs) {
   NumericMatrix m(T, n + 1);
   std::memcpy(&m(0, 0), t, sizeof(double) * T);
@@ -569,12 +573,10 @@ SEXP frame(const double* t, const Ad& a, int T, int n, int nd, bool deriv, bool 
   cn[0] = "time";
   for (int j = 0; j < n; ++j) cn[j + 1] = names[j];
   m.attr("dimnames") = List::create(R_NilValue, cn);
-  if (deriv) {
-    NumericVector d(a.dy.begin(), a.dy.begin() + (std::size_t) T * n * nd);
-    d.attr("dim") = IntegerVector::create(T, n, nd);
-    d.attr("dimnames") = List::create(R_NilValue, names, dirs);
-    m.attr("deriv") = d;
-  }
+  NumericVector d1(a.dy.begin(), a.dy.begin() + (std::size_t) T * n * nd);
+  d1.attr("dim") = IntegerVector::create(T, n, nd);
+  d1.attr("dimnames") = List::create(R_NilValue, names, dirs);
+  m.attr("deriv") = d1;
   if (deriv2) {
     NumericVector d(a.d2y.begin(), a.d2y.begin() + (std::size_t) T * n * nd * nd);
     d.attr("dim") = IntegerVector::create(T, n, nd, nd);
@@ -769,11 +771,11 @@ SEXP chain_data(List plan, List pre, List raw, bool deriv, bool deriv2, bool bui
 // first and the derivatives as attributes, `err` NULL without an error model. NULL where a solve
 // or a function fails.
 // [[Rcpp::export]]
-SEXP chain_frames(List plan, List pre, List raw, bool deriv, bool deriv2, int threads) {
+SEXP chain_frames(List plan, List pre, List raw, bool deriv2, int threads) {
   List conds = plan["cond"];
   const int K = conds.size();
   std::vector<In> in;
-  if (!gather(conds, pre, raw, deriv, deriv2, false, in)) return R_NilValue;
+  if (!gather(conds, pre, raw, true, deriv2, false, in)) return R_NilValue;
   std::vector<char> ok(K, 1);
   std::vector<Ad> Y(K), E(K);
   const int nt = chainThreads(threads, K);
@@ -788,11 +790,11 @@ SEXP chain_frames(List plan, List pre, List raw, bool deriv, bool deriv2, int th
     List pc = conds[c];
     const In& I = in[c];
     CharacterVector dirs = pc["dir_names"], yn = pc["y_names"];
-    SEXP pred = PROTECT(frame(I.tsol, Y[c], I.ntime, I.nyo, I.nd, deriv, deriv2 && I.nd > 0, yn, dirs));
+    SEXP pred = PROTECT(frame(I.tsol, Y[c], I.ntime, I.nyo, I.nd, deriv2 && I.nd > 0, yn, dirs));
     SEXP err = R_NilValue;
     if (I.ef != nullptr) {
       CharacterVector en = pc["e_names"];
-      err = frame(I.tsol, E[c], I.ntime, I.neo, I.nd, deriv, deriv2 && I.nd > 0, en, dirs);
+      err = frame(I.tsol, E[c], I.ntime, I.neo, I.nd, deriv2 && I.nd > 0, en, dirs);
     }
     PROTECT(err);
     out[c] = List::create(Named("pred") = pred, Named("err") = err);
@@ -1154,7 +1156,8 @@ bool pullStage(const PStage& S, const Root& Q, const Vec& u, int nout, int Sn, i
   } else {
     const int nq = Q.ndep;
     if (Q.D == nullptr || (K > 0 && Q.D2 == nullptr)) return false;
-    for (int j = 0; j < nin; ++j)
+    for (int j = 0; j < nin; ++j) {
+      if (S.in[j] < 0) continue;
       for (std::size_t s = 0; s < s1; ++s) {
         double a = 0.0;
         for (int i = 0; i < nq; ++i) a += Q.D[i + (std::size_t) nq * j] * w[i + nout * s];
@@ -1163,6 +1166,7 @@ bool pullStage(const PStage& S, const Root& Q, const Vec& u, int nout, int Sn, i
           double b = 0.0;
           for (int i = 0; i < nq; ++i) b += Q.D[i + (std::size_t) nq * j] * dw[i + nout * (s + s1 * t)];
           for (int l = 0; l < nin; ++l) {
+            if (S.in[l] < 0) continue;
             const double Jl = u.J[S.in[l] + (std::size_t) n * t];
             if (Jl == 0.0) continue;
             for (int i = 0; i < nq; ++i)
@@ -1171,6 +1175,7 @@ bool pullStage(const PStage& S, const Root& Q, const Vec& u, int nout, int Sn, i
           dwp[S.in[j] + n * (s + s1 * t)] += b;
         }
       }
+    }
   }
   w.swap(wp);
   dw.swap(dwp);
@@ -1286,7 +1291,7 @@ SEXP chain_pull(List plan, List values, NumericMatrix tangents, SEXP roots, List
 // unit owner[r] (0-based), its gradient and Hessian by the names of the unit's `etaNames`. Returns
 // per unit list(value, gradient, hessian) in the order of its names.
 // [[Rcpp::export]]
-List chain_unit_sums(List local, IntegerVector owner, List etaNames, bool deriv) {
+List chain_unit_sums(List local, IntegerVector owner, List etaNames) {
   const int U = etaNames.size(), R = local.size();
   std::vector<double> value(U, 0.0);
   std::vector<std::vector<double>> grad(U), hess(U);
@@ -1295,16 +1300,13 @@ List chain_unit_sums(List local, IntegerVector owner, List etaNames, bool deriv)
     CharacterVector nm = etaNames[u];
     const int K = nm.size();
     for (int k = 0; k < K; ++k) pos[u][std::string(nm[k])] = k;
-    if (deriv) {
-      grad[u].assign(K, 0.0);
-      hess[u].assign((std::size_t) K * K, 0.0);
-    }
+    grad[u].assign(K, 0.0);
+    hess[u].assign((std::size_t) K * K, 0.0);
   }
   for (int r = 0; r < R; ++r) {
     const int u = owner[r];
     List l = local[r];
     value[u] += as<double>(l["value"]);
-    if (!deriv) continue;
     NumericVector g = l["gradient"];
     const int n = g.size();
     if (!n) continue;
@@ -1325,10 +1327,6 @@ List chain_unit_sums(List local, IntegerVector owner, List etaNames, bool deriv)
   }
   List out(U);
   for (int u = 0; u < U; ++u) {
-    if (!deriv) {
-      out[u] = List::create(Named("value") = value[u]);
-      continue;
-    }
     CharacterVector nm = etaNames[u];
     const int K = nm.size();
     NumericVector g(grad[u].begin(), grad[u].end());

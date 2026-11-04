@@ -40,7 +40,6 @@ using dmod::trust_driver::Blather;
 using dmod::trust_driver::Reporter;
 using dmod::trust_driver::eval_objfun;
 using dmod::trust_driver::stop_parinit_failed;
-using dmod::trust_driver::last_eval_error;
 using dmod::trust_driver::fill_bound;
 using dmod::trust_driver::fill_parscale;
 using dmod::trust_driver::kInf;
@@ -371,10 +370,9 @@ struct FuseSpec {
 // ---- Coleman-Li trust-region-reflective on the L1-active coordinates ----
 
 // An iteration is `propose` (reduced subproblem, step, kink clamp) then `accept`
-// (objective at the trial point). The one R callback sits between them, so the
-// lockstep driver runs the same code and matches N separate solves bit for bit.
+// (objective at the trial point); the one R callback sits between them.
 
-// Settings shared by every solve in a lockstep round.
+// Settings of a solve.
 struct RefTune {
   double rmax = 0.0, ftol = 0.0, mtol = 0.0, gtol = 0.0, xtol = 0.0;
   double rmin = 0.0, thetamax = 0.0;
@@ -403,8 +401,7 @@ struct RefState {
   Blather trace;
 };
 
-// Bounds, scaling and the starting point. `parinit` is read through `get(i)` so
-// a matrix row can be fed in without materialising a vector.
+// Bounds, scaling and the starting point, read through `get(i)`.
 template <typename Get>
 void ref_init(RefState& s, int K, Get get, const std::vector<double>& pl,
               const std::vector<double>& pu, const std::vector<double>& ps) {
@@ -805,137 +802,6 @@ List trustL1_reflective(Function objfun, NumericVector parinit,
   return ref_result(s, t, parnames);
 }
 
-// ---- N reflective solves in lock-step ----
-
-// Each subject runs ref_propose / ref_accept as a single solve would; one round
-// sends the trial points of all running subjects out as one R call. Converged
-// subjects drop out, so the round count is the maximum over subjects.
-List trustL1_lockstep(Function objfun_many, NumericMatrix parinit,
-                      NumericMatrix mu, NumericMatrix lambda,
-                      bool one_sided, CharacterVector parnames,
-                      double rinit, const RefTune& t,
-                      Nullable<NumericVector> parscale, int iterlim,
-                      Nullable<NumericVector> parupper,
-                      Nullable<NumericVector> parlower) {
-
-  const int N = parinit.nrow(), K = parinit.ncol();
-
-  std::vector<double> pl(K, -kInf), pu(K, kInf), ps(K, 1.0);
-  fill_bound(parupper, pu, parnames, K);
-  fill_bound(parlower, pl, parnames, K);
-  for (int i = 0; i < K; ++i)
-    if (!(pl[i] < pu[i]))
-      stop("trustL1: parlower must lie strictly below parupper");
-  fill_parscale(parscale, ps, K, "trustL1");
-
-  std::vector<RefState> st(N);
-  for (int n = 0; n < N; ++n) {
-    RefState& s = st[n];
-    s.l1.has.assign(K, 0); s.l1.mu.assign(K, 0.0); s.l1.lambda.assign(K, 0.0);
-    s.l1.one_sided = one_sided;
-    for (int i = 0; i < K; ++i) {
-      if (ISNAN(mu(n, i))) continue;   // NA or NaN: no penalty on this coordinate
-      s.l1.has[i] = 1; s.l1.mu[i] = mu(n, i); s.l1.lambda[i] = lambda(n, i);
-      if (!(pl[i] < mu(n, i) && mu(n, i) < pu[i]))
-        stop("trustL1: mu must lie strictly inside [parlower, parupper]");
-    }
-    ref_init(s, K, [&](int i) { return parinit(n, i); }, pl, pu, ps);
-  }
-
-  // One R call for a set of subjects at their current trial points. Returns a
-  // list of objlists, NULL where the evaluation failed.
-  auto run_round = [&](const std::vector<int>& idx,
-                       const std::vector<const double*>& pts) {
-    const int M = static_cast<int>(idx.size());
-    List parsL(M);
-    IntegerVector which(M);
-    for (int j = 0; j < M; ++j) {
-      NumericVector v(pts[j], pts[j] + K);
-      v.names() = parnames;
-      parsL[j]  = v;
-      which[j]  = idx[j] + 1;
-    }
-    return as<List>(objfun_many(Rcpp::Named("parsList") = parsL,
-                                Rcpp::Named("which")    = which));
-  };
-
-  // Read one objlist. Mirrors the single-solve reader, including the "value not
-  // finite counts as a failed evaluation" rule.
-  auto read_one = [&](SEXP el, double* val_obj, std::vector<double>& grad,
-                      std::vector<double>& H) {
-    if (Rf_isNull(el)) { last_eval_error() = "no result"; return false; }
-    if (Rf_inherits(el, "try-error")) {
-      last_eval_error() = Rf_length(el) ? CHAR(STRING_ELT(el, 0)) : "unknown error";
-      return false;
-    }
-    List o(el);
-    double v = as<double>(o["value"]);
-    if (!std::isfinite(v)) { last_eval_error() = "value is not finite"; return false; }
-    NumericVector g = as<NumericVector>(o["gradient"]);
-    NumericMatrix Hm = as<NumericMatrix>(o["hessian"]);
-    if (g.size() != K || Hm.nrow() != K || Hm.ncol() != K)
-      stop("trustL1 lockstep: objfun returned a gradient or hessian of the wrong size");
-    *val_obj = v;
-    grad.assign(g.begin(), g.end());
-    H.assign((std::size_t) K * K, 0.0);
-    for (int j = 0; j < K; ++j)
-      for (int i = 0; i < K; ++i) H[i + (std::size_t) j * K] = Hm(i, j);
-    return true;
-  };
-
-  {
-    std::vector<int> idx(N);
-    std::vector<const double*> pts(N);
-    for (int n = 0; n < N; ++n) { idx[n] = n; pts[n] = st[n].theta.data(); }
-    List got = run_round(idx, pts);
-    std::vector<double> g, H;
-    for (int n = 0; n < N; ++n) {
-      double v = 0.0;
-      if (!read_one(got[n], &v, g, H)) {
-        last_eval_error() = "row " + std::to_string(n + 1) + ": " + last_eval_error();
-        stop_parinit_failed();
-      }
-      ref_seed(st[n], v, g.data(), H.data(), rinit);
-    }
-  }
-
-  for (int round = 1; round <= iterlim; ++round) {
-    R_CheckUserInterrupt();
-    std::vector<int> idx;
-    std::vector<const double*> pts;
-    for (int n = 0; n < N; ++n) {
-      if (st[n].done) continue;
-      st[n].iter = round;
-      if (!ref_propose(st[n], t)) continue;   // stopped on the gradient test
-      idx.push_back(n);
-      pts.push_back(st[n].theta_try.data());
-    }
-    if (idx.empty()) break;
-
-    List got = run_round(idx, pts);
-    std::vector<double> g, H;
-    for (std::size_t j = 0; j < idx.size(); ++j) {
-      const int n = idx[j];
-      double v = 0.0;
-      const bool ok = read_one(got[j], &v, g, H);
-      ref_accept(st[n], t, ok, v, ok ? g.data() : nullptr, ok ? H.data() : nullptr);
-    }
-  }
-
-  List out(N);
-  for (int n = 0; n < N; ++n) {
-    RefState& s = st[n];
-    if (s.stop_reason == "objfun")
-      Rf_warning("trustL1: objfun evaluation failed 3 times in a row");
-    else if (s.stop_reason == "radius")
-      Rf_warning("Trust radius fell below rmin. Fit is not converged.");
-    else if (!s.converged && s.n_iter >= iterlim)
-      Rf_warning("Maximum number of iterations exceeded. Fit is not converged.");
-    out[n] = ref_result(s, t, parnames);
-  }
-  return out;
-}
-
 // ---- boundary = "clip": active-set reduction plus componentwise clipping ----
 List trustL1_clip(Function objfun, NumericVector parinit,
                   const L1Spec& l1,
@@ -1239,50 +1105,4 @@ List trustL1_impl(Function objfun,
                             ftol, mtol, gtol, xtol, rmin, thetamax,
                             minimize, blather, parupper, parlower,
                             printIter, traceFile);
-}
-
-
-// N reflective trustL1 solves stepping in unison. `objfun_many(parsList, which)`
-// returns one objlist per requested subject, NULL where the evaluation failed.
-// `mu` and `lambda` are N x K; NA in `mu` marks an unpenalised coordinate.
-// [[Rcpp::export]]
-List trustL1_lockstep_impl(Function objfun_many,
-                           NumericMatrix parinit,
-                           NumericMatrix mu,
-                           NumericMatrix lambda,
-                           bool   one_sided,
-                           double rinit,
-                           double rmax,
-                           Nullable<NumericVector> parscale = R_NilValue,
-                           int    iterlim   = 100,
-                           double ftol      = 1e-6,
-                           double mtol      = 1e-6,
-                           double gtol      = 1e-6,
-                           double xtol      = 0.0,
-                           double rmin      = 0.0,
-                           double thetamax  = 0.99995,
-                           bool   minimize  = true,
-                           bool   blather   = false,
-                           Nullable<NumericVector> parupper = R_NilValue,
-                           Nullable<NumericVector> parlower = R_NilValue) {
-
-  const int N = parinit.nrow(), K = parinit.ncol();
-  if (N == 0 || K == 0) stop("trustL1: parinit must be a non-empty N x K matrix");
-  if (mu.nrow() != N || mu.ncol() != K || lambda.nrow() != N || lambda.ncol() != K)
-    stop("trustL1: mu and lambda must have the same shape as parinit");
-  List dn = parinit.attr("dimnames");
-  if (dn.size() < 2 || Rf_isNull(dn[1]))
-    stop("trustL1: parinit must have column names");
-  CharacterVector parnames = dn[1];
-  for (int n = 0; n < N; ++n)
-    for (int i = 0; i < K; ++i)
-      if (!std::isfinite(parinit(n, i))) stop("trustL1: parinit not all finite");
-
-  RefTune t;
-  t.rmax = rmax; t.ftol = ftol; t.mtol = mtol; t.gtol = gtol; t.xtol = xtol;
-  t.rmin = rmin; t.thetamax = thetamax;
-  t.minimize = minimize; t.blather_on = blather;
-
-  return trustL1_lockstep(objfun_many, parinit, mu, lambda, one_sided, parnames,
-                          rinit, t, parscale, iterlim, parupper, parlower);
 }

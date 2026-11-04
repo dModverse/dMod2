@@ -602,7 +602,8 @@ compile <- function(..., output = NULL, args = NULL, cores = detectFreeCores(),
     ## mclapply returns a failing fork as a try-error instead of raising it.
     bad <- vapply(res, inherits, logical(1), "try-error")
     if (any(bad)) stop(as.character(res[bad][[1]]), call. = FALSE)
-    try(saveRDS(keys, cachefile), silent = TRUE)
+    ## the entries of the other sources of the directory stay valid for a later call
+    try(saveRDS(c(prev[setdiff(names(prev), files)], keys), cachefile), silent = TRUE)
 
     ## The link takes the union of every entry's linkArgs.
     all_link <- unique(unlist(lapply(info, function(e) strsplit(trimws(e$linkArgs %||% ""), "\\s+")[[1]])))

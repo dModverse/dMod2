@@ -5,26 +5,23 @@
 
 
 ## The forward pass along the colored eta directions of `units`, then a direction per parameter
-## in `along` and the columns of `extra` (rows named by parameters): per condition of `conds` the
-## prediction and error-model values with their tangents and tapes, and per data row its
-## prediction p, sigma s and their derivatives pd, sd along the directions. Through the native chain
-## where it covers the model (`native`, for a backward sweep with `blocks` seed blocks), then
-## without values and tapes.
-.sweepForward <- function(design, full, fixed, units, cores = 1L, along = character(0), extra = NULL,
+## in `along`: per condition of `conds` the prediction and error-model values with their tangents
+## and tapes, and per data row its prediction p, sigma s and their derivatives pd, sd along the
+## directions. Through the native chain where it covers the model (`native`, for a backward sweep
+## with `blocks` seed blocks), then without values and tapes.
+.sweepForward <- function(design, full, fixed, units, cores = 1L, along = character(0),
                           conds = unique(unlist(lapply(units, `[[`, "conditions"), use.names = FALSE)),
                           blocks = 1L, chain = TRUE) {
   nm <- names(full)
   Ke <- max(1L, vapply(units, function(u) length(u$eta), 0L))
-  K <- Ke + length(along) + NCOL(extra) * !is.null(extra)
-  V <- matrix(0, length(nm), K, dimnames = list(nm, c(paste0("eta", seq_len(Ke)), along,
-                                                      if (!is.null(extra)) paste0("extra", seq_len(ncol(extra))))))
+  K <- Ke + length(along)
+  V <- matrix(0, length(nm), K, dimnames = list(nm, c(paste0("eta", seq_len(Ke)), along)))
   for (u in units) V[cbind(match(u$eta, nm), seq_along(u$eta))] <- 1
   if (length(along)) V[cbind(match(along, nm), Ke + seq_along(along))] <- 1
-  if (!is.null(extra)) V[match(rownames(extra), nm), Ke + length(along) + seq_len(ncol(extra))] <- extra
   nat <- if (chain) .sweepChainForward(design, full, fixed, V, conds, blocks, cores)
   if (!is.null(nat))
     return(list(conds = conds, names = nm, K = K, Ke = Ke, rows = nat$rows, native = nat$native,
-                redo = function() .sweepForward(design, full, fixed, units, cores, along, extra, conds, chain = FALSE)))
+                redo = function() .sweepForward(design, full, fixed, units, cores, along, conds, chain = FALSE)))
   n <- length(conds)
   env <- new.env()
   pars <- as.parvec(full, deriv = V)
@@ -228,18 +225,13 @@
 
 
 ## Per unit of `units` (its `eta` and `conditions`) by forward over reverse: `rows`, the exact
-## eta rows of the Hessian of the data term; `traces`, the gradients grad tr(M H_u) of the matrices
-## in `Ms[[u]]`, H_u the Gauss-Newton Hessian of the data term in the unit's etas; and `hv`, the data
-## Hessian times the eta vector `vs[[u]]`. All as named over `reach`, the parameters the unit's
-## conditions reach. One forward pass and one backward sweep with a seed for the rows and the
-## products and one per eta direction for the traces of any number of M.
-.sweepUnits <- function(design, full, fixed, units, Ms = NULL, vs = NULL, cores = 1L, fw = NULL) {
-  extra <- if (!is.null(vs)) {
-    e <- unlist(lapply(units, `[[`, "eta"))
-    matrix(unlist(vs), dimnames = list(e, NULL))
-  }
+## eta rows of the Hessian of the data term, and `traces`, the gradients grad tr(M H_u) of the
+## matrices in `Ms[[u]]`, H_u the Gauss-Newton Hessian of the data term in the unit's etas. All as
+## named over `reach`, the parameters the unit's conditions reach. One forward pass and one
+## backward sweep with a seed for the rows and one per eta direction for the traces of any number of M.
+.sweepUnits <- function(design, full, fixed, units, Ms = NULL, cores = 1L, fw = NULL) {
   B <- 1L + if (length(Ms)) max(1L, vapply(units, function(u) length(u$eta), 0L)) else 0L
-  fw <- fw %||% .sweepForward(design, full, fixed, units, cores, extra = extra, blocks = B)
+  fw <- fw %||% .sweepForward(design, full, fixed, units, cores, blocks = B)
   K <- fw$K; Ke <- fw$Ke
   unitOf <- integer(0)
   for (i in seq_along(units)) unitOf[units[[i]]$conditions] <- i
@@ -287,7 +279,7 @@
       TM <- Uu %*% matrix(vapply(Ms[[u]], function(Mm) c(Mm + t(Mm)) / 2, numeric(Ku * Ku)), Ku * Ku)
       tr <- lapply(seq_len(ncol(TM)), function(m) setNames(TM[, m], reach))
     }
-    list(reach = reach, rows = rows, traces = tr, hv = if (!is.null(vs)) setNames(M[, K + 1L], reach))
+    list(reach = reach, rows = rows, traces = tr)
   })
 }
 

@@ -59,7 +59,7 @@
               lapply(err_list, function(e) dimnames(attr(e, "deriv"))[2:3]))
   hit <- !is.null(meta_cache) && identical(meta_cache$sig, sig)
   meta_list <- if (hit) meta_cache$meta_list else
-    .build_normL2_meta(data, prediction, err_list, conditions, e.cond)
+    .build_normL2_meta(data, prediction, err_list, conditions)
   if (!hit && !is.null(meta_cache)) {
     meta_cache$meta_list <- meta_list
     meta_cache$sig <- sig

@@ -16,6 +16,7 @@
   out <- list(argument = fit$argument, value = fit$value, gradient = fit$gradient,
               hessian = fit$hessian, information = fit$information, converged = fit$converged,
               iterations = fit$iterations, trustIterations = fit$trustIterations,
+              stopReason = fit$stopReason,
               method = method, fixed = fixed,
               nObs = nObs, valueNonmem = if (!is.finite(design$df)) fit$value - nDensity * log(2 * pi) else NA_real_,
               prdfn = design$prdfn, data = design$data, errfn = design$errfn, design = design,
@@ -169,6 +170,7 @@
 #' @param x An `em` object, see [em()].
 #' @param ... Ignored.
 #' @return `x` invisibly.
+#' @example inst/examples/em.R
 #' @export
 print.em <- function(x, ...) {
   cat(sprintf("EM (%s): -2 log L %.6f, converged %s, %s iterations, %d groups\n",
@@ -211,6 +213,7 @@ print.em <- function(x, ...) {
 #' @param object An `em` object, see [em()].
 #' @param ... Ignored.
 #' @return The named estimates of the fixed parameters and hyperparameters.
+#' @example inst/examples/emEstimates.R
 #' @export
 coef.em <- function(object, ...) object$argument
 
@@ -225,6 +228,7 @@ coef.em <- function(object, ...) object$argument
 #'   see [em()], which needs more groups than parameters. A fit
 #'   with Dirichlet-process random effects, whose groups are not independent,
 #'   has neither: an error, as where the scores do not span every direction.
+#' @example inst/examples/emEstimates.R
 #' @export
 vcov.em <- function(object, ...) {
   H <- .emCurvature(object)
@@ -282,6 +286,7 @@ vcov.em <- function(object, ...) {
 #'   prediction in the random effects within the volume term), `omega` and
 #'   `shrinkage` per random effect.
 #' @seealso [em()], [confint.em()]
+#' @example inst/examples/em.R
 #' @export
 summary.em <- function(object, ...) {
   est <- object$argument
@@ -338,6 +343,7 @@ print.summary.em <- function(x, digits = 4, ...) {
 #' @return The marginal log-likelihood, `-value / 2`, of class `logLik` with
 #'   the number of estimated parameters as `df` and the number of
 #'   observations as `nobs`, so [stats::AIC()] and [stats::BIC()] apply.
+#' @example inst/examples/emEstimates.R
 #' @export
 logLik.em <- function(object, ...) {
   structure(-object$value / 2, df = length(object$argument), nobs = object$nObs,
@@ -360,6 +366,7 @@ logLik.em <- function(object, ...) {
 #'   sigma, sigmaPRED, IPRED, PRED, IRES, IWRES, PRES, PWRES, source`;
 #'   `sigma` is the error model at IPRED, `sigmaPRED` at PRED, `source` is
 #'   `"obs"` for the rows of the data and `"grid"` for the other times.
+#' @example inst/examples/emPredictions.R
 #' @export
 predict.em <- function(object, times = NULL, type = c("all", "individual", "population"), ...) {
   type <- match.arg(type)
@@ -439,7 +446,7 @@ predict.em <- function(object, times = NULL, type = c("all", "individual", "popu
 #'   the tests of mean 0 (t-test), variance 1 (chi-square) and normality
 #'   (Shapiro-Wilk) with their p-values and the global p-value, three times the
 #'   smallest.
-#' @example inst/examples/NLME.R
+#' @example inst/examples/residuals.em.R
 #' @references Comets, E., Brendel, K. and Mentré, F. (2008). Computing
 #'   normalised prediction distribution errors to evaluate nonlinear
 #'   mixed-effect models. \emph{Computer Methods and Programs in Biomedicine}
@@ -517,12 +524,15 @@ residuals.em <- function(object, type = c("IWRES", "IRES", "CWRES", "PRES", "PWR
 #'   refits, by default that of the fit.
 #' @param ... Ignored.
 #' @return A data.frame with columns `name`, `value`, `lower`, `upper`.
+#' @example inst/examples/emEstimates.R
 #' @export
 confint.em <- function(object, parm = NULL, level = 0.95, method = c("wald", "profile"),
                        control = NULL, ...) {
   method <- match.arg(method)
-  # the profile keeps the random effects of the fit
+  # the profile keeps the random effects and the derivative mode of the fit
   control <- modifyList(control %||% object$control %||% list(), list(boundary = FALSE))
+  if (is.null(control$derivMode) && isTRUE(object$derivMode %in% c("forward-reverse", "forward-forward")))
+    control$derivMode <- object$derivMode
   est <- object$argument
   se <- .structuralSE(object)
   z <- stats::qnorm(1 - (1 - level) / 2)
@@ -531,9 +541,15 @@ confint.em <- function(object, parm = NULL, level = 0.95, method = c("wald", "pr
                      upper = unname(est[nm] + z * se[nm]), row.names = NULL)
   if (method == "wald") return(wald)
   crit <- object$value + stats::qchisq(level, 1)
-  ofv <- function(p, v)
+  # a message on the derivative mode of the refits is given once, at the end
+  notes <- character(0)
+  ofv <- function(p, v) withCallingHandlers(
     .emFit(object$design, est[setdiff(names(est), p)], c(object$fixed, setNames(v, p)),
-           object$method, control, FALSE)$value
+           object$method, control, FALSE)$value,
+    dMod2DerivModeMessage = function(m) {
+      notes <<- union(notes, conditionMessage(m))
+      invokeRestart("muffleMessage")
+    })
   side <- function(p, dir) {
     s <- if (is.finite(se[p]) && se[p] > 0) se[p] else 0.1 * max(1, abs(est[p]))
     inner <- est[p]; outer <- est[p] + dir * z * s
@@ -548,6 +564,7 @@ confint.em <- function(object, parm = NULL, level = 0.95, method = c("wald", "pr
   }
   wald$lower <- vapply(nm, side, 0, dir = -1)
   wald$upper <- vapply(nm, side, 0, dir = 1)
+  for (n in notes) .derivModeMessage(sub("\n$", "", n))
   wald
 }
 
@@ -563,6 +580,7 @@ confint.em <- function(object, parm = NULL, level = 0.95, method = c("wald", "pr
 #'   arguments), `npar`, `value` (-2 log L), `AIC`, `BIC`, `chisq`, `df` and
 #'   `p` per fit.
 #' @order 1
+#' @example inst/examples/anova.em.R
 #' @export
 anova.em <- function(object, ...) .anovaTable(c(list(object), list(...)))
 
@@ -593,6 +611,7 @@ anova.em <- function(object, ...) .anovaTable(c(list(object), list(...)))
 #' @param ... Ignored.
 #' @return A list of `nsim` [datalist]s in the layout of the data of the fit.
 #' @importFrom stats simulate
+#' @example inst/examples/simulate.em.R
 #' @export
 simulate.em <- function(object, nsim = 1, seed = NULL, ...) {
   if (!is.null(seed)) set.seed(seed)

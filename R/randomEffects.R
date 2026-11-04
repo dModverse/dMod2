@@ -92,9 +92,12 @@ print.randomeffects <- function(x, ...) {
 #' - `spikeSlab()`: the deviation of a group is exactly 0 (spike) or drawn
 #'   from \eqn{N(0, \tau^2)}{N(0, tau^2)} (slab); every group deviates with
 #'   probability `prob`, independently. Up to 12 spike-and-slab random
-#'   effects of a group are integrated jointly and exactly; with more, each is
-#'   integrated alone and the coupling by the data is approximated as set by
-#'   `control$laplace$coupling` of [em()].
+#'   effects of a group are integrated jointly, exactly on the quadratic
+#'   expansion of the data if the group has no Laplace or Dirichlet-process
+#'   random effects. Next to these, and with more than 12, the coupling by
+#'   the data is approximated as set by `control$laplace$coupling` of
+#'   [em()]; expectation consistent integrates the joint ones on a diagonal
+#'   cavity.
 #' - `dirichletProcess()`: per symbol, the deviations follow a Dirichlet
 #'   process with base measure \eqn{N(0, \tau^2)}{N(0, tau^2)} and
 #'   `concentration`, the fixed effect seated first at deviation 0: the
@@ -164,12 +167,6 @@ print.redist <- function(x, ...) {
   invisible(x)
 }
 
-
-.hasBar <- function(e) {
-  if (!is.call(e)) return(FALSE)
-  if (identical(e[[1]], as.name("|"))) return(TRUE)
-  any(vapply(as.list(e)[-1], .hasBar, TRUE))
-}
 
 ## Top-level summands of a formula side with their sign.
 .effectSummands <- function(e, sign = 1) {
