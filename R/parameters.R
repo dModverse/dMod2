@@ -72,31 +72,6 @@ P <- function(trafo = NULL, parameters = NULL, condition = NULL,
 }
 
 
-## Per-condition warm-start caches of a Pimpl, keyed by the condition parfn()
-## passes on, so a condition-less Pimpl behind a condition-specific Pexpl keeps
-## one cache per condition. A NULL or empty key uses a shared slot.
-.warmstart_registry <- function() {
-  caches <- new.env(parent = emptyenv())
-  get_cache <- function(key) {
-    k <- if (is.null(key) || !nzchar(key)) "__default__" else key
-    cc <- get0(k, envir = caches, inherits = FALSE)
-    if (is.null(cc)) { cc <- new.env(parent = emptyenv()); assign(k, cc, envir = caches) }
-    cc
-  }
-  reset <- function() {
-    nms <- ls(caches, all.names = TRUE)
-    for (k in nms) {
-      cc <- get(k, envir = caches, inherits = FALSE)
-      inner <- ls(cc, all.names = TRUE)
-      if (length(inner)) rm(list = inner, envir = cc)
-    }
-    invisible(nms)
-  }
-  list(get = get_cache, reset = reset, caches = caches)
-}
-
-
-
 ## Body of the parameter transformation built by Pexpl(). Package level, so
 ## one parfn per condition holds the state, not another copy of this code.
 
@@ -161,8 +136,12 @@ P <- function(trafo = NULL, parameters = NULL, condition = NULL,
   ## derivative vanishes at this point: the Hessian may not.
   varying <- if (is.null(attr(pars, "deriv"))) .setdiffU(names(pars), names(fixed))
              else rownames(attr(pars, "deriv"))
-  dependent <- vapply(rownames(Jac), function(o)
-    is.null(st$depends[[o]]) || any(st$depends[[o]] %in% varying), logical(1))
+  # kept for the last set of varying inputs, which consecutive conditions mostly share
+  dependent <- if (identical(varying, st$depKey) && identical(rownames(Jac), names(st$depVal))) st$depVal else {
+    st$depKey <- varying
+    st$depVal <- vapply(rownames(Jac), function(o)
+      is.null(st$depends[[o]]) || any(st$depends[[o]] %in% varying), logical(1))
+  }
   Jac  <- Jac[dependent | rowSums(Jac != 0) > 0, , drop = FALSE]
   Hess <- if (deriv2 && !is.null(Hess)) Hess[rownames(Jac), , , drop = FALSE]
 
@@ -283,7 +262,37 @@ P <- function(trafo = NULL, parameters = NULL, condition = NULL,
                                    conditions, cores)
     .Pexpl_batch(st, parsList, fixedList, deriv, deriv2, cores,
                  attach.input = controls$attachInput)
+  # the leaves of a sum of such kernels go to .Pexpl_many() together
+  attr(p2p, "pexpl") <- TRUE
   p2p
+}
+
+# The requests of several Pexpl() kernels, each with its own compiled function, in one
+# evaluateMany() of cppDE; one by one where cppDE has none or a kernel lacks the forward
+# derivatives asked for.
+.Pexpl_many <- function(kernels, parsList, fixedList, deriv, deriv2, cores) {
+  sts <- lapply(kernels, function(k) environment(k)$st)
+  attach <- vapply(kernels, function(k) isTRUE(environment(k)$controls$attachInput), TRUE)
+  many <- get0("evaluateMany", envir = asNamespace("cppDE"), inherits = FALSE)
+  ok <- !is.null(many) && deriv && all(vapply(sts, function(st)
+    st$use_ad && st$emit_d1 && !is.null(st$evaluateBatch) && (!deriv2 || isTRUE(st$emit_d2)), TRUE))
+  if (!ok) return(lapply(seq_along(kernels), function(i)
+    kernels[[i]](parsList[[i]], fixedList[[i]], deriv, deriv2)))
+  sets <- lapply(seq_along(sts), function(i) {
+    st <- sts[[i]]; pars <- parsList[[i]]; fixed <- fixedList[[i]]
+    dP <- attr(pars, "deriv")
+    if (is.null(dP)) {
+      active <- .setdiffU(st$parameters, names(fixed))
+      dP <- diag(length(active)); dimnames(dP) <- list(active, active)
+    }
+    list(vars = NULL, params = c(unclass(pars), unclass(fixed))[st$parameters],
+         tangentP = dP, hessianP = if (deriv2) attr(pars, "deriv2"), attach.input = attach[i],
+         fixed = .intersectU(names(fixed), st$parameters))
+  })
+  ad <- many(lapply(sts, `[[`, "evaluateBatch"), sets, cores = cores, deriv2 = deriv2)
+  lapply(seq_along(sts), function(i)
+    .Pexpl_p2p(sts[[i]], parsList[[i]], fixedList[[i]], deriv, deriv2, .ad_out = ad[[i]],
+               attach.input = attach[i]))
 }
 
 # w' Jac, the reverse of the forward Jac %*% dP: the observation functions' vjp
@@ -416,7 +425,7 @@ Pexpl <- function(trafo, parameters = NULL, attachInput = FALSE, condition = NUL
   ## The wrapper closes over `st` and `controls` alone, not over Pexpl's frame.
   st <- list2env(list(fun = fun, jac = jac, hess = hess, evaluate = evaluate,
                       evaluateBatch = PEval$evaluateBatch, vjp = PEval$vjp,
-                      outnames = names(trafo),
+                      outnames = names(trafo), modelname = modelname,
                       depends = lapply(setNames(as.character(trafo), names(trafo)), getSymbols),
                       parameters = parameters,
                       use_ad = use_ad, ad_symbol = ad_symbol,
@@ -432,29 +441,30 @@ Pexpl <- function(trafo, parameters = NULL, attachInput = FALSE, condition = NUL
 }
 
 
-#' Conserved-quantity coefficient matrix
-#'
-#' @param totals Named list of conserved-quantity expressions (from
-#'   [getTotals()]).
-#' @param states State names.
-#' @return Matrix with one row per total and one column per participating
-#'   state, or `NULL` for no totals.
-#' @keywords internal
-.cq_matrix <- function(totals, states) {
-  if (!length(totals)) return(NULL)
-  sp <- unique(unlist(lapply(totals, function(e) intersect(getSymbols(e), states)),
-                      use.names = FALSE))
-  C <- matrix(0, length(totals), length(sp), dimnames = list(names(totals), sp))
-  e0 <- setNames(as.list(rep(0, length(sp))), sp)
-  for (i in seq_along(totals)) {
-    expr <- parse(text = totals[[i]])
-    base <- eval(expr, envir = e0)
-    for (k in intersect(getSymbols(totals[[i]]), sp)) {
-      e1 <- e0; e1[[k]] <- 1
-      C[i, k] <- eval(expr, envir = e1) - base
-    }
+## The conserved totals of the network without its structurally zero states; one proportional to a
+## total of the full network with the zero states at 0 is written as that total, under its name.
+## Totals of constant states (`held`) are left out.
+.restingTotals <- function(full, reduced, zero, held) {
+  red <- conservedQuantities(reduced)
+  red <- Filter(function(e) !all(intersect(getSymbols(e), reduced$states) %in% held), red)
+  if (!length(red) || is.null(full$smatrix)) return(red)
+  ref <- conservedQuantities(full)
+  if (length(zero)) ref <- lapply(ref, function(e) replaceSymbols(zero, rep("0", length(zero)), e))
+  states <- reduced$states
+  others <- setdiff(getSymbols(c(unlist(red), unlist(ref))), states)
+  values <- setNames(as.list(1 + 0.37 * seq_along(others)), others)
+  coef <- function(e) .linearCoefs(e, states, values)
+  refCoef <- lapply(ref, coef)
+  out <- list()
+  for (k in seq_along(red)) {
+    v <- coef(red[[k]])
+    hit <- which(vapply(refCoef, function(w) !is.null(v) && !is.null(w) && any(w != 0) &&
+                          qr(cbind(v, w))$rank == 1L, TRUE))
+    hit <- setdiff(hit, match(names(out), names(ref)))
+    if (length(hit)) out[[names(ref)[hit[1]]]] <- ref[[hit[1]]]
+    else out[[.uniqueName(names(red)[k], c(names(out), names(ref)))]] <- red[[k]]
   }
-  C
+  out
 }
 
 
@@ -487,6 +497,18 @@ Pexpl <- function(trafo, parameters = NULL, attachInput = FALSE, condition = NUL
   S[is.na(S)] <- 0
   # states some reaction changes; the others, such as catalysts, are constant
   changed <- colnames(S)[colSums(S != 0) > 0]
+  # the conserved moieties, one column of states each
+  moieties <- .conservedBasis(S)
+  moiety <- if (is.null(moieties)) character(0) else rownames(moieties)[rowSums(moieties != 0) > 0]
+  # whether a state is the last one of some moiety not yet at 0, which then holds its total
+  .last_holder <- function(st) {
+    if (is.null(moieties) || !(st %in% rownames(moieties))) return(FALSE)
+    for (k in which(moieties[st, ] != 0)) {
+      others <- setdiff(rownames(moieties)[moieties[, k] != 0], c(st, zero_states))
+      if (!length(others)) return(TRUE)
+    }
+    FALSE
+  }
   rates       <- eqnlist_obj$rates
   description <- eqnlist_obj$description
   reactionCompartment <- eqnlist_obj$reactionCompartment
@@ -544,10 +566,17 @@ Pexpl <- function(trafo, parameters = NULL, attachInput = FALSE, condition = NUL
 
   ## No influx (column has no strictly positive entry) => zero at SS; also
   ## catches the all-zero columns of prior reductions. A state no reaction
-  ## changes, such as a catalyst, is constant instead.
+  ## changes, such as a catalyst, is constant instead, and so is a state of a
+  ## conserved moiety that the reductions left without any reaction or that is
+  ## the last of its moiety not at 0: the moiety's total rests there.
   .neg_col <- function(M) {
-    for (j in seq_len(ncol(M)))
-      if (!any(M[, j] > 0) && colnames(M)[j] %in% changed) return(j)
+    for (j in seq_len(ncol(M))) {
+      cn <- colnames(M)[j]
+      if (any(M[, j] > 0) || !(cn %in% changed)) next
+      if (!any(M[, j] < 0) && cn %in% moiety) next
+      if (.last_holder(cn)) next
+      return(j)
+    }
     NA_integer_
   }
 
@@ -659,109 +688,6 @@ Pexpl <- function(trafo, parameters = NULL, attachInput = FALSE, condition = NUL
 }
 
 
-#' Reset Warm Starts of Implicit Transformations
-#'
-#' @description Clears the stored roots of every [Pimpl()] inside `fn`.
-#'
-#' @param fn A [parfn], [prdfn], [obsfn], objective function, or a
-#'   composition of those.
-#' @param verbose Logical. Print a summary of the cleared caches, default
-#'   `FALSE`.
-#' @return Invisibly, the labels of the cleared caches, empty if none was
-#'   found.
-#' @seealso [Pimpl()]
-#' @examples
-#' f <- eqnvec(A = "k2*B - k1*A", B = "k1*A - k2*B")
-#' p <- Pimpl(f, parameters = "A", modelname = "reset_example",
-#'            outdir = tempdir())
-#' resetWarmStarts(p)
-#' @export
-resetWarmStarts <- function(fn, verbose = FALSE) {
-  if (!is.function(fn))
-    stop("`fn` must be a function (parfn / prdfn / obsfn / objfn / composed fn).",
-         call. = FALSE)
-
-  visited_envs   <- new.env(parent = emptyenv())
-  invoked_resets <- new.env(parent = emptyenv())
-  labels         <- character(0)
-
-  call_reset <- function(r) {
-    key <- format(environment(r))
-    if (key %in% names(invoked_resets)) return()
-    assign(key, TRUE, envir = invoked_resets)
-    new_labels <- tryCatch(r(),
-                           error = function(e) sprintf("<reset error: %s>",
-                                                       conditionMessage(e)))
-    labels <<- c(labels, as.character(new_labels))
-  }
-
-  walk <- function(x) {
-    env <- NULL
-    if (is.function(x)) {
-      r <- attr(x, "resetWarmStart")
-      if (!is.null(r) && is.function(r)) call_reset(r)
-      env <- environment(x)
-    } else if (is.environment(x)) {
-      env <- x
-    } else if (is.list(x)) {
-      for (v in x) walk(v)
-      return()
-    } else {
-      return()
-    }
-    if (is.null(env)) return()
-    key <- format(env)
-    if (key %in% names(visited_envs)) return()
-    assign(key, TRUE, envir = visited_envs)
-    for (nm in ls(env, all.names = TRUE)) {
-      val <- tryCatch(get(nm, envir = env, inherits = FALSE),
-                      error = function(e) NULL)
-      if (is.function(val) || is.environment(val) || is.list(val)) walk(val)
-    }
-  }
-  walk(fn)
-
-  if (isTRUE(verbose)) {
-    if (length(labels))
-      message("resetWarmStarts: cleared ", length(labels),
-              " warm-start cache(s):\n  ",
-              paste(labels, collapse = "\n  "))
-    else
-      message("resetWarmStarts: no warm-start caches found.")
-  }
-  invisible(labels)
-}
-
-
-## Solve A X = B (A square or tall, consistent) by QR on A with columns scaled by
-## cs and rows by their norm. A rank-deficient A takes the pseudoinverse
-## (minimum-norm sensitivity) and warns with the null-space directions.
-#' @keywords internal
-.pimpl_solve_dfdx <- function(A, B, cs = rep(1, ncol(A))) {
-  if (ncol(A) == 0L) return(B[0L, , drop = FALSE])
-  A0 <- A
-  A  <- sweep(A, 2L, cs, `*`)
-  rs <- pmax(rowSums(abs(A)), .Machine$double.xmin)
-  A  <- A / rs; B <- B / rs
-  dimnames(A) <- dimnames(A0)
-  sv  <- svd(A); d <- sv$d
-  tol <- max(dim(A)) * d[1L] * .Machine$double.eps
-  rnk <- sum(d > tol)
-
-  if (rnk == ncol(A)) {
-    X <- qr.coef(qr(A), B)
-  } else {
-    nd <- sv$v[, (rnk + 1L):ncol(sv$v), drop = FALSE]
-    rownames(nd) <- colnames(A)
-    warning(.pimpl_format_singularity(d, rnk, nd), call. = FALSE)
-    inv_d <- ifelse(d > tol, 1 / d, 0)
-    X <- sv$v %*% (inv_d * crossprod(sv$u, B))
-  }
-  X <- cs * matrix(X, ncol(A), ncol(B))
-  dimnames(X) <- list(colnames(A), colnames(B))
-  X
-}
-
 ## Zero forcing symbols in all rates and drop their equations, so forcings are
 ## never solved for; returns an eqnvec. Shared by the steady-state preamble and
 ## by symmetryDetection().
@@ -786,8 +712,8 @@ resetWarmStarts <- function(fn, verbose = FALSE) {
 #' @param parameters Outer parameters (may be `NULL`).
 #' @param forcings Forcing names.
 #' @return A named list with `trafo`, `states`, `zero_states`, `dependent`,
-#'   `parameters`, `parms_all`, `totals`, `C_mat` (see [.cq_matrix()]) and,
-#'   for an [eqnlist], `influx`, the sum of the producing fluxes per state.
+#'   `parameters`, `parms_all`, `totals` and, for an [eqnlist], `influx`, the
+#'   sum of the producing fluxes per state.
 #' @keywords internal
 .normalize_ss_inputs <- function(trafo, parameters, forcings) {
   zero_states <- character(0); influx <- NULL
@@ -798,6 +724,10 @@ resetWarmStarts <- function(fn, verbose = FALSE) {
     original_params <- setdiff(getParameters(trafo), trafo$states)
     if (!is.null(forcings))
       trafo$rates <- replaceSymbols(forcings, rep("0", length(forcings)), trafo$rates)
+    # a state no reaction changes is a parameter, not a total
+    S <- trafo$smatrix; S[is.na(S)] <- 0
+    held <- colnames(S)[colSums(abs(S)) == 0]
+    full <- trafo
     zs <- .zeroStatesFromSmatrix(trafo)
     zero_states <- zs$zero_states
     trafo       <- zs$eqnlist
@@ -806,7 +736,7 @@ resetWarmStarts <- function(fn, verbose = FALSE) {
            "state remains to solve for. The network likely has irreversible ",
            "drains without matching influx (an open system with trivial ",
            "all-zero equilibrium).", call. = FALSE)
-    totals <- getTotals(trafo)
+    totals <- .restingTotals(full, trafo, zero_states, held)
     influx <- vapply(getFluxes(trafo), function(t) {
       pos <- trimws(t[!startsWith(trimws(t), "-")])
       if (length(pos)) paste(sub("^\\+", "", pos), collapse = " + ") else "0"
@@ -822,6 +752,8 @@ resetWarmStarts <- function(fn, verbose = FALSE) {
   const_states <- states[vapply(unclass(trafo), function(x)
     tryCatch(identical(eval(parse(text = x)), 0),
              error = function(e) FALSE), logical(1))]
+  # a state in a total takes its value from the total
+  const_states <- setdiff(const_states, unlist(lapply(totals, getSymbols)))
   if (length(const_states))
     parameters <- union(parameters %||% character(0), const_states)
 
@@ -835,35 +767,14 @@ resetWarmStarts <- function(fn, verbose = FALSE) {
   list(trafo = trafo, states = states, zero_states = zero_states,
        dependent = dependent, parameters = parameters,
        parms_all = setdiff(parameters, dependent),
-       totals = totals, C_mat = .cq_matrix(totals, states),
+       totals = totals,
        influx = if (!is.null(influx)) influx[intersect(dependent, names(influx))])
 }
-
-#' @keywords internal
-.pimpl_format_singularity <- function(d, rnk, null_dirs) {
-  lines <- vapply(seq_len(ncol(null_dirs)), function(j) {
-    v   <- null_dirs[, j]
-    sig <- abs(v) > 0.05 * max(abs(v)); if (!any(sig)) sig <- abs(v) == max(abs(v))
-    paste0("  null #", j, ": ",
-           paste(sprintf("%+.3f*%s", v[sig], rownames(null_dirs)[sig]), collapse = " "))
-  }, character(1))
-  paste0(
-    sprintf("df/dx is rank-deficient (rank %d of %d; smallest sv %.2e of largest %.2e); ",
-            rnk, length(d), d[length(d)], d[1L]),
-    "using SVD pseudoinverse (minimum-norm sensitivity on the constraint manifold).\n",
-    "Null-space direction(s) in dependent-state coordinates:\n",
-    paste(lines, collapse = "\n"),
-    "\nLikely cause: an unmodelled conserved quantity, redundant equations, or a ",
-    "continuum of steady states. Pass an `eqnlist` so `Pimpl` can auto-detect CQs ",
-    "for cleaner sensitivities."
-  )
-}
-
 
 # Pimpl solver controls merged over their defaults. Unknown names are an error.
 .pimplPTC <- function(controlsPTC) {
   def <- list(reltol = 1e-10, abstol = 1e-14, flowTol = 1, maxit = NULL, dtInit = 1e-2,
-              positive = TRUE, stability = TRUE, archive = 8L,
+              positive = TRUE, stability = TRUE, stabilityTol = 0,
               nStarts = 20L, startRange = c(-5, 5), startScale = NULL, seed = 1L)
   given <- as.list(controlsPTC)
   if (length(given) && (is.null(names(given)) || any(!nzchar(names(given)))))
@@ -897,8 +808,8 @@ resetWarmStarts <- function(fn, verbose = FALSE) {
 #' @param forcings Forcing names, set to 0. Default `NULL`.
 #' @param condition `NULL` (default) for a transformation valid in every
 #'   condition, or the name of the condition it belongs to.
-#' @param keepRoot If `TRUE` (default), roots are kept per condition as
-#'   initial guesses and repeated calls are answered from memory.
+#' @param keepRoot If `TRUE` (default), roots are kept and repeated calls with
+#'   the same values are answered from memory.
 #' @param flow If `TRUE`, \eqn{\dot{x} = f(x, p)}{dx/dt = f(x, p)} and a stable
 #'   steady state is returned. If `FALSE`, any regular root. Default `TRUE`
 #'   for an [eqnlist], else `FALSE`.
@@ -921,30 +832,38 @@ resetWarmStarts <- function(fn, verbose = FALSE) {
 #'     \item{`positive`}{Keep states positive, default `TRUE`.}
 #'     \item{`stability`}{Require a stable root if `flow = TRUE`, default
 #'       `TRUE`.}
-#'     \item{`archive`}{Roots kept per condition, default `8`.}
+#'     \item{`stabilityTol`}{With `stability`, a root counts as stable while
+#'       the real part of its leading eigenvalue on the manifold of the conserved
+#'       quantities is at most `stabilityTol`, in the units of the rates; default
+#'       `0`. A small positive value admits a resting state that departs from
+#'       rest more slowly than the experiment lasts, as near a Hopf
+#'       bifurcation.}
 #'     \item{`nStarts`}{Random starts after the deterministic ones, default
 #'       `20`.}
 #'     \item{`startRange`}{Range of a random start, drawn uniformly per
 #'       state on `startScale`, default `c(-5, 5)`.}
 #'     \item{`startScale`}{`"log10"` or `"linear"`, default `"log10"` if
 #'       `positive` and `"linear"` otherwise.}
-#'     \item{`seed`}{Seed of the random starts, default `1`; the global RNG
-#'       is not advanced.}
+#'     \item{`seed`}{Seed of the random starts, default `1`. The starts
+#'       depend on the seed and the values; the global RNG is not used.}
 #'   }
 #' @param outdir Directory for the generated files, default
 #'   `getOption("dMod2.outdir")`, else the working directory.
 #'
 #' @details Conserved quantities of an [eqnlist] enter as \eqn{C x = T}.
-#' States without influx are 0. Initial guesses are kept roots, then the
-#' states in `pars`, missing ones at 1, then `nStarts` random starts. If all
-#' fail, it is an error. Identical parameter values are solved
-#' once, also across conditions. `keepRoot` and `controlsPTC` can be changed
-#' with [controls()].
+#' States without influx are 0. The root is solved from the states in `pars`,
+#' missing ones at 1, then from all states at 1, then from `nStarts` random
+#' starts; with `flow = TRUE` the stable root the flow leads to. If all fail, it
+#' is an error. A root depends on the parameters, the states in `pars` and the
+#' controls only, not on the calls before it. Identical values are solved once,
+#' also across conditions, and conditions are solved in parallel with the
+#' cores of the evaluation. `keepRoot` and `controlsPTC` can be changed with
+#' [controls()].
 #'
 #' @return A [parfn], called as `p(pars, ...)`, see section Calling a dMod
 #'   function.
 #' @inheritSection dModfn Calling a dMod function
-#' @seealso [Pexpl()], [P()], [resetWarmStarts()]
+#' @seealso [Pexpl()], [P()]
 #' @example inst/examples/Pimpl.R
 #' @export
 #' @import cppDE
@@ -971,15 +890,11 @@ Pimpl <- function(trafo, parameters = NULL, forcings = NULL, condition = NULL,
   if (is.null(modelname)) modelname <- "impl_parfn"
   if (!is.null(condition)) modelname <- paste(modelname, sanitizeConditions(condition), sep = "_")
 
-  # conservation rows C x - T; species that are parameters stay in the expression
-  tn <- if (!is.null(norm$C_mat)) names(norm$totals) else character(0)
+  # conservation rows C x - T, C possibly depending on parameters such as volumes; species that
+  # are parameters stay in the expression
+  tn <- names(norm$totals)
   cons <- if (length(tn))
     setNames(paste0("(", unlist(norm$totals), ") - ", tn), tn) else character(0)
-  C_dep <- matrix(0, length(tn), n_dep, dimnames = list(tn, dependent))
-  if (length(tn)) {
-    cs <- intersect(colnames(norm$C_mat), dependent)
-    C_dep[, cs] <- norm$C_mat[tn, cs, drop = FALSE]
-  }
   all_exprs <- c(unclass(norm$trafo[dependent]), cons)
   n_eq      <- length(all_exprs)
   parms_all <- intersect(norm$parms_all, getSymbols(all_exprs))
@@ -992,230 +907,52 @@ Pimpl <- function(trafo, parameters = NULL, forcings = NULL, condition = NULL,
 
   # producing fluxes per state, for states that rest at 0 at the given values
   influx <- if (flow) norm$influx
+  pinflux <- if (length(influx)) intersect(parms_all, getSymbols(unclass(influx))) else character(0)
   PIn <- if (length(influx)) suppressWarnings(cppDE::cppFUN(
-    unclass(influx), variables = dependent,
-    parameters = intersect(parms_all, getSymbols(unclass(influx))), fixed = NULL,
+    unclass(influx), variables = dependent, parameters = pinflux, fixed = NULL,
     compile = compile, modelname = paste0(modelname, "_influx"), outdir = outdir,
     verbose = verbose, convenient = FALSE, deriv = FALSE))
 
-  rowsOf <- function(x) {
-    x <- if (is.matrix(x)) x else matrix(x[dependent], 1, dimnames = list(NULL, dependent))
-    x
-  }
-  eval_G <- function(x, pv) {
-    F <- PEval$func(rowsOf(x), pv[parms_all])
-    matrix(F, dim(F)[1], dim(F)[2], dimnames = list(NULL, dimnames(F)[[2]]))
-  }
-  eval_J <- function(x, pv) {
-    J <- PEval$jac(rowsOf(x), pv[parms_all])
-    matrix(c(J), dim(J)[2], dim(J)[3], dimnames = list(dimnames(J)[[2]], dimnames(J)[[3]]))
-  }
-  eval_H <- function(x, pv) {
-    if (is.null(PEval$hess)) return(NULL)
-    H4 <- PEval$hess(rowsOf(x), pv[parms_all])
-    array(c(H4), dim(H4)[2:4], dimnames = dimnames(H4)[2:4])
-  }
-
-  reg    <- .warmstart_registry()
-  solved <- new.env(parent = emptyenv())   # roots and sensitivities by parameter values
-  stats  <- new.env(parent = emptyenv())
-  statsReset <- function() {
-    stats$calls <- 0L; stats$memo <- 0L; stats$solves <- 0L; stats$iter <- 0L
-    stats$how <- integer(0); stats$failed <- 0L
-  }
-  statsReset()
-  solvedKeys <- character(0)
-  remember <- function(key, val) {
-    assign(key, val, envir = solved)
-    solvedKeys <<- c(setdiff(solvedKeys, key), key)
-    if (length(solvedKeys) > 64L) {
-      rm(list = solvedKeys[1L], envir = solved); solvedKeys <<- solvedKeys[-1L]
+  # the native state, built at the first root after compile(): the roots of repeated values
+  # (keepRoot) and the statistics
+  native <- NULL
+  ctl <- list(keepRoot = keepRoot, controlsPTC = controlsPTC)
+  live <- function() !is.null(native) && pimpl_live(native)
+  pushControls <- function() pimpl_controls(native, isTRUE(ctl$keepRoot), .pimplPTC(ctl$controlsPTC))
+  nativeState <- function() {
+    if (live()) return(native)
+    entry <- get0(".ptcEntry", envir = asNamespace("cppDE"), inherits = FALSE)
+    if (!is.function(entry))
+      stop("Pimpl needs the steady-state solver of a newer cppDE; reinstall cppDE.", call. = FALSE)
+    addr <- function(name) {
+      a <- tryCatch(getNativeSymbolInfo(name)$address, error = function(e) NULL)
+      if (is.null(a)) stop("Pimpl: compile '", modelname, "' first.", call. = FALSE)
+      a
     }
+    mn <- attr(PEval, "modelname")
+    native <<- pimpl_state(list(
+      val = addr(paste0(mn, "_eval")), ad = addr(paste0(mn, "_eval_ad")),
+      ad2 = if (emit_d2) addr(paste0(mn, "_eval_ad2")),
+      influx = if (!is.null(PIn)) addr(paste0(attr(PIn, "modelname"), "_eval")),
+      ptc = entry(), nDep = n_dep, nPar = length(parms_all), nTotals = length(tn),
+      inDep = match(names(influx), dependent) - 1L, inPar = match(pinflux, parms_all) - 1L,
+      depNames = dependent, flow = flow))
+    pushControls()
+    native
   }
-
-  # read at every call, see controls()
-  controls <- list(keepRoot = keepRoot, controlsPTC = controlsPTC)
-
-  # States whose producing fluxes vanish and whose right-hand side is negative
-  # at two fixed positive probes rest at 0. Repeated with the states found set
-  # to 0 until no further state is found.
-  probes <- rbind(exp(sin(seq_len(n_dep))), exp(cos(seq_len(n_dep))))
-  colnames(probes) <- dependent
-  numericZeros <- function(pv) {
-    if (is.null(PIn)) return(character(0))
-    pin  <- intersect(parms_all, getSymbols(unclass(influx)))
-    zero <- character(0)
-    repeat {
-      X <- probes; X[, zero] <- 0
-      F <- PIn$func(X, pv[pin])
-      F <- matrix(F, dim(F)[1], dim(F)[2], dimnames = list(NULL, dimnames(F)[[2]]))
-      R <- eval_G(X, pv)[, colnames(F), drop = FALSE]
-      new <- setdiff(colnames(F)[F[1, ] == 0 & F[2, ] == 0 & R[1, ] < 0 & R[2, ] < 0], zero)
-      if (!length(new)) break
-      zero <- c(zero, new)
-    }
-    zero
-  }
-
-  # Projection onto C x = T_eff minimising relative entropy: x exp(C' lambda),
-  # lambda by Newton. Keeps states positive; coefficients of any sign.
-  onManifold <- function(x, act, Teff) {
-    if (!length(Teff)) return(x)
-    Ca <- C_dep[, act, drop = FALSE]
-    xa <- x[act]; lam <- numeric(nrow(Ca))
-    res <- function(l) drop(Ca %*% (xa * exp(drop(crossprod(Ca, l))))) - Teff
-    r <- res(lam); tol <- 1e-15 * pmax(abs(Teff), drop(abs(Ca) %*% xa))
-    for (it in 1:100) {
-      if (all(abs(r) <= tol)) break
-      e <- xa * exp(drop(crossprod(Ca, lam)))
-      H <- Ca %*% (e * t(Ca))
-      step <- tryCatch(solve(H, r), error = function(err) NULL)
-      if (is.null(step)) break
-      a <- 1
-      repeat {
-        rn <- res(lam - a * step)
-        if (all(is.finite(rn)) && sum(rn^2) < sum(r^2) || a < 1e-8) break
-        a <- a / 2
-      }
-      lam <- lam - a * step; r <- rn
-    }
-    x[act] <- xa * exp(drop(crossprod(Ca, lam)))
-    x
-  }
-
-  # largest real part of the eigenvalues of J on ker C
-  stabilityOf <- function(x, pv, act) {
-    J  <- eval_J(x, pv)[dependent, , drop = FALSE][act, act, drop = FALSE]
-    Ca <- C_dep[, act, drop = FALSE]
-    Nb <- if (nrow(Ca)) MASS::Null(t(Ca)) else diag(length(act))
-    if (!ncol(Nb)) return(list(maxRe = -Inf))
-    ev <- eigen(t(Nb) %*% J %*% Nb)
-    k  <- which.max(Re(ev$values))
-    list(maxRe = Re(ev$values[k]), maxIm = abs(Im(ev$values[k])), scale = max(Mod(ev$values)),
-         dir = setNames(as.numeric(Nb %*% Re(ev$vectors[, k])), act))
-  }
-
-  # starts in a fixed order, then the stability check
-  solveRoot <- function(pv, x_user, arch, ctrl, cache = NULL, condition = NULL) {
-    if (is.null(ctrl$maxit)) ctrl$maxit <- ceiling(70 * log(n_dep + 1))
-    zero <- numericZeros(pv)
-    act  <- setdiff(dependent, zero)
-    if (!length(act)) return(list(x = setNames(rep(0, n_dep), dependent), zero = zero, how = "all zero"))
-    # totals held by the dependent species
-    Teff <- if (length(tn)) -eval_G(setNames(rep(0, n_dep), dependent), pv)[1, tn] else numeric(0)
-    Ca <- C_dep[, act, drop = FALSE]
-    if (length(Teff) && any(Teff > 0 & rowSums(Ca != 0) == 0))
-      stop("Pimpl: a conserved total is positive but every species holding it rests at 0.",
-           call. = FALSE)
-    prep <- function(x) {
-      x <- x[dependent]; x[zero] <- 0
-      if (ctrl$positive) x[act][!(x[act] > 0)] <- 1
-      onManifold(x, act, Teff)
-    }
-    attempts <- list()
-    if (length(arch)) {
-      d  <- vapply(arch, function(a) sum((log(pmax(abs(a$pv), 1e-300)) -
-                                           log(pmax(abs(pv[names(a$pv)]), 1e-300)))^2), 0)
-      a  <- arch[[which.min(d)]]
-      xw <- a$x
-      if (!is.null(a$dxdp)) {
-        xp <- xw + drop(a$dxdp %*% (pv[colnames(a$dxdp)] - a$pv[colnames(a$dxdp)]))
-        if (all(is.finite(xp)) && (!ctrl$positive || all(xp[act] > 0))) xw <- xp
-      }
-      attempts$warm_newton <- list(x = prep(xw), dt = if (flow) 1e8 else 1e8)
-      attempts$warm_flow   <- list(x = prep(a$x), dt = if (flow) ctrl$dtInit else 1)
-    }
-    attempts$guess <- list(x = prep(x_user), dt = if (flow) ctrl$dtInit else 1)
-    if (flow) attempts$guess_fine <- c(attempts$guess, fine = TRUE)
-    if (any(x_user[act] != 1)) {
-      attempts$ones <- list(x = prep(setNames(rep(1, n_dep), dependent)),
-                            dt = if (flow) ctrl$dtInit else 1)
-      if (flow) attempts$ones_fine <- c(attempts$ones, fine = TRUE)
-    }
-
-    log <- character(0)
-    run <- function(x, dt, fine = FALSE) {
-      r <- cppDE::ptc(PEval, x = x[dependent], parms = pv[parms_all], solve = act,
-                      rows = act, C = if (length(Teff)) Ca, total = Teff, flow = flow,
-                      positive = ctrl$positive,
-                      controls = list(reltol = ctrl$reltol, abstol = ctrl$abstol,
-                                      flowTol = ctrl$flowTol / if (fine) 10 else 1,
-                                      maxit = ctrl$maxit, dtInit = dt))
-      list(x = r$x[act], ok = r$converged, iter = r$iterations, reason = r$message)
-    }
-    # multistart: states uniform over startRange on startScale, from the stream of
-    # this warm-start cache; the global RNG is read, not advanced
-    if (ctrl$nStarts > 0L) {
-      oldSeed <- get0(".Random.seed", envir = globalenv(), inherits = FALSE)
-      on.exit(if (is.null(oldSeed)) rm(".Random.seed", envir = globalenv())
-              else assign(".Random.seed", oldSeed, envir = globalenv()), add = TRUE)
-      if (is.null(cache)) cache <- new.env(parent = emptyenv())
-      if (is.null(cache$msBase)) {
-        h <- digest::digest(list(ctrl$seed, condition, oldSeed), algo = "xxhash32")
-        cache$msBase <- strtoi(substr(h, 1, 7), 16L); cache$msCount <- 0L
-      }
-      cache$msCount <- cache$msCount + 1L
-      set.seed((cache$msBase + cache$msCount) %% .Machine$integer.max)
-      for (i in seq_len(ctrl$nStarts)) {
-        u <- stats::runif(n_dep, ctrl$startRange[1], ctrl$startRange[2])
-        attempts[[paste0("start", i)]] <- list(
-          x = prep(setNames(if (ctrl$startScale == "log10") 10^u else u, dependent)),
-          dt = if (flow) ctrl$dtInit else 1)
-      }
-    }
-    for (nm in names(attempts)) {
-      r <- run(attempts[[nm]]$x, attempts[[nm]]$dt, isTRUE(attempts[[nm]]$fine))
-      stats$iter <- stats$iter + r$iter
-      log <- c(log, paste0(nm, ": ", r$reason))
-      if (!r$ok) next
-      x <- setNames(numeric(n_dep), dependent); x[act] <- r$x
-      if (!(flow && ctrl$stability)) return(list(x = x, zero = zero, how = nm))
-      st <- stabilityOf(x, pv, act)
-      if (st$maxRe <= 1e-8 * st$scale) return(list(x = x, zero = zero, how = nm))
-      # unstable: restart along the unstable eigenvector, both directions
-      log <- c(log, sprintf("%s: unstable root, leading eigenvalue %.2e%s, leaving it", nm, st$maxRe,
-                            if (st$maxIm > 0) sprintf(" +- %.2ei (oscillatory)", st$maxIm) else ""))
-      v  <- st$dir; nz <- v != 0 & x[act] > 0
-      if (!any(nz)) next
-      eta <- 0.1 * min(x[act][nz] / abs(v[nz]))
-      for (s in c(1, -1)) {
-        r2 <- run(replace(x, act, x[act] + s * eta * v), ctrl$dtInit)
-        if (!r2$ok) next
-        x2 <- setNames(numeric(n_dep), dependent); x2[act] <- r2$x
-        if (stabilityOf(x2, pv, act)$maxRe <= 1e-8 * st$scale)
-          return(list(x = x2, zero = zero, how = paste0(nm, "+escape")))
-      }
-    }
-    stats$failed <- stats$failed + 1L
-    stop("Pimpl: no ", if (flow) "stable " else "", "root found. Attempts:\n  ",
-         paste(log, collapse = "\n  "), call. = FALSE)
-  }
-
-  ift <- function(root, pv, want_d2) {
-    Jall <- eval_J(root, pv)
-    A <- Jall[, dependent, drop = FALSE]
-    n_par <- length(parms_all)
-    cs <- ifelse(root[dependent] > 0, root[dependent], 1)
-    dxdp <- if (n_par) .pimpl_solve_dfdx(A, -Jall[, parms_all, drop = FALSE], cs)
-            else matrix(numeric(0), n_dep, 0, dimnames = list(dependent, character(0)))
-    d2 <- NULL
-    if (want_d2) {
-      H_all <- eval_H(root, pv)
-      if (is.null(H_all))
-        stop("Pimpl(deriv2 = TRUE) requires hess(); rebuild with deriv2 = TRUE.", call. = FALSE)
-      if (n_par) {
-        f_xx <- H_all[, dependent, dependent, drop = FALSE]
-        f_xp <- H_all[, dependent, parms_all, drop = FALSE]
-        f_pp <- H_all[, parms_all, parms_all, drop = FALSE]
-        T1 <- t(dxdp) %bmm% f_xx %bmm% dxdp
-        T2 <- t(dxdp) %bmm% f_xp
-        RHS <- T1 + T2 + aperm(T2, c(1L, 3L, 2L)) + f_pp
-        d2 <- array(.pimpl_solve_dfdx(A, -matrix(RHS, n_eq, n_par * n_par), cs),
-                    c(n_dep, n_par, n_par), dimnames = list(dependent, parms_all, parms_all))
-      } else d2 <- array(0, c(n_dep, 0L, 0L))
-    }
-    list(dxdp = dxdp, d2 = d2)
-  }
+  # keepRoot and controlsPTC, see controls(); checked when set
+  makeActiveBinding("controls", function(value) {
+    if (missing(value)) return(ctl)
+    .pimplPTC(value$controlsPTC)
+    ctl <<- value
+    if (live()) pushControls()
+    invisible(value)
+  }, environment())
+  makeActiveBinding("stats", function() {
+    if (!live()) return(list(calls = 0L, memo = 0L, solves = 0L, iter = 0, how = integer(0), failed = 0L))
+    pimpl_stats(native)
+  }, environment())
+  statsReset <- function() if (live()) invisible(pimpl_stats(native, TRUE))
 
   # output Jacobian and Hessian, chained with the derivatives of the inputs
   build_derivs <- function(dxdp, d2, out, p, emptypars, fixed, dP, dP2, want_d2) {
@@ -1254,9 +991,10 @@ Pimpl <- function(trafo, parameters = NULL, forcings = NULL, condition = NULL,
       jacobian <- jacobian %*% dPsub
     }
 
-    # a solved state keeps its row where dx/dp vanishes at this point, its
-    # second derivative may not
-    keep <- rownames(jacobian) %in% dependent | rowSums(jacobian != 0) > 0
+    # a solved state and a varying input passed on keep their rows where the Jacobian vanishes here:
+    # the second derivative may not, and an output without a row counts as fixed downstream
+    varying <- if (is.null(dP)) input_cols else intersect(input_cols, rownames(dP))
+    keep <- rownames(jacobian) %in% c(dependent, varying) | rowSums(jacobian != 0) > 0
     jacobian <- jacobian[keep, , drop = FALSE]
     if (!is.null(hessian)) hessian <- hessian[keep, , , drop = FALSE]
     list(jacobian = jacobian, hessian = hessian)
@@ -1268,9 +1006,6 @@ Pimpl <- function(trafo, parameters = NULL, forcings = NULL, condition = NULL,
     if (!emit_d1) deriv <- FALSE
     if (deriv2 && !deriv) deriv <- TRUE
 
-    keepRoot <- controls$keepRoot
-    ctrl  <- .pimplPTC(controls$controlsPTC)
-    cache <- reg$get(condition)
     p   <- pars
     dP  <- attr(p, "deriv")
     dP2 <- if (deriv2) attr(p, "deriv2") else NULL
@@ -1282,63 +1017,36 @@ Pimpl <- function(trafo, parameters = NULL, forcings = NULL, condition = NULL,
     miss <- setdiff(dependent, names(p)); if (length(miss)) p[miss] <- 1
     pv <- setNames(as.numeric(p[parms_all]), parms_all)
     if (anyNA(pv))
-      stop("Pimpl: missing value(s) for ", paste(parms_all[is.na(pv)], collapse = ", "),
-           call. = FALSE)
-
-    # memo key: parameter values and solver controls
-    key <- digest::digest(list(unname(pv), ctrl), algo = "xxhash64")
-    got <- if (keepRoot) get0(key, envir = solved, inherits = FALSE) else NULL
-    stats$calls <- stats$calls + 1L
-    if (is.null(got)) {
-      arch <- if (keepRoot) cache$arch else NULL
-      got  <- solveRoot(pv, setNames(as.numeric(p[dependent]), dependent), arch, ctrl,
-                        cache = cache, condition = condition)
-      got$ift <- NULL
-      stats$solves <- stats$solves + 1L
-      stats$how[got$how] <- (if (is.na(stats$how[got$how])) 0L else stats$how[got$how]) + 1L
-    } else stats$memo <- stats$memo + 1L
-    root <- got$x
-    need_ift <- deriv && (is.null(got$ift) || (deriv2 && is.null(got$ift$d2)))
-    if (need_ift) {
-      got$ift <- tryCatch(ift(root, pv, deriv2), error = function(e) {
-        warning("Pimpl: IFT-based sensitivities unavailable at the current root (",
-                conditionMessage(e), "). Returning value only.", call. = FALSE)
-        NULL
-      })
-    }
-    if (keepRoot) {
-      remember(key, got)
-      entry <- list(pv = pv, x = root, dxdp = got$ift$dxdp)
-      cache$arch <- c(list(entry), Filter(function(a) !identical(a$pv, pv), cache$arch))
-      if (length(cache$arch) > ctrl$archive) cache$arch <- cache$arch[seq_len(ctrl$archive)]
-    }
+      stop("Pimpl: missing value(s) for ", paste(parms_all[is.na(pv)], collapse = ", "), call. = FALSE)
+    got <- pimpl_root(nativeState(), pv, as.numeric(p[dependent]), if (deriv2) 2L else if (deriv) 1L else 0L)
+    for (w in got$warnings) warning(w, call. = FALSE)
+    root <- setNames(got$x, dependent)
 
     zero_vec <- if (length(zero_states))
       setNames(rep(0, length(zero_states)), zero_states) else NULL
     out <- c(root, zero_vec, p[setdiff(names(p), c(dependent, zero_states))])
 
-    d <- if (deriv && !is.null(got$ift))
-      build_derivs(got$ift$dxdp, got$ift$d2, out, p, emptypars, fixed, dP, dP2, deriv2)
+    np <- length(parms_all)
+    d <- if (deriv && !is.null(got$D))
+      build_derivs(matrix(got$D, n_dep, np, dimnames = list(dependent, parms_all)),
+                   if (!is.null(got$D2)) array(got$D2, c(n_dep, np, np), list(dependent, parms_all, parms_all)),
+                   out, p, emptypars, fixed, dP, dP2, deriv2)
     as.parvec(out,
               deriv  = if (deriv  && !is.null(d)) d$jacobian else NULL,
               deriv2 = if (deriv2 && !is.null(d)) d$hessian  else if (deriv2) NULL else FALSE)
   }
 
   attr(p2p, "vjpfn")       <- .parfnVjpFromJacobian(p2p)
+  # the steady state as a stage of the native chain (.chainStage()): its unknowns, the states at
+  # 0, its parameters and the native state that solves its roots
+  attr(p2p, "chainImpl") <- function(condition) list(
+    dependent = dependent, zero = zero_states, parameters = parms_all, d1 = emit_d1, d2 = emit_d2,
+    state = nativeState())
   attr(p2p, "equations")   <- as.eqnvec(all_exprs)
   attr(p2p, "parameters")  <- parameters
   attr(p2p, "modelname")   <- modelname
   attr(p2p, "compileInfo") <- .collectCompileInfo(PEval$func, PEval$jac, PEval$hess,
                                                   if (!is.null(PIn)) PIn$func)
-  attr(p2p, "resetWarmStart") <- local({
-    reg_ref <- reg; mn <- modelname; cond <- condition
-    function() {
-      reg_ref$reset()
-      rm(list = ls(solved, all.names = TRUE), envir = solved)
-      solvedKeys <<- character(0)
-      paste0("Pimpl(", mn, if (!is.null(cond)) paste0(":", cond) else "", ")")
-    }
-  })
   parfn(p2p, parameters, condition)
 }
 

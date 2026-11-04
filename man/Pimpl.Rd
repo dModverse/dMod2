@@ -33,8 +33,8 @@ state whose right-hand side is \code{"0"} becomes a parameter.}
 \item{condition}{\code{NULL} (default) for a transformation valid in every
 condition, or the name of the condition it belongs to.}
 
-\item{keepRoot}{If \code{TRUE} (default), roots are kept per condition as
-initial guesses and repeated calls are answered from memory.}
+\item{keepRoot}{If \code{TRUE} (default), roots are kept and repeated calls with
+the same values are answered from memory.}
 
 \item{flow}{If \code{TRUE}, \eqn{\dot{x} = f(x, p)}{dx/dt = f(x, p)} and a stable
 steady state is returned. If \code{FALSE}, any regular root. Default \code{TRUE}
@@ -63,15 +63,20 @@ default \code{1e-2}.}
 \item{\code{positive}}{Keep states positive, default \code{TRUE}.}
 \item{\code{stability}}{Require a stable root if \code{flow = TRUE}, default
 \code{TRUE}.}
-\item{\code{archive}}{Roots kept per condition, default \code{8}.}
+\item{\code{stabilityTol}}{With \code{stability}, a root counts as stable while
+the real part of its leading eigenvalue on the manifold of the conserved
+quantities is at most \code{stabilityTol}, in the units of the rates; default
+\code{0}. A small positive value admits a resting state that departs from
+rest more slowly than the experiment lasts, as near a Hopf
+bifurcation.}
 \item{\code{nStarts}}{Random starts after the deterministic ones, default
 \code{20}.}
 \item{\code{startRange}}{Range of a random start, drawn uniformly per
 state on \code{startScale}, default \code{c(-5, 5)}.}
 \item{\code{startScale}}{\code{"log10"} or \code{"linear"}, default \code{"log10"} if
 \code{positive} and \code{"linear"} otherwise.}
-\item{\code{seed}}{Seed of the random starts, default \code{1}; the global RNG
-is not advanced.}
+\item{\code{seed}}{Seed of the random starts, default \code{1}. The starts
+depend on the seed and the values; the global RNG is not used.}
 }}
 
 \item{outdir}{Directory for the generated files, default
@@ -88,11 +93,14 @@ the implicit function theorem.
 }
 \details{
 Conserved quantities of an \link{eqnlist} enter as \eqn{C x = T}.
-States without influx are 0. Initial guesses are kept roots, then the
-states in \code{pars}, missing ones at 1, then \code{nStarts} random starts. If all
-fail, it is an error. Identical parameter values are solved
-once, also across conditions. \code{keepRoot} and \code{controlsPTC} can be changed
-with \code{\link[=controls]{controls()}}.
+States without influx are 0. The root is solved from the states in \code{pars},
+missing ones at 1, then from all states at 1, then from \code{nStarts} random
+starts; with \code{flow = TRUE} the stable root the flow leads to. If all fail, it
+is an error. A root depends on the parameters, the states in \code{pars} and the
+controls only, not on the calls before it. Identical values are solved once,
+also across conditions, and conditions are solved in parallel with the
+cores of the evaluation. \code{keepRoot} and \code{controlsPTC} can be changed with
+\code{\link[=controls]{controls()}}.
 }
 \section{Calling a dMod function}{
 
@@ -173,5 +181,5 @@ attr(out$C1, "deriv")
 }
 }
 \seealso{
-\code{\link[=Pexpl]{Pexpl()}}, \code{\link[=P]{P()}}, \code{\link[=resetWarmStarts]{resetWarmStarts()}}
+\code{\link[=Pexpl]{Pexpl()}}, \code{\link[=P]{P()}}
 }

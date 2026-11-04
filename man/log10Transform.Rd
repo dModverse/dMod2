@@ -4,30 +4,36 @@
 \alias{log10Transform}
 \title{Transform an ODE to log10 Coordinates}
 \usage{
-log10Transform(f, suffix = "_l10", simplify = TRUE)
+log10Transform(f, suffix = "_l10", simplify = TRUE, states = names(f))
 }
 \arguments{
 \item{f}{\code{eqnvec} or named character vector, the right-hand sides.}
 
-\item{suffix}{character appended to each state name. Default \code{"_l10"}.}
+\item{suffix}{character appended to the name of each transformed state.
+Default \code{"_l10"}.}
 
 \item{simplify}{logical, cancel the division symbolically with the Python
 module \code{sympy}. Default \code{TRUE}. With \code{FALSE}, or without \code{sympy}, the
 plain quotient is returned.}
+
+\item{states}{character, the states to transform, all of \code{f} by default;
+the others stay linear and read the transformed ones as \eqn{10^{x_{l10}}}.}
 }
 \value{
-An \code{eqnvec} over the renamed states.
+An \code{eqnvec} in the order of \code{f}, the transformed states renamed.
 }
 \description{
 Takes \code{f} as the right-hand side of \eqn{\dot x = f(x)} and returns the
-same system in \eqn{x_{l10} = \log_{10} x},
+same system with the states in \code{states} in \eqn{x_{l10} = \log_{10} x},
 \deqn{\dot x_{l10} = \frac{f(x)}{\log(10)\, x}, \qquad x = 10^{x_{l10}}.}
-Read results back with \code{10^x_l10}.
+A state in log10 coordinates stays positive whatever the error of the
+solver. Read results back with \code{10^x_l10}.
 }
 \examples{
 \dontshow{if (reticulate::py_module_available("sympy")) withAutoprint(\{ # examplesIf}
 log10Transform(eqnvec(x = "-k*x"))
 log10Transform(eqnvec(A = "-k1*A + k2*B", B = "k1*A - k2*B"))
+log10Transform(eqnvec(A = "-k1*A + k2*B", B = "k1*A - k2*B"), states = "A")
 \dontshow{\}) # examplesIf}
 }
 \seealso{

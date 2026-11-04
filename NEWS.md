@@ -1,3 +1,36 @@
+# dMod2 0.14.1
+
+* The steady states of `Pimpl()` are solved in C++ by the solver of `cppDE::ptc()`, in the
+  native chain for all conditions of an evaluation at once and in parallel on
+  `getOption("dMod2.cores")`, with the same result on any number of cores. A root depends on the
+  parameters, the states in `pars` and the controls only, so that an objective is the same
+  function of its parameters in every call; identical values are answered from memory, which
+  `keepRoot = FALSE` turns off. The control `archive` and `resetWarmStarts()` are removed.
+
+* `Pimpl(controlsPTC = list(stabilityTol = ))`: a root counts as stable while the real part of
+  its leading eigenvalue on the manifold of the conserved quantities is at most `stabilityTol`,
+  in the units of the rates; default 0.
+
+* `conservedQuantities(eqnlist)` replaces `getTotals()` and `conservedQuantities(S)` on a
+  stoichiometric matrix. A conserved quantity is an amount: the concentrations enter with the
+  volumes of their compartments, also symbolic ones (`1*A+1*V*B`). A quantity of a single
+  species is named after it. `customTotals()` checks the same, and `Pimpl()` reads the
+  coefficients at the parameters of each call. A state that no reaction changes is a parameter
+  of `Pimpl()`, not a conserved total.
+
+* `Pimpl()` and the PEtab pre-equilibration keep a conserved moiety at its total where its
+  reactions rest, and totals keep the names of the full network.
+
+* `exportPEtab()` takes the observables and the error model as observation functions of `Y()`.
+  `exportPEtab(steadyState = )` takes the `Pimpl()` of the chain and writes the steady state as a
+  pre-equilibration, conditions with equal parameters sharing one; `exportPEtab(events = )`
+  writes the events at time 0 that replace a state into the condition table and refuses others.
+  An observable the error model leaves out takes the standard deviations of its data, one
+  without data the noise 1, and a fixed parameter that enters `p` as `exp()` or `10^()` has the
+  value it has in the model.
+
+* `log10Transform(states = )` transforms the states named, all of them by default.
+
 # dMod2 0.14.0
 
 * Breaking: `define()`, `insert()`, `repar()` and `branch(apply = )` write a substitution as

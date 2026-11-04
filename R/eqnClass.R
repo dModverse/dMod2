@@ -91,63 +91,34 @@ is.eqnlist <- function(x) {
 
 ## Class "eqnlist" and its methods ------------------------------------------
 
-#' Determine Conserved Quantities from the Stoichiometric Matrix
-#'
-#' Each vector of the null space basis of `S` ([nullZ()]) gives one linear
-#' combination of the states that the reactions leave unchanged.
-#'
-#' @param S numeric matrix, one row per reaction and one named column per
-#'   state. `NA` entries count as 0.
-#' @param weight One of `"none"` (default) or `"volume"`. When `"volume"`, the
-#'   columns of `S` are multiplied by their compartment volume before the kernel
-#'   is computed, so the returned quantities are conserved in *amount* rather
-#'   than concentration. Requires `volumes` to be supplied as numeric.
-#' @param volumes Optional named numeric vector of volume values keyed by state,
-#'   aligned with `colnames(S)`. Only consulted when `weight = "volume"`.
-#' @return `NULL` if nothing is conserved, otherwise a data frame with one
-#'   character column of expressions such as `"1*A+1*pA"`, one row per
-#'   conserved quantity, and their number in the attribute `n`.
-#'
-#' @example inst/examples/equations.R
-#' @export
-conservedQuantities <- function(S, weight = c("none", "volume"), volumes = NULL) {
-  weight <- match.arg(weight)
+## ---- Conserved quantities ------------------------------------------------------------
+
+## The null space basis of the stoichiometric matrix `S` (reactions by states, in amounts), one
+## column w per conserved amount sum_s w_s n_s, rows named by the states; NULL if there is none.
+.conservedBasis <- function(S) {
   S[is.na(S)] <- 0
-  if (weight == "volume") S <- .volumeWeighted(S, volumes)
-
   basis <- nullZ(S)
-  n <- ncol(basis)
-  if (n == 0L) return(NULL)
-  states <- colnames(S)
-  if (is.null(states)) stop("Columns of stoichiometric matrix not named.")
-
-  expr <- vapply(seq_len(n), function(k) {
-    w <- basis[, k]
-    used <- w != 0
-    paste(w[used], states[used], sep = "*", collapse = "+")
-  }, character(1))
-  # gsub, not sub: a basis vector may have several negative weights.
-  out <- data.frame(gsub("+-", "-", expr, fixed = TRUE))
-  names(out) <- paste("Conserved quantities:", n)
-  attr(out, "n") <- n
-  out
+  if (!ncol(basis)) return(NULL)
+  rownames(basis) <- colnames(S)
+  basis
 }
 
-# Scale the columns of S by the numeric volume of their state.
-.volumeWeighted <- function(S, volumes) {
-  if (is.null(volumes))
-    stop("`weight = \"volume\"` requires a named numeric `volumes` argument.")
-  if (is.null(colnames(S)))
-    stop("`S` must have column names when `weight = \"volume\"`.")
-  missing_vol <- setdiff(colnames(S), names(volumes))
-  if (length(missing_vol) > 0L)
-    stop("`volumes` missing entries for: ", paste(missing_vol, collapse = ", "))
-  v_num <- suppressWarnings(as.numeric(volumes[colnames(S)]))
-  if (anyNA(v_num))
-    stop("`weight = \"volume\"` requires all volumes to be numeric; got symbolic expression(s).")
-  sweep(S, 2, v_num, "*")
+## The volume of every state as an expression; "1" for a state held as an amount.
+.stateVolumes <- function(eqnlist) {
+  v <- setNames(rep("1", length(eqnlist$states)), eqnlist$states)
+  vol <- eqnlist$volumes
+  if (length(vol)) v[intersect(names(vol), names(v))] <- as.character(vol[intersect(names(vol), names(v))])
+  v[intersect(eqnlist$amountStates, names(v))] <- "1"
+  v
 }
 
+## The weight w of an amount on a concentration in volume `vol`, as text.
+.weightTimes <- function(w, vol) {
+  num <- suppressWarnings(as.numeric(vol))
+  if (!is.na(num)) return(format(w * num, digits = 15))
+  if (!grepl("^[A-Za-z_.][A-Za-z0-9_.]*$", vol)) vol <- paste0("(", vol, ")")
+  paste0(format(w, digits = 15), "*", vol)
+}
 
 ## ---- Totals (CQ basis) management on eqnlist ------------------------------
 
@@ -180,46 +151,45 @@ conservedQuantities <- function(S, weight = c("none", "volume"), volumes = NULL)
   Reduce(lcs2, strings)
 }
 
-## `totalXxx` from LCS of CQ species (require >= 2 chars after trimming
-## underscores), else `total_<index>`. Disambiguated against `used`/`parameters`.
+## A single species, a state no reaction changes, names its own total;
+## several give `totalXxx` from their longest common substring (>= 2 characters after trimming
+## underscores), else `total_<index>`, unique against `used` and `parameters`.
 #' @keywords internal
 .smartTotalName <- function(species, used, parameters, index) {
+  if (length(species) == 1L) return(.uniqueName(species, used))
   fallback <- .uniqueName(paste0("total_", index), c(used, parameters))
-  if (length(species) < 2L) return(fallback)
   lcs <- gsub("^_+|_+$", "", .lcs(species))
   if (nchar(lcs) < 2L) return(fallback)
   .uniqueName(paste0("total", lcs), c(used, parameters))
 }
 
-## Linear coefficients of `expr` over `states` by 1-hot evaluation, checked
-## for linearity at the all-twos point (value must equal 2 * sum(coefs)).
+## Linear coefficients of `expr` over `states` by 1-hot evaluation, the other symbols at
+## `values`, checked for linearity at the all-twos point (value must equal 2 * sum(coefs)).
 ## NULL on unknown symbols or nonlinearity.
 #' @keywords internal
-.linearCoefs <- function(expr, states, tol = 1e-8) {
+.linearCoefs <- function(expr, states, values = list(), tol = 1e-8) {
   syms <- getSymbols(expr)
-  if (length(setdiff(syms, states))) return(NULL)
+  if (length(setdiff(syms, c(states, names(values))))) return(NULL)
   parsed <- parse(text = expr)
-  e0 <- setNames(as.list(rep(0, length(states))), states)
-  base <- tryCatch(eval(parsed, envir = e0), error = function(e) NA_real_)
+  at <- function(x) tryCatch(eval(parsed, envir = c(setNames(as.list(x), states), values)),
+                             error = function(e) NA_real_)
+  base <- at(rep(0, length(states)))
   if (!is.finite(base)) return(NULL)
   v <- setNames(numeric(length(states)), states)
-  for (s in intersect(syms, states)) {
-    e1 <- e0; e1[[s]] <- 1
-    v[s] <- eval(parsed, envir = e1) - base
-  }
-  e2 <- setNames(as.list(rep(2, length(states))), states)
-  check <- tryCatch(eval(parsed, envir = e2), error = function(e) NA_real_)
-  if (!is.finite(check) || abs(check - base - 2 * sum(v)) > tol)
+  for (s in intersect(syms, states)) v[s] <- at(as.numeric(states == s)) - base
+  check <- at(rep(2, length(states)))
+  if (!is.finite(check) || abs(check - base - 2 * sum(v)) > tol * max(1, abs(check)))
     return(NULL)
   v
 }
 
 #' Validate Conservation Expressions Against an Eqnlist
 #'
-#' Each expression must be linear in `eqnlist$states` and a true conservation
-#' quantity (its coefficient vector lies in the left null space of the
-#' stoichiometric matrix). The full basis must have rank equal to
-#' `nrow(conservedQuantities(eqnlist$smatrix))`.
+#' Each expression must be linear in `eqnlist$states` and conserve an amount:
+#' its coefficients divided by the volumes of their states lie in the null
+#' space of the stoichiometric matrix. Symbols other than states, volumes among
+#' them, are checked at two sets of values. Together the expressions must have
+#' the rank of the detected basis.
 #'
 #' @param totals Named list of conservation expressions.
 #' @param eqnlist The [eqnlist] to validate against.
@@ -232,54 +202,71 @@ conservedQuantities <- function(S, weight = c("none", "volume"), volumes = NULL)
          call. = FALSE)
   states <- eqnlist$states
   S <- eqnlist$smatrix; S[is.na(S)] <- 0
-
-  V <- matrix(0, length(totals), length(states),
-              dimnames = list(names(totals), states))
-  for (k in seq_along(totals)) {
-    v <- .linearCoefs(totals[[k]], states)
-    if (is.null(v))
-      stop("totals[['", names(totals)[k], "']] is not linear in the model states.",
-           call. = FALSE)
-    if (max(abs(S %*% v)) > tol)
-      stop("totals[['", names(totals)[k], "']] is not a conservation quantity ",
-           "(S %*% v is not zero).", call. = FALSE)
-    V[k, ] <- v
+  vol <- .stateVolumes(eqnlist)[states]
+  others <- setdiff(getSymbols(c(unlist(totals), vol)), states)
+  W <- NULL
+  for (u in c(0.37, 0.71)) {
+    values <- setNames(as.list(1 + u * seq_along(others)), others)
+    v_vol <- vapply(vol, function(e) eval(parse(text = e), envir = values), 0)
+    Wu <- matrix(0, length(totals), length(states), dimnames = list(names(totals), states))
+    for (k in seq_along(totals)) {
+      v <- .linearCoefs(totals[[k]], states, values)
+      if (is.null(v))
+        stop("totals[['", names(totals)[k], "']] is not linear in the model states.",
+             call. = FALSE)
+      w <- v / v_vol
+      if (max(abs(S %*% w)) > tol * max(1, abs(w)))
+        stop("totals[['", names(totals)[k], "']] is not a conserved quantity: its coefficients ",
+             "divided by the volumes are not in the null space of the stoichiometric matrix.", call. = FALSE)
+      Wu[k, ] <- w
+    }
+    W <- W %||% Wu
   }
 
-  auto <- conservedQuantities(S)
-  n_required <- if (is.null(auto)) 0L else nrow(auto)
+  n_required <- NCOL(.conservedBasis(S) %||% matrix(0, 0, 0))
   if (length(totals) != n_required)
     stop("Expected ", n_required, " conservation quantities, got ",
          length(totals), ".", call. = FALSE)
-  if (n_required > 0L && qr(V)$rank < n_required)
-    stop("Supplied `totals` are linearly dependent; rank ", qr(V)$rank,
+  if (n_required > 0L && qr(W)$rank < n_required)
+    stop("Supplied `totals` are linearly dependent; rank ", qr(W)$rank,
          " < ", n_required, ".", call. = FALSE)
   TRUE
 }
 
 #' Conserved Quantities of an Equation List
 #'
-#' Returns the user-defined totals set by [customTotals()], otherwise the
-#' basis found by [conservedQuantities()]. Totals without a user name are
-#' named after their species.
+#' @description The linear combinations of the states that the reactions leave
+#' unchanged. Every vector \eqn{w} of the null space of the stoichiometric
+#' matrix ([nullZ()]) conserves the amount
+#' \eqn{\sum_s w_s V_s x_s}{sum_s w_s V_s x_s}, written on the concentrations
+#' \eqn{x_s} with the volumes \eqn{V_s} of their compartments, 1 for a state
+#' held as an amount. Totals set by [customTotals()] replace the detected ones.
 #'
 #' @param eqnlist object of class [eqnlist].
-#' @return Named list of conservation expressions (character). Empty list when
-#'   the stoichiometric matrix admits no conserved quantities.
-#' @seealso [customTotals()], [conservedQuantities()]
+#' @return Named list of expressions, one per conserved quantity, named after
+#'   their species: a single species by its own name, several by `totalXxx`
+#'   from the name part they share, else `total_<i>`; an empty list when
+#'   nothing is conserved.
+#' @seealso [customTotals()], [Pimpl()]
+#' @example inst/examples/equations.R
 #' @export
-getTotals <- function(eqnlist) {
+conservedQuantities <- function(eqnlist) {
+  if (!inherits(eqnlist, "eqnlist"))
+    stop("conservedQuantities: `eqnlist` must be an eqnlist.", call. = FALSE)
   if (!is.null(eqnlist$totals)) return(eqnlist$totals)
   S <- eqnlist$smatrix
   if (is.null(S) || ncol(S) == 0L) return(list())
-  cq <- conservedQuantities(S)
-  if (is.null(cq) || nrow(cq) == 0L) return(list())
+  basis <- .conservedBasis(S)
+  if (is.null(basis)) return(list())
+  states <- colnames(S)
+  vol <- .stateVolumes(eqnlist)[states]
   out <- list()
-  for (i in seq_len(nrow(cq))) {
-    expr <- as.character(cq[i, 1])
-    sp   <- intersect(getSymbols(expr), eqnlist$states)
-    nm   <- .smartTotalName(sp, names(out), eqnlist$states, i)
-    out[[nm]] <- expr
+  for (k in seq_len(ncol(basis))) {
+    used <- which(basis[, k] != 0)
+    coef <- vapply(used, function(i) .weightTimes(basis[i, k], vol[[i]]), "")
+    # gsub, not sub: a basis vector may have several negative weights.
+    expr <- gsub("+-", "-", paste(coef, states[used], sep = "*", collapse = "+"), fixed = TRUE)
+    out[[.smartTotalName(states[used], names(out), eqnlist$states, k)]] <- expr
   }
   out
 }
@@ -295,7 +282,7 @@ getTotals <- function(eqnlist) {
 #' @param totals named list of expressions, or `NULL` or `list()` to return to
 #'   the detected basis.
 #' @return The eqnlist with `$totals` updated.
-#' @seealso [getTotals()]
+#' @seealso [conservedQuantities()]
 #' @export
 customTotals <- function(eqnlist, totals) {
   if (is.null(totals) || (is.list(totals) && length(totals) == 0L)) {
@@ -974,7 +961,7 @@ print.eqnlist <- function(x, pander = FALSE, ...) {
     return(invisible(x))
   }
 
-  totals <- getTotals(x)
+  totals <- conservedQuantities(x)
   if (length(totals)) {
     custom <- isTRUE(attr(x$totals, "custom"))
     cat("Conserved quantities", if (custom) " (custom)", ":\n", sep = "")
@@ -1179,7 +1166,7 @@ c.eqnlist <- function(...) {
   custom <- vapply(inputs, function(el) isTRUE(attr(el$totals, "custom")), logical(1))
   if (!any(custom)) return(out)
   totals <- unlist(lapply(inputs[custom], function(el) unclass(el$totals)))
-  auto <- unlist(lapply(inputs[!custom & hasReactions], function(el) unclass(getTotals(el))))
+  auto <- unlist(lapply(inputs[!custom & hasReactions], function(el) unclass(conservedQuantities(el))))
   if (length(auto))
     totals <- c(totals, setNames(auto, make.unique(c(names(totals), rep("total", length(auto))),
                                                    sep = "_")[-seq_along(totals)]))
@@ -1507,33 +1494,42 @@ eqnlist <- function(smatrix = NULL, states = colnames(smatrix), rates = NULL,
 #' Transform an ODE to log10 Coordinates
 #'
 #' Takes `f` as the right-hand side of \eqn{\dot x = f(x)} and returns the
-#' same system in \eqn{x_{l10} = \log_{10} x},
+#' same system with the states in `states` in \eqn{x_{l10} = \log_{10} x},
 #' \deqn{\dot x_{l10} = \frac{f(x)}{\log(10)\, x}, \qquad x = 10^{x_{l10}}.}
-#' Read results back with `10^x_l10`.
+#' A state in log10 coordinates stays positive whatever the error of the
+#' solver. Read results back with `10^x_l10`.
 #'
 #' @param f `eqnvec` or named character vector, the right-hand sides.
-#' @param suffix character appended to each state name. Default `"_l10"`.
+#' @param suffix character appended to the name of each transformed state.
+#'   Default `"_l10"`.
 #' @param simplify logical, cancel the division symbolically with the Python
 #'   module `sympy`. Default `TRUE`. With `FALSE`, or without `sympy`, the
 #'   plain quotient is returned.
-#' @return An `eqnvec` over the renamed states.
+#' @param states character, the states to transform, all of `f` by default;
+#'   the others stay linear and read the transformed ones as \eqn{10^{x_{l10}}}.
+#' @return An `eqnvec` in the order of `f`, the transformed states renamed.
 #' @seealso [odemodel()]
 #' @export
 #' @examplesIf reticulate::py_module_available("sympy")
 #' log10Transform(eqnvec(x = "-k*x"))
 #' log10Transform(eqnvec(A = "-k1*A + k2*B", B = "k1*A - k2*B"))
-log10Transform <- function(f, suffix = "_l10", simplify = TRUE) {
+#' log10Transform(eqnvec(A = "-k1*A + k2*B", B = "k1*A - k2*B"), states = "A")
+log10Transform <- function(f, suffix = "_l10", simplify = TRUE, states = names(f)) {
 
   f <- as.eqnvec(f)
-  states <- names(f)
+  lost <- setdiff(states, names(f))
+  if (length(lost))
+    stop("log10Transform: ", paste(lost, collapse = ", "), " not among the states of f.", call. = FALSE)
   renamed <- paste0(states, suffix)
+  backward <- paste0("(10^(", renamed, "))")
 
   spy <- NULL
   if (simplify)
     spy <- tryCatch(reticulate::import("sympy", convert = TRUE),
                     error = function(e) NULL)
 
-  rhs <- vapply(states, function(k) {
+  rhs <- vapply(names(f), function(k) {
+    if (!k %in% states) return(replaceSymbols(states, backward, f[[k]]))
     quotient <- paste0("(", f[[k]], ")/(", k, ")")
     if (!is.null(spy)) {
       # cancel removes the state where it divides out, expand then distributes
@@ -1547,12 +1543,12 @@ log10Transform <- function(f, suffix = "_l10", simplify = TRUE) {
         error = function(e) NULL)
       if (!is.null(cancelled)) quotient <- cancelled
     }
-    quotient <- replaceSymbols(states, paste0("(10^(", renamed, "))"), quotient)
+    quotient <- replaceSymbols(states, backward, quotient)
     # a bare symbol needs no parentheses; anything else does
     if (grepl("^-?[A-Za-z0-9_.]+$", quotient)) paste0(quotient, "/log(10)")
     else paste0("(", quotient, ")/log(10)")
   }, character(1))
 
-  as.eqnvec(setNames(rhs, renamed))
+  as.eqnvec(setNames(rhs, ifelse(names(f) %in% states, paste0(names(f), suffix), names(f))))
 
 }

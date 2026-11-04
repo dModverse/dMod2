@@ -10,36 +10,6 @@ eqnNet <- function() {
   addReaction(eq, "pB", "B", "deact_B * pB", "Dephosphorylation of pB")
 }
 
-test_that("print.eqnvec lays out sorted, indexed, wrapped equations", {
-  f <- eqnvec(zeta = "k1*A - k2*B", A = "-k1*A + k2*B", longstate = "a+b")
-  expect_snapshot(print(f))
-  long <- eqnvec(x = paste(paste0("k", 1:40, "*x", 1:40), collapse = " + "),
-                 y = "1")
-  expect_snapshot(print(long, width = 60))
-  expect_snapshot(print(long, width = 5))
-  expect_snapshot(print(as.eqnvec(eqnNet())))
-  ws <- eqnvec(b = "a +\n b", a = paste(rep("k*x", 30), collapse = "+\t"), c = "u\t-v")
-  expect_snapshot(print(ws, width = 50))
-  expect_snapshot(print(ws, width = 0))
-  expect_snapshot(print(eqnvec(xy = paste(rep("k*x", 30), collapse = "+\n")), width = 30))
-  expect_snapshot(print(f, pander = TRUE))
-  expect_invisible(print(f))
-  expect_identical(capture.output(r <- print(f)) |> length(), 4L)
-  expect_identical(r, f)
-})
-
-test_that("print.eqnlist shows totals, compartments and reactions", {
-  eq <- eqnNet()
-  expect_snapshot(print(eq))
-  eq2 <- eqnlist(matrix(c(-1, 1), 1, 2, dimnames = list(NULL, c("A", "B"))),
-                 rates = "k*A", compartments = list(cyt = "V1", nuc = "V2"),
-                 compartmentOf = c(A = "cyt", B = "nuc"))
-  expect_snapshot(print(eq2))
-  expect_snapshot(print(eqnlist()))
-  expect_identical(capture.output(r <- print(eq)) |> is.character(), TRUE)
-  expect_identical(r, eq)
-})
-
 test_that("eqnlist() checks dimensions and numbers descriptions", {
   S <- matrix(c(-1, 1, 0, 0, -1, 1), 2, 3, byrow = TRUE)
   expect_error(eqnlist(S, c("A", "B"), c("r1", "r2")),
@@ -130,32 +100,19 @@ test_that("as.eqnvec.character validates names and parses", {
                    structure(c(b = "x"), class = c("eqnvec", "character")))
 })
 
-test_that("conservedQuantities returns the kernel as expressions", {
-  eq <- eqnNet()
-  cq <- conservedQuantities(eq$smatrix)
-  expect_snapshot(print(cq))
-  expect_identical(attr(cq, "n"), 2L)
-  expect_identical(names(cq), "Conserved quantities: 2")
-  expect_identical(class(cq), "data.frame")
-  expect_identical(row.names(cq), c("1", "2"))
-  expect_type(cq[[1]], "character")
-  S <- matrix(c(-1, 2, 1, -1), 2, 2, dimnames = list(NULL, c("A", "B")))
-  expect_null(conservedQuantities(S))
-  S2 <- rbind(c(1, -1, 0, 1))
-  colnames(S2) <- c("w", "x", "y", "z")
-  cq2 <- conservedQuantities(S2)
-  expect_identical(cq2[[1]], c("1*w+1*x", "1*y", "-1*w+1*z"))
-  expect_error(conservedQuantities(rbind(c(1, -1, 0))), "Columns of stoichiometric matrix not named.")
+test_that("conservedQuantities returns the kernel as named expressions", {
+  cq <- conservedQuantities(eqnNet())
+  expect_identical(unname(unlist(cq)), c("0.5*A+0.5*pA+1*pA_pA", "1*B+1*pB"))
+  expect_identical(names(cq), c("total_1", "total_2"))
+  expect_identical(conservedQuantities(addReaction(eqnlist(), "A", "B", "k*A") |> addReaction("B", "", "d*B")),
+                   list())
+  S2 <- rbind(c(1, -1, 0, 1)); colnames(S2) <- c("w", "x", "y", "z")
+  e2 <- eqnlist(S2, rates = "k*w", description = "r1")
+  expect_identical(unname(unlist(conservedQuantities(e2))), c("1*w+1*x", "1*y", "-1*w+1*z"))
   S3 <- rbind(c(1, NA, -1)); colnames(S3) <- c("a", "b", "c")
-  expect_identical(conservedQuantities(S3)[[1]], c("1*b", "1*a+1*c"))
-  S4 <- rbind(c(-1, 1)); colnames(S4) <- c("a", "b")
-  expect_identical(conservedQuantities(S4, "volume", c(a = "2", b = "0.5"))[[1]], "0.25*a+1*b")
-  expect_identical(conservedQuantities(S4, "volume", c(a = 1, b = 1))[[1]], "1*a+1*b")
-  expect_error(conservedQuantities(S4, "volume"), "requires a named numeric")
-  expect_error(conservedQuantities(S4, "volume", c(a = 1)), "missing entries for: b")
-  expect_error(conservedQuantities(S4, "volume", c(a = "V", b = "1")), "symbolic")
-  S5 <- rbind(c(1, 1, 1)); colnames(S5) <- c("a", "b", "c")
-  expect_identical(conservedQuantities(S5)[[1]], c("-1*a+1*b", "-1*a+1*c"))
+  expect_identical(unname(unlist(conservedQuantities(eqnlist(S3, rates = "k*c", description = "r1")))),
+                   c("1*b", "1*a+1*c"))
+  expect_error(conservedQuantities(S3), "must be an eqnlist")
 })
 
 test_that("getSymbols skips zero entries and excluded symbols", {

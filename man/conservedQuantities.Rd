@@ -2,30 +2,26 @@
 % Please edit documentation in R/eqnClass.R
 \name{conservedQuantities}
 \alias{conservedQuantities}
-\title{Determine Conserved Quantities from the Stoichiometric Matrix}
+\title{Conserved Quantities of an Equation List}
 \usage{
-conservedQuantities(S, weight = c("none", "volume"), volumes = NULL)
+conservedQuantities(eqnlist)
 }
 \arguments{
-\item{S}{numeric matrix, one row per reaction and one named column per
-state. \code{NA} entries count as 0.}
-
-\item{weight}{One of \code{"none"} (default) or \code{"volume"}. When \code{"volume"}, the
-columns of \code{S} are multiplied by their compartment volume before the kernel
-is computed, so the returned quantities are conserved in \emph{amount} rather
-than concentration. Requires \code{volumes} to be supplied as numeric.}
-
-\item{volumes}{Optional named numeric vector of volume values keyed by state,
-aligned with \code{colnames(S)}. Only consulted when \code{weight = "volume"}.}
+\item{eqnlist}{object of class \link{eqnlist}.}
 }
 \value{
-\code{NULL} if nothing is conserved, otherwise a data frame with one
-character column of expressions such as \code{"1*A+1*pA"}, one row per
-conserved quantity, and their number in the attribute \code{n}.
+Named list of expressions, one per conserved quantity, named after
+their species: a single species by its own name, several by \code{totalXxx}
+from the name part they share, else \verb{total_<i>}; an empty list when
+nothing is conserved.
 }
 \description{
-Each vector of the null space basis of \code{S} (\code{\link[=nullZ]{nullZ()}}) gives one linear
-combination of the states that the reactions leave unchanged.
+The linear combinations of the states that the reactions leave
+unchanged. Every vector \eqn{w} of the null space of the stoichiometric
+matrix (\code{\link[=nullZ]{nullZ()}}) conserves the amount
+\eqn{\sum_s w_s V_s x_s}{sum_s w_s V_s x_s}, written on the concentrations
+\eqn{x_s} with the volumes \eqn{V_s} of their compartments, 1 for a state
+held as an amount. Totals set by \code{\link[=customTotals]{customTotals()}} replace the detected ones.
 }
 \examples{
 ## Equation list
@@ -41,8 +37,7 @@ reactions <- getReactions(eq)
 print(reactions)
 
 ## Conserved quantities
-cq <- conservedQuantities(eq$smatrix)
-print(cq)
+print(conservedQuantities(eq))
 
 ## Fluxes
 fluxes <- getFluxes(eq)
@@ -57,4 +52,7 @@ print(subeq2)
 ## Equation vector of the ODE
 f <- as.eqnvec(eq)
 print(f)
+}
+\seealso{
+\code{\link[=customTotals]{customTotals()}}, \code{\link[=Pimpl]{Pimpl()}}
 }

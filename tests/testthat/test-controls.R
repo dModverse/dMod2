@@ -332,18 +332,19 @@ test_that("Pimpl reads keepRoot and its solver options from controls", {
   }, add = TRUE)
   expect_identical(controls(pim, NULL, "controlsPTC"), list())
 
-  resetWarmStarts(pim, verbose = FALSE)
-  reg <- environment(.ctl_kernel(pim))$reg
+  E <- environment(.ctl_kernel(pim))
   controls(pim, NULL, "keepRoot") <- FALSE
+  E$statsReset()
   expect_equal(as.numeric(pim(c(a = 4, x = 1))[[1]]["x"]), 2, tolerance = 1e-8)
-  expect_null(reg$get(NULL)$arch)
-  controls(pim, NULL, "keepRoot") <- TRUE
   pim(c(a = 4, x = 1))
-  expect_false(is.null(reg$get(NULL)$arch))
+  expect_equal(c(E$stats$solves, E$stats$memo), c(2L, 0L))
+  controls(pim, NULL, "keepRoot") <- TRUE
+  E$statsReset()
+  pim(c(a = 4, x = 1)); pim(c(a = 4, x = 1))
+  expect_equal(c(E$stats$solves, E$stats$memo), c(1L, 1L))
 
   # One damped Newton step from far away does not reach the root, and every
   # attempt says so.
-  resetWarmStarts(pim, verbose = FALSE)
   controls(pim, NULL, "controlsPTC") <- list(maxit = 1L)
   expect_error(pim(c(a = 4, x = 1e3)), "no convergence in 1 iteration")
 

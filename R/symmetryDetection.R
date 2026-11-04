@@ -458,7 +458,9 @@ reconstControl <- function(relevanceCap = 6L, relevanceCapDir = 24L, relevanceCa
     out$reactions <- list(species = as.list(colnames(f$smatrix)),
                           smatrix = lapply(seq_len(nrow(S)), function(i) I(as.numeric(S[i, ]))),
                           rates = as.list(as.character(f$rates)))
-    tt <- getTotals(f)
+    # a state no reaction changes is an input, not a total
+    held <- colnames(S)[colSums(abs(S)) == 0]
+    tt <- Filter(function(e) !all(intersect(getSymbols(e), f$states) %in% held), conservedQuantities(f))
     if (length(tt)) out$totals <- lapply(tt, as.character)
   }
   out$f <- eqn(as.eqnvec(f))

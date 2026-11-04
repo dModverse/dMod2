@@ -14,6 +14,8 @@ exportPEtab(
   lower = NULL,
   upper = NULL,
   fixed = NULL,
+  steadyState = NULL,
+  events = NULL,
   parameterScale = NULL,
   observableTransformation = "lin",
   noiseDistribution = "normal",
@@ -43,9 +45,9 @@ the source of truth for parameters.tsv, conditions.tsv, and
 chosen \code{parameterScale}. Names become \code{parameterId}s in parameters.tsv.}
 
 \item{errors}{Noise formulas keyed by observableId. Accepts a named
-character vector, \link{eqnvec}, or a Y-built error function. If \code{NULL},
-defaults to \code{"1"} per observable, or to the column \code{sigma} of the data
-where it is given.}
+character vector, \link{eqnvec}, or a Y-built error function. An observable it
+leaves out takes the column \code{sigma} of the data. If \code{NULL}, every
+observable does, or has the noise \code{"1"} without that column.}
 
 \item{lower, upper}{Named numeric vectors of bounds, on the same scale as
 \code{pouter}. Default \code{NULL}: five decades around \code{pouter} for log and log10
@@ -53,6 +55,18 @@ parameters, \code{-Inf} and \code{Inf} for linear ones.}
 
 \item{fixed}{Named numeric vector of parameters that are not estimated, on
 the linear scale. Default \code{NULL}.}
+
+\item{steadyState}{The \code{parfn} of \code{\link[=Pimpl]{Pimpl()}} between \code{p} and the prediction,
+or \code{NULL} (default). Every condition then starts from the steady state of
+\code{reactions}, written as a pre-equilibration: one species per conserved
+total starts at the total over its coefficient, the other states it
+sets at 0, and the conditions with equal parameters share one
+pre-equilibration condition.}
+
+\item{events}{An \code{eventlist} of the model, or \code{NULL} (default). Events at
+time 0 that replace a state set it in the condition table, after the
+pre-equilibration where there is one; their values are evaluated with the
+trafo of each condition.}
 
 \item{parameterScale}{\code{NULL} (default) reads the scale off \code{p}: a
 parameter entering only as \code{exp(X)} is \code{"log"}, one entering only as
@@ -94,9 +108,8 @@ wrap; for any other mapping it is written as \verb{<name>_outer}.
 }
 \section{Limitations}{
 
-Pre-equilibration cannot be expressed through the trafo \code{p} alone, use
-\code{\link[=exportPEtabObject]{exportPEtabObject()}} for those problems. Fixed parameters are always
-written with \code{parameterScale = "lin"}.
+Events other than those at time 0 that replace a state are not written.
+Fixed parameters are always written with \code{parameterScale = "lin"}.
 }
 
 \examples{

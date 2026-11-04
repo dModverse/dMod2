@@ -39,7 +39,7 @@ test_that("conserved quantities have no rounding residues", {
   Z <- nullZ(S)
   expect_false(any(Z != 0 & abs(Z) < 1e-10))
   expect_equal(max(abs(S %*% Z)), 0)
-  cq <- conservedQuantities(S)[[1]]
+  cq <- unlist(conservedQuantities(eqnlist(S, rates = paste0("k", 1:8), description = paste0("r", 1:8))))
   expect_false(any(grepl("e-1", cq)))
 })
 
@@ -84,13 +84,23 @@ test_that("c() keeps the layout of an eqnlist without reactions and custom total
   expect_equal(both$compartmentOf[["A"]], "cyt")
   f <- customTotals(addReaction(eqnlist(), "A", "B", "k1*A"), list(tot = "A + B"))
   g <- addReaction(eqnlist(), "C", "D", "k2*C")
-  expect_true("tot" %in% names(getTotals(c(f, g))))
+  expect_true("tot" %in% names(conservedQuantities(c(f, g))))
 })
 
 test_that("log10Transform keeps names that sympy knows as constants", {
   skip_if_not_installed("reticulate")
   expect_match(log10Transform(eqnvec(x = "-E^2*x"))[["x_l10"]], "E")
   expect_match(log10Transform(eqnvec(x = "I^2*x"))[["x_l10"]], "I")
+})
+
+test_that("log10Transform takes a subset of the states, the others read them back", {
+  f <- eqnvec(A = "-k1*A + k2*B", B = "k1*A - k2*B")
+  sub <- log10Transform(f, states = "A", simplify = FALSE)
+  expect_identical(names(sub), c("A_l10", "B"))
+  at <- list(A_l10 = log10(2), B = 3, k1 = 0.5, k2 = 0.25)
+  expect_equal(eval(parse(text = sub[["A_l10"]]), at), (-0.5 * 2 + 0.25 * 3) / (2 * log(10)))
+  expect_equal(eval(parse(text = sub[["B"]]), at), 0.5 * 2 - 0.25 * 3)
+  expect_error(log10Transform(f, states = "C"), "C not among")
 })
 
 test_that("format.eqnvec pads operators, not powers or exponents", {

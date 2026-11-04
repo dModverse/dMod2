@@ -1332,13 +1332,14 @@ readPEtabTables <- function(yamlPath) {
     # Totals of the conserved quantities from the species initials, over the
     # network without its structurally zero states, as Pimpl derives them.
     peq_totals <- if (length(peq_reactions$states))
-      getTotals(.zeroStatesFromSmatrix(peq_reactions)$eqnlist)
+      conservedQuantities(.zeroStatesFromSmatrix(peq_reactions)$eqnlist)
     for (tn in names(peq_totals)) {
-      sp <- getSymbols(peq_totals[[tn]])
+      sp <- intersect(getSymbols(peq_totals[[tn]]), peq_reactions$states)
       if (!all(sp %in% names(tr_pre)))
         stop("PEtab: the preequilibration total ", tn, " needs initial values for ",
              paste(setdiff(sp, names(tr_pre)), collapse = ", "), ".", call. = FALSE)
-      tr_pre[tn] <- replaceSymbols(sp, paste0("(", tr_pre[sp], ")"), peq_totals[[tn]])
+      sy <- intersect(getSymbols(peq_totals[[tn]]), names(tr_pre))
+      tr_pre[tn] <- replaceSymbols(sy, paste0("(", tr_pre[sy], ")"), peq_totals[[tn]])
     }
 
     pre_tr[[sub]] <- tr_pre
@@ -1951,8 +1952,7 @@ readPEtabTables <- function(yamlPath) {
 #'   estimated parameter, with the PEtab scales in its attribute
 #'   `"petab_scales"`. The attribute `"petab_meta"` of the list holds what
 #'   [exportPEtabObject()] needs, among it the fixed parameters as `fixed`.
-#' @seealso [exportPEtabObject()], [readPEtabTables()], [importSbml()],
-#'   \code{vignette("PEtab", package = "dMod2")}
+#' @seealso [exportPEtabObject()], [readPEtabTables()], [importSbml()]
 #' @examplesIf requireNamespace("reticulate", quietly = TRUE) && requireNamespace("rjson", quietly = TRUE) && requireNamespace("yaml", quietly = TRUE) && reticulate::py_module_available("libsbml")
 #' \donttest{
 #' yaml <- system.file("extdata/petab_boehm/Boehm.yaml", package = "dMod2")
@@ -2589,6 +2589,88 @@ print.petabproblem <- function(x, ...) {
 }
 
 
+# Internal: the states a Pimpl() steady state sets, its totals, and the initial values that let
+# a PEtab pre-equilibration reach the same steady state: one species per total, in no other
+# total, starts at the total over its coefficient, every other set state at 0.
+.petab_steady_state <- function(steadyState, reactions) {
+  if (is.null(steadyState)) return(NULL)
+  rows <- if (inherits(steadyState, "parfn")) getEquations(steadyState)
+  if (is.list(rows)) rows <- rows[[1L]]
+  if (is.null(rows))
+    stop("exportPEtab: `steadyState` must be the parfn of Pimpl().", call. = FALSE)
+  states <- reactions$states
+  S <- reactions$smatrix
+  S[is.na(S)] <- 0
+  held <- colnames(S)[colSums(abs(S)) == 0]
+  set <- setdiff(states, held)
+  totals <- setdiff(names(rows), states)
+  # a conservation row is (C x) - total, linear in the species
+  members <- lapply(setNames(totals, totals), function(tn)
+    intersect(getSymbols(as.character(rows[[tn]])), set))
+  inits <- as.list(setNames(rep(0, length(set)), set))
+  for (tn in totals) {
+    own <- setdiff(members[[tn]], unlist(members[setdiff(totals, tn)]))
+    if (!length(own))
+      stop("exportPEtab: every species of the total ", tn, " belongs to another total as well; ",
+           "the pre-equilibration has no initial value that holds the totals.", call. = FALSE)
+    coef <- vapply(own, function(sp)
+      paste(deparse(stats::D(str2lang(as.character(rows[[tn]])), sp)), collapse = ""), "")
+    num <- suppressWarnings(as.numeric(coef))
+    k <- if (any(num %in% 1)) which(num %in% 1)[1] else if (any(!is.na(num))) which(!is.na(num))[1] else 1L
+    inits[[own[k]]] <- if (num[k] %in% 1) tn else paste0(tn, " / (", coef[k], ")")
+  }
+  list(states = set, totals = totals, inits = inits)
+}
+
+
+# Internal: the pre-equilibration condition of each condition, one per distinct row of the
+# decomposed condition table; NULL without a steady state. The extended table is the attribute
+# "conditions".
+.petab_preequilibration <- function(decomp, ss) {
+  if (is.null(ss)) return(NULL)
+  cdf <- decomp$conditions_df
+  cols <- setdiff(colnames(cdf), "conditionId")
+  key <- if (length(cols)) do.call(paste, c(lapply(cols, function(cn) as.character(cdf[[cn]])),
+                                            sep = "\r")) else rep("", nrow(cdf))
+  groups <- unique(key)
+  ids <- if (length(groups) == 1L) "preequilibration" else paste0("preequilibration_", seq_along(groups))
+  ids <- make.unique(c(rownames(cdf), ids))[nrow(cdf) + seq_along(ids)]
+  rows <- cdf[match(groups, key), , drop = FALSE]
+  rows$conditionId <- ids
+  rownames(rows) <- ids
+  structure(setNames(ids[match(key, groups)], rownames(cdf)), conditions = rbind(cdf, rows))
+}
+
+
+# Internal: events at time 0 that replace a state as columns of the condition table, valued per
+# condition `conds` by its stripped trafo; the other rows, pre-equilibrations, leave them empty.
+.petab_start_events <- function(events, cdf, conds, states, stripped, outer_ids) {
+  if (is.null(events) || !NROW(events)) return(cdf)
+  ev <- as.data.frame(events, stringsAsFactors = FALSE)
+  t0 <- suppressWarnings(as.numeric(as.character(ev$time)))
+  ok <- as.character(ev$var) %in% states & as.character(ev$method) == "replace" & t0 %in% 0
+  if (!all(ok))
+    stop("exportPEtab writes events at time 0 that replace a state; ",
+         paste(unique(as.character(ev$var[!ok])), collapse = ", "), " has another.", call. = FALSE)
+  for (i in seq_len(nrow(ev))) {
+    var <- as.character(ev$var[i])
+    vals <- vapply(conds, function(cn) {
+      tr <- stripped[[cn]]
+      v <- replaceSymbols(names(tr), paste0("(", as.character(tr), ")"), as.character(ev$value[i]))
+      miss <- setdiff(getSymbols(v), outer_ids)
+      if (length(miss))
+        stop("exportPEtab: the event on ", var, " depends on ", paste(miss, collapse = ", "),
+             ", which is no parameter of the problem.", call. = FALSE)
+      num <- tryCatch(eval(str2lang(v), baseenv()), error = function(e) NULL)
+      if (is.numeric(num) && length(num) == 1L) format(num, digits = 17) else v
+    }, "")
+    cdf[[var]] <- NA_character_
+    cdf[conds, var] <- unname(vals)
+  }
+  cdf
+}
+
+
 #' Export a dMod Problem to PEtab
 #'
 #' Writes a PEtab v1 or v2 problem to `dir`: the parameter, observable,
@@ -2597,9 +2679,8 @@ print.petabproblem <- function(x, ...) {
 #' values are read off the parameter transformation `p`.
 #'
 #' @section Limitations:
-#' Pre-equilibration cannot be expressed through the trafo `p` alone, use
-#' [exportPEtabObject()] for those problems. Fixed parameters are always
-#' written with `parameterScale = "lin"`.
+#' Events other than those at time 0 that replace a state are not written.
+#' Fixed parameters are always written with `parameterScale = "lin"`.
 #'
 #' @param data A [datalist] (or a list of data.frames keyed by condition,
 #'   each with `name`, `time`, `value` columns; or a long-format data.frame
@@ -2615,14 +2696,24 @@ print.petabproblem <- function(x, ...) {
 #' @param pouter Named numeric vector of estimated outer parameters, on the
 #'   chosen `parameterScale`. Names become `parameterId`s in parameters.tsv.
 #' @param errors Noise formulas keyed by observableId. Accepts a named
-#'   character vector, [eqnvec], or a Y-built error function. If `NULL`,
-#'   defaults to `"1"` per observable, or to the column `sigma` of the data
-#'   where it is given.
+#'   character vector, [eqnvec], or a Y-built error function. An observable it
+#'   leaves out takes the column `sigma` of the data. If `NULL`, every
+#'   observable does, or has the noise `"1"` without that column.
 #' @param lower,upper Named numeric vectors of bounds, on the same scale as
 #'   `pouter`. Default `NULL`: five decades around `pouter` for log and log10
 #'   parameters, `-Inf` and `Inf` for linear ones.
 #' @param fixed Named numeric vector of parameters that are not estimated, on
 #'   the linear scale. Default `NULL`.
+#' @param steadyState The `parfn` of [Pimpl()] between `p` and the prediction,
+#'   or `NULL` (default). Every condition then starts from the steady state of
+#'   `reactions`, written as a pre-equilibration: one species per conserved
+#'   total starts at the total over its coefficient, the other states it
+#'   sets at 0, and the conditions with equal parameters share one
+#'   pre-equilibration condition.
+#' @param events An `eventlist` of the model, or `NULL` (default). Events at
+#'   time 0 that replace a state set it in the condition table, after the
+#'   pre-equilibration where there is one; their values are evaluated with the
+#'   trafo of each condition.
 #' @param parameterScale `NULL` (default) reads the scale off `p`: a
 #'   parameter entering only as `exp(X)` is `"log"`, one entering only as
 #'   `10^(X)` or `exp10(X)` is `"log10"`, anything else `"lin"`. Otherwise a
@@ -2661,6 +2752,7 @@ print.petabproblem <- function(x, ...) {
 exportPEtab <- function(data, reactions, observables, p, pouter,
                         errors = NULL,
                         lower = NULL, upper = NULL, fixed = NULL,
+                        steadyState = NULL, events = NULL,
                         parameterScale = NULL,
                         observableTransformation = "lin",
                         noiseDistribution = "normal",
@@ -2690,10 +2782,11 @@ exportPEtab <- function(data, reactions, observables, p, pouter,
 
   pull_eqns <- function(obj, what) {
     if (is.function(obj)) {
-      eqns <- attr(obj, "equations")
-      if (is.null(eqns))
-        stop(sprintf(
-          "`%s` is a function but has no `equations` attribute.", what))
+      # a function object of Y() keeps its equations per condition in its mappings
+      eqns <- attr(obj, "equations") %||%
+        if (inherits(obj, "fn")) Filter(Negate(is.null), getEquations(obj))
+      if (!length(eqns))
+        stop(sprintf("`%s` is a function without equations.", what))
       if (is.list(eqns)) eqns <- eqns[[1L]]
       return(setNames(as.character(eqns), names(eqns)))
     }
@@ -2719,12 +2812,22 @@ exportPEtab <- function(data, reactions, observables, p, pouter,
       setNames(rep("1", length(obs_ids)), obs_ids)
   } else {
     err_eqns <- pull_eqns(errors, "errors")
+    # an observable the error model leaves out takes the sigma of its data, as in normL2(), and
+    # one without data the noise 1
+    rest <- setdiff(obs_ids, names(err_eqns))
+    sigmas <- lapply(setNames(rest, rest), function(o) unlist(lapply(data, function(d)
+      if (!"sigma" %in% colnames(d)) rep(NA, sum(as.character(d$name) == o))
+      else d$sigma[as.character(d$name) == o])))
+    unseen <- rest[lengths(sigmas) == 0L]
+    given <- rest[vapply(sigmas, function(x) length(x) && !anyNA(x), logical(1))]
+    err_eqns <- c(err_eqns, setNames(rep("1", length(unseen)), unseen),
+                  setNames(paste0("noiseParameter1_", given), given))
   }
   miss <- setdiff(obs_ids, names(err_eqns))
   if (length(miss))
     stop("`errors` is missing entries for: ", paste(miss, collapse = ", "))
   err_eqns <- err_eqns[obs_ids]
-  use_per_row_noise <- is.null(errors) && has_per_row_sigma
+  use_per_row_noise <- has_per_row_sigma && any(grepl("^noiseParameter1_", err_eqns))
 
   ## --- 4. inner_pars / obs_inner (mirror importer logic) ------------------
   rate_syms <- unique(unlist(lapply(reactions$rates, function(r)
@@ -2742,6 +2845,12 @@ exportPEtab <- function(data, reactions, observables, p, pouter,
   # parameters, so the decomposer must not expect a mapping for them.
   obs_inner <- obs_inner[!grepl(
     "^(observable|noise)Parameter[0-9]+_", obs_inner)]
+
+  # The states a steady state sets come from the pre-equilibration, not from `p`;
+  # its totals are parameters of the initial values.
+  ss <- .petab_steady_state(steadyState, reactions)
+  trafo_states <- setdiff(states, ss$states)
+  inner_pars <- union(inner_pars, ss$totals)
 
   ## --- 5. validate pouter / fixed / scales --------------------------------
   pouter_ids <- names(pouter)
@@ -2768,9 +2877,10 @@ exportPEtab <- function(data, reactions, observables, p, pouter,
   if (length(bad))
     stop("Unknown parameterScale(s): ", paste(bad, collapse = ", "))
 
-  # Fixed parameters are linear: exportPEtabObject writes them with
-  # parameterScale "lin".
-  scales_fixed <- setNames(rep("lin", length(fixed)), names(fixed))
+  # Fixed values are linear, the values that enter the model; their wrap in `p`
+  # is stripped as for the estimated ones, and exportPEtabObject writes them
+  # with parameterScale "lin".
+  scales_fixed <- .petab_detect_scales(eqs, names(fixed))
   scales_all   <- c(scales_pouter, scales_fixed)
 
   ## --- 6. bounds ----------------------------------------------------------
@@ -2822,12 +2932,17 @@ exportPEtab <- function(data, reactions, observables, p, pouter,
   ## --- 7. decompose trafo -------------------------------------------------
   decomp <- .petab_decompose_trafo(
     eqs           = eqs,
-    states        = states,
+    states        = trafo_states,
     inner_pars    = inner_pars,
     obs_inner     = obs_inner,
     pouter_names  = pouter_ids,
     fixed         = fixed,
     scales        = scales_all)
+  decomp$inits[names(ss$inits)] <- ss$inits
+  preeq_of <- .petab_preequilibration(decomp, ss)
+  decomp$conditions_df <- .petab_start_events(
+    events, attr(preeq_of, "conditions") %||% decomp$conditions_df, conds, states,
+    .petab_strip_trafo(eqs, scales_all), c(pouter_ids, names(fixed)))
   .petab_check_self_refs(decomp$inits, decomp$conditions_df)
 
   # Decomposer SBML defaults split in two: override targets need an SBML
@@ -2900,7 +3015,7 @@ exportPEtab <- function(data, reactions, observables, p, pouter,
         data_filtered[[sub_name]] <- d_sub
         scm_rows[[length(scm_rows) + 1L]] <- data.frame(
           simulationConditionId       = c,
-          preequilibrationConditionId = "",
+          preequilibrationConditionId = preeq_of[[c]] %||% "",
           sub_condition               = sub_name,
           stringsAsFactors            = FALSE)
         noi_subs_by_sub[[sub_name]] <- c("*" = sig_str[sel[[1L]]])
@@ -2909,7 +3024,7 @@ exportPEtab <- function(data, reactions, observables, p, pouter,
       data_filtered[[c]] <- d
       scm_rows[[length(scm_rows) + 1L]] <- data.frame(
         simulationConditionId       = c,
-        preequilibrationConditionId = "",
+        preequilibrationConditionId = preeq_of[[c]] %||% "",
         sub_condition               = c,
         stringsAsFactors            = FALSE)
     }
@@ -2921,7 +3036,7 @@ exportPEtab <- function(data, reactions, observables, p, pouter,
       stringsAsFactors = FALSE)
     scm_rows[[length(scm_rows) + 1L]] <- data.frame(
       simulationConditionId       = c,
-      preequilibrationConditionId = "",
+      preequilibrationConditionId = preeq_of[[c]] %||% "",
       sub_condition               = c,
       stringsAsFactors            = FALSE)
   }

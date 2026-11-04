@@ -19,25 +19,31 @@ Run from the package root.
 
 | Script | Content |
 |---|---|
-| `battery.R [ndraw] [nwalk]` | Cold solves at random parameters in all arms, warm solves along random walks; residual, conservation, stability, IFT sensitivities against finite differences |
+| `battery.R [ndraw] [nwalk]` | Solves at random parameters in all arms and along random walks; residual, conservation, stability, IFT sensitivities against finite differences |
 | `exact.R [n]` | Steady states from `steadyStates()` at random values of its free symbols; `Pimpl()` has to return them |
 | `fit.R [nfits] [cores]` | One `trust()` fit and a multistart with the `Pimpl()` statistics |
 | `petab.R <dir> <out.rds> [problems] [nevals]` | Benchmark problems: objective, predictions against `simulatedData`, objective and gradient at perturbed parameters |
 
 ## Results
 
-dMod2 0.9.0, cppDE 0.11.0.
+dMod2 and cppDE development versions after 0.14.0 and 0.13.4: the roots of `Pimpl()` in C++,
+each from the start its values give.
 
-- `battery.R 60 10`: 300/300 cold and 250/250 warm solves, median 0.008 s,
-  4.9 iterations per solve. Conservation error 6.5e-16, all roots stable,
-  IFT sensitivities within 2.4e-3 of central differences.
-- `exact.R 40`: of 190 stable exact states, 185 are returned from a cold
-  start (median relative error at most 2e-12) and 5 lie in a second stable
-  basin; none wrong, none failed. Started at the exact state, `Pimpl()`
-  returns it unchanged.
-- `fit.R 16 8`: in the `trust()` fit 95% of the calls are answered from
-  memory, every solve starts from the kept root of its condition, 4.0
-  iterations per solve, no failure. Multistart: 12 of 16 fits converge.
+- `battery.R 60 10`: 300/300 solves at random parameters and 250/250 along random walks, median
+  0.003 s, 27.1 iterations per solve. Conservation error 8.2e-16, all roots stable, IFT
+  sensitivities within 4.9e-8 of central differences. The largest residual relative to its
+  turnover, 0.13, is in a row that turns over 5e-21.
+- `exact.R 40`: of 190 stable exact states, 185 are returned (median relative error at most
+  1.3e-13) and 5 lie in a second stable basin; none wrong, none failed. Started at the exact state,
+  `Pimpl()` returns it unchanged.
+- `fit.R 16 8`: the `trust()` fit converges at 1372.17 in 119 iterations; 2900 of its 3480 calls
+  are answered from memory, 30 iterations per solve, no failure. Multistart: 16 of 16 fits
+  converge, 218 s on 8 cores.
+
+dMod2 0.9.0, cppDE 0.11.0, with warm starts from the kept roots: `battery.R` 0.008 s per solve,
+IFT within 2.4e-3 of central differences; `exact.R` median relative error at most 2e-12;
+`fit.R` 12 of 16 fits converge.
+
 - `petab.R` on 10 problems of the collection, against dMod2 0.8.2 with
   `Pequil()`:
 

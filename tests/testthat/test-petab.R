@@ -403,6 +403,63 @@ test_that("native exportPEtab roundtrips outer pouter on log10 scale (1-cond)", 
 
 
 
+test_that("exportPEtab writes a Pimpl() steady state and events at time 0", {
+
+  withr::local_dir(tempdir())
+  if (!.libsbml_works()) skip("libsbml virtualenv not available")
+
+  nat <- .petab_native()
+  data <- as.datalist(data.frame(
+    name = "obs_b", time = c(1, 5, 1, 5), value = c(0.4, 0.5, 0.9, 1.2), sigma = 0.1,
+    condition = c("rest", "rest", "dosed", "dosed"), stringsAsFactors = FALSE))
+  pouter <- c(k0 = log(0.2), k1 = log(0.5), k2 = log(0.3), total_1 = log(2))
+  prd <- nat$g_ss * nat$x_ss * nat$p_ss_eq * nat$p_ss
+  v_native <- normL2(data, prd)(c(pouter, s = log(1.5)), deriv = FALSE)$value
+
+  for (v in c("1", "2.0.0")) {
+    yaml <- suppressWarnings(exportPEtab(
+      data = data, reactions = nat$ss, observables = nat$g_ss, p = nat$p_ss, pouter = pouter,
+      fixed = c(s = 1.5), steadyState = nat$p_ss_eq, events = nat$ev_ss, modelID = "ss_export",
+      formatVersion = v, dir = file.path(tempdir(), paste0("petab_ss_", v)), overwrite = TRUE))
+    petab <- importPEtab(yaml, backend = "deSolve", modelname = paste0("ss_imp_", v),
+                         cores = test_cores())
+    expect_equal(petab$obj(petab$bestfit, deriv = FALSE)$value, v_native, tolerance = 1e-6)
+  }
+  expect_error(exportPEtab(
+    data = data, reactions = nat$ss, observables = nat$g_ss, p = nat$p_ss, pouter = pouter,
+    fixed = c(s = 1.5), steadyState = nat$p_ss_eq,
+    events = addEvent(NULL, var = "u", time = 1, value = "dose", method = "replace"),
+    dir = file.path(tempdir(), "petab_ss_late"), overwrite = TRUE), "time 0")
+})
+
+
+
+test_that("exportPEtab reads the observables of a Y()-built observation function", {
+
+  withr::local_dir(tempdir())
+  if (!.libsbml_works()) skip("libsbml virtualenv not available")
+
+  nat <- .petab_native()
+  data <- as.datalist(data.frame(
+    name = c("obs_a", "obs_b"), time = c(1, 1),
+    value = c(0.5, 0.3), sigma = c(1, 1),
+    condition = c("c1", "c1"), stringsAsFactors = FALSE))
+
+  out_dir <- file.path(tempdir(), "petab_yobs")
+  exportPEtab(
+    data = data, reactions = nat$ab, observables = nat$g_ab,
+    p = nat$p_rt1, pouter = c(A = -1, B = -1, K1 = -1, K2 = -1),
+    parameterScale = "log10", modelID = "yobs_export",
+    formatVersion = "1", dir = out_dir, overwrite = TRUE)
+
+  tab <- read.delim(file.path(out_dir, "observables_yobs_export.tsv"), stringsAsFactors = FALSE)
+  expect_setequal(tab$observableId, names(nat$obs_ab))
+  expect_equal(gsub(" ", "", tab$observableFormula[match(names(nat$obs_ab), tab$observableId)]),
+               gsub(" ", "", unname(as.character(nat$obs_ab))))
+})
+
+
+
 test_that("native exportPEtab roundtrips per-condition k override (2-cond)", {
 
   withr::local_dir(tempdir())

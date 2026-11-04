@@ -17,9 +17,10 @@
 \code{TRUE} on success; otherwise \code{stop()}s with a descriptive error.
 }
 \description{
-Each expression must be linear in \code{eqnlist$states} and a true conservation
-quantity (its coefficient vector lies in the left null space of the
-stoichiometric matrix). The full basis must have rank equal to
-\code{nrow(conservedQuantities(eqnlist$smatrix))}.
+Each expression must be linear in \code{eqnlist$states} and conserve an amount:
+its coefficients divided by the volumes of their states lie in the null
+space of the stoichiometric matrix. Symbols other than states, volumes among
+them, are checked at two sets of values. Together the expressions must have
+the rank of the detected basis.
 }
 \keyword{internal}

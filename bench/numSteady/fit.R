@@ -49,8 +49,8 @@ center[grepl("^tSmad", outer)] <- log10(0.4)
 obj <- normL2(m$data, prd, times = as.list(m$t0)) +
   constraintL2(center, sigma = 3, attrName = "prior")
 
-ss <- environment(attr(pSS, "mappings")[[1]])$stats
 showStats <- function(label) {
+  ss <- environment(attr(pSS, "mappings")[[1]])$stats
   how <- if (length(ss$how)) paste(names(ss$how), ss$how, sep = "=", collapse = " ") else "-"
   cat(sprintf("%-10s calls %6d  solves %5d  memo %6d  iter/solve %5.1f  failed %d  starts: %s\n",
               label, ss$calls, ss$solves, ss$memo, ss$iter / max(ss$solves, 1L), ss$failed, how))
@@ -73,7 +73,7 @@ showStats("trust")
 
 # ---- multistart ----------------------------------------------------------------
 set.seed(2)
-tm <- system.time(fits <- mstrust(obj, center, studyname = "numSteady", fits = nfits, cores = cores,
+tm <- system.time(fits <- mstrust(obj, center, name = "numSteady", fits = nfits, cores = cores,
                                   sd = 1, iterlim = 400, output = FALSE))[3]
 pf <- as.parframe(fits)
 ok <- vapply(fits, function(f) is.list(f) && is.null(f$error), TRUE)

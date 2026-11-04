@@ -124,16 +124,29 @@ pp_models <- function() {
     addReaction("S + E", "P + E", "k1*E*S") |> addReaction("P", "S", "k2*P")
   catalyst <- Pimpl(el_cat, modelname = mn("catalyst"), verbose = FALSE)
 
+  # a moiety across two compartments, one of them of symbolic volume
+  el_vol <- eqnlist() |>
+    assignCompartment(B = "nuc", volume = "V") |>
+    addReaction("A", "B", "k1*A") |> addReaction("B", "A", "k2*B")
+  vol <- Pimpl(el_vol, modelname = mn("vol"), verbose = FALSE)
+
+  # a conserved cycle driven by a species that is structurally zero at the steady state
+  el_rest <- eqnlist() |>
+    addReaction("L", "L + R", "u * L") |>
+    addReaction("I", "pI", "a * R * I") |> addReaction("pI", "iI", "b * pI") |>
+    addReaction("iI", "I", "c * iI")
+  rest <- Pimpl(el_rest, modelname = mn("rest"), verbose = FALSE)
+
   compile(lin, d2, d2_2, d2_cq, moiety2_im, dimer_im, recycle, sing, noroot,
           noparam, erk_im, px, px_same, zero, pd, pd2, plasmid, bistable, unstable,
-          kink, catalyst, output = mn("impl"), cores = test_cores())
+          kink, catalyst, vol, rest, output = mn("impl"), cores = test_cores())
 
   .pp_env$models <- list(
     lin = lin, d2 = d2, d2_2 = d2_2, d2_cq = d2_cq, moiety2_im = moiety2_im,
     dimer_im = dimer_im, recycle = recycle, el_recycle = el_recycle, sing = sing,
     noroot = noroot, noparam = noparam, erk_im = erk_im, px = px, px_same = px_same,
     zero = zero, pd = pd, pd2 = pd2, plasmid = plasmid, bistable = bistable,
-    unstable = unstable, kink = kink, catalyst = catalyst)
+    unstable = unstable, kink = kink, catalyst = catalyst, vol = vol, rest = rest)
 }
 
 
@@ -323,7 +336,7 @@ test_that("overlapping conserved quantities reconstruct consistently (recycle en
   # coefficient, so reconstruction divides by it and nests another eliminated species.
   m <- pp_models()
 
-  totals <- getTotals(m$el_recycle)
+  totals <- conservedQuantities(m$el_recycle)
   expect_length(totals, 2L)                       # two independent CQs
 
   p0 <- c(k1 = 2, k1r = 1, k1c = 3, k3 = 1, total_1 = 1, total_2 = 4,
@@ -338,17 +351,24 @@ test_that("overlapping conserved quantities reconstruct consistently (recycle en
   expect_true(is.finite(as.numeric(o["S"])))
 })
 
-test_that("a fully open network (all states drain to zero) errors clearly", {
+test_that("a network without influx keeps its conserved totals, an open one errors clearly", {
   skip_if_no_compile()
   oldwd <- setwd(.dmod_fx_workdir()); on.exit(setwd(oldwd), add = TRUE)
 
-  # No influx anywhere; every species is structurally zero in steady state.
+  # species consumed without influx are zero, the others hold their conserved totals
   el <- eqnlist()
   el <- addReaction(el, "E + S", "ES", "k1*E*S")
   el <- addReaction(el, "ES", "E + S", "k1r*ES")
   el <- addReaction(el, "ES", "E + P", "k1c*ES")
+  n <- dMod2:::.normalize_ss_inputs(el, NULL, NULL)
+  expect_setequal(n$zero_states, c("S", "ES"))
+  expect_setequal(n$dependent, c("E", "P"))
+  expect_length(n$totals, 2L)
 
-  expect_error(Pimpl(el, compile = FALSE), "structurally zero in steady state")
+  # every species drains
+  open <- eqnlist() |> addReaction("A", "", "k1*A") |> addReaction("A", "B", "k2*A") |>
+    addReaction("B", "", "k3*B")
+  expect_error(Pimpl(open, compile = FALSE), "structurally zero in steady state")
 })
 
 
@@ -369,93 +389,58 @@ test_that("Pimpl uses the pseudoinverse when df/dx is rank-deficient", {
 })
 
 
-## ---- resetWarmStarts ---------------------------------------------------
+## ---- Kept roots --------------------------------------------------------
 
-test_that("resetWarmStarts clears Pimpl's cache by name", {
+test_that("keepRoot answers repeated values from memory with the same root", {
   skip_if_no_compile()
   pf <- pp_models()$lin
-  pf(c(a = 1, x = 0.5))
-
-  reset_env <- environment(attr(pf, "resetWarmStart"))$reg_ref$caches[["__default__"]]
-  expect_false(is.null(reset_env$arch))
-
-  labels <- resetWarmStarts(pf, verbose = FALSE)
-  expect_length(labels, 1L)
-  expect_match(labels, "^Pimpl\\(")
-  expect_null(reset_env$arch)
+  E <- environment(attr(pf, "mappings")[[1]])
+  on.exit(controls(pf, name = "keepRoot") <- TRUE, add = TRUE)
+  pars <- c(a = 1.25, x = 0.5)
+  E$statsReset()
+  first <- pf(pars); again <- pf(pars)
+  expect_identical(again, first)
+  expect_equal(c(E$stats$solves, E$stats$memo), c(1L, 1L))
+  controls(pf, name = "keepRoot") <- FALSE
+  E$statsReset()
+  expect_identical(pf(pars), first)
+  expect_equal(c(E$stats$solves, E$stats$memo), c(1L, 0L))
 })
 
 
-test_that("resetWarmStarts walks into composed functions", {
-  skip_if_no_compile()
-  # resetWarmStarts() walks this frame through `wrap`, so no other
-  # warm-starting object may sit in it.
-  p1 <- pp_models()$pd
-  p2 <- pp_models()$pd2
-
-  p1(c(k_in = 1, k_out = 0.5))
-  p2(c(k_in = 2, k_out = 0.4))
-
-  ref1 <- environment(attr(p1, "resetWarmStart"))$reg_ref$caches[["__default__"]]
-  ref2 <- environment(attr(p2, "resetWarmStart"))$reg_ref$caches[["__default__"]]
-  expect_false(is.null(ref1$arch))
-  expect_false(is.null(ref2$arch))
-
-  wrap <- function(pars) list(p1 = p1(pars), p2 = p2(pars))
-  labels <- resetWarmStarts(wrap, verbose = FALSE)
-  expect_setequal(sub("\\(.*", "", labels), c("Pimpl", "Pimpl"))
-  expect_length(labels, 2L)
-  expect_null(ref1$arch)
-  expect_null(ref2$arch)
-})
-
-
-test_that("a condition-less Pimpl keeps an independent warm start per condition", {
+test_that("a condition-less Pimpl solves each condition from its own values", {
   skip_if_no_compile()
   m <- pp_models()
-  resetWarmStarts(m$pd, verbose = FALSE)
-
-  # each condition reaches its own closed-form steady state
-  pf  <- m$pd * m$px
-  out <- pf(c(s = 3), deriv = FALSE)
+  out <- (m$pd * m$px)(c(s = 3), deriv = FALSE)
   expect_equal(as.numeric(out$C1["A"]), 3, tolerance = 1e-10)
   expect_equal(as.numeric(out$C2["A"]), 6, tolerance = 1e-10)
+})
 
-  caches <- environment(attr(m$pd, "resetWarmStart"))$reg_ref$caches
-  expect_true(all(c("C1", "C2") %in% ls(caches)))
-  expect_equal(as.numeric(caches[["C1"]]$arch[[1]]$x["A"]), 3, tolerance = 1e-10)
-  expect_equal(as.numeric(caches[["C2"]]$arch[[1]]$x["A"]), 6, tolerance = 1e-10)
-
-  # the next call starts each condition from its own root
-  st <- environment(attr(m$pd, "mappings")[[1]])$stats
-  how0 <- st$how
-  pf(c(s = 3.3), deriv = FALSE)
-  expect_equal(unname(st$how["warm_newton"]) - (if (is.na(how0["warm_newton"])) 0 else unname(how0["warm_newton"])), 2)
+test_that("a root does not depend on the calls before it", {
+  skip_if_no_compile()
+  pf <- pp_models()$bistable
+  p0 <- c(k0 = 0.02, k1 = 1, K = 1, d = 0.4)
+  f  <- function(x) p0[["k0"]] + p0[["k1"]] * x^2 / (p0[["K"]]^2 + x^2) - p0[["d"]] * x
+  lo <- uniroot(f, c(0.01, 0.1), tol = 1e-14)$root
+  # first a root on another branch, at other parameters
+  on.exit(controls(pf, name = "keepRoot") <- TRUE, add = TRUE)
+  pf(c(replace(p0, "d", 0.2), X = 0.1), deriv = FALSE)
+  after <- pf(c(p0, X = 0.1), deriv = FALSE)[[1]][["X"]]
+  controls(pf, name = "keepRoot") <- FALSE
+  fresh <- pf(c(p0, X = 0.1), deriv = FALSE)[[1]][["X"]]
+  expect_identical(after, fresh)
+  expect_equal(fresh, lo, tolerance = 1e-10)
 })
 
 test_that("conditions with identical steady-state inputs are solved once", {
   skip_if_no_compile()
   m <- pp_models()
-  resetWarmStarts(m$pd, verbose = FALSE)
   E <- environment(attr(m$pd, "mappings")[[1]]); E$statsReset()
-  out <- (m$pd * m$px_same)(c(s = 2), deriv = TRUE)
-  expect_equal(as.numeric(out$C2["A"]), 2, tolerance = 1e-10)
+  out <- (m$pd * m$px_same)(c(s = 2.375), deriv = TRUE)
+  expect_equal(as.numeric(out$C2["A"]), 2.375, tolerance = 1e-10)
   expect_equal(E$stats$calls, 2L)
   expect_equal(E$stats$solves, 1L)
   expect_equal(E$stats$memo, 1L)
-})
-
-
-test_that("resetWarmStarts is idempotent and silent when nothing to reset", {
-  f <- function(x) x + 1
-  labels <- resetWarmStarts(f, verbose = FALSE)
-  expect_length(labels, 0L)
-})
-
-
-test_that("resetWarmStarts rejects non-function inputs", {
-  expect_error(resetWarmStarts(1L), "must be a function")
-  expect_error(resetWarmStarts(NULL), "must be a function")
 })
 
 
@@ -466,7 +451,6 @@ test_that("Pimpl throws when no attempt converges", {
   # a residual without a real root
   pf <- pp_models()$noroot
 
-  resetWarmStarts(pf, verbose = FALSE)
   expect_error(pf(c(x = 0.1))[[1]], "no root found")
 })
 
@@ -590,7 +574,6 @@ test_that("Pimpl returns a stable steady state of a bistable system", {
   hi <- uniroot(f, c(1, 3), tol = 1e-14)$root
 
   root <- function(x0) {
-    resetWarmStarts(pf, verbose = FALSE)
     as.numeric(pf(c(p0, X = x0), deriv = FALSE)[[1]]["X"])
   }
   expect_equal(root(0.8 * mi), lo, tolerance = 1e-8)
@@ -602,7 +585,6 @@ test_that("Pimpl returns a stable steady state of a bistable system", {
 test_that("Pimpl with flow = TRUE refuses an unstable root", {
   skip_if_no_compile()
   pf <- pp_models()$unstable
-  resetWarmStarts(pf, verbose = FALSE)
   expect_error(pf(c(a = 2, x = 1)), "no stable root found")
 })
 
@@ -639,6 +621,10 @@ test_that(".smartTotalName picks the longest common substring", {
   # Collision with an existing parameter -> disambiguate
   expect_equal(dMod2:::.smartTotalName(c("pERK", "ERK"), character(0),
                                         "totalERK", 1), "totalERK_2")
+  # A held species names its own total
+  held <- addReaction(eqnlist(), "Erk + u", "pErk + u", "k*Erk*u") |>
+    addReaction("pErk", "Erk", "kb*pErk")
+  expect_setequal(names(conservedQuantities(held)), c("totalErk", "u"))
 })
 
 
@@ -682,7 +668,6 @@ test_that("Pimpl runs its random starts from a fixed seed and leaves the global 
   on.exit(controls(pf, name = "controlsPTC") <- list(), add = TRUE)
   pars <- c(k1 = 1, k2 = 3, totalERK = 4)
   set.seed(7); before <- .Random.seed
-  resetWarmStarts(pf, verbose = FALSE)
   controls(pf, name = "controlsPTC") <- list(maxit = 1L, nStarts = 3L)
   expect_error(pf(pars, deriv = FALSE), "start3: ")
   expect_identical(.Random.seed, before)
@@ -691,15 +676,13 @@ test_that("Pimpl runs its random starts from a fixed seed and leaves the global 
   expect_equal(as.numeric(out[c("ERK", "pERK")]), c(3, 1), tolerance = 1e-10)
   expect_identical(.Random.seed, before)
 
-  # one stream per warm-start cache: per condition, gone after resetWarmStarts()
-  env <- environment(attr(pf, "mappings")[[1]]); reg <- env$reg
-  resetWarmStarts(pf, verbose = FALSE)
+  # the random starts depend on the values, not on the condition or the calls before
+  env <- environment(attr(pf, "mappings")[[1]])
   controls(pf, name = "controlsPTC") <- list(maxit = 1L, nStarts = 2L)
-  for (cn in c("a", "b")) expect_error(env$p2p(pars, deriv = FALSE, condition = cn), "start2: ")
-  expect_false(identical(reg$get("a")$msBase, reg$get("b")$msBase))
-  expect_identical(reg$get("a")$msCount, 1L)
-  resetWarmStarts(pf, verbose = FALSE)
-  expect_null(reg$get("a")$msBase)
+  msg <- function(cn) tryCatch(env$p2p(pars, deriv = FALSE, condition = cn), error = conditionMessage)
+  expect_match(msg("a"), "start2: ")
+  expect_identical(msg("a"), msg("b"))
+  expect_identical(.Random.seed, before)
 })
 
 
@@ -733,22 +716,22 @@ test_that("Pimpl rejects unknown arguments and controls", {
 })
 
 
-# ==== CQ basis as an eqnlist field: getTotals(), customTotals(), mutators, pre-totals eqnlists ====
+# ==== CQ basis as an eqnlist field: conservedQuantities(), customTotals(), mutators, pre-totals eqnlists ====
 
-## ---- getTotals auto-detection ---------------------------------------
+## ---- conservedQuantities auto-detection ---------------------------------------
 
-test_that("getTotals returns smart-named auto-detected totals", {
+test_that("conservedQuantities returns smart-named auto-detected totals", {
   el_AB <- eqnlist() |>
     addReaction("A", "B", "k1 * A") |>
     addReaction("B", "A", "k2 * B")
-  tot_AB <- getTotals(el_AB)
+  tot_AB <- conservedQuantities(el_AB)
   expect_length(tot_AB, 1L)
   expect_equal(names(tot_AB), "total_1")  # LCS of {A, B} is "" -> fallback
 
   el_ERK <- eqnlist() |>
     addReaction("ERK",  "pERK", "k1 * ERK") |>
     addReaction("pERK", "ERK",  "k2 * pERK")
-  tot_ERK <- getTotals(el_ERK)
+  tot_ERK <- conservedQuantities(el_ERK)
   expect_length(tot_ERK, 1L)
   expect_equal(names(tot_ERK), "totalERK")
 })
@@ -762,13 +745,13 @@ test_that("customTotals validates structure, rank, and CQ membership", {
     addReaction("pERK", "ERK",  "k2 * pERK")
 
   el2 <- customTotals(el, list(totalE = "ERK + pERK"))
-  tot <- getTotals(el2)
+  tot <- conservedQuantities(el2)
   expect_equal(names(tot), "totalE")
   expect_equal(tot[["totalE"]], "ERK + pERK")
   expect_true(isTRUE(attr(el2$totals, "custom")))
 
   expect_error(customTotals(el, list(bogus = "ERK")),
-               "not a conservation quantity")
+               "not a conserved quantity")
   expect_error(customTotals(el, list(too = "ERK + pERK", many = "ERK + pERK")),
                "Expected 1 conservation quantit(y|ies), got 2")
   expect_error(customTotals(el, list(weird = "ERK * pERK")),
@@ -821,8 +804,8 @@ test_that("is.eqnlist accepts pre-totals eqnlists (missing $totals field)", {
   el_old <- el_old[setdiff(names(el_old), "totals")]
   class(el_old) <- c("eqnlist", "list")
   expect_true(is.eqnlist(el_old))
-  # getTotals still works (computes lazily)
-  expect_length(getTotals(el_old), 1L)
+  # conservedQuantities still works (computes lazily)
+  expect_length(conservedQuantities(el_old), 1L)
 })
 
 
@@ -845,23 +828,6 @@ test_that("Pimpl uses customTotals names in the parvec interface", {
 })
 
 
-## ---- print.eqnlist shows totals section -----------------------------
-
-test_that("print.eqnlist shows the conserved quantities by name", {
-  el <- eqnlist() |>
-    addReaction("ERK",  "pERK", "k1 * ERK") |>
-    addReaction("pERK", "ERK",  "k2 * pERK")
-  out <- capture.output(print(el))
-  expect_true(any(grepl("Conserved quantities", out)))
-  expect_true(any(grepl("totalERK", out)))
-
-  el2 <- customTotals(el, list(totalE = "ERK + pERK"))
-  out2 <- capture.output(print(el2))
-  expect_true(any(grepl("Conserved quantities .custom.", out2)))
-  expect_true(any(grepl("totalE\\s*=\\s*ERK \\+ pERK", out2)))
-})
-
-
 test_that("a solved state keeps its second derivative where the first vanishes", {
   skip_if_no_compile()
   w <- pp_models()$kink(c(a = 1), deriv2 = TRUE)[[1]]
@@ -874,10 +840,34 @@ test_that("a catalyst is a constant state, not a zero one", {
   skip_if_no_compile()
   pc <- pp_models()$catalyst
   expect_true("E" %in% attr(pc, "parameters"))
+  expect_false(any(grepl("^total", attr(pc, "parameters"))))
   given <- c(k0 = 1, kd = 1, k1 = 1, k2 = 2, E = 4)
   pars <- given[intersect(names(given), attr(pc, "parameters"))]
   v <- pc(c(pars, setNames(rep(4, length(setdiff(attr(pc, "parameters"), names(given)))),
                            setdiff(attr(pc, "parameters"), names(given)))),
           deriv = FALSE)[[1]]
   expect_equal(unname(v[c("S", "P", "E")]), c(1, 2, 4), tolerance = 1e-6)
+})
+
+test_that("the conserved amount holds the volumes, also symbolic ones", {
+  skip_if_no_compile()
+  pv <- pp_models()$vol
+  tn <- grep("^total", attr(pv, "parameters"), value = TRUE)
+  expect_length(tn, 1L)
+  pars <- c(k1 = 1.5, k2 = 0.5, V = 0.4, setNames(2, tn))
+  o <- pv(pars, deriv = TRUE)[[1]]
+  A <- 2 * 0.5 / 2; B <- 1.5 * A / (0.5 * 0.4)
+  expect_equal(as.numeric(o[c("A", "B")]), c(A, B), tolerance = 1e-8)
+  J <- attr(o, "deriv")
+  expect_equal(unname(J[c("A", "B"), "V"]), c(0, -B / 0.4), tolerance = 1e-7)
+})
+
+test_that("a moiety whose reactions all rest keeps its total in the one form left", {
+  skip_if_no_compile()
+  pr <- pp_models()$rest
+  tn <- grep("^total", attr(pr, "parameters"), value = TRUE)
+  expect_length(tn, 1L)
+  pars <- c(u = 1, a = 1, b = 1, c = 1, setNames(2, tn))
+  o <- pr(pars[intersect(names(pars), attr(pr, "parameters"))], deriv = FALSE)[[1]]
+  expect_equal(as.numeric(o[c("I", "pI", "iI", "R")]), c(2, 0, 0, 0))
 })

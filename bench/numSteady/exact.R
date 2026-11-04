@@ -27,6 +27,21 @@ pss <- Pimpl(full$reactions, forcings = full$forcings, compile = TRUE, modelname
              keepRoot = FALSE)
 E   <- environment(attr(pss, "mappings")[[1]])
 dep <- E$dependent
+# the right-hand side, its Jacobian, and the leading eigenvalue of the Jacobian on ker C
+rhs <- function(x, pv) {
+  f <- E$PEval$func(matrix(x[dep], 1, dimnames = list(NULL, dep)), pv[E$parms_all])
+  setNames(f[1, ], dimnames(f)[[2]])
+}
+jac <- function(x, pv) {
+  J <- E$PEval$jac(matrix(x[dep], 1, dimnames = list(NULL, dep)), pv[E$parms_all])
+  matrix(J, dim(J)[2], dim(J)[3], dimnames = dimnames(J)[2:3])
+}
+leading <- function(x, pv, act) {
+  J  <- jac(x, pv)[act, act, drop = FALSE]
+  Nb <- if (nrow(E$C_dep)) MASS::Null(t(E$C_dep[, act, drop = FALSE])) else diag(length(act))
+  ev <- eigen(t(Nb) %*% J %*% Nb, only.values = TRUE)$values
+  list(maxRe = max(Re(ev)), scale = max(Mod(ev)))
+}
 
 arms <- lapply(list(Ctrl = c(0, 0, 0, 0), R1Knd = c(0, 0, 1, 0), R2Knd = c(0, 0, 0, 1),
                     OE_R1 = c(1, 0, 0, 0), OE_R2 = c(0, 1, 0, 0)), setNames, full$perturbation)
@@ -77,7 +92,7 @@ for (a in names(arms)) {
     p[c("volumeC", "volumeEC")[c("volumeC", "volumeEC") %in% names(p)]] <- c(1, 10)[c("volumeC", "volumeEC") %in% names(p)]
     p[rownames(E$C_dep)] <- drop(E$C_dep %*% x)
     act <- dep[x > 0]
-    st  <- E$stabilityOf(x, p, act)
+    st  <- leading(x, p, act)
     stable <- st$maxRe <= 1e-8 * st$scale
     big <- x > 1e-12 * max(x)
     relErr <- function(o) {
@@ -92,10 +107,10 @@ for (a in names(arms)) {
     other <- NA
     if (ok && err > 1e-6) {
       xo <- unclass(o)[dep]; pv <- p
-      f  <- E$eval_G(xo, pv)[1, dep]
-      J  <- E$eval_J(xo, pv)[dep, dep]
+      f  <- rhs(xo, pv)[dep]
+      J  <- jac(xo, pv)[dep, dep]
       rel <- max(abs(f) / pmax(abs(J) %*% abs(xo), 1e-300)[, 1][xo > 0])
-      sto <- E$stabilityOf(xo, pv, dep[xo > 0])
+      sto <- leading(xo, pv, dep[xo > 0])
       other <- rel < 1e-6 && sto$maxRe <= 1e-8 * sto$scale
     }
     ow <- tryCatch(pss(c(p, x), deriv = FALSE)[[1]], error = function(e) conditionMessage(e))

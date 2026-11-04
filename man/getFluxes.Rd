@@ -33,8 +33,7 @@ reactions <- getReactions(eq)
 print(reactions)
 
 ## Conserved quantities
-cq <- conservedQuantities(eq$smatrix)
-print(cq)
+print(conservedQuantities(eq))
 
 ## Fluxes
 fluxes <- getFluxes(eq)

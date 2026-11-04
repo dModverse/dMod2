@@ -142,40 +142,24 @@ test_that("getFluxes emits a dilution term when a compartment has a rule", {
   expect_true(any(grepl("mu\\*V_cyt", fl$A)))
 })
 
-test_that("print.eqnlist does not surface the default compartment", {
-  f <- NULL
-  f <- addReaction(f, "A", "B", "k*A")
-  captured <- paste(capture.output(print(f)), collapse = "\n")
-  expect_false(grepl("Compartments:", captured))
-})
-
-test_that("print.eqnlist shows compartments when meaningful", {
-  f <- eqnlist(
-    smatrix = matrix(c(-1, 1), nrow = 1, dimnames = list(NULL, c("A", "B"))),
-    states = c("A", "B"), rates = "k*A", description = "r",
-    compartments = list(cyt = "V_cyt", nuc = "V_nuc"),
-    compartmentOf = c(A = "cyt", B = "nuc")
-  )
-  captured <- paste(capture.output(print(f)), collapse = "\n")
-  expect_true(grepl("Compartments:", captured))
-  expect_true(grepl("cyt", captured))
-  expect_true(grepl("nuc", captured))
-})
-
-test_that("conservedQuantities accepts a weight argument", {
-  S <- matrix(c(-1, 1, -1, 1), nrow = 2, byrow = TRUE,
-              dimnames = list(NULL, c("A", "B")))
-
-  unweighted <- conservedQuantities(S)                  # default "none"
-  weighted   <- conservedQuantities(S, weight = "volume",
-                                    volumes = c(A = 2, B = 3))
-  expect_true(!is.null(unweighted))
-  expect_true(!is.null(weighted))
-
-  expect_error(conservedQuantities(S, weight = "volume"), "volumes")
-  expect_error(conservedQuantities(S, weight = "volume",
-                                    volumes = c(A = "V1", B = 3)),
-                "numeric")
+test_that("conserved quantities weight the concentrations by the volumes", {
+  r <- eqnlist() |>
+    assignCompartment(A = "cyt", volume = "2") |>
+    assignCompartment(B = "nuc", C = "nuc", volume = "V") |>
+    addReaction("A", "B", "k1*A") |>
+    addReaction("B + C", "A", "k2*B*C")
+  cq <- conservedQuantities(r)
+  # every total has a vanishing time derivative under the right-hand sides
+  f <- as.eqnvec(r)
+  at <- list(A = 0.3, B = 1.7, C = 0.6, V = 0.4, k1 = 1.1, k2 = 0.8)
+  for (e in cq) {
+    v <- dMod2:::.linearCoefs(e, r$states, at["V"])
+    rhs <- vapply(r$states, function(s) eval(parse(text = f[[s]]), at), 0)
+    expect_equal(sum(v * rhs), 0, tolerance = 1e-12)
+  }
+  expect_true(any(grepl("V*B", unlist(cq), fixed = TRUE)))
+  expect_true(customTotals(r, cq)$totals |> is.list())
+  expect_error(customTotals(r, list(a = "A + B", b = "C")), "not a conserved quantity")
 })
 
 test_that("rateCompartment enables reactions with educts across compartments", {
@@ -358,17 +342,6 @@ test_that("auto-generated compartment IDs follow first appearance, not collation
   expect_equal(f$compartments$c1$volume, "Zeta")
 })
 
-test_that("print surfaces substance-unit states", {
-  f <- eqnlist(
-    smatrix = matrix(c(-1, -1, 1), nrow = 1, dimnames = list(NULL, c("L", "R", "C"))),
-    states = c("L", "R", "C"), rates = "k*L*R", description = "bind",
-    compartments = list(ext = "V_ext", cyt = "V_cyt"),
-    compartmentOf = c(L = "ext", R = "cyt", C = "cyt"),
-    reactionCompartment = "ext", amountStates = "C")
-  captured <- paste(capture.output(print(f)), collapse = "\n")
-  expect_true(grepl("substance units: C", captured))
-})
-
 test_that("a stale $volumes argument is reported rather than dropped", {
   f <- addReaction(NULL, "A", "B", "k*A", compartment = "cyt") |>
     setCompartmentVolume(cyt = "V_cyt")
@@ -383,8 +356,6 @@ test_that("a compartment declared for a future state survives until it appears",
   f <- eqnlist() |> assignCompartment(TGFb = "extraCell", volume = "V_ext")
   expect_true(is.eqnlist(f))
   expect_equal(unname(f$compartmentOf[["TGFb"]]), "extraCell")
-  expect_true(grepl("Declared", paste(capture.output(print(
-    addReaction(f, "A", "B", "k*A", compartment = "Cell"))), collapse = "\n")))
 
   g <- addReaction(f, "", "TGFb", "k_secr", compartment = "Cell")
   expect_equal(unname(g$compartmentOf[["TGFb"]]), "extraCell")

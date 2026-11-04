@@ -49,6 +49,10 @@ focei_run <- function(model_cb, err_cb, joint_cb, init, subject_meta, fixed, con
     .Call(`_dMod2_focei_run`, model_cb, err_cb, joint_cb, init, subject_meta, fixed, control, correction_mode, correction_cb, predict_cb)
 }
 
+pimpl_on_manifold <- function(xa, C, total) {
+    .Call(`_dMod2_pimpl_on_manifold`, xa, C, total)
+}
+
 normL2_kernel <- function(prediction, err_list_opt, meta_list, par_names_global, deriv2_requested, threads, bloq_mode = "M3", build_hessian = TRUE, want_seed = FALSE, local_blocks = FALSE, t_df = 0) {
     .Call(`_dMod2_normL2_kernel`, prediction, err_list_opt, meta_list, par_names_global, deriv2_requested, threads, bloq_mode, build_hessian, want_seed, local_blocks, t_df)
 }
@@ -59,6 +63,26 @@ parvec_attach <- function(out, deriv, deriv2) {
 
 parvec_concat <- function(lst) {
     .Call(`_dMod2_parvec_concat`, lst)
+}
+
+pimpl_state <- function(spec) {
+    .Call(`_dMod2_pimpl_state`, spec)
+}
+
+pimpl_controls <- function(xp, keepRoot, ctrl) {
+    invisible(.Call(`_dMod2_pimpl_controls`, xp, keepRoot, ctrl))
+}
+
+pimpl_stats <- function(xp, reset = FALSE) {
+    .Call(`_dMod2_pimpl_stats`, xp, reset)
+}
+
+pimpl_root <- function(xp, pv, guess, order) {
+    .Call(`_dMod2_pimpl_root`, xp, pv, guess, order)
+}
+
+pimpl_live <- function(xp) {
+    .Call(`_dMod2_pimpl_live`, xp)
 }
 
 sparseGridGK <- function(K, level) {

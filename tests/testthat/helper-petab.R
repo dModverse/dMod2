@@ -136,13 +136,30 @@
     p_rt3 <- P(as.eqnvec(c(A = "10^(A)", B = "10^(B)", k = "10^(K + 5)")),
                condition = "c1", modelname = "rt3_par")
 
+    # a steady state with its input at 0, which an event sets at time 0
+    ss <- eqnlist() %>%
+      addReaction("A", "B", rate = "k0*A") %>%
+      addReaction("A + u", "B + u", rate = "k1*A*u") %>%
+      addReaction("B", "A", rate = "k2*B")
+    ev_ss <- addEvent(NULL, var = "u", time = 0, value = "dose", method = "replace")
+    p_ss_eq <- Pimpl(ss, modelname = "nat_ss_eq")
+    x_ss <- Xs(odemodel(ss, events = ev_ss, modelname = "nat_ss", backend = "deSolve",
+                        compile = FALSE))
+    g_ss <- Y(c(obs_b = "s * B"), f = x_ss, attachInput = FALSE, modelname = "nat_obs_ss")
+    tr_ss <- eqnvec(k0 = "exp(k0)", k1 = "exp(k1)", k2 = "exp(k2)", total_1 = "exp(total_1)",
+                    s = "exp(s)", u = "0")
+    p_ss <- P(c(tr_ss, dose = "0"), condition = "rest", modelname = "nat_ss_par_r") +
+            P(c(tr_ss, dose = "2"), condition = "dosed", modelname = "nat_ss_par_d")
+
     compile(x_ab, x_a, g_0, g_ab, g_a, p_0, p_rt1, p_rt2, p_sig, p_rt3,
-            output = "petab_native", cores = test_cores())
+            x_ss, g_ss, p_ss_eq, p_ss, output = "petab_native", cores = test_cores())
     cache <<- list(ab = ab, a = a, x_ab = x_ab, x_a = x_a,
                    obs_ab = obs_ab, obs_a = obs_a,
                    g_0 = g_0, g_ab = g_ab, g_a = g_a,
                    p_0 = p_0, p_rt1 = p_rt1, p_rt2 = p_rt2,
-                   p_sig = p_sig, p_rt3 = p_rt3)
+                   p_sig = p_sig, p_rt3 = p_rt3,
+                   ss = ss, ev_ss = ev_ss, p_ss_eq = p_ss_eq, x_ss = x_ss, g_ss = g_ss,
+                   p_ss = p_ss)
     cache
   }
 })

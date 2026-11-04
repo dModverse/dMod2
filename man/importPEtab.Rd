@@ -101,6 +101,5 @@ readPEtabTables(yamlOut)$parameters
 \dontshow{\}) # examplesIf}
 }
 \seealso{
-\code{\link[=exportPEtabObject]{exportPEtabObject()}}, \code{\link[=readPEtabTables]{readPEtabTables()}}, \code{\link[=importSbml]{importSbml()}},
-\code{vignette("PEtab", package = "dMod2")}
+\code{\link[=exportPEtabObject]{exportPEtabObject()}}, \code{\link[=readPEtabTables]{readPEtabTables()}}, \code{\link[=importSbml]{importSbml()}}
 }

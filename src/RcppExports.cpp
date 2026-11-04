@@ -221,6 +221,19 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// pimpl_on_manifold
+NumericVector pimpl_on_manifold(NumericVector xa, NumericMatrix C, NumericVector total);
+RcppExport SEXP _dMod2_pimpl_on_manifold(SEXP xaSEXP, SEXP CSEXP, SEXP totalSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type xa(xaSEXP);
+    Rcpp::traits::input_parameter< NumericMatrix >::type C(CSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type total(totalSEXP);
+    rcpp_result_gen = Rcpp::wrap(pimpl_on_manifold(xa, C, total));
+    return rcpp_result_gen;
+END_RCPP
+}
 // normL2_kernel
 List normL2_kernel(List prediction, Nullable<List> err_list_opt, List meta_list, CharacterVector par_names_global, bool deriv2_requested, int threads, std::string bloq_mode, bool build_hessian, bool want_seed, bool local_blocks, double t_df);
 RcppExport SEXP _dMod2_normL2_kernel(SEXP predictionSEXP, SEXP err_list_optSEXP, SEXP meta_listSEXP, SEXP par_names_globalSEXP, SEXP deriv2_requestedSEXP, SEXP threadsSEXP, SEXP bloq_modeSEXP, SEXP build_hessianSEXP, SEXP want_seedSEXP, SEXP local_blocksSEXP, SEXP t_dfSEXP) {
@@ -263,6 +276,66 @@ BEGIN_RCPP
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< SEXP >::type lst(lstSEXP);
     rcpp_result_gen = Rcpp::wrap(parvec_concat(lst));
+    return rcpp_result_gen;
+END_RCPP
+}
+// pimpl_state
+SEXP pimpl_state(List spec);
+RcppExport SEXP _dMod2_pimpl_state(SEXP specSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< List >::type spec(specSEXP);
+    rcpp_result_gen = Rcpp::wrap(pimpl_state(spec));
+    return rcpp_result_gen;
+END_RCPP
+}
+// pimpl_controls
+void pimpl_controls(SEXP xp, bool keepRoot, List ctrl);
+RcppExport SEXP _dMod2_pimpl_controls(SEXP xpSEXP, SEXP keepRootSEXP, SEXP ctrlSEXP) {
+BEGIN_RCPP
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type xp(xpSEXP);
+    Rcpp::traits::input_parameter< bool >::type keepRoot(keepRootSEXP);
+    Rcpp::traits::input_parameter< List >::type ctrl(ctrlSEXP);
+    pimpl_controls(xp, keepRoot, ctrl);
+    return R_NilValue;
+END_RCPP
+}
+// pimpl_stats
+List pimpl_stats(SEXP xp, bool reset);
+RcppExport SEXP _dMod2_pimpl_stats(SEXP xpSEXP, SEXP resetSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type xp(xpSEXP);
+    Rcpp::traits::input_parameter< bool >::type reset(resetSEXP);
+    rcpp_result_gen = Rcpp::wrap(pimpl_stats(xp, reset));
+    return rcpp_result_gen;
+END_RCPP
+}
+// pimpl_root
+List pimpl_root(SEXP xp, NumericVector pv, NumericVector guess, int order);
+RcppExport SEXP _dMod2_pimpl_root(SEXP xpSEXP, SEXP pvSEXP, SEXP guessSEXP, SEXP orderSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type xp(xpSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type pv(pvSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type guess(guessSEXP);
+    Rcpp::traits::input_parameter< int >::type order(orderSEXP);
+    rcpp_result_gen = Rcpp::wrap(pimpl_root(xp, pv, guess, order));
+    return rcpp_result_gen;
+END_RCPP
+}
+// pimpl_live
+bool pimpl_live(SEXP xp);
+RcppExport SEXP _dMod2_pimpl_live(SEXP xpSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type xp(xpSEXP);
+    rcpp_result_gen = Rcpp::wrap(pimpl_live(xp));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -474,9 +547,15 @@ static const R_CallMethodDef CallEntries[] = {
     {"_dMod2_focei_eval_one_subject", (DL_FUNC) &_dMod2_focei_eval_one_subject, 8},
     {"_dMod2_focei_inner_trust", (DL_FUNC) &_dMod2_focei_inner_trust, 10},
     {"_dMod2_focei_run", (DL_FUNC) &_dMod2_focei_run, 10},
+    {"_dMod2_pimpl_on_manifold", (DL_FUNC) &_dMod2_pimpl_on_manifold, 3},
     {"_dMod2_normL2_kernel", (DL_FUNC) &_dMod2_normL2_kernel, 11},
     {"_dMod2_parvec_attach", (DL_FUNC) &_dMod2_parvec_attach, 3},
     {"_dMod2_parvec_concat", (DL_FUNC) &_dMod2_parvec_concat, 1},
+    {"_dMod2_pimpl_state", (DL_FUNC) &_dMod2_pimpl_state, 1},
+    {"_dMod2_pimpl_controls", (DL_FUNC) &_dMod2_pimpl_controls, 3},
+    {"_dMod2_pimpl_stats", (DL_FUNC) &_dMod2_pimpl_stats, 2},
+    {"_dMod2_pimpl_root", (DL_FUNC) &_dMod2_pimpl_root, 4},
+    {"_dMod2_pimpl_live", (DL_FUNC) &_dMod2_pimpl_live, 1},
     {"_dMod2_sparseGridGK", (DL_FUNC) &_dMod2_sparseGridGK, 2},
     {"_dMod2_residual_kernel_aloq", (DL_FUNC) &_dMod2_residual_kernel_aloq, 9},
     {"_dMod2_residual_kernel_bloq", (DL_FUNC) &_dMod2_residual_kernel_bloq, 9},

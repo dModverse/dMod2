@@ -15,8 +15,8 @@
 }
 \value{
 A named list with \code{trafo}, \code{states}, \code{zero_states}, \code{dependent},
-\code{parameters}, \code{parms_all}, \code{totals}, \code{C_mat} (see \code{\link[=.cq_matrix]{.cq_matrix()}}) and,
-for an \link{eqnlist}, \code{influx}, the sum of the producing fluxes per state.
+\code{parameters}, \code{parms_all}, \code{totals} and, for an \link{eqnlist}, \code{influx}, the
+sum of the producing fluxes per state.
 }
 \description{
 Coerces \code{trafo} to an \code{eqnvec}, zeroes and removes forcings, removes states

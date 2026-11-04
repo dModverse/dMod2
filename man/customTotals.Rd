@@ -22,5 +22,5 @@ expression must be linear in the states and conserved by the reactions, and
 together they must span as many quantities as \code{\link[=conservedQuantities]{conservedQuantities()}} finds.
 }
 \seealso{
-\code{\link[=getTotals]{getTotals()}}
+\code{\link[=conservedQuantities]{conservedQuantities()}}
 }
