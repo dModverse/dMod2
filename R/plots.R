@@ -378,6 +378,18 @@ coordTransform <- function(data, transformations) {
 
 # Generics of the prediction and data plots ---------------------------------
 
+## The levels of `x` in natural order: numbers inside the labels compare by value, so L2 comes
+## before L10. A factor keeps its levels.
+.naturalLevels <- function(x) {
+  if (is.factor(x)) return(levels(x))
+  u <- unique(as.character(x))
+  width <- max(0L, nchar(unlist(regmatches(u, gregexpr("[0-9]+", u)))))
+  key <- u
+  regmatches(key, gregexpr("[0-9]+", key)) <- lapply(regmatches(key, gregexpr("[0-9]+", key)),
+    function(d) paste0(strrep("0", width - nchar(d)), d))
+  u[order(key, u)]
+}
+
 
 #' Plot a List of Model Predictions
 #'
@@ -527,6 +539,9 @@ plotPaths <- function(profs, ..., whichPar = NULL, sort = FALSE, relative = TRUE
     scale_color_dMod(name = "profiled\nparameter") +
     scale_linetype_discrete("profile\nlist") +
     theme_dMod()
+  # a legend with a single entry says nothing
+  if (length(unique(paths$proflist)) < 2L) p <- p + guides(linetype = "none")
+  if (length(unique(paths$name)) < 2L) p <- p + guides(colour = "none")
   attr(p, "data") <- paths
   p
 }
@@ -537,7 +552,7 @@ plotPaths <- function(profs, ..., whichPar = NULL, sort = FALSE, relative = TRUE
 # the paths start at zero at the optimum; `absoluteX` keeps the profiled parameter absolute.
 .pathFrame <- function(profs, whichPar = NULL, relative = TRUE, sort = FALSE, absoluteX = FALSE) {
   sets <- .profileSets(profs)
-  do.call(rbind, lapply(names(sets), function(s) {
+  out <- do.call(rbind, lapply(names(sets), function(s) {
     parts <- .profileSplit(sets[[s]])
     parameters <- attr(sets[[s]], "parameters")
     wp <- if (is.null(whichPar)) names(parts) else whichPar
@@ -560,6 +575,8 @@ plotPaths <- function(profs, ..., whichPar = NULL, sort = FALSE, relative = TRUE
                  x = as.vector(X[, cmb[, 1]]), y = as.vector(P[, cmb[, 2]]))
     }))
   }))
+  out$proflist <- factor(out$proflist, levels = names(sets))
+  out
 }
 
 

@@ -72,8 +72,12 @@ Defaults are given as \code{"integrate"} / \code{"optimize"}.
 \item{\code{gamma}}{Initial factor of the correction towards the
 optimum of the other parameters. \code{1} / \code{0}.}
 \item{\code{W}}{Matrix in the path equation, \code{"hessian"} or
-\code{"identity"}. With \code{"identity"} a step moves the profiled
-parameter alone and the others are reoptimised at every step.
+\code{"identity"}. \code{"hessian"} is the exact Hessian where
+\code{fitted} returns one with \code{deriv2 = TRUE}, as a model built
+with second derivatives does, otherwise the one \code{fitted} returns,
+for \code{\link[=normL2]{normL2()}} the Gauss-Newton matrix; \code{deriv2 = FALSE} in
+\code{...} keeps that one. With \code{"identity"} a step moves the
+profiled parameter alone and the others are reoptimised at every step.
 \code{"hessian"} / \code{"identity"}.}
 \item{\code{reoptimize}}{Whether every step is followed by a fit of the
 other parameters with \code{\link[=trust]{trust()}}. \code{FALSE} / \code{TRUE}.}
@@ -123,7 +127,11 @@ parameters, with metanames \code{value} (the objective), \code{constraint}
 (deviation of the profiled parameter from its value in \code{pars}),
 \code{stepsize}, \code{gamma} and \code{whichPar} (the profiled
 parameter), columns for the numeric attributes of the objective, and one
-column per parameter. Profiles that fail are dropped with a message.
+column per parameter. Profiles that fail are dropped with a message. The
+attribute \code{"ends"} is a data frame with one row per side and the
+columns \code{whichPar}, \code{side}, \code{steps} and \code{reason}:
+\code{"threshold"}, \code{"limit"}, \code{"step limit"} or the error of
+the objective that ended the side.
 }
 \description{
 Computes the profile likelihood of one or more parameters around an

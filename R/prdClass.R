@@ -126,13 +126,15 @@ plot.prdlist <- function(x, data = NULL, ..., scales = "free", facet = c("wrap",
         row.names = NULL)
 }
 
+#' @param errfn Optional [obsfn], the error model. Its predicted `sigma` is drawn as a band
+#'   around the prediction. Default `NULL`.
 #' @export
 #' @rdname plotCombined
 #' @importFrom rlang parse_expr
 plotCombined.prdlist <- function(prediction, data = NULL, ..., 
                                  scales = "free", 
                                  facet = c("wrap", "grid", "wrap_plain"), 
-                                 transform = NULL, aesthetics = NULL) {
+                                 transform = NULL, aesthetics = NULL, errfn = NULL) {
 
   facet <- match.arg(facet)
   grid <- if (!is.null(data)) covariates(data)
@@ -140,8 +142,8 @@ plotCombined.prdlist <- function(prediction, data = NULL, ...,
   transformed <- function(frame) if (is.null(transform)) frame else coordTransform(frame, transform)
 
   if (!is.null(prediction)) {
-    long <- wide2long(prediction)
-    long$sigma <- NA
+    long <- if (is.null(errfn)) cbind(wide2long(prediction), sigma = NA_real_)
+            else as.data.frame(prediction, errfn = errfn)
     prediction <- transformed(subsetted(long))
   }
   if (length(data)) {
@@ -149,6 +151,9 @@ plotCombined.prdlist <- function(prediction, data = NULL, ...,
     obs$bloq <- ifelse(obs$value <= obs$lloq, "yes", "no")
     data <- transformed(obs)
   }
+  conditions <- .naturalLevels(c(as.character(prediction$condition), as.character(data$condition)))
+  if (!is.null(prediction)) prediction$condition <- factor(prediction$condition, conditions)
+  if (length(data)) data$condition <- factor(data$condition, conditions)
 
   columns <- union(c("time", "name", "value", "sigma", "condition"), names(grid))
   plotted <- rbind(prediction[columns], data[columns])
@@ -165,6 +170,16 @@ plotCombined.prdlist <- function(prediction, data = NULL, ...,
     wrap_plain = facet_wrap(vars(name, condition), scales = scales))
 
   p <- ggplot(plotted, aes(!!!lapply(mapping, rlang::parse_expr))) + panels
+  # a legend of one condition says nothing
+  if (identical(mapping$colour, "condition") && length(conditions) == 1L) p <- p + guides(colour = "none")
+  if (!is.null(errfn) && !is.null(prediction)) {
+    colourBy <- if (!is.null(mapping$colour)) rlang::parse_expr(mapping$colour)
+    band <- if (is.null(colourBy)) aes() else aes(fill = !!colourBy)
+    p <- p + geom_ribbon(band, data = prediction, alpha = 0.25, linetype = 0, na.rm = TRUE,
+                         show.legend = FALSE)
+    # the bands in the colours of the lines
+    if (!is.null(colourBy) && !is.numeric(rlang::eval_tidy(colourBy, prediction))) p <- p + scale_fill_dMod()
+  }
   if (!is.null(prediction)) p <- p + geom_line(data = prediction)
   if (is.null(data)) return(p)
 
@@ -187,6 +202,7 @@ plotPrediction.prdlist <- function(prediction, ..., errfn = NULL,
   facet <- match.arg(facet)
   frame <- dplyr::filter(as.data.frame(prediction, errfn = errfn), ...)
   if (!is.null(transform)) frame <- coordTransform(frame, transform)
+  frame$condition <- factor(frame$condition, .naturalLevels(frame$condition))
 
   p <- if (facet == "wrap") {
     ggplot(frame, aes(time, value, group = condition, colour = condition)) +
@@ -196,8 +212,8 @@ plotPrediction.prdlist <- function(prediction, ..., errfn = NULL,
       facet_grid(rows = vars(name), cols = vars(condition), scales = scales)
   }
   band <- if (!is.null(errfn))
-    geom_ribbon(aes(ymin = value - sigma, ymax = value + sigma, fill = condition),
-                linetype = 0, alpha = 0.3)
+    list(geom_ribbon(aes(ymin = value - sigma, ymax = value + sigma, fill = condition),
+                     linetype = 0, alpha = 0.3), scale_fill_dMod())
   p <- p + list(band, geom_line())
   attr(p, "data") <- frame
   p

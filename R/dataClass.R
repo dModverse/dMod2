@@ -194,13 +194,16 @@ plotData.datalist <- function(data, ..., scales = "free",
   frame <- as.data.frame(dplyr::filter(frame, ...))
   frame$bloq <- ifelse(frame$value <= frame$lloq, "yes", "no")
   if (!is.null(transform)) frame <- coordTransform(frame, transform)
+  frame$condition <- factor(frame$condition, .naturalLevels(frame$condition))
 
   layout <- switch(facet,
     wrap       = list(aes(group = condition, color = condition),
                       facet_wrap(~name, scales = scales)),
     grid       = facet_grid(name ~ condition, scales = scales),
     wrap_plain = facet_wrap(~name * condition, scales = scales))
-  noBloq <- if (all(frame$bloq == "no")) guides(shape = "none")
+  # no legend for absent BLoQ points or a single condition
+  legends <- list(if (all(frame$bloq == "no")) guides(shape = "none"),
+                  if (nlevels(frame$condition) == 1L) guides(colour = "none"))
 
   p <- ggplot(frame, aes(x = time, y = value, ymin = value - sigma, ymax = value + sigma,
                          pch = bloq)) +
@@ -208,7 +211,7 @@ plotData.datalist <- function(data, ..., scales = "free",
     geom_point() +
     geom_errorbar(width = 0) +
     scale_shape_manual(name = "BLoQ", values = c(yes = 4, no = 19)) +
-    noBloq
+    legends
   structure(p, data = frame)
 }
 

@@ -134,16 +134,19 @@ After a build the \link{obsfn}, \link{parfn} and \link{prdfn} objects and the ob
 use the new shared object.
 }
 \examples{
+\donttest{
+# Two tasks on the local machine, in a temporary working directory; each task
+# starts an R process
 if (.Platform$OS.type == "unix") {
-  # Two tasks on the local machine, in a temporary working directory
   old <- setwd(tempdir())
   M <- matrix(rnorm(1e2), 10, 10)
   job <- distributedComputing(det(M * task), tasks = list(a = 1, b = 2),
                               input = "M", jobname = "example")
-  job$wait(interval = 1)
+  job$wait(interval = 0.1)
   print(job$get())
   job$purge(local = TRUE)
   setwd(old)
+}
 }
 
 \dontrun{

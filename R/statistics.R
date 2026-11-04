@@ -60,8 +60,12 @@
 #'     \item{\code{gamma}}{Initial factor of the correction towards the
 #'       optimum of the other parameters. \code{1} / \code{0}.}
 #'     \item{\code{W}}{Matrix in the path equation, \code{"hessian"} or
-#'       \code{"identity"}. With \code{"identity"} a step moves the profiled
-#'       parameter alone and the others are reoptimised at every step.
+#'       \code{"identity"}. \code{"hessian"} is the exact Hessian where
+#'       \code{fitted} returns one with \code{deriv2 = TRUE}, as a model built
+#'       with second derivatives does, otherwise the one \code{fitted} returns,
+#'       for [normL2()] the Gauss-Newton matrix; \code{deriv2 = FALSE} in
+#'       \code{...} keeps that one. With \code{"identity"} a step moves the
+#'       profiled parameter alone and the others are reoptimised at every step.
 #'       \code{"hessian"} / \code{"identity"}.}
 #'     \item{\code{reoptimize}}{Whether every step is followed by a fit of the
 #'       other parameters with [trust()]. \code{FALSE} / \code{TRUE}.}
@@ -98,7 +102,11 @@
 #'   (deviation of the profiled parameter from its value in \code{pars}),
 #'   \code{stepsize}, \code{gamma} and \code{whichPar} (the profiled
 #'   parameter), columns for the numeric attributes of the objective, and one
-#'   column per parameter. Profiles that fail are dropped with a message.
+#'   column per parameter. Profiles that fail are dropped with a message. The
+#'   attribute \code{"ends"} is a data frame with one row per side and the
+#'   columns \code{whichPar}, \code{side}, \code{steps} and \code{reason}:
+#'   \code{"threshold"}, \code{"limit"}, \code{"step limit"} or the error of
+#'   the objective that ended the side.
 #'
 #' @seealso [confint.parframe()] for confidence intervals, [plotProfile()] and
 #'   [plotPaths()] for plots, [profileThreshold()].
@@ -152,6 +160,8 @@ profile.objfn <- function(fitted, pars, whichPar, alpha = 0.05,
   aControl <- .mergeControl(aControl, algoControl, "algoControl")
   aControl$W <- match.arg(aControl$W[1], c("hessian", "identity"))
   oControl <- .trustControl(oControl, optControl, label = "optControl")
+  # The path equation takes the exact Hessian where the objective has second derivatives.
+  exact <- aControl$W == "hessian" && is.null(dotArgs$deriv2) && .hasExactHessian(objfun, pars, dotArgs)
 
   if (is.character(whichPar)) {
     lost <- setdiff(whichPar, names(pars))
@@ -174,7 +184,7 @@ profile.objfn <- function(fitted, pars, whichPar, alpha = 0.05,
 
   out <- .parallelLapply(whichPar, function(whichIndex) tryCatch(
     .profileOne(whichIndex, objfun, pars, fixed, dotArgs, sControl, aControl, oControl,
-                limits, delta, side, verbose, if (cautiousMode) folder),
+                limits, delta, side, verbose, if (cautiousMode) folder, exact),
     error = function(e) e), cores = cores, coresConditions = coresConditions)
 
   names(out) <- names(pars)[whichPar]
@@ -184,7 +194,18 @@ profile.objfn <- function(fitted, pars, whichPar, alpha = 0.05,
     stop("profile: ", paste(unique(reasons), collapse = "; "), call. = FALSE)
   if (any(failed))
     message("Profiles failed: ", paste0(names(reasons), " (", reasons, ")", collapse = ", "))
-  do.call(rbind, out[!failed])
+  ends <- do.call(rbind, lapply(out[!failed], attr, "ends"))
+  rownames(ends) <- NULL
+  structure(do.call(rbind, out[!failed]), ends = ends)
+}
+
+
+# Whether `objfun` evaluates at `pars` with deriv2 = TRUE, which a model built without second
+# derivatives refuses.
+.hasExactHessian <- function(objfun, pars, dotArgs) {
+  if (inherits(objfun, "fn")) loadDLL(objfun)
+  ok <- tryCatch(do.call(objfun, c(list(pars), dotArgs, list(deriv2 = TRUE))), error = function(e) NULL)
+  !is.null(ok) && !is.null(ok$hessian)
 }
 
 
@@ -192,7 +213,7 @@ profile.objfn <- function(fitted, pars, whichPar, alpha = 0.05,
 # Lagrangian by steps from the optimum, until the objective has risen by delta, the
 # limit or the step limit is reached, or the objective fails.
 .profileOne <- function(whichIndex, objfun, pars, fixed, dotArgs, sControl, aControl,
-                        oControl, limits, delta, side, verbose, folder) {
+                        oControl, limits, delta, side, verbose, folder, exact = FALSE) {
 
   if (inherits(objfun, "fn")) loadDLL(objfun)
   name <- names(pars)[whichIndex]
@@ -233,7 +254,8 @@ profile.objfn <- function(fitted, pars, whichPar, alpha = 0.05,
     list(sol = sol, singular = length(idx) < length(s$d))
   }
 
-  lagrange <- function(y, direction, gamma, out = do.call(objfun, c(list(y), dotArgs))) {
+  lagrange <- function(y, direction, gamma,
+                       out = do.call(objfun, c(list(y), dotArgs, if (exact) list(deriv2 = TRUE)))) {
     gdot <- direction * (seq_len(n) == whichIndex)
     singular <- FALSE
     if (identity) {
@@ -360,7 +382,8 @@ profile.objfn <- function(fitted, pars, whichPar, alpha = 0.05,
       rows[[i]] <- profileRow(lag, con, stepsize, gamma, y)
       dump(rows, label)
       if (verbose) {
-        progress <- max(c(if (is.finite(threshold)) 1 - max(0, min(1, (threshold - lag$value) / delta)),
+        progress <- max(c(if (is.finite(threshold))
+                            1 - max(0, min(1, (threshold - lag[[sControl$stop]]) / delta)),
                           i / sControl$limit,
                           if (is.finite(limit) && limit != 0) con / limit), na.rm = TRUE)
         .progressBar(100 * progress)
@@ -394,10 +417,16 @@ profile.objfn <- function(fitted, pars, whichPar, alpha = 0.05,
 
   out <- as.data.frame(do.call(rbind, c(rev(sides[[1]]$rows), list(originRow), sides[[2]]$rows)))
   out$whichPar <- name
-  parframe(out,
-           parameters = names(pars),
-           metanames = c("value", "constraint", "stepsize", "gamma", "whichPar"),
-           objAttributes = names(unlist(origin[origin$attributes])))
+  walked <- Filter(Negate(is.null), sides)
+  ends <- data.frame(whichPar = rep(name, length(walked)),
+                     side = vapply(walked, `[[`, "", "label"),
+                     steps = vapply(walked, function(sd) length(sd$rows), 1L),
+                     reason = vapply(walked, `[[`, "", "reason"))
+  structure(parframe(out,
+                     parameters = names(pars),
+                     metanames = c("value", "constraint", "stepsize", "gamma", "whichPar"),
+                     objAttributes = names(unlist(origin[origin$attributes]))),
+            ends = ends)
 }
 
 #' @rdname profile
@@ -853,12 +882,8 @@ mstrust <- function(objfun, center, rinit = .1, rmax = 10, fits = 20, cores = 1,
         formatC(i, digits = floor(log10(fits)), flag = "0"), "_", traceFile))
     }
 
-    # Each fit starts without the warm-start roots of the previous fit
-    # (cores = 1) or of the parent process (cores > 1, forked).
-    try(resetWarmStarts(objfun, verbose = FALSE), silent = TRUE)
-
     # Up to maxTries attempts, each from the next drawn start after a try-error
-    # or fit$error, with warm starts reset. Rows of a parframe are never retried.
+    # or fit$error. Rows of a parframe are never retried.
     t0 <- proc.time()[["elapsed"]]
     start <- starts[[i]]
     for (attempt in seq_len(maxTries)) {
@@ -867,7 +892,6 @@ mstrust <- function(objfun, center, rinit = .1, rmax = 10, fits = 20, cores = 1,
       failed <- inherits(fit, "try-error") || !is.list(fit) || "error" %in% names(fit)
       if (!failed || attempt == maxTries) break
       start <- restarts[[i]][[attempt]]
-      try(resetWarmStarts(objfun, verbose = FALSE), silent = TRUE)
     }
 
     # Only the numeric attributes of the optimiser's result are kept.
@@ -919,6 +943,10 @@ mstrust <- function(objfun, center, rinit = .1, rmax = 10, fits = 20, cores = 1,
   summaryText <- .mstrustSummary(parlist, fits)
   writeLog(summaryText)
   if (stats) cat(summaryText)
+  errors <- Filter(Negate(is.null), lapply(parlist, `[[`, "error"))
+  if (length(errors) == length(parlist))
+    warning("mstrust: every fit failed, the first with: ",
+            trimws(paste(as.character(errors[[1]]), collapse = " ")), call. = FALSE)
 
   parlist
 }

@@ -372,7 +372,7 @@ compile <- function(..., output = NULL, args = NULL, cores = detectFreeCores(),
     if (!isTRUE(cfgCppDE$klu_available))
       stop("A sparse Jacobian was requested, but cppDE was installed without the ",
            "KLU linear solver.\n  Install SuiteSparse/KLU and re-install cppDE, ",
-           "see cppDE::install_libs(\"suitesparse\").", call. = FALSE)
+           "see cppDE::installLibs(\"suitesparse\").", call. = FALSE)
     klu_flag <- trimws(paste("-DKLU", cfgCppDE$klu_cflags))
     klu_lib  <- cfgCppDE$klu_libs
   }

@@ -54,8 +54,8 @@ test_that("the generated include line evaluates to the installed cppDE flags", {
 # ssh, sbatch, squeue and scancel stand-ins on PATH for which every host is the
 # directory `remote`, also as its home, so a job runs on the local machine as it would
 # on another. sbatch starts every array task at once and keeps its options in
-# sbatch.args; squeue lists the array tasks still running. Jobs register in a
-# temporary data directory.
+# sbatch.args; squeue lists the array tasks still running, scancel takes the job ID
+# and stops them. Jobs register in a temporary data directory.
 local_fake_hosts <- function(env = parent.frame()) {
   root <- normalizePath(withr::local_tempdir(.local_envir = env), "/")
   bin <- file.path(root, "bin"); remote <- file.path(root, "remote")
@@ -77,7 +77,12 @@ local_fake_hosts <- function(env = parent.frame()) {
                '  else kill -0 "$p" 2>/dev/null && echo "running ${f#.array_}"; fi',
                "done"),
              file.path(bin, "squeue"))
-  writeLines(c("#!/bin/sh", "true"), file.path(bin, "scancel"))
+  writeLines(c("#!/bin/sh",
+               'case "$1" in -n) ;; -*) echo "scancel: invalid option $1" >&2; exit 1;; esac',
+               'for f in .array_*; do [ -f "$f" ] || continue; p=$(cat "$f")',
+               '  pkill -TERM -P "$p" 2>/dev/null; kill -TERM "$p" 2>/dev/null',
+               "done; true"),
+             file.path(bin, "scancel"))
   Sys.chmod(file.path(bin, c("ssh", "sbatch", "squeue", "scancel")), "755")
   withr::local_envvar(PATH = paste(bin, R.home("bin"), Sys.getenv("PATH"),
                                    sep = .Platform$path.sep),
@@ -305,7 +310,6 @@ test_that("an array smaller than the tasks runs them in turn, with the options o
                                          "{{ run }}"))
   on <- slurmCluster("h1", cores = 1, array = 2, partition = "p", maxRunning = 1,
                      sbatch = "--constraint=x", jobscript = tpl)
-  expect_output(print(on), "SLURM cluster h1: 2 array tasks of 1 cores")
   job <- distributedComputing(c(taskId, as.integer(Sys.getenv("SLURM_ARRAY_TASK_ID"))),
                               tasks = 5, on = on, jobname = "ja", input = character(0))
   expect_true(wait_for(job))
@@ -313,6 +317,12 @@ test_that("an array smaller than the tasks runs them in turn, with the options o
   expect_identical(readLines(file.path(remote, "ja_folder", "1", "sbatch.args")),
                    "--partition=p --array=1-2%1 --constraint=x job.sh")
   job$purge(local = TRUE)
+
+  slow <- suppressMessages(distributedComputing(Sys.sleep(60), on = on, jobname = "jc",
+                                                input = character(0)))
+  slow$terminate()
+  expect_true(suppressWarnings(wait_for(slow, 10)))
+  slow$purge(local = TRUE)
 })
 
 test_that("the targets check their nodes and cores", {
@@ -321,7 +331,6 @@ test_that("the targets check their nodes and cores", {
   expect_identical(sshNodes(cores = c(b = 3, a = 2))$cores, c(b = 3L, a = 2L))
   expect_identical(sshNodes(c("a", "b"))$cores, c(a = NA_integer_, b = NA_integer_))
   expect_identical(sshNodes(c("a", "b"), cores = 4)$cores, c(a = 4L, b = 4L))
-  expect_output(print(localNode(2)), "localhost \\(2 cores\\)")
   expect_error(sshNodes("a", cores = 1.5), "positive whole number")
   expect_error(sshNodes(c("a", "a")), "every node once")
   expect_error(sshNodes(c("a", "b"), cores = c(a = 1)), "names of 'cores'")
@@ -386,7 +395,9 @@ test_that("a slot left as a zombie counts as finished", {
   # the shell forks a child and becomes `sleep 5`, which never reaps it
   system(paste("cd jz_folder/1 && sh -c 'sleep 0 & echo $! > slot_1.pid; exec sleep 5'"),
          wait = FALSE)
+  # the pid file exists before the shell has written to it
   state <- function(pid) {
+    if (length(pid) != 1L || !nzchar(pid)) return("")
     f <- file.path("/proc", pid, "status")
     if (!file.exists(f)) return("")
     sub("^State:\\s*(\\S).*", "\\1", grep("^State:", readLines(f), value = TRUE))

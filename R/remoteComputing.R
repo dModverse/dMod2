@@ -230,7 +230,7 @@ detectFreeCores <- function(machine = NULL) {
     paste0("if [ -z \"$(Rscript -e '", cfgExpr(cfgFields("cvode_lapack_libs")), "')\" ]; then"),
     "  echo \"dMod: the model uses SUNDIALS' LAPACK dense solver, which the\" >&2",
     "  echo \"      SUNDIALS of this machine lacks. Build one with\" >&2",
-    "  echo \"      cppDE::install_libs() and reinstall cppDE here.\" >&2",
+    "  echo \"      cppDE::installLibs() and reinstall cppDE here.\" >&2",
     "  exit 1",
     "fi",
     "")
@@ -617,10 +617,11 @@ slurmCluster <- function(login, cores, array = NULL, walltime = NULL, memPerCore
     return(paste0("SLURM cluster ", on$login, ": ",
                   if (is.null(on$array)) "one array task per task" else
                     paste(on$array, "array tasks"),
-                  " of ", on$cores, " cores", if (!is.null(on$walltime))
+                  " of ", .count(on$cores, "core"), if (!is.null(on$walltime))
                     paste0(" for ", on$walltime)))
-  paste0(on$hosts, " (", ifelse(is.na(on$cores), "free", on$cores), " cores)",
-         collapse = ", ")
+  paste0(on$hosts, " (", ifelse(is.na(on$cores), "free cores",
+                                paste(on$cores, ifelse(on$cores %in% 1L, "core", "cores"))),
+         ")", collapse = ", ")
 }
 
 #' @export
@@ -650,7 +651,9 @@ print.dMod2Target <- function(x, ...) {
     paste0("set.seed(", seed, " + taskId)"),
     paste0("result <- try({\n", paste(deparse(expr, width.cutoff = 500L), collapse = "\n"),
            "\n})"),
-    "saveRDS(result, paste0('task_', taskId, '.rds'))")
+    # renamed once written: check() and get() never see a partial result
+    "saveRDS(result, paste0('task_', taskId, '.part'))",
+    "invisible(file.rename(paste0('task_', taskId, '.part'), paste0('task_', taskId, '.rds')))")
 }
 
 ## The model files a job ships: the sources ("compile"), object files ("link") or
@@ -674,9 +677,11 @@ print.dMod2Target <- function(x, ...) {
   files
 }
 
-## The SLURM jobs of a manifest for squeue and scancel: by ID, else by name.
-.slurmSelect <- function(m) {
-  if (is.na(m$jobid)) paste0("-n ", .sq(m$jobname), " -u \"$USER\"") else paste("-j", m$jobid)
+## The SLURM jobs of a manifest for squeue and scancel: by ID, else by name; scancel takes the ID
+## without -j.
+.slurmSelect <- function(m, cancel = FALSE) {
+  if (is.na(m$jobid)) paste0("-n ", .sq(m$jobname), " -u \"$USER\"")
+  else if (cancel) m$jobid else paste("-j", m$jobid)
 }
 
 ## The state of every task: "done", "running" or "failed". A task waiting for
@@ -909,7 +914,7 @@ print.dMod2Target <- function(x, ...) {
 
   terminate <- function() {
     for (k in seq_along(m$hosts)) {
-      cmd <- if (m$slurm) paste("scancel", .slurmSelect(m))
+      cmd <- if (m$slurm) paste("scancel", .slurmSelect(m, cancel = TRUE))
       else paste0("for f in slot_*.pid slot_*.run; do [ -f \"$f\" ] || continue; ",
                   "p=$(cat \"$f\"); kill -TERM -- -$p 2>/dev/null || ",
                   "{ pkill -TERM -P $p; kill -TERM $p; }; ",
@@ -1072,7 +1077,8 @@ distributedComputing <- function(expr, tasks = NULL, on = localNode(), jobname =
     free <- detectFreeCores(hosts)
     short <- !is.na(on$cores) & on$cores > free
     if (any(short))
-      warning(paste0(hosts[short], " has ", free[short], " free cores; its tasks get ",
+      warning(paste0(hosts[short], " has ", free[short],
+                     ifelse(free[short] == 1, " free core", " free cores"), "; its tasks get ",
                      free[short], " instead of ", on$cores[short], collapse = "; "), call. = FALSE)
     cores <- stats::setNames(as.integer(ifelse(is.na(on$cores) | short, free, on$cores)), hosts)
     on$cores <- cores
@@ -1120,8 +1126,10 @@ distributedComputing <- function(expr, tasks = NULL, on = localNode(), jobname =
       cxx = any(grepl("\\.cpp$", files)), cores = buildCores, filelist = "files.txt",
       bundle = buildBundle),
       file.path(stage, "build.sh"))
-    # the build writes to build.log, which shows its end only when it fails
-    buildCmd <- "{ bash build.sh > build.log 2>&1 || { tail -n 40 build.log; false; }; } && "
+    # the build writes to build.log, which shows its end only when it fails; a TMPDIR the host
+    # sets to a missing directory, as on some login nodes, falls back to /tmp for the compiler
+    buildCmd <- paste0("{ [ -d \"${TMPDIR:-/tmp}\" ] || export TMPDIR=/tmp; } && ",
+                       "{ bash build.sh > build.log 2>&1 || { tail -n 40 build.log; false; }; } && ")
   }
   # Windows creates symbolic links only with administrator rights
   if (length(files) && .Platform$OS.type == "windows")
@@ -1162,7 +1170,7 @@ distributedComputing <- function(expr, tasks = NULL, on = localNode(), jobname =
     m$jobid <- id[1L]
     .saveManifest(m)
     message(jobname, ": ", .count(n, "task"), " submitted to ", hosts, " as SLURM job ", m$jobid,
-            ", ", .count(workers, "array task"), " of ", cores[[1L]], " cores")
+            ", ", .count(workers, "array task"), " of ", .count(cores[[1L]], "core"))
   } else {
     # slot_<k>.run holds the PID of the running task, which on Windows a kill of
     # the slot does not reach

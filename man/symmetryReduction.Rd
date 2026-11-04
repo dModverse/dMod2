@@ -16,6 +16,7 @@ symmetryReduction(
   alternatives = FALSE,
   timeout = Inf,
   allowOpen = FALSE,
+  allowChecked = FALSE,
   check = TRUE,
   workCap = 4000L,
   ...
@@ -55,6 +56,10 @@ on the load of the machine. Defaults to \code{Inf}.}
 of level \code{"open"} in place; otherwise such a direction is an error. A direction
 of level \code{"verified"} or \code{"checked"}, and a section claim left unproven, give a
 warning. Defaults to \code{FALSE}.}
+
+\item{allowChecked}{Logical. Reduce also on a direction of level \code{"checked"}, which
+holds at random points but has no proof, and on a result whose saturation check
+failed; otherwise either is an error. Defaults to \code{FALSE}.}
 
 \item{check}{Logical. Run the detection again on the model with the trafo applied
 and record in \code{checks$loop} whether exactly the remaining directions are left.

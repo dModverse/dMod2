@@ -1,3 +1,26 @@
+# dMod2 0.14.4
+
+* `profile()` returns the attribute `ends`, one row per side with the number of steps and why
+  the side ended: the threshold, a limit, the step limit, or the error of the objective. It
+  solves the path equation with the exact Hessian where the objective returns one with
+  `deriv2 = TRUE`; `deriv2 = FALSE` keeps the Gauss-Newton matrix. `verbose = TRUE` shows the
+  progress toward the threshold of the contribution named by `stop`.
+
+* `mstrust()` warns with the first error when every fit failed.
+
+* `plotCombined(errfn = )` draws one standard deviation of the error model as a band around the
+  prediction. `plotData()`, `plotCombined()` and `plotPrediction()` order the conditions
+  naturally (L2 before L10). A colour legend of a single condition, and a legend of
+  `plotProfile()` or `plotPaths()` with a single entry, are left out; `plotProfile()` and
+  `plotPaths()` keep a list of profiles in its order.
+
+* `symmetryReduction(allowChecked = )` reduces on directions of level `"checked"`, which hold at
+  random points without a proof.
+
+* `distributedComputing()` writes the result of a task under a temporary name and renames it
+  once written, so that `check()` and `get()` read complete results only; the remote build uses
+  `/tmp` where `TMPDIR` names a missing directory. `terminate()` cancels a SLURM job by its ID.
+
 # dMod2 0.14.3
 
 * `trust()` also ends on a rejected Newton step from inside the trust region that predicts a

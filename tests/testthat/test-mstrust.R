@@ -177,6 +177,26 @@ test_that("profile with W = \"identity\" gives the profile of the quadratic, wit
   }
 })
 
+test_that("the integrated profile takes the exact Hessian where the objective has one", {
+  obj <- function(pars, fixed = NULL, deriv2 = FALSE, ...) {
+    p <- c(pars, fixed); a <- p[["a"]]; b <- p[["b"]]
+    r <- c(a - 1, b^2 - a, b - 2)
+    J <- rbind(c(1, 0), c(-1, 2 * b), c(0, 1))
+    H <- 2 * crossprod(J)
+    if (deriv2) H[2, 2] <- H[2, 2] + 4 * r[2]
+    dimnames(H) <- list(c("a", "b"), c("a", "b"))
+    free <- names(pars)
+    objlist(sum(r^2), setNames(2 * drop(crossprod(J, r)), c("a", "b"))[free], H[free, free, drop = FALSE])
+  }
+  fit <- trust(obj, c(a = 1, b = 1.5), rinit = 1, rmax = 10, hessianMethod = "exact")
+  along <- function(pr) max(abs(pr$value - vapply(pr$a, function(a)
+    optimize(function(b) obj(c(b = b), fixed = c(a = a))$value, c(0, 5))$objective, 0)))
+  exact <- profile(obj, fit$argument, "a", limits = c(-1, 1), cores = 1)
+  gn <- profile(obj, fit$argument, "a", limits = c(-1, 1), cores = 1, deriv2 = FALSE)
+  expect_lt(along(exact), 1e-4)
+  expect_gt(along(gn), 1e-3)
+})
+
 test_that("profile respects limits on a flat direction", {
   # Along an exactly flat direction the stepsize doubles every step; limits
   # clamp the last step rather than being overshot.
@@ -287,11 +307,11 @@ test_that("mstrust gives up after nTries and records an error", {
   oldwd <- setwd(tempdir()); on.exit(setwd(oldwd), add = TRUE)
 
   obj <- make_flaky_obj(fail_first = 100L)
-  out <- mstrust(objfun = obj, center = c(a = 0, b = 0),
-                 name = "test_mstrust_retry_fail",
-                 rinit = 1, rmax = 10, iterlim = 50,
-                 fits = 1L, sd = 1, cores = 1L,
-                 retry = TRUE, nTries = 3L, output = FALSE)
+  expect_warning(out <- mstrust(objfun = obj, center = c(a = 0, b = 0),
+                                name = "test_mstrust_retry_fail",
+                                rinit = 1, rmax = 10, iterlim = 50,
+                                fits = 1L, sd = 1, cores = 1L,
+                                retry = TRUE, nTries = 3L, output = FALSE), "every fit failed")
 
   expect_length(out, 1L)
   expect_true(!is.null(out[[1]]$error))
@@ -302,11 +322,11 @@ test_that("mstrust with retry = FALSE does not re-attempt", {
   oldwd <- setwd(tempdir()); on.exit(setwd(oldwd), add = TRUE)
 
   obj <- make_flaky_obj(fail_first = 1L)
-  out <- mstrust(objfun = obj, center = c(a = 0, b = 0),
-                 name = "test_mstrust_no_retry",
-                 rinit = 1, rmax = 10, iterlim = 50,
-                 fits = 1L, sd = 1, cores = 1L,
-                 retry = FALSE, output = FALSE)
+  expect_warning(out <- mstrust(objfun = obj, center = c(a = 0, b = 0),
+                                name = "test_mstrust_no_retry",
+                                rinit = 1, rmax = 10, iterlim = 50,
+                                fits = 1L, sd = 1, cores = 1L,
+                                retry = FALSE, output = FALSE), "every fit failed")
 
   expect_length(out, 1L)
   expect_true(!is.null(out[[1]]$error))

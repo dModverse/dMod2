@@ -269,6 +269,18 @@ plotPars.parframe <- function(x, ..., tol = 1) {
 }
 
 
+# The labels of R's format() with as many significant digits as it takes to tell the breaks apart,
+# seven at least.
+.distinctLabels <- function(breaks) {
+  ok <- is.finite(breaks)
+  for (d in 7:15) {
+    labels <- format(breaks, digits = d, trim = TRUE, justify = "left")
+    if (!anyDuplicated(labels[ok])) break
+  }
+  labels
+}
+
+
 # 0 and multiples of the decades from 10 up to the largest absolute limit, both
 # signs, refined from 1 over 1-2-5 to 1..9 until three fall inside the limits.
 # On a pseudo-log axis, which is linear below 1, a break at 1 would crowd 0.
@@ -296,6 +308,7 @@ plotValues.parframe <- function(x, ..., tol = 1, showSteps = FALSE, pseudoLog = 
 
   yScale <- if (pseudoLog)
     scale_y_continuous(transform = scales::pseudo_log_trans(base = 10), breaks = .decadeBreaks)
+  else scale_y_continuous(n.breaks = 7, labels = .distinctLabels)
 
   stepLines <- stepLabels <- NULL
   if (showSteps) {
@@ -382,7 +395,8 @@ plotValues.parframe <- function(x, ..., tol = 1, showSteps = FALSE, pseudoLog = 
     do.call(rbind, lapply(names(parts), function(n)
       .profileDeltas(parts[[n]], n, s, modes, maxvalue)))
   }))
-  out$proflist <- as.factor(out$proflist)
+  # the sets in the order they were given
+  out$proflist <- factor(out$proflist, levels = names(sets))
   out
 }
 
@@ -428,9 +442,11 @@ plotValues.parframe <- function(x, ..., tol = 1, showSteps = FALSE, pseudoLog = 
     guides(x = guide_axis(check.overlap = TRUE)) +
     theme(panel.spacing.x = unit(1.2, "lines"))
 
-  # A single set needs no colour legend to say so.
+  # A single set or contribution needs no legend to say so.
   p <- if (nlevels(data$proflist) < 2L) p + guides(color = "none")
        else p + labs(color = "set")
+  p <- if (length(unique(data$mode)) < 2L) p + guides(linetype = "none")
+       else p + labs(linetype = "contribution")
 
   if (!is.null(parlist)) p <- p + .profilePoints(parlist, sets)
 
@@ -929,7 +945,6 @@ parfn <- function(p2p, parameters = NULL, condition = NULL) {
   attr(outfn, "parameters") <- parameters
   attr(outfn, "conditions") <- condition
   attr(outfn, "compileInfo") <- attr(p2p, "compileInfo")
-  attr(outfn, "resetWarmStart") <- attr(p2p, "resetWarmStart")
   class(outfn) <- c("parfn", "fn")
   outfn
 

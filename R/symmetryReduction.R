@@ -36,6 +36,9 @@
 #'   of level `"open"` in place; otherwise such a direction is an error. A direction
 #'   of level `"verified"` or `"checked"`, and a section claim left unproven, give a
 #'   warning. Defaults to `FALSE`.
+#' @param allowChecked Logical. Reduce also on a direction of level `"checked"`, which
+#'   holds at random points but has no proof, and on a result whose saturation check
+#'   failed; otherwise either is an error. Defaults to `FALSE`.
 #' @param check Logical. Run the detection again on the model with the trafo applied
 #'   and record in `checks$loop` whether exactly the remaining directions are left.
 #'   Defaults to `TRUE`; large models may turn it off.
@@ -98,8 +101,8 @@
 symmetryReduction <- function(object, fixed = NULL, positive = NULL, dPoly = 3L,
                               dDarboux = 2L, dExp = 2L, separable = TRUE,
                               reportZeroCompatibility = FALSE, alternatives = FALSE,
-                              timeout = Inf, allowOpen = FALSE, check = TRUE,
-                              workCap = 4000L, ...) {
+                              timeout = Inf, allowOpen = FALSE, allowChecked = FALSE,
+                              check = TRUE, workCap = 4000L, ...) {
   if (!inherits(object, "symmetrydetection"))
     stop("symmetryReduction(): `object` must be a symmetrydetection result.", call. = FALSE)
   if (length(list(...)))
@@ -112,7 +115,8 @@ symmetryReduction <- function(object, fixed = NULL, positive = NULL, dPoly = 3L,
                zero_compatibility = isTRUE(reportZeroCompatibility),
                alternatives = isTRUE(alternatives),
                timeout = if (is.infinite(timeout)) "Inf" else timeout,
-               allow_open = isTRUE(allowOpen), check = isTRUE(check),
+               allow_open = isTRUE(allowOpen), allow_checked = isTRUE(allowChecked),
+               check = isTRUE(check),
                work_cap = as.integer(workCap))
   if (is.null(fixed)) args$fixed <- NULL
   if (is.null(positive)) args$positive <- NULL

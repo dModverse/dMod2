@@ -25,7 +25,8 @@ plotCombined(prediction, ...)
   scales = "free",
   facet = c("wrap", "grid", "wrap_plain"),
   transform = NULL,
-  aesthetics = NULL
+  aesthetics = NULL,
+  errfn = NULL
 )
 
 \method{plot}{prdframe}(
@@ -60,6 +61,9 @@ gives one panel per combination of name and condition.}
 
 \item{aesthetics}{Named list of aesthetic mappings given as character, e.g.
 \code{list(linetype = "name")}. They can refer to columns of the condition grid.}
+
+\item{errfn}{Optional \link{obsfn}, the error model. Its predicted \code{sigma} is drawn as a band
+around the prediction. Default \code{NULL}.}
 }
 \value{
 A \code{ggplot} object.
