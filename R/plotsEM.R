@@ -247,13 +247,8 @@ plotRandomEffects.em <- function(x, type = c("conditional", "modes"), draws = 20
 
 #' @rdname plotValues
 #' @export
-plotValues.em <- function(x, ..., tol = 1, showSteps = FALSE, pseudoLog = FALSE) {
-  if (is.null(x$multistart))
-    stop("plotValues: the fit has no multistart table; msem() returns one.", call. = FALSE)
-  starts <- x$multistart[!is.na(x$multistart$value), , drop = FALSE]
-  plotValues(parframe(starts, parameters = character(0)), ..., tol = tol, showSteps = showSteps,
-             pseudoLog = pseudoLog)
-}
+plotValues.em <- function(x, ..., tol = 1, showSteps = FALSE, pseudoLog = FALSE, relative = FALSE)
+  .plotWaterfall(list(.valueFrame(x, ...)), tol, showSteps, pseudoLog, relative)
 
 #' @rdname plotTrace
 #' @param x An `em` fit, see [em()], with a stage trace: every method except `"focei"`

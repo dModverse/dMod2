@@ -24,7 +24,7 @@ normal random effects; without those equal to IWRES), \code{"PRES"} or
 \code{"PWRES"} (against the population prediction), \code{"NPDE"} (normalised
 prediction distribution errors from \code{nsim} simulated data sets,
 decorrelated per group, readings at or below their limit imputed as in
-Nguyen et al. 2012).}
+Nguyen et al. 2012, drawn given the other readings of their group).}
 
 \item{nsim, seed}{With \code{"NPDE"}: number of simulated data sets and the seed
 of the random number generator.}

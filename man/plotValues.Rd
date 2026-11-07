@@ -4,24 +4,76 @@
 \name{plotValues.alignment}
 \alias{plotValues.alignment}
 \alias{plotValues.parframe}
+\alias{plotValues.data.frame}
+\alias{plotValues.parlist}
+\alias{plotValues.list}
 \alias{plotValues}
 \alias{plotValues.em}
 \title{Plot Objective Values of a Collection of Fits}
 \usage{
-\method{plotValues}{alignment}(x, ...)
+\method{plotValues}{alignment}(
+  x,
+  ...,
+  tol = 1,
+  showSteps = FALSE,
+  pseudoLog = FALSE,
+  relative = FALSE
+)
 
-\method{plotValues}{parframe}(x, ..., tol = 1, showSteps = FALSE, pseudoLog = FALSE)
+\method{plotValues}{parframe}(
+  x,
+  ...,
+  tol = 1,
+  showSteps = FALSE,
+  pseudoLog = FALSE,
+  relative = FALSE
+)
+
+\method{plotValues}{data.frame}(
+  x,
+  ...,
+  tol = 1,
+  showSteps = FALSE,
+  pseudoLog = FALSE,
+  relative = FALSE
+)
+
+\method{plotValues}{parlist}(
+  x,
+  ...,
+  tol = 1,
+  showSteps = FALSE,
+  pseudoLog = FALSE,
+  relative = FALSE
+)
+
+\method{plotValues}{list}(
+  x,
+  ...,
+  tol = 1,
+  showSteps = FALSE,
+  pseudoLog = FALSE,
+  relative = FALSE
+)
 
 plotValues(x, ...)
 
-\method{plotValues}{em}(x, ..., tol = 1, showSteps = FALSE, pseudoLog = FALSE)
+\method{plotValues}{em}(
+  x,
+  ...,
+  tol = 1,
+  showSteps = FALSE,
+  pseudoLog = FALSE,
+  relative = FALSE
+)
 }
 \arguments{
-\item{x}{Data frame with columns \code{value}, \code{converged} and \code{iterations},
-e.g. a \link{parframe}, a fit of \code{\link[=msem]{msem()}}, whose starts are plotted, or an
-alignment from \code{\link[=align]{align()}}.}
+\item{x}{A collection of fits: a \link{parframe}, the result of \code{\link[=mstrust]{mstrust()}}, a
+data frame with column \code{value} and optionally \code{converged} and
+\code{iterations}, a fit of \code{\link[=msem]{msem()}} or an alignment from \code{\link[=align]{align()}}, whose
+starts are plotted. Or a named list of collections, one panel each.}
 
-\item{...}{Logical expressions to subset \code{x}.}
+\item{...}{Logical expressions to subset \code{x}, every collection of a list.}
 
 \item{tol}{Maximal difference between neighboring objective values that
 still counts as one step. Defaults to 1.}
@@ -32,10 +84,16 @@ vertical lines labelled by their index. Defaults to \code{FALSE}.}
 \item{pseudoLog}{Logical. \code{TRUE} draws the values on a pseudo-log10 scale,
 linear below 1 in absolute value and defined for negative values. Defaults
 to \code{FALSE}, a linear scale.}
+
+\item{relative}{\code{TRUE} draws every value above the best of its
+collection, as for collections whose objectives differ by a constant; a
+number draws every value above that number, as the best of all
+collections. Defaults to \code{FALSE}.}
 }
 \value{
 A \code{ggplot} object with the plotted data frame as attribute
-\code{"data"}; its column \code{delta} is the distance to the best fit.
+\code{"data"}; its column \code{delta} is the distance to the best fit of its
+collection, \code{set} the collection of a list.
 }
 \description{
 Draws the waterfall plot of a fit collection: the objective values in

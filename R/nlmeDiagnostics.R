@@ -59,22 +59,12 @@ utils::globalVariables(c("lo", "mid", "hi", "percentile", "blq", "blqLo", "blqMi
   }, design$data, order), use.names = FALSE)
 }
 
-## Normalised prediction distribution errors per data row (Comets et al. 2008), decorrelated per
-## unit of groups by the Cholesky factor of the simulated covariance; a value at or below its limit
-## becomes the simulated quantile at a uniform draw below the censored fraction (Nguyen et al. 2012).
+## Normalised prediction distribution errors per data row (Comets et al. 2008), per unit of groups.
 .npde <- function(object, nsim, pr) {
   design <- object$design
   sims <- .simulatedRows(object, nsim)
   y <- pr$observed
   lloq <- .emObsLimits(design)
-  for (j in which(is.finite(lloq))) {
-    s <- sims[j, ]
-    below <- s <= lloq[j]
-    p <- max(mean(below), 1 / nsim)
-    impute <- function(n) stats::quantile(s, stats::runif(n, 0, p), names = FALSE, type = 1)
-    if (y[j] <= lloq[j]) y[j] <- impute(1)
-    if (any(below)) sims[j, below] <- impute(sum(below))
-  }
   pars <- c(object$argument, .etaVector(object))
   units <- lapply(.volumeUnits(design, c(pars, object$fixed), object$fixed), `[[`, "conditions")
   units <- c(units, as.list(setdiff(names(design$data), unlist(units))))
@@ -82,18 +72,60 @@ utils::globalVariables(c("lo", "mid", "hi", "percentile", "blq", "blqLo", "blqMi
   for (u in units) {
     r <- which(pr$condition %in% u)
     if (!length(r)) next
-    E <- rowMeans(sims[r, , drop = FALSE])
-    V <- stats::cov(t(sims[r, , drop = FALSE]))
-    L <- tryCatch(t(chol(V)), error = function(e) NULL)
-    if (is.null(L))
+    z <- .npdeUnit(y[r], sims[r, , drop = FALSE], lloq[r])
+    if (is.null(z))
       stop("residuals: the simulated readings of ", paste(u, collapse = ", "), " have a singular covariance; ",
            "raise `nsim`.", call. = FALSE)
-    ys <- forwardsolve(L, y[r] - E)
-    ss <- forwardsolve(L, sims[r, , drop = FALSE] - E)
-    pde <- rowMeans(ss < ys)
-    out[r] <- stats::qnorm(pmin(pmax(pde, 1 / (2 * nsim)), 1 - 1 / (2 * nsim)))
+    out[r] <- z
   }
   out
+}
+
+## NPDE of the readings `y` of one unit against their simulations `S`, rows the readings: decorrelated
+## by the Cholesky factor of the simulated covariance, the pde the mid-rank among the simulations,
+## censored readings imputed by .imputeCensored(). NULL for a singular covariance.
+.npdeUnit <- function(y, S, lloq) {
+  L <- tryCatch(t(chol(stats::cov(t(S)))), error = function(e) NULL)
+  if (is.null(L)) return(NULL)
+  E <- rowMeans(S)
+  ys <- forwardsolve(L, .imputeCensored(y, S, lloq) - E)
+  below <- rowSums(forwardsolve(L, S - E) < drop(ys))
+  stats::qnorm((below + 0.5) / (ncol(S) + 1))
+}
+
+## Readings at or below their limit drawn from their law given the other readings of the unit and
+## the limits: elliptical slice sampling on the Gaussian copula of the simulations, mapped back by
+## their quantiles; without correlation uniform below the censored fraction (Nguyen et al. 2012).
+.imputeCensored <- function(y, S, lloq, iter = 50L) {
+  cens <- which(y <= lloq)
+  if (!length(cens)) return(y)
+  K <- ncol(S)
+  obs <- setdiff(seq_along(y), cens)
+  scores <- stats::qnorm((t(apply(S, 1, rank)) - 0.5) / K)
+  Q <- solve(stats::cor(t(scores)))
+  w <- stats::qnorm((rowSums(S < y) + 0.5) / (K + 1))
+  up <- stats::qnorm(pmax(rowMeans(S <= lloq), 1 / (2 * K)))[cens]
+  # the scores of the censored readings given the others: normal with mean m and covariance C
+  C <- solve(Q[cens, cens, drop = FALSE])
+  m <- -drop(C %*% Q[cens, obs, drop = FALSE] %*% w[obs])
+  Lc <- t(chol(C))
+  x <- stats::qnorm(stats::runif(length(cens)) * stats::pnorm(up))
+  for (it in seq_len(iter)) {
+    nu <- drop(Lc %*% stats::rnorm(length(cens)))
+    th <- stats::runif(1, 0, 2 * pi)
+    lo <- th - 2 * pi
+    hi <- th
+    repeat {
+      prop <- m + (x - m) * cos(th) + nu * sin(th)
+      if (all(prop <= up)) break
+      if (th < 0) lo <- th else hi <- th
+      th <- stats::runif(1, lo, hi)
+    }
+    x <- prop
+  }
+  y[cens] <- vapply(seq_along(cens), function(i)
+    stats::quantile(S[cens[i], ], stats::pnorm(x[i]), names = FALSE, type = 1), 0)
+  y
 }
 
 ## Tests of NPDE against N(0, 1): the mean by a t-test, the variance by the chi-square test of

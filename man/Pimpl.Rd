@@ -62,7 +62,9 @@ its default, an unknown entry is an error:
 default \code{1e-2}.}
 \item{\code{positive}}{Keep states positive, default \code{TRUE}.}
 \item{\code{stability}}{Require a stable root if \code{flow = TRUE}, default
-\code{TRUE}.}
+\code{TRUE}; where no start reaches one, the evaluation fails. With
+\code{FALSE} an unstable root is returned, on which a
+\code{\link[=constraintStability]{constraintStability()}} term rises.}
 \item{\code{stabilityTol}}{With \code{stability}, a root counts as stable while
 the real part of its leading eigenvalue on the manifold of the conserved
 quantities is at most \code{stabilityTol}, in the units of the rates; default

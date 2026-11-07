@@ -76,8 +76,9 @@ failed. A task fails when its process ends without a result.}
 runs, reports each change as a message and returns \code{TRUE} when every task
 is done.}
 \item{\code{get(combine = TRUE, all = FALSE)}}{returns the results. With
-\code{combine = TRUE} parlists are joined by \code{c()} and data frames such as
-parframes by \code{rbind()}, other results come as a list; tasks without a
+\code{combine = TRUE} parlists are joined by \code{c()}, fits of \code{\link[=msem]{msem()}} with
+parts of its starts into one fit, and data frames such as parframes by
+\code{rbind()}, other results come as a list; tasks without a
 result are left out with a warning. \code{combine = FALSE} returns one entry
 per task, named like \code{tasks}, \code{NULL} for a task not done. Results of
 remote nodes are copied into \verb{<jobname>_folder/<k>}, with \code{all = TRUE}
@@ -158,8 +159,7 @@ jobFitting <- distributedComputing(
   on = nodes, jobname = "fits"
 )
 jobFitting$wait()
-fits    <- as.parframe(jobFitting$get())
-bestfit <- as.parvec(fits)
+bestfit <- as.parvec(jobFitting$get())
 jobFitting$purge(local = TRUE)
 
 # Profiles of the best fit: one task per group of four parameters and side, on
@@ -185,6 +185,15 @@ job <- distributedComputing(
   mstrust(obj, center, fits = cores, cores = cores, sd = 4),
   tasks = 100, on = cluster, jobname = "slurmfits"
 )
+
+# The ten starts of one mixed-effects multistart as ten array tasks of four cores:
+# every task draws the same starts and fits its own, get() joins them into one fit
+jobEm <- distributedComputing({
+  set.seed(1)
+  msem(obj, random, init, fits = 10, which = taskId,
+       cores = c(fits = 1, conditions = cores))
+}, tasks = 10, on = slurmCluster("mycluster", cores = 4, walltime = "06:00:00"),
+jobname = "msemfits")
 
 # The jobs submitted and not purged, and the functions of one of them
 dMod2Jobs()

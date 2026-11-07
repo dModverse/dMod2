@@ -3,55 +3,9 @@
 # N(0, tau^2) value per block but that of the population value; the guide chapter Group-specific effects derives both.
 
 
-## The integral of a cluster symbol on the expansion (a, m) of its groups: the exact sum over all
-## set partitions of the groups and the anchor under the Ewens prior (dirichletProcess_kernel.cpp), its
-## Fisher derivatives, posterior moments, M-step statistics and the most probable partition.
-.slabPartition <- function(a, m, concentration, tau) {
-  r <- dirichlet_process_partitions(as.numeric(a), as.numeric(m), concentration, tau)
-  c(r[c("logI", "dm", "da", "mean", "cen2", "spike", "dconcentration", "dtau", "labels", "values")],
-    list(stats = c(r$free, length(a), r$slab2)))
-}
-
-## The largest number of spike-and-slab coordinates of a group integrated jointly, 2^K subsets.
-.slabJoint <- 12L
-
-## The integral of the spike-and-slab coordinates of a group on their full curvature, a sum over
-## the subsets F of slab coordinates of closed-form Gaussian integrals at eta = 0 off F; Fisher
-## derivatives, posterior moments and the most probable subset.
-.slabSubsets <- function(P, m, prob, tau) {
-  K <- length(m)
-  if (K > .slabJoint)
-    stop(sprintf("em: at most %d spike-and-slab coordinates integrated jointly.", .slabJoint), call. = FALSE)
-  b <- drop(P %*% m); c0 <- sum(m * b)
-  subsets <- unname(as.matrix(expand.grid(rep(list(c(FALSE, TRUE)), K))))
-  n <- nrow(subsets)
-  logw <- numeric(n)
-  means <- matrix(0, n, K)
-  second <- array(0, c(n, K, K))
-  for (s in seq_len(n)) {
-    F <- subsets[s, ]
-    logw[s] <- sum(log(prob[F])) + sum(log1p(-prob[!F])) - c0 / 2
-    if (!any(F)) next
-    R <- chol(P[F, F, drop = FALSE] + diag(1 / tau[F]^2, sum(F)))
-    mu <- backsolve(R, forwardsolve(t(R), b[F]))
-    logw[s] <- logw[s] + sum(b[F] * mu) / 2 - sum(log(diag(R))) - sum(log(tau[F]))
-    means[s, F] <- mu
-    second[s, F, F] <- chol2inv(R) + tcrossprod(mu)
-  }
-  mx <- max(logw)
-  logI <- mx + log(sum(exp(logw - mx)))
-  w <- exp(logw - logI)
-  mean <- drop(w %*% means)
-  M2 <- matrix(colSums(w * matrix(second, n)), K, K)
-  cen <- M2 - tcrossprod(mean, m) - tcrossprod(m, mean) + tcrossprod(m)
-  incl <- drop(w %*% subsets)
-  slab2 <- diag(M2)
-  pick <- which.max(logw)
-  list(logI = logI, dm = drop(P %*% (mean - m)), dP = -cen / 2, mean = mean, cov = M2 - tcrossprod(mean),
-       incl = incl, slab2 = slab2, dprob = incl / prob - (1 - incl) / (1 - prob),
-       dtau = -incl / tau + slab2 / tau^3, spike = 1 - incl, selected = as.numeric(subsets[pick, ]),
-       values = means[pick, ])
-}
+## The most nodes the joint sum over the subsets of the spike-and-slab coordinates of a group
+## visits (src/sparse_kernel.cpp, SlabSum) before the group goes to expectation consistent.
+.slabBudget <- 2^24
 
 ## log I of the Dirichlet-process stems on the expansion (precision P[[g]], centre m[g, ]) by
 ## sequential importance sampling over the seating of the groups, each by prior times predictive;

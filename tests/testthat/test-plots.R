@@ -62,6 +62,21 @@ test_that("plotPars and plotValues take a positional subset", {
   expect_no_error(ggplot2::ggplot_build(plotValues(fs, converged)))
 })
 
+test_that("plotValues takes the fits of mstrust() and a named list, each collection ranked on its own", {
+  fits <- mstrust(.coupled, c(a = 1, b = 1, c = 0.5, d = 1), fits = 3, sd = 1, cores = 1, iterlim = 50)
+  expect_equal(attr(plotValues(fits), "data")$value, sort(as.parframe(fits)$value))
+  expect_equal(names(as.parvec(fits)), c("a", "b", "c", "d"))
+  lim <- 2.5
+  p <- plotValues(list(first = .fitFrame(c(3, 1)), second = .fitFrame(c(5, 2, 4))), value < lim + 2,
+                  relative = TRUE)
+  d <- attr(p, "data")
+  expect_equal(levels(d$set), c("first", "second"))
+  expect_equal(d$delta[d$set == "second"], c(0, 2))
+  expect_equal(d$index[d$set == "second"], 1:2)
+  expect_no_error(ggplot2::ggplot_build(p))
+  expect_error(plotValues(list(.fitFrame(1))), "name")
+})
+
 test_that("plotArray takes a positional subset and needs no covtable", {
   times <- 0:5
   x <- Xd(data.frame(name = "A", time = times, row.names = paste0("A", times)))

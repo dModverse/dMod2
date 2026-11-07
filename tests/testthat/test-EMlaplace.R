@@ -1,24 +1,33 @@
 # Laplace and spike-and-slab random effects: the integrals against numerical integration, the
 # exact gradient of the approximate marginal, its exactness on a linear model, and fits.
 
-test_that("the normal-Laplace integral and its moments match a numerical integral", {
-  for (case in list(c(a = 3, m = 0.4, lambda = 2), c(a = 0.5, m = -1.2, lambda = 0.7))) {
-    a <- case[["a"]]; m <- case[["m"]]; lam <- case[["lambda"]]
-    f <- function(e, k = 0) e^k * lam / 2 * exp(-lam * abs(e) - a / 2 * (e - m)^2)
-    I <- integrate(f, -Inf, Inf, rel.tol = 1e-12)$value
-    nl <- dMod2:::.normalLaplace(a, m, lam)
-    expect_equal(nl$logI, log(I), tolerance = 1e-10)
-    expect_equal(nl$mean, integrate(f, -Inf, Inf, k = 1, rel.tol = 1e-12)$value / I, tolerance = 1e-8)
-    expect_equal(nl$dm, numDeriv::grad(function(x) dMod2:::.normalLaplace(a, x, lam)$logI, m), tolerance = 1e-7)
-    expect_equal(nl$da, numDeriv::grad(function(x) dMod2:::.normalLaplace(x, m, lam)$logI, a), tolerance = 1e-7)
-    expect_equal(nl$dlambda, numDeriv::grad(function(x) dMod2:::.normalLaplace(a, m, x)$logI, lam), tolerance = 1e-7)
+test_that("the Laplace factor in natural parameters matches a numerical integral", {
+  for (case in list(c(h = 1.2, t = 3, lambda = 2), c(h = -0.6, t = 0.5, lambda = 0.7), c(h = 0.4, t = 1e-6, lambda = 2))) {
+    h <- case[["h"]]; t <- case[["t"]]; lam <- case[["lambda"]]
+    f <- function(e, k = 0) e^k * lam / 2 * exp(-lam * abs(e) + h * e - t * e^2 / 2)
+    half <- function(k) integrate(f, -Inf, 0, k = k, rel.tol = 1e-12)$value + integrate(f, 0, Inf, k = k, rel.tol = 1e-12)$value
+    I <- half(0)
+    nl <- dMod2:::sparse_factor(1L, h, t, NA, NA, lam, NA)
+    expect_equal(nl$logZ, log(I), tolerance = 1e-10)
+    expect_equal(c(nl$m1, nl$m2, nl$m3, nl$m4), vapply(1:4, half, 0) / I, tolerance = 1e-8)
+    logZ <- function(h, t, lam) dMod2:::sparse_factor(1L, h, t, NA, NA, lam, NA)$logZ
+    expect_equal(nl$m1, numDeriv::grad(function(x) logZ(x, t, lam), h), tolerance = 1e-7)
+    expect_equal(nl$dlambda, numDeriv::grad(function(x) logZ(h, t, x), lam), tolerance = 1e-7)
   }
-  # a strength far above the curvature: the integral tends to exp(-a m^2 / 2)
-  nl <- dMod2:::.normalLaplace(2, 0.3, 1e5)
-  expect_equal(nl$logI, -0.09, tolerance = 1e-4)
-  expect_equal(nl$dm, numDeriv::grad(function(x) dMod2:::.normalLaplace(2, x, 1e5)$logI, 0.3), tolerance = 1e-7)
-  expect_equal(nl$da, numDeriv::grad(function(x) dMod2:::.normalLaplace(x, 0.3, 1e5)$logI, 2), tolerance = 1e-7)
+  # a strength far above the tilt: the prior is the point mass at 0
+  expect_equal(dMod2:::sparse_factor(1L, 0.6, 2, NA, NA, 1e5, NA)$logZ, 0, tolerance = 1e-8)
 })
+
+# The integral over the sparse coordinates in centre form, int exp(-(eta - m)' P (eta - m) / 2) prod p:
+# that of the natural form with b = P m, less m' P m / 2 per group.
+.centred <- function(P, m, ...) {
+  b <- t(vapply(seq_along(P), function(i) drop(P[[i]] %*% m[i, ]), numeric(ncol(m))))
+  dimnames(b) <- dimnames(m)
+  r <- dMod2:::.sparseIntegral(P, b, ...)
+  if (is.null(r)) return(r)
+  r$logI <- r$logI - sum(vapply(seq_along(P), function(i) sum(m[i, ] * (P[[i]] %*% m[i, ])) / 2, 0))
+  r
+}
 
 # A decay model y = A exp(-k dose) per condition, five groups with two conditions each, and the
 # linear model y = a + b dose on the same design with a known sigma.
@@ -73,8 +82,30 @@ test_that("the normal-Laplace integral and its moments match a numerical integra
     pld <- P(linear(dirichletProcess()), method = "explicit", compile = FALSE, modelname = "lap_lindp", deriv2 = TRUE, derivMode = .dm)
     pl2 <- P(linear(laplace(), a ~ 1 + (1 | gr(ID, dist = laplace()))), method = "explicit", compile = FALSE,
              modelname = "lap_lintwo", deriv2 = TRUE, derivMode = .dm)
-    compile(g, err, pc, pm, pn, pl, ps, psk, psm, pskm, psk2, gl, pll, pls, pld, pl2, output = "emlaplace_models",
-            cores = 2)
+    # a second observable z = b + c that only the first two groups measure
+    gz <- Y(c(y = "a + b * dose", z = "b + c"), f = NULL, parameters = c("a", "b", "c", "dose"), compile = FALSE,
+            modelname = "lap_gz", deriv2 = TRUE, derivMode = .dm)
+    reachP <- function(dist, name) {
+      tr <- branch(define(NULL, "x <- x", x = c("a", "b", "c")), table = tab)
+      tr <- define(tr, "dose <- d", d = dose)
+      P(insert(tr, a ~ 1 + (1 | ID), b + c ~ 1 + (1 | gr(ID, dist = dist))), method = "explicit", compile = FALSE,
+        modelname = name, deriv2 = TRUE, derivMode = .dm)
+    }
+    pz <- list(laplace = reachP(laplace(), "lap_zlap"), spikeSlab = reachP(spikeSlab(), "lap_zslab"),
+               dirichletProcess = reachP(dirichletProcess(), "lap_zdp"))
+    # a state X that a stimulus u drives from 0, u = 0 in the groups L1 and L2, read with a drift w
+    # that only a state at 0 multiplies
+    tabu <- cbind(tab, u = ifelse(tab$ID %in% c("L1", "L2"), 0, 1))
+    xu <- Xs(odemodel(eqnvec(X = "s * u - dg * X", W = "w * X - dg * W"), modelname = "lap_xu", compile = FALSE,
+                      deriv2 = TRUE, derivMode = .dm))
+    gu <- Y(c(y = "X + W + c0"), xu, compile = FALSE, modelname = "lap_gu", deriv2 = TRUE, derivMode = .dm)
+    tru <- branch(define(NULL, "x <- x", x = c("s", "w", "dg", "c0", "u", "X", "W")), table = tabu)
+    tru <- define(tru, "u <- v", v = u)
+    tru <- insert(insert(tru, "X <- 0"), "W <- 0")
+    pu <- P(insert(tru, c0 ~ 1 + (1 | ID), s + w ~ 1 + (1 | gr(ID, dist = spikeSlab()))), method = "explicit",
+            compile = FALSE, modelname = "lap_pu", deriv2 = TRUE, derivMode = .dm)
+    compile(g, err, pc, pm, pn, pl, ps, psk, psm, pskm, psk2, gl, pll, pls, pld, pl2, gz, pz$laplace, pz$spikeSlab,
+            pz$dirichletProcess, xu, gu, pu, output = "emlaplace_models", cores = 2)
     set.seed(4)
     dk <- c(L1 = 0, L2 = 0, L3 = 0.8, L4 = 0.8, L5 = -0.6)
     rows <- lapply(rownames(tab), function(cn) {
@@ -91,9 +122,18 @@ test_that("the normal-Laplace integral and its moments match a numerical integra
                  value = 1 + ea[[id]] + (0.5 + eb[[id]]) * tab[cn, "dose"] + rnorm(4, 0, 0.3),
                  sigma = 0.3, condition = cn)
     })
+    linear <- do.call(rbind, rows)
+    ec <- c(L1 = 0.5, L2 = -0.4)
+    zrows <- lapply(rownames(tab)[tab$ID %in% names(ec)], function(cn) {
+      id <- tab[cn, "ID"]
+      data.frame(name = "z", time = c(0, 1, 2, 3), value = 0.5 + eb[[id]] + 0.2 + ec[[id]] + rnorm(4, 0, 0.3),
+                 sigma = 0.3, condition = cn)
+    })
     cache <<- list(g = g, err = err, pc = pc, pm = pm, pn = pn, pl = pl, ps = ps, psk = psk, psm = psm,
                    pskm = pskm, psk2 = psk2, pl2 = pl2, data = data, init = c(k = log(0.6), A = log(10), s = log(0.1)),
-                   gl = gl, pll = pll, pls = pls, pld = pld, tab = tab, linear = as.datalist(do.call(rbind, rows)))
+                   gl = gl, pll = pll, pls = pls, pld = pld, tab = tab, linear = as.datalist(linear),
+                   gz = gz, pz = pz, zdata = as.datalist(rbind(linear, do.call(rbind, zrows))),
+                   xu = xu, gu = gu, pu = pu, udata = as.datalist(transform(linear, value = value - 1)))
     cache
   }
 })
@@ -101,10 +141,11 @@ test_that("the normal-Laplace integral and its moments match a numerical integra
 # The marginal of `p` at `theta` with every Laplace strength `lambda`, slab probability or
 # concentration `share` and slab standard deviation `tau`; the decay data unless `obj` is given.
 .marginalAt <- function(p, theta, lambda = NA, share = NA, tau = NA, grad = TRUE, obj = NULL,
-                        coupling = "expectationConsistent", scores = FALSE, derivMode = NULL) {
+                        scores = FALSE, derivMode = NULL, reach = TRUE) {
   m <- .lap()
   obj <- obj %||% normL2(m$data, m$g * Xt() * p, errmodel = m$err)
   d <- dMod2:::.emDesign(obj, randomEffects(p))
+  if (!reach) d$reach <- NULL
   lay <- dMod2:::.sparseLayout(d)
   hyp <- lapply(list(lambda = lambda, prob = share, concentration = share, tau = tau),
                 function(v) setNames(rep(v, nrow(lay)), lay$stem))
@@ -112,7 +153,7 @@ test_that("the normal-Laplace integral and its moments match a numerical integra
   warm <- matrix(0, length(d$groups), ncol(d$etaNames))
   dMod2:::.laplaceMarginal(d, dMod2:::.conditionObjectives(d), prior, theta, hyp, names(theta),
                            dMod2:::.sparseHypers(lay), NULL, warm, grad = grad,
-                           control = list(iterlim = 300, coupling = coupling, derivMode = derivMode), scores = scores)
+                           control = list(iterlim = 300, derivMode = derivMode), scores = scores)
 }
 
 # The slope of a marginal: its inner iterations leave noise of about 1e-10 in the value, so the
@@ -265,12 +306,11 @@ test_that("SAEM with Dirichlet-process random effects: the sampler draws the exa
   expect_lt(abs(fit$value + 2 * exact$logI), 4 * fit$valueSE + 1e-6)
 })
 
-test_that("two coupled sparse coordinates per group: mean field bounds -2 log L, expectation consistent is closer", {
+test_that("two coupled Laplace coordinates per group: expectation consistent near the exact marginal", {
   m <- .lap()
   theta <- c(a = 1.1, b = 0.4)
   lam <- 2
   obj <- normL2(m$linear, m$gl * Xt() * m$pl2)
-  r <- .marginalAt(m$pl2, theta, lam, obj = obj, coupling = "meanField")
   ec <- .marginalAt(m$pl2, theta, lam, obj = obj)
   expect_identical(ec$coupling, "expectationConsistent")
   exact <- sum(vapply(unique(m$tab$ID), function(id) {
@@ -283,8 +323,7 @@ test_that("two coupled sparse coordinates per group: mean field bounds -2 log L,
     inner <- function(x) vapply(x, function(xi) half(function(z) vapply(z, function(zi) dens(xi, zi), 0)), 0)
     -2 * log(half(inner))
   }, 0))
-  expect_gte(r$value, exact - 1e-6)
-  expect_lt(abs(ec$value - exact), abs(r$value - exact))
+  expect_lt(abs(ec$value - exact), 0.05)
 })
 
 test_that("expectation consistent for two coupled Dirichlet-process stems against the sum over pairs of partitions", {
@@ -331,17 +370,15 @@ test_that("expectation consistent for two coupled Dirichlet-process stems agains
   set.seed(4)
   # without coupling both are exact
   d0 <- draw(0)
-  expect_equal(dMod2:::.sparseIntegral(d0$P, d0$m, d0$m, lay, hyp, character(0))$logI, exact(d0$P, d0$m),
-               tolerance = 1e-10)
+  expect_equal(.centred(d0$P, d0$m, lay, hyp, character(0))$logI, exact(d0$P, d0$m), tolerance = 1e-10)
   err <- t(replicate(10, {
     d <- draw(0.6)
     ex <- exact(d$P, d$m)
-    ec <- dMod2:::.sparseIntegral(d$P, d$m, d$m, lay, hyp, character(0))
-    mf <- dMod2:::.sparseIntegral(d$P, d$m, d$m, lay, hyp, character(0), coupling = "meanField")
-    c(coupling = ec$coupling == "expectationConsistent", ec = abs(ec$logI - ex), mf = abs(mf$logI - ex))
+    ec <- .centred(d$P, d$m, lay, hyp, character(0))
+    c(coupling = ec$coupling == "expectationConsistent", ec = abs(ec$logI - ex))
   }))
   expect_true(all(err[, "coupling"] == 1))
-  expect_lt(mean(err[, "ec"]), mean(err[, "mf"]) / 3)
+  expect_lt(mean(err[, "ec"]), 0.05)
 })
 
 # the gradient of a fit on the unbounded scale of its hyperparameters, log or logit
@@ -426,18 +463,116 @@ test_that("the group scores of a sparse marginal sum to its gradient, each the g
   }
 })
 
-test_that("where expectation consistent fails at the start the fit is by mean field and says so", {
+test_that("em refuses entries of control$laplace it does not read", {
   m <- .lap()
   obj <- normL2(m$data, m$g * Xt() * m$pc, errmodel = m$err)
-  mf <- em(obj, randomEffects(m$pc), m$init, verbose = FALSE, control = list(laplace = list(coupling = "meanField")))
-  expect_equal(mf$coupling, "meanField")
-  expect_error(em(obj, randomEffects(m$pc), m$init, control = list(laplace = list(coupling = "ec"))), "coupling")
-  expect_error(em(obj, randomEffects(m$pc), m$init, control = list(laplace = list(ecmSteps = 5))), "unknown")
-  local_mocked_bindings(.sparseExpectation = function(...) NULL, .package = "dMod2")
-  fb <- em(obj, randomEffects(m$pc), m$init, verbose = FALSE)
-  expect_equal(fb$coupling, "meanFieldFallback")
-  expect_true(fb$converged)
-  expect_equal(fb$value, mf$value, tolerance = 1e-5)
+  expect_error(em(obj, randomEffects(m$pc), m$init, control = list(laplace = list(coupling = "meanField"))), "unknown")
+})
+
+test_that("an eta that reaches no data of its group rests at its prior, with the marginal and gradient unchanged", {
+  m <- .lap()
+  theta <- c(a = 1.1, b = 0.4, c = 0.2, omega_a_a = log(0.4))
+  for (dist in names(m$pz)) {
+    p <- m$pz[[dist]]
+    obj <- normL2(m$zdata, m$gz * Xt() * p)
+    d <- dMod2:::.emDesign(obj, randomEffects(p))
+    expect_identical(unname(d$reach[, "eta_c"]), c(TRUE, TRUE, FALSE, FALSE, FALSE))
+    expect_true(all(d$reach[, c("eta_a", "eta_b")]))
+    # structurally unreached: the data do not move with it
+    full <- c(theta, setNames(rep(0.1, length(d$etaNames)), d$etaNames))
+    gr <- obj(full[setdiff(names(full), "omega_a_a")])$gradient
+    expect_equal(unname(gr[d$etaNames[3:5, "eta_c"]]), c(0, 0, 0))
+    expect_true(all(abs(gr[d$etaNames[1:2, "eta_c"]]) > 1e-3))
+    for (mode in list(NULL, "forward-reverse")) {
+      at <- function(reach) .marginalAt(p, theta, 3, share = if (dist == "spikeSlab") 0.4 else 2, tau = 0.5,
+                                        obj = obj, derivMode = mode, reach = reach)
+      masked <- at(TRUE); all <- at(FALSE)
+      expect_equal(masked$value, all$value, tolerance = 1e-8)
+      expect_equal(masked$gradient, all$gradient, tolerance = 1e-6)
+      expect_equal(unname(masked$modes[3:5, "eta_c"]), c(0, 0, 0))
+    }
+  }
+})
+
+test_that("a state that starts at 0 and that nothing drives passes no random effect on", {
+  m <- .lap()
+  obj <- normL2(m$udata, m$gu * m$xu * m$pu)
+  d <- dMod2:::.emDesign(obj, randomEffects(m$pu))
+  stimulated <- !(d$groups %in% c("L1", "L2"))
+  expect_identical(unname(d$reach[, "eta_s"]), stimulated)
+  expect_identical(unname(d$reach[, "eta_w"]), stimulated)
+  # the data do not move with an unreached eta, at a point away from the modes
+  set.seed(2)
+  full <- c(s = 0.7, w = 0.5, dg = 0.3, c0 = 0.1, setNames(rnorm(length(d$etaNames), 0, 0.3), d$etaNames))
+  gr <- obj(full)$gradient
+  expect_equal(unname(gr[d$etaNames[!stimulated, c("eta_s", "eta_w")]]), rep(0, 4))
+  expect_true(all(abs(gr[d$etaNames[stimulated, c("eta_s", "eta_w")]]) > 1e-6))
+})
+
+test_that("a root of a steady state depends on the inputs its equations and conservation rows reach", {
+  env <- list2env(list(
+    dependent = c("A", "B", "C", "D", "E"),
+    all_exprs = c(A = "k1 - k2 * A", B = "k2 * A - k3 * B", C = "k4 * TNF - k5 * C",
+                  D = "-kf * D + kb * E", E = "kf * D - kb * E", T = "(D + E) - T"),
+    parms_all = c("k1", "k2", "k3", "k4", "k5", "TNF", "kf", "kb", "T")))
+  dep <- dMod2:::.pimplDepends(env, "TNF")
+  expect_setequal(dep$k1, c("A", "B"))
+  expect_setequal(dep$k3, "B")
+  expect_setequal(dep$k5, "C")
+  expect_false("k4" %in% names(dep))
+  expect_setequal(dep$T, c("D", "E"))
+  expect_setequal(dep$kf, c("D", "E"))
+  # a subsystem without full structural rank: every root moves
+  env$all_exprs <- c(A = "k1 - B", B = "k2 - B", C = "k9 - C")
+  env$dependent <- c("A", "B", "C")
+  env$parms_all <- c("k1", "k2", "k9")
+  dep <- dMod2:::.pimplDepends(env, character(0))
+  expect_setequal(dep$k9, c("A", "B", "C"))
+  expect_setequal(dep$k2, c("A", "B"))
+})
+
+test_that("the trace gradients of the sweeps direction by direction are those along all tangents", {
+  m <- .lap()
+  p <- m$pz$spikeSlab
+  d <- dMod2:::.emDesign(normL2(m$zdata, m$gz * Xt() * p), randomEffects(p))
+  full <- c(a = 1.1, b = 0.4, c = 0.2, setNames(seq(-0.2, 0.3, length.out = length(d$etaNames)), d$etaNames))
+  # units of three and of two etas, and per unit a full matrix and one with a single entry
+  units <- lapply(d$groups, function(g) list(eta = unname(d$etaNames[g, d$reach[g, ]]), conditions = d$conditions[[g]]))
+  set.seed(1)
+  Ms <- lapply(units, function(u) {
+    k <- length(u$eta)
+    A <- matrix(rnorm(k * k), k)
+    list(crossprod(A), diag(c(1, rep(0, k - 1)), k))
+  })
+  wide <- dMod2:::.sweepUnits(d, full, NULL, units, Ms, narrow = FALSE)
+  narrow <- dMod2:::.sweepUnits(d, full, NULL, units, Ms, narrow = TRUE)
+  for (u in seq_along(units)) {
+    nm <- wide[[u]]$reach
+    expect_equal(narrow[[u]]$rows[, nm], wide[[u]]$rows[, nm], tolerance = 1e-10)
+    for (j in 1:2) expect_equal(narrow[[u]]$traces[[j]][nm], wide[[u]]$traces[[j]][nm], tolerance = 1e-10)
+  }
+})
+
+test_that("expectation consistent converges beside a coordinate without data and a pair the data tie", {
+  # a pair with correlation 0.997, a coordinate the data do not see, large linear terms
+  P <- diag(c(4, 4, 2, 1, 0, 3)); P[1, 2] <- P[2, 1] <- 0.997 * 4; P[3, 4] <- P[4, 3] <- 0.5
+  b <- matrix(c(30, -28, 2, -1, 0, 1.5), 1)
+  # no budget for the exact sum, so that expectation consistent couples the coordinates
+  ec <- dMod2:::sparse_integral(list(P), b, rep(0L, 6), rep(0.3, 6), rep(0.8, 6), rep(NA_real_, 6),
+                                rep(NA_real_, 6), matrix(TRUE, 1, 6), NULL, NULL, 0)
+  expect_true(ec$ok)
+  expect_identical(ec$coupling, "expectationConsistent")
+  # the exact subset sum over all six coordinates
+  exact <- log(sum(apply(as.matrix(expand.grid(rep(list(c(FALSE, TRUE)), 6))), 1, function(F) {
+    w <- prod(ifelse(F, 0.3, 0.7))
+    if (!any(F)) return(w)
+    A <- P[F, F, drop = FALSE] + diag(1 / 0.8^2, sum(F))
+    w * exp(sum(b[F] * solve(A, b[F])) / 2) / sqrt(det(A)) / 0.8^sum(F)
+  })))
+  expect_lt(abs(ec$logI - exact), 1e-3)
+  # the coordinate without data keeps its prior
+  expect_equal(ec$mean[1, 5], 0, tolerance = 1e-8)
+  expect_equal(ec$spike[1, 5], 0.7, tolerance = 1e-8)
 })
 
 test_that("a trial point at which expectation consistent fails is a failed evaluation, the coupling stays", {
@@ -445,17 +580,17 @@ test_that("a trial point at which expectation consistent fails is a failed evalu
   obj <- normL2(m$data, m$g * Xt() * m$pc, errmodel = m$err)
   ec <- em(obj, randomEffects(m$pc), m$init, verbose = FALSE)
   expect_equal(ec$coupling, "expectationConsistent")
-  real <- dMod2:::.sparseExpectation
+  real <- dMod2:::.sparseIntegral
   first <- bad <- NULL
   after <- 0L
-  # expectation consistent fails at the first trial point whose strength is not that of the start
-  local_mocked_bindings(.sparseExpectation = function(P, m, lay, hyp, ...) {
+  # the integral fails at the first trial point whose strength is not that of the start
+  local_mocked_bindings(.sparseIntegral = function(P, b, lay, hyp, ...) {
     at <- hyp$lambda
     if (is.null(first)) first <<- at
     if (is.null(bad) && !isTRUE(all.equal(at, first))) bad <<- at
     if (isTRUE(all.equal(at, bad))) return(NULL)
     if (!is.null(bad)) after <<- after + 1L
-    real(P, m, lay, hyp, ...)
+    real(P, b, lay, hyp, ...)
   }, .package = "dMod2")
   fit <- em(obj, randomEffects(m$pc), m$init, verbose = FALSE)
   expect_false(is.null(bad))
@@ -495,21 +630,23 @@ test_that("a trial point at which expectation consistent fails is a failed evalu
 
 test_that("the Dirichlet-process integral is the Ewens sum over all set partitions, with exact derivatives", {
   a <- c(3, 1.5, 4, 2); m <- c(0.9, -0.2, 0.75, 0.05); conc <- 0.7; tau <- 0.8
-  ps <- dMod2:::.slabPartition(a, m, conc, tau)
+  # in natural parameters t = a, h = a m; log Z of the centre form is less sum(a m^2) / 2
+  stem <- function(h, t, conc, tau) dMod2:::sparse_factor(2L, h, t, NA, tau, NA, conc)
+  ps <- stem(a * m, a, conc, tau)
   all <- .partitionsBrute(a, m, conc, tau)
   w <- vapply(all, `[[`, 0, "w")
-  expect_equal(ps$logI, log(sum(w)), tolerance = 1e-9)
+  expect_equal(ps$logZ - sum(a * m^2) / 2, log(sum(w)), tolerance = 1e-9)
   expect_equal(ps$spike, colSums(w * t(vapply(all, `[[`, logical(4), "zero"))) / sum(w), tolerance = 1e-8)
   # without data every block integral is 1 and the prior sums to 1
-  expect_equal(dMod2:::.slabPartition(0 * a, m, conc, tau)$logI, 0, tolerance = 1e-12)
+  expect_equal(stem(0 * a, 0 * a, conc, tau)$logZ, 0, tolerance = 1e-12)
   # the prior does not depend on the order of the groups
   o <- c(3, 1, 4, 2)
-  expect_equal(dMod2:::.slabPartition(a[o], m[o], conc, tau)$logI, ps$logI, tolerance = 1e-12)
-  logI <- function(a, m, conc, tau) dMod2:::.slabPartition(a, m, conc, tau)$logI
-  expect_equal(ps$dm, numDeriv::grad(function(x) logI(a, x, conc, tau), m), tolerance = 1e-7)
-  expect_equal(ps$da, numDeriv::grad(function(x) logI(x, m, conc, tau), a), tolerance = 1e-7)
-  expect_equal(ps$dconcentration, numDeriv::grad(function(x) logI(a, m, x, tau), conc), tolerance = 1e-7)
-  expect_equal(ps$dtau, numDeriv::grad(function(x) logI(a, m, conc, x), tau), tolerance = 1e-7)
+  expect_equal(stem((a * m)[o], a[o], conc, tau)$logZ, ps$logZ, tolerance = 1e-12)
+  logZ <- function(h, t, conc, tau) stem(h, t, conc, tau)$logZ
+  expect_equal(ps$m1, numDeriv::grad(function(x) logZ(x, a, conc, tau), a * m), tolerance = 1e-7)
+  expect_equal(-ps$m2 / 2, numDeriv::grad(function(x) logZ(a * m, x, conc, tau), a), tolerance = 1e-7)
+  expect_equal(ps$dconc, numDeriv::grad(function(x) logZ(a * m, a, x, tau), conc), tolerance = 1e-7)
+  expect_equal(ps$dtau, numDeriv::grad(function(x) logZ(a * m, a, conc, x), tau), tolerance = 1e-7)
   # the most probable partition
   expect_equal(ps$labels, all[[which.max(w)]]$labels)
   # the M-step of the concentration: the expected number of slab blocks
@@ -519,7 +656,19 @@ test_that("the Dirichlet-process integral is the Ewens sum over all set partitio
 
 test_that("the spike-and-slab integral of a group sums the subsets on the full curvature", {
   P <- matrix(c(4, 1.5, 1.5, 2), 2); m <- c(0.6, -0.3); prob <- c(0.3, 0.6); tau <- c(0.8, 0.5)
-  ss <- dMod2:::.slabSubsets(P, m, prob, tau)
+  st <- c("s1", "s2")
+  lay <- data.frame(stem = st, block = 1:2, dist = "spikeSlab", lambdaName = NA_character_, probName = c("p1", "p2"),
+                    concentrationName = NA_character_, tauName = c("t1", "t2"), lambda = NA_real_, prob = NA_real_,
+                    concentration = NA_real_, tau = NA_real_, stringsAsFactors = FALSE)
+  joint <- function(P, b, prob, tau) {
+    hyp <- list(lambda = setNames(c(NA, NA), st), prob = setNames(prob, st), concentration = setNames(c(NA, NA), st),
+                tau = setNames(tau, st))
+    dMod2:::.sparseIntegral(list(structure(P, dimnames = list(st, st))), matrix(b, 1, dimnames = list("g", st)),
+                            lay, hyp, c("p1", "p2", "t1", "t2"))
+  }
+  b <- drop(P %*% m)
+  ss <- joint(P, b, prob, tau)
+  expect_null(ss$coupling)
   quad <- function(e) exp(-sum((e - m) * (P %*% (e - m))) / 2)
   line <- function(k, v) { e <- c(0, 0); e[k] <- v; quad(e) }
   one <- function(k) integrate(function(v) vapply(v, function(x) line(k, x), 0) * dnorm(v, 0, tau[k]),
@@ -529,23 +678,24 @@ test_that("the spike-and-slab integral of a group sums the subsets on the full c
     -Inf, Inf, rel.tol = 1e-10)$value
   I <- (1 - prob[1]) * (1 - prob[2]) * quad(c(0, 0)) + prob[1] * (1 - prob[2]) * one(1) +
     (1 - prob[1]) * prob[2] * one(2) + prob[1] * prob[2] * both
-  expect_equal(ss$logI, log(I), tolerance = 1e-8)
-  logI <- function(P, m, prob, tau) dMod2:::.slabSubsets(P, m, prob, tau)$logI
-  expect_equal(ss$dm, numDeriv::grad(function(x) logI(P, x, prob, tau), m), tolerance = 1e-7)
-  # P is symmetric: the off-diagonal entries move together
+  expect_equal(ss$logI - sum(m * b) / 2, log(I), tolerance = 1e-8)
+  # d log I / d b = E eta, d log I / d P = -E[eta eta'] / 2, the symmetric entries moving together
+  logI <- function(P, b, prob, tau) joint(P, b, prob, tau)$logI
+  expect_equal(unname(drop(ss$mean)), numDeriv::grad(function(x) logI(P, x, prob, tau), b), tolerance = 1e-7)
   sym <- function(x) matrix(c(x[1], x[2], x[2], x[3]), 2)
-  dP <- numDeriv::grad(function(x) logI(sym(x), m, prob, tau), c(P[1, 1], P[1, 2], P[2, 2]))
-  expect_equal(c(ss$dP[1, 1], 2 * ss$dP[1, 2], ss$dP[2, 2]), dP, tolerance = 1e-7)
-  expect_equal(ss$dprob, numDeriv::grad(function(x) logI(P, m, x, tau), prob), tolerance = 1e-7)
-  expect_equal(ss$dtau, numDeriv::grad(function(x) logI(P, m, prob, x), tau), tolerance = 1e-7)
+  dP <- numDeriv::grad(function(x) logI(sym(x), b, prob, tau), c(P[1, 1], P[1, 2], P[2, 2]))
+  M2 <- -(ss$cov[[1]] + tcrossprod(drop(ss$mean))) / 2
+  expect_equal(c(M2[1, 1], 2 * M2[1, 2], M2[2, 2]), dP, tolerance = 1e-7)
+  expect_equal(unname(ss$dhyper[c("p1", "p2")]), numDeriv::grad(function(x) logI(P, b, x, tau), prob), tolerance = 1e-7)
+  expect_equal(unname(ss$dhyper[c("t1", "t2")]), numDeriv::grad(function(x) logI(P, b, prob, x), tau), tolerance = 1e-7)
   # one coordinate is the partition of one group with the anchor, c / (1 + c) its slab share
-  one <- dMod2:::.slabSubsets(matrix(3), 0.4, 0.3 / 1.3, 0.7)
-  expect_equal(one$logI, dMod2:::.slabPartition(3, 0.4, 0.3, 0.7)$logI)
+  expect_equal(dMod2:::sparse_factor(0L, 1.2, 3, 0.3 / 1.3, 0.7, NA, NA)$logZ,
+               dMod2:::sparse_factor(2L, 1.2, 3, NA, 0.7, NA, 0.3)$logZ)
 })
 
-test_that("more spike-and-slab coordinates than integrated jointly: one factor each, expectation consistent", {
+test_that("13 coupled spike-and-slab coordinates: exact as one factor, beyond the budget expectation consistent", {
   K <- 13L; G <- 2L; st <- paste0("s", seq_len(K))
-  # the subset sum of .slabSubsets without its bound on K
+  # the subset sum without the bound on K of the joint factors
   exact <- function(P, m, prob, tau) {
     b <- drop(P %*% m); c0 <- sum(m * b)
     terms <- apply(as.matrix(expand.grid(rep(list(c(FALSE, TRUE)), K))), 1, function(F) {
@@ -573,14 +723,16 @@ test_that("more spike-and-slab coordinates than integrated jointly: one factor e
   logI <- function(d) sum(vapply(seq_len(G), function(g) exact(d$P[[g]], d$m[g, ], hyp$prob, hyp$tau), 0))
   set.seed(1)
   d0 <- draw(0)
-  expect_equal(lengths(dMod2:::.sparseFactors(d0$P, st, lay)$factors), rep(1L, K))
-  # without coupling the factors are exact
-  expect_equal(dMod2:::.sparseIntegral(d0$P, d0$m, d0$m, lay, hyp, character(0))$logI, logI(d0), tolerance = 1e-10)
+  # without coupling the factors are exact, also without budget
+  expect_equal(.centred(d0$P, d0$m, lay, hyp, character(0), budget = 0)$logI, logI(d0), tolerance = 1e-10)
+  # coupled: the joint sum is exact, without budget expectation consistent is near it
   d <- draw(0.3)
-  ec <- dMod2:::.sparseIntegral(d$P, d$m, d$m, lay, hyp, character(0))
-  mf <- dMod2:::.sparseIntegral(d$P, d$m, d$m, lay, hyp, character(0), coupling = "meanField")
+  one <- .centred(d$P, d$m, lay, hyp, character(0))
+  expect_null(one$coupling)
+  expect_equal(one$logI, logI(d), tolerance = 1e-10)
+  ec <- .centred(d$P, d$m, lay, hyp, character(0), budget = 0)
   expect_identical(ec$coupling, "expectationConsistent")
-  expect_lt(abs(ec$logI - logI(d)), abs(mf$logI - logI(d)) / 3)
+  expect_lt(abs(ec$logI - logI(d)), 0.02)
 })
 
 test_that("the spike-and-slab and cluster marginals have the exact gradient, normal etas beside", {
@@ -652,6 +804,11 @@ test_that("multistart perturbs the hyperparameters on their unbounded scale", {
     expect_true(all(draws[, prob] > 0 & draws[, prob] < 1))
     expect_gt(sd(draws[, "k"]), 1)
   }
+  # a named sd perturbs the parameters it names, by name
+  sd <- dMod2:::.perturbSd(c(s = 0.5, A = 2), center)
+  expect_equal(sd[c("k", "A", "s")], c(k = 0, A = 2, s = 0.5))
+  expect_error(dMod2:::.perturbSd(c(0.5, 2), center), "names")
+  expect_error(dMod2:::.perturbSd(c(B = 1), center), "B")
 })
 
 test_that("SAEM with Dirichlet-process random effects selects the groups that differ", {
@@ -696,6 +853,9 @@ test_that("spike-and-slab fits select the groups that differ and estimate the th
   expect_equal(summary(fit)$seMethod, "none")
   centre <- em(objOf(m$ps), randomEffects(m$ps), m$init, verbose = FALSE)
   expect_true(centre$converged)
+  # a fit as init starts from its inner modes and evaluates to its value
+  again0 <- em(objOf(m$ps), randomEffects(m$ps), centre, control = list(laplace = list(maxOuter = 0)), verbose = FALSE)
+  expect_equal(again0$value, centre$value, tolerance = 1e-8)
   again <- em(objOf(m$ps), randomEffects(m$ps), centre$argument, verbose = FALSE)
   expect_gt(again$value, centre$value - 1e-5)
   # five groups give scores in four directions, fewer than the five parameters

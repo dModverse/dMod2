@@ -56,6 +56,18 @@
     se_tr <- insert(se_tr, "x <- exp(x)", x = c("V", "Cl", "sigma_prop"))
     se_tr <- insert(se_tr, V ~ 1 + (1 | ID))
     se_p <- P(se_tr, method = "explicit", compile = FALSE, modelname = "sigeta_p", deriv2 = TRUE, derivMode = dm)
+    # the same with an observable and an error model that read the time
+    se_gt <- Y(c(y = "Cc * exp(-b_t * time)"), se_x, modelname = "sigeta_obs_t", compile = FALSE, deriv2 = TRUE,
+               derivMode = dm)
+    se_errt <- Y(eqnvec(y = "sigma_prop * y + s_t * time"), se_gt, attachInput = FALSE, compile = FALSE,
+                 deriv2 = TRUE, modelname = "sigeta_err_t", derivMode = dm)
+    se_trt <- trafo(c("V", "Cl", "Cc", "sigma_prop", "b_t", "s_t"),
+                    data.frame(ID = se_subj, dose = 100, row.names = se_subj))
+    se_trt <- insert(se_trt, "Cc <- dose / V", dose = dose)
+    se_trt <- insert(se_trt, "x <- exp(x)", x = c("V", "Cl", "sigma_prop", "b_t", "s_t"))
+    se_trt <- insert(se_trt, V ~ 1 + (1 | ID))
+    se_pt <- P(se_trt, method = "explicit", compile = FALSE, modelname = "sigeta_p_t", deriv2 = TRUE,
+               derivMode = dm)
 
     # parent / metabolite chain A -> B -> 0, both observed, three subjects
     mo_subj <- c("S1", "S2", "S3")
@@ -75,12 +87,13 @@
     mo_tr <- insert(mo_tr, ka + ke ~ 1 + (1 | ID))
     mo_p <- P(mo_tr, method = "explicit", compile = FALSE, modelname = "mo_p", deriv2 = FALSE)
 
-    compile(th_x, th_g, th_err, th_p, se_x, se_g, se_err, se_p, mo_x, mo_g, mo_err, mo_p,
+    compile(th_x, th_g, th_err, th_p, se_x, se_g, se_err, se_p, se_gt, se_errt, se_pt, mo_x, mo_g, mo_err, mo_p,
             output = "focei_models", cores = 2)
     cache <<- list(
       theoph = list(x = th_x, g = th_g, err = th_err, p = th_p, data = as.datalist(data.frame(
         name = "y", time = th$Time, value = th$conc, sigma = NA_real_, condition = th$Subject))),
-      sigeta = list(x = se_x, g = se_g, err = se_err, p = se_p, ode = se_ode),
+      sigeta = list(x = se_x, g = se_g, err = se_err, p = se_p, ode = se_ode, gt = se_gt, errt = se_errt,
+                    pt = se_pt),
       mo     = list(x = mo_x, g = mo_g, err = mo_err, p = mo_p))
     cache
   }
@@ -200,6 +213,41 @@ test_that("the FOCEI gradient with a random effect in the error model is the slo
   expect_equal(fd$value, ff$value, tolerance = 1e-6)
   expect_equal(fd$argument, ff$argument, tolerance = 1e-4)
   expect_equal(fd$hessian, ff$hessian, tolerance = 1e-4)
+})
+
+
+test_that("the native chain takes observables and error models that read the time", {
+  skip_on_cran()
+  oldwd <- setwd(tempdir()); on.exit(setwd(oldwd))
+  mods <- .focei_models()$sigeta
+  model <- mods$gt * mods$x * mods$pt
+  pars <- c(V = log(20), Cl = log(5), sigma_prop = log(0.1), b_t = log(0.05), s_t = log(0.01),
+            eta_V_A = -0.2, eta_V_B = 0.1, eta_V_C = 0.05)
+  sim <- model(c(0.5, 1, 2, 4, 8), pars, deriv = FALSE)
+  set.seed(6)
+  data <- as.datalist(do.call(rbind, lapply(names(sim), function(s) data.frame(
+    name = "y", time = sim[[s]][, "time"], value = sim[[s]][, "y"] * (1 + 0.1 * rnorm(nrow(sim[[s]]))),
+    sigma = NA_real_, condition = s))))
+  obj <- normL2(data, model, errmodel = mods$errt)
+  viaR <- function(expr) withr::with_options(list(dMod2.evaluation = "R"), expr)
+  a <- obj(pars, deriv2 = TRUE); b <- viaR(obj(pars, deriv2 = TRUE))
+  expect_equal(a$value, b$value, tolerance = 1e-12)
+  expect_equal(a$gradient, b$gradient, tolerance = 1e-10)
+  expect_equal(a$hessian, b$hessian, tolerance = 1e-10)
+  entries <- environment(obj)$.chain$entries
+  expect_false(any(vapply(ls(entries), function(k) isTRUE(get(k, envir = entries)[[1]]$none), TRUE)))
+  # the adjoint gradient
+  expect_equal(obj(pars, sweep = "reverse")$gradient, viaR(obj(pars, sweep = "reverse"))$gradient,
+               tolerance = 1e-10)
+  # the sweeps of forward over reverse
+  design <- .emDesign(obj, randomEffects(mods$pt))
+  outer <- c(pars[1:5], omega_V_V = log(0.3))
+  full <- c(outer, pars[6:8])
+  V <- matrix(1, length(full), 1, dimnames = list(names(full), NULL))
+  expect_false(is.null(.sweepChainForward(design, full, NULL, V, names(design$data), 1L, 1L)))
+  Hinv <- lapply(design$groups, function(g) matrix(0.4, 1, 1, dimnames = list(design$etaNames[g, ], design$etaNames[g, ])))
+  expect_equal(.volumeReverse(design, full, NULL, names(outer), Hinv, curvature = TRUE),
+               viaR(.volumeReverse(design, full, NULL, names(outer), Hinv, curvature = TRUE)), tolerance = 1e-10)
 })
 
 

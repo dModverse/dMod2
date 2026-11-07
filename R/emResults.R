@@ -16,15 +16,16 @@
   out <- list(argument = fit$argument, value = fit$value, gradient = fit$gradient,
               hessian = fit$hessian, information = fit$information, converged = fit$converged,
               iterations = fit$iterations, trustIterations = fit$trustIterations,
-              stopReason = fit$stopReason,
+              stopReason = fit$stopReason, failures = fit$failures,
               method = method, fixed = fixed,
               nObs = nObs, valueNonmem = if (!is.finite(design$df)) fit$value - nDensity * log(2 * pi) else NA_real_,
               prdfn = design$prdfn, data = design$data, errfn = design$errfn, design = design,
               trace = fit$trace, stageTrace = fit$stageTrace, certificate = fit$certificate,
               valueSE = fit$valueSE, coupling = fit$coupling, derivMode = fit$derivMode,
-              hessianExact = fit$hessianExact)
+              hessianExact = fit$hessianExact, innerModes = fit$innerModes)
   if (is.null(design$groupings)) {
-    gr <- .groupingResult(design, pars, .emCurvature(fit), fit$etaModes, fit$etaCov, fit$clusters, fit$spike)
+    gr <- .groupingResult(design, pars, .emCurvature(fit), fit$etaModes, fit$etaCov, fit$clusters, fit$spike,
+                          design$reach)
     out <- c(out, gr[c("Omega", "etaModes", "etaCov", "etaSE", "shrinkage", "omega", "random")])
     out$eta <- .etaVector(list(design = design, etaModes = fit$etaModes))
   } else {
@@ -49,12 +50,12 @@
 }
 
 ## Omega, modes, conditional standard errors, shrinkage and the tables of one grouping.
-.groupingResult <- function(sd, pars, hessian, etaModes, etaCov, clusters = NULL, spike = NULL) {
+.groupingResult <- function(sd, pars, hessian, etaModes, etaCov, clusters = NULL, spike = NULL, reach = NULL) {
   lay <- sd$normal
   Omega <- if (lay$K) tcrossprod(.choleskyFactor(lay, pars))
   info <- .etaInfo(etaCov, Omega, etaModes)
   list(Omega = Omega, etaModes = etaModes, etaCov = etaCov, etaSE = info$se, shrinkage = info$shrinkage,
-       omega = .omegaTable(sd, pars, hessian), random = .randomTable(sd, etaModes, info$se, clusters, spike))
+       omega = .omegaTable(sd, pars, hessian), random = .randomTable(sd, etaModes, info$se, clusters, spike, reach))
 }
 
 ## The modes of every random effect as one named vector, eta names as in the model.
@@ -148,8 +149,9 @@
 }
 
 ## The random effects per group: mode and conditional standard error; for spike-and-slab and
-## Dirichlet-process ones the selected cluster (0 the fixed effect) and the probability of 0.
-.randomTable <- function(design, etaModes, etaSE, clusters = NULL, spike = NULL) {
+## Dirichlet-process ones the selected cluster (0 the fixed effect) and the probability of 0;
+## where some do not reach the data of their group (`reach`), whether each does.
+.randomTable <- function(design, etaModes, etaSE, clusters = NULL, spike = NULL, reach = NULL) {
   if (is.null(etaModes)) return(NULL)
   groups <- rownames(etaModes)
   E <- design$etaNames[groups, colnames(etaModes), drop = FALSE]
@@ -158,6 +160,7 @@
                     parameter = as.vector(E), mode = as.vector(etaModes),
                     se = if (!is.null(etaSE)) as.vector(etaSE) else NA_real_,
                     stringsAsFactors = FALSE)
+  if (!is.null(reach) && !all(reach)) out$data <- as.vector(reach[groups, colnames(etaModes), drop = FALSE])
   if (is.null(clusters) || all(is.na(clusters))) return(out)
   out$cluster <- as.vector(clusters[groups, colnames(etaModes), drop = FALSE])
   out$p0 <- as.vector(spike[groups, colnames(etaModes), drop = FALSE])
@@ -179,10 +182,12 @@ print.em <- function(x, ...) {
   if (!is.null(x$valueSE))
     cat(sprintf("-2 log L by importance sampling, standard error %.3g\n", x$valueSE))
   if (!is.null(x$coupling))
-    cat("Coupled sparse random effects: ", switch(x$coupling, expectationConsistent = "expectation consistent",
-        meanField = "mean field (an upper bound on -2 log L)",
-        meanFieldFallback = "mean field, expectation consistent did not converge at the start"), "\n", sep = "")
+    cat("Coupled sparse random effects: expectation consistent\n")
   print(x$argument)
+  reach <- x$design$reach
+  if (!is.null(reach) && !all(reach))
+    cat(sprintf("%d of %d random effects reach no data of their group and keep their prior (column data of $random)\n",
+                sum(!reach), length(reach)))
   if (length(x$boundary))
     cat("Set to 0 at the boundary: ", paste(x$boundary, collapse = ", "), "\n", sep = "")
   if (!is.null(x$omega)) {
@@ -437,7 +442,7 @@ predict.em <- function(object, times = NULL, type = c("all", "individual", "popu
 #'   `"PWRES"` (against the population prediction), `"NPDE"` (normalised
 #'   prediction distribution errors from `nsim` simulated data sets,
 #'   decorrelated per group, readings at or below their limit imputed as in
-#'   Nguyen et al. 2012).
+#'   Nguyen et al. 2012, drawn given the other readings of their group).
 #' @param nsim,seed With `"NPDE"`: number of simulated data sets and the seed
 #'   of the random number generator.
 #' @param ... Ignored.

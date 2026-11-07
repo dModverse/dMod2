@@ -2,12 +2,16 @@
 % Please edit documentation in R/parClass.R
 \name{as.parvec.parframe}
 \alias{as.parvec.parframe}
+\alias{as.parvec.parlist}
 \title{Select a Parameter Vector from a Parameter Frame}
 \usage{
 \method{as.parvec}{parframe}(x, index = 1, ...)
+
+\method{as.parvec}{parlist}(x, index = 1, ...)
 }
 \arguments{
-\item{x}{object of class \code{parframe}, e.g. from \code{\link[=as.parframe]{as.parframe()}}.}
+\item{x}{object of class \code{parframe}, e.g. from \code{\link[=as.parframe]{as.parframe()}}, or the
+\code{parlist} of \code{\link[=mstrust]{mstrust()}}.}
 
 \item{index}{integer, select the row with the \code{index}-th lowest objective
 value. Default 1, the best fit. Without a \code{value} column, the \code{index}-th

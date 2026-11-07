@@ -22,8 +22,7 @@ jobFitting <- distributedComputing(
   on = nodes, jobname = "fits"
 )
 jobFitting$wait()
-fits    <- as.parframe(jobFitting$get())
-bestfit <- as.parvec(fits)
+bestfit <- as.parvec(jobFitting$get())
 jobFitting$purge(local = TRUE)
 
 # Profiles of the best fit: one task per group of four parameters and side, on
@@ -49,6 +48,15 @@ job <- distributedComputing(
   mstrust(obj, center, fits = cores, cores = cores, sd = 4),
   tasks = 100, on = cluster, jobname = "slurmfits"
 )
+
+# The ten starts of one mixed-effects multistart as ten array tasks of four cores:
+# every task draws the same starts and fits its own, get() joins them into one fit
+jobEm <- distributedComputing({
+  set.seed(1)
+  msem(obj, random, init, fits = 10, which = taskId,
+       cores = c(fits = 1, conditions = cores))
+}, tasks = 10, on = slurmCluster("mycluster", cores = 4, walltime = "06:00:00"),
+jobname = "msemfits")
 
 # The jobs submitted and not purged, and the functions of one of them
 dMod2Jobs()

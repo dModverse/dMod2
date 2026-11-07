@@ -25,10 +25,6 @@ bmm_bb <- function(A, B, Bn, M, K, N) {
     .Call(`_dMod2_bmm_bb`, A, B, Bn, M, K, N)
 }
 
-ec_cavity <- function(P, Lam, gam, Pm, stems, dimnames) {
-    .Call(`_dMod2_ec_cavity`, P, Lam, gam, Pm, stems, dimnames)
-}
-
 chain_params <- function(plan, values, deriv, deriv2, threads, tangents) {
     .Call(`_dMod2_chain_params`, plan, values, deriv, deriv2, threads, tangents)
 }
@@ -65,16 +61,16 @@ datapointL2_kernel <- function(pouter, fixed_opt, prdf, dpred_attr_opt, d2pred_a
     .Call(`_dMod2_datapointL2_kernel`, pouter, fixed_opt, prdf, dpred_attr_opt, d2pred_attr_opt, obs_name, t, sigma, value_par, deriv, build_hessian)
 }
 
-dirichlet_process_partitions <- function(a, m, concentration, tau) {
-    .Call(`_dMod2_dirichlet_process_partitions`, a, m, concentration, tau)
-}
-
 focei_inner_trust <- function(model_cb, err_cb, pars_full, eta_warmstart, subject_meta, Omega_inv_mat, Omega_log_det, fixed, control, predict_cb = NULL) {
     .Call(`_dMod2_focei_inner_trust`, model_cb, err_cb, pars_full, eta_warmstart, subject_meta, Omega_inv_mat, Omega_log_det, fixed, control, predict_cb)
 }
 
 focei_run <- function(model_cb, err_cb, joint_cb, init, subject_meta, fixed, control, correction_mode = "none", correction_cb = NULL, predict_cb = NULL) {
     .Call(`_dMod2_focei_run`, model_cb, err_cb, joint_cb, init, subject_meta, fixed, control, correction_mode, correction_cb, predict_cb)
+}
+
+release_heap <- function() {
+    invisible(.Call(`_dMod2_release_heap`))
 }
 
 normL2_kernel <- function(prediction, err_list_opt, meta_list, par_names_global, deriv2_requested, threads, bloq_mode = "M3", build_hessian = TRUE, want_seed = FALSE, local_blocks = FALSE, t_df = 0) {
@@ -105,12 +101,28 @@ pimpl_root <- function(xp, pv, guess, order) {
     .Call(`_dMod2_pimpl_root`, xp, pv, guess, order)
 }
 
+pimpl_spectrum <- function(xp, pv, x, onset) {
+    .Call(`_dMod2_pimpl_spectrum`, xp, pv, x, onset)
+}
+
 pimpl_live <- function(xp) {
     .Call(`_dMod2_pimpl_live`, xp)
 }
 
 sparseGridGK <- function(K, level) {
     .Call(`_dMod2_sparseGridGK`, K, level)
+}
+
+graph_reach <- function(from, to, sources, sinks) {
+    .Call(`_dMod2_graph_reach`, from, to, sources, sinks)
+}
+
+sparse_integral <- function(P, b, kind, prob, tau, lambda, conc, active, sitesLam, sitesGam, budget) {
+    .Call(`_dMod2_sparse_integral`, P, b, kind, prob, tau, lambda, conc, active, sitesLam, sitesGam, budget)
+}
+
+sparse_factor <- function(kind, h, t, prob, tau, lambda, conc) {
+    .Call(`_dMod2_sparse_factor`, kind, h, t, prob, tau, lambda, conc)
 }
 
 .systemTimes <- function() {

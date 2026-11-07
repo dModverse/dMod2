@@ -167,6 +167,7 @@ reference:
   - res
   - datapointL2
   - constraintL2
+  - constraintStability
   - constraintL1
   - constraintCauchy
   - constraintChisq

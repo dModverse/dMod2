@@ -22,6 +22,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <complex>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -324,6 +325,151 @@ bool derivatives(const State& s, const std::vector<double>& pv, int order, Root&
   if (!solveScaled(A, m, n, R, np * np, cs, s.depNames, D2, again)) return false;
   r.D2 = D2;
   r.hasD2 = true;
+  return true;
+}
+
+// The eigenvalues `re` + i `im` of J = df/dx at the root x on ker C, and for each one whose real
+// part exceeds `onset` (1-based in `active`) the gradient of that real part in the parameters,
+// Re w^H (J_p + J_x D) u / (w^H u), u and w its right and left eigenvectors in J and D = dx/dp.
+bool spectrum(const State& s, const std::vector<double>& pv, const std::vector<double>& x, double onset,
+              std::vector<double>& re, std::vector<double>& im, std::vector<int>& active,
+              std::vector<double>& grad, std::string& error) {
+  using cd = std::complex<double>;
+  const int n = s.nDep, np = s.nPar, m = s.nEq, k = s.k, nd = n + np, q = n - k;
+  if (s.ad2 == nullptr) {
+    error = "the stability of the steady state needs its second derivatives, Pimpl(deriv2 = TRUE)";
+    return false;
+  }
+  Root r;
+  r.x = x;
+  std::vector<std::string> warn;
+  if (np > 0 && !derivatives(s, pv, 1, r, warn)) {
+    error = "the derivatives of the steady state failed";
+    return false;
+  }
+  std::vector<double> xx(x), p(pv), dX((std::size_t) std::max(n, 1) * nd, 0.0),
+      dP((std::size_t) std::max(np, 1) * nd, 0.0);
+  for (int j = 0; j < n; ++j) dX[j + (std::size_t) n * j] = 1.0;
+  for (int a = 0; a < np; ++a) dP[a + (std::size_t) np * (n + a)] = 1.0;
+  if (xx.empty()) xx.push_back(0.0);
+  if (p.empty()) p.push_back(0.0);
+  std::vector<double> y(m), dy((std::size_t) m * nd), d2y((std::size_t) m * nd * nd, 0.0);
+  int one = 1, nv = n, npp = np, no = m, ndd = nd, hx = 0, hp = 0;
+  double none = 0;
+  s.ad2(xx.data(), p.data(), dX.data(), dP.data(), &none, &none, &hx, &hp, y.data(), dy.data(), d2y.data(), &one,
+        &nv, &npp, &no, &ndd);
+  for (double v : dy)
+    if (!std::isfinite(v)) {
+      error = "the Jacobian is not finite at the steady state";
+      return false;
+    }
+  std::vector<double> J((std::size_t) n * n);
+  for (int j = 0; j < n; ++j)
+    for (int i = 0; i < n; ++i) J[i + (std::size_t) n * j] = dy[i + (std::size_t) m * j];
+  // an orthonormal basis N of ker C: the right singular vectors of C beyond its rank
+  std::vector<double> N((std::size_t) n * std::max(q, 1), 0.0);
+  if (k == 0) {
+    for (int j = 0; j < n; ++j) N[j + (std::size_t) n * j] = 1.0;
+  } else {
+    std::vector<double> C((std::size_t) k * n), sv(std::min(k, n)), U(1), VT((std::size_t) n * n);
+    for (int j = 0; j < n; ++j)
+      for (int i = 0; i < k; ++i) C[i + (std::size_t) k * j] = dy[(n + i) + (std::size_t) m * j];
+    int kk = k, nn = n, ldu = 1, lwork = -1, info = 0;
+    double wq = 0;
+    F77_CALL(dgesvd)("N", "A", &kk, &nn, C.data(), &kk, sv.data(), U.data(), &ldu, VT.data(), &nn, &wq, &lwork,
+                     &info FCONE FCONE);
+    lwork = std::max(1, (int) wq);
+    std::vector<double> w(lwork);
+    F77_CALL(dgesvd)("N", "A", &kk, &nn, C.data(), &kk, sv.data(), U.data(), &ldu, VT.data(), &nn, w.data(),
+                     &lwork, &info FCONE FCONE);
+    if (info != 0) {
+      error = "the decomposition of the conservation rows failed";
+      return false;
+    }
+    for (int t = 0; t < q; ++t)
+      for (int j = 0; j < n; ++j) N[j + (std::size_t) n * t] = VT[(k + t) + (std::size_t) n * j];
+  }
+  // eigen decomposition with left and right vectors; false where it fails
+  auto eigen = [](std::vector<double> M, int d, bool vectors, std::vector<double>& wr, std::vector<double>& wi,
+                  std::vector<double>& vl, std::vector<double>& vr) {
+    wr.assign(d, 0.0);
+    wi.assign(d, 0.0);
+    vl.assign(vectors ? (std::size_t) d * d : 1, 0.0);
+    vr.assign(vectors ? (std::size_t) d * d : 1, 0.0);
+    if (d == 0) return true;
+    const char* job = vectors ? "V" : "N";
+    int dd = d, ldv = vectors ? d : 1, lwork = -1, info = 0;
+    double wq = 0;
+    F77_CALL(dgeev)(job, job, &dd, M.data(), &dd, wr.data(), wi.data(), vl.data(), &ldv, vr.data(), &ldv, &wq,
+                    &lwork, &info FCONE FCONE);
+    lwork = std::max(1, (int) wq);
+    std::vector<double> w(lwork);
+    F77_CALL(dgeev)(job, job, &dd, M.data(), &dd, wr.data(), wi.data(), vl.data(), &ldv, vr.data(), &ldv, w.data(),
+                    &lwork, &info FCONE FCONE);
+    return info == 0;
+  };
+  // the spectrum on ker C: of A = N' J N, since C J = 0 puts the range of J into ker C
+  std::vector<double> A((std::size_t) q * q, 0.0);
+  for (int b = 0; b < q; ++b)
+    for (int a = 0; a < q; ++a) {
+      double v = 0.0;
+      for (int i = 0; i < n; ++i)
+        for (int j = 0; j < n; ++j)
+          v += N[i + (std::size_t) n * a] * J[i + (std::size_t) n * j] * N[j + (std::size_t) n * b];
+      A[a + (std::size_t) q * b] = v;
+    }
+  std::vector<double> vl, vr, wrJ, wiJ, vlJ, vrJ;
+  if (!eigen(A, q, false, re, im, vl, vr) || !eigen(J, n, true, wrJ, wiJ, vlJ, vrJ)) {
+    error = "the eigenvalues of the Jacobian at the steady state failed";
+    return false;
+  }
+  auto H = [&](int i, int j, int l) { return d2y[i + (std::size_t) m * (j + (std::size_t) nd * l)]; };
+  active.clear();
+  grad.clear();
+  for (int t = 0; t < q; ++t) {
+    if (!(re[t] > onset)) continue;
+    // the same eigenvalue of J, whose vectors the derivative takes
+    int c = 0;
+    double best = std::numeric_limits<double>::infinity();
+    for (int e = 0; e < n; ++e) {
+      const double dist = std::hypot(wrJ[e] - re[t], wiJ[e] - im[t]);
+      if (dist < best) { best = dist; c = e; }
+    }
+    if (best > 1e-6 * (1.0 + std::hypot(re[t], im[t]))) {
+      error = "an eigenvalue on ker C has no match in the Jacobian";
+      return false;
+    }
+    std::vector<cd> u(n), w(n);
+    for (int i = 0; i < n; ++i) {
+      if (wiJ[c] == 0.0) {
+        u[i] = vrJ[i + (std::size_t) n * c];
+        w[i] = vlJ[i + (std::size_t) n * c];
+      } else if (wiJ[c] > 0.0) {
+        u[i] = cd(vrJ[i + (std::size_t) n * c], vrJ[i + (std::size_t) n * (c + 1)]);
+        w[i] = cd(vlJ[i + (std::size_t) n * c], vlJ[i + (std::size_t) n * (c + 1)]);
+      } else {
+        u[i] = cd(vrJ[i + (std::size_t) n * (c - 1)], -vrJ[i + (std::size_t) n * c]);
+        w[i] = cd(vlJ[i + (std::size_t) n * (c - 1)], -vlJ[i + (std::size_t) n * c]);
+      }
+    }
+    cd den = 0.0;
+    for (int i = 0; i < n; ++i) den += std::conj(w[i]) * u[i];
+    // Q_l = w^H (dJ/dz_l) u for every variable and parameter z_l
+    std::vector<cd> Q(nd, 0.0);
+    for (int l = 0; l < nd; ++l)
+      for (int j = 0; j < n; ++j) {
+        if (u[j] == cd(0.0)) continue;
+        cd v = 0.0;
+        for (int i = 0; i < n; ++i) v += std::conj(w[i]) * H(i, j, l);
+        Q[l] += v * u[j];
+      }
+    active.push_back(t + 1);
+    for (int a = 0; a < np; ++a) {
+      cd g = Q[n + a];
+      for (int l = 0; l < n; ++l) g += Q[l] * r.D[l + (std::size_t) n * a];
+      grad.push_back(std::real(g / den));
+    }
+  }
   return true;
 }
 
@@ -678,6 +824,25 @@ List pimpl_root(SEXP xp, NumericVector pv, NumericVector guess, int order) {
   }
   return List::create(Named("x") = NumericVector(r.x.begin(), r.x.end()), Named("D") = D, Named("D2") = D2,
                       Named("warnings") = wrap(warnings));
+}
+
+// The spectrum of the Jacobian at the root `x` of `pv` on ker C: list(re, im, active, grad), `grad`
+// the gradients in the parameters of the real parts of the eigenvalues `active` above `onset`.
+// [[Rcpp::export]]
+List pimpl_spectrum(SEXP xp, NumericVector pv, NumericVector x, double onset) {
+  State* s = need(xp);
+  std::vector<double> re, im, grad;
+  std::vector<int> active;
+  std::string error;
+  if (!dmod::pimpl::spectrum(*s, as<std::vector<double>>(pv), as<std::vector<double>>(x), onset, re, im, active,
+                             grad, error))
+    stop("Pimpl: " + error);
+  const int na = active.size(), np = s->nPar;
+  NumericMatrix G(na, np);
+  for (int t = 0; t < na; ++t)
+    for (int a = 0; a < np; ++a) G(t, a) = grad[(std::size_t) t * np + a];
+  return List::create(Named("re") = wrap(re), Named("im") = wrap(im), Named("active") = wrap(active),
+                      Named("grad") = G);
 }
 
 // Whether the native state behind `xp` still exists; not after the session it was built in.

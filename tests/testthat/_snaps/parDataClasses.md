@@ -135,21 +135,6 @@
           parvalue = c(2, 5, 1, 3, NA, 2, NA, 9, NA)), class = "data.frame", row.names = c(NA, 
       9L))
 
----
-
-    Code
-      .canonDput(attr(pv, "data"))
-    Output
-      structure(list(index = 1:3, value = c(1, 2, 3), converged = c(TRUE, 
-      FALSE, TRUE), iterations = c(3L, 10L, 5L), stopReason = c("gradient", 
-      "iterlim", "gradient"), neval = c(4L, NA, 7L), iterations.first = c(NA, 
-      NA, 2L), iterations.second = c(NA, NA, 3L), elapsed = c(NA, NA, 
-      0.5), a = c(2, 5, 1), b = c(3, NA, 2), c = c(NA, 9, NA), delta = c(0, 
-      1, 2)), class = c("parframe", "data.frame"), metanames = c("index", 
-      "value", "converged", "iterations", "stopReason", "neval", "iterations.first", 
-      "iterations.second", "elapsed"), parameters = c("a", "b", "c"
-      ), row.names = c(NA, 3L))
-
 # the parlist overlay of a profile plot
 
     Code

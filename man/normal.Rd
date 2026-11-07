@@ -43,13 +43,12 @@ symbols of the term, so the deviation of a group from the fixed effects
 is exactly 0 unless the data need it.
 \item \code{spikeSlab()}: the deviation of a group is exactly 0 (spike) or drawn
 from \eqn{N(0, \tau^2)}{N(0, tau^2)} (slab); every group deviates with
-probability \code{prob}, independently. Up to 12 spike-and-slab random
-effects of a group are integrated jointly, exactly on the quadratic
-expansion of the data if the group has no Laplace or Dirichlet-process
-random effects. Next to these, and with more than 12, the coupling by
-the data is approximated as set by \code{control$laplace$coupling} of
-\code{\link[=em]{em()}}; expectation consistent integrates the joint ones on a diagonal
-cavity.
+probability \code{prob}, independently. The spike-and-slab random effects of
+a group are integrated jointly, exactly on the quadratic expansion of
+the data where the group has no Laplace or Dirichlet-process random
+effects the data tie to them and the sum over their subsets stays within
+a budget; else expectation consistent integrates each one against a
+diagonal cavity.
 \item \code{dirichletProcess()}: per symbol, the deviations follow a Dirichlet
 process with base measure \eqn{N(0, \tau^2)}{N(0, tau^2)} and
 \code{concentration}, the fixed effect seated first at deviation 0: the

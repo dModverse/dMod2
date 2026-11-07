@@ -138,6 +138,13 @@ test_that("detectFreeCores() reports the local machine", {
   expect_true(free >= 1 && free <= attr(free, "ncores"))
 })
 
+test_that("detectFreeCores() takes the cores of a SLURM job", {
+  withr::local_envvar(SLURM_CPUS_ON_NODE = "1", `_R_CHECK_LIMIT_CORES_` = "")
+  expect_equal(as.integer(detectFreeCores()), 1L)
+  withr::local_envvar(SLURM_CPUS_ON_NODE = "100000")
+  expect_lte(as.integer(detectFreeCores()), parallel::detectCores())
+})
+
 test_that("data frame rows are tasks, a task reads its cores and seeds repeat", {
   skip_on_cran()
   local_no_ssh()

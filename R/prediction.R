@@ -1249,6 +1249,8 @@ Xd <- function(data, condition = NULL) {
 
   attr(P2X, "parameters") <- parameters
   attr(P2X, "pouter") <- pouter
+  # per state the parameters it interpolates
+  attr(P2X, "depends") <- lapply(byState, `[[`, "pars")
 
   prdfn(P2X, parameters, condition)
 }
@@ -1814,6 +1816,8 @@ Xt <- function(condition = NULL) {
   attr(P2X, "equations") <- NULL
   attr(P2X, "forcings") <- NULL
   attr(P2X, "events") <- NULL
+  # no states: the observables read the parameters
+  attr(P2X, "timeOnly") <- TRUE
   prdfn(P2X, NULL, condition)
 }
 

@@ -2,9 +2,11 @@
 #'
 #' Declares the Python dependencies the symbolic layer needs, the `simplify`
 #' path in `eqnClass.R` and `steadyStates()`.
-#' `reticulate::py_require()` does not start Python here: it records the
+#' `reticulate::py_require()` does not start Python: it records the
 #' requirement so the first call into Python provisions an env that has the
 #' listed packages. The SBML/PEtab layer adds `python-libsbml` to this list.
+#' The declaration runs when reticulate loads, before Python can start, so a
+#' session without Python does not load reticulate and the Matrix it imports.
 #' symident is required on first use by `.symident()`, so a symident that
 #' cannot be resolved leaves Python for every other caller intact.
 #'
@@ -13,8 +15,9 @@
 #' @importFrom utils globalVariables
 #' @noRd
 .onLoad <- function(libname, pkgname) {
-  if (requireNamespace("reticulate", quietly = TRUE))
-    reticulate::py_require(c("python-libsbml", "sympy", "scipy", "numpy"))
+  declare <- function(...) reticulate::py_require(c("python-libsbml", "sympy", "scipy", "numpy"))
+  if (isNamespaceLoaded("reticulate")) declare()
+  else setHook(packageEvent("reticulate", "onLoad"), declare)
 }
 
 #' Package attach

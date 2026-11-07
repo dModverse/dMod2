@@ -567,15 +567,23 @@ test_that("a continuity break frees the node after it", {
 
 test_that("auto lays out one segment per half oscillation of the data", {
   tt <- seq(0, 10, by = 0.05)
+  draw <- function(f, r = 1L, sigma = 0.02) {
+    t <- rep(tt, each = r)
+    data.frame(name = "y", time = t, value = f(t) + rnorm(length(t), 0, 0.02), sigma = sigma)
+  }
+  wave <- function(t) sin(2 * pi * t)
+  decay <- function(t) exp(-t)
   set.seed(2)
-  # noise within two sigma, which never swings by the five sigma a turn takes
-  osc <- data.frame(name = "y", time = tt, value = sin(2 * pi * tt) + runif(length(tt), -0.04, 0.04),
-                    sigma = 0.02)
-  flat <- transform(osc, value = exp(-tt) + runif(length(tt), -0.04, 0.04))
-  # ten periods reverse twenty times, a decay never
-  expect_equal(dMod2:::.shootTurns(osc), 20L)
-  expect_equal(dMod2:::.shootTurns(flat), 0L)
-  d <- as.datalist(rbind(transform(osc, condition = "A"), transform(flat, condition = "B")))
+  # a half oscillation turns once, Gaussian noise on a plateau never: with sigma given, with
+  # the noise from replicates or from the means alone, whose estimate scatters too much to
+  # rule out a turn on a plateau in every draw
+  for (r in c(1L, 3L)) for (sigma in c(0.02, NA)) {
+    expect_equal(dMod2:::.shootTurns(draw(wave, r, sigma)), 20L, info = paste(r, sigma))
+    if (r == 1L && is.na(sigma)) next
+    expect_equal(dMod2:::.shootTurns(draw(decay, r, sigma)), 0L, info = paste(r, sigma))
+  }
+  d <- as.datalist(rbind(transform(draw(wave), condition = "A"),
+                         transform(draw(decay), condition = "B")))
   nd <- dMod2:::.shootAutoNodes(d, list(), NULL, oscillations = TRUE, minPoints = 3L)
   expect_equal(lengths(nd), c(A = 20L, B = 9L))
   # no more segments than minPoints data points each allow, and never fewer than ten

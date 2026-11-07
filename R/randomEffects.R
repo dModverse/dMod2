@@ -91,13 +91,12 @@ print.randomeffects <- function(x, ...) {
 #'   is exactly 0 unless the data need it.
 #' - `spikeSlab()`: the deviation of a group is exactly 0 (spike) or drawn
 #'   from \eqn{N(0, \tau^2)}{N(0, tau^2)} (slab); every group deviates with
-#'   probability `prob`, independently. Up to 12 spike-and-slab random
-#'   effects of a group are integrated jointly, exactly on the quadratic
-#'   expansion of the data if the group has no Laplace or Dirichlet-process
-#'   random effects. Next to these, and with more than 12, the coupling by
-#'   the data is approximated as set by `control$laplace$coupling` of
-#'   [em()]; expectation consistent integrates the joint ones on a diagonal
-#'   cavity.
+#'   probability `prob`, independently. The spike-and-slab random effects of
+#'   a group are integrated jointly, exactly on the quadratic expansion of
+#'   the data where the group has no Laplace or Dirichlet-process random
+#'   effects the data tie to them and the sum over their subsets stays within
+#'   a budget; else expectation consistent integrates each one against a
+#'   diagonal cavity.
 #' - `dirichletProcess()`: per symbol, the deviations follow a Dirichlet
 #'   process with base measure \eqn{N(0, \tau^2)}{N(0, tau^2)} and
 #'   `concentration`, the fixed effect seated first at deviation 0: the

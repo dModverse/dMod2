@@ -1106,7 +1106,8 @@ print.alignmentmodel <- function(x, ...) {
 #' @return Object of class `alignment`: `aligned` (one row per combination of
 #'   the columns of the biological formulas: the columns, `symbol`, `estimate`
 #'   and `se` of the predictor, `value` and `sigma` on the scale of the
-#'   symbol), `scaled` (the readings with `prediction`, `sigma`, `residual`
+#'   symbol; with REML `se` from the information of the mean parameters alone,
+#'   the error parameters held at their estimates), `scaled` (the readings with `prediction`, `sigma`, `residual`
 #'   and `bloq`), `parameters` (with attribute `estimation`, `"REML"` or
 #'   `"ML"`), `value` (-2 log L, of the restricted likelihood with REML, with
 #'   the normalization and the prior), `npar` (one less per block), `AIC`
@@ -1234,7 +1235,9 @@ align <- function(model, fits = 10L, cores = 1L, method = c("focei", "quadrature
     H <- .alignmentGaussNewton(m, obj, re, best)
     seSource <- "Gauss-Newton"
   }
-  variance <- if (!is.null(H)) .alignmentVariance(H, on)
+  # with REML the standard errors of the mean parameters at the estimated error parameters
+  # (Lindstrom and Bates 1990): the inverse of their block of the information
+  variance <- if (!is.null(H)) .alignmentVariance(H, if (reml) intersect(on, mean) else on)
   aligned <- .alignmentValues(m, allPars, variance)
   scaled <- .alignmentScaled(m, allPars)
   if (any(m$censored)) aligned$lloq <- .alignmentLimits(m, aligned, scaled)
@@ -1567,10 +1570,8 @@ plotAligned <- function(x, ...) {
 
 #' @rdname plotValues
 #' @export
-plotValues.alignment <- function(x, ...) {
-  starts <- x$multistart[is.finite(x$multistart$value), , drop = FALSE]
-  plotValues(parframe(starts, parameters = character(0)), ...)
-}
+plotValues.alignment <- function(x, ..., tol = 1, showSteps = FALSE, pseudoLog = FALSE, relative = FALSE)
+  .plotWaterfall(list(.valueFrame(x, ...)), tol, showSteps, pseudoLog, relative)
 
 #' @rdname plotAligned
 #' @export

@@ -1,3 +1,85 @@
+# dMod2 0.15.0
+
+* New `constraintStability(pSS, p)`, a term of the objective that keeps the steady state of a
+  `Pimpl()` stable: for every eigenvalue of the Jacobian at the steady state on the manifold of the
+  conserved quantities, the square of how far its real part passes an onset, scaled to `weight`
+  where the real part reaches the `stabilityTol` of `pSS`. Zero below the onset, with exact
+  gradient and Gauss-Newton Hessian; the onset defaults to a decay slower than the data last.
+  `Pimpl(deriv2 = TRUE)` provides the second derivatives it needs. With
+  `controlsPTC = list(stability = FALSE)` the steady state may be unstable, and the term goes on
+  rising there instead of the evaluation failing.
+
+* `plotValues()` takes a named list of fit collections, one panel each and each ranked on its own,
+  and with `relative` draws the values above the best of each collection or above a given value.
+  `plotValues()`, `plotPars()` and `as.parvec()` take the result of `mstrust()` as it is, and
+  `as.parframe()` returns a parframe unchanged.
+
+* `align(reml = TRUE)` takes the standard errors of the values from the information of the mean
+  parameters alone, the error parameters held at their estimates (Lindstrom and Bates 1990).
+
+* The integral of `em()` over sparse random effects is formed in natural parameters, without the
+  centre of the quadratic expansion, in C++ group by group where no Dirichlet-process random effect
+  joins groups. The spike-and-slab random effects of a group are integrated exactly, by a
+  depth-first sum over their subsets that leaves out subtrees below a bound, within a budget of
+  nodes instead of a limit on their number. Where the data couple factors, or the sum would exceed
+  its budget, expectation consistent runs as a convergent double loop with Newton steps in both
+  loops; it converges where the data tie coordinates closely or do not see them. Mean field and
+  `control$laplace$coupling` are gone, with the fallback to mean field.
+
+* The native evaluation chain takes observables and error models that read `time`; such models
+  ran on the R path before.
+
+* `em()` with Laplace, spike-and-slab or Dirichlet-process random effects follows the parameter
+  transformations, steady states, ODE, events, observables and error model from every such random
+  effect to the measured names of its group. One that reaches none of them rests at 0 with its
+  prior: its group searches its mode without it, the integral and the updates of its
+  hyperparameters leave it out, and `$random` marks it in a column `data`. A hyperparameter all of
+  whose random effects reach no data is an error. Every expression is read with the names that are 0
+  in the condition set to 0, so that a state that starts at 0 and that nothing drives passes no
+  random effect on, and a root of a steady state depends only on the inputs its equations and
+  conservation rows reach.
+
+* The second derivatives of the Laplace marginal and of the FOCEI volume term by forward over
+  reverse take the gradients of their traces direction by direction, each from a forward pass
+  along one random effect, where that is cheaper than a backward sweep along all of them per
+  random effect.
+
+* `msem(sd = )` takes a vector named by the parameters it perturbs; an unnamed vector of several
+  entries is an error. The table of `msem()` has the largest absolute entry of the gradient of every
+  start (`gradient`).
+
+* `em()` with sparse random effects finds the modes of the random effects group by group, by
+  `trust()` where a group has no Laplace coordinates and by `trustL1()` where it has, in place of
+  one trust region over the random effects of all groups. The search differentiates the model in
+  the random effects of the group only, adds a BFGS correction to the Gauss-Newton Hessian and ends
+  at the `tolControl` of `control$laplace$trustControl`, where given. A group starts from the lowest
+  of its predicted modes and the minima found at its last four distinct accepted points, as its
+  problem may have several local minima; at the start of the fit and every 25 accepted steps the
+  search also runs from 0 and from two starts around the modes.
+
+* The model Hessian of the outer trust region of `em()` with sparse random effects under forward
+  over reverse is built from Gauss-Newton blocks throughout, which keeps it positive semidefinite;
+  the exact rows of the data Hessian in the random effects enter the gradient and the shift of the
+  modes.
+
+* The fits of `em()` with sparse random effects count why evaluations of their trust region failed
+  (`failures`, also a column of the table of `msem()`). Every start of `msem()` runs to
+  convergence, all starts at once; `msem(budget = )` is gone. `msem(which = )`
+  fits a part of its starts, so that tasks of `distributedComputing()` share one multistart, and
+  `get()` joins their fits into one.
+
+* `residuals(type = "NPDE")` of an `em()` fit draws a reading at or below its limit given the other
+  readings of its group, on the Gaussian copula of the simulations, which stay uncensored. The NPDE
+  of a group are then independent under the model also with censored readings. The pde is the
+  mid-rank of a reading among the simulations.
+
+* `detectFreeCores()` inside a SLURM job takes the cores the job was given and bound to.
+
+* Multiple shooting with `nodes = "auto"` counts a turning point of the data where they reverse by
+  more than noise on that many readings reaches in one draw of a thousand, with the noise of the
+  replicate means; noise on a plateau adds no segments, and oscillations without `sigma` are
+  counted.
+
 # dMod2 0.14.8
 
 * `Pimpl()`: a state whose reactions all vanish at the steady state rests. It takes its value

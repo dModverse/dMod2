@@ -136,6 +136,11 @@ plot.parlist <- function(x, path = FALSE, ...) {
 
 #' @export
 #' @rdname as.parframe
+as.parframe.parframe <- function(x, ...) x
+
+
+#' @export
+#' @rdname as.parframe
 #' @param sortBy character, the column by which the returned parameter frame
 #' is sorted. Default `"value"`.
 as.parframe.parlist <- function(x, sortBy = "value", ...) {
@@ -218,7 +223,8 @@ as.parframe <- function(x, ...) {
 
 #' Select a Parameter Vector from a Parameter Frame
 #'
-#' @param x object of class `parframe`, e.g. from [as.parframe()].
+#' @param x object of class `parframe`, e.g. from [as.parframe()], or the
+#'   `parlist` of [mstrust()].
 #' @param index integer, select the row with the `index`-th lowest objective
 #'   value. Default 1, the best fit. Without a `value` column, the `index`-th
 #'   row.
@@ -240,6 +246,10 @@ as.parvec.parframe <- function(x, index = 1, ...) {
   .parvecRow(x, row)
 }
 
+#' @export
+#' @rdname as.parvec.parframe
+as.parvec.parlist <- function(x, index = 1, ...) as.parvec(as.parframe(x), index = index)
+
 # Row i of a parframe as parvec, in the row order of the frame
 .parvecRow <- function(x, i) {
   as.parvec(unlist(as.data.frame(x)[i, attr(x, "parameters"), drop = FALSE]))
@@ -247,6 +257,10 @@ as.parvec.parframe <- function(x, index = 1, ...) {
 
 
 
+
+#' @export
+#' @rdname plotPars
+plotPars.parlist <- function(x, ..., tol = 1) plotPars(as.parframe(x), ..., tol = tol)
 
 #' @export
 #' @rdname plotPars
@@ -295,27 +309,92 @@ plotPars.parframe <- function(x, ..., tol = 1) {
 }
 
 
+# Plain numbers below 10^4, powers of ten from there, so that a wide axis keeps short labels.
+.decadeLabels <- function(breaks) {
+  labels <- format(breaks, trim = TRUE, scientific = FALSE, drop0trailing = TRUE)
+  big <- is.finite(breaks) & abs(breaks) >= 1e4
+  k <- floor(log10(abs(breaks[big])) + 1e-9)
+  m <- round(breaks[big] / 10^k)
+  labels[big] <- ifelse(m == 1, paste0("10^", k),
+                        ifelse(m == -1, paste0("-10^", k), paste0(m, " %*% 10^", k)))
+  parse(text = labels)
+}
+
+
 #' @export
 #' @rdname plotValues
-plotValues.parframe <- function(x, ..., tol = 1, showSteps = FALSE, pseudoLog = FALSE) {
+plotValues.parframe <- function(x, ..., tol = 1, showSteps = FALSE, pseudoLog = FALSE, relative = FALSE)
+  .plotWaterfall(list(.valueFrame(x, ...)), tol, showSteps, pseudoLog, relative)
 
-  if (!missing(...)) x <- subset(x, ...)
+#' @export
+#' @rdname plotValues
+plotValues.data.frame <- function(x, ..., tol = 1, showSteps = FALSE, pseudoLog = FALSE, relative = FALSE)
+  .plotWaterfall(list(.valueFrame(x, ...)), tol, showSteps, pseudoLog, relative)
 
-  pars <- x[order(x$value), ]
-  pars[["index"]] <- seq_len(nrow(pars))
-  pars[["delta"]] <- pars$value - pars$value[1]
-  jumps <- .stepDetect(pars$value, tol)
+#' @export
+#' @rdname plotValues
+plotValues.parlist <- function(x, ..., tol = 1, showSteps = FALSE, pseudoLog = FALSE, relative = FALSE)
+  .plotWaterfall(list(.valueFrame(x, ...)), tol, showSteps, pseudoLog, relative)
+
+#' @export
+#' @rdname plotValues
+plotValues.list <- function(x, ..., tol = 1, showSteps = FALSE, pseudoLog = FALSE, relative = FALSE) {
+  if (!length(x) || is.null(names(x)) || any(!nzchar(names(x))))
+    stop("plotValues: a list of fit collections needs a name for every collection.", call. = FALSE)
+  .plotWaterfall(lapply(x, .valueFrame, ...), tol, showSteps, pseudoLog, relative, sets = names(x))
+}
+
+# The fits of one collection with a finite value, sorted, from a parframe, a data frame with column
+# `value`, the parlist of mstrust(), the multistart table of an msem() fit or of an alignment; rows
+# kept where the expressions in ... hold.
+.valueFrame <- function(x, ...) {
+  if (inherits(x, "parlist")) x <- as.parframe(x)
+  else if (inherits(x, "em") || inherits(x, "alignment")) {
+    if (is.null(x$multistart))
+      stop("plotValues: the fit has no multistart table; msem() and align() return one.", call. = FALSE)
+    x <- x$multistart
+  }
+  if (!is.data.frame(x) || is.null(x$value))
+    stop("plotValues: a collection of fits is a parframe, a data frame with column `value`, the result ",
+         "of mstrust(), a fit of msem() or an alignment.", call. = FALSE)
+  x <- data.frame(as.list(x), check.names = FALSE)
+  x <- x[is.finite(x$value) & .filterRows(x, ...), , drop = FALSE]
+  if (is.null(x$converged)) x$converged <- TRUE
+  x <- x[order(x$value), , drop = FALSE]
+  rownames(x) <- NULL
+  x$index <- seq_len(nrow(x))
+  x$delta <- x$value - x$value[1]
+  x
+}
+
+# The waterfall of one collection, or one panel per collection in `sets`; with `relative` the value
+# above the best of its collection, or above a number.
+.plotWaterfall <- function(frames, tol, showSteps, pseudoLog, relative, sets = NULL) {
+  if (!((is.logical(relative) || is.numeric(relative)) && length(relative) == 1L && !is.na(relative)))
+    stop("plotValues: `relative` is TRUE, FALSE or a number.", call. = FALSE)
+  ref <- if (is.numeric(relative)) relative
+  for (k in seq_along(frames))
+    frames[[k]]$shown <- if (!is.null(ref)) frames[[k]]$value - ref else if (relative) frames[[k]]$delta
+                         else frames[[k]]$value
+  jumps <- lapply(frames, function(f) .stepDetect(f$value, tol))
+  iterations <- any(vapply(frames, function(f) any(!is.na(f$iterations)), TRUE))
+  cols <- c("value", "delta", "shown", "index", "converged", if (iterations) "iterations")
+  for (k in seq_along(frames)) if (iterations && is.null(frames[[k]]$iterations)) frames[[k]]$iterations <- NA_integer_
+  pars <- if (is.null(sets)) frames[[1]]
+          else do.call(rbind, Map(function(f, s) cbind(f[cols], set = s), frames, sets))
+  if (!is.null(sets)) pars$set <- factor(pars$set, levels = sets)
+  steps <- do.call(rbind, Map(function(f, j, s) data.frame(index = j, y = f$shown[j], set = s %||% NA),
+                              frames, jumps, if (is.null(sets)) list(NULL) else sets))
+  if (!is.null(sets)) steps$set <- factor(steps$set, levels = sets)
 
   yScale <- if (pseudoLog)
-    scale_y_continuous(transform = scales::pseudo_log_trans(base = 10), breaks = .decadeBreaks)
+    scale_y_continuous(transform = scales::pseudo_log_trans(base = 10), breaks = .decadeBreaks,
+                       labels = .decadeLabels)
   else scale_y_continuous(n.breaks = 7, labels = .distinctLabels)
-
-  stepLines <- stepLabels <- NULL
-  if (showSteps) {
-    stepLines <- geom_vline(xintercept = jumps, lty = 2)
-    stepLabels <- annotate("text", x = jumps + 1, y = pars$value[jumps], label = jumps,
-                           hjust = 0, vjust = -0.5, color = "firebrick", size = 3)
-  }
+  stepMarks <- if (showSteps) list(
+    geom_vline(data = steps, aes(xintercept = index), lty = 2),
+    geom_text(data = steps, aes(x = index + 1, y = y, label = index), hjust = 0, vjust = -0.5,
+              color = "firebrick", size = 3))
 
   # an unconverged fit is red, outside the ramp of the iterations, with a legend
   # entry of its own
@@ -325,19 +404,22 @@ plotValues.parframe <- function(x, ..., tol = 1, showSteps = FALSE, pseudoLog = 
     scale_shape_manual(values = c(`not converged` = 19),
                        guide = guide_legend(override.aes = list(color = dMod_colors[2]),
                                             order = 1)))
+  converged <- if (iterations) list(geom_point(data = pars[conv, ], aes(color = iterations)), scale_color_dMod_c())
+               else geom_point(data = pars[conv, ])
 
-  P <- ggplot2::ggplot(pars, aes(x = index, y = value)) +
-    stepLines +
-    geom_point(data = pars[conv, ], aes(color = iterations)) +
+  P <- ggplot2::ggplot(pars, aes(x = index, y = shown)) +
+    stepMarks +
+    converged +
     unconverged +
-    stepLabels +
     yScale +
-    labs(x = "Fit rank", y = "Objective value", color = "Iterations", shape = NULL) +
-    scale_color_dMod_c() +
-    theme_dMod()
+    (if (!is.null(sets)) list(facet_wrap(~set, nrow = 1, scales = "free_x"),
+                              scale_x_continuous(breaks = scales::breaks_pretty(n = 3)))) +
+    labs(x = "Fit rank", y = if (!is.null(ref) || relative) "Objective value above the best" else "Objective value",
+         color = "Iterations", shape = NULL) +
+    theme_dMod() +
+    (if (!is.null(sets)) theme(panel.spacing.x = ggplot2::unit(1, "lines")))
 
-  structure(P, data = pars, jumps = jumps)
-
+  structure(P, data = pars, jumps = if (is.null(sets)) jumps[[1]] else stats::setNames(jumps, sets))
 }
 
 

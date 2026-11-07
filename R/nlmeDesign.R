@@ -35,12 +35,286 @@
                randomEffects = random, chain = .objectiveChain(obj, spec))
   inGroup <- unique(unlist(lapply(subs, function(sd) unlist(sd$conditions))))
   free <- setdiff(names(data), inGroup)
-  if (length(subs) == 1L)
-    return(structure(c(base, subs[[1]], list(freeConditions = free)), class = "emdesign"))
+  if (length(subs) == 1L) {
+    design <- structure(c(base, subs[[1]], list(freeConditions = free)), class = "emdesign")
+    design$reach <- .etaReach(design)
+    return(design)
+  }
   structure(c(base, list(groupings = subs, components = .components(subs), freeConditions = free,
                          blocks = unlist(lapply(subs, `[[`, "blocks"), recursive = FALSE))),
             class = "emdesign")
 }
+
+## Per group, whether each sparse eta reaches the data of its conditions, along the dependencies
+## of the parameter transformations, steady states, the ODE with its events and the observables or
+## the error model to a measured name; the normal etas count as reaching. A piece without its
+## equations counts as passing everything on, so that an eta is marked only where no path exists.
+.etaReach <- function(design) {
+  E <- design$etaNames
+  sparse <- vapply(colnames(E), function(st) any(vapply(design$blocks, function(b)
+    b$dist != "normal" && st %in% b$stems, TRUE)), TRUE)
+  reach <- matrix(TRUE, nrow(E), ncol(E), dimnames = dimnames(E))
+  if (!any(sparse)) return(reach)
+  for (i in seq_len(nrow(E))) {
+    etas <- E[i, sparse]
+    hit <- setNames(logical(length(etas)), etas)
+    for (cn in design$conditions[[design$groups[i]]]) hit <- hit | .reachData(design, cn, etas)
+    reach[i, sparse] <- hit
+  }
+  reach
+}
+
+## Which of `etas` reach the data of condition `cn`: a graph of named nodes in layers, the outer
+## parameters, the outputs of every transformation, the states, the observables and the error
+## model, searched in C++ (graph_reach) from every eta to the measured names. Every expression is
+## read with the names that are 0 in this condition set to 0 (.zeroOut()): a state that starts at 0,
+## whose right-hand side vanishes with the other zeros and that no event moves stays 0 and passes
+## nothing on. A piece without its equations, such as a function written by hand, reaches all.
+.reachData <- function(design, cn, etas) {
+  every <- setNames(rep(TRUE, length(etas)), etas)
+  lv <- .fnLeaves(design$prdfn, cn)
+  kinds <- vapply(lv, `[[`, "", "kind")
+  at <- which(kinds == "prdfn")
+  if (length(at) != 1L || any(kinds[seq_len(at - 1L)] != "obsfn") || any(kinds[-seq_len(at)] != "parfn"))
+    return(every)
+  P2X <- lv[[at]]$kernel
+  ode <- attr(P2X, "equations", exact = TRUE)
+  xd <- attr(P2X, "depends", exact = TRUE)
+  if (isTRUE(attr(P2X, "timeOnly", exact = TRUE)) || !is.null(xd)) ode <- list()
+  if (is.null(ode)) return(every)
+  # nodes are keys "layer\rname", numbered in C++; per layer the names it holds and those at 0
+  node <- function(layer, name) paste(layer, name, sep = "\r")
+  held <- list()
+  zeroAt <- list()
+  hold <- function(layer, name) {
+    L <- as.character(layer)
+    held[[L]][[length(held[[L]]) + 1L]] <<- name
+  }
+  from <- list(); to <- list()
+  edge <- function(fl, fn, tl, tn) {
+    if (!length(fn) || !length(tn)) return(invisible())
+    from[[length(from) + 1L]] <<- node(fl, fn); to[[length(to) + 1L]] <<- node(tl, tn)
+    hold(fl, fn); hold(tl, tn)
+  }
+  namesAt <- function(layer) unique(unlist(held[[as.character(layer)]], use.names = FALSE))
+  zerosAt <- function(layer) zeroAt[[as.character(layer)]] %||% character(0)
+  # the transformations from the outer parameters inwards, layer by layer; the names an input
+  # passes on unchanged keep their node in the next layer
+  hold(0L, etas)
+  layer <- 0L
+  for (leaf in rev(lv[-seq_len(at)])) {
+    k <- leaf$kernel
+    env <- environment(k)
+    eq <- attr(k, "equations", exact = TRUE)
+    zin <- zerosAt(layer)
+    zout <- character(0)
+    if (!is.null(attr(k, "chainImpl", exact = TRUE))) {
+      # a steady state: every root from the inputs it depends on, the zero states at 0, the other
+      # inputs passed on
+      dep <- .pimplDepends(env, zin)
+      for (pin in names(dep)) edge(layer, rep(pin, length(dep[[pin]])), layer + 1L, dep[[pin]])
+      outs <- c(env$dependent, env$zero_states)
+      hold(layer + 1L, outs)
+      through <- setdiff(namesAt(layer), outs)
+      edge(layer, through, layer + 1L, through)
+      zout <- c(env$zero_states, intersect(through, zin))
+    } else if (!is.null(eq)) {
+      for (o in names(eq)) {
+        d <- .zeroDepends(eq[[o]], zin)
+        if (d$zero) zout <- c(zout, o)
+        edge(layer, d$symbols, layer + 1L, rep(o, length(d$symbols)))
+        hold(layer + 1L, o)
+      }
+      if (isTRUE(env$controls$attachInput)) {
+        through <- setdiff(namesAt(layer), names(eq))
+        edge(layer, through, layer + 1L, through)
+        zout <- c(zout, intersect(through, zin))
+      }
+    } else return(every)
+    zeroAt[[as.character(layer + 1L)]] <- zout
+    layer <- layer + 1L
+  }
+  inner <- layer
+  zeroPar <- zerosAt(inner)
+  # the states that stay 0: they start at 0, their right-hand side vanishes with the other zeros,
+  # and no event sets them to anything else
+  events <- if (length(ode)) attr(environment(P2X)$func, "events", exact = TRUE)
+  if (!is.data.frame(events)) events <- NULL
+  moves <- function(zs) {
+    if (is.null(events)) return(character(0))
+    v <- as.character(events$var)
+    keep <- vapply(seq_len(nrow(events)), function(r) {
+      method <- as.character(events$method[r] %||% "replace")
+      method == "multiply" || .zeroDepends(as.character(events$value[r]), zs)$zero
+    }, TRUE)
+    unique(v[!keep])
+  }
+  zeroState <- intersect(names(ode), zeroPar)
+  repeat {
+    zs <- c(setdiff(zeroPar, names(ode)), zeroState)
+    stay <- zeroState[vapply(zeroState, function(st) .zeroDepends(ode[[st]], zs)$zero, TRUE)]
+    stay <- setdiff(stay, moves(zs))
+    if (setequal(stay, zeroState)) break
+    zeroState <- stay
+  }
+  zs <- c(setdiff(zeroPar, names(ode)), zeroState)
+  for (st in setdiff(names(ode), zeroState)) {
+    sy <- .zeroDepends(ode[[st]], zs)$symbols
+    edge(inner, sy, inner, rep(st, length(sy)))
+  }
+  for (st in names(xd)) edge(inner, xd[[st]], inner, rep(st, length(xd[[st]])))
+  if (!is.null(events))
+    for (r in seq_len(nrow(events))) {
+      st <- as.character(events$var[r])
+      if (st %in% zeroState) next
+      sy <- unique(unlist(lapply(setdiff(names(events), c("var", "method")), function(col)
+        .zeroDepends(as.character(events[[col]][r]), zs)$symbols)))
+      edge(inner, sy, inner, rep(st, length(sy)))
+    }
+  # the observables, the first reading the states and inner parameters, every further one the
+  # outputs of the one before and the inner parameters
+  top <- inner
+  zeroTop <- zs
+  for (leaf in rev(lv[seq_len(at - 1L)])) {
+    obs <- attr(leaf$kernel, "equations", exact = TRUE)
+    if (is.null(obs)) return(every)
+    below <- namesAt(top)
+    zout <- character(0)
+    for (o in names(obs)) {
+      d <- .zeroDepends(obs[[o]], unique(c(zeroTop, zs)))
+      if (d$zero) zout <- c(zout, o)
+      lower <- intersect(d$symbols, below)
+      edge(top, lower, top + 1L, rep(o, length(lower)))
+      edge(inner, setdiff(d$symbols, lower), top + 1L, rep(o, length(setdiff(d$symbols, lower))))
+      hold(top + 1L, o)
+    }
+    if (isTRUE(environment(leaf$kernel)$controls$attachInput)) {
+      through <- setdiff(below, names(obs))
+      edge(top, through, top + 1L, through)
+      zout <- c(zout, intersect(through, zeroTop))
+    }
+    zeroTop <- zout
+    top <- top + 1L
+  }
+  d <- design$data[[cn]]
+  measured <- unique(as.character(d$name))
+  byModel <- unique(as.character(d$name[if (is.null(d$sigma)) TRUE else is.na(d$sigma)]))
+  sinks <- node(top, measured)
+  if (length(byModel)) {
+    err <- if (!is.null(design$errfn)) .fnLeaves(design$errfn, cn)
+    if (!length(err) || any(vapply(err, `[[`, "", "kind") != "obsfn")) return(every)
+    # the error model reads the observables and the inner parameters
+    base <- top
+    for (leaf in rev(err)) {
+      eq <- attr(leaf$kernel, "equations", exact = TRUE)
+      if (is.null(eq)) return(every)
+      below <- namesAt(base)
+      for (o in names(eq)) {
+        sy <- .zeroDepends(eq[[o]], unique(c(zeroTop, zs)))$symbols
+        lower <- intersect(sy, below)
+        edge(base, lower, base + 1L, rep(o, length(lower)))
+        edge(inner, setdiff(sy, lower), base + 1L, rep(o, length(setdiff(sy, lower))))
+      }
+      base <- base + 1L
+    }
+    sinks <- c(sinks, node(base, byModel))
+  }
+  setNames(graph_reach(as.character(unlist(from)), as.character(unlist(to)), node(0L, etas), sinks), etas)
+}
+
+## The roots of a steady state (environment `env` of Pimpl()) each input moves: the states whose
+## equation holds the input, then every state whose equation holds a moved state and every state of
+## a conservation row with the input or a moved state. The other states solve a subsystem that holds
+## neither the input nor a moved state; where it lacks full structural column rank, the input moves
+## every root. Inputs in `zeros` are 0.
+.pimplDepends <- function(env, zeros) {
+  dep <- env$dependent
+  rows <- env$all_exprs
+  syms <- lapply(rows, function(r) .zeroDepends(r, zeros)$symbols)
+  cons <- !(names(rows) %in% dep)
+  inputs <- setdiff(unique(unlist(syms)), dep)
+  inputs <- intersect(inputs, env$parms_all)
+  setNames(lapply(inputs, function(pin) {
+    moved <- character(0)
+    repeat {
+      hit <- vapply(syms, function(s) pin %in% s || any(moved %in% s), TRUE)
+      add <- unique(c(names(rows)[hit & !cons], unlist(lapply(syms[hit & cons], intersect, dep))))
+      add <- intersect(add, dep)
+      if (all(add %in% moved)) break
+      moved <- union(moved, add)
+    }
+    rest <- setdiff(dep, moved)
+    keep <- (!cons & names(rows) %in% rest) | (cons & vapply(syms, function(s) !any(intersect(s, dep) %in% moved), TRUE))
+    if (length(rest) && .structuralRank(syms[keep], rest) < length(rest)) dep else moved
+  }), inputs)
+}
+
+## The size of a maximum matching between the rows, each the symbols it holds, and `cols`.
+.structuralRank <- function(rows, cols) {
+  owner <- setNames(rep(NA_integer_, length(cols)), cols)
+  adj <- lapply(rows, intersect, cols)
+  seen <- NULL
+  augment <- function(r) {
+    for (c in adj[[r]]) {
+      if (seen[[c]]) next
+      seen[[c]] <<- TRUE
+      if (is.na(owner[[c]]) || augment(owner[[c]])) {
+        owner[[c]] <<- r
+        return(TRUE)
+      }
+    }
+    FALSE
+  }
+  for (r in seq_along(adj)) {
+    seen <- setNames(rep(FALSE, length(cols)), cols)
+    augment(r)
+  }
+  sum(!is.na(owner))
+}
+
+## The symbols an expression holds once the names in `zeros` are 0, and whether it is then 0.
+.zeroDepends <- function(expr, zeros) {
+  e <- .zeroOut(str2lang(as.character(expr)), zeros)
+  list(zero = is.numeric(e) && length(e) == 1L && !is.na(e) && e == 0,
+       symbols = if (is.numeric(e)) character(0) else setdiff(all.vars(e), "time"))
+}
+
+## An expression with the names in `zeros` set to 0: a product with a factor 0, a quotient with
+## numerator 0 and a positive power of 0 vanish, sums drop their terms 0, and an elementary function
+## of constants is evaluated. Returns a number where the result is constant.
+.zeroOut <- function(e, zeros) {
+  if (is.numeric(e) || is.logical(e)) return(as.numeric(e))
+  if (is.name(e)) return(if (as.character(e) %in% zeros) 0 else e)
+  if (!is.call(e) || !is.name(e[[1]])) return(e)
+  f <- as.character(e[[1]])
+  a <- lapply(as.list(e)[-1], .zeroOut, zeros = zeros)
+  zero <- function(x) is.numeric(x) && length(x) == 1L && !is.na(x) && x == 0
+  const <- function(x) is.numeric(x) && length(x) == 1L && !is.na(x)
+  if (f == "(") return(a[[1]])
+  if (f == "*" && any(vapply(a, zero, TRUE))) return(0)
+  if (f == "/" && zero(a[[1]]) && !zero(a[[2]])) return(0)
+  if (f == "^" && zero(a[[1]]) && const(a[[2]]) && a[[2]] > 0) return(0)
+  if (f == "+") {
+    a <- Filter(Negate(zero), a)
+    if (!length(a)) return(0)
+    if (length(a) == 1L) return(a[[1]])
+  }
+  if (f == "-") {
+    if (all(vapply(a, zero, TRUE))) return(0)
+    if (length(a) == 2L && zero(a[[2]])) return(a[[1]])
+    if (length(a) == 2L && zero(a[[1]])) a <- a[2]
+  }
+  out <- as.call(c(e[[1]], a))
+  if (f %in% .elementary && all(vapply(a, const, TRUE))) {
+    v <- tryCatch(suppressWarnings(eval(out, baseenv())), error = function(err) NULL)
+    if (const(v)) return(v)
+  }
+  out
+}
+
+.elementary <- c("+", "-", "*", "/", "^", "exp", "log", "log10", "log2", "log1p", "expm1", "sqrt",
+                 "abs", "sin", "cos", "tan", "sinh", "cosh", "tanh", "asin", "acos", "atan",
+                 "asinh", "acosh", "atanh")
 
 ## The groups of one grouping: their conditions with data, etas, distribution blocks and the
 ## Cholesky layout of the normal ones.
@@ -241,7 +515,23 @@
   setNames(drop(solve(A, b)), free)
 }
 
-## A start perturbed by normal noise of standard deviation `sd` on the scale where each entry is
+## The standard deviation of the perturbation of every parameter of `center` from msem(sd = ): one
+## number for all, or a vector named by the parameters it perturbs, 0 for the others.
+.perturbSd <- function(sd, center) {
+  if (!is.numeric(sd) || !length(sd) || anyNA(sd) || any(sd < 0))
+    stop("msem: `sd` is a non-negative number or a vector of them named by parameters.", call. = FALSE)
+  if (length(sd) == 1L && is.null(names(sd))) return(setNames(rep(sd, length(center)), names(center)))
+  if (is.null(names(sd)) || any(names(sd) == ""))
+    stop("msem: `sd` with several entries names the parameters it perturbs.", call. = FALSE)
+  unknown <- setdiff(names(sd), names(center))
+  if (length(unknown))
+    stop("msem: `sd` names ", paste(unknown, collapse = ", "), ", which the fit does not estimate.", call. = FALSE)
+  out <- setNames(numeric(length(center)), names(center))
+  out[names(sd)] <- sd
+  out
+}
+
+## A start perturbed by normal noise of standard deviations `sd` on the scale where each entry is
 ## unbounded: log for Laplace strengths, concentrations and slab standard deviations, logit for
 ## slab probabilities, the identity for the structural and Cholesky parameters.
 .perturbStart <- function(design, center, sd) {

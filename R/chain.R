@@ -146,7 +146,9 @@
     outer <- c(free[[i]], fixedNames)
     oin <- match(sg$o, outer)
     xparm <- match(xs$handle$required, sg$final)
+    # an observable reading `time` gets it from the solve, index 0 (-1 after the shift)
     yvar <- match(gst$innames, xs$variables)
+    yvar[is.na(yvar) & gst$innames == "time"] <- 0L
     ypar <- match(gst$parameters, sg$final)
     if (anyNA(xparm) || anyNA(yvar) || anyNA(ypar)) return(NULL)
     yfn <- addr(paste0(gst$modelname, ad))
@@ -168,6 +170,7 @@
     }
     if (!is.null(est)) {
       evar <- match(est$innames, gst$outnames)
+      evar[is.na(evar) & est$innames == "time"] <- 0L
       epar <- match(est$parameters, sg$final)
       efn <- addr(paste0(est$modelname, ad))
       evjp <- if (sweep || adjoint) addr(paste0(est$modelname, vjp))

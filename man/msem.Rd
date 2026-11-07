@@ -14,12 +14,12 @@ msem(
   fits = 20L,
   cores = 1L,
   sd = 0.5,
-  budget = 5,
   verbose = FALSE,
   sparse = "auto",
   retry = TRUE,
   nTries = 10L,
-  keepFits = FALSE
+  keepFits = FALSE,
+  which = NULL
 )
 }
 \arguments{
@@ -29,81 +29,61 @@ msem(
 \item{random}{The random effects, \code{\link[=randomEffects]{randomEffects()}} of the parameter
 transformation or of \code{p}.}
 
-\item{init}{Named numeric start. It needs the parameters of \code{obj} that
-are neither random effects nor created by the effect formulas (those
-start at 0); it may set those and the hyperparameters \verb{omega_*} (log
-standard deviations and Cholesky entries) and, named
-\verb{<kind>_<grouping>} and numbered \verb{_1}, \verb{_2}, ... when a grouping has
-several such blocks, \verb{lambda_*} (Laplace), \verb{prob_*} and \verb{tau_*}
-(spike and slab), \verb{concentration_*} and \verb{tau_*} (Dirichlet process).
-An \code{em} fit as \code{init} gives its estimates as the start and its \code{fixed}
-values, and its random effects without those it set to 0 at the boundary.}
+\item{init}{Named numeric start with the parameters of \code{obj} that are
+neither random effects nor created by the effect formulas (those start
+at 0). It may also set those and the hyperparameters: \verb{omega_*} (log
+standard deviations and Cholesky entries), \verb{lambda_*} (Laplace), \verb{prob_*}
+and \verb{tau_*} (spike and slab), \verb{concentration_*} and \verb{tau_*} (Dirichlet
+process), named \verb{<kind>_<grouping>} and numbered \verb{_1}, \verb{_2}, ... where a
+grouping has several blocks. An \code{em} fit as \code{init} gives its estimates,
+its \code{fixed} values, its random effects without those it set to 0 and,
+with sparse random effects, its inner modes as their start.}
 
 \item{fixed}{Named numeric of parameters held fixed.}
 
 \item{method}{\code{"focei"} (default), \code{"quadrature"}, \code{"laplaceEM"} or
 \code{"saem"}.}
 
-\item{control}{List of options: \code{sd} (start of the random-effect standard
-deviations, default 0.3), \code{innerControl} and \code{trustControl} (the inner
-and outer trust region of FOCEI; the inner one stops where the Newton
-step of the random effects is below \code{steptol}, default 1e-8, the outer one
-where the predicted change of -2 log L is below \code{mtol}, default 1e-5), \code{secondOrderCorrection} (default
-\code{TRUE}), \code{derivMode}, how FOCEI gets the second derivatives of its
-volume term: \code{"forward-reverse"} (default), directional sweeps forward
-along the random effects and backward with seeds, for models built with
-\code{derivMode = c("forward", "reverse", "forward-reverse")}: the outer model
-Hessian Gauss-Newton, the volume curvature learned by the SR1 correction;
-the reported Hessian forward over forward where
-the model also has \code{deriv2}, else the exact Schur complement of the joint
-Hessian (up to 500 parameters) with the volume curvature of the variance
-parameters, exact for models linear in the random effects; or \code{"forward-forward"}, the
-second-order sensitivities of models built with \code{deriv2 = TRUE}, with the
-exact volume Hessian. In both modes an SR1 correction from the changes of
-the outer gradient between the last three accepted points adds the curvature
-Gauss-Newton leaves out, negative curvature included, so the outer model
-may be indefinite. Without the mode asked for the fit takes the other
-with a message, also where the default falls back to \code{"forward-forward"};
-\code{\link[=msem]{msem()}} gives it once. \code{quadrature} (section Quadrature of \code{\link[=em]{em()}}, also read by
-\code{"laplaceEM"}) and \code{saem} lists for those methods; \code{laplace}, the list of
-the fits with Laplace, spike-and-slab or Dirichlet-process random
-effects, whose parameters and hyperparameters move in one trust region:
-\code{maxOuter} (default 200), its iterations; \code{trustControl}, its \code{\link[=trust]{trust()}}
-settings; \code{coupling}, \code{"expectationConsistent"} (default) or
-\code{"meanField"}, the integral where the data couple sparse random effects
-of one group that the priors keep apart. The coupling holds for the
-whole fit: where expectation consistent does not converge at the start,
-the fit is by mean field, and \code{fit$coupling} is \code{"meanFieldFallback"}; a
-trial point at which it does not converge is a failed evaluation of the
-trust region. \code{boundary}, the largest rise of -2 log L at which a
-variance is set to 0, default 0.1, \code{FALSE} for none: with one grouping
-and several blocks, a normal random effect of its own block whose
-standard deviation ends below 0.1 is dropped, its etas fixed at 0, and
-the other parameters are fitted again from the estimates; where that
-raises -2 log L by at most \code{boundary}, the fit without it is returned and
-names its hyperparameter in \code{boundary}. Other entries are an error.}
+\item{control}{List of options; other entries are an error.
+\describe{
+\item{\code{sd}}{start of the standard deviations of the random effects,
+default 0.3.}
+\item{\code{innerControl}}{the trust region of the modes; it stops where the
+Newton step is below \code{steptol}, default 1e-8.}
+\item{\code{trustControl}}{the outer trust region; it stops where the
+predicted change of -2 log L is below \code{mtol}, default 1e-5.}
+\item{\code{secondOrderCorrection}}{the derivative of the volume term,
+default \code{TRUE}.}
+\item{\code{derivMode}}{how FOCEI gets the second derivatives of its volume
+term: \code{"forward-reverse"} (default), sweeps for models built with
+\code{derivMode = c("forward", "reverse", "forward-reverse")}, or
+\code{"forward-forward"}, the second-order sensitivities of models built
+with \code{deriv2 = TRUE}. Without the mode asked for the fit takes the
+other, with a message.}
+\item{\code{boundary}}{the largest rise of -2 log L at which a variance is
+set to 0, default 0.1, \code{FALSE} for none. With one grouping and several
+blocks, a normal random effect of its own block whose standard
+deviation ends below 0.1 is dropped and the fit repeated from the
+estimates; where -2 log L rises by at most \code{boundary}, that fit is
+returned and names the hyperparameter in \code{boundary}.}
+\item{\code{quadrature}, \code{saem}, \code{laplace}}{lists of the sections
+Quadrature, SAEM and Sparse random effects.}
+}}
 
 \item{fits}{Number of starts. Default 20.}
 
 \item{cores}{Number of fits run in parallel, or \code{c(fits = , conditions = )}
 as in \code{\link[=mstrust]{mstrust()}}: fits in parallel and cores inside each fit.}
 
-\item{sd}{Standard deviation of the perturbation of the starts.}
-
-\item{budget}{The fit from \code{init} runs first; in every other start the
-outer trust region of FOCEI, also the one before quadrature, and that of
-the fits with sparse random effects end after \code{budget} times the
-iterations they took in the first fit. Quadrature, Laplace-EM and SAEM
-keep their own iteration limits. \code{Inf} lets every start run to
-convergence.}
+\item{sd}{Standard deviation of the perturbation of the starts: one
+number for every parameter, or a vector named by the parameters it
+perturbs, the others keeping their start.}
 
 \item{verbose}{Logical; print the progress of the iterative methods.}
 
-\item{sparse}{\code{"auto"} (default), \code{TRUE} or \code{FALSE}: the outer trust region of
-FOCEI over normal random effects on the sparse Gauss-Newton Hessian, the
-Schur complement and the volume term of every group local to its
-parameters. \code{"auto"} decides as \code{\link[=trust]{trust()}} does, from the number of outer
-parameters and the fill of the outer Hessian at the start.}
+\item{sparse}{\code{"auto"} (default), \code{TRUE} or \code{FALSE}: the outer trust region
+of FOCEI over normal random effects on the sparse Gauss-Newton Hessian.
+\code{"auto"} decides as \code{\link[=trust]{trust()}} does.}
 
 \item{retry}{Logical. If \code{TRUE} (default), a fit that fails with an error,
 for instance at a start where a steady state of \code{\link[=Pimpl]{Pimpl()}} has no stable
@@ -114,13 +94,26 @@ Default \code{10}.}
 
 \item{keepFits}{Logical. If \code{TRUE}, the result has \code{fits}, the fit of every
 start, or its error message, without the model. Default \code{FALSE}.}
+
+\item{which}{Positions of the starts to fit, among the \code{fits} drawn. \code{NULL}
+(default) fits all. Tasks of \code{\link[=distributedComputing]{distributedComputing()}} that set the same
+seed and fit disjoint parts fit the starts of one call, and \code{get()} joins
+their results into one.}
 }
 \value{
-The fit with the smallest \code{value}, of class \code{em}, with \code{multistart},
-a data.frame of every start with its \code{value}, \code{converged}, \code{iterations},
-\code{tries}, \code{stop}, the test that ended its trust region (\code{"error"} where
-every attempt failed), \code{error} and \code{boundary}, the variances its fit set
-to 0; a start that the budget ends has \code{converged = FALSE}.
+The fit with the smallest \code{value}, of class \code{em}, with
+\code{multistart}, a data frame with a row per start:
+\describe{
+\item{\code{value}, \code{converged}, \code{iterations}}{of its fit.}
+\item{\code{gradient}}{the largest absolute entry of the gradient at its end.}
+\item{\code{tries}}{the attempts it took.}
+\item{\code{stop}}{the test that ended its trust region, \code{"error"} where
+every attempt failed.}
+\item{\code{failures}}{why evaluations of its trust region failed, and how
+often.}
+\item{\code{error}, \code{boundary}}{the error of a failed start, the variances
+its fit set to 0.}
+}
 \code{\link[=plotValues]{plotValues()}} draws it as a waterfall.
 }
 \description{

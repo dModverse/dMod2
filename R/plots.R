@@ -1,7 +1,7 @@
 
 # ggplot2 / dplyr NSE column references; declared so R CMD check does not
 # flag them as undefined globals.
-utils::globalVariables(c("predicted", "observed", "sd_est", "iter", "level"))
+utils::globalVariables(c("predicted", "observed", "sd_est", "iter", "level", "shown"))
 
 
 # PDF viewer, theme and color palettes ---
@@ -666,10 +666,11 @@ plotFluxes <- function(pouter, x, times, fluxEquations, legendTitle = "Fluxes:",
 #' ascending order against their rank. A converged fit is colored by its number
 #' of iterations, an unconverged one is red.
 #'
-#' @param x Data frame with columns `value`, `converged` and `iterations`,
-#'   e.g. a [parframe], a fit of [msem()], whose starts are plotted, or an
-#'   alignment from [align()].
-#' @param ... Logical expressions to subset `x`.
+#' @param x A collection of fits: a [parframe], the result of [mstrust()], a
+#'   data frame with column `value` and optionally `converged` and
+#'   `iterations`, a fit of [msem()] or an alignment from [align()], whose
+#'   starts are plotted. Or a named list of collections, one panel each.
+#' @param ... Logical expressions to subset `x`, every collection of a list.
 #' @param tol Maximal difference between neighboring objective values that
 #'   still counts as one step. Defaults to 1.
 #' @param showSteps Logical. `TRUE` marks the detected steps by dashed
@@ -677,8 +678,13 @@ plotFluxes <- function(pouter, x, times, fluxEquations, legendTitle = "Fluxes:",
 #' @param pseudoLog Logical. `TRUE` draws the values on a pseudo-log10 scale,
 #'   linear below 1 in absolute value and defined for negative values. Defaults
 #'   to `FALSE`, a linear scale.
+#' @param relative `TRUE` draws every value above the best of its
+#'   collection, as for collections whose objectives differ by a constant; a
+#'   number draws every value above that number, as the best of all
+#'   collections. Defaults to `FALSE`.
 #' @return A `ggplot` object with the plotted data frame as attribute
-#'   `"data"`; its column `delta` is the distance to the best fit.
+#'   `"data"`; its column `delta` is the distance to the best fit of its
+#'   collection, `set` the collection of a list.
 #' @seealso [mstrust()], [as.parframe()], [plotPars()]
 #' @export
 #' @examples
@@ -694,7 +700,7 @@ plotValues <- function(x, ...) UseMethod("plotValues")
 #' Draws one box per parameter, colored by the step of the objective value the
 #' fits belong to.
 #'
-#' @param x A [parframe], e.g. from `as.parframe(mstrust(...))`.
+#' @param x A [parframe] or the result of [mstrust()].
 #' @param tol Maximal difference between neighboring objective values that
 #'   still counts as one step. Defaults to 1.
 #' @param ... Logical expressions to subset `x`.

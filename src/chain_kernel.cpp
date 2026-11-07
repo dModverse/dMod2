@@ -93,14 +93,18 @@ bool evalAd(DL_FUNC f, bool d2, std::vector<double>& x, std::vector<double>& p, 
   return true;
 }
 
-// The columns `idx` of an array [T, n, nd^k] as an array [T, idx, nd^k], k = 0, 1, 2.
-std::vector<double> columns(const double* a, int T, int n, const std::vector<int>& idx, std::size_t blocks) {
+// The columns `idx` of an array [T, n, nd^k] as an array [T, idx, nd^k], k = 0, 1, 2. An index
+// -1 is the time: `time` in its value column, 0 in its derivatives.
+std::vector<double> columns(const double* a, int T, int n, const std::vector<int>& idx, std::size_t blocks,
+                            const double* time = nullptr) {
   const int m = idx.size();
-  std::vector<double> out((std::size_t) T * m * blocks);
+  std::vector<double> out((std::size_t) T * m * blocks, 0.0);
   for (std::size_t b = 0; b < blocks; ++b)
-    for (int j = 0; j < m; ++j)
-      std::memcpy(out.data() + (std::size_t) T * (j + (std::size_t) m * b),
-                  a + (std::size_t) T * (idx[j] + (std::size_t) n * b), sizeof(double) * T);
+    for (int j = 0; j < m; ++j) {
+      double* to = out.data() + (std::size_t) T * (j + (std::size_t) m * b);
+      if (idx[j] >= 0) std::memcpy(to, a + (std::size_t) T * (idx[j] + (std::size_t) n * b), sizeof(double) * T);
+      else if (time != nullptr && b == 0) std::memcpy(to, time, sizeof(double) * T);
+    }
   return out;
 }
 
@@ -538,7 +542,7 @@ bool observe(const In& I, bool deriv2, bool withErr, Ad& Y, Ad& E) {
   const bool d2 = deriv2 && nd > 0;
   std::vector<double> p, dP, dP2;
   params(I.ypar, p, dP, dP2);
-  std::vector<double> x = columns(I.xv, T, I.nstate, I.yvar, 1), dX, dX2;
+  std::vector<double> x = columns(I.xv, T, I.nstate, I.yvar, 1, I.tsol), dX, dX2;
   if (nd > 0) dX = columns(I.xs, T, I.nstate, I.yvar, nd);
   if (d2) dX2 = columns(I.xh, T, I.nstate, I.yvar, nd2);
   if (!evalAd(I.yf, deriv2, x, p, nd > 0 ? dX.data() : nullptr, nd > 0 ? dP.data() : nullptr,
@@ -549,7 +553,7 @@ bool observe(const In& I, bool deriv2, bool withErr, Ad& Y, Ad& E) {
   if (I.ef == nullptr) return false;
   std::vector<double> ep, edP, edP2;
   params(I.epar, ep, edP, edP2);
-  std::vector<double> ex = columns(Y.y.data(), T, I.nyo, I.evar, 1), edX, edX2;
+  std::vector<double> ex = columns(Y.y.data(), T, I.nyo, I.evar, 1, I.tsol), edX, edX2;
   if (nd > 0) edX = columns(Y.dy.data(), T, I.nyo, I.evar, nd);
   if (d2) edX2 = columns(Y.d2y.data(), T, I.nyo, I.evar, nd2);
   return evalAd(I.ef, deriv2, ex, ep, nd > 0 ? edX.data() : nullptr, nd > 0 ? edP.data() : nullptr,
@@ -1023,7 +1027,8 @@ SEXP chain_back(List plan, List pre, List raw, NumericMatrix seedP, NumericMatri
         }
     };
     if (withErr) {
-      std::vector<double> x = columns(Yv.y.data(), T, nyo, I.evar, 1), vx = columns(Yv.dy.data(), T, nyo, I.evar, K);
+      std::vector<double> x = columns(Yv.y.data(), T, nyo, I.evar, 1, I.tsol),
+                          vx = columns(Yv.dy.data(), T, nyo, I.evar, K);
       std::vector<double> p = valuesOf(I.pv, I.epar), vp = rowsOf(I.pj, npo, I.epar, K);
       Pull u;
       if (!(first ? vjp1(ev[c], x, p, wE.data(), T, I.evar.size(), I.epar.size(), neo, S, u)
@@ -1035,14 +1040,14 @@ SEXP chain_back(List plan, List pre, List raw, NumericMatrix seedP, NumericMatri
       const std::size_t m = I.evar.size();
       for (std::size_t s = 0; s < s1; ++s)
         for (std::size_t j = 0; j < m; ++j)
-          for (std::size_t t = 0; t < T; ++t) {
+          for (std::size_t t = 0; t < T && I.evar[j] >= 0; ++t) {
             wY[t + T * (I.evar[j] + nyo * s)] += u.wx[t + T * (j + m * s)];
             for (int k = 0; k < K; ++k)
               dwY[t + T * (I.evar[j] + nyo * (s + s1 * k))] += u.dwx[t + T * (j + m * (s + s1 * k))];
           }
       toOutputs(u, I.epar);
     }
-    std::vector<double> x = columns(I.xv, T, nst, I.yvar, 1), vx = columns(I.xs, T, nst, I.yvar, K);
+    std::vector<double> x = columns(I.xv, T, nst, I.yvar, 1, I.tsol), vx = columns(I.xs, T, nst, I.yvar, K);
     std::vector<double> p = valuesOf(I.pv, I.ypar), vp = rowsOf(I.pj, npo, I.ypar, K);
     Pull u;
     if (!(first ? vjp1(yv[c], x, p, wY.data(), T, I.yvar.size(), I.ypar.size(), nyo, S, u)
@@ -1055,9 +1060,10 @@ SEXP chain_back(List plan, List pre, List raw, NumericMatrix seedP, NumericMatri
     const std::size_t m = I.yvar.size();
     cot[c].assign(T * nst * s1, 0.0);
     curv[c].assign(T * nst * s1 * k1, 0.0);
+    // the cotangent of the time input has no state to go to
     for (std::size_t s = 0; s < s1; ++s)
       for (std::size_t j = 0; j < m; ++j)
-        for (std::size_t t = 0; t < T; ++t) {
+        for (std::size_t t = 0; t < T && I.yvar[j] >= 0; ++t) {
           cot[c][t + T * (I.yvar[j] + nst * s)] += u.wx[t + T * (j + m * s)];
           for (int k = 0; k < K; ++k)
             curv[c][t + T * (I.yvar[j] + nst * (s + s1 * k))] += u.dwx[t + T * (j + m * (s + s1 * k))];

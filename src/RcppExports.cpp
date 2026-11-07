@@ -106,22 +106,6 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
-// ec_cavity
-List ec_cavity(List P, NumericMatrix Lam, NumericMatrix gam, NumericMatrix Pm, CharacterVector stems, List dimnames);
-RcppExport SEXP _dMod2_ec_cavity(SEXP PSEXP, SEXP LamSEXP, SEXP gamSEXP, SEXP PmSEXP, SEXP stemsSEXP, SEXP dimnamesSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< List >::type P(PSEXP);
-    Rcpp::traits::input_parameter< NumericMatrix >::type Lam(LamSEXP);
-    Rcpp::traits::input_parameter< NumericMatrix >::type gam(gamSEXP);
-    Rcpp::traits::input_parameter< NumericMatrix >::type Pm(PmSEXP);
-    Rcpp::traits::input_parameter< CharacterVector >::type stems(stemsSEXP);
-    Rcpp::traits::input_parameter< List >::type dimnames(dimnamesSEXP);
-    rcpp_result_gen = Rcpp::wrap(ec_cavity(P, Lam, gam, Pm, stems, dimnames));
-    return rcpp_result_gen;
-END_RCPP
-}
 // chain_params
 SEXP chain_params(List plan, List values, bool deriv, bool deriv2, int threads, SEXP tangents);
 RcppExport SEXP _dMod2_chain_params(SEXP planSEXP, SEXP valuesSEXP, SEXP derivSEXP, SEXP deriv2SEXP, SEXP threadsSEXP, SEXP tangentsSEXP) {
@@ -281,20 +265,6 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
-// dirichlet_process_partitions
-List dirichlet_process_partitions(NumericVector a, NumericVector m, double concentration, double tau);
-RcppExport SEXP _dMod2_dirichlet_process_partitions(SEXP aSEXP, SEXP mSEXP, SEXP concentrationSEXP, SEXP tauSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< NumericVector >::type a(aSEXP);
-    Rcpp::traits::input_parameter< NumericVector >::type m(mSEXP);
-    Rcpp::traits::input_parameter< double >::type concentration(concentrationSEXP);
-    Rcpp::traits::input_parameter< double >::type tau(tauSEXP);
-    rcpp_result_gen = Rcpp::wrap(dirichlet_process_partitions(a, m, concentration, tau));
-    return rcpp_result_gen;
-END_RCPP
-}
 // focei_inner_trust
 List focei_inner_trust(Function model_cb, Function err_cb, NumericVector pars_full, NumericMatrix eta_warmstart, List subject_meta, NumericMatrix Omega_inv_mat, double Omega_log_det, Nullable<NumericVector> fixed, List control, Nullable<Function> predict_cb);
 RcppExport SEXP _dMod2_focei_inner_trust(SEXP model_cbSEXP, SEXP err_cbSEXP, SEXP pars_fullSEXP, SEXP eta_warmstartSEXP, SEXP subject_metaSEXP, SEXP Omega_inv_matSEXP, SEXP Omega_log_detSEXP, SEXP fixedSEXP, SEXP controlSEXP, SEXP predict_cbSEXP) {
@@ -333,6 +303,15 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< Nullable<Function> >::type predict_cb(predict_cbSEXP);
     rcpp_result_gen = Rcpp::wrap(focei_run(model_cb, err_cb, joint_cb, init, subject_meta, fixed, control, correction_mode, correction_cb, predict_cb));
     return rcpp_result_gen;
+END_RCPP
+}
+// release_heap
+void release_heap();
+RcppExport SEXP _dMod2_release_heap() {
+BEGIN_RCPP
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    release_heap();
+    return R_NilValue;
 END_RCPP
 }
 // normL2_kernel
@@ -429,6 +408,20 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// pimpl_spectrum
+List pimpl_spectrum(SEXP xp, NumericVector pv, NumericVector x, double onset);
+RcppExport SEXP _dMod2_pimpl_spectrum(SEXP xpSEXP, SEXP pvSEXP, SEXP xSEXP, SEXP onsetSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type xp(xpSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type pv(pvSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type x(xSEXP);
+    Rcpp::traits::input_parameter< double >::type onset(onsetSEXP);
+    rcpp_result_gen = Rcpp::wrap(pimpl_spectrum(xp, pv, x, onset));
+    return rcpp_result_gen;
+END_RCPP
+}
 // pimpl_live
 bool pimpl_live(SEXP xp);
 RcppExport SEXP _dMod2_pimpl_live(SEXP xpSEXP) {
@@ -449,6 +442,58 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< int >::type K(KSEXP);
     Rcpp::traits::input_parameter< int >::type level(levelSEXP);
     rcpp_result_gen = Rcpp::wrap(sparseGridGK(K, level));
+    return rcpp_result_gen;
+END_RCPP
+}
+// graph_reach
+LogicalVector graph_reach(CharacterVector from, CharacterVector to, CharacterVector sources, CharacterVector sinks);
+RcppExport SEXP _dMod2_graph_reach(SEXP fromSEXP, SEXP toSEXP, SEXP sourcesSEXP, SEXP sinksSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< CharacterVector >::type from(fromSEXP);
+    Rcpp::traits::input_parameter< CharacterVector >::type to(toSEXP);
+    Rcpp::traits::input_parameter< CharacterVector >::type sources(sourcesSEXP);
+    Rcpp::traits::input_parameter< CharacterVector >::type sinks(sinksSEXP);
+    rcpp_result_gen = Rcpp::wrap(graph_reach(from, to, sources, sinks));
+    return rcpp_result_gen;
+END_RCPP
+}
+// sparse_integral
+List sparse_integral(List P, NumericMatrix b, IntegerVector kind, NumericVector prob, NumericVector tau, NumericVector lambda, NumericVector conc, LogicalMatrix active, Nullable<NumericMatrix> sitesLam, Nullable<NumericMatrix> sitesGam, double budget);
+RcppExport SEXP _dMod2_sparse_integral(SEXP PSEXP, SEXP bSEXP, SEXP kindSEXP, SEXP probSEXP, SEXP tauSEXP, SEXP lambdaSEXP, SEXP concSEXP, SEXP activeSEXP, SEXP sitesLamSEXP, SEXP sitesGamSEXP, SEXP budgetSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< List >::type P(PSEXP);
+    Rcpp::traits::input_parameter< NumericMatrix >::type b(bSEXP);
+    Rcpp::traits::input_parameter< IntegerVector >::type kind(kindSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type prob(probSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type tau(tauSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type lambda(lambdaSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type conc(concSEXP);
+    Rcpp::traits::input_parameter< LogicalMatrix >::type active(activeSEXP);
+    Rcpp::traits::input_parameter< Nullable<NumericMatrix> >::type sitesLam(sitesLamSEXP);
+    Rcpp::traits::input_parameter< Nullable<NumericMatrix> >::type sitesGam(sitesGamSEXP);
+    Rcpp::traits::input_parameter< double >::type budget(budgetSEXP);
+    rcpp_result_gen = Rcpp::wrap(sparse_integral(P, b, kind, prob, tau, lambda, conc, active, sitesLam, sitesGam, budget));
+    return rcpp_result_gen;
+END_RCPP
+}
+// sparse_factor
+List sparse_factor(int kind, NumericVector h, NumericVector t, double prob, double tau, double lambda, double conc);
+RcppExport SEXP _dMod2_sparse_factor(SEXP kindSEXP, SEXP hSEXP, SEXP tSEXP, SEXP probSEXP, SEXP tauSEXP, SEXP lambdaSEXP, SEXP concSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< int >::type kind(kindSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type h(hSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type t(tSEXP);
+    Rcpp::traits::input_parameter< double >::type prob(probSEXP);
+    Rcpp::traits::input_parameter< double >::type tau(tauSEXP);
+    Rcpp::traits::input_parameter< double >::type lambda(lambdaSEXP);
+    Rcpp::traits::input_parameter< double >::type conc(concSEXP);
+    rcpp_result_gen = Rcpp::wrap(sparse_factor(kind, h, t, prob, tau, lambda, conc));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -589,7 +634,6 @@ static const R_CallMethodDef CallEntries[] = {
     {"_dMod2_bmm_lb", (DL_FUNC) &_dMod2_bmm_lb, 6},
     {"_dMod2_bmm_rb", (DL_FUNC) &_dMod2_bmm_rb, 6},
     {"_dMod2_bmm_bb", (DL_FUNC) &_dMod2_bmm_bb, 6},
-    {"_dMod2_ec_cavity", (DL_FUNC) &_dMod2_ec_cavity, 6},
     {"_dMod2_chain_params", (DL_FUNC) &_dMod2_chain_params, 6},
     {"_dMod2_chain_data", (DL_FUNC) &_dMod2_chain_data, 11},
     {"_dMod2_chain_frames", (DL_FUNC) &_dMod2_chain_frames, 5},
@@ -599,9 +643,9 @@ static const R_CallMethodDef CallEntries[] = {
     {"_dMod2_chain_unit_sums", (DL_FUNC) &_dMod2_chain_unit_sums, 3},
     {"_dMod2_constraintL2_scalar_kernel", (DL_FUNC) &_dMod2_constraintL2_scalar_kernel, 12},
     {"_dMod2_datapointL2_kernel", (DL_FUNC) &_dMod2_datapointL2_kernel, 11},
-    {"_dMod2_dirichlet_process_partitions", (DL_FUNC) &_dMod2_dirichlet_process_partitions, 4},
     {"_dMod2_focei_inner_trust", (DL_FUNC) &_dMod2_focei_inner_trust, 10},
     {"_dMod2_focei_run", (DL_FUNC) &_dMod2_focei_run, 10},
+    {"_dMod2_release_heap", (DL_FUNC) &_dMod2_release_heap, 0},
     {"_dMod2_normL2_kernel", (DL_FUNC) &_dMod2_normL2_kernel, 11},
     {"_dMod2_parvec_attach", (DL_FUNC) &_dMod2_parvec_attach, 3},
     {"_dMod2_parvec_concat", (DL_FUNC) &_dMod2_parvec_concat, 1},
@@ -609,8 +653,12 @@ static const R_CallMethodDef CallEntries[] = {
     {"_dMod2_pimpl_controls", (DL_FUNC) &_dMod2_pimpl_controls, 3},
     {"_dMod2_pimpl_stats", (DL_FUNC) &_dMod2_pimpl_stats, 2},
     {"_dMod2_pimpl_root", (DL_FUNC) &_dMod2_pimpl_root, 4},
+    {"_dMod2_pimpl_spectrum", (DL_FUNC) &_dMod2_pimpl_spectrum, 4},
     {"_dMod2_pimpl_live", (DL_FUNC) &_dMod2_pimpl_live, 1},
     {"_dMod2_sparseGridGK", (DL_FUNC) &_dMod2_sparseGridGK, 2},
+    {"_dMod2_graph_reach", (DL_FUNC) &_dMod2_graph_reach, 4},
+    {"_dMod2_sparse_integral", (DL_FUNC) &_dMod2_sparse_integral, 11},
+    {"_dMod2_sparse_factor", (DL_FUNC) &_dMod2_sparse_factor, 7},
     {"_dMod2_systemTimes", (DL_FUNC) &_dMod2_systemTimes, 0},
     {"_dMod2_trustL1_impl", (DL_FUNC) &_dMod2_trustL1_impl, 24},
     {"_dMod2_trust_impl", (DL_FUNC) &_dMod2_trust_impl, 29},

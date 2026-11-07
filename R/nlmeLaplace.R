@@ -3,59 +3,6 @@
 # in the guide chapter Group-specific effects.
 
 
-## ---- normal-Laplace integral -------------------------------------------------
-
-# sqrt(pi) x erfcx(x) - 1 by its asymptotic series, accurate to machine precision for x > 10
-.erfcxSeries <- function(x) {
-  t <- 1 / (2 * x^2); term <- 1; s <- 0
-  for (k in 1:14) { term <- -term * (2 * k - 1) * t; s <- s + term }
-  s
-}
-
-# log of erfcx(x) = exp(x^2) erfc(x) and its derivative, stable for every real x
-.logErfcx <- function(x) {
-  out <- log(2) + x^2 + stats::pnorm(-x * sqrt(2), log.p = TRUE)
-  big <- x > 10
-  out[big] <- log1p(.erfcxSeries(x[big])) - log(x[big] * sqrt(pi))
-  out
-}
-
-.dLogErfcx <- function(x, logErfcx) {
-  out <- 2 * x - 2 / sqrt(pi) * exp(-logErfcx)
-  big <- x > 10
-  s <- .erfcxSeries(x[big])
-  out[big] <- 2 * x[big] * s / (1 + s)
-  out
-}
-
-.logSumExp2 <- function(a, b) pmax(a, b) + log1p(exp(-abs(a - b)))
-
-## log I(a, m, lambda), I = int lambda / 2 exp(-lambda |eta|) exp(-a / 2 (eta - m)^2) d eta, its
-## partial derivatives and the posterior moments E eta, E|eta| and E (eta - m)^2, vectorised.
-.normalLaplace <- function(a, m, lambda) {
-  n <- max(length(a), length(m), length(lambda))
-  a <- rep_len(a, n); m <- rep_len(m, n); lambda <- rep_len(lambda, n)
-  cc <- sqrt(a / 2)
-  u <- (lambda / a - m) * cc
-  v <- (lambda / a + m) * cc
-  lEu <- .logErfcx(u); lEv <- .logErfcx(v)
-  lse <- .logSumExp2(lEu, lEv)
-  logI <- log(lambda) - log(2) + 0.5 * (log(pi) - log(2 * a)) - a * m^2 / 2 + lse
-  wPos <- exp(lEu - lse); wNeg <- exp(lEv - lse)
-  dEu <- .dLogErfcx(u, lEu); dEv <- .dLogErfcx(v, lEv)
-  dcda <- cc / (2 * a)
-  dudm <- -cc; dvdm <- cc
-  dudl <- cc / a; dvdl <- cc / a
-  duda <- -lambda / a^2 * cc + (lambda / a - m) * dcda
-  dvda <- -lambda / a^2 * cc + (lambda / a + m) * dcda
-  dm <- -a * m + wPos * dEu * dudm + wNeg * dEv * dvdm
-  dl <- 1 / lambda + wPos * dEu * dudl + wNeg * dEv * dvdl
-  da <- -1 / (2 * a) - m^2 / 2 + wPos * dEu * duda + wNeg * dEv * dvda
-  list(logI = logI, dm = dm, da = da, dlambda = dl,
-       mean = m + dm / a, abs = 1 / lambda - dl, cen2 = -2 * da)
-}
-
-
 ## ---- design pieces ---------------------------------------------------------------
 
 ## The Laplace, spike-and-slab and cluster coordinates: per stem its block, distribution, the
@@ -85,6 +32,12 @@
   h <- c(lay$lambdaName[is.na(lay$lambda)], lay$probName[is.na(lay$prob)],
          lay$concentrationName[is.na(lay$concentration)], lay$tauName[is.na(lay$tau)])
   unique(h[!is.na(h)])
+}
+
+## The etas of every group that reach its data (.etaReach()), a G x K logical like design$etaNames.
+.reachOf <- function(design) {
+  E <- design$etaNames
+  design$reach %||% matrix(TRUE, nrow(E), ncol(E), dimnames = dimnames(E))
 }
 
 ## The slab precision 2 / tau^2 of the -2 log prior of every spike-and-slab eta, named by eta.
@@ -124,48 +77,113 @@
 
 ## ---- inner mode --------------------------------------------------------------------
 
-## The joint mode of all etas at `theta` by trustL1: data -2 log L, normal prior, 2 lambda |eta|
-## per Laplace coordinate and the slab alone, eta^2 / tau^2, per spike-and-slab eta.
+## The mode of the etas at `theta`, group by group, since the etas of a group enter only its own
+## conditions: data -2 log L, normal prior, the slab alone, eta^2 / tau^2, per spike-and-slab eta,
+## and 2 lambda |eta| per Laplace coordinate, by trustL1 where a group has one, else by trust. The
+## model is differentiated in the etas of the group that reach its data only, the others rest at 0;
+## its Hessian is Gauss-Newton with a BFGS correction from the points that lowered the value, which
+## adds the curvature of the residuals. A group starts from the lowest of `start` and the modes in
+## `control$optima`, the optima found at earlier points, since the inner problem may have several.
+## The tolerances of the outer trust region, which bound the error the solver leaves, end the search.
+## With `control$phi` the value of every group at its mode is attribute "phi".
 .laplaceModes <- function(design, objs, prior, theta, hyp, start, control = list()) {
   lay <- .sparseLayout(design)
   E <- design$etaNames
   names <- as.vector(E)
   slab <- .slabPrecision(E, lay, hyp)
-  objective <- function(eta, ...) {
-    full <- c(theta, setNames(as.numeric(eta), names))
-    outs <- .groupData(design, objs, rep(list(full), length(design$groups)))
-    gr <- setNames(numeric(length(names)), names)
-    he <- matrix(0, length(names), length(names), dimnames = list(names, names))
-    v <- 0
-    for (i in seq_along(outs)) {
-      en <- E[i, ]
-      v <- v + outs[[i]]$value
-      gr[en] <- outs[[i]]$gradient[en]
-      he[en, en] <- outs[[i]]$hessian[en, en]
-    }
-    if (!is.null(prior)) {
-      pr <- prior(pars = full, deriv = TRUE)
-      nn <- intersect(names, names(pr$gradient))
-      v <- v + pr$value
-      gr[nn] <- gr[nn] + pr$gradient[nn]
-      he[nn, nn] <- he[nn, nn] + pr$hessian[nn, nn]
-    }
-    if (length(slab)) {
-      es <- full[names(slab)]
-      v <- v + sum(slab * es^2) / 2
-      gr[names(slab)] <- gr[names(slab)] + slab * es
-      he[cbind(names(slab), names(slab))] <- he[cbind(names(slab), names(slab))] + slab
-    }
-    list(value = v, gradient = gr, hessian = he)
-  }
   laplace <- lay$stem[lay$dist == "laplace"]
-  mu <- setNames(numeric(length(laplace) * nrow(E)), as.vector(E[, laplace]))
-  args <- list(objfun = objective, parinit = setNames(as.vector(start), names), mu = mu,
-               rinit = 1, rmax = 10, iterlim = control$iterlim %||% 100L,
-               tolControl = list(ftol = 1e-10, mtol = 1e-10))
-  if (length(mu)) args$lambda <- setNames(rep(2 * hyp$lambda[laplace], each = nrow(E)), names(mu))
-  fit <- do.call(trustL1, args)
-  matrix(fit$argument[names], nrow(E), dimnames = dimnames(E))
+  modes <- matrix(as.vector(start), nrow(E), dimnames = dimnames(E))
+  reach <- .reachOf(design)
+  modes[!reach] <- 0
+  given <- as.list(control$trustControl$tolControl)
+  tol <- utils::modifyList(list(ftol = 1e-10, mtol = 1e-10),
+                           given[intersect(c("ftol", "mtol", "gtol"), names(given))])
+  phis <- setNames(rep(NA_real_, nrow(E)), rownames(E))
+  for (i in seq_len(nrow(E))) {
+    en <- E[i, reach[i, ]]
+    if (!length(en)) next
+    conds <- design$conditions[[i]]
+    sl <- slab[intersect(names(slab), en)]
+    lp <- laplace[reach[i, laplace]]
+    # the value alone, with the L1 term of the Laplace coordinates
+    phi <- function(eta) {
+      full <- c(theta, setNames(as.vector(modes), names))
+      full[en] <- as.numeric(eta)
+      v <- sum(vapply(.objEvalMany(objs[conds], rep(list(full[en]), length(conds)), deriv = FALSE,
+                                   fixed = full[setdiff(names(full), en)]), `[[`, 0, "value"))
+      if (!is.null(prior)) v <- v + prior(pars = full, deriv = FALSE)$value
+      if (length(sl)) v <- v + sum(sl * full[names(sl)]^2) / 2
+      if (length(lp)) v <- v + sum(2 * hyp$lambda[lp] * abs(full[E[i, lp]]))
+      v
+    }
+    known <- control$optima[[i]]
+    if (length(known)) {
+      starts <- rbind(modes[i, reach[i, ]], known[, reach[i, ], drop = FALSE])
+      modes[i, reach[i, ]] <- starts[which.min(vapply(seq_len(nrow(starts)), function(r) phi(starts[r, ]), 0)), ]
+    }
+    best <- Inf; bestAt <- bestGrad <- correction <- NULL
+    objective <- function(eta, ...) {
+      full <- c(theta, setNames(as.vector(modes), names))
+      full[en] <- as.numeric(eta)
+      out <- Reduce(`+`, .objEvalMany(objs[conds], rep(list(full[en]), length(conds)),
+                                      fixed = full[setdiff(names(full), en)]))
+      v <- out$value
+      gr <- out$gradient[en]
+      he <- out$hessian[en, en, drop = FALSE]
+      if (!is.null(prior)) {
+        pr <- prior(pars = full, deriv = TRUE)
+        nn <- intersect(en, names(pr$gradient))
+        v <- v + pr$value
+        gr[nn] <- gr[nn] + pr$gradient[nn]
+        he[nn, nn] <- he[nn, nn] + pr$hessian[nn, nn]
+      }
+      if (length(sl)) {
+        es <- full[names(sl)]
+        v <- v + sum(sl * es^2) / 2
+        gr[names(sl)] <- gr[names(sl)] + sl * es
+        he[cbind(names(sl), names(sl))] <- he[cbind(names(sl), names(sl))] + sl
+      }
+      if (is.null(correction)) correction <<- 0 * he
+      # a correction from an earlier point that leaves the model at this one indefinite is dropped
+      if (any(correction != 0) && min(eigen(he + correction, symmetric = TRUE, only.values = TRUE)$values) <= 0)
+        correction <<- 0 * he
+      if (v < best) {
+        if (!is.null(bestAt)) correction <<- .secantCorrection(he, correction, eta - bestAt, gr - bestGrad)
+        best <<- v; bestAt <<- eta; bestGrad <<- gr
+      }
+      list(value = v, gradient = gr, hessian = he + correction)
+    }
+    args <- list(objfun = objective, parinit = setNames(modes[i, reach[i, ]], en), rinit = 1, rmax = 10,
+                 iterlim = control$iterlim %||% 100L, tolControl = tol)
+    fit <- if (length(lp)) {
+      mu <- setNames(numeric(length(lp)), E[i, lp])
+      do.call(trustL1, c(args, list(mu = mu, lambda = setNames(2 * hyp$lambda[lp], names(mu)))))
+    } else do.call(trust, c(args, list(sparse = FALSE)))
+    modes[i, reach[i, ]] <- fit$argument[en]
+    if (isTRUE(control$phi)) phis[i] <- phi(fit$argument[en])
+  }
+  if (isTRUE(control$phi)) attr(modes, "phi") <- phis
+  modes
+}
+
+## The lowest inner minimum per group at `theta` from the modes `warm`, from 0 and from `spread`
+## starts around `warm`, each eta moved by `scale` times a deterministic pseudo-normal number: the
+## inner problem of a group may have several minima, and every search keeps to the one it starts in.
+.exploreModes <- function(design, objs, prior, theta, hyp, warm, control, scale, spread = 2L) {
+  ctl <- utils::modifyList(control, list(phi = TRUE, optima = NULL))
+  best <- .laplaceModes(design, objs, prior, theta, hyp, warm, ctl)
+  low <- attr(best, "phi")
+  n <- length(warm)
+  for (k in 0:spread) {
+    z <- if (k == 0L) 0 else stats::qnorm(pmin(pmax(((sin(seq_len(n) * k * 12.9898 + 78.233) * 43758.5453) %% 1), 0.01), 0.99))
+    start <- if (k == 0L) 0 * warm else warm + scale * matrix(z, nrow(warm))
+    m <- .laplaceModes(design, objs, prior, theta, hyp, start, ctl)
+    lower <- !is.na(attr(m, "phi")) & (is.na(low) | attr(m, "phi") < low - 1e-6)
+    best[lower, ] <- m[lower, ]
+    low[lower] <- attr(m, "phi")[lower]
+  }
+  attr(best, "phi") <- NULL
+  best
 }
 
 
@@ -203,86 +221,12 @@
 
 ## ---- sparse block ----------------------------------------------------------------------------
 
-## The integral of the sparse coordinates (precision P[[i]], centre m[i, ] per group) by mean field
-## over factors, each integrated exactly given the means of the others; the bound is stationary in
-## the factors, so its derivatives in m, P and the hyperparameters hold them fixed.
-.sparseMeanField <- function(P, m, start, lay, hyp, hypers, tol = 1e-11, maxit = 1000L) {
-  G <- nrow(m); K <- ncol(m); stems <- colnames(m)
-  sf <- .sparseFactors(P, stems, lay)
-  r <- sf$rows; factors <- sf$factors; within <- sf$within; coupled <- sf$coupled
-  mu <- start
-  fits <- vector("list", length(factors))
-  for (it in seq_len(maxit)) {
-    before <- mu
-    for (j in seq_along(factors)) {
-      f <- factors[[j]]
-      o <- setdiff(seq_len(K), f)
-      shifted <- matrix(vapply(seq_len(G), function(i) {
-        if (!length(o)) return(m[i, f])
-        m[i, f] - drop(solve(P[[i]][f, f, drop = FALSE], P[[i]][f, o, drop = FALSE] %*% (mu[i, o] - m[i, o])))
-      }, numeric(length(f))), G, length(f), byrow = TRUE)
-      fits[[j]] <- .factorIntegral(f, P, shifted, lay[r[f], , drop = FALSE], hyp)
-      mu[, f] <- fits[[j]]$mean
-    }
-    if (!coupled || max(abs(mu - before)) < tol) break
-  }
-  d <- mu - m
-  cov <- lapply(seq_len(G), function(i) matrix(0, K, K, dimnames = list(stems, stems)))
-  for (j in seq_along(factors)) for (i in seq_len(G)) cov[[i]][factors[[j]], factors[[j]]] <- fits[[j]]$cov[[i]]
-  out <- .factorOutputs(fits, factors, m, lay, hypers)
-  logI <- out$logI
-  # the coupling between factors: sum_{b < c} d_b' P_bc d_c + 1/2 sum_b r_b' P_bb^-1 r_b
-  dm <- matrix(0, G, K, dimnames = dimnames(m))
-  dP <- vector("list", G)
-  for (i in seq_len(G)) {
-    Pc <- P[[i]]; Pc[within] <- 0
-    Pw <- P[[i]]; Pw[!within] <- 0
-    rr <- drop(Pc %*% d[i, ])
-    logI <- logI + sum(d[i, ] * rr) / 2 + sum(rr * solve(Pw, rr)) / 2
-    dm[i, ] <- drop(P[[i]] %*% d[i, ])
-    dP[[i]] <- -(tcrossprod(d[i, ]) + cov[[i]]) / 2
-  }
-  c(list(logI = logI, dm = dm, dP = dP, mean = mu, cov = cov, sweeps = it, coupling = "meanField"),
-    out[c("dhyper", "hyperGroups", "abs", "values", "clusters", "spike", "slab")])
-}
-
-## The sum of log I of the factors and their reported values, clusters, E|eta|, M-step statistics
-## and derivatives in the hyperparameters, collected over the stems; `hyperGroups` holds the
-## derivatives per group, NA where a factor couples the groups (Dirichlet process).
-.factorOutputs <- function(fits, factors, m, lay, hypers) {
-  G <- nrow(m); K <- ncol(m)
-  values <- clusters <- spike <- matrix(NA_real_, G, K, dimnames = dimnames(m))
-  absE <- matrix(0, G, K, dimnames = dimnames(m))
-  slab <- matrix(0, nrow(lay), 3, dimnames = list(lay$stem, c("free", "groups", "slab2")))
-  dhyper <- setNames(numeric(length(hypers)), hypers)
-  hyperGroups <- matrix(0, G, length(hypers), dimnames = list(rownames(m), hypers))
-  logI <- 0
-  for (j in seq_along(factors)) {
-    f <- factors[[j]]; ft <- fits[[j]]
-    logI <- logI + ft$logI
-    values[, f] <- ft$values; clusters[, f] <- ft$clusters; spike[, f] <- ft$spike
-    if (!is.null(ft$abs)) absE[, f] <- ft$abs
-    if (!is.null(ft$stats)) slab[rownames(ft$stats), ] <- ft$stats
-    for (k in seq_along(ft$hyper))
-      if (names(ft$hyper)[k] %in% hypers) dhyper[[names(ft$hyper)[k]]] <- dhyper[[names(ft$hyper)[k]]] + ft$hyper[[k]]
-    if (is.null(ft$hyperGroups)) { hyperGroups[] <- NA_real_; next }
-    for (k in which(colnames(ft$hyperGroups) %in% hypers)) {
-      h <- colnames(ft$hyperGroups)[k]
-      hyperGroups[, h] <- hyperGroups[, h] + ft$hyperGroups[, k]
-    }
-  }
-  list(logI = logI, dhyper = dhyper, hyperGroups = hyperGroups, abs = absE, values = values,
-       clusters = clusters, spike = spike, slab = slab)
-}
-
 ## The factors of the sparse coordinates: every Laplace and Dirichlet-process stem alone, the
-## spike-and-slab stems of a group jointly up to .slabJoint of them, beyond that each alone;
-## `coupled` when the data precision links two factors.
+## spike-and-slab stems of a group jointly; `coupled` when the data precision links two factors.
 .sparseFactors <- function(P, stems, lay) {
   r <- match(stems, lay$stem)
-  joint <- which(lay$dist[r] == "spikeSlab")
-  if (length(joint) > .slabJoint) joint <- integer(0)
-  factors <- c(as.list(setdiff(seq_along(stems), joint)), if (length(joint)) list(joint))
+  slabs <- which(lay$dist[r] == "spikeSlab")
+  factors <- c(as.list(setdiff(seq_along(stems), slabs)), if (length(slabs)) list(slabs))
   owner <- integer(length(stems))
   for (j in seq_along(factors)) owner[factors[[j]]] <- j
   within <- outer(owner, owner, `==`)
@@ -290,87 +234,54 @@
        coupled = any(vapply(P, function(Pi) any(Pi[!within] != 0), TRUE)))
 }
 
-## Expectation consistent (Opper and Winther 2005): every factor exact under a diagonal Gaussian
-## cavity, the coupling exact under diagonal sites with the same means and variances; stationary in
-## the sites, so its derivatives hold them fixed. NULL when the damped iteration does not converge;
-## one that stalls within 100 tol counts as converged.
-.sparseExpectation <- function(P, m, lay, hyp, hypers, tol = 1e-8, maxit = 500L, start = NULL) {
-  G <- nrow(m); K <- ncol(m); stems <- colnames(m)
-  sf <- .sparseFactors(P, stems, lay)
-  Pm <- matrix(vapply(seq_len(G), function(i) drop(P[[i]] %*% m[i, ]), numeric(K)), G, K, byrow = TRUE)
-  Pd <- lapply(P, function(Pi) { Pi <- as.matrix(Pi); storage.mode(Pi) <- "double"; Pi })
-  storage.mode(Pm) <- "double"
-  cavity <- function(Lam, gam) ec_cavity(Pd, Lam, gam, Pm, stems, dimnames(m))
-  integrate <- function(f, cv) .factorIntegral(f, lapply(seq_len(G), function(i) diag(cv$t[i, ], K)),
-                                               cv$n[, f, drop = FALSE], lay[sf$rows[f], , drop = FALSE], hyp)
-  Lam <- gam <- matrix(0, G, K, dimnames = dimnames(m))
-  if (!is.null(start) && identical(dim(start$Lam), dim(Lam)) && all(.sparseCavityOk(P, start$Lam))) {
-    Lam[] <- start$Lam; gam[] <- start$gam
-  }
-  damp <- 0.5; last <- Inf; converged <- FALSE
-  for (it in seq_len(maxit)) {
-    delta <- 0
-    for (f in sf$factors) {
-      cv <- cavity(Lam, gam)
-      ft <- integrate(f, cv)
-      v <- matrix(vapply(ft$cov, function(C) diag(as.matrix(C)), numeric(length(f))), G, length(f), byrow = TRUE)
-      newL <- 1 / v - cv$t[, f, drop = FALSE]
-      newG <- ft$mean / v - cv$t[, f, drop = FALSE] * cv$n[, f, drop = FALSE]
-      if (!all(is.finite(newL)) || !all(is.finite(newG))) return(NULL)
-      step <- damp
-      repeat {
-        L2 <- Lam; G2 <- gam
-        L2[, f] <- Lam[, f] + step * (newL - Lam[, f])
-        G2[, f] <- gam[, f] + step * (newG - gam[, f])
-        if (all(cavity(L2, G2)$t > 0)) break
-        step <- step / 2
-        if (step < 1e-6) return(NULL)
-      }
-      delta <- max(delta, abs(newL - Lam[, f]) / (1 + abs(Lam[, f])), abs(newG - gam[, f]) / (1 + abs(gam[, f])))
-      Lam <- L2; gam <- G2
+## The integral over the sparse coordinates, I = int exp(-eta' P_i eta / 2 + b_i' eta) prod p(eta)
+## per group (src/sparse_kernel.cpp), group by group where no Dirichlet-process stem joins groups:
+## exact where P couples no two factors and the joint spike-and-slab sum of a group stays within
+## `budget` nodes, else by expectation consistent from the sites `sites` where given (`ec` marks
+## those groups). Only the coordinates of `reach` whose row of P and entry of b are not all 0 enter,
+## the others keep their prior. NULL where the integral does not converge. log I, the moments E eta
+## and Cov eta that its derivatives in b and P are, its derivatives in the hyperparameters
+## `hypers`, also per group, the reported values, clusters and spike probabilities and the M-step
+## statistics.
+.sparseIntegral <- function(P, b, lay, hyp, hypers, sites = NULL, reach = NULL, budget = .slabBudget) {
+  G <- nrow(b); K <- ncol(b); stems <- colnames(b)
+  r <- match(stems, lay$stem)
+  kind <- match(lay$dist[r], c("spikeSlab", "laplace", "dirichletProcess")) - 1L
+  reach <- reach %||% matrix(TRUE, G, K)
+  num <- function(v) as.numeric(unname(v[stems]))
+  sp <- sparse_integral(lapply(P, function(Pi) { Pi <- as.matrix(Pi); storage.mode(Pi) <- "double"; Pi }),
+                        unname(b), kind, num(hyp$prob), num(hyp$tau), num(hyp$lambda), num(hyp$concentration),
+                        unname(reach), sites$Lam, sites$gam, as.numeric(budget))
+  if (!isTRUE(sp$ok)) return(NULL)
+  dn <- dimnames(b)
+  named <- function(x) `dimnames<-`(x, dn)
+  # the derivatives in the hyperparameters by name, summed over the stems that share them
+  dhyper <- setNames(numeric(length(hypers)), hypers)
+  hyperGroups <- matrix(0, G, length(hypers), dimnames = list(rownames(b), hypers))
+  add <- function(name, total, groups) {
+    for (j in which(!is.na(name) & name %in% hypers)) {
+      dhyper[[name[j]]] <<- dhyper[[name[j]]] + total[j]
+      hyperGroups[, name[j]] <<- hyperGroups[, name[j]] + if (is.null(groups)) NA_real_ else groups[, j]
     }
-    damp <- if (delta > last) max(damp / 2, 0.01) else min(damp * 1.2, 0.7)
-    last <- delta
-    if (delta < tol) { converged <- TRUE; break }
   }
-  if (!converged && !(last < 100 * tol)) return(NULL)
-  # log I = log Z of the factors under the cavity + log Z of the coupling under the sites
-  #         - log Z of the cavity under the sites
-  cv <- cavity(Lam, gam)
-  fits <- lapply(sf$factors, function(f) integrate(f, cv))
-  out <- .factorOutputs(fits, sf$factors, m, lay, hypers)
-  logR <- 0
-  dm <- matrix(0, G, K, dimnames = dimnames(m)); dP <- vector("list", G)
-  for (i in seq_len(G)) {
-    A <- P[[i]] + diag(Lam[i, ], K); h <- Pm[i, ] + gam[i, ]
-    logR <- logR + K / 2 * log(2 * pi) - 0.5 * as.numeric(determinant(A)$modulus) - 0.5 * sum(m[i, ] * Pm[i, ]) +
-      0.5 * sum(h * solve(A, h))
-    d <- cv$mu[i, ] - m[i, ]
-    dm[i, ] <- drop(P[[i]] %*% d)
-    dP[[i]] <- -(tcrossprod(d) + cv$cov[[i]]) / 2
-  }
-  logS <- sum(0.5 * log(2 * pi) - 0.5 * log(cv$t + Lam) - cv$t * cv$n^2 / 2 +
-                (cv$t * cv$n + gam)^2 / (2 * (cv$t + Lam)))
-  c(list(logI = out$logI + logR - logS, dm = dm, dP = dP, mean = cv$mu, cov = cv$cov, sweeps = it,
-         coupling = "expectationConsistent", sites = list(Lam = Lam, gam = gam)),
-    out[c("dhyper", "hyperGroups", "abs", "values", "clusters", "spike", "slab")])
-}
-
-## Whether sites leave every cavity precision positive.
-.sparseCavityOk <- function(P, Lam) {
-  unlist(lapply(seq_along(P), function(i) 1 / diag(solve(P[[i]] + diag(Lam[i, ], ncol(Lam)))) - Lam[i, ] > 0))
-}
-
-## The sparse integral: exact where the factors are not coupled, otherwise by expectation
-## consistent or mean field as `coupling` says; NULL where expectation consistent does not
-## converge. Expectation consistent starts from the sites `sites` where given, otherwise from zero.
-.sparseIntegral <- function(P, m, start, lay, hyp, hypers, coupling = "expectationConsistent", sites = NULL) {
-  if (identical(coupling, "expectationConsistent") && .sparseFactors(P, colnames(m), lay)$coupled) {
-    ec <- if (!is.null(sites)) .sparseExpectation(P, m, lay, hyp, hypers, start = sites)
-    if (is.null(ec)) ec <- .sparseExpectation(P, m, lay, hyp, hypers)
-    return(ec)
-  }
-  .sparseMeanField(P, m, start, lay, hyp, hypers)
+  slab <- kind == 0L; lap <- kind == 1L; dp <- kind == 2L
+  add(ifelse(slab, lay$probName[r], NA), sp$dprob, sp$gprob)
+  add(ifelse(slab, lay$tauName[r], NA), sp$dtau, sp$gtau)
+  add(ifelse(lap, lay$lambdaName[r], NA), sp$dlambda, sp$glambda)
+  add(ifelse(dp, lay$concentrationName[r], NA), sp$dconc, NULL)
+  add(ifelse(dp, lay$tauName[r], NA), sp$dtau, NULL)
+  # a Dirichlet-process stem couples the groups: no derivatives per group
+  if (any(dp)) hyperGroups[] <- NA_real_
+  stats <- cbind(free = sp$stats$free, groups = sp$stats$groups, slab2 = sp$stats$slab2)
+  slabStats <- matrix(0, nrow(lay), 3, dimnames = list(lay$stem, c("free", "groups", "slab2")))
+  slabStats[stems[slab | dp], ] <- stats[slab | dp, , drop = FALSE]
+  list(logI = sp$logI, mean = named(sp$mean), cov = lapply(sp$cov, `dimnames<-`, list(stems, stems)),
+       abs = named(sp$abs), values = named(sp$values), clusters = named(sp$clusters),
+       spike = named(pmin(pmax(sp$spike, 0), 1)),
+       dhyper = dhyper, hyperGroups = hyperGroups, slab = slabStats,
+       coupling = if (sp$coupling != "none") sp$coupling, ec = setNames(sp$ec, rownames(b)),
+       sites = if (any(sp$ec)) list(Lam = named(sp$Lam), gam = named(sp$gam)),
+       sweeps = sp$outer)
 }
 
 ## The integral of Dirichlet-process stems by sequential importance sampling
@@ -389,50 +300,13 @@
        slab = matrix(0, nrow(lay), 3, dimnames = list(lay$stem, c("free", "groups", "slab2"))))
 }
 
-## The exact integral of one mean-field factor at the centres `mt` (groups x its stems): log Z,
-## per group the posterior mean and covariance, E|eta| of Laplace stems, the Fisher derivatives in
-## the hyperparameters, also per group where the factor is a product over the groups, the reported
-## values and clusters and the M-step statistics.
-.factorIntegral <- function(f, P, mt, rows, hyp) {
-  G <- nrow(mt); st <- rows$stem
-  a <- vapply(P, function(Pi) Pi[f[1], f[1]], 0)
-  one <- function(v) matrix(v, G, 1)
-  if (rows$dist[1] == "laplace") {
-    nl <- .normalLaplace(a, mt[, 1], hyp$lambda[[st]])
-    return(list(logI = sum(nl$logI), mean = one(nl$mean), cov = as.list(pmax(nl$cen2 - (nl$mean - mt[, 1])^2, 0)),
-                abs = nl$abs, hyper = setNames(sum(nl$dlambda), rows$lambdaName),
-                hyperGroups = matrix(nl$dlambda, G, 1, dimnames = list(NULL, rows$lambdaName)),
-                values = one(NA_real_), clusters = one(NA_real_), spike = one(NA_real_)))
-  }
-  if (rows$dist[1] == "dirichletProcess") {
-    ss <- .slabPartition(a, mt[, 1], hyp$concentration[[st]], hyp$tau[[st]])
-    return(list(logI = ss$logI, mean = one(ss$mean), cov = as.list(pmax(ss$cen2 - (ss$mean - mt[, 1])^2, 0)),
-                hyper = setNames(c(ss$dconcentration, ss$dtau), c(rows$concentrationName, rows$tauName)),
-                values = one(ss$values), clusters = one(ss$labels), spike = one(ss$spike),
-                stats = matrix(ss$stats, 1, dimnames = list(st, NULL))))
-  }
-  per <- lapply(seq_len(G), function(i)
-    .slabSubsets(P[[i]][f, f, drop = FALSE], mt[i, ], hyp$prob[st], hyp$tau[st]))
-  byGroup <- function(field) matrix(vapply(per, `[[`, numeric(length(f)), field), G, length(f), byrow = TRUE)
-  incl <- byGroup("incl"); sel <- byGroup("selected")
-  # the groups away from 0 of a symbol, numbered
-  clusters <- apply(sel, 2, function(x) ifelse(x > 0, cumsum(x > 0), 0))
-  stats <- cbind(colSums(incl), G, colSums(byGroup("slab2")), deparse.level = 0)
-  rownames(stats) <- st
-  list(logI = sum(vapply(per, `[[`, 0, "logI")), mean = byGroup("mean"), cov = lapply(per, `[[`, "cov"),
-       hyper = c(setNames(colSums(byGroup("dprob")), rows$probName), setNames(colSums(byGroup("dtau")), rows$tauName)),
-       hyperGroups = `colnames<-`(cbind(byGroup("dprob"), byGroup("dtau")), c(rows$probName, rows$tauName)),
-       values = byGroup("values"), clusters = matrix(clusters, G, length(f)), spike = byGroup("spike"),
-       stats = stats)
-}
-
-
 ## ---- marginal ------------------------------------------------------------------------------
 
 ## The approximate marginal -2 log L at `theta`: the normal etas on the quadratic model of the joint
-## mode, the sparse coordinates on the Schur complement by expectation consistent or mean field as
-## `control$coupling` says; its exact gradient in `active` and `hypers`, a model Hessian, the
-## moments and the selected clusters. With
+## mode, the sparse coordinates on the Schur complement in natural parameters, P = S / 2 and
+## b = (S mode - g) / 2, integrated by .sparseIntegral(); its exact gradient in `active` and
+## `hypers`, a model Hessian, the moments and the selected clusters. An eta that does not reach
+## the data of its group rests at 0 with its prior. With
 ## `scores`, the gradient split into the rows of the groups and that of the conditions without
 ## random effects, with their Hessian.
 .laplaceMarginal <- function(design, objs, prior, theta, hyp, active, hypers, fixed, warm,
@@ -443,6 +317,7 @@
   G <- nrow(E); K <- ncol(E)
   isL <- colnames(E) %in% lay$stem
   iN <- which(!isL); iL <- which(isL)
+  reach <- .reachOf(design)
   modes <- .laplaceModes(design, objs, prior, theta, hyp, warm, control)
   full <- c(theta, setNames(as.vector(modes), as.vector(E)))
   # forward over reverse: the data Hessians Gauss-Newton, the exact rows and the derivatives of the
@@ -457,10 +332,17 @@
   extra <- .extraObjective(design)
   if (!is.null(extra)) free <- c(free, list(extra(pars = full, fixed = fixed, deriv = TRUE, deriv2 = grad && !fr)))
   A <- active
-  units <- lapply(seq_len(G), function(i) list(eta = unname(E[i, ]), conditions = design$conditions[[design$groups[i]]]))
+  units <- lapply(seq_len(G), function(i)
+    list(eta = unname(E[i, reach[i, ]]), conditions = design$conditions[[design$groups[i]]]))
   if (fr) {
     fw <- .sweepForward(design, full, fixed, units)
-    curv <- lapply(.unitCurvature(design, fw, units), function(H) list(H = H))
+    # the curvature of a group on all its etas, 0 in those that do not reach its data
+    cu <- .unitCurvature(design, fw, units)
+    curv <- lapply(seq_len(G), function(i) {
+      H <- matrix(0, K, K)
+      H[reach[i, ], reach[i, ]] <- cu[[i]]
+      list(H = H)
+    })
   } else {
     conds <- unlist(design$conditions, use.names = FALSE)
     times <- lapply(conds, function(cn) .emGrid(design, cn))
@@ -470,31 +352,43 @@
   }
   gr <- matrix(t(vapply(seq_len(G), function(i) at[[i]]$gradient[E[i, ]], numeric(K))), G,
                dimnames = dimnames(E))
+  gr[!reach] <- 0
 
   # the normal etas: H_NN of every group with the prior precision 2 Omega^-1; the sparse block
   # of `Hs` is its Schur complement, the curvature left once the normal etas are integrated out
   cd <- if (length(iN)) .choleskyDerivatives(nl, .choleskyFactor(nl, c(full, fixed)))
   HN <- lapply(curv, function(cv) if (length(iN)) cv$H[iN, iN, drop = FALSE] + 2 * cd$Oinv)
   volume <- sum(vapply(HN, function(H) if (is.null(H)) 0 else as.numeric(determinant(H / 2)$modulus), 0))
-  # the sparse block of every group: its curvature S, the Schur complement of the normal block,
-  # a normal factor with precision S / 2 and centre mode - S^-1 g
+  # the sparse block of every group: its curvature S, the Schur complement of the normal block;
+  # the data term on it is exp(-eta' P eta / 2 + b' eta) up to the constant mode' S mode / 2 - g' mode
   S <- lapply(seq_len(G), function(i) {
     H <- curv[[i]]$H
     s <- H[iL, iL, drop = FALSE]
     if (length(iN)) s <- s - H[iL, iN, drop = FALSE] %*% solve(HN[[i]], H[iN, iL, drop = FALSE])
-    s + diag(1e-12, length(iL))
+    (s + t(s)) / 2
   })
   KL <- length(iL)
   bySparse <- function(f) matrix(vapply(seq_len(G), f, numeric(KL)), G, KL, byrow = TRUE,
                                  dimnames = list(rownames(E), colnames(E)[iL]))
   gL <- gr[, iL, drop = FALSE]
-  u <- bySparse(function(i) solve(S[[i]], gL[i, ]))
-  sp <- if (identical(control$integral, "importance"))
-    .importanceField(lapply(S, `/`, 2), modes[, iL, drop = FALSE] - u, lay, hyp, hypers, control$particles %||% 500L)
-  else .sparseIntegral(lapply(S, `/`, 2), modes[, iL, drop = FALSE] - u, modes[, iL, drop = FALSE],
-                       lay, hyp, hypers, control$coupling %||% "expectationConsistent", control$sites)
+  mL <- modes[, iL, drop = FALSE]
+  bL <- bySparse(function(i) drop(S[[i]] %*% mL[i, ] - gL[i, ]) / 2)
+  offset <- sum(vapply(seq_len(G), function(i) sum(mL[i, ] * (S[[i]] %*% mL[i, ])) / 2 - sum(gL[i, ] * mL[i, ]), 0))
+  importance <- identical(control$integral, "importance")
+  sp <- if (importance) {
+    # in centre form, m = mode - S^-1 g, log I of the natural form is that of the centre form plus m' P m / 2
+    mc <- mL - bySparse(function(i) {
+      a <- reach[i, iL]
+      out <- numeric(KL)
+      out[a] <- solve(S[[i]][a, a, drop = FALSE], gL[i, a])
+      out
+    })
+    is <- .importanceField(lapply(S, `/`, 2), mc, lay, hyp, hypers, control$particles %||% 500L)
+    is$logI <- is$logI + sum(vapply(seq_len(G), function(i) sum(mc[i, ] * (S[[i]] %*% mc[i, ])) / 4, 0))
+    is
+  } else .sparseIntegral(lapply(S, `/`, 2), bL, lay, hyp, hypers, control$sites, reach[, iL, drop = FALSE])
   if (is.null(sp)) return(list(infeasible = TRUE))
-  value <- sum(vapply(at, `[[`, 0, "value")) + (pr$value %||% 0) + volume - sum(gL * u) / 2 - 2 * sp$logI +
+  value <- sum(vapply(at, `[[`, 0, "value")) + (pr$value %||% 0) + volume - 2 * sp$logI + offset +
     sum(vapply(free, `[[`, 0, "value"))
   selected <- modes
   selected[, iL] <- ifelse(is.na(sp$values), modes[, iL], sp$values)
@@ -519,24 +413,29 @@
   var <- matrix(vapply(cov, diag, numeric(K)), G, K, byrow = TRUE, dimnames = dimnames(E))
   out <- list(value = value, modes = modes, mean = mean, var = var, cov = cov, abs = absE, slab = sp$slab,
               selected = selected, clusters = clusters, spike = spike, valueSE = 2 * (sp$se %||% 0),
-              coupling = if (.sparseFactors(S, colnames(E)[iL], lay)$coupled) sp$coupling, sites = sp$sites)
-  if (!grad) return(out)
+              coupling = sp$coupling, sites = sp$sites, reach = reach)
+  if (!grad || importance) return(out)
 
-  # derivatives of the value in g, S and the mode on the sparse block, the mean-field factors
-  # held fixed, then through the Schur complement on the cross and normal blocks of H
-  w <- bySparse(function(i) solve(S[[i]], sp$dm[i, ]))
+  # derivatives of the value in g, S and the mode on the sparse block, from the moments of the
+  # integral at its fixed point, delta = E eta - mode and Cov eta, then through the Schur
+  # complement on the cross and normal blocks of H
+  delta <- sp$mean - mL
   Q <- length(A)
   own <- matrix(0, G, Q, dimnames = list(rownames(E), A))
   names <- as.vector(t(E))
   dEta <- setNames(numeric(G * K), names)
   Hex <- matrix(0, G * K, G * K, dimnames = list(names, names))
   Hcross <- matrix(0, G * K, Q, dimnames = list(names, A))
+  # the blocks of the model Hessian: under forward over reverse those of the Gauss-Newton Hessian, as
+  # its parameter block is, so that the Schur complement is positive semidefinite; the exact rows
+  # enter the gradient and the mode shift
+  HexM <- Hex; HcrossM <- Hcross
   schur <- matrix(0, Q, Q, dimnames = list(A, A))
   # per group the matrices the derivatives of the curvature are contracted with: MHi on all etas,
   # H_NN^-1 on the normal ones
   contraction <- lapply(seq_len(G), function(i) {
     MHi <- matrix(0, K, K, dimnames = list(E[i, ], E[i, ]))
-    MHi[iL, iL] <- tcrossprod(u[i, ]) / 2 - tcrossprod(u[i, ], w[i, ]) - tcrossprod(w[i, ], u[i, ]) - sp$dP[[i]]
+    MHi[iL, iL] <- (tcrossprod(delta[i, ]) + sp$cov[[i]]) / 2
     Hi <- NULL
     if (length(iN)) {
       Hi <- solve(HN[[i]])
@@ -549,10 +448,11 @@
     list(MHi = MHi, Hi = Hi)
   })
   # forward over reverse: the exact eta rows of the data Hessian and the trace gradients
-  sw <- if (fr) .sweepUnits(design, full, fixed, units, fw = fw, Ms = lapply(contraction, function(ct) {
+  sw <- if (fr) .sweepUnits(design, full, fixed, units, fw = fw, Ms = lapply(seq_len(G), function(i) {
+    ct <- contraction[[i]]
     M2 <- 0 * ct$MHi
     if (!is.null(ct$Hi)) M2[iN, iN] <- ct$Hi
-    list(ct$MHi, M2)
+    list(ct$MHi[reach[i, ], reach[i, ], drop = FALSE], M2[reach[i, ], reach[i, ], drop = FALSE])
   }))
   pick <- function(v, nm) { out <- setNames(numeric(length(nm)), nm); h <- intersect(nm, names(v)); out[h] <- v[h]; out }
   for (i in seq_len(G)) {
@@ -562,8 +462,8 @@
     an <- intersect(A, names(o$gradient))
     cv <- curv[[i]]
     Mgi <- Meta <- numeric(K)
-    Mgi[iL] <- 2 * w[i, ] - u[i, ]
-    Meta[iL] <- -2 * sp$dm[i, ]
+    Mgi[iL] <- delta[i, ]
+    Meta[iL] <- -drop(S[[i]] %*% delta[i, ]) - gL[i, ]
     MHi <- contraction[[i]]$MHi
     Hi <- contraction[[i]]$Hi
     # the exact rows of the group's data Hessian at its etas, and tr(M dH) along A and the etas
@@ -571,7 +471,7 @@
       rowsAt <- function(cols) {
         out <- matrix(0, K, length(cols), dimnames = list(en, cols))
         h <- intersect(cols, colnames(sw[[i]]$rows))
-        out[, h] <- sw[[i]]$rows[, h]
+        out[rownames(sw[[i]]$rows), h] <- sw[[i]]$rows[, h]
         out
       }
       exactE <- rowsAt(en); exactA <- rowsAt(an)
@@ -599,6 +499,8 @@
     }
     Hex[en, en] <- exactE
     Hcross[en, an] <- exactA
+    HexM[en, en] <- if (fr) hh[en, en] else exactE
+    HcrossM[en, an] <- if (fr) hh[en, an] else exactA
     schur[an, an] <- schur[an, an] + hh[an, an]
   }
   explicit <- colSums(own)
@@ -608,6 +510,8 @@
     dEta[pe] <- dEta[pe] + pr$gradient[pe]
     Hex[pe, pe] <- Hex[pe, pe] + pr$hessian[pe, pe]
     Hcross[pe, pa] <- Hcross[pe, pa] + pr$hessian[pe, pa]
+    HexM[pe, pe] <- HexM[pe, pe] + pr$hessian[pe, pe]
+    HcrossM[pe, pa] <- HcrossM[pe, pa] + pr$hessian[pe, pa]
     schur[pa, pa] <- schur[pa, pa] + pr$hessian[pa, pa]
   }
   freeGradient <- setNames(numeric(Q), A)
@@ -623,12 +527,12 @@
   # the model Hessian: the Schur complement over all etas, the sparse etas with the effective prior
   # curvature of the integral, the sites of expectation consistent or per factor 2 C^-1 - S of its
   # posterior covariance C; with normal etas alone it is the Gauss-Newton Schur complement
-  posterior <- Hex
+  posterior <- HexM
   factors <- .sparseFactors(lapply(S, `/`, 2), colnames(E)[iL], lay)$factors
   for (i in seq_len(G)) {
     en <- E[i, iL]
-    if (!is.null(sp$sites)) {
-      posterior[en, en] <- posterior[en, en] + diag(2 * sp$sites$Lam[i, ], KL)
+    if (isTRUE(sp$ec[i])) {
+      posterior[en, en] <- posterior[en, en] + diag(2 * pmax(sp$sites$Lam[i, ], 0), KL)
       next
     }
     V <- sp$cov[[i]]
@@ -639,7 +543,10 @@
       posterior[en[f], en[f]] <- posterior[en[f], en[f]] + 2 * inv - S[[i]][f, f, drop = FALSE]
     }
   }
-  model <- if (Q) tryCatch(schur - crossprod(Hcross, solve(posterior, Hcross)), error = function(e) NULL)
+  on <- names[as.vector(t(reach))]
+  model <- if (Q) tryCatch(schur - crossprod(HcrossM[on, , drop = FALSE],
+                                             solve(posterior[on, on, drop = FALSE], HcrossM[on, , drop = FALSE])),
+                           error = function(e) NULL)
 
   slabPrec <- .slabPrecision(E, lay, hyp)
   Hex[cbind(names(slabPrec), names(slabPrec))] <- Hex[cbind(names(slabPrec), names(slabPrec))] + slabPrec
@@ -743,14 +650,26 @@
   kind <- .hyperKind(lay)[hypers]
   structural <- setdiff(names(start), hypers)
   E <- design$etaNames
+  reach <- .reachOf(design)
+  blind <- Filter(function(h) {
+    st <- lay$stem[lay[[paste0(kind[[h]], "Name")]] %in% h]
+    !any(reach[, st])
+  }, hypers)
+  if (length(blind))
+    stop("em: the random effects of ", paste(blind, collapse = ", "), " reach the data of no group; ",
+         "fix ", if (length(blind) > 1L) "them" else "it", " or drop the effect.", call. = FALSE)
+  # the inner modes of a fit given as init where they fit the design, else 0
   warm <- matrix(0, nrow(E), ncol(E), dimnames = dimnames(E))
+  given <- control$modes
+  if (is.matrix(given) && all(dimnames(E)[[1]] %in% rownames(given)) && all(colnames(E) %in% colnames(given)))
+    warm[] <- given[rownames(E), colnames(E)]
   warmAt <- shift <- NULL
   hyper <- start[hypers]
   par <- start[structural]
   lc <- control$laplace %||% list()
   lc$derivMode <- .secondOrderMode(design, design$objfn, par, fixed, control[setdiff(names(control), "secondOrderCorrection")],
                                    units = lapply(design$groups, function(g)
-                                     list(eta = unname(E[g, ]), conditions = design$conditions[[g]])))
+                                     list(eta = unname(E[g, reach[g, ]]), conditions = design$conditions[[g]])))
   maxOuter <- lc$maxOuter %||% 200L
   jointControl <- .trustControl(list(rinit = 1, rmax = 10, tolControl = list(ftol = 1e-10, mtol = 1e-5)),
                                 lc$trustControl, label = "trustControl")
@@ -763,30 +682,39 @@
     out[at] <- out[at] + drop(shift[, q, drop = FALSE] %*% (p[q] - warmAt[q]))
     out
   }
-  # one coupling of the sparse random effects for the whole fit, so that the objective is one
-  # function: expectation consistent where it converges at the start, mean field otherwise; a trial
-  # point at which expectation consistent does not converge is a failed evaluation
-  requested <- match.arg(lc$coupling %||% "expectationConsistent", c("expectationConsistent", "meanField"))
-  coupling <- requested
-  sites <- NULL
+  # a trial point at which the integral does not converge is a failed evaluation
+  sites <- optima <- NULL
   # every evaluation starts from the modes and sites of the last accepted point, so that the
   # objective near it does not depend on the trials before
   marginal <- function(p, grad = TRUE, commit = TRUE, scores = FALSE) {
+    # the solves and sweeps of an evaluation leave freed memory behind that the process would keep
+    on.exit(release_heap(), add = TRUE)
     r <- .laplaceMarginal(design, objs, prior, c(p, fixed), .stemHypers(lay, c(hyper, fixed)), names(p),
                           hypers, fixed, predicted(p), grad = grad, scores = scores,
-                          control = modifyList(lc, list(coupling = coupling, sites = sites)))
+                          control = modifyList(lc, list(sites = sites, optima = optima)))
     if (isTRUE(r$infeasible)) return(r)
     if (commit) accept(p, r)
     r
   }
+  # the inner minima from several starts, at the start of the fit and every 25 accepted steps
+  explored <- NA_integer_
+  scale <- matrix(1, nrow(E), ncol(E), dimnames = dimnames(E))
+  explore <- function(p) {
+    hy <- .stemHypers(lay, c(hyper, fixed))
+    st <- lay$stem[lay$dist %in% c("spikeSlab", "dirichletProcess")]
+    scale[, st] <- rep(hy$tau[st], each = nrow(E))
+    found <- .exploreModes(design, objs, prior, c(p, fixed), hy, warm, lc, scale * .reachOf(design))
+    optima <<- .modeOptima(optima, found)
+    explored <<- steps()
+  }
   accept <- function(p, r) {
     warm <<- r$modes
     warmAt <<- p
+    optima <<- .modeOptima(optima, r$modes)
+    if (!is.na(explored) && steps() - explored >= 25L) explore(p)
     if (!is.null(r$modeShift)) shift <<- r$modeShift
     if (!is.null(r$sites)) sites <<- r$sites
   }
-  fellBack <- identical(coupling, "expectationConsistent") && isTRUE(marginal(par, grad = FALSE)$infeasible)
-  if (fellBack) coupling <- "meanField"
   rows <- list()
   record <- function(phase, value, dpar)
     rows[[length(rows) + 1L]] <<- data.frame(iter = length(rows) + 1L, phase = phase, OFV = value,
@@ -797,11 +725,21 @@
   # is the model Hessian of the marginal and the secant curvature of every hyperparameter to its
   # M-step, plus a BFGS correction from the points that lowered the value
   best <- Inf; bestAt <- bestGrad <- correction <- NULL
+  # why evaluations of the trust region failed, and the warnings of the inner searches, by the
+  # first line of the message
+  failures <- integer(0)
+  fail <- function(why) failures[why] <<- if (is.na(failures[why])) 1L else failures[why] + 1L
   jointObjective <- function(x, ...) {
     p <- x[names(par)]
     hyper <<- .hyperFromFree(kind, x[hypers])
-    r <- marginal(p, commit = FALSE)
-    if (isTRUE(r$infeasible)) return(.failedEvaluation(x))
+    r <- withCallingHandlers(tryCatch(marginal(p, commit = FALSE), error = function(e) {
+      fail(sub("\n.*", "", conditionMessage(e)))
+      stop(e)
+    }), warning = function(w) fail(paste("warning:", sub("\n.*", "", conditionMessage(w)))))
+    if (isTRUE(r$infeasible)) {
+      fail("expectation consistent did not converge on the sparse random effects")
+      return(.failedEvaluation(x))
+    }
     n <- names(x)
     base <- matrix(0, length(n), length(n), dimnames = list(n, n))
     base[names(p), names(p)] <- r$hessian[names(p), names(p)]
@@ -838,6 +776,7 @@
     jt
   }
 
+  if (length(par) + length(hyper) > 0L) explore(par)
   # a run that stops short starts again with a fresh correction while the runs lower -2 log L
   estimated <- length(par) + length(hyper) > 0L
   conv <- !estimated
@@ -852,12 +791,13 @@
     if (conv || !(jt$value < last - mtol)) break
     last <- jt$value
   }
+  explored <- NA_integer_
   final <- marginal(par, scores = TRUE)
   if (isTRUE(final$infeasible) || !is.finite(final$value %||% NA_real_))
-    stop("em: the integral over the sparse random effects is not finite at the last point of the ",
-         "fit; a start nearer the optimum, or another coupling in control$laplace, may avoid it.",
+    stop("em: the integral over the sparse random effects has no finite value at the last point of the ",
+         "fit, or expectation consistent did not converge there; a start nearer the optimum may avoid it.",
          call. = FALSE)
-  coupled <- if (!is.null(final$coupling)) if (fellBack) "meanFieldFallback" else final$coupling
+  coupled <- final$coupling
   # the model Hessian approximates the curvature of the integral by Gauss-Newton, so the fit has none; with
   # independent groups the empirical information is G / (G - 1) times the sum of the outer products
   # of their centred scores of log L, the conditions without random effects add half their Hessian
@@ -872,7 +812,21 @@
        hessian = NULL, information = information, etaModes = final$selected,
        etaCov = setNames(final$cov, design$groups),
        clusters = final$clusters, spike = final$spike, converged = conv, iterations = steps(),
-       stopReason = stopReason, stageTrace = do.call(rbind, rows), coupling = coupled)
+       stopReason = stopReason, failures = failures, stageTrace = do.call(rbind, rows), coupling = coupled,
+       innerModes = final$modes)
+}
+
+
+## The inner optima per group, `optima`, with the modes `modes` of an accepted point added where they
+## differ from those held by more than 1e-3, the newest first, at most `keep` per group.
+.modeOptima <- function(optima, modes, keep = 4L) {
+  lapply(seq_len(nrow(modes)), function(i) {
+    m <- modes[i, , drop = FALSE]
+    known <- optima[[i]]
+    if (is.null(known)) return(m)
+    if (min(apply(abs(sweep(known, 2, m[1, ])), 1, max)) <= 1e-3) return(known)
+    rbind(m, known)[seq_len(min(keep, nrow(known) + 1L)), , drop = FALSE]
+  })
 }
 
 ## A failed evaluation for trust(): it shrinks the radius, three in a row end the run.
@@ -918,6 +872,13 @@
   d
 }
 
+## E|eta| of the Laplace coordinates of the stems `st` that reach their data, from the posterior
+## moments `r`.
+.reachedAbs <- function(r, st) {
+  a <- r$abs[, st, drop = FALSE]
+  if (is.null(r$reach)) a else a[r$reach[, st, drop = FALSE]]
+}
+
 ## The complete-data information of every hyperparameter on its unbounded scale: the second
 ## derivative of the expected -2 log prior of the random effects at the posterior moments `r`,
 ## at least 1e-8 so that it seeds a positive definite model.
@@ -928,7 +889,7 @@
     st <- lay$stem[lay[[paste0(k, "Name")]] %in% h]
     S <- r$slab[st, , drop = FALSE]
     switch(k,
-      lambda = 2 * v * sum(r$abs[, st]),
+      lambda = 2 * v * sum(.reachedAbs(r, st)),
       tau = 4 * sum(S[, "slab2"]) / v^2,
       prob = 2 * sum(S[, "groups"]) * v * (1 - v),
       concentration = { i <- unlist(lapply(S[, "groups"], seq_len)); 2 * sum(v * i / (v + i)^2) })
@@ -948,7 +909,7 @@
     st <- lay$stem[lay[[paste0(k, "Name")]] %in% h]
     S <- r$slab[st, , drop = FALSE]
     switch(k,
-      lambda = 2 * (v * sum(r$abs[, st]) - length(r$abs[, st])),
+      lambda = { a <- .reachedAbs(r, st); 2 * (v * sum(a) - length(a)) },
       tau = 2 * (sum(S[, "free"]) - sum(S[, "slab2"]) / v^2),
       prob = -2 * (sum(S[, "free"]) - sum(S[, "groups"]) * v),
       concentration = { i <- unlist(lapply(S[, "groups"], seq_len)); -2 * (sum(S[, "free"]) - sum(v / (v + i))) })
@@ -956,14 +917,16 @@
   pmax(ifelse(abs(d) > 1e-8 & slope * d > 0, slope / d, info), 1e-8)
 }
 
-## M-steps from the posterior moments `r`: lambda = n / sum E|eta|, tau^2 = E[sum of squared slab
-## values] / E[slab blocks], prob = E[slab etas] / groups, and the concentration c with
-## E[slab blocks] = sum_i c / (c + i) over the groups of every stem.
+## M-steps from the posterior moments `r` over the coordinates that reach their data:
+## lambda = n / sum E|eta|, tau^2 = E[sum of squared slab values] / E[slab blocks],
+## prob = E[slab etas] / groups, and the concentration c with E[slab blocks] = sum_i c / (c + i)
+## over the groups of every stem.
 .updateSparse <- function(lay, r, current) {
   for (h in names(current)) {
     st <- lay$stem[lay$lambdaName %in% h]
     if (length(st)) {
-      current[[h]] <- length(r$abs[, st]) / sum(r$abs[, st])
+      a <- .reachedAbs(r, st)
+      current[[h]] <- length(a) / sum(a)
       next
     }
     rows <- r$slab[lay$stem[lay$probName %in% h | lay$concentrationName %in% h | lay$tauName %in% h], ,

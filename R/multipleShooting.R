@@ -988,31 +988,51 @@
   }), conds)
 }
 
-# Turning points of a condition's data, the most of any observable: extrema of
-# the replicate means the data reverse from by more than `k` times their noise.
-.shootTurns <- function(d, k = 5) {
+# Turning points of a condition's data, the most of any observable: extrema of the replicate
+# means that the data reverse from by more than the range of their noise over the series in
+# all but a fraction `alpha` of draws.
+.shootTurns <- function(d, alpha = 1e-3) {
   best <- 0L
   for (nm in unique(as.character(d$name))) {
     di <- d[as.character(d$name) == nm, , drop = FALSE]
-    if (nrow(di) < 3L) next
-    v <- stats::aggregate(di$value, list(time = di$time), mean)$x
-    s <- if (!is.null(di$sigma)) stats::median(di$sigma, na.rm = TRUE) else NA_real_
-    if (!is.finite(s) || !(s > 0)) s <- stats::mad(diff(v)) / sqrt(2)
-    h <- k * s
+    ag <- stats::aggregate(di$value, list(time = di$time), mean)
+    v <- ag$x
+    if (length(v) < 3L) next
+    s <- .shootMeanNoise(di, ag$time, v)
+    h <- s * stats::qtukey(1 - alpha, length(v), attr(s, "df"))
     if (!is.finite(h) || !(h > 0)) next
-    n <- 0L; dir <- 0L; ext <- v[1L]
+    n <- 0L; dir <- 0L; ext <- lo <- hi <- v[1L]
     for (x in v[-1L]) {
-      if (dir == 0L) {
-        if (abs(x - ext) > h) { dir <- if (x > ext) 1L else -1L; ext <- x }
-      } else if ((x - ext) * dir > 0) {
-        ext <- x
-      } else if (abs(x - ext) > h) {
-        n <- n + 1L; dir <- -dir; ext <- x
+      if (dir != 0L) {
+        if ((x - ext) * dir > 0) ext <- x
+        else if (abs(x - ext) > h) { n <- n + 1L; dir <- -dir; ext <- x }
+        next
       }
+      # the first swing counts from the lowest or highest mean so far
+      lo <- min(lo, x); hi <- max(hi, x)
+      if (hi - lo > h) { dir <- if (x == hi) 1L else -1L; ext <- x }
     }
     best <- max(best, n)
   }
   best
+}
+
+# Noise sd of the means `v` at `times` and the degrees of freedom of its estimate: from sigma,
+# from the replicates where most times have some, else from third differences, which a signal
+# smooth on the sampling hardly enters.
+.shootMeanNoise <- function(di, times, v) {
+  it <- match(di$time, times)
+  nt <- tabulate(it, length(times))
+  if (!is.null(di$sigma)) {
+    s <- stats::median(sqrt(tapply(di$sigma^2, it, sum)) / nt, na.rm = TRUE)
+    if (is.finite(s) && s > 0) return(structure(s, df = Inf))
+  }
+  if (stats::median(nt) > 1) {
+    df <- sum(nt - 1L)
+    s <- sqrt(sum((di$value - v[it])^2) / df) * stats::median(1 / sqrt(nt))
+    return(structure(s, df = df))
+  }
+  structure(stats::mad(diff(v, differences = 3L)) / sqrt(20), df = Inf)
 }
 
 # Nodes just before fast changes of the data, where an observable's rate lies

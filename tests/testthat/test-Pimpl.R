@@ -144,9 +144,14 @@ pp_models <- function() {
   rest_p0 <- P(tr_rest, condition = "C1", modelname = mn("rest_p0"))
   rest_p1 <- P(c(tr_rest, R = "exp(lR)"), condition = "C1", modelname = mn("rest_p1"))
 
+  # the Brusselator: x = a, y = b / a, with eigenvalues of real part (b - 1 - a^2) / 2 while complex
+  bruss <- Pimpl(c(x = "a - (b + 1) * x + x^2 * y", y = "b * x - x^2 * y"), modelname = mn("bruss"),
+                 deriv2 = TRUE, verbose = FALSE)
+  bruss_p <- P(c(a = "exp(la)", b = "exp(lb)"), modelname = mn("bruss_p"))
+
   compile(lin, d2, d2_2, d2_cq, moiety2_im, dimer_im, recycle, sing, noroot,
           noparam, erk_im, px, px_same, zero, pd, pd2, plasmid, bistable, unstable,
-          kink, catalyst, vol, rest, rest_ode, rest_obs, rest_p0, rest_p1,
+          kink, catalyst, vol, rest, rest_ode, rest_obs, rest_p0, rest_p1, bruss, bruss_p,
           output = mn("impl"), cores = test_cores())
 
   .pp_env$models <- list(
@@ -155,7 +160,8 @@ pp_models <- function() {
     noroot = noroot, noparam = noparam, erk_im = erk_im, px = px, px_same = px_same,
     zero = zero, pd = pd, pd2 = pd2, plasmid = plasmid, bistable = bistable,
     unstable = unstable, kink = kink, catalyst = catalyst, vol = vol, rest = rest,
-    rest_ode = rest_ode, rest_obs = rest_obs, rest_p0 = rest_p0, rest_p1 = rest_p1)
+    rest_ode = rest_ode, rest_obs = rest_obs, rest_p0 = rest_p0, rest_p1 = rest_p1,
+    bruss = bruss, bruss_p = bruss_p)
 }
 
 
@@ -910,4 +916,40 @@ test_that("the native chain reads a resting state absent from its input as 0", {
     expect_equal(a$hessian, b$hessian, tolerance = 1e-10)
   }
   expect_true(abs(a$gradient[["lR"]]) > 1)
+})
+
+
+test_that("the spectrum of a steady state has the exact gradients of its real parts", {
+  skip_if_no_compile()
+  m <- pp_models()
+  sp <- attr(attr(m$bruss, "mappings")[[1]], "spectrum")(c(a = 1, b = 1.5), onset = -1)
+  expect_equal(sp$re, c(-0.25, -0.25), tolerance = 1e-10)
+  expect_equal(abs(sp$im), rep(sqrt(1 - 0.25^2), 2), tolerance = 1e-10)
+  expect_equal(unname(sp$grad[, c("a", "b")]), rbind(c(-1, 0.5), c(-1, 0.5)), tolerance = 1e-8)
+})
+
+test_that("constraintStability is zero below the onset and has the exact gradient above it", {
+  skip_if_no_compile()
+  m <- pp_models()
+  stab <- constraintStability(m$bruss, m$bruss_p, onset = -0.5, weight = 10)
+  expect_setequal(attr(stab, "parameters"), c("la", "lb"))
+  expect_equal(stab(c(la = 0, lb = log(0.5)))$value, 0)
+  pars <- c(la = 0.1, lb = log(1.8))
+  out <- stab(pars)
+  re <- (1.8 - 1 - exp(0.2)) / 2
+  expect_equal(out$value, 10 * 2 * ((re + 0.5) / 0.5)^2, tolerance = 1e-8)
+  num <- numDeriv::grad(function(q) stab(setNames(q, names(pars)))$value, unname(pars))
+  expect_equal(unname(out$gradient[names(pars)]), num, tolerance = 1e-6)
+  # the derivatives only where asked for, as the terms it is summed with
+  expect_null(stab(pars, deriv = FALSE)$gradient)
+  expect_null(stab(pars, hessian = FALSE)$hessian)
+  expect_s4_class(stab(pars, hessian = "sparse")$hessian, "sparseMatrix")
+  # beyond the boundary the unstable steady state, on which the term rises
+  expect_equal(as.numeric(m$bruss(c(a = 1, b = 2.5))[[1]][c("x", "y")]), c(1, 2.5), tolerance = 1e-8)
+  expect_equal(stab(c(la = 0, lb = log(2.5)))$value, 10 * 2 * ((0.25 + 0.5) / 0.5)^2, tolerance = 1e-8)
+  # without p on the inputs of the steady state, the same value
+  expect_equal(constraintStability(m$bruss, onset = -0.5, weight = 10)(c(a = exp(0.1), b = 1.8))$value,
+               out$value, tolerance = 1e-10)
+  expect_error(constraintStability(m$bruss, m$bruss_p), "duration")
+  expect_error(constraintStability(m$bruss, m$bruss_p, onset = 0)(pars), "onset")
 })

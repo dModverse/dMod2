@@ -326,34 +326,27 @@ test_that("msem draws a new start where a fit fails, and keeps the first attempt
   expect_equal(once$value[again$tries == 1L], again$value[again$tries == 1L])
 })
 
+test_that("msem fits a part of its starts, and the parts join to the whole", {
+  m <- .lin()
+  run <- function(which = NULL) {
+    set.seed(4)
+    msem(m$obj, randomEffects(m$p), c(a = 0.5, b = 0.2), fits = 3, sd = 0.2,
+         keepFits = TRUE, which = which)
+  }
+  whole <- run()
+  joined <- dMod2:::.combineResults(list(run(3:2), run(1)))
+  expect_equal(joined$multistart, whole$multistart)
+  expect_equal(joined$value, whole$value)
+  expect_equal(lapply(joined$fits, `[[`, "value"), lapply(whole$fits, `[[`, "value"))
+  expect_error(run(4), "which")
+})
+
 test_that("FOCEI reports at most iterlim outer iterations", {
   m <- .lin()
   fit <- em(m$obj, randomEffects(m$p), c(a = 0.5, b = 0.2), control = list(trustControl = list(iterlim = 2)),
             verbose = FALSE)
   expect_equal(fit$iterations, 2L)
   expect_false(fit$converged)
-})
-
-test_that("msem ends the other starts at the budget from the iterations of the first", {
-  m <- .lin()
-  run <- function(budget) {
-    set.seed(1)
-    msem(m$obj, randomEffects(m$p), c(a = 0.5, b = 0.2), fits = 3, sd = 0.2, budget = budget)$multistart
-  }
-  free <- run(Inf)
-  # a cap one below the iterations every other start needs
-  cap <- min(free$iterations[-1]) - 1
-  expect_gt(cap, 0)
-  capped <- run((cap - 0.5) / free$iterations[1])
-  expect_equal(capped[1, ], free[1, ])
-  expect_equal(capped$iterations[-1], rep(cap, 2))
-  expect_false(any(capped$converged[-1]))
-  expect_error(run(0), "budget")
-  # quadrature caps its FOCEI stage by the iterations of that stage; SAEM is not capped
-  first <- list(iterations = 3L, trustIterations = 12L)
-  expect_equal(dMod2:::.msemCap(first, "quadrature", 2), 24L)
-  expect_equal(dMod2:::.msemCap(first["iterations"], "focei", 2), 6L)
-  expect_null(dMod2:::.msemCap(first, "saem", 2))
 })
 
 test_that("the diagnostic plots of an EM fit are ggplots", {
@@ -763,14 +756,26 @@ test_that("NPDE of data simulated from the fit itself, with censored readings, a
   cf <- em(normL2(d, m$g * Xt() * m$p), randomEffects(m$p), c(a = 0.5, b = 0.2), verbose = FALSE)
   sims <- simulate(cf, nsim = 20, seed = 3)
   expect_gt(mean(unlist(lapply(sims, function(s) lapply(s, function(x) x$value <= x$lloq)))), 0.2)
-  z <- unlist(lapply(sims, function(s) {
+  z <- unlist(lapply(seq_along(sims), function(k) {
     f <- cf
-    for (cn in names(f$design$data)) f$design$data[[cn]]$value <- s[[cn]]$value
-    residuals(f, "NPDE", nsim = 500, seed = 4)
+    for (cn in names(f$design$data)) f$design$data[[cn]]$value <- sims[[k]][[cn]]$value
+    residuals(f, "NPDE", nsim = 500, seed = k)
   }))
-  # between draws the mean of the 1020 values scatters by some 0.03, their variance from 0.95 to 1.27
-  expect_lt(abs(mean(z)), 0.15)
-  expect_lt(abs(var(z) - 1), 0.4)
+  # independent standard normal values: mean and variance within four standard errors
+  expect_lt(abs(mean(z)), 4 / sqrt(length(z)))
+  expect_lt(abs(var(z) - 1), 4 * sqrt(2 / (length(z) - 1)))
+})
+
+test_that("NPDE of correlated readings, half of them censored, are independent within their unit", {
+  # per unit the squares of independent standard normal NPDE sum to a chi-square, mean p, variance 2 p
+  withr::local_seed(1)
+  p <- 6
+  L <- t(chol(matrix(0.9, p, p) + diag(0.1, p)))
+  z <- replicate(2000, dMod2:::.npdeUnit(pmax(drop(L %*% rnorm(p)), 0), L %*% matrix(rnorm(p * 500), p),
+                                         rep(0, p)))
+  ss <- colSums(z^2)
+  expect_lt(abs(mean(ss) / p - 1), 0.1)
+  expect_lt(abs(var(ss) / (2 * p) - 1), 0.3)
 })
 
 test_that("the visual predictive check, plain, prediction corrected, stratified and with censored readings", {

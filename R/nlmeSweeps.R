@@ -51,6 +51,33 @@
        preds = preds, errs = errs, rows = unname(rows))
 }
 
+## The forward pass along the k-th tangent of the native full pass `fw` on the conditions `conds`,
+## for a backward sweep with `blocks` seed blocks: the parameter stages along that tangent anew,
+## the solution and its k-th tangent taken from `fw` without a solve. NULL where `fw` did not run
+## natively.
+.sweepSlice <- function(design, full, fixed, fw, k, conds, blocks, cores) {
+  nat <- fw$native
+  if (is.null(nat)) return(NULL)
+  nm <- names(full)
+  V <- nat$V[, k, drop = FALSE]
+  times <- lapply(conds, function(cn) .emGrid(design, cn))
+  planFor <- function(S) .chainLookup(design$chain, conds, rep(list(nm), length(conds)), names(fixed), nm, TRUE,
+                                      FALSE, times, tangents = 1L, seeds = S)
+  plan <- planFor(blocks)
+  if (is.null(plan)) return(NULL)
+  cores <- as.integer(max(1L, cores))
+  pre <- .chainParams(plan, nat$values, TRUE, FALSE, cores, V)
+  if (is.null(pre)) return(NULL)
+  raw <- lapply(match(conds, fw$conds), function(i) {
+    r <- nat$raw[[i]]
+    nt <- nrow(r$variable); n <- ncol(r$variable)
+    r$tangent <- array(r$tangent[nt * n * (k - 1L) + seq_len(nt * n)], c(nt, n, 1L))
+    r
+  })
+  list(conds = conds, names = nm, K = 1L, Ke = 1L,
+       native = list(plan = plan, planFor = planFor, blocks = blocks, pre = pre, raw = raw, values = nat$values, V = V))
+}
+
 ## The data rows of condition `cn` on the frames of a forward pass: values, their derivatives
 ## along the directions `dirs`, and the positions of the rows in the frames. A recorded sigma has
 ## no derivatives and no position in the error model.
@@ -227,10 +254,16 @@
 ## Per unit of `units` (its `eta` and `conditions`) by forward over reverse: `rows`, the exact
 ## eta rows of the Hessian of the data term, and `traces`, the gradients grad tr(M H_u) of the
 ## matrices in `Ms[[u]]`, H_u the Gauss-Newton Hessian of the data term in the unit's etas. All as
-## named over `reach`, the parameters the unit's conditions reach. One forward pass and one
-## backward sweep with a seed for the rows and one per eta direction for the traces of any number of M.
-.sweepUnits <- function(design, full, fixed, units, Ms = NULL, cores = 1L, fw = NULL) {
-  B <- 1L + if (length(Ms)) max(1L, vapply(units, function(u) length(u$eta), 0L)) else 0L
+## named over `reach`, the parameters the unit's conditions reach. Either one backward sweep along
+## all tangents with a seed block for the rows and one per eta direction for the traces
+## (`narrow = FALSE`), or per direction k a forward pass along it alone and a backward sweep with a
+## seed for row k and one per M (.sweepNarrow()), whose stores have two columns in place of K + 1;
+## NULL takes the narrow one where there are matrices M and few of them.
+.sweepUnits <- function(design, full, fixed, units, Ms = NULL, cores = 1L, fw = NULL, narrow = NULL) {
+  Ke <- max(1L, vapply(units, function(u) length(u$eta), 0L))
+  nM <- max(0L, lengths(Ms))
+  narrow <- nM > 0L && (narrow %||% (2L * nM + 2L < Ke + 1L))
+  B <- 1L + if (nM && !narrow) Ke else 0L
   fw <- fw %||% .sweepForward(design, full, fixed, units, cores, blocks = B)
   K <- fw$K; Ke <- fw$Ke
   unitOf <- integer(0)
@@ -239,12 +272,12 @@
   r <- .stackRowsOf(fw$rows)
   lr <- .rowLossDerivs(r$p, r$s, r$y, r$cens, design$df)
   l_ <- function(i, j) lr[, i + 1L, j + 1L]
+  if (narrow) return(.sweepNarrow(design, full, fixed, units, Ms, cores, fw, r, l_, unitOf))
   Ku <- rep(vapply(units, function(u) length(u$eta), 0L)[unitOf[fw$conds]], r$n)
   # block 1, the data Hessian along every tangent: seed the loss gradient, its derivative
   # L (pd, sd); block j + 1, for grad tr(M H_u) = sum_jk M_jk U_jk with symmetric M: seed
   # 2 L J_j, and along tangent k the seeds of J_j' dL J_k, so that U has the derivatives
   # through J and through L
-  B <- 1L + if (length(Ms)) Ke else 0L
   a <- r$pd; b <- r$sd
   sp <- ss <- matrix(0, length(r$p), B * (K + 1L))
   sp[, 1L] <- l_(1, 0); sp[, 1L + seq_len(K)] <- l_(2, 0) * a + l_(1, 1) * b
@@ -280,6 +313,78 @@
       tr <- lapply(seq_len(ncol(TM)), function(m) setNames(TM[, m], reach))
     }
     list(reach = reach, rows = rows, traces = tr)
+  })
+}
+
+## The rows and trace gradients of .sweepUnits() direction by direction. Along eta_k, from a
+## forward pass along it alone over the conditions whose unit has a k-th eta: row k of the Hessian
+## from the loss gradient seeded with its derivative L J_k along the tangent, and with M symmetric
+## sum_j M_jk U_jk from the seed 2 L J M_k with, along the tangent, J M_k' dL J_k. The rows `r` and
+## loss derivatives `l_` are those of the full pass `fw`; a matrix M that is 0 in every unit has no
+## seed.
+.sweepNarrow <- function(design, full, fixed, units, Ms, cores, fw, r, l_, unitOf) {
+  nM <- max(lengths(Ms))
+  Msym <- lapply(Ms, function(ml) lapply(ml, function(Mm) (Mm + t(Mm)) / 2))
+  live <- which(vapply(seq_len(nM), function(m)
+    any(vapply(Msym, function(ml) length(ml) >= m && any(ml[[m]] != 0), TRUE)), TRUE))
+  B <- 1L + length(live)
+  Ku <- vapply(units, function(u) length(u$eta), 0L)
+  rowUnit <- rep(unitOf[fw$conds], r$n)
+  rowCond <- rep(fw$conds, r$n)
+  a <- r$pd; b <- r$sd
+  rowsOf <- lapply(units, function(u) list())
+  trOf <- lapply(units, function(u) list())
+  for (k in seq_len(fw$Ke)) {
+    us <- which(Ku >= k)
+    sel <- rowUnit %in% us
+    if (!any(sel)) next
+    conds <- fw$conds[fw$conds %in% rowCond[sel]]
+    L <- function(i, j) l_(i, j)[sel]
+    x <- a[sel, k]; y <- b[sel, k]
+    sp <- ss <- matrix(0, sum(sel), 2L * B)
+    sp[, 1L] <- L(1, 0); sp[, 2L] <- L(2, 0) * x + L(1, 1) * y
+    ss[, 1L] <- L(0, 1); ss[, 2L] <- L(1, 1) * x + L(0, 2) * y
+    for (q in seq_along(live)) {
+      A <- Bt <- numeric(length(r$p))
+      for (u in us) {
+        if (length(Msym[[u]]) < live[q]) next
+        on <- rowUnit == u
+        w <- Msym[[u]][[live[q]]][, k]
+        A[on] <- a[on, seq_len(Ku[u]), drop = FALSE] %*% w
+        Bt[on] <- b[on, seq_len(Ku[u]), drop = FALSE] %*% w
+      }
+      A <- A[sel]; Bt <- Bt[sel]
+      sp[, 2L * q + 1L] <- 2 * (L(2, 0) * A + L(1, 1) * Bt)
+      ss[, 2L * q + 1L] <- 2 * (L(1, 1) * A + L(0, 2) * Bt)
+      sp[, 2L * q + 2L] <- L(3, 0) * A * x + L(2, 1) * (A * y + Bt * x) + L(1, 2) * Bt * y
+      ss[, 2L * q + 2L] <- L(2, 1) * A * x + L(1, 2) * (A * y + Bt * x) + L(0, 3) * Bt * y
+    }
+    fk <- .sweepSlice(design, full, fixed, fw, k, conds, B, cores)
+    if (is.null(fk)) {
+      one <- lapply(units, function(u) list(eta = if (length(u$eta) >= k) u$eta[k] else character(0),
+                                           conditions = intersect(u$conditions, conds)))
+      fk <- .sweepForward(design, full, fixed, one, cores, conds = conds, blocks = B)
+      if (sum(vapply(fk$rows, function(x) length(x$p), 0L)) != sum(sel))
+        stop("the data rows of a forward pass along one direction differ from those of the full pass", call. = FALSE)
+    }
+    back <- .sweepBackward(fk, list(pred = sp, sigma = ss, n = r$n[fw$conds %in% conds]), cores, blocks = B)
+    sums <- .unitSums(back, unitOf[fk$conds], fk$names)
+    for (u in names(sums)) {
+      i <- as.integer(u)
+      Su <- sums[[u]]
+      rowsOf[[i]][[k]] <- setNames(Su[, 2L], rownames(Su))
+      trOf[[i]][[k]] <- Su[, 2L * seq_along(live) + 2L, drop = FALSE]
+    }
+  }
+  lapply(seq_along(units), function(u) {
+    eta <- units[[u]]$eta
+    rk <- rowsOf[[u]]; tk <- Filter(Negate(is.null), trOf[[u]])
+    reach <- unique(c(eta, unlist(lapply(rk, names)), unlist(lapply(tk, rownames))))
+    rows <- matrix(0, length(eta), length(reach), dimnames = list(eta, reach))
+    for (k in seq_along(rk)) if (!is.null(rk[[k]])) rows[k, names(rk[[k]])] <- rk[[k]]
+    TM <- matrix(0, length(reach), nM, dimnames = list(reach, NULL))
+    for (t in tk) TM[rownames(t), live] <- TM[rownames(t), live, drop = FALSE] + t
+    list(reach = reach, rows = rows, traces = if (length(Ms[[u]])) lapply(seq_len(nM), function(m) setNames(TM[, m], reach)) else list())
   })
 }
 

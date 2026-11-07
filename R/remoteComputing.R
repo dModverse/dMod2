@@ -1,7 +1,8 @@
 #' Detect Number of Free Cores
 #'
 #' Estimates the free cores as the number of cores minus the 1-minute load
-#' average, at least 1. Works on Linux and macOS, locally or on remote
+#' average, at least 1; inside a SLURM job on the local machine, the cores the
+#' job was given (`SLURM_CPUS_ON_NODE`) and its processes are bound to. Works on Linux and macOS, locally or on remote
 #' machines via `ssh`. On the local Windows machine the load is the processor
 #' load since the previous call, over at least 0.25 s and at most a minute. Under
 #' `R CMD check` with `_R_CHECK_LIMIT_CORES_` set, the result is at most 2.
@@ -51,6 +52,15 @@ detectFreeCores <- function(machine = NULL) {
     freeCores <- setNames(vapply(output, `[[`, numeric(1), "free"), machine)
     attr(freeCores, "ncores") <- vapply(output, `[[`, numeric(1), "nCores")
     attr(freeCores, "used") <- vapply(output, `[[`, numeric(1), "occupied")
+  } else if (nzchar(Sys.getenv("SLURM_CPUS_ON_NODE"))) {
+    # inside a SLURM job the cores are those it was given and bound to, whatever the node has
+    # nproc counts the cores the process is bound to, but reads OMP_NUM_THREADS unless it is unset
+    bound <- suppressWarnings(as.integer(tryCatch(.shell("env -u OMP_NUM_THREADS -u OMP_THREAD_LIMIT nproc",
+                                                         intern = TRUE), error = function(e) NA)))
+    freeCores <- as.integer(Sys.getenv("SLURM_CPUS_ON_NODE"))
+    if (isTRUE(bound >= 1)) freeCores <- min(freeCores, bound)
+    attr(freeCores, "ncores") <- freeCores
+    attr(freeCores, "used") <- 0
   } else {
     res <- .getLoadAndCores()
     freeCores <- res$free
@@ -740,8 +750,8 @@ print.dMod2Target <- function(x, ...) {
   }
 }
 
-## The results of the tasks joined: parlists by c(), data frames by rbind(), any
-## other results as a list. Tasks without a result are left out with a warning.
+## The results of the tasks joined: parlists by c(), parts of one msem() into one fit, data
+## frames by rbind(), any other results as a list. Tasks without a result are left out with a warning.
 .combineResults <- function(out) {
   failed <- which(vapply(out, inherits, NA, "try-error"))
   missing <- which(vapply(out, is.null, NA))
@@ -757,6 +767,8 @@ print.dMod2Target <- function(x, ...) {
   ok <- out[!seq_along(out) %in% c(failed, missing)]
   if (!length(ok)) return(ok)
   if (all(vapply(ok, inherits, NA, "parlist"))) return(do.call(c, unname(ok)))
+  if (all(vapply(ok, function(r) inherits(r, "em") && is.data.frame(r$multistart), NA)))
+    return(.joinMsem(unname(ok)))
   if (all(vapply(ok, is.data.frame, NA)))
     return(tryCatch(do.call(rbind, unname(ok)), error = function(e) ok))
   ok
@@ -1032,8 +1044,9 @@ print.dMod2Job <- function(x, ...) {
 #'     runs, reports each change as a message and returns `TRUE` when every task
 #'     is done.}
 #'   \item{`get(combine = TRUE, all = FALSE)`}{returns the results. With
-#'     `combine = TRUE` parlists are joined by `c()` and data frames such as
-#'     parframes by `rbind()`, other results come as a list; tasks without a
+#'     `combine = TRUE` parlists are joined by `c()`, fits of [msem()] with
+#'     parts of its starts into one fit, and data frames such as parframes by
+#'     `rbind()`, other results come as a list; tasks without a
 #'     result are left out with a warning. `combine = FALSE` returns one entry
 #'     per task, named like `tasks`, `NULL` for a task not done. Results of
 #'     remote nodes are copied into `<jobname>_folder/<k>`, with `all = TRUE`

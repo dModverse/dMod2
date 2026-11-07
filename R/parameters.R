@@ -815,7 +815,9 @@ Pexpl <- function(trafo, parameters = NULL, attachInput = FALSE, condition = NUL
 #'       default `1e-2`.}
 #'     \item{`positive`}{Keep states positive, default `TRUE`.}
 #'     \item{`stability`}{Require a stable root if `flow = TRUE`, default
-#'       `TRUE`.}
+#'       `TRUE`; where no start reaches one, the evaluation fails. With
+#'       `FALSE` an unstable root is returned, on which a
+#'       [constraintStability()] term rises.}
 #'     \item{`stabilityTol`}{With `stability`, a root counts as stable while
 #'       the real part of its leading eigenvalue on the manifold of the conserved
 #'       quantities is at most `stabilityTol`, in the units of the rates; default
@@ -1032,6 +1034,19 @@ Pimpl <- function(trafo, parameters = NULL, forcings = NULL, condition = NULL,
   attr(p2p, "chainImpl") <- function(condition) list(
     dependent = dependent, zero = zero_states, resting = resting, parameters = parms_all, d1 = emit_d1, d2 = emit_d2,
     state = nativeState())
+  # the eigenvalues of the Jacobian at the steady state on the manifold of the conserved quantities,
+  # with the gradients in `parms_all` of the real parts above `onset` (constraintStability())
+  attr(p2p, "spectrum") <- function(pars, onset) {
+    root <- p2p(pars, deriv = FALSE)
+    p <- unclass(pars)
+    p[setdiff(resting, names(p))] <- 0
+    pv <- setNames(as.numeric(p[parms_all]), parms_all)
+    if (anyNA(pv)) stop("Pimpl: missing value(s) for ", paste(parms_all[is.na(pv)], collapse = ", "), call. = FALSE)
+    sp <- pimpl_spectrum(nativeState(), pv, as.numeric(root[dependent]), onset)
+    colnames(sp$grad) <- parms_all
+    sp
+  }
+  attr(p2p, "stabilityTol") <- function() .pimplPTC(ctl$controlsPTC)$stabilityTol
   attr(p2p, "equations")   <- as.eqnvec(all_exprs)
   attr(p2p, "parameters")  <- parameters
   attr(p2p, "modelname")   <- modelname
