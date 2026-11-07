@@ -14,6 +14,7 @@ grouped <- file.exists(file.path(project, "results", "compounds.rds"))
 knitr::read_chunk("../../examples/oppeltNPJSystBiolAppl2018/model.R")
 knitr::read_chunk("../../examples/oppeltNPJSystBiolAppl2018/reduced.R")
 knitr::read_chunk("../../examples/oppeltNPJSystBiolAppl2018/compounds.R")
+knitr::read_chunk("../../examples/oppeltNPJSystBiolAppl2018/compoundsFull.R")
 # "a", "a and b", "a, b and c"
 enumerate <- function(x) if (length(x) < 2) paste(x) else
   paste(paste(x[-length(x)], collapse = ", "), "and", x[length(x)])
@@ -363,7 +364,6 @@ data:
 
 ```{r, include = FALSE}
 full <- file.exists(file.path(project, "results", "compoundsFull.rds"))
-knitr::read_chunk("../../examples/oppeltNPJSystBiolAppl2018/compoundsFull.R")
 ```
 
 ```{r fullcompoundeffects, eval = FALSE}
