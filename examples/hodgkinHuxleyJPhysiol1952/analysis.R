@@ -93,7 +93,7 @@ data <- as.datalist(data)
 # Twenty starts around the true conductances.
 obj <- normL2(data, x*p)
 
-fits <- mstrust(obj, pars_true, fits = 20, sd = 0.5, cores = .cores) |> as.parframe()
+fits <- mstrust(obj, pars_true, fits = 20, sd = 0.5, cores = .cores)
 plotValues(fits, pseudoLog = TRUE)
 bestfit <- as.parvec(fits)
 rbind(true = pars_true, fit = bestfit)

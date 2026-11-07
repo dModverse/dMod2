@@ -299,7 +299,7 @@ summary(structural)
 #>   rank: proven (4 directions, exact scalings)
 #>   25 conditions, 50 segments
 #>   settings: reduce_cq=False, equilibrate=False, reconstruct=False
-#>   elapsed: 7.8s
+#>   elapsed: 117.5s (rank 116.4s, reconstruction 0.0s, proofs 0.0s)
 #> 
 #> Result:  rank 92 / 96  |  4 non-identifiable directions
 #> 
@@ -347,8 +347,8 @@ observables stay the same for every $\lambda > 0$, so the data fix only the
 products and ratios this rescaling leaves alone. The rescaled parameters belong
 to the ISRE and GAS occupancy, SOCS1 and SOCS3, which are seen only through the
 rates they enter. As the summary says, holding one parameter of each generator
-fixed removes it. The publication does so by tying one rate to another, and
-fixes rCytNuc, TrLocIRF9n and five blot offsets on top.
+fixed removes it. The publication ties one rate of each generator to another,
+and fixes rCytNuc, TrLocIRF9n and five blot offsets as well.
 
 ``` r
 trafo <- trafo |>
@@ -390,11 +390,11 @@ bestfit <- setNames(.pars$estimate, .pars$parameterId)
 ```
 
 ## Gradient
-The value alone, then with the gradient. Forward sensitivities integrate one
-system per parameter, on one core or with the conditions spread over the free
-cores, here by `cores = .cores` and for every evaluation by
-`options(dMod2.cores = .cores)`; the reverse sweep integrates the states once
-and back, which at 85 parameters is much faster.
+The value alone, then with the gradient. The forward sweep integrates the
+sensitivities of every parameter, on one core or with the conditions spread over
+the free cores, by `cores = .cores` in one call or `options(dMod2.cores = .cores)`
+in every evaluation; the reverse sweep integrates the states forward and the
+adjoint backward, which at 85 parameters is much faster.
 
 ``` r
 system.time(obj(bestfit, deriv = FALSE))
@@ -402,7 +402,7 @@ system.time(obj(bestfit, deriv = FALSE))
 
 ```
 #>    user  system elapsed 
-#>   0.049   0.000   0.016
+#>   0.049   0.001   0.015
 ```
 
 ``` r
@@ -411,7 +411,7 @@ system.time(obj(bestfit))
 
 ```
 #>    user  system elapsed 
-#>   6.319   0.016   0.403
+#>   5.517   0.026   0.360
 ```
 
 ``` r
@@ -420,7 +420,7 @@ system.time(obj(bestfit, cores = .cores))
 
 ```
 #>    user  system elapsed 
-#>   5.993   0.000   0.431
+#>   5.546   0.001   0.348
 ```
 
 ``` r
@@ -429,7 +429,7 @@ system.time(obj(bestfit, sweep = "reverse"))
 
 ```
 #>    user  system elapsed 
-#>   0.149   0.003   0.030
+#>   0.118   0.005   0.026
 ```
 
 ## Multistart
@@ -446,9 +446,9 @@ and the German Research Foundation (DFG) through grant INST 35/1597-1 FUGG.
 
 The job needs an account on Helix, reached by ssh with a key under the host
 alias `helix` of ~/.ssh/config, with dMod2 and cppDE installed there, so
-`.helix <- TRUE` submits it and the analysis otherwise reads the fits shipped with
-the package. The fits are expensive, which is why they do not run on the local
-machine. A job folder `kok_mstrust_folder` in the working directory means the job
+`.helix <- TRUE` submits it; otherwise the analysis reads the fits shipped with
+the package and fits nothing on the local machine. A job folder
+`kok_mstrust_folder` in the working directory means the job
 was submitted from here already: the call then recovers its functions instead
 of submitting again, and its fits replace the shipped ones once check() finds no
 task running; get() joins the parlists of the tasks.
@@ -515,9 +515,10 @@ ggplot(as.data.frame(outframe), aes(elapsed/60)) +
 <img src="figures/unnamed-chunk-16-1.png" width="768" />
 
 At the optimum the gradient is small, so the integration error at the
-tolerances of the fit dominates it. With tighter tolerances and the sweep
-checked against them, the two agree. controls() sets them on the objective,
-which shares them with `x` and `prd`, so they are restored afterwards.
+tolerances of the fit dominates it. With tighter tolerances and the reverse
+sweep checked against them, forward and reverse gradient agree. controls() sets
+them on the objective, which shares them with `x` and `prd`, so they are
+restored afterwards.
 
 ``` r
 .options        <- controls(obj, name = "options")
@@ -533,16 +534,16 @@ head(cbind(forward = .fwd$gradient, reverse = .rev$gradient[names(.fwd$gradient)
 
 ```
 #>                          forward      reverse
-#> Rec                 -0.004117728 -0.004108472
-#> totSTAT1            -0.018540702 -0.018519895
-#> totSTAT2             0.002253636  0.002275425
-#> totIRF9              0.006632842  0.006608674
-#> synthUSP18           0.012816225  0.012754923
-#> synthUSP18mRNAbasal -0.002133477 -0.002149877
-#> hlUSP18mRNA         -0.009635913 -0.009590448
-#> degUSP18            -0.013912567 -0.013855883
-#> synthSTAT1mRNAbasal  0.008162968  0.008120175
-#> hlSTAT1mRNA         -0.004910596 -0.004890890
+#> Rec                 -0.004117871 -0.004109474
+#> totSTAT1            -0.018540172 -0.018520422
+#> totSTAT2             0.002253179  0.002275122
+#> totIRF9              0.006633454  0.006611544
+#> synthUSP18           0.012816524  0.012757370
+#> synthUSP18mRNAbasal -0.002132737 -0.002149798
+#> hlUSP18mRNA         -0.009636368 -0.009593808
+#> degUSP18            -0.013913124 -0.013858636
+#> synthSTAT1mRNAbasal  0.008163078  0.008120533
+#> hlSTAT1mRNA         -0.004910675 -0.004892618
 ```
 
 ## Published optimum
@@ -640,9 +641,10 @@ plotCombined(prediction, mydataL,
 
 <img src="figures/unnamed-chunk-22-1.png" width="768" />
 
-### Sensitization
+### Sensitisation
 The response is the area under the occupied ISRE sites in the 4 h after a dose.
-Above 1 a prestimulation sensitizes the cell, below 1 it desensitizes it.
+The ratio is the response after a prestimulation over that without; above 1 the
+prestimulation sensitises the cell, below 1 it desensitises it.
 
 ``` r
 .auc <- function(pars, from) {

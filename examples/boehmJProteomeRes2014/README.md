@@ -263,7 +263,7 @@ confint(profiles, level = 0.95, val.column = "data",
 #> k_exp_homo                     k_exp_homo -2.2024880 -2.55769739 -1.8887974
 #> k_imp_hetero                 k_imp_hetero -1.7875030 -1.91103290 -1.6580601
 #> k_imp_homo                     k_imp_homo  1.4695884  0.09882774        Inf
-#> k_phos                             k_phos  4.1977213  4.10620546  4.2966860
+#> k_phos                             k_phos  4.1977213  4.10625865  4.2967001
 #> sd_pSTAT5A_rel             sd_pSTAT5A_rel  0.5878645  0.40943535  0.7943554
 #> sd_pSTAT5B_rel             sd_pSTAT5B_rel  0.8201036  0.66458691  1.0130544
 #> sd_rSTAT5A_rel             sd_rSTAT5A_rel  0.4987573  0.34854330  0.6912930
@@ -288,5 +288,5 @@ chi2
 
 ```
 #>  hand.data PEtab.data 
-#>   47.97632   47.97632
+#>   47.97641   47.97641
 ```

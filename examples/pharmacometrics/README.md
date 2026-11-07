@@ -8,6 +8,7 @@ Theophylline, warfarin PK/PD and mavoglurant with occasions: FOCEI and SAEM mult
 |---|---|
 | `analysis.R` | the analysis, shown below |
 | `results/cache.rds` | saved fits; delete it to fit again |
+| `theophyllineMultistart.R` | multistarts of the theophylline model by FOCEI, quadrature and SAEM, saves `results/multistart.rds` for the guide |
 
 ## Run
 
@@ -72,18 +73,12 @@ runDMod2 <- function(obj, random, starts, method) {
   data.frame(package = "dMod2", start = seq_along(out), value = vapply(out, `[[`, 0, "value"),
              converged = vapply(out, `[[`, TRUE, "converged"), seconds = vapply(out, `[[`, 0, "seconds"))
 }
-```
 
-The model `ui` of nlmixr2 at a start `s`: `toIni` turns it into the arguments of rxode2::ini(),
-which evaluates the random effects in `envir`, where it needs lotri()
-
-``` r
+# the model `ui` of nlmixr2 at a start `s`: `toIni` turns it into the arguments of rxode2::ini(),
+# which evaluates the random effects in `envir`, where it needs lotri()
 iniAt <- function(ui, toIni, s) do.call(rxode2::ini, c(list(ui), toIni(s), envir = asNamespace("rxode2")))
-```
 
-A fit of nlmixr2 by `est` of the model `m` on `data`, NULL where it fails
-
-``` r
+# a fit of nlmixr2 by `est` of the model `m` on `data`, NULL where it fails
 fitNlmixr2 <- function(m, data, est) {
   control <- if (est == "focei") nlmixr2est::foceiControl(print = 0) else nlmixr2est::saemControl(print = 0)
   out <- NULL
@@ -107,31 +102,22 @@ runNlmixr2 <- function(ui, data, starts, est, toIni) {
   data.frame(package = "nlmixr2", start = seq_along(out), value = vapply(out, `[[`, 0, "value"),
              converged = vapply(out, `[[`, TRUE, "converged"), seconds = vapply(out, `[[`, 0, "seconds"))
 }
-```
 
-What the comparison reads of a fit of nlmixr2, which a cache holds
-
-``` r
+# what the comparison reads of a fit of nlmixr2, which a cache holds
 nlmixr2Summary <- function(f) {
   table <- as.data.frame(f)
   list(theta = f$theta, omega = f$omega, parFixedDf = f$parFixedDf, covMethod = f$covMethod,
        logLik = as.numeric(stats::logLik(f)), shrink = f$shrink, eta = as.data.frame(f$eta),
        table = table[intersect(c("ID", "TIME", "CMT", "IPRED"), names(table))])
 }
-```
 
-The initial values of random effects for rxode2::ini(), variances from the log standard
-deviations `map` (eta = omega) of a start
-
-``` r
+# the initial values of random effects for rxode2::ini(), variances from the log standard
+# deviations `map` (eta = omega) of a start
 etaIni <- function(map, s)
   unname(Map(function(e, o) stats::as.formula(sprintf("%s ~ %.10g", e, exp(2 * s[[o]]))), names(map), map))
-```
 
-Per package the best value, the starts within 0.1 of it, the failed and unconverged fits, the
-median and total seconds per fit
-
-``` r
+# per package the best value, the starts within 0.1 of it, the failed and unconverged fits, the
+# median and total seconds per fit
 summariseStarts <- function(runs) {
   do.call(rbind, lapply(split(runs, runs$package), function(r) {
     best <- min(r$value, na.rm = TRUE)
@@ -140,34 +126,19 @@ summariseStarts <- function(runs) {
                medianSeconds = stats::median(r$seconds), totalSeconds = sum(r$seconds))
   }))
 }
-```
 
-The waterfall of both packages and the seconds per fit; each package by its own -2 log L, so each
-above its own best
-
-``` r
+# the waterfall of both packages, a panel each, and the seconds per fit
 plotStarts <- function(runs, title) {
-  runs <- runs[order(runs$package, runs$value), ]
-  runs$rank <- stats::ave(seq_along(runs$value), runs$package, FUN = seq_along)
-  runs$delta <- runs$value - stats::ave(runs$value, runs$package, FUN = function(v) min(v, na.rm = TRUE))
-  w <- ggplot2::ggplot(runs[is.finite(runs$value), ], ggplot2::aes(rank, delta + 1e-3, color = package,
-                                                                   shape = package)) +
-    ggplot2::geom_point() + ggplot2::scale_y_log10(labels = scales::label_log()) +
-    ggplot2::scale_shape_manual(values = c(19, 1)) +
-    ggplot2::labs(x = "fit, ordered", y = "-2 log L above the best of the package + 0.001", color = NULL,
-                  shape = NULL, title = title) +
-    scale_color_dMod() + theme_dMod() + ggplot2::theme(legend.position = "top")
+  w <- plotValues(split(runs, factor(runs$package, unique(runs$package))), pseudoLog = TRUE) +
+    ggplot2::labs(title = title)
   s <- ggplot2::ggplot(runs, ggplot2::aes(package, seconds)) + ggplot2::geom_boxplot() +
     ggplot2::scale_y_log10(labels = scales::label_log()) +
     ggplot2::labs(x = NULL, y = "seconds per fit, one core") + theme_dMod()
   cowplot::plot_grid(w, s, nrow = 1, rel_widths = c(2, 1))
 }
-```
 
-Estimates of both packages on the log scale with standard errors, the difference in standard
-errors of dMod2, and the shrinkage of the random effects
-
-``` r
+# the estimates of both packages on the log scale with standard errors, and their difference in
+# standard errors of dMod2
 compareFits <- function(fit, nfit, fromNlmixr2) {
   est <- fit$argument
   se <- sqrt(pmax(diag(vcov(fit)), 0))[names(est)]
@@ -177,12 +148,9 @@ compareFits <- function(fit, nfit, fromNlmixr2) {
   out$differenceInSE <- (out$dMod2 - out$nlmixr2) / out$seDMod2
   out
 }
-```
 
-EBEs and IPRED of both packages against each other: `etas` maps the random effects of dMod2 to
-those of nlmixr2, `id` the groups of dMod2 to the IDs of nlmixr2, `rows` the rows of both to keys
-
-``` r
+# the EBEs and IPRED of both packages against each other: `etas` maps the random effects of dMod2
+# to those of nlmixr2, `id` the groups of dMod2 to the IDs of nlmixr2, `rows` the rows of both to keys
 plotAgainst <- function(fit, nfit, etas, id, rows) {
   e <- fit$random[fit$random$eta %in% names(etas), ]
   ne <- as.data.frame(nfit$eta)
@@ -199,12 +167,9 @@ plotAgainst <- function(fit, nfit, etas, id, rows) {
     ggplot2::labs(x = "IPRED nlmixr2", y = "IPRED dMod2") + theme_dMod()
   cowplot::plot_grid(a, b, nrow = 1, rel_widths = c(2, 1))
 }
-```
 
-The comparison of one model: FOCEI against FOCEI (multistarts, best fits, -2 log L, shrinkage, EBEs
-and IPRED), SAEM against SAEM with -2 log L of both by FOCEI
-
-``` r
+# the comparison of one model: FOCEI against FOCEI (multistarts, best fits, -2 log L, shrinkage, EBEs
+# and IPRED), SAEM against SAEM with -2 log L of both by FOCEI
 compareAll <- function(obj, random, starts, runs, nruns, fit, ui, ndata, toIni, fromNlmixr2, etas, id, rows, label,
                        saem = list(obj = obj, random = random, starts = starts, ui = ui, toIni = toIni)) {
   refit <- function(r, ui, toIni, starts, est)
@@ -334,42 +299,42 @@ plot(theoFit)
 ```
 
 
-<img src="figures/unnamed-chunk-15-1.png" width="768" />
+<img src="figures/unnamed-chunk-6-1.png" width="768" />
 
 ``` r
 plotResiduals(theoFit, nsim = 500, seed = 1)
 ```
 
 
-<img src="figures/unnamed-chunk-15-2.png" width="768" />
+<img src="figures/unnamed-chunk-6-2.png" width="768" />
 
 ``` r
 plotCombined(theoFit)
 ```
 
 
-<img src="figures/unnamed-chunk-15-3.png" width="768" />
+<img src="figures/unnamed-chunk-6-3.png" width="768" />
 
 ``` r
 plotRandomEffects(theoFit)
 ```
 
 
-<img src="figures/unnamed-chunk-15-4.png" width="768" />
+<img src="figures/unnamed-chunk-6-4.png" width="768" />
 
 ``` r
 plotRandomEffects(theoFit, covariates = theoTable["weight"])
 ```
 
 
-<img src="figures/unnamed-chunk-15-5.png" width="768" />
+<img src="figures/unnamed-chunk-6-5.png" width="768" />
 
 ``` r
 plotVPC(theoFit, nsim = 500, bins = 8, seed = 1)
 ```
 
 
-<img src="figures/unnamed-chunk-15-6.png" width="768" />
+<img src="figures/unnamed-chunk-6-6.png" width="768" />
 
 ## Theophylline in nlmixr2
 
@@ -520,42 +485,42 @@ plot(warfFit)
 ```
 
 
-<img src="figures/unnamed-chunk-18-1.png" width="768" />
+<img src="figures/unnamed-chunk-9-1.png" width="768" />
 
 ``` r
 plotResiduals(warfFit, nsim = 500, seed = 1)
 ```
 
 
-<img src="figures/unnamed-chunk-18-2.png" width="768" />
+<img src="figures/unnamed-chunk-9-2.png" width="768" />
 
 ``` r
 plotCombined(warfFit, conditionsPerPage = 8)[[1]]
 ```
 
 
-<img src="figures/unnamed-chunk-18-3.png" width="768" />
+<img src="figures/unnamed-chunk-9-3.png" width="768" />
 
 ``` r
 plotRandomEffects(warfFit)
 ```
 
 
-<img src="figures/unnamed-chunk-18-4.png" width="768" />
+<img src="figures/unnamed-chunk-9-4.png" width="768" />
 
 ``` r
 plotRandomEffects(warfFit, covariates = c("wt", "age", "sex"))
 ```
 
 
-<img src="figures/unnamed-chunk-18-5.png" width="768" />
+<img src="figures/unnamed-chunk-9-5.png" width="768" />
 
 ``` r
 plotVPC(warfFit, nsim = 500, bins = 8, seed = 1)
 ```
 
 
-<img src="figures/unnamed-chunk-18-6.png" width="768" />
+<img src="figures/unnamed-chunk-9-6.png" width="768" />
 
 ## Warfarin in nlmixr2
 
@@ -617,7 +582,8 @@ if (withNlmixr2) {
 120 subjects, an infusion of 10 min (20 min in one occasion) as a time switch, 78 subjects on two
 occasions. Two compartments; clearances scale with weight to the power 0.75, volumes with weight.
 Clearance, the central and peripheral volume and the intercompartmental clearance vary between
-subjects, the clearance also between the occasions of a subject, `(1 | ID:OCC)`.
+subjects, the clearance also between the occasions of a subject, `(1 | ID:OCC)`. SAEM fits the
+model without the variability between occasions.
 
 ``` r
 data(mavoglurant)
@@ -657,8 +623,8 @@ mavoNet
 ```
 
 ``` r
-# solver tolerances 1e-10: at the defaults its error, absolute in mg/L, moves -2 log L by about 1e-3,
-# more than the fit resolves
+# solver tolerances 1e-10: at the defaults the solver error, absolute in mg/L, moves -2 log L by
+# about 1e-3, more than the fit resolves
 mavoX <- Xs(odemodel(mavoNet, modelname = "pm_mavo", compile = FALSE, deriv2 = TRUE, derivMode = dm),
             options = list(atol = 1e-10, rtol = 1e-10))
 # the dose in mg, the concentration in ng/mL
@@ -751,7 +717,7 @@ compileSeconds
 
 ```
 #> theophylline     warfarin  mavoglurant 
-#>       11.454       38.952      230.703
+#>        0.250        0.307        1.105
 ```
 
 ## Diagnostics
@@ -761,42 +727,42 @@ plot(mavoFit)
 ```
 
 
-<img src="figures/unnamed-chunk-21-1.png" width="768" />
+<img src="figures/unnamed-chunk-12-1.png" width="768" />
 
 ``` r
 plotResiduals(mavoFit, nsim = 200, seed = 1)
 ```
 
 
-<img src="figures/unnamed-chunk-21-2.png" width="768" />
+<img src="figures/unnamed-chunk-12-2.png" width="768" />
 
 ``` r
 plotCombined(mavoFit, conditionsPerPage = 12)[[1]]
 ```
 
 
-<img src="figures/unnamed-chunk-21-3.png" width="768" />
+<img src="figures/unnamed-chunk-12-3.png" width="768" />
 
 ``` r
 plotRandomEffects(mavoFit)
 ```
 
 
-<img src="figures/unnamed-chunk-21-4.png" width="768" />
+<img src="figures/unnamed-chunk-12-4.png" width="768" />
 
 ``` r
 plotRandomEffects(mavoFit, covariates = c("WT", "AGE", "SEX", "HT"))
 ```
 
 
-<img src="figures/unnamed-chunk-21-5.png" width="768" />
+<img src="figures/unnamed-chunk-12-5.png" width="768" />
 
 ``` r
 plotVPC(mavoFit, nsim = 200, bins = 8, pc = TRUE, strata = "dose", seed = 1)
 ```
 
 
-<img src="figures/unnamed-chunk-21-6.png" width="768" />
+<img src="figures/unnamed-chunk-12-6.png" width="768" />
 
 ## Mavoglurant in nlmixr2
 

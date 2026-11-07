@@ -148,7 +148,7 @@ fits <- distributedComputing(
   mstrust(obj, pouter, sd = 4, fits = 10 * cores, cores = cores),
   on = localNode(.cores), jobname = "ba_fits_ss", input = c("obj", "pouter"),
   wait = TRUE
-) |> as.parframe()
+)
 plotValues(fits)
 bestfit <- as.parvec(fits)
 

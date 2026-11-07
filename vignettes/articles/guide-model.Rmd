@@ -19,7 +19,7 @@ together with the output, the derivatives of the output with respect to the para
 | `parfn` | `P()`, `Pexpl()`, `Pimpl()` | parameter transformation: outer parameters to the inner parameters of every condition, or parameters to the steady state of a network (`Pimpl()`) |
 | `prdfn` | `Xs()`, `Xf()` | parameters to the trajectories of the states, the solution of the ODE, with their sensitivities (`Xs()`) or without (`Xf()`) |
 | `obsfn` | `Y()` | states to observables, and observables to their standard deviations, the error model |
-| `objfn` | `normL2()`, `constraintL2()`, `datapointL2()` | parameters to the objective $-2 \log L$, its gradient and its Hessian |
+| `objfn` | `normL2()`, `constraintL2()`, `datapointL2()`, `constraintStability()` | parameters to the objective $-2 \log L$, its gradient and its Hessian |
 
 In the guide, `p` and `pSS` are `parfn`s, `x` is the `prdfn`, `g` the observables and `e` the
 error model, both `obsfn`s, and `obj` the `objfn`.
@@ -333,6 +333,36 @@ determine where they determine a parameter; where they do not, it keeps the para
 value. The objective is then $-2 \log$ of the posterior up to a constant, and its minimum exists
 without bounds on the parameters. `constraintL2()` builds the prior as another `objfn`, and `+`
 adds it to the data term.
+
+The cells rest before TNFα is added, so the steady state of `pSS` has to be stable. By default
+`Pimpl()` refuses a root whose leading eigenvalue on the manifold of the conserved quantities has a
+real part above `stabilityTol`, and an evaluation there fails. The project builds `pSS` with
+`controlsPTC = list(stability = FALSE)`, so that it returns the unstable root, and adds
+`constraintStability()`, a term that rises towards the boundary, so that a fit sees it instead of
+running into it: for every eigenvalue $\lambda_k$ of the Jacobian $\partial f / \partial x$ at the
+steady state,
+
+$$
+  w \sum_k r_k^2, \qquad
+  r_k = \frac{\max\bigl(0,\ \mathrm{Re}\,\lambda_k - \lambda_0\bigr)}{\lambda_{tol} - \lambda_0},
+$$
+
+with $\lambda_{tol}$ the `stabilityTol` of `pSS`, here 0, and the onset
+$\lambda_0 = \lambda_{tol} - 1/T$, $T$ the six hours the data span: the term begins where a
+perturbation of the resting state decays more slowly than the experiment lasts, reaches $w = 100$
+where an eigenvalue reaches $\lambda_{tol}$, and goes on rising beyond. With the refusal left on,
+the term rises before it instead. Its gradient comes from the eigenvectors $u_k$, $w_k$ and the
+derivatives of the root,
+
+$$
+  \frac{\mathrm{d}\lambda_k}{\mathrm{d}\theta}
+  = \frac{w_k^{\mathsf H} \bigl(\partial_\theta J + \partial_x J\, \mathrm{d}x^*/\mathrm{d}\theta\bigr) u_k}
+         {w_k^{\mathsf H} u_k},
+$$
+
+which needs the second derivatives of the right-hand side, hence `Pimpl(deriv2 = TRUE)`. The term
+is an assumption of the model, not data: profiles with `stop = "data"` and likelihood ratios read
+the data term without it.
 
 ```{r objective}
 ```

@@ -416,7 +416,7 @@ cat("> Results pending: `results/fits.rds` of the project is written by `fit.R`.
 
 A fit from a start near the best fit, with the gauge held fixed. `mstrust()` with one fit draws the
 start, here with standard deviation 0.5 around the best fit, and draws again where the model cannot
-be evaluated, for example where the resting state of the cells is no longer stable:
+be evaluated, for example where `Pimpl()` finds no steady state:
 
 ```{r, eval = fitted}
 best <- as.parvec(readRDS("results/fits.rds"))
@@ -430,7 +430,7 @@ fit[c("value", "converged", "iterations", "stopReason")]
 
 A single fit finds the optimum whose basin of attraction contains its start. `mstrust()` fits from
 many starts, drawn around a centre, and returns them as a list of fits; `as.parframe()` turns it into
-a table sorted by value. `fit.R` draws the starts from the prior means with standard deviation 2 on
+a table sorted by value, and the plots of fits take either. `fit.R` draws the starts from the prior means with standard deviation 2 on
 the log scale, a factor of $e^2 \approx 7$ per standard deviation. A start at which the model
 cannot be evaluated, for example because a bleaching rate is so large that a signal vanishes, is
 replaced by the next draw. `cores` runs the fits in parallel processes.
@@ -530,16 +530,8 @@ the number of hits, starts that end within 1 of the best value of all; the plate
 multistart above lie closer together than that. `failed` counts the starts that ended without a
 result:
 
-```{r, eval = optimized, fig.height = 6}
-opt$rank <- ave(opt$value, opt$method, FUN = function(v) rank(v, ties.method = "first", na.last = TRUE))
-ggplot2::ggplot(opt, ggplot2::aes(rank, value - top, colour = converged)) +
-  ggplot2::geom_point(size = 1, na.rm = TRUE) +
-  ggplot2::facet_wrap(~method, ncol = 5) +
-  ggplot2::scale_y_continuous(transform = scales::pseudo_log_trans(sigma = 0.1, base = 10),
-                              breaks = c(0, 1, 10, 100, 1000, 1e4)) +
-  ggplot2::scale_colour_manual(values = c(`TRUE` = "black", `FALSE` = dMod_colors[2])) +
-  ggplot2::labs(x = "rank", y = "-2 log L above the best", colour = "converged") +
-  theme_dMod()
+```{r, eval = optimized, fig.width = 10, fig.height = 3.5}
+plotValues(split(opt, factor(opt$method, unique(opt$method))), pseudoLog = TRUE)
 ```
 
 ```{r, include = FALSE, eval = optimized}
@@ -579,27 +571,6 @@ cat("> Results pending: `results/hessianSources.rds` of the Boehm project.\n")
 ```{r, include = FALSE, eval = compared}
 boehm <- readRDS(boehmFile)
 library(ggplot2)
-# One panel for several fit collections, each ranked on its own, drawn back to front so that the
-# first one listed stays on top. A circle is a converged fit, a triangle any other.
-waterfall <- function(frames, cutoff = Inf) {
-  ranked <- do.call(rbind, lapply(rev(names(frames)), function(set) {
-    fits <- subset(frames[[set]], value < cutoff)
-    fits <- fits[order(fits$value), ]
-    data.frame(index = seq_len(nrow(fits)), value = fits$value,
-               converged = as.character(fits$converged), set = set)
-  }))
-  ranked$set <- factor(ranked$set, levels = names(frames))
-  colours <- stats::setNames(dMod_palette(8, "okabe")[-5][seq_along(frames)], names(frames))
-  ggplot(ranked, aes(index, value, colour = set)) +
-    geom_line(aes(group = set), linewidth = 0.3) +
-    geom_point(aes(shape = converged), size = 1.3) +
-    scale_shape_manual(values = c(`TRUE` = 16, `FALSE` = 17), breaks = c("TRUE", "FALSE"),
-                       labels = c(`TRUE` = "yes", `FALSE` = "no")) +
-    scale_colour_manual(values = colours) +
-    labs(x = "start, sorted by value", y = "-2 log L", colour = NULL, shape = "converged") +
-    theme_dMod() +
-    theme(legend.position = "bottom", legend.box = "vertical")
-}
 # hits within `tol` of `ref`, and what they cost
 hitTable <- function(runs, ref, tol = 0.1) {
   do.call(rbind, lapply(names(runs), function(source) {
@@ -685,11 +656,11 @@ sr1Share <- withPrior["sr1, id", "evalPerHit"] / withPrior["gn", "evalPerHit"]
 typical start. Gauss-Newton ends every start on `"fvalue"` or `"preddiff"`; the quasi-Newton
 phases, where these tests are not applied, end on the gradient or on stagnation.
 
-```{r, eval = compared, fig.height = 5.5, fig.cap = "The five Hessian sources over the same 100 starts, each ranked on its own. Values above 600 are left out."}
-waterfall(runs, cutoff = 600)
+```{r, eval = compared, fig.width = 10, fig.height = 3.5, fig.cap = "The five Hessian sources over the same 100 starts, each ranked on its own. Values above 600 are left out."}
+plotValues(runs, value < 600)
 ```
 
-The curves fall into two shapes. Gauss-Newton and both two-phase runs follow each other over the
+The panels fall into two shapes. Gauss-Newton and both two-phase runs have the same curve over the
 whole range, since such a run is Gauss-Newton until a soft stop fires. They differ in the leading
 plateau: under Gauss-Newton it is not flat, because the model stops improving before the minimum,
 whereas the quasi-Newton phase brings those starts to a common value. The runs seeded with the
@@ -707,7 +678,7 @@ others join: SR1 from a Gauss-Newton seed, and the reversed handover from SR1 ba
 Gauss-Newton.
 
 ```{r, eval = compared}
-noprior <- split(boehm$noprior, boehm$noprior$source)
+noprior <- split(boehm$noprior, factor(boehm$noprior$source, unique(boehm$noprior$source)))
 hitTable(noprior, 276.44)
 ```
 
@@ -725,8 +696,8 @@ sr1Factor <- function(table) table["gn", "evalPerHit"] /
   min(table$evalPerHit[startsWith(table$source, "sr1")])
 ```
 
-```{r, eval = compared, fig.height = 4, fig.cap = "Five Hessian sources on the likelihood without a prior, over the same 200 starts, each ranked on its own. Values above 600 are left out."}
-waterfall(noprior, cutoff = 600)
+```{r, eval = compared, fig.width = 10, fig.height = 3.5, fig.cap = "Five Hessian sources on the likelihood without a prior, over the same 200 starts, each ranked on its own. Values above 600 are left out."}
+plotValues(noprior, value < 600)
 ```
 
 Every source reaches the published optimum, and the quasi-Newton runs lose most of their lead: SR1
@@ -773,7 +744,7 @@ cat("> Results pending: `results/hessianSources.rds` of the Bachmann project.\n"
 
 ```{r, eval = comparedBachmann && compared}
 bachmann <- readRDS(bachmannFile)
-bachmannRuns <- split(bachmann, bachmann$source)
+bachmannRuns <- split(bachmann, factor(bachmann$source, unique(bachmann$source)))
 hitTable(bachmannRuns, -479.26)
 with(bachmann, table(source, stop))
 ```
@@ -788,8 +759,8 @@ matched <- sprintf("%d \\times 10^{%d}", ceiling(matched / 10^floor(log10(matche
                    floor(log10(matched)))
 ```
 
-```{r, eval = comparedBachmann && compared, fig.height = 4, fig.cap = "Five Hessian sources on the JAK2-STAT5 model over the same 200 starts, each ranked on its own. Starts ending above -400 are left out."}
-waterfall(bachmannRuns, cutoff = -400)
+```{r, eval = comparedBachmann && compared, fig.width = 10, fig.height = 3.5, fig.cap = "Five Hessian sources on the JAK2-STAT5 model over the same 200 starts, each ranked on its own. Starts ending above -400 are left out."}
+plotValues(bachmannRuns, value < -400)
 ```
 
 Every source reaches the same best value, and the counts at 0.1 and at 1 from the optimum are the

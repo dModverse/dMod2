@@ -153,9 +153,8 @@ short <- band$time[!vapply(saved$profiles, function(pr) {
   min(d$data[c(1, nrow(d))]) - d$data[d$constraint == 0][1] > qchisq(0.95, 1)
 }, logical(1))]
 if (length(short))
-  cat(sprintf(paste("At %s minutes one side ends before the threshold, where the resting",
-                    "state of the model loses its stability: `Pimpl()` finds no stable root, and",
-                    "`confint()` extrapolates the last part of the profile.\n"),
+  cat(sprintf(paste("At %s minutes one side ends before the threshold, and `confint()`",
+                    "extrapolates the last part of the profile.\n"),
               paste(short, collapse = ", ")))
 ```
 

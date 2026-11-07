@@ -13,17 +13,10 @@ knitr::opts_chunk$set(collapse = TRUE, comment = "#>", fig.width = 8, fig.height
 When the same model describes many individuals, subjects, cells or cell lines, their parameters
 differ but are not unrelated. A mixed-effects model writes each individual parameter as a
 population value plus a random deviation, estimates the population values and the spread of the
-deviations, and integrates the deviations out of the likelihood. dMod2 builds such a model from
-the same parts as any other, with the random effects declared in the `parfn`, and fits it with
-`em()`.
-
-The integral over the random effects, the marginal likelihood, has no closed form for an ODE
-model. The four methods of `em()` approximate it in different ways, and all of them are instances
-of the EM algorithm: FOCEI by Laplace's method at the modes of the random effects, adaptive
-sparse-grid quadrature by a cubature rule around them, Laplace EM by an ECM iteration on the
-Laplace approximation, and SAEM by Monte Carlo draws averaged over the iterations. This chapter
-derives them, describes their settings, and fits each to the theophylline data set:
-twelve subjects, one oral dose each, plasma concentrations over a day.
+deviations, and integrates the deviations out of the likelihood. In dMod2 the random effects are
+declared in the `parfn`, and `em()` fits the model by one of four approximations of that integral,
+all of them instances of the EM algorithm. The example is the theophylline data set: twelve
+subjects, one oral dose each, plasma concentrations over a day.
 
 ```{r}
 library(dMod2)
@@ -34,11 +27,8 @@ dir.create(getOption("dMod2.outdir"), showWarnings = FALSE)
 ## Model
 
 The dose goes into a depot and is absorbed into the central compartment of volume $V$, from which
-it is cleared. The amount in the depot is a state of its own, in a frame of volume 1. The
-absorption is a flux $k_a A_g$ out of the depot; arriving in the central compartment it is
-divided by $V$. Elimination is written as a flux $\mathrm{Cl}\, C_c$ in the unit frame, so the
-clearance $\mathrm{Cl}$ keeps its pharmacokinetic meaning, a volume per time, and the
-concentration falls at the rate $\mathrm{Cl}/V$.
+it is cleared. Elimination is a flux $\mathrm{Cl}\, C_c$ in the unit frame, so that the clearance
+$\mathrm{Cl}$ is a volume per time and the concentration falls at the rate $\mathrm{Cl}/V$.
 
 ```{r}
 reactions <- eqnlist() |>
@@ -50,9 +40,8 @@ reactions <- eqnlist() |>
 as.eqnvec(reactions)
 ```
 
-`em()` needs second derivatives for its volume term and its reported Hessian, so the model parts
-are built with `deriv2 = TRUE` and with the derivative modes that compute them by forward over
-reverse sweeps.
+`em()` needs second derivatives, so the parts are built with `deriv2 = TRUE` and the derivative
+modes of forward over reverse sweeps.
 
 ```{r}
 dm <- c("forward", "reverse", "forward-reverse")
@@ -112,249 +101,119 @@ individual parameters. The formula syntax covers more:
 | `Cl ~ 1 + (1 \| ID) + (1 \| ID:OCC)` | variability between subjects and between occasions of a subject |
 | `Cl ~ 1 + (1 \| gr(ID, dist = laplace()))` | Laplace instead of normal random effects |
 
-A group, a level of the grouping such as a subject, may own several conditions: its random
-effects are shared by all of them. A condition outside every group, a reference without a
-subject for example, has none. The random effects of one ID, or of one term without an ID, form a
-block with a full covariance; different blocks are independent, so the covariance $\Omega$ is
-block diagonal. Its parameters `omega_<a>_<b>` are the entries of a Cholesky factor of each
-block, log standard deviations on the diagonal. Laplace, spike-and-slab and Dirichlet-process
-random effects, deviations that are exactly zero unless the data need them, are the subject of
-[chapter 8](guide-group-effects.html); they are fitted by `method = "focei"`, Dirichlet-process
-ones also by `"saem"`. This chapter treats normal ones.
+A group, a level of the grouping such as a subject, may own several conditions, which share its
+random effects; a condition outside every group has none. The random effects of one ID, or of one
+term without an ID, form a block with a full covariance, so that $\Omega$ is block diagonal; its
+parameters `omega_<a>_<b>` are the entries of the Cholesky factor of each block, log standard
+deviations on the diagonal. Laplace, spike-and-slab and Dirichlet-process random effects, which are
+exactly zero unless the data need them, are the subject of [chapter 8](guide-group-effects.html);
+this chapter treats normal ones.
 
 ## Marginal likelihood
 
-The random effects enter the model only through the parameter transformation. For subject $i$,
-one of $G$ groups, with random effects $\eta_i$ the transformation gives the inner parameters
-$\phi_i = h(\theta, \eta_i)$, the ODE and the observation function the prediction
-
-$$\mu_{ij}(\theta, \eta_i) = g\bigl(x(t_{ij};\, \phi_i)\bigr),$$
-
-and the observation model is
+For group $i$ of $G$, the transformation gives the inner parameters $\phi_i = h(\theta, \eta_i)$, and
+the observation model is
 
 $$\begin{aligned}
-y_{ij} &= \mu_{ij}(\theta, \eta_i) + \varepsilon_{ij}, \\
+y_{ij} &= g\bigl(x(t_{ij};\, \phi_i)\bigr) + \varepsilon_{ij}, \\
 \varepsilon_{ij} &\sim \mathcal{N}\bigl(0, \sigma^2(\phi_i, t_{ij})\bigr), \qquad \eta_i \sim \mathcal{N}(0, \Omega),
 \end{aligned}$$
 
-with the population parameters $\psi = (\theta, \Omega, \sigma)$. The right-hand side of the ODE
-never sees $\eta_i$: the sensitivities of the prediction in the random effects come from the
-chain rule through `g * x * p` as any other sensitivities, and the likelihood factorises over the
-groups, since each $\eta_i$ couples only to the data $y_i$ of its group and to the population
-through its prior. The marginal log-likelihood is
+with the population parameters $\psi = (\theta, \Omega, \sigma)$. The sensitivities in $\eta_i$ come
+from the chain rule through `g * x * p` like any other, and the likelihood factorises over the
+groups:
 
 $$\ell(\psi) = \sum_{i=1}^G \log L_i(\psi), \qquad
-L_i(\psi) = \int p(y_i \mid \eta_i, \psi)\, p(\eta_i \mid \Omega)\, \mathrm{d}\eta_i ,$$
+L_i(\psi) = \int p(y_i \mid \eta_i, \psi)\, p(\eta_i \mid \Omega)\, \mathrm{d}\eta_i .$$
 
-with $y_i$ the data of all conditions of group $i$; the conditions without a group add their data
-$-2 \log L$ as it is.
-
-In code, the integrand is the objective of the data, `normL2(data, g * x * p, errmodel = e)`,
-which gives $-2 \log p(y_i \mid \eta_i, \psi)$ summed over the conditions, plus the prior of the
-random effects, $\sum_i \eta_i^\top \Omega^{-1} \eta_i + G \log \lvert \Omega \rvert$, which
-`em()` builds from `randomEffects(p)`. Their sum is the joint $-2 \log$ density
-$-2 \log p(y, \eta \mid \psi)$ up to a constant. `normT(data, g * x * p, errmodel = e, df = 4)`
-instead of `normL2()` gives Student-t residuals with heavier tails.
+The conditions without a group add their data $-2 \log L$ as it is. In code the integrand is the
+objective of the data, `normL2(data, g * x * p, errmodel = e)`, plus the prior
+$\sum_i \eta_i^\top \Omega^{-1} \eta_i + G \log \lvert \Omega \rvert$ that `em()` builds from
+`randomEffects(p)`; `normT(..., df = 4)` in place of `normL2()` gives Student-t residuals.
 
 ## EM algorithm
 
-The marginal likelihood couples the observed data $y$ and the latent random effects $\eta$. The
-expectation-maximisation algorithm [@dempster1977maximum] maximises likelihoods of this form, and
-every method of `em()` is an approximation of it.
+For a reference value $\psi^{(t)}$ and the posterior $q_i(\eta_i) = p(\eta_i \mid y_i, \psi^{(t)})$,
+Jensen's inequality bounds the marginal from below [@dempster1977maximum],
 
-### Lower bound
+$$\log L_i(\psi) \ge \underbrace{\mathbb{E}_{q_i}\bigl[\log p(y_i, \eta_i \mid \psi)\bigr]}_{Q_i(\psi \mid \psi^{(t)})}
+- \mathbb{E}_{q_i}\bigl[\log q_i(\eta_i)\bigr],$$
 
-For a reference value $\psi^{(t)}$, let $q_i(\eta_i) = p(\eta_i \mid y_i, \psi^{(t)})$ be the
-posterior of the random effects of group $i$. For any $\psi$, by Jensen's inequality,
+with equality at $\psi = \psi^{(t)}$. EM alternates the E-step, which forms
+$Q = \sum_i Q_i$, and the M-step $\psi^{(t+1)} = \arg\max_\psi Q(\psi \mid \psi^{(t)})$; since the
+bound is tight at $\psi^{(t)}$, $\ell$ never decreases, and near the optimum it converges linearly at
+the fraction of the information the data do not give. Expectation conditional maximisation (ECM)
+[@meng1993maximum] splits the M-step into conditional steps: $\Omega$ in closed form from sufficient
+statistics, the structural parameters by optimisation. [Chapter 8](guide-group-effects.html) writes
+the same objective on the scale of $-2 \log L$ and minimises $-2Q$.
 
-$$\begin{aligned}
-\log L_i(\psi) &= \log \int q_i(\eta_i)\, \frac{p(y_i, \eta_i \mid \psi)}{q_i(\eta_i)}\, \mathrm{d}\eta_i \\
-&\ge \underbrace{\mathbb{E}_{q_i}\bigl[\log p(y_i, \eta_i \mid \psi)\bigr]}_{Q_i(\psi \mid \psi^{(t)})}
-- \mathbb{E}_{q_i}\bigl[\log q_i(\eta_i)\bigr].
-\end{aligned}$$
+The posterior runs through the ODE solution and has no closed form. The four methods replace it by
+something computable:
 
-The bound is tight at $\psi = \psi^{(t)}$, where $p(y_i, \eta_i \mid \psi) / q_i(\eta_i) =
-p(y_i \mid \psi^{(t)})$ is constant in $\eta_i$. The second term, the entropy of $q_i$, does not
-depend on $\psi$. Summed over the groups, $Q(\psi \mid \psi^{(t)}) = \sum_i Q_i(\psi \mid
-\psi^{(t)})$. EM maximises $Q$; [chapter 8](guide-group-effects.html) writes the same
-objective on the scale of $-2 \log L$ and minimises $-2Q$.
-
-### Iteration
-
-EM alternates two steps:
-
-- E-step: at $\psi^{(t)}$, form the posteriors $q_i$ and with them $Q(\psi \mid \psi^{(t)})$ as a
-  function of $\psi$.
-- M-step: $\psi^{(t+1)} = \arg\max_\psi Q(\psi \mid \psi^{(t)})$.
-
-The iteration never decreases the marginal likelihood. With $\mathcal{H}(q) = -\mathbb{E}_q \log
-q$,
-
-$$\begin{aligned}
-\ell(\psi^{(t+1)}) &\ge Q(\psi^{(t+1)} \mid \psi^{(t)}) + \mathcal{H}(q) \\
-&\ge Q(\psi^{(t)} \mid \psi^{(t)}) + \mathcal{H}(q) = \ell(\psi^{(t)}),
-\end{aligned}$$
-
-the first inequality the bound at $\psi^{(t+1)}$, the second the M-step, the equality the
-tightness at $\psi^{(t)}$. The improvement is strict unless $\psi^{(t)}$ is a stationary point of
-$\ell$. Near the optimum EM converges linearly: the error shrinks per iteration by the fraction
-of the information that is missing, the information of the random effects that the data do not
-give [@dempster1977maximum].
-
-When the M-step is itself hard but $\psi$ splits into blocks whose conditional maximisations are
-easy, expectation conditional maximisation (ECM) [@meng1993maximum] replaces it by a sequence of
-them, $\psi_A$ with $\psi_B$ held, then $\psi_B$ with the new $\psi_A$. Each step still increases
-$Q$, so each cycle still increases $\ell$. For mixed-effects models the split is natural: the
-covariance $\Omega$ has a closed-form conditional update from sufficient statistics, the
-structural parameters do not.
-
-### Three approximations
-
-For a mixed-effects model,
-$\log p(y_i, \eta_i \mid \psi) = \log p(y_i \mid \eta_i, \psi) + \log p(\eta_i \mid \Omega)$,
-and the posterior $q_i \propto p(y_i \mid \eta_i, \psi^{(t)})\, p(\eta_i \mid \Omega^{(t)})$
-runs through the nonlinear ODE solution and has no closed form; neither has the expectation
-$Q_i$. The methods replace it by something computable:
-
-- deterministic, low order: $q_i$ as a Gaussian at its mode and a one-point rule there. This is
-  FOCEI, `method = "focei"`, and with an EM outer loop `method = "laplaceEM"`;
-- deterministic, high order: a multi-point quadrature rule adapted to the Gaussian approximation
-  of $q_i$, `method = "quadrature"`;
-- stochastic: a Monte Carlo average over draws from $q_i$ by MCMC, averaged over the iterations
-  rather than within them, `method = "saem"`.
+| method | posterior and expectation | M-step | reported $-2 \log L$ |
+|---|---|---|---|
+| `"focei"` | Gaussian at the mode, one point | trust region on the Laplace approximation | Laplace |
+| `"quadrature"` | adaptive sparse grid around the mode | trust region on frozen nodes | quadrature |
+| `"laplaceEM"` | moments of the Laplace approximation, nodes of degree 3 | ECM | quadrature of level $K + 2$ |
+| `"saem"` | Metropolis draws, averaged over the iterations | closed form and averaged Newton steps | quadrature of level $K + 2$ |
 
 ## FOCEI
 
 ### Laplace approximation
 
-Fix $\psi$ and write the joint $-2 \log$ density of group $i$ as
-
-$$\Phi_i(\eta) = -2 \log p(y_i \mid \eta, \psi) - 2 \log p(\eta \mid \Omega).$$
-
-With the conditional mode $\hat\eta_i = \arg\min_\eta \Phi_i(\eta)$ and $H_i = \nabla^2_\eta
-\Phi_i(\hat\eta_i)$, the curvature of data and prior, the posterior precision is $P_i = H_i/2$. Expanding $\Phi_i$ to second order
-around $\hat\eta_i$ and integrating the Gaussian gives Laplace's approximation of the $K$-dimensional
-integral,
-
-$$\begin{aligned}
-L_i(\psi) &\approx (2\pi)^{K/2}\, \lvert P_i \rvert^{-1/2} \exp\bigl(-\tfrac12 \Phi_i(\hat\eta_i)\bigr), \\
--2 \log L_i &\approx \Phi_i(\hat\eta_i) + \log \lvert H_i/2 \rvert - K \log(2\pi).
-\end{aligned}$$
-
-The prior term of $\Phi_i$ is written without its $K \log(2\pi)$, which cancels the last term, so
-FOCEI minimises
+Write the joint $-2 \log$ density of group $i$ as $\Phi_i(\eta) = -2 \log p(y_i \mid \eta, \psi) -
+2 \log p(\eta \mid \Omega)$, with the mode $\hat\eta_i$ and the curvature $H_i = \nabla^2_\eta
+\Phi_i(\hat\eta_i)$ of data and prior. Expanding $\Phi_i$ to second order and integrating the
+Gaussian gives Laplace's approximation $-2 \log L_i \approx \Phi_i(\hat\eta_i) + \log \lvert H_i/2
+\rvert - K \log(2\pi)$. The prior is written without its $K \log(2\pi)$, which cancels the last
+term, so FOCEI minimises
 
 $$F(\psi) = \sum_i \Bigl[ \Phi_i(\hat\eta_i) + \log \lvert H_i/2 \rvert \Bigr]$$
 
-plus the data of the conditions without a group: the full $-2 \log L$ with every constant of the
-data. $\log \lvert H_i/2 \rvert$ is the volume term. The "I" of FOCEI, first-order conditional
-estimation with interaction [@wang2007derivation; @pinheiro1995approximations], is the
-interaction between the random effects and the residual error: $H_i$ contains the derivatives of
-$\sigma$ in $\eta$, which couple the structural and the error-model contributions. Without it
-the method loses accuracy wherever $\sigma$ depends on $\eta$, as for a proportional or combined
-error model.
-
-In the language of EM, FOCEI approximates the posterior by the Gaussian
-$\mathcal{N}(\hat\eta_i, P_i^{-1})$ and the expectation by a single evaluation at $\hat\eta_i$ with the
-normalising factor $\log \lvert P_i \rvert$; the M-step becomes one optimisation of the analytic
-surrogate $F$ over all of $\psi$:
-
-| EM | FOCEI |
-|---|---|
-| posterior $q_i$ | Gaussian at $\hat\eta_i$ with covariance $(H_i/2)^{-1}$ |
-| E-step expectation | one point at $\hat\eta_i$, corrected by $\log \lvert H_i/2 \rvert$ |
-| M-step | trust region on $F(\psi)$ with its exact gradient |
-
-The conditional standard errors of the random effects that a fit reports are the square roots of
-the diagonal of $P_i^{-1} = 2 H_i^{-1}$.
+plus the data of the conditions without a group, the full $-2 \log L$ with every constant of the
+data. $\log \lvert H_i/2 \rvert$ is the volume term. $H_i$ holds the derivatives of $\sigma$ in
+$\eta$, the interaction of first-order conditional estimation with interaction
+[@wang2007derivation; @pinheiro1995approximations], without which the method loses accuracy wherever
+$\sigma$ depends on $\eta$. The conditional standard errors of the modes are the square roots of the
+diagonal of $2 H_i^{-1}$. Laplace's method is no bound on the integral: its $-2 \log L$ lies above or
+below the exact one, by an error of order $K / n_i$ for $n_i$ data points of the group.
 
 ### Bilevel optimisation
 
-FOCEI nests two trust regions. Per evaluation of the outer objective at $\psi$:
+Every evaluation at $\psi$ runs in C++:
 
-1. **Modes.** One trust-region solve per group finds $\hat\eta_i(\psi)$ over the data of all its
-   conditions. It starts from the modes of the previous outer iterate, moved to first order
-   along the outer step where that shift stays within the first inner radius, and stops where the
-   Gauss-Newton step $H_i^{-1} g_i$ is below `innerControl$steptol`; near the mode a Newton step
-   whose change of value drowns in the error of the solver is accepted by a smaller gradient. The
-   step model is the Gauss-Newton Hessian plus an SR1 correction learned from the gradients of the
-   accepted steps, the curvature of the prediction in the random effects that Gauss-Newton leaves
-   out, wherever the sum stays positive definite; $H_i$ itself stays Gauss-Newton. An eigenvalue
-   floor, $\lambda_k(H_i) \leftarrow \max\bigl(\lambda_k(H_i), 10^{-10} \operatorname{tr}(H_i)/K\bigr)$,
-   keeps $\log \lvert H_i \rvert$ defined where the local curvature is degenerate.
-2. **Outer gradient.** $\hat\eta_i$ minimises $\Phi_i$, so by the envelope theorem its shift
-   contributes nothing to the derivative of $\Phi_i(\hat\eta_i)$:
-
-   $$\nabla_\psi F = \sum_i \nabla_\psi \Phi_i \big|_{\eta = \hat\eta_i} + \sum_i \frac{\mathrm{d} \log \lvert H_i \rvert}{\mathrm{d} \psi}.$$
-
-   The gradient $g_i$ in the random effects that the inner search leaves is of the order of
-   `steptol` times the curvature; the first term takes the Newton correction to the exact mode,
-   $-\Phi_i^{\psi\eta} H_i^{-1} g_i$, with which its error is of second order.
-3. **Outer Hessian.** The model Hessian of the outer trust region is the Schur complement of the
-   joint Hessian at the modes,
-
-   $$\nabla^2_\psi F \approx \sum_i \Bigl[ \Phi_i^{\psi\psi} - \Phi_i^{\psi\eta} \bigl(\Phi_i^{\eta\eta}\bigr)^{-1} \Phi_i^{\eta\psi} \Bigr],$$
-
-   in its Gauss-Newton form, plus the Hessian of the volume term where the model has the
-   second-order sensitivities; an SR1 correction from the outer gradients of the last three
-   accepted points learns what this model leaves out, negative curvature included, so the outer
-   model may be indefinite.
-4. **Outer step.** The outer trust region takes the step on $F(\psi)$, the modes are kept as
-   starts for the next evaluation, and the loop repeats. A rejected step shrinks the radius to a
-   quarter of the radius or of the step, whichever is shorter, in the inner and the outer trust
-   region alike. The fit ends where its model can gain less than `trustControl$mtol` in the
-   largest region `rmax`, so that a region shrunk by rejections does not end it, or, as in
-   `trust()`, after five rejected trials in a row that leave the value flat within `ftol`: the
-   error of the evaluation, typically that of the ODE solver, leaves nothing to resolve.
-
-The bilevel loop runs in C++. The inner trust region of a group evaluates the residuals of each
-of its conditions, the Gauss-Newton Hessian with the contribution of $\partial \sigma / \partial
-\eta$ and the normal prior without a call of `normL2()`, and the trial points of all groups go
-out as one batched prediction per round. Models with several outputs and error models that depend
-on $\eta$ run through the same loop.
+- **Modes.** One trust region per group, Gauss-Newton with an SR1 correction, starts from the modes
+  of the last iterate moved to first order along the outer step and ends at
+  `innerControl$steptol`. An eigenvalue floor of $10^{-10} \operatorname{tr}(H_i)/K$ keeps
+  $\log \lvert H_i \rvert$ defined; the trial points of all groups go out as one batched
+  prediction.
+- **Gradient.** The modes minimise $\Phi_i$, so by the envelope theorem their shift does not enter:
+  $\nabla_\psi F = \sum_i \nabla_\psi \Phi_i \big|_{\hat\eta_i} + \sum_i \mathrm{d} \log \lvert H_i
+  \rvert / \mathrm{d}\psi$, with a Newton correction for the gradient the inner search leaves.
+- **Model Hessian.** The Gauss-Newton Schur complement $\sum_i [\Phi_i^{\psi\psi} -
+  \Phi_i^{\psi\eta} (\Phi_i^{\eta\eta})^{-1} \Phi_i^{\eta\psi}]$, the Hessian of the volume term
+  where the model has second-order sensitivities, and an SR1 correction from the gradients of the
+  last three accepted points.
+- **Stop.** Where the model gains less than `trustControl$mtol` in the region `rmax`, or after five
+  rejected trials that leave the value flat within `ftol`.
 
 ### Volume term
 
-The inner Hessian has the Gauss-Newton form, over the data rows $r$ of the group with the Hessian
-$L_r$ of the row loss in prediction and sigma,
-
-$$H_i = \sum_r J_r^\top L_r J_r + 2\, \Omega^{-1}, \qquad J_r = \partial(\mu_r, \sigma_r) / \partial \eta ,$$
-
-so the inner solve does not deliver the derivative of $\log \lvert H_i \rvert$. FOCEI evaluates
-it in closed form,
+$H_i$ has the Gauss-Newton form, so its derivative comes in closed form,
 
 $$\frac{\mathrm{d} \log \lvert H_i \rvert}{\mathrm{d} \psi_k}
 = \operatorname{tr}\Bigl(H_i^{-1} \frac{\partial H_i}{\partial \psi_k}\Big|_\eta\Bigr)
-+ \sum_l \operatorname{tr}\Bigl(H_i^{-1} \frac{\partial H_i}{\partial \eta_l}\Bigr) \frac{\mathrm{d} \hat\eta_l}{\mathrm{d} \psi_k},$$
++ \sum_l \operatorname{tr}\Bigl(H_i^{-1} \frac{\partial H_i}{\partial \eta_l}\Bigr) \frac{\mathrm{d} \hat\eta_l}{\mathrm{d} \psi_k},
+\qquad \frac{\mathrm{d}\hat\eta}{\mathrm{d}\psi} = -(\Phi_i^{\eta\eta})^{-1} \Phi_i^{\eta\psi},$$
 
-with $\mathrm{d}\hat\eta / \mathrm{d}\psi = -(\Phi_i^{\eta\eta})^{-1} \Phi_i^{\eta\psi}$ from the
-implicit function theorem on the exact joint Hessian. $\partial H_i / \partial \psi_k$ needs the
-mixed second derivatives $\partial^2 \mu / (\partial \eta\, \partial \psi_k)$, and
-$\partial H_i / \partial \eta_l$ the second derivatives $\partial^2 \mu / (\partial \eta\,
-\partial \eta_l)$, the same for $\sigma$; the Gauss-Newton form needs no third-order
-sensitivities. The Hessian of the volume term leaves out the third-order sensitivities and
-$\mathrm{d}^2 \hat\eta / \mathrm{d}\psi^2$. In the direction of $\Omega$ that is a large error
-when $\sigma$ depends on $\eta$; there the Hessian of the quadrature fit is the better one.
-
-`control$derivMode` decides how FOCEI gets the second derivatives:
-
-- `"forward-reverse"`, the default, for models built with
-  `derivMode = c("forward", "reverse", "forward-reverse")`. Every second derivative the volume term
-  uses is a contraction, a trace $\operatorname{tr}(M\, \partial H_i / \partial x)$ with a fixed
-  matrix $M$ or the joint Hessian applied to a direction of the random effects, and comes from one
-  forward pass along the random effects and a backward sweep with seeds on the predictions and
-  sigmas of the data rows; [chapter 3](guide-sensitivities.html) describes the sweeps. The volume
-  gradient is exact; the curvature of the volume term is learned by the SR1 correction along the
-  steps taken.
-- `"forward-forward"`, the second-order sensitivities of models built with `deriv2 = TRUE`, which
-  give the exact Hessian of the volume term to the outer model as well.
-
-A model with only one of the two takes it, with a message. The Hessian a fit reports, from which
-the standard errors come, is the exact one, forward over forward, where the model has `deriv2`;
-otherwise the exact Schur complement of the joint Hessian, up to 500 parameters, with the volume
-curvature of the variance parameters, which is exact for models linear in the random effects.
-`summary()` says which. `control = list(secondOrderCorrection = FALSE)` drops the derivative of
-the volume term altogether, which biases the estimates.
+from second-order sensitivities, no third. With `control$derivMode = "forward-reverse"`, the
+default, every trace comes from one forward pass along the random effects and a backward sweep
+([chapter 3](guide-sensitivities.html)); the gradient of the volume term is exact, its curvature is
+learned by the SR1 correction. `"forward-forward"` takes the second-order sensitivities of
+`deriv2 = TRUE` and gives the outer model the exact Hessian of the volume term. The Hessian a fit
+reports is exact, forward over forward, where the model has `deriv2`; `summary()` says which. Where
+$\sigma$ depends on $\eta$, the standard errors of $\Omega$ from the quadrature fit are the better ones.
+`secondOrderCorrection = FALSE` drops the derivative of the volume term, which biases the estimates.
 
 ### Fit
 
@@ -400,154 +259,35 @@ $-2 \log L$. As in any fit, the solver error has to stay below these tolerances.
 
 ## Adaptive sparse-grid quadrature
 
-### Beyond Laplace
+Laplace's method treats $\Phi_i$ as quadratic. Its error biases $\Omega$ most where the posterior is
+skewed, for short trajectories such as oral doses sampled near the absorption. A cubature rule
+$\int e^{-\Phi_i/2}\, \mathrm{d}\eta \approx \sum_b W_b\, e^{-\Phi_i(\eta_b)/2}$ removes that error
+level by level and contains Laplace as its one-node case.
 
-The Laplace approximation replaces the integral
-
-$$L_i(\psi) = \int e^{-\frac12 \Phi_i(\eta; \psi)}\, \mathrm{d}\eta$$
-
-by one evaluation at $\hat\eta_i$ with a curvature correction: it treats $\Phi_i$ as quadratic.
-Its error is dominated by the third and fourth derivatives of $\Phi_i$ at the mode and is
-$O(K/n_i)$ per group with $n_i$ data points. It matters for informative but short trajectories,
-such as oral doses sampled near the absorption limit, where $\Phi_i$ is skewed, and where the
-variance components are the target of the inference: the approximation weights the peak against
-the tails differently from the integral, which biases $\Omega$. A cubature rule
-
-$$\int e^{-\frac12 \Phi_i(\eta)}\, \mathrm{d}\eta \approx \sum_{b=1}^{B} W_b\, e^{-\frac12 \Phi_i(\eta_b)}$$
-
-with nodes $\eta_b$ and weights $W_b$ removes that error step by step: it is exact when the
-integrand is a polynomial of bounded degree times a Gaussian, contains Laplace as its one-node
-case, and converges at a rate the smoothness of $\Phi_i$ sets. The rules below keep the number
-$B$ of nodes polynomial in the number $K$ of random effects.
-
-### Nested rules
-
-The Gauss-Hermite rule with $m$ nodes,
-
-$$\int_{-\infty}^{\infty} g(z)\, e^{-z^2}\, \mathrm{d}z \approx \sum_{j=1}^m w_j\, g(z_j),$$
-
-is exact for polynomials $g$ of degree up to $2m - 1$, but its node sets of different sizes do
-not contain each other. Genz and Keister [@genz1996fully] extend the three-point rule by
-Kronrod-Patterson steps to a nested sequence of 1, 3, 9, 19 and 35 points, exact to degree 1, 5,
-15, 29 and 51: every rule holds the nodes of the previous one, so a higher level reuses every
-evaluation of the lower one. dMod2 computes the nodes and weights once, in 300-bit arithmetic.
-
-### Smolyak combination
-
-The tensor product of one-dimensional rules puts a node at every combination of their nodes. It
-is exact in each coordinate separately but needs $m^K$ nodes: 16807 ODE solves per group and
-evaluation for $K = 5$ and $m = 7$. A polynomial of total degree $d$ has far fewer monomials than
-the full product space, and the sparse grid of Smolyak [@smolyak1963quadrature] pays only for
-those. With $\Delta^l = \mathcal{U}^l - \mathcal{U}^{l-1}$ the difference of the one-dimensional
-rules of levels $l$ and $l - 1$, the rule of level $L \ge K$ is
+dMod2 combines the nested Genz-Keister rules [@genz1996fully], 1, 3, 9, 19 and 35 points exact to
+degree 1, 5, 15, 29 and 51, by Smolyak's sparse grid
+[@smolyak1963quadrature; @heiss2008likelihood],
 
 $$A(L, K) = \sum_{\lvert \mathbf{i} \rvert \le L} \Delta^{i_1} \otimes \cdots \otimes \Delta^{i_K},$$
 
-where $\mathbf{i} = (i_1, \dots, i_K)$ sets how many nodes go into each coordinate. Heiss and
-Winschel [@heiss2008likelihood] developed such rules for the likelihood of random-coefficient
-models, and Clausen, Rønn and Skovgaard [@clausen2009maximum] applied adaptive sparse-grid
-quadrature to nonlinear mixed-effects models. dMod2 differentiates the rule exactly through the
-sensitivities of the ODE, gradient and Hessian of the marginal likelihood included. The level is
-the one accuracy setting:
+with $\Delta^l$ the difference of the one-dimensional rules of levels $l$ and $l - 1$. Level $L$
+integrates every polynomial of total degree $2(L - K) + 1$ exactly against the Gaussian, with a
+number of nodes polynomial in $K$ (for $K = 3$ the levels 3 to 7 have 1, 7, 19, 45 and 117); level $K$
+is a single node, Laplace's approximation. The grid of every group sits on the Gaussian
+$\mathcal{N}(\hat\eta_i, 2 H_i^{-1})$ of FOCEI and moves with $\psi$ [@clausen2009maximum]. Some
+weights are negative, so $\log L_i$ is summed as a signed log-sum-exp; a sum that is not positive
+means the grid does not resolve the posterior, and the evaluation names the group. Gradient and
+Hessian are exact, through the sensitivities of the chain.
 
-- $A(L, K)$ integrates every polynomial of total degree $2(L - K) + 1$ exactly against the
-  Gaussian weight.
-- The number of nodes grows polynomially in $K$ at fixed $L - K$. For $K = 3$ the levels 3 to 7
-  have 1, 7, 19, 45 and 117 nodes; for $K = 4$ the levels 6 and 7 have 29 and 89, against 49 and
-  201 for a grid of non-nested Gauss-Hermite rules.
-- At $L = K$ the rule is a single node, which after the change of variables below is Laplace's
-  approximation. Each level above it probes more of the tails.
-
-The differences of the rules make some weights $W_b$ negative; polynomial exactness holds for the
-signed combination. The log-likelihood of a group,
-$\log L_i \approx \log \bigl\lvert \sum_b W_b\, e^{-\frac12 \Phi_i(\eta_b)} \bigr\rvert$, is
-therefore summed in log space with the signs kept, as below.
-
-### Adaptation
-
-The rule integrates against the weight $\exp(-z^\top z)$ in a standard frame; the integral of
-group $i$ lives around its mode. The local Gaussian $\mathcal{N}(\hat\eta_i, P_i^{-1})$, $P_i = H_i/2$, of
-FOCEI matches $\Phi_i$ to second order at the mode, and as the map from $z$ to $\eta$ it makes the
-quadrature adaptive: every outer iterate gives new $(\hat\eta_i, P_i)$, the nodes follow, and the
-rule stays centred as $\psi$ moves. With $L_H$ the lower Cholesky factor of $P_i$, the change of
-variables
-
-$$\eta = \hat\eta_i + \sqrt{2}\, L_H^{-\top} z$$
-
-maps a standard normal in $z$ onto $\mathcal{N}(\hat\eta_i, P_i^{-1})$; the $\sqrt 2$ converts between the
-weight $e^{-z^2}$ of the rule and $e^{-z^2/2}$. Its Jacobian $2^{K/2} / \lvert \det L_H \rvert$
-and the factor $\exp(z^\top z)$ that undoes the weight of the rule go into the weights,
-
-$$\log \lvert W_b \rvert = \tfrac{K}{2} \log 2 - \log \lvert \det L_H \rvert + \log \lvert w_b \rvert + z_b^\top z_b ,$$
-
-with the sign of the rule weight $w_b$ kept apart. The rule is then exact when
-$e^{-\Phi_i/2}$ is a polynomial in $\eta$ times the local Gaussian, and at $L = K$ it is a single
-node at $\hat\eta_i$ with the Laplace normaliser as weight.
-
-### Signed log-sum-exp
-
-For the nodes $b = 1, \dots, B$ of a group let $\ell_b = \log \lvert W_b \rvert - \frac12
-\Phi_i(\eta_b)$ and $s_b = \operatorname{sgn}(W_b)$. Then
-
-$$\begin{aligned}
-\log L_i &= \log \Bigl\lvert \sum_b s_b\, e^{\ell_b} \Bigr\rvert
-= \ell_{\max} + \log \Bigl\lvert \sum_b s_b\, e^{\ell_b - \ell_{\max}} \Bigr\rvert, \\
-\ell_{\max} &= \max_b \ell_b ,
-\end{aligned}$$
-
-and the moments of the posterior use the normalised weights with their signs,
-
-$$\begin{aligned}
-\tilde w_b &= s_b\, e^{\ell_b - \log L_i}, \\
-\hat m_i &= \sum_b \tilde w_b\, \eta_b, \\
-\hat M_i &= \sum_b \tilde w_b\, \eta_b \eta_b^\top .
-\end{aligned}$$
-
-A sum $\sum_b s_b e^{\ell_b - \ell_{\max}}$ that is not positive or not finite means the grid does
-not resolve the posterior: the evaluation stops and names the group, and a higher level resolves it.
-The effective sample size $1 / \sum_b \tilde w_b^2$ of every group is part of the diagnostics.
-
-The gradient of the marginal log-likelihood is the weighted average of the node gradients, and
-its Hessian follows from the log-sum-exp identity,
-
-$$\begin{aligned}
-\nabla_\psi \log L_i &= \sum_b \tilde w_b\, \nabla_\psi \ell_b, \\
-\nabla^2_\psi \log L_i &= \sum_b \tilde w_b\, \nabla^2_\psi \ell_b + \operatorname{Cov}_{\tilde w}(\nabla_\psi \ell_b),
-\end{aligned}$$
-
-with $\nabla_\psi \ell_b = -\frac12 \nabla_\psi \Phi_i(\eta_b)$ and the covariance taken under the
-signed weights, $\operatorname{Cov}(g) = \mathbb{E}[g g^\top] - \mathbb{E}[g]\, \mathbb{E}[g]^\top$;
-the identity uses only that the weights sum to one. The node gradients and Hessians come from one
-prediction over all groups, nodes and conditions, through the sensitivities of the chain.
-
-### Frozen nodes
-
-The fit alternates between placing the grid and optimising on it:
-
-1. **Rebuild.** At the current $\psi$ the inner trust region of FOCEI finds every
-   $\hat\eta_i(\psi)$ and $H_i$, and the adapted grid of each group is placed. The level of a
-   group is the lowest from its stage up whose next level changes its $-2 \log L_i$ by at most
-   `tol` over the number of groups; levels are never lowered, so the objective stays smooth.
-2. **Step.** One trust-region run over every parameter, structural and Cholesky, on the frozen
-   nodes, with the exact Hessian where the model has second derivatives. The nodes of the
-   mu-referenced fixed effects, random intercepts whose formula covers every condition with data
-   and covariates constant within a group, are frozen in $\phi_i = D_i \beta + \eta_i$: their data
-   term does not depend on $\beta$ between rebuilds, so they need no sensitivities, and the frozen
-   nodes stay accurate over larger steps.
-3. **End of a stage.** A stage ends when a Newton step on the rebuilt nodes would lower
-   $-2 \log L$ by less than `tolDecrement`, or by less than the nodes resolve: the change of
-   $-2 \log L$ by the next level, summed over the groups. With the levels capped by `maxLevel`
-   this resolution can stay above `tolDecrement`, and a step on frozen nodes then gains less than
-   the rebuild moves. A step that raised $-2 \log L$ on rebuilt nodes of the same levels by more
-   than a Newton step would gain also ends the stage, at its iterate of lowest $-2 \log L$.
-
-`method = "quadrature"` first runs FOCEI to convergence and starts from its $\psi$ and modes.
-
-At the estimate an importance-sampling check certifies every group: a multivariate $t_5$ proposal
-at the mode and conditional covariance, evaluated on randomly shifted lattice points, gives
-$-2 \log L_i$ with a standard error and the Pareto shape of its weights [@vehtari2024pareto]. A
-group is flagged when the two values differ by more than three standard errors plus the error its
-level allows, or when the Pareto shape exceeds 0.7.
+The fit alternates two steps. A rebuild places the grid of every group at the current $\psi$, at the
+lowest level from its stage up whose next level changes its $-2 \log L_i$ by at most `tol` over the
+number of groups; levels never fall. A step runs the trust region over all parameters on the frozen
+nodes; the nodes of mu-referenced fixed effects, $\phi_i = D_i \beta + \eta_i$, are frozen in $\phi$,
+need no sensitivities and hold over larger steps. A stage ends when a Newton step on the rebuilt
+nodes would gain less than `tolDecrement` or less than the nodes resolve. `method = "quadrature"`
+starts from the converged FOCEI fit. At the estimate an importance-sampling check, a $t_5$ proposal
+at the mode on shifted lattice points, flags a group whose two values differ by more than three
+standard errors plus the error of its level, or whose Pareto shape [@vehtari2024pareto] exceeds 0.7.
 
 | entry of `control$quadrature` | default | controls |
 |---|---|---|
@@ -568,152 +308,39 @@ fitted $\mathcal{N}(0, \Omega_{kk})$.
 
 ## Laplace EM
 
-`method = "laplaceEM"` maximises the marginal likelihood by ECM. Its CM-1 step moves the
-structural parameters by a trust-region run on frozen nodes of level $K + 1$, the rule of degree 3
-around the modes; a single node would lose the posterior variance. Its CM-2 step is the
-closed-form update of $\Omega$.
-
-The complete-data log-density of the random effects is
-
-$$\log p(\eta \mid \Omega) = -\tfrac12 \sum_i \Bigl[ \log \lvert \Omega \rvert + \eta_i^\top \Omega^{-1} \eta_i \Bigr] + \text{const}.$$
-
-Its expectation under the posteriors replaces $\eta_i \eta_i^\top$ by the posterior second moment
-$M_i$, and setting the derivative in $\Omega$ to zero gives the sufficient statistic
-
-$$S = \frac{1}{G} \sum_{i=1}^G M_i .$$
-
-Per block of $\Omega$ the maximiser is the block of $S$ itself, and its Cholesky factor gives the
-parameters `omega_<a>_<b>`; with some entries fixed the update maximises over the others. Laplace
-EM takes the moments of the Laplace approximation, $M_i = \hat\eta_i \hat\eta_i^\top + (H_i/2)^{-1}$:
-the mode alone would leave out the posterior covariance and shrink $\Omega$.
-
-EM converges linearly, so the change of the parameters per iteration says little about the
-distance to the fixed point. With $\delta_t = \max \lvert \psi^{(t)} - \psi^{(t-1)} \rvert$ and the
-rate $\delta_t / \delta_{t-1}$, the remaining distance is about $\delta_t^2 / (\delta_{t-1} - \delta_t)$,
-and the fit stops when $\delta_t$ and this distance lie below `epsEcm` (default `1e-5`), after at most `maxEcm` (default
-200) iterations. The value it reports is the quadrature at level $K + 2$. It reads `epsEcm`,
-`maxEcm`, `cm1Control` and `maxCm1Iter` from `control$quadrature`.
+`method = "laplaceEM"` runs ECM. Its first step moves the structural parameters by a trust region on
+frozen nodes of level $K + 1$; its second sets every block of $\Omega$ to that of
+$S = G^{-1} \sum_i M_i$, with the posterior second moments $M_i = \hat\eta_i \hat\eta_i^\top +
+2 H_i^{-1}$, since the modes alone would shrink $\Omega$. It stops when the change of the parameters
+and the remaining distance extrapolated from its linear rate lie below `epsEcm` (default `1e-5`),
+after at most `maxEcm` (default 200) iterations, and reports the quadrature of level $K + 2$. It reads
+its settings from `control$quadrature`.
 
 ## SAEM
 
-### Stochastic E-step
+`method = "saem"` replaces the expectation by draws from the posterior, which need no Gaussian
+assumption and cost the same whatever $K$. Stochastic-approximation EM [@delyon1999convergence]
+averages the sufficient statistics across the iterations by a Robbins-Monro recursion
+[@robbins1951stochastic],
 
-FOCEI and the sparse grid are deterministic approximations of the same expectation, both built on
-the local Gaussian. FOCEI is biased wherever the posterior is not Gaussian; the grid resolves such
-a posterior only at higher levels, whose number of nodes grows faster the larger $K$, and every
-node costs an ODE solve. A draw $\eta_i \sim q_i$ needs no Gaussian assumption and costs the same
-whatever $K$. The E-step becomes an estimate with a variance, and $\ell$ need not increase in
-every iteration.
+$$s_k = s_{k-1} + \gamma_k \bigl( S(y, \eta^{(k)}) - s_{k-1} \bigr), \qquad
+\eta^{(k)} \sim q(\cdot \mid \psi^{(k-1)}), \qquad \psi^{(k)} = \hat\psi(s_k),$$
 
-Monte Carlo EM replaces $Q_i$ by an average over $M$ draws. Its error must vanish for the
-iteration to converge, so $M$ has to grow without bound, and every draw is discarded at the end of
-its iteration. Stochastic-approximation EM [@delyon1999convergence] averages across iterations
-instead of within them: very few draws per iteration, a single one even, accumulated by a
-Robbins-Monro recursion [@robbins1951stochastic], so the Monte Carlo error is averaged out along
-the trajectory rather than at each point of it.
+which converges to a stationary point of $\ell$ [@delyon1999convergence; @kuhn2004coupling].
+$\Omega$ has the statistic $\sum_i \eta_i \eta_i^\top$, and the mu-referenced fixed effects follow in
+closed form by generalised least squares. The other structural parameters have no statistic of fixed
+dimension: their gradients and Hessians at the draws enter a Robbins-Monro average of quadratic
+models, whose Newton step has the score of the marginal likelihood as its fixed point.
 
-### Sufficient statistics
-
-The recursion rests on the exponential-family structure of the random effects. If the
-complete-data likelihood is of the form
-
-$$\log p(y, \eta \mid \psi) = -\varphi(\psi) + \bigl\langle S(y, \eta),\, \nu(\psi) \bigr\rangle$$
-
-with a sufficient statistic $S$, the E-step needs only the vector $\mathbb{E}_q[S(y, \eta)]$, and
-the M-step is a fixed map $s \mapsto \hat\psi(s)$. The expectation of a fixed statistic is what a
-Robbins-Monro recursion estimates:
-
-$$\begin{aligned}
-s_k &= s_{k-1} + \gamma_k \bigl( S(y, \eta^{(k)}) - s_{k-1} \bigr), \\
-\eta^{(k)} &\sim q(\cdot \mid \psi^{(k-1)}), \qquad \psi^{(k)} = \hat\psi(s_k).
-\end{aligned}$$
-
-Under the conditions on $\gamma_k$ below, $s_k$ converges almost surely and the iterates converge to
-a stationary point of $\ell$ [@delyon1999convergence; @kuhn2004coupling].
-
-The block of the random effects fits this form exactly. With $\eta_i \sim \mathcal{N}(0, \Omega)$,
-
-$$\log p(\eta \mid \Omega) = -\tfrac{G}{2} \log \lvert \Omega \rvert
-- \tfrac12 \Bigl\langle \sum_i \eta_i \eta_i^\top,\, \Omega^{-1} \Bigr\rangle + \text{const},$$
-
-with the statistic $\sum_i \eta_i \eta_i^\top$, and the M-step is the closed form of Laplace EM
-with the outer product of a draw in place of the posterior moment. A fixed effect $\beta$ that
-enters a symbol only through $\phi_i = D_i \beta + \eta_i$, with $D_i$ constant within the group,
-is mu-referenced: holding $\phi_i$ while $\beta$ moves, the data term does not depend on $\beta$,
-and $\beta$ and $\Omega$ follow in closed form from averaged statistics of $\phi$, the
-generalised least-squares $\beta$ alternated with the update of $\Omega$.
-
-The other structural parameters, those of the error model and those without a random effect,
-enter through the ODE solution and have no sufficient statistic of fixed dimension. During
-burn-in they take one `trust()` step per iteration on the complete-data objective at the drawn
-random effects. During averaging the gradient $g_k$ and Hessian $H_k$ of that objective at
-$\theta_k$ enter a Robbins-Monro average of its quadratic models,
-
-$$\begin{aligned}
-A_k &= A_{k-1} + \gamma_k (H_k - A_{k-1}), \\
-c_k &= c_{k-1} + \gamma_k (H_k \theta_k - g_k - c_{k-1}),
-\end{aligned}$$
-
-and $\theta$ takes the Newton step on $\frac12 \theta^\top A_k \theta - c_k^\top \theta$, at most
-one unit long. At the fixed point the averaged gradient vanishes, which by Fisher's identity is
-the score of the marginal likelihood. An average of the Newton steps of single draws would solve
-$\mathbb{E}[H^{-1} g] = 0$ instead, which misses the score wherever the curvature differs between
-draws; for a residual scale it moves the estimate towards the harmonic mean of the residual sums of
-squares.
-
-### Iteration
-
-Each iteration $k$ has three steps:
-
-- **Simulation.** For each group a draw $\eta_i^{(k)} \sim q_i(\eta \mid y_i, \psi^{(k-1)})$ with
-  the target $\Phi_i$ of FOCEI, whose value for all groups comes from one prediction without
-  sensitivities. A few random-walk Metropolis steps from the previous draw are followed by
-  independence proposals from $\mathcal{N}\bigl(\hat\eta_i, 1.5\, (H_i/2)^{-1}\bigr)$ at the conditional
-  modes, refreshed every few iterations. Every proposal leaves $q_i$ invariant, so a short chain
-  suffices [@kuhn2004coupling]. The random numbers come from the session stream, so `set.seed()`
-  reproduces a fit.
-- **Approximation.** The statistics of $\phi$ and $\eta$ are updated,
-  $S \leftarrow S + \gamma_k (s(\eta^{(k)}) - S)$.
-- **Maximisation.** $\beta$ and $\Omega$ in closed form from $S$, the other structural
-  parameters by the step above.
-
-### Burn-in and averaging
-
-The step size $\gamma_k$ separates the two tasks of the algorithm. During burn-in $\gamma_k = 1$:
-no memory, and the iterates move at full step towards the region of the optimum. The random-walk
-steps adapt towards an acceptance rate of 0.4. Draws of chains that have not mixed yet
-underestimate the spread of the random effects, so a variance of $\Omega$ shrinks by at most 5 %
-per iteration, the simulated annealing of Lavielle [@lavielle2014mixed]. Burn-in ends when no
-parameter drifts: the slope of every parameter over the last `window` iterations is below twice
-its standard error.
-
-During averaging $\gamma_k = k^{-0.7}$, counted from the end of burn-in, satisfies the
-Robbins-Monro conditions $\sum_k \gamma_k = \infty$ and $\sum_k \gamma_k^2 < \infty$, and the
-estimate is the mean of the iterates after the first `window` of the averaging
-[@polyak1992acceleration]. Averaging ends, after at least `2 * window` iterations, when the
-expected increase of $-2 \log L$ from the Monte Carlo error of the estimate is below `mcTol`,
-
-$$\mathbb{E}\bigl[\Delta(-2 \log L)\bigr] \approx \operatorname{tr}\bigl(I_c\, V\, I_c\, I_{\text{obs}}^{-1}\bigr),$$
-
-with $V$ the batch-means covariance of the M-steps of the single draws, $I_c$ the complete-data
-information and $I_{\text{obs}}$ half the Hessian of the marginal by quadrature at the end of
-burn-in. `converged` reports both rules; `nBurnin` and `nEM` are maxima.
-
-### Cost
-
-SAEM removes the bias of Laplace and the growth of the grid, and pays in three places:
-
-- **No monotone improvement.** The guarantee of EM needs the exact E-step; the convergence of SAEM
-  is asymptotic and almost sure, not per iteration. A trace that goes the wrong way for a while is
-  no failure.
-- **No value from the algorithm.** SAEM never forms the marginal likelihood, only the
-  complete-data objective. `em()` evaluates the marginal once, at the estimate, by quadrature of
-  level $K + 2$, so `value` compares with those of FOCEI and of the quadrature.
-- **Standard errors from that evaluation**, from the Hessian of the quadrature, not from a
-  stochastic approximation of the information along the path.
-
-SAEM is the method for many random effects, strongly nonlinear models and posteriors that are
-skewed, heavy-tailed or multimodal [@kuhn2005maximum].
+Every iteration draws $\eta_i$ by a few random-walk Metropolis steps and independence proposals from
+$\mathcal{N}(\hat\eta_i, 1.5 \cdot 2 H_i^{-1})$ [@kuhn2004coupling]; `set.seed()` reproduces a fit.
+Burn-in takes $\gamma_k = 1$, lets a variance shrink by at most 5 % per iteration
+[@lavielle2014mixed] and ends when no parameter drifts over `window` iterations. Averaging takes
+$\gamma_k = k^{-0.7}$ with the mean of the iterates [@polyak1992acceleration] and ends when the
+expected rise of $-2 \log L$ from the Monte Carlo error is below `mcTol`. SAEM does not raise $\ell$
+in every iteration and never forms it: `em()` reports the quadrature of level $K + 2$ at the
+estimate, with standard errors from its Hessian. It is the method for many random effects and for
+skewed, heavy-tailed or multimodal posteriors [@kuhn2005maximum].
 
 | entry of `control$saem` | default | controls |
 |---|---|---|
@@ -741,10 +368,11 @@ laplaceEM <- em(obj, random, init, method = "laplaceEM", verbose = FALSE)
 round(c(laplaceEM$argument[names(fit$argument)], minus2logL = laplaceEM$value), 3)
 ```
 
-The estimates agree within their standard errors. The values of $-2 \log L$ differ by the
-accuracy of their approximations of the same integral; Laplace EM and SAEM report the quadrature
-at their estimates. The stage trace of the quadrature fit has one row per rebuild, and its
-certificate the importance-sampling check of every group:
+The estimates agree within their standard errors. Each value of $-2 \log L$ is its method's
+approximation of the same integral; Laplace EM and SAEM report the quadrature. FOCEI may lie below
+the quadrature: Laplace's method is no bound, and a lower value is its error, not a better fit. The
+stage trace of the quadrature fit has one row per rebuild, and its certificate the
+importance-sampling check of every group:
 
 ```{r}
 fits$quadrature$stageTrace[, c("level", "ecmIter", "OFV", "decrement", "resolution", "maxLevel", "nodes")]
@@ -817,12 +445,13 @@ insert(trafo, Cl ~ 1 + (1 | ID) + (1 | ID:OCC))
 Which groups differ at all, rather than by how much, is the subject of
 [chapter 8](guide-group-effects.html).
 
+
 ## Multistart
 
 Like any fit, a mixed-effects fit can end in a local optimum. `msem()` runs `em()` from `fits`
-starts, perturbed around `init` with the standard deviation `sd`, and returns the best fit with
-all starts in `$multistart`. `theophyllineMultistart.R` of the example project `pharmacometrics`
-runs 200 starts for each of FOCEI, quadrature and SAEM, from the same draws:
+starts, perturbed around `init` with the standard deviation `sd`, and returns the best fit with all
+starts in `$multistart`. `theophyllineMultistart.R` of the example project `pharmacometrics` runs
+200 starts for each of FOCEI, quadrature and SAEM, from the same draws:
 
 ```{r, include = FALSE, purl = FALSE}
 project <- normalizePath("../../examples/pharmacometrics")
@@ -837,36 +466,30 @@ knitr::read_chunk("../../examples/pharmacometrics/theophyllineMultistart.R")
 cat("> Results pending: `results/multistart.rds` of the project is written by `theophyllineMultistart.R`.\n")
 ```
 
-The waterfalls, one per method, sort the starts by $-2 \log L$, drawn over the range of the two best
-plateaus:
-
-```{r, fig.width = 10, fig.height = 3.5, eval = stored}
-saved <- readRDS(file.path(project, "results", "multistart.rds"))
-waterfall <- do.call(rbind, lapply(names(saved$multistart), function(m) {
-  starts <- saved$multistart[[m]]
-  data.frame(method = factor(m, names(saved$multistart)), rank = rank(starts$value, ties.method = "first"),
-             value = starts$value, converged = starts$converged)
-}))
-ggplot2::ggplot(waterfall, ggplot2::aes(rank, value, colour = converged)) +
-  ggplot2::geom_point(size = 1) +
-  ggplot2::facet_wrap(~method, nrow = 1) +
-  ggplot2::coord_cartesian(ylim = min(waterfall$value, na.rm = TRUE) + c(-1, 20)) +
-  ggplot2::scale_colour_manual(values = c(`TRUE` = "black", `FALSE` = dMod_colors[2]),
-                               labels = c(`TRUE` = "yes", `FALSE` = "no")) +
-  ggplot2::labs(x = "start, sorted by value", y = "-2 log L", colour = "converged") +
-  theme_dMod()
-```
-
 ```{r, include = FALSE, eval = stored}
+saved <- readRDS(file.path(project, "results", "multistart.rds"))
+values <- unlist(lapply(saved$multistart, `[[`, "value"))
+wide <- diff(range(values, na.rm = TRUE)) > 50
 lowest <- vapply(saved$multistart, function(t) sum(t$value < min(t$value, na.rm = TRUE) + 1, na.rm = TRUE), 0)
 ```
 
-`r if (stored) sum(waterfall$value > min(waterfall$value, na.rm = TRUE) + 20, na.rm = TRUE) else "?"`
-of the `r if (stored) nrow(waterfall) else "?"` starts end more than 20 above the best and lie
-outside the plot. All three methods find the same two optima, $-2 \log L$ shifted by their
-approximations. Most starts end on the upper plateau, the fit of the sections above; about
-`r if (stored) round(mean(lowest)) else "?"` of `r if (stored) nrow(saved$multistart[[1]]) else "?"`
-per method reach the lower one, the flip-flop solution:
+The waterfall of FOCEI, all 200 starts sorted by its $-2 \log L$:
+
+```{r, fig.width = 6, fig.height = 3.5, eval = stored}
+plotValues(saved$multistart$FOCEI, pseudoLog = wide)
+```
+
+and those of the quadrature and SAEM, which both report the quadrature, so that their values
+compare:
+
+```{r, fig.width = 10, fig.height = 3.5, eval = stored}
+plotValues(saved$multistart[c("quadrature", "SAEM")], pseudoLog = wide)
+```
+
+All three methods find the same two optima, each at its own $-2 \log L$. Most starts end on the
+upper plateau, the fit of the sections above; about `r if (stored) round(mean(lowest)) else "?"` of
+`r if (stored) nrow(saved$multistart[[1]]) else "?"` per method reach the lower one, the flip-flop
+solution:
 
 ```{r, eval = stored}
 flipflop <- saved$best$FOCEI
@@ -875,30 +498,27 @@ signif(rbind(fit = c(exp(fit$argument[c("Ka", "V", "Cl")]), minus2logL = fit$val
                           minus2logL = min(saved$multistart$FOCEI$value, na.rm = TRUE))), 4)
 ```
 
-With one oral dose and no intravenous data, the absorption rate `Ka` and the elimination rate
-`Cl / V` can swap. In the flip-flop solution the absorption is the slow step, the volume shrinks
-to `r if (stored) round(exp(flipflop[["V"]]), 1) else "?"` L and the random effect of `Ka`
-vanishes. The likelihood prefers it by
+With one oral dose and no intravenous data, absorption and elimination can swap. In the flip-flop
+solution the absorption is the slow step, the volume shrinks to
+`r if (stored) round(exp(flipflop[["V"]]), 1) else "?"` L and the random effect of `Ka` vanishes.
+The likelihood prefers it by
 `r if (stored) round(fit$value - min(saved$multistart$FOCEI$value, na.rm = TRUE), 1) else "?"`,
 but a volume of a few litres is not that of theophylline, which spreads through the body water,
-about 0.5 L/kg. Knowledge of the drug, or a prior on `V`, decides for the upper plateau.
+about 0.5 L/kg; knowledge of the drug, or a prior on `V`, decides for the upper plateau.
 
 ### A variance at its boundary
 
-At the flip-flop solution the data leave no variation of `Ka` between the subjects, and its
-variance runs to 0, which lies at minus infinity on the log scale of the hyperparameters and which
-no method reaches. `em()` checks every normal random effect of its own block whose standard
-deviation ends below 0.1. It fits the model again without that random effect, its etas fixed at 0,
-from the estimates, and where this raises $-2 \log L$ by at most
-`control$boundary` (default 0.1) it returns that fit, with the variance set to 0 and named in
-`boundary`. On the lower plateau every method sets the variance of `Ka` to 0:
+At the flip-flop solution the variance of `Ka` runs to 0, minus infinity on the log scale of the
+hyperparameters, which no method reaches. `em()` refits every normal random effect of its own block
+whose standard deviation ends below 0.1 without it, its etas at 0, and where this raises
+$-2 \log L$ by at most `control$boundary` (default 0.1) returns that fit, the variance set to 0 and
+named in `boundary`. On the lower plateau every method does:
 
 ```{r, eval = stored}
 sapply(saved$multistart, function(t) sum(t$boundary == "omega_Ka_Ka"))
 sapply(saved$best, function(b) signif(b[c("Ka", "V", "Cl")], 4))
 ```
 
-The lower $-2 \log L$ of FOCEI is its approximation error, not a better optimum.
 `theophyllineMultistart.R` refits the best fit of every method by every other method from its
 estimates:
 
@@ -917,18 +537,16 @@ saemGap <- max(abs(byMethod$SAEM - quadratureValue))
 saemGap <- ceiling(saemGap / 10^floor(log10(saemGap))) * 10^floor(log10(saemGap))
 ```
 
-From every starting point each method ends at the same flip-flop estimates and reports its own
-$-2 \log L$ there: FOCEI about
+From every starting point each method ends at the same estimates and reports its own $-2 \log L$
+there: FOCEI about
 `r if (stored) signif(quadratureValue - mean(byMethod$FOCEI), 2) else "?"` below the quadrature,
 which integrates the random effects more accurately than Laplace's method; SAEM, valued by the
-quadrature of level $K + 2$ at its estimate, within `r if (stored) saemGap else "?"` of the
-quadrature.
+quadrature of level $K + 2$ at its estimate, within `r if (stored) saemGap else "?"` of it.
 
 `msem()` draws every start and seed before the fits are spread over `cores`, so `set.seed()`
 reproduces a run; `cores = c(fits = , conditions = )` splits the cores between parallel fits and
-threads inside each, as in `mstrust()`. The fit from `init` runs first, and every other start ends
-after `budget` (default 5) times its outer iterations; `budget = Inf` lets every start run to
-convergence. `plotValues()` draws `$multistart` as a waterfall.
+threads inside each, as in `mstrust()`. Every start runs to convergence, all at once.
+`plotValues()` draws `$multistart` as a waterfall.
 
 ## Summary
 

@@ -142,9 +142,9 @@ errors <- eqnvec(nucNFkB = "sigma_nucNFkB", cytNFkB = "sigma_cytNFkB", A20GFP = 
 
 ## ---- steadystate
 # the cells rest before TNFα is added: a steady state with the amounts of NFκB and IKK conserved;
-# one that departs from rest by less than 1e-3 per minute, slower than the six hours of the
-# experiment resolve, counts as stable, as just beyond a Hopf bifurcation
-pSS <- Pimpl(reactions, modelname = "oppelt_ss", compile = FALSE, controlsPTC = list(stabilityTol = 1e-3))
+# an unstable one is returned rather than refused, the objective below keeps it stable
+pSS <- Pimpl(reactions, modelname = "oppelt_ss", compile = FALSE, deriv2 = TRUE,
+             controlsPTC = list(stability = FALSE))
 
 
 ## ---- odemodel
@@ -182,7 +182,10 @@ sigma <- structure(rep(4, length(outer)), names = outer)
 mu[grepl("^off_", outer)] <- -2
 sigma[grepl("^off_", outer)] <- 2
 mu[grepl("^eta_", outer)] <- 0
-obj <- normL2(data, prd, e) + constraintL2(mu, sigma = sigma)
+# the cells rest: a term that rises where an eigenvalue of the resting state decays more slowly
+# than over the six hours of data and reaches 100 where the resting state loses its stability
+stability <- constraintStability(pSS, p, duration = max(as.data.frame(data)$time))
+obj <- normL2(data, prd, e) + constraintL2(mu, sigma = sigma) + stability
 
 
 ## ---- tolerances

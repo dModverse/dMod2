@@ -164,8 +164,8 @@ ode
 ```
 
 ``` r
-# solver tolerances 1e-10: at the defaults its error moves -2 log L by about 1e-4, more than FOCEI
-# resolves, and the fit stalls short of its optimum
+# solver tolerances 1e-10: at the defaults the solver error moves -2 log L by about 1e-4, more than
+# FOCEI resolves, and the fit stalls short of its optimum
 x <- Xs(odemodel(ode, modelname = "tmdd", compile = FALSE, deriv2 = TRUE, derivMode = dm),
         options = list(atol = 1e-10, rtol = 1e-10))
 g <- Y(c(lcp = "log(10) * C_l10"), x, modelname = "tmdd_g", compile = FALSE, deriv2 = TRUE, derivMode = dm)
@@ -358,10 +358,10 @@ attr(residuals(fit, type = "NPDE", nsim = 500, seed = 1), "tests")
 
 ```
 #>        test statistic         p
-#> 1      mean 0.5035383 0.6148947
-#> 2  variance 1.0623704 0.3988859
-#> 3 normality 0.9942048 0.1885959
-#> 4    global        NA 0.5657876
+#> 1      mean  0.853457 0.3939750
+#> 2  variance  1.015136 0.8207128
+#> 3 normality  0.996279 0.5659138
+#> 4    global        NA 1.0000000
 ```
 
 ``` r

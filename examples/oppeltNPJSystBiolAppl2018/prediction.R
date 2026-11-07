@@ -24,7 +24,7 @@ times <- c(0, 2, seq(5, 55, 5), 57:59, seq(60, 85, 5), 86:89, seq(90, 120, 5), s
 # of standard deviation 0.01 that enters the data term
 predictionProfile <- function(t) {
   objV <- normL2(data, prdPrediction, ePrediction, times = t) +
-    constraintL2(muReduced, sigma = 10) +
+    constraintL2(muReduced, sigma = 10) + stabilityReduced +
     datapointL2(name = "lognIkb", time = t, parameter = "v", sigma = 0.01, condition = "TNF",
                 attrName = "data")
   start <- c(setNames(as.numeric(bestReduced), names(bestReduced)), v = predicted(t))

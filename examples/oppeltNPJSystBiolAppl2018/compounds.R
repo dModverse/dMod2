@@ -28,7 +28,7 @@ candidates <- setdiff(getParameters(odemodel(reactionsReduced, compile = FALSE))
 reactionsRest <- reactionsReduced
 reactionsRest$rates <- replaceSymbols(candidates, paste0(candidates, "_rest"), reactionsRest$rates)
 pSSCompounds <- Pimpl(reactionsRest, modelname = "oppelt_cmp_ss", compile = FALSE, deriv2 = TRUE,
-                      controlsPTC = list(stabilityTol = 1e-3))
+                      controlsPTC = list(stability = FALSE))
 modelCompounds <- odemodel(reactionsReduced, events = events, modelname = "oppelt_cmp_ode",
                            compile = FALSE, derivMode = dm)
 xCompounds <- Xs(modelCompounds, options = list(atol = 1e-10, rtol = 1e-8))
@@ -63,6 +63,9 @@ compile(gCompounds, xCompounds, pSSCompounds, pCompounds, eCompounds, output = "
         cores = getOption("dMod2.cores"))
 prdCompounds <- gCompounds * xCompounds * pSSCompounds * pCompounds
 objCompounds <- normL2(dataCompounds, prdCompounds, eCompounds)
+# the resting state of the cells without a compound stays stable, as in model.R
+stabilityCompounds <- constraintStability(pSSCompounds, pCompounds,
+                                          duration = max(as.data.frame(dataCompounds)$time))
 
 
 ## ---- compoundfit
@@ -76,15 +79,22 @@ init[paste0(blot3, "_blot3")] <- bestReduced[blot3]
 init[c("prob_compound", "tau_compound")] <- c(0.2, 0.5)
 priorCompounds <- constraintL2(c(muReduced, setNames(muReduced[blot3], paste0(blot3, "_blot3")))[population],
                                sigma = 10)
-# ten starts: the one above and nine with the fixed effects moved by a standard deviation of 0.5 on
-# the log scale, the probability of a change on the logit scale and the spread by a factor; a start
-# whose fit fails, where the resting state is not stable, is drawn again; every start runs to its end,
-# the ten at once on a tenth of the cores each
+# the spread of the starts: per fixed effect half its 68 % profile interval of the reduced model,
+# between 0.1 and 0.5 on the log scale, 0.5 where the profile is open and for the hyperparameters
+ci <- confint(readRDS("results/reduced.rds")$profiles, level = 0.68)
+width <- setNames(pmin(pmax((ci$upper - ci$lower) / 2, 0.1), 0.5), ci$name)
+width <- c(width, setNames(width[intersect(blot3, names(width))], paste0(intersect(blot3, names(width)), "_blot3")))
+sdStart <- setNames(rep(0.5, length(init)), names(init))
+known <- intersect(names(sdStart), names(width)[!is.na(width)])
+sdStart[known] <- width[known]
+# 200 starts: the one above and 199 moved by sdStart, the probability of a change on the logit
+# scale and the spread by a factor; a start whose fit fails is drawn again; every start runs to its
+# end, with up to 1000 iterations of its trust region, one core each
 set.seed(3)
-fitCompounds <- msem(objCompounds + priorCompounds, random, init, fixed = gaugeReduced,
-                     control = list(laplace = list(trustControl = list(tolControl = tolerances))),
-                     fits = 10, sd = 0.5, budget = Inf, keepFits = TRUE,
-                     cores = c(fits = 10, conditions = max(1, getOption("dMod2.cores") %/% 10)))
+fitCompounds <- msem(objCompounds + priorCompounds + stabilityCompounds, random, init, fixed = gaugeReduced,
+                     control = list(laplace = list(maxOuter = 1000, trustControl = list(tolControl = tolerances))),
+                     fits = 200, sd = sdStart, keepFits = TRUE,
+                     cores = getOption("dMod2.cores"))
 
 ## ---- compoundsave
 # the best fit with the table and the fits of all starts, saved without the model, which an

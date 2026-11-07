@@ -101,7 +101,7 @@ job
 ```
 
 ```
-#> Job ba_fits: 1 task on localhost (20 cores)
+#> Job ba_fits: 1 task on localhost (21 cores)
 #> check(), wait(), get(combine = TRUE, all = FALSE), log(i), purge(local = FALSE), terminate()
 ```
 
@@ -204,7 +204,7 @@ fits <- distributedComputing(
   mstrust(obj, pouter, sd = 4, fits = 10 * cores, cores = cores),
   on = localNode(.cores), jobname = "ba_fits_ss", input = c("obj", "pouter"),
   wait = TRUE
-) |> as.parframe()
+)
 plotValues(fits)
 ```
 
@@ -226,8 +226,8 @@ plotProfile(profiles, mode %in% c("data", "prior"))
 
 ## Fixed reflux
 K_REFLUX_OPEN stays practically non-identifiable: its profile is open towards
-instantaneous reflux. The reflux is fixed to a fast rate instead. K_EXPORT_SINUS
-stays open towards slow export below the 68% level.
+instantaneous reflux, so the reflux of open junctions is fixed to a fast rate.
+K_EXPORT_SINUS stays open towards slow export below the 68% level.
 
 ``` r
 trafo <- eqnvec() |>
@@ -261,17 +261,17 @@ confint(profiles, level = 0.95)
 
 ```
 #>                          name      value      lower      upper
-#> K_EXPORT_CANA   K_EXPORT_CANA -1.2565174 -1.8467085 -0.6678135
-#> K_EXPORT_SINUS K_EXPORT_SINUS -0.7632724       -Inf -0.6180585
-#> K_IMPORT             K_IMPORT -0.7173930 -0.8132784 -0.6346369
-#> K_REFLUX             K_REFLUX -0.9154871 -1.4632400 -0.3409825
-#> TCA_CELL             TCA_CELL  2.5685412  2.5459922  2.5905578
+#> K_EXPORT_CANA   K_EXPORT_CANA -1.2565208 -1.8467087 -0.6678100
+#> K_EXPORT_SINUS K_EXPORT_SINUS -0.7632706       -Inf -0.6180587
+#> K_IMPORT             K_IMPORT -0.7173925 -0.8133182 -0.6346369
+#> K_REFLUX             K_REFLUX -0.9154903 -1.4632948 -0.3409944
+#> TCA_CELL             TCA_CELL  2.5685413  2.5459922  2.5905578
 ```
 
 ## Prediction profile
 The cellular bile acid at time t becomes a parameter v, tied to the model by a
-data point with a small sigma. Profiling v gives the confidence interval of the
-prediction; with a small validation term, the total is the prediction profile.
+data point with a small sigma. Along the profile of v the data term is the
+prediction profile, and its interval the confidence interval of the prediction.
 
 ``` r
 .predict <- function(t) {
@@ -299,7 +299,7 @@ confint(prof20, val.column = "data")
 
 ```
 #>   name    value    lower    upper
-#> v    v 298.2223 287.8172 309.6298
+#> v    v 298.2224 287.8172 309.6322
 ```
 
 ``` r

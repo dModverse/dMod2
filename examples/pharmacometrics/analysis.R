@@ -113,19 +113,10 @@ summariseStarts <- function(runs) {
   }))
 }
 
-# the waterfall of both packages and the seconds per fit, each package by its own -2 log L above
-# its own best
+# the waterfall of both packages, a panel each, and the seconds per fit
 plotStarts <- function(runs, title) {
-  runs <- runs[order(runs$package, runs$value), ]
-  runs$rank <- stats::ave(seq_along(runs$value), runs$package, FUN = seq_along)
-  runs$delta <- runs$value - stats::ave(runs$value, runs$package, FUN = function(v) min(v, na.rm = TRUE))
-  w <- ggplot2::ggplot(runs[is.finite(runs$value), ], ggplot2::aes(rank, delta + 1e-3, color = package,
-                                                                   shape = package)) +
-    ggplot2::geom_point() + ggplot2::scale_y_log10(labels = scales::label_log()) +
-    ggplot2::scale_shape_manual(values = c(19, 1)) +
-    ggplot2::labs(x = "fit, ordered", y = "-2 log L above the best of the package + 0.001", color = NULL,
-                  shape = NULL, title = title) +
-    scale_color_dMod() + theme_dMod() + ggplot2::theme(legend.position = "top")
+  w <- plotValues(split(runs, factor(runs$package, unique(runs$package))), pseudoLog = TRUE) +
+    ggplot2::labs(title = title)
   s <- ggplot2::ggplot(runs, ggplot2::aes(package, seconds)) + ggplot2::geom_boxplot() +
     ggplot2::scale_y_log10(labels = scales::label_log()) +
     ggplot2::labs(x = NULL, y = "seconds per fit, one core") + theme_dMod()

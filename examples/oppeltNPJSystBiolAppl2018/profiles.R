@@ -7,7 +7,7 @@ if (!exists("obj")) source("model.R")
 ## ---- wideprior
 # the prior widened to standard deviation 10, so that the profiles follow the data; the best fit
 # of the multistart refitted with it
-objWide <- normL2(data, prd, e) + constraintL2(mu, sigma = 10)
+objWide <- normL2(data, prd, e) + constraintL2(mu, sigma = 10) + stability
 best <- as.parvec(readRDS("results/fits.rds"))
 refit <- trust(objWide, best, fixed = gauge, rinit = 0.1, rmax = 10, iterlim = 1000,
                tolControl = tolerances)

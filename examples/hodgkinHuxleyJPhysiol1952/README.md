@@ -48,7 +48,7 @@ f <- eqnvec(
   m = paste0(alpha_m, "*(1 - m) - ", beta_m, "*m"),
   h = paste0(alpha_h, "*(1 - h) - ", beta_h, "*h"),
   n = paste0(alpha_n, "*(1 - n) - ", beta_n, "*n"),
-  # The right-hand side jumps where V crosses V_th; the solver locates the switch
+  # the right-hand side jumps where V crosses V_th; the solver locates the switch
   a = "piecewise((1 - a)/tau_on, V > V_th, -a/tau_off)"
 )
 
@@ -121,7 +121,7 @@ Twenty starts around the true conductances.
 ``` r
 obj <- normL2(data, x*p)
 
-fits <- mstrust(obj, pars_true, fits = 20, sd = 0.5, cores = .cores) |> as.parframe()
+fits <- mstrust(obj, pars_true, fits = 20, sd = 0.5, cores = .cores)
 plotValues(fits, pseudoLog = TRUE)
 ```
 
@@ -136,7 +136,7 @@ rbind(true = pars_true, fit = bestfit)
 ```
 #>         lg_Na     lg_K       lg_L    lg_AHP
 #> true 2.079181 1.556303 -0.5228787 0.6989700
-#> fit  2.076954 1.561847 -0.5045334 0.7194365
+#> fit  2.076958 1.561851 -0.5045314 0.7194383
 ```
 
 ``` r
@@ -164,8 +164,8 @@ confint(profiles)
 
 ```
 #>          name      value      lower      upper
-#> lg_AHP lg_AHP  0.7194365  0.6831532  0.7570700
-#> lg_K     lg_K  1.5618474  1.5241501  1.6036846
-#> lg_L     lg_L -0.5045334 -0.5335327 -0.4723016
-#> lg_Na   lg_Na  2.0769540  2.0422585  2.1156451
+#> lg_AHP lg_AHP  0.7194383  0.6831549  0.7570720
+#> lg_K     lg_K  1.5618514  1.5241544  1.6036853
+#> lg_L     lg_L -0.5045314 -0.5335305 -0.4722975
+#> lg_Na   lg_Na  2.0769580  2.0422626  2.1156488
 ```

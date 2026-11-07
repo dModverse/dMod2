@@ -10,8 +10,8 @@ fits <- readRDS("results/fits.rds")
 best <- as.parvec(fits)
 
 ## ---- waterfall
-# every fit, on a pseudo-log scale above the best; each plateau is a local optimum
-plotValues(fits, pseudoLog = TRUE)
+# the best 100 fits; each plateau is a local optimum
+plotValues(fits, rank(value, ties.method = "first") <= 100)
 
 ## ---- parameters
 # the parameters of the fits on the best plateaus, one colour per plateau

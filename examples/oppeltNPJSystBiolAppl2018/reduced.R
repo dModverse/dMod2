@@ -53,10 +53,10 @@ observablesReduced["ipNFkB_ibNFkB"] <- "log(off_ipNFkB_ibNFkB)"
 
 
 ## ---- reducedmodel
-# at rest the steady state of the reduced network, with the stability tolerance of model.R; TNFα
-# added at time 0 as there
-pSSReduced <- Pimpl(reactionsReduced, modelname = "oppelt_red_ss", compile = FALSE,
-                    controlsPTC = list(stabilityTol = 1e-3))
+# at rest the steady state of the reduced network, kept stable as in model.R; TNFα added at time 0
+# as there
+pSSReduced <- Pimpl(reactionsReduced, modelname = "oppelt_red_ss", compile = FALSE, deriv2 = TRUE,
+                    controlsPTC = list(stability = FALSE))
 modelReduced <- odemodel(reactionsReduced, events = events, modelname = "oppelt_red_ode", compile = FALSE)
 xReduced <- Xs(modelReduced, options = list(atol = 1e-10, rtol = 1e-8))
 gReduced <- Y(observablesReduced, xReduced, modelname = "oppelt_red_obs", compile = FALSE)
@@ -84,8 +84,9 @@ prdReduced <- gReduced * xReduced * pSSReduced * pReduced
 
 
 ## ---- reducedobjective
-# the wide prior of profiles.R on the parameters that remain
+# the wide prior of profiles.R on the parameters that remain, and the stability of the resting state
 outerReduced <- getParameters(prdReduced)
 muReduced <- mu[outerReduced]
 gaugeReduced <- gauge[intersect(names(gauge), outerReduced)]
-objReduced <- normL2(data, prdReduced, eReduced) + constraintL2(muReduced, sigma = 10)
+stabilityReduced <- constraintStability(pSSReduced, pReduced, duration = max(as.data.frame(data)$time))
+objReduced <- normL2(data, prdReduced, eReduced) + constraintL2(muReduced, sigma = 10) + stabilityReduced

@@ -35,19 +35,24 @@ obj <- normL2(data, g * x * p, errmodel = e)
 init <- c(Ka = 0, V = 3, Cl = 0.7, sigma = log(0.5))
 
 ## ---- multistart
-# 200 starts per method, from the same draws
+# 200 starts per method, from the same draws, each run to its end; SAEM with up to 500 burn-in and
+# 1000 averaging iterations
 methods <- c(FOCEI = "focei", quadrature = "quadrature", SAEM = "saem")
-ms <- lapply(methods, function(method) {
+controls <- list(FOCEI = list(), quadrature = list(), SAEM = list(saem = list(nBurnin = 500, nEM = 1000)))
+ms <- lapply(names(methods), function(m) {
   set.seed(1)
-  msem(obj, random, init, method = method, fits = 200, sd = 1, cores = getOption("dMod2.cores", 1))
+  msem(obj, random, init, method = methods[[m]], fits = 200, sd = 1,
+       control = controls[[m]], cores = getOption("dMod2.cores", 1))
 })
+names(ms) <- names(methods)
 
 ## ---- crosscheck
 # the best fit of every method refitted by every other method from its estimates, so that the
 # values of the optima compare on the scale of each method
 best <- lapply(ms, function(f) f$argument)
 cross <- do.call(rbind, lapply(names(best), function(from) do.call(rbind, lapply(names(methods), function(by) {
-  fit <- tryCatch(em(obj, random, best[[from]], method = methods[[by]], verbose = FALSE),
+  fit <- tryCatch(em(obj, random, best[[from]], method = methods[[by]], control = controls[[by]],
+                     verbose = FALSE),
                   error = function(err) NULL)
   data.frame(from = from, by = by, value = if (is.null(fit)) NA else fit$value,
              converged = !is.null(fit) && isTRUE(fit$converged),
