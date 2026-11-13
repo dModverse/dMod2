@@ -1,4 +1,4 @@
-# The result of a mixed-effects fit and its methods: Omega and the random effects with standard
+# The result of a mixed-effects fit and the methods for it: Omega and the random effects with standard
 # errors, log-likelihood, residuals, predictions and confidence intervals.
 
 
@@ -182,7 +182,7 @@ print.em <- function(x, ...) {
   if (!is.null(x$valueSE))
     cat(sprintf("-2 log L by importance sampling, standard error %.3g\n", x$valueSE))
   if (!is.null(x$coupling))
-    cat("Coupled sparse random effects: expectation consistent\n")
+    cat("Coupled sparse random effects: expectation consistent (EC) approximation\n")
   print(x$argument)
   reach <- x$design$reach
   if (!is.null(reach) && !all(reach))
@@ -248,7 +248,7 @@ vcov.em <- function(object, ...) {
   vcov.trustfit(object, ...)
 }
 
-## The Hessian of -2 log L of a fit or, where it has none, twice its empirical information when
+## The Hessian of -2 log L of a fit or, where it has none, twice the empirical information when
 ## that is positive definite; NULL otherwise.
 .emCurvature <- function(fit) {
   if (!is.null(fit$hessian)) return(fit$hessian)
@@ -278,7 +278,7 @@ vcov.em <- function(object, ...) {
 }
 
 
-#' Summarise a mixed-effects fit
+#' Summarize a mixed-effects fit
 #'
 #' @param object An `em` object, see [em()].
 #' @param ... Ignored.
@@ -287,7 +287,7 @@ vcov.em <- function(object, ...) {
 #'   and relative standard errors in percent), `seMethod` (`"hessian"`,
 #'   `"scores"` for the empirical information of the groups, see
 #'   [vcov()][vcov.em], or `"none"`), `partialCurvature` (`TRUE` where FOCEI by
-#'   forward over reverse reports its Hessian without the curvature of the
+#'   forward over reverse reports the Hessian without the curvature of the
 #'   prediction in the random effects within the volume term), `omega` and
 #'   `shrinkage` per random effect.
 #' @seealso [em()], [confint.em()]
@@ -365,7 +365,7 @@ logLik.em <- function(object, ...) {
 #' @param object An `em` object, see [em()].
 #' @param times Additional times of the prediction grid.
 #' @param type `"all"` (default) both predictions, `"individual"` only IPRED
-#'   and its residuals, `"population"` only PRED and its residuals.
+#'   with residuals, `"population"` only PRED with residuals.
 #' @param ... Ignored.
 #' @return A data.frame with columns `condition, group, time, name, observed,
 #'   sigma, sigmaPRED, IPRED, PRED, IRES, IWRES, PRES, PWRES, source`;
@@ -435,11 +435,11 @@ predict.em <- function(object, times = NULL, type = c("all", "individual", "popu
 #' @param object An `em` object, see [em()].
 #' @param type `"IWRES"` (default; data minus individual prediction over the
 #'   error model), `"IRES"` (data minus individual prediction), `"CWRES"`
-#'   (conditional weighted residuals of the FOCE linearisation at the modes:
-#'   per group the residual of its data against \eqn{f(\eta^*) - G \eta^*},
+#'   (conditional weighted residuals of the FOCE linearization at the modes:
+#'   per group the residual of the group data against \eqn{f(\eta^*) - G \eta^*},
 #'   whitened by \eqn{G \Omega G' + \Sigma}, \eqn{G} the sensitivities in the
 #'   normal random effects; without those equal to IWRES), `"PRES"` or
-#'   `"PWRES"` (against the population prediction), `"NPDE"` (normalised
+#'   `"PWRES"` (against the population prediction), `"NPDE"` (normalized
 #'   prediction distribution errors from `nsim` simulated data sets,
 #'   decorrelated per group, readings at or below their limit imputed as in
 #'   Nguyen et al. 2012, drawn given the other readings of their group).
@@ -453,7 +453,7 @@ predict.em <- function(object, times = NULL, type = c("all", "individual", "popu
 #'   smallest.
 #' @example inst/examples/residuals.em.R
 #' @references Comets, E., Brendel, K. and Mentré, F. (2008). Computing
-#'   normalised prediction distribution errors to evaluate nonlinear
+#'   normalized prediction distribution errors to evaluate nonlinear
 #'   mixed-effect models. \emph{Computer Methods and Programs in Biomedicine}
 #'   90(2), 154-166.
 #'
@@ -476,7 +476,7 @@ residuals.em <- function(object, type = c("IWRES", "IRES", "CWRES", "PRES", "PWR
 }
 
 ## Conditional weighted residuals per group, or per component with several groupings, over the
-## rows of all its conditions, in the row order of `pr`; rows outside every group get IWRES.
+## rows of all conditions of the group or component, in the row order of `pr`; rows outside every group get IWRES.
 .cwres <- function(object, pr) {
   design <- object$design
   out <- pr$IWRES
@@ -647,7 +647,7 @@ simulate.em <- function(object, nsim = 1, seed = NULL, ...) {
   })
 }
 
-## One draw of the random effects of every group: normal blocks from Omega, centre Laplace and
+## One draw of the random effects of every group: normal blocks from Omega, center Laplace and
 ## spike-and-slab and cluster coordinates from their hyperparameters, clusters by the Chinese
 ## restaurant with the population value seated first.
 .drawEtas <- function(design, pars) {

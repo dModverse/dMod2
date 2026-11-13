@@ -96,7 +96,7 @@ fx_register(multicond = TRUE)
   list(obj = obj, starts = starts)
 }
 
-# trust() with the worker's PID and its dMod2.cores in the fit.
+# trust() with the worker's PID and dMod2.cores of the worker in the fit.
 .trustWhere <- function(objfun, parinit, ...) {
   fit <- trust(objfun, parinit, ...)
   fit$pid <- Sys.getpid()
@@ -174,7 +174,7 @@ test_that("mstrust runs the layout asked for and leaves no workers or options be
 })
 
 
-test_that("profile gives the same profiles in every layout and closes its workers", {
+test_that("profile gives the same profiles in every layout and closes the workers", {
   skip_on_cran()
   skip_on_os("windows")
   skip_if(dMod2:::.availableCores() < 4L, "needs 4 cores")

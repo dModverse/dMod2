@@ -5,8 +5,8 @@
 
 ## ---- design pieces ---------------------------------------------------------------
 
-## The Laplace, spike-and-slab and cluster coordinates: per stem its block, distribution, the
-## names of its hyperparameters and their fixed values, NA when estimated.
+## The Laplace, spike-and-slab and cluster coordinates: per stem the block, distribution, the
+## names of the hyperparameters and their fixed values, NA when estimated.
 .sparseLayout <- function(design) {
   blocks <- Filter(function(b) b$dist != "normal", design$blocks)
   name <- function(b, kind) if (kind %in% names(b$hyper)) b$hyper[[kind]] else NA_character_
@@ -34,7 +34,7 @@
   unique(h[!is.na(h)])
 }
 
-## The etas of every group that reach its data (.etaReach()), a G x K logical like design$etaNames.
+## The etas of every group that reach the group data (.etaReach()), a G x K logical like design$etaNames.
 .reachOf <- function(design) {
   E <- design$etaNames
   design$reach %||% matrix(TRUE, nrow(E), ncol(E), dimnames = dimnames(E))
@@ -59,14 +59,14 @@
   })
 }
 
-## The terms of the objective of `design` besides its data, such as priors and constraints; NULL
+## The terms of the objective of `design` besides the data, such as priors and constraints; NULL
 ## without.
 .extraObjective <- function(design) {
   terms <- Filter(function(t) is.null(attr(t, "l2spec", exact = TRUE)), .objTerms(design$objfn))
   if (length(terms)) Reduce(`+`, terms)
 }
 
-## The data -2 log L of every group at its own parameter vector, summed over its conditions.
+## The data -2 log L of every group at the group parameter vector, summed over the group conditions.
 .groupData <- function(design, objs, parsByGroup, deriv = TRUE, deriv2 = FALSE) {
   conds <- unlist(design$conditions, use.names = FALSE)
   owner <- rep(seq_along(design$groups), lengths(design$conditions))
@@ -77,15 +77,15 @@
 
 ## ---- inner mode --------------------------------------------------------------------
 
-## The mode of the etas at `theta`, group by group, since the etas of a group enter only its own
+## The mode of the etas at `theta`, group by group, since the etas of a group enter only the group
 ## conditions: data -2 log L, normal prior, the slab alone, eta^2 / tau^2, per spike-and-slab eta,
 ## and 2 lambda |eta| per Laplace coordinate, by trustL1 where a group has one, else by trust. The
-## model is differentiated in the etas of the group that reach its data only, the others rest at 0;
-## its Hessian is Gauss-Newton with a BFGS correction from the points that lowered the value, which
+## model is differentiated in the etas of the group that reach the group data only, the others rest at 0;
+## the Hessian is Gauss-Newton with a BFGS correction from the points that lowered the value, which
 ## adds the curvature of the residuals. A group starts from the lowest of `start` and the modes in
 ## `control$optima`, the optima found at earlier points, since the inner problem may have several.
 ## The tolerances of the outer trust region, which bound the error the solver leaves, end the search.
-## With `control$phi` the value of every group at its mode is attribute "phi".
+## With `control$phi` the value of every group at the group mode is attribute "phi".
 .laplaceModes <- function(design, objs, prior, theta, hyp, start, control = list()) {
   lay <- .sparseLayout(design)
   E <- design$etaNames
@@ -189,8 +189,8 @@
 
 ## ---- curvature -------------------------------------------------------------------------
 
-## The Gauss-Newton Hessian of the data -2 log L of a group in its etas, sum over its rows of
-## J' L J with J = d(p, s) / d eta and L the Hessian of the row loss, and its derivatives in the
+## The Gauss-Newton Hessian of the data -2 log L of a group in the group etas, sum over the group rows of
+## J' L J with J = d(p, s) / d eta and L the Hessian of the row loss, and the derivatives of that Hessian in the
 ## parameters `A` and in the etas, [K, K, direction].
 .gnCurvature <- function(design, g, preds, eta, A, fixed) {
   frames <- lapply(design$conditions[[g]], function(cn) .volumeFrames(design, cn, preds[[cn]], fixed))
@@ -237,12 +237,12 @@
 ## The integral over the sparse coordinates, I = int exp(-eta' P_i eta / 2 + b_i' eta) prod p(eta)
 ## per group (src/sparse_kernel.cpp), group by group where no Dirichlet-process stem joins groups:
 ## exact where P couples no two factors and the joint spike-and-slab sum of a group stays within
-## `budget` nodes, else by expectation consistent from the sites `sites` where given (`ec` marks
-## those groups). Only the coordinates of `reach` whose row of P and entry of b are not all 0 enter,
-## the others keep their prior. NULL where the integral does not converge. log I, the moments E eta
-## and Cov eta that its derivatives in b and P are, its derivatives in the hyperparameters
-## `hypers`, also per group, the reported values, clusters and spike probabilities and the M-step
-## statistics.
+## `budget` nodes, else by the expectation consistent (EC) approximation from the sites `sites`
+## where given (`ec` marks those groups). Only the coordinates of `reach` whose row of P and entry
+## of b are not all 0 enter, the others keep their prior. NULL where the integral does not
+## converge. log I, the moments E eta and Cov eta that the derivatives of log I in b and P are, the
+## derivatives in the hyperparameters `hypers`, also per group, the reported values, clusters and
+## spike probabilities and the M-step statistics.
 .sparseIntegral <- function(P, b, lay, hyp, hypers, sites = NULL, reach = NULL, budget = .slabBudget) {
   G <- nrow(b); K <- ncol(b); stems <- colnames(b)
   r <- match(stems, lay$stem)
@@ -304,9 +304,9 @@
 
 ## The approximate marginal -2 log L at `theta`: the normal etas on the quadratic model of the joint
 ## mode, the sparse coordinates on the Schur complement in natural parameters, P = S / 2 and
-## b = (S mode - g) / 2, integrated by .sparseIntegral(); its exact gradient in `active` and
+## b = (S mode - g) / 2, integrated by .sparseIntegral(); the exact gradient in `active` and
 ## `hypers`, a model Hessian, the moments and the selected clusters. An eta that does not reach
-## the data of its group rests at 0 with its prior. With
+## the data of the group rests at 0 with the prior. With
 ## `scores`, the gradient split into the rows of the groups and that of the conditions without
 ## random effects, with their Hessian.
 .laplaceMarginal <- function(design, objs, prior, theta, hyp, active, hypers, fixed, warm,
@@ -336,7 +336,7 @@
     list(eta = unname(E[i, reach[i, ]]), conditions = design$conditions[[design$groups[i]]]))
   if (fr) {
     fw <- .sweepForward(design, full, fixed, units)
-    # the curvature of a group on all its etas, 0 in those that do not reach its data
+    # the curvature of a group on all etas of the group, 0 in those that do not reach the group data
     cu <- .unitCurvature(design, fw, units)
     curv <- lapply(seq_len(G), function(i) {
       H <- matrix(0, K, K)
@@ -355,11 +355,11 @@
   gr[!reach] <- 0
 
   # the normal etas: H_NN of every group with the prior precision 2 Omega^-1; the sparse block
-  # of `Hs` is its Schur complement, the curvature left once the normal etas are integrated out
+  # of `Hs` is the Schur complement of `Hs`, the curvature left once the normal etas are integrated out
   cd <- if (length(iN)) .choleskyDerivatives(nl, .choleskyFactor(nl, c(full, fixed)))
   HN <- lapply(curv, function(cv) if (length(iN)) cv$H[iN, iN, drop = FALSE] + 2 * cd$Oinv)
   volume <- sum(vapply(HN, function(H) if (is.null(H)) 0 else as.numeric(determinant(H / 2)$modulus), 0))
-  # the sparse block of every group: its curvature S, the Schur complement of the normal block;
+  # the sparse block of every group: the curvature S, the Schur complement of the normal block;
   # the data term on it is exp(-eta' P eta / 2 + b' eta) up to the constant mode' S mode / 2 - g' mode
   S <- lapply(seq_len(G), function(i) {
     H <- curv[[i]]$H
@@ -376,7 +376,7 @@
   offset <- sum(vapply(seq_len(G), function(i) sum(mL[i, ] * (S[[i]] %*% mL[i, ])) / 2 - sum(gL[i, ] * mL[i, ]), 0))
   importance <- identical(control$integral, "importance")
   sp <- if (importance) {
-    # in centre form, m = mode - S^-1 g, log I of the natural form is that of the centre form plus m' P m / 2
+    # in center form, m = mode - S^-1 g, log I of the natural form is that of the center form plus m' P m / 2
     mc <- mL - bySparse(function(i) {
       a <- reach[i, iL]
       out <- numeric(KL)
@@ -417,7 +417,7 @@
   if (!grad || importance) return(out)
 
   # derivatives of the value in g, S and the mode on the sparse block, from the moments of the
-  # integral at its fixed point, delta = E eta - mode and Cov eta, then through the Schur
+  # integral at the fixed point, delta = E eta - mode and Cov eta, then through the Schur
   # complement on the cross and normal blocks of H
   delta <- sp$mean - mL
   Q <- length(A)
@@ -427,7 +427,7 @@
   Hex <- matrix(0, G * K, G * K, dimnames = list(names, names))
   Hcross <- matrix(0, G * K, Q, dimnames = list(names, A))
   # the blocks of the model Hessian: under forward over reverse those of the Gauss-Newton Hessian, as
-  # its parameter block is, so that the Schur complement is positive semidefinite; the exact rows
+  # the parameter block is, so that the Schur complement is positive semidefinite; the exact rows
   # enter the gradient and the mode shift
   HexM <- Hex; HcrossM <- Hcross
   schur <- matrix(0, Q, Q, dimnames = list(A, A))
@@ -466,7 +466,7 @@
     Meta[iL] <- -drop(S[[i]] %*% delta[i, ]) - gL[i, ]
     MHi <- contraction[[i]]$MHi
     Hi <- contraction[[i]]$Hi
-    # the exact rows of the group's data Hessian at its etas, and tr(M dH) along A and the etas
+    # the exact rows of the group's data Hessian at the group etas, and tr(M dH) along A and the etas
     if (fr) {
       rowsAt <- function(cols) {
         out <- matrix(0, K, length(cols), dimnames = list(en, cols))
@@ -525,7 +525,7 @@
   schur <- schur + freeHessian
 
   # the model Hessian: the Schur complement over all etas, the sparse etas with the effective prior
-  # curvature of the integral, the sites of expectation consistent or per factor 2 C^-1 - S of its
+  # curvature of the integral, the sites of EC or per factor 2 C^-1 - S of the
   # posterior covariance C; with normal etas alone it is the Gauss-Newton Schur complement
   posterior <- HexM
   factors <- .sparseFactors(lapply(S, `/`, 2), colnames(E)[iL], lay)$factors
@@ -552,7 +552,7 @@
   Hex[cbind(names(slabPrec), names(slabPrec))] <- Hex[cbind(names(slabPrec), names(slabPrec))] + slabPrec
 
   # the shift of the mode: normal etas, slab etas and free clusters move with the parameters; the
-  # curvature of the mode is block diagonal by groups, so the shift of a group is its own
+  # curvature of the mode is block diagonal by groups, so the shift of a group is separate
   C <- .freeClusters(modes, E, lay, hyp)
   gradient <- explicit
   hyperGrad <- -2 * sp$dhyper
@@ -603,7 +603,7 @@
 }
 
 ## The free variables of the mode as columns over all etas (normal and slab etas, Laplace ones
-## away from 0), and per eta the derivative of its prior gradient in its
+## away from 0), and per eta the derivative of the eta prior gradient in the
 ## hyperparameter with that hyperparameter's name.
 .freeClusters <- function(modes, E, lay, hyp, tol = 1e-8) {
   names <- as.vector(t(E))
@@ -635,7 +635,7 @@
 
 ## Sparse random effects: one trust region over all parameters, the hyperparameters unbounded, on
 ## the Schur complement under the posterior covariance of the sparse etas and per hyperparameter
-## the curvature whose Newton step is its M-step, with a BFGS correction for the missing information.
+## the curvature whose Newton step is the M-step, with a BFGS correction for the missing information.
 .fitLaplace <- function(design, start, fixed, control = list(), verbose = FALSE) {
   .requireM3(design, NULL, "FOCEI")
   lay <- .sparseLayout(design)
@@ -721,8 +721,8 @@
                                              deltaPar = dpar, t(hyper))
   # the iterations are the recorded steps; the start of every trust run is recorded without one
   steps <- function() sum(vapply(rows, function(r) !is.na(r$deltaPar), TRUE))
-  # the objective in the structural parameters and the unbounded hyperparameters; its model Hessian
-  # is the model Hessian of the marginal and the secant curvature of every hyperparameter to its
+  # the objective in the structural parameters and the unbounded hyperparameters; the model Hessian
+  # is the model Hessian of the marginal and the secant curvature of every hyperparameter to the
   # M-step, plus a BFGS correction from the points that lowered the value
   best <- Inf; bestAt <- bestGrad <- correction <- NULL
   # why evaluations of the trust region failed, and the warnings of the inner searches, by the
@@ -737,7 +737,7 @@
       stop(e)
     }), warning = function(w) fail(paste("warning:", sub("\n.*", "", conditionMessage(w)))))
     if (isTRUE(r$infeasible)) {
-      fail("expectation consistent did not converge on the sparse random effects")
+      fail("the expectation consistent (EC) approximation did not converge on the sparse random effects")
       return(.failedEvaluation(x))
     }
     n <- names(x)
@@ -795,12 +795,13 @@
   final <- marginal(par, scores = TRUE)
   if (isTRUE(final$infeasible) || !is.finite(final$value %||% NA_real_))
     stop("em: the integral over the sparse random effects has no finite value at the last point of the ",
-         "fit, or expectation consistent did not converge there; a start nearer the optimum may avoid it.",
+         "fit, or the expectation consistent (EC) approximation did not converge there; a start nearer ",
+         "the optimum may avoid it.",
          call. = FALSE)
   coupled <- final$coupling
   # the model Hessian approximates the curvature of the integral by Gauss-Newton, so the fit has none; with
   # independent groups the empirical information is G / (G - 1) times the sum of the outer products
-  # of their centred scores of log L, the conditions without random effects add half their Hessian
+  # of their centered scores of log L, the conditions without random effects add half their Hessian
   information <- if (!is.null(final$scores) && !anyNA(final$scores)) {
     G <- nrow(final$scores)
     centred <- sweep(final$scores, 2, colMeans(final$scores)) / 2
@@ -855,7 +856,7 @@
 }
 
 ## The hyperparameters on their unbounded scale, logit for a probability and log otherwise, back,
-## and the derivative of a hyperparameter in its unbounded value.
+## and the derivative of a hyperparameter in the unbounded value.
 .hyperToFree <- function(kind, h) {
   pr <- kind[names(h)] == "prob"
   u <- h; u[!pr] <- log(h[!pr]); u[pr] <- stats::qlogis(h[pr])
@@ -879,7 +880,7 @@
   if (is.null(r$reach)) a else a[r$reach[, st, drop = FALSE]]
 }
 
-## The complete-data information of every hyperparameter on its unbounded scale: the second
+## The complete-data information of every hyperparameter on the unbounded scale: the second
 ## derivative of the expected -2 log prior of the random effects at the posterior moments `r`,
 ## at least 1e-8 so that it seeds a positive definite model.
 .hyperInformation <- function(lay, kind, r, hyper) {
@@ -897,7 +898,7 @@
   pmax(info, 1e-8)
 }
 
-## The curvature of every hyperparameter on its unbounded scale whose Newton step is its M-step:
+## The curvature of every hyperparameter on the unbounded scale whose Newton step is the M-step:
 ## the slope of the complete-data gradient between the value and the M-step, Q being convex on that
 ## scale; the complete-data information where the two coincide.
 .hyperSecant <- function(lay, kind, r, hyper) {
@@ -945,7 +946,7 @@
 
 ## The Ewens concentration c > 0 whose expected number of new blocks over stems with `groups`
 ## groups each equals `free`: sum_s sum_{i <= G_s} c / (c + i) = free, by Newton on log c (the
-## left side is increasing in c); `free` at most half a block below its limit, so c stays finite.
+## left side is increasing in c); `free` at most half a block below the limit, so c stays finite.
 .ewensConcentration <- function(free, groups) {
   i <- unlist(lapply(groups, seq_len))
   free <- min(max(free, 1e-8), length(i) - 0.5)

@@ -80,10 +80,10 @@ importSbml <- function(modelpath, keep = NULL) {
   spc_json  <- sbml[["speciesCompartments"]]
   if (!is.null(comp_json) && length(comp_json) > 0L) {
     for (c in comp_json) {
-      # A unit-size compartment becomes the literal "1", keeping its id out of
+      # A unit-size compartment becomes the literal "1", keeping the compartment id out of
       # the kinetic laws; otherwise the id is a volume symbol the trafo can set.
       trivial <- !is.null(c$size) && is.numeric(c$size) && isTRUE(c$size == 1)
-      # An InitialAssignment on the compartment is its symbolic volume.
+      # An InitialAssignment on the compartment is the symbolic volume.
       volume <- if (!is.null(c$sizeAssignment)) .normalise_formula(c$sizeAssignment)
                 else if (trivial) "1" else c$id
       compartments[[c$id]] <- list(volume = volume, rule = NULL)
@@ -150,7 +150,7 @@ importSbml <- function(modelpath, keep = NULL) {
   if (length(rules)) {
     rule_lhs <- names(rules)
     rule_rhs <- .normalise_formula(unlist(rules, use.names = FALSE))
-    # Parenthesised so substitution into a sub-expression keeps precedence.
+    # Parenthesized so substitution into a sub-expression keeps precedence.
     rule_rhs <- paste0("(", rule_rhs, ")")
     max_iter <- length(rule_lhs) + 1L
     for (it in seq_len(max_iter)) {
@@ -179,7 +179,7 @@ importSbml <- function(modelpath, keep = NULL) {
       }
     }
     # A RateRule on a non-constant parameter or compartment promotes it to a
-    # state with its SBML value as initial condition. Without a compartment it
+    # state with the SBML value as initial condition. Without a compartment it
     # gets unit volume, so dX/dt = rhs.
     promote <- setdiff(rr_lhs, states)
     if (length(promote)) {
@@ -199,7 +199,7 @@ importSbml <- function(modelpath, keep = NULL) {
     for (k in seq_along(rr_lhs)) {
       var <- rr_lhs[k]; rhs <- rr_rhs[k]
       # A virtual reaction with stoichiometry +1 on `var` and rate rhs. An amount
-      # species has V_X = 1, so its volume is divided out to leave dn/dt = rhs.
+      # species has V_X = 1, so the volume is divided out to leave dn/dt = rhs.
       if (var %in% amountStates && !is.null(compartmentOf)) {
         var_vol <- compartments[[unname(compartmentOf[var])]]$volume
         if (!identical(var_vol, "1")) rhs <- paste0("(", rhs, ")/(", var_vol, ")")
@@ -264,7 +264,7 @@ importSbml <- function(modelpath, keep = NULL) {
                       tf
       }
       for (a in ev$assignments) {
-        # An event assignment to a compartment changes its size while species
+        # An event assignment to a compartment changes the compartment size while species
         # amounts stay put, so concentrations scale inversely. Emit the
         # rescale first, while the old volume is still in effect.
         new_val <- .normalise_formula(a$formula)
@@ -341,7 +341,7 @@ importSbml <- function(modelpath, keep = NULL) {
 
 # Internal: apply a rename map to expressions, textually. A non-syntactic id
 # cannot go through `replaceSymbols()`, which parses, so the substitution has
-# to work on the string with identifier boundaries of its own.
+# to work on the string with separate identifier boundaries.
 .renameIds <- function(x, map) {
   if (!length(map) || !length(x)) return(x)
   old <- names(map)
@@ -462,7 +462,7 @@ exportSbml <- function(eqnlist, parameters = NULL, inits = NULL, filepath,
     entry <- eqnlist$compartments[[cid]]
     vol <- entry$volume
     size <- suppressWarnings(as.numeric(vol))
-    # A compartment whose volume expression is its own symbol has its
+    # A compartment whose volume expression is the compartment symbol has the
     # value in the parameter vector; write that as the size instead of a
     # self-referential assignment.
     if (is.na(size) && identical(vol, cid)) {
@@ -534,7 +534,7 @@ exportSbml <- function(eqnlist, parameters = NULL, inits = NULL, filepath,
     kinetic_law <- paste0("(", home_vol, ") * (", eqnlist$rates[i], ")")
     # SBML requires every species in the kinetic law to be a reactant, a
     # product or a declared modifier (a rate rule imported as a reaction
-    # names the other states only in its rate).
+    # names the other states only in the rate).
     modifiers <- setdiff(intersect(getSymbols(eqnlist$rates[i]), eqnlist$states),
                          eqnlist$states[c(educt_idx, product_idx)])
 
@@ -594,7 +594,7 @@ exportSbml <- function(eqnlist, parameters = NULL, inits = NULL, filepath,
     override
   } else {
     # `python-libsbml` was declared via reticulate::py_require() in .onLoad(),
-    # but py_exe() reports a path only once Python is initialised. Before that
+    # but py_exe() reports a path only once Python is initialized. Before that
     # it falls back to discovery, misses the managed env and returns "".
     tryCatch({
       if (!reticulate::py_available(initialize = TRUE))

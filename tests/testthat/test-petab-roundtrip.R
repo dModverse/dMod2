@@ -50,7 +50,7 @@ test_that("states a preequilibration cannot move keep their initial values", {
 
 
 
-test_that("exportPEtab keeps log parametrisations free of self-references", {
+test_that("exportPEtab keeps log parametrizations free of self-references", {
 
   withr::local_dir(tempdir())
   if (!.libsbml_works()) skip("libsbml virtualenv not available")
@@ -174,7 +174,7 @@ test_that("a v1 export names conditions by id in every table", {
   if (!.libsbml_works()) skip("libsbml virtualenv not available")
   withr::local_dir(tempdir())
 
-  # Boehm keys its conditions by name; the tables on disk store the id.
+  # Boehm keys the conditions by name; the tables on disk store the id.
   wd <- tempfile("v1_condid_"); dir.create(wd)
   setwd(wd)
   petab <- .petab_boehm_cppDE()

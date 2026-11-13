@@ -2,7 +2,7 @@
 % Please edit documentation in R/statistics.R
 \name{mstrust}
 \alias{mstrust}
-\title{Non-Linear Optimisation, Multi-Start}
+\title{Non-Linear Optimization, Multi-Start}
 \usage{
 mstrust(
   objfun,
@@ -27,7 +27,7 @@ mstrust(
 \arguments{
 \item{objfun}{Objective function, see \code{\link[=trust]{trust()}}.}
 
-\item{center}{Named numeric parameter centre, or a parframe whose rows are
+\item{center}{Named numeric parameter center, or a parframe whose rows are
 used as starting points; \code{fits} is then the number of rows. The random
 starts, those of retries included, are drawn before the fits are spread
 over \code{cores}, so \code{\link[=set.seed]{set.seed()}} reproduces a run.}
@@ -41,11 +41,11 @@ Default \code{0.1} and \code{10}.}
 also give each fit a condition axis, which selects a PSOCK backend. Keep
 the product below the number of cores. Default \code{1}.}
 
-\item{optmethod}{Optimiser, a function or its name, called via
+\item{optmethod}{Optimizer, a function or a function name, called via
 \code{do.call(optmethod, ...)}. Default \code{"trust"}. Arguments in \code{...} are
-routed by the formals of this optimiser.}
+routed by the formals of this optimizer.}
 
-\item{samplefun}{Sampler for the random offsets, a function or its name,
+\item{samplefun}{Sampler for the random offsets, a function or a function name,
 with an argument \code{n}, the number of parameters. Default \code{"rnorm"}.}
 
 \item{resultPath}{Folder under which files are written. Default \code{"."}, the
@@ -59,7 +59,7 @@ working directory.}
 Default \code{FALSE}.}
 
 \item{cautiousMode}{Logical, also write every fit deparsed to an \code{.R} file
-in \verb{interRes/}, which is kept after the run while its \code{.Rda} files are
+in \verb{interRes/}, which is kept after the run while the \code{.Rda} files in it are
 removed. Default \code{FALSE}.}
 
 \item{startFromCenter}{Logical. If \code{TRUE}, the first fit starts at
@@ -73,17 +73,17 @@ when \code{center} is a parframe.}
 Default \code{10}.}
 
 \item{...}{Arguments passed by name to \code{optmethod}, \code{samplefun} or
-\code{objfun}. Names matching neither the optimiser nor the sampler go to
+\code{objfun}. Names matching neither the optimizer nor the sampler go to
 \code{objfun}.}
 }
 \value{
 A parlist with one entry per fit, failed fits included. Each entry
-is the result of the optimiser without \code{hessian}, plus \code{parinit}, its
-starting point, and \code{elapsed}, its wall time in seconds including
+is the result of the optimizer without \code{hessian}, plus \code{parinit}, the
+starting point, and \code{elapsed}, the wall time in seconds including
 retries; a fit that failed is a list with element \code{error}. For the
 covariance at a fit, use \code{vcov(objfun(fit$argument))}. The attribute
 \code{"run"} holds the start time, total wall time, number of fits, cores,
-optimiser and sampler with their arguments, and the versions of R, dMod2
+optimizer and sampler with their arguments, and the versions of R, dMod2
 and cppDE. \code{\link[=as.parframe]{as.parframe()}} turns the parlist into a table.
 }
 \description{
@@ -93,7 +93,7 @@ random offsets drawn by \code{samplefun}, or the rows of a parframe.
 \details{
 Nothing is written to disk unless \code{output}, \code{cautiousMode} or a
 \code{traceFile} argument for \code{\link[=trust]{trust()}} asks for it. Files then go to
-\verb{<resultPath>/<name>/trial-<k>-<date>/}: the per-fit files in its
+\verb{<resultPath>/<name>/trial-<k>-<date>/}: the per-fit files in the
 subfolder \verb{interRes/}, which is removed on completion unless
 \code{cautiousMode = TRUE}, the final \code{parameterList.Rda} (with \code{output}) and
 the log \code{mstrust.log}. \code{\link[=load.parlist]{load.parlist()}} reads the fits from \verb{interRes/}

@@ -4,7 +4,7 @@
                    sex = c("f", "m", "f"), row.names = c("C1", "C2", "C3"))
 .tr <- function() branch(define(NULL, "x <- x", x = c("ka", "cl", "v")), table = .cov)
 
-test_that("an effect formula replaces the symbol by its linear predictor on the scale of the trafo", {
+test_that("an effect formula replaces the symbol by the linear predictor on the scale of the trafo", {
   tr <- insert(.tr(), "x <- exp(x)", x = "cl")
   tr <- insert(tr, cl ~ wt + sex + (1 + dose | ID), v ~ 1 + (1 | ID))
   expect_equal(as.character(tr$C2["cl"]),
@@ -83,7 +83,7 @@ test_that("misspecified effect formulas and late substitutions stop with a messa
   expect_silent(insert(tr, "x <- exp(x)", x = "v"))
 })
 
-test_that("a cluster term shares its concentration and tau over its symbols", {
+test_that("a cluster term shares the concentration and tau over the symbols of the term", {
   re <- randomEffects(insert(.tr(), cl + v ~ 1 + (1 | gr(ID, dist = dirichletProcess()))))
   expect_equal(unique(re$terms$dist), "dirichletProcess")
   expect_length(re$blocks, 1L)

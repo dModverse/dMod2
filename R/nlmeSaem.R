@@ -1,6 +1,6 @@
 # SAEM: Metropolis draws of the etas, Robbins-Monro averages of the sufficient statistics, the
 # mu-referenced fixed effects by GLS and Omega in closed form, the other parameters on the averaged
-# quadratic model; the estimate is the mean of the late iterates, its marginal by quadrature.
+# quadratic model; the estimate is the mean of the late iterates, the marginal at the estimate by quadrature.
 
 
 ## -2 log likelihood of data rows with prediction p and sigma s, normal or Student-t, censored
@@ -98,7 +98,7 @@
   lapply(H, function(h) tryCatch(t(chol(chol2inv(chol(h / 2)) * scale)), error = function(e) NULL))
 
 
-## t statistics of the slopes of the columns of `x` over its rows, 0 for a constant column.
+## t statistics of the slopes of the columns of `x` over the rows, 0 for a constant column.
 .slopeStatistics <- function(x) {
   i <- seq_len(nrow(x)) - (nrow(x) + 1) / 2
   b <- colSums(i * x) / sum(i^2)
@@ -131,7 +131,7 @@
 }
 
 ## The Robbins-Monro average of the quadratic models 0.5 t'A t - c't of the complete-data objective
-## at the drawn random effects, `out` its value, gradient and Hessian at `theta`.
+## at the drawn random effects, `out` the average value, gradient and Hessian at `theta`.
 .averageQuadratic <- function(model, out, theta, gamma) {
   A <- unclass(out$hessian)
   c <- drop(A %*% theta) - out$gradient
@@ -139,7 +139,7 @@
   list(A = model$A + gamma * (A - model$A), c = model$c + gamma * (c - model$c))
 }
 
-## The Newton step at `theta` on the averaged model, at most `radius` long; its fixed point zeroes
+## The Newton step at `theta` on the averaged model, at most `radius` long; the fixed point of the step zeroes
 ## the averaged gradient, the score of the marginal by Fisher's identity.
 .quadraticStep <- function(model, theta, radius = 1) {
   e <- eigen(model$A, symmetric = TRUE)
@@ -168,7 +168,7 @@
     k <- s$z[g] + 1L
     sizes[k] <- sizes[k] - 1L
     a <- aux[g, ]; la <- La[g, ]
-    # a group alone in its cluster offers the value of that cluster as one auxiliary
+    # a group alone in a cluster offers the value of that cluster as one auxiliary
     if (k > 1L && sizes[k] == 0L) { a[1] <- vals[k]; la[1] <- L[g, k] }
     open <- which(sizes > 0L)
     logw <- c(log(sizes[open]) - L[g, open] / 2, log(concentration / m) - la / 2)
@@ -259,7 +259,7 @@
   })
   shift <- function(beta) matrix(vapply(D, function(m) drop(m %*% beta[refPars]), numeric(K)), G, K,
                                  byrow = TRUE, dimnames = dimnames(E))
-  # Omega and the GLS beta that maximise the expected prior given the averages s1 of phi_g and
+  # Omega and the GLS beta that maximize the expected prior given the averages s1 of phi_g and
   # s2 of phi_g phi_g' / G; the diagonal of S at least `minVar` while annealing
   mStep <- function(s1, s2, beta, minVar = NULL) {
     for (it in 1:3) {
@@ -494,7 +494,7 @@
             hessian = .namedHessian(out$hessian, structural))
   }
 
-  # every group starts in a cluster of its own at its mode under the slab alone, so the sampler
+  # every group starts in a separate cluster at the group mode under the slab alone, so the sampler
   # merges clusters rather than finding deviations by draws from the slab
   objs <- .conditionObjectives(design)
   prior <- if (K) .normalPrior(design)
@@ -612,7 +612,7 @@
   full[names(outer)] <- psi[names(outer)]
   hyper[] <- psi[hypers]
 
-  # the most frequent partition of every stem in the late draws, its cluster values averaged over
+  # the most frequent partition of every stem in the late draws, the cluster values averaged over
   # the draws with that partition, and the share of draws at the population value per group
   keep <- utils::tail(draws, length(late))
   modes <- matrix(0, G, ncol(design$etaNames), dimnames = dimnames(design$etaNames))

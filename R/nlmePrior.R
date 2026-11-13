@@ -94,7 +94,7 @@
 }
 
 
-## M-step of the normal blocks: Omega restricted to the block structure that maximises the
+## M-step of the normal blocks: Omega restricted to the block structure that maximizes the
 ## expected prior given the second moments E[eta_g eta_g'] per group, as Cholesky parameters; in
 ## closed form per block, by trust over the free entries when some are fixed.
 .updateNormal <- function(design, moments, fixed = NULL) {

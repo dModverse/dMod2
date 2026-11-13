@@ -1,7 +1,7 @@
 // The modes of the components of a joint FOCEI fit (.fitFoceiJoint()) in lock step: per round one
 // evaluation of the data terms of the components still moving, then per component a trust step on
-// its data and the normal prior e' P e / 2, accepted by its own ratio; a component whose step finds
-// its modes takes its last Newton step without a trial and drops out. The rules are those of the
+// the component data and the normal prior e' P e / 2, accepted by a separate ratio; a component whose step finds
+// the modes takes the last Newton step without a trial and drops out. The rules are those of the
 // inner search of the FOCEI kernel.
 
 #define USE_FC_LEN_T
@@ -19,8 +19,8 @@ List trust_step_impl(NumericVector x, NumericVector g, NumericMatrix H, double r
 
 namespace {
 
-// A component at its etas: the value, gradient and Hessian of its data and prior; `ok` false where
-// its prediction failed or its value is not finite.
+// A component at the etas: the value, gradient and Hessian of the component data and prior; `ok` false where
+// the prediction failed or the value is not finite.
 struct Unit {
   std::vector<double> eta, grad, hess;
   double value = 0.0;
@@ -68,8 +68,8 @@ bool newtonStep(const Unit& u, std::vector<double>& s) {
 
 }  // namespace
 
-// `data_cb(idx, etas)`: per component idx (1-based) at its etas, list(value, gradient, hessian) of its
-// data terms in the order of its etas, NULL where its prediction fails. `warm` holds the etas the
+// `data_cb(idx, etas)`: per component idx (1-based) at the component etas, list(value, gradient, hessian) of the
+// data terms in the order of the etas, NULL where the prediction fails. `warm` holds the etas the
 // search starts from, `P` the prior precisions, `control` rinit, rmax, iterlim, steptol and mtol.
 // Returns the etas at the modes per component.
 // [[Rcpp::export]]

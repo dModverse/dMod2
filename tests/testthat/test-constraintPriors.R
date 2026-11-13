@@ -1,4 +1,4 @@
-# The soft constraints beyond L2, each against its own density on the -2 log
+# The soft constraints beyond L2, each against the matching density on the -2 log
 # scale with closed-form derivatives, and composed with a parameter trafo.
 
 .priorCases <- function() {
@@ -36,7 +36,7 @@
 }
 
 
-test_that("each constraint is -2 log of its density", {
+test_that("each constraint is -2 log of the density", {
   for (case in .priorCases())
     expect_equal(unname(case$fn(pars = c(k = 5))$value), -2 * case$ld(5),
                  tolerance = 1e-12, info = case$name)
@@ -94,7 +94,7 @@ test_that("a duplicated parameter name is rejected", {
 })
 
 
-# An R-level log trafo with its own Jacobian and Hessian.
+# An R-level log trafo with a hand-written Jacobian and Hessian.
 .priorLogTrafo <- function() {
   p2p <- function(pars, fixed = NULL, deriv = TRUE, deriv2 = FALSE) {
     k <- exp(pars[["logk"]])

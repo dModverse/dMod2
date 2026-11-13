@@ -12,7 +12,7 @@
 //
 //   log I = A_q(lambda) + A_r(gamma) - A_s(nu),
 //
-// the outer loop sets nu to the current marginals, the inner one minimises the convex
+// the outer loop sets nu to the current marginals, the inner one minimizes the convex
 // Psi(lambda) = A_q(lambda) + A_r(nu - lambda) by Newton with a backtracking line search. At the
 // fixed point d log I / d b_i = E_r eta, d log I / d P_i = -E_r[eta eta'] / 2 and the derivatives in
 // the hyperparameters are those of the factors at their cavities. Where P couples no two factors,
@@ -59,9 +59,9 @@ double logErfcx(double x) {
   return M_LN2 + x * x + R::pnorm(-x * M_SQRT2, 0.0, 1.0, 1, 1);
 }
 
-// The half integral int_0^inf u^k exp(-u^2 / 2 - alpha u) du for k = 0: its log, and the moments
-// E u^k, k = 1..4, of the normalised density; by the recurrence I_k + alpha I_{k-1} = (k-1) I_{k-2}
-// forward for small alpha and by its continued fraction for the ratios I_k / I_{k-1} beyond.
+// The half integral int_0^inf u^k exp(-u^2 / 2 - alpha u) du for k = 0: the log of it, and the moments
+// E u^k, k = 1..4, of the normalized density; by the recurrence I_k + alpha I_{k-1} = (k-1) I_{k-2}
+// forward for small alpha and by the continued fraction for the ratios I_k / I_{k-1} beyond.
 struct Half { double logI0, e1, e2, e3, e4; };
 
 Half half(double alpha) {
@@ -87,7 +87,7 @@ Half half(double alpha) {
   return h;
 }
 
-// A coordinate factor against its tilt: log Z, the raw moments m1..m4 and what the reports and
+// A coordinate factor against the tilt: log Z, the raw moments m1..m4 and what the reports and
 // the M-steps read.
 struct Coord {
   bool ok = false;
@@ -234,7 +234,7 @@ Stem dpStem(const std::vector<double>& h, const std::vector<double>& t, double c
   st.dconc = st.free / conc - dnorm;
   st.dtau = -st.free / tau + st.slab2 / (tau2 * tau);
   if (cross && G <= CROSS_MAX) {
-    // the moments of two groups: from a common slab block the moments of its value, from two
+    // the moments of two groups: from a common slab block the moments of the block value, from two
     // blocks the product of theirs, Sum_T p_T a_f(T) r(U \ T) with r(R) the expectation of a_h of
     // the block of g' over the partitions of R, by the same recursion as F
     std::vector<double> a1(N, 0.0), a2(N, 0.0);
@@ -337,8 +337,8 @@ bool luSolve(std::vector<double> A, int n, double* x) {
   return info == 0;
 }
 
-// The Gaussian part of one group under sites: Q = P + diag(lt), its inverse C and the mean
-// C (b + lh), log |Q|, by a Cholesky factor of the Jacobi-scaled Q; false outside its domain.
+// The Gaussian part of one group under sites: Q = P + diag(lt), the inverse C and the mean
+// C (b + lh), log |Q|, by a Cholesky factor of the Jacobi-scaled Q; false outside the domain.
 struct Gauss { std::vector<double> C, mu; double logdet = 0; };
 
 bool gauss(const std::vector<double>& P, const std::vector<double>& b, const std::vector<double>& lt,
@@ -393,7 +393,7 @@ bool gauss(const std::vector<double>& P, const std::vector<double>& b, const std
 // least the conditional precision 1 / (A_S^-1)_jj; A_S^-1 follows the exclusions by rank-one
 // downdates. The child of the larger bound goes first, so that large subsets are found early.
 struct Joint {
-  bool ok = false, over = false;  // over: the search left its budget of nodes
+  bool ok = false, over = false;  // over: the search left the budget of nodes
   double logZ = 0;
   std::vector<double> mean, cov, incl, slab2, dprob, dtau, value;
   std::vector<int> selected;
@@ -412,7 +412,7 @@ public:
       lout[k] = std::log1p(-p[k]);
       itau2[k] = 1.0 / (tau[k] * tau[k]);
     }
-    // A^-1 of all coordinates and its mean and quadratic form, the bound at the root
+    // A^-1 of all coordinates with mean and quadratic form, the bound at the root
     std::vector<double> A(K * K);
     for (int c = 0; c < K; ++c)
       for (int r = 0; r < K; ++r) A[r + c * K] = Pf[r + c * K] + (r == c ? itau2[r] : 0.0);
@@ -485,7 +485,7 @@ private:
   const std::vector<double>& Pf;
   const std::vector<double>& h;
   std::vector<double> lin, lout, itau2;
-  // W column-major with leading dimension K, its row r over the positions 0..r; per depth the
+  // W column-major with leading dimension K, row r over the positions 0..r; per depth the
   // subset mean over the coordinates; the coordinate and z = L^-1 h_F at every position
   std::vector<double> W, muStack;
   std::vector<int> F;
@@ -617,7 +617,7 @@ private:
 
   // the subsets below with coordinate k included at position m
   double include(int k, int m, double lw, double quad, double half, int slot) {
-    // the new row of L is l = W A_F,k, its diagonal d; the new row of W is (-l' W / d, 1 / d)
+    // the new row of L is l = W A_F,k, with diagonal d; the new row of W is (-l' W / d, 1 / d)
     const int inc = 1;
     for (int c = 0; c < m; ++c) l[c] = Pf[F[c] + k * K];
     if (m) F77_CALL(dtrmv)("L", "N", "N", &m, W.data(), &K, l.data(), &inc FCONE FCONE FCONE);
@@ -651,16 +651,16 @@ Joint slabJoint(const std::vector<double>& Pf, const std::vector<double>& h, con
   return sum.run(p, tau);
 }
 
-// The layout of one call: per group its active stems, per stem its kind and hyperparameters.
+// The layout of one call: per group the active stems, per stem the kind and hyperparameters.
 struct Layout {
   int G, K;
   std::vector<int> kind;  // 0 spike and slab, 1 Laplace, 2 Dirichlet process
   std::vector<double> prob, tau, lambda, conc;
   std::vector<std::vector<int>> act;  // the active stems of every group
-  std::vector<std::vector<double>> P, b;  // per group on its active stems
+  std::vector<std::vector<double>> P, b;  // per group on the active stems
 };
 
-// the prior variance of a coordinate, the start of its site
+// the prior variance of a coordinate, the start of the coordinate site
 double priorVar(const Layout& L, int j) {
   if (L.kind[j] == 0) return L.prob[j] * L.tau[j] * L.tau[j];
   if (L.kind[j] == 1) return 2.0 / (L.lambda[j] * L.lambda[j]);
@@ -685,7 +685,7 @@ void initResult(const Layout& L, Result& R) {
   R.dprob.assign(L.K, 0.0); R.dtau.assign(L.K, 0.0); R.dlambda.assign(L.K, 0.0); R.dconc.assign(L.K, 0.0);
   R.free.assign(L.K, 0.0); R.groups.assign(L.K, 0.0); R.slab2.assign(L.K, 0.0);
   R.cov.assign(L.G, std::vector<double>(L.K * L.K, 0.0));
-  // a coordinate without data keeps its prior
+  // a coordinate without data keeps the prior
   for (int i = 0; i < L.G; ++i)
     for (int j = 0; j < L.K; ++j) {
       R.cov[i][j + j * L.K] = priorVar(L, j);
@@ -733,7 +733,7 @@ void numberClusters(const Layout& L, Result& R) {
 
 // ---- expectation consistent ----------------------------------------------------------------
 
-// the coordinates of the call: (group, stem) and its position among the active stems of the group
+// the coordinates of the call: (group, stem) and the position among the active stems of the group
 struct Coords {
   std::vector<int> g, j, pos;
   std::vector<std::vector<int>> at;  // per group the coordinate of each active stem
@@ -789,7 +789,7 @@ bool factorsAt(const Layout& L, const Coords& C, const std::vector<double>& lh, 
 }
 
 // The Gaussian part under the sites (gh, gt): A_r summed, the marginal moments per coordinate and
-// per group its covariance; false outside its domain.
+// per group the covariance; false outside the domain.
 bool gaussAt(const Layout& L, const Coords& C, const std::vector<double>& gh, const std::vector<double>& gt,
              double& Ar, std::vector<double>& mu, std::vector<double>& var, std::vector<Gauss>& gs) {
   const int N = C.g.size();
@@ -848,7 +848,7 @@ void expectationConsistent(const Layout& L, const Coords& C, const NumericMatrix
     for (int k = 0; k < N; ++k) { lt[k] = nt[k] / 2.0; lh[k] = nh[k] / 2.0; }
   // Cov_q phi and Cov_r phi on the blocks of the Newton systems, rows (eta, -eta^2 / 2) of the
   // coordinates of a block: one per group, or one of all coordinates where a Dirichlet-process
-  // stem couples the groups, with its moments between groups
+  // stem couples the groups, with the stem moments between groups
   struct Block { std::vector<int> ks; std::vector<double> Q, Rr; };
   // the moments of one coordinate in the matrix H of size m at rows x (eta), y (eta^2)
   auto covQ = [&](std::vector<double>& H, int m, int x, int y, int k) {
@@ -858,7 +858,7 @@ void expectationConsistent(const Layout& L, const Coords& C, const NumericMatrix
     H[y + x * m] += c13;
     H[y + y * m] += 0.25 * (m4[k] - m2[k] * m2[k]);
   };
-  // Cov_r phi of group i into H of size m, its coordinates at rows pos(a) and pos(a) + off
+  // Cov_r phi of group i into H of size m, the group coordinates at rows pos(a) and pos(a) + off
   auto covR = [&](std::vector<double>& H, int m, int i, int off, const std::vector<int>& pos) {
     const int n = L.act[i].size();
     const std::vector<double>& Cg = gs[i].C;
@@ -930,7 +930,7 @@ void expectationConsistent(const Layout& L, const Coords& C, const NumericMatrix
     cholSolve(Hc, m, rhs.data());
     return true;
   };
-  // inner: minimise Psi(lam) = A_q(lam) + A_r(nu - lam) by Newton on Cov_q phi + Cov_r phi
+  // inner: minimize Psi(lam) = A_q(lam) + A_r(nu - lam) by Newton on Cov_q phi + Cov_r phi
   auto psi = [&](const std::vector<double>& h, const std::vector<double>& t, double& value) {
     std::vector<double> sh(N), stt(N);
     for (int k = 0; k < N; ++k) { sh[k] = nh[k] - h[k]; stt[k] = nt[k] - t[k]; }
@@ -974,7 +974,7 @@ void expectationConsistent(const Layout& L, const Coords& C, const NumericMatrix
         for (int k = 0; k < N; ++k) { th[k] = lh[k] + step * d[k]; tt[k] = lt[k] + step * d[N + k]; }
         if (psi(th, tt, trial) && trial <= value + 1e-4 * step * slope) { moved = true; break; }
       }
-      // no decrease to resolve: the iterate stays, its moments are those of the last evaluation
+      // no decrease to resolve: the iterate stays, the moments are those of the last evaluation
       if (!moved) return psi(lh, lt, value) && worst <= floor;
       const bool flat = value - trial <= 1e-14 * (1.0 + std::fabs(value)) && worst <= floor;
       lh = th; lt = tt; value = trial;
@@ -1052,7 +1052,7 @@ void expectationConsistent(const Layout& L, const Coords& C, const NumericMatrix
     }
     return true;
   };
-  // F at an inner solution, and its gradient in nu, E_r phi - E_s phi
+  // F at an inner solution, and the gradient of F in nu, E_r phi - E_s phi
   auto freeEnergy = [&]() { return Aq + Ar - As(nh, nt); };
   auto gradient = [&](std::vector<double>& g) {
     g.assign(2 * N, 0.0);
@@ -1140,10 +1140,10 @@ void expectationConsistent(const Layout& L, const Coords& C, const NumericMatrix
 
 // ---- exact factors ---------------------------------------------------------------------------
 
-// The integral where the precision couples none of the factors: per group its spike-and-slab stems
-// jointly (SlabSum), every other stem alone, every Dirichlet-process stem over its groups, each
-// against the linear term and the precision of its own coordinates. `over` where a joint sum left
-// its budget of nodes, R then unchanged.
+// The integral where the precision couples none of the factors: per group the spike-and-slab stems
+// jointly (SlabSum), every other stem alone, every Dirichlet-process stem over the stem groups, each
+// against the linear term and the precision of the factor coordinates. `over` where a joint sum left
+// the budget of nodes, R then unchanged.
 bool exactFactors(const Layout& L, double budget, Result& R, bool& over) {
   const int G = L.G, K = L.K;
   over = false;
@@ -1211,7 +1211,7 @@ bool exactFactors(const Layout& L, double budget, Result& R, bool& over) {
   return true;
 }
 
-// Whether the precision of group i links two of its factors: its spike-and-slab coordinates
+// Whether the precision of group i links two of the group factors: the spike-and-slab coordinates
 // jointly, every other coordinate alone.
 bool groupCoupled(const Layout& L, int i) {
   const int n = L.act[i].size();
@@ -1224,7 +1224,7 @@ bool groupCoupled(const Layout& L, int i) {
 }
 
 // The groups one by one, where no Dirichlet-process stem joins two of them: exactly where the
-// precision couples none of the factors of a group and its joint sum stays within `budget` nodes,
+// precision couples none of the factors of a group and the joint sum of the group stays within `budget` nodes,
 // else by expectation consistent, every coordinate a factor; `ec` marks the groups of the second.
 void byGroup(const Layout& L, const NumericMatrix* sitesLam, const NumericMatrix* sitesGam, double budget,
              std::vector<int>& ec, Result& R) {
@@ -1272,7 +1272,7 @@ void byGroup(const Layout& L, const NumericMatrix* sitesLam, const NumericMatrix
 }  // namespace
 
 // The integral over the sparse coordinates: P a list of the G precisions on all stems, b the
-// G x K linear terms, per stem its kind (0 spike and slab, 1 Laplace, 2 Dirichlet process) and
+// G x K linear terms, per stem the kind (0 spike and slab, 1 Laplace, 2 Dirichlet process) and
 // hyperparameters, `active` the G x K coordinates the data reach, of which those with a row of P
 // and an entry of b exactly 0 keep their prior as well. Exact where P couples no two factors and
 // the joint spike-and-slab sum of a group stays within `budget` nodes, else by expectation
@@ -1289,7 +1289,7 @@ List sparse_integral(List P, NumericMatrix b, IntegerVector kind, NumericVector 
   L.act.resize(L.G); L.P.resize(L.G); L.b.resize(L.G);
   for (int i = 0; i < L.G; ++i) {
     NumericMatrix Pi = P[i];
-    // a coordinate the data do not see, its row of P and its b exactly 0, keeps its prior
+    // a coordinate the data do not see, with the row of P and the entry of b exactly 0, keeps the prior
     for (int j = 0; j < L.K; ++j) {
       if (!active(i, j)) continue;
       bool flat = b(i, j) == 0.0;

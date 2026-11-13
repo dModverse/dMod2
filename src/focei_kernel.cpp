@@ -178,7 +178,7 @@ static CharacterVector deriv_par_names(const NumericVector& d) {
 
 // The derivative of sum_i log|H_i| in theta comes from R (`.foceiVolume`) through
 // `correction_cb`, at the start, at accepted trials and at the final point; the
-// trust ratio of a trial needs its value only.
+// trust ratio of a trial needs the trial value only.
 
 
 // Inner objective for one subject from one model_cb and one err_cb call, without
@@ -198,7 +198,7 @@ static inline bool all_finite(const EvalResult& e) {
 }
 
 // The prediction and error-model frames of a subject, one per condition block;
-// `failed` where the prediction of one of its blocks failed.
+// `failed` where the prediction of one of the subject blocks failed.
 struct SubjectFrames {
   std::vector<NumericMatrix> pred, err;
   bool failed = false;
@@ -238,7 +238,7 @@ static void predict_one_subject(
   }
 }
 
-// Data term of one condition block of a subject in its K etas, Gauss-Newton,
+// Data term of one condition block of a subject in the K subject etas, Gauss-Newton,
 // added to value, grad and hess.
 static void accumulate_block(
     NumericMatrix& pred_i,
@@ -256,7 +256,7 @@ static void accumulate_block(
   IntegerVector t_idx_in_err         = meta_i["t_idx_in_err"];
   IntegerVector o_idx_in_err         = meta_i["o_idx_in_err"];
   IntegerVector o_idx_in_err_deriv   = meta_i["o_idx_in_err_deriv"];
-  // a recorded sigma replaces the error model of its row, NA where the model applies
+  // a recorded sigma replaces the error model of the row, NA where the model applies
   const bool have_sigma_data = meta_i.containsElementNamed("sigma_data");
   NumericVector sigma_data = have_sigma_data ? as<NumericVector>(meta_i["sigma_data"]) : NumericVector(0);
 
@@ -343,7 +343,7 @@ static void accumulate_block(
   }
 
   // Shared residual kernel, Gauss-Newton in eta: the rows above the limit, then the
-  // censored rows (M3), which the meta orders last. Its plain sum of squares is not reported.
+  // censored rows (M3), which the meta orders last. The plain sum of squares of these rows is not reported.
   const int n_aloq = meta_i.containsElementNamed("n_aloq") ? as<int>(meta_i["n_aloq"]) : T;
   double chi2_unused = 0.0;
   dmod::AccumOpts opts;
@@ -390,8 +390,8 @@ static void accumulate_block(
   }
 }
 
-// Inner objective of one subject: the data terms of its condition blocks plus
-// the MVN prior of its etas.
+// Inner objective of one subject: the data terms of the subject condition blocks plus
+// the MVN prior of the subject etas.
 static EvalResult eval_one_subject_from(
     SubjectFrames& frames,
     NumericVector& pars,
@@ -906,7 +906,7 @@ List focei_inner_trust(Function model_cb,
 
 // Adds the volume derivatives of `correction_cb`, a list of the gradient named by
 // outer parameter and an optional Hessian with outer dimnames, to the outer model;
-// the callback gets the outer gradient without them as `data_gradient`. Returns its
+// the callback gets the outer gradient without them as `data_gradient`. Returns the
 // `eta_shift`, d eta*/d theta per subject (K x n_outer), or an empty list.
 static List add_correction(Function& correction_cb, const CharacterVector& outer_names,
                            const NumericVector& pars_full, const NumericMatrix& H_full,
@@ -933,7 +933,7 @@ static List add_correction(Function& correction_cb, const CharacterVector& outer
 
 // Moves the modes in `eta` (N x K) to first order along the step: eta += S_i step.
 // Only a subject whose move stays within `radius`, the region the inner search starts with; one that
-// would move farther, as where H_ee is near singular, keeps its modes.
+// would move farther, as where H_ee is near singular, keeps the previous modes.
 static void shift_modes(NumericMatrix& eta, const List& shift, const std::vector<double>& step, double radius) {
   const int N = eta.nrow(), K = eta.ncol(), n = step.size();
   if (shift.size() != N) return;
@@ -1215,7 +1215,7 @@ List focei_run(Function model_cb,
   const bool corrected = correction_mode != "none" && correction_cb.isNotNull();
 
   List out_curr = eval_outer(theta, true);
-  // the evaluation of the point the loop stands on, with its volume correction
+  // the evaluation of the point the loop stands on, with the volume correction
   List out_keep = out_curr;
   double       f_curr = as<double>(out_curr["value"]);
   NumericVector g_curr = as<NumericVector>(out_curr["gradient"]);
@@ -1251,7 +1251,7 @@ List focei_run(Function model_cb,
     trust_subproblem(n_outer, g_vec.data(), vals.data(), vecs.data(),
                      r, p_step.data(), &predicted_red, &is_newton);
     // what the model can gain at all, in the largest region the fit allows: a region that rejections
-    // shrank makes the step's own prediction small without the fit being near its optimum
+    // shrank makes the step's own prediction small without the fit being near the optimum
     double reachable = predicted_red;
     if (r < rmax) {
       std::vector<double> p_max(n_outer);
@@ -1329,7 +1329,7 @@ List focei_run(Function model_cb,
 
     if (is_terminate) { converged = true; break; }
     // as trust(): consecutive rejected trials that leave the objective flat within ftol, the noise
-    // of its evaluation, end the fit with nothing left to resolve
+    // of the evaluation, end the fit with nothing left to resolve
     if (accept || !eval_ok || std::fabs(actual_red) >= ftol) n_stall = 0;
     else if (++n_stall >= dmod::trust_driver::kStallLimit) { converged = true; break; }
   }

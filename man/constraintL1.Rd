@@ -10,7 +10,7 @@ constraintL1(mu, ...)
 \method{constraintL1}{default}(mu, sigma = 1, attrName = "prior", condition = NULL, ...)
 }
 \arguments{
-\item{mu}{Named numeric vector of prior locations. Its names select the
+\item{mu}{Named numeric vector of prior locations. The names select the
 constrained parameters.}
 
 \item{...}{Passed to the method.}
@@ -27,7 +27,7 @@ one.}
 }
 \value{
 An objective function of class \code{objfn}, called as
-\code{obj(pars, ...)}, see \link{dModfn}. Its value is the full \verb{-2 log} density,
+\code{obj(pars, ...)}, see \link{dModfn}. The objective value is the full \verb{-2 log} density,
 while \code{\link[=constraintL2]{constraintL2()}} returns the penalty form without the constant.
 }
 \description{
@@ -38,7 +38,7 @@ function.
 Computes the Laplace prior on the \verb{-2 log} scale,
 \deqn{2\log(2\sigma) + 2|p-\mu|/\sigma,}
 the L1 counterpart of \code{\link[=constraintL2]{constraintL2()}}. At \eqn{p = \mu} the term is not
-differentiable and its gradient is returned as 0.
+differentiable and the gradient is returned as 0.
 }
 \examples{
 prior <- constraintL1(mu = c(k1 = 0), sigma = 2)

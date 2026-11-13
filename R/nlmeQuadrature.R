@@ -1,5 +1,5 @@
 # Adaptive sparse-grid quadrature of the marginal likelihood of every group around the
-# conditional mode of its normal random effects, on nested Genz-Keister grids, and the ECM fits
+# conditional mode of the normal random effects of the group, on nested Genz-Keister grids, and the ECM fits
 # on it: one trust over every parameter on frozen nodes, the nodes rebuilt between the steps.
 
 
@@ -66,7 +66,7 @@
 
 
 ## Per group the matrix D_g that maps a change of the mu-referenced fixed effects to the shift
-## of its etas, eta = phi - D_g beta with phi held, one column per referenced parameter.
+## of the group etas, eta = phi - D_g beta with phi held, one column per referenced parameter.
 .referenceShift <- function(design) {
   lay <- design$normal
   # the conditions without a group are evaluated at psi, so referencing reads the grouped ones
@@ -151,7 +151,7 @@
                    conditions = reqCond[r])[[1L]])
     errs <- unname(as.list(errs))
   }
-  # the row map of a request depends on its condition only
+  # the row map of a request depends on the request condition only
   first <- match(unique(reqCond), reqCond)
   meta <- lapply(first, function(r)
     .build_normL2_meta(setNames(list(design$data[[reqCond[r]]]), "c"), list(c = preds[[r]]),
@@ -163,7 +163,7 @@
 }
 
 
-## log N(eta_b | 0, Omega) of the node etas with, given `grad`, its gradient and Hessian in the
+## log N(eta_b | 0, Omega) of the node etas with, given `grad`, the gradient and Hessian in the
 ## referenced fixed effects `refPars` (eta_b = phi_b - D beta) and the Cholesky parameters `ch`.
 .nodePrior <- function(lay, L, eta, D, refPars, ch, grad) {
   K <- lay$K
@@ -219,7 +219,7 @@
 
 
 ## The quadrature objective: `rebuild(psi, level, tol)` places the nodes around the modes at
-## `psi`, each group at its level (see `rebuild`); `value(pars)` is -2 log L on the frozen nodes,
+## `psi`, each group at the group level (see `rebuild`); `value(pars)` is -2 log L on the frozen nodes,
 ## frozen in phi = X beta + eta for the mu-referenced fixed effects, in eta for the other etas.
 .quadratureObjective <- function(design, start, fixed, control = list()) {
   lay <- design$normal
@@ -242,8 +242,8 @@
         data, etas)
   }
 
-  # each group at the lowest level from `level` up, never below its previous one, whose next
-  # level changes its -2 log L by at most tol / G
+  # each group at the lowest level from `level` up, never below the previous one, whose next
+  # level changes the group -2 log L by at most tol / G
   rebuild <- function(psi, level, tol = Inf, etaInit = state$modes) {
     psi <- c(psi, fixed[setdiff(names(fixed), names(psi))])
     im <- .innerModes(design, psi, etaInit, fixed, meta, control$innerControl %||% list())
@@ -432,7 +432,7 @@
       resolution <- sum(q$state$levelError[is.finite(q$state$levelError)])
       at <- list(psi = psi, value = ev$value, levels = q$state$levels)
       # -2 log L rose since the last iterate, on nodes of the same levels, by more than the Newton
-      # decrement here: the change is below what these nodes resolve, the stage ends at its best iterate.
+      # decrement here: the change is below what these nodes resolve, the stage ends at the best iterate.
       unresolved <- !is.null(prev) && identical(prev$levels, at$levels) && at$value - prev$value > dec
       if (is.null(best) || !identical(best$levels, at$levels) || at$value < best$value) best <- at
       rows[[length(rows) + 1L]] <- data.frame(level = level, ecmIter = it, OFV = ev$value, decrement = dec,
@@ -509,7 +509,7 @@
 
 
 ## Importance sampling at the estimate: per group a t5 proposal at (mode, (H / 2)^-1), `points`
-## draws on 8 randomly shifted rank-1 lattices. A group is flagged when its quadrature is off by
+## draws on 8 randomly shifted rank-1 lattices. A group is flagged when the group quadrature is off by
 ## more than 3 SE plus max(tol / G, level error), or the Pareto shape exceeds 0.7.
 .quadratureCertificate <- function(design, q, psi, fixed, control = list(), tol = Inf) {
   lay <- design$normal
@@ -578,7 +578,7 @@
   }
 }
 
-## A Korobov rank-1 lattice of n points in [0, 1)^s whose generator minimises the P2 criterion.
+## A Korobov rank-1 lattice of n points in [0, 1)^s whose generator minimizes the P2 criterion.
 .latticePoints <- function(n, s) {
   k <- 0:(n - 1L)
   b2 <- function(x) x^2 - x + 1 / 6

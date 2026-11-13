@@ -139,7 +139,7 @@ test_that("reml sees every term of a split objective", {
 })
 
 
-test_that("profileThreshold matches its definition", {
+test_that("profileThreshold matches the definition", {
   expect_equal(profileThreshold(0.95), qchisq(0.95, 1))
   n <- 48; p <- 6
   expect_equal(profileThreshold(0.95, method = "F", n = n, p = p),

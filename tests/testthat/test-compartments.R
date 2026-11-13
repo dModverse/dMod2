@@ -59,7 +59,7 @@ test_that("addReaction respects the compartment argument for new states", {
   expect_equal(unname(f$compartmentOf[["A"]]), "cyt")
   expect_equal(unname(f$compartmentOf[["B"]]), "cyt")
   f <- addReaction(f, "B", "C", "k2*B", compartment = "nuc")
-  expect_equal(unname(f$compartmentOf[["B"]]), "cyt")   # existing state keeps its compartment
+  expect_equal(unname(f$compartmentOf[["B"]]), "cyt")   # existing state keeps the compartment
   expect_equal(unname(f$compartmentOf[["C"]]), "nuc")   # new state picks up the arg
 })
 
@@ -319,7 +319,7 @@ test_that("a net-zero reaction contributes no flux instead of failing", {
   expect_equal(unname(as.eqnvec(f)[["A"]]), "0")
 })
 
-test_that("the constructor normalises zero stoichiometry to NA", {
+test_that("the constructor normalizes zero stoichiometry to NA", {
   f <- eqnlist(smatrix = matrix(c(-1, 0), nrow = 1, dimnames = list(NULL, c("A", "B"))),
                states = c("A", "B"), rates = "k*A", description = "r")
   expect_true(is.na(f$smatrix[1, "B"]))

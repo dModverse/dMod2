@@ -35,7 +35,7 @@ between two rounds. Default \code{1e-6}.}
 
 \item{rankTol}{Passed to \code{\link[=remlLeverage]{remlLeverage()}}. Default \code{1e-8}.}
 
-\item{optimizer}{Optimiser for the mean step, called as
+\item{optimizer}{Optimizer for the mean step, called as
 \code{optimizer(objfun, parinit, fixed = , ...)}. Default \code{\link[=trust]{trust()}}.}
 
 \item{control}{Named list of arguments for \code{optimizer}, merged into
@@ -66,8 +66,8 @@ A list with components
 \description{
 Alternates between fitting the mean parameters at a fixed error model and
 updating the error parameters from the REML stationarity condition, until
-the error parameters stop moving. Every data point enters with its own
-leverage, see \code{\link[=remlLeverage]{remlLeverage()}}. Every L2 term of a composed objective is
+the error parameters stop moving. Every data point enters with the leverage
+of that point, see \code{\link[=remlLeverage]{remlLeverage()}}. Every L2 term of a composed objective is
 used, so \code{normL2(d1, ...) + normL2(d2, ...)} is handled as one dataset.
 }
 \details{

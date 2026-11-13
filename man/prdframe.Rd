@@ -25,7 +25,7 @@ Object of class \code{prdframe}, a matrix with the attributes above.
 }
 \description{
 A prediction frame stores model predictions as a matrix with the column
-\code{"time"} and one column per variable. Its attributes are \code{"deriv"}, the
+\code{"time"} and one column per variable. The attributes are \code{"deriv"}, the
 first-order sensitivities with respect to the outer parameters (see \code{\link[=P]{P()}}),
 \code{"deriv2"}, the second-order sensitivities, and \code{"parameters"}, the inner
 parameters used for the prediction.

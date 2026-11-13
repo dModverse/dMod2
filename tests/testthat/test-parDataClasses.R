@@ -140,7 +140,7 @@ test_that("as.datalist of a list", {
   expect_false(is.datalist(l))
 })
 
-test_that("renaming a datalist renames its grid", {
+test_that("renaming a datalist renames the grid", {
   dl <- .xdGrid()
   names(dl) <- c("lo", "hi")
   expect_snapshot(.canonDput(dl))
@@ -169,7 +169,7 @@ test_that("plotData of a datalist", {
   expect_equal(attr(tr, "data")$value[attr(tr, "data")$name == "A"], log(c(1, 3, 5, 7)))
 })
 
-test_that("covariates of a datalist are its condition grid", {
+test_that("covariates of a datalist are the condition grid", {
   dl <- .xdGrid()
   expect_identical(covariates(dl), attr(dl, "condition.grid"))
   expect_null(covariates(structure(list(), class = c("datalist", "list"))))

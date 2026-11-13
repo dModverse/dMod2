@@ -1,4 +1,4 @@
-// The steady states of Pimpl() in C++: the roots of its system by cppDE's pseudo-transient
+// The steady states of Pimpl() in C++: the roots of the Pimpl system by cppDE's pseudo-transient
 // continuation, from the start the parameters give, with their derivatives by the implicit
 // function theorem. A root depends on the parameters, the start and the controls only.
 
@@ -18,7 +18,7 @@ struct State;
 // x exp(C' lambda) on C x = total for the n positive states xa; C is k x n, column-major.
 void onManifold(double* xa, int n, const double* C, int k, const double* total);
 
-// The steady state of `st` at its parameters `pv` from the start `guess` (the dependent states),
+// The steady state of `st` at the parameters `pv` from the start `guess` (the dependent states),
 // with derivatives of order `order`.
 struct Request {
   State* st = nullptr;

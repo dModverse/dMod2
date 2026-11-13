@@ -189,8 +189,8 @@ remlLeverage <- function(objfun, pars, meanpars = NULL, fixed = NULL,
 #' @description
 #' Alternates between fitting the mean parameters at a fixed error model and
 #' updating the error parameters from the REML stationarity condition, until
-#' the error parameters stop moving. Every data point enters with its own
-#' leverage, see [remlLeverage()]. Every L2 term of a composed objective is
+#' the error parameters stop moving. Every data point enters with the leverage
+#' of that point, see [remlLeverage()]. Every L2 term of a composed objective is
 #' used, so `normL2(d1, ...) + normL2(d2, ...)` is handled as one dataset.
 #'
 #' @details
@@ -207,7 +207,7 @@ remlLeverage <- function(objfun, pars, meanpars = NULL, fixed = NULL,
 #' @param tol Convergence threshold on the largest change of an error parameter
 #'   between two rounds. Default `1e-6`.
 #' @param rankTol Passed to [remlLeverage()]. Default `1e-8`.
-#' @param optimizer Optimiser for the mean step, called as
+#' @param optimizer Optimizer for the mean step, called as
 #'   `optimizer(objfun, parinit, fixed = , ...)`. Default [trust()].
 #' @param control Named list of arguments for `optimizer`, merged into
 #'   `list(rinit = 0.1, rmax = 10)`. Default `NULL`.
@@ -334,7 +334,7 @@ reml <- function(objfun, pars, errpars = NULL, fixed = NULL,
 }
 
 
-# Minimise sum_i [(1 - h_i) log sigma_i^2 + r_i^2/sigma_i^2] over the error
+# Minimize sum_i [(1 - h_i) log sigma_i^2 + r_i^2/sigma_i^2] over the error
 # parameters at frozen residuals and leverages, which is the REML condition.
 .remlUpdateSigma <- function(objfun, pars, errpars, h, fixed = NULL, cores = 1L) {
 
@@ -408,10 +408,10 @@ reml <- function(objfun, pars, errpars = NULL, fixed = NULL,
 ## The term that integrates the parameters `mean` out of the likelihood under a flat prior by
 ## Laplace, log|S / 2| - p log(2 pi) with S the Schur complement over the etas of the information
 ## G = sum_r w_r a_r a_r' + C + P over the mean parameters and the etas: a_r the derivative of the
-## prediction of data row r, w_r its curvature in the prediction with sigma held (the expected
+## prediction of data row r, w_r the curvature of the row loss in the prediction with sigma held (the expected
 ## one for Student-t readings), C the Hessian of the terms of the objective beside the data and P
 ## the prior precision of the etas, at `full`, the outer parameters and the modes. With `deriv`
-## also its gradient in the parameters `theta` of `full`, the others held:
+## also the gradient of the term in the parameters `theta` of `full`, the others held:
 ## sum_r q_r dw_r + tr(Gamma dP), q_r = a_r' Gamma a_r, Gamma = G^-1 minus the inverse eta blocks.
 .remlTerm <- function(design, full, fixed, mean, theta = character(0), deriv = TRUE, cores = 1L) {
   units <- if (length(.allEtas(design))) .volumeUnits(design, full, fixed) else list()
@@ -527,7 +527,7 @@ reml <- function(objfun, pars, errpars = NULL, fixed = NULL,
 
 ## The restricted likelihood term as an objective of the error parameters and hyperparameters
 ## `theta`, the other parameters of `full` and the modes held at the point `anchor` of the previous
-## round, the linearization of Lindstrom and Bates. Its Hessian is left 0.
+## round, the linearization of Lindstrom and Bates. The Hessian of the term is left 0.
 .remlAnchor <- function(design, anchor, mean, theta) {
   last <- NULL
   fn <- function(..., fixed = NULL, deriv = TRUE, deriv2 = FALSE, hessian = NULL, conditions = NULL,

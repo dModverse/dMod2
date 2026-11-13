@@ -4,31 +4,7 @@
 utils::globalVariables(c("predicted", "observed", "sd_est", "iter", "level", "shown"))
 
 
-# PDF viewer, theme and color palettes ---
-
-#' Open a Plot in an External PDF Viewer
-#'
-#' Saves a plot as PDF in [tempdir()] and opens it with an external command.
-#'
-#' @param plot A `ggplot2` plot object. Defaults to [ggplot2::last_plot()].
-#' @param command Character, the shell command that opens the PDF file.
-#'   Default `NULL` opens it with the viewer of the platform: `"open"` on
-#'   macOS, `"xdg-open"` on Linux and `shell.exec()` on Windows.
-#' @param ... Arguments passed to [ggplot2::ggsave()].
-#' @return The path of the PDF file, invisibly.
-#' @export
-ggopen <- function(plot = last_plot(), command = NULL, ...) {
-  filename <- tempfile(pattern = "Rplot", fileext = ".pdf")
-  ggsave(filename = filename, plot = plot, ...)
-  if (is.null(command) && .Platform$OS.type == "windows") {
-    get("shell.exec", envir = baseenv())(filename)
-    return(invisible(filename))
-  }
-  if (is.null(command))
-    command <- if (Sys.info()[["sysname"]] == "Darwin") "open" else "xdg-open"
-  system(command = paste(command, shQuote(filename)))
-  invisible(filename)
-}
+# Theme and color palettes ---
 
 
 #' Standard Plotting Theme of dMod
@@ -46,17 +22,17 @@ ggopen <- function(plot = last_plot(), command = NULL, ...) {
 #'   geom_line() + theme_dMod()
 theme_dMod <- function(base_size = 12, base_family = "", showGrid = FALSE) {
   theme_bw(base_size = base_size, base_family = base_family) +
-    theme(line = element_line(colour = "black"),
-          rect = element_rect(fill = "white", colour = NA),
-          text = element_text(colour = "black"),
-          axis.text = element_text(size = rel(1.0), colour = "black"),
+    theme(line = element_line(color = "black"),
+          rect = element_rect(fill = "white", color = NA),
+          text = element_text(color = "black"),
+          axis.text = element_text(size = rel(1.0), color = "black"),
           axis.text.x = element_text(margin = margin(t = 4, r = 4, b = 0, l = 4, unit = "mm")),
           axis.text.y = element_text(margin = margin(t = 4, r = 4, b = 4, l = 0, unit = "mm")),
-          axis.ticks = element_line(colour = "black"),
+          axis.ticks = element_line(color = "black"),
           axis.ticks.length = unit(-2, "mm"),
-          legend.key = element_rect(colour = NA),
-          panel.border = element_rect(colour = "black"),
-          strip.background = element_rect(fill = "white", colour = NA),
+          legend.key = element_rect(color = NA),
+          panel.border = element_rect(color = "black"),
+          strip.background = element_rect(fill = "white", color = NA),
           strip.text = element_text(size = rel(1.0))) +
     (if (showGrid) NULL else theme(panel.grid = element_blank()))
 
@@ -146,7 +122,7 @@ dMod_divergent_cb <- c("#072F62", "#56B4E9", "#FFFFFF", "#E69F00", "#4F3408")
 .dMod_seq <- list(
   okabe   = list(dE = 12.0, colors = dMod_gradient_cb),
   viridis = list(dE = 13.8, colors = c("#440154","#3B528B","#21908C","#5DC863","#FDE725")),
-  grey    = list(dE = 13.2, colors = c("#111111", "#DDDDDD")),
+  gray    = list(dE = 13.2, colors = c("#111111", "#DDDDDD")),
   heat    = list(dE = 10.7, colors = c("#FFFFFF", "#FF950E", "#C5000B")),
   dMod    = list(dE =  5.4, colors = dMod_gradient))
 
@@ -199,7 +175,7 @@ dMod_palettes <- function(type = NULL) {
 
 #' Generate Distinct Colors from a dMod Palette
 #'
-#' Returns the first `n` colors of the chosen palette. Beyond its seeds the
+#' Returns the first `n` colors of the chosen palette. Beyond the seeds of the palette the
 #' colors come from `Polychrome::createPalette()` if Polychrome is installed and
 #' from [grDevices::hcl.colors()] otherwise. These extra colors are not
 #' colorblind-safe; a colorblind-safe palette warns when it runs out of seeds.
@@ -262,10 +238,10 @@ dMod_palette <- function(n, palette = "okabe") {
 #'    value = c(values, 1.2*values, 1.4*values, 1.6*values),
 #'    group = rep(c("C1", "C2", "C3", "C4"), each = length(times))
 #' )
-#' ggplot(data, aes(time, value, colour = group)) + geom_line() +
+#' ggplot(data, aes(time, value, color = group)) + geom_line() +
 #'    theme_dMod() + scale_color_dMod()
 scale_color_dMod <- function(..., palette = "okabe") {
-  ggplot2::discrete_scale(aesthetics = "colour",
+  ggplot2::discrete_scale(aesthetics = "color",
                           palette = function(n) dMod_palette(n, palette), ...)
 }
 
@@ -293,7 +269,7 @@ scale_fill_dMod <- function(..., palette = "okabe") {
 #' @param direction 1 (default) or -1; -1 reverses the ramp.
 #' @param palette Name of a sequential palette for `_c`, a diverging one for
 #'   `_div`, see [dMod_palettes()]. Defaults to the colorblind-safe `"okabe"`.
-#' @param ... Arguments passed to [ggplot2::scale_colour_gradientn()] or
+#' @param ... Arguments passed to [ggplot2::scale_color_gradientn()] or
 #'   [ggplot2::scale_fill_gradientn()].
 #' @return A continuous `ggplot2` scale.
 #' @seealso [scale_color_dMod()]
@@ -301,25 +277,25 @@ scale_fill_dMod <- function(..., palette = "okabe") {
 #' @examples
 #' library(ggplot2)
 #' d <- expand.grid(time = seq(0, 10, 0.1), eps = seq(0, 1, 0.1))
-#' ggplot(d, aes(time, exp(-eps * time), group = eps, colour = eps)) +
+#' ggplot(d, aes(time, exp(-eps * time), group = eps, color = eps)) +
 #'    geom_line() + theme_dMod() + scale_color_dMod_c()
 scale_color_dMod_c <- function(..., direction = 1, palette = "okabe") {
-  ggplot2::scale_colour_gradientn(
-    colours = .dMod_ramp(.dMod_pick(palette, "sequential")$colors, direction), ...)
+  ggplot2::scale_color_gradientn(
+    colors = .dMod_ramp(.dMod_pick(palette, "sequential")$colors, direction), ...)
 }
 
 #' @export
 #' @rdname scale_color_dMod_c
 scale_fill_dMod_c <- function(..., direction = 1, palette = "okabe") {
   ggplot2::scale_fill_gradientn(
-    colours = .dMod_ramp(.dMod_pick(palette, "sequential")$colors, direction), ...)
+    colors = .dMod_ramp(.dMod_pick(palette, "sequential")$colors, direction), ...)
 }
 
 #' @export
 #' @rdname scale_color_dMod_c
 scale_color_dMod_div <- function(mid = 0, ..., direction = 1, palette = "okabe") {
-  ggplot2::scale_colour_gradientn(
-    colours = .dMod_ramp(.dMod_pick(palette, "diverging")$colors, direction),
+  ggplot2::scale_color_gradientn(
+    colors = .dMod_ramp(.dMod_pick(palette, "diverging")$colors, direction),
     rescaler = .dMod_mid_rescaler(mid), ...)
 }
 
@@ -327,7 +303,7 @@ scale_color_dMod_div <- function(mid = 0, ..., direction = 1, palette = "okabe")
 #' @rdname scale_color_dMod_c
 scale_fill_dMod_div <- function(mid = 0, ..., direction = 1, palette = "okabe") {
   ggplot2::scale_fill_gradientn(
-    colours = .dMod_ramp(.dMod_pick(palette, "diverging")$colors, direction),
+    colors = .dMod_ramp(.dMod_pick(palette, "diverging")$colors, direction),
     rescaler = .dMod_mid_rescaler(mid), ...)
 }
 
@@ -379,7 +355,7 @@ coordTransform <- function(data, transformations) {
 # Generics of the prediction and data plots ---------------------------------
 
 ## The levels of `x` in natural order: numbers inside the labels compare by value, so L2 comes
-## before L10. A factor keeps its levels.
+## before L10. A factor keeps the given levels.
 .naturalLevels <- function(x) {
   if (is.factor(x)) return(levels(x))
   u <- unique(as.character(x))
@@ -479,7 +455,7 @@ plotData.data.frame <- function(data, ...) plotData(as.datalist(data), ...)
 #' @param maxvalue Numeric, the value of the objective difference at which
 #'   profiles are cut off. Defaults to 5.
 #' @param parlist Matrix or data frame with parameter columns, drawn as points.
-#'   With a `value` column, its differences to the lowest profile value are
+#'   With a `value` column, the differences of `value` to the lowest profile value are
 #'   used.
 #' @param ncol Number of columns of the plot grid. `NULL` (default) lets
 #'   [ggplot2::facet_wrap()] choose.
@@ -531,7 +507,7 @@ plotPaths <- function(profs, ..., whichPar = NULL, sort = FALSE, relative = TRUE
     if (relative) as.expression(bquote(paste(Delta, .(label)))) else label
   }
 
-  p <- ggplot2::ggplot(paths, aes(x, y, group = interaction(name, proflist), colour = name,
+  p <- ggplot2::ggplot(paths, aes(x, y, group = interaction(name, proflist), color = name,
                                   linetype = proflist)) +
     geom_path() +
     facet_wrap(vars(combination), scales = scales) +
@@ -541,7 +517,7 @@ plotPaths <- function(profs, ..., whichPar = NULL, sort = FALSE, relative = TRUE
     theme_dMod()
   # a legend with a single entry says nothing
   if (length(unique(paths$proflist)) < 2L) p <- p + guides(linetype = "none")
-  if (length(unique(paths$name)) < 2L) p <- p + guides(colour = "none")
+  if (length(unique(paths$name)) < 2L) p <- p + guides(color = "none")
   attr(p, "data") <- paths
   p
 }
@@ -635,7 +611,7 @@ plotFluxes <- function(pouter, x, times, fluxEquations, legendTitle = "Fluxes:",
   }, prediction, names(prediction))))
 
   p <- ggplot2::ggplot(out, aes(time, value, group = name, fill = name)) +
-    geom_area(position = "stack", alpha = 0.3, colour = "darkgrey", linewidth = 0.4) +
+    geom_area(position = "stack", alpha = 0.3, color = "darkgray", linewidth = 0.4) +
     facet_wrap(vars(condition)) +
     scale_fill_dMod(name = legendTitle) +
     labs(x = "time", y = "flux contribution") +
@@ -663,7 +639,7 @@ plotFluxes <- function(pouter, x, times, fluxEquations, legendTitle = "Fluxes:",
 #' Plot Objective Values of a Collection of Fits
 #'
 #' Draws the waterfall plot of a fit collection: the objective values in
-#' ascending order against their rank. A converged fit is colored by its number
+#' ascending order against their rank. A converged fit is colored by the number
 #' of iterations, an unconverged one is red.
 #'
 #' @param x A collection of fits: a [parframe], the result of [mstrust()], a
@@ -674,16 +650,16 @@ plotFluxes <- function(pouter, x, times, fluxEquations, legendTitle = "Fluxes:",
 #' @param tol Maximal difference between neighboring objective values that
 #'   still counts as one step. Defaults to 1.
 #' @param showSteps Logical. `TRUE` marks the detected steps by dashed
-#'   vertical lines labelled by their index. Defaults to `FALSE`.
+#'   vertical lines labeled by their index. Defaults to `FALSE`.
 #' @param pseudoLog Logical. `TRUE` draws the values on a pseudo-log10 scale,
 #'   linear below 1 in absolute value and defined for negative values. Defaults
 #'   to `FALSE`, a linear scale.
-#' @param relative `TRUE` draws every value above the best of its
+#' @param relative `TRUE` draws every value above the best value in the same
 #'   collection, as for collections whose objectives differ by a constant; a
 #'   number draws every value above that number, as the best of all
 #'   collections. Defaults to `FALSE`.
 #' @return A `ggplot` object with the plotted data frame as attribute
-#'   `"data"`; its column `delta` is the distance to the best fit of its
+#'   `"data"`; the column `delta` is the distance to the best fit in the same
 #'   collection, `set` the collection of a list.
 #' @seealso [mstrust()], [as.parframe()], [plotPars()]
 #' @export
@@ -721,7 +697,7 @@ plotPars <- function(x, ...) UseMethod("plotPars")
 #' Sums the squared weighted residuals of each fit over all variables not
 #' named in `split` and plots the sums.
 #'
-#' @param parframe A [parframe], e.g. from `as.parframe(mstrust(...))`. Its
+#' @param parframe A [parframe], e.g. from `as.parframe(mstrust(...))`. The
 #'   column `index` labels the fits; without it the row numbers are used.
 #' @param x Prediction function returning a [prdlist] with names matching
 #'   `data`.
@@ -765,7 +741,7 @@ plotResiduals.default <- function(parframe, x, data, split = "condition",
   times <- sort(unique(c(0, unlist(lapply(data, `[[`, "time")))))
   fits <- if ("index" %in% colnames(parframe)) parframe$index else seq_len(nrow(parframe))
 
-  # residuals of one fit, all conditions, labelled by fit and condition
+  # residuals of one fit, all conditions, labeled by fit and condition
   residualsOf <- function(j) {
     pred <- x(times, .parvecRow(parframe, j), deriv = FALSE, ...)
     data.table::rbindlist(lapply(names(pred), function(C) {
@@ -781,8 +757,8 @@ plotResiduals.default <- function(parframe, x, data, split = "condition",
   sums <- data.table::data.table(long[, split, with = FALSE], res = terms)
   out <- as.data.frame(sums[, list(res = sum(res)), keyby = split])
 
-  colourBy <- as.name(split[min(2L, length(split))])
-  p <- ggplot(out, aes(!!as.name(split[1]), res, colour = !!colourBy, group = !!colourBy)) +
+  colorBy <- as.name(split[min(2L, length(split))])
+  p <- ggplot(out, aes(!!as.name(split[1]), res, color = !!colorBy, group = !!colorBy)) +
     theme_dMod() +
     geom_point() +
     geom_line()
@@ -841,7 +817,7 @@ plotPairs <- function(x, ...) UseMethod("plotPairs", x)
 #' @param direction `"up"` (default) or `"down"`, the side of the profile that
 #'   is traced from the optimum.
 #' @param covtable Condition table, e.g. from [covariates()], merged with the
-#'   predictions by condition so that `...` can refer to its columns. Default
+#'   predictions by condition so that `...` can refer to the table columns. Default
 #'   `NULL`.
 #' @param nSim Number of trajectories, evenly spaced along the profile side
 #'   and starting at the optimum; at most the number of profile points on that
@@ -878,7 +854,7 @@ plotArray <- function(par, profs, prd, times, ..., direction = c("up", "down"),
     })
     if (is.null(pred)) return(NULL)
     plain <- lapply(.fillNames(pred, ""), function(m) matrix(m, nrow(m), dimnames = dimnames(m)))
-    cbind(wide2long(plain), set = k, ParValue = pars[[par]])
+    cbind(.wide2long(plain), set = k, ParValue = pars[[par]])
   }
   out <- as.data.frame(data.table::rbindlist(lapply(seq_along(side), trajectories)))
 
@@ -888,7 +864,7 @@ plotArray <- function(par, profs, prd, times, ..., direction = c("up", "down"),
   }
   out <- dplyr::filter(out, ...)
 
-  ggplot2::ggplot(out, aes(time, value, group = set, colour = ParValue)) +
+  ggplot2::ggplot(out, aes(time, value, group = set, color = ParValue)) +
     geom_line() +
     facet_grid(rows = vars(name), cols = vars(condition), scales = "free_y") +
     scale_color_viridis_c(name = par) +
@@ -921,7 +897,7 @@ plotArray <- function(par, profs, prd, times, ..., direction = c("up", "down"),
 #' Profile Likelihood: Plot All Parameter Paths of One Profile Together
 #'
 #' Draws, for each profiled parameter, the changes of all other parameters
-#' along its profile in one panel. The `nPars` parameters with the largest
+#' along the profile of that parameter in one panel. The `nPars` parameters with the largest
 #' change are colored and named, the others are gray. Requires the package
 #' cowplot.
 #'
@@ -969,7 +945,7 @@ plotPathsMulti <- function(profs, whichPar, nPars = 5, normalizePaths = FALSE) {
     theme(legend.position = "inside",
           legend.position.inside = corner,
           legend.justification = corner,
-          legend.background = element_rect(fill = alpha("white", 0.85), colour = "black",
+          legend.background = element_rect(fill = alpha("white", 0.85), color = "black",
                                            linewidth = 0.3),
           legend.key.size = unit(0.4, "cm"),
           legend.margin = margin(2, 4, 2, 4),

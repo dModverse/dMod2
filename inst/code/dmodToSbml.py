@@ -153,7 +153,7 @@ def build_sbml(spec):
 
 
 def main(argv):
-    """Build the SBML document described by the JSON spec argv[0] and write it to its outfile."""
+    """Build the SBML document described by the JSON spec argv[0] and write it to the outfile the spec names."""
     if not argv:
         sys.exit("usage: dmodToSbml.py SPEC.json")
     with open(argv[0]) as fh:

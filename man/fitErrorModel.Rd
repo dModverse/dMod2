@@ -35,7 +35,7 @@ expression in the mean \code{x} and the parameters. Default
 \code{par}. Default \code{NULL}, unbounded.}
 
 \item{plotting}{Logical. If \code{TRUE}, plot the variances, the fitted model
-and its 68 and 95 percent bands per group. Default \code{FALSE}.}
+with 68 and 95 percent bands per group. Default \code{FALSE}.}
 
 \item{blather}{Logical. If \code{TRUE}, return the extended data frame described
 under Value. Default \code{FALSE}.}
@@ -48,10 +48,10 @@ under Value. Default \code{FALSE}.}
 the fitted model gives.
 
 With \code{blather = TRUE}, a data frame with the columns of \code{data}, \code{sigma}
-replaced as above, one column per parameter of \code{errorModel} with its
+replaced as above, one column per parameter of \code{errorModel} with the
 fitted value, the variance bands \code{cbLower68}, \code{cbUpper68}, \code{cbLower95} and
 \code{cbUpper95}, the group label \code{condidnt} and the input \code{sigma} as
-\code{sigmaLS}. Its attribute \code{"errorModel"} holds \code{errorModel}.
+\code{sigmaLS}. The attribute \code{"errorModel"} holds \code{errorModel}.
 }
 \description{
 Fits the variance of replicate measurements as a function of

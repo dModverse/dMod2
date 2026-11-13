@@ -35,10 +35,10 @@ reconstControl(
 for the dense fit; wider entries use sparse interpolation. Defaults to 6.}
 
 \item{relevanceCapDir}{Maximum number of coordinates in one direction; a wider
-one is reported by its support. Defaults to 24.}
+one is reported by the support. Defaults to 24.}
 
 \item{relevanceCapSparse}{Maximum number of coordinates in one entry for the
-sparse (Ben-Or/Tiwari) fit; a wider entry is reported by its support.
+sparse (Ben-Or/Tiwari) fit; a wider entry is reported by the support.
 Defaults to 30.}
 
 \item{degreeCap}{Total degree bound of the dense rational fit. Defaults to 4.}
@@ -83,7 +83,7 @@ finished in time are reported by their support. \code{Inf} (default) sets no lim
 \item{degreeCapMax}{Degree up to which an entry past \code{degreeCap} is probed again,
 the bound doubled each time.}
 
-\item{exactProof}{Whether a closed form that is not its own lift is proven through
+\item{exactProof}{Whether a closed form that differs from the lift of the form is proven through
 the fields of each regime, one detection per regime.}
 
 \item{exactWorkCap}{Work bound of that proof: regimes times coordinates times tape

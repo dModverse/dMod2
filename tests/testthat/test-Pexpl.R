@@ -139,7 +139,7 @@ test_that("Pexpl derivMode 'reverse' and 'forward' agree on the value", {
 # derivative row counts as fixed downstream, so a missing row would zero the
 # forward gradient along it.
 
-test_that("Pexpl(attachInput = TRUE) gives every input it passes through its own row", {
+test_that("Pexpl(attachInput = TRUE) gives every input it passes through a separate row", {
   skip_if_no_compile()
   p <- .pexpl_fx()$p_thru
   outer <- c(a = 1.3, b = 0.7, s = 2, u = -1)
@@ -184,7 +184,7 @@ test_that("an input passed through that the caller fixed stays fixed", {
   expect_equal(unname(J["u", ]), c(0, 0, 1))
   expect_false("s" %in% dimnames(attr(out, "deriv2"))[[1L]])
 
-  # Fixing an input the trafo reads removes its direction from the trafo's rows.
+  # Fixing an input the trafo reads removes the input direction from the trafo's rows.
   out <- p(c(b = 0.7, s = 2), fixed = c(a = 1.3))$C1
   expect_setequal(names(out), c("A", "k", "a", "b", "s"))
   expect_setequal(attr(out, "fixed"), c("A", "a"))
@@ -275,7 +275,7 @@ test_that("an uncompiled Pexpl asks for compile()", {
 })
 
 
-test_that("an output with a vanishing first derivative keeps its second", {
+test_that("an output with a vanishing first derivative keeps the second", {
   skip_if_no_compile()
   fx <- .pexpl_fx()
   v <- fx$p_kink(c(b = 0, d = 1), deriv2 = TRUE)[[1]]

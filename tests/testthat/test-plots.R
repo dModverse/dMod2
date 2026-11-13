@@ -37,7 +37,7 @@ test_that("plotPars detects steps also on a frame not sorted by value", {
   expect_equal(as.integer(as.character(steps$step[order(steps$value)])), c(1, 1, 2, 3))
 })
 
-test_that("a layer added to plotCombined inherits its data", {
+test_that("a layer added to plotCombined inherits the plotCombined data", {
   x <- Xd(data.frame(name = "A", time = 0:2, row.names = paste0("A", 0:2)), condition = "C1")
   pars <- c(A0 = 1, A1 = 0.5, A2 = 0.2)
   data <- as.datalist(data.frame(name = "A", time = 0:2, value = pars + 0.01, sigma = 0.1,
@@ -46,7 +46,7 @@ test_that("a layer added to plotCombined inherits its data", {
   expect_no_error(ggplot2::ggplot_build(p))
 })
 
-test_that("plotResiduals labels each fit with the residuals of its own row", {
+test_that("plotResiduals labels each fit with the residuals of the fit row", {
   x <- Xd(data.frame(name = "A", time = 0:1, row.names = c("a0", "a1")), condition = "C1")
   data <- as.datalist(data.frame(name = "A", time = 0:1, value = c(1, 2), sigma = 1, condition = "C1"))
   pf <- parframe(data.frame(value = c(8, 0), index = 1:2, a0 = c(3, 1), a1 = c(4, 2)),
@@ -62,7 +62,7 @@ test_that("plotPars and plotValues take a positional subset", {
   expect_no_error(ggplot2::ggplot_build(plotValues(fs, converged)))
 })
 
-test_that("plotValues takes the fits of mstrust() and a named list, each collection ranked on its own", {
+test_that("plotValues takes the fits of mstrust() and a named list, each collection ranked separately", {
   fits <- mstrust(.coupled, c(a = 1, b = 1, c = 0.5, d = 1), fits = 3, sd = 1, cores = 1, iterlim = 50)
   expect_equal(attr(plotValues(fits), "data")$value, sort(as.parframe(fits)$value))
   expect_equal(names(as.parvec(fits)), c("a", "b", "c", "d"))
@@ -142,7 +142,7 @@ test_that("plotProfilesAndPaths draws the total besides the contributions", {
   profs <- profile(constraintL2(mu = pars, sigma = 0.1), pars, whichPar = "a",
                    limits = c(-1, 1), cores = 1)
   panels <- list()
-  # the first call aligns the profile panel with its paths
+  # the first call aligns the profile panel with the paths
   local_mocked_bindings(align_plots = function(...) {
     if (!length(panels)) panels <<- list(...)
     list(...)

@@ -3,7 +3,7 @@
 \name{trust}
 \alias{trust}
 \alias{trustL1}
-\title{Non-Linear Optimisation by a Trust-Region Method}
+\title{Non-Linear Optimization by a Trust-Region Method}
 \usage{
 trust(
   objfun,
@@ -77,12 +77,12 @@ objective, \code{"bfgs"} or \code{"sr1"} a quasi-Newton update seeded as
 every iterate, which needs an objective that takes \code{deriv2}.
 Quasi-Newton methods require \code{boundary = "reflective"}.
 Also selects the control defaults below. With \code{phases}, each phase
-names its own and this argument is an error.}
+names a method, and this argument is an error.}
 
 \item{phases}{List of phases, each a list of settings, run one after the
 other and from the first again after the last. The run hands over to the
 next phase at a value, model, step or stagnation stop and when a phase
-uses up its own \code{iterlim}. A handover restarts the trust region at
+uses up the \code{iterlim} of that phase. A handover restarts the trust region at
 \code{rinit} and discards the quasi-Newton pairs. Default \code{NULL}: one
 phase from \code{hessianMethod} and \code{qnControl}, evaluated with the
 \code{sweep} in \code{...}. Names of the list label the phases in the
@@ -185,8 +185,8 @@ the nodes are laid out afresh and released. Default \code{FALSE}.}
 \item{\code{restore}}{Multiple shooting only: if \code{TRUE}, a run whose
 steps keep being rejected with open gaps enters a restoration phase,
 at most five times. Default \code{FALSE}.}
-\item{\code{regularise}}{Multiple shooting only: directions of the
-condensed problem with a singular value below \code{regularise} times
+\item{\code{regularize}}{Multiple shooting only: directions of the
+condensed problem with a singular value below \code{regularize} times
 the largest are held fixed in a step. Default \code{0}, off. With
 \code{acceptance = "natural"} directions below \code{1e-7} are always
 held fixed.}
@@ -194,13 +194,13 @@ held fixed.}
 step whose gaps did not close as predicted is retried once with a
 second-order correction. Default \code{TRUE}.}
 \item{\code{anneal}}{Multiple shooting only: if \code{TRUE}, the run
-first minimises the objective plus a rising penalty on the gaps, then
+first minimizes the objective plus a rising penalty on the gaps, then
 enforces continuity. Needs forward sensitivities and is skipped
 without them. Default \code{TRUE}.}
 }}
 
-\item{minimize}{If \code{TRUE} (default) minimise, if \code{FALSE}
-maximise.}
+\item{minimize}{If \code{TRUE} (default) minimize, if \code{FALSE}
+maximize.}
 
 \item{blather}{If \code{TRUE}, the result also contains the per-iteration
 trace listed under Value. Default \code{FALSE}.}
@@ -213,11 +213,11 @@ iteration, objective value and parameters. Default \code{NULL}, no file.}
 
 \item{sparse}{\code{"auto"} (default), \code{TRUE} or \code{FALSE}. With
 \code{TRUE}, \code{objfun} is called with \code{hessian = "sparse"} and
-its sparse Gauss-Newton Hessian (a \code{Matrix}) is factorised by sparse
+the sparse Gauss-Newton Hessian it returns (a \code{Matrix}) is factorized by sparse
 Cholesky. Without phases and bounds; of the other settings only
 \code{rinit}, \code{rmax}, \code{iterlim}, \code{tolControl$ftol},
 \code{tolControl$mtol} and \code{printIter} apply. \code{"auto"} takes
-this path for a Gauss-Newton minimisation without phases, bounds, exact
+this path for a Gauss-Newton minimization without phases, bounds, exact
 Hessian, trace or multiple shooting when \code{parinit} has at least
 \code{parameters} entries and the sparse Hessian at \code{parinit} fills
 at most \code{fill} of the matrix, both from
@@ -226,7 +226,7 @@ at most \code{fill} of the matrix, both from
 
 \item{...}{Further named arguments passed to \code{objfun}.}
 
-\item{mu}{Named numeric vector of reference values for the L1-penalised
+\item{mu}{Named numeric vector of reference values for the L1-penalized
 parameters. Names must be a subset of \code{names(parinit)}; only the
 named parameters receive a penalty. Each must lie strictly inside
 \code{[parlower, parupper]}. Defaults to a zero vector covering all of
@@ -244,8 +244,8 @@ all entries of \code{mu}) or a named numeric aligned with \code{mu}.}
 on \code{mu} and leaves it only upward. Starts below \code{mu} are moved
 onto it.}
 
-\item{fuse}{List of fusion blocks. A block penalises
-\code{lambda * sum_{i<j} w_ij |p_i - p_j|} over its parameters, plus
+\item{fuse}{List of fusion blocks. A block penalizes
+\code{lambda * sum_{i<j} w_ij |p_i - p_j|} over the parameters of the block, plus
 \code{lambda * w_ia |p_i - a|} toward an optional anchor \code{a}.
 Parameters with equal values move as one and split again when the data
 pull them apart. A block is a character vector of parameter names or a
@@ -306,7 +306,7 @@ stages), the \code{cuts}, the \code{acceptance} and \code{sweep} used,
 \code{blather = TRUE}.
 }
 \description{
-\code{trust} minimises (or maximises) a smooth objective function for which
+\code{trust} minimizes (or maximizes) a smooth objective function for which
 value, gradient and Hessian are available. It solves a Moré-Sorensen
 trust-region subproblem exactly, via the full eigendecomposition of the
 Hessian.
@@ -352,7 +352,7 @@ remain, see \code{phases}, an \code{"fvalue"}, \code{"preddiff"},
 \code{"step"} or \code{"stagnation"} stop hands over to the next phase
 instead of ending the run. In a quasi-Newton phase \code{"fvalue"},
 \code{"preddiff"} and \code{"step"} do not end the run. A phase that
-reaches its own \code{iterlim} ends like a soft stop, with
+reaches the \code{iterlim} of that phase ends like a soft stop, with
 \code{stopReason = "iterlim"} and \code{converged = FALSE} when no
 handover is left. The total \code{iterlim} ends the run in any phase, with
 \code{stopReason = "iterlim"} and \code{converged = FALSE}.
@@ -365,7 +365,7 @@ the last accepted one when \code{stepControl$nonmonotone = 0}.
 \section{Multiple shooting}{
 
 An objective built by \code{\link{normL2}(..., multipleShootingControl = )},
-alone or in a sum, is optimised by multiple shooting with the same controls.
+alone or in a sum, is optimized by multiple shooting with the same controls.
 Not available then: \code{hessianMethod = "exact"}, more than one phase,
 \code{switches}, \code{qnControl$hessianReseed},
 \code{qnControl$qnMemory}, \code{stepControl$nonmonotone},
@@ -396,7 +396,7 @@ fit <- trust(rosenbrock, c(a = -1.2, b = 1), parupper = c(a = 0.5),
              iterlim = 200)
 fit$atBound
 
-# Gauss-Newton, then BFGS with a budget of its own, then Gauss-Newton again
+# Gauss-Newton, then BFGS with a separate budget, then Gauss-Newton again
 fit <- trust(rosenbrock, c(a = -1.2, b = 1), iterlim = 200,
              phases = list(list(hessianMethod = "gn"),
                            list(hessianMethod = "bfgs", iterlim = 50)),

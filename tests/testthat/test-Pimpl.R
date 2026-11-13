@@ -12,7 +12,7 @@ skip_if_no_compile <- function() {
 
 # Every model a test evaluates, generated once and compiled on first use. The
 # ODE sources need -fopenmp and the algebraic ones do not, so each flag set
-# gets its own shared object.
+# gets a separate shared object.
 .pp_env <- new.env(parent = emptyenv())
 
 pp_models <- function() {
@@ -136,7 +136,7 @@ pp_models <- function() {
     addReaction("I", "pI", "a * R * I") |> addReaction("pI", "iI", "b * pI") |>
     addReaction("iI", "I", "c * iI")
   rest <- Pimpl(el_rest, modelname = mn("rest"), verbose = FALSE)
-  # the same network as g * x * rest * p, its resting state absent from p or given by it
+  # the same network as g * x * rest * p, the resting state absent from p or given by it
   rest_ode <- odemodel(el_rest, modelname = mn("rest_ode"), compile = FALSE)
   rest_obs <- Y(c(yI = "I", yP = "pI"), f = el_rest, modelname = mn("rest_obs"))
   tr_rest <- c(u = "exp(lu)", a = "exp(la)", b = "exp(lb)", c = "1",
@@ -331,7 +331,7 @@ test_that("two independent conserved moieties solve to closed form", {
 
 test_that("non-unit stoichiometric coefficient is handled (2*M <-> D)", {
   skip_if_no_compile()
-  # Dimerisation conserves the monomer count.
+  # Dimerization conserves the monomer count.
   m <- pp_models()
 
   p0 <- c(ka = 1, kd = 2, total_MD = 5)
@@ -361,12 +361,12 @@ test_that("overlapping conserved quantities reconstruct consistently (recycle en
   # all four species reconstructed and non-negative at the steady state
   expect_setequal(intersect(c("G","GS","S","P"), names(o)), c("G","GS","S","P"))
   expect_true(all(as.numeric(o[c("G","GS","S","P")]) >= -1e-6))
-  # the enzyme moiety G + GS equals its total to the solver tolerance
+  # the enzyme moiety G + GS equals the moiety total to the solver tolerance
   expect_equal(as.numeric(o["G"] + o["GS"]), p0[["total_1"]], tolerance = 1e-5)
   expect_true(is.finite(as.numeric(o["S"])))
 })
 
-test_that("a network without influx keeps its conserved totals, an open one errors clearly", {
+test_that("a network without influx keeps the conserved totals, an open one errors clearly", {
   skip_if_no_compile()
   oldwd <- setwd(.dmod_fx_workdir()); on.exit(setwd(oldwd), add = TRUE)
 
@@ -423,7 +423,7 @@ test_that("keepRoot answers repeated values from memory with the same root", {
 })
 
 
-test_that("a condition-less Pimpl solves each condition from its own values", {
+test_that("a condition-less Pimpl solves each condition from the condition values", {
   skip_if_no_compile()
   m <- pp_models()
   out <- (m$pd * m$px)(c(s = 3), deriv = FALSE)
@@ -489,7 +489,7 @@ test_that("NegCol: a state with only outflux is detected as zero", {
 ## ---- Layer 2: PosCol with single-state feeder --------------------------
 
 test_that("PosCol: only-influx state whose feeder has a single reactant", {
-  # An only-influx state forces its single-reactant feeder to zero; the state
+  # An only-influx state forces the single-reactant feeder to zero; the state
   # itself is left without reactions and rests.
   el <- eqnlist() |>
     addReaction("", "X", "k_pr * Z") |>
@@ -504,7 +504,7 @@ test_that("PosCol: only-influx state whose feeder has a single reactant", {
 
 test_that("Sink cluster: TGFb + R_TGFb + R_TGFb_int (combined mass leaks)", {
   skip_if_not_installed("lpSolve")
-  # Every column has both signs, so layers 1 and 2 miss the cluster; its total
+  # Every column has both signs, so layers 1 and 2 miss the cluster; the total
   # mass leaks through one degradation.
   el <- eqnlist() |>
     addReaction("L + R", "RL",  "k_on  * L * R") |>
@@ -516,7 +516,7 @@ test_that("Sink cluster: TGFb + R_TGFb + R_TGFb_int (combined mass leaks)", {
     addReaction("R",     "",    "k_dg_R * R")
   zs <- helper(el)
   expect_true(all(c("L", "RL", "RLi") %in% zs$zero_states))
-  # R is not in the sink cluster: it has its own production/degradation.
+  # R is not in the sink cluster: it has a separate production/degradation.
   expect_false("R" %in% zs$zero_states)
 })
 
@@ -637,7 +637,7 @@ test_that(".smartTotalName picks the longest common substring", {
   # Collision with an existing parameter -> disambiguate
   expect_equal(dMod2:::.smartTotalName(c("pERK", "ERK"), character(0),
                                         "totalERK", 1), "totalERK_2")
-  # A held species names its own total
+  # A held species names the total after the species
   held <- addReaction(eqnlist(), "Erk + u", "pErk + u", "k*Erk*u") |>
     addReaction("pErk", "Erk", "kb*pErk")
   expect_setequal(names(conservedQuantities(held)), c("totalErk", "u"))
@@ -678,7 +678,7 @@ test_that("Pimpl solves ERK <-> pERK to closed form in totals", {
 })
 
 
-test_that("Pimpl runs its random starts from a fixed seed and leaves the global RNG alone", {
+test_that("Pimpl runs the random starts from a fixed seed and leaves the global RNG alone", {
   skip_if_no_compile()
   pf <- pp_models()$erk_im
   on.exit(controls(pf, name = "controlsPTC") <- list(), add = TRUE)
@@ -844,7 +844,7 @@ test_that("Pimpl uses customTotals names in the parvec interface", {
 })
 
 
-test_that("a solved state keeps its second derivative where the first vanishes", {
+test_that("a solved state keeps the second derivative where the first vanishes", {
   skip_if_no_compile()
   w <- pp_models()$kink(c(a = 1), deriv2 = TRUE)[[1]]
   expect_equal(unname(w[["x"]]), 1, tolerance = 1e-8)
@@ -896,7 +896,7 @@ test_that("a resting state is 0 unless given, and a given value drives the moiet
 })
 
 
-test_that("the native chain reads a resting state absent from its input as 0", {
+test_that("the native chain reads a resting state absent from the input as 0", {
   skip_if_no_compile()
   m <- pp_models()
   x <- Xs(m$rest_ode)
@@ -919,7 +919,7 @@ test_that("the native chain reads a resting state absent from its input as 0", {
 })
 
 
-test_that("the spectrum of a steady state has the exact gradients of its real parts", {
+test_that("the spectrum of a steady state has the exact gradients of the eigenvalue real parts", {
   skip_if_no_compile()
   m <- pp_models()
   sp <- attr(attr(m$bruss, "mappings")[[1]], "spectrum")(c(a = 1, b = 1.5), onset = -1)

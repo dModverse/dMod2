@@ -32,7 +32,7 @@ Object of class \code{parlist}. \code{print()} and \code{summary()} return their
 argument invisibly.
 }
 \description{
-A parameter list holds the results of several optimisation
+A parameter list holds the results of several optimization
 runs, as returned by \code{\link[=mstrust]{mstrust()}}. \code{c()} concatenates parameter lists.
 }
 \examples{

@@ -62,7 +62,7 @@
        outer = colnames(dP))
 }
 
-# The objlist of a restricted term over all of `outer`, its Hessian sparse.
+# The objlist of a restricted term over all of `outer`, with a sparse Hessian.
 .sparseLift <- function(value, gradient, hessian, outer) {
   g <- setNames(numeric(length(outer)), outer)
   if (length(gradient)) g[names(gradient)] <- gradient
@@ -76,8 +76,8 @@
   !length(d) || !all(is.finite(d)) || min(d) <= tol * max(d)
 }
 
-# The rule of .cholSingular() for a sparse LU factor of an indefinite matrix, by its pivots;
-# a factorisation that failed is singular.
+# The rule of .cholSingular() for a sparse LU factor of an indefinite matrix, by the pivots;
+# a factorization that failed is singular.
 .luSingular <- function(lu, tol = 1e-14) {
   if (!methods::is(lu, "sparseLU")) return(TRUE)
   d <- abs(Matrix::diag(lu@U))
@@ -85,7 +85,7 @@
 }
 
 # The columns of a singular sparse M at the pivots .luSingular() finds, one per null
-# direction. An exactly singular M is factorised with a diagonal shift below `tol`.
+# direction. An exactly singular M is factorized with a diagonal shift below `tol`.
 .luSingularColumns <- function(M, tol = 1e-14) {
   lu <- Matrix::lu(M, errSing = FALSE)
   if (!methods::is(lu, "sparseLU"))
@@ -102,7 +102,7 @@
   if (m == 0 || !is.finite(m)) m else m * sqrt(sum((x / m)^2))
 }
 
-# Trust-region step: minimises g'p + p'Bp/2 subject to |p| <= radius with
+# Trust-region step: minimizes g'p + p'Bp/2 subject to |p| <= radius with
 # sparse Cholesky factors of B + lambda I (More and Sorensen 1983), B = H plus
 # the low-rank part U diag(d) U' of `lowrank`, solved by Woodbury.
 .sparseTrustStep <- function(H, g, radius, lambda0 = 0, lowrank = NULL) {
@@ -114,7 +114,7 @@
     x <- as.numeric(Matrix::solve(f$ch, b))
     if (is.null(f$W)) x else x - drop(f$W %*% solve(f$K, crossprod(f$W, b)))
   }
-  # NULL where B + lambda I is not positive definite: with H + lambda I positive definite and its
+  # NULL where B + lambda I is not positive definite: with H + lambda I positive definite and the
   # factor not numerically singular, B + lambda I has as many negative eigenvalues as
   # diag(1/d) + U'(H + lambda I)^-1 U has positive ones beyond d; a solve that fails, a step p or a
   # curvature q = u' (B + lambda I)^-1 u along u = p / |p| that is not finite, or a negative
@@ -222,19 +222,19 @@
   which(dense)
 }
 
-# Trust-region minimisation with sparse Hessians. objfun(pars, deriv, hessian = "sparse", ...)
-# returns value, gradient and a sparse Hessian; `first` is its evaluation at `parinit`.
+# Trust-region minimization with sparse Hessians. objfun(pars, deriv, hessian = "sparse", ...)
+# returns value, gradient and a sparse Hessian; `first` is the objfun evaluation at `parinit`.
 .trustSparse <- function(objfun, parinit, rinit, rmax, iterlim, fterm, mterm, dots, printIter = FALSE,
                          first = NULL) {
   pnames <- names(parinit)
-  failure <- "its value is not finite"
+  failure <- "the value is not finite"
   prepare <- function(out) {
     if (is.null(out) || !is.finite(out$value)) return(NULL)
     if (!.isSparse(out$hessian)) {
       dense <- .denseTerms(objfun, setNames(x, pnames), dots)
       stop("trust(sparse = TRUE): the objective returns a dense Hessian",
            if (length(dense) && inherits(objfun, "objfn"))
-             paste0(", from term ", paste(dense, collapse = ", "), " of its sum"),
+             paste0(", from term ", paste(dense, collapse = ", "), " of the sum"),
            "; use sparse = FALSE.", call. = FALSE)
     }
     out$gradient <- out$gradient[pnames]

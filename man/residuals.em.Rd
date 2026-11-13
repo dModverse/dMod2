@@ -17,11 +17,11 @@
 
 \item{type}{\code{"IWRES"} (default; data minus individual prediction over the
 error model), \code{"IRES"} (data minus individual prediction), \code{"CWRES"}
-(conditional weighted residuals of the FOCE linearisation at the modes:
-per group the residual of its data against \eqn{f(\eta^*) - G \eta^*},
+(conditional weighted residuals of the FOCE linearization at the modes:
+per group the residual of the group data against \eqn{f(\eta^*) - G \eta^*},
 whitened by \eqn{G \Omega G' + \Sigma}, \eqn{G} the sensitivities in the
 normal random effects; without those equal to IWRES), \code{"PRES"} or
-\code{"PWRES"} (against the population prediction), \code{"NPDE"} (normalised
+\code{"PWRES"} (against the population prediction), \code{"NPDE"} (normalized
 prediction distribution errors from \code{nsim} simulated data sets,
 decorrelated per group, readings at or below their limit imputed as in
 Nguyen et al. 2012, drawn given the other readings of their group).}
@@ -58,8 +58,8 @@ g <- Y(c(y = "amt * Ka / (V * Ka - Cl) * (exp(-Cl / V * time) - exp(-Ka * time))
        outdir = tempdir())
 err <- Y(c(y = "sigma_add"), g, attachInput = FALSE, modelname = "theoph_err", compile = FALSE,
          derivMode = dm, outdir = tempdir())
-## one condition per subject with its dose; the effect formula replaces each log parameter
-## by its intercept plus a random effect per subject
+## one condition per subject with the subject dose; the effect formula replaces each log parameter
+## by an intercept plus a random effect per subject
 doses <- tapply(th$Dose * th$Wt, th$Subject, `[`, 1)[subjects]
 trafo <- branch(define(NULL, "x <- x", x = c("Ka", "V", "Cl", "amt", "sigma_add")),
                 table = data.frame(ID = subjects, dose = doses, row.names = subjects))
@@ -85,7 +85,7 @@ attr(npde, "tests")
 }
 \references{
 Comets, E., Brendel, K. and Mentré, F. (2008). Computing
-normalised prediction distribution errors to evaluate nonlinear
+normalized prediction distribution errors to evaluate nonlinear
 mixed-effect models. \emph{Computer Methods and Programs in Biomedicine}
 90(2), 154-166.
 

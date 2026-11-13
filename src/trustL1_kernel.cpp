@@ -1,18 +1,18 @@
-// trust-region optimiser with L1 penalty
+// trust-region optimizer with L1 penalty
 //
-// Minimises  objfun(theta) + sum_i lambda_i * |theta_i - mu_i|
+// Minimizes  objfun(theta) + sum_i lambda_i * |theta_i - mu_i|
 // (or one-sided  lambda_i * max(0, mu_i - theta_i)) over a subset of
 // parameters named in mu, on top of the Moré-Sorensen subproblem in
 // trust_subproblem.h. Two L1-specific interventions sit in the inner loop:
 //
-//  1. L1 active set: a penalised coordinate sitting exactly on its kink
+//  1. L1 active set: a penalized coordinate sitting exactly on the kink
 //     theta_i = mu_i is dropped from the reduced subproblem whenever
 //     |grad_obj_i| <= lambda_i (two-sided) resp. -grad_obj_i <= lambda_i
 //     (one-sided). Below that threshold the L1 force dominates and the
 //     coordinate stays pinned.
 //
-//  2. Kink clamping: after the trust step is added to theta, any penalised
-//     coordinate that crossed its kink is snapped back to mu_i, so the next
+//  2. Kink clamping: after the trust step is added to theta, any penalized
+//     coordinate that crossed the kink is snapped back to mu_i, so the next
 //     iteration can re-examine the active set. The assignment is verbatim:
 //     downstream sparsity tests read an exact equality.
 //
@@ -128,7 +128,7 @@ struct L1Spec {
       default: return std::fabs(grad_obj_i) <= lambda[i];
     }
   }
-  // Snap any coordinate that crossed its kink back onto mu, verbatim.
+  // Snap any coordinate that crossed the kink back onto mu, verbatim.
   void clamp(const std::vector<double>& th, std::vector<double>& th_try) const {
     for (std::size_t i = 0; i < th.size(); ++i) {
       if (!has[i]) continue;
@@ -142,7 +142,7 @@ struct L1Spec {
 
 // One reduced coordinate of the subproblem: a free coordinate, or a class of
 // fused block members moving together. `pen` is the penalty subgradient of the
-// class, summed over its members, on the branch the class is about to take.
+// class, summed over the class members, on the branch the class is about to take.
 struct RCoord {
   std::vector<int> mem;
   double ps = 1.0;
@@ -323,7 +323,7 @@ struct FuseSpec {
   }
 
   // Shorten the step to the first point where two classes of a block, or a
-  // class and its anchor, meet, and fuse them there. Values are set verbatim
+  // class and the class anchor, meet, and fuse them there. Values are set verbatim
   // so the next iteration reads the fusion as exact equality.
   void truncate(const std::vector<double>& th, std::vector<double>& tt) const {
     double tmin = 1.0;
@@ -359,7 +359,7 @@ struct FuseSpec {
 
   // Members of a class share one value; anything that nudged them apart
   // (push_interior) is undone toward the first member.
-  void equalise(const std::vector<RCoord>& rc, std::vector<double>& tt) const {
+  void equalize(const std::vector<RCoord>& rc, std::vector<double>& tt) const {
     for (const RCoord& c : rc) {
       if (c.single) continue;
       for (std::size_t a = 1; a < c.mem.size(); ++a) tt[c.mem[a]] = tt[c.mem[0]];
@@ -573,7 +573,7 @@ bool ref_propose(RefState& s, const RefTune& t) {
   for (int i = 0; i < K; ++i) s.theta_try[i] = s.z_try[i] / s.ps[i];
   s.l1.clamp(s.theta, s.theta_try);
   if (s.fuse) {
-    s.fuse->equalise(s.rc, s.theta_try);
+    s.fuse->equalize(s.rc, s.theta_try);
     s.fuse->truncate(s.theta, s.theta_try);
   }
   for (int i = 0; i < K; ++i) s.z_try[i] = s.ps[i] * s.theta_try[i];

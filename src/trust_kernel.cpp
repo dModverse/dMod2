@@ -1,4 +1,4 @@
-// trust-region optimiser.
+// trust-region optimizer.
 //
 // Two boundary schemes, selected by `boundary`:
 //
@@ -470,7 +470,7 @@ List trust_reflective(Function objfun, NumericVector parinit,
     const bool qn_pair = qn_active && eval_ok &&
                          (accept || (qp->rejected && qn_kind == HM_SR1));
 
-    // (s, y) in minimised sign, before z/grad_full are overwritten.
+    // (s, y) in minimized sign, before z/grad_full are overwritten.
     if (qn_pair)
       for (int i = 0; i < K; ++i) {
         s_qn[i] = (z_try[i] - z[i]) / ps[i];

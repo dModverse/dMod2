@@ -1,6 +1,6 @@
 # Entry points of mixed-effects fits: em() for one fit, msem() for a multistart. Both build the
 # estimation design from the objective of the data and the random effects of the parameter
-# transformation, and maximise the marginal likelihood over the random effects.
+# transformation, and maximize the marginal likelihood over the random effects.
 
 
 #' Mixed-effects fit by marginal maximum likelihood
@@ -9,10 +9,11 @@
 #' Fits a mixed-effects model: the random effects that [insert()] with effect
 #' formulas put into the parameter transformation are integrated out, and the
 #' fixed parameters and the hyperparameters of the random effects are
-#' estimated by maximising the marginal likelihood.
+#' estimated by maximizing the marginal likelihood.
 #'
 #' A group, a level of the grouping of a random term such as a patient or a
-#' cell line, may own several conditions, which share its random effects.
+#' cell line, may own several conditions, which share the random effects of the
+#' group.
 #' Normal, Laplace, spike-and-slab and Dirichlet-process random effects of one
 #' grouping may be combined. Random terms over several groupings, nested or
 #' crossed, are normal and integrated per connected component of the
@@ -42,9 +43,9 @@
 #'   standard deviations and Cholesky entries), `lambda_*` (Laplace), `prob_*`
 #'   and `tau_*` (spike and slab), `concentration_*` and `tau_*` (Dirichlet
 #'   process), named `<kind>_<grouping>` and numbered `_1`, `_2`, ... where a
-#'   grouping has several blocks. An `em` fit as `init` gives its estimates,
-#'   its `fixed` values, its random effects without those it set to 0 and,
-#'   with sparse random effects, its inner modes as their start.
+#'   grouping has several blocks. An `em` fit as `init` gives the start: the
+#'   estimates, `fixed` values and random effects of that fit, without those it
+#'   set to 0, and with sparse random effects the inner modes.
 #' @param fixed Named numeric of parameters held fixed.
 #' @param method `"focei"` (default), `"quadrature"`, `"laplaceEM"` or
 #'   `"saem"`.
@@ -58,7 +59,7 @@
 #'       predicted change of -2 log L is below `mtol`, default 1e-5.}
 #'     \item{`secondOrderCorrection`}{the derivative of the volume term,
 #'       default `TRUE`.}
-#'     \item{`derivMode`}{how FOCEI gets the second derivatives of its volume
+#'     \item{`derivMode`}{how FOCEI gets the second derivatives of the volume
 #'       term: `"forward-reverse"` (default), sweeps for models built with
 #'       `derivMode = c("forward", "reverse", "forward-reverse")`, or
 #'       `"forward-forward"`, the second-order sensitivities of models built
@@ -66,8 +67,8 @@
 #'       other, with a message.}
 #'     \item{`boundary`}{the largest rise of -2 log L at which a variance is
 #'       set to 0, default 0.1, `FALSE` for none. With one grouping and several
-#'       blocks, a normal random effect of its own block whose standard
-#'       deviation ends below 0.1 is dropped and the fit repeated from the
+#'       blocks, a normal random effect that forms a block alone and whose
+#'       standard deviation ends below 0.1 is dropped and the fit repeated from the
 #'       estimates; where -2 log L rises by at most `boundary`, that fit is
 #'       returned and names the hyperparameter in `boundary`.}
 #'     \item{`quadrature`, `saem`, `laplace`}{lists of the sections
@@ -82,12 +83,12 @@
 #' @return An object of class `em` with, among others:
 #'   \describe{
 #'     \item{`argument`, `value`, `gradient`, `hessian`}{the estimates, -2 log
-#'       L of the marginal likelihood, its gradient and Hessian (a sparse
+#'       L of the marginal likelihood with gradient and Hessian (a sparse
 #'       `Matrix` on the sparse path, `NULL` with Laplace, spike-and-slab or
 #'       Dirichlet-process random effects).}
 #'     \item{`information`}{with Laplace or spike-and-slab random effects the
 #'       empirical information that gives the standard errors: `G / (G - 1)`
-#'       times the sum of the outer products of the centred scores of the `G`
+#'       times the sum of the outer products of the centered scores of the `G`
 #'       groups, plus half the Hessian of the conditions without random
 #'       effects.}
 #'     \item{`converged`, `iterations`}{}
@@ -97,7 +98,7 @@
 #'       for spike-and-slab and Dirichlet-process random effects also the
 #'       cluster, 0 for the population value, and the posterior probability
 #'       `p0` of a deviation of 0; a column `data` where a sparse random effect
-#'       reaches no data of its group, which then rests at 0 with its prior.}
+#'       reaches no data of the group; such an effect rests at 0 with the prior.}
 #'     \item{`strengths`, `slab`}{the hyperparameters of the Laplace blocks
 #'       and of the spike-and-slab and Dirichlet-process blocks.}
 #'     \item{`valueSE`}{the standard error of `value` where it comes from
@@ -119,8 +120,9 @@
 #' in `phi = X beta + eta`. Entries of `control$quadrature`:
 #' \describe{
 #'   \item{`tol`}{allowed change of -2 log L by the next level, default 0.1,
-#'     split over the groups; each group takes the lowest level from its stage
-#'     up within `tol / G` and never a lower one than before. `Inf` keeps the
+#'     split over the groups; each group takes the lowest level from the current
+#'     stage of the group up within `tol / G` and never a lower one than before.
+#'     `Inf` keeps the
 #'     levels of the stages.}
 #'   \item{`levels`}{the stages, default `K + 1` with `K` the number of random
 #'     effects of a group; level `K + s` integrates polynomials of total
@@ -136,10 +138,10 @@
 #'   \item{`certificate`}{`FALSE`, or a list of `points` (default 256) and
 #'     `seed` (default 1): importance sampling at the estimate from a t5
 #'     proposal at the mode of each group. A group is flagged where the two
-#'     -2 log L differ by more than three standard errors plus the error its
-#'     level allows, or the Pareto shape of the weights exceeds 0.7.}
+#'     -2 log L differ by more than three standard errors plus the error the
+#'     level of the group allows, or the Pareto shape of the weights exceeds 0.7.}
 #'   \item{`epsEcm`, `maxEcm`}{for `"laplaceEM"`: the extrapolated distance to
-#'     the fixed point at which it stops, default 1e-5, and its iterations.}
+#'     the fixed point at which it stops, default 1e-5, and the iteration limit.}
 #' }
 #' @section SAEM:
 #' Metropolis draws of the random effects by random-walk and independence
@@ -169,14 +171,14 @@
 #' @section Sparse random effects:
 #' With Laplace, spike-and-slab or Dirichlet-process random effects the
 #' parameters and hyperparameters move in one trust region. The integral of a
-#' group is exact where the data couple none of its factors and the sum over
-#' the subsets of its spike-and-slab random effects stays within a budget of
-#' nodes; else it is expectation consistent, and a trial point at which that
-#' does not converge is a failed evaluation. Entries of `control$laplace`:
+#' group is exact where the data couple none of the factors and the sum over
+#' the subsets of the spike-and-slab random effects of the group stays within a budget of
+#' nodes; else it is the expectation consistent (EC) approximation, and a
+#' trial point at which EC does not converge is a failed evaluation. Entries of `control$laplace`:
 #' \describe{
 #'   \item{`maxOuter`}{iterations of the trust region, default 200.}
-#'   \item{`trustControl`}{its [trust()] settings; `ftol`, `mtol` and `gtol`
-#'     of its `tolControl` also end the search of the modes (else 1e-10).}
+#'   \item{`trustControl`}{the [trust()] settings; `ftol`, `mtol` and `gtol`
+#'     of the `tolControl` there also end the search of the modes (else 1e-10).}
 #' }
 #'
 #' @seealso [msem()], [randomEffects()], [insert()]
@@ -244,7 +246,7 @@ em <- function(obj, random, init = NULL, fixed = NULL,
 #' @param nTries Maximum number of attempts per start, including the first.
 #'   Default `10`.
 #' @param keepFits Logical. If `TRUE`, the result has `fits`, the fit of every
-#'   start, or its error message, without the model. Default `FALSE`.
+#'   start, or the error message of a failed one, without the model. Default `FALSE`.
 #' @param which Positions of the starts to fit, among the `fits` drawn. `NULL`
 #'   (default) fits all. Tasks of [distributedComputing()] that set the same
 #'   seed and fit disjoint parts fit the starts of one call, and `get()` joins
@@ -253,15 +255,16 @@ em <- function(obj, random, init = NULL, fixed = NULL,
 #' @return The fit with the smallest `value`, of class `em`, with
 #'   `multistart`, a data frame with a row per start:
 #'   \describe{
-#'     \item{`value`, `converged`, `iterations`}{of its fit.}
-#'     \item{`gradient`}{the largest absolute entry of the gradient at its end.}
+#'     \item{`value`, `converged`, `iterations`}{of the fit.}
+#'     \item{`gradient`}{the largest absolute entry of the gradient at the end
+#'       of the fit.}
 #'     \item{`tries`}{the attempts it took.}
-#'     \item{`stop`}{the test that ended its trust region, `"error"` where
+#'     \item{`stop`}{the test that ended the trust region, `"error"` where
 #'       every attempt failed.}
-#'     \item{`failures`}{why evaluations of its trust region failed, and how
+#'     \item{`failures`}{why evaluations in the trust region failed, and how
 #'       often.}
 #'     \item{`error`, `boundary`}{the error of a failed start, the variances
-#'       its fit set to 0.}
+#'       the fit set to 0.}
 #'   }
 #'   [plotValues()] draws it as a waterfall.
 #' @seealso [em()]
@@ -291,7 +294,7 @@ msem <- function(obj, random, init = NULL, fixed = NULL,
   reseeds <- matrix(sample.int(.Machine$integer.max, fits * (maxTries - 1L)), fits)
   split <- .splitCores(cores, "fits")
   inner <- if (!is.null(split$conditions)) .sanitizeCores(split$conditions)
-  # a worker returns its fit without the parts of the design, which the parent has; a fit with a
+  # a worker returns the fit without the parts of the design, which the parent has; a fit with a
   # variance set to 0 keeps the design without that random effect
   shared <- c("prdfn", "data", "errfn", "design")
   # the message on the derivative mode travels with the fit and is given once
@@ -372,7 +375,7 @@ msem <- function(obj, random, init = NULL, fixed = NULL,
 
 
 
-## A fit as `init`: its estimates as the start and its fixed values, its random effects without
+## A fit as `init`: the estimates of the fit as the start, the fixed values, the random effects without
 ## those it set to 0 at the boundary, whose etas are held at 0.
 .emContinue <- function(obj, random, init, fixed) {
   if (!inherits(init, "em")) return(list(random = random, init = init, fixed = fixed))
@@ -389,7 +392,7 @@ msem <- function(obj, random, init = NULL, fixed = NULL,
        modes = init$innerModes)
 }
 
-## One fit of `design` from `start` by `method`, with its `control`; -2 log L of the data at the
+## One fit of `design` from `start` by `method`, with `control`; -2 log L of the data at the
 ## start with the random effects at 0 must be finite.
 .emFit <- function(design, start, fixed, method, control, verbose) {
   etas <- .allEtas(design)
@@ -405,7 +408,7 @@ msem <- function(obj, random, init = NULL, fixed = NULL,
 
 ## The fit with the normal random effects of single blocks whose standard deviation ended below 0.1
 ## set to 0 one at a time, smallest first, where the fit without one is at most control$boundary
-## worse; every refit starts from the estimates and checks its own random effects again.
+## worse; every refit starts from the estimates and checks the random effects of the refit again.
 .emBoundary <- function(design, fit, fixed, method, control, verbose) {
   tol <- control$boundary %||% 0.1
   if (isFALSE(tol) || !is.null(design$groupings) || is.null(design$normal)) return(fit)

@@ -41,8 +41,8 @@ fx_register <- function(extra = NULL, multicond = FALSE) {
   invisible(NULL)
 }
 
-# Extras registered after the fixture was built, in a shared object of their
-# own. They go first, so a name this file reuses finds its own object.
+# Extras registered after the fixture was built, in a separate shared object.
+# They go first, so a name this file reuses finds the object of the extra.
 .fx_build_extra <- function(extra) {
   cache <- .dmod_fx_cache()
   base <- cache$decay[c("m", "xfn", "gfn", "pfn_id", "pfn_log")]
@@ -105,7 +105,7 @@ fx_decay_compiled <- function() {
 
 ## ---- Four conditions -------------------------------------------------------
 
-# The decay chain over C1..C4 with a scale of its own per condition, so each
+# The decay chain over C1..C4 with a separate scale per condition, so each
 # condition has a different derivative basis and every leaf runs batched.
 # Elements: conditions, m, xfn, gfn, pfn, prd, outerpars, and libs, the joint
 # shared objects the chain is linked into, for modelname<- and loadDLL().

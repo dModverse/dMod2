@@ -98,8 +98,8 @@ An object of class \code{odemodel}: a list with the compiled objects
 \code{"compileInfo"} holds the sources and compiler flags \code{\link[=compile]{compile()}} uses.
 }
 \description{
-Generates and compiles the code of an ODE system and, as requested, of its
-first- and second-order sensitivities and its adjoint. \code{\link[=Xs]{Xs()}} or \code{\link[=Xf]{Xf()}} turn
+Generates and compiles the code of an ODE system and, as requested, of the
+first- and second-order sensitivities and the adjoint. \code{\link[=Xs]{Xs()}} or \code{\link[=Xf]{Xf()}} turn
 the result into a prediction function.
 }
 \examples{

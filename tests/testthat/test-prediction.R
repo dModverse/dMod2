@@ -33,7 +33,7 @@ test_that("Xd names a missing grid parameter", {
   expect_error(x(c(0, 1), c(a0 = 1, a2 = 2)), "a1")
 })
 
-test_that("predict() labels every prediction with its own parameter row", {
+test_that("predict() labels every prediction with the matching parameter row", {
   x <- Xd(data.frame(name = "A", time = 0:1, row.names = c("a0", "a1")), "C1")
   pf <- parframe(data.frame(value = c(5, 1, 3), a0 = c(10, 20, 30), a1 = 0),
                  parameters = c("a0", "a1"), metanames = "value")
@@ -83,7 +83,7 @@ test_that("dMod functions refuse unknown, surplus and missing arguments", {
   expect_error(obj(p, fixd = c(a0 = 1)), "fixd")
 })
 
-test_that("modelname<- names each condition and honours conditions", {
+test_that("modelname<- names each condition and honors conditions", {
   mk <- function(cond, mn) {
     f <- function(...) NULL
     attr(f, "modelname") <- mn

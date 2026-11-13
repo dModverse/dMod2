@@ -3,7 +3,7 @@
 \name{summary.em}
 \alias{summary.em}
 \alias{print.summary.em}
-\title{Summarise a mixed-effects fit}
+\title{Summarize a mixed-effects fit}
 \usage{
 \method{summary}{em}(object, ...)
 
@@ -24,12 +24,12 @@ An object of class \code{summary.em}: \code{method}, \code{value}, \code{valueNo
 and relative standard errors in percent), \code{seMethod} (\code{"hessian"},
 \code{"scores"} for the empirical information of the groups, see
 \link[=vcov.em]{vcov()}, or \code{"none"}), \code{partialCurvature} (\code{TRUE} where FOCEI by
-forward over reverse reports its Hessian without the curvature of the
+forward over reverse reports the Hessian without the curvature of the
 prediction in the random effects within the volume term), \code{omega} and
 \code{shrinkage} per random effect.
 }
 \description{
-Summarise a mixed-effects fit
+Summarize a mixed-effects fit
 }
 \examples{
 \donttest{
@@ -48,8 +48,8 @@ g <- Y(c(y = "amt * Ka / (V * Ka - Cl) * (exp(-Cl / V * time) - exp(-Ka * time))
        outdir = tempdir())
 err <- Y(c(y = "sigma_add"), g, attachInput = FALSE, modelname = "theoph_err", compile = FALSE,
          derivMode = dm, outdir = tempdir())
-## one condition per subject with its dose; the effect formula replaces each log parameter
-## by its intercept plus a random effect per subject
+## one condition per subject with the subject dose; the effect formula replaces each log parameter
+## by an intercept plus a random effect per subject
 doses <- tapply(th$Dose * th$Wt, th$Subject, `[`, 1)[subjects]
 trafo <- branch(define(NULL, "x <- x", x = c("Ka", "V", "Cl", "amt", "sigma_add")),
                 table = data.frame(ID = subjects, dose = doses, row.names = subjects))
@@ -61,7 +61,7 @@ compile(g, err, p, output = tempfile("theoph"))
 obj <- normL2(data, g * x * p, errmodel = err)
 init <- c(Ka = 0, V = 3, Cl = 0.7, sigma_add = log(0.5))
 
-## FOCEI fit, its estimates and the random effects per subject
+## FOCEI fit, the estimates and the random effects per subject
 fit <- em(obj, randomEffects(p), init = init)
 fit
 summary(fit)

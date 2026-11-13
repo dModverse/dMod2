@@ -10,7 +10,7 @@ constraintL2(mu, ...)
 \method{constraintL2}{default}(mu, sigma = 1, attrName = "prior", condition = NULL, ...)
 }
 \arguments{
-\item{mu}{Named numeric vector of prior means. Its names select the
+\item{mu}{Named numeric vector of prior means. The names select the
 constrained parameters.}
 
 \item{...}{Passed to the method.}
@@ -29,7 +29,7 @@ one.}
 }
 \value{
 An objective function of class \code{objfn}, called as
-\code{obj(pars, ...)}, see section Calling a dMod function. Its value is the
+\code{obj(pars, ...)}, see section Calling a dMod function. The objective value is the
 penalty form, without the constant of the Gaussian density; the other
 \verb{constraint*()} functions return the full \verb{-2 log} density.
 }
@@ -57,7 +57,8 @@ returning a \link{prdlist};
 
 \code{pars} is a named numeric vector. If it has a \code{deriv} attribute, as the
 output of a parameter transformation does, the derivatives are taken with
-respect to the parameters behind it. A composition is called as its class:
+respect to the parameters behind it. A composition is called according to
+the resulting class:
 \code{g * x * p} is a prediction function, \code{(g * x * p)(times, pars)}.
 
 The other arguments are named:
@@ -79,7 +80,7 @@ backward pass, whose cost does not grow with the number of parameters.
 \item \code{conditions}: character vector, the conditions to evaluate. Default all
 conditions of the function.
 \item \code{env}: environment for intermediate results. Default \code{NULL}, a new one.
-An objective function stores its prediction there as \code{prediction} and
+An objective function stores the prediction there as \code{prediction} and
 returns the environment as attribute \code{env}.
 \item \code{cores}: number of threads for the ODE solves and the residual kernel.
 Default \code{getOption("dMod2.cores", 1L)}.
@@ -100,7 +101,7 @@ this Hessian:
 
 \code{hessian = "sparse"} returns the Gauss-Newton Hessian of the forward sweep
 as a sparse \code{Matrix}, assembled from the blocks of the conditions; \code{\link[=trust]{trust()}}
-factorises it where its argument \code{sparse} takes the sparse path, and \code{\link[=vcov]{vcov()}}
+factorizes it where the argument \code{sparse} takes the sparse path, and \code{\link[=vcov]{vcov()}}
 solves it for the columns of \code{which}.
 
 With \code{deriv = FALSE} it returns the value alone.

@@ -21,7 +21,8 @@ Pimpl(
 )
 }
 \arguments{
-\item{trafo}{Named character, \link{eqnvec} or \link{eqnlist} defining \eqn{f}.}
+\item{trafo}{Named character, \link{eqnvec} or \link{eqnlist} defining \eqn{f}, in the
+language of \link[cppDE:expressions]{cppDE::expressions}.}
 
 \item{parameters}{Outer parameter names. For an \link{eqnlist} the totals
 \eqn{T} of the conserved quantities are added.
@@ -52,7 +53,7 @@ is \code{"impl_parfn"}, followed by \verb{_<condition>}.}
 \code{FALSE}. \code{deriv2} requires \code{deriv = TRUE}.}
 
 \item{controlsPTC}{Named list of solver controls; an entry not given keeps
-its default, an unknown entry is an error:
+the default, an unknown entry is an error:
 \describe{
 \item{\code{reltol}, \code{abstol}}{Convergence tolerances, default \code{1e-10}, \code{1e-14}.}
 \item{\code{flowTol}}{Relative local error per pseudo-time step, default \code{1}.}
@@ -66,7 +67,7 @@ default \code{1e-2}.}
 \code{FALSE} an unstable root is returned, on which a
 \code{\link[=constraintStability]{constraintStability()}} term rises.}
 \item{\code{stabilityTol}}{With \code{stability}, a root counts as stable while
-the real part of its leading eigenvalue on the manifold of the conserved
+the real part of the leading eigenvalue on the manifold of the conserved
 quantities is at most \code{stabilityTol}, in the units of the rates; default
 \code{0}. A small positive value admits a resting state that departs from
 rest more slowly than the experiment lasts, as near a Hopf
@@ -96,7 +97,7 @@ the implicit function theorem.
 \details{
 Conserved quantities of an \link{eqnlist} enter as \eqn{C x = T}.
 States without influx are 0. A state whose reactions all vanish with them
-rests: it takes its value from \code{pars}, 0 where \code{pars} has none, and is not
+rests: it takes the value from \code{pars}, 0 where \code{pars} has none, and is not
 among the parameters. The root is solved from the states in \code{pars},
 missing ones at 1, then from all states at 1, then from \code{nStarts} random
 starts; with \code{flow = TRUE} the stable root the flow leads to. If all fail, it
@@ -121,7 +122,8 @@ returning a \link{prdlist};
 
 \code{pars} is a named numeric vector. If it has a \code{deriv} attribute, as the
 output of a parameter transformation does, the derivatives are taken with
-respect to the parameters behind it. A composition is called as its class:
+respect to the parameters behind it. A composition is called according to
+the resulting class:
 \code{g * x * p} is a prediction function, \code{(g * x * p)(times, pars)}.
 
 The other arguments are named:
@@ -143,7 +145,7 @@ backward pass, whose cost does not grow with the number of parameters.
 \item \code{conditions}: character vector, the conditions to evaluate. Default all
 conditions of the function.
 \item \code{env}: environment for intermediate results. Default \code{NULL}, a new one.
-An objective function stores its prediction there as \code{prediction} and
+An objective function stores the prediction there as \code{prediction} and
 returns the environment as attribute \code{env}.
 \item \code{cores}: number of threads for the ODE solves and the residual kernel.
 Default \code{getOption("dMod2.cores", 1L)}.
@@ -164,7 +166,7 @@ this Hessian:
 
 \code{hessian = "sparse"} returns the Gauss-Newton Hessian of the forward sweep
 as a sparse \code{Matrix}, assembled from the blocks of the conditions; \code{\link[=trust]{trust()}}
-factorises it where its argument \code{sparse} takes the sparse path, and \code{\link[=vcov]{vcov()}}
+factorizes it where the argument \code{sparse} takes the sparse path, and \code{\link[=vcov]{vcov()}}
 solves it for the columns of \code{which}.
 
 With \code{deriv = FALSE} it returns the value alone.

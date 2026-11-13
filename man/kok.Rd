@@ -3,7 +3,7 @@
 \docType{data}
 \name{kok}
 \alias{kok}
-\title{Time-Course Data for IFN-alpha Signalling in Huh7.5 Cells}
+\title{Time-Course Data for IFN-alpha Signaling in Huh7.5 Cells}
 \format{
 A data frame with 1918 rows and 8 columns:
 \describe{

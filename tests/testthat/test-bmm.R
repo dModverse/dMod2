@@ -1,4 +1,5 @@
 # bmm(): batched matrix multiplication, batch-first.
+`%bmm%` <- dMod2:::`%bmm%`
 
 test_that("bmm_lb matches per-slice reference", {
   set.seed(1)

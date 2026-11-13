@@ -18,7 +18,7 @@
 }
 \description{
 Each expression must be linear in \code{eqnlist$states} and conserve an amount:
-its coefficients divided by the volumes of their states lie in the null
+the coefficients divided by the volumes of their states lie in the null
 space of the stoichiometric matrix. Symbols other than states, volumes among
 them, are checked at two sets of values. Together the expressions must have
 the rank of the detected basis.

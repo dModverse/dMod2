@@ -1,5 +1,5 @@
 
-## Class "eqnlist" and its constructor ------------------------------------------
+## Class "eqnlist" and constructor ------------------------------------------
 
 
 #' Generate or Coerce to an Equation List
@@ -89,7 +89,7 @@ is.eqnlist <- function(x) {
 }
 
 
-## Class "eqnlist" and its methods ------------------------------------------
+## Class "eqnlist" and methods ------------------------------------------
 
 ## ---- Conserved quantities ------------------------------------------------------------
 
@@ -97,7 +97,7 @@ is.eqnlist <- function(x) {
 ## column w per conserved amount sum_s w_s n_s, rows named by the states; NULL if there is none.
 .conservedBasis <- function(S) {
   S[is.na(S)] <- 0
-  basis <- nullZ(S)
+  basis <- .nullZ(S)
   if (!ncol(basis)) return(NULL)
   rownames(basis) <- colnames(S)
   basis
@@ -151,7 +151,7 @@ is.eqnlist <- function(x) {
   Reduce(lcs2, strings)
 }
 
-## A single species, a state no reaction changes, names its own total;
+## A single species, a state no reaction changes, names the total after the species;
 ## several give `totalXxx` from their longest common substring (>= 2 characters after trimming
 ## underscores), else `total_<index>`, unique against `used` and `parameters`.
 #' @keywords internal
@@ -186,7 +186,7 @@ is.eqnlist <- function(x) {
 #' Validate Conservation Expressions Against an Eqnlist
 #'
 #' Each expression must be linear in `eqnlist$states` and conserve an amount:
-#' its coefficients divided by the volumes of their states lie in the null
+#' the coefficients divided by the volumes of their states lie in the null
 #' space of the stoichiometric matrix. Symbols other than states, volumes among
 #' them, are checked at two sets of values. Together the expressions must have
 #' the rank of the detected basis.
@@ -216,7 +216,7 @@ is.eqnlist <- function(x) {
              call. = FALSE)
       w <- v / v_vol
       if (max(abs(S %*% w)) > tol * max(1, abs(w)))
-        stop("totals[['", names(totals)[k], "']] is not a conserved quantity: its coefficients ",
+        stop("totals[['", names(totals)[k], "']] is not a conserved quantity: the coefficients ",
              "divided by the volumes are not in the null space of the stoichiometric matrix.", call. = FALSE)
       Wu[k, ] <- w
     }
@@ -237,14 +237,14 @@ is.eqnlist <- function(x) {
 #'
 #' @description The linear combinations of the states that the reactions leave
 #' unchanged. Every vector \eqn{w} of the null space of the stoichiometric
-#' matrix ([nullZ()]) conserves the amount
+#' matrix conserves the amount
 #' \eqn{\sum_s w_s V_s x_s}{sum_s w_s V_s x_s}, written on the concentrations
 #' \eqn{x_s} with the volumes \eqn{V_s} of their compartments, 1 for a state
 #' held as an amount. Totals set by [customTotals()] replace the detected ones.
 #'
 #' @param eqnlist object of class [eqnlist].
 #' @return Named list of expressions, one per conserved quantity, named after
-#'   their species: a single species by its own name, several by `totalXxx`
+#'   their species: a single species by the species name, several by `totalXxx`
 #'   from the name part they share, else `total_<i>`; an empty list when
 #'   nothing is conserved.
 #' @seealso [customTotals()], [Pimpl()]
@@ -316,7 +316,7 @@ getReactions <- function(eqnlist) {
     c(side(-v[v < 0]), side(v[v > 0]))
   })
 
-  # "!" marks a reaction whose rate does not contain all its educts.
+  # "!" marks a reaction whose rate does not contain all educts of the reaction.
   check <- vapply(seq_along(rates), function(i) {
     educts <- eqnlist$states[which(S[i, ] < 0)]
     if (all(educts %in% getSymbols(rates[i]))) " " else "!"
@@ -335,8 +335,8 @@ getReactions <- function(eqnlist) {
 #' @param eqnlist equation list, see [eqnlist]
 #' @param from character with the left hand side of the reaction, e.g. "2*A + B"
 #' @param to character with the right hand side of the reaction, e.g. "C + 2*D"
-#' @param rate character. The rate associated with the reaction. The name is employed as a description
-#' of the reaction.
+#' @param rate character. The rate of the reaction, an expression in the language of
+#'   [cppDE::expressions]. The name is employed as a description of the reaction.
 #' @param description Optional description instead of `names(rate)`.
 #' @param compartment character, compartment ID for the states this reaction
 #' introduces. Default `"defaultComp"`, created with volume `"1"` if new.
@@ -581,7 +581,7 @@ setCompartmentVolume <- function(eqnlist, ..., rules = NULL) {
 }
 
 
-# Reference compartment per reaction: the frame in which its rate is a
+# Reference compartment per reaction: the frame in which the rate is a
 # concentration-rate. Shared with .volumeScaledReactions() so the ODE and the
 # csv the steady-state backend reads cannot drift apart.
 .refCompartments <- function(SMatrix, compOf, reactionCompartment, description) {
@@ -681,8 +681,8 @@ setCompartmentVolume <- function(eqnlist, ..., rules = NULL) {
 #' @param eqnlist object of class [eqnlist].
 #' @param type `"conc"` (default) or `"amount"` for fluxes in units of
 #' concentration or of amount.
-#' @return Named list with one named character vector per state, its in- and
-#' out-fluxes.
+#' @return Named list with one named character vector per state, the in- and
+#' out-fluxes of the state.
 #' @example inst/examples/equations.R
 #' @export
 getFluxes <- function(eqnlist, type = c("conc", "amount")) {
@@ -888,9 +888,9 @@ subset.eqnlist <- function(x, ...) {
   
   # Translate subsetting on eqnlist entries
   # smatrix
-  smatrix <- submatrix(eqnlist$smatrix, rows = select)
+  smatrix <- .submatrix(eqnlist$smatrix, rows = select)
   empty <- sapply(1:ncol(smatrix), function(i) all(is.na(smatrix[, i])))
-  smatrix <- submatrix(smatrix, cols = !empty)
+  smatrix <- .submatrix(smatrix, cols = !empty)
   
   # states and rates
   states <- colnames(smatrix)
@@ -1030,7 +1030,7 @@ print.eqnlist <- function(x, pander = FALSE, ...) {
 
 
 
-## Class "eqnvec" and its constructors --------------------------------------------
+## Class "eqnvec" and constructors --------------------------------------------
 
 
 
@@ -1185,7 +1185,7 @@ c.eqnlist <- function(...) {
 is.eqnvec <- function(x) inherits(x, "eqnvec") && length(names(x)) == length(x)
 
 
-## Class "eqnvec" and its methods --------------------------------------------
+## Class "eqnvec" and methods --------------------------------------------
 
 
 
@@ -1350,7 +1350,7 @@ eqnlist <- function(smatrix = NULL, states = colnames(smatrix), rates = NULL,
                     reactionCompartment = NULL, amountStates = NULL, totals = NULL) {
 
   # A model without species has no stoichiometry;
-  # canonicalise it to NULL so is.eqnlist() recognises the empty list.
+  # canonicalize it to NULL so is.eqnlist() recognizes the empty list.
   if (length(states) == 0L && length(rates) == 0L) smatrix <- NULL
 
   # One column per state, one row per rate; "not involved" is NA, as in addReaction().

@@ -33,7 +33,7 @@ plotArray(
 is traced from the optimum.}
 
 \item{covtable}{Condition table, e.g. from \code{\link[=covariates]{covariates()}}, merged with the
-predictions by condition so that \code{...} can refer to its columns. Default
+predictions by condition so that \code{...} can refer to the table columns. Default
 \code{NULL}.}
 
 \item{nSim}{Number of trajectories, evenly spaced along the profile side

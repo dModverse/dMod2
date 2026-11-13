@@ -240,7 +240,7 @@ List constraintL2_scalar_kernel(
     }
   }
 
-  // Chain rule via dP / exact dP2 contribution. The Hessian sandwich (and its
+  // Chain rule via dP / exact dP2 contribution. The Hessian sandwich (and the
   // dP2 term) is skipped entirely under build_hessian = false; only the
   // gradient chain rule runs and the result has a NULL hessian.
   NumericVector grad_out;
@@ -404,7 +404,7 @@ List datapointL2_kernel(
   const int idx_value = find_name(pouter_names, value_par);
   if (idx_value >= 0) dres_dp[idx_value] = -1.0;
 
-  // 5. Gradient + Hessian. The Hessian (and its exact d2pred term) is skipped
+  // 5. Gradient + Hessian. The Hessian (and the exact d2pred term) is skipped
   // entirely under build_hessian = false; the result then has a NULL hessian.
   std::vector<double> gr(n_p, 0.0);
   std::vector<double> hs;

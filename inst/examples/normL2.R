@@ -10,7 +10,7 @@
   ## Simulate data
   data.list <- lapply(1:3, function(i) {
     prediction <- x(times, pars + rnorm(length(pars), 0, 1))
-    cbind(wide2long(prediction), sigma = 1)
+    transform(as.data.frame(prediction), sigma = 1)
   })
   
   data <- as.datalist(do.call(rbind, data.list))

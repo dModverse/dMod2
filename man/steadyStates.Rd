@@ -33,7 +33,7 @@ at zero and treated as exogenous. Default \code{NULL}.}
 \item{givenCQs}{Unnamed character vector of conserved quantities, either as
 \code{c("A + pA = totA", "B + pB = totB")} or as \code{c("A + pA", "B + pB")}.
 Default \code{NULL}: a basis is derived, or taken from \code{\link[=customTotals]{customTotals()}} when the
-\code{eqnlist} has them. Each given quantity keeps one of its states free, the
+\code{eqnlist} has them. Each given quantity keeps one of the states in it free, the
 first where possible.}
 
 \item{neglect}{Character vector, states and rate parameters the solver must
@@ -48,8 +48,8 @@ probabilistic check modulo a prime, or \code{"skip"}.}
 \item{simplify}{\code{TRUE} (default) simplifies every expression once with
 sympy, \code{FALSE} skips it, \code{"full"} simplifies further at a higher cost.}
 
-\item{solveQuadratic}{Logical, whether a balance quadratic in its own state
-may be solved by its positive root instead of for a rate constant, which
+\item{solveQuadratic}{Logical, whether the balance of a state, when quadratic
+in that state, may be solved for the positive root instead of for a rate constant, which
 introduces \code{sqrt()} terms. Default \code{FALSE}.}
 
 \item{priority}{Character vector of state and rate-parameter names, most
@@ -65,7 +65,7 @@ are preferred as pivots. Default \code{NULL}.}
 }
 \value{
 Named character vector of steady-state equations in dMod format, or
-\code{0} if no solution was found. An entry whose value is its own name is a
+\code{0} if no solution was found. An entry whose value equals the entry name is a
 free parameter.
 }
 \description{

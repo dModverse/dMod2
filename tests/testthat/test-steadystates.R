@@ -1,4 +1,4 @@
-test_that("a closed cycle started in its steady state stays there", {
+test_that("a closed cycle started in the steady state stays there", {
   withr::local_dir(tempdir())
 
   cycle <- eqnlist() |>
@@ -16,15 +16,15 @@ test_that("a closed cycle started in its steady state stays there", {
   compile(x, p, output = "ssCycle_all", cores = test_cores())
 
   outer <- setNames(seq(0.3, 0.9, length.out = length(getParameters(p))), getParameters(p))
-  traj <- wide2long((x * p)(seq(0, 10, 0.5), outer, deriv = FALSE))
+  traj <- as.data.frame((x * p)(seq(0, 10, 0.5), outer, deriv = FALSE))
   drift <- tapply(traj$value, traj$name, function(v) diff(range(v)) / max(abs(v), 1))
   expect_true(all(drift <= 1e-8))
 })
 
 test_that("additive fluxes are split instead of derailing the solver", {
 
-  # A production with a basal and an induced arm has no rate constant of its
-  # own; fluxpars must still align with the flux columns.
+  # A production with a basal and an induced arm has no separate rate constant;
+  # fluxpars must still align with the flux columns.
   withr::local_dir(tempdir())
 
   reactions <- eqnlist()
@@ -257,9 +257,9 @@ test_that("a recycling loop is solved without a definition referring to itself",
   reactions <- addReaction(reactions, "", "Lig", "k_pr_Lig", "Ligand production")
   reactions <- addReaction(reactions, "Lig", "", "k_dg_Lig*Lig", "Ligand clearance")
   reactions <- addReaction(reactions, "Lig", "Cpx", "k_form*Lig", "Complex formation")
-  reactions <- addReaction(reactions, "Cpx", "Cpx_int", "k_int*Cpx", "Internalisation")
+  reactions <- addReaction(reactions, "Cpx", "Cpx_int", "k_int*Cpx", "Internalization")
   reactions <- addReaction(reactions, "Cpx_int", "Cpx", "k_rec*Cpx_int", "Recycling")
-  reactions <- addReaction(reactions, "Cpx_int", "", "k_dg_int*Cpx_int", "Internalised degradation")
+  reactions <- addReaction(reactions, "Cpx_int", "", "k_dg_int*Cpx_int", "Internalized degradation")
   reactions <- addReaction(reactions, "Cpx", "", "k_dg_Cpx*Cpx", "Complex degradation")
   reactions <- addReaction(reactions, "Cpx", "", "k_dg_Cpx_Inh*Cpx*Inh", "Inhibitor-driven removal")
   reactions <- addReaction(reactions, "", "Inh", "k_pr_Inh*Cpx", "Inhibitor induction")
@@ -268,7 +268,7 @@ test_that("a recycling loop is solved without a definition referring to itself",
   mysteadies <- steadyStates(reactions)
 
   defs <- mysteadies[trimws(mysteadies) != names(mysteadies)]
-  # No definition may reference its own left-hand side.
+  # No definition may reference the variable it defines.
   selfref <- mapply(function(nm, eqn) nm %in% all.vars(parse(text = eqn)),
                     names(defs), defs)
   expect_false(any(selfref))
@@ -440,7 +440,7 @@ test_that("solveQuadratic takes the positive root", {
     r <- models[[nm]]
     ss <- steadyStates(r, solveQuadratic = TRUE, verbose = FALSE)
     defs <- ss[trimws(ss) != names(ss)]
-    # the state is a root, no rate constant was spent on its balance
+    # the state is a root, no rate constant was spent on the state balance
     expect_true(any(grepl("sqrt", defs)), label = nm)
     odes <- as.eqnvec(r)
     set.seed(6)
@@ -477,7 +477,7 @@ test_that("species named like sympy objects (Ci, E, S, Q) are plain symbols", {
     addReaction("", "R", "ksR", "synthesis") |>
     addReaction("R", "", "kdR*R", "turnover") |>
     addReaction("R + E", "C", "kon*R*E", "binding") |>
-    addReaction("C", "Ci + E", "kint*C", "internalisation") |>
+    addReaction("C", "Ci + E", "kint*C", "internalization") |>
     addReaction("Ci", "", "kdeg*Ci", "degradation") |>
     addReaction("C + S", "C + Q", "kp*C*S", "phosphorylation") |>
     addReaction("Q", "S", "kdp*Q", "dephosphorylation")

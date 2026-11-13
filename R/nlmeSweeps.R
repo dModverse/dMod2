@@ -6,7 +6,7 @@
 
 ## The forward pass along the colored eta directions of `units`, then a direction per parameter
 ## in `along`: per condition of `conds` the prediction and error-model values with their tangents
-## and tapes, and per data row its prediction p, sigma s and their derivatives pd, sd along the
+## and tapes, and per data row the prediction p, sigma s and their derivatives pd, sd along the
 ## directions. Through the native chain where it covers the model (`native`, for a backward sweep
 ## with `blocks` seed blocks), then without values and tapes.
 .sweepForward <- function(design, full, fixed, units, cores = 1L, along = character(0),
@@ -53,7 +53,7 @@
 
 ## The forward pass along the k-th tangent of the native full pass `fw` on the conditions `conds`,
 ## for a backward sweep with `blocks` seed blocks: the parameter stages along that tangent anew,
-## the solution and its k-th tangent taken from `fw` without a solve. NULL where `fw` did not run
+## the solution and the k-th tangent taken from `fw` without a solve. NULL where `fw` did not run
 ## natively.
 .sweepSlice <- function(design, full, fixed, fw, k, conds, blocks, cores) {
   nat <- fw$native
@@ -112,7 +112,7 @@
 
 ## The backward sweep of a forward pass `fw` with the seeds `seeds`, per condition a list of
 ## `pred` and `sigma`, [rows, blocks (K + 1)], or these stacked over the conditions with `n` the
-## rows per condition: per block a seed and its derivatives along the K tangents. Per condition
+## rows per condition: per block a seed and the seed derivatives along the K tangents. Per condition
 ## the cotangent of the parameters it reaches, [parameters, blocks (K + 1)]: per block J' w and the
 ## sum over rows of w Hess(f) v_k plus J' wdot_k.
 .sweepBackward <- function(fw, seeds, cores = 1L, blocks = 1L) {
@@ -211,7 +211,7 @@
   })
 }
 
-## The data rows of a forward pass stacked over its conditions, `n` the rows per condition.
+## The data rows of a forward pass stacked over the conditions of the pass, `n` the rows per condition.
 .stackRowsOf <- function(rows) {
   pick <- function(f) unlist(lapply(rows, `[[`, f), use.names = FALSE)
   list(p = pick("p"), s = pick("s"), y = pick("y"), cens = pick("cens"),
@@ -229,7 +229,7 @@
 }
 
 ## The cotangents `cts` per condition summed per unit, `unitOf` the unit of every condition:
-## per unit its names and their rows.
+## per unit the names and their rows.
 .unitSums <- function(cts, unitOf, names) {
   P <- length(names)
   key <- unlist(Map(function(ct, u) (u - 1L) * P + match(rownames(ct), names), cts, unitOf), use.names = FALSE)
@@ -251,7 +251,7 @@
 }
 
 
-## Per unit of `units` (its `eta` and `conditions`) by forward over reverse: `rows`, the exact
+## Per unit of `units` (with `eta` and `conditions`) by forward over reverse: `rows`, the exact
 ## eta rows of the Hessian of the data term, and `traces`, the gradients grad tr(M H_u) of the
 ## matrices in `Ms[[u]]`, H_u the Gauss-Newton Hessian of the data term in the unit's etas. All as
 ## named over `reach`, the parameters the unit's conditions reach. Either one backward sweep along
@@ -274,7 +274,7 @@
   l_ <- function(i, j) lr[, i + 1L, j + 1L]
   if (narrow) return(.sweepNarrow(design, full, fixed, units, Ms, cores, fw, r, l_, unitOf))
   Ku <- rep(vapply(units, function(u) length(u$eta), 0L)[unitOf[fw$conds]], r$n)
-  # block 1, the data Hessian along every tangent: seed the loss gradient, its derivative
+  # block 1, the data Hessian along every tangent: seed the loss gradient, the derivative
   # L (pd, sd); block j + 1, for grad tr(M H_u) = sum_jk M_jk U_jk with symmetric M: seed
   # 2 L J_j, and along tangent k the seeds of J_j' dL J_k, so that U has the derivatives
   # through J and through L
@@ -318,7 +318,7 @@
 
 ## The rows and trace gradients of .sweepUnits() direction by direction. Along eta_k, from a
 ## forward pass along it alone over the conditions whose unit has a k-th eta: row k of the Hessian
-## from the loss gradient seeded with its derivative L J_k along the tangent, and with M symmetric
+## from the loss gradient seeded with the loss derivative L J_k along the tangent, and with M symmetric
 ## sum_j M_jk U_jk from the seed 2 L J M_k with, along the tangent, J M_k' dL J_k. The rows `r` and
 ## loss derivatives `l_` are those of the full pass `fw`; a matrix M that is 0 in every unit has no
 ## seed.
@@ -389,7 +389,7 @@
 }
 
 
-## The Gauss-Newton Hessian of the data term in the etas of every unit, sum over its rows of
+## The Gauss-Newton Hessian of the data term in the etas of every unit, sum over the unit rows of
 ## J' L J with J = d(p, s) / d eta from the tangents of the forward pass `fw`.
 .unitCurvature <- function(design, fw, units) {
   unitOf <- integer(0)
@@ -410,7 +410,7 @@
 }
 
 
-## The volume term sum_u log|H_u| of FOCEI by forward over reverse: its gradient in `outer` and
+## The volume term sum_u log|H_u| of FOCEI by forward over reverse: the gradient in `outer` and
 ## the mode shift d eta*/d theta = -H_ee^-1 H_eA per unit, H_u^-1 from `H_inv_list`, from the
 ## eta rows of the joint Hessian and the trace gradient at M = H_u^-1 (`.sweepUnits()`). With
 ## `curvature` also the volume Hessian from dH_u/dtheta, the trace gradients at the unit matrices:
@@ -420,7 +420,7 @@
 .volumeReverse <- function(design, full, fixed, outer, H_inv_list, cores = 1L, local = FALSE,
                            curvature = FALSE) {
   units <- .volumeUnits(design, full, fixed)
-  # per unit the matrices M of its trace gradients: H^-1, then E_kl for k <= l
+  # per unit the matrices M of the unit trace gradients: H^-1, then E_kl for k <= l
   pairs <- lapply(units, function(u) which(upper.tri(diag(length(u$eta)), diag = TRUE), arr.ind = TRUE))
   Ms <- lapply(seq_along(units), function(i) {
     e <- units[[i]]$eta
@@ -453,7 +453,7 @@
       TR[own, ] <- TR[own, , drop = FALSE] + t(crossprod(Mv, matrix(vapply(un$dP[own], c, numeric(Ku * Ku)), Ku * Ku)))
     }
     trace <- TR[, 1L]
-    # the normal prior: its precision in the eta block, its derivative in the Cholesky parameters
+    # the normal prior: the precision in the eta block, the derivative in the Cholesky parameters
     rowsH[, eta] <- rowsH[, eta] + un$P
     for (cp in intersect(cholIn, names(un$dP))) rowsH[, cp] <- rowsH[, cp] + un$dP[[cp]] %*% full[eta]
     Hee <- rowsH[, eta, drop = FALSE]

@@ -106,7 +106,7 @@ test_that("Xs keeps the forcings as given and integrates the ones set later", {
   a2 <- xf(.ctl_times, inner, deriv = FALSE)[[1]][, "A"]
   expect_equal(a2, 2 * a1, tolerance = 1e-5)
 
-  # The batched path keys its prepared handle on the forcings, so a change
+  # The batched path keys the prepared handle on the forcings, so a change
   # has to reach it as well.
   many <- function() dMod2:::.predictMany(xf, .ctl_times,
                                           list(inner, c(A = 0, k = 2)),
@@ -129,7 +129,7 @@ test_that("Xs keeps the forcings as given and integrates the ones set later", {
   expect_error(xf(.ctl_times, inner, deriv = FALSE), "NA values")
 })
 
-test_that("Xf keeps its forcings and options as given, too", {
+test_that("Xf keeps the forcings and options as given, too", {
   fx <- ctl_models()
   u1 <- data.frame(name = "u", time = c(0, 100), value = c(1, 1))
   xf <- Xf(fx$mf, forcings = u1)
@@ -323,7 +323,7 @@ test_that("attachInput set through controls reaches both sweeps", {
 
 ## ---- Pimpl --------------------------------------------------------------
 
-test_that("Pimpl reads keepRoot and its solver options from controls", {
+test_that("Pimpl reads keepRoot and the solver options from controls", {
   fx <- ctl_models()
   pim <- fx$pim
   on.exit({
@@ -449,7 +449,7 @@ test_that("controls reach through %.*% and objfn * parfn, which stay one term", 
   controls(op, "multipleShootingControl") <- list(nodes = 2)
   expect_identical(controls(obj, "multipleShootingControl"), list(nodes = 2))
 
-  # Multiple shooting reads the terms of an objective as its summands; a
+  # Multiple shooting reads the terms of an objective as the summands; a
   # scaled or composed objective is one of them, not the objective inside.
   terms <- dMod2:::.objTerms(sobj)
   expect_length(terms, 1L)
@@ -520,7 +520,7 @@ test_that("Y names the state the prediction does not return", {
 })
 
 
-test_that("a failed batch solve names its conditions", {
+test_that("a failed batch solve names the failed conditions", {
   fx <- ctl_models()
   x <- Xs(fx$m)
   prd <- fx$g * x * fx$p

@@ -6,11 +6,11 @@
 #'
 #' @param trafo An [eqnvec], named character or [eqnlist], or a list of
 #'   those named by condition, which builds one transformation per condition.
-#'   `NULL` (default) returns `NULL`.
+#'   `NULL` (default) returns `NULL`. Expressions follow [cppDE::expressions].
 #' @param parameters Outer parameter names. Default `NULL`, the symbols of
 #'   `trafo`.
 #' @param condition Condition label of a single `trafo`, default `NULL`; a
-#'   list takes its names instead.
+#'   list takes the list names instead.
 #' @param compile Logical. `TRUE` compiles all conditions into one shared
 #'   object named `modelname`, `FALSE` (default) leaves it to [compile()].
 #' @param modelname Base name of the generated files, default `NULL`, which
@@ -132,7 +132,7 @@ P <- function(trafo = NULL, parameters = NULL, condition = NULL,
   if (!deriv || is.null(Jac))
     return(as.parvec(val, deriv = FALSE, deriv2 = FALSE))
 
-  ## An output is fixed when its expression has no varying input, not when its
+  ## An output is fixed when the output expression has no varying input, not when the
   ## derivative vanishes at this point: the Hessian may not.
   varying <- if (is.null(attr(pars, "deriv"))) .setdiffU(names(pars), names(fixed))
              else rownames(attr(pars, "deriv"))
@@ -160,8 +160,8 @@ P <- function(trafo = NULL, parameters = NULL, condition = NULL,
 }
 
 
-# Derivatives of the inputs Pexpl passes through, in the basis `theta` of its
-# Jacobian. Without incoming derivatives an input is its own direction, added to
+# Derivatives of the inputs Pexpl passes through, in the basis `theta` of the incoming
+# Jacobian. Without incoming derivatives an input is a direction of itself, added to
 # the basis if needed; an incoming input without a row was fixed and keeps none.
 .Pexpl_through <- function(pars, moving, theta, second = FALSE) {
   dP <- attr(pars, "deriv")
@@ -248,7 +248,7 @@ P <- function(trafo = NULL, parameters = NULL, condition = NULL,
 }
 
 
-# The kernel with its batch and reverse entries. All three close over this
+# The kernel with batch and reverse entries. All three close over this
 # frame, which holds `st` and `controls` alone, and read `controls` when they
 # run: controls<- rebinds it here, so a change reaches every entry at once.
 .Pexpl_wrap <- function(st, controls) {
@@ -266,7 +266,7 @@ P <- function(trafo = NULL, parameters = NULL, condition = NULL,
   p2p
 }
 
-# The requests of several Pexpl() kernels, each with its own compiled function, in one
+# The requests of several Pexpl() kernels, each with a separate compiled function, in one
 # evaluateMany() of cppDE; one by one where cppDE has none or a kernel lacks the forward
 # derivatives asked for.
 .Pexpl_many <- function(kernels, parsList, fixedList, deriv, deriv2, cores) {
@@ -318,7 +318,7 @@ P <- function(trafo = NULL, parameters = NULL, condition = NULL,
     u <- matrix(r$cotangentP, ncol = K, dimnames = list(rownames(r$cotangentP), NULL))
   } else {
     # The node has no variables, so only the parameters bring tangents in, and
-    # the cotangent brings its own. Both halves of d/dv (w' J) come back in one
+    # the cotangent brings separate ones. Both halves of d/dv (w' J) come back in one
     # pass; nothing here forms a Hessian.
     nd <- b$D
     W <- array(0, c(1L, length(outnames), b$S), dimnames = list(NULL, outnames, NULL))
@@ -353,7 +353,8 @@ P <- function(trafo = NULL, parameters = NULL, condition = NULL,
 #' only after compilation.
 #'
 #' @param trafo Named character or [eqnvec]; names are inner parameters,
-#'   values are expressions in the outer parameters.
+#'   values are expressions in the outer parameters, in the language of
+#'   [cppDE::expressions].
 #' @param parameters Outer parameters; default `NULL`, the symbols of
 #'   `trafo`. Names given here that `trafo` does not map pass through as
 #'   identity.
@@ -439,8 +440,8 @@ Pexpl <- function(trafo, parameters = NULL, attachInput = FALSE, condition = NUL
 }
 
 
-## The conserved totals of the network without its structurally zero states; one proportional to a
-## total of the full network with the zero states at 0 is written as that total, under its name.
+## The conserved totals of the network without the structurally zero states; one proportional to a
+## total of the full network with the zero states at 0 is written as that total, under the name of that total.
 ## Totals of constant states (`held`) are left out.
 .restingTotals <- function(full, reduced, zero, held) {
   red <- conservedQuantities(reduced)
@@ -482,7 +483,7 @@ Pexpl <- function(trafo, parameters = NULL, attachInput = FALSE, condition = NUL
 #' by `"0"` in remaining rates, structurally-zero reactions are removed, and
 #' detection re-runs (removals can expose new zero-states). A state that some
 #' reaction changes but none is left to change, outside every conserved
-#' moiety, rests: the steady state leaves its value free.
+#' moiety, rests: the steady state leaves the value of such a state free.
 #'
 #' @param eqnlist_obj An [eqnlist].
 #' @return `list(zero_states, resting, eqnlist)` with the reduced system.
@@ -500,7 +501,7 @@ Pexpl <- function(trafo, parameters = NULL, attachInput = FALSE, condition = NUL
   # the conserved moieties, one column of states each
   moieties <- .conservedBasis(S)
   moiety <- if (is.null(moieties)) character(0) else rownames(moieties)[rowSums(moieties != 0) > 0]
-  # whether a state is the last one of some moiety not yet at 0, which then holds its total
+  # whether a state is the last one of some moiety not yet at 0, which then holds the moiety total
   .last_holder <- function(st) {
     if (is.null(moieties) || !(st %in% rownames(moieties))) return(FALSE)
     for (k in which(moieties[st, ] != 0)) {
@@ -685,7 +686,7 @@ Pexpl <- function(trafo, parameters = NULL, attachInput = FALSE, condition = NUL
 }
 
 
-#' Normalise steady-state inputs
+#' Normalize steady-state inputs
 #'
 #' Coerces `trafo` to an `eqnvec`, zeroes and removes forcings, removes states
 #' that are structurally zero at steady state and promotes states with a zero
@@ -736,7 +737,7 @@ Pexpl <- function(trafo, parameters = NULL, attachInput = FALSE, condition = NUL
   const_states <- states[vapply(unclass(trafo), function(x)
     tryCatch(identical(eval(parse(text = x)), 0),
              error = function(e) FALSE), logical(1))]
-  # a state in a total takes its value from the total
+  # a state in a total takes the state value from the total
   const_states <- setdiff(const_states, unlist(lapply(totals, getSymbols)))
   if (length(const_states))
     parameters <- union(parameters %||% character(0), const_states)
@@ -784,7 +785,8 @@ Pexpl <- function(trafo, parameters = NULL, attachInput = FALSE, condition = NUL
 #' continuation ([cppDE::ptc()]) and returns a [parfn] with sensitivities from
 #' the implicit function theorem.
 #'
-#' @param trafo Named character, [eqnvec] or [eqnlist] defining \eqn{f}.
+#' @param trafo Named character, [eqnvec] or [eqnlist] defining \eqn{f}, in the
+#'   language of [cppDE::expressions].
 #' @param parameters Outer parameter names. For an [eqnlist] the totals
 #'   \eqn{T} of the conserved quantities are added.
 #'   States named here are held at their value instead of solved for, and a
@@ -805,7 +807,7 @@ Pexpl <- function(trafo, parameters = NULL, attachInput = FALSE, condition = NUL
 #' @param deriv,deriv2 Build first and second derivatives, default `TRUE` and
 #'   `FALSE`. `deriv2` requires `deriv = TRUE`.
 #' @param controlsPTC Named list of solver controls; an entry not given keeps
-#'   its default, an unknown entry is an error:
+#'   the default, an unknown entry is an error:
 #'   \describe{
 #'     \item{`reltol`, `abstol`}{Convergence tolerances, default `1e-10`, `1e-14`.}
 #'     \item{`flowTol`}{Relative local error per pseudo-time step, default `1`.}
@@ -819,7 +821,7 @@ Pexpl <- function(trafo, parameters = NULL, attachInput = FALSE, condition = NUL
 #'       `FALSE` an unstable root is returned, on which a
 #'       [constraintStability()] term rises.}
 #'     \item{`stabilityTol`}{With `stability`, a root counts as stable while
-#'       the real part of its leading eigenvalue on the manifold of the conserved
+#'       the real part of the leading eigenvalue on the manifold of the conserved
 #'       quantities is at most `stabilityTol`, in the units of the rates; default
 #'       `0`. A small positive value admits a resting state that departs from
 #'       rest more slowly than the experiment lasts, as near a Hopf
@@ -838,7 +840,7 @@ Pexpl <- function(trafo, parameters = NULL, attachInput = FALSE, condition = NUL
 #'
 #' @details Conserved quantities of an [eqnlist] enter as \eqn{C x = T}.
 #' States without influx are 0. A state whose reactions all vanish with them
-#' rests: it takes its value from `pars`, 0 where `pars` has none, and is not
+#' rests: it takes the value from `pars`, 0 where `pars` has none, and is not
 #' among the parameters. The root is solved from the states in `pars`,
 #' missing ones at 1, then from all states at 1, then from `nStarts` random
 #' starts; with `flow = TRUE` the stable root the flow leads to. If all fail, it
@@ -964,7 +966,7 @@ Pimpl <- function(trafo, parameters = NULL, forcings = NULL, condition = NULL,
     }
 
     if (!is.null(dP)) {
-      dPsub <- submatrix(dP, rows = colnames(jacobian))
+      dPsub <- .submatrix(dP, rows = colnames(jacobian))
       th    <- colnames(dPsub); n_th <- length(th)
       if (want_d2) {
         new_hess <- t(dPsub) %bmm% hessian %bmm% dPsub
@@ -1029,8 +1031,8 @@ Pimpl <- function(trafo, parameters = NULL, forcings = NULL, condition = NULL,
   }
 
   attr(p2p, "vjpfn")       <- .parfnVjpFromJacobian(p2p)
-  # the steady state as a stage of the native chain (.chainStage()): its unknowns, the states at
-  # 0, its parameters and the native state that solves its roots
+  # the steady state as a stage of the native chain (.chainStage()): the unknowns, the states at
+  # 0, the parameters and the native state that solves the roots
   attr(p2p, "chainImpl") <- function(condition) list(
     dependent = dependent, zero = zero_states, resting = resting, parameters = parms_all, d1 = emit_d1, d2 = emit_d2,
     state = nativeState())
@@ -1072,7 +1074,7 @@ Pimpl <- function(trafo, parameters = NULL, forcings = NULL, condition = NULL,
 #' @description Build, change and branch the symbolic transformations that
 #' [P()] turns into a [parfn].
 #'
-#' - `define()` sets the entry named by the left-hand side of `expr` to its
+#' - `define()` sets the entry named by the left-hand side of `expr` to the
 #'   right-hand side, adding it if missing.
 #' - `insert()` replaces the left-hand side by the right-hand side wherever it
 #'   occurs in the expressions.
@@ -1081,7 +1083,7 @@ Pimpl <- function(trafo, parameters = NULL, forcings = NULL, condition = NULL,
 #'
 #' @param trafo Named character or [eqnvec], or a list of those named by
 #'   condition as `branch()` returns it. `NULL` starts a new one.
-#' @param expr `"lhs <- rhs"` string. Its symbols are replaced by the
+#' @param expr `"lhs <- rhs"` string. The symbols in it are replaced by the
 #'   arguments in `...` of the same name; see [repar()]. For `insert()` on a
 #'   branched transformation also one or several effect formulas, e.g.
 #'   `cl ~ wt + (1 | ID)`, which replace the symbol by a linear predictor
@@ -1089,7 +1091,7 @@ Pimpl <- function(trafo, parameters = NULL, forcings = NULL, condition = NULL,
 #'   [randomEffects()]. Named arguments in `...` are then placeholders of the
 #'   formulas, `insert(trafo, x ~ 1 + (1 | ID), x = c("ka", "cl"))`.
 #' @param table `data.frame` with one row per condition, row names the
-#'   conditions. Kept as attribute `tree`; its columns can be read in `...`
+#'   conditions. Kept as attribute `tree`; the columns can be read in `...`
 #'   by name.
 #' @param conditions Condition names; default `rownames(table)`.
 #' @param apply One of `"nothing"` (default), `"insert"` and `"define"`: what
@@ -1100,7 +1102,8 @@ Pimpl <- function(trafo, parameters = NULL, forcings = NULL, condition = NULL,
 #' @param ... Named vectors replacing the symbols of `expr` of the same name,
 #'   one substitution per element. They are evaluated per condition, with
 #'   the columns of `attr(trafo, "tree")`, `.currentTrafo` (the
-#'   transformation of the condition) and `.currentSymbols` (its symbols) in
+#'   transformation of the condition) and `.currentSymbols` (the symbols of
+#'   that transformation) in
 #'   scope. An unnamed logical argument of `insert()` selects the conditions
 #'   where it is `TRUE`. Next to effect formulas they are more formulas and
 #'   placeholders, evaluated once in the calling environment.
@@ -1151,7 +1154,7 @@ insert <- function(trafo, expr, ..., conditionMatch = NULL) {
 
 # `edit(branch, args)` for each branch of `trafo` (a single trafo is one
 # branch) whose condition matches `conditionMatch`, with the dots evaluated
-# against that condition. The result has the shape of `trafo` and its tree.
+# against that condition. The result has the shape and tree of `trafo`.
 .reparBranches <- function(trafo, dots, callerEnv, conditionMatch, edit) {
   tree <- attr(trafo, "tree")
   branched <- is.list(trafo)
@@ -1242,7 +1245,7 @@ branch <- function(trafo, table = NULL,
 #'
 #' @param trafo Named character, [eqnvec] or a list of those. Default `NULL`
 #'   starts from the identity of the left-hand sides, so the result maps each
-#'   left-hand side to its right-hand side.
+#'   left-hand side to the matching right-hand side.
 #' @param expr `"lhs <- rhs"` string. Inside a name, `_` separates symbols,
 #'   so `"Delta_x"` with `x = "a"` becomes `"Delta_a"`. A `"lhs ~ rhs"`
 #'   string or a formula is an error: `~` is reserved for model formulas.
@@ -1276,7 +1279,7 @@ repar <- function(trafo = NULL, expr, ..., reset = FALSE) {
   else { trafo[lhs] <- rhs; trafo }
 }
 
-# A substitution string, or a formula or `~` string given in its place, as
+# A substitution string, or a formula or `~` string given in place of one, as
 # opposed to a transformation.
 .isReparExpr <- function(x)
   inherits(x, "formula") ||

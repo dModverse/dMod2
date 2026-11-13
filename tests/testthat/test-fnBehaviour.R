@@ -1,4 +1,4 @@
-# Characterisation of Xd(), Id(), the event and start checks of the deSolve
+# Characterization of Xd(), Id(), the event and start checks of the deSolve
 # prediction functions, the forcing check of Y(), objective sums, res() with a
 # factor name column, and define()/insert().
 
@@ -7,7 +7,7 @@
                        value = c(1, 2, 4, 5, 3),
                        row.names = c("a0", "a1", "a3", "b2", "b0"))
 
-test_that("Xd interpolates per state and clamps outside its grid", {
+test_that("Xd interpolates per state and clamps outside the grid", {
   x <- Xd(.xdGrid, condition = "C1")
   expect_identical(getParameters(x), c("a0", "a1", "a3", "b2", "b0"))
   pouter <- attr(attr(x, "mappings")[[1]], "pouter")
@@ -120,7 +120,7 @@ test_that("Y infers states, forcings and parameters from a prediction function",
   f
 }
 
-test_that("+.objfn evaluates every term on its own conditions", {
+test_that("+.objfn evaluates every term on the term conditions", {
   log <- new.env(); log$env <- new.env()
   o <- .logObj(c("C1", "C2"), 1, log) + .logObj(NULL, 10, log) + .logObj("C3", 100, log)
   expect_identical(attr(o, "conditions"), c("C1", "C2", "C3"))

@@ -1,4 +1,4 @@
-# Observable behaviour of mstrust(), reduceReplicates(), fitErrorModel() and
+# Observable behavior of mstrust(), reduceReplicates(), fitErrorModel() and
 # the result parsing of steadyStates(): messages, files, routing, values.
 
 quadObj <- function(pars, fixed = NULL, ...) {
@@ -47,7 +47,7 @@ test_that("mstrust writes the run folder, log and parameter list with output = T
 })
 
 
-test_that("mstrust routes its arguments to the optimiser, the sampler and the objective", {
+test_that("mstrust routes the arguments to the optimizer, the sampler and the objective", {
   seen <- new.env()
   myopt <- function(objfun, parinit, iterlim = 1, ...) {
     seen$iterlim <- iterlim
@@ -64,20 +64,20 @@ test_that("mstrust routes its arguments to the optimiser, the sampler and the ob
   expect_equal(fits[[1]]$parinit, c(a = 0.5, b = 1))
   expect_equal(fits[[2]]$value, 12.5)
   run <- attr(fits, "run")
-  expect_identical(run$optimiser, "myopt")
+  expect_identical(run$optimizer, "myopt")
   expect_identical(run$sampler, "mysample")
-  expect_identical(run$optimiserArgs, list(iterlim = 7))
+  expect_identical(run$optimizerArgs, list(iterlim = 7))
   expect_identical(run$samplerArgs, list(n = 2L, spread = 0.5))
   expect_identical(run$fits, 2)
   expect_equal(run$cores, c(fits = 1))
 
-  # startFromCenter puts the first fit at the centre
+  # startFromCenter puts the first fit at the center
   fits <- mstrust(obj, c(a = 0, b = 0), fits = 2, optmethod = myopt,
                   samplefun = mysample, spread = 0.5, startFromCenter = TRUE)
   expect_equal(fits[[1]]$parinit, c(a = 0, b = 0))
   expect_equal(fits[[2]]$parinit, c(a = 0.5, b = 1))
 
-  # a parframe centre gives one fit per row
+  # a parframe center gives one fit per row
   starts <- msParframe(c(a = 0, b = 0), n = 3, sd = 1)
   fits <- mstrust(obj, starts, fits = 10, optmethod = myopt)
   expect_length(fits, 3L)
@@ -114,7 +114,7 @@ test_that("reduceReplicates gives mean, standard error and the stable columns", 
   expect_snapshot(pinFrame(suppressMessages(reduceReplicates(d[, -7]))))
 })
 
-test_that("reduceReplicates checks its input", {
+test_that("reduceReplicates checks the input", {
   d <- replicateData()
   expect_error(reduceReplicates(d[, -1]),
                "Mandatory column names are: name, time, value, condition")

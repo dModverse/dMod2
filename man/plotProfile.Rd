@@ -36,7 +36,7 @@ plotProfile(profs, ...)
 profiles are cut off. Defaults to 5.}
 
 \item{parlist}{Matrix or data frame with parameter columns, drawn as points.
-With a \code{value} column, its differences to the lowest profile value are
+With a \code{value} column, the differences of \code{value} to the lowest profile value are
 used.}
 
 \item{ncol}{Number of columns of the plot grid. \code{NULL} (default) lets

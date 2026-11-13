@@ -20,12 +20,12 @@
 #'     their `cores` argument. Default 1.}
 #'   \item{`dMod2.outdir`}{Directory the model constructors such as
 #'     [odemodel()], [Y()] and [P()] write their sources and shared objects
-#'     to, and where [distributedComputing()] looks for model files when its
-#'     objects name none. Default the working directory.}
+#'     to, and where [distributedComputing()] looks for model files when the
+#'     input objects name none. Default the working directory.}
 #'   \item{`dMod2.evaluation`}{`"C++"` evaluates the objectives of [normL2()],
 #'     with their predictions and the random-effects fits of [em()] built on
 #'     them, in C++ per condition where the model allows it (see Details of
-#'     [normL2()]); `"R"` evaluates every model through its function objects
+#'     [normL2()]); `"R"` evaluates every model through the function objects
 #'     in R. Default `"C++"`.}
 #'   \item{`dMod2.compile.cmdlimit`}{Longest command line in characters that
 #'     [compile()] passes to the compiler and archiver. Default 96000, 8000 on

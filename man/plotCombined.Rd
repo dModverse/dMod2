@@ -62,7 +62,7 @@ gives one panel per combination of name and condition.}
 \item{aesthetics}{Named list of aesthetic mappings given as character, e.g.
 \code{list(linetype = "name")}. They can refer to columns of the condition grid.}
 
-\item{errfn}{Optional \link{obsfn}, the error model. Its predicted \code{sigma} is drawn as a band
+\item{errfn}{Optional \link{obsfn}, the error model. The \code{sigma} it predicts is drawn as a band
 around the prediction. Default \code{NULL}.}
 }
 \value{
@@ -103,7 +103,7 @@ plotPrediction(prediction, scales = "fixed",
 
 ## Simulate data
 set.seed(1)
-dataset <- wide2long(prediction)
+dataset <- as.data.frame(prediction)
 dataset <- dataset[seq(1, nrow(dataset), 5), ]
 dataset$value <- dataset$value + rnorm(nrow(dataset), 0, .1)
 dataset$sigma <- 0.1

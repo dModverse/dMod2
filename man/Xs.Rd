@@ -33,7 +33,7 @@ Xs(odemodel, ...)
 )
 }
 \arguments{
-\item{odemodel}{An \code{\link[=odemodel]{odemodel()}}. Its backend decides which method runs.}
+\item{odemodel}{An \code{\link[=odemodel]{odemodel()}}. The backend of the model decides which method runs.}
 
 \item{...}{Not used; an argument not named here is an error.}
 
@@ -62,7 +62,7 @@ Solver options.}
 
 \item{fcontrol}{\code{deSolve} backend only. List with the interpolation
 settings of the forcings, \code{method}, \code{rule}, \code{f} and \code{ties} as in
-\code{\link[stats:approxfun]{stats::approxfun()}}, passed to \code{\link[deSolve:ode]{deSolve::ode()}} as its \code{fcontrol}.}
+\code{\link[stats:approxfun]{stats::approxfun()}}, passed to \code{\link[deSolve:ode]{deSolve::ode()}} as argument \code{fcontrol}.}
 
 \item{optionsReverse}{Named list controlling the backward pass of
 \code{sweep = "reverse"}. Needs \code{backend = "cppDE"} and a model built with
@@ -92,7 +92,7 @@ integrates the states and, with \code{deriv = TRUE}, their sensitivities.
 \section{Solver options}{
 
 On the \code{cppDE} and \code{Sundials} backends the lists take the entries below and
-pass them to \code{\link[cppDE:solveODE]{cppDE::solveODE()}}. An entry not given keeps its default; an
+pass them to \code{\link[cppDE:solveODE]{cppDE::solveODE()}}. An entry not given keeps the default; an
 unknown entry is an error, also when set later with \code{\link[=controls]{controls()}}.
 \itemize{
 \item \code{atol}, \code{rtol}: absolute and relative error tolerance, default \code{1e-6}.
@@ -134,7 +134,7 @@ without sensitivities and to \code{"lsodes"} for those with, unless \code{option
 \section{Forcings}{
 
 On the \code{cppDE} and \code{Sundials} backends each forcing is the monotone cubic
-Hermite interpolant (PCHIP) of its data points, see
+Hermite interpolant (PCHIP) of the forcing data points, see
 \code{\link[cppDE:forcingValues]{cppDE::forcingValues()}}. Outside the points it holds the value of the
 first and the last one; a single point gives a constant. The integrator
 does not stop at the points, so a jump is best given by an event or by
@@ -173,7 +173,8 @@ returning a \link{prdlist};
 
 \code{pars} is a named numeric vector. If it has a \code{deriv} attribute, as the
 output of a parameter transformation does, the derivatives are taken with
-respect to the parameters behind it. A composition is called as its class:
+respect to the parameters behind it. A composition is called according to
+the resulting class:
 \code{g * x * p} is a prediction function, \code{(g * x * p)(times, pars)}.
 
 The other arguments are named:
@@ -195,7 +196,7 @@ backward pass, whose cost does not grow with the number of parameters.
 \item \code{conditions}: character vector, the conditions to evaluate. Default all
 conditions of the function.
 \item \code{env}: environment for intermediate results. Default \code{NULL}, a new one.
-An objective function stores its prediction there as \code{prediction} and
+An objective function stores the prediction there as \code{prediction} and
 returns the environment as attribute \code{env}.
 \item \code{cores}: number of threads for the ODE solves and the residual kernel.
 Default \code{getOption("dMod2.cores", 1L)}.
@@ -216,7 +217,7 @@ this Hessian:
 
 \code{hessian = "sparse"} returns the Gauss-Newton Hessian of the forward sweep
 as a sparse \code{Matrix}, assembled from the blocks of the conditions; \code{\link[=trust]{trust()}}
-factorises it where its argument \code{sparse} takes the sparse path, and \code{\link[=vcov]{vcov()}}
+factorizes it where the argument \code{sparse} takes the sparse path, and \code{\link[=vcov]{vcov()}}
 solves it for the columns of \code{which}.
 
 With \code{deriv = FALSE} it returns the value alone.

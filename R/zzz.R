@@ -58,7 +58,7 @@
   invisible(TRUE)
 }
 
-# cppDE's install-time SUNDIALS/KLU flags, read from its (unexported)
+# cppDE's install-time SUNDIALS/KLU flags, read from the (unexported)
 # cvodeConfig environment. All-empty when unavailable.
 .cppDE_config <- function() {
   empty <- list(available = FALSE, cflags = "", libs = "",

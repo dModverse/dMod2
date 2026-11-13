@@ -24,7 +24,8 @@ returning a \link{prdlist};
 
 \code{pars} is a named numeric vector. If it has a \code{deriv} attribute, as the
 output of a parameter transformation does, the derivatives are taken with
-respect to the parameters behind it. A composition is called as its class:
+respect to the parameters behind it. A composition is called according to
+the resulting class:
 \code{g * x * p} is a prediction function, \code{(g * x * p)(times, pars)}.
 
 The other arguments are named:
@@ -46,7 +47,7 @@ backward pass, whose cost does not grow with the number of parameters.
 \item \code{conditions}: character vector, the conditions to evaluate. Default all
 conditions of the function.
 \item \code{env}: environment for intermediate results. Default \code{NULL}, a new one.
-An objective function stores its prediction there as \code{prediction} and
+An objective function stores the prediction there as \code{prediction} and
 returns the environment as attribute \code{env}.
 \item \code{cores}: number of threads for the ODE solves and the residual kernel.
 Default \code{getOption("dMod2.cores", 1L)}.
@@ -67,7 +68,7 @@ this Hessian:
 
 \code{hessian = "sparse"} returns the Gauss-Newton Hessian of the forward sweep
 as a sparse \code{Matrix}, assembled from the blocks of the conditions; \code{\link[=trust]{trust()}}
-factorises it where its argument \code{sparse} takes the sparse path, and \code{\link[=vcov]{vcov()}}
+factorizes it where the argument \code{sparse} takes the sparse path, and \code{\link[=vcov]{vcov()}}
 solves it for the columns of \code{which}.
 
 With \code{deriv = FALSE} it returns the value alone.

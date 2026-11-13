@@ -15,7 +15,7 @@ normL2(
 )
 }
 \arguments{
-\item{data}{Object of class \link{datalist}. Each of its conditions has to be
+\item{data}{Object of class \link{datalist}. Each condition of the data has to be
 a condition of \code{x}.}
 
 \item{x}{Object of class \link{prdfn}.}
@@ -26,9 +26,9 @@ defined only for a subset of conditions.}
 \item{times}{Optional time points at which the prediction is evaluated in
 addition to the data times: a numeric vector for all conditions, which then
 share one grid, or a list named by condition, which gives each condition
-its own grid. The prediction of a condition starts at the first time of its
-grid, where the initial values take effect, so a single time per condition
-sets its start. A model built with \code{odemodel(..., includeTimeZero = TRUE)},
+a separate grid. The prediction of a condition starts at the first time of
+the grid, where the initial values take effect, so a single time per condition
+sets the start of that condition. A model built with \code{odemodel(..., includeTimeZero = TRUE)},
 the default, has 0 in every grid and so starts at 0 at the latest.
 Fixed-time events before the start do not fire. Event times should be
 included if the model uses events.}
@@ -46,7 +46,7 @@ or \code{"M4BEAL"} (truncated variants; require non-negative LOQ).}
 
 \item{multipleShootingControl}{\code{NULL} (default), \code{TRUE} or a list, which
 turns on multiple shooting in \code{\link[=trust]{trust()}}; \code{TRUE} is \code{list()}, every entry
-at its default. Can be changed, or switched off with \code{NULL}, by
+at the default. Can be changed, or switched off with \code{NULL}, by
 \verb{controls(obj, "multipleShootingControl") <-}, also on a sum holding the
 objective. An unknown entry is an error. Entries:
 \itemize{
@@ -60,7 +60,7 @@ that \code{"auto"} accepts, default \code{10}.
 \item \code{misfit}: root mean square of a segment's weighted residuals above
 which \code{"auto"} cuts it, default \code{3}.
 \item \code{charts}: named character, \code{"log10"}, \code{"linear"} or \code{"angle"} per
-state, the coordinate of its node values. Default \code{NULL}, all linear.
+state, the coordinate of the node values. Default \code{NULL}, all linear.
 \item \code{scale}: named numeric, the scale of each state's gaps and node steps.
 Default \code{1} on a log10 or angle chart, else the range of the state in
 the data or, unobserved, in a simulation at the start.
@@ -85,7 +85,7 @@ section Calling a dMod function. It returns an \link{objlist} whose value is
 the sum of the weighted squared residuals and, for error models and
 censored data, of the further terms of \verb{-2 log} likelihood. With
 \code{multipleShootingControl} the objective called as a function is still the
-single-shooting one; \code{\link[=trust]{trust()}} and \code{\link[=mstrust]{mstrust()}} optimise it by multiple
+single-shooting one; \code{\link[=trust]{trust()}} and \code{\link[=mstrust]{mstrust()}} optimize it by multiple
 shooting, also as a summand.
 }
 \description{
@@ -118,7 +118,8 @@ returning a \link{prdlist};
 
 \code{pars} is a named numeric vector. If it has a \code{deriv} attribute, as the
 output of a parameter transformation does, the derivatives are taken with
-respect to the parameters behind it. A composition is called as its class:
+respect to the parameters behind it. A composition is called according to
+the resulting class:
 \code{g * x * p} is a prediction function, \code{(g * x * p)(times, pars)}.
 
 The other arguments are named:
@@ -140,7 +141,7 @@ backward pass, whose cost does not grow with the number of parameters.
 \item \code{conditions}: character vector, the conditions to evaluate. Default all
 conditions of the function.
 \item \code{env}: environment for intermediate results. Default \code{NULL}, a new one.
-An objective function stores its prediction there as \code{prediction} and
+An objective function stores the prediction there as \code{prediction} and
 returns the environment as attribute \code{env}.
 \item \code{cores}: number of threads for the ODE solves and the residual kernel.
 Default \code{getOption("dMod2.cores", 1L)}.
@@ -161,7 +162,7 @@ this Hessian:
 
 \code{hessian = "sparse"} returns the Gauss-Newton Hessian of the forward sweep
 as a sparse \code{Matrix}, assembled from the blocks of the conditions; \code{\link[=trust]{trust()}}
-factorises it where its argument \code{sparse} takes the sparse path, and \code{\link[=vcov]{vcov()}}
+factorizes it where the argument \code{sparse} takes the sparse path, and \code{\link[=vcov]{vcov()}}
 solves it for the columns of \code{which}.
 
 With \code{deriv = FALSE} it returns the value alone.
@@ -180,7 +181,7 @@ With \code{deriv = FALSE} it returns the value alone.
   ## Simulate data
   data.list <- lapply(1:3, function(i) {
     prediction <- x(times, pars + rnorm(length(pars), 0, 1))
-    cbind(wide2long(prediction), sigma = 1)
+    transform(as.data.frame(prediction), sigma = 1)
   })
   
   data <- as.datalist(do.call(rbind, data.list))

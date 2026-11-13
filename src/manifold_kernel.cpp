@@ -1,6 +1,6 @@
 // The projection of positive states onto the conservation laws C x = T of a steady state (Pimpl):
-// x exp(C' lambda), which minimises the relative entropy to x, with lambda by Newton and a halving
-// line search on the squared residual. It ends where the residual is within the rounding of its
+// x exp(C' lambda), which minimizes the relative entropy to x, with lambda by Newton and a halving
+// line search on the squared residual. It ends where the residual is within the rounding of the
 // sums, or where no step lowers it; a singular Newton matrix ends it as in solve() of R.
 
 #define USE_FC_LEN_T

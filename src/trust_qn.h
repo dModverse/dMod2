@@ -14,7 +14,7 @@ namespace dmod { namespace trust_internal {
 // Values of `kind`, the same as the kernel's HessianMethod.
 enum QnKind { QN_BFGS = 1, QN_SR1 = 2 };
 
-// Dense quasi-Newton update of `B` in place, all arguments in the minimised
+// Dense quasi-Newton update of `B` in place, all arguments in the minimized
 // sign convention and `s` in the frame `B` lives in. BFGS is Powell-damped and
 // stays positive definite; SR1 may be indefinite. Returns whether `B` changed.
 inline bool qn_update_B(int kind, int K, std::vector<double>& B,

@@ -27,7 +27,7 @@ innerpars["Egf"] <- "1"
 
 p <- P(innerpars)
 
-out <- wide2long(y(times, p(pars)))
+out <- as.data.frame(y(times, p(pars)))
 
 timesD <- c(0, 1, 2, 3, 4, 5)
 data <- subset(out, time %in% timesD)

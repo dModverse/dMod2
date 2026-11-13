@@ -13,7 +13,7 @@ test_that("lloq = NA means no limit of quantification", {
   expect_equal(normL2(as.datalist(transform(d, lloq = NA)), x)(p)$value, ref)
 })
 
-test_that("renaming a datalist renames the conditions of its data frame", {
+test_that("renaming a datalist renames the conditions of the data frame", {
   dl <- as.datalist(data.frame(name = "A", time = 0, value = 1:2, sigma = 1, condition = c("C1", "C2")))
   names(dl) <- c("low", "high")
   expect_equal(unique(as.data.frame(dl)$condition), c("low", "high"))
@@ -52,10 +52,10 @@ test_that("covariates of a data frame are a data frame for any number of covaria
 })
 
 test_that("wide2long refuses duplicated names", {
-  expect_error(wide2long(cbind(time = 0:1, A = 1:2, A = 3:4)), "A")
+  expect_error(dMod2:::.wide2long(cbind(time = 0:1, A = 1:2, A = 3:4)), "A")
 })
 
-test_that("a parframe keeps its class for one column and selects columns by one index", {
+test_that("a parframe keeps the class for one column and selects columns by one index", {
   ms <- msParframe(c(a = 0), 3)
   sub <- ms[2:3, ]
   expect_s3_class(sub, "parframe")

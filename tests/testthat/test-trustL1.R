@@ -1,8 +1,8 @@
-# trustL1() on quadratic objectives, whose L1-penalised optimum is the
+# trustL1() on quadratic objectives, whose L1-penalized optimum is the
 # soft-thresholding solution on both sides of the kink.
 
 
-# Quadratic objfn centred at `target` with unit "sigma". Returns an
+# Quadratic objfn centered at `target` with unit "sigma". Returns an
 # objlist so trustL1's `+.objlist` accumulation works correctly.
 .quadratic_objfn <- function(target) {
   d <- length(target)
@@ -96,7 +96,7 @@ test_that("trustL1 pins sub-kink coords to mu exactly via the active set", {
 ## ---- Sub-kink coords stay pinned when parinit starts off the kink -----
 
 test_that("trustL1 pulls sub-kink coords to mu when started away from it", {
-  # Same dead-zone setup, but initialise far from mu so the optimiser has
+  # Same dead-zone setup, but initialize far from mu so the optimizer has
   # to *cross* the kink to pin the parameter.
   x0     <- c(a = 1.5, b = 0.10)
   lambda <- 0.5
@@ -129,7 +129,7 @@ test_that("trustL1 one-sided penalty pins coords pushing below mu", {
 
   # a is held at the lower wall.
   expect_identical(unname(fit$argument[["a"]]), 0)
-  # b is above mu, penalty inactive, so b lands at the unpenalised min.
+  # b is above mu, penalty inactive, so b lands at the unpenalized min.
   expect_equal(unname(fit$argument[["b"]]), 0.5, tolerance = 1e-6)
 })
 
@@ -138,7 +138,7 @@ test_that("trustL1 one-sided penalty pins coords pushing below mu", {
 # The kink active set is independent of the box and pins to mu bit-exactly.
 
 test_that("trustL1 combines a box bound with an L1 kink", {
-  # a is capped by its upper bound; b lies inside the dead zone and stays at mu.
+  # a is capped by the upper bound; b lies inside the dead zone and stays at mu.
   obj <- function(p, ...) {
     d <- as.numeric(p - c(3, 0.05))
     list(value = sum(d^2), gradient = 2 * d, hessian = 2 * diag(2))
@@ -181,7 +181,7 @@ test_that("trustL1 boundary = 'clip' reproduces the historical pinning", {
 
 ## ---- gates and fusion blocks --------------------------------------------
 
-test_that("a gate stays on its kink unless the data pull it upward", {
+test_that("a gate stays on the kink unless the data pull it upward", {
   for (case in list(c(y = -1, s = 0), c(y = 0.3, s = 0), c(y = 2, s = 1.5))) {
     fit <- trustL1(.quadratic_objfn(c(s = case[["y"]])), parinit = c(s = 1),
                    mu = c(s = 0), lambda = 1, gate = "s")
@@ -200,10 +200,10 @@ test_that("a fusion block shrinks toward fused values and fuses exactly", {
     trustL1(obj, parinit = start, fuse = list(names(y)), lambda = lambda,
             rinit = 0.5, rmax = 5, iterlim = 200)$argument
 
-  # No fusion: each value moves by lambda/2 per neighbour above minus below.
+  # No fusion: each value moves by lambda/2 per neighbor above minus below.
   expect_equal(unname(fit(0.8)), c(0.8, 1, 4.2), tolerance = 1e-6)
 
-  # a and b fuse and stay fused; c keeps its own value.
+  # a and b fuse and stay fused; c keeps a separate value.
   p <- fit(1.2)
   expect_identical(p[["a"]], p[["b"]])
   expect_equal(unname(p), c(1.1, 1.1, 3.8), tolerance = 1e-6)
@@ -214,7 +214,7 @@ test_that("a fusion block shrinks toward fused values and fuses exactly", {
   expect_equal(unname(p), c(1.1, 1.1, 3.8), tolerance = 1e-6)
 })
 
-test_that("an anchored block soft-thresholds toward its anchor", {
+test_that("an anchored block soft-thresholds toward the anchor", {
   y <- c(a = 0.3, b = -2)
   w <- matrix(1, 3, 3); w[1:2, 1:2] <- 0
   fit <- trustL1(.quadratic_objfn(y), parinit = c(a = 0, b = 0),
@@ -245,7 +245,7 @@ test_that("gates and fuse blocks reject the clip boundary and overlap with mu", 
 })
 
 
-test_that("trustL1 maximising subtracts the penalty", {
+test_that("trustL1 maximizing subtracts the penalty", {
   x0 <- c(a = 3, b = -0.2, c = 0.1)
   neg <- function(pars, ...) {
     o <- .quadratic_objfn(x0)(pars, ...)
@@ -261,7 +261,7 @@ test_that("trustL1 maximising subtracts the penalty", {
 })
 
 
-test_that("trustL1 takes its tolerances in tolControl and refuses them flat", {
+test_that("trustL1 takes the tolerances in tolControl and refuses them flat", {
   obj <- .quadratic_objfn(c(a = 1, b = 0.5))
   init <- c(a = 0, b = 0)
   expect_error(trustL1(obj, init, gtol = 1e-8), "tolControl\\$gtol")

@@ -7,7 +7,7 @@
 constraintExponential(scale, attrName = "prior", condition = NULL)
 }
 \arguments{
-\item{scale}{Named numeric vector of scale parameters, not rates. Its names
+\item{scale}{Named numeric vector of scale parameters, not rates. The names
 select the constrained parameters.}
 
 \item{attrName}{Character. Name of the attribute holding the constraint
@@ -19,7 +19,7 @@ one.}
 }
 \value{
 An objective function of class \code{objfn}, called as
-\code{obj(pars, ...)}, see \link{dModfn}. Its value is the full \verb{-2 log} density.
+\code{obj(pars, ...)}, see \link{dModfn}. The objective value is the full \verb{-2 log} density.
 }
 \description{
 Soft Exponential Constraint on Positive Parameters
@@ -27,7 +27,7 @@ Soft Exponential Constraint on Positive Parameters
 \details{
 Computes the exponential prior on the \verb{-2 log} scale,
 \deqn{2p/s + 2\log s.}
-It is the gamma prior at shape 1 and pulls a parameter towards 0 with a
+It is the gamma prior at shape 1 and pulls a parameter toward 0 with a
 constant force, which makes it the smooth one-sided counterpart of an L1
 penalty at \code{mu = 0}. The value is \code{Inf} for a negative parameter.
 }

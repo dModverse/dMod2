@@ -23,7 +23,7 @@ A \code{ggplot} object; for several \code{whichPar} the grid of
 }
 \description{
 Draws, for each profiled parameter, the changes of all other parameters
-along its profile in one panel. The \code{nPars} parameters with the largest
+along the profile of that parameter in one panel. The \code{nPars} parameters with the largest
 change are colored and named, the others are gray. Requires the package
 cowplot.
 }

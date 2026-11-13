@@ -2,7 +2,7 @@
 % Please edit documentation in R/symmetryReduction.R
 \name{symmetryReduction}
 \alias{symmetryReduction}
-\title{Remove Detected Symmetries by Reparametrisation}
+\title{Remove Detected Symmetries by Reparametrization}
 \usage{
 symmetryReduction(
   object,
@@ -49,7 +49,7 @@ drive to 0. Defaults to \code{FALSE}.}
 in \verb{$alternatives}. Defaults to \code{FALSE}.}
 
 \item{timeout}{Time limit in seconds for the section search of one block; a block not
-solved in time keeps its invariants (\code{"invariantOnly"}). Unlike \code{workCap}, it depends
+solved in time keeps the invariants (\code{"invariantOnly"}). Unlike \code{workCap}, it depends
 on the load of the machine. Defaults to \code{Inf}.}
 
 \item{allowOpen}{Logical. Reduce the directions with a closed form and leave those
@@ -73,12 +73,12 @@ reaching it is an entry in \code{limits}. Defaults to 4000.}
 \value{
 An object of class \code{symmetryreduction}:
 \describe{
-\item{\code{blocks}}{one entry per set of coupled directions, with its
+\item{\code{blocks}}{one entry per set of coupled directions, with
 \code{invariants}, \code{section}, \code{newParameters} (the invariant each \verb{q_<k>}
 holds), \code{solvedDomain}, \code{coverage} and \code{status} (\code{"fixed"},
 \code{"reduced"}, \code{"invariantOnly"} or \code{"unresolved"}), \code{level},
-\code{generatorLevel} (the lowest level of its directions), \code{unproven} (the claims
-of its section that are not proven) and, for a curved block, \code{count}
+\code{generatorLevel} (the lowest level of the directions in the block), \code{unproven} (the claims
+of the section that are not proven) and, for a curved block, \code{count}
 (\code{"exact"} or \code{"upper bound"}), \code{injective} and \code{reach}. A section on a face
 (\code{face}) holds \code{faceWhy}, why the model is not shown continuous up to the face
 (\code{NULL} when it is), and \code{faceLevel}, \code{"checked"} when the resting state under
@@ -94,9 +94,9 @@ coordinates) and \code{starts} (the sides of switches declared at the start), wi
 \item{\code{limits}}{the work budgets and time limits that stopped a section or
 invariant search.}
 \item{\code{checks}}{\code{pins} and \code{invariants}, whether every pin holds under the trafo
-and every invariant of a block maps to its new parameter over Q, \code{failed},
+and every invariant of a block maps to the matching new parameter over Q, \code{failed},
 and with \code{check = TRUE} \code{loop}: the \code{directions} the reduced model has, the
-number \code{expected}, its \code{rank}, \code{dim} and \code{rankStatus}, and \code{ok}.}
+number \code{expected}, \code{rank}, \code{dim} and \code{rankStatus}, and \code{ok}.}
 \item{\code{zeroCompatibility}}{with \code{reportZeroCompatibility = TRUE}, the sets of
 coordinates that can vanish together and the \code{condition} for it.}
 \item{\code{trafo}}{an \link{eqnvec} over all coordinates for \code{\link[=P]{P()}} or
@@ -118,14 +118,14 @@ the positive orthant.}
 \description{
 Turns the non-identifiable directions of a \code{\link[=symmetryDetection]{symmetryDetection()}} result into a
 parameter transformation that removes them. A scaling fixes one coordinate to 1.
-A general direction is replaced by its invariants, held by new parameters
+A general direction is replaced by the invariants of that direction, held by new parameters
 \verb{q_<k>}, searched up to the degree bounds \code{dPoly}, \code{dDarboux} and \code{dExp}. The
 computation runs in the Python package \code{symident}.
 }
 \details{
 A chart is returned only if it is valid on the domain declared by
 \code{positive}. A \verb{q_<k>} that takes both signs is marked \verb{[real-valued]} and is
-estimated on a linear scale; a chart valid only for its positive values has
+estimated on a linear scale; a chart valid only for positive values of the \verb{q_<k>} has
 \code{coverage = "partial"}. \code{print()} lists the invariant behind each \verb{q_<k>}.
 }
 \examples{

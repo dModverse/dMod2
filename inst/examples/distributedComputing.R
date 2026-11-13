@@ -14,7 +14,7 @@ if (.Platform$OS.type == "unix") {
 }
 
 \dontrun{
-# For an objective obj and a centre of the starts: multistarts on two nodes
+# For an objective obj and a center of the starts: multistarts on two nodes
 # reached by ssh, one task per node with ten fits per core
 nodes <- sshNodes(c("server1", "server2"), cores = 16)
 jobFitting <- distributedComputing(
@@ -40,7 +40,7 @@ profiles <- jobProfiling$get()
 confint(profiles)
 
 # 1000 fits on a SLURM cluster: 100 array tasks of 10 fits on 10 cores each,
-# through the job script template of its login node "mycluster", set up once
+# through the job script template of the login node "mycluster", set up once
 # from a job script of the cluster with the placeholders of ?slurmTemplate.
 slurmTemplate("mycluster", from = "~/mycluster.sh")
 cluster <- slurmCluster("mycluster", cores = 10, walltime = "02:00:00")
@@ -50,7 +50,7 @@ job <- distributedComputing(
 )
 
 # The ten starts of one mixed-effects multistart as ten array tasks of four cores:
-# every task draws the same starts and fits its own, get() joins them into one fit
+# every task draws the same starts and fits a separate part, get() joins them into one fit
 jobEm <- distributedComputing({
   set.seed(1)
   msem(obj, random, init, fits = 10, which = taskId,

@@ -18,8 +18,8 @@ objlist(value, gradient, hessian)
 An object of class \code{objlist}.
 }
 \description{
-An objective list holds an objective value, its gradient and
-its Hessian, as objective functions such as \code{\link[=normL2]{normL2()}}, \code{\link[=constraintL2]{constraintL2()}}
+An objective list holds an objective value with gradient and
+Hessian, as objective functions such as \code{\link[=normL2]{normL2()}}, \code{\link[=constraintL2]{constraintL2()}}
 and \code{\link[=datapointL2]{datapointL2()}} return them. Further numeric attributes are added
 along when two objective lists are added with \code{+}, see \link{sumobjlist}.
 }

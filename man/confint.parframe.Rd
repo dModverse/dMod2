@@ -42,7 +42,7 @@ effective count, which is what to pass when directions are non-identifiable.}
 A data frame with one row per parameter and columns \code{name},
 \code{value} (the value at the optimum), \code{lower} and \code{upper}. A bound is \code{NA}
 or infinite when the profile on that side is too short or does not rise
-towards the threshold.
+toward the threshold.
 }
 \description{
 Reads confidence intervals off profile likelihoods. Where a

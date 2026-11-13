@@ -19,7 +19,7 @@
 #' @param givenCQs Unnamed character vector of conserved quantities, either as
 #'   `c("A + pA = totA", "B + pB = totB")` or as `c("A + pA", "B + pB")`.
 #'   Default `NULL`: a basis is derived, or taken from [customTotals()] when the
-#'   `eqnlist` has them. Each given quantity keeps one of its states free, the
+#'   `eqnlist` has them. Each given quantity keeps one of the states in it free, the
 #'   first where possible.
 #' @param neglect Character vector, states and rate parameters the solver must
 #'   not solve for. Default `NULL`.
@@ -29,8 +29,8 @@
 #'   (default) for none.
 #' @param simplify `TRUE` (default) simplifies every expression once with
 #'   sympy, `FALSE` skips it, `"full"` simplifies further at a higher cost.
-#' @param solveQuadratic Logical, whether a balance quadratic in its own state
-#'   may be solved by its positive root instead of for a rate constant, which
+#' @param solveQuadratic Logical, whether the balance of a state, when quadratic
+#'   in that state, may be solved for the positive root instead of for a rate constant, which
 #'   introduces `sqrt()` terms. Default `FALSE`.
 #' @param priority Character vector of state and rate-parameter names, most
 #'   preferred first: named states are solved earlier, named rate parameters
@@ -42,7 +42,7 @@
 #'   `FALSE` (default) only the result, `"full"` every step of the solver.
 #'
 #' @return Named character vector of steady-state equations in dMod format, or
-#'   `0` if no solution was found. An entry whose value is its own name is a
+#'   `0` if no solution was found. An entry whose value equals the entry name is a
 #'   free parameter.
 #'
 #' @references \[1\] Rosenblatt, M., Timmer, J. and Kaschek, D. (2016).
@@ -106,8 +106,8 @@ steadyStates <- function(model, file = NULL, forcings = NULL,
     # State volumes let the backend test for sink clusters in amounts, across
     # the rows a reaction is split into
     volumes <- attr(tab, "volumes")
-    # Names sympy resolves to its own objects (Ci, Si, E, S, Q, gamma, ...) reach the
-    # backend under an alias: its implicit sympify() of strings would otherwise build
+    # Names sympy resolves to built-in objects (Ci, Si, E, S, Q, gamma, ...) reach the
+    # backend under an alias: the implicit sympify() of strings would otherwise build
     # Symbol*Ci and fail. Mapped back on the result below.
     symAlias <- .ssSympyAliases(unique(c(names(tab)[-(1:2)], getSymbols(tab$Rate),
                                          forcings, neglect, priority,
@@ -160,7 +160,7 @@ steadyStates <- function(model, file = NULL, forcings = NULL,
                               names(steady)))
   }
 
-  # The solver substitutes its results into each other; this catches what is left.
+  # The solver substitutes the results into each other; this catches what is left.
   # Only rewrite when there is something to resolve, resolveRecurrence() reformats
   # every equation it touches, which would break printed == returned.
   if (resolve && length(steady) > 1) {
@@ -188,7 +188,7 @@ steadyStates <- function(model, file = NULL, forcings = NULL,
 }
 
 
-# Model names that sympy's sympify() turns into its own objects (functions, constants,
+# Model names that sympy's sympify() turns into built-in objects (functions, constants,
 # the S registry): each gets an alias that is a plain symbol and clashes with no other
 # name. Named character vector original -> alias; empty when nothing clashes.
 .ssSympyAliases <- function(names) {

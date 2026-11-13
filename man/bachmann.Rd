@@ -9,7 +9,7 @@ A data frame with 541 rows and 11 columns:
 \describe{
 \item{\code{time}}{minutes after stimulation.}
 \item{\code{name}}{observable, 20 levels.}
-\item{\code{value}}{signal divided by the maximum of its observable.}
+\item{\code{value}}{signal divided by the maximum signal of the observable.}
 \item{\code{sigma}}{\code{NA} throughout; the errors are estimated in the fit.}
 \item{\code{condition}}{one of 36 experimental conditions.}
 \item{\code{experiment}}{one of 13 experiments; selects the scale and offset

@@ -123,7 +123,7 @@ SEXP parvec_class() {
 }
 
 // deriv / deriv2 for a target name set, or R_NilValue when no row survives.
-// Returns the input array untouched when its rows already are `nms` in order.
+// Returns the input array untouched when the rows already are `nms` in order.
 SEXP rows_for(SEXP arr, SEXP nms, bool three_d) {
   if (arr == R_NilValue) return R_NilValue;
   SEXP rn = three_d ? dim_names(arr, 0) : dim_names(arr, 0);

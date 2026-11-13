@@ -16,13 +16,13 @@
 #'   `reduceCQ` and `equilibrate` use the reactions of an [eqnlist].
 #' @param g Observables: one [eqnvec] or named character vector for all conditions,
 #'   or a list with one per row of `conditions`. An observable `a*log(h) + c` with a
-#'   number `a` is analysed through `h`.
+#'   number `a` is analyzed through `h`.
 #' @param trafo Parameter transformation: one [eqnvec] for all conditions or a list
 #'   with one per condition. An entry named like a parameter is substituted into `f`,
-#'   `g`, event values and event times; an entry named like a state is its initial
-#'   value. On the right-hand side a state name is the initial value of that state.
+#'   `g`, event values and event times; an entry named like a state sets the initial
+#'   value of the state. On the right-hand side a state name is the initial value of that state.
 #'   A parameter that enters only through `k = "exp(lk)"`, `"exp10(lk)"` or
-#'   `"10^lk"` is analysed in `b^lk` and reported in `lk`.
+#'   `"10^lk"` is analyzed in `b^lk` and reported in `lk`.
 #' @param parameters Character vector of additional symbols treated as parameters.
 #' @param fixed Character vector of known symbols: a fixed parameter is a known
 #'   constant, a fixed state has no unknown initial value.
@@ -41,20 +41,20 @@
 #'   value named like a column of `conditions` is read from it.
 #' @param conditions Data frame with one row per condition and columns named by
 #'   model symbols or event values. A numeric cell fixes the symbol, a character cell
-#'   renames it. A column named like a dynamic state sets its initial value. A
+#'   renames it. A column named like a dynamic state sets the initial value of the state. A
 #'   direction is reported only if it is non-identifiable in every condition.
 #' @param regimes For a model with switches, the regimes an experiment visits: a
 #'   character vector of comparisons such as `"x > c"`, each selecting the regimes on
 #'   that side of a switch, or a list of such vectors whose comparisons hold together;
 #'   the first entry is the regime at the start. A list named by the rows of
 #'   `conditions` gives them per condition. Without it every regime counts; a switch on
-#'   parameters alone needs its side named here.
+#'   parameters alone needs the side of the switch named here.
 #' @param equilibrate Logical. Start at a steady state of `f` with the inputs at 0;
 #'   the earliest events apply on top. Coupled steady states may need msolve; when
 #'   it is missing, an interactive session asks whether to build it into the
 #'   symident cache (on Windows with Rtools). Defaults to `FALSE`.
 #' @param reduceCQ Logical, [eqnlist] only. Report the freedom of a conserved moiety
-#'   on its total (`TRUE`) or on the initial value of one species (`FALSE`,
+#'   on the total of the moiety (`TRUE`) or on the initial value of one species (`FALSE`,
 #'   default).
 #' @param freeInitial States, at most one per conserved quantity, holding the free
 #'   resting value of their moiety under `equilibrate = TRUE, reduceCQ = FALSE`.
@@ -181,9 +181,9 @@ symmetryDetection <- function(f, g, trafo = NULL, parameters = NULL,
 #' @param relevanceCap Maximum number of coordinates in one entry of a direction
 #'   for the dense fit; wider entries use sparse interpolation. Defaults to 6.
 #' @param relevanceCapDir Maximum number of coordinates in one direction; a wider
-#'   one is reported by its support. Defaults to 24.
+#'   one is reported by the support. Defaults to 24.
 #' @param relevanceCapSparse Maximum number of coordinates in one entry for the
-#'   sparse (Ben-Or/Tiwari) fit; a wider entry is reported by its support.
+#'   sparse (Ben-Or/Tiwari) fit; a wider entry is reported by the support.
 #'   Defaults to 30.
 #' @param degreeCap Total degree bound of the dense rational fit. Defaults to 4.
 #' @param sampleSlack Number of samples beyond the minimum of the fit. Defaults
@@ -212,7 +212,7 @@ symmetryDetection <- function(f, g, trafo = NULL, parameters = NULL,
 #' @param homotopyDegree Total degree bound of the entries the homotopy route fits.
 #' @param degreeCapMax Degree up to which an entry past `degreeCap` is probed again,
 #'   the bound doubled each time.
-#' @param exactProof Whether a closed form that is not its own lift is proven through
+#' @param exactProof Whether a closed form that differs from the lift of the form is proven through
 #'   the fields of each regime, one detection per regime.
 #' @param exactWorkCap Work bound of that proof: regimes times coordinates times tape
 #'   instructions; above it the proof is skipped and the limit noted.
@@ -331,9 +331,9 @@ reconstControl <- function(relevanceCap = 6L, relevanceCapDir = 24L, relevanceCa
   if (is.list(x) && !is.null(names(x))) lapply(x, entries) else entries(x)
 }
 
-# one call into symident: the arguments as JSON in, the result as JSON out, with its
+# one call into symident: the arguments as JSON in, the result as JSON out, with the
 # warnings raised and the JSON kept as attribute "json". The SYMIDENT_* environment
-# travels with it, since Python reads its environment once
+# travels with it, since Python reads the environment once
 .symCall <- function(fun, ...) {
   si <- .symident()
   env <- Sys.getenv()
@@ -345,7 +345,7 @@ reconstControl <- function(relevanceCap = 6L, relevanceCapDir = 24L, relevanceCa
   out <- tryCatch(do.call(si[[fun]], args),
                   symident.sym.msolve.MsolveMissingError = function(e) {
                     if (!.offerMsolve())
-                      stop("this steady state needs msolve: confirm its installation in an ",
+                      stop("this steady state needs msolve: confirm the msolve installation in an ",
                            "interactive session, or set SYMIDENT_MSOLVE to an msolve ",
                            "executable.", call. = FALSE)
                     do.call(si[[fun]], args)
@@ -434,7 +434,7 @@ reconstControl <- function(relevanceCap = 6L, relevanceCapDir = 24L, relevanceCa
   normalizePath(exe)
 }
 
-# the result as symident wrote it, for its own report and for the reduction
+# the result as symident wrote it, for the report of symident and for the reduction
 .symRaw <- function(x) {
   raw <- attr(x, "symident")
   if (is.null(raw))

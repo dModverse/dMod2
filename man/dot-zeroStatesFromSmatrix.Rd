@@ -27,6 +27,6 @@ For each zero-state the column is dropped, the state symbol is substituted
 by \code{"0"} in remaining rates, structurally-zero reactions are removed, and
 detection re-runs (removals can expose new zero-states). A state that some
 reaction changes but none is left to change, outside every conserved
-moiety, rests: the steady state leaves its value free.
+moiety, rests: the steady state leaves the value of such a state free.
 }
 \keyword{internal}

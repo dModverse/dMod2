@@ -55,7 +55,7 @@ Replaces the replicates of each condition by their mean and the standard
 error of the mean.
 }
 \details{
-A column not in \code{select} is kept when its value is the same for all
+A column not in \code{select} is kept when it has the same value for all
 replicates of every condition, otherwise it is dropped with a message.
 }
 \examples{

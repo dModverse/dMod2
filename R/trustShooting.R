@@ -1,13 +1,13 @@
 ## Trust-region multiple shooting ------------------------------------------------
-## Bock's generalised Gauss-Newton method, condensed onto theta, on a trust region
+## Bock's generalized Gauss-Newton method, condensed onto theta, on a trust region
 ## over parameters and nodes; acceptance by filter, l2 penalty or natural level.
 
 ## Copyright (C) 2026 Simon Beyer
 
 
 # trust() on an objective holding a normL2 with a multipleShootingControl.
-# Settings a shooting run cannot honour are refused. Every other summand enters
-# the condensed problem with its own value, gradient and Gauss-Newton Hessian.
+# Settings a shooting run cannot honor are refused. Every other summand enters
+# the condensed problem with a separate value, gradient and Gauss-Newton Hessian.
 .trustShooting <- function(objfun, parinit, rinit, rmax, iterlim,
                            hessianMethod, parupper, parlower, tol, qn, step,
                            minimize, blather, printIter, traceFile, dots) {
@@ -31,7 +31,7 @@
     stop("trust: stepControl$acceptance = \"natural\" is Bock's damped ",
          "Gauss-Newton method and needs hessianMethod = \"gn\".", call. = FALSE)
 
-  # What normL2 would honour and a multiple-shooting run cannot; anything else
+  # What normL2 would honor and a multiple-shooting run cannot; anything else
   # it ignores, as normL2 itself does.
   refused <- intersect(names(dots), c("deriv2", "hessian", "conditions", "env",
                                       ".prediction"))
@@ -115,7 +115,7 @@
           else .shootNodes(sobj, th, fixed = fixed,
                            observed = !identical(init, "simulation"), cores = cores,
                            smooth = identical(init, "spline"))
-    # Unobserved states follow a run synchronised to the data.
+    # Unobserved states follow a run synchronized to the data.
     if (is.character(init) && init %in% c("data", "spline"))
       nd <- .shootSweep(sobj, th, nd, fixed, cores)
     nd
@@ -126,7 +126,7 @@
 
   # --- continuity breaks ------------------------------------------------------
   # Voss, Timmer and Kurths (2004): the node after a break joins the parameters
-  # and its gap is no constraint. Extended variables: theta, then break nodes.
+  # and the gap at that node is no constraint. Extended variables: theta, then break nodes.
   breakTimes <- attr(sobj, "breaks")
   nBreak <- length(unlist(breakTimes))
   if (nBreak && hm != "gn")
@@ -194,7 +194,7 @@
 
   # --- adaptive nodes -------------------------------------------------------
   # A segment whose propagation matrix exceeds `growth` or whose solve fails is
-  # cut; the new node takes its own state, or the start value and the data.
+  # cut; the new node takes the state of the trajectory there, or the start value and the data.
   kappa <- attr(sobj, "growth")
   misfit <- attr(sobj, "misfit")
   minLen <- attr(sobj, "minLength")
@@ -210,7 +210,7 @@
     !is.na(.shootSplitTime(sg, minLen[[sg$cond]], minPoints = minPts))
   }
   # The spectral radius, not a norm: it is invariant under chart and state
-  # scaling, and is the rate the linearised flow expands at.
+  # scaling, and is the rate the linearized flow expands at.
   growthOf <- function(E) vapply(E$segments, function(sg) {
     G <- sg$growth
     if (is.null(G)) return(0)
@@ -368,7 +368,7 @@
     }
   }
 
-  # Model Hessian per segment: its Gauss-Newton block, or a quasi-Newton one.
+  # Model Hessian per segment: the Gauss-Newton block, or a quasi-Newton one.
   # Kept by segment across a new layout; a segment that is new gets a seed.
   seedBlocks <- function(E, which) {
     if (qn$hessianInit == "gn") {
@@ -399,7 +399,7 @@
     Bn[!is.na(hit)] <- B[hit[!is.na(hit)]]
     fresh <- which(is.na(hit))
     if (length(fresh)) Bn[fresh] <- seedBlocks(E, fresh)
-    # the same segment under its new index: node names contain the index, the
+    # the same segment under a new index: node names contain the index, the
     # order of the variables does not change
     for (k in which(!is.na(hit))) {
       v <- E$segments[[k]]$vars
@@ -420,7 +420,7 @@
   n_fail <- 0L; n_stall <- 0L; nRelaxed <- 0L; nSOC <- 0L; qnSkipped <- 0L
   nRejRow <- 0L; nRestore <- 0L
 
-  # Filter restoration: close the linearised gaps at theta, damped if needed;
+  # Filter restoration: close the linearized gaps at theta, damped if needed;
   # failing that, put every node on theta's trajectory. NULL when neither works.
   restoreGaps <- function(C) {
     for (a in c(1, 0.5, 0.25)) {
@@ -446,7 +446,7 @@
 
   # --- Bock's damped Gauss-Newton method on the natural level function -------
   # Peifer and Timmer (2007), sec. 3.4: predictor-corrector damping; a step is
-  # taken when the simplified step at its end has shrunk.
+  # taken when the simplified step at the step end has shrunk.
   handedOver <- FALSE
   if (acc == "natural") {
     if (!is.null(attr(sobj, "args")$errmodel) ||
@@ -456,7 +456,7 @@
     # Peifer and Timmer's constants; the corrector may damp below tmin down
     # to lmin, Deuflhard's setting for highly nonlinear problems
     tmin <- 0.01; tup <- 0.5; eta0 <- 1; eta2 <- 1.8; lmin <- 1e-6
-    reg <- step$regularise %||% 0
+    reg <- step$regularize %||% 0
     E <- ev(theta, nodes, quiet = TRUE)
     neval <- neval + 1L
     if (inherits(E, "error"))
@@ -537,7 +537,7 @@
       }
     }
     C <- NULL
-    # Where the damping finds no step, the linearisation holds nowhere along
+    # Where the damping finds no step, the linearization holds nowhere along
     # the full step; the filter's trust region takes over from here.
     if (stopReason == "damping") {
       handedOver <- TRUE
@@ -563,7 +563,7 @@
 
     znorm <- C$znorm
     st <- .shootStep(thx(theta), C, r, lbx, ubx, psx, step$thetaMax, opt$measure,
-                     step$regularise %||% 0)
+                     step$regularize %||% 0)
     alpha <- st$alpha
     if (alpha < 1 && znorm > 0) nRelaxed <- nRelaxed + 1L
     dthx <- setNames(st$step, tx)
@@ -571,12 +571,12 @@
     dmf <- st$dmf
     thetaT <- theta + dth
     nodesT <- .shootStepNodes(nodes, C, alpha, dthx)
-    # the gaps the linearisation predicts for this very step; (1 - alpha) h
+    # the gaps the linearization predicts for this very step; (1 - alpha) h
     # unless a link was decoupled
     hl <- .shootLinViolation(E, spec, dthx, nodes, nodesT, scale, tx, bkOf()$brk)
 
     # after an acceptance, one solve with sensitivities serves both the
-    # judgement and the next model; after a rejection values suffice
+    # judgment and the next model; after a rejection values suffice
     withD <- trialDeriv || lastAccepted
     ET <- ev(thetaT, nodesT, quiet = TRUE, deriv = withD)
     neval <- neval + 1L
@@ -629,7 +629,7 @@
       }
     }
 
-    # an accepted trial judged on values alone gets its sensitivities now; a
+    # an accepted trial judged on values alone gets the sensitivities now; a
     # solve that fails with them is a failed trial like any other
     if (ok && d$accept && !withD) {
       ETd <- ev(thetaT, nodesT, quiet = TRUE)
@@ -664,7 +664,7 @@
 
     stepnorm <- st$stepnorm
     # a segment the trial could not solve is too long for this step: cut it
-    # at the current iterate, where its trajectory is known, and try again
+    # at the current iterate, where the segment trajectory is known, and try again
     # from there
     if (!ok && adaptive && inherits(ET, "shootingSegmentError") &&
         splittable(ET$segment) && splitSegments(ET$segment, TRUE)) {
@@ -857,7 +857,7 @@
       q2 <- q2 + sum(zk * Hz)
       L[[k]] <- Lk; zh[[k]] <- zk
       if (i < M && isTRUE(brk[[cn]][i])) {
-        # a continuity break: the next node is a variable of its own, its
+        # a continuity break: the next node is a separate variable, the node
         # step the columns bcol of the extended parameters, and no gap
         Ac[[i]] <- sg$jac
         S_cur <- matrix(0, length(spec$states), K)
@@ -872,8 +872,8 @@
         Ac[[i]] <- A
         S_cur <- A %*% Lk
         z_cur <- as.numeric(E$gaps[[cn]][i, spec$states]) + as.numeric(A %*% zk)
-        # A propagated gap or sensitivity past its bound is outside the
-        # linearisation: the link to the node before is dropped, an inexact
+        # A propagated gap or sensitivity past the bound is outside the
+        # linearization: the link to the node before is dropped, an inexact
         # step the acceptance judges on the true gaps.
         if (i > 1L && (max(abs(z_cur / scale[spec$states])) > zbound ||
                        max(abs(S_cur / scale[spec$states])) > sbound)) {
@@ -940,9 +940,9 @@
 }
 
 
-# Size of the gaps the linearised constraints leave after a step,
+# Size of the gaps the linearized constraints leave after a step,
 # c_j + A_j d_j - Delta s_{j+1}, scaled per state, with A_j the full end-state
-# Jacobian: the exact linearisation, also where condensing decoupled a link.
+# Jacobian: the exact linearization, also where condensing decoupled a link.
 .shootLinViolation <- function(E, spec, dth, nodes, nodesT, scale, tnames, brk = NULL) {
   s2 <- 0
   st <- spec$states
@@ -971,7 +971,7 @@
 
 ## ---- Partitioned quasi-Newton ------------------------------------------------
 ## Multipliers by lambda_{j-1} = grad_{s_j} m_j + G_j' lambda_j; segment j's pair
-## is its local step and the change of the gradient of f_j + lambda_j' end_j.
+## is the local step of segment j and the change of the gradient of f_j + lambda_j' end_j.
 
 .shootQNUpdate <- function(B, E, ET, C, alpha, dth, nodes, nodesT, spec, hm, cautious) {
   skipped <- 0L
@@ -1043,9 +1043,9 @@
 
 ## ---- Small helpers -------------------------------------------------------------
 
-# The full generalised Gauss-Newton step (alpha = 1) on the pseudo-inverse,
-# directions below reg dropped, and its scaled full-space vector. With `g`, `Vz`
-# of another linearisation, the simplified step of the natural level function.
+# The full generalized Gauss-Newton step (alpha = 1) on the pseudo-inverse,
+# directions below reg dropped, and the scaled full-space vector of the step. With `g`, `Vz`
+# of another linearization, the simplified step of the natural level function.
 .shootFullStep <- function(C, theta, lb, ub, ps, reg, g = C$g0 + C$gz, Vz = C$Vz,
                            eig = NULL, truncate = TRUE) {
   if (is.null(eig)) {
@@ -1094,7 +1094,7 @@
   res2 <- sum(qq[-seq_len(K)]^2)
 
   # length of the full Gauss-Newton step, alpha = 1, in the full space; the
-  # model Hessian may be singular or indefinite, so its spectrum is floored
+  # model Hessian may be singular or indefinite, so the spectrum is floored
   g1 <- C$g0 + C$gz
   ev <- eigen(0.5 * (Hm + t(Hm)), symmetric = TRUE)
   lmax <- max(abs(ev$values), .Machine$double.eps)
@@ -1112,7 +1112,7 @@
   gu <- crossprod(Rinv, ga - Hm %*% w0)
   Hu <- crossprod(Rinv, Hm %*% Rinv)
   # Peifer and Timmer (2007), sec. 4: a direction with singular value below
-  # reg times the largest loses its gradient and is damped as if fixed.
+  # reg times the largest loses the gradient along it and is damped as if fixed.
   if (reg > 0) {
     eh <- eigen(0.5 * (Hu + t(Hu)), symmetric = TRUE)
     lmax <- max(abs(eh$values), .Machine$double.eps)
@@ -1322,7 +1322,7 @@
   list(step = p, lambda = lam)
 }
 
-# Annealing stages, each minimising f + w ||V c||^2 until a step gains less
+# Annealing stages, each minimizing f + w ||V c||^2 until a step gains less
 # than `ftol`, until the RMS gap per node is below `hnode`, w reaches `wmax`, or
 # the gaps stall. Returns the point the exact method starts from.
 .shootAnneal <- function(evGN, spec, theta, nodes, tnames, ps, scale, pv, lb, ub,

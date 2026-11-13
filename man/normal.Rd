@@ -36,7 +36,7 @@ effect formula by \code{gr(group, dist = )}, e.g.
 \code{cl ~ 1 + (1 | gr(cellline, dist = laplace()))}. Their parameters are
 estimated by \code{\link[=em]{em()}} unless given.
 \itemize{
-\item \code{normal()}: multivariate normal with mean 0; its covariance is estimated
+\item \code{normal()}: multivariate normal with mean 0 and a covariance estimated
 per correlation block. The default.
 \item \code{laplace()}: Laplace with mean 0 and strength \code{lambda}, shared by all
 symbols of the term, so the deviation of a group from the fixed effects
@@ -47,8 +47,8 @@ probability \code{prob}, independently. The spike-and-slab random effects of
 a group are integrated jointly, exactly on the quadratic expansion of
 the data where the group has no Laplace or Dirichlet-process random
 effects the data tie to them and the sum over their subsets stays within
-a budget; else expectation consistent integrates each one against a
-diagonal cavity.
+a budget; else the expectation consistent (EC) approximation
+integrates each one against a diagonal cavity.
 \item \code{dirichletProcess()}: per symbol, the deviations follow a Dirichlet
 process with base measure \eqn{N(0, \tau^2)}{N(0, tau^2)} and
 \code{concentration}, the fixed effect seated first at deviation 0: the

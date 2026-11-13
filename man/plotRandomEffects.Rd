@@ -22,7 +22,7 @@ plotRandomEffects(x, ...)
 \item{...}{Ignored.}
 
 \item{type}{\code{"conditional"} (default): per group \code{draws} values from the
-conditional distribution of its random effects, normal around the mode with
+conditional distribution of the random effects of the group, normal around the mode with
 the conditional standard error; under the model they follow \code{N(0, Omega_kk)}
 whatever the shrinkage. \code{"modes"}: the modes, narrower than \code{N(0, Omega_kk)}
 by the shrinkage.}
@@ -34,7 +34,7 @@ by the shrinkage.}
 \item{covariates}{Columns of the condition grid of the data of the fit
 (\link{datalist}), or a data.frame with one row per condition (row names or a
 column \code{condition}): instead the modes of the random effects of every
-group against the covariates of its first condition, a scatter with a
+group against the covariates of the first condition of the group, a scatter with a
 loess trend for a numeric covariate of more than five values, boxes for
 the others.}
 }
@@ -66,8 +66,8 @@ g <- Y(c(y = "amt * Ka / (V * Ka - Cl) * (exp(-Cl / V * time) - exp(-Ka * time))
        outdir = tempdir())
 err <- Y(c(y = "sigma_add"), g, attachInput = FALSE, modelname = "theoph_err", compile = FALSE,
          derivMode = dm, outdir = tempdir())
-## one condition per subject with its dose; the effect formula replaces each log parameter
-## by its intercept plus a random effect per subject
+## one condition per subject with the subject dose; the effect formula replaces each log parameter
+## by an intercept plus a random effect per subject
 doses <- tapply(th$Dose * th$Wt, th$Subject, `[`, 1)[subjects]
 trafo <- branch(define(NULL, "x <- x", x = c("Ka", "V", "Cl", "amt", "sigma_add")),
                 table = data.frame(ID = subjects, dose = doses, row.names = subjects))

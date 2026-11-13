@@ -13,8 +13,8 @@ getFluxes(eqnlist, type = c("conc", "amount"))
 concentration or of amount.}
 }
 \value{
-Named list with one named character vector per state, its in- and
-out-fluxes.
+Named list with one named character vector per state, the in- and
+out-fluxes of the state.
 }
 \description{
 Generate List of Fluxes from Equation List

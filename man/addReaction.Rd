@@ -21,8 +21,8 @@ addReaction(
 
 \item{to}{character with the right hand side of the reaction, e.g. "C + 2*D"}
 
-\item{rate}{character. The rate associated with the reaction. The name is employed as a description
-of the reaction.}
+\item{rate}{character. The rate of the reaction, an expression in the language of
+\link[cppDE:expressions]{cppDE::expressions}. The name is employed as a description of the reaction.}
 
 \item{description}{Optional description instead of \code{names(rate)}.}
 

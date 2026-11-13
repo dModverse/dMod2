@@ -18,7 +18,7 @@ absolute paths \code{sbmlFile}, \code{conditionFile}, \code{measurementFile} and
 \code{models}, the SBML path of every model id.
 }
 \description{
-Reads a PEtab v1 or v2 YAML file, as selected by its \code{format_version}, and
+Reads a PEtab v1 or v2 YAML file, as selected by the \code{format_version} entry, and
 resolves the paths of the files it names. Only one problem per file is
 supported.
 }

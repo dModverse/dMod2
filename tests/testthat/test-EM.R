@@ -57,7 +57,7 @@
   }
 })
 
-# -2 log of the closed-form marginal: per group a normal of its stacked rows with covariance
+# -2 log of the closed-form marginal: per group a normal of the stacked group rows with covariance
 # sigma^2 I + Z Omega Z', the condition without a group with sigma^2 I.
 .linMarginal <- function(pars, mod) {
   m <- mod
@@ -103,7 +103,7 @@ test_that("mu-referenced fixed effects: random intercepts on every condition, ro
   ref <- .muReference(design, sub)
   expect_named(ref, c("eta_ka", "eta_cl"))
   expect_equal(ref$eta_cl$X, cbind(cl = c(s1 = 1, s2 = 1, s3 = 1), cl_wt = c(60, 70, 85)))
-  # a condition with data but without the formula leaves its symbol unreferenced
+  # a condition with data but without the formula leaves the symbol unreferenced
   design$data <- c(design$data, list(ref = NULL))
   design$randomEffects$etas["ref", ] <- NA
   expect_length(.muReference(design, sub), 0)
@@ -125,7 +125,7 @@ test_that("mu-referenced fixed effects: random intercepts on every condition, ro
   expect_lt(max(abs(numDeriv::grad(at, part))), 1e-8)
 })
 
-test_that("the normal prior has the exact gradient and Hessian, and the M-step is its optimum", {
+test_that("the normal prior has the exact gradient and Hessian, and the M-step is the optimum of the prior", {
   m <- .lin()
   d <- dMod2:::.emDesign(m$obj, randomEffects(m$p))
   prior <- dMod2:::.normalPrior(d)
@@ -149,7 +149,7 @@ test_that("the normal prior has the exact gradient and Hessian, and the M-step i
     sum(vapply(M, function(Mg) sum(diag(solve(O, Mg))), 0)) + 8 * as.numeric(determinant(O)$modulus)
   }
   expect_lt(max(abs(numDeriv::grad(q, unname(chol)))), 1e-6)
-  # with a fixed entry the optimum over the free ones, by trust() to its tolerance: a diagonal
+  # with a fixed entry the optimum over the free ones, by trust() to the trust() tolerance: a diagonal
   # Omega of the mean moments
   held <- dMod2:::.updateNormal(d, M, fixed = c(omega_b_a = 0))
   expect_equal(unname(exp(held[c("omega_a_a", "omega_b_b")])), sqrt(diag(Reduce(`+`, M) / 8)), tolerance = 1e-6)
@@ -177,7 +177,7 @@ test_that("FOCEI and quadrature reproduce the closed-form marginal with groups o
   expect_equal(fit$omega$type, c("sd", "sd", "cor"))
 })
 
-test_that("a variance the data leave at 0 is set to 0, and the fit without its random effect is returned", {
+test_that("a variance the data leave at 0 is set to 0, and the fit without that random effect is returned", {
   m <- .lin()
   withr::local_seed(5)
   # the intercepts vary between the groups, the slopes do not for any draw: the noise of a group is
@@ -228,7 +228,7 @@ test_that("rows with a recorded sigma keep it beside the error model, replicates
                sort(unique(round(c(0.3, 0.6, exp(fit$argument[["s"]])), 8))))
 })
 
-test_that("a fixed hyperparameter stays at its value", {
+test_that("a fixed hyperparameter stays at the fixed value", {
   m <- .lin()
   fit <- em(m$obj, randomEffects(m$p), c(a = 0.5, b = 0.2), fixed = c(omega_b_a = 0), verbose = FALSE)
   expect_false("omega_b_a" %in% names(fit$argument))
@@ -261,7 +261,7 @@ test_that("msem draws starts and seeds in the session, so the cores do not chang
   expect_equal(run(2), run(1))
 })
 
-test_that("an EM fit reports its predictions, residuals, log-likelihood and random effects", {
+test_that("an EM fit reports predictions, residuals, log-likelihood and random effects", {
   m <- .lin()
   fit <- em(m$obj, randomEffects(m$p), c(a = 0.5, b = 0.2), verbose = FALSE)
   pr <- predict(fit, times = c(0.5, 1.5))
@@ -272,7 +272,7 @@ test_that("an EM fit reports its predictions, residuals, log-likelihood and rand
   expect_true(is.na(unique(obs$group[obs$condition == "ref"])))
   expect_equal(obs$PWRES, obs$PRES / obs$sigmaPRED)
   expect_equal(residuals(fit, "IRES"), obs$IRES)
-  # CWRES of a group whiten its stacked rows against the linearised population prediction
+  # CWRES of a group whiten the stacked group rows against the linearized population prediction
   cw <- residuals(fit, "CWRES")
   r <- obs$condition %in% c("s1a", "s1b")
   Z <- cbind(1, m$tab[obs$condition[r], "dose"])
@@ -326,7 +326,7 @@ test_that("msem draws a new start where a fit fails, and keeps the first attempt
   expect_equal(once$value[again$tries == 1L], again$value[again$tries == 1L])
 })
 
-test_that("msem fits a part of its starts, and the parts join to the whole", {
+test_that("msem fits a part of the starts, and the parts join to the whole", {
   m <- .lin()
   run <- function(which = NULL) {
     set.seed(4)
@@ -388,7 +388,7 @@ test_that("forward over reverse gives the volume gradient and the mode shift of 
     rev <- .volumeReverse(design, full, NULL, names(start), Hinv)
     expect_equal(rev$gradient, fwd$gradient, tolerance = 1e-10)
     expect_equal(rev$etaShift, fwd$etaShift, tolerance = 1e-10)
-    # a sweep with two seed blocks answers each as a sweep of its own
+    # a sweep with two seed blocks answers each as a separate sweep
     units <- .volumeUnits(design, full, NULL)
     fw <- .sweepForward(design, full, NULL, units)
     seed <- function(f) lapply(fw$rows, function(r) list(pred = f(r$pd, r$p), sigma = f(r$sd, r$s)))
@@ -472,10 +472,10 @@ test_that("laplaceEM and SAEM reach the closed-form marginal", {
                 .linMarginal, mod = m, method = "BFGS", control = list(reltol = 1e-12))
   le <- em(m$obj, randomEffects(m$p), c(a = 0.5, b = 0.2), method = "laplaceEM", verbose = FALSE)
   expect_equal(le$value, best$value, tolerance = 1e-4)
-  # SAEM stops where its Monte Carlo gap falls below 0.05 or at the end of its 500 iterations,
-  # -2 log L at its estimate above the optimum by a few times that gap
+  # SAEM stops where the Monte Carlo gap falls below 0.05 or after 500 iterations,
+  # -2 log L at the SAEM estimate above the optimum by a few times that gap
   gap <- function(fit) max(utils::tail(fit$stageTrace$mcGap, 1), 0.05)
-  # a and b enter the condition without a group: the centred trust step
+  # a and b enter the condition without a group: the centered trust step
   set.seed(2)
   sa <- em(m$obj, randomEffects(m$p), c(a = 0.5, b = 0.2), method = "saem", verbose = FALSE)
   expect_true(sa$converged || nrow(sa$stageTrace) == 500L)
@@ -569,10 +569,10 @@ test_that("anova tests nested fits and simulate draws data that refit to the est
     set.seed(7)
     pat <- paste0("p", 1:8); cen <- paste0("c", 1:3)
     tab <- do.call(rbind, lapply(seq_along(pat), function(i)
-      data.frame(ID = pat[i], centre = cen[c(i %% 3 + 1, (i + 1) %% 3 + 1)])))
-    rownames(tab) <- paste(tab$ID, tab$centre, sep = "_")
+      data.frame(ID = pat[i], center = cen[c(i %% 3 + 1, (i + 1) %% 3 + 1)])))
+    rownames(tab) <- paste(tab$ID, tab$center, sep = "_")
     tr <- branch(define(NULL, "x <- x", x = "a"), table = tab)
-    tr <- insert(tr, a ~ 1 + (1 | ID) + (1 | centre))
+    tr <- insert(tr, a ~ 1 + (1 | ID) + (1 | center))
     dm <- c("forward", "reverse", "forward-reverse")
     g <- Y(c(y = "a"), f = NULL, parameters = "a", compile = FALSE, modelname = "crossed_g", deriv2 = TRUE,
            derivMode = dm)
@@ -580,21 +580,21 @@ test_that("anova tests nested fits and simulate draws data that refit to the est
     # the same groupings, nonlinear in the random effects with a proportional error
     trn <- branch(define(NULL, "x <- x", x = c("a", "s")), table = tab)
     trn <- insert(trn, "s <- exp(s)")
-    trn <- insert(trn, a ~ 1 + (1 | ID) + (1 | centre))
+    trn <- insert(trn, a ~ 1 + (1 | ID) + (1 | center))
     gn <- Y(c(y = "exp(a)"), f = NULL, parameters = "a", compile = FALSE, modelname = "crossed_gn", deriv2 = TRUE,
             derivMode = dm)
     en <- Y(c(y = "s * y"), gn, attachInput = FALSE, compile = FALSE, modelname = "crossed_en", deriv2 = TRUE,
             derivMode = dm)
     pn <- P(trn, method = "explicit", compile = FALSE, modelname = "crossed_pn", deriv2 = TRUE, derivMode = dm)
     compile(g, p, gn, en, pn, output = "nlmefit_crossed", cores = 2)
-    # the effects of the three centres spread by construction: three drawn ones leave the maximum
+    # the effects of the three centers spread by construction: three drawn ones leave the maximum
     # likelihood of their variance at 0 in about one draw of ten
     ep <- setNames(rnorm(8, 0, 0.6), pat); ec <- setNames(c(-0.4, 0, 0.4), cen)
     rows <- lapply(rownames(tab), function(cn) data.frame(name = "y", time = 1:3,
-      value = 1 + ep[[tab[cn, "ID"]]] + ec[[tab[cn, "centre"]]] + rnorm(3, 0, 0.3), sigma = 0.3, condition = cn))
+      value = 1 + ep[[tab[cn, "ID"]]] + ec[[tab[cn, "center"]]] + rnorm(3, 0, 0.3), sigma = 0.3, condition = cn))
     data <- as.datalist(do.call(rbind, rows))
     rows <- lapply(rownames(tab), function(cn) data.frame(name = "y", time = 1:3,
-      value = exp(1 + ep[[tab[cn, "ID"]]] + ec[[tab[cn, "centre"]]]) * (1 + rnorm(3, 0, 0.2)), sigma = NA_real_,
+      value = exp(1 + ep[[tab[cn, "ID"]]] + ec[[tab[cn, "center"]]]) * (1 + rnorm(3, 0, 0.2)), sigma = NA_real_,
       condition = cn))
     datan <- as.datalist(do.call(rbind, rows))
     cache <<- list(p = p, data = data, tab = tab, obj = normL2(data, g * Xt() * p),
@@ -607,9 +607,9 @@ test_that("anova tests nested fits and simulate draws data that refit to the est
 .crossedMarginal <- function(pars, mod) {
   d <- do.call(rbind, lapply(names(mod$data), function(cn) cbind(mod$data[[cn]], cond = cn)))
   Zp <- outer(mod$tab[d$cond, "ID"], unique(mod$tab$ID), `==`) * 1
-  Zc <- outer(mod$tab[d$cond, "centre"], unique(mod$tab$centre), `==`) * 1
+  Zc <- outer(mod$tab[d$cond, "center"], unique(mod$tab$center), `==`) * 1
   C <- diag(0.3^2, nrow(d)) + exp(2 * pars[["omega_a_a"]]) * tcrossprod(Zp) +
-    exp(2 * pars[["omega_a_centre_a_centre"]]) * tcrossprod(Zc)
+    exp(2 * pars[["omega_a_center_a_center"]]) * tcrossprod(Zc)
   r <- d$value - pars[["a"]]
   drop(t(r) %*% solve(C, r)) + as.numeric(determinant(C)$modulus) + nrow(d) * log(2 * pi)
 }
@@ -617,9 +617,9 @@ test_that("anova tests nested fits and simulate draws data that refit to the est
 test_that("crossed groupings: FOCEI over the connected component hits the closed-form marginal", {
   m <- .crossed()
   re <- randomEffects(m$p)
-  expect_equal(re$terms$stem, c("eta_a", "eta_a_centre"))
+  expect_equal(re$terms$stem, c("eta_a", "eta_a_center"))
   d <- dMod2:::.emDesign(m$obj, re)
-  expect_equal(names(d$groupings), c("ID", "centre"))
+  expect_equal(names(d$groupings), c("ID", "center"))
   expect_length(d$components, 1L)
   fit <- em(m$obj, re, c(a = 0.5), verbose = FALSE)
   expect_equal(fit$value, .crossedMarginal(fit$argument, m), tolerance = 1e-6)
@@ -627,7 +627,7 @@ test_that("crossed groupings: FOCEI over the connected component hits the closed
   expect_equal(fit$value, best$value, tolerance = 1e-6)
   h <- numDeriv::hessian(function(u) .crossedMarginal(setNames(u, names(fit$argument)), m), unname(fit$argument))
   expect_equal(unname(fit$hessian), h, tolerance = 1e-4)
-  expect_equal(unique(fit$omega$grouping), c("ID", "centre"))
+  expect_equal(unique(fit$omega$grouping), c("ID", "center"))
   expect_equal(nrow(fit$random), 11L)
   expect_true(all(is.finite(residuals(fit, "CWRES"))))
   # a fixed structural parameter enters the joint modes
@@ -635,7 +635,7 @@ test_that("crossed groupings: FOCEI over the connected component hits the closed
   expect_equal(at$value, .crossedMarginal(c(at$argument, a = 1.1), m), tolerance = 1e-6)
 })
 
-test_that("the lock-step search of the modes stops on its Newton step, not on a change of the value", {
+test_that("the lock-step search of the modes stops on the Newton step, not on a change of the value", {
   m <- .crossed()
   re <- randomEffects(m$pn)
   d <- dMod2:::.emDesign(m$objn, re)
@@ -719,7 +719,7 @@ test_that("FOCEI names second derivatives that are not finite at the start", {
                "second derivatives of the model are not finite")
 })
 
-test_that("NPDE of the linear model are its residuals decorrelated by the exact marginal, a censored reading below its fraction", {
+test_that("NPDE of the linear model are the residuals decorrelated by the exact marginal, a censored reading below the censored fraction", {
   m <- .lin()
   fit <- em(m$obj, randomEffects(m$p), c(a = 0.5, b = 0.2), verbose = FALSE)
   npde <- residuals(fit, "NPDE", nsim = 4000, seed = 1)
@@ -735,7 +735,7 @@ test_that("NPDE of the linear model are its residuals decorrelated by the exact 
     C <- Z %*% fit$Omega %*% t(Z) + diag(0.3^2, length(r))
     expect_lt(max(abs(npde[r] - forwardsolve(t(chol(C)), pr$observed[r] - mu(pr$condition[r])))), 0.15)
   }
-  # rows outside every group are independent; a censored reading lies below the quantile of its
+  # rows outside every group are independent; a censored reading lies below the quantile of the
   # censored fraction
   d <- m$data
   d[["ref"]]$lloq <- c(d[["ref"]]$value[1] + 0.1, -Inf, -Inf)
@@ -826,7 +826,7 @@ test_that("the visual predictive check, plain, prediction corrected, stratified 
   expect_equal(mid$observed, as.vector(tapply(shifted, bin, median)[as.character(mid$bin)]))
 })
 
-test_that("the residual plots of a fit draw its residuals, covariates come from the condition grid", {
+test_that("the residual plots of a fit draw the fit residuals, covariates come from the condition grid", {
   skip_if_not_installed("ggplot2")
   m <- .lin()
   fit <- em(m$obj, randomEffects(m$p), c(a = 0.5, b = 0.2), verbose = FALSE)

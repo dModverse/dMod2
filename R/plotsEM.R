@@ -42,7 +42,7 @@ plot.em <- function(x, ...) {
   p <- ggplot2::ggplot(long, ggplot2::aes(x = predicted, y = observed,
                                           color = condition)) +
     ggplot2::geom_abline(slope = 1, intercept = 0, linetype = "dashed",
-                         color = "grey50") +
+                         color = "gray50") +
     ggplot2::geom_point(alpha = 0.75)
   if (multiple) {
     # Observable scales can differ by orders of magnitude, so the scales are
@@ -94,8 +94,8 @@ plotResiduals.em <- function(parframe, type = c("IWRES", "CWRES", "NPDE"), nsim 
   scatter <- long[long$panel != "QQ", , drop = FALSE]
   qq <- long[long$panel == "QQ", , drop = FALSE]
   ggplot2::ggplot(long, ggplot2::aes(x = x, y = y, color = name)) +
-    ggplot2::geom_hline(data = scatter, ggplot2::aes(yintercept = 0), linetype = "dashed", color = "grey50") +
-    ggplot2::geom_abline(data = qq, ggplot2::aes(slope = 1, intercept = 0), linetype = "dashed", color = "grey50") +
+    ggplot2::geom_hline(data = scatter, ggplot2::aes(yintercept = 0), linetype = "dashed", color = "gray50") +
+    ggplot2::geom_abline(data = qq, ggplot2::aes(slope = 1, intercept = 0), linetype = "dashed", color = "gray50") +
     ggplot2::geom_point(alpha = 0.7, size = 1.2) +
     ggplot2::geom_smooth(data = scatter, ggplot2::aes(group = 1), se = FALSE, method = "loess", formula = y ~ x,
                          color = dMod_colors[2], linewidth = 0.6) +
@@ -171,7 +171,7 @@ plotCombined.em <- function(prediction, times = NULL, ncol = 4L, showPred = TRUE
 #' @rdname plotRandomEffects
 #' @param x An `em` fit, see [em()].
 #' @param type `"conditional"` (default): per group `draws` values from the
-#'   conditional distribution of its random effects, normal around the mode with
+#'   conditional distribution of the random effects of the group, normal around the mode with
 #'   the conditional standard error; under the model they follow `N(0, Omega_kk)`
 #'   whatever the shrinkage. `"modes"`: the modes, narrower than `N(0, Omega_kk)`
 #'   by the shrinkage.
@@ -180,7 +180,7 @@ plotCombined.em <- function(prediction, times = NULL, ncol = 4L, showPred = TRUE
 #' @param covariates Columns of the condition grid of the data of the fit
 #'   ([datalist]), or a data.frame with one row per condition (row names or a
 #'   column `condition`): instead the modes of the random effects of every
-#'   group against the covariates of its first condition, a scatter with a
+#'   group against the covariates of the first condition of the group, a scatter with a
 #'   loess trend for a numeric covariate of more than five values, boxes for
 #'   the others.
 #' @param ... Ignored.
@@ -202,8 +202,8 @@ plotRandomEffects.em <- function(x, type = c("conditional", "modes"), draws = 20
   }))
   what <- if (type == "conditional") "Conditional draws" else "Modes"
   hist <- ggplot2::ggplot(values, ggplot2::aes(x = value)) +
-    ggplot2::geom_histogram(ggplot2::aes(y = ggplot2::after_stat(density)), bins = bins, fill = "grey80",
-                            color = "grey40") +
+    ggplot2::geom_histogram(ggplot2::aes(y = ggplot2::after_stat(density)), bins = bins, fill = "gray80",
+                            color = "gray40") +
     ggplot2::geom_line(data = density, ggplot2::aes(x = x, y = density), inherit.aes = FALSE,
                        color = dMod_colors[2], linewidth = 0.8) +
     ggplot2::facet_wrap(~ eta, scales = "free") +
@@ -213,7 +213,7 @@ plotRandomEffects.em <- function(x, type = c("conditional", "modes"), draws = 20
     ggplot2::stat_qq() +
     ggplot2::stat_qq_line(color = dMod_colors[2]) +
     ggplot2::facet_wrap(~ eta) +
-    ggplot2::labs(x = "Theoretical quantile (N(0,1))", y = "Standardised eta", title = paste(what, "QQ vs N(0,1)")) +
+    ggplot2::labs(x = "Theoretical quantile (N(0,1))", y = "Standardized eta", title = paste(what, "QQ vs N(0,1)")) +
     theme_dMod(base_size = 11)
   if (requireNamespace("cowplot", quietly = TRUE)) cowplot::plot_grid(hist, qq, ncol = 1)
   else list(hist = hist, qq = qq)
@@ -232,7 +232,7 @@ plotRandomEffects.em <- function(x, type = c("conditional", "modes"), draws = 20
   do.call(rbind, unlist(lapply(which(keep), function(g) {
     E <- etaModes[[g]]; O <- Omegas[[g]]; S <- etaSE[[g]]
     if (type == "conditional" && is.null(S))
-      stop("plotRandomEffects: the fit has no conditional standard errors of its random effects; ",
+      stop("plotRandomEffects: the fit has no conditional standard errors of the random effects; ",
            "use type = \"modes\".", call. = FALSE)
     lapply(intersect(colnames(E), rownames(O)), function(k) {
       value <- if (type == "modes") unname(E[, k]) else

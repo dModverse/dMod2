@@ -1,5 +1,5 @@
 # Reverse-mode derivatives through the chain, checked against forward mode.
-# The two modes differentiate discretisations that differ by O(tol), so the
+# The two modes differentiate discretizations that differ by O(tol), so the
 # tolerances keep that gap far below the assertions.
 
 skip_on_cran()
@@ -10,7 +10,7 @@ skip_on_cran()
   d
 }
 
-# Tight, so the discretisation gap between the two modes stays negligible.
+# Tight, so the discretization gap between the two modes stays negligible.
 .rev_opt <- list(atol = 1e-11, rtol = 1e-11)
 
 .rev_reactions <- function()
@@ -41,7 +41,7 @@ skip_on_cran()
     p <- P(tr, condition = "C1", derivMode = fr, modelname = "rv_p", outdir = d)
     pe <- P(c(tr, sd_rel = "exp(logsdrel)", sd_abs = "exp(logsdabs)"),
             condition = "C1", derivMode = fr, modelname = "rv_pe", outdir = d)
-    # One trafo per condition, each with a parameter of its own.
+    # One trafo per condition, each with a separate parameter.
     pc <- Reduce("+", lapply(c("C1", "C2"), function(cn)
       P(repar(tr, paste0("logk1 <- logk1 + dk_", cn)), condition = cn, derivMode = fr,
         modelname = paste0("rv_p2_", cn), outdir = d)))
@@ -200,7 +200,7 @@ test_that("the reverse mode reaches every condition and every branch", {
   obj  <- normL2(.rev_data(fx, prd, pars, conds, seed = 7L), prd)
 
   both <- expect_modes_agree(obj, pars)
-  # A condition-specific parameter must come back with a contribution from its
+  # A condition-specific parameter must come back with a contribution from the
   # own branch and from nowhere else, which a shared-parameter-only check would
   # not notice.
   expect_true(all(abs(both$reverse$gradient[c("dk_C1", "dk_C2")]) > 1e-6))
@@ -283,7 +283,7 @@ test_that("a summed objective passes the direction on", {
   prd <- fx$g * fx$x * fx$p
   obj <- normL2(.rev_data(fx, prd, fx$pars), prd) +
          constraintL2(fx$pars * 0, sigma = 4)
-  # The constraint has no reverse path of its own and keeps the forward one;
+  # The constraint has no separate reverse path and keeps the forward one;
   # the sum is still the same number, and still has no Hessian.
   both <- expect_modes_agree(obj, fx$pars)
   expect_null(both$reverse$hessian)
@@ -348,7 +348,7 @@ test_that("a steady-state transformation goes backwards too", {
   fx <- .rev_fx()
 
   # A steady state feeds an initial value, so the gradient has to pass through
-  # the nested steady state to reach its parameters.
+  # the nested steady state to reach the steady-state parameters.
   prd  <- fx$g * fx$x * fx$pq * fx$pl
   pars <- c(logkin = log(1.5), logkout = log(0.75),
             logk1 = log(0.6), logk2 = log(0.3), logs = log(1.5))
@@ -396,7 +396,7 @@ test_that("a fixed sigma seeds the prediction and nothing else", {
   prd <- fx$g * fx$x * fx$pe
   pars <- c(fx$pars, logsdrel = log(0.08), logsdabs = log(0.02))
   # sigma given in the data, so the error model is there but contributes no
-  # derivative for these rows: its cotangent has to be dropped rather than
+  # derivative for these rows: the error-model cotangent has to be dropped rather than
   # multiplied by a zero that is never formed.
   obj <- normL2(.rev_data(fx, prd, pars, sigma = 0.1), prd, fx$e)
   both <- expect_modes_agree(obj, pars)
@@ -408,8 +408,8 @@ test_that("the Sundials backend goes backwards too", {
               "CVODE backend not available")
   fx <- .rev_fx()
 
-  # CVODES adjoint analysis under the same chain: a third discretisation, solved
-  # as its own ODE over checkpointed forward states rather than by replaying steps.
+  # CVODES adjoint analysis under the same chain: a third discretization, solved
+  # as a separate ODE over checkpointed forward states rather than by replaying steps.
   m <- fx$sun
   expect_false(is.null(m$reversed))
 
@@ -454,7 +454,7 @@ test_that("odemodel builds the forward-reverse object and names it", {
   expect_false(is.null(m$reversed2))
   expect_identical(attr(m$reversed2, "derivMode"), "forward-reverse")
 
-  # forward-forward is deriv2 = TRUE under its own name.
+  # forward-forward is deriv2 = TRUE under a separate name.
   m2 <- odemodel(.rev_reactions(), modelname = "rv_ffm", outdir = d,
                  derivMode = c("forward", "forward-forward"), compile = FALSE)
   expect_false(is.null(m2$extended2))
@@ -469,7 +469,7 @@ test_that("odemodel builds the forward-reverse object and names it", {
 # ---- Second order: the exact Hessian through the whole chain ----
 # Oracle is deriv2 = TRUE, forward over forward; the gap is O(tol) as at first order.
 
-# Data on whatever the chain's own columns are called, on its own grid.
+# Data on whatever the chain's own columns are called, on a separate grid.
 .rev2_data <- function(fx, chain, nms, seed = 4L, conditions = "C1") {
   pred <- chain(fx$times, fx$pars)
   set.seed(seed)
@@ -526,9 +526,9 @@ test_that("an estimated error model enters the Hessian backwards, also as a sum 
 })
 
 test_that("the batched backward path handles the directions too", {
-  # The batched leaf sizes its pass-through half from the cotangent it was
-  # handed, not from its own. With one condition the batch entry never engages,
-  # so this is the first place a K-column answer meets a one-column neighbour.
+  # The batched leaf sizes the pass-through half from the cotangent it was
+  # handed, not from the leaf width. With one condition the batch entry never engages,
+  # so this is the first place a K-column answer meets a one-column neighbor.
   fx    <- .rev2_fx()
   chain <- fx$x * fx$p2
   obj   <- normL2(.rev2_data(fx, chain, c("A", "B"), conditions = c("C1", "C2")),
@@ -567,7 +567,7 @@ test_that("a reverse evaluation says which direction answered it", {
 })
 
 test_that("a summed objective keeps every term's curvature", {
-  # A constraint runs forward and under an exact request must still return its
+  # A constraint runs forward and under an exact request must still return the
   # Hessian: .sumobjlist adds an absent one as zero, so a dropped term would
   # leave the total short without failing.
   fx    <- .rev2_fx()
@@ -592,7 +592,7 @@ test_that("a term whose value is not finite makes the sum not finite rather than
   fx    <- .rev2_fx()
   chain <- fx$x * fx$p
   obj   <- normL2(.rev2_data(fx, chain, c("A", "B")), chain)
-  # a term that has no derivatives where its value is not finite
+  # a term that has no derivatives where the value is not finite
   inf <- structure(function(..., fixed = NULL, deriv = TRUE, deriv2 = FALSE, hessian = NULL, conditions = NULL,
                             env = NULL, cores = 1L) objlist(value = Inf, gradient = NULL, hessian = NULL),
                    class = c("objfn", "fn"), parameters = names(fx$pars))
@@ -615,7 +615,7 @@ test_that("a term whose value is not finite makes the sum not finite rather than
   }, f(pars))
 }
 
-test_that("an input passed through keeps its gradient, forwards and backwards", {
+test_that("an input passed through keeps the gradient, forwards and backwards", {
   fx <- .rev2_fx()
   fx$pars <- pars <- c(logA = log(2), logk1 = log(0.6), k2 = 0.3, s = 1.5)
   chain <- fx$g * fx$x * fx$pt
@@ -627,7 +627,7 @@ test_that("an input passed through keeps its gradient, forwards and backwards", 
   expect_equal(both$forward$gradient[names(pars)], fd, tolerance = 1e-5)
 
   # A fixed s is handed on as a constant: it still scales the observation, and
-  # it has no gradient entry of its own in either direction.
+  # it has no separate gradient entry in either direction.
   ff <- obj(pars[-4], fixed = pars[4], deriv = TRUE)
   fr <- obj(pars[-4], fixed = pars[4], deriv = TRUE, sweep = "reverse")
   expect_equal(ff$value, both$forward$value, tolerance = 1e-10)
@@ -638,7 +638,7 @@ test_that("an input passed through keeps its gradient, forwards and backwards", 
                tolerance = 1e-6)
 })
 
-test_that("an input passed through keeps its curvature, forwards and backwards", {
+test_that("an input passed through keeps the curvature, forwards and backwards", {
   fx <- .rev2_fx()
   fx$pars <- pars <- c(logA = log(2), logk1 = log(0.6), k2 = 0.3, s = 1.5)
   chain <- fx$g * fx$x * fx$pt
@@ -660,7 +660,7 @@ test_that("inputs passed through behind another transformation, batched", {
                            conditions = c("C1", "C2")), chain)
 
   # Guard against a vacuous pass: qb is one kernel for both conditions, so it
-  # answers them through its batch entry, with the Jacobian qh hands it.
+  # answers them through the batch entry, with the Jacobian qh hands it.
   expect_false(is.null(attr(attr(fx$pb, "mappings")[[1L]], "batchfn")))
   expect_length(chain(fx$times, pars), 2L)
 
@@ -721,7 +721,7 @@ test_that("the steady states of all conditions are solved together, the same on 
   pq <- c(logkin = log(1.5), logkout = log(0.75), logk1 = log(0.6), logk2 = log(0.3), logs = log(1.5))
   steady <- fx$g * fx$x * fx$pq * (fx$pl + fx$pl2)
   obj <- normL2(.rev_data(fx, steady, pq, conds = c("C1", "C2"), seed = 12L), steady)
-  # every call solves its roots
+  # every call solves the roots
   controls(fx$pq, name = "keepRoot") <- FALSE
   on.exit(controls(fx$pq, name = "keepRoot") <- TRUE, add = TRUE)
   at <- function(cores, evaluation = "C++")
@@ -799,7 +799,7 @@ test_that("a reseed needs a moved iterate and cannot outlast one", {
 
   # A stall is made of rejected steps, so refetching at the same iterate would
   # return the same matrix. Reseeds are taken, and then the run stops the way
-  # "never" does instead of spending its budget on them.
+  # "never" does instead of spending the budget on them.
   expect_gt(rs$nReseed, 0L)
   expect_true(rs$converged)
   expect_identical(rs$stopReason, "stagnation")

@@ -1,9 +1,9 @@
-// Alignment models: the derivatives of the readings of every condition in its parameters from the
+// Alignment models: the derivatives of the readings of every condition in the condition parameters from the
 // derivatives of the compiled model in the symbols, and the vjp contractions of the backward sweep.
 //
 // A reading r of a condition depends on the parameters of the condition through the predictors of
 // the symbols, eta_a(r) = sum_p D_a[r, p] theta_p, with D_a the dense coefficients of symbol a on
-// the columns of its parameters. With t[r, o, a] = d f_o / d eta_a and h[r, o, a, b] the second
+// the columns of the symbol parameters. With t[r, o, a] = d f_o / d eta_a and h[r, o, a, b] the second
 // derivatives of output o (prediction, sigma),
 //
 //   d f_o(r) / d theta_p            = sum_a t[r, o, a] D_a[r, p],
@@ -11,7 +11,7 @@
 //
 // and the vjp of a seed w[r, k] is J' w, at second order sum_r w[r] Hess(f_o(r)) v plus J' wdot
 // for a tangent v of the parameters. The model arrays cover all rows of all conditions; a condition
-// reads its rows from `start` on. R objects are allocated in the serial part, the OpenMP region
+// reads the condition rows from `start` on. R objects are allocated in the serial part, the OpenMP region
 // writes into their memory only.
 
 #include <Rcpp.h>
@@ -39,7 +39,7 @@ using namespace Rcpp;
 
 namespace {
 
-// One symbol of one condition: the local parameters of its columns and its dense coefficients.
+// One symbol of one condition: the local parameters of the symbol columns and the dense coefficients.
 struct SymbolBlock {
   std::vector<int> cols;      // local parameter index of every column, 0-based
   const double* D = nullptr;  // [n x cols.size()], column-major
@@ -48,7 +48,7 @@ struct SymbolBlock {
 struct CondBlock {
   int start = 0, n = 0, P = 0;
   std::vector<SymbolBlock> sym;
-  std::vector<int> slot;      // per local parameter its output column, -1 when not kept
+  std::vector<int> slot;      // per local parameter the output column, -1 when not kept
   int F = 0;                  // number of kept parameters
 };
 
@@ -97,7 +97,7 @@ std::vector<CondBlock> readBlocks(const List& conds, int S) {
 } // namespace
 
 // The predictors of all rows, [N x S]: for the rows of a condition sum_j D_a[r, j] theta[cols_a[j]]
-// with `theta` its parameter values, one vector per condition over its local parameters.
+// with `theta` the parameter values, one vector per condition over the condition local parameters.
 // [[Rcpp::export]]
 NumericMatrix alignmentPredictors(List conds, List theta, int S, int threads = 1) {
   std::vector<CondBlock> B = readBlocks(conds, S);
@@ -207,7 +207,7 @@ List alignmentForwardBlocks(NumericVector tangent, Nullable<NumericVector> hessi
   return out;
 }
 
-// Per condition the vjp of output `o` (1 prediction, 2 sigma) over its local parameters,
+// Per condition the vjp of output `o` (1 prediction, 2 sigma) over the condition local parameters,
 // [P x K]: per seed block J' w, and with tangents `V` (per condition [P x D] or NULL) the
 // derivatives sum_r w[r, first] Hess(f(r)) v_d added to the columns `rest`. `W` per condition is
 // [n x K]; `first` (length nb) and `rest` ([D x nb]) are 1-based.

@@ -59,7 +59,7 @@ utils::globalVariables(c("lo", "mid", "hi", "percentile", "blq", "blqLo", "blqMi
   }, design$data, order), use.names = FALSE)
 }
 
-## Normalised prediction distribution errors per data row (Comets et al. 2008), per unit of groups.
+## Normalized prediction distribution errors per data row (Comets et al. 2008), per unit of groups.
 .npde <- function(object, nsim, pr) {
   design <- object$design
   sims <- .simulatedRows(object, nsim)
@@ -150,17 +150,18 @@ utils::globalVariables(c("lo", "mid", "hi", "percentile", "blq", "blqLo", "blqMi
 #' percentiles of the readings against the 95 percent prediction intervals of
 #' the same percentiles of `nsim` data sets simulated from the fit
 #' ([simulate()][simulate.em]). Censored readings and simulations enter at
-#' their limit, and a percentile at or below the limit of its bin is not
+#' their limit, and a percentile at or below the limit of the bin is not
 #' drawn. Where the data have a limit of quantification a second panel shows
-#' the fraction of censored readings per bin against its prediction interval.
+#' the fraction of censored readings per bin against the prediction interval
+#' of that fraction.
 #'
 #' @param x An `em` fit, see [em()].
 #' @param nsim Number of simulated data sets.
 #' @param bins Number of bins, at quantiles of the times of the readings, or
 #'   the breaks of the bins.
 #' @param pc `TRUE`: prediction corrected (Bergstrand et al. 2011), every
-#'   reading and simulation times the median population prediction of its bin
-#'   over its own population prediction. Without `logScale`, readings whose
+#'   reading and simulation times the median population prediction of the bin
+#'   over the population prediction of that reading. Without `logScale`, readings whose
 #'   population prediction is not positive are left out, with their simulations.
 #' @param logScale With `pc`, `TRUE` for observables on a log scale: the
 #'   correction adds the median population prediction of the bin minus the
@@ -245,7 +246,7 @@ plotVPC.em <- function(x, nsim = 200L, bins = 8L, pc = FALSE, logScale = FALSE, 
            else ggplot2::facet_wrap(~ name, scales = "free_y")
   p <- ggplot2::ggplot(shown, ggplot2::aes(x = time, group = percentile)) +
     ggplot2::geom_ribbon(ggplot2::aes(ymin = lo, ymax = hi, fill = percentile == "50%"), alpha = 0.3) +
-    ggplot2::geom_line(ggplot2::aes(y = mid), linetype = "dashed", color = "grey40") +
+    ggplot2::geom_line(ggplot2::aes(y = mid), linetype = "dashed", color = "gray40") +
     ggplot2::geom_line(ggplot2::aes(y = observed), color = dMod_colors[2], linewidth = 0.8, na.rm = TRUE) +
     ggplot2::geom_point(ggplot2::aes(y = observed), color = dMod_colors[2], na.rm = TRUE) +
     ggplot2::scale_fill_manual(values = c(`TRUE` = dMod_colors[1], `FALSE` = dMod_colors[3]), guide = "none") +
@@ -258,7 +259,7 @@ plotVPC.em <- function(x, nsim = 200L, bins = 8L, pc = FALSE, logScale = FALSE, 
   bt <- table[table$percentile == "50%" & table$limited, , drop = FALSE]
   blq <- ggplot2::ggplot(bt, ggplot2::aes(x = time)) +
     ggplot2::geom_ribbon(ggplot2::aes(ymin = blqLo, ymax = blqHi), fill = dMod_colors[3], alpha = 0.3) +
-    ggplot2::geom_line(ggplot2::aes(y = blqMid), linetype = "dashed", color = "grey40") +
+    ggplot2::geom_line(ggplot2::aes(y = blqMid), linetype = "dashed", color = "gray40") +
     ggplot2::geom_line(ggplot2::aes(y = blq), color = dMod_colors[2], linewidth = 0.8) +
     ggplot2::geom_point(ggplot2::aes(y = blq), color = dMod_colors[2]) +
     facet + ggplot2::labs(x = "Time", y = "Fraction censored") + theme_dMod(base_size = 11)
@@ -291,14 +292,14 @@ plotVPC.em <- function(x, nsim = 200L, bins = 8L, pc = FALSE, logScale = FALSE, 
   first <- conditionOf[random$group]
   long <- do.call(rbind, lapply(cols, function(cv) {
     v <- grid[first, cv]
-    # a covariate of few values is a category, in the order of its values
+    # a covariate of few values is a category, in the order of the values
     levels <- if (is.numeric(v)) as.character(sort(unique(v))) else .naturalLevels(v)
     data.frame(eta = factor(random$eta, unique(random$eta)), mode = random$mode, covariate = cv,
                numeric = is.numeric(v) && length(unique(v)) > 5L, value = factor(as.character(v), levels),
                x = suppressWarnings(as.numeric(as.character(v))), stringsAsFactors = FALSE)
   }))
   plots <- lapply(split(long, factor(long$covariate, cols)), function(d) {
-    p <- ggplot2::ggplot(d, ggplot2::aes(y = mode)) + ggplot2::geom_hline(yintercept = 0, linetype = "dashed", color = "grey50")
+    p <- ggplot2::ggplot(d, ggplot2::aes(y = mode)) + ggplot2::geom_hline(yintercept = 0, linetype = "dashed", color = "gray50")
     p <- if (d$numeric[1]) p + ggplot2::geom_point(ggplot2::aes(x = x), alpha = 0.7) +
       ggplot2::geom_smooth(ggplot2::aes(x = x), method = "loess", formula = y ~ x, se = FALSE, color = dMod_colors[2],
                            linewidth = 0.7)

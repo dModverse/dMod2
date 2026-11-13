@@ -33,7 +33,8 @@ column \code{absolute} marks the absolute readings.}
 symbols of the formulas and data columns (covariates), e.g.
 \code{"yi * sj + bj"}.}
 
-\item{errmodel}{Expression of its standard deviation; \code{prediction} stands for
+\item{errmodel}{Expression of the standard deviation of a relative reading;
+\code{prediction} stands for
 the prediction of the reading, e.g. \code{"sqrt(sigmaA^2 + (sigmaR * prediction)^2)"}.}
 
 \item{biological, scaling, error}{Formulas, or lists of formulas, with one or
@@ -51,7 +52,7 @@ columns, e.g. \code{"yi + log2(1000)"} for readings in pM of values in nM.
 is an error.}
 
 \item{trafo}{Character vector of \code{"symbol <- expression"}, the scale of a
-symbol in its predictor, e.g. \code{c("yi <- 10^yi", "sj <- 10^sj")}. Symbols
+symbol in the predictor of that symbol, e.g. \code{c("yi <- 10^yi", "sj <- 10^sj")}. Symbols
 not named are their predictor.}
 
 \item{technical}{Names of the columns of \code{data} that tell technical
@@ -61,7 +62,7 @@ replaced by their mean before the alignment. The mean is geometric,
 taken on the log scale, for an error model in \code{prediction} (relative
 errors), and arithmetic otherwise, as for readings already on a log
 scale. A sample with censored readings
-is censored at the mean of its readings with the limits in place of the
+is censored at the mean of the sample readings with the limits in place of the
 censored ones. \code{NULL} (default): every reading is a sample.}
 
 \item{distribution}{\code{"normal"} or \code{"t"} (Student-t, \code{\link[=normT]{normT()}}).}
@@ -102,7 +103,8 @@ predictor is then on the log10 scale.
 
 Values and scales share a common factor. As in blotIt, the experiments that
 share biological values form blocks, and in each block the mean of the
-predictors of the first biological symbol over its values is held at 0, by a
+predictors of the first biological symbol over the values of that symbol is
+held at 0, by a
 residual of weight 1000: the geometric mean of the values is 1 for
 \code{"yi <- exp(yi)"} or \code{"yi <- 2^yi"}, the mean of a symbol without \code{trafo},
 a log scale or an offset, is 0.
@@ -113,11 +115,11 @@ column \code{absolute}. Their prediction is the expression \code{absolute} in th
 biological symbols and data columns, so they depend on no scaling
 parameter; the scaling formulas are coded over the other readings, and
 their columns may be \code{NA} in absolute rows. A block that holds absolute
-readings is not normalized: its values and the experiments connected to
+readings is not normalized: the values in it and the experiments connected to
 them come out in the units of \code{absolute}.
 }
 \examples{
-## Five time points on six gels, each gel with its own scale and an additive background
+## Five time points on six gels, each gel with a separate scale and an additive background
 set.seed(1)
 d <- expand.grid(time = c("0", "10", "30", "60", "120"), gel = paste0("G", 1:6),
                  stringsAsFactors = FALSE)
@@ -126,7 +128,7 @@ d$value <- (rlnorm(6, 7, 0.5)[match(d$gel, unique(d$gel))] * truth + 50) * rlnor
 
 \donttest{
 old <- options(dMod2.outdir = tempdir())
-## every symbol positive, on the log scale of its predictor; one value per time point,
+## every symbol positive, on the log scale of the predictor; one value per time point,
 ## one scale per gel
 logs <- c("yi <- exp(yi)", "sj <- exp(sj)", "bj <- exp(bj)", "sigmaR <- exp(sigmaR)")
 m <- alignmentModel(d, model = "yi * sj + bj", errmodel = "sigmaR * prediction",

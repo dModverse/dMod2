@@ -67,7 +67,7 @@ print.prdlist <- function(x, ...) {
 
 
 #' @export
-#' @param data object of class `datalist`. Default `NULL`. Its condition grid
+#' @param data object of class `datalist`. Default `NULL`. The condition grid of the data
 #'   adds covariate columns to the output.
 #' @param errfn object of class `obsfn`, the error model that predicts the
 #'   column `sigma`. Default `NULL` sets `sigma` to `NaN`.
@@ -87,13 +87,13 @@ as.data.frame.prdlist <- function(x, ..., data = NULL, errfn = NULL) {
                                conditions = names(prediction)[i], deriv = FALSE)[[1]]),
       names = names(prediction)
     )
-    sigma <- wide2long(sigma)
+    sigma <- .wide2long(sigma)
   }
   
-  prediction <- wide2long(prediction)
+  prediction <- .wide2long(prediction)
   prediction$sigma <- NaN
   if (!is.null(sigma)) {
-    # Keyed, not positional: the error model may order or cover its observables
+    # Keyed, not positional: the error model may order or cover the observables
     # differently from the prediction, and a row-wise copy would then hand a
     # sigma to the wrong observable.
     i <- match(paste(prediction$condition, prediction$time, prediction$name),
@@ -126,7 +126,7 @@ plot.prdlist <- function(x, data = NULL, ..., scales = "free", facet = c("wrap",
         row.names = NULL)
 }
 
-#' @param errfn Optional [obsfn], the error model. Its predicted `sigma` is drawn as a band
+#' @param errfn Optional [obsfn], the error model. The `sigma` it predicts is drawn as a band
 #'   around the prediction. Default `NULL`.
 #' @export
 #' @rdname plotCombined
@@ -142,7 +142,7 @@ plotCombined.prdlist <- function(prediction, data = NULL, ...,
   transformed <- function(frame) if (is.null(transform)) frame else coordTransform(frame, transform)
 
   if (!is.null(prediction)) {
-    long <- if (is.null(errfn)) cbind(wide2long(prediction), sigma = NA_real_)
+    long <- if (is.null(errfn)) cbind(.wide2long(prediction), sigma = NA_real_)
             else as.data.frame(prediction, errfn = errfn)
     prediction <- transformed(subsetted(long))
   }
@@ -160,7 +160,7 @@ plotCombined.prdlist <- function(prediction, data = NULL, ...,
 
   # user aesthetics replace defaults of the same name
   mapping <- list(x = "time", y = "value", ymin = "value - sigma", ymax = "value + sigma")
-  if (facet == "wrap") mapping[c("group", "colour")] <- "condition"
+  if (facet == "wrap") mapping[c("group", "color")] <- "condition"
   user <- as.list(aesthetics)
   names(user) <- ggplot2::standardise_aes_names(names(user))
   mapping <- utils::modifyList(mapping, user)
@@ -171,7 +171,7 @@ plotCombined.prdlist <- function(prediction, data = NULL, ...,
 
   p <- ggplot(plotted, aes(!!!lapply(mapping, rlang::parse_expr))) + panels
   # a legend of one condition says nothing
-  if (identical(mapping$colour, "condition") && length(conditions) == 1L) p <- p + guides(colour = "none")
+  if (identical(mapping$color, "condition") && length(conditions) == 1L) p <- p + guides(color = "none")
   if (!is.null(errfn) && !is.null(prediction)) {
     colourBy <- if (!is.null(mapping$colour)) rlang::parse_expr(mapping$colour)
     band <- if (is.null(colourBy)) aes() else aes(fill = !!colourBy)
@@ -205,7 +205,7 @@ plotPrediction.prdlist <- function(prediction, ..., errfn = NULL,
   frame$condition <- factor(frame$condition, .naturalLevels(frame$condition))
 
   p <- if (facet == "wrap") {
-    ggplot(frame, aes(time, value, group = condition, colour = condition)) +
+    ggplot(frame, aes(time, value, group = condition, color = condition)) +
       facet_wrap(vars(name), scales = scales)
   } else {
     ggplot(frame, aes(time, value)) +
@@ -388,7 +388,7 @@ summary.obsfn <- function(object, ...) {
 #' @param times numeric vector of time points.
 #' @param pars a [parframe], e.g. `as.parframe(mstrust(...))` or the result
 #'   of [profile()][profile.objfn].
-#' @param data object of class `datalist`. Default `NULL`. Its condition grid
+#' @param data object of class `datalist`. Default `NULL`. The condition grid of the data
 #'   adds covariate columns to the output.
 #' @return A data frame in long format with one block per row of `pars`. The
 #'   non-parameter columns of `pars` are added with a leading dot, e.g.
@@ -497,7 +497,7 @@ obsfn <- function(X2Y, parameters = NULL, condition = NULL) {
 #'
 #' @description
 #' A prediction frame stores model predictions as a matrix with the column
-#' `"time"` and one column per variable. Its attributes are `"deriv"`, the
+#' `"time"` and one column per variable. The attributes are `"deriv"`, the
 #' first-order sensitivities with respect to the outer parameters (see [P()]),
 #' `"deriv2"`, the second-order sensitivities, and `"parameters"`, the inner
 #' parameters used for the prediction.

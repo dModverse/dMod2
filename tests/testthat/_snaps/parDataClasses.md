@@ -230,7 +230,7 @@
     Output
       structure(list(), class = c("datalist", "list"), condition.grid = structure(list(), names = character(0), class = "data.frame", row.names = integer(0)))
 
-# renaming a datalist renames its grid
+# renaming a datalist renames the grid
 
     Code
       .canonDput(dl)

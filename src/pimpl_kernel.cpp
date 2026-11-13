@@ -9,11 +9,11 @@
 // gives the root; with flow and stability, a stable one.
 //
 // Derivatives by the implicit function theorem on the stacked system [f_x; C] dx = -G_p,
-// scaled by rows and by the states, through its singular value decomposition: the
+// scaled by rows and by the states, through the singular value decomposition of that system: the
 // pseudo-inverse where it is rank-deficient. Second order from
 //   [f_x; C] d2x[a, b] = -(dx_a' G_xx dx_b + G_xp[, a] dx_b + G_xp[, b] dx_a + G_pp[a, b]).
 //
-// A root depends on the parameters, the start and the controls only, and so do its derivatives:
+// A root depends on the parameters, the start and the controls only, and so do the root derivatives:
 // repeated values are answered from memory, the same for every thread count.
 
 #define USE_FC_LEN_T
@@ -94,7 +94,7 @@ struct State {
 
 namespace {
 
-// One solve: its root, how it was found, its iterations, the reason where it failed.
+// One solve: the root, how it was found, the iterations, the reason where it failed.
 struct Solved {
   Root r;
   std::string how, error;
@@ -242,7 +242,7 @@ bool solveScaled(const std::vector<double>& A0, int m, int n, const std::vector<
         msg += buf;
       }
     }
-    msg += "\nLikely cause: an unmodelled conserved quantity, redundant equations, or a continuum of steady "
+    msg += "\nLikely cause: an unmodeled conserved quantity, redundant equations, or a continuum of steady "
            "states. Pass an `eqnlist` so `Pimpl` can auto-detect CQs for cleaner sensitivities.";
     warnings.push_back(msg);
   }
@@ -330,14 +330,14 @@ bool derivatives(const State& s, const std::vector<double>& pv, int order, Root&
 
 // The eigenvalues `re` + i `im` of J = df/dx at the root x on ker C, and for each one whose real
 // part exceeds `onset` (1-based in `active`) the gradient of that real part in the parameters,
-// Re w^H (J_p + J_x D) u / (w^H u), u and w its right and left eigenvectors in J and D = dx/dp.
+// Re w^H (J_p + J_x D) u / (w^H u), u and w the right and left eigenvectors of the eigenvalue in J and D = dx/dp.
 bool spectrum(const State& s, const std::vector<double>& pv, const std::vector<double>& x, double onset,
               std::vector<double>& re, std::vector<double>& im, std::vector<int>& active,
               std::vector<double>& grad, std::string& error) {
   using cd = std::complex<double>;
   const int n = s.nDep, np = s.nPar, m = s.nEq, k = s.k, nd = n + np, q = n - k;
   if (s.ad2 == nullptr) {
-    error = "the stability of the steady state needs its second derivatives, Pimpl(deriv2 = TRUE)";
+    error = "the stability of the steady state needs the second derivatives of the steady state, Pimpl(deriv2 = TRUE)";
     return false;
   }
   Root r;
@@ -366,7 +366,7 @@ bool spectrum(const State& s, const std::vector<double>& pv, const std::vector<d
   std::vector<double> J((std::size_t) n * n);
   for (int j = 0; j < n; ++j)
     for (int i = 0; i < n; ++i) J[i + (std::size_t) n * j] = dy[i + (std::size_t) m * j];
-  // an orthonormal basis N of ker C: the right singular vectors of C beyond its rank
+  // an orthonormal basis N of ker C: the right singular vectors of C beyond the rank of C
   std::vector<double> N((std::size_t) n * std::max(q, 1), 0.0);
   if (k == 0) {
     for (int j = 0; j < n; ++j) N[j + (std::size_t) n * j] = 1.0;
@@ -600,7 +600,7 @@ bool roots(const std::vector<Request>& req, std::vector<Root>& out, int threads,
            std::vector<std::string>& warnings) {
   const int N = req.size();
   out.assign(N, Root());
-  // per request: a memory entry, the task of another request, or a task of its own
+  // per request: a memory entry, the task of another request, or a new task
   std::vector<int> task(N, -1);
   std::vector<std::string> keys(N);
   std::vector<char> hit(N, 0);
@@ -705,7 +705,7 @@ void finalizeState(SEXP xp) {
 
 State* need(SEXP xp) {
   State* s = dmod::pimpl::stateOf(xp);
-  if (s == nullptr) stop("Pimpl: its native state is gone");
+  if (s == nullptr) stop("Pimpl: the native state of this Pimpl is gone");
   return s;
 }
 
@@ -716,9 +716,9 @@ DL_FUNC fnOf(SEXP x) {
 
 }  // namespace
 
-// The native state of a Pimpl(): the entries of its system (`val`, `ad`, `ad2`, `influx`),
+// The native state of a Pimpl(): the entries of the system (`val`, `ad`, `ad2`, `influx`),
 // cppDE's solver (`ptc`), the sizes, the number of conservation rows `nTotals`, per influx output
-// its dependent state `inDep` and the parameters it reads `inPar` (0-based), and `flow`.
+// the dependent state `inDep` and the parameters it reads `inPar` (0-based), and `flow`.
 // [[Rcpp::export]]
 SEXP pimpl_state(List spec) {
   State* s = new State();
@@ -745,7 +745,7 @@ SEXP pimpl_state(List spec) {
   return xp;
 }
 
-// Sets the controls of the state and forgets its roots.
+// Sets the controls of the state and forgets the stored roots.
 // [[Rcpp::export]]
 void pimpl_controls(SEXP xp, bool keepRoot, List ctrl) {
   State* s = need(xp);

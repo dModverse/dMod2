@@ -12,7 +12,7 @@
 #' wherever it occurs in a branch by a linear predictor. The scale of the
 #' symbol is the one the transformation gives it: after
 #' `insert(trafo, "x <- exp(x)", x = "cl")` the random effects are normal on
-#' the log scale. Its parts:
+#' the log scale. The parts of an effect formula:
 #' \describe{
 #'   \item{left-hand side}{one or more symbols of the transformation,
 #'     `ka + v ~ ...` applies the right-hand side to each.}
@@ -27,7 +27,7 @@
 #'     the distribution, see [normal()]. The random effect of a group is
 #'     `eta_<symbol>_<group>` for the intercept and
 #'     `eta_<symbol>_<column>_<group>` for a slope; a symbol with random terms
-#'     in a second grouping gets its name in the stem, `eta_cl_centre_<group>`.}
+#'     in a second grouping gets the grouping name in the stem, `eta_cl_center_<group>`.}
 #' }
 #'
 #' @param trafo A branched transformation from [insert()] with effect
@@ -36,13 +36,13 @@
 #' @param ... Ignored.
 #'
 #' @return An object of class `randomeffects`, a list with `terms` (one row
-#'   per random effect column: symbol, term of its formula, column, grouping,
-#'   ID, distribution, its fixed hyperparameters and the name stem of
-#'   its etas),
+#'   per random effect column: symbol, formula term, column, grouping,
+#'   ID, distribution, fixed hyperparameters and the name stem of
+#'   the etas),
 #'   `blocks` (the correlated groups of rows), `subjects` (the groups of each
 #'   grouping and the conditions they own), `fixed` (the parameters the
 #'   formulas created), `etas` (eta names, one row per condition, one column
-#'   per term row) and `fixedDesign` (per symbol the model matrix of its fixed
+#'   per term row) and `fixedDesign` (per symbol the model matrix of the fixed
 #'   effects, one row per condition).
 #' @seealso [insert()], [em()], [normal()]
 #' @example inst/examples/randomEffects.R
@@ -84,7 +84,7 @@ print.randomeffects <- function(x, ...) {
 #' `cl ~ 1 + (1 | gr(cellline, dist = laplace()))`. Their parameters are
 #' estimated by [em()] unless given.
 #'
-#' - `normal()`: multivariate normal with mean 0; its covariance is estimated
+#' - `normal()`: multivariate normal with mean 0 and a covariance estimated
 #'   per correlation block. The default.
 #' - `laplace()`: Laplace with mean 0 and strength `lambda`, shared by all
 #'   symbols of the term, so the deviation of a group from the fixed effects
@@ -95,8 +95,8 @@ print.randomeffects <- function(x, ...) {
 #'   a group are integrated jointly, exactly on the quadratic expansion of
 #'   the data where the group has no Laplace or Dirichlet-process random
 #'   effects the data tie to them and the sum over their subsets stays within
-#'   a budget; else expectation consistent integrates each one against a
-#'   diagonal cavity.
+#'   a budget; else the expectation consistent (EC) approximation
+#'   integrates each one against a diagonal cavity.
 #' - `dirichletProcess()`: per symbol, the deviations follow a Dirichlet
 #'   process with base measure \eqn{N(0, \tau^2)}{N(0, tau^2)} and
 #'   `concentration`, the fixed effect seated first at deviation 0: the
@@ -212,7 +212,7 @@ print.redist <- function(x, ...) {
        "insert(trafo, \"x <- exp(x)\", x = \"cl\").", call. = FALSE)
 }
 
-## One effect formula: its symbols, the fixed part as a one-sided formula and the random terms.
+## One effect formula: the symbols, the fixed part as a one-sided formula and the random terms.
 .parseEffectFormula <- function(f) {
   if (length(f) != 3L)
     stop("insert: an effect formula has a left-hand side, as in `cl ~ wt + (1 | ID)`.", call. = FALSE)
@@ -296,7 +296,7 @@ print.redist <- function(x, ...) {
 }
 
 ## The design of one formula over the rows of `tree`: the fixed-effect matrix with the names of
-## its parameters, and per random-effect column its stem, the eta and coefficient of every row.
+## the parameters, and per random-effect column the stem, the eta and coefficient of every row.
 ## A stem already taken by a term of another grouping gets the grouping appended. With `sparse`
 ## the fixed-effect matrix is a sparse Matrix.
 .effectMatrices <- function(pf, tree, taken = NULL, sparse = FALSE) {
@@ -408,7 +408,7 @@ print.redist <- function(x, ...) {
 .effectSymbolsOf <- function(re, terms = re$terms, fixed = re$fixed)
   unique(c(terms$symbol, fixed))
 
-## Substituting a symbol that has an effect formula would rewrite its linear predictor.
+## Substituting a symbol that has an effect formula would rewrite the linear predictor of the symbol.
 .guardEffectSymbols <- function(lhs, re) {
   hit <- intersect(lhs, .effectSymbolsOf(re))
   if (length(hit))
@@ -418,7 +418,7 @@ print.redist <- function(x, ...) {
 
 ## Blocks: normal rows of one grouping with one ID, or of one term without an ID, are correlated;
 ## the other rows of one term of one formula share their hyperparameters. `fixedDesign` holds per
-## symbol the model matrix of its fixed effects, rows the conditions.
+## symbol the model matrix of the symbol fixed effects, rows the conditions.
 .newRandomEffects <- function(terms, etas, groups, fixedPars, fixedDesign = list(), subjects = NULL,
                               etaNames = NULL) {
   if (is.null(terms))

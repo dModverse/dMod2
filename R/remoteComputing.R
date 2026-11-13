@@ -247,7 +247,7 @@ detectFreeCores <- function(machine = NULL) {
 
   ## Job count: a fixed `cores`, or whatever the remote machine reports.
   nproc <- if (is.null(cores)) "$NPROC" else as.character(max(1L, as.integer(cores)))
-  ## nproc honours OMP_NUM_THREADS, which the job sets to 1 for itself
+  ## nproc honors OMP_NUM_THREADS, which the job sets to 1 for itself
   detect <- if (is.null(cores))
     c("NPROC=$(env -u OMP_NUM_THREADS -u OMP_THREAD_LIMIT nproc 2>/dev/null || echo 1)",
       "if [ \"$NPROC\" -gt 16 ]; then NPROC=16; fi", "")
@@ -271,7 +271,7 @@ detectFreeCores <- function(machine = NULL) {
     "PKG_CXXFLAGS=\"$PKG_CXXFLAGS -include dMod_pch.hpp\"", "")
 
   ## Compile off the file list in parallel, then link: R CMD SHLIB does not
-  ## parallelise via MAKEFLAGS.
+  ## parallelize via MAKEFLAGS.
   chunked <- !is.null(filelist) && .remoteNeedsChunking(files)
   isCxx   <- grepl("\\.cpp$", files, ignore.case = TRUE)
 

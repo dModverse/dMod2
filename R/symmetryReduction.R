@@ -1,14 +1,14 @@
-#' Remove Detected Symmetries by Reparametrisation
+#' Remove Detected Symmetries by Reparametrization
 #'
 #' Turns the non-identifiable directions of a [symmetryDetection()] result into a
 #' parameter transformation that removes them. A scaling fixes one coordinate to 1.
-#' A general direction is replaced by its invariants, held by new parameters
+#' A general direction is replaced by the invariants of that direction, held by new parameters
 #' `q_<k>`, searched up to the degree bounds `dPoly`, `dDarboux` and `dExp`. The
 #' computation runs in the Python package `symident`.
 #'
 #' @details A chart is returned only if it is valid on the domain declared by
 #'   `positive`. A `q_<k>` that takes both signs is marked `[real-valued]` and is
-#'   estimated on a linear scale; a chart valid only for its positive values has
+#'   estimated on a linear scale; a chart valid only for positive values of the `q_<k>` has
 #'   `coverage = "partial"`. `print()` lists the invariant behind each `q_<k>`.
 #'
 #' @param object A `symmetrydetection` result from [symmetryDetection()].
@@ -28,7 +28,7 @@
 #' @param alternatives Logical. Also return the charts of the other valid pins
 #'   in `$alternatives`. Defaults to `FALSE`.
 #' @param timeout Time limit in seconds for the section search of one block; a block not
-#'   solved in time keeps its invariants (`"invariantOnly"`). Unlike `workCap`, it depends
+#'   solved in time keeps the invariants (`"invariantOnly"`). Unlike `workCap`, it depends
 #'   on the load of the machine. Defaults to `Inf`.
 #' @param workCap Number of candidate sections the search of one block may try;
 #'   reaching it is an entry in `limits`. Defaults to 4000.
@@ -46,12 +46,12 @@
 #'
 #' @return An object of class `symmetryreduction`:
 #'   \describe{
-#'     \item{`blocks`}{one entry per set of coupled directions, with its
+#'     \item{`blocks`}{one entry per set of coupled directions, with
 #'       `invariants`, `section`, `newParameters` (the invariant each `q_<k>`
 #'       holds), `solvedDomain`, `coverage` and `status` (`"fixed"`,
 #'       `"reduced"`, `"invariantOnly"` or `"unresolved"`), `level`,
-#'       `generatorLevel` (the lowest level of its directions), `unproven` (the claims
-#'       of its section that are not proven) and, for a curved block, `count`
+#'       `generatorLevel` (the lowest level of the directions in the block), `unproven` (the claims
+#'       of the section that are not proven) and, for a curved block, `count`
 #'       (`"exact"` or `"upper bound"`), `injective` and `reach`. A section on a face
 #'       (`face`) holds `faceWhy`, why the model is not shown continuous up to the face
 #'       (`NULL` when it is), and `faceLevel`, `"checked"` when the resting state under
@@ -67,9 +67,9 @@
 #'     \item{`limits`}{the work budgets and time limits that stopped a section or
 #'       invariant search.}
 #'     \item{`checks`}{`pins` and `invariants`, whether every pin holds under the trafo
-#'       and every invariant of a block maps to its new parameter over Q, `failed`,
+#'       and every invariant of a block maps to the matching new parameter over Q, `failed`,
 #'       and with `check = TRUE` `loop`: the `directions` the reduced model has, the
-#'       number `expected`, its `rank`, `dim` and `rankStatus`, and `ok`.}
+#'       number `expected`, `rank`, `dim` and `rankStatus`, and `ok`.}
 #'     \item{`zeroCompatibility`}{with `reportZeroCompatibility = TRUE`, the sets of
 #'       coordinates that can vanish together and the `condition` for it.}
 #'     \item{`trafo`}{an [eqnvec] over all coordinates for [P()] or

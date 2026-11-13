@@ -65,7 +65,7 @@ name), "time", "value", "sigma" (uncertainty, can be \code{NA}) and "lloq"
 
 The attribute \code{condition.grid} holds one row per condition with further
 information such as doses; see \code{\link[=covariates]{covariates()}}. Renaming a datalist renames
-the rows of its condition grid.
+the rows of the condition grid.
 }
 \examples{
 ## Generate datalist from scratch

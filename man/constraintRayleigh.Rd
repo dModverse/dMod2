@@ -7,7 +7,7 @@
 constraintRayleigh(sigma, attrName = "prior", condition = NULL)
 }
 \arguments{
-\item{sigma}{Named numeric vector of scale parameters. Its names select the
+\item{sigma}{Named numeric vector of scale parameters. The names select the
 constrained parameters.}
 
 \item{attrName}{Character. Name of the attribute holding the constraint
@@ -19,7 +19,7 @@ one.}
 }
 \value{
 An objective function of class \code{objfn}, called as
-\code{obj(pars, ...)}, see \link{dModfn}. Its value is the full \verb{-2 log} density.
+\code{obj(pars, ...)}, see \link{dModfn}. The objective value is the full \verb{-2 log} density.
 }
 \description{
 Soft Rayleigh Constraint on Positive Parameters

@@ -12,7 +12,7 @@
 \item{times}{Additional times of the prediction grid.}
 
 \item{type}{\code{"all"} (default) both predictions, \code{"individual"} only IPRED
-and its residuals, \code{"population"} only PRED and its residuals.}
+with residuals, \code{"population"} only PRED with residuals.}
 
 \item{...}{Ignored.}
 }
@@ -43,8 +43,8 @@ g <- Y(c(y = "amt * Ka / (V * Ka - Cl) * (exp(-Cl / V * time) - exp(-Ka * time))
        outdir = tempdir())
 err <- Y(c(y = "sigma_add"), g, attachInput = FALSE, modelname = "theoph_err", compile = FALSE,
          derivMode = dm, outdir = tempdir())
-## one condition per subject with its dose; the effect formula replaces each log parameter
-## by its intercept plus a random effect per subject
+## one condition per subject with the subject dose; the effect formula replaces each log parameter
+## by an intercept plus a random effect per subject
 doses <- tapply(th$Dose * th$Wt, th$Subject, `[`, 1)[subjects]
 trafo <- branch(define(NULL, "x <- x", x = c("Ka", "V", "Cl", "amt", "sigma_add")),
                 table = data.frame(ID = subjects, dose = doses, row.names = subjects))

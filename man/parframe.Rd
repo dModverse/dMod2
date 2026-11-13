@@ -56,13 +56,13 @@ logical.
 }
 \description{
 A parameter frame is a data frame with one parameter set per
-row. Its columns fall into three groups: meta-information (e.g. index,
+row. The columns fall into three groups: meta-information (e.g. index,
 value, converged), attributes of an objective function (e.g. data and prior
 contribution) and the parameters.
 }
 \details{
 \code{rbind()} keeps the attributes of the first frame. Profiles of one
-parameter computed in parts, such as its left and right side, are joined
+parameter computed in parts, such as the left and right side, are joined
 into one: the repeated optimum is dropped and the points are sorted by
 \code{constraint}.
 

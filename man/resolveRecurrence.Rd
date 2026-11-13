@@ -13,7 +13,7 @@ resolveRecurrence(variables)
 Named character vector of the same length as \code{variables}.
 }
 \description{
-Replaces, for each entry, its name in all later entries by the entry in
+Replaces the name of each entry in all later entries by the entry in
 parentheses, so that no entry depends on an earlier name, e.g. for steady
 state expressions.
 }

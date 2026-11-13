@@ -17,7 +17,7 @@ test_that("PEtab test cases 0001-0006 import and produce solution-matching llh",
     sol <- yaml::read_yaml(sol_path)
 
     out <- petab$obj(petab$bestfit, deriv = FALSE)
-    # dMod normL2 returns -2*log L (chi2 + log normaliser); compare against
+    # dMod normL2 returns -2*log L (chi2 + log normalizer); compare against
     # -2 * sol$llh so all 6 cases share the same metric.
     expect_lt(abs(out$value - (-2 * sol$llh)),
               max(0.01, abs(2 * sol$tol_llh)),
@@ -115,7 +115,7 @@ test_that("the bundled Boehm problem imports and matches the published optimum",
 
 
 
-test_that("exportPEtabObject v2 writes nominalValue verbatim (no parameterScale linearisation)", {
+test_that("exportPEtabObject v2 writes nominalValue verbatim (no parameterScale linearization)", {
   if (!.libsbml_works()) skip("libsbml virtualenv not available")
   petab_dir <- .petab_repo_dir()
   if (!nzchar(petab_dir)) skip("PEtabTests/ not found: set DMOD_PETABTESTS to the repo directory")
@@ -292,7 +292,7 @@ test_that("v2 export round-trips a mid-run condition switch on a compartment", {
                                 overwrite = TRUE)
 
   # The compartment is an event target, so it imports as a state and has to
-  # go back out with its size and its non-constant flag intact.
+  # go back out with the size and the non-constant flag intact.
   sbml <- paste(readLines(list.files(td, pattern = "\\.xml$", full.names = TRUE)),
                 collapse = "")
   expect_match(sbml, "<compartment id=\"C\"[^>]*size=\"4\"")

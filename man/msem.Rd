@@ -35,9 +35,9 @@ at 0). It may also set those and the hyperparameters: \verb{omega_*} (log
 standard deviations and Cholesky entries), \verb{lambda_*} (Laplace), \verb{prob_*}
 and \verb{tau_*} (spike and slab), \verb{concentration_*} and \verb{tau_*} (Dirichlet
 process), named \verb{<kind>_<grouping>} and numbered \verb{_1}, \verb{_2}, ... where a
-grouping has several blocks. An \code{em} fit as \code{init} gives its estimates,
-its \code{fixed} values, its random effects without those it set to 0 and,
-with sparse random effects, its inner modes as their start.}
+grouping has several blocks. An \code{em} fit as \code{init} gives the start: the
+estimates, \code{fixed} values and random effects of that fit, without those it
+set to 0, and with sparse random effects the inner modes.}
 
 \item{fixed}{Named numeric of parameters held fixed.}
 
@@ -54,7 +54,7 @@ Newton step is below \code{steptol}, default 1e-8.}
 predicted change of -2 log L is below \code{mtol}, default 1e-5.}
 \item{\code{secondOrderCorrection}}{the derivative of the volume term,
 default \code{TRUE}.}
-\item{\code{derivMode}}{how FOCEI gets the second derivatives of its volume
+\item{\code{derivMode}}{how FOCEI gets the second derivatives of the volume
 term: \code{"forward-reverse"} (default), sweeps for models built with
 \code{derivMode = c("forward", "reverse", "forward-reverse")}, or
 \code{"forward-forward"}, the second-order sensitivities of models built
@@ -62,8 +62,8 @@ with \code{deriv2 = TRUE}. Without the mode asked for the fit takes the
 other, with a message.}
 \item{\code{boundary}}{the largest rise of -2 log L at which a variance is
 set to 0, default 0.1, \code{FALSE} for none. With one grouping and several
-blocks, a normal random effect of its own block whose standard
-deviation ends below 0.1 is dropped and the fit repeated from the
+blocks, a normal random effect that forms a block alone and whose
+standard deviation ends below 0.1 is dropped and the fit repeated from the
 estimates; where -2 log L rises by at most \code{boundary}, that fit is
 returned and names the hyperparameter in \code{boundary}.}
 \item{\code{quadrature}, \code{saem}, \code{laplace}}{lists of the sections
@@ -93,7 +93,7 @@ root, is repeated from a new perturbed start, up to \code{nTries} attempts.}
 Default \code{10}.}
 
 \item{keepFits}{Logical. If \code{TRUE}, the result has \code{fits}, the fit of every
-start, or its error message, without the model. Default \code{FALSE}.}
+start, or the error message of a failed one, without the model. Default \code{FALSE}.}
 
 \item{which}{Positions of the starts to fit, among the \code{fits} drawn. \code{NULL}
 (default) fits all. Tasks of \code{\link[=distributedComputing]{distributedComputing()}} that set the same
@@ -104,15 +104,16 @@ their results into one.}
 The fit with the smallest \code{value}, of class \code{em}, with
 \code{multistart}, a data frame with a row per start:
 \describe{
-\item{\code{value}, \code{converged}, \code{iterations}}{of its fit.}
-\item{\code{gradient}}{the largest absolute entry of the gradient at its end.}
+\item{\code{value}, \code{converged}, \code{iterations}}{of the fit.}
+\item{\code{gradient}}{the largest absolute entry of the gradient at the end
+of the fit.}
 \item{\code{tries}}{the attempts it took.}
-\item{\code{stop}}{the test that ended its trust region, \code{"error"} where
+\item{\code{stop}}{the test that ended the trust region, \code{"error"} where
 every attempt failed.}
-\item{\code{failures}}{why evaluations of its trust region failed, and how
+\item{\code{failures}}{why evaluations in the trust region failed, and how
 often.}
 \item{\code{error}, \code{boundary}}{the error of a failed start, the variances
-its fit set to 0.}
+the fit set to 0.}
 }
 \code{\link[=plotValues]{plotValues()}} draws it as a waterfall.
 }
@@ -139,8 +140,8 @@ g <- Y(c(y = "amt * Ka / (V * Ka - Cl) * (exp(-Cl / V * time) - exp(-Ka * time))
        outdir = tempdir())
 err <- Y(c(y = "sigma_add"), g, attachInput = FALSE, modelname = "theoph_err", compile = FALSE,
          derivMode = dm, outdir = tempdir())
-## one condition per subject with its dose; the effect formula replaces each log parameter
-## by its intercept plus a random effect per subject
+## one condition per subject with the subject dose; the effect formula replaces each log parameter
+## by an intercept plus a random effect per subject
 doses <- tapply(th$Dose * th$Wt, th$Subject, `[`, 1)[subjects]
 trafo <- branch(define(NULL, "x <- x", x = c("Ka", "V", "Cl", "amt", "sigma_add")),
                 table = data.frame(ID = subjects, dose = doses, row.names = subjects))

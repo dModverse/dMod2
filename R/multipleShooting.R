@@ -6,7 +6,7 @@
 
 
 # obj(pars, nodes, ...) returning the data term, the gaps and, per segment, the
-# blocks on (theta_loc, s_j) and the end state's chart value with its Jacobian.
+# blocks on (theta_loc, s_j) and the end state's chart value with the Jacobian.
 # Segment j holds the data and fixed-time events in [tau_j, tau_{j+1}).
 .shootObjective <- function(data, x, p, g = NULL, errmodel = NULL, nodes,
                             charts = NULL, times = NULL,
@@ -40,10 +40,10 @@
     tau <- .shootSnap(sort(unique(c(tstart, as.numeric(nodesL[[cn]])))), c(dc$time, tcn))
     tau <- tau[!duplicated(tau)]
     if (any(tau < tstart))
-      stop("multiple shooting: condition '", cn, "' has nodes before its start, t = ",
+      stop("multiple shooting: condition '", cn, "' has nodes before the start of the condition, t = ",
            tstart, ".", call. = FALSE)
     if (any(tau[-1L] >= tend))
-      stop("multiple shooting: condition '", cn, "' has nodes at or after its last data ",
+      stop("multiple shooting: condition '", cn, "' has nodes at or after the last data point ",
            "point, t = ", tend, "; every segment needs time to run.", call. = FALSE)
     M <- length(tau)
     upper <- c(tau[-1L], tend)
@@ -108,7 +108,7 @@
 
 ## ---- Setup helpers -----------------------------------------------------------
 
-# The state names of a prediction function from Xs(): the equations of its ODE.
+# The state names of a prediction function from Xs(): the equations of the ODE.
 .shootStates <- function(x) {
   maps <- attr(x, "mappings")
   eq <- if (length(maps)) attr(maps[[1L]], "equations") else NULL
@@ -145,7 +145,7 @@
 }
 
 # Node times within a relative 1e-9 of a grid time become that time: the
-# solver merges times that close, and a segment's grid has to keep its length.
+# solver merges times that close, and a segment's grid has to keep the same length.
 .shootSnap <- function(tau, grid) {
   if (!length(grid)) return(tau)
   i <- findInterval(tau, sort(unique(grid)), all.inside = FALSE)
@@ -159,12 +159,12 @@
 }
 
 # The extra times of condition `cn`: normL2's `times` for all conditions, or
-# its entry of the list.
+# the entry of the list for `cn`.
 .shootTimesOf <- function(times, cn)
   as.numeric(if (is.list(times)) times[[cn]] else times)
 
-# Start and end of the time axis of every condition: the start of its grid in
-# normL2, and its last data point or extra time.
+# Start and end of the time axis of every condition: the start of the condition grid in
+# normL2, and the last data point or extra time.
 .shootSpan <- function(data, times, conditions) {
   grid <- .normL2Grid(data, times)
   setNames(lapply(conditions, function(cn) {
@@ -191,7 +191,7 @@
 
 ## ---- Charts ------------------------------------------------------------------
 
-# State value from a node coordinate, and its derivative.
+# State value from a node coordinate, with the derivative.
 .shootFromChart <- function(s, charts) {
   lg <- charts == "log10"
   v <- s; d <- rep(1, length(s))
@@ -200,12 +200,12 @@
   list(value = setNames(v, names(charts)), deriv = setNames(d, names(charts)))
 }
 
-# Node coordinate of a state value, and its derivative.
+# Node coordinate of a state value, with the derivative.
 .shootToChart <- function(v, charts) {
   lg <- charts == "log10"
   if (any(lg & !(v > 0)))
     stop("multiple shooting: state ", paste(names(charts)[lg & !(v > 0)], collapse = ", "),
-         " is not positive, so its log10 chart is undefined.",
+         " is not positive, so a log10 chart is undefined.",
          call. = FALSE)
   s <- v; d <- rep(1, length(v))
   s[lg] <- log10(v[lg])
@@ -218,7 +218,7 @@
 
 # Inner parameters of the segments `which`: p's own for a condition's first
 # segment, node values otherwise. With derivatives each solve integrates theta
-# and its node (with `x0cols` also the initial state) as directions.
+# and the segment node (with `x0cols` also the initial state) as directions.
 .shootSegmentParsAll <- function(pin, spec, nodes, deriv, x0cols = FALSE,
                                  which = seq_along(spec$segs)) {
   states <- spec$states
@@ -271,7 +271,7 @@
   out
 }
 
-# A parvec as as.parvec() builds it, without its checks.
+# A parvec as as.parvec() builds it, without the checks.
 .shootParvec <- function(v, D, fixed) {
   attr(v, "deriv") <- D
   attr(v, "fixed") <- fixed
@@ -291,7 +291,7 @@
   out
 }
 
-# A segment has to run from its node to its end, which the grid encodes. A
+# A segment has to run from the segment node to the segment end, which the grid encodes. A
 # model that forces t = 0 or an event time into the grid moves the start.
 .shootCheckGrid <- function(pr, seg, k = NA_integer_) {
   tt <- pr[, "time"]
@@ -360,7 +360,7 @@
   list(values = .evalMany(spec$g, b, deriv, FALSE, env, cores), b = b)
 }
 
-# Chart value of every segment's end state; with `deriv`, its Jacobian on the
+# Chart value of every segment's end state; with `deriv`, the Jacobian on the
 # segment's own columns.
 .shootEnds <- function(spec, preds, deriv) {
   states <- spec$states
@@ -371,7 +371,7 @@
     r <- nrow(pr)
     xe <- pr[r, states]
     # a state of a log10 chart that the solve drives to zero or below, as a
-    # gating variable can under wild parameters, has no end value in its
+    # gating variable can under wild parameters, has no end value in the
     # chart: classed like a failed solve, so the driver cuts the segment
     bad <- spec$charts[states] == "log10" & !(xe > 0)
     if (any(bad))
@@ -380,7 +380,7 @@
                        "multiple shooting: state ", paste(states[bad], collapse = ", "),
                        " is not positive at the end of segment ", seg$j,
                        " of condition '", seg$cond, "', t = ", seg$end,
-                       ", so its log10 chart is undefined."),
+                       ", so a log10 chart is undefined."),
                        call = NULL, segment = k)))
     ch <- .shootToChart(xe, spec$charts)
     J <- NULL
@@ -530,7 +530,7 @@
   out
 }
 
-# The end-state Jacobian of a first segment along its initial state, mapped
+# The end-state Jacobian of a first segment along the initial state, mapped
 # into the chart of the nodes: d end / d s_1 = d end / d x_0 * T'(s_1).
 .shootChartGrowth <- function(J, pin, spec) {
   # T'(s_1) = ln(10) x_0 on a log10 chart, which is zero, not undefined, at a
@@ -689,7 +689,7 @@
     init <- unclass(p0)[states]
     X <- matrix(rep(init, each = length(tau) - 1L), length(tau) - 1L,
                 dimnames = list(tau[-1L], states))
-    # A node is the state before the events at its time, which its segment
+    # A node is the state before the events at the node time, which the segment
     # applies. Solver and data report it after, so a node on an event reads the
     # state just before and observed states subtract the simulated jump.
     evt <- .shootEventTimes(spec, p0)
@@ -734,7 +734,7 @@
   out
 }
 
-# Sets the unobserved states of every node by replacement synchronisation: one
+# Sets the unobserved states of every node by replacement synchronization: one
 # run from p's initial state with observed states reset to the data at every
 # data time. A failed solve restarts from the next node as it was.
 .shootSweep <- function(sobj, theta, nodes, fixed, cores) {
@@ -826,7 +826,7 @@
 }
 
 # The states on the whole time axis of every condition, simulated at `theta`
-# in one piece; NULL for a condition whose solve does not reach its end.
+# in one piece; NULL for a condition whose solve does not reach the end.
 .shootSimulate <- function(sobj, theta, fixed, cores) {
   spec <- attr(sobj, "spec")
   pin <- .shootInner(spec, theta, fixed, cores)
@@ -1017,7 +1017,7 @@
   best
 }
 
-# Noise sd of the means `v` at `times` and the degrees of freedom of its estimate: from sigma,
+# Noise sd of the means `v` at `times` and the degrees of freedom of the sd estimate: from sigma,
 # from the replicates where most times have some, else from third differences, which a signal
 # smooth on the sampling hardly enters.
 .shootMeanNoise <- function(di, times, v) {
@@ -1036,7 +1036,7 @@
 }
 
 # Nodes just before fast changes of the data, where an observable's rate lies
-# more than `k` robust deviations off its median, a twentieth of the median
+# more than `k` robust deviations off the median rate, a twentieth of the median
 # interval before the change. NULL when no condition shows one.
 .shootTransitionNodes <- function(data, x, times, k = 8, n = 10L) {
   base <- .shootAutoNodes(data, x, times, n)
@@ -1060,7 +1060,7 @@
       if (!(sc > 0)) sc <- 64 * .Machine$double.eps * max(1, abs(md))
       fast <- which(abs(rate - md) > k * sc)
       if (!length(fast)) next
-      # consecutive fast samples are one change, which starts at its first
+      # consecutive fast samples are one change, which starts at the first of them
       first <- fast[c(TRUE, diff(fast) > 2L)]
       onsets <- c(onsets, ag$time[first])
     }
@@ -1098,7 +1098,7 @@
   }), conds)
 }
 
-# Where segment k is cut: at the grid time nearest its middle, or the middle
+# Where segment k is cut: at the grid time nearest the segment middle, or the middle
 # itself when no grid time lies in the middle half. NA when the halves would
 # fall below the minimal length.
 .shootSplitTime <- function(seg, minLength, events = numeric(0), minPoints = 1L) {
@@ -1111,7 +1111,7 @@
   inner <- inner[!(inner %in% events)]
   cand <- if (length(inner)) inner[order(abs(inner - mid))]
           else if (mid %in% events) mid + len / 8 else mid
-  # each half keeps at least minPoints data points of its own: a node is
+  # each half keeps at least minPoints data points: a node is
   # there to be told by data, not to take the place of the parameters
   if (minPoints > 1L) {
     td <- seg$data$time
@@ -1143,7 +1143,7 @@
   grids <- Map(c, starts, tn)
   prs <- try(suppressWarnings(unname(unclass(.predictMany(
     spec$x, grids, pk, conds, deriv = FALSE, cores = cores)))), silent = TRUE)
-  # a failure anywhere fails the batch; then each segment on its own
+  # a failure anywhere fails the batch; then each segment alone
   if (inherits(prs, "try-error"))
     prs <- lapply(seq_along(ks), function(i) try(suppressWarnings(.predictMany(
       spec$x, grids[i], pk[i], conds[i], deriv = FALSE, cores = cores)[[1L]]), silent = TRUE))
@@ -1177,7 +1177,7 @@
   list(sobj = new, nodes = nodesN)
 }
 
-# A composition flattened into its factors, left to right.
+# A composition flattened into the factors, left to right.
 .shootFactors <- function(f) {
   st <- .fnNode(f)
   if (!is.null(st) && identical(st$op, "*"))
@@ -1225,9 +1225,9 @@
                    e$optBLOQ, e$controls$multipleShootingControl)
 }
 
-# The same objective, optimised by single shooting: a wrapper that answers as
-# it does and keeps none of its terms or controls. The objective itself, and
-# whoever else holds it, keeps its control.
+# The same objective, optimized by single shooting: a wrapper that answers as
+# it does and keeps none of the terms or controls of the objective. The objective itself, and
+# whoever else holds it, keeps the control.
 .singleShooting <- function(f) {
   if (!length(.shootingTerms(f))) return(f)
   g <- function(...) f(...)

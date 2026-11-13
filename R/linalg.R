@@ -1,24 +1,5 @@
-#' Batched Matrix Multiplication
-#'
-#' Multiplies matrices batch by batch through BLAS. The batch index is the
-#' first dimension of a 3D array.
-#'
-#' @section Supported Shapes:
-#' \describe{
-#'   \item{`[B,M,K] x [K,N] -> [B,M,N]`}{left operand batched}
-#'   \item{`[M,K] x [B,K,N] -> [B,M,N]`}{right operand batched}
-#'   \item{`[B,M,K] x [B,K,N] -> [B,M,N]`}{both operands batched}
-#' }
-#'
-#' @param A Numeric matrix or 3D array.
-#' @param B Numeric matrix or 3D array.
-#' @return Numeric 3D array with dimensions `c(B, M, N)`.
-#' @export
-#' @examples
-#' A <- array(rnorm(2 * 3 * 4), c(2, 3, 4))
-#' M <- matrix(rnorm(4 * 5), 4, 5)
-#' dim(A %bmm% M)
-#' all.equal((A %bmm% M)[1, , ], A[1, , ] %*% M)
+# Batched matrix product through BLAS, the batch index first: [B,M,K] x [K,N], [M,K] x [B,K,N] and
+# [B,M,K] x [B,K,N], each to [B,M,N]
 `%bmm%` <- function(A, B) {
   da <- dim(A)
   db <- dim(B)
@@ -47,27 +28,10 @@
 
 ## nullZ --------------------------------------------
 
-#' Null Space Basis from the Reduced Row Echelon Form
-#'
-#' Computes a basis of the null space of `A` from its reduced row echelon
-#' form, like `null(A, "r")` in MATLAB: each basis vector has a 1 in one
-#' non-pivot column and 0 in the others. The basis is integer if the reduced
-#' row echelon form is.
-#'
-#' @param A Numeric matrix.
-#' @param tol Numeric tolerance below which a pivot counts as zero, passed to
-#'   [rref()].
-#' @return A matrix with `ncol(A)` rows and one column per basis vector.
-#'
-#' @seealso [rref()]
-#' @examples
-#' A <- rbind(c(1, -1, 0), c(0, 1, -1))
-#' nullZ(A)
-#' A %*% nullZ(A)
-#'
-#' @export
-nullZ <- function(A, tol = sqrt(.Machine$double.eps)) {
-  r <- rref(A, tol)
+# Null space basis from the reduced row echelon form, as null(A, "r") in MATLAB: each basis vector
+# has a 1 in one non-pivot column and 0 in the others, integer if the echelon form is
+.nullZ <- function(A, tol = sqrt(.Machine$double.eps)) {
+  r <- .rref(A, tol)
   piv <- r$pivots
   free <- setdiff(seq_len(ncol(A)), piv)
   Z <- matrix(0, ncol(A), length(free))
@@ -79,26 +43,9 @@ nullZ <- function(A, tol = sqrt(.Machine$double.eps)) {
 
 ## rref ---------------------------------------------
 
-#' Reduced Row Echelon Form of a Matrix
-#'
-#' Computes the reduced row echelon form of a numeric matrix by Gauss-Jordan
-#' elimination with partial pivoting, like the MATLAB function `rref`.
-#'
-#' @param A Numeric matrix.
-#' @param tol Numeric tolerance below which a pivot counts as zero. Defaults to
-#'   `sqrt(.Machine$double.eps)`.
-#'
-#' @return A list with the elements `rref`, the reduced row echelon form of
-#'   `A` with entries below `tol` set to zero, and `pivots`, the integer indices
-#'   of the pivot columns.
-#'
-#' @seealso [nullZ()]
-#' @examples
-#' A <- rbind(c(1, 2, 3), c(2, 4, 7), c(1, 2, 4))
-#' rref(A)
-#'
-#' @export
-rref <- function(A, tol = sqrt(.Machine$double.eps)) {
+# Reduced row echelon form by Gauss-Jordan elimination with partial pivoting: the form with entries
+# below tol set to zero, and the pivot columns
+.rref <- function(A, tol = sqrt(.Machine$double.eps)) {
   if (!is.numeric(A) || !is.matrix(A))
     stop("'A' must be a numeric matrix", call. = FALSE)
   m <- nrow(A)
@@ -127,17 +74,8 @@ rref <- function(A, tol = sqrt(.Machine$double.eps)) {
 
 ## submatrix --------------------------------------------
 
-#' Submatrix That Stays a Matrix
-#'
-#' @param M A matrix.
-#' @param rows Index vector of rows. Defaults to all.
-#' @param cols Index vector of columns. Defaults to all.
-#' @return The matrix `M[rows, cols, drop = FALSE]`, with its dimnames.
-#' @examples
-#' M <- matrix(1:6, 2, 3, dimnames = list(c("a", "b"), c("x", "y", "z")))
-#' submatrix(M, rows = 1)
-#' @export
-submatrix <- function(M, rows = 1:nrow(M), cols = 1:ncol(M)) {
+# M[rows, cols] that stays a matrix
+.submatrix <- function(M, rows = 1:nrow(M), cols = 1:ncol(M)) {
   M[rows, cols, drop = FALSE]
 }
 

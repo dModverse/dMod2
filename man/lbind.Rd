@@ -14,7 +14,8 @@ is \code{NA} there.}
 A data frame with the original columns and \code{condition}.
 }
 \description{
-Adds to each data frame a column \code{condition} with its name in the list and
+Adds to each data frame a column \code{condition} with the name of the data
+frame in the list and
 binds them by rows.
 }
 \examples{

@@ -59,7 +59,7 @@ the linear scale. Default \code{NULL}.}
 \item{steadyState}{The \code{parfn} of \code{\link[=Pimpl]{Pimpl()}} between \code{p} and the prediction,
 or \code{NULL} (default). Every condition then starts from the steady state of
 \code{reactions}, written as a pre-equilibration: one species per conserved
-total starts at the total over its coefficient, the other states it
+total starts at the total divided by the coefficient of that species, the other states it
 sets at 0, and the conditions with equal parameters share one
 pre-equilibration condition.}
 
@@ -103,7 +103,7 @@ values are read off the parameter transformation \code{p}.
 An outer parameter named like a state (e.g. \code{"A <- exp(A)"}) cannot
 share the species id in SBML. It is written as \verb{init_<state>} and the
 condition table sets the species to it. An outer parameter named
-like an inner parameter keeps its name when the trafo is a pure scale
+like an inner parameter keeps the name when the trafo is a pure scale
 wrap; for any other mapping it is written as \verb{<name>_outer}.
 }
 \section{Limitations}{

@@ -255,7 +255,7 @@ void accumulate_aloq_residual(
     if (seed_sigma) seed_sigma[i] += inv_s * (C - A * wr - B * w0);
 
     // All per-row Hessian terms as four bilinear forms with pre-merged
-    // coefficients: dwr⊗dwr (Part0), symmetrised dpred⊗dsigma (Part1, M4BEAL),
+    // coefficients: dwr⊗dwr (Part0), symmetrized dpred⊗dsigma (Part1, M4BEAL),
     // dsigma⊗dsigma (Part2, Part3, M4BEAL) and dw0⊗dw0 (M4BEAL only).
     const double coef_dwr2 = 2.0;
     double coef_cross = 0.0;
@@ -479,7 +479,7 @@ void accumulate_bloq_residual(
     // ---- Hessian ----
     if (is_m3) {
       // M3 Hessian, BLOQ Parts 1/2/3 in one (k1, k2) loop: dwr⊗dwr, the
-      // symmetrised dpred⊗dsigma cross term and dsigma⊗dsigma.
+      // symmetrized dpred⊗dsigma cross term and dsigma⊗dsigma.
       const double G_neg_wr = G_by_Phi(-wr, -wr);
       const double coef_dwr2_m3  = opts.bloq_part1
           ? 2.0 * (-wr * G_neg_wr + G_neg_wr * G_neg_wr)

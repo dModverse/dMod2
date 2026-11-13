@@ -19,13 +19,13 @@ formulas, or a parameter function \code{\link[=P]{P()}} built from one.}
 }
 \value{
 An object of class \code{randomeffects}, a list with \code{terms} (one row
-per random effect column: symbol, term of its formula, column, grouping,
-ID, distribution, its fixed hyperparameters and the name stem of
-its etas),
+per random effect column: symbol, formula term, column, grouping,
+ID, distribution, fixed hyperparameters and the name stem of
+the etas),
 \code{blocks} (the correlated groups of rows), \code{subjects} (the groups of each
 grouping and the conditions they own), \code{fixed} (the parameters the
 formulas created), \code{etas} (eta names, one row per condition, one column
-per term row) and \code{fixedDesign} (per symbol the model matrix of its fixed
+per term row) and \code{fixedDesign} (per symbol the model matrix of the fixed
 effects, one row per condition).
 }
 \description{
@@ -40,7 +40,7 @@ An effect formula \code{cl ~ wt + (1 + dose | p | ID)} replaces the symbol \code
 wherever it occurs in a branch by a linear predictor. The scale of the
 symbol is the one the transformation gives it: after
 \code{insert(trafo, "x <- exp(x)", x = "cl")} the random effects are normal on
-the log scale. Its parts:
+the log scale. The parts of an effect formula:
 \describe{
 \item{left-hand side}{one or more symbols of the transformation,
 \code{ka + v ~ ...} applies the right-hand side to each.}
@@ -55,7 +55,7 @@ terms are independent. \code{gr(ID, dist = laplace())} instead of \code{ID} sets
 the distribution, see \code{\link[=normal]{normal()}}. The random effect of a group is
 \verb{eta_<symbol>_<group>} for the intercept and
 \verb{eta_<symbol>_<column>_<group>} for a slope; a symbol with random terms
-in a second grouping gets its name in the stem, \verb{eta_cl_centre_<group>}.}
+in a second grouping gets the grouping name in the stem, \verb{eta_cl_center_<group>}.}
 }
 }
 \examples{

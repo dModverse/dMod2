@@ -3,7 +3,7 @@
 # nothing may keep one: entry points are dispatched by name and shared object.
 
 
-# Two-condition decay model in its own workdir, so the reload tests cannot
+# Two-condition decay model in a separate workdir, so the reload tests cannot
 # touch the shared fixture libraries. Two conditions are what puts the
 # prediction on the batched cppDE entry point.
 fx_loaddll <- local({
@@ -36,7 +36,7 @@ fx_loaddll <- local({
     cache <<- list(dir = dir, x = x, g = g, prd = prd, pouter = pouter,
                    obj = normL2(data, prd),
                    # dyn.unload() matches the path string dyn.load() was given.
-                   # compile() loads a normalised path and names the library by
+                   # compile() loads a normalized path and names the library by
                    # the platform's extension, so both have to be reproduced.
                    so = normalizePath(
                      file.path(dir, paste0("ld_all", .Platform$dynlib.ext)),
@@ -85,7 +85,7 @@ test_that("an unloaded model names the shared object it is missing", {
   on.exit({ if (!fx$so %in% dMod2:::.loadedDLLPaths()) dyn.load(fx$so) }, add = TRUE)
 
   # Whichever entry point the chain reaches first, the message has to name it
-  # and its library instead of failing on a null address.
+  # and the library instead of failing on a null address.
   dyn.unload(fx$so)
   expect_error(fx$obj(fx$pouter), "ld_all")
 })
@@ -149,7 +149,7 @@ test_that("compiling into a loaded output name yields a fresh library", {
 })
 
 
-test_that("a multi-condition trafo compiled on its own is named by its modelname", {
+test_that("a multi-condition trafo compiled alone is named by the modelname", {
   fx <- fx_loaddll()
   oldwd <- setwd(fx$dir); on.exit(setwd(oldwd), add = TRUE)
 

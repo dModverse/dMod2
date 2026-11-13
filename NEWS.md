@@ -1,15 +1,25 @@
+# dMod2 0.15.1
+
+* American spelling throughout: `trust(stepControl = list(regularize = ))` replaces `regularise`,
+  the attribute `run` of the result of `mstrust()` names `optimizer` and `optimizerArgs` instead
+  of `optimiser` and `optimiserArgs`, and the sequential palette `"grey"` of [dMod_palettes()] is `"gray"`.
+
+* `wide2long()`, `%bmm%`, `rref()`, `nullZ()` and `submatrix()` are no longer exported, and
+  `ggopen()` is removed. `as.data.frame()` of a prediction returns the long format of
+  `wide2long()`, with a column `sigma`.
+
 # dMod2 0.15.0
 
 * New `constraintStability(pSS, p)`, a term of the objective that keeps the steady state of a
   `Pimpl()` stable: for every eigenvalue of the Jacobian at the steady state on the manifold of the
-  conserved quantities, the square of how far its real part passes an onset, scaled to `weight`
+  conserved quantities, the square of how far the real part passes an onset, scaled to `weight`
   where the real part reaches the `stabilityTol` of `pSS`. Zero below the onset, with exact
   gradient and Gauss-Newton Hessian; the onset defaults to a decay slower than the data last.
   `Pimpl(deriv2 = TRUE)` provides the second derivatives it needs. With
   `controlsPTC = list(stability = FALSE)` the steady state may be unstable, and the term goes on
   rising there instead of the evaluation failing.
 
-* `plotValues()` takes a named list of fit collections, one panel each and each ranked on its own,
+* `plotValues()` takes a named list of fit collections, one panel each and each ranked separately,
   and with `relative` draws the values above the best of each collection or above a given value.
   `plotValues()`, `plotPars()` and `as.parvec()` take the result of `mstrust()` as it is, and
   `as.parframe()` returns a parframe unchanged.
@@ -18,26 +28,26 @@
   parameters alone, the error parameters held at their estimates (Lindstrom and Bates 1990).
 
 * The integral of `em()` over sparse random effects is formed in natural parameters, without the
-  centre of the quadratic expansion, in C++ group by group where no Dirichlet-process random effect
+  center of the quadratic expansion, in C++ group by group where no Dirichlet-process random effect
   joins groups. The spike-and-slab random effects of a group are integrated exactly, by a
   depth-first sum over their subsets that leaves out subtrees below a bound, within a budget of
   nodes instead of a limit on their number. Where the data couple factors, or the sum would exceed
-  its budget, expectation consistent runs as a convergent double loop with Newton steps in both
-  loops; it converges where the data tie coordinates closely or do not see them. Mean field and
-  `control$laplace$coupling` are gone, with the fallback to mean field.
+  the budget, the expectation consistent (EC) approximation runs as a convergent double loop with
+  Newton steps in both loops; EC converges where the data tie coordinates closely or do not see
+  them. Mean field and `control$laplace$coupling` are gone, with the fallback to mean field.
 
 * The native evaluation chain takes observables and error models that read `time`; such models
   ran on the R path before.
 
 * `em()` with Laplace, spike-and-slab or Dirichlet-process random effects follows the parameter
   transformations, steady states, ODE, events, observables and error model from every such random
-  effect to the measured names of its group. One that reaches none of them rests at 0 with its
-  prior: its group searches its mode without it, the integral and the updates of its
-  hyperparameters leave it out, and `$random` marks it in a column `data`. A hyperparameter all of
+  effect to the measured names of the group. One that reaches none of them rests at 0 with the
+  prior: the group searches the mode without it, the integral and the hyperparameter updates
+  leave it out, and `$random` marks it in a column `data`. A hyperparameter all of
   whose random effects reach no data is an error. Every expression is read with the names that are 0
   in the condition set to 0, so that a state that starts at 0 and that nothing drives passes no
-  random effect on, and a root of a steady state depends only on the inputs its equations and
-  conservation rows reach.
+  random effect on, and a root of a steady state depends only on the inputs that the equations and
+  conservation rows of the steady state reach.
 
 * The second derivatives of the Laplace marginal and of the FOCEI volume term by forward over
   reverse take the gradients of their traces direction by direction, each from a forward pass
@@ -53,8 +63,8 @@
   one trust region over the random effects of all groups. The search differentiates the model in
   the random effects of the group only, adds a BFGS correction to the Gauss-Newton Hessian and ends
   at the `tolControl` of `control$laplace$trustControl`, where given. A group starts from the lowest
-  of its predicted modes and the minima found at its last four distinct accepted points, as its
-  problem may have several local minima; at the start of the fit and every 25 accepted steps the
+  of the predicted modes and the minima found at the last four distinct accepted points, as the
+  inner problem of a group may have several local minima; at the start of the fit and every 25 accepted steps the
   search also runs from 0 and from two starts around the modes.
 
 * The model Hessian of the outer trust region of `em()` with sparse random effects under forward
@@ -65,24 +75,25 @@
 * The fits of `em()` with sparse random effects count why evaluations of their trust region failed
   (`failures`, also a column of the table of `msem()`). Every start of `msem()` runs to
   convergence, all starts at once; `msem(budget = )` is gone. `msem(which = )`
-  fits a part of its starts, so that tasks of `distributedComputing()` share one multistart, and
+  fits a part of the starts, so that tasks of `distributedComputing()` share one multistart, and
   `get()` joins their fits into one.
 
-* `residuals(type = "NPDE")` of an `em()` fit draws a reading at or below its limit given the other
-  readings of its group, on the Gaussian copula of the simulations, which stay uncensored. The NPDE
+* `residuals(type = "NPDE")` of an `em()` fit draws a reading at or below the limit given the other
+  readings of the same group, on the Gaussian copula of the simulations, which stay uncensored. The NPDE
   of a group are then independent under the model also with censored readings. The pde is the
   mid-rank of a reading among the simulations.
 
 * `detectFreeCores()` inside a SLURM job takes the cores the job was given and bound to.
 
-* Multiple shooting with `nodes = "auto"` counts a turning point of the data where they reverse by
-  more than noise on that many readings reaches in one draw of a thousand, with the noise of the
-  replicate means; noise on a plateau adds no segments, and oscillations without `sigma` are
-  counted.
+* Multiple shooting with `nodes = "auto"` counts a turning point of the data where the replicate
+  means reverse by more than the range that their noise reaches over the series in one draw of a
+  thousand. The noise is that of the replicate means, from `sigma` where the data have it, else
+  from the replicates or the scatter of the series. Noise on a plateau adds no segments, and
+  oscillations are also counted without `sigma`.
 
 # dMod2 0.14.8
 
-* `Pimpl()`: a state whose reactions all vanish at the steady state rests. It takes its value
+* `Pimpl()`: a state whose reactions all vanish at the steady state rests. It takes the value
   from the input, 0 where the input has none, and is not among the parameters.
 
 * Alignment models compile into `align/<host>_<process>/` of the output directory, so processes
@@ -90,16 +101,16 @@
 
 * `plotVPC(pc = TRUE)` leaves out the readings whose population prediction is not positive.
   `confint(method = "profile")` of an `em()` fit refits with the fit's derivative mode. The plots
-  of `em()` fits order their panels as the model and the data do; `plotTrace()` its stages as
+  of `em()` fits order their panels as the model and the data do; `plotTrace()` orders the stages as
   they ran.
 
-* `msem(retry = TRUE)`, the default, draws a start again where its fit fails, for instance where the
+* `msem(retry = TRUE)`, the default, draws a start again where the fit from it fails, for instance where the
   steady state of `Pimpl()` has no stable root at the start, up to `nTries` attempts; the table of
   starts has their `tries` and `stop`, the test that ended each trust region. `keepFits = TRUE`
   returns the fit of every start. The fits of `em()` have `stopReason`.
 
 * `align()` takes the standard errors of a fit without random terms from the exact Hessian at the
-  fit, and its fallback where the marginal Hessian is not positive definite from the expected
+  fit, and the fallback where the marginal Hessian is not positive definite from the expected
   information, positive semidefinite by construction.
 
 * `compile()` reuses the objects of earlier calls in the same directory.
@@ -109,7 +120,7 @@
 
 # dMod2 0.14.7
 
-* The website <https://dmodverse.github.io/dMod2/> replaces the vignettes. Its guide has eleven
+* The website <https://dmodverse.github.io/dMod2/> replaces the vignettes. The site guide has eleven
   chapters: setting up models, symmetries, sensitivities, optimization, profile likelihood,
   prediction uncertainty, nonlinear mixed-effects models, group-specific effects, alignment of
   relative data measurements, PEtab import and export, remote computing. The chapters on
@@ -118,10 +129,10 @@
   site also has the reference by topic and the example projects as articles.
 
 * The applications that were demos are example projects in `examples/` of the repository: each
-  folder holds its scripts, its saved fits and a README. New example projects `pharmacometrics`
+  folder holds the scripts, the saved fits and a README of one project. New example projects `pharmacometrics`
   (theophylline, warfarin and mavoglurant, FOCEI and SAEM multistarts with the diagnostics of
   `em()` fits, nlmixr2 on the same model where installed) and `TMDD` (target-mediated drug
-  disposition with the target at its steady state, censored readings, FOCEI and quadrature).
+  disposition with the target at steady state, censored readings, FOCEI and quadrature).
 
 * License GPL (>= 3).
 
@@ -131,36 +142,36 @@
   random terms, by restricted likelihood. The parameters of the symbols of the prediction are
   integrated out under a flat prior as by Lindstrom and Bates: in rounds from the maximum
   likelihood fit, the log determinant of their Gauss-Newton information at the parameters and
-  modes of the previous round enters the objective with its exact gradient, through FOCEI where
+  modes of the previous round enters the objective with an exact gradient, through FOCEI where
   the model has random terms. Fits with Laplace, spike-and-slab or Dirichlet-process terms and
   `method = "quadrature"` stay maximum likelihood; `print()` and the attribute `estimation` of
   `fit$parameters` say which, `fit$remlRounds` counts the rounds. Where the information is
   singular, the fit is by maximum likelihood, with a warning. `anova()` of alignments refuses
   restricted likelihoods of fits with different parameters of the prediction.
 
-* `align()` goes on from its fit after a variance is set to 0, and its results have those etas
+* `align()` goes on from the current fit after a variance is set to 0, and the results have those etas
   among `parameters`. Where the Hessian of a fit with random terms is not positive definite at
-  its optimum, the standard errors come from the Gauss-Newton Schur complement over the random
+  the optimum, the standard errors come from the Gauss-Newton Schur complement over the random
   effects (`fit$seSource`).
 
 * `alignmentModel(technical = )` names the columns that tell technical replicates apart, such as
   lanes. Readings that agree in all other columns but `value` and `lloq` are replaced by their
   mean before the alignment: geometric, on the log scale, for an error model in `prediction`,
-  arithmetic otherwise; a sample with censored readings is censored at the mean of its readings.
+  arithmetic otherwise; a sample with censored readings is censored at the mean of the sample readings.
 
 * Alignment models compile into `getOption("dMod2.outdir")`, and processes that build the same
   model at once take turns.
 
 # dMod2 0.14.5
 
-* `em()` sets a variance at its boundary to 0: a normal random effect of its own block whose
-  standard deviation ends below 0.1 is dropped, its etas fixed at 0, and the other parameters are
+* `em()` sets a variance at the boundary to 0: a normal random effect that forms a block alone and
+  whose standard deviation ends below 0.1 is dropped, the etas of that effect fixed at 0, and the other parameters are
   fitted again; where that raises -2 log L by at most `control$boundary` (default 0.1), the fit
   without it is returned and names the hyperparameter in `boundary`, which `msem()` lists per
-  start. The fit keeps its random effects in `design` and the values given as `fixed`, and
+  start. The fit stores the random effects in `design` and the values given as `fixed`, and
   `em()` and `msem()` take a fit as `init` and go on from it.
 
-* FOCEI ends where its model can gain less than `mtol` in the largest region the fit allows
+* FOCEI ends where the trust-region model can gain less than `mtol` in the largest region the fit allows
   (`rmax`), and after five consecutive rejected trials that leave the objective flat within
   `ftol`. The inner search for the modes, of FOCEI and of the quadrature, stops where the Newton
   step is below `innerControl$steptol` (default 1e-8), so that -2 log L at given parameters does
@@ -169,8 +180,8 @@
   the shrinkage per grouping.
 
 * `em()` and `msem()` stop with an error where -2 log L of the data is not finite at the start,
-  and FOCEI where a Hessian is not finite. A trial point where the prediction fails, or where its
-  value or derivatives are not finite, is rejected, in the search for the modes for that subject
+  and FOCEI where a Hessian is not finite. A trial point where the prediction fails, or where the
+  value or derivatives there are not finite, is rejected, in the search for the modes for that subject
   alone; SAEM keeps the parameters of an iteration where the objective fails at the draws.
 
 * `em(method = "quadrature")` and Laplace EM factor the Hessian of the modes instead of inverting
@@ -179,7 +190,7 @@
   nodes would lower -2 log L by less than `tolDecrement` or than the nodes resolve, or where a
   step raised -2 log L by more than a Newton step would gain; the stage trace has the resolution.
 
-* SAEM evaluates the data term of its draws, and the quadrature that of its nodes, in C++ where
+* SAEM evaluates the data term of the draws, and the quadrature that of the nodes, in C++ where
   the model allows it, as FOCEI does.
 
 * `msem(budget = )` caps the outer trust region of FOCEI, also the one before quadrature, at
@@ -187,15 +198,15 @@
   limits.
 
 * Spike-and-slab random effects have no upper bound per group: up to 12 of a group are
-  integrated jointly and exactly, more each alone, coupled by expectation consistent or mean
-  field (`coupling` in `control`). With sparse random effects one coupling holds for the whole
-  fit, expectation consistent where it converges at the start, else mean field, reported as
+  integrated jointly and exactly, more each alone, coupled by the expectation consistent (EC)
+  approximation or mean field (`coupling` in `control`). With sparse random effects one coupling
+  holds for the whole fit, EC where it converges at the start, else mean field, reported as
   `"meanFieldFallback"`.
 
 * An effect formula leaves a condition whose grouping is missing (`NA` in the branch table)
   without random effect, at the fixed effects.
 
-* `residuals(fit, type = "NPDE")`: normalised prediction distribution errors from simulated data
+* `residuals(fit, type = "NPDE")`: normalized prediction distribution errors from simulated data
   sets, decorrelated per group, censored readings by a uniform draw below their simulated
   fraction, with the tests of mean, variance and normality as attribute `tests`. New
   `plotVPC()`: visual predictive check of an `em()` fit, prediction corrected with `pc = TRUE`,
@@ -219,16 +230,16 @@
 
 * `plotCombined(errfn = )` draws one standard deviation of the error model as a band around the
   prediction. `plotData()`, `plotCombined()` and `plotPrediction()` order the conditions
-  naturally (L2 before L10). A colour legend of a single condition, and a legend of
+  naturally (L2 before L10). A color legend of a single condition, and a legend of
   `plotProfile()` or `plotPaths()` with a single entry, are left out; `plotProfile()` and
-  `plotPaths()` keep a list of profiles in its order.
+  `plotPaths()` keep the order of a list of profiles.
 
 * `symmetryReduction(allowChecked = )` reduces on directions of level `"checked"`, which hold at
   random points without a proof.
 
 * `distributedComputing()` writes the result of a task under a temporary name and renames it
   once written, so that `check()` and `get()` read complete results only; the remote build uses
-  `/tmp` where `TMPDIR` names a missing directory. `terminate()` cancels a SLURM job by its ID.
+  `/tmp` where `TMPDIR` names a missing directory. `terminate()` cancels a SLURM job by job ID.
 
 # dMod2 0.14.3
 
@@ -268,11 +279,11 @@
   native chain for all conditions of an evaluation at once and in parallel on
   `getOption("dMod2.cores")`, with the same result on any number of cores. A root depends on the
   parameters, the states in `pars` and the controls only, so that an objective is the same
-  function of its parameters in every call; identical values are answered from memory, which
+  function of the parameters in every call; identical values are answered from memory, which
   `keepRoot = FALSE` turns off. The control `archive` and `resetWarmStarts()` are removed.
 
 * `Pimpl(controlsPTC = list(stabilityTol = ))`: a root counts as stable while the real part of
-  its leading eigenvalue on the manifold of the conserved quantities is at most `stabilityTol`,
+  the leading eigenvalue on the manifold of the conserved quantities is at most `stabilityTol`,
   in the units of the rates; default 0.
 
 * `conservedQuantities(eqnlist)` replaces `getTotals()` and `conservedQuantities(S)` on a
@@ -282,14 +293,14 @@
   coefficients at the parameters of each call. A state that no reaction changes is a parameter
   of `Pimpl()`, not a conserved total.
 
-* `Pimpl()` and the PEtab pre-equilibration keep a conserved moiety at its total where its
-  reactions rest, and totals keep the names of the full network.
+* `Pimpl()` and the PEtab pre-equilibration keep a conserved moiety at the total where the
+  moiety reactions rest, and totals keep the names of the full network.
 
 * `exportPEtab()` takes the observables and the error model as observation functions of `Y()`.
   `exportPEtab(steadyState = )` takes the `Pimpl()` of the chain and writes the steady state as a
   pre-equilibration, conditions with equal parameters sharing one; `exportPEtab(events = )`
   writes the events at time 0 that replace a state into the condition table and refuses others.
-  An observable the error model leaves out takes the standard deviations of its data, one
+  An observable the error model leaves out takes the standard deviations of the observable data, one
   without data the noise 1, and a fixed parameter that enters `p` as `exp()` or `10^()` has the
   value it has in the model.
 

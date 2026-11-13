@@ -18,7 +18,8 @@
 #'
 #' `pars` is a named numeric vector. If it has a `deriv` attribute, as the
 #' output of a parameter transformation does, the derivatives are taken with
-#' respect to the parameters behind it. A composition is called as its class:
+#' respect to the parameters behind it. A composition is called according to
+#' the resulting class:
 #' `g * x * p` is a prediction function, `(g * x * p)(times, pars)`.
 #'
 #' The other arguments are named:
@@ -39,7 +40,7 @@
 #' * `conditions`: character vector, the conditions to evaluate. Default all
 #'   conditions of the function.
 #' * `env`: environment for intermediate results. Default `NULL`, a new one.
-#'   An objective function stores its prediction there as `prediction` and
+#'   An objective function stores the prediction there as `prediction` and
 #'   returns the environment as attribute `env`.
 #' * `cores`: number of threads for the ODE solves and the residual kernel.
 #'   Default `getOption("dMod2.cores", 1L)`.
@@ -59,7 +60,7 @@
 #'
 #' `hessian = "sparse"` returns the Gauss-Newton Hessian of the forward sweep
 #' as a sparse `Matrix`, assembled from the blocks of the conditions; [trust()]
-#' factorises it where its argument `sparse` takes the sparse path, and [vcov()]
+#' factorizes it where the argument `sparse` takes the sparse path, and [vcov()]
 #' solves it for the columns of `which`.
 #'
 #' With `deriv = FALSE` it returns the value alone.
@@ -76,7 +77,7 @@ NULL
 #' @description Turns an [odemodel()] into a prediction function that
 #' integrates the states and, with `deriv = TRUE`, their sensitivities.
 #'
-#' @param odemodel An [odemodel()]. Its backend decides which method runs.
+#' @param odemodel An [odemodel()]. The backend of the model decides which method runs.
 #' @param forcings `data.frame` with columns `name` (character or factor),
 #'   `time` and `value`, one row per data point of a forcing declared in
 #'   `odemodel(forcings = )`. See section Forcings.
@@ -105,12 +106,12 @@ NULL
 #'     of the gradient. Default `NULL`, no check on the gradient.
 #' @param fcontrol `deSolve` backend only. List with the interpolation
 #'   settings of the forcings, `method`, `rule`, `f` and `ties` as in
-#'   [stats::approxfun()], passed to [deSolve::ode()] as its `fcontrol`.
+#'   [stats::approxfun()], passed to [deSolve::ode()] as argument `fcontrol`.
 #' @param ... Not used; an argument not named here is an error.
 #'
 #' @section Solver options:
 #' On the `cppDE` and `Sundials` backends the lists take the entries below and
-#' pass them to [cppDE::solveODE()]. An entry not given keeps its default; an
+#' pass them to [cppDE::solveODE()]. An entry not given keeps the default; an
 #' unknown entry is an error, also when set later with [controls()].
 #'
 #' * `atol`, `rtol`: absolute and relative error tolerance, default `1e-6`.
@@ -149,7 +150,7 @@ NULL
 #'
 #' @section Forcings:
 #' On the `cppDE` and `Sundials` backends each forcing is the monotone cubic
-#' Hermite interpolant (PCHIP) of its data points, see
+#' Hermite interpolant (PCHIP) of the forcing data points, see
 #' [cppDE::forcingValues()]. Outside the points it holds the value of the
 #' first and the last one; a single point gives a constant. The integrator
 #' does not stop at the points, so a jump is best given by an event or by
@@ -194,7 +195,7 @@ Xs <- function(odemodel, ...) {
          call. = FALSE)
 }
 
-# One deSolve solve through cOde::odeC(). Its warnings are kept back, and a solve
+# One deSolve solve through cOde::odeC(). The solver warnings are kept back, and a solve
 # that ends before the last time point warns once with the first of them.
 .odeCSolve <- function(args, who) {
   msgs <- character(0)
@@ -303,7 +304,7 @@ Xs.deSolve <- function(odemodel, forcings = NULL, events = NULL, names = NULL, c
       out <- .odeCSolve(c(list(y = unclass(yini), times = times, func = func,
                                parms = mypars, forcings = forc,
                                events = list(data = events), fcontrol = fcontrol), optsOde), "Xs")
-      out <- submatrix(out, rows = out[, "time"] %in% requested, cols = c("time", names))
+      out <- .submatrix(out, rows = out[, "time"] %in% requested, cols = c("time", names))
       
     } else {
       
@@ -315,7 +316,7 @@ Xs.deSolve <- function(odemodel, forcings = NULL, events = NULL, names = NULL, c
                                    events = list(data = events)), optsSens), "Xs")
       outSens <- outSens[outSens[, "time"] %in% requested, , drop = FALSE]
 
-      out <- submatrix(outSens, cols = c("time", names))
+      out <- .submatrix(outSens, cols = c("time", names))
 
       # Forcings live in `names` so the value matrix can return them, but the
       # extended ODE only has sensitivities for state variables. Restrict
@@ -357,7 +358,7 @@ Xs.deSolve <- function(odemodel, forcings = NULL, events = NULL, names = NULL, c
 
 }
 
-# A prepared batch handle is live while its entry point is loaded from the shared
+# A prepared batch handle is live while the entry point is loaded from the shared
 # object it was resolved from; a rename or a workspace reopened elsewhere drops it.
 .batchHandleLive <- function(handle) {
   if (is.null(handle)) return(FALSE)
@@ -489,14 +490,14 @@ Xs.cppDE <- function(odemodel, forcings = NULL, events = NULL, names = NULL, con
   has_reverse <- !is.null(reversed)
   has_reverse2 <- !is.null(reversed2)
   # Checkpoint store and checked sweep exist only on the native backend; CVODES
-  # keeps its own. Checked when options are read, so controls<- is covered.
+  # keeps a separate one. Checked when options are read, so controls<- is covered.
   has_store <- has_reverse && !identical(attr(reversed, "backend"), "cvode")
   reverseOpts <- function() {
     o <- controls$optionsReverse
     if (!is.null(o) && !has_store)
       stop("Xs: 'optionsReverse' checks the native backward pass. It needs ",
            "odemodel(backend = \"cppDE\", derivMode = c(\"forward\", \"reverse\")); ",
-           "the Sundials backend runs its own step-size control.", call. = FALSE)
+           "the Sundials backend runs a separate step-size control.", call. = FALSE)
     revOf(o)
   }
   reverseOpts()
@@ -592,7 +593,7 @@ Xs.cppDE <- function(odemodel, forcings = NULL, events = NULL, names = NULL, con
     fnms <- .intersectU(controls$names, forcNames)
     keepAll <- identical(nms, colnames(res$variable))
     out <- cbind(res$time,
-                 if (keepAll) res$variable else submatrix(res$variable, cols = nms),
+                 if (keepAll) res$variable else .submatrix(res$variable, cols = nms),
                  if (length(fnms))
                    cppDE::forcingValues(res$time, forcsOf(controls$forcings)[fnms]))
     colnames(out)[1] <- "time"
@@ -605,7 +606,7 @@ Xs.cppDE <- function(odemodel, forcings = NULL, events = NULL, names = NULL, con
     prdframe(out, deriv = dX, deriv2 = dX2, parameters = c(pars, fixed))
   }
 
-  # Every solve reads its options here, so reverse options set later are
+  # Every solve reads the options here, so reverse options set later are
   # checked too. `sec` is the sensErrCon of a solve with tangents.
   solveOpts <- function(deriv, sec = NULL) {
     reverseOpts()
@@ -774,9 +775,9 @@ Xs.cppDE <- function(odemodel, forcings = NULL, events = NULL, names = NULL, con
   }
   attr(P2X, "batchfn") <- P2Xbatch
   # The prepared solve of the native chain (.chainPlan()): one condition per entry of `timesL`,
-  # `dirsL` the directions of its tangent. With `seeds` the backward solve of forward over
+  # `dirsL` the directions of the condition tangent. With `seeds` the backward solve of forward over
   # reverse with that many seeds per condition instead. With `adjoint` the first order: the
-  # forward solve keeping its checkpoints, or with `seeds` the backward one, which the caller
+  # forward solve keeping the checkpoints, or with `seeds` the backward one, which the caller
   # hands them. NULL where the leaf cannot take part.
   attr(P2X, "chainSolve") <- function(timesL, dirsL, deriv, deriv2, seeds = 0L, adjoint = FALSE) {
     if (adjoint) {
@@ -842,7 +843,7 @@ Xs.cppDE <- function(odemodel, forcings = NULL, events = NULL, names = NULL, con
     .requireReverse(has_reverse, has_reverse2, K)
     ct <- .widenCotangent(w, states, controls$names)
     # Second order sweeps over the value pass's tangents, as prep1 builds them
-    # for a forward solve, and integrates its own trajectory.
+    # for a forward solve, and integrates a separate trajectory.
     pr <- prep1(pars, fixed, K > 1L, FALSE)
     o <- solveOpts(K > 1L, if (K > 1L) sensSec())
     # cppDE refuses a store and a control under forward-reverse.
@@ -880,7 +881,7 @@ Xs.cppDE <- function(odemodel, forcings = NULL, events = NULL, names = NULL, con
     condOf <- function(i)
       if (is.null(conditions)) NULL else conditions[[i]]
 
-    # Independent first-order seeds, each request with its own number of them.
+    # Independent first-order seeds, each request with a separate number of them.
     if (seeds) {
       .requireReverse(has_reverse, has_reverse2, 1L)
       o <- solveOpts(FALSE)
@@ -987,10 +988,10 @@ Xs.cppDE <- function(odemodel, forcings = NULL, events = NULL, names = NULL, con
 #' further quantities, such as fluxes, can be integrated by adding them to the
 #' equations.
 #'
-#' @param odemodel An [odemodel()]. Its backend decides which method runs.
+#' @param odemodel An [odemodel()]. The backend of the model decides which method runs.
 #' @param forcings,events,condition As in [Xs()].
 #' @param options Named list of solver options, as `options` of [Xs()]; see
-#'   its section Solver options. On the `deSolve` backend `method` defaults to
+#'   section Solver options there. On the `deSolve` backend `method` defaults to
 #'   `"lsoda"`.
 #' @param fcontrol `deSolve` backend only, as in [Xs()].
 #' @param ... Not used; an argument not named here is an error.
@@ -1163,7 +1164,7 @@ Xf.cppDE <- function(odemodel, forcings = NULL, events = NULL, condition = NULL,
 #' @param condition `NULL` for a prediction valid in every condition, or the
 #'   name of the condition it belongs to.
 #' @return A [prdfn], called as `x(times, pars, ...)`, see section Calling a
-#'   dMod function. Outside its grid a state holds the value of the first or
+#'   dMod function. Outside the grid a state holds the value of the first or
 #'   the last point. Second-order derivatives are not available.
 #' @inheritSection dModfn Calling a dMod function
 #' @seealso [Xs()]
@@ -1282,7 +1283,7 @@ Xd <- function(data, condition = NULL) {
     }
     if (!jacobian) return(list(value = value))
 
-    # Upper neighbour first, so a clamped point (hi == lo) ends with weight 1.
+    # Upper neighbor first, so a clamped point (hi == lo) ends with weight 1.
     nt <- length(times)
     basis <- matrix(0, nt, nk)
     basis[cbind(seq_len(nt), hi)] <- frac
@@ -1342,7 +1343,8 @@ Xd <- function(data, condition = NULL) {
 #'
 #' @param g Named character vector or [eqnvec] defining the observation
 #' function, or a list of those named by condition, which builds one
-#' observation function per condition in a single call.
+#' observation function per condition in a single call. Expressions follow
+#' [cppDE::expressions].
 #' @param f Equations, anything [as.eqnvec()] accepts, or a prediction
 #'   function. The states and parameters are read off `f`; for a prediction
 #'   function the forcings count as states.
@@ -1407,7 +1409,7 @@ Y <- function(g, f = NULL, states = NULL, parameters = NULL,
   # in parallel and compiled once, the way `P()` handles a trafo list.
   if (is.list(g) && !inherits(g, "eqnvec")) {
     if (is.null(names(g)) || any(!nzchar(names(g))))
-      stop("Y(): a list of observables needs the conditions as its names.",
+      stop("Y(): a list of observables needs the conditions as names.",
            call. = FALSE)
     cores <- if (is.null(cores)) detectFreeCores() else min(detectFreeCores(), cores)
     result <- Reduce("+", parallel::mclapply(seq_along(g), function(i)
@@ -1494,7 +1496,7 @@ Y <- function(g, f = NULL, states = NULL, parameters = NULL,
     if (length(lack))
       stop("Y(): the prediction has no column ", paste(lack, collapse = ", "),
            ", which the observables read. A prediction function returns the ",
-           "states in its control 'names', see controls().", call. = FALSE)
+           "states in the control 'names' of that function, see controls().", call. = FALSE)
   }
 
   # `.ad_out` lets the batched entry hand in a precomputed AD result.
@@ -1515,7 +1517,7 @@ Y <- function(g, f = NULL, states = NULL, parameters = NULL,
     params <- c(unclass(pars), unclass(fixed))
 
     if (use_ad && deriv && !is.null(gevaluate)) {
-      # AD path: evaluate() returns y and its tangent, chain-ruled via dX/dP.
+      # AD path: evaluate() returns y and the tangent, chain-ruled via dX/dP.
       dX_full <- attr(out, "deriv")
       dX2_full <- attr(out, "deriv2")
       # A dX without any obsStates holds no sensitivity this function reads;
@@ -1542,7 +1544,7 @@ Y <- function(g, f = NULL, states = NULL, parameters = NULL,
       # normL2 stops on a NaN at a data point.
       gVal <- gAll[, observables, drop = FALSE]
       values <- cbind(time = out[, "time"], gVal)
-      if (attachInput) values <- cbind(values, submatrix(out, cols = -1))
+      if (attachInput) values <- cbind(values, .submatrix(out, cols = -1))
       myderivs <- ad_out$tangent
       myderivs2 <- if (deriv2) ad_out$hessian else NULL
       # Attached states not read by the observables keep their incoming
@@ -1582,7 +1584,7 @@ Y <- function(g, f = NULL, states = NULL, parameters = NULL,
       # Values only (reverse-only build).
       gVal <- gfun(out[, obsStates, drop = FALSE], params[obsParams], attachInput, fixedObsParams)[, observables, drop = FALSE]
       values <- cbind(time = out[, "time"], gVal)
-      if (attachInput) values <- cbind(values, submatrix(out, cols = -1))
+      if (attachInput) values <- cbind(values, .submatrix(out, cols = -1))
       myderivs <- NULL
       myderivs2 <- NULL
     }
@@ -1721,7 +1723,7 @@ Y <- function(g, f = NULL, states = NULL, parameters = NULL,
 
   attr(X2Y, "vjpfn") <- X2Yvjp
   attr(X2Y, "batchfn") <- X2Ybatch
-  # What the native chain (.chainPlan()) needs: the compiled function and the names of its
+  # What the native chain (.chainPlan()) needs: the compiled function and the names of the
   # inputs and outputs; NULL where the leaf cannot take part.
   attr(X2Y, "chainObs") <- function()
     if (use_ad && emit_d1 && !isTRUE(controls$attachInput) && !is.null(gEval$evaluateBatch))
@@ -1747,7 +1749,7 @@ Y <- function(g, f = NULL, states = NULL, parameters = NULL,
 #' @param condition `NULL` for a prediction valid in every condition, or the
 #'   name of the condition it belongs to.
 #' @return A [prdfn], called as `x(times, pars, ...)`, see section Calling a
-#'   dMod function. Its derivatives are zero.
+#'   dMod function. The derivatives of the prediction are zero.
 #' @inheritSection dModfn Calling a dMod function
 #' @seealso [Y()]
 #' @examples
@@ -1786,11 +1788,11 @@ Xt <- function(condition = NULL) {
     # (an error model reads them off the prediction), as in Xs.
     prdframe(out, deriv = sens, deriv2 = sens2, parameters = c(pars, fixed))
   }
-  # Time depends on no parameter, so its cotangent is zero.
+  # Time depends on no parameter, so the time cotangent is zero.
   attr(P2X, "vjpfn") <- function(times, pars, fixed = NULL, cotangent)
     .ctZero(names(pars), .ctK(.asCtOut(cotangent)))
   # The solve of the native chain (.chainPlan()), as the batch solve of Xs() answers it: time the
-  # one state, its derivatives and the cotangents of the backward solve zero.
+  # one state, the time derivatives and the cotangents of the backward solve zero.
   attr(P2X, "chainSolve") <- function(timesL, dirsL, deriv, deriv2, seeds = 0L, adjoint = FALSE) {
     back <- seeds > 0L
     preps <- lapply(seq_along(timesL), function(i) {

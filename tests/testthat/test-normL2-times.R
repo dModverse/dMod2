@@ -1,5 +1,5 @@
-# normL2(times = ) as a list named by condition: each condition solves on its
-# own grid from its first time, and an event before that start does not fire.
+# normL2(times = ) as a list named by condition: each condition solves on a separate
+# grid from the first time of the condition, and an event before that start does not fire.
 
 .times_fx <- local({
   cache <- NULL
@@ -27,7 +27,7 @@
   as.datalist(rbind(d("C1", c(0.6, 0.4, 0.2)), d("C2", c(0.9, 0.5, 0.3))))
 }
 
-test_that("per-condition times start each condition at its own first time", {
+test_that("per-condition times start each condition at the condition first time", {
   skip_if_not_installed("cppDE"); skip_on_cran()
   prd  <- .times_fx()$prd
   data <- .times_data()
@@ -49,7 +49,7 @@ test_that("per-condition times start each condition at its own first time", {
 
   expect_false(isTRUE(all.equal(split$value, early$value)))
   expect_false(isTRUE(all.equal(split$value, late$value)))
-  # a condition the list leaves out solves on its data times alone
+  # a condition the list leaves out solves on the data times alone
   expect_equal(normL2(data, prd, times = list(C1 = -10))(pars, deriv = TRUE)$value,
                split$value)
 
@@ -70,7 +70,7 @@ test_that("times as a list is named by the conditions of the data", {
   expect_error(normL2(data, prd, times = list(-10, 0)), "named by the conditions")
 })
 
-test_that("a leaf of several conditions answers each with its own times", {
+test_that("a leaf of several conditions answers each with the condition times", {
   x <- prdfn(function(times, pars, fixed = NULL, deriv = TRUE, deriv2 = FALSE) {
     J <- array(times, c(length(times), 1L, 1L), dimnames = list(NULL, "y", "a"))
     prdframe(cbind(time = times, y = pars[["a"]] * times), deriv = if (deriv) J, parameters = pars)

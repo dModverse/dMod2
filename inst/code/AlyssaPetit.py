@@ -10,7 +10,7 @@
 #   - a solution is a ratio of positive sums by construction, nothing is ever
 #     expanded to prove it,
 #   - differences cancel exactly between balances (moiety sums, recycling
-#     loops, a ligand that leaves only through its receptors), because
+#     loops, a ligand that leaves only through the receptors), because
 #     identical atoms share one coefficient,
 #   - solutions stay lazy and small: they reference each other, the LP keeps
 #     the references acyclic, and one resolution happens at output time.
@@ -59,8 +59,8 @@ def ParseVolumes(volumes):
 
 
 def _amount_key(flux):
-    # Floats to 12 significant digits: a numeric volume ratio times its
-    # denominator compares equal to its numerator.
+    # Floats to 12 significant digits: a numeric volume ratio times the
+    # denominator compares equal to the numerator.
     return flux.xreplace({f: sympy.Rational(format(float(f), '.12g'))
                           for f in flux.atoms(sympy.Float)})
 
@@ -87,8 +87,8 @@ def FindSinkCluster(SM, eps=1e-8, M=1e4, F=None, X=None, volumes=None):
     # c^T * SM <= 0 componentwise with at least one strictly negative entry.
     # Support of such c is a subset of states whose total mass monotonically
     # leaks out of the system -> all of them must be zero in steady state.
-    # Generalises checkNegRows (which only catches single-row sinks).
-    # The support may add a conserved moiety to a leaking cluster. Only its
+    # Generalizes checkNegRows (which only catches single-row sinks).
+    # The support may add a conserved moiety to a leaking cluster. Only the cluster
     # states that reach a leaking column along columns of the support are 0:
     # educts of the leaking columns, then the educts of every column producing
     # a state already found (as .zeroStatesFromSmatrix() in R).
@@ -127,7 +127,7 @@ def FindSinkCluster(SM, eps=1e-8, M=1e4, F=None, X=None, volumes=None):
 
 
 def _mono_sign_definite(mono, positive_syms):
-    # Monomial sign is set by its coefficient only if every symbolic factor is
+    # Monomial sign is set by the coefficient only if every symbolic factor is
     # known non-negative: declared positive, or raised to an even power.
     for base, exp in mono.as_powers_dict().items():
         if not base.free_symbols or base in positive_syms:
@@ -139,7 +139,7 @@ def _mono_sign_definite(mono, positive_syms):
 
 
 def _normalizeSign(expr):
-    # factor() normalises the sign of each irreducible factor, which can park a
+    # factor() normalizes the sign of each irreducible factor, which can park a
     # -1 in front of a quotient whose value is positive.
     numer, denom=sympy.fraction(expr)
     if _sign_class(denom)=='-':
@@ -232,7 +232,7 @@ def _finalSimplify(rs, full):
 
 
 def _topo_sort_eqs(eqs):
-    # Order 'lhs = rhs' entries so every definition precedes its uses -- the
+    # Order 'lhs = rhs' entries so every definition precedes the uses -- the
     # textual resolution substitutes entry i into entries j > i, so a
     # reference must point backwards. Free-parameter entries (lhs == rhs)
     # define nothing. Stable: among ready entries the earliest wins. A symbol
@@ -520,7 +520,7 @@ def _linear_factor(atom, s):
 
 def _candidates(states, atoms, neglect):
     # Symbols linear in at least one atom: states and rate constants. Per
-    # symbol, the atoms linear in it (usable on its side of an equation) and
+    # symbol, the atoms linear in it (usable on the symbol side of an equation) and
     # the atoms it sits in otherwise (a denominator, a square), which the
     # equation for it must leave out.
     occ={}
@@ -651,7 +651,7 @@ def _sign_of_sum(e):
     return signs.pop() if len(signs)==1 else 0
 
 def _compact(e):
-    # A polynomial written with its most frequent symbol factored out, recursively:
+    # A polynomial written with the most frequent symbol factored out, recursively:
     # no expansion, and a sum of positive terms stays one.
     f=sympy.factor(e)
     if not f.is_Add:
@@ -669,7 +669,7 @@ def _compact(e):
     return best*_compact(sympy.expand(sympy.Add(*inner)/best))+_compact(sympy.Add(*rest))
 
 def _own_quadratic(u, atoms, B_rows, row_of, forced, span, basis):
-    """A state's own balance, quadratic in the state once its denominators are
+    """A state's own balance, quadratic in the state once the denominators are
     cleared: a*u^2 = (P - N)*u + c with a, c, P, N positive sums. Returns
     (w, root) or None.
 
@@ -734,8 +734,8 @@ def _solve_unknown(u, Au, basis, Rnp, forced, span):
 
     c = w^T R: atoms of u (Au) have c <= 0 summing to -1, every other atom
     c >= 0, atoms in `forced` c = 0 (they would close a reference cycle).
-    Minimises the positive side, which keeps the equation sparse. The float
-    optimum is rationalised and re-checked exactly; it must be independent of
+    Minimizes the positive side, which keeps the equation sparse. The float
+    optimum is rationalized and re-checked exactly; it must be independent of
     the equations already used.
     """
     r, A=Rnp.shape
@@ -787,7 +787,7 @@ def _solve_unknown(u, Au, basis, Rnp, forced, span):
     return None
 
 def _formula(u, c, Au, atoms):
-    # scale to coprime integers: the LP normalisation is arbitrary
+    # scale to coprime integers: the LP normalization is arbitrary
     from math import gcd
     L=1
     for v in c.values():
@@ -823,8 +823,8 @@ def _reaches(start, target, deps):
 
 def _group_unknown(order, cands, nonlin, atoms, atom_syms, basis, Rnp, span,
                    sol, deps, B_rows, row_of, state_set):
-    # One side of an unsolved state's balance, every atom of it with its
-    # own unsolved rate constant. The fluxes of that side share their sum by
+    # One side of an unsolved state's balance, every atom of it with a separate
+    # unsolved rate constant. The fluxes of that side share their sum by
     # new free flux ratios, flux_g = r_g * flux_g0 (v1.3's r_*), and the sum
     # fixes k_g0.
     for y in order:
@@ -1018,7 +1018,7 @@ def Alyssa(model_csv, injections=(), givenCQs=(), neglect=(), testSteady='fast',
     r=len(basis)
     Rnp=numpy.array([[float(row.get(a, 0)) for a in range(len(atoms))] for row in basis])
     cands_all, nonlin=_candidates(states, atoms, neglect)
-    # a given conserved quantity keeps one of its states free, the first by
+    # a given conserved quantity keeps one of the quantity states free, the first by
     # default; if that state's balance is left, the next one is tried
     cq_groups=[]
     for cq in givenCQs:
@@ -1052,7 +1052,7 @@ def Alyssa(model_csv, injections=(), givenCQs=(), neglect=(), testSteady='fast',
 
     # A state whose flux terms occur in no other balance (an mRNA, a protein)
     # is safe to solve first. One that hands mass on (a precursor, a chain, a
-    # receptor pool) would put its rate constants into its solution, and a
+    # receptor pool) would put the rate constants of the state into the solution, and a
     # later balance may need exactly those: such states come after the rate
     # constants.
     atom_rows={}

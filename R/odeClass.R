@@ -61,8 +61,8 @@ print.odemodel <- function(x, ...) {
 
 #' Compiled ODE Model
 #'
-#' Generates and compiles the code of an ODE system and, as requested, of its
-#' first- and second-order sensitivities and its adjoint. [Xs()] or [Xf()] turn
+#' Generates and compiles the code of an ODE system and, as requested, of the
+#' first- and second-order sensitivities and the adjoint. [Xs()] or [Xf()] turn
 #' the result into a prediction function.
 #'
 #' @param f Named character vector, [eqnvec] or [eqnlist] with the right-hand

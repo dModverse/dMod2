@@ -9,7 +9,7 @@ test_that("insert on a symbol that is not in the trafo is a no-op", {
 
 test_that("compound identifiers may contain digit-leading parts", {
 
-  # "21mRNA" is not a syntactic name on its own, but "k_pr_21mRNA" is.
+  # "21mRNA" is not a syntactic name alone, but "k_pr_21mRNA" is.
   trafo <- define(eqnvec(), "x<-x",
                   x = c("k_pr_21mRNA", "k_pr_21mRNA_Pert", "alpha"))
 
@@ -66,7 +66,7 @@ test_that("branch tolerates grid columns that match no parameter", {
 
 test_that("dots are resolved in the calling frame", {
 
-  # A caller inside a function must see its own variables, not only globals.
+  # A caller inside a function must see the local variables, not only globals.
   build <- function() {
     pars <- c("alpha", "beta")
     repl <- "0.5"
@@ -116,7 +116,7 @@ test_that("subset() on an eqnlist sees the calling frame", {
 
 })
 
-test_that("a compound replacement keeps its precedence", {
+test_that("a compound replacement keeps the precedence", {
 
   trafo <- define(eqnvec(), "x<-x", x = c("a", "b"))
   trafo <- define(trafo, "c <- x/tot*k^tot", x = "a")

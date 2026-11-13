@@ -26,15 +26,16 @@ align(
 
 \item{sd}{Standard deviation of the start perturbation on the parameter scale.}
 
-\item{iterlim}{Iteration limit of the optimiser; with Laplace, spike-and-slab
+\item{iterlim}{Iteration limit of the optimizer; with Laplace, spike-and-slab
 or Dirichlet-process terms the outer iterations of \code{\link[=em]{em()}}.}
 
 \item{init}{Optional named start of some parameters; the intercepts of the
 biological symbols start where the symbol is the median reading, the other
 intercepts where their symbol is 1, the other parameters at 0. The
-coefficients of the first scaling symbol then start where its predictor
+coefficients of the first scaling symbol then start where the predictor
+of that symbol
 is, per experiment, the median of the predictors at which the prediction
-meets its relative readings.}
+meets the relative readings.}
 
 \item{reml}{\code{TRUE} (default): the error parameters, and the hyperparameters
 of normal random terms, by restricted likelihood, the parameters of the
@@ -59,7 +60,7 @@ and \code{bloq}), \code{parameters} (with attribute \code{estimation}, \code{"RE
 the normalization and the prior), \code{npar} (one less per block), \code{AIC}
 (with REML comparable only between fits with the same parameters of the
 prediction), \code{values} (-2 log L of all fits, sorted), \code{multistart}
-(per fit its \code{value}, \code{converged} and \code{iterations}, see \code{\link[=plotValues]{plotValues()}};
+(\code{value}, \code{converged} and \code{iterations} per fit, see \code{\link[=plotValues]{plotValues()}};
 with REML the maximum likelihood fits the rounds start from),
 \code{remlRounds} (the rounds of the restricted likelihood, 0 without),
 \code{seSource} (\code{"Hessian"}, or \code{"Gauss-Newton"} where the reported Hessian
@@ -80,7 +81,7 @@ normalization of the values per block of experiments (see
 hyperparameters of normal random terms by default by restricted
 likelihood. Every experiment, a combination of
 the columns of the scaling formulas, or with random terms every group, is
-a condition of its own, so the Hessian is sparse over them; \code{\link[=trust]{trust()}} and
+a separate condition, so the Hessian is sparse over them; \code{\link[=trust]{trust()}} and
 \code{\link[=em]{em()}} take the sparse path as \code{sparse = "auto"} decides.
 }
 \details{
@@ -89,7 +90,7 @@ at changes of the objective, predicted decreases and gradients below
 \code{sqrt(.Machine$double.eps)}, the inner fits of the random effects too.
 }
 \examples{
-## Five time points on six gels, each gel with its own scale and an additive background
+## Five time points on six gels, each gel with a separate scale and an additive background
 set.seed(1)
 d <- expand.grid(time = c("0", "10", "30", "60", "120"), gel = paste0("G", 1:6),
                  stringsAsFactors = FALSE)
@@ -98,7 +99,7 @@ d$value <- (rlnorm(6, 7, 0.5)[match(d$gel, unique(d$gel))] * truth + 50) * rlnor
 
 \donttest{
 old <- options(dMod2.outdir = tempdir())
-## every symbol positive, on the log scale of its predictor; one value per time point,
+## every symbol positive, on the log scale of the predictor; one value per time point,
 ## one scale per gel
 logs <- c("yi <- exp(yi)", "sj <- exp(sj)", "bj <- exp(bj)", "sigmaR <- exp(sigmaR)")
 m <- alignmentModel(d, model = "yi * sj + bj", errmodel = "sigmaR * prediction",

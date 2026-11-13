@@ -15,6 +15,6 @@
 \code{x}, invisibly.
 }
 \description{
-Prints a parameter vector with information about its derivatives and its
-fixed parameters.
+Prints a parameter vector with information about derivatives and fixed
+parameters.
 }

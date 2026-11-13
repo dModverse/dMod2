@@ -7,7 +7,7 @@
 constraintGamma(shape, scale = 1, attrName = "prior", condition = NULL)
 }
 \arguments{
-\item{shape}{Named numeric vector of shape parameters. Its names select the
+\item{shape}{Named numeric vector of shape parameters. The names select the
 constrained parameters.}
 
 \item{scale}{Numeric, scalar or named and aligned with \code{shape}, default
@@ -22,7 +22,7 @@ one.}
 }
 \value{
 An objective function of class \code{objfn}, called as
-\code{obj(pars, ...)}, see \link{dModfn}. Its value is the full \verb{-2 log} density.
+\code{obj(pars, ...)}, see \link{dModfn}. The objective value is the full \verb{-2 log} density.
 }
 \description{
 Soft Gamma Constraint on Positive Parameters

@@ -1,5 +1,5 @@
 # mstrust(), profile(), vcov() and confint.parframe() on quadratic objectives
-# (constraintL2), so the expected behaviour has a closed form.
+# (constraintL2), so the expected behavior has a closed form.
 
 
 # ---- mstrust ------------------------------------------------------------
@@ -80,8 +80,8 @@ test_that("a multi-start records wall times and run settings, not Hessians", {
 
   run <- attr(fits, "run")
   expect_equal(run$fits, 3)
-  expect_equal(run$optimiser, "trust")
-  expect_equal(run$optimiserArgs$iterlim, 100)
+  expect_equal(run$optimizer, "trust")
+  expect_equal(run$optimizerArgs$iterlim, 100)
   expect_equal(run$samplerArgs$sd, 1)
   expect_gte(run$elapsed, 0)
   expect_named(run$versions, c("R", "dMod2", "cppDE"))
@@ -93,7 +93,7 @@ test_that("a multi-start records wall times and run settings, not Hessians", {
 })
 
 
-test_that("mstrust refuses an argument both the optimiser and the sampler take", {
+test_that("mstrust refuses an argument both the optimizer and the sampler take", {
   # An argument is routed by name, so one that both could take has no single
   # destination. The clash is caught before any fit starts.
   obj <- constraintL2(mu = c(a = 1.0, b = -0.5), sigma = 1)
@@ -105,18 +105,18 @@ test_that("mstrust refuses an argument both the optimiser and the sampler take",
 
   expect_error(mstrust(objfun = obj, center = c(a = 0, b = 0), fits = 1,
                        optmethod = myopt, sd = 2, cores = 1),
-               "Argument names of the optimiser and rnorm\\(\\) clash")
+               "Argument names of the optimizer and rnorm\\(\\) clash")
   expect_null(seen$sd)
 
-  # The sample size is always an argument, so an optimiser that takes `n`
+  # The sample size is always an argument, so an optimizer that takes `n`
   # clashes with every sampler even when the caller passes nothing more.
   nopt <- function(objfun, parinit, n = 1, ...)
     list(argument = parinit, value = 0, converged = TRUE, iterations = 0L)
   expect_error(mstrust(objfun = obj, center = c(a = 0, b = 0), fits = 1,
                        optmethod = nopt, samplefun = "runif", cores = 1),
-               "Argument names of the optimiser and runif\\(\\) clash")
+               "Argument names of the optimizer and runif\\(\\) clash")
 
-  # A sampler without `sd` leaves it to the optimiser alone.
+  # A sampler without `sd` leaves it to the optimizer alone.
   fits <- mstrust(objfun = obj, center = c(a = 0, b = 0), fits = 1,
                   optmethod = myopt, samplefun = "runif", sd = 2, cores = 1)
   expect_length(fits, 1L)
@@ -384,7 +384,7 @@ test_that("mstrust writes nothing unless asked", {
 })
 
 
-test_that("cautiousMode removes the .Rda fits of its own run only", {
+test_that("cautiousMode removes the .Rda fits of the same run only", {
   obj <- constraintL2(mu = c(a = 1.0, b = -0.5), sigma = 1)
   d <- file.path(tempdir(), paste0("ms_cautious_", as.integer(runif(1, 1e6, 9e6))))
   dir.create(d)
@@ -422,8 +422,8 @@ test_that("subset() on a parframe sees the calling frame", {
 
 # ---- PSOCK workers --------------------------------------------------------
 
-# Two conditions behind a Pimpl steady state, each source compiled into its
-# own shared object, so a worker has to find all of them by itself.
+# Two conditions behind a Pimpl steady state, each source compiled into a
+# separate shared object, so a worker has to find all of them by itself.
 .psock_env <- new.env(parent = emptyenv())
 
 psock_model <- function() {
@@ -501,7 +501,7 @@ test_that("a profile without an accepted step holds the origin only", {
   expect_equal(pr$constraint, 0)
 })
 
-test_that("mstrust passes the own arguments of another optimiser", {
+test_that("mstrust passes the own arguments of another optimizer", {
   obj <- constraintL2(mu = c(a = 1, b = 2), sigma = 1)
   fits <- mstrust(obj, c(a = 0, b = 0), fits = 2, sd = 1, cores = 1, optmethod = "trustL1",
                   lambda = 1e-3)

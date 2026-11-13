@@ -29,9 +29,9 @@ at 0). It may also set those and the hyperparameters: \verb{omega_*} (log
 standard deviations and Cholesky entries), \verb{lambda_*} (Laplace), \verb{prob_*}
 and \verb{tau_*} (spike and slab), \verb{concentration_*} and \verb{tau_*} (Dirichlet
 process), named \verb{<kind>_<grouping>} and numbered \verb{_1}, \verb{_2}, ... where a
-grouping has several blocks. An \code{em} fit as \code{init} gives its estimates,
-its \code{fixed} values, its random effects without those it set to 0 and,
-with sparse random effects, its inner modes as their start.}
+grouping has several blocks. An \code{em} fit as \code{init} gives the start: the
+estimates, \code{fixed} values and random effects of that fit, without those it
+set to 0, and with sparse random effects the inner modes.}
 
 \item{fixed}{Named numeric of parameters held fixed.}
 
@@ -48,7 +48,7 @@ Newton step is below \code{steptol}, default 1e-8.}
 predicted change of -2 log L is below \code{mtol}, default 1e-5.}
 \item{\code{secondOrderCorrection}}{the derivative of the volume term,
 default \code{TRUE}.}
-\item{\code{derivMode}}{how FOCEI gets the second derivatives of its volume
+\item{\code{derivMode}}{how FOCEI gets the second derivatives of the volume
 term: \code{"forward-reverse"} (default), sweeps for models built with
 \code{derivMode = c("forward", "reverse", "forward-reverse")}, or
 \code{"forward-forward"}, the second-order sensitivities of models built
@@ -56,8 +56,8 @@ with \code{deriv2 = TRUE}. Without the mode asked for the fit takes the
 other, with a message.}
 \item{\code{boundary}}{the largest rise of -2 log L at which a variance is
 set to 0, default 0.1, \code{FALSE} for none. With one grouping and several
-blocks, a normal random effect of its own block whose standard
-deviation ends below 0.1 is dropped and the fit repeated from the
+blocks, a normal random effect that forms a block alone and whose
+standard deviation ends below 0.1 is dropped and the fit repeated from the
 estimates; where -2 log L rises by at most \code{boundary}, that fit is
 returned and names the hyperparameter in \code{boundary}.}
 \item{\code{quadrature}, \code{saem}, \code{laplace}}{lists of the sections
@@ -77,12 +77,12 @@ of FOCEI over normal random effects on the sparse Gauss-Newton Hessian.
 An object of class \code{em} with, among others:
 \describe{
 \item{\code{argument}, \code{value}, \code{gradient}, \code{hessian}}{the estimates, -2 log
-L of the marginal likelihood, its gradient and Hessian (a sparse
+L of the marginal likelihood with gradient and Hessian (a sparse
 \code{Matrix} on the sparse path, \code{NULL} with Laplace, spike-and-slab or
 Dirichlet-process random effects).}
 \item{\code{information}}{with Laplace or spike-and-slab random effects the
 empirical information that gives the standard errors: \code{G / (G - 1)}
-times the sum of the outer products of the centred scores of the \code{G}
+times the sum of the outer products of the centered scores of the \code{G}
 groups, plus half the Hessian of the conditions without random
 effects.}
 \item{\code{converged}, \code{iterations}}{}
@@ -92,7 +92,7 @@ their standard deviations and correlations with standard errors.}
 for spike-and-slab and Dirichlet-process random effects also the
 cluster, 0 for the population value, and the posterior probability
 \code{p0} of a deviation of 0; a column \code{data} where a sparse random effect
-reaches no data of its group, which then rests at 0 with its prior.}
+reaches no data of the group; such an effect rests at 0 with the prior.}
 \item{\code{strengths}, \code{slab}}{the hyperparameters of the Laplace blocks
 and of the spike-and-slab and Dirichlet-process blocks.}
 \item{\code{valueSE}}{the standard error of \code{value} where it comes from
@@ -112,10 +112,11 @@ Methods: \code{print}, \code{summary}, \code{coef}, \code{vcov}, \link[=confint.
 Fits a mixed-effects model: the random effects that \code{\link[=insert]{insert()}} with effect
 formulas put into the parameter transformation are integrated out, and the
 fixed parameters and the hyperparameters of the random effects are
-estimated by maximising the marginal likelihood.
+estimated by maximizing the marginal likelihood.
 
 A group, a level of the grouping of a random term such as a patient or a
-cell line, may own several conditions, which share its random effects.
+cell line, may own several conditions, which share the random effects of the
+group.
 Normal, Laplace, spike-and-slab and Dirichlet-process random effects of one
 grouping may be combined. Random terms over several groupings, nested or
 crossed, are normal and integrated per connected component of the
@@ -143,8 +144,9 @@ these frozen nodes. The nodes of the mu-referenced fixed effects are frozen
 in \verb{phi = X beta + eta}. Entries of \code{control$quadrature}:
 \describe{
 \item{\code{tol}}{allowed change of -2 log L by the next level, default 0.1,
-split over the groups; each group takes the lowest level from its stage
-up within \code{tol / G} and never a lower one than before. \code{Inf} keeps the
+split over the groups; each group takes the lowest level from the current
+stage of the group up within \code{tol / G} and never a lower one than before.
+\code{Inf} keeps the
 levels of the stages.}
 \item{\code{levels}}{the stages, default \code{K + 1} with \code{K} the number of random
 effects of a group; level \code{K + s} integrates polynomials of total
@@ -160,10 +162,10 @@ largest are dropped, default \code{Inf}.}
 \item{\code{certificate}}{\code{FALSE}, or a list of \code{points} (default 256) and
 \code{seed} (default 1): importance sampling at the estimate from a t5
 proposal at the mode of each group. A group is flagged where the two
--2 log L differ by more than three standard errors plus the error its
-level allows, or the Pareto shape of the weights exceeds 0.7.}
+-2 log L differ by more than three standard errors plus the error the
+level of the group allows, or the Pareto shape of the weights exceeds 0.7.}
 \item{\code{epsEcm}, \code{maxEcm}}{for \code{"laplaceEM"}: the extrapolated distance to
-the fixed point at which it stops, default 1e-5, and its iterations.}
+the fixed point at which it stops, default 1e-5, and the iteration limit.}
 }
 }
 
@@ -199,14 +201,14 @@ draws.
 
 With Laplace, spike-and-slab or Dirichlet-process random effects the
 parameters and hyperparameters move in one trust region. The integral of a
-group is exact where the data couple none of its factors and the sum over
-the subsets of its spike-and-slab random effects stays within a budget of
-nodes; else it is expectation consistent, and a trial point at which that
-does not converge is a failed evaluation. Entries of \code{control$laplace}:
+group is exact where the data couple none of the factors and the sum over
+the subsets of the spike-and-slab random effects of the group stays within a budget of
+nodes; else it is the expectation consistent (EC) approximation, and a
+trial point at which EC does not converge is a failed evaluation. Entries of \code{control$laplace}:
 \describe{
 \item{\code{maxOuter}}{iterations of the trust region, default 200.}
-\item{\code{trustControl}}{its \code{\link[=trust]{trust()}} settings; \code{ftol}, \code{mtol} and \code{gtol}
-of its \code{tolControl} also end the search of the modes (else 1e-10).}
+\item{\code{trustControl}}{the \code{\link[=trust]{trust()}} settings; \code{ftol}, \code{mtol} and \code{gtol}
+of the \code{tolControl} there also end the search of the modes (else 1e-10).}
 }
 }
 
@@ -227,8 +229,8 @@ g <- Y(c(y = "amt * Ka / (V * Ka - Cl) * (exp(-Cl / V * time) - exp(-Ka * time))
        outdir = tempdir())
 err <- Y(c(y = "sigma_add"), g, attachInput = FALSE, modelname = "theoph_err", compile = FALSE,
          derivMode = dm, outdir = tempdir())
-## one condition per subject with its dose; the effect formula replaces each log parameter
-## by its intercept plus a random effect per subject
+## one condition per subject with the subject dose; the effect formula replaces each log parameter
+## by an intercept plus a random effect per subject
 doses <- tapply(th$Dose * th$Wt, th$Subject, `[`, 1)[subjects]
 trafo <- branch(define(NULL, "x <- x", x = c("Ka", "V", "Cl", "amt", "sigma_add")),
                 table = data.frame(ID = subjects, dose = doses, row.names = subjects))
@@ -240,7 +242,7 @@ compile(g, err, p, output = tempfile("theoph"))
 obj <- normL2(data, g * x * p, errmodel = err)
 init <- c(Ka = 0, V = 3, Cl = 0.7, sigma_add = log(0.5))
 
-## FOCEI fit, its estimates and the random effects per subject
+## FOCEI fit, the estimates and the random effects per subject
 fit <- em(obj, randomEffects(p), init = init)
 fit
 summary(fit)

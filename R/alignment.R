@@ -19,7 +19,8 @@
 #'
 #' Values and scales share a common factor. As in blotIt, the experiments that
 #' share biological values form blocks, and in each block the mean of the
-#' predictors of the first biological symbol over its values is held at 0, by a
+#' predictors of the first biological symbol over the values of that symbol is
+#' held at 0, by a
 #' residual of weight 1000: the geometric mean of the values is 1 for
 #' `"yi <- exp(yi)"` or `"yi <- 2^yi"`, the mean of a symbol without `trafo`,
 #' a log scale or an offset, is 0.
@@ -30,7 +31,7 @@
 #' biological symbols and data columns, so they depend on no scaling
 #' parameter; the scaling formulas are coded over the other readings, and
 #' their columns may be `NA` in absolute rows. A block that holds absolute
-#' readings is not normalized: its values and the experiments connected to
+#' readings is not normalized: the values in it and the experiments connected to
 #' them come out in the units of `absolute`.
 #'
 #' @param data data.frame with a column `value`, the readings, and the columns
@@ -41,7 +42,8 @@
 #' @param model Expression of the prediction of a relative reading in the
 #'   symbols of the formulas and data columns (covariates), e.g.
 #'   `"yi * sj + bj"`.
-#' @param errmodel Expression of its standard deviation; `prediction` stands for
+#' @param errmodel Expression of the standard deviation of a relative reading;
+#'   `prediction` stands for
 #'   the prediction of the reading, e.g. `"sqrt(sigmaA^2 + (sigmaR * prediction)^2)"`.
 #' @param biological,scaling,error Formulas, or lists of formulas, with one or
 #'   more symbols on the left, `sj + bj ~ gel`, and their predictor on the
@@ -56,7 +58,7 @@
 #'   `NULL` (default) is the first biological symbol. A scaling symbol in it
 #'   is an error.
 #' @param trafo Character vector of `"symbol <- expression"`, the scale of a
-#'   symbol in its predictor, e.g. `c("yi <- 10^yi", "sj <- 10^sj")`. Symbols
+#'   symbol in the predictor of that symbol, e.g. `c("yi <- 10^yi", "sj <- 10^sj")`. Symbols
 #'   not named are their predictor.
 #' @param technical Names of the columns of `data` that tell technical
 #'   replicates apart, such as the lanes of one sample on a gel. Readings that
@@ -65,7 +67,7 @@
 #'   taken on the log scale, for an error model in `prediction` (relative
 #'   errors), and arithmetic otherwise, as for readings already on a log
 #'   scale. A sample with censored readings
-#'   is censored at the mean of its readings with the limits in place of the
+#'   is censored at the mean of the sample readings with the limits in place of the
 #'   censored ones. `NULL` (default): every reading is a sample.
 #' @param distribution `"normal"` or `"t"` (Student-t, [normT()]).
 #' @param df Degrees of freedom for `distribution = "t"`.
@@ -114,7 +116,7 @@ alignmentModel <- function(data, model, errmodel, biological, scaling, error, ab
   rownames(data) <- NULL
 
   # the predictor of every symbol over the readings
-  # the symbols of one formula share the hyperparameters of its non-normal random terms
+  # the symbols of one formula share the hyperparameters of the non-normal random terms of the formula
   if (is.null(biological) || is.null(scaling))
     stop("alignmentModel: `biological` and `scaling` need formulas.", call. = FALSE)
   roles <- list(biological = biological, scaling = scaling, error = error)
@@ -213,7 +215,7 @@ alignmentModel <- function(data, model, errmodel, biological, scaling, error, ab
   m
 }
 
-## The design of a scaling formula over the relative readings alone, its columns NA or not in
+## The design of a scaling formula over the relative readings alone, columns NA or not in
 ## the absolute ones: those rows have no coefficient and no group of the random terms.
 .relativeDesign <- function(pf, coded, isAbs) {
   rel <- which(!isAbs)
@@ -232,7 +234,7 @@ alignmentModel <- function(data, model, errmodel, biological, scaling, error, ab
 
 ## One row per sample, the readings that agree in all columns but `value`, `lloq` and `technical`:
 ## their mean, on the log scale with `geometric`. A sample with censored readings is censored at
-## the mean of its readings with the limits in place of the censored ones, a bound of its mean.
+## the mean of the sample readings with the limits in place of the censored ones, a bound of the sample mean.
 .technicalMeans <- function(data, technical, lloq, censored, geometric) {
   key <- setdiff(names(data), c("value", "lloq", technical))
   id <- if (length(key)) do.call(paste, c(lapply(data[key], function(x) ifelse(is.na(x), "\rNA", as.character(x))),
@@ -315,7 +317,7 @@ print.alignmentmodel <- function(x, ...) {
   list(fixed = fixed, eta = eta)
 }
 
-## Per symbol the coefficients of every reading in every parameter, a sparse Matrix: its
+## Per symbol the coefficients of every reading in every parameter, a sparse Matrix: the
 ## predictor is coef %*% pars. Scaling symbols have none on absolute readings.
 .alignmentCoefficients <- function(m) {
   ap <- .alignmentPars(m)
@@ -347,7 +349,7 @@ print.alignmentmodel <- function(x, ...) {
 .rowCoefficients <- function(m, rows) lapply(m$coef, function(C) C[rows, , drop = FALSE])
 
 ## The readings `rows` for their evaluation: the parameters they depend on, per symbol the
-## columns of its parameters among them with the coefficients there as a dense matrix, and the
+## columns of the parameters of the symbol among them with the coefficients there as a dense matrix, and the
 ## covariates. `coef` holds the coefficients of the rows.
 .alignmentLocal <- function(m, rows, coef = .rowCoefficients(m, rows)) {
   pn <- colnames(coef[[1]])[Matrix::colSums(Reduce(`+`, lapply(coef, abs))) > 0]
@@ -484,7 +486,7 @@ print.alignmentmodel <- function(x, ...) {
 
 ## ---- scales and normalization ------------------------------------------------------------
 
-## A symbol's value from its predictor and the derivative in it, by its trafo expression.
+## A symbol's value from the predictor and the derivative in it, by the trafo expression of the symbol.
 .trafoValue <- function(m, s, lin) {
   e <- str2lang(m$trafo[[s]])
   env <- setNames(list(lin), s)
@@ -506,7 +508,7 @@ print.alignmentmodel <- function(x, ...) {
 }
 
 ## The blocks of experiments connected by shared values of the first biological symbol, as in
-## blotIt, and per block without absolute readings the coefficients of the mean of its
+## blotIt, and per block without absolute readings the coefficients of the mean of the block
 ## predictors over those values.
 .alignmentNormalizationDesign <- function(m) {
   s <- m$symbols$symbol[m$symbols$role == "biological"][1]
@@ -715,8 +717,8 @@ print.alignmentmodel <- function(x, ...) {
   prdfn(P2X, parNames, NULL)
 }
 
-## The error model of the readings of all conditions: sigma depends on the parameters alone, its
-## model has the prediction substituted, so its vjp has no half on the prediction frame.
+## The error model of the readings of all conditions: sigma depends on the parameters alone, the error
+## model has the prediction substituted, so the vjp has no half on the prediction frame.
 .alignmentX2E <- function(shared, parNames) {
   X2Y <- function(out, pars, fixed = NULL, deriv = TRUE, deriv2 = FALSE, condition = NULL) {
     times <- out[, "time"]
@@ -746,7 +748,7 @@ print.alignmentmodel <- function(x, ...) {
   obsfn(X2Y, parNames, NULL)
 }
 
-## The condition of a call: the one it names, else the one of its first row.
+## The condition of a call: the one it names, else the one of the first row.
 .alignmentCondition <- function(shared, condition, times)
   if (length(condition)) condition[[1L]] else shared$cond[[times[1L]]]
 
@@ -763,7 +765,7 @@ print.alignmentmodel <- function(x, ...) {
     fn$evaluate(vars = .rowsOf(vars, k), params = numeric(0), tangentX = .rowsOf(tX, k), deriv2 = deriv2))
 }
 
-## The conditions of the calls, NULL unless the times of every condition are its rows.
+## The conditions of the calls, NULL unless the times of every condition are the rows of the condition.
 .alignmentRowConditions <- function(shared, times, conditions = NULL) {
   if (!length(times) || !is.list(times)) return(NULL)
   conds <- if (length(conditions) == length(times)) vapply(conditions, function(cn) cn[[1L]], "")
@@ -786,7 +788,7 @@ print.alignmentmodel <- function(x, ...) {
   blocks
 }
 
-## Per condition the positions of its parameters among the names `pn` of the parameters and `fn` of
+## Per condition the positions of the condition parameters among the names `pn` of the parameters and `fn` of
 ## the fixed ones of a request. Kept for the last two sets of names, as the prediction and the
 ## error model of a sweep ask with their names each.
 .alignmentPositions <- function(shared, conds, pn, fn) {
@@ -800,8 +802,8 @@ print.alignmentmodel <- function(x, ...) {
   pos
 }
 
-## Per condition of a batch its parameters in its request: `theta`, the values of all its
-## parameters with 0 where the request has none, `keep` and `free`, the free ones, `pars`, the
+## Per condition of a batch the condition parameters in the request: `theta`, the values of all
+## parameters of the condition with 0 where the request has none, `keep` and `free`, the free ones, `pars`, the
 ## values it has, from the parameters before the fixed ones, and `V`, the tangents of the free ones.
 .alignmentRequests <- function(shared, conds, parsList, fixedList) {
   p0 <- parsList[[1L]]; f0 <- fixedList[[1L]]
@@ -833,7 +835,7 @@ print.alignmentmodel <- function(x, ...) {
 }
 
 ## The prediction frames of many conditions, by one evaluation at all their rows where the times of
-## every condition are its rows, else one by one.
+## every condition are the rows of the condition, else one by one.
 .alignmentOutputsMany <- function(shared, times, parsList, fixedList, deriv, deriv2, cores, conditions = NULL) {
   conds <- .alignmentRowConditions(shared, times, conditions)
   if (is.null(conds))
@@ -881,7 +883,7 @@ print.alignmentmodel <- function(x, ...) {
 }
 
 ## The vjps of output `o` (1 prediction, 2 sigma) of many conditions, per condition [free x K]:
-## one evaluation at all their rows where the times of every condition are its rows, shared by the
+## one evaluation at all their rows where the times of every condition are the condition rows, shared by the
 ## two outputs of a sweep as in .alignmentVjp(), else one by one. With `seeds` every column is a
 ## first-order seed.
 .alignmentVjpMany <- function(shared, times, parsList, fixedList, cotangentList, o, cores, seeds = FALSE,
@@ -946,8 +948,8 @@ print.alignmentmodel <- function(x, ...) {
   out
 }
 
-## The condition of every reading: its experiment, the combination of the columns of the fixed
-## parts of the scaling formulas, within its connected component of the groups of the random
+## The condition of every reading: the experiment of the reading, the combination of the columns of the fixed
+## parts of the scaling formulas, within the connected component of the reading of the groups of the random
 ## terms, so the Hessian is sparse over them and every condition depends on few parameters.
 ## The name joins the parts that are set and not repeated, "absolute" for a reading without
 ## any, where these names tell the conditions apart.
@@ -970,7 +972,7 @@ print.alignmentmodel <- function(x, ...) {
   .effectName(if (distinct) short else full)
 }
 
-## The connected component of every reading in the groups of the random terms, named by its
+## The connected component of every reading in the groups of the random terms, named by the
 ## group of the first grouping; NA for a reading in no group, NULL without random terms.
 .alignmentComponents <- function(m) {
   r <- unlist(lapply(m$design, `[[`, "random"), recursive = FALSE)
@@ -1012,7 +1014,7 @@ print.alignmentmodel <- function(x, ...) {
   parNames <- unique(unlist(lapply(shared$local, `[[`, "pars"), use.names = FALSE))
   prd <- .fnWithConditions(.alignmentP2X(shared, parNames), conds)
   ef <- .fnWithConditions(.alignmentX2E(shared, parNames), conds)
-  # sigma is evaluated with the prediction and travels in its frame
+  # sigma is evaluated with the prediction and travels in the prediction frame
   attr(ef, "sigmaInPrediction") <- TRUE
   dl <- as.datalist(data.frame(name = "y", time = seq_len(n), value = m$y, sigma = NA_real_,
                                lloq = ifelse(is.na(m$lloq), -Inf, m$lloq), condition = cond,
@@ -1023,9 +1025,9 @@ print.alignmentmodel <- function(x, ...) {
 }
 
 
-## The random effects of the model as the random effects of em(): per grouping its groups, the
+## The random effects of the model as the random effects of em(): per grouping the groups, the
 ## conditions that hold readings of a group and the etas of a group; a condition holds the
-## readings of several groups of a grouping crossed with its experiment.
+## readings of several groups of a grouping crossed with the experiment of the condition.
 .alignmentRandomEffects <- function(m) {
   cond <- .alignmentConditions(m)
   conds <- unique(cond)
@@ -1038,7 +1040,7 @@ print.alignmentmodel <- function(x, ...) {
     lambda = rows[[i]]$lambda, prob = rows[[i]]$prob, concentration = rows[[i]]$concentration,
     tau = rows[[i]]$tau,
     stem = rows[[i]]$stem, stringsAsFactors = FALSE)))
-  # per condition the value of a reading column where all its readings share it, else NA
+  # per condition the value of a reading column where all readings of the condition share it, else NA
   single <- function(x) vapply(split(x, factor(cond, conds)), function(v) {
     u <- unique(v)
     if (length(u) == 1L) u else NA_character_
@@ -1071,7 +1073,7 @@ print.alignmentmodel <- function(x, ...) {
 #'   hyperparameters of normal random terms by default by restricted
 #'   likelihood. Every experiment, a combination of
 #'   the columns of the scaling formulas, or with random terms every group, is
-#'   a condition of its own, so the Hessian is sparse over them; [trust()] and
+#'   a separate condition, so the Hessian is sparse over them; [trust()] and
 #'   [em()] take the sparse path as `sparse = "auto"` decides.
 #'
 #' @param model An `alignmentmodel`.
@@ -1079,14 +1081,15 @@ print.alignmentmodel <- function(x, ...) {
 #' @param cores Number of fits run in parallel; every fit runs on one core.
 #' @param method With random terms: `"focei"` or `"quadrature"`, see [em()].
 #' @param sd Standard deviation of the start perturbation on the parameter scale.
-#' @param iterlim Iteration limit of the optimiser; with Laplace, spike-and-slab
+#' @param iterlim Iteration limit of the optimizer; with Laplace, spike-and-slab
 #'   or Dirichlet-process terms the outer iterations of [em()].
 #' @param init Optional named start of some parameters; the intercepts of the
 #'   biological symbols start where the symbol is the median reading, the other
 #'   intercepts where their symbol is 1, the other parameters at 0. The
-#'   coefficients of the first scaling symbol then start where its predictor
+#'   coefficients of the first scaling symbol then start where the predictor
+#'   of that symbol
 #'   is, per experiment, the median of the predictors at which the prediction
-#'   meets its relative readings.
+#'   meets the relative readings.
 #' @param reml `TRUE` (default): the error parameters, and the hyperparameters
 #'   of normal random terms, by restricted likelihood, the parameters of the
 #'   symbols of the prediction (`model` and `absolute` of the
@@ -1113,7 +1116,7 @@ print.alignmentmodel <- function(x, ...) {
 #'   the normalization and the prior), `npar` (one less per block), `AIC`
 #'   (with REML comparable only between fits with the same parameters of the
 #'   prediction), `values` (-2 log L of all fits, sorted), `multistart`
-#'   (per fit its `value`, `converged` and `iterations`, see [plotValues()];
+#'   (`value`, `converged` and `iterations` per fit, see [plotValues()];
 #'   with REML the maximum likelihood fits the rounds start from),
 #'   `remlRounds` (the rounds of the restricted likelihood, 0 without),
 #'   `seSource` (`"Hessian"`, or `"Gauss-Newton"` where the reported Hessian
@@ -1170,7 +1173,7 @@ align <- function(model, fits = 10L, cores = 1L, method = c("focei", "quadrature
     multistart <- if (!is.null(best$multistart)) best$multistart[c("value", "converged", "iterations")]
                   else data.frame(value = best$value, converged = isTRUE(best$converged),
                                   iterations = as.numeric(best$iterations %||% NA)[1])
-    # the random effects the fit kept, a variance it set to 0 with its random effects fixed at 0
+    # the random effects the fit kept, a variance it set to 0 with the random effects of that variance fixed at 0
     re <- best$design$randomEffects
     pars <- c(best$argument, .etaVector(best), best$fixed)
     ctrl$boundary <- FALSE
@@ -1188,7 +1191,7 @@ align <- function(model, fits = 10L, cores = 1L, method = c("focei", "quadrature
   }
   rounds <- 0L
   if (reml) {
-    # rounds of the restricted likelihood from the best fit, its term linearized at the last round
+    # rounds of the restricted likelihood from the best fit, the REML term linearized at the last round
     design <- if (!is.null(re)) .emDesign(obj, re) else .remlDesign(obj)
     theta <- setdiff(names(best$argument), mean)
     ml <- list(best = best, pars = pars)
@@ -1216,7 +1219,7 @@ align <- function(model, fits = 10L, cores = 1L, method = c("focei", "quadrature
       if (moved < 1e-4) break
       if (rounds == 20L) {
         warning("align: the restricted likelihood moved the error parameters by ", signif(moved, 2),
-                " in its last of 20 rounds.", call. = FALSE)
+                " in the last of 20 rounds.", call. = FALSE)
         break
       }
     }
@@ -1288,7 +1291,7 @@ align <- function(model, fits = 10L, cores = 1L, method = c("focei", "quadrature
 }
 
 ## The expected information of the readings in -2 log L over the parameters `free` at `pars`, from
-## the first derivatives of prediction and sigma: of its value for a reading, of lying below its
+## the first derivatives of prediction and sigma: of the value for a reading, of lying below the
 ## limit for a censored one.
 .alignmentFisher <- function(m, pars, free) {
   cond <- .alignmentConditions(m)
@@ -1392,7 +1395,7 @@ align <- function(model, fits = 10L, cores = 1L, method = c("focei", "quadrature
   out
 }
 
-## Per combination of the first biological symbol the smallest scaled value of its censored
+## Per combination of the first biological symbol the smallest scaled value of the censored
 ## readings.
 .alignmentLimits <- function(m, aligned, scaled) {
   s <- m$symbols$symbol[m$symbols$role == "biological"][1]
@@ -1443,8 +1446,8 @@ align <- function(model, fits = 10L, cores = 1L, method = c("focei", "quadrature
 
 
 ## Start values: biological intercepts where the symbol is the median reading, or the median
-## positive one where its scale does not reach that, the other intercepts where their symbol
-## is 1, the rest 0. The coefficients of the first scaling symbol then start where its predictor
+## positive one where the scale of the symbol does not reach that, the other intercepts where their symbol
+## is 1, the rest 0. The coefficients of the first scaling symbol then start where the predictor
 ## is per experiment the median of the predictors that meet the relative readings.
 .alignmentStart <- function(m, free) {
   y <- m$y[is.finite(m$y)]
@@ -1487,7 +1490,7 @@ print.alignment <- function(x, ...) {
               if (!reml) "maximum likelihood"
               else sprintf("restricted likelihood (REML, %d %s)", x$remlRounds, if (x$remlRounds == 1L) "round" else "rounds"),
               x$value, x$AIC))
-  # with REML the multistart is by maximum likelihood, its best fit the start of the rounds
+  # with REML the multistart is by maximum likelihood, the best multistart fit the start of the rounds
   nf <- length(x$values)
   if (nf > 1L || reml)
     cat(sprintf("  %s%s: -2 log L %s\n",
@@ -1546,7 +1549,7 @@ as.datalist.alignment <- function(x, time = "time", name = "symbol", condition =
 #' @description `plotAligned()` shows the aligned values with their standard
 #'   errors, `plotScaled()` the measured readings mapped onto the values next to
 #'   them (a censored reading has no value and is left out), `plotResiduals()` the
-#'   standardised residuals against the prediction.
+#'   standardized residuals against the prediction.
 #'
 #' @param x An `alignment` from [align()].
 #' @param ... Ignored.
@@ -1560,11 +1563,11 @@ plotAligned <- function(x, ...) {
   grp <- setdiff(cols, xv)
   a$group <- if (length(grp)) do.call(paste, c(lapply(a[grp], as.character), sep = " ")) else "all"
   if (is.character(a[[xv]])) a[[xv]] <- factor(a[[xv]], levels = .axisLevels(a[[xv]]))
-  ggplot2::ggplot(a, ggplot2::aes(x = .data[[xv]], y = .data$value, colour = .data$group)) +
+  ggplot2::ggplot(a, ggplot2::aes(x = .data[[xv]], y = .data$value, color = .data$group)) +
     ggplot2::geom_point() +
     ggplot2::geom_errorbar(ggplot2::aes(ymin = .data$value - .data$sigma, ymax = .data$value + .data$sigma),
                            width = 0) +
-    ggplot2::labs(x = xv, y = "aligned value", colour = NULL) +
+    ggplot2::labs(x = xv, y = "aligned value", color = NULL) +
     scale_color_dMod(guide = if (length(grp)) "legend" else "none") + theme_dMod()
 }
 
@@ -1588,7 +1591,7 @@ plotScaled <- function(x, ...) {
   }
   ggplot2::ggplot(s, ggplot2::aes(x = .data[[xv]], y = .data$scaled)) +
     ggplot2::geom_point(alpha = 0.6) +
-    ggplot2::geom_point(data = bio, ggplot2::aes(x = .data[[xv]], y = .data$value), colour = dMod_colors[2]) +
+    ggplot2::geom_point(data = bio, ggplot2::aes(x = .data[[xv]], y = .data$value), color = dMod_colors[2]) +
     ggplot2::labs(x = xv, y = "reading on the scale of the values") +
     theme_dMod()
 }
@@ -1600,7 +1603,7 @@ plotResiduals.alignment <- function(parframe, ...) {
   s <- parframe$scaled[!parframe$scaled$bloq, ]
   ggplot2::ggplot(s, ggplot2::aes(x = .data$prediction, y = .data$residual)) +
     ggplot2::geom_point() + ggplot2::geom_hline(yintercept = 0, linetype = 2) +
-    ggplot2::labs(x = "prediction", y = "standardised residual") +
+    ggplot2::labs(x = "prediction", y = "standardized residual") +
     theme_dMod()
 }
 

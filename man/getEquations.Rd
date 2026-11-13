@@ -20,7 +20,8 @@ conditions. Default \code{NULL}.}
 }
 \value{
 A list of \code{eqnvec} objects, one per condition. If \code{conditions} has
-length one, the \code{eqnvec} itself. For an \code{odemodel}, its \code{eqnvec}.
+length one, the \code{eqnvec} itself. For an \code{odemodel}, the \code{eqnvec} of the
+model.
 }
 \description{
 Extract the Equations of an Object

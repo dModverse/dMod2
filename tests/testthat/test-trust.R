@@ -302,7 +302,7 @@ test_that("a collapsing trust radius reports failure, not convergence", {
 
 test_that("a flat objective under repeated rejection stops as stagnation", {
   # Without an rmin floor the run ends once the objective stops moving. That is
-  # "stagnation", never "gradient": the optimiser cannot tell a noise floor from
+  # "stagnation", never "gradient": the optimizer cannot tell a noise floor from
   # a bad model.
   misleading <- function(p, ...) {
     list(value = sum(p^2), gradient = -2 * p, hessian = diag(length(p)))
@@ -314,7 +314,7 @@ test_that("a flat objective under repeated rejection stops as stagnation", {
 
 
 test_that("a rank-deficient Gauss-Newton Hessian gives a minimum-norm step", {
-  # Rank-deficient Gauss-Newton Hessian with the gradient orthogonal to its null
+  # Rank-deficient Gauss-Newton Hessian with the gradient orthogonal to the null
   # space: the step must not extend along the zero-curvature direction.
   obj <- function(p, ...) {
     res <- as.numeric(p[1] + p[2] - 2)
@@ -350,7 +350,7 @@ test_that("curvature at roundoff level does not steer the degenerate step", {
 
 
 test_that("a null space wider than one direction still gives the minimum-norm step", {
-  # A rank-1 Hessian with a two-dimensional null space: roundoff splits its
+  # A rank-1 Hessian with a two-dimensional null space: roundoff splits the zero
   # eigenvalues, so no LAPACK build returns a basis g is exactly orthogonal to.
   J <- matrix(c(1, 2, 3), nrow = 1)
   obj <- function(p, ...) {
@@ -376,7 +376,7 @@ test_that("bounds compose with parinit on a bound and minimize = FALSE", {
   expect_equal(unname(on_bound$argument[["y"]]), 5, tolerance = 1e-6)
   expect_true(on_bound$atBound[["x"]])
 
-  # Maximising a concave objective under the same bound.
+  # Maximizing a concave objective under the same bound.
   negobj <- function(p, ...) {
     o <- .quadratic_objfn(target)(p)
     list(value = -o$value, gradient = -o$gradient, hessian = -o$hessian)
@@ -766,7 +766,7 @@ test_that("a single phase or no switch reproduces the plain run", {
   }
 })
 
-test_that("the source of a later phase is selectable and is charged for its evaluations", {
+test_that("the source of a later phase is selectable and is charged for the phase evaluations", {
   obj  <- .misscaled_objfn(c(a = 1, b = -2))
   init <- c(a = 0, b = 0)
   for (fb in c("bfgs", "sr1")) {
@@ -811,9 +811,9 @@ test_that("phases are checked by name and the fallback arguments refused", {
   expect_error(trust(obj, init, phases = list(list(hessianMethod = "gn")), switches = -1),
                "non-negative")
   expect_error(trust(obj, init, hessianMethod = "sr1",
-                     phases = list(list(hessianMethod = "gn"))), "its own hessianMethod")
+                     phases = list(list(hessianMethod = "gn"))), "every phase names the hessianMethod")
   expect_error(trust(obj, init, phases = list(list(hessianMethod = "gn")), sweep = "reverse"),
-               "its own sweep")
+               "every phase sets the sweep")
   expect_error(trust(obj, init, fallbackControl = list(hessianMethod = "sr1")),
                "`phases` and `switches`")
   expect_error(trust(obj, init, hessianFallback = "sr1"), "`phases` and `switches`")
@@ -839,7 +839,7 @@ test_that("a phase reports the sweep it used and refuses one it cannot run", {
                "forward sensitivities")
 })
 
-test_that("a phase that uses up its iterations ends unconverged", {
+test_that("a phase that uses up the phase iterations ends unconverged", {
   obj  <- .misscaled_objfn(c(a = 1, b = -2))
   init <- c(a = 0, b = 0)
   ph   <- list(list(hessianMethod = "gn"), list(hessianMethod = "bfgs", iterlim = 2L))
@@ -916,7 +916,7 @@ test_that("the total iterlim ends the run inside a later phase", {
   expect_false(f$converged)
 })
 
-test_that("every evaluation is charged once, with the sweep of its phase", {
+test_that("every evaluation is charged once, with the sweep of the phase", {
   lf   <- .logged_flat(2L)
   init <- c(a = 0, b = 0)
   f <- suppressWarnings(trust(lf$f, init, blather = TRUE, switches = 3L,
@@ -943,7 +943,7 @@ test_that("every evaluation is charged once, with the sweep of its phase", {
   }
 }
 
-test_that("each quasi-Newton phase has its own reseed allowance", {
+test_that("each quasi-Newton phase has a separate reseed allowance", {
   init <- c(a = 0, b = 0)
   qn   <- list(hessianReseed = "stall")
   one <- trust(.stepping_objfn(2L), init,
@@ -981,7 +981,7 @@ test_that("a quasi-Newton start survives an objective that returns no Hessian", 
   expect_lt(fit$value, 1e-8)
 })
 
-test_that("gn says which argument it cannot honour when no Hessian arrives", {
+test_that("gn says which argument it cannot honor when no Hessian arrives", {
   init <- c(x = -1.2, y = 1)
   expect_error(trust(.declining_objfn(), init, rinit = 1, rmax = 10),
                "no Hessian at parinit")
@@ -992,7 +992,7 @@ test_that("gn says which argument it cannot honour when no Hessian arrives", {
 
 test_that("a trial point without a Hessian is a failed evaluation, not an error", {
   # A Hessian at the start only: the kernel must treat the trial as infeasible
-  # rather than let the conversion throw from outside its own handler.
+  # rather than let the conversion throw from outside the kernel handler.
   init <- c(x = -1.2, y = 1)
   expect_warning(
     fit <- trust(.declining_objfn(function(p) isTRUE(all.equal(unname(p), unname(init)))), init, rinit = 1,

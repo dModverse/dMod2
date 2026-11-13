@@ -101,7 +101,7 @@ test_that("constraintL2 refuses numbers among sigma parameter names", {
                "all numbers or all parameter names")
 })
 
-test_that("a named scalar sigma applies to its own parameter only", {
+test_that("a named scalar sigma applies to the named parameter only", {
   expect_error(constraintL2(mu = c(a = 0, b = 0), sigma = c(b = 2)), "no entry for a")
   o <- constraintL2(mu = c(a = 0, b = 0), sigma = c(b = 2, a = 1))(c(a = 1, b = 2))
   expect_equal(unname(o$value), 1 + 1)

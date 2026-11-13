@@ -78,7 +78,7 @@ test_that("plot() of a prdframe and a data frame takes a subset", {
   expect_equal(max(p$data$time), 2)
 })
 
-test_that("plotPrediction keeps its data, subsets and transforms", {
+test_that("plotPrediction keeps the data, subsets and transforms", {
   pred <- .x2(c("C1", "C2"))(0:3, .pars2)
   p <- plotPrediction(pred)
   d <- attr(p, "data")
@@ -117,7 +117,7 @@ test_that("plotFluxes stacks the fluxes of every condition", {
   expect_identical(p$data, out)
 })
 
-test_that("plotFluxes evaluates unnamed fluxes and passes its arguments to x", {
+test_that("plotFluxes evaluates unnamed fluxes and passes the arguments to x", {
   x <- .x2(c("C1", "C2"))
   p <- plotFluxes(.pars2, function(...) unname(x(...)), 0:1,
                   list("piecewise(1, time < 1, 2)", "exp10(B1)"), legendTitle = "F")

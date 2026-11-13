@@ -15,7 +15,7 @@ normT(
 )
 }
 \arguments{
-\item{data}{Object of class \link{datalist}. Each of its conditions has to be
+\item{data}{Object of class \link{datalist}. Each condition of the data has to be
 a condition of \code{x}.}
 
 \item{x}{Object of class \link{prdfn}.}
@@ -28,9 +28,9 @@ defined only for a subset of conditions.}
 \item{times}{Optional time points at which the prediction is evaluated in
 addition to the data times: a numeric vector for all conditions, which then
 share one grid, or a list named by condition, which gives each condition
-its own grid. The prediction of a condition starts at the first time of its
-grid, where the initial values take effect, so a single time per condition
-sets its start. A model built with \code{odemodel(..., includeTimeZero = TRUE)},
+a separate grid. The prediction of a condition starts at the first time of
+the grid, where the initial values take effect, so a single time per condition
+sets the start of that condition. A model built with \code{odemodel(..., includeTimeZero = TRUE)},
 the default, has 0 in every grid and so starts at 0 at the latest.
 Fixed-time events before the start do not fire. Event times should be
 included if the model uses events.}
@@ -52,7 +52,7 @@ usable in \code{\link[=trust]{trust()}}, \code{\link[=mstrust]{mstrust()}}, \cod
 Builds the objective of a fit whose residuals follow a Student-t
 distribution with \code{df} degrees of freedom and scale given by the error
 model or the data's \code{sigma}: the \verb{-2 log} likelihood of the data, summed
-over the conditions. Its tails are heavier than those of \code{\link[=normL2]{normL2()}}, so
+over the conditions. The tails are heavier than those of \code{\link[=normL2]{normL2()}}, so
 single outliers move the fit less; \code{df = Inf} would be \code{\link[=normL2]{normL2()}}.
 }
 \examples{

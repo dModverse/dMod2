@@ -14,8 +14,8 @@ g <- Y(c(y = "amt * Ka / (V * Ka - Cl) * (exp(-Cl / V * time) - exp(-Ka * time))
        outdir = tempdir())
 err <- Y(c(y = "sigma_add"), g, attachInput = FALSE, modelname = "theoph_err", compile = FALSE,
          derivMode = dm, outdir = tempdir())
-## one condition per subject with its dose; the effect formula replaces each log parameter
-## by its intercept plus a random effect per subject
+## one condition per subject with the subject dose; the effect formula replaces each log parameter
+## by an intercept plus a random effect per subject
 doses <- tapply(th$Dose * th$Wt, th$Subject, `[`, 1)[subjects]
 trafo <- branch(define(NULL, "x <- x", x = c("Ka", "V", "Cl", "amt", "sigma_add")),
                 table = data.frame(ID = subjects, dose = doses, row.names = subjects))
@@ -27,7 +27,7 @@ compile(g, err, p, output = tempfile("theoph"))
 obj <- normL2(data, g * x * p, errmodel = err)
 init <- c(Ka = 0, V = 3, Cl = 0.7, sigma_add = log(0.5))
 
-## FOCEI fit, its estimates and the random effects per subject
+## FOCEI fit, the estimates and the random effects per subject
 fit <- em(obj, randomEffects(p), init = init)
 fit
 summary(fit)

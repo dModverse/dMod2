@@ -14,15 +14,15 @@ test_that("the snake-case names of the symmetry controls are derived", {
                    c("perprime_cap", "minsupport_cand_cap", "degree_cap"))
 })
 
-test_that("rref names its result", {
+test_that("rref names the result", {
   A <- rbind(c(1, 2, 3), c(2, 4, 7))
-  r <- rref(A)
+  r <- dMod2:::.rref(A)
   expect_named(r, c("rref", "pivots"))
   expect_identical(r[[1]], r$rref)
 })
 
 test_that("nullZ of a matrix without pivots is the identity", {
-  expect_equal(nullZ(matrix(0, 2, 3)), diag(3))
+  expect_equal(dMod2:::.nullZ(matrix(0, 2, 3)), diag(3))
 })
 
 test_that("plotArray takes more simulations than the profile has points", {

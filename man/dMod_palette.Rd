@@ -16,7 +16,7 @@ Defaults to \code{"okabe"}.}
 Character vector of length \code{n} with hex color codes.
 }
 \description{
-Returns the first \code{n} colors of the chosen palette. Beyond its seeds the
+Returns the first \code{n} colors of the chosen palette. Beyond the seeds of the palette the
 colors come from \code{Polychrome::createPalette()} if Polychrome is installed and
 from \code{\link[grDevices:hcl.colors]{grDevices::hcl.colors()}} otherwise. These extra colors are not
 colorblind-safe; a colorblind-safe palette warns when it runs out of seeds.

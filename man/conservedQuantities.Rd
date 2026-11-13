@@ -11,14 +11,14 @@ conservedQuantities(eqnlist)
 }
 \value{
 Named list of expressions, one per conserved quantity, named after
-their species: a single species by its own name, several by \code{totalXxx}
+their species: a single species by the species name, several by \code{totalXxx}
 from the name part they share, else \verb{total_<i>}; an empty list when
 nothing is conserved.
 }
 \description{
 The linear combinations of the states that the reactions leave
 unchanged. Every vector \eqn{w} of the null space of the stoichiometric
-matrix (\code{\link[=nullZ]{nullZ()}}) conserves the amount
+matrix conserves the amount
 \eqn{\sum_s w_s V_s x_s}{sum_s w_s V_s x_s}, written on the concentrations
 \eqn{x_s} with the volumes \eqn{V_s} of their compartments, 1 for a state
 held as an amount. Totals set by \code{\link[=customTotals]{customTotals()}} replace the detected ones.

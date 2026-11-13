@@ -7,7 +7,7 @@
 constraintCauchy(mu, sigma = 1, attrName = "prior", condition = NULL)
 }
 \arguments{
-\item{mu}{Named numeric vector of prior locations. Its names select the
+\item{mu}{Named numeric vector of prior locations. The names select the
 constrained parameters.}
 
 \item{sigma}{Numeric, scalar or named and aligned with \code{mu}, default \code{1}.
@@ -22,7 +22,7 @@ one.}
 }
 \value{
 An objective function of class \code{objfn}, called as
-\code{obj(pars, ...)}, see \link{dModfn}. Its value is the full \verb{-2 log} density.
+\code{obj(pars, ...)}, see \link{dModfn}. The objective value is the full \verb{-2 log} density.
 }
 \description{
 Soft Cauchy Constraint on Parameters

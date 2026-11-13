@@ -21,7 +21,7 @@ branch(
 \item{trafo}{Named character or \link{eqnvec}, or a list of those named by
 condition as \code{branch()} returns it. \code{NULL} starts a new one.}
 
-\item{expr}{\code{"lhs <- rhs"} string. Its symbols are replaced by the
+\item{expr}{\code{"lhs <- rhs"} string. The symbols in it are replaced by the
 arguments in \code{...} of the same name; see \code{\link[=repar]{repar()}}. For \code{insert()} on a
 branched transformation also one or several effect formulas, e.g.
 \code{cl ~ wt + (1 | ID)}, which replace the symbol by a linear predictor
@@ -32,7 +32,8 @@ formulas, \code{insert(trafo, x ~ 1 + (1 | ID), x = c("ka", "cl"))}.}
 \item{...}{Named vectors replacing the symbols of \code{expr} of the same name,
 one substitution per element. They are evaluated per condition, with
 the columns of \code{attr(trafo, "tree")}, \code{.currentTrafo} (the
-transformation of the condition) and \code{.currentSymbols} (its symbols) in
+transformation of the condition) and \code{.currentSymbols} (the symbols of
+that transformation) in
 scope. An unnamed logical argument of \code{insert()} selects the conditions
 where it is \code{TRUE}. Next to effect formulas they are more formulas and
 placeholders, evaluated once in the calling environment.}
@@ -41,7 +42,7 @@ placeholders, evaluated once in the calling environment.}
 match are changed. Default \code{NULL}, all.}
 
 \item{table}{\code{data.frame} with one row per condition, row names the
-conditions. Kept as attribute \code{tree}; its columns can be read in \code{...}
+conditions. Kept as attribute \code{tree}; the columns can be read in \code{...}
 by name.}
 
 \item{conditions}{Condition names; default \code{rownames(table)}.}
@@ -58,7 +59,7 @@ Same shape as \code{trafo}, or a list named by condition for
 Build, change and branch the symbolic transformations that
 \code{\link[=P]{P()}} turns into a \link{parfn}.
 \itemize{
-\item \code{define()} sets the entry named by the left-hand side of \code{expr} to its
+\item \code{define()} sets the entry named by the left-hand side of \code{expr} to the
 right-hand side, adding it if missing.
 \item \code{insert()} replaces the left-hand side by the right-hand side wherever it
 occurs in the expressions.

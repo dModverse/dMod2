@@ -10,7 +10,7 @@ plotResiduals(parframe, ...)
 \method{plotResiduals}{default}(parframe, x, data, split = "condition", errmodel = NULL, ...)
 }
 \arguments{
-\item{parframe}{A \link{parframe}, e.g. from \code{as.parframe(mstrust(...))}. Its
+\item{parframe}{A \link{parframe}, e.g. from \code{as.parframe(mstrust(...))}. The
 column \code{index} labels the fits; without it the row numbers are used.}
 
 \item{...}{Further arguments passed to \code{x}.}

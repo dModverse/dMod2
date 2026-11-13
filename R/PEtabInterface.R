@@ -1,5 +1,5 @@
 ## R/PEtabInterface.R: PEtab v1/v2 import and export on top of the SBML interface.
-## The v2 reader translates its tables into the v1 shapes the `.petab_parse_*`
+## The v2 reader translates the v2 tables into the v1 shapes the `.petab_parse_*`
 ## helpers consume; the exporter writes either version (default "2.0.0").
 
 # Internal: classify a YAML format_version string/number as the major version
@@ -10,7 +10,7 @@
   s <- as.character(fv)[1L]
   m <- regmatches(s, regexec("^([1-9][0-9]*)", s))[[1L]]
   if (length(m) < 2L)
-    stop("Unrecognised PEtab format_version: ", s)
+    stop("Unrecognized PEtab format_version: ", s)
   as.integer(m[2L])
 }
 
@@ -19,7 +19,7 @@
 
 #' Read a PEtab YAML File
 #'
-#' Reads a PEtab v1 or v2 YAML file, as selected by its `format_version`, and
+#' Reads a PEtab v1 or v2 YAML file, as selected by the `format_version` entry, and
 #' resolves the paths of the files it names. Only one problem per file is
 #' supported.
 #'
@@ -368,7 +368,7 @@ readPEtabTables <- function(yamlPath) {
 
   exp_df <- tables$experiments
   # A measurement without an experiment applies no overrides. It still needs a
-  # condition to key on, so one is synthesised: `cond_1`, or the next free
+  # condition to key on, so one is synthesized: `cond_1`, or the next free
   # number when the problem already uses that id.
   dflt_cond <- local({
     taken <- as.character(cond_wide$conditionId)
@@ -416,7 +416,7 @@ readPEtabTables <- function(yamlPath) {
         cids  <- cids[-1L]
       }
       # A period without a conditionId applies no overrides, which is what the
-      # synthesised condition stands for.
+      # synthesized condition stands for.
       dflt <- function(cid) if (nzchar(cid)) cid else dflt_cond
       if (!length(times)) {
         # Preequilibration only: the simulation holds the steady state.
@@ -461,7 +461,7 @@ readPEtabTables <- function(yamlPath) {
     meas$preequilibrationConditionId  <- preeq
     meas$experimentId <- NULL
 
-    # With a synthesised default condition, a no-override row is appended to
+    # With a synthesized default condition, a no-override row is appended to
     # cond_wide so .petab_parse_conditions sees it.
     if (any(c(sim, preeq) == dflt_cond) &&
         !dflt_cond %in% cond_wide$conditionId) {
@@ -586,7 +586,7 @@ readPEtabTables <- function(yamlPath) {
 
 # Internal: one record list(id, dist, pars, lower, upper, ...) per prior, or
 # NULL; v2 `priorDistribution` columns win over v1's. A `parameterScale*` prior
-# is on the optimised parameter; a plain `normal` on a non-lin scale is rejected.
+# is on the optimized parameter; a plain `normal` on a non-lin scale is rejected.
 .petab_parse_priors <- function(df, scales) {
 
   pick <- function(a, b)
@@ -729,8 +729,8 @@ readPEtabTables <- function(yamlPath) {
   parts <- Filter(Negate(is.null), lapply(specs, one))
   rest  <- specs[vapply(specs, function(sp) is.null(one(sp)), logical(1))]
 
-  # `constraintL2` is the penalty form and drops the normalisation of the
-  # Gaussian; PEtab reports a normalised density, so the constant comes back
+  # `constraintL2` is the penalty form and drops the normalization of the
+  # Gaussian; PEtab reports a normalized density, so the constant comes back
   # here next to the truncation.
   norm_const <- function(sp)
     if (identical(sp$dist, "normal")) 0.5 * (log(2 * pi) + 2 * log(sp$pars[2L]))
@@ -784,7 +784,7 @@ readPEtabTables <- function(yamlPath) {
 
 
 # Internal: one observable parse from several per-model parses. Each model
-# inlines its own SBML assignment rules, so the entries differ per model and
+# inlines the SBML assignment rules of the model, so the entries differ per model and
 # the first one to define an observable wins.
 .petab_merge_obs_meta <- function(parts) {
   flds <- c("obs", "obs_trafo", "noise", "noise_dist")
@@ -1027,7 +1027,7 @@ readPEtabTables <- function(yamlPath) {
   }
 
   # One row per sub-condition; the substitution maps live in the attributes
-  # "obs_subs" / "noi_subs" so the data.frame stays serialisable.
+  # "obs_subs" / "noi_subs" so the data.frame stays serializable.
   sub_cond_map <- unique(m[, c("simulationConditionId",
                                "preequilibrationConditionId",
                                "sub_condition")])
@@ -1097,7 +1097,7 @@ readPEtabTables <- function(yamlPath) {
 }
 
 
-# Internal: TRUE if expression `e` is 0 for all values of its other symbols once
+# Internal: TRUE if expression `e` is 0 for all values of the other symbols once
 # those in `zero` are 0, judged at two fixed positive points. An expression that
 # does not evaluate counts as nonzero.
 .petab_vanishes <- function(e, zero = character(0)) {
@@ -1121,7 +1121,7 @@ readPEtabTables <- function(yamlPath) {
 
 
 # Internal: states an equilibration from `init` cannot move. A reaction is idle
-# if its rate vanishes with `zero_pars` and `zero` at 0; `zero` and `frozen` take
+# if the rate vanishes with `zero_pars` and `zero` at 0; `zero` and `frozen` take
 # part in idle reactions only. Returns list(zero, frozen, idle).
 .petab_invariant_states <- function(reactions, init, zero_pars = character(0)) {
   st <- reactions$states
@@ -1202,7 +1202,7 @@ readPEtabTables <- function(yamlPath) {
   apply_scale_chain_rule <- function(tr) {
     log_pars   <- names(scales)[scales == "log"   & names(scales) %in% pouter_names]
     log10_pars <- names(scales)[scales == "log10" & names(scales) %in% pouter_names]
-    # The replacement has to be parenthesised as a whole: `^` is right
+    # The replacement has to be parenthesized as a whole: `^` is right
     # associative, so substituting into `K^2` would give `10^(K^2)` instead of
     # `(10^K)^2`.
     if (length(log_pars))   tr <- repar(tr, "x <- (exp(x))", x = log_pars)
@@ -1244,7 +1244,7 @@ readPEtabTables <- function(yamlPath) {
   noi_subs_attr <- attr(sub_cond_map, "noi_subs") %||% list()
 
   # One `P()` per group of conditions, so the generator and `cores` run over the
-  # whole list. Conditions with one preequilibration share its equilibration
+  # whole list. Conditions with one preequilibration share the equilibration
   # model, which is sound because this builder runs once per SBML model.
   plain_tr <- list(); pre_tr <- list(); post_tr <- list()
   eq_of    <- character(0); eq_model <- list(); eq_net <- list()
@@ -1292,7 +1292,7 @@ readPEtabTables <- function(yamlPath) {
     }
 
     # A steady state needs an autonomous system, so a time-dependent input is
-    # frozen at its value at the equilibration start; otherwise `time` reaches
+    # frozen at the value at the equilibration start; otherwise `time` reaches
     # the integrator as an unset parameter.
     peq_start <- 0
     if (any(grepl("\\btime\\b", peq_reactions$rates)))
@@ -1319,7 +1319,7 @@ readPEtabTables <- function(yamlPath) {
     tr_pre <- apply_scale_chain_rule(tr_pre)
 
     # Totals of the conserved quantities from the species initials, over the
-    # network without its structurally zero states, as Pimpl derives them.
+    # network without the structurally zero states, as Pimpl derives them.
     peq_totals <- if (length(peq_reactions$states)) {
       zs <- .zeroStatesFromSmatrix(peq_reactions)
       Filter(function(e) !all(intersect(getSymbols(e), zs$eqnlist$states) %in% zs$resting),
@@ -1441,7 +1441,7 @@ readPEtabTables <- function(yamlPath) {
     else formula
   }, obs, obs_trafo[names(obs)], SIMPLIFY = TRUE, USE.NAMES = TRUE)
   # A PEtab model may declare no species at all; the observables are then
-  # pure functions of parameters, so Y gets its symbols directly.
+  # pure functions of parameters, so Y gets the symbols directly.
   stateless <- length(reactions$states) == 0L
   Y(g          = as.eqnvec(obs_eqn),
     f          = if (stateless) NULL else as.eqnvec(reactions),
@@ -1519,7 +1519,7 @@ readPEtabTables <- function(yamlPath) {
   if (length(reactions$states) == 0L)
     return(list(odemodel = NULL, x = Xt()))
 
-  # A PEtab experiment may start after t = 0, and its initial values belong at
+  # A PEtab experiment may start after t = 0, and the initial values belong at
   # that start. The backends otherwise force 0 into the integration grid,
   # which would apply the initial values there instead.
   args <- list(reactions, modelname = modelname, backend = backend,
@@ -1583,7 +1583,7 @@ readPEtabTables <- function(yamlPath) {
 
 
 # Internal: mid-run condition switches as a dMod eventlist. A period boundary
-# assigns every target its condition overrides at the switch time; values may
+# assigns to every target the condition overrides at the switch time; values may
 # reference states, which is what PEtab's `A + 5` style overrides need.
 .petab_switch_events <- function(switches, conditions_df) {
   if (!length(switches) || is.null(conditions_df)) return(NULL)
@@ -1644,7 +1644,7 @@ readPEtabTables <- function(yamlPath) {
   )
 
   # An observable may read a symbol that an SBML assignment rule defines. The
-  # rule was inlined into the rates and its left hand side is no longer a
+  # rule was inlined into the rates and the left hand side is no longer a
   # parameter, so the observable and noise formulas need it inlined too.
   rules <- sbml$assignmentRules
   if (length(rules)) {
@@ -1678,7 +1678,7 @@ readPEtabTables <- function(yamlPath) {
   states    <- sbml$reactions$states
   rate_syms <- unique(unlist(lapply(sbml$reactions$rates, function(r)
                 getSymbols(r, exclude = c(states, "time")))))
-  # An event may name a parameter no rate mentions, typically its own trigger
+  # An event may name a parameter no rate mentions, typically the trigger of the event
   # time. The model still needs it, so it belongs to the inner set.
   ev_syms <- if (!is.null(all_events) && nrow(all_events))
     unique(unlist(lapply(unlist(all_events[intersect(c("time", "value", "root"),
@@ -1789,7 +1789,7 @@ readPEtabTables <- function(yamlPath) {
 
   dataList <- as.datalist(meas_info$data, splitBy = "condition")
 
-  # Each sub-condition inherits the simulation start of its condition, so the
+  # Each sub-condition inherits the simulation start of the parent condition, so the
   # objective can anchor the time grid where the experiment actually begins.
   t0_sub <- setNames(rep(0, length(dataList)), names(dataList))
   if (length(start_times)) {
@@ -1832,9 +1832,9 @@ readPEtabTables <- function(yamlPath) {
          paste(unique(obs_meta$obs_trafo[!obs_meta$obs_trafo %in%
                                           c("lin", "log", "log10")]),
                collapse = ", "),
-         " are not recognised.")
+         " are not recognized.")
 
-  # Every condition starts at the start time of its experiment: one grid for
+  # Every condition starts at the start time of the experiment: one grid for
   # all when they share it, else a grid per condition beginning there.
   t0 <- attr(data, "t0")
   if (is.null(t0)) t0 <- setNames(rep(0, length(data)), names(data))
@@ -1935,7 +1935,7 @@ readPEtabTables <- function(yamlPath) {
 #'   `reactions`, `odemodel`, `g`, `x`, `p`, `e`, `prd` (the composite
 #'   `g * x * p`), `obj`, `bestfit`, `parlower` and `parupper`. `obj` has the
 #'   PEtab fixed parameters set; `bestfit` is the PEtab `nominalValue` of each
-#'   estimated parameter, with the PEtab scales in its attribute
+#'   estimated parameter, with the PEtab scales in the attribute
 #'   `"petab_scales"`. The attribute `"petab_meta"` of the list holds what
 #'   [exportPEtabObject()] needs, among it the fixed parameters as `fixed`.
 #' @seealso [exportPEtabObject()], [readPEtabTables()], [importSbml()]
@@ -2019,7 +2019,7 @@ importPEtab <- function(yamlPath, backend,
     if (any(nas)) {
       if (length(sbml_paths) > 1L)
         stop("measurements.tsv has missing `modelId` values; in a multi-model ",
-             "problem every measurement row must specify its modelId.")
+             "problem every measurement row must specify a modelId.")
       meas$modelId[nas] <- default_mid
     }
     bad <- !meas$modelId %in% names(sbml_paths)
@@ -2045,7 +2045,7 @@ importPEtab <- function(yamlPath, backend,
       next
     }
     meas_m$modelId <- NULL
-    # PEtab assigns its condition targets and table parameters itself, ahead
+    # PEtab assigns the condition targets and table parameters itself, ahead
     # of an SBML initial assignment.
     sbml_m <- importSbml(unname(sbml_paths[mid]),
                          keep = c(setdiff(colnames(tables$conditions),
@@ -2352,7 +2352,7 @@ print.petabproblem <- function(x, ...) {
 }
 
 # Internal: stop when an SBML initial assignment or a condition entry refers to
-# its own target. `conditions = FALSE` skips the table, where a v2 targetValue
+# the target it assigns. `conditions = FALSE` skips the table, where a v2 targetValue
 # may read the target's current value.
 .petab_check_self_refs <- function(inits, cond_grid, conditions = TRUE) {
   bad <- character(0)
@@ -2498,7 +2498,7 @@ print.petabproblem <- function(x, ...) {
 
       identity = {
         if (state) {
-          # A state mapped to a symbol of its own name is set by an outer
+          # A state mapped to a symbol of the same name is set by an outer
           # parameter; it goes out as an initialAssignment, which the importer's
           # chain rule turns back into the scaled form.
           if (lhs %in% pouter_names || lhs %in% names(fixed))
@@ -2574,9 +2574,9 @@ print.petabproblem <- function(x, ...) {
 }
 
 
-# Internal: the states a Pimpl() steady state sets, its totals, and the initial values that let
+# Internal: the states a Pimpl() steady state sets, the totals, and the initial values that let
 # a PEtab pre-equilibration reach the same steady state: one species per total, in no other
-# total, starts at the total over its coefficient, every other set state at 0.
+# total, starts at the total over the coefficient of the species, every other set state at 0.
 .petab_steady_state <- function(steadyState, reactions) {
   if (is.null(steadyState)) return(NULL)
   rows <- if (inherits(steadyState, "parfn")) getEquations(steadyState)
@@ -2628,7 +2628,7 @@ print.petabproblem <- function(x, ...) {
 
 
 # Internal: events at time 0 that replace a state as columns of the condition table, valued per
-# condition `conds` by its stripped trafo; the other rows, pre-equilibrations, leave them empty.
+# condition `conds` by the stripped trafo of the condition; the other rows, pre-equilibrations, leave them empty.
 .petab_start_events <- function(events, cdf, conds, states, stripped, outer_ids) {
   if (is.null(events) || !NROW(events)) return(cdf)
   ev <- as.data.frame(events, stringsAsFactors = FALSE)
@@ -2692,7 +2692,7 @@ print.petabproblem <- function(x, ...) {
 #' @param steadyState The `parfn` of [Pimpl()] between `p` and the prediction,
 #'   or `NULL` (default). Every condition then starts from the steady state of
 #'   `reactions`, written as a pre-equilibration: one species per conserved
-#'   total starts at the total over its coefficient, the other states it
+#'   total starts at the total divided by the coefficient of that species, the other states it
 #'   sets at 0, and the conditions with equal parameters share one
 #'   pre-equilibration condition.
 #' @param events An `eventlist` of the model, or `NULL` (default). Events at
@@ -2718,7 +2718,7 @@ print.petabproblem <- function(x, ...) {
 #' @details An outer parameter named like a state (e.g. `"A <- exp(A)"`) cannot
 #'   share the species id in SBML. It is written as `init_<state>` and the
 #'   condition table sets the species to it. An outer parameter named
-#'   like an inner parameter keeps its name when the trafo is a pure scale
+#'   like an inner parameter keeps the name when the trafo is a pure scale
 #'   wrap; for any other mapping it is written as `<name>_outer`.
 #' @seealso [exportPEtabObject()] for a problem returned by [importPEtab()],
 #'   [importPEtab()].
@@ -2745,7 +2745,7 @@ exportPEtab <- function(data, reactions, observables, p, pouter,
                         formatVersion = "2.0.0",
                         dir, overwrite = FALSE) {
 
-  ## --- 1. datalist normalisation ------------------------------------------
+  ## --- 1. datalist normalization ------------------------------------------
   if (is.data.frame(data)) data <- as.datalist(data)
   if (is.list(data) && !inherits(data, "datalist")) data <- as.datalist(data)
   if (!inherits(data, "datalist"))
@@ -2767,7 +2767,7 @@ exportPEtab <- function(data, reactions, observables, p, pouter,
 
   pull_eqns <- function(obj, what) {
     if (is.function(obj)) {
-      # a function object of Y() keeps its equations per condition in its mappings
+      # a function object of Y() keeps the equations per condition in the mappings
       eqns <- attr(obj, "equations") %||%
         if (inherits(obj, "fn")) Filter(Negate(is.null), getEquations(obj))
       if (!length(eqns))
@@ -2797,7 +2797,7 @@ exportPEtab <- function(data, reactions, observables, p, pouter,
       setNames(rep("1", length(obs_ids)), obs_ids)
   } else {
     err_eqns <- pull_eqns(errors, "errors")
-    # an observable the error model leaves out takes the sigma of its data, as in normL2(), and
+    # an observable the error model leaves out takes the sigma of the data, as in normL2(), and
     # one without data the noise 1
     rest <- setdiff(obs_ids, names(err_eqns))
     sigmas <- lapply(setNames(rest, rest), function(o) unlist(lapply(data, function(d)
@@ -2832,7 +2832,7 @@ exportPEtab <- function(data, reactions, observables, p, pouter,
     "^(observable|noise)Parameter[0-9]+_", obs_inner)]
 
   # The states a steady state sets come from the pre-equilibration, not from `p`;
-  # its totals are parameters of the initial values.
+  # the totals are parameters of the initial values.
   ss <- .petab_steady_state(steadyState, reactions)
   trafo_states <- setdiff(states, ss$states)
   inner_pars <- union(inner_pars, ss$totals)
@@ -3212,9 +3212,9 @@ exportPEtabObject <- function(petab, dir, modelID = NULL,
                             c("conditionId", "conditionName", "condition"))
     fixed_v1 <- fixed[!names(fixed) %in% c(names(reactions$compartments),
                                            reactions$states, cond_targets)]
-    # An imported problem keeps its SBML constants in the SBML, as the source
+    # An imported problem keeps the SBML constants in the SBML, as the source
     # did: the importer reads a constant outside parameters.tsv as structure
-    # (a rate constant at 0 idles its reaction in a preequilibration).
+    # (a rate constant at 0 idles the reaction in a preequilibration).
     if (!is.null(param_meta))
       fixed_v1 <- fixed_v1[names(fixed_v1) %in%
                              c(names(param_meta$fixed), cond_syms, obs_syms)]
@@ -3228,12 +3228,12 @@ exportPEtabObject <- function(petab, dir, modelID = NULL,
       stringsAsFactors = FALSE
     ) else NULL
   } else {
-    # v2 has no parameterScale column, so non-lin parameters are linearised with
-    # one warning; a re-import optimises the linear parameter.
+    # v2 has no parameterScale column, so non-lin parameters are linearized with
+    # one warning; a re-import optimizes the linear parameter.
     nonlin <- est_ids[scales[est_ids] != "lin"]
     if (length(nonlin))
       warning("exportPEtabObject: PEtab v2 has no `parameterScale`. ",
-              "Linearising ", paste(nonlin, collapse = ", "),
+              "Linearizing ", paste(nonlin, collapse = ", "),
               ". Export to formatVersion = \"1\" to keep the scale.",
               call. = FALSE)
 
@@ -3332,7 +3332,7 @@ exportPEtabObject <- function(petab, dir, modelID = NULL,
   om <- obs_meta
 
   # Numeric noise lives in the data's `sigma` column and may vary by row; such an
-  # observable exports one noise placeholder and each row writes its sigma.
+  # observable exports one noise placeholder and each row writes the sigma of the row.
   .sigma_of <- function(o) unlist(lapply(data_list, function(d)
     d$sigma[as.character(d$name) == o]), use.names = FALSE)
   numeric_sigma <- vapply(names(om$obs), function(o) {
@@ -3346,7 +3346,7 @@ exportPEtabObject <- function(petab, dir, modelID = NULL,
   ln10 <- 2.302585092994046
   .rescale_v2 <- major != 1L & om$obs_trafo[names(om$obs)] == "log10"
 
-  # An observable with a single sigma throughout writes it as its noise
+  # An observable with a single sigma throughout writes it as the noise
   # formula; the per-row placeholder is kept for varying sigmas.
   one_sigma <- vapply(names(om$obs), function(o) {
     v <- unique(.sigma_of(o))
@@ -3361,7 +3361,7 @@ exportPEtabObject <- function(petab, dir, modelID = NULL,
 
   if (major == 1L) {
     noi_v1 <- unname(om$noise[names(om$obs)])
-    # v2 lets a noise formula name an observable; v1 needs its formula.
+    # v2 lets a noise formula name an observable; v1 needs the observable formula.
     noi_v1 <- vapply(noi_v1, function(f) {
       if (is.na(f)) return(f)
       hit <- intersect(getSymbols(f), names(om$obs))
@@ -3401,7 +3401,7 @@ exportPEtabObject <- function(petab, dir, modelID = NULL,
                          noise_dist[is.na(v2_dist)]), collapse = "; "))
     obs_form <- unname(om$obs[obs_ids])
     noi_form <- unname(om$noise[obs_ids])
-    # A symbolic noise keeps its parameters and takes the factor in the formula;
+    # A symbolic noise keeps the parameters and takes the factor in the formula;
     # a numeric one is written per row and takes it there instead.
     scale_here <- unname(.rescale_v2[obs_ids]) & !unname(numeric_sigma[obs_ids]) &
                   !unname(has_one[obs_ids])
@@ -3518,7 +3518,7 @@ exportPEtabObject <- function(petab, dir, modelID = NULL,
                      row.names = FALSE, na = "")
 
   ## --- experiments.tsv (v2 only) ----------------------------------------
-  # One synthesised experimentId per (sim, preeq) sub-condition tuple.
+  # One synthesized experimentId per (sim, preeq) sub-condition tuple.
   uniq_pairs <- unique(scm[, c("simulationConditionId",
                                "preequilibrationConditionId"),
                            drop = FALSE])
@@ -3532,7 +3532,7 @@ exportPEtabObject <- function(petab, dir, modelID = NULL,
     uniq_pairs$preequilibrationConditionId)
 
   if (major == 2L) {
-    # The synthesised condition, and any condition without a row in the
+    # The synthesized condition, and any condition without a row in the
     # condition table, is written as an empty conditionId, which v2 reads as
     # "no overrides".
     named <- function(cid) {
@@ -3691,8 +3691,8 @@ exportPEtabObject <- function(petab, dir, modelID = NULL,
   }
 
   # A condition target nothing else declares (a parameter read only by an
-  # initial assignment) still needs its SBML id, and a compartment sized by
-  # its own symbol its size; both take the model default.
+  # initial assignment) still needs an SBML id, and a compartment whose size is
+  # the compartment symbol needs a size; both take the model default.
   sbml_defaults <- meta$sbml_pars %||% numeric(0)
   comps <- names(reactions$compartments)
   own_size <- comps[vapply(comps, function(cid)

@@ -1,11 +1,11 @@
-## PEtab importer / exporter: parsers, normalisers and native exports.
+## PEtab importer / exporter: parsers, normalizers and native exports.
 
 ## --- interpreter resolution -----------------------------------------------
 
 test_that(".dmod_libsbml_python resolves a usable interpreter", {
 
   # Not behind .libsbml_works(), which turns every failure into a skip, and with
-  # Python uninitialised before the call, since that state is the one under test.
+  # Python uninitialized before the call, since that state is the one under test.
   skip_if_not_installed("reticulate")
   withr::local_envvar(c(DMOD_LIBSBML_PYTHON = NA, DMOD_LIBSBML_OK = NA))
 
@@ -69,7 +69,7 @@ test_that(".petab_parse_observables defaults to lin/normal and parses noise", {
 test_that(".petab_parse_conditions classifies columns as init / parameter", {
 
   # Case 0002 shape: a0 is in conditions and is a parameter symbol that also
-  # parameterises species A's initial. It classifies as "parameter".
+  # parameterizes species A's initial. It classifies as "parameter".
   df <- data.frame(conditionId = c("c0", "c1"),
                    a0          = c(0.8, 0.9),
                    stringsAsFactors = FALSE)
@@ -659,7 +659,7 @@ test_that("exportPEtab rejects self-referencing assignments", {
 
 ## --- PEtab v2 (no-SBML pure-parser tests) ---------------------------------
 
-test_that(".petab_major_version recognises v1 and v2 strings", {
+test_that(".petab_major_version recognizes v1 and v2 strings", {
   expect_identical(dMod2:::.petab_major_version(1L),       1L)
   expect_identical(dMod2:::.petab_major_version("1"),      1L)
   expect_identical(dMod2:::.petab_major_version("1.0.0"),  1L)
@@ -667,7 +667,7 @@ test_that(".petab_major_version recognises v1 and v2 strings", {
   expect_identical(dMod2:::.petab_major_version("2.1.3"),  2L)
   expect_identical(dMod2:::.petab_major_version(NULL),     1L)  # legacy default
   expect_error(dMod2:::.petab_major_version("v2"),
-               regexp = "Unrecognised PEtab format_version")
+               regexp = "Unrecognized PEtab format_version")
 })
 
 
@@ -713,7 +713,7 @@ test_that(".petab_v2_normalize_tables converts a single-condition v2 problem", {
 
   out <- dMod2:::.petab_v2_normalize_tables(tables)
 
-  # parameters: parameterScale synthesised; estimate coerced to 1/0.
+  # parameters: parameterScale synthesized; estimate coerced to 1/0.
   expect_true("parameterScale" %in% colnames(out$parameters))
   expect_equal(unique(out$parameters$parameterScale), "lin")
   expect_equal(out$parameters$estimate, c(1L, 1L, 0L))
@@ -901,7 +901,7 @@ test_that("readPEtabYaml errors on non-SBML model language", {
 
 
 
-test_that("exportSbml refuses a compartment sized by its own symbol without a value", {
+test_that("exportSbml refuses a compartment sized by the compartment symbol without a value", {
   if (!.libsbml_works()) skip("libsbml virtualenv not available")
   reactions <- eqnlist() %>%
     addReaction("A", "B", "k*A", "A to B") %>%
@@ -936,7 +936,7 @@ test_that("a prior on the parameter scale is truncated on that scale", {
 
 
 
-test_that("a prior term honours hessian = FALSE", {
+test_that("a prior term honors hessian = FALSE", {
   # A missing Hessian tells a caller that a reverse-swept term cannot produce
   # one, so a term asked for none must not return a zero matrix.
   specs <- list(list(id = "a", dist = "normal", pars = c(0, 1),
@@ -1013,9 +1013,9 @@ test_that("exportSbml declares rate species as modifiers", {
 
 
 
-test_that("v2 → v1 → v2 textual normaliser roundtrips a minimal problem", {
-  # Round-trip purely at the table level: build a v2 input, normalise to v1
-  # shape, write back as v2, normalise again, and compare key invariants.
+test_that("v2 → v1 → v2 textual normalizer roundtrips a minimal problem", {
+  # Round-trip purely at the table level: build a v2 input, normalize to v1
+  # shape, write back as v2, normalize again, and compare key invariants.
   v2 <- list(
     parameters = data.frame(
       parameterId = c("k1"), lowerBound = 1e-3, upperBound = 1e3,

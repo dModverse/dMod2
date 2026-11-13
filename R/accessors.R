@@ -70,7 +70,7 @@ controls <- function(x, ...) {
 
 }
 
-# The functions an objective evaluates, through its terms and the objectives it
+# The functions an objective evaluates, through the terms and the objectives it
 # wraps: prediction and error model of each normL2() term, and the parameter
 # transformation of an objfn * parfn.
 .objFns <- function(x) {
@@ -127,7 +127,7 @@ controls <- function(x, ...) {
   })
   leaves <- Filter(function(l) !is.null(l$env) &&
                      (is.null(name) || name %in% names(l$env$controls)), leaves)
-  # One kernel can sit in several places; format() names an environment by its
+  # One kernel can sit in several places; format() names an environment by the
   # address, which keeps this linear in the number of leaves.
   keys <- vapply(leaves, function(l) format(l$env), "")
   leaves[!duplicated(keys)]
@@ -690,7 +690,7 @@ modelname.fn <- function(x = NULL, ..., conditions = NULL) {
         modelname(m) <- value[k]  # recursive
       } else {
         attr(m, "modelname") <- value[k]
-        # A deSolve leaf keeps the compiled model in its closure, from which
+        # A deSolve leaf keeps the compiled model in the closure, from which
         # cOde reads the shared object to load, so the rename must reach it.
         e <- if (is.function(m)) environment(m) else NULL
         if (!is.null(e)) {
@@ -735,7 +735,8 @@ modelname.fn <- function(x = NULL, ..., conditions = NULL) {
 #' @param conditions character or numeric, restrict the result to these
 #'   conditions. Default `NULL`.
 #' @return A list of `eqnvec` objects, one per condition. If `conditions` has
-#'   length one, the `eqnvec` itself. For an `odemodel`, its `eqnvec`.
+#'   length one, the `eqnvec` itself. For an `odemodel`, the `eqnvec` of the
+#'   model.
 #' @export
 getEquations <- function(x, conditions = NULL) {
 

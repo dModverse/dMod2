@@ -17,7 +17,7 @@
 \item{pars}{a \link{parframe}, e.g. \code{as.parframe(mstrust(...))} or the result
 of \link[=profile.objfn]{profile()}.}
 
-\item{data}{object of class \code{datalist}. Default \code{NULL}. Its condition grid
+\item{data}{object of class \code{datalist}. Default \code{NULL}. The condition grid of the data
 adds covariate columns to the output.}
 }
 \value{

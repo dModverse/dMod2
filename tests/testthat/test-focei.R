@@ -1,5 +1,5 @@
 # FOCEI: the C++ kernel of the inner problem against an R replica, the outer fit against the
-# Theoph reference and nlmixr2, and its gradient against the slope of its objective.
+# Theoph reference and nlmixr2, and the gradient against the slope of the objective.
 
 
 # ---- Models ---------------------------------------------------------------
@@ -151,7 +151,7 @@ test_that("FOCEI reproduces the Theoph reference fit and agrees with nlmixr2", {
   expect_lt(abs(fit$value - ref$nlmixr2Value), 0.5)
 })
 
-test_that("the FOCEI gradient with a random effect in the error model is the slope of its objective", {
+test_that("the FOCEI gradient with a random effect in the error model is the slope of the objective", {
   skip_on_cran()
   oldwd <- setwd(tempdir()); on.exit(setwd(oldwd))
   mods <- .focei_models()$sigeta
@@ -193,7 +193,7 @@ test_that("the FOCEI gradient with a random effect in the error model is the slo
   Hinv <- lapply(design$groups, function(g) matrix(0.4, 1, 1, dimnames = list(E[g, ], E[g, ])))
   ffV <- .foceiVolume(design, full, NULL, names(init), Hinv)
   frV <- .volumeReverse(design, full, NULL, names(init), Hinv)
-  # the adjoint and the forward sensitivities differentiate discretisations that differ by the
+  # the adjoint and the forward sensitivities differentiate discretizations that differ by the
   # tolerance of the solver
   expect_equal(frV$gradient, ffV$gradient, tolerance = 1e-3)
   expect_equal(frV$etaShift, ffV$etaShift, tolerance = 1e-3)
@@ -410,7 +410,7 @@ test_that("the inner kernel has the value, gradient and Gauss-Newton Hessian of 
   }
 })
 
-test_that("a failed prediction at an inner trial point rejects the trial of its subject only", {
+test_that("a failed prediction at an inner trial point rejects the trial of that subject only", {
   skip_on_cran()
   oldwd <- setwd(tempdir()); on.exit(setwd(oldwd))
   subjects <- c("A", "B", "C")
@@ -428,7 +428,7 @@ test_that("a failed prediction at an inner trial point rejects the trial of its 
   outer <- c(V = log(20), Cl = log(5), sigma_prop = log(0.1), omega_V_V = log(0.3))
   km <- .kernelMeta(obj, mods$p, outer, c(eta_V_A = 0, eta_V_B = 0, eta_V_C = 0))
   predict <- dMod2:::.batchPredictor(km$design)
-  # the prediction of one subject fails at the first trial value of its eta, alone or in a batch
+  # the prediction of one subject fails at the first trial value of the subject eta, alone or in a batch
   bad <- NULL
   failing <- function(timesList, parsList, conditions, fixed) {
     for (q in which(conditions == "B")) {
@@ -453,7 +453,7 @@ test_that("a failed prediction at an inner trial point rejects the trial of its 
   expect_lt(abs(got$eta_modes["B", 1] - ref$eta_modes["B", 1]), 1e-5)
 })
 
-test_that("an inner trial point whose derivatives are not finite rejects the trial of its subject only", {
+test_that("an inner trial point whose derivatives are not finite rejects the trial of that subject only", {
   skip_on_cran()
   oldwd <- setwd(tempdir()); on.exit(setwd(oldwd))
   subjects <- c("A", "B", "C")
@@ -471,7 +471,7 @@ test_that("an inner trial point whose derivatives are not finite rejects the tri
   outer <- c(V = log(20), Cl = log(5), sigma_prop = log(0.1), omega_V_V = log(0.3))
   km <- .kernelMeta(obj, mods$p, outer, c(eta_V_A = 0, eta_V_B = 0, eta_V_C = 0))
   predict <- dMod2:::.batchPredictor(km$design)
-  # the sensitivities of one subject are NaN at the first trial value of its eta
+  # the sensitivities of one subject are NaN at the first trial value of the subject eta
   bad <- NULL
   poisoned <- function(timesList, parsList, conditions, fixed) {
     out <- predict(timesList, parsList, conditions, fixed)
@@ -564,7 +564,7 @@ test_that("the inner kernel matches the R replica for two observables per subjec
   }
 })
 
-test_that("an eta block with a vanishing variance is solved on its unit diagonal", {
+test_that("an eta block with a vanishing variance is solved on the unit diagonal", {
   A <- matrix(c(5e18, 1, 0.5, 1, 4, 1, 0.5, 1, 3), 3, dimnames = rep(list(c("a", "b", "c")), 2))
   B <- matrix(1:6, 3)
   expect_error(solve(A, B), "singular")

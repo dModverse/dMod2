@@ -33,7 +33,7 @@
 }
 
 # Every problem the file imports as published, imported once and linked into
-# one shared object. A failed import is kept as its error for the test to raise.
+# one shared object. A failed import is kept as the error for the test to raise.
 .petab_published <- local({
   cache <- NULL
   function() {
@@ -77,7 +77,7 @@
   pp
 }
 
-# Boehm under cppDE, exported by two tests. Its KLU macros keep it out of the
+# Boehm under cppDE, exported by two tests. The KLU macros of the model keep it out of the
 # shared object above.
 .petab_boehm_cppDE <- local({
   cache <- NULL
@@ -136,7 +136,7 @@
     p_rt3 <- P(as.eqnvec(c(A = "10^(A)", B = "10^(B)", k = "10^(K + 5)")),
                condition = "c1", modelname = "rt3_par")
 
-    # a steady state with its input at 0, which an event sets at time 0
+    # a steady state with the input at 0, which an event sets at time 0
     ss <- eqnlist() %>%
       addReaction("A", "B", rate = "k0*A") %>%
       addReaction("A + u", "B + u", rate = "k1*A*u") %>%

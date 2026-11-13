@@ -1,8 +1,8 @@
-// Shared subproblem helpers for the trust-region optimisers in
+// Shared subproblem helpers for the trust-region optimizers in
 // trust_kernel.cpp and trustL1_kernel.cpp.
 //
 // `trust_sub` is a faithful port of the Moré-Sorensen subproblem solver in
-// the historical R `trust()` (R/trust.R). The algorithm parametrises the
+// the historical R `trust()` (R/trust.R). The algorithm parametrizes the
 // Lagrange multiplier as `beep = sigma + lam_min`, so the smallest shifted
 // eigenvalue `beta_j = vals_j - lam_min` is always non-negative and the
 // degenerate index set is `{j : beta_j <= eig_tol}`, eig_tol being the noise
@@ -27,7 +27,7 @@
 //
 // with D = diag(|v|^{1/2}) and C = diag(|g| * jv) >= 0, so Bhat is positive
 // semi-definite whenever H is. Candidate steps are scored with `model_value`,
-// the model the subproblem itself minimises, which keeps the predicted and the
+// the model the subproblem itself minimizes, which keeps the predicted and the
 // achieved reduction referring to one and the same step.
 
 #ifndef DMOD_TRUST_SUBPROBLEM_H
@@ -79,7 +79,7 @@ inline void eigen_sym_local(const double* A, int K, double* vals, double* vecs) 
 
 // Moré-Sorensen trust-region subproblem.
 // Minimize g^T p + 1/2 p^T H p subject to ||p|| <= r, where H is given
-// implicitly by its eigendecomposition (vals ascending, vecs column-major).
+// implicitly by the eigendecomposition (vals ascending, vecs column-major).
 inline void trust_sub(int K, const double* g,
                       const double* vals, const double* vecs,
                       double r, double* p_out, double* predicted_red,
@@ -376,7 +376,7 @@ inline double line_min(int K, const double* ghat, const double* Bhat,
   return (b < 0.0) ? tmax : 0.0;
 }
 
-// Best in-box step among the truncated trust-region step `shat`, its reflection
+// Best in-box step among the truncated trust-region step `shat`, the reflection of it
 // and the scaled steepest-descent step, scored by `model_value`; `sqrt_absv` is
 // diag(D). `theta_frac` in (0, 1] of the distance to a face keeps it interior.
 inline void stepback(int K, const double* theta,
@@ -411,11 +411,11 @@ inline void stepback(int K, const double* theta,
   *m_out = model_value(K, ghat, Bhat, shat_out);
   *label = (f < 1.0) ? "truncated" : "full";
 
-  // shat already minimises m over the whole ball; no candidate can beat it.
+  // shat already minimizes m over the whole ball; no candidate can beat it.
   if (f >= 1.0) return;
 
   // Single reflection: walk to the blocking face, flip the blocked components,
-  // then minimise along the reflected direction within box and trust region.
+  // then minimize along the reflected direction within box and trust region.
   if (std::isfinite(alpha)) {
     for (int i = 0; i < K; ++i) {
       cand_shat[i] = alpha * shat[i];

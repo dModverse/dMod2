@@ -96,7 +96,7 @@ test_that("res errors if an observable in data is missing from the prediction", 
 
 # ---- datapointL2 --------------------------------------------------------
 
-# datapointL2 penalises (prediction[name, t] - target_par) / sigma in L2.
+# datapointL2 penalizes (prediction[name, t] - target_par) / sigma in L2.
 # It reads prediction from the shared `env` set by an upstream normL2.
 
 skip_if_no_compile <- function() {

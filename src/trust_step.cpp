@@ -1,4 +1,4 @@
-// One trust-region step and one quasi-Newton update for optimisers driven from
+// One trust-region step and one quasi-Newton update for optimizers driven from
 // R, such as the multiple-shooting driver. The step is trust_kernel.cpp's: parscale,
 // Coleman-Li scaling, Moré-Sorensen on the eigendecomposition, interior stepback.
 

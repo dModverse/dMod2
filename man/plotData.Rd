@@ -47,7 +47,7 @@ gives one panel per combination of name and condition.}
 \item{x}{object of class \code{datalist}.}
 }
 \value{
-A \code{ggplot} object. Its attribute \code{"data"} holds the plotted data
+A \code{ggplot} object. The attribute \code{"data"} holds the plotted data
 frame.
 
 A \code{ggplot} object.
@@ -100,7 +100,7 @@ plotPrediction(prediction, scales = "fixed",
 
 ## Simulate data
 set.seed(1)
-dataset <- wide2long(prediction)
+dataset <- as.data.frame(prediction)
 dataset <- dataset[seq(1, nrow(dataset), 5), ]
 dataset$value <- dataset$value + rnorm(nrow(dataset), 0, .1)
 dataset$sigma <- 0.1

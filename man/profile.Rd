@@ -69,7 +69,7 @@ such as \code{"data"}. \code{"value"} for both methods.}
 \item{algoControl}{List of path settings, merged into the defaults.
 Defaults are given as \code{"integrate"} / \code{"optimize"}.
 \describe{
-\item{\code{gamma}}{Initial factor of the correction towards the
+\item{\code{gamma}}{Initial factor of the correction toward the
 optimum of the other parameters. \code{1} / \code{0}.}
 \item{\code{W}}{Matrix in the path equation, \code{"hessian"} or
 \code{"identity"}. \code{"hessian"} is the exact Hessian where
@@ -77,18 +77,18 @@ optimum of the other parameters. \code{1} / \code{0}.}
 with second derivatives does, otherwise the one \code{fitted} returns,
 for \code{\link[=normL2]{normL2()}} the Gauss-Newton matrix; \code{deriv2 = FALSE} in
 \code{...} keeps that one. With \code{"identity"} a step moves the
-profiled parameter alone and the others are reoptimised at every step.
+profiled parameter alone and the others are reoptimized at every step.
 \code{"hessian"} / \code{"identity"}.}
 \item{\code{reoptimize}}{Whether every step is followed by a fit of the
 other parameters with \code{\link[=trust]{trust()}}. \code{FALSE} / \code{TRUE}.}
 \item{\code{correction}}{Relative correction above which \code{gamma}
-is halved; below half of it \code{gamma} doubles up to its initial
+is halved; below half of it \code{gamma} doubles up to the initial
 value. \code{1} for both methods.}
 \item{\code{reg}}{Singular values below \code{reg} are dropped when the
 Hessian is inverted. \code{.Machine$double.eps} / \code{0}.}
 }}
 
-\item{optControl}{List of arguments for \code{\link[=trust]{trust()}} in the re-optimisation,
+\item{optControl}{List of arguments for \code{\link[=trust]{trust()}} in the re-optimization,
 merged into \code{list(rinit = 0.1, rmax = 10, iterlim = 10)} for
 \code{"integrate"} and \code{list(rinit = 0.1, rmax = 10, iterlim = 100)}
 for \code{"optimize"}. Any other argument of \code{\link[=trust]{trust()}} can be added.}
@@ -97,9 +97,8 @@ for \code{"optimize"}. Any other argument of \code{\link[=trust]{trust()}} can b
 
 \item{cores}{Number of parallel workers over parameters, or
 \code{c(pars = , conditions = )} to also give each worker a condition axis,
-which selects a PSOCK backend. Multiplies with the threads each objective
-evaluation uses; keep the product below the number of cores. Default
-\code{1}.}
+which selects a PSOCK backend. Keep the product with the threads of each
+objective evaluation below the number of cores. Default \code{1}.}
 
 \item{cautiousMode}{Logical. If \code{TRUE}, every step is written to
 \code{profiles-interRes/<parameter>-<side>.R} in the working directory,
@@ -114,7 +113,7 @@ side of the optimum to profile.}
 \code{\link[=confint.parframe]{confint.parframe()}}, so the profile reaches that threshold.}
 
 \item{sparse}{\code{"auto"} (default), \code{TRUE} or \code{FALSE}: the
-path equation and the reoptimisations on the sparse Hessian of
+path equation and the reoptimizations on the sparse Hessian of
 \code{fitted}, chosen at \code{pars} as in \code{\link[=trust]{trust()}}. \code{hessian =
 "sparse"} in \code{...} is \code{TRUE}.}
 
@@ -124,7 +123,7 @@ path equation and the reoptimisations on the sparse Hessian of
 \value{
 A \code{\link[=parframe]{parframe()}} with one row per profile point of all profiled
 parameters, with metanames \code{value} (the objective), \code{constraint}
-(deviation of the profiled parameter from its value in \code{pars}),
+(deviation of the profiled parameter from the value in \code{pars}),
 \code{stepsize}, \code{gamma} and \code{whichPar} (the profiled
 parameter), columns for the numeric attributes of the objective, and one
 column per parameter. Profiles that fail are dropped with a message. The
@@ -136,7 +135,7 @@ the objective that ended the side.
 \description{
 Computes the profile likelihood of one or more parameters around an
 optimum. \code{method = "integrate"} follows the profile path by Euler steps of
-the path equation of the Lagrangian; \code{method = "optimize"} re-optimises the
+the path equation of the Lagrangian; \code{method = "optimize"} re-optimizes the
 other parameters at every step. A method of \code{\link[stats:profile]{stats::profile()}} for dMod
 objective functions and plain R functions.
 }
@@ -162,7 +161,7 @@ data <- datalist(C1 = data.frame(
 obj <- normL2(data, g * x * p)
 myfit <- trust(obj, c(logA = 0, logk = 0), rinit = 1, rmax = 10)
 
-## Profiles by integration and by repeated optimisation
+## Profiles by integration and by repeated optimization
 profiles.approx <- profile(obj, myfit$argument, whichPar = c("logA", "logk"))
 profiles.exact <- profile(obj, myfit$argument, whichPar = c("logA", "logk"),
                           method = "optimize")

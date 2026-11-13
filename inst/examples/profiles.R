@@ -19,7 +19,7 @@ data <- datalist(C1 = data.frame(
 obj <- normL2(data, g * x * p)
 myfit <- trust(obj, c(logA = 0, logk = 0), rinit = 1, rmax = 10)
 
-## Profiles by integration and by repeated optimisation
+## Profiles by integration and by repeated optimization
 profiles.approx <- profile(obj, myfit$argument, whichPar = c("logA", "logk"))
 profiles.exact <- profile(obj, myfit$argument, whichPar = c("logA", "logk"),
                           method = "optimize")

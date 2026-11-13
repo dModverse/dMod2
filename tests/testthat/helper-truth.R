@@ -4,8 +4,8 @@
 
 ## ---- Closed-form solutions ----------------------------------------------
 
-# Closed-form linear decay with its first and second derivatives in (x0, k),
-# vectorised over t.
+# Closed-form linear decay with first and second derivatives in (x0, k),
+# vectorized over t.
 truth_decay <- function(t, x0, k) {
   E <- exp(-k * t)
   value <- x0 * E

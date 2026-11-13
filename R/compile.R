@@ -17,7 +17,7 @@
 
 
 
-## A compile command run without a shell: its output, with the "status"
+## A compile command run without a shell: the output, with the "status"
 ## attribute of a failure. Pipes, not a `2>&1` token, which on Windows reaches
 ## the compiler as an input file.
 .compileRun <- function(cmd) {
@@ -28,7 +28,7 @@
 
 ## One shared object by R CMD SHLIB, with the environment `job$env` set in this
 ## process, which on a cluster worker reaches no other compile. A working
-## directory of its own keeps the tmp.def SHLIB writes there from colliding.
+## separate directory keeps the tmp.def SHLIB writes there from colliding.
 .compileShlib <- function(job) {
   do.call(Sys.setenv, as.list(job$env))
   wd <- tempfile("shlib")
@@ -142,7 +142,7 @@
 }
 
 ## Reinstalling a backend changes the headers a source compiles against without
-## changing the source, so its install stamp belongs in the object cache key.
+## changing the source, so the install stamp of the backend belongs in the object cache key.
 .headerStamp <- function() {
   paste(vapply(c("cppDE", "cOde"), function(pkg) {
     d <- tryCatch(find.package(pkg), error = function(e) NA_character_)
@@ -338,7 +338,7 @@ compile <- function(..., output = NULL, args = NULL, cores = detectFreeCores(),
   files      <- vapply(info, function(e) e$srcfile, character(1))
 
   ## Where the combined shared object goes. A bare name lands next to the
-  ## sources, a name that includes a directory is honoured as given.
+  ## sources, a name that includes a directory is honored as given.
   outfile <- NULL
   if (!is.null(output)) {
     if (length(output) != 1L || !is.character(output) || !nzchar(output))
@@ -454,8 +454,8 @@ compile <- function(..., output = NULL, args = NULL, cores = detectFreeCores(),
     paste(unique(tok), collapse = " ")
   }
 
-  ## Compile one file with its own flags set via PKG_*, so per-file linkArgs
-  ## reach only the files that need them. Each mclapply fork has its own env.
+  ## Compile one file with separate flags set via PKG_*, so per-file linkArgs
+  ## reach only the files that need them. Each mclapply fork has a separate env.
   ## The PKG_* flags of one source as Makevars lines, named by variable.
   shlib_flags <- function(entry) {
     extra_c <- entry$compileArgs %||% ""
@@ -506,7 +506,7 @@ compile <- function(..., output = NULL, args = NULL, cores = detectFreeCores(),
                 entry$srcfile)
   }
 
-  ## In parallel on Windows every worker sets its own environment and user
+  ## In parallel on Windows every worker sets a separate environment and user
   ## Makevars, read after a Makevars.win, so no file next to the sources is shared.
   compile_on_cluster <- function(info) {
     jobs <- lapply(info, function(entry) {
@@ -576,7 +576,7 @@ compile <- function(..., output = NULL, args = NULL, cores = detectFreeCores(),
 
     ## Reuse objects whose source bytes and compile command are unchanged: the
     ## generators rewrite every source each run, so file times say nothing.
-    ## Touching a reused object keeps it newer than its source for the link.
+    ## Touching a reused object keeps it newer than the source for the link.
     objs <- sub("\\.[^.]+$", ".o", files)
     keys <- structure(paste(tools::md5sum(files), vapply(info, obj_cmd, ""),
                             .headerStamp()), names = files)
@@ -714,7 +714,7 @@ compile <- function(..., output = NULL, args = NULL, cores = detectFreeCores(),
            paste(out_lines, collapse = "\n"))
     .reloadDLL(out)
     .clearSymbols()
-    ## cOde loads a deSolve leaf's entry points from the shared object its
+    ## cOde loads a deSolve leaf's entry points from the shared object the
     ## `modelname` names, which must now be the combined one.
     for (o in fn_objs) .retargetCode(o, output)
     ## Only arguments passed as a plain variable can have their modelname
@@ -790,7 +790,7 @@ getLocalDLLs <- function() {
 # Default directory of generated sources and shared objects
 .dmodOutdir <- function() getOption("dMod2.outdir", getwd())
 
-## Directories to search for an object's shared libraries: where its sources
+## Directories to search for an object's shared libraries: where the sources
 ## were generated, the default output directory and the working directory.
 .dllSearchDirs <- function(objects) {
   dirs <- unlist(lapply(objects, function(o)
@@ -801,7 +801,7 @@ getLocalDLLs <- function() {
 
 
 ## The shared objects of dMod objects found in the search directories: those of
-## their model names and of every generated source compiled on its own, also the
+## their model names and of every generated source compiled alone, also the
 ## auxiliary ones no model name names (Pimpl's `_influx`).
 .dllFiles <- function(objects) {
   fns    <- Filter(function(o) inherits(o, c("fn", "objfn")), objects)

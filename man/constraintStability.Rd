@@ -66,7 +66,7 @@ pSS <- Pimpl(f, deriv2 = TRUE, modelname = "brusselator_ss")
 p <- P(c(a = "exp(la)", b = "exp(lb)"), modelname = "brusselator_p")
 compile(pSS, p, output = "brusselator")
 stab <- constraintStability(pSS, p, onset = -0.5, weight = 10)
-# far from the Hopf point nothing, near it the term and its gradient, beyond it the term on the
+# far from the Hopf point nothing, near it the term with gradient, beyond it the term on the
 # unstable steady state
 stab(c(la = 0, lb = log(0.5)))$value
 stab(c(la = 0, lb = log(1.8)))

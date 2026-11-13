@@ -50,7 +50,7 @@ NULL
 #' \describe{
 #'   \item{`time`}{minutes after stimulation.}
 #'   \item{`name`}{observable, 20 levels.}
-#'   \item{`value`}{signal divided by the maximum of its observable.}
+#'   \item{`value`}{signal divided by the maximum signal of the observable.}
 #'   \item{`sigma`}{`NA` throughout; the errors are estimated in the fit.}
 #'   \item{`condition`}{one of 36 experimental conditions.}
 #'   \item{`experiment`}{one of 13 experiments; selects the scale and offset
@@ -161,49 +161,14 @@ combine <- function(...) {
 
 ## wide2long --------------------------------------------
 
-#' Translate Wide Format into Long Format
-#'
-#' Converts output in wide format, e.g. of a prediction, into long format with
-#' one row per value.
-#'
-#' @param out A data frame, matrix, or list of those, in wide format.
-#' @param keep Integer vector, the columns kept as identifiers. Defaults to 1,
-#'   the time column.
-#' @param na.rm Logical. `TRUE` removes rows with missing values. Defaults to
-#'   `FALSE`.
-#'
-#' @return A data frame with the kept columns and the columns
-#' \describe{
-#'   \item{`name`}{the column names of the other columns of `out`.}
-#'   \item{`value`}{their values.}
-#'   \item{`condition`}{for a list, its names, or the list positions if it
-#'     has none.}
-#' }
-#' @examples
-#' out <- cbind(time = 0:2, A = c(1, 0.5, 0.25), B = c(0, 0.5, 0.75))
-#' wide2long(out)
-#' wide2long(list(C1 = out, C2 = out))
-#'
-#' @export
-wide2long <- function(out, keep = 1, na.rm = FALSE) {
-  
-  UseMethod("wide2long", out)
-  
-  
-}
+# Wide output (a matrix, data frame or list of those) in long format: the `keep` columns, `name`
+# and `value`, and for a list `condition` from the list names or positions
+.wide2long <- function(out, keep = 1, na.rm = FALSE) UseMethod(".wide2long", out)
 
-#' @rdname wide2long
-#' @export
-wide2long.data.frame <- function(out, keep = 1, na.rm = FALSE) {
-  
-  wide2long.matrix(out, keep = keep, na.rm = na.rm)
-  
-}
+.wide2long.data.frame <- function(out, keep = 1, na.rm = FALSE)
+  .wide2long.matrix(out, keep = keep, na.rm = na.rm)
 
-#' @rdname wide2long
-#' @export
-wide2long.matrix <- function(out, keep = 1, na.rm = FALSE) {
-  
+.wide2long.matrix <- function(out, keep = 1, na.rm = FALSE) {
   timenames <- colnames(out)[keep]
   allnames <- colnames(out)[-keep]
   if (anyDuplicated(allnames))
@@ -211,25 +176,19 @@ wide2long.matrix <- function(out, keep = 1, na.rm = FALSE) {
          call. = FALSE)
   times <- out[, keep, drop = FALSE]
   ntimes <- nrow(out)
-  values <- unlist(out[,allnames])
+  values <- unlist(out[, allnames])
   outlong <- data.frame(times,
                         name = factor(rep(allnames, each = ntimes), levels = allnames),
                         value = as.numeric(values), row.names = NULL)
-  colnames(outlong)[1:length(keep)] <- timenames
-  
-  if (na.rm) outlong <- outlong[!is.na(outlong$value),]
-  
-  return(outlong)
-  
+  colnames(outlong)[seq_along(keep)] <- timenames
+  if (na.rm) outlong <- outlong[!is.na(outlong$value), ]
+  outlong
 }
 
-#' @rdname wide2long
-#' @export
-wide2long.list <- function(out, keep = 1, na.rm = FALSE) {
-  # An unnamed list still gets a condition column, which callers read.
+.wide2long.list <- function(out, keep = 1, na.rm = FALSE) {
   conditions <- names(out)
   if (is.null(conditions)) conditions <- as.character(seq_along(out))
-  pieces <- lapply(out, wide2long.matrix, keep = keep, na.rm = na.rm)
+  pieces <- lapply(out, .wide2long.matrix, keep = keep, na.rm = na.rm)
   outlong <- as.data.frame(data.table::rbindlist(pieces))
   outlong$condition <- rep(conditions, vapply(pieces, nrow, 1L))
   outlong
@@ -246,7 +205,8 @@ wide2long.list <- function(out, keep = 1, na.rm = FALSE) {
 
 #' Bind a Named List of Data Frames into One Data Frame
 #'
-#' Adds to each data frame a column `condition` with its name in the list and
+#' Adds to each data frame a column `condition` with the name of the data
+#' frame in the list and
 #' binds them by rows.
 #'
 #' @param mylist A named list of data frames; a column missing in one of them
@@ -265,7 +225,7 @@ lbind <- function(mylist) {
 }
 
 
-#' Time-Course Data for IFN-alpha Signalling in Huh7.5 Cells
+#' Time-Course Data for IFN-alpha Signaling in Huh7.5 Cells
 #'
 #' 1918 measurements on human hepatoma cells stimulated with IFN-alpha at 0 h,
 #' at 24 h or at both: phosphorylated and total STAT1 and STAT2 and IRF9 in the

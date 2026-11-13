@@ -3,7 +3,7 @@
 # their hyperparameters. Everything downstream of em() reads the design, never the spec.
 
 
-## The plans of the native chain of the data term `spec` of `obj`: those of its normL2() term, so
+## The plans of the native chain of the data term `spec` of `obj`: those of the normL2() term of `obj`, so
 ## that they last over the fits of one objective; a context of their own where it has none.
 .objectiveChain <- function(obj, spec) {
   if (is.null(spec)) return(NULL)
@@ -12,7 +12,7 @@
   if (is.environment(ctx)) ctx else .chainContext(spec)
 }
 
-## The design of `obj` and the random effects `random`: with one grouping its groups, etas and
+## The design of `obj` and the random effects `random`: with one grouping the groups, etas and
 ## blocks are fields of the design, with several `groupings` holds one design per grouping and
 ## `components` the sets of conditions their groups connect.
 .emDesign <- function(obj, random) {
@@ -45,9 +45,9 @@
             class = "emdesign")
 }
 
-## Per group, whether each sparse eta reaches the data of its conditions, along the dependencies
-## of the parameter transformations, steady states, the ODE with its events and the observables or
-## the error model to a measured name; the normal etas count as reaching. A piece without its
+## Per group, whether each sparse eta reaches the data of the group conditions, along the dependencies
+## of the parameter transformations, steady states, the ODE with events and the observables or
+## the error model to a measured name; the normal etas count as reaching. A piece without
 ## equations counts as passing everything on, so that an eta is marked only where no path exists.
 .etaReach <- function(design) {
   E <- design$etaNames
@@ -69,7 +69,7 @@
 ## model, searched in C++ (graph_reach) from every eta to the measured names. Every expression is
 ## read with the names that are 0 in this condition set to 0 (.zeroOut()): a state that starts at 0,
 ## whose right-hand side vanishes with the other zeros and that no event moves stays 0 and passes
-## nothing on. A piece without its equations, such as a function written by hand, reaches all.
+## nothing on. A piece without equations, such as a function written by hand, reaches all.
 .reachData <- function(design, cn, etas) {
   every <- setNames(rep(TRUE, length(etas)), etas)
   lv <- .fnLeaves(design$prdfn, cn)
@@ -370,8 +370,8 @@
 .allEtas <- function(design) unlist(lapply(.subDesigns(design), function(sd) as.vector(sd$etaNames)))
 
 
-## One distribution block: its stems (random-effect columns) and short names, the distribution
-## and its fixed hyperparameters, NA when estimated.
+## One distribution block: the stems (random-effect columns) and short names, the distribution
+## and the fixed hyperparameters, NA when estimated.
 .designBlock <- function(rows) {
   list(dist = rows$dist[1], lambda = rows$lambda[1], prob = rows$prob[1],
        concentration = rows$concentration[1], tau = rows$tau[1], stems = rows$stem,
@@ -470,7 +470,7 @@
 
 
 ## The mu-referenced fixed effects of grouping design `sub`, phi = X beta + eta: per normal random
-## intercept, the first of its symbol, whose formula covers every condition with data and whose
+## intercept, the first of the symbol, whose formula covers every condition with data and whose
 ## fixed-effect rows are constant within each group, the fixed parameters and their rows per group.
 .muReference <- function(design, sub = design) {
   random <- design$randomEffects
@@ -494,9 +494,9 @@
   out
 }
 
-## Generalised least squares for the referenced fixed effects: with `phi` the posterior means per
+## Generalized least squares for the referenced fixed effects: with `phi` the posterior means per
 ## group (columns the normal stems, phi in the referenced ones), the free entries of `beta` that
-## minimise sum_g (phi_g - D_g beta)' Omega^-1 (phi_g - D_g beta).
+## minimize sum_g (phi_g - D_g beta)' Omega^-1 (phi_g - D_g beta).
 .glsFixedEffects <- function(ref, phi, Omega, beta, free = names(beta)) {
   stems <- colnames(phi)
   pars <- unlist(lapply(unname(ref), `[[`, "pars"))

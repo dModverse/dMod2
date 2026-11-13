@@ -30,7 +30,7 @@ data <- data.frame(
    value = c(values, 1.2*values, 1.4*values, 1.6*values),
    group = rep(c("C1", "C2", "C3", "C4"), each = length(times))
 )
-ggplot(data, aes(time, value, colour = group)) + geom_line() +
+ggplot(data, aes(time, value, color = group)) + geom_line() +
    theme_dMod() + scale_color_dMod()
 }
 \seealso{

@@ -32,7 +32,7 @@ test_that(".resolveConditions reproduces the leaf truth table", {
   expect_true(r$evaluate)
   expect_identical(r$slots, 1L)
 
-  # specific leaf in a wider request: only its own slot
+  # specific leaf in a wider request: only the leaf slot
   r <- rc(c("C1", "C2"), "C1")
   expect_identical(r$conditions, c("C1", "C2"))
   expect_true(r$evaluate)
@@ -47,7 +47,7 @@ test_that(".resolveConditions reproduces the leaf truth table", {
 
 
 test_that(".resolveConditions handles a leaf owning several conditions", {
-  # The PEtab relabeller produces this case.
+  # The PEtab relabeler produces this case.
   r <- dMod2:::.resolveConditions(c("C1", "C2", "C3"), c("C1", "C3"))
   expect_true(r$evaluate)
   expect_identical(r$slots, c(1L, 3L))
@@ -154,7 +154,7 @@ test_that("a composed chain flattens nested sums into one node", {
   skip_if_not_installed("cppDE")
   skip_on_cran()
 
-  # P(branch(.)) builds its parfn with Reduce("+", .), so a+b+c must end up
+  # P(branch(.)) builds the parfn with Reduce("+", .), so a+b+c must end up
   # as one node with four parts, not three nested ones.
   fx <- fx_decay_multicond_compiled()
   st <- dMod2:::.fnNode(fx$pfn)
@@ -174,7 +174,7 @@ test_that("composed mappings keep the metadata their consumers read", {
 
   # equations come from the prediction side, not the observables
   expect_s3_class(attr(m, "equations"), "eqnvec")
-  # parameters are indexed by name, so C2 gets its own scale parameter
+  # parameters are indexed by name, so C2 gets a separate scale parameter
   expect_true("s_C2_log" %in% attr(m, "parameters"))
   expect_false("s_C1_log" %in% attr(m, "parameters"))
 
@@ -344,7 +344,7 @@ test_that("without a trafo, fixed does NOT leave the derivative basis", {
   skip_on_cran()
 
   # Xs drops a run-time `fixed` only from `pars`, while a trafo in the chain
-  # removes it through its Jacobian. The two paths disagree; pinned, not endorsed.
+  # removes it through the trafo Jacobian. The two paths disagree; pinned, not endorsed.
   fx <- fx_decay_compiled()
   gx <- fx$gfn * fx$xfn
   times <- seq(0, 4, by = 0.5)
@@ -376,7 +376,7 @@ test_that("objfn * parfn reaches the same value with and without fixed", {
                tolerance = 1e-5)
 })
 
-test_that("normL2 honours a conditions= restriction", {
+test_that("normL2 honors a conditions= restriction", {
   fx <- fx_decay_multicond_compiled()
   d  <- fx_decay_data_multi(parslist = setNames(
     lapply(seq_along(fx$conditions), function(i) c(A = 1.0, k = 0.4 + 0.2 * i)),
@@ -609,7 +609,7 @@ test_that("(o1 + o2)(p) equals (o2 + o1)(p) at the value level", {
 
 ## ---- Cached batch handle ---------------------------------------------------
 
-# The cached cppDE batch handle names the shared object of its entry point.
+# The cached cppDE batch handle names the shared object of the entry point.
 # Renaming the model or reopening a saved workspace leaves it pointing at a
 # .so that cannot be called.
 
@@ -625,7 +625,7 @@ test_that("a batch handle whose shared object is gone is re-prepared", {
   bcache <- environment(attr(fx$xfn, "mappings")[[1]])$bcache
   expect_false(is.null(bcache$entries[[1]]$handle))
 
-  # What the cluster node sees: the handle survived, its shared object did not.
+  # What the cluster node sees: the handle survived, the shared object did not.
   bcache$entries[[1]]$handle$sym$dll <- "no_such_shared_object"
 
   out <- expect_silent(fx$prd(times, fx$outerpars, deriv = TRUE))
@@ -678,7 +678,7 @@ test_that("modelname<- drops the cached batch handle", {
 
 ## ---- Sums of objectives ------------------------------------------------------
 
-test_that("a sum of objectives shares the predictions of all its terms", {
+test_that("a sum of objectives shares the predictions of all terms", {
   skip_if_not_installed("cppDE")
   skip_on_cran()
   fx <- fx_decay_multicond_compiled()

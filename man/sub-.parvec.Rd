@@ -18,5 +18,5 @@ subsetting. Default \code{FALSE}.}
 Object of class \code{parvec}.
 }
 \description{
-Subsets a \code{parvec} and its derivatives.
+Subsets a \code{parvec} together with the derivatives.
 }

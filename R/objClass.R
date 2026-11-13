@@ -2,7 +2,7 @@
 
 
 
-## Class "objlist" and its constructors ------------------------------------
+## Class "objlist" and constructors ------------------------------------
 
 
 
@@ -165,7 +165,7 @@ evalConditionResidual <- function(dataI, predictionI, pars,
 #' data given the prediction, up to a constant, summed over the conditions of
 #' the data.
 #'
-#' @param data Object of class [datalist]. Each of its conditions has to be
+#' @param data Object of class [datalist]. Each condition of the data has to be
 #'   a condition of `x`.
 #' @param x Object of class [prdfn].
 #' @param errmodel Optional object of class [obsfn]. The error model may be
@@ -173,9 +173,9 @@ evalConditionResidual <- function(dataI, predictionI, pars,
 #' @param times Optional time points at which the prediction is evaluated in
 #'   addition to the data times: a numeric vector for all conditions, which then
 #'   share one grid, or a list named by condition, which gives each condition
-#'   its own grid. The prediction of a condition starts at the first time of its
-#'   grid, where the initial values take effect, so a single time per condition
-#'   sets its start. A model built with `odemodel(..., includeTimeZero = TRUE)`,
+#'   a separate grid. The prediction of a condition starts at the first time of
+#'   the grid, where the initial values take effect, so a single time per condition
+#'   sets the start of that condition. A model built with `odemodel(..., includeTimeZero = TRUE)`,
 #'   the default, has 0 in every grid and so starts at 0 at the latest.
 #'   Fixed-time events before the start do not fire. Event times should be
 #'   included if the model uses events.
@@ -190,7 +190,7 @@ evalConditionResidual <- function(dataI, predictionI, pars,
 #'   or `"M4BEAL"` (truncated variants; require non-negative LOQ).
 #' @param multipleShootingControl `NULL` (default), `TRUE` or a list, which
 #'   turns on multiple shooting in [trust()]; `TRUE` is `list()`, every entry
-#'   at its default. Can be changed, or switched off with `NULL`, by
+#'   at the default. Can be changed, or switched off with `NULL`, by
 #'   `controls(obj, "multipleShootingControl") <-`, also on a sum holding the
 #'   objective. An unknown entry is an error. Entries:
 #'   * `nodes`: `"auto"` (default), `"transitions"`, or node times, a numeric
@@ -203,7 +203,7 @@ evalConditionResidual <- function(dataI, predictionI, pars,
 #'   * `misfit`: root mean square of a segment's weighted residuals above
 #'     which `"auto"` cuts it, default `3`.
 #'   * `charts`: named character, `"log10"`, `"linear"` or `"angle"` per
-#'     state, the coordinate of its node values. Default `NULL`, all linear.
+#'     state, the coordinate of the node values. Default `NULL`, all linear.
 #'   * `scale`: named numeric, the scale of each state's gaps and node steps.
 #'     Default `1` on a log10 or angle chart, else the range of the state in
 #'     the data or, unobserved, in a simulation at the start.
@@ -227,7 +227,7 @@ evalConditionResidual <- function(dataI, predictionI, pars,
 #' the sum of the weighted squared residuals and, for error models and
 #' censored data, of the further terms of `-2 log` likelihood. With
 #' `multipleShootingControl` the objective called as a function is still the
-#' single-shooting one; [trust()] and [mstrust()] optimise it by multiple
+#' single-shooting one; [trust()] and [mstrust()] optimize it by multiple
 #' shooting, also as a summand.
 #'
 #' @details
@@ -259,7 +259,7 @@ normL2 <- function(data, x, errmodel = NULL, times = NULL,
 #' Builds the objective of a fit whose residuals follow a Student-t
 #' distribution with `df` degrees of freedom and scale given by the error
 #' model or the data's `sigma`: the `-2 log` likelihood of the data, summed
-#' over the conditions. Its tails are heavier than those of [normL2()], so
+#' over the conditions. The tails are heavier than those of [normL2()], so
 #' single outliers move the fit less; `df = Inf` would be [normL2()].
 #'
 #' @inheritParams normL2
@@ -294,7 +294,7 @@ normT <- function(data, x, errmodel = NULL, df, times = NULL, attrName = "data",
     stop("normL2: the data conditions ", paste(miss, collapse = ", "),
          " are not conditions of x, which has ",
          if (length(x.cond)) paste(x.cond, collapse = ", ") else "none",
-         ". Give each Xs(), P() or Y() its condition.", call. = FALSE)
+         ". Set the condition of each Xs(), P() or Y().", call. = FALSE)
 
   e.cond <- if (!is.null(errmodel)) names(attr(errmodel, "mappings")) else NULL
   conditions.obj <- intersect(x.cond, d.cond)
@@ -379,7 +379,7 @@ normT <- function(data, x, errmodel = NULL, df, times = NULL, attrName = "data",
     # J^T J contraction is skipped and no second-order sensitivities are needed.
     build_hessian <- hessian
 
-    # the native chain where its pieces allow it, the R path below otherwise; the predictions
+    # the native chain where the pieces of the chain allow it, the R path below otherwise; the predictions
     # are computed when the environment is asked for them
     if (is.null(.prediction) && !sparse && !.local && .evalCpp() &&
         !exists("prediction", envir = env, inherits = FALSE)) {
@@ -457,7 +457,7 @@ normT <- function(data, x, errmodel = NULL, df, times = NULL, attrName = "data",
         !identical(.meta_cache$shape, cur_shape)) {
       .meta_cache$par_names_global <- unique(unlist(lapply(seq_along(prediction), function(k)
         union(cur_sig[[1]][[k]], if (k <= length(cur_sig[[2]])) cur_sig[[2]][[k]])), use.names = FALSE))
-      # the meta of a condition is kept by its parameters and row counts, so that calls on
+      # the meta of a condition is kept by the condition parameters and row counts, so that calls on
       # changing sets of conditions rebuild only what changed
       n <- length(conditions)
       key <- lapply(seq_len(n), function(k) list(cur_sig[[1]][[k]], if (k <= length(cur_sig[[2]])) cur_sig[[2]][[k]],
@@ -497,7 +497,7 @@ normT <- function(data, x, errmodel = NULL, df, times = NULL, attrName = "data",
       local_blocks     = .local || (build_hessian && sparse),
       t_df             = df
     )
-    # the value, gradient and Hessian of every condition in its own parameters
+    # the value, gradient and Hessian of every condition in the condition parameters
     if (.local) return(setNames(kr$local, conditions))
     # a sparse Hessian is assembled from the blocks of the conditions
     if (build_hessian && sparse)
@@ -597,7 +597,7 @@ normT <- function(data, x, errmodel = NULL, df, times = NULL, attrName = "data",
     error = function(e) NULL)
   if (is.null(preds)) return(serial())
 
-  # slices of one objective: its error model and kernel take all conditions in one call
+  # slices of one objective: the error model and kernel of the objective take all conditions in one call
   if (!is.null(whole) && all(vapply(objs, function(o) identical(attr(o, "whole", exact = TRUE), whole), TRUE))) {
     loc <- whole(parsList[[1L]], fixed = fixed, deriv = deriv, deriv2 = deriv2, cores = cores,
                  conditions = conds, .prediction = setNames(preds, conds), .local = TRUE)
@@ -708,7 +708,7 @@ normT <- function(data, x, errmodel = NULL, df, times = NULL, attrName = "data",
 #' @description Builds a Gaussian prior on parameters as an objective
 #' function, to be added to a data term such as [normL2()].
 #'
-#' @param mu Named numeric vector of prior means. Its names select the
+#' @param mu Named numeric vector of prior means. The names select the
 #'   constrained parameters.
 #' @param sigma Numeric standard deviations, scalar or named and aligned with
 #'   `mu`, default `1`; or a character vector of parameter names that
@@ -726,7 +726,7 @@ normT <- function(data, x, errmodel = NULL, df, times = NULL, attrName = "data",
 #' plus \eqn{2\log\sigma} per parameter if `sigma` is estimated.
 #'
 #' @return An objective function of class `objfn`, called as
-#'   `obj(pars, ...)`, see section Calling a dMod function. Its value is the
+#'   `obj(pars, ...)`, see section Calling a dMod function. The objective value is the
 #'   penalty form, without the constant of the Gaussian density; the other
 #'   `constraint*()` functions return the full `-2 log` density.
 #' @inheritSection dModfn Calling a dMod function
@@ -835,7 +835,7 @@ constraintL2.default <- function(mu, sigma = 1, attrName = "prior",
 
 
 # Internal: shared assembly for the soft constraints below. `term(x, k)` maps
-# values and indices of the constrained parameters to the -2 log density and its
+# values and indices of the constrained parameters to the -2 log density and the
 # first two derivatives. A `fixed` parameter enters the value only.
 .constraintTerms <- function(parnames, term, attr.name, condition) {
 
@@ -920,7 +920,7 @@ constraintL2.default <- function(mu, sigma = 1, attrName = "prior",
 #' @description Builds a Laplace prior on parameters as an objective
 #' function.
 #'
-#' @param mu Named numeric vector of prior locations. Its names select the
+#' @param mu Named numeric vector of prior locations. The names select the
 #'   constrained parameters.
 #' @param sigma Numeric, scalar or named and aligned with `mu`, default `1`.
 #'   The Laplace scale, the reciprocal penalty strength.
@@ -934,10 +934,10 @@ constraintL2.default <- function(mu, sigma = 1, attrName = "prior",
 #' Computes the Laplace prior on the `-2 log` scale,
 #' \deqn{2\log(2\sigma) + 2|p-\mu|/\sigma,}
 #' the L1 counterpart of [constraintL2()]. At \eqn{p = \mu} the term is not
-#' differentiable and its gradient is returned as 0.
+#' differentiable and the gradient is returned as 0.
 #'
 #' @return An objective function of class `objfn`, called as
-#'   `obj(pars, ...)`, see [dModfn]. Its value is the full `-2 log` density,
+#'   `obj(pars, ...)`, see [dModfn]. The objective value is the full `-2 log` density,
 #'   while [constraintL2()] returns the penalty form without the constant.
 #' @seealso [constraintL2()]
 #' @examples
@@ -966,7 +966,7 @@ constraintL1.default <- function(mu, sigma = 1, attrName = "prior",
 
 #' Soft Cauchy Constraint on Parameters
 #'
-#' @param mu Named numeric vector of prior locations. Its names select the
+#' @param mu Named numeric vector of prior locations. The names select the
 #'   constrained parameters.
 #' @param sigma Numeric, scalar or named and aligned with `mu`, default `1`.
 #'   The Cauchy scale.
@@ -984,7 +984,7 @@ constraintL1.default <- function(mu, sigma = 1, attrName = "prior",
 #' pull it.
 #'
 #' @return An objective function of class `objfn`, called as
-#'   `obj(pars, ...)`, see [dModfn]. Its value is the full `-2 log` density.
+#'   `obj(pars, ...)`, see [dModfn]. The objective value is the full `-2 log` density.
 #' @seealso [constraintL2], [constraintL1]
 #' @examples
 #' prior <- constraintCauchy(mu = c(k1 = 0), sigma = 2)
@@ -1007,7 +1007,7 @@ constraintCauchy <- function(mu, sigma = 1, attrName = "prior", condition = NULL
 
 #' Soft Gamma Constraint on Positive Parameters
 #'
-#' @param shape Named numeric vector of shape parameters. Its names select the
+#' @param shape Named numeric vector of shape parameters. The names select the
 #'   constrained parameters.
 #' @param scale Numeric, scalar or named and aligned with `shape`, default
 #'   `1`. The gamma scale, not the rate.
@@ -1024,7 +1024,7 @@ constraintCauchy <- function(mu, sigma = 1, attrName = "prior", condition = NULL
 #' non-positive parameter.
 #'
 #' @return An objective function of class `objfn`, called as
-#'   `obj(pars, ...)`, see [dModfn]. Its value is the full `-2 log` density.
+#'   `obj(pars, ...)`, see [dModfn]. The objective value is the full `-2 log` density.
 #' @seealso [constraintExponential], [constraintChisq]
 #' @examples
 #' prior <- constraintGamma(shape = c(k1 = 3), scale = 5)
@@ -1051,7 +1051,7 @@ constraintGamma <- function(shape, scale = 1, attrName = "prior", condition = NU
 
 #' Soft Exponential Constraint on Positive Parameters
 #'
-#' @param scale Named numeric vector of scale parameters, not rates. Its names
+#' @param scale Named numeric vector of scale parameters, not rates. The names
 #'   select the constrained parameters.
 #' @param attrName Character. Name of the attribute holding the constraint
 #'   value, default `"prior"`.
@@ -1062,12 +1062,12 @@ constraintGamma <- function(shape, scale = 1, attrName = "prior", condition = NU
 #' @details
 #' Computes the exponential prior on the `-2 log` scale,
 #' \deqn{2p/s + 2\log s.}
-#' It is the gamma prior at shape 1 and pulls a parameter towards 0 with a
+#' It is the gamma prior at shape 1 and pulls a parameter toward 0 with a
 #' constant force, which makes it the smooth one-sided counterpart of an L1
 #' penalty at `mu = 0`. The value is `Inf` for a negative parameter.
 #'
 #' @return An objective function of class `objfn`, called as
-#'   `obj(pars, ...)`, see [dModfn]. Its value is the full `-2 log` density.
+#'   `obj(pars, ...)`, see [dModfn]. The objective value is the full `-2 log` density.
 #' @seealso [constraintGamma], [constraintL1]
 #' @examples
 #' prior <- constraintExponential(scale = c(k1 = 3))
@@ -1090,7 +1090,7 @@ constraintExponential <- function(scale, attrName = "prior", condition = NULL) {
 
 #' Soft Chi-Squared Constraint on Positive Parameters
 #'
-#' @param df Named numeric vector of degrees of freedom. Its names select the
+#' @param df Named numeric vector of degrees of freedom. The names select the
 #'   constrained parameters.
 #' @param attrName Character. Name of the attribute holding the constraint
 #'   value, default `"prior"`.
@@ -1105,7 +1105,7 @@ constraintExponential <- function(scale, attrName = "prior", condition = NULL) {
 #' parameter.
 #'
 #' @return An objective function of class `objfn`, called as
-#'   `obj(pars, ...)`, see [dModfn]. Its value is the full `-2 log` density.
+#'   `obj(pars, ...)`, see [dModfn]. The objective value is the full `-2 log` density.
 #' @seealso [constraintGamma]
 #' @examples
 #' prior <- constraintChisq(df = c(k1 = 4))
@@ -1130,7 +1130,7 @@ constraintChisq <- function(df, attrName = "prior", condition = NULL) {
 
 #' Soft Rayleigh Constraint on Positive Parameters
 #'
-#' @param sigma Named numeric vector of scale parameters. Its names select the
+#' @param sigma Named numeric vector of scale parameters. The names select the
 #'   constrained parameters.
 #' @param attrName Character. Name of the attribute holding the constraint
 #'   value, default `"prior"`.
@@ -1145,7 +1145,7 @@ constraintChisq <- function(df, attrName = "prior", condition = NULL) {
 #' both 0 and large values. The value is `Inf` for a non-positive parameter.
 #'
 #' @return An objective function of class `objfn`, called as
-#'   `obj(pars, ...)`, see [dModfn]. Its value is the full `-2 log` density.
+#'   `obj(pars, ...)`, see [dModfn]. The objective value is the full `-2 log` density.
 #' @seealso [constraintGamma], [constraintExponential]
 #' @examples
 #' prior <- constraintRayleigh(sigma = c(k1 = 3))
@@ -1188,7 +1188,7 @@ constraintRayleigh <- function(sigma, attrName = "prior", condition = NULL) {
 #' with the prediction \eqn{x(t)} and the value of `parameter`, \eqn{v}. The
 #' prediction is read from `env`, where [normL2()] stores it, so the
 #' objective is evaluated as summand of an objective that predicts, or with
-#' its `env`. `time`, `sigma` and `attrName` can be changed with
+#' the `env` of such an objective. `time`, `sigma` and `attrName` can be changed with
 #' [controls()].
 #' @return An objective function of class `objfn`, called as
 #'   `obj(pars, ...)`, see section Calling a dMod function. It returns an
@@ -1265,7 +1265,7 @@ datapointL2 <- function(name, time, parameter, sigma = 1,
     out <- if (cv$sparse) .sparseLift(kr$value, kr$gradient, kr$hessian, names(pouter))
            else objlist(value = kr$value, gradient = kr$gradient, hessian = kr$hessian)
     attr(out, attrName)    <- out$value
-    # The value is the squared standardised residual itself, no normaliser.
+    # The value is the squared standardized residual itself, no normalizer.
     attr(out, "chi2")       <- setNames(out$value, attrName)
     attr(out, "prediction") <- kr$prediction
     attr(out, "env")        <- env
@@ -1378,7 +1378,7 @@ datapointL2 <- function(name, time, parameter, sigma = 1,
 }
 
 
-# The numeric attributes of an objlist apart from its chi2 contributions (`num`), and those as one
+# The numeric attributes of an objlist apart from the chi2 contributions (`num`), and those as one
 # named vector (`chi2`), however they are stored: a single one under `chi2`, several under
 # `chi2_<name>`.
 .objlistAttrs <- function(x) {
@@ -1421,7 +1421,7 @@ print.objlist <- function(x, n1 = 20, n2 = 6, ...) {
   cat("\n")
   heading("attributes")
   # str() would prefix every line with the storage mode, and the chi2 tag with
-  # a line of its own. The attributes hold objective contributions, so what
+  # a separate line. The attributes hold objective contributions, so what
   # matters is the name and the number.
   a <- attributes(x)[setdiff(names(attributes(x)), c("names", "class"))]
   if (length(a)) {
@@ -1611,8 +1611,8 @@ res <- function(data, out, err = NULL) {
 
 #' Objective List
 #'
-#' @description An objective list holds an objective value, its gradient and
-#' its Hessian, as objective functions such as [normL2()], [constraintL2()]
+#' @description An objective list holds an objective value with gradient and
+#' Hessian, as objective functions such as [normL2()], [constraintL2()]
 #' and [datapointL2()] return them. Further numeric attributes are added
 #' along when two objective lists are added with `+`, see [sumobjlist].
 #'
@@ -1680,7 +1680,7 @@ objframe <- function(mydata, deriv = NULL, deriv.err = NULL,
 
 # The time grid of normL2: data times and `times`, one sorted vector for all
 # conditions, or with `times` a list named by condition one per condition. A
-# condition absent from the list gets its data times alone.
+# condition absent from the list gets the data times alone.
 .normL2Grid <- function(data, times) {
   if (!is.list(times))
     return(sort(unique(c(unlist(lapply(data, `[[`, "time")), as.numeric(times)))))

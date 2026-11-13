@@ -1,4 +1,4 @@
-## Characterisation of the equation classes and helpers (eqnClass.R, linalg.R,
+## Characterization of the equation classes and helpers (eqnClass.R, linalg.R,
 ## symbolics.R, utils.R, eventClass.R).
 
 eqnNet <- function() {
@@ -37,7 +37,7 @@ test_that("eqnlist() checks dimensions and numbers descriptions", {
   expect_identical(eqnlist(S, c("A", "B", "C"), c("k1*A", "k2*B"), description = "x")$description, "x")
 })
 
-test_that("is.eqnlist() and is.eqnvec() recognise valid objects only", {
+test_that("is.eqnlist() and is.eqnvec() recognize valid objects only", {
   el <- eqnNet()
   expect_true(is.eqnlist(el))
   expect_false(is.eqnlist(unclass(el)))
@@ -140,11 +140,11 @@ test_that("attrs keeps or drops the selected attributes", {
 
 test_that("nullZ returns the rref null space basis", {
   A <- rbind(c(1, -1, 0), c(0, 1, -1))
-  expect_identical(nullZ(A), matrix(c(1, 1, 1), 3, 1))
-  expect_identical(dim(nullZ(diag(3))), c(3L, 0L))
-  expect_identical(nullZ(matrix(0, 1, 2)), diag(2))
+  expect_identical(dMod2:::.nullZ(A), matrix(c(1, 1, 1), 3, 1))
+  expect_identical(dim(dMod2:::.nullZ(diag(3))), c(3L, 0L))
+  expect_identical(dMod2:::.nullZ(matrix(0, 1, 2)), diag(2))
   B <- rbind(c(1, 2, 3), c(2, 4, 6))
-  expect_equal(B %*% nullZ(B), matrix(0, 2, 2))
+  expect_equal(B %*% dMod2:::.nullZ(B), matrix(0, 2, 2))
 })
 
 test_that("eventlist helpers build and coerce event tables", {

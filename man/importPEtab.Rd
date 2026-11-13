@@ -56,7 +56,7 @@ A list of class \code{"petabproblem"} with components \code{dataList},
 \code{reactions}, \code{odemodel}, \code{g}, \code{x}, \code{p}, \code{e}, \code{prd} (the composite
 \code{g * x * p}), \code{obj}, \code{bestfit}, \code{parlower} and \code{parupper}. \code{obj} has the
 PEtab fixed parameters set; \code{bestfit} is the PEtab \code{nominalValue} of each
-estimated parameter, with the PEtab scales in its attribute
+estimated parameter, with the PEtab scales in the attribute
 \code{"petab_scales"}. The attribute \code{"petab_meta"} of the list holds what
 \code{\link[=exportPEtabObject]{exportPEtabObject()}} needs, among it the fixed parameters as \code{fixed}.
 }

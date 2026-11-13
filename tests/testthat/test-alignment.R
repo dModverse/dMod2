@@ -40,7 +40,7 @@ test_that("the values are normalized per block of connected experiments and the 
            trafo = .logs("yi", "sj", "bj", "sigmaA", "sigmaR"))
   expect_s3_class(m, "alignmentmodel")
   expect_equal(colnames(m$design$sj$X), c("sj", "sj_gelG02", "sj_gelG03", "sj_gelG04"))
-  # one block, the mean of the predictors of yi over its five values
+  # one block, the mean of the predictors of yi over the five values
   nz <- m$normalization
   expect_equal(nz$symbol, "yi")
   expect_equal(unique(nz$block), 1L)
@@ -200,7 +200,7 @@ test_that("without random terms every experiment is a condition and trust() runs
   d <- .alignmentSim(5)
   m <- .rel(d)
   expect_setequal(unique(dMod2:::.alignmentConditions(m)), unique(d$gel))
-  # the scale of every experiment starts at the median of the scales that meet its readings
+  # the scale of every experiment starts at the median of the scales that meet the experiment readings
   st <- dMod2:::.alignmentStart(m, dMod2:::.alignmentPars(m)$fixed)
   lin <- dMod2:::.alignmentPredictors(m, seq_len(nrow(d)), st)
   expect_equal(tapply(lin[, "sj"], d$gel, function(x) x[1]),
@@ -253,7 +253,7 @@ test_that("a random background per gel fits through EM, censored readings by M3"
   expect_named(fit$multistart, c("value", "converged", "iterations"))
   expect_equal(nrow(fit$multistart), 2L)
   expect_true(all(c("eta_bj_G01", "eta_sigmaR_G01") %in% names(fit$parameters)))
-  # a random effect the fit sets to 0 at the boundary leaves the variances, its etas held at 0;
+  # a random effect the fit sets to 0 at the boundary leaves the variances, the etas of that effect held at 0;
   # whether the error scale, drawn without a spread, ends there depends on the draw
   dropped <- sub("^omega_(.+)_\\1$", "\\1", fit$fit$boundary, perl = TRUE)
   expect_setequal(c(fit$omega$eta1, dropped), c("bj", "sigmaR"))
@@ -348,7 +348,7 @@ test_that("technical replicates are averaged per sample, and the fit is that of 
   expect_equal(fit$parameters, ref$parameters, tolerance = 1e-10)
   expect_equal(fit$aligned, ref$aligned, tolerance = 1e-10)
   # an absolute error model: the arithmetic mean; a sample with censored readings is censored at
-  # the mean of its readings with the limits in place of the censored ones
+  # the mean of the sample readings with the limits in place of the censored ones
   lanes$value <- log2(lanes$value)
   lanes$lloq <- NA_real_
   low <- lanes$gel == "G01" & lanes$time %in% c("0", "10")
@@ -471,7 +471,7 @@ test_that("the FOCEI gradient with a random effect in the error model is the slo
   expect_equal(unname(.foceiAt(fit, th)$gradient[sel]), num, tolerance = 5e-3)
 })
 
-test_that("quadrature has the exact Hessian of its objective, Omega included", {
+test_that("quadrature has the exact Hessian of the objective, Omega included", {
   d <- .alignmentSim(6)
   fo <- suppressMessages(align(.rbg(d), fits = 2, reml = FALSE))
   qu <- suppressMessages(align(.rbg(d), fits = 2, method = "quadrature"))
@@ -625,7 +625,7 @@ test_that("align() runs the fits of a multistart in parallel as one by one", {
   r <- .rbg(.alignmentSim(6))
   one <- run(r, 1)
   two <- run(r, 2)
-  # an optimised BLAS rounds by the memory layout of its arguments, so these fits agree to their
+  # an optimized BLAS rounds by the memory layout of the arguments, so these fits agree to their
   # stopping tolerance only
   expect_equal(two$multistart$value, one$multistart$value, tolerance = 1e-8)
   expect_equal(two$parameters, one$parameters, tolerance = 1e-6)
@@ -659,7 +659,7 @@ test_that("the restricted likelihood of a model linear in the mean parameters gi
   expect_identical(ml$remlRounds, 0L)
 })
 
-test_that("the restricted likelihood through FOCEI: sigma near the drawn noise, its value, gradient and sparse path", {
+test_that("the restricted likelihood through FOCEI: sigma near the drawn noise, the value, gradient and sparse path", {
   set.seed(1)
   times <- c(0, 10, 30, 60, 120, 240); conc <- c(1, 40, 85, 60, 25, 10)
   gels <- sprintf("G%02d", 1:10)
@@ -680,8 +680,8 @@ test_that("the restricted likelihood through FOCEI: sigma near the drawn noise, 
   sigmas <- function(fit) c(exp(fit$parameters[["sigma"]]), exp(fit$parameters[["sigma"]] + fit$parameters[["sigma_methodWB"]]))
   # restricted likelihood removes the downward bias of the maximum likelihood estimate
   expect_true(all(sigmas(re) > sigmas(ml)))
-  # the relative method near the standard deviation of its noise as drawn; the eight readings of
-  # the absolute method leave its sigma far from that in some draws
+  # the relative method near the standard deviation of the drawn noise; the eight readings of
+  # the absolute method leave the sigma of that method far from that in some draws
   expect_lt(abs(sigmas(re)[2] / sqrt(mean(noiseWB^2)) - 1), 0.35)
   expect_gte(re$remlRounds, 2L)
   # the term of a round: log|S / 2| - p log(2 pi) at the parameters and modes of the last round, the
@@ -762,7 +762,7 @@ test_that("alignment models build in the output directory of the session, by for
   expect_true(any(grepl("align_.*\\.so$", list.files(dir, recursive = TRUE))))
 })
 
-test_that("a fit reports the modes at its parameters, a positive definite Hessian and finite standard errors", {
+test_that("a fit reports the modes at the fit parameters, a positive definite Hessian and finite standard errors", {
   times <- c(0, 10, 30, 60, 120, 240, 480, 1440, 2880)
   signal <- c(-2.6, 1, 2.3, 2.5, 2, 1.2, 0.8, 0.2, -0.2)
   gels <- sprintf("G%02d", 1:50)
@@ -782,7 +782,7 @@ test_that("a fit reports the modes at its parameters, a positive definite Hessia
                       error = sigma ~ 1, trafo = "sigma <- exp(sigma)",
                       prior = constraintL2(mu = c(omega_bj_bj = log(0.3), b = -2), sigma = c(omega_bj_bj = 0.3, b = 1)))
   fit <- suppressMessages(align(m, fits = 1, reml = FALSE))
-  # the modes the fit reports are those at its parameters, and its Hessian there is positive definite
+  # the modes the fit reports are those at the fit parameters, and the Hessian there is positive definite
   ctl <- list(trustControl = list(iterlim = 0), innerControl = list(ftol = 1e-12, mtol = 1e-12, iterlim = 200))
   at <- suppressMessages(em(fit$objfn, fit$randomEffects, fit$fit$argument, control = ctl, verbose = FALSE))
   expect_equal(fit$fit$etaModes, at$etaModes, tolerance = 1e-4)

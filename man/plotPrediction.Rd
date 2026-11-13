@@ -72,7 +72,7 @@ plotPrediction(prediction, scales = "fixed",
 
 ## Simulate data
 set.seed(1)
-dataset <- wide2long(prediction)
+dataset <- as.data.frame(prediction)
 dataset <- dataset[seq(1, nrow(dataset), 5), ]
 dataset$value <- dataset$value + rnorm(nrow(dataset), 0, .1)
 dataset$sigma <- 0.1

@@ -29,7 +29,7 @@ Default \code{NULL}.}
 \value{
 Square matrix with the parameter names as dimnames: the inverse of
 half the Hessian of \code{object} (pseudo-inverse when singular), with rows
-and columns of fixed parameters set to zero. A sparse Hessian is factorised
+and columns of fixed parameters set to zero. A sparse Hessian is factorized
 by sparse Cholesky; when singular, a pseudo-inverse is taken up to 5000
 free parameters and an error raised beyond. For a \code{trustfit}, \code{NULL}
 when it has no \code{argument}, and an error when it has no Hessian; the fits

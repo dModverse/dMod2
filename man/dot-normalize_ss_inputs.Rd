@@ -2,7 +2,7 @@
 % Please edit documentation in R/parameters.R
 \name{.normalize_ss_inputs}
 \alias{.normalize_ss_inputs}
-\title{Normalise steady-state inputs}
+\title{Normalize steady-state inputs}
 \usage{
 .normalize_ss_inputs(trafo, parameters, forcings)
 }

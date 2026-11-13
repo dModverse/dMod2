@@ -317,7 +317,7 @@ test_that("getParameters(normL2(..., errmodel = ec$e)) includes errmodel pars", 
 
 
 # ---- BLOQ + error model: end-to-end wiring ------------------------------
-# The errmodel sigma and its derivatives reach the BLOQ rows as well as the
+# The errmodel sigma and the sigma derivatives reach the BLOQ rows as well as the
 # ALOQ rows: M3 value against the closed form, gradient against differences.
 test_that("normL2 BLOQ M3 + proportional errmodel: value and gradient match", {
   skip_if_no_compile()
@@ -332,7 +332,7 @@ test_that("normL2 BLOQ M3 + proportional errmodel: value and gradient match", {
   obj <- normL2(data, ec$prd, errmodel = ec$e, optBLOQ = "M3")
   o <- obj(pars)
 
-  # Use the exact prediction normL2 integrated (its env), so the closed-form
+  # Use the exact prediction normL2 integrated (the normL2 env), so the closed-form
   # reference is not perturbed by a separate integrator-grid call.
   env_pred <- attr(o, "env")$prediction[["C1"]]
   pred <- env_pred[match(d$time, env_pred[, "time"]), "y"]
@@ -498,7 +498,7 @@ test_that("hessian = FALSE returns value and gradient but no Hessian", {
 })
 
 
-test_that("a prediction cut short is an error, not a read past its rows", {
+test_that("a prediction cut short is an error, not a read past the prediction rows", {
   skip_if_no_compile()
   bench <- fx_decay_compiled()
   data <- fx_decay_data()
@@ -517,7 +517,7 @@ test_that("a prediction cut short is an error, not a read past its rows", {
   attr(short, "deriv") <- attr(pr, "deriv")[keep, , , drop = FALSE]
   cut[[1]] <- short
   expect_error(obj(pars, .prediction = cut), "stopped early")
-  # and the full prediction afterwards still reads its own rows
+  # and the full prediction afterwards still reads the full rows
   expect_equal(obj(pars, .prediction = full)$value, v)
 })
 
@@ -555,7 +555,7 @@ test_that("evalConditionResidual keeps fixed error parameters without sensitivit
 })
 
 
-test_that("an error parameter outside the prediction's derivatives has its gradient", {
+test_that("an error parameter outside the prediction's derivatives has a gradient", {
   x <- Xd(data.frame(name = "y", time = 0:3, row.names = paste0("a", 0:3)), condition = "C1")
   X2Y <- function(out, pars, fixed = NULL, deriv = TRUE, deriv2 = FALSE) {
     p <- c(unclass(pars), unclass(fixed))
@@ -653,7 +653,7 @@ test_that("normL2 has the exact Hessian with censored rows under every BLOQ meth
 })
 
 
-test_that("the row loss derivatives of the Student-t likelihood match its expressions", {
+test_that("the row loss derivatives of the Student-t likelihood match the closed-form expressions", {
   f <- function(x, y, cens, nu) if (cens) -2 * pt((y - x[1]) / x[2], nu, log.p = TRUE) else
     (nu + 1) * log1p(((x[1] - y) / x[2])^2 / nu) + 2 * log(x[2])
   for (cens in c(FALSE, TRUE)) {

@@ -36,7 +36,7 @@ test_that("conserved quantities have no rounding residues", {
                 1, 1, 0, 1, 0, 1, 0, 1, 0, 0, 0, -1, 1, 0, -2, 0, 0, 0, -1, 0, -1, 0, 0, 0, 0, 0,
                 0, 0, 0, 0, 0, 0, 0, -1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, -1, 0, 0, 0, 0, 0, 3,
                 0, 0), 8, 10, dimnames = list(NULL, paste0("X", 1:10)))
-  Z <- nullZ(S)
+  Z <- dMod2:::.nullZ(S)
   expect_false(any(Z != 0 & abs(Z) < 1e-10))
   expect_equal(max(abs(S %*% Z)), 0)
   cq <- unlist(conservedQuantities(eqnlist(S, rates = paste0("k", 1:8), description = paste0("r", 1:8))))

@@ -129,7 +129,7 @@ plot.parlist <- function(x, path = FALSE, ...) {
                iteration = rep(seq_len(nrow(iterates)), length(pars)),
                path = as.vector(iterates), idx = as.character(i))
   })
-  ggplot(do.call(rbind, steps), aes(x = iteration, y = path, colour = idx)) +
+  ggplot(do.call(rbind, steps), aes(x = iteration, y = path, color = idx)) +
     geom_line() + facet_wrap(~parameter)
 }
 
@@ -162,7 +162,7 @@ as.parframe.parlist <- function(x, sortBy = "value", ...) {
   for (name in c("neval", "qnEval", "qnSkipped", "nSwitch"))
     extra[[name]] <- field(name, integer(1), as.integer)
 
-  # Iterations per element of trust()'s `phases`, summed over its runs, when
+  # Iterations per element of trust()'s `phases`, summed over the runs, when
   # the fits had more than one.
   phases <- unique(unlist(lapply(fits, function(f)
     names(f[["phaseSweep"]]) %||% names(f[["phaseIterations"]]))))
@@ -211,7 +211,8 @@ c.parlist <- function(...) {
 #' columns are `index`, `value`, `converged` and `iterations`, plus the
 #' termination and evaluation counts and the wall time `elapsed` the fits
 #' report. Fits of [trust()] with several `phases` add one column
-#' `iterations.<phase>` per phase, the iterations summed over its runs. The
+#' `iterations.<phase>` per phase, the iterations summed over the runs of that
+#' phase. The
 #' attribute `"run"` of the parlist is kept.
 #' @seealso [parframe()], [as.parvec.parframe()], and [parlist()] for an
 #'   example.
@@ -272,7 +273,7 @@ plotPars.parframe <- function(x, ..., tol = 1) {
   x$step <- as.factor(findInterval(seq_len(nrow(x)), .stepDetect(x$value, tol)))
 
   parNames <- attr(x, "parameters")
-  parOut <- wide2long.data.frame(out = x[, c("step", "value", parNames)], keep = 1:2)
+  parOut <- .wide2long.data.frame(out = x[, c("step", "value", parNames)], keep = 1:2)
   names(parOut) <- c("step", "value", "name", "parvalue")
   plot <- ggplot2::ggplot(parOut, aes(x = name, y = parvalue, color = step)) +
     geom_boxplot(outlier.alpha = 0) + theme_dMod() + scale_color_dMod() +
@@ -368,7 +369,7 @@ plotValues.list <- function(x, ..., tol = 1, showSteps = FALSE, pseudoLog = FALS
 }
 
 # The waterfall of one collection, or one panel per collection in `sets`; with `relative` the value
-# above the best of its collection, or above a number.
+# above the best of the collection, or above a number.
 .plotWaterfall <- function(frames, tol, showSteps, pseudoLog, relative, sets = NULL) {
   if (!((is.logical(relative) || is.numeric(relative)) && length(relative) == 1L && !is.na(relative)))
     stop("plotValues: `relative` is TRUE, FALSE or a number.", call. = FALSE)
@@ -397,7 +398,7 @@ plotValues.list <- function(x, ..., tol = 1, showSteps = FALSE, pseudoLog = FALS
               color = "firebrick", size = 3))
 
   # an unconverged fit is red, outside the ramp of the iterations, with a legend
-  # entry of its own
+  # entry for it
   conv <- pars$converged %in% TRUE
   unconverged <- if (!all(conv)) list(
     geom_point(data = pars[!conv, ], aes(shape = "not converged"), color = dMod_colors[2]),
@@ -423,9 +424,9 @@ plotValues.list <- function(x, ..., tol = 1, showSteps = FALSE, pseudoLog = FALS
 }
 
 
-# Default lines of a profile plot: the chi-square thresholds, labelled with the
+# Default lines of a profile plot: the chi-square thresholds, labeled with the
 # level they belong to. The names are the labels, so a caller can hand in the
-# thresholds its intervals are actually read at.
+# thresholds the intervals are actually read at.
 .profileLines <- function() {
   c("68%" = 1, "90%" = qchisq(0.90, 1), "95%" = qchisq(0.95, 1))
 }
@@ -437,7 +438,7 @@ plotValues.list <- function(x, ..., tol = 1, showSteps = FALSE, pseudoLog = FALS
 }
 
 
-# Profile sets covered by one call. Names label the colour scale.
+# Profile sets covered by one call. Names label the color scale.
 .profileSets <- function(profs) {
   sets <- if (inherits(profs, "parframe")) list(profs) else as.list(profs)
   if (is.null(names(sets))) names(sets) <- seq_along(sets)
@@ -604,7 +605,7 @@ subset.parframe <- function(x, ...) {
 }
 
 #' @details `rbind()` keeps the attributes of the first frame. Profiles of one
-#' parameter computed in parts, such as its left and right side, are joined
+#' parameter computed in parts, such as the left and right side, are joined
 #' into one: the repeated optimum is dropped and the points are sorted by
 #' `constraint`.
 #' @param deparse.level not used.
@@ -717,8 +718,8 @@ as.parvec.numeric <- function(x, names = NULL, deriv = NULL, deriv2 = NULL, ...)
 
 #' Print Parameter Vectors
 #'
-#' Prints a parameter vector with information about its derivatives and its
-#' fixed parameters.
+#' Prints a parameter vector with information about derivatives and fixed
+#' parameters.
 #'
 #' @param x object of class `parvec`.
 #' @param ... not used.
@@ -751,7 +752,7 @@ print.parvec <- function(x, ...) {
 
 #' Subset a Parameter Vector
 #'
-#' Subsets a `parvec` and its derivatives.
+#' Subsets a `parvec` together with the derivatives.
 #'
 #' @param x object of class `parvec`.
 #' @param ... subsetting indices.
@@ -1011,7 +1012,7 @@ summary.parfn <- function(object, ...) {
 #'   defined. Default `NULL`, every condition.
 #' @return Object of class `parfn`, a function
 #'   `p(..., fixed, deriv, deriv2, hessian, conditions, env, cores, sweep)`
-#'   that takes the parameter vector `pars` through `...`. Its attributes are
+#'   that takes the parameter vector `pars` through `...`. The attributes of the function are
 #'   `"mappings"`, the list of `p2p` functions, `"parameters"`, the union of
 #'   their parameters, and `"conditions"`.
 #' @seealso [+.fn], [P()]
@@ -1038,7 +1039,7 @@ parfn <- function(p2p, parameters = NULL, condition = NULL) {
 #' Generate a Parameter Frame
 #'
 #' @description A parameter frame is a data frame with one parameter set per
-#' row. Its columns fall into three groups: meta-information (e.g. index,
+#' row. The columns fall into three groups: meta-information (e.g. index,
 #' value, converged), attributes of an objective function (e.g. data and prior
 #' contribution) and the parameters.
 #' @seealso [as.parframe()], [profile()][profile.objfn], [mstrust()]
@@ -1071,7 +1072,7 @@ parframe <- function(x = NULL, parameters = setdiff(colnames(x), c(metanames, ob
 
 #' Parameter List
 #'
-#' @description A parameter list holds the results of several optimisation
+#' @description A parameter list holds the results of several optimization
 #' runs, as returned by [mstrust()]. `c()` concatenates parameter lists.
 #' @param ... for `parlist()` and `c()`, fit results or parameter lists; for
 #'   `print()` and `summary()`, not used.

@@ -14,7 +14,7 @@
 
 \item{...}{not used.}
 
-\item{data}{object of class \code{datalist}. Default \code{NULL}. Its condition grid
+\item{data}{object of class \code{datalist}. Default \code{NULL}. The condition grid of the data
 adds covariate columns to the output.}
 
 \item{errfn}{object of class \code{obsfn}, the error model that predicts the

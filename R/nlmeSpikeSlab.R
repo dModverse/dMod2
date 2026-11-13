@@ -4,12 +4,13 @@
 
 
 ## The most nodes the joint sum over the subsets of the spike-and-slab coordinates of a group
-## visits (src/sparse_kernel.cpp, SlabSum) before the group goes to expectation consistent.
+## visits (src/sparse_kernel.cpp, SlabSum) before the group goes to the expectation consistent
+## (EC) approximation.
 .slabBudget <- 2^24
 
-## log I of the Dirichlet-process stems on the expansion (precision P[[g]], centre m[g, ]) by
+## log I of the Dirichlet-process stems on the expansion (precision P[[g]], center m[g, ]) by
 ## sequential importance sampling over the seating of the groups, each by prior times predictive;
-## the product of the normalisers is unbiased for I, the standard error of log I beside it.
+## the product of the normalizers is unbiased for I, the standard error of log I beside it.
 .dirichletImportance <- function(P, m, concentration, tau, particles = 500L) {
   G <- nrow(m); K <- ncol(m)
   # log of the integral over the free values with precision Lam (data and prior), linear term h

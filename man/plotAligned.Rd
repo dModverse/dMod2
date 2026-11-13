@@ -26,5 +26,5 @@ A ggplot.
 \code{plotAligned()} shows the aligned values with their standard
 errors, \code{plotScaled()} the measured readings mapped onto the values next to
 them (a censored reading has no value and is left out), \code{plotResiduals()} the
-standardised residuals against the prediction.
+standardized residuals against the prediction.
 }

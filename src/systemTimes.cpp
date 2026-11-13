@@ -6,7 +6,7 @@
 #include <Rcpp.h>
 
 // Idle and total processor time of the machine in seconds since boot, summed
-// over its cores; NA outside Windows.
+// over the cores; NA outside Windows.
 // [[Rcpp::export(name = ".systemTimes")]]
 Rcpp::NumericVector systemTimes() {
 #ifdef _WIN32

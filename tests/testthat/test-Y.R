@@ -182,7 +182,7 @@ test_that("g * Xt() * P() differentiates by the outer parameters", {
   expect_equal(d[, "y", "k1_log"], -times * exp(pars[["k1_log"]]) * out$C1[, "y"])
 })
 
-test_that("Y differentiates its own parameters without a trafo upstream", {
+test_that("Y differentiates the observation parameters without a trafo upstream", {
   skip_if_no_compile()
   fx <- .y_xt_fx()
   times <- c(0, 0.5, 2)

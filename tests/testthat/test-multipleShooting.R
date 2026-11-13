@@ -1,4 +1,4 @@
-# Multiple shooting: normL2(shooting = ) and trust() on its objective. With
+# Multiple shooting: normL2(shooting = ) and trust() on the objective. With
 # nodes on one continuous trajectory the gaps vanish and value, condensed
 # gradient and Gauss-Newton Hessian equal the single-shooting ones.
 
@@ -43,7 +43,7 @@ skip_on_cran()
                    s = "exp(ls)"),
             condition = "C", modelname = "ms_chain_p", compile = FALSE,
             derivMode = fr)
-    # a second condition with an initial amount of its own
+    # a second condition with a separate initial amount
     pc2 <- P(eqnvec(A = "exp(lA2)", B = "0", k1 = "exp(lk1)", k2 = "exp(lk2)",
                     s = "exp(ls)"),
              condition = "D", modelname = "ms_chain_p2", compile = FALSE,
@@ -165,7 +165,7 @@ test_that("the control is read and written through controls(), also on a sum", {
 test_that("the segment layout rejects nodes outside the data", {
   mo <- .ms_models()
   expect_error(normL2(mo$data, mo$g * mo$x * mo$p, multipleShootingControl = list(nodes = c(5, 20))),
-               "at or after its last data")
+               "at or after the last data point")
   expect_error(normL2(mo$data, mo$g * mo$x * mo$p, multipleShootingControl = list(nodes = 5, foo = 1)),
                "not foo")
   expect_error(normL2(mo$data, mo$g * mo$x * mo$p, multipleShootingControl = list(growth = 0.5)),
@@ -233,7 +233,7 @@ test_that("a new layout keeps the data term and the continuity", {
   expect_true(attr(rl$sobj, "adaptive"))
 })
 
-test_that("the growth of every segment is its propagation matrix, forward and reverse", {
+test_that("the growth of every segment is the segment propagation matrix, forward and reverse", {
   mo <- .ms_models()
   obj <- normL2(mo$data, mo$g * mo$x * mo$p, multipleShootingControl = TRUE)
   sobj <- dMod2:::.shootObjOf(obj)
@@ -245,7 +245,7 @@ test_that("the growth of every segment is its propagation matrix, forward and re
     expect_equal(unname(Er$segments[[k]]$growth), unname(Ef$segments[[k]]$growth),
                  tolerance = 1e-5, info = paste("segment", k))
   }
-  # no stray directions of the first segment's start among its variables
+  # no stray directions of the first segment's start among the segment variables
   expect_false(any(grepl("@x0", Ef$segments[[1L]]$vars)))
 })
 
@@ -286,7 +286,7 @@ test_that("segment gradients and end-state Jacobians match finite differences", 
   v0 <- c(th, nv)[loc]
   J <- numDeriv::jacobian(.ms_local_fn(sobj, th, nd, k), v0)
   # the data term of all segments depends on theta, the one of segment k alone
-  # on its node
+  # on the segment node
   gtot <- Reduce(`+`, lapply(E$segments, function(s) s$grad[names(th)]))
   it <- match(names(th), loc)
   inode <- setdiff(seq_along(loc), it)
@@ -463,7 +463,7 @@ test_that("the natural level function converges to the single-shooting optimum",
                      stepControl = list(acceptance = "natural")), "hessianMethod")
 })
 
-test_that("the residuals of a segment make up its value, gradient and Hessian", {
+test_that("the residuals of a segment make up the segment value, gradient and Hessian", {
   mo <- .ms_models()
   obj <- normL2(mo$data, mo$g * mo$x * mo$p, multipleShootingControl = list(nodes = c(5, 10, 15)))
   sobj <- dMod2:::.shootObjOf(obj)
@@ -479,7 +479,7 @@ test_that("the residuals of a segment make up its value, gradient and Hessian", 
   expect_equal(Ev$segments[[2]]$res, E$segments[[2]]$res, tolerance = 1e-6)
 })
 
-test_that("two phases, a spline start and regularisation reach the optimum", {
+test_that("two phases, a spline start and regularization reach the optimum", {
   mo <- .ms_models()
   obj0 <- normL2(mo$data, mo$g * mo$x * mo$p)
   ref <- trust(obj0, mo$truth, iterlim = 200)
@@ -499,7 +499,7 @@ test_that("two phases, a spline start and regularisation reach the optimum", {
   expect_equal(fit$value, ref$value, tolerance = 1e-6)
   for (acc in c("filter", "natural")) {
     fit <- trust(obj, start, iterlim = 200,
-                 stepControl = list(acceptance = acc, regularise = 1e-6))
+                 stepControl = list(acceptance = acc, regularize = 1e-6))
     expect_true(fit$converged, info = acc)
     expect_equal(fit$value, ref$value, tolerance = 1e-6, info = acc)
   }
@@ -605,7 +605,7 @@ test_that("minPoints counts data points and defaults to one more than the states
 test_that("a misfit everywhere does not refine the layout", {
   mo <- .ms_models()
   obj <- normL2(mo$data, mo$g * mo$x * mo$p, multipleShootingControl = TRUE)
-  # far from the truth every segment misses its data alike
+  # far from the truth every segment misses the segment data alike
   start <- mo$truth + c(1.5, -1.5, 1, 1, -1)
   fit <- trust(obj, start, iterlim = 0, stepControl = list(anneal = FALSE))
   expect_lt(nrow(fit$multipleShooting$nodes$C) + 1L, 20L)
@@ -651,7 +651,7 @@ test_that("transitions lays a node just before every fast change of the data", {
   x <- structure(function(...) NULL, mappings = NULL)
   nd <- dMod2:::.shootTransitionNodes(d, x, numeric(0))$C
   expect_equal(nd, c(27, 57, 87))
-  # no fast change: no layout of its own
+  # no fast change: no separate layout
   d$C$value <- sin(tt / 10)
   expect_null(dMod2:::.shootTransitionNodes(d, x, numeric(0)))
   # through normL2, which falls back to "auto" on FitzHugh-Nagumo
@@ -699,7 +699,7 @@ test_that("a prior enters the condensed problem", {
   expect_equal(fit$value, ref$value, tolerance = 1e-6)
 })
 
-test_that("trust() refuses what multiple shooting cannot honour", {
+test_that("trust() refuses what multiple shooting cannot honor", {
   mo <- .ms_models()
   obj <- normL2(mo$data, mo$g * mo$x * mo$p, multipleShootingControl = list(nodes = seq(2, 18, 2)))
   expect_error(trust(obj, mo$truth, hessianMethod = "exact"), "does not support")
@@ -720,21 +720,21 @@ test_that("mstrust fits a multiple-shooting objective through trust", {
   expect_s3_class(as.parframe(fits), "parframe")
 })
 
-test_that("profile() re-optimises by single shooting", {
+test_that("profile() re-optimizes by single shooting", {
   mo <- .ms_models()
   obj <- normL2(mo$data, mo$g * mo$x * mo$p, multipleShootingControl = list(nodes = seq(2, 18, 2)))
   single <- dMod2:::.singleShooting(obj)
   expect_length(dMod2:::.shootingTerms(single), 0L)
   expect_s3_class(single, "objfn")
   expect_equal(single(mo$truth)$value, obj(mo$truth)$value)
-  # the objective itself keeps its control
+  # the objective itself keeps the control
   expect_length(dMod2:::.shootingTerms(obj), 1L)
 })
 
 
 ## ---- The pieces multiple shooting is built from ----
 
-test_that("mstrust routes arguments by the formals of its optimiser", {
+test_that("mstrust routes arguments by the formals of the optimizer", {
   seen <- new.env()
   myopt <- function(objfun, parinit, special = 0, ...) {
     seen$special <- special
@@ -764,7 +764,7 @@ test_that("the backward walk takes several first-order seeds in one sweep", {
   u <- dMod2:::.bwdNode(fw$tape, list(dMod2:::.ct(out = W)), new.env(), 1L, seeds = TRUE)
   U <- u[[1L]]$pars
   expect_equal(ncol(U), 3L)
-  # each seed alone, as a first-order sweep of its own, replaying the same store
+  # each seed alone, as a separate first-order sweep, replaying the same store
   for (s in 1:3) {
     us <- dMod2:::.bwdNode(fw$tape, list(dMod2:::.ct(out = W[, , s, drop = FALSE])),
                            new.env(), 1L)

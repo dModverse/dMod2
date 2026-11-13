@@ -16,7 +16,7 @@ scale_color_dMod_div(mid = 0, ..., direction = 1, palette = "okabe")
 scale_fill_dMod_div(mid = 0, ..., direction = 1, palette = "okabe")
 }
 \arguments{
-\item{...}{Arguments passed to \code{\link[ggplot2:scale_colour_gradientn]{ggplot2::scale_colour_gradientn()}} or
+\item{...}{Arguments passed to \code{\link[ggplot2:scale_color_gradientn]{ggplot2::scale_color_gradientn()}} or
 \code{\link[ggplot2:scale_fill_gradientn]{ggplot2::scale_fill_gradientn()}}.}
 
 \item{direction}{1 (default) or -1; -1 reverses the ramp.}
@@ -37,7 +37,7 @@ asymmetric limits.
 \examples{
 library(ggplot2)
 d <- expand.grid(time = seq(0, 10, 0.1), eps = seq(0, 1, 0.1))
-ggplot(d, aes(time, exp(-eps * time), group = eps, colour = eps)) +
+ggplot(d, aes(time, exp(-eps * time), group = eps, color = eps)) +
    geom_line() + theme_dMod() + scale_color_dMod_c()
 }
 \seealso{

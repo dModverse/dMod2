@@ -9,7 +9,7 @@ test_that(".compileChunks caps both count and command length", {
   expect_equal(lengths(chunks), c(100L, 100L, 50L))
   expect_identical(unlist(chunks, use.names = FALSE), files)
 
-  ## An over-long name forms a chunk of its own rather than an empty one.
+  ## An over-long name forms a separate chunk rather than an empty one.
   long <- c(strrep("x", 500), files[1:3])
   expect_equal(lengths(dMod2:::.compileChunks(long, maxChars = 100L, maxN = 100L)),
                c(1L, 3L))
@@ -98,7 +98,7 @@ test_that("compile() compiles the sources of an output in parallel", {
 })
 
 
-test_that("compile() builds one shared object per source in parallel with its own flags", {
+test_that("compile() builds one shared object per source in parallel with per-source flags", {
 
   dir <- withr::local_tempdir()
   # BLAS calls link only when PKG_LIBS reaches the link of each source
@@ -141,7 +141,7 @@ test_that("compile() reuses objects whose source and command are unchanged", {
 
   ## The index keys on source bytes and compile command, so the shared object
   ## may take a fresh name each time and the objects are still reused.
-  # expect_no_match() forces its argument twice, so compile runs once into a variable.
+  # expect_no_match() forces the argument twice, so compile runs once into a variable.
   p <- mk()
   out1 <- capture.output(compile(p, output = "reuse_all_1", cores = 1), type = "message")
   expect_no_match(out1, "reusing")
@@ -214,7 +214,7 @@ test_that("the toolchain report separates shared from per-file flags", {
 
   expect_length(head, 1L)
 
-  # No source declares a flag of its own, a toolchain without OpenMP for
+  # No source declares a separate flag, a toolchain without OpenMP for
   # instance, and the report collapses to the one-line form that names the
   # shared set in brackets.
   if (!length(also)) {

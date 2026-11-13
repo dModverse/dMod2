@@ -1,6 +1,6 @@
-#' Non-Linear Optimisation by a Trust-Region Method
+#' Non-Linear Optimization by a Trust-Region Method
 #'
-#' \code{trust} minimises (or maximises) a smooth objective function for which
+#' \code{trust} minimizes (or maximizes) a smooth objective function for which
 #' value, gradient and Hessian are available. It solves a Moré-Sorensen
 #' trust-region subproblem exactly, via the full eigendecomposition of the
 #' Hessian.
@@ -43,7 +43,7 @@
 #' \code{"step"} or \code{"stagnation"} stop hands over to the next phase
 #' instead of ending the run. In a quasi-Newton phase \code{"fvalue"},
 #' \code{"preddiff"} and \code{"step"} do not end the run. A phase that
-#' reaches its own \code{iterlim} ends like a soft stop, with
+#' reaches the \code{iterlim} of that phase ends like a soft stop, with
 #' \code{stopReason = "iterlim"} and \code{converged = FALSE} when no
 #' handover is left. The total \code{iterlim} ends the run in any phase, with
 #' \code{stopReason = "iterlim"} and \code{converged = FALSE}.
@@ -54,7 +54,7 @@
 #'
 #' @section Multiple shooting:
 #' An objective built by \code{\link{normL2}(..., multipleShootingControl = )},
-#' alone or in a sum, is optimised by multiple shooting with the same controls.
+#' alone or in a sum, is optimized by multiple shooting with the same controls.
 #' Not available then: \code{hessianMethod = "exact"}, more than one phase,
 #' \code{switches}, \code{qnControl$hessianReseed},
 #' \code{qnControl$qnMemory}, \code{stepControl$nonmonotone},
@@ -84,11 +84,11 @@
 #'   every iterate, which needs an objective that takes \code{deriv2}.
 #'   Quasi-Newton methods require \code{boundary = "reflective"}.
 #'   Also selects the control defaults below. With \code{phases}, each phase
-#'   names its own and this argument is an error.
+#'   names a method, and this argument is an error.
 #' @param phases List of phases, each a list of settings, run one after the
 #'   other and from the first again after the last. The run hands over to the
 #'   next phase at a value, model, step or stagnation stop and when a phase
-#'   uses up its own \code{iterlim}. A handover restarts the trust region at
+#'   uses up the \code{iterlim} of that phase. A handover restarts the trust region at
 #'   \code{rinit} and discards the quasi-Newton pairs. Default \code{NULL}: one
 #'   phase from \code{hessianMethod} and \code{qnControl}, evaluated with the
 #'   \code{sweep} in \code{...}. Names of the list label the phases in the
@@ -185,8 +185,8 @@
 #'     \item{\code{restore}}{Multiple shooting only: if \code{TRUE}, a run whose
 #'       steps keep being rejected with open gaps enters a restoration phase,
 #'       at most five times. Default \code{FALSE}.}
-#'     \item{\code{regularise}}{Multiple shooting only: directions of the
-#'       condensed problem with a singular value below \code{regularise} times
+#'     \item{\code{regularize}}{Multiple shooting only: directions of the
+#'       condensed problem with a singular value below \code{regularize} times
 #'       the largest are held fixed in a step. Default \code{0}, off. With
 #'       \code{acceptance = "natural"} directions below \code{1e-7} are always
 #'       held fixed.}
@@ -194,12 +194,12 @@
 #'       step whose gaps did not close as predicted is retried once with a
 #'       second-order correction. Default \code{TRUE}.}
 #'     \item{\code{anneal}}{Multiple shooting only: if \code{TRUE}, the run
-#'       first minimises the objective plus a rising penalty on the gaps, then
+#'       first minimizes the objective plus a rising penalty on the gaps, then
 #'       enforces continuity. Needs forward sensitivities and is skipped
 #'       without them. Default \code{TRUE}.}
 #'   }
-#' @param minimize If \code{TRUE} (default) minimise, if \code{FALSE}
-#'   maximise.
+#' @param minimize If \code{TRUE} (default) minimize, if \code{FALSE}
+#'   maximize.
 #' @param blather If \code{TRUE}, the result also contains the per-iteration
 #'   trace listed under Value. Default \code{FALSE}.
 #' @param printIter If \code{TRUE}, print iteration count and objective value
@@ -208,11 +208,11 @@
 #'   iteration, objective value and parameters. Default \code{NULL}, no file.
 #' @param sparse \code{"auto"} (default), \code{TRUE} or \code{FALSE}. With
 #'   \code{TRUE}, \code{objfun} is called with \code{hessian = "sparse"} and
-#'   its sparse Gauss-Newton Hessian (a \code{Matrix}) is factorised by sparse
+#'   the sparse Gauss-Newton Hessian it returns (a \code{Matrix}) is factorized by sparse
 #'   Cholesky. Without phases and bounds; of the other settings only
 #'   \code{rinit}, \code{rmax}, \code{iterlim}, \code{tolControl$ftol},
 #'   \code{tolControl$mtol} and \code{printIter} apply. \code{"auto"} takes
-#'   this path for a Gauss-Newton minimisation without phases, bounds, exact
+#'   this path for a Gauss-Newton minimization without phases, bounds, exact
 #'   Hessian, trace or multiple shooting when \code{parinit} has at least
 #'   \code{parameters} entries and the sparse Hessian at \code{parinit} fills
 #'   at most \code{fill} of the matrix, both from
@@ -294,7 +294,7 @@
 #'              iterlim = 200)
 #' fit$atBound
 #'
-#' # Gauss-Newton, then BFGS with a budget of its own, then Gauss-Newton again
+#' # Gauss-Newton, then BFGS with a separate budget, then Gauss-Newton again
 #' fit <- trust(rosenbrock, c(a = -1.2, b = 1), iterlim = 200,
 #'              phases = list(list(hessianMethod = "gn"),
 #'                            list(hessianMethod = "bfgs", iterlim = 50)),
@@ -360,17 +360,17 @@ trust <- function(objfun, parinit, rinit = 0.1, rmax = 10,
   }
   if (isTRUE(sparse)) {
     if (!is.null(phases) || !is.null(parupper) || !is.null(parlower) || !minimize)
-      stop("trust(sparse = TRUE) minimises without phases and bounds.", call. = FALSE)
+      stop("trust(sparse = TRUE) minimizes without phases and bounds.", call. = FALSE)
     tol <- utils::modifyList(.trustDefaults()$tolControl, as.list(tolControl))
     return(.trustFit(.trustSparse(objfun, parinit, rinit, rmax, as.integer(iterlim),
                                   tol$ftol, tol$mtol, dots, printIter, first)))
   }
   .trustRejectMoved(names(dots), "trust")
   if (!is.null(phases) && !missing(hessianMethod))
-    stop("trust: with `phases`, each phase names its own hessianMethod.",
+    stop("trust: with `phases`, every phase names the hessianMethod.",
          call. = FALSE)
   if (!is.null(phases) && !is.null(dots$sweep))
-    stop("trust: with `phases`, each phase sets its own sweep.", call. = FALSE)
+    stop("trust: with `phases`, every phase sets the sweep.", call. = FALSE)
   hessianMethod <- if (is.null(phases)) match.arg(hessianMethod) else
     .phaseMethod(phases[[1L]]$hessianMethod, 1L)
 
@@ -387,7 +387,7 @@ trust <- function(objfun, parinit, rinit = 0.1, rmax = 10,
   ph <- .trustPhases(phases, switches, hessianMethod, qnControl)
 
   # The objective decides: a normL2 with a multipleShootingControl, alone or
-  # in a sum, is optimised by multiple shooting, with the same controls.
+  # in a sum, is optimized by multiple shooting, with the same controls.
   if (length(.shootingTerms(objfun)) > 0L) {
     if (length(ph$phases) > 1L || ph$switches > 0L)
       stop("trust: a multiple-shooting objective runs a single phase; ",
@@ -400,7 +400,7 @@ trust <- function(objfun, parinit, rinit = 0.1, rmax = 10,
   }
 
   # `want` (0 value, 1 gradient, 2 Gauss-Newton, 3 exact) becomes the objective's
-  # own arguments here, where its formals are visible. The exact request is checked
+  # own arguments here, where the formals of the objective are visible. The exact request is checked
   # up front, since a stop() inside fn reads as "parinit not feasible".
   .fml   <- names(formals(objfun))
   .wants_exact <- any(vapply(ph$phases, function(p)
@@ -412,7 +412,7 @@ trust <- function(objfun, parinit, rinit = 0.1, rmax = 10,
          "with.", call. = FALSE)
 
   # Without `phases` the objective takes `...` as given. With `phases` each
-  # phase passes its own sweep in place of one in `...`, and a request for a
+  # phase passes a separate sweep in place of one in `...`, and a request for a
   # Gauss-Newton Hessian runs forward, since it needs the forward sensitivities.
   sweeps <- if (is.null(phases)) dots$sweep %||% "forward" else {
     probe <- local({
@@ -468,8 +468,8 @@ trust <- function(objfun, parinit, rinit = 0.1, rmax = 10,
   match.arg(method, c("gn", "bfgs", "sr1", "exact"))
 }
 
-# The phases of a run, each with its Hessian source, budget (NA: none of its
-# own), sweep and quasi-Newton settings merged over the defaults of its source
+# The phases of a run, each with the Hessian source, budget (NA: no phase
+# budget), sweep and quasi-Newton settings merged over the defaults of the source
 # and the top-level qnControl. Without `phases`, one phase from the top level.
 .trustPhases <- function(phases, switches, hessianMethod, qnControl) {
   if (is.null(phases))
@@ -572,7 +572,7 @@ print.trustfit <- function(x, ...) {
     qnControl   = qn,
     stepControl = list(thetaMax = 0.99995,
                        nonmonotone = 0, acceptance = "filter", soc = TRUE,
-                       anneal = TRUE, twoPhase = FALSE, regularise = 0,
+                       anneal = TRUE, twoPhase = FALSE, regularize = 0,
                        restore = FALSE))
 }
 
@@ -621,7 +621,7 @@ print.trustfit <- function(x, ...) {
 
 #' @export
 #' @rdname trust
-#' @param mu Named numeric vector of reference values for the L1-penalised
+#' @param mu Named numeric vector of reference values for the L1-penalized
 #'   parameters. Names must be a subset of \code{names(parinit)}; only the
 #'   named parameters receive a penalty. Each must lie strictly inside
 #'   \code{[parlower, parupper]}. Defaults to a zero vector covering all of
@@ -635,8 +635,8 @@ print.trustfit <- function(x, ...) {
 #'   \code{lambda * (p - mu)} with \code{p >= mu}: the parameter can sit exactly
 #'   on \code{mu} and leaves it only upward. Starts below \code{mu} are moved
 #'   onto it.
-#' @param fuse List of fusion blocks. A block penalises
-#'   \code{lambda * sum_{i<j} w_ij |p_i - p_j|} over its parameters, plus
+#' @param fuse List of fusion blocks. A block penalizes
+#'   \code{lambda * sum_{i<j} w_ij |p_i - p_j|} over the parameters of the block, plus
 #'   \code{lambda * w_ia |p_i - a|} toward an optional anchor \code{a}.
 #'   Parameters with equal values move as one and split again when the data
 #'   pull them apart. A block is a character vector of parameter names or a
@@ -708,7 +708,7 @@ trustL1 <- function(objfun, parinit, mu = 0 * parinit, one.sided = FALSE, lambda
   }
   if (!is.null(fuse)) fuse <- .fuseBlocks(fuse, names(parinit), lambda0)
 
-  # Maximising f minus the penalty is minimising -f plus the penalty; the kernel
+  # Maximizing f minus the penalty is minimizing -f plus the penalty; the kernel
   # would negate the penalty with f.
   flip <- function(out) {
     if (inherits(out, "try-error")) return(out)
@@ -730,7 +730,7 @@ trustL1 <- function(objfun, parinit, mu = 0 * parinit, one.sided = FALSE, lambda
   if (minimize) out else flip(out)
 }
 
-# Normalise trustL1 fuse blocks to list(idx, lambda, anchor, w) with idx
+# Normalize trustL1 fuse blocks to list(idx, lambda, anchor, w) with idx
 # positions in `parnames`.
 .fuseBlocks <- function(fuse, parnames, lambda0) {
   if (!is.list(fuse)) fuse <- list(fuse)
@@ -758,7 +758,7 @@ trustL1 <- function(objfun, parinit, mu = 0 * parinit, one.sided = FALSE, lambda
 
 
 # Merge user control into `defaults` for trust()/trustL1(). Names are checked
-# against the optimiser's formals, so every optimiser argument is settable and a
+# against the optimizer's formals, so every optimizer argument is settable and a
 # typo errors here instead of silently reaching objfun via `...`.
 .trustControl <- function(defaults, control = NULL, optimizer = trust,
                           label = "control") {
@@ -775,7 +775,7 @@ trustL1 <- function(objfun, parinit, mu = 0 * parinit, one.sided = FALSE, lambda
 }
 
 
-## An R error reaches the kernel as a try-error with its message; thrown
+## An R error reaches the kernel as a try-error with the message; thrown
 ## through Rcpp, the message would be lost.
 .tryObjective <- function(expr)
   tryCatch(expr, error = function(e) structure(conditionMessage(e), class = "try-error"))

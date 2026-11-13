@@ -203,7 +203,7 @@ def parse_sbml(sbml_file):
     # needs a numeric default to fall back on for fixed-parameter wiring.
     parameter_names = []
     parameter_values = []
-    # An <initialAssignment> on a parameter is its starting value; a parameter
+    # An <initialAssignment> on a parameter is the starting value; a parameter
     # that a RateRule drives becomes a state on the R side and needs it.
     parameter_assignments = {}
     for i in range(model.getNumParameters()):

@@ -5,7 +5,7 @@
 //
 // The numerical core lives in trust_subproblem.h, which is deliberately free of
 // Rcpp so it can be reasoned about (and unit-tested) as plain LAPACK code. This
-// header is the other half: everything that only exists because the optimiser is
+// header is the other half: everything that only exists because the optimizer is
 // driven from R.
 
 #ifndef DMOD_TRUST_DRIVER_H
@@ -26,7 +26,7 @@ using namespace Rcpp;
 
 const double kInf = std::numeric_limits<double>::infinity();
 
-// Named entries slot in by name; an unnamed vector broadcasts its first element.
+// Named entries slot in by name; an unnamed vector broadcasts the first element.
 inline void fill_bound(Nullable<NumericVector> nv, std::vector<double>& out,
                        const CharacterVector& parnames, int K) {
   if (nv.isNull()) return;

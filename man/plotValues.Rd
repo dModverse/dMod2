@@ -79,25 +79,25 @@ starts are plotted. Or a named list of collections, one panel each.}
 still counts as one step. Defaults to 1.}
 
 \item{showSteps}{Logical. \code{TRUE} marks the detected steps by dashed
-vertical lines labelled by their index. Defaults to \code{FALSE}.}
+vertical lines labeled by their index. Defaults to \code{FALSE}.}
 
 \item{pseudoLog}{Logical. \code{TRUE} draws the values on a pseudo-log10 scale,
 linear below 1 in absolute value and defined for negative values. Defaults
 to \code{FALSE}, a linear scale.}
 
-\item{relative}{\code{TRUE} draws every value above the best of its
+\item{relative}{\code{TRUE} draws every value above the best value in the same
 collection, as for collections whose objectives differ by a constant; a
 number draws every value above that number, as the best of all
 collections. Defaults to \code{FALSE}.}
 }
 \value{
 A \code{ggplot} object with the plotted data frame as attribute
-\code{"data"}; its column \code{delta} is the distance to the best fit of its
+\code{"data"}; the column \code{delta} is the distance to the best fit in the same
 collection, \code{set} the collection of a list.
 }
 \description{
 Draws the waterfall plot of a fit collection: the objective values in
-ascending order against their rank. A converged fit is colored by its number
+ascending order against their rank. A converged fit is colored by the number
 of iterations, an unconverged one is red.
 }
 \examples{

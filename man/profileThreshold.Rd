@@ -25,7 +25,7 @@ How far a profile has to rise for a parameter value to leave the confidence
 region. \code{"chisq"} is the asymptotic \eqn{\chi^2_1} quantile. \code{"F"} is the
 finite-sample threshold \eqn{n\log(1 + F_{1,\nu,1-\alpha}/\nu)},
 \eqn{\nu = n - p}, exact for Gaussian errors with a single sigma profiled
-out and the generalisation of the classical t interval.
+out and the generalization of the classical t interval.
 }
 \seealso{
 \link[=profile.objfn]{profile()}, \code{\link[=confint.parframe]{confint.parframe()}}

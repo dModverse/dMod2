@@ -35,14 +35,14 @@ symmetryDetection(
 
 \item{g}{Observables: one \link{eqnvec} or named character vector for all conditions,
 or a list with one per row of \code{conditions}. An observable \code{a*log(h) + c} with a
-number \code{a} is analysed through \code{h}.}
+number \code{a} is analyzed through \code{h}.}
 
 \item{trafo}{Parameter transformation: one \link{eqnvec} for all conditions or a list
 with one per condition. An entry named like a parameter is substituted into \code{f},
-\code{g}, event values and event times; an entry named like a state is its initial
-value. On the right-hand side a state name is the initial value of that state.
+\code{g}, event values and event times; an entry named like a state sets the initial
+value of the state. On the right-hand side a state name is the initial value of that state.
 A parameter that enters only through \code{k = "exp(lk)"}, \code{"exp10(lk)"} or
-\code{"10^lk"} is analysed in \code{b^lk} and reported in \code{lk}.}
+\code{"10^lk"} is analyzed in \code{b^lk} and reported in \code{lk}.}
 
 \item{parameters}{Character vector of additional symbols treated as parameters.}
 
@@ -68,7 +68,7 @@ value named like a column of \code{conditions} is read from it.}
 
 \item{conditions}{Data frame with one row per condition and columns named by
 model symbols or event values. A numeric cell fixes the symbol, a character cell
-renames it. A column named like a dynamic state sets its initial value. A
+renames it. A column named like a dynamic state sets the initial value of the state. A
 direction is reported only if it is non-identifiable in every condition.}
 
 \item{regimes}{For a model with switches, the regimes an experiment visits: a
@@ -76,7 +76,7 @@ character vector of comparisons such as \code{"x > c"}, each selecting the regim
 that side of a switch, or a list of such vectors whose comparisons hold together;
 the first entry is the regime at the start. A list named by the rows of
 \code{conditions} gives them per condition. Without it every regime counts; a switch on
-parameters alone needs its side named here.}
+parameters alone needs the side of the switch named here.}
 
 \item{equilibrate}{Logical. Start at a steady state of \code{f} with the inputs at 0;
 the earliest events apply on top. Coupled steady states may need msolve; when
@@ -84,7 +84,7 @@ it is missing, an interactive session asks whether to build it into the
 symident cache (on Windows with Rtools). Defaults to \code{FALSE}.}
 
 \item{reduceCQ}{Logical, \link{eqnlist} only. Report the freedom of a conserved moiety
-on its total (\code{TRUE}) or on the initial value of one species (\code{FALSE},
+on the total of the moiety (\code{TRUE}) or on the initial value of one species (\code{FALSE},
 default).}
 
 \item{freeInitial}{States, at most one per conserved quantity, holding the free

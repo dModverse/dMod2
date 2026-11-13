@@ -15,7 +15,7 @@ msParframe(
 }
 \arguments{
 \item{pars}{Named numeric vector. If \code{samplefun} has an argument \code{mean},
-the draws are centred on \code{pars}.}
+the draws are centered on \code{pars}.}
 
 \item{n}{Integer, number of rows. Default \code{20}.}
 

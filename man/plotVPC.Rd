@@ -29,8 +29,8 @@ plotVPC(x, ...)
 the breaks of the bins.}
 
 \item{pc}{\code{TRUE}: prediction corrected (Bergstrand et al. 2011), every
-reading and simulation times the median population prediction of its bin
-over its own population prediction. Without \code{logScale}, readings whose
+reading and simulation times the median population prediction of the bin
+over the population prediction of that reading. Without \code{logScale}, readings whose
 population prediction is not positive are left out, with their simulations.}
 
 \item{logScale}{With \code{pc}, \code{TRUE} for observables on a log scale: the
@@ -52,9 +52,10 @@ Per observable and bin of time the 5th, 50th and 95th
 percentiles of the readings against the 95 percent prediction intervals of
 the same percentiles of \code{nsim} data sets simulated from the fit
 (\link[=simulate.em]{simulate()}). Censored readings and simulations enter at
-their limit, and a percentile at or below the limit of its bin is not
+their limit, and a percentile at or below the limit of the bin is not
 drawn. Where the data have a limit of quantification a second panel shows
-the fraction of censored readings per bin against its prediction interval.
+the fraction of censored readings per bin against the prediction interval
+of that fraction.
 }
 \examples{
 \donttest{
@@ -73,8 +74,8 @@ g <- Y(c(y = "amt * Ka / (V * Ka - Cl) * (exp(-Cl / V * time) - exp(-Ka * time))
        outdir = tempdir())
 err <- Y(c(y = "sigma_add"), g, attachInput = FALSE, modelname = "theoph_err", compile = FALSE,
          derivMode = dm, outdir = tempdir())
-## one condition per subject with its dose; the effect formula replaces each log parameter
-## by its intercept plus a random effect per subject
+## one condition per subject with the subject dose; the effect formula replaces each log parameter
+## by an intercept plus a random effect per subject
 doses <- tapply(th$Dose * th$Wt, th$Subject, `[`, 1)[subjects]
 trafo <- branch(define(NULL, "x <- x", x = c("Ka", "V", "Cl", "amt", "sigma_add")),
                 table = data.frame(ID = subjects, dose = doses, row.names = subjects))

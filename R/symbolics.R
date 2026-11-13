@@ -119,7 +119,7 @@ replaceSymbols <- function(what, by, x) {
 
 #' Substitute Earlier Entries into Later Ones
 #'
-#' Replaces, for each entry, its name in all later entries by the entry in
+#' Replaces the name of each entry in all later entries by the entry in
 #' parentheses, so that no entry depends on an earlier name, e.g. for steady
 #' state expressions.
 #'

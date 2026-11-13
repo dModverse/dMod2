@@ -53,7 +53,7 @@ test_that("a missing msolve is offered, and the call repeated once it is install
     '{"ok": true}'
   }), .package = "dMod2")
   local_mocked_bindings(.offerMsolve = function() FALSE, .package = "dMod2")
-  expect_error(dMod2:::.symCall("f"), "confirm its installation")
+  expect_error(dMod2:::.symCall("f"), "confirm the msolve installation")
   calls <- 0L
   local_mocked_bindings(.offerMsolve = function() installed <<- TRUE, .package = "dMod2")
   expect_true(dMod2:::.symCall("f")$ok)
@@ -103,7 +103,7 @@ test_that("a scaling and a general direction, with the result object", {
   expect_identical(r$call[[1]], quote(symmetryDetection))
 })
 
-test_that("an unknown input and its change along each direction", {
+test_that("an unknown input and the input change along each direction", {
   r <- symmetryDetection(eqnvec(L = "-(c*T + L)/tau"), eqnvec(y = "L"), unknownInputs = "T",
                          reconstruct = TRUE, verbose = FALSE)
   expect_identical(c(r$rank, r$dim), c(1L, 3L))
@@ -137,7 +137,7 @@ test_that("events split the time line and equilibrate starts at rest", {
   expect_true(isTRUE(r$info$settings$equilibrate))
 })
 
-test_that("the gap order is raised to its rank bound, else the rank is a lower bound", {
+test_that("the gap order is raised to the rank bound, else the rank is a lower bound", {
   f <- eqnvec(x = "u*w - k*x", w = "c*(1 - u)*v", v = "1 - u", u = "0")
   ev <- addEvent(eventlist(), var = "u", time = 0, value = "0", method = "replace") |>
     addEvent(var = "u", time = 1, value = "1", method = "replace")
@@ -149,7 +149,7 @@ test_that("the gap order is raised to its rank bound, else the rank is a lower b
   r <- symmetryDetection(f, eqnvec(y = "x"), trafo = tr, events = ev, reconstruct = TRUE,
                          verify = FALSE, control = cap, verbose = FALSE)
   expect_false(r$info$gapCertified)
-  expect_match(r$info$gapCertificate, "below its bound 3")
+  expect_match(r$info$gapCertificate, "below (its|the) bound 3")
   expect_identical(r$info$rankStatus$status, "lower bound")
   expect_false(r$identifiable)
   expect_true(any(grepl("^gap order: ", unlist(r$info$limits))))
@@ -186,7 +186,7 @@ test_that("scalings only, the gauge and the control settings", {
   expect_identical(r$info$settings$control$degreeCapMax, 6L)
 })
 
-test_that("the reduction removes the directions and reports its chart", {
+test_that("the reduction removes the directions and reports the chart", {
   r <- symmetryDetection(f_ab, eqnvec(y = "s*A"), reconstruct = TRUE, verbose = FALSE)
   red <- symmetryReduction(r, reportZeroCompatibility = TRUE)
   expect_s3_class(red, "symmetryreduction")

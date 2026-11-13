@@ -68,7 +68,7 @@ test_that("vcov of a sparse Hessian equals the dense one, also for a block and w
                   Matrix::sparseMatrix(i = c(1, 1, 2, 2), j = c(1, 2, 1, 2), x = 2, dims = c(2, 2),
                                        dimnames = list(c("a", "b"), c("a", "b"))))
   expect_equal(unname(vcov(sing)), matrix(0.25, 2, 2))
-  # semidefinite matrices that sparse Cholesky factorises with a pivot at rounding level
+  # semidefinite matrices that sparse Cholesky factorizes with a pivot at rounding level
   for (seed in 1:3) {
     set.seed(seed)
     A <- matrix(rnorm(12), 4, 3)
@@ -142,7 +142,7 @@ test_that("a singular sparse path equation gives the profile and the warning of 
                "non-identifiable parameters: [ab]\\.")
 })
 
-test_that("trust(sparse = \"auto\") takes the sparse path above its thresholds, from the first evaluation", {
+test_that("trust(sparse = \"auto\") takes the sparse path above the thresholds, from the first evaluation", {
   f <- .sparseFixture()
   obj <- f$obj + constraintL2(c(C1_a0 = 1, C2_a3 = 2), sigma = 1)
   calls <- 0
@@ -203,7 +203,7 @@ test_that("normT, censored rows and datapointL2 have the sparse Hessian of the d
   }
 })
 
-test_that("a sum of objectives holds its terms, not the frame it is built in", {
+test_that("a sum of objectives holds the terms, not the frame it is built in", {
   f <- .sparseFixture()
   prior <- constraintL2(c(C1_a0 = 1), sigma = 1)
   build <- function() {
@@ -241,7 +241,7 @@ test_that("the sparse trust step on a Hessian with a flat direction ends on the 
   expect_equal(drop(as.matrix(H + st$lambda * Matrix::Diagonal(2)) %*% st$p), c(-1, -1), tolerance = 1e-10)
   # at a vanishing gradient the step is zero
   expect_equal(dMod2:::.sparseTrustStep(H, c(0, 0), 1)$p, c(0, 0))
-  # gradients whose squares underflow: a step of the radius, its norm taken without underflow
+  # gradients whose squares underflow: a step of the radius, the norm taken without underflow
   H2 <- Matrix::Diagonal(x = c(1, 2))
   for (g in list(c(1e-160, 1e-160), c(1e-170, 1e-170))) {
     tiny <- dMod2:::.sparseTrustStep(H2, g, 1e-170)

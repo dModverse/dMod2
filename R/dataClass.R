@@ -1,5 +1,5 @@
 
-## Class "datalist" and its constructor ------------------------------------------
+## Class "datalist" and constructor ------------------------------------------
 
 
 #' @param x object of class `data.frame` or `list` of data frames. Data frames
@@ -69,7 +69,7 @@ as.datalist.list <- function(x, names = NULL, ..., condition.grid = attr(x, "con
   conditions <- if (is.null(names)) base::names(x) else names
   if (length(conditions) != length(frames)) stop("names argument has wrong length")
 
-  # A list without a grid gets one with the condition names as its only column.
+  # A list without a grid gets one with the condition names as the only column.
   grid <- condition.grid %||% data.frame(condition = conditions, row.names = conditions)
   structure(stats::setNames(frames, conditions), class = c("datalist", "list"),
             condition.grid = grid)
@@ -159,13 +159,13 @@ subset.datalist <- function(x, subset, ...) {
 #' @param scales the `scales` argument of [ggplot2::facet_wrap()] or
 #'   [ggplot2::facet_grid()]: `"free"` (default), `"fixed"`, `"free_x"` or
 #'   `"free_y"`.
-#' @param facet `"wrap"` (default): one panel per name, colour by condition.
+#' @param facet `"wrap"` (default): one panel per name, color by condition.
 #'   `"grid"`: names as rows, conditions as columns. `"wrap_plain"`: one panel
 #'   per combination of name and condition.
 #' @param transform list of transformations for the states, see
 #'   [coordTransform()]. Default `NULL`.
 #'
-#' @return A `ggplot` object. Its attribute `"data"` holds the plotted data
+#' @return A `ggplot` object. The attribute `"data"` holds the plotted data
 #'   frame.
 #' @seealso [plotCombined()], [plotPrediction()]
 #'
@@ -203,7 +203,7 @@ plotData.datalist <- function(data, ..., scales = "free",
     wrap_plain = facet_wrap(~name * condition, scales = scales))
   # no legend for absent BLoQ points or a single condition
   legends <- list(if (all(frame$bloq == "no")) guides(shape = "none"),
-                  if (nlevels(frame$condition) == 1L) guides(colour = "none"))
+                  if (nlevels(frame$condition) == 1L) guides(color = "none"))
 
   p <- ggplot(frame, aes(x = time, y = value, ymin = value - sigma, ymax = value + sigma,
                          pch = bloq)) +
@@ -308,7 +308,7 @@ covariates.data.frame <- function(x, ...) {
 #'
 #' The attribute `condition.grid` holds one row per condition with further
 #' information such as doses; see [covariates()]. Renaming a datalist renames
-#' the rows of its condition grid.
+#' the rows of the condition grid.
 #' @param ... for `datalist()` and `c()`, named data frames or datalists; for
 #' the `as.datalist()` methods, not used.
 #' @return Object of class `datalist`.
