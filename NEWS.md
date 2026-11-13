@@ -1,3 +1,13 @@
+# dMod2 0.15.6
+
+* `symmetryDetection()` and `symmetryReduction()` need symident 0.13.5. The exact proof of a
+  direction expands the identities under a cap on the terms and solves the state components that
+  an initial value set by parameters gives a direction from the parametrization of that value.
+  Under `equilibrate`, a direction without exact proof is `"verified"` with an error bound where
+  the resting states lie on one component of each resting variety, and the Lie order is certified
+  for generic values. The order bound counts the points drawn for each random point, in
+  `info$orderDraws`, and on models with many denominators the detection is several times faster.
+
 # dMod2 0.15.5
 
 * The jobs of `distributedComputing()` count a task without result on a node that does not
