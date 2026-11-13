@@ -29,7 +29,8 @@
 #'   \item \code{xtol}: the step norm is below \code{xtol}.
 #'   \item stagnation: five consecutive rejected steps left the objective
 #'     flat within \code{ftol}.
-#'   \item \code{rmin}: the trust radius is below \code{rmin}. Reports
+#'   \item \code{rmin}: the trust radius is below \code{rmin}, or a step
+#'     no longer changes the parameters in floating point. Reports
 #'     \code{converged = FALSE}.
 #' }
 #' \code{stopReason} in the result names the test that fired:
@@ -149,7 +150,8 @@
 #'       \code{deriv2}, see \code{derivMode} in [odemodel()]. Used only when
 #'       \code{hessianMethod} is \code{"bfgs"} or \code{"sr1"}.}
 #'     \item{\code{hessianReseed}}{\code{"never"} (default): a stalled
-#'       quasi-Newton phase stops. \code{"stall"}: it continues from a fresh
+#'       quasi-Newton phase, or one whose trust radius collapses, stops.
+#'       \code{"stall"}: it continues from a fresh
 #'       Hessian of the same source at the current iterate, provided the
 #'       iterate moved since the last reseed. The result reports the count as
 #'       \code{nReseed}.}

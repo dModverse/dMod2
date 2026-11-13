@@ -69,8 +69,8 @@ struct QnParams {
   bool rejected;
 };
 
-// One phase of a run: its Hessian source, its own iteration budget, the sweep
-// the objective is evaluated with, and its quasi-Newton settings.
+// One phase of a run: the Hessian source, a separate iteration budget, the sweep
+// the objective is evaluated with, and the quasi-Newton settings.
 struct Phase {
   int method;
   int iterlim;
@@ -180,7 +180,7 @@ List trust_reflective(Function objfun, NumericVector parinit,
   for (int i = 0; i < K; ++i) x_named[i] = z[i] / ps[i];
 
   // Only a run that starts quasi-Newton can do without the objective's Hessian;
-  // gn needs it every iteration and a later phase seeds its handover from it.
+  // gn needs it every iteration and a later phase seeds the handover from it.
   const int hessianMethod = phases[0].method;
   const QnParams& qpri = phases[0].qn;
   const bool qn_start = (hessianMethod == HM_BFGS || hessianMethod == HM_SR1);
@@ -205,7 +205,7 @@ List trust_reflective(Function objfun, NumericVector parinit,
   if (seed_gn) {
     seeded = read_hessian(out_init, K, H_full);
     // gn reads a Hessian at every iterate, so an objective that declines one
-    // cannot drive it at all; a quasi-Newton start only loses its seed.
+    // cannot drive it at all; a quasi-Newton start only loses the seed.
     if (!seeded && !qn_start)
       stop("objfun returned no Hessian at parinit, which this hessianMethod "
            "needs at every iterate");
@@ -259,7 +259,7 @@ List trust_reflective(Function objfun, NumericVector parinit,
   // gradient as the new phase computes them.
   int  pending_level = -1;
   bool pending_refresh = false;
-  // Iterations of the running phase, against its own budget, and of every
+  // Iterations of the running phase, against the phase budget, and of every
   // phase run so far in run order. The iteration of a handover counts on the
   // phase it ends.
   int  phase_iter = 0;
@@ -282,6 +282,19 @@ List trust_reflective(Function objfun, NumericVector parinit,
   // qnMemory = 0 accumulates onto the seed, otherwise rebuild from the window.
   std::deque<std::vector<double>> qn_S, qn_Y;
   double qn_gamma = 1.0;
+  // A stalled quasi-Newton phase can fetch a fresh curvature instead of stopping. A reseed, not a
+  // handover: the source stays and only the matrix it updates from is replaced, so the stored
+  // pairs go with it. Under "stall" it fetches the kind the phase was seeded with.
+  auto can_reseed = [&]() {
+    return qp->reseed == HR_STALL && qn_active && moved_since_reseed &&
+           phase_reseed < kReseedLimit;
+  };
+  auto reseed = [&]() {
+    pending_level = (qp->init == HI_EXACT) ? CV_EXACT : CV_GN;
+    n_reseed++; phase_reseed++; moved_since_reseed = false;
+    n_stall = 0; r = rinit;
+    qn_S.clear(); qn_Y.clear(); qn_gamma = 1.0;
+  };
 
   // Scaling, optimality measure, bound flags and the best-iterate snapshot at
   // the current point. Runs at the head of an iteration and once more after the
@@ -301,7 +314,7 @@ List trust_reflective(Function objfun, NumericVector parinit,
     for (int i = 0; i < K; ++i)
       opt_measure = std::max(opt_measure, std::fabs(absv[i] * g_z[i]));
     // A coordinate counts as bound-active when only the scaling makes it
-    // stationary, its own gradient still well away from zero. Set before
+    // stationary, the gradient entry of the coordinate still well away from zero. Set before
     // the convergence break, which is exactly when it matters.
     const double btol = std::max(gtol, 1e-10);
     for (int i = 0; i < K; ++i)
@@ -328,7 +341,7 @@ List trust_reflective(Function objfun, NumericVector parinit,
       x_now.names() = parnames;
       for (int i = 0; i < K; ++i) x_now[i] = z[i] / ps[i];
       // A Gauss-Newton Hessian is computed forward, so a reverse phase takes
-      // its value and gradient from a second evaluation.
+      // the value and gradient from a second evaluation.
       const bool split = refresh && phases[cur].reverse && level == CV_GN;
       auto take = [&](const List& out) {
         if (!out.containsElementNamed("value") ||
@@ -411,11 +424,19 @@ List trust_reflective(Function objfun, NumericVector parinit,
     // setting |v| = 0 and freezing the coordinate.
     push_interior(K, z_try, lbz, ubz);
 
+    // A step below the resolution of the iterate would evaluate the iterate itself, and every
+    // later step is smaller still: the radius has collapsed whatever rmin is. A quasi-Newton
+    // phase that may still reseed stalls instead.
+    bool moved = false;
+    for (int i = 0; i < K && !moved; ++i) moved = z_try[i] != z[i];
+    if (!moved && can_reseed()) { reseed(); continue; }
+    if (!moved) { stop_reason = "radius"; break; }
+
     NumericVector x_try(K);
     x_try.names() = parnames;
     for (int i = 0; i < K; ++i) x_try[i] = z_try[i] / ps[i];
 
-    // The quasi-Newton phase maintains its own Hessian, so it asks the
+    // The quasi-Newton phase maintains a separate Hessian, so it asks the
     // objective not to build J^T J; only the gn pass-through reads it back.
     const bool want_h = !qn_active;
     List out_try;
@@ -536,27 +557,18 @@ List trust_reflective(Function objfun, NumericVector parinit,
       else if (xtol > 0.0 && stepnorm < xtol) { soft_stop = "step";     model_stop = true; }
     }
     // A rejected Newton step inside the radius that predicts less than mtol: no smaller step
-    // predicts more, the model is at its minimum.
+    // predicts more, the model is at the minimum.
     if (!accept && eval_ok && is_newton && std::fabs(m_value) < mtol) {
       soft_stop = "preddiff"; model_stop = true;
     }
     if (soft_stop == nullptr && r >= rmin && n_stall >= kStallLimit)
       soft_stop = "stagnation";
 
-    // A stalled quasi-Newton phase can fetch a fresh curvature instead of
-    // stopping. A reseed, not a handover: the source stays and only the matrix
-    // it updates from is replaced, so the stored pairs go with it.
-    if (soft_stop != nullptr && qp->reseed == HR_STALL && qn_active &&
-        moved_since_reseed && phase_reseed < kReseedLimit &&
-        std::strcmp(soft_stop, "stagnation") == 0) {
-      // A reseed under "stall" fetches the same kind the phase was seeded with.
-      pending_level = (qp->init == HI_EXACT) ? CV_EXACT : CV_GN;
-      n_reseed++; phase_reseed++; moved_since_reseed = false;
-      n_stall = 0; r = rinit;
-      qn_S.clear(); qn_Y.clear(); qn_gamma = 1.0;
+    if (soft_stop != nullptr && std::strcmp(soft_stop, "stagnation") == 0 && can_reseed()) {
+      reseed();
       soft_stop = nullptr;
     }
-    // A phase that used up its budget ends like a soft stop, but without the
+    // A phase that used up the phase budget ends like a soft stop, but without the
     // claim of convergence.
     bool budget_out = false;
     phase_iters.back()++;
@@ -616,7 +628,8 @@ List trust_reflective(Function objfun, NumericVector parinit,
   if (stop_reason == "objfun")
     Rf_warning("trust: objfun evaluation failed 3 times in a row");
   else if (stop_reason == "radius")
-    Rf_warning("Trust radius fell below rmin. Fit is not converged.");
+    Rf_warning("Trust radius fell below rmin or below the resolution of the parameters. "
+               "Fit is not converged.");
   else if (!converged && n_iter >= iterlim)
     Rf_warning("Maximum number of iterations exceeded. Fit is not converged.");
 
@@ -965,7 +978,7 @@ List trust_impl(Function objfun,
     else if (m == "exact") ph.method = HM_EXACT;
     else stop("trust: hessianMethod must be one of \"gn\", \"bfgs\", \"sr1\", "
               "\"exact\"");
-    // NA: no budget of its own, only the total iterlim.
+    // NA: no phase budget, only the total iterlim.
     ph.iterlim = (phaseIterlim[k] == NA_INTEGER) ? INT_MAX : phaseIterlim[k];
     if (ph.iterlim < 1) stop("trust: the iterlim of a phase must be >= 1");
     ph.reverse = phaseReverse[k] == TRUE;

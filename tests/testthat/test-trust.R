@@ -300,6 +300,23 @@ test_that("a collapsing trust radius reports failure, not convergence", {
 })
 
 
+test_that("a step that no longer moves the iterate ends the run as a collapsed radius", {
+  # every evaluation after the first is higher, at the start as well, so no step is accepted and
+  # the values never turn flat
+  calls <- 0L
+  obj <- function(p, ...) {
+    calls <<- calls + 1L
+    h <- diag(2, length(p))
+    dimnames(h) <- list(names(p), names(p))
+    objlist(sum(p^2) + if (calls > 1L) 3 else 0, 2 * p, h)
+  }
+  expect_warning(fit <- trust(obj, c(a = 1, b = 1), rinit = 1, rmax = 10, iterlim = 500),
+                 "resolution")
+  expect_false(fit$converged)
+  expect_identical(fit$stopReason, "radius")
+  expect_lt(fit$iterations, 100L)
+})
+
 test_that("a flat objective under repeated rejection stops as stagnation", {
   # Without an rmin floor the run ends once the objective stops moving. That is
   # "stagnation", never "gradient": the optimizer cannot tell a noise floor from

@@ -801,8 +801,8 @@ test_that("a reseed needs a moved iterate and cannot outlast one", {
   # return the same matrix. Reseeds are taken, and then the run stops the way
   # "never" does instead of spending the budget on them.
   expect_gt(rs$nReseed, 0L)
-  expect_true(rs$converged)
-  expect_identical(rs$stopReason, "stagnation")
+  expect_identical(rs$stopReason, nv$stopReason)
+  expect_identical(rs$converged, nv$converged)
   expect_lt(rs$iterations, 100L)
   expect_identical(nv$nReseed, 0L)
   expect_equal(rs$value, nv$value, tolerance = 1e-6)

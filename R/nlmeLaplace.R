@@ -836,12 +836,13 @@
           hessian = matrix(0, length(x), length(x), dimnames = list(names(x), names(x))))
 
 ## The BFGS update of B = base + correction for the step s with gradient change y, returned as the
-## new correction; a pair with s'y <= 1e-8 |s| |y| is skipped, a correction that leaves B
-## indefinite is dropped.
+## new correction; a pair with 0 < s'y <= 1e-8 |s| |y| is skipped, a correction that a pair with
+## s'y <= 0 contradicts or that leaves B indefinite is dropped.
 .secantCorrection <- function(base, correction, s, y) {
   B <- base + correction
   Bs <- drop(B %*% s)
   sy <- sum(s * y); sBs <- sum(s * Bs)
+  if (sy <= 0) return(0 * correction)
   if (sy <= 1e-8 * sqrt(sum(s^2) * sum(y^2)) || sBs <= 0) return(correction)
   updated <- B - tcrossprod(Bs) / sBs + tcrossprod(y) / sy
   if (min(eigen(updated, symmetric = TRUE, only.values = TRUE)$values) <= 0) return(0 * correction)

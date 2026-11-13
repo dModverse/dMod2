@@ -1,3 +1,15 @@
+# dMod2 0.15.3
+
+* `trust()` ends with `stopReason = "radius"` once a step no longer changes the parameters in
+  floating point, also with the default `rmin = 0`. Before, an objective whose value at the iterate
+  differs between evaluations, as the Laplace marginal of `em()` and `msem()` can, kept the run
+  evaluating the iterate until `iterlim`. Under `qnControl = list(hessianReseed = "stall")` a
+  quasi-Newton phase reseeds first, as at a stall.
+
+* With sparse random effects, `em()` and `msem()` drop the BFGS correction of the model Hessian,
+  in the search of the random effect modes and in the joint fit, when a step shows no positive
+  curvature, so the search returns to the model Hessian instead of creeping on a stale correction.
+
 # dMod2 0.15.2
 
 * The refit in each step of `profile()` starts at the radius `rinit` of `optControl`. Before, the
