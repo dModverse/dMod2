@@ -29,7 +29,7 @@ is one task per worker.}
 \item{on}{Where the tasks run: \code{\link[=localNode]{localNode()}} (default), \code{\link[=sshNodes]{sshNodes()}} or
 \code{\link[=slurmCluster]{slurmCluster()}}.}
 
-\item{jobname}{Character, the name of the job and its folder. \code{NULL}
+\item{jobname}{Character, the name of the job and of the job folder. \code{NULL}
 (default) picks a random name.}
 
 \item{input}{Character vector, the objects saved and copied to the nodes,
@@ -53,7 +53,7 @@ tasks is kept. Default \code{FALSE}.}
 \item{recover}{Logical. \code{TRUE} returns the functions of the job \code{jobname},
 submitted from this working directory or registered, without submitting
 again. Else, with \code{on} given, the manifest is taken from the job folder of
-its remote nodes, which recovers a job submitted from another machine; it
+the remote nodes, which recovers a job submitted from another machine; it
 is then saved in \verb{<jobname>_folder} of the working directory and
 registered. A job that also runs on \code{"localhost"} is recovered only on the
 machine it was submitted from. Default \code{FALSE}.}
@@ -71,13 +71,16 @@ With \code{wait = TRUE} the results of \code{get()}, else an object of class
 \describe{
 \item{\code{check()}}{reports how many tasks are done, running or failed and
 returns \code{TRUE} once no task runs any more, with a warning when some
-failed. A task fails when its process ends without a result.}
+failed. A task fails when the task process ends without a result. A
+task without a result on a node that does not answer, or whose queue
+does not, counts as running.}
 \item{\code{wait(interval = 10)}}{polls every \code{interval} seconds until no task
 runs, reports each change as a message and returns \code{TRUE} when every task
-is done.}
+is done. While a node does not answer, the pause between polls doubles up
+to 10 minutes.}
 \item{\code{get(combine = TRUE, all = FALSE)}}{returns the results. With
-\code{combine = TRUE} parlists are joined by \code{c()}, fits of \code{\link[=msem]{msem()}} with
-parts of its starts into one fit, and data frames such as parframes by
+\code{combine = TRUE} parlists are joined by \code{c()}, fits of \code{\link[=msem]{msem()}} that
+each ran a part of the same starts into one fit, and data frames such as parframes by
 \code{rbind()}, other results come as a list; tasks without a
 result are left out with a warning. \code{combine = FALSE} returns one entry
 per task, named like \code{tasks}, \code{NULL} for a task not done. Results of
@@ -99,20 +102,20 @@ nodes need a POSIX shell.
 }
 \details{
 The start is reported as a message, on a SLURM cluster with the job ID. A
-build writes its output to \code{build.log} in the job folder; a failed build
-shows its end in the error.
+build writes the output to \code{build.log} in the job folder; the error of a
+failed build shows the end of that log.
 
 The value of \code{expr} is the result of a task. In the code, \code{task}
-is the task's element of \code{tasks} (\code{NULL} for a count), \code{taskId} its
-position, \code{cores} the cores the task may use and \code{jobname} the job's name.
+is the task's element of \code{tasks} (\code{NULL} for a count), \code{taskId} the
+position of the task, \code{cores} the cores the task may use and \code{jobname} the job's name.
 Parallel code such as \code{\link[=mstrust]{mstrust()}} or \link[=profile.objfn]{profile()} takes
 \code{cores = cores}. A task that raises an error returns the error as a
 \code{try-error}. Task \code{i} starts with the seed \code{seed + i}.
 
 The tasks are dealt in turn to the workers of \code{on}, the nodes or the array
-tasks of a SLURM job, and a worker runs its tasks one after the other, see
+tasks of a SLURM job, and a worker runs the tasks dealt to it one after the other, see
 \code{\link[=localNode]{localNode()}}. A job is kept in \verb{<jobname>_folder}, in the working directory
-for \code{"localhost"} and in the home directory of a remote node. Its manifest
+for \code{"localhost"} and in the home directory of a remote node. The job manifest
 \code{job.rds} lies in the local \verb{<jobname>_folder} and in that of every remote
 node. A job of the same name that still runs there is an error, also when it
 was submitted from another machine. Every job is registered in

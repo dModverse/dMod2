@@ -4,7 +4,7 @@
 \alias{localNode}
 \alias{sshNodes}
 \alias{slurmCluster}
-\title{Where distributedComputing() Runs its Tasks}
+\title{Where distributedComputing() Runs Tasks}
 \usage{
 localNode(cores = NULL)
 
@@ -26,7 +26,7 @@ slurmCluster(
 \arguments{
 \item{cores}{The cores of every task. For \code{sshNodes()} one number for all
 nodes or a vector named by node. \code{NULL} (default) uses the free cores of
-each node, see \code{\link[=detectFreeCores]{detectFreeCores()}}; a node gets at most its free cores. For
+each node, see \code{\link[=detectFreeCores]{detectFreeCores()}}; a node gets at most the free cores it has. For
 \code{slurmCluster()} the cores of each array task.}
 
 \item{nodes}{Character, the nodes, each once: \code{ssh} destinations such as
@@ -60,13 +60,13 @@ An object of class \code{dMod2Nodes} or \code{dMod2Slurm}.
 }
 \description{
 \code{localNode()} is the local machine, \code{sshNodes()} are machines reached by
-\code{ssh} and \code{slurmCluster()} is a SLURM cluster reached through its login
+\code{ssh} and \code{slurmCluster()} is a SLURM cluster reached through a login
 node. \code{\link[=distributedComputing]{distributedComputing()}} takes one of them as \code{on}.
 }
 \details{
 The tasks of a job run on workers: a node is one worker, and a SLURM job has
-\code{array} workers, its array tasks. The tasks are dealt to the workers in turn,
-and a worker runs its tasks one after the other, each with \code{cores} cores.
+\code{array} workers, the array tasks of the job. The tasks are dealt to the workers in turn,
+and a worker runs the tasks dealt to it one after the other, each with \code{cores} cores.
 Without SLURM the processes run detached and survive the R session. With
 SLURM the array job is submitted on the login node through the job script
 template \code{\link[=slurmTemplate]{slurmTemplate()}} set up for it; \code{partition}, \code{account},

@@ -33,7 +33,7 @@ the templates set up, named by login node.
 Sets up the job script template of a SLURM cluster, once per login node.
 The templates are kept in \code{tools::R_user_dir("dMod2", "config")} and stay
 across sessions; \code{\link[=distributedComputing]{distributedComputing()}} on a \code{\link[=slurmCluster]{slurmCluster()}} takes the one
-named like its login node.
+named like the login node of the cluster.
 }
 \details{
 A template is a job script with the placeholders \code{{{ jobname }}},

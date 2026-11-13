@@ -9,7 +9,7 @@ dMod2Jobs()
 \value{
 A data frame with one row per job: \code{jobname}, \code{on} (where it runs),
 \code{tasks}, \code{jobid} (of SLURM), \code{submitted}, \code{wd} (the working directory it
-was submitted from) and \code{local} (whether its local job folder is still
+was submitted from) and \code{local} (whether the local job folder is still
 there).
 }
 \description{

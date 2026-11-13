@@ -2,7 +2,7 @@
 #'
 #' Estimates the free cores as the number of cores minus the 1-minute load
 #' average, at least 1; inside a SLURM job on the local machine, the cores the
-#' job was given (`SLURM_CPUS_ON_NODE`) and its processes are bound to. Works on Linux and macOS, locally or on remote
+#' job was given (`SLURM_CPUS_ON_NODE`) and the job processes are bound to. Works on Linux and macOS, locally or on remote
 #' machines via `ssh`. On the local Windows machine the load is the processor
 #' load since the previous call, over at least 0.25 s and at most a minute. Under
 #' `R CMD check` with `_R_CHECK_LIMIT_CORES_` set, the result is at most 2.
@@ -142,7 +142,7 @@ detectFreeCores <- function(machine = NULL) {
   }
 
   ## Path-valued flags point into the local library tree; the remote build
-  ## resolves its own from the cppDE installed there.
+  ## resolves the paths from the cppDE installed there.
   compileArgs <- unique(compileArgs[nzchar(compileArgs) &
                                       !grepl("^-(I|L|l|Wl,|isystem)", compileArgs)])
   ## cppDE tags sparse models with -DKLUBTF/-DKLUAMD; compile() adds the
@@ -186,7 +186,7 @@ detectFreeCores <- function(machine = NULL) {
 
 ## Bash script that builds the shared object on the remote machine from the
 ## sources, or the object files when `link = TRUE`. Beyond the argument limit it
-## uses compile()'s chunked archive build, reading its inputs from `filelist`.
+## uses compile()'s chunked archive build, reading the inputs from `filelist`.
 ## `sources` are the local paths of `files`, read for the precompiled header.
 .remoteBuildScript <- function(files, output, compileArgs = "",
                                needsCVODE = FALSE, needsKLU = FALSE,
@@ -327,8 +327,8 @@ detectFreeCores <- function(machine = NULL) {
     paste0("R CMD SHLIB ", paste(files, collapse = " "), " -o ", output)
   } else {
     c(paste0("LIB=\"$PWD/", sub("\\.so$", "", output), "_objects.a\""), "",
-      "# The anchor is linked directly; in the archive too it would define its",
-      "# symbols twice.",
+      "# The anchor is linked directly; in the archive too it would define the",
+      "# same symbols twice.",
       "rm -f \"$LIB\"",
       paste0("sed 's/\\.[^.]*$/.o/' \"$WORK\" |",
              " xargs -r -n ", max(1L, as.integer(chunkSize)), " \"$AR\" qc \"$LIB\""),
@@ -351,7 +351,7 @@ detectFreeCores <- function(machine = NULL) {
     "# All path-valued compiler flags are resolved here, not on the submitting",
     "# machine, because the library trees differ.",
     "set -e",
-    "# R CMD check exports R_TESTS to its test subprocesses; an Rscript started",
+    "# R CMD check exports R_TESTS to the test subprocesses; an Rscript started",
     "# below would source that nonexistent startup file and die with exit 1.",
     "unset R_TESTS",
     "",
@@ -410,8 +410,8 @@ detectFreeCores <- function(machine = NULL) {
   sub("^([A-Za-z]):", "/\\L\\1", normalizePath(path, "/", mustWork = FALSE), perl = TRUE)
 }
 
-## `cmd` run by the POSIX shell of `machine` in its job folder `dir`. On
-## "localhost" `dir` lies in `wd`, and the R of this session with its library
+## `cmd` run by the POSIX shell of `machine` in the job folder `dir`. On
+## "localhost" `dir` lies in `wd`, and the R of this session with the session library
 ## paths comes first.
 .onMachine <- function(machine, cmd, dir, wd, ...) {
   if (.isLocalhost(machine)) {
@@ -451,7 +451,7 @@ detectFreeCores <- function(machine = NULL) {
 }
 
 ## Tasks as a list, one element per task: a count gives NULL elements, a data
-## frame its rows as lists.
+## frame the rows as lists.
 .asTasks <- function(tasks) {
   if (is.numeric(tasks) && length(tasks) == 1L && !is.list(tasks)) {
     n <- as.integer(tasks)
@@ -479,7 +479,7 @@ detectFreeCores <- function(machine = NULL) {
 }
 
 ## The job script of a SLURM template: every {{ name }} of `values` filled in.
-## The lines before {{ run }} other than #SBATCH and comments are its
+## The lines before {{ run }} other than #SBATCH and comments are the script
 ## environment, which the build on the login node uses too.
 .fillJobscript <- function(template, values) {
   lines <- readLines(template, warn = FALSE)
@@ -534,15 +534,15 @@ detectFreeCores <- function(machine = NULL) {
 }
 
 
-#' Where distributedComputing() Runs its Tasks
+#' Where distributedComputing() Runs Tasks
 #'
 #' `localNode()` is the local machine, `sshNodes()` are machines reached by
-#' `ssh` and `slurmCluster()` is a SLURM cluster reached through its login
+#' `ssh` and `slurmCluster()` is a SLURM cluster reached through a login
 #' node. [distributedComputing()] takes one of them as `on`.
 #'
 #' The tasks of a job run on workers: a node is one worker, and a SLURM job has
-#' `array` workers, its array tasks. The tasks are dealt to the workers in turn,
-#' and a worker runs its tasks one after the other, each with `cores` cores.
+#' `array` workers, the array tasks of the job. The tasks are dealt to the workers in turn,
+#' and a worker runs the tasks dealt to it one after the other, each with `cores` cores.
 #' Without SLURM the processes run detached and survive the R session. With
 #' SLURM the array job is submitted on the login node through the job script
 #' template [slurmTemplate()] set up for it; `partition`, `account`,
@@ -551,7 +551,7 @@ detectFreeCores <- function(machine = NULL) {
 #'
 #' @param cores The cores of every task. For `sshNodes()` one number for all
 #'   nodes or a vector named by node. `NULL` (default) uses the free cores of
-#'   each node, see [detectFreeCores()]; a node gets at most its free cores. For
+#'   each node, see [detectFreeCores()]; a node gets at most the free cores it has. For
 #'   `slurmCluster()` the cores of each array task.
 #' @param nodes Character, the nodes, each once: `ssh` destinations such as
 #'   `"host"` or `"user@@host"` with key authentication, or `"localhost"` for the
@@ -620,7 +620,7 @@ slurmCluster <- function(login, cores, array = NULL, walltime = NULL, memPerCore
             class = c("dMod2Slurm", "dMod2Target"))
 }
 
-## One line naming the nodes of a target, or the SLURM cluster and its array tasks.
+## One line naming the nodes of a target, or the SLURM cluster and the array tasks.
 .targetLabel <- function(on) {
   if (inherits(on, "dMod2Slurm"))
     return(paste0("SLURM cluster ", on$login, ": ",
@@ -693,8 +693,9 @@ print.dMod2Target <- function(x, ...) {
   else if (cancel) m$jobid else paste("-j", m$jobid)
 }
 
-## The state of every task: "done", "running" or "failed". A task waiting for
-## its worker counts as running.
+## The state of every task: "done", "running", "failed" or "unknown". A task waiting for
+## a worker counts as running; a task without a result on a node or under a queue that does not
+## answer counts as unknown, never as failed. A job folder that is gone holds no task.
 .taskStatus <- function(m) {
   worker <- m$taskWorker %||% if (m$slurm) seq_len(m$ntasks) else m$taskHost
   state <- rep("failed", m$ntasks)
@@ -702,7 +703,9 @@ print.dMod2Target <- function(x, ...) {
     host <- m$hosts[k]
     dir <- file.path(m$folder, k)
     probe <- if (m$slurm)
-      paste0("ls; squeue -h -r ", .slurmSelect(m), " -o 'running %K' 2>/dev/null")
+      # a job ID the queue has forgotten is an error of squeue, not a queue that does not answer
+      paste0("ls; q=$(squeue -h -r ", .slurmSelect(m), " -o 'running %K' 2>&1) && echo \"$q\" ",
+             "|| { echo \"$q\" | grep -q 'Invalid job id' || echo dMod2-queue-unknown; }")
     else
       # a zombie is finished: a container whose init does not reap keeps it in the
       # process table, where it still answers signal 0
@@ -710,9 +713,16 @@ print.dMod2Target <- function(x, ...) {
              "p=$(cat \"$f\"); if [ -r /proc/$p/status ]; then ",
              "grep -q \"^State:[[:space:]]*Z\" /proc/$p/status ",
              "|| echo alive \"$f\"; else kill -0 \"$p\" 2>/dev/null && echo alive \"$f\"; fi; done")
-    out <- suppressWarnings(.onMachine(host, paste0(probe, "; true"), dir, m$wd,
-                                       intern = TRUE, ignore.stderr = TRUE))
+    out <- suppressWarnings(.onMachine(host, paste0(probe, "; echo dMod2-probe-done"), dir,
+                                       m$wd, intern = TRUE, ignore.stderr = TRUE))
     mine <- which(m$taskHost == k)
+    # without an answer, a node that answers without the job folder has no tasks left
+    if (!"dMod2-probe-done" %in% out) {
+      there <- suppressWarnings(.onMachine(host, paste0("[ -d ", .sq(dir), " ] && echo dMod2-folder ",
+                                                        "|| echo dMod2-no-folder"), ".", m$wd,
+                                           intern = TRUE, ignore.stderr = TRUE))
+      if (!"dMod2-no-folder" %in% there) state[mine] <- "unknown"
+    } else if ("dMod2-queue-unknown" %in% out) state[mine] <- "unknown"
     if (m$slurm) {
       running <- as.integer(sub("^running ", "", grep("^running [0-9]+$", out, value = TRUE)))
       state[mine[worker[mine] %in% running]] <- "running"
@@ -730,25 +740,30 @@ print.dMod2Target <- function(x, ...) {
 
 ## "<jobname>: k of n tasks done, r running, f failed".
 .stateLine <- function(m, state) {
-  n <- table(factor(state, c("done", "running", "failed")))
+  n <- table(factor(state, c("done", "running", "failed", "unknown")))
   paste0(m$jobname, ": ", n[["done"]], " of ", m$ntasks, " tasks done",
          if (n[["running"]]) paste0(", ", n[["running"]], " running"),
-         if (n[["failed"]]) paste0(", ", n[["failed"]], " failed"))
+         if (n[["failed"]]) paste0(", ", n[["failed"]], " failed"),
+         if (n[["unknown"]]) paste0(", ", n[["unknown"]], " not reachable"))
 }
 
 ## The states once no task runs, polled every `interval` seconds; each change is
-## reported as a message.
-.waitTasks <- function(m, interval) {
+## reported as a message. While a node does not answer, the pause doubles up to `maxInterval`,
+## so that a login node that is down is not asked every few seconds.
+.waitTasks <- function(m, interval, maxInterval = 600) {
   last <- ""
+  pause <- interval
   repeat {
     state <- .taskStatus(m)
     line <- .stateLine(m, state)
     if (!identical(line, last)) message(line)
     last <- line
-    if (!any(state == "running")) return(state)
-    Sys.sleep(interval)
+    if (!any(state %in% c("running", "unknown"))) return(state)
+    pause <- if (any(state == "unknown")) min(max(2 * pause, interval, 1), maxInterval) else interval
+    .sleep(pause)
   }
 }
+.sleep <- function(seconds) Sys.sleep(seconds)
 
 ## The results of the tasks joined: parlists by c(), parts of one msem() into one fit, data
 ## frames by rbind(), any other results as a list. Tasks without a result are left out with a warning.
@@ -827,7 +842,7 @@ print.dMod2Target <- function(x, ...) {
   if (length(found))
     stop("several jobs '", jobname, "' are registered, submitted from ",
          paste(vapply(found, `[[`, "", "wd"), collapse = ", "),
-         "; recover it from its working directory", call. = FALSE)
+         "; recover it from the working directory it was submitted from", call. = FALSE)
   hosts <- hosts[!vapply(hosts, .isLocalhost, NA)]
   for (host in hosts) {
     m <- .remoteManifest(host, paste0(jobname, "_folder"))
@@ -846,7 +861,7 @@ print.dMod2Target <- function(x, ...) {
 }
 
 ## An error when a job of this name still runs where the new one would replace
-## its folders: in this working directory, or on one of the same remote nodes,
+## the folders: in this working directory, or on one of the same remote nodes,
 ## also when it was submitted from another machine.
 .refuseRunning <- function(jobname, wd, hosts) {
   f <- file.path(wd, paste0(jobname, "_folder"), "job.rds")
@@ -859,10 +874,10 @@ print.dMod2Target <- function(x, ...) {
   old <- old[!duplicated(vapply(old, function(m)
     paste(m$wd, as.numeric(m$submitted %||% NA)), ""))]
   for (m in old) {
-    running <- sum(.taskStatus(m) == "running")
+    running <- sum(.taskStatus(m) %in% c("running", "unknown"))
     if (running)
       stop("the job '", jobname, "' submitted from ", m$wd, " still runs ", running,
-           " tasks; recover = TRUE returns its functions, and terminate() stops it",
+           " tasks; recover = TRUE returns the job functions, and terminate() stops it",
            call. = FALSE)
   }
 }
@@ -874,7 +889,7 @@ print.dMod2Target <- function(x, ...) {
   check <- function() {
     state <- .taskStatus(m)
     cat(.stateLine(m, state), "\n", sep = "")
-    finished <- !any(state == "running")
+    finished <- !any(state %in% c("running", "unknown"))
     failed <- sum(state == "failed")
     if (finished && failed)
       warning(failed, " of ", m$ntasks, " tasks failed; log(i) shows the output of task i",
@@ -940,7 +955,7 @@ print.dMod2Target <- function(x, ...) {
             class = "dMod2Job", manifest = m)
 }
 
-## Where a job runs, from its manifest.
+## Where a job runs, from the job manifest.
 .jobWhere <- function(m) {
   if (!is.null(m$on)) return(m$on)
   if (m$slurm) paste("SLURM cluster", m$hosts) else paste(m$hosts, collapse = ", ")
@@ -966,20 +981,20 @@ print.dMod2Job <- function(x, ...) {
 #' nodes need a POSIX shell.
 #'
 #' The start is reported as a message, on a SLURM cluster with the job ID. A
-#' build writes its output to `build.log` in the job folder; a failed build
-#' shows its end in the error.
+#' build writes the output to `build.log` in the job folder; the error of a
+#' failed build shows the end of that log.
 #'
 #' @details The value of `expr` is the result of a task. In the code, `task`
-#' is the task's element of `tasks` (`NULL` for a count), `taskId` its
-#' position, `cores` the cores the task may use and `jobname` the job's name.
+#' is the task's element of `tasks` (`NULL` for a count), `taskId` the
+#' position of the task, `cores` the cores the task may use and `jobname` the job's name.
 #' Parallel code such as [mstrust()] or [profile()][profile.objfn] takes
 #' `cores = cores`. A task that raises an error returns the error as a
 #' `try-error`. Task `i` starts with the seed `seed + i`.
 #'
 #' The tasks are dealt in turn to the workers of `on`, the nodes or the array
-#' tasks of a SLURM job, and a worker runs its tasks one after the other, see
+#' tasks of a SLURM job, and a worker runs the tasks dealt to it one after the other, see
 #' [localNode()]. A job is kept in `<jobname>_folder`, in the working directory
-#' for `"localhost"` and in the home directory of a remote node. Its manifest
+#' for `"localhost"` and in the home directory of a remote node. The job manifest
 #' `job.rds` lies in the local `<jobname>_folder` and in that of every remote
 #' node. A job of the same name that still runs there is an error, also when it
 #' was submitted from another machine. Every job is registered in
@@ -1007,7 +1022,7 @@ print.dMod2Job <- function(x, ...) {
 #'   is one task per worker.
 #' @param on Where the tasks run: [localNode()] (default), [sshNodes()] or
 #'   [slurmCluster()].
-#' @param jobname Character, the name of the job and its folder. `NULL`
+#' @param jobname Character, the name of the job and of the job folder. `NULL`
 #'   (default) picks a random name.
 #' @param input Character vector, the objects saved and copied to the nodes,
 #'   looked up from the calling environment. Defaults to all objects of the
@@ -1025,7 +1040,7 @@ print.dMod2Job <- function(x, ...) {
 #' @param recover Logical. `TRUE` returns the functions of the job `jobname`,
 #'   submitted from this working directory or registered, without submitting
 #'   again. Else, with `on` given, the manifest is taken from the job folder of
-#'   its remote nodes, which recovers a job submitted from another machine; it
+#'   the remote nodes, which recovers a job submitted from another machine; it
 #'   is then saved in `<jobname>_folder` of the working directory and
 #'   registered. A job that also runs on `"localhost"` is recovered only on the
 #'   machine it was submitted from. Default `FALSE`.
@@ -1039,13 +1054,16 @@ print.dMod2Job <- function(x, ...) {
 #' \describe{
 #'   \item{`check()`}{reports how many tasks are done, running or failed and
 #'     returns `TRUE` once no task runs any more, with a warning when some
-#'     failed. A task fails when its process ends without a result.}
+#'     failed. A task fails when the task process ends without a result. A
+#'     task without a result on a node that does not answer, or whose queue
+#'     does not, counts as running.}
 #'   \item{`wait(interval = 10)`}{polls every `interval` seconds until no task
 #'     runs, reports each change as a message and returns `TRUE` when every task
-#'     is done.}
+#'     is done. While a node does not answer, the pause between polls doubles up
+#'     to 10 minutes.}
 #'   \item{`get(combine = TRUE, all = FALSE)`}{returns the results. With
-#'     `combine = TRUE` parlists are joined by `c()`, fits of [msem()] with
-#'     parts of its starts into one fit, and data frames such as parframes by
+#'     `combine = TRUE` parlists are joined by `c()`, fits of [msem()] that
+#'     each ran a part of the same starts into one fit, and data frames such as parframes by
 #'     `rbind()`, other results come as a list; tasks without a
 #'     result are left out with a warning. `combine = FALSE` returns one entry
 #'     per task, named like `tasks`, `NULL` for a task not done. Results of
@@ -1090,7 +1108,7 @@ distributedComputing <- function(expr, tasks = NULL, on = localNode(), jobname =
     short <- !is.na(on$cores) & on$cores > free
     if (any(short))
       warning(paste0(hosts[short], " has ", free[short],
-                     ifelse(free[short] == 1, " free core", " free cores"), "; its tasks get ",
+                     ifelse(free[short] == 1, " free core", " free cores"), "; the tasks of that node get ",
                      free[short], " instead of ", on$cores[short], collapse = "; "), call. = FALSE)
     cores <- stats::setNames(as.integer(ifelse(is.na(on$cores) | short, free, on$cores)), hosts)
     on$cores <- cores
@@ -1138,7 +1156,7 @@ distributedComputing <- function(expr, tasks = NULL, on = localNode(), jobname =
       cxx = any(grepl("\\.cpp$", files)), cores = buildCores, filelist = "files.txt",
       bundle = buildBundle),
       file.path(stage, "build.sh"))
-    # the build writes to build.log, which shows its end only when it fails; a TMPDIR the host
+    # the build writes to build.log, which shows the end only when it fails; a TMPDIR the host
     # sets to a missing directory, as on some login nodes, falls back to /tmp for the compiler
     buildCmd <- paste0("{ [ -d \"${TMPDIR:-/tmp}\" ] || export TMPDIR=/tmp; } && ",
                        "{ bash build.sh > build.log 2>&1 || { tail -n 40 build.log; false; }; } && ")
@@ -1178,7 +1196,7 @@ distributedComputing <- function(expr, tasks = NULL, on = localNode(), jobname =
     id <- regmatches(submitted, regexpr("[0-9]+$", submitted))
     if (!length(id))
       stop("the submission on ", hosts, " reported no job ID; if the job runs, recover = TRUE ",
-           "returns its functions:\n", paste(out, collapse = "\n"), call. = FALSE)
+           "returns the job functions:\n", paste(out, collapse = "\n"), call. = FALSE)
     m$jobid <- id[1L]
     .saveManifest(m)
     message(jobname, ": ", .count(n, "task"), " submitted to ", hosts, " as SLURM job ", m$jobid,
@@ -1217,7 +1235,7 @@ distributedComputing <- function(expr, tasks = NULL, on = localNode(), jobname =
     job$purge(local = TRUE)
     return(result)
   }
-  warning(failed, " of ", n, " tasks failed; the job is kept: recover = TRUE returns its ",
+  warning(failed, " of ", n, " tasks failed; the job is kept: recover = TRUE returns the job ",
           "functions, and log(i) shows the output of task i", call. = FALSE)
   result
 }
@@ -1230,7 +1248,7 @@ distributedComputing <- function(expr, tasks = NULL, on = localNode(), jobname =
 #'
 #' @return A data frame with one row per job: `jobname`, `on` (where it runs),
 #'   `tasks`, `jobid` (of SLURM), `submitted`, `wd` (the working directory it
-#'   was submitted from) and `local` (whether its local job folder is still
+#'   was submitted from) and `local` (whether the local job folder is still
 #'   there).
 #' @seealso [distributedComputing()]
 #' @examples
@@ -1255,7 +1273,7 @@ dMod2Jobs <- function() {
 #' Sets up the job script template of a SLURM cluster, once per login node.
 #' The templates are kept in `tools::R_user_dir("dMod2", "config")` and stay
 #' across sessions; [distributedComputing()] on a [slurmCluster()] takes the one
-#' named like its login node.
+#' named like the login node of the cluster.
 #'
 #' A template is a job script with the placeholders `{{ jobname }}`,
 #' `{{ ntasks }}` (the number of array tasks), `{{ cores }}`, `{{ memPerCore }}`,

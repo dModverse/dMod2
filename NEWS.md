@@ -1,3 +1,10 @@
+# dMod2 0.15.5
+
+* The jobs of `distributedComputing()` count a task without result on a node that does not
+  answer, or under a SLURM queue that does not, as running: `check()` reports it as not reachable,
+  and `wait()` goes on polling instead of returning with every such task failed. While a node does
+  not answer, `wait()` doubles the pause between polls up to 10 minutes.
+
 # dMod2 0.15.4
 
 * Under `Xs(optionsReverse = list(refine = TRUE))` the reverse objective of `normL2()` adds to the

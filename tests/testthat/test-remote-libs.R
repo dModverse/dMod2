@@ -52,8 +52,8 @@ test_that("the generated include line evaluates to the installed cppDE flags", {
 })
 
 # ssh, sbatch, squeue and scancel stand-ins on PATH for which every host is the
-# directory `remote`, also as its home, so a job runs on the local machine as it would
-# on another. sbatch starts every array task at once and keeps its options in
+# directory `remote`, also as the home directory, so a job runs on the local machine as it would
+# on another. sbatch starts every array task at once and keeps the options in
 # sbatch.args; squeue lists the array tasks still running, scancel takes the job ID
 # and stops them. Jobs register in a temporary data directory.
 local_fake_hosts <- function(env = parent.frame()) {
@@ -75,7 +75,7 @@ local_fake_hosts <- function(env = parent.frame()) {
                '  if [ -r /proc/$p/status ]; then',
                '    grep -q "^State:[[:space:]]*Z" /proc/$p/status || echo "running ${f#.array_}"',
                '  else kill -0 "$p" 2>/dev/null && echo "running ${f#.array_}"; fi',
-               "done"),
+               "done; true"),
              file.path(bin, "squeue"))
   writeLines(c("#!/bin/sh",
                'case "$1" in -n) ;; -*) echo "scancel: invalid option $1" >&2; exit 1;; esac',
@@ -145,7 +145,7 @@ test_that("detectFreeCores() takes the cores of a SLURM job", {
   expect_lte(as.integer(detectFreeCores()), parallel::detectCores())
 })
 
-test_that("data frame rows are tasks, a task reads its cores and seeds repeat", {
+test_that("data frame rows are tasks, a task reads the task cores and seeds repeat", {
   skip_on_cran()
   local_no_ssh()
   local_mocked_bindings(detectFreeCores = function(machine) setNames(rep(8, length(machine)),
@@ -191,12 +191,12 @@ test_that("remote nodes run their tasks, and recover, the registry and purge rea
   expect_error(distributedComputing(NULL, jobname = "jr", recover = TRUE), "no job 'jr'")
 })
 
-test_that("a job submitted from another machine is recovered from its nodes and keeps its name", {
+test_that("a job submitted from another machine is recovered from the nodes and keeps the name", {
   skip_on_cran()
   remote <- local_fake_hosts()
   local_mocked_bindings(detectFreeCores = function(machine) setNames(rep(8, length(machine)),
                                                                      machine))
-  # another machine: its own working directory and registry
+  # another machine: a separate working directory and registry
   other <- withr::local_tempdir()
   dir.create(file.path(other, "wd"))
   elsewhere <- function(code) withr::with_dir(file.path(other, "wd"), withr::with_envvar(
@@ -230,7 +230,7 @@ test_that("a job submitted from another machine is recovered from its nodes and 
   expect_length(list.files(remote), 0L)
 })
 
-test_that("a job ships the model files of its objects, else those of dMod2.outdir", {
+test_that("a job ships the model files of the job objects, else those of dMod2.outdir", {
   models <- withr::local_tempdir()
   so <- paste0("a", .Platform$dynlib.ext)
   file.create(file.path(models, c("a.cpp", "a.o", so, "b.cpp")))
@@ -286,7 +286,7 @@ test_that("build = 'copy' ships the shared objects of dMod2.outdir", {
   expect_length(list.files("."), 0L)
 })
 
-test_that("a SLURM job fills the template of its login node and runs one array task per task", {
+test_that("a SLURM job fills the template of the login node and runs one array task per task", {
   skip_on_cran()
   remote <- local_fake_hosts()
   withr::local_envvar(R_USER_CONFIG_DIR = withr::local_tempdir())
@@ -308,6 +308,44 @@ test_that("a SLURM job fills the template of its login node and runs one array t
                     "#SBATCH --cpus-per-task=2") %in% script))
   job$purge(local = TRUE)
   expect_length(list.files(remote), 0L)
+})
+
+test_that("a node or queue that does not answer leaves the tasks without result unknown, a gone folder failed", {
+  m <- list(jobname = "j", ntasks = 2L, hosts = "h1", folder = "j_folder", wd = tempdir(),
+            slurm = TRUE, jobid = "1", taskHost = c(1L, 1L))
+  answers <- list(character(0), "dMod2-no-folder",
+                  character(0), character(0),
+                  c("task_1.rds", "dMod2-queue-unknown", "dMod2-probe-done"),
+                  c("task_1.rds", "running 2", "dMod2-probe-done"),
+                  c("task_1.rds", "task_2.rds", "dMod2-probe-done"))
+  i <- 0L
+  pauses <- numeric(0)
+  local_mocked_bindings(.onMachine = function(...) {
+    i <<- i + 1L
+    answers[[i]]
+  }, .sleep = function(seconds) pauses <<- c(pauses, seconds), .package = "dMod2")
+  expect_identical(dMod2:::.taskStatus(m), c("failed", "failed"))
+  expect_identical(dMod2:::.taskStatus(m), c("unknown", "unknown"))
+  expect_message(state <- dMod2:::.waitTasks(m, 0), "1 not reachable")
+  expect_identical(state, c("done", "done"))
+  expect_identical(i, 7L)
+  expect_identical(pauses, c(1, 0))
+})
+
+test_that("wait() asks a node that does not answer less and less often, up to maxInterval", {
+  m <- list(jobname = "j", ntasks = 1L, hosts = "h1", folder = "j_folder", wd = tempdir(),
+            slurm = TRUE, jobid = "1", taskHost = 1L)
+  answers <- c(rep(list(character(0), character(0)), 6),
+               list(c("running 1", "dMod2-probe-done"), c("task_1.rds", "dMod2-probe-done")))
+  i <- 0L
+  pauses <- numeric(0)
+  local_mocked_bindings(.onMachine = function(...) {
+    i <<- i + 1L
+    answers[[i]]
+  }, .sleep = function(seconds) pauses <<- c(pauses, seconds), .package = "dMod2")
+  expect_message(state <- dMod2:::.waitTasks(m, 10, maxInterval = 100), "not reachable")
+  expect_identical(state, "done")
+  expect_identical(pauses, c(20, 40, 80, 100, 100, 100, 10))
 })
 
 test_that("an array smaller than the tasks runs them in turn, with the options of sbatch", {
@@ -349,14 +387,14 @@ test_that("the targets check their nodes and cores", {
   expect_error(distributedComputing(1, tasks = 0), "positive whole number")
 })
 
-test_that("a node gets at most its free cores", {
+test_that("a node gets at most the free cores of the node", {
   skip_on_cran()
   local_no_ssh()
   local_mocked_bindings(detectFreeCores = function(machine) setNames(rep(2, length(machine)),
                                                                      machine))
   expect_warning(out <- suppressMessages(distributedComputing(
     cores, on = localNode(5), input = character(0), jobname = "jc", wait = TRUE)),
-    "2 free cores; its tasks get 2 instead of 5")
+    "2 free cores; the tasks of that node get 2 instead of 5")
   expect_identical(out, list(2L))
   expect_identical(suppressMessages(distributedComputing(cores, input = character(0),
                                                          jobname = "jf", wait = TRUE)),
@@ -430,7 +468,7 @@ test_that("get() joins the results and leaves out tasks without one", {
   expect_identical(dMod2:::.combineResults(list(a = 1, b = "x")), list(a = 1, b = "x"))
 })
 
-test_that("a failing task returns its error, a running job keeps its name, and terminate() stops it", {
+test_that("a failing task returns the error, a running job keeps the name, and terminate() stops it", {
   skip_on_cran()
   local_no_ssh()
   expect_warning(out <- suppressMessages(distributedComputing(
