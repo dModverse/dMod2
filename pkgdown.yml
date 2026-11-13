@@ -1,0 +1,38 @@
+pandoc: 3.8.3
+pkgdown: 2.2.1
+pkgdown_sha: ~
+articles:
+  articles/bachmannMSB2011: bachmannMSB2011.html
+  articles/bileAcidTransport: bileAcidTransport.html
+  articles/boehmJProteomeRes2014: boehmJProteomeRes2014.html
+  articles/dMod2: dMod2.html
+  articles/guide-alignment: guide-alignment.html
+  articles/guide-group-effects: guide-group-effects.html
+  articles/guide-model: guide-model.html
+  articles/guide-nlme: guide-nlme.html
+  articles/guide-optimization: guide-optimization.html
+  articles/guide-petab: guide-petab.html
+  articles/guide-prediction-uncertainty: guide-prediction-uncertainty.html
+  articles/guide-profiles: guide-profiles.html
+  articles/guide-remote-computing: guide-remote-computing.html
+  articles/guide-sensitivities: guide-sensitivities.html
+  articles/guide-symmetries: guide-symmetries.html
+  articles/installation: installation.html
+  articles/kokMSB2020: kokMSB2020.html
+  articles/methods-multiple-shooting: methods-multiple-shooting.html
+  articles/methods-nlme: methods-nlme.html
+  articles/methods-objective: methods-objective.html
+  articles/methods-profiles: methods-profiles.html
+  articles/methods-sensitivities: methods-sensitivities.html
+  articles/methods-sparse-random-effects: methods-sparse-random-effects.html
+  articles/methods-steady-states: methods-steady-states.html
+  articles/methods-symmetries: methods-symmetries.html
+  articles/methods-trust: methods-trust.html
+  articles/migrating: migrating.html
+  articles/oppeltNPJSystBiolAppl2018: oppeltNPJSystBiolAppl2018.html
+  articles/pharmacometrics: pharmacometrics.html
+  articles/TMDD: TMDD.html
+last_built: 2026-11-13T20:17Z
+urls:
+  reference: https://dmodverse.github.io/dMod2/reference
+  article: https://dmodverse.github.io/dMod2/articles

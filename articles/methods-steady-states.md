@@ -1,0 +1,188 @@
+# Steady states
+
+A model at rest before a stimulus starts from a root of the right-hand
+side. [`Pimpl()`](https://dmodverse.github.io/dMod2/reference/Pimpl.md)
+computes it numerically,
+[`steadyStates()`](https://dmodverse.github.io/dMod2/reference/steadyStates.md)
+in closed form. Guide: [Setting up
+models](https://dmodverse.github.io/dMod2/articles/guide-model.html#steady-state-constraints).
+
+## Conserved quantities
+
+With compartment volumes \\V_i\\, stoichiometric coefficients
+\\S\_{ri}\\ of species \\i\\ in reaction \\r\\, and rates \\v_r\\ in a
+frame of volume \\V\_{f(r)}\\, the right-hand side is
+
+\\\dot x_i = f_i(x, p) = \frac{1}{V_i} \sum_r S\_{ri}\\ V\_{f(r)}\\
+v_r(x, p). \tag{1}\\
+
+Every \\w\\ with \\S w = 0\\ conserves the amount
+
+\\\sum_i w_i V_i x_i \tag{2}\\
+
+by (1);
+[`conservedQuantities()`](https://dmodverse.github.io/dMod2/reference/conservedQuantities.md)
+lists these amounts. Then \\f(x, p) = 0\\ does not determine \\x\\:
+every conservation class, the states with given totals, has separate
+roots.
+
+## Pseudo-transient continuation
+
+[`Pimpl()`](https://dmodverse.github.io/dMod2/reference/Pimpl.md) adds
+the conservation laws \\C(p)\\ x = T\\, totals \\T\\ as parameters:
+
+\\G(x, p) = \begin{pmatrix} f(x, p) \\ C(p)\\ x - T \end{pmatrix} = 0 .
+\tag{3}\\
+
+Pseudo-transient continuation solves (3) by implicit Euler steps of
+\\\dot x = f(x, p)\\ on the conservation manifold, with a pseudo-time
+step that grows as the residual falls. It follows the flow far from the
+root and becomes Newton’s method near it, so it reaches a stable steady
+state. A state no reaction changes keeps the given value. The solver is
+cppDE’s `ptc()`, called from C++ ([step, convergence and stability
+tests](https://dmodverse.github.io/cppDE/articles/methods-ptc.html)).
+
+Every root starts from the same guess, a function of parameters and
+controls, never from an earlier root, so the objective is the same
+function of the parameters in every call. Warm starts would change roots
+in the last digits, which the ODE step-size control magnifies in the
+objective.
+
+## Derivatives of the root
+
+From \\G(x(p), p) = 0\\ for all \\p\\, the implicit function theorem
+gives
+
+\\\frac{\partial G}{\partial x}\\ \frac{\partial x}{\partial p} =
+-\frac{\partial G}{\partial p}, \tag{4}\\
+
+regular where the steady state is isolated in the conservation class.
+Differentiating (4) again gives the second derivatives,
+`Pimpl(deriv2 = TRUE)`, with the same matrix. A reverse sweep uses the
+transpose of (4) ([Sensitivities and
+Hessians](https://dmodverse.github.io/dMod2/articles/methods-sensitivities.html#reverse-sweep)).
+
+## Stability
+
+A root is a resting state only if every eigenvalue \\\lambda_k\\ of \\J
+= \partial f / \partial x\\ on the conservation manifold has negative
+real part. At a root whose leading eigenvalue has real part above
+`stabilityTol`, the solver continues along the leading eigenvector
+([cppDE](https://dmodverse.github.io/cppDE/articles/methods-ptc.html#stability));
+the evaluation fails if neither direction leads to a stable root.
+`controlsPTC = list(stability = FALSE)` returns the unstable root.
+
+[`constraintStability()`](https://dmodverse.github.io/dMod2/reference/constraintStability.md)
+adds a term that rises towards the stability boundary:
+
+\\w \sum_k r_k^2, \qquad r_k = \frac{\max\bigl(0,\\
+\mathrm{Re}\\\lambda_k - \lambda_0\bigr)}{\lambda\_{tol} - \lambda_0},
+\tag{5}\\
+
+with \\\lambda\_{tol}\\ the `stabilityTol` of the
+[`Pimpl()`](https://dmodverse.github.io/dMod2/reference/Pimpl.md), onset
+\\\lambda_0 = \lambda\_{tol} - 1/T\\ and \\T\\ the time span of the
+data. The term is zero while every perturbation decays faster than the
+experiment lasts. Steady states that agree in all inputs count once.
+With right and left eigenvectors \\u_k\\, \\w_k\\ of \\J\\ and (4),
+
+\\ \frac{\mathrm{d}\lambda_k}{\mathrm{d}\theta} = \frac{w_k^{\mathsf H}
+\bigl(\partial\_\theta J + \partial_x J\\
+\mathrm{d}x^\*/\mathrm{d}\theta\bigr) u_k} {w_k^{\mathsf H} u_k},
+\tag{6} \\
+
+which needs `Pimpl(deriv2 = TRUE)`. The term is a model assumption, not
+data: profiles with `stop = "data"` and likelihood ratios leave it out.
+
+At the onset, (5) and the gradient are continuous and the curvature
+jumps: below, term and Hessian are zero; above, the Gauss-Newton Hessian
+is
+
+\\\frac{2 w}{(\lambda\_{tol} - \lambda_0)^2} \sum\_{k \\:\\
+\mathrm{Re}\\\lambda_k \> \lambda_0}
+\frac{\mathrm{d}\\\mathrm{Re}\\\lambda_k}{\mathrm{d}\theta}
+\frac{\mathrm{d}\\\mathrm{Re}\\\lambda_k}{\mathrm{d}\theta}^{\mathsf T}
+, \tag{7}\\
+
+nonzero as \\\mathrm{Re}\\\lambda_k \to \lambda_0\\. A profile therefore
+takes small steps across the onset ([Profile
+likelihood](https://dmodverse.github.io/dMod2/articles/methods-profiles.html#computing-a-profile)).
+
+## Analytical steady-state constraints
+
+[`steadyStates()`](https://dmodverse.github.io/dMod2/reference/steadyStates.md)
+solves \\f(x, p) = 0\\ in closed form
+[\[1\]](#ref-rosenblatt2016customized), [\[2\]](#ref-kaschek2019dmod).
+Each unknown, a state or a kinetic parameter, is solved from a
+combination of balances such that the solution is a ratio of sums of
+positive terms. The solution is thus positive for positive parameters,
+also with `solveQuadratic = TRUE`, which takes the positive root of a
+balance quadratic in the state. A state whose balance is spent on a
+kinetic parameter stays free, as the parameter of the steady-state value
+of the state. States that are zero in every steady state are set to 0. A
+conserved quantity keeps one state free. Volumes are never solved for.
+
+The result, one equation per solved unknown, replaces identity entries
+of a parameter transformation:
+
+``` r
+
+steady <- steadyStates(reactions)
+parameters <- getParameters(reactions)
+trafo <- repar(eqnvec(setNames(parameters, parameters)), "x <- y",
+               x = names(steady), y = steady)
+p <- P(trafo)
+```
+
+| argument | effect |
+|----|----|
+| `givenCQs` | conserved quantities, default from [`customTotals()`](https://dmodverse.github.io/dMod2/reference/customTotals.md) or derived |
+| `neglect` | states and parameters never solved for |
+| `priority` | states solved first, parameters preferred as pivots |
+| `forcings` | states held at zero as exogenous inputs |
+| `solveQuadratic` | allow the positive root of a quadratic balance |
+| `file` | save the result with [`saveRDS()`](https://rdrr.io/r/base/readRDS.html) |
+
+Without a solution of this form,
+[`steadyStates()`](https://dmodverse.github.io/dMod2/reference/steadyStates.md)
+returns `0`. The solver is a Python module (numpy, sympy, scipy) called
+through reticulate.
+
+[`P()`](https://dmodverse.github.io/dMod2/reference/P.md) or
+[`Pexpl()`](https://dmodverse.github.io/dMod2/reference/Pexpl.md)
+evaluate the closed form explicitly with symbolic derivatives: no root
+search, no convergence failure, no solver tolerance in the objective,
+one parameter less per solved equation. Rosenblatt et al. report more
+reliable and faster optimization than with common numerical
+implementations [\[1\]](#ref-rosenblatt2016customized).
+[`steadyStates()`](https://dmodverse.github.io/dMod2/reference/steadyStates.md)
+does not test stability;
+[`Pimpl()`](https://dmodverse.github.io/dMod2/reference/Pimpl.md) does
+([Stability](#stability)).
+[`Pimpl()`](https://dmodverse.github.io/dMod2/reference/Pimpl.md) is
+needed where no closed form of positive sums exists, as for the network
+of the guide.
+
+Reference:
+[`conservedQuantities()`](https://dmodverse.github.io/dMod2/reference/conservedQuantities.md),
+[`Pimpl()`](https://dmodverse.github.io/dMod2/reference/Pimpl.md),
+[`steadyStates()`](https://dmodverse.github.io/dMod2/reference/steadyStates.md),
+[`constraintStability()`](https://dmodverse.github.io/dMod2/reference/constraintStability.md)
+
+## References
+
+\[1\]
+
+M. Rosenblatt, J. Timmer, and D. Kaschek, “Customized steady-state
+constraints for parameter estimation in non-linear ordinary differential
+equation models,” *Frontiers in Cell and Developmental Biology*, vol. 4,
+p. 41, 2016, doi:
+[10.3389/fcell.2016.00041](https://doi.org/10.3389/fcell.2016.00041).
+
+\[2\]
+
+D. Kaschek, W. Mader, M. Fehling-Kaschek, M. Rosenblatt, and J. Timmer,
+“dMod: Efficient parameter estimation and uncertainty analysis for
+dynamic models,” *Journal of Statistical Software*, vol. 88, no. 10, pp.
+1–32, 2019, doi:
+[10.18637/jss.v088.i10](https://doi.org/10.18637/jss.v088.i10).

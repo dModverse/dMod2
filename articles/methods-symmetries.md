@@ -1,0 +1,158 @@
+# Structural identifiability and Lie symmetries
+
+[`symmetryDetection()`](https://dmodverse.github.io/dMod2/reference/symmetryDetection.md)
+finds the Lie symmetries of the prediction with the Python package
+[symident](https://dmodverse.github.io/symident/); a gauge or
+[`symmetryReduction()`](https://dmodverse.github.io/dMod2/reference/symmetryReduction.md)
+removes them. Guide:
+[Symmetries](https://dmodverse.github.io/dMod2/articles/guide-symmetries.md).
+
+## Structural identifiability
+
+The model is
+
+\\\dot x = f(x, u(t), \theta), \qquad x(t_0) = x_0(\theta), \qquad y =
+h(x, \theta), \tag{1}\\
+
+with states \\x\\, input \\u\\, observables \\y\\ and parameters
+\\\theta \in \Theta \subseteq \mathbb{R}^d\\ of any kind, and prediction
+\\g(t; \theta) = h(x(t), \theta)\\. It is *locally structurally
+identifiable* at \\\theta\\ if no nearby \\\tilde\theta \ne \theta\\ has
+the same prediction. The property depends on the equations alone, as if
+every observable were measured exactly and continuously, and holds for
+generic \\\theta\\, outside a set of measure zero. A structural
+non-identifiability makes the likelihood exactly flat along a curve,
+seen as a flat profile [\[1\]](#ref-raue2009structural).
+
+## Lie symmetries
+
+A *Lie symmetry* is a one-parameter group \\\Phi\_\varepsilon\\ on
+\\\Theta\\ with \\g(t; \Phi\_\varepsilon(\theta)) = g(t; \theta)\\ for
+all \\t\\ and small \\\varepsilon\\. The orbits are the integral curves
+of the *generator*
+
+\\X = \sum\_{i=1}^d \xi_i(\theta)\\ \frac{\partial}{\partial \theta_i},
+\qquad \xi(\theta) = \frac{\partial \Phi\_\varepsilon(\theta)}{\partial
+\varepsilon}\Big\|\_{\varepsilon = 0}. \tag{2}\\
+
+An *invariant*, \\X(I) = 0\\, is constant on every orbit, and the
+prediction depends on \\\theta\\ only through invariants. With \\r\\
+independent generators, the observables determine \\d - r\\ parameter
+combinations.
+
+*Scalings*, \\\xi_i(\theta) = w_i \theta_i\\ with integer weights, are
+the most common symmetries of reaction networks; on the log scale their
+orbits are straight lines. Two kinds occur in almost every signaling
+model:
+
+- Observable `s * (A + B) + off`: concentrations of the moiety times
+  \\\lambda\\, rate constants of second order in it and the scale `s`
+  divided by \\\lambda\\. The generator moves the total, the scales and
+  the bimolecular rate constants together.
+- Unobserved intermediate: level and production rate times \\\lambda\\,
+  the rate it drives divided by \\\lambda\\.
+
+General symmetries also occur, such as a Möbius transformation of an
+input amplitude in an NFκB model [\[2\]](#ref-merkt2015higher); symident
+finds generators with rational components.
+
+## Detection
+
+With \\z = (x, \theta, t)\\, \\\dot\theta = 0\\, \\\dot t = 1\\, the
+model is the vector field \\F = f\\ \partial_x + \partial_t\\. The *Lie
+derivatives* of the observables,
+
+\\L_F^0 h = h, \qquad L_F^{k+1} h = F\bigl(L_F^k h\bigr), \tag{3}\\
+
+are the Taylor coefficients of an analytic prediction,
+
+\\g(t; \theta) = \sum\_{k \ge 0} \frac{(t - t_0)^k}{k!}\\ L_F^k
+h\bigl(z_0(\theta)\bigr). \tag{4}\\
+
+Collected up to order \\N\\ they form \\\Psi_N(\theta)\\, with the
+observability-identifiability matrix
+
+\\\mathrm{OIM}\_N(\theta) = \frac{\partial \Psi_N(\theta)}{\partial
+\theta}. \tag{5}\\
+
+\\\Psi_N\\ is constant on every orbit,
+\\\Psi_N(\Phi\_\varepsilon(\theta)) = \Psi_N(\theta)\\, and the
+derivative at \\\varepsilon = 0\\ is, by the chain rule and (2),
+
+\\\frac{\mathrm{d}}{\mathrm{d}\varepsilon}\Psi_N\bigl(\Phi\_\varepsilon(\theta)\bigr)\Big\|\_{\varepsilon
+= 0} = \mathrm{OIM}\_N(\theta)\\ \xi(\theta) = 0. \tag{6}\\
+
+At generic \\\theta\\ and large enough \\N\\ the kernel of
+\\\mathrm{OIM}\_N\\ consists exactly of the generators, \\d -
+\operatorname{rank} \mathrm{OIM}\_N\\ counts them, and full rank means
+identifiable.
+
+For scalings, (6) reads \\\mathrm{OIM}\_N(\theta)\\
+\mathrm{diag}(\theta)\\ w = 0\\ for every \\\theta\\. With rational
+right-hand sides, observables and initial values this holds exactly when
+every term of every equation keeps the weighted degree: a linear system
+in the monomial exponents, whose integer solution lattice symident
+computes exactly. The remaining kernel vectors are *general* directions,
+with closed forms from interpolation ([symident
+method](https://dmodverse.github.io/symident/method.html)).
+
+symident computes (5) exactly over a finite field \\\mathbb{F}\_p\\ at a
+random point. There the rank can only fall below the generic value, with
+a small probability that further primes and points exclude. symident
+proves the order \\N\\ sufficient where it can and checks the
+reconstructed rational \\\xi(\theta)\\ over the rationals.
+
+### Steady-state starts, inputs and conditions
+
+| setting | effect |
+|----|----|
+| `equilibrate = TRUE` | initial state a root of \\f(x, 0, \theta) = 0\\, inputs at 0 |
+| `reduceCQ = TRUE` | one species eliminated per conserved moiety; freedom reported on the totals |
+| `forcings` | input states, 0 at rest |
+| `conditions` | shared parameters; a direction is non-identifiable only if it is so in every condition |
+
+symident writes an observable \\a \log h + c\\ through \\h\\. A
+clock-time factor of \\h\\ such as \\e^{-\tau t}\\ is no function of the
+states of a model at rest, so it is left out of the observables passed
+to
+[`symmetryDetection()`](https://dmodverse.github.io/dMod2/reference/symmetryDetection.md);
+this is valid where the parameters of that factor take no part in a
+symmetry.
+
+## Gauge and reduction
+
+Along every orbit the objective, the profiles and the Hessian in the
+generator directions are flat, so symmetries are removed before the fit.
+A *gauge* fixes one coordinate per scaling; each orbit meets the fixed
+values in one point with the same prediction. With \\W\\ the weights of
+the scalings on the fixed coordinates, one row per generator, the gauge
+removes every scaling if
+
+\\\det W \ne 0 . \tag{7}\\
+
+[`symmetryReduction()`](https://dmodverse.github.io/dMod2/reference/symmetryReduction.md)
+turns the generators into a parameter transformation: for scalings a
+*section* fixing one coordinate per direction, for general directions
+invariants as new parameters
+([reduction](https://dmodverse.github.io/symident/method.html#reduction)).
+
+Reference:
+[`symmetryDetection()`](https://dmodverse.github.io/dMod2/reference/symmetryDetection.md),
+[`symmetryReduction()`](https://dmodverse.github.io/dMod2/reference/symmetryReduction.md)
+
+## References
+
+\[1\]
+
+A. Raue *et al.*, “Structural and practical identifiability analysis of
+partially observed dynamical models by exploiting the profile
+likelihood,” *Bioinformatics*, vol. 25, no. 15, pp. 1923–1929, 2009,
+doi:
+[10.1093/bioinformatics/btp358](https://doi.org/10.1093/bioinformatics/btp358).
+
+\[2\]
+
+B. Merkt, J. Timmer, and D. Kaschek, “Higher-order Lie symmetries in
+identifiability and predictability analysis of dynamic models,”
+*Physical Review E*, vol. 92, no. 1, p. 012920, 2015, doi:
+[10.1103/PhysRevE.92.012920](https://doi.org/10.1103/PhysRevE.92.012920).

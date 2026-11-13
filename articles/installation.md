@@ -1,0 +1,158 @@
+# Installation and troubleshooting
+
+dMod2 compiles C++ code for every model during the R session. It needs a
+C++17 compiler, Python with SymPy for code generation, and further
+Python packages for some features.
+
+## Package installation
+
+``` r
+
+remotes::install_github("dModverse/dMod2")
+```
+
+[cppDE](https://dmodverse.github.io/cppDE/) and
+[cOde](https://github.com/dkaschek/cOde) are listed under `Remotes:` and
+installed with it. Models compile against the installed cppDE headers,
+so cppDE is installed first; after a cppDE reinstall, the next
+[`compile()`](https://dmodverse.github.io/dMod2/reference/compile.md)
+recompiles the model sources.
+
+## C++ compiler
+
+| system | what to install |
+|----|----|
+| Linux | compilers R was built with, e.g. `sudo apt install r-base-dev` |
+| macOS | Xcode command line tools, `xcode-select --install` |
+| Windows | [Rtools](https://cran.r-project.org/bin/windows/Rtools/) matching the R version |
+
+[`compile()`](https://dmodverse.github.io/dMod2/reference/compile.md)
+calls `R CMD SHLIB` with the compiler and flags of R, `~/.R/Makevars`
+included. `pkgbuild::check_build_tools(debug = TRUE)` tests whether R
+finds a compiler.
+
+## Python environment
+
+cppDE and dMod2 declare their Python packages with
+[`reticulate::py_require()`](https://rstudio.github.io/reticulate/reference/py_require.html);
+[reticulate](https://rstudio.github.io/reticulate/) provides a Python
+with them on first use.
+
+| package | needed for |
+|----|----|
+| `sympy` | code generation, symbolic derivatives, [`steadyStates()`](https://dmodverse.github.io/dMod2/reference/steadyStates.md) |
+| `numpy`, `scipy` | symbolic layer of dMod2 |
+| `python-libsbml` | [`importSbml()`](https://dmodverse.github.io/dMod2/reference/importSbml.md), [`exportSbml()`](https://dmodverse.github.io/dMod2/reference/exportSbml.md), [`importPEtab()`](https://dmodverse.github.io/dMod2/reference/importPEtab.md), [`exportPEtab()`](https://dmodverse.github.io/dMod2/reference/exportPEtab.md) |
+| `symident` | [`symmetryDetection()`](https://dmodverse.github.io/dMod2/reference/symmetryDetection.md), [`symmetryReduction()`](https://dmodverse.github.io/dMod2/reference/symmetryReduction.md) |
+
+With `RETICULATE_PYTHON` set, reticulate uses that Python and installs
+nothing:
+
+``` sh
+python -m pip install sympy numpy scipy python-libsbml symident
+```
+
+[`reticulate::py_config()`](https://rstudio.github.io/reticulate/reference/py_config.html)
+shows the Python of the session. The SBML and PEtab interfaces run
+libsbml in a separate Python process, whose interpreter
+`DMOD_LIBSBML_PYTHON` sets.
+
+## symident and msolve
+
+On first use of
+[`symmetryDetection()`](https://dmodverse.github.io/dMod2/reference/symmetryDetection.md)
+or
+[`symmetryReduction()`](https://dmodverse.github.io/dMod2/reference/symmetryReduction.md),
+dMod2 installs [symident](https://github.com/dModverse/symident) from
+PyPI into the session Python. On failure the error names the
+interpreter; `pip install -U symident` with that interpreter installs
+it.
+
+Coupled steady states in a steady-state start need
+[msolve](https://msolve.lip6.fr/). Interactively,
+[`symmetryDetection()`](https://dmodverse.github.io/dMod2/reference/symmetryDetection.md)
+offers to build it into the symident cache, on Windows with Rtools.
+`SYMIDENT_MSOLVE` points to an msolve built elsewhere:
+
+``` r
+
+Sys.setenv(SYMIDENT_MSOLVE = "/opt/msolve/bin/msolve")
+```
+
+Every environment variable `SYMIDENT_<NAME>` reaches symident as the
+switch `<name>`, see Details of
+[`?symmetryDetection`](https://dmodverse.github.io/dMod2/reference/symmetryDetection.md).
+
+## Optional solver libraries
+
+The default backend needs no further libraries.
+`odemodel(backend = "Sundials")` needs SUNDIALS, a sparse Jacobian
+SuiteSparse/KLU; cppDE finds both at install time. Without administrator
+rights,
+
+``` r
+
+cppDE::installLibs("sundials")      # or "suitesparse"
+```
+
+builds them into a user cache; afterwards cppDE is reinstalled with the
+printed command.
+
+## Output directory
+
+The constructors
+([`odemodel()`](https://dmodverse.github.io/dMod2/reference/odemodel.md),
+[`Y()`](https://dmodverse.github.io/dMod2/reference/Y.md),
+[`P()`](https://dmodverse.github.io/dMod2/reference/P.md), …) write C++
+sources into `getOption("dMod2.outdir")`, by default the working
+directory;
+[`compile()`](https://dmodverse.github.io/dMod2/reference/compile.md)
+puts object files and shared object next to them and skips unchanged
+sources. For scratch work:
+
+``` r
+
+options(dMod2.outdir = tempdir())
+```
+
+## Common errors
+
+**`Compilation failed: ...` with “command not found” or `make`
+missing.** No compiler: Rtools missing or mismatched (Windows), command
+line tools missing (macOS). `pkgbuild::check_build_tools(debug = TRUE)`
+shows what R tries.
+
+**`Compilation failed: ...` with C++ errors in generated code.** The
+compiler lacks C++17; update it, on Windows with Rtools.
+
+**Python or SymPy errors when building the model.** No Python, or one
+without SymPy. Check
+[`reticulate::py_config()`](https://rstudio.github.io/reticulate/reference/py_config.html);
+with `RETICULATE_PYTHON` set, install SymPy there.
+
+**`Could not provision a Python with python-libsbml`.** Install
+`python-libsbml` into the session Python, or set `DMOD_LIBSBML_PYTHON`
+to an interpreter that has it.
+
+**`... source files would need as many shared objects, but R can load at most ...`.**
+Pass `output = "<name>"` to
+[`compile()`](https://dmodverse.github.io/dMod2/reference/compile.md) to
+link all sources into one shared object.
+
+**`A shared library named '...' is already loaded`.** A model name was
+used twice; dMod2 appends `_2`, `_3`, … A new name avoids the warning.
+
+**`A sparse Jacobian was requested, but cppDE was installed without the KLU linear solver`.**
+Run `cppDE::installLibs("suitesparse")` and reinstall cppDE.
+
+**`NULL value passed as symbol address`.** A model shared object was
+unloaded by [`dyn.unload()`](https://rdrr.io/r/base/dynload.html).
+Restart R;
+[`loadDLL()`](https://dmodverse.github.io/dMod2/reference/loadDLL.md)
+loads without unloading.
+
+**[`mstrust()`](https://dmodverse.github.io/dMod2/reference/mstrust.md)
+or [`profile()`](https://rdrr.io/r/stats/profile.html) with `cores > 1`
+hangs.** A threaded BLAS without thread control deadlocks in forked
+workers; dMod2 warns on attach. Start R with `OMP_NUM_THREADS=1`, see
+[`cppDE::forkGuard()`](https://rdrr.io/pkg/cppDE/man/forkGuard.html).
