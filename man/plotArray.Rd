@@ -12,7 +12,8 @@ plotArray(
   ...,
   direction = c("up", "down"),
   covtable = NULL,
-  nSim = 4
+  nSim = 4,
+  fixed = NULL
 )
 }
 \arguments{
@@ -39,6 +40,10 @@ predictions by condition so that \code{...} can refer to the table columns. Defa
 \item{nSim}{Number of trajectories, evenly spaced along the profile side
 and starting at the optimum; at most the number of profile points on that
 side. Defaults to 4.}
+
+\item{fixed}{Named numeric vector of the parameters held fixed in the
+profiles (the \code{fixed} of \link[=profile.objfn]{profile()}), added to every
+parameter set. Default \code{NULL}.}
 }
 \value{
 A \code{ggplot} object.

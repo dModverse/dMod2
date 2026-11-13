@@ -888,9 +888,10 @@ subset.eqnlist <- function(x, ...) {
   
   # Translate subsetting on eqnlist entries
   # smatrix
+  # a state stays if a kept reaction changes it or its rate depends on it, as on a catalyst
   smatrix <- .submatrix(eqnlist$smatrix, rows = select)
-  empty <- sapply(1:ncol(smatrix), function(i) all(is.na(smatrix[, i])))
-  smatrix <- .submatrix(smatrix, cols = !empty)
+  changed <- vapply(seq_len(ncol(smatrix)), function(i) !all(is.na(smatrix[, i])), logical(1))
+  smatrix <- .submatrix(smatrix, cols = changed | colnames(smatrix) %in% getSymbols(eqnlist$rates[select]))
   
   # states and rates
   states <- colnames(smatrix)

@@ -197,6 +197,24 @@ test_that("the integrated profile takes the exact Hessian where the objective ha
   expect_gt(along(gn), 1e-3)
 })
 
+test_that("a reoptimized profile follows the other parameters when the profiled one is on a small scale", {
+  s <- 1e-6
+  obj <- function(pars, fixed = NULL, ...) {
+    p <- c(pars, fixed); v <- p[["v"]]; pred <- s * exp(p[["a"]] + p[["b"]])
+    r <- c((v - pred) / (0.01 * s), p[["a"]], p[["b"]])
+    J <- rbind(c(1, -pred, -pred) / (0.01 * s), c(0, 1, 0), c(0, 0, 1))
+    dimnames(J) <- list(NULL, c("v", "a", "b"))
+    free <- names(pars)
+    objlist(sum(r^2), (2 * drop(crossprod(J, r)))[free], (2 * crossprod(J))[free, free, drop = FALSE])
+  }
+  pr <- suppressWarnings(profile(obj, c(v = s, a = 0, b = 0), "v", cores = 1,
+                                 stepControl = list(stepsize = 0.01 * s, min = 1e-3 * s),
+                                 algoControl = list(reoptimize = TRUE),
+                                 optControl = list(iterlim = 100, tolControl = list(ftol = 1e-4, mtol = 1e-4, gtol = 1e-2))))
+  ci <- confint(pr, level = 0.95, val.column = "value")
+  expect_equal(log(c(ci$lower, ci$upper) / s), c(-1, 1) * sqrt(2 * qchisq(0.95, 1)), tolerance = 0.02)
+})
+
 test_that("profile respects limits on a flat direction", {
   # Along an exactly flat direction the stepsize doubles every step; limits
   # clamp the last step rather than being overshot.

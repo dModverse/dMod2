@@ -288,16 +288,15 @@ profile.objfn <- function(fitted, pars, whichPar, alpha = 0.05,
       optimize <- TRUE
       y.try <- y
       y.try[whichIndex] <- y[whichIndex] + direction * stepsize
-      rinit <- oControl$rinit
     } else {
-      rinit <- min(oControl$rinit, 3 * sqrt(sum(dy^2)))
       y.try <- y + dy
       if (lag$singular) optimize <- TRUE
     }
     if (!optimize) return(y.try)
+    # the radius of the refit is that of optControl, whatever the scale of the profiled parameter
     arglist <- c(list(objfun = obj.opt, parinit = y.try[-whichIndex],
-                      fixed = c(fixed, y.try[whichIndex]), rinit = rinit),
-                 oControl[names(oControl) != "rinit"],
+                      fixed = c(fixed, y.try[whichIndex])),
+                 oControl,
                  list(sparse = sparse),
                  dotArgs[!names(dotArgs) %in% c("fixed", if (sparse) "hessian")])
     fit <- try(do.call(trust, arglist), silent = TRUE)

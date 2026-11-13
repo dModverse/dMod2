@@ -97,6 +97,23 @@ test_that("plotPrediction takes the sigma of an error model", {
   expect_equal(attr(p, "data")$sigma, rep(0.2, 8))
 })
 
+# sigma for A only, as for an error model that leaves an observable without one
+.errfnA <- function(out, pars, conditions = NULL, ...) {
+  s <- out
+  s[, -1] <- NA_real_
+  s[, "A"] <- 0.2
+  setNames(list(prdframe(s, parameters = pars)), conditions)
+}
+
+test_that("the sigma band leaves out the observables without a sigma", {
+  pred <- .x2()(0:3, .pars2)
+  p <- plotCombined(pred, .data2(), errfn = .errfnA)
+  expect_silent(ggplot2::ggplot_gtable(ggplot2::ggplot_build(p)))
+  expect_equal(unique(as.character(p$layers[[1]]$data$name)), "A")
+  p <- plotPrediction(pred, errfn = .errfnA)
+  expect_silent(ggplot2::ggplot_gtable(ggplot2::ggplot_build(p)))
+})
+
 test_that("plotData of a data frame splits it into conditions", {
   d <- data.frame(name = "A", time = 0:3, value = 1:4, sigma = 0.1,
                   condition = rep(c("u", "v"), each = 2))

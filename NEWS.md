@@ -1,3 +1,19 @@
+# dMod2 0.15.2
+
+* The refit in each step of `profile()` starts at the radius `rinit` of `optControl`. Before, the
+  radius was at most three times the length of the step, which for a parameter on a small scale,
+  such as the validation parameter of a prediction profile, kept the other parameters in place
+  and returned the profile of the validation point alone.
+
+* `subset()` of an equation list keeps a state that a kept reaction does not change but whose rate
+  depends on it, as a catalyst.
+
+* `plotCombined(errfn = )` and `plotPrediction(errfn = )` draw the sigma band only where the error
+  model gives a sigma, so an observable without one no longer stops the plot.
+
+* `plotArray(fixed = )` adds the parameters held fixed in the profiles to every parameter set, so
+  it plots the predictions along profiles computed with `fixed`.
+
 # dMod2 0.15.1
 
 * American spelling throughout: `trust(stepControl = list(regularize = ))` replaces `regularise`,

@@ -31,6 +31,16 @@ test_that("subset of an eqnlist matches %in% on ordinary vectors as base R does"
   expect_equal(subset(f, "B" %in% Educt)$description, "r2")
 })
 
+test_that("subset of an eqnlist keeps a state that a kept reaction has as catalyst", {
+  f <- eqnlist() |>
+    addReaction("L", "L + R", "k1 * L", "activation") |>
+    addReaction("R", "", "k2 * R", "decay") |>
+    addReaction("A", "B", "k3 * R * A", "conversion")
+  s <- subset(f, Description != "conversion")
+  expect_equal(s$states, c("L", "R"))
+  expect_equal(s$smatrix, f$smatrix[1:2, c("L", "R")])
+})
+
 test_that("conserved quantities have no rounding residues", {
   S <- matrix(c(0, -1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, -2, 0, 0, 0, 1, 0, 0, 0,
                 1, 1, 0, 1, 0, 1, 0, 1, 0, 0, 0, -1, 1, 0, -2, 0, 0, 0, -1, 0, -1, 0, 0, 0, 0, 0,

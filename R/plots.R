@@ -822,6 +822,9 @@ plotPairs <- function(x, ...) UseMethod("plotPairs", x)
 #' @param nSim Number of trajectories, evenly spaced along the profile side
 #'   and starting at the optimum; at most the number of profile points on that
 #'   side. Defaults to 4.
+#' @param fixed Named numeric vector of the parameters held fixed in the
+#'   profiles (the `fixed` of [profile()][profile.objfn]), added to every
+#'   parameter set. Default `NULL`.
 #'
 #' @return A `ggplot` object.
 #' @seealso [plotProfile()], [plotPathsMulti()]
@@ -835,7 +838,7 @@ plotPairs <- function(x, ...) UseMethod("plotPairs", x)
 #' plotArray("A2", profs, x, seq(0, 5, 0.1))
 #' @export
 plotArray <- function(par, profs, prd, times, ..., direction = c("up", "down"),
-                      covtable = NULL, nSim = 4) {
+                      covtable = NULL, nSim = 4, fixed = NULL) {
 
   direction <- match.arg(direction)
   prof <- as.data.frame(profs)[profs$whichPar == par, , drop = FALSE]
@@ -848,7 +851,7 @@ plotArray <- function(par, profs, prd, times, ..., direction = c("up", "down"),
   # long trajectories of profile point k, NULL with a warning if the prediction fails
   trajectories <- function(k) {
     pars <- unlist(prof[side[k], parameters])
-    pred <- tryCatch(prd(times, as.parvec(pars), deriv = FALSE), error = function(e) {
+    pred <- tryCatch(prd(times, as.parvec(c(pars, fixed)), deriv = FALSE), error = function(e) {
       warning("plotArray: parameter set ", k, " failed: ", conditionMessage(e), call. = FALSE)
       NULL
     })

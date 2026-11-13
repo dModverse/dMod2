@@ -162,7 +162,7 @@ plotCombined.prdlist <- function(prediction, data = NULL, ...,
   mapping <- list(x = "time", y = "value", ymin = "value - sigma", ymax = "value + sigma")
   if (facet == "wrap") mapping[c("group", "color")] <- "condition"
   user <- as.list(aesthetics)
-  names(user) <- ggplot2::standardise_aes_names(names(user))
+  names(user) <- sub("^colour$", "color", ggplot2::standardise_aes_names(names(user)))
   mapping <- utils::modifyList(mapping, user)
   panels <- switch(facet,
     wrap = facet_wrap(vars(name), scales = scales),
@@ -173,12 +173,13 @@ plotCombined.prdlist <- function(prediction, data = NULL, ...,
   # a legend of one condition says nothing
   if (identical(mapping$color, "condition") && length(conditions) == 1L) p <- p + guides(color = "none")
   if (!is.null(errfn) && !is.null(prediction)) {
-    colourBy <- if (!is.null(mapping$colour)) rlang::parse_expr(mapping$colour)
-    band <- if (is.null(colourBy)) aes() else aes(fill = !!colourBy)
-    p <- p + geom_ribbon(band, data = prediction, alpha = 0.25, linetype = 0, na.rm = TRUE,
-                         show.legend = FALSE)
-    # the bands in the colours of the lines
-    if (!is.null(colourBy) && !is.numeric(rlang::eval_tidy(colourBy, prediction))) p <- p + scale_fill_dMod()
+    colorBy <- if (!is.null(mapping$color)) rlang::parse_expr(mapping$color)
+    band <- if (is.null(colorBy)) aes() else aes(fill = !!colorBy)
+    # rows without a sigma leave groups the ribbon cannot draw
+    p <- p + geom_ribbon(band, data = prediction[!is.na(prediction$sigma), ], alpha = 0.25,
+                         linetype = 0, show.legend = FALSE)
+    # the bands in the colors of the lines
+    if (!is.null(colorBy) && !is.numeric(rlang::eval_tidy(colorBy, prediction))) p <- p + scale_fill_dMod()
   }
   if (!is.null(prediction)) p <- p + geom_line(data = prediction)
   if (is.null(data)) return(p)
@@ -213,7 +214,8 @@ plotPrediction.prdlist <- function(prediction, ..., errfn = NULL,
   }
   band <- if (!is.null(errfn))
     list(geom_ribbon(aes(ymin = value - sigma, ymax = value + sigma, fill = condition),
-                     linetype = 0, alpha = 0.3), scale_fill_dMod())
+                     data = frame[!is.na(frame$sigma), ], linetype = 0, alpha = 0.3),
+         scale_fill_dMod())
   p <- p + list(band, geom_line())
   attr(p, "data") <- frame
   p
