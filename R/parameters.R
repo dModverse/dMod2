@@ -853,7 +853,8 @@ Pexpl <- function(trafo, parameters = NULL, attachInput = FALSE, condition = NUL
 #' @return A [parfn], called as `p(pars, ...)`, see section Calling a dMod
 #'   function.
 #' @inheritSection dModfn Calling a dMod function
-#' @seealso [Pexpl()], [P()]
+#' @seealso [Pexpl()], [P()]; the guide chapter
+#'   [Setting up models](https://dmodverse.github.io/dMod2/articles/guide-model.html).
 #' @example inst/examples/Pimpl.R
 #' @export
 #' @import cppDE

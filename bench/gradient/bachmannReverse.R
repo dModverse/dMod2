@@ -132,7 +132,7 @@ print(format(agree, digits = 3), row.names = FALSE)
 
 
 # The prediction underneath, for one condition ----------------------------------
-# The chain the objective holds is callable on its own.
+# The chain the objective holds is callable alone.
 cond  <- names(mydataL)[1]
 times <- sort(unique(c(0, mydataL[[cond]]$time)))
 pred  <- (g * xBDF * p)(times, pars, conditions = cond)

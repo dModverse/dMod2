@@ -1,6 +1,6 @@
-## FOCEI with the second derivatives of its volume term forward over forward and forward over
+## FOCEI with the second derivatives of the volume term forward over forward and forward over
 ## reverse (`control$derivMode`): the time (minimum over `reps` runs), -2 log L, the iterations
-## and the standard errors, on Theophylline (seven parameters), on STAT5 dimerisation in ten cell
+## and the standard errors, on Theophylline (seven parameters), on STAT5 dimerization in ten cell
 ## lines with four parameters varying between them (Boehm et al. 2014), and on an alignment with
 ## a random scale per gel.
 library(dMod2)
@@ -48,7 +48,7 @@ data.frame(mode = modes, seconds = sapply(theoph, `[[`, "seconds"),
 sapply(theoph, function(r) summary(r$fit)$population[, "se"])
 
 ## STAT5 in ten cell lines ----------------------------------------------------------------
-# The reactions of demo("cellLines"), normal random effects on the STAT5 pool, its split and two
+# The reactions of demo("cellLines"), normal random effects on the STAT5 pool, the split of the pool and two
 # transport rates over the lines.
 epo <- "1.25e-7*exp(-Epo_degradation_BaF3*time)"
 stat5 <- eqnlist() |>

@@ -42,6 +42,7 @@ head(bachmann)
 }
 \seealso{
 The example project
-\href{https://dmodverse.github.io/dMod2/articles/bachmannMSB2011.html}{bachmannMSB2011} builds and fits the model.
+\href{https://dmodverse.github.io/dMod2/articles/bachmannMSB2011.html}{JAK2-STAT5 signaling (Bachmann 2011)}
+builds and fits the model.
 }
 \keyword{data}

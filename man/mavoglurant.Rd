@@ -40,7 +40,8 @@ data(mavoglurant)
 head(mavoglurant)
 }
 \seealso{
-The example project \href{https://dmodverse.github.io/dMod2/articles/pharmacometrics.html}{pharmacometrics}
+The example project
+\href{https://dmodverse.github.io/dMod2/articles/pharmacometrics.html}{Theophylline, warfarin and mavoglurant}
 fits a two-compartment model with variability between occasions.
 }
 \keyword{data}

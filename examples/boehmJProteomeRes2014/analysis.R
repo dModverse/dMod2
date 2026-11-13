@@ -1,4 +1,4 @@
-# STAT5 dimerisation after Epo stimulation, from reactions to profile likelihoods:
+# STAT5 dimerization after Epo stimulation, from reactions to profile likelihoods:
 # multi-start fit, an error model by restricted maximum likelihood, confidence
 # intervals and a cross-check against the shipped PEtab form.
 # Boehm et al. (2014) J Proteome Res, doi:10.1021/pr5006923.
@@ -111,7 +111,7 @@ best <- as.parvec(fits)
 
 # REML ----
 # Maximum likelihood underestimates the standard deviations, because the fitted
-# mean shrinks the residuals. `reml()` counts each data point with one minus its
+# mean shrinks the residuals. `reml()` counts each data point with one minus the
 # leverage, the stationarity condition of the restricted likelihood (Patterson
 # and Thompson 1971), which corrects the variances for the degrees of freedom the
 # mean uses.
@@ -134,11 +134,11 @@ plot(prediction, data) +
   geom_ribbon(data = as.data.frame(prediction, errfn = e),
               aes(x = time, ymin = value - sigma, ymax = value + sigma),
               linetype = "dashed", alpha = 0.3) +
-  labs(x = "time [min]", y = "relative signal [%]", colour = NULL)
+  labs(x = "time [min]", y = "relative signal [%]", color = NULL)
 
 
 # Profiles ----
-# A profile re-optimises every other parameter while one is held away from the
+# A profile re-optimizes every other parameter while one is held away from the
 # optimum, so the interval comes from the likelihood itself (Raue et al. 2009).
 # `profileThreshold()` gives the threshold for `profile()` and `plotProfile()`;
 # `confint()` computes the same one from `method`, `n` and `p`. `method = "F"`

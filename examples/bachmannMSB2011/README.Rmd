@@ -1,10 +1,12 @@
-# Bachmann 2011
+# JAK2-STAT5 signaling (Bachmann 2011)
+
+Shows: `eqnlist()`, `odemodel()`, `Y()`, `normL2()`, `constraintL2()`, `mstrust()`, `plotCombined()`, `importPEtab()`, `exportPEtab()`.
 
 ```{r, include = FALSE}
 knitr::read_chunk("plots.R")
 ```
 
-JAK2-STAT5 signalling in CFU-E cells with the feedbacks of CIS, SOCS3 and SHP1, after Bachmann et
+JAK2-STAT5 signaling in CFU-E cells with the feedbacks of CIS, SOCS3 and SHP1, after Bachmann et
 al. (2011), Mol Syst Biol 7:516. 541 measurements from 13 experiments in 36 conditions, 20
 observables, 113 parameters, fitted within the bounds of the publication. The guide chapter
 [PEtab](https://dmodverse.github.io/dMod2/articles/guide-petab.html) imports the problem from the
@@ -17,7 +19,7 @@ PEtab benchmark collection.
 | `model.R` | data, reactions, observables, error model, conditions, compiling, objective |
 | `fit.R` | multistart of 200 fits, saves `results/fits.rds` |
 | `plots.R` | figures from the saved results |
-| `petab.R` | the problem from its PEtab files, compared with `model.R`, and `model.R` written as PEtab |
+| `petab.R` | the problem from the PEtab files, compared with `model.R`, and `model.R` written as PEtab |
 | `results/` | saved fits |
 
 ## Run
@@ -25,8 +27,8 @@ PEtab benchmark collection.
 With this folder as working directory:
 
 ```r
-source("model.R")     # about a minute, mostly compiling into build/
-source("fit.R")       # about 100 core hours
+source("model.R")     # compiles into build/
+source("fit.R")
 source("plots.R")
 ```
 

@@ -181,7 +181,12 @@
 #'     of the `tolControl` there also end the search of the modes (else 1e-10).}
 #' }
 #'
-#' @seealso [msem()], [randomEffects()], [insert()]
+#' @seealso [msem()], [randomEffects()], [insert()]; the guide chapters
+#'   [Nonlinear mixed-effects models](https://dmodverse.github.io/dMod2/articles/guide-nlme.html) and
+#'   [Group-specific effects](https://dmodverse.github.io/dMod2/articles/guide-group-effects.html), the
+#'   methods articles
+#'   [Marginal likelihood of mixed-effects models](https://dmodverse.github.io/dMod2/articles/methods-nlme.html)
+#'   and [Sparse random effects](https://dmodverse.github.io/dMod2/articles/methods-sparse-random-effects.html).
 #' @example inst/examples/em.R
 #' @export
 em <- function(obj, random, init = NULL, fixed = NULL,

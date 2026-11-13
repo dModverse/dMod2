@@ -8,7 +8,7 @@ library(dMod2)
 if (!dir.exists(.outdir)) dir.create(.outdir, recursive = TRUE)
 setwd(.outdir)
 
-# Tight, so the discretisation gap between the two modes stays below the
+# Tight, so the discretization gap between the two modes stays below the
 # comparisons below. Section 5 is the one that varies it on purpose.
 tight <- list(atol = 1e-11, rtol = 1e-11)
 
@@ -35,7 +35,7 @@ w <- matrix(rnorm(nrow(fwd) * 2), nrow(fwd), 2, dimnames = list(NULL, c("A", "B"
 
 ref <- apply(attr(fwd, "deriv") * as.vector(w), 3, sum)
 # A vjp answers a cotangent with a direction axis: column 1 is the gradient,
-# and second order would put its derivatives beside it.
+# and second order would put the gradient derivatives beside it.
 got <- attr(x, "mappings")[[1]] |> attr("vjpfn") |> (\(f) f(times, inner, NULL, w))()
 got <- got[, 1L]
 
@@ -76,7 +76,7 @@ cat("2. g * x * p       max |difference| =",
 
 # 3. Several conditions, and a parameter only one of them has -----------------
 # Cotangents of the `+` branches meet on shared parameters; a condition-specific
-# parameter receives a contribution from its own condition only.
+# parameter receives a contribution from the same condition only.
 conds <- c("C1", "C2")
 trafo2 <- c(A = "exp(logA)", B = "0", k1 = "exp(logk1)", k2 = "exp(logk2)",
             s = "exp(logs)")
@@ -127,7 +127,7 @@ cat("4. error model     max |difference| =",
 
 
 # 5. Why the two do not agree to machine precision ----------------------------
-# Each mode differentiates its own discretisation exactly, so the gap falls with
+# Each mode differentiates a separate discretization exactly, so the gap falls with
 # the tolerance; a missing channel in the reverse pass would leave a floor.
 gap <- t(vapply(10^-c(4, 6, 8, 10, 12), function(tt) {
   o  <- list(atol = tt, rtol = tt)
@@ -142,7 +142,7 @@ gap <- t(vapply(10^-c(4, 6, 8, 10, 12), function(tt) {
 }, numeric(3)))
 print(format(as.data.frame(gap), digits = 3), row.names = FALSE)
 cat("\n5. the gap tracks the tolerance over eight decades, so it is the\n",
-    "  discretisation and not the adjoint.\n\n")
+    "  discretization and not the adjoint.\n\n")
 
 
 # 5b. A log observable with an epsilon below the solver's noise floor amplifies
@@ -201,7 +201,7 @@ cat(sprintf("   Gauss-Newton vs exact: max|difference| %.2e  (they are not the "
             max(abs(gn$hessian - hf$hessian))))
 cat("same matrix)\n")
 
-# 9. An optimiser that chooses per evaluation ---------------------------------
+# 9. An optimizer that chooses per evaluation ---------------------------------
 # One exact Hessian at the start, then quasi-Newton on reverse gradients. It pays
 # only past the crossover of section 7, at tens of parameters.
 start <- pars + 0.3

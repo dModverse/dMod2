@@ -40,7 +40,8 @@ data(kok)
 head(kok)
 }
 \seealso{
-The example project \href{https://dmodverse.github.io/dMod2/articles/kokMSB2020.html}{kokMSB2020} builds
-the model.
+The example project
+\href{https://dmodverse.github.io/dMod2/articles/kokMSB2020.html}{IFN-α sensitization (Kok 2020)}
+builds the model.
 }
 \keyword{data}

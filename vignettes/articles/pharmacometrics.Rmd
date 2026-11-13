@@ -1,5 +1,5 @@
 ---
-title: "Pharmacometrics"
+title: "Theophylline, warfarin and mavoglurant"
 ---
 
 ```{r, echo = FALSE, results = "asis"}

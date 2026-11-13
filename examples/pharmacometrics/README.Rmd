@@ -1,6 +1,8 @@
-# Pharmacometrics
+# Theophylline, warfarin and mavoglurant
 
-Theophylline, warfarin PK/PD and mavoglurant with occasions: FOCEI and SAEM multistarts, diagnostics, and nlmixr2 on the same starts.
+Shows: `randomEffects()`, `em()`, `msem()`, `vcov()`, `plotVPC()`, `plotResiduals()`, `plotRandomEffects()`.
+
+Theophylline, warfarin PK/PD and mavoglurant with occasions: FOCEI and SAEM multistarts and the diagnostics of the fits.
 
 ## Files
 

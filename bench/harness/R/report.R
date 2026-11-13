@@ -1,5 +1,5 @@
 ## =====================================================================
-##  report.R: the run directory, its README and the console summary.
+##  report.R: the run directory, the README in it and the console summary.
 ## =====================================================================
 
 bench_tag <- function(opts) {
@@ -18,7 +18,7 @@ bench_info <- function(opts) {
     sprintf("threads   OMP_NUM_THREADS=%s", Sys.getenv("OMP_NUM_THREADS", "unset")))
 }
 
-##  One row per model: the cost of each arm in value solves and its error.
+##  One row per model: the cost of each arm in value solves and the error of the arm.
 bench_table <- function(df) {
   w <- stats::reshape(df[, c("model", "n_theta", "arm", "cost", "err_rel")],
                       idvar = c("model", "n_theta"), timevar = "arm", direction = "wide")
@@ -34,7 +34,7 @@ bench_table <- function(df) {
 
 bench_print <- function(df) {
   if (!NROW(df)) return(invisible(NULL))
-  cat("\nCost of a gradient in value solves, and its error against the forward\n",
+  cat("\nCost of a gradient in value solves, and the gradient error against the forward\n",
       "gradient at atol 1e-12, rtol 1e-10 (max |g - g_ref| / max |g_ref|)\n\n", sep = "")
   tab <- bench_table(df)
   num <- vapply(tab, is.numeric, TRUE)

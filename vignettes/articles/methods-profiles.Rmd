@@ -1,0 +1,98 @@
+---
+title: "Profile likelihood"
+bibliography: refs.bib
+csl: ieee.csl
+link-citations: true
+---
+
+The profile likelihood gives confidence intervals of parameters and predictions of nonlinear models
+without a quadratic approximation [@raue2009structural; @kreutz2012likelihood]. Guide:
+[Profile likelihood](guide-profiles.html), [Prediction uncertainty](guide-prediction-uncertainty.html).
+
+## Profile and threshold
+
+The objective $f(\theta) = -2 \log L(\theta) - 2 \log \pi(\theta)$ is the data term plus the
+prior $\pi$ ([Likelihood and prior](methods-objective.html)). Along the profile of $\theta_i$ the
+other parameters minimize $f$,
+
+$$\hat\theta(c) = \operatorname*{arg\,min}_{\theta \,:\, \theta_i = c} f(\theta) , \tag{1}$$
+
+and the profile likelihood is the data term along this path,
+
+$$\mathrm{PL}_i(c) = -2 \log L\bigl(\hat\theta(c)\bigr) . \tag{2}$$
+
+Without a prior, (2) is the minimum of $-2 \log L$ with $\theta_i = c$. By the likelihood ratio
+test, $\mathrm{PL}_i(c) - \min_c \mathrm{PL}_i(c)$ below the $1 - \alpha$ quantile of $\chi^2_1$
+(3.84 for 95 %) defines an asymptotic confidence interval, invariant under reparametrization of
+$\theta_i$. `profileThreshold()` computes the threshold, `method = "F"` the finite-sample one for
+estimated standard deviations. A prior wide against the data curvature keeps (1) finite where the
+data do not determine $\theta_i$ and changes (2) little where they do.
+
+`profile()` stops on $f$ by default; `stepControl = list(stop = "data")` ends a profile at the
+threshold of (2), and `confint(val.column = "data")` reads the interval off (2).
+
+## Shapes
+
+| shape of (2) | meaning |
+|---|---|
+| above the threshold on both sides | finite interval |
+| below the threshold on one side | practically non-identifiable |
+| exactly flat | structurally non-identifiable, a symmetry ([Symmetries](guide-symmetries.html)), removed by a gauge |
+
+On the log scale, a one-sided profile towards $-\infty$ means the reaction can be switched off,
+towards $+\infty$ that the process is in equilibrium on the time scale of the data, replaceable by a
+large fixed value or the quasi-steady state. Both limits give a smaller model with the same fit
+[@maiwald2016driving]. Each profile tests one limit with all other parameters free; several limits
+together need a likelihood ratio test of the reduced model.
+
+## Computing a profile
+
+A profile is a sequence of constrained fits, each started from the last point.
+
+- `method = "optimize"` steps $\theta_i$ and refits the others with `trust()`, one converged fit
+  per point.
+- `method = "integrate"` follows the constrained optimum of the Lagrangian
+  $f(\theta) + \lambda\,(\theta_i - c)$, where $\nabla f + \lambda e_i = 0$ and $\theta_i = c$.
+  Differentiating in $c$ gives the path equation
+
+  $$\begin{pmatrix} H & e_i \\ e_i^\top & 0 \end{pmatrix}
+    \begin{pmatrix} \mathrm{d}\theta/\mathrm{d}c \\ \mathrm{d}\lambda/\mathrm{d}c \end{pmatrix}
+    = \begin{pmatrix} 0 \\ 1 \end{pmatrix} \tag{3}$$
+
+  with the Hessian $H$ of $f$: one evaluation and one linear solve per step. With a Gauss-Newton
+  $H$ the path drifts; `algoControl = list(reoptimize = TRUE)` corrects each step by a short fit.
+
+Step control and stops:
+
+| rule | setting |
+|---|---|
+| step shrinks | mismatch of predicted and actual change above `atol` |
+| step doubles | mismatch below `0.3 * atol`, or below `0.3 * rtol` relative |
+| side ends | objective (or data term, `stop = "data"`) up by the threshold; `limits` relative to the optimum reached; `limit` steps |
+
+A point below the start value is a better optimum, from which fit and profiles are repeated. Where
+the curvature jumps, as at the onset of `constraintStability()`
+([Steady states](methods-steady-states.html#stability)), the step shrinks to `min` and stays on the
+profile.
+
+## Prediction profiles
+
+A prediction $z = h(t, \theta)$ has the profile likelihood
+
+$$\mathrm{PPL}(z) = -2 \log L\bigl(\hat\theta(z)\bigr) , \quad
+\hat\theta(z) = \operatorname*{arg\,min}_{\theta \,:\, h(t, \theta) = z} f(\theta) , \tag{4}$$
+
+whose threshold gives a confidence interval of the prediction [@kreutz2012likelihood], the
+projection of the parameter confidence region.
+
+A validation data point makes $z$ a parameter $v$, tied to the prediction by
+
+$$\left( \frac{h(t, \theta) - v}{\sigma_v} \right)^2 . \tag{5}$$
+
+The profile of $v$ is (4) for $\sigma_v \to 0$, and within $\sigma_v$ of (4) for $\sigma_v$ small
+against the band. `datapointL2()` builds (5) as an `objfn` from the evaluation of `normL2()`, which
+therefore predicts at $t$ (`times = t`). With `attrName = "data"`, (5) adds to the data term, so
+`stop = "data"` and `confint(val.column = "data")` include it. Where the model cannot follow $v$,
+(5) grows and ends the profile.
+
+## References

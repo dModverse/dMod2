@@ -5,8 +5,8 @@
 # [PURPOSE]
 # Small models that exercise one option each: conserved moieties, steady
 # states, events and conditions, free exponents, states inside exponentials,
-# the reduction stages and their degree bounds, and a 26-state signalling
-# model at the end. Each call prints its result; compare the two engines
+# the reduction stages and their degree bounds, and a 26-state signaling
+# model at the end. Each call prints the result; compare the two engines
 # where both apply.
 #
 # [AUTHOR]
@@ -268,7 +268,7 @@ symmetryDetection(bz, eqnvec(y = "s*x"), trafo = red$trafo)$identifiable
 
 
 # –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
-# TGF-beta/SMAD signalling: 26 states, perturbation conditions
+# TGF-beta/SMAD signaling: 26 states, perturbation conditions
 # –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
 addRC <- function(eq, from, to, rate, ...) addReaction(eq, from, to, rate, compartment = "Cell", ...)
 addRE <- function(eq, from, to, rate, ...) addReaction(eq, from, to, rate, compartment = "extraCell", ...)

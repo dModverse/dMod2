@@ -5,7 +5,7 @@
 # [PURPOSE]
 # A large conductance-based model for symmetryDetection() and
 # symmetryReduction(): soma, axon initial segment and a dendritic cable, each
-# compartment with its own conductances, leak and calcium pool. Gates are
+# compartment with separate conductances, leak and calcium pool. Gates are
 # Boltzmann functions of the membrane potential, so states enter through
 # exp(). The somatic potential is patched, the dendrites are read by a
 # voltage-sensitive dye and by a calcium dye. Channel blockers, two
@@ -20,7 +20,7 @@
 # [Info]
 # Channels after Migliore & Shepherd (2002) and Hu et al. (2009): NaT (Nav1.2
 # somatodendritic, Nav1.6 in the AIS), Kdr, KA, KM (Kv7, PIP2-dependent), HCN
-# (cAMP shifts its activation), CaL with GHK flux, SK on calcium. Forskolin
+# (cAMP shifts the HCN activation), CaL with GHK flux, SK on calcium. Forskolin
 # raises cAMP; carbachol activates PLC, which depletes the PIP2 pool of each
 # compartment, and KM needs PIP2 (Suh & Hille 2002). Initial values are free:
 # every condition starts at the same unknown resting state when the step and
@@ -135,7 +135,7 @@ for (cp in comps) {
   f[CaB] <- paste0("kon_B * ", Ca, " * (Btot_", cp, " - ", CaB, ") - koff_B * ", CaB)
 }
 
-# forskolin raises cAMP, modelled as one well-mixed pool
+# forskolin raises cAMP, modeled as one well-mixed pool
 f["cAMP"] <- "k_cAMP + k_cAMP_FSK * bool_FSK - k_PDE * cAMP"
 
 # drugs and the injected current are constant over the whole record

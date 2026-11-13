@@ -20,7 +20,7 @@ reactions <- addReaction(reactions, "Epo + EpoR", "Epo_EpoR", "Epo * EpoR * kon 
 reactions <- addReaction(reactions, "Epo_EpoR", "Epo + EpoR", "Epo_EpoR * koff", "unbinding")
 reactions <- addReaction(reactions, "", "EpoR", "4 * init_Epo * init_EpoR_rel * kt", "synthesis")
 reactions <- addReaction(reactions, "EpoR", "", "EpoR * kt", "turnover")
-reactions <- addReaction(reactions, "Epo_EpoR", "Epo_EpoR_i", "Epo_EpoR * ke", "internalisation")
+reactions <- addReaction(reactions, "Epo_EpoR", "Epo_EpoR_i", "Epo_EpoR * ke", "internalization")
 reactions <- addReaction(reactions, "Epo_EpoR_i", "Epo + EpoR", "Epo_EpoR_i * kex", "recycling")
 reactions <- addReaction(reactions, "Epo_EpoR_i", "dEpo_i", "Epo_EpoR_i * kdi", "intra degr.")
 reactions <- addReaction(reactions, "Epo_EpoR_i", "dEpo_e", "Epo_EpoR_i * kde", "extra degr.")
@@ -119,7 +119,7 @@ for (s in seq_len(nsim)) {
   shared <- st[c("kon", "ke", "kt", "sigma")]
 
   # Hauber et al.: full fit, L_q path upward from the previous optimum and the sparse point,
-  # L_q by reweighted L1 (three rounds), unpenalised refit of every structure on the path,
+  # L_q by reweighted L1 (three rounds), unpenalized refit of every structure on the path,
   # the structure of the largest lambda the likelihood-ratio test against the full fit keeps
   tH <- system.time({
     center <- c(shared, r_true * 0)

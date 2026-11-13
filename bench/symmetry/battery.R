@@ -5,7 +5,7 @@
 # [PURPOSE]
 # A literature model with states inside exponentials and every parameter and
 # initial value positive. Four decomposition reactions heat a cell in an oven;
-# only its temperature is observed, as in an oven or ARC test.
+# only the cell temperature is observed, as in an oven or ARC test.
 # symmetryDetection() finds the scalings and a translation of the SEI
 # thickness inside exp(-tsei/tref), symmetryReduction() removes them in a
 # chart certified positive. Each direction is flown both ways against the
@@ -91,7 +91,7 @@ red.phys$trafo
 # ---- Prediction chain -------------------------------------------------------
 
 # The ODE is integrated in linear coordinates. Both parameter trafos switch to
-# log10 after the reduction, since its chart is certified positive.
+# log10 after the reduction, since the reduced chart is certified positive.
 myOptions <- list(atol = 1e-12, rtol = 1e-12, maxsteps = 1e7)
 
 model <- odemodel(f, modelname = "battery_ode", compile = FALSE, outdir = .outdir)

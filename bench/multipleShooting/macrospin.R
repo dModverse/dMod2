@@ -9,8 +9,8 @@
 # times in 1.5 ns; from a start with the wrong precession frequency single
 # shooting ends in minima that fit the easy axis and average the ringing out.
 # Multiple shooting lays one segment per half oscillation of the data, so no
-# segment holds enough of the ringing for its phase to slip by a period.
-# A start is a hit when the single-shooting objective at its end lies within 1
+# segment holds enough of the ringing for the phase to slip by a period.
+# A start is a hit when the single-shooting objective at the end of the fit lies within 1
 # of the best.
 #
 # On 29 Sep 2026, one core per fit, the least of three runs: single shooting
@@ -20,7 +20,7 @@
 #
 # The spherical chart is singular at th = 0, which the easy-axis field relaxes
 # to, and a segment that passes near the pole winds ph one turn more or less
-# for an arbitrarily small change of its start. ph therefore lives on an angle
+# for an arbitrarily small change of the segment start. ph therefore lives on an angle
 # chart, whose gaps count modulo 2 pi. The same physics in Cartesian
 # coordinates, the second block, has no pole and needs no chart.
 #
@@ -139,7 +139,7 @@ aggregate(cbind(hits = hit, sec, neval) ~ method, out,
           function(z) c(sum = sum(z), median = median(z)))
 
 # the misses of single shooting: the easy axis fits, the ringing is averaged out
-ggplot(out, aes(rank(ss, ties.method = "first"), pmin(ss - best, 1e4), colour = method)) +
+ggplot(out, aes(rank(ss, ties.method = "first"), pmin(ss - best, 1e4), color = method)) +
   geom_point(size = 0.8) + facet_wrap(~method) +
   scale_y_continuous(trans = "log1p") +
   labs(x = "fit rank", y = "objective - best") + theme_dMod(base_size = 9)

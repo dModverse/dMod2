@@ -1,9 +1,9 @@
 # -------------------------------------------------------------------------#
-# Catalogue of trust() Hessian-source variants used by the benchmarks
+# Catalog of trust() Hessian-source variants used by the benchmarks
 # -------------------------------------------------------------------------#
 #
 # [PURPOSE]
-# One definition of the optimiser settings compared by hessianSource.R,
+# One definition of the optimizer settings compared by hessianSource.R,
 # the guide chapter Optimization. Each
 # selects the subset it can afford to run.
 #

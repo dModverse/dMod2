@@ -108,7 +108,10 @@
 #'   the objective that ended the side.
 #'
 #' @seealso [confint.parframe()] for confidence intervals, [plotProfile()] and
-#'   [plotPaths()] for plots, [profileThreshold()].
+#'   [plotPaths()] for plots, [profileThreshold()]; the guide chapters
+#'   [Profile likelihood](https://dmodverse.github.io/dMod2/articles/guide-profiles.html),
+#'   [Prediction uncertainty](https://dmodverse.github.io/dMod2/articles/guide-prediction-uncertainty.html)
+#'   and [Remote computing](https://dmodverse.github.io/dMod2/articles/guide-remote-computing.html), which explains `cores`.
 #' @example inst/examples/profiles.R
 #' @importFrom stats profile
 #' @rdname profile
@@ -789,7 +792,9 @@ vcov.trustfit <- function(object, parupper = NULL, parlower = NULL, which = NULL
 #'   optimizer and sampler with their arguments, and the versions of R, dMod2
 #'   and cppDE. [as.parframe()] turns the parlist into a table.
 #'
-#' @seealso [trust()], [msParframe()], [as.parframe()], [load.parlist()]
+#' @seealso [trust()], [msParframe()], [as.parframe()], [load.parlist()]; the guide
+#'   chapters [Optimization](https://dmodverse.github.io/dMod2/articles/guide-optimization.html) and
+#'   [Remote computing](https://dmodverse.github.io/dMod2/articles/guide-remote-computing.html), which explains `cores`.
 #'
 #' @examples
 #' rosenbrock <- function(x, ...) {

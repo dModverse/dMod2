@@ -1,0 +1,135 @@
+---
+title: "Get started"
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>", fig.width = 8, fig.height = 3.5, dpi = 96,
+                      fig.retina = 2, message = FALSE)
+source("results/stored.R")
+# through do.call: the resource scan of rmarkdown purls the article elsewhere and runs
+# every literal read_chunk() call there
+do.call(knitr::read_chunk, list(file.path("results", "dMod2.R")))
+```
+
+A model of bile acid transport in hepatocytes, fitted to two experimental conditions from many
+starts and profiled. The [guide](guide-model.html) covers each step on a larger model.
+
+```{r setup}
+```
+
+## Data and conditions
+
+Bile acid in buffer and cells, measured with closed and opened tight junctions, one data set per
+condition.
+
+```{r data}
+```
+
+```{r}
+plot(data)
+```
+
+## Model definition
+
+Bile acid moves from the buffer into the cells, from the cells into buffer or canaliculi, and
+from the canaliculi back into the buffer.
+
+```{r reactions}
+```
+
+`odemodel()` generates C++ code for ODE and sensitivities, `Xs()` makes the prediction function,
+`Y()` the observables: cells and canaliculi are measured together, both with scale `s`.
+Expressions follow the
+[expression language of cppDE](https://dmodverse.github.io/cppDE/reference/expressions.html),
+including switches such as `piecewise()`.
+
+```{r model}
+```
+
+`P()` maps estimated to model parameters, all on log10 scale, with an empty buffer at the start.
+`branch()` makes one transformation per condition, open junctions with a separate reflux rate
+`K_REFLUX_OPEN`. All three function objects compile into one shared object.
+
+```{r trafo}
+```
+
+## Likelihood, prior and fit
+
+`normL2()` returns $-2 \log L$ of the data; a weak prior from `constraintL2()` keeps parameters
+the data do not determine finite.
+
+```{r objective}
+```
+
+`trust()` is a trust-region fit from one start; `mstrust()` runs it from 50 random starts around
+`pouter`, standard deviation 4 on log10 scale ([options](guide-optimization.html)).
+
+```{r fit, eval = FALSE}
+```
+
+```{r, include = FALSE}
+saved <- stored("results/dMod2.rds", "results/dMod2.R", envir = new.env())
+fits <- saved$fits
+profiles <- saved$profiles
+```
+
+`plotValues()` sorts the fits by value; a plateau at the lowest value indicates the global
+optimum.
+
+```{r}
+plotValues(fits)
+```
+
+`as.parvec()` takes the best fit.
+
+```{r best}
+```
+
+```{r}
+fits[1, c("value", "converged", "iterations")]
+best
+plot((g * x * p)(seq(0, 50, length.out = 200), best, deriv = FALSE), data)
+```
+
+## Profile likelihood
+
+`profile()` moves each parameter away from the optimum and reoptimizes the others. A confidence
+interval ends where the profile crosses the threshold.
+
+```{r profile, eval = FALSE}
+```
+
+```{r, fig.height = 6}
+plotProfile(profiles, mode == "data")
+confint(profiles, val.column = "data")
+```
+
+`S`, `TCA_CELL` and `TCA_CANA` are flat, a structural non-identifiability: smaller initial
+amounts compensate a larger scale. [Symmetries](guide-symmetries.html) finds and removes it
+systematically; the [bile acid project](bileAcidTransport.html) fixes the scale, starts the
+canaliculi in steady state and goes on to prediction bands. `K_EXPORT_SINUS` and `K_REFLUX_OPEN`
+are bounded on one side only, a practical non-identifiability.
+
+## Terminology
+
+| term | meaning |
+|---|---|
+| outer parameters | parameters the optimizer sees, here `K_IMPORT`, `S`, ... on log10 scale |
+| inner parameters | parameters of ODE and observables in one condition, here `k_import`, `s`, ... |
+| condition | one experimental setting with own data and inner parameters, here `closed`, `open` |
+| `parfn` | parameter transformation, outer to inner: `P()`, `Pexpl()`, `Pimpl()` |
+| `prdfn` | prediction function, parameters to trajectories: `Xs()`, `Xf()` |
+| `obsfn` | observation function, trajectories to observables or errors: `Y()` |
+| `objfn` | objective, $-2 \log L$ or with a prior $-2 \log$ of the posterior: `normL2()`, `constraintL2()` |
+
+`+` and `branch()` join conditions; `*` composes function objects by the chain rule, so every
+call returns value, gradient and Hessian in the outer parameters.
+
+## Next steps
+
+- [Setting up models](guide-model.html): reactions, compartments, error models, steady states and
+  events on the NFκB model.
+- [Optimization](guide-optimization.html) and [Profile likelihood](guide-profiles.html): fits
+  and identifiability.
+- [Nonlinear mixed-effects models](guide-nlme.html): random effects with `em()`.
+- [Installation and troubleshooting](installation.html): compilers and Python.

@@ -9,7 +9,7 @@
 # symmetryDetection() finds the directions the voltage cannot resolve and
 # symmetryReduction() removes them on the declared domain. Each direction is
 # then flown both ways: parameters and currents move, the voltage does not.
-# The last part runs the detection with exp10() in its trafo for comparison.
+# The last part runs the detection with exp10() in the trafo for comparison.
 # Fitting this model is the subject of bench/multipleShooting/preBotC.R.
 #
 # [AUTHOR]
@@ -166,7 +166,7 @@ pred0 <- as.data.frame(prd(times, truthO, deriv = FALSE))
 ggplot(pred0, aes(time, value)) + geom_line() +
   facet_wrap(~ name, scales = "free_y", ncol = 1) + theme_dMod(base_size = 9)
 
-# reduced truth: each outer parameter of the reduction evaluated as its invariant
+# reduced truth: each outer parameter of the reduction evaluated as the invariant it stands for
 meaning   <- unlist(lapply(red$blocks, `[[`, "survivorMeaning"))
 parsRed   <- getParameters(prd.red)
 truth.red <- setNames(truth[parsRed], parsRed)
@@ -188,7 +188,7 @@ max(abs(predR$value[obs] - pred0$value[obs]))
 #
 # From the truth both ways, over a range that moves the parameters by up to
 # half a decade or 5 mV to first order. At each orbit point the model is solved
-# over one burst; the verdict is the largest voltage deviation relative to its RMS.
+# over one burst; the verdict is the largest voltage deviation relative to the voltage RMS.
 # –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
 prdI   <- gI*x*p.full
 tw     <- seq(2000, 3000, by = 0.5)
@@ -250,7 +250,7 @@ orbitPred <- lapply(orbitPred, function(q) {
 })
 
 # the currents move, the voltage does not
-ggplot(orbitPred[[1]], aes(time, value, group = eps, colour = eps)) +
+ggplot(orbitPred[[1]], aes(time, value, group = eps, color = eps)) +
   geom_line(linewidth = 0.3) +
   facet_wrap(~ name, scales = "free_y", ncol = 2) +
   scale_color_dMod_div(name = expression(epsilon)) +
@@ -258,7 +258,7 @@ ggplot(orbitPred[[1]], aes(time, value, group = eps, colour = eps)) +
        x = "time [ms]", y = NULL) +
   theme_dMod(base_size = 9)
 
-ggplot(orbitPred[[2]], aes(time, value, group = eps, colour = eps)) +
+ggplot(orbitPred[[2]], aes(time, value, group = eps, color = eps)) +
   geom_line(linewidth = 0.3) +
   facet_wrap(~ name, scales = "free_y", ncol = 2) +
   scale_color_dMod_div(name = expression(epsilon)) +
@@ -266,7 +266,7 @@ ggplot(orbitPred[[2]], aes(time, value, group = eps, colour = eps)) +
        x = "time [ms]", y = NULL) +
   theme_dMod(base_size = 9)
 
-ggplot(orbitPred[[3]], aes(time, value, group = eps, colour = eps)) +
+ggplot(orbitPred[[3]], aes(time, value, group = eps, color = eps)) +
   geom_line(linewidth = 0.3) +
   facet_wrap(~ name, scales = "free_y", ncol = 2) +
   scale_color_dMod_div(name = expression(epsilon)) +

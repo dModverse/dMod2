@@ -176,5 +176,8 @@ options(old)
 }
 \seealso{
 \code{\link[=confint.parframe]{confint.parframe()}} for confidence intervals, \code{\link[=plotProfile]{plotProfile()}} and
-\code{\link[=plotPaths]{plotPaths()}} for plots, \code{\link[=profileThreshold]{profileThreshold()}}.
+\code{\link[=plotPaths]{plotPaths()}} for plots, \code{\link[=profileThreshold]{profileThreshold()}}; the guide chapters
+\href{https://dmodverse.github.io/dMod2/articles/guide-profiles.html}{Profile likelihood},
+\href{https://dmodverse.github.io/dMod2/articles/guide-prediction-uncertainty.html}{Prediction uncertainty}
+and \href{https://dmodverse.github.io/dMod2/articles/guide-remote-computing.html}{Remote computing}, which explains \code{cores}.
 }

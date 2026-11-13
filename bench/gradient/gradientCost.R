@@ -85,7 +85,7 @@ importOne <- function(dir, tag) {
 # –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
 # Per model
 #
-# Warnings are surfaced: a model that does not integrate cleanly at its own
+# Warnings are surfaced: a model that does not integrate cleanly at the
 # published optimum has a meaningless timing.
 # –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
 dirs <- c(system.file("extdata", "petab_boehm",    package = "dMod2"),

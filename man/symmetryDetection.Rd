@@ -190,5 +190,6 @@ res$identifiable
 \dontshow{\}) # examplesIf}
 }
 \seealso{
-\code{\link[=symmetryReduction]{symmetryReduction()}}, \code{\link[=reconstControl]{reconstControl()}}
+\code{\link[=symmetryReduction]{symmetryReduction()}}, \code{\link[=reconstControl]{reconstControl()}}; the guide chapter
+\href{https://dmodverse.github.io/dMod2/articles/guide-symmetries.html}{Symmetries}.
 }

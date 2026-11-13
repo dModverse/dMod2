@@ -4,7 +4,7 @@
 #
 # [PURPOSE]
 # The smallest model with a non-scaling symmetry: A converts to B and back,
-# only s*B is observed. symmetryDetection() finds its directions, each is
+# only s*B is observed. symmetryDetection() finds the symmetry directions, each is
 # flown both ways to show that the states move and the observable does not.
 # The full and the reduced model from symmetryReduction() are then fitted and
 # profiled side by side.
@@ -31,7 +31,7 @@ if (!dir.exists(.outdir)) dir.create(.outdir, recursive = TRUE)
 
 
 # –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
-# Model and its symmetries
+# Model and symmetries
 #
 # The engine works over Q, so it gets the rational observable; the log
 # enters only in the prediction chain.
@@ -146,7 +146,7 @@ zf <- flow[[direction]](eps, c(z0, sgn =  1), deriv = FALSE)$flow
 zb <- flow[[direction]](eps, c(z0, sgn = -1), deriv = FALSE)$flow
 
 # one orbit through the truth, signed eps taken from the returned time column
-# so that a run the solver stopped early is labelled correctly
+# so that a run the solver stopped early is labeled correctly
 z <- rbind(zb[rev(seq_len(nrow(zb))), ], zf[-1, ])
 z[, "time"] <- c(-rev(zb[, "time"]), zf[-1, "time"])
 
@@ -172,7 +172,7 @@ lev  <- levels(long$name)
 levels(long$name) <- ifelse(lev %in% names(observables), paste0(lev, " [observed]"), lev)
 long$name <- factor(long$name, levels(long$name)[order(lev %in% names(observables))])
 
-ggplot(long, aes(time, value, group = eps, colour = eps)) +
+ggplot(long, aes(time, value, group = eps, color = eps)) +
   geom_line() +
   facet_wrap(~ name, scales = "free_y") +
   scale_color_dMod_div(name = expression(epsilon)) +

@@ -12,6 +12,8 @@
 #' Fitting and uncertainty: [trust()], [mstrust()], [profile()][profile.objfn],
 #' [plotProfile()]. Exchange formats: [importPEtab()], [exportPEtab()].
 #' Identifiability: [symmetryDetection()].
+#' Articles: [Get started](https://dmodverse.github.io/dMod2/articles/dMod2.html),
+#' [Installation and troubleshooting](https://dmodverse.github.io/dMod2/articles/installation.html).
 #'
 #' @section Options:
 #' \describe{

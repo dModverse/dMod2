@@ -10,33 +10,29 @@ knitr::opts_chunk$set(collapse = TRUE, comment = "#>", fig.width = 8, fig.height
                       fig.retina = 2, message = FALSE)
 project <- normalizePath("../../examples/oppeltNPJSystBiolAppl2018")
 knitr::opts_knit$set(root.dir = project)
-grouped <- file.exists(file.path(project, "results", "compounds.rds"))
+source("results/stored.R")
 knitr::read_chunk("../../examples/oppeltNPJSystBiolAppl2018/model.R")
 knitr::read_chunk("../../examples/oppeltNPJSystBiolAppl2018/reduced.R")
 knitr::read_chunk("../../examples/oppeltNPJSystBiolAppl2018/compounds.R")
-knitr::read_chunk("../../examples/oppeltNPJSystBiolAppl2018/compoundsFull.R")
 # "a", "a and b", "a, b and c"
 enumerate <- function(x) if (length(x) < 2) paste(x) else
   paste(paste(x[-length(x)], collapse = ", "), "and", x[length(x)])
-code <- function(x) if (length(x)) sprintf("`%s`", x) else character(0)
 ```
 
-Oppelt et al. [@oppelt2018model] measured the response to TNFα not only in untreated cells but
-also with drugs known to cause liver injury: diclofenac (DCF) with the imaging and blots of the
-first chapters, and amiodarone (AMD), paracetamol (APAP), fialuridine (FIAU) and ximelagatran
-(XIM) with four blots. The question is which processes of the pathway each compound changes. The
-publication answered it for DCF with an L1 penalty on the differences of all rate constants
-between treated and untreated cells, scanned over the strength of the penalty. This chapter
-answers it for all five compounds at once, with the compounds as the groups of a random effect
-whose distribution is a spike and a slab: a compound leaves a rate constant exactly as it is, or
-changes it by an amount drawn from a normal distribution. The probability of a change and the
-spread of the changes are estimated from all compounds together. The code is `compounds.R`, on the
-reduced model of [chapter 5](guide-profiles.html); [chapter 7](guide-nlme.html) introduces random
-effects and their estimation by `em()`.
+Oppelt et al. [@oppelt2018model] also measured the TNFα response under drugs causing liver
+injury: diclofenac (DCF) with the imaging and blots of the first chapters, and amiodarone (AMD),
+paracetamol (APAP), fialuridine (FIAU) and ximelagatran (XIM) with four blots. Which pathway
+processes does each compound change? The publication answered this for DCF with an L1 penalty on
+the differences of all rate constants between treated and untreated cells, scanned over the
+penalty strength. Here all five compounds are the groups of a spike-and-slab random effect: a
+compound leaves a rate constant unchanged or changes it by a normal draw, with probability and
+spread of changes estimated from all compounds together. Code: `compounds.R`, on the reduced model
+of [Profile likelihood](guide-profiles.html); random effects and `em()` are introduced in
+[Nonlinear mixed-effects models](guide-nlme.html).
 
-The second part of the chapter derives how `em()` integrates random effects whose deviations are
-exactly zero unless the data need them: Laplace, spike-and-slab and Dirichlet-process random
-effects.
+The second part lists the sparse random-effect distributions (Laplace, spike-and-slab,
+Dirichlet-process) and what their fits report; derivations are in
+[Methods > Sparse random effects](methods-sparse-random-effects.html).
 
 ```{r setup, echo = FALSE}
 ```
@@ -44,53 +40,14 @@ effects.
 ```{r data, echo = FALSE}
 ```
 
-```{r reactions, echo = FALSE}
-```
-
-```{r observables, echo = FALSE}
-```
-
-```{r errors, echo = FALSE}
-```
-
-```{r steadystate, echo = FALSE}
-```
-
-```{r odemodel, echo = FALSE}
-```
-
-```{r transformation, echo = FALSE}
-```
-
-```{r compile, echo = FALSE}
-```
-
-```{r objective, echo = FALSE}
-```
-
-```{r tolerances, echo = FALSE}
-```
-
-```{r gauge, echo = FALSE}
-```
-
 ```{r reducedreactions, echo = FALSE}
 ```
 
-```{r reducedobservables, echo = FALSE}
-```
+## Compound data
 
-```{r reducedmodel, echo = FALSE}
-```
-
-```{r reducedobjective, echo = FALSE}
-```
-
-## Data
-
-Every compound comes with its own control: DCF on the blots and imaging of the first chapters, the
-other four on a third set of blots with an untreated, stimulated control of their own. A condition
-without a compound belongs to no group: `NA` in the column `compound`.
+Each compound has a separate control: DCF on the blots and imaging of the first chapters, the other
+four on a third blot set with their own untreated, stimulated control. A condition without compound
+belongs to no group (`NA` in column `compound`).
 
 ```{r compounddata}
 ```
@@ -99,79 +56,76 @@ without a compound belongs to no group: `NA` in the column `compound`.
 covariates(dataCompounds)
 ```
 
-## Spike and slab
+## Spike-and-slab random effects
 
-Write $\theta_k$ for the rate constant $k$ on the log scale, the same in every condition, and
-$\eta_{ik}$ for its change by compound $i$; a condition with compound $i$ uses $\theta_k + \eta_{ik}$,
-a condition without compound $\theta_k$. The spike-and-slab distribution
-[@mitchell1988bayesian; @george1993variable] of a change is
+With $\theta_k$ the log rate constant $k$ and $\eta_{ik}$ the change by compound $i$, a condition
+with compound $i$ uses $\theta_k + \eta_{ik}$, one without uses $\theta_k$. The spike-and-slab
+distribution [@mitchell1988bayesian; @george1993variable] of a change is
 
 $$p(\eta_{ik}) = (1 - \rho)\, \delta(\eta_{ik}) + \rho\, \mathcal{N}(\eta_{ik};\, 0, \tau^2),$$
 
-a point mass at 0, the spike, with weight $1 - \rho$, and a normal slab of standard deviation $\tau$
-with weight $\rho$. The changes are independent across compounds and rate constants; $\rho$ and
-$\tau$ are shared by all. The likelihood of the fixed effects $\theta$ and the hyperparameters
-$\rho, \tau$ integrates the changes out,
+a spike at 0 with weight $1 - \rho$ and a normal slab of standard deviation $\tau$ with weight
+$\rho$. Changes are independent across compounds and rate constants; $\rho$, $\tau$ are shared.
+`em()` estimates $\theta$, $\rho$ and $\tau$ from the likelihood with the changes integrated out, a
+sum over the subsets of changed rate constants
+([Methods > Sparse random effects](methods-sparse-random-effects.html#approximate-marginal)). The
+posterior spike probability $p_0 = \Pr(\eta_{ik} = 0 \mid y)$ near 0 means a change, near the prior
+$1 - \rho$ no evidence, above it evidence against a change.
 
-$$L(\theta, \rho, \tau) = \prod_i \int p(y_i \mid \theta, \eta_i)\, \prod_k p(\eta_{ik})\, d\eta_i ,$$
-
-with $y_i$ the data of the conditions of compound $i$, times the likelihood of the conditions
-without a compound. Each integral is a sum over the subsets $F$ of rate constants that compound $i$
-changes: the spike sets $\eta_{ik} = 0$ for $k \notin F$, and the slab integrates the others,
-
-$$\begin{aligned}
-\int p(y_i \mid \theta, \eta_i)\, \prod_k p(\eta_{ik})\, d\eta_i
-&= \sum_F \rho^{|F|} (1 - \rho)^{K - |F|} \\
-&\quad \times \int p(y_i \mid \theta, \eta_F)\, \prod_{k \in F} \mathcal{N}(\eta_{ik};\, 0, \tau^2)\, d\eta_F ,
-\end{aligned}$$
-
-with $K$ the number of spike-and-slab random effects of a group, here the rate constants that may
-change. `em(method = "focei")` approximates
-$p(y_i \mid \theta, \eta_i)$ around the mode of $\eta_i$ as a Gaussian in $\eta_i$, with the
-curvature $P_i$ of the data term, the Laplace approximation of [chapter 7](guide-nlme.html), so
-every term of the sum is a Gaussian integral in closed form (section
-[Approximate marginal](#approximate-marginal)). The posterior probability of the spike,
-$p_0 = \Pr(\eta_{ik} = 0 \mid y)$, says how strongly the data of compound $i$ ask for a change of
-rate constant $k$: a value near 0 is a change, a value near the prior probability of the spike,
-$1 - \rho$, no evidence either way, and a value above it evidence against a change.
-
-```{r, include = FALSE, eval = grouped}
-rateConstants <- length(unique(readRDS("results/compounds.rds")$random$eta))
+```{r, include = FALSE}
+fit <- stored("results/compounds.rds", "compounds.R", envir = new.env())
+rateConstants <- length(unique(fit$random$eta))
 ```
 
-The data couple the changes of one compound through $P_i$, so the sum runs over all $2^K$ subsets.
-Here every compound has `r if (grouped) rateConstants else "?"` rate constants that may change. The
-sum leaves out the subsets the data make negligible (section [Spike and slab](#spike-and-slab-1)),
-so its cost follows the changes the data leave undecided rather than $K$, and it is exact for every
-compound here. Where it would exceed its budget, the coupling by the data is approximated by
-expectation consistent [@opper2005expectation] (section [Expectation consistent](#expectation-consistent)).
+Each compound has `r rateConstants` candidate rate constants, and the subset sum is exact; beyond
+a term budget `em()` uses the expectation consistent (EC) approximation
+([Methods > Spike and slab](methods-sparse-random-effects.html#spike-and-slab)). Comparison with the
+L1 penalty: [Methods > Selection of deviations](methods-sparse-random-effects.html#selection-of-deviations).
 
-The publication's L1 penalty $\lambda \sum |\eta_{ik}|$ is the mode of a Laplace distribution of the
-changes [@tibshirani1996regression]: it sets small changes to exactly 0, with a strength $\lambda$
-chosen by a scan, and gives no probability of a change.
+## Compound model
 
-## Model
+The reduced model of [Profile likelihood](guide-profiles.html) with second derivatives for `em()`.
+Its resting state (all NFκB bound to IκBα, all IKK inactive) holds for all rate constants, so a
+compound changes the dynamics only from TNFα on:
 
-The reduced model of [chapter 5](guide-profiles.html) with second derivatives, which `em()` uses,
-and each condition at rest at its own steady state:
-
-```{r compoundmodel, eval = FALSE}
+```{r reactions, include = FALSE}
 ```
 
-`insert()` with an effect formula writes the change: `x ~ 1 + (1 | gr(compound, dist =
-spikeSlab()))` replaces the rate constant `x` by its fixed effect plus a random effect of the
-compound. The scales and offsets of the third set of blots are parameters of their own.
-
-```{r compoundeffects, eval = FALSE}
+```{r observables, include = FALSE}
 ```
 
-## Fit
+```{r errors, include = FALSE}
+```
 
-`em()` estimates the fixed effects, the modes of the changes and $\rho$ and $\tau$ together.
-`compounds.R` runs it from 200 starts, the reduced model at its optimum with the changes at 0 and
-199 starts around it; a start whose fit fails is drawn again. The fits ran as 100 tasks
-of two on a SLURM cluster, with `msem(which = )` and `distributedComputing()`
-([chapter 11](guide-remote-computing.html)):
+```{r odemodel, include = FALSE}
+```
+
+```{r gauge, include = FALSE}
+```
+
+```{r reducedobservables, include = FALSE}
+```
+
+```{r reducedmodel, include = FALSE}
+```
+
+```{r compoundmodel}
+```
+
+`x ~ 1 + (1 | gr(compound, dist = spikeSlab()))` in `insert()` replaces rate constant `x` by a
+fixed effect plus a compound random effect. Candidates are the rate constants the reduced model
+estimates, all but gauge and fixed values of the publication. Scales and offsets of the third blot
+set are separate parameters, except `off_IkBa`, fixed at 0 by the reduced model.
+
+```{r compoundeffects, warning = FALSE}
+```
+
+## Joint fit of all compounds
+
+`em()` estimates fixed effects, change modes, $\rho$ and $\tau$ together. `compounds.R` runs 200
+starts, the reduced optimum with changes at 0 and 199 around it, redrawing failed starts, split
+into `distributedComputing()` tasks by `msem(which = )`
+([Remote computing](guide-remote-computing.html)):
 
 ```{r compoundfit, eval = FALSE}
 ```
@@ -181,51 +135,35 @@ The best fit is saved with a table of all starts:
 ```{r compoundsave, eval = FALSE}
 ```
 
-```{r, echo = FALSE, results = "asis", eval = !grouped}
-cat("> Results pending: `results/compounds.rds` of the project is written by `compounds.R`.\n")
-```
-
-```{r, eval = grouped}
+```{r}
 fit <- readRDS("results/compounds.rds")
 c(value = fit$value, converged = fit$converged, iterations = fit$iterations)
 fit$argument[c("prob_compound", "tau_compound")]
 fit$coupling
 ```
 
-```{r, include = FALSE, eval = grouped}
+```{r, include = FALSE}
 couplingText <- switch(fit$coupling %||% "none",
-  expectationConsistent = "expectation consistent",
+  expectationConsistent = "the expectation consistent (EC) approximation",
   none = "none: every compound is integrated exactly")
 ```
 
-`value` is $-2 \log L$ of the approximate marginal, `iterations` the steps of the one trust region
-in which the fixed effects and the hyperparameters move. `coupling` names the integral over the
-changes that the data couple, here `r if (grouped) couplingText`.
+`value` is $-2 \log L$ of the approximate marginal, `iterations` the steps of the joint trust
+region of fixed effects and hyperparameters, `coupling` the integral over coupled changes, here
+`r couplingText`.
 
-## Multistart
+## Multistart optimization
 
-The objective of the compounds has local optima like that of any fit, and at a start far from the
-optimum the resting state may not be stable: NFκB oscillates there. `pSSCompounds` returns that
-root, and the term of `constraintStability()` rises with it, as in [chapter 1](guide-model.html).
-`msem()` draws a start again where its fit fails, for instance where expectation consistent does
-not converge. The table `$multistart` of the saved fit has a row per
-start: its `value`, whether it `converged`, its `iterations`, the attempts it took (`tries`), and
-the `error` of a start that failed every attempt. The waterfall shows the best 100 starts sorted by
-$-2 \log L$; starts on one plateau ended in the same optimum.
+The objective has local optima. `msem()` redraws a start whose fit fails, e.g. where EC does not
+converge. `$multistart` has per start `value`, `converged`, `iterations`, attempts (`tries`) and the
+`error` of a start that failed every attempt. The waterfall shows the best 100 starts; a plateau is
+one optimum.
 
-```{r, include = FALSE}
-multistart <- grouped && is.data.frame(fit$multistart)
-```
-
-```{r, echo = FALSE, results = "asis", eval = !multistart}
-cat("> Multistart pending: the saved fit holds no table of starts; `compounds.R` writes it to `$multistart`.\n")
-```
-
-```{r, fig.height = 3.5, eval = multistart}
+```{r, fig.height = 3.5}
 plotValues(fit, rank(value, ties.method = "first") <= 100)
 ```
 
-```{r, include = FALSE, eval = multistart}
+```{r, include = FALSE}
 ms <- fit$multistart
 best <- min(ms$value, na.rm = TRUE)
 multistartText <- sprintf(
@@ -236,21 +174,20 @@ retriedText <- if (is.null(ms$tries) || !any(ms$tries > 1)) "" else
   sprintf("%d of the starts were drawn again, %d times in all.", sum(ms$tries > 1), sum(ms$tries - 1))
 ```
 
-`r if (multistart) multistartText` `r if (multistart) retriedText`
+`r multistartText` `r retriedText`
 
-## Changes
+## Changes by compound
 
-The changes with a posterior probability of the spike below 0.05, by compound, with their modes on
-the log scale:
+Changes with $p_0 < 0.05$, with log-scale modes:
 
-```{r, eval = grouped}
+```{r}
 changes <- fit$random[fit$random$p0 < 0.05, c("group", "eta", "mode", "se", "p0")]
 changes <- changes[order(changes$group, changes$p0), ]
 rownames(changes) <- NULL
 changes
 ```
 
-```{r, include = FALSE, eval = grouped}
+```{r, include = FALSE}
 compounds <- sort(unique(fit$random$group))
 rates <- unique(fit$random$eta)
 counts <- table(factor(changes$group, levels = compounds))
@@ -259,912 +196,191 @@ changesText <- sprintf(
   "DCF changes %d of the %d rate constants, %s. The probability of a change is %.2f, and a change has a spread of %.2f on the log scale, a factor of about %.1f.",
   counts[["DCF"]], length(rates), enumerate(sprintf("%s %d", others, counts[others])),
   fit$argument[["prob_compound"]], fit$argument[["tau_compound"]], exp(fit$argument[["tau_compound"]]))
+# the seven rate constants the L1 scan of the publication selected for DCF, by reaction
+publication <- c(act_Ikk_by_TNF = "IKK activation by TNFα", trigger_iIkk = "IKK recovery",
+                 act_pIkk = "IKK phosphorylation", act_Ikb_by_Ikk = "IκBα phosphorylation by pIKK",
+                 prod_mIkb_by_nNfk = "IκBα transcription", degrad_mIkb = "IκBα transcript degradation",
+                 build_A20 = "A20 translation")
+reactions <- c(publication, shuttle_RnaA20 = "the delay of the A20 transcript")
+named <- function(x) ifelse(x %in% names(reactions), paste0(reactions[x], " (`", x, "`)"), paste0("`", x, "`"))
+dcf <- changes$eta[changes$group == "DCF"]
+shared <- intersect(names(publication), dcf)
+publicationText <- paste0(
+  sprintf("Of the %d rate constants the L1 scan of the publication selected for DCF, the spike and slab finds %d: %s",
+          length(publication), length(shared), enumerate(named(shared))),
+  if (length(setdiff(names(publication), dcf)))
+    sprintf("; not %s", enumerate(named(setdiff(names(publication), dcf)))),
+  if (length(setdiff(dcf, names(publication))))
+    sprintf(", but %s", enumerate(named(setdiff(dcf, names(publication))))),
+  ".")
 ```
 
-`r if (grouped) changesText`
+`r changesText` `r publicationText` [@oppelt2018model]
 
-```{r, fig.height = 5.5, eval = grouped}
+```{r, fig.height = 5.5}
 shown <- fit$random
 shown$eta <- factor(shown$eta, levels = unique(shown$eta))
 shown$evidence <- -log10(pmax(shown$p0, 1e-6))
 ggplot2::ggplot(shown, ggplot2::aes(group, eta)) +
-  ggplot2::geom_tile(ggplot2::aes(fill = mode, alpha = evidence), colour = "white") +
+  ggplot2::geom_tile(ggplot2::aes(fill = mode, alpha = evidence), color = "white") +
   ggplot2::geom_point(data = shown[shown$p0 < 0.05, ], ggplot2::aes(shape = "p0 < 0.05"),
-                      size = 1.8, fill = "white") +
+                      fill = "white") +
   ggplot2::scale_y_discrete(limits = rev) +
   ggplot2::scale_fill_gradient2(low = "#2166ac", mid = "white", high = "#b2182b") +
   ggplot2::scale_alpha(range = c(0.1, 1), limits = c(0, 6), breaks = 1:3,
                        labels = c("1, p0 = 0.1", "2, p0 = 0.01", "3, p0 = 0.001"),
-                       guide = ggplot2::guide_legend(override.aes = list(fill = "grey30"))) +
+                       guide = ggplot2::guide_legend(override.aes = list(fill = "gray30"))) +
   ggplot2::scale_shape_manual(values = 21) +
   ggplot2::labs(x = NULL, y = NULL, fill = "change [log]", alpha = "evidence, -log10 p0", shape = NULL) +
   theme_dMod()
 ```
 
-Every tile is one compound and one rate constant, the random effect $\eta_{ik}$; the rate constants
-follow the pathway, from IKK at the top to A20 at the bottom. The colour of a tile is the mode of
-the change on the log scale, that of the most probable structure: red an increase, blue a decrease,
-white no change, which is the mode wherever the spike is more probable than the slab. A mode of
-$-0.7$ halves the rate constant. The opacity of a tile is the evidence for a change,
-$-\log_{10} p_0$, with $p_0$ the posterior probability of the spike, that is of no change at all:
-1 is $p_0 = 0.1$, 2 is $p_0 = 0.01$, 3 is $p_0 = 0.001$, and from 6 on, $p_0$ below $10^{-6}$, the
-tile has its full colour. A pale tile is either a small change or a rate constant that the data of
-the compound leave where it is or say nothing about, with $p_0$ near or above the prior probability
-of the spike, $1 - \rho$. The circle tells the two apart: it marks the tiles with $p_0 < 0.05$, the
-changes of the table above. A coloured tile without a circle is a change more probable than none,
-but with $p_0$ between 0.05 and 0.5.
+Each tile is one $\eta_{ik}$; rate constants follow the pathway from IKK (top) to A20 (bottom).
+Color is the log-scale mode of the most probable structure: red increase, blue decrease, white no
+change (wherever the spike is more probable than the slab); $-0.7$ halves a rate constant. Opacity
+is the evidence $-\log_{10} p_0$, full from 6 on ($p_0 < 10^{-6}$). A pale tile is a small change,
+or $p_0$ near or above $1 - \rho$; circles mark $p_0 < 0.05$, the table above. A colored tile without
+circle has $p_0$ between 0.05 and 0.5.
 
-## Comparison with the publication
+## Data and fit by compound
 
-The publication selected the changes of DCF by an L1 penalty on the full model, in its
-supplement; it found seven rate constants changed. The table lists them with every change the spike
-and slab finds for DCF, with the reaction each rate constant belongs to:
+Prediction per compound at the estimated fixed effects and changes against the compound data, each
+point with its measured standard deviation, which the blots have in place of an error model; gray:
+the untreated, stimulated control of the same blots at the fixed effects alone. DCF blots span six
+hours, the others 50 minutes:
 
-```{r, eval = grouped}
-publication <- c("act_Ikb_by_Ikk", "act_Ikk_by_TNF", "act_pIkk", "degrad_mIkb",
-                 "prod_mIkb_by_nNfk", "shuttle_RnaA20", "trigger_iIkk")
-dcf <- fit$random[fit$random$group == "DCF", c("eta", "mode", "p0")]
-dcf <- dcf[dcf$eta %in% publication | dcf$p0 < 0.05, ]
-dcf$publication <- dcf$eta %in% publication
-dcf$spikeSlab <- dcf$p0 < 0.05
-# the reaction of a rate constant: of those whose rate uses it, the one with the fewest symbols
-dcf$reaction <- vapply(dcf$eta, function(k) {
-  symbols <- lapply(reactionsReduced$rates, function(r) all.vars(str2lang(r)))
-  uses <- which(vapply(symbols, function(s) k %in% s, TRUE))
-  reactionsReduced$description[uses[which.min(lengths(symbols[uses]))]]
-}, "")
-dcf <- dcf[order(!dcf$publication, !dcf$spikeSlab, dcf$p0), ]
-yes <- function(x) ifelse(x, "yes", "no")
-knitr::kable(data.frame(dcf$eta, yes(dcf$publication), yes(dcf$spikeSlab), round(dcf$mode, 2),
-                        formatC(dcf$p0, format = "g", digits = 2), dcf$reaction),
-             row.names = FALSE, col.names = c("rate constant", "publication", "spike and slab",
-                                               "mode", "$p_0$", "reaction"))
+::: {.wide}
+```{r, fig.width = 12, fig.height = 8.5}
+outer <- getParameters(prdCompounds)
+estimates <- c(fit$argument, fit$fixed, setNames(fit$random$mode, fit$random$parameter))
+pars <- setNames(numeric(length(outer)), outer)
+pars[intersect(outer, names(estimates))] <- estimates[intersect(outer, names(estimates))]
+
+treated <- grep("^TNF_[A-Z]", names(dataCompounds), value = TRUE)
+controls <- sub("^TNF_[A-Z]+_", "TNF_none_", treated)
+observed <- as.data.frame(dataCompounds)
+times <- sort(unique(c(seq(0, 60, length.out = 200), seq(0, max(observed$time), length.out = 200))))
+prediction <- as.data.frame(prdCompounds(times, pars, deriv = FALSE, conditions = union(treated, controls)))
+
+# every compound with the untreated control on the same blots
+blots <- c("IkBa", "pIkBa", "pIKK", "pNFkB")
+byCompound <- function(frame) do.call(rbind, Map(function(cond, ctl) {
+  rows <- frame[frame$condition %in% c(cond, ctl) & frame$name %in% blots,
+                c("time", "name", "value", "sigma", "condition")]
+  rows$compound <- sub("^TNF_([A-Z]+)_.*", "\\1", cond)
+  rows$treatment <- ifelse(rows$condition == cond, "compound", "control")
+  rows
+}, treated, controls))
+points <- byCompound(observed)
+# the curves over the time range of the data of the compound
+curves <- byCompound(prediction)
+curves <- curves[curves$time <= tapply(points$time, points$compound, max)[curves$compound], ]
+colors <- c(compound = "#b2182b", control = "gray55")
+ggplot2::ggplot(mapping = ggplot2::aes(time, value, color = treatment)) +
+  ggplot2::geom_line(data = curves) +
+  ggplot2::geom_errorbar(data = points, ggplot2::aes(ymin = value - sigma, ymax = value + sigma),
+                         width = 0) +
+  ggplot2::geom_point(data = points) +
+  ggplot2::facet_grid(name ~ compound, scales = "free") +
+  ggplot2::scale_x_continuous(breaks = scales::breaks_pretty(n = 3)) +
+  ggplot2::scale_color_manual(values = colors) +
+  ggplot2::labs(x = "time [min]", y = "log signal [a.u.]", color = NULL) +
+  theme_dMod() +
+  ggplot2::theme(legend.position = "bottom")
 ```
+:::
 
-```{r, include = FALSE, eval = grouped}
-foundDCF <- dcf$eta[dcf$publication & dcf$spikeSlab]
-missedDCF <- dcf[dcf$publication & !dcf$spikeSlab, ]
-addedDCF <- dcf$eta[!dcf$publication & dcf$spikeSlab]
-dcfText <- paste0(
-  sprintf("Of the seven, the spike and slab finds %d: %s. ", length(foundDCF), enumerate(code(foundDCF))),
-  if (nrow(missedDCF)) sprintf("It leaves %s at the population value, %s. ",
-                              enumerate(code(missedDCF$eta)),
-                              enumerate(sprintf("$p_0 = %.2g$", missedDCF$p0))),
-  if (length(addedDCF)) sprintf("It adds %d: %s.", length(addedDCF), enumerate(code(addedDCF)))
-  else "It adds none.")
-perCompound <- vapply(others, function(g) {
-  k <- changes$eta[changes$group == g]
-  if (!length(k)) return(sprintf("none for %s", g))
-  sprintf("%d for %s (%s)", length(k), g, enumerate(code(k)))
-}, "")
-othersText <- sprintf("The spike and slab finds %s.", enumerate(perCompound))
-```
+## Sparse random-effect distributions
 
-`r if (grouped) dcfText`
-
-For AMD, APAP, FIAU and XIM the publication estimated no changes; it predicted A20 for them under
-two scenarios. `r if (grouped) othersText`
-
-The two analyses differ in three respects. The model: the reduced model of
-[chapter 5](guide-profiles.html) has fewer processes than the full model of the publication; a
-process the reduction made fast or removed cannot change, and a change of the full model may show
-on a neighbouring rate constant of the reduced one. The criterion: the L1 scan selects the changes
-at one strength of the penalty, the spike and slab by the posterior probability of no change, with
-$\rho$ and $\tau$ estimated from all five compounds, so that the data of each compound inform the
-prior of the others through these two numbers. And the threshold: $p_0 < 0.05$ is a choice;
-`fit$random` holds $p_0$ for every compound and rate constant, and with it the reading at any other
-threshold.
-
-## The full model
-
-The model is the one difference the reduced model adds to the comparison. `compoundsFull.R` takes
-the full model of [chapter 1](guide-model.html), on which the publication ran its L1 scan, with a
-spike-and-slab random effect over the compounds on every rate constant but the gauge, and the same
-data:
-
-```{r, include = FALSE}
-full <- file.exists(file.path(project, "results", "compoundsFull.rds"))
-```
-
-```{r fullcompoundeffects, eval = FALSE}
-```
-
-The full model has directions the data leave flat ([chapter 5](guide-profiles.html)); the slab
-regularises the changes, not the population values, which keep the weak prior of `model.R`, as in
-the fits of the publication:
-
-```{r fullprior, eval = FALSE}
-```
-
-```{r, echo = FALSE, results = "asis", eval = !full}
-cat("> Results pending: `results/compoundsFull.rds` of the project is written by `compoundsFull.R`.\n")
-```
-
-```{r, eval = full}
-fitFull <- readRDS(file.path(project, "results", "compoundsFull.rds"))
-dcfFull <- fitFull$random[fitFull$random$group == "DCF", c("eta", "mode", "p0")]
-rows <- union(publication, union(dcf$eta[dcf$spikeSlab], dcfFull$eta[dcfFull$p0 < 0.05]))
-knitr::kable(data.frame(rows, yes(rows %in% publication), yes(rows %in% dcf$eta[dcf$spikeSlab]),
-                        yes(rows %in% dcfFull$eta[dcfFull$p0 < 0.05])),
-             col.names = c("rate constant", "publication", "reduced model", "full model"))
-```
-
-```{r, include = FALSE, eval = full}
-selFull <- dcfFull$eta[dcfFull$p0 < 0.05]
-core <- Reduce(intersect, list(publication, dcf$eta[dcf$spikeSlab], selFull))
-dropped <- dcfFull[dcfFull$eta %in% setdiff(publication, selFull), ]
-both <- intersect(dcf$eta[dcf$spikeSlab], selFull)
-flips <- both[sign(dcf$mode[match(both, dcf$eta)]) != sign(dcfFull$mode[match(both, dcfFull$eta)])]
-fullText <- paste0(
-  sprintf("All three analyses change %s. On the full model the spike and slab leaves %s at the population value, with %s",
-          enumerate(code(core)), enumerate(code(dropped$eta)), enumerate(sprintf("$p_0 = %.2f$", dropped$p0))),
-  if (length(flips)) sprintf(", and it changes %s in the direction opposite to the reduced model.", enumerate(code(flips)))
-  else ".")
-```
-
-`r if (full) fullText`
-
-On the full model, which rate constants change under DCF rests on the directions the data leave
-flat ([chapter 5](guide-profiles.html)): there the weak prior of the population values, not the
-data, decides between structures that fit equally well, and a different prior width moves the
-selection between neighbouring rate constants. The reduced model keeps only what the data
-determine, and its changes are the reading to rely on. The comparison also shows that the
-selection of the publication on the full model stands on the same flat directions.
-
-Which method to trust where the model is identifiable follows from how the two select. A
-likelihood-ratio test per rate constant does not work here: with 21 to 33 rate constants per
-compound there are $2^{21}$ to $2^{33}$ structures, the test of one rate depends on which others
-are free, and coupled rates give a different answer for every order. Both methods replace that
-search. The L1 penalty shrinks every selected change towards 0 by the same amount and pays for it
-by selecting further small changes; among rate constants the data tie together it keeps one, and
-which one is not stable, the condition under which the lasso finds the right set fails for such
-correlations. The spike and slab separates the decision from the size: a change is either exactly 0
-or drawn from the slab, whose spread $\tau$ shrinks a selected change only little, and the exact
-sum over the subsets weighs every structure by its marginal likelihood, the all-subsets comparison
-done in one integral, with $\rho$ and $\tau$ estimated by maximum likelihood instead of a strength
-set by hand. Where the data cannot tell coupled rates apart, the probability spreads over the
-structures that explain the data equally well, and $p_0$ of each stays in between. Within the
-Laplace approximation of the data term, the spike and slab is the more reliable reading on an
-identifiable model; on the full model neither method can decide what the data leave flat.
-
-## Sparse random effects
-
-`gr(group, dist = )` in an effect formula sets the distribution of the random effects of a term.
-Besides `normal()`, three distributions have deviations that are exactly zero unless the data need
-them:
+`gr(group, dist = )` sets the random-effect distribution of a term. Besides `normal()`, three have
+deviations exactly zero unless the data need them:
 
 | distribution | a deviation $\eta$ of a group | hyperparameters |
 |---|---|---|
-| `laplace()` | density $\tfrac{\lambda}{2} e^{-\lambda \lvert \eta \rvert}$ | strength `lambda_<grouping>` |
-| `spikeSlab()` | $0$ with probability $1 - \rho$, else from $\mathcal{N}(0, \tau^2)$ | `prob_<grouping>`, `tau_<grouping>` |
-| `dirichletProcess()` | the value of its cluster: $0$ for the cluster of the population value, else one draw from $\mathcal{N}(0, \tau^2)$ per cluster | `concentration_<grouping>`, `tau_<grouping>` |
-
-The hyperparameters are shared by all symbols of a term, numbered `_1`, `_2`, ... where a grouping
-has several such terms, and estimated with the fixed effects unless given, as in
-`laplace(lambda = 2)`. A Laplace deviation has its mode at exactly zero unless the data pull it
-away, so the fit sorts shared from group-specific parameters, with one strength $\lambda$ per term
-estimated from all its deviations. A spike-and-slab deviation is zero with a probability, which the
-fit reports per group. Under the Dirichlet process the groups of a symbol share deviations: they
-form clusters with the population value, the section
-[Dirichlet-process random effects](#dirichlet-process-random-effects) treats them. Normal and sparse
-random effects of one grouping may be combined; `em(method = "focei")` fits all of them,
-Dirichlet-process ones also `method = "saem"`.
-
-## Approximate marginal
-
-Write $D_i(\eta_i)$ for the data $-2 \log L$ of group $i$ at its random effects $\eta_i$, summed
-over its conditions, and split the random effects of a group into the normal coordinates $N$ and
-the sparse ones $S$ (Laplace, spike and slab, Dirichlet process).
-
-### Joint mode
-
-`em()` first finds the joint mode $\hat\eta$ of all random effects, minimising
-
-$$\begin{aligned}
-\Phi(\eta) = {} & \sum_i \Bigl[ D_i(\eta_i) + \eta_{iN}^\top \Omega^{-1} \eta_{iN} \Bigr] \\
-& + \sum_{\text{Laplace}} 2 \lambda \lvert \eta \rvert
-+ \sum_{\text{spike and slab, Dirichlet}} \frac{\eta^2}{\tau^2} :
-\end{aligned}$$
-
-the data, the normal prior, the L1 penalty of the Laplace coordinates, and for spike-and-slab and
-Dirichlet-process coordinates the slab alone. $\Phi$ is a sum over the groups, whose random effects
-enter only their own conditions, so each group is minimised on its own: by `trustL1()`
-([chapter 4](guide-optimization.html)) where it has Laplace coordinates, by `trust()` otherwise.
-The model Hessian is Gauss-Newton plus a BFGS correction from the points that lowered $\Phi$: where
-the residuals stay large, Gauss-Newton alone overestimates the curvature and converges only
-linearly. A random effect that reaches no data of its group, along the transformations, the ODE
-and the observables, rests at 0 (section [Reported structure](#reported-structure)). This mode is
-smooth in the parameters, so the marginal does not jump where the most probable structure changes.
-Every evaluation starts from the modes of the last accepted point, moved to first order along the
-step (section [Exact gradient](#exact-gradient)), and solves to the tolerances of the outer trust
-region, $10^{-10}$ where none are given. The problem of a group may have several local minima, and
-the Laplace approximation belongs to the lowest, which outweighs one higher by $e^{\Delta\Phi / 2}$.
-So a group starts from the lowest of these modes and of the minima found at its last four distinct
-accepted points; a step does not fall into a higher minimum while a lower one is known. At the
-start of the fit and every 25 accepted steps the search runs for every group also from 0 and from
-two starts around its modes, each random effect moved by its slab standard deviation, and the
-lowest minimum joins those known; the moves are fixed numbers, so that `em()` draws no random
-numbers.
-
-### Normal coordinates
-
-Around the mode the data term is expanded to second order, with the gradient $\nabla D_i$ and the
-Gauss-Newton curvature $H_i$ of the data term alone in the random effects; $H_{NN}$ is its normal
-block plus the prior precision $2 \Omega^{-1}$, the curvature $H_i$ of
-[chapter 7](guide-nlme.html#laplace-approximation) in the normal coordinates. At the mode the
-gradient of the data term and the normal prior vanishes in the normal coordinates, so on the
-quadratic model they integrate out exactly. They leave the volume $\log \lvert H_{NN}/2 \rvert$, as
-in FOCEI, and for the sparse coordinates the Schur complement
-
-$$\tilde H_i = H_{SS} - H_{SN} H_{NN}^{-1} H_{NS},$$
-
-so that the data term on the sparse coordinates is, up to a constant, the Gaussian
-$\exp(-\tfrac12 \eta_{iS}^\top P_i\, \eta_{iS} + b_i^\top \eta_{iS})$ with
-
-$$P_i = \tilde H_i / 2, \qquad b_i = \tfrac12 \bigl( \tilde H_i\, \hat\eta_{iS} - \nabla_S D_i \bigr)$$
-
-per group, $\nabla_S D_i$ the gradient of the data term in the sparse coordinates. Unlike
-$P_i = H_i/2$ of chapter 7, $P_i$ holds no prior: the prior of the sparse coordinates is not
-Gaussian and enters the integral $I$ below exactly. $P_i$ may be singular, where the data of a
-group do not see a coordinate or a combination of coordinates; the integral needs no inverse of
-it.
-
-### Value
-
-The expansion gives
-
-$$\begin{aligned}
--2 \log L \approx {} & \sum_i \Bigl[ D_i(\hat\eta_i) + \log \lvert H_{NN}/2 \rvert
-+ \tfrac12 \hat\eta_{iS}^\top \tilde H_i\, \hat\eta_{iS} - \nabla_S D_i^\top \hat\eta_{iS} \\
-& \qquad + \hat\eta_{iN}^\top \Omega^{-1} \hat\eta_{iN} \Bigr]
-+ G \log \lvert \Omega \rvert - 2 \log I + D_0 ,
-\end{aligned}$$
-
-with $D_0$ the $-2 \log L$ of the conditions without random effects and of the other terms of the
-objective, such as priors, and
-
-$$I = \int \prod_i \exp\Bigl( -\tfrac12\, \eta_{iS}^\top P_i\, \eta_{iS} + b_i^\top \eta_{iS} \Bigr)\,
-p(\eta_S)\, d\eta_S$$
-
-over the sparse coordinates of all groups, $p$ their prior. Without sparse coordinates this is the
-FOCEI value of [chapter 7](guide-nlme.html). Every structure, a subset of spike coordinates or a
-partition into clusters, is a Gaussian integral under the expansion. $I$ is a product of
-one-dimensional integrals only where every $P_i$ is diagonal and the prior a product over the
-coordinates. The Laplace and spike-and-slab priors are products over the groups, the Dirichlet
-process couples the groups of a symbol, and the data couple the coordinates of a group through the
-off-diagonal entries of $P_i$.
-
-## Factor integrals
-
-$I$ is evaluated in factors, each integrated exactly:
-
-- every Laplace symbol, over all groups, a product of one-dimensional integrals;
-- every Dirichlet-process symbol, its coordinates of all groups jointly;
-- the spike-and-slab symbols of a group jointly, within a budget of terms; beyond it, each alone.
-
-A factor is integrated against an exponential tilt $\exp(h^\top \eta - \tfrac12 \eta^\top T \eta)$:
-its Gaussian part with $T = P_{ff}$ in the uncoupled case, a diagonal $T$ under expectation
-consistent below. A tilt with $T = 0$, a coordinate the data do not see, is no special
-case. With $\log Z(h, T)$ the log integral, Fisher's identity gives
-
-$$\frac{\partial \log Z}{\partial h} = \mathbb{E}\, \eta, \qquad
-\frac{\partial \log Z}{\partial T} = -\tfrac12\, \mathbb{E}\, \eta \eta^\top,$$
-
-and the derivative in a hyperparameter is the posterior expectation of the derivative of the log
-prior.
-
-### Laplace
-
-A Laplace coordinate against the tilt $(h, t)$, $t > 0$, integrates in closed form,
-
-$$\begin{aligned}
-Z(h, t, \lambda) &= \int \frac{\lambda}{2} e^{-\lambda \lvert \eta \rvert}\, e^{h \eta - t \eta^2 / 2}\, d\eta \\
-&= \frac{\lambda}{2} \sqrt{\frac{\pi}{2t}}\,
-\bigl[ \operatorname{erfcx}(x_+) + \operatorname{erfcx}(x_-) \bigr], \qquad
-x_\pm = \frac{\lambda \mp h}{\sqrt{2t}},
-\end{aligned}$$
-
-the two terms the halves $\eta > 0$ and $\eta < 0$, with $\operatorname{erfcx}(x) = e^{x^2}
-\operatorname{erfc}(x)$ the scaled complementary error function. It stays finite where
-$\operatorname{erfc}$ underflows: $\log \operatorname{erfcx}$ comes from the logarithm of the normal
-distribution function up to $x = 10$ and from its asymptotic series beyond. Each half is a
-truncated normal; its moments $\mathbb{E}\, u^k$ of $u = \eta \sqrt t$ follow from the recurrence
-$I_k + \alpha I_{k-1} = (k-1) I_{k-2}$ of $I_k = \int_0^\infty u^k e^{-u^2/2 - \alpha u}\, du$,
-forward for small $\alpha = \sqrt{2}\, x_\pm$ and by its continued fraction for the ratios
-$I_k / I_{k-1}$ beyond, so that they stay accurate as $t \to 0$, where a half tends to an
-exponential distribution. $\mathbb{E}\, \lvert \eta \rvert = 1/\lambda - \partial \log Z / \partial
-\lambda$.
-
-### Spike and slab
-
-The spike-and-slab coordinates of a group against the tilt $(h, T)$ integrate as a sum over the
-subsets $F$ of coordinates in the slab. With the covariance
-$V_F = (T_{FF} + \tau^{-2} \mathbb{1})^{-1}$ of the slab coordinates given $F$,
-
-$$Z = \sum_F \rho^{|F|} (1 - \rho)^{K - |F|}\,
-\frac{\lvert V_F \rvert^{1/2}}{\tau^{|F|}}\,
-\exp\bigl( \tfrac12 h_F^\top V_F\, h_F \bigr) ,$$
-
-$2^K$ terms for the $K$ coordinates of the factor. A term is the Gaussian integral over the slab
-coordinates with the others at 0; the factors $2\pi$ of the slab density and of the integral
-cancel. The posterior probability $\Pr(F \mid y)$ of a subset is its term divided by $Z$; given
-the subset, $\eta_F$ is normal with mean $\mu_F = V_F\, h_F$ and covariance $V_F$, and the other
-coordinates are 0. The posterior is the mixture of these normals, with the moments
-
-$$\begin{aligned}
-1 - p_{0k} &= \sum_{F \ni k} \Pr(F \mid y), \\
-\mathbb{E}\, \eta &= \sum_F \Pr(F \mid y)\, \mu_F, \\
-\mathbb{E}\, \eta \eta^\top &= \sum_F \Pr(F \mid y) \bigl( V_F + \mu_F \mu_F^\top \bigr),
-\end{aligned}$$
-
-$\mu_F$ and $V_F$ filled with zeros outside $F$: the probability of coordinate $k$ to be in the
-slab, the posterior mean, and the second moment, whose diagonal $\mathbb{E}\, \eta_k^2$ comes from
-the slab alone. The covariance is full within the factor. Fisher's identity gives the derivatives
-in the hyperparameters, summed over the coordinates that share them,
-
-$$\begin{aligned}
-\frac{\partial \log Z}{\partial \rho} &= \sum_k \Bigl( \frac{1 - p_{0k}}{\rho} - \frac{p_{0k}}{1 - \rho} \Bigr), \\
-\frac{\partial \log Z}{\partial \tau} &= \sum_k \Bigl( -\frac{1 - p_{0k}}{\tau} + \frac{\mathbb{E}\, \eta_k^2}{\tau^3} \Bigr) .
-\end{aligned}$$
-
-The sum runs as a depth-first search over the coordinates, each in or out of the slab. With $L$
-the Cholesky factor of $V_F^{-1}$, including a coordinate adds one row to $W = L^{-1}$, so that a
-term costs $O(K^2)$ and not $O(K^3)$. Since $V_F = W^\top W$ is the sum of the outer products of the
-rows of $W$, and a row depends only on the coordinates before it, every included coordinate adds
-its row's outer product times the weight of all terms below it; the means $\mu_F$ of the terms and
-these rows enter the second moment in blocks, by a symmetric rank-$k$ update. A subtree is left out
-where a bound on its terms falls below $e^{-40}$ of the largest term found, at most $2^K e^{-40}$
-of $Z$: $h_F^\top V_F h_F$ grows with $F$, so it is at most that of the subset of the coordinates in
-the slab and those still open, and every later diagonal entry of $L$ is at least the conditional
-precision of its coordinate given that subset. The branch with the larger bound goes first, so the
-largest terms are found early; where the data decide most coordinates, few terms remain.
-
-A single coordinate needs only $t > -\tau^{-2}$. The search visits at most $2^{24}$ nodes, a few
-seconds; a group that would need more goes to expectation consistent, every spike-and-slab
-coordinate a factor of its own.
-
-### Clusters
-
-A Dirichlet-process symbol integrates by a sum over the partitions of its groups, a recursion over
-subsets given in the section [Partition sum](#partition-sum).
-
-## Expectation consistent
-
-The groups are integrated one by one where no Dirichlet-process symbol joins them, a group whose
-factors the data do not couple exactly. The factors are coupled where the data of a group link
-coordinates of different factors, the off-diagonal blocks $P_{ff'}$ of the precision between
-factors $f$ and $f'$. There, and where the joint spike-and-slab sum would exceed its budget, the
-integral is the expectation-consistent approximation of Opper and Winther [@opper2005expectation]. Write the integrand of $I$ as the product of the prior $p$
-of the factors and the Gaussian coupling $\mathcal{G}(\eta) = \prod_i \exp(-\tfrac12 \eta_i^\top
-P_i \eta_i + b_i^\top \eta_i)$, and look at it in two tractable ways, with the statistics
-$\phi(\eta) = (\eta_k, -\eta_k^2/2)_k$ of every coordinate:
-
-- $q \propto p\, e^{\lambda^\top \phi}$, every factor exact against a diagonal cavity $\lambda$;
-- $r \propto \mathcal{G}\, e^{\gamma^\top \phi}$, the coupling exact under diagonal sites $\gamma$,
-  a Gaussian of precision $P_i + \operatorname{diag}(\gamma_t)$ per group.
-
-With $A_q(\lambda) = \log \int p\, e^{\lambda^\top \phi}$, $A_r(\gamma) = \log \int \mathcal{G}\,
-e^{\gamma^\top \phi}$ and $A_s(\nu) = \log \int e^{\nu^\top \phi}$ the log integrals, a product of
-one-dimensional Gaussians for $A_s$,
-
-$$\log I \;\approx\; A_q(\lambda) + A_r(\gamma) - A_s(\nu), \qquad \nu = \lambda + \gamma,$$
-
-at a point where $q$, $r$ and $e^{\nu^\top \phi}$ have the same mean and variance in every
-coordinate. The cavity is the effective field of the other factors on one factor, solved
-self-consistently with its fluctuations. The result is exact without coupling and for Gaussian
-factors; it is not a bound.
-
-The fixed point is found by a double loop that converges whatever the coupling [@heskes2005approximate].
-Its outer step sets $\nu$ to the natural parameters of the current marginals, $\nu_t = 1 /
-\operatorname{Var}\, \eta_k$ and $\nu_h = \mathbb{E}\, \eta_k / \operatorname{Var}\, \eta_k$. The
-inner loop minimises
-
-$$\Psi_\nu(\lambda) = A_q(\lambda) + A_r(\nu - \lambda),$$
-
-convex in $\lambda$ as the sum of two log integrals, whose gradient $\mathbb{E}_q \phi -
-\mathbb{E}_r \phi$ vanishes where the moments of $q$ and $r$ match. Newton steps on the Hessian
-$\operatorname{Cov}_q \phi + \operatorname{Cov}_r \phi$ with a backtracking line search on $\Psi$
-converge quadratically; the third and fourth moments of the factors enter $\operatorname{Cov}_q
-\phi$, and for a Dirichlet-process symbol of up to ten groups also its moments between groups, so
-that the step solves all coordinates jointly. The cavity is the variable, so no cavity precision is
-formed as a difference $1 / \operatorname{Var}_r \eta_k - \gamma_{t,k}$, and a site precision may be
-negative. A step is confined to the domains of the integrals: the Gaussian part positive definite,
-tested by a Cholesky factor of its Jacobi-scaled precision, $\lambda_t > -\tau^{-2}$ for a slab
-coordinate, $\lambda_t > 0$ for a Laplace coordinate, and $\tau^{-2} + \sum_g \min(\lambda_{t,g}, 0)
-> 0$ for a Dirichlet-process symbol. Each evaluation starts from the sites of the last accepted
-point.
-
-That outer step converges linearly, slowly where the data tie coordinates closely. The outer loop
-therefore takes Newton steps on the condition $\mathbb{E}_q \phi(\lambda^*(\nu)) = \mathbb{E}_s
-\phi(\nu)$, with $s \propto e^{\nu^\top \phi}$ and $\lambda^*(\nu)$ the solution of the inner loop. Differentiating its condition
-gives $\mathrm{d}\lambda^* = (\operatorname{Cov}_q \phi + \operatorname{Cov}_r \phi)^{-1}
-\operatorname{Cov}_r \phi\; \mathrm{d}\nu$, so the Jacobian is
-
-$$\operatorname{Cov}_q \phi\, (\operatorname{Cov}_q \phi + \operatorname{Cov}_r \phi)^{-1}
-\operatorname{Cov}_r \phi - \operatorname{Cov}_s \phi ,$$
-
-solved after scaling its rows and columns, since a coordinate the data pin at 0 has second moments
-many orders below the others. The cavities move with $\mathrm{d}\lambda^*$, which starts the next
-inner loop near its solution. A Newton step that does not lower the largest mismatch of the moments
-gives way to the fixed-point step from the iterate before it, and the next ten rounds take
-fixed-point steps.
-
-The inner loop ends where the means match to $10^{-10}$ standard deviations and the variances to
-$10^{-10}$ relative, or, within $10^{-4}$, where a Newton step no longer lowers $\Psi$; the outer one
-where the marginals of $r$ match the Gaussians of $\nu$ to $10^{-10}$ in the same units, or, within
-$10^{-4}$, where the mismatch stops falling for twenty rounds. The second criterion is the rounding of an ill-conditioned Gaussian part, where
-the data tie coordinates closely. A point at which the double loop does not converge is a failed
-evaluation of the trust region, which shrinks its radius and tries a shorter step. `fit$coupling`
-is `"expectationConsistent"` where a group needed it, and `NULL` where every group is exact.
-
-## Exact gradient
-
-At the fixed point the value is stationary in the sites and cavities, so the derivatives of
-$\log I$ in $b$, $P$ and the hyperparameters hold them fixed; for exact factors these are Fisher's
-identity:
-
-$$\frac{\partial \log I}{\partial b_i} = \mathbb{E}\, \eta_{iS}, \qquad
-\frac{\partial \log I}{\partial P_i} = -\tfrac12 \bigl( \mathbb{E}\, \eta_{iS}\, \mathbb{E}\, \eta_{iS}^\top + \Sigma_i \bigr),$$
-
-with $\Sigma_i$ the posterior covariance of the sparse coordinates of group $i$. For exact factors
-$\mathbb{E}$ and $\Sigma_i$ are those of the posterior, block diagonal over the factors; under
-expectation consistent $\mathbb{E}$ is $\mathbb{E}_r$ and $\Sigma_i$ the covariance of $r$, full
-within the group. The derivative in a hyperparameter is the expectation of the derivative of its
-log prior under the factors, at the cavity under expectation consistent: Fisher's identity per
-factor.
-
-Through $b_i = \tfrac12 (\tilde H_i \hat\eta_{iS} - \nabla_S D_i)$ and $P_i = \tilde H_i / 2$ these
-give, with $\delta_i = \mathbb{E}\, \eta_{iS} - \hat\eta_{iS}$, the derivatives of $-2 \log L$ in
-$\nabla_S D_i$, $\tilde H_i$ and the mode,
-
-$$\delta_i, \qquad \tfrac12 \bigl( \delta_i \delta_i^\top + \Sigma_i \bigr), \qquad
--\tilde H_i\, \delta_i - \nabla_S D_i ,$$
-
-and through the Schur complement those in $H_i$ and $\Omega$. From there the chain needs
-$\partial \nabla D_i / \partial \psi$ from the exact Hessian of the data term,
-$\partial H_i / \partial \psi$ and $\partial H_i / \partial \eta$ from second derivatives of the
-prediction and the error model, as for the volume term of FOCEI in [chapter 7](guide-nlme.html),
-and the shift of the mode.
-
-The mode moves with the parameters $\psi$ in its free coordinates: the normal ones, the
-spike-and-slab and Dirichlet-process ones, whose inner objective has the slab alone, and the
-Laplace coordinates away from zero; those at zero stay there. With $W$ the matrix whose columns
-select the free coordinates, $\eta = W \xi$, the stationarity of the inner objective,
-$W^\top (\nabla_\eta \Phi + \text{subgradient}) = 0$, gives
-
-$$\frac{d \xi}{d \psi} = -\bigl( W^\top \nabla^2_\eta \Phi\, W \bigr)^{-1} W^\top \nabla^2_{\eta \psi} \Phi .$$
-
-The curvature of the inner objective is block diagonal by groups, so the shift of a group is its
-own. The same shift with the derivative of the subgradient in a hyperparameter, $2 \operatorname{sign}
-\eta$ in $\lambda$ and $-4 \eta / \tau^3$ in $\tau$, gives the derivatives in $\lambda$ and $\tau$
-through the mode; $\rho$ and the concentration $\alpha$ do not enter the inner objective and do not
-move it. The shift also gives the first-order start of the inner modes at the next trial point. The
-gradient is exact for the approximate marginal.
-
-## Hyperparameters
-
-### E-step
-
-`em()` does not alternate E- and M-steps: every evaluation of the approximate marginal is an
-E-step, and the M-steps below set the curvature of the hyperparameters in the joint trust region.
-[Chapter 7](guide-nlme.html#em-algorithm) derives EM in general; for the spike and slab the E-step
-forms the posterior moments of the deviations that the objective of $\rho$ and $\tau$ needs. This
-chapter writes that objective on the scale of $-2 \log L$, as $-2Q$ with $Q$ the expected
-complete-data log-density of chapter 7, and minimises it.
-
-With the indicator $z_{ik}$, 1 for a deviation in the slab and 0 for one in the spike, the
-complete data are $(\eta, z)$, and their $-2 \log$ prior, summed over the groups $i$ and the
-symbols $k$ of a term, is up to terms free of $\rho$ and $\tau$
-
-$$\begin{aligned}
--2 \log p(\eta, z \mid \rho, \tau) = \sum_{i,k} \Bigl[ & -2 z_{ik} \log \rho - 2 (1 - z_{ik}) \log (1 - \rho) \\
-& + z_{ik} \Bigl( 2 \log \tau + \frac{\eta_{ik}^2}{\tau^2} \Bigr) \Bigr] .
-\end{aligned}$$
-
-Its posterior expectation is the complete-data objective of the M-steps,
-
-$$\begin{aligned}
--2Q(\rho, \tau) = {} & -2 \bar n \log \rho - 2 (n - \bar n) \log (1 - \rho) \\
-& + 2 \bar n \log \tau + \frac{\mathbb{E} \sum v^2}{\tau^2} ,
-\end{aligned}$$
-
-$n$ the number of deviations of the term. It depends on the data only through two expected
-sufficient statistics, the expected number $\bar n$ of deviations in the slab and the expected sum
-of their squares $v^2$,
-
-$$\begin{aligned}
-\bar n &= \sum_{i,k} \mathbb{E}\, z_{ik} = \sum_{i,k} (1 - p_{0,ik}), \\
-\mathbb{E} \sum v^2 &= \sum_{i,k} \mathbb{E}\, z_{ik} \eta_{ik}^2 = \sum_{i,k} \mathbb{E}\, \eta_{ik}^2 ,
-\end{aligned}$$
-
-the last since $\eta_{ik} = 0$ wherever $z_{ik} = 0$.
-
-The expectations are taken under the posterior of the approximate marginal. For group $i$ it is
-the quadratic model of the data term at the joint mode, with the Gauss-Newton curvature and the
-normal coordinates integrated out (section [Normal coordinates](#normal-coordinates)), times the
-exact prior,
-
-$$p(\eta_{iS} \mid y_i) \propto \exp\Bigl( -\tfrac12 (\eta_{iS} - m_i)^\top P_i\, (\eta_{iS} - m_i) \Bigr)
-\prod_k p(\eta_{ik}) ,$$
-
-and the groups are independent under it. The spike-and-slab symbols of a group form one factor,
-the subset sum of section [Spike and slab](#spike-and-slab-1); without coupled sparse coordinates
-it is integrated on $(P_i, m_i)$ and gives the moments of this posterior exactly. Under expectation
-consistent every spike-and-slab coordinate is a factor alone, integrated on a one-dimensional Gaussian
-of precision $a$ and centre $m$, a sum of two terms. Given a deviation, the slab has the posterior
-variance $V$, the $V_F$ of one coordinate, and the posterior mean $\mu$,
-
-$$V = \frac{1}{a + \tau^{-2}}, \qquad \mu = V a\, m .$$
-
-The probability of a deviation is the inverse logit of the posterior log odds of slab and spike,
-
-$$1 - p_0 = \operatorname{logit}^{-1} \Bigl( \operatorname{logit} \rho + \frac{\mu^2}{2 V}
-+ \tfrac12 \log \frac{V}{\tau^2} \Bigr) :$$
-
-the prior log odds, the gain of the exponent at the slab mean over the spike at 0, and the log
-ratio of the posterior to the prior width of the slab. The moments are those of the mixture of the
-spike and the slab,
-
-$$\begin{aligned}
-\mathbb{E}\, \eta &= (1 - p_0)\, \mu, \\
-\mathbb{E}\, \eta^2 &= (1 - p_0)\, (\mu^2 + V), \\
-\operatorname{Var} \eta &= \mathbb{E}\, \eta^2 - (\mathbb{E}\, \eta)^2 .
-\end{aligned}$$
-
-Under expectation consistent every coordinate has its cavity, $a = a^c_{ik}$ and $m = m^c_{ik}$
-(section [Expectation consistent](#expectation-consistent)). $p_0$, $\mathbb{E}\, \eta$ and
-$\mathbb{E}\, \eta^2$ are those of $q$, whose means and variances equal those of $r$ at the fixed
-point, and $\Sigma_i = (P_i + \operatorname{diag} \Lambda_i)^{-1}$ is the covariance of $r$.
-
-Given its sparse coordinates, the normal coordinates of a group are normal on the expansion,
-
-$$\begin{aligned}
-\eta_{iN} \mid \eta_{iS} &\sim \mathcal{N}\bigl( \hat\eta_{iN} - R_i\, (\eta_{iS} - \hat\eta_{iS}),\;
-2 H_{NN}^{-1} \bigr), \\
-R_i &= H_{NN}^{-1} H_{NS} ,
-\end{aligned}$$
-
-so the posterior covariance of all random effects of the group, `fit$etaCov`, has the blocks
-
-$$\Sigma_{NN} = 2 H_{NN}^{-1} + R_i \Sigma_{SS} R_i^\top, \qquad \Sigma_{NS} = -R_i \Sigma_{SS} ,$$
-
-with $\Sigma_{SS}$ that of the sparse coordinates above; `se` of `fit$random` is the square root of
-its diagonal. $\Omega$ has no M-step here: it moves with the fixed parameters.
-
-By Fisher's identity the same statistics give the gradient in the hyperparameters: at the current
-point the derivative of $-2 \log I$ is that of $-2Q$,
-
-$$\begin{aligned}
-\frac{\partial (-2Q)}{\partial \rho} &= -2 \Bigl( \frac{\bar n}{\rho} - \frac{n - \bar n}{1 - \rho} \Bigr), \\
-\frac{\partial (-2Q)}{\partial \tau} &= 2 \Bigl( \frac{\bar n}{\tau} - \frac{\mathbb{E} \sum v^2}{\tau^3} \Bigr),
-\end{aligned}$$
-
-$-2$ times the sums over the groups of the derivatives of the factors. The gradient of the
-marginal in $\tau$ adds the shift of the mode (section [Exact gradient](#exact-gradient)); $\rho$
-does not move the mode. The M-steps set both derivatives of $-2Q$ to zero at fixed statistics.
-
-### M-steps
-
-The closed-form M-step of a hyperparameter $h$ minimises $-2Q(h)$, the expected complete-data
-$-2 \log$ prior of the random effects with their structure, at the current posterior moments: the
-complete data are $(\eta, z)$ for the spike and slab (section [E-step](#e-step)) and the partition
-with the cluster values for the Dirichlet process. With $n$ the number of deviations of a term,
-groups times symbols, $\bar n$ the expected number of slab deviations or of clusters off the
-population value, and $\mathbb{E} \sum v^2$ the expected sum of their squared values,
-
-$$\begin{aligned}
-\lambda &= \frac{n}{\sum \mathbb{E} \lvert \eta \rvert}, &
-\tau^2 &= \frac{\mathbb{E} \sum v^2}{\bar n}, \\
-\rho &= \frac{\bar n}{n}, &
-\bar n &= \sum_k \sum_{i=1}^{G} \frac{\alpha}{\alpha + i} ,
-\end{aligned}$$
-
-the last one, for the concentration of the Dirichlet process, summed over the symbols $k$ of the
-term; its left side increases in $\alpha$, and Newton's method on $\log \alpha$ solves it.
-
-Near the optimum such a step is a gradient step scaled by the complete-data information
-$\mathcal{I}_c$, the information the deviations would give if they were observed, while the data
-hold only $\mathcal{I}_{\text{obs}} = \mathcal{I}_c - \mathcal{I}_{\text{mis}}$; per iteration the
-error shrinks by the fraction of missing information [@dempster1977maximum], the matrix
-
-$$\mathcal{I}_c^{-1} \mathcal{I}_{\text{mis}} .$$
-
-For a strength estimated from a few groups the rate is close to one. A Newton step on the curvature
-of $-2Q$ at the current point is no better far from the optimum: on the unbounded scale
-$u = \log \lambda$ the M-step lies at $u^* = \log(n / \sum \mathbb{E} \lvert \eta \rvert)$, the
-Newton step is $e^{u^* - u} - 1$, $-1$ where $u^*$ lies five below and $147$ where it lies five
-above.
-
-### Joint trust region
-
-`em()` moves all parameters in one trust region: the fixed parameters, and the hyperparameters on
-their unbounded scale $u$, $\log \lambda$, $\log \tau$, $\log \alpha$ and
-$\operatorname{logit} \rho$, with the exact gradient of the marginal. For the fixed parameters the
-model Hessian is the Schur complement over all random effects, the sparse ones at the curvature of
-their posterior: a factor with posterior covariance $\Sigma$ and data curvature $\tilde H_{ff}$ of
-$-2 \log L$ gets the prior curvature $2 \Sigma^{-1} - \tilde H_{ff}$, so that its block after the normal
-coordinates are eliminated is $2 \Sigma^{-1}$; under expectation consistent the prior curvature is
-that of the sites, $2 \operatorname{diag}(\Lambda)$. The blocks of the data Hessian are all of one
-kind: Gauss-Newton under forward over reverse, whose parameter block is Gauss-Newton, so that the
-Schur complement is positive semidefinite; exact with second-order sensitivities. A Schur complement
-of a Gauss-Newton parameter block and exact rows in the random effects can be far from definite.
-The exact rows enter the gradient and the shift of the mode. With normal random effects alone this
-is the Schur complement of FOCEI. The Schur complement over the free
-modes alone has no curvature in a fixed parameter whose deviations are free under a Laplace prior,
-and jumps to that of the data where the deviations sit at zero.
-
-For every hyperparameter the model Hessian is the secant of the complete-data gradient to its
-M-step,
-
-$$\kappa_h = \frac{\partial_u (-2Q)}{u - u^*},$$
-
-with the derivatives of $-2Q$ on the unbounded scale
-
-$$\partial_u (-2Q) = \begin{cases}
-2 \bigl( \lambda \sum \mathbb{E} \lvert \eta \rvert - n \bigr) & \text{for } \lambda, \\
-2 \bigl( \bar n - \mathbb{E} \sum v^2 / \tau^2 \bigr) & \text{for } \tau, \\
--2 \, (\bar n - n \rho) & \text{for } \rho, \\
--2 \bigl( \bar n - \sum_k \sum_{i=1}^{G} \alpha / (\alpha + i) \bigr) & \text{for } \alpha .
-\end{cases}$$
-
-$-2Q$ is convex in $u$ for all four, so $\kappa_h > 0$. Where $u = u^*$, $\kappa_h$ is the curvature
-of $-2Q$, the complete-data information on the scale of $-2 \log L$,
-
-$$\partial_u^2 (-2Q) = \begin{cases}
-2 \lambda \sum \mathbb{E} \lvert \eta \rvert & \text{for } \lambda, \\
-4\, \mathbb{E} \sum v^2 / \tau^2 & \text{for } \tau, \\
-2 n \rho (1 - \rho) & \text{for } \rho, \\
-2 \sum_k \sum_{i=1}^{G} \alpha\, i / (\alpha + i)^2 & \text{for } \alpha ,
-\end{cases}$$
-
-and $\kappa_h$ is at least $10^{-8}$. The gradient of the marginal in $u$ is that of $-2Q$ at the
-current point (section [E-step](#e-step)) plus the term of the shift of the mode, so a Newton step
-on $\kappa_h$ alone moves $u$ by
-
-$$\Delta u = -\frac{1}{\kappa_h} \frac{\partial (-2 \log L)}{\partial u}
-= u^* - u - \frac{1}{\kappa_h}\, \nabla_{\hat\eta} (-2 \log L)^\top \frac{d \hat\eta}{d u} ,$$
-
-$\nabla_{\hat\eta} (-2 \log L)$ the derivative of the marginal in the mode at fixed parameters and
-$d \hat\eta / d u$ the shift of the mode of section [Exact gradient](#exact-gradient). For $\rho$
-and $\alpha$ the mode does not move, and the step is the exact M-step. For $\tau$ and $\lambda$ it
-adds the second term, which vanishes where the data term is exactly quadratic in the random
-effects, the expansion then being independent of the mode.
-
-A BFGS correction from the accepted steps learns the missing information and the curvature between
-fixed parameters and hyperparameters [@lange1995quasi; @jamshidian1997acceleration]: every step
-between two points that lowered $-2 \log L$ updates the model Hessian by BFGS with the change of
-the gradient along it; a pair whose inner product is at most $10^{-8}$ times the product of their
-norms is skipped, and an update that would leave the model indefinite drops the correction. Far
-from the optimum the correction is small, and a step is an EM step in the hyperparameters and a
-Gauss-Newton step in the fixed parameters, at one evaluation of the marginal; near the optimum the model approaches the
-Hessian of the marginal and the steps converge superlinearly. The model has the gradient of the
-marginal and a bounded Hessian, which suffices for the convergence of a trust region
-[@conn2000trust], and the ratio of actual to predicted reduction sets the step: there is no number
-of EM iterations to choose.
-
-The trust region stops at a predicted reduction below `mtol`; a run that stops short of it, at its
-iteration limit or after rejected steps, starts again with a fresh correction as long as the runs
-lower $-2 \log L$ by more than `mtol`. A multistart guards against local optima; `msem()` perturbs
-strengths, concentrations and slab standard deviations on the log scale, slab probabilities on the
-logit scale. Neither model Hessian is the Hessian of the marginal, which would need the curvature of
-the integral over the sparse coordinates: such a fit reports none, `fit$hessian` is `NULL`, and its
-standard errors come from the scores of the groups (section [Standard errors](#standard-errors)).
-
-### Settings
+| `laplace()` | density $\tfrac{\lambda}{2} e^{-\lambda \lvert \eta \rvert}$ | `lambda_<grouping>` |
+| `spikeSlab()` | $0$ with probability $1 - \rho$, else $\mathcal{N}(0, \tau^2)$ | `prob_<grouping>`, `tau_<grouping>` |
+| `dirichletProcess()` | cluster value: $0$ for the population cluster, else one $\mathcal{N}(0, \tau^2)$ draw | `concentration_<grouping>`, `tau_<grouping>` |
+
+Hyperparameters are shared by the symbols of a term, numbered `_1`, `_2`, ... for several terms
+of one grouping, and estimated with the fixed effects unless given, as in `laplace(lambda = 2)`. A
+Laplace mode is exactly zero unless the data pull it away, which sorts shared from group-specific
+parameters, one $\lambda$ per term. A spike-and-slab deviation is zero with a probability reported
+per group. Under the Dirichlet process groups share deviations in clusters with the population
+value, see [Dirichlet-process random effects](#dirichlet-process-random-effects). Normal and sparse
+random effects of one grouping combine; `em(method = "focei")` fits all, Dirichlet-process ones
+also `method = "saem"`.
+
+## Fitting sparse random effects
+
+`em(method = "focei")` integrates sparse random effects on the Laplace approximation of the data
+term at the joint mode of a group, exactly where possible, by EC where the data couple them. Fixed
+effects and hyperparameters move in one trust region: no EM iteration count, no random numbers.
+`fit$coupling` is `"expectationConsistent"` if a group needed EC, `NULL` if all are exact. Integral,
+gradient and hyperparameter steps:
+[Methods > Approximate marginal](methods-sparse-random-effects.html#approximate-marginal),
+[Methods > Expectation consistent
+approximation](methods-sparse-random-effects.html#expectation-consistent-approximation) and
+[Methods > Joint trust region](methods-sparse-random-effects.html#joint-trust-region).
 
 | entry of `control$laplace` | default | controls |
 |---|---|---|
-| `maxOuter` | `200` | the iterations of the joint trust region, over all its runs |
-| `trustControl` | `rinit = 1`, `rmax = 10`, `ftol = 1e-10`, `mtol = 1e-5` | the joint trust region, as in `trust()` |
+| `maxOuter` | `200` | joint trust-region iterations, all runs |
+| `trustControl` | `rinit = 1`, `rmax = 10`, `ftol = 1e-10`, `mtol = 1e-5` | joint trust region, as `trust()` |
 
-Other entries are an error. The fit of the compounds sets the tolerances of `trustControl` to those
-of [chapter 1](guide-model.html), above the error the solver leaves in the value and the gradient.
+Other entries are an error. The compound fit uses the `trustControl` tolerances of
+[Setting up models](guide-model.html), above the solver error in value and gradient. A run stopping
+short of `mtol` restarts while runs lower $-2 \log L$ by more than `mtol`. `msem()` perturbs
+strengths, concentrations and slab standard deviations on log scale, slab probabilities on logit
+scale.
 
 ## Reported structure
 
-The fit reports the most probable structure: for the spike and slab the most probable subset of
-every factor, for the Dirichlet process the most probable partition, from the partition recursion
-with the maximum in place of the sum. Deviations in the spike are exactly zero. A slab deviation
-is the slab mean given the most probable subset, at the precision and centre at which its factor is
-integrated: in a joint factor $\mu_{F^*} = V_{F^*} b_{F^*}$, $F^*$ the most probable subset of the
-factor, the posterior mean given the subset, exact without other sparse coordinates; for a
-coordinate alone, and for every coordinate under expectation consistent, the slab mean
-$\mu = V a\, m$ of section [E-step](#e-step) where $1 - p_0 > \tfrac12$, at the cavity under
-expectation consistent, so that it is not conditioned on the structure of the others. Every free cluster has
-its posterior mean given the most probable partition, and Laplace deviations are their joint
-mode. `fit$random` has a row per group and random effect:
+The fit reports the most probable structure: subset of deviations (spike and slab) or partition
+(Dirichlet process). Spike deviations are exactly zero, slab deviations the posterior mean given
+the structure, Laplace deviations the joint mode
+([Methods > Reported structure](methods-sparse-random-effects.html#reported-structure)).
+`fit$random` has a row per group and random effect:
 
 - `mode`, this value;
-- `se`, the posterior standard deviation, over spike and slab together;
-- for spike-and-slab and Dirichlet-process random effects `cluster`, 0 for the population value and
-  1, 2, ... for the deviating groups or the clusters of a symbol in the order of the groups, and
-  `p0`, the posterior probability of a deviation of zero;
-- `data`, where some random effects reach no data of their group, whether each does.
+- `se`, posterior standard deviation over spike and slab;
+- spike-and-slab and Dirichlet process: `cluster`, 0 for the population value, 1, 2, ... for
+  deviating groups or clusters in group order, and `p0`, posterior probability of zero deviation;
+- `data`, whether the random effect reaches data of the group, where some do not.
 
-Before the fit, `em()` follows every sparse random effect of a group through the parameter
-transformations, the steady states, the right-hand sides and events of the ODE, the observables and
-the error model to the names measured in the conditions of the group, a search in the graph of
-their symbols. Every expression is read with the names that are 0 in the condition set to 0: a
-product with a factor 0 vanishes, and a state that starts at 0, whose right-hand side vanishes with
-the other zeros and that no event moves stays 0 for all time, by uniqueness of the solution, and
-passes nothing on. A root of a steady state depends on an input only through the states whose
-equations or conservation rows the input reaches, directly or through moved states; the others
-solve a subsystem without the input, whose solution does not move where it has full structural
-rank, and the search falls back to every root where it does not. Where the graph finds no path,
-the sensitivity is 0 for every value of the parameters. One that reaches none rests at 0 with its
-prior: its mode is not searched, it leaves
-the integral, whose factor is 1 there, and it does not enter the updates of its hyperparameters. It
-is reported with its prior standard deviation and, for the spike and slab, $p_0 = 1 - \rho$; a
-Dirichlet-process group without data leaves the partition, which leaves the others unchanged, as
-the Ewens prior of a subset of the groups is that of the subset. Without this the data-free
-coordinates would be flat directions of the mode and of the integral.
-
-`fit$strengths` lists the Laplace strengths, `fit$slab` the probabilities, concentrations and slab
-standard deviations, each with the symbols of its term, its estimate and whether it was fixed.
-
-The sum over the structures is exact or expectation consistent; the data term in the random effects
-of a structure is its Laplace approximation at the joint mode, as in FOCEI.
+A sparse random effect reaching no data of the group (through transformations, ODE, observables,
+error model) rests at 0 with the prior standard deviation and, for spike and slab,
+$p_0 = 1 - \rho$. `fit$strengths` lists Laplace strengths, `fit$slab` probabilities, concentrations
+and slab standard deviations, each with term symbols, estimate and whether fixed.
 
 ## Standard errors
 
-With Laplace and spike-and-slab random effects the marginal is a sum over the independent groups
-and the conditions without random effects, $-2 \log L = -2 \sum_i \log L_i + D_0$, with $L_i$
-the approximate marginal likelihood of group $i$. The mode, the
-curvature and the integral of a group depend on its data alone, and the shift of the mode with the
-parameters is block diagonal by groups, so the exact gradient of the marginal splits into the exact
-gradients $-2 \nabla \log L_i$ of the groups. With the scores $s_i = \nabla \log L_i$ and their
-mean $\bar s$, the empirical information is
-
-$$\mathcal{I} = \frac{G}{G - 1} \sum_{i=1}^{G} (s_i - \bar s)(s_i - \bar s)^\top + \tfrac12 H_0 ,$$
-
-$H_0$ the Hessian of $D_0$, which also holds the priors and other terms of the objective.
-`fit$information` holds it and `vcov()` inverts it. At the optimum the scores sum to
-$\tfrac12 \nabla D_0$, and the centring removes that direction exactly: the first term has rank
-at most $G - 1$. The information needs more groups than parameters, or $H_0$ for the directions the
-scores leave out; where it does not span every direction, `vcov()` is an error and the standard
-errors are `NA`. In the fit of the compounds the five compounds give a first term of rank at most
-four, and the conditions without a compound and the prior give the other directions. Under
-`dirichletProcess()` the partition couples the groups, the marginal is no sum over groups, and a fit
-has neither a Hessian nor an empirical information; `confint(method = "profile")` gives intervals.
+With Laplace or spike-and-slab random effects `fit$hessian` is `NULL`; `vcov()` inverts
+`fit$information`, the empirical information from the group scores. It needs more groups than
+parameters, or conditions without random effects plus priors for the other directions; otherwise
+`vcov()` is an error and standard errors are `NA`. In the compound fit the conditions without
+compound and the prior complete the five compounds. `dirichletProcess()` fits have neither;
+`confint(method = "profile")` gives intervals. Details: [Methods > Standard errors](methods-sparse-random-effects.html#standard-errors).
 
 ## Dirichlet-process random effects
 
-`gr(group, dist = dirichletProcess())` lets the groups of a symbol share deviations: the groups and
-the population value, the anchor, form clusters; the cluster of the anchor has deviation zero, and
-every other cluster one common deviation from the slab $\mathcal{N}(0, \tau^2)$. The fit estimates
-the concentration $\alpha$ and $\tau$ by marginal maximum likelihood, in one fit without a penalty
-to scan. The structure a fit reports is that of the spike and slab with clusters in place of single
-deviations; the compounds of this chapter are fitted without it.
+With `gr(group, dist = dirichletProcess())` groups and population value form clusters; the
+concentration $\alpha$ sets how readily a group opens a new one. The population cluster has
+deviation zero, every other cluster one common deviation from $\mathcal{N}(0, \tau^2)$. $\alpha$ and
+$\tau$ are estimated by marginal maximum likelihood in one fit, with no penalty to scan. The
+reported structure is that of spike and slab with clusters in place of single deviations; the
+compounds here are fitted without it.
 
-### Ewens prior
+`method = "focei"` sums exactly over partitions of up to 14 groups. `method = "saem"` draws
+partitions, allowing normal random effects alongside but no other sparse ones, and reports the most
+frequent partition after burn-in, with standard error `valueSE` of $-2 \log L$.
+`control$saem$particles` sets the importance-sampling particles, default 500; `converged` says
+whether burn-in ended by the drift test. An SAEM fit has no gradient, Hessian or empirical
+information. Details:
+[Methods > Sparse random effects](methods-sparse-random-effects.html#dirichlet-process-random-effects).
 
-The partitions $\mathcal{C}$ of the $G$ groups and the anchor have the Ewens distribution
-[@ewens1972sampling] of the Chinese restaurant process with concentration $\alpha$ and the anchor
-seated first: a group joins an existing cluster with probability proportional to its size, the
-anchor counted, or opens a new one with probability proportional to $\alpha$,
+Reference: `randomEffects()`, `laplace()`, `spikeSlab()`, `dirichletProcess()`, `em()`, `msem()`,
+`plotValues()`
 
-$$\Pr(\mathcal{C}) = \frac{\alpha^{\lvert \mathcal{C} \rvert - 1} \prod_{T \in \mathcal{C}} (\lvert T \rvert - 1)!}
-{\prod_{i=1}^{G} (\alpha + i)} ,$$
-
-$\lvert \mathcal{C} \rvert$ the number of clusters and $\lvert T \rvert$ their sizes. The prior depends on the
-sizes only: it is exchangeable in the groups, independent of their order and of the data, and
-consistent in $G$, so that leaving out a group gives the prior of the others. $\alpha \to 0$ puts
-every group at the population value, $\alpha \to \infty$ every group in a cluster of its own; the
-expected number of free clusters, those off the population value, is
-$\sum_{i=1}^{G} \alpha / (\alpha + i)$.
-
-### Partition sum
-
-The data term is expanded as for the other sparse random effects, around the mode under the slab
-alone. Per symbol, on the factors $(a_i, m_i)$ of its $G$ groups, precision and centre, a cluster
-$T$ with the sums
-
-$$A_T = \sum_{i \in T} a_i, \qquad B_T = \sum_{i \in T} a_i m_i, \qquad C_T = \sum_{i \in T} a_i m_i^2$$
-
-has the weight
-
-$$w(T) = (\lvert T \rvert - 1)!\; e^{-C_T / 2}$$
-
-if it holds the anchor, and otherwise, integrating its common value over the slab,
-
-$$w(T) = \alpha\, (\lvert T \rvert - 1)!\; \bigl(1 + \tau^2 A_T\bigr)^{-1/2}
-\exp\Bigl( -\frac{C_T}{2} + \frac{B_T^2}{2 (A_T + \tau^{-2})} \Bigr) .$$
-
-The sum over all set partitions is a recursion over the subsets of the $G + 1$ elements: with
-$\mathcal{Z}(X)$ the sum over the partitions of a subset $X$ of the products of their cluster
-weights,
-
-$$\mathcal{Z}(X) = \sum_{T \subseteq X,\ \min X \in T} w(T)\, \mathcal{Z}(X \setminus T), \qquad
-I = \frac{\mathcal{Z}(U)}{\prod_{i=1}^{G} (\alpha + i)} ,$$
-
-$U$ the full set, $3^{G+1}$ terms, exact for up to 14 groups. The posterior probability that $T$ is
-a cluster is $w(T)\, \mathcal{Z}(U \setminus T) / \mathcal{Z}(U)$; given that, the value of a free cluster is normal
-with mean $B_T / (A_T + \tau^{-2})$ and variance $1 / (A_T + \tau^{-2})$. The posterior moments of
-every group, its $p_0$, the M-step statistics and the derivatives follow from these probabilities.
-The most probable partition is the same recursion with the maximum in place of the sum.
-
-### Gradient and M-steps
-
-Fisher's identity gives the derivatives of $\log I$ in $m$, in $a$ and in the hyperparameters from
-the posterior moments,
-
-$$\frac{\partial \log I}{\partial \alpha} = \frac{\bar n}{\alpha} - \sum_{i=1}^{G} \frac{1}{\alpha + i},
-\qquad
-\frac{\partial \log I}{\partial \tau} = -\frac{\bar n}{\tau} + \frac{\mathbb{E} \sum v^2}{\tau^3} ,$$
-
-with $\bar n$ the expected number of free clusters and $\mathbb{E} \sum v^2$ the expected sum of their
-squared values; the chain through $\nabla D_i$, $H_i$ and the mode is that of the other sparse
-random effects. The mode shifts with $\tau$ through the slab term, not with $\alpha$. The M-steps of
-$\tau$ and $\alpha$ are those of the section [M-steps](#m-steps), summed over the symbols of a term,
-and they set the curvature of $\alpha$ and $\tau$ in the joint trust region.
-
-### SAEM
-
-The exact partition sum is limited to 14 groups. `method = "saem"` draws the partition instead,
-with normal random effects beside the Dirichlet-process ones and no other sparse ones. Every group
-starts in a cluster of its own at its mode under the slab alone, so that the sampler merges clusters
-rather than finds deviations by draws from the slab. An iteration has these steps:
-
-- **Normal random effects.** Random-walk Metropolis steps, `nMcmc` per iteration, the step size
-  adapted during burn-in towards an acceptance of 0.4.
-- **Clusters.** One Gibbs sweep per symbol, Neal's algorithm 8 with two auxiliary clusters
-  [@neal2000markov]: every group, in random order, leaves its cluster and joins an existing one
-  with probability proportional to its size, the anchor counted, times the likelihood of the group
-  at the cluster value, or one of two auxiliary clusters with values drawn from the slab, with
-  probability proportional to $\alpha / 2$ times the likelihood there. A group alone in its cluster
-  offers that value as one of the auxiliary ones. The likelihoods of all groups at one value come
-  from one prediction.
-- **Cluster values.** Three random-walk Metropolis steps on the values of all clusters at once,
-  each accepted on the data of its groups and the slab.
-- **A-step and M-steps.** Robbins-Monro averages of the number of free clusters and of the sum of
-  their squared values give $\tau$ and $\alpha$ by the M-steps above; during burn-in they change by
-  a factor between 0.95 and 1.25 per iteration, and the variances of $\Omega$ shrink by at most
-  5 %. $\Omega$, the mu-referenced fixed effects and the other structural parameters move as in the
-  SAEM of [chapter 7](guide-nlme.html).
-
-Burn-in ends when no parameter drifts over the last `window` iterations, or after `nBurnin`; the
-averaging, with step sizes falling as the iteration number to the power $-0.7$, runs `nEM` iterations, and the estimate is the
-mean of the iterates after its first `window`. `converged` says whether the burn-in ended by the
-drift test. The reported structure is the most frequent partition of the draws after that window,
-its cluster values averaged over the draws with that partition, and $p_0$ of a group the share of
-those draws in which it sits at the population value.
-
-### Importance sampling
-
-The $-2 \log L$ of an SAEM fit comes from sequential importance sampling under the expansion
-[@liu1996nonparametric]. A particle seats the groups one after the other; group $i$ joins a cluster
-of every symbol, an existing one or a new one, with probability proportional to the Ewens prior
-times its predictive given the groups seated before, the cluster values of the particle having a
-joint normal posterior. With $\mathcal{C}_{i-1}$ the partition after $i - 1$ groups and
-$Z(\mathcal{C})$ the integral of the seated factors under it, the weight of a particle is the
-product of the normalisers,
-
-$$\zeta = \prod_{i=1}^{G} \sum_{T} \Pr(T \mid \mathcal{C}_{i-1})\,
-\frac{Z(\mathcal{C}_{i-1} + T)}{Z(\mathcal{C}_{i-1})} ,$$
-
-the sum over the seats $T$ of group $i$, a cluster of every symbol, existing or new. Its mean
-$\bar\zeta$ over $M$ particles is unbiased for $I$, and the spread gives the standard error of
-$-2 \log L$,
-
-$$\texttt{valueSE} = \frac{2\, \operatorname{sd}(\zeta)}{\sqrt{M}\, \bar\zeta} ,$$
-
-by the delta method on $\log \bar\zeta$. The symbols of a group are seated together on its full
-precision $P_i$, so no factorisation enters. `control$saem$particles` sets $M$, default 500. An
-SAEM fit has no gradient, Hessian or empirical information.
-
-## Summary
-
-- A spike-and-slab random effect over a grouping gives, per group and parameter, the posterior
-  probability $p_0$ of no change, with the probability and the spread of the changes estimated from
-  all groups together.
-- `em()` integrates Laplace, spike-and-slab and Dirichlet-process random effects on the quadratic
-  expansion of the data at the joint mode: normal coordinates by the Schur complement, every factor
-  exactly, spike-and-slab random effects of a group jointly by a pruned sum over their subsets,
-  coupled factors by expectation consistent.
-- Fixed effects and hyperparameters move in one trust region with the exact gradient, the
-  hyperparameters on the secant to their M-steps; standard errors come from the scores of the
-  groups.
-- Dirichlet-process random effects sum exactly over the partitions of up to 14 groups;
-  `method = "saem"` draws the partitions of more and reports $-2 \log L$ with its standard error.
+[← 7. Nonlinear mixed-effects models](guide-nlme.html) | [9. Alignment of relative data measurements →](guide-alignment.html)
 
 ## References

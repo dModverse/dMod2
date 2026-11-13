@@ -28,7 +28,7 @@ plotData(as.datalist(boehm))
 }
 \seealso{
 The example project
-\href{https://dmodverse.github.io/dMod2/articles/boehmJProteomeRes2014.html}{boehmJProteomeRes2014} builds and fits
-the model.
+\href{https://dmodverse.github.io/dMod2/articles/boehmJProteomeRes2014.html}{STAT5 dimerization (Boehm 2014)}
+builds and fits the model.
 }
 \keyword{data}

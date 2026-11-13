@@ -1,6 +1,6 @@
 # Sparse against dense Hessians on simulated alignments. trust() over the number of
 # experiments sets the thresholds of sparse = "auto"; em() by FOCEI over the number of groups;
-# one alignment of the size of a large blotIt preprocessing, its runtime and memory.
+# one alignment of the size of a large blotIt preprocessing, with runtime and memory.
 
 library(dMod2)
 

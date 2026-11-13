@@ -41,7 +41,8 @@ data(warfarin)
 head(warfarin)
 }
 \seealso{
-The example project \href{https://dmodverse.github.io/dMod2/articles/pharmacometrics.html}{pharmacometrics}
+The example project
+\href{https://dmodverse.github.io/dMod2/articles/pharmacometrics.html}{Theophylline, warfarin and mavoglurant}
 fits a PK/PD model.
 }
 \keyword{data}

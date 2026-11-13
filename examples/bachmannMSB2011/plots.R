@@ -13,7 +13,7 @@ best <- as.parvec(fits)
 plotValues(fits)
 
 ## ---- parameters
-# the dynamic parameters of the plateaus within 4 of the best value, one colour per plateau
+# the dynamic parameters of the plateaus within 4 of the best value, one color per plateau
 dynamic <- grep("^(scale|offset|sd)[0-9]*_", names(best), invert = TRUE, value = TRUE)
 keep <- c(setdiff(names(fits), attr(fits, "parameters")), dynamic)
 plotPars(fits[, keep], value < min(value) + 4) +
@@ -21,7 +21,7 @@ plotPars(fits[, keep], value < min(value) + 4) +
   scale_x_discrete(limits = rev) +
   scale_y_continuous(breaks = seq(-4, 12, 2)) +
   guides(x = guide_axis()) +
-  labs(x = NULL, y = "log10 value", colour = "plateau")
+  labs(x = NULL, y = "log10 value", color = "plateau")
 
 ## ---- helpers
 # what each condition recorded; the error model `e` draws one standard deviation as a band
@@ -52,11 +52,11 @@ plotCombined(pred, data[perturbed], paste(condition, name) %in% recorded, name %
   scale_color_dMod(limits = c("control", unname(perturbations))) +
   scale_fill_dMod(limits = c("control", unname(perturbations))) +
   scale_x_continuous(breaks = c(0, 120, 240)) +
-  labs(x = "time [min]", y = "log10 signal [a.u.]", colour = NULL) +
+  labs(x = "time [min]", y = "log10 signal [a.u.]", color = NULL) +
   theme(legend.position = "bottom", panel.spacing.x = unit(1, "lines"))
 
 ## ---- dose
-# the dose swept through one condition per experiment, with its scales and measurement time
+# the dose swept through one condition per experiment, with the scales and measurement time of the experiment
 doseData <- subset(bachmann, grepl("^dr", experiment))
 doses <- 10^seq(log10(min(doseData$epo_level)), log10(max(doseData$epo_level)), length.out = 300)
 inner <- p(best, deriv = FALSE)
@@ -77,7 +77,7 @@ at <- tapply(doseData$time, doseData$experiment, `[`, 1)
 measuredAt <- function(ex) factor(paste(at[ex], "min"), paste(sort(at), "min"))
 dosePred$measured <- measuredAt(dosePred$experiment)
 doseData$measured <- measuredAt(doseData$experiment)
-ggplot(dosePred, aes(epo_level, value, colour = measured, fill = measured)) +
+ggplot(dosePred, aes(epo_level, value, color = measured, fill = measured)) +
   geom_ribbon(aes(ymin = value - sigma, ymax = value + sigma), alpha = 0.25, linetype = 0,
               show.legend = FALSE) +
   geom_line() +
@@ -87,4 +87,4 @@ ggplot(dosePred, aes(epo_level, value, colour = measured, fill = measured)) +
   scale_color_dMod() +
   scale_fill_dMod() +
   theme_dMod() +
-  labs(x = "Epo [units/cell]", y = "log10 signal [a.u.]", colour = "measured at", fill = "measured at")
+  labs(x = "Epo [units/cell]", y = "log10 signal [a.u.]", color = "measured at", fill = "measured at")

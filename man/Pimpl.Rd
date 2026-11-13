@@ -187,5 +187,6 @@ attr(out$C1, "deriv")
 }
 }
 \seealso{
-\code{\link[=Pexpl]{Pexpl()}}, \code{\link[=P]{P()}}
+\code{\link[=Pexpl]{Pexpl()}}, \code{\link[=P]{P()}}; the guide chapter
+\href{https://dmodverse.github.io/dMod2/articles/guide-model.html}{Setting up models}.
 }

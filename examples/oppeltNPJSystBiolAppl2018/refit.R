@@ -1,13 +1,15 @@
-# Fit and profiles of the reduced model of reduced.R, and its likelihood ratio against the full
+# Fit and profiles of the reduced model of reduced.R, and the likelihood ratio against the full
 # model. Saves results/reduced.rds, which plots.R and prediction.R read.
 
 # reduced.R, unless it ran in this session
 if (!exists("objReduced")) source("reduced.R")
 
 ## ---- reducedfit
-# from the full model refitted in profiles.R, then a multistart around that fit
+# from the full model refitted in profiles.R, the basal phosphorylation in the pNFκB complex at
+# the product of the two rates it replaces, then a multistart around that fit
 full <- readRDS("results/profiles.rds")$refit
-start <- c(full$argument, gauge)[outerReduced]
+start <- c(full$argument, gauge, act_Ikb_complex = full$argument[["act_Ikb_Base"]] +
+             full$argument[["eta_act_Ikb_Base_c_pNfkIkb"]])[outerReduced]
 freeReduced <- setdiff(outerReduced, names(gaugeReduced))
 fit <- trust(objReduced, start[freeReduced], fixed = gaugeReduced, rinit = 0.1, rmax = 10,
              iterlim = 1000, tolControl = tolerances)
@@ -27,11 +29,32 @@ removed <- length(full$argument) - length(bestReduced)
 ratio <- c(full = dataFull, reduced = dataReduced, difference = dataReduced - dataFull,
            removed = removed, threshold = qchisq(0.95, removed))
 
-## ---- reducedprofiles
-profilesReduced <- profile(objReduced, bestReduced, names(bestReduced), fixed = gaugeReduced,
-                           limits = c(lower = -7, upper = 7), stepControl = list(stop = "data"),
-                           algoControl = list(reoptimize = TRUE),
-                           optControl = list(iterlim = 100, tolControl = tolerances),
-                           cores = getOption("dMod2.cores"))
+## ---- reducedprofileprior
+# the prior of the profiles of profiles.R, standard deviation 20 at the best fit
+objReducedProfile <- normL2(data, prdReduced, eReduced) + constraintL2(bestReduced, sigma = 20)
+fitReducedProfile <- trust(objReducedProfile, bestReduced, fixed = gaugeReduced, rinit = 0.1,
+                           rmax = 10, iterlim = 1000, tolControl = tolerances)
+bestReducedProfile <- fitReducedProfile$argument
 
-saveRDS(list(fits = fitsReduced, ratio = ratio, profiles = profilesReduced), "results/reduced.rds")
+## ---- reducedprofiles
+# the settings of the full model, with the same restart from a lower point of a profile
+repeat {
+  profilesReduced <- profile(objReducedProfile, bestReducedProfile, names(bestReducedProfile),
+                             fixed = gaugeReduced, limits = c(lower = -7, upper = 7),
+                             stepControl = list(stop = "data"), algoControl = list(reoptimize = TRUE),
+                             optControl = list(iterlim = 100, tolControl = tolerances),
+                             cores = getOption("dMod2.cores"))
+  if (min(profilesReduced$value) > fitReducedProfile$value - 1e-2) break
+  fitReducedProfile <- trust(objReducedProfile, as.parvec(profilesReduced)[names(bestReducedProfile)],
+                             fixed = gaugeReduced, rinit = 0.1, rmax = 10, iterlim = 1000,
+                             tolControl = tolerances)
+  bestReducedProfile <- fitReducedProfile$argument
+}
+
+## ---- reducedsave
+# the md5 of the files the result is computed from, which the guide checks on reading
+sources <- c("model.R", "reduced.R", "refit.R", "data/oppelt2018.csv", "results/profiles.rds")
+saved <- list(fits = fitsReduced, ratio = ratio, fitProfile = fitReducedProfile,
+              profiles = profilesReduced)
+attr(saved, "stamp") <- list(md5 = tools::md5sum(sources), dMod2 = packageVersion("dMod2"))
+saveRDS(saved, "results/reduced.rds")

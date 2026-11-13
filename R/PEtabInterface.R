@@ -1938,7 +1938,8 @@ readPEtabTables <- function(yamlPath) {
 #'   estimated parameter, with the PEtab scales in the attribute
 #'   `"petab_scales"`. The attribute `"petab_meta"` of the list holds what
 #'   [exportPEtabObject()] needs, among it the fixed parameters as `fixed`.
-#' @seealso [exportPEtabObject()], [readPEtabTables()], [importSbml()]
+#' @seealso [exportPEtabObject()], [readPEtabTables()], [importSbml()]; the guide
+#'   chapter [PEtab](https://dmodverse.github.io/dMod2/articles/guide-petab.html).
 #' @examplesIf requireNamespace("reticulate", quietly = TRUE) && requireNamespace("rjson", quietly = TRUE) && requireNamespace("yaml", quietly = TRUE) && reticulate::py_module_available("libsbml")
 #' \donttest{
 #' yaml <- system.file("extdata/petab_boehm/Boehm.yaml", package = "dMod2")
@@ -2721,7 +2722,8 @@ print.petabproblem <- function(x, ...) {
 #'   like an inner parameter keeps the name when the trafo is a pure scale
 #'   wrap; for any other mapping it is written as `<name>_outer`.
 #' @seealso [exportPEtabObject()] for a problem returned by [importPEtab()],
-#'   [importPEtab()].
+#'   [importPEtab()]; the guide chapter
+#'   [PEtab](https://dmodverse.github.io/dMod2/articles/guide-petab.html).
 #' @examplesIf requireNamespace("reticulate", quietly = TRUE) && requireNamespace("rjson", quietly = TRUE) && requireNamespace("yaml", quietly = TRUE) && reticulate::py_module_available("libsbml")
 #' f <- addReaction(eqnlist(), from = "A", to = "", rate = "k*A")
 #' p <- P(eqnvec(A = "exp(logA)", k = "exp(logk)"), condition = "C1",

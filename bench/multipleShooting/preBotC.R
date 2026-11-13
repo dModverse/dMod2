@@ -3,8 +3,8 @@
 # -------------------------------------------------------------------------#
 #
 # [PURPOSE]
-# The model of bench/symmetry/preBotC.R, in the chart its symmetry reduction
-# certifies, fitted to one simulated burst of its voltage: thirteen spikes of
+# The model of bench/symmetry/preBotC.R, in the chart the symmetry reduction
+# certifies, fitted to one simulated burst of the voltage: thirteen spikes of
 # about 2 ms in 700 ms, sampled at 10 kHz with 0.25 mV noise, as a patch-clamp
 # recording would give it. A change of a parameter by a per cent moves the late
 # spikes of the burst by more than their width, so single shooting finds the
@@ -17,19 +17,21 @@
 # 2. From ten starts at 0.02, 0.05 and 0.1 decades from the truth (positive
 #    parameters in log10; potentials, half-activations and slopes by a fifth of
 #    that relatively), single shooting and multiple shooting. A start is a hit
-#    when the single-shooting objective at its end lies within 1 of the
+#    when the single-shooting objective at the end of the fit lies within 1 of the
 #    optimum.
 # 3. A start single shooting misses and multiple shooting hits, against the
 #    data.
 #
 # On 26 Sep 2026, half an hour on twenty cores: single shooting hit from none
 # of the 30 starts, multiple shooting from 4, 4 and 1 of 10 at 0.02, 0.05 and
-# 0.1 decades. Its misses end where single shooting ends, with spikes missing
+# 0.1 decades. The misses of multiple shooting end where single shooting ends, with spikes missing
 # or added.
 #
 # With MS_RESULTS set, the numbers and the trajectories of the figure are
-# written there; vignettes/articles/results/preBotC.rds, which the guide
-# chapter Optimization reads, is that file.
+# written there as an .rds file; no article reads it.
+#
+# Does not run at present: symmetryReduction() no longer returns the
+# `survivorMeaning` of a block, which the reduced chart below reads.
 #
 # [AUTHOR]
 # Simon Beyer
@@ -41,7 +43,7 @@
 # Model 1 of Butera RJ, Rinzel J, Smith JC (1999). J Neurophysiol 82, 382-397,
 # as in bench/symmetry/preBotC.R. The ODE model is built with
 # includeTimeZero = FALSE, which multiple shooting needs: a segment starts at
-# its own node, not at zero. The solver runs at 1e-10: at 1e-8 the objective
+# the segment node, not at zero. The solver runs at 1e-10: at 1e-8 the objective
 # scatters by more than a step predicts far from the optimum. Needs cppDE
 # 0.10.3, whose first step resolves a late start under that tolerance.
 # -------------------------------------------------------------------------#
@@ -121,7 +123,7 @@ truthO <- toOuter(truth.red, logRed)
 # Data: one burst, the voltage at 10 kHz for 700 ms, 0.25 mV noise
 #
 # The window starts at 2100 ms of the trajectory from the published initial
-# state, shortly before the second burst; its state there is the initial state
+# state, shortly before the second burst; the state there is the initial state
 # of the fit, n and h in log10 like every positive quantity.
 # –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
 full <- (x * p)(seq(0, 2100, by = 1), truthO, deriv = FALSE)[[1]]
@@ -232,8 +234,8 @@ traj$run <- factor(traj$run, panels)
 shown <- data$clamp[seq(1, nrow(data$clamp), by = 5), ]
 
 ggplot(traj, aes(time, value)) +
-  geom_point(data = shown, size = 0.15, colour = "grey60") +
-  geom_line(linewidth = 0.3, colour = "#0072B2") +
+  geom_point(data = shown, size = 0.15, color = "gray60") +
+  geom_line(linewidth = 0.3, color = "#0072B2") +
   facet_wrap(~run, ncol = 1) +
   labs(x = "time [ms]", y = "V [mV]",
        title = sprintf("start %d at %.2f decades", pick$start, pick$scale)) +

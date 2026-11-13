@@ -128,5 +128,6 @@ readPEtabTables(yaml)$parameters
 }
 \seealso{
 \code{\link[=exportPEtabObject]{exportPEtabObject()}} for a problem returned by \code{\link[=importPEtab]{importPEtab()}},
-\code{\link[=importPEtab]{importPEtab()}}.
+\code{\link[=importPEtab]{importPEtab()}}; the guide chapter
+\href{https://dmodverse.github.io/dMod2/articles/guide-petab.html}{PEtab}.
 }

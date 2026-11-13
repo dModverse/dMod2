@@ -122,5 +122,7 @@ as.parframe(fits)
 
 }
 \seealso{
-\code{\link[=trust]{trust()}}, \code{\link[=msParframe]{msParframe()}}, \code{\link[=as.parframe]{as.parframe()}}, \code{\link[=load.parlist]{load.parlist()}}
+\code{\link[=trust]{trust()}}, \code{\link[=msParframe]{msParframe()}}, \code{\link[=as.parframe]{as.parframe()}}, \code{\link[=load.parlist]{load.parlist()}}; the guide
+chapters \href{https://dmodverse.github.io/dMod2/articles/guide-optimization.html}{Optimization} and
+\href{https://dmodverse.github.io/dMod2/articles/guide-remote-computing.html}{Remote computing}, which explains \code{cores}.
 }

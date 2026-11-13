@@ -1,0 +1,180 @@
+---
+title: "Migrating from dMod"
+bibliography: refs.bib
+csl: ieee.csl
+link-citations: true
+---
+
+What a dMod [@kaschek2019dmod] script has to change for dMod2.
+
+## Unchanged interface
+
+Function objects and algebra are the same: `Xs()`, `Xf()`, `Y()`, `P()`, `Pexpl()`, `Pimpl()`,
+`normL2()`, `constraintL2()`, `datapointL2()`, with `*` for concatenation, `+` for conditions or
+objective terms, and `normL2(data, g * x * p)`. `eqnlist()`, `addReaction()`, `define()`,
+`insert()`, `branch()`, `repar()`, `trust()`, `mstrust()`, `profile()` and `plot*()` keep names
+and main arguments. dMod2 has `getSymbols()` and `replaceSymbols()`, so `library(cOde)` is not
+needed.
+
+## Substitution syntax
+
+`define()`, `insert()`, `repar()` and `branch(apply = )` take `"lhs <- rhs"`; `"lhs ~ rhs"` is an
+error naming the new form.
+
+| dMod | dMod2 |
+|---|---|
+| `define(trafo, "x ~ x", x = pars)` | `define(trafo, "x <- x", x = pars)` |
+| `insert(trafo, "x ~ exp(x)", x = pars)` | `insert(trafo, "x <- exp(x)", x = pars)` |
+| `insert(trafo, "x ~ x*x_OE", dose == 10, ...)` | `insert(trafo, "x <- x*x_OE", dose == 10, ...)` |
+
+Placeholders in `...`, branch table columns in scope, unnamed logical condition selectors and
+`conditionMatch` are unchanged.
+
+`~` now writes effect formulas: on a branched transformation, `insert()` takes an unquoted formula
+and replaces the symbol by a linear predictor over the branch table columns, fixed and random
+effects in lme4 notation:
+
+```{r, eval = FALSE}
+trafo <- branch(trafo, table = covariates)        # one row per condition, columns ID and wt
+trafo <- insert(trafo, "x <- exp(x)", x = c("ka", "cl"))
+trafo <- insert(trafo, x ~ 1 + (1 | ID), x = c("ka", "cl"))
+trafo <- insert(trafo, v ~ wt + (1 | gr(ID, dist = laplace())))
+randomEffects(trafo)
+```
+
+See [Group-specific effects](guide-group-effects.html) and
+[Nonlinear mixed-effects models](guide-nlme.html).
+
+## Backend and compilation
+
+The default `odemodel(backend = "cppDE")` generates C++ code through
+[cppDE](https://dmodverse.github.io/cppDE/); `"Sundials"` runs CVODES through `cppDE::cvode()`,
+`"deSolve"` keeps the dMod path with code compiled by cOde.
+
+Every function object is compiled. With `compile = FALSE` only sources are written, and one
+`compile()` builds them into one shared object:
+
+:::: {.row}
+::: {.col-md-6}
+**dMod**
+
+```{r, eval = FALSE}
+x <- Xs(odemodel(r, modelname = "x"))
+g <- Y(obs, r, attach.input = FALSE)
+p <- P(trafo, condition = "C1")
+```
+:::
+
+::: {.col-md-6}
+**dMod2**
+
+```{r, eval = FALSE}
+x <- Xs(odemodel(r, modelname = "x", compile = FALSE))
+g <- Y(obs, x, modelname = "g", compile = FALSE)
+p <- P(trafo, condition = "C1", modelname = "p", compile = FALSE)
+compile(x, g, p, output = "model")
+```
+:::
+::::
+
+Files go to `outdir`, default `getOption("dMod2.outdir")`, else the working directory.
+
+| dMod | dMod2 |
+|---|---|
+| `odemodel(solver = )` | `odemodel(backend = c("cppDE", "Sundials", "deSolve"))` |
+| `odemodel(outputs = , estimate = , gridpoints = )` | `...`, deSolve only |
+| `Xs(optionsOde = , optionsSens = )` | `Xs(options = , optionsSens = )`, see `cppDE::solveODE()` |
+| `Xs(fcontrol = )` | deSolve only |
+| none | `deriv2 = TRUE` in `odemodel()`, `Y()`, `P()`: exact second derivatives |
+
+## Renamed arguments
+
+Dotted argument names are lowerCamelCase.
+
+| dMod | dMod2 | in |
+|---|---|---|
+| `attach.input` | `attachInput` | `Y()`, `Pexpl()` |
+| `keep.root` | `keepRoot` | `Pimpl()` |
+| `attr.name` | `attrName` | `normL2()`, `constraintL2()`, `datapointL2()` |
+| `split.by`, `keep.covariates` | `splitBy`, `keepCovariates` | `as.datalist()` |
+| `sort.by` | `sortBy` | `as.parframe()` of a parlist |
+| `obj.attributes` | `objAttributes` | `parframe()` |
+| `studyname` | `name`, default `"mstrust"` | `mstrust()` |
+| `value` | `parameter` | `datapointL2()` |
+| `nameFlux` | `legendTitle` | `plotFluxes()` |
+| `atr` | `which` | `attrs()` |
+| `S` (stoichiometric matrix) | `eqnlist` | `conservedQuantities()` |
+
+## Optimization
+
+`trust()` drops `parscale`, `fterm`, `mterm`; thresholds go to `tolControl`, step settings to
+`stepControl`.
+
+| dMod | dMod2 |
+|---|---|
+| `trust(..., fterm = , mterm = )` | `trust(..., tolControl = list(ftol = , mtol = , gtol = ))` |
+| `trust(parscale = )` | removed |
+| Gauss-Newton Hessian only | `hessianMethod = c("gn", "bfgs", "sr1", "exact")` |
+| `mstrust(..., studyname = "fits")` | `mstrust(..., name = "fits", resultPath = ".")` |
+| `mstrust(cores = )` | `cores = n`, or `c(fits = , conditions = )` |
+
+## Profile likelihood
+
+`profile(obj, pars, whichPar)` keeps `method`, `stepControl`, `algoControl` and defaults. Changes:
+
+| dMod | dMod2 |
+|---|---|
+| `optControl = list(fterm = , mterm = )` | any `trust()` argument, e.g. `tolControl` |
+| `stepControl = list(stop = "data")` | `stop`: also any numeric attribute of the objective |
+| threshold `qchisq(1 - alpha, 1)` | `delta = `, e.g. `profileThreshold(method = "F", n = , p = )` |
+| both sides | `side = c("both", "left", "right")` |
+| `algoControl = list(W = "hessian")`: Gauss-Newton | exact Hessian with `deriv2 = TRUE` |
+| `cores = ` over parameters | `cores = n`, or `c(pars = , conditions = )` |
+| none | attribute `"ends"`: steps and stop reason per side |
+| none | `sparse = "auto"`: sparse Hessian where available |
+
+`confint()` uses the data term by default, `val.column = "value"` the whole objective; see
+[Profile likelihood](methods-profiles.html) for the method. Stop reasons in `"ends"` are threshold,
+limit, step limit or error.
+
+## Steady states
+
+`Pimpl()` solves by pseudo-transient continuation in C++ instead of `rootSolve::multiroot()`.
+On an eqnlist, `flow = TRUE` (default) returns the stable steady state reached by the flow;
+settings such as `positive` go to `controlsPTC`. `P(eqnlist)` without `method` is implicit,
+`steadyStates()` derives an analytic transformation.
+
+## Removed functions
+
+| dMod | dMod2 |
+|---|---|
+| `priorL2(mu, lambda)` | `constraintL2(mu, sigma)` |
+| `nll()` | `normL2(optBLOQ = c("M3", "M1", "M4NM", "M4BEAL"))` |
+| `mname()` | `modelname()` |
+| `funC0()` | `cppDE::cppFUN()` |
+| `ginv()` | `MASS::ginv()` |
+| `wide2long(prediction)` | `as.data.frame(prediction)` |
+
+## Changed defaults
+
+These run without error but give results different from dMod.
+
+- `odemodel()`: cppDE (BDF) instead of deSolve `lsoda`; trajectories differ within tolerances.
+- `Y()`: `attachInput = FALSE`, `g * x` returns observables only.
+- `P()`: an eqnlist as `trafo` gives an implicit transformation.
+- `trust()`: `iterlim = 1000` instead of `100`, `tolControl` with `ftol = mtol = gtol = 1e-6`;
+  `mstrust()` passes both on.
+- `mstrust()`: `retry = TRUE` restarts a fit that errors, up to `nTries = 10` attempts.
+- `compile()`: `cores = detectFreeCores()` instead of `1`.
+- `confint()`: `val.column = "data"` instead of `"value"`, a prior no longer narrows the interval.
+- `fitErrorModel()`: `plotting = FALSE`.
+
+## Further reading
+
+- [Get started](dMod2.html): one small model end to end.
+- [Guide](guide-model.html): a published model from setup to
+  [optimization](guide-optimization.html) and [profile likelihood](guide-profiles.html).
+- [Installation and troubleshooting](installation.html): compilers, Python, SBML.
+- [cppDE](https://dmodverse.github.io/cppDE/): solver options and the expression language.
+
+## References

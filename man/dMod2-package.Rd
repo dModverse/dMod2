@@ -52,6 +52,8 @@ Data and objectives: \code{\link[=as.datalist]{as.datalist()}}, \code{\link[=nor
 Fitting and uncertainty: \code{\link[=trust]{trust()}}, \code{\link[=mstrust]{mstrust()}}, \link[=profile.objfn]{profile()},
 \code{\link[=plotProfile]{plotProfile()}}. Exchange formats: \code{\link[=importPEtab]{importPEtab()}}, \code{\link[=exportPEtab]{exportPEtab()}}.
 Identifiability: \code{\link[=symmetryDetection]{symmetryDetection()}}.
+Articles: \href{https://dmodverse.github.io/dMod2/articles/dMod2.html}{Get started},
+\href{https://dmodverse.github.io/dMod2/articles/installation.html}{Installation and troubleshooting}.
 }
 \author{
 \strong{Maintainer}: Simon Beyer \email{simon.beyer@fdm.uni-freiburg.de}

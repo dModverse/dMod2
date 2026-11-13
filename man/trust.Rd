@@ -374,8 +374,8 @@ Not available then: \code{hessianMethod = "exact"}, more than one phase,
 \code{boundary = "clip"}, \code{minimize = FALSE} and \code{traceFile}.
 The run reports \code{converged = TRUE} only when the scaled gaps between
 the segments are below \code{tolControl$ctol}. The method is described in
-the guide chapter
-\href{https://dmodverse.github.io/dMod2/articles/guide-optimization.html}{Optimization}.
+the methods article
+\href{https://dmodverse.github.io/dMod2/articles/methods-multiple-shooting.html}{Multiple shooting}.
 }
 
 \examples{
@@ -439,5 +439,6 @@ multiple shooting. \emph{IET Systems Biology} 1(2), 78-88.
 \code{\link[=mstrust]{mstrust()}} for multi-start fits, \link[=profile.objfn]{profile()} for
 profile likelihoods, \code{\link[=normL2]{normL2()}} for the objective,
 the guide chapter
-\href{https://dmodverse.github.io/dMod2/articles/guide-optimization.html}{Optimization} for the method.
+\href{https://dmodverse.github.io/dMod2/articles/guide-optimization.html}{Optimization}, the methods
+article \href{https://dmodverse.github.io/dMod2/articles/methods-trust.html}{Trust-region optimization}.
 }

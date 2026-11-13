@@ -3,13 +3,13 @@
 #   Rscript bench/numSteady/exact.R [n per arm] [outdir]
 #
 # Per arm the perturbation parameters are substituted and steadyStates()
-# parametrises the steady states of the model without ligand states (they are 0
+# parametrizes the steady states of the model without ligand states (they are 0
 # at steady state). Random values of the free symbols (rate constants, states,
 # flux ratios r_*) give exact steady states with their parameters. Pimpl, built
 # on the full model, gets the same parameters and the totals of the exact state
 # and has to return it, cold (all states start at 1) and started at the exact
-# state. A cold result that differs is checked to be a stable steady state of
-# its own (a second basin). Exact states that are not stable are counted apart.
+# state. A cold result that differs is checked to be a separate stable steady
+# state (a second basin). Exact states that are not stable are counted apart.
 
 args   <- commandArgs(TRUE)
 nper   <- if (length(args) >= 1L) as.integer(args[1]) else 40L
@@ -27,7 +27,7 @@ pss <- Pimpl(full$reactions, forcings = full$forcings, compile = TRUE, modelname
              keepRoot = FALSE)
 E   <- environment(attr(pss, "mappings")[[1]])
 dep <- E$dependent
-# the right-hand side, its Jacobian, and the leading eigenvalue of the Jacobian on ker C
+# the right-hand side, the Jacobian, and the leading eigenvalue of the Jacobian on ker C
 rhs <- function(x, pv) {
   f <- E$PEval$func(matrix(x[dep], 1, dimnames = list(NULL, dep)), pv[E$parms_all])
   setNames(f[1, ], dimnames(f)[[2]])
@@ -71,7 +71,7 @@ evalSS <- function(ss, free) {
 set.seed(1); res <- list()
 for (a in names(arms)) {
   sym <- symbolic(arms[[a]])
-  if (is.null(sym)) { cat(a, ": steadyStates() found no parametrisation\n"); next }
+  if (is.null(sym)) { cat(a, ": steadyStates() found no parametrization\n"); next }
   ss <- sym$ss
   # free: symbols that are not solved for; a free state maps to itself
   solved   <- names(ss)[unlist(ss) != names(ss)]
@@ -103,7 +103,7 @@ for (a in names(arms)) {
     t <- system.time(o <- tryCatch(pss(p, deriv = TRUE)[[1]], error = function(e) conditionMessage(e)))[3]
     ok <- !is.character(o)
     err <- relErr(o)
-    # a differing cold root: a steady state of its own and stable?
+    # a differing cold root: a separate steady state and stable?
     other <- NA
     if (ok && err > 1e-6) {
       xo <- unclass(o)[dep]; pv <- p

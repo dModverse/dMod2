@@ -18,7 +18,7 @@
 # The model is the one of demo/Boehm_JProteomeRes2014.R, built
 # here so the script stands alone. The Gauss-Newton-seeded arms dominate the run
 # time, because they spend the whole iteration cap on most starts. Run from the
-# package root, which holds the shared catalogue of settings.
+# package root, which holds the shared catalog of settings.
 # -------------------------------------------------------------------------#
 
 library(dMod2)
@@ -50,7 +50,7 @@ reactions <- eqnlist() |>
   addReaction("nucpBpB", "2*STAT5B", "k_exp_homo*nucpBpB",   compartment = "nuc") |>
   setCompartmentVolume(cyt = "1.4")
 
-# The optimiser can only resolve what the integrator delivers, so the tolerances
+# The optimizer can only resolve what the integrator delivers, so the tolerances
 # are set explicitly rather than left at their defaults.
 myOptions <- list(atol = 1e-8, rtol = 1e-6, maxattempts = 100L, maxsteps = 1e6)
 model <- odemodel(reactions, modelname = "boehm_ode", compile = FALSE,
@@ -112,7 +112,7 @@ run <- function(...)
                       rinit = 0.1, rmax = 10, iterlim = 5000,
                       parlower = parlower, parupper = parupper, ...))
 
-# Every variant of the shared catalogue.
+# Every variant of the shared catalog.
 source(file.path("bench", "hessian", "hessianSourceSettings.R"))
 
 frames <- lapply(hessianSourceSettings, function(a) do.call(run, a))

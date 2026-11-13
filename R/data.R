@@ -28,8 +28,8 @@ NULL
 #'   `sigma`, `lloq` (lower limit of quantification, `-Inf` throughout) and
 #'   `condition`.
 #' @seealso The example project
-#'   [bileAcidTransport](https://dmodverse.github.io/dMod2/articles/bileAcidTransport.html) builds and fits the
-#'   model.
+#'   [Bile acid transport](https://dmodverse.github.io/dMod2/articles/bileAcidTransport.html)
+#'   builds and fits the model.
 #' @examples
 #' data(badata)
 #' plotData(as.datalist(badata))
@@ -70,7 +70,8 @@ NULL
 #' `Bachmann_MSB2011`, which is installed with the package, see
 #' `system.file("extdata", "petab_bachmann", package = "dMod2")`.
 #' @seealso The example project
-#'   [bachmannMSB2011](https://dmodverse.github.io/dMod2/articles/bachmannMSB2011.html) builds and fits the model.
+#'   [JAK2-STAT5 signaling (Bachmann 2011)](https://dmodverse.github.io/dMod2/articles/bachmannMSB2011.html)
+#'   builds and fits the model.
 #' @examples
 #' data(bachmann)
 #' head(bachmann)
@@ -96,8 +97,8 @@ NULL
 #' Values as distributed in the PEtab benchmark collection, model
 #' `Boehm_JProteomeRes2014`.
 #' @seealso The example project
-#'   [boehmJProteomeRes2014](https://dmodverse.github.io/dMod2/articles/boehmJProteomeRes2014.html) builds and fits
-#'   the model.
+#'   [STAT5 dimerization (Boehm 2014)](https://dmodverse.github.io/dMod2/articles/boehmJProteomeRes2014.html)
+#'   builds and fits the model.
 #' @examples
 #' data(boehm)
 #' plotData(as.datalist(boehm))
@@ -254,8 +255,9 @@ lbind <- function(mylist) {
 #' molecular mechanisms regulating sensitization of interferon alpha signal
 #' transduction. Mol Syst Biol 16:e8955, \doi{10.15252/msb.20198955}. Values
 #' as fitted for the Huh7.5 core model of the publication.
-#' @seealso The example project [kokMSB2020](https://dmodverse.github.io/dMod2/articles/kokMSB2020.html) builds
-#'   the model.
+#' @seealso The example project
+#'   [IFN-α sensitization (Kok 2020)](https://dmodverse.github.io/dMod2/articles/kokMSB2020.html)
+#'   builds the model.
 #' @examples
 #' data(kok)
 #' head(kok)
@@ -294,7 +296,8 @@ NULL
 #'   O'Reilly RA, Aggeler PM (1968), Studies on coumarin anticoagulant drugs:
 #'   initiation of warfarin therapy without a loading dose. Circulation
 #'   38:169-177.
-#' @seealso The example project [pharmacometrics](https://dmodverse.github.io/dMod2/articles/pharmacometrics.html)
+#' @seealso The example project
+#'   [Theophylline, warfarin and mavoglurant](https://dmodverse.github.io/dMod2/articles/pharmacometrics.html)
 #'   fits a PK/PD model.
 #' @examples
 #' data(warfarin)
@@ -333,7 +336,8 @@ NULL
 #'   L (2016), Reduction of a whole-body physiologically based pharmacokinetic
 #'   model to stabilise the Bayesian analysis of clinical data. The AAPS
 #'   Journal 18(1):196-209.
-#' @seealso The example project [pharmacometrics](https://dmodverse.github.io/dMod2/articles/pharmacometrics.html)
+#' @seealso The example project
+#'   [Theophylline, warfarin and mavoglurant](https://dmodverse.github.io/dMod2/articles/pharmacometrics.html)
 #'   fits a two-compartment model with variability between occasions.
 #' @examples
 #' data(mavoglurant)

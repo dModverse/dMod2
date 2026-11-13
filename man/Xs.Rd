@@ -251,5 +251,9 @@ head(x(times, pars, deriv = FALSE)[[1]])
 }
 \seealso{
 \code{\link[=Xf]{Xf()}} for predictions without sensitivities, \code{\link[=controls]{controls()}},
-\code{\link[cppDE:solveODE]{cppDE::solveODE()}}.
+\code{\link[cppDE:solveODE]{cppDE::solveODE()}}; the guide chapters
+\href{https://dmodverse.github.io/dMod2/articles/guide-model.html}{Setting up models} and
+\href{https://dmodverse.github.io/dMod2/articles/guide-sensitivities.html}{Sensitivities}, the methods
+article \href{https://dmodverse.github.io/dMod2/articles/methods-sensitivities.html}{Sensitivities and Hessians}
+and the cppDE article \href{https://dmodverse.github.io/cppDE/articles/methods-forward.html}{Forward sensitivities}.
 }

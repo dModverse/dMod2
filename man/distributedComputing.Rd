@@ -204,5 +204,6 @@ job <- distributedComputing(NULL, jobname = "slurmfits", recover = TRUE)
 }
 }
 \seealso{
-\code{\link[=localNode]{localNode()}}, \code{\link[=slurmTemplate]{slurmTemplate()}}, \code{\link[=dMod2Jobs]{dMod2Jobs()}}, \code{\link[=detectFreeCores]{detectFreeCores()}}
+\code{\link[=localNode]{localNode()}}, \code{\link[=slurmTemplate]{slurmTemplate()}}, \code{\link[=dMod2Jobs]{dMod2Jobs()}}, \code{\link[=detectFreeCores]{detectFreeCores()}}; the
+guide chapter \href{https://dmodverse.github.io/dMod2/articles/guide-remote-computing.html}{Remote computing}.
 }

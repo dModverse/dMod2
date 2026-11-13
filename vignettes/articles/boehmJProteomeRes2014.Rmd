@@ -1,5 +1,5 @@
 ---
-title: "Boehm 2014"
+title: "STAT5 dimerization (Boehm 2014)"
 ---
 
 ```{r, echo = FALSE, results = "asis"}

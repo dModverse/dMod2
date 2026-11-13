@@ -125,7 +125,8 @@
 #'   `~/.cache/symident` on Linux). The other switches are diagnostic, see the
 #'   symident documentation at <https://dmodverse.github.io/symident/>.
 #'
-#' @seealso [symmetryReduction()], [reconstControl()]
+#' @seealso [symmetryReduction()], [reconstControl()]; the guide chapter
+#'   [Symmetries](https://dmodverse.github.io/dMod2/articles/guide-symmetries.html).
 #' @examplesIf requireNamespace("reticulate", quietly = TRUE) && reticulate::py_module_available("symident")
 #' f <- eqnvec(m = "ktx - dm*m", p = "ktl*m - dp*p")
 #' g <- eqnvec(y = "p")

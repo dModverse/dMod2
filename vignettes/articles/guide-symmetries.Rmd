@@ -1,5 +1,8 @@
 ---
 title: "2. Symmetries"
+bibliography: refs.bib
+csl: ieee.csl
+link-citations: true
 ---
 
 ```{r, include = FALSE, purl = FALSE}
@@ -7,7 +10,7 @@ knitr::opts_chunk$set(collapse = TRUE, comment = "#>", fig.width = 8, fig.height
                       fig.retina = 2, message = FALSE)
 project <- normalizePath("../../examples/oppeltNPJSystBiolAppl2018")
 knitr::opts_knit$set(root.dir = project)
-detected <- file.exists(file.path(project, "results", "symmetries.rds"))
+source("results/stored.R")
 knitr::read_chunk("../../examples/oppeltNPJSystBiolAppl2018/model.R")
 knitr::read_chunk("../../examples/oppeltNPJSystBiolAppl2018/symmetries.R")
 # a count as the text writes it
@@ -15,12 +18,11 @@ inWords <- function(n) if (n %in% 1:12) c("one", "two", "three", "four", "five",
   "eight", "nine", "ten", "eleven", "twelve")[n] else format(n)
 ```
 
-Before a model meets its data, its equations decide which parameters it can determine at all. If
-a continuous family of parameter values gives the same prediction for every observable, no data
-of these observables, however many and however precise, can tell its members apart. This chapter
-finds such families in the model of [chapter 1](guide-model.html) with `symmetryDetection()`, which
-calls the Python package [symident](https://dmodverse.github.io/symident/), and removes them before
-the fit. The code is `symmetries.R` and the last part of `model.R`.
+If a continuous family of parameter values gives the same prediction for every observable, no
+data of these observables can tell the members apart. `symmetryDetection()`, through the Python
+package [symident](https://dmodverse.github.io/symident/), finds such families in the model of
+[Setting up models](guide-model.html); they are removed before the fit. Code: `symmetries.R` and
+the end of `model.R`.
 
 ```{r setup, echo = FALSE}
 ```
@@ -46,244 +48,122 @@ the fit. The code is `symmetries.R` and the last part of `model.R`.
 ```{r transformation, echo = FALSE}
 ```
 
-```{r compile, echo = FALSE}
+```{r compile, echo = FALSE, warning = FALSE}
 ```
 
 ```{r objective, echo = FALSE}
 ```
 
-## Structural identifiability
+## Lie symmetries and detection
 
-Write the model as
+Such a family is the orbit of a Lie symmetry with a generator, a vector field on the parameters.
+Most symmetries of reaction networks are scalings: the moved parameters are multiplied by powers
+of one factor, and on log scale an orbit is a straight line. symident obtains the generators as
+the kernel of the observability-identifiability matrix, built from the Lie derivatives of the
+observables, and proves scalings exactly; see
+[Methods > Structural identifiability and Lie symmetries](methods-symmetries.html).
 
-$$\dot x = f(x, u(t), \theta), \qquad x(t_0) = x_0(\theta), \qquad y = h(x, \theta),$$
+## Detection settings
 
-with the states $x$, an input $u$, here TNFα, the observables $y$, and the parameters
-$\theta \in \Theta \subseteq \mathbb{R}^d$, rate constants, totals and observation parameters
-alike. The prediction is $g(t; \theta) = h(x(t), \theta)$. The model is *locally structurally
-identifiable* at $\theta$ if no other $\tilde\theta$ near $\theta$ has the same prediction,
-$g(\cdot; \tilde\theta) = g(\cdot; \theta)$. The property is *structural*: it is decided by the
-equations alone, as if every observable were measured exactly and continuously in time, and it is
-stated for generic $\theta$, for all values outside a set of measure zero. A structural
-non-identifiability makes the likelihood exactly flat along a curve in $\Theta$, whatever the data.
+- `equilibrate = TRUE`: the cells start at the steady state without TNFα, so initial values are
+  functions of the parameters.
+- `reduceCQ = TRUE`: one species per conserved moiety is eliminated, symmetries act on the totals,
+  the parameters of `Pimpl()`.
+- `forcings = "TNF"`: TNFα is an input state, 0 at rest and set by the event at time 0.
+- `conditions`: the two doses; a direction is non-identifiable only if it is so in both.
 
-## Lie symmetries
+The imaging readouts bleach, $y = \log(s x + o) - \tau t$; $e^{-\tau t}$ is no function of the
+states of a model at rest. In the control the states are constant and the slope of an imaging
+readout is $-\tau$ alone, so the bleaching rates are in no symmetry, and `symmetries.R` drops the
+bleaching terms.
 
-A continuous family of parameter values with the same prediction is the orbit of a *Lie symmetry*,
-a one-parameter group of transformations $\Phi_\varepsilon$ of $\Theta$ with
-$g(t; \Phi_\varepsilon(\theta)) = g(t; \theta)$ for all $t$ and $\varepsilon$ near 0. The group is
-determined by its *generator*, the vector field of its velocities at $\varepsilon = 0$,
+## Symmetries of the full model
 
-$$X = \sum_{i=1}^d \xi_i(\theta)\, \frac{\partial}{\partial \theta_i}, \qquad
-\xi(\theta) = \frac{\partial \Phi_\varepsilon(\theta)}{\partial \varepsilon}\Big|_{\varepsilon = 0},$$
-
-and the orbit through $\theta$ is the integral curve of $X$. A function $I(\theta)$ with
-$X(I) = \sum_i \xi_i\, \partial I / \partial \theta_i = 0$ is an *invariant*, constant along every
-orbit. The prediction depends on $\theta$ only through the invariants, and the number of
-combinations of parameters that the observables determine is $d$ minus the number of independent
-generators.
-
-The simplest and in reaction networks the most common symmetries are *scalings*,
-$\xi_i(\theta) = w_i \theta_i$ with integer weights $w_i$. Their orbits are
-$\theta_i \mapsto e^{w_i \varepsilon} \theta_i$, and on the log scale of the parameters they are
-straight lines: $\log \theta_i$ moves by $w_i \varepsilon$. Two examples from the model of
-chapter 1:
-
-- An observable `s * (A + B) + off` measures the species only up to the scale `s`. If every
-  concentration of a moiety is multiplied by $\lambda$, and every rate constant of a reaction of
-  second order in it divided by $\lambda$, the dynamics of the other species are unchanged, and the
-  scale divided by $\lambda$ restores the observable. The generator moves the total of the moiety,
-  the scales of all its observables and the bimolecular rate constants together.
-- TNFα produces active receptors at the rate `uptake * TNF`. Only the product of the uptake and the
-  dose enters the equations; with the dose known, the uptake is determined, but the active receptor
-  is observed nowhere, and its level trades against the rate constant of IKK activation.
-
-A symmetry need not be a scaling. Merkt, Timmer and Kaschek (2015, Phys Rev E 92:012920) found in
-another model of NFκB signalling the transformation $u \mapsto u / (1 - \varepsilon u)$,
-$k_0 \mapsto k_0 + \varepsilon$ of an input amplitude $u$ and a constant $k_0$, with the
-generator $X = u^2 \partial_u + \partial_{k_0}$. It leaves $k_1 u / (1 + k_0 u) = k_1 / (1/u + k_0)$
-unchanged: in $w = 1/u$ it is the translation $w \mapsto w - \varepsilon$, and only the sum
-$1/u + k_0$ is determined. A method that looks for scalings alone misses it; symident finds general
-generators with rational components.
-
-## Detection
-
-symident decides identifiability from the Taylor series of the prediction in time. The parameters
-and the time are added to the states, $z = (x, \theta, t)$ with $\dot\theta = 0$ and $\dot t = 1$,
-so that the model is the vector field $F = f\, \partial_x + \partial_t$. Applied to a function
-$\varphi(z)$, $F$ gives its rate of change along a solution, and the *Lie derivatives* of the
-observables are
-
-$$L_F^0 h = h, \qquad L_F^{k+1} h = F\bigl(L_F^k h\bigr).$$
-
-For an analytic model they fix the prediction at the initial time,
-
-$$g(t; \theta) = \sum_{k \ge 0} \frac{(t - t_0)^k}{k!}\, L_F^k h\bigl(z_0(\theta)\bigr),$$
-
-so two parameter values with the same Lie derivatives at $t_0$ have the same prediction. Collected
-up to order $N$ they form $\Psi_N(\theta)$, and its Jacobian is the observability-identifiability
-matrix
-
-$$\mathrm{OIM}_N(\theta) = \frac{\partial \Psi_N(\theta)}{\partial \theta}.$$
-
-A generator leaves every Lie derivative unchanged, so its vector $\xi(\theta)$ lies in the kernel
-of $\mathrm{OIM}_N(\theta)$; at a generic $\theta$ the kernel consists exactly of these vectors.
-The model is identifiable when the matrix has full rank $d$. symident computes the matrix in exact
-arithmetic over a finite field $\mathbb{F}_p$ at a random point, where a rank can only fall below
-its generic value, with a small probability that it confirms at further primes and points; it
-proves the order $N$ sufficient where it can, and reconstructs the kernel vectors as exact rational
-functions $\xi(\theta)$, which it then checks over the rationals.
-
-The cells start at rest: `equilibrate = TRUE` takes the initial state from $f(x, 0, \theta) = 0$,
-with the inputs at 0, so the initial values are functions of the parameters and not free. The
-conserved moieties leave a family of steady states; `reduceCQ = TRUE` eliminates one species per
-moiety and reports the freedom on the totals, the parameters of `Pimpl()`. TNFα is an input state,
-`forcings = "TNF"`, which is 0 at rest and set by the event at time 0. The two conditions differ in
-the dose, given by `conditions`; a direction is non-identifiable only if it is non-identifiable in
-both.
-
-The imaging readouts bleach, $y = \log(s x + o) - \tau t$. symident writes an observable
-$a \log h + c$ through $h$, and the bleaching would make $h$ contain $e^{-\tau t}$, a function of
-the clock time that a start at rest does not admit. The bleaching rates take no part in a symmetry,
-though: in the control the cells rest, the states are constant, and the slope of an imaging readout
-is $-\tau$ alone. `symmetries.R` therefore analyses the observables without the bleaching terms.
-
-## The full model
-
-```{r, echo = FALSE, results = "asis", eval = !detected}
-cat("> Results pending: `results/symmetries.rds` of the project is written by `symmetries.R`.\n")
+```{r, echo = FALSE}
+invisible(stored("results/symmetries.rds", "symmetries.R"))
+invisible(stored("results/reduction.rds", "symmetries.R"))
 ```
 
 ```{r symmetries, eval = FALSE}
 ```
 
-```{r, eval = detected}
+```{r}
 symmetries <- readRDS("results/symmetries.rds")
 symmetries
 ```
 
-```{r, include = FALSE, eval = detected}
+```{r, include = FALSE}
 types <- vapply(symmetries$symmetries, `[[`, "", "type")
-general <- symmetries$symmetries[types == "general"]
 ```
 
 The rank of the observability-identifiability matrix is `r symmetries$rank` of
-`r symmetries$dim` coordinates, proven, and the kernel is spanned by
-`r inWords(length(types))` directions, each proven over the rationals:
-`r inWords(sum(types == "scaling"))` scalings and `r inWords(length(general))` general direction.
-The `r inWords(length(types))` generators are a basis of the kernel; symident prints one basis,
-and a sum of its generators is a symmetry as well. Up to such sums, the scalings fall into five
-kinds.
+`r symmetries$dim` coordinates, proven; the kernel is spanned by
+`r inWords(length(types))` scalings, each proven over the rationals. The `r inWords(length(types))` printed generators
+are one basis, sums of them are symmetries too. Up to such sums there are four kinds.
 
-- **Unobserved intermediates.** The active receptor `TNFR`, the IκBα transcript `mIkb`, the A20
-  transcript and the A20 protein are measured nowhere, or, A20, only up to a scale. Each enters
-  the rest of the network through a product of its level and the rate constant it drives, and a
-  level multiplied by $\lambda$ is undone by its production rate multiplied by $\lambda$ and the
-  rate it drives divided by $\lambda$: $X_1$ for the receptor (`uptake`, `act_Ikk_by_TNF`), $X_4$
-  for the IκBα transcript (`prod_mIkb_by_nNfk`, `prod_Ikb`), $X_6$ for the A20 transcript
-  (`build_RnaA20`, `build_A20`). In $X_7$ the A20 protein moves its production, the constant
-  `inh_Ikk` of its inhibition of IKK, which enters as `A20 / inh_Ikk`, and the scale of its
-  imaging readout.
-- **Relative measurements.** Blots and imaging give no absolute amounts. $X_2$ divides the total
-  of IKK, and with it every form, by $\lambda$ and multiplies the rate constants of the
-  phosphorylations IKK catalyses and the scale of the pIKK blot by $\lambda$; the IKK cycle is
-  linear in IKK, so its dynamics only scale.
-  NFκB and IκBα scale together: every form multiplied by $\lambda$, the constant of complex
-  formation, of second order in them, and the scales of their readouts divided by $\lambda$. The
-  printed $X_3$ is this direction plus $X_4$, $X_5$ and $X_6$ and minus $X_7$, which is why it also
-  moves the nuclear volume and the production of IκBα.
-- **The nuclear volume.** At fixed amounts, a larger nucleus has lower nuclear concentrations. In
-  $X_5$ the volume `Vnuc` grows, the nuclear concentrations fall, and the rates that read them, the
-  transcription of IκBα and A20 and the formation of the nuclear complex, and the scale of nuclear
-  NFκB grow to compensate.
+- **Unobserved intermediates.** Active receptor `TNFR`, IκBα transcript `mIkb`, A20 transcript and
+  A20 protein are unmeasured, A20 only up to a scale. Each acts through the product of level and
+  driven rate constant: level and production rate times $\lambda$, driven rate divided by
+  $\lambda$. $X_1$: receptor (`uptake`, `act_Ikk_by_TNF`); $X_4$: IκBα transcript
+  (`prod_mIkb_by_nNfk`, `prod_Ikb`); $X_6$: A20 transcript (`build_RnaA20`, `build_A20`). $X_7$
+  moves A20 with the A20 production, the IKK inhibition constant `inh_Ikk` (entering as
+  `A20 / inh_Ikk`) and the scale of the A20 imaging readout.
+- **Relative measurements.** Blots and imaging give no absolute amounts. $X_2$ divides the IKK
+  total and every IKK form by $\lambda$ and multiplies the IKK-catalyzed phosphorylation rates and
+  the pIKK blot scale by $\lambda$; the IKK cycle is linear in IKK. NFκB and IκBα scale together:
+  every form times $\lambda$; complex formation (second order), the readout scales and the A20
+  transcription driven by nuclear NFκB divided by $\lambda$. The printed $X_3$ is this direction
+  plus $X_4$ and $X_5$, hence it also moves nuclear volume and IκBα production.
+- **Nuclear volume.** In $X_5$ `Vnuc` grows at fixed amounts, nuclear concentrations fall, and the
+  rates reading them (transcription of IκBα and A20, nuclear complex formation) and the scale of
+  nuclear NFκB grow to compensate.
 - **A product.** `split_NfkIkb` appears only multiplied by `eta_split_pNfkpIkb` ($X_8$).
-- **The ligand.** Nothing in the experiment moves the ligand away from its resting level
-  $u = \mathrm{prod\_L} / \mathrm{degrad\_L}$, so only that level enters the prediction, and $X_9$
-  multiplies secretion and decay together.
 
-## A general direction
+## Symmetry reduction
 
-$X_{10}$ is not a scaling. The receptors see TNFα and the ligand together. The dose of TNFα is
-known, 0 at rest and 1 after the stimulus, so the rate of receptor activation takes two values,
-
-$$v_0 = \frac{\mathrm{uptake}\; u}{1 + K_R\, u}, \qquad
-  v_1 = \frac{\mathrm{uptake}\,(1 + u)}{1 + K_R\,(1 + u)},$$
-
-which three parameters, `uptake`, $K_R$ and the level $u$, produce. $X_{10}$ moves all three and
-keeps both values: applied to $v_0$ and to $v_1$ its components cancel. Along an orbit, after a
-change of the curve parameter, the level follows $\dot u = -u(1 + u)$, whose solutions take $u$ to
-
-$$u \mapsto \frac{u}{e^{\varepsilon} + (e^{\varepsilon} - 1)\, u},$$
-
-a Möbius transformation of the level, as in the model of Merkt et al.; `K_R` and `uptake` follow
-it. The components of the generator are polynomials of degree
-`r inWords(general[[1]]$degree)`, and a search for scalings alone would not find it. Without the
-ligand the same holds for the saturation alone: with one dose, `uptake / (1 + K_R)` is determined,
-and $K_R$ moves along an affine direction.
-
-## Reduction
-
-`symmetryReduction()` turns the directions into a transformation of the parameters that removes
-them. It treats the directions in blocks. For a block of scalings it fixes one coordinate per
-direction, a *section* that every orbit meets once. For a general direction it computes its
-invariants, rational functions that the generator leaves unchanged, and a section on which the
-invariants are new parameters `q_<k>`:
+`symmetryReduction()` returns a parameter transformation that removes the directions, for scalings
+by fixing one coordinate per direction
+([Methods > Gauge and reduction](methods-symmetries.html#gauge-and-reduction)).
 
 ```{r reduction, eval = FALSE}
 ```
 
-```{r, eval = detected}
+```{r}
 reduction <- readRDS("results/reduction.rds")
 reduction
 ```
 
-The section of $X_{10}$ is $K_R = 0$, with `prod_L = 1` from $X_9$: there the invariants are
-`q_1 = degrad_L` and `q_2 = uptake`, and the receptors are activated at the linear rate
-`uptake * (TNF + Lig)` by TNFα and a ligand of level `1 / degrad_L`. The saturation is not
-identifiable at all. $K_R = 0$ lies on the boundary of the domain $K_R \ge 0$, a *face*: every
-orbit reaches it in the limit, and the prediction there is the limit of the predictions on the
-orbit, which are all equal. Two claims of this section are left unproven: that each level set of
-the invariants is one orbit, and that the resting state of the model on the face is regular,
-which symident did not confirm at random points. `alternatives = TRUE` returns the other valid
-sections; here two, which also fix $K_R = 0$ and `prod_L = 1` and pick other coordinates for the
-scalings.
+## Gauge fixing
 
-## Gauge
-
-A symmetry is removed by fixing one coordinate it moves. Each orbit then meets the fixed values in
-one point, and the prediction is the same as on the whole orbit: fixing the coordinate chooses the
-units in which the others are measured, it does not change the fit. `model.R` fixes one parameter
-per scaling at 1, at 0 on the log scale, and the saturation at the section of the reduction:
+The objective is flat along every orbit, so the fit fixes one moved coordinate per symmetry, the
+gauge. This chooses units and leaves the fit unchanged. `model.R` fixes one parameter per scaling
+at 1, 0 on log scale:
 
 ```{r gauge}
 ```
 
-The `r inWords(length(gauge))` fixed coordinates remove all `r inWords(length(types))` directions
-if no combination of generators leaves them all unchanged, that is if the components of the
-generators on them form a regular matrix. For a scaling the components are its weights on the log
-scale; for $X_{10}$ they are its components at a point of the section, `K_R = 0` and
-`prod_L = uptake = degrad_L = 1`, divided by the coordinate where it is on the log scale:
+The `r inWords(length(gauge))` coordinates remove all `r inWords(length(types))` scalings if their
+weight matrix is regular
+([Methods > Gauge and reduction](methods-symmetries.html#gauge-and-reduction)):
 
-```{r, eval = detected}
-point <- c(K_R = 0, prod_L = 1, uptake = 1, degrad_L = 1)
-component <- function(X, coordinate) {
-  if (identical(X$type, "scaling")) return(as.numeric(X$weights[[coordinate]] %||% 0))
-  if (!coordinate %in% names(X$generator)) return(0)
-  v <- eval(str2lang(X$generator[[coordinate]]), as.list(point))
-  if (coordinate == "K_R") v else v / point[[coordinate]]
-}
+```{r}
 W <- t(vapply(symmetries$symmetries, function(X)
-  vapply(names(gauge), function(cn) component(X, cn), 0), numeric(length(gauge))))
+  vapply(names(gauge), function(cn) as.numeric(X$weights[[cn]] %||% 0), 0), numeric(length(gauge))))
 dimnames(W) <- list(paste0("X", seq_len(nrow(W))), names(gauge))
 W
 det(W)
 ```
 
-For the scalings the gauge is the one of Oppelt et al.: the totals of NFκB and IKK and the nuclear
-volume set the units of the concentrations, and the receptor, the transcripts and A20 are measured
-in units of the rates that produce them; the reduction fixes other coordinates of the same
-scalings, a different choice of units. With the gauge, the totals are 1: a concentration is a
-fraction of the total of its moiety. The fit of [chapter 4](guide-optimization.html) estimates the
-remaining `r length(setdiff(getParameters(p), names(gauge)))` parameters. The ligand stays in
-the model: whether the data need its level is the question of the profiles of
-[chapter 5](guide-profiles.html).
+This is the gauge of Oppelt et al. [@oppelt2018model]: NFκB and IKK totals and nuclear volume set
+the concentration units, so a concentration is a fraction of the moiety total; receptor and A20
+transcript are in units of their production rates, the IκBα transcript in units of the translation
+it drives, A20 in units of the A20 imaging scale. The reduction fixes other coordinates, a
+different choice of units. [Optimization](guide-optimization.html) fits the remaining
+`r length(setdiff(getParameters(p), names(gauge)))` parameters,
+[Profile likelihood](guide-profiles.html) checks which the data determine.
+
+Reference: `symmetryDetection()`, `symmetryReduction()`
+
+[← 1. Setting up models](guide-model.html) | [3. Sensitivities →](guide-sensitivities.html)
+
+## References

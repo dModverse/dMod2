@@ -13,7 +13,7 @@ bench_plots <- function(df, outdir) {
     ggplot2::labs(x = NULL, y = "time / value solve",
                   title = "Cost of a gradient, models by number of parameters") +
     ggplot2::theme_bw()
-  p2 <- ggplot2::ggplot(grad, ggplot2::aes(x = model, y = err_rel, colour = arm)) +
+  p2 <- ggplot2::ggplot(grad, ggplot2::aes(x = model, y = err_rel, color = arm)) +
     ggplot2::geom_point(size = 2.5, position = ggplot2::position_dodge(width = 0.5)) +
     ggplot2::scale_y_log10() +
     ggplot2::labs(x = NULL, y = "max |g - g_ref| / max |g_ref|",

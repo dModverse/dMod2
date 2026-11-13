@@ -115,14 +115,17 @@ With \code{deriv = FALSE} it returns the value alone.
 }
 
 \examples{
-prediction <- list(a = matrix(c(0, 1), nrow = 1, dimnames = list(NULL, c("time", "A"))))
-attr(prediction$a, "deriv") <- array(c(1, 0.1), c(1, 1, 2),
-  dimnames = list(NULL, "A", c("A", "k1")))
-p0 <- c(A = 1, k1 = 2)
+## A prediction without an ODE: the values of A at the times 0 to 5 are parameters
+grid <- data.frame(name = "A", time = 0:5, row.names = paste0("p", 0:5))
+x <- Xd(grid, condition = "C1")
+pars <- setNames(c(1, 0.8, 0.6, 0.5, 0.4, 0.3), row.names(grid))
+data <- as.datalist(data.frame(name = "A", time = c(0, 2, 4), value = c(1, 0.6, 0.4),
+                               sigma = 0.1, condition = "C1"))
 
-vali <- datapointL2(name = "A", time = 0, parameter = "newpoint", sigma = 1,
-                    condition = "a")
-vali(pars = c(p0, newpoint = 2), env = .GlobalEnv)
+## The data term also predicts at t = 2.5, where the data point v reads the prediction
+obj <- normL2(data, x, times = 2.5) +
+  datapointL2(name = "A", time = 2.5, parameter = "v", sigma = 0.05, condition = "C1")
+obj(c(pars, v = 0.6))
 }
 \seealso{
 \code{\link[=normL2]{normL2()}}, \code{\link[=constraintL2]{constraintL2()}}

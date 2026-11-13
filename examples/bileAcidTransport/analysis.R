@@ -2,7 +2,7 @@
 # canalicular export, and reflux from the canaliculi. With tight junctions
 # opened, the reflux is faster. The analysis fits both conditions, finds a structural
 # non-identifiability in the profiles, removes it with a steady-state start and a
-# fixed scale and ends with a prediction band from prediction profiles. Its
+# fixed scale and ends with a prediction band from prediction profiles. The
 # multistarts run as tasks through distributedComputing().
 
 library(dMod2)
@@ -16,15 +16,16 @@ options(dMod2.outdir = "build")
 set.seed(5555)
 
 
+## ---- model
 # Data and model ----
 # Bile acid amounts in the buffer and in the cells, closed and open junctions.
 # A model has three parts: the prediction `x` solves the ODEs, the observation
-# `g` maps states to what was measured, the parametrisation `p` maps the
+# `g` maps states to what was measured, the parametrization `p` maps the
 # estimated parameters to those of the model. `g*x*p` composes them.
 data(badata)
 data <- as.datalist(badata)
 #+ fig.height = 3.5
-plot(data) + labs(colour = "junctions")
+plot(data) + labs(color = "junctions")
 
 reactions <- eqnlist() |>
   addReaction("TCA_buffer", "TCA_cell", "k_import*TCA_buffer", "uptake") |>
@@ -63,6 +64,7 @@ obj  <- normL2(data, g*x*p, attrName = "data") +
   constraintL2(pouter, sigma = 4, attrName = "prior")
 
 
+## ---- multistart
 # Multistart ----
 # distributedComputing() saves the objects named in `input`, copies them with the
 # code and the shared objects of the model to a job folder in the working
@@ -84,28 +86,30 @@ fits <- as.parframe(job$get())
 job$purge(local = TRUE)
 plotValues(fits)
 
+## ---- optima
 # The fits end in a few local optima, one prediction each.
 .optima <- predict(g*x*p, times = times, pars = unique(subset(fits, converged)),
                    data = data)
-ggplot(.optima, aes(time, value, colour = factor(round(.value, 1)),
+ggplot(.optima, aes(time, value, color = factor(round(.value, 1)),
                     group = interaction(condition, .value))) +
   geom_line() +
   geom_errorbar(data = attr(.optima, "data"),
                 aes(x = time, ymin = value - sigma, ymax = value + sigma),
                 inherit.aes = FALSE, width = 0) +
-  geom_point(data = attr(.optima, "data"), colour = "black") +
+  geom_point(data = attr(.optima, "data"), color = "black") +
   facet_grid(name ~ condition, scales = "free_y") +
   theme_dMod() +
   scale_color_dMod() +
-  labs(colour = "objective value")
+  labs(color = "objective value")
 
 bestfit <- as.parvec(fits)
 
 
+## ---- profiles
 # Profiles ----
 # profile() follows each profile in one of two ways: `method = "integrate"`
 # integrates the path along which the other parameters stay optimal, and
-# `method = "optimize"` reoptimises them at every step. Both run here, and
+# `method = "optimize"` reoptimizes them at every step. Both run here, and
 # plotProfile() takes the two as a list and draws them together.
 profiles_integrate <- profile(obj, bestfit, whichPar = names(bestfit),
                               method = "integrate", cores = .cores,
@@ -117,13 +121,14 @@ profiles_optimize <- profile(obj, bestfit, whichPar = names(bestfit),
                              stepControl = list(stop = "data"))
 plotProfile(list(integrate = profiles_integrate, optimize = profiles_optimize),
             mode %in% c("data", "prior")) +
-  labs(colour = "method")
+  labs(color = "method")
 
 # The profiles of S, TCA_CELL and TCA_CANA stay flat in the data: the three
 # compensate each other, as the paths show.
 plotPaths(profiles_integrate, whichPar = "S") + theme(legend.position = "none")
 
 
+## ---- steadystate
 # Steady state ----
 # The canaliculi start in balance with the cells, at the reflux of closed
 # junctions, since they open only at time 0. The scale is fixed to 1, which
@@ -159,8 +164,9 @@ profiles <- profile(obj, bestfit, whichPar = names(bestfit), method = "integrate
 plotProfile(profiles, mode %in% c("data", "prior"))
 
 
+## ---- fixedreflux
 # Fixed reflux ----
-# K_REFLUX_OPEN stays practically non-identifiable: its profile is open towards
+# K_REFLUX_OPEN stays practically non-identifiable: the profile is open towards
 # instantaneous reflux, so the reflux of open junctions is fixed to a fast rate.
 # K_EXPORT_SINUS stays open towards slow export below the 68% level.
 trafo <- eqnvec() |>
@@ -176,7 +182,7 @@ p <- P(trafo, modelname = "ba_trafo_final", compile = TRUE)
 obj     <- normL2(data, g*x*p, attrName = "data")
 bestfit <- trust(obj, bestfit[getParameters(p)], rinit = 1)$argument
 #+ fig.height = 3.5
-plot((g*x*p)(times, bestfit, deriv = FALSE), data) + labs(colour = "junctions")
+plot((g*x*p)(times, bestfit, deriv = FALSE), data) + labs(color = "junctions")
 
 # the parameters with their 95% confidence intervals, on log10
 profiles <- profile(obj, bestfit, whichPar = names(bestfit), method = "integrate",
@@ -185,10 +191,11 @@ profiles <- profile(obj, bestfit, whichPar = names(bestfit), method = "integrate
 confint(profiles, level = 0.95)
 
 
-# Prediction profile ------------------------------------------------------------
+## ---- band
+# Prediction profile ----
 # The cellular bile acid at time t becomes a parameter v, tied to the model by a
 # data point with a small sigma. Along the profile of v the data term is the
-# prediction profile, and its interval the confidence interval of the prediction.
+# prediction profile, and the profile interval the confidence interval of the prediction.
 .predict <- function(t) {
   objv <- normL2(data, g*x*p, times = t, attrName = "data") +
     datapointL2(name = "cellular", time = t, parameter = "v", sigma = 0.1,

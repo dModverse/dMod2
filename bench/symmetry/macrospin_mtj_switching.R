@@ -144,7 +144,7 @@ z[, "time"] <- c(-rev(zb[, "time"]), zf[-1, "time"])
 
 # the orbit in (alpha, gamma), and the relaxation rate along it
 orbit <- data.frame(eps = z[, "time"], al = 10^z[, "al_l10"], gam = 10^z[, "gam_l10"])
-ggplot(orbit, aes(al, gam, colour = eps)) + geom_path() + geom_point() +
+ggplot(orbit, aes(al, gam, color = eps)) + geom_path() + geom_point() +
   scale_x_log10() + scale_y_log10() +
   scale_color_dMod_div(name = expression(epsilon)) + theme_dMod(base_size = 9)
 range(orbit$gam*orbit$al/(1 + orbit$al^2))
@@ -157,7 +157,7 @@ pred  <- lapply(seq_len(nrow(z)), function(j) {
   transform(d[d$condition == "easy", ], eps = z[j, "time"])
 })
 
-# max deviation of y relative to its RMS, and the max change of mx
+# max deviation of y relative to the RMS of y, and the max change of mx
 obs <- easy0$name == "y"
 rms <- sqrt(mean(easy0$value[obs]^2))
 dev.y  <- sapply(pred, function(d) max(abs(d$value[obs] - easy0$value[obs])) / rms)
@@ -167,7 +167,7 @@ dev.mx
 
 long <- do.call(rbind, pred)
 long$name <- factor(long$name, c("y", "mx", "my"), c("y [observed]", "mx", "my"))
-ggplot(long, aes(time, value, group = eps, colour = eps)) +
+ggplot(long, aes(time, value, group = eps, color = eps)) +
   geom_line() + facet_wrap(~ name, ncol = 1, scales = "free_y") +
   scale_color_dMod_div(name = expression(epsilon)) +
   labs(title = "easy axis, alpha-gamma direction", x = "time [ns]", y = NULL) +
@@ -380,7 +380,7 @@ uc.orbits
 range.orbits <- lapply(orbits.stt, function(z) apply(z[, setdiff(colnames(z), "time"), drop = FALSE], 2, range))
 range.orbits
 
-# max deviation of y in the collinear conditions relative to its RMS
+# max deviation of y in the collinear conditions relative to the RMS of y
 pred0.stt <- as.data.frame(prd.stt(times.stt, truth.stt, deriv = FALSE))
 col0 <- pred0.stt[pred0.stt$condition %in% .col & pred0.stt$name == "y", ]
 rms  <- sqrt(mean(col0$value^2))

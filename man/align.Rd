@@ -128,5 +128,6 @@ for repeated measures data. \emph{Biometrics} 46(3), 673-687.
 \doi{10.2307/2532087}
 }
 \seealso{
-\code{\link[=alignmentModel]{alignmentModel()}}, \code{\link[=plotAligned]{plotAligned()}}
+\code{\link[=alignmentModel]{alignmentModel()}}, \code{\link[=plotAligned]{plotAligned()}}; the guide chapter
+\href{https://dmodverse.github.io/dMod2/articles/guide-alignment.html}{Alignment of relative data measurements}.
 }

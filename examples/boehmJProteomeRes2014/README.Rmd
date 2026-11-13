@@ -1,6 +1,8 @@
-# Boehm 2014
+# STAT5 dimerization (Boehm 2014)
 
-STAT5 dimerisation in BaF3 cells after Boehm et al. (2014), J Proteome Res 13:5685: multistart, error model by restricted maximum likelihood, prediction band, profiles and the PEtab form of the problem.
+Shows: `mstrust()`, `reml()`, `profile()`, `profileThreshold()`, `confint()`, `plotProfile()`, `importPEtab()`.
+
+STAT5 dimerization in BaF3 cells after Boehm et al. (2014), J Proteome Res 13:5685: multistart, error model by restricted maximum likelihood, prediction band, profiles and the PEtab form of the problem.
 
 ## Files
 

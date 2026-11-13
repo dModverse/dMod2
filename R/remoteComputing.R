@@ -1075,7 +1075,8 @@ print.dMod2Job <- function(x, ...) {
 #'     `local = TRUE` also the local `<jobname>_folder` and the registry entry.}
 #'   \item{`terminate()`}{stops the tasks.}
 #' }
-#' @seealso [localNode()], [slurmTemplate()], [dMod2Jobs()], [detectFreeCores()]
+#' @seealso [localNode()], [slurmTemplate()], [dMod2Jobs()], [detectFreeCores()]; the
+#'   guide chapter [Remote computing](https://dmodverse.github.io/dMod2/articles/guide-remote-computing.html).
 #' @example inst/examples/distributedComputing.R
 #' @export
 distributedComputing <- function(expr, tasks = NULL, on = localNode(), jobname = NULL,

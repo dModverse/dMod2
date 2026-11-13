@@ -26,11 +26,11 @@ knitr::opts_chunk$set(
 
 dMod2 builds ODE models of reaction networks, generates and compiles C++ code for them, and estimates their parameters from data. Prediction, observation, parameter transformation and objective functions return gradient and Hessian with their value, propagated forward or in one reverse sweep.
 
-The [website](https://dmodverse.github.io/dMod2/) has the reference, the example projects and a [guide](https://dmodverse.github.io/dMod2/articles/guide-model.html) from the setup of a model to fits, profile likelihoods and mixed effects.
+The [website](https://dmodverse.github.io/dMod2/) has a [Get started](https://dmodverse.github.io/dMod2/articles/dMod2.html) page, a [guide](https://dmodverse.github.io/dMod2/articles/guide-model.html) from the setup of a model to fits, profile likelihoods and mixed effects, the derivations under Methods, the [example projects](https://dmodverse.github.io/dMod2/articles/index.html) and the reference.
 
 ## System requirements
 
-Model code is generated and compiled at run time, so **C and C++ compilers** and **Python with SymPy** are required; reticulate provides the Python packages on first use. On Linux the compilers are usually present, Windows users need [Rtools](https://cran.r-project.org/bin/windows/Rtools/). The default backend is [cppDE](https://github.com/dModverse/cppDE), which generates C++ with forward and reverse derivatives to second order; [cOde](https://github.com/dkaschek/cOde) with deSolve is available as an alternative.
+Model code is generated and compiled at run time, so a **C++17 compiler** and **Python with SymPy** are required; reticulate provides the Python packages on first use. On Linux the compilers are usually present, Windows users need [Rtools](https://cran.r-project.org/bin/windows/Rtools/). [Installation and troubleshooting](https://dmodverse.github.io/dMod2/articles/installation.html) lists the optional parts and the errors of a first compile. The default backend is [cppDE](https://github.com/dModverse/cppDE), which generates C++ with forward and reverse derivatives to second order; [cOde](https://github.com/dkaschek/cOde) with deSolve is available as an alternative.
 
 ## Installation
 
@@ -39,25 +39,8 @@ remotes::install_github("dModverse/dMod2")
 ```
 
 The backend [cppDE](https://github.com/dModverse/cppDE) comes along as a
-`Remotes:` dependency and does not have to be installed separately.
-
-### As an RStudio project
-
-Working on the package itself is easier from a checkout.
-
-1.  **File → New Project → Version Control → Git**, repository URL
-    `https://github.com/dModverse/dMod2`.
-
-2.  Install the dependencies, including the ones declared under `Remotes:`:
-
-    ```r
-    remotes::install_deps(dependencies = TRUE)
-    ```
-
-3.  **Build → Install and Restart**.
-
-`cppDE` installs the same way and has to be built first: dMod2 compiles the
-generated model sources against its headers.
+`Remotes:` dependency and does not have to be installed separately. Working on the
+package from a checkout is described in [CONTRIBUTING.md](.github/CONTRIBUTING.md).
 
 ## Building a model
 
@@ -65,52 +48,31 @@ Models are assembled from four kinds of function objects that compose with `*` (
 
 | Object | Constructor | Role |
 |---|---|---|
-| `odemodel`, `prdfn` | `odemodel()`, `Xs()` | the compiled ODE and its sensitivities |
+| `odemodel`, `prdfn` | `odemodel()`, `Xs()` | the compiled ODE with sensitivities |
 | `obsfn` | `Y()` | observation and error functions |
 | `parfn` | `P()` | parameter transformations |
 | `objfn` | `normL2()`, `constraintL2()` | objective functions |
 
-Four models are worked through end to end:
-
-- [NFκB signalling after TNFα](https://dmodverse.github.io/dMod2/articles/oppeltNPJSystBiolAppl2018.html): the model of
-  [Oppelt et al. (2018)](https://doi.org/10.1038/s41540-018-0058-z), 38 reactions in two
-  compartments from a numerically computed resting state, its symmetries, a multistart, the
-  reduction by profile likelihoods to a model whose parameters are all determined, a prediction
-  band, and the changes five liver-toxic drugs cause, by spike-and-slab random effects. The
-  guide goes through it.
-- [JAK2-STAT5 signalling with feedbacks](https://dmodverse.github.io/dMod2/articles/bachmannMSB2011.html): the model of
-  [Bachmann et al. (2011)](https://doi.org/10.1038/msb.2011.50), with 25 states
-  in two compartments, the negative feedbacks CIS, SOCS3 and SHP1, and 113
-  parameters estimated from 541 measurements across thirteen experiments, and its
-  problem in PEtab.
-- [STAT5 dimerisation after Epo stimulation](https://dmodverse.github.io/dMod2/articles/boehmJProteomeRes2014.html): the model of
-  Boehm et al. (2014) from reactions to profile likelihoods, with a multistart
-  fit, an error model by restricted maximum likelihood and confidence
-  intervals.
-- [IFN-alpha sensitization](https://dmodverse.github.io/dMod2/articles/kokMSB2020.html): the model of
-  [Kok et al. (2020)](https://doi.org/10.15252/msb.20198955), its structural
-  identifiability, the fit at the published optimum over 25 conditions, the
-  gradient by forward sensitivities and by the reverse sweep, and the
-  sensitization of a second dose by a first.
-
-All four are example projects in [`examples/`](https://github.com/dModverse/dMod2/tree/master/examples)
-of the repository, each with its data, scripts and saved results, as are [bile acid
-transport](https://dmodverse.github.io/dMod2/articles/bileAcidTransport.html) from profile likelihoods to a prediction band, and
-a [Hodgkin-Huxley neuron](https://dmodverse.github.io/dMod2/articles/hodgkinHuxleyJPhysiol1952.html) with switches on time and
-state.
+The [example projects](https://dmodverse.github.io/dMod2/articles/index.html) in
+[`examples/`](https://github.com/dModverse/dMod2/tree/master/examples) work through published
+models of signaling pathways and pharmacometrics, each with data, scripts and saved results.
 
 ## Mixed-effects models
 
 Random effects are written as effect formulas on the parameter transformation, in
 the notation of lme4, and `em()` fits them by marginal maximum likelihood: FOCEI,
-adaptive sparse-grid quadrature, laplaceEM or SAEM. Besides normal random effects,
+adaptive sparse-grid quadrature, Laplace EM or SAEM. Besides normal random effects,
 Laplace, spike-and-slab and Dirichlet-process ones select which groups differ, with
-their hyperparameters estimated in the same fit. The example projects show
-[pharmacometric models](https://dmodverse.github.io/dMod2/articles/pharmacometrics.html) of theophylline, warfarin and mavoglurant
-against nlmixr2 and a simulated [target-mediated drug disposition](https://dmodverse.github.io/dMod2/articles/TMDD.html); the guide
-finds [which rates of NFκB signalling five drugs change](https://dmodverse.github.io/dMod2/articles/guide-group-effects.html) with
-spike-and-slab random effects and [aligns](https://dmodverse.github.io/dMod2/articles/guide-alignment.html) qPCR experiments and Western blots with a
-random gel background together with targeted mass spectrometry in nM with `align()`.
+their hyperparameters estimated in the same fit. The guide covers
+[mixed-effects models](https://dmodverse.github.io/dMod2/articles/guide-nlme.html) and
+[group-specific effects](https://dmodverse.github.io/dMod2/articles/guide-group-effects.html).
+
+## Alignment
+
+`align()` brings measurements in relative units from separate experiments, such as
+Western blots and qPCR runs, to common values, with the scaling factors of each
+experiment written as free expressions, optionally with random effects per group
+([guide](https://dmodverse.github.io/dMod2/articles/guide-alignment.html)).
 
 ## Structural identifiability
 
@@ -118,8 +80,8 @@ random gel background together with targeted mass spectrometry in nM with `align
 which the observations of a model do not change, and `symmetryReduction()` turns
 them into a parameter transformation that removes them. Both run in the Python
 package [symident](https://github.com/dModverse/symident), which dMod2 installs
-from PyPI on first use; under `RETICULATE_PYTHON` install it there with
-`pip install symident`. A steady-state start on coupled steady states needs
+from PyPI on first use. If `RETICULATE_PYTHON` points to your own Python, install it
+there with `pip install symident`. A steady-state start on coupled steady states needs
 msolve, which `symmetryDetection()` offers to build when it is missing, or which
 `SYMIDENT_MSOLVE` points to.
 
@@ -132,6 +94,6 @@ use, or as an array job of a SLURM cluster through a job script template. The
 
 ## Citation
 
-There is no publication for dMod2 yet. The paper below describes [dMod](https://github.com/JetiLab/dMod), its predecessor, and is the reference for the modelling framework:
+There is no publication for dMod2 yet. The paper below describes the predecessor [dMod](https://github.com/JetiLab/dMod) and is the reference for the modeling framework:
 
 Kaschek D, Mader W, Fehling-Kaschek M, Rosenblatt M, Timmer J (2019). Dynamic Modeling, Parameter Estimation, and Uncertainty Analysis in R. *Journal of Statistical Software*, 88(10), 1-32. [doi:10.18637/jss.v088.i10](https://doi.org/10.18637/jss.v088.i10)

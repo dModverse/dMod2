@@ -76,8 +76,8 @@ conditions or a list named by condition. Default \code{NULL}. Needs
 
 \code{x} has to be a chain \code{g * x * p} with one prediction function from
 \code{\link[=Xs]{Xs()}}, built on \code{odemodel(..., includeTimeZero = FALSE)}. The method
-and the node layout are described in the guide chapter
-\href{https://dmodverse.github.io/dMod2/articles/guide-optimization.html}{Optimization}.}
+and the node layout are described in the methods article
+\href{https://dmodverse.github.io/dMod2/articles/methods-multiple-shooting.html}{Multiple shooting}.}
 }
 \value{
 An objective function of class \code{objfn}, called as \code{obj(pars, ...)}, see
@@ -194,5 +194,8 @@ With \code{deriv = FALSE} it returns the value alone.
 }
 }
 \seealso{
-\code{\link[=datapointL2]{datapointL2()}}, \code{\link[=constraintL2]{constraintL2()}}, \code{\link[=res]{res()}}
+\code{\link[=datapointL2]{datapointL2()}}, \code{\link[=constraintL2]{constraintL2()}}, \code{\link[=res]{res()}}; the guide chapters
+\href{https://dmodverse.github.io/dMod2/articles/guide-model.html}{Setting up models} and
+\href{https://dmodverse.github.io/dMod2/articles/guide-sensitivities.html}{Sensitivities}, the methods
+article \href{https://dmodverse.github.io/dMod2/articles/methods-sensitivities.html}{Sensitivities and Hessians}.
 }

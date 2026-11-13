@@ -20,10 +20,11 @@ Description: Tools for dynamic modeling and parameter estimation in ordinary
     and evaluated in parallel. Mixed-effects models with normal, Laplace,
     spike-and-slab and Dirichlet-process random effects are fitted by
     expectation maximization with the Laplace approximation, sparse-grid
-    quadrature or stochastic approximation, and replicate measurements are
-    aligned by free models of their scales. Further tools cover symbolic steady
-    states, parameter transformations with implicit and steady-state solutions,
-    error models, and distributed computing on a cluster. Models, experimental
+    quadrature or stochastic approximation. Measurements in relative units from
+    separate experiments are aligned to common values, with the scaling factors
+    of each experiment written as free expressions. Further tools cover steady states, solved symbolically or
+    numerically within the parameter transformation, error models, and
+    distributed computing on a cluster. Models, experimental
     conditions, measurements and parameter tables are imported from and
     exported to the 'PEtab' format, with 'SBML' import and export through
     'libSBML'.
@@ -73,8 +74,10 @@ Suggests:
     ragg,
     rjson,
     yaml
-SystemRequirements: Python package symident (symmetryDetection(),
-    symmetryReduction()), installed from PyPI on first use
+SystemRequirements: C++17 compiler; Python (>= 3.9) with SymPy, NumPy and
+    SciPy; the Python packages python-libsbml for SBML and PEtab, and symident
+    for symmetryDetection() and symmetryReduction(). reticulate provides the
+    Python packages on first use; symident is installed from PyPI.
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
 LinkingTo: 

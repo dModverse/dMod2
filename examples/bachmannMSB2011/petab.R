@@ -1,4 +1,4 @@
-# The same problem from its PEtab files, compared with model.R at the published values, and
+# The same problem from the PEtab files, compared with model.R at the published values, and
 # model.R written as a PEtab problem.
 
 # model.R, unless it ran in this session

@@ -1,5 +1,5 @@
 ---
-title: "Bachmann 2011"
+title: "JAK2-STAT5 signaling (Bachmann 2011)"
 ---
 
 ```{r, echo = FALSE, results = "asis"}

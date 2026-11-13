@@ -1,17 +1,45 @@
 # Bile acid transport
 
-Bile acid transport in hepatocytes, the demonstration model of the data set `badata`: multistart, profiles, a structural non-identifiability removed by a steady-state start and a fixed scale, and a prediction profile.
+Shows: `distributedComputing()`, `localNode()`, `profile()`, `datapointL2()`, `confint()`.
+
+The model, the multistart and the first profiles are on the
+[Get started](https://dmodverse.github.io/dMod2/articles/dMod2.html) page. This project runs the
+multistart as tasks through `distributedComputing()`, removes the structural non-identifiability of
+the profiles by a steady-state start and a fixed scale, and ends with a prediction band from
+prediction profiles.
 
 ## Files
 
 | file | content |
 |---|---|
-| `analysis.R` | the analysis, shown below |
+| `analysis.R` | the whole analysis, from the data to the prediction band; the parts below are taken from it |
 
 ## Run
 
-With this folder as working directory: `source("analysis.R")`.
+With this folder as working directory: `source("analysis.R")`. The code below is shown without
+being run; the fits, profiles and figures come from running the script.
 
-```{r, echo = FALSE, results = "asis"}
-cat(knitr::knit_child(text = script("analysis.R"), quiet = TRUE), sep = "\n")
+```{r, include = FALSE}
+knitr::read_chunk("analysis.R")
+```
+
+## Multistart as tasks
+
+```{r multistart, eval = FALSE}
+```
+
+## Steady-state start and fixed scale
+
+The profiles of `S`, `TCA_CELL` and `TCA_CANA` are flat in the data. A steady-state start of the
+canaliculi and a fixed scale remove the direction:
+
+```{r steadystate, eval = FALSE}
+```
+
+```{r fixedreflux, eval = FALSE}
+```
+
+## Prediction band
+
+```{r band, eval = FALSE}
 ```

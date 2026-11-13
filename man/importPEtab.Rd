@@ -101,5 +101,6 @@ readPEtabTables(yamlOut)$parameters
 \dontshow{\}) # examplesIf}
 }
 \seealso{
-\code{\link[=exportPEtabObject]{exportPEtabObject()}}, \code{\link[=readPEtabTables]{readPEtabTables()}}, \code{\link[=importSbml]{importSbml()}}
+\code{\link[=exportPEtabObject]{exportPEtabObject()}}, \code{\link[=readPEtabTables]{readPEtabTables()}}, \code{\link[=importSbml]{importSbml()}}; the guide
+chapter \href{https://dmodverse.github.io/dMod2/articles/guide-petab.html}{PEtab}.
 }

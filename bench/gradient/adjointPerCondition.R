@@ -6,19 +6,19 @@
 # Both reverse routes answer the same interface, `obj(pars, sweep = "reverse")`,
 # and differ only in the ODE object underneath: our own discrete adjoint, which
 # replays every accepted forward step, and CVODES adjoint sensitivity analysis,
-# which integrates the adjoint as its own ODE over checkpointed states. This
+# which integrates the adjoint as a separate ODE over checkpointed states. This
 # times them against each other on the whole chain up to normL2, over all
 # conditions at once and then over one condition at a time.
 #
 # The two granularities answer different questions. The whole objective is what
-# an optimiser pays per iteration. The per-condition table says where that time
-# sits, and whether the whole is the sum of its parts: a ratio near one means
-# the chain is the sum of its conditions, well under one means the whole shares
+# an optimizer pays per iteration. The per-condition table says where that time
+# sits, and whether the whole is the sum of the parts: a ratio near one means
+# the chain is the sum of the conditions, well under one means the whole shares
 # work that the parts each repeat.
 #
 # The model is the hand-built one from
-# demo/BachmannMSB2011.R, sourced up to its objective rather
-# than transcribed. Its observables floor log10 at 1e-10, which sits above
+# demo/BachmannMSB2011.R, sourced up to the objective rather
+# than transcribed. The observables floor log10 at 1e-10, which sits above
 # what the solver resolves at these tolerances; the PEtab form of the same
 # problem floors at 1e-15, and a floor below the tolerance multiplies whatever
 # noise is left by several decades and makes every gradient comparison on it
@@ -30,7 +30,7 @@
 #
 # Every route is called once before it is timed. A first call builds dMod2's
 # prepared-batch handle and fills the object caches, so timing it cold measures
-# the marshalling rather than the solve.
+# the marshaling rather than the solve.
 #
 # [WHAT IT TAKES]
 # SUNDIALS, for the ASA column; without it that column is NA and the rest still
@@ -68,7 +68,7 @@ tmin <- function(f, reps) {
 
 
 # -----------------------------------------------------------------------------
-# The example's own chain, up to but not including its first objective call
+# The example's own chain, up to but not including the first objective call
 #
 # `reactions`, `observables`, `errorModels`, `trafo`, `mydataL` and `bestfit`
 # come from there, along with the compiled g, e and p this benchmark reuses.
@@ -96,7 +96,7 @@ mC <- odemodel(reactions, modelname = "bench_cpp", backend = "cppDE",
                outdir = .bdir)
 xC <- Xs(mC, options = TOL)
 
-# The same model on the Rosenbrock stepper. Its adjoint is a different piece of
+# The same model on the Rosenbrock stepper. The adjoint is a different piece of
 # arithmetic: six direct solves transposed, against a corrector's implicit
 # function theorem, so the two are worth seeing side by side.
 mR <- odemodel(reactions, modelname = "bench_rb4", backend = "cppDE",
@@ -125,7 +125,7 @@ if (hasASA) {
   compile(g, e, p, xC, xR, output = "bench_adjoint", cores = 12)
 }
 
-# normL2 alone, not the example's objective: its prior term is one scalar over
+# normL2 alone, not the example's objective: the prior term of that objective is one scalar over
 # the whole problem and would be counted once per condition below.
 mkobj  <- function(dat) normL2(dat, g * xC * p, e)
 mkobjR <- function(dat) normL2(dat, g * xR * p, e)
@@ -183,7 +183,7 @@ print(format(whole, digits = 3), row.names = FALSE)
 # Do the two adjoints agree?
 #
 # Speed without this says nothing. Both are held against the forward gradient,
-# which is the third discretisation of the same derivative and the only oracle
+# which is the third discretization of the same derivative and the only oracle
 # either of them has here.
 # -----------------------------------------------------------------------------
 g_fwd <- objC_all(pars, deriv = TRUE, hessian = FALSE)$gradient
@@ -222,7 +222,7 @@ print(format(agree, digits = 3), row.names = FALSE)
 # `steps` is the accepted step count of the reverse solve for that condition,
 # read off the sweep's own grid. It is the thing our cost is proportional to and
 # ASA's is not: we replay every accepted forward step, ASA integrates the
-# adjoint on a grid of its own choosing.
+# adjoint on a grid ASA chooses.
 # -----------------------------------------------------------------------------
 conds <- names(mydataL)
 rows <- lapply(conds, function(cn) {

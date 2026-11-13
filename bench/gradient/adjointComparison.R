@@ -65,7 +65,7 @@ print(format(agree, digits = 3), row.names = FALSE)
 fall <- agree$grad_gap[1] / agree$grad_gap[nrow(agree)]
 cat("\n   over", length(TOLS), "steps of tolerance the gradient gap falls by",
     format(fall, digits = 3), "\n")
-cat("   A gap that tracks the tolerance is the discretisation. One that does\n",
+cat("   A gap that tracks the tolerance is the discretization. One that does\n",
     "  not is a missing channel, and that is what this row is watching for.\n")
 
 
@@ -151,6 +151,6 @@ cat("  Everything went through one objective built one way; only the ODE object\
     " log10(x + 1e-15): an epsilon below anything double precision resolves\n",
     " multiplies the integration's leftover noise by fifteen decades, and it\n",
     " does that to all three routes alike. Section 1 shows the gap falling with\n",
-    " the tolerance, which is what says it is discretisation and not a defect.\n")
+    " the tolerance, which is what says it is discretization and not a defect.\n")
 
 cat("\ndone.\n")

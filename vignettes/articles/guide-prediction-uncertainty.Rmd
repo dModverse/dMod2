@@ -1,5 +1,8 @@
 ---
 title: "6. Prediction uncertainty"
+bibliography: refs.bib
+csl: ieee.csl
+link-citations: true
 ---
 
 ```{r, include = FALSE, purl = FALSE}
@@ -7,25 +10,19 @@ knitr::opts_chunk$set(collapse = TRUE, comment = "#>", fig.width = 8, fig.height
                       fig.retina = 2, message = FALSE)
 project <- normalizePath("../../examples/oppeltNPJSystBiolAppl2018")
 knitr::opts_knit$set(root.dir = project)
-predicted <- file.exists(file.path(project, "results", "prediction.rds"))
+source("results/stored.R")
 knitr::read_chunk("../../examples/oppeltNPJSystBiolAppl2018/model.R")
 knitr::read_chunk("../../examples/oppeltNPJSystBiolAppl2018/reduced.R")
 knitr::read_chunk("../../examples/oppeltNPJSystBiolAppl2018/prediction.R")
-# a value of a stored result for the text, "?" while the result is missing
-ifStored <- function(available, value) if (available) value else "?"
 inWords <- function(n) if (n %in% 1:12) c("one", "two", "three", "four", "five", "six", "seven",
   "eight", "nine", "ten", "eleven", "twelve")[n] else format(n)
 ```
 
-A model is fitted to say something the data do not show directly: the time course of a species
-nobody measured, or the response to an experiment nobody did. How certain such a prediction is
-follows from the uncertainty of the parameters, but not in a simple way: the parameters enter
-nonlinearly, and some of them, the totals and the scales, are only determined in combination.
-The prediction profile likelihood (Kreutz et al. 2012, BMC Syst Biol 6:120) answers the question
-directly, without the detour over parameter intervals. This chapter computes the band of nuclear
-IκBα after TNFα in the reduced model of [chapter 5](guide-profiles.html). Nuclear IκBα is not
-measured; in the publication it decides when NFκB leaves the nucleus again (Oppelt et al. 2018,
-Fig. 5). The code is `prediction.R`.
+The prediction profile likelihood [@kreutz2012likelihood] gives the confidence band of a model
+prediction directly, without parameter intervals. This chapter computes the band of nuclear IκBα
+after TNFα in the reduced model of [Profile likelihood](guide-profiles.html); nuclear IκBα is not
+measured and decides when NFκB leaves the nucleus [@oppelt2018model, Fig. 5]. The code is
+`prediction.R`.
 
 ```{r setup, echo = FALSE}
 ```
@@ -51,7 +48,20 @@ Fig. 5). The code is `prediction.R`.
 ```{r transformation, echo = FALSE}
 ```
 
-```{r compile, echo = FALSE}
+```{r reducedreactions, echo = FALSE}
+```
+
+```{r reducedobservables, echo = FALSE}
+```
+
+```{r reducedmodel, echo = FALSE}
+```
+
+```{r, echo = FALSE}
+compile(g, x, pSS, p, e, gReduced, xReduced, pReduced, eReduced,
+        output = "oppelt_full_reduced", cores = 6)
+prd <- g * x * pSS * p
+prdReduced <- gReduced * xReduced * pReduced
 ```
 
 ```{r objective, echo = FALSE}
@@ -63,67 +73,37 @@ Fig. 5). The code is `prediction.R`.
 ```{r gauge, echo = FALSE}
 ```
 
-```{r reducedreactions, echo = FALSE}
-```
-
-```{r reducedobservables, echo = FALSE}
-```
-
-```{r reducedmodel, echo = FALSE}
-```
-
 ```{r reducedobjective, echo = FALSE}
 ```
 
-## Prediction profile
+## Prediction profiles and validation data points
 
-A prediction $z = h(t, \theta)$, here the concentration of nuclear IκBα at time $t$, is a function of
-the parameters. Its profile is the objective minimised over all parameters that predict $z$:
+The prediction profile is the objective minimized over all parameters with the prediction held
+at a value; the values within the $\chi^2_1$ threshold form the confidence interval. `datapointL2()`
+turns the prediction into a parameter `v`, tied to the model by a validation data point of small
+standard deviation; the profile of `v` is the prediction profile. `normL2()` predicts at the time
+of the point (`times = t`); `attrName = "data"` adds the validation term to the data term, so
+`stop = "data"` and `confint(val.column = "data")` leave the prior out
+([Methods > Prediction profiles](methods-profiles.html#prediction-profiles)).
 
-$$\mathrm{PPL}(z) = \min_{\theta \,:\, h(t, \theta) = z} \; -2 \log L(\theta) .$$
+## Prediction band
 
-As for a parameter, the values $z$ with $\mathrm{PPL}(z) - \min \mathrm{PPL}$ below the $1 - \alpha$
-quantile of $\chi^2_1$ form a confidence interval of level $1 - \alpha$ for the prediction. The
-prediction is one combination of the parameters, so the interval is the projection of the
-confidence region of the parameters onto it, and it is as wide as the data leave it, no matter
-how many parameters it depends on. A prediction that depends only on combinations the data
-determine is narrow even where single parameters are not.
-
-The constraint $h(t, \theta) = z$ is not a parameter that `profile()` could hold fixed. A
-validation data point turns it into one: $z$ becomes an additional parameter $v$, and the term
-
-$$\left( \frac{h(t, \theta) - v}{\sigma_v} \right)^2$$
-
-ties the prediction to it. For $\sigma_v \to 0$ the profile of $v$ is the prediction profile; with a
-$\sigma_v$ small against the width of the band, the data term along the profile of $v$ is the
-prediction profile to within that width. `datapointL2()` builds the term as an `objfn`. It reads
-the prediction from the evaluation of `normL2()`, which therefore has to predict at the time $t$,
-`times = t`.
-
-The profile of $v$ minimises the data term plus the validation term over $\theta$, and its
-threshold applies to that sum, the prior left out as in [chapter 5](guide-profiles.html).
-`datapointL2()` reports its value under the attribute `attrName`, `"validation"` by default; with
-`attrName = "data"` it adds to the data term of `normL2()`, so that `stop = "data"` in `profile()`
-and `confint()` read the sum. Where the model cannot follow $v$, the validation term grows and
-ends the profile; with the data term alone, the profile would walk on until its step limit.
-
-## Band
-
-```{r, include = FALSE, eval = predicted}
-# the decades of the prediction at the times of the band
-decades <- log10(range(readRDS("results/prediction.rds")$band$value))
+```{r, echo = FALSE}
+invisible(stored("results/reduced.rds", "refit.R"))
+invisible(stored("results/prediction.rds", "prediction.R"))
 ```
 
-`prediction.R` takes the reduced model at its best fit and computes the prediction profile of
-nuclear IκBα in the stimulated condition at 45 times, densest at the flanks of its pulse, in
-parallel, with the settings of the profiles of [chapter 5](guide-profiles.html). The predicted
-concentration spans `r ifStored(predicted, inWords(floor(diff(decades))))` orders of magnitude over
-the time course, so the profiles run on its logarithm, like the parameters: a second observation
-function adds `lognIkb` to the readouts, the validation point has the standard deviation 0.01 on the
-logarithm, one percent of the concentration, and the interval returns to the concentration by the
-exponential. On the concentration itself, $v$ would be as small as
-$10^{`r ifStored(predicted, floor(decades[1]))`}$ next to parameters of order one, and the path
-equation of the profile would be numerically singular.
+```{r, include = FALSE}
+# the decades of the prediction at the times of the band
+band <- readRDS("results/prediction.rds")$band
+decades <- log10(range(band$value[band$value > 0]))
+```
+
+`prediction.R` computes the profile in the stimulated condition at `r nrow(band)` times, densest
+at the flanks of the pulse. The prediction spans `r inWords(floor(diff(decades)))` orders of
+magnitude, so the validation point has standard deviation $0.01\,\hat v(t)$ and the steps are
+fractions of $\hat v(t)$. The profiles run on the linear scale since the resting state holds no
+nuclear IκBα; the times start at 2 minutes.
 
 ```{r predictionsetup, eval = FALSE}
 ```
@@ -131,22 +111,18 @@ equation of the profile would be numerically singular.
 ```{r predictionprofiles, eval = FALSE}
 ```
 
-`confint()` reads the interval off each profile, from the data term:
+`confint()` reads the interval from the data term:
 
 ```{r predictionband, eval = FALSE}
 ```
 
-```{r, echo = FALSE, results = "asis", eval = !predicted}
-cat("> Results pending: `results/prediction.rds` of the project is written by `prediction.R`.\n")
-```
-
-```{r, eval = predicted}
+```{r}
 saved <- readRDS("results/prediction.rds")
 band <- saved$band
 band[band$time %in% c(0, 10, 30, 55, 60, 70, 85, 90, 120, 240, 360), ]
 ```
 
-```{r, echo = FALSE, results = "asis", eval = predicted}
+```{r, echo = FALSE, results = "asis"}
 # the times at which a side of the profile ends below the threshold
 short <- band$time[!vapply(saved$profiles, function(pr) {
   d <- as.data.frame(pr)
@@ -158,27 +134,28 @@ if (length(short))
               paste(short, collapse = ", ")))
 ```
 
-The prediction profiles at three times, drawn by `plotProfile()` like the profiles of parameters
-in [chapter 5](guide-profiles.html), from the data term, which holds the validation point; one
-panel per time:
+Prediction profiles at three times; all times are in
+[All prediction profiles](#all-prediction-profiles):
 
-```{r, fig.height = 3.5, eval = predicted}
+```{r, fig.height = 3.5}
 times <- c(10, 70, 240)
 shown <- setNames(saved$profiles[match(times, band$time)], paste(times, "min"))
 plotProfile(shown, mode == "data") +
   ggplot2::facet_wrap(~proflist, scales = "free_x") +
-  ggplot2::guides(colour = "none") +
-  ggplot2::labs(x = "log nuclear IκBα [total NFκB]")
+  ggplot2::scale_x_continuous(breaks = scales::breaks_pretty(n = 3), labels = function(x) signif(x, 2)) +
+  ggplot2::guides(color = "none", x = ggplot2::guide_axis(check.overlap = TRUE)) +
+  ggplot2::theme(panel.spacing.x = grid::unit(1.5, "lines")) +
+  ggplot2::labs(x = "nuclear IκBα [total NFκB]")
 ```
 
-The band over time, around the prediction of the best fit:
+The band around the prediction of the best fit:
 
-```{r, eval = predicted}
+```{r}
 controls(gReduced, name = "attachInput") <- TRUE
 bestReduced <- as.parvec(readRDS("results/reduced.rds")$fits)
-times <- seq(0, 360, length.out = 361)
-course <- data.frame(time = times,
-                     value = prdReduced(times, c(bestReduced, gaugeReduced), deriv = FALSE)$TNF[, "nIkb"])
+out <- prdReduced(1:360, c(bestReduced, gaugeReduced), deriv = FALSE)$TNF
+# the resting state holds no nuclear IκBα, which the log scale leaves out
+course <- subset(data.frame(time = out[, "time"], value = out[, "nIkb"]), value > 0)
 ggplot2::ggplot(course, ggplot2::aes(time, value)) +
   ggplot2::geom_ribbon(data = band, ggplot2::aes(x = time, ymin = lower, ymax = upper),
                        inherit.aes = FALSE, alpha = 0.3) +
@@ -191,6 +168,25 @@ ggplot2::ggplot(course, ggplot2::aes(time, value)) +
   theme_dMod()
 ```
 
-The concentration is in units of the total of NFκB, the unit the gauge of
-[chapter 2](guide-symmetries.html) sets; a prediction of an absolute concentration would need a
-measurement of one.
+Concentrations are in units of total NFκB, set by the gauge of [Symmetries](guide-symmetries.html).
+
+## All prediction profiles
+
+The axis is in units of the prediction $\hat v(t)$ of the best fit:
+
+```{r, fig.height = 16}
+relative <- Map(function(pr, v) { pr$v <- pr$v / v; pr }, saved$profiles, band$value)
+names(relative) <- paste(band$time, "min")
+plotProfile(relative, mode == "data") +
+  ggplot2::facet_wrap(~factor(proflist, levels = names(relative)), ncol = 5, scales = "free_x") +
+  ggplot2::scale_x_continuous(breaks = scales::breaks_pretty(n = 3)) +
+  ggplot2::scale_color_manual(values = rep("black", length(relative)), guide = "none") +
+  ggplot2::guides(x = ggplot2::guide_axis(check.overlap = TRUE)) +
+  ggplot2::labs(x = "nuclear IκBα / prediction")
+```
+
+Reference: `datapointL2()`, `profile()`, `confint()`, `plotProfile()`
+
+[← 5. Profile likelihood](guide-profiles.html) | [7. Nonlinear mixed-effects models →](guide-nlme.html)
+
+## References

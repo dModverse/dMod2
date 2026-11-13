@@ -8,7 +8,6 @@
     <listOfSpecies>
       <species id="TNF" compartment="defaultComp" initialConcentration="0" hasOnlySubstanceUnits="false" boundaryCondition="false" constant="false"/>
       <species id="TNFR" compartment="defaultComp" initialConcentration="0" hasOnlySubstanceUnits="false" boundaryCondition="false" constant="false"/>
-      <species id="Lig" compartment="defaultComp" initialConcentration="0" hasOnlySubstanceUnits="false" boundaryCondition="false" constant="false"/>
       <species id="Ikk" compartment="defaultComp" hasOnlySubstanceUnits="false" boundaryCondition="false" constant="false"/>
       <species id="pIkk" compartment="defaultComp" initialConcentration="0" hasOnlySubstanceUnits="false" boundaryCondition="false" constant="false"/>
       <species id="ppIkk" compartment="defaultComp" initialConcentration="0" hasOnlySubstanceUnits="false" boundaryCondition="false" constant="false"/>
@@ -32,70 +31,69 @@
       <species id="A20" compartment="defaultComp" initialConcentration="0" hasOnlySubstanceUnits="false" boundaryCondition="false" constant="false"/>
     </listOfSpecies>
     <listOfParameters>
-      <parameter id="deact_TNFR" value="0.587300814387725" constant="true"/>
-      <parameter id="degrad_L" value="1515.67866409259" constant="true"/>
-      <parameter id="act_Ikk_by_TNF" value="0.0886248556613847" constant="true"/>
-      <parameter id="inh_Ikk" value="0.632183054299799" constant="true"/>
-      <parameter id="act_Ikk_Base" value="7.14895282955984e-05" constant="true"/>
-      <parameter id="trigger_iIkk" value="0.00286494792992197" constant="true"/>
-      <parameter id="act_pIkk" value="1.27961044222455" constant="true"/>
-      <parameter id="deact_ppIkk" value="0.147084368269385" constant="true"/>
-      <parameter id="act_Ikb_Base" value="0.0015639453808298" constant="true"/>
-      <parameter id="act_Ikb_by_Ikk" value="0.141434320986581" constant="true"/>
-      <parameter id="eta_s_ppIkk" value="11.5428548572593" constant="true"/>
-      <parameter id="act_Nfk_Base" value="0.00108011040833836" constant="true"/>
-      <parameter id="act_Nfk_by_Ikk" value="0.101655616712495" constant="true"/>
-      <parameter id="form_complex" value="4.75607826932715" constant="true"/>
-      <parameter id="ext_nNfkIkb" value="8.02746150443666" constant="true"/>
-      <parameter id="eta_act_Nfk_Base_c_NfkpIkb" value="0.382421743495739" constant="true"/>
-      <parameter id="eta_act_Nfk_c_NfkpIkb" value="0.561561114511728" constant="true"/>
-      <parameter id="split_NfkpIkb" value="0.0874246799836936" constant="true"/>
-      <parameter id="eta_act_Ikb_Base_c_pNfkIkb" value="263.170580893032" constant="true"/>
-      <parameter id="eta_act_Ikb_c_pNfkIkb" value="2.6822379306317" constant="true"/>
-      <parameter id="eta_split_pNfkpIkb" value="1.51499808152514" constant="true"/>
-      <parameter id="int_Nfk" value="0.0183343413595126" constant="true"/>
-      <parameter id="degrad_Ikb" value="7.00359147156468" constant="true"/>
-      <parameter id="eta_int_pNfk" value="14.0690620637894" constant="true"/>
-      <parameter id="eta_int_Ikb" value="11.0486457900966" constant="true"/>
-      <parameter id="prod_mIkb_by_nNfk" value="0.00492064951099106" constant="true"/>
-      <parameter id="degrad_mIkb" value="0.0337181232128828" constant="true"/>
-      <parameter id="eta_form_complex_nuc" value="24.2490023196223" constant="true"/>
-      <parameter id="deact_pnNfk" value="0.471139393388661" constant="true"/>
-      <parameter id="shuttle_RnaA20" value="0.00868047802729978" constant="true"/>
-      <parameter id="degrad_RnaA20" value="0.0652275217544697" constant="true"/>
-      <parameter id="build_A20" value="0.0361403190175852" constant="true"/>
-      <parameter id="degrad_A20" value="0.0652275217544963" constant="true"/>
-      <parameter id="s_nucNFkB" value="1.17711418434476" constant="true"/>
-      <parameter id="off_nucNFkB" value="0.951020619934025" constant="true"/>
-      <parameter id="tau_nucNFkB" value="0.000335057465232426" constant="true"/>
-      <parameter id="s_cytNFkB" value="0.305994620711817" constant="true"/>
-      <parameter id="off_cytNFkB" value="0.811378268900887" constant="true"/>
-      <parameter id="tau_cytNFkB" value="0.000448253257950266" constant="true"/>
-      <parameter id="off_A20GFP" value="0.435964753440947" constant="true"/>
-      <parameter id="tau_A20GFP" value="1.29327549848218e-05" constant="true"/>
-      <parameter id="s_IkBa" value="1.34489304095028" constant="true"/>
-      <parameter id="off_IkBa" value="0.0141231648656639" constant="true"/>
-      <parameter id="s_pNFkB" value="10.1386466318383" constant="true"/>
-      <parameter id="off_pNFkB" value="0.158421340352217" constant="true"/>
-      <parameter id="s_pIkBa" value="8.15839965259132" constant="true"/>
-      <parameter id="off_pIkBa" value="0.0257534794202915" constant="true"/>
-      <parameter id="s_pIKK" value="6.92504288497339" constant="true"/>
-      <parameter id="off_pIKK" value="0.445257957357707" constant="true"/>
-      <parameter id="s_ipIkBa_ibIkBa" value="1.75445065840612" constant="true"/>
-      <parameter id="off_ipIkBa_ibIkBa" value="0.0963886767479576" constant="true"/>
-      <parameter id="s_ipNFkB_ibNFkB" value="0.151252130738462" constant="true"/>
-      <parameter id="off_ipNFkB_ibNFkB" value="0.933781736257096" constant="true"/>
-      <parameter id="s_ipNFkB_ibpIkBa" value="6.50792377531191" constant="true"/>
-      <parameter id="off_ipNFkB_ibpIkBa" value="0.0252784782324724" constant="true"/>
-      <parameter id="s_ipNFkB_ibpNFkB" value="4.37838226212101" constant="true"/>
-      <parameter id="off_ipNFkB_ibpNFkB" value="0.358391088978296" constant="true"/>
-      <parameter id="s_ipIkBa_ibpNFkB" value="10.8367943032863" constant="true"/>
-      <parameter id="off_ipIkBa_ibpNFkB" value="0.278987928833362" constant="true"/>
-      <parameter id="s_ipIkBa_ibNFkB" value="1.4101181508455" constant="true"/>
-      <parameter id="off_ipIkBa_ibNFkB" value="0.263720069942164" constant="true"/>
-      <parameter id="sigma_nucNFkB" value="0.0186565141860641" constant="true"/>
-      <parameter id="sigma_cytNFkB" value="0.0203325974718572" constant="true"/>
-      <parameter id="sigma_A20GFP" value="0.0475361056238898" constant="true"/>
+      <parameter id="deact_TNFR" value="0.0365058595972715" constant="true"/>
+      <parameter id="act_Ikk_by_TNF" value="0.122333782125263" constant="true"/>
+      <parameter id="inh_Ikk" value="0.492625065430509" constant="true"/>
+      <parameter id="act_Ikk_Base" value="8.70808922428511e-05" constant="true"/>
+      <parameter id="trigger_iIkk" value="0.00298723263665323" constant="true"/>
+      <parameter id="act_pIkk" value="0.0832488564226213" constant="true"/>
+      <parameter id="deact_ppIkk" value="0.0699934221123145" constant="true"/>
+      <parameter id="act_Ikb_Base" value="0.00229514710563028" constant="true"/>
+      <parameter id="act_Ikb_by_Ikk" value="0.600380732805117" constant="true"/>
+      <parameter id="eta_s_ppIkk" value="0.0960395939562323" constant="true"/>
+      <parameter id="act_Nfk_Base" value="0.000194951838711119" constant="true"/>
+      <parameter id="act_Nfk_by_Ikk" value="0.511210282056679" constant="true"/>
+      <parameter id="form_complex" value="5.80787823472684" constant="true"/>
+      <parameter id="ext_nNfkIkb" value="12.7419613537896" constant="true"/>
+      <parameter id="eta_act_Nfk_Base_c_NfkpIkb" value="0.743817979790978" constant="true"/>
+      <parameter id="eta_act_Nfk_c_NfkpIkb" value="0.534093753118867" constant="true"/>
+      <parameter id="split_NfkpIkb" value="0.0809728216210379" constant="true"/>
+      <parameter id="eta_act_Ikb_Base_c_pNfkIkb" value="162.489055557018" constant="true"/>
+      <parameter id="eta_act_Ikb_c_pNfkIkb" value="2.39472441917369" constant="true"/>
+      <parameter id="eta_split_pNfkpIkb" value="0.94877450239984" constant="true"/>
+      <parameter id="int_Nfk" value="0.0202073726957993" constant="true"/>
+      <parameter id="degrad_Ikb" value="2.8333412485267" constant="true"/>
+      <parameter id="eta_int_pNfk" value="11.1882827119692" constant="true"/>
+      <parameter id="eta_int_Ikb" value="11.3282978890191" constant="true"/>
+      <parameter id="prod_mIkb_by_nNfk" value="0.00469014745714037" constant="true"/>
+      <parameter id="degrad_mIkb" value="0.0347809789899726" constant="true"/>
+      <parameter id="eta_form_complex_nuc" value="27.5739033767545" constant="true"/>
+      <parameter id="deact_pnNfk" value="0.488375349089891" constant="true"/>
+      <parameter id="shuttle_RnaA20" value="0.0324043177493874" constant="true"/>
+      <parameter id="degrad_RnaA20" value="0.00374150453240701" constant="true"/>
+      <parameter id="build_A20" value="0.00213548653628247" constant="true"/>
+      <parameter id="degrad_A20" value="0.0543223373368521" constant="true"/>
+      <parameter id="s_nucNFkB" value="1.21175235694589" constant="true"/>
+      <parameter id="off_nucNFkB" value="0.961429724659625" constant="true"/>
+      <parameter id="tau_nucNFkB" value="0.000333058169177981" constant="true"/>
+      <parameter id="s_cytNFkB" value="0.314119555371836" constant="true"/>
+      <parameter id="off_cytNFkB" value="0.800309285165974" constant="true"/>
+      <parameter id="tau_cytNFkB" value="0.000447873035004417" constant="true"/>
+      <parameter id="off_A20GFP" value="0.44590762644511" constant="true"/>
+      <parameter id="tau_A20GFP" value="1.44665928495407e-05" constant="true"/>
+      <parameter id="s_IkBa" value="1.36464454218615" constant="true"/>
+      <parameter id="off_IkBa" value="0.00878332061263268" constant="true"/>
+      <parameter id="s_pNFkB" value="8.34286008667077" constant="true"/>
+      <parameter id="off_pNFkB" value="0.245989598646372" constant="true"/>
+      <parameter id="s_pIkBa" value="7.81453035153981" constant="true"/>
+      <parameter id="off_pIkBa" value="0.0196812519936732" constant="true"/>
+      <parameter id="s_pIKK" value="2.39480505533478" constant="true"/>
+      <parameter id="off_pIKK" value="0.413831043875044" constant="true"/>
+      <parameter id="s_ipIkBa_ibIkBa" value="1.76778703025448" constant="true"/>
+      <parameter id="off_ipIkBa_ibIkBa" value="0.0966416681345065" constant="true"/>
+      <parameter id="s_ipNFkB_ibNFkB" value="0.156270287249963" constant="true"/>
+      <parameter id="off_ipNFkB_ibNFkB" value="0.93063051218331" constant="true"/>
+      <parameter id="s_ipNFkB_ibpIkBa" value="6.23900774345582" constant="true"/>
+      <parameter id="off_ipNFkB_ibpIkBa" value="0.0213541872624451" constant="true"/>
+      <parameter id="s_ipNFkB_ibpNFkB" value="3.57588764873873" constant="true"/>
+      <parameter id="off_ipNFkB_ibpNFkB" value="0.397982774683027" constant="true"/>
+      <parameter id="s_ipIkBa_ibpNFkB" value="6.75664738497427" constant="true"/>
+      <parameter id="off_ipIkBa_ibpNFkB" value="0.327889660152283" constant="true"/>
+      <parameter id="s_ipIkBa_ibNFkB" value="1.40696502130361" constant="true"/>
+      <parameter id="off_ipIkBa_ibNFkB" value="0.253200387129447" constant="true"/>
+      <parameter id="sigma_nucNFkB" value="0.018390654491932" constant="true"/>
+      <parameter id="sigma_cytNFkB" value="0.0202733709809931" constant="true"/>
+      <parameter id="sigma_A20GFP" value="0.046799770626401" constant="true"/>
       <parameter id="Vnuc" value="1" constant="true"/>
       <parameter id="totalNfk" value="1" constant="true"/>
       <parameter id="totalIkk" value="1" constant="true"/>
@@ -104,8 +102,6 @@
       <parameter id="build_RnaA20" value="1" constant="true"/>
       <parameter id="split_NfkIkb" value="1" constant="true"/>
       <parameter id="s_A20GFP" value="1" constant="true"/>
-      <parameter id="prod_L" value="1" constant="true"/>
-      <parameter id="K_R" value="0" constant="true"/>
     </listOfParameters>
     <listOfInitialAssignments>
       <initialAssignment symbol="nucleus">
@@ -131,38 +127,14 @@
         </listOfProducts>
         <listOfModifiers>
           <modifierSpeciesReference species="TNF"/>
-          <modifierSpeciesReference species="Lig"/>
         </listOfModifiers>
         <kineticLaw>
           <math xmlns="http://www.w3.org/1998/Math/MathML">
             <apply>
               <times/>
               <cn type="integer"> 1 </cn>
-              <apply>
-                <divide/>
-                <apply>
-                  <times/>
-                  <ci> uptake </ci>
-                  <apply>
-                    <plus/>
-                    <ci> TNF </ci>
-                    <ci> Lig </ci>
-                  </apply>
-                </apply>
-                <apply>
-                  <plus/>
-                  <cn type="integer"> 1 </cn>
-                  <apply>
-                    <times/>
-                    <ci> K_R </ci>
-                    <apply>
-                      <plus/>
-                      <ci> TNF </ci>
-                      <ci> Lig </ci>
-                    </apply>
-                  </apply>
-                </apply>
-              </apply>
+              <ci> uptake </ci>
+              <ci> TNF </ci>
             </apply>
           </math>
         </kineticLaw>
@@ -183,35 +155,6 @@
         </kineticLaw>
       </reaction>
       <reaction id="r3" reversible="false">
-        <listOfProducts>
-          <speciesReference species="Lig" stoichiometry="1" constant="true"/>
-        </listOfProducts>
-        <kineticLaw>
-          <math xmlns="http://www.w3.org/1998/Math/MathML">
-            <apply>
-              <times/>
-              <cn type="integer"> 1 </cn>
-              <ci> prod_L </ci>
-            </apply>
-          </math>
-        </kineticLaw>
-      </reaction>
-      <reaction id="r4" reversible="false">
-        <listOfReactants>
-          <speciesReference species="Lig" stoichiometry="1" constant="true"/>
-        </listOfReactants>
-        <kineticLaw>
-          <math xmlns="http://www.w3.org/1998/Math/MathML">
-            <apply>
-              <times/>
-              <cn type="integer"> 1 </cn>
-              <ci> degrad_L </ci>
-              <ci> Lig </ci>
-            </apply>
-          </math>
-        </kineticLaw>
-      </reaction>
-      <reaction id="r5" reversible="false">
         <listOfReactants>
           <speciesReference species="Ikk" stoichiometry="1" constant="true"/>
         </listOfReactants>
@@ -246,7 +189,7 @@
           </math>
         </kineticLaw>
       </reaction>
-      <reaction id="r6" reversible="false">
+      <reaction id="r4" reversible="false">
         <listOfReactants>
           <speciesReference species="Ikk" stoichiometry="1" constant="true"/>
         </listOfReactants>
@@ -264,7 +207,7 @@
           </math>
         </kineticLaw>
       </reaction>
-      <reaction id="r7" reversible="false">
+      <reaction id="r5" reversible="false">
         <listOfReactants>
           <speciesReference species="pIkk" stoichiometry="1" constant="true"/>
         </listOfReactants>
@@ -282,7 +225,7 @@
           </math>
         </kineticLaw>
       </reaction>
-      <reaction id="r8" reversible="false">
+      <reaction id="r6" reversible="false">
         <listOfReactants>
           <speciesReference species="ppIkk" stoichiometry="1" constant="true"/>
         </listOfReactants>
@@ -300,7 +243,7 @@
           </math>
         </kineticLaw>
       </reaction>
-      <reaction id="r9" reversible="false">
+      <reaction id="r7" reversible="false">
         <listOfReactants>
           <speciesReference species="iIkk" stoichiometry="1" constant="true"/>
         </listOfReactants>
@@ -318,7 +261,7 @@
           </math>
         </kineticLaw>
       </reaction>
-      <reaction id="r10" reversible="false">
+      <reaction id="r8" reversible="false">
         <listOfReactants>
           <speciesReference species="NfkIkb" stoichiometry="1" constant="true"/>
         </listOfReactants>
@@ -336,7 +279,7 @@
           </math>
         </kineticLaw>
       </reaction>
-      <reaction id="r11" reversible="false">
+      <reaction id="r9" reversible="false">
         <listOfReactants>
           <speciesReference species="NfkIkb" stoichiometry="1" constant="true"/>
         </listOfReactants>
@@ -358,7 +301,7 @@
           </math>
         </kineticLaw>
       </reaction>
-      <reaction id="r12" reversible="false">
+      <reaction id="r10" reversible="false">
         <listOfReactants>
           <speciesReference species="NfkIkb" stoichiometry="1" constant="true"/>
         </listOfReactants>
@@ -381,7 +324,7 @@
           </math>
         </kineticLaw>
       </reaction>
-      <reaction id="r13" reversible="false">
+      <reaction id="r11" reversible="false">
         <listOfReactants>
           <speciesReference species="NfkIkb" stoichiometry="1" constant="true"/>
         </listOfReactants>
@@ -399,7 +342,7 @@
           </math>
         </kineticLaw>
       </reaction>
-      <reaction id="r14" reversible="false">
+      <reaction id="r12" reversible="false">
         <listOfReactants>
           <speciesReference species="NfkIkb" stoichiometry="1" constant="true"/>
         </listOfReactants>
@@ -421,7 +364,7 @@
           </math>
         </kineticLaw>
       </reaction>
-      <reaction id="r15" reversible="false">
+      <reaction id="r13" reversible="false">
         <listOfReactants>
           <speciesReference species="NfkIkb" stoichiometry="1" constant="true"/>
         </listOfReactants>
@@ -444,7 +387,7 @@
           </math>
         </kineticLaw>
       </reaction>
-      <reaction id="r16" reversible="false">
+      <reaction id="r14" reversible="false">
         <listOfReactants>
           <speciesReference species="pNfkIkb" stoichiometry="1" constant="true"/>
         </listOfReactants>
@@ -463,7 +406,7 @@
           </math>
         </kineticLaw>
       </reaction>
-      <reaction id="r17" reversible="false">
+      <reaction id="r15" reversible="false">
         <listOfReactants>
           <speciesReference species="pNfkIkb" stoichiometry="1" constant="true"/>
         </listOfReactants>
@@ -486,7 +429,7 @@
           </math>
         </kineticLaw>
       </reaction>
-      <reaction id="r18" reversible="false">
+      <reaction id="r16" reversible="false">
         <listOfReactants>
           <speciesReference species="pNfkIkb" stoichiometry="1" constant="true"/>
         </listOfReactants>
@@ -510,7 +453,7 @@
           </math>
         </kineticLaw>
       </reaction>
-      <reaction id="r19" reversible="false">
+      <reaction id="r17" reversible="false">
         <listOfReactants>
           <speciesReference species="NfkpIkb" stoichiometry="1" constant="true"/>
         </listOfReactants>
@@ -529,7 +472,7 @@
           </math>
         </kineticLaw>
       </reaction>
-      <reaction id="r20" reversible="false">
+      <reaction id="r18" reversible="false">
         <listOfReactants>
           <speciesReference species="NfkpIkb" stoichiometry="1" constant="true"/>
         </listOfReactants>
@@ -552,7 +495,7 @@
           </math>
         </kineticLaw>
       </reaction>
-      <reaction id="r21" reversible="false">
+      <reaction id="r19" reversible="false">
         <listOfReactants>
           <speciesReference species="NfkpIkb" stoichiometry="1" constant="true"/>
         </listOfReactants>
@@ -576,7 +519,7 @@
           </math>
         </kineticLaw>
       </reaction>
-      <reaction id="r22" reversible="false">
+      <reaction id="r20" reversible="false">
         <listOfReactants>
           <speciesReference species="NfkpIkb" stoichiometry="1" constant="true"/>
         </listOfReactants>
@@ -595,7 +538,7 @@
           </math>
         </kineticLaw>
       </reaction>
-      <reaction id="r23" reversible="false">
+      <reaction id="r21" reversible="false">
         <listOfReactants>
           <speciesReference species="pNfkpIkb" stoichiometry="1" constant="true"/>
         </listOfReactants>
@@ -615,7 +558,7 @@
           </math>
         </kineticLaw>
       </reaction>
-      <reaction id="r24" reversible="false">
+      <reaction id="r22" reversible="false">
         <listOfReactants>
           <speciesReference species="Nfk" stoichiometry="1" constant="true"/>
           <speciesReference species="Ikb" stoichiometry="1" constant="true"/>
@@ -635,7 +578,7 @@
           </math>
         </kineticLaw>
       </reaction>
-      <reaction id="r25" reversible="false">
+      <reaction id="r23" reversible="false">
         <listOfProducts>
           <speciesReference species="mIkb" stoichiometry="1" constant="true"/>
         </listOfProducts>
@@ -653,7 +596,7 @@
           </math>
         </kineticLaw>
       </reaction>
-      <reaction id="r26" reversible="false">
+      <reaction id="r24" reversible="false">
         <listOfReactants>
           <speciesReference species="mIkb" stoichiometry="1" constant="true"/>
         </listOfReactants>
@@ -668,7 +611,7 @@
           </math>
         </kineticLaw>
       </reaction>
-      <reaction id="r27" reversible="false">
+      <reaction id="r25" reversible="false">
         <listOfProducts>
           <speciesReference species="Ikb" stoichiometry="1" constant="true"/>
         </listOfProducts>
@@ -686,7 +629,7 @@
           </math>
         </kineticLaw>
       </reaction>
-      <reaction id="r28" reversible="false">
+      <reaction id="r26" reversible="false">
         <listOfReactants>
           <speciesReference species="pIkb" stoichiometry="1" constant="true"/>
         </listOfReactants>
@@ -701,7 +644,7 @@
           </math>
         </kineticLaw>
       </reaction>
-      <reaction id="r29" reversible="false">
+      <reaction id="r27" reversible="false">
         <listOfReactants>
           <speciesReference species="Ikb" stoichiometry="1" constant="true"/>
         </listOfReactants>
@@ -720,7 +663,7 @@
           </math>
         </kineticLaw>
       </reaction>
-      <reaction id="r30" reversible="false">
+      <reaction id="r28" reversible="false">
         <listOfReactants>
           <speciesReference species="pNfk" stoichiometry="1" constant="true"/>
         </listOfReactants>
@@ -739,7 +682,7 @@
           </math>
         </kineticLaw>
       </reaction>
-      <reaction id="r31" reversible="false">
+      <reaction id="r29" reversible="false">
         <listOfReactants>
           <speciesReference species="Nfk" stoichiometry="1" constant="true"/>
         </listOfReactants>
@@ -757,7 +700,7 @@
           </math>
         </kineticLaw>
       </reaction>
-      <reaction id="r32" reversible="false">
+      <reaction id="r30" reversible="false">
         <listOfReactants>
           <speciesReference species="pnNfk" stoichiometry="1" constant="true"/>
         </listOfReactants>
@@ -775,7 +718,7 @@
           </math>
         </kineticLaw>
       </reaction>
-      <reaction id="r33" reversible="false">
+      <reaction id="r31" reversible="false">
         <listOfReactants>
           <speciesReference species="nIkb" stoichiometry="1" constant="true"/>
           <speciesReference species="nNfk" stoichiometry="1" constant="true"/>
@@ -796,7 +739,7 @@
           </math>
         </kineticLaw>
       </reaction>
-      <reaction id="r34" reversible="false">
+      <reaction id="r32" reversible="false">
         <listOfReactants>
           <speciesReference species="nNfkIkb" stoichiometry="1" constant="true"/>
         </listOfReactants>
@@ -814,7 +757,7 @@
           </math>
         </kineticLaw>
       </reaction>
-      <reaction id="r35" reversible="false">
+      <reaction id="r33" reversible="false">
         <listOfProducts>
           <speciesReference species="RnaA20_1" stoichiometry="1" constant="true"/>
         </listOfProducts>
@@ -832,7 +775,7 @@
           </math>
         </kineticLaw>
       </reaction>
-      <reaction id="r36" reversible="false">
+      <reaction id="r34" reversible="false">
         <listOfReactants>
           <speciesReference species="RnaA20_1" stoichiometry="1" constant="true"/>
         </listOfReactants>
@@ -850,7 +793,7 @@
           </math>
         </kineticLaw>
       </reaction>
-      <reaction id="r37" reversible="false">
+      <reaction id="r35" reversible="false">
         <listOfReactants>
           <speciesReference species="RnaA20_2" stoichiometry="1" constant="true"/>
         </listOfReactants>
@@ -868,7 +811,7 @@
           </math>
         </kineticLaw>
       </reaction>
-      <reaction id="r38" reversible="false">
+      <reaction id="r36" reversible="false">
         <listOfReactants>
           <speciesReference species="RnaA20" stoichiometry="1" constant="true"/>
         </listOfReactants>
@@ -883,7 +826,7 @@
           </math>
         </kineticLaw>
       </reaction>
-      <reaction id="r39" reversible="false">
+      <reaction id="r37" reversible="false">
         <listOfProducts>
           <speciesReference species="A20" stoichiometry="1" constant="true"/>
         </listOfProducts>
@@ -901,7 +844,7 @@
           </math>
         </kineticLaw>
       </reaction>
-      <reaction id="r40" reversible="false">
+      <reaction id="r38" reversible="false">
         <listOfReactants>
           <speciesReference species="A20" stoichiometry="1" constant="true"/>
         </listOfReactants>

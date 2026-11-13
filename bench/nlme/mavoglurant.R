@@ -75,7 +75,7 @@ dmod <- rbind(
   }, mc.cores = cores)))
 
 ## nlmixr2 -------------------------------------------------------------------------------
-# The occasions of a subject on one time axis, the second 1000 h after the first, its dose a reset
+# The occasions of a subject on one time axis, the second 1000 h after the first, the dose of an occasion a reset
 # of the compartments (EVID 4); the variability between occasions as `iov.cl ~ ... | occ`.
 ui <- nlmixr2est::nlmixr2(function() {
   ini({

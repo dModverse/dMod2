@@ -1,6 +1,6 @@
-# IFNalpha signalling in Huh7.5 hepatoma cells: receptor activation, STAT1/STAT2/
+# IFNalpha signaling in Huh7.5 hepatoma cells: receptor activation, STAT1/STAT2/
 # IRF9 complexes, target gene transcription and the USP18, SOCS1 and SOCS3
-# feedbacks that make a first dose sensitise or desensitise the cell.
+# feedbacks that make a first dose sensitize or desensitize the cell.
 # Kok et al. (2020) Mol Syst Biol; Huh7.5 core model at the published optimum.
 
 library(dMod2)
@@ -32,7 +32,7 @@ cat(sprintf("%d points, %d conditions, %d observables\n", nrow(kok),
 # [doi:10.15252/msb.20198955](https://doi.org/10.15252/msb.20198955), published
 # under CC BY 4.0.
 #
-# ![Model scheme of IFNalpha signalling, Kok et al. (2020), Figure 2](figures/KokMSB2020_pathway.png)
+# ![Model scheme of IFNalpha signaling, Kok et al. (2020), Figure 2](figures/KokMSB2020_pathway.png)
 #
 # Newly made STAT1, STAT2, IRF9, USP18 and SOCS1 pass a linear chain before they
 # act, which delays the feedback without a delay differential equation.
@@ -155,7 +155,7 @@ observables <- do.call(eqnvec, c(
            paste0(rep(c("pSTAT1", "pSTAT2", "IRF9", "tSTAT1", "tSTAT2"), each = 2),
                   "_", c("Cyt", "Nuc"))),
   list(USP18_Cyt = "log(scale_USP18*USP18 + off_USP18)"),
-  # qPCR is normalised to the untreated level, so a transcript needs no scale
+  # qPCR is normalized to the untreated level, so a transcript needs no scale
   setNames(as.list(sprintf("log(%smRNA)",
                            c("STAT1", "STAT2", "IRF9", "IRF2", "USP18", "SOCS1", "SOCS3"))),
            paste0(c("STAT1", "STAT2", "IRF9", "IRF2", "USP18", "SOCS1", "SOCS3"), "_mRNA")),
@@ -178,7 +178,7 @@ g <- Y(observables, x, modelname = "kok_obs", derivMode = .modes, compile = FALS
 
 # Transformation ----
 # Every condition starts at the unstimulated steady state, solved in closed form.
-# A rule is inserted before the rules that rewrite its symbols, so the right-hand
+# A rule is inserted before the rules that rewrite the symbols of the rule, so the right-hand
 # sides end up in the estimated parameters only.
 .complexes <- c("IFN", "aRecIFN", "pSTAT1pSTAT2c", "pSTAT1pSTAT2n", "ISGF3c",
                 "ISGF3n", "pSTAT1dimc", "pSTAT1dimn", "OccISREbs", "OccGASbs")
@@ -250,7 +250,7 @@ trafo <- trafo |>
 # Structural identifiability ----------------------------------------------------
 # A symmetry is a direction in parameter space along which the observables do not
 # change. Over all 25 conditions the model has four, all scaling symmetries.
-# symident takes its switches from the environment variables `SYMIDENT_<NAME>`,
+# symident takes the switches from the environment variables `SYMIDENT_<NAME>`,
 # also when set during the session: `Sys.setenv(SYMIDENT_MSOLVE =
 # "/opt/msolve/bin/msolve")` uses an msolve installed elsewhere, and
 # `SYMIDENT_CACHE` moves the cache it installs msolve into.
@@ -259,7 +259,7 @@ structural <- symmetryDetection(reactions, observables, trafo = trafo,
 summary(structural)
 
 # Each generator $X = \sum_i \xi_i(\theta)\,\partial_{\theta_i}$ has the components
-# $\xi_i(\theta) = \pm\theta_i$. Its flow solves
+# $\xi_i(\theta) = \pm\theta_i$. The flow of X solves
 # $\mathrm{d}\theta_i/\mathrm{d}s = \xi_i(\theta)$, so
 # $\theta_i(s) = \theta_i\,e^{\pm s}$: with $\lambda = e^{s}$ the parameters marked
 # $+$ are multiplied by $\lambda$ and those marked $-$ divided by it. The
@@ -318,7 +318,7 @@ system.time(obj(bestfit, sweep = "reverse"))
 # bwForCluster Helix through distributedComputing(), as a SLURM array job of 10
 # tasks. `slurmCluster("helix", cores = 20)` names the login node and the 20 cores
 # of each array task; in the task `cores` holds them, and mstrust() runs 20 fits on
-# them. Every task has a seed of its own. The fits use the default Gauss-Newton
+# them. Every task has a separate seed. The fits use the default Gauss-Newton
 # Hessian. The sources of the objective are compiled once on the login node, and
 # the job script is the one dMod2 ships for Helix, set up once with
 # slurmTemplate("helix").
@@ -330,8 +330,8 @@ system.time(obj(bestfit, sweep = "reverse"))
 # `.helix <- TRUE` submits it; otherwise the analysis reads the fits shipped with
 # the package and fits nothing on the local machine. A job folder
 # `kok_mstrust_folder` in the working directory means the job
-# was submitted from here already: the call then recovers its functions instead
-# of submitting again, and its fits replace the shipped ones once check() finds no
+# was submitted from here already: the call then recovers the job functions instead
+# of submitting again, and the job fits replace the shipped ones once check() finds no
 # task running; get() joins the parlists of the tasks.
 .helix   <- FALSE
 outframe <- readRDS(file.path(.extDir, "outframe_KokMSB2020.rds"))
@@ -390,10 +390,10 @@ fit        <- as.data.frame(prediction, data = mydataL)
                    rep(c("Cyt", "Nuc"), each = 5)), "USP18_Cyt")
 .mRNAs <- grep("_mRNA$", unique(kok$name), value = TRUE)
 
-# plotCombined() draws model and data of the conditions its filters select,
-# coloured by a covariate of the data
+# plotCombined() draws model and data of the conditions the filters select,
+# colored by a covariate of the data
 .doses <- function(...)
-  scale_colour_viridis_c(transform = "log10", end = 0.9, breaks = 10^(-1:4), ...,
+  scale_color_viridis_c(transform = "log10", end = 0.9, breaks = 10^(-1:4), ...,
                          labels = function(d) format(d, scientific = FALSE,
                                                      drop0trailing = TRUE))
 
@@ -404,7 +404,7 @@ plotCombined(prediction, mydataL, experiment == "WT", ifn2 == 0, ifn1 > 0,
   .doses() +
   coord_cartesian(xlim = c(0, 24)) +
   scale_x_continuous(breaks = seq(0, 24, 8)) +
-  labs(x = "time [h]", y = "log signal [a.u.]", colour = "IFN [U/ml]")
+  labs(x = "time [h]", y = "log signal [a.u.]", color = "IFN [U/ml]")
 
 #+ fig.height = 7
 plotCombined(prediction, mydataL, experiment == "WT", ifn2 == 0, ifn1 > 0,
@@ -412,7 +412,7 @@ plotCombined(prediction, mydataL, experiment == "WT", ifn2 == 0, ifn1 > 0,
   .doses() +
   coord_cartesian(xlim = c(0, 24)) +
   scale_x_continuous(breaks = seq(0, 24, 8)) +
-  labs(x = "time [h]", y = "log fold change", colour = "IFN [U/ml]")
+  labs(x = "time [h]", y = "log fold change", color = "IFN [U/ml]")
 
 ## --- Second dose ---
 # Without prestimulation the response to 5000 U/ml is that of `WT_5000_0`,
@@ -427,7 +427,7 @@ plotCombined(prediction, mydataL, experiment == "WT", ifn2 == 0, ifn1 > 0,
                  subset(.naive(fit), name %in% .late))
 .data   <- rbind(subset(kok, .second(kok) & name %in% .late),
                  subset(.naive(kok), name %in% .late))
-ggplot(.model, aes(time, value, colour = ifn1, group = condition)) +
+ggplot(.model, aes(time, value, color = ifn1, group = condition)) +
   geom_line() +
   geom_errorbar(data = .data, aes(ymin = value - sigma, ymax = value + sigma),
                 width = 0, alpha = 0.6) +
@@ -436,7 +436,7 @@ ggplot(.model, aes(time, value, colour = ifn1, group = condition)) +
   coord_cartesian(xlim = c(24, 30)) +
   .doses(na.value = "black") +
   theme_dMod() +
-  labs(x = "time [h]", y = "log signal [a.u.]", colour = "prestimulation\n[U/ml]",
+  labs(x = "time [h]", y = "log signal [a.u.]", color = "prestimulation\n[U/ml]",
        title = "5000 U/ml at 24 h, black without prestimulation")
 
 ## --- USP18 knock-down and overexpression ---
@@ -448,12 +448,12 @@ plotCombined(prediction, mydataL,
   geom_vline(xintercept = 24, linetype = "dotted") +
   scale_color_dMod(limits = c("WT", "USP18kd", "USP18oe")) +
   scale_linetype_manual(values = c(`FALSE` = "solid", `TRUE` = "dashed"), labels = c("no", "yes")) +
-  labs(x = "time [h]", y = "log signal [a.u.]", colour = "cell line", linetype = "dose at 24 h")
+  labs(x = "time [h]", y = "log signal [a.u.]", color = "cell line", linetype = "dose at 24 h")
 
-## --- Sensitisation ---
+## --- Sensitization ---
 # The response is the area under the occupied ISRE sites in the 4 h after a dose.
 # The ratio is the response after a prestimulation over that without; above 1 the
-# prestimulation sensitises the cell, below 1 it desensitises it.
+# prestimulation sensitizes the cell, below 1 it desensitizes it.
 .auc <- function(pars, from) {
   tt  <- seq(from, from + 4, by = 0.02)
   occ <- x(sort(unique(c(0, tt))), pars, deriv = FALSE)[[1]]
@@ -472,7 +472,7 @@ ggplot(sensitization, aes(dose, ratio)) +
   geom_line() +
   # the prestimulation doses measured
   geom_rug(data = data.frame(dose = unique(kok$ifn1[.second(kok)])),
-           aes(x = dose), inherit.aes = FALSE, sides = "b", colour = "grey50") +
+           aes(x = dose), inherit.aes = FALSE, sides = "b", color = "gray50") +
   scale_x_log10(breaks = 10^(-1:4), labels = scales::label_log()) +
   theme_dMod() +
   labs(x = "prestimulation at 0 h [U/ml]",

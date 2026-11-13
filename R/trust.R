@@ -62,8 +62,8 @@
 #' \code{boundary = "clip"}, \code{minimize = FALSE} and \code{traceFile}.
 #' The run reports \code{converged = TRUE} only when the scaled gaps between
 #' the segments are below \code{tolControl$ctol}. The method is described in
-#' the guide chapter
-#' \href{https://dmodverse.github.io/dMod2/articles/guide-optimization.html}{Optimization}.
+#' the methods article
+#' [Multiple shooting](https://dmodverse.github.io/dMod2/articles/methods-multiple-shooting.html).
 #'
 #' @param objfun Function whose first argument is a numeric vector of
 #'   parameters, returning a list with components \code{value},
@@ -274,7 +274,8 @@
 #' @seealso [mstrust()] for multi-start fits, [profile()][profile.objfn] for
 #'   profile likelihoods, [normL2()] for the objective,
 #'   the guide chapter
-#'   \href{https://dmodverse.github.io/dMod2/articles/guide-optimization.html}{Optimization} for the method.
+#'   [Optimization](https://dmodverse.github.io/dMod2/articles/guide-optimization.html), the methods
+#'   article [Trust-region optimization](https://dmodverse.github.io/dMod2/articles/methods-trust.html).
 #'
 #' @examples
 #' rosenbrock <- function(x, ...) {

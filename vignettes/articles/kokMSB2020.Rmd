@@ -1,5 +1,5 @@
 ---
-title: "Kok 2020"
+title: "IFN-α sensitization (Kok 2020)"
 ---
 
 ```{r, echo = FALSE, results = "asis"}

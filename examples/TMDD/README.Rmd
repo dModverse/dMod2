@@ -1,6 +1,8 @@
-# TMDD
+# Target-mediated drug disposition
 
-Simulated target-mediated drug disposition: steady state, identifiability, censored readings, FOCEI and quadrature against nlmixr2.
+Shows: `steadyStates()`, `log10Transform()`, `symmetryDetection()`, `randomEffects()`, `em()`, `vcov()`, `plotVPC()`, `plotResiduals()`.
+
+Simulated target-mediated drug disposition: steady state, identifiability, censored readings, FOCEI and quadrature.
 
 ## Files
 

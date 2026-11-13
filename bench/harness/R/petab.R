@@ -24,7 +24,7 @@ petab_index <- function(root) {
   out[!is.na(out$yaml), , drop = FALSE]
 }
 
-##  The tier lists short names; a problem matches when its id starts with one.
+##  The tier lists short names; a problem matches when the problem id starts with one.
 petab_select <- function(index, names) {
   hit <- vapply(names, function(n) {
     i <- which(startsWith(index$name, paste0(n, "_")) | index$name == n)
@@ -37,7 +37,7 @@ petab_select <- function(index, names) {
   out
 }
 
-##  One import, compiled into its own directory. `backend = "Sundials"` builds
+##  One import, compiled into a separate directory. `backend = "Sundials"` builds
 ##  the CVODES adjoint for the --asa arm.
 petab_import <- function(entry, outdir, backend = "cppDE", cores = 1L, tol = 1e-6,
                          sparse = NULL) {

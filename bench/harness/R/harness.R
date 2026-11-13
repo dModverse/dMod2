@@ -100,7 +100,7 @@ bench_problem <- function(pet, entry, tol, bursts, target, asa = NULL) {
 ##  Solve against R
 ## ---------------------------------------------------------------------
 
-##  The share of a call spent in cppDE, from wrapping its two entry points for
+##  The share of a call spent in cppDE, from wrapping the two cppDE entry points for
 ##  the duration of a 2 s loop; a nested call counts once. The rest is dMod2's R.
 bench_split <- function(pet, p, seconds = 2) {
   ns <- asNamespace("cppDE")

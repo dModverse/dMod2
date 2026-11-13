@@ -1,5 +1,5 @@
 ---
-title: "Oppelt 2018"
+title: "NFκB signaling (Oppelt 2018)"
 ---
 
 ```{r, echo = FALSE, results = "asis"}

@@ -1,21 +1,17 @@
 url: https://dmodverse.github.io/dMod2/
 
-redirects:
-- ["articles/distributedComputing.html", "articles/guide-remote-computing.html"]
-- ["articles/guide-fit.html", "articles/guide-optimization.html"]
-- ["articles/guide-prediction.html", "articles/guide-prediction-uncertainty.html"]
-- ["articles/guide-mixed-effects.html", "articles/guide-nlme.html"]
-- ["articles/guide-groupings.html", "articles/guide-group-effects.html"]
-
 template:
   bootstrap: 5
   math-rendering: mathjax
 
 navbar:
   structure:
-    left: [guide, articles, reference, news]
-    right: [search, github]
+    left: [intro, guide, methods, examples, reference, news]
+    right: [search, cppde, github]
   components:
+    intro:
+      text: Get started
+      href: articles/dMod2.html
     guide:
       text: Guide
       menu:
@@ -35,21 +31,85 @@ navbar:
         href: articles/guide-nlme.html
       - text: "8. Group-specific effects"
         href: articles/guide-group-effects.html
+      - text: "---"
+      - text: "Tools"
       - text: "9. Alignment of relative data measurements"
         href: articles/guide-alignment.html
       - text: "10. PEtab import and export"
         href: articles/guide-petab.html
       - text: "11. Remote computing"
         href: articles/guide-remote-computing.html
+      - text: "---"
+      - text: "Installation and troubleshooting"
+        href: articles/installation.html
+      - text: "Migrating from dMod"
+        href: articles/migrating.html
+      - text: Expression language (cppDE)
+        href: https://dmodverse.github.io/cppDE/reference/expressions.html
+    methods:
+      text: Methods
+      menu:
+      - text: "Likelihood and prior"
+        href: articles/methods-objective.html
+      - text: "Sensitivities and Hessians"
+        href: articles/methods-sensitivities.html
+      - text: "Steady states"
+        href: articles/methods-steady-states.html
+      - text: "Structural identifiability and Lie symmetries"
+        href: articles/methods-symmetries.html
+      - text: "Trust-region optimization"
+        href: articles/methods-trust.html
+      - text: "Profile likelihood"
+        href: articles/methods-profiles.html
+      - text: "Multiple shooting"
+        href: articles/methods-multiple-shooting.html
+      - text: "Marginal likelihood of mixed-effects models"
+        href: articles/methods-nlme.html
+      - text: "Sparse random effects"
+        href: articles/methods-sparse-random-effects.html
+    examples:
+      text: Examples
+      menu:
+      - text: "Signaling models"
+      - text: "NFκB signaling (Oppelt 2018)"
+        href: articles/oppeltNPJSystBiolAppl2018.html
+      - text: "JAK2-STAT5 signaling (Bachmann 2011)"
+        href: articles/bachmannMSB2011.html
+      - text: "STAT5 dimerization (Boehm 2014)"
+        href: articles/boehmJProteomeRes2014.html
+      - text: "IFN-α sensitization (Kok 2020)"
+        href: articles/kokMSB2020.html
+      - text: "Bile acid transport"
+        href: articles/bileAcidTransport.html
+      - text: "---"
+      - text: "Pharmacometrics"
+      - text: "Theophylline, warfarin and mavoglurant"
+        href: articles/pharmacometrics.html
+      - text: "Target-mediated drug disposition"
+        href: articles/TMDD.html
+    cppde:
+      text: cppDE
+      href: https://dmodverse.github.io/cppDE/
+      aria-label: cppDE, the ODE backend
     github:
-      icon: fa-github
+      icon: fab fa-github fa-lg
       href: https://github.com/dModverse/dMod2
       aria-label: GitHub
 
 articles:
+- title: Get started
+  navbar: ~
+  contents:
+  - '`articles/dMod2`'
+  - '`articles/installation`'
+  - '`articles/migrating`'
+
 - title: Guide
   navbar: ~
-  desc: The NFκB project of Oppelt et al. (2018), chapter by chapter; theophylline for mixed effects, simulated blots for the alignment.
+  desc: >
+    The NFκB project of Oppelt et al. (2018), chapter by chapter. The mixed-effects chapter fits
+    theophylline; the alignment chapter aligns simulated Western blots, qPCR and targeted mass
+    spectrometry.
   contents:
   - '`articles/guide-model`'
   - '`articles/guide-symmetries`'
@@ -63,16 +123,38 @@ articles:
   - '`articles/guide-petab`'
   - '`articles/guide-remote-computing`'
 
-- title: Examples
-  navbar: Examples
-  desc: Projects in `examples/` of the repository, each with its data, scripts and saved results.
+- title: Methods
+  navbar: ~
+  desc: Derivations behind the guide, with the comparisons that support them.
+  contents:
+  - '`articles/methods-objective`'
+  - '`articles/methods-sensitivities`'
+  - '`articles/methods-steady-states`'
+  - '`articles/methods-symmetries`'
+  - '`articles/methods-trust`'
+  - '`articles/methods-profiles`'
+  - '`articles/methods-multiple-shooting`'
+  - '`articles/methods-nlme`'
+  - '`articles/methods-sparse-random-effects`'
+
+- title: "Examples: signaling models"
+  navbar: ~
+  desc: >
+    Published models of signaling pathways and bile acid transport, each a project in
+    `examples/` of the repository with data, scripts and saved results.
   contents:
   - '`articles/oppeltNPJSystBiolAppl2018`'
   - '`articles/bachmannMSB2011`'
   - '`articles/boehmJProteomeRes2014`'
   - '`articles/kokMSB2020`'
   - '`articles/bileAcidTransport`'
-  - '`articles/hodgkinHuxleyJPhysiol1952`'
+
+- title: "Examples: pharmacometrics"
+  navbar: ~
+  desc: >
+    Population pharmacokinetics with mixed effects, each a project in `examples/` of the
+    repository.
+  contents:
   - '`articles/pharmacometrics`'
   - '`articles/TMDD`'
 
@@ -153,14 +235,20 @@ reference:
   - sumdatalist
   - as.data.frame.datalist
   - covariates
-  - wide2long
   - lbind
   - combine
   - reduceReplicates
   - coordTransform
 
-- title: Objective functions
-  desc: Likelihoods of the data, constraints and priors, error models.
+- title: Structural identifiability
+  desc: Symmetries of ODE models by the Python package symident.
+  contents:
+  - symmetryDetection
+  - symmetryReduction
+  - reconstControl
+
+- title: Likelihood and prior
+  desc: Likelihoods of the data, priors and constraints, sums of objectives.
   contents:
   - normL2
   - normT
@@ -185,7 +273,7 @@ reference:
   - remlLeverage
   - fitErrorModel
 
-- title: Optimisation and profiles
+- title: Optimization and profiles
   contents:
   - trust
   - mstrust
@@ -247,28 +335,6 @@ reference:
   - simulate.alignment
   - plotAligned
 
-- title: Plots and colours
-  contents:
-  - plotData
-  - plotPrediction
-  - plotCombined
-  - theme_dMod
-  - scale_color_dMod
-  - scale_color_dMod_c
-  - dMod_colors
-  - dMod_colors_cb
-  - dMod_palette
-  - dMod_palettes
-  - dMod_gradient
-  - ggopen
-
-- title: Structural identifiability
-  desc: Symmetries of ODE models by the Python package symident.
-  contents:
-  - symmetryDetection
-  - symmetryReduction
-  - reconstControl
-
 - title: PEtab and SBML
   contents:
   - importPEtab
@@ -287,6 +353,20 @@ reference:
   - slurmTemplate
   - dMod2Jobs
   - detectFreeCores
+
+- title: Plots and colors
+  contents:
+  - plotData
+  - plotPrediction
+  - plotCombined
+  - theme_dMod
+  - scale_color_dMod
+  - scale_color_dMod_c
+  - dMod_colors
+  - dMod_colors_cb
+  - dMod_palette
+  - dMod_palettes
+  - dMod_gradient
 
 - title: Data sets
   contents:
@@ -307,7 +387,3 @@ reference:
   - getObservables
   - getParameters
   - attrs
-  - "%bmm%"
-  - rref
-  - nullZ
-  - submatrix

@@ -267,5 +267,10 @@ AIC(fit, fit2)
 }
 }
 \seealso{
-\code{\link[=msem]{msem()}}, \code{\link[=randomEffects]{randomEffects()}}, \code{\link[=insert]{insert()}}
+\code{\link[=msem]{msem()}}, \code{\link[=randomEffects]{randomEffects()}}, \code{\link[=insert]{insert()}}; the guide chapters
+\href{https://dmodverse.github.io/dMod2/articles/guide-nlme.html}{Nonlinear mixed-effects models} and
+\href{https://dmodverse.github.io/dMod2/articles/guide-group-effects.html}{Group-specific effects}, the
+methods articles
+\href{https://dmodverse.github.io/dMod2/articles/methods-nlme.html}{Marginal likelihood of mixed-effects models}
+and \href{https://dmodverse.github.io/dMod2/articles/methods-sparse-random-effects.html}{Sparse random effects}.
 }

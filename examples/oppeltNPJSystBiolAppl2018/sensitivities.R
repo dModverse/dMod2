@@ -1,4 +1,4 @@
-# Forward and reverse derivatives of the full model at its best fit: the gradient by both
+# Forward and reverse derivatives of the full model at the best fit: the gradient by both
 # sweeps, their cost, and the exact Hessian by forward over reverse against Gauss-Newton. Saves
 # results/sensitivities.rds, which the guide reads.
 
@@ -6,18 +6,20 @@
 if (!exists("obj")) source("model.R")
 
 ## ---- reversechain
-# the chain of model.R once more, every function object with the reverse sweep and second
-# derivatives; Pimpl() passes the reverse sweep through the Jacobian of its root
+# the chain and objective of model.R once more, every function object with the reverse sweep and
+# second derivatives; Pimpl() passes the reverse sweep through the Jacobian of the root
 dm <- c("forward", "reverse", "forward-reverse")
 modelR <- odemodel(reactions, events = events, modelname = "oppelt_rev_ode", deriv2 = TRUE,
                    derivMode = dm, compile = FALSE)
 xR <- Xs(modelR, options = list(atol = 1e-10, rtol = 1e-8))
 gR <- Y(observables, xR, modelname = "oppelt_rev_obs", compile = FALSE, deriv2 = TRUE, derivMode = dm)
 eR <- Y(errors, gR, modelname = "oppelt_rev_err", compile = FALSE, deriv2 = TRUE, derivMode = dm)
-pSSR <- Pimpl(reactions, modelname = "oppelt_rev_ss", compile = FALSE, deriv2 = TRUE)
+pSSR <- Pimpl(reactions, modelname = "oppelt_rev_ss", compile = FALSE, deriv2 = TRUE,
+              controlsPTC = list(stability = FALSE))
 pR <- P(trafo, modelname = "oppelt_rev_par", compile = FALSE, deriv2 = TRUE, derivMode = dm)
 compile(gR, xR, pSSR, pR, eR, output = "oppelt_rev", cores = getOption("dMod2.cores"))
-objR <- normL2(data, gR * xR * pSSR * pR, eR) + constraintL2(mu, sigma = sigma)
+objR <- normL2(data, gR * xR * pSSR * pR, eR) + constraintL2(mu, sigma = sigma) +
+  constraintStability(pSSR, pR, duration = max(as.data.frame(data)$time))
 
 ## ---- gradients
 # the data term, whose gradient the prior balances at the optimum, so that it does not vanish
@@ -43,7 +45,7 @@ timing
 
 ## ---- forwardforward
 # one evaluation of the exact Hessian forward over forward, with second-order sensitivities in all
-# pairs of parameters: its time and the peak memory of the process in GB
+# pairs of parameters: the time and the peak memory of the process in GB
 peak <- function() as.numeric(gsub("\\D", "", grep("^VmHWM", readLines("/proc/self/status"), value = TRUE))) / 2^20
 before <- peak()
 forwardForward <- system.time(ff <- dataTerm(best, fixed = gauge, sweep = "forward", deriv2 = TRUE))[["elapsed"]]
@@ -58,7 +60,12 @@ gaussNewton <- forward$hessian[rownames(exact), colnames(exact)]
 hessians <- data.frame(exact = sort(eigen(exact, symmetric = TRUE, only.values = TRUE)$values),
                        gaussNewton = sort(eigen(gaussNewton, symmetric = TRUE, only.values = TRUE)$values))
 
+## ---- sensitivitiessave
 dir.create("results", showWarnings = FALSE)
-saveRDS(list(gradients = gradients, timing = timing, forwardForward = forwardForward, memory = memory,
-             hessians = hessians, exact = exact, forwardForwardHessian = ff$hessian,
-             gaussNewton = gaussNewton), "results/sensitivities.rds")
+# the md5 of the files the result is computed from, which the guide checks on reading
+sources <- c("model.R", "sensitivities.R", "data/oppelt2018.csv", "results/fits.rds")
+saved <- list(gradients = gradients, timing = timing, forwardForward = forwardForward, memory = memory,
+              hessians = hessians, exact = exact, forwardForwardHessian = ff$hessian,
+              gaussNewton = gaussNewton)
+attr(saved, "stamp") <- list(md5 = tools::md5sum(sources), dMod2 = packageVersion("dMod2"))
+saveRDS(saved, "results/sensitivities.rds")

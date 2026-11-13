@@ -1,4 +1,4 @@
-# JAK2-STAT5 signalling in CFU-E cells with the feedbacks CIS, SOCS3 and SHP1
+# JAK2-STAT5 signaling in CFU-E cells with the feedbacks CIS, SOCS3 and SHP1
 # (Bachmann et al. 2011, Mol Syst Biol 7:516). Data, model, conditions and objective;
 # the other scripts of this project start with source("model.R").
 
@@ -6,7 +6,7 @@
 library(dMod2)
 
 # generated sources and shared objects in build/, reused when nothing changed;
-# one evaluation spreads its conditions over the free cores
+# one evaluation spreads the conditions over the free cores
 dir.create("build", showWarnings = FALSE)
 options(dMod2.outdir = "build", dMod2.cores = detectFreeCores())
 
@@ -64,7 +64,7 @@ reactions <- eqnlist() |>
   addNuc("npSTAT5", "STAT5", "STAT5Exp * npSTAT5") |>
   addTranscript("CIS") |>
   addTranscript("SOCS3") |>
-  # feedback proteins, each with the overexpression term of its experiment
+  # feedback proteins, each with the overexpression term of the experiment
   addCyt("", "CIS", "CISEqc * CISTurn * CISRNA") |>
   addCyt("CIS", "", "CISTurn * CIS") |>
   addCyt("", "CIS", "CISoe * CISEqcOE * CISTurn") |>
@@ -96,7 +96,7 @@ observables <- do.call(eqnvec, c(list(
   CIS_abs     = log10Of("CIS"),
   SOCS3_abs   = log10Of("SOCS3"),
   pSTAT5B_rel = "offset_pSTAT5_conc + 100 * pSTAT5 / (pSTAT5 + STAT5)"),
-  # three qPCR replicates, each with its own scale
+  # three qPCR replicates, each with a separate scale
   setNames(as.list(log10Of(paste0("1 + scale_CISRNA_fold", LETTERS[1:3], " / CISRNAEqc / init_STAT5 * CISRNA"))),
            paste0("CISRNA_fold", LETTERS[1:3])),
   setNames(as.list(log10Of(paste0("1 + scale_SOCS3RNA_fold", LETTERS[1:3], " / SOCS3RNAEqc / init_STAT5 * SOCS3RNA"))),
@@ -130,7 +130,7 @@ errors <- eqnvec(
 
 
 ## ---- conditions
-# experiments that recorded each blot; elsewhere its scale is 1 and its offset 0
+# experiments that recorded each blot; elsewhere the blot scale is 1 and the offset 0
 recordedBy <- list(
   pJAK2  = c("long", "actd", "fine", "cisoe", "socs3oe", "shp1oe", "dr7", "dr30"),
   pEpoR  = c("long", "actd", "fine", "cisoe", "cisoe_pepor", "socs3oe", "shp1oe", "dr7", "dr30"),

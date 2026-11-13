@@ -23,7 +23,7 @@ net <- eqnlist() |>
   addReaction("Cp", "C", "Q * Cp", "redistribution", rateCompartment = "unit") |>
   addReaction("C + R", "RC", "kon * C * R", "binding") |>
   addReaction("RC", "C + R", "koff * RC", "dissociation") |>
-  addReaction("RC", "", "kint * RC", "internalisation") |>
+  addReaction("RC", "", "kint * RC", "internalization") |>
   addReaction("", "R", "ksyn", "synthesis", compartment = "central") |>
   addReaction("R", "", "kdeg * R", "degradation")
 truth <- log(c(CL = 0.3, V = 3, Q = 0.2, Vp = 3, kon = 5, koff = 0.25, kint = 15, kdeg = 15, R0 = 0.1))

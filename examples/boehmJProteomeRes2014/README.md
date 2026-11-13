@@ -1,6 +1,8 @@
-# Boehm 2014
+# STAT5 dimerization (Boehm 2014)
 
-STAT5 dimerisation in BaF3 cells after Boehm et al. (2014), J Proteome Res 13:5685: multistart, error model by restricted maximum likelihood, prediction band, profiles and the PEtab form of the problem.
+Shows: `mstrust()`, `reml()`, `profile()`, `profileThreshold()`, `confint()`, `plotProfile()`, `importPEtab()`.
+
+STAT5 dimerization in BaF3 cells after Boehm et al. (2014), J Proteome Res 13:5685: multistart, error model by restricted maximum likelihood, prediction band, profiles and the PEtab form of the problem.
 
 ## Files
 
@@ -157,7 +159,7 @@ best <- as.parvec(fits)
 
 ## REML
 Maximum likelihood underestimates the standard deviations, because the fitted
-mean shrinks the residuals. `reml()` counts each data point with one minus its
+mean shrinks the residuals. `reml()` counts each data point with one minus the
 leverage, the stationarity condition of the restricted likelihood (Patterson
 and Thompson 1971), which corrects the variances for the degrees of freedom the
 mean uses.
@@ -169,8 +171,8 @@ rbind(ML = best[remlfit$errpars], REML = remlfit$argument[remlfit$errpars])
 
 ```
 #>      sd_pSTAT5A_rel sd_pSTAT5B_rel sd_rSTAT5A_rel
-#> ML        0.5878645      0.8201036      0.4987573
-#> REML      0.6254541      0.8442159      0.5248553
+#> ML        0.5877357      0.8201003      0.4987671
+#> REML      0.6253827      0.8442638      0.5249191
 ```
 
 ``` r
@@ -179,7 +181,7 @@ remlfit$dof     # data points minus the summed leverage, per observable
 
 ```
 #> pSTAT5A_rel pSTAT5B_rel rSTAT5A_rel 
-#>    13.67804    14.22153    14.10043
+#>    13.67754    14.22182    14.10064
 ```
 
 ``` r
@@ -198,7 +200,7 @@ tapply(remlfit$leverage$leverage, remlfit$leverage$name, sum)
 
 ```
 #> pSTAT5A_rel pSTAT5B_rel rSTAT5A_rel 
-#>    2.321961    1.778473    1.899565
+#>    2.322464    1.778181    1.899355
 ```
 
 ## Prediction band
@@ -214,14 +216,14 @@ plot(prediction, data) +
   geom_ribbon(data = as.data.frame(prediction, errfn = e),
               aes(x = time, ymin = value - sigma, ymax = value + sigma),
               linetype = "dashed", alpha = 0.3) +
-  labs(x = "time [min]", y = "relative signal [%]", colour = NULL)
+  labs(x = "time [min]", y = "relative signal [%]", color = NULL)
 ```
 
 
 <img src="figures/unnamed-chunk-14-1.png" width="768" />
 
 ## Profiles
-A profile re-optimises every other parameter while one is held away from the
+A profile re-optimizes every other parameter while one is held away from the
 optimum, so the interval comes from the likelihood itself (Raue et al. 2009).
 `profileThreshold()` gives the threshold for `profile()` and `plotProfile()`;
 `confint()` computes the same one from `method`, `n` and `p`. `method = "F"`
@@ -258,15 +260,15 @@ confint(profiles, level = 0.95, val.column = "data",
 
 ```
 #>                                      name      value       lower      upper
-#> Epo_degradation_BaF3 Epo_degradation_BaF3 -1.5677371 -1.74022203 -1.3899726
-#> k_exp_hetero                 k_exp_hetero -4.4198626        -Inf -2.9525917
-#> k_exp_homo                     k_exp_homo -2.2024880 -2.55769739 -1.8887974
-#> k_imp_hetero                 k_imp_hetero -1.7875030 -1.91103290 -1.6580601
-#> k_imp_homo                     k_imp_homo  1.4695884  0.09882774        Inf
-#> k_phos                             k_phos  4.1977213  4.10625865  4.2967001
-#> sd_pSTAT5A_rel             sd_pSTAT5A_rel  0.5878645  0.40943535  0.7943554
-#> sd_pSTAT5B_rel             sd_pSTAT5B_rel  0.8201036  0.66458691  1.0130544
-#> sd_rSTAT5A_rel             sd_rSTAT5A_rel  0.4987573  0.34854330  0.6912930
+#> Epo_degradation_BaF3 Epo_degradation_BaF3 -1.5679595 -1.74005895 -1.3901478
+#> k_exp_hetero                 k_exp_hetero -4.4421935        -Inf -2.9536118
+#> k_exp_homo                     k_exp_homo -2.2029667 -2.55732648 -1.8892122
+#> k_imp_hetero                 k_imp_hetero -1.7873087 -1.91091368 -1.6581547
+#> k_imp_homo                     k_imp_homo  1.4688356  0.09953717        Inf
+#> k_phos                             k_phos  4.1976586  4.10644777  4.2965239
+#> sd_pSTAT5A_rel             sd_pSTAT5A_rel  0.5877357  0.40937804  0.7942116
+#> sd_pSTAT5B_rel             sd_pSTAT5B_rel  0.8201003  0.66464015  1.0126205
+#> sd_rSTAT5A_rel             sd_rSTAT5A_rel  0.4987671  0.34873677  0.6906962
 ```
 
 For k_imp_homo and k_exp_hetero the data term stays level and only the prior

@@ -19,7 +19,7 @@ plotData(as.datalist(badata))
 }
 \seealso{
 The example project
-\href{https://dmodverse.github.io/dMod2/articles/bileAcidTransport.html}{bileAcidTransport} builds and fits the
-model.
+\href{https://dmodverse.github.io/dMod2/articles/bileAcidTransport.html}{Bile acid transport}
+builds and fits the model.
 }
 \keyword{data}

@@ -189,7 +189,11 @@ NULL
 #'
 #' @inheritSection dModfn Calling a dMod function
 #' @seealso [Xf()] for predictions without sensitivities, [controls()],
-#'   [cppDE::solveODE()].
+#'   [cppDE::solveODE()]; the guide chapters
+#'   [Setting up models](https://dmodverse.github.io/dMod2/articles/guide-model.html) and
+#'   [Sensitivities](https://dmodverse.github.io/dMod2/articles/guide-sensitivities.html), the methods
+#'   article [Sensitivities and Hessians](https://dmodverse.github.io/dMod2/articles/methods-sensitivities.html)
+#'   and the cppDE article [Forward sensitivities](https://dmodverse.github.io/cppDE/articles/methods-forward.html).
 #' @example inst/examples/Xs.R
 #' @export
 Xs <- function(odemodel, ...) {

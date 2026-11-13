@@ -1128,7 +1128,8 @@ print.alignmentmodel <- function(x, ...) {
 #'   `scaledSigma`, the error model over the slope of the prediction there;
 #'   `aligned` has `lloq`, the smallest such value of the censored readings of
 #'   a combination.
-#' @seealso [alignmentModel()], [plotAligned()]
+#' @seealso [alignmentModel()], [plotAligned()]; the guide chapter
+#'   [Alignment of relative data measurements](https://dmodverse.github.io/dMod2/articles/guide-alignment.html).
 #' @references Kemmer, S., Bang, S., Rosenblatt, M., Timmer, J. and Kaschek, D. (2022).
 #'   BlotIt: Optimal alignment of Western blot and qPCR experiments.
 #'   \emph{PLOS ONE} 17(8), e0264295. \doi{10.1371/journal.pone.0264295}

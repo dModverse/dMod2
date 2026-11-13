@@ -1,6 +1,5 @@
-# TNFα-induced NFκB signalling in HepG2 cells (Oppelt et al. 2018, npj Syst Biol Appl 4:23): the
-# full model of the publication, before any reduction, with receptors that saturate and a ligand
-# the cells secrete, on untreated and TNFα-stimulated cells.
+# TNFα-induced NFκB signaling in HepG2 cells (Oppelt et al. 2018, npj Syst Biol Appl 4:23): the
+# full model of the publication, before any reduction, on untreated and TNFα-stimulated cells.
 # Data, model, conditions and objective; the other scripts of this project start with
 # source("model.R").
 
@@ -45,13 +44,9 @@ data <- as.datalist(hepg2[c("name", "time", "value", "sigma", "condition", "trea
 reactions <- eqnlist() |>
   assignCompartment(nIkb = "nucleus", pnNfk = "nucleus", nNfk = "nucleus", nNfkIkb = "nucleus",
                     volume = "Vnuc") |>
-  # receptors activated by TNFα in the medium, which they do not use up, and by a ligand the
-  # cells secrete, saturating in the sum of both
-  addReaction("TNF", "TNF + TNFR", "uptake * (TNF + Lig) / (1 + K_R * (TNF + Lig))",
-              "receptor activation") |>
+  # receptors activated by TNFα in the medium, which they do not use up
+  addReaction("TNF", "TNF + TNFR", "uptake * TNF", "receptor activation") |>
   addReaction("TNFR", "", "deact_TNFR * TNFR", "receptor deactivation") |>
-  addReaction("", "Lig", "prod_L", "ligand secretion") |>
-  addReaction("Lig", "", "degrad_L * Lig", "ligand decay") |>
   # IKK cycle: activation by receptors, inhibited by A20, and basal; inactivation and recovery
   addReaction("Ikk", "pIkk", "act_Ikk_by_TNF / (1 + A20 / inh_Ikk) * TNFR * Ikk", "IKK activation") |>
   addReaction("Ikk", "pIkk", "act_Ikk_Base * Ikk", "basal IKK activation") |>
@@ -86,12 +81,12 @@ reactions <- eqnlist() |>
   addReaction("pNfkpIkb", "pNfk + pIkb", "split_NfkIkb * eta_split_pNfkpIkb * pNfkpIkb",
               "release of pNFkB") |>
   addReaction("Nfk + Ikb", "NfkIkb", "form_complex * Nfk * Ikb", "complex formation") |>
-  # IκBα transcript, induced by nuclear NFκB, its translation, and degradation of pIκBα
+  # IκBα transcript, induced by nuclear NFκB, the translation, and degradation of pIκBα
   addReaction("", "mIkb", "prod_mIkb_by_nNfk * nNfk", "IkBa transcription") |>
   addReaction("mIkb", "", "degrad_mIkb * mIkb", "IkBa transcript degradation") |>
   addReaction("", "Ikb", "prod_Ikb * mIkb", "IkBa translation") |>
   addReaction("pIkb", "", "degrad_Ikb * pIkb", "pIkBa degradation") |>
-  # nuclear import, dephosphorylation of pNFκB, the nuclear complex and its export
+  # nuclear import, dephosphorylation of pNFκB, the nuclear complex and the complex export
   addReaction("Ikb", "nIkb", "int_Nfk * eta_int_Ikb * Ikb", "IkBa import") |>
   addReaction("pNfk", "pnNfk", "int_Nfk * eta_int_pNfk * pNfk", "pNFkB import") |>
   addReaction("Nfk", "nNfk", "int_Nfk * Nfk", "NFkB import") |>
@@ -157,11 +152,10 @@ e <- Y(errors, g, modelname = "oppelt_err", compile = FALSE)
 
 
 ## ---- transformation
-# every parameter on the log scale but the saturation constant, which may be 0; at rest no TNFα,
-# the dose is the unit of TNFα
+# every parameter on the log scale; at rest no TNFα, the dose is the unit of TNFα
 trafo <- eqnvec() |>
   define("x <- x", x = setdiff(getParameters(pSS, x, g, e), reactions$states)) |>
-  insert("x <- exp(x)", x = setdiff(.currentSymbols, "K_R")) |>
+  insert("x <- exp(x)", x = .currentSymbols) |>
   define("TNF <- 0") |>
   branch(covariates(data)) |>
   define("dose_TNF <- 0", conditionMatch = "control") |>
@@ -170,33 +164,50 @@ p <- P(trafo, modelname = "oppelt_par", compile = FALSE)
 
 
 ## ---- compile
-compile(g, x, pSS, p, e, output = "oppelt", cores = getOption("dMod2.cores"))
+compile(g, x, pSS, p, e, output = "oppelt", cores = 6)
 prd <- g * x * pSS * p
 
 
 ## ---- objective
-# a weak prior on the log scale: the offsets below the signals, the eta factors around 1
+# a weak prior on the log scale: mean 0, standard deviation 4, a factor of about 55, narrower
+# where the order of magnitude is known before the fit
 outer <- getParameters(prd)
-mu <- structure(rep(-1, length(outer)), names = outer)
+mu <- structure(rep(0, length(outer)), names = outer)
 sigma <- structure(rep(4, length(outer)), names = outer)
-mu[grepl("^off_", outer)] <- -2
-sigma[grepl("^off_", outer)] <- 2
-mu[grepl("^eta_", outer)] <- 0
+# bleaching removes at most a few percent of the signal over the time of the data
+bleach <- grep("^tau_", outer, value = TRUE)
+mu[bleach] <- log(0.1 / max(as.data.frame(data)$time))
+sigma[bleach] <- 2
+# the imaging readouts scatter by about 5%
+noise <- grep("^sigma_", outer, value = TRUE)
+mu[noise] <- log(0.05)
+sigma[noise] <- 1
+# without TNFα, IKK, IκBα and NFκB are activated far more slowly than after it
+basal <- grep("_Base$", outer, value = TRUE)
+mu[basal] <- -8
+sigma[basal] <- 2
+# transcripts and A20 are made and degraded within about an hour
+turnover <- c("shuttle_RnaA20", "degrad_RnaA20", "build_A20", "degrad_A20", "degrad_mIkb")
+mu[turnover] <- log(1 / 60)
+sigma[turnover] <- 2
+# IKK recovers from its inactive form over hours
+mu["trigger_iIkk"] <- log(1 / 240)
+sigma["trigger_iIkk"] <- 2
 # the cells rest: a term that rises where an eigenvalue of the resting state decays more slowly
-# than over the six hours of data and reaches 100 where the resting state loses its stability
+# than over the six hours of data and reaches 100 where the resting state loses stability
 stability <- constraintStability(pSS, p, duration = max(as.data.frame(data)$time))
 obj <- normL2(data, prd, e) + constraintL2(mu, sigma = sigma) + stability
 
 
 ## ---- tolerances
 # the stopping tolerances of trust(), above the error that the solver settings leave: ftol and
-# mtol an order of magnitude above that of the value (below 1e-6), gtol two above that of the
-# gradient (below 1e-5)
-tolerances <- list(ftol = 1e-5, mtol = 1e-5, gtol = 1e-3)
+# mtol an order of magnitude above that of the value (about 2e-6), gtol two above that of the
+# gradient (about 8e-5)
+tolerances <- list(ftol = 1e-4, mtol = 1e-4, gtol = 1e-2)
 
 
 ## ---- gauge
-# one coordinate of each symmetry (symmetries.R) fixed: a scaling at 1, at 0 on the log scale,
-# the saturation of the receptors at 0
+# one coordinate of each scaling (symmetries.R) fixed at 1, at 0 on the log scale
 gauge <- c(Vnuc = 0, totalNfk = 0, totalIkk = 0, uptake = 0, prod_Ikb = 0, build_RnaA20 = 0,
-           split_NfkIkb = 0, s_A20GFP = 0, prod_L = 0, K_R = 0)
+           split_NfkIkb = 0, s_A20GFP = 0)
+

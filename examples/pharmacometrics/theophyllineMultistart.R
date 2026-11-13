@@ -35,7 +35,7 @@ obj <- normL2(data, g * x * p, errmodel = e)
 init <- c(Ka = 0, V = 3, Cl = 0.7, sigma = log(0.5))
 
 ## ---- multistart
-# 200 starts per method, from the same draws, each run to its end; SAEM with up to 500 burn-in and
+# 200 starts per method, from the same draws, each run to the end; SAEM with up to 500 burn-in and
 # 1000 averaging iterations
 methods <- c(FOCEI = "focei", quadrature = "quadrature", SAEM = "saem")
 controls <- list(FOCEI = list(), quadrature = list(), SAEM = list(saem = list(nBurnin = 500, nEM = 1000)))
@@ -47,7 +47,7 @@ ms <- lapply(names(methods), function(m) {
 names(ms) <- names(methods)
 
 ## ---- crosscheck
-# the best fit of every method refitted by every other method from its estimates, so that the
+# the best fit of every method refitted by every other method from the estimates of that fit, so that the
 # values of the optima compare on the scale of each method
 best <- lapply(ms, function(f) f$argument)
 cross <- do.call(rbind, lapply(names(best), function(from) do.call(rbind, lapply(names(methods), function(by) {
@@ -60,6 +60,9 @@ cross <- do.call(rbind, lapply(names(best), function(from) do.call(rbind, lapply
              V = if (is.null(fit)) NA else exp(fit$argument[["V"]]))
 }))))
 
+## ---- save
 dir.create("results", showWarnings = FALSE)
-saveRDS(list(multistart = lapply(ms, `[[`, "multistart"), best = best, cross = cross),
-        "results/multistart.rds")
+saved <- list(multistart = lapply(ms, `[[`, "multistart"), best = best, cross = cross)
+# the md5 of the script, which the guide checks on reading
+attr(saved, "stamp") <- list(md5 = tools::md5sum("theophyllineMultistart.R"), dMod2 = packageVersion("dMod2"))
+saveRDS(saved, "results/multistart.rds")

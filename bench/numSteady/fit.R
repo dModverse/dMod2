@@ -58,8 +58,8 @@ showStats <- function(label) {
 
 t1 <- system.time(v1 <- obj(center))[3]
 t2 <- system.time(v2 <- obj(center))[3]
-cat(sprintf("objective at the centre %.2f; first call %.2f s, repeated %.2f s\n", v1$value, t1, t2))
-showStats("centre")
+cat(sprintf("objective at the center %.2f; first call %.2f s, repeated %.2f s\n", v1$value, t1, t2))
+showStats("center")
 
 # ---- single trust fit, statistics of this process -----------------------------
 statsReset <- environment(attr(pSS, "mappings")[[1]])$statsReset

@@ -218,8 +218,8 @@ evalConditionResidual <- function(dataI, predictionI, pars,
 #'
 #'   `x` has to be a chain `g * x * p` with one prediction function from
 #'   [Xs()], built on `odemodel(..., includeTimeZero = FALSE)`. The method
-#'   and the node layout are described in the guide chapter
-#'   [Optimization](https://dmodverse.github.io/dMod2/articles/guide-optimization.html).
+#'   and the node layout are described in the methods article
+#'   [Multiple shooting](https://dmodverse.github.io/dMod2/articles/methods-multiple-shooting.html).
 #'
 #' @return
 #' An objective function of class `objfn`, called as `obj(pars, ...)`, see
@@ -241,7 +241,10 @@ evalConditionResidual <- function(dataI, predictionI, pars,
 #' evaluated in R, as is every model under `options(dMod2.evaluation = "R")`.
 #'
 #' @inheritSection dModfn Calling a dMod function
-#' @seealso [datapointL2()], [constraintL2()], [res()]
+#' @seealso [datapointL2()], [constraintL2()], [res()]; the guide chapters
+#'   [Setting up models](https://dmodverse.github.io/dMod2/articles/guide-model.html) and
+#'   [Sensitivities](https://dmodverse.github.io/dMod2/articles/guide-sensitivities.html), the methods
+#'   article [Sensitivities and Hessians](https://dmodverse.github.io/dMod2/articles/methods-sensitivities.html).
 #' @example inst/examples/normL2.R
 #' @export
 normL2 <- function(data, x, errmodel = NULL, times = NULL,
@@ -1199,14 +1202,17 @@ constraintRayleigh <- function(sigma, attrName = "prior", condition = NULL) {
 #' @inheritSection dModfn Calling a dMod function
 #' @seealso [normL2()], [constraintL2()]
 #' @examples
-#' prediction <- list(a = matrix(c(0, 1), nrow = 1, dimnames = list(NULL, c("time", "A"))))
-#' attr(prediction$a, "deriv") <- array(c(1, 0.1), c(1, 1, 2),
-#'   dimnames = list(NULL, "A", c("A", "k1")))
-#' p0 <- c(A = 1, k1 = 2)
-#' 
-#' vali <- datapointL2(name = "A", time = 0, parameter = "newpoint", sigma = 1,
-#'                     condition = "a")
-#' vali(pars = c(p0, newpoint = 2), env = .GlobalEnv)
+#' ## A prediction without an ODE: the values of A at the times 0 to 5 are parameters
+#' grid <- data.frame(name = "A", time = 0:5, row.names = paste0("p", 0:5))
+#' x <- Xd(grid, condition = "C1")
+#' pars <- setNames(c(1, 0.8, 0.6, 0.5, 0.4, 0.3), row.names(grid))
+#' data <- as.datalist(data.frame(name = "A", time = c(0, 2, 4), value = c(1, 0.6, 0.4),
+#'                                sigma = 0.1, condition = "C1"))
+#'
+#' ## The data term also predicts at t = 2.5, where the data point v reads the prediction
+#' obj <- normL2(data, x, times = 2.5) +
+#'   datapointL2(name = "A", time = 2.5, parameter = "v", sigma = 0.05, condition = "C1")
+#' obj(c(pars, v = 0.6))
 #' @export
 datapointL2 <- function(name, time, parameter, sigma = 1,
                         attrName = "validation", condition) {
