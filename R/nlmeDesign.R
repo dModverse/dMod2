@@ -27,6 +27,10 @@
     stop("em: `obj` holds no prediction and data; build it as normL2(data, g * x * p).",
          call. = FALSE)
   spec <- attr(obj, "l2spec", exact = TRUE)[[1]]
+  if (.refines(prdfn))
+    stop("em: the prediction has optionsReverse = list(refine = TRUE), which applies to the ",
+         "reverse gradient of normL2(). The sweeps of em() run forward over reverse without ",
+         "refine; build the prediction for em() without it.", call. = FALSE)
   if (!nrow(random$terms))
     stop("em: the effect formulas have no random term, as in (1 | ID).", call. = FALSE)
   subs <- lapply(setNames(nm = unique(random$terms$group)), function(gr) .groupingDesign(random, data, gr))

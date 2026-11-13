@@ -20,7 +20,7 @@ and \code{objfn * parfn} an \code{objfn}. \code{Id() * f} and \code{f * Id()} re
 \description{
 Concatenates observation functions, prediction functions and parameter
 transformations: \code{(e1 * e2)(times, pars)} evaluates \code{e2} first and passes
-its output to \code{e1}.
+the output of \code{e2} to \code{e1}.
 }
 \details{
 Both functions must be defined for the same conditions, or one of

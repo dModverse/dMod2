@@ -15,7 +15,7 @@
 
 ## A stage of the transformation for the parfn kernel `k` on the names `prev` before it:
 ## list(kind, fn, vjp, inNames, fnout, through, guessNames, state, order), a compiled function
-## (kind 0) or a steady state (kind 1) whose native `state` solves its roots, with derivatives of
+## (kind 0) or a steady state (kind 1) whose native `state` solves the roots, with derivatives of
 ## order `order`. With `vjp` the vector-Jacobian product of the sweeps (`"_vjp_ad"`) or of the
 ## adjoint (`"_vjp"`). NULL where the kernel cannot take part.
 .chainStage <- function(k, prev, cond, deriv2, order, vjp = NULL) {
@@ -73,8 +73,8 @@
 }
 
 ## The plan for the objective of `spec` (an entry of attr(obj, "l2spec")) on `conds`: per
-## condition its free outer names `free[[i]]`, the fixed ones `fixedNames` behind them, and the
-## positions of its directions among `global`. With `times`, a list per condition, the plan of the
+## condition the free outer names `free[[i]]`, the fixed ones `fixedNames` behind them, and the
+## positions of the condition directions among `global`. With `times`, a list per condition, the plan of the
 ## prediction and error model on these times, without the data. With `tangents` the plan of the
 ## sweeps of forward over reverse instead: the solve on `times` along that many tangents of the
 ## free names, the data rows, and the backward solve with `seeds` seeds. With `adjoint` the plan of
@@ -94,7 +94,7 @@
   if (adjoint && (deriv || deriv2 || sweep)) return(NULL)
   frames <- !is.null(times) && !sweep
   vnames <- paste0("v", seq_len(tangents))
-  # the derivatives a steady state gives with its root, and the vector-Jacobian products
+  # the derivatives a steady state gives with the root, and the vector-Jacobian products
   order <- if (deriv2 || sweep) 2L else if (deriv || adjoint) 1L else 0L
   vjp <- if (adjoint) "_vjp" else if (sweep) "_vjp_ad"
   timesOf <- function(i) if (!is.null(times)) times[[i]] else if (is.list(spec$timesD)) spec$timesD[[conds[i]]] else spec$timesD
@@ -135,7 +135,7 @@
   xs <- tryCatch(solve(tl, dl, deriv, deriv2, 0L, adjoint), error = function(e) NULL)
   if (is.null(xs)) return(NULL)
   xr <- if (sweep) tryCatch(solve(tl, dl, TRUE, FALSE, seeds), error = function(e) NULL)
-        else if (adjoint) tryCatch(solve(tl, dl, FALSE, FALSE, 1L, TRUE), error = function(e) NULL)
+        else if (adjoint) tryCatch(solve(tl, dl, FALSE, FALSE, max(1L, seeds), TRUE), error = function(e) NULL)
   if ((sweep || adjoint) && (is.null(xr) || !identical(xr$handle$required, xs$handle$required))) return(NULL)
 
   cond <- vector("list", length(conds))
@@ -210,7 +210,7 @@
        observables = lapply(leaves, function(l) l$gi), onFailure = xs$onFailure)
 }
 
-## Whether `plan` still holds: its shared objects loaded and the controls of its leaves as they
+## Whether `plan` still holds: the shared objects loaded and the controls of the leaves as they
 ## were.
 .chainLive <- function(plan) {
   live <- function(h) is.null(h$sym) || .batchHandleLive(h)
@@ -234,7 +234,7 @@
   invisible(NULL)
 }
 
-## The forward solve of `plan` on the arguments `args`, or with `back` its backward solve; NULL
+## The forward solve of `plan` on the arguments `args`, or with `back` the backward solve; NULL
 ## where it fails.
 .chainSolveRun <- function(plan, args, cores, back = FALSE) {
   run <- if (back) plan$rrun else plan$run
@@ -256,9 +256,9 @@
 
 
 ## The data term of `ctx` per request in C++: request j on condition `conds[j]`, which may repeat,
-## at its free values `parsList[[j]]` and fixed values `fixedList[[j]]` (NULL for none, the same
+## at the free values `parsList[[j]]` and fixed values `fixedList[[j]]` (NULL for none, the same
 ## names in every request), with value, chi2 and, with `deriv`, gradient and Hessian in the names of
-## its free values; NULL where the chain does not cover the model or fails, for the R path.
+## the free values; NULL where the chain does not cover the model or fails, for the R path.
 .chainLocal <- function(ctx, conds, parsList, fixedList, deriv, deriv2, cores, bloq, df) {
   if (is.null(ctx) || !.evalCpp() || !length(conds)) return(NULL)
   fixedList <- fixedList %||% rep(list(NULL), length(conds))
@@ -275,8 +275,11 @@
 .chainAdjoint <- function(ctx, conditions, pars, fixed, cores, bloq, df) {
   if (is.null(ctx) || !.evalCpp()) return(NULL)
   nm <- names(pars)
+  # under refine a second seed for chi2, as in .normL2_reverse()
+  correct <- .refines(ctx$spec$prdfn, conditions)
+  S <- if (correct) 2L else 1L
   plan <- .chainLookup(ctx, conditions, rep(list(nm), length(conditions)), names(fixed), nm, FALSE, FALSE,
-                       adjoint = TRUE)
+                       seeds = S, adjoint = TRUE)
   if (is.null(plan)) return(NULL)
   cores <- as.integer(max(1L, cores))
   values <- list(c(as.numeric(pars), as.numeric(fixed)))
@@ -287,14 +290,19 @@
   dat <- if (!is.null(raw))
     chain_data(plan, pre, raw, FALSE, FALSE, FALSE, FALSE, cores, bloq, if (is.finite(df)) df else 0, TRUE)
   back <- if (!is.null(dat))
-    chain_back(plan, pre, raw, matrix(dat$seed_pred), matrix(dat$seed_sigma), 1L, cores, TRUE)
+    chain_back(plan, pre, raw, cbind(dat$seed_pred, if (correct) dat$seed_chi2_pred),
+               cbind(dat$seed_sigma, if (correct) dat$seed_chi2_sigma), S, cores, TRUE)
   rraw <- if (!is.null(back)) .chainSolveRun(plan, back$args, cores, back = TRUE)
   pull <- if (!is.null(rraw))
-    chain_pull(plan, values, matrix(0, length(nm), 0), pre$roots, back, rraw, 1L, cores, TRUE)
+    chain_pull(plan, values, matrix(0, length(nm), 0), pre$roots, back, rraw, S, cores, TRUE)
   if (is.null(pull)) return(NULL)
   gradient <- setNames(numeric(length(nm)), nm)
   for (u in pull) gradient[u$rows + 1L] <- gradient[u$rows + 1L] + u$ct[, 1L]
-  list(value = dat$value, chi2 = dat$chi2, gradient = gradient)
+  if (!correct) return(list(value = dat$value, chi2 = dat$chi2, gradient = gradient))
+  corr <- c(0, 0)
+  for (r in rraw) if (!is.null(r$correction)) corr <- corr + as.numeric(r$correction)
+  list(value = dat$value + corr[1L], chi2 = dat$chi2 + corr[2L], gradient = gradient,
+       correction = c(value = corr[1L], chi2 = corr[2L]))
 }
 
 
@@ -315,7 +323,7 @@
 ## with `tangents` and `seeds` for the sweeps (.chainPlan()).
 .chainLookup <- function(ctx, conditions, free, fixedNames, global, deriv, deriv2, times = NULL,
                          retry = TRUE, tangents = 0L, seeds = 0L, adjoint = FALSE) {
-  # a repeated request: the plan of the last one while its shared objects are loaded
+  # a repeated request: the plan of the last one while the shared objects of that plan are loaded
   req <- list(conditions, free, fixedNames, global, deriv, deriv2, times, tangents, seeds, adjoint)
   last <- ctx$last
   if (!is.null(last) && identical(last$req, req) && all(vapply(last$plans, .chainLive, TRUE)))

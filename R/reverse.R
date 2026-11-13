@@ -1,10 +1,11 @@
 ## Reverse-mode helpers -----------------------------------------------------
 ## Copyright (C) 2026 Simon Beyer
 
-# A cotangent: `out` on the node's output matrix, `pars` on its parameters,
+# A cotangent: `out` on the node's output matrix, `pars` on the node parameters,
 # both optional and additive. The trailing axis of extent K holds the cotangent
-# in slice 1 and its directional derivatives after it, or K seeds in seed mode.
-.ct <- function(out = NULL, pars = NULL) {
+# in slice 1 and the directional derivatives after it, or K seeds in seed mode.
+# `value`, per seed, is the value correction of refined sweeps below the node.
+.ct <- function(out = NULL, pars = NULL, value = NULL) {
   if (!is.null(pars) && is.null(dim(pars)))
     pars <- matrix(pars, ncol = 1L, dimnames = list(names(pars), NULL))
   if (!is.null(out) && length(dim(out)) == 2L) {
@@ -12,7 +13,7 @@
     dim(out) <- c(dim(out), 1L)
     dimnames(out) <- c(dn, list(NULL))
   }
-  list(out = out, pars = pars)
+  list(out = out, pars = pars, value = value)
 }
 
 # How many directions a half has. Works on both shapes, [p, K] and
@@ -27,7 +28,7 @@
   matrix(0, length(nms), K, dimnames = list(nms, NULL))
 
 # Inside .withSeeds(S, ...) the trailing axis of a second-order cotangent holds S blocks of
-# equal width, each a seed followed by its derivatives along the tangents, so that one backward
+# equal width, each a seed followed by the seed derivatives along the tangents, so that one backward
 # sweep answers S seeds; outside it there is one block.
 .reverseState <- new.env(parent = emptyenv())
 .withSeeds <- function(S, expr) {
@@ -38,7 +39,7 @@
 }
 
 # The blocks of a trailing axis of width K: `first`, the position of every seed, and `rest`,
-# [D, S], the positions of its derivatives along the D tangents.
+# [D, S], the positions of the seed derivatives along the D tangents.
 .ctBlocks <- function(K, S = .reverseState$seeds %||% 1L) {
   if (K %% S)
     stop("a cotangent of width ", K, " does not split into ", S, " seed blocks.", call. = FALSE)
@@ -48,7 +49,7 @@
        rest = matrix(rep(first, each = B - 1L) + seq_len(B - 1L), B - 1L, S))
 }
 
-# The solver's answer as a K-column cotangent: per seed the gradient and its directional
+# The solver's answer as a K-column cotangent: per seed the gradient and the directional
 # derivatives along the chain's tangents beside it.
 .adjointCt <- function(res, K = 1L) {
   b <- .ctBlocks(K)
@@ -88,7 +89,7 @@
   if (is.null(b)) return(a)
   if (ncol(a) != ncol(b))
     stop("two cotangent halves have ", ncol(a), " and ", ncol(b),
-         " directions; a node handed on a width its neighbour does not have.",
+         " directions; a node handed on a width the neighboring node does not have.",
          call. = FALSE)
   na <- rownames(a); nb <- rownames(b)
   nms <- c(na, nb[is.na(match(nb, na))])
@@ -103,7 +104,40 @@
   if (is.null(a)) return(b)
   if (is.null(b)) return(a)
   o <- if (is.null(a$out)) b$out else if (is.null(b$out)) a$out else a$out + b$out
-  .ct(o, .addNamed(a$pars, b$pars))
+  v <- if (is.null(a$value)) b$value else if (is.null(b$value)) a$value else a$value + b$value
+  .ct(o, .addNamed(a$pars, b$pars), v)
+}
+
+# Inside .withCorrection() the seeded sweeps of a prediction are refined under
+# optionsReverse$refine and return the value correction per seed.
+.withCorrection <- function(expr) {
+  old <- .reverseState$correct
+  .reverseState$correct <- TRUE
+  on.exit(.reverseState$correct <- old)
+  expr
+}
+
+# The cotangent `ct` of a vjp with the value correction of the solver result `res`, per seed, as
+# attribute "correction"; .bwdLeaf() lifts it into the value of the cotangent.
+.withCorrectionOf <- function(ct, res) {
+  if (!is.null(res$correction)) attr(ct, "correction") <- unname(as.numeric(res$correction))
+  ct
+}
+
+# A vjp answer on the parameters as a cotangent, the value correction lifted out of the attribute.
+.ctPars <- function(p) {
+  v <- attr(p, "correction", exact = TRUE)
+  attr(p, "correction") <- NULL
+  .ct(pars = p, value = v)
+}
+
+# Whether a prediction of `f` on `conditions` sweeps refined, see optionsReverse.
+.refines <- function(f, conditions = NULL) {
+  for (l in .fnLeaves(f, conditions)) {
+    r <- attr(l$kernel, "refine", exact = TRUE)
+    if (is.function(r) && isTRUE(r())) return(TRUE)
+  }
+  FALSE
 }
 
 # Which object a cotangent of width K needs from the prediction. K > 1 is
@@ -120,17 +154,17 @@
 }
 
 # A seeded solve without a cotangent has failed; a silent zero would drop
-# its block of the gradient.
+# the solve block of the gradient.
 .requireAdjoint <- function(res, condition = NULL) {
   if (!is.null(res$cotangent)) return(invisible(NULL))
   stop("the backward solve returned no cotangent",
        if (is.null(condition)) "" else paste0(" for condition ", condition),
        ", though it reported success. The model was seeded, so this is a ",
-       "backend fault rather than a modelling one.", call. = FALSE)
+       "backend fault rather than a modeling one.", call. = FALSE)
 }
 
 # A matrix on exactly the rows `nms`, zero where `w` has none. `K` is the width
-# expected back: an absent half is zero at the width of its neighbour.
+# expected back: an absent half is zero at the width of the neighbor.
 .pickCotangent <- function(w, nms, K = .ctK(w)) {
   out <- .ctZero(nms, K)
   if (is.null(w) || !length(nms)) return(out)
@@ -148,7 +182,7 @@
 }
 
 # A cotangent on a subset of columns, widened to the full state set with zeros.
-# Slice 1 becomes the solver's `cotangent`, the further direction slices its
+# Slice 1 becomes the solver's `cotangent`, the further direction slices the
 # `curvature` (NULL at first order), since a seed column costs a whole sweep.
 .widenCotangent <- function(w, full, subset) {
   n <- dim(w)[1L]
@@ -166,7 +200,7 @@
 }
 
 # Seed-mode counterpart: every slice of the trailing axis goes to the solver
-# as a seed column of its own, none becomes a curvature.
+# as a separate seed column, none becomes a curvature.
 .widenSeeds <- function(w, full, subset) {
   n <- dim(w)[1L]
   S <- .ctK(w)
@@ -191,7 +225,7 @@
 .asCtPars <- function(w) if (is.null(w) || !is.null(dim(w))) w else .ct(pars = w)$pars
 
 # A cotangent widened to K directions with zeros: an objective's seed is a
-# constant, so its tangents vanish.
+# constant, so the seed tangents vanish.
 .ctWiden <- function(w, K) {
   if (K <= 1L) return(w)
   d <- dim(w)
@@ -208,7 +242,7 @@
   if (length(dim(m)) == 2L) m[, keep, drop = FALSE] else m[, keep, , drop = FALSE]
 }
 
-# Vjp of a parfn that builds its own Jacobian, as Pimpl does by the implicit
+# Vjp of a parfn that builds the Jacobian itself, as Pimpl does by the implicit
 # function theorem: the transposed Jacobian applied to the cotangent. The
 # Jacobian's width is the node's own parameter set, not n_theta.
 .parfnVjpFromJacobian <- function(p2p) {

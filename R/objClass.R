@@ -352,13 +352,16 @@ normT <- function(data, x, errmodel = NULL, df, times = NULL, attrName = "data",
         stop("normL2: a handed-in prediction is a forward-mode shortcut and ",
              "records no tape; the reverse mode has to walk the chain itself.",
              call. = FALSE)
-      # the adjoint gradient through the native chain where its pieces allow it
-      if (isTRUE(deriv) && !isTRUE(hessian) && !exists("prediction", envir = env, inherits = FALSE)) {
+      # the adjoint gradient through the native chain where the pieces of the chain allow it
+      # under refine a value alone takes the sweep too, for the correction
+      if ((isTRUE(deriv) || .refines(x, conditions)) && !isTRUE(hessian) &&
+          !exists("prediction", envir = env, inherits = FALSE)) {
         res <- .chainAdjoint(.chain, conditions, pars, fixed, cores, optBLOQ, df)
         if (!is.null(res)) {
-          out <- objlist(value = res$value, gradient = res$gradient, hessian = NULL)
+          out <- objlist(value = res$value, gradient = if (isTRUE(deriv)) res$gradient, hessian = NULL)
           attr(out, attrName) <- out$value
           attr(out, "chi2") <- setNames(res$chi2, attrName)
+          if (!is.null(res$correction)) attr(out, "correction") <- res$correction
           attr(out, "sweep") <- "reverse"
           delayedAssign("prediction", x(times = .timesOf(conditions), pars = pars, fixed = fixed, deriv = FALSE,
                                         conditions = conditions, cores = cores), assign.env = env)

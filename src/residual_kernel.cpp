@@ -68,7 +68,7 @@ void contract_d2_block(int n_obs, int n_par,
   }
 }
 
-// The parameters at which a row has a nonzero derivative of its prediction or its sigma; the
+// The parameters at which a row has a nonzero derivative of the row prediction or sigma; the
 // Gauss-Newton Hessian of the row vanishes outside them.
 inline void row_support(int n_par, const double* dpred, const double* dsigma, std::vector<int>& nz) {
   nz.clear();
@@ -79,7 +79,7 @@ inline void row_support(int n_par, const double* dpred, const double* dsigma, st
 }  // namespace
 
 
-// Student-t rows: the loss l(pred, sigma) by its first and second derivatives; censored rows
+// Student-t rows: the loss l(pred, sigma) by the first and second derivatives of l; censored rows
 // by M3 with the t distribution function. Shared by the ALOQ and BLOQ entries.
 static void accumulate_t_rows(int n_obs, int n_par, const double* pred, const double* dpred,
                               const double* d2pred, const double* y_data, const double* sigma,
@@ -274,8 +274,8 @@ void accumulate_aloq_residual(
       }
     }
 
-    // Single per-row Hessian double-loop over the support of the row, where its bilinear
-    // terms can be nonzero; each coefficient defaults to 0 when its contribution is absent.
+    // Single per-row Hessian double-loop over the support of the row, where the bilinear
+    // terms can be nonzero; each coefficient defaults to 0 when the matching contribution is absent.
     if (opts.build_hessian) row_support(n_par, dpred_i, dsigma_i, nz);
     if (opts.build_hessian)
     for (const int k2 : nz) {
@@ -298,7 +298,7 @@ void accumulate_aloq_residual(
     }
 
     // d2pred exact weight: 2 * wr/sigma from the base term; M4BEAL adds the
-    // exact second-order part of its +2 log Phi(w0) correction, 2 * G(w0)/sigma.
+    // exact second-order part of the M4BEAL +2 log Phi(w0) correction, 2 * G(w0)/sigma.
     if (opts.use_deriv2_exact) {
       W_d2[i] = 2.0 * wr * inv_s;
       if (m4beal_aloq) W_d2[i] += 2.0 * G_w0 * inv_s;
@@ -576,6 +576,15 @@ void accumulate_bloq_residual(
   if (opts.build_hessian && has_d2sig) {
     contract_d2_block(n_obs, n_par, d2sigma, W_d2sig.data(), hess_acc,
                       scratch_d2);
+  }
+}
+
+void chi2_seeds(int n_obs, const double* pred, const double* y_data, const double* sigma,
+                double* seed_pred, double* seed_sigma) {
+  for (int i = 0; i < n_obs; ++i) {
+    const double inv_s = 1.0 / sigma[i], wr = (pred[i] - y_data[i]) * inv_s;
+    seed_pred[i] += 2.0 * wr * inv_s;
+    seed_sigma[i] -= 2.0 * wr * wr * inv_s;
   }
 }
 

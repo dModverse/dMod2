@@ -246,7 +246,53 @@ test_that("optionsReverse refine checks the sweep", {
   expect_lt(err(g_ref), err(g_plain))
 })
 
-test_that("the gap to the forward mode is the discretisation, not the adjoint", {
+test_that("optionsReverse refine adds the correction of the sweep to value and chi2", {
+  fx <- .rev_fx()
+  lo <- list(atol = 1e-6, rtol = 1e-4)
+  th <- fx$pars + 0.5
+  cases <- list(
+    fixed = list(p = fx$p, e = NULL, conds = "C1", sigma = 0.1, pars = th),
+    error = list(p = fx$pe, e = fx$e, conds = "C1", sigma = NULL,
+                 pars = c(th, logsdrel = log(0.08), logsdabs = log(0.02))),
+    batch = list(p = fx$pc, e = NULL, conds = c("C1", "C2"), sigma = 0.1,
+                 pars = c(th, dk_C1 = 0.1, dk_C2 = -0.15)))
+  chi2 <- function(o) unname(attr(o, "chi2"))
+  for (nm in names(cases)) {
+    cs <- cases[[nm]]
+    pars <- cs$pars
+    dat <- .rev_data(fx, fx$g * fx$x * cs$p, pars, cs$conds, sigma = cs$sigma)
+    obj <- function(opt, rev = list(refine = TRUE, gradtol = 1e-9))
+      normL2(dat, fx$g * Xs(fx$m, options = opt, optionsReverse = rev) * cs$p, cs$e)
+    plain <- obj(lo)(pars, deriv = FALSE)
+    o <- obj(lo)
+    r <- o(pars, deriv = TRUE, sweep = "reverse")
+    rR <- withr::with_options(list(dMod2.evaluation = "R"), o(pars, deriv = TRUE, sweep = "reverse"))
+    # the native chain answers, rather than handing over to the R path
+    expect_length(.chainAdjoint(environment(o)$.chain, environment(o)$conditions.obj, pars, NULL, 1L,
+                                "M3", Inf)$correction, 2L)
+
+    # without refine the reverse value is the forward one
+    expect_equal(obj(lo, list())(pars, deriv = TRUE, sweep = "reverse")$value, plain$value,
+                 tolerance = 1e-10, info = nm)
+    # the value of the swept trajectory, which need not be closer to the exact one
+    corr <- attr(r, "correction")
+    expect_true(all(is.finite(corr)) && all(corr != 0), info = nm)
+    expect_equal(r$value, plain$value + corr[["value"]], tolerance = 1e-10, info = nm)
+    expect_equal(chi2(r), chi2(plain) + corr[["chi2"]], tolerance = 1e-10, info = nm)
+    expect_equal(rR$value, r$value, tolerance = 1e-10, info = nm)
+    expect_equal(chi2(rR), chi2(r), tolerance = 1e-10, info = nm)
+    expect_equal(rR$gradient[names(r$gradient)], r$gradient, tolerance = 1e-8, info = nm)
+    # a value alone is the value of the same function
+    v <- o(pars, deriv = FALSE, sweep = "reverse")
+    vR <- withr::with_options(list(dMod2.evaluation = "R"), o(pars, deriv = FALSE, sweep = "reverse"))
+    expect_null(v$gradient)
+    expect_equal(v$value, r$value, tolerance = 1e-12, info = nm)
+    expect_equal(chi2(v), chi2(r), tolerance = 1e-12, info = nm)
+    expect_equal(vR$value, r$value, tolerance = 1e-10, info = nm)
+  }
+})
+
+test_that("the gap to the forward mode is the discretization, not the adjoint", {
   fx <- .rev_fx()
   prd <- fx$g * fx$x * fx$p
   data <- .rev_data(fx, prd, fx$pars)

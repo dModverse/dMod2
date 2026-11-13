@@ -71,7 +71,15 @@ value pass. An unknown entry is an error. Entries:
 \itemize{
 \item \code{refine}: \code{TRUE} checks each step of the sweep against the tolerances
 of the solve and sweeps a failing step again in substeps, see
-\code{\link[cppDE:adjointControl]{cppDE::adjointControl()}}. Default \code{FALSE}.
+\code{\link[cppDE:adjointControl]{cppDE::adjointControl()}}. Default \code{FALSE}. The value and the \code{chi2}
+attribute of the reverse objective of \code{\link[=normL2]{normL2()}} then include the
+first-order change from the computed trajectory to the one the sweep
+differentiates, so value and gradient belong to one function, which
+need not be closer to the exact value; a call with \code{deriv = FALSE}
+sweeps as well. The change is the attribute
+\code{correction} of the result. Forward values, the sweeps of \code{\link[=em]{em()}} and
+\code{\link[=msem]{msem()}} (forward over reverse) and multiple shooting run without
+refine; \code{\link[=em]{em()}} refuses a prediction with it.
 \item \code{gradtol}: under \code{refine}, the absolute tolerance on each step's share
 of the gradient. Default \code{NULL}, no check on the gradient.
 }}

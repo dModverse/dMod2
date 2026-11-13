@@ -10,7 +10,7 @@
 //
 // Parallel safety: all R API access (extracting matrices, attributes, ints)
 // happens in the serial phase 1 (gather). Phase 2 (accumulate) only touches
-// plain std::vector data; each thread has its own grad/hess local buffer
+// plain std::vector data; each thread has a separate grad/hess local buffer
 // that is merged in a critical region.
 
 #include "residual_kernel.h"
@@ -389,7 +389,7 @@ List normL2_kernel(
   // Phase 2: accumulate (parallel-over-conditions)
   std::vector<double> grad_global(n_par_global, 0.0);
   std::vector<double> hess_global;
-  // A caller that asks for the blocks of each condition assembles its own
+  // A caller that asks for the blocks of each condition assembles a separate
   // matrix from them, the way multiple shooting condenses them, and would
   // only discard a global one of n_par_global^2.
   const bool build_global_hessian = build_hessian && !local_blocks;
@@ -404,9 +404,9 @@ List normL2_kernel(
 #else
   n_threads = std::min(n_threads, omp_get_num_procs());
 #endif
-  // a forked child has none of the OpenMP threads of its parent
+  // a forked child has none of the OpenMP threads of the parent
   if (dmod_normL2_forked()) n_threads = 1;
-  // the requested team, at most the processors, also for fewer conditions, so that OpenMP keeps its
+  // the requested team, at most the processors, also for fewer conditions, so that OpenMP keeps the
   // threads
   if (n_cond <= 1) n_threads = 1;
 
@@ -417,7 +417,7 @@ List normL2_kernel(
   if (t_df > 0) base_opts.t_df = t_df;
   base_opts.build_hessian    = build_hessian;
 
-  // One slot per condition in its local parameter space, allocated here so the
+  // One slot per condition in the condition local parameter space, allocated here so the
   // workers neither allocate nor share; merged serially after the region.
   std::vector<double> value_c(n_cond, 0.0);
   std::vector<double> chi2_c(n_cond, 0.0);
@@ -425,7 +425,7 @@ List normL2_kernel(
   // The reverse seeds, one pair per condition, in the row order the meta
   // built: ALOQ rows first, then BLOQ. The caller scatters them back onto
   // times and observables.
-  std::vector<std::vector<double> > seedp_c(n_cond), seeds_c(n_cond);
+  std::vector<std::vector<double> > seedp_c(n_cond), seeds_c(n_cond), chip_c(n_cond), chis_c(n_cond);
   for (int c = 0; c < n_cond; ++c) {
     const int npl = conds[c].n_par_local;
     grad_c[c].assign(npl, 0.0);
@@ -434,6 +434,8 @@ List normL2_kernel(
       const int nrow = conds[c].n_aloq + conds[c].n_bloq;
       seedp_c[c].assign(nrow, 0.0);
       seeds_c[c].assign(nrow, 0.0);
+      chip_c[c].assign(nrow, 0.0);
+      chis_c[c].assign(nrow, 0.0);
     }
   }
 
@@ -471,6 +473,9 @@ List normL2_kernel(
             value_cond, chi2_cond, grad_cond, hess_cond,
             want_seed ? seedp_c[c].data() : nullptr,
             want_seed ? seeds_c[c].data() : nullptr);
+        if (want_seed)
+          dmod::chi2_seeds(C.n_aloq, C.pred.data(), C.y_data.data(), C.sigma.data(),
+                           chip_c[c].data(), chis_c[c].data());
       }
       // BLOQ rows (offset = n_aloq)
       if (C.n_bloq > 0) {
@@ -544,15 +549,18 @@ List normL2_kernel(
 
   RObject seed_R = R_NilValue;
   if (want_seed) {
-    List sp(n_cond), ss(n_cond);
+    List sp(n_cond), ss(n_cond), cp(n_cond), cs(n_cond);
     for (int c = 0; c < n_cond; ++c) {
       sp[c] = NumericVector(seedp_c[c].begin(), seedp_c[c].end());
       ss[c] = NumericVector(seeds_c[c].begin(), seeds_c[c].end());
+      cp[c] = NumericVector(chip_c[c].begin(), chip_c[c].end());
+      cs[c] = NumericVector(chis_c[c].begin(), chis_c[c].end());
     }
-    seed_R = List::create(Named("pred") = sp, Named("sigma") = ss);
+    seed_R = List::create(Named("pred") = sp, Named("sigma") = ss, Named("chi2_pred") = cp,
+                          Named("chi2_sigma") = cs);
   }
 
-  // Each condition in its own parameter space, named after the columns of its
+  // Each condition in the condition parameter space, named after the columns of the
   // sensitivity block.
   RObject local_R = R_NilValue;
   if (local_blocks) {

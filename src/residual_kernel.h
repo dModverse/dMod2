@@ -7,7 +7,7 @@
 //
 //   For ALOQ rows (val > lloq):
 //     obj   += wr^2 + log(2 pi sigma^2)
-//     chi2  += wr^2                    (the data term without its normaliser)
+//     chi2  += wr^2                    (the data term without the normalizer)
 //     grad  += 2 * (wr * dwr/dtheta + 1/sigma * dsigma/dtheta)
 //     hess  += 2 * outer(dwr/dtheta, dwr/dtheta)              -- Part0 (GN)
 //            + ALOQ_part1 + ALOQ_part2 + ALOQ_part3            -- toggleable
@@ -38,7 +38,7 @@
 //     M3:   obj += -2 log F_nu(-wr)
 //     grad and hess from the derivatives of the loss in (pred, sigma), the
 //     Hessian J' L J with L the exact 2 x 2 Hessian of the loss, plus the
-//     deriv2-exact terms weighted by its first derivatives.
+//     deriv2-exact terms weighted by the first derivatives of the loss.
 //
 // Conventions:
 //   - dpred is stored row-major: dpred[row*n_par + p] = d pred_row / d par_p.
@@ -150,6 +150,11 @@ void accumulate_bloq_residual(
     double* hess_acc,
     double* seed_pred = nullptr,
     double* seed_sigma = nullptr);
+
+// The derivatives of chi2 = sum wr^2 in pred and sigma of the ALOQ rows, the seeds of the
+// reverse sweep for the chi2 attribute. Censored rows have no chi2 term.
+void chi2_seeds(int n_obs, const double* pred, const double* y_data, const double* sigma,
+                double* seed_pred, double* seed_sigma);
 
 }  // namespace dmod
 

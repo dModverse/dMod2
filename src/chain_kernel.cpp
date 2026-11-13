@@ -41,7 +41,7 @@ struct ChainForkGuard {
 } chainForkGuard;
 #endif
 
-// The requested team, at most the processors, also for fewer conditions, so that libgomp keeps its
+// The requested team, at most the processors, also for fewer conditions, so that libgomp keeps the
 // threads and cppDE their scratch; one thread inside a parallel region or in a forked child.
 int chainThreads(int requested, int n) {
   int nt = n > 1 ? std::max(1, requested) : 1;
@@ -94,7 +94,7 @@ bool evalAd(DL_FUNC f, bool d2, std::vector<double>& x, std::vector<double>& p, 
 }
 
 // The columns `idx` of an array [T, n, nd^k] as an array [T, idx, nd^k], k = 0, 1, 2. An index
-// -1 is the time: `time` in its value column, 0 in its derivatives.
+// -1 is the time: `time` in the value column, 0 in the derivative columns.
 std::vector<double> columns(const double* a, int T, int n, const std::vector<int>& idx, std::size_t blocks,
                             const double* time = nullptr) {
   const int m = idx.size();
@@ -117,7 +117,7 @@ int position(const List& l, const char* name) {
 
 // A stage of the transformation: a compiled function (kind 0) of the entries `in` of the vector
 // before it, or a steady state (kind 1) of them, solved by `pimpl` with derivatives of order
-// `order`; its `nfo` outputs, then the entries `pass` of the vector before it. `guess` are the
+// `order`; the stage has `nfo` outputs, then the entries `pass` of the vector before it. `guess` are the
 // entries a steady state starts from, -1 where it has none.
 struct PStage {
   int kind = 0, nfo = 0, order = 0;
@@ -126,19 +126,19 @@ struct PStage {
   std::vector<int> in, pass, guess;
 };
 
-// The root of a steady-state stage at its inputs: x [ndep], D [ndep, n_in], D2 [ndep, n_in, n_in].
+// The root of a steady-state stage at the stage inputs: x [ndep], D [ndep, n_in], D2 [ndep, n_in, n_in].
 struct Root {
   const double *x = nullptr, *D = nullptr, *D2 = nullptr;
   int ndep = 0;
 };
 
-// A vector with its derivatives along nd directions: v [n], J [n, nd], H [n, nd, nd].
+// A vector with derivatives along nd directions: v [n], J [n, nd], H [n, nd, nd].
 struct Vec {
   int n = 0;
   std::vector<double> v, J, H;
 };
 
-// A condition's stages, its outer entries `p_oidx` and per entry its direction `p_odir` and its
+// A condition's stages, the outer entries `p_oidx` and per entry the direction `p_odir` and the
 // tangent row `p_ovrow`, -1 where it has none.
 struct PPlan {
   std::vector<PStage> st;
@@ -172,7 +172,7 @@ bool readPlan(const List& pc, PPlan& P) {
   return true;
 }
 
-// The roots of the steady-state stages of a condition, from its entry of `roots` (a list per stage,
+// The roots of the steady-state stages of a condition, from the condition entry of `roots` (a list per stage,
 // NULL or list(x, D, D2)); the index of the first such stage without one, or -1.
 int readRoots(SEXP roots, const PPlan& P, std::vector<Root>& R) {
   R.assign(P.st.size(), Root());
@@ -302,7 +302,7 @@ bool runStages(const PPlan& P, const std::vector<Root>& R, Vec& u, int upto, int
 // of a sweep plan, the directions instead of the free names themselves. The steady-state stages
 // are solved on the way, all conditions at a stage at once. Returns list(pv, pj, ph, args, roots,
 // warnings): per condition the inner values, their first [n_out, nd] and second derivatives
-// [n_out, nd, nd], the solve arguments and per stage its root (list(x, D, D2), NULL for a
+// [n_out, nd, nd], the solve arguments and per stage the root (list(x, D, D2), NULL for a
 // compiled stage). NULL where a function fails or a root has no derivatives; an error where no
 // root is found.
 // [[Rcpp::export]]
@@ -520,7 +520,7 @@ bool gather(const List& conds, const List& pre, const List& raw, bool deriv, boo
   return true;
 }
 
-// The observables of a condition on the grid of its solve and, with `withErr`, the error model on
+// The observables of a condition on the grid of the condition solve and, with `withErr`, the error model on
 // them; inputs from the states and the transformation.
 bool observe(const In& I, bool deriv2, bool withErr, Ad& Y, Ad& E) {
   const int T = I.ntime, nd = I.nd;
@@ -595,9 +595,10 @@ SEXP frame(const double* t, const Ad& a, int T, int n, int nd, bool deriv2, cons
 
 // Observables, error model and data term of all conditions from the transformations of
 // chain_params() and the results of the batch solve. Returns list(value, chi2, gradient, hessian,
-// local): over the `n_global` parameters of the plan, or per condition in its directions; with
+// local): over the `n_global` parameters of the plan, or per condition in the condition directions; with
 // `want_seed` also seed_pred and seed_sigma, the derivatives of the value in the prediction and
-// sigma of every data row, in the order of the conditions and of their data. NULL where a solve or
+// sigma of every data row, in the order of the conditions and of their data, and seed_chi2_pred,
+// seed_chi2_sigma those of chi2. NULL where a solve or
 // a function fails or a prediction at a data point is not finite.
 // [[Rcpp::export]]
 SEXP chain_data(List plan, List pre, List raw, bool deriv, bool deriv2, bool build_hessian, bool local,
@@ -609,8 +610,9 @@ SEXP chain_data(List plan, List pre, List raw, bool deriv, bool deriv2, bool bui
   if (!gather(conds, pre, raw, deriv, deriv2, true, in)) return R_NilValue;
   std::vector<int> rowOff(K + 1, 0);
   for (int c = 0; c < K; ++c) rowOff[c + 1] = rowOff[c] + (int) in[c].t.size();
-  NumericVector seedP(want_seed ? rowOff[K] : 0), seedS(want_seed ? rowOff[K] : 0);
-  double *SPd = REAL(seedP), *SSd = REAL(seedS);
+  NumericVector seedP(want_seed ? rowOff[K] : 0), seedS(want_seed ? rowOff[K] : 0),
+      chiP(want_seed ? rowOff[K] : 0), chiS(want_seed ? rowOff[K] : 0);
+  double *SPd = REAL(seedP), *SSd = REAL(seedS), *CPd = REAL(chiP), *CSd = REAL(chiS);
 
   dmod::AccumOpts base;
   base.build_hessian = build_hessian;
@@ -686,7 +688,9 @@ SEXP chain_data(List plan, List pre, List raw, bool deriv, bool deriv2, bool bui
     opts.sigma_depends_on_par = hasDs;
     opts.d2sigma_present = d2 && hasDs;
     double v = 0.0, ch = 0.0;
-    std::vector<double> sp(want_seed ? n : 0, 0.0), ss(want_seed ? n : 0, 0.0);
+    std::vector<double> sp(want_seed ? n : 0, 0.0), ss(want_seed ? n : 0, 0.0), cp(want_seed ? n : 0, 0.0),
+        cs(want_seed ? n : 0, 0.0);
+    if (want_seed && na > 0) dmod::chi2_seeds(na, pred.data(), ydat.data(), sig.data(), cp.data(), cs.data());
     if (na > 0)
       dmod::accumulate_aloq_residual(na, nd, pred.data(), dpred.data(), d2 ? d2pred.data() : nullptr, ydat.data(),
                                      sig.data(), hasDs ? dsig.data() : nullptr,
@@ -706,6 +710,8 @@ SEXP chain_data(List plan, List pre, List raw, bool deriv, bool deriv2, bool bui
     for (int j = 0; j < n && want_seed; ++j) {
       SPd[rowOff[c] + perm[j]] = sp[j];
       SSd[rowOff[c] + perm[j]] = ss[j];
+      CPd[rowOff[c] + perm[j]] = cp[j];
+      CSd[rowOff[c] + perm[j]] = cs[j];
     }
     value[c] = v;
     chi2[c] = ch;
@@ -719,6 +725,8 @@ SEXP chain_data(List plan, List pre, List raw, bool deriv, bool deriv2, bool bui
   if (want_seed) {
     out["seed_pred"] = seedP;
     out["seed_sigma"] = seedS;
+    out["seed_chi2_pred"] = chiP;
+    out["seed_chi2_sigma"] = chiS;
   }
   if (local) {
     List loc(K);
@@ -813,7 +821,7 @@ SEXP chain_frames(List plan, List pre, List raw, bool deriv2, int threads) {
 // along the tangents, chain_back() pulls seeds on them through the error model and the
 // observables onto the states and fills the arguments of the backward solve, chain_pull() takes
 // the answer of that solve through the transformation onto the free names. Seeds come in blocks:
-// a seed and its derivatives along the K tangents.
+// a seed and the seed derivatives along the K tangents.
 
 namespace {
 
@@ -957,9 +965,9 @@ SEXP chain_rows(List plan, List pre, List raw, int threads) {
 
 // The seeds `seedP` on the predictions and `seedS` on the sigmas of the rows of chain_rows(),
 // [rows, S (K + 1)], through the error model and the observables. Returns list(args, cp, dcp): per
-// condition the arguments of the backward solve with its cotangent [T, states, S] and curvature
+// condition the arguments of the backward solve with the cotangent [T, states, S] and curvature
 // [T, states, S, K], and the cotangent of the transformation's outputs so far [outputs, S] with
-// its derivatives [outputs, S, K]. With `first` the first order of an adjoint plan: no tangents,
+// the derivatives [outputs, S, K]. With `first` the first order of an adjoint plan: no tangents,
 // the raw `_vjp` entries, and the store of the forward solve handed to the backward one. NULL
 // where a function fails.
 // [[Rcpp::export]]
@@ -1122,7 +1130,7 @@ SEXP chain_back(List plan, List pre, List raw, NumericMatrix seedP, NumericMatri
 namespace {
 
 // Cotangents w [n, S] of a stage's outputs and their derivatives dw [n, S, K] along the tangents,
-// pulled through the stage onto its input `u` (the vector before it with its tangents u.J [n, K]).
+// pulled through the stage onto the stage input `u` (the vector before it with tangents u.J [n, K]).
 // First order (`first`) through the raw `_vjp` entry, else through `_vjp_ad`; a steady state by
 // D' w and D' dw + (D2 u.J)' w. False where a function fails or a root is missing.
 bool pullStage(const PStage& S, const Root& Q, const Vec& u, int nout, int Sn, int K, bool first,
@@ -1190,7 +1198,7 @@ bool pullStage(const PStage& S, const Root& Q, const Vec& u, int nout, int Sn, i
 
 }  // namespace
 
-// The answers `rraw` of the backward solve on the arguments of chain_back() `back`, added to its
+// The answers `rraw` of the backward solve on the arguments of chain_back() `back`, added to the
 // cotangents of the transformation's outputs and pulled through the stages of the transformation
 // at `values` along `tangents`, with the `roots` of chain_params(). Per condition list(rows, ct):
 // the free names it reaches, 0-based rows of `tangents`, and their cotangents [rows, S (K + 1)] in
@@ -1220,7 +1228,7 @@ SEXP chain_pull(List plan, List values, NumericMatrix tangents, SEXP roots, List
     cp[c] = as<std::vector<double>>(cpL[c]);
     dcp[c] = as<std::vector<double>>(dcpL[c]);
     const std::size_t npo = cp[c].size() / s1;
-    // the cotangent of the solve's inputs [inputs, S] and its derivatives [inputs, K, S]
+    // the cotangent of the solve's inputs [inputs, S] and the derivatives [inputs, K, S]
     List r = rraw[c];
     const int dg = position(r, "diagnostics");
     if (dg >= 0) {
@@ -1294,8 +1302,8 @@ SEXP chain_pull(List plan, List values, NumericMatrix tangents, SEXP roots, List
 
 
 // The local data terms `local` of chain_data(), one per request, summed per unit: request r adds to
-// unit owner[r] (0-based), its gradient and Hessian by the names of the unit's `etaNames`. Returns
-// per unit list(value, gradient, hessian) in the order of its names.
+// unit owner[r] (0-based), the gradient and Hessian by the names of the unit's `etaNames`. Returns
+// per unit list(value, gradient, hessian) in the order of the unit names.
 // [[Rcpp::export]]
 List chain_unit_sums(List local, IntegerVector owner, List etaNames) {
   const int U = etaNames.size(), R = local.size();

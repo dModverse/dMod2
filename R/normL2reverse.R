@@ -26,7 +26,7 @@
   prediction <- as.prdlist(fw$values)
   prediction <- prediction[conditions]
 
-  # --- the error model on the predictions and their tangents, with a tape for its vjp
+  # --- the error model on the predictions and their tangents, with a tape for the vjp
   err_list <- NULL
   err_pars <- err_fixed <- NULL
   err_tape <- NULL
@@ -65,6 +65,10 @@
     meta_cache$sig <- sig
   }
 
+  # A refined first-order sweep reports how far the swept function lies from the value pass, per seed:
+  # one column for the value, one for chi2. A value alone then sweeps as well.
+  correct <- n_dir == 0L && .refines(x, conditions)
+
   kr <- normL2_kernel(
     prediction       = prediction,
     err_list_opt     = err_list,
@@ -75,10 +79,10 @@
     bloq_mode        = opt.BLOQ,
     t_df             = t.df,
     build_hessian    = n_dir > 0L,
-    want_seed        = isTRUE(deriv)
+    want_seed        = isTRUE(deriv) || correct
   )
 
-  if (!isTRUE(deriv)) {
+  if (!isTRUE(deriv) && !correct) {
     out <- objlist(value = kr$value, gradient = NULL, hessian = NULL)
     attr(out, attr.name) <- out$value
     attr(out, "chi2") <- setNames(kr$chi2, attr.name)
@@ -93,9 +97,31 @@
                            K = n_dir + 1L)
 
   # --- the chain backwards --------------------------------------------------
-  u <- .bwdNode(fw$tape, w_chain, env, cores)
+  corr <- c(0, 0)
+  if (correct) {
+    kc <- kr
+    kc$seed <- list(pred = kr$seed$chi2_pred, sigma = kr$seed$chi2_sigma)
+    w_chi2 <- .normL2SeedCt(meta_list, prediction, err_list, kc, err_tape,
+                            err_idx = match(cn_eval, conditions), env = env, cores = cores)
+    u <- .withCorrection(.bwdNode(fw$tape, Map(.stackCt, w_chain, w_chi2), env, cores, seeds = TRUE))
+    for (z in u) if (!is.null(z$value)) corr <- corr + z$value
+  } else {
+    u <- .bwdNode(fw$tape, w_chain, env, cores)
+  }
   grad <- .sumCotangents(lapply(u, function(z) if (is.null(z)) NULL else z$pars), names(pars))
   gradient <- setNames(grad[, 1L], rownames(grad))
+  value <- kr$value + corr[1L]
+  chi2 <- kr$chi2 + corr[2L]
+
+  if (!isTRUE(deriv)) {
+    out <- objlist(value = value, gradient = NULL, hessian = NULL)
+    attr(out, attr.name) <- out$value
+    attr(out, "chi2") <- setNames(chi2, attr.name)
+    if (correct) attr(out, "correction") <- c(value = corr[1L], chi2 = corr[2L])
+    env$prediction <- prediction
+    attr(out, "env") <- env
+    return(out)
+  }
 
   # The two terms, on the same rows and in the same order: the kernel's is in
   # par_names_global order, the sweep's directions are the identity's columns.
@@ -105,11 +131,12 @@
     dimnames(hess) <- list(names(pars), names(pars))
   }
 
-  out <- .alignObjlist(objlist(value = kr$value, gradient = gradient,
+  out <- .alignObjlist(objlist(value = value, gradient = gradient,
                                hessian = hess),
                        names(pars))
   attr(out, attr.name) <- out$value
-  attr(out, "chi2") <- setNames(kr$chi2, attr.name)
+  attr(out, "chi2") <- setNames(chi2, attr.name)
+  if (correct) attr(out, "correction") <- c(value = corr[1L], chi2 = corr[2L])
   # Which direction answered; reverse mode can return a Hessian too.
   attr(out, "sweep") <- if (n_dir > 0L) "forward-reverse" else "reverse"
   env$prediction <- prediction
@@ -147,7 +174,7 @@
     }
   }
 
-  # The error model reads the prediction's values and its parameters, so its
+  # The error model reads the prediction's values and the error parameters, so the
   # cotangent lands on both, and the prediction's half adds to the seed above.
   w_chain <- lapply(seq_len(n), function(ci)
     .ct(out = .ctWiden(.ct(out = .dropTime(w_pred[[ci]]))$out, K)))
@@ -162,6 +189,20 @@
     }
   }
   w_chain
+}
+
+# Two first-order cotangents of one condition as the two seeds of one sweep.
+.stackCt <- function(a, b) {
+  out <- if (!is.null(a$out) || !is.null(b$out)) {
+    ref <- if (is.null(a$out)) b$out else a$out
+    z <- array(0, c(dim(ref)[1:2], 2L), dimnames = c(dimnames(ref)[1:2], list(NULL)))
+    if (!is.null(a$out)) z[, , 1L] <- a$out[, , 1L]
+    if (!is.null(b$out)) z[, , 2L] <- b$out[, , 1L]
+    z
+  }
+  rows <- unique(c(rownames(a$pars), rownames(b$pars)))
+  pars <- if (length(rows)) cbind(.pickCotangent(a$pars, rows, 1L), .pickCotangent(b$pars, rows, 1L))
+  .ct(out = out, pars = pars)
 }
 
 # A zero vector of length n with v added at the linear positions idx, repeated

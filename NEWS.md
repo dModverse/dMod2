@@ -1,3 +1,12 @@
+# dMod2 0.15.4
+
+* Under `Xs(optionsReverse = list(refine = TRUE))` the reverse objective of `normL2()` adds to the
+  value and to `chi2` the first-order change from the computed trajectory to the one the refined
+  sweep differentiates, which cppDE reports as `correction`, so value and gradient belong to one
+  function; that value need not be closer to the exact one. A call with `deriv = FALSE` sweeps as well. The change is the attribute `correction`
+  of the result. The sweeps of `em()` and `msem()` and multiple shooting run without refine, and
+  `em()` refuses a prediction with it. Needs cppDE 0.13.12.
+
 # dMod2 0.15.3
 
 * `trust()` ends with `stopReason = "radius"` once a step no longer changes the parameters in

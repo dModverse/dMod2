@@ -13,7 +13,7 @@
 #' @export
 match.fnargs <- function(arglist, choices) {
   nms <- names(arglist)
-  # each argument by position or by its own name, in order
+  # each argument by position or by name, in order
   if (length(arglist) == length(choices) && (is.null(nms) || all(!nzchar(nms) | nms == choices)))
     return(seq_along(choices))
   if (is.null(nms)) nms <- rep("", length(arglist))
@@ -179,7 +179,7 @@ match.fnargs <- function(arglist, choices) {
 )
 
 # How one element of p2's output becomes p1's (pars, fixed), per pair of kinds.
-# Kept apart rather than unified: changing one needs its own test.
+# Kept apart rather than unified: changing one needs a separate test.
 .handoff_prd_outerfixed <- function(v, fixed)          # obsfn * obsfn
   list(pars = attr(v, "parameters"), fixed = fixed)
 
@@ -298,7 +298,7 @@ match.fnargs <- function(arglist, choices) {
   res
 }
 
-# Warm-start key for Pimpl. A leaf with its own condition keys by slot; an
+# Warm-start key for Pimpl. A leaf bound to one condition keys by slot; an
 # unspecific leaf answering several slots from one call keys by NULL.
 .condKeys <- function(st, conds, shared) {
   if (!is.null(st$condition) || length(conds) == 1L || !shared) return(conds)
@@ -331,7 +331,7 @@ match.fnargs <- function(arglist, choices) {
 
 ## ---- Composition evaluation ---------------------------------------------
 
-# p2 over every condition at once; its result names are p1's condition vector.
+# p2 over every condition at once; the result names are p1's condition vector.
 .evalProd <- function(st, b, deriv, deriv2, env, cores, hessian = TRUE,
                       sweep = "forward") {
   b2 <- .bundle(conds = b$conds, times = b$times, pars = b$pars,
@@ -421,7 +421,7 @@ match.fnargs <- function(arglist, choices) {
 
 .fwdNode <- function(st, b, env, cores, deriv = FALSE) {
   switch(st$op,
-    # A leaf keeps its checkpoints for the backward pass to replay. Under
+    # A leaf keeps the checkpoints for the backward pass to replay. Under
     # second order it propagates the tangents each vjp is differentiated along.
     leaf = list(values = .evalLeaf(st, b, deriv, FALSE, cores,
                                    keepStore = isTRUE(st$keepstore)),
@@ -502,7 +502,7 @@ match.fnargs <- function(arglist, choices) {
 
 # The leaf's own vjp; a leaf that answered no slot leaves a NULL hole. Slots
 # behind one shared request have their cotangents summed and take one vjp, as
-# the vjp is linear in its seed; separate requests go through the batch entry.
+# the vjp is linear in the seed; separate requests go through the batch entry.
 .bwdLeaf <- function(tape, w, cores, seeds = FALSE) {
   st <- tape$st; b <- tape$b
   vjp <- st$vjpfn
@@ -531,14 +531,14 @@ match.fnargs <- function(arglist, choices) {
     cnd <- if (vjp_cond) list(condition = cond)
     r <- if (!identical(st$kind, "parfn") && is.null(ws$out)) .ct() else
       switch(st$kind,
-      prdfn = .ct(pars = do.call(vjp, c(list(times = .req_times(b, i), pars = pf$pars,
-                                             fixed = pf$fixed, cotangent = ws$out), cnd))),
+      prdfn = .ctPars(do.call(vjp, c(list(times = .req_times(b, i), pars = pf$pars,
+                                          fixed = pf$fixed, cotangent = ws$out), cnd))),
       obsfn = do.call(vjp, c(list(out = .req_out(b, i), pars = pf$pars, fixed = pf$fixed,
                                   cotangent = ws$out), cnd)),
       parfn = .ct(pars = vjp(pars = pf$pars, fixed = pf$fixed,
                              cotangent = ws$pars, condition = cond)),
       stop(".bwdLeaf: no reverse mode for a ", st$kind, " leaf.", call. = FALSE))
-    # Whatever the node passed through untouched keeps its cotangent.
+    # Whatever the node passed through untouched keeps the same cotangent.
     if (!identical(st$kind, "parfn")) {
       K <- max(.ctK(ws$pars), .ctK(ws$out))
       r <- .addCt(r, .ct(pars = .pickCotangent(ws$pars, names(pf$pars), K)))
@@ -554,8 +554,8 @@ match.fnargs <- function(arglist, choices) {
       pf <- .splitParsFixed(.req_pars(b, i), .req_fixed(b, i))
       S  <- max(.ctK(ws$pars), .ctK(ws$out))
       r  <- if (is.null(ws$out)) .ct() else
-        .ct(pars = vjp(times = .req_times(b, i), pars = pf$pars,
-                       fixed = pf$fixed, cotangent = ws$out, seeds = TRUE))
+        .ctPars(vjp(times = .req_times(b, i), pars = pf$pars,
+                    fixed = pf$fixed, cotangent = ws$out, seeds = TRUE))
       return(.addCt(r, .ct(pars = .pickCotangent(ws$pars, names(pf$pars), S))))
     }
     S <- max(.ctK(ws$pars), .ctK(ws$out))
@@ -580,7 +580,7 @@ match.fnargs <- function(arglist, choices) {
   if (batchable) {
     split <- lapply(live, function(s) .splitParsFixed(.req_pars(b, s),
                                                       .req_fixed(b, s)))
-    # an observation leaf answers with cotangents of its output and its parameters
+    # an observation leaf answers with cotangents of the leaf output and parameters
     vals <- if (identical(st$kind, "obsfn"))
       st$vjpbatchfn(
         outList   = lapply(live, function(s) .req_out(b, s)),
@@ -598,11 +598,11 @@ match.fnargs <- function(arglist, choices) {
       cores     = cores,
       seeds     = seeds)
     # As in call_one, the pass-through half is picked at the width the node
-    # hands on, not at its own; a slot without one passes nothing on.
+    # hands on, not at the node width; a slot without one passes nothing on.
     for (j in seq_along(live)) {
       wj <- w[[live[j]]]
       K  <- max(.ctK(wj$pars), .ctK(wj$out))
-      own <- if (identical(st$kind, "obsfn")) vals[[j]] else .ct(pars = vals[[j]])
+      own <- if (identical(st$kind, "obsfn")) vals[[j]] else .ctPars(vals[[j]])
       out[[live[j]]] <- if (is.null(wj$pars)) own else
         .addCt(own, .ct(pars = .pickRows(wj$pars, names(split[[j]]$pars), K)))
     }
@@ -633,7 +633,9 @@ match.fnargs <- function(arglist, choices) {
   pars <- if (!length(rows)) NULL else
     do.call(cbind, lapply(pl, function(p) .pickCotangent(p, rows, 1L)))
   if (!is.null(pars)) dimnames(pars) <- list(rows, NULL)
-  list(out = out, pars = pars)
+  vals <- lapply(parts, `[[`, "value")
+  value <- if (!all(vapply(vals, is.null, TRUE))) vapply(vals, function(v) sum(v %||% 0), 0)
+  list(out = out, pars = pars, value = value)
 }
 
 .bwdProd <- function(tape, w, env, cores, seeds = FALSE) {
@@ -644,10 +646,10 @@ match.fnargs <- function(arglist, choices) {
   u1 <- .bwdNode(tape$t1, w1, env, cores, seeds)
 
   if (tape$p2_is_par) {
-    # p1 read p2's parvec as its parameters, and the outer `out` as its input.
+    # p1 read p2's parvec as the parameters of p1, and the outer `out` as the input.
     w2 <- lapply(u1, function(u) if (is.null(u)) NULL else .ct(pars = u$pars))
     down <- .bwdNode(tape$t2, w2, env, cores, seeds)
-    outer_out <- lapply(u1, function(u) if (is.null(u)) NULL else .ct(out = u$out))
+    outer_out <- lapply(u1, function(u) if (is.null(u)) NULL else .ct(out = u$out, value = u$value))
     return(.mergeCt(down, outer_out))
   }
   # p1 read p2's own output, values and parameters both.
@@ -670,7 +672,7 @@ match.fnargs <- function(arglist, choices) {
 
 ## ---- Public shim ---------------------------------------------------------
 
-# Every fn object is a thin wrapper over its descriptor; match.fnargs refuses
+# Every fn object is a thin wrapper over the descriptor; match.fnargs refuses
 # named arguments in `...` that are no inputs.
 .fnWrap <- function(st) {
   function(..., fixed = NULL, deriv = TRUE, deriv2 = FALSE, hessian = TRUE,
@@ -729,7 +731,7 @@ match.fnargs <- function(arglist, choices) {
 .evalLegacy <- function(f, b, deriv, deriv2, env, hessian = TRUE,
                         sweep = "forward") {
   kind <- .fnKind(f)
-  # A request without conditions asks the fn for all of its own, so the result
+  # A request without conditions asks the fn for all conditions it has, so the result
   # keeps the names `.evalProd` reads back as p1's condition vector.
   conds <- if (is.null(b$conds)) attr(f, "conditions") else b$conds
   outlist <- .emptySlots(conds)
@@ -753,7 +755,7 @@ match.fnargs <- function(arglist, choices) {
                            if ("sweep" %in% names(formals(f))) list(sweep = sweep))),
       stop(".evalLegacy: cannot drive an fn of class ",
            paste(class(f), collapse = "/"), call. = FALSE))
-    # an objfn returns its objlist directly, not a per-condition list
+    # an objfn returns the objlist directly, not a per-condition list
     outlist[[i]] <- if (identical(kind, "objfn")) r
                     else if (length(r) >= 1L) r[[1L]] else NULL
   }
@@ -763,8 +765,8 @@ match.fnargs <- function(arglist, choices) {
 
 ## ---- Composition bookkeeping ---------------------------------------------
 
-# A `+` node contributes its parts, anything else is one part owning all of
-# its conditions. Flattening keeps a long Reduce("+", .) one node.
+# A `+` node contributes the parts, anything else is one part owning all of
+# the conditions. Flattening keeps a long Reduce("+", .) one node.
 .fnParts <- function(f) {
   st <- .fnNode(f)
   if (!is.null(st) && identical(st$op, "+"))
@@ -863,7 +865,7 @@ match.fnargs <- function(arglist, choices) {
 }
 
 # Relabel a leaf so it answers for several conditions through one kernel. The
-# descriptor is relabelled too, as `+` dispatches on it, not on `mappings`.
+# descriptor is relabeled too, as `+` dispatches on it, not on `mappings`.
 .fnWithConditions <- function(fn, conds) {
   st <- .fnNode(fn)
   if (is.null(st) || !identical(st$op, "leaf"))
@@ -911,7 +913,7 @@ match.fnargs <- function(arglist, choices) {
 #' @export
 "+.objfn" <- function(e1, e2) .sumObjfn(e1, e2)
 
-# The sum is built in a frame of its own: the frame of an S3 method holds the caller's frame
+# The sum is built in a separate frame: the frame of an S3 method holds the caller's frame
 # (`.GenericCallEnv`), which the closure would keep and serialize.
 .sumObjfn <- function(e1, e2) {
 
@@ -946,7 +948,7 @@ match.fnargs <- function(arglist, choices) {
       pars <- arglist[[1]]
 
       # A term understands `sweep` only if it names it as a formal; one that
-      # does not runs forward, and under an exact request still returns its
+      # does not runs forward, and under an exact request still returns the
       # Hessian. Every wrapper in this package declares `sweep`.
       .call <- function(f, conds, e) {
         if (identical(sweep, "reverse") && "sweep" %in% names(formals(f)))
@@ -960,7 +962,7 @@ match.fnargs <- function(arglist, choices) {
             conditions = conds, env = e, cores = cores)
       }
       # A term without conditions is evaluated once with the caller's env, any
-      # other on its share of `conditions` and skipped when that is empty,
+      # other on the term share of `conditions` and skipped when that is empty,
       # unless it holds an unconditioned term. The second term reuses the env
       # the first returned.
       .term <- function(f, own, e) {
@@ -977,8 +979,8 @@ match.fnargs <- function(arglist, choices) {
       .finite <- function(v) all(is.finite(v$value))
       if (!is.null(v1) && !is.null(v2) && xor(.h(v1), .h(v2)) && .finite(v1) && .finite(v2))
         stop("a summed objective got a Hessian from ",
-             if (.h(v1)) "its first" else "its second", " term and none from ",
-             if (.h(v1)) "its second" else "its first",
+             if (.h(v1)) "the first" else "the second", " term and none from ",
+             if (.h(v1)) "the second" else "the first",
              ". Adding them would drop that term's curvature silently.",
              call. = FALSE)
 
@@ -1001,7 +1003,7 @@ match.fnargs <- function(arglist, choices) {
       if (is.null(.v)) .v <- attr(e2, .a, exact = TRUE)
       if (!is.null(.v)) attr(outfn, .a) <- .v
     }
-    # l2spec is CONCATENATED: every L2 term keeps its own data, prediction and
+    # l2spec is CONCATENATED: every L2 term keeps separate data, prediction and
     # error model, which is what reml() needs from a split objective.
     attr(outfn, "l2spec") <- c(attr(e1, "l2spec", exact = TRUE),
                                attr(e2, "l2spec", exact = TRUE))
@@ -1134,7 +1136,7 @@ match.fnargs <- function(arglist, choices) {
   attr(outfn, "forcings")    <- .unionMappingAttr(own$mappings)
 
   # Keep "composed" only when a composed operand went in, so summary() keeps
-  # its detail branch for a sum of leaves and drops it for a sum of chains.
+  # the detail branch for a sum of leaves and drops it for a sum of chains.
   cls <- c(k1, "fn")
   if (inherits(e1, "composed") || inherits(e2, "composed")) cls <- c(cls, "composed")
   class(outfn) <- cls
@@ -1203,7 +1205,7 @@ test_conditions <- function(c1, c2) {
 #'
 #' Concatenates observation functions, prediction functions and parameter
 #' transformations: `(e1 * e2)(times, pars)` evaluates `e2` first and passes
-#' its output to `e1`.
+#' the output of `e2` to `e1`.
 #'
 #' @param e1 function of class `objfn`, `obsfn`, `prdfn`, `parfn` or `idfn`.
 #' @param e2 function of class `obsfn`, `prdfn`, `parfn` or `idfn`.
@@ -1274,8 +1276,8 @@ test_conditions <- function(c1, c2) {
                                                   attr(e2, "compileInfo"))
 
   if (identical(spec$out, "objfn")) {
-    # An objfn has no mappings; without these an objfn * parfn loses its
-    # parameter set, its model name and the reconstruction handles.
+    # An objfn has no mappings; without these an objfn * parfn loses the
+    # parameter set, the model name and the reconstruction handles.
     attr(outfn, "modelname") <- union(attr(e1, "modelname"), attr(e2, "modelname"))
     for (.a in c("data", "errfn", "timesD")) {
       .v <- attr(e1, .a, exact = TRUE)

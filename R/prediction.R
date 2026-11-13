@@ -101,7 +101,15 @@ NULL
 #'   value pass. An unknown entry is an error. Entries:
 #'   * `refine`: `TRUE` checks each step of the sweep against the tolerances
 #'     of the solve and sweeps a failing step again in substeps, see
-#'     [cppDE::adjointControl()]. Default `FALSE`.
+#'     [cppDE::adjointControl()]. Default `FALSE`. The value and the `chi2`
+#'     attribute of the reverse objective of [normL2()] then include the
+#'     first-order change from the computed trajectory to the one the sweep
+#'     differentiates, so value and gradient belong to one function, which
+#'     need not be closer to the exact value; a call with `deriv = FALSE`
+#'     sweeps as well. The change is the attribute
+#'     `correction` of the result. Forward values, the sweeps of [em()] and
+#'     [msem()] (forward over reverse) and multiple shooting run without
+#'     refine; [em()] refuses a prediction with it.
 #'   * `gradtol`: under `refine`, the absolute tolerance on each step's share
 #'     of the gradient. Default `NULL`, no check on the gradient.
 #' @param fcontrol `deSolve` backend only. List with the interpolation
@@ -550,6 +558,8 @@ Xs.cppDE <- function(odemodel, forcings = NULL, events = NULL, names = NULL, con
     if (!has_store || !isTRUE(o$refine)) return(NULL)
     cppDE::adjointControl(refine = TRUE, gradtol = o$gradtol)
   }
+  # A seeded sweep is checked only inside .withCorrection(), for the columns of normL2().
+  seedCtl <- function() if (isTRUE(.reverseState$correct)) sweepCtl()
 
   # Marshalling shared by the single and the batched entry: Phi'(theta) as the
   # tangent (and Phi''(theta) as the Hessian) on the inner parameter rows.
@@ -835,9 +845,10 @@ Xs.cppDE <- function(odemodel, forcings = NULL, events = NULL, names = NULL, con
         list(reversed, times, params, fixed = NULL,
              forcings = forcs,
              cotangent = .widenSeeds(w, dim_names$variable, controls$names),
-             store = if (has_store) storeGet(times, params)), solveOpts(FALSE)))
+             store = if (has_store) storeGet(times, params),
+             adjoint = seedCtl()), solveOpts(FALSE)))
       .requireAdjoint(res)
-      return(.pickCotangent(.adjointSeeds(res), names(pars)))
+      return(.withCorrectionOf(.pickCotangent(.adjointSeeds(res), names(pars)), res))
     }
     states <- dim_names$variable
     .requireReverse(has_reverse, has_reverse2, K)
@@ -863,7 +874,7 @@ Xs.cppDE <- function(odemodel, forcings = NULL, events = NULL, names = NULL, con
     }
     res <- do.call(cppDE::solveODE, c(call, o))
     .requireAdjoint(res)
-    .pickCotangent(.adjointCt(res, K), names(pars))
+    .withCorrectionOf(.pickCotangent(.adjointCt(res, K), names(pars)), res)
   }
   attr(P2X, "vjpfn") <- P2Xvjp
 
@@ -891,6 +902,7 @@ Xs.cppDE <- function(odemodel, forcings = NULL, events = NULL, names = NULL, con
                    forcings = forcs,
                    cotangent = .widenSeeds(wList[[i]], states, controls$names))
         if (has_store) cd$store <- storeGet(timesL[[i]], params)
+        cd$adjoint <- seedCtl()
         cd
       })
       res <- if (is.null(batch))
@@ -898,12 +910,12 @@ Xs.cppDE <- function(odemodel, forcings = NULL, events = NULL, names = NULL, con
           do.call(cppDE::solveODE,
                   c(list(reversed, a$times, a$parms, fixed = NULL,
                          forcings = a$forcings, cotangent = a$cotangent,
-                         store = a$store), o)))
+                         store = a$store, adjoint = a$adjoint), o)))
       else
         do.call(batch, c(list(reversed, conditions = conds, cores = cores), o))
       return(lapply(seq_len(n), function(i) {
         .requireAdjoint(res[[i]], condOf(i))
-        .pickCotangent(.adjointSeeds(res[[i]]), names(parsList[[i]]))
+        .withCorrectionOf(.pickCotangent(.adjointSeeds(res[[i]]), names(parsList[[i]])), res[[i]])
       }))
     }
 
@@ -961,14 +973,16 @@ Xs.cppDE <- function(odemodel, forcings = NULL, events = NULL, names = NULL, con
 
     lapply(seq_len(n), function(i) {
       .requireAdjoint(res[[i]], condOf(i))
-      .pickCotangent(.adjointCt(res[[i]], .ctK(wList[[i]])),
-                     names(parsList[[i]]))
+      .withCorrectionOf(.pickCotangent(.adjointCt(res[[i]], .ctK(wList[[i]])),
+                                       names(parsList[[i]])), res[[i]])
     })
   }
   attr(P2X, "vjpbatchfn") <- P2Xvjpbatch
   # Says the value pass of a reverse evaluation should run on the reverse
   # object, so the backward pass finds the checkpoints already taken.
   attr(P2X, "keepstore") <- has_store
+  # Whether the first-order sweep is refined, so that the reverse value takes the correction.
+  attr(P2X, "refine") <- function() has_store && isTRUE(reverseOpts()$refine)
 
   attr(P2X, "parameters") <- paramNames
   attr(P2X, "equations") <- as.eqnvec(attr(func, "equations"))
