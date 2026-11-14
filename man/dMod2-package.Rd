@@ -4,7 +4,7 @@
 \name{dMod2-package}
 \alias{dMod2}
 \alias{dMod2-package}
-\title{dMod2: Dynamic Modeling and Parameter Estimation in ODE Models}
+\title{dMod2: Parameter Estimation in Dynamical Models}
 \description{
 Models are built from reactions or equations, compiled to C++ with
 sensitivities, and composed from observation, prediction and parameter

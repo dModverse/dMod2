@@ -1,33 +1,24 @@
 Package: dMod2
 Type: Package
-Title: Dynamic Modeling and Parameter Estimation in ODE Models
-Version: 0.15.6
-Date: 2026-11-05
+Title: Parameter Estimation in Dynamical Models
+Version: 0.15.7
+Date: 2026-11-14
 Authors@R: c(
     person("Simon", "Beyer", email = "simon.beyer@fdm.uni-freiburg.de",
            role = c("aut", "cre")),
     person("Daniel", "Kaschek", email = "daniel.kaschek@gmail.com", role = "aut",
            comment = "Created dMod 1.0; original design, philosophy"))
-Description: Tools for dynamic modeling and parameter estimation in ordinary
-    differential equation (ODE) models of reaction networks. Models are built
-    symbolically and compiled to C/C++ with first- and second-order
-    sensitivities. Prediction, observation and objective functions are
-    composable function objects with their symbolic derivatives, following the
-    paradigm that derivative information should be used for optimization
-    whenever possible. Model calibration uses trust-region optimization with
-    optional L1 penalties, multi-start search and profile-likelihood
-    identifiability analysis, over experimental conditions that are integrated
-    and evaluated in parallel. Mixed-effects models with normal, Laplace,
-    spike-and-slab and Dirichlet-process random effects are fitted by
-    expectation maximization with the Laplace approximation, sparse-grid
-    quadrature or stochastic approximation. Measurements in relative units from
-    separate experiments are aligned to common values, with the scaling factors
-    of each experiment written as free expressions. Further tools cover steady states, solved symbolically or
-    numerically within the parameter transformation, error models, and
-    distributed computing on a cluster. Models, experimental
-    conditions, measurements and parameter tables are imported from and
-    exported to the 'PEtab' format, with 'SBML' import and export through
-    'libSBML'.
+Description: Ordinary differential equation (ODE) models of reaction
+    networks are built symbolically, compiled to 'C' or 'C++' code with
+    first- and second-order sensitivities and fitted to data, following
+    Kaschek et al. (2019) <doi:10.18637/jss.v088.i10>. The package succeeds
+    'dMod' with a new interface and the 'cppDE' solver backend. Prediction,
+    observation and objective functions compose by the chain rule and return
+    derivatives with their values. Fits use trust-region optimization with
+    multi-start search and profile likelihood, also for mixed-effects models.
+    Models and data are exchanged in the 'PEtab' format for parameter
+    estimation problems and in the Systems Biology Markup Language ('SBML').
+Language: en-US
 URL: https://dmodverse.github.io/dMod2/, https://github.com/dModverse/dMod2
 BugReports: https://github.com/dModverse/dMod2/issues
 License: GPL (>= 3)
@@ -61,6 +52,7 @@ Suggests:
     jsonlite,
     knitr,
     rmarkdown,
+    spelling,
     testthat (>= 3.0.0),
     numDeriv,
     withr,

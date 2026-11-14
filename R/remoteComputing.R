@@ -54,11 +54,7 @@ detectFreeCores <- function(machine = NULL) {
     attr(freeCores, "used") <- vapply(output, `[[`, numeric(1), "occupied")
   } else if (nzchar(Sys.getenv("SLURM_CPUS_ON_NODE"))) {
     # inside a SLURM job the cores are those it was given and bound to, whatever the node has
-    # nproc counts the cores the process is bound to, but reads OMP_NUM_THREADS unless it is unset
-    bound <- suppressWarnings(as.integer(tryCatch(.shell("env -u OMP_NUM_THREADS -u OMP_THREAD_LIMIT nproc",
-                                                         intern = TRUE), error = function(e) NA)))
-    freeCores <- as.integer(Sys.getenv("SLURM_CPUS_ON_NODE"))
-    if (isTRUE(bound >= 1)) freeCores <- min(freeCores, bound)
+    freeCores <- min(as.integer(Sys.getenv("SLURM_CPUS_ON_NODE")), .availableCores())
     attr(freeCores, "ncores") <- freeCores
     attr(freeCores, "used") <- 0
   } else {

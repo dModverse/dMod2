@@ -4,6 +4,7 @@ dMod2 - Dynamic Modeling and Parameter Estimation in R
 <!-- badges: start -->
 
 [![R-CMD-check](https://github.com/dModverse/dMod2/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/dModverse/dMod2/actions/workflows/R-CMD-check.yaml)
+[![docs](https://img.shields.io/badge/docs-dmodverse.github.io%2FdMod2-blue)](https://dmodverse.github.io/dMod2/)
 
 <!-- badges: end -->
 
@@ -53,12 +54,12 @@ Models are assembled from four kinds of function objects that compose
 with `*` (concatenation, chain rule) and `+` (direct sum over
 experimental conditions):
 
-| Object              | Constructor                  | Role                                |
-|---------------------|------------------------------|-------------------------------------|
-| `odemodel`, `prdfn` | `odemodel()`, `Xs()`         | the compiled ODE with sensitivities |
-| `obsfn`             | `Y()`                        | observation and error functions     |
-| `parfn`             | `P()`                        | parameter transformations           |
-| `objfn`             | `normL2()`, `constraintL2()` | objective functions                 |
+| Object | Constructor | Role |
+|----|----|----|
+| `odemodel`, `prdfn` | `odemodel()`, `Xs()` | the compiled ODE with sensitivities |
+| `obsfn` | `Y()` | observation and error functions |
+| `parfn` | `P()` | parameter transformations |
+| `objfn` | `normL2()`, `constraintL2()` | objective functions |
 
 The [example
 projects](https://dmodverse.github.io/dMod2/articles/index.html) in

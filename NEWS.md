@@ -1,3 +1,8 @@
+# dMod2 0.15.7
+
+* `detectFreeCores()` inside a SLURM job counts at most the cores the process may use, as
+  `parallelly::availableCores()` reports them, also on macOS.
+
 # dMod2 0.15.6
 
 * `symmetryDetection()` and `symmetryReduction()` need symident 0.13.5. The exact proof of a
@@ -545,12 +550,12 @@
   gradient and Hessian.
 
 * An objective called with `hessian = "sparse"` returns its Gauss-Newton Hessian as a sparse
-  `Matrix` assembled from the blocks of the conditions; `trust(sparse = TRUE)` factorises it by
+  `Matrix` assembled from the blocks of the conditions; `trust(sparse = TRUE)` factorizes it by
   sparse Cholesky and `vcov(which = )` solves it for the columns named. `datapointL2()` returns
   a sparse Hessian there too.
 
 * `trust()` and `profile()` take `sparse = "auto"` (default), `TRUE` or `FALSE`. `"auto"` takes
-  the sparse Gauss-Newton Hessian for a minimisation without phases, bounds or exact Hessian
+  the sparse Gauss-Newton Hessian for a minimization without phases, bounds or exact Hessian
   when there are at least 500 free parameters and the Hessian at the start fills at most 5% of
   its matrix (`options(dMod2.sparseAuto = )`), and starts from that evaluation.
   `trust(sparse = TRUE)` on an objective that returns a dense Hessian is an error that names the
@@ -558,9 +563,9 @@
 
 * `profile()` on a sparse Hessian decides by the pivots of its LU whether the path equation is
   singular, by the rule of `vcov()`: a pivot at most 1e-14 times the largest. A singular step
-  then takes the pseudo-inverse and reoptimises as on a dense Hessian, up to 5000 parameters;
+  then takes the pseudo-inverse and reoptimizes as on a dense Hessian, up to 5000 parameters;
   above, the error names the non-identifiable parameters. The pseudo-inverse step keeps all its
-  components. `algoControl$W = "identity"` moves the profiled parameter alone and reoptimises
+  components. `algoControl$W = "identity"` moves the profiled parameter alone and reoptimizes
   the others at every step, without a matrix in the path equation and without a warning on
   singularity.
 
@@ -736,7 +741,7 @@
 * `confint()` takes a profile without a `data` column through `val.column = "value"`.
 
 * `mstrust()` takes an anonymous `samplefun` or one with a long name, passes the arguments
-  of an optimiser other than `trust()`, refuses
+  of an optimizer other than `trust()`, refuses
   `fits < 1`, and writes one log entry per fit also from PSOCK workers; `load.parlist()`
   reads the fits in the order of their numbers. `mstrust()` and `profile()` share one
   parallel backend.
@@ -781,7 +786,7 @@
 
 * `constraintL2()` and the other priors apply a named `sigma` to the parameter it names and
   refuse a `sigma` without an entry for a parameter of `mu`. `trustL1(minimize = FALSE)`
-  subtracts the penalty from the objective it maximises. `evalConditionResidual()` passes
+  subtracts the penalty from the objective it maximizes. `evalConditionResidual()` passes
   `fixed` parameters to the error model also without sensitivities.
 
 * `odemodel(deriv = FALSE)` builds no derivatives, whatever `derivMode`. `define()` and
@@ -810,7 +815,7 @@
   parameters.
 
 * The code that dMod 1 contributors other than the authors wrote is reimplemented from its
-  documented behaviour: the print methods of eqnvec, eqnlist, objlist and parvec,
+  documented behavior: the print methods of eqnvec, eqnlist, objlist and parvec,
   `summary()`, `plot()` and `as.parframe()` of a parlist, `fitErrorModel()`,
   `reduceReplicates()`, the argument routing and fit log of `mstrust()`, `Xd()`,
   `define()`, `insert()`, `conservedQuantities()`, the datalist methods and the prediction,
@@ -916,7 +921,7 @@
   `readPetabYaml()`, `readPetabTables()`. `repar(expr, trafo)` is an error.
 * `mstrust()` drops `hessian` from every fit and records `elapsed`, the wall
   time of each fit, and the attribute `"run"` with the start time, total wall
-  time, cores, optimiser, sampler, their arguments and the package versions.
+  time, cores, optimizer, sampler, their arguments and the package versions.
   `as.parframe()` adds the column `elapsed` and keeps `"run"`.
 * `vcov()` takes an evaluation of an objective function, `vcov(obj(pars))`,
   with `fixed` for parameters held at a bound. `vcov()` on a fit without
@@ -974,8 +979,8 @@
 * New `trustL1()`: the trust region of `trust()` with an L1 penalty on chosen
   parameters around reference values `mu`, one-sided with `one.sided`. `gate`
   keeps a parameter on or above its kink, so it can reach the reference
-  exactly, and `fuse` penalises the pairwise differences within blocks, whose
-  members move as one while equal. The penalised step runs in a C++ kernel.
+  exactly, and `fuse` penalizes the pairwise differences within blocks, whose
+  members move as one while equal. The penalized step runs in a C++ kernel.
 
 # dMod2 0.11.2
 
@@ -1088,7 +1093,7 @@
   `readPetabYaml()` and `readPetabTables()`. An imported problem prints as
   `<PEtab problem ...>`.
 * Breaking: `repar(trafo, expr)` takes the transformation first, as
-  `define()` and `insert()` do. The order `repar(expr, trafo)` is recognised
+  `define()` and `insert()` do. The order `repar(expr, trafo)` is recognized
   by an expression in first place.
 * Breaking: `profile()` and `vcov()` are methods of the generics of stats,
   which dMod2 no longer masks. `profile()` dispatches on objective functions
@@ -1103,7 +1108,7 @@
 * Breaking: `distributedComputing()` submits by default (`recover = FALSE`).
   The `get()` of `distributedComputing()` and `runbg()` returns the results
   instead of assigning `cluster_result` or `.runbgOutput` in the global
-  environment; `runbg(wait = TRUE)` returns them too. The former behaviour is
+  environment; `runbg(wait = TRUE)` returns them too. The former behavior is
   `cluster_result <- job$get()`.
 * Breaking: `steadyStates()` writes nothing unless `file` is given; the model
   for the solver goes to a temporary file. Its unused argument `rates` is
@@ -1177,19 +1182,19 @@
   PEtab start times go through `times`, in one objective for all conditions.
 * **Multiple shooting.**
   `normL2(data, g * x * p, multipleShootingControl = TRUE)`, or a list of
-  settings, makes `trust()` and `mstrust()` fit by Bock's generalised
+  settings, makes `trust()` and `mstrust()` fit by Bock's generalized
   Gauss-Newton method. The time axis is cut into segments with node values of
-  their own; continuity is a constraint, linearised and eliminated at every
+  their own; continuity is a constraint, linearized and eliminated at every
   iterate (condensing), so the subproblem keeps the single-shooting size and
   box bounds work as before. At convergence the result is a stationary point
   of the single-shooting objective, which the objective still is when called
   as a function. The ODE model needs `odemodel(..., includeTimeZero = FALSE)`;
-  `profile()` re-optimises by single shooting.
+  `profile()` re-optimizes by single shooting.
 * The trust region bounds parameters and node values together. Steps are
   accepted by a filter or an l2 merit function (`stepControl$acceptance`),
   with a second-order correction (`stepControl$soc`) and a gap tolerance
   (`tolControl$ctol`).
-* `stepControl$anneal` (default) first penalises the gaps, `f + w ||c||^2`
+* `stepControl$anneal` (default) first penalizes the gaps, `f + w ||c||^2`
   with `w` rising tenfold per stage, then hands over to the exact method. A
   stage ends once a step gains less than a thousandth; the annealing ends
   early where the penalty dominates and a stage no longer closes the gaps.
@@ -1199,7 +1204,7 @@
   data by more than `misfit` and by twice the median of its condition, or where
   its solve fails. A misfit everywhere is left to the parameters, and each half
   of a cut keeps `minPoints` data points, by default one more than the states.
-  Unobserved node values start from a run synchronised to the data. `charts`
+  Unobserved node values start from a run synchronized to the data. `charts`
   puts node values on a log10, linear or angle scale per state; the gap of an
   angle is taken modulo 2 pi. The scale of an unobserved linear state is the
   largest range it covers within one segment. `hessianMethod = "bfgs"` or
@@ -1371,7 +1376,7 @@
   single balance stays positive, e.g. receptors recycling through endosomes.
 * `steadyStates()` solves every rate constant at most once. A symbol defined
   twice, by itself or in a cycle is an error.
-* `steadyStates()` factors out common terms instead of cancelling the resolved
+* `steadyStates()` factors out common terms instead of canceling the resolved
   expressions, which stalled large models.
 * `steadyStates(testSteady = "fast")` checks mod p only. A residual it cannot
   evaluate is an error with its reason, not a fallback to the symbolic test.
@@ -1415,7 +1420,7 @@
   build time in `odemodel()`, `Y()`, `Pexpl()` and `importPEtab()`;
   `reverse = TRUE` and `"dual"` are errors. `"symbolic"` is gone, so
   transformation and observation functions evaluate only after `compile()`.
-* **Optimisation.** `trust()` asks per evaluation for a value, a gradient, a
+* **Optimization.** `trust()` asks per evaluation for a value, a gradient, a
   Gauss-Newton or an exact Hessian. `qnControl$hessianInit = "exact"` seeds a
   quasi-Newton run, `hessianReseed = "stall"` fetches a fresh Hessian when it
   stalls, and `hessianMethod = "exact"` is a Newton run.
@@ -1428,7 +1433,7 @@
 * **Bug fixes.** A summed objective keeps the curvature of every term. An
   objective that declines a Hessian no longer crashes `trust()`. A backward
   solve without an answer is an error instead of a zero gradient. A PEtab prior
-  honours `hessian = FALSE`. The batched backward path propagates more than one
+  honors `hessian = FALSE`. The batched backward path propagates more than one
   direction. `compile()` stays within the 8191-character command line of
   Windows.
 * New examples `inst/examples/example_ReverseAD.R`,
@@ -1443,7 +1448,7 @@
   directory` and the job never started. The script now asks the remote R for
   `R.home("include")`, as `compile()` does locally.
 * `runbg(compile = TRUE)` compiles in parallel again. It exports
-  `OMP_NUM_THREADS=1` before the build, and `nproc` honours that, so the build
+  `OMP_NUM_THREADS=1` before the build, and `nproc` honors that, so the build
   counted one core and compiled every source in turn. The count now ignores the
   OpenMP variables. `runbg()` also gains `buildCores` and `buildBundle`, as
   `distributedComputing()` has.
@@ -1462,11 +1467,11 @@
 # dMod2 0.7.3
 
 * SBML and PEtab import work again in a fresh session. `.dmod_libsbml_python()`
-  read `reticulate::py_exe()` before Python was initialised, where it falls back
+  read `reticulate::py_exe()` before Python was initialized, where it falls back
   to discovery, misses the reticulate-managed environment and returns an empty
   string. The `system2()` that followed then failed with status 127, which the
   resolver reported as a missing `python-libsbml`, so a working environment
-  looked like a broken one. It now initialises Python first and rejects an empty
+  looked like a broken one. It now initializes Python first and rejects an empty
   path.
 * The libsbml integration tests did not catch that, because `.libsbml_works()`
   turns any error into `FALSE` and every test behind it into a skip. A test now
@@ -1585,7 +1590,7 @@
 * `normL2()` returns gradient and Hessian in the order of the parameter vector
   it was called with. They used to follow the union of the per-condition
   sensitivity blocks, while `trust()` and `optim()` read them positionally, so
-  every fit optimised a permuted model.
+  every fit optimized a permuted model.
 * `normL2()` reports its sum of squares as a `chi2` attribute. Adding
   objectives pools the terms sharing an `attr.name` and splits the rest into
   `chi2_<attr.name>`.
@@ -1625,7 +1630,7 @@
 * New soft constraints next to `constraintL2()`: `constraintL1()` (Laplace),
   `constraintCauchy()`, `constraintGamma()`, `constraintExponential()`,
   `constraintChisq()` and `constraintRayleigh()`. Each is the `-2 log` density
-  including its normalisation, unlike `constraintL2()`, which is the penalty
+  including the normalization, unlike `constraintL2()`, which is the penalty
   form, and each applies the chain rule so `constraint * P()` is exact.
 * The multivariate-normal path of `constraintL2()` is gone, together with the
   `penaltySpec` plumbing and the `plotIndivs()` / `plotHistIndivs()` generics.
@@ -1671,7 +1676,7 @@
 # dMod2 0.6.0
 
 * The core is complete: equations, compiled prediction, observation and
-  parameter transformations, objectives, trust region optimisation and
+  parameter transformations, objectives, trust region optimization and
   profile likelihood. The PEtab, symmetry, mixed effects and Bayesian layers
   live on their own development branches.
 * Test suite over equations, compilation, prediction, objectives, the trust
@@ -1681,7 +1686,7 @@
 
 * `plotProfile()`, `plotPaths()` and `plotValues()` build on one long-format
   frame; the `parlist` overlay is measured against the profile optimum.
-* dMod palettes, `theme_dMod()` and the colour scales.
+* dMod palettes, `theme_dMod()` and the color scales.
 
 # dMod2 0.5.20
 

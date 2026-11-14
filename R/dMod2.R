@@ -1,4 +1,4 @@
-#' dMod2: Dynamic Modeling and Parameter Estimation in ODE Models
+#' dMod2: Parameter Estimation in Dynamical Models
 #'
 #' Models are built from reactions or equations, compiled to C++ with
 #' sensitivities, and composed from observation, prediction and parameter
