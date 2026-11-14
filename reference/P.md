@@ -31,7 +31,7 @@ P(
   [eqnlist](https://dmodverse.github.io/dMod2/reference/eqnlist.md), or
   a list of those named by condition, which builds one transformation
   per condition. `NULL` (default) returns `NULL`. Expressions follow
-  [cppDE::expressions](https://rdrr.io/pkg/cppDE/man/expressions.html).
+  [cppDE::expressions](https://dmodverse.github.io/cppDE/reference/expressions.html).
 
 - parameters:
 

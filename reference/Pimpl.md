@@ -1,7 +1,8 @@
 # Implicit Parameter Transformation
 
 Solves \\f(x, p) = 0\\ for the states \\x\\ by pseudo-transient
-continuation ([`cppDE::ptc()`](https://rdrr.io/pkg/cppDE/man/ptc.html))
+continuation
+([`cppDE::ptc()`](https://dmodverse.github.io/cppDE/reference/ptc.html))
 and returns a
 [parfn](https://dmodverse.github.io/dMod2/reference/parfn.md) with
 sensitivities from the implicit function theorem.
@@ -34,7 +35,7 @@ Pimpl(
   [eqnvec](https://dmodverse.github.io/dMod2/reference/eqnvec.md) or
   [eqnlist](https://dmodverse.github.io/dMod2/reference/eqnlist.md)
   defining \\f\\, in the language of
-  [cppDE::expressions](https://rdrr.io/pkg/cppDE/man/expressions.html).
+  [cppDE::expressions](https://dmodverse.github.io/cppDE/reference/expressions.html).
 
 - parameters:
 

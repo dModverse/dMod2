@@ -301,7 +301,6 @@ summary(res)
 #>   Lie order 4 (gap order 0), set by condition 1
 #>   rank: proven (1 directions, proven symmetries)
 #>   settings: reduce_cq=False, equilibrate=False, reconstruct=True
-#>   elapsed: 0.1s (rank 0.0s, reconstruction 0.0s, proofs 0.0s)
 #> 
 #> Result:  rank 5 / 6  |  1 non-identifiable direction
 #> 

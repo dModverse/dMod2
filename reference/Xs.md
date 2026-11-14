@@ -107,7 +107,7 @@ Xs(
   - `refine`: `TRUE` checks each step of the sweep against the
     tolerances of the solve and sweeps a failing step again in substeps,
     see
-    [`cppDE::adjointControl()`](https://rdrr.io/pkg/cppDE/man/adjointControl.html).
+    [`cppDE::adjointControl()`](https://dmodverse.github.io/cppDE/reference/adjointControl.html).
     Default `FALSE`. The value and the `chi2` attribute of the reverse
     objective of
     [`normL2()`](https://dmodverse.github.io/dMod2/reference/normL2.md)
@@ -142,8 +142,8 @@ backend, model built with `deriv2 = TRUE`).
 
 On the `cppDE` and `Sundials` backends the lists take the entries below
 and pass them to
-[`cppDE::solveODE()`](https://rdrr.io/pkg/cppDE/man/solveODE.html). An
-entry not given keeps the default; an unknown entry is an error, also
+[`cppDE::solveODE()`](https://dmodverse.github.io/cppDE/reference/solveODE.html).
+An entry not given keeps the default; an unknown entry is an error, also
 when set later with
 [`controls()`](https://dmodverse.github.io/dMod2/reference/controls.md).
 
@@ -173,7 +173,7 @@ when set later with
   own.
 
 - `stald`: stability limit detection for `"bdf"`, default `FALSE`; see
-  [`cppDE::solveODE()`](https://rdrr.io/pkg/cppDE/man/solveODE.html).
+  [`cppDE::solveODE()`](https://dmodverse.github.io/cppDE/reference/solveODE.html).
 
 - `sensErrCon`: `optionsSens` only. `FALSE` takes the sensitivities out
   of the error test, which is cheaper and gives less accurate
@@ -197,7 +197,7 @@ it.
 
 On the `cppDE` and `Sundials` backends each forcing is the monotone
 cubic Hermite interpolant (PCHIP) of the forcing data points, see
-[`cppDE::forcingValues()`](https://rdrr.io/pkg/cppDE/man/forcingValues.html).
+[`cppDE::forcingValues()`](https://dmodverse.github.io/cppDE/reference/forcingValues.html).
 Outside the points it holds the value of the first and the last one; a
 single point gives a constant. The integrator does not stop at the
 points, so a jump is best given by an event or by two close points.
@@ -309,8 +309,8 @@ With `deriv = FALSE` it returns the value alone.
 [`Xf()`](https://dmodverse.github.io/dMod2/reference/Xf.md) for
 predictions without sensitivities,
 [`controls()`](https://dmodverse.github.io/dMod2/reference/controls.md),
-[`cppDE::solveODE()`](https://rdrr.io/pkg/cppDE/man/solveODE.html); the
-guide chapters [Setting up
+[`cppDE::solveODE()`](https://dmodverse.github.io/cppDE/reference/solveODE.html);
+the guide chapters [Setting up
 models](https://dmodverse.github.io/dMod2/articles/guide-model.html) and
 [Sensitivities](https://dmodverse.github.io/dMod2/articles/guide-sensitivities.html),
 the methods article [Sensitivities and

@@ -34,7 +34,7 @@ addReaction(
 - rate:
 
   character. The rate of the reaction, an expression in the language of
-  [cppDE::expressions](https://rdrr.io/pkg/cppDE/man/expressions.html).
+  [cppDE::expressions](https://dmodverse.github.io/cppDE/reference/expressions.html).
   The name is employed as a description of the reaction.
 
 - description:

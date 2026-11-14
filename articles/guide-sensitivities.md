@@ -73,7 +73,7 @@ The backward sweep follows the step grid of the value pass by default.
 On the cppDE backend, `optionsReverse` of
 [`Xs()`](https://dmodverse.github.io/dMod2/reference/Xs.md) sets the
 accuracy, see
-[`cppDE::adjointControl()`](https://rdrr.io/pkg/cppDE/man/adjointControl.html):
+[`cppDE::adjointControl()`](https://dmodverse.github.io/cppDE/reference/adjointControl.html):
 
 ``` r
 
@@ -113,7 +113,7 @@ on the model class.
 | backend | solver | forward | fwd/fwd | reverse | fwd/rev | use |
 |----|----|----|----|----|----|----|
 | `"cppDE"` (default) | C++: BDF/NDF, Adams, Rosenbrock, Tsitouras | duals | `deriv2` | discrete adjoint | yes | all models |
-| `"Sundials"` | CVODES, [`cppDE::cvode()`](https://rdrr.io/pkg/cppDE/man/cvode.html) | CVODES | no | CVODES ASA | no | first-order derivatives |
+| `"Sundials"` | CVODES, [`cppDE::cvode()`](https://dmodverse.github.io/cppDE/reference/cvode.html) | CVODES | no | CVODES ASA | no | first-order derivatives |
 | `"deSolve"` | `lsodes`, cOde | sens. equations | no | no | no | dMod models |
 
 See cppDE on

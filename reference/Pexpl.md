@@ -30,7 +30,7 @@ Pexpl(
   [eqnvec](https://dmodverse.github.io/dMod2/reference/eqnvec.md); names
   are inner parameters, values are expressions in the outer parameters,
   in the language of
-  [cppDE::expressions](https://rdrr.io/pkg/cppDE/man/expressions.html).
+  [cppDE::expressions](https://dmodverse.github.io/cppDE/reference/expressions.html).
 
 - parameters:
 

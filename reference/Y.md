@@ -35,7 +35,7 @@ Y(
   defining the observation function, or a list of those named by
   condition, which builds one observation function per condition in a
   single call. Expressions follow
-  [cppDE::expressions](https://rdrr.io/pkg/cppDE/man/expressions.html).
+  [cppDE::expressions](https://dmodverse.github.io/cppDE/reference/expressions.html).
 
 - f:
 

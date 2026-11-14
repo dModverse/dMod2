@@ -1,5 +1,12 @@
 # Changelog
 
+## dMod2 0.15.7
+
+- [`detectFreeCores()`](https://dmodverse.github.io/dMod2/reference/detectFreeCores.md)
+  inside a SLURM job counts at most the cores the process may use, as
+  [`parallelly::availableCores()`](https://parallelly.futureverse.org/reference/availableCores.html)
+  reports them, also on macOS.
+
 ## dMod2 0.15.6
 
 - [`symmetryDetection()`](https://dmodverse.github.io/dMod2/reference/symmetryDetection.md)
@@ -498,7 +505,7 @@
   [`Xs()`](https://dmodverse.github.io/dMod2/reference/Xs.md) keeps for
   the reverse sweep are limited to twice the widest batch of conditions,
   at least 4, and freed with
-  [`cppDE::releaseStore()`](https://rdrr.io/pkg/cppDE/man/releaseStore.html)
+  [`cppDE::releaseStore()`](https://dmodverse.github.io/cppDE/reference/releaseStore.html)
   once they leave the cache or the backward solve of the native chain
   used them.
 
@@ -512,8 +519,8 @@
 - The steady states of
   [`Pimpl()`](https://dmodverse.github.io/dMod2/reference/Pimpl.md) are
   solved in C++ by the solver of
-  [`cppDE::ptc()`](https://rdrr.io/pkg/cppDE/man/ptc.html), in the
-  native chain for all conditions of an evaluation at once and in
+  [`cppDE::ptc()`](https://dmodverse.github.io/cppDE/reference/ptc.html),
+  in the native chain for all conditions of an evaluation at once and in
   parallel on `getOption("dMod2.cores")`, with the same result on any
   number of cores. A root depends on the parameters, the states in
   `pars` and the controls only, so that an objective is the same
@@ -868,7 +875,7 @@
 
 - An objective called with `hessian = "sparse"` returns its Gauss-Newton
   Hessian as a sparse `Matrix` assembled from the blocks of the
-  conditions; `trust(sparse = TRUE)` factorises it by sparse Cholesky
+  conditions; `trust(sparse = TRUE)` factorizes it by sparse Cholesky
   and `vcov(which = )` solves it for the columns named.
   [`datapointL2()`](https://dmodverse.github.io/dMod2/reference/datapointL2.md)
   returns a sparse Hessian there too.
@@ -876,7 +883,7 @@
 - [`trust()`](https://dmodverse.github.io/dMod2/reference/trust.md) and
   [`profile()`](https://rdrr.io/r/stats/profile.html) take
   `sparse = "auto"` (default), `TRUE` or `FALSE`. `"auto"` takes the
-  sparse Gauss-Newton Hessian for a minimisation without phases, bounds
+  sparse Gauss-Newton Hessian for a minimization without phases, bounds
   or exact Hessian when there are at least 500 free parameters and the
   Hessian at the start fills at most 5% of its matrix
   (`options(dMod2.sparseAuto = )`), and starts from that evaluation.
@@ -891,10 +898,10 @@
   singular, by the rule of
   [`vcov()`](https://rdrr.io/r/stats/vcov.html): a pivot at most 1e-14
   times the largest. A singular step then takes the pseudo-inverse and
-  reoptimises as on a dense Hessian, up to 5000 parameters; above, the
+  reoptimizes as on a dense Hessian, up to 5000 parameters; above, the
   error names the non-identifiable parameters. The pseudo-inverse step
   keeps all its components. `algoControl$W = "identity"` moves the
-  profiled parameter alone and reoptimises the others at every step,
+  profiled parameter alone and reoptimizes the others at every step,
   without a matrix in the path equation and without a warning on
   singularity.
 
@@ -1157,7 +1164,7 @@
 
 - [`mstrust()`](https://dmodverse.github.io/dMod2/reference/mstrust.md)
   takes an anonymous `samplefun` or one with a long name, passes the
-  arguments of an optimiser other than
+  arguments of an optimizer other than
   [`trust()`](https://dmodverse.github.io/dMod2/reference/trust.md),
   refuses `fits < 1`, and writes one log entry per fit also from PSOCK
   workers;
@@ -1250,7 +1257,7 @@
   and the other priors apply a named `sigma` to the parameter it names
   and refuse a `sigma` without an entry for a parameter of `mu`.
   `trustL1(minimize = FALSE)` subtracts the penalty from the objective
-  it maximises.
+  it maximizes.
   [`evalConditionResidual()`](https://dmodverse.github.io/dMod2/reference/evalConditionResidual.md)
   passes `fixed` parameters to the error model also without
   sensitivities.
@@ -1306,7 +1313,7 @@
   every condition returns its parameters.
 
 - The code that dMod 1 contributors other than the authors wrote is
-  reimplemented from its documented behaviour: the print methods of
+  reimplemented from its documented behavior: the print methods of
   eqnvec, eqnlist, objlist and parvec,
   [`summary()`](https://rdrr.io/r/base/summary.html),
   [`plot()`](https://rdrr.io/r/graphics/plot.default.html) and
@@ -1481,7 +1488,7 @@
 - [`mstrust()`](https://dmodverse.github.io/dMod2/reference/mstrust.md)
   drops `hessian` from every fit and records `elapsed`, the wall time of
   each fit, and the attribute `"run"` with the start time, total wall
-  time, cores, optimiser, sampler, their arguments and the package
+  time, cores, optimizer, sampler, their arguments and the package
   versions.
   [`as.parframe()`](https://dmodverse.github.io/dMod2/reference/as.parframe.md)
   adds the column `elapsed` and keeps `"run"`.
@@ -1561,9 +1568,9 @@
   [`trust()`](https://dmodverse.github.io/dMod2/reference/trust.md) with
   an L1 penalty on chosen parameters around reference values `mu`,
   one-sided with `one.sided`. `gate` keeps a parameter on or above its
-  kink, so it can reach the reference exactly, and `fuse` penalises the
+  kink, so it can reach the reference exactly, and `fuse` penalizes the
   pairwise differences within blocks, whose members move as one while
-  equal. The penalised step runs in a C++ kernel.
+  equal. The penalized step runs in a C++ kernel.
 
 ## dMod2 0.11.2
 
@@ -1755,7 +1762,7 @@
   [`define()`](https://dmodverse.github.io/dMod2/reference/define.md)
   and
   [`insert()`](https://dmodverse.github.io/dMod2/reference/define.md)
-  do. The order `repar(expr, trafo)` is recognised by an expression in
+  do. The order `repar(expr, trafo)` is recognized by an expression in
   first place.
 - Breaking: [`profile()`](https://rdrr.io/r/stats/profile.html) and
   [`vcov()`](https://rdrr.io/r/stats/vcov.html) are methods of the
@@ -1780,7 +1787,7 @@
   [`distributedComputing()`](https://dmodverse.github.io/dMod2/reference/distributedComputing.md)
   and `runbg()` returns the results instead of assigning
   `cluster_result` or `.runbgOutput` in the global environment;
-  `runbg(wait = TRUE)` returns them too. The former behaviour is
+  `runbg(wait = TRUE)` returns them too. The former behavior is
   `cluster_result <- job$get()`.
 - Breaking:
   [`steadyStates()`](https://dmodverse.github.io/dMod2/reference/steadyStates.md)
@@ -1806,7 +1813,8 @@
 - `rref()` returns a list named `rref` and `pivots`; its unused argument
   `fractions` is deprecated and ignored.
 - Breaking: `Pimpl(controlsPTC)` takes the tolerances as `reltol` and
-  `abstol`, as [`cppDE::ptc()`](https://rdrr.io/pkg/cppDE/man/ptc.html)
+  `abstol`, as
+  [`cppDE::ptc()`](https://dmodverse.github.io/cppDE/reference/ptc.html)
   does; `rtol` and `atol` are deprecated.
 - [`compile()`](https://dmodverse.github.io/dMod2/reference/compile.md)
   restores `PKG_*` flags set before the call without an error, and
@@ -1895,21 +1903,21 @@
   of settings, makes
   [`trust()`](https://dmodverse.github.io/dMod2/reference/trust.md) and
   [`mstrust()`](https://dmodverse.github.io/dMod2/reference/mstrust.md)
-  fit by Bock’s generalised Gauss-Newton method. The time axis is cut
+  fit by Bock’s generalized Gauss-Newton method. The time axis is cut
   into segments with node values of their own; continuity is a
-  constraint, linearised and eliminated at every iterate (condensing),
+  constraint, linearized and eliminated at every iterate (condensing),
   so the subproblem keeps the single-shooting size and box bounds work
   as before. At convergence the result is a stationary point of the
   single-shooting objective, which the objective still is when called as
   a function. The ODE model needs
   `odemodel(..., includeTimeZero = FALSE)`;
-  [`profile()`](https://rdrr.io/r/stats/profile.html) re-optimises by
+  [`profile()`](https://rdrr.io/r/stats/profile.html) re-optimizes by
   single shooting.
 - The trust region bounds parameters and node values together. Steps are
   accepted by a filter or an l2 merit function
   (`stepControl$acceptance`), with a second-order correction
   (`stepControl$soc`) and a gap tolerance (`tolControl$ctol`).
-- `stepControl$anneal` (default) first penalises the gaps,
+- `stepControl$anneal` (default) first penalizes the gaps,
   `f + w ||c||^2` with `w` rising tenfold per stage, then hands over to
   the exact method. A stage ends once a step gains less than a
   thousandth; the annealing ends early where the penalty dominates and a
@@ -1921,7 +1929,7 @@
   of its condition, or where its solve fails. A misfit everywhere is
   left to the parameters, and each half of a cut keeps `minPoints` data
   points, by default one more than the states. Unobserved node values
-  start from a run synchronised to the data. `charts` puts node values
+  start from a run synchronized to the data. `charts` puts node values
   on a log10, linear or angle scale per state; the gap of an angle is
   taken modulo 2 pi. The scale of an unobserved linear state is the
   largest range it covers within one segment. `hessianMethod = "bfgs"`
@@ -2048,7 +2056,7 @@
   root. It follows the flow to a stable steady state and checks the
   eigenvalues on the conservation manifold; `flow = FALSE` returns any
   regular root of plain equations. The iteration runs in C++,
-  [`cppDE::ptc()`](https://rdrr.io/pkg/cppDE/man/ptc.html).
+  [`cppDE::ptc()`](https://dmodverse.github.io/cppDE/reference/ptc.html).
 - [`Pimpl()`](https://dmodverse.github.io/dMod2/reference/Pimpl.md)
   keeps every species and adds the conservation rows `C x = T` instead
   of eliminating pivot species. Iterates stay positive and on the
@@ -2139,7 +2147,7 @@
   solves every rate constant at most once. A symbol defined twice, by
   itself or in a cycle is an error.
 - [`steadyStates()`](https://dmodverse.github.io/dMod2/reference/steadyStates.md)
-  factors out common terms instead of cancelling the resolved
+  factors out common terms instead of canceling the resolved
   expressions, which stalled large models.
 - `steadyStates(testSteady = "fast")` checks mod p only. A residual it
   cannot evaluate is an error with its reason, not a fallback to the
@@ -2205,7 +2213,7 @@
   `reverse = TRUE` and `"dual"` are errors. `"symbolic"` is gone, so
   transformation and observation functions evaluate only after
   [`compile()`](https://dmodverse.github.io/dMod2/reference/compile.md).
-- **Optimisation.**
+- **Optimization.**
   [`trust()`](https://dmodverse.github.io/dMod2/reference/trust.md) asks
   per evaluation for a value, a gradient, a Gauss-Newton or an exact
   Hessian. `qnControl$hessianInit = "exact"` seeds a quasi-Newton run,
@@ -2226,8 +2234,8 @@
   An objective that declines a Hessian no longer crashes
   [`trust()`](https://dmodverse.github.io/dMod2/reference/trust.md). A
   backward solve without an answer is an error instead of a zero
-  gradient. A PEtab prior honours `hessian = FALSE`. The batched
-  backward path propagates more than one direction.
+  gradient. A PEtab prior honors `hessian = FALSE`. The batched backward
+  path propagates more than one direction.
   [`compile()`](https://dmodverse.github.io/dMod2/reference/compile.md)
   stays within the 8191-character command line of Windows.
 - New examples `inst/examples/example_ReverseAD.R`,
@@ -2244,7 +2252,7 @@
   [`compile()`](https://dmodverse.github.io/dMod2/reference/compile.md)
   does locally.
 - `runbg(compile = TRUE)` compiles in parallel again. It exports
-  `OMP_NUM_THREADS=1` before the build, and `nproc` honours that, so the
+  `OMP_NUM_THREADS=1` before the build, and `nproc` honors that, so the
   build counted one core and compiled every source in turn. The count
   now ignores the OpenMP variables. `runbg()` also gains `buildCores`
   and `buildBundle`, as
@@ -2272,12 +2280,12 @@
 - SBML and PEtab import work again in a fresh session.
   `.dmod_libsbml_python()` read
   [`reticulate::py_exe()`](https://rstudio.github.io/reticulate/reference/py_exe.html)
-  before Python was initialised, where it falls back to discovery,
+  before Python was initialized, where it falls back to discovery,
   misses the reticulate-managed environment and returns an empty string.
   The [`system2()`](https://rdrr.io/r/base/system2.html) that followed
   then failed with status 127, which the resolver reported as a missing
   `python-libsbml`, so a working environment looked like a broken one.
-  It now initialises Python first and rejects an empty path.
+  It now initializes Python first and rejects an empty path.
 - The libsbml integration tests did not catch that, because
   `.libsbml_works()` turns any error into `FALSE` and every test behind
   it into a skip. A test now covers the interpreter resolution itself,
@@ -2448,7 +2456,7 @@
   sensitivity blocks, while
   [`trust()`](https://dmodverse.github.io/dMod2/reference/trust.md) and
   [`optim()`](https://rdrr.io/r/stats/optim.html) read them
-  positionally, so every fit optimised a permuted model.
+  positionally, so every fit optimized a permuted model.
 - [`normL2()`](https://dmodverse.github.io/dMod2/reference/normL2.md)
   reports its sum of squares as a `chi2` attribute. Adding objectives
   pools the terms sharing an `attr.name` and splits the rest into
@@ -2503,7 +2511,7 @@
   [`constraintChisq()`](https://dmodverse.github.io/dMod2/reference/constraintChisq.md)
   and
   [`constraintRayleigh()`](https://dmodverse.github.io/dMod2/reference/constraintRayleigh.md).
-  Each is the `-2 log` density including its normalisation, unlike
+  Each is the `-2 log` density including the normalization, unlike
   [`constraintL2()`](https://dmodverse.github.io/dMod2/reference/constraintL2.md),
   which is the penalty form, and each applies the chain rule so
   `constraint * P()` is exact.
@@ -2570,7 +2578,7 @@
 ## dMod2 0.6.0
 
 - The core is complete: equations, compiled prediction, observation and
-  parameter transformations, objectives, trust region optimisation and
+  parameter transformations, objectives, trust region optimization and
   profile likelihood. The PEtab, symmetry, mixed effects and Bayesian
   layers live on their own development branches.
 - Test suite over equations, compilation, prediction, objectives, the
@@ -2586,7 +2594,7 @@
   against the profile optimum.
 - dMod palettes,
   [`theme_dMod()`](https://dmodverse.github.io/dMod2/reference/theme_dMod.md)
-  and the colour scales.
+  and the color scales.
 
 ## dMod2 0.5.20
 
@@ -2637,7 +2645,7 @@
 
 - [`Xs()`](https://dmodverse.github.io/dMod2/reference/Xs.md) hands
   every condition to
-  [`cppDE::solveODEBatch()`](https://rdrr.io/pkg/cppDE/man/solveODEBatch.html)
+  [`cppDE::solveODEBatch()`](https://dmodverse.github.io/cppDE/reference/solveODEBatch.html)
   in one call.
 - [`Y()`](https://dmodverse.github.io/dMod2/reference/Y.md) and
   `P(method = "explicit")` evaluate all conditions in one call.

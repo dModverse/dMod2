@@ -34,7 +34,7 @@ odemodel(
   [eqnlist](https://dmodverse.github.io/dMod2/reference/eqnlist.md) with
   the right-hand sides; the names are the states. The functions and
   operators an equation may use are listed in
-  [cppDE::expressions](https://rdrr.io/pkg/cppDE/man/expressions.html).
+  [cppDE::expressions](https://dmodverse.github.io/cppDE/reference/expressions.html).
 
 - deriv:
 
@@ -111,10 +111,10 @@ odemodel(
 - ...:
 
   Passed to
-  [`cppDE::cppODE()`](https://rdrr.io/pkg/cppDE/man/cppODE.html),
-  [`cppDE::cvode()`](https://rdrr.io/pkg/cppDE/man/cvode.html) or
-  [`cOde::funC()`](https://rdrr.io/pkg/cOde/man/funC.html), according to
-  `backend`. Among them:
+  [`cppDE::cppODE()`](https://dmodverse.github.io/cppDE/reference/cppODE.html),
+  [`cppDE::cvode()`](https://dmodverse.github.io/cppDE/reference/cvode.html)
+  or [`cOde::funC()`](https://rdrr.io/pkg/cOde/man/funC.html), according
+  to `backend`. Among them:
 
   - `method`: the integration method, `"bdf"` (default), `"adams"`,
     `"rb4"` or `"tsit5"` on `cppDE`; `"bdf"` or `"adams"` on `Sundials`.
@@ -158,9 +158,9 @@ uses.
 [`Xf()`](https://dmodverse.github.io/dMod2/reference/Xf.md),
 [`compile()`](https://dmodverse.github.io/dMod2/reference/compile.md),
 [`eventlist()`](https://dmodverse.github.io/dMod2/reference/eventlist.md),
-[cppDE::expressions](https://rdrr.io/pkg/cppDE/man/expressions.html),
-[`cppDE::cppODE()`](https://rdrr.io/pkg/cppDE/man/cppODE.html),
-[`cppDE::cvode()`](https://rdrr.io/pkg/cppDE/man/cvode.html),
+[cppDE::expressions](https://dmodverse.github.io/cppDE/reference/expressions.html),
+[`cppDE::cppODE()`](https://dmodverse.github.io/cppDE/reference/cppODE.html),
+[`cppDE::cvode()`](https://dmodverse.github.io/cppDE/reference/cvode.html),
 [`cOde::funC()`](https://rdrr.io/pkg/cOde/man/funC.html)
 
 ## Examples

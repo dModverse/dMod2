@@ -155,4 +155,4 @@ loads without unloading.
 or [`profile()`](https://rdrr.io/r/stats/profile.html) with `cores > 1`
 hangs.** A threaded BLAS without thread control deadlocks in forked
 workers; dMod2 warns on attach. Start R with `OMP_NUM_THREADS=1`, see
-[`cppDE::forkGuard()`](https://rdrr.io/pkg/cppDE/man/forkGuard.html).
+[`cppDE::forkGuard()`](https://dmodverse.github.io/cppDE/reference/forkGuard.html).

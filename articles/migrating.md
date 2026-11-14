@@ -73,7 +73,8 @@ models](https://dmodverse.github.io/dMod2/articles/guide-nlme.md).
 
 The default `odemodel(backend = "cppDE")` generates C++ code through
 [cppDE](https://dmodverse.github.io/cppDE/); `"Sundials"` runs CVODES
-through [`cppDE::cvode()`](https://rdrr.io/pkg/cppDE/man/cvode.html),
+through
+[`cppDE::cvode()`](https://dmodverse.github.io/cppDE/reference/cvode.html),
 `"deSolve"` keeps the dMod path with code compiled by cOde.
 
 Every function object is compiled. With `compile = FALSE` only sources
@@ -107,7 +108,7 @@ working directory.
 |----|----|
 | `odemodel(solver = )` | `odemodel(backend = c("cppDE", "Sundials", "deSolve"))` |
 | `odemodel(outputs = , estimate = , gridpoints = )` | `...`, deSolve only |
-| `Xs(optionsOde = , optionsSens = )` | `Xs(options = , optionsSens = )`, see [`cppDE::solveODE()`](https://rdrr.io/pkg/cppDE/man/solveODE.html) |
+| `Xs(optionsOde = , optionsSens = )` | `Xs(options = , optionsSens = )`, see [`cppDE::solveODE()`](https://dmodverse.github.io/cppDE/reference/solveODE.html) |
 | `Xs(fcontrol = )` | deSolve only |
 | none | `deriv2 = TRUE` in [`odemodel()`](https://dmodverse.github.io/dMod2/reference/odemodel.md), [`Y()`](https://dmodverse.github.io/dMod2/reference/Y.md), [`P()`](https://dmodverse.github.io/dMod2/reference/P.md): exact second derivatives |
 
@@ -182,7 +183,7 @@ derives an analytic transformation.
 | `priorL2(mu, lambda)` | `constraintL2(mu, sigma)` |
 | `nll()` | `normL2(optBLOQ = c("M3", "M1", "M4NM", "M4BEAL"))` |
 | `mname()` | [`modelname()`](https://dmodverse.github.io/dMod2/reference/modelname.md) |
-| `funC0()` | [`cppDE::cppFUN()`](https://rdrr.io/pkg/cppDE/man/cppFUN.html) |
+| `funC0()` | [`cppDE::cppFUN()`](https://dmodverse.github.io/cppDE/reference/cppFUN.html) |
 | `ginv()` | [`MASS::ginv()`](https://rdrr.io/pkg/MASS/man/ginv.html) |
 | `wide2long(prediction)` | `as.data.frame(prediction)` |
 

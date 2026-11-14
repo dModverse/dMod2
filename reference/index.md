@@ -4,7 +4,7 @@
 
 - [`dMod2`](https://dmodverse.github.io/dMod2/reference/dMod2-package.md)
   [`dMod2-package`](https://dmodverse.github.io/dMod2/reference/dMod2-package.md)
-  : dMod2: Dynamic Modeling and Parameter Estimation in ODE Models
+  : dMod2: Parameter Estimation in Dynamical Models
 
 ## Reaction networks and equations
 
