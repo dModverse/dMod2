@@ -25,13 +25,17 @@ transformation or of \code{p}.}
 
 \item{init}{Named numeric start with the parameters of \code{obj} that are
 neither random effects nor created by the effect formulas (those start
-at 0). It may also set those and the hyperparameters: \verb{omega_*} (log
-standard deviations and Cholesky entries), \verb{lambda_*} (Laplace), \verb{prob_*}
-and \verb{tau_*} (spike and slab), \verb{concentration_*} and \verb{tau_*} (Dirichlet
-process), named \verb{<kind>_<grouping>} and numbered \verb{_1}, \verb{_2}, ... where a
-grouping has several blocks. An \code{em} fit as \code{init} gives the start: the
-estimates, \code{fixed} values and random effects of that fit, without those it
-set to 0, and with sparse random effects the inner modes.}
+at 0). It may also set those and the hyperparameters: \verb{omega_<a>_<a>},
+the log of the diagonal entry of the Cholesky factor of \code{Omega} (the log
+standard deviation of an uncorrelated random effect), and \verb{omega_<a>_<b>},
+the entry in row \code{a} and column \code{b} below the diagonal, with \code{a} and \code{b}
+the stems of the random effects without \code{eta_}, as in \code{omega_cl_cl};
+\verb{prob_*} and \verb{tau_*} (spike and slab), \verb{concentration_*} and \verb{tau_*}
+(Dirichlet process), named \verb{<kind>_<grouping>} and numbered
+\verb{_1}, \verb{_2}, ... where a grouping has several blocks. An \code{em} fit as
+\code{init} gives the start: the estimates, \code{fixed} values and random effects
+of that fit, without those it set to 0, and with sparse random effects
+the inner modes.}
 
 \item{fixed}{Named numeric of parameters held fixed.}
 
@@ -60,7 +64,7 @@ blocks, a normal random effect that forms a block alone and whose
 standard deviation ends below 0.1 is dropped and the fit repeated from the
 estimates; where -2 log L rises by at most \code{boundary}, that fit is
 returned and names the hyperparameter in \code{boundary}.}
-\item{\code{quadrature}, \code{saem}, \code{laplace}}{lists of the sections
+\item{\code{quadrature}, \code{saem}, \code{sparseFit}}{lists of the sections
 Quadrature, SAEM and Sparse random effects.}
 }}
 
@@ -78,9 +82,9 @@ An object of class \code{em} with, among others:
 \describe{
 \item{\code{argument}, \code{value}, \code{gradient}, \code{hessian}}{the estimates, -2 log
 L of the marginal likelihood with gradient and Hessian (a sparse
-\code{Matrix} on the sparse path, \code{NULL} with Laplace, spike-and-slab or
+\code{Matrix} on the sparse path, \code{NULL} with spike-and-slab or
 Dirichlet-process random effects).}
-\item{\code{information}}{with Laplace or spike-and-slab random effects the
+\item{\code{information}}{with spike-and-slab random effects the
 empirical information that gives the standard errors: \code{G / (G - 1)}
 times the sum of the outer products of the centered scores of the \code{G}
 groups, plus half the Hessian of the conditions without random
@@ -93,8 +97,8 @@ for spike-and-slab and Dirichlet-process random effects also the
 cluster, 0 for the population value, and the posterior probability
 \code{p0} of a deviation of 0; a column \code{data} where a sparse random effect
 reaches no data of the group; such an effect rests at 0 with the prior.}
-\item{\code{strengths}, \code{slab}}{the hyperparameters of the Laplace blocks
-and of the spike-and-slab and Dirichlet-process blocks.}
+\item{\code{slab}}{the hyperparameters of the spike-and-slab and
+Dirichlet-process blocks.}
 \item{\code{valueSE}}{the standard error of \code{value} where it comes from
 importance sampling.}
 \item{\code{coupling}}{\code{"expectationConsistent"} where a group needed it,
@@ -117,7 +121,7 @@ estimated by maximizing the marginal likelihood.
 A group, a level of the grouping of a random term such as a patient or a
 cell line, may own several conditions, which share the random effects of the
 group.
-Normal, Laplace, spike-and-slab and Dirichlet-process random effects of one
+Normal, spike-and-slab and Dirichlet-process random effects of one
 grouping may be combined. Random terms over several groupings, nested or
 crossed, are normal and integrated per connected component of the
 conditions.
@@ -126,7 +130,7 @@ Methods:
 \describe{
 \item{\code{"focei"}}{Laplace approximation at the conditional modes with the
 exact derivative of the volume term. The default, and the method for
-Laplace, spike-and-slab and Dirichlet-process random effects (at most 14
+spike-and-slab and Dirichlet-process random effects (at most 14
 groups) and for several groupings.}
 \item{\code{"quadrature"}}{adaptive sparse-grid quadrature around the modes,
 started from the FOCEI fit; section Quadrature.}
@@ -190,6 +194,8 @@ averaging when the expected rise of -2 log L from the Monte Carlo error
 is below \code{mcTol} (default 0.05).}
 \item{\code{particles}}{with Dirichlet-process random effects the particles of
 the sequential importance sampling of -2 log L, default 500.}
+\item{\code{cm1Control}}{\code{\link[=trust]{trust()}} settings of the Newton steps of the other
+parameters, default one iteration per SAEM iteration.}
 }
 With Dirichlet-process random effects a Gibbs sweep draws the clusters of
 the groups (Neal 2000, algorithm 8), the averaging runs \code{nEM} iterations,
@@ -199,12 +205,12 @@ draws.
 
 \section{Sparse random effects}{
 
-With Laplace, spike-and-slab or Dirichlet-process random effects the
+With spike-and-slab or Dirichlet-process random effects the
 parameters and hyperparameters move in one trust region. The integral of a
 group is exact where the data couple none of the factors and the sum over
 the subsets of the spike-and-slab random effects of the group stays within a budget of
 nodes; else it is the expectation consistent (EC) approximation, and a
-trial point at which EC does not converge is a failed evaluation. Entries of \code{control$laplace}:
+trial point at which EC does not converge is a failed evaluation. Entries of \code{control$sparseFit}:
 \describe{
 \item{\code{maxOuter}}{iterations of the trust region, default 200.}
 \item{\code{trustControl}}{the \code{\link[=trust]{trust()}} settings; \code{ftol}, \code{mtol} and \code{gtol}
@@ -255,22 +261,22 @@ fitS <- em(obj, randomEffects(p), init = init, method = "saem", verbose = FALSE)
 c(focei = fit$value, quadrature = fitQ$value, saem = fitS$value)
 }
 \dontrun{
-## Ka and Cl with correlated random effects, V with a Laplace one: a second transformation
-p2 <- P(insert(trafo, Ka + Cl ~ 1 + (1 | p | ID), V ~ 1 + (1 | gr(ID, dist = laplace()))),
+## Ka and Cl with correlated random effects, V with a spike-and-slab one: a second transformation
+p2 <- P(insert(trafo, Ka + Cl ~ 1 + (1 | p | ID), V ~ 1 + (1 | gr(ID, dist = spikeSlab()))),
         method = "explicit", compile = FALSE, modelname = "theoph_p2", derivMode = dm,
         outdir = tempdir())
 compile(p2, output = tempfile("theoph"))
 fit2 <- em(normL2(data, g * x * p2, errmodel = err), randomEffects(p2), init = init)
 fit2$omega
-fit2$strengths
+fit2$slab
 AIC(fit, fit2)
 }
 }
 \seealso{
 \code{\link[=msem]{msem()}}, \code{\link[=randomEffects]{randomEffects()}}, \code{\link[=insert]{insert()}}; the guide chapters
 \href{https://dmodverse.github.io/dMod2/articles/guide-nlme.html}{Nonlinear mixed-effects models} and
-\href{https://dmodverse.github.io/dMod2/articles/guide-group-effects.html}{Group-specific effects}, the
+\href{https://dmodverse.github.io/dMod2/articles/guide-sparse-deviations.html}{Sparse deviations}, the
 methods articles
 \href{https://dmodverse.github.io/dMod2/articles/methods-nlme.html}{Marginal likelihood of mixed-effects models}
-and \href{https://dmodverse.github.io/dMod2/articles/methods-sparse-random-effects.html}{Sparse random effects}.
+and \href{https://dmodverse.github.io/dMod2/articles/methods-sparsity-priors.html}{Sparsity priors}.
 }

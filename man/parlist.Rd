@@ -22,8 +22,9 @@ parlist(...)
 \item{x}{list of fit results, each as returned by \code{\link[=trust]{trust()}}. Default \code{NULL}
 returns \code{NULL}.}
 
-\item{...}{for \code{parlist()} and \code{c()}, fit results or parameter lists; for
-\code{print()} and \code{summary()}, not used.}
+\item{...}{for \code{parlist()}, fit results, one entry each; for \code{c()}, fit
+results or parameter lists, whose entries are concatenated; for \code{print()}
+and \code{summary()}, not used.}
 
 \item{object}{object of class \code{parlist}.}
 }

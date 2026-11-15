@@ -27,7 +27,9 @@ branched transformation also one or several effect formulas, e.g.
 \code{cl ~ wt + (1 | ID)}, which replace the symbol by a linear predictor
 over the columns of the branch table with fixed and random effects; see
 \code{\link[=randomEffects]{randomEffects()}}. Named arguments in \code{...} are then placeholders of the
-formulas, \code{insert(trafo, x ~ 1 + (1 | ID), x = c("ka", "cl"))}.}
+formulas, \code{insert(trafo, x ~ 1 + (1 | ID), x = c("ka", "cl"))}. A
+substitution or a second effect formula for a symbol that has an effect
+formula is an error: set the scale of a symbol before adding effects.}
 
 \item{...}{Named vectors replacing the symbols of \code{expr} of the same name,
 one substitution per element. They are evaluated per condition, with
@@ -39,7 +41,8 @@ where it is \code{TRUE}. Next to effect formulas they are more formulas and
 placeholders, evaluated once in the calling environment.}
 
 \item{conditionMatch}{Regular expression; only the conditions whose names
-match are changed. Default \code{NULL}, all.}
+match are changed. Default \code{NULL}, all. Needs the tree of a
+transformation built by \code{branch()}.}
 
 \item{table}{\code{data.frame} with one row per condition, row names the
 conditions. Kept as attribute \code{tree}; the columns can be read in \code{...}
@@ -49,7 +52,8 @@ by name.}
 
 \item{apply}{One of \code{"nothing"} (default), \code{"insert"} and \code{"define"}: what
 is done with every non-missing entry \code{table[condition, column]}, with
-the column name as left-hand side and the entry as right-hand side.}
+the column name as left-hand side and the entry as right-hand side.
+Columns named \code{condition} or \code{conditions} are skipped.}
 }
 \value{
 Same shape as \code{trafo}, or a list named by condition for

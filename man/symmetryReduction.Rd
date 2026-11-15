@@ -49,7 +49,7 @@ drive to 0. Defaults to \code{FALSE}.}
 in \verb{$alternatives}. Defaults to \code{FALSE}.}
 
 \item{timeout}{Time limit in seconds for the section search of one block; a block not
-solved in time keeps the invariants (\code{"invariantOnly"}). Unlike \code{workCap}, it depends
+solved in time keeps the invariants (\code{"invariant_only"}). Unlike \code{workCap}, it depends
 on the load of the machine. Defaults to \code{Inf}.}
 
 \item{allowOpen}{Logical. Reduce the directions with a closed form and leave those
@@ -76,7 +76,7 @@ An object of class \code{symmetryreduction}:
 \item{\code{blocks}}{one entry per set of coupled directions, with
 \code{invariants}, \code{section}, \code{newParameters} (the invariant each \verb{q_<k>}
 holds), \code{solvedDomain}, \code{coverage} and \code{status} (\code{"fixed"},
-\code{"reduced"}, \code{"invariantOnly"} or \code{"unresolved"}), \code{level},
+\code{"reduced"}, \code{"invariant_only"} or \code{"unresolved"}), \code{level},
 \code{generatorLevel} (the lowest level of the directions in the block), \code{unproven} (the claims
 of the section that are not proven) and, for a curved block, \code{count}
 (\code{"exact"} or \code{"upper bound"}), \code{injective} and \code{reach}. A section on a face

@@ -17,7 +17,7 @@ with residuals, \code{"population"} only PRED with residuals.}
 \item{...}{Ignored.}
 }
 \value{
-A data.frame with columns \verb{condition, group, time, name, observed, sigma, sigmaPRED, IPRED, PRED, IRES, IWRES, PRES, PWRES, source};
+A data.frame with columns \verb{condition, group, time, name, observed, sigma, sigmaPRED, IPRED, PRED, source, IRES, PRES, IWRES, PWRES};
 \code{sigma} is the error model at IPRED, \code{sigmaPRED} at PRED, \code{source} is
 \code{"obs"} for the rows of the data and \code{"grid"} for the other times.
 }

@@ -280,8 +280,8 @@ NULL
 #'   \item{`time`}{hours after the dose.}
 #'   \item{`value`}{the reading.}
 #'   \item{`sigma`}{`NA` throughout.}
-#'   \item{`condition`}{the subject, `"ID1"` to `"ID32"`.}
-#'   \item{`id`}{the subject, 1 to 32.}
+#'   \item{`condition`}{the subject, `"ID1"` to `"ID33"` without `"ID11"`.}
+#'   \item{`id`}{the subject, 1 to 33 without 11.}
 #'   \item{`dose`}{the oral dose in mg.}
 #'   \item{`wt`, `age`, `sex`}{weight (kg), age (years) and sex.}
 #' }

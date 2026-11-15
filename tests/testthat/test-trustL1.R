@@ -113,24 +113,25 @@ test_that("trustL1 pulls sub-kink coords to mu when started away from it", {
 })
 
 
-## ---- One-sided penalty acts as a lower wall at mu ---------------------
+## ---- One-sided penalty acts below mu only -------------------------------
 
-test_that("trustL1 one-sided penalty pins coords pushing below mu", {
-  # The one-sided penalty fires only below mu, so the optimum is the
-  # soft-threshold solution projected onto [mu, +Inf).
-  x0     <- c(a = -1.0, b = 0.5)
+test_that("trustL1 one-sided penalty acts below mu only", {
+  # lambda * max(0, mu - p): below mu the soft threshold, at mu where the
+  # objective pulls down by at most lambda, above mu nothing
+  x0     <- c(a = -1.0, b = 0.5, c = -0.1, d = 0.1)
   lambda <- 0.4
   obj    <- .quadratic_objfn(x0)
-  mu_L1  <- c(a = 0, b = 0)
+  mu_L1  <- c(a = 0, b = 0, c = 0, d = 0)
 
-  fit <- trustL1(obj, parinit = c(a = 0.5, b = 0.5),
+  fit <- trustL1(obj, parinit = c(a = 0.5, b = 0.5, c = 0.5, d = 0),
                  mu = mu_L1, one.sided = TRUE, lambda = lambda,
                  rinit = 0.5, rmax = 5, iterlim = 200)
 
-  # a is held at the lower wall.
-  expect_identical(unname(fit$argument[["a"]]), 0)
-  # b is above mu, penalty inactive, so b lands at the unpenalized min.
+  expect_equal(unname(fit$argument[["a"]]), -1 + lambda / 2, tolerance = 1e-6)
   expect_equal(unname(fit$argument[["b"]]), 0.5, tolerance = 1e-6)
+  expect_identical(unname(fit$argument[["c"]]), 0)
+  # started on the kink with the objective pulling up, d leaves it
+  expect_equal(unname(fit$argument[["d"]]), 0.1, tolerance = 1e-6)
 })
 
 

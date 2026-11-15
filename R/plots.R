@@ -406,7 +406,8 @@ plotPrediction <- function(prediction,...) {
 #' @param transform Named list of transformations of the states, see
 #'   [coordTransform()].
 #' @param aesthetics Named list of aesthetic mappings given as character, e.g.
-#'   `list(linetype = "name")`. They can refer to columns of the condition grid.
+#'   `list(linetype = "name")`. With `data`, they can also refer to columns of
+#'   the condition grid of `data`.
 #' @details The plotted data frame has columns `time`, `value`, `sigma`, `name`
 #'   and `condition`.
 #'
@@ -422,20 +423,21 @@ plotCombined <- function(prediction,...) {
 #' Plot a List of Data Points
 #'
 #' @param data A [datalist], i.e. a named list of data frames with columns
-#'   `name`, `time`, `value` and `sigma`, or such a data frame with a
-#'   `condition` column.
-#' @param ... Logical expressions to subset the plotted data.
+#'   `name`, `time`, `value` and `sigma`, or such a data frame, split into
+#'   conditions by [as.datalist()].
+#' @param ... Logical expressions to subset the plotted data. They can refer
+#'   to the columns of the data and of the condition grid.
 #' @param scales The `scales` argument of [ggplot2::facet_wrap()] or
 #'   [ggplot2::facet_grid()]: `"free"` (default), `"fixed"`, `"free_x"` or
 #'   `"free_y"`.
-#' @param facet `"wrap"` (default), `"grid"` or `"wrap_plain"`. `"wrap_plain"`
-#'   gives one panel per combination of name and condition.
+#' @param facet `"wrap"` (default): one panel per name, color by condition.
+#'   `"grid"`: names as rows, conditions as columns. `"wrap_plain"`: one panel
+#'   per combination of name and condition.
 #' @param transform Named list of transformations of the states, see
 #'   [coordTransform()].
 #' @details The plotted data frame has columns `time`, `value`, `sigma`, `name`
 #'   and `condition`.
 #'
-#' @return A `ggplot` object.
 #' @seealso [plotPrediction()], [plotCombined()]
 #' @example inst/examples/plotting.R
 #' @export
@@ -455,8 +457,8 @@ plotData.data.frame <- function(data, ...) plotData(as.datalist(data), ...)
 #' @param maxvalue Numeric, the value of the objective difference at which
 #'   profiles are cut off. Defaults to 5.
 #' @param parlist Matrix or data frame with parameter columns, drawn as points.
-#'   With a `value` column, the differences of `value` to the lowest profile value are
-#'   used.
+#'   With a `value` column, a point is drawn at the difference of `value` to
+#'   the lowest objective value at the optima of the profiles, otherwise at 0.
 #' @param ncol Number of columns of the plot grid. `NULL` (default) lets
 #'   [ggplot2::facet_wrap()] choose.
 #' @param threshold Numeric, the horizontal lines and y-axis breaks above the
@@ -647,8 +649,8 @@ plotFluxes <- function(pouter, x, times, fluxEquations, legendTitle = "Fluxes:",
 #'   `iterations`, a fit of [msem()] or an alignment from [align()], whose
 #'   starts are plotted. Or a named list of collections, one panel each.
 #' @param ... Logical expressions to subset `x`, every collection of a list.
-#' @param tol Maximal difference between neighboring objective values that
-#'   still counts as one step. Defaults to 1.
+#' @param tol A value more than `tol` above the lowest value of the current
+#'   step starts a new step. Defaults to 1.
 #' @param showSteps Logical. `TRUE` marks the detected steps by dashed
 #'   vertical lines labeled by their index. Defaults to `FALSE`.
 #' @param pseudoLog Logical. `TRUE` draws the values on a pseudo-log10 scale,
@@ -677,8 +679,8 @@ plotValues <- function(x, ...) UseMethod("plotValues")
 #' fits belong to.
 #'
 #' @param x A [parframe] or the result of [mstrust()].
-#' @param tol Maximal difference between neighboring objective values that
-#'   still counts as one step. Defaults to 1.
+#' @param tol A value more than `tol` above the lowest value of the current
+#'   step starts a new step. Defaults to 1.
 #' @param ... Logical expressions to subset `x`.
 #' @return A `ggplot` object with the plotted data frame as attribute `"data"`.
 #' @seealso [plotValues()], [mstrust()]

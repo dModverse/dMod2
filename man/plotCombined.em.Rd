@@ -17,8 +17,9 @@
 \arguments{
 \item{prediction}{An \code{em} fit, see \code{\link[=em]{em()}}.}
 
-\item{times}{Times of the predicted curves, by default 200 over the range
-of the data.}
+\item{times}{Times added to the prediction grid of \link[=predict.em]{predict()},
+by default 200 over the range of the data. The curves are drawn over the
+range of the data only.}
 
 \item{ncol}{Number of columns with one observable. Default 4.}
 

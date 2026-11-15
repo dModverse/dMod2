@@ -65,8 +65,9 @@ plot.em <- function(x, ...) {
 #' Residual diagnostics of a mixed-effects fit
 #'
 #' @description One row of panels per type of residual: against the population
-#'   prediction (IWRES against the individual one), against time with a loess
-#'   smoother, and a QQ-plot against N(0, 1). See [residuals()][residuals.em].
+#'   prediction (IWRES against the individual one) and against time, both with
+#'   a loess smoother, and a QQ-plot against N(0, 1). See
+#'   [residuals()][residuals.em].
 #' @param parframe An `em` fit, see [em()].
 #' @param type Any of `"IWRES"`, `"CWRES"` and `"NPDE"`, by default all three.
 #' @param nsim,seed With `"NPDE"`: the number of simulated data sets and the
@@ -112,8 +113,9 @@ plotResiduals.em <- function(parframe, type = c("IWRES", "CWRES", "NPDE"), nsim 
 #'   model, the population prediction (PRED) dashed. Several observables give
 #'   one row each.
 #' @param prediction An `em` fit, see [em()].
-#' @param times Times of the predicted curves, by default 200 over the range
-#'   of the data.
+#' @param times Times added to the prediction grid of [predict()][predict.em],
+#'   by default 200 over the range of the data. The curves are drawn over the
+#'   range of the data only.
 #' @param ncol Number of columns with one observable. Default 4.
 #' @param showPred Logical; draw PRED. Default `TRUE`.
 #' @param showBand Logical; draw the band of the error model. Default `TRUE`.
@@ -184,7 +186,9 @@ plotCombined.em <- function(prediction, times = NULL, ncol = 4L, showPred = TRUE
 #'   loess trend for a numeric covariate of more than five values, boxes for
 #'   the others.
 #' @param ... Ignored.
-#' @return A ggplot (or a list with `hist` and `qq` if cowplot is unavailable).
+#' @return A ggplot, or without cowplot a list with `hist` and `qq`. With
+#'   `covariates`, a ggplot for one covariate; for several a cowplot grid, or
+#'   without cowplot a list of ggplots named by covariate.
 #' @example inst/examples/plotRandomEffects.R
 #' @export
 plotRandomEffects.em <- function(x, type = c("conditional", "modes"), draws = 20L, bins = 30, covariates = NULL,

@@ -39,7 +39,8 @@ diagonal.
 \item \code{list}: a list with the result for each element.
 }
 
-An error is raised if \code{x} has no second derivatives.
+An error is raised if \code{x} has no second derivatives; an \code{objlist} without
+Hessian gives \code{NULL}.
 }
 \description{
 Extract the Second Derivatives of an Object

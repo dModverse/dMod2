@@ -21,7 +21,7 @@
 #' @param fitted Objective function \code{fitted(pars, fixed, ...)} returning a
 #'   list with \code{value}, \code{gradient} and \code{hessian}. Numeric
 #'   attributes of the result, such as \code{"data"} and \code{"prior"}, are
-#'   kept as columns of the profile.
+#'   kept as columns of the profile, except \code{chi2} and \code{chi2_*}.
 #' @param pars Named numeric parameter vector at the optimum.
 #' @param whichPar Numeric or character vector, the parameters to profile.
 #' @param alpha Significance level; the profile stops where the objective has
@@ -72,8 +72,10 @@
 #'     \item{\code{correction}}{Relative correction above which \code{gamma}
 #'       is halved; below half of it \code{gamma} doubles up to the initial
 #'       value. \code{1} for both methods.}
-#'     \item{\code{reg}}{Singular values below \code{reg} are dropped when the
-#'       Hessian is inverted. \code{.Machine$double.eps} / \code{0}.}
+#'     \item{\code{reg}}{Where the Hessian bordered by the constraint is
+#'       numerically singular, the path equation is solved by a pseudoinverse
+#'       without the singular values below \code{reg} times the largest one
+#'       and the matrix dimension. \code{.Machine$double.eps} / \code{0}.}
 #'   }
 #' @param optControl List of arguments for [trust()] in the re-optimization,
 #'   merged into \code{list(rinit = 0.1, rmax = 10, iterlim = 10)} for
@@ -100,8 +102,10 @@
 #'   parameters, with metanames \code{value} (the objective), \code{constraint}
 #'   (deviation of the profiled parameter from the value in \code{pars}),
 #'   \code{stepsize}, \code{gamma} and \code{whichPar} (the profiled
-#'   parameter), columns for the numeric attributes of the objective, and one
-#'   column per parameter. Profiles that fail are dropped with a message. The
+#'   parameter), columns for the numeric attributes of the objective other
+#'   than \code{chi2} and \code{chi2_*}, and one column per parameter.
+#'   Profiles that fail are dropped with a message; when all fail,
+#'   \code{profile()} stops with an error. The
 #'   attribute \code{"ends"} is a data frame with one row per side and the
 #'   columns \code{whichPar}, \code{side}, \code{steps} and \code{reason}:
 #'   \code{"threshold"}, \code{"limit"}, \code{"step limit"} or the error of
@@ -320,9 +324,9 @@ profile.objfn <- function(fitted, pars, whichPar, alpha = 0.05,
     if (mismatch > sControl$atol && stepsize > sControl$min) {
       stepsize <- max(stepsize / 1.5, sControl$min)
       valid <- FALSE
-    }
-    if (mismatch < .3 * sControl$atol || abs(mismatch / dobj.fact) < .3 * sControl$rtol)
+    } else if (mismatch < .3 * sControl$atol || abs(mismatch / dobj.fact) < .3 * sControl$rtol) {
       stepsize <- min(stepsize * 2, sControl$max)
+    }
     list(y = y.try, lag = lag.try, stepsize = stepsize, gamma = gamma, valid = valid)
   }
 
@@ -761,9 +765,9 @@ vcov.trustfit <- function(object, parupper = NULL, parlower = NULL, which = NULL
 #' @param stats Logical, print the summary to the console. Default `FALSE`.
 #' @param output Logical, write every fit and the final parlist to disk.
 #'   Default `FALSE`.
-#' @param cautiousMode Logical, also write every fit deparsed to an `.R` file
-#'   in `interRes/`, which is kept after the run while the `.Rda` files in it are
-#'   removed. Default `FALSE`.
+#' @param cautiousMode Logical. With `output = TRUE`, also write every fit
+#'   deparsed to an `.R` file in `interRes/`, which is kept after the run while
+#'   the `.Rda` files in it are removed. Default `FALSE`.
 #' @param startFromCenter Logical. If `TRUE`, the first fit starts at
 #'   `center` without offset. Default `FALSE`.
 #' @param retry Logical. If `TRUE` (default), a fit that fails with an error

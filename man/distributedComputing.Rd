@@ -69,15 +69,15 @@ as arguments. \code{1} compiles one file at a time. Default 50.}
 With \code{wait = TRUE} the results of \code{get()}, else an object of class
 \code{dMod2Job}, a list of functions:
 \describe{
-\item{\code{check()}}{reports how many tasks are done, running or failed and
-returns \code{TRUE} once no task runs any more, with a warning when some
-failed. A task fails when the task process ends without a result. A
-task without a result on a node that does not answer, or whose queue
-does not, counts as running.}
+\item{\code{check()}}{reports how many tasks are done, running, failed or not
+reachable and returns \code{TRUE} once no task runs or is not reachable, with
+a warning when some failed. A task fails when the task process ends
+without a result. A task without a result on a node that does not answer,
+or whose queue does not, is not reachable.}
 \item{\code{wait(interval = 10)}}{polls every \code{interval} seconds until no task
-runs, reports each change as a message and returns \code{TRUE} when every task
-is done. While a node does not answer, the pause between polls doubles up
-to 10 minutes.}
+runs or is not reachable, reports each change as a message and returns
+\code{TRUE} when every task is done. While a node does not answer, the pause
+between polls doubles up to 10 minutes.}
 \item{\code{get(combine = TRUE, all = FALSE)}}{returns the results. With
 \code{combine = TRUE} parlists are joined by \code{c()}, fits of \code{\link[=msem]{msem()}} that
 each ran a part of the same starts into one fit, and data frames such as parframes by
@@ -123,8 +123,8 @@ was submitted from another machine. Every job is registered in
 \code{\link[=dMod2Jobs]{dMod2Jobs()}} lists them.
 
 The model files are those of the \link{obsfn}, \link{parfn}, \link{prdfn} and objective
-objects in \code{input}; objects without them take every file of
-\code{getOption("dMod2.outdir")}, else of the working directory.
+objects in \code{input}; when none of them has model files, those in
+\code{getOption("dMod2.outdir")}, else in the working directory.
 \itemize{
 \item \code{build = "compile"}: the C/C++ sources are copied and compiled once
 per node into one shared object, against the cppDE installed there.

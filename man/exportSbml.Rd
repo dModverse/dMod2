@@ -18,9 +18,9 @@ exportSbml(
 
 \item{parameters}{Named numeric vector of parameter values (including any
 compartment-size parameters referenced in \code{eqnlist$compartments}). An entry
-whose name is a compartment or a species is that element's size or initial
-value, not a separate \verb{<parameter>}. Default \code{NULL}: parameters are
-written without values.}
+named like a compartment whose volume is the compartment symbol is the size
+of that compartment; entries named like other compartments or like species
+are not written. Default \code{NULL}: no \verb{<parameter>} is written.}
 
 \item{inits}{Named numeric \emph{or} character vector of initial values keyed
 by state name. Numeric entries (or character entries that parse as

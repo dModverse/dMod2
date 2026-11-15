@@ -36,8 +36,8 @@ plotProfile(profs, ...)
 profiles are cut off. Defaults to 5.}
 
 \item{parlist}{Matrix or data frame with parameter columns, drawn as points.
-With a \code{value} column, the differences of \code{value} to the lowest profile value are
-used.}
+With a \code{value} column, a point is drawn at the difference of \code{value} to
+the lowest objective value at the optima of the profiles, otherwise at 0.}
 
 \item{ncol}{Number of columns of the plot grid. \code{NULL} (default) lets
 \code{\link[ggplot2:facet_wrap]{ggplot2::facet_wrap()}} choose.}

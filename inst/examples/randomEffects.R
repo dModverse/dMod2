@@ -7,7 +7,7 @@ trafo <- insert(trafo, "x <- exp(x)", x = c("ka", "cl", "v"))
 trafo <- insert(trafo,
                 ka ~ 1 + (1 | p | ID),
                 cl ~ wt + (1 + dose | p | ID),
-                v  ~ 1 + (1 | gr(ID, dist = laplace())))
+                v  ~ 1 + (1 | gr(ID, dist = spikeSlab())))
 trafo$C2
 re <- randomEffects(trafo)
 re

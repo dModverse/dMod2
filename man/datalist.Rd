@@ -29,7 +29,7 @@ datalist(...)
 must provide the columns "name", "time" and "value". The columns "sigma"
 and "lloq" are optional and default to \code{NA} and \code{-Inf}.}
 
-\item{...}{for \code{datalist()} and \code{c()}, named data frames or datalists; for
+\item{...}{for \code{datalist()}, named data frames; for \code{c()}, datalists; for
 the \code{as.datalist()} methods, not used.}
 
 \item{splitBy}{character, the columns whose combined values identify a

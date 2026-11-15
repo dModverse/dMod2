@@ -499,8 +499,8 @@
   objs <- .conditionObjectives(design)
   prior <- if (K) .normalPrior(design)
   start0 <- matrix(0, G, ncol(design$etaNames), dimnames = dimnames(design$etaNames))
-  mode0 <- .laplaceModes(design, objs, prior, c(outer, fixed), .stemHypers(sl, c(hyper, fixed)), start0,
-                         list(iterlim = 300L))
+  mode0 <- .sparseModes(design, objs, prior, c(outer, fixed), .stemHypers(sl, c(hyper, fixed)), start0,
+                        list(iterlim = 300L))
   state <- lapply(setNames(nm = sl$stem), function(st) list(z = seq_len(G), v = unname(mode0[, st])))
   for (st in sl$stem) full[Dp[, st]] <- mode0[, st]
   eta <- mode0[, lay$stems, drop = FALSE]
@@ -628,9 +628,9 @@
     clusters[, st] <- z
     spike[, st] <- colMeans(do.call(rbind, lapply(keep, function(d) d[[st]]$z == 0L)))
   }
-  r <- .laplaceMarginal(design, objs, prior, c(full[names(outer)], fixed), .stemHypers(sl, c(hyper, fixed)),
-                        as.character(intersect(names(outer), names(start))), character(0), fixed, modes, grad = TRUE,
-                        control = list(integral = "importance", particles = sc$particles %||% 500L, iterlim = 300L))
+  r <- .sparseMarginal(design, objs, prior, c(full[names(outer)], fixed), .stemHypers(sl, c(hyper, fixed)),
+                       as.character(intersect(names(outer), names(start))), character(0), fixed, modes, grad = TRUE,
+                       control = list(integral = "importance", particles = sc$particles %||% 500L, iterlim = 300L))
   modes[, lay$stems] <- r$modes[, lay$stems]
   list(argument = psi, value = r$value, valueSE = r$valueSE, gradient = NULL, hessian = NULL,
        etaModes = modes, etaCov = setNames(r$cov, design$groups), clusters = clusters, spike = spike,

@@ -1,6 +1,6 @@
 # Theophylline, warfarin and mavoglurant
 
-Shows: `randomEffects()`, `em()`, `msem()`, `vcov()`, `plotVPC()`, `plotResiduals()`, `plotRandomEffects()`.
+Shows: `randomEffects()`, `em()`, `plotVPC()`, `plotResiduals()`, `plotRandomEffects()`.
 
 Theophylline, warfarin PK/PD and mavoglurant with occasions: FOCEI and SAEM multistarts and the diagnostics of the fits.
 
@@ -9,7 +9,7 @@ Theophylline, warfarin PK/PD and mavoglurant with occasions: FOCEI and SAEM mult
 | file | content |
 |---|---|
 | `analysis.R` | the analysis, shown below |
-| `results/cache.rds` | saved fits; delete it to fit again |
+| `results/cache.rds` | saved fits; delete it to fit again, on Windows with `cores <- 1` in `analysis.R`, where `parallel::mclapply()` runs on one core only |
 | `theophyllineMultistart.R` | multistarts of the theophylline model by FOCEI, quadrature and SAEM, saves `results/multistart.rds` for the guide |
 
 ## Run

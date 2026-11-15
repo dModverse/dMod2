@@ -1,6 +1,7 @@
 # Spike-and-slab random effects, each 0 or from N(0, tau^2) with probability prob, and
 # Dirichlet-process random effects, a partition of the groups under the Ewens prior with one
-# N(0, tau^2) value per block but that of the population value; the guide chapter Group-specific effects derives both.
+# N(0, tau^2) value per block but that of the population value; the methods article Sparsity
+# priors derives both.
 
 
 ## The most nodes the joint sum over the subsets of the spike-and-slab coordinates of a group

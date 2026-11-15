@@ -1,7 +1,7 @@
 #' Import an SBML Model
 #'
-#' Reads an SBML Level 3 file. Requires \pkg{reticulate}, which provides a
-#' Python with `python-libsbml`; set the environment variable
+#' Reads an SBML Level 3 file. Requires \pkg{rjson} and \pkg{reticulate}, which
+#' provides a Python with `python-libsbml`; set the environment variable
 #' `DMOD_LIBSBML_PYTHON` to the path of a Python interpreter to use that one
 #' instead. Kinetic laws are divided by the volume of their compartment.
 #'
@@ -18,8 +18,9 @@
 #'     \item{`inits`}{Named character, the initial value of each state.}
 #'     \item{`observables`}{Named list of observable formulas, possibly
 #'       empty.}
-#'     \item{`assignmentRules`}{Named list of assignment rule formulas,
-#'       already substituted into rates, initial values and observables.}
+#'     \item{`assignmentRules`}{Named list of the formulas of the assignment
+#'       rules and of the parameter initial assignments that `keep` does not
+#'       name, already substituted into rates, initial values and observables.}
 #'     \item{`events`}{An [eventlist] or `NULL`, including the rescaling of
 #'       states when an event changes a compartment volume.}
 #'     \item{`eventsSource`}{An [eventlist] or `NULL`, the event assignments
@@ -422,9 +423,9 @@ importSbml <- function(modelpath, keep = NULL) {
 #' @param eqnlist Object of class [eqnlist] to export.
 #' @param parameters Named numeric vector of parameter values (including any
 #'   compartment-size parameters referenced in `eqnlist$compartments`). An entry
-#'   whose name is a compartment or a species is that element's size or initial
-#'   value, not a separate `<parameter>`. Default `NULL`: parameters are
-#'   written without values.
+#'   named like a compartment whose volume is the compartment symbol is the size
+#'   of that compartment; entries named like other compartments or like species
+#'   are not written. Default `NULL`: no `<parameter>` is written.
 #' @param inits Named numeric *or* character vector of initial values keyed
 #'   by state name. Numeric entries (or character entries that parse as
 #'   numeric) are written as `initialConcentration`, `initialAmount` for
@@ -552,12 +553,18 @@ exportSbml <- function(eqnlist, parameters = NULL, inits = NULL, filepath,
     ev <- as.data.frame(events, stringsAsFactors = FALSE)
     trig <- ifelse(is.na(ev$time), as.character(ev$root),
                    paste("time >=", ev$time))
+    # SBML assigns a value: an added or multiplied value becomes the formula on the old one
+    formula <- function(var, value, method)
+      switch(if (is.null(method) || is.na(method)) "replace" else as.character(method),
+             replace = as.character(value),
+             add = sprintf("%s + (%s)", var, value), multiply = sprintf("%s * (%s)", var, value),
+             stop("exportSbml: event method ", method, " is not replace, add or multiply.", call. = FALSE))
     for (t in unique(trig)) {
       rows <- ev[trig == t, , drop = FALSE]
       event_list[[length(event_list) + 1L]] <- list(
         trigger = t,
         assignments = lapply(seq_len(nrow(rows)), function(i)
-          list(variable = rows$var[i], formula = as.character(rows$value[i]))))
+          list(variable = rows$var[i], formula = formula(rows$var[i], rows$value[i], rows$method[i]))))
     }
   }
 

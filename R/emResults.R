@@ -43,7 +43,6 @@
                                                                    lapply(per, `[[`, f), names(per)))
     out$eta <- fit$etas
   }
-  out$strengths <- .strengthTable(design, pars, names(fixed))
   out$slab <- .slabTable(design, pars, names(fixed))
   class(out) <- c("em", "list")
   out
@@ -124,17 +123,6 @@
              estimate = est, se = se, stringsAsFactors = FALSE)[keep, , drop = FALSE]
 }
 
-## The strengths of the Laplace blocks, estimated or fixed in the design or by name in `fixed`.
-.strengthTable <- function(design, pars, fixed = NULL) {
-  blocks <- Filter(function(b) b$dist == "laplace", design$blocks)
-  if (!length(blocks)) return(NULL)
-  data.frame(name = vapply(blocks, `[[`, "", "hyper"),
-             symbols = vapply(blocks, function(b) paste(b$short, collapse = ", "), ""),
-             estimate = vapply(blocks, function(b) if (is.na(b$lambda)) pars[[b$hyper]] else b$lambda, 0),
-             fixed = !vapply(blocks, function(b) is.na(b$lambda), TRUE) |
-               vapply(blocks, function(b) b$hyper, "") %in% fixed, stringsAsFactors = FALSE)
-}
-
 ## The hyperparameters of the spike-and-slab and cluster blocks: the probability of a deviation
 ## or the concentration, and the slab standard deviation.
 .slabTable <- function(design, pars, fixed = NULL) {
@@ -194,10 +182,6 @@ print.em <- function(x, ...) {
     cat("Random effects:\n")
     print(x$omega, row.names = FALSE)
   }
-  if (!is.null(x$strengths)) {
-    cat("Laplace strengths:\n")
-    print(x$strengths, row.names = FALSE)
-  }
   if (!is.null(x$slab)) {
     kinds <- c(spikeSlab = "Spike-and-slab", dirichletProcess = "Dirichlet-process")
     cat(paste(kinds[unique(x$slab$distribution)], collapse = " and "), "hyperparameters:\n")
@@ -228,7 +212,7 @@ coef.em <- function(object, ...) object$argument
 #' @param object An `em` object, see [em()].
 #' @param ... `parupper`, `parlower` and `which`, passed to [vcov()][vcov.trustfit].
 #' @return The inverse of half the Hessian of the marginal -2 log L. A fit with
-#'   Laplace or spike-and-slab random effects has no Hessian; there it is the
+#'   spike-and-slab random effects has no Hessian; there it is the
 #'   inverse of the empirical information `information` of the group scores,
 #'   see [em()], which needs more groups than parameters. A fit
 #'   with Dirichlet-process random effects, whose groups are not independent,
@@ -368,7 +352,7 @@ logLik.em <- function(object, ...) {
 #'   with residuals, `"population"` only PRED with residuals.
 #' @param ... Ignored.
 #' @return A data.frame with columns `condition, group, time, name, observed,
-#'   sigma, sigmaPRED, IPRED, PRED, IRES, IWRES, PRES, PWRES, source`;
+#'   sigma, sigmaPRED, IPRED, PRED, source, IRES, PRES, IWRES, PWRES`;
 #'   `sigma` is the error model at IPRED, `sigmaPRED` at PRED, `source` is
 #'   `"obs"` for the rows of the data and `"grid"` for the other times.
 #' @example inst/examples/emPredictions.R
@@ -519,7 +503,9 @@ residuals.em <- function(object, type = c("IWRES", "IRES", "CWRES", "PRES", "PWR
 #' @description `method = "wald"` from the standard errors of [vcov()][vcov.em];
 #' `method = "profile"` refits with each parameter held at trial values and
 #' finds where -2 log L has risen by the \eqn{\chi^2_1} quantile of `level`
-#' on either side, by bisection from the Wald limits.
+#' on either side, by bisection from the Wald limits. A side on which the rise
+#' is not reached within 128 times the distance of the Wald limit from the
+#' estimate gives `-Inf` or `Inf`.
 #'
 #' @param object An `em` object, see [em()].
 #' @param parm Parameter names; default all estimated parameters.
@@ -647,9 +633,9 @@ simulate.em <- function(object, nsim = 1, seed = NULL, ...) {
   })
 }
 
-## One draw of the random effects of every group: normal blocks from Omega, center Laplace and
-## spike-and-slab and cluster coordinates from their hyperparameters, clusters by the Chinese
-## restaurant with the population value seated first.
+## One draw of the random effects of every group: normal blocks from Omega, spike-and-slab and
+## cluster coordinates from their hyperparameters, clusters by the Chinese restaurant with the
+## population value seated first.
 .drawEtas <- function(design, pars) {
   out <- setNames(numeric(length(.allEtas(design))), .allEtas(design))
   for (sd in .subDesigns(design)) {
@@ -676,9 +662,7 @@ simulate.em <- function(object, nsim = 1, seed = NULL, ...) {
         }
         next
       }
-      out[as.vector(E[, b$stems, drop = FALSE])] <- if (b$dist == "laplace")
-        stats::rexp(n, value("lambda")) * sample(c(-1, 1), n, TRUE)
-      else stats::rbinom(n, 1, value("prob")) * stats::rnorm(n, 0, value("tau"))
+      out[as.vector(E[, b$stems, drop = FALSE])] <- stats::rbinom(n, 1, value("prob")) * stats::rnorm(n, 0, value("tau"))
     }
   }
   out

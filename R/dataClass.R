@@ -152,19 +152,6 @@ subset.datalist <- function(x, subset, ...) {
 #' Plots data with error bars and marks values below the limit of
 #' quantification (BLoQ).
 #'
-#' @param data object of class `datalist`, or a data frame with the columns
-#'   `name`, `time`, `value` and `sigma`.
-#' @param ... filter expressions passed to [dplyr::filter()]. They can refer
-#'   to the columns of the data and of the condition grid.
-#' @param scales the `scales` argument of [ggplot2::facet_wrap()] or
-#'   [ggplot2::facet_grid()]: `"free"` (default), `"fixed"`, `"free_x"` or
-#'   `"free_y"`.
-#' @param facet `"wrap"` (default): one panel per name, color by condition.
-#'   `"grid"`: names as rows, conditions as columns. `"wrap_plain"`: one panel
-#'   per combination of name and condition.
-#' @param transform list of transformations for the states, see
-#'   [coordTransform()]. Default `NULL`.
-#'
 #' @return A `ggplot` object. The attribute `"data"` holds the plotted data
 #'   frame.
 #' @seealso [plotCombined()], [plotPrediction()]
@@ -309,7 +296,7 @@ covariates.data.frame <- function(x, ...) {
 #' The attribute `condition.grid` holds one row per condition with further
 #' information such as doses; see [covariates()]. Renaming a datalist renames
 #' the rows of the condition grid.
-#' @param ... for `datalist()` and `c()`, named data frames or datalists; for
+#' @param ... for `datalist()`, named data frames; for `c()`, datalists; for
 #' the `as.datalist()` methods, not used.
 #' @return Object of class `datalist`.
 #' @seealso [plotData()], [+.datalist], [normL2()]

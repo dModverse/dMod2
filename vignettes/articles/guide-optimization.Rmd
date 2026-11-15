@@ -70,7 +70,8 @@ value; the result is then the best iterate.
 
 `parlower` and `parupper` set bounds. `boundary = "reflective"` (default) keeps the iterates
 strictly inside and reports the parameters held by a bound in `atBound`; `boundary = "clip"` takes
-them out of the subproblem and supports no quasi-Newton source.
+them out of the subproblem, runs a single Gauss-Newton phase, reads only `ftol` and `mtol` and stops
+with `"fvalue"` or `"iterlim"`.
 
 ### Termination criteria
 
@@ -87,9 +88,10 @@ them out of the subproblem and supports no quasi-Newton source.
 | `"objfun"` | three failed evaluations in a row | `FALSE` |
 | `"iterlim"` | `iterlim` iterations | `FALSE` |
 
-Only `"gradient"` tests first-order optimality; the value and step tests are off in a quasi-Newton
-phase. `ftol` and `gtol` belong at or above the numerical error of value and gradient; `model.R`
-passes them as `tolControl`.
+Only `"gradient"` tests first-order optimality; the last quasi-Newton phase ignores the value,
+model and step tests ([Hessian phases](#hessian-phases-and-reverse-sweep)). `ftol` and `gtol`
+belong at or above the numerical error of value and gradient; `model.R` defines them as
+`tolerances`, which the fitting scripts pass as `tolControl`.
 
 ## Model Hessian
 
@@ -107,7 +109,7 @@ entries of `qnControl`:
 | entry | default | controls |
 |---|---|---|
 | `hessianInit` | `"gn"` | seed: Gauss-Newton at the start, `"identity"`, or `"exact"` |
-| `hessianReseed` | `"never"` | `"stall"`: reseed at the current iterate instead of stopping on stagnation, at most eight times per phase |
+| `hessianReseed` | `"never"` | `"stall"`: reseed at the current iterate instead of stopping on stagnation or on a step that no longer moves it, where the iterate moved since the last reseed, at most eight times per phase |
 | `qnMemory` | `0` | `0` accumulates all updates; $m > 0$ rebuilds from the last $m$ pairs |
 | `qnCautious` | `1e-8` | cautious test of BFGS; `0` turns it off |
 | `qnRejected` | `TRUE` for `"sr1"` | SR1 also updates from rejected trial points |
@@ -128,8 +130,9 @@ fit[c("phaseIterations", "evalBySource", "nSwitch", "stopReason")]
 ```
 
 `sweep = "reverse"` computes the gradient of a quasi-Newton phase by one backward sweep, for models
-built with `derivMode = c("forward", "reverse")`; by default a `"bfgs"` or `"sr1"` phase sweeps
-backwards where it can. `phaseSweep` reports the sweep per phase.
+built with `derivMode = c("forward", "reverse")`; by default a `"bfgs"` or `"sr1"` phase of
+`phases` sweeps backwards where it can, while a run without `phases` sweeps only with
+`sweep = "reverse"`. With `phases`, `phaseSweep` reports the sweep per phase.
 
 ### Sparse Hessians
 
@@ -197,10 +200,11 @@ starts are drawn before the fits are distributed, so `set.seed()` reproduces a r
 | `retry`, `nTries` | `TRUE`, `10` | a failed fit restarts from the next draw |
 | `cores` | `1` | parallel fits, or `c(fits = , conditions = )` |
 | `optmethod` | `"trust"` | optimizer, e.g. `"trustL1"` |
-| `output`, `cautiousMode` | `FALSE` | write every fit to `resultPath/name/` |
+| `output`, `cautiousMode` | `FALSE` | `output` writes every fit to `resultPath/name/trial-<k>-<date>/interRes/` while the run goes on and the parameter list at the end of the run; `cautiousMode` adds a deparsed `.R` copy of every fit, kept after the run |
 
 `msParframe()` draws starts from a separate seed, so several runs can share them; `load.parlist()`
-reads fits written by `output = TRUE`. `helix.R` runs the 200 fits as 100 array tasks
+reads the fits in `interRes/` of a run that is still going or was aborted, since a finished run
+removes them and leaves `parameterList.Rda`. `helix.R` runs the 200 fits as 100 array tasks
 ([Remote computing](guide-remote-computing.html)):
 
 ```{r, echo = FALSE}
@@ -276,8 +280,9 @@ controls(obj, "multipleShootingControl") <- NULL   # single shooting again
 ```
 
 The chain must be `g * x * p` with one `Xs()` built on `odemodel(..., includeTimeZero = FALSE)`.
-Not available with it: `hessianMethod = "exact"`, several phases, `switches`, `hessianReseed`,
-`qnMemory`, `nonmonotone`, `boundary = "clip"`, `minimize = FALSE`, `traceFile`.
+Not available with it: `hessianMethod = "exact"`, `qnControl$hessianInit = "exact"`, several
+phases, `switches`, `hessianReseed`, `qnMemory`, `nonmonotone`, `boundary = "clip"`,
+`minimize = FALSE`, `traceFile`.
 
 | entry of `multipleShootingControl` | default | controls |
 |---|---|---|

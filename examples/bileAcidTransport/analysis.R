@@ -70,8 +70,8 @@ obj  <- normL2(data, g*x*p, attrName = "data") +
 # code and the shared objects of the model to a job folder in the working
 # directory and runs the code there in the background, as one task on the local
 # machine. In the task, `cores` holds the cores of `on`, and mstrust() runs ten
-# fits per core. It needs a Unix-like system; on Windows, call mstrust() itself
-# with `cores = .cores`. ?distributedComputing shows how to send the same code to
+# fits per core; on Windows the commands run in the sh of Rtools.
+# ?distributedComputing shows how to send the same code to
 # other machines with sshNodes() or to a SLURM cluster with slurmCluster().
 job <- distributedComputing(
   mstrust(obj, pouter, sd = 4, fits = 10 * cores, cores = cores),

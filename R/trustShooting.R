@@ -209,8 +209,8 @@
     sg <- spec$segs[[k]]
     !is.na(.shootSplitTime(sg, minLen[[sg$cond]], minPoints = minPts))
   }
-  # The spectral radius, not a norm: it is invariant under chart and state
-  # scaling, and is the rate the linearized flow expands at.
+  # The spectral radius, not a norm: the rate the linearized flow expands at, in
+  # the chart coordinates of the nodes, invariant under constant linear changes of them.
   growthOf <- function(E) vapply(E$segments, function(sg) {
     G <- sg$growth
     if (is.null(G)) return(0)

@@ -96,10 +96,12 @@ summary.parlist <- function(object, ...) {
 #' each parameter, or with `path = TRUE` the parameter values over the
 #' iterations.
 #'
-#' @param x object of class `parlist`, e.g. from [mstrust()].
+#' @param x object of class `parlist` from [mstrust()]. Both plots need the
+#'   starting point `parinit` that [mstrust()] adds to each fit; a list of
+#'   [trust()] results has none.
 #' @param path logical, plot the path of the parameters from the initial
 #'   values to convergence. Default `FALSE`. `path = TRUE` needs fits run with
-#'   `trust(..., blather = TRUE)` or `mstrust(..., blather = TRUE)`.
+#'   `mstrust(..., blather = TRUE)`.
 #' @param ... not used.
 #' @return A `ggplot` object.
 #' @seealso [parlist()], [plotValues()]
@@ -227,12 +229,13 @@ as.parframe <- function(x, ...) {
 #' @param x object of class `parframe`, e.g. from [as.parframe()], or the
 #'   `parlist` of [mstrust()].
 #' @param index integer, select the row with the `index`-th lowest objective
-#'   value. Default 1, the best fit. Without a `value` column, the `index`-th
-#'   row.
+#'   value. Default 1, the best fit. If `"value"` is not among the metanames
+#'   of `x`, the `index`-th row.
 #' @param ... not used.
 #'
 #' @return Object of class `parvec` with the parameter columns of the selected
-#'   row. A warning is issued if that fit did not converge.
+#'   row. A warning is issued if `"converged"` is among the metanames of `x`
+#'   and that fit did not converge.
 #' @seealso [as.parframe()], [parvec()]
 #'
 #' @export
@@ -641,7 +644,8 @@ rbind.parframe <- function(..., deparse.level = 1) {
 #' Keeps one row per distinct objective value.
 #' @param x parameter frame
 #' @param incomparables not used. Argument exists for compatibility with S3 generic.
-#' @param tol tolerance to decide when values are assumed to be equal, see [plotValues()].
+#' @param tol a value more than `tol` above the lowest value of the current step
+#'   starts a new step, see [plotValues()]. Default 1.
 #' @param ... Not used. Select rows first with [subset()], as in
 #'   `unique(subset(x, converged))`.
 #' @return The rows of `x` with distinct values, sorted by value.
@@ -1003,9 +1007,12 @@ summary.parfn <- function(object, ...) {
 #' propagates the Jacobian. [P()] calls it internally; use it directly for a
 #' transformation of your own.
 #' @param p2p transformation for one condition, a function
-#'   `p2p(p, fixed, deriv)` that maps the parameter vector `p` and the fixed
-#'   values `fixed` to a new parameter vector. With `deriv = TRUE` the result
-#'   has the attribute `deriv`, the Jacobian of the transformation.
+#'   `p2p(pars, fixed, deriv, deriv2)` that maps the parameter vector `pars`
+#'   and the fixed values `fixed` to a new parameter vector. With
+#'   `deriv = TRUE` the result has the attribute `deriv`, the Jacobian of the
+#'   transformation, with `deriv2 = TRUE` also `deriv2`, the second
+#'   derivatives. A `p2p` with an argument `condition` receives the condition
+#'   name.
 #' @param parameters character, the parameters accepted by the function.
 #'   Default `NULL`.
 #' @param condition character, the condition for which the transformation is
@@ -1074,8 +1081,9 @@ parframe <- function(x = NULL, parameters = setdiff(colnames(x), c(metanames, ob
 #'
 #' @description A parameter list holds the results of several optimization
 #' runs, as returned by [mstrust()]. `c()` concatenates parameter lists.
-#' @param ... for `parlist()` and `c()`, fit results or parameter lists; for
-#'   `print()` and `summary()`, not used.
+#' @param ... for `parlist()`, fit results, one entry each; for `c()`, fit
+#'   results or parameter lists, whose entries are concatenated; for `print()`
+#'   and `summary()`, not used.
 #' @return Object of class `parlist`. `print()` and `summary()` return their
 #'   argument invisibly.
 #' @export

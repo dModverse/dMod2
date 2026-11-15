@@ -38,9 +38,10 @@ eqnlist(
 \item{data}{data frame with the columns "Description", "Rate" and one
 column per state.}
 
-\item{volumes}{named character of state volumes. Without \code{compartments}
-and \code{compartmentOf}, each distinct expression becomes a compartment with
-ID \code{c1}, \code{c2}, ...}
+\item{volumes}{named character of state volumes. Without \code{compartmentOf},
+each distinct expression becomes a compartment with ID \code{c1}, \code{c2}, ...,
+and \code{compartments} is ignored. With \code{compartmentOf}, the compartment layout
+wins, and a volume that differs from it gives a warning.}
 
 \item{...}{not used.}
 
@@ -73,8 +74,12 @@ column per state. Default \code{NULL} gives an empty equation list.}
 \item{description}{character, one description per reaction. Default
 \code{NULL} numbers the reactions.}
 
-\item{totals}{named list of user-defined conservation expressions, see
-\code{\link[=customTotals]{customTotals()}}. Default \code{NULL} uses the detected basis.}
+\item{totals}{named list of user-defined conservation expressions, stored
+without the checks of \code{\link[=customTotals]{customTotals()}}. \code{\link[=conservedQuantities]{conservedQuantities()}} returns
+them; \code{\link[=steadyStates]{steadyStates()}} ignores them, and \code{\link[=addReaction]{addReaction()}},
+\code{\link[=assignCompartment]{assignCompartment()}}, \code{\link[=setCompartmentVolume]{setCompartmentVolume()}}, \code{subset()} and \code{c()} drop
+them, as they keep only totals set by \code{\link[=customTotals]{customTotals()}}. Default \code{NULL}
+uses the detected basis.}
 }
 \value{
 Object of class \code{eqnlist}, a list with the entries above and the
@@ -89,8 +94,9 @@ one from these parts, \code{as.eqnlist()} from a data frame of reactions.
 The data frame for \code{as.eqnlist()} contains the columns
 "Description" (character), "Rate" (character) and one column per state,
 the columns of the stoichiometric matrix. Layout attributes of the data
-frame, as set by \code{\link[=as.data.frame.eqnlist]{as.data.frame.eqnlist()}}, are used unless \code{volumes} is
-given.
+frame, as set by \code{\link[=as.data.frame.eqnlist]{as.data.frame.eqnlist()}}, fill in the layout arguments not
+given; with \code{volumes} given, the attributes \code{compartments} and
+\code{compartmentOf} are not used.
 }
 \examples{
 # Generate eqnlist from the constructor

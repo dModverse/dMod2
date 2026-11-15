@@ -12,10 +12,12 @@ readPEtabYaml(yamlPath)
 \value{
 A list with \code{baseDir}, \code{formatVersion} (integer major version),
 \code{parameterFile}, and a one-element list \code{problems} whose entry holds the
-absolute paths \code{sbmlFile}, \code{conditionFile}, \code{measurementFile} and
-\code{observableFile}. For v2 the entry also holds \code{experimentFile} and
-\code{mappingFile} (possibly \code{NULL}), \code{modelID}, the first model id, and
-\code{models}, the SBML path of every model id.
+absolute paths \code{sbmlFile}, \code{conditionFile}, \code{measurementFile},
+\code{observableFile}, \code{experimentFile} and \code{mappingFile}, as well as \code{modelID},
+the first model id, and \code{models}, the SBML path of every model id. A file
+the problem does not name is \code{NULL}. For v1, \code{experimentFile} and
+\code{mappingFile} are \code{NULL}, \code{modelID} is \code{NA} and the one entry of \code{models}
+is named \code{"model"}.
 }
 \description{
 Reads a PEtab v1 or v2 YAML file, as selected by the \code{format_version} entry, and

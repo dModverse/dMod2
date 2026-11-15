@@ -133,8 +133,8 @@ plotData(data) + ggplot2::aes(color = factor(dose)) +
 # Fits ----
 #
 # The starts: the truth on the log scale and 99 draws around it, N(0, 0.5) per parameter. Every
-# fit runs on one core. Up to level 5 the nodes resolve -2 log L only to the level error the
-# summary of quadrature prints, and a rebuild of the nodes moves it by about 1e-3. A quadrature
+# fit runs on one core. Up to level 5 the nodes resolve -2 log L only to the level error that
+# printing the quadrature fit shows, and a rebuild of the nodes moves it by about 1e-3. A quadrature
 # fit converges where a step no longer lowers -2 log L on the rebuilt nodes; one still moving
 # after ten rebuilds ends unconverged.
 obj <- normL2(data, g * x * p, errmodel = e)

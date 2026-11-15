@@ -54,7 +54,7 @@ objective. An unknown entry is an error. Entries:
 vector for all conditions or a list named by condition. \code{"auto"} cuts
 segments where they grow, fail or miss their data; \code{"transitions"}
 places a node before every fast change of the data and keeps the
-layout fixed.
+layout fixed, and without a fast change in the data it is \code{"auto"}.
 \item \code{growth}: largest spectral radius of a segment's propagation matrix
 that \code{"auto"} accepts, default \code{10}.
 \item \code{misfit}: root mean square of a segment's weighted residuals above

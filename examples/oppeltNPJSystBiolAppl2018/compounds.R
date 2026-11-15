@@ -84,7 +84,7 @@ sdStart[known] <- width[known]
 # end, with up to 1000 iterations of the trust region, one core each
 set.seed(3)
 fitCompounds <- msem(objCompounds + priorCompounds, random, init, fixed = gaugeReduced,
-                     control = list(laplace = list(maxOuter = 1000, trustControl = list(tolControl = tolerances))),
+                     control = list(sparseFit = list(maxOuter = 1000, trustControl = list(tolControl = tolerances))),
                      fits = 200, sd = sdStart, keepFits = TRUE,
                      cores = getOption("dMod2.cores"))
 

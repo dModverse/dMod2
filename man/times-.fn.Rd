@@ -23,8 +23,9 @@ transformations: \code{(e1 * e2)(times, pars)} evaluates \code{e2} first and pas
 the output of \code{e2} to \code{e1}.
 }
 \details{
-Both functions must be defined for the same conditions, or one of
-them for no specific condition (\code{conditions = NULL}).
+A function defined for one condition combines only with one for
+the same condition or for no specific condition (\code{conditions = NULL}); with
+one for another condition or for several conditions it is an error.
 }
 \examples{
 ## A prediction function interpolating parameter values piecewise linearly

@@ -76,7 +76,8 @@ print.odemodel <- function(x, ...) {
 #'   `backend = "cppDE"` and implies `deriv = TRUE`.
 #' @param derivMode character, the derivative directions to build, one or
 #'   more of:
-#'   * `"forward"` (default): sensitivity equations.
+#'   * `"forward"` (default): sensitivity equations. `deriv = TRUE` builds them
+#'     also when `derivMode` leaves out `"forward"`.
 #'   * `"reverse"`: adjoint gradient, needed for `obj(..., sweep = "reverse")`.
 #'     Not available on `backend = "deSolve"`.
 #'   * `"forward-forward"`: second-order sensitivities.
@@ -97,10 +98,12 @@ print.odemodel <- function(x, ...) {
 #' @param backend `"cppDE"` (default), `"Sundials"` or `"deSolve"`: the
 #'   integrators of \pkg{cppDE}, CVODE(S) through \pkg{cppDE}, or \pkg{deSolve}
 #'   through \pkg{cOde}.
-#' @param verbose logical, print the compiler output. Default `FALSE`.
+#' @param verbose logical, print the compiler output. Default `FALSE`. Not used
+#'   with `backend = "deSolve"`.
 #' @param outdir directory for the generated sources and shared objects.
 #'   Default `getOption("dMod2.outdir")`, else the working directory.
-#'   `backend = "deSolve"` writes to the working directory only.
+#'   `backend = "deSolve"` writes to the working directory only; any other
+#'   `outdir`, also one set by the option, is an error.
 #' @param ... Passed to [cppDE::cppODE()], [cppDE::cvode()] or
 #'   [cOde::funC()], according to `backend`. Among them:
 #'   * `method`: the integration method, `"bdf"` (default), `"adams"`,

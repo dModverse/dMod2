@@ -27,8 +27,9 @@ A ggplot.
 }
 \description{
 One row of panels per type of residual: against the population
-prediction (IWRES against the individual one), against time with a loess
-smoother, and a QQ-plot against N(0, 1). See \link[=residuals.em]{residuals()}.
+prediction (IWRES against the individual one) and against time, both with
+a loess smoother, and a QQ-plot against N(0, 1). See
+\link[=residuals.em]{residuals()}.
 }
 \examples{
 \donttest{

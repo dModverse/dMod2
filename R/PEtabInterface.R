@@ -26,10 +26,12 @@
 #' @param yamlPath Path to the PEtab YAML file.
 #' @return A list with `baseDir`, `formatVersion` (integer major version),
 #'   `parameterFile`, and a one-element list `problems` whose entry holds the
-#'   absolute paths `sbmlFile`, `conditionFile`, `measurementFile` and
-#'   `observableFile`. For v2 the entry also holds `experimentFile` and
-#'   `mappingFile` (possibly `NULL`), `modelID`, the first model id, and
-#'   `models`, the SBML path of every model id.
+#'   absolute paths `sbmlFile`, `conditionFile`, `measurementFile`,
+#'   `observableFile`, `experimentFile` and `mappingFile`, as well as `modelID`,
+#'   the first model id, and `models`, the SBML path of every model id. A file
+#'   the problem does not name is `NULL`. For v1, `experimentFile` and
+#'   `mappingFile` are `NULL`, `modelID` is `NA` and the one entry of `models`
+#'   is named `"model"`.
 #' @seealso [readPEtabTables()], [importPEtab()]
 #' @examplesIf requireNamespace("yaml", quietly = TRUE)
 #' yaml <- system.file("extdata/petab_boehm/Boehm.yaml", package = "dMod2")
@@ -584,9 +586,10 @@ readPEtabTables <- function(yamlPath) {
 .petab_ss_time <- 1e10
 
 
-# Internal: one record list(id, dist, pars, lower, upper, ...) per prior, or
+# Internal: one record list(id, dist, pars, lower, upper, scale, ...) per prior, or
 # NULL; v2 `priorDistribution` columns win over v1's. A `parameterScale*` prior
-# is on the optimized parameter; a plain `normal` on a non-lin scale is rejected.
+# is on the optimized parameter; a plain one is on the linear parameter, and
+# `scale` is the scale of the optimized parameter it is evaluated through.
 .petab_parse_priors <- function(df, scales) {
 
   pick <- function(a, b)
@@ -621,14 +624,6 @@ readPEtabTables <- function(yamlPath) {
       stop("Unsupported priorDistribution `", d, "` for parameter `", pid,
            "`. Known: ", paste(names(n_expected), collapse = ", "),
            " (optionally `parameterScale`-prefixed).")
-    if (!scaled && base %in% c("normal", "laplace") && !identical(sc, "lin"))
-      stop("priorDistribution `", d, "` for parameter `", pid,
-           "` (parameterScale = `", sc, "`) is ambiguous: dMod's prior acts ",
-           "on the optimizer's parameter (the parameterScale-transformed ",
-           "value). Use `parameterScale", sub("^(.)", "\\U\\1", base,
-           perl = TRUE), "` to declare a prior on that view, or set ",
-           "parameterScale = `lin`.")
-
     parts <- trimws(strsplit(pp[i], ";", fixed = TRUE)[[1L]])
     vals  <- suppressWarnings(as.numeric(parts))
     if (length(vals) != n_expected[[base]] || anyNA(vals))
@@ -646,6 +641,7 @@ readPEtabTables <- function(yamlPath) {
     specs[[pid]] <- list(id = pid, dist = base, pars = vals,
                          lower = if (is.na(lo)) -Inf else lo,
                          upper = if (is.na(hi))  Inf else hi,
+                         scale = if (scaled) "lin" else sc,
                          declared = d, declaredPars = pp[i])
   }
   if (!length(specs)) return(NULL)
@@ -653,15 +649,33 @@ readPEtabTables <- function(yamlPath) {
 }
 
 
-# Internal: log density with first and second derivative for the PEtab priors
-# without a dMod constructor. The plain `log-*` spellings are densities in the
-# parameter itself and include the change-of-variables term.
+# Internal: log density of a PEtab prior with first and second derivative in x.
+# The plain `log-*` spellings are densities in the parameter itself and include
+# the change-of-variables term.
 .petab_prior_logdens <- function(dist, pars, x) {
   a <- pars[1L]; b <- if (length(pars) > 1L) pars[2L] else NA_real_
   pos <- x > 0
+  none <- list(ld = -Inf, d1 = 0, d2 = 0)
   switch(dist,
     uniform = list(ld = if (x >= a && x <= b) -log(b - a) else -Inf,
                    d1 = 0, d2 = 0),
+    normal = list(ld = stats::dnorm(x, a, b, log = TRUE), d1 = -(x - a) / b^2, d2 = -1 / b^2),
+    laplace = list(ld = -log(2 * b) - abs(x - a) / b, d1 = -sign(x - a) / b, d2 = 0),
+    cauchy = {
+      z <- (x - a) / b
+      list(ld = stats::dcauchy(x, a, b, log = TRUE), d1 = -2 * z / (b * (1 + z^2)),
+           d2 = -2 * (1 - z^2) / (b^2 * (1 + z^2)^2))
+    },
+    gamma = if (!pos) none else
+      list(ld = stats::dgamma(x, shape = a, scale = b, log = TRUE), d1 = (a - 1) / x - 1 / b,
+           d2 = -(a - 1) / x^2),
+    exponential = if (x < 0) none else list(ld = -log(a) - x / a, d1 = -1 / a, d2 = 0),
+    chisquare = if (!pos) none else
+      list(ld = stats::dchisq(x, a, log = TRUE), d1 = (a / 2 - 1) / x - 1 / 2,
+           d2 = -(a / 2 - 1) / x^2),
+    rayleigh = if (!pos) none else
+      list(ld = log(x) - 2 * log(a) - x^2 / (2 * a^2), d1 = 1 / x - x / a^2,
+           d2 = -1 / x^2 - 1 / a^2),
     `log-normal` = if (!pos) list(ld = -Inf, d1 = 0, d2 = 0) else {
       u <- log(x)
       list(ld = stats::dlnorm(x, a, b, log = TRUE),
@@ -708,11 +722,15 @@ readPEtabTables <- function(yamlPath) {
 
 
 # Internal: the prior term of a PEtab objective on the -2 log scale, reported in
-# `attr(, "prior")`. Families with a dMod constructor go through it; the others
-# and the truncation constant, which leaves gradient and Hessian alone, are here.
+# `attr(, "prior")`. A prior on the optimized parameter of a family with a dMod
+# constructor goes through it; the others and the truncation constant, which
+# leaves gradient and Hessian alone, are here. A prior on the linear parameter of
+# a log or log10 parameter is the prior density at the back-transformed value, without
+# a Jacobian term, as in other PEtab tools.
 .petab_prior_objective <- function(specs) {
 
   one <- function(sp) {
+    if (!identical(sp$scale %||% "lin", "lin")) return(NULL)
     id <- sp$id; a <- sp$pars[1L]
     b  <- if (length(sp$pars) > 1L) sp$pars[2L] else NA_real_
     switch(sp$dist,
@@ -733,7 +751,8 @@ readPEtabTables <- function(yamlPath) {
   # Gaussian; PEtab reports a normalized density, so the constant comes back
   # here next to the truncation.
   norm_const <- function(sp)
-    if (identical(sp$dist, "normal")) 0.5 * (log(2 * pi) + 2 * log(sp$pars[2L]))
+    if (identical(sp$dist, "normal") && identical(sp$scale %||% "lin", "lin"))
+      0.5 * (log(2 * pi) + 2 * log(sp$pars[2L]))
     else 0
 
   ids   <- vapply(specs, `[[`, character(1), "id")
@@ -760,7 +779,17 @@ readPEtabTables <- function(yamlPath) {
 
     for (sp in rest) {
       if (!sp$id %in% names(all)) next
-      td <- .petab_prior_logdens(sp$dist, sp$pars, as.numeric(all[[sp$id]]))
+      u <- as.numeric(all[[sp$id]])
+      sc <- sp$scale %||% "lin"
+      if (identical(sc, "lin")) {
+        td <- .petab_prior_logdens(sp$dist, sp$pars, u)
+      } else {
+        # the density in x = exp(u) or 10^u, by the chain rule in u
+        k <- if (identical(sc, "log10")) log(10) else 1
+        x <- exp(k * u)
+        tx <- .petab_prior_logdens(sp$dist, sp$pars, x)
+        td <- list(ld = tx$ld, d1 = tx$d1 * k * x, d2 = tx$d2 * (k * x)^2 + tx$d1 * k^2 * x)
+      }
       value <- value - 2 * td$ld
       if (deriv && sp$id %in% nms) {
         grad[sp$id] <- grad[sp$id] - 2 * td$d1
@@ -1899,15 +1928,18 @@ readPEtabTables <- function(yamlPath) {
 #' read by [importSbml()].
 #'
 #' Supported: one problem per YAML file with any number of v2 model files;
-#' preequilibration (at most two periods per v2 experiment); observable
-#' transformations `lin`, `log` and `log10`; the noise distribution `normal`,
-#' and `log-normal` in v2; a v2 mapping table. Priors of the distributions
+#' preequilibration; any number of periods per v2 experiment, those after the
+#' first applied as events, with one schedule for all experiments that start in
+#' the same condition; observable transformations `lin`, `log` and `log10`; the
+#' noise distribution `normal`, and `log-normal` in v2; a v2 mapping table.
+#' Priors of the distributions
 #' `uniform`, `normal`, `log-normal`, `cauchy`, `chisquare`, `exponential`,
 #' `gamma`, `laplace`, `log-laplace`, `log-uniform` and `rayleigh`, also with
 #' the `parameterScale` prefix, are added to `obj`, truncated to the parameter
-#' bounds. Not supported: model languages other than SBML, other noise
-#' distributions, and a plain `normal` or `laplace` prior on a parameter whose
-#' scale is not `lin`.
+#' bounds. A prior without the prefix is on the linear parameter: for a
+#' parameter on `log` or `log10` scale it is the density at the back-transformed
+#' value, without a Jacobian term. Not supported: model languages other than
+#' SBML and other noise distributions.
 #'
 #' @param yamlPath Path to the PEtab YAML manifest.
 #' @param backend Required, one of `"deSolve"`, `"cppDE"` or `"Sundials"`,
@@ -1918,8 +1950,9 @@ readPEtabTables <- function(yamlPath) {
 #'   Default `1`.
 #' @param modelname Base name of the generated files. Default `NULL`, the base
 #'   name of the YAML file.
-#' @param deriv Logical. If `FALSE`, the model is built without sensitivities;
-#'   the objective is then evaluated with `deriv = FALSE`. Default `TRUE`.
+#' @param deriv Logical. If `FALSE`, the model is built without sensitivities,
+#'   which needs `backend = "cppDE"` or `"Sundials"`; the objective then has to
+#'   be called with `deriv = FALSE`. Default `TRUE`.
 #' @param derivMode Derivative directions to build, passed to [odemodel()]:
 #'   `"forward"` (default), `"reverse"` or `c("forward", "reverse")`.
 #'   `"reverse"` needs `backend = "cppDE"` or `"Sundials"`. First order only.
@@ -1933,11 +1966,14 @@ readPEtabTables <- function(yamlPath) {
 #'   working directory.
 #' @return A list of class `"petabproblem"` with components `dataList`,
 #'   `reactions`, `odemodel`, `g`, `x`, `p`, `e`, `prd` (the composite
-#'   `g * x * p`), `obj`, `bestfit`, `parlower` and `parupper`. `obj` has the
-#'   PEtab fixed parameters set; `bestfit` is the PEtab `nominalValue` of each
-#'   estimated parameter, with the PEtab scales in the attribute
-#'   `"petab_scales"`. The attribute `"petab_meta"` of the list holds what
-#'   [exportPEtabObject()] needs, among it the fixed parameters as `fixed`.
+#'   `g * x * p`), `obj`, `bestfit`, `parlower` and `parupper`. With several
+#'   models, `reactions`, `odemodel`, `g`, `x` and `p` are lists by model id.
+#'   `obj` has the PEtab fixed parameters set; `bestfit` is the PEtab
+#'   `nominalValue` of each estimated parameter on the PEtab `parameterScale`,
+#'   with the scales in the attribute `"petab_scales"`, and `parlower` and
+#'   `parupper` are the bounds on that scale. The attribute `"petab_meta"` of the
+#'   list holds what [exportPEtabObject()] needs, among it the fixed parameters
+#'   as `fixed`, on the linear scale.
 #' @seealso [exportPEtabObject()], [readPEtabTables()], [importSbml()]; the guide
 #'   chapter [PEtab](https://dmodverse.github.io/dMod2/articles/guide-petab.html).
 #' @examplesIf requireNamespace("reticulate", quietly = TRUE) && requireNamespace("rjson", quietly = TRUE) && requireNamespace("yaml", quietly = TRUE) && reticulate::py_module_available("libsbml")
@@ -2665,7 +2701,8 @@ print.petabproblem <- function(x, ...) {
 #' values are read off the parameter transformation `p`.
 #'
 #' @section Limitations:
-#' Events other than those at time 0 that replace a state are not written.
+#' Only events at time 0 that replace a state are written; any other event in
+#' `events` is an error.
 #' Fixed parameters are always written with `parameterScale = "lin"`.
 #'
 #' @param data A [datalist] (or a list of data.frames keyed by condition,
@@ -2683,8 +2720,10 @@ print.petabproblem <- function(x, ...) {
 #'   chosen `parameterScale`. Names become `parameterId`s in parameters.tsv.
 #' @param errors Noise formulas keyed by observableId. Accepts a named
 #'   character vector, [eqnvec], or a Y-built error function. An observable it
-#'   leaves out takes the column `sigma` of the data. If `NULL`, every
-#'   observable does, or has the noise `"1"` without that column.
+#'   leaves out takes the column `sigma` of the data, or the noise `"1"` without
+#'   data; a data row of such an observable without a sigma is an error. If
+#'   `NULL`, every observable takes the column `sigma` of the data, or has the
+#'   noise `"1"` when the data hold no sigma.
 #' @param lower,upper Named numeric vectors of bounds, on the same scale as
 #'   `pouter`. Default `NULL`: five decades around `pouter` for log and log10
 #'   parameters, `-Inf` and `Inf` for linear ones.
@@ -3069,6 +3108,11 @@ exportPEtab <- function(data, reactions, observables, p, pouter,
 #'     "petab_scales")`; without it they are `"lin"`.
 #'   \item v2 has no parameter scales: values and bounds are written on the
 #'     linear scale, with a warning.
+#'   \item v2 has no priors on the parameter scale: such a prior is written as
+#'     the matching prior of the linear parameter, with a warning.
+#'   \item v1 has no experiment periods, no start time other than 0 and fewer
+#'     prior distributions: periods and later starts are an error, a prior
+#'     without a v1 form gives a warning.
 #'   \item v2 has no `log10` observable transformation: it is written as
 #'     `"log-normal"` noise, with a warning.
 #'   \item Initial values set per condition only in the parameter

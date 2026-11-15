@@ -38,7 +38,8 @@ of variable and parameter.
 \item \code{list}: a list with the result for each element.
 }
 
-An error is raised if \code{x} has no first derivatives.
+An error is raised if \code{x} has no first derivatives; an \code{objlist} without
+gradient gives \code{NULL}.
 }
 \description{
 Extract the First Derivatives of an Object

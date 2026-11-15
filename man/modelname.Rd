@@ -29,7 +29,7 @@ modelname(x, ...) <- value
 }
 \arguments{
 \item{x}{object of class \code{prdfn}, \code{parfn}, \code{obsfn} or \code{objfn}, or a
-character naming such an object in the calling environment.}
+character naming such an object in the global environment.}
 
 \item{...}{further objects; their model names are added to the result.}
 

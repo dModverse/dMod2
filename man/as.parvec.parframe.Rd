@@ -14,14 +14,15 @@
 \code{parlist} of \code{\link[=mstrust]{mstrust()}}.}
 
 \item{index}{integer, select the row with the \code{index}-th lowest objective
-value. Default 1, the best fit. Without a \code{value} column, the \code{index}-th
-row.}
+value. Default 1, the best fit. If \code{"value"} is not among the metanames
+of \code{x}, the \code{index}-th row.}
 
 \item{...}{not used.}
 }
 \value{
 Object of class \code{parvec} with the parameter columns of the selected
-row. A warning is issued if that fit did not converge.
+row. A warning is issued if \code{"converged"} is among the metanames of \code{x}
+and that fit did not converge.
 }
 \description{
 Select a Parameter Vector from a Parameter Frame

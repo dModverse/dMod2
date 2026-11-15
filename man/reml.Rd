@@ -36,7 +36,7 @@ between two rounds. Default \code{1e-6}.}
 \item{rankTol}{Passed to \code{\link[=remlLeverage]{remlLeverage()}}. Default \code{1e-8}.}
 
 \item{optimizer}{Optimizer for the mean step, called as
-\code{optimizer(objfun, parinit, fixed = , ...)}. Default \code{\link[=trust]{trust()}}.}
+\code{optimizer(objfun, parinit, fixed = , cores = , ...)}. Default \code{\link[=trust]{trust()}}.}
 
 \item{control}{Named list of arguments for \code{optimizer}, merged into
 \code{list(rinit = 0.1, rmax = 10)}. Default \code{NULL}.}
@@ -44,7 +44,8 @@ between two rounds. Default \code{1e-6}.}
 \item{cores}{Passed to the prediction and the objective. Default
 \code{getOption("dMod2.cores", 1)}.}
 
-\item{...}{Further arguments for \code{objfun}.}
+\item{...}{Further arguments for \code{objfun} in the mean step, passed through
+\code{optimizer}. \code{value.plain} is evaluated without them.}
 }
 \value{
 A list with components

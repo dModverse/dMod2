@@ -11,8 +11,8 @@ A data frame with 479 rows, one per reading, and 10 columns:
 \item{\code{time}}{hours after the dose.}
 \item{\code{value}}{the reading.}
 \item{\code{sigma}}{\code{NA} throughout.}
-\item{\code{condition}}{the subject, \code{"ID1"} to \code{"ID32"}.}
-\item{\code{id}}{the subject, 1 to 32.}
+\item{\code{condition}}{the subject, \code{"ID1"} to \code{"ID33"} without \code{"ID11"}.}
+\item{\code{id}}{the subject, 1 to 33 without 11.}
 \item{\code{dose}}{the oral dose in mg.}
 \item{\code{wt}, \code{age}, \code{sex}}{weight (kg), age (years) and sex.}
 }

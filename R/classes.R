@@ -1106,7 +1106,8 @@ match.fnargs <- function(arglist, choices) {
 #' @param e2 function of the same class as `e1`.
 #' @details Each function is defined for a set of conditions. The sum is
 #' defined for their union. A condition present in both is taken from `e2`,
-#' with a warning.
+#' with a warning. A function defined for no specific condition
+#' (`conditions = NULL`) cannot be added and gives an error.
 #' @return Object of the same class as `e1` and `e2`, defined for the union of
 #' conditions.
 #' @aliases sumfn
@@ -1209,8 +1210,9 @@ test_conditions <- function(c1, c2) {
 #'
 #' @param e1 function of class `objfn`, `obsfn`, `prdfn`, `parfn` or `idfn`.
 #' @param e2 function of class `obsfn`, `prdfn`, `parfn` or `idfn`.
-#' @details Both functions must be defined for the same conditions, or one of
-#' them for no specific condition (`conditions = NULL`).
+#' @details A function defined for one condition combines only with one for
+#' the same condition or for no specific condition (`conditions = NULL`); with
+#' one for another condition or for several conditions it is an error.
 #' @return `obsfn * obsfn` and `obsfn * parfn` return an `obsfn`,
 #'   `obsfn * prdfn` and `prdfn * parfn` a `prdfn`, `parfn * parfn` a `parfn`
 #'   and `objfn * parfn` an `objfn`. `Id() * f` and `f * Id()` return `f`.
@@ -1250,6 +1252,11 @@ test_conditions <- function(c1, c2) {
         "or one function must be condition-unspecific."
       )
     }
+    # two single conditions -> only the same one
+    if (is_specific(conditions.p1) && is_specific(conditions.p2) &&
+        !identical(conditions.p1, conditions.p2))
+      stop("Invalid composition of functions: the left-hand function is defined for condition ",
+           conditions.p1, ", the right-hand one for condition ", conditions.p2, ".", call. = FALSE)
   }
 
   if (inherits(e1, "idfn")) return(e2)

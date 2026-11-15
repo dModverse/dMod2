@@ -34,10 +34,10 @@
 #'
 #' @param x object of class `objfn` or `fn`.
 #' @param ... not used.
-#' @return `controls(x)` prints the available controls and returns their names
-#' invisibly; for an `fn`, as a list with one entry per function. With `name`,
-#' the value of the control, or `NULL` if no function holds it. The setter
-#' returns `x`.
+#' @return For an `fn`, `controls(x)` prints the available controls and returns
+#' them invisibly, a list with one entry per function; for an `objfn`, it
+#' returns their names. With `name`, the value of the control, or `NULL` if no
+#' function holds it. The setter returns `x`.
 #' @seealso [normL2()], [P()], [Y()]
 #' @examples
 #' old <- options(dMod2.outdir = tempdir())
@@ -267,7 +267,8 @@ controls.fn <- function(x, condition = NULL, name = NULL, ...) {
 #' * `objlist`: the gradient, a named numeric vector.
 #' * `list`: a list with the result for each element.
 #'
-#' An error is raised if `x` has no first derivatives.
+#' An error is raised if `x` has no first derivatives; an `objlist` without
+#' gradient gives `NULL`.
 #' @seealso [getDerivs2()], [parvec()]
 #'
 #' @examples
@@ -372,7 +373,8 @@ getDerivs.objlist <- function(x, ...) {
 #' * `objlist`: the Hessian matrix.
 #' * `list`: a list with the result for each element.
 #'
-#' An error is raised if `x` has no second derivatives.
+#' An error is raised if `x` has no second derivatives; an `objlist` without
+#' Hessian gives `NULL`.
 #' @seealso [getDerivs()]
 #'
 #' @examples
@@ -611,7 +613,7 @@ getConditions.fn <- function(x, ...) {
 #' transformation or objective function.
 #'
 #' @param x object of class `prdfn`, `parfn`, `obsfn` or `objfn`, or a
-#'   character naming such an object in the calling environment.
+#'   character naming such an object in the global environment.
 #' @param ... further objects; their model names are added to the result.
 #' @param conditions character, restrict the result to these conditions.
 #'   Default `NULL`.

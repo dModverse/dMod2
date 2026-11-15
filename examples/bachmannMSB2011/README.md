@@ -6,9 +6,10 @@ Shows: `eqnlist()`, `odemodel()`, `Y()`, `normL2()`, `constraintL2()`, `mstrust(
 
 JAK2-STAT5 signaling in CFU-E cells with the feedbacks of CIS, SOCS3 and SHP1, after Bachmann et
 al. (2011), Mol Syst Biol 7:516. 541 measurements from 13 experiments in 36 conditions, 20
-observables, 113 parameters, fitted within the bounds of the publication. The guide chapter
-[PEtab](https://dmodverse.github.io/dMod2/articles/guide-petab.html) imports the problem from the
-PEtab benchmark collection.
+observables, 113 parameters, fitted within the bounds of the publication. `petab.R` imports the
+problem from the PEtab benchmark collection; the guide chapter
+[PEtab](https://dmodverse.github.io/dMod2/articles/guide-petab.html) shows import and export on
+the guide model.
 
 ## Files
 
@@ -18,7 +19,7 @@ PEtab benchmark collection.
 | `fit.R` | multistart of 200 fits, saves `results/fits.rds` |
 | `plots.R` | figures from the saved results |
 | `petab.R` | the problem from the PEtab files, compared with `model.R`, and `model.R` written as PEtab |
-| `results/` | saved fits |
+| `results/` | saved fits, and in `results/petab/` the problem `petab.R` writes |
 
 ## Run
 
@@ -32,7 +33,8 @@ source("plots.R")
 
 `model.R` uses the free cores of the machine. The guide chapter
 [Remote computing](https://dmodverse.github.io/dMod2/articles/guide-remote-computing.html) shows how
-to run a multistart on other machines. `plots.R` only reads `results/`.
+to run a multistart on other machines. `plots.R` fits nothing: it reads `results/` and simulates
+the compiled model.
 
 
 

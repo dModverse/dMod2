@@ -1,16 +1,17 @@
 #' Detect Number of Free Cores
 #'
 #' Estimates the free cores as the number of cores minus the 1-minute load
-#' average, at least 1; inside a SLURM job on the local machine, the cores the
-#' job was given (`SLURM_CPUS_ON_NODE`) and the job processes are bound to. Works on Linux and macOS, locally or on remote
+#' average, at least 1. With `machine = NULL` inside a SLURM job, they are the
+#' cores the job was given (`SLURM_CPUS_ON_NODE`) and the job processes are
+#' bound to. Works on Linux and macOS, locally or on remote
 #' machines via `ssh`. On the local Windows machine the load is the processor
 #' load since the previous call, over at least 0.25 s and at most a minute. Under
 #' `R CMD check` with `_R_CHECK_LIMIT_CORES_` set, the result is at most 2.
 #' @param machine Character vector of machines: `"localhost"` is the local machine,
 #'   any other entry an `ssh` destination such as `"host"` or `"user@@host"`.
 #'   `NULL` (default) for the local machine.
-#' @return Numeric vector of free cores, one per machine and named by it, with
-#'   attributes
+#' @return Numeric vector of free cores, one per machine, named by `machine`
+#'   when it is given, with attributes
 #'   `"ncores"` (number of cores) and `"used"` (load average).
 #' @export
 #' @examples
@@ -491,7 +492,10 @@ detectFreeCores <- function(machine = NULL) {
     x
   }
   script <- fill(lines)
-  left <- unique(unlist(regmatches(script, gregexpr("\\{\\{\\s*[A-Za-z]+\\s*\\}\\}", script))))
+  # a directive or comment whose field has no value, such as --time without a walltime, is left out
+  field <- "\\{\\{\\s*[A-Za-z]+\\s*\\}\\}"
+  script <- script[!(grepl("^\\s*#", script) & grepl(field, script))]
+  left <- unique(unlist(regmatches(script, gregexpr(field, script))))
   left <- left[!grepl("^\\{\\{\\s*run\\s*\\}\\}$", left)]
   if (length(left))
     stop("the job script ", template, " has placeholders without a value: ",
@@ -556,7 +560,8 @@ detectFreeCores <- function(machine = NULL) {
 #' @param array The number of array tasks, at most one per task. `NULL`
 #'   (default) is one per task.
 #' @param walltime The maximum runtime of an array task, `"HH:MM:SS"`, filled
-#'   into the job script. Default `NULL`, none.
+#'   into the job script. Default `NULL`, none: a directive or comment line of
+#'   the template with a field that has no value is left out.
 #' @param memPerCore Memory per core in GB, filled into the job script. Default 2.
 #' @param partition,account Character, the partition and the account of the
 #'   job. Default `NULL`, those of the job script.
@@ -998,8 +1003,8 @@ print.dMod2Job <- function(x, ...) {
 #' [dMod2Jobs()] lists them.
 #'
 #' The model files are those of the [obsfn], [parfn], [prdfn] and objective
-#' objects in `input`; objects without them take every file of
-#' `getOption("dMod2.outdir")`, else of the working directory.
+#' objects in `input`; when none of them has model files, those in
+#' `getOption("dMod2.outdir")`, else in the working directory.
 #' \itemize{
 #'   \item `build = "compile"`: the C/C++ sources are copied and compiled once
 #'         per node into one shared object, against the cppDE installed there.
@@ -1048,15 +1053,15 @@ print.dMod2Job <- function(x, ...) {
 #' @return With `wait = TRUE` the results of `get()`, else an object of class
 #'   `dMod2Job`, a list of functions:
 #' \describe{
-#'   \item{`check()`}{reports how many tasks are done, running or failed and
-#'     returns `TRUE` once no task runs any more, with a warning when some
-#'     failed. A task fails when the task process ends without a result. A
-#'     task without a result on a node that does not answer, or whose queue
-#'     does not, counts as running.}
+#'   \item{`check()`}{reports how many tasks are done, running, failed or not
+#'     reachable and returns `TRUE` once no task runs or is not reachable, with
+#'     a warning when some failed. A task fails when the task process ends
+#'     without a result. A task without a result on a node that does not answer,
+#'     or whose queue does not, is not reachable.}
 #'   \item{`wait(interval = 10)`}{polls every `interval` seconds until no task
-#'     runs, reports each change as a message and returns `TRUE` when every task
-#'     is done. While a node does not answer, the pause between polls doubles up
-#'     to 10 minutes.}
+#'     runs or is not reachable, reports each change as a message and returns
+#'     `TRUE` when every task is done. While a node does not answer, the pause
+#'     between polls doubles up to 10 minutes.}
 #'   \item{`get(combine = TRUE, all = FALSE)`}{returns the results. With
 #'     `combine = TRUE` parlists are joined by `c()`, fits of [msem()] that
 #'     each ran a part of the same starts into one fit, and data frames such as parframes by

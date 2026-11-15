@@ -58,9 +58,9 @@ working directory.}
 \item{output}{Logical, write every fit and the final parlist to disk.
 Default \code{FALSE}.}
 
-\item{cautiousMode}{Logical, also write every fit deparsed to an \code{.R} file
-in \verb{interRes/}, which is kept after the run while the \code{.Rda} files in it are
-removed. Default \code{FALSE}.}
+\item{cautiousMode}{Logical. With \code{output = TRUE}, also write every fit
+deparsed to an \code{.R} file in \verb{interRes/}, which is kept after the run while
+the \code{.Rda} files in it are removed. Default \code{FALSE}.}
 
 \item{startFromCenter}{Logical. If \code{TRUE}, the first fit starts at
 \code{center} without offset. Default \code{FALSE}.}

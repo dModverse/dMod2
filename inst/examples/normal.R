@@ -1,7 +1,5 @@
 ## The distributions of a random term, written into gr() of an effect formula
 normal()
-laplace()
-laplace(lambda = 2)
 spikeSlab()
 spikeSlab(prob = 0.2, tau = 0.5)
 dirichletProcess()

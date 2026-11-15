@@ -422,8 +422,12 @@ test_that("slurmTemplate() sets up one template per login node and keeps it", {
 
 test_that("templates are checked, and a SLURM job needs one", {
   withr::local_envvar(R_USER_CONFIG_DIR = withr::local_tempdir())
-  tpl <- withr::local_tempfile(lines = c("#SBATCH --time={{ walltime }}", "{{ run }}"))
-  expect_error(dMod2:::.fillJobscript(tpl, list(jobname = "j")), "\\{\\{ walltime \\}\\}")
+  # a directive without a value is left out, any other field without one is an error
+  tpl <- withr::local_tempfile(lines = c("#SBATCH --time={{ walltime }}", "module load {{ mod }}",
+                                         "{{ run }}"))
+  expect_identical(dMod2:::.fillJobscript(tpl, list(jobname = "j", mod = "R"))$script,
+                   c("module load R", "{{ run }}"))
+  expect_error(dMod2:::.fillJobscript(tpl, list(jobname = "j")), "\\{\\{ mod \\}\\}")
   norun <- withr::local_tempfile(lines = "#SBATCH --job-name={{ jobname }}")
   expect_error(dMod2:::.fillJobscript(norun, list(jobname = "j")), "\\{\\{ run \\}\\}")
   expect_error(distributedComputing(1, on = slurmCluster("h", cores = 2)),

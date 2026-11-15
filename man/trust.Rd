@@ -57,7 +57,8 @@ parameters, returning a list with components \code{value},
 \code{gradient} and \code{hessian}. It is called with the logical
 arguments \code{deriv} and \code{hessian}, and with \code{deriv2 = TRUE}
 when an exact Hessian is requested, so it must accept them or
-\code{...}.}
+\code{...}. \code{trustL1} calls it with the parameters and \code{...}
+only.}
 
 \item{parinit}{Named numeric starting vector. Must be finite. Values
 outside \code{[parlower, parupper]} are clipped with a warning; with
@@ -75,7 +76,8 @@ Default \code{1000}.}
 objective, \code{"bfgs"} or \code{"sr1"} a quasi-Newton update seeded as
 \code{qnControl$hessianInit} says, \code{"exact"} the true Hessian at
 every iterate, which needs an objective that takes \code{deriv2}.
-Quasi-Newton methods require \code{boundary = "reflective"}.
+\code{"bfgs"}, \code{"sr1"} and \code{"exact"} require
+\code{boundary = "reflective"}.
 Also selects the control defaults below. With \code{phases}, each phase
 names a method, and this argument is an error.}
 
@@ -138,21 +140,23 @@ before. Default \code{1e-6}.}
 and \code{rmin}.}
 
 \item{qnControl}{List of quasi-Newton settings, merged into the defaults and
-read only in a \code{"bfgs"} or \code{"sr1"} phase.
+read in a \code{"bfgs"} or \code{"sr1"} phase; \code{hessianInit} also in
+a first phase of source \code{"gn"}.
 \describe{
 \item{\code{hessianInit}}{Seed of the approximation: \code{"gn"}
 (default) the Gauss-Newton Hessian at \code{parinit};
-\code{"identity"} the identity matrix, after which no Hessian is
-requested from the objective; \code{"exact"} the true Hessian at
-\code{parinit}, then gradients only. \code{"exact"} needs
-\code{deriv2}, see \code{derivMode} in \code{\link[=odemodel]{odemodel()}}. Used only when
-\code{hessianMethod} is \code{"bfgs"} or \code{"sr1"}.}
+\code{"identity"} the identity matrix, after which the objective is
+asked for gradients only until a reseed; \code{"exact"} the true
+Hessian at \code{parinit}, then gradients only. \code{"exact"} needs
+\code{deriv2}, see \code{derivMode} in \code{\link[=odemodel]{odemodel()}}. In a first phase
+of source \code{"gn"}, \code{"exact"} makes the first step use the
+exact Hessian at \code{parinit}.}
 \item{\code{hessianReseed}}{\code{"never"} (default): a stalled
 quasi-Newton phase, or one whose trust radius collapses, stops.
-\code{"stall"}: it continues from a fresh
-Hessian of the same source at the current iterate, provided the
-iterate moved since the last reseed. The result reports the count as
-\code{nReseed}.}
+\code{"stall"}: it continues from a fresh Hessian at the current
+iterate, the exact one with \code{hessianInit = "exact"} and the
+Gauss-Newton one otherwise, provided the iterate moved since the last
+reseed. The result reports the count as \code{nReseed}.}
 \item{\code{qnMemory}}{Number of \code{(s, y)} pairs kept. Default
 \code{0}: every update accumulates onto the seed. A positive value
 rebuilds the approximation in each iteration from the last
@@ -169,9 +173,10 @@ rejected trial point. Default \code{TRUE} for a phase whose source is
 \item{stepControl}{List of step and acceptance settings, merged into the
 defaults.
 \describe{
-\item{\code{thetaMax}}{Largest fraction of the distance to a bound a
-step may use. Default \code{0.99995}. \code{boundary = "reflective"}
-only.}
+\item{\code{thetaMax}}{Smallest fraction of the distance to a bound a
+step may use. The fraction is \code{max(thetaMax, 1 - m)}, below 1,
+with \code{m} the first-order optimality measure. Default
+\code{0.99995}. \code{boundary = "reflective"} only.}
 \item{\code{nonmonotone}}{Zhang-Hager relaxation in \code{[0, 1)}: a
 step is rated against a weighted average of past objective values and
 may increase the objective. Default \code{0}, monotone.}
@@ -198,7 +203,8 @@ second-order correction. Default \code{TRUE}.}
 first minimizes the objective plus a rising penalty on the gaps, then
 enforces continuity. Needs forward sensitivities and is skipped
 without them. Default \code{TRUE}.}
-}}
+}
+\code{trustL1} takes \code{thetaMax} only.}
 
 \item{minimize}{If \code{TRUE} (default) minimize, if \code{FALSE}
 maximize.}
@@ -206,16 +212,18 @@ maximize.}
 \item{blather}{If \code{TRUE}, the result also contains the per-iteration
 trace listed under Value. Default \code{FALSE}.}
 
-\item{printIter}{If \code{TRUE}, print iteration count and objective value
-at each evaluation. Default \code{FALSE}.}
+\item{printIter}{If \code{TRUE}, print the number of the evaluation and the
+objective value at each evaluation. Default \code{FALSE}.}
 
 \item{traceFile}{Path of a CSV file written with one row per evaluation:
-iteration, objective value and parameters. Default \code{NULL}, no file.}
+the number of the evaluation (column \code{Iteration}), objective value
+and parameters. Default \code{NULL}, no file.}
 
 \item{sparse}{\code{"auto"} (default), \code{TRUE} or \code{FALSE}. With
 \code{TRUE}, \code{objfun} is called with \code{hessian = "sparse"} and
 the sparse Gauss-Newton Hessian it returns (a \code{Matrix}) is factorized by sparse
-Cholesky. Without phases and bounds; of the other settings only
+Cholesky. Minimization without phases and bounds only; of the other
+settings only
 \code{rinit}, \code{rmax}, \code{iterlim}, \code{tolControl$ftol},
 \code{tolControl$mtol} and \code{printIter} apply. \code{"auto"} takes
 this path for a Gauss-Newton minimization without phases, bounds, exact
@@ -229,12 +237,13 @@ at most \code{fill} of the matrix, both from
 
 \item{mu}{Named numeric vector of reference values for the L1-penalized
 parameters. Names must be a subset of \code{names(parinit)}; only the
-named parameters receive a penalty. Each must lie strictly inside
-\code{[parlower, parupper]}. Defaults to a zero vector covering all of
+named parameters receive a penalty. With \code{boundary = "reflective"}
+each must lie strictly inside \code{[parlower, parupper]}. Defaults to a
+zero vector covering all of
 \code{parinit}.}
 
-\item{one.sided}{Logical. If \code{TRUE}, the penalty is one-sided and
-acts as a lower wall at \code{mu}: \code{lambda * max(0, mu - p)}.
+\item{one.sided}{Logical. If \code{TRUE}, the penalty is one-sided,
+\code{lambda * max(0, mu - p)}: only values below \code{mu} are penalized.
 Otherwise it is the symmetric \code{lambda * |p - mu|}.}
 
 \item{lambda}{Strength of the L1 penalty. Either a scalar (broadcast to
@@ -243,7 +252,7 @@ all entries of \code{mu}) or a named numeric aligned with \code{mu}.}
 \item{gate}{Character, names in \code{mu} whose penalty is the gate
 \code{lambda * (p - mu)} with \code{p >= mu}: the parameter can sit exactly
 on \code{mu} and leaves it only upward. Starts below \code{mu} are moved
-onto it.}
+onto it. Needs \code{boundary = "reflective"}.}
 
 \item{fuse}{List of fusion blocks. A block penalizes
 \code{lambda * sum_{i<j} w_ij |p_i - p_j|} over the parameters of the block, plus
@@ -254,7 +263,8 @@ list with \code{pars}, and optionally \code{lambda} (default: the scalar
 \code{lambda}), \code{anchor} (default none) and \code{weights}, an
 \code{(m+1) x (m+1)} matrix whose last row and column refer to the
 anchor (default all 1). Fused parameters must not appear in \code{mu}; if
-\code{fuse} is given and \code{mu} is not, \code{mu} is empty.}
+\code{fuse} is given and \code{mu} is not, \code{mu} is empty. Needs
+\code{boundary = "reflective"}.}
 }
 \value{
 A list of class \code{trustfit} with components
@@ -268,8 +278,10 @@ gradient and model Hessian at \code{argument}.}
 \item{\code{qnSkipped}}{Pairs rejected by the cautious test.}
 \item{\code{nSwitch}}{Number of handovers between phases.}
 \item{\code{phaseIterations}}{Named integer, the iterations of each
-phase run, in run order and named after the phase; sums to
-\code{iterations}.}
+phase run, in run order and named after the phase. The sum is
+\code{iterations} without the iteration that ends the run on failed
+evaluations and without the iterations that reseed instead of
+taking a step.}
 \item{\code{phaseSweep}}{Named character, the sweep of each element
 of \code{phases}, present when \code{phases} is set.}
 \item{\code{nReseed}}{Number of reseeds by
@@ -287,12 +299,23 @@ With \code{blather = TRUE} the list also contains the matrices
 row per iteration, and the per-iteration vectors \code{steptype},
 \code{stepback}, \code{accept}, \code{r} (radius), \code{rho} (ratio of
 actual to predicted reduction), \code{valpath}, \code{valtry},
-\code{preddiff}, \code{stepnorm} and, when a quasi-Newton source is
-involved, \code{hessianSource}.
+\code{preddiff}, \code{stepnorm} and, with
+\code{boundary = "reflective"}, \code{hessianSource}.
 
 \code{boundary = "clip"} returns only \code{argument}, \code{value},
 \code{gradient}, \code{hessian}, \code{iterations}, \code{converged},
 \code{atBound} and \code{stopReason}, plus the trace.
+
+The sparse path, see \code{sparse}, returns only \code{argument},
+\code{value}, \code{gradient}, \code{hessian} (a sparse \code{Matrix}),
+\code{iterations} and \code{converged}.
+
+\code{trustL1} returns a list without class with \code{argument},
+\code{value}, \code{gradient}, \code{hessian}, \code{iterations},
+\code{converged}, \code{atBound} and \code{stopReason}, plus the trace
+without \code{hessianSource}. \code{value} and \code{gradient} include the
+penalty, whose gradient counts zero on a kink; \code{hessian} is that of
+\code{objfun}.
 
 A multiple-shooting run returns \code{argument}, \code{value},
 \code{gradient}, \code{hessian}, \code{iterations}, \code{neval},
@@ -319,20 +342,26 @@ trust-region-reflective scheme of Coleman and Li. Iterates stay strictly
 inside the box and never land exactly on a bound; \code{atBound} in the
 result reports which parameters a bound holds.
 
-\code{boundary = "clip"}: active-set reduction with componentwise clipping.
+\code{boundary = "clip"}: active-set reduction with componentwise clipping,
+with a single \code{"gn"} phase. The run stops when a trial point, accepted
+or not, changes the value by less than \code{ftol} or has a predicted
+reduction below \code{mtol}, both reported as \code{stopReason = "fvalue"}.
+\code{gtol}, \code{xtol}, \code{rmin} and stagnation are not tested; three
+failed evaluations in a row end the run with \code{stopReason = "iterlim"}.
 }
 
 \section{Convergence}{
 
-The run stops as soon as one of the following holds. The gradient test is
+With \code{boundary = "reflective"} the run stops as soon as one of the
+following holds. The gradient test is
 evaluated at the current iterate; the value and step tests count only on an
 accepted step, the model test also on a rejected Newton step from inside the
 trust region.
 \itemize{
 \item \code{gtol}: the first-order optimality measure
 \eqn{\max_i |v_i g_i|} is at most \code{gtol}, with \eqn{v_i} the
-distance to the bound the gradient points to, 1 if that bound is
-infinite. Without bounds it is \eqn{\max_i |g_i|}.
+distance to the bound in the descent direction \eqn{-g_i}, 1 if that
+bound is infinite. Without bounds it is \eqn{\max_i |g_i|}.
 \item \code{ftol}: \eqn{|f - f_{\mathrm{try}}| <} \code{ftol}.
 \item \code{mtol}: the predicted reduction
 \eqn{|g^\top p + \frac{1}{2} p^\top H p| <} \code{mtol}.
@@ -346,7 +375,8 @@ no longer changes the parameters in floating point. Reports
 \code{stopReason} in the result names the test that fired:
 \code{"gradient"}, \code{"fvalue"}, \code{"preddiff"}, \code{"step"},
 \code{"stagnation"}, \code{"radius"}, \code{"objfun"} (three failed
-evaluations in a row) or \code{"iterlim"}. Stagnation reports
+evaluations in a row, ten with multiple shooting) or \code{"iterlim"}.
+Stagnation reports
 \code{converged = TRUE}.
 
 Only \code{gtol} tests first-order optimality. While \code{switches}
@@ -369,8 +399,9 @@ the last accepted one when \code{stepControl$nonmonotone = 0}.
 An objective built by \code{\link{normL2}(..., multipleShootingControl = )},
 alone or in a sum, is optimized by multiple shooting with the same controls.
 Not available then: \code{hessianMethod = "exact"}, more than one phase,
-\code{switches}, \code{qnControl$hessianReseed},
-\code{qnControl$qnMemory}, \code{stepControl$nonmonotone},
+\code{switches}, \code{qnControl$hessianInit = "exact"},
+\code{qnControl$hessianReseed}, \code{qnControl$qnMemory},
+\code{stepControl$nonmonotone},
 \code{boundary = "clip"}, \code{minimize = FALSE} and \code{traceFile}.
 The run reports \code{converged = TRUE} only when the scaled gaps between
 the segments are below \code{tolControl$ctol}. The method is described in

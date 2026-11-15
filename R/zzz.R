@@ -4,7 +4,7 @@
 #' path in `eqnClass.R` and `steadyStates()`.
 #' `reticulate::py_require()` does not start Python: it records the
 #' requirement so the first call into Python provisions an env that has the
-#' listed packages. The SBML/PEtab layer adds `python-libsbml` to this list.
+#' listed packages. The list includes `python-libsbml` for the SBML/PEtab layer.
 #' The declaration runs when reticulate loads, before Python can start, so a
 #' session without Python does not load reticulate and the Matrix it imports.
 #' symident is required on first use by `.symident()`, so a symident that

@@ -23,7 +23,8 @@ functions of the same class.
 \details{
 Each function is defined for a set of conditions. The sum is
 defined for their union. A condition present in both is taken from \code{e2},
-with a warning.
+with a warning. A function defined for no specific condition
+(\code{conditions = NULL}) cannot be added and gives an error.
 }
 \examples{
 ## A prediction function interpolating parameter values piecewise linearly

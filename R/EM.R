@@ -14,7 +14,7 @@
 #' A group, a level of the grouping of a random term such as a patient or a
 #' cell line, may own several conditions, which share the random effects of the
 #' group.
-#' Normal, Laplace, spike-and-slab and Dirichlet-process random effects of one
+#' Normal, spike-and-slab and Dirichlet-process random effects of one
 #' grouping may be combined. Random terms over several groupings, nested or
 #' crossed, are normal and integrated per connected component of the
 #' conditions.
@@ -23,7 +23,7 @@
 #' \describe{
 #'   \item{`"focei"`}{Laplace approximation at the conditional modes with the
 #'     exact derivative of the volume term. The default, and the method for
-#'     Laplace, spike-and-slab and Dirichlet-process random effects (at most 14
+#'     spike-and-slab and Dirichlet-process random effects (at most 14
 #'     groups) and for several groupings.}
 #'   \item{`"quadrature"`}{adaptive sparse-grid quadrature around the modes,
 #'     started from the FOCEI fit; section Quadrature.}
@@ -39,13 +39,17 @@
 #'   transformation or of `p`.
 #' @param init Named numeric start with the parameters of `obj` that are
 #'   neither random effects nor created by the effect formulas (those start
-#'   at 0). It may also set those and the hyperparameters: `omega_*` (log
-#'   standard deviations and Cholesky entries), `lambda_*` (Laplace), `prob_*`
-#'   and `tau_*` (spike and slab), `concentration_*` and `tau_*` (Dirichlet
-#'   process), named `<kind>_<grouping>` and numbered `_1`, `_2`, ... where a
-#'   grouping has several blocks. An `em` fit as `init` gives the start: the
-#'   estimates, `fixed` values and random effects of that fit, without those it
-#'   set to 0, and with sparse random effects the inner modes.
+#'   at 0). It may also set those and the hyperparameters: `omega_<a>_<a>`,
+#'   the log of the diagonal entry of the Cholesky factor of `Omega` (the log
+#'   standard deviation of an uncorrelated random effect), and `omega_<a>_<b>`,
+#'   the entry in row `a` and column `b` below the diagonal, with `a` and `b`
+#'   the stems of the random effects without `eta_`, as in `omega_cl_cl`;
+#'   `prob_*` and `tau_*` (spike and slab), `concentration_*` and `tau_*`
+#'   (Dirichlet process), named `<kind>_<grouping>` and numbered
+#'   `_1`, `_2`, ... where a grouping has several blocks. An `em` fit as
+#'   `init` gives the start: the estimates, `fixed` values and random effects
+#'   of that fit, without those it set to 0, and with sparse random effects
+#'   the inner modes.
 #' @param fixed Named numeric of parameters held fixed.
 #' @param method `"focei"` (default), `"quadrature"`, `"laplaceEM"` or
 #'   `"saem"`.
@@ -71,7 +75,7 @@
 #'       standard deviation ends below 0.1 is dropped and the fit repeated from the
 #'       estimates; where -2 log L rises by at most `boundary`, that fit is
 #'       returned and names the hyperparameter in `boundary`.}
-#'     \item{`quadrature`, `saem`, `laplace`}{lists of the sections
+#'     \item{`quadrature`, `saem`, `sparseFit`}{lists of the sections
 #'       Quadrature, SAEM and Sparse random effects.}
 #'   }
 #' @param cores Number of cores over the groups and conditions inside the
@@ -84,9 +88,9 @@
 #'   \describe{
 #'     \item{`argument`, `value`, `gradient`, `hessian`}{the estimates, -2 log
 #'       L of the marginal likelihood with gradient and Hessian (a sparse
-#'       `Matrix` on the sparse path, `NULL` with Laplace, spike-and-slab or
+#'       `Matrix` on the sparse path, `NULL` with spike-and-slab or
 #'       Dirichlet-process random effects).}
-#'     \item{`information`}{with Laplace or spike-and-slab random effects the
+#'     \item{`information`}{with spike-and-slab random effects the
 #'       empirical information that gives the standard errors: `G / (G - 1)`
 #'       times the sum of the outer products of the centered scores of the `G`
 #'       groups, plus half the Hessian of the conditions without random
@@ -99,8 +103,8 @@
 #'       cluster, 0 for the population value, and the posterior probability
 #'       `p0` of a deviation of 0; a column `data` where a sparse random effect
 #'       reaches no data of the group; such an effect rests at 0 with the prior.}
-#'     \item{`strengths`, `slab`}{the hyperparameters of the Laplace blocks
-#'       and of the spike-and-slab and Dirichlet-process blocks.}
+#'     \item{`slab`}{the hyperparameters of the spike-and-slab and
+#'       Dirichlet-process blocks.}
 #'     \item{`valueSE`}{the standard error of `value` where it comes from
 #'       importance sampling.}
 #'     \item{`coupling`}{`"expectationConsistent"` where a group needed it,
@@ -163,18 +167,20 @@
 #'     is below `mcTol` (default 0.05).}
 #'   \item{`particles`}{with Dirichlet-process random effects the particles of
 #'     the sequential importance sampling of -2 log L, default 500.}
+#'   \item{`cm1Control`}{[trust()] settings of the Newton steps of the other
+#'     parameters, default one iteration per SAEM iteration.}
 #' }
 #' With Dirichlet-process random effects a Gibbs sweep draws the clusters of
 #' the groups (Neal 2000, algorithm 8), the averaging runs `nEM` iterations,
 #' and the reported clusters are the most frequent partition of the late
 #' draws.
 #' @section Sparse random effects:
-#' With Laplace, spike-and-slab or Dirichlet-process random effects the
+#' With spike-and-slab or Dirichlet-process random effects the
 #' parameters and hyperparameters move in one trust region. The integral of a
 #' group is exact where the data couple none of the factors and the sum over
 #' the subsets of the spike-and-slab random effects of the group stays within a budget of
 #' nodes; else it is the expectation consistent (EC) approximation, and a
-#' trial point at which EC does not converge is a failed evaluation. Entries of `control$laplace`:
+#' trial point at which EC does not converge is a failed evaluation. Entries of `control$sparseFit`:
 #' \describe{
 #'   \item{`maxOuter`}{iterations of the trust region, default 200.}
 #'   \item{`trustControl`}{the [trust()] settings; `ftol`, `mtol` and `gtol`
@@ -183,10 +189,10 @@
 #'
 #' @seealso [msem()], [randomEffects()], [insert()]; the guide chapters
 #'   [Nonlinear mixed-effects models](https://dmodverse.github.io/dMod2/articles/guide-nlme.html) and
-#'   [Group-specific effects](https://dmodverse.github.io/dMod2/articles/guide-group-effects.html), the
+#'   [Sparse deviations](https://dmodverse.github.io/dMod2/articles/guide-sparse-deviations.html), the
 #'   methods articles
 #'   [Marginal likelihood of mixed-effects models](https://dmodverse.github.io/dMod2/articles/methods-nlme.html)
-#'   and [Sparse random effects](https://dmodverse.github.io/dMod2/articles/methods-sparse-random-effects.html).
+#'   and [Sparsity priors](https://dmodverse.github.io/dMod2/articles/methods-sparsity-priors.html).
 #' @example inst/examples/em.R
 #' @export
 em <- function(obj, random, init = NULL, fixed = NULL,
@@ -203,16 +209,16 @@ em <- function(obj, random, init = NULL, fixed = NULL,
   .withCores(cores, .emFit(design, start, fixed, method, control, verbose))
 }
 
-## Refuses entries of `control` and of `control$laplace` that em() does not read.
+## Refuses entries of `control` and of `control$sparseFit` that em() does not read.
 .checkEmControl <- function(control) {
   known <- list(control = c("sd", "innerControl", "trustControl", "secondOrderCorrection", "derivMode", "quadrature",
-                            "saem", "laplace", "boundary"),
-                laplace = c("maxOuter", "trustControl"))
+                            "saem", "sparseFit", "boundary"),
+                sparseFit = c("maxOuter", "trustControl"))
   for (k in names(known)) {
     x <- if (k == "control") control else control[[k]]
     bad <- setdiff(names(x), known[[k]])
     if (length(bad))
-      stop("em: unknown ", if (k == "control") "entries of `control`: " else "entries of `control$laplace`: ",
+      stop("em: unknown ", if (k == "control") "entries of `control`: " else "entries of `control$sparseFit`: ",
            paste(bad, collapse = ", "), ".", call. = FALSE)
   }
   dm <- control$derivMode
@@ -235,7 +241,7 @@ em <- function(obj, random, init = NULL, fixed = NULL,
 #'
 #' @description Runs [em()] from `fits` starts, the first at `init`, the others
 #' perturbed by normal noise of standard deviation `sd` (on the log scale for
-#' strengths, concentrations and slab standard deviations, on the logit scale
+#' concentrations and slab standard deviations, on the logit scale
 #' for slab probabilities), and returns the best fit.
 #'
 #' @inheritParams em
@@ -250,6 +256,8 @@ em <- function(obj, random, init = NULL, fixed = NULL,
 #'   root, is repeated from a new perturbed start, up to `nTries` attempts.
 #' @param nTries Maximum number of attempts per start, including the first.
 #'   Default `10`.
+#' @param verbose Logical. If `TRUE`, print the table of the starts; the fits
+#'   print no progress. Default `FALSE`.
 #' @param keepFits Logical. If `TRUE`, the result has `fits`, the fit of every
 #'   start, or the error message of a failed one, without the model. Default `FALSE`.
 #' @param which Positions of the starts to fit, among the `fits` drawn. `NULL`
@@ -260,6 +268,7 @@ em <- function(obj, random, init = NULL, fixed = NULL,
 #' @return The fit with the smallest `value`, of class `em`, with
 #'   `multistart`, a data frame with a row per start:
 #'   \describe{
+#'     \item{`start`}{the position of the start among the `fits` drawn.}
 #'     \item{`value`, `converged`, `iterations`}{of the fit.}
 #'     \item{`gradient`}{the largest absolute entry of the gradient at the end
 #'       of the fit.}
@@ -467,9 +476,9 @@ msem <- function(obj, random, init = NULL, fixed = NULL,
     if (method == "saem") return(.emResult(design, .fitSaemDirichlet(design, start, fixed, control, verbose),
                                            method, fixed))
     if (method != "focei")
-      stop("em: Laplace, spike-and-slab and Dirichlet-process random effects are fitted by method = \"focei\" ",
+      stop("em: spike-and-slab and Dirichlet-process random effects are fitted by method = \"focei\" ",
            "(Dirichlet-process ones also by \"saem\").", call. = FALSE)
-    return(.emResult(design, .fitLaplace(design, start, fixed, control, verbose), method, fixed))
+    return(.emResult(design, .fitSparse(design, start, fixed, control, verbose), method, fixed))
   }
   joint <- design$objfn + .normalPrior(design)
   fit <- switch(method,

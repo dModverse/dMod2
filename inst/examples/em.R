@@ -40,13 +40,13 @@ fitS <- em(obj, randomEffects(p), init = init, method = "saem", verbose = FALSE)
 c(focei = fit$value, quadrature = fitQ$value, saem = fitS$value)
 }
 \dontrun{
-## Ka and Cl with correlated random effects, V with a Laplace one: a second transformation
-p2 <- P(insert(trafo, Ka + Cl ~ 1 + (1 | p | ID), V ~ 1 + (1 | gr(ID, dist = laplace()))),
+## Ka and Cl with correlated random effects, V with a spike-and-slab one: a second transformation
+p2 <- P(insert(trafo, Ka + Cl ~ 1 + (1 | p | ID), V ~ 1 + (1 | gr(ID, dist = spikeSlab()))),
         method = "explicit", compile = FALSE, modelname = "theoph_p2", derivMode = dm,
         outdir = tempdir())
 compile(p2, output = tempfile("theoph"))
 fit2 <- em(normL2(data, g * x * p2, errmodel = err), randomEffects(p2), init = init)
 fit2$omega
-fit2$strengths
+fit2$slab
 AIC(fit, fit2)
 }

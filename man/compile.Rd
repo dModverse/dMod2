@@ -42,12 +42,15 @@ them.
 \details{
 Compile and link flags are taken per source from the \code{"compileInfo"}
 attribute of the objects. Objects without it are matched to sources in the
-working directory by model name. Unchanged sources are not recompiled.
+working directory by model name.
 
-Without \code{output}, each source becomes a shared object named after it, i.e.
-after the model name. With \code{output}, all sources are linked into one shared
-object of that name, and the model name of every object passed as a plain
-variable is set to \code{output}, see \code{\link[=modelname]{modelname()}}. If a shared object of that
+Without \code{output}, each source goes through \verb{R CMD SHLIB} and becomes a
+shared object named after it, i.e. after the model name. With \code{output}, all
+sources are linked into one shared object of that name, and the model name
+of every \code{prdfn}, \code{obsfn} or \code{parfn} passed as a plain variable is set to
+\code{output}, see \code{\link[=modelname]{modelname()}}. The object file of a source is then reused while
+the source, the compile command and the installed \pkg{cppDE} and \pkg{cOde}
+are unchanged. If a shared object of that
 name is already loaded, a suffix \verb{_2}, \verb{_3}, ... is appended with a warning.
 With many sources, set \code{output}: R limits the number of loaded shared
 objects.

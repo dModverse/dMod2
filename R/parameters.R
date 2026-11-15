@@ -12,7 +12,8 @@
 #' @param condition Condition label of a single `trafo`, default `NULL`; a
 #'   list takes the list names instead.
 #' @param compile Logical. `TRUE` compiles all conditions into one shared
-#'   object named `modelname`, `FALSE` (default) leaves it to [compile()].
+#'   object named `modelname`, or with `modelname = NULL` into one shared
+#'   object per condition; `FALSE` (default) leaves it to [compile()].
 #' @param modelname Base name of the generated files, default `NULL`, which
 #'   is `"expl_parfn"` or `"impl_parfn"`, followed by `_<condition>`.
 #' @param verbose Logical. Print the compiler output, default `FALSE`.
@@ -1090,7 +1091,9 @@ Pimpl <- function(trafo, parameters = NULL, forcings = NULL, condition = NULL,
 #'   `cl ~ wt + (1 | ID)`, which replace the symbol by a linear predictor
 #'   over the columns of the branch table with fixed and random effects; see
 #'   [randomEffects()]. Named arguments in `...` are then placeholders of the
-#'   formulas, `insert(trafo, x ~ 1 + (1 | ID), x = c("ka", "cl"))`.
+#'   formulas, `insert(trafo, x ~ 1 + (1 | ID), x = c("ka", "cl"))`. A
+#'   substitution or a second effect formula for a symbol that has an effect
+#'   formula is an error: set the scale of a symbol before adding effects.
 #' @param table `data.frame` with one row per condition, row names the
 #'   conditions. Kept as attribute `tree`; the columns can be read in `...`
 #'   by name.
@@ -1098,8 +1101,10 @@ Pimpl <- function(trafo, parameters = NULL, forcings = NULL, condition = NULL,
 #' @param apply One of `"nothing"` (default), `"insert"` and `"define"`: what
 #'   is done with every non-missing entry `table[condition, column]`, with
 #'   the column name as left-hand side and the entry as right-hand side.
+#'   Columns named `condition` or `conditions` are skipped.
 #' @param conditionMatch Regular expression; only the conditions whose names
-#'   match are changed. Default `NULL`, all.
+#'   match are changed. Default `NULL`, all. Needs the tree of a
+#'   transformation built by `branch()`.
 #' @param ... Named vectors replacing the symbols of `expr` of the same name,
 #'   one substitution per element. They are evaluated per condition, with
 #'   the columns of `attr(trafo, "tree")`, `.currentTrafo` (the

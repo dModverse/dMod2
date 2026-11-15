@@ -26,8 +26,9 @@ alignmentModel(
 \item{data}{data.frame with a column \code{value}, the readings, and the columns
 named in the formulas and expressions. An optional column \code{lloq} holds the
 lower limit of quantification of each reading (\code{NA} for none); a reading
-with \code{value <= lloq} or \code{value} \code{NA} is censored (M3). An optional logical
-column \code{absolute} marks the absolute readings.}
+with a limit and \code{value <= lloq} or \code{value} \code{NA} is censored (M3). A
+reading without a limit whose value is not finite is dropped with a
+warning. An optional logical column \code{absolute} marks the absolute readings.}
 
 \item{model}{Expression of the prediction of a relative reading in the
 symbols of the formulas and data columns (covariates), e.g.
@@ -97,7 +98,7 @@ effect formulas: \code{yi ~ target * time} gives one value per combination of
 target and time, \code{sj ~ gel + target} additive effects. A column gives one
 level per value, numeric or not; \code{I(dose)} enters a numeric column as a
 covariate with one slope. Random terms, \code{(1 | gel)}, \code{(1 + dose | p | gel)}
-and \code{gr(gel, dist = laplace())}, add random effects per group as in
+and \code{gr(gel, dist = spikeSlab())}, add random effects per group as in
 \code{\link[=randomEffects]{randomEffects()}}. \code{trafo} sets the scale of a symbol, \code{"sj <- 10^sj"}: the
 predictor is then on the log10 scale.
 

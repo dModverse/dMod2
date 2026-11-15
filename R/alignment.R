@@ -13,7 +13,7 @@
 #' target and time, `sj ~ gel + target` additive effects. A column gives one
 #' level per value, numeric or not; `I(dose)` enters a numeric column as a
 #' covariate with one slope. Random terms, `(1 | gel)`, `(1 + dose | p | gel)`
-#' and `gr(gel, dist = laplace())`, add random effects per group as in
+#' and `gr(gel, dist = spikeSlab())`, add random effects per group as in
 #' [randomEffects()]. `trafo` sets the scale of a symbol, `"sj <- 10^sj"`: the
 #' predictor is then on the log10 scale.
 #'
@@ -37,8 +37,9 @@
 #' @param data data.frame with a column `value`, the readings, and the columns
 #'   named in the formulas and expressions. An optional column `lloq` holds the
 #'   lower limit of quantification of each reading (`NA` for none); a reading
-#'   with `value <= lloq` or `value` `NA` is censored (M3). An optional logical
-#'   column `absolute` marks the absolute readings.
+#'   with a limit and `value <= lloq` or `value` `NA` is censored (M3). A
+#'   reading without a limit whose value is not finite is dropped with a
+#'   warning. An optional logical column `absolute` marks the absolute readings.
 #' @param model Expression of the prediction of a relative reading in the
 #'   symbols of the formulas and data columns (covariates), e.g.
 #'   `"yi * sj + bj"`.
@@ -1037,7 +1038,7 @@ print.alignmentmodel <- function(x, ...) {
   terms <- do.call(rbind, lapply(seq_along(rows), function(i) data.frame(
     symbol = rows[[i]]$symbol, origin = origin[i], term = rows[[i]]$term, column = rows[[i]]$column,
     group = rows[[i]]$group, id = rows[[i]]$id, dist = rows[[i]]$dist,
-    lambda = rows[[i]]$lambda, prob = rows[[i]]$prob, concentration = rows[[i]]$concentration,
+    prob = rows[[i]]$prob, concentration = rows[[i]]$concentration,
     tau = rows[[i]]$tau,
     stem = rows[[i]]$stem, stringsAsFactors = FALSE)))
   # per condition the value of a reading column where all readings of the condition share it, else NA
@@ -1081,8 +1082,8 @@ print.alignmentmodel <- function(x, ...) {
 #' @param cores Number of fits run in parallel; every fit runs on one core.
 #' @param method With random terms: `"focei"` or `"quadrature"`, see [em()].
 #' @param sd Standard deviation of the start perturbation on the parameter scale.
-#' @param iterlim Iteration limit of the optimizer; with Laplace, spike-and-slab
-#'   or Dirichlet-process terms the outer iterations of [em()].
+#' @param iterlim Iteration limit of the optimizer; with spike-and-slab or
+#'   Dirichlet-process terms the outer iterations of [em()].
 #' @param init Optional named start of some parameters; the intercepts of the
 #'   biological symbols start where the symbol is the median reading, the other
 #'   intercepts where their symbol is 1, the other parameters at 0. The
@@ -1113,7 +1114,8 @@ print.alignmentmodel <- function(x, ...) {
 #'   the error parameters held at their estimates), `scaled` (the readings with `prediction`, `sigma`, `residual`
 #'   and `bloq`), `parameters` (with attribute `estimation`, `"REML"` or
 #'   `"ML"`), `value` (-2 log L, of the restricted likelihood with REML, with
-#'   the normalization and the prior), `npar` (one less per block), `AIC`
+#'   the normalization and the prior), `npar` (one less per block without
+#'   absolute readings), `AIC`
 #'   (with REML comparable only between fits with the same parameters of the
 #'   prediction), `values` (-2 log L of all fits, sorted), `multistart`
 #'   (`value`, `converged` and `iterations` per fit, see [plotValues()];
@@ -1168,7 +1170,7 @@ align <- function(model, fits = 10L, cores = 1L, method = c("focei", "quadrature
   if (!is.null(re)) {
     ctrl <- list(sd = 1, trustControl = c(list(iterlim = iterlim), tc), innerControl = tc[c("ftol", "mtol")],
                  quadrature = list(cm1Control = list(tolControl = tc)),
-                 laplace = list(maxOuter = iterlim, trustControl = list(tolControl = tc)))
+                 sparseFit = list(maxOuter = iterlim, trustControl = list(tolControl = tc)))
     best <- if (fits > 1L) msem(obj, re, st, method = method, control = ctrl, fits = fits, cores = cores, sd = sd)
             else em(obj, re, st, method = method, control = ctrl, cores = 1L, verbose = FALSE)
     multistart <- if (!is.null(best$multistart)) best$multistart[c("value", "converged", "iterations")]

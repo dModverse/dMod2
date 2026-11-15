@@ -2,17 +2,21 @@
 #'
 #' An eventlist is a data frame with one event per row and the columns `var`,
 #' `time`, `value`, `root` and `method`. Event time and value can be
-#' parameters, which can be estimated. `addEvent()` appends an event and is
+#' parameters, which can be estimated. Each event gives either a `time` or a
+#' `root` and has `NA` in the other column, so an event triggered by a root
+#' needs `time = NA` in `addEvent()`. `addEvent()` appends an event and is
 #' pipe-friendly.
 #'
 #' @param var character, the state to which the event is applied.
-#' @param time character or numeric, the time at which the event happens.
-#'   Default `NULL` in `eventlist()` and `0` in `addEvent()`.
+#' @param time character or numeric, the time at which the event happens, or
+#'   `NA` for an event triggered by `root`. Default `NULL` in `eventlist()` and
+#'   `0` in `addEvent()`.
 #' @param value character or numeric, the value of the event. Default `NULL`
 #'   in `eventlist()` and `0` in `addEvent()`.
-#' @param root character or `NA`, a condition that triggers the event when it
-#'   reaches zero, instead of `time`. Default `NULL` in `eventlist()`, which
-#'   becomes `NA` as soon as another column is given, and `NA` in `addEvent()`.
+#' @param root character or `NA`, an expression that triggers the event when
+#'   it reaches zero, for an event with `time = NA`. Default `NULL` in
+#'   `eventlist()`, which becomes `NA` as soon as another column is given, and
+#'   `NA` in `addEvent()`.
 #' @param method character, `"replace"`, `"add"` or `"multiply"`. Default
 #'   `NULL` in `eventlist()` and `"replace"` in `addEvent()`.
 #'
@@ -33,8 +37,8 @@
 #' events <- eventlist()
 #' events <- addEvent(events, var = "A", time = "time_switch",
 #'                    value = "value_switch", method = "replace")
-#' # Set B to 2 when A reaches A_target; the event time is the parameter time_root
-#' events <- addEvent(events, var = "B", time = "time_root", value = 2,
+#' # Set B to 2 when A reaches A_target, an event without a time
+#' events <- addEvent(events, var = "B", time = NA, value = 2,
 #'                    root = "A - A_target", method = "replace")
 #' events
 eventlist <- function(var = NULL, time = NULL, value = NULL, root = NULL, method = NULL) {

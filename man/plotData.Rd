@@ -29,17 +29,19 @@ plotData(data, ...)
 }
 \arguments{
 \item{data}{A \link{datalist}, i.e. a named list of data frames with columns
-\code{name}, \code{time}, \code{value} and \code{sigma}, or such a data frame with a
-\code{condition} column.}
+\code{name}, \code{time}, \code{value} and \code{sigma}, or such a data frame, split into
+conditions by \code{\link[=as.datalist]{as.datalist()}}.}
 
-\item{...}{Logical expressions to subset the plotted data.}
+\item{...}{Logical expressions to subset the plotted data. They can refer
+to the columns of the data and of the condition grid.}
 
 \item{scales}{The \code{scales} argument of \code{\link[ggplot2:facet_wrap]{ggplot2::facet_wrap()}} or
 \code{\link[ggplot2:facet_grid]{ggplot2::facet_grid()}}: \code{"free"} (default), \code{"fixed"}, \code{"free_x"} or
 \code{"free_y"}.}
 
-\item{facet}{\code{"wrap"} (default), \code{"grid"} or \code{"wrap_plain"}. \code{"wrap_plain"}
-gives one panel per combination of name and condition.}
+\item{facet}{\code{"wrap"} (default): one panel per name, color by condition.
+\code{"grid"}: names as rows, conditions as columns. \code{"wrap_plain"}: one panel
+per combination of name and condition.}
 
 \item{transform}{Named list of transformations of the states, see
 \code{\link[=coordTransform]{coordTransform()}}.}
@@ -49,8 +51,6 @@ gives one panel per combination of name and condition.}
 \value{
 A \code{ggplot} object. The attribute \code{"data"} holds the plotted data
 frame.
-
-A \code{ggplot} object.
 }
 \description{
 Plots data with error bars and marks values below the limit of

@@ -42,33 +42,35 @@ $$\log L_i(\psi) \ge \underbrace{\mathbb{E}_{q_i}\bigl[\log p(y_i, \eta_i \mid \
 
 with equality at $\psi = \psi^{(t)}$. EM alternates forming $Q = \sum_i Q_i$ and maximizing it,
 so $\ell$ never decreases; near the optimum it converges linearly at the fraction of missing
-information. ECM [@meng1993maximum] splits the M-step: $\Omega$ in closed form, structural
-parameters by optimization. [Sparse random effects](methods-sparse-random-effects.html#hyperparameters)
+information. ECM [@meng1993maximum] splits the M-step into conditional steps, ECME
+[@liu1994ecme] takes some of them on the likelihood itself: $\Omega$ in closed form, structural
+parameters by optimization. [Sparsity priors](methods-sparsity-priors.html#hyperparameters)
 minimizes $-2Q$ instead. The methods replace the posterior, which has no closed form, by:
 
 | method | posterior and expectation | M-step | reported $-2 \log L$ |
 |---|---|---|---|
 | `"focei"` | Gaussian at the mode | trust region, Laplace | Laplace |
 | `"quadrature"` | adaptive sparse grid at the mode | trust region, frozen nodes | quadrature |
-| `"laplaceEM"` | Laplace moments, nodes of degree 3 | ECM | quadrature, level $K + 2$ |
+| `"laplaceEM"` | Laplace moments, nodes of degree 3 | ECME | quadrature, level $K + 2$ |
 | `"saem"` | Metropolis draws, averaged | closed form, averaged Newton | quadrature, level $K + 2$ |
 
 ## FOCEI
 
 ### Laplace approximation
 
-With $\Phi_i(\eta) = -2 \log p(y_i \mid \eta, \psi) - 2 \log p(\eta \mid \Omega)$, mode
-$\hat\eta_i$ and curvature $H_i = \nabla^2_\eta \Phi_i(\hat\eta_i)$, Laplace's approximation of
-(2) is $-2 \log L_i \approx \Phi_i(\hat\eta_i) + \log \lvert H_i/2 \rvert - K \log(2\pi)$. The
-prior omits $K \log(2\pi)$, so FOCEI minimizes
+With $\Phi_i(\eta) = -2 \log p(y_i \mid \eta, \psi) - 2 \log p(\eta \mid \Omega) - K \log(2\pi)$,
+the prior without the constant of the normal density, mode $\hat\eta_i$ and the Gauss-Newton
+curvature $H_i$ of $\Phi_i$ at $\hat\eta_i$, Laplace's approximation of (2) is
+$-2 \log L_i \approx \Phi_i(\hat\eta_i) + \log \lvert H_i/2 \rvert$, the constant canceling against
+that of the Gaussian integral. FOCEI minimizes
 
 $$F(\psi) = \sum_i \Bigl[ \Phi_i(\hat\eta_i) + \log \lvert H_i/2 \rvert \Bigr] \tag{4}$$
 
 plus the full $-2 \log L$ of the conditions without a group. $\log \lvert H_i/2 \rvert$ is the
 volume term. $H_i$ includes the derivatives of $\sigma$ in $\eta$, the interaction of FOCEI
 [@wang2007derivation; @pinheiro1995approximations]. Conditional standard errors of the modes are
-the square roots of the diagonal of $2 H_i^{-1}$. The error has either sign and order $K / n_i$ for
-$n_i$ data points in the group.
+the square roots of the diagonal of $2 H_i^{-1}$. The error has either sign and order $1 / n_i$ for
+$n_i$ data points in the group, with a factor that grows with $K$.
 
 ### Bilevel optimization
 
@@ -99,11 +101,11 @@ $$\frac{\mathrm{d} \log \lvert H_i \rvert}{\mathrm{d} \psi_k}
 | `control` | volume term |
 |---|---|
 | `derivMode = "forward-reverse"` (default) | traces from one forward pass and a backward sweep ([Sensitivities](guide-sensitivities.html)); exact gradient, curvature by SR1 |
-| `derivMode = "forward-forward"` | `deriv2 = TRUE` sensitivities; exact Hessian in the outer model |
+| `derivMode = "forward-forward"` | `deriv2 = TRUE` sensitivities; exact gradient, curvature without third-order terms |
 | `secondOrderCorrection = FALSE` | derivative dropped; biased estimates |
 
-The reported Hessian is exact (forward over forward) where the model has `deriv2`, as `summary()`
-states. For $\sigma$ depending on $\eta$, quadrature gives better standard errors of $\Omega$.
+Where the model has `deriv2`, the reported Hessian has the exact Schur complement and the
+curvature of the volume term without third-order sensitivities, as `summary()` states. For $\sigma$ depending on $\eta$, quadrature gives better standard errors of $\Omega$.
 
 ## Adaptive sparse-grid quadrature
 
@@ -120,7 +122,10 @@ for total degree $2(L - K) + 1$ against the Gaussian, with nodes polynomial in $
 levels 3 to 7 have 1, 7, 19, 45, 117); level $K$ is the single Laplace node. The grid sits on the
 FOCEI Gaussian $\mathcal{N}(\hat\eta_i, 2 H_i^{-1})$ and moves with $\psi$ [@clausen2009maximum].
 Negative weights make $\log L_i$ a signed log-sum-exp; a nonpositive sum, an unresolved posterior,
-fails the evaluation, naming the group. Gradient and Hessian are exact.
+fails the evaluation, naming the group. The gradient is the quadrature of the exact gradient of
+$\log L_i$ on the current nodes (Fisher's identity), the Hessian follows by Louis' identity from
+data Hessians per node that are exact where the model has `deriv2` and Gauss-Newton otherwise; the
+move of the grid with $\psi$ is not differentiated.
 
 `method = "quadrature"` starts from the converged FOCEI fit and alternates:
 
@@ -138,8 +143,8 @@ groups whose two estimates differ by more than three standard errors plus the le
 
 ## Laplace EM
 
-`method = "laplaceEM"` runs ECM: a trust-region step of the structural parameters on frozen nodes
-of level $K + 1$, then every block of $\Omega$ from $S = G^{-1} \sum_i M_i$ with the posterior
+`method = "laplaceEM"` runs ECME: a trust-region run of at most `maxCm1Iter` (30) iterations of
+the structural parameters on the likelihood over frozen nodes of level $K + 1$, then every block of $\Omega$ from $S = G^{-1} \sum_i M_i$ with the posterior
 second moments $M_i = \hat\eta_i \hat\eta_i^\top + 2 H_i^{-1}$ (modes alone would shrink
 $\Omega$). It stops when parameter change and extrapolated remaining distance are below `epsEcm`
 (default `1e-5`), or after `maxEcm` (200) iterations. Settings come from `control$quadrature`.
@@ -162,7 +167,7 @@ step has the marginal score as fixed point.
 |---|---|
 | draws | few random-walk Metropolis steps and independence proposals from $\mathcal{N}(\hat\eta_i, 1.5 \cdot 2 H_i^{-1})$ [@kuhn2004coupling]; `set.seed()` reproduces |
 | burn-in | $\gamma_k = 1$, variances shrink at most 5 % per iteration [@lavielle2014mixed]; ends when no parameter drifts over `window` |
-| averaging | $\gamma_k = k^{-0.7}$, mean of iterates [@polyak1992acceleration]; ends when the expected Monte Carlo rise of $-2 \log L$ is below `mcTol` |
+| averaging | $\gamma_k = k^{-0.7}$, $k$ counted from the end of burn-in, mean of iterates [@polyak1992acceleration]; ends when the expected Monte Carlo rise of $-2 \log L$ is below `mcTol` |
 
 SAEM neither forms $\ell$ nor raises it in every iteration; `em()` reports the quadrature of level
 $K + 2$ with standard errors from the quadrature Hessian. SAEM suits many random effects and skewed,
@@ -170,8 +175,9 @@ heavy-tailed or multimodal posteriors [@kuhn2005maximum].
 
 ## Zero variance components {#variance-at-the-boundary}
 
-An unsupported variance runs to 0, minus infinity on the log scale. A lone normal random effect in
-a block ending below standard deviation 0.1 is therefore refitted at 0. If $-2 \log L$ rises by at
+An unsupported variance runs to 0, minus infinity on the log scale. With one grouping and several
+blocks, a normal random effect alone in a block whose estimated standard deviation ends below 0.1
+is therefore refitted at 0. If $-2 \log L$ rises by at
 most `control$boundary`, the refit is returned, the variance named in `boundary`.
 
 ## References

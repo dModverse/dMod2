@@ -22,8 +22,9 @@ A list with components
 \item{\code{inits}}{Named character, the initial value of each state.}
 \item{\code{observables}}{Named list of observable formulas, possibly
 empty.}
-\item{\code{assignmentRules}}{Named list of assignment rule formulas,
-already substituted into rates, initial values and observables.}
+\item{\code{assignmentRules}}{Named list of the formulas of the assignment
+rules and of the parameter initial assignments that \code{keep} does not
+name, already substituted into rates, initial values and observables.}
 \item{\code{events}}{An \link{eventlist} or \code{NULL}, including the rescaling of
 states when an event changes a compartment volume.}
 \item{\code{eventsSource}}{An \link{eventlist} or \code{NULL}, the event assignments
@@ -33,8 +34,8 @@ valid R or C++ names, named by the old ids.}
 }
 }
 \description{
-Reads an SBML Level 3 file. Requires \pkg{reticulate}, which provides a
-Python with \code{python-libsbml}; set the environment variable
+Reads an SBML Level 3 file. Requires \pkg{rjson} and \pkg{reticulate}, which
+provides a Python with \code{python-libsbml}; set the environment variable
 \code{DMOD_LIBSBML_PYTHON} to the path of a Python interpreter to use that one
 instead. Kinetic laws are divided by the volume of their compartment.
 }

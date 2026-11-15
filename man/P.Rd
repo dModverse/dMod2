@@ -30,7 +30,8 @@ those named by condition, which builds one transformation per condition.
 list takes the list names instead.}
 
 \item{compile}{Logical. \code{TRUE} compiles all conditions into one shared
-object named \code{modelname}, \code{FALSE} (default) leaves it to \code{\link[=compile]{compile()}}.}
+object named \code{modelname}, or with \code{modelname = NULL} into one shared
+object per condition; \code{FALSE} (default) leaves it to \code{\link[=compile]{compile()}}.}
 
 \item{modelname}{Base name of the generated files, default \code{NULL}, which
 is \code{"expl_parfn"} or \code{"impl_parfn"}, followed by \verb{_<condition>}.}

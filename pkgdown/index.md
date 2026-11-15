@@ -9,7 +9,8 @@ remotes::install_github("dModverse/dMod2")
 
 ## Where to go
 
-- [Get started](articles/dMod2.html): a two-state model from reactions to profile likelihoods.
+- [Get started](articles/dMod2.html): a model of bile acid transport from reactions to profile
+  likelihoods.
 - [Installation and troubleshooting](articles/installation.html): compilers, Python, SBML, symident.
 - [Migrating from dMod](articles/migrating.html): what changed for users of dMod.
 - [Guide](articles/guide-model.html): the NFκB project of Oppelt et al. (2018), chapter by chapter,

@@ -39,7 +39,8 @@ local machine. Defaults to the names of \code{cores}.}
 (default) is one per task.}
 
 \item{walltime}{The maximum runtime of an array task, \code{"HH:MM:SS"}, filled
-into the job script. Default \code{NULL}, none.}
+into the job script. Default \code{NULL}, none: a directive or comment line of
+the template with a field that has no value is left out.}
 
 \item{memPerCore}{Memory per core in GB, filled into the job script. Default 2.}
 

@@ -9,7 +9,7 @@ Simulated target-mediated drug disposition: steady state, identifiability, censo
 | file | content |
 |---|---|
 | `analysis.R` | the analysis, shown below |
-| `results/cache.rds` | saved fits; delete it to fit again |
+| `results/cache.rds` | saved fits; delete it to fit again, on Windows with `cores <- 1` in `analysis.R`, where `parallel::mclapply()` runs on one core only |
 
 ## Run
 

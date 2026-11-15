@@ -26,8 +26,8 @@ align(
 
 \item{sd}{Standard deviation of the start perturbation on the parameter scale.}
 
-\item{iterlim}{Iteration limit of the optimizer; with Laplace, spike-and-slab
-or Dirichlet-process terms the outer iterations of \code{\link[=em]{em()}}.}
+\item{iterlim}{Iteration limit of the optimizer; with spike-and-slab or
+Dirichlet-process terms the outer iterations of \code{\link[=em]{em()}}.}
 
 \item{init}{Optional named start of some parameters; the intercepts of the
 biological symbols start where the symbol is the median reading, the other
@@ -57,7 +57,8 @@ symbol; with REML \code{se} from the information of the mean parameters alone,
 the error parameters held at their estimates), \code{scaled} (the readings with \code{prediction}, \code{sigma}, \code{residual}
 and \code{bloq}), \code{parameters} (with attribute \code{estimation}, \code{"REML"} or
 \code{"ML"}), \code{value} (-2 log L, of the restricted likelihood with REML, with
-the normalization and the prior), \code{npar} (one less per block), \code{AIC}
+the normalization and the prior), \code{npar} (one less per block without
+absolute readings), \code{AIC}
 (with REML comparable only between fits with the same parameters of the
 prediction), \code{values} (-2 log L of all fits, sorted), \code{multistart}
 (\code{value}, \code{converged} and \code{iterations} per fit, see \code{\link[=plotValues]{plotValues()}};

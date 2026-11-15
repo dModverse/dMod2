@@ -31,13 +31,17 @@ transformation or of \code{p}.}
 
 \item{init}{Named numeric start with the parameters of \code{obj} that are
 neither random effects nor created by the effect formulas (those start
-at 0). It may also set those and the hyperparameters: \verb{omega_*} (log
-standard deviations and Cholesky entries), \verb{lambda_*} (Laplace), \verb{prob_*}
-and \verb{tau_*} (spike and slab), \verb{concentration_*} and \verb{tau_*} (Dirichlet
-process), named \verb{<kind>_<grouping>} and numbered \verb{_1}, \verb{_2}, ... where a
-grouping has several blocks. An \code{em} fit as \code{init} gives the start: the
-estimates, \code{fixed} values and random effects of that fit, without those it
-set to 0, and with sparse random effects the inner modes.}
+at 0). It may also set those and the hyperparameters: \verb{omega_<a>_<a>},
+the log of the diagonal entry of the Cholesky factor of \code{Omega} (the log
+standard deviation of an uncorrelated random effect), and \verb{omega_<a>_<b>},
+the entry in row \code{a} and column \code{b} below the diagonal, with \code{a} and \code{b}
+the stems of the random effects without \code{eta_}, as in \code{omega_cl_cl};
+\verb{prob_*} and \verb{tau_*} (spike and slab), \verb{concentration_*} and \verb{tau_*}
+(Dirichlet process), named \verb{<kind>_<grouping>} and numbered
+\verb{_1}, \verb{_2}, ... where a grouping has several blocks. An \code{em} fit as
+\code{init} gives the start: the estimates, \code{fixed} values and random effects
+of that fit, without those it set to 0, and with sparse random effects
+the inner modes.}
 
 \item{fixed}{Named numeric of parameters held fixed.}
 
@@ -66,7 +70,7 @@ blocks, a normal random effect that forms a block alone and whose
 standard deviation ends below 0.1 is dropped and the fit repeated from the
 estimates; where -2 log L rises by at most \code{boundary}, that fit is
 returned and names the hyperparameter in \code{boundary}.}
-\item{\code{quadrature}, \code{saem}, \code{laplace}}{lists of the sections
+\item{\code{quadrature}, \code{saem}, \code{sparseFit}}{lists of the sections
 Quadrature, SAEM and Sparse random effects.}
 }}
 
@@ -79,7 +83,8 @@ as in \code{\link[=mstrust]{mstrust()}}: fits in parallel and cores inside each 
 number for every parameter, or a vector named by the parameters it
 perturbs, the others keeping their start.}
 
-\item{verbose}{Logical; print the progress of the iterative methods.}
+\item{verbose}{Logical. If \code{TRUE}, print the table of the starts; the fits
+print no progress. Default \code{FALSE}.}
 
 \item{sparse}{\code{"auto"} (default), \code{TRUE} or \code{FALSE}: the outer trust region
 of FOCEI over normal random effects on the sparse Gauss-Newton Hessian.
@@ -104,6 +109,7 @@ their results into one.}
 The fit with the smallest \code{value}, of class \code{em}, with
 \code{multistart}, a data frame with a row per start:
 \describe{
+\item{\code{start}}{the position of the start among the \code{fits} drawn.}
 \item{\code{value}, \code{converged}, \code{iterations}}{of the fit.}
 \item{\code{gradient}}{the largest absolute entry of the gradient at the end
 of the fit.}
@@ -120,7 +126,7 @@ the fit set to 0.}
 \description{
 Runs \code{\link[=em]{em()}} from \code{fits} starts, the first at \code{init}, the others
 perturbed by normal noise of standard deviation \code{sd} (on the log scale for
-strengths, concentrations and slab standard deviations, on the logit scale
+concentrations and slab standard deviations, on the logit scale
 for slab probabilities), and returns the best fit.
 }
 \examples{

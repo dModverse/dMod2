@@ -35,10 +35,10 @@ condition.}
 \item{value}{the new value of the control.}
 }
 \value{
-\code{controls(x)} prints the available controls and returns their names
-invisibly; for an \code{fn}, as a list with one entry per function. With \code{name},
-the value of the control, or \code{NULL} if no function holds it. The setter
-returns \code{x}.
+For an \code{fn}, \code{controls(x)} prints the available controls and returns
+them invisibly, a list with one entry per function; for an \code{objfn}, it
+returns their names. With \code{name}, the value of the control, or \code{NULL} if no
+function holds it. The setter returns \code{x}.
 }
 \description{
 Reads and changes the settings an object of class \code{objfn},

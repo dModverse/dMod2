@@ -117,12 +117,12 @@ graph_reach <- function(from, to, sources, sinks) {
     .Call(`_dMod2_graph_reach`, from, to, sources, sinks)
 }
 
-sparse_integral <- function(P, b, kind, prob, tau, lambda, conc, active, sitesLam, sitesGam, budget) {
-    .Call(`_dMod2_sparse_integral`, P, b, kind, prob, tau, lambda, conc, active, sitesLam, sitesGam, budget)
+sparse_integral <- function(P, b, kind, prob, tau, conc, active, sitesLam, sitesGam, budget) {
+    .Call(`_dMod2_sparse_integral`, P, b, kind, prob, tau, conc, active, sitesLam, sitesGam, budget)
 }
 
-sparse_factor <- function(kind, h, t, prob, tau, lambda, conc) {
-    .Call(`_dMod2_sparse_factor`, kind, h, t, prob, tau, lambda, conc)
+sparse_factor <- function(kind, h, t, prob, tau, conc) {
+    .Call(`_dMod2_sparse_factor`, kind, h, t, prob, tau, conc)
 }
 
 .systemTimes <- function() {

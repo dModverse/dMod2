@@ -1,5 +1,5 @@
 ---
-title: "8. Group-specific effects"
+title: "8. Sparse deviations"
 bibliography: refs.bib
 csl: ieee.csl
 link-citations: true
@@ -30,9 +30,8 @@ spread of changes estimated from all compounds together. Code: `compounds.R`, on
 of [Profile likelihood](guide-profiles.html); random effects and `em()` are introduced in
 [Nonlinear mixed-effects models](guide-nlme.html).
 
-The second part lists the sparse random-effect distributions (Laplace, spike-and-slab,
-Dirichlet-process) and what their fits report; derivations are in
-[Methods > Sparse random effects](methods-sparse-random-effects.html).
+The second part lists the sparse random-effect distributions (spike-and-slab, Dirichlet-process)
+and what their fits report; derivations are in [Methods > Sparsity priors](methods-sparsity-priors.html).
 
 ```{r setup, echo = FALSE}
 ```
@@ -68,7 +67,7 @@ a spike at 0 with weight $1 - \rho$ and a normal slab of standard deviation $\ta
 $\rho$. Changes are independent across compounds and rate constants; $\rho$, $\tau$ are shared.
 `em()` estimates $\theta$, $\rho$ and $\tau$ from the likelihood with the changes integrated out, a
 sum over the subsets of changed rate constants
-([Methods > Sparse random effects](methods-sparse-random-effects.html#approximate-marginal)). The
+([Methods > Sparsity priors](methods-sparsity-priors.html#approximate-marginal)). The
 posterior spike probability $p_0 = \Pr(\eta_{ik} = 0 \mid y)$ near 0 means a change, near the prior
 $1 - \rho$ no evidence, above it evidence against a change.
 
@@ -79,8 +78,8 @@ rateConstants <- length(unique(fit$random$eta))
 
 Each compound has `r rateConstants` candidate rate constants, and the subset sum is exact; beyond
 a term budget `em()` uses the expectation consistent (EC) approximation
-([Methods > Spike and slab](methods-sparse-random-effects.html#spike-and-slab)). Comparison with the
-L1 penalty: [Methods > Selection of deviations](methods-sparse-random-effects.html#selection-of-deviations).
+([Methods > Spike and slab](methods-sparsity-priors.html#spike-and-slab)). Comparison with the
+L1 penalty: [Methods > Selection of deviations](methods-sparsity-priors.html#selection-of-deviations).
 
 ## Compound model
 
@@ -123,8 +122,8 @@ set are separate parameters, except `off_IkBa`, fixed at 0 by the reduced model.
 ## Joint fit of all compounds
 
 `em()` estimates fixed effects, change modes, $\rho$ and $\tau$ together. `compounds.R` runs 200
-starts, the reduced optimum with changes at 0 and 199 around it, redrawing failed starts, split
-into `distributedComputing()` tasks by `msem(which = )`
+starts, the reduced optimum with changes at 0 and 199 around it, redrawing failed starts; `helix.R`
+splits them into `distributedComputing()` tasks by `msem(which = )`
 ([Remote computing](guide-remote-computing.html)):
 
 ```{r compoundfit, eval = FALSE}
@@ -292,20 +291,17 @@ ggplot2::ggplot(mapping = ggplot2::aes(time, value, color = treatment)) +
 
 ## Sparse random-effect distributions
 
-`gr(group, dist = )` sets the random-effect distribution of a term. Besides `normal()`, three have
+`gr(group, dist = )` sets the random-effect distribution of a term. Besides `normal()`, two have
 deviations exactly zero unless the data need them:
 
 | distribution | a deviation $\eta$ of a group | hyperparameters |
 |---|---|---|
-| `laplace()` | density $\tfrac{\lambda}{2} e^{-\lambda \lvert \eta \rvert}$ | `lambda_<grouping>` |
 | `spikeSlab()` | $0$ with probability $1 - \rho$, else $\mathcal{N}(0, \tau^2)$ | `prob_<grouping>`, `tau_<grouping>` |
 | `dirichletProcess()` | cluster value: $0$ for the population cluster, else one $\mathcal{N}(0, \tau^2)$ draw | `concentration_<grouping>`, `tau_<grouping>` |
 
 Hyperparameters are shared by the symbols of a term, numbered `_1`, `_2`, ... for several terms
-of one grouping, and estimated with the fixed effects unless given, as in `laplace(lambda = 2)`. A
-Laplace mode is exactly zero unless the data pull it away, which sorts shared from group-specific
-parameters, one $\lambda$ per term. A spike-and-slab deviation is zero with a probability reported
-per group. Under the Dirichlet process groups share deviations in clusters with the population
+of one grouping, and estimated with the fixed effects unless given, as in `spikeSlab(tau = 0.5)`.
+A spike-and-slab deviation is zero with a probability reported per group. Under the Dirichlet process groups share deviations in clusters with the population
 value, see [Dirichlet-process random effects](#dirichlet-process-random-effects). Normal and sparse
 random effects of one grouping combine; `em(method = "focei")` fits all, Dirichlet-process ones
 also `method = "saem"`.
@@ -313,16 +309,18 @@ also `method = "saem"`.
 ## Fitting sparse random effects
 
 `em(method = "focei")` integrates sparse random effects on the Laplace approximation of the data
-term at the joint mode of a group, exactly where possible, by EC where the data couple them. Fixed
+term at the joint mode of a group, exactly where possible, the spike-and-slab effects of a group
+jointly even where the data couple them, and by EC where the data link a Dirichlet-process effect
+to another factor or the subset sum leaves the budget. Fixed
 effects and hyperparameters move in one trust region: no EM iteration count, no random numbers.
 `fit$coupling` is `"expectationConsistent"` if a group needed EC, `NULL` if all are exact. Integral,
 gradient and hyperparameter steps:
-[Methods > Approximate marginal](methods-sparse-random-effects.html#approximate-marginal),
+[Methods > Approximate marginal](methods-sparsity-priors.html#approximate-marginal),
 [Methods > Expectation consistent
-approximation](methods-sparse-random-effects.html#expectation-consistent-approximation) and
-[Methods > Joint trust region](methods-sparse-random-effects.html#joint-trust-region).
+approximation](methods-sparsity-priors.html#expectation-consistent-approximation) and
+[Methods > Joint trust region](methods-sparsity-priors.html#joint-trust-region).
 
-| entry of `control$laplace` | default | controls |
+| entry of `control$sparseFit` | default | controls |
 |---|---|---|
 | `maxOuter` | `200` | joint trust-region iterations, all runs |
 | `trustControl` | `rinit = 1`, `rmax = 10`, `ftol = 1e-10`, `mtol = 1e-5` | joint trust region, as `trust()` |
@@ -330,15 +328,13 @@ approximation](methods-sparse-random-effects.html#expectation-consistent-approxi
 Other entries are an error. The compound fit uses the `trustControl` tolerances of
 [Setting up models](guide-model.html), above the solver error in value and gradient. A run stopping
 short of `mtol` restarts while runs lower $-2 \log L$ by more than `mtol`. `msem()` perturbs
-strengths, concentrations and slab standard deviations on log scale, slab probabilities on logit
-scale.
+concentrations and slab standard deviations on log scale, slab probabilities on logit scale.
 
 ## Reported structure
 
 The fit reports the most probable structure: subset of deviations (spike and slab) or partition
 (Dirichlet process). Spike deviations are exactly zero, slab deviations the posterior mean given
-the structure, Laplace deviations the joint mode
-([Methods > Reported structure](methods-sparse-random-effects.html#reported-structure)).
+the structure ([Methods > Reported structure](methods-sparsity-priors.html#reported-structure)).
 `fit$random` has a row per group and random effect:
 
 - `mode`, this value;
@@ -349,17 +345,17 @@ the structure, Laplace deviations the joint mode
 
 A sparse random effect reaching no data of the group (through transformations, ODE, observables,
 error model) rests at 0 with the prior standard deviation and, for spike and slab,
-$p_0 = 1 - \rho$. `fit$strengths` lists Laplace strengths, `fit$slab` probabilities, concentrations
-and slab standard deviations, each with term symbols, estimate and whether fixed.
+$p_0 = 1 - \rho$. `fit$slab` lists probabilities, concentrations and slab standard deviations,
+each with term symbols, estimate and whether fixed.
 
 ## Standard errors
 
-With Laplace or spike-and-slab random effects `fit$hessian` is `NULL`; `vcov()` inverts
+With spike-and-slab random effects `fit$hessian` is `NULL`; `vcov()` inverts
 `fit$information`, the empirical information from the group scores. It needs more groups than
 parameters, or conditions without random effects plus priors for the other directions; otherwise
 `vcov()` is an error and standard errors are `NA`. In the compound fit the conditions without
 compound and the prior complete the five compounds. `dirichletProcess()` fits have neither;
-`confint(method = "profile")` gives intervals. Details: [Methods > Standard errors](methods-sparse-random-effects.html#standard-errors).
+`confint(method = "profile")` gives intervals. Details: [Methods > Standard errors](methods-sparsity-priors.html#standard-errors).
 
 ## Dirichlet-process random effects
 
@@ -372,13 +368,14 @@ compounds here are fitted without it.
 
 `method = "focei"` sums exactly over partitions of up to 14 groups. `method = "saem"` draws
 partitions, allowing normal random effects alongside but no other sparse ones, and reports the most
-frequent partition after burn-in, with standard error `valueSE` of $-2 \log L$.
+frequent partition of the late draws, from `window` iterations after burn-in, with standard error
+`valueSE` of $-2 \log L$.
 `control$saem$particles` sets the importance-sampling particles, default 500; `converged` says
 whether burn-in ended by the drift test. An SAEM fit has no gradient, Hessian or empirical
 information. Details:
-[Methods > Sparse random effects](methods-sparse-random-effects.html#dirichlet-process-random-effects).
+[Methods > Sparsity priors](methods-sparsity-priors.html#dirichlet-process-random-effects).
 
-Reference: `randomEffects()`, `laplace()`, `spikeSlab()`, `dirichletProcess()`, `em()`, `msem()`,
+Reference: `randomEffects()`, `spikeSlab()`, `dirichletProcess()`, `em()`, `msem()`,
 `plotValues()`
 
 [← 7. Nonlinear mixed-effects models](guide-nlme.html) | [9. Alignment of relative data measurements →](guide-alignment.html)

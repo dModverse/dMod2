@@ -75,8 +75,8 @@ starts are plotted. Or a named list of collections, one panel each.}
 
 \item{...}{Logical expressions to subset \code{x}, every collection of a list.}
 
-\item{tol}{Maximal difference between neighboring objective values that
-still counts as one step. Defaults to 1.}
+\item{tol}{A value more than \code{tol} above the lowest value of the current
+step starts a new step. Defaults to 1.}
 
 \item{showSteps}{Logical. \code{TRUE} marks the detected steps by dashed
 vertical lines labeled by their index. Defaults to \code{FALSE}.}

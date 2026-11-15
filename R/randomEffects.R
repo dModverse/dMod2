@@ -23,7 +23,7 @@
 #'   \item{random terms}{`(1 | ID)`, `(1 + dose | ID)` with a random slope,
 #'     `(1 | p | ID)` with an ID `p`: terms with the same ID and grouping are
 #'     correlated across formulas, the columns of one term are correlated, other
-#'     terms are independent. `gr(ID, dist = laplace())` instead of `ID` sets
+#'     terms are independent. `gr(ID, dist = spikeSlab())` instead of `ID` sets
 #'     the distribution, see [normal()]. The random effect of a group is
 #'     `eta_<symbol>_<group>` for the intercept and
 #'     `eta_<symbol>_<column>_<group>` for a slope; a symbol with random terms
@@ -36,14 +36,18 @@
 #' @param ... Ignored.
 #'
 #' @return An object of class `randomeffects`, a list with `terms` (one row
-#'   per random effect column: symbol, formula term, column, grouping,
-#'   ID, distribution, fixed hyperparameters and the name stem of
-#'   the etas),
-#'   `blocks` (the correlated groups of rows), `subjects` (the groups of each
+#'   per random effect column: `symbol`, `origin` (the formula), `term`,
+#'   `column`, `group`, `id`, `dist`, the fixed hyperparameters `prob`,
+#'   `concentration` and `tau` (`NA` where estimated) and `stem`, the name
+#'   stem of the etas),
+#'   `blocks` (groups of rows: the normal rows of a block are correlated, the
+#'   rows of a spike-and-slab or Dirichlet-process block share the
+#'   hyperparameters), `subjects` (the groups of each
 #'   grouping and the conditions they own), `fixed` (the parameters the
 #'   formulas created), `etas` (eta names, one row per condition, one column
-#'   per term row) and `fixedDesign` (per symbol the model matrix of the fixed
-#'   effects, one row per condition).
+#'   per term row), `groups` (per stem the group of each condition),
+#'   `fixedDesign` (per symbol the model matrix of the fixed effects, one row
+#'   per condition) and `etaNames` (`NULL` for random effects from [insert()]).
 #' @seealso [insert()], [em()], [normal()]
 #' @example inst/examples/randomEffects.R
 #' @export
@@ -66,7 +70,6 @@ print.randomeffects <- function(x, ...) {
     r <- tm[x$blocks[[b]], , drop = FALSE]
     given <- function(v) if (is.na(v)) "estimated" else format(v)
     dist <- switch(r$dist[1], normal = "normal",
-                   laplace = sprintf("laplace, lambda %s", given(r$lambda[1])),
                    spikeSlab = sprintf("spikeSlab, prob %s, tau %s", given(r$prob[1]), given(r$tau[1])),
                    dirichletProcess = sprintf("dirichletProcess, concentration %s, tau %s",
                                               given(r$concentration[1]), given(r$tau[1])))
@@ -81,22 +84,19 @@ print.randomeffects <- function(x, ...) {
 #'
 #' @description The distribution of the random effects of a term, set in an
 #' effect formula by `gr(group, dist = )`, e.g.
-#' `cl ~ 1 + (1 | gr(cellline, dist = laplace()))`. Their parameters are
+#' `cl ~ 1 + (1 | gr(cellline, dist = spikeSlab()))`. Their parameters are
 #' estimated by [em()] unless given.
 #'
 #' - `normal()`: multivariate normal with mean 0 and a covariance estimated
 #'   per correlation block. The default.
-#' - `laplace()`: Laplace with mean 0 and strength `lambda`, shared by all
-#'   symbols of the term, so the deviation of a group from the fixed effects
-#'   is exactly 0 unless the data need it.
 #' - `spikeSlab()`: the deviation of a group is exactly 0 (spike) or drawn
 #'   from \eqn{N(0, \tau^2)}{N(0, tau^2)} (slab); every group deviates with
 #'   probability `prob`, independently. The spike-and-slab random effects of
 #'   a group are integrated jointly, exactly on the quadratic expansion of
-#'   the data where the group has no Laplace or Dirichlet-process random
-#'   effects the data tie to them and the sum over their subsets stays within
-#'   a budget; else the expectation consistent (EC) approximation
-#'   integrates each one against a diagonal cavity.
+#'   the data where the group has no Dirichlet-process random effects the
+#'   data tie to them and the sum over their subsets stays within a budget;
+#'   else the expectation consistent (EC) approximation integrates each one
+#'   against a diagonal cavity.
 #' - `dirichletProcess()`: per symbol, the deviations follow a Dirichlet
 #'   process with base measure \eqn{N(0, \tau^2)}{N(0, tau^2)} and
 #'   `concentration`, the fixed effect seated first at deviation 0: the
@@ -110,8 +110,6 @@ print.randomeffects <- function(x, ...) {
 #'
 #' [em()] estimates `prob`, `concentration` and `tau` unless given.
 #'
-#' @param lambda Strength of the Laplace distribution; `NULL` (default)
-#'   estimates it, a positive number fixes it.
 #' @param prob Probability that a group deviates, in (0, 1); `NULL`
 #'   (default) estimates it.
 #' @param concentration Concentration of the Ewens prior, positive; `NULL`
@@ -122,14 +120,6 @@ print.randomeffects <- function(x, ...) {
 #' @example inst/examples/normal.R
 #' @export
 normal <- function() .redist("normal")
-
-#' @export
-#' @rdname normal
-laplace <- function(lambda = NULL) {
-  if (!is.null(lambda) && !(is.numeric(lambda) && length(lambda) == 1L && lambda > 0))
-    stop("laplace: `lambda` is NULL or one positive number.", call. = FALSE)
-  .redist("laplace", lambda = lambda)
-}
 
 #' @export
 #' @rdname normal
@@ -151,15 +141,14 @@ dirichletProcess <- function(concentration = NULL, tau = NULL) {
 
 .positiveOrNull <- function(x) is.null(x) || (is.numeric(x) && length(x) == 1L && x > 0)
 
-.redist <- function(dist, lambda = NULL, prob = NULL, concentration = NULL, tau = NULL)
-  structure(list(dist = dist, lambda = lambda %||% NA_real_, prob = prob %||% NA_real_,
-                 concentration = concentration %||% NA_real_, tau = tau %||% NA_real_), class = "redist")
+.redist <- function(dist, prob = NULL, concentration = NULL, tau = NULL)
+  structure(list(dist = dist, prob = prob %||% NA_real_, concentration = concentration %||% NA_real_,
+                 tau = tau %||% NA_real_), class = "redist")
 
 #' @export
 print.redist <- function(x, ...) {
   arg <- function(v) if (is.na(v)) "NULL" else format(v)
   cat(switch(x$dist, normal = "normal()",
-             laplace = sprintf("laplace(lambda = %s)", arg(x$lambda)),
              spikeSlab = sprintf("spikeSlab(prob = %s, tau = %s)", arg(x$prob), arg(x$tau)),
              dirichletProcess = sprintf("dirichletProcess(concentration = %s, tau = %s)", arg(x$concentration),
                                         arg(x$tau))), "\n")
@@ -249,7 +238,7 @@ print.redist <- function(x, ...) {
     a <- as.list(grp)[-1]
     nm <- names(a) %||% rep("", length(a))
     if (any(!nm %in% c("", "dist")))
-      stop("insert: gr() takes the grouping and `dist`, as in gr(ID, dist = laplace()).", call. = FALSE)
+      stop("insert: gr() takes the grouping and `dist`, as in gr(ID, dist = spikeSlab()).", call. = FALSE)
     if ("dist" %in% nm) dist <- .evalDistribution(a[["dist"]], env)
     grp <- a[[which(nm == "")[1]]]
   }
@@ -259,15 +248,14 @@ print.redist <- function(x, ...) {
        id = id, dist = dist)
 }
 
-## `dist =` of gr(): normal(), laplace(), spikeSlab() or dirichletProcess() of this package,
-## whatever else is attached.
+## `dist =` of gr(): normal(), spikeSlab() or dirichletProcess() of this package, whatever else
+## is attached.
 .evalDistribution <- function(e, env) {
   scope <- new.env(parent = env %||% globalenv())
-  scope$normal <- normal; scope$laplace <- laplace; scope$spikeSlab <- spikeSlab
-  scope$dirichletProcess <- dirichletProcess
+  scope$normal <- normal; scope$spikeSlab <- spikeSlab; scope$dirichletProcess <- dirichletProcess
   d <- eval(e, scope)
   if (!inherits(d, "redist"))
-    stop("insert: gr(dist = ) is normal(), laplace(), spikeSlab() or dirichletProcess(), not ", deparse1(e), ".",
+    stop("insert: gr(dist = ) is normal(), spikeSlab() or dirichletProcess(), not ", deparse1(e), ".",
          call. = FALSE)
   d
 }
@@ -325,8 +313,7 @@ print.redist <- function(x, ...) {
     stems[clash] <- paste0(stems[clash], "_", .effectName(rt$group))
     for (k in seq_along(zn))
       random[[length(random) + 1L]] <- list(symbol = sym, term = ti, column = zn[k], group = rt$group,
-                                            id = rt$id, dist = rt$dist$dist,
-                                            lambda = rt$dist$lambda, prob = rt$dist$prob,
+                                            id = rt$id, dist = rt$dist$dist, prob = rt$dist$prob,
                                             concentration = rt$dist$concentration, tau = rt$dist$tau,
                                             stem = stems[k],
                                             etas = ifelse(none, NA_character_, paste0(stems[k], "_", .effectName(g))),
@@ -389,7 +376,7 @@ print.redist <- function(x, ...) {
         stop("insert: the random effect ", r$stem, " is defined twice.", call. = FALSE)
       row <- data.frame(symbol = r$symbol, origin = pf$origin, term = r$term, column = r$column,
                         group = r$group, id = r$id, dist = r$dist,
-                        lambda = r$lambda, prob = r$prob, concentration = r$concentration, tau = r$tau,
+                        prob = r$prob, concentration = r$concentration, tau = r$tau,
                         stem = r$stem, stringsAsFactors = FALSE)
       terms <- rbind(terms, row)
       col <- setNames(rep(NA_character_, length(conds)), conds)
@@ -425,14 +412,14 @@ print.redist <- function(x, ...) {
     terms <- data.frame(symbol = character(0), origin = integer(0), term = integer(0),
                         column = character(0),
                         group = character(0), id = character(0), dist = character(0),
-                        lambda = numeric(0), prob = numeric(0),
-                        concentration = numeric(0), tau = numeric(0), stem = character(0))
+                        prob = numeric(0), concentration = numeric(0), tau = numeric(0),
+                        stem = character(0))
   key <- ifelse(terms$dist != "normal", paste(terms$dist, terms$origin, terms$term, sep = "\r"),
          ifelse(is.na(terms$id), paste("term", terms$symbol, terms$term, sep = "\r"),
                 paste("id", terms$id, terms$group, terms$dist, sep = "\r")))
   blocks <- unname(split(seq_len(nrow(terms)), factor(key, unique(key))))
   if (any(terms$dist != "normal" & !is.na(terms$id)))
-    stop("insert: Laplace, spike-and-slab and Dirichlet-process random effects are not correlated; drop the ID of their ",
+    stop("insert: spike-and-slab and Dirichlet-process random effects are not correlated; drop the ID of their ",
          "terms.", call. = FALSE)
   subjects <- subjects %||% lapply(split(as.character(names(groups)), terms$group), function(st) {
     g <- groups[[st[1]]]

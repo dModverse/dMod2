@@ -12,15 +12,17 @@ addEvent(event, var, time = 0, value = 0, root = NA, method = "replace", ...)
 \arguments{
 \item{var}{character, the state to which the event is applied.}
 
-\item{time}{character or numeric, the time at which the event happens.
-Default \code{NULL} in \code{eventlist()} and \code{0} in \code{addEvent()}.}
+\item{time}{character or numeric, the time at which the event happens, or
+\code{NA} for an event triggered by \code{root}. Default \code{NULL} in \code{eventlist()} and
+\code{0} in \code{addEvent()}.}
 
 \item{value}{character or numeric, the value of the event. Default \code{NULL}
 in \code{eventlist()} and \code{0} in \code{addEvent()}.}
 
-\item{root}{character or \code{NA}, a condition that triggers the event when it
-reaches zero, instead of \code{time}. Default \code{NULL} in \code{eventlist()}, which
-becomes \code{NA} as soon as another column is given, and \code{NA} in \code{addEvent()}.}
+\item{root}{character or \code{NA}, an expression that triggers the event when
+it reaches zero, for an event with \code{time = NA}. Default \code{NULL} in
+\code{eventlist()}, which becomes \code{NA} as soon as another column is given, and
+\code{NA} in \code{addEvent()}.}
 
 \item{method}{character, \code{"replace"}, \code{"add"} or \code{"multiply"}. Default
 \code{NULL} in \code{eventlist()} and \code{"replace"} in \code{addEvent()}.}
@@ -36,7 +38,9 @@ arguments returns an empty eventlist.
 \description{
 An eventlist is a data frame with one event per row and the columns \code{var},
 \code{time}, \code{value}, \code{root} and \code{method}. Event time and value can be
-parameters, which can be estimated. \code{addEvent()} appends an event and is
+parameters, which can be estimated. Each event gives either a \code{time} or a
+\code{root} and has \code{NA} in the other column, so an event triggered by a root
+needs \code{time = NA} in \code{addEvent()}. \code{addEvent()} appends an event and is
 pipe-friendly.
 }
 \examples{
@@ -51,8 +55,8 @@ events <- addEvent(NULL, var = "B", time = 2, value = 0.5, method = "add") |>
 events <- eventlist()
 events <- addEvent(events, var = "A", time = "time_switch",
                    value = "value_switch", method = "replace")
-# Set B to 2 when A reaches A_target; the event time is the parameter time_root
-events <- addEvent(events, var = "B", time = "time_root", value = 2,
+# Set B to 2 when A reaches A_target, an event without a time
+events <- addEvent(events, var = "B", time = NA, value = 2,
                    root = "A - A_target", method = "replace")
 events
 }

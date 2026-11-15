@@ -208,12 +208,13 @@ remlLeverage <- function(objfun, pars, meanpars = NULL, fixed = NULL,
 #'   between two rounds. Default `1e-6`.
 #' @param rankTol Passed to [remlLeverage()]. Default `1e-8`.
 #' @param optimizer Optimizer for the mean step, called as
-#'   `optimizer(objfun, parinit, fixed = , ...)`. Default [trust()].
+#'   `optimizer(objfun, parinit, fixed = , cores = , ...)`. Default [trust()].
 #' @param control Named list of arguments for `optimizer`, merged into
 #'   `list(rinit = 0.1, rmax = 10)`. Default `NULL`.
 #' @param cores Passed to the prediction and the objective. Default
 #'   `getOption("dMod2.cores", 1)`.
-#' @param ... Further arguments for `objfun`.
+#' @param ... Further arguments for `objfun` in the mean step, passed through
+#'   `optimizer`. `value.plain` is evaluated without them.
 #'
 #' @return A list with components
 #'   \describe{

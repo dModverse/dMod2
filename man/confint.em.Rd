@@ -34,7 +34,9 @@ A data.frame with columns \code{name}, \code{value}, \code{lower}, \code{upper}.
 \code{method = "wald"} from the standard errors of \link[=vcov.em]{vcov()};
 \code{method = "profile"} refits with each parameter held at trial values and
 finds where -2 log L has risen by the \eqn{\chi^2_1} quantile of \code{level}
-on either side, by bisection from the Wald limits.
+on either side, by bisection from the Wald limits. A side on which the rise
+is not reached within 128 times the distance of the Wald limit from the
+estimate gives \code{-Inf} or \code{Inf}.
 }
 \examples{
 \donttest{

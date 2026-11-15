@@ -153,8 +153,8 @@ in sequence, each with the `cores` of the node. `tasks = NULL`, the default, giv
 worker.
 
 `cores` per task is one number, a vector named by node, or `NULL` for the free cores at
-submission. `detectFreeCores()` counts cores minus the one-minute load average, at least 1,
-locally or over ssh; a node gets at most the free cores, with a warning if given more.
+submission. `detectFreeCores()` counts cores minus the one-minute load average, on a local
+Windows machine minus the processor load since the previous call, at least 1, locally or over ssh; a node gets at most the free cores, with a warning if given more.
 
 ```{r}
 detectFreeCores(c("localhost", "server1", "server2"))
@@ -197,7 +197,7 @@ directory.
 | `wait(interval = 10)` | polls until none runs, reports changes; `TRUE` if all done |
 | `get(combine = TRUE, all = FALSE)` | returns the results |
 | `log(i, lines = 20)` | last output lines of task `i` |
-| `purge(local = FALSE)` | deletes remote job folders, with `local = TRUE` also local folder and registry entry |
+| `purge(local = FALSE)` | deletes the job folders on the nodes, on `"localhost"` the local `<jobname>_folder/<k>`, with `local = TRUE` also local folder and registry entry |
 | `terminate()` | stops the tasks |
 
 A task is done when the result file exists, running while the worker runs (also while waiting),
@@ -218,8 +218,9 @@ job$purge(local = TRUE)
 `distributedComputing(wait = TRUE)` waits, returns `get()` and deletes the job; a job with failed
 tasks is kept for `log()`.
 
-A job outlives the session. The manifest is in the local `<jobname>_folder`, in every remote node
-folder and in the registry `tools::R_user_dir("dMod2", "data")` until `purge(local = TRUE)`;
+A job outlives the session. The manifest is in the local `<jobname>_folder`, in the
+`<jobname>_folder` of every remote node until `purge()`, and in the registry
+`tools::R_user_dir("dMod2", "data")` until `purge(local = TRUE)`;
 `dMod2Jobs()` lists registered jobs. `recover = TRUE` with a job name returns the job functions
 without resubmitting, from the manifest in the working directory, else the registry, else, with
 `on`, the remote node folders, which recovers a job from another machine. A new job of the same
@@ -308,7 +309,7 @@ profiles <- profilesJob$get()
 `get()` binds both sides of each parameter into one profile.
 
 An `msem()` multistart splits by `which`: every task draws all starts from the same seed and fits
-those it names. The 200 starts of [Group effects](guide-group-effects.html), two per task:
+those it names. The 200 starts of [Sparse deviations](guide-sparse-deviations.html), two per task:
 
 ```{r}
 compoundsJob <- distributedComputing({
@@ -339,7 +340,8 @@ fitsJob <- distributedComputing(
 
 ## System requirements
 
-- A POSIX shell locally (on Windows the `sh` of Rtools) and on every remote node.
+- A POSIX shell locally (on Windows the `sh` of Rtools) and on every remote node, bash on remote
+  nodes for `build = "compile"` (default) and `"link"`.
 - Remote nodes: ssh with key authentication, dMod2 and cppDE for the R on the node `PATH` or in
   `libs`, a compiler for `build = "compile"`.
 - SLURM: an account on the login node, a template from `slurmTemplate()`, a home directory visible

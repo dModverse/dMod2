@@ -460,8 +460,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // sparse_integral
-List sparse_integral(List P, NumericMatrix b, IntegerVector kind, NumericVector prob, NumericVector tau, NumericVector lambda, NumericVector conc, LogicalMatrix active, Nullable<NumericMatrix> sitesLam, Nullable<NumericMatrix> sitesGam, double budget);
-RcppExport SEXP _dMod2_sparse_integral(SEXP PSEXP, SEXP bSEXP, SEXP kindSEXP, SEXP probSEXP, SEXP tauSEXP, SEXP lambdaSEXP, SEXP concSEXP, SEXP activeSEXP, SEXP sitesLamSEXP, SEXP sitesGamSEXP, SEXP budgetSEXP) {
+List sparse_integral(List P, NumericMatrix b, IntegerVector kind, NumericVector prob, NumericVector tau, NumericVector conc, LogicalMatrix active, Nullable<NumericMatrix> sitesLam, Nullable<NumericMatrix> sitesGam, double budget);
+RcppExport SEXP _dMod2_sparse_integral(SEXP PSEXP, SEXP bSEXP, SEXP kindSEXP, SEXP probSEXP, SEXP tauSEXP, SEXP concSEXP, SEXP activeSEXP, SEXP sitesLamSEXP, SEXP sitesGamSEXP, SEXP budgetSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -470,19 +470,18 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< IntegerVector >::type kind(kindSEXP);
     Rcpp::traits::input_parameter< NumericVector >::type prob(probSEXP);
     Rcpp::traits::input_parameter< NumericVector >::type tau(tauSEXP);
-    Rcpp::traits::input_parameter< NumericVector >::type lambda(lambdaSEXP);
     Rcpp::traits::input_parameter< NumericVector >::type conc(concSEXP);
     Rcpp::traits::input_parameter< LogicalMatrix >::type active(activeSEXP);
     Rcpp::traits::input_parameter< Nullable<NumericMatrix> >::type sitesLam(sitesLamSEXP);
     Rcpp::traits::input_parameter< Nullable<NumericMatrix> >::type sitesGam(sitesGamSEXP);
     Rcpp::traits::input_parameter< double >::type budget(budgetSEXP);
-    rcpp_result_gen = Rcpp::wrap(sparse_integral(P, b, kind, prob, tau, lambda, conc, active, sitesLam, sitesGam, budget));
+    rcpp_result_gen = Rcpp::wrap(sparse_integral(P, b, kind, prob, tau, conc, active, sitesLam, sitesGam, budget));
     return rcpp_result_gen;
 END_RCPP
 }
 // sparse_factor
-List sparse_factor(int kind, NumericVector h, NumericVector t, double prob, double tau, double lambda, double conc);
-RcppExport SEXP _dMod2_sparse_factor(SEXP kindSEXP, SEXP hSEXP, SEXP tSEXP, SEXP probSEXP, SEXP tauSEXP, SEXP lambdaSEXP, SEXP concSEXP) {
+List sparse_factor(int kind, NumericVector h, NumericVector t, double prob, double tau, double conc);
+RcppExport SEXP _dMod2_sparse_factor(SEXP kindSEXP, SEXP hSEXP, SEXP tSEXP, SEXP probSEXP, SEXP tauSEXP, SEXP concSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -491,9 +490,8 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< NumericVector >::type t(tSEXP);
     Rcpp::traits::input_parameter< double >::type prob(probSEXP);
     Rcpp::traits::input_parameter< double >::type tau(tauSEXP);
-    Rcpp::traits::input_parameter< double >::type lambda(lambdaSEXP);
     Rcpp::traits::input_parameter< double >::type conc(concSEXP);
-    rcpp_result_gen = Rcpp::wrap(sparse_factor(kind, h, t, prob, tau, lambda, conc));
+    rcpp_result_gen = Rcpp::wrap(sparse_factor(kind, h, t, prob, tau, conc));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -657,8 +655,8 @@ static const R_CallMethodDef CallEntries[] = {
     {"_dMod2_pimpl_live", (DL_FUNC) &_dMod2_pimpl_live, 1},
     {"_dMod2_sparseGridGK", (DL_FUNC) &_dMod2_sparseGridGK, 2},
     {"_dMod2_graph_reach", (DL_FUNC) &_dMod2_graph_reach, 4},
-    {"_dMod2_sparse_integral", (DL_FUNC) &_dMod2_sparse_integral, 11},
-    {"_dMod2_sparse_factor", (DL_FUNC) &_dMod2_sparse_factor, 7},
+    {"_dMod2_sparse_integral", (DL_FUNC) &_dMod2_sparse_integral, 10},
+    {"_dMod2_sparse_factor", (DL_FUNC) &_dMod2_sparse_factor, 6},
     {"_dMod2_systemTimes", (DL_FUNC) &_dMod2_systemTimes, 0},
     {"_dMod2_trustL1_impl", (DL_FUNC) &_dMod2_trustL1_impl, 24},
     {"_dMod2_trust_impl", (DL_FUNC) &_dMod2_trust_impl, 29},

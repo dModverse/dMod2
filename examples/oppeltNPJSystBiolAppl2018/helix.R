@@ -162,7 +162,7 @@ run("compounds.R", to = "^set.seed\\(3\\)")
 compoundsJob <- distributedComputing({
   set.seed(3)
   msem(objCompounds + priorCompounds, random, init, fixed = gaugeReduced,
-       control = list(laplace = list(maxOuter = 1000, trustControl = list(tolControl = tolerances))),
+       control = list(sparseFit = list(maxOuter = 1000, trustControl = list(tolControl = tolerances))),
        fits = 200, sd = sdStart, keepFits = TRUE, which = task, cores = cores)
 }, tasks = split(1:200, rep(1:100, each = 2)),
 on = slurmCluster("helix", cores = 2, walltime = "24:00:00"), jobname = "oppelt_compounds",

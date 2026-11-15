@@ -17,8 +17,8 @@ plotPars(x, ...)
 
 \item{...}{Logical expressions to subset \code{x}.}
 
-\item{tol}{Maximal difference between neighboring objective values that
-still counts as one step. Defaults to 1.}
+\item{tol}{A value more than \code{tol} above the lowest value of the current
+step starts a new step. Defaults to 1.}
 }
 \value{
 A \code{ggplot} object with the plotted data frame as attribute \code{"data"}.

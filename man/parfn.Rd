@@ -8,9 +8,12 @@ parfn(p2p, parameters = NULL, condition = NULL)
 }
 \arguments{
 \item{p2p}{transformation for one condition, a function
-\code{p2p(p, fixed, deriv)} that maps the parameter vector \code{p} and the fixed
-values \code{fixed} to a new parameter vector. With \code{deriv = TRUE} the result
-has the attribute \code{deriv}, the Jacobian of the transformation.}
+\code{p2p(pars, fixed, deriv, deriv2)} that maps the parameter vector \code{pars}
+and the fixed values \code{fixed} to a new parameter vector. With
+\code{deriv = TRUE} the result has the attribute \code{deriv}, the Jacobian of the
+transformation, with \code{deriv2 = TRUE} also \code{deriv2}, the second
+derivatives. A \code{p2p} with an argument \code{condition} receives the condition
+name.}
 
 \item{parameters}{character, the parameters accepted by the function.
 Default \code{NULL}.}

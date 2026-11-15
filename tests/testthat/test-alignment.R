@@ -84,7 +84,7 @@ test_that("start values and trafos of any scale and name", {
   expect_equal(dMod2:::.trafoInverse(list(trafo = c(yi = "yi")), "yi", 1000), 1000, tolerance = 1e-10)
   expect_equal(dMod2:::.trafoInverse(list(trafo = c(yi = "exp(yi)")), "yi", 1e60), log(1e60), tolerance = 1e-10)
   expect_true(is.na(dMod2:::.trafoInverse(list(trafo = c(yi = "exp(yi)")), "yi", -1)))
-  # biological symbols with different formulas; a symbol with "_"; one lambda for the symbols of a formula
+  # biological symbols with different formulas; a symbol with "_"; shared hyperparameters of a formula
   d <- .alignmentSim(4)
   m <- alignmentModel(d, model = "y_i * sj + zi", errmodel = "sigmaR * prediction",
                       biological = list(y_i ~ time, zi ~ 1), scaling = sj ~ gel, error = sigmaR ~ 1,
@@ -93,7 +93,7 @@ test_that("start values and trafos of any scale and name", {
   expect_equal(unique(fit$aligned$symbol), c("y_i", "zi"))
   expect_true(is.na(fit$aligned$time[fit$aligned$symbol == "zi"]))
   ml <- alignmentModel(d, model = "yi * sj + bj", errmodel = "sigmaR * prediction", biological = yi ~ time,
-                       scaling = sj ~ gel, error = bj + sigmaR ~ 1 + (1 | gr(gel, dist = laplace())),
+                       scaling = sj ~ gel, error = bj + sigmaR ~ 1 + (1 | gr(gel, dist = spikeSlab())),
                        trafo = .logs("yi", "sj", "bj", "sigmaR"))
   expect_length(dMod2:::.alignmentRandomEffects(ml)$blocks, 1L)
 })
@@ -608,7 +608,7 @@ test_that("random terms of two crossed groupings recover both standard deviation
   expect_equal(nrow(fit$random), 80L)
   expect_true(inherits(plotRandomEffects(fit$fit), c("gg", "list")))
   expect_error(alignmentModel(d, model = "yi + sj + lj", errmodel = "sigma", biological = yi ~ antibody * time,
-                              scaling = list(sj ~ antibody + (1 | gr(gel, dist = laplace())),
+                              scaling = list(sj ~ antibody + (1 | gr(gel, dist = spikeSlab())),
                                              lj ~ 0 + (1 | gel:lane)),
                               error = sigma ~ 1), "several groupings are normal")
 })

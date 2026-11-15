@@ -7,9 +7,8 @@
 //
 //  1. L1 active set: a penalized coordinate sitting exactly on the kink
 //     theta_i = mu_i is dropped from the reduced subproblem whenever
-//     |grad_obj_i| <= lambda_i (two-sided) resp. -grad_obj_i <= lambda_i
-//     (one-sided). Below that threshold the L1 force dominates and the
-//     coordinate stays pinned.
+//     |grad_obj_i| <= lambda_i (two-sided) resp. 0 <= grad_obj_i <= lambda_i
+//     (one-sided). There the L1 force holds the coordinate on the kink.
 //
 //  2. Kink clamping: after the trust step is added to theta, any penalized
 //     coordinate that crossed the kink is snapped back to mu_i, so the next
@@ -50,7 +49,7 @@ using dmod::trust_driver::subproblem_label;
 namespace {
 
 // L1 metadata from the named (mu, lambda) pair. `side` overrides `one_sided` per
-// coordinate: 0 two-sided, -1 lower wall lambda * max(0, mu - theta), +1 gate
+// coordinate: 0 two-sided, -1 one-sided lambda * max(0, mu - theta), +1 gate
 // lambda * max(0, theta - mu) that keeps theta >= mu and leaves the kink upward.
 struct L1Spec {
   std::vector<unsigned char> has;
@@ -123,7 +122,7 @@ struct L1Spec {
   bool pinned(int i, double th_i, double grad_obj_i) const {
     if (!has[i] || th_i != mu[i]) return false;
     switch (sd(i)) {
-      case -1: return (-grad_obj_i) <= lambda[i];
+      case -1: return grad_obj_i >= 0.0 && grad_obj_i <= lambda[i];
       case  1: return ( grad_obj_i) >= -lambda[i];
       default: return std::fabs(grad_obj_i) <= lambda[i];
     }
@@ -133,9 +132,7 @@ struct L1Spec {
     for (std::size_t i = 0; i < th.size(); ++i) {
       if (!has[i]) continue;
       if ((th[i] - mu[i]) * (th_try[i] - mu[i]) < 0.0) th_try[i] = mu[i];
-      const int si = sd(i);
-      if (si == -1 && th_try[i] < mu[i]) th_try[i] = mu[i];
-      if (si ==  1 && th_try[i] < mu[i]) th_try[i] = mu[i];
+      if (sd(i) == 1 && th_try[i] < mu[i]) th_try[i] = mu[i];
     }
   }
 };

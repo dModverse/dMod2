@@ -60,7 +60,8 @@ gives one panel per combination of name and condition.}
 \code{\link[=coordTransform]{coordTransform()}}.}
 
 \item{aesthetics}{Named list of aesthetic mappings given as character, e.g.
-\code{list(linetype = "name")}. They can refer to columns of the condition grid.}
+\code{list(linetype = "name")}. With \code{data}, they can also refer to columns of
+the condition grid of \code{data}.}
 
 \item{errfn}{Optional \link{obsfn}, the error model. The \code{sigma} it predicts is drawn as a band
 around the prediction. Default \code{NULL}.}

@@ -10,8 +10,9 @@
 #' @details The data frame for `as.eqnlist()` contains the columns
 #' "Description" (character), "Rate" (character) and one column per state,
 #' the columns of the stoichiometric matrix. Layout attributes of the data
-#' frame, as set by [as.data.frame.eqnlist()], are used unless `volumes` is
-#' given.
+#' frame, as set by [as.data.frame.eqnlist()], fill in the layout arguments not
+#' given; with `volumes` given, the attributes `compartments` and
+#' `compartmentOf` are not used.
 #' @rdname eqnlist
 #' @export
 as.eqnlist <- function(data, volumes, ...) {
@@ -1320,9 +1321,10 @@ eqnvec <- function(...) {
 #'   column per state. Default `NULL` gives an empty equation list.
 #' @param states character, the state names. Default `colnames(smatrix)`.
 #' @param rates character, the rate expressions, one per reaction.
-#' @param volumes named character of state volumes. Without `compartments`
-#'   and `compartmentOf`, each distinct expression becomes a compartment with
-#'   ID `c1`, `c2`, ...
+#' @param volumes named character of state volumes. Without `compartmentOf`,
+#'   each distinct expression becomes a compartment with ID `c1`, `c2`, ...,
+#'   and `compartments` is ignored. With `compartmentOf`, the compartment layout
+#'   wins, and a volume that differs from it gives a warning.
 #' @param description character, one description per reaction. Default
 #'   `NULL` numbers the reactions.
 #' @param compartments named list keyed by compartment ID; each entry is a
@@ -1338,8 +1340,12 @@ eqnvec <- function(...) {
 #' @param amountStates character, the states given in amounts rather than
 #'   concentrations (SBML's `hasOnlySubstanceUnits`). Their fluxes are not
 #'   divided by a compartment volume. Default `NULL`.
-#' @param totals named list of user-defined conservation expressions, see
-#'   [customTotals()]. Default `NULL` uses the detected basis.
+#' @param totals named list of user-defined conservation expressions, stored
+#'   without the checks of [customTotals()]. [conservedQuantities()] returns
+#'   them; [steadyStates()] ignores them, and [addReaction()],
+#'   [assignCompartment()], [setCompartmentVolume()], `subset()` and `c()` drop
+#'   them, as they keep only totals set by [customTotals()]. Default `NULL`
+#'   uses the detected basis.
 #' @return Object of class `eqnlist`, a list with the entries above and the
 #'   per-state `volumes`. `is.eqnlist()` returns a logical.
 #' @seealso [addReaction()], [as.eqnlist()], [assignCompartment()],

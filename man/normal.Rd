@@ -2,23 +2,17 @@
 % Please edit documentation in R/randomEffects.R
 \name{normal}
 \alias{normal}
-\alias{laplace}
 \alias{spikeSlab}
 \alias{dirichletProcess}
 \title{Distributions of random effects}
 \usage{
 normal()
 
-laplace(lambda = NULL)
-
 spikeSlab(prob = NULL, tau = NULL)
 
 dirichletProcess(concentration = NULL, tau = NULL)
 }
 \arguments{
-\item{lambda}{Strength of the Laplace distribution; \code{NULL} (default)
-estimates it, a positive number fixes it.}
-
 \item{prob}{Probability that a group deviates, in (0, 1); \code{NULL}
 (default) estimates it.}
 
@@ -33,22 +27,19 @@ An object of class \code{redist}.
 \description{
 The distribution of the random effects of a term, set in an
 effect formula by \code{gr(group, dist = )}, e.g.
-\code{cl ~ 1 + (1 | gr(cellline, dist = laplace()))}. Their parameters are
+\code{cl ~ 1 + (1 | gr(cellline, dist = spikeSlab()))}. Their parameters are
 estimated by \code{\link[=em]{em()}} unless given.
 \itemize{
 \item \code{normal()}: multivariate normal with mean 0 and a covariance estimated
 per correlation block. The default.
-\item \code{laplace()}: Laplace with mean 0 and strength \code{lambda}, shared by all
-symbols of the term, so the deviation of a group from the fixed effects
-is exactly 0 unless the data need it.
 \item \code{spikeSlab()}: the deviation of a group is exactly 0 (spike) or drawn
 from \eqn{N(0, \tau^2)}{N(0, tau^2)} (slab); every group deviates with
 probability \code{prob}, independently. The spike-and-slab random effects of
 a group are integrated jointly, exactly on the quadratic expansion of
-the data where the group has no Laplace or Dirichlet-process random
-effects the data tie to them and the sum over their subsets stays within
-a budget; else the expectation consistent (EC) approximation
-integrates each one against a diagonal cavity.
+the data where the group has no Dirichlet-process random effects the
+data tie to them and the sum over their subsets stays within a budget;
+else the expectation consistent (EC) approximation integrates each one
+against a diagonal cavity.
 \item \code{dirichletProcess()}: per symbol, the deviations follow a Dirichlet
 process with base measure \eqn{N(0, \tau^2)}{N(0, tau^2)} and
 \code{concentration}, the fixed effect seated first at deviation 0: the
@@ -66,8 +57,6 @@ the clusters of any number of groups.
 \examples{
 ## The distributions of a random term, written into gr() of an effect formula
 normal()
-laplace()
-laplace(lambda = 2)
 spikeSlab()
 spikeSlab(prob = 0.2, tau = 0.5)
 dirichletProcess()

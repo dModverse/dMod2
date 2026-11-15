@@ -30,7 +30,7 @@
 \item{fitted}{Objective function \code{fitted(pars, fixed, ...)} returning a
 list with \code{value}, \code{gradient} and \code{hessian}. Numeric
 attributes of the result, such as \code{"data"} and \code{"prior"}, are
-kept as columns of the profile.}
+kept as columns of the profile, except \code{chi2} and \code{chi2_*}.}
 
 \item{pars}{Named numeric parameter vector at the optimum.}
 
@@ -84,8 +84,10 @@ other parameters with \code{\link[=trust]{trust()}}. \code{FALSE} / \code{TRUE}.
 \item{\code{correction}}{Relative correction above which \code{gamma}
 is halved; below half of it \code{gamma} doubles up to the initial
 value. \code{1} for both methods.}
-\item{\code{reg}}{Singular values below \code{reg} are dropped when the
-Hessian is inverted. \code{.Machine$double.eps} / \code{0}.}
+\item{\code{reg}}{Where the Hessian bordered by the constraint is
+numerically singular, the path equation is solved by a pseudoinverse
+without the singular values below \code{reg} times the largest one
+and the matrix dimension. \code{.Machine$double.eps} / \code{0}.}
 }}
 
 \item{optControl}{List of arguments for \code{\link[=trust]{trust()}} in the re-optimization,
@@ -125,8 +127,10 @@ A \code{\link[=parframe]{parframe()}} with one row per profile point of all prof
 parameters, with metanames \code{value} (the objective), \code{constraint}
 (deviation of the profiled parameter from the value in \code{pars}),
 \code{stepsize}, \code{gamma} and \code{whichPar} (the profiled
-parameter), columns for the numeric attributes of the objective, and one
-column per parameter. Profiles that fail are dropped with a message. The
+parameter), columns for the numeric attributes of the objective other
+than \code{chi2} and \code{chi2_*}, and one column per parameter.
+Profiles that fail are dropped with a message; when all fail,
+\code{profile()} stops with an error. The
 attribute \code{"ends"} is a data frame with one row per side and the
 columns \code{whichPar}, \code{side}, \code{steps} and \code{reason}:
 \code{"threshold"}, \code{"limit"}, \code{"step limit"} or the error of

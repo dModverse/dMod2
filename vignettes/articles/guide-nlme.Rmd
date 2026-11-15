@@ -71,14 +71,15 @@ individual parameters. Further forms:
 - `Cl ~ 1 + wt + (1 + dose | p | ID)`: a covariate and a random slope, correlated with the
   intercept.
 - `Cl ~ 1 + (1 | ID) + (1 | ID:OCC)`: variability between subjects and between occasions.
-- `Cl ~ 1 + (1 | gr(ID, dist = laplace()))`: Laplace instead of normal random effects.
+- `Cl ~ 1 + (1 | gr(ID, dist = spikeSlab()))`: spike-and-slab instead of normal random effects.
 
 A group (a level of the grouping, such as a subject) may own several conditions, which share the
 group random effects; a condition outside every group has none. The random effects of one ID, or of one
 term without ID, form a block with full covariance, so $\Omega$ is block diagonal; `omega_<a>_<b>`
-are the entries of the Cholesky factor of each block, log standard deviations on the diagonal.
-This chapter treats normal random effects; Laplace, spike-and-slab and Dirichlet-process ones are
-in [Group-specific effects](guide-group-effects.html).
+are the entries of the Cholesky factor of each block, with the log of the factor diagonal on the diagonal,
+for a random effect alone in a block the log of the standard deviation of that effect.
+This chapter treats normal random effects; spike-and-slab and Dirichlet-process ones are in
+[Sparse deviations](guide-sparse-deviations.html).
 
 ## Marginal likelihood
 
@@ -126,12 +127,13 @@ fit[model] <- em(obj, random, fit, control = list(trustControl = list(iterlim = 
 summary(fit)
 ```
 
-`omega_*` are log standard deviations, shown on natural scale in the random-effects table.
+Every block here holds one random effect, so `omega_*` are log standard deviations, shown on
+natural scale in the random-effects table.
 Shrinkage near 0 means the modes spread as widely as the random effects, near 1 that the data of a
 subject hardly move the individual parameter.
 
-`value` is $-2 \log L$ with all data constants; `valueNonmem`, $-2 \log L$ less
-$N_{\text{obs}} \log(2\pi)$, compares with the NONMEM `OBJ`. The fit holds `argument`, `Omega`,
+`value` is $-2 \log L$ with all data constants; `valueNonmem`, $-2 \log L$ less $\log(2\pi)$ per
+reading above the limit of quantification, compares with the NONMEM `OBJ` (`NA` for `normT()`). The fit holds `argument`, `Omega`,
 `omega` (standard deviations and correlations with standard errors), `random` (modes per group with
 conditional standard errors), `etaModes`, `etaSE` and `shrinkage`. Methods: `coef()`, `vcov()`,
 `confint()` (Wald or `method = "profile"`), `logLik()`, `AIC()`, `BIC()`, `anova()` of nested fits,
@@ -184,7 +186,9 @@ the modes, against the fitted $\mathcal{N}(0, \Omega_{kk})$ (see [Model diagnost
 
 `method = "laplaceEM"` runs expectation conditional maximization on the Laplace approximation and
 reports the quadrature of level $K + 2$. Settings in `control$quadrature`: convergence tolerance
-`epsEcm` (default `1e-5`), iterations `maxEcm` (default 200), and those of the quadrature above. Details: [Methods > Laplace EM](methods-nlme.html#laplace-em).
+`epsEcm` (default `1e-5`), iterations `maxEcm` (default 200), and of the quadrature above
+`cm1Control`, `maxCm1Iter`, `pruneTol` and `maxLevel`; the levels are $K + 1$ and $K + 2$, and the
+fit has no certificate. Details: [Methods > Laplace EM](methods-nlme.html#laplace-em).
 
 ## Stochastic approximation EM (SAEM)
 
@@ -302,7 +306,7 @@ variability this way:
 insert(trafo, Cl ~ 1 + (1 | ID) + (1 | ID:OCC))
 ```
 
-Which groups differ at all, rather than by how much: [Group-specific effects](guide-group-effects.html).
+Which groups differ at all, rather than by how much: [Sparse deviations](guide-sparse-deviations.html).
 
 
 ## Multistart optimization
@@ -401,6 +405,6 @@ convergence; `plotValues()` draws `$multistart` as a waterfall.
 Reference: `randomEffects()`, `em()`, `msem()`, `anova()`, `plotResiduals()`, `plotVPC()`,
 `plotRandomEffects()`, `plotTrace()`, `plotValues()`
 
-[← 6. Prediction uncertainty](guide-prediction-uncertainty.html) | [8. Group-specific effects →](guide-group-effects.html)
+[← 6. Prediction uncertainty](guide-prediction-uncertainty.html) | [8. Sparse deviations →](guide-sparse-deviations.html)
 
 ## References

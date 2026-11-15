@@ -12,14 +12,15 @@ any other entry an \code{ssh} destination such as \code{"host"} or \code{"user@h
 \code{NULL} (default) for the local machine.}
 }
 \value{
-Numeric vector of free cores, one per machine and named by it, with
-attributes
+Numeric vector of free cores, one per machine, named by \code{machine}
+when it is given, with attributes
 \code{"ncores"} (number of cores) and \code{"used"} (load average).
 }
 \description{
 Estimates the free cores as the number of cores minus the 1-minute load
-average, at least 1; inside a SLURM job on the local machine, the cores the
-job was given (\code{SLURM_CPUS_ON_NODE}) and the job processes are bound to. Works on Linux and macOS, locally or on remote
+average, at least 1. With \code{machine = NULL} inside a SLURM job, they are the
+cores the job was given (\code{SLURM_CPUS_ON_NODE}) and the job processes are
+bound to. Works on Linux and macOS, locally or on remote
 machines via \code{ssh}. On the local Windows machine the load is the processor
 load since the previous call, over at least 0.25 s and at most a minute. Under
 \verb{R CMD check} with \verb{_R_CHECK_LIMIT_CORES_} set, the result is at most 2.

@@ -13,7 +13,7 @@
 }
 \value{
 The inverse of half the Hessian of the marginal -2 log L. A fit with
-Laplace or spike-and-slab random effects has no Hessian; there it is the
+spike-and-slab random effects has no Hessian; there it is the
 inverse of the empirical information \code{information} of the group scores,
 see \code{\link[=em]{em()}}, which needs more groups than parameters. A fit
 with Dirichlet-process random effects, whose groups are not independent,

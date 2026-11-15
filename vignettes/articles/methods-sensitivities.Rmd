@@ -60,9 +60,10 @@ $$L_j = \frac{2}{\sigma_j^2} \begin{pmatrix} 1 & -2 r_j \\ -2 r_j & 3 r_j^2 - 1 
   \qquad \det L_j = -\frac{4\,(1 + r_j^2)}{\sigma_j^4} < 0. \tag{4}$$
 
 The Gauss-Newton Hessian of `normL2()` is $\sum_j J_j^\top L_j J_j$, $J_j$ the Jacobian of
-$(f_j, \sigma_j)$: exact curvature of $\ell_j$, no second derivatives of $f_j$ and $\sigma_j$. The
-concave $\log \sigma_j^2$ gives $L_j$ one negative eigenvalue, so the matrix is in general
-indefinite along directions that move a sigma where residuals are small. The exact Hessian adds the
+$(f_j, \sigma_j)$: exact curvature of $\ell_j$, no second derivatives of $f_j$ and $\sigma_j$. By (4)
+$L_j$ has one negative eigenvalue at every residual, and the $\sigma\sigma$ entry $3 r_j^2 - 1$ is
+negative where residuals are small, so the matrix is in general indefinite along directions that
+move a sigma. The exact Hessian adds the
 second derivatives of $f_j$ and $\sigma_j$, weighted by $2 r_j / \sigma_j$ and
 $2 (1 - r_j^2) / \sigma_j$.
 
@@ -74,14 +75,18 @@ for small models.
 ## Reverse sweep
 
 The gradient of the objective alone follows from one backward sweep with the multipliers
-$\lambda(t)$ and the data term $\ell$,
+$\lambda(t)$, zero after the last measurement, and the terms $\ell_j$ of the data at the
+measurement times $t_j$,
 
-$$\dot\lambda = -\left(\frac{\partial f}{\partial x}\right)^{\!\top} \lambda
-  - \left(\frac{\partial \ell}{\partial x}\right)^{\!\top}, \qquad
-  \frac{\mathrm{d}(-2 \log L)}{\mathrm{d}\theta} = \int \lambda^\top \frac{\partial f}{\partial \theta}\,
-  \mathrm{d}t + \dots, \tag{5}$$
+$$\begin{aligned}
+\dot\lambda &= -\left(\frac{\partial f}{\partial x}\right)^{\!\top} \lambda, \qquad
+\lambda(t_j^-) = \lambda(t_j^+) + \left(\frac{\partial \ell_j}{\partial x}\right)^{\!\top}, \\
+\frac{\mathrm{d}(-2 \log L)}{\mathrm{d}\theta} &= \int \lambda^\top \frac{\partial f}{\partial \theta}\,
+\mathrm{d}t + \lambda(t_0)^\top \frac{\partial x_0}{\partial \theta}
++ \sum_j \frac{\partial \ell_j}{\partial \theta} .
+\end{aligned} \tag{5}$$
 
-with jumps of $\lambda$ at the measurement times. cppDE uses the *discrete adjoint* of the
+cppDE uses the *discrete adjoint* of the
 integrator steps, the exact derivative of the computed objective, with checkpoints of the forward
 trajectory ([reverse mode](https://dmodverse.github.io/cppDE/articles/methods-reverse.html)). The
 cost is a few times the value, independent of $n_\theta$. The value pass solves without
@@ -97,8 +102,10 @@ By default the adjoint follows the step grid of the states without error control
 | `refine = TRUE` | every step held to the CVODES backward error test under the solve tolerances; a failing step is swept again in substeps |
 | `gradtol` | the share of each step in the gradient added to that test as absolute tolerance |
 
-A trust region converges with a gradient accurate relative to the gradient size
-[@carter1991global; @conn2000trust], so `gradtol` is a fraction of the gradient scale
+A trust region converges with a gradient whose error is small relative to the gradient
+[@carter1991global; @conn2000trust]. `gradtol` bounds the error of every step in absolute terms,
+and the errors of the steps add up over the sweep; near the optimum, where the gradient vanishes,
+a fixed `gradtol` does not keep the relative error small
 ([checking the sweep](https://dmodverse.github.io/cppDE/articles/methods-reverse-checks.html)).
 
 A refined sweep differentiates the trajectory with substeps, not the computed one. Under `refine` it
@@ -114,7 +121,8 @@ correction.
 ## Forward over reverse
 
 Forward tangents, one per parameter, ride on the backward sweep, which returns one Hessian column
-per tangent. Cost grows like a forward solve; nothing of order $n_\theta^2$ is integrated or stored
+per tangent. Cost grows like a forward solve; the $n_\theta^2$ Hessian entries are accumulated, but
+no $n_x n_\theta^2$ second-order sensitivities are integrated or stored
 ([forward over reverse](https://dmodverse.github.io/cppDE/articles/methods-forward-reverse.html)).
 
 ### Second derivatives along directions

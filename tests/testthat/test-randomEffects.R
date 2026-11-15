@@ -44,14 +44,14 @@ test_that("placeholders and sums on the left apply one right-hand side to many s
 
 test_that("an ID correlates terms across formulas and gr() sets the distribution", {
   tr <- insert(.tr(), ka ~ 1 + (1 | p | ID), cl ~ 1 + (1 | p | ID),
-               v ~ 1 + (1 | gr(ID, dist = laplace())))
+               v ~ 1 + (1 | gr(ID, dist = spikeSlab())))
   re <- randomEffects(tr)
   expect_equal(lapply(re$blocks, function(b) re$terms$stem[b]), list(c("eta_ka", "eta_cl"), "eta_v"))
-  expect_equal(re$terms$dist, c("normal", "normal", "laplace"))
-  expect_true(is.na(re$terms$lambda[3]))
-  lam <- 2
-  re <- randomEffects(insert(.tr(), v ~ 1 + (1 | gr(ID, dist = laplace(lambda = lam)))))
-  expect_equal(re$terms$lambda, 2)
+  expect_equal(re$terms$dist, c("normal", "normal", "spikeSlab"))
+  expect_true(is.na(re$terms$prob[3]))
+  share <- 0.2
+  re <- randomEffects(insert(.tr(), v ~ 1 + (1 | gr(ID, dist = spikeSlab(prob = share)))))
+  expect_equal(re$terms$prob, 0.2)
 })
 
 test_that("P() keeps the random effects and effect formulas stack over calls", {
@@ -69,13 +69,13 @@ test_that("misspecified effect formulas and late substitutions stop with a messa
   expect_error(insert(.tr(), ka ~ kz), "\"ka <- kz\"")
   expect_error(insert(.tr(), k ~ 1 + (1 | ID)), "not in the trafo")
   expect_error(insert(.tr(), cl ~ 1 + (1 | site)), "not a column of the branch table")
-  expect_error(insert(.tr(), cl ~ 1 + (1 | p | gr(ID, dist = laplace())),
-                      v ~ 1 + (1 | p | gr(ID, dist = laplace()))), "not correlated")
-  expect_error(insert(.tr(), cl ~ 1 + (1 | gr(ID, dist = "t"))), "normal\\(\\), laplace\\(\\), spikeSlab\\(\\) or dirichletProcess\\(\\)")
+  expect_error(insert(.tr(), cl ~ 1 + (1 | p | gr(ID, dist = spikeSlab())),
+                      v ~ 1 + (1 | p | gr(ID, dist = spikeSlab()))), "not correlated")
+  expect_error(insert(.tr(), cl ~ 1 + (1 | gr(ID, dist = "t"))), "normal\\(\\), spikeSlab\\(\\) or dirichletProcess\\(\\)")
   expect_error(spikeSlab(prob = 1.5), "in \\(0, 1\\)")
   expect_identical(dirichletProcess(concentration = 1.5)$concentration, 1.5)
   expect_error(dirichletProcess(concentration = -1), "positive")
-  expect_error(laplace(lambda = -1), "positive")
+  expect_error(spikeSlab(tau = -1), "positive")
   expect_error(randomEffects(.tr()), "no random effects")
   tr <- insert(.tr(), cl ~ 1 + (1 | ID))
   expect_error(insert(tr, "x <- exp(x)", x = "cl"), "has an effect formula")

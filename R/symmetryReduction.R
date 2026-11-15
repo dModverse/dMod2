@@ -28,7 +28,7 @@
 #' @param alternatives Logical. Also return the charts of the other valid pins
 #'   in `$alternatives`. Defaults to `FALSE`.
 #' @param timeout Time limit in seconds for the section search of one block; a block not
-#'   solved in time keeps the invariants (`"invariantOnly"`). Unlike `workCap`, it depends
+#'   solved in time keeps the invariants (`"invariant_only"`). Unlike `workCap`, it depends
 #'   on the load of the machine. Defaults to `Inf`.
 #' @param workCap Number of candidate sections the search of one block may try;
 #'   reaching it is an entry in `limits`. Defaults to 4000.
@@ -49,7 +49,7 @@
 #'     \item{`blocks`}{one entry per set of coupled directions, with
 #'       `invariants`, `section`, `newParameters` (the invariant each `q_<k>`
 #'       holds), `solvedDomain`, `coverage` and `status` (`"fixed"`,
-#'       `"reduced"`, `"invariantOnly"` or `"unresolved"`), `level`,
+#'       `"reduced"`, `"invariant_only"` or `"unresolved"`), `level`,
 #'       `generatorLevel` (the lowest level of the directions in the block), `unproven` (the claims
 #'       of the section that are not proven) and, for a curved block, `count`
 #'       (`"exact"` or `"upper bound"`), `injective` and `reach`. A section on a face

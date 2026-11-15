@@ -116,8 +116,9 @@ fitted and profiled like any other.
 `exportSbml()` writes species with compartments and volumes, reactions with kinetic laws,
 parameters and initial assignments, here one species per total set to that total. SBML kinetic
 laws are amounts per time: `exportSbml()` multiplies concentration rates by the compartment
-volume, `importSbml()` divides again. `importSbml()` returns an equation list with compartments,
-volumes, parameter values, initial values, assignment rules and events:
+volume, `importSbml()` divides again. `importSbml()` returns a list: the equation list with
+compartments and volumes in `reactions`, parameter values, initial values, observables, assignment
+rules and events:
 
 ```{r}
 sbml <- importSbml("results/petab/oppelt.xml")

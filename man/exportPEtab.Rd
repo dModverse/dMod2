@@ -46,8 +46,10 @@ chosen \code{parameterScale}. Names become \code{parameterId}s in parameters.tsv
 
 \item{errors}{Noise formulas keyed by observableId. Accepts a named
 character vector, \link{eqnvec}, or a Y-built error function. An observable it
-leaves out takes the column \code{sigma} of the data. If \code{NULL}, every
-observable does, or has the noise \code{"1"} without that column.}
+leaves out takes the column \code{sigma} of the data, or the noise \code{"1"} without
+data; a data row of such an observable without a sigma is an error. If
+\code{NULL}, every observable takes the column \code{sigma} of the data, or has the
+noise \code{"1"} when the data hold no sigma.}
 
 \item{lower, upper}{Named numeric vectors of bounds, on the same scale as
 \code{pouter}. Default \code{NULL}: five decades around \code{pouter} for log and log10
@@ -108,7 +110,8 @@ wrap; for any other mapping it is written as \verb{<name>_outer}.
 }
 \section{Limitations}{
 
-Events other than those at time 0 that replace a state are not written.
+Only events at time 0 that replace a state are written; any other event in
+\code{events} is an error.
 Fixed parameters are always written with \code{parameterScale = "lin"}.
 }
 

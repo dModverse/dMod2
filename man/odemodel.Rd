@@ -35,7 +35,8 @@ effect.}
 \item{derivMode}{character, the derivative directions to build, one or
 more of:
 \itemize{
-\item \code{"forward"} (default): sensitivity equations.
+\item \code{"forward"} (default): sensitivity equations. \code{deriv = TRUE} builds them
+also when \code{derivMode} leaves out \code{"forward"}.
 \item \code{"reverse"}: adjoint gradient, needed for \code{obj(..., sweep = "reverse")}.
 Not available on \code{backend = "deSolve"}.
 \item \code{"forward-forward"}: second-order sensitivities.
@@ -63,11 +64,13 @@ overwritten.}
 integrators of \pkg{cppDE}, CVODE(S) through \pkg{cppDE}, or \pkg{deSolve}
 through \pkg{cOde}.}
 
-\item{verbose}{logical, print the compiler output. Default \code{FALSE}.}
+\item{verbose}{logical, print the compiler output. Default \code{FALSE}. Not used
+with \code{backend = "deSolve"}.}
 
 \item{outdir}{directory for the generated sources and shared objects.
 Default \code{getOption("dMod2.outdir")}, else the working directory.
-\code{backend = "deSolve"} writes to the working directory only.}
+\code{backend = "deSolve"} writes to the working directory only; any other
+\code{outdir}, also one set by the option, is an error.}
 
 \item{...}{Passed to \code{\link[cppDE:cppODE]{cppDE::cppODE()}}, \code{\link[cppDE:cvode]{cppDE::cvode()}} or
 \code{\link[cOde:funC]{cOde::funC()}}, according to \code{backend}. Among them:

@@ -252,6 +252,28 @@ test_that("exportSbml emits InitialAssignment for symbolic state initials", {
   unlink(out_xml)
 })
 
+test_that("exportSbml writes added and multiplied event values onto the old value", {
+
+  withr::local_dir(tempdir())
+  if (!.libsbml_works()) skip("libsbml virtualenv not available")
+
+  reactions <- addReaction(eqnlist(), "A", "B", "k1*A", "fwd", compartment = "compartment")
+  events <- addEvent(NULL, var = "A", time = 2, value = 0.5, method = "add") |>
+    addEvent(var = "B", time = 3, value = 2, method = "multiply") |>
+    addEvent(var = "A", time = 4, value = 1, method = "replace")
+  out_xml <- file.path(tempdir(), "ev_export.xml")
+  exportSbml(reactions, parameters = c(k1 = 0.8, compartment = 1), inits = c(A = "1", B = "0"),
+             filepath = out_xml, modelID = "ev_export", events = events)
+
+  xml_text <- paste(readLines(out_xml, warn = FALSE), collapse = "\n")
+  ev_xml <- regmatches(xml_text, regexpr("<listOfEvents>.*</listOfEvents>", xml_text))
+  expect_true(grepl("<plus/>", ev_xml))
+  expect_true(grepl("<times/>", ev_xml))
+  expect_length(gregexpr("<eventAssignment", ev_xml)[[1]], 3L)
+
+  unlink(out_xml)
+})
+
 
 
 ## --- trafo-aware exportPEtab: pure-R helper unit tests --------------------
@@ -932,6 +954,24 @@ test_that("a prior on the parameter scale is truncated on that scale", {
                    objectivePriorParameters = "-4;3")
   sp <- dMod2:::.petab_parse_priors(df, c(k = "log10"))$k
   expect_equal(c(sp$lower, sp$upper), c(-5, 3))
+})
+
+test_that("a plain prior on a log-scale parameter is the density at the linear value", {
+  df <- data.frame(parameterId = c("k", "v", "w"), estimate = 1L,
+                   objectivePriorType = c("logNormal", "normal", "gamma"),
+                   objectivePriorParameters = c("0.5;0.8", "2;1", "2;1.5"))
+  specs <- dMod2:::.petab_parse_priors(df, c(k = "log10", v = "log", w = "lin"))
+  expect_equal(vapply(specs, `[[`, character(1), "scale"), c(k = "log10", v = "log", w = "lin"))
+  pf <- dMod2:::.petab_prior_objective(specs)
+  u <- c(k = 0.3, v = 0.4, w = 1.7)
+  out <- pf(u, deriv = TRUE)
+  # PEtab's convention: the linear density at 10^u or exp(u), no Jacobian term
+  minus2 <- function(u) -2 * (stats::dlnorm(10^u[["k"]], 0.5, 0.8, log = TRUE) +
+                                stats::dnorm(exp(u[["v"]]), 2, 1, log = TRUE) +
+                                stats::dgamma(u[["w"]], shape = 2, scale = 1.5, log = TRUE))
+  expect_equal(out$value, minus2(u), tolerance = 1e-12)
+  expect_equal(unname(out$gradient), numDeriv::grad(minus2, u), tolerance = 1e-7)
+  expect_equal(unname(out$hessian), numDeriv::hessian(minus2, u), tolerance = 1e-6, ignore_attr = TRUE)
 })
 
 

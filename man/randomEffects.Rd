@@ -19,14 +19,18 @@ formulas, or a parameter function \code{\link[=P]{P()}} built from one.}
 }
 \value{
 An object of class \code{randomeffects}, a list with \code{terms} (one row
-per random effect column: symbol, formula term, column, grouping,
-ID, distribution, fixed hyperparameters and the name stem of
-the etas),
-\code{blocks} (the correlated groups of rows), \code{subjects} (the groups of each
+per random effect column: \code{symbol}, \code{origin} (the formula), \code{term},
+\code{column}, \code{group}, \code{id}, \code{dist}, the fixed hyperparameters \code{prob},
+\code{concentration} and \code{tau} (\code{NA} where estimated) and \code{stem}, the name
+stem of the etas),
+\code{blocks} (groups of rows: the normal rows of a block are correlated, the
+rows of a spike-and-slab or Dirichlet-process block share the
+hyperparameters), \code{subjects} (the groups of each
 grouping and the conditions they own), \code{fixed} (the parameters the
 formulas created), \code{etas} (eta names, one row per condition, one column
-per term row) and \code{fixedDesign} (per symbol the model matrix of the fixed
-effects, one row per condition).
+per term row), \code{groups} (per stem the group of each condition),
+\code{fixedDesign} (per symbol the model matrix of the fixed effects, one row
+per condition) and \code{etaNames} (\code{NULL} for random effects from \code{\link[=insert]{insert()}}).
 }
 \description{
 Returns the random-effect structure that \code{\link[=insert]{insert()}} with effect formulas
@@ -51,7 +55,7 @@ other columns are \verb{cl_<column>} (\code{cl_wt}, \code{cl_log_wt}).}
 \item{random terms}{\code{(1 | ID)}, \code{(1 + dose | ID)} with a random slope,
 \code{(1 | p | ID)} with an ID \code{p}: terms with the same ID and grouping are
 correlated across formulas, the columns of one term are correlated, other
-terms are independent. \code{gr(ID, dist = laplace())} instead of \code{ID} sets
+terms are independent. \code{gr(ID, dist = spikeSlab())} instead of \code{ID} sets
 the distribution, see \code{\link[=normal]{normal()}}. The random effect of a group is
 \verb{eta_<symbol>_<group>} for the intercept and
 \verb{eta_<symbol>_<column>_<group>} for a slope; a symbol with random terms
@@ -68,7 +72,7 @@ trafo <- insert(trafo, "x <- exp(x)", x = c("ka", "cl", "v"))
 trafo <- insert(trafo,
                 ka ~ 1 + (1 | p | ID),
                 cl ~ wt + (1 + dose | p | ID),
-                v  ~ 1 + (1 | gr(ID, dist = laplace())))
+                v  ~ 1 + (1 | gr(ID, dist = spikeSlab())))
 trafo$C2
 re <- randomEffects(trafo)
 re

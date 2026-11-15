@@ -197,7 +197,7 @@ evalConditionResidual <- function(dataI, predictionI, pars,
 #'     vector for all conditions or a list named by condition. `"auto"` cuts
 #'     segments where they grow, fail or miss their data; `"transitions"`
 #'     places a node before every fast change of the data and keeps the
-#'     layout fixed.
+#'     layout fixed, and without a fast change in the data it is `"auto"`.
 #'   * `growth`: largest spectral radius of a segment's propagation matrix
 #'     that `"auto"` accepts, default `10`.
 #'   * `misfit`: root mean square of a segment's weighted residuals above
@@ -263,10 +263,10 @@ normL2 <- function(data, x, errmodel = NULL, times = NULL,
 #' distribution with `df` degrees of freedom and scale given by the error
 #' model or the data's `sigma`: the `-2 log` likelihood of the data, summed
 #' over the conditions. The tails are heavier than those of [normL2()], so
-#' single outliers move the fit less; `df = Inf` would be [normL2()].
+#' single outliers move the fit less; the limit of large `df` is [normL2()].
 #'
 #' @inheritParams normL2
-#' @param df Degrees of freedom, a positive number, fixed during the fit.
+#' @param df Degrees of freedom, a positive finite number, fixed during the fit.
 #' @param optBLOQ `"M3"` (default, the probability of lying below the limit
 #'   under the t distribution) or `"M1"` (censored rows dropped).
 #'

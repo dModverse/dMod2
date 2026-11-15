@@ -3,7 +3,7 @@
 //   I = int exp(-eta' P_i eta / 2 + b_i' eta) prod_k p_k(eta_k) d eta,
 //
 // per group i the Gaussian part of the data term with precision P_i and linear term b_i, and the
-// priors p_k of the spike-and-slab, Laplace and Dirichlet-process coordinates. Every factor is
+// priors p_k of the spike-and-slab and Dirichlet-process coordinates. Every factor is
 // integrated against an exponential tilt exp(h eta - t eta^2 / 2); a flat tilt t = 0 is no special
 // case. The coupling of the factors through P is integrated by expectation consistent (Opper and
 // Winther 2005) as a convergent double loop (Heskes, Opper, Wiegerinck, Winther and Zoeter 2005):
@@ -48,51 +48,12 @@ double logSumExp(double a, double b) {
   return m + std::log1p(std::exp(-std::fabs(a - b)));
 }
 
-// log erfcx(x) = x^2 + log erfc(x), stable for every real x; beyond 10 by the asymptotic series
-double logErfcx(double x) {
-  if (x > 10.0) {
-    const double t = 1.0 / (2.0 * x * x);
-    double term = 1.0, s = 0.0;
-    for (int k = 1; k <= 14; ++k) { term = -term * (2 * k - 1) * t; s += term; }
-    return std::log1p(s) - std::log(x * std::sqrt(M_PI));
-  }
-  return M_LN2 + x * x + R::pnorm(-x * M_SQRT2, 0.0, 1.0, 1, 1);
-}
-
-// The half integral int_0^inf u^k exp(-u^2 / 2 - alpha u) du for k = 0: the log of it, and the moments
-// E u^k, k = 1..4, of the normalized density; by the recurrence I_k + alpha I_{k-1} = (k-1) I_{k-2}
-// forward for small alpha and by the continued fraction for the ratios I_k / I_{k-1} beyond.
-struct Half { double logI0, e1, e2, e3, e4; };
-
-Half half(double alpha) {
-  Half h;
-  h.logI0 = 0.5 * std::log(M_PI / 2.0) + logErfcx(alpha / M_SQRT2);
-  if (alpha <= 2.0) {
-    const double inv = std::exp(-h.logI0);
-    h.e1 = inv - alpha;
-    h.e2 = 1.0 - alpha * h.e1;
-    h.e3 = 2.0 * h.e1 - alpha * h.e2;
-    h.e4 = 3.0 * h.e2 - alpha * h.e3;
-    return h;
-  }
-  double r = 0.0, r1 = 0.0, r2 = 0.0, r3 = 0.0, r4 = 0.0;
-  for (int k = 300; k >= 2; --k) {
-    r = (k - 1) / (alpha + r);
-    if (k - 1 == 4) r4 = r;
-    if (k - 1 == 3) r3 = r;
-    if (k - 1 == 2) r2 = r;
-    if (k - 1 == 1) r1 = r;
-  }
-  h.e1 = r1; h.e2 = r1 * r2; h.e3 = h.e2 * r3; h.e4 = h.e3 * r4;
-  return h;
-}
-
 // A coordinate factor against the tilt: log Z, the raw moments m1..m4 and what the reports and
 // the M-steps read.
 struct Coord {
   bool ok = false;
   double logZ = 0, m1 = 0, m2 = 0, m3 = 0, m4 = 0, var = 0;
-  double incl = 0, abs = 0, value = NA_REAL, dprob = 0, dtau = 0, dlambda = 0;
+  double incl = 0, value = NA_REAL, dprob = 0, dtau = 0;
   int selected = 0;
 };
 
@@ -114,28 +75,6 @@ Coord slab1(double h, double t, double p, double tau) {
   c.dtau = -w / tau + c.m2 / (tau * tau * tau);
   c.selected = w > 0.5;
   c.value = c.selected ? ms : 0.0;
-  c.ok = std::isfinite(c.logZ);
-  return c;
-}
-
-// Laplace: lambda / 2 exp(-lambda |eta|); needs t > 0
-Coord laplace1(double h, double t, double lambda) {
-  Coord c;
-  if (!(t > 0)) return c;
-  const double s = std::sqrt(t);
-  const Half p = half((lambda - h) / s), n = half((lambda + h) / s);
-  const double lse = logSumExp(p.logI0, n.logI0);
-  c.logZ = std::log(lambda / 2.0) - 0.5 * std::log(t) + lse;
-  const double wp = std::exp(p.logI0 - lse), wn = std::exp(n.logI0 - lse);
-  c.m1 = (wp * p.e1 - wn * n.e1) / s;
-  c.m2 = (wp * p.e2 + wn * n.e2) / t;
-  c.m3 = (wp * p.e3 - wn * n.e3) / (t * s);
-  c.m4 = (wp * p.e4 + wn * n.e4) / (t * t);
-  c.abs = (wp * p.e1 + wn * n.e1) / s;
-  const double mp = p.e1 / s, mn = -n.e1 / s;
-  c.var = wp * ((p.e2 - p.e1 * p.e1) / t + (mp - c.m1) * (mp - c.m1)) +
-          wn * ((n.e2 - n.e1 * n.e1) / t + (mn - c.m1) * (mn - c.m1));
-  c.dlambda = 1.0 / lambda - c.abs;
   c.ok = std::isfinite(c.logZ);
   return c;
 }
@@ -654,8 +593,8 @@ Joint slabJoint(const std::vector<double>& Pf, const std::vector<double>& h, con
 // The layout of one call: per group the active stems, per stem the kind and hyperparameters.
 struct Layout {
   int G, K;
-  std::vector<int> kind;  // 0 spike and slab, 1 Laplace, 2 Dirichlet process
-  std::vector<double> prob, tau, lambda, conc;
+  std::vector<int> kind;  // 0 spike and slab, 1 Dirichlet process
+  std::vector<double> prob, tau, conc;
   std::vector<std::vector<int>> act;  // the active stems of every group
   std::vector<std::vector<double>> P, b;  // per group on the active stems
 };
@@ -663,7 +602,6 @@ struct Layout {
 // the prior variance of a coordinate, the start of the coordinate site
 double priorVar(const Layout& L, int j) {
   if (L.kind[j] == 0) return L.prob[j] * L.tau[j] * L.tau[j];
-  if (L.kind[j] == 1) return 2.0 / (L.lambda[j] * L.lambda[j]);
   return L.tau[j] * L.tau[j];
 }
 
@@ -672,17 +610,17 @@ struct Result {
   bool ok = false, converged = false;
   double logI = 0;
   int outer = 0, inner = 0;
-  std::vector<double> mean, abs, value, spike, clusters, dprob, dtau, dlambda, dconc, gprob, gtau, glambda,
-      free, groups, slab2, Lam, gam;
+  std::vector<double> mean, value, spike, clusters, dprob, dtau, dconc, gprob, gtau, free, groups, slab2,
+      Lam, gam;
   std::vector<std::vector<double>> cov;  // per group K x K
 };
 
 void initResult(const Layout& L, Result& R) {
   const int GK = L.G * L.K;
-  R.mean.assign(GK, 0.0); R.abs.assign(GK, 0.0); R.value.assign(GK, NA_REAL); R.spike.assign(GK, NA_REAL);
-  R.clusters.assign(GK, NA_REAL); R.gprob.assign(GK, 0.0); R.gtau.assign(GK, 0.0); R.glambda.assign(GK, 0.0);
+  R.mean.assign(GK, 0.0); R.value.assign(GK, NA_REAL); R.spike.assign(GK, NA_REAL);
+  R.clusters.assign(GK, NA_REAL); R.gprob.assign(GK, 0.0); R.gtau.assign(GK, 0.0);
   R.Lam.assign(GK, 0.0); R.gam.assign(GK, 0.0);
-  R.dprob.assign(L.K, 0.0); R.dtau.assign(L.K, 0.0); R.dlambda.assign(L.K, 0.0); R.dconc.assign(L.K, 0.0);
+  R.dprob.assign(L.K, 0.0); R.dtau.assign(L.K, 0.0); R.dconc.assign(L.K, 0.0);
   R.free.assign(L.K, 0.0); R.groups.assign(L.K, 0.0); R.slab2.assign(L.K, 0.0);
   R.cov.assign(L.G, std::vector<double>(L.K * L.K, 0.0));
   // a coordinate without data keeps the prior
@@ -690,23 +628,16 @@ void initResult(const Layout& L, Result& R) {
     for (int j = 0; j < L.K; ++j) {
       R.cov[i][j + j * L.K] = priorVar(L, j);
       if (L.kind[j] == 0) { R.spike[i + L.G * j] = 1.0 - L.prob[j]; R.clusters[i + L.G * j] = 0; R.value[i + L.G * j] = 0; }
-      if (L.kind[j] == 1) R.abs[i + L.G * j] = 1.0 / L.lambda[j];
     }
 }
 
-// the reports of a coordinate factor at (group i, stem j)
+// the reports of a spike-and-slab coordinate factor at (group i, stem j)
 void reportCoord(const Layout& L, int i, int j, const Coord& c, Result& R) {
   const int at = i + L.G * j;
-  R.abs[at] = c.abs;
-  if (L.kind[j] == 0) {
-    R.value[at] = c.value; R.spike[at] = 1.0 - c.incl; R.clusters[at] = c.selected;
-    R.gprob[at] += c.dprob; R.gtau[at] += c.dtau;
-    R.dprob[j] += c.dprob; R.dtau[j] += c.dtau;
-    R.free[j] += c.incl; R.groups[j] += 1; R.slab2[j] += c.m2;
-  } else {
-    R.value[at] = NA_REAL; R.spike[at] = NA_REAL; R.clusters[at] = NA_REAL;
-    R.glambda[at] += c.dlambda; R.dlambda[j] += c.dlambda;
-  }
+  R.value[at] = c.value; R.spike[at] = 1.0 - c.incl; R.clusters[at] = c.selected;
+  R.gprob[at] += c.dprob; R.gtau[at] += c.dtau;
+  R.dprob[j] += c.dprob; R.dtau[j] += c.dtau;
+  R.free[j] += c.incl; R.groups[j] += 1; R.slab2[j] += c.m2;
 }
 
 void reportStem(const Layout& L, int j, const std::vector<int>& groups, const Stem& s, Result& R) {
@@ -748,7 +679,7 @@ Coords coordsOf(const Layout& L) {
     for (std::size_t a = 0; a < L.act[i].size(); ++a) {
       const int j = L.act[i][a];
       C.at[i].push_back(C.g.size());
-      if (L.kind[j] == 2) { C.stemGroups[j].push_back(i); C.stemCoords[j].push_back(C.g.size()); }
+      if (L.kind[j] == 1) { C.stemGroups[j].push_back(i); C.stemCoords[j].push_back(C.g.size()); }
       C.g.push_back(i); C.j.push_back(j); C.pos.push_back(a);
     }
   return C;
@@ -765,14 +696,14 @@ bool factorsAt(const Layout& L, const Coords& C, const std::vector<double>& lh, 
   logZ = 0.0;
   for (int k = 0; k < N; ++k) {
     const int j = C.j[k];
-    if (L.kind[j] == 2) continue;
-    const Coord c = L.kind[j] == 0 ? slab1(lh[k], lt[k], L.prob[j], L.tau[j]) : laplace1(lh[k], lt[k], L.lambda[j]);
+    if (L.kind[j] == 1) continue;
+    const Coord c = slab1(lh[k], lt[k], L.prob[j], L.tau[j]);
     if (!c.ok) return false;
     logZ += c.logZ;
     m1[k] = c.m1; m2[k] = c.m2; m3[k] = c.m3; m4[k] = c.m4; vq[k] = c.var;
   }
   for (int j = 0; j < L.K; ++j) {
-    if (L.kind[j] != 2 || C.stemCoords[j].empty()) continue;
+    if (L.kind[j] != 1 || C.stemCoords[j].empty()) continue;
     const std::vector<int>& ks = C.stemCoords[j];
     std::vector<double> h(ks.size()), t(ks.size());
     for (std::size_t a = 0; a < ks.size(); ++a) { h[a] = lh[ks[a]]; t[a] = lt[ks[a]]; }
@@ -831,7 +762,7 @@ void expectationConsistent(const Layout& L, const Coords& C, const NumericMatrix
   double Ar = 0, Aq = 0;
   bool crossing = false;
   for (int j = 0; j < L.K; ++j)
-    if (L.kind[j] == 2 && C.stemCoords[j].size() > 1 && (int) C.stemCoords[j].size() <= CROSS_MAX) crossing = true;
+    if (L.kind[j] == 1 && C.stemCoords[j].size() > 1 && (int) C.stemCoords[j].size() <= CROSS_MAX) crossing = true;
   // sites from the last accepted point where they are valid, else at the prior variances
   bool warm = sitesLam != nullptr && sitesGam != nullptr;
   for (int k = 0; k < N; ++k) {
@@ -898,10 +829,10 @@ void expectationConsistent(const Layout& L, const Coords& C, const NumericMatrix
     for (int k = 0; k < N; ++k) b.ks[k] = k;
     b.Q.assign(m * m, 0.0); b.Rr.assign(m * m, 0.0);
     for (int i = 0; i < L.G; ++i) covR(b.Rr, m, i, N, C.at[i]);
-    for (int k = 0; k < N; ++k) if (L.kind[C.j[k]] != 2) covQ(b.Q, m, k, N + k, k);
+    for (int k = 0; k < N; ++k) if (L.kind[C.j[k]] != 1) covQ(b.Q, m, k, N + k, k);
     for (int j = 0; j < L.K; ++j) {
       const std::vector<int>& ks = C.stemCoords[j];
-      if (L.kind[j] != 2 || ks.empty()) continue;
+      if (L.kind[j] != 1 || ks.empty()) continue;
       const Stem& st = stv[j];
       const int Gj = ks.size();
       if (st.e11.empty()) { for (int k : ks) covQ(b.Q, m, k, N + k, k); continue; }
@@ -1123,12 +1054,12 @@ void expectationConsistent(const Layout& L, const Coords& C, const NumericMatrix
   }
   for (int k = 0; k < N; ++k) {
     const int j = C.j[k];
-    if (L.kind[j] == 2) continue;
-    const Coord c = L.kind[j] == 0 ? slab1(lh[k], lt[k], L.prob[j], L.tau[j]) : laplace1(lh[k], lt[k], L.lambda[j]);
+    if (L.kind[j] == 1) continue;
+    const Coord c = slab1(lh[k], lt[k], L.prob[j], L.tau[j]);
     reportCoord(L, C.g[k], j, c, R);
   }
   for (int j = 0; j < L.K; ++j) {
-    if (L.kind[j] != 2 || C.stemCoords[j].empty()) continue;
+    if (L.kind[j] != 1 || C.stemCoords[j].empty()) continue;
     const std::vector<int>& ks = C.stemCoords[j];
     std::vector<double> h(ks.size()), t(ks.size());
     for (std::size_t a = 0; a < ks.size(); ++a) { h[a] = lh[ks[a]]; t[a] = lt[ks[a]]; }
@@ -1141,8 +1072,8 @@ void expectationConsistent(const Layout& L, const Coords& C, const NumericMatrix
 // ---- exact factors ---------------------------------------------------------------------------
 
 // The integral where the precision couples none of the factors: per group the spike-and-slab stems
-// jointly (SlabSum), every other stem alone, every Dirichlet-process stem over the stem groups, each
-// against the linear term and the precision of the factor coordinates. `over` where a joint sum left
+// jointly (SlabSum), every Dirichlet-process stem over the stem groups, each against the linear term
+// and the precision of the factor coordinates. `over` where a joint sum left
 // the budget of nodes, R then unchanged.
 bool exactFactors(const Layout& L, double budget, Result& R, bool& over) {
   const int G = L.G, K = L.K;
@@ -1174,19 +1105,9 @@ bool exactFactors(const Layout& L, double budget, Result& R, bool& over) {
         T.free[jx] += J.incl[x]; T.groups[jx] += 1; T.slab2[jx] += J.slab2[x];
       }
     }
-    for (int a = 0; a < n; ++a) {
-      const int j = L.act[i][a];
-      if (L.kind[j] != 1) continue;
-      const Coord c = laplace1(L.b[i][a], L.P[i][a + a * n], L.lambda[j]);
-      if (!c.ok) return false;
-      logI += c.logZ;
-      T.mean[i + G * j] = c.m1;
-      T.cov[i][j + K * j] = c.m2 - c.m1 * c.m1;
-      reportCoord(L, i, j, c, T);
-    }
   }
   for (int j = 0; j < K; ++j) {
-    if (L.kind[j] != 2) continue;
+    if (L.kind[j] != 1) continue;
     std::vector<int> gr;
     std::vector<double> h, t;
     for (int i = 0; i < G; ++i)
@@ -1212,7 +1133,7 @@ bool exactFactors(const Layout& L, double budget, Result& R, bool& over) {
 }
 
 // Whether the precision of group i links two of the group factors: the spike-and-slab coordinates
-// jointly, every other coordinate alone.
+// jointly, every Dirichlet-process coordinate alone.
 bool groupCoupled(const Layout& L, int i) {
   const int n = L.act[i].size();
   for (int a = 0; a < n; ++a)
@@ -1233,7 +1154,7 @@ void byGroup(const Layout& L, const NumericMatrix* sitesLam, const NumericMatrix
   for (int i = 0; i < L.G; ++i) {
     if (L.act[i].empty()) continue;
     Layout S;
-    S.G = 1; S.K = L.K; S.kind = L.kind; S.prob = L.prob; S.tau = L.tau; S.lambda = L.lambda; S.conc = L.conc;
+    S.G = 1; S.K = L.K; S.kind = L.kind; S.prob = L.prob; S.tau = L.tau; S.conc = L.conc;
     S.act.assign(1, L.act[i]); S.P.assign(1, L.P[i]); S.b.assign(1, L.b[i]);
     Result Ri;
     initResult(S, Ri);
@@ -1258,10 +1179,10 @@ void byGroup(const Layout& L, const NumericMatrix* sitesLam, const NumericMatrix
     R.cov[i] = Ri.cov[0];
     for (int j = 0; j < L.K; ++j) {
       const int at = i + L.G * j;
-      R.mean[at] = Ri.mean[j]; R.abs[at] = Ri.abs[j]; R.value[at] = Ri.value[j]; R.spike[at] = Ri.spike[j];
+      R.mean[at] = Ri.mean[j]; R.value[at] = Ri.value[j]; R.spike[at] = Ri.spike[j];
       R.clusters[at] = Ri.clusters[j]; R.gprob[at] = Ri.gprob[j]; R.gtau[at] = Ri.gtau[j];
-      R.glambda[at] = Ri.glambda[j]; R.Lam[at] = Ri.Lam[j]; R.gam[at] = Ri.gam[j];
-      R.dprob[j] += Ri.dprob[j]; R.dtau[j] += Ri.dtau[j]; R.dlambda[j] += Ri.dlambda[j]; R.dconc[j] += Ri.dconc[j];
+      R.Lam[at] = Ri.Lam[j]; R.gam[at] = Ri.gam[j];
+      R.dprob[j] += Ri.dprob[j]; R.dtau[j] += Ri.dtau[j]; R.dconc[j] += Ri.dconc[j];
       R.free[j] += Ri.free[j]; R.groups[j] += Ri.groups[j]; R.slab2[j] += Ri.slab2[j];
     }
   }
@@ -1272,20 +1193,20 @@ void byGroup(const Layout& L, const NumericMatrix* sitesLam, const NumericMatrix
 }  // namespace
 
 // The integral over the sparse coordinates: P a list of the G precisions on all stems, b the
-// G x K linear terms, per stem the kind (0 spike and slab, 1 Laplace, 2 Dirichlet process) and
+// G x K linear terms, per stem the kind (0 spike and slab, 1 Dirichlet process) and
 // hyperparameters, `active` the G x K coordinates the data reach, of which those with a row of P
 // and an entry of b exactly 0 keep their prior as well. Exact where P couples no two factors and
 // the joint spike-and-slab sum of a group stays within `budget` nodes, else by expectation
 // consistent from the sites `sitesLam`, `sitesGam` where given.
 // [[Rcpp::export]]
 List sparse_integral(List P, NumericMatrix b, IntegerVector kind, NumericVector prob, NumericVector tau,
-                     NumericVector lambda, NumericVector conc, LogicalMatrix active,
+                     NumericVector conc, LogicalMatrix active,
                      Nullable<NumericMatrix> sitesLam, Nullable<NumericMatrix> sitesGam, double budget) {
   Layout L;
   L.G = b.nrow(); L.K = b.ncol();
   L.kind = as<std::vector<int>>(kind);
   L.prob = as<std::vector<double>>(prob); L.tau = as<std::vector<double>>(tau);
-  L.lambda = as<std::vector<double>>(lambda); L.conc = as<std::vector<double>>(conc);
+  L.conc = as<std::vector<double>>(conc);
   L.act.resize(L.G); L.P.resize(L.G); L.b.resize(L.G);
   for (int i = 0; i < L.G; ++i) {
     NumericMatrix Pi = P[i];
@@ -1314,7 +1235,7 @@ List sparse_integral(List P, NumericMatrix b, IntegerVector kind, NumericVector 
   // all groups at once where a Dirichlet-process stem joins two of them, else one by one
   const Coords C = coordsOf(L);
   bool across = false;
-  for (int j = 0; j < L.K; ++j) across = across || (L.kind[j] == 2 && C.stemGroups[j].size() > 1);
+  for (int j = 0; j < L.K; ++j) across = across || (L.kind[j] == 1 && C.stemGroups[j].size() > 1);
   std::vector<int> ec(L.G, 0);
   if (across) {
     bool coupled = false, over = false;
@@ -1343,29 +1264,26 @@ List sparse_integral(List P, NumericMatrix b, IntegerVector kind, NumericVector 
   return List::create(
       _["ok"] = R.ok, _["converged"] = R.converged, _["coupling"] = anyEc ? "expectationConsistent" : "none",
       _["ec"] = ecGroups, _["logI"] = R.logI,
-      _["mean"] = mat(R.mean, L.G, L.K), _["cov"] = cov, _["abs"] = mat(R.abs, L.G, L.K),
+      _["mean"] = mat(R.mean, L.G, L.K), _["cov"] = cov,
       _["values"] = mat(R.value, L.G, L.K), _["spike"] = mat(R.spike, L.G, L.K),
       _["clusters"] = mat(R.clusters, L.G, L.K), _["dprob"] = R.dprob, _["dtau"] = R.dtau,
-      _["dlambda"] = R.dlambda, _["dconc"] = R.dconc, _["gprob"] = mat(R.gprob, L.G, L.K),
-      _["gtau"] = mat(R.gtau, L.G, L.K), _["glambda"] = mat(R.glambda, L.G, L.K),
+      _["dconc"] = R.dconc, _["gprob"] = mat(R.gprob, L.G, L.K), _["gtau"] = mat(R.gtau, L.G, L.K),
       _["stats"] = List::create(_["free"] = R.free, _["groups"] = R.groups, _["slab2"] = R.slab2),
       _["Lam"] = mat(R.Lam, L.G, L.K), _["gam"] = mat(R.gam, L.G, L.K), _["outer"] = R.outer,
       _["inner"] = R.inner);
 }
 
-// The factor of one spike-and-slab, Laplace or Dirichlet-process coordinate against the tilts
-// (h, t), for the tests of the integrals.
+// The factor of one spike-and-slab coordinate or Dirichlet-process stem against the tilts (h, t),
+// for the tests of the integrals.
 // [[Rcpp::export]]
-List sparse_factor(int kind, NumericVector h, NumericVector t, double prob, double tau, double lambda,
-                   double conc) {
-  if (kind == 2) {
+List sparse_factor(int kind, NumericVector h, NumericVector t, double prob, double tau, double conc) {
+  if (kind == 1) {
     const Stem s = dpStem(as<std::vector<double>>(h), as<std::vector<double>>(t), conc, tau);
     return List::create(_["ok"] = s.ok, _["logZ"] = s.logZ, _["m1"] = s.m1, _["m2"] = s.m2, _["m3"] = s.m3,
                         _["m4"] = s.m4, _["dconc"] = s.dconc, _["dtau"] = s.dtau, _["spike"] = s.spike,
                         _["labels"] = s.label);
   }
-  const Coord c = kind == 0 ? slab1(h[0], t[0], prob, tau) : laplace1(h[0], t[0], lambda);
+  const Coord c = slab1(h[0], t[0], prob, tau);
   return List::create(_["ok"] = c.ok, _["logZ"] = c.logZ, _["m1"] = c.m1, _["m2"] = c.m2, _["m3"] = c.m3,
-                      _["m4"] = c.m4, _["abs"] = c.abs, _["dprob"] = c.dprob, _["dtau"] = c.dtau,
-                      _["dlambda"] = c.dlambda);
+                      _["m4"] = c.m4, _["dprob"] = c.dprob, _["dtau"] = c.dtau);
 }

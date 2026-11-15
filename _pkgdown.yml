@@ -29,8 +29,8 @@ navbar:
         href: articles/guide-prediction-uncertainty.html
       - text: "7. Nonlinear mixed-effects models"
         href: articles/guide-nlme.html
-      - text: "8. Group-specific effects"
-        href: articles/guide-group-effects.html
+      - text: "8. Sparse deviations"
+        href: articles/guide-sparse-deviations.html
       - text: "---"
       - text: "Tools"
       - text: "9. Alignment of relative data measurements"
@@ -65,8 +65,8 @@ navbar:
         href: articles/methods-multiple-shooting.html
       - text: "Marginal likelihood of mixed-effects models"
         href: articles/methods-nlme.html
-      - text: "Sparse random effects"
-        href: articles/methods-sparse-random-effects.html
+      - text: "Sparsity priors"
+        href: articles/methods-sparsity-priors.html
     examples:
       text: Examples
       menu:
@@ -118,7 +118,7 @@ articles:
   - '`articles/guide-profiles`'
   - '`articles/guide-prediction-uncertainty`'
   - '`articles/guide-nlme`'
-  - '`articles/guide-group-effects`'
+  - '`articles/guide-sparse-deviations`'
   - '`articles/guide-alignment`'
   - '`articles/guide-petab`'
   - '`articles/guide-remote-computing`'
@@ -135,7 +135,7 @@ articles:
   - '`articles/methods-profiles`'
   - '`articles/methods-multiple-shooting`'
   - '`articles/methods-nlme`'
-  - '`articles/methods-sparse-random-effects`'
+  - '`articles/methods-sparsity-priors`'
 
 - title: "Examples: signaling models"
   navbar: ~

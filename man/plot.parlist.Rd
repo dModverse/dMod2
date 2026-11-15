@@ -7,11 +7,13 @@
 \method{plot}{parlist}(x, path = FALSE, ...)
 }
 \arguments{
-\item{x}{object of class \code{parlist}, e.g. from \code{\link[=mstrust]{mstrust()}}.}
+\item{x}{object of class \code{parlist} from \code{\link[=mstrust]{mstrust()}}. Both plots need the
+starting point \code{parinit} that \code{\link[=mstrust]{mstrust()}} adds to each fit; a list of
+\code{\link[=trust]{trust()}} results has none.}
 
 \item{path}{logical, plot the path of the parameters from the initial
 values to convergence. Default \code{FALSE}. \code{path = TRUE} needs fits run with
-\code{trust(..., blather = TRUE)} or \code{mstrust(..., blather = TRUE)}.}
+\code{mstrust(..., blather = TRUE)}.}
 
 \item{...}{not used.}
 }

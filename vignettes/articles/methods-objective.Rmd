@@ -32,9 +32,12 @@ $\sigma z$ in $z$.
 
 `constraintL2()` adds a Gaussian prior with means $\mu_k$ and standard deviations $s_k$,
 
-$$-2 \log \pi(\theta) = \sum_k \left( \frac{\theta_k - \mu_k}{s_k} \right)^2, \tag{2}$$
+$$-2 \log \pi(\theta) = \sum_k \left( \left( \frac{\theta_k - \mu_k}{s_k} \right)^2 + \log s_k^2 \right)
++ \text{const}, \tag{2}$$
 
-added to the data term by `+`. On the log scale, a prior far wider than the data leaves
+added to the data term by `+`; $\log s_k^2$ enters only where $s_k$ is a parameter. It keeps an
+estimated $s_k$ from growing, but (2) then has no minimum: $\theta_k = \mu_k$ with $s_k \to 0$
+lowers it without limit, so an estimated $s_k$ needs a lower bound. On the log scale, a prior far wider than the data leaves
 determined parameters in place and keeps undetermined ones finite, so the minimum exists without
 bounds. The Hessian of (2) is $2/s_k^2$ on the diagonal.
 

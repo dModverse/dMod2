@@ -196,12 +196,15 @@
 #' @details
 #' Compile and link flags are taken per source from the `"compileInfo"`
 #' attribute of the objects. Objects without it are matched to sources in the
-#' working directory by model name. Unchanged sources are not recompiled.
+#' working directory by model name.
 #'
-#' Without `output`, each source becomes a shared object named after it, i.e.
-#' after the model name. With `output`, all sources are linked into one shared
-#' object of that name, and the model name of every object passed as a plain
-#' variable is set to `output`, see [modelname()]. If a shared object of that
+#' Without `output`, each source goes through `R CMD SHLIB` and becomes a
+#' shared object named after it, i.e. after the model name. With `output`, all
+#' sources are linked into one shared object of that name, and the model name
+#' of every `prdfn`, `obsfn` or `parfn` passed as a plain variable is set to
+#' `output`, see [modelname()]. The object file of a source is then reused while
+#' the source, the compile command and the installed \pkg{cppDE} and \pkg{cOde}
+#' are unchanged. If a shared object of that
 #' name is already loaded, a suffix `_2`, `_3`, ... is appended with a warning.
 #' With many sources, set `output`: R limits the number of loaded shared
 #' objects.
@@ -393,7 +396,8 @@ compile <- function(..., output = NULL, args = NULL, cores = detectFreeCores(),
   } else {
     blaslapack <- paste(cfg("LAPACK_LIBS"), cfg("BLAS_LIBS"))
   }
-  base_libs <- paste(klu_lib, blaslapack)
+  # the flags of `args` reach the link as well as every compile
+  base_libs <- trimws(paste(klu_lib, blaslapack, extra_args))
   cppflags  <- paste0("-I", system.file("include", package = "cppDE"))
 
   ## Compiler settings read once, so parallel forks do not each call

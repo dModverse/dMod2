@@ -23,7 +23,7 @@ a condition of \code{x}.}
 \item{errmodel}{Optional object of class \link{obsfn}. The error model may be
 defined only for a subset of conditions.}
 
-\item{df}{Degrees of freedom, a positive number, fixed during the fit.}
+\item{df}{Degrees of freedom, a positive finite number, fixed during the fit.}
 
 \item{times}{Optional time points at which the prediction is evaluated in
 addition to the data times: a numeric vector for all conditions, which then
@@ -53,7 +53,7 @@ Builds the objective of a fit whose residuals follow a Student-t
 distribution with \code{df} degrees of freedom and scale given by the error
 model or the data's \code{sigma}: the \verb{-2 log} likelihood of the data, summed
 over the conditions. The tails are heavier than those of \code{\link[=normL2]{normL2()}}, so
-single outliers move the fit less; \code{df = Inf} would be \code{\link[=normL2]{normL2()}}.
+single outliers move the fit less; the limit of large \code{df} is \code{\link[=normL2]{normL2()}}.
 }
 \examples{
 ## A straight line with two gross outliers: the Student-t fit stays on the line

@@ -336,7 +336,6 @@
   dimnames(etaNames) <- list(groups, stems)
   blocks <- lapply(own, function(b) .designBlock(terms[b, , drop = FALSE]))
   dist <- vapply(blocks, `[[`, "", "dist")
-  blocks[dist == "laplace"] <- .nameHypers(blocks[dist == "laplace"], grouping, "lambda")
   slab <- dist %in% c("spikeSlab", "dirichletProcess")
   blocks[slab] <- .nameHypers(blocks[slab], grouping, function(b)
     c(if (b$dist == "spikeSlab") "prob" else "concentration", "tau"))
@@ -377,9 +376,8 @@
 ## One distribution block: the stems (random-effect columns) and short names, the distribution
 ## and the fixed hyperparameters, NA when estimated.
 .designBlock <- function(rows) {
-  list(dist = rows$dist[1], lambda = rows$lambda[1], prob = rows$prob[1],
-       concentration = rows$concentration[1], tau = rows$tau[1], stems = rows$stem,
-       short = sub("^eta_", "", rows$stem))
+  list(dist = rows$dist[1], prob = rows$prob[1], concentration = rows$concentration[1],
+       tau = rows$tau[1], stems = rows$stem, short = sub("^eta_", "", rows$stem))
 }
 
 ## Names of the hyperparameters of the blocks of one distribution, `hyper` named by `kinds`
@@ -443,7 +441,7 @@
 
 
 ## A complete start: the structural parameters from `init`, the fixed effects the formulas
-## created at 0, the random-effect and slab standard deviations at `sd`, Laplace strengths at 1,
+## created at 0, the random-effect and slab standard deviations at `sd`, concentrations at 1,
 ## split probabilities at 1/2.
 .emStart <- function(design, init = NULL, fixed = NULL, sd = 0.3) {
   structural <- setdiff(.structuralNames(design), names(fixed))
@@ -456,7 +454,7 @@
   start[given] <- init[given]
   chol <- unlist(unname(lapply(.subDesigns(design), function(sub)
     setNames(ifelse(sub$normal$isDiag, log(sd), 0), sub$normal$cholPars))))
-  initial <- c(lambda = 1, prob = 0.5, concentration = 1, tau = sd)
+  initial <- c(prob = 0.5, concentration = 1, tau = sd)
   sparse <- unlist(unname(lapply(design$blocks, function(b) {
     h <- .estimatedHypers(b)
     setNames(initial[names(h)], h)
@@ -536,14 +534,13 @@
 }
 
 ## A start perturbed by normal noise of standard deviations `sd` on the scale where each entry is
-## unbounded: log for Laplace strengths, concentrations and slab standard deviations, logit for
-## slab probabilities, the identity for the structural and Cholesky parameters.
+## unbounded: log for concentrations and slab standard deviations, logit for slab probabilities, the identity for the structural and Cholesky parameters.
 .perturbStart <- function(design, center, sd) {
   kinds <- unlist(lapply(design$blocks, function(b) setNames(names(b$hyper), unname(b$hyper))))
   kind <- kinds[names(center)]
   noise <- stats::rnorm(length(center), 0, sd)
   out <- center + noise
-  pos <- !is.na(kind) & kind %in% c("lambda", "concentration", "tau")
+  pos <- !is.na(kind) & kind %in% c("concentration", "tau")
   out[pos] <- center[pos] * exp(noise[pos])
   prob <- !is.na(kind) & kind == "prob"
   out[prob] <- stats::plogis(stats::qlogis(center[prob]) + noise[prob])

@@ -41,7 +41,9 @@ the others.}
 \value{
 A ggplot (or a list of ggplots if \code{cowplot} is unavailable).
 
-A ggplot (or a list with \code{hist} and \code{qq} if cowplot is unavailable).
+A ggplot, or without cowplot a list with \code{hist} and \code{qq}. With
+\code{covariates}, a ggplot for one covariate; for several a cowplot grid, or
+without cowplot a list of ggplots named by covariate.
 }
 \description{
 Per random effect a histogram against the estimated

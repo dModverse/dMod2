@@ -33,8 +33,9 @@ Default \code{1}.}
 \item{modelname}{Base name of the generated files. Default \code{NULL}, the base
 name of the YAML file.}
 
-\item{deriv}{Logical. If \code{FALSE}, the model is built without sensitivities;
-the objective is then evaluated with \code{deriv = FALSE}. Default \code{TRUE}.}
+\item{deriv}{Logical. If \code{FALSE}, the model is built without sensitivities,
+which needs \code{backend = "cppDE"} or \code{"Sundials"}; the objective then has to
+be called with \code{deriv = FALSE}. Default \code{TRUE}.}
 
 \item{derivMode}{Derivative directions to build, passed to \code{\link[=odemodel]{odemodel()}}:
 \code{"forward"} (default), \code{"reverse"} or \code{c("forward", "reverse")}.
@@ -54,11 +55,14 @@ working directory.}
 \value{
 A list of class \code{"petabproblem"} with components \code{dataList},
 \code{reactions}, \code{odemodel}, \code{g}, \code{x}, \code{p}, \code{e}, \code{prd} (the composite
-\code{g * x * p}), \code{obj}, \code{bestfit}, \code{parlower} and \code{parupper}. \code{obj} has the
-PEtab fixed parameters set; \code{bestfit} is the PEtab \code{nominalValue} of each
-estimated parameter, with the PEtab scales in the attribute
-\code{"petab_scales"}. The attribute \code{"petab_meta"} of the list holds what
-\code{\link[=exportPEtabObject]{exportPEtabObject()}} needs, among it the fixed parameters as \code{fixed}.
+\code{g * x * p}), \code{obj}, \code{bestfit}, \code{parlower} and \code{parupper}. With several
+models, \code{reactions}, \code{odemodel}, \code{g}, \code{x} and \code{p} are lists by model id.
+\code{obj} has the PEtab fixed parameters set; \code{bestfit} is the PEtab
+\code{nominalValue} of each estimated parameter on the PEtab \code{parameterScale},
+with the scales in the attribute \code{"petab_scales"}, and \code{parlower} and
+\code{parupper} are the bounds on that scale. The attribute \code{"petab_meta"} of the
+list holds what \code{\link[=exportPEtabObject]{exportPEtabObject()}} needs, among it the fixed parameters
+as \code{fixed}, on the linear scale.
 }
 \description{
 Reads a PEtab v1 or v2 problem, a YAML file with an SBML model and TSV
@@ -68,15 +72,18 @@ read by \code{\link[=importSbml]{importSbml()}}.
 }
 \details{
 Supported: one problem per YAML file with any number of v2 model files;
-preequilibration (at most two periods per v2 experiment); observable
-transformations \code{lin}, \code{log} and \code{log10}; the noise distribution \code{normal},
-and \code{log-normal} in v2; a v2 mapping table. Priors of the distributions
+preequilibration; any number of periods per v2 experiment, those after the
+first applied as events, with one schedule for all experiments that start in
+the same condition; observable transformations \code{lin}, \code{log} and \code{log10}; the
+noise distribution \code{normal}, and \code{log-normal} in v2; a v2 mapping table.
+Priors of the distributions
 \code{uniform}, \code{normal}, \code{log-normal}, \code{cauchy}, \code{chisquare}, \code{exponential},
 \code{gamma}, \code{laplace}, \code{log-laplace}, \code{log-uniform} and \code{rayleigh}, also with
 the \code{parameterScale} prefix, are added to \code{obj}, truncated to the parameter
-bounds. Not supported: model languages other than SBML, other noise
-distributions, and a plain \code{normal} or \code{laplace} prior on a parameter whose
-scale is not \code{lin}.
+bounds. A prior without the prefix is on the linear parameter: for a
+parameter on \code{log} or \code{log10} scale it is the density at the back-transformed
+value, without a Jacobian term. Not supported: model languages other than
+SBML and other noise distributions.
 }
 \examples{
 \dontshow{if (requireNamespace("reticulate", quietly = TRUE) && requireNamespace("rjson", quietly = TRUE) && requireNamespace("yaml", quietly = TRUE) && reticulate::py_module_available("libsbml")) withAutoprint(\{ # examplesIf}

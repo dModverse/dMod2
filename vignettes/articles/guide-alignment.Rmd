@@ -382,4 +382,4 @@ plot(fit$fit) + theme(legend.position = "right") + labs(color = "gel")
 
 Reference: `alignmentModel()`, `align()`, `plotAligned()`, `plotResiduals()`, `plotRandomEffects()`
 
-[← 8. Group-specific effects](guide-group-effects.html) | [10. PEtab import and export →](guide-petab.html)
+[← 8. Sparse deviations](guide-sparse-deviations.html) | [10. PEtab import and export →](guide-petab.html)

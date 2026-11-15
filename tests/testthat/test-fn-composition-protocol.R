@@ -193,6 +193,16 @@ test_that("composition rejects class pairs it cannot handle", {
   expect_error(fx$xfn + fx$gfn, "cannot add")
 })
 
+test_that("functions for single conditions compose only for the same condition", {
+  skip_if_not_installed("cppDE")
+  skip_on_cran()
+
+  fx <- fx_decay_compiled()
+  gA <- dMod2:::.fnWithConditions(fx$gfn, "A")
+  expect_error(gA * dMod2:::.fnWithConditions(fx$xfn, "B"), "condition A")
+  expect_s3_class(gA * dMod2:::.fnWithConditions(fx$xfn, "A"), "prdfn")
+})
+
 
 ## ---- Objective composition ----------------------------------------------
 
